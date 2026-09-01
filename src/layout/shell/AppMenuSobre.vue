@@ -90,7 +90,7 @@
         </a>
         <a
           class="about-link"
-          href="https://www.louvorja.com.br/telegram"
+          href="https://louvorja.com.br/telegram"
           target="_blank"
           rel="noopener noreferrer"
         >

@@ -158,8 +158,13 @@ defineEmits(["go-to-slide", "maximize", "fullscreen", "close"]);
 const display = useDisplay();
 
 function openWindow(route) {
-  // Em dev/prod o origin já é o servidor correto. window.open dispara o
-  // setWindowOpenHandler do Electron que cria uma BrowserWindow nova.
-  window.open(route, "_blank", "noopener,noreferrer");
+  // Em web, abre popup sem chrome do navegador; no Electron cai no handler
+  // de BrowserWindow. Mantém a experiência mínima para projeção/operador.
+  const features =
+    "popup=yes,noopener,noreferrer,width=1280,height=720,toolbar=no,location=no,menubar=no,status=no,scrollbars=no,resizable=yes";
+  const name = `louvorja_${String(route)
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")}`;
+  window.open(route, name, features);
 }
 </script>

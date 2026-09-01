@@ -1,6 +1,6 @@
 <template>
-  <div class="ribbon-group">
-    <div ref="contentRef" class="ribbon-group-content">
+  <div class="ribbon-group" :class="{ 'ribbon-group--web': !Platform.isDesktop }">
+    <div class="ribbon-group-content">
       <slot />
     </div>
     <div class="ribbon-group-label">{{ title }}</div>
@@ -8,23 +8,10 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from "vue";
+import Platform from "@/helpers/Platform";
 
 defineProps({
   title: { type: String, required: true },
-});
-
-const contentRef = ref(null);
-
-//Verificação da largura dos menus para não cortar o conteúdo
-onMounted(() => {
-  const el = contentRef.value;
-  if (!el) return;
-  const anyVisible = Array.from(el.children).some((child) => !child.hasAttribute("hidden"));
-  if (!anyVisible) return;
-  if (el.scrollWidth > el.clientWidth) {
-    el.style.minWidth = el.scrollWidth + "px";
-  }
 });
 </script>
 
@@ -36,7 +23,7 @@ onMounted(() => {
   padding: var(--lj-space-2) var(--lj-space-3) 0;
   flex-shrink: 0;
   height: 100%;
-  width: fit-content;
+  width: max-content;
 }
 
 .ribbon-group:last-child {
@@ -51,14 +38,28 @@ onMounted(() => {
   gap: var(--lj-space-1);
   padding: var(--lj-space-1) 0 0;
   min-height: 0;
+  width: max-content;
+  min-width: max-content;
   /* Limita a 3 botões small empilhados em coluna (estilo Office Ribbon).
      Botões large quebram em coluna nova naturalmente.
      overflow: hidden previne sobreposição visual com o label do grupo
      se o conteúdo tentar estourar. */
   max-height: calc(var(--lj-ribbon-body-height) - var(--lj-group-label-height) - 8px);
-  min-width: 50px;
   overflow: hidden;
   align-content: center;
+}
+
+.ribbon-group--web .ribbon-group-content {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: var(--lj-space-2);
+  overflow: visible;
+}
+
+.ribbon-group--web .ribbon-group-content > * {
+  flex: 0 0 auto;
 }
 
 .ribbon-group-label {

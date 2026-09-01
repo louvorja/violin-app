@@ -290,9 +290,9 @@ function _clearSequenceTimer() {
 let _lastSeqProgress = 0;
 
 function _pollSequence() {
-  const show = $appdata.get("modules.media.show", false);
-  const progress = $appdata.get("modules.media.config.progress", 0);
-  const idMusic = $appdata.get("modules.media.id_music", null);
+  const show = $appdata.get(KEYS.MODULES.MEDIA.SHOW, false);
+  const progress = $appdata.get(KEYS.MODULES.MEDIA.CONFIG.PROGRESS, 0);
+  const idMusic = $appdata.get(KEYS.MODULES.MEDIA.ID_MUSIC, null);
 
   if (show && progress > 0) {
     _lastSeqProgress = progress;

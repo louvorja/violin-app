@@ -189,7 +189,12 @@ function staticCommands(t) {
             fullscreen: true,
           });
         } else {
-          window.open("/projection", "_blank", "noopener,noreferrer");
+          const name = "louvorja_projection";
+          window.open(
+            "/projection",
+            name,
+            "popup=yes,noopener,noreferrer,width=1280,height=720,toolbar=no,location=no,menubar=no,status=no,scrollbars=no,resizable=yes"
+          );
         }
       },
     },
@@ -207,7 +212,12 @@ function staticCommands(t) {
             fullscreen: false,
           });
         } else {
-          window.open("/operator", "_blank", "noopener,noreferrer");
+          const name = "louvorja_operator";
+          window.open(
+            "/operator",
+            name,
+            "popup=yes,noopener,noreferrer,width=1280,height=720,toolbar=no,location=no,menubar=no,status=no,scrollbars=no,resizable=yes"
+          );
         }
       },
     },

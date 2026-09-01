@@ -29,12 +29,10 @@ export default async ({ mode }) => {
   const cspDesktopYt = isDesktop
     ? " https://www.youtube.com https://*.doubleclick.net https://www.google.com"
     : "";
-  // frame-src só é necessário no desktop (Electron), onde as janelas de
-  // projeção criam iframes do YouTube via YT.Player API. No web/PWA a
-  // projeção de vídeos não usa iframes embarcados.
-  const cspDesktopFrame = isDesktop
-    ? " frame-src https://www.youtube.com https://www.youtube-nocookie.com https://vlibras.gov.br;"
-    : "";
+  // frame-src precisa liberar YouTube e VLibras em ambos os targets.
+  // No web/PWA o avatar do VLibras usa um iframe para o player Unity.
+  const cspFrame =
+    " frame-src https://www.youtube.com https://www.youtube-nocookie.com https://vlibras.gov.br;";
   const cspMeta =
     `<meta http-equiv="Content-Security-Policy" content="` +
     `default-src 'self'${cspExtra};` +
@@ -44,8 +42,8 @@ export default async ({ mode }) => {
     ` img-src 'self' data: https:${cspExtra};` +
     ` media-src 'self' blob: https:${cspExtra};` +
     ` connect-src 'self' blob:${cspExtra} https://api.louvorja.com.br https://*.louvorja.com.br http://localhost:* ws://localhost:* https://*.youtube.com https://*.ytimg.com https://*.googlevideo.com https://*.googleapis.com https://www.google.com https://*.google.com https://traducao2.vlibras.gov.br https://dicionario2.vlibras.gov.br https://repositorio.vlibras.gov.br https://cdn.jsdelivr.net https://static.cloudflareinsights.com;` +
-    `${cspDesktopFrame}` +
-    ` worker-src 'self'${cspExtra};` +
+    ` worker-src 'self' blob:${cspExtra};` +
+    `${cspFrame}` +
     `">`;
 
   // Plugins base — sempre incluídos

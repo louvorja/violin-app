@@ -68,8 +68,8 @@ async function _open(
     return;
   }
   const features = fullscreen
-    ? "noopener,noreferrer,fullscreen=yes"
-    : "noopener,noreferrer,width=1280,height=720";
+    ? "popup=yes,noopener,noreferrer,width=1280,height=720,toolbar=no,location=no,menubar=no,status=no,scrollbars=no,resizable=yes"
+    : "popup=yes,noopener,noreferrer,width=1280,height=720,toolbar=no,location=no,menubar=no,status=no,scrollbars=no,resizable=yes";
   _openWebWindows[feature] = window.open(route, `louvorja_${feature}`, features);
 }
 
