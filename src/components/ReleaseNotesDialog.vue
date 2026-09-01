@@ -1,11 +1,5 @@
 <template>
-  <v-dialog
-    v-model="internalShow"
-    max-width="620"
-    persistent
-    :scrim="true"
-    @update:model-value="onClose"
-  >
+  <v-dialog v-model="internalShow" max-width="620" persistent :scrim="true">
     <v-card>
       <v-toolbar color="primary" density="compact">
         <v-icon :icon="ICONS.UI.NEWS" class="mx-2" />

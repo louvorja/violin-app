@@ -8,8 +8,10 @@ import { KEYS, moduleShowInMainMenu } from "@/constants/UserDataKeys";
 import { DB_TABLE } from "@/constants/DbTables";
 import { BOOKS } from "@/constants/Bible";
 import type { BibleVersion } from "@/types/Bible";
+import type { BundleProgress } from "@/types/Database";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
 import Libras from "@/helpers/Libras";
+import BundleInstaller from "@/helpers/BundleInstaller";
 import type { Music } from "@/types/Music";
 import type { BibleBook } from "@/types/Bible";
 
@@ -83,17 +85,27 @@ export function useSyncManager() {
   const bibleProgress = ref({ done: 0, total: 0, currentFile: "" });
   const bibleCompletedMsg = ref("");
 
+  // Bundle download
+  const bundleInstalling = ref(false);
+  const bundleProgress = ref<BundleProgress>({ phase: "download", current: 0, total: 0 });
+
   let _downloadCleanup: CleanupFn[] = [];
+  let _bundleAbort: AbortController | null = null;
 
   // ─── FTP ────────────────────────────────────────────────────────
 
   async function checkFtp(): Promise<boolean> {
-    if (!Platform.download) return false;
+    if (!Platform.download) {
+      console.warn("[useSyncManager] checkFtp → Platform.download é null (web/PWA?)");
+      return false;
+    }
     ftpChecking.value = true;
     ftpOk.value = false;
     ftpError.value = "";
     try {
+      console.info("[useSyncManager] checkFtp → chamando checkConnection...");
       const r = await Platform.download.checkConnection() as { ok: boolean; host?: string; msg?: string; error?: string };
+      console.info("[useSyncManager] checkFtp → resultado:", r);
       if (r.ok) {
         ftpOk.value = true;
         if (r.msg) {
@@ -104,6 +116,7 @@ export function useSyncManager() {
         ftpError.value = r.error || "Disconnected";
       }
     } catch (e) {
+      console.error("[useSyncManager] checkFtp → exceção:", e);
       ftpError.value = (e as Error).message;
     } finally {
       ftpChecking.value = false;
@@ -238,7 +251,6 @@ export function useSyncManager() {
     hymnal1996Cached: boolean;
     bibleVersions: BibleVersion[];
     downloadedBibles: number[];
-    connectionOk: boolean;
   }> {
     const { categories, hymnalIds, hymnal1996Ids } = await loadCatalog(lang);
     const { versions: bibleVersions } = await loadBibleVersions(lang);
@@ -256,8 +268,7 @@ export function useSyncManager() {
     const downloadedBibles = await scanBibleVersionsDisk(bibleVersions, lang);
 
     scanning.value = false;
-    const connectionOk = await checkFtp();
-    return { categories, hymnalIds, hymnal1996Ids, cachedAlbums, hymnalCached, hymnal1996Cached, bibleVersions, downloadedBibles, connectionOk };
+    return { categories, hymnalIds, hymnal1996Ids, cachedAlbums, hymnalCached, hymnal1996Cached, bibleVersions, downloadedBibles };
   }
 
   // ─── Bible Versions ─────────────────────────────────────────────
@@ -635,6 +646,56 @@ export function useSyncManager() {
     bibleCancelled.value = true;
   }
 
+  // ─── Bundle Download ────────────────────────────────────────
+
+  async function downloadBundle(opts: { force?: boolean } = {}): Promise<boolean> {
+    if (bundleInstalling.value) return false;
+
+    bundleInstalling.value = true;
+    bundleProgress.value = { phase: "download", current: 0, total: 0 };
+    _bundleAbort = new AbortController();
+    const signal = _bundleAbort.signal;
+
+    const taskId = "db-bundle";
+    bgTasks.registerTask(taskId, "shell.background_tasks.db_bundle", () => {
+      _bundleAbort?.abort();
+    });
+
+    try {
+      await BundleInstaller.install({
+        force: opts.force,
+        signal,
+        onProgress: (p: BundleProgress) => {
+          bundleProgress.value = p;
+          const pct =
+            p.total > 0 ? Math.round((p.current / p.total) * 100) : 0;
+          bgTasks.updateTask(taskId, {
+            progress: pct,
+            detail: p.detail || p.phase,
+          });
+        },
+      });
+
+      bgTasks.completeTask(taskId);
+      return true;
+    } catch (e) {
+      if (signal.aborted) {
+        bgTasks.updateTask(taskId, { status: "cancelled" });
+      } else {
+        console.error("[useSyncManager] downloadBundle:", e);
+        bgTasks.updateTask(taskId, { status: "error" });
+      }
+      return false;
+    } finally {
+      bundleInstalling.value = false;
+      _bundleAbort = null;
+    }
+  }
+
+  function cancelBundle(): void {
+    _bundleAbort?.abort();
+  }
+
   // ─── Utilities ──────────────────────────────────────────────────
 
   function humanSize(bytes: number | null | undefined): string {
@@ -944,6 +1005,10 @@ export function useSyncManager() {
     humanSize,
     formatBibleKey,
     refreshDiskUsage,
+    bundleInstalling,
+    bundleProgress,
+    downloadBundle,
+    cancelBundle,
     cleanup,
   };
 }

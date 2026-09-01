@@ -132,7 +132,71 @@
             <v-icon icon="mdi-broom" size="14" class="mr-1" />
             {{ $t("options.storage.clear_cache_collections") }}
           </button>
+          <button type="button" class="opt-btn" :disabled="dbBackupBusy" @click="exportDatabase">
+            <v-icon icon="mdi-download" size="14" class="mr-1" />
+            {{ $t("options.updates.export_db") }}
+          </button>
+          <button
+            type="button"
+            class="opt-btn"
+            :disabled="dbBackupBusy"
+            @click="pickImportDatabase"
+          >
+            <v-icon icon="mdi-upload" size="14" class="mr-1" />
+            {{ $t("options.updates.import_db") }}
+          </button>
+          <button
+            v-if="isDesktop"
+            type="button"
+            class="opt-btn"
+            :disabled="dbBackupBusy || sync.bundleInstalling.value"
+            @click="reinstallDatabase"
+          >
+            <v-icon icon="mdi-database-refresh" size="14" class="mr-1" />
+            {{ $t("options.updates.reinstall_db") }}
+          </button>
         </div>
+        <input
+          ref="importFileInput"
+          type="file"
+          accept=".zip,application/zip"
+          style="display: none"
+          @change="onImportFileChange"
+        />
+      </div>
+      <div v-if="dbBackupState !== 'idle'" class="opt-folder-path mt-2">
+        {{
+          dbBackupState === "exporting"
+            ? $t("options.updates.exporting_db")
+            : $t("options.updates.importing_db")
+        }}
+      </div>
+      <div v-if="dbBackupState !== 'idle'" class="opt-backup-progress mt-2">
+        <v-progress
+          :model-value="dbBackupProgressPercent"
+          :label="dbBackupProgressLabel"
+          color="primary"
+          rounded
+        />
+        <div v-if="dbBackupProgressDetail" class="opt-folder-path mt-1">
+          {{ dbBackupProgressDetail }}
+        </div>
+      </div>
+      <div v-if="sync.bundleInstalling.value" class="opt-folder-actions mt-2">
+        <v-progress-circular indeterminate color="primary" size="32" />
+        <v-progress
+          :model-value="
+            sync.bundleProgress.value.total > 0
+              ? Math.round(
+                  (sync.bundleProgress.value.current / sync.bundleProgress.value.total) * 100
+                )
+              : 0
+          "
+          :label="$t(`options.updates.db_${sync.bundleProgress.value.phase}`)"
+          color="primary"
+          class="ml-3"
+          rounded
+        />
       </div>
     </section>
   </div>
@@ -145,7 +209,11 @@ import Platform from "@/helpers/Platform";
 import $alert from "@/helpers/Alert";
 import $database from "@/helpers/Database";
 import $userdata from "@/helpers/UserData";
+import DatabaseBackup, { type BackupProgress } from "@/helpers/DatabaseBackup";
 import { KEYS } from "@/constants/UserDataKeys";
+import { useSyncManager } from "@/composables/useSyncManager";
+import type { DbConfig } from "@/types/Database";
+import Alert from "@/helpers/Alert";
 
 interface AppUpdateState {
   status: string;
@@ -154,13 +222,6 @@ interface AppUpdateState {
   newVersion: string | null;
   error: string | null;
   packagePath?: string | null;
-}
-
-interface DbConfig {
-  datetime: string;
-  latest_updated: string;
-  version: number;
-  version_number: number;
 }
 
 type UpdateStatus = "idle" | "checking" | "ok" | "available" | "error";
@@ -194,6 +255,35 @@ const installType = ref<string>("");
 const useBeta = ref(false);
 const checkOnStart = ref(false);
 const autoDownload = ref(false);
+
+// Sync manager (bundle download)
+const sync = useSyncManager();
+const reinstallingDb = ref(false);
+const importFileInput = ref<HTMLInputElement | null>(null);
+const dbBackupState = ref<"idle" | "exporting" | "importing">("idle");
+const dbBackupProgress = ref<BackupProgress | null>(null);
+
+const dbBackupBusy = computed<boolean>(
+  () => dbBackupState.value !== "idle" || reinstallingDb.value || sync.bundleInstalling.value
+);
+
+const dbBackupProgressPercent = computed<number>(() => {
+  const progress = dbBackupProgress.value;
+  if (!progress || progress.total <= 0) return 0;
+  return Math.min(100, Math.max(0, Math.round((progress.current / progress.total) * 100)));
+});
+
+const dbBackupProgressLabel = computed<string>(() => {
+  return dbBackupState.value === "exporting"
+    ? t("options.updates.exporting_db")
+    : t("options.updates.importing_db");
+});
+
+const dbBackupProgressDetail = computed<string>(() => {
+  const progress = dbBackupProgress.value;
+  if (!progress?.detail) return "";
+  return formatBackupDetail(progress.detail);
+});
 
 const dbHasUpdate = computed<boolean>(
   () =>
@@ -365,7 +455,9 @@ async function checkDbUpdate(): Promise<void> {
     const res = await fetch(`${import.meta.env.VITE_URL_DATABASE}/config`, {
       headers: { "Api-Token": import.meta.env.VITE_API_TOKEN },
     });
-    if (!res.ok) throw new Error();
+    if (!res.ok) {
+      throw new Error();
+    }
     const data: DbConfig = await res.json();
     dbLatestConfig.value = data ?? null;
     dbStatus.value = dbHasUpdate.value ? "available" : "ok";
@@ -379,13 +471,22 @@ async function checkDbUpdate(): Promise<void> {
 }
 
 async function applyDbUpdate(): Promise<void> {
-  sessionStorage.clear();
-  $database.invalidate("config");
-  dbCacheCleared.value = true;
-  dbStatus.value = "ok";
-  dbCurrentConfig.value = dbLatestConfig.value;
-  await new Promise<void>((r) => setTimeout(r, 2000));
-  window.location.reload();
+  if (isDesktop.value) {
+    const ok = await sync.downloadBundle();
+    if (!ok) return;
+    dbCacheCleared.value = true;
+    dbCurrentConfig.value = dbLatestConfig.value;
+    await new Promise<void>((r) => setTimeout(r, 1000));
+    window.location.reload();
+  } else {
+    sessionStorage.clear();
+    $database.invalidate("config");
+    dbCacheCleared.value = true;
+    dbStatus.value = "ok";
+    dbCurrentConfig.value = dbLatestConfig.value;
+    await new Promise<void>((r) => setTimeout(r, 2000));
+    window.location.reload();
+  }
 }
 
 function formatLastCheck(iso: string): string {
@@ -410,6 +511,123 @@ function clearCollectionsCache(): void {
   setTimeout(() => {
     dbCacheCleared.value = false;
   }, 4000);
+}
+
+function formatBackupDetail(detail: string): string {
+  const labels: Record<string, string> = {
+    loading: t("options.updates.import_db_loading"),
+    clearing: t("options.updates.import_db_clearing"),
+    writing: t("options.updates.import_db_writing"),
+    cache: t("options.updates.database"),
+    musics: t("modules.musics.title"),
+    hymnal: t("modules.collections_download.hymnal"),
+    hymnal_1996: t("modules.collections_download.hymnal_1996"),
+    albums: t("modules.albums.title"),
+  };
+  if (labels[detail]) return labels[detail];
+  return detail.replace(/_/g, " ");
+}
+
+function setBackupProgress(progress: BackupProgress | null): void {
+  dbBackupProgress.value = progress;
+}
+
+function pickImportDatabase(): void {
+  if (dbBackupBusy.value) return;
+  importFileInput.value?.click();
+}
+
+async function exportDatabase(): Promise<void> {
+  if (dbBackupBusy.value) return;
+  dbBackupState.value = "exporting";
+  setBackupProgress({ phase: "export", current: 0, total: 1, detail: "loading" });
+  try {
+    const res = await DatabaseBackup.exportAll((progress) => setBackupProgress(progress));
+    $alert.info({
+      title: t("options.updates.export_db_title"),
+      text: t("options.updates.export_db_done", {
+        file: res.fileName,
+        tables: res.tables,
+        rows: res.rows,
+      }),
+      translate: false,
+    });
+  } catch (e) {
+    console.error("[Atualizações] exportDatabase:", e);
+    $alert.error({
+      title: t("options.updates.export_db_title"),
+      text: t("options.updates.export_db_error"),
+      translate: false,
+    });
+  } finally {
+    dbBackupState.value = "idle";
+    setBackupProgress(null);
+  }
+}
+
+async function onImportFileChange(e: Event): Promise<void> {
+  const input = e.target as HTMLInputElement;
+  const file = input.files?.[0] || null;
+  input.value = "";
+  if (!file || dbBackupBusy.value) return;
+
+  $alert.yesno(
+    {
+      title: t("options.updates.import_db_title"),
+      text: t("options.updates.import_db_confirm"),
+      translate: false,
+    },
+    async (btn?: string) => {
+      if (btn !== "yes") return;
+      dbBackupState.value = "importing";
+      setBackupProgress({ phase: "import", current: 0, total: 1, detail: "loading" });
+      try {
+        const res = await DatabaseBackup.importAll(file, (progress) => setBackupProgress(progress));
+        $alert.info(
+          {
+            title: t("options.updates.import_db_title"),
+            text: t("options.updates.import_db_done", { tables: res.tables, rows: res.rows }),
+            translate: false,
+          },
+          () => window.location.reload()
+        );
+      } catch (err) {
+        console.error("[Atualizações] importDatabase:", err);
+        $alert.error({
+          title: t("options.updates.import_db_title"),
+          text: t("options.updates.import_db_error"),
+          translate: false,
+        });
+      } finally {
+        dbBackupState.value = "idle";
+        setBackupProgress(null);
+      }
+    }
+  );
+}
+
+async function reinstallDatabase(): Promise<void> {
+  if (reinstallingDb.value) return;
+  $alert.yesno("options.updates.reinstall_db_confirm", async (btn?: string) => {
+    if (btn !== "yes") return;
+    reinstallingDb.value = true;
+    try {
+      const ok = await sync.downloadBundle({ force: true });
+      if (ok) {
+        dbCacheCleared.value = true;
+        await new Promise<void>((r) => setTimeout(r, 1000));
+        window.location.reload();
+      } else {
+        Alert.error({
+          text: t("startup_check.bundle_error"),
+        });
+      }
+    } catch (e) {
+      console.error("[Atualizações] reinstallDatabase:", e);
+    } finally {
+      reinstallingDb.value = false;
+    }
+  });
 }
 
 async function loadCurrentDbVersion(): Promise<void> {

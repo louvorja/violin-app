@@ -329,7 +329,26 @@
       "db_available": "Nova versão {version} do banco disponível.",
       "db_up_to_date": "Banco atualizado",
       "db_error": "Não foi possível verificar.",
-      "cache_cleared": "Cache limpo."
+      "cache_cleared": "Cache limpo.",
+      "reinstall_db": "Reinstalar banco de dados",
+      "reinstall_db_confirm": "Isso vai baixar e reinstalar todo o banco de dados da internet. Deseja continuar?",
+      "db_download": "Baixando banco de dados...",
+      "db_extract": "Extraindo arquivos...",
+      "db_inject": "Injetando dados no banco...",
+      "export_db": "Exportar banco de dados",
+      "import_db": "Importar banco de dados",
+      "export_db_title": "Exportar banco de dados",
+      "import_db_title": "Importar banco de dados",
+      "exporting_db": "Exportando banco de dados...",
+      "importing_db": "Importando banco de dados...",
+      "export_db_done": "Arquivo {file} gerado com sucesso. {tables} tabelas e {rows} registros exportados.",
+      "import_db_done": "Banco importado com sucesso. {tables} tabelas e {rows} registros restaurados.",
+      "export_db_error": "Não foi possível exportar o banco de dados.",
+      "import_db_error": "Não foi possível importar o banco de dados.",
+      "import_db_confirm": "Todos os dados atuais serão substituídos. Deseja continuar?",
+      "import_db_loading": "Lendo arquivo...",
+      "import_db_clearing": "Limpando banco local...",
+      "import_db_writing": "Gravando dados..."
     },
     "albums": {
       "title": "Álbuns",
@@ -901,6 +920,7 @@
       "cancelled": "Cancelado",
       "confirm_cancel": "Deseja cancelar este download?",
       "app_update": "Atualização do app",
+      "db_bundle": "Atualizando banco de dados",
       "libras_music": "Tradução Libras — Músicas",
       "libras_bible": "Tradução Libras — Bíblia"
     },
@@ -1055,11 +1075,26 @@
     "select_files": "Selecionar Arquivos",
     "download_all": "Baixar Tudo",
     "sync_hint": "Você pode baixar álbuns ou versões bíblicas específicas depois no menu Opções > Sincronizar.",
+    "offline_hint": "Servidor de download indisponível. Verifique sua conexão com a internet.",
     "minimize": "Minimizar para segundo plano",
     "task": {
       "collections": "Baixando coletâneas",
       "bible": "Baixando Bíblia"
-    }
+    },
+    "bundle_check": "Verificando banco de dados...",
+    "bundle_downloading": "Baixando banco de dados...",
+    "bundle_extracting": "Extraindo arquivos...",
+    "bundle_injecting": "Injetando dados no banco...",
+    "bundle_preparing": "Preparando...",
+    "bundle_retry": "Tentativa {attempt}/{max}",
+    "bundle_error": "Não foi possível baixar o banco de dados. Verifique sua conexão com a internet e tente novamente.",
+    "bundle_error_title": "Falha ao baixar banco de dados",
+    "bundle_error_hint": "Você pode fazer manualmente em: Opções → Atualizar → Banco de dados",
+    "bundle_importing_albums": "Importando álbuns...",
+    "bundle_importing_musics": "Importando músicas...",
+    "bundle_importing_bible": "Importando Bíblias...",
+    "bundle_importing_catalog": "Importando catálogo...",
+    "bundle_importing_extras": "Importando complementos..."
   },
   "accessibility": {
     "title": "Acessibilidade — Libras",

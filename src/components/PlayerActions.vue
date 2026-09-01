@@ -58,14 +58,14 @@
       @click="$emit('maximize')"
     />
     <v-btn
-      v-if="location == 'fullscreen'"
+      v-if="location === 'fullscreen'"
       variant="text"
       size="small"
       icon="mdi-fullscreen-exit"
       @click="$emit('fullscreen', false)"
     />
     <v-btn
-      v-else-if="location == 'window'"
+      v-else-if="location === 'window'"
       variant="text"
       size="small"
       icon="mdi-fullscreen"
@@ -120,7 +120,7 @@
 
         <v-divider v-if="display.width.value <= 350" />
         <template v-for="(item, key) in menuModes" :key="key">
-          <v-divider v-if="item.title == '-' && display.width.value <= 350" />
+          <v-divider v-if="item.title === '-' && display.width.value <= 350" />
           <v-list-item
             v-else-if="display.width.value <= 350"
             :active="item.active"

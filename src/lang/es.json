@@ -329,7 +329,26 @@
       "db_available": "Nueva versión {version} de la base disponible.",
       "db_up_to_date": "Base de datos actualizada",
       "db_error": "No se pudo verificar.",
-      "cache_cleared": "Caché limpiado."
+      "cache_cleared": "Caché limpiado.",
+      "reinstall_db": "Reinstalar base de datos",
+      "reinstall_db_confirm": "Esto descargará e reinstalará toda la base de datos de internet. ¿Desea continuar?",
+      "db_download": "Descargando base de datos...",
+      "db_extract": "Extrayendo archivos...",
+      "db_inject": "Inyectando datos en la base...",
+      "export_db": "Exportar base de datos",
+      "import_db": "Importar base de datos",
+      "export_db_title": "Exportar base de datos",
+      "import_db_title": "Importar base de datos",
+      "exporting_db": "Exportando base de datos...",
+      "importing_db": "Importando base de datos...",
+      "export_db_done": "Archivo {file} generado con éxito. {tables} tablas y {rows} registros exportados.",
+      "import_db_done": "Base importada con éxito. {tables} tablas y {rows} registros restaurados.",
+      "export_db_error": "No se pudo exportar la base de datos.",
+      "import_db_error": "No se pudo importar la base de datos.",
+      "import_db_confirm": "Todos los datos actuales serán reemplazados. ¿Desea continuar?",
+      "import_db_loading": "Leyendo archivo...",
+      "import_db_clearing": "Limpiando base local...",
+      "import_db_writing": "Guardando datos..."
     },
     "albums": {
       "title": "Álbumes",
@@ -901,6 +920,7 @@
       "cancelled": "Cancelado",
       "confirm_cancel": "¿Desea cancelar esta descarga?",
       "app_update": "Actualización de la app",
+      "db_bundle": "Actualizando base de datos",
       "libras_music": "Traducción Libras — Músicas",
       "libras_bible": "Traducción Libras — Biblia"
     },
@@ -1055,11 +1075,26 @@
     "select_files": "Seleccionar Archivos",
     "download_all": "Descargar Todo",
     "sync_hint": "Puede descargar álbumes o versiones bíblicas específicas después en el menú Opciones > Sincronizar.",
+    "offline_hint": "Servidor de descarga no disponible. Verifique su conexión a internet.",
     "minimize": "Minimizar al segundo plano",
     "task": {
       "collections": "Descargando colecciones",
       "bible": "Descargando Biblia"
-    }
+    },
+    "bundle_check": "Verificando base de datos...",
+    "bundle_downloading": "Descargando base de datos...",
+    "bundle_extracting": "Extrayendo archivos...",
+    "bundle_injecting": "Inyectando datos en la base...",
+    "bundle_preparing": "Preparando...",
+    "bundle_retry": "Intento {attempt}/{max}",
+    "bundle_error": "No se pudo descargar la base de datos. Verifique su conexión a internet e intente de nuevo.",
+    "bundle_error_title": "Error al descargar base de datos",
+    "bundle_error_hint": "Puede hacerlo manualmente en: Opciones → Actualizar → Base de datos",
+    "bundle_importing_albums": "Importando álbumes...",
+    "bundle_importing_musics": "Importando músicas...",
+    "bundle_importing_bible": "Importando Biblias...",
+    "bundle_importing_catalog": "Importando catálogo...",
+    "bundle_importing_extras": "Importando complementos..."
   },
   "accessibility": {
     "title": "Accesibilidad — Libras",

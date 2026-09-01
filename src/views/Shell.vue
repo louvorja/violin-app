@@ -44,6 +44,102 @@
       @dont-show-again="onUpdateDialogDontShowAgain"
       @close="onUpdateDialogClose"
     />
+
+    <!-- Bundle download overlay (before startup check) -->
+    <v-overlay v-model="bundleLoading" class="align-center justify-center" persistent>
+      <v-card class="pa-5" max-width="540">
+        <div class="d-flex flex-column ga-4">
+          <div class="d-flex align-center ga-3">
+            <v-progress-circular indeterminate color="primary" size="32" />
+            <span class="text-body-1 font-weight-medium">
+              {{ t("startup_check.bundle_downloading") }}
+            </span>
+          </div>
+          <v-progress-linear
+            :model-value="
+              sync.bundleProgress.value.total > 0
+                ? Math.round(
+                    (sync.bundleProgress.value.current / sync.bundleProgress.value.total) * 100
+                  )
+                : 0
+            "
+            color="primary"
+            height="8"
+            rounded
+          />
+          <div class="d-flex justify-space-between text-caption text-medium-emphasis">
+            <span v-if="sync.bundleProgress.value.total > 0">
+              {{
+                Math.round(
+                  (sync.bundleProgress.value.current / sync.bundleProgress.value.total) * 100
+                )
+              }}%
+            </span>
+            <span v-else>{{ t("startup_check.bundle_preparing") }}</span>
+            <span
+              v-if="sync.bundleProgress.value.detail"
+              class="text-truncate ml-2"
+              style="max-width: 260px"
+            >
+              {{ bundleDetailLabel(sync.bundleProgress.value.detail) }}
+            </span>
+          </div>
+          <div v-if="bundleRetryAttempt > 1" class="text-caption text-medium-emphasis text-center">
+            {{
+              t("startup_check.bundle_retry", { attempt: bundleRetryAttempt, max: bundleRetryMax })
+            }}
+          </div>
+        </div>
+
+        <v-divider class="my-3" />
+
+        <v-card-actions>
+          <v-btn
+            variant="text"
+            prepend-icon="mdi-window-minimize"
+            size="small"
+            @click="bundleLoading = false"
+          >
+            {{ t("startup_check.minimize") }}
+          </v-btn>
+          <v-spacer />
+          <v-btn
+            variant="outlined"
+            color="error"
+            prepend-icon="mdi-stop"
+            size="small"
+            @click="onBundleCancel"
+          >
+            {{ t("options.collections_download.cancel") }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-overlay>
+
+    <!-- Bundle error dialog -->
+    <v-dialog v-model="bundleErrorOpen" max-width="420" persistent :scrim="true">
+      <v-card>
+        <v-toolbar color="transparent" density="compact" class="px-2 pt-2">
+          <v-icon icon="mdi-alert-circle" color="error" class="mr-2" />
+          <v-toolbar-title class="text-body-1 font-weight-bold">
+            {{ t("startup_check.bundle_error_title") }}
+          </v-toolbar-title>
+        </v-toolbar>
+        <v-divider />
+        <v-card-text>
+          <p class="text-body-2">{{ bundleError }}</p>
+          <p class="text-caption text-medium-emphasis mt-2">
+            {{ t("startup_check.bundle_error_hint") }}
+          </p>
+        </v-card-text>
+        <v-card-actions class="pa-4">
+          <v-spacer />
+          <v-btn variant="outlined" prepend-icon="mdi-check" @click="bundleErrorOpen = false">
+            {{ t("actions.close") }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-app>
 </template>
 
@@ -82,12 +178,15 @@ import type { BibleSearchResult } from "@/types/Bible";
 import { registerShell } from "@/composables/useShell";
 import { useFileProjection } from "@/composables/useFileProjection";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
+import { useSyncManager } from "@/composables/useSyncManager";
 import { COLOR_THEMES } from "@/config/Theme";
+import BundleInstaller from "@/helpers/BundleInstaller";
 
 const { locale, t } = useI18n();
 const vuetifyTheme = useTheme();
 const display = useDisplay();
 const bgTasks = useBackgroundTasks();
+const sync = useSyncManager();
 
 const cmdPaletteOpen = ref(false);
 const musicSearchOpen = ref(false);
@@ -95,6 +194,12 @@ const bibleSearchOpen = ref(false);
 const hotkeysOpen = ref(false);
 const startupCheckOpen = ref(false);
 const classicCheckOpen = ref(false);
+const bundleLoading = ref(false);
+const bundleCancelled = ref(false);
+const bundleRetryAttempt = ref(1);
+const bundleRetryMax = ref(3);
+const bundleError = ref<string | null>(null);
+const bundleErrorOpen = ref(false);
 const releaseNotesOpen = ref(false);
 const updateDialogOpen = ref(false);
 const updateDialogVersion = ref("");
@@ -157,7 +262,15 @@ let _startupCheckTimeout: ReturnType<typeof setTimeout> | null = null;
 // Quando o startup check fecha, verificar se há versão clássica no Windows
 watch(startupCheckOpen, (isOpen, wasOpen) => {
   if (wasOpen && !isOpen) {
-    _showPendingClassicCheck();
+    if (!_showPendingClassicCheck()) {
+      _showPendingReleaseNotes();
+    }
+  }
+});
+
+watch(classicCheckOpen, (isOpen, wasOpen) => {
+  if (wasOpen && !isOpen) {
+    _showPendingReleaseNotes();
   }
 });
 
@@ -165,12 +278,9 @@ function _openUpdatesScreen() {
   window.dispatchEvent(new CustomEvent("louvorja:open-updates"));
 }
 
-// Mostra release notes se pendente, senão segue para startup check.
+// Mostra release notes se pendente.
 function _showPendingReleaseNotes() {
-  if (!_pendingReleaseNotes) {
-    _showPendingStartupCheck();
-    return;
-  }
+  if (!_pendingReleaseNotes) return;
   _pendingReleaseNotes = false;
   const skippedNotesVersion = $userdata.get<string | null>(
     KEYS.OPTIONS.SKIP_RELEASE_NOTES_VERSION,
@@ -178,26 +288,101 @@ function _showPendingReleaseNotes() {
   );
   if (skippedNotesVersion !== packageJson.version) {
     releaseNotesOpen.value = true;
-  } else {
-    _showPendingStartupCheck();
   }
 }
 
-function _showPendingStartupCheck() {
+async function _showPendingStartupCheck() {
+  if (!Platform.isDesktop) return;
+
   const skip = $userdata.get<boolean>(KEYS.OPTIONS.SKIP_STARTUP_CHECK, false);
-  if (!skip) {
-    startupCheckOpen.value = true;
-  } else {
-    _showPendingClassicCheck();
+  if (skip) {
+    if (!_showPendingClassicCheck()) {
+      _showPendingReleaseNotes();
+    }
+    return;
+  }
+
+  const needsBundle = await _checkBundleNeeded();
+  if (needsBundle) {
+    const ok = await _showPendingBundleDownload();
+    if (!ok) return;
+  }
+
+  startupCheckOpen.value = true;
+}
+
+async function _checkBundleNeeded(): Promise<boolean> {
+  try {
+    const remote = await BundleInstaller.fetchRemoteConfig();
+    console.info("[Shell] bundle check → remote version:", remote?.version_number ?? "null");
+    if (!remote) {
+      console.warn("[Shell] bundle check → remote inacessível — tentando baixar bundle");
+      return true;
+    }
+
+    const installed = await BundleInstaller.isBundleInstalled(remote.version_number);
+    console.info("[Shell] bundle check → installed for v" + remote.version_number + ":", installed);
+    return !installed;
+  } catch (e) {
+    console.warn("[Shell] bundle check erro — assumindo bundle necessário:", e);
+    return true;
   }
 }
 
-function _showPendingClassicCheck() {
-  if (!Platform.isDesktop || Platform.platform !== "win32") return;
+/** Bundle download com retry (3x) + overlay bloqueante. Retorna true se OK, false se falhou/cancelou. */
+async function _showPendingBundleDownload(): Promise<boolean> {
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY_MS = 2000;
+
+  bundleCancelled.value = false;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    bundleLoading.value = true;
+    bundleRetryAttempt.value = attempt;
+    bundleRetryMax.value = MAX_RETRIES;
+    bundleError.value = null;
+
+    const ok = await sync.downloadBundle();
+    bundleLoading.value = false;
+
+    if (ok) return true;
+
+    if (bundleCancelled.value) {
+      console.info("[Shell] bundle download cancelado pelo usuário");
+      return false;
+    }
+
+    if (attempt < MAX_RETRIES) {
+      await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+    }
+  }
+
+  bundleError.value = t("startup_check.bundle_error");
+  bundleErrorOpen.value = true;
+  return false;
+}
+
+function onBundleCancel(): void {
+  bundleCancelled.value = true;
+  sync.cancelBundle();
+}
+
+function bundleDetailLabel(detail: string): string {
+  if (!detail) return "";
+  if (detail.startsWith("album_")) return t("startup_check.bundle_importing_albums");
+  if (detail.startsWith("music_")) return t("startup_check.bundle_importing_musics");
+  if (detail.startsWith("bible_")) return t("startup_check.bundle_importing_bible");
+  if (/^(pt|es)_/.test(detail)) return t("startup_check.bundle_importing_catalog");
+  return t("startup_check.bundle_importing_extras");
+}
+
+function _showPendingClassicCheck(): boolean {
+  if (!Platform.isDesktop || Platform.platform !== "win32") return false;
   const skip = $userdata.get<boolean>(KEYS.OPTIONS.SKIP_CLASSIC_CHECK, false);
   const alreadyUsing = $userdata.get<boolean>(KEYS.OPTIONS.USE_CLASSIC_DIR, false);
-  if (skip || alreadyUsing) return;
+  if (skip || alreadyUsing) return false;
   classicCheckOpen.value = true;
+  return true;
 }
 
 function _handleUpdaterState(
@@ -242,8 +427,8 @@ function _handleUpdaterState(
         updateDialogVersion.value = state.newVersion || "";
         updateDialogOpen.value = true;
       } else {
-        // Versão dispensada → seguir para release notes
-        _showPendingReleaseNotes();
+        // Versão dispensada → seguir para a verificação inicial
+        _showPendingStartupCheck();
       }
     } else if (_startupCheckPending && autoDownload) {
       // Auto-download ativo: download já começou, não mostrar dialog
@@ -254,16 +439,15 @@ function _handleUpdaterState(
     $appdata.set(KEYS.SHELL.APP_UPDATE_AVAILABLE, true);
     $appdata.set(KEYS.SHELL.APP_UPDATE_VERSION, state.newVersion || "");
     // Download manual via dialog → o dialog já mostra o estado "instalar";
-    // não reabrir as notas por cima. Só encadeia para release notes quando
-    // o download foi automático (dialog não aberto).
+    // não reabrir as notas por cima. Segue para a verificação inicial.
     if (!updateDialogOpen.value) {
-      _showPendingReleaseNotes();
+      _showPendingStartupCheck();
     }
   } else if (state.status === "not-available" || state.status === "error") {
     $appdata.set(KEYS.SHELL.APP_UPDATE_AVAILABLE, false);
     _startupCheckPending = false;
-    // Sem update → seguir para release notes
-    _showPendingReleaseNotes();
+    // Sem update → seguir para a verificação inicial
+    _showPendingStartupCheck();
   }
 }
 
@@ -291,9 +475,9 @@ async function _runStartupUpdateCheck() {
   // libera o fluxo de boot para não ficar preso esperando.
   _startupCheckTimeout = setTimeout(() => {
     if (_startupCheckPending) {
-      console.warn("[Shell] startup update check demorou demais — seguindo para release notes");
+      console.warn("[Shell] startup update check demorou demais — seguindo para startup check");
       _startupCheckPending = false;
-      _showPendingReleaseNotes();
+      _showPendingStartupCheck();
     }
   }, 15000);
 
@@ -304,18 +488,18 @@ async function _runStartupUpdateCheck() {
       $userdata.set(KEYS.OPTIONS.LAST_APP_CHECK, new Date().toISOString());
     } else if (res && !res.ok) {
       // Check falhou sem emitir estado (ex: erro no main). Segue o fluxo
-      // de boot para release notes/startup check não dependerem do updater.
+      // de boot para não depender do updater.
       console.warn("[Shell] startup update check retornou erro:", res?.error);
       if (_startupCheckPending) {
         _startupCheckPending = false;
-        _showPendingReleaseNotes();
+        _showPendingStartupCheck();
       }
     }
   } catch (e) {
     console.warn("[Shell] startup update check falhou:", e);
     if (_startupCheckPending) {
       _startupCheckPending = false;
-      _showPendingReleaseNotes();
+      _showPendingStartupCheck();
     }
   } finally {
     if (_startupCheckTimeout) {
@@ -341,13 +525,11 @@ function openBibleSearch() {
 
 defineExpose({ openCommandPalette, openHotkeysCheatsheet, openMusicSearch, openBibleSearch });
 
-// Ao fechar o modal de novidades: persiste a dispensa (se marcado) e segue
-// para o startup check de arquivos.
+// Ao fechar o modal de novidades: persiste a dispensa (se marcado).
 function onReleaseNotesClose(dontShowAgain = false) {
   if (dontShowAgain) {
     $userdata.set(KEYS.OPTIONS.SKIP_RELEASE_NOTES_VERSION, packageJson.version);
   }
-  _showPendingStartupCheck();
 }
 
 // Handler: iniciar download da atualização a partir do dialog
@@ -362,9 +544,9 @@ function onUpdateDialogDontShowAgain() {
   $userdata.set(KEYS.OPTIONS.SKIP_UPDATE_NOTIFICATION_VERSION, updateDialogVersion.value);
 }
 
-// Handler: dialog de update fechado (sem download) → seguir para release notes
+// Handler: dialog de update fechado (sem download) → seguir para startup check
 function onUpdateDialogClose() {
-  _showPendingReleaseNotes();
+  _showPendingStartupCheck();
 }
 
 // Registra ações do shell no composable (substitui `$appdata.set("shell._ref")`)
@@ -479,7 +661,7 @@ onMounted(() => {
       .catch((e: unknown) => console.warn("[Shell] status replay falhou:", e));
     _runStartupUpdateCheck();
   } else {
-    // Sem updater (web/PWA): release notes e startup check direto
+    // Sem updater (web/PWA): release notes direto
     _showPendingReleaseNotes();
   }
 

@@ -32,7 +32,14 @@
           <div class="d-flex flex-column ga-2">
             <!-- FTP -->
             <v-sheet class="d-flex align-center ga-3 pa-3 rounded" color="primary">
+              <v-progress-circular
+                v-if="sync.ftpChecking.value"
+                indeterminate
+                size="20"
+                color="primary"
+              />
               <v-icon
+                v-else
                 :icon="sync.ftpOk.value ? 'mdi-wifi' : 'mdi-wifi-off'"
                 :color="sync.ftpOk.value ? 'success' : 'error'"
                 size="20"
@@ -43,20 +50,38 @@
                 </div>
                 <div class="text-caption">
                   {{
-                    sync.ftpOk.value
-                      ? $t("options.collections_download.connected")
-                      : $t("options.collections_download.disconnected")
+                    sync.ftpChecking.value
+                      ? $t("options.collections_download.checking")
+                      : sync.ftpOk.value
+                        ? $t("options.collections_download.connected")
+                        : $t("options.collections_download.disconnected")
                   }}
                 </div>
               </div>
-              <v-chip :color="sync.ftpOk.value ? 'success' : 'error'" size="x-small" variant="flat">
+              <v-chip
+                :color="sync.ftpChecking.value ? 'default' : sync.ftpOk.value ? 'success' : 'error'"
+                size="x-small"
+                variant="flat"
+              >
                 {{
-                  sync.ftpOk.value
-                    ? $t("options.collections_download.connected")
-                    : $t("options.collections_download.disconnected")
+                  sync.ftpChecking.value
+                    ? $t("options.collections_download.checking")
+                    : sync.ftpOk.value
+                      ? $t("options.collections_download.connected")
+                      : $t("options.collections_download.disconnected")
                 }}
               </v-chip>
             </v-sheet>
+
+            <!-- Offline hint -->
+            <v-alert
+              v-if="!sync.ftpChecking.value && !sync.ftpOk.value"
+              type="warning"
+              variant="tonal"
+              density="compact"
+              icon="mdi-information-outline"
+              :text="$t('startup_check.offline_hint')"
+            />
 
             <!-- Collections: categories with albums -->
             <v-sheet class="pa-3 rounded">
@@ -223,6 +248,7 @@
           <v-btn
             variant="outlined"
             prepend-icon="mdi-checkbox-multiple-marked-outline"
+            :disabled="!canDownload"
             @click="view = 'details'"
           >
             {{ $t("startup_check.select_files") }}
@@ -231,6 +257,7 @@
             color="primary"
             variant="elevated"
             prepend-icon="mdi-download"
+            :disabled="!canDownload"
             @click="downloadAll"
           >
             {{ $t("startup_check.download_all") }}
@@ -316,6 +343,7 @@
             color="primary"
             variant="elevated"
             prepend-icon="mdi-download"
+            :disabled="!canDownload"
             @click="downloadSelected"
           >
             {{ $t("options.collections_download.start") }}
@@ -484,6 +512,8 @@ const scanData = ref<ScanData>({
 
 const sync = useSyncManager();
 
+const canDownload = computed(() => sync.ftpOk.value && !sync.ftpChecking.value);
+
 const downloadPercent = computed(() => {
   const total = sync.downloadProgress.value.total;
   if (total <= 0) return 0;
@@ -501,7 +531,10 @@ watch(
   () => props.modelValue,
   (v) => {
     model.value = v;
-    if (v) startScan();
+    if (v) {
+      view.value = "scanning";
+      startScan();
+    }
   }
 );
 
@@ -521,9 +554,9 @@ function minimizeToBackground(): void {
 }
 
 async function startScan(): Promise<void> {
-  view.value = "scanning";
-  const lang = $userdata.get("language", "pt") || "pt";
+  const lang = $userdata.get(KEYS.OPTIONS.LANGUAGE, "pt") || "pt";
 
+  view.value = "scanning";
   const result = await sync.runScan(lang);
 
   const total = result.categories.reduce(
@@ -546,6 +579,8 @@ async function startScan(): Promise<void> {
   selectedBibles.value = result.downloadedBibles;
 
   view.value = "summary";
+
+  sync.checkFtp();
 }
 
 function isCategoryFullySelected(cat: Category): boolean {
@@ -615,7 +650,7 @@ async function performDownload(
     }
 
     if (bibles.length > 0) {
-      const lang = $userdata.get("language", "pt") || "pt";
+      const lang = $userdata.get(KEYS.OPTIONS.LANGUAGE, "pt") || "pt";
       await sync.downloadBibleVersions(bibles, scanData.value.bibleVersions, lang);
     }
 
@@ -633,6 +668,7 @@ async function performDownload(
 
 onMounted(() => {
   if (model.value) {
+    view.value = "scanning";
     startScan();
   }
 });

@@ -245,9 +245,8 @@ sem alteração:
 são **rotas REST** da API (`{origin}/{lang}/collections/online`,
 `{origin}/{lang}/albums/category/doxology` e
 `{origin}/{lang}/albums/category/children`, onde origin é `VITE_URL_DATABASE`
-sem o sufixo `/json_db`) e não existem como arquivos em `/json_db`. O mesmo
-vale para o script `npm run jsondb`. Toda resposta 200 é injetada
-automaticamente no IDB via `writeRouted`.
+sem o sufixo `/json_db`) e não existem como arquivos em `/json_db`.
+Toda resposta 200 é injetada automaticamente no IDB via `writeRouted`.
 
 - **Registro de item**: `{ id: "{chave}:{id}", file, dataId, seq, data, ts, v }` —
   `seq` preserva a ordem do servidor na reconstrução; `v` (versão do app,
@@ -264,7 +263,34 @@ automaticamente no IDB via `writeRouted`.
   `invalidate("pt_musics")` apaga só as linhas daquele dataset (pt não afeta es).
   A tela **Opções → Atualizações** expõe os dois botões de limpeza.
   Em **Sincronizar → Armazenamento** fica o botão **Restaurar banco de dados**
-  (`Seed.restore()`: limpa tudo + reinjeta o pacote jsondb).
+  (`BundleInstaller.install({ force: true })`: baixa ZIP da API, extrai JSONs,
+  limpa 14 tabelas de catálogo e injeta dados novos).
+
+#### Bundle do banco de dados (`BundleInstaller.ts`)
+
+O app pode baixar todos os dados de catálogo de uma vez via bundle ZIP
+(`/db/bundle` da API), sem necessidade de fetch incremental por arquivo.
+O bundle contém 14 tabelas de catálogo (cache, musics, hymnal, hymnal_1996,
+albums, music_categories, doxology_albums, children_albums, online_videos,
+online_videos_channels, online_videos_playlists, bible_versions, bible_books,
+bible_chapters).
+
+**Fluxo:**
+1. `fetchBundle(signal)` — baixa o ZIP com headers de autenticação.
+2. `extractBundle(buffer, onProgress, signal)` — extrai JSONs via JSZip, mapeia
+   caminhos para chaves lógicas do banco.
+3. `clearBundleTables()` — limpa as 14 tabelas de catálogo (preserva dados de
+   módulos: settings, playlists, overlay, liturgy, etc.).
+4. `injectBundle(datasets, onProgress, signal)` — injeta cada dataset via
+   `$database.seed()`.
+
+**Pontos de uso:**
+- **StartupCheckDialog** (desktop): verifica se o catálogo de músicas está vazio
+  ou se a versão do bundle diverge da local → baixa bundle antes do scan.
+- **AppMenuAtualizacoes** (desktop): botão "Aplicar" baixa bundle quando há
+  versão nova; botão "Reinstalar banco" faz `force: true`.
+- **AppMenuSincronizar** (desktop): botão "Restaurar banco de dados" faz
+  `force: true` + reload da página.
 
 #### Pacote jsondb empacotado + seed inicial (`Seed.ts`)
 
@@ -349,6 +375,7 @@ Helpers principais:
 | `ProjectionWindows.ts` | Abre/fecha janelas por feature (monitor-aware)                               |
 | `IndexedDB.ts`         | CRUD unificado no IndexedDB                                                  |
 | `Database.ts`          | JSONs do banco com cache em camadas (memória → IDB → rede) e stale-if-error  |
+| `BundleInstaller.ts`   | Download/extract/inject de bundle ZIP do banco (14 tabelas de catálogo)       |
 | `ImageConvert.ts`      | HEIC/HEIF → JPEG (`heic2any`) na importação                                  |
 | `SljaConverter.js`     | Import/export `.slja` do editor legado Delphi (JSZip + INI)                  |
 | `SettingsStorage.ts`   | CRUD na tabela `settings` do IDB                                             |
@@ -364,7 +391,7 @@ Composables principais:
 |------------------------|--------------------------------------------------------------------------------------------|
 | `useMedia`             | Player de áudio/vídeo/youtube — sincronização de slides, crossfade, broadcast              |
 | `useBackgroundTasks`   | Singleton — gerencia tarefas de download em segundo plano (progresso, cancel, dismiss)     |
-| `useSyncManager`       | Downloads de coletâneas (FTP → HttpQueue) e bíblia (HTTP sequencial) + scan de integridade |
+| `useSyncManager`       | Downloads de coletâneas (FTP → HttpQueue), bíblia (HTTP sequencial), bundle do banco (ZIP) + scan de integridade |
 | `useBroadcastListener` | Listener de BroadcastChannel com cleanup automático via `onUnmounted`                      |
 | `useBroadcastSender`   | Envio de mensagens via BroadcastChannel                                                    |
 | `useFileProjection`    | Barra de controle de projeção de arquivos (mini-player no footer)                          |
@@ -508,7 +535,7 @@ fechamento do diálogo de origem. É composto por:
   independentemente do lifecycle dos componentes.
 - **`ShellTools.vue`** — botão `mdi-progress-download` com `v-badge` (contagem)
   e `v-menu` com lista de tarefas, barras de progresso e botões de cancelamento/dismiss.
-- **`useSyncManager.ts`** — registra tarefas (`sync-collections`, `sync-bible`) no singleton
+- **`useSyncManager.ts`** — registra tarefas (`sync-collections`, `sync-bible`, `db-bundle`) no singleton
   ao iniciar downloads. Atualiza progresso via callbacks IPC e refs.
 - **`Shell.vue`** — registra tarefa `app-update` quando o updater entra em `status: "downloading"`.
 
@@ -1056,9 +1083,14 @@ src/
 │   ├── ImageFileExts.ts      # Re-export de IMAGE_EXT (compatibilidade legada)
 │   ├── Projection.ts         # Constantes de projeção
 │   └── UserDataKeys.ts       # Chaves de user_data
+├── types/
+│   ├── Database.ts           # DbConfig, BundleProgress
+│   └── Music.ts              # Playlist, PlaylistSong
 ├── helpers/                  # Utilitários
 │   ├── Broadcast.ts / BroadcastTypes.ts
 │   ├── IndexedDB.ts
+│   ├── Database.ts
+│   ├── BundleInstaller.ts
 │   ├── FilePicker.ts
 │   ├── SettingsStorage.ts
 │   ├── Snackbar.ts           # Snackbar global (suporta action opcional)

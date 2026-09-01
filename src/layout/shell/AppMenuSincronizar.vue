@@ -526,12 +526,26 @@
                 v-if="Platform.isDesktop"
                 type="button"
                 class="opt-btn"
-                :disabled="restoringDb"
+                :disabled="restoringDb || sync.bundleInstalling.value"
                 @click="restoreDatabase"
               >
                 <v-icon icon="mdi-database-refresh" size="14" class="mr-1" />
                 {{ $t("options.storage.restore_db") }}
               </button>
+            </div>
+            <div v-if="sync.bundleInstalling.value" class="mt-2">
+              <v-progress-linear
+                :model-value="
+                  sync.bundleProgress.value.total > 0
+                    ? Math.round(
+                        (sync.bundleProgress.value.current / sync.bundleProgress.value.total) * 100
+                      )
+                    : 0
+                "
+                color="primary"
+                height="6"
+                rounded
+              />
             </div>
           </section>
         </v-window-item>
@@ -553,7 +567,6 @@ import { useSyncManager } from "@/composables/useSyncManager";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
 import ProgressBar from "@/components/ProgressBar.vue";
 import $snackbar from "@/helpers/Snackbar";
-import Seed from "@/helpers/Seed";
 import type { BibleVersion } from "@/types/Bible";
 
 /* ---- Tipos ---- */
@@ -1132,15 +1145,18 @@ async function clearFiles(): Promise<void> {
 
 const restoringDb = ref(false);
 
-/** Restaura o banco: limpa as tabelas do IndexedDB e reinjeta os JSONs empacotados. */
+/** Restaura o banco: baixa o bundle da API e injeta no IndexedDB. */
 async function restoreDatabase(): Promise<void> {
   $alert.yesno("options.storage.restore_db_confirm", (async (btn) => {
     if (btn !== "yes" || restoringDb.value) return;
     restoringDb.value = true;
     try {
-      await Seed.restore();
-      $snackbar.success(t("options.storage.restore_db_done"));
-      await reloadStats();
+      const ok = await sync.downloadBundle({ force: true });
+      if (ok) {
+        $snackbar.success(t("options.storage.restore_db_done"));
+        await new Promise<void>((r) => setTimeout(r, 1000));
+        window.location.reload();
+      }
     } catch (e) {
       console.error("[Sincronizar] restoreDatabase:", e);
       $alert.error({ text: t("options.storage.restore_db_error") });
