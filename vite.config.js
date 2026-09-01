@@ -139,8 +139,8 @@ export default async ({ mode }) => {
           runtimeCaching,
         },
         manifest: {
-          name: "LouvorJA",
-          short_name: "LouvorJA",
+          name: "LouvorJA Violin",
+          short_name: "LouvorJA Violin",
           description: "Software de músicas para Louvor e Adoração",
           start_url: process.env.VITE_BASE_URL ?? "/",
           display: "standalone",

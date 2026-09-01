@@ -11,7 +11,7 @@ const fs = require("fs-extra");
 let _filesDirOverride = null;
 
 module.exports = {
-  /** Diretório de dados do usuário (%APPDATA%/LouvorJA no Windows) */
+  /** Diretório de dados do usuário (%APPDATA%/LouvorJA Violin no Windows) */
   userData() {
     return app.getPath("userData");
   },
@@ -42,9 +42,9 @@ module.exports = {
    *  - usuário pode escolher Documents (ou qualquer pasta) em
    *    "Configurações → Armazenamento"
    *
-   * Compat: se já existe `Documents/LouvorJA` de uma instalação anterior,
-   * continua usando para não perder dados — só faz fallback para userData
-   * em instalações novas.
+   * Compat: se já existe `Documents/LouvorJA Violin` de uma instalação
+   * anterior, continua usando para não perder dados. Instalações antigas em
+   * `Documents/LouvorJA` ainda são aceitas como fallback.
    */
   filesDir() {
     if (_filesDirOverride) return _filesDirOverride;
@@ -52,9 +52,13 @@ module.exports = {
     const userDataDir = path.join(app.getPath("userData"), "files");
 
     try {
-      const docsDir = path.join(app.getPath("documents"), "LouvorJA");
+      const docsDir = path.join(app.getPath("documents"), "LouvorJA Violin");
       if (fs.existsSync(docsDir) && fs.statSync(docsDir).isDirectory()) {
         return docsDir;
+      }
+      const legacyDocsDir = path.join(app.getPath("documents"), "LouvorJA");
+      if (fs.existsSync(legacyDocsDir) && fs.statSync(legacyDocsDir).isDirectory()) {
+        return legacyDocsDir;
       }
     } catch (_) {
       /* documents inacessível — segue para userData */

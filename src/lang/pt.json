@@ -315,7 +315,7 @@
       "app_downloaded_to": "Arquivo baixado em {path}. Instalar agora?",
       "app_asset_missing": "Não foi possível baixar o instalador automaticamente. Abrir a página de downloads?",
       "app_available_snackbar": "Nova versão v{version} disponível. Clique para atualizar.",
-      "update_dialog_description": "Uma nova versão do LouvorJA está disponível. Deseja atualizar agora?",
+      "update_dialog_description": "Uma nova versão do LouvorJA Violin está disponível. Deseja atualizar agora?",
       "update_now": "Atualizar",
       "later": "Depois",
       "download_manually": "Baixar manualmente",

@@ -2,7 +2,7 @@
 # Docs: https://www.electron.build/configuration/configuration
 
 appId: br.com.louvorja.app
-productName: LouvorJA
+productName: LouvorJA Violin
 
 # Entry point do main process (referenciado em package.json "main")
 extraMetadata:
@@ -89,7 +89,7 @@ nsis:
   # Criar atalho no menu iniciar
   createStartMenuShortcut: true
   # Nome do atalho
-  shortcutName: LouvorJA
+  shortcutName: LouvorJA Violin
   # Idioma principal do instalador: 1046 = Portuguese (Brazil)
   language: "1046"
   # Suporte a múltiplos idiomas no instalador

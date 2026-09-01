@@ -254,7 +254,7 @@ app.whenReady().then(async () => {
     if (e && e.portExhausted) {
       await dialog.showMessageBox({
         type: "error",
-        title: "LouvorJA",
+        title: "LouvorJA Violin",
         message: "Não foi possível iniciar o aplicativo.",
         detail: "Não foi possível reservar uma porta no computador. Feche o aplicativo e tente novamente.",
         buttons: ["OK"],

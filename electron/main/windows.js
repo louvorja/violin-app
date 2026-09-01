@@ -31,7 +31,7 @@ function createMainWindow(devUrl, prodHtmlPath, preloadPath, httpBaseUrl) {
     height: 800,
     minWidth: 900,
     minHeight: 600,
-    title: "LouvorJA",
+    title: "LouvorJA Violin",
     icon: iconPath,
     show: false, // Mostrar só quando pronto (evita flash branco)
     backgroundColor: "#1b2a41",

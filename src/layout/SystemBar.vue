@@ -88,11 +88,11 @@ const activeModuleId = computed(() => {
 });
 
 const title = computed(() => {
-  if (!activeModuleId.value) return "Louvor JA";
+  if (!activeModuleId.value) return "Louvor JA Violin";
   const key = `modules.${activeModuleId.value}.title`;
   const translated = t(key);
   const moduleTitle = translated === key ? activeModuleId.value.replace(/_/g, " ") : translated;
-  return `${moduleTitle} - Louvor JA`;
+  return `${moduleTitle} - Louvor JA Violin`;
 });
 
 function minimize() {
