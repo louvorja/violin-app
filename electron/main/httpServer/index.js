@@ -259,6 +259,7 @@ async function start({ port, mainWindow } = {}) {
     isDev: _isDev(),
     distDir: paths.webBuild(),
     getToken: () => _token,
+    getUserData: () => getUserData(),
   });
 
   return new Promise((resolve, reject) => {

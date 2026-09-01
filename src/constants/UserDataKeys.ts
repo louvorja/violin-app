@@ -270,6 +270,7 @@ export const KEYS = {
       DEVTOOLS_MAIN_WINDOW: `${OPTIONS}.dev.devtools_main_window`,
       DEVTOOLS_PROJECTIONS: `${OPTIONS}.dev.devtools_projections`,
       LOGS_TERMINAL: `${OPTIONS}.dev.logs_terminal`,
+      ALLOW_HTTP_ROOT: `${OPTIONS}.dev.allow_http_root`,
     },
     ONLINE_VIDEO_PROJECTION: {
       ALWAYS_ON_TOP: `${OPTIONS_ONLINE_VIDEO_PROJECTION}.always_on_top`,

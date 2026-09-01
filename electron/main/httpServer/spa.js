@@ -30,7 +30,6 @@ const DEV_VITE_PORT = 5002;
 // Rotas servidas pela SPA — qualquer coisa fora daqui (/api, /events) é
 // tratada por outros middlewares antes deste.
 const SPA_ROUTES = new Set([
-  "/",
   "/obs",
   "/obs/bible",
   "/projection",
@@ -94,6 +93,15 @@ function _injectMinimalBridge(html) {
     return cleaned.replace("</head>", script + "</head>");
   }
   return script + cleaned;
+}
+
+function _allowHttpRoot(getUserData) {
+  try {
+    const userData = typeof getUserData === "function" ? (getUserData() || {}) : {};
+    return !!userData?.options?.dev?.allow_http_root;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -273,9 +281,9 @@ function _carryToken(req) {
  * Instala o middleware SPA no app Express.
  *
  * @param {import('express').Application} app
- * @param {{ isDev: boolean, distDir: string, getToken: () => string|null }} opts
+ * @param {{ isDev: boolean, distDir: string, getToken: () => string|null, getUserData?: () => Record<string, unknown> }} opts
  */
-function install(app, { isDev, distDir, getToken }) {
+function install(app, { isDev, distDir, getToken, getUserData }) {
   _setupAliases(app);
 
   if (isDev) {
@@ -285,6 +293,9 @@ function install(app, { isDev, distDir, getToken }) {
     // disponíveis em /src/, /node_modules/, /@vite/, /@id/ etc.
     app.use((req, res, next) => {
       if (req.path.startsWith("/api/") || req.path === "/events") return next();
+      if (req.path === "/" && !_allowHttpRoot(getUserData)) {
+        return res.status(404).send("A rota raiz do servidor HTTP está desativada em desenvolvimento.");
+      }
       return proxy(req, res);
     });
     return;
@@ -317,6 +328,9 @@ function install(app, { isDev, distDir, getToken }) {
   app.use((req, res, next) => {
     if (req.method !== "GET") return next();
     if (req.path.startsWith("/api/") || req.path === "/events") return next();
+    if (req.path === "/") {
+      return res.status(404).send("A rota raiz do servidor HTTP está desativada.");
+    }
     if (req.path.includes(".")) return next(); // arquivo estático ausente → 404 do express.static
     return indexHandler(req, res);
   });

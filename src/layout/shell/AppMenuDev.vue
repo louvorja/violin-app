@@ -27,6 +27,13 @@
 
       <div class="opt-row">
         <label class="opt-checkbox">
+          <input type="checkbox" :checked="allowHttpRoot" @change="setAllowHttpRoot($c($event))" />
+          <span>{{ $t("options.dev.allow_http_root") }}</span>
+        </label>
+      </div>
+
+      <div class="opt-row">
+        <label class="opt-checkbox">
           <input type="checkbox" :checked="logsTerminal" @change="setLogsTerminal($c($event))" />
           <span>{{ $t("options.dev.logs_terminal") }}</span>
         </label>
@@ -121,6 +128,7 @@ function getUserData<T = unknown>(key: string, defaultValue?: T): T {
 
 const devtoolsMainWindow = ref(getUserData<boolean>(KEYS.OPTIONS.DEV.DEVTOOLS_MAIN_WINDOW, true));
 const devtoolsProjections = ref(getUserData<boolean>(KEYS.OPTIONS.DEV.DEVTOOLS_PROJECTIONS, true));
+const allowHttpRoot = ref(getUserData<boolean>(KEYS.OPTIONS.DEV.ALLOW_HTTP_ROOT, false));
 const logsTerminal = ref(getUserData<boolean>(KEYS.OPTIONS.DEV.LOGS_TERMINAL, true));
 const showLibrasText = ref(getUserData<boolean>(KEYS.MODULES.LIBRAS.SHOW_TEXT, false));
 
@@ -136,6 +144,11 @@ function setDevtoolsMainWindow(v: boolean): void {
 function setDevtoolsProjections(v: boolean): void {
   devtoolsProjections.value = v;
   $userdata.set(KEYS.OPTIONS.DEV.DEVTOOLS_PROJECTIONS, v);
+}
+
+function setAllowHttpRoot(v: boolean): void {
+  allowHttpRoot.value = v;
+  $userdata.set(KEYS.OPTIONS.DEV.ALLOW_HTTP_ROOT, v);
 }
 
 function setLogsTerminal(v: boolean): void {

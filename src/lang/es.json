@@ -488,6 +488,7 @@
       "section_devtools": "Herramientas de Desarrollador",
       "devtools_main_window": "Abrir DevTools en la ventana principal al iniciar",
       "devtools_projections": "Abrir DevTools en nuevas ventanas de proyección",
+      "allow_http_root": "Permitir la ruta raíz del servidor HTTP",
       "logs_terminal": "Enviar logs del renderer (warn/error) a la terminal",
       "show_libras_text": "Mostrar texto de la traducción Libras en la proyección",
       "section_actions": "Acciones",
