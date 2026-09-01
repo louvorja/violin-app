@@ -132,29 +132,30 @@
             <v-icon icon="mdi-broom" size="14" class="mr-1" />
             {{ $t("options.storage.clear_cache_collections") }}
           </button>
-          <button type="button" class="opt-btn" :disabled="dbBackupBusy" @click="exportDatabase">
-            <v-icon icon="mdi-download" size="14" class="mr-1" />
-            {{ $t("options.updates.export_db") }}
-          </button>
-          <button
-            type="button"
-            class="opt-btn"
-            :disabled="dbBackupBusy"
-            @click="pickImportDatabase"
-          >
-            <v-icon icon="mdi-upload" size="14" class="mr-1" />
-            {{ $t("options.updates.import_db") }}
-          </button>
-          <button
-            v-if="isDesktop"
-            type="button"
-            class="opt-btn"
-            :disabled="dbBackupBusy || sync.bundleInstalling.value"
-            @click="reinstallDatabase"
-          >
-            <v-icon icon="mdi-database-refresh" size="14" class="mr-1" />
-            {{ $t("options.updates.reinstall_db") }}
-          </button>
+          <template v-if="isDesktop">
+            <button type="button" class="opt-btn" :disabled="dbBackupBusy" @click="exportDatabase">
+              <v-icon icon="mdi-download" size="14" class="mr-1" />
+              {{ $t("options.updates.export_db") }}
+            </button>
+            <button
+              type="button"
+              class="opt-btn"
+              :disabled="dbBackupBusy"
+              @click="pickImportDatabase"
+            >
+              <v-icon icon="mdi-upload" size="14" class="mr-1" />
+              {{ $t("options.updates.import_db") }}
+            </button>
+            <button
+              type="button"
+              class="opt-btn"
+              :disabled="dbBackupBusy || sync.bundleInstalling.value"
+              @click="reinstallDatabase"
+            >
+              <v-icon icon="mdi-database-refresh" size="14" class="mr-1" />
+              {{ $t("options.updates.reinstall_db") }}
+            </button>
+          </template>
         </div>
         <input
           ref="importFileInput"

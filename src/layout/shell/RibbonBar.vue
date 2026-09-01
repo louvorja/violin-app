@@ -41,160 +41,204 @@
           <component :is="group.customCategory" v-bind="getCustomComponentProps(group)" />
         </template>
         <template v-else>
-          <template
-            v-for="btn in group.buttons"
-            :key="`${ribbonStore.activePage}:${group.id}:${btn.id}`"
+          <div
+            v-if="largeButtons(group).length"
+            class="ribbon-group-track ribbon-group-track--large"
           >
-            <component
-              :is="btn.customButton"
-              v-if="btn.customButton"
-              v-bind="getCustomComponentProps(group, btn)"
-            />
-            <RibbonScreenButton
-              v-else-if="btn.type === 'screen'"
-              :feature="btn.feature"
-              :route="btn.route"
-              :icon-color="resolveBtnColor(btn)"
-              :label="$t(btn.label)"
-              :size="btn.size || 'large'"
-              :testid="`ribbon-btn-${btn.id}`"
-            />
-            <div v-else-if="btn.type === 'action_input'" class="ribbon-action-input">
-              <label v-if="btn.inputType === 'time'" class="ribbon-field-label">
-                {{ $t(btn.label) }}
-              </label>
-              <input
-                v-model="inputValues[btn.id]"
-                :type="btn.inputType || 'text'"
-                class="ribbon-action-input__field"
-                :placeholder="$t(btn.placeholder || '')"
-                @keydown.enter.prevent="executeInputAction(btn)"
-                @change="btn.inputType === 'time' && executeInputAction(btn)"
-              />
-              <RibbonButtonComponent
-                v-if="btn.inputType !== 'time'"
-                :icon="btn.icon || ''"
-                :icon-color="resolveBtnColor(btn)"
-                :label="$t(btn.label)"
-                size="medium"
-                :testid="`ribbon-btn-${btn.id}`"
-                @click="executeInputAction(btn)"
-              />
-            </div>
-            <div
-              v-else-if="btn.type === 'select'"
-              v-show="isDependencyMet(btn)"
-              class="ribbon-field-wrap"
-              :data-testid="`ribbon-btn-${btn.id}`"
+            <template
+              v-for="btn in largeButtons(group)"
+              :key="`${ribbonStore.activePage}:${group.id}:${btn.id}`"
             >
-              <label class="ribbon-field-label">{{ $t(btn.label) }}</label>
-              <select
-                class="ribbon-field-select"
-                :value="getSelectValue(btn)"
-                @change="setSelectValue(btn, ($event.target as HTMLSelectElement)?.value)"
-              >
-                <option v-for="opt in btn.options || []" :key="opt.value" :value="opt.value">
-                  {{ $t(opt.label) }}
-                </option>
-                <option
-                  v-for="opt in btn.dynamicOptions ? dynamicSelectOptions[btn.dynamicOptions] : []"
-                  :key="opt.value"
-                  :value="opt.value"
-                >
-                  {{ opt.label }}
-                </option>
-                <template v-if="btn.feature">
-                  <option v-for="d in displays" :key="d.id" :value="d.id">
-                    {{ d.label || `Monitor ${d.id}` }}
-                  </option>
-                </template>
-              </select>
-            </div>
-            <div
-              v-else-if="btn.type === 'slider'"
-              v-show="isDependencyMet(btn)"
-              class="ribbon-field-wrap"
-              :data-testid="`ribbon-btn-${btn.id}`"
-            >
-              <label class="ribbon-field-label">{{ $t(btn.label) }}</label>
-              <div class="ribbon-slider-row">
-                <v-slider
-                  :model-value="getSelectValue(btn)"
-                  :min="btn.min ?? 0"
-                  :max="btn.max ?? 2000"
-                  :step="btn.step ?? 100"
-                  density="compact"
-                  hide-details
-                  class="ribbon-slider"
-                  thumb-label
-                  @update:model-value="setSelectValue(btn, $event)"
+              <div class="ribbon-group-item ribbon-group-item--full">
+                <component
+                  :is="btn.customButton"
+                  v-if="btn.customButton"
+                  v-bind="getCustomComponentProps(group, btn)"
                 />
-                <span class="ribbon-slider-value">{{ getSelectValue(btn) }}ms</span>
+                <RibbonScreenButton
+                  v-else-if="btn.type === 'screen'"
+                  :feature="btn.feature"
+                  :route="btn.route"
+                  :icon-color="resolveBtnColor(btn)"
+                  :label="$t(btn.label)"
+                  :size="btn.size || 'large'"
+                  :testid="`ribbon-btn-${btn.id}`"
+                />
+                <RibbonButtonComponent
+                  v-else
+                  v-show="isDependencyMet(btn)"
+                  :icon="resolveBtnIcon(btn)"
+                  :icon-color="resolveBtnColor(btn)"
+                  :label="$t(resolveBtnLabel(btn))"
+                  :size="btn.size || 'large'"
+                  :active="isButtonActive(btn)"
+                  :hidden="!isButtonActive(btn)"
+                  :disabled="btn.disabled"
+                  :testid="`ribbon-btn-${btn.id}`"
+                  @click="executeButton(btn)"
+                />
               </div>
-            </div>
-            <div
-              v-else-if="btn.type === 'number'"
-              v-show="isDependencyMet(btn)"
-              class="ribbon-field-wrap"
-              :data-testid="`ribbon-btn-${btn.id}`"
+            </template>
+          </div>
+
+          <div
+            v-if="compactButtons(group).length"
+            class="ribbon-group-track"
+            :class="getCompactTrackClass()"
+          >
+            <template
+              v-for="btn in compactButtons(group)"
+              :key="`${ribbonStore.activePage}:${group.id}:${btn.id}`"
             >
-              <label class="ribbon-field-label">{{ $t(btn.label) }}</label>
-              <input
-                class="ribbon-field-number"
-                type="number"
-                :min="btn.min"
-                :max="btn.max"
-                :step="btn.step ?? 1"
-                :value="getSelectValue(btn)"
-                @change="setSelectValue(btn, ($event.target as HTMLSelectElement)?.value)"
-              />
-            </div>
-            <label v-else-if="btn.type === 'checkbox'" class="ribbon-field-checkbox">
-              <input
-                type="checkbox"
-                :checked="getCheckValue(btn)"
-                @change="setCheckValue(btn, ($event.target as HTMLInputElement).checked)"
-              />
-              <span>{{ $t(btn.label) }}</span>
-            </label>
-            <div
-              v-else-if="btn.type === 'switch'"
-              class="ribbon-switch"
-              :data-testid="`ribbon-btn-${btn.id}`"
-            >
-              <v-switch
-                :model-value="getCheckValue(btn)"
-                density="compact"
-                size="small"
-                hide-details
-                :label="$t(btn.label)"
-                color="primary"
-                class="ribbon-field-switch"
-                true-icon="mdi-check"
-                false-icon="mdi-close"
-                @update:model-value="setCheckValue(btn, $event)"
+              <div
+                class="ribbon-group-item ribbon-group-item--compact"
+                :class="getRibbonItemClass(btn)"
               >
-                <template #label>
-                  <span class="ribbon-field-switch">
+                <component
+                  :is="btn.customButton"
+                  v-if="btn.customButton"
+                  v-bind="getCustomComponentProps(group, btn)"
+                />
+                <div v-else-if="btn.type === 'action_input'" class="ribbon-action-input">
+                  <label v-if="btn.inputType === 'time'" class="ribbon-field-label">
                     {{ $t(btn.label) }}
-                  </span>
-                </template>
-              </v-switch>
-            </div>
-            <RibbonButtonComponent
-              v-else
-              v-show="isDependencyMet(btn)"
-              :icon="resolveBtnIcon(btn)"
-              :icon-color="resolveBtnColor(btn)"
-              :label="$t(resolveBtnLabel(btn))"
-              :size="btn.size || 'large'"
-              :active="isButtonActive(btn)"
-              :hidden="!isButtonActive(btn)"
-              :disabled="btn.disabled"
-              :testid="`ribbon-btn-${btn.id}`"
-              @click="executeButton(btn)"
-            />
-          </template>
+                  </label>
+                  <input
+                    v-model="inputValues[btn.id]"
+                    :type="btn.inputType || 'text'"
+                    class="ribbon-action-input__field"
+                    :placeholder="$t(btn.placeholder || '')"
+                    @keydown.enter.prevent="executeInputAction(btn)"
+                    @change="btn.inputType === 'time' && executeInputAction(btn)"
+                  />
+                  <RibbonButtonComponent
+                    v-if="btn.inputType !== 'time'"
+                    :icon="btn.icon || ''"
+                    :icon-color="resolveBtnColor(btn)"
+                    :label="$t(btn.label)"
+                    size="medium"
+                    :testid="`ribbon-btn-${btn.id}`"
+                    @click="executeInputAction(btn)"
+                  />
+                </div>
+                <div
+                  v-else-if="btn.type === 'select'"
+                  v-show="isDependencyMet(btn)"
+                  class="ribbon-field-wrap"
+                  :data-testid="`ribbon-btn-${btn.id}`"
+                >
+                  <label class="ribbon-field-label">{{ $t(btn.label) }}</label>
+                  <select
+                    class="ribbon-field-select"
+                    :value="getSelectValue(btn)"
+                    @change="setSelectValue(btn, ($event.target as HTMLSelectElement)?.value)"
+                  >
+                    <option v-for="opt in btn.options || []" :key="opt.value" :value="opt.value">
+                      {{ $t(opt.label) }}
+                    </option>
+                    <option
+                      v-for="opt in btn.dynamicOptions
+                        ? dynamicSelectOptions[btn.dynamicOptions]
+                        : []"
+                      :key="opt.value"
+                      :value="opt.value"
+                    >
+                      {{ opt.label }}
+                    </option>
+                    <template v-if="btn.feature">
+                      <option v-for="d in displays" :key="d.id" :value="d.id">
+                        {{ d.label || `Monitor ${d.id}` }}
+                      </option>
+                    </template>
+                  </select>
+                </div>
+                <div
+                  v-else-if="btn.type === 'slider'"
+                  v-show="isDependencyMet(btn)"
+                  class="ribbon-field-wrap"
+                  :data-testid="`ribbon-btn-${btn.id}`"
+                >
+                  <label class="ribbon-field-label">{{ $t(btn.label) }}</label>
+                  <div class="ribbon-slider-row">
+                    <v-slider
+                      :model-value="getSelectValue(btn)"
+                      :min="btn.min ?? 0"
+                      :max="btn.max ?? 2000"
+                      :step="btn.step ?? 100"
+                      density="compact"
+                      hide-details
+                      class="ribbon-slider"
+                      thumb-label
+                      @update:model-value="setSelectValue(btn, $event)"
+                    />
+                    <span class="ribbon-slider-value">{{ getSelectValue(btn) }}ms</span>
+                  </div>
+                </div>
+                <div
+                  v-else-if="btn.type === 'number'"
+                  v-show="isDependencyMet(btn)"
+                  class="ribbon-field-wrap"
+                  :data-testid="`ribbon-btn-${btn.id}`"
+                >
+                  <label class="ribbon-field-label">{{ $t(btn.label) }}</label>
+                  <input
+                    class="ribbon-field-number"
+                    type="number"
+                    :min="btn.min"
+                    :max="btn.max"
+                    :step="btn.step ?? 1"
+                    :value="getSelectValue(btn)"
+                    @change="setSelectValue(btn, ($event.target as HTMLSelectElement)?.value)"
+                  />
+                </div>
+                <label v-else-if="btn.type === 'checkbox'" class="ribbon-field-checkbox">
+                  <input
+                    type="checkbox"
+                    :checked="getCheckValue(btn)"
+                    @change="setCheckValue(btn, ($event.target as HTMLInputElement).checked)"
+                  />
+                  <span>{{ $t(btn.label) }}</span>
+                </label>
+                <div
+                  v-else-if="btn.type === 'switch'"
+                  class="ribbon-switch"
+                  :data-testid="`ribbon-btn-${btn.id}`"
+                >
+                  <v-switch
+                    :model-value="getCheckValue(btn)"
+                    density="compact"
+                    size="small"
+                    hide-details
+                    :label="$t(btn.label)"
+                    color="primary"
+                    class="ribbon-field-switch"
+                    true-icon="mdi-check"
+                    false-icon="mdi-close"
+                    @update:model-value="setCheckValue(btn, $event)"
+                  >
+                    <template #label>
+                      <span class="ribbon-field-switch">
+                        {{ $t(btn.label) }}
+                      </span>
+                    </template>
+                  </v-switch>
+                </div>
+                <RibbonButtonComponent
+                  v-else
+                  v-show="isDependencyMet(btn)"
+                  :icon="resolveBtnIcon(btn)"
+                  :icon-color="resolveBtnColor(btn)"
+                  :label="$t(resolveBtnLabel(btn))"
+                  :size="btn.size || 'small'"
+                  :active="isButtonActive(btn)"
+                  :hidden="!isButtonActive(btn)"
+                  :disabled="btn.disabled"
+                  :testid="`ribbon-btn-${btn.id}`"
+                  @click="executeButton(btn)"
+                />
+              </div>
+            </template>
+          </div>
         </template>
       </RibbonGroupComponent>
       <div v-if="activeGroups.length === 0" class="ribbon-empty">
@@ -499,6 +543,43 @@ function resolveBtnLabel(btn: RibbonButton): string {
   return btn.label;
 }
 
+function isLargeRibbonItem(btn: RibbonButton): boolean {
+  if (btn.type === "screen") return true;
+  if (btn.customButton) return false;
+  return !btn.type && (btn.size || "large") === "large";
+}
+
+function isCompactRibbonItem(btn: RibbonButton): boolean {
+  return !isLargeRibbonItem(btn);
+}
+
+function getCompactTrackClass(): string {
+  return Platform.isDesktop
+    ? "ribbon-group-track--compact-desktop"
+    : "ribbon-group-track--compact-web";
+}
+
+function largeButtons(group: RibbonGroup): RibbonButton[] {
+  return (group.buttons || []).filter((btn) => isLargeRibbonItem(btn) && isDependencyMet(btn));
+}
+
+function compactButtons(group: RibbonGroup): RibbonButton[] {
+  return (group.buttons || []).filter((btn) => isCompactRibbonItem(btn) && isDependencyMet(btn));
+}
+
+function getRibbonItemClass(btn: RibbonButton): string {
+  if (btn.type === "screen") return "ribbon-group-item--full";
+  if (!btn.type && (btn.size ?? "large") === "large") return "ribbon-group-item--full";
+  if (btn.type === "action_input") return "ribbon-group-item--compact ribbon-group-item--input";
+  if (btn.type === "select" || btn.type === "slider" || btn.type === "number") {
+    return "ribbon-group-item--compact ribbon-group-item--field";
+  }
+  if (btn.type === "checkbox" || btn.type === "switch") {
+    return "ribbon-group-item--compact ribbon-group-item--toggle";
+  }
+  return "ribbon-group-item--compact";
+}
+
 function executeButton(btn: RibbonButton): void {
   if (btn.module) {
     if (!$modules.check(btn.module)) {
@@ -648,6 +729,63 @@ useBroadcastListener(BROADCAST_TYPE.RIBBON_SELECT_PAGE, (payload: unknown) => {
 
 .ribbon-body--ctx {
   background: var(--lj-body-bg-ctx);
+}
+
+.ribbon-group-track {
+  display: flex;
+  min-width: 0;
+}
+
+.ribbon-group-track--large {
+  flex: 0 0 auto;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: var(--lj-space-2);
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: var(--lj-space-1);
+}
+
+.ribbon-group-track--compact {
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: var(--lj-space-2);
+}
+
+.ribbon-group-track--compact-web {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: max-content;
+  grid-template-rows: repeat(3, max-content);
+  justify-content: start;
+  align-content: start;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.ribbon-group-track--compact-desktop {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: max-content;
+  grid-template-rows: repeat(3, max-content);
+  justify-content: start;
+  align-content: start;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.ribbon-group-item {
+  display: flex;
+  flex: 0 0 auto;
+}
+
+.ribbon-group-item--full {
+  width: max-content;
+}
+
+.ribbon-group-item--compact {
+  width: max-content;
 }
 
 .ribbon-body::-webkit-scrollbar {

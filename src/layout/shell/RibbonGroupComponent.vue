@@ -32,34 +32,27 @@ defineProps({
 
 .ribbon-group-content {
   display: flex;
-  flex-flow: column wrap;
-  align-items: flex-start;
-  flex: 0 0 auto;
-  gap: var(--lj-space-1);
+  flex-direction: column;
+  align-items: stretch;
+  flex: 1 1 auto;
+  gap: var(--lj-space-2);
   padding: var(--lj-space-1) 0 0;
   min-height: 0;
   width: max-content;
   min-width: max-content;
-  /* Limita a 3 botões small empilhados em coluna (estilo Office Ribbon).
-     Botões large quebram em coluna nova naturalmente.
-     overflow: hidden previne sobreposição visual com o label do grupo
-     se o conteúdo tentar estourar. */
+  /* O web usa dois trilhos internos: um para itens grandes e outro para
+     controles compactos. O grupo só limita a altura total. */
   max-height: calc(var(--lj-ribbon-body-height) - var(--lj-group-label-height) - 8px);
   overflow: hidden;
-  align-content: center;
 }
 
 .ribbon-group--web .ribbon-group-content {
   display: flex;
-  flex-direction: row;
-  flex-wrap: nowrap;
-  align-items: flex-start;
+  flex-direction: column;
+  align-items: stretch;
+  flex: 1 1 auto;
   gap: var(--lj-space-2);
-  overflow: visible;
-}
-
-.ribbon-group--web .ribbon-group-content > * {
-  flex: 0 0 auto;
+  overflow: hidden;
 }
 
 .ribbon-group-label {
