@@ -79,7 +79,9 @@
                 <v-list-item-subtitle v-if="task.status === 'running'">
                   <v-progress-linear :model-value="task.progress" height="4" rounded class="mt-1" />
                   <span class="text-caption" style="font-size: 10px">
-                    {{ task.detail || `${Math.round(task.progress)}%` }}
+                    {{
+                      formatBackgroundTaskDetail(task.detail, t) || `${Math.round(task.progress)}%`
+                    }}
                   </span>
                 </v-list-item-subtitle>
                 <v-list-item-subtitle v-else class="text-caption">
@@ -187,6 +189,7 @@ import {
 import Broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBackgroundTasks, type BackgroundTask } from "@/composables/useBackgroundTasks";
+import { formatBackgroundTaskDetail } from "@/helpers/BackgroundTaskDetail";
 import { ICONS } from "@/config/Icons";
 import { COLORS } from "@constants/Colors";
 

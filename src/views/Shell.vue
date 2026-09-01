@@ -81,7 +81,7 @@
               class="text-truncate ml-2"
               style="max-width: 260px"
             >
-              {{ bundleDetailLabel(sync.bundleProgress.value.detail) }}
+              {{ formatBackgroundTaskDetail(sync.bundleProgress.value.detail, t) }}
             </span>
           </div>
           <div v-if="bundleRetryAttempt > 1" class="text-caption text-medium-emphasis text-center">
@@ -178,6 +178,7 @@ import type { BibleSearchResult } from "@/types/Bible";
 import { registerShell } from "@/composables/useShell";
 import { useFileProjection } from "@/composables/useFileProjection";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
+import { formatBackgroundTaskDetail } from "@/helpers/BackgroundTaskDetail";
 import { useSyncManager } from "@/composables/useSyncManager";
 import { COLOR_THEMES } from "@/config/Theme";
 import BundleInstaller from "@/helpers/BundleInstaller";
@@ -365,15 +366,6 @@ async function _showPendingBundleDownload(): Promise<boolean> {
 function onBundleCancel(): void {
   bundleCancelled.value = true;
   sync.cancelBundle();
-}
-
-function bundleDetailLabel(detail: string): string {
-  if (!detail) return "";
-  if (detail.startsWith("album_")) return t("startup_check.bundle_importing_albums");
-  if (detail.startsWith("music_")) return t("startup_check.bundle_importing_musics");
-  if (detail.startsWith("bible_")) return t("startup_check.bundle_importing_bible");
-  if (/^(pt|es)_/.test(detail)) return t("startup_check.bundle_importing_catalog");
-  return t("startup_check.bundle_importing_extras");
 }
 
 function _showPendingClassicCheck(): boolean {

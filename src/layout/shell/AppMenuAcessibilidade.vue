@@ -452,9 +452,9 @@
               <div v-for="cat in categories" :key="cat.id_category" class="opt-cat">
                 <label class="opt-checkbox opt-cat-header">
                   <input
+                    :ref="(el) => setCategoryCheckboxRef(cat.id_category, el)"
                     type="checkbox"
                     :checked="isCategoryFullySelected(cat)"
-                    :indeterminate.prop="isCategoryPartiallySelected(cat)"
                     :disabled="translating"
                     @change="toggleCategory(cat, ($event.target as HTMLInputElement).checked)"
                   />
@@ -656,7 +656,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { ICONS } from "@/config/Icons";
 import $database from "@/helpers/Database";
@@ -665,6 +665,7 @@ import $snackbar from "@/helpers/Snackbar";
 import Libras from "@/helpers/Libras";
 import { useSyncManager } from "@/composables/useSyncManager";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
+import { formatBackgroundTaskDetail } from "@/helpers/BackgroundTaskDetail";
 import ProgressBar from "@/components/ProgressBar.vue";
 import { BG_SWATCHES } from "@/config/Theme";
 import $broadcast from "@/helpers/Broadcast";
@@ -727,6 +728,7 @@ const cachedAlbumsBaseline = ref<Set<number>>(new Set());
 const cachedHymnalBaseline = ref(false);
 const cachedHymnal1996Baseline = ref(false);
 const saving = ref(false);
+const categoryCheckboxRefs = ref<Record<number, HTMLInputElement | null>>({});
 
 // Bíblia
 const bibleVersions = ref<BibleVersion[]>([]);
@@ -745,7 +747,7 @@ const musicProgress = computed(() => {
     return {
       done: task._done ?? 0,
       total: task._total ?? 0,
-      current: task.detail ?? "",
+      current: formatBackgroundTaskDetail(task.detail, t),
     };
   }
   return sync.librasMusicProgress.value;
@@ -761,7 +763,7 @@ const bibleProgress = computed(() => {
     return {
       done: task._done ?? 0,
       total: task._total ?? 0,
-      current: task.detail ?? "",
+      current: formatBackgroundTaskDetail(task.detail, t),
     };
   }
   return sync.librasBibleProgress.value;
@@ -811,6 +813,26 @@ function toggleBibleEnabled(value: boolean | null) {
   librasBibleEnabled.value = value === true;
   localStorage.setItem(KEYS_LS.LIBRAS.BIBLE_ENABLED, String(value === true));
 }
+
+function setCategoryCheckboxRef(id: number, el: unknown): void {
+  categoryCheckboxRefs.value[id] = el instanceof HTMLInputElement ? el : null;
+}
+
+async function syncCategoryIndeterminateState(): Promise<void> {
+  await nextTick();
+  for (const cat of categories.value) {
+    const el = categoryCheckboxRefs.value[cat.id_category];
+    if (el) el.indeterminate = isCategoryPartiallySelected(cat);
+  }
+}
+
+watch(
+  [categories, selectedAlbums],
+  () => {
+    void syncCategoryIndeterminateState();
+  },
+  { deep: true, immediate: true }
+);
 
 function toggleShowBorder(value: boolean | null) {
   showBorder.value = value === true;

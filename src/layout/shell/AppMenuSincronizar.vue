@@ -555,7 +555,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref, watch } from "vue";
+import { computed, onMounted, onBeforeUnmount, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import Platform from "@/helpers/Platform";
 import $userdata from "@/helpers/UserData";
@@ -565,6 +565,7 @@ import { ICONS } from "@/config/Icons";
 import Icon from "@/components/Icon.vue";
 import { useSyncManager } from "@/composables/useSyncManager";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
+import { formatBackgroundTaskDetail } from "@/helpers/BackgroundTaskDetail";
 import ProgressBar from "@/components/ProgressBar.vue";
 import $snackbar from "@/helpers/Snackbar";
 import type { BibleVersion } from "@/types/Bible";
@@ -660,7 +661,9 @@ const totalDownloads = computed(() => {
 });
 const currentDownloadFile = computed(() => {
   const task = findTask("sync-collections");
-  return task ? (task.detail ?? null) : sync.downloadProgress.value.currentFile || null;
+  return task
+    ? formatBackgroundTaskDetail(task.detail, t) || null
+    : formatBackgroundTaskDetail(sync.downloadProgress.value.currentFile || null, t) || null;
 });
 const completedMsg = computed(() => sync.downloadCompletedMsg.value);
 
@@ -675,7 +678,9 @@ const bibleTotal = computed(() => {
 });
 const bibleCurrentFile = computed(() => {
   const task = findTask("sync-bible");
-  return task ? (task.detail ?? null) : sync.bibleProgress.value.currentFile || null;
+  return task
+    ? formatBackgroundTaskDetail(task.detail, t) || null
+    : formatBackgroundTaskDetail(sync.bibleProgress.value.currentFile || null, t) || null;
 });
 const bibleCompletedMsg = computed(() => sync.bibleCompletedMsg.value);
 
