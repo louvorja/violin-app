@@ -20,7 +20,7 @@
         :text="error"
         variant="tonal"
         class="ma-2"
-        style="max-height: 60px"
+        style="max-height: 70px"
       />
 
       <!-- Nível 2: Músicas do álbum -->

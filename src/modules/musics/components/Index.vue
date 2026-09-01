@@ -161,7 +161,7 @@
       variant="tonal"
       border="start"
       class="ma-2"
-      style="max-height: 60px"
+      style="max-height: 70px"
     />
 
     <template #footer>
