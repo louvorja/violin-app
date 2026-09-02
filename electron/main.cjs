@@ -178,6 +178,7 @@ app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 if (process.platform === "linux") {
   app.commandLine.appendSwitch("ozone-platform", "x11");
   app.commandLine.appendSwitch("ozone-platform-hint", "x11");
+  app.commandLine.appendSwitch("disable-dev-shm-usage");
   app.commandLine.appendSwitch("no-sandbox");
 }
 
