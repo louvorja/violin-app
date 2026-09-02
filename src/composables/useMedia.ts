@@ -27,7 +27,7 @@ const _slides = useSlides();
 const _lyric  = useLyric();
 const _album  = useAlbum();
 let _loadingId: string | number | null = null;
-let _playlistOnEnd: (() => void) | null = null;
+let _playlistOnEnd: (() => boolean) | null = null;
 // XHR atual de download de áudio — abortado ao trocar de música rapidamente
 // para liberar conexão e evitar callbacks de respostas obsoletas (mesmo que
 // o early-return pelo _loadingId já as ignore, a request continuava
@@ -154,7 +154,10 @@ _audio.onTimeUpdate((ct, d) => {
 
   if (!_audio.isPaused.value && ct >= d && d > 0) {
     if (_playlistOnEnd) {
-      _playlistOnEnd();
+      const handled = _playlistOnEnd();
+      if (!handled) {
+        _self.close(true);
+      }
     } else {
       _self.close(true);
     }
@@ -839,9 +842,9 @@ const _self = {
     _album.setAlbumInfo(id_album, module);
   },
 
-  registerPlaylistEndHandler(handler: () => void): void {
-    _playlistOnEnd = handler;
-  },
+    registerPlaylistEndHandler(handler: () => boolean): void {
+      _playlistOnEnd = handler;
+    },
 
   unregisterPlaylistEndHandler(): void {
     _playlistOnEnd = null;

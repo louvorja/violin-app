@@ -123,21 +123,22 @@ function _nextIndex(): number | null {
   return nextIdx;
 }
 
-function _onSongEnded(): void {
-  if (!_isActive.value) return;
-  if (_advanceLock.value) return;
+function _onSongEnded(): boolean {
+  if (!_isActive.value) return false;
+  if (_advanceLock.value) return true;
   const playlist = currentPlaylist.value;
-  if (!playlist) { _stopInternal(); return; }
+  if (!playlist) { _stopInternal(); return true; }
 
   const nextIdx = _nextIndex();
   if (nextIdx === null) {
     $dev.write("playlist:ended", { name: playlist.name });
     _stopInternal();
     Media.close(true);
-    return;
+    return true;
   }
   $dev.write("playlist:song_ended", { index: _currentIndex.value });
   _playSongAt(nextIdx);
+  return true;
 }
 
 function playNext(): void {
