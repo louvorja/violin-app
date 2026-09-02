@@ -140,6 +140,7 @@
 <script setup>
 import { useDisplay } from "vuetify";
 import LScreenBtn from "@/components/buttons/Screen.vue";
+import Projection from "@/helpers/Projection";
 
 defineProps({
   location: { type: String, default: "" },
@@ -157,14 +158,21 @@ defineEmits(["go-to-slide", "maximize", "fullscreen", "close"]);
 
 const display = useDisplay();
 
-function openWindow(route) {
-  // Em web, abre popup sem chrome do navegador; no Electron cai no handler
-  // de BrowserWindow. Mantém a experiência mínima para projeção/operador.
-  const features =
-    "popup=yes,noopener,noreferrer,width=1280,height=720,toolbar=no,location=no,menubar=no,status=no,scrollbars=no,resizable=yes";
-  const name = `louvorja_${String(route)
-    .replace(/[^a-zA-Z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")}`;
-  window.open(route, name, features);
+async function openWindow(route) {
+  const feature =
+    route === "/projection"
+      ? "media:musicas"
+      : route === "/projection/return"
+        ? "media:retorno"
+        : route === "/operator"
+          ? "media:operador"
+          : route;
+  const fullscreen = route !== "/operator";
+
+  await Projection.open({
+    feature,
+    route,
+    fullscreen,
+  });
 }
 </script>

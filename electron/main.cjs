@@ -177,6 +177,7 @@ app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 // Forçar X11 resolve: display bounds corretos + window positioning funciona.
 // O --no-sandbox é necessário para AppImage (ambiente isolado sem capabilities).
 if (process.platform === "linux") {
+  app.commandLine.appendSwitch("ozone-platform", "x11");
   app.commandLine.appendSwitch("ozone-platform-hint", "x11");
   app.commandLine.appendSwitch("no-sandbox");
 }
