@@ -1024,26 +1024,54 @@ const useClassicDir = computed((): boolean => {
   return $userdata.get<boolean>(KEYS.OPTIONS.USE_CLASSIC_DIR, false) === true;
 });
 
+async function persistClassicSelection(result: {
+  configDir: string;
+  lang: "pt" | "es" | null;
+}): Promise<void> {
+  const lang = result.lang || "pt";
+  $userdata.set(KEYS.OPTIONS.USE_CLASSIC_DIR, true);
+  $userdata.set(KEYS.OPTIONS.CLASSIC_LANG, lang);
+  const cur = (await Platform.userStore?.read("storage")) || {};
+  await Platform.userStore?.write("storage", {
+    ...cur,
+    classicDir: result.configDir,
+    classicLang: lang,
+    useClassicDir: true,
+  });
+  await reloadStats();
+}
+
 async function detectClassic(): Promise<void> {
   if (!Platform.classic?.detect) return;
   try {
     const result = await Platform.classic.detect();
     if (!result.detected) {
-      $alert.error({ text: "options.storage.classic_not_found" });
+      $alert.yesno(
+        {
+          title: t("options.storage.classic_version"),
+          text: t("options.storage.classic_manual_prompt"),
+        },
+        async (btn?: string) => {
+          if (btn !== "yes") return;
+
+          const manualDir = await Platform.storage?.chooseDir?.();
+          if (!manualDir) return;
+
+          const manualResult = await Platform.classic?.detect?.(manualDir);
+          if (!manualResult?.detected) {
+            $alert.error({ text: "options.storage.classic_manual_invalid" });
+            return;
+          }
+
+          await persistClassicSelection(manualResult);
+        }
+      );
       return;
     }
+
     $alert.yesno("options.storage.classic_confirm", (async (btn: string) => {
       if (btn === "cancel") return;
-      $userdata.set(KEYS.OPTIONS.USE_CLASSIC_DIR, true);
-      $userdata.set(KEYS.OPTIONS.CLASSIC_LANG, result.lang || "pt");
-      const cur = (await Platform.userStore?.read("storage")) || {};
-      await Platform.userStore?.write("storage", {
-        ...cur,
-        classicDir: result.configDir,
-        classicLang: result.lang || "pt",
-        useClassicDir: true,
-      });
-      await reloadStats();
+      await persistClassicSelection(result);
     }) as (...args: unknown[]) => unknown);
   } catch (e) {
     console.warn("[Sincronizar] classic:detect falhou:", e);

@@ -234,7 +234,7 @@
         <div>
           <v-checkbox
             v-model="dontShowAgain"
-            :label="$t('startup_check.dont_show_again')"
+            :label="$t('startup_check.hide_on_login')"
             density="compact"
             hide-details
             class="mt-1 ml-3"

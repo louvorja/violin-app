@@ -80,7 +80,7 @@
         <v-card-actions class="pa-4">
           <v-spacer />
           <v-btn color="primary" variant="flat" @click="onClose">
-            {{ $t("actions.ok") }}
+            {{ $t("alert.ok") }}
           </v-btn>
         </v-card-actions>
       </template>

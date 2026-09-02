@@ -449,8 +449,10 @@
       "change_failed": "Falló el cambio de la carpeta de medios.",
       "classic_version": "Versión clásica",
       "use_classic_dir": "Usar directorio de la versión clásica",
-      "classic_not_found": "No se encontró la versión clásica en C:\\Program Files (x86)\\LouvorJA",
+      "classic_not_found": "No se encontró la versión clásica en C:\\Program Files (x86)\\Louvor JA",
       "classic_confirm": "¿Usar el mismo directorio de la versión clásica de LouvorJA?",
+      "classic_manual_prompt": "No encontré la instalación en el directorio predeterminado. ¿Desea indicar manualmente el directorio raíz de la instalación clásica?",
+      "classic_manual_invalid": "El directorio seleccionado no parece ser la raíz de la instalación clásica.",
       "classic_import_confirm": "¿Desea copiar o mover los archivos de la versión clásica a la nueva carpeta?"
     },
     "videos": {
@@ -1080,7 +1082,7 @@
     "hymnal_missing": "No descargado",
     "albums_count": "{done} de {total} álbumes",
     "bible_count": "{done} de {total} versiones",
-    "dont_show_again": "No mostrar esta verificación al inicio",
+    "hide_on_login": "No mostrar este diálogo al iniciar sesión",
     "select_files": "Seleccionar Archivos",
     "download_all": "Descargar Todo",
     "sync_hint": "Puede descargar álbumes o versiones bíblicas específicas después en el menú Opciones > Sincronizar.",

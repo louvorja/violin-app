@@ -1057,7 +1057,7 @@ ipcMain.handle("storage:setAutoCache", (_e, enabled) => {
 // IPC: Classic Version — detecção e importação da versão Delphi
 // ---------------------------------------------------------------------------
 
-ipcMain.handle("classic:detect", () => classicVersion.detect());
+ipcMain.handle("classic:detect", (_e, installDir) => classicVersion.detect(installDir));
 
 /**
  * Importa arquivos da versão clássica para um novo diretório,

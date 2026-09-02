@@ -106,6 +106,29 @@ watchEffect(() => {
   document.documentElement.style.setProperty(FONT.PROJECTION.CSS_VAR, projectionFont);
 });
 
+function seedDefaultFonts() {
+  const seeds = [
+    [KEYS.OPTIONS.FONT, FONT.UI.FALLBACK],
+    [KEYS.OPTIONS.PROJECTION_FONT, FONT.PROJECTION.FALLBACK],
+    [KEYS.OPTIONS.UTILITIES_FONT, FONT.PROJECTION.INHERIT],
+    [KEYS.MODULES.BIBLE.FONT, FONT.PROJECTION.INHERIT],
+    [KEYS.OPTIONS.SLIDE.FONT, FONT.PROJECTION.INHERIT],
+  ];
+
+  let changed = false;
+  for (const [key, value] of seeds) {
+    const current = UserData.get(key, null);
+    if (typeof current !== "string" || !current.trim()) {
+      UserData.set(key, value);
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    console.info("[main] Default fonts seeded for empty preferences");
+  }
+}
+
 // Exposição em dev para debug rápido no DevTools de qualquer janela.
 // Permite inspecionar `__userdata.get("options.custom_background")` ou
 // `__userdata.get()` (state inteiro) direto no console — útil para
@@ -180,6 +203,7 @@ $storage.hydrate().then(async () => {
   // de fonte, alinhamento, etc.).
   try {
     await UserData.load();
+    seedDefaultFonts();
   } catch (e) {
     console.warn("[main] UserData.load falhou:", e);
   }

@@ -289,7 +289,7 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
 
   classic: {
     /** Detecta se a versão Delphi está instalada. */
-    detect: () => ipcRenderer.invoke("classic:detect"),
+    detect: (installDir) => ipcRenderer.invoke("classic:detect", installDir),
   },
 
   // -------------------------------------------------------------------------

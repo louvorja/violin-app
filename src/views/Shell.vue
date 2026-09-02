@@ -263,9 +263,9 @@ let _startupCheckTimeout: ReturnType<typeof setTimeout> | null = null;
 // Quando o startup check fecha, verificar se há versão clássica no Windows
 watch(startupCheckOpen, (isOpen, wasOpen) => {
   if (wasOpen && !isOpen) {
-    if (!_showPendingClassicCheck()) {
-      _showPendingReleaseNotes();
-    }
+    void _showPendingClassicCheck().then((shown) => {
+      if (!shown) _showPendingReleaseNotes();
+    });
   }
 });
 
@@ -297,9 +297,8 @@ async function _showPendingStartupCheck() {
 
   const skip = $userdata.get<boolean>(KEYS.OPTIONS.SKIP_STARTUP_CHECK, false);
   if (skip) {
-    if (!_showPendingClassicCheck()) {
-      _showPendingReleaseNotes();
-    }
+    const shown = await _showPendingClassicCheck();
+    if (!shown) _showPendingReleaseNotes();
     return;
   }
 
@@ -368,11 +367,16 @@ function onBundleCancel(): void {
   sync.cancelBundle();
 }
 
-function _showPendingClassicCheck(): boolean {
+async function _showPendingClassicCheck(): Promise<boolean> {
   if (!Platform.isDesktop || Platform.platform !== "win32") return false;
   const skip = $userdata.get<boolean>(KEYS.OPTIONS.SKIP_CLASSIC_CHECK, false);
   const alreadyUsing = $userdata.get<boolean>(KEYS.OPTIONS.USE_CLASSIC_DIR, false);
   if (skip || alreadyUsing) return false;
+  if (!Platform.classic?.detect) return false;
+
+  const result = await Platform.classic.detect();
+  if (!result?.detected) return false;
+
   classicCheckOpen.value = true;
   return true;
 }
