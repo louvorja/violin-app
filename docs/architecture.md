@@ -304,6 +304,37 @@ Remoto, Sincronizar e StartupCheck.
 
 ---
 
+## 🖥️ Versão clássica (Delphi)
+
+A detecção da versão clássica é feita em `electron/main/classicVersion.js`.
+O app considera a instalação presente quando a pasta raiz padrão existe em
+`C:\Program Files (x86)\Louvor JA`.
+
+### Fluxo de login
+
+- `Shell.vue` só abre o `ClassicVersionDialog` quando a detecção retorna sucesso
+  e `SKIP_CLASSIC_CHECK`/`USE_CLASSIC_DIR` não bloqueiam o fluxo.
+- O checkbox do dialog grava `SKIP_CLASSIC_CHECK`, evitando reaparecer no login.
+- O dialog mostra o diretório detectado e permite aceitar ou recusar o uso do
+  diretório clássico.
+
+### Sincronização e importação
+
+- Em `AppMenuSincronizar.vue`, quando a instalação padrão não é encontrada, o
+  usuário pode apontar manualmente o diretório raiz da instalação clássica.
+- O caminho salvo fica em `storage.classicDir` e a flag `storage.useClassicDir`
+  ativa o modo clássico.
+- Quando o modo clássico está ativo, o diretório em runtime é atualizado sem
+  reiniciar a aplicação.
+- Ao trocar a pasta, o alerta oferece `Copiar` / `Mover` / `Cancelar`.
+- A importação clássica copia apenas as pastas de mídia:
+  - `capas` → `covers`
+  - `imagens` → `images`
+  - `musicas` → `musics/<lang>`
+- Em `Mover`, só essas pastas são removidas da origem.
+
+---
+
 ## 🌎 Internacionalização
 
 - Tradução global em `src/lang/pt.json` e `src/lang/es.json`
@@ -885,6 +916,12 @@ Projection views             ← fontFamily via resolveFont() + inline style
 os renderers. Assim, Shell, projeção, retorno e operador iniciam com as mesmas
 fontes configuradas. O valor legado `"__UI_FONT__"` continua sendo aceito como
 alias de `"__FONT_DEFAULT_UI__"`.
+
+Na inicialização, preferências vazias de fonte são seedadas automaticamente com
+defaults concretos para evitar selects vazios (`—`) em instalações novas:
+`options.font` → `FONT.UI.FALLBACK`, `options.projection_font` →
+`FONT.PROJECTION.FALLBACK`, `options.utilities_font`/
+`modules.bible.font`/`options.slide.font` → `FONT.PROJECTION.INHERIT`.
 
 Defaults e marcadores ficam no namespace `FONT`: `FONT.UI.FALLBACK`,
 `FONT.UI.INHERIT`, `FONT.PROJECTION.FALLBACK`, `FONT.PROJECTION.INHERIT` e

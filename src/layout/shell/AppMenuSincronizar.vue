@@ -1038,6 +1038,7 @@ async function persistClassicSelection(result: {
     classicLang: lang,
     useClassicDir: true,
   });
+  await Platform.storage?.setFilesDir?.(result.configDir, { moveExisting: false });
   await reloadStats();
 }
 
@@ -1099,30 +1100,41 @@ async function changeFolder(): Promise<void> {
   if (!newDir) return;
 
   if (useClassicDir.value) {
-    $alert.yesno("options.storage.classic_import_confirm", (async (btn: string) => {
-      if (btn === "cancel") return;
-      const move = btn === "yes";
-      try {
-        const cur = (await Platform.userStore?.read("storage")) || {};
-        const classicDir = cur.classicDir || "";
-        const lang = cur.classicLang || "pt";
-        if (classicDir && Platform.storage?.importFromClassic) {
-          await Platform.storage.importFromClassic(classicDir, newDir, lang, {
-            moveExisting: move,
+    $alert.show(
+      {
+        title: "options.storage.change_folder",
+        text: "options.storage.classic_import_confirm",
+        buttons: [
+          { text: "actions.copy", color: "info", value: "copy" },
+          { text: "actions.move", color: "warning", value: "move" },
+          { text: "alert.cancel", color: "error", value: "cancel" },
+        ],
+      },
+      (async (btn: string) => {
+        if (btn === "cancel") return;
+        const move = btn === "move";
+        try {
+          const cur = (await Platform.userStore?.read("storage")) || {};
+          const classicDir = cur.classicDir || "";
+          const lang = cur.classicLang || "pt";
+          if (classicDir && Platform.storage?.importFromClassic) {
+            await Platform.storage.importFromClassic(classicDir, newDir, lang, {
+              moveExisting: move,
+            });
+          }
+          await Platform.storage?.setFilesDir?.(newDir, { moveExisting: false });
+          await Platform.userStore?.write("storage", {
+            ...cur,
+            filesDir: newDir,
+            useClassicDir: false,
           });
+          $userdata.set(KEYS.OPTIONS.USE_CLASSIC_DIR, false);
+          await reloadStats();
+        } catch (e) {
+          $alert.error({ text: "options.storage.change_failed", error: e as Error });
         }
-        await Platform.storage?.setFilesDir?.(newDir, { moveExisting: false });
-        await Platform.userStore?.write("storage", {
-          ...cur,
-          filesDir: newDir,
-          useClassicDir: false,
-        });
-        $userdata.set(KEYS.OPTIONS.USE_CLASSIC_DIR, false);
-        await reloadStats();
-      } catch (e) {
-        $alert.error({ text: "options.storage.change_failed", error: e as Error });
-      }
-    }) as (...args: unknown[]) => unknown);
+      }) as (...args: unknown[]) => unknown
+    );
     return;
   }
 

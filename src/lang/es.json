@@ -131,6 +131,7 @@
     "edit": "Editar",
     "add": "Agregar",
     "copy": "Copiar",
+    "move": "Mover",
     "clone": "Duplicar",
     "open": "Abrir",
     "back": "Volver",
@@ -453,7 +454,7 @@
       "classic_confirm": "¿Usar el mismo directorio de la versión clásica de LouvorJA?",
       "classic_manual_prompt": "No encontré la instalación en el directorio predeterminado. ¿Desea indicar manualmente el directorio raíz de la instalación clásica?",
       "classic_manual_invalid": "El directorio seleccionado no parece ser la raíz de la instalación clásica.",
-      "classic_import_confirm": "¿Desea copiar o mover los archivos de la versión clásica a la nueva carpeta?"
+      "classic_import_confirm": "¿Desea copiar o mover las carpetas de medios de la versión clásica (musicas, capas e imágenes) a la nueva carpeta?"
     },
     "videos": {
       "title": "Vídeos On-line",

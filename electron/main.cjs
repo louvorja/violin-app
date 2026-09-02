@@ -1089,6 +1089,13 @@ ipcMain.handle("storage:importFromClassic", async (_e, classicDir, targetDir, la
     if (await fs.pathExists(srcDir)) {
       await fs.ensureDir(destDir);
       await fs.copy(srcDir, destDir, { overwrite: true });
+      if (moveExisting) {
+        try {
+          await fs.remove(srcDir);
+        } catch (_) {
+          /* ignore — may be locked */
+        }
+      }
     }
   }
 
@@ -1097,13 +1104,12 @@ ipcMain.handle("storage:importFromClassic", async (_e, classicDir, targetDir, la
     const destMusics = path.join(targetDir, "musics", lang || "pt");
     await fs.ensureDir(destMusics);
     await fs.copy(musicasDir, destMusics, { overwrite: true });
-  }
-
-  if (moveExisting) {
-    try {
-      await fs.remove(configDir);
-    } catch (_) {
-      /* ignore — may be locked */
+    if (moveExisting) {
+      try {
+        await fs.remove(musicasDir);
+      } catch (_) {
+        /* ignore — may be locked */
+      }
     }
   }
 

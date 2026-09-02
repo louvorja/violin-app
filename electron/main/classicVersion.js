@@ -3,7 +3,7 @@
 /**
  * classicVersion.js — Detecção da versão clássica Delphi do LouvorJA.
  *
- * Verifica se existe instalação em C:/Program Files (x86)/Louvor JA
+ * Verifica se existe a pasta raiz da instalação em C:/Program Files (x86)/Louvor JA
  * e detecta o idioma via %APPDATA%/LouvorJA/configPT ou configES.
  */
 
@@ -12,7 +12,6 @@ const fs = require("fs-extra");
 const os = require("os");
 
 const CLASSIC_INSTALL_DIR = "C:\\Program Files (x86)\\Louvor JA";
-const CLASSIC_EXE = "LouvorJA.exe";
 const CLASSIC_CONFIG_DIR = "config";
 
 const CLASSIC_FOLDERS = {
@@ -50,13 +49,10 @@ function _detectLanguage() {
  */
 function detect(installDir = CLASSIC_INSTALL_DIR) {
   const configDir = path.join(installDir, CLASSIC_CONFIG_DIR);
-  const exePath = path.join(installDir, CLASSIC_EXE);
 
   let detected = false;
   try {
-    detected =
-      fs.existsSync(exePath) &&
-      fs.statSync(exePath).isFile();
+    detected = fs.existsSync(installDir) && fs.statSync(installDir).isDirectory();
   } catch {
     detected = false;
   }
