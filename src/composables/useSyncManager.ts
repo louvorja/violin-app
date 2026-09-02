@@ -298,8 +298,8 @@ export function useSyncManager() {
     if (!books || books.length === 0) return [];
 
     const downloaded: number[] = [];
-    // Capítulos presentes no IndexedDB (seed do pacote jsondb + downloads
-    // em runtime). O disco (userData/json_db) continua valendo como
+    // Capítulos presentes no IndexedDB (bundle completo + downloads em
+    // runtime). O disco (userData/json_db) continua valendo como
     // complemento para usuários legados.
     const stored = new Map<number, Set<string>>();
     const loadStored = async (versionId: number): Promise<Set<string>> => {
@@ -380,7 +380,7 @@ export function useSyncManager() {
     }
 
     const allKeys = allChapters.map((c) => `bible_${c.versionId}_${c.bookId}_${c.n}`);
-    // Capítulos já presentes no IndexedDB (seed/jsondb) não são rebaixados.
+    // Capítulos já presentes no IndexedDB não são rebaixados.
     const storedByVersion = new Map<number, Set<string>>();
     for (const vId of versionIds) {
       storedByVersion.set(
