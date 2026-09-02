@@ -213,34 +213,34 @@ $userdata.set("theme", "dark");
 
 **Composable** — função em `src/composables/` que usa APIs Vue e deve ser chamada apenas dentro de `setup()`. Retorna estado reativo com cleanup automático via `onUnmounted`.
 
-| Arquivo | Tipo | Observação |
-|---------|------|------------|
-| `helpers/Path.ts` | helper-puro | Seguro no Electron main process |
-| `helpers/Strings.js` | helper-puro | |
-| `helpers/DateTime.js` | helper-puro | |
-| `helpers/Database.ts` | helper-puro | Cache via sessionStorage |
-| `helpers/Storage.ts` | helper-puro | Seguro no Electron main process |
-| `helpers/Platform.js` | helper-puro | Seguro no Electron main process |
-| `helpers/Broadcast.ts` | helper-puro | Baixo nível; use `useBroadcastListener`/`useBroadcastSender` em componentes |
-| `helpers/BroadcastTypes.ts` | helper-puro | Só tipos e constantes |
-| `helpers/AudioBeep.js` | helper-puro | Web Audio API, sem Vue |
-| `helpers/Hotkeys.js` | helper-puro | Event listeners in-window, sem reatividade Vue |
-| `helpers/Shortcuts.js` | helper-puro | Atalhos globais OS-level (Electron) |
-| `helpers/SljaConverter.js` | helper-puro | Conversão de slides `.slja` |
-| `helpers/ModuleTypes.js` | helper-puro | Factory e validação de `manifest.json` |
-| `helpers/Libras.ts` | helper-puro | Tradução PT-BR → Libras (API VLibras, cache IndexedDB) |
-| `helpers/AppData.ts` | deve-virar-composable | Camada de acesso ao Pinia (dot-notation); candidato a `useAppState` |
-| `helpers/UserData.ts` | deve-virar-composable | Preferências persistidas via AppData |
-| `helpers/Modules.js` | deve-virar-composable | Runtime open/close de módulos |
-| `helpers/Favorites.js` | deve-virar-composable | |
-| `helpers/History.js` | deve-virar-composable | |
-| `helpers/Liturgy.js` | deve-virar-composable | |
-| `helpers/Dev.js` | deve-virar-composable | |
-| `helpers/Alert.js` | deve-virar-composable | Já usa `watch()` Vue internamente |
-| `helpers/Snackbar.ts` | deve-virar-composable | Snackbar global; aceita `action?: () => void` opcional |
-| `helpers/Popup.js` | deve-virar-composable | |
-| `helpers/ModuleManager.js` | deve-virar-composable | Boot-time; chamado 1× em `main.js` |
-| `helpers/CommandRegistry.js` | deve-virar-composable | Usa `Modules` + `useMedia` composable |
+| Arquivo                      | Tipo                  | Observação                                                                  |
+|------------------------------|-----------------------|-----------------------------------------------------------------------------|
+| `helpers/Path.ts`            | helper-puro           | Seguro no Electron main process                                             |
+| `helpers/Strings.js`         | helper-puro           |                                                                             |
+| `helpers/DateTime.js`        | helper-puro           |                                                                             |
+| `helpers/Database.ts`        | helper-puro           | Cache via sessionStorage                                                    |
+| `helpers/Storage.ts`         | helper-puro           | Seguro no Electron main process                                             |
+| `helpers/Platform.js`        | helper-puro           | Seguro no Electron main process                                             |
+| `helpers/Broadcast.ts`       | helper-puro           | Baixo nível; use `useBroadcastListener`/`useBroadcastSender` em componentes |
+| `helpers/BroadcastTypes.ts`  | helper-puro           | Só tipos e constantes                                                       |
+| `helpers/AudioBeep.js`       | helper-puro           | Web Audio API, sem Vue                                                      |
+| `helpers/Hotkeys.js`         | helper-puro           | Event listeners in-window, sem reatividade Vue                              |
+| `helpers/Shortcuts.js`       | helper-puro           | Atalhos globais OS-level (Electron)                                         |
+| `helpers/SljaConverter.js`   | helper-puro           | Conversão de slides `.slja`                                                 |
+| `helpers/ModuleTypes.js`     | helper-puro           | Factory e validação de `manifest.json`                                      |
+| `helpers/Libras.ts`          | helper-puro           | Tradução PT-BR → Libras (API VLibras, cache IndexedDB)                      |
+| `helpers/AppData.ts`         | deve-virar-composable | Camada de acesso ao Pinia (dot-notation); candidato a `useAppState`         |
+| `helpers/UserData.ts`        | deve-virar-composable | Preferências persistidas via AppData                                        |
+| `helpers/Modules.js`         | deve-virar-composable | Runtime open/close de módulos                                               |
+| `helpers/Favorites.js`       | deve-virar-composable |                                                                             |
+| `helpers/History.js`         | deve-virar-composable |                                                                             |
+| `helpers/Liturgy.js`         | deve-virar-composable |                                                                             |
+| `helpers/Dev.js`             | deve-virar-composable |                                                                             |
+| `helpers/Alert.js`           | deve-virar-composable | Já usa `watch()` Vue internamente                                           |
+| `helpers/Snackbar.ts`        | deve-virar-composable | Snackbar global; aceita `action?: () => void` opcional                      |
+| `helpers/Popup.js`           | deve-virar-composable |                                                                             |
+| `helpers/ModuleManager.js`   | deve-virar-composable | Boot-time; chamado 1× em `main.js`                                          |
+| `helpers/CommandRegistry.js` | deve-virar-composable | Usa `Modules` + `useMedia` composable                                       |
 
 ---
 
