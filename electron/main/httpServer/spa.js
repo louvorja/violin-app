@@ -68,10 +68,10 @@ function _stripCspMeta(html) {
   );
 }
 
-function _injectBridge(html, token) {
+function _injectBridge(html, token, initialHash) {
   if (html.includes("window.LJ_SSE_BRIDGE_INJECTED")) return html;
   const cleaned = _stripCspMeta(html);
-  const bridge = _bridgeScript(token);
+  const bridge = _bridgeScript(token, initialHash);
   if (cleaned.includes("</head>")) {
     return cleaned.replace("</head>", bridge + "</head>");
   }
@@ -84,15 +84,43 @@ function _injectBridge(html, token) {
  * conflitos de roteamento e exibia Shell.vue em vez de FileProjection.vue).
  * A comunicação inter-window continua via BroadcastChannel.
  */
-function _injectMinimalBridge(html) {
+function _injectMinimalBridge(html, initialHash) {
   if (html.includes("window.LJ_SSE_BRIDGE_INJECTED")) return html;
   const cleaned = _stripCspMeta(html);
-  const script =
-    '<script>window.LJ_HASH_ROUTING=true;</script>';
+  const script = `<script>${_initialRouteScript(initialHash)}</script>`;
   if (cleaned.includes("</head>")) {
     return cleaned.replace("</head>", script + "</head>");
   }
   return script + cleaned;
+}
+
+function _pathToHash(pathname) {
+  const map = {
+    "/obs": "/obs",
+    "/obs/bible": "/obs/bible",
+    "/relogio": "/clock",
+    "/projecao": "/projection",
+    "/remote": "/remote",
+    "/projection/return": "/projection/return",
+    "/projection/bible/return": "/projection/bible/return",
+    "/projection": "/projection",
+    "/projection/bible": "/projection/bible",
+    "/projection/module": "/projection/module",
+    "/projection/file": "/projection/file",
+    "/projection/file/return": "/projection/file/return",
+    "/clock": "/clock",
+    "/operator": "/operator",
+  };
+  return map[pathname] || null;
+}
+
+function _isAllowedSpaPath(pathname) {
+  return SPA_ROUTES.has(pathname);
+}
+
+function _initialRouteScript(initialHash) {
+  const hashJson = JSON.stringify(initialHash || "");
+  return `window.LJ_HASH_ROUTING=true;try{var hash=${hashJson};if(!window.location.hash&&hash){window.location.hash="#"+hash;}}catch(e){}`;
 }
 
 function _allowHttpRoot(getUserData) {
@@ -108,8 +136,9 @@ function _allowHttpRoot(getUserData) {
  * Script injetado no HTML retornado para clients HTTP. Roda ANTES da app
  * Vue carregar — assim o router já pega `LJ_HASH_ROUTING=true` no boot.
  */
-function _bridgeScript(token) {
+function _bridgeScript(token, initialHash) {
   const tokenJson = JSON.stringify(token || "");
+  const initialRouteScript = _initialRouteScript(initialHash);
   // Bridge cliente: abre EventSource, mantém um BUFFER de mensagens recebidas
   // antes do bundle Vue carregar (race condition real — o replay do último
   // estado vem assim que conectamos, e o usuário pode estar com música
@@ -117,7 +146,7 @@ function _bridgeScript(token) {
   return `<script>(function(){
   if (window.LJ_SSE_BRIDGE_INJECTED) return;
   window.LJ_SSE_BRIDGE_INJECTED = true;
-  window.LJ_HASH_ROUTING = true;
+  ${initialRouteScript}
   window.LJ_REMOTE_CLIENT = true;
   window.__ljSseBuffer = window.__ljSseBuffer || [];
   window.__ljSseDrained = false;
@@ -176,9 +205,10 @@ function _createStaticIndexHandler(distDir, getToken) {
       // (só LJ_HASH_ROUTING=true). Clients remotos (OBS, celular) recebem o
       // bridge SSE completo (hash routing + EventSource + buffer replay).
       const ip = req.ip || req.socket?.remoteAddress || "";
+      const initialHash = _pathToHash(req.path);
       const html = _isLocalhost(ip)
-        ? _injectMinimalBridge(_cached)
-        : _injectBridge(_cached, typeof getToken === "function" ? getToken() : null);
+        ? _injectMinimalBridge(_cached, initialHash)
+        : _injectBridge(_cached, typeof getToken === "function" ? getToken() : null, initialHash);
       res.set("Content-Type", "text/html; charset=utf-8");
       res.set("Cache-Control", "no-cache");
       res.send(html);
@@ -214,7 +244,7 @@ function _createDevProxyHandler(getToken) {
         proxyRes.on("data", (c) => chunks.push(c));
         proxyRes.on("end", () => {
           const html = Buffer.concat(chunks).toString("utf8");
-          res.end(_injectBridge(html, typeof getToken === "function" ? getToken() : null));
+          res.end(_injectBridge(html, typeof getToken === "function" ? getToken() : null, _pathToHash(req.path)));
         });
       } else {
         proxyRes.pipe(res);
@@ -245,22 +275,30 @@ function _createDevProxyHandler(getToken) {
 function _setupAliases(app) {
   app.get("/musica", (req, res) => {
     if (Object.prototype.hasOwnProperty.call(req.query, "transmissao")) {
-      return res.redirect(302, "/#/obs" + _carryToken(req));
+      return res.redirect(302, "/obs" + _carryToken(req));
     }
     if (Object.prototype.hasOwnProperty.call(req.query, "retorno")) {
-      return res.redirect(302, "/#/projection/return" + _carryToken(req));
+      return res.redirect(302, "/projection/return" + _carryToken(req));
     }
     return res
       .status(404)
       .send("Use /musica?transmissao (OBS) ou /musica?retorno (stage).");
   });
 
+  app.get("/relogio", (req, res) => {
+    return res.redirect(302, "/clock" + _carryToken(req));
+  });
+
+  app.get("/projecao", (req, res) => {
+    return res.redirect(302, "/projection" + _carryToken(req));
+  });
+
   app.get("/biblia", (req, res) => {
     if (Object.prototype.hasOwnProperty.call(req.query, "transmissao")) {
-      return res.redirect(302, "/#/obs/bible" + _carryToken(req));
+      return res.redirect(302, "/obs/bible" + _carryToken(req));
     }
     if (Object.prototype.hasOwnProperty.call(req.query, "retorno")) {
-      return res.redirect(302, "/#/projection/bible/return" + _carryToken(req));
+      return res.redirect(302, "/projection/bible/return" + _carryToken(req));
     }
     return res
       .status(404)
@@ -268,7 +306,7 @@ function _setupAliases(app) {
   });
 
   app.get("/controle", (req, res) => {
-    return res.redirect(302, "/#/remote" + _carryToken(req));
+    return res.redirect(302, "/remote" + _carryToken(req));
   });
 }
 
@@ -329,9 +367,15 @@ function install(app, { isDev, distDir, getToken, getUserData }) {
     if (req.method !== "GET") return next();
     if (req.path.startsWith("/api/") || req.path === "/events") return next();
     if (req.path === "/") {
-      return res.status(404).send("A rota raiz do servidor HTTP está desativada.");
+      const ip = req.ip || req.socket?.remoteAddress || "";
+      if (!_isLocalhost(ip)) {
+        return res.status(404).send("A rota raiz do servidor HTTP está desativada para clientes remotos.");
+      }
+      return indexHandler(req, res);
     }
-    if (req.path.includes(".")) return next(); // arquivo estático ausente → 404 do express.static
+    if (!_isAllowedSpaPath(req.path)) {
+      return res.status(404).send("Rota não encontrada.");
+    }
     return indexHandler(req, res);
   });
 }

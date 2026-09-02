@@ -204,7 +204,7 @@ async function start({ port, mainWindow } = {}) {
    * para YouTube IFrame API e BroadcastChannel.
    */
   const EXTERNAL_PREFIXES = ['/events', '/api', '/legacy'];
-  const EXTERNAL_PATHS = new Set(['/musica', '/biblia', '/controle']);
+  const EXTERNAL_PATHS = new Set(['/musica', '/biblia', '/controle', '/remote', '/relogio', '/projecao']);
 
   function _isLocalhost(ip) {
     return (

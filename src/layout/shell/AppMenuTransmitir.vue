@@ -231,6 +231,8 @@ const FRAMED_ROUTES = ["/operator"];
 // e os usuários reconhecem os termos "Transmissão" e "Retorno".
 const remoteLinks = [
   { alias: "/controle", titleKey: "options.transmission.remote_control" },
+  { alias: "/relogio", titleKey: "options.transmission.win_clock" },
+  { alias: "/projecao", titleKey: "options.transmission.win_projection" },
   { alias: "/musica?transmissao", titleKey: "options.transmission.win_music" },
   { alias: "/musica?retorno", titleKey: "options.transmission.win_return" },
   { alias: "/biblia?retorno", titleKey: "options.transmission.win_bible_return" },
