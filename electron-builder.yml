@@ -128,3 +128,8 @@ linux:
     - rpm
   icon: build/icon-512.png
   category: AudioVideo
+  executableArgs:
+    - --ozone-platform=x11
+    - --ozone-platform-hint=x11
+    - --disable-dev-shm-usage
+    - --no-sandbox
