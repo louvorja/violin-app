@@ -22,6 +22,7 @@
             : `libras-anim-${currentAnimation}`,
         ]"
         @load="onIframeLoad"
+        @error="onIframeError"
       />
     </div>
 
@@ -204,17 +205,48 @@ const hasContent = computed(() => {
 let unityReady = false;
 let pendingGloss = "";
 let settingsApplied = false;
+let unityLoadTimeout: ReturnType<typeof setTimeout> | null = null;
+
+function clearUnityLoadTimeout() {
+  if (unityLoadTimeout) {
+    clearTimeout(unityLoadTimeout);
+    unityLoadTimeout = null;
+  }
+}
 
 function onIframeLoad() {
+  console.log("[LibrasOverlay] iframe carregado", {
+    type: props.type,
+    musicId: props.musicId,
+    hasContent: hasContent.value,
+    shouldShow: shouldShow.value,
+  });
   window.addEventListener("message", onUnityMessage);
+  clearUnityLoadTimeout();
+  unityLoadTimeout = setTimeout(() => {
+    if (!unityReady) {
+      console.warn("[LibrasOverlay] iframe carregou, mas o Unity não respondeu ao on_load_player");
+    }
+  }, 12000);
+}
+
+function onIframeError() {
+  console.warn("[LibrasOverlay] erro ao carregar o iframe do Unity", {
+    type: props.type,
+    musicId: props.musicId,
+    src: unitySrc,
+  });
 }
 
 function onUnityMessage(event: MessageEvent) {
   if (event.source !== iframeRef.value?.contentWindow) return;
   if (event.data?.type !== "unity_event") return;
 
+  console.log("[LibrasOverlay] mensagem Unity:", event.data.event, event.data);
+
   if (event.data.event === "on_load_player") {
     unityReady = true;
+    clearUnityLoadTimeout();
     const avatar = localStorage.getItem(KEYS_LS.LIBRAS.AVATAR) || "icaro";
     console.log("[LibrasOverlay] on_load_player → avatar:", avatar);
     sendToUnity("PlayerManager", "Change", avatar);
@@ -277,14 +309,25 @@ function onUnityMessage(event: MessageEvent) {
 }
 
 function sendToUnity(object: string, method: string, param: string) {
-  if (!iframeRef.value?.contentWindow) return;
+  if (!iframeRef.value?.contentWindow) {
+    console.warn("[LibrasOverlay] sendToUnity sem contentWindow", { object, method, param });
+    return;
+  }
   console.log("[LibrasOverlay] sendToUnity:", object, method, param);
   iframeRef.value.contentWindow.postMessage({ type: "unity", object, method, params: param }, "*");
 }
 
 function playGloss(gloss: string) {
+  console.log("[LibrasOverlay] playGloss:", {
+    gloss,
+    unityReady,
+    pendingGloss,
+    shouldShow: shouldShow.value,
+    hasContent: hasContent.value,
+  });
   if (!unityReady) {
     pendingGloss = gloss;
+    console.log("[LibrasOverlay] gloss pendente até o Unity responder");
     return;
   }
   sendToUnity("PlayerManager", "playNow", gloss);
@@ -334,6 +377,7 @@ function startExitAnimation() {
 }
 
 function disable() {
+  console.log("[LibrasOverlay] disable()", { type: props.type, musicId: props.musicId });
   stopUnity();
   enabled.value = false;
   rawGloss.value = "";
@@ -345,7 +389,16 @@ function disable() {
 
 async function translateAndShow(text: string): Promise<void> {
   const plainText = Libras.stripHtml(text);
+  console.log("[LibrasOverlay] translateAndShow:", {
+    plainText,
+    type: props.type,
+    musicId: props.musicId,
+    enabled: enabled.value,
+    shouldShow: shouldShow.value,
+    unityReady,
+  });
   if (!plainText) {
+    console.warn("[LibrasOverlay] texto vazio após stripHtml");
     rawGloss.value = "";
     return;
   }
@@ -356,6 +409,7 @@ async function translateAndShow(text: string): Promise<void> {
   const cacheKey = `${region}:${plainText}`;
   const memCached = glossCache.get(cacheKey);
   if (memCached) {
+    console.log("[LibrasOverlay] cache em memória hit", { cacheKey });
     rawGloss.value = memCached;
     playGloss(memCached);
     return;
@@ -365,6 +419,7 @@ async function translateAndShow(text: string): Promise<void> {
   const entryType = props.type === "bible" ? "bible" : "music";
   const textCached = await Libras.findCachedByText(plainText, entryType);
   if (textCached?.gloss) {
+    console.log("[LibrasOverlay] cache IndexedDB hit", { cacheKey, entryType });
     rawGloss.value = textCached.gloss;
     glossCache.set(cacheKey, textCached.gloss);
     playGloss(textCached.gloss);
@@ -376,6 +431,11 @@ async function translateAndShow(text: string): Promise<void> {
   try {
     const result = await Libras.translateText(plainText);
     if (result) {
+      console.log("[LibrasOverlay] tradução online concluída", {
+        cacheKey,
+        entryType,
+        tokens: Libras.uniqueTokens(result).length,
+      });
       rawGloss.value = result;
       glossCache.set(cacheKey, result);
       playGloss(result);
@@ -407,6 +467,13 @@ async function translateAndShow(text: string): Promise<void> {
 // ─── Watch ──────────────────────────────────────────────────────────────────
 
 watch(hasContent, (has) => {
+  console.log("[LibrasOverlay] watch hasContent:", {
+    has,
+    unityReady,
+    shouldShow: shouldShow.value,
+    avatarVisible: avatarVisible.value,
+    isExiting: isExiting.value,
+  });
   if (has && unityReady && shouldShow.value) {
     isExiting.value = false;
     avatarVisible.value = true;
@@ -418,6 +485,11 @@ watch(hasContent, (has) => {
 watch(
   () => props.slideLyric,
   (lyric) => {
+    console.log("[LibrasOverlay] watch slideLyric:", {
+      hasLyric: !!lyric,
+      shouldShow: shouldShow.value,
+      enabled: enabled.value,
+    });
     if (!shouldShow.value) return;
     if (lyric) {
       isMediaActive.value = true;
@@ -429,6 +501,11 @@ watch(
 watch(
   () => props.verseText,
   (text) => {
+    console.log("[LibrasOverlay] watch verseText:", {
+      hasText: !!text,
+      shouldShow: shouldShow.value,
+      enabled: enabled.value,
+    });
     if (!shouldShow.value || !text) return;
     translateAndShow(text);
   }
@@ -441,9 +518,18 @@ let unlistenLibrasToggle: (() => void) | null = null;
 
 onMounted(() => {
   enabled.value = localStorage.getItem(KEYS_LS.LIBRAS.ENABLED) === "true";
+  console.log("[LibrasOverlay] mounted", {
+    type: props.type,
+    musicId: props.musicId,
+    enabled: enabled.value,
+    shouldShow: shouldShow.value,
+    hasContent: hasContent.value,
+    currentRegion: currentRegion.value,
+  });
 
   unlistenMediaClose = $broadcast.listen((msg: { type: string }) => {
     if (msg.type === BROADCAST_TYPE.MEDIA_CLOSE) {
+      console.log("[LibrasOverlay] MEDIA_CLOSE recebido");
       sendToUnity("PlayerManager", "stopAll", "");
       if (avatarVisible.value) {
         startExitAnimation();
@@ -459,6 +545,7 @@ onMounted(() => {
   unlistenLibrasToggle = $broadcast.listen((msg: { type: string; payload?: unknown }) => {
     if (msg.type === BROADCAST_TYPE.LIBRAS_TOGGLE) {
       const p = msg.payload as Record<string, unknown> | undefined;
+      console.log("[LibrasOverlay] LIBRAS_TOGGLE recebido:", p);
       enabled.value = p?.enabled === true;
       if (!enabled.value) {
         disable();
@@ -470,9 +557,11 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  console.log("[LibrasOverlay] beforeUnmount");
   unlistenMediaClose?.();
   unlistenLibrasToggle?.();
   window.removeEventListener("message", onUnityMessage);
+  clearUnityLoadTimeout();
   stopUnity();
 });
 </script>

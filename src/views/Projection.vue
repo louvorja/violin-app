@@ -17,7 +17,7 @@
 </template>
 
 <script setup>
-import { onMounted, onBeforeUnmount } from "vue";
+import { onMounted, onBeforeUnmount, watch } from "vue";
 import { useProjectionState } from "@/composables/useProjectionState";
 import $broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
@@ -26,6 +26,18 @@ import OverlayRenderer from "@/components/OverlayRenderer.vue";
 import LibrasOverlay from "@/views/LibrasOverlay.vue";
 
 const { slide, progress, title, slideIndex, totalSlides } = useProjectionState();
+
+watch(
+  [slideIndex, totalSlides, title],
+  ([index, total, currentTitle]) => {
+    console.log("[Projection] state:", {
+      slideIndex: index,
+      totalSlides: total,
+      title: currentTitle || "",
+    });
+  },
+  { immediate: true }
+);
 
 function _goTo(index) {
   if (totalSlides.value <= 0) return;
@@ -58,6 +70,7 @@ function _onKey(e) {
 }
 
 onMounted(() => {
+  console.log("[Projection] mounted");
   document.body.style.margin = "0";
   document.body.style.overflow = "hidden";
   document.body.style.background = "#000";
@@ -65,6 +78,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  console.log("[Projection] beforeUnmount");
   window.removeEventListener("keydown", _onKey);
 });
 </script>

@@ -176,6 +176,7 @@ app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 if (process.platform === "linux") {
   app.commandLine.appendSwitch("disable-dev-shm-usage");
   app.commandLine.appendSwitch("no-sandbox");
+  app.commandLine.appendSwitch("disable-dev-shm-usage");
   console.log("[LouvorJA] Linux session:", {
     xdgSessionType: process.env.XDG_SESSION_TYPE || null,
     waylandDisplay: process.env.WAYLAND_DISPLAY || null,

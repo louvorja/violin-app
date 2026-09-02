@@ -30,7 +30,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from "vue";
+import { ref, onMounted, watch } from "vue";
 import { useProjectionState } from "@/composables/useProjectionState";
 import OverlayRenderer from "@/components/OverlayRenderer.vue";
 import LibrasOverlay from "@/views/LibrasOverlay.vue";
@@ -38,7 +38,20 @@ import LibrasOverlay from "@/views/LibrasOverlay.vue";
 const { slide } = useProjectionState();
 const showLibrasObs = ref(localStorage.getItem("libras_show_on_obs") === "true");
 
+watch(
+  [slide, showLibrasObs],
+  ([currentSlide, showLibras]) => {
+    console.log("[Obs] state:", {
+      hasSlide: !!currentSlide,
+      slideId: currentSlide?.id_music || null,
+      showLibras,
+    });
+  },
+  { immediate: true }
+);
+
 onMounted(() => {
+  console.log("[Obs] mounted");
   document.body.style.margin = "0";
   document.body.style.background = "transparent";
 });

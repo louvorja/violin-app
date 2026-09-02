@@ -329,6 +329,13 @@ const bibleDisplayReference = computed(() => {
 
 useBroadcastListener(BROADCAST_TYPE.BIBLE_VERSE, (payload: unknown) => {
   const p = payload as Record<string, unknown>;
+  console.log("[BackgroundProjection] BIBLE_VERSE:", {
+    active: !!p?.active,
+    text: (p?.text as string) || "",
+    reference: (p?.reference as string) || "",
+    book: (p?.book as string) || "",
+    version: (p?.version as string) || "",
+  });
   if (p?.active) {
     bibleText.value = (p.text as string) || "";
     bibleReference.value = (p.reference as string) || "";
@@ -367,11 +374,13 @@ readPendingBg();
 setTimeout(readPendingBg, 500);
 
 useBroadcastListener(BROADCAST_TYPE.BACKGROUND_PROJECTION, (payload: unknown) => {
+  console.log("[BackgroundProjection] BACKGROUND_PROJECTION:", payload);
   activateBg((payload || {}) as BgState);
 });
 
 useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION, (payload: unknown) => {
   const p = payload as { type?: string; url?: string; page?: number };
+  console.log("[BackgroundProjection] FILE_PROJECTION:", p);
   if (p?.url) {
     if (pdfDoc) {
       try {
@@ -391,6 +400,7 @@ useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION, (payload: unknown) => {
 
 useBroadcastListener(BROADCAST_TYPE.ONLINE_VIDEO_PROJECTION, (payload: unknown) => {
   const p = payload as { type?: string; url?: string };
+  console.log("[BackgroundProjection] ONLINE_VIDEO_PROJECTION:", p);
   if (p?.url) {
     _destroyYoutube();
     fileState.active = true;
@@ -403,6 +413,7 @@ useBroadcastListener(BROADCAST_TYPE.ONLINE_VIDEO_PROJECTION, (payload: unknown) 
 
 useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION_PAGE, (payload: unknown) => {
   const p = payload as { page: number };
+  console.log("[BackgroundProjection] FILE_PROJECTION_PAGE:", p);
   if (fileState.active && fileState.type === "pdf" && pdfDoc) {
     currentPdfPage.value = p.page;
     renderPdfPage(p.page);
@@ -410,6 +421,7 @@ useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION_PAGE, (payload: unknown) => 
 });
 
 useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, () => {
+  console.log("[BackgroundProjection] MEDIA_CLOSE");
   _destroyYoutube();
   if (pdfDoc) {
     try {
@@ -431,6 +443,7 @@ useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, () => {
 });
 
 useBroadcastListener(BROADCAST_TYPE.YOUTUBE_CONTROL, (payload: unknown) => {
+  console.log("[BackgroundProjection] YOUTUBE_CONTROL:", payload);
   if (!ytPlayer || !fileState.active || fileState.type !== "youtube") return;
   const data = payload as { action?: string; value?: number };
   switch (data.action) {
@@ -644,6 +657,7 @@ useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION_BG_UPDATE, () => {
 });
 
 onMounted(async () => {
+  console.log("[BackgroundProjection] mounted");
   document.body.style.margin = "0";
   document.body.style.overflow = "hidden";
   document.body.style.background = "#000";

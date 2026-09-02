@@ -86,6 +86,13 @@ const displayReference = computed(() => {
 });
 
 useBroadcastListener(BROADCAST_TYPE.BIBLE_VERSE, (payload) => {
+  console.log("[ObsBible] BIBLE_VERSE:", {
+    active: payload?.active ?? true,
+    text: payload?.text || "",
+    reference: payload?.reference || "",
+    book: payload?.book || "",
+    chapter: payload?.chapter || "",
+  });
   text.value = payload.text || "";
   reference.value = payload.reference || "";
   book.value = payload.book || "";
@@ -98,6 +105,7 @@ useBroadcastListener(BROADCAST_TYPE.BIBLE_VERSE, (payload) => {
 });
 
 onMounted(() => {
+  console.log("[ObsBible] mounted");
   document.body.style.margin = "0";
   document.body.style.overflow = "hidden";
   document.body.style.background = "transparent";
