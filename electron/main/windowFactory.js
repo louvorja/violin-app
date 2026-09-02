@@ -43,6 +43,13 @@ function _routePath(route) {
   return String(route || "").split("?")[0].split("#")[0];
 }
 
+function _logProjection(feature, message, extra = undefined) {
+  if (process.platform !== "linux") return;
+  const prefix = `[windowFactory][linux][${feature}] ${message}`;
+  if (extra === undefined) console.info(prefix);
+  else console.info(prefix, extra);
+}
+
 function _isProjectionPresentationWindow(route, feature) {
   const path = _routePath(route);
   return (
@@ -76,6 +83,13 @@ function openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = f
   // Se já existe janela para essa feature, mostra-a sem roubar o foco da main.
   const existing = _openWindows.get(feature);
   if (existing && !existing.isDestroyed()) {
+    _logProjection(feature, "existing window reused", {
+      route,
+      monitorId,
+      fullscreen,
+      frame,
+      bounds: existing.getBounds(),
+    });
     existing.showInactive();
     _refocusMainWindow();
     return existing;
@@ -88,6 +102,22 @@ function openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = f
     if (target) displays.setPreferred(feature, monitorId);
   }
   if (!target) target = displays.getPreferred(feature);
+
+  _logProjection(feature, "target display resolved", {
+    route,
+    requestedMonitorId: monitorId,
+    targetId: target?.id ?? null,
+    fullscreen,
+    frame,
+    bounds: target?.bounds,
+    workArea: target?.workArea,
+    allDisplays: screen.getAllDisplays().map((d) => ({
+      id: d.id,
+      primary: d.id === screen.getPrimaryDisplay().id,
+      bounds: d.bounds,
+      workArea: d.workArea,
+    })),
+  });
 
   const bounds = target.bounds;
   const isMac = process.platform === "darwin";
@@ -206,6 +236,11 @@ function openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = f
   function _applyDeferredFullscreen() {
     if (!useDeferredFullscreen || win.isDestroyed()) return;
     try {
+      _logProjection(feature, "applyDeferredFullscreen:start", {
+        bounds,
+        currentBounds: win.getBounds(),
+        isFullScreen: win.isFullScreen(),
+      });
       // Reforça posição/tamanho ANTES do fullscreen — alguns drivers de
       // projetor mexem nos bounds entre a criação e o primeiro paint.
       win.setBounds({
@@ -218,6 +253,10 @@ function openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = f
       // setFullScreen(true) no Windows = borderless windowed cobrindo o monitor
       // (incluindo a taskbar). Mais previsível que mudar resolução.
       if (!win.isFullScreen()) win.setFullScreen(true);
+      _logProjection(feature, "applyDeferredFullscreen:end", {
+        currentBounds: win.getBounds(),
+        isFullScreen: win.isFullScreen(),
+      });
     } catch (e) {
       console.warn(`[windowFactory] applyDeferredFullscreen ${feature}:`, e?.message || e);
     }
@@ -230,6 +269,12 @@ function openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = f
   const showOnce = () => {
     if (_shown || win.isDestroyed()) return;
     _shown = true;
+    _logProjection(feature, "showOnce:before", {
+      currentBounds: win.getBounds(),
+      isFullScreen: win.isFullScreen(),
+      isVisible: win.isVisible(),
+      isFocused: win.isFocused(),
+    });
     win.showInactive();
     _applyDeferredFullscreen();
     if (fullscreen && (isWin || isLin)) {
@@ -250,6 +295,13 @@ function openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = f
     // O operador navega pela janela principal (setas da Bíblia, atalhos);
     // a projeção apenas exibe e recebe estado via BroadcastChannel.
     _refocusMainWindow();
+    _logProjection(feature, "showOnce:after", {
+      currentBounds: win.getBounds(),
+      isFullScreen: win.isFullScreen(),
+      isVisible: win.isVisible(),
+      isFocused: win.isFocused(),
+      targetBounds: bounds,
+    });
   };
   win.webContents.once("did-finish-load", showOnce);
   win.once("ready-to-show", showOnce);
@@ -261,6 +313,17 @@ function openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = f
     const _onDisplayChange = () => {
       if (win.isDestroyed()) return;
       const stillThere = screen.getAllDisplays().some((d) => d.id === target.id);
+      _logProjection(feature, "display-change", {
+        targetId: target.id,
+        stillThere,
+        currentBounds: win.getBounds(),
+        isFullScreen: win.isFullScreen(),
+        displays: screen.getAllDisplays().map((d) => ({
+          id: d.id,
+          primary: d.id === screen.getPrimaryDisplay().id,
+          bounds: d.bounds,
+        })),
+      });
       if (!stillThere) {
         // Monitor sumiu — move pra qualquer outro disponível e reaplica fullscreen.
         const fallback = screen.getPrimaryDisplay();
