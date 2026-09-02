@@ -136,12 +136,12 @@ function openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = f
   // de monitor secundário: o Chromium frequentemente posiciona primeiro no
   // monitor primário e DEPOIS migra, deixando a janela "presa" no display
   // errado em alguns drivers de projetor. Estratégia mais determinística:
-  // criar como borderless cobrindo os bounds exatos do display alvo, e em
-  // ready-to-show aplicar setFullScreen(true). No macOS usamos `kiosk`
-  // somente quando a projeção está no monitor principal, pois ali precisa
-  // cobrir Dock/menu bar. Em monitores secundários, kiosk é agressivo demais
-  // e pode deixar o app preso no modo apresentação.
-  const useDeferredFullscreen = fullscreen && (isWin || isLin);
+  // criar como borderless cobrindo os bounds exatos do display alvo.
+  // No Windows ainda reaplicamos fullscreen depois do primeiro paint para
+  // cobrir a taskbar. No Linux/Wayland, a transição para fullscreen pode
+  // ser controlada pelo compositor e acabar movendo a janela; manter só o
+  // borderless tende a ser mais estável para projeção.
+  const useDeferredFullscreen = fullscreen && isWin;
   const winOpts = {
     x: bounds.x - overscan,
     y: bounds.y - overscan,
@@ -230,7 +230,7 @@ function openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = f
   // setVisibleOnAllWorkspaces transforma o tipo do processo (UIElement),
   // o que ESCONDE o ícone do dock. Não usar.
 
-  // Aplica fullscreen "borderless" no Windows/Linux DEPOIS da janela já
+  // Aplica fullscreen "borderless" no Windows DEPOIS da janela já
   // estar posicionada no monitor correto. Esta sequência é defensiva
   // contra drivers de projetor que demoram a "settle".
   function _applyDeferredFullscreen() {
