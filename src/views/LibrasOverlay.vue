@@ -127,10 +127,12 @@ const anchor = computed<OverlayAnchor>(
     ($userdata.get<string>(KEYS.MODULES.LIBRAS.ANCHOR, "bottom-right") ||
       "bottom-right") as OverlayAnchor
 );
-const offsetX = computed(() => $userdata.get<number>(KEYS.MODULES.LIBRAS.OFFSET_X, 20) || 0);
-const offsetY = computed(() => $userdata.get<number>(KEYS.MODULES.LIBRAS.OFFSET_Y, 20) || 0);
-const avatarWidth = computed(() => $userdata.get<number>(KEYS.MODULES.LIBRAS.WIDTH, 200) || 200);
-const avatarHeight = computed(() => $userdata.get<number>(KEYS.MODULES.LIBRAS.HEIGHT, 300) || 300);
+const offsetX = computed(() => $userdata.get<number>(KEYS.MODULES.LIBRAS.OFFSET_X, -20) as number);
+const offsetY = computed(() => $userdata.get<number>(KEYS.MODULES.LIBRAS.OFFSET_Y, -20) as number);
+const avatarWidth = computed(() => $userdata.get<number>(KEYS.MODULES.LIBRAS.WIDTH, 450) as number);
+const avatarHeight = computed(
+  () => $userdata.get<number>(KEYS.MODULES.LIBRAS.HEIGHT, 400) as number
+);
 
 const anchorStyle = computed(() => {
   const pos = buildAnchorStyle({
@@ -213,7 +215,7 @@ function onUnityMessage(event: MessageEvent) {
 
   if (event.data.event === "on_load_player") {
     unityReady = true;
-    const avatar = localStorage.getItem("libras_avatar") || "icaro";
+    const avatar = localStorage.getItem(KEYS_LS.LIBRAS.AVATAR) || "icaro";
     console.log("[LibrasOverlay] on_load_player → avatar:", avatar);
     sendToUnity("PlayerManager", "Change", avatar);
     hideSubtitles();

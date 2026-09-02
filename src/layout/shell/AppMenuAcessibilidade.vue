@@ -1031,10 +1031,10 @@ onMounted(async () => {
   showOnObs.value = localStorage.getItem("libras_show_on_obs") === "true";
   currentAnchor.value =
     $userdata.get<string>(KEYS.MODULES.LIBRAS.ANCHOR, "bottom-right") || "bottom-right";
-  currentOffsetX.value = $userdata.get<number>(KEYS.MODULES.LIBRAS.OFFSET_X, 20) || 20;
-  currentOffsetY.value = $userdata.get<number>(KEYS.MODULES.LIBRAS.OFFSET_Y, 20) || 20;
-  currentWidth.value = $userdata.get<number>(KEYS.MODULES.LIBRAS.WIDTH, 200) || 200;
-  currentHeight.value = $userdata.get<number>(KEYS.MODULES.LIBRAS.HEIGHT, 300) || 300;
+  currentOffsetX.value = $userdata.get<number>(KEYS.MODULES.LIBRAS.OFFSET_X, -20) as number;
+  currentOffsetY.value = $userdata.get<number>(KEYS.MODULES.LIBRAS.OFFSET_Y, -20) as number;
+  currentWidth.value = $userdata.get<number>(KEYS.MODULES.LIBRAS.WIDTH, 450) || 200;
+  currentHeight.value = $userdata.get<number>(KEYS.MODULES.LIBRAS.HEIGHT, 400) as number;
   showBorder.value = $userdata.get<boolean>(KEYS.MODULES.LIBRAS.SHOW_BORDER, false) || false;
   currentSpeed.value = $userdata.get<number>(KEYS.MODULES.LIBRAS.SPEED, 1) || 1;
   currentEmotion.value = $userdata.get<string>(KEYS.MODULES.LIBRAS.EMOTION, "default") || "default";

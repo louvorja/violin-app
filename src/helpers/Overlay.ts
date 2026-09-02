@@ -2,7 +2,6 @@ import $idb from "@/helpers/IndexedDB";
 import { DB_TABLE } from "@/constants/DbTables";
 import Platform from "@/helpers/Platform";
 import type { OverlayImageRecord, OverlaySlot } from "@/types/Overlay";
-import { KEYS } from "@/constants/UserDataKeys";
 import { IMAGE_EXT } from "@/constants/FileTypes";
 
 // ── Tables ──
