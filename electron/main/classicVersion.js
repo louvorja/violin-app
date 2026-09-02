@@ -52,7 +52,11 @@ function detect(installDir = CLASSIC_INSTALL_DIR) {
 
   let detected = false;
   try {
-    detected = fs.existsSync(installDir) && fs.statSync(installDir).isDirectory();
+    detected =
+      fs.existsSync(installDir) &&
+      fs.statSync(installDir).isDirectory() &&
+      fs.existsSync(configDir) &&
+      fs.statSync(configDir).isDirectory();
   } catch {
     detected = false;
   }

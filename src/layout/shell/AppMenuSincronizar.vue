@@ -409,20 +409,25 @@
         <!-- Armazenamento -->
         <v-window-item value="storage">
           <section class="opt-section">
-            <div class="opt-row opt-row--col">
-              <label class="opt-label">{{ $t("options.storage.folder") }}</label>
-              <div class="opt-folder">
-                <code class="opt-folder-path">{{ storageStats?.filesDir || "—" }}</code>
+            <div class="opt-row opt-row--col mt-5">
+              <label class="opt-label">
+                {{ $t("options.storage.folder") }}
                 <v-chip
                   v-if="useClassicDir"
                   size="x-small"
-                  color="warning"
+                  color="primary"
                   variant="tonal"
                   class="ml-2"
                 >
                   <v-icon icon="mdi-desktop-classic" size="12" class="mr-1" />
                   {{ $t("options.storage.classic_version") }}
                 </v-chip>
+              </label>
+              <div class="opt-folder">
+                <code class="opt-folder-path">
+                  {{ storageStats?.filesDir || "—" }}
+                </code>
+
                 <div class="opt-folder-actions">
                   <button type="button" class="opt-btn" @click="openFolder">
                     {{ $t("options.storage.open_folder") }}
@@ -431,7 +436,7 @@
                     {{ $t("options.storage.change_folder") }}
                   </button>
                   <button
-                    v-if="!useClassicDir && Platform.platform === 'win32'"
+                    v-if="!useClassicDir"
                     type="button"
                     class="opt-btn"
                     @click="detectClassic"
@@ -1045,6 +1050,26 @@ async function persistClassicSelection(result: {
 async function detectClassic(): Promise<void> {
   if (!Platform.classic?.detect) return;
   try {
+    const openManualSelection = async (): Promise<void> => {
+      const manualDir = await Platform.storage?.chooseDir?.();
+      if (!manualDir) return;
+
+      const manualResult = await Platform.classic?.detect?.(manualDir);
+      const hasClassicContent =
+        !!manualResult?.detected && Object.values(manualResult.folders || {}).some(Boolean);
+      if (!hasClassicContent) {
+        $alert.error({ text: "options.storage.classic_manual_invalid" });
+        return;
+      }
+
+      await persistClassicSelection(manualResult);
+    };
+
+    if (Platform.platform !== "win32") {
+      await openManualSelection();
+      return;
+    }
+
     const result = await Platform.classic.detect();
     if (!result.detected) {
       $alert.yesno(
@@ -1054,17 +1079,7 @@ async function detectClassic(): Promise<void> {
         },
         async (btn?: string) => {
           if (btn !== "yes") return;
-
-          const manualDir = await Platform.storage?.chooseDir?.();
-          if (!manualDir) return;
-
-          const manualResult = await Platform.classic?.detect?.(manualDir);
-          if (!manualResult?.detected) {
-            $alert.error({ text: "options.storage.classic_manual_invalid" });
-            return;
-          }
-
-          await persistClassicSelection(manualResult);
+          await openManualSelection();
         }
       );
       return;

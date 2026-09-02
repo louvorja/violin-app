@@ -198,7 +198,7 @@ const classicCheckOpen = ref(false);
 const bundleLoading = ref(false);
 const bundleCancelled = ref(false);
 const bundleRetryAttempt = ref(1);
-const bundleRetryMax = ref(3);
+const bundleRetryMax = ref(5);
 const bundleError = ref<string | null>(null);
 const bundleErrorOpen = ref(false);
 const releaseNotesOpen = ref(false);
@@ -329,10 +329,10 @@ async function _checkBundleNeeded(): Promise<boolean> {
   }
 }
 
-/** Bundle download com retry (3x) + overlay bloqueante. Retorna true se OK, false se falhou/cancelou. */
+/** Bundle download com retry (5x) + overlay bloqueante. Retorna true se OK, false se falhou/cancelou. */
 async function _showPendingBundleDownload(): Promise<boolean> {
-  const MAX_RETRIES = 3;
-  const RETRY_DELAY_MS = 2000;
+  const MAX_RETRIES = 5;
+  const RETRY_DELAY_MS = 5000;
 
   bundleCancelled.value = false;
 

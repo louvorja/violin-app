@@ -307,21 +307,24 @@ Remoto, Sincronizar e StartupCheck.
 ## 🖥️ Versão clássica (Delphi)
 
 A detecção da versão clássica é feita em `electron/main/classicVersion.js`.
-O app considera a instalação presente quando a pasta raiz padrão existe em
-`C:\Program Files (x86)\Louvor JA`.
+O app considera a instalação presente quando a pasta raiz padrão existe e a
+subpasta `config/` também está presente em `C:\Program Files (x86)\Louvor JA`.
 
 ### Fluxo de login
 
 - `Shell.vue` só abre o `ClassicVersionDialog` quando a detecção retorna sucesso
   e `SKIP_CLASSIC_CHECK`/`USE_CLASSIC_DIR` não bloqueiam o fluxo.
+- A verificação inicial da versão clássica só roda no **Windows**.
 - O checkbox do dialog grava `SKIP_CLASSIC_CHECK`, evitando reaparecer no login.
 - O dialog mostra o diretório detectado e permite aceitar ou recusar o uso do
   diretório clássico.
 
 ### Sincronização e importação
 
-- Em `AppMenuSincronizar.vue`, quando a instalação padrão não é encontrada, o
-  usuário pode apontar manualmente o diretório raiz da instalação clássica.
+- Em `AppMenuSincronizar.vue`, o botão de versão clássica aparece em todo o
+  desktop, não apenas no Windows.
+- Quando a instalação padrão não é encontrada, o usuário pode apontar
+  manualmente o diretório raiz da instalação clássica.
 - O caminho salvo fica em `storage.classicDir` e a flag `storage.useClassicDir`
   ativa o modo clássico.
 - Quando o modo clássico está ativo, o diretório em runtime é atualizado sem
@@ -360,11 +363,11 @@ Atalhos in-window registrados em `src/main.js` via `Hotkeys.register()`.
 
 ## 🔌 Helpers vs Composables
 
-| Tipo | Descrição |
-|------|-----------|
-| **Helper puro** | JS/TS sem APIs Vue. Seguro no Electron main process |
-| **Acoplado a Pinia** | Acessa o store. Funciona apenas no renderer |
-| **Composable** | Usa APIs Vue, chamado dentro de `setup()` |
+| Tipo                 | Descrição                                           |
+|----------------------|-----------------------------------------------------|
+| **Helper puro**      | JS/TS sem APIs Vue. Seguro no Electron main process |
+| **Acoplado a Pinia** | Acessa o store. Funciona apenas no renderer         |
+| **Composable**       | Usa APIs Vue, chamado dentro de `setup()`           |
 
 Helpers principais:
 
@@ -408,10 +411,10 @@ Composables principais:
 
 Canal único `BroadcastChannel("louvorja")`. Duas finalidades:
 
-| Categoria | Descrição | Escopo |
-|---|---|---|
+| Categoria        | Descrição                                        | Escopo                      |
+|------------------|--------------------------------------------------|-----------------------------|
 | **cross-window** | Sincronizam estado entre janelas (Projeção, OBS) | Multi-janela (mesmo origin) |
-| **in-app** | Hotkeys e eventos HTTP → módulos Vue | Mesma janela |
+| **in-app**       | Hotkeys e eventos HTTP → módulos Vue             | Mesma janela                |
 
 > ✅ **Electron**: `BroadcastChannel` funciona entre `BrowserWindow` (sandbox: false, mesma origem).
 
@@ -1222,15 +1225,15 @@ AppImage/deb/rpm.
 
 Aliases em `vite.config.js`:
 
-| Alias | Resolve |
-|---|---|
-| `@` | `src/` |
-| `@helpers` | `src/helpers/` |
-| `@modules` | `src/modules/` |
+| Alias         | Resolve           |
+|---------------|-------------------|
+| `@`           | `src/`            |
+| `@helpers`    | `src/helpers/`    |
+| `@modules`    | `src/modules/`    |
 | `@components` | `src/components/` |
-| `@constants` | `src/constants/` |
-| `@store` | `src/store/` |
-| `@views` | `src/views/` |
+| `@constants`  | `src/constants/`  |
+| `@store`      | `src/store/`      |
+| `@views`      | `src/views/`      |
 
 ---
 

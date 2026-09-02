@@ -1234,6 +1234,7 @@
     "detected": "Foi detectada a instalação da versão clássica do LouvorJA.",
     "not_found": "Nenhuma instalação da versão clássica foi localizada.",
     "language_detected": "Idioma detectado: {lang}",
+    "dont_show_again": "Não mostrar novamente",
     "accept": "Usar diretório da versão clássica",
     "decline": "Não usar"
   }
