@@ -168,18 +168,19 @@ function createWindow() {
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 
 // ---------------------------------------------------------------------------
-// Linux — Forçar X11 e desabilitar sandbox
+// Linux — manter o backend gráfico da sessão e desabilitar shm problemático
 // ---------------------------------------------------------------------------
-// Ubuntu 22.04+ usa Wayland por padrão, mas screen.getAllDisplays() retorna
-// bounds incorretos no Wayland (todos os displays com mesmas coordenadas).
-// Isso quebra detecção de monitores e posicionamento de janelas de projeção.
-// Forçar X11 resolve: display bounds corretos + window positioning funciona.
-// O --no-sandbox é necessário para AppImage (ambiente isolado sem capabilities).
+// Não forçamos X11 aqui: Wayland deve continuar funcionando em desktops que o
+// usam nativamente. Mantemos apenas os flags de estabilidade que valem para os
+// dois caminhos de sessão.
 if (process.platform === "linux") {
-  app.commandLine.appendSwitch("ozone-platform", "x11");
-  app.commandLine.appendSwitch("ozone-platform-hint", "x11");
   app.commandLine.appendSwitch("disable-dev-shm-usage");
   app.commandLine.appendSwitch("no-sandbox");
+  console.log("[LouvorJA] Linux session:", {
+    xdgSessionType: process.env.XDG_SESSION_TYPE || null,
+    waylandDisplay: process.env.WAYLAND_DISPLAY || null,
+    display: process.env.DISPLAY || null,
+  });
 }
 
 app.whenReady().then(async () => {
