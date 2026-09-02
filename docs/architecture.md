@@ -292,38 +292,9 @@ bible_chapters).
 - **AppMenuSincronizar** (desktop): botão "Restaurar banco de dados" faz
   `force: true` + reload da página.
 
-#### Pacote jsondb empacotado + seed inicial (`Seed.ts`)
-
-`npm run jsondb` (`scripts/fetch-jsondb.mjs`, execução manual) baixa da API
-todos os JSONs que o app consome e grava em `./jsondb/`, empacotado via
-`extraResources` para `resourcesPath/jsondb`. Log por arquivo (download ok,
-skip por existência, 404, falha); layout antigo é migrado automaticamente:
-
-```
-jsondb/
-├── _manifest.json              ← data/contagens
-├── lang/
-│   └── pt/ · es/               ← catálogos por idioma
-│       ├── {loc}_musics/_hymnal/_hymnal_1996/_categories/
-│       │   _bible_version/_bible_book/_doxology_albums/
-│       │   _children_albums/_collections_online
-├── albums/album_<id>.json      ← derivados, sem idioma
-├── musics/music_<id>.json
-└── bible/bible_<v>_<livro>_<cap>.json
-```
-
-No boot (`main.js` → `Seed.start()`), **somente desktop**:
-
-1. Flag única em settings (`id: "seed"`): já marcada = no-op instantâneo.
-2. Primeiro start: injeta os datasets **críticos** (catálogos dos dois idiomas)
-   ANTES de montar a UI — start inicial funcional sem internet.
-3. Bulk (álbuns, detalhes `music_*`, capítulos de todas as versões) roda em
-   background após o mount.
-4. Injeção usa `$database.needsSeed(chave)` + `$database.seed(chave, dados)` —
-   mesma normalização/diff das escritas de rede; datasets já válidos são pulados.
-
-Dados novos publicados na API durante o uso seguem o fluxo normal
-(rede → diff nas tabelas), independente do pacote.
+O bundle substitui o antigo seed inicial de JSONs empacotados. O fluxo atual de
+instalação usa `BundleInstaller.ts` para baixar `/db/bundle`, extrair os JSONs e
+injetar no IndexedDB via `$database.seed()` antes do uso normal.
 
 **Versões da Bíblia "baixadas"** (`helpers/BibleDownloads.ts`): detecção
 unificada por união — capítulos completos no IDB (`bible_chapters`) ∪ cache

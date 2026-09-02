@@ -278,7 +278,7 @@ describe("Database — invalidação e legado", () => {
   });
 });
 
-describe("Database — seed do pacote jsondb (needsSeed/seed)", () => {
+describe("Database — seed do bundle do banco (needsSeed/seed)", () => {
   it("needsSeed=true com tabela vazia; após seed() lê sem rede", async () => {
     fetchMock.mockResolvedValue(jsonResponse([{ id_music: 1 }]));
     const db = await importDatabase();

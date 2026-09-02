@@ -5,8 +5,8 @@
  * (`bible_<versão>_<livro>_<capítulo>`) estão disponíveis em qualquer uma
  * das fontes locais:
  *
- *   1. IndexedDB (tabela `bible_chapters`) — seed do pacote jsondb e
- *      downloads em runtime via $database;
+ *   1. IndexedDB (tabela `bible_chapters`) — bundle do banco e downloads em
+ *      runtime via $database;
  *   2. Disco legado (userData/json_db/*.json) — usuários de versões antigas;
  *   3. Flag manual do usuário (KEYS.STORAGE.BIBLE_DOWNLOADED_VERSIONS),
  *      gravada pelo download na tela Sincronizar/StartupCheck.

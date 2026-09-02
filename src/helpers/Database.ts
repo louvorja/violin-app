@@ -467,7 +467,7 @@ export default {
 
   /**
    * O dataset já está válido no IDB (meta/linhas com a versão vigente)?
-   * Usado pelo seed do pacote jsondb — não toca na camada de memória.
+   * Usado pelo instalador do bundle do banco — não toca na camada de memória.
    */
   async needsSeed(file: string): Promise<boolean> {
     try {
@@ -502,9 +502,9 @@ export default {
   },
 
   /**
-   * Grava dados brutos (ex.: do pacote jsondb) no dataset roteado, com a
-   * mesma normalização/diff das escritas de rede. Não toca na memória —
-   * a próxima leitura populará o cache normalmente.
+   * Grava dados brutos no dataset roteado, com a mesma normalização/diff das
+   * escritas de rede. Não toca na memória — a próxima leitura populará o cache
+   * normalmente.
    */
   async seed(file: string, data: unknown): Promise<void> {
     await writeRouted(file, data, routeFor(file));

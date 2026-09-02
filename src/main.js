@@ -33,7 +33,6 @@ import { IMAGE_EXT, AUDIO_EXT, VIDEO_EXT } from "@/constants/FileTypes";
 import { DB_TABLE } from "@/constants/DbTables";
 import $idb from "@/helpers/IndexedDB";
 import ScheduledStore from "@/helpers/ScheduledStore";
-import Seed from "@/helpers/Seed";
 import ProjectionWindows from "@/helpers/ProjectionWindows";
 import Projection from "@/helpers/Projection";
 import {
@@ -680,15 +679,6 @@ $storage.hydrate().then(async () => {
       await ScheduledStore.hydrate();
     } catch (e) {
       console.warn("[main] ScheduledStore.hydrate falhou:", e);
-    }
-
-    // Seed do pacote jsondb (desktop): no primeiro start injeta os catálogos
-    // críticos ANTES da UI montar — start inicial funcional sem internet.
-    // Com a flag marcada é um check rápido e segue direto para o mount.
-    try {
-      await Seed.start();
-    } catch (e) {
-      console.warn("[main] seed jsondb falhou:", e);
     }
 
     app.mount("#app");
