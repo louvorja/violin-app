@@ -39,6 +39,12 @@ const splash = require("./main/splash.js");
 const storage = require("./main/storage.js");
 const classicVersion = require("./main/classicVersion.js");
 
+function configureAppPaths() {
+  // Mantém o identificador técnico do pacote separado do nome exibido.
+  app.setName("LouvorJA Violin");
+  app.setPath("userData", path.join(app.getPath("appData"), "LouvorJA Violin"));
+}
+
 // ---------------------------------------------------------------------------
 // D2 — Registrar scheme louvorja:// como privilegiado ANTES do app.whenReady
 // ---------------------------------------------------------------------------
@@ -176,6 +182,8 @@ if (process.platform === "linux") {
 }
 
 app.whenReady().then(async () => {
+  configureAppPaths();
+
   // Limpa Service Workers herdados de execuções anteriores em modo PWA/dev.
   // Em prod desktop o app é file:// e não usa SW, mas se o usuário já abriu
   // o app via dev server / PWA, o SW persistido pode interceptar requests
