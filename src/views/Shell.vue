@@ -259,36 +259,59 @@ let _updaterUnsub: (() => void) | null = null;
 let _startupCheckPending = false;
 let _pendingReleaseNotes = false;
 let _startupCheckTimeout: ReturnType<typeof setTimeout> | null = null;
+let _bootPhase: "idle" | "release-notes" | "startup" | "classic" | "done" = "idle";
+let _startupCloseDeferred = false;
 
-// Quando o startup check fecha, verificar se há versão clássica no Windows
 watch(startupCheckOpen, (isOpen, wasOpen) => {
-  if (wasOpen && !isOpen) {
-    void _showPendingClassicCheck().then((shown) => {
-      if (!shown) _showPendingReleaseNotes();
-    });
+  if (!wasOpen || isOpen || _bootPhase !== "startup") return;
+  if (sync.downloading.value || sync.bibleDownloading.value) {
+    _startupCloseDeferred = true;
+    return;
   }
+  _startupCloseDeferred = false;
+  void _showPendingClassicCheck();
 });
 
-watch(classicCheckOpen, (isOpen, wasOpen) => {
-  if (wasOpen && !isOpen) {
-    _showPendingReleaseNotes();
+watch(
+  [() => sync.downloading.value, () => sync.bibleDownloading.value],
+  ([downloading, bibleDownloading]) => {
+    if (_bootPhase !== "startup" || !_startupCloseDeferred) return;
+    if (downloading || bibleDownloading) return;
+    _startupCloseDeferred = false;
+    void _showPendingClassicCheck();
   }
-});
+);
 
 function _openUpdatesScreen() {
   window.dispatchEvent(new CustomEvent("louvorja:open-updates"));
 }
 
 // Mostra release notes se pendente.
-function _showPendingReleaseNotes() {
-  if (!_pendingReleaseNotes) return;
+function _showPendingReleaseNotes(): boolean {
+  if (!_pendingReleaseNotes) return false;
   _pendingReleaseNotes = false;
   const skippedNotesVersion = $userdata.get<string | null>(
     KEYS.OPTIONS.SKIP_RELEASE_NOTES_VERSION,
     null
   );
   if (skippedNotesVersion !== packageJson.version) {
+    _bootPhase = "release-notes";
     releaseNotesOpen.value = true;
+    return true;
+  }
+  return false;
+}
+
+function _continueBootAfterUpdate(): void {
+  _startupCheckPending = false;
+  if (_startupCheckTimeout) {
+    clearTimeout(_startupCheckTimeout);
+    _startupCheckTimeout = null;
+  }
+
+  const shown = _showPendingReleaseNotes();
+  if (!shown) {
+    void _showPendingStartupCheck();
   }
 }
 
@@ -298,16 +321,11 @@ async function _showPendingStartupCheck() {
   const skip = $userdata.get<boolean>(KEYS.OPTIONS.SKIP_STARTUP_CHECK, false);
   if (skip) {
     const shown = await _showPendingClassicCheck();
-    if (!shown) _showPendingReleaseNotes();
+    if (!shown) _bootPhase = "done";
     return;
   }
 
-  const needsBundle = await _checkBundleNeeded();
-  if (needsBundle) {
-    const ok = await _showPendingBundleDownload();
-    if (!ok) return;
-  }
-
+  _bootPhase = "startup";
   startupCheckOpen.value = true;
 }
 
@@ -377,6 +395,7 @@ async function _showPendingClassicCheck(): Promise<boolean> {
   const result = await Platform.classic.detect();
   if (!result?.detected) return false;
 
+  _bootPhase = "classic";
   classicCheckOpen.value = true;
   return true;
 }
@@ -423,33 +442,33 @@ function _handleUpdaterState(
         updateDialogVersion.value = state.newVersion || "";
         updateDialogOpen.value = true;
       } else {
-        // Versão dispensada → seguir para a verificação inicial
-        _showPendingStartupCheck();
+        // Versão dispensada → seguir para release notes / startup
+        _continueBootAfterUpdate();
       }
     } else if (_startupCheckPending && autoDownload) {
       // Auto-download ativo: download já começou, não mostrar dialog
       // mas chain para release notes quando o download concluir
-      _startupCheckPending = false;
+      _bootPhase = "idle";
     }
   } else if (state.status === "downloaded") {
     $appdata.set(KEYS.SHELL.APP_UPDATE_AVAILABLE, true);
     $appdata.set(KEYS.SHELL.APP_UPDATE_VERSION, state.newVersion || "");
     // Download manual via dialog → o dialog já mostra o estado "instalar";
-    // não reabrir as notas por cima. Segue para a verificação inicial.
+    // não reabrir as notas por cima. Segue para release notes / startup.
     if (!updateDialogOpen.value) {
-      _showPendingStartupCheck();
+      _continueBootAfterUpdate();
     }
   } else if (state.status === "not-available" || state.status === "error") {
     $appdata.set(KEYS.SHELL.APP_UPDATE_AVAILABLE, false);
     _startupCheckPending = false;
     // Sem update → seguir para a verificação inicial
-    _showPendingStartupCheck();
+    _continueBootAfterUpdate();
   }
 }
 
 async function _runStartupUpdateCheck() {
   if (!Platform.isDesktop || !Platform.updater) {
-    _showPendingReleaseNotes();
+    _continueBootAfterUpdate();
     return;
   }
   const checkOnStart = $userdata.get<boolean>(KEYS.OPTIONS.CHECK_UPDATES_ON_START, true) === true;
@@ -462,7 +481,7 @@ async function _runStartupUpdateCheck() {
   );
   if (!checkOnStart) {
     // Preferência desligada: não checa, mas segue o fluxo normal de boot
-    _showPendingReleaseNotes();
+    _continueBootAfterUpdate();
     return;
   }
   _startupCheckPending = true;
@@ -473,7 +492,7 @@ async function _runStartupUpdateCheck() {
     if (_startupCheckPending) {
       console.warn("[Shell] startup update check demorou demais — seguindo para startup check");
       _startupCheckPending = false;
-      _showPendingStartupCheck();
+      _continueBootAfterUpdate();
     }
   }, 15000);
 
@@ -487,15 +506,13 @@ async function _runStartupUpdateCheck() {
       // de boot para não depender do updater.
       console.warn("[Shell] startup update check retornou erro:", res?.error);
       if (_startupCheckPending) {
-        _startupCheckPending = false;
-        _showPendingStartupCheck();
+        _continueBootAfterUpdate();
       }
     }
   } catch (e) {
     console.warn("[Shell] startup update check falhou:", e);
     if (_startupCheckPending) {
-      _startupCheckPending = false;
-      _showPendingStartupCheck();
+      _continueBootAfterUpdate();
     }
   } finally {
     if (_startupCheckTimeout) {
@@ -526,6 +543,9 @@ function onReleaseNotesClose(dontShowAgain = false) {
   if (dontShowAgain) {
     $userdata.set(KEYS.OPTIONS.SKIP_RELEASE_NOTES_VERSION, packageJson.version);
   }
+  if (_bootPhase === "release-notes") {
+    void _showPendingStartupCheck();
+  }
 }
 
 // Handler: iniciar download da atualização a partir do dialog
@@ -540,9 +560,9 @@ function onUpdateDialogDontShowAgain() {
   $userdata.set(KEYS.OPTIONS.SKIP_UPDATE_NOTIFICATION_VERSION, updateDialogVersion.value);
 }
 
-// Handler: dialog de update fechado (sem download) → seguir para startup check
+// Handler: dialog de update fechado (sem download) → seguir para release notes/startup
 function onUpdateDialogClose() {
-  _showPendingStartupCheck();
+  _continueBootAfterUpdate();
 }
 
 // Registra ações do shell no composable (substitui `$appdata.set("shell._ref")`)
@@ -620,8 +640,7 @@ onMounted(() => {
   }
 
   // Startup check — só no desktop.
-  // O fluxo é: update check → release notes → startup check.
-  // Marca como pendente; será exibido após o update check.
+  // O fluxo é: bundle download → update check → release notes → startup check → classic.
   if (display.platform.value.electron) {
     const skippedNotesVersion = $userdata.get<string | null>(
       KEYS.OPTIONS.SKIP_RELEASE_NOTES_VERSION,
@@ -655,10 +674,18 @@ onMounted(() => {
         _handleUpdaterState(s);
       })
       .catch((e: unknown) => console.warn("[Shell] status replay falhou:", e));
-    _runStartupUpdateCheck();
   } else {
-    // Sem updater (web/PWA): release notes direto
-    _showPendingReleaseNotes();
+    // Sem updater (web/PWA): segue direto para release notes/startup.
+  }
+
+  if (Platform.isDesktop) {
+    (async () => {
+      const ok = await _showPendingBundleDownload();
+      if (!ok) return;
+      _runStartupUpdateCheck();
+    })();
+  } else {
+    _continueBootAfterUpdate();
   }
 
   // Bridge popup → main (replica popup ↔ shell)
