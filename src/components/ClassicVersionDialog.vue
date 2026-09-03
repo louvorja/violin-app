@@ -58,13 +58,6 @@
         <v-divider />
 
         <v-card-actions class="pa-4">
-          <v-checkbox
-            v-model="dontShowAgain"
-            :label="$t('classic.dont_show_again')"
-            density="compact"
-            hide-details
-            class="mt-1"
-          />
           <v-spacer />
           <v-btn variant="text" @click="onDecline">
             {{ $t("classic.decline") }}
@@ -127,14 +120,12 @@ const { t } = useI18n();
 const model = ref(props.modelValue);
 const view = ref<"scanning" | "detected" | "not_found">("scanning");
 const result = ref<ClassicDetectResult | null>(null);
-const dontShowAgain = ref(false);
 
 watch(
   () => props.modelValue,
   (v) => {
     model.value = v;
     if (v) {
-      dontShowAgain.value = false;
       runDetection();
     }
   }
@@ -188,9 +179,7 @@ function onDecline(): void {
 }
 
 function onClose(): void {
-  if (dontShowAgain.value) {
-    $userdata.set(KEYS.OPTIONS.SKIP_CLASSIC_CHECK, true);
-  }
+  $userdata.set(KEYS.OPTIONS.SKIP_CLASSIC_CHECK, true);
   model.value = false;
   emit("update:modelValue", false);
 }
