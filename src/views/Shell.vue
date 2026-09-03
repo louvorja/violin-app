@@ -50,7 +50,6 @@
       <v-card class="pa-5" max-width="540">
         <div class="d-flex flex-column ga-4">
           <div class="d-flex align-center ga-3">
-            <v-progress-circular indeterminate color="primary" size="32" />
             <span class="text-body-1 font-weight-medium">
               {{ t("startup_check.bundle_downloading") }}
             </span>
@@ -63,6 +62,7 @@
                   )
                 : 0
             "
+            :indeterminate="sync.bundleProgress.value.total === 0"
             color="primary"
             height="8"
             rounded
