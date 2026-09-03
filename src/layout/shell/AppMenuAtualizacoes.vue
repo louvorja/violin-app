@@ -149,7 +149,7 @@
             <button
               type="button"
               class="opt-btn"
-              :disabled="dbBackupBusy || sync.bundleInstalling.value"
+              :disabled="dbBackupBusy"
               @click="reinstallDatabase"
             >
               <v-icon icon="mdi-database-refresh" size="14" class="mr-1" />
@@ -183,17 +183,11 @@
           {{ dbBackupProgressDetail }}
         </div>
       </div>
-      <div v-if="sync.bundleInstalling.value" class="opt-folder-actions mt-2">
+      <div v-if="dbBundleRunning" class="opt-folder-actions mt-2">
         <v-progress-circular indeterminate color="primary" size="32" />
         <v-progress
-          :model-value="
-            sync.bundleProgress.value.total > 0
-              ? Math.round(
-                  (sync.bundleProgress.value.current / sync.bundleProgress.value.total) * 100
-                )
-              : 0
-          "
-          :label="$t(`options.updates.db_${sync.bundleProgress.value.phase}`)"
+          :model-value="dbBundleProgressPercent"
+          :label="$t('options.updates.db_bundle')"
           color="primary"
           class="ml-3"
           rounded
@@ -213,6 +207,7 @@ import $userdata from "@/helpers/UserData";
 import DatabaseBackup, { type BackupProgress } from "@/helpers/DatabaseBackup";
 import { KEYS } from "@/constants/UserDataKeys";
 import { useSyncManager } from "@/composables/useSyncManager";
+import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
 import type { DbConfig } from "@/types/Database";
 import Alert from "@/helpers/Alert";
 
@@ -259,13 +254,22 @@ const autoDownload = ref(false);
 
 // Sync manager (bundle download)
 const sync = useSyncManager();
+const bgTasks = useBackgroundTasks();
 const reinstallingDb = ref(false);
 const importFileInput = ref<HTMLInputElement | null>(null);
 const dbBackupState = ref<"idle" | "exporting" | "importing">("idle");
 const dbBackupProgress = ref<BackupProgress | null>(null);
 
+const dbBundleTask = computed(() => bgTasks.tasks.value.find((t) => t.id === "db-bundle") ?? null);
+const dbBundleRunning = computed(() => dbBundleTask.value?.status === "running");
+const dbBundleProgressPercent = computed<number>(() => dbBundleTask.value?.progress ?? 0);
+
 const dbBackupBusy = computed<boolean>(
-  () => dbBackupState.value !== "idle" || reinstallingDb.value || sync.bundleInstalling.value
+  () =>
+    dbBackupState.value !== "idle" ||
+    reinstallingDb.value ||
+    sync.bundleInstalling.value ||
+    dbBundleRunning.value
 );
 
 const dbBackupProgressPercent = computed<number>(() => {
@@ -608,9 +612,10 @@ async function onImportFileChange(e: Event): Promise<void> {
 }
 
 async function reinstallDatabase(): Promise<void> {
-  if (reinstallingDb.value) return;
+  if (reinstallingDb.value || dbBundleRunning.value) return;
   $alert.yesno("options.updates.reinstall_db_confirm", async (btn?: string) => {
     if (btn !== "yes") return;
+    if (dbBundleRunning.value) return;
     reinstallingDb.value = true;
     try {
       const ok = await sync.downloadBundle({ force: true });
