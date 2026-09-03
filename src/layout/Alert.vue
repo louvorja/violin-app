@@ -226,6 +226,18 @@ function clickBtn(value) {
   border-color: var(--lj-danger-dark);
 }
 
+.alert-btn--warning {
+  background: var(--lj-warning);
+  color: var(--lj-white);
+  border-color: var(--lj-warning);
+}
+
+.alert-btn--warning:hover {
+  background: var(--lj-warning-dark, var(--lj-warning));
+  color: var(--lj-white);
+  border-color: var(--lj-warning-dark, var(--lj-warning));
+}
+
 .alert-btn--success {
   background: var(--lj-success);
   color: var(--lj-white);

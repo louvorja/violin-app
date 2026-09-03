@@ -80,7 +80,7 @@
         <v-card-actions class="pa-4">
           <v-spacer />
           <v-btn color="primary" variant="flat" @click="onClose">
-            {{ $t("actions.ok") }}
+            {{ $t("alert.ok") }}
           </v-btn>
         </v-card-actions>
       </template>
@@ -125,7 +125,9 @@ watch(
   () => props.modelValue,
   (v) => {
     model.value = v;
-    if (v) runDetection();
+    if (v) {
+      runDetection();
+    }
   }
 );
 
@@ -159,7 +161,6 @@ function onAccept(): void {
 
   $userdata.set(KEYS.OPTIONS.USE_CLASSIC_DIR, true);
   $userdata.set(KEYS.OPTIONS.CLASSIC_LANG, result.value.lang || "pt");
-  $userdata.set(KEYS.OPTIONS.SKIP_CLASSIC_CHECK, true);
 
   const cur = Platform.userStore?.read?.("storage") || {};
   Platform.userStore?.write?.("storage", {
@@ -168,16 +169,17 @@ function onAccept(): void {
     classicLang: result.value.lang || "pt",
     useClassicDir: true,
   });
+  Platform.storage?.setFilesDir?.(result.value.configDir, { moveExisting: false });
 
   onClose();
 }
 
 function onDecline(): void {
-  $userdata.set(KEYS.OPTIONS.SKIP_CLASSIC_CHECK, true);
   onClose();
 }
 
 function onClose(): void {
+  $userdata.set(KEYS.OPTIONS.SKIP_CLASSIC_CHECK, true);
   model.value = false;
   emit("update:modelValue", false);
 }

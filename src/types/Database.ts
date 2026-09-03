@@ -12,4 +12,7 @@ export interface BundleProgress {
   current: number;
   total: number;
   detail?: string;
+  bytesReceived?: number;
+  bytesTotal?: number;
+  bytesPerSecond?: number;
 }

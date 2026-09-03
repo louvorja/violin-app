@@ -487,6 +487,18 @@ ipcMain.handle("dev:reloadAll", () => {
   return { ok: true, count };
 });
 
+// Abre o DevTools a partir da janela que disparou a ação.
+ipcMain.handle("dev:openDevTools", (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || win.isDestroyed()) return { ok: false };
+  if (win.webContents.isDevToolsOpened()) {
+    win.webContents.focus();
+  } else {
+    win.webContents.openDevTools({ mode: "detach" });
+  }
+  return { ok: true };
+});
+
 // ---------------------------------------------------------------------------
 // IPC handlers do userStore (D1)
 // ---------------------------------------------------------------------------
@@ -1057,7 +1069,7 @@ ipcMain.handle("storage:setAutoCache", (_e, enabled) => {
 // IPC: Classic Version — detecção e importação da versão Delphi
 // ---------------------------------------------------------------------------
 
-ipcMain.handle("classic:detect", () => classicVersion.detect());
+ipcMain.handle("classic:detect", (_e, installDir) => classicVersion.detect(installDir));
 
 /**
  * Importa arquivos da versão clássica para um novo diretório,
@@ -1089,6 +1101,13 @@ ipcMain.handle("storage:importFromClassic", async (_e, classicDir, targetDir, la
     if (await fs.pathExists(srcDir)) {
       await fs.ensureDir(destDir);
       await fs.copy(srcDir, destDir, { overwrite: true });
+      if (moveExisting) {
+        try {
+          await fs.remove(srcDir);
+        } catch (_) {
+          /* ignore — may be locked */
+        }
+      }
     }
   }
 
@@ -1097,13 +1116,12 @@ ipcMain.handle("storage:importFromClassic", async (_e, classicDir, targetDir, la
     const destMusics = path.join(targetDir, "musics", lang || "pt");
     await fs.ensureDir(destMusics);
     await fs.copy(musicasDir, destMusics, { overwrite: true });
-  }
-
-  if (moveExisting) {
-    try {
-      await fs.remove(configDir);
-    } catch (_) {
-      /* ignore — may be locked */
+    if (moveExisting) {
+      try {
+        await fs.remove(musicasDir);
+      } catch (_) {
+        /* ignore — may be locked */
+      }
     }
   }
 

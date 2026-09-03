@@ -50,31 +50,25 @@
       <v-card class="pa-5" max-width="540">
         <div class="d-flex flex-column ga-4">
           <div class="d-flex align-center ga-3">
-            <v-progress-circular indeterminate color="primary" size="32" />
             <span class="text-body-1 font-weight-medium">
               {{ t("startup_check.bundle_downloading") }}
             </span>
           </div>
           <v-progress-linear
-            :model-value="
-              sync.bundleProgress.value.total > 0
-                ? Math.round(
-                    (sync.bundleProgress.value.current / sync.bundleProgress.value.total) * 100
-                  )
-                : 0
+            :model-value="bundleDownloadPercent"
+            :indeterminate="
+              sync.bundleProgress.value.phase === 'download' &&
+              !sync.bundleProgress.value.bytesTotal
             "
             color="primary"
             height="8"
             rounded
           />
           <div class="d-flex justify-space-between text-caption text-medium-emphasis">
-            <span v-if="sync.bundleProgress.value.total > 0">
-              {{
-                Math.round(
-                  (sync.bundleProgress.value.current / sync.bundleProgress.value.total) * 100
-                )
-              }}%
+            <span v-if="bundleDownloadDetail">
+              {{ bundleDownloadDetail }}
             </span>
+            <span v-else-if="bundleDownloadPercent > 0">{{ bundleDownloadPercent }}%</span>
             <span v-else>{{ t("startup_check.bundle_preparing") }}</span>
             <span
               v-if="sync.bundleProgress.value.detail"
@@ -198,7 +192,7 @@ const classicCheckOpen = ref(false);
 const bundleLoading = ref(false);
 const bundleCancelled = ref(false);
 const bundleRetryAttempt = ref(1);
-const bundleRetryMax = ref(3);
+const bundleRetryMax = ref(5);
 const bundleError = ref<string | null>(null);
 const bundleErrorOpen = ref(false);
 const releaseNotesOpen = ref(false);
@@ -230,6 +224,33 @@ const footerHeight = computed(() => {
   return "0px";
 });
 
+const bundleDownloadPercent = computed<number>(() => {
+  const progress = sync.bundleProgress.value;
+  if (progress.phase === "download") {
+    const received = progress.bytesReceived ?? progress.current;
+    const total = progress.bytesTotal ?? 0;
+    return total > 0 ? Math.round((received / total) * 100) : 0;
+  }
+  return progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
+});
+
+const bundleDownloadDetail = computed<string>(() => {
+  const progress = sync.bundleProgress.value;
+  if (progress.phase !== "download") return "";
+
+  const received = progress.bytesReceived ?? progress.current ?? 0;
+  if (received <= 0) return "";
+
+  const total = progress.bytesTotal ?? 0;
+  const rate = progress.bytesPerSecond ?? 0;
+
+  if (total > 0) {
+    return `${sync.humanSize(received)} / ${sync.humanSize(total)} · ${sync.humanSize(rate)}/s`;
+  }
+
+  return `${sync.humanSize(received)} baixados · ${sync.humanSize(rate)}/s`;
+});
+
 // Listeners externos (eventos globais que substituem acoplamento direto via shell._ref)
 const onOpenCommandPalette = () => {
   cmdPaletteOpen.value = true;
@@ -259,36 +280,59 @@ let _updaterUnsub: (() => void) | null = null;
 let _startupCheckPending = false;
 let _pendingReleaseNotes = false;
 let _startupCheckTimeout: ReturnType<typeof setTimeout> | null = null;
+let _bootPhase: "idle" | "release-notes" | "startup" | "classic" | "done" = "idle";
+let _startupCloseDeferred = false;
 
-// Quando o startup check fecha, verificar se há versão clássica no Windows
 watch(startupCheckOpen, (isOpen, wasOpen) => {
-  if (wasOpen && !isOpen) {
-    if (!_showPendingClassicCheck()) {
-      _showPendingReleaseNotes();
-    }
+  if (!wasOpen || isOpen || _bootPhase !== "startup") return;
+  if (sync.downloading.value || sync.bibleDownloading.value) {
+    _startupCloseDeferred = true;
+    return;
   }
+  _startupCloseDeferred = false;
+  void _showPendingClassicCheck();
 });
 
-watch(classicCheckOpen, (isOpen, wasOpen) => {
-  if (wasOpen && !isOpen) {
-    _showPendingReleaseNotes();
+watch(
+  [() => sync.downloading.value, () => sync.bibleDownloading.value],
+  ([downloading, bibleDownloading]) => {
+    if (_bootPhase !== "startup" || !_startupCloseDeferred) return;
+    if (downloading || bibleDownloading) return;
+    _startupCloseDeferred = false;
+    void _showPendingClassicCheck();
   }
-});
+);
 
 function _openUpdatesScreen() {
   window.dispatchEvent(new CustomEvent("louvorja:open-updates"));
 }
 
 // Mostra release notes se pendente.
-function _showPendingReleaseNotes() {
-  if (!_pendingReleaseNotes) return;
+function _showPendingReleaseNotes(): boolean {
+  if (!_pendingReleaseNotes) return false;
   _pendingReleaseNotes = false;
   const skippedNotesVersion = $userdata.get<string | null>(
     KEYS.OPTIONS.SKIP_RELEASE_NOTES_VERSION,
     null
   );
   if (skippedNotesVersion !== packageJson.version) {
+    _bootPhase = "release-notes";
     releaseNotesOpen.value = true;
+    return true;
+  }
+  return false;
+}
+
+function _continueBootAfterUpdate(): void {
+  _startupCheckPending = false;
+  if (_startupCheckTimeout) {
+    clearTimeout(_startupCheckTimeout);
+    _startupCheckTimeout = null;
+  }
+
+  const shown = _showPendingReleaseNotes();
+  if (!shown) {
+    void _showPendingStartupCheck();
   }
 }
 
@@ -297,18 +341,12 @@ async function _showPendingStartupCheck() {
 
   const skip = $userdata.get<boolean>(KEYS.OPTIONS.SKIP_STARTUP_CHECK, false);
   if (skip) {
-    if (!_showPendingClassicCheck()) {
-      _showPendingReleaseNotes();
-    }
+    const shown = await _showPendingClassicCheck();
+    if (!shown) _bootPhase = "done";
     return;
   }
 
-  const needsBundle = await _checkBundleNeeded();
-  if (needsBundle) {
-    const ok = await _showPendingBundleDownload();
-    if (!ok) return;
-  }
-
+  _bootPhase = "startup";
   startupCheckOpen.value = true;
 }
 
@@ -330,10 +368,10 @@ async function _checkBundleNeeded(): Promise<boolean> {
   }
 }
 
-/** Bundle download com retry (3x) + overlay bloqueante. Retorna true se OK, false se falhou/cancelou. */
+/** Bundle download com retry (5x) + overlay bloqueante. Retorna true se OK, false se falhou/cancelou. */
 async function _showPendingBundleDownload(): Promise<boolean> {
-  const MAX_RETRIES = 3;
-  const RETRY_DELAY_MS = 2000;
+  const MAX_RETRIES = 5;
+  const RETRY_DELAY_MS = 5000;
 
   bundleCancelled.value = false;
 
@@ -357,7 +395,7 @@ async function _showPendingBundleDownload(): Promise<boolean> {
       await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
     }
   }
-
+  if (bundleCancelled.value) return false;
   bundleError.value = t("startup_check.bundle_error");
   bundleErrorOpen.value = true;
   return false;
@@ -368,11 +406,17 @@ function onBundleCancel(): void {
   sync.cancelBundle();
 }
 
-function _showPendingClassicCheck(): boolean {
+async function _showPendingClassicCheck(): Promise<boolean> {
   if (!Platform.isDesktop || Platform.platform !== "win32") return false;
   const skip = $userdata.get<boolean>(KEYS.OPTIONS.SKIP_CLASSIC_CHECK, false);
   const alreadyUsing = $userdata.get<boolean>(KEYS.OPTIONS.USE_CLASSIC_DIR, false);
   if (skip || alreadyUsing) return false;
+  if (!Platform.classic?.detect) return false;
+
+  const result = await Platform.classic.detect();
+  if (!result?.detected) return false;
+
+  _bootPhase = "classic";
   classicCheckOpen.value = true;
   return true;
 }
@@ -419,33 +463,33 @@ function _handleUpdaterState(
         updateDialogVersion.value = state.newVersion || "";
         updateDialogOpen.value = true;
       } else {
-        // Versão dispensada → seguir para a verificação inicial
-        _showPendingStartupCheck();
+        // Versão dispensada → seguir para release notes / startup
+        _continueBootAfterUpdate();
       }
     } else if (_startupCheckPending && autoDownload) {
       // Auto-download ativo: download já começou, não mostrar dialog
       // mas chain para release notes quando o download concluir
-      _startupCheckPending = false;
+      _bootPhase = "idle";
     }
   } else if (state.status === "downloaded") {
     $appdata.set(KEYS.SHELL.APP_UPDATE_AVAILABLE, true);
     $appdata.set(KEYS.SHELL.APP_UPDATE_VERSION, state.newVersion || "");
     // Download manual via dialog → o dialog já mostra o estado "instalar";
-    // não reabrir as notas por cima. Segue para a verificação inicial.
+    // não reabrir as notas por cima. Segue para release notes / startup.
     if (!updateDialogOpen.value) {
-      _showPendingStartupCheck();
+      _continueBootAfterUpdate();
     }
   } else if (state.status === "not-available" || state.status === "error") {
     $appdata.set(KEYS.SHELL.APP_UPDATE_AVAILABLE, false);
     _startupCheckPending = false;
     // Sem update → seguir para a verificação inicial
-    _showPendingStartupCheck();
+    _continueBootAfterUpdate();
   }
 }
 
 async function _runStartupUpdateCheck() {
   if (!Platform.isDesktop || !Platform.updater) {
-    _showPendingReleaseNotes();
+    _continueBootAfterUpdate();
     return;
   }
   const checkOnStart = $userdata.get<boolean>(KEYS.OPTIONS.CHECK_UPDATES_ON_START, true) === true;
@@ -458,7 +502,7 @@ async function _runStartupUpdateCheck() {
   );
   if (!checkOnStart) {
     // Preferência desligada: não checa, mas segue o fluxo normal de boot
-    _showPendingReleaseNotes();
+    _continueBootAfterUpdate();
     return;
   }
   _startupCheckPending = true;
@@ -469,7 +513,7 @@ async function _runStartupUpdateCheck() {
     if (_startupCheckPending) {
       console.warn("[Shell] startup update check demorou demais — seguindo para startup check");
       _startupCheckPending = false;
-      _showPendingStartupCheck();
+      _continueBootAfterUpdate();
     }
   }, 15000);
 
@@ -483,15 +527,13 @@ async function _runStartupUpdateCheck() {
       // de boot para não depender do updater.
       console.warn("[Shell] startup update check retornou erro:", res?.error);
       if (_startupCheckPending) {
-        _startupCheckPending = false;
-        _showPendingStartupCheck();
+        _continueBootAfterUpdate();
       }
     }
   } catch (e) {
     console.warn("[Shell] startup update check falhou:", e);
     if (_startupCheckPending) {
-      _startupCheckPending = false;
-      _showPendingStartupCheck();
+      _continueBootAfterUpdate();
     }
   } finally {
     if (_startupCheckTimeout) {
@@ -522,6 +564,9 @@ function onReleaseNotesClose(dontShowAgain = false) {
   if (dontShowAgain) {
     $userdata.set(KEYS.OPTIONS.SKIP_RELEASE_NOTES_VERSION, packageJson.version);
   }
+  if (_bootPhase === "release-notes") {
+    void _showPendingStartupCheck();
+  }
 }
 
 // Handler: iniciar download da atualização a partir do dialog
@@ -536,9 +581,9 @@ function onUpdateDialogDontShowAgain() {
   $userdata.set(KEYS.OPTIONS.SKIP_UPDATE_NOTIFICATION_VERSION, updateDialogVersion.value);
 }
 
-// Handler: dialog de update fechado (sem download) → seguir para startup check
+// Handler: dialog de update fechado (sem download) → seguir para release notes/startup
 function onUpdateDialogClose() {
-  _showPendingStartupCheck();
+  _continueBootAfterUpdate();
 }
 
 // Registra ações do shell no composable (substitui `$appdata.set("shell._ref")`)
@@ -616,8 +661,7 @@ onMounted(() => {
   }
 
   // Startup check — só no desktop.
-  // O fluxo é: update check → release notes → startup check.
-  // Marca como pendente; será exibido após o update check.
+  // O fluxo é: bundle download → update check → release notes → startup check → classic.
   if (display.platform.value.electron) {
     const skippedNotesVersion = $userdata.get<string | null>(
       KEYS.OPTIONS.SKIP_RELEASE_NOTES_VERSION,
@@ -651,10 +695,22 @@ onMounted(() => {
         _handleUpdaterState(s);
       })
       .catch((e: unknown) => console.warn("[Shell] status replay falhou:", e));
-    _runStartupUpdateCheck();
   } else {
-    // Sem updater (web/PWA): release notes direto
-    _showPendingReleaseNotes();
+    // Sem updater (web/PWA): segue direto para release notes/startup.
+  }
+
+  if (Platform.isDesktop) {
+    (async () => {
+      const needsBundle = await _checkBundleNeeded();
+      console.info("[Shell] bundle check → needed:", needsBundle);
+      if (needsBundle) {
+        const ok = await _showPendingBundleDownload();
+        if (!ok) return;
+      }
+      _runStartupUpdateCheck();
+    })();
+  } else {
+    _continueBootAfterUpdate();
   }
 
   // Bridge popup → main (replica popup ↔ shell)

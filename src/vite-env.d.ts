@@ -28,7 +28,7 @@ declare global {
       importFromClassic: (classicDir: string, targetDir: string, lang: string, opts?: { moveExisting?: boolean }) => Promise<{ ok: boolean; error?: string }>;
     };
     classic: {
-      detect: () => Promise<{
+      detect: (installDir?: string) => Promise<{
         detected: boolean;
         installDir: string;
         configDir: string;

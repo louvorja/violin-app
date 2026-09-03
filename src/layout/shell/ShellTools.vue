@@ -77,7 +77,13 @@
                   {{ t(task.label) }}
                 </v-list-item-title>
                 <v-list-item-subtitle v-if="task.status === 'running'">
-                  <v-progress-linear :model-value="task.progress" height="4" rounded class="mt-1" />
+                  <v-progress-linear
+                    :model-value="task.progress"
+                    :indeterminate="task.progress === undefined || task.progress === 0"
+                    height="4"
+                    rounded
+                    class="mt-1"
+                  />
                   <span class="text-caption" style="font-size: 10px">
                     {{
                       formatBackgroundTaskDetail(task.detail, t) || `${Math.round(task.progress)}%`

@@ -6,12 +6,12 @@ import $idb from "@/helpers/IndexedDB";
 import $userdata from "@/helpers/UserData";
 import { KEYS, moduleShowInMainMenu } from "@/constants/UserDataKeys";
 import { DB_TABLE } from "@/constants/DbTables";
-import { BOOKS } from "@/constants/Bible";
 import type { BibleVersion } from "@/types/Bible";
 import type { BundleProgress } from "@/types/Database";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
 import Libras from "@/helpers/Libras";
 import BundleInstaller from "@/helpers/BundleInstaller";
+import { formatBibleDownloadDetail } from "@/helpers/BackgroundTaskDetail";
 import type { Music } from "@/types/Music";
 import type { BibleBook } from "@/types/Bible";
 
@@ -413,7 +413,8 @@ export function useSyncManager() {
     for (const ch of toDownload) {
       if (bibleCancelled.value) break;
       const key = `bible_${ch.versionId}_${ch.bookId}_${ch.n}`;
-      bibleProgress.value = { ...bibleProgress.value, currentFile: key };
+      const detail = formatBibleDownloadDetail(key, t, bibleVersions);
+      bibleProgress.value = { ...bibleProgress.value, currentFile: detail || key };
       try {
         await Database.get(key, { fresh: true, silent: true });
       } catch (e) {
@@ -422,7 +423,7 @@ export function useSyncManager() {
       bibleProgress.value = { ...bibleProgress.value, done: bibleProgress.value.done + 1 };
       bgTasks.updateTask("sync-bible", {
         progress: toDownload.length > 0 ? Math.round((bibleProgress.value.done / toDownload.length) * 100) : 0,
-        detail: key,
+        detail: detail || key,
       });
     }
 
@@ -652,7 +653,7 @@ export function useSyncManager() {
     if (bundleInstalling.value) return false;
 
     bundleInstalling.value = true;
-    bundleProgress.value = { phase: "download", current: 0, total: 0 };
+    bundleProgress.value = { phase: "download", current: 0, total: 0, bytesReceived: 0, bytesTotal: 0 };
     _bundleAbort = new AbortController();
     const signal = _bundleAbort.signal;
 
@@ -668,10 +669,25 @@ export function useSyncManager() {
         onProgress: (p: BundleProgress) => {
           bundleProgress.value = p;
           const pct =
-            p.total > 0 ? Math.round((p.current / p.total) * 100) : 0;
+            p.phase === "download" && p.bytesTotal && p.bytesTotal > 0
+              ? Math.round(((p.bytesReceived ?? p.current) / p.bytesTotal) * 100)
+              : p.total > 0
+                ? Math.round((p.current / p.total) * 100)
+                : 0;
+          const received = p.bytesReceived ?? (p.phase === "download" ? p.current : 0);
+          const totalBytes = p.bytesTotal ?? 0;
+          const rate = p.bytesPerSecond ?? 0;
+          const detail =
+            p.phase === "download"
+              ? totalBytes > 0
+                ? `${humanSize(received)} / ${humanSize(totalBytes)} · ${humanSize(rate)}/s`
+                : received > 0
+                  ? `${humanSize(received)} baixados · ${humanSize(rate)}/s`
+                  : p.detail || p.phase
+              : p.detail || p.phase;
           bgTasks.updateTask(taskId, {
             progress: pct,
-            detail: p.detail || p.phase,
+            detail,
           });
         },
       });
@@ -708,24 +724,6 @@ export function useSyncManager() {
       i += 1;
     }
     return `${val.toFixed(val < 10 ? 1 : 0)} ${units[i]}`;
-  }
-
-  function formatBibleKey(key: string, versions: BibleVersion[]): string {
-    if (!key || !key.startsWith("bible_")) return key;
-    const parts = key.split("_");
-    if (parts.length < 4) return key;
-    const versionId = Number(parts[1]);
-    const bookId = Number(parts[2]);
-    const chapter = Number(parts[3]);
-    if (!versionId || !bookId || !chapter) return key;
-
-    const version = versions.find((v) => v.id_bible_version === versionId);
-    const bookSlug = BOOKS[bookId - 1]?.id;
-    if (!version && !bookSlug) return key;
-
-    const abbrev = version?.abbreviation || String(versionId);
-    const bookName = bookSlug ? t("bible.books." + bookSlug) : String(bookId);
-    return `${abbrev} — ${bookName} ${chapter}`;
   }
 
   async function refreshDiskUsage(
@@ -1003,7 +1001,6 @@ export function useSyncManager() {
     removeFilesFromCache,
     fetchJson,
     humanSize,
-    formatBibleKey,
     refreshDiskUsage,
     bundleInstalling,
     bundleProgress,

@@ -149,7 +149,7 @@
             <button
               type="button"
               class="opt-btn"
-              :disabled="dbBackupBusy || sync.bundleInstalling.value"
+              :disabled="dbBackupBusy"
               @click="reinstallDatabase"
             >
               <v-icon icon="mdi-database-refresh" size="14" class="mr-1" />
@@ -183,21 +183,24 @@
           {{ dbBackupProgressDetail }}
         </div>
       </div>
-      <div v-if="sync.bundleInstalling.value" class="opt-folder-actions mt-2">
-        <v-progress-circular indeterminate color="primary" size="32" />
-        <v-progress
-          :model-value="
-            sync.bundleProgress.value.total > 0
-              ? Math.round(
-                  (sync.bundleProgress.value.current / sync.bundleProgress.value.total) * 100
-                )
-              : 0
-          "
-          :label="$t(`options.updates.db_${sync.bundleProgress.value.phase}`)"
-          color="primary"
-          class="ml-3"
-          rounded
-        />
+      <div v-if="dbBundleDisplayActive" class="opt-row opt-row--col mt-2">
+        <div class="d-flex align-center ga-3 w-100">
+          <v-progress
+            class="flex-grow-1"
+            :model-value="dbBundleProgressPercent"
+            :label="$t('shell.background_tasks.db_bundle')"
+            :indeterminate="dbBundleProgressPercent === 0"
+            color="primary"
+            rounded
+          />
+          <button type="button" class="opt-btn opt-btn--danger" @click="sync.cancelBundle()">
+            <v-icon icon="mdi-close-circle" size="14" class="mr-1" />
+            {{ $t("options.collections_download.cancel") }}
+          </button>
+        </div>
+        <div v-if="dbBundleDetail" class="opt-folder-path mt-1">
+          {{ dbBundleDetail }}
+        </div>
       </div>
     </section>
   </div>
@@ -211,8 +214,13 @@ import $alert from "@/helpers/Alert";
 import $database from "@/helpers/Database";
 import $userdata from "@/helpers/UserData";
 import DatabaseBackup, { type BackupProgress } from "@/helpers/DatabaseBackup";
+import {
+  formatBackgroundTaskDetail,
+  formatBibleDownloadDetail,
+} from "@/helpers/BackgroundTaskDetail";
 import { KEYS } from "@/constants/UserDataKeys";
 import { useSyncManager } from "@/composables/useSyncManager";
+import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
 import type { DbConfig } from "@/types/Database";
 import Alert from "@/helpers/Alert";
 
@@ -259,13 +267,51 @@ const autoDownload = ref(false);
 
 // Sync manager (bundle download)
 const sync = useSyncManager();
+const bgTasks = useBackgroundTasks();
 const reinstallingDb = ref(false);
 const importFileInput = ref<HTMLInputElement | null>(null);
 const dbBackupState = ref<"idle" | "exporting" | "importing">("idle");
 const dbBackupProgress = ref<BackupProgress | null>(null);
 
+const dbBundleTask = computed(() => bgTasks.tasks.value.find((t) => t.id === "db-bundle") ?? null);
+const dbBundleRunning = computed(() => dbBundleTask.value?.status === "running");
+const dbBundleDisplayActive = computed<boolean>(
+  () => reinstallingDb.value || sync.bundleInstalling.value || dbBundleRunning.value
+);
+const dbBundleProgressPercent = computed<number>(() => {
+  const progress = sync.bundleProgress.value;
+  if (progress.phase === "download") {
+    const received = progress.bytesReceived ?? progress.current;
+    const total = progress.bytesTotal ?? 0;
+    return total > 0 ? Math.round((received / total) * 100) : (dbBundleTask.value?.progress ?? 0);
+  }
+  return dbBundleTask.value?.progress ?? 0;
+});
+const dbBundleDetail = computed<string>(() => {
+  const progress = sync.bundleProgress.value;
+  if (progress.phase === "download") {
+    const received = progress.bytesReceived ?? progress.current ?? 0;
+    const rate = progress.bytesPerSecond ?? 0;
+    const total = progress.bytesTotal ?? 0;
+    if (received > 0) {
+      if (total > 0) {
+        return `${sync.humanSize(received)} / ${sync.humanSize(total)} · ${sync.humanSize(rate)}/s`;
+      }
+      return `${sync.humanSize(received)} baixados · ${sync.humanSize(rate)}/s`;
+    }
+  }
+
+  const detail = dbBundleTask.value?.detail || progress.detail || "";
+  if (!detail) return "";
+  return formatBibleDownloadDetail(detail, t) || formatBackgroundTaskDetail(detail, t);
+});
+
 const dbBackupBusy = computed<boolean>(
-  () => dbBackupState.value !== "idle" || reinstallingDb.value || sync.bundleInstalling.value
+  () =>
+    dbBackupState.value !== "idle" ||
+    reinstallingDb.value ||
+    sync.bundleInstalling.value ||
+    dbBundleRunning.value
 );
 
 const dbBackupProgressPercent = computed<number>(() => {
@@ -608,9 +654,10 @@ async function onImportFileChange(e: Event): Promise<void> {
 }
 
 async function reinstallDatabase(): Promise<void> {
-  if (reinstallingDb.value) return;
+  if (reinstallingDb.value || dbBundleRunning.value) return;
   $alert.yesno("options.updates.reinstall_db_confirm", async (btn?: string) => {
     if (btn !== "yes") return;
+    if (dbBundleRunning.value) return;
     reinstallingDb.value = true;
     try {
       const ok = await sync.downloadBundle({ force: true });
@@ -625,6 +672,9 @@ async function reinstallDatabase(): Promise<void> {
       }
     } catch (e) {
       console.error("[Atualizações] reinstallDatabase:", e);
+      Alert.error({
+        text: t("startup_check.bundle_error"),
+      });
     } finally {
       reinstallingDb.value = false;
     }

@@ -364,7 +364,9 @@
                 :done="bibleDone"
                 :total="bibleTotal"
                 :current="
-                  bibleCurrentFile ? sync.formatBibleKey(bibleCurrentFile, bibleVersions) : null
+                  bibleCurrentFile
+                    ? formatBibleDownloadDetail(bibleCurrentFile, undefined, bibleVersions)
+                    : null
                 "
                 :completed-msg="bibleCompletedMsg"
                 show-cancel
@@ -409,20 +411,25 @@
         <!-- Armazenamento -->
         <v-window-item value="storage">
           <section class="opt-section">
-            <div class="opt-row opt-row--col">
-              <label class="opt-label">{{ $t("options.storage.folder") }}</label>
-              <div class="opt-folder">
-                <code class="opt-folder-path">{{ storageStats?.filesDir || "—" }}</code>
+            <div class="opt-row opt-row--col mt-5">
+              <label class="opt-label">
+                {{ $t("options.storage.folder") }}
                 <v-chip
                   v-if="useClassicDir"
                   size="x-small"
-                  color="warning"
+                  color="primary"
                   variant="tonal"
                   class="ml-2"
                 >
                   <v-icon icon="mdi-desktop-classic" size="12" class="mr-1" />
                   {{ $t("options.storage.classic_version") }}
                 </v-chip>
+              </label>
+              <div class="opt-folder">
+                <code class="opt-folder-path">
+                  {{ storageStats?.filesDir || "—" }}
+                </code>
+
                 <div class="opt-folder-actions">
                   <button type="button" class="opt-btn" @click="openFolder">
                     {{ $t("options.storage.open_folder") }}
@@ -431,7 +438,7 @@
                     {{ $t("options.storage.change_folder") }}
                   </button>
                   <button
-                    v-if="!useClassicDir && Platform.platform === 'win32'"
+                    v-if="!useClassicDir"
                     type="button"
                     class="opt-btn"
                     @click="detectClassic"
@@ -535,17 +542,18 @@
             </div>
             <div v-if="sync.bundleInstalling.value" class="mt-2">
               <v-progress-linear
-                :model-value="
-                  sync.bundleProgress.value.total > 0
-                    ? Math.round(
-                        (sync.bundleProgress.value.current / sync.bundleProgress.value.total) * 100
-                      )
-                    : 0
+                :model-value="bundleDownloadPercent"
+                :indeterminate="
+                  sync.bundleProgress.value.phase === 'download' &&
+                  !sync.bundleProgress.value.bytesTotal
                 "
                 color="primary"
                 height="6"
                 rounded
               />
+              <div v-if="bundleDownloadDetail" class="opt-hint mt-1">
+                {{ bundleDownloadDetail }}
+              </div>
             </div>
           </section>
         </v-window-item>
@@ -565,7 +573,10 @@ import { ICONS } from "@/config/Icons";
 import Icon from "@/components/Icon.vue";
 import { useSyncManager } from "@/composables/useSyncManager";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
-import { formatBackgroundTaskDetail } from "@/helpers/BackgroundTaskDetail";
+import {
+  formatBackgroundTaskDetail,
+  formatBibleDownloadDetail,
+} from "@/helpers/BackgroundTaskDetail";
 import ProgressBar from "@/components/ProgressBar.vue";
 import $snackbar from "@/helpers/Snackbar";
 import type { BibleVersion } from "@/types/Bible";
@@ -666,6 +677,33 @@ const currentDownloadFile = computed(() => {
     : formatBackgroundTaskDetail(sync.downloadProgress.value.currentFile || null, t) || null;
 });
 const completedMsg = computed(() => sync.downloadCompletedMsg.value);
+
+const bundleDownloadPercent = computed<number>(() => {
+  const progress = sync.bundleProgress.value;
+  if (progress.phase === "download") {
+    const received = progress.bytesReceived ?? progress.current;
+    const total = progress.bytesTotal ?? 0;
+    return total > 0 ? Math.round((received / total) * 100) : 0;
+  }
+  return progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
+});
+
+const bundleDownloadDetail = computed<string>(() => {
+  const progress = sync.bundleProgress.value;
+  if (!sync.bundleInstalling.value || progress.phase !== "download") return "";
+
+  const received = progress.bytesReceived ?? progress.current ?? 0;
+  if (received <= 0) return "";
+
+  const total = progress.bytesTotal ?? 0;
+  const rate = progress.bytesPerSecond ?? 0;
+
+  if (total > 0) {
+    return `${sync.humanSize(received)} / ${sync.humanSize(total)} · ${sync.humanSize(rate)}/s`;
+  }
+
+  return `${sync.humanSize(received)} baixados · ${sync.humanSize(rate)}/s`;
+});
 
 const bibleDownloading = computed(() => sync.bibleDownloading.value || !!findTask("sync-bible"));
 const bibleDone = computed(() => {
@@ -1024,26 +1062,65 @@ const useClassicDir = computed((): boolean => {
   return $userdata.get<boolean>(KEYS.OPTIONS.USE_CLASSIC_DIR, false) === true;
 });
 
+async function persistClassicSelection(result: {
+  configDir: string;
+  lang: "pt" | "es" | null;
+}): Promise<void> {
+  const lang = result.lang || "pt";
+  $userdata.set(KEYS.OPTIONS.USE_CLASSIC_DIR, true);
+  $userdata.set(KEYS.OPTIONS.CLASSIC_LANG, lang);
+  const cur = (await Platform.userStore?.read("storage")) || {};
+  await Platform.userStore?.write("storage", {
+    ...cur,
+    classicDir: result.configDir,
+    classicLang: lang,
+    useClassicDir: true,
+  });
+  await Platform.storage?.setFilesDir?.(result.configDir, { moveExisting: false });
+  await reloadStats();
+}
+
 async function detectClassic(): Promise<void> {
   if (!Platform.classic?.detect) return;
   try {
-    const result = await Platform.classic.detect();
-    if (!result.detected) {
-      $alert.error({ text: "options.storage.classic_not_found" });
+    const openManualSelection = async (): Promise<void> => {
+      const manualDir = await Platform.storage?.chooseDir?.();
+      if (!manualDir) return;
+
+      const manualResult = await Platform.classic?.detect?.(manualDir);
+      const hasClassicContent =
+        !!manualResult?.detected && Object.values(manualResult.folders || {}).some(Boolean);
+      if (!hasClassicContent) {
+        $alert.error({ text: "options.storage.classic_manual_invalid" });
+        return;
+      }
+
+      await persistClassicSelection(manualResult);
+    };
+
+    if (Platform.platform !== "win32") {
+      await openManualSelection();
       return;
     }
+
+    const result = await Platform.classic.detect();
+    if (!result.detected) {
+      $alert.yesno(
+        {
+          title: t("options.storage.classic_version"),
+          text: t("options.storage.classic_manual_prompt"),
+        },
+        async (btn?: string) => {
+          if (btn !== "yes") return;
+          await openManualSelection();
+        }
+      );
+      return;
+    }
+
     $alert.yesno("options.storage.classic_confirm", (async (btn: string) => {
       if (btn === "cancel") return;
-      $userdata.set(KEYS.OPTIONS.USE_CLASSIC_DIR, true);
-      $userdata.set(KEYS.OPTIONS.CLASSIC_LANG, result.lang || "pt");
-      const cur = (await Platform.userStore?.read("storage")) || {};
-      await Platform.userStore?.write("storage", {
-        ...cur,
-        classicDir: result.configDir,
-        classicLang: result.lang || "pt",
-        useClassicDir: true,
-      });
-      await reloadStats();
+      await persistClassicSelection(result);
     }) as (...args: unknown[]) => unknown);
   } catch (e) {
     console.warn("[Sincronizar] classic:detect falhou:", e);
@@ -1071,30 +1148,41 @@ async function changeFolder(): Promise<void> {
   if (!newDir) return;
 
   if (useClassicDir.value) {
-    $alert.yesno("options.storage.classic_import_confirm", (async (btn: string) => {
-      if (btn === "cancel") return;
-      const move = btn === "yes";
-      try {
-        const cur = (await Platform.userStore?.read("storage")) || {};
-        const classicDir = cur.classicDir || "";
-        const lang = cur.classicLang || "pt";
-        if (classicDir && Platform.storage?.importFromClassic) {
-          await Platform.storage.importFromClassic(classicDir, newDir, lang, {
-            moveExisting: move,
+    $alert.show(
+      {
+        title: "options.storage.change_folder",
+        text: "options.storage.classic_import_confirm",
+        buttons: [
+          { text: "actions.copy", color: "info", value: "copy" },
+          { text: "actions.move", color: "warning", value: "move" },
+          { text: "alert.cancel", color: "error", value: "cancel" },
+        ],
+      },
+      (async (btn: string) => {
+        if (btn === "cancel") return;
+        const move = btn === "move";
+        try {
+          const cur = (await Platform.userStore?.read("storage")) || {};
+          const classicDir = cur.classicDir || "";
+          const lang = cur.classicLang || "pt";
+          if (classicDir && Platform.storage?.importFromClassic) {
+            await Platform.storage.importFromClassic(classicDir, newDir, lang, {
+              moveExisting: move,
+            });
+          }
+          await Platform.storage?.setFilesDir?.(newDir, { moveExisting: false });
+          await Platform.userStore?.write("storage", {
+            ...cur,
+            filesDir: newDir,
+            useClassicDir: false,
           });
+          $userdata.set(KEYS.OPTIONS.USE_CLASSIC_DIR, false);
+          await reloadStats();
+        } catch (e) {
+          $alert.error({ text: "options.storage.change_failed", error: e as Error });
         }
-        await Platform.storage?.setFilesDir?.(newDir, { moveExisting: false });
-        await Platform.userStore?.write("storage", {
-          ...cur,
-          filesDir: newDir,
-          useClassicDir: false,
-        });
-        $userdata.set(KEYS.OPTIONS.USE_CLASSIC_DIR, false);
-        await reloadStats();
-      } catch (e) {
-        $alert.error({ text: "options.storage.change_failed", error: e as Error });
-      }
-    }) as (...args: unknown[]) => unknown);
+      }) as (...args: unknown[]) => unknown
+    );
     return;
   }
 
