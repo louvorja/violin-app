@@ -55,26 +55,20 @@
             </span>
           </div>
           <v-progress-linear
-            :model-value="
-              sync.bundleProgress.value.total > 0
-                ? Math.round(
-                    (sync.bundleProgress.value.current / sync.bundleProgress.value.total) * 100
-                  )
-                : 0
+            :model-value="bundleDownloadPercent"
+            :indeterminate="
+              sync.bundleProgress.value.phase === 'download' &&
+              !sync.bundleProgress.value.bytesTotal
             "
-            :indeterminate="sync.bundleProgress.value.total === 0"
             color="primary"
             height="8"
             rounded
           />
           <div class="d-flex justify-space-between text-caption text-medium-emphasis">
-            <span v-if="sync.bundleProgress.value.total > 0">
-              {{
-                Math.round(
-                  (sync.bundleProgress.value.current / sync.bundleProgress.value.total) * 100
-                )
-              }}%
+            <span v-if="bundleDownloadDetail">
+              {{ bundleDownloadDetail }}
             </span>
+            <span v-else-if="bundleDownloadPercent > 0">{{ bundleDownloadPercent }}%</span>
             <span v-else>{{ t("startup_check.bundle_preparing") }}</span>
             <span
               v-if="sync.bundleProgress.value.detail"
@@ -230,6 +224,33 @@ const footerHeight = computed(() => {
   return "0px";
 });
 
+const bundleDownloadPercent = computed<number>(() => {
+  const progress = sync.bundleProgress.value;
+  if (progress.phase === "download") {
+    const received = progress.bytesReceived ?? progress.current;
+    const total = progress.bytesTotal ?? 0;
+    return total > 0 ? Math.round((received / total) * 100) : 0;
+  }
+  return progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
+});
+
+const bundleDownloadDetail = computed<string>(() => {
+  const progress = sync.bundleProgress.value;
+  if (progress.phase !== "download") return "";
+
+  const received = progress.bytesReceived ?? progress.current ?? 0;
+  if (received <= 0) return "";
+
+  const total = progress.bytesTotal ?? 0;
+  const rate = progress.bytesPerSecond ?? 0;
+
+  if (total > 0) {
+    return `${sync.humanSize(received)} / ${sync.humanSize(total)} · ${sync.humanSize(rate)}/s`;
+  }
+
+  return `${sync.humanSize(received)} baixados · ${sync.humanSize(rate)}/s`;
+});
+
 // Listeners externos (eventos globais que substituem acoplamento direto via shell._ref)
 const onOpenCommandPalette = () => {
   cmdPaletteOpen.value = true;
@@ -374,7 +395,7 @@ async function _showPendingBundleDownload(): Promise<boolean> {
       await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
     }
   }
-
+  if (bundleCancelled.value) return false;
   bundleError.value = t("startup_check.bundle_error");
   bundleErrorOpen.value = true;
   return false;
@@ -680,8 +701,12 @@ onMounted(() => {
 
   if (Platform.isDesktop) {
     (async () => {
-      const ok = await _showPendingBundleDownload();
-      if (!ok) return;
+      const needsBundle = await _checkBundleNeeded();
+      console.info("[Shell] bundle check → needed:", needsBundle);
+      if (needsBundle) {
+        const ok = await _showPendingBundleDownload();
+        if (!ok) return;
+      }
       _runStartupUpdateCheck();
     })();
   } else {

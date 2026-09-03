@@ -397,7 +397,11 @@
               </span>
               <span class="text-truncate ml-2" style="max-width: 200px">
                 {{
-                  sync.formatBibleKey(sync.bibleProgress.value.currentFile, scanData.bibleVersions)
+                  formatBibleDownloadDetail(
+                    sync.bibleProgress.value.currentFile,
+                    undefined,
+                    scanData.bibleVersions
+                  )
                 }}
               </span>
             </div>
@@ -466,6 +470,7 @@ import { KEYS } from "@/constants/UserDataKeys";
 import { useSyncManager } from "@/composables/useSyncManager";
 import type { BibleVersion } from "@/types/Bible";
 import { ICONS } from "@/config/Icons";
+import { formatBibleDownloadDetail } from "@/helpers/BackgroundTaskDetail";
 
 interface Category {
   id_category: number;

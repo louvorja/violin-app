@@ -71,11 +71,46 @@ function abortCheck(signal?: AbortSignal): void {
 }
 
 export default {
-  async fetchBundle(signal?: AbortSignal): Promise<ArrayBuffer> {
+  async fetchBundle(
+    onProgress?: (p: BundleProgress) => void,
+    signal?: AbortSignal,
+  ): Promise<ArrayBuffer> {
     abortCheck(signal);
     const res = await fetch(bundleUrl(), { headers: authHeaders(), signal });
     if (!res.ok) throw new Error(`Bundle download failed: HTTP ${res.status}`);
-    return res.arrayBuffer();
+
+    const totalBytes = Number(res.headers.get("content-length") || 0);
+    const reader = res.body?.getReader();
+    if (!reader) return res.arrayBuffer();
+
+    const chunks: BlobPart[] = [];
+    let receivedBytes = 0;
+    const startedAt = Date.now();
+
+    while (true) {
+      abortCheck(signal);
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+
+      chunks.push(value);
+      receivedBytes += value.byteLength;
+      const elapsedSeconds = Math.max((Date.now() - startedAt) / 1000, 0.001);
+      const bytesPerSecond = receivedBytes / elapsedSeconds;
+
+      // Durante o download, current/total representam bytes recebidos/total.
+      onProgress?.({
+        phase: "download",
+        current: receivedBytes,
+        total: totalBytes,
+        bytesReceived: receivedBytes,
+        bytesTotal: totalBytes,
+        bytesPerSecond,
+      });
+    }
+
+    const blob = new Blob(chunks);
+    return await blob.arrayBuffer();
   },
 
   async extractBundle(
@@ -124,7 +159,7 @@ export default {
 
     abortCheck(signal);
     onProgress?.({ phase: "download", current: 0, total: 1 });
-    const buffer = await this.fetchBundle(signal);
+    const buffer = await this.fetchBundle(onProgress, signal);
 
     abortCheck(signal);
     const datasets = await this.extractBundle(buffer, onProgress, signal);

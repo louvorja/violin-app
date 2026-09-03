@@ -364,7 +364,9 @@
                 :done="bibleDone"
                 :total="bibleTotal"
                 :current="
-                  bibleCurrentFile ? sync.formatBibleKey(bibleCurrentFile, bibleVersions) : null
+                  bibleCurrentFile
+                    ? formatBibleDownloadDetail(bibleCurrentFile, undefined, bibleVersions)
+                    : null
                 "
                 :completed-msg="bibleCompletedMsg"
                 show-cancel
@@ -540,17 +542,18 @@
             </div>
             <div v-if="sync.bundleInstalling.value" class="mt-2">
               <v-progress-linear
-                :model-value="
-                  sync.bundleProgress.value.total > 0
-                    ? Math.round(
-                        (sync.bundleProgress.value.current / sync.bundleProgress.value.total) * 100
-                      )
-                    : 0
+                :model-value="bundleDownloadPercent"
+                :indeterminate="
+                  sync.bundleProgress.value.phase === 'download' &&
+                  !sync.bundleProgress.value.bytesTotal
                 "
                 color="primary"
                 height="6"
                 rounded
               />
+              <div v-if="bundleDownloadDetail" class="opt-hint mt-1">
+                {{ bundleDownloadDetail }}
+              </div>
             </div>
           </section>
         </v-window-item>
@@ -570,7 +573,10 @@ import { ICONS } from "@/config/Icons";
 import Icon from "@/components/Icon.vue";
 import { useSyncManager } from "@/composables/useSyncManager";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
-import { formatBackgroundTaskDetail } from "@/helpers/BackgroundTaskDetail";
+import {
+  formatBackgroundTaskDetail,
+  formatBibleDownloadDetail,
+} from "@/helpers/BackgroundTaskDetail";
 import ProgressBar from "@/components/ProgressBar.vue";
 import $snackbar from "@/helpers/Snackbar";
 import type { BibleVersion } from "@/types/Bible";
@@ -671,6 +677,33 @@ const currentDownloadFile = computed(() => {
     : formatBackgroundTaskDetail(sync.downloadProgress.value.currentFile || null, t) || null;
 });
 const completedMsg = computed(() => sync.downloadCompletedMsg.value);
+
+const bundleDownloadPercent = computed<number>(() => {
+  const progress = sync.bundleProgress.value;
+  if (progress.phase === "download") {
+    const received = progress.bytesReceived ?? progress.current;
+    const total = progress.bytesTotal ?? 0;
+    return total > 0 ? Math.round((received / total) * 100) : 0;
+  }
+  return progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
+});
+
+const bundleDownloadDetail = computed<string>(() => {
+  const progress = sync.bundleProgress.value;
+  if (!sync.bundleInstalling.value || progress.phase !== "download") return "";
+
+  const received = progress.bytesReceived ?? progress.current ?? 0;
+  if (received <= 0) return "";
+
+  const total = progress.bytesTotal ?? 0;
+  const rate = progress.bytesPerSecond ?? 0;
+
+  if (total > 0) {
+    return `${sync.humanSize(received)} / ${sync.humanSize(total)} · ${sync.humanSize(rate)}/s`;
+  }
+
+  return `${sync.humanSize(received)} baixados · ${sync.humanSize(rate)}/s`;
+});
 
 const bibleDownloading = computed(() => sync.bibleDownloading.value || !!findTask("sync-bible"));
 const bibleDone = computed(() => {
