@@ -487,6 +487,18 @@ ipcMain.handle("dev:reloadAll", () => {
   return { ok: true, count };
 });
 
+// Abre o DevTools a partir da janela que disparou a ação.
+ipcMain.handle("dev:openDevTools", (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || win.isDestroyed()) return { ok: false };
+  if (win.webContents.isDevToolsOpened()) {
+    win.webContents.focus();
+  } else {
+    win.webContents.openDevTools({ mode: "detach" });
+  }
+  return { ok: true };
+});
+
 // ---------------------------------------------------------------------------
 // IPC handlers do userStore (D1)
 // ---------------------------------------------------------------------------

@@ -59,6 +59,10 @@
           <v-icon icon="mdi-refresh" size="14" class="mr-1" />
           {{ $t("options.dev.reload_all") }}
         </button>
+        <button type="button" class="opt-btn" @click="openDevToolsConsole">
+          <v-icon icon="mdi-code-braces" size="14" class="mr-1" />
+          {{ $t("options.dev.open_devtools_console") }}
+        </button>
         <button type="button" class="opt-btn" @click="clearDbCache">
           <v-icon icon="mdi-broom" size="14" class="mr-1" />
           {{ $t("options.dev.clear_db_cache") }}
@@ -172,6 +176,16 @@ function reloadAllWindows(): void {
   try {
     (Platform.api as { invoke?: (channel: string, ...args: unknown[]) => Promise<unknown> })
       .invoke?.("dev:reloadAll")
+      .catch(() => {});
+  } catch {
+    /* noop */
+  }
+}
+
+function openDevToolsConsole(): void {
+  try {
+    (Platform.api as { invoke?: (channel: string, ...args: unknown[]) => Promise<unknown> })
+      .invoke?.("dev:openDevTools")
       .catch(() => {});
   } catch {
     /* noop */

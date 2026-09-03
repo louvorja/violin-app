@@ -496,6 +496,7 @@
       "show_libras_text": "Mostrar texto de la traducción Libras en la proyección",
       "section_actions": "Acciones",
       "reload_all": "Recargar todas las ventanas",
+      "open_devtools_console": "Abrir consola DevTools",
       "clear_db_cache": "Limpiar caché de la base de datos",
       "section_environment": "Entorno",
       "env_mode": "Modo",
