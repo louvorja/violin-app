@@ -235,7 +235,7 @@
       </div>
 
       <!-- Rename dialog -->
-      <v-dialog v-model="showRenameDialog" max-width="400" persistent>
+      <v-dialog v-model="showRenameDialog" max-width="400">
         <v-card>
           <v-card-title class="text-body-1 font-weight-medium">
             <v-icon icon="mdi-pencil-outline" class="mr-1" />

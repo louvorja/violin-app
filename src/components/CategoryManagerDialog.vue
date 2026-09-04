@@ -2,7 +2,6 @@
   <v-dialog
     :model-value="modelValue"
     max-width="600"
-    persistent
     @update:model-value="$emit('update:modelValue', $event)"
   >
     <v-card>
@@ -49,7 +48,7 @@
   </v-dialog>
 
   <!-- New/Edit Category Dialog -->
-  <v-dialog v-model="showForm" max-width="520" persistent>
+  <v-dialog v-model="showForm" max-width="520">
     <v-card>
       <v-card-title class="text-body-1 font-weight-medium">
         <v-icon :icon="editingId ? 'mdi-pencil' : 'mdi-plus'" class="mr-1" />

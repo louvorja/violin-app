@@ -1,6 +1,6 @@
 <template>
-  <v-dialog v-model="model" max-width="520" persistent :scrim="true" @update:model-value="onClose">
-    <v-card>
+  <v-dialog v-model="model" max-width="520" :scrim="true" @update:model-value="onClose">
+    <v-card rounded="lg">
       <v-toolbar color="transparent" density="compact" class="px-2 pt-2">
         <v-icon icon="mdi-desktop-classic" class="mr-2" />
         <v-toolbar-title class="text-body-1 font-weight-bold">

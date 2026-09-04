@@ -110,7 +110,7 @@
     </div>
 
     <!-- Add / Edit dialog -->
-    <v-dialog v-model="dialogOpen" max-width="480" persistent @keydown.esc="dialogOpen = false">
+    <v-dialog v-model="dialogOpen" max-width="480" @keydown.esc="dialogOpen = false">
       <v-card>
         <v-card-title>{{ editingId ? t("edit_title") : t("add_title") }}</v-card-title>
         <v-card-text>

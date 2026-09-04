@@ -1,6 +1,11 @@
 <template>
-  <v-dialog v-model="internalShow" max-width="620" persistent :scrim="true">
-    <v-card>
+  <v-dialog
+    v-model="internalShow"
+    max-width="620"
+    :scrim="true"
+    @update:model-value="onDialogModel"
+  >
+    <v-card rounded="lg">
       <v-toolbar color="primary" density="compact">
         <v-icon :icon="ICONS.UI.NEWS" class="mx-2" />
         <v-toolbar-title class="font-weight-bold">
@@ -53,16 +58,11 @@
       <v-divider v-if="!error" class="mx-4" />
 
       <v-card-actions class="pa-4 pt-2">
-        <v-checkbox
-          v-model="dontShowAgain"
-          density="compact"
-          hide-details
-          class="release-notes-checkbox"
-        >
-          <template #label>
-            <span class="text-label-small">{{ t("release_notes.dont_show_again") }}</span>
-          </template>
-        </v-checkbox>
+        <DontShowAgainCheckbox
+          :storage-key="KEYS.OPTIONS.SKIP_RELEASE_NOTES_VERSION"
+          :value="packageJson.version"
+          :label="t('release_notes.dont_show_again')"
+        />
         <v-spacer />
         <v-btn variant="flat" color="primary" @click="onClose">
           {{ t("actions.close") }}
@@ -76,6 +76,9 @@
 import { ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import Platform from "@/helpers/Platform";
+import DontShowAgainCheckbox from "@/components/inputs/DontShowAgainCheckbox.vue";
+import { KEYS } from "@/constants/UserDataKeys";
+import packageJson from "@root/package.json";
 import { ICONS } from "@/config/Icons";
 
 const props = defineProps<{
@@ -83,7 +86,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{
   (e: "update:modelValue", v: boolean): void;
-  (e: "close", _dontShowAgain: boolean): void;
+  (e: "close"): void;
 }>();
 
 const { t } = useI18n();
@@ -106,13 +109,11 @@ const release = ref<{
   bodyHtml: string | null;
   url: string;
 } | null>(null);
-const dontShowAgain = ref(false);
 
 async function load() {
   loading.value = true;
   error.value = false;
   release.value = null;
-  dontShowAgain.value = false;
   try {
     const data = Platform.updater ? await Platform.updater.getReleaseNotes() : null;
     release.value = data;
@@ -128,7 +129,12 @@ async function load() {
 function onClose() {
   internalShow.value = false;
   emit("update:modelValue", false);
-  emit("close", dontShowAgain.value);
+  emit("close");
+}
+
+/** Fechamento vindo do próprio v-dialog (clique fora / ESC). */
+function onDialogModel(v: boolean) {
+  if (!v) onClose();
 }
 </script>
 
@@ -247,9 +253,5 @@ function onClose() {
   border: none;
   border-top: 1px solid rgba(var(--v-theme-on-surface), 0.12);
   margin: 12px 0;
-}
-
-.release-notes-checkbox {
-  margin: 0;
 }
 </style>

@@ -173,7 +173,7 @@
       </v-dialog>
 
       <!-- Edit file dialog -->
-      <v-dialog v-model="showEditFileDialog" max-width="480" persistent>
+      <v-dialog v-model="showEditFileDialog" max-width="480">
         <v-card>
           <v-card-title class="text-body-1 font-weight-medium d-flex align-center ga-2">
             <v-icon icon="mdi-pencil" />

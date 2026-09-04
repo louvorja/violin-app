@@ -1,18 +1,12 @@
 <template>
-  <v-dialog
-    v-model="internalShow"
-    max-width="520"
-    persistent
-    :scrim="true"
-    @update:model-value="onClose"
-  >
-    <v-card>
+  <v-dialog v-model="internalShow" max-width="520" :scrim="true" @update:model-value="onClose">
+    <v-card rounded="lg">
       <v-toolbar color="primary" density="compact">
         <v-icon :icon="ICONS.ACTIONS.DOWNLOAD" :color="COLORS.WARNING" class="mx-2" />
         <v-toolbar-title class="font-weight-bold">
           {{ t("options.updates.app_available", { version }) }}
         </v-toolbar-title>
-        <v-btn icon variant="text" density="compact" @click="onClose(false)">
+        <v-btn icon variant="text" density="compact" @click="onClose">
           <v-icon :icon="ICONS.ACTIONS.CLOSE" />
         </v-btn>
       </v-toolbar>
@@ -81,25 +75,18 @@
 
       <!-- Ações -->
       <v-card-actions class="pa-4 pt-2">
-        <v-checkbox
+        <DontShowAgainCheckbox
           v-if="!isDownloading && !isDownloaded && !hasError"
-          v-model="dontShowAgain"
+          :key="version"
+          :storage-key="KEYS.OPTIONS.SKIP_UPDATE_NOTIFICATION_VERSION"
+          :value="version"
           :label="t('release_notes.dont_show_again')"
-          density="compact"
-          hide-details
-          class="update-dialog-checkbox"
-        >
-          <template #label>
-            <span class="ml-2 text-label-small">
-              {{ t("release_notes.dont_show_again") }}
-            </span>
-          </template>
-        </v-checkbox>
+        />
         <v-spacer />
 
         <!-- Estado disponível: Atualizar / Depois -->
         <template v-if="!isDownloading && !isDownloaded && !hasError">
-          <v-btn variant="tonal" color="secondary" @click="onClose(false)">
+          <v-btn variant="tonal" color="secondary" @click="onClose">
             {{ t("options.updates.later") }}
           </v-btn>
           <v-btn variant="flat" color="primary" @click="startDownload">
@@ -118,7 +105,7 @@
 
         <!-- Estado erro: Baixar manualmente / Fechar -->
         <template v-else-if="hasError">
-          <v-btn variant="text" @click="onClose(false)">
+          <v-btn variant="text" @click="onClose">
             {{ t("actions.close") }}
           </v-btn>
           <v-btn variant="flat" color="primary" @click="openReleasePage">
@@ -135,6 +122,8 @@
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import Platform from "@/helpers/Platform";
+import DontShowAgainCheckbox from "@/components/inputs/DontShowAgainCheckbox.vue";
+import { KEYS } from "@/constants/UserDataKeys";
 import { ICONS } from "@/config/Icons";
 import { COLORS } from "@constants/Colors";
 
@@ -158,13 +147,11 @@ const emit = defineEmits<{
   (e: "update:modelValue", v: boolean): void;
   (e: "start-download"): void;
   (e: "close"): void;
-  (e: "dont-show-again"): void;
 }>();
 
 const { t } = useI18n();
 
 const internalShow = ref(props.modelValue);
-const dontShowAgain = ref(false);
 const releaseNotes = ref<string | null>(null);
 const releaseNotesHtml = ref<string | null>(null);
 const appUpdate = ref<AppUpdateState>({
@@ -220,7 +207,6 @@ function formatEta(seconds: number): string {
 }
 
 async function load() {
-  dontShowAgain.value = false;
   releaseNotes.value = null;
   releaseNotesHtml.value = null;
 
@@ -271,16 +257,13 @@ function openReleasePage() {
   if (Platform.updater) {
     Platform.updater.openReleasePage();
   }
-  onClose(false);
+  onClose();
 }
 
-function onClose(skipVersion = false) {
+function onClose() {
   internalShow.value = false;
   emit("update:modelValue", false);
   emit("close");
-  if (skipVersion || dontShowAgain.value) {
-    emit("dont-show-again");
-  }
 }
 </script>
 
@@ -360,9 +343,5 @@ function onClose(skipVersion = false) {
   padding-left: 10px;
   border-left: 3px solid rgba(var(--v-theme-on-surface), 0.2);
   color: rgba(var(--v-theme-on-surface), 0.6);
-}
-
-.update-dialog-checkbox {
-  margin: 0;
 }
 </style>

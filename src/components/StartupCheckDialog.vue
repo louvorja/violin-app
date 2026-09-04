@@ -1,14 +1,15 @@
 <template>
-  <v-dialog v-model="model" max-width="650" persistent :scrim="true" @update:model-value="onClose">
-    <v-card>
-      <v-toolbar color="transparent" density="compact" class="px-2 pt-2">
-        <v-icon icon="mdi-sync" class="mr-2" />
-        <v-toolbar-title class="text-body-1 font-weight-bold">
+  <v-dialog v-model="model" max-width="650" :scrim="true" @update:model-value="onDialogModel">
+    <v-card rounded="lg">
+      <v-toolbar color="primary" density="compact">
+        <v-icon :icon="ICONS.UI.SYNC" class="mx-2" />
+        <v-toolbar-title class="font-weight-bold">
           {{ $t("startup_check.title") }}
         </v-toolbar-title>
+        <v-btn icon variant="text" density="compact" @click="onClose">
+          <v-icon :icon="ICONS.ACTIONS.CLOSE" />
+        </v-btn>
       </v-toolbar>
-
-      <v-divider />
 
       <!-- Scanning -->
       <template v-if="view === 'scanning'">
@@ -231,20 +232,15 @@
 
         <v-divider />
 
-        <div>
-          <v-checkbox
-            v-model="dontShowAgain"
+        <v-card-actions class="pa-4 pt-2">
+          <DontShowAgainCheckbox
+            :storage-key="KEYS.OPTIONS.SKIP_STARTUP_CHECK"
             :label="$t('startup_check.hide_on_login')"
-            density="compact"
-            hide-details
-            class="mt-1 ml-3"
           />
-        </div>
-        <v-card-actions class="pa-4">
-          <v-btn variant="outlined" prepend-icon="mdi-close" @click="onClose">
+          <v-spacer />
+          <v-btn variant="text" @click="onClose">
             {{ $t("actions.close") }}
           </v-btn>
-          <v-spacer />
           <v-btn
             variant="outlined"
             prepend-icon="mdi-checkbox-multiple-marked-outline"
@@ -470,6 +466,7 @@ import { KEYS } from "@/constants/UserDataKeys";
 import { useSyncManager } from "@/composables/useSyncManager";
 import type { BibleVersion } from "@/types/Bible";
 import { ICONS } from "@/config/Icons";
+import DontShowAgainCheckbox from "@/components/inputs/DontShowAgainCheckbox.vue";
 import { formatBibleDownloadDetail } from "@/helpers/BackgroundTaskDetail";
 
 interface Category {
@@ -500,7 +497,6 @@ const { t } = useI18n();
 
 const model = ref(props.modelValue);
 const view = ref<"scanning" | "summary" | "details" | "downloading">("scanning");
-const dontShowAgain = ref(false);
 const selectedAlbums = ref<number[]>([]);
 const selectedHymnal = ref(false);
 const selectedBibles = ref<number[]>([]);
@@ -548,10 +544,12 @@ function toggleExpandedCategory(id: number): void {
 }
 
 function onClose(): void {
-  if (dontShowAgain.value) {
-    $userdata.set(KEYS.OPTIONS.SKIP_STARTUP_CHECK, true);
-  }
   emit("update:modelValue", false);
+}
+
+/** Fechamento vindo do próprio v-dialog (clique fora / ESC). */
+function onDialogModel(v: boolean): void {
+  if (!v) onClose();
 }
 
 function minimizeToBackground(): void {

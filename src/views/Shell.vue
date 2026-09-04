@@ -41,7 +41,6 @@
       v-model="updateDialogOpen"
       :version="updateDialogVersion"
       @start-download="onUpdateDialogDownload"
-      @dont-show-again="onUpdateDialogDontShowAgain"
       @close="onUpdateDialogClose"
     />
 
@@ -111,7 +110,7 @@
     </v-overlay>
 
     <!-- Bundle error dialog -->
-    <v-dialog v-model="bundleErrorOpen" max-width="420" persistent :scrim="true">
+    <v-dialog v-model="bundleErrorOpen" max-width="420" :scrim="true">
       <v-card>
         <v-toolbar color="transparent" density="compact" class="px-2 pt-2">
           <v-icon icon="mdi-alert-circle" color="error" class="mr-2" />
@@ -560,10 +559,7 @@ function openBibleSearch() {
 defineExpose({ openCommandPalette, openHotkeysCheatsheet, openMusicSearch, openBibleSearch });
 
 // Ao fechar o modal de novidades: persiste a dispensa (se marcado).
-function onReleaseNotesClose(dontShowAgain = false) {
-  if (dontShowAgain) {
-    $userdata.set(KEYS.OPTIONS.SKIP_RELEASE_NOTES_VERSION, packageJson.version);
-  }
+function onReleaseNotesClose() {
   if (_bootPhase === "release-notes") {
     void _showPendingStartupCheck();
   }
@@ -574,11 +570,6 @@ function onUpdateDialogDownload() {
   if (Platform.updater) {
     Platform.updater.download();
   }
-}
-
-// Handler: dispensar notificação desta versão
-function onUpdateDialogDontShowAgain() {
-  $userdata.set(KEYS.OPTIONS.SKIP_UPDATE_NOTIFICATION_VERSION, updateDialogVersion.value);
 }
 
 // Handler: dialog de update fechado (sem download) → seguir para release notes/startup

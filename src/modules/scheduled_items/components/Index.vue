@@ -103,7 +103,7 @@
     </div>
 
     <!-- Diálogo: nova / renomear categoria -->
-    <v-dialog v-model="categoryDialog" max-width="360" persistent>
+    <v-dialog v-model="categoryDialog" max-width="360">
       <v-card>
         <v-card-title class="text-body-1 font-weight-medium">
           {{ editingCatId ? tt("rename_category") : tt("new_category") }}
@@ -138,7 +138,7 @@
     </v-dialog>
 
     <!-- Diálogo: agendamento do dia -->
-    <v-dialog v-model="entryDialog" max-width="550" persistent>
+    <v-dialog v-model="entryDialog" max-width="550">
       <v-card>
         <v-card-title class="text-body-1 font-weight-medium si-entry-title">
           {{ tt("entry_title") }} — {{ entryWeekday }},
@@ -212,7 +212,7 @@
     </v-dialog>
 
     <!-- Diálogo: Adicionar Automaticamente -->
-    <v-dialog v-model="autoPopulateDialog" max-width="520" persistent>
+    <v-dialog v-model="autoPopulateDialog" max-width="520">
       <v-card>
         <v-card-title class="text-body-1 font-weight-medium">
           {{ tt("add_auto_dialog") }}
