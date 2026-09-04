@@ -1,11 +1,14 @@
 <template>
   <div class="opt">
     <section v-if="!isDesktop" class="opt-section">
-      <p class="opt-hint">{{ $t("options.collections_download.desktop_only") }}</p>
+      <p class="opt-empty">{{ $t("options.collections_download.desktop_only") }}</p>
     </section>
 
     <section v-if="isDesktop" class="opt-section">
-      <h3 class="opt-section-title">{{ $t("options.collections_download.connection") }}</h3>
+      <h3 class="opt-section-title">
+        <v-icon :icon="ICONS.UI.SYNC_CLOUD" size="18" />
+        {{ $t("options.collections_download.connection") }}
+      </h3>
       <div class="opt-row opt-row--col">
         <div
           class="opt-connection-status"
@@ -14,7 +17,7 @@
             'opt-connection-status--checking': ftpChecking,
           }"
         >
-          <div v-if="!ftpChecking" class="opt-connection-box">{{ ftpStatusText }}</div>
+          <div v-if="ftpErrorText" class="opt-connection-box">{{ ftpErrorText }}</div>
           <span class="opt-connection-badge">
             {{
               ftpChecking
@@ -26,7 +29,12 @@
           </span>
         </div>
         <div class="opt-folder-actions">
-          <button type="button" class="opt-btn" :disabled="ftpChecking" @click="sync.checkFtp()">
+          <button
+            type="button"
+            class="opt-btn"
+            :disabled="ftpChecking"
+            @click="sync.checkFtp(true)"
+          >
             {{ $t("options.collections_download.check_connection") }}
           </button>
         </div>
@@ -52,7 +60,7 @@
 
       <v-divider />
 
-      <v-window v-model="activeTab">
+      <v-window v-model="activeTab" class="mt-5">
         <!-- Coletâneas -->
         <v-window-item value="collections">
           <section class="opt-section">
@@ -727,12 +735,11 @@ const downloadPercent = computed<number>(() =>
   totalDownloads.value > 0 ? Math.round((downloadProcessed.value / totalDownloads.value) * 100) : 0
 );
 
-const ftpStatusText = computed<string>(() => {
-  if (ftpChecking.value) return t("options.collections_download.checking");
-  if (ftpOk.value) return t("options.collections_download.connected");
-  if (ftpError.value) return String(ftpError.value);
-  return t("options.collections_download.disconnected");
-});
+// A caixa ao lado do selo só existe para detalhar uma falha — repetir
+// "Conectado" nos dois lugares não diz nada.
+const ftpErrorText = computed<string>(() =>
+  !ftpChecking.value && !ftpOk.value && ftpError.value ? String(ftpError.value) : ""
+);
 
 const hasAnySelection = computed<boolean>(
   () => selectedAlbums.value.size > 0 || selectedHymnal.value || selectedHymnal1996.value
@@ -833,7 +840,7 @@ async function loadCatalog({ fresh = false }: { fresh?: boolean } = {}): Promise
     hymnalIds.value = result.hymnalIds;
     hymnal1996Ids.value = result.hymnal1996Ids;
     catalogTimestamp.value = nowHHMM();
-    await scanLocalCache();
+    await scanLocalCache({ force: fresh });
   } catch (e) {
     console.error("[Sincronizar] loadCatalog:", e);
   } finally {
@@ -845,7 +852,7 @@ async function refreshCatalog(): Promise<void> {
   await loadCatalog({ fresh: true });
 }
 
-async function scanLocalCache(): Promise<void> {
+async function scanLocalCache({ force = false }: { force?: boolean } = {}): Promise<void> {
   if (!Platform.storage?.checkLocal) return;
   scanningCache.value = true;
 
@@ -853,7 +860,8 @@ async function scanLocalCache(): Promise<void> {
     locale.value,
     categories.value,
     hymnalIds.value,
-    hymnal1996Ids.value
+    hymnal1996Ids.value,
+    { force }
   );
   scanCacheDone.value = sync.scanProgress.value.done;
   scanCacheTotal.value = sync.scanProgress.value.total;
@@ -912,7 +920,7 @@ async function startDownloads(): Promise<void> {
 
   await sync.startDownloads(files);
   await sync.waitForDownloadQueue();
-  await scanLocalCache();
+  await scanLocalCache({ force: true });
 }
 
 /* ---- Salvar seleção (remover do disco) ---- */
@@ -1077,7 +1085,7 @@ async function persistClassicSelection(result: {
     useClassicDir: true,
   });
   await Platform.storage?.setFilesDir?.(result.configDir, { moveExisting: false });
-  await reloadStats();
+  await Promise.all([reloadStats(), scanLocalCache({ force: true })]);
 }
 
 async function detectClassic(): Promise<void> {
@@ -1177,7 +1185,7 @@ async function changeFolder(): Promise<void> {
             useClassicDir: false,
           });
           $userdata.set(KEYS.OPTIONS.USE_CLASSIC_DIR, false);
-          await reloadStats();
+          await Promise.all([reloadStats(), scanLocalCache({ force: true })]);
         } catch (e) {
           $alert.error({ text: "options.storage.change_failed", error: e as Error });
         }
@@ -1193,7 +1201,7 @@ async function changeFolder(): Promise<void> {
       await Platform.storage?.setFilesDir(newDir, { moveExisting: move });
       const cur = (await Platform.userStore?.read("storage")) || {};
       await Platform.userStore?.write("storage", { ...cur, filesDir: newDir });
-      await reloadStats();
+      await Promise.all([reloadStats(), scanLocalCache({ force: true })]);
     } catch (e) {
       $alert.error({ text: "options.storage.change_failed", error: e as Error });
     }
@@ -1216,7 +1224,7 @@ async function setQuotaGb(gb: number): Promise<void> {
   await Platform.userStore?.write("storage", { ...cur, maxBytes });
   if (maxBytes > 0 && Platform?.storage?.enforceQuota) {
     await Platform.storage.enforceQuota(maxBytes);
-    await reloadStats();
+    await Promise.all([reloadStats(), scanLocalCache({ force: true })]);
   }
 }
 
@@ -1232,7 +1240,7 @@ async function clearFiles(): Promise<void> {
   $alert.yesno("options.storage.clear_files_confirm", (async (btn) => {
     if (btn !== "yes") return;
     await Platform?.storage?.clearFiles?.();
-    await reloadStats();
+    await Promise.all([reloadStats(), scanLocalCache({ force: true })]);
   }) as (...args: unknown[]) => unknown);
 }
 
@@ -1287,10 +1295,8 @@ async function refreshDiskUsage(): Promise<void> {
 
 onMounted(async () => {
   if (!isDesktop.value) return;
-  await loadCatalog();
-  await sync.checkFtp();
-  await reloadStats();
-  await loadBibleVersions();
+  // Independentes entre si — em série a tela levava a soma dos quatro tempos.
+  await Promise.all([loadCatalog(), sync.checkFtp(), reloadStats(), loadBibleVersions()]);
 });
 
 onBeforeUnmount(() => {
