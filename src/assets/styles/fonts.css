@@ -1,8 +1,24 @@
+/* Métricas verticais normalizadas
+ *
+ * As métricas declaradas nestas fontes divergem muito entre si — a
+ * DINCondensedBold declara ascender 0.712em, exatamente a cap-height, de modo
+ * que acentos maiúsculos (Ó sobe a 0.885em) estouram a caixa da linha e o texto
+ * encosta no topo; a OpenSans declara 1.069em e joga o texto para baixo. Como a
+ * projeção usa caixa de fundo e uppercase, a assimetria fica visível e muda a
+ * cada troca de fonte.
+ *
+ * Os valores abaixo (1.05 / 0.30) fixam a baseline no mesmo ponto em todas
+ * elas e cobrem o maior glifo acentuado do acervo (À da BetaniaPatmos, 1.043em).
+ */
+
 @font-face {
   font-family: "DINCondensedBold";
   src: url("../fonts/din-condensed-bold.ttf") format("truetype");
   font-weight: bold;
   font-style: normal;
+  ascent-override: 105%;
+  descent-override: 30%;
+  line-gap-override: 0%;
 }
 
 @font-face {
@@ -10,6 +26,9 @@
   src: url("../fonts/AdventSans-Logo.otf") format("opentype");
   font-weight: normal;
   font-style: normal;
+  ascent-override: 105%;
+  descent-override: 30%;
+  line-gap-override: 0%;
 }
 
 @font-face {
@@ -17,6 +36,9 @@
   src: url("../fonts/FjallaOne-Regular.ttf") format("truetype");
   font-weight: normal;
   font-style: normal;
+  ascent-override: 105%;
+  descent-override: 30%;
+  line-gap-override: 0%;
 }
 
 @font-face {
@@ -24,6 +46,9 @@
   src: url("../fonts/impact-regular-6_ufonts.com.ttf") format("truetype");
   font-weight: normal;
   font-style: normal;
+  ascent-override: 105%;
+  descent-override: 30%;
+  line-gap-override: 0%;
 }
 
 @font-face {
@@ -31,6 +56,9 @@
   src: url("../fonts/calibri-bold.ttf") format("truetype");
   font-weight: bold;
   font-style: normal;
+  ascent-override: 105%;
+  descent-override: 30%;
+  line-gap-override: 0%;
 }
 
 @font-face {
@@ -38,6 +66,9 @@
   src: url("../fonts/Inter-VariableFont_opsz,wght.ttf") format("truetype");
   font-weight: 100 900;
   font-style: normal;
+  ascent-override: 105%;
+  descent-override: 30%;
+  line-gap-override: 0%;
 }
 
 @font-face {
@@ -45,6 +76,9 @@
   src: url("../fonts/Roboto-VariableFont_wdth,wght.ttf") format("truetype");
   font-weight: 100 900;
   font-style: normal;
+  ascent-override: 105%;
+  descent-override: 30%;
+  line-gap-override: 0%;
 }
 
 @font-face {
@@ -52,6 +86,9 @@
   src: url("../fonts/BetaniaPatmos-Regular.ttf") format("truetype");
   font-weight: normal;
   font-style: normal;
+  ascent-override: 105%;
+  descent-override: 30%;
+  line-gap-override: 0%;
 }
 
 @font-face {
@@ -59,6 +96,9 @@
   src: url("../fonts/OpenSans-Regular.ttf") format("truetype");
   font-weight: normal;
   font-style: normal;
+  ascent-override: 105%;
+  descent-override: 30%;
+  line-gap-override: 0%;
 }
 
 @font-face {
@@ -66,6 +106,9 @@
   src: url("../fonts/OpenSans-Light.ttf") format("truetype");
   font-weight: normal;
   font-style: normal;
+  ascent-override: 105%;
+  descent-override: 30%;
+  line-gap-override: 0%;
 }
 
 @font-face {
@@ -73,6 +116,9 @@
   src: url("../fonts/OpenSans-Semibold.ttf") format("truetype");
   font-weight: normal;
   font-style: normal;
+  ascent-override: 105%;
+  descent-override: 30%;
+  line-gap-override: 0%;
 }
 
 @font-face {
@@ -80,4 +126,7 @@
   src: url("../fonts/OpenSans-ExtraBold.ttf") format("truetype");
   font-weight: normal;
   font-style: normal;
+  ascent-override: 105%;
+  descent-override: 30%;
+  line-gap-override: 0%;
 }
