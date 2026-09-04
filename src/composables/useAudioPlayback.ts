@@ -1,4 +1,5 @@
 import { ref, getCurrentScope, onScopeDispose, type Ref } from "vue";
+import { detachMediaSource as _detachSource } from "@/helpers/Dom";
 
 type TimeCallback = (currentTime: number, duration: number) => void;
 
@@ -119,6 +120,10 @@ function _create(): AudioPlayback {
 
   function play(onError?: (e: unknown) => void): void {
     const el = getElement();
+    // Sem fonte anexada o play() rejeita com NotSupportedError e vira um
+    // alerta de "erro ao carregar áudio" — mas aqui o áudio só ainda não
+    // chegou: o onload do XHR chama play() de novo assim que o blob existir.
+    if (!el.getAttribute("src")) return;
     const playPromise = el.play();
     if (playPromise) {
       playPromise
@@ -147,7 +152,7 @@ function _create(): AudioPlayback {
     if (_el) {
       _el.onerror = null;
       _el.pause();
-      _el.src = "";
+      _detachSource(_el);
     }
     isPaused.value = true;
     if (callback) callback();

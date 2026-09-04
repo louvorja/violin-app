@@ -84,6 +84,7 @@ function _loadAudioSrc(
   request.responseType = "blob";
   request.onload = function (this: XMLHttpRequest) {
     if (_audioXhr === request) _audioXhr = null;
+    $appdata.set(KEYS.MODULES.MEDIA.LOADING, false);
     if (_loadingId !== idCheck) return;
     if (this.status == 200) {
       _audio.setSrc(URL.createObjectURL(this.response as Blob), false);
@@ -100,6 +101,7 @@ function _loadAudioSrc(
   };
   request.onerror = function () {
     if (_audioXhr === request) _audioXhr = null;
+    $appdata.set(KEYS.MODULES.MEDIA.LOADING, false);
     if (_loadingId !== idCheck) return;
     _self.close(true);
     $alert.error(
@@ -113,8 +115,10 @@ function _loadAudioSrc(
     if (_audioXhr === request) _audioXhr = null;
   };
 
+  // LOADING só cai nos handlers: o blob ainda está sendo baixado aqui, e
+  // liberar a UI antes disso deixa o usuário apertar Play num <audio> sem
+  // fonte — que rejeita com "no supported source was found".
   request.send();
-  $appdata.set(KEYS.MODULES.MEDIA.LOADING, false);
 }
 
 // Mantém $appdata sincronizado com o estado reativo de useSlides

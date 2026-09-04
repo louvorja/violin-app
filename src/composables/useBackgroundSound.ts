@@ -1,5 +1,6 @@
 import { ref } from "vue";
 import { MediaFile } from "@/types/Media";
+import { detachMediaSource } from "@/helpers/Dom";
 
 const _audio = new Audio();
 const isPlaying = ref(false);
@@ -143,7 +144,7 @@ export function useBackgroundSound() {
         _clearFade();
         _audio.pause();
         _revokeBlob();
-        _audio.src = "";
+        detachMediaSource(_audio);
         _audio.currentTime = 0;
         currentFile.value = null;
         currentTime.value = 0;
@@ -157,7 +158,7 @@ export function useBackgroundSound() {
       _audio.pause();
       _audio.currentTime = 0;
       _revokeBlob();
-      _audio.src = "";
+      detachMediaSource(_audio);
       currentFile.value = null;
       currentTime.value = 0;
       duration.value = 0;
@@ -216,9 +217,8 @@ export function useBackgroundSound() {
     _clearFade();
     _audio.pause();
     _revokeBlob();
-    _audio.src = "";
+    detachMediaSource(_audio);
     _audio.onended = null;
-    _audio.load();
   }
 
   return {
