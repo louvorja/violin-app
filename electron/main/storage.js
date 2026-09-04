@@ -155,19 +155,30 @@ async function verify(remoteFiles = []) {
 
   const missing = [];
   const damaged = [];
+  // Locais que satisfazem algum arquivo esperado, inclusive por variante de
+  // extensão. Sem isso o acervo antigo em .mp3/.bmp entraria em `extra` e o
+  // clearUnused apagaria tudo que o banco agora pede em .opus/.jpg.
+  const matched = new Set();
+
   for (const [rel, item] of remoteMap.entries()) {
-    if (!localSet.has(rel)) {
+    const found = variantsOf(rel).find((c) => localSet.has(c));
+    if (!found) {
       missing.push(item);
       continue;
     }
-    const localFile = local.find((f) => f.relative === rel);
-    if (item.expectedSize && localFile.size !== item.expectedSize) {
-      damaged.push({ ...item, localSize: localFile.size });
+    matched.add(found);
+    // Tamanho só acusa corrupção quando o formato é o mesmo: um .mp3 no lugar
+    // de um .opus tem outro tamanho por natureza, e não está danificado.
+    if (found === rel && item.expectedSize) {
+      const localFile = local.find((f) => f.relative === found);
+      if (localFile.size !== item.expectedSize) {
+        damaged.push({ ...item, localSize: localFile.size });
+      }
     }
   }
 
   const extra = local
-    .filter((f) => !remoteMap.has(f.relative))
+    .filter((f) => !matched.has(f.relative))
     .map((f) => ({ remote: f.relative, localSize: f.size }));
 
   return { missing, damaged, extra };
