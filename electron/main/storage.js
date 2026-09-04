@@ -19,6 +19,7 @@ const fs = require("fs-extra");
 const path = require("path");
 const { shell } = require("electron");
 const paths = require("./paths.js");
+const { variantsOf } = require("./mediaVariants.js");
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -154,19 +155,30 @@ async function verify(remoteFiles = []) {
 
   const missing = [];
   const damaged = [];
+  // Locais que satisfazem algum arquivo esperado, inclusive por variante de
+  // extensão. Sem isso o acervo antigo em .mp3/.bmp entraria em `extra` e o
+  // clearUnused apagaria tudo que o banco agora pede em .opus/.jpg.
+  const matched = new Set();
+
   for (const [rel, item] of remoteMap.entries()) {
-    if (!localSet.has(rel)) {
+    const found = variantsOf(rel).find((c) => localSet.has(c));
+    if (!found) {
       missing.push(item);
       continue;
     }
-    const localFile = local.find((f) => f.relative === rel);
-    if (item.expectedSize && localFile.size !== item.expectedSize) {
-      damaged.push({ ...item, localSize: localFile.size });
+    matched.add(found);
+    // Tamanho só acusa corrupção quando o formato é o mesmo: um .mp3 no lugar
+    // de um .opus tem outro tamanho por natureza, e não está danificado.
+    if (found === rel && item.expectedSize) {
+      const localFile = local.find((f) => f.relative === found);
+      if (localFile.size !== item.expectedSize) {
+        damaged.push({ ...item, localSize: localFile.size });
+      }
     }
   }
 
   const extra = local
-    .filter((f) => !remoteMap.has(f.relative))
+    .filter((f) => !matched.has(f.relative))
     .map((f) => ({ remote: f.relative, localSize: f.size }));
 
   return { missing, damaged, extra };
@@ -256,20 +268,22 @@ async function sizeOfPaths(remoteRelPaths = []) {
     seen.add(cleaned);
 
     const localPath = path.resolve(filesDir, cleaned);
-    if (!localPath.startsWith(filesDir + path.sep) || localPath !== filesDir) {
+    if (!localPath.startsWith(filesDir + path.sep) && localPath !== filesDir) {
       missing += 1;
       continue;
     }
     try {
-      if (await fs.pathExists(localPath)) {
-        const stat = await fs.stat(localPath);
-        if (stat.isFile()) {
-          bytes += stat.size;
-          count += 1;
-        }
-      } else {
-        missing += 1;
+      let counted = false;
+      for (const candidate of variantsOf(localPath)) {
+        if (!(await fs.pathExists(candidate))) continue;
+        const stat = await fs.stat(candidate);
+        if (!stat.isFile()) continue;
+        bytes += stat.size;
+        count += 1;
+        counted = true;
+        break;
       }
+      if (!counted) missing += 1;
     } catch {
       missing += 1;
     }

@@ -11,7 +11,7 @@
  * Fases posteriores vão adicionar:
  *   D1: ipcMain handlers para userStore
  *   D2: protocolo customizado louvorja://
- *   D3: ipcMain handlers para FTP download
+ *   D3: ipcMain handlers para download HTTPS de mídia
  *   D4: multi-monitor, windowFactory expandido
  *   D5: servidor HTTP embarcado
  *   D6: globalShortcut
@@ -37,6 +37,7 @@ const powerBlocker = require("./main/powerBlocker.js");
 const splash = require("./main/splash.js");
 const storage = require("./main/storage.js");
 const classicVersion = require("./main/classicVersion.js");
+const mediaVariants = require("./main/mediaVariants.js");
 
 function configureAppPaths() {
   // Mantém o identificador técnico do pacote separado do nome exibido.
@@ -224,7 +225,7 @@ app.whenReady().then(async () => {
       "font-src 'self' data: http://localhost:* https://fonts.gstatic.com https://vlibras.gov.br https://cdn.jsdelivr.net; " +
       "img-src 'self' blob: data: https: http://localhost:* https://*.ytimg.com https://*.youtube.com; " +
       "media-src 'self' blob: https: http://localhost:* https://*.googlevideo.com; " +
-      "connect-src 'self' blob: http://localhost:* ws://localhost:* https://api.louvorja.com.br https://*.louvorja.com.br https://*.youtube.com https://*.ytimg.com https://*.googlevideo.com https://*.googleapis.com https://fonts.gstatic.com https://www.gstatic.com https://*.doubleclick.net https://www.google.com https://*.google.com https://traducao2.vlibras.gov.br https://dicionario2.vlibras.gov.br https://repositorio.vlibras.gov.br https://cdn.jsdelivr.net; " +
+      "connect-src 'self' blob: http://localhost:* ws://localhost:* https://api.louvorja.com.br https://*.louvorja.com.br https://api.louvorja.workers.dev https://*.youtube.com https://*.ytimg.com https://*.googlevideo.com https://*.googleapis.com https://fonts.gstatic.com https://www.gstatic.com https://*.doubleclick.net https://www.google.com https://*.google.com https://traducao2.vlibras.gov.br https://dicionario2.vlibras.gov.br https://repositorio.vlibras.gov.br https://cdn.jsdelivr.net; " +
       "frame-src https://www.youtube.com https://www.youtube-nocookie.com https://vlibras.gov.br; " +
       "worker-src 'self' blob:;";
     session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
@@ -617,7 +618,7 @@ ipcMain.handle("jsonCache:dir", () => {
 });
 
 // ---------------------------------------------------------------------------
-// IPC handlers do downloader FTP (D3)
+// IPC handlers do downloader HTTPS (D3)
 // ---------------------------------------------------------------------------
 
 /** Atualiza configuração da API de download (paramsUrl, apiToken) */
@@ -626,7 +627,7 @@ ipcMain.handle("download:setApiConfig", (_event, cfg) => downloader.setApiConfig
 /** Busca params da API (com cache TTL diário). force=true força refetch. */
 ipcMain.handle("download:getParams", (_event, force) => downloader.getParams(force));
 
-/** Verifica conexão FTP fazendo handshake real com o servidor */
+/** Verifica se o servidor de arquivos está acessível */
 ipcMain.handle("download:checkConnection", () => downloader.checkConnection());
 
 /** Inicia download de uma lista de arquivos em background */
@@ -1051,7 +1052,10 @@ ipcMain.handle("storage:checkLocal", async (_e, remotePaths) => {
       continue;
     }
     try {
-      out[rel] = await fs.pathExists(localPath);
+      const found = await Promise.all(
+        mediaVariants.variantsOf(localPath).map((p) => fs.pathExists(p))
+      );
+      out[rel] = found.some(Boolean);
     } catch {
       out[rel] = false;
     }

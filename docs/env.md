@@ -15,7 +15,7 @@ Copie `.env.example` para `.env` e preencha os valores reais.
 | Campo       | Valor                                    |
 |-------------|------------------------------------------|
 | Tipo        | URL (string)                             |
-| Exemplo     | `https://api.louvorja.com.br/json_db`    |
+| Exemplo     | `https://api.louvorja.workers.dev/json_db` |
 | Offline     | `http://localhost:7070/database`         |
 | Usado em    | `helpers/Path.ts`, `helpers/Database.ts`, `main.js`, `layout/shell/AppMenuAtualizacoes.vue` |
 
@@ -29,7 +29,7 @@ URL base do banco de dados JSON. Todas as chamadas de `$database.get(key)` resol
 | Campo       | Valor                                    |
 |-------------|------------------------------------------|
 | Tipo        | URL (string)                             |
-| Exemplo     | `https://api.louvorja.com.br/file`       |
+| Exemplo     | `https://api.louvorja.workers.dev/file`  |
 | Offline     | `http://localhost:7070`                  |
 | Usado em    | `helpers/Path.ts`, `main.js`             |
 
@@ -47,7 +47,9 @@ Se ausente, a reprodução de áudio e carregamento de imagens de fundo falham s
 | Usado em    | `helpers/Database.ts`, `main.js`, `layout/shell/AppMenuAtualizacoes.vue` |
 
 Token enviado como header `Api-Token` em todas as requisições ao servidor louvorja.
-Se ausente, as requisições ao `api.louvorja.com.br` retornam 401 e o app não carrega dados.
+Obrigatório no servidor legado (`api.louvorja.com.br`), que responde 401 sem ele.
+A API em `api.louvorja.workers.dev` é somente leitura e não exige token — o header
+é enviado assim mesmo e simplesmente ignorado.
 Em desenvolvimento com servidor local (`npm run files`), pode ser deixado vazio.
 
 ---

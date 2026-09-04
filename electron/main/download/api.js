@@ -8,9 +8,12 @@ const paths = require("../paths.js");
 const TTL_MS = 24 * 60 * 60 * 1000; // 24h
 const CACHE_FILE = () => path.join(paths.userData(), "configweb.json");
 
+// Preenchido por setConfig() no boot, a partir das variáveis do .env que o
+// renderer envia. Sem default: um endereço fixo aqui sobrevive à troca de
+// servidor no .env e faz o downloader falar com a API errada em silêncio.
 let _config = {
-  paramsUrl: "https://api.louvorja.com.br/params?type=env",
-  apiToken: "02@v2nFB2Dc",
+  paramsUrl: "",
+  apiToken: "",
 };
 
 function setConfig(cfg) {
@@ -66,6 +69,16 @@ async function getParams({ force = false } = {}) {
         return await fs.readJson(cacheFile);
       } catch (_) { /* invalido, refetch */ }
     }
+  }
+
+  if (!_config.paramsUrl) {
+    if (fs.existsSync(cacheFile)) {
+      console.warn("[download.api] paramsUrl não configurada — usando cache stale");
+      return await fs.readJson(cacheFile);
+    }
+    throw new Error(
+      "download.api: paramsUrl não configurada. O renderer envia via setApiConfig no boot; verifique VITE_URL_DATABASE no .env."
+    );
   }
 
   console.log(`[download.api] Buscando params: ${_config.paramsUrl}`);

@@ -5,8 +5,8 @@
  *
  * Hosts suportados:
  *   louvorja://app/<caminho>       — assets do build Vue em dist/ (substitui file://)
- *   louvorja://json_db/<arquivo>   — proxy com cache para api.louvorja.com.br/json_db
- *   louvorja://files/<caminho>     — arquivos locais em userData/files/ (populado em D3 via FTP)
+ *   louvorja://json_db/<arquivo>   — proxy com cache para <api>/json_db
+ *   louvorja://files/<caminho>     — arquivos locais em userData/files/ (populado em D3 via HTTPS)
  *
  * O protocolo é marcado como standard + secure para que fetch() e XHR funcionem
  * normalmente dentro do renderer sem erros de CORS/CSP. O host "app" existe
@@ -26,6 +26,7 @@ const fs = require("fs-extra");
 const path = require("path");
 const paths = require("./paths.js");
 const jsonCache = require("./jsonCache.js");
+const { variantsOf } = require("./mediaVariants.js");
 
 // ---------------------------------------------------------------------------
 // Configuração de URLs remotas
@@ -36,8 +37,8 @@ const jsonCache = require("./jsonCache.js");
  * depois que o renderer lê as variáveis de ambiente do Vite.
  */
 let _config = {
-  databaseUrl: "https://api.louvorja.com.br/json_db",
-  filesUrl: "https://api.louvorja.com.br/file",
+  databaseUrl: "https://api.louvorja.workers.dev/json_db",
+  filesUrl: "https://api.louvorja.workers.dev/file",
   apiToken: "",
 };
 
@@ -68,6 +69,8 @@ const _MIME_TYPES = {
   ".mp3": "audio/mpeg",
   ".wav": "audio/wav",
   ".ogg": "audio/ogg",
+  ".opus": "audio/ogg",
+  ".oga": "audio/ogg",
   ".flac": "audio/flac",
   ".m4a": "audio/mp4",
   ".aac": "audio/aac",
@@ -255,7 +258,7 @@ function handle() {
             "font-src 'self' data: file: louvorja: https://fonts.gstatic.com https://vlibras.gov.br https://cdn.jsdelivr.net",
             "img-src 'self' blob: data: https: file: louvorja: https://*.ytimg.com https://*.youtube.com",
             "media-src 'self' blob: https: file: louvorja: https://*.googlevideo.com",
-            "connect-src 'self' blob: louvorja: https://api.louvorja.com.br https://*.louvorja.com.br http://localhost:* ws://localhost:* https://*.youtube.com https://*.ytimg.com https://*.googlevideo.com https://*.googleapis.com https://fonts.gstatic.com https://www.gstatic.com https://*.doubleclick.net https://www.google.com https://*.google.com https://traducao2.vlibras.gov.br https://dicionario2.vlibras.gov.br https://repositorio.vlibras.gov.br https://cdn.jsdelivr.net",
+            "connect-src 'self' blob: louvorja: https://api.louvorja.com.br https://*.louvorja.com.br https://api.louvorja.workers.dev http://localhost:* ws://localhost:* https://*.youtube.com https://*.ytimg.com https://*.googlevideo.com https://*.googleapis.com https://fonts.gstatic.com https://www.gstatic.com https://*.doubleclick.net https://www.google.com https://*.google.com https://traducao2.vlibras.gov.br https://dicionario2.vlibras.gov.br https://repositorio.vlibras.gov.br https://cdn.jsdelivr.net",
             "frame-src https://www.youtube.com https://www.youtube-nocookie.com https://vlibras.gov.br",
             "worker-src 'self' file: louvorja:",
           ].join("; ");
@@ -335,8 +338,11 @@ function handle() {
         }
 
         // Prioriza arquivo local sempre que existe (suporta Range, streaming, mime).
-        if (fs.existsSync(localPath)) {
-          const fileUrl = pathToFileURL(localPath).toString();
+        // Aceita variantes de extensão: o banco pede .opus/.jpg, mas o acervo
+        // em disco pode estar em .mp3/.bmp (instalação antiga ou modo clássico).
+        const localVariant = variantsOf(localPath).find((p) => fs.existsSync(p));
+        if (localVariant) {
+          const fileUrl = pathToFileURL(localVariant).toString();
           return electron.net.fetch(fileUrl);
         }
 

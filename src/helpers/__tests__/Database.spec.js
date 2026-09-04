@@ -316,3 +316,69 @@ describe("Database — seed do bundle do banco (needsSeed/seed)", () => {
     expect(stored.has("bible_9_1_1")).toBe(false);
   });
 });
+
+describe("Database — deduplicação de buscas concorrentes", () => {
+  it("dois chamadores simultâneos compartilham uma única requisição", async () => {
+    const db = await importDatabase();
+    let resolveFetch;
+    fetchMock.mockReturnValue(
+      new Promise((res) => {
+        resolveFetch = () => res(jsonResponse({ channels: [{ id: 1 }] }));
+      })
+    );
+
+    // Nenhum dos dois resolve antes da resposta: ambos entram na mesma busca.
+    const a = db.get("pt_collections_online", { silent: true });
+    const b = db.get("pt_collections_online", { silent: true });
+    await Promise.resolve();
+    resolveFetch();
+
+    const [ra, rb] = await Promise.all([a, b]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(ra).toEqual({ channels: [{ id: 1 }] });
+    expect(rb).toEqual(ra);
+  });
+
+  it("libera a chave depois de terminar — busca seguinte vai à rede de novo", async () => {
+    const db = await importDatabase();
+    fetchMock.mockResolvedValue(jsonResponse({ channels: [] }));
+
+    await db.get("pt_collections_online", { silent: true });
+    await db.invalidateAll();
+    await db.get("pt_collections_online", { silent: true });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("propaga a falha para os dois chamadores e não deixa a chave presa", async () => {
+    const db = await importDatabase();
+    fetchMock.mockRejectedValue(new Error("offline"));
+
+    const [ra, rb] = await Promise.all([
+      db.get("pt_collections_online", { silent: true }),
+      db.get("pt_collections_online", { silent: true }),
+    ]);
+    expect(ra).toBeNull();
+    expect(rb).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // Chave liberada: a próxima tentativa sai de novo, em vez de reusar o erro.
+    fetchMock.mockResolvedValue(jsonResponse({ channels: [{ id: 2 }] }));
+    expect(await db.get("pt_collections_online", { silent: true })).toEqual({
+      channels: [{ id: 2 }],
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("uma busca fresh não reusa a promise de uma busca normal", async () => {
+    const db = await importDatabase();
+    fetchMock.mockResolvedValue(jsonResponse({ channels: [] }));
+
+    await Promise.all([
+      db.get("pt_collections_online", { silent: true }),
+      db.get("pt_collections_online", { silent: true, fresh: true }),
+    ]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});

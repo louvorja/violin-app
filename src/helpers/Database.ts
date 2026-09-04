@@ -65,6 +65,13 @@ enum ENDPOINT_CATEGORIES {
 /** Cache em memória — primeira camada (instantânea, mesma sessão). */
 const _memory = new Map<string, CacheEntry<unknown>>();
 
+/**
+ * Buscas de rede em andamento, por chave. Vários módulos abrem no mesmo boot
+ * e pedem o mesmo dataset antes de qualquer um popular o cache — sem isto,
+ * cada um dispara o próprio download (o catálogo online tem ~5 MB).
+ */
+const _inflight = new Map<string, Promise<unknown>>();
+
 function getVersion(): string {
   return import.meta.env.VITE_DB_VERSION || "";
 }
@@ -341,6 +348,65 @@ async function writeRouted(file: string, data: unknown, r: Route | null): Promis
   });
 }
 
+/**
+ * Busca o dataset na rede, normaliza e grava nos caches. Chamadas concorrentes
+ * para a mesma chave compartilham uma única requisição; o tratamento de erro
+ * fica com quem chamou, para que cada um respeite o próprio `silent`.
+ */
+function fetchAndStore<T>(file: string, fresh: boolean): Promise<T | null> {
+  const key = `${file}|${fresh ? 1 : 0}`;
+  const running = _inflight.get(key);
+  if (running) {
+    $dev.write("Reusando busca em andamento", file);
+    return running as Promise<T | null>;
+  }
+
+  const pending = (async (): Promise<T | null> => {
+    // Cache-buster: data + timestamp quando fresh, evita CDN/proxy
+    // servir versão antiga após "Atualizar coletâneas" no UI.
+    const url = fetchUrlFor(file);
+    const cacheBuster = fresh
+      ? `?_=${Date.now()}`
+      : `?${new Date().toISOString().slice(0, 10).replace(/-/g, "")}`;
+    $dev.write("Abrindo DB", `${url}${cacheBuster}`);
+    const response = await fetch(`${url}${cacheBuster}`, {
+      headers: {
+        "Api-Token": import.meta.env.VITE_API_TOKEN as string,
+      },
+    });
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    let data = (await response.json()) as T;
+    // Envelope Laravel paginado ({current_page, data[], last_page}) →
+    // array cru, para rotas "items" servidas por REST.
+    const route = routeFor(file);
+    if (
+      route?.kind === "items" &&
+      data !== null &&
+      typeof data === "object" &&
+      !Array.isArray(data) &&
+      Array.isArray((data as Record<string, unknown>).data)
+    ) {
+      data = (data as unknown as { data: T }).data;
+    }
+
+    await writeRouted(file, data, route);
+    _memory.set(file, { id: file, data, ts: Date.now(), v: getVersion() });
+
+    return data;
+  })();
+
+  _inflight.set(key, pending);
+  const release = () => {
+    if (_inflight.get(key) === pending) _inflight.delete(key);
+  };
+  // then(release, release) em vez de finally(): não deixa pendurada uma
+  // promise rejeitada sem handler quando a busca falha.
+  pending.then(release, release);
+
+  return pending;
+}
+
 // ───────────────────────── API pública ─────────────────────────
 
 export default {
@@ -407,38 +473,7 @@ export default {
         }
       }
 
-      // Cache-buster: data + timestamp quando opts.fresh, evita CDN/proxy
-      // servir versão antiga após "Atualizar coletâneas" no UI.
-      const url = fetchUrlFor(file);
-      const cacheBuster = opts.fresh
-        ? `?_=${Date.now()}`
-        : `?${new Date().toISOString().slice(0, 10).replace(/-/g, "")}`;
-      $dev.write("Abrindo DB", `${url}${cacheBuster}`);
-      const response = await fetch(`${url}${cacheBuster}`, {
-        headers: {
-          "Api-Token": import.meta.env.VITE_API_TOKEN as string,
-        },
-      });
-      if (response.status === 404) return null;
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      let data = (await response.json()) as T;
-      // Envelope Laravel paginado ({current_page, data[], last_page}) →
-      // array cru, para rotas "items" servidas por REST.
-      const route = routeFor(file);
-      if (
-        route?.kind === "items" &&
-        data !== null &&
-        typeof data === "object" &&
-        !Array.isArray(data) &&
-        Array.isArray((data as Record<string, unknown>).data)
-      ) {
-        data = (data as unknown as { data: T }).data;
-      }
-
-      await writeRouted(file, data, routeFor(file));
-      _memory.set(file, { id: file, data, ts: Date.now(), v: getVersion() });
-
-      return data;
+      return await fetchAndStore<T>(file, !!opts.fresh);
     } catch (error) {
       // Stale-if-error: sem rede/protocolo indisponível, qualquer cache existente
       // (mesmo antigo) é preferível a quebrar — essencial para uso offline.
