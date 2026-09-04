@@ -121,6 +121,14 @@
           <v-list-item-subtitle>{{ d.bounds?.width }}×{{ d.bounds?.height }}</v-list-item-subtitle>
         </v-list-item>
 
+        <!-- Navegador sem permissão: sem isso a lista de monitores fica vazia -->
+        <v-list-item v-if="needs_access" @click="detectScreens()">
+          <template #prepend>
+            <v-icon size="18">mdi-monitor-multiple</v-icon>
+          </template>
+          <v-list-item-title>{{ $t("options.monitors.web_detect") }}</v-list-item-title>
+        </v-list-item>
+
         <v-divider class="my-1" />
 
         <v-list-item :disabled="!can_identify" @click="identify()">
@@ -143,7 +151,6 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import Platform from "@/helpers/Platform";
 import { ICONS } from "@/config/Icons";
 import {
   listDisplays,
@@ -156,6 +163,8 @@ import {
   getFallbackFeature,
   isUsingFallback,
   getCategorizedDisplays,
+  needsScreenAccess,
+  requestScreenAccess,
 } from "@/helpers/Projection";
 import { useI18n } from "vue-i18n";
 import { CategorizedDisplays } from "@/types/Projection";
@@ -173,8 +182,8 @@ const props = defineProps({
 const { t } = useI18n();
 const projection_open = ref(false);
 const displays = ref<any[]>([]);
-const effective_id = ref<number | null>(null);
-const explicit_id = ref<number | undefined>(undefined);
+const effective_id = ref<number | string | null>(null);
+const explicit_id = ref<number | string | null | undefined>(undefined);
 
 const categorized = ref<CategorizedDisplays>({
   primaryDisplay: undefined,
@@ -205,7 +214,8 @@ const fallback_label = computed(() => {
 });
 
 const is_active = computed(() => projection_open.value);
-const can_identify = computed(() => Platform.isDesktop && displays.value.length > 1);
+const can_identify = computed(() => displays.value.length > 1);
+const needs_access = ref(false);
 
 const dynamicIcon = computed(() =>
   is_active.value ? ICONS.PROJECTION.STOP : ICONS.PROJECTION.START
@@ -218,9 +228,10 @@ const dynamicLabel = computed(() =>
 
 async function refresh() {
   displays.value = await listDisplays();
+  needs_access.value = await needsScreenAccess();
   const explicit = await getPreferredMonitor(props.feature, { explicit: true });
   const usingFallback = await isUsingFallback(props.feature);
-  explicit_id.value = usingFallback ? undefined : (explicit as number | undefined);
+  explicit_id.value = usingFallback ? undefined : explicit;
   effective_id.value = await getPreferredMonitor(props.feature);
   projection_open.value = await isProjectionOpen(props.feature);
 }
@@ -241,7 +252,7 @@ async function primaryClick() {
 }
 
 async function choose(displayId: number | string | null | undefined) {
-  const toSave = displayId === undefined ? null : (displayId as number | null);
+  const toSave = displayId === undefined ? null : displayId;
   await setPreferredMonitor(props.feature, toSave);
   await refresh();
   if (effective_id.value == null) {
@@ -266,6 +277,11 @@ async function closeOpen() {
 
 async function identify() {
   await identifyDisplays(5000);
+}
+
+async function detectScreens() {
+  await requestScreenAccess();
+  await refresh();
 }
 
 let pollTimer: ReturnType<typeof setTimeout> | null = null;

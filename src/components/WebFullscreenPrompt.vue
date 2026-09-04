@@ -76,6 +76,10 @@ onMounted(async () => {
   document.addEventListener("fullscreenchange", syncState);
   if (Platform.isDesktop) return;
 
+  // Reconecta ao acesso às telas já concedido na janela principal: sem ele
+  // `rawScreens()` volta vazio nesta janela e a tela cheia não sabe em qual
+  // monitor entrar.
+  await WebDisplays.restoreAccess();
   await enterFullscreen({ silent: true });
   WebDisplays.setAutoFullscreenState(!!document.fullscreenElement);
 

@@ -23,6 +23,7 @@ import {
   openWebWindow,
 } from "@/helpers/projection/webWindow";
 import WebRoles from "@/helpers/projection/WebRoles";
+import WebDisplays from "@/helpers/projection/WebDisplays";
 import { roleOfFeature } from "@/helpers/DisplayRoles";
 
 /**
@@ -89,7 +90,20 @@ export async function listDisplays(): Promise<DisplayInfo[]> {
       console.warn("[Projection] displays.list falhou:", e);
     }
   }
-  // Web fallback: um monitor lógico (a tela do navegador).
+  // Web/PWA: as telas vêm da Window Management API. Reaproveita um acesso já
+  // concedido — sem ele o navegador só conta a tela atual, e o menu de monitores
+  // ficava com uma única entrada fictícia que nunca posicionava nada.
+  await WebDisplays.restoreAccess();
+  const screens = WebDisplays.listScreens();
+  if (screens.length > 1) {
+    return screens.map((screen) => ({
+      id: screen.id,
+      label: screen.label ? `Monitor ${screen.index + 1} — ${screen.label}` : `Monitor ${screen.index + 1}`,
+      primary: screen.primary,
+      bounds: screen.bounds,
+    }));
+  }
+
   if (typeof window !== "undefined" && window.screen) {
     return [
       {
@@ -109,18 +123,25 @@ export async function getCategorizedDisplays(): Promise<CategorizedDisplays> {
 
   const primaryId = $userdata.get(KEYS.OPTIONS.DISPLAYS.PRIMARY, null);
   const secondaryId = $userdata.get(KEYS.OPTIONS.DISPLAYS.SECONDARY, null);
-  const primaryDisplay = displays.find((d) => d.id === primaryId);
-  const secondaryDisplay = displays.find((d) => d.id === secondaryId);
+  // `id === null` é a tela genérica do navegador, não um monitor escolhível:
+  // sem esta guarda ela casava com os dois papéis e o menu mostrava "Tela
+  // principal" e "Tela de retorno" apontando para a mesma janela.
+  const primaryDisplay = primaryId == null ? undefined : displays.find((d) => d.id === primaryId);
+  const secondaryDisplay =
+    secondaryId == null ? undefined : displays.find((d) => d.id === secondaryId);
   return {
     primaryDisplay,
     secondaryDisplay,
     primaryLabel: primaryDisplay?.label || (primaryId ? `Monitor ${primaryId}` : null),
     secondaryLabel: secondaryDisplay?.label || (secondaryId ? `Monitor ${secondaryId}` : null),
-    otherDisplays: displays.filter((d) => d.id !== primaryId && d.id !== secondaryId),
+    // Telas sem id são a janela atual, não um monitor escolhível.
+    otherDisplays: displays.filter(
+      (d) => d.id != null && d.id !== primaryDisplay?.id && d.id !== secondaryDisplay?.id
+    ),
   };
 }
 
-async function _getRawPreferred(feature: string): Promise<number | null> {
+async function _getRawPreferred(feature: string): Promise<number | string | null> {
   const api = await _getDisplaysApi();
   if (api?.getPreferred) {
     try {
@@ -135,7 +156,9 @@ async function _getRawPreferred(feature: string): Promise<number | null> {
       /* falha silenciosa — usa fallback */
     }
   }
-  const prefs = ($userdata.get(KEYS.OPTIONS.DISPLAYS.PREFERRED, {}) as Record<string, number | null>) ?? {};
+  const prefs =
+    ($userdata.get(KEYS.OPTIONS.DISPLAYS.PREFERRED, {}) as Record<string, number | string | null>) ??
+    {};
   return prefs[feature] ?? null;
 }
 
@@ -153,7 +176,7 @@ async function _getRawPreferred(feature: string): Promise<number | null> {
 export async function getPreferredMonitor(
   feature: string,
   opts: { explicit?: boolean } = {}
-): Promise<number | null> {
+): Promise<number | string | null> {
   const own = await _getRawPreferred(feature);
   if (own != null || opts.explicit) return own;
 
@@ -177,7 +200,7 @@ export async function isUsingFallback(feature: string): Promise<boolean> {
 /** Salva o monitorId preferido para a feature. Use null para "mesma janela". */
 export async function setPreferredMonitor(
   feature: string,
-  monitorId: number | null
+  monitorId: number | string | null
 ): Promise<void> {
   const api = await _getDisplaysApi();
   if (api?.setPreferred) {
@@ -188,10 +211,30 @@ export async function setPreferredMonitor(
       /* falha silenciosa — usa fallback */
     }
   }
-  const prefs = { ...(($userdata.get(KEYS.OPTIONS.DISPLAYS.PREFERRED, {}) as Record<string, number | null>) ?? {}), };
+  const prefs = {
+    ...(($userdata.get(KEYS.OPTIONS.DISPLAYS.PREFERRED, {}) as Record<
+      string,
+      number | string | null
+    >) ?? {}),
+  };
   if (monitorId == null) delete prefs[feature];
   else prefs[feature] = monitorId;
   $userdata.set(KEYS.OPTIONS.DISPLAYS.PREFERRED, prefs);
+}
+
+/**
+ * No navegador, true quando as telas só aparecem depois de o usuário autorizar
+ * o "Gerenciamento de janelas". Sem isso o menu de monitores fica vazio e não
+ * há como o operador descobrir o porquê.
+ */
+export async function needsScreenAccess(): Promise<boolean> {
+  if (Platform.isDesktop || !WebDisplays.isSupported()) return false;
+  return (await WebDisplays.permissionState()) !== "granted";
+}
+
+/** Pede o acesso às telas. Precisa ser chamada de dentro de um clique. */
+export async function requestScreenAccess(): Promise<boolean> {
+  return (await WebDisplays.requestAccess()) === "granted";
 }
 
 /** Mostra overlay "Monitor N" em todos os displays por durationMs (default 5000). */
@@ -249,12 +292,34 @@ function _webRectFor(feature: string): { x: number; y: number; width: number; he
   }
 }
 
+/**
+ * Geometria de um monitor escolhido à mão no navegador ("screen-N").
+ *
+ * Síncrona pelo mesmo motivo de `_webRectFor`: qualquer espera antes do
+ * `window.open` custa a ativação transitória do clique.
+ */
+function _webRectForMonitor(
+  monitorId: number | string | null | undefined
+): { x: number; y: number; width: number; height: number } | null {
+  if (monitorId == null) return null;
+  const screen = WebDisplays.listScreens().find((s) => s.id === String(monitorId));
+  if (!screen) return null;
+  return {
+    x: screen.avail.x,
+    y: screen.avail.y,
+    width: screen.avail.width,
+    height: screen.avail.height,
+  };
+}
+
 /** Abre a janela de projeção no monitor escolhido (ou no preferido). */
 export async function open(opts: OpenOptions): Promise<void> {
   // Web/PWA primeiro e sem nenhum `await` antes: qualquer espera aqui consome a
   // ativação transitória do clique e o popup é bloqueado.
   if (!Platform.isDesktop) {
-    const rect = _webRectFor(opts.feature);
+    // Monitor escolhido no menu tem prioridade sobre o papel configurado em
+    // Opções — é a escolha mais recente e mais específica do operador.
+    const rect = _webRectForMonitor(opts.monitorId) ?? _webRectFor(opts.feature);
     const win = openWebWindow(opts.feature, opts.route, featuresForRect(rect));
     nudgeIntoRect(win, rect);
     return;
@@ -311,6 +376,8 @@ export async function toggle(opts: OpenOptions): Promise<boolean> {
 
 export default {
   listDisplays,
+  needsScreenAccess,
+  requestScreenAccess,
   getPreferredMonitor,
   setPreferredMonitor,
   identifyDisplays,

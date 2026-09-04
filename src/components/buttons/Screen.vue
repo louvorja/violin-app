@@ -45,13 +45,13 @@
 
         <!-- Tela principal -->
         <v-list-item
-          v-if="monitorPrimary !== null"
-          :active="explicit_id === monitorPrimary"
-          @click="choose(monitorPrimary)"
+          v-if="primaryDisplay"
+          :active="explicit_id === primaryDisplay.id"
+          @click="choose(primaryDisplay.id)"
         >
           <template #prepend>
             <v-icon size="18">
-              {{ effective_id === monitorPrimary ? "mdi-check" : "mdi-monitor" }}
+              {{ effective_id === primaryDisplay.id ? "mdi-check" : "mdi-monitor" }}
             </v-icon>
           </template>
           <v-list-item-title>
@@ -65,13 +65,13 @@
 
         <!-- Tela de retorno -->
         <v-list-item
-          v-if="monitorSecondary !== null"
-          :active="explicit_id === monitorSecondary"
-          @click="choose(monitorSecondary)"
+          v-if="secondaryDisplay"
+          :active="explicit_id === secondaryDisplay.id"
+          @click="choose(secondaryDisplay.id)"
         >
           <template #prepend>
             <v-icon size="18">
-              {{ effective_id === monitorSecondary ? "mdi-check" : "mdi-monitor" }}
+              {{ effective_id === secondaryDisplay.id ? "mdi-check" : "mdi-monitor" }}
             </v-icon>
           </template>
           <v-list-item-title>
@@ -102,6 +102,14 @@
           <v-list-item-subtitle>{{ d.bounds.width }}×{{ d.bounds.height }}</v-list-item-subtitle>
         </v-list-item>
 
+        <!-- Navegador sem permissão: sem isso a lista de monitores fica vazia -->
+        <v-list-item v-if="needs_access" @click="detectScreens()">
+          <template #prepend>
+            <v-icon size="18">mdi-monitor-multiple</v-icon>
+          </template>
+          <v-list-item-title>{{ $t("options.monitors.web_detect") }}</v-list-item-title>
+        </v-list-item>
+
         <v-divider class="my-1" />
 
         <v-list-item :disabled="!can_identify" @click="identify()">
@@ -125,7 +133,6 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import AppData from "@/helpers/AppData";
-import Platform from "@/helpers/Platform";
 import Popup from "@/helpers/Popup";
 import { ICONS } from "@/config/Icons";
 import { useCategorizedDisplays } from "@/composables/useCategorizedDisplays";
@@ -139,6 +146,8 @@ import {
   close as closeProjection,
   getFallbackFeature,
   isUsingFallback,
+  needsScreenAccess,
+  requestScreenAccess,
 } from "@/helpers/Projection";
 import { PROJECTION_TYPE } from "@/constants/Projection";
 
@@ -217,7 +226,8 @@ const is_active = computed(() =>
 computed(() => (is_active.value ? ICONS.PROJECTION.STOP : props.icon));
 const btnColor = computed(() => (is_active.value ? "error" : undefined));
 
-const can_identify = computed(() => Platform.isDesktop && displays.value.length > 1);
+const can_identify = computed(() => displays.value.length > 1);
+const needs_access = ref(false);
 
 const { primaryDisplay, secondaryDisplay, primaryLabel, secondaryLabel, otherDisplays } =
   useCategorizedDisplays(displays);
@@ -225,6 +235,7 @@ const { primaryDisplay, secondaryDisplay, primaryLabel, secondaryLabel, otherDis
 async function refreshDisplays() {
   if (!isProjectionMode.value) return;
   displays.value = await listDisplays();
+  needs_access.value = await needsScreenAccess();
   // explicit: só leitura crua da feature (sem fallback)
   const explicit = await getPreferredMonitor(featureName.value, { explicit: true });
   const usingFallback = await isUsingFallback(featureName.value);
@@ -301,6 +312,11 @@ async function closeOpen() {
 
 async function identify() {
   await identifyDisplays(5000);
+}
+
+async function detectScreens() {
+  await requestScreenAccess();
+  await refreshDisplays();
 }
 
 let pollTimer = null;

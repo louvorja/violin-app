@@ -1,5 +1,6 @@
 export interface DisplayInfo {
-  id: number | null;
+  /** Número no Electron; "screen-N" no navegador; null quando não há telas listáveis. */
+  id: number | string | null;
   label: string;
   primary: boolean;
   bounds: { x: number; y: number; width: number; height: number };
@@ -15,7 +16,7 @@ export interface NativeDisplay {
 export interface OpenOptions {
   route: string;
   feature: string;
-  monitorId?: number | null;
+  monitorId?: number | string | null;
   fullscreen?: boolean;
   alwaysOnTop?: boolean;
   frame?: boolean;
