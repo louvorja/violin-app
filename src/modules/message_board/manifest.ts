@@ -55,8 +55,8 @@ export const contextualPages: RibbonPage[] = [
         id: "ctx_message_board_actions",
         title: "ribbon.groups.actions",
         buttons: [
-          { id: `${moduleId}_toggle_list`, icon: "mdi-format-list-bulleted", label: "ribbon.btn.message_board_list", action: `${moduleId}_toggle_list`, color: "#27ae60" },
-          { id: `${moduleId}_clear`, icon: "mdi-stop-circle", label: "ribbon.btn.message_board_clear", action: `${moduleId}_clear`, color: "#e74c3c" },
+          { id: `${moduleId}_toggle_list`, icon: ICONS.FORMAT.LIST_BULLETED, label: "ribbon.btn.message_board_list", action: `${moduleId}_toggle_list`, color: "#27ae60" },
+          { id: `${moduleId}_clear`, icon: ICONS.PLAYER.STOP_CIRCLE, label: "ribbon.btn.message_board_clear", action: `${moduleId}_clear`, color: "#e74c3c" },
         ],
       },
       {
@@ -70,7 +70,7 @@ export const contextualPages: RibbonPage[] = [
         id: "ctx_message_board_screen",
         title: "ribbon.groups.projection",
         buttons: [
-          { id: `${moduleId}_project`, type: "screen", feature: moduleId, route: `/projection/module?module=${moduleId}`, icon: "mdi-projector-screen-outline", label: "ribbon.btn.project", color: "#1b4f8a" },
+          { id: `${moduleId}_project`, type: "screen", feature: moduleId, route: `/projection/module?module=${moduleId}`, icon: ICONS.PROJECTION.SCREEN_OUTLINE, label: "ribbon.btn.project", color: "#1b4f8a" },
         ],
       },
     ],

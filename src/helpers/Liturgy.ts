@@ -5,6 +5,7 @@ import ScheduledStore from "@/helpers/ScheduledStore";
 import { KEYS } from "@/constants/UserDataKeys";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import type { LiturgyItem, ScheduledCategory, ScheduledItem } from "@/types/Liturgy";
+import { ICONS } from "@/config/Icons";
 
 const DEFAULT_COLOR = "#4F0000";
 
@@ -49,27 +50,27 @@ function _isYoutube(url: string | undefined | null): boolean {
 
 function iconForItem(item: LiturgyItem): string {
   const map: Record<string, string> = {
-    [LiturgyItemTypeEnum.ANOTACAO]: "mdi-note-text-outline",
+    [LiturgyItemTypeEnum.ANOTACAO]: ICONS.UI.NOTE_TEXT_OUTLINE,
     [LiturgyItemTypeEnum.ARQUIVO]:
-      item.subtipo === "dir" ? "mdi-folder-outline" : "mdi-file-outline",
-    [LiturgyItemTypeEnum.SITE]: _isYoutube(item.url || item.subitem) ? "mdi-youtube" : "mdi-web",
-    [LiturgyItemTypeEnum.MUSICA]: "mdi-music",
-    [LiturgyItemTypeEnum.VIDEO_ONLINE]: "mdi-youtube",
+      item.subtipo === "dir" ? ICONS.UI.FOLDER : ICONS.UI.FILE,
+    [LiturgyItemTypeEnum.SITE]: _isYoutube(item.url || item.subitem) ? ICONS.MEDIA.YOUTUBE : ICONS.UI.WEB,
+    [LiturgyItemTypeEnum.MUSICA]: ICONS.MUSIC.MUSIC,
+    [LiturgyItemTypeEnum.VIDEO_ONLINE]: ICONS.MEDIA.YOUTUBE,
     [LiturgyItemTypeEnum.MEDIA_LIBRARY]:
       item.subtipo === "image"
-        ? "mdi-image"
+        ? ICONS.MEDIA.IMAGE
         : item.subtipo === "video"
-          ? "mdi-video"
+          ? ICONS.MEDIA.VIDEO_FILE
           : item.subtipo === "pdf"
-            ? "mdi-file-pdf-box"
-            : "mdi-library-outline",
-    [LiturgyItemTypeEnum.BG_SOUND]: "mdi-music-box-outline",
-    [LiturgyItemTypeEnum.ANUNCIOS]: "mdi-bullhorn",
-    [LiturgyItemTypeEnum.ITENS_AGENDADOS]: "mdi-calendar-multiselect",
-    [LiturgyItemTypeEnum.BLOCO]: "mdi-view-dashboard",
-    [LiturgyItemTypeEnum.OVERLAY]: "mdi-layers-triple",
+            ? ICONS.UI.FILE_PDF
+            : ICONS.MEDIA.LIBRARY,
+    [LiturgyItemTypeEnum.BG_SOUND]: ICONS.MUSIC.PLAYBACK,
+    [LiturgyItemTypeEnum.ANUNCIOS]: ICONS.MODULES.ANNOUNCEMENTS,
+    [LiturgyItemTypeEnum.ITENS_AGENDADOS]: ICONS.CALENDAR.MULTISELECT,
+    [LiturgyItemTypeEnum.BLOCO]: ICONS.UI.DASHBOARD,
+    [LiturgyItemTypeEnum.OVERLAY]: ICONS.UI.LAYERS,
   };
-  return map[item.tipo] || "mdi-circle-medium";
+  return map[item.tipo] || ICONS.UI.DOT;
 }
 
 export default {

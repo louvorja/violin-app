@@ -1,6 +1,7 @@
 import { ModuleCategoryEnum } from "@/enums/ModuleCategoryEnum"
 import { ModuleGroupEnum } from "@/enums/ModuleGroupEnum"
 import { ModuleCategory } from "@/types/Module";
+import { ICONS } from "@/config/Icons";
 
 const path = "ribbon.pages.";
 
@@ -8,7 +9,7 @@ export const categories: Record<string, ModuleCategory> = {
   [ModuleCategoryEnum.COLLECTIONS]: {
     id: ModuleCategoryEnum.COLLECTIONS,
     title: path + ModuleCategoryEnum.COLLECTIONS,
-    icon: "mdi-folder-music",
+    icon: ICONS.MODULES.ALBUM,
     color: "#1b4f8a",
     order: 0,
     groups: [
@@ -23,7 +24,7 @@ export const categories: Record<string, ModuleCategory> = {
   [ModuleCategoryEnum.WORSHIP]: {
     id: ModuleCategoryEnum.WORSHIP,
     title: path + ModuleCategoryEnum.WORSHIP,
-    icon: "mdi-microphone-variant",
+    icon: ICONS.MUSIC.MICROPHONE,
     color: "#1b4f8a",
     order: 1,
     groups: [ModuleGroupEnum.CHURCH, ModuleGroupEnum.MEDIA],
@@ -31,7 +32,7 @@ export const categories: Record<string, ModuleCategory> = {
   [ModuleCategoryEnum.BIBLE]: {
     id: ModuleCategoryEnum.BIBLE,
     title: path + ModuleCategoryEnum.BIBLE,
-    icon: "mdi-book-open-variant",
+    icon: ICONS.MODULES.BIBLE,
     color: "#c0392b",
     order: 2,
     groups: [ModuleGroupEnum.BIBLE_GENERAL],
@@ -39,7 +40,7 @@ export const categories: Record<string, ModuleCategory> = {
   [ModuleCategoryEnum.UTILITIES]: {
     id: ModuleCategoryEnum.UTILITIES,
     title: path + ModuleCategoryEnum.UTILITIES,
-    icon: "mdi-tools",
+    icon: ICONS.UI.TOOLS,
     color: "#27ae60",
     order: 3,
     groups: [
@@ -52,7 +53,7 @@ export const categories: Record<string, ModuleCategory> = {
   [ModuleCategoryEnum.FAVORITES]: {
     id: ModuleCategoryEnum.FAVORITES,
     title: path + ModuleCategoryEnum.FAVORITES,
-    icon: "mdi-star",
+    icon: ICONS.MODULES.FAVORITES,
     color: "#f39c12",
     order: 4,
     groups: [ModuleGroupEnum.FAVORITES_LIST],

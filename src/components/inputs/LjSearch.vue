@@ -4,8 +4,8 @@
     :color="primaryColor"
     :disabled="disabled"
     :label="label"
-    prepend-inner-icon="mdi-magnify"
-    :append-inner-icon="input ? 'mdi-close' : ''"
+    :prepend-inner-icon="ICONS.ACTIONS.SEARCH"
+    :append-inner-icon="input ? ICONS.ACTIONS.CLOSE : ''"
     density="compact"
     variant="outlined"
     :hide-details="!disabled"
@@ -18,6 +18,7 @@
 </template>
 
 <script setup>
+import { ICONS } from "@/config/Icons";
 import { computed } from "vue";
 import AppData from "@/helpers/AppData";
 

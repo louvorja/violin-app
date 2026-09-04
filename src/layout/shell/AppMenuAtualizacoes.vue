@@ -28,7 +28,7 @@
             :disabled="appUpdate.status === 'checking'"
             @click="checkAppUpdate"
           >
-            <v-icon icon="mdi-refresh" size="14" class="mr-1" />
+            <v-icon :icon="ICONS.ACTIONS.REFRESH" size="14" class="mr-1" />
             {{ $t("options.updates.check") }}
           </button>
           <button
@@ -37,7 +37,7 @@
             class="opt-btn opt-btn--primary"
             @click="startDownload"
           >
-            <v-icon icon="mdi-download" size="14" class="mr-1" />
+            <v-icon :icon="ICONS.ACTIONS.DOWNLOAD" size="14" class="mr-1" />
             {{ $t("options.updates.app_update_button", { version: appUpdate.newVersion }) }}
           </button>
           <button
@@ -46,7 +46,7 @@
             class="opt-btn opt-btn--primary"
             @click="installUpdate"
           >
-            <v-icon icon="mdi-restart" size="14" class="mr-1" />
+            <v-icon :icon="ICONS.ACTIONS.RESTART" size="14" class="mr-1" />
             {{ $t("options.updates.install") }}
           </button>
           <button
@@ -55,7 +55,7 @@
             class="opt-btn"
             @click="openPackageFile"
           >
-            <v-icon icon="mdi-folder-open" size="14" class="mr-1" />
+            <v-icon :icon="ICONS.ACTIONS.FOLDER_OPEN" size="14" class="mr-1" />
             {{ $t("options.updates.open_package") }}
           </button>
         </div>
@@ -118,7 +118,7 @@
         <div class="opt-folder-path">{{ dbUpdateStatusText }}</div>
         <div class="opt-folder-actions">
           <button type="button" class="opt-btn" :disabled="dbChecking" @click="checkDbUpdate">
-            <v-icon icon="mdi-refresh" size="14" class="mr-1" />
+            <v-icon :icon="ICONS.ACTIONS.REFRESH" size="14" class="mr-1" />
             {{ $t("options.updates.check") }}
           </button>
           <button
@@ -127,20 +127,20 @@
             class="opt-btn opt-btn--primary"
             @click="applyDbUpdate"
           >
-            <v-icon icon="mdi-cloud-download" size="14" class="mr-1" />
+            <v-icon :icon="ICONS.ACTIONS.CLOUD_DOWNLOAD" size="14" class="mr-1" />
             {{ $t("options.updates.apply") }}
           </button>
           <button type="button" class="opt-btn" @click="clearDbCache">
-            <v-icon icon="mdi-broom" size="14" class="mr-1" />
+            <v-icon :icon="ICONS.UI.BROOM" size="14" class="mr-1" />
             {{ $t("options.updates.clear_cache") }}
           </button>
           <button type="button" class="opt-btn" @click="clearCollectionsCache">
-            <v-icon icon="mdi-broom" size="14" class="mr-1" />
+            <v-icon :icon="ICONS.UI.BROOM" size="14" class="mr-1" />
             {{ $t("options.storage.clear_cache_collections") }}
           </button>
           <template v-if="isDesktop">
             <button type="button" class="opt-btn" :disabled="dbBackupBusy" @click="exportDatabase">
-              <v-icon icon="mdi-download" size="14" class="mr-1" />
+              <v-icon :icon="ICONS.ACTIONS.DOWNLOAD" size="14" class="mr-1" />
               {{ $t("options.updates.export_db") }}
             </button>
             <button
@@ -149,7 +149,7 @@
               :disabled="dbBackupBusy"
               @click="pickImportDatabase"
             >
-              <v-icon icon="mdi-upload" size="14" class="mr-1" />
+              <v-icon :icon="ICONS.ACTIONS.UPLOAD" size="14" class="mr-1" />
               {{ $t("options.updates.import_db") }}
             </button>
             <button
@@ -158,7 +158,7 @@
               :disabled="dbBackupBusy"
               @click="reinstallDatabase"
             >
-              <v-icon icon="mdi-database-refresh" size="14" class="mr-1" />
+              <v-icon :icon="ICONS.ACTIONS.DATABASE_REFRESH" size="14" class="mr-1" />
               {{ $t("options.updates.reinstall_db") }}
             </button>
           </template>
@@ -200,7 +200,7 @@
             rounded
           />
           <button type="button" class="opt-btn opt-btn--danger" @click="sync.cancelBundle()">
-            <v-icon icon="mdi-close-circle" size="14" class="mr-1" />
+            <v-icon :icon="ICONS.ACTIONS.CANCEL" size="14" class="mr-1" />
             {{ $t("options.collections_download.cancel") }}
           </button>
         </div>

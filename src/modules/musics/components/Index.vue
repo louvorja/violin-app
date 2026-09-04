@@ -131,7 +131,7 @@
             />
             <v-btn
               v-else
-              icon="mdi-check"
+              :icon="ICONS.UI.CHECK"
               variant="text"
               density="compact"
               size="small"

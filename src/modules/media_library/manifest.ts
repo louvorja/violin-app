@@ -55,7 +55,7 @@ export const contextualPages: RibbonPage[] = [
           },
           {
             id: `${moduleId}_manage_categories`,
-            icon: "mdi-tune",
+            icon: ICONS.UI.TUNE,
             label: `${modulePath}.manage_categories`,
             action: `${moduleId}_manage_categories`,
             color: "#1976d2",

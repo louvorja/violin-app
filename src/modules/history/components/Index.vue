@@ -3,7 +3,7 @@
     <template #right>
       <v-btn
         v-if="history.length"
-        icon="mdi-delete-outline"
+        :icon="ICONS.ACTIONS.DELETE"
         variant="text"
         density="compact"
         :title="t('actions.clear')"
@@ -12,7 +12,7 @@
     </template>
 
     <div v-if="history.length === 0" class="pa-6 text-center">
-      <v-icon icon="mdi-history" size="64" class="mb-4 text-disabled" />
+      <v-icon :icon="ICONS.MODULES.HISTORY" size="64" class="mb-4 text-disabled" />
       <div class="text-body-1 mb-2">{{ t("data.empty") }}</div>
       <div class="text-body-2 text-disabled">{{ t("data.empty_hint") }}</div>
     </div>
@@ -32,7 +32,7 @@
             :has_instrumental_music="item.has_instrumental_music"
           />
           <v-btn
-            icon="mdi-close"
+            :icon="ICONS.ACTIONS.CLOSE"
             variant="text"
             density="compact"
             size="small"
@@ -47,6 +47,7 @@
 </template>
 
 <script setup>
+import { ICONS } from "@/config/Icons";
 import { ref, computed } from "vue";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";

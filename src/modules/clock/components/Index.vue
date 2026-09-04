@@ -7,7 +7,7 @@
   >
     <template #right>
       <v-btn
-        icon="mdi-fullscreen"
+        :icon="ICONS.PLAYER.FULLSCREEN"
         variant="text"
         density="compact"
         :title="t('actions.fullscreen')"
@@ -32,6 +32,7 @@
 </template>
 
 <script setup>
+import { ICONS } from "@/config/Icons";
 import { ref, onMounted, onBeforeUnmount } from "vue";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";

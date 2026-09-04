@@ -18,7 +18,7 @@
             <template #prepend>
               <v-icon
                 v-if="!downloadedVersions.has(item.id_bible_version)"
-                icon="mdi-download"
+                :icon="ICONS.ACTIONS.DOWNLOAD"
                 size="small"
                 class="mr-2"
               />
@@ -30,7 +30,7 @@
           <div class="d-flex align-center overflow-hidden">
             <v-icon
               v-if="!downloadedVersions.has(item.id_bible_version)"
-              icon="mdi-download"
+              :icon="ICONS.ACTIONS.DOWNLOAD"
               size="x-small"
               class="mr-1"
             />
@@ -43,7 +43,7 @@
       <label class="book-picker-label">{{ t("modules.bible_search.ribbon.filter.books") }}</label>
       <button class="book-picker-trigger" @click="toggleOpen">
         <span class="book-picker-summary">{{ bookSummary }}</span>
-        <v-icon icon="mdi-chevron-down" size="14" />
+        <v-icon :icon="ICONS.UI.CHEVRON_DOWN" size="14" />
       </button>
     </div>
     <Teleport to="body">
@@ -102,6 +102,7 @@
 </template>
 
 <script setup lang="ts">
+import { ICONS } from "@/config/Icons";
 import { ref, computed, reactive, onMounted, onUnmounted } from "vue";
 import { useI18n } from "vue-i18n";
 import $database from "@/helpers/Database";

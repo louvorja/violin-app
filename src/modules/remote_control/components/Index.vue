@@ -11,7 +11,7 @@
           :label="t('labels.ip')"
           density="compact"
           variant="outlined"
-          prepend-icon="mdi-ip-network"
+          :prepend-icon="ICONS.UI.IP_NETWORK"
           :hint="t('messages.get_ip')"
           persistent-hint
           :loading="loading ? 'warning' : false"
@@ -23,7 +23,7 @@
           class="mt-3"
           density="compact"
           variant="outlined"
-          prepend-icon="mdi-code-braces"
+          :prepend-icon="ICONS.UI.CODE_BRACES"
           persistent-hint
           :loading="loading ? 'warning' : false"
         />
@@ -39,6 +39,7 @@
 </template>
 
 <script setup lang="ts">
+import { ICONS } from "@/config/Icons";
 import { ref, computed, onMounted } from "vue";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";

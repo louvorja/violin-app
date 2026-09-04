@@ -9,7 +9,7 @@
           :title="t('playlists.import')"
           @click="onImport"
         >
-          <v-icon icon="mdi-upload" size="16" />
+          <v-icon :icon="ICONS.ACTIONS.UPLOAD" size="16" />
         </button>
         <button
           type="button"
@@ -17,7 +17,7 @@
           :title="t('playlists.create')"
           @click="showCreate = true"
         >
-          <v-icon icon="mdi-plus" size="16" />
+          <v-icon :icon="ICONS.ACTIONS.ADD" size="16" />
         </button>
       </div>
     </div>
@@ -35,10 +35,10 @@
         @keydown.esc="cancelCreate"
       />
       <button type="button" class="playlist-panel-btn" @click="create">
-        <v-icon icon="mdi-check" size="16" />
+        <v-icon :icon="ICONS.UI.CHECK" size="16" />
       </button>
       <button type="button" class="playlist-panel-btn" @click="cancelCreate">
-        <v-icon icon="mdi-close" size="16" />
+        <v-icon :icon="ICONS.ACTIONS.CLOSE" size="16" />
       </button>
     </div>
 
@@ -55,10 +55,10 @@
         @keydown.esc="cancelRename"
       />
       <button type="button" class="playlist-panel-btn" @click="confirmRename">
-        <v-icon icon="mdi-check" size="16" />
+        <v-icon :icon="ICONS.UI.CHECK" size="16" />
       </button>
       <button type="button" class="playlist-panel-btn" @click="cancelRename">
-        <v-icon icon="mdi-close" size="16" />
+        <v-icon :icon="ICONS.ACTIONS.CLOSE" size="16" />
       </button>
     </div>
 
@@ -84,7 +84,7 @@
             :title="t('playlists.export')"
             @click.stop="onExport(playlist)"
           >
-            <v-icon icon="mdi-download" size="14" />
+            <v-icon :icon="ICONS.ACTIONS.DOWNLOAD" size="14" />
           </button>
           <button
             type="button"
@@ -92,7 +92,7 @@
             :title="t('playlists.rename')"
             @click.stop="startRename(playlist)"
           >
-            <v-icon icon="mdi-pencil" size="14" />
+            <v-icon :icon="ICONS.ACTIONS.EDIT" size="14" />
           </button>
           <button
             type="button"
@@ -100,7 +100,7 @@
             :title="t('playlists.delete')"
             @click.stop="onDelete(playlist)"
           >
-            <v-icon icon="mdi-delete-outline" size="14" />
+            <v-icon :icon="ICONS.ACTIONS.DELETE" size="14" />
           </button>
         </div>
       </div>
@@ -113,6 +113,7 @@
 </template>
 
 <script setup lang="ts">
+import { ICONS } from "@/config/Icons";
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import DateTime from "@/helpers/DateTime";

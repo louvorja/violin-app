@@ -1,7 +1,7 @@
 <template>
   <div class="liturgy-list-area" :class="{ 'liturgy-list-area--locked': locked }">
     <div v-if="items.length === 0" class="liturgy-empty">
-      <v-icon icon="mdi-script" size="80" class="text-disabled" />
+      <v-icon :icon="ICONS.LITURGY.SCRIPT" size="80" class="text-disabled" />
       <div class="liturgy-empty-title">{{ t("data.empty") }}</div>
       <div class="liturgy-empty-hint">{{ t("data.empty_hint") }}</div>
       <button
@@ -10,7 +10,7 @@
         data-testid="liturgy-add-item"
         @click="openItemDialog()"
       >
-        <v-icon icon="mdi-plus" size="16" />
+        <v-icon :icon="ICONS.ACTIONS.ADD" size="16" />
         <span>{{ t("actions.add") }}</span>
       </button>
     </div>
@@ -50,6 +50,7 @@
 </template>
 
 <script setup lang="ts">
+import { ICONS } from "@/config/Icons";
 import { useI18n } from "vue-i18n";
 import draggable from "vuedraggable";
 import LiturgyItemComponent from "./LiturgyItem.vue";

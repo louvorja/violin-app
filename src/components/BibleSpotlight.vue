@@ -63,13 +63,14 @@
       </div>
 
       <button class="quicknav-close" @click="model = false">
-        <v-icon size="18">mdi-close</v-icon>
+        <v-icon size="18" :icon="ICONS.ACTIONS.CLOSE" />
       </button>
     </div>
   </v-dialog>
 </template>
 
 <script setup lang="ts">
+import { ICONS } from "@/config/Icons";
 import { computed, nextTick, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import Database from "@/helpers/Database";

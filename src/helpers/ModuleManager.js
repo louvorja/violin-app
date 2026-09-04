@@ -4,6 +4,7 @@ import $userdata from "./UserData";
 import $dev from "./Dev";
 import $alert from "./Alert";
 import { moduleShowInMainMenu } from "@/constants/UserDataKeys";
+import { ICONS } from "@/config/Icons";
 
 /**
  * ModuleManager — lifecycle de módulos (boot-time).
@@ -45,7 +46,7 @@ export default {
       $appdata.set(`modules.${manifest.id}`, {
         id: manifest.id,
         title: manifest.translationKey || `modules.${manifest.id}.title`,
-        icon: manifest.icon || "mdi-puzzle",
+        icon: manifest.icon || ICONS.UI.PUZZLE,
         show: false,
         language: manifest.language,
         type: "module",

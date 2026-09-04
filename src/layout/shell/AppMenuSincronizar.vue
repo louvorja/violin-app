@@ -53,7 +53,7 @@
           {{ $t("options.bible_download.title") }}
         </v-tab>
         <v-tab value="storage">
-          <Icon icon="mdi-harddisk" class="mr-2" />
+          <Icon :icon="ICONS.UI.HARDDISK" class="mr-2" />
           {{ $t("options.storage.title") }}
         </v-tab>
       </v-tabs>
@@ -429,7 +429,7 @@
                   variant="tonal"
                   class="ml-2"
                 >
-                  <v-icon icon="mdi-desktop-classic" size="12" class="mr-1" />
+                  <v-icon :icon="ICONS.PROJETOS.DELPHI" size="12" class="mr-1" />
                   {{ $t("options.storage.classic_version") }}
                 </v-chip>
               </label>
@@ -451,7 +451,7 @@
                     class="opt-btn"
                     @click="detectClassic"
                   >
-                    <v-icon icon="mdi-desktop-classic" size="14" class="mr-1" />
+                    <v-icon :icon="ICONS.PROJETOS.DELPHI" size="14" class="mr-1" />
                     {{ $t("options.storage.use_classic_dir") }}
                   </button>
                 </div>
@@ -526,15 +526,15 @@
 
             <div class="opt-actions">
               <button type="button" class="opt-btn" @click="clearJson">
-                <v-icon icon="mdi-database-remove" size="14" class="mr-1" />
+                <v-icon :icon="ICONS.ACTIONS.DATABASE_REMOVE" size="14" class="mr-1" />
                 {{ $t("options.storage.clear_cache") }}
               </button>
               <button type="button" class="opt-btn opt-btn--danger" @click="clearFiles">
-                <v-icon icon="mdi-delete" size="14" class="mr-1" />
+                <v-icon :icon="ICONS.ACTIONS.DELETE_FILLED" size="14" class="mr-1" />
                 {{ $t("options.storage.clear_files") }}
               </button>
               <button type="button" class="opt-btn" :disabled="loading" @click="reloadStats">
-                <v-icon icon="mdi-refresh" size="14" class="mr-1" />
+                <v-icon :icon="ICONS.ACTIONS.REFRESH" size="14" class="mr-1" />
                 {{ $t("options.storage.refresh") }}
               </button>
               <button
@@ -544,7 +544,7 @@
                 :disabled="restoringDb || sync.bundleInstalling.value"
                 @click="restoreDatabase"
               >
-                <v-icon icon="mdi-database-refresh" size="14" class="mr-1" />
+                <v-icon :icon="ICONS.ACTIONS.DATABASE_REFRESH" size="14" class="mr-1" />
                 {{ $t("options.storage.restore_db") }}
               </button>
             </div>

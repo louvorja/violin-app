@@ -23,10 +23,10 @@
         :title="t('play_all')"
         @click.stop="$emit('playAll')"
       >
-        <v-icon icon="mdi-play-circle" size="22" color="#fff" />
+        <v-icon :icon="ICONS.PLAYER.PLAY" size="22" color="#fff" />
       </button>
       <div v-if="variant === 'video'" class="ov-card-play">
-        <v-icon icon="mdi-play-circle" size="28" color="#fff" />
+        <v-icon :icon="ICONS.PLAYER.PLAY" size="28" color="#fff" />
       </div>
     </div>
     <div class="ov-card-body">
@@ -37,6 +37,7 @@
 </template>
 
 <script setup lang="ts">
+import { ICONS } from "@/config/Icons";
 /**
  * OnlineVideoCard — card de exibição do módulo Vídeos On-line.
  *
@@ -146,7 +147,7 @@ const cardStyle = computed(() => {
 });
 
 const fallbackIcon = computed(() =>
-  props.variant === "playlist" ? "mdi-playlist-play" : "mdi-youtube"
+  props.variant === "playlist" ? ICONS.MEDIA.PLAYLIST : ICONS.MEDIA.YOUTUBE
 );
 
 // ─── Cadeia de thumbnails ────────────────────────────────────────────

@@ -1,7 +1,7 @@
 <template>
   <div class="liturgy-tl-area" :class="{ 'liturgy-tl-area--locked': locked }">
     <div v-if="items.length === 0" class="liturgy-tl-empty">
-      <v-icon icon="mdi-script" size="80" class="text-disabled" />
+      <v-icon :icon="ICONS.LITURGY.SCRIPT" size="80" class="text-disabled" />
       <div class="liturgy-tl-empty-title">{{ t("data.empty") }}</div>
       <div class="liturgy-tl-empty-hint">{{ t("data.empty_hint") }}</div>
       <button
@@ -10,7 +10,7 @@
         data-testid="liturgy-add-item"
         @click="openItemDialog()"
       >
-        <v-icon icon="mdi-plus" size="16" />
+        <v-icon :icon="ICONS.ACTIONS.ADD" size="16" />
         <span>{{ t("actions.add") }}</span>
       </button>
     </div>
@@ -64,7 +64,7 @@
                   :title="t('actions.edit')"
                   @click.stop="openItemDialog(index)"
                 >
-                  <v-icon icon="mdi-pencil" size="14" />
+                  <v-icon :icon="ICONS.ACTIONS.EDIT" size="14" />
                 </button>
                 <button
                   class="tl-bloco-action tl-bloco-collapse"
@@ -72,7 +72,9 @@
                   @click.stop="toggleBlocoCollapse(element.id)"
                 >
                   <v-icon
-                    :icon="collapsedBlocos.has(element.id) ? 'mdi-chevron-down' : 'mdi-chevron-up'"
+                    :icon="
+                      collapsedBlocos.has(element.id) ? ICONS.UI.CHEVRON_DOWN : ICONS.UI.CHEVRON_UP
+                    "
                     size="16"
                   />
                 </button>
@@ -123,6 +125,7 @@
 </template>
 
 <script setup lang="ts">
+import { ICONS } from "@/config/Icons";
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import draggable from "vuedraggable";

@@ -30,6 +30,7 @@
 </template>
 
 <script setup lang="ts">
+import { ICONS } from "@/config/Icons";
 import { computed } from "vue";
 import LjButton from "@/components/ui/LjButton.vue";
 import LjProgress from "@/components/ui/LjProgress.vue";
@@ -52,7 +53,7 @@ const props = withDefaults(
     failed: 0,
     completedMsg: "",
     showCancel: false,
-    cancelIcon: "mdi-close-circle",
+    cancelIcon: ICONS.ACTIONS.CANCEL,
     cancelLabel: "Cancelar",
   }
 );

@@ -10,7 +10,7 @@
           density="compact"
           hide-details
           clearable
-          prepend-inner-icon="mdi-magnify"
+          :prepend-inner-icon="ICONS.ACTIONS.SEARCH"
           @keydown.enter="doSearch"
         />
         <v-btn
@@ -43,7 +43,7 @@
     </div>
 
     <div v-else-if="!results.length && searched" class="pa-6 text-center text-medium-emphasis">
-      <v-icon icon="mdi-music-note-off" size="36" class="mb-2" />
+      <v-icon :icon="ICONS.MUSIC.NO_AUDIO" size="36" class="mb-2" />
       <div>{{ t("no_results") }}</div>
     </div>
 
@@ -95,7 +95,7 @@
 
     <div v-else class="flex-grow-1 d-flex align-center justify-center text-medium-emphasis">
       <div class="text-center">
-        <v-icon icon="mdi-magnify" size="48" class="mb-2 text-disabled" />
+        <v-icon :icon="ICONS.ACTIONS.SEARCH" size="48" class="mb-2 text-disabled" />
         <div>{{ t("search_placeholder") }}</div>
       </div>
     </div>
@@ -103,6 +103,7 @@
 </template>
 
 <script setup lang="ts">
+import { ICONS } from "@/config/Icons";
 import type { ComponentPublicInstance } from "vue";
 import { nextTick, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";

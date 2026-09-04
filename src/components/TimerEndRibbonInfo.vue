@@ -49,7 +49,7 @@ const icon = computed<string>(() => {
     case MediaEnum.MUSIC:
       return ICONS.MUSIC.MUSIC;
     default:
-      return "mdi-check-circle-outline";
+      return ICONS.ACTIONS.CHECK_CIRCLE;
   }
 });
 

@@ -8,7 +8,7 @@
         :title="t('playlists.close')"
         @click="selectPlaylist(null)"
       >
-        <v-icon icon="mdi-close" size="16" />
+        <v-icon :icon="ICONS.ACTIONS.CLOSE" size="16" />
       </button>
     </div>
 
@@ -25,7 +25,7 @@
         <span class="playlist-songs-item-index">
           <v-icon
             v-if="isPlayingSong(song.id_music)"
-            icon="mdi-equalizer"
+            :icon="ICONS.MEDIA.EQUALIZER"
             size="14"
             class="playlist-songs-playing-icon"
           />
@@ -42,7 +42,10 @@
             :title="t('playlists.play_song')"
             @click="playSong(song)"
           >
-            <v-icon :icon="isPlayingSong(song.id_music) ? 'mdi-pause' : 'mdi-play'" size="14" />
+            <v-icon
+              :icon="isPlayingSong(song.id_music) ? ICONS.PLAYER.PAUSE_PLAIN : ICONS.PLAYER.PLAYER"
+              size="14"
+            />
           </button>
           <button
             type="button"
@@ -50,13 +53,13 @@
             :title="t('playlists.remove_song')"
             @click="removeSong(playlist.id, index)"
           >
-            <v-icon icon="mdi-close" size="14" />
+            <v-icon :icon="ICONS.ACTIONS.CLOSE" size="14" />
           </button>
         </div>
       </div>
 
       <div v-if="playlist.songs.length === 0" class="playlist-songs-empty">
-        <v-icon icon="mdi-music-note-off" size="32" class="mb-2" />
+        <v-icon :icon="ICONS.MUSIC.NO_AUDIO" size="32" class="mb-2" />
         <div>{{ t("playlists.no_songs") }}</div>
       </div>
     </div>
@@ -99,7 +102,7 @@
         </v-tooltip>
       </div>
       <button type="button" class="playlist-songs-play-btn" @click="playAll">
-        <v-icon icon="mdi-play" size="18" />
+        <v-icon :icon="ICONS.PLAYER.PLAYER" size="18" />
         {{ t("playlists.play") }}
       </button>
     </div>

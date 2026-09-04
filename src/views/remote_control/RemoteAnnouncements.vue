@@ -16,11 +16,11 @@
       >
         <template #prepend>
           <v-avatar color="secondary" size="32" class="mr-2">
-            <v-icon icon="mdi-bullhorn" color="white" size="18" />
+            <v-icon :icon="ICONS.MODULES.ANNOUNCEMENTS" color="white" size="18" />
           </v-avatar>
         </template>
         <template #append>
-          <v-icon icon="mdi-play-circle-outline" color="primary" />
+          <v-icon :icon="ICONS.PLAYER.PLAY_OUTLINE" color="primary" />
         </template>
       </v-list-item>
     </div>
@@ -28,6 +28,7 @@
 </template>
 
 <script setup lang="ts">
+import { ICONS } from "@/config/Icons";
 import { ref, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
 import { apiFetch } from "@/helpers/ApiClient";

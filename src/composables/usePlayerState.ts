@@ -6,6 +6,7 @@ import { useAudioPlayback } from "@/composables/useAudioPlayback";
 import type { AudioPlayback } from "@/composables/useAudioPlayback";
 import Modules from "@/helpers/Modules";
 import AppData from "@/helpers/AppData";
+import { ICONS } from "@/config/Icons";
 
 export interface PlayerButton {
   show: boolean;
@@ -88,10 +89,10 @@ export function usePlayerState(): {
 
   const volume_icon = computed<string>(() => {
     const v = audio.volume.value;
-    if (v <= 0)  return "mdi-volume-mute";
-    if (v <= 20) return "mdi-volume-low";
-    if (v <= 70) return "mdi-volume-medium";
-    return "mdi-volume-high";
+    if (v <= 0)  return ICONS.PLAYER.VOLUME_MUTE;
+    if (v <= 20) return ICONS.PLAYER.VOLUME_LOW;
+    if (v <= 70) return ICONS.PLAYER.VOLUME_MEDIUM;
+    return ICONS.PLAYER.VOLUME_HIGH;
   });
 
   const slide_text = computed<string>(() => {
@@ -114,37 +115,37 @@ export function usePlayerState(): {
     return [
       {
         show: hasAudio, compact: true,  disabled: false,
-        highlight: false, icon: "mdi-rewind-10",
+        highlight: false, icon: ICONS.PLAYER.REWIND_10,
         click: () => rewind(),
       },
       {
         show: hasSlides, compact: true, disabled: slideIndex <= 0,
-        highlight: false, icon: "mdi-page-first",
+        highlight: false, icon: ICONS.PLAYER.PAGE_FIRST,
         click: () => first(),
       },
       {
         show: hasSlides, compact: false, disabled: slideIndex <= 0,
-        highlight: false, icon: "mdi-chevron-left",
+        highlight: false, icon: ICONS.ACTIONS.PREVIOUS,
         click: () => prev(),
       },
       {
         show: hasAudio, compact: false, disabled: audio.isFading.value,
-        highlight: true, icon: audio.isPaused.value ? "mdi-play" : "mdi-pause",
+        highlight: true, icon: audio.isPaused.value ? ICONS.PLAYER.PLAYER : ICONS.PLAYER.PAUSE_PLAIN,
         click: () => playToggle(),
       },
       {
         show: hasSlides, compact: false, disabled: slideIndex >= lastSlide - 1,
-        highlight: false, icon: "mdi-chevron-right",
+        highlight: false, icon: ICONS.ACTIONS.NEXT,
         click: () => next(),
       },
       {
         show: hasSlides, compact: true, disabled: slideIndex >= lastSlide - 1,
-        highlight: false, icon: "mdi-page-last",
+        highlight: false, icon: ICONS.PLAYER.PAGE_LAST,
         click: () => last(),
       },
       {
         show: hasAudio, compact: true, disabled: false,
-        highlight: false, icon: "mdi-fast-forward-10",
+        highlight: false, icon: ICONS.PLAYER.FORWARD_10,
         click: () => forward(),
       },
     ];
@@ -160,8 +161,8 @@ export function usePlayerState(): {
         title: t("modules.media.general.sung"),
         color: "info",
         active: cfg.mode === "audio",
-        icon: "mdi-play-box-multiple",
-        tray_icon: "mdi-account-voice",
+        icon: ICONS.MUSIC.SLIDES_AUDIO,
+        tray_icon: ICONS.MUSIC.SUNG,
         click: () => open({ id_music: idMusic, mode: "audio", minimized }),
       },
       {
@@ -170,8 +171,8 @@ export function usePlayerState(): {
         color: "success",
         active: cfg.mode === "instrumental",
         disabled: !has_instrumental_music.value,
-        icon: "mdi-play-box-multiple-outline",
-        tray_icon: "mdi-music-note",
+        icon: ICONS.MUSIC.SLIDES_PLAYBACK,
+        tray_icon: ICONS.MUSIC.NOTE,
         click: () => open({ id_music: idMusic, mode: "instrumental", minimized }),
       },
       {
@@ -179,15 +180,15 @@ export function usePlayerState(): {
         title: t("modules.media.general.no_audio"),
         color: "error",
         active: cfg.mode === "no_audio",
-        icon: "mdi-checkbox-multiple-blank-outline",
-        tray_icon: "mdi-music-off",
+        icon: ICONS.MUSIC.SLIDES_ONLY,
+        tray_icon: ICONS.MUSIC.OFF,
         click: () => open({ id_music: idMusic, minimized }),
       },
       { title: "-" },
       {
         title: t("modules.media.general.lyric"),
         color: "error",
-        icon: "mdi-text-box-outline",
+        icon: ICONS.MUSIC.LYRIC,
         click: () => openLyric(),
       },
     ];

@@ -1,5 +1,6 @@
 /** @category deve-virar-composable — Usa AppData (Pinia); requer renderer. */
 import $appdata from "@/helpers/AppData";
+import { ICONS } from "@/config/Icons";
 
 const DEFAULT_TIMEOUT = 3000;
 
@@ -67,18 +68,18 @@ export default {
   },
 
   success(text: string, config?: { color?: string; icon?: string; timeout?: number }): void {
-    this.show({ text, color: "success", icon: "mdi-check-circle", ...config });
+    this.show({ text, color: "success", icon: ICONS.UI.CHECK_CIRCLE, ...config });
   },
 
   info(text: string, config?: { color?: string; icon?: string; timeout?: number }): void {
-    this.show({ text, color: "info", icon: "mdi-information", ...config });
+    this.show({ text, color: "info", icon: ICONS.UI.INFO_SOLID, ...config });
   },
 
   error(text: string, config?: { color?: string; icon?: string; timeout?: number }): void {
-    this.show({ text, color: "error", icon: "mdi-alert-circle", ...config });
+    this.show({ text, color: "error", icon: ICONS.UI.ALERT_CIRCLE, ...config });
   },
 
   warning(text: string, config?: { color?: string; icon?: string; timeout?: number }): void {
-    this.show({ text, color: "warning", icon: "mdi-alert", ...config });
+    this.show({ text, color: "warning", icon: ICONS.UI.ALERT, ...config });
   },
 };

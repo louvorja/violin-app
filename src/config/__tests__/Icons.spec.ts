@@ -48,4 +48,30 @@ describe("catálogo de ícones", () => {
     );
     expect(usados.filter((n) => !existentes.has(n))).toEqual([]);
   });
+
+  it("nenhum nome mdi- fica hardcoded fora do catálogo", () => {
+    // A troca do acervo MDI acontece editando só o Icons.ts. Um nome escrito
+    // direto num template escapa dessa troca e sobrevive como ícone órfão.
+    const { readdirSync, statSync } = require("node:fs") as typeof import("node:fs");
+    const fora: string[] = [];
+    const visita = (dir: string) => {
+      for (const entrada of readdirSync(dir)) {
+        const caminho = `${dir}/${entrada}`;
+        if (statSync(caminho).isDirectory()) {
+          if (entrada !== "__tests__") visita(caminho);
+          continue;
+        }
+        if (!/\.(vue|ts|js)$/.test(entrada)) continue;
+        if (caminho.endsWith("config/Icons.ts")) continue;
+        readFileSync(caminho, "utf8")
+          .split("\n")
+          .forEach((linha, i) => {
+            if (/^\s*(\*|\/\/)/.test(linha)) return; // menções em comentário
+            if (/(["'])mdi-[a-z0-9-]+\1/.test(linha)) fora.push(`${caminho}:${i + 1}`);
+          });
+      }
+    };
+    visita("src");
+    expect(fora).toEqual([]);
+  });
 });

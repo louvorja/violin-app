@@ -4,7 +4,7 @@
       block
       color="primary"
       variant="outlined"
-      prepend-icon="mdi-book-search"
+      :prepend-icon="ICONS.BIBLE.BOOK_SEARCH"
       class="mb-4"
       @click="bibleSearchOpen = true"
     >
@@ -29,7 +29,7 @@
           <template #append>
             <v-icon
               v-if="!downloadedVersions.has(item.id_bible_version)"
-              icon="mdi-download-outline"
+              :icon="ICONS.ACTIONS.DOWNLOAD_OUTLINE"
               size="small"
               color="warning"
             />
@@ -40,7 +40,7 @@
         <span>{{ item.name }}</span>
         <v-icon
           v-if="!downloadedVersions.has(item.id_bible_version)"
-          icon="mdi-download-outline"
+          :icon="ICONS.ACTIONS.DOWNLOAD_OUTLINE"
           size="small"
           color="warning"
           class="ml-1"
@@ -90,7 +90,7 @@
     >
       <v-divider class="my-4" />
       <div class="px-2 py-1 bg-surface-variant text-caption d-flex align-center mb-2">
-        <v-icon icon="mdi-book-open-variant" size="small" class="mr-1" />
+        <v-icon :icon="ICONS.BIBLE.BOOK_OPEN" size="small" class="mr-1" />
         <span class="text-truncate">{{ activeBible.reference }}</span>
       </div>
       <div class="remote-slides-grid">
@@ -113,6 +113,7 @@
 </template>
 
 <script setup lang="ts">
+import { ICONS } from "@/config/Icons";
 import { ref, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
 import BibleSpotlight from "@/components/BibleSpotlight.vue";

@@ -53,9 +53,9 @@ export const contextualPages: RibbonPage[] = [
         id: "ctx_counter_actions",
         title: "ribbon.groups.actions",
         buttons: [
-          { id: `${moduleId}_decrement`, icon: "mdi-minus-box", label: "ribbon.btn.counter_decrement", action: `${moduleId}_decrement`, color: "#e74c3c" },
-          { id: `${moduleId}_increment`, icon: "mdi-plus-box", label: "ribbon.btn.counter_increment", action: `${moduleId}_increment`, color: "#27ae60" },
-          { id: `${moduleId}_reset`, icon: "mdi-restart", label: "ribbon.btn.counter_reset", action: `${moduleId}_reset`, color: "#7f8c8d" },
+          { id: `${moduleId}_decrement`, icon: ICONS.ACTIONS.MINUS_BOX, label: "ribbon.btn.counter_decrement", action: `${moduleId}_decrement`, color: "#e74c3c" },
+          { id: `${moduleId}_increment`, icon: ICONS.ACTIONS.ADD_BOX, label: "ribbon.btn.counter_increment", action: `${moduleId}_increment`, color: "#27ae60" },
+          { id: `${moduleId}_reset`, icon: ICONS.ACTIONS.RESTART, label: "ribbon.btn.counter_reset", action: `${moduleId}_reset`, color: "#7f8c8d" },
         ],
       },
       {
@@ -69,7 +69,7 @@ export const contextualPages: RibbonPage[] = [
         id: "ctx_counter_screen",
         title: "ribbon.groups.projection",
         buttons: [
-          { id: `${moduleId}_project`, type: "screen", feature: moduleId, route: `/projection/module?module=${moduleId}`, icon: "mdi-projector-screen-outline", label: "ribbon.btn.project", color: "#1b4f8a" },
+          { id: `${moduleId}_project`, type: "screen", feature: moduleId, route: `/projection/module?module=${moduleId}`, icon: ICONS.PROJECTION.SCREEN_OUTLINE, label: "ribbon.btn.project", color: "#1b4f8a" },
         ],
       },
     ],

@@ -1,7 +1,7 @@
 <template>
   <ModuleContainer ref="moduleContainer" :manifest="manifest" @close="close()">
     <div v-if="favorites.length === 0" class="pa-6 text-center">
-      <v-icon icon="mdi-star-off-outline" size="64" class="mb-4 text-disabled" />
+      <v-icon :icon="ICONS.UI.STAR_OFF_OUTLINE" size="64" class="mb-4 text-disabled" />
       <div class="text-body-1 mb-2">{{ t("data.empty") }}</div>
       <div class="text-body-2 text-disabled">{{ t("data.empty_hint") }}</div>
     </div>
@@ -12,7 +12,7 @@
           <template #prepend>
             <v-icon
               class="drag-handle cursor-grab mr-2"
-              icon="mdi-drag-vertical"
+              :icon="ICONS.ACTIONS.DRAG"
               size="small"
               color="grey"
             />
@@ -32,6 +32,7 @@
 </template>
 
 <script setup>
+import { ICONS } from "@/config/Icons";
 import { ref, computed } from "vue";
 import draggable from "vuedraggable";
 import { module as manifest } from "../manifest";
@@ -53,7 +54,7 @@ function extraMenu(item) {
   return [
     {
       title: t("actions.remove"),
-      icon: "mdi-star-off",
+      icon: ICONS.UI.STAR_OFF,
       click: () => Favorites.remove(item.id_music),
     },
   ];

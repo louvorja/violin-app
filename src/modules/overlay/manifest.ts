@@ -40,14 +40,14 @@ export const contextualPages: RibbonPage[] = [
         buttons: [
           {
             id: `${moduleId}_toggle`,
-            icon: "mdi-layers-off",
+            icon: ICONS.UI.LAYERS_OFF,
             label: `${modulePath}.ribbon.btn.overlay_toggle`,
             action: `${moduleId}_toggle`,
             color: "#7c3aed",
             stateBinding: {
               watchPath: "modules.overlay.enabled",
-              iconOn: "mdi-layers-triple",
-              iconOff: "mdi-layers-off",
+              iconOn: ICONS.UI.LAYERS,
+              iconOff: ICONS.UI.LAYERS_OFF,
               colorOn: "#10b981",
               colorOff: "#7c3aed",
               labelOn: `${modulePath}.ribbon.btn.overlay_on`,

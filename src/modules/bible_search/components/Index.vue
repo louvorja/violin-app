@@ -24,16 +24,15 @@
               @click="toggleHistoryTerm(item as string)"
             >
               <template #prepend>
-                <v-icon size="small" class="text-medium-emphasis">mdi-history</v-icon>
+                <v-icon size="small" class="text-medium-emphasis" :icon="ICONS.UI.HISTORY" />
               </template>
               <template #append>
                 <v-icon
                   size="x-small"
                   class="text-medium-emphasis"
+                  :icon="ICONS.ACTIONS.CANCEL"
                   @click.stop="removeFromHistory(item as string)"
-                >
-                  mdi-close-circle
-                </v-icon>
+                />
               </template>
             </v-list-item>
           </template>
@@ -88,7 +87,7 @@
         </main>
 
         <div v-else-if="noResults" class="bs-empty">
-          <v-icon icon="mdi-book-search" size="48" color="primary" />
+          <v-icon :icon="ICONS.MODULES.BIBLE_SEARCH" size="48" color="primary" />
           <p>{{ t("empty_hint") }}</p>
         </div>
       </template>

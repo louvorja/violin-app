@@ -19,6 +19,7 @@ import Modules from "@/helpers/Modules";
 import Media from "@/composables/useMedia";
 import { open as openProjection } from "@/helpers/Projection";
 import { PROJECTION_TYPE, PROJECTION_URL } from "@/constants/Projection";
+import { ICONS } from "@/config/Icons";
 
 let _loaded = false;
 let _commands = [];
@@ -80,7 +81,7 @@ function staticCommands(t) {
       id: "module:liturgy",
       title: t("shell.cmd.open_liturgy"),
       keywords: ["liturgia", "culto", "programa"],
-      icon: "mdi-view-list-outline",
+      icon: ICONS.UI.VIEW_LIST,
       category: "module",
       run: () => Modules.open("liturgy"),
     },
@@ -88,7 +89,7 @@ function staticCommands(t) {
       id: "module:bible",
       title: t("shell.cmd.open_bible"),
       keywords: ["biblia", "versiculo", "scripture"],
-      icon: "mdi-book-open-variant",
+      icon: ICONS.MODULES.BIBLE,
       category: "module",
       run: () => Modules.open("bible"),
     },
@@ -96,7 +97,7 @@ function staticCommands(t) {
       id: "module:hymnal",
       title: t("shell.cmd.open_hymnal"),
       keywords: ["hino", "hinario", "cantai"],
-      icon: "mdi-music-clef-treble",
+      icon: ICONS.MUSIC.CLEF,
       category: "module",
       run: () => Modules.open("hymnal"),
     },
@@ -104,7 +105,7 @@ function staticCommands(t) {
       id: "module:musics",
       title: t("shell.cmd.open_musics"),
       keywords: ["musicas", "songs", "louvor"],
-      icon: "mdi-music",
+      icon: ICONS.MUSIC.MUSIC,
       category: "module",
       run: () => Modules.open("musics"),
     },
@@ -112,7 +113,7 @@ function staticCommands(t) {
       id: "module:favorites",
       title: t("shell.cmd.open_favorites"),
       keywords: ["favoritos", "estrela", "salvos"],
-      icon: "mdi-star",
+      icon: ICONS.MODULES.FAVORITES,
       category: "module",
       run: () => Modules.open("favorites"),
     },
@@ -120,7 +121,7 @@ function staticCommands(t) {
       id: "module:history",
       title: t("shell.cmd.open_history"),
       keywords: ["historico", "recentes"],
-      icon: "mdi-history",
+      icon: ICONS.MODULES.HISTORY,
       category: "module",
       run: () => Modules.open("history"),
     },
@@ -128,7 +129,7 @@ function staticCommands(t) {
       id: "module:slide_editor",
       title: t("shell.cmd.open_slide_editor"),
       keywords: ["editor", "slides", "personalizar"],
-      icon: "mdi-presentation-play",
+      icon: ICONS.MODULES.SLIDE_EDITOR,
       category: "module",
       run: () => Modules.open("slide_editor"),
     },
@@ -137,7 +138,7 @@ function staticCommands(t) {
       id: "media:close",
       title: t("shell.cmd.close_media"),
       keywords: ["fechar", "stop", "parar"],
-      icon: "mdi-stop",
+      icon: ICONS.PLAYER.STOP,
       category: "action",
       shortcut: "Esc",
       run: () => Media.close(true),
@@ -146,7 +147,7 @@ function staticCommands(t) {
       id: "media:next",
       title: t("shell.cmd.next_slide"),
       keywords: ["proximo", "next", "avancar"],
-      icon: "mdi-skip-next",
+      icon: ICONS.PLAYER.NEXT,
       category: "action",
       shortcut: "PgDn",
       run: () => Media.nextSlide(),
@@ -155,7 +156,7 @@ function staticCommands(t) {
       id: "media:prev",
       title: t("shell.cmd.prev_slide"),
       keywords: ["anterior", "previous", "voltar"],
-      icon: "mdi-skip-previous",
+      icon: ICONS.PLAYER.PREV,
       category: "action",
       shortcut: "PgUp",
       run: () => Media.prevSlide(),
@@ -166,7 +167,7 @@ function staticCommands(t) {
       id: "theme:toggle",
       title: t("shell.cmd.toggle_theme"),
       keywords: ["tema", "dark", "light", "escuro", "claro"],
-      icon: "mdi-theme-light-dark",
+      icon: ICONS.UI.THEME_LIGHT_DARK,
       category: "action",
       // run é injetado na palette porque precisa de acesso ao $vuetify
       run: () => {
@@ -180,7 +181,7 @@ function staticCommands(t) {
       id: "projection:open",
       title: t("shell.cmd.open_projection"),
       keywords: ["projetar", "projection", "monitor"],
-      icon: "mdi-presentation",
+      icon: ICONS.PROJECTION.PRESENTATION,
       category: "action",
       run: () => {
         openProjection({
@@ -194,7 +195,7 @@ function staticCommands(t) {
       id: "operator:open",
       title: t("shell.cmd.open_operator"),
       keywords: ["operador", "grade", "operator"],
-      icon: "mdi-view-grid",
+      icon: ICONS.UI.VIEW_GRID,
       category: "action",
       run: () => {
         openProjection({
@@ -221,7 +222,7 @@ async function dynamicCommands($database, $userdata) {
         id: `fav:${f.id_music}`,
         title: f.name || String(f.id_music),
         keywords: ["favorito"],
-        icon: "mdi-star",
+        icon: ICONS.UI.STAR,
         category: "favorite",
         run: () => Media.open({ id_music: f.id_music, mode: "no_audio" }),
       });
@@ -237,7 +238,7 @@ async function dynamicCommands($database, $userdata) {
       id: `hist:${h.id_music}`,
       title: h.name || String(h.id_music),
       keywords: ["recente", "historico"],
-      icon: "mdi-history",
+      icon: ICONS.UI.HISTORY,
       category: "recent",
       run: () => Media.open({ id_music: h.id_music, mode: "no_audio" }),
     });
@@ -254,7 +255,7 @@ async function dynamicCommands($database, $userdata) {
           id: `music:${m.id_music}`,
           title: m.name || String(m.id_music),
           keywords: ["musica"],
-          icon: "mdi-music-note",
+          icon: ICONS.MUSIC.NOTE,
           category: "music",
           subtitle: m.album || "",
           run: () =>

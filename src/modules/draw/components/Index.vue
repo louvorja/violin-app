@@ -7,7 +7,7 @@
   >
     <template #right>
       <v-btn
-        icon="mdi-fullscreen"
+        :icon="ICONS.PLAYER.FULLSCREEN"
         variant="text"
         density="compact"
         :title="t('actions.fullscreen')"
@@ -73,16 +73,16 @@
           :color="primaryColor"
           :disabled="remaining === 0"
           size="large"
-          prepend-icon="mdi-dice-5"
+          :prepend-icon="ICONS.SORT.DICE"
           @click="drawNumber"
         >
           {{ t("actions.draw") }}
         </v-btn>
-        <v-btn variant="tonal" size="large" prepend-icon="mdi-restart" @click="reset">
+        <v-btn variant="tonal" size="large" :prepend-icon="ICONS.ACTIONS.RESTART" @click="reset">
           {{ t("actions.reset") }}
         </v-btn>
         <v-btn
-          icon="mdi-fullscreen-exit"
+          :icon="ICONS.PLAYER.FULLSCREEN_EXIT"
           variant="text"
           size="large"
           color="white"
@@ -99,6 +99,7 @@
 </template>
 
 <script setup>
+import { ICONS } from "@/config/Icons";
 import { ref, computed, watch, nextTick, onBeforeUnmount } from "vue";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";

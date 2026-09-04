@@ -53,8 +53,8 @@ export const contextualPages: RibbonPage[] = [
         id: moduleCtxId+"_actions",
         title: "ribbon.groups.actions",
         buttons: [
-          { id: `${moduleId}_draw`, icon: "mdi-dice-5", label: "ribbon.btn.draw_action", action: `${moduleId}_draw`, color: "#3498db" },
-          { id: `${moduleId}_reset`, icon: "mdi-restart", label: "ribbon.btn.draw_reset", action: `${moduleId}_reset`, color: "#7f8c8d" },
+          { id: `${moduleId}_draw`, icon: ICONS.SORT.DICE, label: "ribbon.btn.draw_action", action: `${moduleId}_draw`, color: "#3498db" },
+          { id: `${moduleId}_reset`, icon: ICONS.ACTIONS.RESTART, label: "ribbon.btn.draw_reset", action: `${moduleId}_reset`, color: "#7f8c8d" },
         ],
       },
       {
@@ -84,7 +84,7 @@ export const contextualPages: RibbonPage[] = [
         id: moduleCtxId+"_screen",
         title: "ribbon.groups.projection",
         buttons: [
-          { id: `${moduleId}_project`, type: "screen", feature: moduleId, route: `/projection/module?module=${moduleId}`, icon: "mdi-projector-screen-outline", label: "ribbon.btn.project", color: "#1b4f8a" },
+          { id: `${moduleId}_project`, type: "screen", feature: moduleId, route: `/projection/module?module=${moduleId}`, icon: ICONS.PROJECTION.SCREEN_OUTLINE, label: "ribbon.btn.project", color: "#1b4f8a" },
         ],
       },
     ],

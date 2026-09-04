@@ -213,8 +213,8 @@
                     :label="$t(btn.label)"
                     color="primary"
                     class="ribbon-field-switch"
-                    true-icon="mdi-check"
-                    false-icon="mdi-close"
+                    :true-icon="ICONS.UI.CHECK"
+                    :false-icon="ICONS.ACTIONS.CLOSE"
                     @update:model-value="setCheckValue(btn, $event)"
                   >
                     <template #label>
@@ -250,6 +250,7 @@
 </template>
 
 <script setup lang="ts">
+import { ICONS } from "@/config/Icons";
 import { computed, type ComputedRef, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import RibbonScreenButton from "./RibbonScreenButton.vue";

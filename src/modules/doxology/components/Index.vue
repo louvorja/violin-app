@@ -3,10 +3,10 @@
     <template #header>
       <div class="dx-header">
         <div class="dx-search-wrap">
-          <v-icon icon="mdi-magnify" size="16" class="dx-search-icon" />
+          <v-icon :icon="ICONS.ACTIONS.SEARCH" size="16" class="dx-search-icon" />
           <input v-model="search" type="text" class="dx-search-input" :placeholder="t('search')" />
           <button v-if="search" type="button" class="dx-search-clear" @click="search = ''">
-            <v-icon icon="mdi-close" size="14" />
+            <v-icon :icon="ICONS.ACTIONS.CLOSE" size="14" />
           </button>
         </div>
       </div>
@@ -27,7 +27,7 @@
       <template v-if="selectedAlbum">
         <div class="dx-back">
           <v-btn icon size="small" variant="text" @click="goBack">
-            <v-icon icon="mdi-arrow-left" />
+            <v-icon :icon="ICONS.UI.ARROW_LEFT" />
           </v-btn>
           <span class="dx-back-title">{{ selectedAlbum.name }}</span>
         </div>
@@ -73,10 +73,10 @@
                 @error="coverFailed.add(String(album.id_album))"
               />
               <div v-else class="dx-card-cover-fallback">
-                <v-icon icon="mdi-album" size="32" color="#8e44ad" />
+                <v-icon :icon="ICONS.MUSIC.VINYL" size="32" color="#8e44ad" />
               </div>
               <div class="dx-card-overlay">
-                <v-icon icon="mdi-play-circle" size="36" color="#fff" />
+                <v-icon :icon="ICONS.PLAYER.PLAY" size="36" color="#fff" />
               </div>
             </div>
             <div class="dx-card-name">{{ album.name }}</div>

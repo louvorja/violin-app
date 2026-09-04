@@ -6,15 +6,15 @@
     </div>
     <div class="liturgy-ribbon-info__stats">
       <span class="liturgy-ribbon-info__stat">
-        <v-icon icon="mdi-clock-start" size="13" class="mr-1" />
+        <v-icon :icon="ICONS.TIMER.CLOCK_START" size="13" class="mr-1" />
         {{ info.startTime || "—" }}
       </span>
       <span class="liturgy-ribbon-info__stat">
-        <v-icon icon="mdi-clock-end" size="13" class="mr-1" />
+        <v-icon :icon="ICONS.TIMER.CLOCK_END" size="13" class="mr-1" />
         {{ info.endTime || "—" }}
       </span>
       <span class="liturgy-ribbon-info__stat">
-        <v-icon icon="mdi-timer-outline" size="13" class="mr-1" />
+        <v-icon :icon="ICONS.TIMER.TIMER_OUTLINE" size="13" class="mr-1" />
         {{ formattedDuration }}
       </span>
     </div>

@@ -9,7 +9,7 @@
         type="button"
         @click="$emit('remove')"
       >
-        <v-icon icon="mdi-close" size="12" />
+        <v-icon :icon="ICONS.ACTIONS.CLOSE" size="12" />
       </button>
     </div>
     <div class="lj-monitor__stand" :style="{ width: standW + 'px' }"></div>
@@ -17,6 +17,7 @@
 </template>
 
 <script setup lang="ts">
+import { ICONS } from "@/config/Icons";
 import { computed } from "vue";
 
 const props = withDefaults(

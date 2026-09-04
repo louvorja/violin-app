@@ -9,7 +9,7 @@
         <v-text-field
           v-model="ui.onlineVideoSearch"
           :placeholder="endAction.t('ribbon.online_video_search')"
-          prepend-inner-icon="mdi-magnify"
+          :prepend-inner-icon="ICONS.ACTIONS.SEARCH"
           density="compact"
           hide-details
           clearable
@@ -29,7 +29,7 @@
               class="ov-thumb"
             />
             <div v-else class="ov-thumb-fallback">
-              <v-icon icon="mdi-youtube" size="28" color="#e74c3c" />
+              <v-icon :icon="ICONS.MEDIA.YOUTUBE" size="28" color="#e74c3c" />
             </div>
             <div class="ov-card-title">{{ video.name }}</div>
           </div>
@@ -45,7 +45,12 @@
           class="mr-2"
           @keydown.enter="endAction.pickCustomUrl"
         />
-        <v-btn icon="mdi-check" color="primary" variant="tonal" @click="endAction.pickCustomUrl" />
+        <v-btn
+          :icon="ICONS.UI.CHECK"
+          color="primary"
+          variant="tonal"
+          @click="endAction.pickCustomUrl"
+        />
       </v-card-actions>
     </v-card>
   </v-dialog>
@@ -60,6 +65,7 @@
 </template>
 
 <script setup lang="ts">
+import { ICONS } from "@/config/Icons";
 import { computed } from "vue";
 import MusicSpotlight from "@/components/MusicSpotlight.vue";
 import type { TimerEndAction } from "@/composables/useTimerEndAction";

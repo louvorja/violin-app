@@ -23,9 +23,10 @@
 </template>
 
 <script setup>
+import { ICONS } from "@/config/Icons";
 defineProps({
   volume: { type: Number, default: 100 },
-  icon: { type: String, default: "mdi-volume-high" },
+  icon: { type: String, default: ICONS.PLAYER.VOLUME_HIGH },
   loading: { type: Boolean, default: false },
 });
 

@@ -46,7 +46,7 @@ export const contextualPages: RibbonPage[] = [
         id: "ctx_bs_actions",
         title: "ribbon.groups.actions",
         buttons: [
-          { id: "go_bible", icon: "mdi-book-open-variant", label: "modules.bible_search.ribbon.go_bible", action: `${moduleId}_go_bible`, color: "#c0392b" },
+          { id: "go_bible", icon: ICONS.MODULES.BIBLE, label: "modules.bible_search.ribbon.go_bible", action: `${moduleId}_go_bible`, color: "#c0392b" },
           {
             id: "project_current",
             icon: ICONS.PROJECTION.START,

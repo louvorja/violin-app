@@ -41,7 +41,7 @@
               :title="$t('shell.window.minimize')"
               @click="minimize()"
             >
-              <v-icon icon="mdi-minus" size="16" />
+              <v-icon :icon="ICONS.ACTIONS.MINUS" size="16" />
             </button>
             <button
               v-if="closable"
@@ -50,7 +50,7 @@
               :title="$t('alert.close')"
               @click="close()"
             >
-              <v-icon icon="mdi-close" size="16" />
+              <v-icon :icon="ICONS.ACTIONS.CLOSE" size="16" />
             </button>
           </div>
         </header>
@@ -95,6 +95,7 @@
 </template>
 
 <script setup>
+import { ICONS } from "@/config/Icons";
 import { ref, computed, watch, onMounted } from "vue";
 import { useDisplay } from "vuetify";
 

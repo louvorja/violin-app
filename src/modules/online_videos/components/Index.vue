@@ -3,10 +3,10 @@
     <template #header>
       <div class="ov-header">
         <div class="ov-search-wrap">
-          <v-icon icon="mdi-magnify" size="16" class="ov-search-icon" />
+          <v-icon :icon="ICONS.ACTIONS.SEARCH" size="16" class="ov-search-icon" />
           <input v-model="search" type="text" class="ov-search-input" :placeholder="t('search')" />
           <button v-if="search" type="button" class="ov-search-clear" @click="search = ''">
-            <v-icon icon="mdi-close" size="14" />
+            <v-icon :icon="ICONS.ACTIONS.CLOSE" size="14" />
           </button>
         </div>
       </div>
@@ -44,7 +44,7 @@
       <!-- Botão voltar -->
       <div v-else-if="level > 1" class="ov-back">
         <v-btn icon size="small" variant="text" @click="goBack">
-          <v-icon icon="mdi-arrow-left" />
+          <v-icon :icon="ICONS.UI.ARROW_LEFT" />
         </v-btn>
         <span class="ov-back-title">{{ backTitle }}</span>
       </div>
@@ -112,6 +112,7 @@
 </template>
 
 <script setup lang="ts">
+import { ICONS } from "@/config/Icons";
 import { ref, computed, watch, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
 import { module as manifest } from "../manifest";

@@ -32,7 +32,7 @@
           item-value="id_bible_book"
           item-title="name"
           item-subtitle="abbreviation"
-          icon="mdi-book-open-page-variant"
+          :icon="ICONS.BIBLE.BOOK_OPEN_PAGE"
         />
         <div class="my-2" />
         <l-select
@@ -41,7 +41,7 @@
           :items="chaptersList"
           item-value="id"
           item-title="value"
-          icon="mdi-bookmark"
+          :icon="ICONS.BIBLE.BOOKMARK"
         />
         <div class="my-2" />
         <l-select
@@ -51,7 +51,7 @@
           item-value="id"
           item-title="value"
           multiple
-          icon="mdi-format-list-numbered"
+          :icon="ICONS.FORMAT.LIST_NUMBERED"
         />
       </div>
     </template>
@@ -71,7 +71,7 @@
             item-value="id_bible_book"
             item-title="name"
             item-subtitle="abbreviation"
-            icon="mdi-book-open-page-variant"
+            :icon="ICONS.BIBLE.BOOK_OPEN_PAGE"
           />
         </div>
         <div class="bible-col__grid">
@@ -116,7 +116,7 @@
             :items="chaptersList"
             item-value="id"
             item-title="value"
-            icon="mdi-bookmark"
+            :icon="ICONS.BIBLE.BOOKMARK"
           />
         </div>
         <div class="bible-col__grid">
@@ -160,7 +160,7 @@
             variant="outlined"
             hide-details
             clearable
-            prepend-inner-icon="mdi-magnify"
+            :prepend-inner-icon="ICONS.ACTIONS.SEARCH"
           />
           <v-checkbox
             v-if="verse_filter"
@@ -258,7 +258,7 @@
         :disabled="!(select_bible?.verses && select_bible.verses.length > 0)"
         variant="text"
         size="small"
-        :prepend-icon="'mdi-eraser'"
+        :prepend-icon="ICONS.ACTIONS.CLEAN"
         @click="clearText()"
       >
         {{ t("clear_text") }}
@@ -268,7 +268,7 @@
         :disabled="!(select_bible?.verses && select_bible.verses.length > 0)"
         variant="text"
         size="small"
-        prepend-icon="mdi-chevron-left"
+        :prepend-icon="ICONS.ACTIONS.PREVIOUS"
         @click="prevVerse()"
       >
         {{ t("prev_verse") }}
@@ -277,7 +277,7 @@
         :disabled="!(select_bible?.verses && select_bible.verses.length > 0)"
         variant="text"
         size="small"
-        append-icon="mdi-chevron-right"
+        :append-icon="ICONS.ACTIONS.NEXT"
         @click="nextVerse()"
       >
         {{ t("next_verse") }}
@@ -287,6 +287,7 @@
 </template>
 
 <script setup lang="ts">
+import { ICONS } from "@/config/Icons";
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick, type Ref } from "vue";
 import { useI18n } from "vue-i18n";
 import LSelect from "@/components/inputs/LjSelect.vue";

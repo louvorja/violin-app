@@ -52,8 +52,8 @@
           density="compact"
           size="small"
           hide-details
-          true-icon="mdi-check"
-          false-icon="mdi-close"
+          :true-icon="ICONS.UI.CHECK"
+          :false-icon="ICONS.ACTIONS.CLOSE"
           :label="t(LANG_PATH + '.repeat')"
           color="primary"
           @update:model-value="save('repeat', $event)"

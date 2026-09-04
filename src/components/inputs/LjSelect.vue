@@ -19,7 +19,7 @@
           :error="!!search.value && !filteredItems.length"
           density="compact"
           :placeholder="$t('components.inputs.search') + '...'"
-          prepend-inner-icon="mdi-magnify"
+          :prepend-inner-icon="ICONS.ACTIONS.SEARCH"
           variant="outlined"
           clearable
           hide-details
@@ -30,6 +30,7 @@
 </template>
 
 <script setup>
+import { ICONS } from "@/config/Icons";
 // LEGADO — wrapper de v-select, ainda usado pelo módulo Bíblia (que precisa de
 // seleção múltipla, algo que o primitivo novo não faz). Para UI nova use
 // @/components/ui/LjSelect.vue. Este arquivo sai quando a Bíblia migrar.

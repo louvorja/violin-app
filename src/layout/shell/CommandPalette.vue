@@ -9,7 +9,7 @@
     <v-card class="cmd-palette" rounded="lg" elevation="8">
       <!-- Input de busca -->
       <div class="cmd-search">
-        <v-icon icon="mdi-magnify" size="22" class="mr-2 text-medium-emphasis" />
+        <v-icon :icon="ICONS.ACTIONS.SEARCH" size="22" class="mr-2 text-medium-emphasis" />
         <input
           ref="searchInput"
           v-model="query"
@@ -26,7 +26,7 @@
         <kbd v-if="!query" class="cmd-kbd cmd-kbd--hint">Esc</kbd>
         <v-btn
           v-else
-          icon="mdi-close"
+          :icon="ICONS.ACTIONS.CLOSE"
           size="x-small"
           variant="text"
           density="compact"
@@ -43,7 +43,7 @@
           v-if="!loading && results.length === 0"
           class="cmd-empty pa-6 text-center text-medium-emphasis"
         >
-          <v-icon icon="mdi-magnify" size="36" class="mb-2 text-disabled" />
+          <v-icon :icon="ICONS.ACTIONS.SEARCH" size="36" class="mb-2 text-disabled" />
           <div>{{ $t("shell.no_results") }}</div>
         </div>
 
@@ -106,6 +106,7 @@
 </template>
 
 <script setup>
+import { ICONS } from "@/config/Icons";
 import { ref, computed, watch, nextTick } from "vue";
 import { useI18n } from "vue-i18n";
 import { useTheme } from "vuetify";

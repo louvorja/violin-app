@@ -10,7 +10,7 @@
       </div>
       <div class="fpb-actions">
         <v-btn
-          icon="mdi-chevron-left"
+          :icon="ICONS.ACTIONS.PREVIOUS"
           size="small"
           variant="text"
           class="fpb-icon"
@@ -18,7 +18,7 @@
           @click="fp.prev()"
         />
         <v-btn
-          icon="mdi-stop"
+          :icon="ICONS.PLAYER.STOP"
           size="small"
           variant="text"
           color="error"
@@ -26,7 +26,7 @@
           @click="fp.stopProjection()"
         />
         <v-btn
-          icon="mdi-chevron-right"
+          :icon="ICONS.ACTIONS.NEXT"
           size="small"
           variant="text"
           class="fpb-icon"
@@ -47,7 +47,7 @@ const fp = useFileProjection();
 
 const infoIcon = computed(() => {
   if (fp.currentType.value === "announcements")
-    return ICONS.MODULES.ANNOUNCEMENTS || "mdi-bullhorn";
+    return ICONS.MODULES.ANNOUNCEMENTS || ICONS.MODULES.ANNOUNCEMENTS;
   return ICONS.MEDIA.VIDEO;
 });
 

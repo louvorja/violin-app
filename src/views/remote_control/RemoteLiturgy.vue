@@ -35,17 +35,17 @@
           <template #append>
             <div v-if="isChooseLaterMusic(item)" class="d-flex align-center gap-1">
               <v-btn
-                :icon="!isItemChecked(item) ? 'mdi-magnify' : ''"
+                :icon="!isItemChecked(item) ? ICONS.ACTIONS.SEARCH : ''"
                 size="small"
                 variant="text"
                 color="primary"
                 @click.stop="openChooseLater(item)"
               />
-              <v-icon v-if="isItemChecked(item)" icon="mdi-check-circle" color="success" />
+              <v-icon v-if="isItemChecked(item)" :icon="ICONS.UI.CHECK_CIRCLE" color="success" />
             </div>
             <template v-else>
-              <v-icon v-if="isItemChecked(item)" icon="mdi-check-circle" color="success" />
-              <v-icon v-else icon="mdi-play-circle-outline" color="primary" />
+              <v-icon v-if="isItemChecked(item)" :icon="ICONS.UI.CHECK_CIRCLE" color="success" />
+              <v-icon v-else :icon="ICONS.PLAYER.PLAY_OUTLINE" color="primary" />
             </template>
           </template>
         </v-list-item>
@@ -55,6 +55,7 @@
 </template>
 
 <script setup lang="ts">
+import { ICONS } from "@/config/Icons";
 import { ref, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
 import type { LiturgyItem } from "@/types/Liturgy";

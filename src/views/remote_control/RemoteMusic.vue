@@ -3,7 +3,7 @@
     <v-text-field
       v-model="musicSearch"
       :label="t('components.inputs.search')"
-      prepend-inner-icon="mdi-magnify"
+      :prepend-inner-icon="ICONS.ACTIONS.SEARCH"
       clearable
       hide-details
       density="compact"
@@ -23,7 +23,7 @@
           <div class="d-flex align-center gap-3">
             <!-- Cantada (tag=1) -->
             <v-btn
-              icon="mdi-play-box-multiple"
+              :icon="ICONS.MUSIC.SLIDES_AUDIO"
               size="large"
               variant="text"
               color="primary"
@@ -33,7 +33,7 @@
             />
             <!-- Instrumental (tag=2) -->
             <v-btn
-              icon="mdi-play-box-multiple-outline"
+              :icon="ICONS.MUSIC.SLIDES_PLAYBACK"
               size="large"
               variant="text"
               color="primary"
@@ -44,7 +44,7 @@
             />
             <!-- Sem Áudio (tag=3) -->
             <v-btn
-              icon="mdi-checkbox-multiple-blank-outline"
+              :icon="ICONS.MUSIC.SLIDES_ONLY"
               size="large"
               variant="text"
               color="primary"
@@ -66,6 +66,7 @@
 </template>
 
 <script setup lang="ts">
+import { ICONS } from "@/config/Icons";
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { MusicAlbum, MusicItem } from "@/types/Music";

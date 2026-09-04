@@ -15,7 +15,7 @@
           density="compact"
           hide-details
           clearable
-          prepend-inner-icon="mdi-magnify"
+          :prepend-inner-icon="ICONS.ACTIONS.SEARCH"
           width="400px"
         />
       </div>

@@ -9,7 +9,10 @@
       @click="setActiveDay(i)"
     >
       <span>
-        <v-icon :icon="i === todayIndex ? 'mdi-calendar-star' : 'mdi-calendar-blank'" size="16" />
+        <v-icon
+          :icon="i === todayIndex ? ICONS.CALENDAR.STAR : ICONS.CALENDAR.BLANK_SOLID"
+          size="16"
+        />
         {{ label }}
       </span>
     </button>
@@ -17,6 +20,7 @@
 </template>
 
 <script setup lang="ts">
+import { ICONS } from "@/config/Icons";
 const props = withDefaults(
   defineProps<{
     activeDay?: number;

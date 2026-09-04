@@ -45,9 +45,9 @@ export const contextualPages: RibbonPage[] = [
         id: `${moduleCtxId}_items`,
         title: "ribbon.groups.items",
         buttons: [
-          { id: "check_all", icon: "mdi-checkbox-marked", label: "ribbon.btn.check_all", action: "lit_check_all", size: "small" },
-          { id: "uncheck_all", icon: "mdi-checkbox-blank-outline", label: "ribbon.btn.uncheck_all", action: "lit_uncheck_all", size: "small" },
-          { id: "invert_selection", icon: "mdi-swap-horizontal", label: "ribbon.btn.invert_selection", action: "lit_invert", size: "small" },
+          { id: "check_all", icon: ICONS.UI.CHECKED, label: "ribbon.btn.check_all", action: "lit_check_all", size: "small" },
+          { id: "uncheck_all", icon: ICONS.ACTIONS.UNCHECKED, label: "ribbon.btn.uncheck_all", action: "lit_uncheck_all", size: "small" },
+          { id: "invert_selection", icon: ICONS.ACTIONS.SORT, label: "ribbon.btn.invert_selection", action: "lit_invert", size: "small" },
         ],
       },
       {
@@ -61,8 +61,8 @@ export const contextualPages: RibbonPage[] = [
         id: `${moduleCtxId}_options`,
         title: "ribbon.groups.options",
         buttons: [
-          { id: "mark_done", icon: "mdi-check-circle", label: "ribbon.btn.mark_done", action: "lit_mark_done", size: "small" },
-          { id: "show_notes", icon: "mdi-note-text", label: "ribbon.btn.show_notes", action: "lit_show_notes", size: "small" },
+          { id: "mark_done", icon: ICONS.UI.CHECK_CIRCLE, label: "ribbon.btn.mark_done", action: "lit_mark_done", size: "small" },
+          { id: "show_notes", icon: ICONS.UI.NOTE_TEXT, label: "ribbon.btn.show_notes", action: "lit_show_notes", size: "small" },
           { id: "lock_items", label: "ribbon.btn.lock_liturgy", action: "lit_lock", size: "small", stateBinding: {
             watchPath: KEYS.MODULES.LITURGY.LOCKED,
             iconOn: ICONS.ACTIONS.LOCK,
@@ -77,12 +77,12 @@ export const contextualPages: RibbonPage[] = [
         id: `${moduleCtxId}_library`,
         title: "ribbon.groups.library",
         buttons: [
-          { id: "save_liturgy", icon: "mdi-content-save", label: modulePath+".library.save_title", action: "lit_save", size: "small" },
-          { id: "load_liturgy", icon: "mdi-folder-open", label: modulePath+".library.load_title", action: "lit_load", size: "small" },
+          { id: "save_liturgy", icon: ICONS.ACTIONS.SAVE, label: modulePath+".library.save_title", action: "lit_save", size: "small" },
+          { id: "load_liturgy", icon: ICONS.ACTIONS.FOLDER_OPEN, label: modulePath+".library.load_title", action: "lit_load", size: "small" },
           { id: "clear_liturgy", icon: ICONS.ACTIONS.CLEAN, label: "ribbon.btn.clear_liturgy", action: "lit_clear", size: "small", color: "#e74c3c" },
-          { id: "export_liturgy", icon: "mdi-export", label: modulePath+".library.export_title", action: "lit_export", size: "small" },
-          { id: "import_liturgy", icon: "mdi-import", label: modulePath+".library.import_title", action: "lit_import", size: "small" },
-          { id: "manage_liturgy", icon: "mdi-file-cog-outline", label: modulePath+".library.manage_title", action: "lit_manage", size: "small" },
+          { id: "export_liturgy", icon: ICONS.ACTIONS.EXPORT, label: modulePath+".library.export_title", action: "lit_export", size: "small" },
+          { id: "import_liturgy", icon: ICONS.ACTIONS.IMPORT, label: modulePath+".library.import_title", action: "lit_import", size: "small" },
+          { id: "manage_liturgy", icon: ICONS.ACTIONS.FILE_SETTINGS, label: modulePath+".library.manage_title", action: "lit_manage", size: "small" },
         ],
       },
       {

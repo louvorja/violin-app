@@ -4,7 +4,7 @@
       <v-toolbar density="compact" color="primary" flat>
         <v-toolbar-title>{{ t("library.save_title") }}</v-toolbar-title>
         <v-btn icon variant="text" density="compact" @click="internalShow = false">
-          <v-icon icon="mdi-close" />
+          <v-icon :icon="ICONS.ACTIONS.CLOSE" />
         </v-btn>
       </v-toolbar>
       <v-card-text class="pt-4">
@@ -27,7 +27,7 @@
           {{ t("actions.cancel") }}
         </v-btn>
         <v-btn variant="flat" color="primary" :disabled="!name.trim()" @click="doSave">
-          <v-icon icon="mdi-content-save" size="16" class="mr-1" />
+          <v-icon :icon="ICONS.ACTIONS.SAVE" size="16" class="mr-1" />
           {{ t("actions.save") }}
         </v-btn>
       </v-card-actions>
@@ -36,6 +36,7 @@
 </template>
 
 <script setup lang="ts">
+import { ICONS } from "@/config/Icons";
 import { ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import pt from "../lang/pt.json";

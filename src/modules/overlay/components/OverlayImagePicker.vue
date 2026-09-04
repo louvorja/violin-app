@@ -11,7 +11,13 @@
     <div v-if="selectedImage" class="image-picker-selected">
       <img :src="selectedImageUrl" class="image-picker-selected-img" alt="" />
       <div class="image-picker-selected-name">{{ selectedImage.name }}</div>
-      <v-btn icon="mdi-close" size="x-small" variant="text" color="error" @click="clearSelection" />
+      <v-btn
+        :icon="ICONS.ACTIONS.CLOSE"
+        size="x-small"
+        variant="text"
+        color="error"
+        @click="clearSelection"
+      />
     </div>
 
     <!-- Library grid -->
@@ -38,7 +44,7 @@
 
     <!-- Drag-drop zone -->
     <div v-if="images.length === 0 && !selectedImage" class="image-picker-empty">
-      <v-icon icon="mdi-image-plus" size="36" color="grey" />
+      <v-icon :icon="ICONS.ACTIONS.IMAGE_PLUS" size="36" color="grey" />
       <p>{{ t("slot.drag_drop_hint") }}</p>
     </div>
 
@@ -53,7 +59,7 @@
     />
 
     <v-btn size="small" variant="tonal" class="image-picker-upload-btn" @click="openFilePicker">
-      <v-icon start icon="mdi-upload" />
+      <v-icon start :icon="ICONS.ACTIONS.UPLOAD" />
       {{ t("slot.image_library") }}
     </v-btn>
   </div>

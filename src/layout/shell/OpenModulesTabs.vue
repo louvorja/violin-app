@@ -30,13 +30,14 @@
         :aria-label="`${$t('alert.close')}: ${t(getModule(m.id).title)}`"
         @click.stop="close(m.id)"
       >
-        <v-icon icon="mdi-close" size="11" aria-hidden="true" />
+        <v-icon :icon="ICONS.ACTIONS.CLOSE" size="11" aria-hidden="true" />
       </span>
     </v-btn>
   </div>
 </template>
 
 <script setup>
+import { ICONS } from "@/config/Icons";
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import $appdata from "@/helpers/AppData";

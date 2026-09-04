@@ -63,7 +63,7 @@ export const contextualPages: RibbonPage[] = [
           },
           {
             id: `${moduleId}_stop_immediately`,
-            icon: "mdi-stop-circle-outline",
+            icon: ICONS.CATEGORY.CLOSING,
             label: `${modulePath}.stop_immediately`,
             action: `${moduleId}_stop_immediately`,
             color: "#e74c3c",
@@ -90,7 +90,7 @@ export const contextualPages: RibbonPage[] = [
           },
           {
             id: `${moduleId}_manage_categories`,
-            icon: "mdi-tune",
+            icon: ICONS.UI.TUNE,
             label: `shell.category.manage_categories`,
             action: `${moduleId}_manage_categories`,
             color: "#1976d2",

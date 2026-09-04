@@ -74,7 +74,7 @@ export const contextualPages: RibbonPage[] = [
           },
           {
             id: `${moduleId}_reset`,
-            icon: "mdi-restart",
+            icon: ICONS.ACTIONS.RESTART,
             label: "ribbon.btn.stopwatch_reset",
             action: `${moduleId}_reset`,
             color: "#7f8c8d",
@@ -90,7 +90,7 @@ export const contextualPages: RibbonPage[] = [
             type: "screen",
             feature: moduleId,
             route: `/projection/module?module=${moduleId}`,
-            icon: "mdi-projector-screen-outline",
+            icon: ICONS.PROJECTION.SCREEN_OUTLINE,
             label: "ribbon.btn.project",
             color: "#1b4f8a",
           },

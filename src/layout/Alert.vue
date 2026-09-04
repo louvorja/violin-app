@@ -44,6 +44,7 @@
 </template>
 
 <script setup>
+import { ICONS } from "@/config/Icons";
 import { computed } from "vue";
 import $appdata from "@/helpers/AppData";
 
@@ -63,12 +64,12 @@ const variant = computed(() => alert.value?.color || "info");
 
 const iconForVariant = computed(() => {
   const map = {
-    error: "mdi-alert-circle",
-    success: "mdi-check-circle",
-    warning: "mdi-alert",
-    info: "mdi-information",
+    error: ICONS.UI.ALERT_CIRCLE,
+    success: ICONS.UI.CHECK_CIRCLE,
+    warning: ICONS.UI.ALERT,
+    info: ICONS.UI.INFO_SOLID,
   };
-  return map[variant.value] || "mdi-information-outline";
+  return map[variant.value] || ICONS.UI.INFORMATION_OUTLINE;
 });
 
 function clickBtn(value) {

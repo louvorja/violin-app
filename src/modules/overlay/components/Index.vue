@@ -13,7 +13,7 @@
         <!-- Preview -->
         <div class="overlay-preview-panel">
           <div class="overlay-preview-header">
-            <v-icon icon="mdi-eye-outline" size="14" />
+            <v-icon :icon="ICONS.UI.EYE_OUTLINE" size="14" />
             <span>{{ t("preview") }}</span>
           </div>
           <div class="overlay-preview-canvas-wrap">
@@ -55,7 +55,7 @@
         <!-- Slot list -->
         <div class="overlay-slot-list">
           <div v-if="localSlots.length === 0" class="overlay-empty">
-            <v-icon icon="mdi-layers-outline" size="48" color="grey" />
+            <v-icon :icon="ICONS.MODULES.OVERLAY" size="48" color="grey" />
             <p>{{ t("empty") }}</p>
           </div>
 
@@ -67,7 +67,7 @@
               :class="{ 'overlay-slot-card--active': editingSlot?.id === slot.id }"
             >
               <div class="overlay-slot-card-header">
-                <v-icon icon="mdi-drag-vertical" size="16" class="overlay-slot-drag" />
+                <v-icon :icon="ICONS.ACTIONS.DRAG" size="16" class="overlay-slot-drag" />
                 <v-switch
                   v-model="slot.enabled"
                   density="compact"
@@ -81,19 +81,19 @@
                 </v-chip>
                 <v-spacer />
                 <v-btn
-                  icon="mdi-pencil-outline"
+                  :icon="ICONS.ACTIONS.EDIT_OUTLINE"
                   size="x-small"
                   variant="text"
                   @click="editSlot(i)"
                 />
                 <v-btn
-                  icon="mdi-content-duplicate"
+                  :icon="ICONS.ACTIONS.DUPLICATE"
                   size="x-small"
                   variant="text"
                   @click="duplicateSlot(i)"
                 />
                 <v-btn
-                  icon="mdi-delete-outline"
+                  :icon="ICONS.ACTIONS.DELETE"
                   size="x-small"
                   variant="text"
                   color="error"
@@ -114,6 +114,7 @@
 </template>
 
 <script setup lang="ts">
+import { ICONS } from "@/config/Icons";
 import { ref, reactive, onMounted } from "vue";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";

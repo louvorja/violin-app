@@ -31,7 +31,7 @@
         </div>
 
         <!-- Mensagem de alarme -->
-        <v-chip v-if="alarmed" color="error" variant="tonal" prepend-icon="mdi-alarm">
+        <v-chip v-if="alarmed" color="error" variant="tonal" :prepend-icon="ICONS.TIMER.ALARM">
           {{ t("alarm.done") }}
         </v-chip>
       </div>
@@ -40,6 +40,7 @@
 </template>
 
 <script setup>
+import { ICONS } from "@/config/Icons";
 import { ref, computed, watch, onBeforeUnmount } from "vue";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";

@@ -39,7 +39,7 @@ export const contextualPages: RibbonPage[] = [
         buttons: [
           {
             id: `${moduleId}_add_auto`,
-            icon: "mdi-folder-sync",
+            icon: ICONS.ACTIONS.FOLDER_SYNC,
             label: `${modulePath}.ribbon.add_auto`,
             action: `${moduleId}_add_auto`,
             color: "#00897b",

@@ -47,14 +47,14 @@ export const contextualPages: RibbonPage[] = [
           },
           {
             id: `${moduleId}_toggle_view`,
-            icon: "mdi-grid-large",
+            icon: ICONS.UI.GRID_LARGE,
             label: "ribbon.btn.custom_online_videos_toggle_view",
             action: `${moduleId}_toggle_view`,
             color: "#7f8c8d",
           },
           {
             id: `${moduleId}_manage_categories`,
-            icon: "mdi-tune",
+            icon: ICONS.UI.TUNE,
             label: `${modulePath}.manage_categories`,
             action: `${moduleId}_manage_categories`,
             color: "#1976d2",

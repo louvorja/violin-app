@@ -25,7 +25,7 @@
 
       <div class="bgs-footer-actions">
         <v-btn
-          :icon="bg.repeat.value ? 'mdi-repeat' : 'mdi-repeat-off'"
+          :icon="bg.repeat.value ? ICONS.PLAYER.LOOP : ICONS.PLAYER.LOOP_OFF"
           size="small"
           variant="text"
           class="bgs-footer-icon"
@@ -39,9 +39,15 @@
           class="bgs-footer-icon"
           @click="bg.togglePlay(bg.fadeInMs.value, bg.fadeOutMs.value)"
         />
-        <v-btn icon="mdi-stop" size="small" variant="text" color="error" @click="bg.stop()" />
         <v-btn
-          icon="mdi-stop-circle-outline"
+          :icon="ICONS.PLAYER.STOP"
+          size="small"
+          variant="text"
+          color="error"
+          @click="bg.stop()"
+        />
+        <v-btn
+          :icon="ICONS.CATEGORY.CLOSING"
           size="small"
           variant="text"
           color="error"
@@ -79,10 +85,10 @@ const previousVolume = ref(50);
 
 const volumeIcon = computed(() => {
   const v = bg.volume.value;
-  if (v <= 0 || isMuted.value) return "mdi-volume-mute";
-  if (v <= 20) return "mdi-volume-low";
-  if (v <= 50) return "mdi-volume-medium";
-  return "mdi-volume-high";
+  if (v <= 0 || isMuted.value) return ICONS.PLAYER.VOLUME_MUTE;
+  if (v <= 20) return ICONS.PLAYER.VOLUME_LOW;
+  if (v <= 50) return ICONS.PLAYER.VOLUME_MEDIUM;
+  return ICONS.PLAYER.VOLUME_HIGH;
 });
 
 function toggleRepeat(): void {
