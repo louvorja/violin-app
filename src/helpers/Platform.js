@@ -133,7 +133,8 @@ export default {
    * Permite listar displays, identificá-los visualmente e salvar preferências por feature.
    * null quando rodando no browser/PWA.
    *
-   * @returns {{ list, getPreferred, setPreferred, getPrefs, identify } | null}
+   * @returns {{ list, getPreferred, setPreferred, getPrefs, identify, onChanged,
+   *            getRoles, setRole, getFeatureRole, setFeatureRole } | null}
    */
   get displays() {
     return api?.displays ?? null;

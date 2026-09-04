@@ -13,6 +13,12 @@ const displays = require("./displays.js");
 /** Mantém referência das janelas abertas por feature para evitar duplicatas */
 const _openWindows = new Map();
 
+/**
+ * Metadata de cada janela aberta, para conseguir recolocá-la no monitor certo
+ * quando os displays mudarem (ver `reconcile`).
+ */
+const _windowMeta = new Map();
+
 /** Referência à janela principal — usada para devolver o foco após abrir projeções. */
 let _mainWindow = null;
 
@@ -48,9 +54,8 @@ function _isProjectionPresentationWindow(route, feature) {
   return (
     path === "/projection" ||
     path.startsWith("/projection/") ||
-    feature === "media:musicas" ||
-    feature === "media:retorno" ||
-    feature === "shell:projection"
+    feature === "musicas" ||
+    feature === "retorno"
   );
 }
 
@@ -81,13 +86,16 @@ function openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = f
     return existing;
   }
 
-  // Decidir display alvo
+  // Decidir display alvo.
+  // NÃO gravamos preferência aqui: quem persiste a escolha do usuário é a UI
+  // (Screen.vue / RibbonScreenButton.vue / MonitorSelect.vue). Gravar na
+  // abertura já poluiu o mapa de preferências no passado com chaves que nenhum
+  // leitor consulta.
   let target;
   if (monitorId !== undefined && monitorId !== null) {
     target = screen.getAllDisplays().find((d) => d.id === monitorId);
-    if (target) displays.setPreferred(feature, monitorId);
   }
-  if (!target) target = displays.getPreferred(feature);
+  if (!target) target = displays.getPreferredOrPrimary(feature);
 
   const bounds = target.bounds;
   const isMac = process.platform === "darwin";
@@ -254,37 +262,6 @@ function openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = f
   win.webContents.once("did-finish-load", showOnce);
   win.once("ready-to-show", showOnce);
 
-  // Reforço: alguns projetores HDMI "piscam" e o Windows pode tirar a
-  // janela de fullscreen. Reaplica fullscreen quando o display volta a
-  // estar disponível ou quando a janela ganha foco após perda.
-  if (useDeferredFullscreen) {
-    const _onDisplayChange = () => {
-      if (win.isDestroyed()) return;
-      const stillThere = screen.getAllDisplays().some((d) => d.id === target.id);
-      if (!stillThere) {
-        // Monitor sumiu — move pra qualquer outro disponível e reaplica fullscreen.
-        const fallback = screen.getPrimaryDisplay();
-        if (fallback && fallback.bounds) {
-          try {
-            win.setFullScreen(false);
-            win.setBounds(fallback.bounds);
-            win.setFullScreen(true);
-          } catch (_) { /* ignore */ }
-        }
-      } else if (!win.isFullScreen()) {
-        _applyDeferredFullscreen();
-      }
-    };
-    screen.on("display-metrics-changed", _onDisplayChange);
-    screen.on("display-removed", _onDisplayChange);
-    screen.on("display-added", _onDisplayChange);
-    win.on("closed", () => {
-      screen.removeListener("display-metrics-changed", _onDisplayChange);
-      screen.removeListener("display-removed", _onDisplayChange);
-      screen.removeListener("display-added", _onDisplayChange);
-    });
-  }
-
   // Esc fecha a janela fullscreen no macOS como saída de emergência.
   if (fullscreen && isMac) {
     win.webContents.on("before-input-event", (_e, input) => {
@@ -318,6 +295,7 @@ function openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = f
 
   win.on("closed", () => {
     _openWindows.delete(feature);
+    _windowMeta.delete(feature);
     if (useMacPrimaryKiosk && app.dock && typeof app.dock.show === "function") {
       setTimeout(() => {
         try { app.dock.show(); } catch (_) { /* ignore */ }
@@ -337,7 +315,107 @@ function openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = f
   }
 
   _openWindows.set(feature, win);
+  _windowMeta.set(feature, {
+    fullscreen,
+    alwaysOnTop,
+    useDeferredFullscreen,
+    useMacPresentationLevel,
+    isMac,
+    overscan,
+  });
   return win;
+}
+
+/**
+ * Coloca uma janela num display, usando os bounds ATUAIS dele.
+ *
+ * Reler os bounds importa: um projetor que renegocia 1080p→720p muda de
+ * tamanho, e reposicionar pelo valor capturado na abertura deixaria a janela
+ * maior que a tela.
+ */
+function _placeOnDisplay(win, display, meta) {
+  const bounds = display.bounds;
+  const overscan = meta.fullscreen && meta.isMac ? meta.overscan || 0 : 0;
+
+  try {
+    if (win.isFullScreen && win.isFullScreen()) win.setFullScreen(false);
+
+    if (meta.fullscreen) {
+      win.setBounds({
+        x: bounds.x - overscan,
+        y: bounds.y - overscan,
+        width: bounds.width + overscan * 2,
+        height: bounds.height + overscan * 2,
+      });
+    } else {
+      // Janela comum (operador): só muda de monitor, mantendo o tamanho que o
+      // usuário deixou. Esticá-la para cobrir a tela seria uma regressão.
+      const current = win.getBounds();
+      const width = Math.min(current.width, bounds.width);
+      const height = Math.min(current.height, bounds.height);
+      win.setBounds({
+        x: bounds.x + Math.round((bounds.width - width) / 2),
+        y: bounds.y + Math.round((bounds.height - height) / 2),
+        width,
+        height,
+      });
+    }
+    if (!win.isVisible()) win.showInactive();
+    if (meta.useDeferredFullscreen) {
+      win.setMenuBarVisibility(false);
+      win.setFullScreen(true);
+      win.setAlwaysOnTop(true, "screen-saver");
+    } else if (meta.useMacPresentationLevel) {
+      win.setAlwaysOnTop(true, "screen-saver");
+    }
+    _refocusMainWindow();
+  } catch (e) {
+    console.warn("[windowFactory] Falha ao reposicionar janela:", e?.message || e);
+  }
+}
+
+/**
+ * Reconcilia as janelas abertas com os monitores atuais.
+ *
+ * Janela cujo monitor sumiu é ESCONDIDA, não fechada nem movida: fechar perde o
+ * slide/versículo/cronômetro em andamento, e mover jogaria a projeção na tela
+ * do operador no meio do culto. Quando o monitor volta, ela reaparece sozinha.
+ *
+ * @param {(feature: string) => object|null} resolveDisplay
+ * @returns {{shown: string[], hidden: string[]}}
+ */
+function reconcile(resolveDisplay) {
+  const shown = [];
+  const hidden = [];
+
+  for (const [feature, win] of Array.from(_openWindows.entries())) {
+    if (!win || win.isDestroyed()) {
+      _openWindows.delete(feature);
+      _windowMeta.delete(feature);
+      continue;
+    }
+    const meta = _windowMeta.get(feature) || {};
+    let display = null;
+    try {
+      display = resolveDisplay(feature);
+    } catch (e) {
+      console.warn(`[windowFactory] resolveDisplay(${feature}) falhou:`, e?.message || e);
+    }
+
+    if (!display) {
+      if (win.isVisible()) {
+        try { win.hide(); } catch (_) { /* ignore */ }
+        hidden.push(feature);
+      }
+      continue;
+    }
+
+    const wasHidden = !win.isVisible();
+    _placeOnDisplay(win, display, meta);
+    if (wasHidden) shown.push(feature);
+  }
+
+  return { shown, hidden };
 }
 
 /**
@@ -371,4 +449,4 @@ function getWindow(feature) {
   return w && !w.isDestroyed() ? w : null;
 }
 
-module.exports = { openOnMonitor, close, listOpen, getWindow, setMainWindow };
+module.exports = { openOnMonitor, close, listOpen, getWindow, setMainWindow, reconcile };

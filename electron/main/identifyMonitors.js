@@ -8,8 +8,19 @@
  */
 
 const { BrowserWindow, screen } = require("electron");
+const { orderDisplays } = require("./displays.js");
 
 const _activeWindows = [];
+
+/** Escapa texto vindo do sistema antes de injetá-lo no HTML do overlay. */
+function _escapeHtml(text) {
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
 /**
  * Mostra um overlay "Monitor N" em cada display por durationMs milissegundos.
@@ -21,7 +32,9 @@ function show(durationMs = 5000) {
   // Fechar overlays anteriores se houver
   hide();
 
-  const allDisplays = screen.getAllDisplays();
+  // Mesma ordem geométrica de displays.list(), senão o número mostrado aqui
+  // não corresponderia ao que o usuário escolhe nas Opções.
+  const allDisplays = orderDisplays(screen.getAllDisplays());
   const primary = screen.getPrimaryDisplay();
 
   // Card pequeno no canto inferior direito de cada monitor (não ocupa a tela toda).
@@ -53,7 +66,9 @@ function show(durationMs = 5000) {
     win.setIgnoreMouseEvents(true);
 
     const isPrimary = display.id === primary.id;
-    const label = isPrimary ? " — Principal" : "";
+    const suffix = isPrimary ? " — Principal" : "";
+    // Nome real do aparelho, quando o sistema informa (vazio no Linux/X11).
+    const name = typeof display.label === "string" ? display.label.trim() : "";
     const html = `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><style>
   html, body {
@@ -80,8 +95,18 @@ function show(durationMs = 5000) {
     padding: 16px;
     animation: pulse 1.5s ease-in-out infinite;
   }
+  .name {
+    font-size: 1.05rem;
+    font-weight: 500;
+    margin-top: 4px;
+    text-align: center;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .num {
-    font-size: 7rem;
+    font-size: 5.5rem;
     font-weight: 100;
     line-height: 1;
     text-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
@@ -101,7 +126,8 @@ function show(durationMs = 5000) {
 <body>
   <div class="card">
     <div class="num">${i + 1}</div>
-    <div class="label">${display.bounds.width} \xD7 ${display.bounds.height}${label}</div>
+    ${name ? `<div class="name">${_escapeHtml(name)}</div>` : ""}
+    <div class="label">${display.bounds.width} \xD7 ${display.bounds.height}${suffix}</div>
   </div>
 </body></html>`;
 

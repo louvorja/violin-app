@@ -58,7 +58,33 @@ declare global {
       cancel: () => void;
       checkFiles: (files: unknown) => Promise<unknown>;
     };
-    displays: Record<string, unknown>;
+    displays: {
+      list: () => Promise<unknown[]>;
+      getPreferred: (feature: string) => Promise<{ id: number; bounds: unknown } | null>;
+      setPreferred: (feature: string, displayId: number | string | null) => Promise<void>;
+      getPrefs: () => Promise<Record<string, number | string | null>>;
+      getRoles: () => Promise<
+        {
+          role: string;
+          status: string;
+          reason: string | null;
+          displayId: number | null;
+        }[]
+      >;
+      setRole: (role: string, displayId: number | null) => Promise<boolean>;
+      getFeatureRole: (feature: string) => Promise<string | null>;
+      setFeatureRole: (feature: string, role: string | null) => Promise<boolean>;
+      identify: (durationMs?: number) => Promise<number>;
+      /** Assina mudanças de monitor. Devolve a função de cleanup. */
+      onChanged: (
+        callback: (payload: {
+          displays: unknown[];
+          promoted: string[];
+          hidden: string[];
+          shown: string[];
+        }) => void
+      ) => () => void;
+    };
     windows: Record<string, unknown>;
     httpServer: Record<string, unknown>;
     shortcuts: Record<string, unknown>;

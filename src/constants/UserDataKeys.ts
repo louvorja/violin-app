@@ -259,12 +259,18 @@ export const KEYS = {
     OPEN_OPERATOR: `${OPTIONS}.open_operator`,
     DISPLAYS: {
       PREFERRED: `${OPTIONS_DISPLAYS}.monitor_preferred`,
+      /** Papel de monitor escolhido por módulo (web/PWA; no desktop vive em roles). */
+      FEATURE_ROLES: `${OPTIONS_DISPLAYS}.features`,
+      /** Monitor atribuído a cada papel. */
+      ROLES: `${OPTIONS_DISPLAYS}.roles`,
       PRIMARY: `${OPTIONS_DISPLAYS}.monitor_primary`,
       SECONDARY: `${OPTIONS_DISPLAYS}.monitor_secondary`,
       ONLINE_VIDEO: `${OPTIONS_DISPLAYS}.online_video`,
       ONLINE_VIDEO_RETURN: `${OPTIONS_DISPLAYS}.online_video_return`,
     },
     START_WITH_OS: `${OPTIONS}.start_with_os`,
+    TELEMETRY: `${OPTIONS}.telemetry`,
+    TELEMETRY_ID: `${OPTIONS}.telemetry_id`,
     YOUTUBE_ACTION: `${OPTIONS}.youtube_action`,
     DEV: {
       DEVTOOLS_MAIN_WINDOW: `${OPTIONS}.dev.devtools_main_window`,

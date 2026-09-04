@@ -176,7 +176,23 @@
       "primary": "Tela principal",
       "secondary": "Tela de retorno",
       "primary_short": "Principal",
-      "use_default": "Usar padrão"
+      "use_default": "Usar padrão",
+      "roles": {
+        "projection": "Projeção",
+        "stage": "Retorno (Stage)",
+        "operator": "Operador",
+        "none": "sem monitor",
+        "missing": "monitor desconectado",
+        "ambiguous": "monitores iguais — escolha manual",
+        "inferred": "deduzido"
+      },
+      "assign_hint": "Cada módulo usa um destes papéis. Se o monitor de um papel for desconectado, a janela some em vez de aparecer na sua tela.",
+      "disconnected": "Monitor desconectado — a projeção foi ocultada.",
+      "reconnected": "Monitor reconectado — a projeção voltou.",
+      "web_prompt": "O navegador precisa da sua permissão para listar os monitores conectados.",
+      "web_detect": "Detectar monitores",
+      "web_denied": "Permissão negada. Libere \"Gerenciamento de janelas\" no cadeado da barra de endereços e recarregue.",
+      "web_unsupported": "Este navegador não sabe listar monitores. Use o aplicativo, ou arraste a janela de projeção para o projetor e aperte F11."
     },
     "slides": {
       "title": "Slides de Músicas",
@@ -233,7 +249,9 @@
       "text_case": "Estilo da letra:",
       "case_normal": "Normal",
       "case_capitalize": "Capitalizada",
-      "case_uppercase": "MAIÚSCULA"
+      "case_uppercase": "MAIÚSCULA",
+      "preview": "Prévia do fundo",
+      "remove_image": "Remover imagem"
     },
     "background": {
       "title": "Imagem de Fundo",
@@ -485,6 +503,11 @@
       "open_at": "Projetar utilitários em:",
       "show_return": "Exibir tela de retorno",
       "font": "Fonte de projeção:"
+    },
+    "privacy": {
+      "title": "Privacidade",
+      "telemetry": "Enviar métricas de uso anônimas",
+      "telemetry_hint": "Ajuda a entender quantas pessoas usam o LouvorJA, em quais sistemas e versões. São dados agregados e anônimos: nunca enviamos músicas, versículos ou qualquer conteúdo projetado."
     },
     "dev": {
       "title": "Desenvolvedor",
@@ -1239,5 +1262,9 @@
     "dont_show_again": "Não mostrar novamente",
     "accept": "Usar diretório da versão clássica",
     "decline": "Não usar"
+  },
+  "projection": {
+    "enter_fullscreen": "Entrar em tela cheia",
+    "fullscreen_hint": "Você também pode apertar F11"
   }
 }

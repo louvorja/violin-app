@@ -15,8 +15,14 @@ import Platform from "@/helpers/Platform";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
 import { CategorizedDisplays, DisplayInfo, NativeDisplay, OpenOptions } from "@/types/Projection";
-
-const _webWindows: Record<string, Window | null> = {};
+import {
+  closeWebWindow,
+  featuresForRect,
+  isWebWindowOpen,
+  nudgeIntoRect,
+  openWebWindow,
+} from "@/helpers/projection/webWindow";
+import WebRoles from "@/helpers/projection/WebRoles";
 
 /**
  * Fallback hierárquico — quando uma feature não tem monitor explicitamente
@@ -210,12 +216,44 @@ export async function isOpen(feature: string): Promise<boolean> {
       /* fallback */
     }
   }
-  const w = _webWindows[feature];
-  return !!w && !w.closed;
+  return isWebWindowOpen(feature);
+}
+
+/**
+ * Geometria da tela do papel que a feature usa, para abrir o popup já no
+ * projetor. Síncrona de propósito — ver `openWebWindow`.
+ */
+function _webRectFor(feature: string): { x: number; y: number; width: number; height: number } | null {
+  try {
+    const roles =
+      ($userdata.get(KEYS.OPTIONS.DISPLAYS.FEATURE_ROLES, {}) as Record<string, string>) ?? {};
+    const role = roles[feature];
+    if (!role) return null;
+
+    const screen = WebRoles.screenForRole(role);
+    if (!screen) return null;
+    return {
+      x: screen.avail.x,
+      y: screen.avail.y,
+      width: screen.avail.width,
+      height: screen.avail.height,
+    };
+  } catch {
+    return null;
+  }
 }
 
 /** Abre a janela de projeção no monitor escolhido (ou no preferido). */
 export async function open(opts: OpenOptions): Promise<void> {
+  // Web/PWA primeiro e sem nenhum `await` antes: qualquer espera aqui consome a
+  // ativação transitória do clique e o popup é bloqueado.
+  if (!Platform.isDesktop) {
+    const rect = _webRectFor(opts.feature);
+    const win = openWebWindow(opts.feature, opts.route, featuresForRect(rect));
+    nudgeIntoRect(win, rect);
+    return;
+  }
+
   const monitorId = opts.monitorId ?? (await getPreferredMonitor(opts.feature));
   const fullscreen = opts.fullscreen ?? true;
   const alwaysOnTop = opts.alwaysOnTop ?? false;
@@ -238,16 +276,8 @@ export async function open(opts: OpenOptions): Promise<void> {
     }
   }
 
-  // Fallback web/PWA
-  const existing = _webWindows[opts.feature];
-  if (existing && !existing.closed) {
-    existing.focus();
-    return;
-  }
-  const features = fullscreen
-    ? "popup=yes,noopener,noreferrer,width=1280,height=720,toolbar=no,location=no,menubar=no,status=no,scrollbars=no,resizable=yes"
-    : "popup=yes,noopener,noreferrer,width=1280,height=720,toolbar=no,location=no,menubar=no,status=no,scrollbars=no,resizable=yes";
-  _webWindows[opts.feature] = window.open(opts.route, `louvorja_${opts.feature}`, features);
+  // A API desktop falhou — último recurso.
+  openWebWindow(opts.feature, opts.route);
 }
 
 /** Fecha a janela da feature, se estiver aberta. */
@@ -260,9 +290,7 @@ export async function close(feature: string): Promise<void> {
       /* noop */
     }
   }
-  const w = _webWindows[feature];
-  if (w && !w.closed) w.close();
-  _webWindows[feature] = null;
+  closeWebWindow(feature);
 }
 
 /** Toggle aberto/fechado, com monitor opcional. Útil para botão de projeção. */

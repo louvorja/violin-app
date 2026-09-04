@@ -176,7 +176,23 @@
       "primary": "Pantalla principal",
       "secondary": "Pantalla de Retorno",
       "primary_short": "Principal",
-      "use_default": "Usar predeterminado"
+      "use_default": "Usar predeterminado",
+      "roles": {
+        "projection": "Proyección",
+        "stage": "Retorno (Stage)",
+        "operator": "Operador",
+        "none": "sin monitor",
+        "missing": "monitor desconectado",
+        "ambiguous": "monitores iguales — elección manual",
+        "inferred": "deducido"
+      },
+      "assign_hint": "Cada módulo usa uno de estos roles. Si el monitor de un rol se desconecta, la ventana desaparece en lugar de aparecer en su pantalla.",
+      "disconnected": "Monitor desconectado — la proyección fue ocultada.",
+      "reconnected": "Monitor reconectado — la proyección volvió.",
+      "web_prompt": "El navegador necesita su permiso para listar los monitores conectados.",
+      "web_detect": "Detectar monitores",
+      "web_denied": "Permiso denegado. Habilite \"Gestión de ventanas\" en el candado de la barra de direcciones y recargue.",
+      "web_unsupported": "Este navegador no sabe listar monitores. Use la aplicación, o arrastre la ventana de proyección al proyector y pulse F11."
     },
     "slides": {
       "title": "Diapositivas de Músicas",
@@ -233,7 +249,9 @@
       "text_case": "Estilo de letra:",
       "case_normal": "Normal",
       "case_capitalize": "Capitalizada",
-      "case_uppercase": "MAYÚSCULA"
+      "case_uppercase": "MAYÚSCULA",
+      "preview": "Vista previa del fondo",
+      "remove_image": "Quitar imagen"
     },
     "background": {
       "title": "Imagen de Fondo",
@@ -485,6 +503,11 @@
       "open_at": "Proyectar utilidades en:",
       "show_return": "Mostrar pantalla de retorno",
       "font": "Fuente de proyección:"
+    },
+    "privacy": {
+      "title": "Privacidad",
+      "telemetry": "Enviar métricas de uso anónimas",
+      "telemetry_hint": "Ayuda a entender cuántas personas usan LouvorJA, en qué sistemas y versiones. Son datos agregados y anónimos: nunca enviamos canciones, versículos ni ningún contenido proyectado."
     },
     "dev": {
       "title": "Desarrollador",
@@ -1239,5 +1262,9 @@
     "dont_show_again": "No mostrar de nuevo",
     "accept": "Usar directorio de la versión clásica",
     "decline": "No usar"
+  },
+  "projection": {
+    "enter_fullscreen": "Entrar en pantalla completa",
+    "fullscreen_hint": "También puede pulsar F11"
   }
 }

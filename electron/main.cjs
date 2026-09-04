@@ -17,7 +17,7 @@
  *   D6: globalShortcut
  */
 
-const { app, BrowserWindow, ipcMain, session, dialog } = require("electron");
+const { app, BrowserWindow, ipcMain, screen, session, dialog } = require("electron");
 const path = require("path");
 const fs = require("fs-extra");
 
@@ -28,6 +28,9 @@ const protocolModule = require("./main/protocol.js");
 const jsonCache = require("./main/jsonCache.js");
 const downloader = require("./main/download/index.js");
 const displays = require("./main/displays.js");
+const monitorConfig = require("./main/monitorConfig.js");
+const displayManager = require("./main/displayManager.js");
+const monitorIdentity = require("./main/monitorIdentityBridge.cjs");
 const windowFactory = require("./main/windowFactory.js");
 const identifyMonitors = require("./main/identifyMonitors.js");
 const httpServer = require("./main/httpServer/index.js");
@@ -198,8 +201,93 @@ if (process.platform === "linux") {
   app.commandLine.appendSwitch("no-sandbox");
 }
 
+// ---------------------------------------------------------------------------
+// Monitores — migração v2 e ponte com o user_data vivo
+// ---------------------------------------------------------------------------
+
+/** Persiste `_userDataMain` e avisa as janelas abertas. */
+function _persistUserDataFromMain(path) {
+  try {
+    userStore.write("user_data", _userDataMain);
+  } catch (e) {
+    console.warn("[main] Falha ao persistir user_data:", e?.message || e);
+    return;
+  }
+  const payload = { path, value: _walkGet(_userDataMain, path) };
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (!w || w.isDestroyed()) continue;
+    try { w.webContents.send("userdata:patch", payload); } catch (_) { /* ignore */ }
+  }
+}
+
+function _walkGet(obj, path) {
+  return String(path).split(".").reduce((cur, key) => (cur == null ? cur : cur[key]), obj);
+}
+
+/**
+ * Migra as preferências de monitor para o formato v2 e promove as pendências.
+ *
+ * Roda depois do `screen` estar disponível e ANTES de qualquer janela de
+ * projeção abrir, para que elas já usem o resolvedor novo.
+ */
+async function _bootstrapMonitorConfig() {
+  // O algoritmo de identidade é ESM (compartilhado com o renderer); carregar
+  // antes de qualquer janela de projeção abrir.
+  await monitorIdentity.init();
+
+  const bridge = {
+    getUserData: () => _userDataMain,
+    saveUserData: () => _persistUserDataFromMain("options.displays"),
+  };
+  displays.configure(bridge);
+  displayManager.init(bridge);
+
+  try {
+    const prefs = userStore.read("monitor_prefs") || {};
+    const connected = screen.getAllDisplays();
+    const alreadyV2 = !!monitorConfig.getConfig(_userDataMain);
+
+    if (!alreadyV2 && Object.keys(prefs).length > 0) {
+      // Backup antes da primeira escrita. `monitor_prefs` em si nunca é
+      // alterado nem apagado, então um build antigo continua funcionando.
+      try {
+        if (!userStore.read("monitor_prefs_bak_v1")) {
+          userStore.write("monitor_prefs_bak_v1", prefs);
+        }
+      } catch (e) {
+        console.warn("[monitors] Backup do formato antigo falhou:", e?.message || e);
+      }
+    }
+
+    const migration = monitorConfig.migrateIfNeeded({
+      userData: _userDataMain, prefs, connected,
+    });
+    if (migration.error) {
+      console.warn("[monitors] Migração falhou, usando resolvedor antigo:", migration.error.message);
+    }
+
+    const reconciliation = monitorConfig.reconcile({ userData: _userDataMain, connected });
+    if (migration.changed || reconciliation.changed) {
+      _persistUserDataFromMain("options.displays");
+    }
+
+    const config = monitorConfig.getConfig(_userDataMain);
+    if (config) {
+      const states = Object.entries(config.roles).map(([role, entry]) => `${role}=${entry.state}`);
+      console.log(
+        `[monitors] ${connected.length} monitor(es); papéis: ${states.join(", ")}` +
+        (reconciliation.promoted.length ? `; promovidos: ${reconciliation.promoted.join(", ")}` : "")
+      );
+    }
+  } catch (e) {
+    console.warn("[monitors] Bootstrap falhou:", e?.message || e);
+  }
+}
+
 app.whenReady().then(async () => {
   configureAppPaths();
+
+  await _bootstrapMonitorConfig();
 
   // Limpa Service Workers herdados de execuções anteriores em modo PWA/dev.
   // Em prod desktop o app é file:// e não usa SW, mas se o usuário já abriu
@@ -249,7 +337,7 @@ app.whenReady().then(async () => {
       "font-src 'self' data: http://localhost:* https://fonts.gstatic.com https://vlibras.gov.br https://cdn.jsdelivr.net; " +
       "img-src 'self' blob: data: https: http://localhost:* https://*.ytimg.com https://*.youtube.com; " +
       "media-src 'self' blob: https: http://localhost:* https://*.googlevideo.com; " +
-      "connect-src 'self' blob: http://localhost:* ws://localhost:* https://api.louvorja.com.br https://*.louvorja.com.br https://api.louvorja.workers.dev https://*.youtube.com https://*.ytimg.com https://*.googlevideo.com https://*.googleapis.com https://fonts.gstatic.com https://www.gstatic.com https://*.doubleclick.net https://www.google.com https://*.google.com https://traducao2.vlibras.gov.br https://dicionario2.vlibras.gov.br https://repositorio.vlibras.gov.br https://cdn.jsdelivr.net; " +
+      "connect-src 'self' blob: http://localhost:* ws://localhost:* https://api.louvorja.com.br https://*.louvorja.com.br https://api.louvorja.workers.dev https://us.i.posthog.com https://us-assets.i.posthog.com https://*.youtube.com https://*.ytimg.com https://*.googlevideo.com https://*.googleapis.com https://fonts.gstatic.com https://www.gstatic.com https://*.doubleclick.net https://www.google.com https://*.google.com https://traducao2.vlibras.gov.br https://dicionario2.vlibras.gov.br https://repositorio.vlibras.gov.br https://cdn.jsdelivr.net; " +
       "frame-src https://www.youtube.com https://www.youtube-nocookie.com https://vlibras.gov.br; " +
       "worker-src 'self' blob:;";
     session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
@@ -686,6 +774,22 @@ ipcMain.handle("displays:setPreferred", (_event, feature, displayId) => {
 
 /** Retorna todas as preferências salvas de monitor por feature */
 ipcMain.handle("displays:getPrefs", () => displays.getPrefs());
+
+/** Estado de cada papel (Projeção / Retorno / Operador) */
+ipcMain.handle("displays:getRoles", () => displays.getRoles());
+
+/** Atribui um monitor a um papel */
+ipcMain.handle("displays:setRole", (_event, role, displayId) =>
+  displays.setRole(role, displayId ?? null)
+);
+
+/** Papel efetivo de uma feature */
+ipcMain.handle("displays:getFeatureRole", (_event, feature) => displays.getFeatureRole(feature));
+
+/** Define qual papel uma feature usa */
+ipcMain.handle("displays:setFeatureRole", (_event, feature, role) =>
+  displays.setFeatureRole(feature, role ?? null)
+);
 
 /** Abre janela de projeção em um monitor específico */
 ipcMain.handle("windows:open", (_event, options) => {

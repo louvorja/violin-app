@@ -16,16 +16,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watchEffect } from "vue";
+import { onMounted, ref, watchEffect } from "vue";
 import { useI18n } from "vue-i18n";
 import MonitorSelect from "@/components/inputs/MonitorSelect.vue";
 import { useDisplays } from "@/composables/useDisplays";
 import { useUserDataStore } from "@/stores/userDataStore";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
+import { PROJECTION_TYPE } from "@/constants/Projection";
 
 const { t } = useI18n();
-const { getPreferred, setPreferred } = useDisplays();
+const { getFeatureRole, setFeatureRole } = useDisplays();
 
 const showReturn = ref(false);
 
@@ -34,14 +35,25 @@ watchEffect(() => {
     useUserDataStore().$state.options?.online_video_projection?.show_return === true;
 });
 
-const videoMonitor = computed(() => getPreferred(KEYS.OPTIONS.DISPLAYS.ONLINE_VIDEO) ?? "");
+// Antes eram passadas chaves de UserData ("options.displays.online_video") onde
+// se esperava um nome de feature, então a preferência era gravada numa chave
+// que nenhum leitor consultava.
+const videoMonitor = ref<string>("");
+const returnMonitor = ref<string>("");
+
+onMounted(async () => {
+  videoMonitor.value = (await getFeatureRole(PROJECTION_TYPE.ONLINE_VIDEO)) ?? "";
+  returnMonitor.value = (await getFeatureRole(PROJECTION_TYPE.ONLINE_VIDEO_RETURN)) ?? "";
+});
+
 function setVideoMonitor(val: string) {
-  setPreferred(KEYS.OPTIONS.DISPLAYS.ONLINE_VIDEO, val);
+  videoMonitor.value = val;
+  setFeatureRole(PROJECTION_TYPE.ONLINE_VIDEO, val || null);
 }
 
-const returnMonitor = computed(() => getPreferred(KEYS.OPTIONS.DISPLAYS.ONLINE_VIDEO_RETURN) ?? "");
 function setReturnMonitor(val: string) {
-  setPreferred(KEYS.OPTIONS.DISPLAYS.ONLINE_VIDEO_RETURN, val);
+  returnMonitor.value = val;
+  setFeatureRole(PROJECTION_TYPE.ONLINE_VIDEO_RETURN, val || null);
 }
 
 function toggleReturn(e: Event) {

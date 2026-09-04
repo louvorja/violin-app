@@ -219,8 +219,26 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
     setPreferred: (feature, displayId) => ipcRenderer.invoke("displays:setPreferred", feature, displayId),
     /** Retorna todas as preferências salvas de monitor por feature */
     getPrefs: () => ipcRenderer.invoke("displays:getPrefs"),
+    /** Estado de cada papel (Projeção / Retorno / Operador) */
+    getRoles: () => ipcRenderer.invoke("displays:getRoles"),
+    /** Atribui um monitor a um papel */
+    setRole: (role, displayId) => ipcRenderer.invoke("displays:setRole", role, displayId),
+    /** Papel efetivo de uma feature */
+    getFeatureRole: (feature) => ipcRenderer.invoke("displays:getFeatureRole", feature),
+    /** Define qual papel uma feature usa (null = mesma janela) */
+    setFeatureRole: (feature, role) =>
+      ipcRenderer.invoke("displays:setFeatureRole", feature, role),
     /** Mostra overlays de identificação em todos os monitores por durationMs */
     identify: (durationMs) => ipcRenderer.invoke("displays:identify", durationMs),
+    /**
+     * Assina mudanças de monitor (conectar, desconectar, mudar resolução).
+     * Devolve a função de cleanup.
+     */
+    onChanged: (callback) => {
+      const handler = (_event, payload) => callback(payload);
+      ipcRenderer.on("displays:changed", handler);
+      return () => ipcRenderer.off("displays:changed", handler);
+    },
   },
 
   windows: {
