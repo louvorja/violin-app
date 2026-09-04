@@ -90,3 +90,10 @@
 .w-100 {
   width: 100% !important;
 }
+
+/* Empurra o que vem depois para a outra ponta de um container flex — é o
+   equivalente do v-spacer, e não merece um componente só para isso. */
+.lj-u-spacer {
+  flex: 1 1 auto;
+  min-width: 0;
+}

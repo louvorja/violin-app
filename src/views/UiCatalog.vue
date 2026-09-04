@@ -151,6 +151,20 @@
             </div>
           </LjCard>
 
+          <LjCard title="Avisos">
+            <div class="cat-stack">
+              <LjAlert variant="info" text="A verificação de integridade roda ao iniciar." />
+              <LjAlert variant="success" title="Tudo certo" text="148 músicas conferidas." />
+              <LjAlert variant="warning" text="Nenhum monitor secundário detectado." />
+              <LjAlert
+                variant="danger"
+                title="Falha ao baixar"
+                text="Não foi possível alcançar o servidor de coletâneas."
+                dismissible
+              />
+            </div>
+          </LjCard>
+
           <LjEmpty
             :icon="ICONS.MODULES.FAVORITES"
             title="Nenhum favorito ainda"
@@ -160,6 +174,29 @@
               Adicionar música
             </LjButton>
           </LjEmpty>
+        </div>
+      </section>
+
+      <!-- ══════════ Divisórias ══════════ -->
+      <section class="cat__section">
+        <h2 class="cat__h2">Divisórias</h2>
+        <p class="cat__lead">
+          Decorativa por padrão — sai da árvore de acessibilidade, porque anunciar "separador" entre
+          cada par de itens só atrapalha quem usa leitor de tela. Marque
+          <code>semantic</code>
+          quando ela de fato separa grupos.
+        </p>
+        <div class="cat__divider-demo">
+          <span>Antes</span>
+          <LjDivider />
+          <span>Depois</span>
+        </div>
+        <div class="cat__row" style="margin-top: 16px">
+          <span>Esquerda</span>
+          <LjDivider vertical />
+          <span>Meio</span>
+          <LjDivider vertical />
+          <span>Direita</span>
         </div>
       </section>
 
@@ -290,7 +327,9 @@ import {
   LjButton,
   LjCard,
   LjCheckbox,
+  LjAlert,
   LjChip,
+  LjDivider,
   LjEmpty,
   LjField,
   LjInput,
@@ -544,6 +583,19 @@ onMounted(() => {
 .cat__vs-tag--old {
   background: var(--lj-danger-soft);
   color: var(--lj-alert-error-color, var(--lj-danger));
+}
+
+.cat-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-4);
+}
+
+.cat__divider-demo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-4);
+  max-width: 380px;
 }
 
 .cat__tabbody {

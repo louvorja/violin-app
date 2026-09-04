@@ -632,7 +632,8 @@ Veja todos lado a lado, nos 10 temas, na rota **`/ui`**.
 ### Sem biblioteca — markup + CSS sobre os tokens
 
 `LjButton` · `LjInput` · `LjTextarea` · `LjCheckbox` · `LjSwitch` · `LjField` ·
-`LjCard` · `LjChip` · `LjSpinner` · `LjProgress` · `LjSkeleton` · `LjEmpty`
+`LjCard` · `LjChip` · `LjSpinner` · `LjProgress` · `LjSkeleton` · `LjEmpty` ·
+`LjAlert` · `LjDivider` · `LjToast`
 
 ### Sobre Reka UI — onde há comportamento acessível
 
@@ -703,8 +704,21 @@ passasse o mouse por um botão da barra.
 contrato** — visualmente indistinguíveis dos primitivos enquanto a migração
 avança. Ao migrar o último deles, o arquivo sai junto.
 
+Não existe `LjSpacer`: o equivalente do `v-spacer` é a classe utilitária
+`.lj-u-spacer`, e um componente para `flex: 1` seria cerimônia sem ganho.
+
 Componentes já migrados: `SelectFont`, `MonitorSelect`, `FieldSelect`,
-`ProgressBar`, `ShellTools`, `ClassicVersionDialog`.
+`ProgressBar`, `ShellTools`, `ClassicVersionDialog`, `PlayerActions`,
+`ReleaseNotesDialog`, `UpdateAvailableDialog`, `CategoryManagerDialog`,
+`LiturgyManageDialog`, `Screen`, `RibbonScreenButton`, `AppMenuSobre`,
+`collections/Index`, `OverlaySlotEditor`.
+
+### Uma armadilha de prop que já custou caro
+
+Nunca use `false` como sentinela numa prop que também aceita string
+(`icon?: string | false`). O Vue faz _casting_ de Boolean: uma prop cujo tipo
+inclui `Boolean` nasce `false` quando não é passada, e o ramo "desligado" vale
+sempre. Use `null` (`icon?: string | null`).
 
 ---
 

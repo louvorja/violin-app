@@ -11,10 +11,12 @@
  */
 
 /* — sem biblioteca — */
+export { default as LjAlert } from "./LjAlert.vue";
 export { default as LjButton } from "./LjButton.vue";
 export { default as LjCard } from "./LjCard.vue";
 export { default as LjCheckbox } from "./LjCheckbox.vue";
 export { default as LjChip } from "./LjChip.vue";
+export { default as LjDivider } from "./LjDivider.vue";
 export { default as LjEmpty } from "./LjEmpty.vue";
 export { default as LjField } from "./LjField.vue";
 export { default as LjInput } from "./LjInput.vue";
