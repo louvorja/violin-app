@@ -48,7 +48,7 @@ const fp = useFileProjection();
 const infoIcon = computed(() => {
   if (fp.currentType.value === "announcements")
     return ICONS.MODULES.ANNOUNCEMENTS || "mdi-bullhorn";
-  return ICONS.MEDIA.VIDEO || "mdi-file-play";
+  return ICONS.MEDIA.VIDEO;
 });
 
 function onKeydown(e: KeyboardEvent): void {

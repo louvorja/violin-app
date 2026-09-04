@@ -46,7 +46,9 @@ export const ICONS = {
   },
   BIBLE: {
     BIBLE: "mdi-book-cross",
-    BOOK_BIBLE: "mdi-book-bible",
+    // mdi-book-bible não existe no acervo instalado (7.4.47) — renderizava
+    // vazio nos cabeçalhos do diálogo de inicialização.
+    BOOK_BIBLE: "mdi-book-cross",
     BOOK_OPEN: "mdi-book-open-variant",
     BOOK_OPEN_PAGE: "mdi-book-open-page-variant",
     BOOK_SEARCH: "mdi-book-search",
@@ -105,8 +107,6 @@ export const ICONS = {
     ADD: "mdi-music-note-plus",
     AUDIO: "mdi-music",
     AUDIO_PLAYER: "mdi-disc-player",
-    AUDIOBOOK: "mdi-audiobook",
-    AUDIOBOOK_OUTLINE: "mdi-audiobook-outline",
     AUDIO_VIDEO: "mdi-audio-video",
     BLUR: "mdi-blur",
     CAMERA: "mdi-camera",
@@ -184,7 +184,6 @@ export const ICONS = {
   },
   PLAYER: {
     FAST_FORWARD: "mdi-fast-forward",
-    FAST_REWIND: "mdi-fast-rewind",
     FORWARD_10: "mdi-fast-forward-10",
     FULLSCREEN: "mdi-fullscreen",
     FULLSCREEN_EXIT: "mdi-fullscreen-exit",
