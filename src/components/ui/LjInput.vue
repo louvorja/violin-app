@@ -6,6 +6,7 @@
     <Icon v-if="icon" :icon="icon" :size="iconSize" class="lj-input__icon" />
     <input
       :id="resolvedId"
+      ref="inputEl"
       v-bind="$attrs"
       :value="modelValue"
       :type="type"
@@ -31,7 +32,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, nextTick, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
@@ -51,6 +52,14 @@ const props = withDefaults(
     disabled?: boolean;
     invalid?: boolean;
     clearable?: boolean;
+    /**
+     * Foca o campo ao montar.
+     *
+     * Não é o atributo `autofocus` do HTML: o navegador o ignora em elementos
+     * inseridos depois do carregamento, que é sempre o caso dentro de um
+     * diálogo. Aqui o foco é dado de fato, no próximo tick.
+     */
+    autofocus?: boolean;
   }>(),
   { size: "md", type: "text" }
 );
@@ -72,6 +81,17 @@ const isInvalid = computed(() => props.invalid || field?.invalid.value || false)
 defineOptions({ inheritAttrs: false });
 
 const iconSize = computed(() => ICON_SIZE[props.size]);
+
+const inputEl = ref<HTMLInputElement | null>(null);
+
+onMounted(async () => {
+  if (!props.autofocus) return;
+  await nextTick();
+  inputEl.value?.focus();
+});
+
+/** Permite ao consumidor focar o campo sob demanda. */
+defineExpose({ focus: () => inputEl.value?.focus() });
 
 function onInput(event: Event): void {
   emit("update:modelValue", (event.target as HTMLInputElement).value);

@@ -1,165 +1,167 @@
 <template>
-  <v-dialog
+  <LjDialog
     :model-value="modelValue"
-    max-width="780"
+    :title="t('schedules.title')"
+    :icon="ICONS.CALENDAR.MULTISELECT"
+    size="lg"
     @update:model-value="$emit('update:modelValue', $event)"
-    @keydown.escape="$emit('update:modelValue', false)"
   >
-    <v-card class="lit-dialog">
-      <div class="lit-dialog-title">
-        <v-icon icon="mdi-calendar-multiselect" size="18" />
-        <span>{{ t("schedules.title") }}</span>
-        <v-spacer />
-        <button class="lit-card-action" @click="$emit('update:modelValue', false)">
-          <v-icon icon="mdi-close" size="14" />
-        </button>
-      </div>
+    <div class="ls-panes">
+      <aside class="ls-pane ls-pane--left">
+        <div class="ls-head">
+          <span>{{ t("schedules.categories") }}</span>
+          <span class="lj-u-spacer" />
+          <LjButton
+            size="sm"
+            variant="ghost"
+            icon-only
+            :icon="ICONS.ACTIONS.ADD"
+            :title="t('schedules.add_category')"
+            :aria-label="t('schedules.add_category')"
+            @click="addCategory"
+          />
+        </div>
 
-      <div class="lit-schedules">
-        <aside class="lit-schedules-left">
-          <div class="lit-schedules-head">
-            <span>{{ t("schedules.categories") }}</span>
-            <button
-              class="lit-card-action"
-              :title="t('schedules.add_category')"
-              @click="addCategory"
-            >
-              <v-icon icon="mdi-plus" size="14" />
-            </button>
+        <ul class="ls-cats">
+          <li v-if="scheduledCategories.length === 0" class="ls-cats__hint">
+            {{ t("schedules.no_categories") }}
+          </li>
+          <li
+            v-for="c in scheduledCategories"
+            :key="c.id"
+            class="ls-cat"
+            :class="{ 'is-active': activeCatId === c.id }"
+            @click="setActiveCatId(c.id)"
+          >
+            <input
+              type="color"
+              class="ls-cat__color"
+              :value="c.cor || DEFAULT_CATEGORY_COLOR"
+              :title="t('actions.change_color')"
+              :aria-label="t('actions.change_color')"
+              @input="updateCatColor(c.id, ($event.target as HTMLInputElement).value)"
+            />
+
+            <LjInput
+              v-if="editingCatId === c.id"
+              v-model="editingCatName"
+              size="sm"
+              class="ls-cat__input"
+              @blur="doSaveCatName(c.id)"
+              @keyup.enter="doSaveCatName(c.id)"
+              @keyup.esc="editingCatId = null"
+            />
+            <span v-else class="ls-cat__name" @dblclick="startEditingCategory(c)">
+              {{ c.nome }}
+            </span>
+
+            <span class="lj-u-spacer" />
+
+            <LjButton
+              size="sm"
+              variant="ghost"
+              icon-only
+              :icon="ICONS.ACTIONS.EDIT"
+              :title="t('actions.edit')"
+              :aria-label="t('actions.edit')"
+              @click.stop="startEditingCategory(c)"
+            />
+            <LjButton
+              size="sm"
+              variant="ghost"
+              icon-only
+              class="ls-danger"
+              :icon="ICONS.ACTIONS.CLOSE"
+              :title="t('actions.remove')"
+              :aria-label="t('actions.remove')"
+              @click.stop="removeCategory(c.id)"
+            />
+          </li>
+        </ul>
+      </aside>
+
+      <section class="ls-pane ls-pane--right">
+        <div class="ls-head">
+          <span v-if="activeCategory">{{ activeCategory.nome }}</span>
+          <span v-else>{{ t("schedules.select_category") }}</span>
+          <span class="lj-u-spacer" />
+          <LjButton
+            v-if="activeCategory"
+            size="sm"
+            variant="primary"
+            :icon="ICONS.ACTIONS.ADD"
+            @click="addScheduledItem"
+          >
+            {{ t("schedules.add_item") }}
+          </LjButton>
+        </div>
+
+        <div v-if="!activeCategory" class="ls-empty">
+          <LjEmpty
+            :icon="ICONS.CALENDAR.MULTISELECT"
+            :title="t('schedules.select_category_hint')"
+          />
+        </div>
+
+        <div v-else class="ls-table">
+          <div class="ls-row ls-row--head">
+            <span></span>
+            <span>{{ t("schedules.date") }}</span>
+            <span>{{ t("schedules.item_name") }}</span>
+            <span>{{ t("schedules.file") }}</span>
+            <span></span>
           </div>
-          <ul class="lit-schedules-cats">
-            <li v-if="scheduledCategories?.length === 0" class="lit-hint pa-2">
-              {{ t("schedules.no_categories") }}
-            </li>
-            <li
-              v-for="c in scheduledCategories"
-              :key="c.id"
-              :class="['lit-schedules-cat', { 'is-active': activeCatId === c.id }]"
-              @click="setActiveCatId(c.id)"
-            >
-              <v-menu :close-on-content-click="false" location="bottom">
-                <template #activator="{ props: colorProps }">
-                  <span
-                    v-bind="colorProps"
-                    class="lit-schedules-cat-color"
-                    :style="{ background: c.cor || '#1976d2' }"
-                  />
-                </template>
-                <v-color-picker
-                  :model-value="c.cor || '#1976d2'"
-                  mode="hex"
-                  hide-inputs
-                  @update:model-value="updateCatColor(c.id, String($event))"
-                />
-              </v-menu>
-              <input
-                v-if="editingCatId === c.id"
-                v-model="editingCatName"
-                class="lit-input"
-                @blur="doSaveCatName(c.id)"
-                @keyup.enter="doSaveCatName(c.id)"
-                @keyup.esc="editingCatId = null"
-              />
-              <span v-else @dblclick="startEditingCategory(c)">{{ c.nome }}</span>
-              <v-spacer />
-              <button
-                class="lit-card-action"
-                :title="t('actions.edit')"
-                @click.stop="startEditingCategory(c)"
-              >
-                <v-icon icon="mdi-pencil" size="12" />
-              </button>
-              <button
-                class="lit-card-action"
-                :title="t('actions.remove')"
-                @click.stop="removeCategory(c.id)"
-              >
-                <v-icon icon="mdi-close" size="12" />
-              </button>
-            </li>
-          </ul>
-        </aside>
 
-        <section class="lit-schedules-right">
-          <div class="lit-schedules-head">
-            <span v-if="activeCategory">{{ activeCategory.nome }}</span>
-            <span v-else>{{ t("schedules.select_category") }}</span>
-            <v-spacer />
-            <button
-              v-if="activeCategory"
-              class="lit-btn lit-btn--primary"
-              @click="addScheduledItem"
-            >
-              <v-icon icon="mdi-plus" size="14" />
-              <span>{{ t("schedules.add_item") }}</span>
-            </button>
+          <div v-if="categoryItems.length === 0" class="ls-empty">
+            <LjEmpty :icon="ICONS.UI.FILE" :title="t('schedules.no_items')" />
           </div>
 
-          <div v-if="!activeCategory" class="lit-empty">
-            {{ t("schedules.select_category_hint") }}
+          <div v-for="it in categoryItems" :key="it.id" class="ls-row">
+            <Icon :icon="fileTypeIcon(String(it.arquivo || ''))" :size="16" class="ls-row__icon" />
+            <!-- `ScheduledItem` indexa campos como `unknown`: o v-model direto
+                 não tipa, então a leitura vira string e a escrita é explícita. -->
+            <LjInput
+              :model-value="String(it.data ?? '')"
+              type="date"
+              size="md"
+              class="ls-cell"
+              @update:model-value="it.data = $event"
+              @change="updateScheduled(it)"
+            />
+            <LjInput
+              :model-value="fileName(String(it.arquivo || ''))"
+              size="md"
+              class="ls-cell"
+              readonly
+            />
+            <LjInput
+              :model-value="String(it.arquivo ?? '')"
+              size="md"
+              class="ls-cell"
+              @update:model-value="it.arquivo = $event"
+              @change="updateScheduled(it)"
+            />
+            <LjButton
+              size="sm"
+              variant="ghost"
+              icon-only
+              class="ls-danger"
+              :icon="ICONS.ACTIONS.CLOSE"
+              :title="t('actions.remove')"
+              :aria-label="t('actions.remove')"
+              @click="removeScheduled(it.id)"
+            />
           </div>
+        </div>
+      </section>
+    </div>
 
-          <div v-else class="lit-schedules-table">
-            <div class="lit-schedules-row lit-schedules-row--head">
-              <div class="col-icon"></div>
-              <div class="col-date">{{ t("schedules.date") }}</div>
-              <div class="col-name">{{ t("schedules.item_name") }}</div>
-              <div class="col-file">{{ t("schedules.file") }}</div>
-              <div class="col-actions"></div>
-            </div>
-            <div v-if="categoryItems?.length === 0" class="lit-empty">
-              {{ t("schedules.no_items") }}
-            </div>
-            <div v-for="it in categoryItems" :key="it.id" class="lit-schedules-row">
-              <div class="col-icon">
-                <v-icon :icon="fileTypeIcon(String(it.arquivo || ''))" size="16" />
-              </div>
-              <div class="col-date">
-                <input
-                  v-model="it.data"
-                  type="date"
-                  class="lit-input"
-                  @change="updateScheduled(it)"
-                />
-              </div>
-              <div class="col-name">
-                <input
-                  :value="fileName(String(it.arquivo || ''))"
-                  type="text"
-                  class="lit-input"
-                  readonly
-                />
-              </div>
-              <div class="col-file">
-                <input
-                  v-model="it.arquivo"
-                  type="text"
-                  class="lit-input"
-                  @change="updateScheduled(it)"
-                />
-              </div>
-              <div class="col-actions">
-                <button
-                  class="lit-card-action"
-                  :title="t('actions.remove')"
-                  @click="removeScheduled(it.id)"
-                >
-                  <v-icon icon="mdi-close" size="12" />
-                </button>
-              </div>
-            </div>
-          </div>
-        </section>
-      </div>
-
-      <div class="lit-dialog-footer">
-        <v-spacer />
-        <button class="lit-btn lit-btn--primary" @click="$emit('update:modelValue', false)">
-          {{ t("actions.close") }}
-        </button>
-      </div>
-    </v-card>
-  </v-dialog>
+    <template #footer>
+      <LjButton size="sm" variant="primary" @click="$emit('update:modelValue', false)">
+        {{ t("actions.close") }}
+      </LjButton>
+    </template>
+  </LjDialog>
 </template>
 
 <script setup lang="ts">
@@ -167,6 +169,9 @@ import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import pt from "../lang/pt.json";
 import es from "../lang/es.json";
+import Icon from "@/components/Icon.vue";
+import { LjButton, LjDialog, LjEmpty, LjInput } from "@/components/ui";
+import { ICONS } from "@/config/Icons";
 import type { ScheduledCategory, ScheduledItem } from "@/types/Liturgy";
 
 const TRANSLATIONS: Record<string, Record<string, unknown>> = { pt, es };
@@ -212,6 +217,9 @@ defineEmits<{ "update:modelValue": [value: boolean] }>();
 const { locale } = useI18n();
 const t = (key: string) => _t(key, locale.value);
 
+/** Cor de uma categoria ainda sem cor escolhida — dado, não token de tema. */
+const DEFAULT_CATEGORY_COLOR = "#1976d2";
+
 const editingCatId = ref<string | number | null>(null);
 const editingCatName = ref("");
 
@@ -230,35 +238,35 @@ function updateCatColor(id: string | number, color: string) {
 }
 
 const FILE_ICON_MAP: Record<string, string> = {
-  mp4: "mdi-video",
-  webm: "mdi-video",
-  mkv: "mdi-video",
-  mov: "mdi-video",
-  avi: "mdi-video",
-  m4v: "mdi-video",
-  mp3: "mdi-music-note",
-  wav: "mdi-music-note",
-  ogg: "mdi-music-note",
-  flac: "mdi-music-note",
-  aac: "mdi-music-note",
-  m4a: "mdi-music-note",
-  opus: "mdi-music-note",
-  wma: "mdi-music-note",
-  jpg: "mdi-image",
-  jpeg: "mdi-image",
-  png: "mdi-image",
-  webp: "mdi-image",
-  gif: "mdi-image",
-  bmp: "mdi-image",
-  heic: "mdi-image",
-  heif: "mdi-image",
-  pdf: "mdi-file-pdf-box",
+  mp4: ICONS.MEDIA.VIDEO_FILE,
+  webm: ICONS.MEDIA.VIDEO_FILE,
+  mkv: ICONS.MEDIA.VIDEO_FILE,
+  mov: ICONS.MEDIA.VIDEO_FILE,
+  avi: ICONS.MEDIA.VIDEO_FILE,
+  m4v: ICONS.MEDIA.VIDEO_FILE,
+  mp3: ICONS.MUSIC.NOTE,
+  wav: ICONS.MUSIC.NOTE,
+  ogg: ICONS.MUSIC.NOTE,
+  flac: ICONS.MUSIC.NOTE,
+  aac: ICONS.MUSIC.NOTE,
+  m4a: ICONS.MUSIC.NOTE,
+  opus: ICONS.MUSIC.NOTE,
+  wma: ICONS.MUSIC.NOTE,
+  jpg: ICONS.MEDIA.IMAGE,
+  jpeg: ICONS.MEDIA.IMAGE,
+  png: ICONS.MEDIA.IMAGE,
+  webp: ICONS.MEDIA.IMAGE,
+  gif: ICONS.MEDIA.IMAGE,
+  bmp: ICONS.MEDIA.IMAGE,
+  heic: ICONS.MEDIA.IMAGE,
+  heif: ICONS.MEDIA.IMAGE,
+  pdf: ICONS.UI.FILE_PDF,
 };
 
 function fileTypeIcon(path?: string): string {
-  if (!path) return "mdi-file-outline";
+  if (!path) return ICONS.UI.FILE;
   const ext = path.split(".").pop()?.toLowerCase() || "";
-  return FILE_ICON_MAP[ext] || "mdi-file-outline";
+  return FILE_ICON_MAP[ext] || ICONS.UI.FILE;
 }
 
 function fileName(path?: string): string {
@@ -267,192 +275,185 @@ function fileName(path?: string): string {
 }
 </script>
 
+<!-- O conteúdo do diálogo vai para um portal, mas é compilado AQUI (slot do
+     consumidor), então o Vue carimba o atributo de escopo nele e `scoped`
+     funciona — inclusive na raiz dos primitivos filhos. -->
 <style scoped>
-.lit-dialog {
-  background: var(--lj-surface-bg);
-  color: var(--lj-text);
-  border-radius: 6px;
-  overflow: hidden;
-}
-.lit-dialog-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.1));
-  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  font-weight: 500;
-}
-.lit-dialog-footer {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  border-top: 1px solid rgba(var(--v-border-color), 0.2);
-  background: rgba(var(--lj-on-surface-ch), 0.02);
-}
-.lit-card-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border: none;
-  border-radius: 3px;
-  background: transparent;
-  cursor: pointer;
-  color: rgba(var(--lj-on-surface-ch), 0.5);
-  flex-shrink: 0;
-}
-.lit-card-action:hover {
-  background: rgba(var(--lj-on-surface-ch), 0.1);
-  color: var(--lj-text);
-}
+/* ── Duas colunas ─────────────────────────────────────────────────────── */
 
-.lit-schedules {
+/* Sem primitivo de painel dividido: o corpo do LjDialog já rola, então a
+   moldura fica aqui e cada coluna rola por conta própria. */
+.ls-panes {
   display: flex;
   min-height: 400px;
   max-height: 60vh;
+  border: 1px solid var(--lj-surface-border);
+  border-radius: var(--lj-radius-md);
+  overflow: hidden;
 }
-.lit-schedules-left {
+
+.ls-pane {
+  display: flex;
+  flex-direction: column;
+}
+
+.ls-pane--left {
   width: 240px;
-  border-right: 1px solid rgba(var(--v-border-color), 0.3);
-  display: flex;
-  flex-direction: column;
+  flex-shrink: 0;
+  border-right: 1px solid var(--lj-surface-border);
 }
-.lit-schedules-right {
+
+.ls-pane--right {
   flex: 1;
-  display: flex;
-  flex-direction: column;
   min-width: 0;
 }
-.lit-schedules-head {
+
+.ls-head {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 10px;
-  background: rgba(var(--lj-on-surface-ch), 0.04);
-  border-bottom: 1px solid rgba(var(--v-border-color), 0.2);
-  font-weight: 500;
-  font-size: 12px;
+  gap: var(--lj-space-3);
+  padding: var(--lj-space-3) var(--lj-space-4);
+  background: var(--lj-surface-bg-soft);
+  border-bottom: 1px solid var(--lj-surface-divider);
+  font-size: var(--lj-text-base);
+  font-weight: var(--lj-weight-medium);
 }
-.lit-schedules-cats {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  overflow-y: auto;
+
+/* ── Lista de categorias ──────────────────────────────────────────────── */
+
+.ls-cats {
   flex: 1;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
 }
-.lit-schedules-cat {
+
+/* Lista densa: uma linha de texto pesa menos que um LjEmpty emoldurado. */
+.ls-cats__hint {
+  padding: var(--lj-space-4);
+  color: var(--lj-text-muted);
+  font-size: var(--lj-text-sm);
+}
+
+.ls-cat {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px 10px;
+  gap: var(--lj-space-2);
+  padding: var(--lj-space-3) var(--lj-space-4);
+  border-bottom: 1px solid var(--lj-surface-divider);
+  color: var(--lj-text);
+  font-size: var(--lj-text-base);
   cursor: pointer;
-  border-bottom: 1px solid rgba(var(--v-border-color), 0.1);
-  font-size: 12px;
 }
-.lit-schedules-cat:hover {
-  background: rgba(var(--lj-on-surface-ch), 0.04);
+
+.ls-cat:hover {
+  background: var(--lj-surface-bg-hover);
 }
-.lit-schedules-cat.is-active {
-  background: rgba(var(--lj-navy-ch), 0.1);
-  color: var(--lj-navy);
-  font-weight: 500;
+
+.ls-cat.is-active {
+  background: var(--lj-ui-accent-soft);
+  color: var(--lj-ui-accent-text);
+  font-weight: var(--lj-weight-medium);
 }
-.lit-schedules-cat-color {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
+
+.ls-cat__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ls-cat__input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Não há primitivo de cor: o <input type="color"> nativo abre o seletor do
+   sistema, como o LiturgyManageDialog já faz. Aqui ele vira a própria
+   bolinha da categoria. */
+.ls-cat__color {
+  width: 14px;
+  height: 14px;
   flex-shrink: 0;
+  padding: 0;
+  background: transparent;
+  border: var(--lj-ui-border);
+  border-radius: 50%;
+  overflow: hidden;
   cursor: pointer;
-  border: 1px solid rgba(0, 0, 0, 0.15);
 }
-.lit-empty {
+
+.ls-cat__color::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.ls-cat__color::-webkit-color-swatch {
+  border: none;
+  border-radius: 50%;
+}
+
+.ls-cat__color:focus-visible {
+  outline: none;
+  box-shadow: var(--lj-ui-focus);
+}
+
+/* ── Tabela de itens agendados ────────────────────────────────────────── */
+
+.ls-table {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+/* Sem primitivo de tabela: grade de colunas fixas sobre os mesmos tokens. */
+.ls-row {
+  display: grid;
+  grid-template-columns: 30px 130px 1fr 1fr 30px;
+  gap: var(--lj-space-2);
+  align-items: center;
+  padding: var(--lj-space-2) var(--lj-space-4);
+  border-bottom: 1px solid var(--lj-surface-divider);
+}
+
+.ls-row--head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--lj-surface-bg-soft);
+  color: var(--lj-text-muted);
+  font-size: var(--lj-text-sm);
+  font-weight: var(--lj-weight-medium);
+  text-transform: uppercase;
+}
+
+.ls-row__icon {
+  color: var(--lj-text-muted);
+}
+
+/* O LjInput é inline-flex e encolhe para o conteúdo: na célula ele ocupa tudo. */
+.ls-cell {
+  width: 100%;
+}
+
+.ls-empty {
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(var(--lj-on-surface-ch), 0.5);
-  font-size: 12px;
-  padding: 20px;
-  text-align: center;
-}
-.lit-schedules-table {
-  flex: 1;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-}
-.lit-schedules-row {
-  display: grid;
-  grid-template-columns: 30px 130px 1fr 1fr 30px;
-  gap: 4px;
-  padding: 4px 8px;
-  border-bottom: 1px solid rgba(var(--v-border-color), 0.1);
-  align-items: center;
-}
-.lit-schedules-row--head {
-  background: rgba(var(--lj-on-surface-ch), 0.04);
-  font-weight: 500;
-  font-size: 11px;
-  text-transform: uppercase;
-  color: rgba(var(--lj-on-surface-ch), 0.7);
-}
-.lit-schedules-row .lit-input {
-  height: 26px;
-  font-size: 12px;
-}
-.lit-input {
-  height: 30px;
-  padding: 0 8px;
-  border: 1px solid rgba(var(--v-border-color), 0.5);
-  border-radius: 3px;
-  background: var(--lj-surface-bg);
-  color: var(--lj-text);
-  font-size: 13px;
-  font-family: inherit;
-  width: 100%;
-  outline: none;
-}
-.lit-input:focus {
-  border-color: var(--lj-navy);
-  box-shadow: var(--lj-shadow-focus-navy-sm);
-}
-.lit-hint {
-  font-size: 11px;
-  color: rgba(var(--lj-on-surface-ch), 0.6);
-  padding: 4px 0;
+  padding: var(--lj-space-6);
 }
 
-/* Botões duplicados localmente */
-.lit-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 28px;
-  padding: 0 10px;
-  border: 1px solid transparent;
-  border-radius: 3px;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  background: rgba(var(--lj-on-surface-ch), 0.06);
-  color: var(--lj-text);
-  transition:
-    background 0.15s,
-    border 0.15s;
-  white-space: nowrap;
-}
-.lit-btn--primary {
-  background: var(--lj-navy);
-  color: var(--lj-white);
-}
-.lit-btn--primary:hover {
-  filter: brightness(1.1);
+/* Ação destrutiva discreta: mantém o fantasma do LjButton e só troca a cor.
+   O seletor descendente supera a regra `.lj-btn--ghost` do próprio primitivo. */
+.ls-cat .ls-danger,
+.ls-row .ls-danger {
+  color: var(--lj-danger);
 }
 
-.pa-2 {
-  padding: 8px;
+.ls-cat .ls-danger:hover,
+.ls-row .ls-danger:hover {
+  background: var(--lj-danger-soft);
+  color: var(--lj-danger);
 }
 </style>

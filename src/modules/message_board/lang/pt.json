@@ -15,7 +15,8 @@
   "data": {
     "empty": "Nenhum recado. Abra a lista para adicionar.",
     "list": "Recados",
-    "showing": "Exibindo na projeção"
+    "showing": "Exibindo na projeção",
+    "esc_hint": "ESC para fechar"
   },
   "ribbon": {
     "title_ctx": "Configurar Recados",

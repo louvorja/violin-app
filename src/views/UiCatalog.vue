@@ -28,6 +28,18 @@
           compartilham altura, traço, raio e anel de foco. É isso que faz a linguagem "conversar" —
           não o estilo individual de cada um.
         </p>
+        <div class="cat__align cat__align--touch">
+          <span class="cat__sizetag">touch · 44px</span>
+          <LjButton size="touch">Botão</LjButton>
+          <LjButton size="touch" variant="primary" :icon="ICONS.ACTIONS.SAVE">Salvar</LjButton>
+          <LjButton size="touch" variant="ghost" :icon="ICONS.ACTIONS.SEARCH" icon-only />
+          <LjInput size="touch" model-value="Campo de texto" style="width: 200px" />
+          <p class="cat__note">
+            Exceção deliberada, fora da escala da shell: vale só onde o dedo opera, como o controle
+            remoto aberto no celular. Aqui o alvo curto custa toque errado no meio do culto.
+          </p>
+        </div>
+
         <div v-for="s in SIZES" :key="s" class="cat__align">
           <span class="cat__sizetag">{{ s }} · {{ HEIGHTS[s] }}</span>
           <LjButton :size="s">Botão</LjButton>
@@ -353,7 +365,12 @@ import {
 } from "@/components/ui";
 
 const SIZES: UiSize[] = ["sm", "md", "lg"];
-const HEIGHTS: Record<UiSize, string> = { sm: "22px", md: "26px", lg: "32px" };
+const HEIGHTS: Record<UiSize, string> = {
+  sm: "22px",
+  md: "26px",
+  lg: "32px",
+  touch: "44px",
+};
 const BUTTON_VARIANTS = ["default", "primary", "ghost", "danger", "subtle"] as const;
 const CHIP_VARIANTS = ["neutral", "primary", "success", "warning", "danger"] as const;
 const THEME_IDS = [...new Set(Object.values(COLOR_THEMES))];
@@ -529,6 +546,19 @@ onMounted(() => {
   gap: var(--lj-space-4);
   padding: var(--lj-space-4) 0;
   border-bottom: 1px dashed var(--lj-surface-border);
+}
+
+.cat__align--touch {
+  border-bottom-style: solid;
+  border-color: var(--lj-surface-border-strong);
+}
+
+.cat__note {
+  flex-basis: 100%;
+  margin: var(--lj-space-2) 0 0 96px;
+  max-width: 62ch;
+  font-size: var(--lj-text-sm);
+  color: var(--lj-text-muted);
 }
 
 .cat__sizetag {

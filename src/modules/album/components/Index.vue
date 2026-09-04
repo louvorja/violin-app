@@ -5,7 +5,6 @@
     :image="module?.data?.url_image ? $path.file(module.data.url_image) : ''"
     closable
     compact
-    title-class="text-h4 font-weight-light"
     :image-size="125"
     :color="module?.data?.color"
     slot-left-class="w-100"

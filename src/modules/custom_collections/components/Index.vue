@@ -1,205 +1,184 @@
 <template>
   <ModuleContainer ref="moduleContainer" :manifest="manifest" @show="onShow" @close="onClose">
     <template #header>
-      <div class="d-flex align-center pa-2" style="gap: 8px; width: 100%">
-        <v-tabs v-model="activeTab" :color="primaryColor" density="compact">
-          <v-tab value="songs">{{ t("tabs.songs") }}</v-tab>
-          <v-tab value="collections">{{ t("tabs.collections") }}</v-tab>
-        </v-tabs>
-        <v-spacer />
+      <div class="cc-toolbar">
+        <LjTabs v-model="activeTab" :tabs="tabItems" :aria-label="t('title')" />
+        <span class="lj-u-spacer" />
         <template v-if="activeTab === 'songs'">
-          <v-btn size="small" prepend-icon="mdi-plus" @click="actNewSong">
+          <LjButton size="sm" :icon="ICONS.ACTIONS.ADD" @click="actNewSong">
             {{ t("actions.new_song") }}
-          </v-btn>
-          <v-btn size="small" variant="tonal" prepend-icon="mdi-import" @click="actImport">
+          </LjButton>
+          <LjButton size="sm" variant="subtle" :icon="ICONS.ACTIONS.IMPORT" @click="actImport">
             {{ t("actions.import") }}
-          </v-btn>
+          </LjButton>
         </template>
-        <template v-else>
-          <v-btn size="small" prepend-icon="mdi-plus" @click="actNewCollection">
-            {{ t("actions.new_collection") }}
-          </v-btn>
-        </template>
+        <LjButton v-else size="sm" :icon="ICONS.ACTIONS.ADD" @click="actNewCollection">
+          {{ t("actions.new_collection") }}
+        </LjButton>
       </div>
     </template>
 
     <!-- Aba: Músicas -->
-    <div v-if="activeTab === 'songs'" class="pa-2">
-      <div v-if="songs.length === 0" class="pa-6 text-center text-disabled">
-        {{ t("data.empty_songs") }}
-      </div>
-      <div v-else class="d-flex flex-wrap" style="gap: 12px">
-        <v-card
+    <div v-if="activeTab === 'songs'" class="cc-pane">
+      <LjEmpty v-if="songs.length === 0" :title="t('data.empty_songs')" />
+      <div v-else class="cc-song-grid">
+        <LjCard
           v-for="s in songs"
           :key="s.id"
-          width="240"
-          class="cursor-pointer"
+          flush
+          class="cc-song"
+          tabindex="0"
           @click="executeSong(s)"
+          @keydown.enter="executeSong(s)"
         >
-          <div class="song-card-preview" :style="songPreviewStyle(s)">
-            <div class="song-card-actions">
-              <v-btn
-                icon
-                size="x-small"
-                variant="flat"
+          <div class="cc-song__preview" :style="songPreviewStyle(s)">
+            <div class="cc-song__actions">
+              <LjButton
+                size="sm"
+                variant="ghost"
+                icon-only
+                :icon="ICONS.ACTIONS.EDIT"
                 :title="t('actions.edit')"
+                :aria-label="t('actions.edit')"
                 @click.stop="openInEditor(s)"
-              >
-                <v-icon>mdi-pencil</v-icon>
-              </v-btn>
-              <v-btn
-                icon
-                size="x-small"
-                variant="flat"
-                color="error"
+              />
+              <LjButton
+                size="sm"
+                variant="ghost"
+                icon-only
+                class="cc-song__danger"
+                :icon="ICONS.ACTIONS.DELETE"
                 :title="t('actions.delete')"
+                :aria-label="t('actions.delete')"
                 @click.stop="confirmDeleteSong(s)"
-              >
-                <v-icon>mdi-delete</v-icon>
-              </v-btn>
-              <v-menu>
-                <template #activator="{ props }">
-                  <v-btn icon size="x-small" variant="flat" v-bind="props" @click.stop>
-                    <v-icon>mdi-dots-vertical</v-icon>
-                  </v-btn>
+              />
+              <LjMenu :items="songMenuItems(s)" side="bottom" align="end">
+                <template #trigger>
+                  <LjButton
+                    size="sm"
+                    variant="ghost"
+                    icon-only
+                    :icon="ICONS.UI.DOTS_VERTICAL"
+                    :title="t('actions.more')"
+                    :aria-label="t('actions.more')"
+                    @click.stop
+                  />
                 </template>
-                <v-list density="compact">
-                  <v-list-item
-                    :title="t('actions.export')"
-                    prepend-icon="mdi-download"
-                    @click="exportSong(s)"
-                  />
-                  <v-list-item
-                    :title="t('actions.rename')"
-                    prepend-icon="mdi-rename"
-                    @click="renameSong(s)"
-                  />
-                </v-list>
-              </v-menu>
+              </LjMenu>
             </div>
-            <div class="song-card-text" :style="{ color: s.slides[0]?.cor_letra || '#fff' }">
+            <div class="cc-song__text" :style="songTextStyle(s)">
               {{ truncate(s.slides[0]?.letra || s.nome, 40) }}
             </div>
           </div>
-          <v-card-title class="text-body-2">
-            <span class="song-card-name">{{ s.nome }}</span>
-          </v-card-title>
-          <v-card-subtitle class="pb-2 text-caption">
-            {{ s.slides.length }} {{ t("labels.slides") }}
-            <span v-if="s.audio_token">· {{ t("labels.audio") }}</span>
-          </v-card-subtitle>
-        </v-card>
+          <div class="cc-song__info">
+            <span class="cc-song__name">{{ s.nome }}</span>
+            <span class="cc-song__meta">
+              {{ s.slides.length }} {{ t("labels.slides") }}
+              <template v-if="s.audio_token">· {{ t("labels.audio") }}</template>
+            </span>
+          </div>
+        </LjCard>
       </div>
     </div>
 
     <!-- Aba: Coletâneas -->
-    <div v-else class="d-flex h-100" style="min-height: 0">
-      <div class="border-e" style="width: 240px; overflow-y: auto; flex-shrink: 0">
-        <v-list density="compact">
-          <v-list-item
+    <div v-else class="cc-collections">
+      <div class="cc-col-list">
+        <ul v-if="collections.length > 0" class="cc-col-items">
+          <li
             v-for="c in collections"
             :key="c.id"
-            :title="c.nome"
-            :subtitle="`${c.song_ids.length} ${t('labels.songs_count')}`"
-            :active="selectedCollectionId === c.id"
-            @click="selectedCollectionId = c.id"
+            class="cc-col-item"
+            :class="{ 'is-active': selectedCollectionId === c.id }"
           >
-            <template #prepend>
-              <div class="color-dot" :style="{ background: c.cor }" />
-            </template>
-            <template #append>
-              <v-menu>
-                <template #activator="{ props }">
-                  <v-btn icon size="x-small" variant="text" v-bind="props" @click.stop>
-                    <v-icon>mdi-dots-vertical</v-icon>
-                  </v-btn>
-                </template>
-                <v-list density="compact">
-                  <v-list-item
-                    :title="t('actions.rename')"
-                    prepend-icon="mdi-rename"
-                    @click="renameCollection(c)"
-                  />
-                  <v-list-item
-                    :title="t('actions.delete')"
-                    prepend-icon="mdi-delete"
-                    base-color="error"
-                    @click="confirmDeleteCollection(c)"
-                  />
-                </v-list>
-              </v-menu>
-            </template>
-          </v-list-item>
-        </v-list>
-        <div v-if="collections.length === 0" class="pa-4 text-caption text-disabled text-center">
-          {{ t("data.empty_collections") }}
-        </div>
+            <button
+              type="button"
+              class="cc-col-item__main"
+              :aria-current="selectedCollectionId === c.id ? 'true' : undefined"
+              @click="selectedCollectionId = c.id"
+            >
+              <span class="cc-col-dot" :style="{ background: c.cor }" />
+              <span class="cc-col-item__text">
+                <span class="cc-col-item__name">{{ c.nome }}</span>
+                <span class="cc-col-item__sub">
+                  {{ c.song_ids.length }} {{ t("labels.songs_count") }}
+                </span>
+              </span>
+            </button>
+            <LjMenu :items="collectionMenuItems(c)" side="bottom" align="end">
+              <template #trigger>
+                <LjButton
+                  size="sm"
+                  variant="ghost"
+                  icon-only
+                  :icon="ICONS.UI.DOTS_VERTICAL"
+                  :title="t('actions.more')"
+                  :aria-label="t('actions.more')"
+                  @click.stop
+                />
+              </template>
+            </LjMenu>
+          </li>
+        </ul>
+        <p v-else class="cc-col-empty">{{ t("data.empty_collections") }}</p>
       </div>
 
-      <div class="flex-1 pa-2" style="overflow-y: auto">
-        <div v-if="!selectedCollection" class="pa-6 text-center text-disabled">←</div>
+      <div class="cc-col-detail">
+        <p v-if="!selectedCollection" class="cc-col-hint">←</p>
         <template v-else>
-          <div class="d-flex align-center mb-2">
-            <h3 class="text-h6">{{ selectedCollection.nome }}</h3>
-            <v-spacer />
-            <v-menu>
-              <template #activator="{ props }">
-                <v-btn size="small" variant="tonal" prepend-icon="mdi-plus" v-bind="props">
+          <div class="cc-col-header">
+            <h3 class="cc-col-title">{{ selectedCollection.nome }}</h3>
+            <span class="lj-u-spacer" />
+            <LjMenu :items="addSongMenuItems" side="bottom" align="end">
+              <template #trigger>
+                <LjButton size="sm" variant="subtle" :icon="ICONS.ACTIONS.ADD">
                   {{ t("actions.add_to_collection") }}
-                </v-btn>
+                </LjButton>
               </template>
-              <v-list density="compact" max-height="400">
-                <v-list-item
-                  v-for="s in songsNotInSelected"
-                  :key="s.id"
-                  :title="s.nome"
-                  @click="addSongToCollection(s.id)"
-                />
-                <v-list-item
-                  v-if="songsNotInSelected.length === 0"
-                  :title="t('data.empty_songs')"
-                  disabled
-                />
-              </v-list>
-            </v-menu>
+            </LjMenu>
           </div>
 
-          <div v-if="selectedCollectionSongs.length === 0" class="pa-4 text-disabled text-center">
-            {{ t("data.empty_collection_songs") }}
-          </div>
+          <LjEmpty
+            v-if="selectedCollectionSongs.length === 0"
+            :title="t('data.empty_collection_songs')"
+          />
           <draggable
             v-else
             v-model="selectedCollectionSongs"
             item-key="id"
-            handle=".drag-handle"
+            handle=".cc-drag"
             @end="persistCollectionOrder"
           >
             <template #item="{ element }">
-              <v-list-item
-                :title="element.nome"
-                :subtitle="`${element.slides.length} ${t('labels.slides')}`"
-                class="border-b"
-                density="compact"
-              >
-                <template #prepend>
-                  <v-icon class="drag-handle cursor-grab mr-2" size="small">
-                    mdi-drag-vertical
-                  </v-icon>
-                </template>
-                <template #append>
-                  <v-btn icon size="small" variant="text" @click="openInEditor(element)">
-                    <v-icon>mdi-pencil</v-icon>
-                  </v-btn>
-                  <v-btn
-                    icon
-                    size="small"
-                    variant="text"
-                    @click="removeSongFromCollection(element.id)"
-                  >
-                    <v-icon>mdi-close</v-icon>
-                  </v-btn>
-                </template>
-              </v-list-item>
+              <div class="cc-song-row">
+                <span class="cc-drag">
+                  <Icon :icon="ICONS.ACTIONS.DRAG" :size="16" />
+                </span>
+                <span class="cc-song-row__text">
+                  <span class="cc-song-row__name">{{ element.nome }}</span>
+                  <span class="cc-song-row__sub">
+                    {{ element.slides.length }} {{ t("labels.slides") }}
+                  </span>
+                </span>
+                <LjButton
+                  size="sm"
+                  variant="ghost"
+                  icon-only
+                  :icon="ICONS.ACTIONS.EDIT"
+                  :title="t('actions.edit')"
+                  :aria-label="t('actions.edit')"
+                  @click="openInEditor(element)"
+                />
+                <LjButton
+                  size="sm"
+                  variant="ghost"
+                  icon-only
+                  :icon="ICONS.ACTIONS.CLOSE"
+                  :title="t('actions.remove_from_collection')"
+                  :aria-label="t('actions.remove_from_collection')"
+                  @click="removeSongFromCollection(element.id)"
+                />
+              </div>
             </template>
           </draggable>
         </template>
@@ -207,9 +186,12 @@
     </div>
 
     <input ref="fileSlja" type="file" accept=".slja,.lja" multiple hidden @change="onImportSlja" />
-    <v-snackbar v-model="importStatus.show" :color="importStatus.color" timeout="3000">
-      {{ importStatus.text }}
-    </v-snackbar>
+    <LjToast
+      v-model="importStatus.show"
+      :text="importStatus.text"
+      :variant="importStatus.variant"
+      :timeout="3000"
+    />
   </ModuleContainer>
 </template>
 
@@ -218,7 +200,9 @@ import { ref, computed, onMounted } from "vue";
 import draggable from "vuedraggable";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
-import AppData from "@/helpers/AppData";
+import Icon from "@/components/Icon.vue";
+import { LjButton, LjCard, LjEmpty, LjMenu, LjTabs, LjToast } from "@/components/ui";
+import { ICONS } from "@/config/Icons";
 import Modules from "@/helpers/Modules";
 import CustomSongs from "@/helpers/CustomSongs";
 import SljaConverter from "@/helpers/SljaConverter";
@@ -243,11 +227,15 @@ function songPreviewStyle(s) {
   const slide = s.slides?.[0] || {};
   const img = songPreviewImages.value.get(s.id);
   return {
-    background: slide.cor_fundo || "#000",
+    background: slide.cor_fundo || "var(--lj-color-projection-bg)",
     ...(img ? { backgroundImage: `url(${img})` } : {}),
     backgroundSize: "cover",
     backgroundPosition: "center",
   };
+}
+
+function songTextStyle(s) {
+  return { color: s.slides?.[0]?.cor_letra || "var(--lj-white)" };
 }
 
 async function resolvePreviewImages(list) {
@@ -265,8 +253,12 @@ async function resolvePreviewImages(list) {
   songPreviewImages.value = map;
 }
 
-const primaryColor = computed(() => (AppData.get("is_dark") ? undefined : "primary"));
-const t = (key) => moduleContainer.value?.t(key) || key;
+const t = (key, named) => moduleContainer.value?.t(key, named) || key;
+
+const tabItems = computed(() => [
+  { value: "songs", label: t("tabs.songs") },
+  { value: "collections", label: t("tabs.collections") },
+]);
 
 const selectedCollection = computed(
   () => collections.value.find((c) => c.id === selectedCollectionId.value) || null
@@ -290,6 +282,38 @@ const songsNotInSelected = computed(() => {
   if (!selectedCollection.value) return songs.value;
   const has = new Set(selectedCollection.value.song_ids);
   return songs.value.filter((s) => !has.has(s.id));
+});
+
+// ===== Menus =====
+
+function songMenuItems(s) {
+  return [
+    { label: t("actions.export"), icon: ICONS.ACTIONS.DOWNLOAD, action: () => exportSong(s) },
+    { label: t("actions.rename"), icon: ICONS.ACTIONS.RENAME, action: () => renameSong(s) },
+  ];
+}
+
+function collectionMenuItems(c) {
+  return [
+    { label: t("actions.rename"), icon: ICONS.ACTIONS.RENAME, action: () => renameCollection(c) },
+    {
+      label: t("actions.delete"),
+      icon: ICONS.ACTIONS.DELETE,
+      action: () => confirmDeleteCollection(c),
+    },
+  ];
+}
+
+// Item desabilitado (e não rótulo) quando não há o que adicionar: o rótulo do
+// LjMenu sai em caixa alta, e aqui o texto é uma frase inteira.
+const addSongMenuItems = computed(() => {
+  if (songsNotInSelected.value.length === 0) {
+    return [{ label: t("data.empty_songs"), disabled: true, action: () => undefined }];
+  }
+  return songsNotInSelected.value.map((s) => ({
+    label: s.nome,
+    action: () => addSongToCollection(s.id),
+  }));
 });
 
 function truncate(text, max = 60) {
@@ -406,10 +430,10 @@ function actImport() {
   fileSlja.value.click();
 }
 
-const importStatus = ref({ show: false, text: "", color: "info" });
+const importStatus = ref({ show: false, text: "", variant: "info" });
 
-function showStatus(text, color = "info") {
-  importStatus.value = { show: true, text, color };
+function showStatus(text, variant = "info") {
+  importStatus.value = { show: true, text, variant };
 }
 
 async function importSljaFile(file) {
@@ -492,7 +516,8 @@ async function onImportSlja(e) {
     }
   }
   await loadAll();
-  showStatus(`${ok} importada(s)${fail ? `, ${fail} falha(s)` : ""}`, fail ? "warning" : "success");
+  const text = t("data.import_result", { ok }) + (fail ? t("data.import_failed", { fail }) : "");
+  showStatus(text, fail ? "warning" : "success");
 }
 
 // ===== Collections =====
@@ -544,44 +569,265 @@ async function persistCollectionOrder() {
 </script>
 
 <style scoped>
-.song-card-preview {
-  height: 100px;
+/* ---- barra de ferramentas do cabeçalho ---- */
+.cc-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-4);
+  width: 100%;
+  min-width: 0;
+}
+
+/* ---- aba: músicas ---- */
+.cc-pane {
+  padding: var(--lj-space-4);
+}
+
+.cc-song-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lj-space-5);
+}
+
+.cc-song {
+  width: 240px;
+  cursor: pointer;
+}
+
+.cc-song:focus-visible {
+  outline: none;
+  box-shadow: var(--lj-ui-focus);
+}
+
+/* O fundo vem do slide (cor ou imagem), então o cartão é sempre escuro aqui —
+   os botões flutuam sobre ele com uma cortina preta, como no original. */
+.cc-song__preview {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 8px;
+  height: 100px;
+  padding: var(--lj-space-4);
   overflow: hidden;
-  position: relative;
 }
-.song-card-actions {
+
+.cc-song__actions {
   position: absolute;
-  top: 4px;
-  right: 4px;
-  display: flex;
-  gap: 2px;
+  top: var(--lj-space-2);
+  right: var(--lj-space-2);
   z-index: 1;
+  display: flex;
+  gap: var(--lj-space-1);
 }
-.song-card-actions .v-btn {
-  background: rgba(0, 0, 0, 0.45);
-  color: #fff;
+
+.cc-song__actions :deep(.lj-btn) {
+  background: var(--lj-black-alpha-40);
+  border-color: transparent;
+  color: var(--lj-white);
 }
-.song-card-text {
-  font-size: 11px;
+
+.cc-song__actions :deep(.lj-btn:hover) {
+  background: var(--lj-black-alpha-75);
+  color: var(--lj-white);
+}
+
+.cc-song__actions :deep(.lj-btn.cc-song__danger) {
+  color: var(--lj-danger-light);
+}
+
+.cc-song__text {
+  width: 100%;
+  font-size: var(--lj-text-sm);
   text-align: center;
   white-space: pre-line;
-  width: 100%;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+  text-shadow: 0 1px 4px var(--lj-black-alpha-75);
 }
-.song-card-name {
-  display: block;
+
+.cc-song__info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-1);
+  min-width: 0;
+  padding: var(--lj-space-4) var(--lj-space-5);
+}
+
+.cc-song__name {
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--lj-text-base);
+  font-weight: var(--lj-weight-medium);
 }
-.color-dot {
+
+.cc-song__meta {
+  color: var(--lj-text-muted);
+  font-size: var(--lj-text-xs);
+}
+
+/* ---- aba: coletâneas ---- */
+.cc-collections {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+}
+
+.cc-col-list {
+  flex-shrink: 0;
+  width: 240px;
+  overflow-y: auto;
+  border-right: 1px solid var(--lj-surface-border);
+}
+
+.cc-col-items {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-1);
+  margin: 0;
+  padding: var(--lj-space-2);
+  list-style: none;
+}
+
+.cc-col-item {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-2);
+  padding-right: var(--lj-space-2);
+  border-radius: var(--lj-radius-sm);
+}
+
+.cc-col-item:hover {
+  background: var(--lj-surface-bg-hover);
+}
+
+.cc-col-item.is-active {
+  background: var(--lj-ui-accent-soft);
+}
+
+.cc-col-item.is-active .cc-col-item__name {
+  color: var(--lj-ui-accent-text);
+  font-weight: var(--lj-weight-medium);
+}
+
+.cc-col-item__main {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--lj-space-4);
+  min-width: 0;
+  padding: var(--lj-space-3) var(--lj-space-4);
+  border: none;
+  border-radius: var(--lj-radius-sm);
+  background: transparent;
+  color: var(--lj-text);
+  font: inherit;
+  font-size: var(--lj-text-base);
+  text-align: left;
+  cursor: pointer;
+}
+
+.cc-col-item__main:focus-visible {
+  outline: none;
+  box-shadow: var(--lj-ui-focus);
+}
+
+.cc-col-item__text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-1);
+  min-width: 0;
+}
+
+.cc-col-item__name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.cc-col-item__sub {
+  color: var(--lj-text-muted);
+  font-size: var(--lj-text-xs);
+}
+
+/* A cor vem do registro da coletânea (c.cor); o traço só separa o disco de
+   fundos claros. */
+.cc-col-dot {
+  flex-shrink: 0;
   width: 14px;
   height: 14px;
-  border-radius: 4px;
-  border: 1px solid rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--lj-black-alpha-18);
+  border-radius: var(--lj-radius-md);
+}
+
+.cc-col-empty {
+  margin: 0;
+  padding: var(--lj-space-6);
+  color: var(--lj-text-subtle);
+  font-size: var(--lj-text-xs);
+  text-align: center;
+}
+
+.cc-col-detail {
+  flex: 1;
+  min-width: 0;
+  padding: var(--lj-space-4);
+  overflow-y: auto;
+}
+
+.cc-col-hint {
+  margin: 0;
+  padding: var(--lj-space-8);
+  color: var(--lj-text-subtle);
+  text-align: center;
+}
+
+.cc-col-header {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-4);
+  margin-bottom: var(--lj-space-4);
+}
+
+.cc-col-title {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--lj-text-xl);
+  font-weight: var(--lj-weight-semibold);
+}
+
+.cc-song-row {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-4);
+  padding: var(--lj-space-3) var(--lj-space-4);
+  border-bottom: 1px solid var(--lj-surface-divider);
+}
+
+.cc-song-row__text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--lj-space-1);
+  min-width: 0;
+}
+
+.cc-song-row__name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--lj-text-base);
+}
+
+.cc-song-row__sub {
+  color: var(--lj-text-muted);
+  font-size: var(--lj-text-xs);
+}
+
+.cc-drag {
+  display: inline-flex;
+  color: var(--lj-text-subtle);
+  cursor: grab;
 }
 </style>

@@ -135,6 +135,9 @@
   "timer": {
     "current_item": "Ítem en ejecución"
   },
+  "units": {
+    "min": "min"
+  },
   "placeholders": {
     "untitled": "(Sin título)",
     "bloco": "Nuevo Bloque",

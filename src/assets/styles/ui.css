@@ -17,16 +17,21 @@
   --lj-ui-h-sm: 22px;
   --lj-ui-h-md: 26px;
   --lj-ui-h-lg: 32px;
+  /* Superfícies operadas com o dedo — o controle remoto que o operador abre no
+     celular. Não use na shell: lá o ponteiro é preciso e a densidade importa. */
+  --lj-ui-h-touch: 44px;
 
   /* Padding horizontal proporcional à altura */
   --lj-ui-px-sm: var(--lj-space-4);
   --lj-ui-px-md: 10px;
   --lj-ui-px-lg: var(--lj-space-6);
+  --lj-ui-px-touch: var(--lj-space-6);
 
   /* Gap entre ícone e texto dentro de um controle */
   --lj-ui-gap-sm: var(--lj-space-2);
   --lj-ui-gap-md: var(--lj-space-3);
   --lj-ui-gap-lg: var(--lj-space-4);
+  --lj-ui-gap-touch: var(--lj-space-4);
 
   /* O tamanho do ícone por tamanho de controle vive em components/ui/types.ts
      (ICON_SIZE): os primitivos passam o número como prop para o Icon, não por
@@ -36,6 +41,7 @@
   --lj-ui-font-sm: var(--lj-text-sm);
   --lj-ui-font-md: var(--lj-text-base);
   --lj-ui-font-lg: var(--lj-text-md);
+  --lj-ui-font-touch: var(--lj-text-lg);
 
   /* Traço e raio — iguais em TODOS os primitivos, sem exceção */
   --lj-ui-border: 1px solid var(--lj-surface-border-strong);
@@ -152,6 +158,13 @@
   padding-inline: var(--lj-ui-px-lg);
   gap: var(--lj-ui-gap-lg);
   font-size: var(--lj-ui-font-lg);
+}
+
+.lj-ui-size-touch {
+  height: var(--lj-ui-h-touch);
+  padding-inline: var(--lj-ui-px-touch);
+  gap: var(--lj-ui-gap-touch);
+  font-size: var(--lj-ui-font-touch);
 }
 
 /* Painel flutuante (menu, popover, dialog) */

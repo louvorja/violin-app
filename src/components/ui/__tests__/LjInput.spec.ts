@@ -1,3 +1,4 @@
+import { nextTick } from "vue";
 import { describe, expect, it, vi } from "vitest";
 import LjInput from "../LjInput.vue";
 import { expectKeyExists, mountUi } from "./mountUi";
@@ -172,5 +173,31 @@ describe("LjInput — regressões", () => {
   it("botão de limpar fica desabilitado junto com o campo", () => {
     const w = mountUi(LjInput, { props: { clearable: true, modelValue: "x", disabled: true } });
     expect(w.get(".lj-input__clear").attributes("disabled")).toBeDefined();
+  });
+});
+
+describe("LjInput — foco", () => {
+  it("autofocus foca o campo de verdade, não só declara o atributo", async () => {
+    // O atributo `autofocus` do HTML é ignorado em elementos inseridos depois
+    // do carregamento — que é sempre o caso dentro de um diálogo.
+    const w = mountUi(LjInput, { attachTo: document.body, props: { autofocus: true } });
+    await nextTick();
+    expect(document.activeElement).toBe(w.get("input").element);
+    w.unmount();
+  });
+
+  it("sem autofocus não rouba o foco", async () => {
+    const w = mountUi(LjInput, { attachTo: document.body });
+    await nextTick();
+    expect(document.activeElement).not.toBe(w.get("input").element);
+    w.unmount();
+  });
+
+  it("expõe focus() para quem precisa focar depois", async () => {
+    const w = mountUi(LjInput, { attachTo: document.body });
+    (w.vm as unknown as { focus: () => void }).focus();
+    await nextTick();
+    expect(document.activeElement).toBe(w.get("input").element);
+    w.unmount();
   });
 });

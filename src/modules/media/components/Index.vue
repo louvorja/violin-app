@@ -6,7 +6,6 @@
       config?.subtitle + (config?.track > 0 ? ' | ' + t('general.track') + ' ' + config.track : '')
     "
     :image="config?.image ? pathFile(config.image) : ''"
-    title-class="text-h4 font-weight-light"
     closable
     minimizable
     compact
@@ -19,124 +18,104 @@
     @resize="resize"
   >
     <template #system_buttons>
-      <v-menu v-if="is_online">
-        <template #activator="{ props }">
-          <v-btn v-bind="props" class="ms-2" icon="mdi-menu" variant="text" size="small" />
+      <LjPopover v-if="is_online" side="bottom" align="end">
+        <template #trigger>
+          <LjButton
+            class="media-menu-trigger"
+            size="sm"
+            variant="ghost"
+            icon-only
+            :icon="ICONS.UI.MENU"
+            :aria-label="$t('shell.appmenu_items.settings')"
+          />
         </template>
-        <v-card>
-          <v-card-text>
-            <v-tooltip :text="t('inputs.lazy_load_tooltip')">
-              <template #activator="{ props }">
-                <v-switch
-                  v-bind="props"
-                  v-model="lazy_load"
-                  color="blue"
-                  :label="t('inputs.lazy_load')"
-                />
-              </template>
-            </v-tooltip>
-            <v-tooltip :text="t('inputs.fade_audio_tooltip')">
-              <template #activator="{ props }">
-                <v-switch
-                  v-bind="props"
-                  v-model="fade_audio"
-                  color="blue"
-                  :label="t('inputs.fade_audio')"
-                />
-              </template>
-            </v-tooltip>
-          </v-card-text>
-        </v-card>
-      </v-menu>
+
+        <div class="media-options">
+          <LjTooltip :text="t('inputs.lazy_load_tooltip')" side="bottom">
+            <LjSwitch v-model="lazy_load" :label="t('inputs.lazy_load')" />
+          </LjTooltip>
+          <LjTooltip :text="t('inputs.fade_audio_tooltip')" side="bottom">
+            <LjSwitch v-model="fade_audio" :label="t('inputs.fade_audio')" />
+          </LjTooltip>
+        </div>
+      </LjPopover>
     </template>
 
-    <div class="d-flex flex-no-wrap align-stretch flex-row justify-space-between">
-      <div class="w-100">
+    <div class="media-body">
+      <div class="media-preview-col">
         <Fullscreen
           v-if="!isYouTube"
           v-model="fullscreen"
-          class="position-sticky w-100"
-          :style="`top: 0; height:${preview_height}px; overflow: hidden;`"
+          class="media-preview"
+          :style="{ height: preview_height + 'px' }"
         >
           <l-slide v-if="slide" :slide="slideForRenderer" :title="config?.title || ''" />
           <l-fullscreen-player v-if="fullscreen" />
         </Fullscreen>
         <div
           v-else
-          class="position-sticky w-100 d-flex align-center justify-center"
-          :style="`top: 0; height:${preview_height}px; overflow: hidden; background: #000;`"
+          class="media-preview media-preview--youtube"
+          :style="{ height: preview_height + 'px' }"
         >
-          <img
-            v-if="youtubeThumbnail"
-            :src="youtubeThumbnail"
-            alt=""
-            class="youtube-thumbnail"
-            style="max-width: 100%; max-height: 100%; object-fit: contain"
-          />
+          <img v-if="youtubeThumbnail" :src="youtubeThumbnail" alt="" class="media-thumbnail" />
         </div>
       </div>
       <div v-if="width > 600">
         <!-- Slide list for music -->
-        <v-list v-if="!isYouTube" class="overflow h-100 ma-0 pa-0" bg-color="black" :width="250">
-          <v-list-item
+        <div v-if="!isYouTube" class="media-slides">
+          <button
             v-for="(item, index) in slides"
             :key="index"
             ref="slideItem"
-            link
-            :active="config.slide_index === index"
-            variant="tonal"
-            :height="58"
+            type="button"
+            class="media-slide"
+            :class="{ 'is-active': config.slide_index === index }"
+            :aria-current="config.slide_index === index ? 'true' : undefined"
             @click="goToSlide(index)"
           >
-            <template #prepend>
-              <v-chip class="mr-2">{{ index + 1 }}</v-chip>
-            </template>
+            <LjChip class="media-slide__number">{{ index + 1 }}</LjChip>
 
-            <v-list-item-title v-if="item.cover">
-              {{ item.lyric }}
-            </v-list-item-title>
-            <div v-else class="text-caption text-truncate" v-html="item.lyric" />
-            <v-progress-linear
-              v-if="config.audio != '' && config.slide_index == index"
-              v-model="config.slide_progress"
-              :indeterminate="loading"
-              :height="5"
-              :color="config.is_paused ? 'orange' : 'white'"
-            />
+            <span class="media-slide__content">
+              <span v-if="item.cover" class="media-slide__title">
+                {{ item.lyric }}
+              </span>
+              <span v-else class="media-slide__lyric" v-html="item.lyric" />
+              <LjProgress
+                v-if="config.audio != '' && config.slide_index == index"
+                class="media-slide__progress"
+                :class="{ 'media-slide__progress--paused': config.is_paused }"
+                :value="config.slide_progress"
+                :indeterminate="loading"
+                :height="5"
+              />
+            </span>
 
             <img
               v-if="item.url_image"
               :src="pathFile(item.url_image)"
               alt=""
-              style="display: none"
+              class="media-preload"
             />
-          </v-list-item>
-        </v-list>
+          </button>
+        </div>
         <!-- YouTube info panel -->
-        <div v-else class="pa-4 overflow-y-auto" style="width: 280px">
-          <div class="text-caption text-grey mb-1">{{ $t("modules.media.general.channel") }}</div>
-          <div class="text-body-2 mb-2">
-            <a
-              v-if="ytChannelUrl"
-              :href="ytChannelUrl"
-              target="_blank"
-              class="text-blue-lighten-2"
-              style="text-decoration: none"
-            >
+        <div v-else class="media-youtube">
+          <div class="media-youtube__label">{{ t("general.channel") }}</div>
+          <div class="media-youtube__value">
+            <a v-if="ytChannelUrl" :href="ytChannelUrl" target="_blank" class="media-youtube__link">
               {{ ytChannel || "—" }}
             </a>
             <span v-else>{{ ytChannel || "—" }}</span>
           </div>
-          <v-divider class="mb-3" />
-          <div class="text-caption text-grey mb-1">
-            {{ $t("modules.media.general.video_link") }}
+          <LjDivider class="media-youtube__divider" />
+          <div class="media-youtube__label">
+            {{ t("general.video_link") }}
           </div>
           <a
             v-if="youtubeWatchUrl"
             :href="youtubeWatchUrl"
             target="_blank"
-            class="text-blue-lighten-2 text-body-2"
-            style="text-decoration: none"
+            class="media-youtube__link media-youtube__link--url"
           >
             {{ youtubeWatchUrl }}
           </a>
@@ -160,6 +139,16 @@ import Window from "@/components/Window.vue";
 import LSlide from "@/components/Slide.vue";
 import LPlayer from "@/components/Player.vue";
 import LFullscreenPlayer from "@/components/FullscreenPlayer.vue";
+import {
+  LjButton,
+  LjChip,
+  LjDivider,
+  LjPopover,
+  LjProgress,
+  LjSwitch,
+  LjTooltip,
+} from "@/components/ui";
+import { ICONS } from "@/config/Icons";
 import Modules from "@/helpers/Modules";
 import UserData from "@/helpers/UserData";
 import AppData from "@/helpers/AppData";
@@ -252,8 +241,11 @@ const fade_audio = computed({
 watch(slide_index, () => {
   if (!module_.value.show) return;
   const items = slideItem.value;
-  if (items && items[0]?.$el) {
-    const height = items[0].$el.offsetHeight;
+  // Os itens da lista são elementos nativos desde a migração; `$el` fica como
+  // salvaguarda caso voltem a ser componentes.
+  const first = items && (items[0]?.$el ?? items[0]);
+  if (first) {
+    const height = first.offsetHeight;
     setTimeout(() => {
       scrollPos.value = slide_index.value * height - height;
     }, 100);
@@ -356,3 +348,169 @@ onBeforeUnmount(() => {
   document.removeEventListener("fullscreenchange", _syncFullscreenFlag);
 });
 </script>
+
+<style scoped>
+.media-menu-trigger {
+  margin-inline-start: var(--lj-space-4);
+}
+
+.media-body {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  justify-content: space-between;
+}
+
+.media-preview-col {
+  width: 100%;
+}
+
+.media-preview {
+  position: sticky;
+  top: 0;
+  width: 100%;
+  overflow: hidden;
+}
+
+.media-preview--youtube {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--lj-color-projection-bg);
+}
+
+.media-thumbnail {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/* A faixa de slides é sempre preta, independente do tema do shell. Os
+   primitivos usados aqui dentro leem tokens de superfície, então eles são
+   redefinidos no escopo da faixa para render claro sobre fundo escuro. */
+.media-slides {
+  width: 250px;
+  height: 100%;
+  background: var(--lj-color-projection-bg);
+  color: var(--lj-white);
+
+  --lj-surface-bg-active: var(--lj-white-alpha-18);
+  --lj-surface-border: var(--lj-white-alpha-20);
+  --lj-text-muted: var(--lj-white-alpha-50);
+}
+
+.media-slide {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-4);
+  width: 100%;
+  height: 58px;
+  padding: 0 var(--lj-space-6);
+  background: transparent;
+  border: none;
+  color: inherit;
+  font-family: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: background var(--lj-transition-fast);
+}
+
+.media-slide:hover {
+  background: var(--lj-white-alpha-08);
+}
+
+.media-slide:focus-visible {
+  outline: none;
+  box-shadow: var(--lj-ui-focus);
+}
+
+.media-slide.is-active {
+  background: var(--lj-white-alpha-18);
+}
+
+.media-slide__number {
+  flex-shrink: 0;
+}
+
+.media-slide__content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-2);
+}
+
+.media-slide__title {
+  font-size: var(--lj-text-xl);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.media-slide__lyric {
+  font-size: var(--lj-text-base);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A barra do slide corrente é branca; laranja enquanto pausado. */
+.media-slide__progress :deep(.lj-progress__bar) {
+  background: var(--lj-white);
+}
+
+.media-slide__progress--paused :deep(.lj-progress__bar) {
+  background: var(--lj-orange);
+}
+
+/* Pré-carrega a imagem do slide sem exibi-la. */
+.media-preload {
+  display: none;
+}
+
+.media-youtube {
+  width: 280px;
+  padding: var(--lj-space-6);
+  overflow-y: auto;
+  color: var(--lj-white);
+
+  --lj-surface-divider: var(--lj-white-alpha-18);
+}
+
+.media-youtube__label {
+  margin-bottom: var(--lj-space-2);
+  color: var(--lj-white-alpha-50);
+  font-size: var(--lj-text-base);
+}
+
+.media-youtube__value {
+  margin-bottom: var(--lj-space-4);
+  font-size: var(--lj-text-lg);
+}
+
+.media-youtube__divider {
+  margin-bottom: var(--lj-space-5);
+}
+
+.media-youtube__link {
+  color: var(--lj-info-light);
+  text-decoration: none;
+}
+
+.media-youtube__link--url {
+  font-size: var(--lj-text-lg);
+  word-break: break-all;
+}
+</style>
+
+<!-- Sem `scoped`: o conteúdo do popover vai para um portal no <body> e não
+     recebe o atributo de escopo. O isolamento vem do prefixo `media-`. -->
+<style>
+.media-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-5);
+  min-width: 220px;
+}
+</style>

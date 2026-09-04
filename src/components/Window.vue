@@ -24,7 +24,7 @@
             <img :src="image" alt="" loading="lazy" />
           </div>
           <div class="lj-window-titles">
-            <h2 v-if="title" class="lj-window-title" :class="titleClass">
+            <h2 v-if="title" class="lj-window-title">
               {{ title }}
             </h2>
             <p v-if="subtitle" class="lj-window-subtitle">{{ subtitle }}</p>
@@ -112,7 +112,6 @@ const props = defineProps({
   compact_footer: Boolean,
   closable: Boolean,
   minimizable: Boolean,
-  titleClass: String,
   dark: Boolean,
   index: [Boolean, Number, String],
   size: String,

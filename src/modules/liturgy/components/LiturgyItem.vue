@@ -8,129 +8,107 @@
       }"
     >
       <!-- Checkbox + Icon -->
-      <v-checkbox
-        :model-value="checked"
-        :color="element.cor || defaultColor"
-        hide-details
-        density="compact"
-        class="lit-card-check"
-        @update:model-value="$emit('toggle-checked', element)"
-      />
+      <!-- A cor do item vira o acento do controle: o primitivo não expõe `color`,
+           e a variável cascateia para dentro dele sem precisar de :deep(). -->
+      <span class="lit-card-check" :style="{ '--lj-ui-accent': itemColor }">
+        <LjCheckbox :model-value="checked" @update:model-value="$emit('toggle-checked', element)" />
+      </span>
 
-      <v-chip
-        color="primary"
-        :prepend-icon="ICONS.TIMER.CLOCK"
-        size="small"
-        class="ml-2"
+      <LjChip
+        variant="primary"
+        :icon="ICONS.TIMER.CLOCK"
+        class="lit-card-duration"
         :class="{ 'lit-card-icon--checked': checked }"
       >
-        {{ props.element.duration }} min
-      </v-chip>
+        {{ props.element.duration }} {{ t("units.min") }}
+      </LjChip>
       <Icon
         :icon="$liturgy.iconForItem(element)"
         size="40"
-        :color="element.cor || defaultColor"
+        :color="itemColor"
         class="lit-card-icon"
         :class="{ 'lit-card-icon--checked': checked }"
       />
 
-      <!-- Texto -->
+      <!-- Texto — também é o punho de arraste (data-handle) do vuedraggable -->
       <button class="lit-card-text" data-handle="true" @click="onCardClick">
         <span class="lit-card-title">
           {{ element.item || t("placeholders.untitled") }}
         </span>
         <span v-if="subtitleFor(element)" class="lit-card-subtitle">
           <template v-if="parsedSubtitle(element).icon">
-            <v-icon :icon="parsedSubtitle(element).icon" size="14" class="mr-1" />
+            <Icon :icon="parsedSubtitle(element).icon" :size="14" class="lit-card-sub-icon" />
           </template>
           {{ parsedSubtitle(element).text }}
-          <v-chip v-if="chip" class="ml-2" size="small" :color="chip.color">
-            <v-icon :icon="chip.icon" class="mr-2" />
+          <LjChip
+            v-if="chip"
+            variant="primary"
+            :icon="chip.icon"
+            class="lit-card-sub-chip"
+            :style="chipColorVars(chip.color)"
+          >
             {{ t(`inputs.music_version_${chip.action}`) }}
-          </v-chip>
-          <v-chip v-if="linkedOverlay" class="ml-2" size="x-small" variant="tonal" color="primary">
-            <v-icon :icon="ICONS.MODULES.OVERLAY" size="14" class="mr-1" />
+          </LjChip>
+          <LjChip
+            v-if="linkedOverlay"
+            variant="primary"
+            size="sm"
+            :icon="ICONS.MODULES.OVERLAY"
+            class="lit-card-sub-chip"
+          >
             {{ linkedOverlay.name }}
-          </v-chip>
+          </LjChip>
         </span>
       </button>
 
       <!-- Ação de vídeo on-line -->
       <div v-if="element.tipo === 'video-online'" class="lit-card-music-actions">
-        <v-tooltip location="top" :open-delay="700">
-          <template #activator="{ props }">
-            <button v-bind="props" class="lit-music-btn" @click.stop="$emit('execute', element)">
-              <Icon :icon="ICONS.PLAYER.PLAY" :size="SIZE_ICON_MEDIA" color="#e74c3c" />
-            </button>
-          </template>
-
-          {{ t("video.play") }}
-        </v-tooltip>
+        <LjTooltip :text="t('video.play')" :delay="700">
+          <button class="lit-music-btn lit-music-btn--play" @click.stop="$emit('execute', element)">
+            <Icon :icon="ICONS.PLAYER.PLAY" :size="SIZE_ICON_MEDIA" />
+          </button>
+        </LjTooltip>
       </div>
 
       <!-- Ações: editar + reordenar (sem X — exclusão pelo ribbon "Apagar Selecionados") -->
       <div class="lit-card-end">
-        <v-tooltip v-if="!locked" location="top" :open-delay="500">
-          <template #activator="{ props }">
-            <button v-bind="props" class="lit-card-action" @click.stop="$emit('edit', index)">
-              <Icon :icon="ICONS.ACTIONS.EDIT" :size="SIZE_ICON_TOOLS" />
-            </button>
-          </template>
+        <LjTooltip v-if="!locked" :text="t('actions.edit')" :delay="500">
+          <button class="lit-card-action" @click.stop="$emit('edit', index)">
+            <Icon :icon="ICONS.ACTIONS.EDIT" :size="SIZE_ICON_TOOLS" />
+          </button>
+        </LjTooltip>
 
-          {{ t("actions.edit") }}
-        </v-tooltip>
+        <LjTooltip v-if="!locked" :text="t('actions.clone')" :delay="500">
+          <button class="lit-card-action" @click.stop="$emit('clone', index)">
+            <Icon :icon="ICONS.ACTIONS.COPY" :size="SIZE_ICON_TOOLS" />
+          </button>
+        </LjTooltip>
 
-        <v-tooltip v-if="!locked" location="top" :open-delay="500">
-          <template #activator="{ props }">
-            <button v-bind="props" class="lit-card-action" @click.stop="$emit('clone', index)">
-              <Icon :icon="ICONS.ACTIONS.COPY" :size="SIZE_ICON_TOOLS" />
-            </button>
-          </template>
-
-          {{ t("actions.clone") }}
-        </v-tooltip>
-
-        <v-tooltip v-if="!locked" location="top" :open-delay="500">
-          <template #activator="{ props }">
-            <button
-              v-bind="props"
-              class="lit-card-action"
-              @click.stop="$emit('confirm-remove', index)"
-            >
-              <Icon :icon="ICONS.ACTIONS.DELETE" color="red" :size="SIZE_ICON_TOOLS" />
-            </button>
-          </template>
-
-          {{ t("actions.delete") }}
-        </v-tooltip>
+        <LjTooltip v-if="!locked" :text="t('actions.delete')" :delay="500">
+          <button
+            class="lit-card-action lit-card-action--danger"
+            @click.stop="$emit('confirm-remove', index)"
+          >
+            <Icon :icon="ICONS.ACTIONS.DELETE" :size="SIZE_ICON_TOOLS" />
+          </button>
+        </LjTooltip>
       </div>
     </div>
 
-    <v-dialog v-model="versionPickerOpen" max-width="320">
-      <v-card>
-        <v-toolbar density="compact" color="primary" flat>
-          <v-toolbar-title>{{ element.item }}</v-toolbar-title>
-          <v-btn icon variant="text" density="compact" @click="versionPickerOpen = false">
-            <v-icon icon="mdi-close" />
-          </v-btn>
-        </v-toolbar>
-        <v-card-text class="pa-2">
-          <v-list density="compact">
-            <v-list-item
-              v-for="opt in availableActions"
-              :key="opt.action"
-              density="compact"
-              @click="playVersion(opt.action)"
-            >
-              <template #prepend>
-                <v-icon :icon="opt.icon" :color="opt.color" size="22" />
-              </template>
-              <v-list-item-title>{{ t(opt.labelKey) }}</v-list-item-title>
-            </v-list-item>
-          </v-list>
-        </v-card-text>
-      </v-card>
-    </v-dialog>
+    <LjDialog v-model="versionPickerOpen" :title="element.item" size="sm">
+      <div class="lit-versions">
+        <button
+          v-for="opt in availableActions"
+          :key="opt.action"
+          type="button"
+          class="lit-version"
+          @click="playVersion(opt.action)"
+        >
+          <Icon :icon="opt.icon" :size="22" :color="opt.color" />
+          <span class="lit-version__label">{{ t(opt.labelKey) }}</span>
+        </button>
+      </div>
+    </LjDialog>
   </div>
 </template>
 
@@ -143,6 +121,7 @@ import type { LiturgyItem } from "@/types/Liturgy";
 import type { OverlaySlot } from "@/types/Overlay";
 import { ICONS } from "@/config/Icons";
 import Icon from "@/components/Icon.vue";
+import { LjCheckbox, LjChip, LjDialog, LjTooltip } from "@/components/ui";
 import { MUSIC_ACTION, MusicAction } from "@/config/MusicAction";
 import { MusicActionEnum } from "@/enums/MusicActionEnum";
 import $liturgy from "@/helpers/Liturgy";
@@ -187,13 +166,13 @@ const availableActions = computed((): ActionOption[] => {
     return [
       {
         action: "sung",
-        icon: MUSIC_ACTION.sung?.icon || "mdi-music-box",
+        icon: MUSIC_ACTION.sung?.icon || ICONS.MUSIC.SING,
         color: MUSIC_ACTION.sung?.color || "#c0392b",
         labelKey: "inputs.music_version_sung",
       },
       {
         action: "lyric",
-        icon: MUSIC_ACTION.lyric?.icon || "mdi-text-box-outline",
+        icon: MUSIC_ACTION.lyric?.icon || ICONS.MUSIC.LYRIC,
         color: MUSIC_ACTION.lyric?.color || "#7f8c8d",
         labelKey: "inputs.music_version_lyric",
       },
@@ -203,31 +182,31 @@ const availableActions = computed((): ActionOption[] => {
   return [
     {
       action: MUSIC_ACTION[MusicActionEnum.AUDIO].action,
-      icon: MUSIC_ACTION[MusicActionEnum.AUDIO].icon || "mdi-music-box",
+      icon: MUSIC_ACTION[MusicActionEnum.AUDIO].icon || ICONS.MUSIC.SING,
       color: MUSIC_ACTION[MusicActionEnum.AUDIO].color || "#c0392b",
       labelKey: "inputs.music_version_sung",
     },
     {
       action: MUSIC_ACTION[MusicActionEnum.PLAYBACK].action,
-      icon: MUSIC_ACTION[MusicActionEnum.PLAYBACK].icon || "mdi-music-box-outline",
+      icon: MUSIC_ACTION[MusicActionEnum.PLAYBACK].icon || ICONS.MUSIC.PLAYBACK,
       color: MUSIC_ACTION[MusicActionEnum.PLAYBACK].color || "#1b4f8a",
       labelKey: "inputs.music_version_pb",
     },
     {
       action: MUSIC_ACTION[MusicActionEnum.LYRIC].action,
-      icon: MUSIC_ACTION[MusicActionEnum.LYRIC].icon || "mdi-text-box-outline",
+      icon: MUSIC_ACTION[MusicActionEnum.LYRIC].icon || ICONS.MUSIC.LYRIC,
       color: MUSIC_ACTION[MusicActionEnum.LYRIC].color || "#7f8c8d",
       labelKey: "inputs.music_version_lyric",
     },
     {
       action: MUSIC_ACTION[MusicActionEnum.AUDIO_ONLY].action,
-      icon: MUSIC_ACTION[MusicActionEnum.AUDIO_ONLY].icon || "mdi-file-music-outline",
+      icon: MUSIC_ACTION[MusicActionEnum.AUDIO_ONLY].icon || ICONS.MUSIC.AUDIO_PLAYBACK,
       color: MUSIC_ACTION[MusicActionEnum.AUDIO_ONLY].color || "#27ae60",
       labelKey: "inputs.music_version_audio-only",
     },
     {
       action: MUSIC_ACTION[MusicActionEnum.PLAYBACK_ONLY].action,
-      icon: MUSIC_ACTION[MusicActionEnum.PLAYBACK_ONLY].icon || "mdi-music-note-off",
+      icon: MUSIC_ACTION[MusicActionEnum.PLAYBACK_ONLY].icon || ICONS.MUSIC.NO_AUDIO,
       color: MUSIC_ACTION[MusicActionEnum.PLAYBACK_ONLY].color || "#8e44ad",
       labelKey: "inputs.music_version_playback-only",
     },
@@ -277,6 +256,21 @@ const props = withDefaults(
   { locked: false, defaultColor: "#00004F", hideCheckbox: false, overlaySlots: () => [] }
 );
 const element = toRef(props, "element");
+
+/** Cor do item — usada no ícone e como acento da caixa de seleção. */
+const itemColor = computed(() => props.element.cor || props.defaultColor);
+
+/**
+ * A cor de uma versão de música é um dado (vem de `MUSIC_ACTION`), não um token.
+ * Ela entra no chip pelas variáveis de acento do primitivo, preservando o
+ * contrato visual: fundo tonal + texto na cor.
+ */
+function chipColorVars(color: string): Record<string, string> {
+  return {
+    "--lj-ui-accent-soft": `color-mix(in srgb, ${color} 15%, transparent)`,
+    "--lj-ui-accent-text": color,
+  };
+}
 
 /** Parse o subitem: se contém "|||", separa icon path do texto. */
 function parsedSubtitle(item: LiturgyItem): { icon: string; text: string } {
@@ -350,8 +344,13 @@ const t = (key: string) => _t(key, locale.value);
 }
 
 .lit-card-check {
+  display: inline-flex;
+  align-items: center;
   flex-shrink: 0;
   padding: 0 2px 0 8px;
+}
+.lit-card-duration {
+  margin-left: var(--lj-space-4);
 }
 .lit-card-icon {
   flex-shrink: 0;
@@ -383,6 +382,15 @@ const t = (key: string) => _t(key, locale.value);
   margin-top: 2px;
 }
 
+.lit-card-sub-icon {
+  margin-right: var(--lj-space-2);
+}
+
+.lit-card-sub-chip {
+  margin-left: var(--lj-space-4);
+  vertical-align: middle;
+}
+
 .lit-card--checked .lit-card-subtitle {
   text-decoration: line-through;
 }
@@ -392,7 +400,7 @@ const t = (key: string) => _t(key, locale.value);
   align-items: center;
   gap: 1px;
   padding: 0 6px;
-  border-left: 1px solid rgba(var(--v-border-color), 0.25);
+  border-left: 1px solid var(--lj-surface-border);
 }
 .lit-music-btn {
   width: 30px;
@@ -409,11 +417,15 @@ const t = (key: string) => _t(key, locale.value);
 .lit-music-btn:hover {
   background: rgba(var(--lj-navy-ch), 0.12);
 }
+.lit-music-btn--play,
+.lit-music-btn--play:hover {
+  color: var(--lj-danger);
+}
 
 .lit-card-end {
   display: flex;
   align-items: center;
-  border-left: 1px solid rgba(var(--v-border-color), 0.25);
+  border-left: 1px solid var(--lj-surface-border);
   padding: 0 4px;
   gap: 2px;
 }
@@ -444,11 +456,49 @@ const t = (key: string) => _t(key, locale.value);
   background: rgba(var(--lj-on-surface-ch), 0.08);
   color: var(--lj-text);
 }
+.lit-card-action--danger,
+.lit-card-action--danger:hover {
+  color: var(--lj-danger);
+}
 
 .lit-category .lit-card-action {
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--lj-text-on-navy);
 }
 .lit-category .lit-card-action:hover {
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--lj-black-alpha-20);
+}
+</style>
+
+<!-- Sem `scoped`: o corpo do diálogo é emitido num portal no <body> e o Vue não
+     propaga o atributo de escopo para lá — regras scoped não casariam. O
+     isolamento vem do prefixo `lit-`. -->
+<style>
+.lit-versions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-2);
+}
+
+.lit-version {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-5);
+  width: 100%;
+  padding: var(--lj-space-4) var(--lj-space-5);
+  background: transparent;
+  border: none;
+  border-radius: var(--lj-ui-radius);
+  color: var(--lj-text);
+  font-family: var(--lj-font-shell);
+  font-size: var(--lj-text-base);
+  text-align: left;
+  cursor: pointer;
+}
+.lit-version:hover {
+  background: var(--lj-surface-bg-hover);
+}
+.lit-version:focus-visible {
+  outline: none;
+  box-shadow: var(--lj-ui-focus);
 }
 </style>

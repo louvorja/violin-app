@@ -15,7 +15,8 @@
   "data": {
     "empty": "Ningún aviso. Abra la lista para agregar.",
     "list": "Avisos",
-    "showing": "Mostrando en proyección"
+    "showing": "Mostrando en proyección",
+    "esc_hint": "ESC para cerrar"
   },
   "ribbon": {
     "title_ctx": "Configurar Avisos",

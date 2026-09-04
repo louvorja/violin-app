@@ -67,6 +67,7 @@
       "search": "Buscar"
     },
     "music_search": {
+      "title": "Buscar Música",
       "placeholder": "Digite o nome da música...",
       "empty": "Digite para localizar uma música.",
       "empty_search": "Nenhuma música encontrada para esta busca.",
@@ -590,7 +591,8 @@
       "generic": "Erro"
     },
     "sync": {
-      "syncing": "Sincronizando..."
+      "syncing": "Sincronizando...",
+      "refresh": "Atualizar"
     },
     "token_invalid": {
       "title": "Token inválido",

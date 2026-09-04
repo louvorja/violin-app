@@ -100,6 +100,11 @@ const open = ref(false);
 .lj-menu {
   min-width: 180px;
   max-width: 320px;
+  /* Um menu que lista dados do usuário (músicas, coletâneas) cresce sem limite
+     e passava da viewport. A variável é publicada pelo Reka com o espaço real
+     disponível abaixo do gatilho. */
+  max-height: min(400px, var(--reka-dropdown-menu-content-available-height, 400px));
+  overflow-y: auto;
   padding: var(--lj-space-1);
   z-index: 2400;
   color: var(--lj-text);

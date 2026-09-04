@@ -1,81 +1,89 @@
 <template>
   <div class="mmt">
     <template v-if="!compact">
-      <v-btn
-        v-for="(btn, key) in buttons"
-        :key="key"
-        type="button"
-        class="mmt-btn"
-        variant="text"
-        :class="{
-          'mmt-btn--disabled': btn.disabled,
-          'mmt-btn--star': btn.icon === 'mdi-star',
-        }"
-        max-idth="5"
-        :color="color ?? 'var(--lj-text-muted)'"
+      <LjButton
+        v-for="btn in buttons"
+        :key="btn.testid"
+        size="md"
+        variant="ghost"
+        icon-only
+        :icon="btn.icon"
+        :class="{ 'mmt-btn--star': btn.icon === ICONS.UI.STAR }"
+        :style="colorStyle"
         :disabled="btn.disabled"
         :title="btn.title"
         :data-testid="'mmt-btn-' + btn.testid"
         @click="btn.click"
-      >
-        <v-icon :icon="btn.icon" size="16" />
-      </v-btn>
+      />
     </template>
 
-    <v-menu location="start">
-      <template #activator="{ props }">
-        <button
-          type="button"
-          class="mmt-btn mmt-btn--menu"
-          :title="$t('shell.appmenu')"
-          v-bind="props"
-        >
-          <v-icon icon="mdi-dots-vertical" size="16" />
-        </button>
+    <LjMenu side="left" align="start">
+      <template #trigger>
+        <LjButton
+          size="md"
+          variant="ghost"
+          icon-only
+          :icon="ICONS.UI.DOTS_VERTICAL"
+          :title="t('shell.appmenu')"
+          :aria-label="t('shell.appmenu')"
+        />
       </template>
 
-      <v-list>
-        <v-list-item v-if="compact" class="d-flex justify-center">
-          <v-btn
-            v-for="(btn, key) in buttons"
-            :key="key"
-            :disabled="btn.disabled ? btn.disabled : false"
-            variant="text"
-            :color="primaryColor"
-            :icon="btn.icon"
-            density="compact"
-            class="mx-1"
-            @click="btn.click"
-          />
-        </v-list-item>
-        <v-divider v-if="compact" />
+      <!-- Nas larguras estreitas os botões rápidos saem da linha e entram no
+           menu, como no layout original. Cada um é um item do menu (`as-child`):
+           é o que mantém a navegação por teclado e o fechamento ao acionar. -->
+      <template v-if="compact">
+        <div class="mmt-quick">
+          <DropdownMenuItem
+            v-for="btn in buttons"
+            :key="btn.testid"
+            as-child
+            :disabled="btn.disabled"
+            @select="btn.click()"
+          >
+            <LjButton
+              size="md"
+              variant="ghost"
+              icon-only
+              :icon="btn.icon"
+              :disabled="btn.disabled"
+              :title="btn.title"
+              :data-testid="'mmt-btn-' + btn.testid"
+            />
+          </DropdownMenuItem>
+        </div>
+        <DropdownMenuSeparator class="lj-menu__separator" />
+      </template>
 
-        <v-list-item v-for="(item, key) in menu" :key="key" class="cursor-pointer">
-          <template #prepend>
-            <v-icon icon="mdi-menu-left" size="30"></v-icon>
-          </template>
-          <template #append>
-            <v-icon :icon="item.icon"></v-icon>
-          </template>
-          <v-list-item-title>{{ item.title }}</v-list-item-title>
+      <DropdownMenuSub v-for="(item, key) in menu" :key="key">
+        <DropdownMenuSubTrigger class="lj-menu__item">
+          <span class="lj-menu__mark">
+            <Icon :icon="ICONS.UI.MENU_LEFT" :size="15" />
+          </span>
+          <span class="lj-menu__text">{{ item.title }}</span>
+          <Icon :icon="item.icon" :size="15" class="mmt-sub__icon" />
+        </DropdownMenuSubTrigger>
 
-          <v-menu :open-on-focus="false" activator="parent" :open-on-hover="!is_mobile" submenu>
-            <v-list>
-              <template v-for="(subitem, subkey) in item.menu" :key="subkey">
-                <v-divider v-if="subitem.title == '-'" />
-                <v-list-item
-                  v-else
-                  :prepend-icon="subitem.icon"
-                  :title="subitem.title"
-                  :disabled="subitem.disabled ? subitem.disabled : false"
-                  @click="subitem.click"
-                />
-              </template>
-            </v-list>
-          </v-menu>
-        </v-list-item>
-      </v-list>
-    </v-menu>
+        <DropdownMenuPortal>
+          <DropdownMenuSubContent class="lj-ui-float lj-menu" :side-offset="4">
+            <template v-for="(subitem, subkey) in item.menu" :key="subkey">
+              <DropdownMenuSeparator v-if="subitem.title === '-'" class="lj-menu__separator" />
+              <DropdownMenuItem
+                v-else
+                class="lj-menu__item"
+                :disabled="subitem.disabled ? subitem.disabled : false"
+                @select="subitem.click?.()"
+              >
+                <span class="lj-menu__mark">
+                  <Icon v-if="subitem.icon" :icon="subitem.icon" :size="13" />
+                </span>
+                <span class="lj-menu__text">{{ subitem.title }}</span>
+              </DropdownMenuItem>
+            </template>
+          </DropdownMenuSubContent>
+        </DropdownMenuPortal>
+      </DropdownMenuSub>
+    </LjMenu>
   </div>
 </template>
 
@@ -85,15 +93,28 @@
  * playback, sem áudio, letra) + menu dropdown com submenus. O sufixo "Table" no nome
  * indica o contexto onde é renderizado, não a presença de lógica de tabela — não há
  * duplicação com DataTable.vue.
+ *
+ * O catálogo não tem primitivo de submenu, e o `LjMenu` expõe o slot padrão dentro
+ * do próprio conteúdo flutuante: os níveis aninhados são montados ali com as peças
+ * do Reka UI que o `LjMenu` já usa, reaproveitando as classes `lj-menu__*`.
  */
 import { computed, inject } from "vue";
 import { useI18n } from "vue-i18n";
 import { useDisplay } from "vuetify";
+import {
+  DropdownMenuItem,
+  DropdownMenuPortal,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+} from "reka-ui";
 import Favorites from "@/helpers/Favorites";
 import Liturgy from "@/helpers/Liturgy";
 import Media from "@/composables/useMedia";
-import AppData from "@/helpers/AppData";
 import $snackbar from "@/helpers/Snackbar";
+import Icon from "@/components/Icon.vue";
+import { LjButton, LjMenu } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { MusicActionEnum } from "@/enums/MusicActionEnum";
 import { usePlaylists } from "@/modules/musics/composables/usePlaylists";
@@ -140,8 +161,15 @@ const closeSpotlight = inject<() => void>("close-spotlight", () => {});
 
 const is_favorite = computed(() => Favorites.isFavorite(props.id_music));
 const compact = computed(() => width.value <= 550);
-const is_mobile = computed(() => AppData.get("is_mobile"));
-const primaryColor = computed(() => (AppData.get("is_dark") ? undefined : "primary"));
+
+/**
+ * A cor vem do consumidor (a tabela de álbuns pinta a linha de branco sobre a
+ * capa). Em vez de forçar `color`, o valor entra pelos tokens que o botão
+ * fantasma já lê — assim o estado de hover continua coerente.
+ */
+const colorStyle = computed(() =>
+  props.color ? { "--lj-text-muted": props.color, "--lj-text": props.color } : undefined
+);
 
 const buttons = computed<ButtonItem[]>(() => [
   {
@@ -150,7 +178,7 @@ const buttons = computed<ButtonItem[]>(() => [
     title: is_favorite.value
       ? t("components.music_menu.remove_from_favorites")
       : t("components.music_menu.add_to_favorites"),
-    icon: is_favorite.value ? "mdi-star" : "mdi-star-outline",
+    icon: is_favorite.value ? ICONS.UI.STAR : ICONS.UI.STAR_OUTLINE,
     click: () => Favorites.toggle(props.id_music, props.name, !!props.has_instrumental_music),
   },
   {
@@ -217,18 +245,18 @@ const { playlists, addSong, isSongInPlaylist } = usePlaylists();
 const menu = computed<MenuItem[]>(() => [
   {
     title: t("components.music_menu.add_to"),
-    icon: "mdi-plus",
+    icon: ICONS.ACTIONS.ADD,
     menu: [
       {
         title: is_favorite.value
           ? t("components.music_menu.remove_from_favorites")
           : t("components.music_menu.add_to_favorites"),
-        icon: is_favorite.value ? "mdi-star-off" : "mdi-star",
+        icon: is_favorite.value ? ICONS.UI.STAR_OFF : ICONS.UI.STAR,
         click: () => Favorites.toggle(props.id_music, props.name, !!props.has_instrumental_music),
       },
       {
         title: t("components.music_menu.add_to_liturgy"),
-        icon: "mdi-view-list-outline",
+        icon: ICONS.UI.VIEW_LIST,
         click: () => Liturgy.addMusic(props.id_music, props.name, !!props.has_instrumental_music),
       },
     ],
@@ -237,10 +265,10 @@ const menu = computed<MenuItem[]>(() => [
     ? [
         {
           title: t("components.music_menu.add_to_playlist"),
-          icon: "mdi-playlist-plus",
+          icon: ICONS.PLAYER.PLAYLIST_PLUS,
           menu: playlists.value.map((p) => ({
             title: p.name,
-            icon: isSongInPlaylist(p.id, props.id_music) ? "mdi-check" : "mdi-playlist-music",
+            icon: isSongInPlaylist(p.id, props.id_music) ? ICONS.UI.CHECK : ICONS.PLAYER.PLAYLIST,
             disabled: isSongInPlaylist(p.id, props.id_music),
             click: () => {
               const song: PlaylistSong = {
@@ -258,7 +286,7 @@ const menu = computed<MenuItem[]>(() => [
     : []),
   {
     title: t("components.music_menu.execute"),
-    icon: "mdi-play",
+    icon: ICONS.PLAYER.PLAYER,
     menu: [
       {
         title: t("ribbon.btn.sing"),
@@ -304,54 +332,43 @@ const menu = computed<MenuItem[]>(() => [
 ]);
 </script>
 
-<style scoped>
+<!-- Sem `scoped`: os submenus e a fileira compacta são renderizados dentro do
+     portal do LjMenu, fora da árvore do componente, e não recebem o atributo de
+     escopo. O isolamento vem do prefixo `mmt-`. -->
+<style>
 .mmt {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--lj-space-1);
   flex-wrap: nowrap;
 }
 
-.mmt-btn {
-  display: inline-flex;
+/*
+ * Estrela do favorito. A cor entra pelos tokens que o botão fantasma consome,
+ * e não por uma regra de `color`: assim não há disputa de especificidade com o
+ * CSS do primitivo, e o `color` vindo do consumidor (estilo inline) continua
+ * tendo a última palavra.
+ */
+.mmt-btn--star {
+  --lj-text-muted: var(--lj-color-cover-gold);
+  --lj-text: var(--lj-orange-darker);
+  --lj-surface-bg-hover: var(--lj-orange-alpha-12);
+}
+
+/* Fileira de botões rápidos dentro do menu (larguras estreitas) */
+.mmt-quick {
+  --lj-text-muted: var(--lj-ui-accent-text);
+
+  display: flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--lj-radius-sm);
-  cursor: pointer;
-  transition:
-    background var(--lj-transition-fast),
-    color var(--lj-transition-fast),
-    border-color var(--lj-transition-fast);
-  font-family: inherit;
+  gap: var(--lj-space-1);
+  padding: var(--lj-space-1);
+}
+
+/* Ícone do grupo, à direita do rótulo — a seta de submenu fica à esquerda */
+.mmt-sub__icon {
   flex-shrink: 0;
-}
-
-.mmt-btn:hover:not(:disabled) {
-  background: var(--lj-active-bg);
-  border-color: var(--lj-navy);
-}
-
-.mmt-btn--disabled,
-.mmt-btn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-.mmt-btn--star {
-  color: var(--lj-color-cover-gold);
-}
-
-.mmt-btn--star:hover:not(:disabled) {
-  color: var(--lj-orange-darker);
-  background: var(--lj-orange-alpha-12);
-  border-color: var(--lj-orange);
-}
-
-.mmt-btn--menu {
   color: var(--lj-text-muted);
 }
 </style>

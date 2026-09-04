@@ -1,184 +1,203 @@
 <template>
-  <v-app>
-    <v-main class="remote-root">
-      <v-overlay v-model="loading" class="d-flex align-center justify-center" persistent>
-        <v-progress-circular indeterminate color="primary" size="48" />
-      </v-overlay>
-      <v-toolbar color="primary" density="compact" flat>
-        <v-toolbar-title class="text-subtitle-1">
-          {{ t("options.transmission.remote_control") }}
-        </v-toolbar-title>
-        <v-spacer />
-        <v-btn icon="mdi-refresh" variant="text" size="small" @click="refreshState" />
-      </v-toolbar>
+  <div class="rc-root">
+    <!-- Carregando -->
+    <div v-if="loading" class="rc-loading" role="presentation">
+      <LjSpinner :size="48" />
+    </div>
 
-      <v-tabs v-model="tab" color="primary" density="compact" align-tabs="center">
-        <v-tab value="music">
-          <v-icon icon="mdi-music-note" class="mr-1" />
-          {{ t("module_group.musics.title") }}
-        </v-tab>
-        <v-tab value="bible">
-          <v-icon icon="mdi-book-open-variant" class="mr-1" />
-          {{ t("module_group.bible.title") }}
-        </v-tab>
-        <v-tab value="liturgy">
-          <v-icon icon="mdi-format-list-bulleted" class="mr-1" />
-          {{ t("modules.liturgy.name") }}
-        </v-tab>
-        <v-tab value="slides">
-          <v-icon icon="mdi-view-grid" class="mr-1" />
-          {{ t("remote_control.tabs.slides") }}
-        </v-tab>
-        <v-tab value="announcements">
-          <v-icon icon="mdi-bullhorn" class="mr-1" />
-          {{ t("remote_control.tabs.announcements") }}
-        </v-tab>
-      </v-tabs>
+    <header class="rc-topbar">
+      <h1 class="rc-topbar__title">{{ t("options.transmission.remote_control") }}</h1>
+      <span class="lj-u-spacer" />
+      <div class="rc-topbar__refresh">
+        <LjButton
+          size="touch"
+          variant="ghost"
+          icon-only
+          :icon="ICONS.ACTIONS.REFRESH"
+          :aria-label="t('remote_control.sync.refresh')"
+          @click="refreshState"
+        />
+      </div>
+    </header>
 
-      <v-window v-model="tab" class="remote-content">
-        <!-- Tab Músicas -->
-        <v-window-item value="music">
-          <remote-music
-            v-model:tab="tab"
-            v-model:choose-later-mode="chooseLaterMode"
-            v-model:choose-later-item="chooseLaterItem"
-            :token="token"
-            @show-snackbar="showSnackbar"
-          />
-        </v-window-item>
+    <div class="rc-tabs">
+      <LjTabs
+        v-model="tab"
+        :tabs="tabItems"
+        :aria-label="t('options.transmission.remote_control')"
+      />
+    </div>
 
-        <!-- Tab Bíblia -->
-        <v-window-item value="bible">
-          <remote-bible
-            ref="bibleRef"
-            v-model:active-bible="activeBible"
-            :token="token"
-            @show-snackbar="showSnackbar"
-          />
-        </v-window-item>
+    <div class="rc-content">
+      <!-- Tab Músicas -->
+      <div v-if="isBooted('music')" v-show="tab === 'music'" class="rc-pane">
+        <remote-music
+          v-model:tab="tab"
+          v-model:choose-later-mode="chooseLaterMode"
+          v-model:choose-later-item="chooseLaterItem"
+          :token="token"
+          @show-snackbar="showSnackbar"
+        />
+      </div>
 
-        <!-- Tab Liturgia -->
-        <v-window-item value="liturgy">
-          <remote-liturgy
-            ref="liturgyRef"
-            v-model:tab="tab"
-            :token="token"
-            @show-snackbar="showSnackbar"
-            @open-choose-later="openChooseLater"
-          />
-        </v-window-item>
+      <!-- Tab Bíblia -->
+      <div v-if="isBooted('bible')" v-show="tab === 'bible'" class="rc-pane">
+        <remote-bible
+          ref="bibleRef"
+          v-model:active-bible="activeBible"
+          :token="token"
+          @show-snackbar="showSnackbar"
+        />
+      </div>
 
-        <!-- Tab Slides (Controle) -->
-        <v-window-item value="slides">
-          <remote-slides
-            v-model:current-slide-index="currentSlideIndex"
-            :token="token"
-            :slides="slides"
-            :current-title="currentTitle"
-            @show-snackbar="showSnackbar"
-          />
-        </v-window-item>
+      <!-- Tab Liturgia -->
+      <div v-if="isBooted('liturgy')" v-show="tab === 'liturgy'" class="rc-pane">
+        <remote-liturgy
+          ref="liturgyRef"
+          v-model:tab="tab"
+          :token="token"
+          @show-snackbar="showSnackbar"
+          @open-choose-later="openChooseLater"
+        />
+      </div>
 
-        <!-- Tab Anúncios -->
-        <v-window-item value="announcements">
-          <remote-announcements
-            ref="announcementsRef"
-            :token="token"
-            @show-snackbar="showSnackbar"
-            @update:ann-projecting="annProjecting = $event"
-          />
-        </v-window-item>
-      </v-window>
-    </v-main>
+      <!-- Tab Slides (Controle) -->
+      <div v-if="isBooted('slides')" v-show="tab === 'slides'" class="rc-pane">
+        <remote-slides
+          v-model:current-slide-index="currentSlideIndex"
+          :token="token"
+          :slides="slides"
+          :current-title="currentTitle"
+          @show-snackbar="showSnackbar"
+        />
+      </div>
+
+      <!-- Tab Anúncios -->
+      <div v-if="isBooted('announcements')" v-show="tab === 'announcements'" class="rc-pane">
+        <remote-announcements
+          ref="announcementsRef"
+          :token="token"
+          @show-snackbar="showSnackbar"
+          @update:ann-projecting="annProjecting = $event"
+        />
+      </div>
+    </div>
 
     <!-- Controles fixos na parte inferior -->
-    <v-footer v-if="tab === 'slides' && slides.length > 0" app border class="d-block pa-0">
-      <div class="pa-4 d-flex justify-space-between align-center">
-        <v-btn
-          icon="mdi-chevron-left"
-          variant="tonal"
+    <footer v-if="tab === 'slides' && slides.length > 0" class="rc-footer">
+      <div class="rc-footer__nav">
+        <LjButton
+          size="touch"
+          variant="subtle"
+          icon-only
+          :icon="ICONS.ACTIONS.PREVIOUS"
+          :aria-label="t('actions.previous')"
           :disabled="currentSlideIndex <= 0"
           @click="prevSlide"
         />
-        <div class="text-caption">{{ currentSlideIndex + 1 }} / {{ slides.length }}</div>
-        <v-btn
-          icon="mdi-chevron-right"
-          variant="tonal"
+        <span class="rc-footer__status">{{ currentSlideIndex + 1 }} / {{ slides.length }}</span>
+        <LjButton
+          size="touch"
+          variant="subtle"
+          icon-only
+          :icon="ICONS.ACTIONS.NEXT"
+          :aria-label="t('actions.next')"
           :disabled="currentSlideIndex >= slides.length - 1"
           @click="nextSlide"
         />
       </div>
-      <v-divider />
-      <v-list density="compact">
-        <v-list-item
-          prepend-icon="mdi-close-circle"
-          :title="t('remote_control.slides.close_projection')"
-          color="error"
-          @click="closeMedia"
-        />
-      </v-list>
-    </v-footer>
+      <LjDivider />
+      <button type="button" class="rc-action rc-action--danger" @click="closeMedia">
+        <Icon :icon="ICONS.ACTIONS.CANCEL" :size="20" />
+        <span>{{ t("remote_control.slides.close_projection") }}</span>
+      </button>
+    </footer>
 
-    <v-footer v-if="tab === 'bible'" app border class="d-block pa-0">
-      <div class="pa-4 d-flex justify-space-between align-center">
-        <v-btn icon="mdi-chevron-left" variant="tonal" @click="prevVerseRemote" />
-        <div class="text-caption">{{ activeBible.reference }}</div>
-        <v-btn icon="mdi-chevron-right" variant="tonal" @click="nextVerseRemote" />
-      </div>
-      <v-divider />
-      <div class="pa-4 d-flex justify-space-between align-center">
-        <div class="cursor-pointer" @click="closeBible">
-          <v-btn icon="mdi-monitor" variant="tonal" />
-          <span class="ml-2">{{ t("remote_control.bible.clear_screen") }}</span>
-        </div>
-        <div class="cursor-pointer" @click="closeProjection">
-          <span class="mr-2">{{ t("remote_control.bible.close_projection") }}</span>
-          <v-btn icon="mdi-projector-screen" variant="tonal" />
-        </div>
-      </div>
-    </v-footer>
-
-    <v-footer v-if="tab === 'announcements'" app border class="d-block pa-0">
-      <div class="pa-4 d-flex justify-space-between align-center">
-        <v-btn icon="mdi-chevron-left" variant="tonal" @click="annPrev" />
-        <div class="text-caption">{{ t("remote_control.announcements.controls") }}</div>
-        <v-btn icon="mdi-chevron-right" variant="tonal" @click="annNext" />
-      </div>
-      <v-divider />
-      <v-list density="compact">
-        <v-list-item
-          prepend-icon="mdi-close-circle"
-          :title="t('remote_control.announcements.stop_projection')"
-          color="error"
-          @click="annStop"
+    <footer v-if="tab === 'bible'" class="rc-footer">
+      <div class="rc-footer__nav">
+        <LjButton
+          size="touch"
+          variant="subtle"
+          icon-only
+          :icon="ICONS.ACTIONS.PREVIOUS"
+          :aria-label="t('actions.previous')"
+          @click="prevVerseRemote"
         />
-      </v-list>
-    </v-footer>
+        <span class="rc-footer__status">{{ activeBible.reference }}</span>
+        <LjButton
+          size="touch"
+          variant="subtle"
+          icon-only
+          :icon="ICONS.ACTIONS.NEXT"
+          :aria-label="t('actions.next')"
+          @click="nextVerseRemote"
+        />
+      </div>
+      <LjDivider />
+      <div class="rc-footer__split">
+        <button type="button" class="rc-action" @click="closeBible">
+          <Icon :icon="ICONS.UI.MONITOR" :size="20" />
+          <span>{{ t("remote_control.bible.clear_screen") }}</span>
+        </button>
+        <button type="button" class="rc-action rc-action--end" @click="closeProjection">
+          <span>{{ t("remote_control.bible.close_projection") }}</span>
+          <Icon :icon="ICONS.PROJECTION.SCREEN" :size="20" />
+        </button>
+      </div>
+    </footer>
+
+    <footer v-if="tab === 'announcements'" class="rc-footer">
+      <div class="rc-footer__nav">
+        <LjButton
+          size="touch"
+          variant="subtle"
+          icon-only
+          :icon="ICONS.ACTIONS.PREVIOUS"
+          :aria-label="t('actions.previous')"
+          @click="annPrev"
+        />
+        <span class="rc-footer__status">{{ t("remote_control.announcements.controls") }}</span>
+        <LjButton
+          size="touch"
+          variant="subtle"
+          icon-only
+          :icon="ICONS.ACTIONS.NEXT"
+          :aria-label="t('actions.next')"
+          @click="annNext"
+        />
+      </div>
+      <LjDivider />
+      <button type="button" class="rc-action rc-action--danger" @click="annStop">
+        <Icon :icon="ICONS.ACTIONS.CANCEL" :size="20" />
+        <span>{{ t("remote_control.announcements.stop_projection") }}</span>
+      </button>
+    </footer>
 
     <!-- Diálogo de token inválido -->
-    <v-dialog v-model="isTokenInvalid" persistent max-width="420">
-      <v-card>
-        <v-card-title class="text-error d-flex align-center ga-2">
-          <v-icon icon="mdi-alert-circle" size="24" />
-          <span>{{ t("remote_control.token_invalid.title") }}</span>
-        </v-card-title>
-        <v-card-text class="text-body-2">
-          {{ t("remote_control.token_invalid.message") }}
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn color="primary" variant="tonal" @click="isTokenInvalid = false">
-            {{ t("alert.close") }}
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <LjDialog
+      v-model="isTokenInvalid"
+      persistent
+      size="sm"
+      :title="t('remote_control.token_invalid.title')"
+      :icon="ICONS.UI.ALERT_CIRCLE"
+      icon-variant="danger"
+    >
+      <p class="rc-dialog-text">{{ t("remote_control.token_invalid.message") }}</p>
+      <template #footer>
+        <LjButton size="touch" variant="primary" @click="isTokenInvalid = false">
+          {{ t("alert.close") }}
+        </LjButton>
+      </template>
+    </LjDialog>
 
-    <!-- Snackbar de feedback -->
-    <v-snackbar v-model="snackbar.show" :timeout="2000" :color="snackbar.color">
-      {{ snackbar.text }}
-    </v-snackbar>
-  </v-app>
+    <!-- Aviso de feedback -->
+    <LjToast
+      v-model="snackbar.show"
+      :text="snackbar.text"
+      :variant="snackbarVariant"
+      :timeout="2000"
+    />
+  </div>
 </template>
 
 <script setup>
@@ -188,6 +207,9 @@ import { useRoute } from "vue-router";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { isTokenInvalid, apiFetch } from "@/helpers/ApiClient";
+import Icon from "@/components/Icon.vue";
+import { LjButton, LjDialog, LjDivider, LjSpinner, LjTabs, LjToast } from "@/components/ui";
+import { ICONS } from "@/config/Icons";
 import RemoteMusic from "./RemoteMusic.vue";
 import RemoteBible from "./RemoteBible.vue";
 import RemoteLiturgy from "./RemoteLiturgy.vue";
@@ -209,6 +231,30 @@ isTokenInvalid.value = false;
 const bibleRef = ref(null);
 const liturgyRef = ref(null);
 const announcementsRef = ref(null);
+
+const tabItems = computed(() => [
+  { value: "music", label: t("module_group.musics.title"), icon: ICONS.MUSIC.NOTE },
+  { value: "bible", label: t("module_group.bible.title"), icon: ICONS.BIBLE.BOOK_OPEN },
+  { value: "liturgy", label: t("modules.liturgy.name"), icon: ICONS.FORMAT.LIST_BULLETED },
+  { value: "slides", label: t("remote_control.tabs.slides"), icon: ICONS.UI.VIEW_GRID },
+  {
+    value: "announcements",
+    label: t("remote_control.tabs.announcements"),
+    icon: ICONS.MODULES.ANNOUNCEMENTS,
+  },
+]);
+
+// O `v-window-item` do Vuetify montava a aba no primeiro acesso e a mantinha
+// montada dali em diante (só escondia). As telas dependem disso: os `ref`
+// continuam válidos e a busca digitada não se perde ao trocar de aba.
+const bootedTabs = ref(new Set([tab.value]));
+const isBooted = (name) => bootedTabs.value.has(name);
+watch(tab, (newTab) => bootedTabs.value.add(newTab));
+
+const TOAST_VARIANTS = ["info", "success", "warning", "error"];
+const snackbarVariant = computed(() =>
+  TOAST_VARIANTS.includes(snackbar.value.color) ? snackbar.value.color : "info"
+);
 
 // --- Anúncios ---
 const annProjecting = ref(false);
@@ -461,18 +507,172 @@ onMounted(async () => {
 });
 </script>
 
-<style scoped>
-.remote-root {
-  background: #f5f5f5;
-  height: 100vh;
+<!-- Sem `scoped`: o diálogo de token vai para um portal no <body> e o atributo
+     de escopo não chega lá. O isolamento vem do prefixo `rc-`. -->
+<style>
+.rc-root {
   display: flex;
   flex-direction: column;
+  height: 100vh;
+  background: var(--lj-surface-bg-soft);
+  color: var(--lj-text);
+  font-family: var(--lj-font-shell);
+  font-size: var(--lj-text-base);
 }
-.remote-content {
+
+/* --- Cabeçalho --- */
+.rc-topbar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--lj-space-4);
+  height: 48px;
+  padding-inline: var(--lj-space-6);
+  background: var(--lj-titlebar-bg);
+  color: var(--lj-titlebar-color);
+}
+
+.rc-topbar__title {
+  margin: 0;
+  overflow: hidden;
+  font-size: var(--lj-text-xl);
+  font-weight: var(--lj-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* O botão fantasma nasce com a cor de texto da superfície — sobre o navy do
+   cabeçalho ele precisa herdar o branco da barra. */
+.rc-topbar .rc-topbar__refresh .lj-btn {
+  color: var(--lj-titlebar-color);
+}
+
+.rc-topbar .rc-topbar__refresh .lj-btn:hover {
+  background: var(--lj-white-alpha-10);
+  color: var(--lj-titlebar-color);
+}
+
+/* --- Abas --- */
+.rc-tabs {
+  flex-shrink: 0;
+  background: var(--lj-surface-bg);
+}
+
+/* Cinco abas não cabem na largura de um celular: a faixa rola na horizontal,
+   sem barra visível, como fazia o `v-tabs`. */
+.rc-tabs .lj-tabs__list {
+  justify-content: center;
+  justify-content: safe center;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.rc-tabs .lj-tabs__list::-webkit-scrollbar {
+  display: none;
+}
+
+/* Alvo de toque confortável — a altura de aba do shell é pensada para mouse. */
+.rc-tabs .lj-tabs__list .lj-tabs__trigger {
+  flex-shrink: 0;
+  height: auto;
+  min-height: 44px;
+  white-space: nowrap;
+}
+
+/* --- Conteúdo --- */
+.rc-content {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
-:deep(.v-window-item) {
+
+.rc-pane {
   height: 100%;
+}
+
+/* --- Rodapé de controles --- */
+.rc-footer {
+  flex-shrink: 0;
+  background: var(--lj-surface-bg);
+  border-top: 1px solid var(--lj-surface-border);
+}
+
+.rc-footer__nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lj-space-5);
+  padding: var(--lj-space-6);
+}
+
+.rc-footer__status {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--lj-text-muted);
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rc-footer__split {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-4);
+}
+
+.rc-action {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--lj-space-4);
+  min-height: 48px;
+  padding: var(--lj-space-5) var(--lj-space-6);
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rc-action--end {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.rc-action--danger {
+  color: var(--lj-alert-error-color, var(--lj-danger));
+}
+
+.rc-action:hover {
+  background: var(--lj-surface-bg-hover);
+}
+
+.rc-action:active {
+  background: var(--lj-surface-bg-active);
+}
+
+.rc-action:focus-visible {
+  outline: none;
+  box-shadow: var(--lj-ui-focus);
+}
+
+/* --- Carregando --- */
+.rc-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 2400;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--lj-black-alpha-40);
+  color: var(--lj-white);
+}
+
+/* --- Diálogo (conteúdo teleportado) --- */
+.rc-dialog-text {
+  margin: 0;
+  line-height: 1.5;
 }
 </style>

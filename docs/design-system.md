@@ -659,6 +659,11 @@ com qualquer outro `size="md"`.
 | `--lj-ui-icon-*`                 | 13px | 15px | 17px   |
 | `--lj-ui-font-*`                 | 11px | 12px | 12.5px |
 
+Há um quarto tamanho, `touch` (44px), fora dessa escala de propósito: vale só
+para superfícies operadas com o dedo — hoje, o controle remoto que o operador
+abre no celular. Na shell, use `sm`/`md`/`lg`; 32px é alvo curto demais para
+toque, e num culto o toque errado custa caro.
+
 Invariantes:
 
 - **um traço**: `--lj-ui-border` (1px sólido) em todo controle;
@@ -712,6 +717,13 @@ Componentes já migrados: `SelectFont`, `MonitorSelect`, `FieldSelect`,
 `ReleaseNotesDialog`, `UpdateAvailableDialog`, `CategoryManagerDialog`,
 `LiturgyManageDialog`, `Screen`, `RibbonScreenButton`, `AppMenuSobre`,
 `collections/Index`, `OverlaySlotEditor`.
+
+### Autofoco dentro de diálogo
+
+O atributo `autofocus` do HTML é ignorado pelo navegador em elementos inseridos
+depois do carregamento — sempre o caso dentro de um `LjDialog`. Use a prop
+`autofocus` do `LjInput`, que foca de fato no próximo tick, ou o método
+`focus()` que ele expõe.
 
 ### Uma armadilha de prop que já custou caro
 

@@ -8,9 +8,9 @@
       <!-- Servidor: start/stop + token + port + external routes toggle -->
       <section class="opt-section">
         <h3 class="opt-section-title">
-          <v-icon :icon="ICONS.UI.SERVER" size="18" />
+          <Icon :icon="ICONS.UI.SERVER" :size="18" />
           {{ $t("options.transmission.http_server") }}
-          <span class="font-italic text-sm-body-small ml-5">
+          <span class="tx-title-hint">
             {{ $t("options.transmission.http_server_hint") }}
           </span>
         </h3>
@@ -23,12 +23,11 @@
           <span v-else class="tx-status-text">
             {{ $t("options.transmission.server_stopped") }}
           </span>
-          <v-btn
-            type="button"
+          <LjButton
+            size="sm"
+            :variant="httpServer.running ? 'danger' : 'primary'"
             :disabled="httpServerLoading"
-            size="small"
-            :prepend-icon="httpServer.running ? ICONS.ACTIONS.STOP : ICONS.ACTIONS.START"
-            :color="httpServer.running ? 'error' : 'primary'"
+            :icon="httpServer.running ? ICONS.ACTIONS.STOP : ICONS.ACTIONS.START"
             @click="toggleHttpServer"
           >
             {{
@@ -36,42 +35,41 @@
                 ? $t("options.transmission.stop_server")
                 : $t("options.transmission.start_server")
             }}
-          </v-btn>
+          </LjButton>
         </div>
 
         <div class="tx-token-row">
           <span class="tx-token-label">{{ $t("options.transmission.token_label") }}</span>
           <code class="tx-token">{{ httpServer.token }}</code>
-          <v-btn
-            size="small"
-            class="opt-btn opt-btn--small"
-            :prepend-icon="ICONS.ACTIONS.RESTART"
-            @click="resetToken"
-          >
+          <LjButton size="sm" :icon="ICONS.ACTIONS.RESTART" @click="resetToken">
             {{ $t("options.transmission.token_reset") }}
-          </v-btn>
+          </LjButton>
 
-          <label class="opt-label ml-10">{{ $t("options.transmission.port") }}</label>
-          <input
-            type="number"
-            class="opt-input opt-input--num"
-            placeholder="7070"
-            :value="httpServerPort"
-            min="1"
-            max="65535"
-            @change="setHttpServerPort(Number($event.target.value))"
-          />
+          <label class="opt-label tx-port-label" for="tx-port">
+            {{ $t("options.transmission.port") }}
+          </label>
+          <!-- O invólucro dá ao CSS com escopo onde se prender: a classe passada
+               ao LjInput cairia no <input> interno, que não recebe o atributo. -->
+          <span class="tx-port">
+            <LjInput
+              id="tx-port"
+              size="sm"
+              type="number"
+              placeholder="7070"
+              :model-value="httpServerPort"
+              min="1"
+              max="65535"
+              @change="setHttpServerPort(Number($event.target.value))"
+            />
+          </span>
           <p class="opt-hint">{{ $t("options.transmission.port_hint") }}</p>
         </div>
 
-        <label class="opt-checkbox">
-          <input
-            type="checkbox"
-            :checked="externalRoutesEnabled"
-            @change="setExternalRoutes($event.target.checked)"
-          />
-          <span>{{ $t("options.transmission.external_routes") }}</span>
-        </label>
+        <LjCheckbox
+          :model-value="externalRoutesEnabled"
+          :label="$t('options.transmission.external_routes')"
+          @update:model-value="setExternalRoutes"
+        />
         <p v-if="!httpServer.running" class="opt-hint opt-hint--warn">
           {{ $t("options.transmission.server_stopped_hint") }}
         </p>
@@ -79,14 +77,11 @@
         <p class="opt-hint opt-hint--info"></p>
 
         <div>
-          <label class="opt-checkbox">
-            <input
-              type="checkbox"
-              :checked="useHostname"
-              @change="toggleUseHostname($event.target.checked)"
-            />
-            <span>{{ $t("options.transmission.use_hostname") }}</span>
-          </label>
+          <LjCheckbox
+            :model-value="useHostname"
+            :label="$t('options.transmission.use_hostname')"
+            @update:model-value="toggleUseHostname"
+          />
           <p class="opt-hint">
             {{
               $t("options.transmission.use_hostname_hint", {
@@ -102,7 +97,7 @@
       <!-- URLs de transmissão (compatibilidade Delphi) -->
       <section v-if="httpServer.running && externalRoutesEnabled" class="opt-section">
         <h3 class="opt-section-title">
-          <v-icon :icon="ICONS.UI.LINK" size="18" />
+          <Icon :icon="ICONS.UI.LINK" :size="18" />
           {{ $t("options.transmission.urls_section") }}
         </h3>
         <p class="opt-hint">{{ $t("options.transmission.urls_hint") }}</p>
@@ -113,10 +108,9 @@
               <div class="tx-url-title">{{ $t(link.titleKey) }}</div>
               <code class="tx-url">{{ remoteUrl(link) }}</code>
             </div>
-            <v-btn
-              size="small"
-              class="opt-btn opt-btn--small"
-              :prepend-icon="ICONS.ACTIONS.COPY"
+            <LjButton
+              size="sm"
+              :icon="ICONS.ACTIONS.COPY"
               @click="copy(remoteUrl(link), link.alias)"
             >
               {{
@@ -124,11 +118,10 @@
                   ? $t("options.transmission.copied")
                   : $t("options.transmission.copy")
               }}
-            </v-btn>
-            <v-btn size="small" class="opt-btn opt-btn--small" @click="showQrCode(link)">
-              <v-icon icon="mdi-qrcode" size="14" />
+            </LjButton>
+            <LjButton size="sm" :icon="ICONS.UI.QRCODE" @click="showQrCode(link)">
               {{ $t("options.transmission.qr_code") }}
-            </v-btn>
+            </LjButton>
           </div>
         </div>
       </section>
@@ -136,17 +129,14 @@
       <!-- Atalhos globais -->
       <section class="opt-section">
         <h3 class="opt-section-title">
-          <v-icon :icon="ICONS.UI.KEYBOARD" size="18" />
+          <Icon :icon="ICONS.UI.KEYBOARD" :size="18" />
           {{ $t("options.transmission.shortcuts_title") }}
         </h3>
-        <label class="opt-checkbox">
-          <input
-            type="checkbox"
-            :checked="globalShortcutsEnabled"
-            @change="toggleGlobalShortcuts($event.target.checked)"
-          />
-          <span>{{ $t("options.transmission.global_shortcuts") }}</span>
-        </label>
+        <LjCheckbox
+          :model-value="globalShortcutsEnabled"
+          :label="$t('options.transmission.global_shortcuts')"
+          @update:model-value="toggleGlobalShortcuts"
+        />
         <p class="opt-hint">{{ $t("options.transmission.global_shortcuts_hint") }}</p>
       </section>
     </template>
@@ -154,13 +144,13 @@
     <!-- Janelas locais — abre uma view como BrowserWindow -->
     <section class="opt-section">
       <h3 class="opt-section-title">
-        <v-icon :icon="ICONS.UI.WINDOW_RESTORE" size="18" />
+        <Icon :icon="ICONS.UI.WINDOW_RESTORE" :size="18" />
         {{ $t("options.transmission.local_windows") }}
       </h3>
       <p class="opt-hint">{{ $t("options.transmission.local_windows_hint") }}</p>
       <div class="tx-local">
         <div v-for="win in localWindows" :key="win.route" class="tx-local-row">
-          <v-icon :icon="win.icon" size="18" />
+          <Icon :icon="win.icon" :size="18" />
           <div class="tx-local-info">
             <div class="tx-local-title">{{ $t(win.titleKey) }}</div>
           </div>
@@ -171,51 +161,38 @@
             :model-value="getPref(featureKey(win.route))"
             @update:model-value="setPref(featureKey(win.route), $event)"
           />
-          <v-btn
-            size="small"
-            class="opt-btn opt-btn--small"
-            prepend-icon="mdi-monitor-multiple"
-            @click="openLocalWindow(win)"
-          >
+          <LjButton size="sm" :icon="ICONS.UI.MONITORS" @click="openLocalWindow(win)">
             {{ $t("options.transmission.open_window") }}
-          </v-btn>
+          </LjButton>
         </div>
       </div>
     </section>
   </div>
 
-  <v-dialog v-model="showQrDialog" max-width="340">
-    <v-card rounded="lg">
-      <header class="qr-header">
-        <v-icon icon="mdi-qrcode" size="20" />
-        <span>{{ $t(qrTitle) }}</span>
-        <v-spacer />
-        <button
-          type="button"
-          class="qr-close"
-          :title="$t('alert.close')"
-          @click="showQrDialog = false"
-        >
-          <v-icon icon="mdi-close" size="16" />
-        </button>
-      </header>
-      <div class="qr-body">
-        <canvas ref="qrCanvas" class="qr-canvas" />
-        <code class="qr-url">{{ qrUrl }}</code>
-      </div>
-      <footer class="qr-footer">
-        <v-btn class="opt-btn" @click="showQrDialog = false">
-          {{ $t("alert.close") }}
-        </v-btn>
-      </footer>
-    </v-card>
-  </v-dialog>
+  <LjDialog
+    v-model="showQrDialog"
+    size="sm"
+    :icon="ICONS.UI.QRCODE"
+    :title="qrTitle ? $t(qrTitle) : ''"
+  >
+    <div class="qr-body">
+      <canvas ref="qrCanvas" class="qr-canvas" />
+      <code class="qr-url">{{ qrUrl }}</code>
+    </div>
+    <template #footer>
+      <LjButton size="sm" @click="showQrDialog = false">
+        {{ $t("alert.close") }}
+      </LjButton>
+    </template>
+  </LjDialog>
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useDisplays } from "@/composables/useDisplays";
+import Icon from "@/components/Icon.vue";
 import MonitorSelect from "@/components/inputs/MonitorSelect.vue";
+import { LjButton, LjCheckbox, LjDialog, LjInput } from "@/components/ui";
 import Platform from "@/helpers/Platform";
 import { open as openProjection } from "@/helpers/Projection";
 import { ICONS } from "@/config/Icons";
@@ -253,37 +230,37 @@ const remoteLinks = [
 const localWindows = [
   {
     route: "/projection",
-    icon: "mdi-monitor",
+    icon: ICONS.UI.MONITOR,
     titleKey: "options.transmission.win_projection",
   },
   {
     route: "/projection/return",
-    icon: "mdi-monitor-eye",
+    icon: ICONS.PROJECTION.RETURN,
     titleKey: "options.transmission.win_return",
   },
   {
     route: "/projection/bible/return",
-    icon: "mdi-book-open-page-variant",
+    icon: ICONS.BIBLE.BOOK_OPEN_PAGE,
     titleKey: "options.transmission.win_bible_return",
   },
   {
     route: "/operator",
-    icon: "mdi-view-grid-outline",
+    icon: ICONS.UI.VIEW_GRID_OUTLINE,
     titleKey: "options.transmission.win_operator",
   },
   {
     route: "/obs",
-    icon: "mdi-television-play",
+    icon: ICONS.MEDIA.TELEVISION_PLAY,
     titleKey: "options.transmission.win_music",
   },
   {
     route: "/obs/bible",
-    icon: "mdi-book-open-variant",
+    icon: ICONS.BIBLE.BOOK_OPEN,
     titleKey: "options.transmission.win_bible",
   },
   {
     route: "/clock",
-    icon: "mdi-clock-outline",
+    icon: ICONS.MODULES.CLOCK,
     titleKey: "options.transmission.win_clock",
   },
 ];
@@ -359,9 +336,15 @@ function showQrCode(link) {
   qrUrl.value = url;
   qrTitle.value = link.titleKey;
   showQrDialog.value = true;
-  nextTick(async () => {
-    const canvas = qrCanvas.value;
-    if (!canvas) return;
+}
+
+// O corpo do diálogo é emitido num portal, então o canvas só existe depois que
+// o conteúdo monta: o desenho fica preso à referência (e à URL, para o caso de
+// abrir outro link com o diálogo já montado), não a um tick após abrir.
+watch(
+  [qrCanvas, qrUrl],
+  async ([canvas, url]) => {
+    if (!canvas || !url) return;
     try {
       await QRCode.toCanvas(canvas, url, {
         width: 240,
@@ -371,8 +354,9 @@ function showQrCode(link) {
     } catch (e) {
       console.error("[Transmitir] QRCode:", e);
     }
-  });
-}
+  },
+  { flush: "post" }
+);
 
 async function toggleHttpServer() {
   if (!Platform.httpServer) return;
@@ -507,78 +491,101 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+/* Legenda ao lado do título da seção: contexto que não compete com o título. */
+.tx-title-hint {
+  margin-left: var(--lj-space-7);
+  font-size: var(--lj-text-sm);
+  font-style: italic;
+  font-weight: var(--lj-weight-regular);
+  color: var(--lj-text-subtle);
+}
+
 /* Status do servidor: bullet + url/legenda + botão alinhados em uma linha. */
 .tx-status {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: var(--lj-space-4);
+  margin-bottom: var(--lj-space-4);
 }
 .tx-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #aaa;
+  background: var(--lj-text-subtle);
   flex-shrink: 0;
 }
 .tx-dot--on {
-  background: #16a34a;
-  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.18);
+  background: var(--lj-success);
+  box-shadow: 0 0 0 3px var(--lj-success-soft);
 }
 .tx-status-url {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--lj-font-mono);
   flex: 1;
   word-break: break-all;
 }
 .tx-status-text {
   flex: 1;
-  opacity: 0.7;
+  color: var(--lj-text-muted);
 }
 
 .tx-token-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 8px 0;
+  gap: var(--lj-space-4);
+  margin: var(--lj-space-4) 0;
 }
 .tx-token-label {
-  opacity: 0.7;
-  font-size: 0.85rem;
+  color: var(--lj-text-muted);
+  font-size: var(--lj-text-base);
 }
 .tx-token {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--lj-font-mono);
   letter-spacing: 0.08em;
-  padding: 2px 8px;
-  background: rgba(127, 127, 127, 0.12);
-  border-radius: 4px;
+  padding: var(--lj-space-1) var(--lj-space-4);
+  background: var(--lj-surface-bg-active);
+  border-radius: var(--lj-radius-md);
+}
+.tx-port-label {
+  margin-left: var(--lj-space-8);
+}
+.tx-port {
+  display: inline-flex;
+  flex: none;
+  width: 92px;
+}
+.tx-port :deep(.lj-input) {
+  width: 100%;
+}
+.tx-port :deep(.lj-input__field) {
+  text-align: center;
 }
 
 /* Lista de URLs de transmissão. */
 .tx-urls {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--lj-space-3);
 }
 .tx-url-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px;
-  background: rgba(127, 127, 127, 0.06);
-  border-radius: 6px;
+  gap: var(--lj-space-4);
+  padding: var(--lj-space-4);
+  background: var(--lj-surface-bg-hover);
+  border-radius: var(--lj-radius-lg);
 }
 .tx-url-info {
   flex: 1;
   min-width: 0;
 }
 .tx-url-title {
-  font-weight: 500;
-  margin-bottom: 2px;
+  font-weight: var(--lj-weight-medium);
+  margin-bottom: var(--lj-space-1);
 }
 .tx-url {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.78rem;
-  opacity: 0.85;
+  font-family: var(--lj-font-mono);
+  font-size: var(--lj-text-md);
+  color: var(--lj-text-muted);
   word-break: break-all;
   display: block;
 }
@@ -587,74 +594,41 @@ onMounted(async () => {
 .tx-local {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--lj-space-2);
 }
 .tx-local-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 0;
+  gap: var(--lj-space-4);
+  padding: var(--lj-space-2) 0;
 }
 .tx-local-info {
   flex: 1;
 }
 .tx-local-title {
-  font-size: 0.92rem;
+  font-size: var(--lj-text-lg);
 }
 .tx-local-select {
   max-width: 180px;
 }
 
-/* QR Code dialog */
-.qr-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--lj-surface-divider);
-  font-weight: 600;
-  font-size: 0.95rem;
-}
-.qr-close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: none;
-  background: transparent;
-  border-radius: 4px;
-  cursor: pointer;
-  color: var(--lj-text);
-  opacity: 0.6;
-}
-.qr-close:hover {
-  opacity: 1;
-  background: var(--lj-surface-bg-hover);
-}
+/* Corpo do diálogo de QR Code — o cabeçalho e o rodapé são do LjDialog. */
 .qr-body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  padding: 20px;
+  gap: var(--lj-space-5);
 }
 .qr-canvas {
-  border-radius: 8px;
+  border-radius: var(--lj-radius-lg);
   max-width: 100%;
 }
 .qr-url {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.75rem;
-  opacity: 0.8;
+  font-family: var(--lj-font-mono);
+  font-size: var(--lj-text-base);
+  color: var(--lj-text-muted);
   word-break: break-all;
   text-align: center;
   max-width: 100%;
-}
-.qr-footer {
-  display: flex;
-  justify-content: flex-end;
-  padding: 8px 16px;
-  border-top: 1px solid var(--lj-surface-divider);
 }
 </style>

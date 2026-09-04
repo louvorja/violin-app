@@ -58,3 +58,11 @@ describe("LjButton", () => {
     }
   });
 });
+
+describe("LjButton — tamanho de toque", () => {
+  it("aceita o tamanho touch, para superfícies operadas com o dedo", () => {
+    // Existe porque o controle remoto roda no celular: 32px (lg) é alvo curto
+    // demais para o dedo. Na shell continua sm/md/lg.
+    expect(mountUi(LjButton, { props: { size: "touch" } }).classes()).toContain("lj-ui-size-touch");
+  });
+});

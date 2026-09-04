@@ -5,95 +5,84 @@
     :style="{ minWidth: '360px' }"
     @close="close()"
   >
-    <div class="d-flex h-100">
+    <div class="mb-body">
       <ModuleFormatDrawer v-model="show_format" :module-id="'message_board'" :manifest="manifest" />
 
       <!-- Drawer direito — edição dos recados -->
-      <v-navigation-drawer
-        v-model="showList"
-        temporary
-        absolute
-        :scrim="false"
-        location="end"
-        width="300"
-        class="mb-list-drawer"
-      >
-        <div class="mb-list-drawer__header">
-          <span class="mb-list-drawer__title">{{ t("data.list") }}</span>
-        </div>
-        <div class="mb-list-drawer__body">
-          <v-textarea
-            v-model="draft"
-            :placeholder="t('inputs.message')"
-            rows="3"
-            auto-grow
-            density="compact"
-            hide-details
-            variant="outlined"
-            @keydown.ctrl.enter.prevent="addMessage"
-          />
-          <div class="d-flex mt-2" style="gap: 8px">
-            <v-btn
-              :color="primaryColor"
-              size="small"
-              prepend-icon="mdi-plus"
-              :disabled="!draft.trim()"
-              @click="addMessage"
-            >
-              {{ t("actions.add") }}
-            </v-btn>
-            <v-chip v-if="showing" color="success" size="small" prepend-icon="mdi-check-circle">
-              {{ t("data.showing") }}
-            </v-chip>
+      <Transition name="mb-drawer">
+        <aside v-if="showList" class="mb-list-drawer">
+          <div class="mb-list-drawer__header">
+            <span class="mb-list-drawer__title">{{ t("data.list") }}</span>
           </div>
-        </div>
 
-        <v-divider />
+          <div class="mb-list-drawer__body">
+            <LjTextarea
+              v-model="draft"
+              :placeholder="t('inputs.message')"
+              :rows="3"
+              @keydown.ctrl.enter.prevent="addMessage"
+            />
+            <div class="mb-list-drawer__actions">
+              <LjButton
+                size="sm"
+                variant="primary"
+                :icon="ICONS.ACTIONS.ADD"
+                :disabled="!draft.trim()"
+                @click="addMessage"
+              >
+                {{ t("actions.add") }}
+              </LjButton>
+              <LjChip v-if="showing" variant="success" size="sm" :icon="ICONS.UI.CHECK_CIRCLE">
+                {{ t("data.showing") }}
+              </LjChip>
+            </div>
+          </div>
 
-        <div v-if="messages.length === 0" class="pa-6 text-center text-disabled text-body-2">
-          {{ t("data.empty") }}
-        </div>
+          <LjDivider />
 
-        <v-list v-else density="compact" class="mb-list-drawer__list">
-          <v-list-item
-            v-for="(msg, i) in messages"
-            :key="msg.id"
-            class="border-b"
-            :class="{ 'msg-active': activeIndex === i }"
-            @click="present(i)"
-          >
-            <v-list-item-title class="text-body-2" style="white-space: pre-wrap">
-              {{ msg.text }}
-            </v-list-item-title>
-            <template #append>
-              <v-btn
-                icon="mdi-presentation-play"
-                variant="text"
-                density="compact"
-                size="small"
-                :color="activeIndex === i ? 'success' : primaryColor"
-                @click.stop="present(i)"
-              />
-              <v-btn
-                icon="mdi-close"
-                variant="text"
-                density="compact"
-                size="small"
-                color="error"
-                @click.stop="removeMessage(i)"
-              />
-            </template>
-          </v-list-item>
-        </v-list>
-      </v-navigation-drawer>
+          <p v-if="messages.length === 0" class="mb-list-drawer__empty">
+            {{ t("data.empty") }}
+          </p>
+
+          <ul v-else class="mb-list">
+            <li
+              v-for="(msg, i) in messages"
+              :key="msg.id"
+              class="mb-msg"
+              :class="{ 'mb-msg--active': activeIndex === i }"
+            >
+              <button type="button" class="mb-msg__text" @click="present(i)">
+                {{ msg.text }}
+              </button>
+              <div class="mb-msg__actions">
+                <LjButton
+                  size="sm"
+                  variant="ghost"
+                  icon-only
+                  :icon="ICONS.PROJECTION.PRESENT"
+                  :class="activeIndex === i ? 'mb-msg__present--on' : 'mb-msg__present'"
+                  :title="t('actions.present')"
+                  :aria-label="t('actions.present')"
+                  @click.stop="present(i)"
+                />
+                <LjButton
+                  size="sm"
+                  variant="ghost"
+                  icon-only
+                  :icon="ICONS.ACTIONS.CLOSE"
+                  class="mb-msg__remove"
+                  :title="t('actions.remove')"
+                  :aria-label="t('actions.remove')"
+                  @click.stop="removeMessage(i)"
+                />
+              </div>
+            </li>
+          </ul>
+        </aside>
+      </Transition>
 
       <!-- Preview do recado selecionado -->
-      <div
-        ref="container"
-        class="flex-grow-1"
-        style="min-width: 0; position: relative"
-        :style="rootStyle"
-      >
+      <div ref="container" class="mb-preview-area" :style="rootStyle">
         <img v-if="bgImage" :src="bgImage" class="mb-bg-img" :style="imageStyle" alt="" />
         <div v-if="showing" class="mb-preview" :style="textStyle">
           {{ messages[activeIndex]?.text || "" }}
@@ -106,42 +95,51 @@
 
     <!-- Toolbar do preview (clear + fullscreen) -->
     <template #right>
-      <v-btn
-        v-if="showing"
-        icon="mdi-stop"
-        variant="text"
-        density="compact"
-        color="error"
-        :title="t('actions.clear_board')"
-        @click="clearPresentation"
-      />
-      <v-btn
-        icon="mdi-fullscreen"
-        variant="text"
-        density="compact"
-        :title="t('actions.fullscreen')"
-        @click="fullscreen = true"
-      />
+      <div class="mb-tools">
+        <LjButton
+          v-if="showing"
+          size="sm"
+          variant="ghost"
+          icon-only
+          class="mb-tools__danger"
+          :icon="ICONS.PLAYER.STOP"
+          :title="t('actions.clear_board')"
+          :aria-label="t('actions.clear_board')"
+          @click="clearPresentation"
+        />
+        <LjButton
+          size="sm"
+          variant="ghost"
+          icon-only
+          :icon="ICONS.PLAYER.FULLSCREEN"
+          :title="t('actions.fullscreen')"
+          :aria-label="t('actions.fullscreen')"
+          @click="fullscreen = true"
+        />
+      </div>
     </template>
   </ModuleContainer>
 
-  <!-- Fullscreen overlay -->
-  <v-dialog v-model="fullscreen" fullscreen transition="fade-transition">
-    <div
-      ref="fsRoot"
-      class="mb-fs-root"
-      tabindex="0"
-      :style="rootStyle"
-      @keydown.esc="fullscreen = false"
-      @keydown.space.prevent="showing ? clearPresentation() : null"
-      @click="fullscreen = false"
-    >
-      <Transition name="fade-slide" mode="out-in">
-        <div :key="fsText" class="mb-fs-text" :style="textStyle">{{ fsText || "" }}</div>
-      </Transition>
-      <div class="mb-fs-hint">ESC para fechar</div>
-    </div>
-  </v-dialog>
+  <!-- Fullscreen overlay — não há primitivo de diálogo em tela cheia -->
+  <Teleport to="body">
+    <Transition name="mb-fade">
+      <div
+        v-if="fullscreen"
+        ref="fsRoot"
+        class="mb-fs-root"
+        tabindex="0"
+        :style="rootStyle"
+        @keydown.esc="fullscreen = false"
+        @keydown.space.prevent="showing ? clearPresentation() : null"
+        @click="fullscreen = false"
+      >
+        <Transition name="fade-slide" mode="out-in">
+          <div :key="fsText" class="mb-fs-text" :style="textStyle">{{ fsText || "" }}</div>
+        </Transition>
+        <div class="mb-fs-hint">{{ t("data.esc_hint") }}</div>
+      </div>
+    </Transition>
+  </Teleport>
 </template>
 
 <script setup>
@@ -149,9 +147,10 @@ import { ref, computed, watch, nextTick, onMounted } from "vue";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import ModuleFormatDrawer from "@/components/ModuleFormatDrawer.vue";
+import { LjButton, LjChip, LjDivider, LjTextarea } from "@/components/ui";
+import { ICONS } from "@/config/Icons";
 import $broadcast from "@/helpers/Broadcast";
 import UserData from "@/helpers/UserData";
-import AppData from "@/helpers/AppData";
 import { useModuleProjection } from "@/composables/useModuleProjection";
 import { useModuleFormat } from "@/composables/useModuleFormat";
 import { useModuleBodyStyle } from "@/composables/useModuleBodyStyle";
@@ -182,7 +181,6 @@ const activeIndex = ref(-1);
 const fullscreen = ref(false);
 const fsText = ref("");
 
-const primaryColor = computed(() => (AppData.get("is_dark") ? undefined : "primary"));
 const showing = computed(() => activeIndex.value >= 0);
 
 const t = (key) => moduleContainer.value?.t(key) || key;
@@ -234,12 +232,19 @@ function close() {
 </script>
 
 <style scoped>
-.msg-active {
-  background: rgba(99, 102, 241, 0.08);
-  border-left: 3px solid #6366f1;
+/* Corpo do módulo: preview ocupa a área toda e o drawer flutua à direita. */
+.mb-body {
+  position: relative;
+  display: flex;
+  height: 100%;
 }
 
 /* Preview centralizado */
+.mb-preview-area {
+  position: relative;
+  flex-grow: 1;
+  min-width: 0;
+}
 .mb-preview {
   position: relative;
   z-index: 1;
@@ -248,7 +253,7 @@ function close() {
   justify-content: center;
   width: 100%;
   height: 100%;
-  padding: 24px;
+  padding: var(--lj-space-8);
   text-align: center;
   white-space: pre-wrap;
   word-break: break-word;
@@ -261,12 +266,30 @@ function close() {
   justify-content: center;
   width: 100%;
   height: 100%;
-  font-size: 0.875rem;
+  font-size: var(--lj-text-lg);
   opacity: 0.4;
+}
+
+/* Barra de ferramentas do cabeçalho do módulo */
+.mb-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-2);
+}
+.mb-tools :deep(.lj-btn.mb-tools__danger) {
+  color: var(--lj-danger);
 }
 
 /* Drawer direito */
 .mb-list-drawer {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  width: 300px;
   border-left: 1px solid var(--lj-surface-border);
   background: var(--lj-surface-bg);
   overflow: clip;
@@ -274,23 +297,87 @@ function close() {
 .mb-list-drawer__header {
   display: flex;
   align-items: center;
-  padding: 4px 8px 4px 12px;
+  padding: var(--lj-space-2) var(--lj-space-4) var(--lj-space-2) var(--lj-space-5);
   border-bottom: 1px solid var(--lj-surface-border);
-  background: var(--lj-surface-bg-soft, #eee);
+  background: var(--lj-surface-bg-soft);
 }
 .mb-list-drawer__title {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--lj-text-sm);
+  font-weight: var(--lj-weight-semibold);
   letter-spacing: 0.5px;
   text-transform: uppercase;
-  color: var(--lj-text-muted, #666);
+  color: var(--lj-text-muted);
 }
 .mb-list-drawer__body {
-  padding: 12px;
+  padding: var(--lj-space-5);
 }
-.mb-list-drawer__list {
-  overflow-y: auto;
+.mb-list-drawer__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-4);
+  margin-top: var(--lj-space-4);
+}
+.mb-list-drawer__empty {
+  margin: 0;
+  padding: var(--lj-space-7);
+  text-align: center;
+  font-size: var(--lj-text-lg);
+  color: var(--lj-text-subtle);
+}
+
+/* Lista de recados */
+.mb-list {
   flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+}
+.mb-msg {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-2);
+  padding: var(--lj-space-2) var(--lj-space-4) var(--lj-space-2) var(--lj-space-5);
+  border-bottom: 1px solid var(--lj-surface-divider);
+  border-left: 3px solid transparent;
+  cursor: pointer;
+}
+.mb-msg--active {
+  background: var(--lj-ui-accent-soft);
+  border-left-color: var(--lj-ui-accent);
+}
+.mb-msg__text {
+  flex: 1;
+  min-width: 0;
+  padding: var(--lj-space-3) 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--lj-text-lg);
+  text-align: left;
+  white-space: pre-wrap;
+  word-break: break-word;
+  cursor: pointer;
+}
+.mb-msg__text:focus-visible {
+  outline: none;
+  box-shadow: var(--lj-ui-focus);
+}
+.mb-msg__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-1);
+}
+.mb-msg__actions :deep(.lj-btn.mb-msg__present) {
+  color: var(--lj-ui-accent-text);
+}
+.mb-msg__actions :deep(.lj-btn.mb-msg__present--on) {
+  color: var(--lj-success);
+}
+.mb-msg__actions :deep(.lj-btn.mb-msg__remove) {
+  color: var(--lj-danger);
 }
 
 /* Background image */
@@ -305,9 +392,12 @@ function close() {
 
 /* Fullscreen */
 .mb-fs-root {
+  position: fixed;
+  inset: 0;
+  z-index: 2500;
   width: 100vw;
   height: 100vh;
-  background: #000;
+  background: var(--lj-color-projection-bg);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -320,23 +410,41 @@ function close() {
   position: relative;
   z-index: 1;
   font-size: clamp(2rem, 6vw, 5rem);
-  font-weight: 300;
-  color: #fff;
+  font-weight: var(--lj-weight-regular);
+  color: var(--lj-white);
   text-align: center;
   white-space: pre-wrap;
   line-height: 1.4;
-  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.8);
+  text-shadow: 0 2px 12px var(--lj-black-alpha-75);
   max-width: 90vw;
 }
 .mb-fs-hint {
   position: absolute;
-  bottom: 16px;
-  font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.2);
+  bottom: var(--lj-space-6);
+  font-size: var(--lj-text-base);
+  color: var(--lj-white-alpha-20);
   letter-spacing: 0.1em;
 }
 
 /* Transições */
+.mb-drawer-enter-active,
+.mb-drawer-leave-active {
+  transition: transform var(--lj-transition-slow);
+}
+.mb-drawer-enter-from,
+.mb-drawer-leave-to {
+  transform: translateX(100%);
+}
+
+.mb-fade-enter-active,
+.mb-fade-leave-active {
+  transition: opacity var(--lj-transition-slow);
+}
+.mb-fade-enter-from,
+.mb-fade-leave-to {
+  opacity: 0;
+}
+
 .fade-slide-enter-active {
   transition:
     opacity 0.3s,

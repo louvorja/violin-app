@@ -1,46 +1,37 @@
 <template>
-  <v-dialog v-model="open" max-width="760" transition="dialog-top-transition">
-    <v-card class="music-search">
-      <div class="music-search__bar">
-        <v-icon icon="mdi-magnify" size="22" class="text-medium-emphasis" />
-        <input
-          ref="searchInput"
-          v-model="search"
-          class="music-search__input"
-          type="text"
-          :placeholder="t('placeholder')"
-          autocomplete="off"
-          spellcheck="false"
-          @keydown.escape.prevent="open = false"
-          @keydown.enter.prevent="pickFirst"
-        />
-        <v-btn
-          v-if="search"
-          icon="mdi-close"
-          size="x-small"
-          variant="text"
-          density="compact"
-          @click="search = ''"
-        />
+  <LjDialog v-model="open" size="lg" :title="t('title')" :icon="ICONS.MODULES.MUSIC_SEARCH">
+    <div ref="searchBar" class="music-search__bar">
+      <LjInput
+        v-model="search"
+        size="lg"
+        clearable
+        :icon="ICONS.ACTIONS.SEARCH"
+        :placeholder="t('placeholder')"
+        :aria-label="t('placeholder')"
+        autocomplete="off"
+        spellcheck="false"
+        @keydown.escape.prevent="open = false"
+        @keydown.enter.prevent="pickFirst"
+      />
+    </div>
+
+    <div class="music-search__results">
+      <div v-if="loading" class="music-search__state">
+        <LjSpinner :size="24" />
       </div>
 
-      <v-divider />
+      <LjEmpty
+        v-else-if="!filteredMusics.length"
+        :icon="ICONS.MUSIC.NOTE_OUTLINE"
+        :title="search ? t('empty_search') : t('empty')"
+      />
 
-      <div class="music-search__results">
-        <div v-if="loading" class="music-search__state">
-          <v-progress-circular indeterminate size="24" />
-        </div>
-
-        <div v-else-if="!filteredMusics.length" class="music-search__state text-medium-emphasis">
-          <v-icon icon="mdi-music-note-outline" size="34" class="mb-2 text-disabled" />
-          <div>{{ search ? t("empty_search") : t("empty") }}</div>
-        </div>
-
-        <table v-else class="music-search__table">
+      <div v-else class="music-search__scroll">
+        <table class="music-search__table">
           <thead>
             <tr>
-              <th class="text-left">{{ t("music") }}</th>
-              <th class="text-left">{{ t("album") }}</th>
+              <th>{{ t("music") }}</th>
+              <th>{{ t("album") }}</th>
               <th />
             </tr>
           </thead>
@@ -52,60 +43,59 @@
               @click="mode === 'pick' && pickMusic(item)"
               @dblclick="pickMusic(item)"
             >
+              <td class="music-search__name">{{ item.name }}</td>
+              <td class="music-search__album">{{ albumLabel(item) }}</td>
               <td>
-                <strong>{{ item.name }}</strong>
-              </td>
-              <td class="text-medium-emphasis">
-                {{ albumLabel(item) }}
-              </td>
-              <td>
-                <div class="d-flex justify-end">
-                  <button
+                <div class="music-search__actions">
+                  <LjButton
                     v-if="mode === 'pick' && !onMusicAction"
-                    type="button"
-                    class="music-search__pick"
+                    size="sm"
+                    variant="ghost"
+                    icon-only
+                    :icon="ICONS.MUSIC.SLIDES_AUDIO"
                     :title="t('select')"
+                    :aria-label="t('select')"
                     @click.stop="pickMusic(item)"
-                  >
-                    <v-icon icon="mdi-play-box-multiple" size="16" />
-                  </button>
+                  />
                   <template v-if="onMusicAction">
-                    <button
-                      type="button"
-                      class="music-search__pick"
+                    <LjButton
+                      size="sm"
+                      variant="ghost"
+                      icon-only
+                      :icon="ICONS.MUSIC.SLIDES_AUDIO"
                       :title="t('audio')"
+                      :aria-label="t('audio')"
                       @click.stop="handleMusicAction(item, MusicActionEnum.AUDIO)"
-                    >
-                      <v-icon icon="mdi-play-box-multiple" size="16" />
-                    </button>
-                    <button
-                      type="button"
-                      class="music-search__pick"
+                    />
+                    <LjButton
+                      size="sm"
+                      variant="ghost"
+                      icon-only
+                      :icon="ICONS.MUSIC.SLIDES_PLAYBACK"
                       :title="t('playback')"
-                      :class="{ 'music-search__pick--disabled': !item.has_instrumental_music }"
+                      :aria-label="t('playback')"
                       :disabled="!item.has_instrumental_music"
                       @click.stop="handleMusicAction(item, MusicActionEnum.INSTRUMENTAL)"
-                    >
-                      <v-icon icon="mdi-play-box-multiple-outline" size="16" />
-                    </button>
-                    <button
-                      type="button"
-                      class="music-search__pick"
+                    />
+                    <LjButton
+                      size="sm"
+                      variant="ghost"
+                      icon-only
+                      :icon="ICONS.MUSIC.AUDIO"
                       :title="t('audio_only')"
+                      :aria-label="t('audio_only')"
                       @click.stop="handleMusicAction(item, MusicActionEnum.AUDIO_ONLY)"
-                    >
-                      <v-icon icon="mdi-file-music" size="16" />
-                    </button>
-                    <button
-                      type="button"
-                      class="music-search__pick"
+                    />
+                    <LjButton
+                      size="sm"
+                      variant="ghost"
+                      icon-only
+                      :icon="ICONS.MUSIC.AUDIO_PLAYBACK"
                       :title="t('playback_only')"
-                      :class="{ 'music-search__pick--disabled': !item.has_instrumental_music }"
+                      :aria-label="t('playback_only')"
                       :disabled="!item.has_instrumental_music"
                       @click.stop="handleMusicAction(item, MusicActionEnum.PLAYBACK_ONLY)"
-                    >
-                      <v-icon icon="mdi-file-music-outline" size="16" />
-                    </button>
+                    />
                   </template>
                   <l-music-menu-table
                     v-else-if="!Platform.isRemote"
@@ -113,37 +103,41 @@
                     :name="item.name"
                     :has_instrumental_music="item.has_instrumental_music ?? false"
                   />
-                  <div v-else class="d-flex align-center gap-1">
-                    <v-btn
-                      icon="mdi-play-circle-outline"
-                      size="small"
-                      variant="text"
-                      color="primary"
-                      @click.stop="pickMusic(item)"
-                    />
-                  </div>
+                  <LjButton
+                    v-else
+                    size="sm"
+                    variant="ghost"
+                    icon-only
+                    class="music-search__accent"
+                    :icon="ICONS.PLAYER.PLAY_OUTLINE"
+                    :title="t('select')"
+                    :aria-label="t('select')"
+                    @click.stop="pickMusic(item)"
+                  />
                 </div>
               </td>
             </tr>
           </tbody>
         </table>
       </div>
+    </div>
 
-      <v-divider />
-
-      <div class="music-search__footer">{{ filteredMusics.length }} {{ t("results") }}</div>
-    </v-card>
-  </v-dialog>
+    <template #footer>
+      <span class="music-search__footer">{{ filteredMusics.length }} {{ t("results") }}</span>
+    </template>
+  </LjDialog>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, provide, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import LMusicMenuTable from "@/components/MusicMenuTable.vue";
+import { LjButton, LjDialog, LjEmpty, LjInput, LjSpinner } from "@/components/ui";
 import Database from "@/helpers/Database";
 import Strings from "@/helpers/Strings";
 import Platform from "@/helpers/Platform";
 import $userdata from "@/helpers/UserData";
+import { ICONS } from "@/config/Icons";
 import { KEYS } from "@/constants/UserDataKeys";
 import type { SearchMusicItem } from "@/types/Music";
 import type { AlbumItem } from "@/types/Album";
@@ -164,7 +158,9 @@ const emit = defineEmits<{
 const { t: i18nT, locale } = useI18n();
 
 const search = ref<string>("");
-const searchInput = ref<HTMLInputElement | null>(null);
+// O primitivo não expõe o <input> interno: o invólucro é o caminho até ele
+// para devolver o foco ao campo assim que o diálogo abre.
+const searchBar = ref<HTMLElement | null>(null);
 const loading = ref<boolean>(false);
 const loadedLocale = ref<string | null>(null);
 const musics = ref<SearchMusicItem[]>([]);
@@ -263,7 +259,7 @@ watch(open, async (value: boolean) => {
   search.value = "";
   await loadMusics();
   await nextTick();
-  searchInput.value?.focus();
+  searchBar.value?.querySelector("input")?.focus();
 });
 
 watch(
@@ -277,58 +273,47 @@ watch(
 );
 </script>
 
+<!-- O corpo do diálogo viaja num portal, mas é compilado AQUI (slot do
+     consumidor), então o Vue carimba o atributo de escopo nele — inclusive na
+     raiz dos primitivos filhos — e `scoped` funciona normalmente. -->
 <style scoped>
-.music-search {
-  background: var(--lj-popup-bg);
-  color: var(--lj-text);
-  display: flex;
-  flex-direction: column;
-  max-height: 72vh;
-}
-
 .music-search__bar {
-  display: flex;
-  align-items: center;
-  gap: var(--lj-space-3);
-  padding: var(--lj-space-5) var(--lj-space-6);
+  margin-bottom: var(--lj-space-5);
 }
 
-.music-search__input {
-  flex: 1;
-  min-width: 0;
-  border: none;
-  outline: none;
-  background: transparent;
-  color: var(--lj-text);
-  font-family: inherit;
-  font-size: var(--lj-text-xl);
-}
-
-.music-search__input::placeholder {
-  color: var(--lj-text-muted);
+/* O LjInput é inline-flex e encolhe para o conteúdo: aqui ele ocupa a linha. */
+.music-search__bar :deep(.lj-input) {
+  width: 100%;
 }
 
 .music-search__results {
-  flex: 1;
-  overflow: auto;
   min-height: 180px;
 }
 
 .music-search__state {
-  min-height: 180px;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: var(--lj-space-6);
-  text-align: center;
+  min-height: 180px;
+  color: var(--lj-ui-accent-text);
+}
+
+/* Sem primitivo de tabela no catálogo: moldura única com cabeçalho fixo, como
+   a que já existia aqui. A rolagem mora neste invólucro para o `sticky` do
+   cabeçalho ter um contêiner de rolagem próprio. */
+.music-search__scroll {
+  max-height: 46vh;
+  overflow: auto;
+  border: 1px solid var(--lj-surface-border);
+  border-radius: var(--lj-radius-md);
 }
 
 .music-search__table {
   width: 100%;
-  min-width: 640px;
+  min-width: 560px;
   border-collapse: collapse;
   font-size: var(--lj-text-base);
+  text-align: left;
 }
 
 .music-search__table th {
@@ -350,6 +335,10 @@ watch(
   vertical-align: middle;
 }
 
+.music-search__table tbody tr:last-child td {
+  border-bottom: none;
+}
+
 .music-search__table tbody tr:hover {
   background: var(--lj-surface-bg-hover);
 }
@@ -358,29 +347,29 @@ watch(
   cursor: pointer;
 }
 
-.music-search__pick {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--lj-radius-sm);
-  color: var(--lj-text-muted);
-  cursor: pointer;
+.music-search__name {
+  font-weight: var(--lj-weight-semibold);
 }
 
-.music-search__pick:hover {
-  background: var(--lj-active-bg);
-  color: var(--lj-navy);
-  border-color: var(--lj-navy);
+.music-search__album {
+  color: var(--lj-text-muted);
+}
+
+.music-search__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--lj-space-2);
+}
+
+/* Três classes para vencer o `.lj-btn--ghost` do primitivo sem `!important`:
+   o botão de tocar do modo remoto era tingido com a cor de destaque. */
+.music-search__actions :deep(.lj-btn.music-search__accent) {
+  color: var(--lj-ui-accent-text);
 }
 
 .music-search__footer {
-  padding: var(--lj-space-3) var(--lj-space-6);
   color: var(--lj-text-muted);
   font-size: var(--lj-text-sm);
-  text-align: right;
 }
 </style>
