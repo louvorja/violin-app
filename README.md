@@ -6,13 +6,13 @@ Sistema de apresentação de letras de músicas e conteúdo bíblico para uso em
 
 ## Quick start
 
-**Pré-requisitos:** Node.js 18+, npm 9+
+**Pré-requisitos:** Node.js 20.19+ ou 22.12+ (exigido pelo Vite 7), npm 10+
 
 ```bash
 git clone https://github.com/louvorja/violin-app
 cd violin-app
 npm install
-cp env .env              # configure VITE_URL_DATABASE, VITE_URL_FILES, VITE_API_TOKEN
+cp .env.example .env     # configure VITE_URL_DATABASE, VITE_URL_FILES, VITE_API_TOKEN
 npm run dev              # → http://localhost:5002
 ```
 
@@ -90,9 +90,10 @@ exibindo um avatar 3D na janela de projeção.
 
 1. Texto (PT-BR) → `POST traducao2.vlibras.gov.br/translate` → gloss Libras
 2. Gloss → widget VLibras (`vlibras-plugin.js`) → avatar Unity WebGL
-3. Bundles de animação → cache IndexedDB → HTTP local (porta 7070)
+3. Bundles de animação → cache IndexedDB → HTTP local (porta 7070 por padrão;
+   o servidor sorteia outra se ela estiver ocupada)
 
-**Detalhes:** [docs/architecture.md](docs/architecture.md#-acessibilidade---libras)
+**Detalhes:** [docs/architecture.md](docs/architecture.md#-acessibilidade--libras)
 
 ---
 
@@ -114,19 +115,18 @@ personalizada** no texto:
 
 | Tecnologia | Versão | Nota |
 |---|---|---|
-| Vue 3 + Composition API | ^3.x | `<script setup>` em todo o projeto |
-| Vuetify 4 | ~4.0.6 | Travado — ver [ADR 0001](docs/adr/0001-vuetify-versao-estavel.md) |
+| Vue 3 + Composition API | ~3.5.x | `<script setup>` em todo o projeto |
+| Vuetify 4 | 4.1.2 | UI framework — versão fixa, sem `^` |
 | Pinia | ^3.x | Estado global (migrado de Vuex) |
-| Vue Router | 5.x | Travado — ver [ADR 0002](docs/adr/0002-vue-router-version.md) |
+| Vue Router | 5.0.6 | Versão fixa, sem `^` |
 | Vue I18n | ^11.x | PT/ES |
 | TypeScript | ^6.x | Tipagem em todo o código |
 | Vite 7 | ^7.x | Build + dev server (porta 5002) |
 | Electron | ^41.x | Target desktop |
-| Vuetify | 4.0.6 | UI framework |
 | pdfjs-dist | ^6.x | Renderização de PDF |
-| idb | — | IndexedDB unificado |
-| heic2any | ^4.x | Conversão HEIC/HEIF → JPEG na importação |
-| jszip | — | Import/export `.slja` e coletâneas |
+| idb | ^8.x | IndexedDB unificado |
+| heic2any | ^0.0.4 | Conversão HEIC/HEIF → JPEG na importação |
+| jszip | ^3.x | Import/export `.slja` e coletâneas |
 
 ---
 
