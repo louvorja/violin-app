@@ -40,6 +40,7 @@ import {
   writeSlot as writeOverlaySlot,
 } from "@/helpers/Overlay";
 import Shortcuts from "@/helpers/Shortcuts";
+import Telemetry from "@/helpers/Telemetry";
 import Hotkeys from "@/helpers/Hotkeys";
 import { useShell } from "@/composables/useShell";
 import { BROADCAST_TYPE } from "@helpers/BroadcastTypes";
@@ -727,6 +728,10 @@ $storage.hydrate().then(async () => {
     // M2 — Registrar atalhos de teclado in-window após o app montar.
     // ---------------------------------------------------------------------------
     Hotkeys.init();
+
+    // Métrica de uso agregada. Não bloqueia o boot e é no-op fora da janela
+    // principal, em dev, ou quando o usuário desliga nas Opções.
+    void Telemetry.init();
 
     // --- Geral ---
 
