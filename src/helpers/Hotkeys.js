@@ -112,7 +112,12 @@ function _onKeyDown(e) {
   // os itens. Este listener roda em `capture` na window, antes de todos, e
   // chama preventDefault: sem esta guarda ele neutralizaria o fechamento e
   // ainda dispararia o atalho global por baixo do diálogo aberto.
-  if (document.querySelector("[data-dismissable-layer]")) return;
+  //
+  // O critério é o FOCO, não a mera presença da camada: tooltip também é uma
+  // camada, mas nunca recebe foco nem consome teclado. Testar só a presença
+  // desligava todos os atalhos enquanto o operador passasse o mouse por um
+  // botão da barra — inaceitável num app conduzido ao vivo.
+  if (document.activeElement?.closest?.("[data-dismissable-layer]")) return;
 
   const combo = _comboFromEvent(e);
   const handlers = _registry.get(combo);
