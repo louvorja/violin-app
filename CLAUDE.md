@@ -336,6 +336,24 @@ icon: ICONS.PLAYER.PLAY
 icon: "mdi-play"
 ```
 
+### Primitivos — nunca componentes Vuetify em UI nova
+
+A interface usa o catálogo fechado em `src/components/ui/` (veja `/ui` e
+`docs/design-system.md`). Não introduza `v-btn`, `v-select`, `v-dialog`,
+`v-menu`, `v-text-field` e afins em código novo — o app está migrando para fora
+do Material.
+
+```ts
+import { LjButton, LjSelect, LjDialog } from "@/components/ui";
+```
+
+Medidas de controle vêm de `ui.css` (`--lj-ui-h-md`, `--lj-ui-border`,
+`--lj-ui-radius`, `--lj-ui-focus`). Para cor de estado use `--lj-ui-accent*`,
+nunca `--lj-navy` direto — a marca é acromática nos temas escuros.
+
+Componente com portal (menu, select, diálogo) usa `<style>` **sem** `scoped`:
+conteúdo teleportado não recebe o atributo de escopo.
+
 ### `KEYS.*` — UserData sempre por constante
 
 Toda leitura/escrita em `$userdata.get/set` e `$appdata.get/set` deve usar

@@ -1,0 +1,171 @@
+/**
+ * ui.css — Contratos compartilhados dos primitivos do design system.
+ *
+ * Os tokens de `tokens.css` dizem QUAIS cores e medidas existem. Este arquivo
+ * diz COMO um controle interativo se comporta: altura por tamanho, borda, raio,
+ * anel de foco e tamanho de ícone.
+ *
+ * É o que faz botão, input, select e combobox de mesmo `size` alinharem na
+ * horizontal e parecerem a mesma família. Alterar um valor daqui muda todos os
+ * primitivos de uma vez — que é exatamente a intenção.
+ */
+
+:root {
+  /* Altura dos controles — sm/md/lg é a única escala permitida.
+     22px vem de --lj-small-btn-height (botão do ribbon Delphi);
+     26px é a altura dos campos da tela de Opções. */
+  --lj-ui-h-sm: 22px;
+  --lj-ui-h-md: 26px;
+  --lj-ui-h-lg: 32px;
+
+  /* Padding horizontal proporcional à altura */
+  --lj-ui-px-sm: var(--lj-space-4);
+  --lj-ui-px-md: 10px;
+  --lj-ui-px-lg: var(--lj-space-6);
+
+  /* Gap entre ícone e texto dentro de um controle */
+  --lj-ui-gap-sm: var(--lj-space-2);
+  --lj-ui-gap-md: var(--lj-space-3);
+  --lj-ui-gap-lg: var(--lj-space-4);
+
+  /* Tamanho do ícone por tamanho de controle */
+  --lj-ui-icon-sm: 13px;
+  --lj-ui-icon-md: 15px;
+  --lj-ui-icon-lg: 17px;
+
+  /* Tipografia por tamanho de controle */
+  --lj-ui-font-sm: var(--lj-text-sm);
+  --lj-ui-font-md: var(--lj-text-base);
+  --lj-ui-font-lg: var(--lj-text-md);
+
+  /* Traço e raio — iguais em TODOS os primitivos, sem exceção */
+  --lj-ui-border: 1px solid var(--lj-surface-border-strong);
+  --lj-ui-radius: var(--lj-radius-sm);
+
+  /* ---------------------------------------------------------------------
+   * Acento dos controles
+   *
+   * Deliberadamente separado de --lj-navy: aquele é a cor de MARCA do tema,
+   * e nem toda marca serve de acento legível sobre a superfície do tema.
+   * Um controle marcado (checkbox, switch, barra de progresso) precisa de
+   * contraste garantido — por isso o acento é seu próprio token.
+   * ------------------------------------------------------------------- */
+  --lj-ui-accent: var(--lj-navy);
+  --lj-ui-accent-hover: var(--lj-navy-active);
+  --lj-ui-accent-press: var(--lj-navy-dark);
+  --lj-ui-accent-fg: var(--lj-white);
+  --lj-ui-accent-text: var(--lj-navy);
+  --lj-ui-accent-soft: var(--lj-active-bg);
+
+  /* Anel de foco único do sistema. Visível sobre qualquer superfície. */
+  --lj-ui-focus: 0 0 0 2px rgba(var(--lj-navy-ch), 0.35);
+
+  /* Superfície flutuante: SEMPRE borda + sombra. Sombra difusa sozinha é o
+     que dá aparência Material aos menus. */
+  --lj-ui-float-border: 1px solid var(--lj-surface-border-strong);
+  --lj-ui-float-shadow: var(--lj-shadow-2);
+
+  --lj-ui-disabled-opacity: 0.45;
+}
+
+/* Nos temas escuros a marca é acromática (#2e2e2e) e desaparece contra a
+   superfície. O laranja já é o acento do app nesses temas — item ativo da
+   sidebar, tabs contextuais, botão de fechar sub-tab —, então os controles
+   seguem o mesmo acento em vez de inventarem outro. */
+:root.v-theme--dark,
+.v-theme--dark,
+[data-theme="dark"],
+[data-theme="black"] {
+  --lj-ui-accent: var(--lj-orange);
+  --lj-ui-accent-hover: var(--lj-orange-dark);
+  --lj-ui-accent-press: var(--lj-orange-darker);
+  --lj-ui-accent-fg: var(--lj-gray-900);
+  --lj-ui-accent-text: var(--lj-orange);
+  --lj-ui-accent-soft: var(--lj-orange-alpha-12);
+  --lj-ui-focus: 0 0 0 2px var(--lj-orange-alpha-30);
+}
+
+/* Base comum a todo controle interativo do sistema.
+   Componha com .lj-ui-size-* para obter as medidas. */
+.lj-ui-control {
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  font-family: inherit;
+  color: var(--lj-text);
+  background: var(--lj-surface-bg);
+  border: var(--lj-ui-border);
+  border-radius: var(--lj-ui-radius);
+  outline: none;
+  transition:
+    background var(--lj-transition-fast),
+    border-color var(--lj-transition-fast),
+    box-shadow var(--lj-transition-fast);
+}
+
+.lj-ui-control:focus-visible {
+  box-shadow: var(--lj-ui-focus);
+  border-color: var(--lj-ui-accent);
+}
+
+.lj-ui-control:disabled,
+.lj-ui-control[aria-disabled="true"],
+.lj-ui-control.is-disabled {
+  opacity: var(--lj-ui-disabled-opacity);
+  pointer-events: none;
+}
+
+.lj-ui-control.is-invalid {
+  border-color: var(--lj-danger);
+}
+.lj-ui-control.is-invalid:focus-visible {
+  box-shadow: 0 0 0 2px var(--lj-danger-border);
+}
+
+/* Escala de tamanho — aplicável a qualquer primitivo */
+.lj-ui-size-sm {
+  height: var(--lj-ui-h-sm);
+  padding-inline: var(--lj-ui-px-sm);
+  gap: var(--lj-ui-gap-sm);
+  font-size: var(--lj-ui-font-sm);
+}
+.lj-ui-size-md {
+  height: var(--lj-ui-h-md);
+  padding-inline: var(--lj-ui-px-md);
+  gap: var(--lj-ui-gap-md);
+  font-size: var(--lj-ui-font-md);
+}
+.lj-ui-size-lg {
+  height: var(--lj-ui-h-lg);
+  padding-inline: var(--lj-ui-px-lg);
+  gap: var(--lj-ui-gap-lg);
+  font-size: var(--lj-ui-font-lg);
+}
+
+/* Painel flutuante (menu, popover, dialog) */
+.lj-ui-float {
+  background: var(--lj-surface-bg);
+  border: var(--lj-ui-float-border);
+  border-radius: var(--lj-radius-md);
+  box-shadow: var(--lj-ui-float-shadow);
+}
+
+/* ---------------------------------------------------------------------------
+ * Ícones dentro de primitivos
+ *
+ * Icon.vue aplica drop-shadow em todo ícone — faz sentido sobre fundo de
+ * projeção, mas em controle de UI a 13px o glifo fica borrado. Dentro do
+ * catálogo o ícone é sempre nítido.
+ * ------------------------------------------------------------------------- */
+.lj-btn .lj-icon,
+.lj-input .lj-icon,
+.lj-chip .lj-icon,
+.lj-check .lj-icon,
+.lj-card__icon,
+.lj-empty__icon,
+.lj-btn .lj-icon svg,
+.lj-input .lj-icon svg,
+.lj-chip .lj-icon svg,
+.lj-check .lj-icon svg {
+  filter: none;
+}

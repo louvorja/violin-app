@@ -1,14 +1,20 @@
 <template>
   <AppLoading />
-  <v-app id="app-container">
-    <router-view />
-    <WebFullscreenPrompt v-if="isProjectionRoute" />
-  </v-app>
+  <!-- Tooltips do design system exigem um provider único na raiz — ele guarda
+       o atraso compartilhado, para que passar o mouse de um botão a outro não
+       reinicie a contagem a cada elemento. -->
+  <TooltipProvider :delay-duration="400" :skip-delay-duration="300">
+    <v-app id="app-container">
+      <router-view />
+      <WebFullscreenPrompt v-if="isProjectionRoute" />
+    </v-app>
+  </TooltipProvider>
 </template>
 
 <script setup>
 import { computed } from "vue";
 import { useRoute } from "vue-router";
+import { TooltipProvider } from "reka-ui";
 import AppLoading from "@/layout/Loading.vue";
 import WebFullscreenPrompt from "@/components/WebFullscreenPrompt.vue";
 

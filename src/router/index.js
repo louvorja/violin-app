@@ -88,6 +88,11 @@ const routes = [
     name: "BackgroundProjectionReturn",
     component: () => import("@/views/BackgroundProjectionReturn.vue"),
   },
+  {
+    path: "/ui",
+    name: "UiCatalog",
+    component: () => import("@/views/UiCatalog.vue"),
+  },
 ];
 
 // Em Electron prod o app é servido via file:// (legacy) ou louvorja://app

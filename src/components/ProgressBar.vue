@@ -5,7 +5,7 @@
     </label>
     <label v-else-if="total > 0" class="opt-label">{{ done }}/{{ total }} ({{ percent }}%)</label>
 
-    <v-progress-linear :model-value="percent" :color="color" height="8" rounded class="mt-1" />
+    <LjProgress :value="percent" :height="8" />
 
     <div v-if="current" class="opt-folder-path">
       {{ current }}
@@ -22,16 +22,17 @@
     </div>
 
     <div v-if="showCancel" class="opt-folder-actions" style="margin-top: 8px">
-      <button type="button" class="opt-btn opt-btn--danger" @click="$emit('cancel')">
-        <v-icon :icon="cancelIcon" size="14" class="mr-1" />
+      <LjButton size="sm" variant="danger" :icon="cancelIcon" @click="$emit('cancel')">
         {{ cancelLabel }}
-      </button>
+      </LjButton>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from "vue";
+import LjButton from "@/components/ui/LjButton.vue";
+import LjProgress from "@/components/ui/LjProgress.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -41,7 +42,6 @@ const props = withDefaults(
     failed?: number;
     completedMsg?: string;
     showCancel?: boolean;
-    color?: string;
     cancelIcon?: string;
     cancelLabel?: string;
   }>(),
@@ -52,7 +52,6 @@ const props = withDefaults(
     failed: 0,
     completedMsg: "",
     showCancel: false,
-    color: "primary",
     cancelIcon: "mdi-close-circle",
     cancelLabel: "Cancelar",
   }

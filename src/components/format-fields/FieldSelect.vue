@@ -1,16 +1,17 @@
 <template>
-  <select
-    :value="modelValue || ''"
-    class="format-field format-field--input"
-    @change="$emit('update:modelValue', $event.target.value)"
-  >
-    <option v-for="opt in options" :key="opt" :value="opt">{{ optionLabel(opt) }}</option>
-  </select>
+  <LjSelect
+    :model-value="modelValue || ''"
+    :items="items"
+    size="sm"
+    class="format-field"
+    @update:model-value="$emit('update:modelValue', String($event))"
+  />
 </template>
 
 <script setup>
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
+import LjSelect from "@/components/ui/LjSelect.vue";
 
 const props = defineProps({
   modelValue: { type: [String, null], default: null },
@@ -21,6 +22,8 @@ defineEmits(["update:modelValue"]);
 const { t } = useI18n();
 
 const options = computed(() => props.field.options || []);
+
+const items = computed(() => options.value.map((opt) => ({ value: opt, label: optionLabel(opt) })));
 
 const LABELS = {
   start: "components.format_panel.align_start",
@@ -53,14 +56,7 @@ function optionLabel(opt) {
 </script>
 
 <style scoped>
-.format-field--input {
-  font-size: 12px;
-  padding: 4px 6px;
-  border: 1px solid var(--lj-surface-border);
-  border-radius: 3px;
-  background: var(--lj-surface-bg);
-  color: inherit;
+.format-field {
   width: 100%;
-  box-sizing: border-box;
 }
 </style>

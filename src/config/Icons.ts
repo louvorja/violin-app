@@ -225,6 +225,8 @@ export const ICONS = {
     CHECK: "mdi-check",
     CHECK_UPDATE: "mdi-monitor-arrow-down-variant",
     CHECKED: "mdi-checkbox-marked",
+    CHEVRON_DOWN: "mdi-chevron-down",
+    CHEVRON_UP: "mdi-chevron-up",
     CODE_BRACES: "mdi-code-braces",
     DATABASE: "mdi-database-outline",
     DEV: "mdi-code-json",

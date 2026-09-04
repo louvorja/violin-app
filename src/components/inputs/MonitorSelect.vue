@@ -1,17 +1,20 @@
 <template>
-  <select
+  <LjSelect
     :id="id"
-    class="opt-select"
-    :class="{ 'opt-select--inline': inline }"
-    :value="modelValue ?? ''"
-    @change="onChange"
+    v-model="model"
+    :items="options"
+    item-value="role"
+    item-label="label"
+    class="lj-monitor-select"
+    :class="{ 'lj-monitor-select--inline': inline }"
   >
-    <option value="">{{ $t("options.slides.same_window") }}</option>
-    <option v-for="option in roleOptions" :key="option.role" :value="option.role">
-      {{ option.label }}
-      <template v-if="option.hint">— {{ option.hint }}</template>
-    </option>
-  </select>
+    <template #item="{ item }">
+      <span class="lj-monitor-select__option">
+        {{ item.label }}
+        <small v-if="item.hint" class="lj-monitor-select__hint">{{ item.hint }}</small>
+      </span>
+    </template>
+  </LjSelect>
 </template>
 
 <script setup lang="ts">
@@ -24,9 +27,10 @@
  */
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
+import LjSelect from "@/components/ui/LjSelect.vue";
 import { DISPLAY_ROLES, useDisplays } from "@/composables/useDisplays";
 
-defineProps<{
+const props = defineProps<{
   id?: string;
   /** Papel escolhido: "projection" | "stage" | "operator", ou "" para mesma janela. */
   modelValue?: string | null;
@@ -37,6 +41,11 @@ const emit = defineEmits<{ "update:modelValue": [value: string] }>();
 
 const { t } = useI18n();
 const { displays, roles } = useDisplays();
+
+const model = computed({
+  get: () => props.modelValue ?? "",
+  set: (value) => emit("update:modelValue", String(value)),
+});
 
 /** Descreve o monitor atribuído ao papel, ou por que ele não está disponível. */
 function hintFor(role: string): string {
@@ -50,15 +59,32 @@ function hintFor(role: string): string {
   return state.status === "inferred" ? `${name} (${t("options.monitors.roles.inferred")})` : name;
 }
 
-const roleOptions = computed(() =>
-  DISPLAY_ROLES.map((role) => ({
+const options = computed(() => [
+  { role: "", label: t("options.slides.same_window"), hint: "" },
+  ...DISPLAY_ROLES.map((role) => ({
     role,
     label: t(`options.monitors.roles.${role}`),
     hint: hintFor(role),
-  }))
-);
-
-function onChange(event: Event): void {
-  emit("update:modelValue", (event.target as HTMLSelectElement).value);
-}
+  })),
+]);
 </script>
+
+<style scoped>
+.lj-monitor-select {
+  width: var(--lj-opt-select-width);
+}
+
+.lj-monitor-select--inline {
+  width: auto;
+}
+
+.lj-monitor-select__option {
+  display: flex;
+  flex-direction: column;
+}
+
+.lj-monitor-select__hint {
+  color: var(--lj-text-subtle);
+  font-size: var(--lj-text-xs);
+}
+</style>

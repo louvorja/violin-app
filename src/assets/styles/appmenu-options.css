@@ -95,16 +95,26 @@
 }
 
 .opt-select {
+  box-sizing: border-box;
+  height: var(--lj-ui-h-md);
+  padding-inline: var(--lj-ui-px-md);
   background: var(--lj-surface-bg);
-  border: 1px solid var(--lj-surface-border-strong);
-  border-radius: var(--lj-radius-sm);
-  padding: var(--lj-space-2) var(--lj-space-3);
-  font-size: var(--lj-text-base);
+  border: var(--lj-ui-border);
+  border-radius: var(--lj-ui-radius);
+  font-size: var(--lj-ui-font-md);
   font-family: inherit;
   color: var(--lj-text);
   cursor: pointer;
   outline: none;
   min-width: var(--lj-opt-select-width);
+  transition:
+    border-color var(--lj-transition-fast),
+    box-shadow var(--lj-transition-fast);
+}
+
+.opt-select:focus-visible {
+  border-color: var(--lj-ui-accent);
+  box-shadow: var(--lj-ui-focus);
 }
 
 .opt-select--inline {
@@ -146,20 +156,35 @@
   margin-top: calc(var(--lj-space-2) * -1);
 }
 
+/* Alinhado ao contrato de `ui.css` para que estes controles legados fiquem
+   indistinguíveis dos primitivos LjButton/LjSelect enquanto a migração da tela
+   avança. Ao migrar o último `.opt-*`, este bloco sai junto. */
 .opt-btn {
   display: inline-flex;
   align-items: center;
-  gap: var(--lj-space-2);
+  justify-content: center;
+  gap: var(--lj-ui-gap-md);
+  height: var(--lj-ui-h-md);
+  padding-inline: var(--lj-ui-px-md);
   background: var(--lj-surface-bg);
-  border: 1px solid var(--lj-surface-border-strong);
-  border-radius: var(--lj-radius-sm);
-  padding: var(--lj-space-3) var(--lj-space-5);
+  border: var(--lj-ui-border);
+  border-radius: var(--lj-ui-radius);
   cursor: pointer;
   color: var(--lj-text);
-  font-size: var(--lj-text-base);
+  font-size: var(--lj-ui-font-md);
+  font-weight: var(--lj-weight-medium);
   font-family: inherit;
   margin-top: var(--lj-space-3);
-  transition: background var(--lj-transition-fast);
+  transition:
+    background var(--lj-transition-fast),
+    border-color var(--lj-transition-fast),
+    box-shadow var(--lj-transition-fast);
+}
+
+.opt-btn:focus-visible {
+  outline: none;
+  border-color: var(--lj-ui-accent);
+  box-shadow: var(--lj-ui-focus);
 }
 
 .opt-btn:hover {
@@ -167,16 +192,16 @@
 }
 
 .opt-btn--danger {
-  border-color: var(--lj-danger, #c0392b);
-  color: var(--lj-danger, #c0392b);
+  border-color: var(--lj-danger-border);
+  color: var(--lj-danger);
 }
 .opt-btn--danger:hover {
   background: rgba(192, 57, 43, 0.08);
 }
 .opt-btn--primary {
-  background: var(--lj-navy);
-  color: var(--lj-white);
-  border-color: var(--lj-navy);
+  background: var(--lj-ui-accent);
+  color: var(--lj-ui-accent-fg);
+  border-color: var(--lj-ui-accent);
 }
 .opt-btn--primary:hover {
   filter: brightness(1.1);
@@ -184,9 +209,10 @@
   border-color: var(--lj-white-alpha-08);
 }
 .opt-btn--small {
-  padding: 4px 10px;
+  height: var(--lj-ui-h-sm);
+  padding-inline: var(--lj-ui-px-sm);
   margin-top: 0;
-  font-size: var(--lj-text-sm);
+  font-size: var(--lj-ui-font-sm);
 }
 .opt-btn:disabled {
   opacity: 0.5;
@@ -555,16 +581,25 @@
 }
 
 .opt-input {
+  box-sizing: border-box;
+  height: var(--lj-ui-h-md);
+  padding-inline: var(--lj-ui-px-md);
   background: var(--lj-surface-bg);
-  border: 1px solid var(--lj-surface-border-strong);
-  border-radius: var(--lj-radius-sm);
-  padding: 4px 8px;
-  font-size: var(--lj-text-base);
+  border: var(--lj-ui-border);
+  border-radius: var(--lj-ui-radius);
+  font-size: var(--lj-ui-font-md);
   font-family: inherit;
   color: var(--lj-text);
   outline: none;
-  height: 26px;
   min-width: 60px;
+  transition:
+    border-color var(--lj-transition-fast),
+    box-shadow var(--lj-transition-fast);
+}
+
+.opt-input:focus-visible {
+  border-color: var(--lj-ui-accent);
+  box-shadow: var(--lj-ui-focus);
 }
 .opt-input:focus {
   border-color: var(--lj-navy);
@@ -578,9 +613,12 @@
 .opt-btn--ghost {
   margin-top: 0;
   margin-left: auto;
-  padding: 4px 10px;
-  font-size: var(--lj-text-sm);
-  border-color: var(--lj-surface-border);
+  height: var(--lj-ui-h-sm);
+  padding-inline: var(--lj-ui-px-sm);
+  font-size: var(--lj-ui-font-sm);
+  border-color: transparent;
+  background: transparent;
+  color: var(--lj-text-muted);
 }
 
 /* === Range slider (sombra, fade, etc.) === */

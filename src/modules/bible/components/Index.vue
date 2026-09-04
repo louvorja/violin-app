@@ -294,7 +294,6 @@ import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import Screen from "../components/Screen.vue";
 import ModuleFormatDrawer from "@/components/ModuleFormatDrawer.vue";
-import LSelect from "@/components/inputs/LjSelect.vue";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { KEYS } from "@/constants/UserDataKeys";

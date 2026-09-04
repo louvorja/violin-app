@@ -107,6 +107,13 @@ function _focusIsInForm() {
 // ---------------------------------------------------------------------------
 
 function _onKeyDown(e) {
+  // Camadas flutuantes do design system (menu, select, combobox, popover,
+  // diálogo) tratam as próprias teclas — Escape fecha a camada, setas navegam
+  // os itens. Este listener roda em `capture` na window, antes de todos, e
+  // chama preventDefault: sem esta guarda ele neutralizaria o fechamento e
+  // ainda dispararia o atalho global por baixo do diálogo aberto.
+  if (document.querySelector("[data-dismissable-layer]")) return;
+
   const combo = _comboFromEvent(e);
   const handlers = _registry.get(combo);
   if (!handlers || handlers.length === 0) return;

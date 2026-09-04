@@ -7,6 +7,7 @@ import { loadFonts } from "./plugins/webfontloader";
 import { createI18nInstance } from "./i18n";
 import VueFullscreen from "vue-fullscreen";
 import "./assets/styles/tokens.css";
+import "./assets/styles/ui.css";
 import "./assets/styles/utilities.css";
 import "./assets/styles/main.css";
 import "./assets/styles/fonts.css";

@@ -1,36 +1,26 @@
 <template>
-  <v-menu v-model="open" :close-on-content-click="true" location="bottom" :disabled="disabled">
-    <template #activator="{ props }">
-      <button
-        v-bind="props"
-        type="button"
-        class="select-font"
-        :class="{ 'select-font--disabled': disabled }"
-      >
-        <span :style="{ fontFamily: selectedFontPreview }">
-          {{ selectedFont?.name || "—" }}
-        </span>
-        <v-icon icon="mdi-chevron-down" size="14" class="select-font__arrow" />
-      </button>
+  <LjSelect
+    v-model="model"
+    :items="orderedFonts"
+    item-value="family"
+    item-label="name"
+    :disabled="disabled"
+    placeholder="—"
+  >
+    <template #value="{ item }">
+      <span :style="{ fontFamily: fontPreview(item?.family || '') }">
+        {{ item?.name || "—" }}
+      </span>
     </template>
-
-    <v-list density="compact" class="select-font__list" max-height="280">
-      <v-list-item
-        v-for="f in orderedFonts"
-        :key="f.family"
-        :active="f.family === (modelValue || '')"
-        @click="select(f.family)"
-      >
-        <v-list-item-title :style="{ fontFamily: fontPreview(f.family), fontSize: '13px' }">
-          {{ f.name }}
-        </v-list-item-title>
-      </v-list-item>
-    </v-list>
-  </v-menu>
+    <template #item="{ item }">
+      <span :style="{ fontFamily: fontPreview(item.family) }">{{ item.name }}</span>
+    </template>
+  </LjSelect>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed } from "vue";
+import LjSelect from "@/components/ui/LjSelect.vue";
 import { FONT, Fonts, resolveFont, type FontOption } from "@/config/Fonts";
 
 const props = withDefaults(
@@ -50,11 +40,12 @@ const props = withDefaults(
   }
 );
 
-const emit = defineEmits<{
-  "update:modelValue": [value: string];
-}>();
+const emit = defineEmits<{ "update:modelValue": [value: string] }>();
 
-const open = ref(false);
+const model = computed({
+  get: () => props.modelValue ?? "",
+  set: (value) => emit("update:modelValue", value as string),
+});
 
 function fontPreview(family: string): string {
   return resolveFont(family, "inherit", props.defaultFont);
@@ -80,57 +71,12 @@ const orderedFonts = computed<FontOption[]>(() => {
 
   return [padrao, padraoInterface, padraoProjecao, ...realFonts].filter(Boolean) as FontOption[];
 });
-
-const selectedFont = computed(() => {
-  if (props.modelValue === FONT.DEFAULT) return { name: "Padrão", family: FONT.DEFAULT };
-  return Fonts.find((f) => f.family === (props.modelValue || "")) || null;
-});
-
-const selectedFontPreview = computed(() => fontPreview(selectedFont.value?.family || ""));
-
-function select(family: string) {
-  emit("update:modelValue", family);
-  open.value = false;
-}
 </script>
 
 <style scoped>
-/* Mesma caixa de `.opt-select` (appmenu-options.css): este controle aparece
-   lado a lado com os selects nativos e destoava em borda, raio e altura. O
-   conteúdo continua sendo renderizado na própria fonte, que é o ponto dele. */
-.select-font {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+/* Largura herdada da tela de Opções, onde este controle aparece ao lado dos
+   demais selects. A caixa, o raio e a altura vêm do LjSelect. */
+.lj-select {
   width: var(--lj-opt-select-width);
-  padding: var(--lj-space-2) var(--lj-space-3);
-  border: 1px solid var(--lj-surface-border-strong);
-  border-radius: var(--lj-radius-sm);
-  background: var(--lj-surface-bg);
-  color: var(--lj-text);
-  font-size: var(--lj-text-base);
-  cursor: pointer;
-  text-align: left;
-  box-sizing: border-box;
-  transition: border-color var(--lj-transition-fast);
-}
-.select-font:hover {
-  border-color: var(--lj-text-muted, #999);
-}
-.select-font:focus-visible {
-  border-color: var(--lj-navy);
-  box-shadow: var(--lj-focus-ring);
-  outline: none;
-}
-.select-font--disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.select-font__arrow {
-  margin-left: auto;
-  opacity: 0.5;
-}
-.select-font__list {
-  max-width: 260px;
 }
 </style>
