@@ -1,19 +1,23 @@
 <template>
   <textarea
-    :id="id"
+    :id="resolvedId"
     class="lj-textarea"
-    :class="{ 'is-invalid': invalid }"
+    :class="{ 'is-invalid': isInvalid }"
     :value="modelValue"
     :rows="rows"
     :placeholder="placeholder"
     :disabled="disabled"
-    :aria-invalid="invalid || undefined"
+    :aria-invalid="isInvalid || undefined"
+    :aria-describedby="describedBy"
     @input="onInput"
   />
 </template>
 
 <script setup lang="ts">
-withDefaults(
+import { computed } from "vue";
+import { useFieldContext } from "./fieldContext";
+
+const props = withDefaults(
   defineProps<{
     modelValue?: string;
     /** Casa com o `htmlFor` do LjField. */
@@ -27,6 +31,13 @@ withDefaults(
 );
 
 const emit = defineEmits<{ "update:modelValue": [value: string] }>();
+
+// Quando dentro de um LjField, o controle adota o id e a mensagem publicados
+// por ele. Uma prop `id` explícita continua tendo precedência.
+const field = useFieldContext();
+const resolvedId = computed(() => props.id ?? field?.inputId.value);
+const describedBy = computed(() => field?.describedById.value);
+const isInvalid = computed(() => props.invalid || field?.invalid.value || false);
 
 function onInput(event: Event): void {
   emit("update:modelValue", (event.target as HTMLTextAreaElement).value);

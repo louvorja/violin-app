@@ -6,9 +6,12 @@
     >
       <Icon :icon="ICONS.ACTIONS.SEARCH" :size="iconSize" class="lj-combobox__icon" />
       <ComboboxInput
+        :id="resolvedId"
         class="lj-combobox__input"
         :placeholder="placeholder ?? t('components.ui.search_placeholder')"
         :display-value="displayValue"
+        :aria-label="ariaLabel"
+        :aria-describedby="describedBy"
       />
       <ComboboxTrigger class="lj-combobox__trigger">
         <Icon :icon="ICONS.UI.CHEVRON_DOWN" :size="iconSize" />
@@ -52,6 +55,7 @@ import {
 } from "reka-ui";
 import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
+import { useFieldContext } from "./fieldContext";
 import type { UiSize } from "./types";
 import { ICON_SIZE } from "./types";
 
@@ -68,6 +72,9 @@ const props = withDefaults(
     emptyText?: string;
     disabled?: boolean;
     invalid?: boolean;
+    /** Nome acessível quando o combobox não está dentro de um LjField. */
+    ariaLabel?: string;
+    id?: string;
   }>(),
   {
     items: () => [],
@@ -80,6 +87,13 @@ const props = withDefaults(
 const emit = defineEmits<{ "update:modelValue": [value: Item] }>();
 
 const { t } = useI18n();
+
+// O root do Combobox é uma div sem papel: sem repassar explicitamente, o
+// aria-label pousaria nela e o input com role="combobox" ficaria anônimo.
+const field = useFieldContext();
+const resolvedId = computed(() => props.id ?? field?.inputId.value);
+const describedBy = computed(() => field?.describedById.value);
+const isInvalid = computed(() => props.invalid || field?.invalid.value || false);
 
 const open = ref(false);
 

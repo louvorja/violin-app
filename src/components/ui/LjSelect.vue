@@ -2,9 +2,11 @@
   <SelectRoot v-model="model" :disabled="disabled">
     <SelectTrigger
       v-bind="$attrs"
+      :id="resolvedId"
       class="lj-select"
-      :class="[`lj-ui-size-${size}`, { 'is-invalid': invalid }]"
+      :class="[`lj-ui-size-${size}`, { 'is-invalid': isInvalid }]"
       :aria-label="ariaLabel"
+      :aria-describedby="describedBy"
     >
       <Icon v-if="icon" :icon="icon" :size="iconSize" class="lj-select__icon" />
       <!-- Sem seleção e sem slot próprio, o SelectValue fica sem filhos de
@@ -65,6 +67,7 @@ import {
 } from "reka-ui";
 import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
+import { useFieldContext } from "./fieldContext";
 import type { UiSize } from "./types";
 import { ICON_SIZE } from "./types";
 
@@ -84,6 +87,8 @@ const props = withDefaults(
     disabled?: boolean;
     invalid?: boolean;
     ariaLabel?: string;
+    /** Casa com o rótulo do LjField; normalmente vem do contexto, não à mão. */
+    id?: string;
   }>(),
   {
     items: () => [],
@@ -96,6 +101,13 @@ const props = withDefaults(
 const emit = defineEmits<{ "update:modelValue": [value: Primitive] }>();
 
 const { t } = useI18n();
+
+// Dentro de um LjField o gatilho adota o id do rótulo — é o que dá nome
+// acessível ao select sem o chamador repetir ids.
+const field = useFieldContext();
+const resolvedId = computed(() => props.id ?? field?.inputId.value);
+const describedBy = computed(() => field?.describedById.value);
+const isInvalid = computed(() => props.invalid || field?.invalid.value || false);
 
 // SelectRoot não emite DOM — sem isto, class/style aplicados na tag do
 // componente se perderiam em vez de chegar ao gatilho visível.

@@ -114,9 +114,11 @@ describe("LjTabs", () => {
     expect(estados()).toEqual(["inactive", "active", "inactive"]);
   });
 
-  it("sem v-model, a aba clicada assume o estado ativo", async () => {
+  it("sem v-model, começa na primeira aba e a clicada assume o estado ativo", async () => {
+    // Sem v-model o componente se vira sozinho — mas o TabsRoot ainda nasce com
+    // um valor definido, que é o que evita ele travar em modo não controlado.
     const w = montar({ props: { tabs: ABAS } });
-    expect(estados()).toEqual(["inactive", "inactive", "inactive"]);
+    expect(estados()).toEqual(["active", "inactive", "inactive"]);
 
     await clicar(abas()[1]);
 
@@ -253,13 +255,18 @@ describe("LjTabs", () => {
    * a um ref carregado de forma assíncrona). Ele não garante que, a partir daí,
    * o pai volte a mandar na aba ativa; ver a nota de defeito no fim do arquivo.
    */
-  it("passa a refletir o modelValue que só chega depois do primeiro render", async () => {
+  it("segue mandando no v-model que só chega depois do primeiro render", async () => {
     const w = montar({ props: { tabs: ABAS } });
-    expect(estados()).toEqual(["inactive", "inactive", "inactive"]);
+    expect(estados()).toEqual(["active", "inactive", "inactive"]);
 
     await w.setProps({ modelValue: "slides" });
     await nextTick();
+    expect(estados()).toEqual(["inactive", "inactive", "active"]);
 
+    // O pai continua sendo a autoridade: se ele ignorar a troca, a aba visível
+    // não pode andar sozinha.
+    await clicar(abas()[1]);
+    await nextTick();
     expect(estados()).toEqual(["inactive", "inactive", "active"]);
   });
 });

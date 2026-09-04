@@ -1,17 +1,18 @@
 <template>
   <div
     class="lj-input"
-    :class="[`lj-ui-size-${size}`, { 'is-disabled': disabled, 'is-invalid': invalid }]"
+    :class="[`lj-ui-size-${size}`, { 'is-disabled': disabled, 'is-invalid': isInvalid }]"
   >
     <Icon v-if="icon" :icon="icon" :size="iconSize" class="lj-input__icon" />
     <input
-      :id="id"
+      :id="resolvedId"
       v-bind="$attrs"
       :value="modelValue"
       :type="type"
       :placeholder="placeholder"
       :disabled="disabled"
-      :aria-invalid="invalid || undefined"
+      :aria-invalid="isInvalid || undefined"
+      :aria-describedby="describedBy"
       class="lj-input__field"
       @input="onInput"
     />
@@ -34,6 +35,7 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
+import { useFieldContext } from "./fieldContext";
 import type { UiSize } from "./types";
 import { ICON_SIZE } from "./types";
 
@@ -56,6 +58,13 @@ const props = withDefaults(
 const emit = defineEmits<{ "update:modelValue": [value: string] }>();
 
 const { t } = useI18n();
+
+// Quando dentro de um LjField, o controle adota o id e a mensagem publicados
+// por ele. Uma prop `id` explícita continua tendo precedência.
+const field = useFieldContext();
+const resolvedId = computed(() => props.id ?? field?.inputId.value);
+const describedBy = computed(() => field?.describedById.value);
+const isInvalid = computed(() => props.invalid || field?.invalid.value || false);
 
 // O wrapper carrega a moldura, então atributos e listeners precisam ser
 // redirecionados ao <input> — sem o v-bind acima, `inheritAttrs: false` os

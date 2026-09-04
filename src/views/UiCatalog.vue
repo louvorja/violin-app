@@ -108,7 +108,7 @@
           <LjField label="Observações" layout="column">
             <LjTextarea v-model="demoArea" placeholder="Anotações da liturgia…" />
           </LjField>
-          <LjField label="Opções" layout="column">
+          <LjField label="Opções" layout="column" group>
             <LjCheckbox v-model="demoCheck" label="Repetir refrão" />
             <LjCheckbox :model-value="false" indeterminate label="Selecionar todas" />
             <LjCheckbox :model-value="true" disabled label="Bloqueado" />

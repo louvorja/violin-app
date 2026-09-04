@@ -67,16 +67,33 @@ describe("LjField", () => {
     );
   });
 
-  it("sem htmlFor o rótulo não declara um for órfão", () => {
+  it("liga rótulo e campo sozinho, sem o chamador passar id", () => {
+    // A ligação já foi opt-in, e ninguém optava — todo rótulo ficava órfão.
+    // Agora o LjField gera o id e o controle o adota pelo contexto.
     montarNoDocumento({
       props: { label: "Observações" },
       slots: { default: () => h(LjInput, { modelValue: "" }) },
     });
 
     const label = document.querySelector("label") as HTMLLabelElement;
-    // Pior que não ter ligação é ter uma que aponta para lugar nenhum
-    // ("", "undefined"): o leitor de tela anuncia o campo como sem nome.
-    expect(label.hasAttribute("for")).toBe(false);
+    const input = document.querySelector("input") as HTMLInputElement;
+    expect(label.getAttribute("for")).toBeTruthy();
+    expect(label.getAttribute("for")).toBe(input.id);
+    // o navegador enxerga a associação, não só os atributos
+    expect(Array.from(input.labels || [])).toContain(label);
+  });
+
+  it("anuncia a mensagem de erro pelo próprio campo", () => {
+    montarNoDocumento({
+      props: { label: "Versículo", error: "Informe um capítulo válido." },
+      slots: { default: () => h(LjInput, { modelValue: "" }) },
+    });
+
+    const input = document.querySelector("input") as HTMLInputElement;
+    const erro = document.querySelector(".lj-field__error") as HTMLElement;
+    expect(input.getAttribute("aria-describedby")).toBe(erro.id);
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    expect(erro.getAttribute("role")).toBe("alert");
   });
 
   it("não renderiza <label> quando não há rótulo", () => {

@@ -11,14 +11,20 @@
       <SliderTrack class="lj-slider__track">
         <SliderRange class="lj-slider__range" />
       </SliderTrack>
-      <SliderThumb class="lj-slider__thumb" :aria-label="ariaLabel" />
+      <SliderThumb
+        :id="resolvedId"
+        class="lj-slider__thumb"
+        :aria-label="ariaLabel"
+        :aria-describedby="describedBy"
+      />
     </SliderRoot>
-    <span v-if="showValue" class="lj-slider__value">{{ model[0] }}{{ unit }}</span>
+    <span v-if="showValue" class="lj-slider__value">{{ clamped }}{{ unit }}</span>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from "vue";
+import { useFieldContext } from "./fieldContext";
 import { SliderRange, SliderRoot, SliderThumb, SliderTrack } from "reka-ui";
 
 const props = withDefaults(
@@ -31,15 +37,26 @@ const props = withDefaults(
     showValue?: boolean;
     unit?: string;
     ariaLabel?: string;
+    id?: string;
   }>(),
   { modelValue: 0, min: 0, max: 100, step: 1, unit: "" }
 );
 
 const emit = defineEmits<{ "update:modelValue": [value: number] }>();
 
+const field = useFieldContext();
+const resolvedId = computed(() => props.id ?? field?.inputId.value);
+const describedBy = computed(() => field?.describedById.value);
+
 // Reka trabalha com array (suporta múltiplos thumbs); aqui só há um.
+//
+// O valor é limitado à faixa na leitura: uma preferência gravada quando o
+// máximo era outro faria o thumb anunciar aria-valuenow fora de aria-valuemax,
+// e a tela mostraria um número que o controle não aceita.
+const clamped = computed(() => Math.min(props.max, Math.max(props.min, props.modelValue)));
+
 const model = computed({
-  get: () => [props.modelValue],
+  get: () => [clamped.value],
   set: (value: number[]) => emit("update:modelValue", value[0]),
 });
 </script>

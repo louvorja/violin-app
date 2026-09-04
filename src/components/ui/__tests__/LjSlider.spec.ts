@@ -161,3 +161,25 @@ describe("LjSlider", () => {
   // Também fora: LjSlider não tem prop `size` nem rótulo traduzido, então não há
   // contrato de tamanho nem chave i18n a travar aqui.
 });
+
+describe("LjSlider — regressões", () => {
+  it("limita valor acima do máximo em vez de anunciar estado impossível", async () => {
+    // Uma preferência gravada quando o máximo era outro faria o thumb anunciar
+    // aria-valuenow fora de aria-valuemax, e a tela mostraria um número que o
+    // controle não aceita.
+    const w = await montar({ modelValue: 999, min: 0, max: 100, showValue: true });
+    expect(thumb(w).attributes("aria-valuenow")).toBe("100");
+    expect(w.text()).toContain("100");
+  });
+
+  it("limita valor abaixo do mínimo", async () => {
+    const w = await montar({ modelValue: -50, min: 0, max: 100 });
+    expect(thumb(w).attributes("aria-valuenow")).toBe("0");
+  });
+
+  it("nome acessível cai no elemento com papel de slider, não no invólucro", async () => {
+    const w = await montar({ modelValue: 50, ariaLabel: "Volume" });
+    expect(thumb(w).attributes("aria-label")).toBe("Volume");
+    expect(w.attributes("aria-label")).toBeUndefined();
+  });
+});

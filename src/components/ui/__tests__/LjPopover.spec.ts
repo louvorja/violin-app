@@ -266,3 +266,26 @@ describe("LjPopover", () => {
  * - LjPopover não expõe `size` nem `v-model:open` — o estado aberto é um ref
  *   interno, então não há contrato de tamanho nem de modelo para testar.
  */
+
+describe("LjPopover — nome acessível", () => {
+  // O Reka rotula o painel pelo gatilho e sobrescreve qualquer aria-labelledby
+  // vindo de fora (ver comentário em LjPopover.vue). O que dá para garantir é
+  // que o nome existe e aponta para um elemento real — nunca para um id morto.
+  it("tem nome acessível resolvendo para um elemento existente", async () => {
+    const w = mountUi(LjPopover, {
+      attachTo: document.body,
+      props: { title: "Formatação" },
+      slots: { trigger: "<button>Formatar</button>", default: "conteúdo" },
+    });
+    await w.get("button").trigger("click");
+    await nextTick();
+
+    const painel = document.querySelector(".lj-popover") as HTMLElement;
+    const rotuloId = painel.getAttribute("aria-labelledby");
+    expect(rotuloId).toBeTruthy();
+    const rotulo = document.getElementById(rotuloId as string);
+    expect(rotulo).not.toBeNull();
+    expect(rotulo?.textContent?.trim()).not.toBe("");
+    w.unmount();
+  });
+});

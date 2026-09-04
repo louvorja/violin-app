@@ -13,7 +13,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { TabsIndicator, TabsList, TabsRoot, TabsTrigger } from "reka-ui";
 import Icon from "@/components/Icon.vue";
 import LjChip from "./LjChip.vue";
@@ -28,9 +28,24 @@ export interface LjTab {
 const props = defineProps<{ modelValue?: string; tabs: LjTab[]; ariaLabel?: string }>();
 const emit = defineEmits<{ "update:modelValue": [value: string] }>();
 
+// O TabsRoot do Reka decide uma única vez, no setup, se é controlado — olhando
+// se modelValue veio undefined. Passar a prop crua tem dois modos de falha: sem
+// v-model as abas nem trocam, e um v-model preenchido depois deixa o componente
+// presa em modo não controlado, com a aba visível divergindo do modelo.
+//
+// Aqui ele sempre recebe um valor definido, e a autoridade é decidida a cada
+// leitura: quem passa v-model manda; quem não passa deixa o componente
+// se virar sozinho.
+const interno = ref(props.tabs[0]?.value);
+
+const controlado = computed(() => props.modelValue !== undefined);
+
 const model = computed({
-  get: () => props.modelValue,
-  set: (value) => emit("update:modelValue", value as string),
+  get: () => (controlado.value ? props.modelValue : interno.value),
+  set: (value) => {
+    interno.value = value as string;
+    emit("update:modelValue", value as string);
+  },
 });
 </script>
 
