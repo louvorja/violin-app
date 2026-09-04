@@ -146,8 +146,9 @@
                       {{ opt.label }}
                     </option>
                     <template v-if="btn.feature">
-                      <option v-for="d in displays" :key="d.id" :value="d.id">
-                        {{ d.label || `Monitor ${d.id}` }}
+                      <option value="">{{ $t("options.slides.same_window") }}</option>
+                      <option v-for="r in roleOptions" :key="r.role" :value="r.role">
+                        {{ r.label }}
                       </option>
                     </template>
                   </select>
@@ -249,14 +250,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, type ComputedRef, reactive, watch } from "vue";
+import { computed, type ComputedRef, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import RibbonScreenButton from "./RibbonScreenButton.vue";
 import AppMenu from "./AppMenu.vue";
 import ShellTools from "./ShellTools.vue";
 import { useShell } from "@/composables/useShell";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
-import { useDisplays } from "@/composables/useDisplays";
+import { DISPLAY_ROLES, useDisplays } from "@/composables/useDisplays";
 import { useRibbonStore } from "@/stores/ribbonStore";
 import Platform from "@/helpers/Platform";
 import $appdata from "@/helpers/AppData";
@@ -282,7 +283,15 @@ const ribbonStore = useRibbonStore();
 
 const inputValues = reactive<Record<string, string>>({});
 
-const { displays, setPreferred, getPreferred } = useDisplays();
+const { displays, getFeatureRole, setFeatureRole } = useDisplays();
+
+/** Papel de cada botão da ribbon. Carregado sob demanda (passa pelo IPC). */
+const featureRoles = ref<Record<string, string>>({});
+
+/** Papéis de monitor oferecidos nos selects de projeção. */
+const roleOptions = computed(() =>
+  DISPLAY_ROLES.map((role) => ({ role, label: t(`options.monitors.roles.${role}`) }))
+);
 
 interface DynamicOption {
   value: string;
@@ -333,7 +342,15 @@ function getCustomComponentProps(
 function getSelectValue(btn: RibbonButton): string | number {
   if (btn.optionKey) return $userdata.get(btn.optionKey, btn.defaultValue ?? "") as string;
   if (!btn.feature) return "";
-  return getPreferred(btn.feature) ?? "";
+
+  const feature = btn.feature;
+  if (featureRoles.value[feature] === undefined) {
+    featureRoles.value[feature] = "";
+    getFeatureRole(feature).then((role) => {
+      featureRoles.value = { ...featureRoles.value, [feature]: role ?? "" };
+    });
+  }
+  return featureRoles.value[feature];
 }
 
 function setSelectValue(btn: RibbonButton, val: string | number): void {
@@ -342,9 +359,9 @@ function setSelectValue(btn: RibbonButton, val: string | number): void {
     return;
   }
   if (!btn.feature) return;
-  if (val === "") setPreferred(btn.feature, 0);
-  else if (val === "primary" || val === "secondary") setPreferred(btn.feature, val as string);
-  else setPreferred(btn.feature, Number(val));
+  const role = String(val);
+  featureRoles.value = { ...featureRoles.value, [btn.feature]: role };
+  setFeatureRole(btn.feature, role || null);
 }
 
 function getCheckValue(btn: RibbonButton): boolean {

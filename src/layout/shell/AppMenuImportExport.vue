@@ -1,7 +1,10 @@
 <template>
   <div class="opt">
     <section class="opt-section">
-      <h3 class="opt-section-title">{{ $t("modules.liturgy.name") }}</h3>
+      <h3 class="opt-section-title">
+        <v-icon :icon="ICONS.UI.IMPORT_EXPORT" size="18" />
+        {{ $t("modules.liturgy.name") }}
+      </h3>
 
       <div class="opt-actions-row">
         <div>
@@ -53,6 +56,7 @@
 </template>
 
 <script setup lang="ts">
+import { ICONS } from "@/config/Icons";
 import { ref } from "vue";
 import $liturgy from "@/helpers/Liturgy";
 import SljaConverter from "@/helpers/SljaConverter";

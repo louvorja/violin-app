@@ -1,7 +1,10 @@
 <template>
   <div class="opt">
     <section class="opt-section">
-      <h3 class="opt-section-title">{{ $t("options.albums.title") }}</h3>
+      <h3 class="opt-section-title">
+        <v-icon :icon="ICONS.MODULES.ALBUM" size="18" />
+        {{ $t("options.albums.title") }}
+      </h3>
       <p class="opt-hint">{{ $t("options.albums.hint") }}</p>
 
       <!-- Pesquisa -->
@@ -93,6 +96,7 @@
 </template>
 
 <script setup lang="ts">
+import { ICONS } from "@/config/Icons";
 import { ref, computed, watch, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
 import Database from "@/helpers/Database";

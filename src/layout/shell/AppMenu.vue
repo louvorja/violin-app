@@ -15,61 +15,71 @@
     </button>
 
     <Teleport to="body">
-      <div v-if="open" class="app-menu-overlay" @click.self="close">
-        <div class="app-menu-panel" role="menu" :aria-label="$t('shell.appmenu')">
-          <header class="app-menu-header" :class="{ 'app-menu-header--mac': isMac }">
-            <v-btn
-              class="app-menu-back"
-              :title="$t('alert.close')"
-              :aria-label="$t('alert.close')"
-              @click="close"
-            >
-              <v-icon :icon="ICONS.ACTIONS.CLOSE" size="20" />
-            </v-btn>
-            <span class="app-menu-header-title">
-              {{ activeItem?.label ? $t(activeItem.label) : $t("shell.appmenu") }}
-            </span>
-          </header>
-
-          <div class="app-menu-body">
-            <nav class="app-menu-sidebar">
+      <Transition name="app-menu">
+        <div v-if="open" class="app-menu-overlay" @click.self="close">
+          <div class="app-menu-panel" role="menu" :aria-label="$t('shell.appmenu')">
+            <header class="app-menu-header" :class="{ 'app-menu-header--mac': isMac }">
               <button
-                v-for="item in items"
-                :key="item.id"
                 type="button"
-                class="app-menu-item"
-                :class="{ 'app-menu-item--active': activeItem?.id === item.id }"
-                role="menuitem"
-                @click="selectItem(item)"
+                class="app-menu-back"
+                :title="$t('alert.close')"
+                :aria-label="$t('alert.close')"
+                @click="close"
               >
-                <Icon :icon="item.icon" class="mr-2" />
-                <span class="app-menu-item-label lj-u-truncate">{{ $t(item.label) }}</span>
+                <v-icon :icon="ICONS.ACTIONS.CLOSE" size="20" />
               </button>
-            </nav>
+              <span class="app-menu-header-title">
+                {{ activeItem?.label ? $t(activeItem.label) : $t("shell.appmenu") }}
+              </span>
+            </header>
 
-            <div class="app-menu-content">
-              <h2 class="app-menu-content-title">
-                {{ activeItem?.label ? $t(activeItem.label) : "" }}
-              </h2>
+            <div class="app-menu-body">
+              <nav class="app-menu-sidebar">
+                <button
+                  v-for="item in items"
+                  :key="item.id"
+                  type="button"
+                  class="app-menu-item"
+                  :class="{ 'app-menu-item--active': activeItem?.id === item.id }"
+                  :title="$t(item.label)"
+                  role="menuitem"
+                  @click="selectItem(item)"
+                >
+                  <Icon :icon="item.icon" class="mr-2" />
+                  <span class="app-menu-item-label lj-u-truncate">{{ $t(item.label) }}</span>
+                </button>
+              </nav>
 
-              <!-- Painéis específicos por item -->
-              <AppMenuOpcoes v-if="activeItem?.id === 'settings'" :initial-tab="optionsTab" />
-              <AppMenuSobre v-else-if="activeItem?.id === 'about'" />
-              <AppMenuTransmitir v-else-if="activeItem?.id === 'transmission'" />
-              <AppMenuSincronizar v-else-if="activeItem?.id === 'sync'" />
-              <AppMenuAcessibilidade v-else-if="activeItem?.id === 'accessibility'" />
-              <AppMenuAtualizacoes v-else-if="activeItem?.id === 'updates'" />
-              <AppMenuImportExport v-else-if="activeItem?.id === 'import_export'" />
-              <AppMenuAlbums v-else-if="activeItem?.id === 'albums'" />
-              <AppMenuDev v-else-if="activeItem?.id === 'dev'" />
+              <div class="app-menu-content">
+                <Transition name="app-menu-screen" mode="out-in">
+                  <div :key="activeItem?.id">
+                    <!-- O Sobre abre com hero próprio e mantém o título da página;
+                       nas demais telas ele repetiria o header do painel. -->
+                    <h2 v-if="activeItem?.id === 'about'" class="app-menu-content-title">
+                      {{ activeItem?.label ? $t(activeItem.label) : "" }}
+                    </h2>
 
-              <p v-else class="app-menu-content-placeholder">
-                {{ $t("shell.appmenu_content_placeholder") }}
-              </p>
+                    <!-- Painéis específicos por item -->
+                    <AppMenuOpcoes v-if="activeItem?.id === 'settings'" :initial-tab="optionsTab" />
+                    <AppMenuSobre v-else-if="activeItem?.id === 'about'" />
+                    <AppMenuTransmitir v-else-if="activeItem?.id === 'transmission'" />
+                    <AppMenuSincronizar v-else-if="activeItem?.id === 'sync'" />
+                    <AppMenuAcessibilidade v-else-if="activeItem?.id === 'accessibility'" />
+                    <AppMenuAtualizacoes v-else-if="activeItem?.id === 'updates'" />
+                    <AppMenuImportExport v-else-if="activeItem?.id === 'import_export'" />
+                    <AppMenuAlbums v-else-if="activeItem?.id === 'albums'" />
+                    <AppMenuDev v-else-if="activeItem?.id === 'dev'" />
+
+                    <p v-else class="app-menu-content-placeholder">
+                      {{ $t("shell.appmenu_content_placeholder") }}
+                    </p>
+                  </div>
+                </Transition>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </Transition>
     </Teleport>
   </div>
 </template>
@@ -362,7 +372,13 @@ function onOpenOptions(e) {
   min-width: 30px;
   width: 30px;
   height: 30px;
-  border-radius: 10%;
+  /* Botão nativo, não v-btn: o `padding: 0 16px` do Vuetify brigava com a
+     largura fixa e deixava o quadrado em 32×30, e o ripple do Material não
+     combina com o resto da barra. */
+  padding: 0;
+  cursor: pointer;
+  /* Em % o raio vira elipse (10% da largura × 10% da altura). */
+  border-radius: var(--lj-radius-sm);
   border: none;
   background: var(--lj-navy-active);
   color: var(--lj-white);
@@ -429,7 +445,7 @@ function onOpenOptions(e) {
 
 .app-menu-content {
   flex: 1;
-  padding: var(--lj-space-8) 32px;
+  padding: var(--lj-space-6) var(--lj-space-8) var(--lj-space-8);
   overflow-y: auto;
   background: var(--lj-surface-bg);
 }
@@ -446,6 +462,73 @@ function onOpenOptions(e) {
   color: var(--lj-text-muted);
   font-size: var(--lj-text-base);
   margin: var(--lj-space-6) 0;
+}
+
+/* Abertura do painel: o backdrop dissolve e a superfície sobe um pouco.
+   Trocar de tela é só um fade — deslizar sugeriria navegação lateral. */
+.app-menu-enter-active,
+.app-menu-leave-active {
+  transition: opacity var(--lj-transition-normal);
+}
+
+.app-menu-enter-active .app-menu-panel,
+.app-menu-leave-active .app-menu-panel {
+  transition:
+    opacity var(--lj-transition-normal),
+    transform 0.2s var(--lj-ease-out);
+}
+
+.app-menu-enter-from,
+.app-menu-leave-to {
+  opacity: 0;
+}
+
+.app-menu-enter-from .app-menu-panel,
+.app-menu-leave-to .app-menu-panel {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.app-menu-screen-enter-active,
+.app-menu-screen-leave-active {
+  transition: opacity var(--lj-transition-fast);
+}
+
+.app-menu-screen-enter-from,
+.app-menu-screen-leave-to {
+  opacity: 0;
+}
+
+/* Janela estreita: a barra lateral vira uma coluna de ícones para devolver
+   largura ao conteúdo. */
+@media (max-width: 820px) {
+  .app-menu-sidebar {
+    width: 56px;
+  }
+
+  .app-menu-item {
+    justify-content: center;
+    padding: 0;
+  }
+
+  .app-menu-item-label {
+    display: none;
+  }
+
+  .app-menu-item :deep(.mr-2) {
+    margin-right: 0 !important;
+  }
+}
+
+@media (max-width: 560px) {
+  .app-menu-content {
+    padding: var(--lj-space-5) var(--lj-space-6) var(--lj-space-6);
+  }
+
+  .app-menu-header {
+    padding: 0 var(--lj-space-5);
+    gap: var(--lj-space-4);
+  }
 }
 
 .app-menu-footer {

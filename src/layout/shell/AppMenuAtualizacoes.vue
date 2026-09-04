@@ -1,7 +1,10 @@
 <template>
   <div class="opt">
     <section v-if="isDesktop" class="opt-section">
-      <h3 class="opt-section-title">{{ $t("options.updates.app") }}</h3>
+      <h3 class="opt-section-title">
+        <v-icon :icon="ICONS.UI.CHECK_UPDATE" size="18" />
+        {{ $t("options.updates.app") }}
+      </h3>
 
       <div class="opt-row opt-row--col">
         <label class="opt-label">v{{ appVersion }}</label>
@@ -88,7 +91,10 @@
     </section>
 
     <section class="opt-section">
-      <h3 class="opt-section-title">{{ $t("options.updates.database") }}</h3>
+      <h3 class="opt-section-title">
+        <v-icon :icon="ICONS.UI.DATABASE" size="18" />
+        {{ $t("options.updates.database") }}
+      </h3>
 
       <div class="opt-row opt-row--spread">
         <label class="opt-label">{{ $t("options.updates.current_version") }}</label>
@@ -207,6 +213,7 @@
 </template>
 
 <script setup lang="ts">
+import { ICONS } from "@/config/Icons";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import Platform from "@/helpers/Platform";

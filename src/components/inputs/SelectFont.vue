@@ -95,18 +95,20 @@ function select(family: string) {
 </script>
 
 <style scoped>
+/* Mesma caixa de `.opt-select` (appmenu-options.css): este controle aparece
+   lado a lado com os selects nativos e destoava em borda, raio e altura. O
+   conteúdo continua sendo renderizado na própria fonte, que é o ponto dele. */
 .select-font {
   display: flex;
   align-items: center;
   gap: 4px;
   width: var(--lj-opt-select-width);
-  min-height: 28px;
-  padding: 4px 8px;
-  border: 1px solid var(--lj-surface-border);
-  border-radius: 3px;
+  padding: var(--lj-space-2) var(--lj-space-3);
+  border: 1px solid var(--lj-surface-border-strong);
+  border-radius: var(--lj-radius-sm);
   background: var(--lj-surface-bg);
-  color: inherit;
-  font-size: 12px;
+  color: var(--lj-text);
+  font-size: var(--lj-text-base);
   cursor: pointer;
   text-align: left;
   box-sizing: border-box;
@@ -114,6 +116,11 @@ function select(family: string) {
 }
 .select-font:hover {
   border-color: var(--lj-text-muted, #999);
+}
+.select-font:focus-visible {
+  border-color: var(--lj-navy);
+  box-shadow: var(--lj-focus-ring);
+  outline: none;
 }
 .select-font--disabled {
   opacity: 0.5;

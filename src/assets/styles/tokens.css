@@ -323,8 +323,11 @@
 /* =====================================================================
  * Tema dark — overrides (mesmas keys, valores escuros)
  * ===================================================================== */
+/* [data-theme] fica no <html> — sem ele, conteúdo teleportado para fora do
+   v-application (AppMenu, dialogs) não recebe as superfícies escuras. */
 :root.v-theme--dark,
-.v-theme--dark {
+.v-theme--dark,
+[data-theme="dark"] {
   /* Surface */
   --lj-surface-bg: #1f2937;
   --lj-surface-bg-soft: #161e2c;

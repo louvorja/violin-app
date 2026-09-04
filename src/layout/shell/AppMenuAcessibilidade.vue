@@ -1,7 +1,10 @@
 <template>
   <div class="opt">
     <section class="opt-section">
-      <h3 class="opt-section-title">{{ $t("accessibility.title") }}</h3>
+      <h3 class="opt-section-title">
+        <v-icon :icon="ICONS.UI.ACCESSIBILITY" size="18" />
+        {{ $t("accessibility.title") }}
+      </h3>
 
       <div class="opt-stats opt-stats--compact">
         <div class="opt-stat">
@@ -55,7 +58,7 @@
 
     <v-divider />
 
-    <v-window v-model="activeTab">
+    <v-window v-model="activeTab" class="mt-5">
       <!-- ═══ Aba Avatar ═══ -->
       <v-window-item value="avatar">
         <section class="opt-section">
@@ -1478,21 +1481,21 @@ async function clearLibrasCache(): Promise<void> {
   display: inline-flex;
   align-items: center;
   padding: 6px 12px;
-  border: 2px solid rgba(var(--v-border-color), 0.3);
-  border-radius: 6px;
+  border: 2px solid var(--lj-surface-border-strong);
+  border-radius: var(--lj-radius-md);
   background: transparent;
   cursor: pointer;
-  transition: all 0.15s ease;
-  color: rgba(var(--v-border-color), 0.5);
+  transition: all var(--lj-transition-fast);
+  color: var(--lj-text-muted);
   font-size: var(--lj-text-sm);
 }
 .position-btn:hover {
-  border-color: rgba(var(--v-theme-primary), 0.5);
-  color: rgb(var(--v-theme-primary));
+  border-color: var(--lj-navy-active);
+  color: var(--lj-text);
 }
 .position-btn--active {
-  border-color: rgb(var(--v-theme-primary));
-  background: rgba(var(--v-theme-primary), 0.1);
-  color: rgb(var(--v-theme-primary));
+  border-color: var(--lj-orange);
+  background: var(--lj-surface-bg-hover);
+  color: var(--lj-text);
 }
 </style>
