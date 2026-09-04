@@ -22,8 +22,11 @@ export interface FontOption {
 export const FONT = {
   DEFAULT: "__DEFAULT__",
   UI: {
+    // Fonte do sistema primeiro: SF Pro no macOS, Segoe UI no Windows, a do
+    // desktop no Linux. Assim a interface acompanha o visual do SO em vez de
+    // impor a Inter, que continua disponível na lista como escolha explícita.
     FALLBACK:
-      '"InterVariable", "Inter", "Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, "Helvetica Neue", "Tahoma", sans-serif',
+      'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", "Helvetica Neue", Arial, sans-serif',
     INHERIT: "__FONT_DEFAULT_UI__",
     CSS_VAR: "--lj-font-shell",
   },
@@ -36,6 +39,14 @@ export const FONT = {
 
 /** Marcador aceito apenas para dados persistidos por versões antigas. */
 const LEGACY_UI_FAMILY = "__UI_FONT__";
+
+/**
+ * Fallback da interface até a versão anterior, gravado literalmente em
+ * `options.font` no primeiro boot. Sem tratá-lo como legado, quem já usava o
+ * app continuaria preso à Inter e nunca veria a fonte do sistema.
+ */
+const LEGACY_UI_FALLBACK =
+  '"InterVariable", "Inter", "Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, "Helvetica Neue", "Tahoma", sans-serif';
 
 /** Lista de fontes disponíveis para seleção. */
 export const Fonts: FontOption[] = [
@@ -77,7 +88,7 @@ export function resolveFont(
   defaultFont?: string,
 ): string {
   if (typeof saved !== "string" || !saved.trim()) return fallback;
-  if (saved === FONT.UI.INHERIT || saved === LEGACY_UI_FAMILY) {
+  if (saved === FONT.UI.INHERIT || saved === LEGACY_UI_FAMILY || saved === LEGACY_UI_FALLBACK) {
     return `var(${FONT.UI.CSS_VAR}, ${FONT.UI.FALLBACK})`;
   }
   if (saved === FONT.PROJECTION.INHERIT) {
@@ -97,7 +108,8 @@ export function resolveDefaultFont(
     saved === FONT.DEFAULT ||
     saved === FONT.UI.INHERIT ||
     saved === FONT.PROJECTION.INHERIT ||
-    saved === LEGACY_UI_FAMILY
+    saved === LEGACY_UI_FAMILY ||
+    saved === LEGACY_UI_FALLBACK
   ) {
     return fallback;
   }
