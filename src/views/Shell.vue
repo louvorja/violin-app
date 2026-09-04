@@ -146,6 +146,7 @@ import AppFooter from "@/layout/Footer.vue";
 import AppModules from "@/layout/Modules.vue";
 import AppAlert from "@/layout/Alert.vue";
 import AppSnackbar from "@/layout/SnackbarBar.vue";
+import $snackbar from "@/helpers/Snackbar";
 import AppLoading from "@/layout/Loading.vue";
 import CommandPalette from "@/layout/shell/CommandPalette.vue";
 import MusicSpotlight from "@components/MusicSpotlight.vue";
@@ -292,6 +293,22 @@ let messageHandler: ((event: MessageEvent) => void) | null = null;
 // background e o estado "downloaded" também acende o ícone.
 // ---------------------------------------------------------------------------
 let _updaterUnsub: (() => void) | null = null;
+let _displaysUnsub: (() => void) | null = null;
+
+/**
+ * Avisa o operador quando um monitor cai ou volta.
+ *
+ * O snackbar só existe nesta janela — as de projeção não montam o componente —
+ * então é aqui que o evento vira aviso visível.
+ */
+function _handleDisplaysChanged(payload: { hidden?: string[]; shown?: string[] } | null): void {
+  if (!payload) return;
+  if (payload.hidden?.length) {
+    $snackbar.warning(t("options.monitors.disconnected"));
+  } else if (payload.shown?.length) {
+    $snackbar.success(t("options.monitors.reconnected"));
+  }
+}
 let _startupCheckPending = false;
 let _pendingReleaseNotes = false;
 let _startupCheckTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -689,6 +706,14 @@ onMounted(() => {
     "| api:",
     !!Platform.api
   );
+  if (Platform.isDesktop && Platform.displays?.onChanged) {
+    try {
+      _displaysUnsub = Platform.displays.onChanged(_handleDisplaysChanged);
+    } catch (e) {
+      console.warn("[Shell] displays.onChanged falhou:", e);
+    }
+  }
+
   if (Platform.isDesktop && Platform.updater) {
     try {
       _updaterUnsub = Platform.updater.onStateChange(_handleUpdaterState);
@@ -757,6 +782,14 @@ onBeforeUnmount(() => {
   if (_updaterUnsub) {
     try {
       _updaterUnsub();
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  if (_displaysUnsub) {
+    try {
+      _displaysUnsub();
     } catch (_) {
       /* ignore */
     }
