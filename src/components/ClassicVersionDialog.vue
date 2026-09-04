@@ -1,96 +1,61 @@
 <template>
-  <v-dialog v-model="model" max-width="520" :scrim="true" @update:model-value="onClose">
-    <v-card rounded="lg">
-      <v-toolbar color="transparent" density="compact" class="px-2 pt-2">
-        <v-icon icon="mdi-desktop-classic" class="mr-2" />
-        <v-toolbar-title class="text-body-1 font-weight-bold">
-          {{ $t("classic.title") }}
-        </v-toolbar-title>
-      </v-toolbar>
+  <LjDialog v-model="model" :title="$t('classic.title')" :icon="ICONS.UI.MONITORS" persistent>
+    <!-- Scanning -->
+    <div v-if="view === 'scanning'" class="cv-center">
+      <LjSpinner :size="32" />
+      <span>{{ $t("classic.scanning") }}</span>
+    </div>
 
-      <v-divider />
+    <!-- Detected -->
+    <div v-else-if="view === 'detected'" class="cv-stack">
+      <div class="cv-row">
+        <Icon :icon="ICONS.UI.CHECK" :size="18" class="cv-ok" />
+        <span>{{ $t("classic.detected") }}</span>
+      </div>
 
-      <!-- Scanning -->
-      <template v-if="view === 'scanning'">
-        <v-card-text class="pa-8">
-          <div class="d-flex flex-column align-center ga-4 py-4">
-            <v-progress-circular indeterminate color="primary" size="48" />
-            <span class="text-body-1">{{ $t("classic.scanning") }}</span>
-          </div>
-        </v-card-text>
+      <code class="cv-path">{{ result?.installDir }}</code>
+
+      <div class="cv-folders">
+        <LjChip
+          v-for="(exists, folder) in result?.folders"
+          :key="folder"
+          size="sm"
+          :variant="exists ? 'success' : 'neutral'"
+          :icon="exists ? ICONS.UI.FOLDER : ICONS.UI.FOLDER_OFF"
+        >
+          {{ folder }}
+        </LjChip>
+      </div>
+
+      <p v-if="result?.lang" class="cv-hint">
+        {{ $t("classic.language_detected", { lang: result.lang.toUpperCase() }) }}
+      </p>
+    </div>
+
+    <!-- Not found -->
+    <div v-else-if="view === 'not_found'" class="cv-row">
+      <Icon :icon="ICONS.UI.ALERT" :size="18" class="cv-warn" />
+      <span>{{ $t("classic.not_found") }}</span>
+    </div>
+
+    <template v-if="view !== 'scanning'" #footer>
+      <template v-if="view === 'detected'">
+        <LjButton size="sm" @click="onDecline">{{ $t("classic.decline") }}</LjButton>
+        <LjButton size="sm" variant="primary" @click="onAccept">
+          {{ $t("classic.accept") }}
+        </LjButton>
       </template>
-
-      <!-- Detected -->
-      <template v-else-if="view === 'detected'">
-        <v-card-text class="pa-4">
-          <div class="d-flex flex-column ga-3">
-            <div class="d-flex align-center ga-3">
-              <v-icon icon="mdi-check-circle" color="success" size="24" />
-              <span class="text-body-1">{{ $t("classic.detected") }}</span>
-            </div>
-
-            <code
-              class="text-caption pa-2 rounded"
-              style="background: rgba(var(--v-border-color), 0.12)"
-            >
-              {{ result?.installDir }}
-            </code>
-
-            <div class="d-flex flex-wrap ga-1 mt-1">
-              <v-chip
-                v-for="(exists, folder) in result?.folders"
-                :key="folder"
-                size="x-small"
-                :color="exists ? 'success' : 'default'"
-                variant="tonal"
-              >
-                <v-icon :icon="exists ? 'mdi-folder' : 'mdi-folder-off'" size="12" class="mr-1" />
-                {{ folder }}
-              </v-chip>
-            </div>
-
-            <p v-if="result?.lang" class="text-caption text-medium-emphasis mt-1">
-              {{ $t("classic.language_detected", { lang: result.lang.toUpperCase() }) }}
-            </p>
-          </div>
-        </v-card-text>
-
-        <v-divider />
-
-        <v-card-actions class="pa-4">
-          <v-spacer />
-          <v-btn variant="text" @click="onDecline">
-            {{ $t("classic.decline") }}
-          </v-btn>
-          <v-btn color="primary" variant="flat" @click="onAccept">
-            {{ $t("classic.accept") }}
-          </v-btn>
-        </v-card-actions>
-      </template>
-
-      <!-- Not found -->
-      <template v-else-if="view === 'not_found'">
-        <v-card-text class="pa-4">
-          <div class="d-flex align-center ga-3">
-            <v-icon icon="mdi-alert-circle-outline" color="warning" size="24" />
-            <span class="text-body-1">{{ $t("classic.not_found") }}</span>
-          </div>
-        </v-card-text>
-
-        <v-card-actions class="pa-4">
-          <v-spacer />
-          <v-btn color="primary" variant="flat" @click="onClose">
-            {{ $t("alert.ok") }}
-          </v-btn>
-        </v-card-actions>
-      </template>
-    </v-card>
-  </v-dialog>
+      <LjButton v-else size="sm" variant="primary" @click="onClose">{{ $t("alert.ok") }}</LjButton>
+    </template>
+  </LjDialog>
 </template>
 
 <script setup lang="ts">
 import { ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import Icon from "@/components/Icon.vue";
+import { LjButton, LjChip, LjDialog, LjSpinner } from "@/components/ui";
+import { ICONS } from "@/config/Icons";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
 import Platform from "@/helpers/Platform";
@@ -184,3 +149,55 @@ function onClose(): void {
   emit("update:modelValue", false);
 }
 </script>
+
+<style scoped>
+.cv-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--lj-space-5);
+  padding: var(--lj-space-7) 0;
+}
+
+.cv-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-4);
+}
+
+.cv-row {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-4);
+}
+
+.cv-ok {
+  color: var(--lj-success);
+}
+
+.cv-warn {
+  color: var(--lj-warning);
+}
+
+.cv-path {
+  padding: var(--lj-space-3) var(--lj-space-4);
+  background: var(--lj-surface-bg-soft);
+  border: 1px solid var(--lj-surface-border);
+  border-radius: var(--lj-radius-xs);
+  font-family: var(--lj-font-mono);
+  font-size: var(--lj-text-sm);
+  word-break: break-all;
+}
+
+.cv-folders {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lj-space-2);
+}
+
+.cv-hint {
+  margin: 0;
+  color: var(--lj-text-subtle);
+  font-size: var(--lj-text-sm);
+}
+</style>

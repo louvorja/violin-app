@@ -1,181 +1,145 @@
 <template>
   <div class="shell-tools">
     <!--    Projeção de Fundo-->
-    <v-tooltip location="bottom" :open-delay="300">
-      <template #activator="{ props }">
-        <button v-bind="props" type="button" class="shell-tool" @click="toggleBackgroundProjection">
-          <v-icon
-            :icon="!isBgPlaying ? ICONS.PROJECTION.START : ICONS.PROJECTION.STOP"
-            :color="!isBgPlaying ? COLORS.SURFACE : COLORS.DANGER"
-            :size="sizeIcon"
-          />
-        </button>
-      </template>
-      {{ isBgPlaying ? "Desativar projeção de fundo" : "Ativar projeção de fundo" }}
-    </v-tooltip>
+    <LjTooltip
+      :text="isBgPlaying ? 'Desativar projeção de fundo' : 'Ativar projeção de fundo'"
+      side="bottom"
+    >
+      <button type="button" class="shell-tool" @click="toggleBackgroundProjection">
+        <Icon
+          :icon="!isBgPlaying ? ICONS.PROJECTION.START : ICONS.PROJECTION.STOP"
+          :color="!isBgPlaying ? COLORS.SURFACE : COLORS.DANGER"
+          :size="sizeIcon"
+        />
+      </button>
+    </LjTooltip>
 
     <!--    Libras-->
-    <v-tooltip location="bottom" :open-delay="300">
-      <template #activator="{ props }">
+    <LjTooltip
+      :text="isLibrasEnabled ? $t('accessibility.musics.cached') + ' Libras' : 'Libras'"
+      side="bottom"
+    >
+      <button
+        type="button"
+        class="shell-tool"
+        :class="{ 'shell-tool--active': isLibrasEnabled }"
+        @click="toggleLibras"
+      >
+        <Icon
+          v-if="isLibrasEnabled"
+          :icon="ICONS.UI.LIBRAS_ON"
+          :size="sizeIcon"
+          :color="COLORS.WARNING"
+        />
+        <Icon v-else :icon="ICONS.UI.LIBRAS_OFF" :size="sizeIcon" />
+      </button>
+    </LjTooltip>
+
+    <!--    Atualização disponível-->
+    <LjTooltip v-if="hasUpdate" :text="$t('shell.appmenu_items.check_update')" side="bottom">
+      <button type="button" class="shell-tool shell-tool--update" @click="openUpdates">
+        <Icon :icon="ICONS.UI.DOWNLOAD_CIRCLE" :size="sizeIcon" class="shell-tool--update-icon" />
+      </button>
+    </LjTooltip>
+
+    <!--    Atividades em segundo plano-->
+    <LjPopover :title="t('shell.background_tasks.title')" side="bottom" align="end">
+      <template #trigger>
         <button
-          v-bind="props"
           type="button"
           class="shell-tool"
-          :class="{ 'shell-tool--active': isLibrasEnabled }"
-          @click="toggleLibras"
+          :class="{ 'shell-tool--active': bgTasks.hasActiveTasks.value }"
+          :aria-label="t('shell.background_tasks.title')"
         >
-          <v-icon
-            v-if="isLibrasEnabled"
-            :icon="ICONS.UI.LIBRAS_ON"
+          <Icon
+            :icon="ICONS.UI.PROGRESS_DOWNLOAD"
+            :color="bgTasks.hasActiveTasks.value ? COLORS.WARNING : undefined"
             :size="sizeIcon"
-            :color="COLORS.WARNING"
           />
-          <v-icon v-else :icon="ICONS.UI.LIBRAS_OFF" :size="sizeIcon" />
         </button>
       </template>
-      {{ isLibrasEnabled ? $t("accessibility.musics.cached") + " Libras" : "Libras" }}
-    </v-tooltip>
-    <!--    Atividades em segundo plano-->
-    <v-tooltip v-if="hasUpdate" location="bottom" :open-delay="300">
-      <template #activator="{ props }">
-        <button
-          v-bind="props"
-          type="button"
-          class="shell-tool shell-tool--update"
-          @click="openUpdates"
-        >
-          <v-icon icon="mdi-download-circle" :size="sizeIcon" class="shell-tool--update-icon" />
-        </button>
-      </template>
-      {{ $t("shell.appmenu_items.check_update") }}
-    </v-tooltip>
-    <v-tooltip location="bottom" :open-delay="300" :open-on-click="false" :open-on-hover="false">
-      <template #activator="{ props: tipProps }">
-        <v-menu :close-on-content-click="false" location="bottom end" offset="8">
-          <template #activator="{ props: menuProps }">
-            <button
-              v-bind="{ ...menuProps, ...tipProps }"
-              type="button"
-              class="shell-tool"
-              :class="{ 'shell-tool--active': bgTasks.hasActiveTasks.value }"
-            >
-              <v-icon
-                icon="mdi-progress-download"
-                :color="bgTasks.hasActiveTasks.value ? 'warning' : undefined"
-                :size="sizeIcon"
-              />
-            </button>
-          </template>
-          <v-card min-width="340" max-width="420" class="bg-tasks-card">
-            <v-card-title class="py-2" style="font-size: 14px">
-              {{ t("shell.background_tasks.title") }}
-            </v-card-title>
-            <v-divider />
-            <v-list density="compact" lines="one" class="py-0">
-              <v-list-item v-for="task in bgTasks.tasks.value" :key="task.id">
-                <v-list-item-title style="font-size: 12px">
-                  {{ t(task.label) }}
-                </v-list-item-title>
-                <v-list-item-subtitle v-if="task.status === 'running'">
-                  <v-progress-linear
-                    :model-value="task.progress"
-                    :indeterminate="task.progress === undefined || task.progress === 0"
-                    height="4"
-                    rounded
-                    class="mt-1"
-                  />
-                  <span class="text-caption" style="font-size: 10px">
-                    {{
-                      formatBackgroundTaskDetail(task.detail, t) || `${Math.round(task.progress)}%`
-                    }}
-                  </span>
-                </v-list-item-subtitle>
-                <v-list-item-subtitle v-else class="text-caption">
-                  {{ t(`shell.background_tasks.${task.status}`) }}
-                </v-list-item-subtitle>
-                <template #append>
-                  <v-icon
-                    v-if="task.status === 'running' && task._cancelFn"
-                    icon="mdi-close-circle"
-                    size="18"
-                    color="error"
-                    @click="confirmCancel(task)"
-                  />
-                  <v-icon v-else icon="mdi-close" size="16" @click="bgTasks.dismissTask(task.id)" />
-                </template>
-              </v-list-item>
-            </v-list>
-            <v-card-text
-              v-if="bgTasks.tasks.value.length === 0"
-              class="text-caption text-center py-3"
-            >
-              {{ t("shell.background_tasks.empty") }}
-            </v-card-text>
-          </v-card>
-        </v-menu>
-      </template>
-      {{ t("shell.background_tasks.title") }}
-    </v-tooltip>
+
+      <div class="bg-tasks">
+        <div v-for="task in bgTasks.tasks.value" :key="task.id" class="bg-task">
+          <div class="bg-task__main">
+            <span class="bg-task__label">{{ t(task.label) }}</span>
+            <template v-if="task.status === 'running'">
+              <LjProgress :value="task.progress ?? 0" :indeterminate="!task.progress" :height="4" />
+              <span class="bg-task__detail">
+                {{ formatBackgroundTaskDetail(task.detail, t) || `${Math.round(task.progress)}%` }}
+              </span>
+            </template>
+            <span v-else class="bg-task__detail">
+              {{ t(`shell.background_tasks.${task.status}`) }}
+            </span>
+          </div>
+
+          <LjButton
+            v-if="task.status === 'running' && task._cancelFn"
+            size="sm"
+            variant="ghost"
+            icon-only
+            :icon="ICONS.ACTIONS.CANCEL"
+            :aria-label="t('shell.background_tasks.cancel')"
+            @click="confirmCancel(task)"
+          />
+          <LjButton
+            v-else
+            size="sm"
+            variant="ghost"
+            icon-only
+            :icon="ICONS.ACTIONS.CLOSE"
+            @click="bgTasks.dismissTask(task.id)"
+          />
+        </div>
+
+        <p v-if="bgTasks.tasks.value.length === 0" class="bg-tasks__empty">
+          {{ t("shell.background_tasks.empty") }}
+        </p>
+      </div>
+    </LjPopover>
 
     <!--    Pesquisa Rápida-->
-    <v-tooltip location="bottom" :open-delay="300">
-      <template #activator="{ props }">
-        <button v-bind="props" type="button" class="shell-tool" @click="openCommandPalette">
-          <v-icon icon="mdi-magnify" :size="sizeIcon" />
-        </button>
-      </template>
-      {{ $t("shell.quick_search") }}
-    </v-tooltip>
+    <LjTooltip :text="$t('shell.quick_search')" side="bottom">
+      <button type="button" class="shell-tool" @click="openCommandPalette">
+        <Icon :icon="ICONS.ACTIONS.SEARCH" :size="sizeIcon" />
+      </button>
+    </LjTooltip>
 
     <!--    Pesquisa Bíblia-->
-    <v-tooltip location="bottom" :open-delay="300">
-      <template #activator="{ props }">
-        <button v-bind="props" type="button" class="shell-tool" @click="openBibleSearch">
-          <v-icon icon="mdi-book-open-variant" :size="sizeIcon" />
-        </button>
-      </template>
-      {{ $t("shell.bible_quick_search") }}
-    </v-tooltip>
+    <LjTooltip :text="$t('shell.bible_quick_search')" side="bottom">
+      <button type="button" class="shell-tool" @click="openBibleSearch">
+        <Icon :icon="ICONS.MODULES.BIBLE" :size="sizeIcon" />
+      </button>
+    </LjTooltip>
 
     <!--    Favoritos-->
-    <v-tooltip location="bottom" :open-delay="300">
-      <template #activator="{ props }">
-        <button v-bind="props" type="button" class="shell-tool" @click="openFavorites">
-          <v-icon icon="mdi-star" :size="sizeIcon" />
-        </button>
-      </template>
-      {{ $t("ribbon.btn.favorites") }}
-    </v-tooltip>
+    <LjTooltip :text="$t('ribbon.btn.favorites')" side="bottom">
+      <button type="button" class="shell-tool" @click="openFavorites">
+        <Icon :icon="ICONS.UI.STAR" :size="sizeIcon" />
+      </button>
+    </LjTooltip>
 
     <!--    Modo de cor-->
-    <v-tooltip location="bottom" :open-delay="300">
-      <template #activator="{ props }">
-        <button v-bind="props" type="button" class="shell-tool" @click="toggleTheme">
-          <v-icon :icon="isDark ? 'mdi-weather-sunny' : 'mdi-weather-night'" :size="sizeIcon" />
-        </button>
-      </template>
-      {{ $t("shell.toggle_theme") }}
-    </v-tooltip>
+    <LjTooltip :text="$t('shell.toggle_theme')" side="bottom">
+      <button type="button" class="shell-tool" @click="toggleTheme">
+        <Icon :icon="isDark ? ICONS.UI.THEME_LIGHT : ICONS.UI.THEME_DARK" :size="sizeIcon" />
+      </button>
+    </LjTooltip>
 
     <!--    Sobre-->
-    <v-tooltip location="bottom" :open-delay="300">
-      <template #activator="{ props }">
-        <button v-bind="props" type="button" class="shell-tool" @click="openAbout">
-          <v-icon icon="mdi-information-outline" :size="sizeIcon" />
-        </button>
-      </template>
-      {{ $t("shell.appmenu_items.about") }}
-    </v-tooltip>
+    <LjTooltip :text="$t('shell.appmenu_items.about')" side="bottom">
+      <button type="button" class="shell-tool" @click="openAbout">
+        <Icon :icon="ICONS.UI.INFORMATION_OUTLINE" :size="sizeIcon" />
+      </button>
+    </LjTooltip>
 
     <!--    Hotkeys-->
-    <v-tooltip location="bottom" :open-delay="300">
-      <template #activator="{ props }">
-        <button v-bind="props" type="button" class="shell-tool" @click="openHotkeys">
-          <v-icon icon="mdi-help-circle-outline" :size="sizeIcon" />
-        </button>
-      </template>
-      {{ $t("hotkeys.title") }}
-    </v-tooltip>
+    <LjTooltip :text="$t('hotkeys.title')" side="bottom">
+      <button type="button" class="shell-tool" @click="openHotkeys">
+        <Icon :icon="ICONS.UI.HELP" :size="sizeIcon" />
+      </button>
+    </LjTooltip>
   </div>
 </template>
 
@@ -196,6 +160,8 @@ import Broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBackgroundTasks, type BackgroundTask } from "@/composables/useBackgroundTasks";
 import { formatBackgroundTaskDetail } from "@/helpers/BackgroundTaskDetail";
+import Icon from "@/components/Icon.vue";
+import { LjButton, LjPopover, LjProgress, LjTooltip } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { COLORS } from "@constants/Colors";
 
@@ -339,5 +305,48 @@ Broadcast.listen((msg: { type: string; payload: unknown }) => {
 .shell-tool--update-icon {
   color: #ffb300;
   filter: drop-shadow(0 0 4px rgba(255, 179, 0, 0.6));
+}
+</style>
+
+<!-- Sem `scoped`: este conteúdo é renderizado dentro do popover, que vai para
+     um portal no <body> e não recebe o atributo de escopo. -->
+<style>
+.bg-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-3);
+  min-width: 300px;
+}
+
+.bg-task {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--lj-space-3);
+}
+
+.bg-task__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-2);
+}
+
+.bg-task__label {
+  font-size: var(--lj-text-base);
+  color: var(--lj-text);
+}
+
+.bg-task__detail {
+  font-size: var(--lj-text-xs);
+  color: var(--lj-text-subtle);
+}
+
+.bg-tasks__empty {
+  margin: 0;
+  padding: var(--lj-space-4) 0;
+  color: var(--lj-text-subtle);
+  font-size: var(--lj-text-sm);
+  text-align: center;
 }
 </style>
