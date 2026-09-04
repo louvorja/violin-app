@@ -1096,7 +1096,7 @@
     },
     "bundle_check": "Verificando base de datos...",
     "bundle_downloading": "Descargando base de datos...",
-    "bundle_cancel": "Descarga de la base de datos cancelada",
+    "bundle_cancel": "Descarga de la base de datos interrumpido",
     "bundle_extracting": "Extrayendo archivos...",
     "bundle_injecting": "Inyectando datos en la base...",
     "bundle_preparing": "Preparando...",
