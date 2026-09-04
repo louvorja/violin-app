@@ -1175,7 +1175,8 @@
     "bundle_importing_musics": "Importando músicas...",
     "bundle_importing_bible": "Importando Bíblias...",
     "bundle_importing_catalog": "Importando catálogo...",
-    "bundle_importing_extras": "Importando complementos..."
+    "bundle_importing_extras": "Importando complementos...",
+    "bundle_version_suffix": "Versão"
   },
   "accessibility": {
     "title": "Acessibilidade — Libras",

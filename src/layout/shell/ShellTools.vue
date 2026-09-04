@@ -66,7 +66,7 @@
             <template v-if="task.status === 'running'">
               <LjProgress :value="task.progress ?? 0" :indeterminate="!task.progress" :height="4" />
               <span class="bg-task__detail">
-                {{ formatBackgroundTaskDetail(task.detail, t) || `${Math.round(task.progress)}%` }}
+                {{ formatTaskDetail(task.detail, t) || `${Math.round(task.progress)}%` }}
               </span>
             </template>
             <span v-else class="bg-task__detail">
@@ -169,6 +169,18 @@ import { COLORS } from "@constants/Colors";
 const { t } = useI18n();
 const { isDark, toggleDark } = useAppTheme();
 const bgTasks = useBackgroundTasks();
+
+function formatTaskDetail(detail: string | null | undefined): string {
+  if (!detail) return "";
+  const formatted = formatBackgroundTaskDetail(detail, t);
+  if (formatted) return formatted;
+  if (/\.\w{2,5}$/.test(detail)) {
+    return `${t("shell.background_tasks.download")} — ${detail}`;
+  }
+  return detail;
+}
+
+const isDark = computed(() => $appdata.get(KEYS.SHELL.IS_DARK, false));
 
 const hasUpdate = computed(() => $appdata.get(KEYS.SHELL.APP_UPDATE_AVAILABLE, false));
 

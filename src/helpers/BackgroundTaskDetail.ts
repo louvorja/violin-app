@@ -39,6 +39,25 @@ function _translateToken(token: string, t?: TranslateFn): string {
   return _basename(token);
 }
 
+function _formatBibleKey(value: string, t?: TranslateFn, versions?: BibleVersion[]): string {
+  const parts = value.split("_");
+  const versionId = Number(parts[1]);
+  const bookId = Number(parts[2]);
+  const chapter = Number(parts[3]);
+
+  const version = versions?.find((v) => v.id_bible_version === versionId);
+  const bookKey = BOOKS[bookId - 1]?.id;
+  const bookName = bookKey ? (t ? t(`bible.books.${bookKey}`) : bookKey) : String(bookId);
+
+  if (version) {
+    const abbrev = version.abbreviation || String(versionId);
+    return `${abbrev} — ${bookName} ${chapter}`;
+  }
+
+  const suffix = t ? t("startup_check.bundle_version_suffix") : "Versão";
+  return `${bookName} ${chapter} - ${suffix} ${versionId}`;
+}
+
 export function formatBibleDownloadDetail(
   detail: string | null | undefined,
   t?: TranslateFn,
@@ -50,24 +69,13 @@ export function formatBibleDownloadDetail(
   if (!value) return "";
 
   if (/^bible_\d+_\d+_\d+$/.test(value)) {
-    const parts = value.split("_");
-    const versionId = Number(parts[1]);
-    const bookId = Number(parts[2]);
-    const chapter = Number(parts[3]);
-    if (!versionId || !bookId || !chapter) return value;
-
-    const version = versions?.find((v) => v.id_bible_version === versionId);
-    const bookKey = BOOKS[bookId - 1]?.id;
-    const bookName = bookKey ? (t ? t(`bible.books.${bookKey}`) : bookKey) : String(bookId);
-    const abbrev = version?.abbreviation || String(versionId);
-    return `${abbrev} — ${bookName} ${chapter}`;
+    return _formatBibleKey(value, t, versions);
   }
 
   const parts = value.split(" — ");
   if (parts.length >= 2) {
     const head = parts.shift() || "";
     const tail = parts.join(" — ");
-    // Já está formatado como `ABBR — Livro 1`.
     if (/^[\p{L}\p{N}]{1,8}$/u.test(head) && /\d+$/.test(tail)) {
       return value;
     }
@@ -76,18 +84,25 @@ export function formatBibleDownloadDetail(
   return "";
 }
 
-export function formatBackgroundTaskDetail(detail: string | null | undefined, t?: TranslateFn): string {
+export function formatBackgroundTaskDetail(
+  detail: string | null | undefined,
+  t?: TranslateFn,
+  versions?: BibleVersion[]
+): string {
   if (!detail) return "";
 
   const value = String(detail).trim();
   if (!value) return "";
 
-  // Textos de progresso em bytes/taxa já são legíveis; não os trate como tokens.
-  if (/\d/.test(value) && /(?:B|KB|MB|GB|TB|\/s|baixados)/i.test(value)) {
+  if (/\d/.test(value) && /(?:KB|MB|GB|TB|\/s\b|baixados)/i.test(value)) {
     return value;
   }
 
-  const bibleDetail = formatBibleDownloadDetail(value, t);
+  if (/^bible_\d+_\d+_\d+$/.test(value)) {
+    return _formatBibleKey(value, t, versions);
+  }
+
+  const bibleDetail = formatBibleDownloadDetail(value, t, versions);
   if (bibleDetail) return bibleDetail;
 
   const parts = value.split(" — ");

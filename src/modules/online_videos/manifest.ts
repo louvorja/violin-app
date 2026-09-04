@@ -5,6 +5,7 @@ import { ModuleGroupEnum } from "@/enums/ModuleGroupEnum"
 import { ICONS } from "@/config/Icons"
 import { ModuleEnum } from "@/enums/ModuleEnum"
 import $modules from "@/helpers/Modules"
+import { KEYS } from "@/constants/UserDataKeys"
 
 const moduleId = ModuleEnum.ONLINE_VIDEOS;
 const modulePath = $modules.getPath(moduleId);
@@ -43,28 +44,61 @@ export const contextualPages: RibbonPage[] = [
             label: "ribbon.btn.settings",
             action: `${moduleId}_settings`,
           },
+          {
+            id: `${moduleId}_monitor`,
+            type: "select",
+            feature: "online_video",
+            label: `${modulePath}.ribbon.monitor`,
+          },
+          {
+            id: `${moduleId}_show_return`,
+            type: "checkbox",
+            optionKey: KEYS.OPTIONS.ONLINE_VIDEO_PROJECTION.SHOW_RETURN,
+            label: `${modulePath}.ribbon.show_return`,
+          },
+          {
+            id: `${moduleId}_return_monitor`,
+            type: "select",
+            feature: "online_video_return",
+            optionKey: KEYS.OPTIONS.DISPLAYS.ONLINE_VIDEO_RETURN,
+            label: `${modulePath}.ribbon.return_monitor`,
+            defaultValue: "",
+            dependsOnOption: {
+              path: KEYS.OPTIONS.ONLINE_VIDEO_PROJECTION.SHOW_RETURN,
+              value: "true",
+            },
+          },
         ],
       },
       {
         id: "ctx_online_videos_actions",
-        title: "ribbon.groups.settings",
+        title: "ribbon.groups.actions",
         buttons: [
           {
             id: `${moduleId}_personal_url`,
             type: "action_input",
-            icon: ICONS.PROJECTION.START,
+            icon: ICONS.UI.OPEN_IN_NEW,
             label: "ribbon.btn.online_videos_personal_url",
             placeholder: "ribbon.btn.online_videos_personal_url_placeholder",
             action: `${moduleId}_personal_url`,
             color: "#3498db",
           },
           {
-            id: `${moduleId}_stop`,
-            icon: ICONS.PROJECTION.STOP,
-            label: "ribbon.btn.stop_projection",
-            action: `${moduleId}_stop`,
-            color: "#e74c3c",
-          }
+            id: `${moduleId}_toggle`,
+            icon: ICONS.PROJECTION.START,
+            label: `${modulePath}.ribbon.project`,
+            action: `${moduleId}_toggle`,
+            color: "#27ae60",
+            stateBinding: {
+              watchPath: KEYS.MODULES.ONLINE_VIDEOS.IS_PROJECTING,
+              iconOn: ICONS.PROJECTION.STOP,
+              iconOff: ICONS.PROJECTION.START,
+              colorOn: "#e74c3c",
+              colorOff: "#27ae60",
+              labelOn: `${modulePath}.ribbon.project_stop`,
+              labelOff: `${modulePath}.ribbon.project`,
+            },
+          },
         ],
       },
     ],

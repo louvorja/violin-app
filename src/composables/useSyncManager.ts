@@ -11,7 +11,7 @@ import type { BundleProgress } from "@/types/Database";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
 import Libras from "@/helpers/Libras";
 import BundleInstaller from "@/helpers/BundleInstaller";
-import { formatBibleDownloadDetail } from "@/helpers/BackgroundTaskDetail";
+import { formatBackgroundTaskDetail } from "@/helpers/BackgroundTaskDetail";
 import type { Music } from "@/types/Music";
 import type { BibleBook } from "@/types/Bible";
 
@@ -494,7 +494,7 @@ export function useSyncManager() {
     for (const ch of toDownload) {
       if (bibleCancelled.value) break;
       const key = `bible_${ch.versionId}_${ch.bookId}_${ch.n}`;
-      const detail = formatBibleDownloadDetail(key, t, bibleVersions);
+      const detail = formatBackgroundTaskDetail(key, t, bibleVersions);
       bibleProgress.value = { ...bibleProgress.value, currentFile: detail || key };
       try {
         await Database.get(key, { fresh: true, silent: true });
@@ -788,9 +788,10 @@ export function useSyncManager() {
                   ? `${humanSize(received)} baixados · ${humanSize(rate)}/s`
                   : p.detail || p.phase
               : p.detail || p.phase;
+          const translatedDetail = formatBackgroundTaskDetail(detail, t);
           bgTasks.updateTask(taskId, {
             progress: pct,
-            detail,
+            detail: translatedDetail || detail,
           });
         },
       });
