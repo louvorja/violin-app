@@ -1,6 +1,7 @@
 <template>
   <label class="lj-switch" :class="{ 'is-disabled': disabled }">
     <input
+      ref="inputEl"
       type="checkbox"
       role="switch"
       class="lj-switch__input"
@@ -16,12 +17,29 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{ modelValue?: boolean; label?: string; disabled?: boolean }>();
+import { nextTick, ref, watch } from "vue";
+
+const props = defineProps<{ modelValue?: boolean; label?: string; disabled?: boolean }>();
 
 const emit = defineEmits<{ "update:modelValue": [value: boolean] }>();
 
+// O <input> nativo já alternou sozinho quando o usuário clicou. Se o pai não
+// aceitar a mudança (validação, confirmação, limite de seleção), `modelValue`
+// não muda — e como o valor ligado continua o mesmo, o Vue não repinta a
+// propriedade e o controle fica mostrando um estado que o modelo não tem.
+// Num app conduzido ao vivo o operador confia no que vê, então o DOM é
+// devolvido ao estado do modelo a cada mudança.
+const inputEl = ref<HTMLInputElement | null>(null);
+
+function syncFromModel(): void {
+  if (inputEl.value) inputEl.value.checked = !!props.modelValue;
+}
+
+watch(() => props.modelValue, syncFromModel);
+
 function onChange(event: Event): void {
   emit("update:modelValue", (event.target as HTMLInputElement).checked);
+  nextTick(syncFromModel);
 }
 </script>
 

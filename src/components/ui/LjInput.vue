@@ -6,6 +6,7 @@
     <Icon v-if="icon" :icon="icon" :size="iconSize" class="lj-input__icon" />
     <input
       :id="id"
+      v-bind="$attrs"
       :value="modelValue"
       :type="type"
       :placeholder="placeholder"
@@ -18,6 +19,7 @@
       v-if="clearable && String(modelValue ?? '').length"
       type="button"
       class="lj-input__clear"
+      :disabled="disabled"
       :aria-label="t('components.ui.clear')"
       @click="$emit('update:modelValue', '')"
     >
@@ -55,7 +57,9 @@ const emit = defineEmits<{ "update:modelValue": [value: string] }>();
 
 const { t } = useI18n();
 
-// O wrapper carrega a moldura; o id precisa cair no <input>, não nele.
+// O wrapper carrega a moldura, então atributos e listeners precisam ser
+// redirecionados ao <input> — sem o v-bind acima, `inheritAttrs: false` os
+// descartaria em silêncio (adeus name, autocomplete, @keydown, aria-*).
 defineOptions({ inheritAttrs: false });
 
 const iconSize = computed(() => ICON_SIZE[props.size]);

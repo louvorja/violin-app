@@ -7,7 +7,7 @@
       type="button"
       class="lj-chip__remove"
       :aria-label="t('components.ui.remove')"
-      @click="$emit('remove')"
+      @click.stop="$emit('remove')"
     >
       <Icon :icon="ICONS.ACTIONS.CLOSE" :size="11" />
     </button>

@@ -1,23 +1,19 @@
 <template>
-  <v-snackbar
+  <LjToast
     v-model="show"
-    timer="top"
-    :color="snackbar.color ?? 'info'"
+    :text="snackbar.text"
+    :variant="variant"
+    :icon="snackbar.icon || defaultIcon"
     :timeout="snackbar.timeout ?? 4000"
-    location="bottom"
-    multi-line
-    :z-index="20000"
-    class="cursor-pointer"
-    :class="{ 'snackbar--actionable': actionable }"
+    :clickable="actionable"
     @click="onClick"
-  >
-    <v-icon v-if="snackbar.icon" :icon="snackbar.icon" class="mr-2" size="20" />
-    <span>{{ snackbar.text }}</span>
-  </v-snackbar>
+  />
 </template>
 
 <script setup lang="ts">
 import { computed } from "vue";
+import LjToast from "@/components/ui/LjToast.vue";
+import { ICONS } from "@/config/Icons";
 import $appdata from "@/helpers/AppData";
 import $snackbar from "@/helpers/Snackbar";
 
@@ -28,6 +24,8 @@ interface SnackbarState {
   icon: string | null;
   timeout: number;
 }
+
+type ToastVariant = "info" | "success" | "warning" | "error";
 
 const snackbar = computed((): SnackbarState => {
   const raw = $appdata.get("snackbar");
@@ -40,9 +38,30 @@ const show = computed({
   set: (v) => $appdata.set("snackbar.show", v),
 });
 
+// O helper Snackbar fala em "color" (herança do Vuetify); o primitivo fala em
+// variante semântica. A conversão fica aqui para não mudar a API de quem chama.
+const VARIANTS: Record<string, ToastVariant> = {
+  info: "info",
+  success: "success",
+  warning: "warning",
+  error: "error",
+  danger: "error",
+};
+
+const variant = computed<ToastVariant>(() => VARIANTS[snackbar.value.color] ?? "info");
+
+const DEFAULT_ICONS: Record<ToastVariant, string> = {
+  info: ICONS.UI.INFORMATION_OUTLINE,
+  success: ICONS.UI.CHECK,
+  warning: ICONS.UI.ALERT,
+  error: ICONS.UI.ALERT,
+};
+
+const defaultIcon = computed(() => DEFAULT_ICONS[variant.value]);
+
 const actionable = computed(() => $snackbar.hasAction());
 
-function onClick() {
+function onClick(): void {
   const action = $snackbar.takeAction();
   if (action) {
     show.value = false;
@@ -50,9 +69,3 @@ function onClick() {
   }
 }
 </script>
-
-<style scoped>
-.snackbar--actionable {
-  cursor: pointer;
-}
-</style>

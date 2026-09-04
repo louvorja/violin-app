@@ -23,6 +23,7 @@ export { default as LjSkeleton } from "./LjSkeleton.vue";
 export { default as LjSpinner } from "./LjSpinner.vue";
 export { default as LjSwitch } from "./LjSwitch.vue";
 export { default as LjTextarea } from "./LjTextarea.vue";
+export { default as LjToast } from "./LjToast.vue";
 
 /* — sobre Reka UI — */
 export { default as LjCombobox } from "./LjCombobox.vue";

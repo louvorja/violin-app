@@ -239,6 +239,8 @@
           <LjTooltip text="Passe o mouse aqui">
             <LjButton variant="ghost">Com dica</LjButton>
           </LjTooltip>
+
+          <LjButton :icon="ICONS.UI.ALERT" @click="toastOpen = true">Aviso</LjButton>
         </div>
       </section>
 
@@ -252,6 +254,13 @@
           .
         </p>
       </section>
+
+      <LjToast
+        v-model="toastOpen"
+        variant="success"
+        :icon="ICONS.UI.CHECK"
+        text="Coletânea baixada — 148 músicas prontas para projetar."
+      />
 
       <LjDialog
         v-model="dialogOpen"
@@ -297,6 +306,7 @@ import {
   LjPopover,
   LjSlider,
   LjTabs,
+  LjToast,
   LjTooltip,
   type LjMenuItem,
   type LjTab,
@@ -347,6 +357,7 @@ const volume = ref(70);
 const fontSize = ref(42);
 const tab = ref("geral");
 const dialogOpen = ref(false);
+const toastOpen = ref(false);
 
 function applyTheme(id: string): void {
   theme.value = id;

@@ -5,7 +5,7 @@
       <DialogContent
         class="lj-dialog"
         :class="`lj-dialog--${size}`"
-        :aria-describedby="description ? undefined : ''"
+        v-bind="description ? {} : { 'aria-describedby': undefined }"
         @open-auto-focus="onOpenAutoFocus"
         @escape-key-down="onDismiss"
         @pointer-down-outside="onDismiss"

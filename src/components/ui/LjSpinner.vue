@@ -3,7 +3,7 @@
     class="lj-spinner"
     :style="{ width: px, height: px }"
     role="status"
-    :aria-label="label ?? t('components.ui.loading')"
+    :aria-label="label || t('components.ui.loading')"
   >
     <svg viewBox="0 0 24 24" :width="size" :height="size">
       <circle

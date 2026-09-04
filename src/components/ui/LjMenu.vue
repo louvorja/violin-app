@@ -8,7 +8,10 @@
       <DropdownMenuContent class="lj-ui-float lj-menu" :side="side" :align="align" :side-offset="4">
         <template v-for="(item, index) in items" :key="index">
           <DropdownMenuSeparator v-if="item.separator" class="lj-menu__separator" />
-          <DropdownMenuLabel v-else-if="item.label && !item.action" class="lj-menu__label">
+          <DropdownMenuLabel
+            v-else-if="item.label && !item.action && item.checked === undefined"
+            class="lj-menu__label"
+          >
             {{ item.label }}
           </DropdownMenuLabel>
           <!-- Item marcável usa CheckboxItem: só ele expõe role="menuitemcheckbox"

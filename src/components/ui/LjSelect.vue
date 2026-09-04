@@ -7,12 +7,16 @@
       :aria-label="ariaLabel"
     >
       <Icon v-if="icon" :icon="icon" :size="iconSize" class="lj-select__icon" />
+      <!-- Sem seleção e sem slot próprio, o SelectValue fica sem filhos de
+           propósito: é só assim que o Reka renderiza o texto do placeholder. -->
       <SelectValue
+        v-if="selectedItem !== undefined || $slots.value"
         class="lj-select__value"
-        :placeholder="placeholder ?? t('components.ui.select_placeholder')"
+        :placeholder="resolvedPlaceholder"
       >
         <slot name="value" :item="selectedItem">{{ selectedLabel }}</slot>
       </SelectValue>
+      <SelectValue v-else class="lj-select__value" :placeholder="resolvedPlaceholder" />
       <Icon :icon="ICONS.UI.CHEVRON_DOWN" :size="iconSize" class="lj-select__caret" />
     </SelectTrigger>
 
@@ -130,6 +134,10 @@ function labelOf(item: T): string {
 }
 
 const selectedItem = computed(() => props.items.find((item) => valueOf(item) === props.modelValue));
+
+const resolvedPlaceholder = computed(
+  () => props.placeholder ?? t("components.ui.select_placeholder")
+);
 
 const selectedLabel = computed(() => (selectedItem.value ? labelOf(selectedItem.value) : ""));
 </script>
