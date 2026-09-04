@@ -46,9 +46,26 @@ function configureAppPaths() {
 }
 
 // ---------------------------------------------------------------------------
-// D2 — Registrar scheme louvorja:// como privilegiado ANTES do app.whenReady
+// Instância única
 // ---------------------------------------------------------------------------
-protocolModule.register();
+// Duas cópias do app disputam o mesmo userData: a segunda não consegue o LOCK
+// do IndexedDB, fica sem os dados e renderiza a janela quebrada. Quem chega
+// depois encerra e devolve o foco para a janela que já está aberta.
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  });
+
+  // -------------------------------------------------------------------------
+  // D2 — Registrar scheme louvorja:// como privilegiado ANTES do app.whenReady
+  // -------------------------------------------------------------------------
+  protocolModule.register();
+}
 
 // ---------------------------------------------------------------------------
 // Constantes
