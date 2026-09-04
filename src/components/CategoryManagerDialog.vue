@@ -1,147 +1,166 @@
 <template>
-  <v-dialog
+  <LjDialog
     :model-value="modelValue"
-    max-width="600"
+    :title="$t('shell.category.manage_categories')"
+    :icon="ICONS.UI.TUNE"
     @update:model-value="$emit('update:modelValue', $event)"
   >
-    <v-card>
-      <v-card-title class="d-flex align-center ga-1">
-        <v-icon icon="mdi-tune" />
-        {{ $t("shell.category.manage_categories") }}
-        <v-spacer />
-        <v-btn size="x-small" color="primary" class="text-label-large" @click="openNewCategory">
-          <v-icon start icon="mdi-plus" />
-          {{ $t("shell.category.new_category") }}
-        </v-btn>
-      </v-card-title>
-      <v-card-text>
-        <div v-if="categories.length === 0" class="cat-empty">
-          <p>{{ $t("shell.category.no_categories") }}</p>
+    <div class="cat-toolbar">
+      <LjButton size="sm" variant="primary" :icon="ICONS.ACTIONS.ADD" @click="openNewCategory">
+        {{ $t("shell.category.new_category") }}
+      </LjButton>
+    </div>
+
+    <LjEmpty
+      v-if="categories.length === 0"
+      :icon="ICONS.UI.TAG"
+      :title="$t('shell.category.no_categories')"
+    />
+
+    <div v-else class="cat-manage-list">
+      <div v-for="cat in categories" :key="cat.id" class="cat-manage-item">
+        <div class="cat-manage-item-icon" :style="{ background: cat.color }">
+          <Icon v-if="cat.iconType === 'icon'" :icon="cat.icon" :size="18" />
+          <img v-else :src="cat.icon" class="cat-manage-item-img" alt="" />
         </div>
-        <div v-else class="cat-manage-list">
-          <div v-for="cat in categories" :key="cat.id" class="cat-manage-item">
-            <div class="cat-manage-item-icon" :style="{ background: cat.color }">
-              <v-icon v-if="cat.iconType === 'icon'" :icon="cat.icon" size="18" color="white" />
-              <v-img v-else :src="cat.icon" width="18" height="18" />
-            </div>
-            <div class="cat-manage-item-info">
-              <span class="cat-manage-item-name">{{ cat.name }}</span>
-            </div>
-            <v-btn icon="mdi-pencil" size="small" variant="text" @click="openEditCategory(cat)" />
-            <v-btn
-              icon="mdi-delete"
-              size="small"
-              variant="text"
-              color="error"
-              @click="deleteCategory(cat)"
-            />
-          </div>
-        </div>
-      </v-card-text>
-      <v-card-actions>
-        <v-spacer />
-        <v-btn variant="text" @click="$emit('update:modelValue', false)">
-          {{ $t("actions.close") }}
-        </v-btn>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
+        <span class="cat-manage-item-name lj-u-fill lj-u-truncate">{{ cat.name }}</span>
+        <LjButton
+          size="sm"
+          variant="ghost"
+          icon-only
+          :icon="ICONS.ACTIONS.EDIT"
+          :aria-label="$t('actions.edit')"
+          @click="openEditCategory(cat)"
+        />
+        <LjButton
+          size="sm"
+          variant="ghost"
+          icon-only
+          class="cat-btn-danger"
+          :icon="ICONS.ACTIONS.DELETE"
+          :aria-label="$t('actions.delete')"
+          @click="deleteCategory(cat)"
+        />
+      </div>
+    </div>
+
+    <template #footer>
+      <LjButton size="sm" @click="$emit('update:modelValue', false)">
+        {{ $t("actions.close") }}
+      </LjButton>
+    </template>
+  </LjDialog>
 
   <!-- New/Edit Category Dialog -->
-  <v-dialog v-model="showForm" max-width="520">
-    <v-card>
-      <v-card-title class="text-body-1 font-weight-medium">
-        <v-icon :icon="editingId ? 'mdi-pencil' : 'mdi-plus'" class="mr-1" />
-        {{ editingId ? $t("shell.category.edit_category") : $t("shell.category.new_category") }}
-      </v-card-title>
-      <v-card-text>
-        <v-text-field
-          v-model="form.name"
-          density="compact"
-          hide-details
-          variant="outlined"
-          :label="$t('shell.category.category_name')"
-          class="mb-4"
-        />
+  <LjDialog
+    v-model="showForm"
+    :title="editingId ? $t('shell.category.edit_category') : $t('shell.category.new_category')"
+    :icon="editingId ? ICONS.ACTIONS.EDIT : ICONS.ACTIONS.ADD"
+  >
+    <LjField layout="column" :label="$t('shell.category.category_name')">
+      <LjInput v-model="form.name" />
+    </LjField>
 
-        <v-row>
-          <v-col cols="12" sm="6">
-            <label class="cat-label">{{ $t("components.customization.color") }}</label>
-            <div class="cat-color-swatches">
-              <button
-                v-for="c in colorPresets"
-                :key="c"
-                class="cat-color-swatch"
-                :class="{ 'cat-color-swatch--active': form.color === c }"
-                :style="{ background: c }"
-                @click="form.color = c"
-              />
-            </div>
-          </v-col>
-          <v-col cols="12" sm="6">
-            <label class="cat-label">{{ $t("shell.icon") }}</label>
-            <div class="cat-icon-grid">
-              <button
-                v-for="opt in iconOptions"
-                :key="opt.value"
-                class="cat-icon-btn"
-                :class="{ 'cat-icon-btn--active': form.icon === opt.value }"
-                @click="form.icon = opt.value"
-              >
-                <v-icon :icon="opt.value" size="20" />
-              </button>
-            </div>
-            <v-divider class="my-2" />
-            <label class="cat-label">{{ $t("shell.category.custom_image") }}</label>
-            <v-btn size="small" variant="tonal" @click="triggerIconUpload">
-              <v-icon start icon="mdi-upload" />
-              {{ $t("shell.category.upload_image") }}
-            </v-btn>
-            <input
-              ref="iconFileInput"
-              type="file"
-              accept="image/*"
-              style="display: none"
-              @change="onIconFile"
-            />
-            <div v-if="form.iconImage" class="cat-custom-icon-preview mt-2">
-              <v-img :src="form.iconImage" width="40" height="40" />
-              <v-btn
-                icon="mdi-close"
-                size="x-small"
-                variant="text"
-                color="error"
-                class="cat-custom-icon-remove"
-                @click="removeCustomIcon"
-              />
-            </div>
-          </v-col>
-        </v-row>
-      </v-card-text>
-      <v-card-actions>
-        <v-btn v-if="editingId" variant="text" color="error" @click="deleteFromForm">
-          <v-icon start icon="mdi-delete" />
-          {{ $t("actions.delete") }}
-        </v-btn>
-        <v-spacer />
-        <v-btn variant="text" @click="showForm = false">{{ $t("actions.cancel") }}</v-btn>
-        <v-btn
-          variant="tonal"
-          color="primary"
-          :disabled="!form.name.trim() || saving"
-          :loading="saving"
-          @click="saveForm"
-        >
-          {{ $t("actions.save") }}
-        </v-btn>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
+    <div class="cat-form-grid">
+      <div class="cat-form-col">
+        <span class="cat-label">{{ $t("components.customization.color") }}</span>
+        <div class="cat-color-swatches">
+          <button
+            v-for="c in colorPresets"
+            :key="c"
+            type="button"
+            class="cat-color-swatch"
+            :class="{ 'cat-color-swatch--active': form.color === c }"
+            :style="{ background: c }"
+            :aria-label="c"
+            :aria-pressed="form.color === c"
+            @click="form.color = c"
+          />
+        </div>
+      </div>
+
+      <div class="cat-form-col">
+        <span class="cat-label">{{ $t("shell.icon") }}</span>
+        <div class="cat-icon-grid">
+          <button
+            v-for="opt in iconOptions"
+            :key="opt.value"
+            type="button"
+            class="cat-icon-btn"
+            :class="{ 'cat-icon-btn--active': form.icon === opt.value }"
+            :aria-pressed="form.icon === opt.value"
+            @click="form.icon = opt.value"
+          >
+            <Icon :icon="opt.value" :size="20" />
+          </button>
+        </div>
+
+        <div class="cat-divider" />
+
+        <span class="cat-label">{{ $t("shell.category.custom_image") }}</span>
+        <div class="cat-upload-row">
+          <LjButton
+            size="sm"
+            variant="subtle"
+            :icon="ICONS.ACTIONS.UPLOAD"
+            @click="triggerIconUpload"
+          >
+            {{ $t("shell.category.upload_image") }}
+          </LjButton>
+        </div>
+        <input
+          ref="iconFileInput"
+          type="file"
+          accept="image/*"
+          class="cat-file-input"
+          @change="onIconFile"
+        />
+        <div v-if="form.iconImage" class="cat-custom-icon-preview">
+          <img :src="form.iconImage" class="cat-custom-icon-img" alt="" />
+          <LjButton
+            size="sm"
+            variant="ghost"
+            icon-only
+            class="cat-custom-icon-remove cat-btn-danger"
+            :icon="ICONS.ACTIONS.CLOSE"
+            :aria-label="$t('components.ui.remove')"
+            @click="removeCustomIcon"
+          />
+        </div>
+      </div>
+    </div>
+
+    <template #footer>
+      <LjButton
+        v-if="editingId"
+        size="sm"
+        variant="danger"
+        class="cat-footer-left"
+        :icon="ICONS.ACTIONS.DELETE"
+        @click="deleteFromForm"
+      >
+        {{ $t("actions.delete") }}
+      </LjButton>
+      <LjButton size="sm" @click="showForm = false">{{ $t("actions.cancel") }}</LjButton>
+      <LjButton
+        size="sm"
+        variant="primary"
+        :disabled="!form.name.trim() || saving"
+        :loading="saving"
+        @click="saveForm"
+      >
+        {{ $t("actions.save") }}
+      </LjButton>
+    </template>
+  </LjDialog>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed } from "vue";
-import $modules from "@/helpers/Modules";
+import { ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
+import Icon from "@/components/Icon.vue";
+import { LjButton, LjDialog, LjEmpty, LjField, LjInput } from "@/components/ui";
+import { ICONS } from "@/config/Icons";
 import { MediaFile } from "@/types/Media";
 
 export interface CategoryFileData {
@@ -169,6 +188,8 @@ const emit = defineEmits<{
   save: [category: CategoryFileData];
   delete: [id: string];
 }>();
+
+const { t } = useI18n();
 
 const showForm = ref(false);
 const editingId = ref<string | null>(null);
@@ -225,13 +246,13 @@ function openEditCategory(cat: CategoryFileData): void {
 }
 
 function deleteCategory(cat: CategoryFileData): void {
-  if (!window.confirm("Excluir esta categoria?")) return;
+  if (!window.confirm(t("shell.category.confirm_delete_category"))) return;
   emit("delete", cat.id);
 }
 
 function deleteFromForm(): void {
   if (!editingId.value) return;
-  if (!window.confirm("Excluir esta categoria?")) return;
+  if (!window.confirm(t("shell.category.confirm_delete_category"))) return;
   emit("delete", editingId.value);
   showForm.value = false;
 }
@@ -284,104 +305,202 @@ function removeCustomIcon(): void {
 }
 </script>
 
+<!-- O conteúdo dos diálogos vai para um portal, mas é compilado AQUI (slot do
+     consumidor), então o Vue carimba o atributo de escopo nele e `scoped`
+     funciona — inclusive na raiz dos primitivos filhos. -->
 <style scoped>
-.cat-empty {
-  text-align: center;
-  padding: 24px 0;
-  color: rgba(255, 255, 255, 0.4);
+/* ── Diálogo de gerenciamento ─────────────────────────────────────────── */
+
+.cat-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--lj-space-5);
 }
+
 .cat-manage-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--lj-space-3);
 }
+
 .cat-manage-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px;
-  border-radius: 8px;
-  background: rgba(var(--v-theme-surface), 0.4);
+  gap: var(--lj-space-5);
+  padding: var(--lj-space-4);
+  background: var(--lj-surface-bg-soft);
+  border: 1px solid var(--lj-surface-border);
+  border-radius: var(--lj-radius-md);
 }
+
 .cat-manage-item-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  width: var(--lj-ui-h-lg);
+  height: var(--lj-ui-h-lg);
+  border-radius: 50%;
+  overflow: hidden;
+  /* Círculo colorido pelo dado da categoria: o ícone herda o branco fixo. */
+  color: var(--lj-white);
 }
-.cat-manage-item-info {
-  flex: 1;
+
+.cat-manage-item-img {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.cat-manage-item-name {
+  font-size: var(--lj-text-lg);
+  font-weight: var(--lj-weight-medium);
+}
+
+/* Ação destrutiva discreta: mantém o fantasma do LjButton e só troca a cor.
+   O seletor descendente supera a regra `.lj-btn--ghost` do próprio primitivo. */
+.cat-manage-item .cat-btn-danger,
+.cat-custom-icon-preview .cat-btn-danger {
+  color: var(--lj-danger);
+}
+
+.cat-manage-item .cat-btn-danger:hover,
+.cat-custom-icon-preview .cat-btn-danger:hover {
+  background: var(--lj-danger-soft);
+  color: var(--lj-danger);
+}
+
+/* ── Diálogo de formulário ────────────────────────────────────────────── */
+
+.cat-form-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--lj-space-6);
+}
+
+@media (min-width: 600px) {
+  .cat-form-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.cat-form-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-3);
   min-width: 0;
 }
-.cat-manage-item-name {
-  font-size: 14px;
-  font-weight: 500;
-}
+
 .cat-label {
-  display: block;
-  margin-bottom: 6px;
-  font-size: 12px;
-  font-weight: 500;
-  color: rgba(var(--v-theme-on-surface), 0.7);
+  color: var(--lj-text-muted);
+  font-size: var(--lj-text-base);
+  font-weight: var(--lj-weight-medium);
 }
-.cat-color-swatches {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+
+.cat-divider {
+  margin: var(--lj-space-2) 0;
+  border-top: 1px solid var(--lj-surface-divider);
 }
-.cat-color-swatch {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  border: 2px solid transparent;
-  cursor: pointer;
-  transition: transform 0.1s;
-}
-.cat-color-swatch:hover {
-  transform: scale(1.15);
-}
-.cat-color-swatch--active {
-  border-color: #fff;
-  transform: scale(1.15);
-}
+
+.cat-color-swatches,
 .cat-icon-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--lj-space-2);
 }
-.cat-icon-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-  border: 1px solid transparent;
+
+.cat-color-swatch {
+  width: var(--lj-space-8);
+  height: var(--lj-space-8);
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
   cursor: pointer;
+  transition: transform var(--lj-transition-fast);
+}
+
+.cat-color-swatch:hover {
+  transform: scale(1.15);
+}
+
+.cat-color-swatch--active {
+  border-color: var(--lj-ui-accent);
+  transform: scale(1.15);
+}
+
+.cat-color-swatch:focus-visible {
+  outline: none;
+  box-shadow: var(--lj-ui-focus);
+}
+
+.cat-icon-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(var(--v-theme-on-surface), 0.06);
-  color: rgba(var(--v-theme-on-surface), 0.7);
-  transition: background 0.1s;
+  width: var(--lj-ui-h-lg);
+  height: var(--lj-ui-h-lg);
+  padding: 0;
+  background: var(--lj-surface-bg-soft);
+  border: 1px solid transparent;
+  border-radius: var(--lj-ui-radius);
+  color: var(--lj-text-muted);
+  cursor: pointer;
+  transition:
+    background var(--lj-transition-fast),
+    border-color var(--lj-transition-fast);
 }
+
 .cat-icon-btn:hover {
-  background: rgba(var(--v-theme-primary), 0.15);
+  background: var(--lj-surface-bg-hover);
+  color: var(--lj-text);
 }
+
 .cat-icon-btn--active {
-  border-color: rgb(var(--v-theme-primary));
-  background: rgba(var(--v-theme-primary), 0.12);
+  background: var(--lj-ui-accent-soft);
+  border-color: var(--lj-ui-accent);
+  color: var(--lj-ui-accent-text);
 }
+
+.cat-icon-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--lj-ui-focus);
+}
+
+.cat-upload-row {
+  display: flex;
+}
+
+.cat-file-input {
+  display: none;
+}
+
 .cat-custom-icon-preview {
   position: relative;
   display: inline-block;
+  margin-top: var(--lj-space-2);
 }
+
+.cat-custom-icon-img {
+  display: block;
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  background: var(--lj-surface-bg-soft);
+  border: 1px solid var(--lj-surface-border);
+  border-radius: var(--lj-radius-sm);
+}
+
 .cat-custom-icon-remove {
   position: absolute;
-  top: -6px;
-  right: -6px;
-  min-width: 0;
-  width: 18px;
-  height: 18px;
+  top: calc(-1 * var(--lj-space-3));
+  right: calc(-1 * var(--lj-space-3));
+  background: var(--lj-surface-bg);
+  border: 1px solid var(--lj-surface-border);
+  border-radius: 50%;
+}
+
+/* O rodapé do LjDialog alinha à direita; a exclusão fica isolada à esquerda. */
+.cat-footer-left {
+  margin-right: auto;
 }
 </style>

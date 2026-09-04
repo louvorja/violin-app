@@ -1,131 +1,99 @@
 <template>
-  <v-dialog v-model="internalShow" max-width="520" :scrim="true" @update:model-value="onClose">
-    <v-card rounded="lg">
-      <v-toolbar color="primary" density="compact">
-        <v-icon :icon="ICONS.ACTIONS.DOWNLOAD" :color="COLORS.WARNING" class="mx-2" />
-        <v-toolbar-title class="font-weight-bold">
-          {{ t("options.updates.app_available", { version }) }}
-        </v-toolbar-title>
-        <v-btn icon variant="text" density="compact" @click="onClose">
-          <v-icon :icon="ICONS.ACTIONS.CLOSE" />
-        </v-btn>
-      </v-toolbar>
+  <LjDialog
+    :model-value="internalShow"
+    :title="t('options.updates.app_available', { version })"
+    :icon="ICONS.ACTIONS.DOWNLOAD"
+    icon-variant="warning"
+    @update:model-value="onClose"
+  >
+    <!-- Estado: baixando -->
+    <div v-if="isDownloading" class="ua-state">
+      <LjSpinner :size="40" class="ua-state__spinner" />
+      <span class="ua-state__label">{{ t("options.updates.app_downloading") }}</span>
 
-      <!-- Estado: baixando -->
-      <v-card-text v-if="isDownloading" class="pa-6">
-        <div class="d-flex flex-column align-center">
-          <v-progress-circular indeterminate color="primary" size="48" />
-          <span class="mt-4 text-body-2">{{ t("options.updates.app_downloading") }}</span>
-          <div v-if="appUpdate.progress > 0" class="mt-4" style="width: 100%">
-            <v-progress-linear
-              :model-value="appUpdate.progress"
-              color="primary"
-              height="10"
-              rounded
-            />
-            <div class="d-flex justify-space-between mt-2 text-caption text-medium-emphasis">
-              <span>{{ formatRate(appUpdate.bytesPerSecond) }}</span>
-              <span>{{ appUpdate.progress }}%</span>
-            </div>
-            <div class="d-flex justify-space-between text-caption text-medium-emphasis">
-              <span>
-                {{ formatBytes(appUpdate.transferred) }} / {{ formatBytes(appUpdate.total) }}
-              </span>
-              <span v-if="etaSeconds != null">~{{ formatEta(etaSeconds) }}</span>
-              <span v-else>—</span>
-            </div>
-          </div>
+      <div v-if="appUpdate.progress > 0" class="ua-progress">
+        <LjProgress :value="appUpdate.progress" :height="8" />
+        <div class="ua-progress__row">
+          <span>{{ formatRate(appUpdate.bytesPerSecond) }}</span>
+          <span>{{ appUpdate.progress }}%</span>
         </div>
-      </v-card-text>
-
-      <!-- Estado: baixado — pronto para instalar -->
-      <v-card-text v-else-if="isDownloaded" class="pa-6">
-        <div class="d-flex flex-column align-center">
-          <v-icon icon="mdi-check-circle" size="48" color="success" />
-          <span class="mt-4 text-body-1 font-weight-medium">
-            {{ t("options.updates.app_downloaded") }}
-          </span>
+        <div class="ua-progress__row">
+          <span>{{ formatBytes(appUpdate.transferred) }} / {{ formatBytes(appUpdate.total) }}</span>
+          <span v-if="etaSeconds != null">~{{ formatEta(etaSeconds) }}</span>
+          <span v-else>—</span>
         </div>
-      </v-card-text>
+      </div>
+    </div>
 
-      <!-- Estado: erro -->
-      <v-card-text v-else-if="hasError" class="pa-6">
-        <v-alert type="error" density="compact" class="mb-4">
-          {{ t("options.updates.app_error") }}
-        </v-alert>
-        <p class="text-body-2 text-medium-emphasis">
-          {{ t("options.updates.app_asset_missing") }}
-        </p>
-      </v-card-text>
+    <!-- Estado: baixado — pronto para instalar -->
+    <div v-else-if="isDownloaded" class="ua-state">
+      <Icon :icon="ICONS.UI.CHECK_CIRCLE" :size="40" class="ua-state__ok" />
+      <span class="ua-state__label ua-state__label--strong">
+        {{ t("options.updates.app_downloaded") }}
+      </span>
+    </div>
 
-      <!-- Estado: disponível — conteúdo principal -->
-      <template v-else>
-        <v-card-text class="pb-0">
-          <p class="text-body-1 mb-2">
-            {{ t("options.updates.update_dialog_description") }}
-          </p>
-          <div v-if="releaseNotes" class="release-notes-body mt-2">
-            <div v-if="releaseNotesHtml" class="release-notes-md" v-html="releaseNotesHtml" />
-            <pre v-else>{{ releaseNotes }}</pre>
-          </div>
-        </v-card-text>
-      </template>
+    <!-- Estado: erro -->
+    <template v-else-if="hasError">
+      <p class="ua-alert" role="alert">{{ t("options.updates.app_error") }}</p>
+      <p class="ua-hint">{{ t("options.updates.app_asset_missing") }}</p>
+    </template>
 
-      <v-divider class="mx-4" />
+    <!-- Estado: disponível — conteúdo principal -->
+    <template v-else>
+      <p class="ua-description">{{ t("options.updates.update_dialog_description") }}</p>
+      <div v-if="releaseNotes" class="ua-notes">
+        <div v-if="releaseNotesHtml" class="lj-md" v-html="releaseNotesHtml" />
+        <pre v-else class="ua-notes__raw">{{ releaseNotes }}</pre>
+      </div>
+    </template>
 
-      <!-- Ações -->
-      <v-card-actions class="pa-4 pt-2">
+    <!-- Ações -->
+    <template #footer>
+      <div v-if="!isDownloading && !isDownloaded && !hasError" class="ua-footer-start">
         <DontShowAgainCheckbox
-          v-if="!isDownloading && !isDownloaded && !hasError"
           :key="version"
           :storage-key="KEYS.OPTIONS.SKIP_UPDATE_NOTIFICATION_VERSION"
           :value="version"
           :label="t('release_notes.dont_show_again')"
         />
-        <v-spacer />
+      </div>
 
-        <!-- Estado disponível: Atualizar / Depois -->
-        <template v-if="!isDownloading && !isDownloaded && !hasError">
-          <v-btn variant="tonal" color="secondary" @click="onClose">
-            {{ t("options.updates.later") }}
-          </v-btn>
-          <v-btn variant="flat" color="primary" @click="startDownload">
-            <v-icon :icon="ICONS.ACTIONS.DOWNLOAD" size="16" class="mr-1" />
-            {{ t("options.updates.update_now") }}
-          </v-btn>
-        </template>
+      <!-- Estado disponível: Atualizar / Depois -->
+      <template v-if="!isDownloading && !isDownloaded && !hasError">
+        <LjButton size="sm" @click="onClose">{{ t("options.updates.later") }}</LjButton>
+        <LjButton size="sm" variant="primary" :icon="ICONS.ACTIONS.DOWNLOAD" @click="startDownload">
+          {{ t("options.updates.update_now") }}
+        </LjButton>
+      </template>
 
-        <!-- Estado baixado: Instalar -->
-        <template v-else-if="isDownloaded">
-          <v-btn variant="flat" color="primary" @click="install">
-            <v-icon :icon="ICONS.UI.INSTALL" size="16" class="mr-1" />
-            {{ t("options.updates.app_install_close") }}
-          </v-btn>
-        </template>
+      <!-- Estado baixado: Instalar -->
+      <template v-else-if="isDownloaded">
+        <LjButton size="sm" variant="primary" :icon="ICONS.UI.INSTALL" @click="install">
+          {{ t("options.updates.app_install_close") }}
+        </LjButton>
+      </template>
 
-        <!-- Estado erro: Baixar manualmente / Fechar -->
-        <template v-else-if="hasError">
-          <v-btn variant="text" @click="onClose">
-            {{ t("actions.close") }}
-          </v-btn>
-          <v-btn variant="flat" color="primary" @click="openReleasePage">
-            <v-icon :icon="ICONS.UI.OPEN_IN_NEW" size="16" class="mr-1" />
-            {{ t("options.updates.download_manually") }}
-          </v-btn>
-        </template>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
+      <!-- Estado erro: Baixar manualmente / Fechar -->
+      <template v-else-if="hasError">
+        <LjButton size="sm" variant="ghost" @click="onClose">{{ t("actions.close") }}</LjButton>
+        <LjButton size="sm" variant="primary" :icon="ICONS.UI.OPEN_IN_NEW" @click="openReleasePage">
+          {{ t("options.updates.download_manually") }}
+        </LjButton>
+      </template>
+    </template>
+  </LjDialog>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import Platform from "@/helpers/Platform";
+import Icon from "@/components/Icon.vue";
 import DontShowAgainCheckbox from "@/components/inputs/DontShowAgainCheckbox.vue";
+import { LjButton, LjDialog, LjProgress, LjSpinner } from "@/components/ui";
 import { KEYS } from "@/constants/UserDataKeys";
 import { ICONS } from "@/config/Icons";
-import { COLORS } from "@constants/Colors";
 
 interface AppUpdateState {
   status: string;
@@ -268,80 +236,85 @@ function onClose() {
 </script>
 
 <style scoped>
-.release-notes-body {
+.ua-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--lj-space-6);
+  padding: var(--lj-space-5) 0;
+}
+
+.ua-state__spinner {
+  color: var(--lj-ui-accent-text);
+}
+
+.ua-state__ok {
+  color: var(--lj-success);
+}
+
+.ua-state__label {
+  color: var(--lj-text-muted);
+}
+
+.ua-state__label--strong {
+  color: var(--lj-text);
+  font-weight: var(--lj-weight-medium);
+}
+
+.ua-progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-2);
+  width: 100%;
+}
+
+.ua-progress__row {
+  display: flex;
+  justify-content: space-between;
+  color: var(--lj-text-muted);
+  font-size: var(--lj-text-sm);
+}
+
+.ua-alert {
+  margin: 0 0 var(--lj-space-5);
+  padding: var(--lj-space-4) var(--lj-space-5);
+  background: var(--lj-danger-soft);
+  border: 1px solid var(--lj-danger-border);
+  border-radius: var(--lj-ui-radius);
+  color: var(--lj-alert-error-color);
+}
+
+.ua-hint {
+  margin: 0;
+  color: var(--lj-text-muted);
+  line-height: 1.5;
+}
+
+.ua-description {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.ua-notes {
   max-height: 30vh;
+  margin-top: var(--lj-space-5);
   overflow-y: auto;
 }
 
-.release-notes-body pre {
+.ua-notes__raw {
+  margin: 0;
   font-family: inherit;
-  font-size: 13px;
+  font-size: var(--lj-text-base);
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
-  margin: 0;
 }
 
-.release-notes-md {
-  font-size: 13px;
-  line-height: 1.6;
-  color: rgba(var(--v-theme-on-surface), 0.87);
-}
+/* Conteúdo vindo de `v-html` não recebe o atributo de escopo — daí o :deep(). */
 
-.release-notes-md :deep(h1),
-.release-notes-md :deep(h2),
-.release-notes-md :deep(h3) {
-  font-weight: 600;
-  margin: 12px 0 6px;
-}
-
-.release-notes-md :deep(h1) {
-  font-size: 16px;
-}
-
-.release-notes-md :deep(h2) {
-  font-size: 15px;
-}
-
-.release-notes-md :deep(p) {
-  margin: 6px 0;
-}
-
-.release-notes-md :deep(ul),
-.release-notes-md :deep(ol) {
-  margin: 6px 0;
-  padding-left: 20px;
-}
-
-.release-notes-md :deep(li) {
-  margin: 2px 0;
-}
-
-.release-notes-md :deep(code) {
-  font-family: monospace;
-  font-size: 0.9em;
-  background: rgba(var(--v-theme-on-surface), 0.06);
-  border-radius: 4px;
-  padding: 1px 4px;
-}
-
-.release-notes-md :deep(pre) {
-  background: rgba(var(--v-theme-on-surface), 0.06);
-  border-radius: 6px;
-  padding: 8px;
-  overflow-x: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.release-notes-md :deep(a) {
-  color: inherit;
-}
-
-.release-notes-md :deep(blockquote) {
-  margin: 6px 0;
-  padding-left: 10px;
-  border-left: 3px solid rgba(var(--v-theme-on-surface), 0.2);
-  color: rgba(var(--v-theme-on-surface), 0.6);
+/* Empurra as ações para a direita, mantendo a caixa de seleção à esquerda. */
+.ua-footer-start {
+  margin-right: auto;
+  min-width: 0;
 }
 </style>

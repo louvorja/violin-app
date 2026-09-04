@@ -1,82 +1,62 @@
 <template>
-  <v-dialog
-    v-model="internalShow"
-    max-width="620"
-    :scrim="true"
+  <LjDialog
+    :model-value="internalShow"
+    :title="t('release_notes.title')"
+    :icon="ICONS.UI.NEWS"
+    size="md"
     @update:model-value="onDialogModel"
   >
-    <v-card rounded="lg">
-      <v-toolbar color="primary" density="compact">
-        <v-icon :icon="ICONS.UI.NEWS" class="mx-2" />
-        <v-toolbar-title class="font-weight-bold">
-          {{ t("release_notes.title") }}
-        </v-toolbar-title>
-        <v-btn icon variant="text" density="compact" @click="onClose">
-          <v-icon :icon="ICONS.ACTIONS.CLOSE" />
-        </v-btn>
-      </v-toolbar>
+    <div v-if="loading" class="rn-center">
+      <LjSpinner :size="32" />
+      <span>{{ t("release_notes.loading") }}</span>
+    </div>
 
-      <v-card-text v-if="loading" class="pa-8 d-flex flex-column align-center">
-        <v-progress-circular indeterminate color="primary" size="40" />
-        <span class="mt-4 text-body-2">{{ t("release_notes.loading") }}</span>
-      </v-card-text>
+    <div v-else-if="error" class="rn-alert" role="alert">
+      <Icon :icon="ICONS.UI.ALERT" :size="ICON_SIZE.lg" class="rn-alert__icon" />
+      <span>{{ t("release_notes.error_offline") }}</span>
+    </div>
 
-      <v-card-text v-else-if="error" class="pa-6">
-        <v-alert type="warning" density="compact" class="mb-4">
-          {{ t("release_notes.error_offline") }}
-        </v-alert>
-      </v-card-text>
+    <template v-else-if="release">
+      <div class="rn-head">
+        <div class="rn-name">{{ release.name }}</div>
+        <div class="rn-version">v{{ release.version }}</div>
+      </div>
 
-      <template v-else-if="release">
-        <v-card-text class="pb-0">
-          <div class="release-notes-title">{{ release.name }}</div>
-          <div class="release-notes-version">v{{ release.version }}</div>
-        </v-card-text>
+      <div class="rn-body">
+        <div v-if="release.bodyHtml" class="lj-md" v-html="release.bodyHtml"></div>
+        <pre v-else>{{ release.body || t("release_notes.no_notes") }}</pre>
+      </div>
 
-        <v-divider class="mx-4" />
+      <div class="rn-actions">
+        <a class="rn-link" :href="release.url" target="_blank" rel="noopener noreferrer">
+          <Icon :icon="ICONS.UI.OPEN_IN_NEW" :size="ICON_SIZE.sm" />
+          {{ t("release_notes.view_on_github") }}
+        </a>
+      </div>
+    </template>
 
-        <v-card-text class="release-notes-body">
-          <div v-if="release.bodyHtml" class="release-notes-md" v-html="release.bodyHtml"></div>
-          <pre v-else>{{ release.body || t("release_notes.no_notes") }}</pre>
-        </v-card-text>
-
-        <v-card-actions>
-          <v-spacer />
-          <v-btn
-            variant="text"
-            size="small"
-            :href="release.url"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <v-icon :icon="ICONS.UI.OPEN_IN_NEW" size="16" class="mr-1" />
-            {{ t("release_notes.view_on_github") }}
-          </v-btn>
-        </v-card-actions>
-      </template>
-
-      <v-divider v-if="!error" class="mx-4" />
-
-      <v-card-actions class="pa-4 pt-2">
+    <template #footer>
+      <div class="rn-footer">
         <DontShowAgainCheckbox
           :storage-key="KEYS.OPTIONS.SKIP_RELEASE_NOTES_VERSION"
           :value="packageJson.version"
           :label="t('release_notes.dont_show_again')"
         />
-        <v-spacer />
-        <v-btn variant="flat" color="primary" @click="onClose">
+        <LjButton size="sm" variant="primary" @click="onClose">
           {{ t("actions.close") }}
-        </v-btn>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
+        </LjButton>
+      </div>
+    </template>
+  </LjDialog>
 </template>
 
 <script setup lang="ts">
 import { ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import Platform from "@/helpers/Platform";
+import Icon from "@/components/Icon.vue";
 import DontShowAgainCheckbox from "@/components/inputs/DontShowAgainCheckbox.vue";
+import { ICON_SIZE, LjButton, LjDialog, LjSpinner } from "@/components/ui";
 import { KEYS } from "@/constants/UserDataKeys";
 import packageJson from "@root/package.json";
 import { ICONS } from "@/config/Icons";
@@ -132,126 +112,108 @@ function onClose() {
   emit("close");
 }
 
-/** Fechamento vindo do próprio v-dialog (clique fora / ESC). */
+/** Fechamento vindo do próprio LjDialog (clique fora / ESC / botão fechar). */
 function onDialogModel(v: boolean) {
   if (!v) onClose();
 }
 </script>
 
 <style scoped>
-.release-notes-title {
-  font-size: 18px;
-  font-weight: 600;
+.rn-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--lj-space-5);
+  padding: var(--lj-space-7) 0;
+}
+
+/* Sem primitivo de alerta no catálogo: cor na borda e no ícone, como o LjToast. */
+.rn-alert {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-4);
+  padding: var(--lj-space-4) var(--lj-space-5);
+  background: var(--lj-surface-bg-soft);
+  border: 1px solid var(--lj-surface-border);
+  border-left: 3px solid var(--lj-warning);
+  border-radius: var(--lj-radius-md);
+  line-height: 1.45;
+}
+
+.rn-alert__icon {
+  flex-shrink: 0;
+  color: var(--lj-warning);
+}
+
+.rn-head {
+  margin-bottom: var(--lj-space-5);
+  padding-bottom: var(--lj-space-5);
+  border-bottom: 1px solid var(--lj-surface-divider);
+}
+
+.rn-name {
+  font-size: var(--lj-text-lg);
+  font-weight: var(--lj-weight-semibold);
   line-height: 1.3;
 }
 
-.release-notes-version {
-  font-size: 13px;
-  color: rgba(0, 0, 0, 0.6);
+.rn-version {
+  margin-top: var(--lj-space-1);
+  color: var(--lj-text-muted);
+  font-size: var(--lj-text-md);
   font-variant-numeric: tabular-nums;
-  margin-top: 2px;
 }
 
-.release-notes-body {
+.rn-body {
   max-height: 46vh;
   overflow-y: auto;
 }
 
-.release-notes-body pre {
+.rn-body pre {
+  margin: 0;
   font-family: inherit;
-  font-size: 14px;
+  font-size: var(--lj-text-lg);
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
-  margin: 0;
 }
 
-.release-notes-md {
-  font-size: 14px;
-  line-height: 1.6;
-  color: rgba(var(--v-theme-on-surface), 0.87);
+.rn-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--lj-space-4);
 }
 
-.release-notes-md :deep(h1),
-.release-notes-md :deep(h2),
-.release-notes-md :deep(h3),
-.release-notes-md :deep(h4) {
-  font-weight: 600;
-  margin: 16px 0 8px;
+/* Sem variante de link no LjButton: âncora com as medidas do contrato `sm`. */
+.rn-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lj-ui-gap-sm);
+  height: var(--lj-ui-h-sm);
+  padding-inline: var(--lj-ui-px-sm);
+  border-radius: var(--lj-ui-radius);
+  color: var(--lj-link-color);
+  font-size: var(--lj-ui-font-sm);
+  font-weight: var(--lj-weight-medium);
+  text-decoration: none;
+  white-space: nowrap;
 }
 
-.release-notes-md :deep(h1) {
-  font-size: 18px;
+.rn-link:hover {
+  background: var(--lj-surface-bg-hover);
 }
 
-.release-notes-md :deep(h2) {
-  font-size: 16px;
+.rn-link:focus-visible {
+  outline: none;
+  box-shadow: var(--lj-ui-focus);
 }
 
-.release-notes-md :deep(h3) {
-  font-size: 15px;
-}
-
-.release-notes-md :deep(p) {
-  margin: 8px 0;
-}
-
-.release-notes-md :deep(ul),
-.release-notes-md :deep(ol) {
-  margin: 8px 0;
-  padding-left: 22px;
-}
-
-.release-notes-md :deep(li) {
-  margin: 2px 0;
-}
-
-.release-notes-md :deep(code) {
-  font-family: monospace;
-  font-size: 0.9em;
-  background: rgba(var(--v-theme-on-surface), 0.06);
-  border-radius: 4px;
-  padding: 1px 4px;
-}
-
-.release-notes-md :deep(pre) {
-  background: rgba(var(--v-theme-on-surface), 0.06);
-  border-radius: 6px;
-  padding: 10px;
-  overflow-x: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.release-notes-md :deep(a) {
-  color: inherit;
-}
-
-.release-notes-md :deep(blockquote) {
-  margin: 8px 0;
-  padding-left: 12px;
-  border-left: 3px solid rgba(var(--v-theme-on-surface), 0.2);
-  color: rgba(var(--v-theme-on-surface), 0.6);
-}
-
-.release-notes-md :deep(img) {
-  max-width: 100%;
-}
-
-.release-notes-md :deep(table) {
-  border-collapse: collapse;
-  margin: 8px 0;
-}
-
-.release-notes-md :deep(th),
-.release-notes-md :deep(td) {
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
-  padding: 4px 8px;
-}
-
-.release-notes-md :deep(hr) {
-  border: none;
-  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.12);
-  margin: 12px 0;
+/* O rodapé do LjDialog alinha à direita; o "não mostrar novamente" fica à esquerda. */
+.rn-footer {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lj-space-5);
 }
 </style>

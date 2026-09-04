@@ -12,7 +12,13 @@
         @interact-outside="onDismiss"
       >
         <header class="lj-dialog__header">
-          <Icon v-if="icon" :icon="icon" :size="16" class="lj-dialog__icon" />
+          <Icon
+            v-if="icon"
+            :icon="icon"
+            :size="16"
+            class="lj-dialog__icon"
+            :class="iconVariant && `lj-dialog__icon--${iconVariant}`"
+          />
           <DialogTitle class="lj-dialog__title">{{ title }}</DialogTitle>
           <DialogClose v-if="!persistent" class="lj-dialog__close" :aria-label="t('actions.close')">
             <Icon :icon="ICONS.ACTIONS.CLOSE" :size="15" />
@@ -54,6 +60,8 @@ const props = withDefaults(
     title: string;
     description?: string;
     icon?: string;
+    /** Tinge o ícone do cabeçalho — use para diferenciar aviso, risco e êxito. */
+    iconVariant?: "info" | "success" | "warning" | "danger";
     size?: "sm" | "md" | "lg";
     /** Sem botão de fechar — a saída tem de ser por uma ação do rodapé. */
     persistent?: boolean;
@@ -137,6 +145,19 @@ function onDismiss(event: Event): void {
 
 .lj-dialog__icon {
   color: var(--lj-text-muted);
+}
+
+.lj-dialog__icon--info {
+  color: var(--lj-info);
+}
+.lj-dialog__icon--success {
+  color: var(--lj-success);
+}
+.lj-dialog__icon--warning {
+  color: var(--lj-warning);
+}
+.lj-dialog__icon--danger {
+  color: var(--lj-alert-error-color, var(--lj-danger));
 }
 
 .lj-dialog__title {

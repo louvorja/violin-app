@@ -50,6 +50,13 @@
   --lj-info: #2563eb;
   --lj-info-light: #6ea0d0;
 
+  /* Marcas de terceiros — valor definido por elas, não pela nossa paleta, então
+     não derivam de nenhum token e não mudam com o tema. */
+  --lj-brand-facebook: #1877f2;
+  --lj-brand-instagram: #c13584;
+  --lj-brand-whatsapp: #25d366;
+  --lj-brand-telegram: #229ed9;
+
   --lj-orange-alpha-12: rgba(243, 156, 18, 0.12);
   --lj-orange-alpha-30: rgba(243, 156, 18, 0.3);
 

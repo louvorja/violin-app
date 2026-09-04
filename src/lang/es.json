@@ -546,6 +546,15 @@
     "build": "Build",
     "platform": "Plataforma",
     "credits": "Desarrollado con ❤ para la comunidad Adventista.",
+    "links": {
+      "website": "Sitio Web",
+      "online": "LouvorJA On-line",
+      "email": "Correo",
+      "facebook": "Facebook",
+      "instagram": "Instagram",
+      "whatsapp": "Whatsapp",
+      "telegram": "Telegram"
+    },
     "contributors": {
       "title": "Contribuidores",
       "development": "Desarrollo",
@@ -1008,7 +1017,11 @@
       "last": "Última diapositiva",
       "close": "Cerrar música",
       "maximize": "Restaurar ventana",
-      "fullscreen": "Pantalla completa"
+      "fullscreen": "Pantalla completa",
+      "fullscreen_exit": "Salir de pantalla completa",
+      "mode": "Modo de reproducción",
+      "go_to_slide": "Ir a la diapositiva",
+      "more_actions": "Más acciones"
     },
     "version": "versión {v}",
     "operator_label": "Operador de diapositivas",

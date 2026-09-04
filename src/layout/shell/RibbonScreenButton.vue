@@ -8,149 +8,34 @@
       :data-testid="testid"
       @click="primaryClick"
     >
-      <v-icon
+      <Icon
         :icon="dynamicIcon"
         :size="size === 'large' ? 32 : 16"
-        :style="dynamicIconColor ? { color: dynamicIconColor } : null"
+        :color="dynamicIconColor"
         class="ribbon-btn-icon"
       />
       <span class="ribbon-btn-label">{{ dynamicLabel }}</span>
     </button>
 
-    <v-menu location="bottom end">
-      <template #activator="{ props: menuProps }">
+    <LjMenu :items="menuItems" side="bottom" align="end">
+      <template #trigger>
         <button
-          v-bind="menuProps"
           type="button"
           class="ribbon-screen-btn__chevron"
           :title="$t('options.slides.open_at')"
           @click.stop
         >
-          <v-icon icon="mdi-chevron-down" size="14" />
+          <Icon :icon="ICONS.UI.CHEVRON_DOWN" :size="14" />
         </button>
       </template>
-
-      <v-list density="compact" min-width="260">
-        <v-list-subheader>{{ $t("options.slides.open_at") }}</v-list-subheader>
-
-        <v-list-item
-          v-if="fallback_feature"
-          :active="explicit_id === undefined && !is_active"
-          @click="choose(undefined)"
-        >
-          <template #prepend>
-            <v-icon size="18">
-              {{ explicit_id === undefined ? "mdi-check" : "mdi-link-variant" }}
-            </v-icon>
-          </template>
-          <v-list-item-title>{{ $t("options.monitors.use_default") }}</v-list-item-title>
-          <v-list-item-subtitle>{{ fallback_label }}</v-list-item-subtitle>
-        </v-list-item>
-
-        <v-list-item :active="explicit_id === null && !is_active" @click="choose(null)">
-          <template #prepend>
-            <v-icon size="18">{{ explicit_id === null ? "mdi-check" : "" }}</v-icon>
-          </template>
-          <v-list-item-title>{{ $t("options.slides.same_window") }}</v-list-item-title>
-        </v-list-item>
-
-        <!-- Tela principal -->
-        <v-list-item
-          v-if="categorized.primaryDisplay"
-          :active="explicit_id === categorized.primaryDisplay.id"
-          @click="choose(categorized.primaryDisplay.id)"
-        >
-          <template #prepend>
-            <v-icon size="18">
-              {{ effective_id === categorized.primaryDisplay.id ? "mdi-check" : "mdi-monitor" }}
-            </v-icon>
-          </template>
-          <v-list-item-title>
-            {{ $t("options.monitors.primary") }}
-            <span v-if="categorized.primaryLabel" class="text-caption ms-1">
-              - {{ categorized.primaryLabel }}
-            </span>
-          </v-list-item-title>
-          <v-list-item-subtitle v-if="categorized.primaryDisplay">
-            {{ categorized.primaryDisplay.bounds?.width }}×{{
-              categorized.primaryDisplay.bounds?.height
-            }}
-          </v-list-item-subtitle>
-        </v-list-item>
-
-        <!-- Tela de retorno -->
-        <v-list-item
-          v-if="categorized.secondaryDisplay"
-          :active="explicit_id === categorized.secondaryDisplay.id"
-          @click="choose(categorized.secondaryDisplay.id)"
-        >
-          <template #prepend>
-            <v-icon size="18">
-              {{ effective_id === categorized.secondaryDisplay.id ? "mdi-check" : "mdi-monitor" }}
-            </v-icon>
-          </template>
-          <v-list-item-title>
-            {{ $t("options.monitors.secondary") }}
-            <span v-if="categorized.secondaryLabel" class="text-caption ms-1">
-              - {{ categorized.secondaryLabel }}
-            </span>
-          </v-list-item-title>
-          <v-list-item-subtitle v-if="categorized.secondaryDisplay">
-            {{ categorized.secondaryDisplay.bounds?.width }}×{{
-              categorized.secondaryDisplay.bounds?.height
-            }}
-          </v-list-item-subtitle>
-        </v-list-item>
-
-        <!-- Demais monitores -->
-        <v-list-item
-          v-for="d in categorized.otherDisplays"
-          :key="d.id ?? 'web'"
-          :active="explicit_id === d.id"
-          @click="choose(d.id)"
-        >
-          <template #prepend>
-            <v-icon size="18">{{ effective_id === d.id ? "mdi-check" : "mdi-monitor" }}</v-icon>
-          </template>
-          <v-list-item-title>
-            {{ d.label }}
-            <span v-if="d.primary" class="text-caption text-medium-emphasis ms-1">
-              ({{ $t("options.monitors.primary_short") }})
-            </span>
-          </v-list-item-title>
-          <v-list-item-subtitle>{{ d.bounds?.width }}×{{ d.bounds?.height }}</v-list-item-subtitle>
-        </v-list-item>
-
-        <!-- Navegador sem permissão: sem isso a lista de monitores fica vazia -->
-        <v-list-item v-if="needs_access" @click="detectScreens()">
-          <template #prepend>
-            <v-icon size="18">mdi-monitor-multiple</v-icon>
-          </template>
-          <v-list-item-title>{{ $t("options.monitors.web_detect") }}</v-list-item-title>
-        </v-list-item>
-
-        <v-divider class="my-1" />
-
-        <v-list-item :disabled="!can_identify" @click="identify()">
-          <template #prepend>
-            <v-icon size="18">mdi-magnify</v-icon>
-          </template>
-          <v-list-item-title>{{ $t("options.monitors.identify") }}</v-list-item-title>
-        </v-list-item>
-
-        <v-list-item v-if="is_active" @click="closeOpen()">
-          <template #prepend>
-            <v-icon size="18">mdi-close</v-icon>
-          </template>
-          <v-list-item-title>{{ $t("popup.close") }}</v-list-item-title>
-        </v-list-item>
-      </v-list>
-    </v-menu>
+    </LjMenu>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import Icon from "@/components/Icon.vue";
+import { LjMenu, type LjMenuItem } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import {
   listDisplays,
@@ -167,7 +52,7 @@ import {
   requestScreenAccess,
 } from "@/helpers/Projection";
 import { useI18n } from "vue-i18n";
-import { CategorizedDisplays } from "@/types/Projection";
+import { CategorizedDisplays, DisplayInfo } from "@/types/Projection";
 
 const props = defineProps({
   feature: { type: String, default: "" },
@@ -221,10 +106,100 @@ const dynamicIcon = computed(() =>
   is_active.value ? ICONS.PROJECTION.STOP : ICONS.PROJECTION.START
 );
 
-const dynamicIconColor = computed(() => (is_active.value ? "#e74c3c" : props.iconColor));
+const dynamicIconColor = computed<string | undefined>(() =>
+  is_active.value ? "var(--lj-danger)" : (props.iconColor ?? undefined)
+);
 const dynamicLabel = computed(() =>
   is_active.value ? t("ribbon.btn.stop_projection") : t("ribbon.btn.project")
 );
+
+/** Resolução do monitor — vira a linha secundária do item de menu. */
+function boundsHint(display: DisplayInfo): string {
+  return `${display.bounds?.width}×${display.bounds?.height}`;
+}
+
+/**
+ * Item de monitor. A marca de seleção segue o id EFETIVO (o que realmente
+ * abre a janela), não o explícito — é o que o menu Vuetify exibia.
+ */
+function displayItem(display: DisplayInfo, label: string): LjMenuItem {
+  return {
+    label,
+    hint: boundsHint(display),
+    icon: ICONS.UI.MONITOR,
+    checked: effective_id.value === display.id,
+    action: () => choose(display.id),
+  };
+}
+
+const menuItems = computed<LjMenuItem[]>(() => {
+  const items: LjMenuItem[] = [{ label: t("options.slides.open_at") }];
+
+  // Padrão (herdado) — só aparece quando há grupo de fallback
+  if (fallback_feature.value) {
+    items.push({
+      label: t("options.monitors.use_default"),
+      hint: fallback_label.value,
+      icon: ICONS.UI.LINK_VARIANT,
+      checked: explicit_id.value === undefined,
+      action: () => choose(undefined),
+    });
+  }
+
+  items.push({
+    label: t("options.slides.same_window"),
+    checked: explicit_id.value === null,
+    action: () => choose(null),
+  });
+
+  // Tela principal
+  const primary = categorized.value.primaryDisplay;
+  if (primary) {
+    const suffix = categorized.value.primaryLabel ? ` - ${categorized.value.primaryLabel}` : "";
+    items.push(displayItem(primary, `${t("options.monitors.primary")}${suffix}`));
+  }
+
+  // Tela de retorno
+  const secondary = categorized.value.secondaryDisplay;
+  if (secondary) {
+    const suffix = categorized.value.secondaryLabel ? ` - ${categorized.value.secondaryLabel}` : "";
+    items.push(displayItem(secondary, `${t("options.monitors.secondary")}${suffix}`));
+  }
+
+  // Demais monitores
+  for (const d of categorized.value.otherDisplays) {
+    const suffix = d.primary ? ` (${t("options.monitors.primary_short")})` : "";
+    items.push(displayItem(d, `${d.label}${suffix}`));
+  }
+
+  // Navegador sem permissão: sem isso a lista de monitores fica vazia
+  if (needs_access.value) {
+    items.push({
+      label: t("options.monitors.web_detect"),
+      icon: ICONS.UI.MONITORS,
+      action: () => detectScreens(),
+    });
+  }
+
+  items.push({ separator: true });
+
+  items.push({
+    label: t("options.monitors.identify"),
+    icon: ICONS.ACTIONS.SEARCH,
+    disabled: !can_identify.value,
+    action: () => identify(),
+  });
+
+  if (is_active.value) {
+    items.push({
+      label: t("popup.close"),
+      icon: ICONS.ACTIONS.CLOSE,
+      action: () => closeOpen(),
+    });
+  }
+
+  return items;
+});
 
 async function refresh() {
   displays.value = await listDisplays();
@@ -377,12 +352,16 @@ watch(() => props.feature, refresh);
   border: 1px solid transparent;
   border-radius: var(--lj-radius-sm);
   cursor: pointer;
-  color: var(--lj-text-muted, #888);
+  color: var(--lj-text-muted);
   outline: none;
 }
 
 .ribbon-screen-btn__chevron:hover {
   background: var(--lj-rbtn-hover-bg);
   border-color: var(--lj-rbtn-hover-border);
+}
+
+.ribbon-screen-btn__chevron:focus-visible {
+  box-shadow: var(--lj-ui-focus);
 }
 </style>

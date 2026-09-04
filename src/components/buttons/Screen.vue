@@ -1,139 +1,39 @@
 <template>
-  <v-btn-group v-if="!is_mobile" :variant="variant" style="overflow: clip">
-    <v-btn
-      :size="size"
-      :active="is_active"
-      :icon="is_active ? ICONS.PROJECTION.START : ICONS.PROJECTION.START"
-      :color="btnColor"
-      :title="$t('options.slides.open_at')"
-      @click="primaryClick()"
-    />
+  <div v-if="!is_mobile" class="screen-btn">
+    <LjTooltip :text="$t('options.slides.open_at')">
+      <LjButton
+        class="screen-btn__main"
+        :class="{ 'screen-btn__main--active': is_active }"
+        :size="ui_size"
+        :variant="ui_variant"
+        icon-only
+        :icon="is_active ? ICONS.PROJECTION.STOP : ICONS.PROJECTION.START"
+        :aria-label="$t('options.slides.open_at')"
+        @click="primaryClick()"
+      />
+    </LjTooltip>
 
-    <v-menu location="bottom end">
-      <template #activator="{ props: menuProps }">
-        <v-btn v-bind="menuProps" :size="size" icon="mdi-chevron-down" density="compact" />
+    <LjMenu :items="menuItems" side="bottom" align="end">
+      <template #trigger>
+        <LjButton
+          class="screen-btn__chevron"
+          :size="ui_size"
+          :variant="ui_variant"
+          icon-only
+          :icon="ICONS.UI.CHEVRON_DOWN"
+          :aria-label="$t('options.slides.open_at')"
+        />
       </template>
-
-      <v-list density="compact" min-width="260">
-        <v-list-subheader>{{ $t("options.slides.open_at") }}</v-list-subheader>
-
-        <!-- Padrão (herdado) — só aparece quando há grupo de fallback -->
-        <v-list-item
-          v-if="fallback_feature"
-          :active="explicit_id === undefined && !is_active"
-          @click="choose(undefined)"
-        >
-          <template #prepend>
-            <v-icon size="18">
-              {{ explicit_id === undefined ? "mdi-check" : "mdi-link-variant" }}
-            </v-icon>
-          </template>
-          <v-list-item-title>
-            {{ $t("options.monitors.use_default") }}
-          </v-list-item-title>
-          <v-list-item-subtitle>
-            {{ fallback_label }}
-          </v-list-item-subtitle>
-        </v-list-item>
-
-        <v-list-item :active="explicit_id === null && !is_active" @click="choose(null)">
-          <template #prepend>
-            <v-icon size="18">{{ explicit_id === null ? "mdi-check" : "" }}</v-icon>
-          </template>
-          <v-list-item-title>{{ $t("options.slides.same_window") }}</v-list-item-title>
-        </v-list-item>
-
-        <!-- Tela principal -->
-        <v-list-item
-          v-if="primaryDisplay"
-          :active="explicit_id === primaryDisplay.id"
-          @click="choose(primaryDisplay.id)"
-        >
-          <template #prepend>
-            <v-icon size="18">
-              {{ effective_id === primaryDisplay.id ? "mdi-check" : "mdi-monitor" }}
-            </v-icon>
-          </template>
-          <v-list-item-title>
-            {{ $t("options.monitors.primary") }}
-            <span v-if="primaryLabel" class="text-caption ms-1">- {{ primaryLabel }}</span>
-          </v-list-item-title>
-          <v-list-item-subtitle v-if="primaryDisplay">
-            {{ primaryDisplay.bounds.width }}×{{ primaryDisplay.bounds.height }}
-          </v-list-item-subtitle>
-        </v-list-item>
-
-        <!-- Tela de retorno -->
-        <v-list-item
-          v-if="secondaryDisplay"
-          :active="explicit_id === secondaryDisplay.id"
-          @click="choose(secondaryDisplay.id)"
-        >
-          <template #prepend>
-            <v-icon size="18">
-              {{ effective_id === secondaryDisplay.id ? "mdi-check" : "mdi-monitor" }}
-            </v-icon>
-          </template>
-          <v-list-item-title>
-            {{ $t("options.monitors.secondary") }}
-            <span v-if="secondaryLabel" class="text-caption ms-1">- {{ secondaryLabel }}</span>
-          </v-list-item-title>
-          <v-list-item-subtitle v-if="secondaryDisplay">
-            {{ secondaryDisplay.bounds.width }}×{{ secondaryDisplay.bounds.height }}
-          </v-list-item-subtitle>
-        </v-list-item>
-
-        <!-- Demais monitores -->
-        <v-list-item
-          v-for="d in otherDisplays"
-          :key="d.id ?? 'web'"
-          :active="explicit_id === d.id"
-          @click="choose(d.id)"
-        >
-          <template #prepend>
-            <v-icon size="18">{{ effective_id === d.id ? "mdi-check" : "mdi-monitor" }}</v-icon>
-          </template>
-          <v-list-item-title>
-            {{ d.label }}
-            <span v-if="d.primary" class="text-caption text-medium-emphasis ms-1">
-              ({{ $t("options.monitors.primary_short") }})
-            </span>
-          </v-list-item-title>
-          <v-list-item-subtitle>{{ d.bounds.width }}×{{ d.bounds.height }}</v-list-item-subtitle>
-        </v-list-item>
-
-        <!-- Navegador sem permissão: sem isso a lista de monitores fica vazia -->
-        <v-list-item v-if="needs_access" @click="detectScreens()">
-          <template #prepend>
-            <v-icon size="18">mdi-monitor-multiple</v-icon>
-          </template>
-          <v-list-item-title>{{ $t("options.monitors.web_detect") }}</v-list-item-title>
-        </v-list-item>
-
-        <v-divider class="my-1" />
-
-        <v-list-item :disabled="!can_identify" @click="identify()">
-          <template #prepend>
-            <v-icon size="18">mdi-magnify</v-icon>
-          </template>
-          <v-list-item-title>{{ $t("options.monitors.identify") }}</v-list-item-title>
-        </v-list-item>
-
-        <v-list-item v-if="is_active" @click="closeOpen()">
-          <template #prepend>
-            <v-icon size="18">mdi-close</v-icon>
-          </template>
-          <v-list-item-title>{{ $t("popup.close") }}</v-list-item-title>
-        </v-list-item>
-      </v-list>
-    </v-menu>
-  </v-btn-group>
+    </LjMenu>
+  </div>
 </template>
 
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import AppData from "@/helpers/AppData";
 import Popup from "@/helpers/Popup";
+import { LjButton, LjMenu, LjTooltip } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { useCategorizedDisplays } from "@/composables/useCategorizedDisplays";
 import {
@@ -163,6 +63,8 @@ const props = defineProps({
   fullscreen: { type: Boolean, default: true },
   alwaysOnTop: { type: Boolean, default: false },
 });
+
+const { t } = useI18n();
 
 const ROUTE_BY_MODULE = {
   bible: "/projection/bible",
@@ -223,14 +125,120 @@ const fallback_label = computed(() => {
 const is_active = computed(() =>
   isProjectionMode.value ? projection_open.value : is_popup_selected.value
 );
-computed(() => (is_active.value ? ICONS.PROJECTION.STOP : props.icon));
-const btnColor = computed(() => (is_active.value ? "error" : undefined));
-
 const can_identify = computed(() => displays.value.length > 1);
 const needs_access = ref(false);
 
 const { primaryDisplay, secondaryDisplay, primaryLabel, secondaryLabel, otherDisplays } =
   useCategorizedDisplays(displays);
+
+// A escala do catálogo tem três degraus; o `size` continua nomeado como no
+// Vuetify por causa dos consumidores. O `small` do Vuetify (32px) cai entre
+// `sm` (22px) e `md` (26px) — fica em `md` para não encolher dentro do player.
+const SIZE_MAP = {
+  "x-small": "sm",
+  small: "md",
+  default: "md",
+  large: "lg",
+  "x-large": "lg",
+};
+const ui_size = computed(() => SIZE_MAP[props.size] || "md");
+
+// `text`/`plain` do Vuetify não têm superfície nem traço — é o `ghost` daqui.
+const VARIANT_MAP = {
+  text: "ghost",
+  plain: "ghost",
+  tonal: "subtle",
+  outlined: "default",
+  flat: "default",
+  elevated: "default",
+};
+const ui_variant = computed(() => VARIANT_MAP[props.variant] || "ghost");
+
+/** Resolução do monitor — vira a linha secundária do item de menu. */
+function boundsHint(display) {
+  return `${display.bounds?.width}×${display.bounds?.height}`;
+}
+
+/**
+ * Item de monitor. A marca de seleção segue o id EFETIVO (o que realmente abre
+ * a janela), não o explícito — é o que o menu Vuetify exibia.
+ */
+function displayItem(display, label) {
+  return {
+    label,
+    hint: boundsHint(display),
+    icon: ICONS.UI.MONITOR,
+    checked: effective_id.value === display.id,
+    action: () => choose(display.id),
+  };
+}
+
+const menuItems = computed(() => {
+  const items = [{ label: t("options.slides.open_at") }];
+
+  // Padrão (herdado) — só aparece quando há grupo de fallback
+  if (fallback_feature.value) {
+    items.push({
+      label: t("options.monitors.use_default"),
+      hint: fallback_label.value,
+      icon: ICONS.UI.LINK_VARIANT,
+      checked: explicit_id.value === undefined,
+      action: () => choose(undefined),
+    });
+  }
+
+  items.push({
+    label: t("options.slides.same_window"),
+    checked: explicit_id.value === null,
+    action: () => choose(null),
+  });
+
+  // Tela principal
+  if (primaryDisplay.value) {
+    const suffix = primaryLabel.value ? ` - ${primaryLabel.value}` : "";
+    items.push(displayItem(primaryDisplay.value, `${t("options.monitors.primary")}${suffix}`));
+  }
+
+  // Tela de retorno
+  if (secondaryDisplay.value) {
+    const suffix = secondaryLabel.value ? ` - ${secondaryLabel.value}` : "";
+    items.push(displayItem(secondaryDisplay.value, `${t("options.monitors.secondary")}${suffix}`));
+  }
+
+  // Demais monitores
+  for (const d of otherDisplays.value) {
+    const suffix = d.primary ? ` (${t("options.monitors.primary_short")})` : "";
+    items.push(displayItem(d, `${d.label}${suffix}`));
+  }
+
+  // Navegador sem permissão: sem isso a lista de monitores fica vazia
+  if (needs_access.value) {
+    items.push({
+      label: t("options.monitors.web_detect"),
+      icon: ICONS.UI.MONITORS,
+      action: () => detectScreens(),
+    });
+  }
+
+  items.push({ separator: true });
+
+  items.push({
+    label: t("options.monitors.identify"),
+    icon: ICONS.ACTIONS.SEARCH,
+    disabled: !can_identify.value,
+    action: () => identify(),
+  });
+
+  if (is_active.value) {
+    items.push({
+      label: t("popup.close"),
+      icon: ICONS.ACTIONS.CLOSE,
+      action: () => closeOpen(),
+    });
+  }
+
+  return items;
+});
 
 async function refreshDisplays() {
   if (!isProjectionMode.value) return;
@@ -346,4 +354,29 @@ watch([() => props.module, () => props.feature, () => props.route], () => {
 });
 </script>
 
-<style scoped></style>
+<style scoped>
+.screen-btn {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Split button: os dois controles se encostam e o traço do meio não duplica. */
+.screen-btn__main {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.screen-btn__chevron {
+  margin-left: -1px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+/* Projeção aberta — o vermelho de estado que o `color="error"` do v-btn dava.
+   Repetido no :hover porque a variante ghost troca a cor ao passar o mouse. */
+.screen-btn .screen-btn__main--active,
+.screen-btn .screen-btn__main--active:hover {
+  background: var(--lj-danger-soft);
+  color: var(--lj-danger);
+}
+</style>

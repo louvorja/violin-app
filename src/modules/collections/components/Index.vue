@@ -1,130 +1,101 @@
 <template>
   <ModuleContainer ref="moduleContainer" :manifest="manifest" @show="show" @close="close">
     <template #header>
-      <v-toolbar v-if="compact" color="transparent">
-        <template #prepend>
-          <v-menu>
-            <template #activator="{ props }">
-              <v-btn icon="$menu" v-bind="props" />
-            </template>
-            <v-list :color="primaryColor" class="d-flex flex-column h-100">
-              <v-list-item
-                v-for="category in categories"
-                :key="category.id_category"
-                :title="category.name"
-                :active="id_category === category.id_category"
-                @click="setCategory(category.id_category)"
-              />
+      <div v-if="compact" class="col-toolbar">
+        <LjMenu :items="categoryMenuItems" side="bottom" align="start">
+          <template #trigger>
+            <LjButton
+              variant="ghost"
+              icon-only
+              :icon="ICONS.UI.MENU"
+              :title="t('categories')"
+              :aria-label="t('categories')"
+            />
+          </template>
+        </LjMenu>
 
-              <v-divider />
+        <span class="col-toolbar__title">{{ currentCategoryName }}</span>
 
-              <v-list-item
-                class="mt-auto"
-                :title="t('all_collections')"
-                :active="id_category === 0"
-                @click="setCategory(0)"
-              />
-            </v-list>
-          </v-menu>
-        </template>
-
-        <v-toolbar-title
-          v-if="!id_category || id_category == 0"
-          class="text-h6"
-          :text="t('all_collections')"
+        <LjButton
+          variant="ghost"
+          icon-only
+          :icon="ICONS.ACTIONS.SEARCH"
+          :title="t('music_search.title')"
+          :aria-label="t('music_search.title')"
+          @click="openMusicSearch"
         />
-        <v-toolbar-title
-          v-else
-          class="text-h6"
-          :text="categories.find((c) => c.id_category == id_category).name"
-        />
-
-        <template #append>
-          <v-btn icon="mdi-magnify" :title="t('music_search.title')" @click="openMusicSearch" />
-        </template>
-      </v-toolbar>
+      </div>
     </template>
 
     <template #left>
-      <v-list v-if="!compact" :color="primaryColor" :width="200" class="d-flex flex-column h-100">
-        <v-progress-linear v-if="loading" :color="primaryColor" indeterminate />
-        <v-list-item
-          prepend-icon="mdi-magnify"
-          :title="t('music_search.title')"
-          @click="openMusicSearch"
-        />
-        <v-divider />
-        <v-list-item
+      <nav v-if="!compact" class="col-sidebar" :aria-label="t('title')">
+        <LjProgress v-if="loading" indeterminate :height="4" />
+
+        <button type="button" class="col-nav-item" @click="openMusicSearch">
+          <Icon :icon="ICONS.ACTIONS.SEARCH" :size="16" />
+          <span class="col-nav-item__label">{{ t("music_search.title") }}</span>
+        </button>
+
+        <hr class="col-divider" />
+
+        <button
           v-for="category in categories"
           :key="category.id_category"
-          :title="category.name"
-          :active="id_category === category.id_category"
+          type="button"
+          class="col-nav-item"
+          :class="{ 'is-active': id_category === category.id_category }"
+          :aria-current="id_category === category.id_category ? 'true' : undefined"
           @click="setCategory(category.id_category)"
-        />
+        >
+          <span class="col-nav-item__label">{{ category.name }}</span>
+        </button>
 
-        <v-list-item
-          class="mt-auto"
-          :title="t('all_collections')"
-          :active="id_category === 0"
+        <button
+          type="button"
+          class="col-nav-item col-nav-item--last"
+          :class="{ 'is-active': id_category === 0 }"
+          :aria-current="id_category === 0 ? 'true' : undefined"
           @click="setCategory(0)"
-        />
-      </v-list>
+        >
+          <span class="col-nav-item__label">{{ t("all_collections") }}</span>
+        </button>
+      </nav>
     </template>
 
-    <v-alert v-if="error" type="error" :text="error" variant="tonal" border="start" class="ma-2" />
+    <p v-if="error" class="col-alert" role="alert">{{ error }}</p>
 
-    <div
-      class="collections-scroll"
-      @scroll="
-        ($event) => {
-          const el = $event.currentTarget;
-          if (el.scrollTop + el.clientHeight >= el.scrollHeight - 200) showMore();
-        }
-      "
-    >
-      <div class="px-4 pt-2">
-        <v-text-field
+    <div class="collections-scroll" @scroll="onScroll">
+      <div class="col-search">
+        <LjInput
           v-model="search"
-          density="compact"
-          hide-details
           clearable
-          variant="outlined"
+          :icon="ICONS.ACTIONS.SEARCH"
           :placeholder="t('music_search.title')"
-          prepend-inner-icon="mdi-magnify"
         />
       </div>
-      <div class="d-flex flex-wrap justify-center">
-        <v-card
+
+      <div class="col-grid">
+        <button
           v-for="album in visibleAlbums"
           :key="album.id_album"
-          :style="width > 350 ? 'min-width: 300px; max-width: 300px' : 'width:100%'"
-          theme="dark"
-          width="320"
-          class="ma-2"
-          :color="album.color || '#385F73'"
-          dark
+          type="button"
+          class="col-album"
+          :class="{ 'col-album--wide': width > 350 }"
+          :style="album.color ? { background: album.color } : undefined"
           @click="openAlbum(album.id_album)"
         >
-          <div class="d-flex flex-no-wrap justify-space-between align-center">
-            <v-avatar
-              v-if="album.url_image"
-              class="ma-3"
-              :size="width > 350 ? 125 : 75"
-              tile
-              rounded="0"
-            >
-              <v-img :src="pathFile(album.url_image)" />
-            </v-avatar>
-            <div class="flex-grow-1 d-flex flex-column">
-              <div class="text-h6 pt-2" v-text="album.name" />
-
-              <div class="h6" v-text="album.subtitle" />
-            </div>
-          </div>
-        </v-card>
+          <span v-if="album.url_image" class="col-album__cover">
+            <img :src="pathFile(album.url_image)" :alt="album.name" loading="lazy" />
+          </span>
+          <span class="col-album__text">
+            <span class="col-album__name">{{ album.name }}</span>
+            <span v-if="album.subtitle" class="col-album__subtitle">{{ album.subtitle }}</span>
+          </span>
+        </button>
       </div>
-      <div v-if="visibleAlbums.length < filteredAlbums.length" class="text-center pa-4">
-        <v-progress-circular indeterminate size="24" />
+
+      <div v-if="visibleAlbums.length < filteredAlbums.length" class="col-more">
+        <LjSpinner :size="24" />
       </div>
     </div>
   </ModuleContainer>
@@ -136,11 +107,13 @@ import { useI18n } from "vue-i18n";
 import { useDisplay } from "vuetify";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
+import Icon from "@/components/Icon.vue";
+import { LjButton, LjInput, LjMenu, LjProgress, LjSpinner } from "@/components/ui";
+import { ICONS } from "@/config/Icons";
 import Strings from "@/helpers/Strings";
 import Database from "@/helpers/Database";
 import Modules from "@/helpers/Modules";
 import Media from "@/composables/useMedia";
-import AppData from "@/helpers/AppData";
 import Path from "@/helpers/Path";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
@@ -156,8 +129,6 @@ const lang = ref(null);
 const id_category = ref(null);
 const loading = ref(false);
 const error = ref(null);
-
-const primaryColor = computed(() => (AppData.get("is_dark") ? undefined : "primary"));
 
 const albums = computed(() => {
   const disabled = $userdata.get(KEYS.OPTIONS.DISABLED_ALBUMS, []) || [];
@@ -205,8 +176,34 @@ function showMore() {
   }
 }
 
+function onScroll(event) {
+  const el = event.currentTarget;
+  if (el.scrollTop + el.clientHeight >= el.scrollHeight - 200) showMore();
+}
+
 const t = (key) => moduleContainer.value?.t(key) || key;
 const pathFile = (img) => Path.file(img);
+
+// Título da barra compacta: nome da categoria atual ou "todas as coletâneas".
+const currentCategoryName = computed(() => {
+  if (!id_category.value) return t("all_collections");
+  return categories.value.find((c) => c.id_category === id_category.value)?.name || "";
+});
+
+// Mesma lista da sidebar, servida como menu na largura compacta.
+const categoryMenuItems = computed(() => [
+  ...categories.value.map((category) => ({
+    label: category.name,
+    checked: id_category.value === category.id_category,
+    action: () => setCategory(category.id_category),
+  })),
+  { separator: true },
+  {
+    label: t("all_collections"),
+    checked: id_category.value === 0,
+    action: () => setCategory(0),
+  },
+]);
 
 async function loadData() {
   id_category.value = null;
@@ -263,8 +260,200 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+/* ---- barra compacta (largura <= 600px) ---- */
+.col-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-4);
+  width: 100%;
+  min-width: 0;
+}
+
+.col-toolbar__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--lj-text-lg);
+  font-weight: var(--lj-weight-medium);
+}
+
+/* ---- lista lateral de categorias ---- */
+.col-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-1);
+  width: 200px;
+  height: 100%;
+  padding: var(--lj-space-2);
+}
+
+.col-nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-4);
+  width: 100%;
+  padding: var(--lj-space-3) var(--lj-space-4);
+  border: none;
+  border-radius: var(--lj-radius-sm);
+  background: transparent;
+  color: var(--lj-text);
+  font-family: inherit;
+  font-size: var(--lj-text-base);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--lj-transition-fast),
+    color var(--lj-transition-fast);
+}
+
+.col-nav-item:hover {
+  background: var(--lj-surface-bg-hover);
+}
+
+.col-nav-item:focus-visible {
+  outline: none;
+  box-shadow: var(--lj-ui-focus);
+}
+
+.col-nav-item.is-active {
+  background: var(--lj-ui-accent-soft);
+  color: var(--lj-ui-accent-text);
+  font-weight: var(--lj-weight-medium);
+}
+
+.col-nav-item__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Empurra "todas as coletâneas" para o fim da coluna. */
+.col-nav-item--last {
+  margin-top: auto;
+}
+
+.col-divider {
+  height: 1px;
+  margin: var(--lj-space-2) 0;
+  border: none;
+  background: var(--lj-surface-divider);
+}
+
+/* ---- corpo ---- */
+.col-alert {
+  margin: var(--lj-space-4);
+  padding: var(--lj-space-4) var(--lj-space-5);
+  border-left: 3px solid var(--lj-danger);
+  border-radius: var(--lj-radius-sm);
+  background: var(--lj-danger-soft);
+  color: var(--lj-alert-error-color);
+  font-size: var(--lj-text-base);
+}
+
 .collections-scroll {
   height: 100%;
   overflow-y: auto;
+}
+
+.col-search {
+  padding: var(--lj-space-4) var(--lj-space-6) 0;
+}
+
+.col-search :deep(.lj-input) {
+  width: 100%;
+}
+
+.col-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--lj-space-4);
+  padding: var(--lj-space-4);
+}
+
+/* Cartão de álbum: a cor vem do banco (album.color); sem ela, cai num cinza
+   escuro do sistema — o texto é sempre claro, como no cartão dark original. */
+.col-album {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lj-space-5);
+  width: 100%;
+  padding: var(--lj-space-5);
+  border: none;
+  border-radius: var(--lj-radius-md);
+  background: var(--lj-gray-700);
+  color: var(--lj-white);
+  box-shadow: var(--lj-shadow-1);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  transition: box-shadow var(--lj-transition-normal);
+}
+
+.col-album:hover {
+  box-shadow: var(--lj-shadow-2);
+}
+
+.col-album:focus-visible {
+  outline: none;
+  box-shadow: var(--lj-ui-focus);
+}
+
+.col-album--wide {
+  min-width: 300px;
+  max-width: 300px;
+}
+
+.col-album__cover {
+  display: block;
+  flex-shrink: 0;
+  width: 75px;
+  height: 75px;
+}
+
+.col-album--wide .col-album__cover {
+  width: 125px;
+  height: 125px;
+}
+
+.col-album__cover img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.col-album__text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  gap: var(--lj-space-2);
+}
+
+.col-album__name {
+  font-size: var(--lj-text-xl);
+  font-weight: var(--lj-weight-medium);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.col-album__subtitle {
+  font-size: var(--lj-text-base);
+  opacity: 0.85;
+  overflow-wrap: anywhere;
+}
+
+.col-more {
+  display: flex;
+  justify-content: center;
+  padding: var(--lj-space-6);
+  color: var(--lj-text-muted);
 }
 </style>

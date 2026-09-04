@@ -1,60 +1,39 @@
 <template>
   <div class="editor-root">
-    <v-tabs v-model="activeTab" density="compact" color="primary" class="editor-tabs">
-      <v-tab value="content">{{ t("slot.content") }}</v-tab>
-      <v-tab value="position">{{ t("position.title") }}</v-tab>
-      <v-tab value="appearance">{{ t("style.title") }}</v-tab>
-      <v-tab value="animation">{{ t("animation.title") }}</v-tab>
-      <v-tab value="visibility">{{ t("visibility.title") }}</v-tab>
-    </v-tabs>
-
-    <v-divider />
+    <LjTabs v-model="activeTab" :tabs="tabItems" :aria-label="t('title')" class="editor-tabs" />
 
     <!-- Content tab -->
     <div v-if="activeTab === 'content'" class="editor-pane">
-      <v-text-field
-        :model-value="m.name"
-        :label="t('slot.name')"
-        density="compact"
-        hide-details
-        variant="outlined"
-        @update:model-value="set('name', $event)"
-      />
+      <LjField :label="t('slot.name')" layout="column">
+        <LjInput :model-value="m.name" @update:model-value="set('name', $event)" />
+      </LjField>
 
-      <v-select
-        :model-value="m.type"
-        :label="t('slot.type')"
-        :items="typeOptions"
-        density="compact"
-        hide-details
-        variant="outlined"
-        @update:model-value="
-          set('type', $event);
-          onTypeChange();
-        "
-      />
+      <LjField :label="t('slot.type')" layout="column">
+        <LjSelect
+          :model-value="m.type"
+          :items="typeOptions"
+          @update:model-value="
+            set('type', $event);
+            onTypeChange();
+          "
+        />
+      </LjField>
 
-      <v-textarea
-        v-if="m.type === 'text'"
-        :model-value="m.content"
-        :label="t('slot.content')"
-        density="compact"
-        hide-details
-        variant="outlined"
-        rows="3"
-        @update:model-value="set('content', $event)"
-      />
+      <LjField v-if="m.type === 'text'" :label="t('slot.content')" layout="column">
+        <LjTextarea
+          :model-value="m.content"
+          :rows="3"
+          @update:model-value="set('content', $event)"
+        />
+      </LjField>
 
-      <v-select
-        v-if="m.type === 'module_mirror'"
-        :model-value="m.source_module"
-        :label="t('slot.module_source')"
-        :items="moduleOptions"
-        density="compact"
-        hide-details
-        variant="outlined"
-        @update:model-value="set('source_module', $event)"
-      />
+      <LjField v-if="m.type === 'module_mirror'" :label="t('slot.module_source')" layout="column">
+        <LjSelect
+          :model-value="m.source_module"
+          :items="moduleOptions"
+          @update:model-value="set('source_module', $event)"
+        />
+      </LjField>
 
       <div v-if="m.type === 'image'" class="editor-image-picker">
         <OverlayImagePicker :selected-id="m.file_id" @select="set('file_id', $event)" />
@@ -63,285 +42,263 @@
 
     <!-- Position tab -->
     <div v-if="activeTab === 'position'" class="editor-pane">
-      <div class="anchor-grid">
-        <div
-          v-for="anchor in anchors"
-          :key="anchor"
-          class="anchor-cell"
-          :class="{ 'anchor-cell--active': m.position.anchor === anchor }"
-          @click="
-            m.position.anchor = anchor;
-            emitChange();
-          "
-        >
-          <div class="anchor-dot" />
+      <LjField :label="t('position.anchor')" layout="column" group>
+        <div class="anchor-grid">
+          <button
+            v-for="anchor in anchors"
+            :key="anchor"
+            type="button"
+            class="anchor-cell"
+            :class="{ 'anchor-cell--active': m.position.anchor === anchor }"
+            :aria-label="t('anchors.' + anchor)"
+            :aria-pressed="m.position.anchor === anchor"
+            @click="
+              m.position.anchor = anchor;
+              emitChange();
+            "
+          >
+            <span class="anchor-dot" />
+          </button>
         </div>
-      </div>
+      </LjField>
 
-      <v-row dense>
-        <v-col cols="6">
-          <v-text-field
+      <div class="editor-grid">
+        <LjField :label="t('position.offset_x')" layout="column">
+          <LjInput
             :model-value="m.position.offset_x"
-            :label="t('position.offset_x')"
             type="number"
-            density="compact"
-            hide-details
-            variant="outlined"
-            suffix="px"
             @update:model-value="
               m.position.offset_x = Number($event);
               emitChange();
             "
-          />
-        </v-col>
-        <v-col cols="6">
-          <v-text-field
+          >
+            <template #suffix><span class="editor-suffix">px</span></template>
+          </LjInput>
+        </LjField>
+        <LjField :label="t('position.offset_y')" layout="column">
+          <LjInput
             :model-value="m.position.offset_y"
-            :label="t('position.offset_y')"
             type="number"
-            density="compact"
-            hide-details
-            variant="outlined"
-            suffix="px"
             @update:model-value="
               m.position.offset_y = Number($event);
               emitChange();
             "
-          />
-        </v-col>
-      </v-row>
+          >
+            <template #suffix><span class="editor-suffix">px</span></template>
+          </LjInput>
+        </LjField>
+      </div>
     </div>
 
     <!-- Appearance tab -->
     <div v-if="activeTab === 'appearance'" class="editor-pane">
-      <SelectFont
-        :model-value="m.style.font"
-        @update:model-value="
-          m.style.font = $event;
-          emitChange();
-        "
-      />
-      <v-slider
-        :model-value="m.style.font_size"
-        :label="t('style.font_size')"
-        min="1"
-        max="20"
-        step="0.5"
-        density="compact"
-        hide-details
-        thumb-label
-        @update:model-value="
-          m.style.font_size = $event;
-          emitChange();
-        "
-      />
-      <v-row dense>
-        <v-col cols="6">
-          <v-text-field
-            :model-value="m.style.color"
-            :label="t('style.color')"
-            density="compact"
-            hide-details
-            variant="outlined"
-            type="color"
-            @update:model-value="
-              m.style.color = $event;
-              emitChange();
-            "
-          />
-        </v-col>
-        <v-col cols="6">
-          <v-text-field
-            :model-value="m.style.background"
-            :label="t('style.background')"
-            density="compact"
-            hide-details
-            variant="outlined"
-            type="color"
-            @update:model-value="
-              m.style.background = $event;
-              emitChange();
-            "
-          />
-        </v-col>
-      </v-row>
-      <v-slider
-        :model-value="m.style.opacity"
-        :label="t('style.opacity')"
-        min="0"
-        max="100"
-        density="compact"
-        hide-details
-        thumb-label
-        @update:model-value="
-          m.style.opacity = $event;
-          emitChange();
-        "
-      />
-      <v-select
-        :model-value="m.style.text_align"
-        :label="t('style.text_align')"
-        :items="['left', 'center', 'right']"
-        density="compact"
-        hide-details
-        variant="outlined"
-        @update:model-value="
-          m.style.text_align = $event;
-          emitChange();
-        "
-      />
-      <v-row dense class="editor-checkboxes">
-        <v-col cols="6">
-          <v-checkbox
-            :model-value="m.style.text_shadow"
-            :label="t('style.text_shadow')"
-            density="compact"
-            hide-details
-            @update:model-value="
-              m.style.text_shadow = $event;
-              emitChange();
-            "
-          />
-        </v-col>
-        <v-col cols="6">
-          <v-checkbox
-            :model-value="m.style.box_shadow"
-            :label="t('style.box_shadow')"
-            density="compact"
-            hide-details
-            @update:model-value="
-              m.style.box_shadow = $event;
-              emitChange();
-            "
-          />
-        </v-col>
-      </v-row>
-      <v-text-field
-        :model-value="m.style.padding"
-        :label="t('style.padding')"
-        density="compact"
-        hide-details
-        variant="outlined"
-        @update:model-value="
-          m.style.padding = $event;
-          emitChange();
-        "
-      />
-      <v-text-field
-        :model-value="m.style.border_radius"
-        :label="t('style.border_radius')"
-        density="compact"
-        hide-details
-        variant="outlined"
-        @update:model-value="
-          m.style.border_radius = $event;
-          emitChange();
-        "
-      />
-      <v-text-field
-        :model-value="m.style.border"
-        :label="t('style.border')"
-        density="compact"
-        hide-details
-        variant="outlined"
-        placeholder="1px solid #fff"
-        @update:model-value="
-          m.style.border = $event;
-          emitChange();
-        "
-      />
+      <LjField :label="t('style.font')" layout="column">
+        <SelectFont
+          :model-value="m.style.font"
+          @update:model-value="
+            m.style.font = $event;
+            emitChange();
+          "
+        />
+      </LjField>
 
-      <v-divider v-if="m.type === 'image'" class="my-2" />
+      <LjField :label="t('style.font_size')" layout="column">
+        <LjSlider
+          :model-value="m.style.font_size"
+          :min="1"
+          :max="20"
+          :step="0.5"
+          show-value
+          @update:model-value="
+            m.style.font_size = $event;
+            emitChange();
+          "
+        />
+      </LjField>
+
+      <div class="editor-grid">
+        <LjField :label="t('style.color')" layout="column">
+          <div class="editor-color">
+            <LjInput
+              :model-value="m.style.color"
+              type="color"
+              @update:model-value="
+                m.style.color = $event;
+                emitChange();
+              "
+            />
+          </div>
+        </LjField>
+        <LjField :label="t('style.background')" layout="column">
+          <div class="editor-color">
+            <LjInput
+              :model-value="m.style.background"
+              type="color"
+              @update:model-value="
+                m.style.background = $event;
+                emitChange();
+              "
+            />
+          </div>
+        </LjField>
+      </div>
+
+      <LjField :label="t('style.opacity')" layout="column">
+        <LjSlider
+          :model-value="m.style.opacity"
+          :min="0"
+          :max="100"
+          show-value
+          @update:model-value="
+            m.style.opacity = $event;
+            emitChange();
+          "
+        />
+      </LjField>
+
+      <LjField :label="t('style.text_align')" layout="column">
+        <LjSelect
+          :model-value="m.style.text_align"
+          :items="alignOptions"
+          @update:model-value="
+            m.style.text_align = $event;
+            emitChange();
+          "
+        />
+      </LjField>
+
+      <div class="editor-grid editor-checkboxes">
+        <LjCheckbox
+          :model-value="m.style.text_shadow"
+          :label="t('style.text_shadow')"
+          @update:model-value="
+            m.style.text_shadow = $event;
+            emitChange();
+          "
+        />
+        <LjCheckbox
+          :model-value="m.style.box_shadow"
+          :label="t('style.box_shadow')"
+          @update:model-value="
+            m.style.box_shadow = $event;
+            emitChange();
+          "
+        />
+      </div>
+
+      <LjField :label="t('style.padding')" layout="column">
+        <LjInput
+          :model-value="m.style.padding"
+          @update:model-value="
+            m.style.padding = $event;
+            emitChange();
+          "
+        />
+      </LjField>
+
+      <LjField :label="t('style.border_radius')" layout="column">
+        <LjInput
+          :model-value="m.style.border_radius"
+          @update:model-value="
+            m.style.border_radius = $event;
+            emitChange();
+          "
+        />
+      </LjField>
+
+      <LjField :label="t('style.border')" layout="column">
+        <LjInput
+          :model-value="m.style.border"
+          placeholder="1px solid #fff"
+          @update:model-value="
+            m.style.border = $event;
+            emitChange();
+          "
+        />
+      </LjField>
 
       <template v-if="m.type === 'image'">
-        <v-slider
-          :model-value="m.style.image_scale"
-          :label="t('style.image_scale')"
-          min="10"
-          max="200"
-          step="5"
-          density="compact"
-          hide-details
-          thumb-label
-          @update:model-value="
-            m.style.image_scale = $event;
-            emitChange();
-          "
-        />
-        <v-select
-          :model-value="m.style.object_fit"
-          :label="t('style.image_fit')"
-          :items="fitOptions"
-          density="compact"
-          hide-details
-          variant="outlined"
-          @update:model-value="
-            m.style.object_fit = $event;
-            emitChange();
-          "
-        />
+        <hr class="editor-divider" />
+
+        <LjField :label="t('style.image_scale')" layout="column">
+          <LjSlider
+            :model-value="m.style.image_scale"
+            :min="10"
+            :max="200"
+            :step="5"
+            show-value
+            @update:model-value="
+              m.style.image_scale = $event;
+              emitChange();
+            "
+          />
+        </LjField>
+
+        <LjField :label="t('style.image_fit')" layout="column">
+          <LjSelect
+            :model-value="m.style.object_fit"
+            :items="fitOptions"
+            @update:model-value="
+              m.style.object_fit = $event;
+              emitChange();
+            "
+          />
+        </LjField>
       </template>
     </div>
 
     <!-- Animation tab -->
     <div v-if="activeTab === 'animation'" class="editor-pane">
-      <v-select
-        :model-value="m.style.animation"
-        :label="t('animation.entrance')"
-        :items="animationOptions"
-        density="compact"
-        hide-details
-        variant="outlined"
-        @update:model-value="
-          m.style.animation = $event;
-          emitChange();
-        "
-      />
-      <v-select
-        :model-value="m.style.animation_exit"
-        :label="t('animation.exit')"
-        :items="animationOptions"
-        density="compact"
-        hide-details
-        variant="outlined"
-        @update:model-value="
-          m.style.animation_exit = $event;
-          emitChange();
-        "
-      />
-      <v-slider
-        :model-value="m.style.animation_duration"
-        :label="t('animation.duration')"
-        min="100"
-        max="1000"
-        step="50"
-        density="compact"
-        hide-details
-        thumb-label
-        @update:model-value="
-          m.style.animation_duration = $event;
-          emitChange();
-        "
-      />
+      <LjField :label="t('animation.entrance')" layout="column">
+        <LjSelect
+          :model-value="m.style.animation"
+          :items="animationOptions"
+          @update:model-value="
+            m.style.animation = $event;
+            emitChange();
+          "
+        />
+      </LjField>
+
+      <LjField :label="t('animation.exit')" layout="column">
+        <LjSelect
+          :model-value="m.style.animation_exit"
+          :items="animationOptions"
+          @update:model-value="
+            m.style.animation_exit = $event;
+            emitChange();
+          "
+        />
+      </LjField>
+
+      <LjField :label="t('animation.duration')" layout="column">
+        <LjSlider
+          :model-value="m.style.animation_duration"
+          :min="100"
+          :max="1000"
+          :step="50"
+          show-value
+          @update:model-value="
+            m.style.animation_duration = $event;
+            emitChange();
+          "
+        />
+      </LjField>
     </div>
 
     <!-- Visibility tab -->
     <div v-if="activeTab === 'visibility'" class="editor-pane">
-      <v-checkbox
+      <LjCheckbox
         :model-value="m.show_on_return"
         :label="t('visibility.show_on_return')"
-        density="compact"
-        hide-details
         @update:model-value="
           m.show_on_return = $event;
           emitChange();
         "
       />
-      <v-checkbox
+      <LjCheckbox
         :model-value="m.show_on_obs"
         :label="t('visibility.show_on_obs')"
-        density="compact"
-        hide-details
         @update:model-value="
           m.show_on_obs = $event;
           emitChange();
@@ -352,10 +309,19 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch, nextTick } from "vue";
+import { ref, reactive, computed, watch, nextTick } from "vue";
 import { useI18n } from "vue-i18n";
 import OverlayImagePicker from "./OverlayImagePicker.vue";
 import SelectFont from "@/components/inputs/SelectFont.vue";
+import {
+  LjCheckbox,
+  LjField,
+  LjInput,
+  LjSelect,
+  LjSlider,
+  LjTabs,
+  LjTextarea,
+} from "@/components/ui";
 import { OVERLAY_ANCHORS, OVERLAY_ANIMATIONS, OVERLAY_MODULE_SOURCES } from "@/types/Overlay";
 import { getModuleTitle } from "@/config/modules";
 
@@ -408,30 +374,46 @@ function emitChange() {
 
 const anchors = OVERLAY_ANCHORS;
 
+// Os rótulos das abas eram interpolados no template e reagiam à troca de
+// idioma; o LjTabs recebe a lista pronta, então ela precisa ser computada.
+const tabItems = computed(() => [
+  { value: "content", label: t("slot.content") },
+  { value: "position", label: t("position.title") },
+  { value: "appearance", label: t("style.title") },
+  { value: "animation", label: t("animation.title") },
+  { value: "visibility", label: t("visibility.title") },
+]);
+
 const typeOptions = [
-  { title: t("slot.type_text"), value: "text" },
-  { title: t("slot.type_image"), value: "image" },
-  { title: t("slot.type_module_mirror"), value: "module_mirror" },
+  { label: t("slot.type_text"), value: "text" },
+  { label: t("slot.type_image"), value: "image" },
+  { label: t("slot.type_module_mirror"), value: "module_mirror" },
 ];
 
 const moduleOptions = [
-  ...OVERLAY_MODULE_SOURCES.map((m) => ({
-    title: _t(getModuleTitle(m)) || m,
-    value: m,
+  ...OVERLAY_MODULE_SOURCES.map((source) => ({
+    label: _t(getModuleTitle(source)) || source,
+    value: source,
   })),
 ];
 
 const animationOptions = OVERLAY_ANIMATIONS.map((a) => ({
-  title: t("animations." + a),
+  label: t("animations." + a),
   value: a,
 }));
 
+const alignOptions = [
+  { label: t("style.align_left"), value: "left" },
+  { label: t("style.align_center"), value: "center" },
+  { label: t("style.align_right"), value: "right" },
+];
+
 const fitOptions = [
-  { title: t("style.fit_contain"), value: "contain" },
-  { title: t("style.fit_cover"), value: "cover" },
-  { title: t("style.fit_fill"), value: "fill" },
-  { title: t("style.fit_none"), value: "none" },
-  { title: t("style.fit_scale_down"), value: "scale-down" },
+  { label: t("style.fit_contain"), value: "contain" },
+  { label: t("style.fit_cover"), value: "cover" },
+  { label: t("style.fit_fill"), value: "fill" },
+  { label: t("style.fit_none"), value: "none" },
+  { label: t("style.fit_scale_down"), value: "scale-down" },
 ];
 
 function onTypeChange() {
@@ -454,52 +436,97 @@ function onTypeChange() {
 .editor-pane {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 12px 0;
+  gap: var(--lj-space-5);
+  padding: var(--lj-space-5) 0;
+}
+
+/* O LjField já reserva margem inferior própria; aqui quem espaça é o gap do
+   painel, senão cada campo ganharia o dobro do respiro. */
+.editor-pane :deep(.lj-field) {
+  margin-bottom: 0;
+}
+
+.editor-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--lj-space-5);
+}
+
+.editor-checkboxes {
+  align-items: center;
+}
+
+.editor-divider {
+  height: 0;
+  margin: var(--lj-space-2) 0;
+  border: 0;
+  border-top: 1px solid var(--lj-surface-divider);
+}
+
+.editor-suffix {
+  color: var(--lj-text-subtle);
+  font-size: var(--lj-text-sm);
+}
+
+/* O seletor de cor é um <input type="color"> nativo: o invólucro existe só
+   para o CSS com escopo alcançar a moldura do LjInput. */
+.editor-color :deep(.lj-input) {
+  width: 100%;
+  padding-inline: var(--lj-space-2);
+}
+
+.editor-color :deep(.lj-input__field) {
+  cursor: pointer;
 }
 
 .anchor-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 4px;
-  padding: 8px;
-  background: rgba(var(--v-theme-surface), 0.3);
-  border-radius: 8px;
+  gap: var(--lj-space-2);
+  padding: var(--lj-space-4);
+  background: var(--lj-surface-bg-soft);
+  border: 1px solid var(--lj-surface-border);
+  border-radius: var(--lj-radius-md);
 }
 
 .anchor-cell {
-  aspect-ratio: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
+  aspect-ratio: 1;
+  padding: 0;
+  background: var(--lj-surface-bg-hover);
+  border: 1px solid transparent;
+  border-radius: var(--lj-radius-xs);
   cursor: pointer;
-  background: rgba(var(--v-theme-on-surface), 0.06);
-  transition: background 0.12s;
+  transition:
+    background var(--lj-transition-fast),
+    border-color var(--lj-transition-fast);
 }
 
 .anchor-cell:hover {
-  background: rgba(var(--v-theme-primary), 0.12);
+  background: var(--lj-ui-accent-soft);
+}
+
+.anchor-cell:focus-visible {
+  outline: none;
+  box-shadow: var(--lj-ui-focus);
 }
 
 .anchor-cell--active {
-  background: rgba(var(--v-theme-primary), 0.2);
-  box-shadow: inset 0 0 0 2px rgb(var(--v-theme-primary));
+  background: var(--lj-ui-accent-soft);
+  border-color: var(--lj-ui-accent);
 }
 
 .anchor-dot {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: rgba(var(--v-theme-on-surface), 0.3);
+  background: var(--lj-text-subtle);
 }
 
 .anchor-cell--active .anchor-dot {
-  background: rgb(var(--v-theme-primary));
-}
-
-.editor-checkboxes {
-  margin: 0;
+  background: var(--lj-ui-accent);
 }
 
 .editor-image-picker {

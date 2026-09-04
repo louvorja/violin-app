@@ -264,5 +264,12 @@
     "deactivate": "Desactivar",
     "link_overlay": "Vincular Overlay",
     "linked_overlay": "Overlay vinculado"
-  }
+  },
+  "library.weekday_sunday": "Domingo",
+  "library.weekday_monday": "Lunes",
+  "library.weekday_tuesday": "Martes",
+  "library.weekday_wednesday": "Miércoles",
+  "library.weekday_thursday": "Jueves",
+  "library.weekday_friday": "Viernes",
+  "library.weekday_saturday": "Sábado"
 }

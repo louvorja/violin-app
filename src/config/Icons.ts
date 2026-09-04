@@ -199,6 +199,7 @@ export const ICONS = {
   },
   PROJECTION: {
     CLEAN: "mdi-monitor-shimmer",
+    RETURN: "mdi-monitor-eye",
     START: "mdi-monitor",
     STOP: "mdi-monitor-off",
   },
@@ -223,6 +224,7 @@ export const ICONS = {
     BROOM: "mdi-broom",
     BUG: "mdi-bug-outline",
     CHECK: "mdi-check",
+    CHECK_CIRCLE: "mdi-check-circle",
     CHECK_UPDATE: "mdi-monitor-arrow-down-variant",
     CHECKED: "mdi-checkbox-marked",
     CHEVRON_DOWN: "mdi-chevron-down",
@@ -254,7 +256,9 @@ export const ICONS = {
     LINK: "mdi-link",
     LINK_VARIANT: "mdi-link-variant",
     MENU: "mdi-menu",
+    MENU_DOWN: "mdi-menu-down",
     MESSAGE_BULLETED: "mdi-message-bulleted",
+    MONITOR: "mdi-monitor",
     MONITORS: "mdi-monitor-multiple",
     NEWS: "mdi-newspaper-variant-outline",
     NOTE_EDIT: "mdi-note-edit-outline",
@@ -279,6 +283,7 @@ export const ICONS = {
     THEME_LIGHT: "mdi-weather-sunny",
     THEME_LIGHT_DARK: "mdi-theme-light-dark",
     TOOLS: "mdi-tools",
+    TUNE: "mdi-tune",
     VIEW_GRID: "mdi-view-grid",
     VIEW_GRID_OUTLINE: "mdi-view-grid-outline",
     VIEW_LIST: "mdi-view-list-outline",
@@ -286,6 +291,17 @@ export const ICONS = {
     WINDOW_MAXIMIZE: "mdi-window-maximize",
     WINDOW_MINIMIZE: "mdi-window-minimize",
     WINDOW_RESTORE: "mdi-window-restore",
+  },
+  /**
+   * Contato e redes sociais (links da tela Sobre)
+   */
+  SOCIAL: {
+    CAST: "mdi-cast-variant",
+    EMAIL: "mdi-mail",
+    FACEBOOK: "mdi-facebook",
+    INSTAGRAM: "mdi-instagram",
+    TELEGRAM: "mdi-send",
+    WHATSAPP: "mdi-whatsapp",
   },
   PROJETOS: {
     WEB: "mdi-web",

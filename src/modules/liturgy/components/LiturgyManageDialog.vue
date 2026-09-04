@@ -1,99 +1,94 @@
 <template>
-  <v-dialog v-model="internalShow" max-width="480">
-    <v-card>
-      <v-toolbar density="compact" color="primary" flat>
-        <v-toolbar-title>{{ t("library.manage_title") }}</v-toolbar-title>
-        <v-btn icon variant="text" density="compact" @click="internalShow = false">
-          <v-icon icon="mdi-close" />
-        </v-btn>
-      </v-toolbar>
-      <v-card-text class="pt-4">
-        <v-text-field
-          v-model="form.name"
-          :label="t('library.manage_name')"
-          :error-messages="nameError"
-          variant="outlined"
-          density="compact"
-          hide-details="auto"
-          class="mb-3"
+  <LjDialog v-model="internalShow" :title="t('library.manage_title')" size="md">
+    <LjField layout="column" :label="t('library.manage_name')" :error="nameError">
+      <LjInput v-model="form.name" />
+    </LjField>
+
+    <LjField layout="column" :label="t('inputs.color')">
+      <div class="lmd-color">
+        <input
+          :value="form.color"
+          type="color"
+          class="lmd-color__swatch"
+          :aria-label="t('inputs.color')"
+          @input="form.color = ($event.target as HTMLInputElement).value"
         />
-        <v-row class="mb-3">
-          <v-col cols="12">
-            <div class="lit-field lit-field--color">
-              <label>{{ t("inputs.color") }}:</label>
-              <div class="lit-color-picker">
-                <input
-                  :value="form.color"
-                  type="color"
-                  class="lit-color-input"
-                  @input="form.color = ($event.target as HTMLInputElement).value"
-                />
-                <button
-                  type="button"
-                  class="lit-color-toggle"
-                  @click.stop="presetsOpen = !presetsOpen"
-                >
-                  <v-icon icon="mdi-menu-down" size="14" />
-                </button>
-                <div v-if="presetsOpen" class="lit-color-presets" @click="presetsOpen = false">
-                  <span
-                    v-for="c in COLORS"
-                    :key="c"
-                    class="lit-color-preset"
-                    :class="{ 'is-active': form.color?.toLowerCase() === c.toLowerCase() }"
-                    :style="{ background: c }"
-                    @click="form.color = c"
-                  />
-                </div>
-              </div>
-            </div>
-          </v-col>
-        </v-row>
-        <v-divider class="mb-3" />
-        <p class="text-body-2 font-weight-medium mb-2">{{ t("library.manage_binding") }}</p>
-        <v-radio-group v-model="bindingType" density="compact" hide-details class="mb-2">
-          <v-radio :label="t('library.manage_binding_none')" value="" />
-          <v-radio :label="t('library.manage_binding_day')" value="day_of_week" />
-          <v-radio :label="t('library.manage_binding_date')" value="date" />
-          <v-radio :label="t('library.manage_binding_13th')" value="thirteenth_sabbath" />
-        </v-radio-group>
-        <v-select
-          v-if="bindingType === 'day_of_week'"
-          v-model="bindingValue"
-          :label="t('library.manage_binding_day_placeholder')"
-          :items="dayOptions"
-          variant="outlined"
-          density="compact"
-          hide-details
+        <button
+          type="button"
+          class="lmd-color__toggle"
+          :aria-expanded="presetsOpen"
+          :aria-label="t('inputs.color')"
+          @click.stop="presetsOpen = !presetsOpen"
+        >
+          <Icon :icon="ICONS.UI.MENU_DOWN" :size="14" />
+        </button>
+        <div v-if="presetsOpen" class="lmd-color__presets" @click="presetsOpen = false">
+          <span
+            v-for="c in COLORS"
+            :key="c"
+            class="lmd-color__preset"
+            :class="{ 'is-active': form.color?.toLowerCase() === c.toLowerCase() }"
+            :style="{ background: c }"
+            @click="form.color = c"
+          />
+        </div>
+      </div>
+    </LjField>
+
+    <hr class="lmd-divider" />
+
+    <p class="lmd-section">{{ t("library.manage_binding") }}</p>
+
+    <div class="lmd-radios" role="radiogroup" :aria-label="t('library.manage_binding')">
+      <label v-for="opt in bindingOptions" :key="opt.value" class="lmd-radio">
+        <input
+          v-model="bindingType"
+          type="radio"
+          class="lmd-radio__input"
+          :name="radioName"
+          :value="opt.value"
         />
-        <v-text-field
-          v-if="bindingType === 'date'"
-          v-model="bindingValue"
-          type="date"
-          variant="outlined"
-          density="compact"
-          hide-details
-        />
-      </v-card-text>
-      <v-card-actions>
-        <v-spacer />
-        <v-btn variant="text" @click="internalShow = false">
-          {{ t("actions.cancel") }}
-        </v-btn>
-        <v-btn variant="flat" color="primary" :disabled="!form.name.trim()" @click="doSave">
-          <v-icon icon="mdi-check" size="16" class="mr-1" />
-          {{ t("actions.save") }}
-        </v-btn>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
+        <span class="lmd-radio__mark" aria-hidden="true" />
+        <span class="lmd-radio__label">{{ opt.label }}</span>
+      </label>
+    </div>
+
+    <LjSelect
+      v-if="bindingType === 'day_of_week'"
+      :model-value="bindingValue"
+      :items="dayOptions"
+      item-label="title"
+      :placeholder="t('library.manage_binding_day_placeholder')"
+      @update:model-value="bindingValue = String($event)"
+    />
+
+    <LjInput v-if="bindingType === 'date'" v-model="bindingValue" type="date" />
+
+    <template #footer>
+      <LjButton size="sm" @click="internalShow = false">
+        {{ t("actions.cancel") }}
+      </LjButton>
+      <LjButton
+        size="sm"
+        variant="primary"
+        :icon="ICONS.UI.CHECK"
+        :disabled="!form.name.trim()"
+        @click="doSave"
+      >
+        {{ t("actions.save") }}
+      </LjButton>
+    </template>
+  </LjDialog>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, reactive } from "vue";
+import { computed, reactive, ref, useId, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import pt from "../lang/pt.json";
 import es from "../lang/es.json";
+import Icon from "@/components/Icon.vue";
+import { LjButton, LjDialog, LjField, LjInput, LjSelect } from "@/components/ui";
+import { ICONS } from "@/config/Icons";
 import $alert from "@/helpers/Alert";
 import $liturgy from "@/helpers/Liturgy";
 import { useLiturgyLibrary } from "../composables/useLiturgyLibrary";
@@ -135,15 +130,25 @@ const bindingValue = ref("");
 const nameError = ref("");
 const presetsOpen = ref(false);
 
-const dayOptions = [
-  { title: "Domingo", value: "0" },
-  { title: "Segunda", value: "1" },
-  { title: "Terça", value: "2" },
-  { title: "Quarta", value: "3" },
-  { title: "Quinta", value: "4" },
-  { title: "Sexta", value: "5" },
-  { title: "Sábado", value: "6" },
-];
+// Sem `name` compartilhado os rádios nativos não se excluem entre si; o id
+// gerado mantém o grupo isolado caso o diálogo apareça mais de uma vez na tela.
+const radioName = useId();
+
+const bindingOptions = computed(() => [
+  { value: "", label: t("library.manage_binding_none") },
+  { value: "day_of_week", label: t("library.manage_binding_day") },
+  { value: "date", label: t("library.manage_binding_date") },
+  { value: "thirteenth_sabbath", label: t("library.manage_binding_13th") },
+]);
+
+const WEEKDAY_KEYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+
+const dayOptions = computed(() =>
+  WEEKDAY_KEYS.map((key, index) => ({
+    title: t(`library.weekday_${key}`),
+    value: String(index),
+  }))
+);
 
 watch(internalShow, async (v) => {
   if (!v) return;
@@ -202,63 +207,164 @@ async function doSave() {
 </script>
 
 <style scoped>
-/* ====================== Color picker ====================== */
-.lit-color-picker {
+/* ====================== Seletor de cor ======================
+   Sem primitivo equivalente no catálogo: o <input type="color"> nativo abre o
+   seletor do sistema e a paleta ao lado é atalho para as cores da liturgia. */
+.lmd-color {
   display: inline-flex;
   align-items: center;
   position: relative;
 }
-.lit-color-input {
-  width: 30px;
-  height: 26px;
-  border: 1px solid rgba(var(--v-border-color), 0.5);
-  border-right: 0;
-  border-radius: 3px 0 0 3px;
-  cursor: pointer;
+
+.lmd-color__swatch {
+  width: var(--lj-fixed-btn-width);
+  height: var(--lj-ui-h-md);
   padding: 0;
   background: transparent;
+  border: var(--lj-ui-border);
+  border-right: 0;
+  border-radius: var(--lj-ui-radius) 0 0 var(--lj-ui-radius);
+  cursor: pointer;
 }
-.lit-color-toggle {
-  height: 26px;
-  width: 18px;
-  border: 1px solid rgba(var(--v-border-color), 0.5);
-  border-radius: 0 3px 3px 0;
-  background: var(--lj-surface-bg);
+
+.lmd-color__toggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
-  color: var(--lj-text);
+  width: 18px;
+  height: var(--lj-ui-h-md);
   padding: 0;
+  background: var(--lj-surface-bg);
+  border: var(--lj-ui-border);
+  border-radius: 0 var(--lj-ui-radius) var(--lj-ui-radius) 0;
+  color: var(--lj-text);
+  cursor: pointer;
 }
-.lit-color-toggle:hover {
-  background: rgba(var(--lj-on-surface-ch), 0.06);
+
+.lmd-color__toggle:hover {
+  background: var(--lj-surface-bg-hover);
 }
-.lit-color-presets {
+
+.lmd-color__toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--lj-ui-focus);
+  border-color: var(--lj-ui-accent);
+}
+
+.lmd-color__presets {
   position: absolute;
-  top: calc(100% + 4px);
+  top: calc(100% + var(--lj-space-2));
   left: 0;
+  z-index: 1;
   display: grid;
   grid-template-columns: repeat(6, 1fr);
-  gap: 3px;
-  padding: 6px;
+  gap: var(--lj-space-2);
+  padding: var(--lj-space-3);
   background: var(--lj-surface-bg);
-  border: 1px solid rgba(var(--v-border-color), 0.5);
-  border-radius: 4px;
-  box-shadow: var(--lj-shadow-3);
+  border: var(--lj-ui-float-border);
+  border-radius: var(--lj-radius-md);
+  box-shadow: var(--lj-ui-float-shadow);
 }
-.lit-color-preset {
+
+.lmd-color__preset {
   width: 18px;
   height: 18px;
-  border-radius: 3px;
+  border: var(--lj-ui-border);
+  border-radius: var(--lj-radius-xs);
   cursor: pointer;
-  border: 1.5px solid rgba(var(--v-border-color), 0.3);
 }
-.lit-color-preset:hover {
+
+.lmd-color__preset:hover {
   transform: scale(1.15);
 }
-.lit-color-preset.is-active {
-  border-color: white;
-  box-shadow: 0 0 0 2px var(--lj-navy);
+
+.lmd-color__preset.is-active {
+  border-color: var(--lj-white);
+  box-shadow: 0 0 0 2px var(--lj-ui-accent);
+}
+
+/* ====================== Seção de vínculo ====================== */
+.lmd-divider {
+  margin: 0 0 var(--lj-space-5);
+  border: 0;
+  border-top: 1px solid var(--lj-surface-divider);
+}
+
+.lmd-section {
+  margin: 0 0 var(--lj-space-4);
+  color: var(--lj-text);
+  font-size: var(--lj-text-base);
+  font-weight: var(--lj-weight-medium);
+}
+
+/* Rádio não existe no catálogo — markup nativo sobre os mesmos tokens do
+   LjCheckbox para o grupo não destoar dos demais controles. */
+.lmd-radios {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-3);
+  margin-bottom: var(--lj-space-5);
+}
+
+.lmd-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lj-space-3);
+  color: var(--lj-text);
+  font-size: var(--lj-text-base);
+  cursor: pointer;
+  user-select: none;
+}
+
+/* Input real fica invisível mas focável — o :focus-visible dele estiliza a marca */
+.lmd-radio__input {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+}
+
+.lmd-radio__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  background: var(--lj-surface-bg);
+  border: var(--lj-ui-border);
+  border-radius: 50%;
+  transition:
+    background var(--lj-transition-fast),
+    border-color var(--lj-transition-fast),
+    box-shadow var(--lj-transition-fast);
+}
+
+.lmd-radio__mark::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--lj-ui-accent-fg);
+  transform: scale(0);
+  transition: transform var(--lj-transition-fast);
+}
+
+.lmd-radio__input:checked + .lmd-radio__mark {
+  background: var(--lj-ui-accent);
+  border-color: var(--lj-ui-accent);
+}
+
+.lmd-radio__input:checked + .lmd-radio__mark::after {
+  transform: scale(1);
+}
+
+.lmd-radio__input:focus-visible + .lmd-radio__mark {
+  border-color: var(--lj-ui-accent);
+  box-shadow: var(--lj-ui-focus);
+}
+
+.lmd-radio:hover .lmd-radio__mark {
+  border-color: var(--lj-ui-accent);
 }
 </style>
