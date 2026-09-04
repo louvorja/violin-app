@@ -171,6 +171,7 @@ import type { BibleSearchResult } from "@/types/Bible";
 import { registerShell } from "@/composables/useShell";
 import { useFileProjection } from "@/composables/useFileProjection";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
+import { hasOpenWebWindows } from "@/helpers/projection/webWindow";
 import { formatBackgroundTaskDetail } from "@/helpers/BackgroundTaskDetail";
 import { useSyncManager } from "@/composables/useSyncManager";
 import { COLOR_THEMES } from "@/config/Theme";
@@ -265,6 +266,21 @@ const onOpenBibleSearch = () => {
 };
 
 let beforeUnloadHandler: ((e: BeforeUnloadEvent) => void) | null = null;
+
+/**
+ * Só vale avisar antes de recarregar quando o reload destrói algo em curso:
+ * uma janela de projeção aberta (o handle morre e a tela apaga no meio do
+ * culto), mídia tocando ou download em segundo plano. Fora disso o prompt do
+ * navegador aparece em toda troca de aba e o usuário aprende a ignorá-lo.
+ *
+ * Síncrona: `beforeunload` não espera promessa.
+ */
+function _hasWorkInProgress(): boolean {
+  if (hasOpenWebWindows()) return true;
+  if ($appdata.get(KEYS.MODULES.MEDIA.IS_PLAYING, false)) return true;
+  return bgTasks.hasActiveTasks.value;
+}
+
 let messageHandler: ((event: MessageEvent) => void) | null = null;
 
 // ---------------------------------------------------------------------------
@@ -637,6 +653,7 @@ onMounted(() => {
   const isElectron = !!window.louvorjaApi;
   if (!isDev && !isElectron) {
     beforeUnloadHandler = (e) => {
+      if (!_hasWorkInProgress()) return;
       e.preventDefault();
       e.returnValue = "";
     };
