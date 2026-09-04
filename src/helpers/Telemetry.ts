@@ -70,7 +70,7 @@ export function setEnabled(enabled: boolean): void {
     if (_started) posthog.opt_out_capturing();
     return;
   }
-  if (_started) posthog.opt_in_capturing();
+  if (_started) posthog.opt_in_capturing({ captureEventName: false });
   else void init();
 }
 
@@ -115,8 +115,12 @@ export async function init(): Promise<void> {
       "$session_entry_referrer",
       "$session_entry_referring_domain",
     ],
-    before_send: (e) => { console.log("TELEMETRY_DEBUG", JSON.stringify(e)); return e; },
   });
+
+  // O `opt_out_capturing` abaixo grava uma flag própria no localStorage que
+  // sobrevive ao reload. Sem reconciliar aqui, quem desligasse e religasse a
+  // opção ficaria sem telemetria para sempre, com o toggle marcado.
+  posthog.opt_in_capturing({ captureEventName: false });
 
   posthog.capture("app_opened", {
     platform: Platform.isDesktop ? "desktop" : "web",
