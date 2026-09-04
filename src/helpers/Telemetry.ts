@@ -21,11 +21,26 @@ let _started = false;
 /**
  * Projeção, retorno, OBS, operador e popups rodam o mesmo `main.js`. Sem este
  * filtro, cada monitor aberto durante um culto viraria uma instalação a mais.
+ *
+ * A rota chega por hash na janela principal, mas o servidor HTTP embarcado
+ * serve as auxiliares por caminho (`/projection`), então olhar só o hash
+ * deixava toda janela de projeção passar como se fosse a principal.
  */
+const AUX_ROUTES = [
+  "/projection",
+  "/projecao",
+  "/obs",
+  "/operator",
+  "/clock",
+  "/relogio",
+  "/popup",
+  "/remote",
+];
+
 function isMainWindow(): boolean {
   if (typeof window === "undefined") return false;
-  const hash = window.location.hash.replace(/^#/, "");
-  return hash === "" || hash === "/";
+  const route = window.location.hash.replace(/^#/, "") || window.location.pathname || "/";
+  return !AUX_ROUTES.some((aux) => route === aux || route.startsWith(`${aux}/`));
 }
 
 function osName(): string {
