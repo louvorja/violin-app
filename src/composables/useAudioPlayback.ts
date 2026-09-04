@@ -134,6 +134,11 @@ function _create(): AudioPlayback {
           _startRaf();
         })
         .catch((e) => {
+          // Interromper um play() pendente — com pause(), com load() ao trocar
+          // de faixa, ou soltando a fonte — rejeita a promise com AbortError.
+          // É o desfecho esperado dessas ações, não uma falha de carregamento:
+          // reportar viraria um alerta de erro a cada troca rápida de música.
+          if ((e as { name?: string } | null)?.name === "AbortError") return;
           if (onError) onError(e);
         });
     }
