@@ -21,7 +21,7 @@ async function getParams(force = false) {
 
 /**
  * Verifica disponibilidade do servidor de arquivos via HEAD.
- * Substitui o handshake FTP — agora as mídias vêm via HTTPS.
+ * As mídias vêm por HTTPS a partir de filesUrl.
  */
 function checkConnection() {
   return new Promise((resolve) => {

@@ -227,9 +227,14 @@ $storage.hydrate().then(async () => {
   if (Platform.isDesktop && Platform.download) {
     const apiToken = import.meta.env.VITE_API_TOKEN || "";
     const filesUrl = import.meta.env.VITE_URL_FILES;
+    // O /params vive na raiz da mesma API do banco — derivar daqui evita que
+    // trocar de servidor no .env deixe o downloader apontando para o antigo.
+    const apiOrigin = (import.meta.env.VITE_URL_DATABASE || "")
+      .replace(/\/json_db\/?$/, "")
+      .replace(/\/$/, "");
     try {
       await Platform.download.setApiConfig({
-        paramsUrl: "https://api.louvorja.com.br/params?type=env",
+        paramsUrl: `${apiOrigin}/params?type=env`,
         apiToken,
         filesUrl,
       });

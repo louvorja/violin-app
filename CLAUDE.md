@@ -11,7 +11,6 @@ Sistema de apresentação de letras de músicas e conteúdo bíblico para uso em
 - **Vue I18n 11** (PT/ES)
 - **Vite 7** (build)
 - **vuedraggable** (drag-and-drop)
-- **basic-ftp** (download de coletâneas)
 - **vue-fullscreen** (projeção fullscreen)
 - **vue3-shortkey** (atalhos de teclado)
 
@@ -674,13 +673,13 @@ O sistema original em Delphi (`louvorja-desktop`) possui 33 módulos, banco SQLi
 | Feature | Origem Delphi | Status |
 |---|---|---|
 | Verificação de versão do banco | API `louvorja.com.br/params` | ✅ módulo `update` |
-| Download de coletâneas via FTP | `fmAtualiza.pas` | ✅ `useSyncManager` + Electron `download/` |
+| Download de coletâneas via HTTPS | `fmAtualiza.pas` | ✅ `useSyncManager` + Electron `download/` |
 | Verificação de integridade de arquivos | `fmArquivosFalta/Excesso.pas` | ✅ `StartupCheckDialog` |
 | Processos em segundo plano | — | ✅ `useBackgroundTasks` + `ShellTools` v-menu |
 
 **Implementação:**
 - Módulo `update` — verifica versão, mostra changelog, botão de atualizar
-- `useSyncManager` composable — download de coletâneas (FTP → HttpQueue) e bíblia (HTTP sequencial)
+- `useSyncManager` composable — download de coletâneas (HttpQueue) e bíblia (HTTP sequencial)
 - `StartupCheckDialog` — verificação inicial com botão "Minimizar" para background
 - `useBackgroundTasks` singleton — gerencia tarefas de download em segundo plano
 - `ShellTools.vue` — v-menu com badges de progresso, cancelamento com confirmação
@@ -734,19 +733,19 @@ A versão web/PWA atual é a base. A próxima etapa é empacotá-la como **app d
 
 | Item | Escolha | Razão |
 |---|---|---|
-| Stack desktop | **Electron** (não Tauri) | Reaproveita `basic-ftp`, `archiver`, `fs-extra` já no `package.json`. Sem curva de Rust. |
-| Fonte de dados | **JSON pronto do servidor** (não SQLite local) | Mantém `api.louvorja.com.br/json_db/*` como fonte; sem precisar lidar com senha SQLite (`bddbuscacdja`). Cache local em `userData/json_db/` para offline. |
+| Stack desktop | **Electron** (não Tauri) | Reaproveita `archiver`, `fs-extra` já no `package.json`. Sem curva de Rust. |
+| Fonte de dados | **JSON pronto do servidor** (não SQLite local) | Mantém `<api>/json_db/*` como fonte; sem precisar lidar com senha SQLite (`bddbuscacdja`). Cache local em `userData/json_db/` para offline. |
 | PWA web em paralelo | **Sim, ambos** | Mesmo código Vue, dois targets (web + desktop). Adapter `Platform.js` detecta `window.louvorjaApi`. |
 | Layout | **Manter Ribbon** (evolução do `AppsRibbon.vue`) | Familiaridade com usuários do Delphi. Sem reescrever UI. |
-| Servidor LouvorJA atual | **Manter compatibilidade** | API `https://api.louvorja.com.br/params?type=env` com header `Api-Token: 02@v2nFB2Dc` continua sendo a fonte. |
+| Servidor LouvorJA | **`api.louvorja.workers.dev`** (Cloudflare Workers + R2) | Réplica somente leitura, sem autenticação. O legado `api.louvorja.com.br` segue liberado no CSP para rollback via `.env`, sem rebuild. |
 
 ### Arquitetura
 
 ```
 ELECTRON MAIN (Node.js)
   ├── BrowserWindow factory + screen.getAllDisplays()
-  ├── Cache JSON em userData/json_db/ (proxy de api.louvorja.com.br)
-  ├── FTP downloader (basic-ftp) com fila + progresso
+  ├── Cache JSON em userData/json_db/ (proxy da API)
+  ├── Downloader HTTPS com fila + progresso
   ├── HTTP server embarcado (Express, porta 7070)
   ├── globalShortcut, electron-updater
   └── IPC: ipcMain.handle("louvorja:*", ...)
@@ -766,7 +765,7 @@ Vue Renderer (BrowserWindow)
 | **D0** | Bootstrap Electron — empacota Vue atual em janela nativa, mantém PWA | 1-2 dias | ⏳ próximo |
 | **D1** | UserData persistente em `app.getPath("userData")` (substitui localStorage no desktop) | 1 dia | — |
 | **D2** | Cache de JSON do banco em `userData/json_db/` via custom protocol `louvorja://` | 1-2 dias | — |
-| **D3** | **Download FTP de mídia** ⭐ — handshake com `conn_ftp`, `basic-ftp` baixa MP3/imagens | 3-4 dias | — |
+| **D3** | **Download HTTPS de mídia** ⭐ — `HttpQueue` baixa áudio/imagens de `VITE_URL_FILES` | 3-4 dias | ✅ implementado |
 | **D4** | **Multi-monitor real** ⭐ — `BrowserWindow` por monitor, "Identificar Monitores" 5s overlay | 2-3 dias | — |
 | **D5** | Servidor HTTP embarcado — Express porta 7070, replica 7 endpoints do `fmTransmitir.pas` | 2 dias | — |
 | **D6** | Atalhos globais OS-level — `globalShortcut` + roteamento contextual (substitui `FormKeyUp`) | 1 dia | — |
@@ -787,18 +786,18 @@ electron/
     ├── paths.js          # userData, tempDir
     ├── windows.js        # BrowserWindow factory
     ├── userStore.js      # JSON persistente em userData/ (D1)
-    ├── jsonCache.js      # Cache de api.louvorja.com.br/json_db (D2)
+    ├── jsonCache.js      # Cache de <api>/json_db (D2)
     ├── protocol.js       # louvorja:// custom protocol (D2)
+    ├── mediaVariants.js  # extensões intercambiáveis (.opus/.mp3, .jpg/.bmp)
     ├── displays.js       # screen.getAllDisplays + persist por feature (D4)
     ├── windowFactory.js  # openProjection(monitorId, ...), openOperator (D4)
     ├── identifyMonitors.js # Overlay 5s "Monitor N" (D4)
     ├── shortcuts.js      # globalShortcut (D6)
     ├── updater.js        # Auto-update: electron-updater + GitHub API (deb/rpm) (D8)
     ├── download/
-    │   ├── api.js        # api.louvorja.com.br/params (D3)
-    │   ├── handshake.js  # conn_ftp → credenciais voláteis (D3)
-    │   ├── ftpQueue.js   # basic-ftp + fila (D3)
-    │   └── integrity.js  # comparação por TAMANHO (D3)
+    │   ├── api.js        # <api>/params (D3)
+    │   ├── httpQueue.js  # fila HTTPS + pool de workers (D3)
+    │   └── integrity.js  # existência + tamanho, aceitando variantes (D3)
     └── httpServer/
         ├── index.js      # Express (D5)
         ├── auth.js       # token + bypass localhost (D5)
@@ -809,6 +808,26 @@ electron-builder.yml      # Config NSIS Win (D0)
 build/installer.nsh       # NSIS custom (D8)
 src/helpers/Platform.js   # Adapter web/desktop (D0)
 ```
+
+### Formatos de mídia — Opus e JPEG
+
+A API serve áudio em **Opus** e capas em **JPEG**; o acervo antigo (e a
+instalação Delphi usada pelo modo clássico) tem os mesmos arquivos em MP3 e
+BMP. `electron/main/mediaVariants.js` define os grupos de extensões
+intercambiáveis e exporta `variantsOf(caminho)`, que devolve os candidatos
+equivalentes na ordem de preferência — sem tocar no disco.
+
+Três pontos consultam essas variantes antes de concluir que um arquivo falta:
+
+| Local | Efeito |
+|---|---|
+| `protocol.js` host `files` | Serve o `.mp3` local quando o banco pede `.opus` |
+| `main.cjs` → `storage:checkLocal` | Indicador "✓ baixado" reconhece o formato antigo |
+| `download/integrity.js` | Não rebaixa mídia que já está no disco em outro formato |
+
+Ao adicionar um formato novo, basta incluí-lo no grupo correspondente em
+`VARIANT_GROUPS` — e no `_MIME_TYPES` do `protocol.js` se o host `local`
+também precisar servi-lo.
 
 ### Adapter Platform.js
 
@@ -826,9 +845,8 @@ Helpers atuais (`Storage`, `Path`, `Popup`, `Window`) detectam `Platform.isDeskt
 
 Mantida 100%. Endpoints usados:
 
-- `GET https://api.louvorja.com.br/params?type=env` (header `Api-Token: 02@v2nFB2Dc`) — descobre todos os outros endpoints
-- `GET <conn_ftp>?data=<base64>&lang=PT|ES` — handshake para credenciais FTP voláteis
-- FTP modo passivo — baixa `config/musicas/<Album>/<faixa>.mp3` etc.
+- `GET <api>/params?type=env` — descobre todos os outros endpoints. O header `Api-Token` só é exigido pelo servidor legado; a API em Workers é pública.
+- `GET <files_url>/musics/<lang>/<Album>/<faixa>.opus` — mídia por HTTPS (o endpoint `/ftp` foi descontinuado)
 - Cache TTL diário em `userData/configweb.json` (substitui `configweb.ja` do Delphi)
 
 Veja `/Users/juanaleixo/.claude/plans/ticklish-purring-flurry.md` para o plano detalhado com todos os arquivos, riscos e critérios de verificação por fase.
@@ -838,7 +856,7 @@ Veja `/Users/juanaleixo/.claude/plans/ticklish-purring-flurry.md` para o plano d
 | Arquivo Delphi | Função | Usado em |
 |---|---|---|
 | `/Users/juanaleixo/Repo/louvorja-desktop/fmIniciando.pas` | Paths, URL fixa, token, idioma | D0/D2 |
-| `/Users/juanaleixo/Repo/louvorja-desktop/fmAtualiza.pas` | Algoritmo FTP completo (Indy → basic-ftp) | D3 |
+| `/Users/juanaleixo/Repo/louvorja-desktop/fmAtualiza.pas` | Algoritmo de sincronização (referência histórica; hoje via HTTPS) | D3 |
 | `/Users/juanaleixo/Repo/louvorja-desktop/fmTransmitir.pas` | Spec do servidor HTTP (TIdHTTPServer → Express) | D5 |
 | `/Users/juanaleixo/Repo/louvorja-desktop/fmEditorSlides.pas:1503-1566` | Parser `.slja` (TZipFile + INI) | D10 |
 | `/Users/juanaleixo/Repo/louvorja-desktop/fmMenu.pas:13566-14163` | Escrita `.slja` | D10 |

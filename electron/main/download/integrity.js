@@ -2,9 +2,13 @@
 const fs = require("fs-extra");
 const path = require("path");
 const paths = require("../paths.js");
+const { variantsOf } = require("../mediaVariants.js");
 
 /**
- * Verifica se um arquivo local existe e bate o tamanho esperado.
+ * Verifica se um arquivo local existe e bate o tamanho esperado. Aceita
+ * variantes de extensão (.mp3 vale por .opus, .bmp por .jpg) para não
+ * rebaixar acervo que já está no disco em outro formato.
+ *
  * @param {string} localPath  Caminho absoluto OU relativo a userData/files/
  * @param {number} expectedSize  Tamanho em bytes (0 = não checar)
  * @returns {{ exists:boolean, sizeOk:boolean, actualSize:number }}
@@ -14,9 +18,10 @@ function checkFile(localPath, expectedSize = 0) {
     ? localPath
     : path.join(paths.filesDir(), localPath);
 
-  if (!fs.existsSync(abs)) return { exists: false, sizeOk: false, actualSize: 0 };
+  const found = variantsOf(abs).find((p) => fs.existsSync(p));
+  if (!found) return { exists: false, sizeOk: false, actualSize: 0 };
 
-  const actualSize = fs.statSync(abs).size;
+  const actualSize = fs.statSync(found).size;
   const sizeOk = expectedSize === 0 ? true : actualSize >= expectedSize;
   return { exists: true, sizeOk, actualSize };
 }

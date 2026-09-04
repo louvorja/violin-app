@@ -57,8 +57,8 @@ Aponte o `.env` para o servidor de produção. Não requer nenhuma dependência 
 
 ```env
 VITE_APP_MODE=development
-VITE_URL_DATABASE=https://api.louvorja.com.br/json_db
-VITE_URL_FILES=https://api.louvorja.com.br/file
+VITE_URL_DATABASE=https://api.louvorja.workers.dev/json_db
+VITE_URL_FILES=https://api.louvorja.workers.dev/file
 VITE_API_TOKEN=<token obtido com o administrador>
 ```
 

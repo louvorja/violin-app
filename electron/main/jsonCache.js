@@ -114,7 +114,7 @@ const _inflight = new Map();
  * Múltiplas chamadas concorrentes para o mesmo path compartilham a mesma promise.
  *
  * @param {string} relPath        Ex: "/pt_musics" ou "/music_123"
- * @param {string} remoteBaseUrl  Ex: "https://api.louvorja.com.br/json_db"
+ * @param {string} remoteBaseUrl  Ex: "https://api.louvorja.workers.dev/json_db"
  * @param {object} headers        Headers para a requisição (Api-Token, etc.)
  * @returns {Promise<{body: Buffer|null, contentType: string, fromCache: boolean, status: number}>}
  */

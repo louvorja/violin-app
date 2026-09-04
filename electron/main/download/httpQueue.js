@@ -7,10 +7,9 @@ const { EventEmitter } = require("events");
 const paths = require("../paths.js");
 
 /**
- * HttpQueue — fila de downloads HTTPS sequenciais com a mesma API
- * pública do FtpQueue (mesmos eventos), para que o renderer continue
- * intacto. Usada para baixar mídia (capas, MP3s, imagens das letras)
- * via VITE_URL_FILES — os arquivos NÃO ficam no FTP.
+ * HttpQueue — fila de downloads HTTPS com pool de workers concorrentes.
+ * Usada para baixar mídia (capas, áudio, imagens das letras) via
+ * VITE_URL_FILES.
  *
  * Eventos:
  *   "progress" → { current, total, file, bytes, totalBytes }

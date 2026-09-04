@@ -12,7 +12,7 @@
  * forem implementados no main process:
  *   - D1: userStore (read/write/atomicSwap)
  *   - D2: jsonCache, protocol
- *   - D3: ftpDownload, downloadProgress
+ *   - D3: download de mídia, downloadProgress
  *   - D4: windows (open, close, identify)
  *   - D5: httpServer (start/stop, getUrl)
  *   - D6: shortcuts (register/unregister)
@@ -155,7 +155,7 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
   },
 
   // -------------------------------------------------------------------------
-  // D3 — Download FTP de mídia
+  // D3 — Download HTTPS de mídia
   // -------------------------------------------------------------------------
 
   download: {
@@ -163,13 +163,13 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
     setApiConfig: (cfg) => ipcRenderer.invoke("download:setApiConfig", cfg),
     /** Busca params da API (com cache TTL diário). force=true força refetch. */
     getParams: (force) => ipcRenderer.invoke("download:getParams", force),
-    /** Verifica conexão FTP fazendo handshake real com o servidor */
+    /** Verifica se o servidor de arquivos está acessível */
     checkConnection: () => ipcRenderer.invoke("download:checkConnection"),
     /** Inicia download de uma lista de arquivos */
     start: (files) => ipcRenderer.invoke("download:start", files),
     /** Cancela o download em andamento */
     cancel: () => ipcRenderer.invoke("download:cancel"),
-    /** Pausa o download (mantém conexão FTP). */
+    /** Pausa o download (mantém a fila). */
     pause: () => ipcRenderer.invoke("download:pause"),
     /** Retoma um download pausado. */
     resume: () => ipcRenderer.invoke("download:resume"),
