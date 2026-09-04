@@ -55,6 +55,14 @@
         "not_found": "Não foi possível localizar o arquivo para exibir essas informações!"
       }
     },
+    "ui": {
+      "loading": "Carregando",
+      "clear": "Limpar",
+      "remove": "Remover",
+      "select_placeholder": "Selecione...",
+      "search_placeholder": "Buscar...",
+      "no_results": "Nenhum resultado."
+    },
     "inputs": {
       "search": "Buscar"
     },
@@ -944,6 +952,8 @@
     "not_implemented": "Não implementado",
     "appmenu_content_placeholder": "Selecione uma opção do menu para configurar.",
     "background_tasks": {
+      "cancel": "Cancelar download",
+      "dismiss": "Dispensar",
       "title": "Processos em segundo plano",
       "empty": "Nenhum processo em andamento",
       "running": "Em andamento",

@@ -34,7 +34,7 @@
   flex: 0 0 180px;
 }
 
-.opt-section > .opt-row :is(.opt-select, .select-font) {
+.opt-section > .opt-row :is(.opt-select, .select-font, .lj-monitor-select) {
   width: 100%;
   min-width: 0;
   max-width: 320px;
@@ -122,11 +122,6 @@
   min-width: 180px;
 }
 
-.opt-select:focus {
-  border-color: var(--lj-navy);
-  box-shadow: var(--lj-focus-ring);
-}
-
 .opt-checkbox {
   display: inline-flex;
   align-items: center;
@@ -204,9 +199,8 @@
   border-color: var(--lj-ui-accent);
 }
 .opt-btn--primary:hover {
-  filter: brightness(1.1);
-  background: var(--lj-navy-active);
-  border-color: var(--lj-white-alpha-08);
+  background: var(--lj-ui-accent-hover);
+  border-color: var(--lj-ui-accent-hover);
 }
 .opt-btn--small {
   height: var(--lj-ui-h-sm);
@@ -600,10 +594,6 @@
 .opt-input:focus-visible {
   border-color: var(--lj-ui-accent);
   box-shadow: var(--lj-ui-focus);
-}
-.opt-input:focus {
-  border-color: var(--lj-navy);
-  box-shadow: var(--lj-focus-ring);
 }
 .opt-input--num {
   width: 64px;

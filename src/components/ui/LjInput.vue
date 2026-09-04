@@ -5,6 +5,7 @@
   >
     <Icon v-if="icon" :icon="icon" :size="iconSize" class="lj-input__icon" />
     <input
+      :id="id"
       :value="modelValue"
       :type="type"
       :placeholder="placeholder"
@@ -17,7 +18,7 @@
       v-if="clearable && String(modelValue ?? '').length"
       type="button"
       class="lj-input__clear"
-      aria-label="Limpar"
+      :aria-label="t('components.ui.clear')"
       @click="$emit('update:modelValue', '')"
     >
       <Icon :icon="ICONS.ACTIONS.CLOSE" :size="iconSize" />
@@ -28,6 +29,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import type { UiSize } from "./types";
@@ -36,6 +38,8 @@ import { ICON_SIZE } from "./types";
 const props = withDefaults(
   defineProps<{
     modelValue?: string | number | null;
+    /** Casa com o `htmlFor` do LjField para o rótulo apontar ao campo real. */
+    id?: string;
     size?: UiSize;
     type?: string;
     placeholder?: string;
@@ -48,6 +52,11 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{ "update:modelValue": [value: string] }>();
+
+const { t } = useI18n();
+
+// O wrapper carrega a moldura; o id precisa cair no <input>, não nele.
+defineOptions({ inheritAttrs: false });
 
 const iconSize = computed(() => ICON_SIZE[props.size]);
 

@@ -11,6 +11,25 @@
           <DropdownMenuLabel v-else-if="item.label && !item.action" class="lj-menu__label">
             {{ item.label }}
           </DropdownMenuLabel>
+          <!-- Item marcável usa CheckboxItem: só ele expõe role="menuitemcheckbox"
+               e aria-checked, sem os quais a seleção não existe para leitor de tela. -->
+          <DropdownMenuCheckboxItem
+            v-else-if="item.checked !== undefined"
+            class="lj-menu__item"
+            :model-value="item.checked"
+            :disabled="item.disabled"
+            @select="item.action?.()"
+          >
+            <span class="lj-menu__mark">
+              <Icon v-if="item.checked" :icon="ICONS.UI.CHECK" :size="12" />
+              <Icon v-else-if="item.icon" :icon="item.icon" :size="13" />
+            </span>
+            <span class="lj-menu__text">
+              {{ item.label }}
+              <small v-if="item.hint" class="lj-menu__hint">{{ item.hint }}</small>
+            </span>
+            <kbd v-if="item.shortcut" class="lj-menu__kbd">{{ item.shortcut }}</kbd>
+          </DropdownMenuCheckboxItem>
           <DropdownMenuItem
             v-else
             class="lj-menu__item"
@@ -18,8 +37,7 @@
             @select="item.action?.()"
           >
             <span class="lj-menu__mark">
-              <Icon v-if="item.checked" :icon="ICONS.UI.CHECK" :size="12" />
-              <Icon v-else-if="item.icon" :icon="item.icon" :size="13" />
+              <Icon v-if="item.icon" :icon="item.icon" :size="13" />
             </span>
             <span class="lj-menu__text">
               {{ item.label }}
@@ -37,6 +55,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import {
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,

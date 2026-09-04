@@ -89,6 +89,7 @@
             variant="ghost"
             icon-only
             :icon="ICONS.ACTIONS.CLOSE"
+            :aria-label="t('shell.background_tasks.dismiss')"
             @click="bgTasks.dismissTask(task.id)"
           />
         </div>

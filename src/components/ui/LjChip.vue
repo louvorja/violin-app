@@ -6,7 +6,7 @@
       v-if="removable"
       type="button"
       class="lj-chip__remove"
-      aria-label="Remover"
+      :aria-label="t('components.ui.remove')"
       @click="$emit('remove')"
     >
       <Icon :icon="ICONS.ACTIONS.CLOSE" :size="11" />
@@ -15,8 +15,11 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from "vue-i18n";
 import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
+
+const { t } = useI18n();
 
 withDefaults(
   defineProps<{

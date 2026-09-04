@@ -1,20 +1,23 @@
 <template>
-  <LjSelect
-    :id="id"
-    v-model="model"
-    :items="options"
-    item-value="role"
-    item-label="label"
-    class="lj-monitor-select"
-    :class="{ 'lj-monitor-select--inline': inline }"
-  >
-    <template #item="{ item }">
-      <span class="lj-monitor-select__option">
-        {{ item.label }}
-        <small v-if="item.hint" class="lj-monitor-select__hint">{{ item.hint }}</small>
-      </span>
-    </template>
-  </LjSelect>
+  <!-- O invólucro existe para o CSS com escopo ter onde se prender: LjSelect
+       envolve um SelectRoot, que não emite elemento próprio, então nem `:deep`
+       alcançaria o gatilho sem um ancestral deste componente. -->
+  <div class="lj-monitor-select" :class="{ 'lj-monitor-select--inline': inline }">
+    <LjSelect :id="id" v-model="model" :items="options" item-value="role" item-label="label">
+      <template #value="{ item }">
+        <span class="lj-monitor-select__value">
+          {{ item?.label }}
+          <template v-if="item?.hint">— {{ item.hint }}</template>
+        </span>
+      </template>
+      <template #item="{ item }">
+        <span class="lj-monitor-select__option">
+          {{ item.label }}
+          <small v-if="item.hint" class="lj-monitor-select__hint">{{ item.hint }}</small>
+        </span>
+      </template>
+    </LjSelect>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -76,6 +79,16 @@ const options = computed(() => [
 
 .lj-monitor-select--inline {
   width: auto;
+}
+
+.lj-monitor-select :deep(.lj-select) {
+  width: 100%;
+}
+
+.lj-monitor-select__value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .lj-monitor-select__option {

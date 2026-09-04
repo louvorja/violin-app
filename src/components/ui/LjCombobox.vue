@@ -7,7 +7,7 @@
       <Icon :icon="ICONS.ACTIONS.SEARCH" :size="iconSize" class="lj-combobox__icon" />
       <ComboboxInput
         class="lj-combobox__input"
-        :placeholder="placeholder"
+        :placeholder="placeholder ?? t('components.ui.search_placeholder')"
         :display-value="displayValue"
       />
       <ComboboxTrigger class="lj-combobox__trigger">
@@ -18,7 +18,9 @@
     <ComboboxPortal>
       <ComboboxContent class="lj-ui-float lj-combobox__content" position="popper" :side-offset="4">
         <ComboboxViewport class="lj-combobox__viewport">
-          <ComboboxEmpty class="lj-combobox__empty">{{ emptyText }}</ComboboxEmpty>
+          <ComboboxEmpty class="lj-combobox__empty">
+            {{ emptyText ?? t("components.ui.no_results") }}
+          </ComboboxEmpty>
           <ComboboxItem
             v-for="item in items"
             :key="String(valueOf(item))"
@@ -26,7 +28,6 @@
             :value="item"
           >
             <span class="lj-combobox__check"><Icon :icon="ICONS.UI.CHECK" :size="12" /></span>
-            <ComboboxItemIndicator as-child><span /></ComboboxItemIndicator>
             {{ labelOf(item) }}
           </ComboboxItem>
         </ComboboxViewport>
@@ -37,13 +38,13 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import {
   ComboboxAnchor,
   ComboboxContent,
   ComboboxEmpty,
   ComboboxInput,
   ComboboxItem,
-  ComboboxItemIndicator,
   ComboboxPortal,
   ComboboxRoot,
   ComboboxTrigger,
@@ -73,12 +74,12 @@ const props = withDefaults(
     itemValue: "value",
     itemLabel: "label",
     size: "md",
-    placeholder: "Buscar…",
-    emptyText: "Nenhum resultado.",
   }
 );
 
 const emit = defineEmits<{ "update:modelValue": [value: Item] }>();
+
+const { t } = useI18n();
 
 const open = ref(false);
 

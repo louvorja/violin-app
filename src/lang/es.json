@@ -55,6 +55,14 @@
         "not_found": "¡No se pudo encontrar el archivo para mostrar esta información!"
       }
     },
+    "ui": {
+      "loading": "Cargando",
+      "clear": "Limpiar",
+      "remove": "Quitar",
+      "select_placeholder": "Seleccione...",
+      "search_placeholder": "Buscar...",
+      "no_results": "Ningún resultado."
+    },
     "inputs": {
       "search": "Buscar"
     },
@@ -944,6 +952,8 @@
     "not_implemented": "No implementado",
     "appmenu_content_placeholder": "Seleccione una opción del menú para configurar.",
     "background_tasks": {
+      "cancel": "Cancelar descarga",
+      "dismiss": "Descartar",
       "title": "Procesos en segundo plano",
       "empty": "Ningún proceso en curso",
       "running": "En curso",

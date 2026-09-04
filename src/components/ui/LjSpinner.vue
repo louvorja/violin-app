@@ -1,5 +1,10 @@
 <template>
-  <span class="lj-spinner" :style="{ width: px, height: px }" role="status" aria-label="Carregando">
+  <span
+    class="lj-spinner"
+    :style="{ width: px, height: px }"
+    role="status"
+    :aria-label="label ?? t('components.ui.loading')"
+  >
     <svg viewBox="0 0 24 24" :width="size" :height="size">
       <circle
         class="lj-spinner__track"
@@ -23,8 +28,11 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 
-const props = withDefaults(defineProps<{ size?: number; strokeWidth?: number }>(), {
+const { t } = useI18n();
+
+const props = withDefaults(defineProps<{ size?: number; strokeWidth?: number; label?: string }>(), {
   size: 15,
   strokeWidth: 3,
 });

@@ -28,10 +28,9 @@
   --lj-ui-gap-md: var(--lj-space-3);
   --lj-ui-gap-lg: var(--lj-space-4);
 
-  /* Tamanho do ícone por tamanho de controle */
-  --lj-ui-icon-sm: 13px;
-  --lj-ui-icon-md: 15px;
-  --lj-ui-icon-lg: 17px;
+  /* O tamanho do ícone por tamanho de controle vive em components/ui/types.ts
+     (ICON_SIZE): os primitivos passam o número como prop para o Icon, não por
+     CSS. Duplicar aqui só criaria duas fontes de verdade. */
 
   /* Tipografia por tamanho de controle */
   --lj-ui-font-sm: var(--lj-text-sm);
@@ -66,16 +65,23 @@
   --lj-ui-float-shadow: var(--lj-shadow-2);
 
   --lj-ui-disabled-opacity: 0.45;
+
+  /* Tooltip é a única superfície invertida do sistema — escura sobre a
+     interface clara, para não competir com menus e popovers. */
+  --lj-ui-tooltip-bg: var(--lj-gray-800);
+  --lj-ui-tooltip-fg: var(--lj-white);
+  --lj-ui-tooltip-border: transparent;
 }
 
 /* Nos temas escuros a marca é acromática (#2e2e2e) e desaparece contra a
    superfície. O laranja já é o acento do app nesses temas — item ativo da
    sidebar, tabs contextuais, botão de fechar sub-tab —, então os controles
-   seguem o mesmo acento em vez de inventarem outro. */
+   seguem o mesmo acento em vez de inventarem outro.
+   O tema "black" fica de fora de propósito: apesar do nome, a superfície dele
+   é clara (`dark: false`), e ali o cinza da marca contrasta bem. */
 :root.v-theme--dark,
 .v-theme--dark,
-[data-theme="dark"],
-[data-theme="black"] {
+[data-theme="dark"] {
   --lj-ui-accent: var(--lj-orange);
   --lj-ui-accent-hover: var(--lj-orange-dark);
   --lj-ui-accent-press: var(--lj-orange-darker);
@@ -83,6 +89,12 @@
   --lj-ui-accent-text: var(--lj-orange);
   --lj-ui-accent-soft: var(--lj-orange-alpha-12);
   --lj-ui-focus: 0 0 0 2px var(--lj-orange-alpha-30);
+
+  /* No escuro a inversão não existe: um tooltip cinza-escuro desapareceria
+     contra a superfície. Ele clareia e ganha traço para se destacar. */
+  --lj-ui-tooltip-bg: #2f3a4a;
+  --lj-ui-tooltip-fg: var(--lj-text);
+  --lj-ui-tooltip-border: var(--lj-surface-border-strong);
 }
 
 /* Base comum a todo controle interativo do sistema.
@@ -154,18 +166,38 @@
  * Ícones dentro de primitivos
  *
  * Icon.vue aplica drop-shadow em todo ícone — faz sentido sobre fundo de
- * projeção, mas em controle de UI a 13px o glifo fica borrado. Dentro do
- * catálogo o ícone é sempre nítido.
+ * projeção, mas em controle de UI a 13px o glifo fica borrado.
+ *
+ * A classe vem repetida de propósito (`.lj-icon.lj-icon`): a regra do Icon.vue
+ * é `.lj-icon[data-v-…]`, de mesma especificidade que um seletor de duas
+ * classes, e vence no desempate por ordem porque o CSS do componente é
+ * injetado depois deste arquivo. Repetir a classe sobe a especificidade e
+ * dispensa `!important`.
  * ------------------------------------------------------------------------- */
-.lj-btn .lj-icon,
-.lj-input .lj-icon,
-.lj-chip .lj-icon,
-.lj-check .lj-icon,
-.lj-card__icon,
-.lj-empty__icon,
-.lj-btn .lj-icon svg,
-.lj-input .lj-icon svg,
-.lj-chip .lj-icon svg,
-.lj-check .lj-icon svg {
+.lj-btn .lj-icon.lj-icon,
+.lj-input .lj-icon.lj-icon,
+.lj-chip .lj-icon.lj-icon,
+.lj-check .lj-icon.lj-icon,
+.lj-select .lj-icon.lj-icon,
+.lj-select__item .lj-icon.lj-icon,
+.lj-combobox__anchor .lj-icon.lj-icon,
+.lj-combobox__item .lj-icon.lj-icon,
+.lj-menu .lj-icon.lj-icon,
+.lj-dialog .lj-icon.lj-icon,
+.lj-popover .lj-icon.lj-icon,
+.lj-tabs .lj-icon.lj-icon,
+.lj-card__icon.lj-card__icon,
+.lj-empty__icon.lj-empty__icon {
+  filter: none;
+}
+
+.lj-btn .lj-icon.lj-icon svg,
+.lj-input .lj-icon.lj-icon svg,
+.lj-chip .lj-icon.lj-icon svg,
+.lj-check .lj-icon.lj-icon svg,
+.lj-select .lj-icon.lj-icon svg,
+.lj-menu .lj-icon.lj-icon svg,
+.lj-dialog .lj-icon.lj-icon svg,
+.lj-popover .lj-icon.lj-icon svg {
   filter: none;
 }

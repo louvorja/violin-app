@@ -39,10 +39,11 @@ withDefaults(
   gap: var(--lj-space-3);
   max-width: 280px;
   padding: var(--lj-space-2) var(--lj-space-4);
-  background: var(--lj-gray-800);
+  background: var(--lj-ui-tooltip-bg);
+  border: 1px solid var(--lj-ui-tooltip-border);
   border-radius: var(--lj-radius-xs);
   box-shadow: var(--lj-shadow-2);
-  color: var(--lj-white);
+  color: var(--lj-ui-tooltip-fg);
   font-family: var(--lj-font-shell);
   font-size: var(--lj-text-sm);
   line-height: 1.4;

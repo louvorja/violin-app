@@ -7,7 +7,10 @@
       :aria-label="ariaLabel"
     >
       <Icon v-if="icon" :icon="icon" :size="iconSize" class="lj-select__icon" />
-      <SelectValue class="lj-select__value" :placeholder="placeholder">
+      <SelectValue
+        class="lj-select__value"
+        :placeholder="placeholder ?? t('components.ui.select_placeholder')"
+      >
         <slot name="value" :item="selectedItem">{{ selectedLabel }}</slot>
       </SelectValue>
       <Icon :icon="ICONS.UI.CHEVRON_DOWN" :size="iconSize" class="lj-select__caret" />
@@ -42,6 +45,7 @@
 
 <script setup lang="ts" generic="T extends string | number | object">
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 
 import {
   SelectContent,
@@ -82,11 +86,12 @@ const props = withDefaults(
     itemValue: "value",
     itemLabel: "label",
     size: "md",
-    placeholder: "Selecione…",
   }
 );
 
 const emit = defineEmits<{ "update:modelValue": [value: Primitive] }>();
+
+const { t } = useI18n();
 
 // SelectRoot não emite DOM — sem isto, class/style aplicados na tag do
 // componente se perderiam em vez de chegar ao gatilho visível.

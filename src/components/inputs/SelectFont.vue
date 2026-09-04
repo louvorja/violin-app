@@ -1,21 +1,25 @@
 <template>
-  <LjSelect
-    v-model="model"
-    :items="orderedFonts"
-    item-value="family"
-    item-label="name"
-    :disabled="disabled"
-    placeholder="—"
-  >
-    <template #value="{ item }">
-      <span :style="{ fontFamily: fontPreview(item?.family || '') }">
-        {{ item?.name || "—" }}
-      </span>
-    </template>
-    <template #item="{ item }">
-      <span :style="{ fontFamily: fontPreview(item.family) }">{{ item.name }}</span>
-    </template>
-  </LjSelect>
+  <!-- Invólucro necessário para o CSS com escopo alcançar o gatilho — ver
+       MonitorSelect.vue. -->
+  <div class="select-font">
+    <LjSelect
+      v-model="model"
+      :items="orderedFonts"
+      item-value="family"
+      item-label="name"
+      :disabled="disabled"
+      placeholder="—"
+    >
+      <template #value="{ item }">
+        <span :style="{ fontFamily: fontPreview(item?.family || '') }">
+          {{ item?.name || "—" }}
+        </span>
+      </template>
+      <template #item="{ item }">
+        <span :style="{ fontFamily: fontPreview(item.family) }">{{ item.name }}</span>
+      </template>
+    </LjSelect>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -76,7 +80,11 @@ const orderedFonts = computed<FontOption[]>(() => {
 <style scoped>
 /* Largura herdada da tela de Opções, onde este controle aparece ao lado dos
    demais selects. A caixa, o raio e a altura vêm do LjSelect. */
-.lj-select {
+.select-font {
   width: var(--lj-opt-select-width);
+}
+
+.select-font :deep(.lj-select) {
+  width: 100%;
 }
 </style>

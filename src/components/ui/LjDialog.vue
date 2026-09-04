@@ -5,12 +5,16 @@
       <DialogContent
         class="lj-dialog"
         :class="`lj-dialog--${size}`"
+        :aria-describedby="description ? undefined : ''"
         @open-auto-focus="onOpenAutoFocus"
+        @escape-key-down="onDismiss"
+        @pointer-down-outside="onDismiss"
+        @interact-outside="onDismiss"
       >
         <header class="lj-dialog__header">
           <Icon v-if="icon" :icon="icon" :size="16" class="lj-dialog__icon" />
           <DialogTitle class="lj-dialog__title">{{ title }}</DialogTitle>
-          <DialogClose v-if="!persistent" class="lj-dialog__close" aria-label="Fechar">
+          <DialogClose v-if="!persistent" class="lj-dialog__close" :aria-label="t('actions.close')">
             <Icon :icon="ICONS.ACTIONS.CLOSE" :size="15" />
           </DialogClose>
         </header>
@@ -38,8 +42,11 @@ import {
   DialogRoot,
   DialogTitle,
 } from "reka-ui";
+import { useI18n } from "vue-i18n";
 import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
+
+const { t } = useI18n();
 
 const props = withDefaults(
   defineProps<{
@@ -67,6 +74,13 @@ const open = computed({
 function onOpenAutoFocus(event: Event): void {
   event.preventDefault();
   (event.currentTarget as HTMLElement | null)?.focus?.();
+}
+
+// `persistent` promete que só uma ação do rodapé fecha o diálogo. Sem barrar
+// estas saídas, Escape e clique fora fechavam assim mesmo — e o chamador
+// perdia o efeito colateral que esperava rodar no fechamento.
+function onDismiss(event: Event): void {
+  if (props.persistent) event.preventDefault();
 }
 </script>
 

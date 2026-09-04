@@ -154,6 +154,7 @@ Cada módulo em `src/modules/<id>/` segue esta estrutura:
 ```
 
 **manifest.json mínimo:**
+
 ```json
 {
   "id": "module_id",
@@ -185,6 +186,7 @@ $userdata.set("theme", "dark");
 ```
 
 **Estrutura de `user_data` no store:**
+
 ```js
 {
   theme: string,
@@ -213,7 +215,7 @@ $userdata.set("theme", "dark");
 **Composable** — função em `src/composables/` que usa APIs Vue e deve ser chamada apenas dentro de `setup()`. Retorna estado reativo com cleanup automático via `onUnmounted`.
 
 | Arquivo                      | Tipo                  | Observação                                                                  |
-|------------------------------|-----------------------|-----------------------------------------------------------------------------|
+| ---------------------------- | --------------------- | --------------------------------------------------------------------------- |
 | `helpers/Path.ts`            | helper-puro           | Seguro no Electron main process                                             |
 | `helpers/Strings.js`         | helper-puro           |                                                                             |
 | `helpers/DateTime.js`        | helper-puro           |                                                                             |
@@ -266,22 +268,23 @@ src/modules/musics/
 interface PlaylistSong {
   id_music: number;
   name: string;
-  duration: number;        // segundos
+  duration: number; // segundos
   has_instrumental_music: boolean;
 }
 
 interface Playlist {
-  id: string;              // UUID
+  id: string; // UUID
   name: string;
   songs: PlaylistSong[];
-  createdAt: string;       // ISO date
-  updatedAt: string;       // ISO date
+  createdAt: string; // ISO date
+  updatedAt: string; // ISO date
 }
 ```
 
 ### Persistência
 
 Playlists são salvas em `UserData` via chaves:
+
 - `KEYS.MODULES.MUSICS.PLAYLISTS` — array de `Playlist[]`
 - `KEYS.MODULES.MUSICS.SELECTED_PLAYLIST` — ID da playlist selecionada
 
@@ -297,22 +300,26 @@ MusicMenuTable → usePlaylists.addSong() → playlist song
 ### Funcionalidades
 
 **PlaylistPanel (painel esquerdo):**
+
 - Criar/renomear/excluir playlists
 - Importar playlist de arquivo `.json`
 - Exportar playlist como `.json`
 - Selecionar playlist (mostra PlaylistSongs)
 
 **PlaylistSongs (painel direito):**
+
 - Lista de músicas com play individual
 - Botão "Reproduzir" para tocar playlist completa
 - Remover músicas da playlist
 
 **Footer.vue (barra de playlist):**
+
 - Nome da playlist + progresso (tocadas/total)
 - Controles prev/next/stop
 - Aparece acima do player principal
 
 **MusicMenuTable (context menu):**
+
 - Submenu "Adicionar à playlist" com todas as playlists
 - Só aparece quando `showPlaylistMenu={true}` (módulo músicas)
 - Marca músicas já existentes na playlist
@@ -330,10 +337,10 @@ ribbon buttons devem usar `ICONS.*` de `src/config/Icons.ts`:
 import { ICONS } from "@/config/Icons";
 
 // ✅ Correto
-icon: ICONS.PLAYER.PLAY
+icon: ICONS.PLAYER.PLAY;
 
 // ❌ Errado — string hardcoded
-icon: "mdi-play"
+icon: "mdi-play";
 ```
 
 ### Primitivos — nunca componentes Vuetify em UI nova
@@ -352,7 +359,10 @@ Medidas de controle vêm de `ui.css` (`--lj-ui-h-md`, `--lj-ui-border`,
 nunca `--lj-navy` direto — a marca é acromática nos temas escuros.
 
 Componente com portal (menu, select, diálogo) usa `<style>` **sem** `scoped`:
-conteúdo teleportado não recebe o atributo de escopo.
+o Vue carimba o atributo de escopo só nos elementos do próprio template, e o
+conteúdo flutuante é emitido lá dentro pela Reka. Pelo mesmo motivo, para
+estilizar o gatilho de um primitivo a partir do consumidor, envolva-o num
+elemento seu e use `:deep()`.
 
 ### `KEYS.*` — UserData sempre por constante
 
@@ -405,37 +415,38 @@ VITE_URL_FILES=https://...
 ```
 
 **Padrão de carregamento** (com cache de sessão via `Database.js`):
+
 ```js
 import $database from "@/helpers/Database";
 const musics = await $database.get("pt_musics");
-const song   = await $database.get(`music_${id}`);
+const song = await $database.get(`music_${id}`);
 ```
 
 ## Rotas
 
-| Rota | Componente | Uso |
-|------|-----------|-----|
-| `/` | `Main.vue` | Shell principal |
-| `/popup` | `Popup.vue` | Módulo em janela popup |
-| `/projection` | `Projection.vue` | Tela de projeção fullscreen (monitor 2) com transições CSS |
-| `/projection/return` | `ProjectionReturn.vue` | Stage display horizontal (atual + próximo) |
-| `/obs` | `Obs.vue` | Captura transparente de slides para OBS Studio |
-| `/obs/bible` | `ObsBible.vue` | Captura transparente de versículos para OBS Studio |
-| `/operator` | `Operator.vue` | Grade de todos os slides, navegação por teclado (← → Home End) |
-| `/clock` | `Clock.vue` | Relógio digital fullscreen (responsive via clamp) |
+| Rota                 | Componente             | Uso                                                            |
+| -------------------- | ---------------------- | -------------------------------------------------------------- |
+| `/`                  | `Main.vue`             | Shell principal                                                |
+| `/popup`             | `Popup.vue`            | Módulo em janela popup                                         |
+| `/projection`        | `Projection.vue`       | Tela de projeção fullscreen (monitor 2) com transições CSS     |
+| `/projection/return` | `ProjectionReturn.vue` | Stage display horizontal (atual + próximo)                     |
+| `/obs`               | `Obs.vue`              | Captura transparente de slides para OBS Studio                 |
+| `/obs/bible`         | `ObsBible.vue`         | Captura transparente de versículos para OBS Studio             |
+| `/operator`          | `Operator.vue`         | Grade de todos os slides, navegação por teclado (← → Home End) |
+| `/clock`             | `Clock.vue`            | Relógio digital fullscreen (responsive via clamp)              |
 
 ### Comunicação entre janelas (BroadcastChannel "louvorja")
 
-| Tipo de mensagem | Emitido por | Recebido por |
-|---|---|---|
-| `slide_change` | `Media.js` timeUpdate/goToSlide | Projection, ProjectionReturn, Obs, Operator |
-| `slides_data` | `Media.js` open() | Operator |
-| `go_to_slide` | `Operator.vue` | `Media.js` (via listener em getElement) |
-| `bible_verse` | `bible/Index.vue` selVerse | ObsBible |
-| `message_board` | `message_board/index.vue` | (recepção futura) |
-| `libras_toggle` | ShellTools / ribbon | Projection |
-| `libras_translate` | useLibras composable | Projection, Obs |
-| `request_libras_state` | LibrasOverlay | main.js (re-emite LIBRAS_TOGGLE) |
+| Tipo de mensagem       | Emitido por                     | Recebido por                                |
+| ---------------------- | ------------------------------- | ------------------------------------------- |
+| `slide_change`         | `Media.js` timeUpdate/goToSlide | Projection, ProjectionReturn, Obs, Operator |
+| `slides_data`          | `Media.js` open()               | Operator                                    |
+| `go_to_slide`          | `Operator.vue`                  | `Media.js` (via listener em getElement)     |
+| `bible_verse`          | `bible/Index.vue` selVerse      | ObsBible                                    |
+| `message_board`        | `message_board/index.vue`       | (recepção futura)                           |
+| `libras_toggle`        | ShellTools / ribbon             | Projection                                  |
+| `libras_translate`     | useLibras composable            | Projection, Obs                             |
+| `request_libras_state` | LibrasOverlay                   | main.js (re-emite LIBRAS_TOGGLE)            |
 
 ---
 
@@ -455,6 +466,7 @@ fechamento do diálogo de origem. É composto por:
 - **`Shell.vue`** — registra tarefa `app-update` quando o updater entra em `status: "downloading"`.
 
 **Fluxo de dados:**
+
 ```
 StartupCheckDialog / AppMenuSincronizar
   → useSyncManager.startDownloads() / downloadBibleVersions()
@@ -475,19 +487,20 @@ ShellTools.vue
 
 ### Estrutura
 
-| Arquivo | Função |
-|---------|--------|
-| `src/config/fonts.ts` | Config de fontes: `FontOption`, `Fonts`, namespace `FONT`, `resolveFont()` |
-| `src/assets/styles/fonts.css` | Declarações `@font-face` para fontes customizadas |
-| `src/assets/fonts/` | Arquivos de fonte (.ttf, .otf) |
-| `src/components/inputs/SelectFont.vue` | Componente reutilizável de seleção de fonte (v-menu com preview) |
-| `src/constants/UserDataKeys.ts` | Chaves: `OPTIONS.FONT`, `OPTIONS.PROJECTION_FONT`, `OPTIONS.SLIDE.FONT`, `OPTIONS.UTILITIES_FONT` |
+| Arquivo                                | Função                                                                                            |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `src/config/fonts.ts`                  | Config de fontes: `FontOption`, `Fonts`, namespace `FONT`, `resolveFont()`                        |
+| `src/assets/styles/fonts.css`          | Declarações `@font-face` para fontes customizadas                                                 |
+| `src/assets/fonts/`                    | Arquivos de fonte (.ttf, .otf)                                                                    |
+| `src/components/inputs/SelectFont.vue` | Componente reutilizável de seleção de fonte (v-menu com preview)                                  |
+| `src/constants/UserDataKeys.ts`        | Chaves: `OPTIONS.FONT`, `OPTIONS.PROJECTION_FONT`, `OPTIONS.SLIDE.FONT`, `OPTIONS.UTILITIES_FONT` |
 
 ### Como adicionar uma nova fonte
 
 1. **Copiar o arquivo** para `src/assets/fonts/` (ex: `AdventSans-Logo.otf`)
 
 2. **Adicionar `@font-face`** em `src/assets/styles/fonts.css`:
+
    ```css
    @font-face {
      font-family: "NomeDaFamilia";
@@ -496,12 +509,15 @@ ShellTools.vue
      font-style: normal;
    }
    ```
+
    - Formatos suportados: `format("truetype")` para .ttf, `format("opentype")` para .otf
 
 3. **Adicionar ao array** em `src/config/fonts.ts`:
+
    ```ts
    { name: "Nome Exibido", family: "NomeDaFamilia", file: "arquivo.otf" }
    ```
+
    - `family` deve ser o mesmo valor usado no `font-family` do `@font-face`
    - `file` é opcional (usado para referência/documentação)
 
@@ -528,22 +544,22 @@ resolveFont() em projection views (inline style fontFamily)
 
 ### Chaves UserData
 
-| Chave | Escopo | Uso |
-|-------|--------|-----|
-| `options.font` | Global | Fonte da interface (UI) |
-| `options.projection_font` | Global | Fonte padrão de projeção |
-| `options.slide.font` | Slides | Fonte de projeção de slides |
-| `options.utilities_font` | Utilitários | Fonte de projeção de utilitários |
-| `modules.bible.font` | Bíblia | Fonte de projeção da bíblia |
-| `modules.<id>.font` | Por módulo | Fonte de projeção específica do módulo |
+| Chave                     | Escopo      | Uso                                    |
+| ------------------------- | ----------- | -------------------------------------- |
+| `options.font`            | Global      | Fonte da interface (UI)                |
+| `options.projection_font` | Global      | Fonte padrão de projeção               |
+| `options.slide.font`      | Slides      | Fonte de projeção de slides            |
+| `options.utilities_font`  | Utilitários | Fonte de projeção de utilitários       |
+| `modules.bible.font`      | Bíblia      | Fonte de projeção da bíblia            |
+| `modules.<id>.font`       | Por módulo  | Fonte de projeção específica do módulo |
 
 ### Opções especiais de family
 
-| Family key | Nome | Resolve para |
-|------------|------|-------------|
-| `"__FONT_DEFAULT_UI__"` | Padrão da Interface | `options.font` via `--lj-font-shell` |
-| `"__FONT_DEFAULT_PROJECTION__"` | Padrão da Projecão | `options.projection_font` via `--lj-font-projection` |
-| `"__DEFAULT__"` | Padrão | Fallback interno usado nos selects de Geral |
+| Family key                      | Nome                | Resolve para                                         |
+| ------------------------------- | ------------------- | ---------------------------------------------------- |
+| `"__FONT_DEFAULT_UI__"`         | Padrão da Interface | `options.font` via `--lj-font-shell`                 |
+| `"__FONT_DEFAULT_PROJECTION__"` | Padrão da Projecão  | `options.projection_font` via `--lj-font-projection` |
+| `"__DEFAULT__"`                 | Padrão              | Fallback interno usado nos selects de Geral          |
 
 As variáveis globais são aplicadas em `main.js`, depois da hidratação do
 UserData, para funcionarem em todas as janelas. O legado `"__UI_FONT__"` é
@@ -556,13 +572,13 @@ Os defaults e marcadores ficam unificados em `FONT`: `FONT.UI.FALLBACK`,
 
 ### SelectFont — Props
 
-| Prop | Tipo | Default | Descrição |
-|------|------|---------|-----------|
-| `modelValue` | `string \| null` | `""` | Valor salvo (family key) |
-| `disabled` | `boolean` | `false` | Desabilita o select |
-| `showInterfaceDefault` | `boolean` | `true` | Mostra "Padrão da Interface" |
-| `showProjectionDefault` | `boolean` | `true` | Mostra "Padrão da Projecão" |
-| `defaultFont` | `string` | `""` | CSS font-family para a opção "Padrão" |
+| Prop                    | Tipo             | Default | Descrição                             |
+| ----------------------- | ---------------- | ------- | ------------------------------------- |
+| `modelValue`            | `string \| null` | `""`    | Valor salvo (family key)              |
+| `disabled`              | `boolean`        | `false` | Desabilita o select                   |
+| `showInterfaceDefault`  | `boolean`        | `true`  | Mostra "Padrão da Interface"          |
+| `showProjectionDefault` | `boolean`        | `true`  | Mostra "Padrão da Projecão"           |
+| `defaultFont`           | `string`         | `""`    | CSS font-family para a opção "Padrão" |
 
 ---
 
@@ -571,18 +587,20 @@ Os defaults e marcadores ficam unificados em `FONT`: `FONT.UI.FALLBACK`,
 O sistema original em Delphi (`louvorja-desktop`) possui 33 módulos, banco SQLite com 74+ queries, servidor HTTP embarcado, sincronismo de áudio BASS24 e suporte a múltiplos monitores. A migração está organizada em 7 fases.
 
 ### FASE 1 — Core de Músicas ✅ concluída
-*Prioridade máxima — desbloqueia Fase 2 e 3*
 
-| Feature | Origem Delphi | Status |
-|---|---|---|
-| Favoritos (lista + reordenação) | `fmFavoritos.pas` + `favoritos.xml` | ✅ módulo `favorites` |
-| Histórico de músicas abertas | `cdsBIBLIA_HISTORICO` / uso | ✅ módulo `history` |
-| Busca por trecho de letra | `fmBuscaMusica.pas` full-text | ✅ já existia |
-| Coletâneas personalizadas | `cdsColETANEAS_PERSO` | ✅ já existia (module `collections`) |
-| Bíblia completa | `fmMonitorBiblia` + versões PT/ES | ✅ já existia (module `bible`) |
-| Playlists de músicas | — | ✅ módulo `musics` (usePlaylists + usePlaylistPlayback) |
+_Prioridade máxima — desbloqueia Fase 2 e 3_
+
+| Feature                         | Origem Delphi                       | Status                                                  |
+| ------------------------------- | ----------------------------------- | ------------------------------------------------------- |
+| Favoritos (lista + reordenação) | `fmFavoritos.pas` + `favoritos.xml` | ✅ módulo `favorites`                                   |
+| Histórico de músicas abertas    | `cdsBIBLIA_HISTORICO` / uso         | ✅ módulo `history`                                     |
+| Busca por trecho de letra       | `fmBuscaMusica.pas` full-text       | ✅ já existia                                           |
+| Coletâneas personalizadas       | `cdsColETANEAS_PERSO`               | ✅ já existia (module `collections`)                    |
+| Bíblia completa                 | `fmMonitorBiblia` + versões PT/ES   | ✅ já existia (module `bible`)                          |
+| Playlists de músicas            | —                                   | ✅ módulo `musics` (usePlaylists + usePlaylistPlayback) |
 
 **Implementação:**
+
 - Módulo `favorites` — store com persistência, lista reordenável via `vuedraggable`
 - Histórico — array circular em `UserData`, UI na sidebar
 - Bíblia — completar carregamento, busca por livro/capítulo/versículo, múltiplas versões
@@ -593,17 +611,19 @@ O sistema original em Delphi (`louvorja-desktop`) possui 33 módulos, banco SQLi
 ---
 
 ### FASE 2 — Liturgia / Gerenciamento de Culto
-*Alta prioridade para uso em ambiente de culto*
 
-| Feature | Origem Delphi | Status |
-|---|---|---|
-| Planejador de culto com itens | `fmLiturgia.pas` | ✅ módulo `liturgy` |
-| Tipos de item (música, anotação, site, arquivo) | `fmItensAgendados.pas` | ✅ 6 tipos + drag/drop |
-| Salvar/carregar liturgia | Formato `.ja` proprietário | ✅ export/import JSON |
-| Cronômetro por item da liturgia | `fmMonitorCronometro.pas` | ✅ integrado no `liturgy` |
-| Cronômetro Escola Sabatina | `fmMonitorCronometroCulto.pas` | ✅ módulo `stopwatch` (regressivo) |
+_Alta prioridade para uso em ambiente de culto_
+
+| Feature                                         | Origem Delphi                  | Status                             |
+| ----------------------------------------------- | ------------------------------ | ---------------------------------- |
+| Planejador de culto com itens                   | `fmLiturgia.pas`               | ✅ módulo `liturgy`                |
+| Tipos de item (música, anotação, site, arquivo) | `fmItensAgendados.pas`         | ✅ 6 tipos + drag/drop             |
+| Salvar/carregar liturgia                        | Formato `.ja` proprietário     | ✅ export/import JSON              |
+| Cronômetro por item da liturgia                 | `fmMonitorCronometro.pas`      | ✅ integrado no `liturgy`          |
+| Cronômetro Escola Sabatina                      | `fmMonitorCronometroCulto.pas` | ✅ módulo `stopwatch` (regressivo) |
 
 **Implementação:**
+
 - Módulo `liturgy` — lista drag/drop de itens, tipos, cores por categoria
 - Exportar/importar como JSON (substitui `.ja`)
 - Expandir módulo `stopwatch` para vincular com itens da liturgia
@@ -611,17 +631,19 @@ O sistema original em Delphi (`louvorja-desktop`) possui 33 módulos, banco SQLi
 ---
 
 ### FASE 3 — Sistema de Projeção Multi-Janela
-*Core do produto*
 
-| Feature | Origem Delphi | Status |
-|---|---|---|
-| Stage display (slide atual + próximo) | `fmMusicaRetorno.pas` | ✅ `/projection/return` |
-| Visão do operador (grade de slides) | `fmMusicaOperador.pas` | ⚠️ roadmap |
-| Janela de projeção fullscreen (monitor 2) | `fmMusica.pas` em monitor secundário | ✅ `/projection` |
-| Sincronização entre janelas | Eventos internos Delphi | ✅ `BroadcastChannel` em `Broadcast.js` |
-| Identificação de monitores | `fmIdentificaMonitores.pas` | ⚠️ roadmap |
+_Core do produto_
+
+| Feature                                   | Origem Delphi                        | Status                                  |
+| ----------------------------------------- | ------------------------------------ | --------------------------------------- |
+| Stage display (slide atual + próximo)     | `fmMusicaRetorno.pas`                | ✅ `/projection/return`                 |
+| Visão do operador (grade de slides)       | `fmMusicaOperador.pas`               | ⚠️ roadmap                              |
+| Janela de projeção fullscreen (monitor 2) | `fmMusica.pas` em monitor secundário | ✅ `/projection`                        |
+| Sincronização entre janelas               | Eventos internos Delphi              | ✅ `BroadcastChannel` em `Broadcast.js` |
+| Identificação de monitores                | `fmIdentificaMonitores.pas`          | ⚠️ roadmap                              |
 
 **Implementação:**
+
 - Rota `/projection` — `window.open()` para segunda tela, `BroadcastChannel` para sincronização
 - Rota `/projection/return` — stage display (slide atual + preview do próximo)
 - Módulo `operator` — grade de thumbnails dos slides com navegação por teclado
@@ -630,15 +652,17 @@ O sistema original em Delphi (`louvorja-desktop`) possui 33 módulos, banco SQLi
 ---
 
 ### FASE 4 — Transmissão para OBS/Vmix
-*Muito solicitado por usuários de live*
 
-| Feature | Origem Delphi | Status |
-|---|---|---|
-| Captura do slide atual para OBS | `fmTransmitir.pas` endpoint `/musica?transmissao` | ✅ rota `/obs` |
-| Captura do stage display para OBS | endpoint `/musica?retorno` | ✅ rota `/projection/return` |
-| Captura do versículo para OBS | endpoint `/biblia?transmissao` | ⚠️ roadmap |
+_Muito solicitado por usuários de live_
+
+| Feature                           | Origem Delphi                                     | Status                       |
+| --------------------------------- | ------------------------------------------------- | ---------------------------- |
+| Captura do slide atual para OBS   | `fmTransmitir.pas` endpoint `/musica?transmissao` | ✅ rota `/obs`               |
+| Captura do stage display para OBS | endpoint `/musica?retorno`                        | ✅ rota `/projection/return` |
+| Captura do versículo para OBS     | endpoint `/biblia?transmissao`                    | ⚠️ roadmap                   |
 
 **Implementação:**
+
 - Rota `/obs` — página sem chrome, recebe estado via `BroadcastChannel`, styled para captura
 - Rota `/obs/return` — versão stage display
 - Rota `/obs/bible` — versículo atual
@@ -648,17 +672,18 @@ O sistema original em Delphi (`louvorja-desktop`) possui 33 módulos, banco SQLi
 
 ### FASE 5 — Sorteios e Utilitários Avançados
 
-| Feature | Origem Delphi | Status |
-|---|---|---|
-| Sorteador de números | `fmMonitorSorteio.pas` | ✅ módulo `draw` |
-| Sorteador de nomes | `fmMonitorSorteioNomes.pas` | ✅ módulo `name_draw` |
-| Painel de recados dinâmico | `fmMonitorPainelDinamico.pas` | ⚠️ roadmap |
-| Texto interativo em tela | `fmMonitorTextoInterativo.pas` | ⚠️ roadmap |
-| Contador | módulo `counter` | ✅ módulo `counter` |
-| Relógio | `fmMonitorRelogio.pas` | ✅ módulo `clock` |
-| Doxologia por categorias | `fmMenu` seção doxologia | ⚠️ roadmap |
+| Feature                    | Origem Delphi                  | Status                |
+| -------------------------- | ------------------------------ | --------------------- |
+| Sorteador de números       | `fmMonitorSorteio.pas`         | ✅ módulo `draw`      |
+| Sorteador de nomes         | `fmMonitorSorteioNomes.pas`    | ✅ módulo `name_draw` |
+| Painel de recados dinâmico | `fmMonitorPainelDinamico.pas`  | ⚠️ roadmap            |
+| Texto interativo em tela   | `fmMonitorTextoInterativo.pas` | ⚠️ roadmap            |
+| Contador                   | módulo `counter`               | ✅ módulo `counter`   |
+| Relógio                    | `fmMonitorRelogio.pas`         | ✅ módulo `clock`     |
+| Doxologia por categorias   | `fmMenu` seção doxologia       | ⚠️ roadmap            |
 
 **Implementação:**
+
 - Módulo `draw` — sorteador de números com animação e exibição fullscreen
 - Módulo `name-draw` — sorteador de nomes com lista editável
 - Completar módulo `counter`
@@ -667,17 +692,19 @@ O sistema original em Delphi (`louvorja-desktop`) possui 33 módulos, banco SQLi
 ---
 
 ### FASE 6 — Editor de Slides
-*Feature mais complexa — equivalente a 52K linhas de código Delphi*
 
-| Feature | Origem Delphi | Status |
-|---|---|---|
-| Criar/editar slides customizados | `fmEditorSlides.pas` | ✅ módulo `slide_editor` |
-| Sincronismo de slides com áudio | Marcação de tempo por slide | ⚠️ roadmap |
-| Formatação (fontes, cores, alinhamento) | `fmFormatacao.pas` | ✅ cores, tamanho, imagem de fundo |
-| Importar/exportar slides | Formato proprietário `.ja` | ✅ export/import JSON |
-| Divisão e mesclagem de slides | Operações sobre blocos | ⚠️ roadmap |
+_Feature mais complexa — equivalente a 52K linhas de código Delphi_
+
+| Feature                                 | Origem Delphi               | Status                             |
+| --------------------------------------- | --------------------------- | ---------------------------------- |
+| Criar/editar slides customizados        | `fmEditorSlides.pas`        | ✅ módulo `slide_editor`           |
+| Sincronismo de slides com áudio         | Marcação de tempo por slide | ⚠️ roadmap                         |
+| Formatação (fontes, cores, alinhamento) | `fmFormatacao.pas`          | ✅ cores, tamanho, imagem de fundo |
+| Importar/exportar slides                | Formato proprietário `.ja`  | ✅ export/import JSON              |
+| Divisão e mesclagem de slides           | Operações sobre blocos      | ⚠️ roadmap                         |
 
 **Implementação:**
+
 - Canvas de edição com texto + imagem de fundo
 - Toolbar de formatação
 - Timeline com marcação de tempo por slide (playback + click)
@@ -688,14 +715,15 @@ O sistema original em Delphi (`louvorja-desktop`) possui 33 módulos, banco SQLi
 
 ### FASE 7 — Atualização e Download de Coletâneas
 
-| Feature | Origem Delphi | Status |
-|---|---|---|
-| Verificação de versão do banco | API `louvorja.com.br/params` | ✅ módulo `update` |
-| Download de coletâneas via HTTPS | `fmAtualiza.pas` | ✅ `useSyncManager` + Electron `download/` |
-| Verificação de integridade de arquivos | `fmArquivosFalta/Excesso.pas` | ✅ `StartupCheckDialog` |
-| Processos em segundo plano | — | ✅ `useBackgroundTasks` + `ShellTools` v-menu |
+| Feature                                | Origem Delphi                 | Status                                        |
+| -------------------------------------- | ----------------------------- | --------------------------------------------- |
+| Verificação de versão do banco         | API `louvorja.com.br/params`  | ✅ módulo `update`                            |
+| Download de coletâneas via HTTPS       | `fmAtualiza.pas`              | ✅ `useSyncManager` + Electron `download/`    |
+| Verificação de integridade de arquivos | `fmArquivosFalta/Excesso.pas` | ✅ `StartupCheckDialog`                       |
+| Processos em segundo plano             | —                             | ✅ `useBackgroundTasks` + `ShellTools` v-menu |
 
 **Implementação:**
+
 - Módulo `update` — verifica versão, mostra changelog, botão de atualizar
 - `useSyncManager` composable — download de coletâneas (HttpQueue) e bíblia (HTTP sequencial)
 - `StartupCheckDialog` — verificação inicial com botão "Minimizar" para background
@@ -749,13 +777,13 @@ A versão web/PWA atual é a base. A próxima etapa é empacotá-la como **app d
 
 ### Decisões fundamentais
 
-| Item | Escolha | Razão |
-|---|---|---|
-| Stack desktop | **Electron** (não Tauri) | Reaproveita `archiver`, `fs-extra` já no `package.json`. Sem curva de Rust. |
-| Fonte de dados | **JSON pronto do servidor** (não SQLite local) | Mantém `<api>/json_db/*` como fonte; sem precisar lidar com senha SQLite (`bddbuscacdja`). Cache local em `userData/json_db/` para offline. |
-| PWA web em paralelo | **Sim, ambos** | Mesmo código Vue, dois targets (web + desktop). Adapter `Platform.js` detecta `window.louvorjaApi`. |
-| Layout | **Manter Ribbon** (evolução do `AppsRibbon.vue`) | Familiaridade com usuários do Delphi. Sem reescrever UI. |
-| Servidor LouvorJA | **`api.louvorja.workers.dev`** (Cloudflare Workers + R2) | Réplica somente leitura, sem autenticação. O legado `api.louvorja.com.br` segue liberado no CSP para rollback via `.env`, sem rebuild. |
+| Item                | Escolha                                                  | Razão                                                                                                                                       |
+| ------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Stack desktop       | **Electron** (não Tauri)                                 | Reaproveita `archiver`, `fs-extra` já no `package.json`. Sem curva de Rust.                                                                 |
+| Fonte de dados      | **JSON pronto do servidor** (não SQLite local)           | Mantém `<api>/json_db/*` como fonte; sem precisar lidar com senha SQLite (`bddbuscacdja`). Cache local em `userData/json_db/` para offline. |
+| PWA web em paralelo | **Sim, ambos**                                           | Mesmo código Vue, dois targets (web + desktop). Adapter `Platform.js` detecta `window.louvorjaApi`.                                         |
+| Layout              | **Manter Ribbon** (evolução do `AppsRibbon.vue`)         | Familiaridade com usuários do Delphi. Sem reescrever UI.                                                                                    |
+| Servidor LouvorJA   | **`api.louvorja.workers.dev`** (Cloudflare Workers + R2) | Réplica somente leitura, sem autenticação. O legado `api.louvorja.com.br` segue liberado no CSP para rollback via `.env`, sem rebuild.      |
 
 ### Arquitetura
 
@@ -778,19 +806,19 @@ Vue Renderer (BrowserWindow)
 
 ### Roadmap Desktop (D0–D10)
 
-| Fase | Objetivo | Duração | Status |
-|---|---|---|---|
-| **D0** | Bootstrap Electron — empacota Vue atual em janela nativa, mantém PWA | 1-2 dias | ⏳ próximo |
-| **D1** | UserData persistente em `app.getPath("userData")` (substitui localStorage no desktop) | 1 dia | — |
-| **D2** | Cache de JSON do banco em `userData/json_db/` via custom protocol `louvorja://` | 1-2 dias | — |
-| **D3** | **Download HTTPS de mídia** ⭐ — `HttpQueue` baixa áudio/imagens de `VITE_URL_FILES` | 3-4 dias | ✅ implementado |
-| **D4** | **Multi-monitor real** ⭐ — `BrowserWindow` por monitor, "Identificar Monitores" 5s overlay | 2-3 dias | — |
-| **D5** | Servidor HTTP embarcado — Express porta 7070, replica 7 endpoints do `fmTransmitir.pas` | 2 dias | — |
-| **D6** | Atalhos globais OS-level — `globalShortcut` + roteamento contextual (substitui `FormKeyUp`) | 1 dia | — |
-| **D7** | Player polish — `requestAnimationFrame` para sincronia ±50ms, conversor `.slja` legado | 2-3 dias | — |
-| **D8** | Auto-update + distribuição — `electron-updater` (win/mac/AppImage) + GitHub API p/ deb/rpm, opções de beta/check-on-start/auto-download | 1-2 dias | ✅ implementado |
-| **D9** | Polir layout Ribbon — AppMenu hambúrguer, ContextToolbar | 2-3 dias | — |
-| **D10** | Funcionalidades restantes (paralelizável) — painel D, texto interativo, vídeos online, editor `.slja` completo | — | — |
+| Fase    | Objetivo                                                                                                                                | Duração  | Status          |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------- | -------- | --------------- |
+| **D0**  | Bootstrap Electron — empacota Vue atual em janela nativa, mantém PWA                                                                    | 1-2 dias | ⏳ próximo      |
+| **D1**  | UserData persistente em `app.getPath("userData")` (substitui localStorage no desktop)                                                   | 1 dia    | —               |
+| **D2**  | Cache de JSON do banco em `userData/json_db/` via custom protocol `louvorja://`                                                         | 1-2 dias | —               |
+| **D3**  | **Download HTTPS de mídia** ⭐ — `HttpQueue` baixa áudio/imagens de `VITE_URL_FILES`                                                    | 3-4 dias | ✅ implementado |
+| **D4**  | **Multi-monitor real** ⭐ — `BrowserWindow` por monitor, "Identificar Monitores" 5s overlay                                             | 2-3 dias | —               |
+| **D5**  | Servidor HTTP embarcado — Express porta 7070, replica 7 endpoints do `fmTransmitir.pas`                                                 | 2 dias   | —               |
+| **D6**  | Atalhos globais OS-level — `globalShortcut` + roteamento contextual (substitui `FormKeyUp`)                                             | 1 dia    | —               |
+| **D7**  | Player polish — `requestAnimationFrame` para sincronia ±50ms, conversor `.slja` legado                                                  | 2-3 dias | —               |
+| **D8**  | Auto-update + distribuição — `electron-updater` (win/mac/AppImage) + GitHub API p/ deb/rpm, opções de beta/check-on-start/auto-download | 1-2 dias | ✅ implementado |
+| **D9**  | Polir layout Ribbon — AppMenu hambúrguer, ContextToolbar                                                                                | 2-3 dias | —               |
+| **D10** | Funcionalidades restantes (paralelizável) — painel D, texto interativo, vídeos online, editor `.slja` completo                          | —        | —               |
 
 **Caminho crítico para MVP** (instalável + baixa músicas + multi-monitor): D0→D1→D2→D3→D4 + D8 ≈ **2-3 semanas**.
 
@@ -837,11 +865,11 @@ equivalentes na ordem de preferência — sem tocar no disco.
 
 Três pontos consultam essas variantes antes de concluir que um arquivo falta:
 
-| Local | Efeito |
-|---|---|
-| `protocol.js` host `files` | Serve o `.mp3` local quando o banco pede `.opus` |
-| `main.cjs` → `storage:checkLocal` | Indicador "✓ baixado" reconhece o formato antigo |
-| `download/integrity.js` | Não rebaixa mídia que já está no disco em outro formato |
+| Local                             | Efeito                                                  |
+| --------------------------------- | ------------------------------------------------------- |
+| `protocol.js` host `files`        | Serve o `.mp3` local quando o banco pede `.opus`        |
+| `main.cjs` → `storage:checkLocal` | Indicador "✓ baixado" reconhece o formato antigo        |
+| `download/integrity.js`           | Não rebaixa mídia que já está no disco em outro formato |
 
 Ao adicionar um formato novo, basta incluí-lo no grupo correspondente em
 `VARIANT_GROUPS` — e no `_MIME_TYPES` do `protocol.js` se o host `local`
@@ -871,10 +899,10 @@ Veja `/Users/juanaleixo/.claude/plans/ticklish-purring-flurry.md` para o plano d
 
 ### Spec dos forms Delphi (read-only references)
 
-| Arquivo Delphi | Função | Usado em |
-|---|---|---|
-| `/Users/juanaleixo/Repo/louvorja-desktop/fmIniciando.pas` | Paths, URL fixa, token, idioma | D0/D2 |
-| `/Users/juanaleixo/Repo/louvorja-desktop/fmAtualiza.pas` | Algoritmo de sincronização (referência histórica; hoje via HTTPS) | D3 |
-| `/Users/juanaleixo/Repo/louvorja-desktop/fmTransmitir.pas` | Spec do servidor HTTP (TIdHTTPServer → Express) | D5 |
-| `/Users/juanaleixo/Repo/louvorja-desktop/fmEditorSlides.pas:1503-1566` | Parser `.slja` (TZipFile + INI) | D10 |
-| `/Users/juanaleixo/Repo/louvorja-desktop/fmMenu.pas:13566-14163` | Escrita `.slja` | D10 |
+| Arquivo Delphi                                                         | Função                                                            | Usado em |
+| ---------------------------------------------------------------------- | ----------------------------------------------------------------- | -------- |
+| `/Users/juanaleixo/Repo/louvorja-desktop/fmIniciando.pas`              | Paths, URL fixa, token, idioma                                    | D0/D2    |
+| `/Users/juanaleixo/Repo/louvorja-desktop/fmAtualiza.pas`               | Algoritmo de sincronização (referência histórica; hoje via HTTPS) | D3       |
+| `/Users/juanaleixo/Repo/louvorja-desktop/fmTransmitir.pas`             | Spec do servidor HTTP (TIdHTTPServer → Express)                   | D5       |
+| `/Users/juanaleixo/Repo/louvorja-desktop/fmEditorSlides.pas:1503-1566` | Parser `.slja` (TZipFile + INI)                                   | D10      |
+| `/Users/juanaleixo/Repo/louvorja-desktop/fmMenu.pas:13566-14163`       | Escrita `.slja`                                                   | D10      |

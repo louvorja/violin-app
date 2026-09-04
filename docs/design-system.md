@@ -678,14 +678,24 @@ Em componente de UI use sempre `--lj-ui-accent`, `--lj-ui-accent-hover`,
 
 ### Duas armadilhas já resolvidas
 
-**Portal e `<style scoped>`.** Conteúdo teleportado para o `<body>` não recebe o
-atributo de escopo, então regras `scoped` não casam. Os primitivos com portal
-usam `<style>` sem `scoped`; o isolamento vem do prefixo `lj-`.
+**Portal e `<style scoped>`.** O CSS com escopo mira `.classe[data-v-…]`, e o
+Vue só carimba esse atributo nos elementos do próprio template — incluindo a
+raiz de um componente filho, mas não os elementos que esse filho renderiza
+internamente. O conteúdo flutuante é emitido lá dentro, pela Reka, várias
+camadas abaixo, então nenhuma regra `scoped` casa com ele. Os primitivos com
+painel flutuante usam `<style>` sem `scoped`; o isolamento vem do prefixo
+`lj-`. Pelo mesmo motivo, um consumidor não consegue estilizar o gatilho de
+`LjSelect` a partir do seu próprio `scoped`: envolva o primitivo num elemento
+do consumidor e use `:deep()` a partir dele — é o que `MonitorSelect` e
+`SelectFont` fazem.
 
 **Atalhos globais.** `Hotkeys.js` escuta `keydown` na window em `capture` e
 chama `preventDefault()`. Sem guarda, ele neutralizava o Escape das camadas
-flutuantes e disparava o atalho por baixo do diálogo aberto. Hoje o handler
-retorna cedo quando existe `[data-dismissable-layer]` no documento.
+flutuantes e disparava o atalho por baixo do diálogo aberto. O handler retorna
+cedo quando o **foco** está dentro de `[data-dismissable-layer]`. O critério é
+o foco, e não a presença da camada: tooltip também é camada, mas nunca recebe
+foco — testar só a presença desligava todos os atalhos enquanto o operador
+passasse o mouse por um botão da barra.
 
 ### Estado da migração
 
@@ -694,7 +704,7 @@ contrato** — visualmente indistinguíveis dos primitivos enquanto a migração
 avança. Ao migrar o último deles, o arquivo sai junto.
 
 Componentes já migrados: `SelectFont`, `MonitorSelect`, `FieldSelect`,
-`ProgressBar`.
+`ProgressBar`, `ShellTools`, `ClassicVersionDialog`.
 
 ---
 

@@ -1,5 +1,6 @@
 <template>
   <textarea
+    :id="id"
     class="lj-textarea"
     :class="{ 'is-invalid': invalid }"
     :value="modelValue"
@@ -15,6 +16,8 @@
 withDefaults(
   defineProps<{
     modelValue?: string;
+    /** Casa com o `htmlFor` do LjField. */
+    id?: string;
     rows?: number;
     placeholder?: string;
     disabled?: boolean;
