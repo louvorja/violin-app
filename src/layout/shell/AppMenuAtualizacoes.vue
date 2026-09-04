@@ -223,6 +223,7 @@ import { useSyncManager } from "@/composables/useSyncManager";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
 import type { DbConfig } from "@/types/Database";
 import Alert from "@/helpers/Alert";
+import Snackbar from "@helpers/Snackbar";
 
 interface AppUpdateState {
   status: string;
@@ -666,15 +667,11 @@ async function reinstallDatabase(): Promise<void> {
         await new Promise<void>((r) => setTimeout(r, 1000));
         window.location.reload();
       } else {
-        Alert.error({
-          text: t("startup_check.bundle_error"),
-        });
+        Snackbar.warning(t("startup_check.bundle_cancel"));
       }
     } catch (e) {
       console.error("[Atualizações] reinstallDatabase:", e);
-      Alert.error({
-        text: t("startup_check.bundle_error"),
-      });
+      Snackbar.error(t("startup_check.bundle_error"));
     } finally {
       reinstallingDb.value = false;
     }
