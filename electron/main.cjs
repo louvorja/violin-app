@@ -197,10 +197,13 @@ app.whenReady().then(async () => {
     console.warn("[main] Falha ao limpar SW/caches:", e?.message || e);
   }
 
-  // Dock icon no macOS (em dev) — em prod o icns vem do bundle .app.
-  if (process.platform === "darwin" && app.dock) {
+  // Dock icon no macOS — SÓ em dev, onde não há bundle e o Dock mostraria o
+  // ícone genérico do Electron. Em produção o .icns do .app já está correto:
+  // sobrescrevê-lo aqui trocava o ícone assim que o app abria, e o PNG com
+  // fundo transparente ainda ganhava a caixa cinza do macOS 26+.
+  if (isDev && process.platform === "darwin" && app.dock) {
     try {
-      const iconPath = path.join(__dirname, "..", "public", "ico", "favicon-180x180.png");
+      const iconPath = path.join(__dirname, "..", "build", "icon-mac.png");
       const { nativeImage } = require("electron");
       const img = nativeImage.createFromPath(iconPath);
       if (!img.isEmpty()) app.dock.setIcon(img);

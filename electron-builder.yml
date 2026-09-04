@@ -108,7 +108,12 @@ mac:
       arch:
         - x64
         - arm64
-  icon: build/icon-512.png
+  # Ícone próprio do macOS: 1024x1024 opaco, sem canal alpha. O macOS 26+
+  # recorta todo ícone no squircle e põe uma caixa cinza atrás do que tiver
+  # transparência — o icon-512.png é um círculo de cantos transparentes, e era
+  # isso que deixava o app destoando no Dock. Aqui o fundo branco cobre o
+  # canvas e o sistema faz o recorte. Windows e Linux seguem com o icon-512.png.
+  icon: build/icon-mac.png
   category: public.app-category.music
   # Assinatura + notarização (certificado Developer ID + credenciais Apple
   # fornecidas via env no CI: CSC_LINK/CSC_KEY_PASSWORD + APPLE_ID/
