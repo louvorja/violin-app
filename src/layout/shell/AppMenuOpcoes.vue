@@ -169,6 +169,9 @@
         <template v-else-if="screenAccess === 'unsupported'">
           {{ $t("options.monitors.web_unsupported") }}
         </template>
+        <template v-else-if="screenAccess === 'granted'">
+          {{ $t("options.monitors.web_single") }}
+        </template>
         <template v-else>
           {{ $t("options.monitors.no_displays") }}
         </template>
@@ -199,6 +202,21 @@
           {{ $t("options.monitors.identify") }}
         </button>
 
+        <!-- Tela cheia automática: o site não pode pedir essa permissão nem
+             consultá-la; só o usuário libera. Mostramos o estado deduzido da
+             última projeção e como resolver. -->
+        <div v-if="autoFullscreen !== 'native'" class="opt-row opt-row--stack">
+          <span class="opt-label">{{ $t("options.monitors.auto_fullscreen_title") }}</span>
+          <div>
+            <span v-if="autoFullscreen === 'granted'" class="opt-hint">
+              {{ $t("options.monitors.auto_fullscreen_granted") }}
+            </span>
+            <span v-else class="opt-hint">
+              {{ $t("options.monitors.auto_fullscreen_blocked") }}
+            </span>
+          </div>
+        </div>
+
         <p class="opt-hint">{{ $t("options.monitors.assign_hint") }}</p>
 
         <div v-for="role in roleRows" :key="role.role" class="opt-row">
@@ -209,7 +227,7 @@
             :id="`opt-monitor-role-${role.role}`"
             class="opt-select"
             :value="role.displayId ?? ''"
-            @change="setRole(role.role, $v($event) === '' ? null : Number($v($event)))"
+            @change="setRole(role.role, $v($event) === '' ? null : $v($event))"
           >
             <option value="">{{ $t("options.slides.none") }}</option>
             <option v-for="d in displays" :key="d.id" :value="d.id">
@@ -1109,6 +1127,7 @@ import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useI18n } from "vue-i18n";
 import { useTheme } from "vuetify";
 import { useDisplays } from "@/composables/useDisplays";
+import WebDisplays from "@/helpers/projection/WebDisplays";
 import MonitorSelect from "@/components/inputs/MonitorSelect.vue";
 import SelectFont from "@/components/inputs/SelectFont.vue";
 import MonitorShape from "@/components/MonitorShape.vue";
@@ -1161,6 +1180,15 @@ const {
   setFeatureRole,
   identify,
 } = useDisplays();
+
+/**
+ * Estado da configuração "Tela cheia automática", deduzido da última tentativa
+ * da janela de projeção — o navegador não deixa consultar essa permissão nem
+ * pedi-la por prompt.
+ */
+const autoFullscreen = computed(() =>
+  Platform.isDesktop ? "native" : WebDisplays.getAutoFullscreenState()
+);
 
 const themes: ComputedRef<ThemeOption[]> = computed(() =>
   Object.keys(theme.themes.value).map((id) => ({

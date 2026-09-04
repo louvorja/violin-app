@@ -1,9 +1,9 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { createRequire } from "module";
+import { ROLES, deriveRoles, roleOfFeature } from "../displayRoles.mjs";
 
 const require = createRequire(import.meta.url);
-const { ROLES, deriveRoles, roleOfFeature } = require("../displayRoles.js");
 const { resolveWantedId } = require("../monitorPrefs.js");
 
 const NO_ROLES = { primary: null, secondary: null };

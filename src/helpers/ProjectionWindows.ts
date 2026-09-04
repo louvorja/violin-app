@@ -16,6 +16,8 @@ import $userdata from "@/helpers/UserData";
 import { PROJECTION_TYPE, PROJECTION_URL } from "@/constants/Projection";
 import { KEYS } from "@/constants/UserDataKeys";
 import { close as closeWindow, isOpen as isWindowOpen, open as openWindow } from "@/helpers/Projection";
+import { roleOfFeature } from "@/helpers/DisplayRoles";
+import WebRoles from "@/helpers/projection/WebRoles";
 
 interface DisplaysAPI {
   getPrefs: () => Promise<Record<string, number | string | null>>;
@@ -64,9 +66,16 @@ async function _target(feature: string): Promise<{ open: boolean; monitorId: num
     }
   }
 
-  const roles =
+  // Papel da feature: escolha explícita do usuário ou o padrão do módulo.
+  // Exigir escolha explícita fazia a projeção nunca abrir para quem só
+  // atribuiu o monitor ao papel, que é o caminho normal.
+  const chosen =
     ($userdata.get(KEYS.OPTIONS.DISPLAYS.FEATURE_ROLES, {}) as Record<string, string>) ?? {};
-  return { open: !!roles[feature], monitorId: null };
+  const role = feature in chosen ? chosen[feature] : roleOfFeature(feature);
+  if (!role) return { open: false, monitorId: null };
+
+  // Só abre janela separada se o papel tiver uma tela de fato disponível.
+  return { open: !!WebRoles.screenForRole(role), monitorId: null };
 }
 
 /**

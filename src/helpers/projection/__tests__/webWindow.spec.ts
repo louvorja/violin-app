@@ -44,50 +44,78 @@ describe("featuresForRect", () => {
 });
 
 describe("nudgeIntoRect", () => {
-  const rect = { x: 1920, y: 0, width: 1920, height: 1080 };
+  const rect = { x: 1920, y: 0, width: 1920, height: 1050 };
 
-  function fakeWindow(screenX: number, screenY: number) {
+  function fakeWindow(over: Record<string, unknown> = {}) {
     return {
       closed: false,
-      screenX,
-      screenY,
+      screenX: 0,
+      screenY: 0,
       outerWidth: 1280,
       outerHeight: 720,
       moveTo: vi.fn(),
       resizeTo: vi.fn(),
-    } as unknown as Window & { moveTo: ReturnType<typeof vi.fn> };
+      ...over,
+    } as unknown as Window & {
+      moveTo: ReturnType<typeof vi.fn>;
+      resizeTo: ReturnType<typeof vi.fn>;
+    };
   }
 
-  it("corrige quando o navegador abriu na tela errada", async () => {
+  it("move e redimensiona para preencher o monitor", () => {
+    // A janela precisa OCUPAR a tela, não só estar dentro dela: no navegador
+    // não há tela cheia automática, então preencher o monitor é o que mais se
+    // aproxima de uma projeção limpa.
     vi.useFakeTimers();
-    const win = fakeWindow(0, 0) as never as Window & { moveTo: ReturnType<typeof vi.fn> };
+    const win = fakeWindow();
     nudgeIntoRect(win, rect, 10);
-    vi.advanceTimersByTime(20);
+    vi.advanceTimersByTime(600);
     expect(win.moveTo).toHaveBeenCalledWith(1920, 0);
+    expect(win.resizeTo).toHaveBeenCalledWith(1920, 1050);
     vi.useRealTimers();
   });
 
-  it("não mexe na janela que já está na tela certa", () => {
+  it("não mexe na janela que já preenche o monitor", () => {
     vi.useFakeTimers();
-    const win = fakeWindow(2000, 100) as never as Window & { moveTo: ReturnType<typeof vi.fn> };
+    const win = fakeWindow({ screenX: 1920, screenY: 0, outerWidth: 1920, outerHeight: 1050 });
     nudgeIntoRect(win, rect, 10);
-    vi.advanceTimersByTime(20);
+    vi.advanceTimersByTime(600);
+    expect(win.moveTo).not.toHaveBeenCalled();
+    expect(win.resizeTo).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it("corrige o tamanho mesmo se a posição já estiver certa", () => {
+    vi.useFakeTimers();
+    const win = fakeWindow({ screenX: 1920, screenY: 0, outerWidth: 1686, outerHeight: 1050 });
+    nudgeIntoRect(win, rect, 10);
+    vi.advanceTimersByTime(600);
+    expect(win.resizeTo).toHaveBeenCalledWith(1920, 1050);
+    vi.useRealTimers();
+  });
+
+  it("tolera diferença de poucos pixels", () => {
+    // Bordas do gerenciador de janelas causam desvios de 1-2px; insistir aí
+    // vira cabo de guerra com o sistema.
+    vi.useFakeTimers();
+    const win = fakeWindow({ screenX: 1921, screenY: 1, outerWidth: 1919, outerHeight: 1049 });
+    nudgeIntoRect(win, rect, 10);
+    vi.advanceTimersByTime(600);
     expect(win.moveTo).not.toHaveBeenCalled();
     vi.useRealTimers();
   });
 
   it("ignora janela já fechada", () => {
     vi.useFakeTimers();
-    const win = fakeWindow(0, 0) as never as Window & { moveTo: ReturnType<typeof vi.fn> };
-    (win as unknown as { closed: boolean }).closed = true;
+    const win = fakeWindow({ closed: true });
     nudgeIntoRect(win, rect, 10);
-    vi.advanceTimersByTime(20);
+    vi.advanceTimersByTime(600);
     expect(win.moveTo).not.toHaveBeenCalled();
     vi.useRealTimers();
   });
 
   it("não faz nada sem janela ou sem geometria", () => {
     expect(() => nudgeIntoRect(null, rect)).not.toThrow();
-    expect(() => nudgeIntoRect(fakeWindow(0, 0), null)).not.toThrow();
+    expect(() => nudgeIntoRect(fakeWindow(), null)).not.toThrow();
   });
 });

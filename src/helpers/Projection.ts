@@ -23,6 +23,7 @@ import {
   openWebWindow,
 } from "@/helpers/projection/webWindow";
 import WebRoles from "@/helpers/projection/WebRoles";
+import { roleOfFeature } from "@/helpers/DisplayRoles";
 
 /**
  * Fallback hierárquico — quando uma feature não tem monitor explicitamente
@@ -225,13 +226,18 @@ export async function isOpen(feature: string): Promise<boolean> {
  */
 function _webRectFor(feature: string): { x: number; y: number; width: number; height: number } | null {
   try {
-    const roles =
+    const chosen =
       ($userdata.get(KEYS.OPTIONS.DISPLAYS.FEATURE_ROLES, {}) as Record<string, string>) ?? {};
-    const role = roles[feature];
+    // Escolha explícita do usuário ou o padrão do módulo — exigir a explícita
+    // deixava a janela abrir sem posição, na tela do operador.
+    const role = feature in chosen ? chosen[feature] : roleOfFeature(feature);
     if (!role) return null;
 
     const screen = WebRoles.screenForRole(role);
     if (!screen) return null;
+    // Área útil da tela: é o máximo que uma janela comum consegue ocupar (fora
+    // dela ficam barra de menu e dock, que o sistema não deixa cobrir sem tela
+    // cheia real).
     return {
       x: screen.avail.x,
       y: screen.avail.y,

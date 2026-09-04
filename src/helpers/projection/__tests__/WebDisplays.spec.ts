@@ -114,3 +114,37 @@ describe("identityOf", () => {
     expect(identity.rotation).toBeNull();
   });
 });
+
+describe("aviso de mudança de telas", () => {
+  it("avisa ao conectar/desconectar monitor e respeita o cleanup", () => {
+    // Regressão: o composable só reagia ao evento `focus` da janela, então
+    // conectar um projetor não atualizava nada até recarregar a página.
+    // `window.screen` emite `change` mesmo sem a permissão concedida.
+    const handlers: Record<string, (() => void)[]> = {};
+    vi.stubGlobal("window", {
+      screen: {
+        isExtended: false,
+        addEventListener: (evt: string, cb: () => void) => {
+          (handlers[evt] ||= []).push(cb);
+        },
+      },
+    });
+
+    const recebidos: string[] = [];
+    const unQuebrado = WebDisplays.onChange(() => {
+      throw new Error("listener com defeito");
+    });
+    const unBom = WebDisplays.onChange(() => recebidos.push("ok"));
+
+    const disparar = () => handlers.change.forEach((h) => h());
+
+    disparar();
+    // Um listener com defeito não pode impedir os outros de serem avisados.
+    expect(recebidos).toEqual(["ok"]);
+
+    unQuebrado();
+    unBom();
+    disparar();
+    expect(recebidos).toEqual(["ok"]);
+  });
+});

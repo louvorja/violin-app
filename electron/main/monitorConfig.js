@@ -8,7 +8,6 @@
  * importá-los, para continuar testável sem subir o Electron.
  */
 
-const { ROLES, roleOfFeature } = require("./displayRoles.js");
 const monitorIdentity = require("./monitorIdentityBridge.cjs");
 const {
   SCHEMA_VERSION,
@@ -133,7 +132,7 @@ function resolveRole({ userData, role, connected }) {
 
   // Pendente, ou salvo mas desaparecido. Se só existe um monitor externo, ele é
   // quase certamente o projetor — usamos, mas sinalizamos para a UI avisar.
-  if (role !== ROLES.OPERATOR) {
+  if (role !== monitorIdentity.roles().ROLES.OPERATOR) {
     const sole = _soleExternalCandidate(list);
     if (sole) return { status: STATUS.INFERRED, display: sole, reason: "sole-external" };
   }
@@ -156,8 +155,8 @@ function featureRole(userData, feature) {
   const config = getConfig(userData);
   const chosen = config && config.features ? config.features[feature] : undefined;
   if (chosen === "" || chosen === null) return null; // "mesma janela", explícito
-  if (chosen && Object.values(ROLES).includes(chosen)) return chosen;
-  return roleOfFeature(feature);
+  if (chosen && Object.values(monitorIdentity.roles().ROLES).includes(chosen)) return chosen;
+  return monitorIdentity.roles().roleOfFeature(feature);
 }
 
 /**
@@ -170,7 +169,7 @@ function setFeatureRole({ userData, feature, role }) {
   if (!target.features) target.features = {};
 
   if (!role) target.features[feature] = "";
-  else if (Object.values(ROLES).includes(role)) target.features[feature] = role;
+  else if (Object.values(monitorIdentity.roles().ROLES).includes(role)) target.features[feature] = role;
   else return false;
   return true;
 }
@@ -181,7 +180,7 @@ function resolveFeature({ userData, feature, connected }) {
   if (!role) {
     // Distingue "o usuário escolheu mesma janela" de "essa feature não existe",
     // que são bugs bem diferentes de diagnosticar.
-    const known = roleOfFeature(feature) != null;
+    const known = monitorIdentity.roles().roleOfFeature(feature) != null;
     return {
       status: STATUS.NONE,
       display: null,
@@ -197,7 +196,7 @@ function resolveFeature({ userData, feature, connected }) {
  * quando um monitor sumiu ou ficou ambíguo.
  */
 function rolesSummary({ userData, connected }) {
-  return Object.values(ROLES).map((role) => {
+  return Object.values(monitorIdentity.roles().ROLES).map((role) => {
     const resolved = resolveRole({ userData, role, connected });
     return {
       role,

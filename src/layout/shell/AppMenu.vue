@@ -18,7 +18,10 @@
       <Transition name="app-menu">
         <div v-if="open" class="app-menu-overlay" @click.self="close">
           <div class="app-menu-panel" role="menu" :aria-label="$t('shell.appmenu')">
-            <header class="app-menu-header" :class="{ 'app-menu-header--mac': isMac }">
+            <header
+              class="app-menu-header"
+              :class="{ 'app-menu-header--mac': hasOverlayTrafficLights }"
+            >
               <button
                 type="button"
                 class="app-menu-back"
@@ -103,17 +106,18 @@ import Icon from "@/components/Icon.vue";
 // "Desenvolvedor" no menu (recursos de dev são ocultados em produção).
 const isDev = Platform.isDev;
 
-// Detecta macOS via Platform (Electron) ou navigator (web fallback) —
-// usado para ajustar o header da AppMenu (não sobrepor traffic lights)
-// e usar botão retangular em vez de circular.
-const isMac = computed(() => {
-  if (Platform.platform === "darwin") return true;
-  if (typeof navigator !== "undefined") {
-    const p = (navigator.platform || navigator.userAgent || "").toLowerCase();
-    return p.includes("mac");
-  }
-  return false;
-});
+/**
+ * True só quando os semáforos do macOS ficam POR CIMA do conteúdo — ou seja,
+ * no app desktop, onde a janela usa `titleBarStyle: "hiddenInset"`.
+ *
+ * Não basta perguntar "é um Mac": no navegador, mesmo em macOS, os controles
+ * da janela ficam na barra do próprio navegador e não invadem a página. Com o
+ * fallback antigo (`navigator.platform`), o webapp em Mac reservava 88px à
+ * esquerda sem motivo e o botão de fechar ficava deslocado.
+ */
+const hasOverlayTrafficLights = computed(
+  () => Platform.isDesktop && Platform.platform === "darwin"
+);
 
 const open = ref(false);
 const trigger = ref(null);
@@ -364,6 +368,8 @@ function onOpenOptions(e) {
 
 /* macOS: traffic lights ocupam ~78px do canto superior esquerdo.
    Empurra o conteúdo do header pra direita pra não sobrepor. */
+/* Só no app desktop em macOS: abre espaço para os semáforos, que ali ficam
+   sobre o conteúdo da janela. No navegador não se aplica. */
 .app-menu-header--mac {
   padding-left: 88px;
 }

@@ -55,6 +55,10 @@ interface ScreenDetails extends EventTarget {
 let _details: ScreenDetails | null = null;
 const _listeners = new Set<() => void>();
 
+/** Cleanups dos listeners de `change` de cada tela (resolução, densidade). */
+let _perScreenCleanups: (() => void)[] = [];
+let _screenListenerAttached = false;
+
 /** A API existe neste navegador? */
 export function isSupported(): boolean {
   return typeof window !== "undefined" && typeof (window as never as {
@@ -100,8 +104,9 @@ export async function requestAccess(): Promise<PermissionState> {
   try {
     const api = window as never as { getScreenDetails: () => Promise<ScreenDetails> };
     _details = await api.getScreenDetails();
-    _details.addEventListener("screenschange", _notify);
+    _details.addEventListener("screenschange", _onScreensChange);
     _details.addEventListener("currentscreenchange", _notify);
+    _watchIndividualScreens();
     _notify();
     return "granted";
   } catch {
@@ -116,6 +121,26 @@ export async function restoreAccess(): Promise<boolean> {
   return (await requestAccess()) === "granted";
 }
 
+/**
+ * Assina o `change` de cada tela, que avisa sobre resolução e densidade — um
+ * projetor renegociando 1080p→720p dispara isto, não `screenschange`.
+ */
+function _watchIndividualScreens(): void {
+  for (const cleanup of _perScreenCleanups.splice(0)) cleanup();
+  if (!_details) return;
+
+  for (const screen of _details.screens) {
+    screen.addEventListener("change", _notify);
+    _perScreenCleanups.push(() => screen.removeEventListener("change", _notify));
+  }
+}
+
+/** Uma tela entrou ou saiu: reassina as individuais e avisa. */
+function _onScreensChange(): void {
+  _watchIndividualScreens();
+  _notify();
+}
+
 function _notify(): void {
   for (const listener of _listeners) {
     try {
@@ -126,9 +151,27 @@ function _notify(): void {
   }
 }
 
-/** Assina mudanças de tela. Devolve a função de cleanup. */
+/**
+ * Assina mudanças de tela. Devolve a função de cleanup.
+ *
+ * Funciona mesmo sem a permissão concedida: `window.screen` emite `change`
+ * quando um monitor entra ou sai, e é o único aviso disponível antes de o
+ * usuário autorizar a listagem completa.
+ */
 export function onChange(callback: () => void): () => void {
   _listeners.add(callback);
+
+  if (!_screenListenerAttached && typeof window !== "undefined" && window.screen) {
+    try {
+      // `Screen` só virou EventTarget em navegadores recentes; o lib.dom ainda
+      // não reflete isso.
+      (window.screen as unknown as EventTarget).addEventListener("change", _notify);
+      _screenListenerAttached = true;
+    } catch {
+      /* navegador sem o evento — resta o fallback de foco no chamador */
+    }
+  }
+
   return () => _listeners.delete(callback);
 }
 
@@ -201,7 +244,126 @@ export function listIdentities(): MonitorIdentity[] {
   return listScreens().map(identityOf);
 }
 
+/**
+ * Mostra um cartão "Monitor N" em cada tela, por alguns segundos.
+ *
+ * No Electron isso são janelas nativas sem moldura; no navegador o mais
+ * próximo é um popup por tela. Popups em série costumam ser permitidos quando
+ * partem de um clique, mas o navegador pode barrar os seguintes — por isso a
+ * função devolve quantos realmente abriram, para a UI poder avisar.
+ *
+ * @returns quantidade de telas identificadas
+ */
+export function identify(durationMs = 5000): number {
+  const screens = listScreens();
+  const abertas: Window[] = [];
+
+  screens.forEach((screen, index) => {
+    const features = [
+      "popup=yes",
+      `left=${Math.round(screen.avail.x + screen.avail.width / 2 - 160)}`,
+      `top=${Math.round(screen.avail.y + screen.avail.height / 2 - 100)}`,
+      "width=320,height=200",
+      "toolbar=no,location=no,menubar=no,status=no,scrollbars=no,resizable=no",
+    ].join(",");
+
+    const win = window.open("", `louvorja_identify_${index}`, features);
+    if (!win) return;
+
+    const nome = screen.label ? escapeHtml(screen.label) : "";
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Monitor ${index + 1}</title>
+<style>
+  html,body{margin:0;height:100%;background:#6366f1;color:#fff;
+    font-family:-apple-system,system-ui,sans-serif;display:flex;align-items:center;
+    justify-content:center;overflow:hidden;user-select:none}
+  .n{font-size:5.5rem;font-weight:100;line-height:1}
+  .w{text-align:center}
+  .l{font-size:1.05rem;font-weight:500;margin-top:4px}
+  .s{font-size:.95rem;opacity:.85;margin-top:8px}
+</style></head><body><div class="w">
+  <div class="n">${index + 1}</div>
+  ${nome ? `<div class="l">${nome}</div>` : ""}
+  <div class="s">${screen.bounds.width} \u00D7 ${screen.bounds.height}${screen.primary ? " — Principal" : ""}</div>
+</div></body></html>`);
+    win.document.close();
+    abertas.push(win);
+  });
+
+  setTimeout(() => {
+    for (const win of abertas) {
+      try {
+        if (!win.closed) win.close();
+      } catch {
+        /* já fechada pelo usuário */
+      }
+    }
+  }, durationMs);
+
+  return abertas.length;
+}
+
+/** Escapa texto vindo do sistema antes de injetá-lo no HTML do cartão. */
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/**
+ * Estado da configuração "Tela cheia automática" do Chrome.
+ *
+ * Não dá para consultar pela Permissions API nem pedir por prompt — o Chrome
+ * bloqueia de propósito, e só o usuário libera nas configurações. O que dá é
+ * DEDUZIR: a janela de projeção tenta entrar em tela cheia sozinha ao abrir, e
+ * o resultado dessa tentativa diz se a configuração está ativa. Guardamos aqui
+ * para a tela de Opções poder mostrar o estado e orientar.
+ */
+const AUTO_FS_KEY = "louvorja:auto_fullscreen";
+
+export type AutoFullscreenState = "unknown" | "granted" | "blocked";
+
+/** Registra o resultado da última tentativa automática de tela cheia. */
+export function setAutoFullscreenState(ok: boolean): void {
+  try {
+    localStorage.setItem(AUTO_FS_KEY, ok ? "granted" : "blocked");
+  } catch {
+    /* armazenamento indisponível — seguimos sem o registro */
+  }
+}
+
+/** Último resultado conhecido, ou "unknown" se a projeção ainda não abriu. */
+export function getAutoFullscreenState(): AutoFullscreenState {
+  try {
+    const v = localStorage.getItem(AUTO_FS_KEY);
+    return v === "granted" || v === "blocked" ? v : "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+/** Caminho da configuração no Chrome. Não é navegável por link nem por script. */
+export const AUTO_FULLSCREEN_SETTINGS_PATH =
+  "chrome://settings/content/automaticFullScreen";
+
+/**
+ * Objetos `ScreenDetailed` crus do navegador, na mesma ordem de `listScreens`.
+ *
+ * `requestFullscreen({ screen })` exige a instância que veio da API — o objeto
+ * simplificado de `listScreens` não serve.
+ */
+export function rawScreens(): unknown[] {
+  return _details ? _details.screens : [];
+}
+
 export default {
+  identify,
+  rawScreens,
+  setAutoFullscreenState,
+  getAutoFullscreenState,
+  AUTO_FULLSCREEN_SETTINGS_PATH,
   isSupported,
   isExtended,
   permissionState,

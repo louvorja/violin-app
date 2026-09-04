@@ -53,29 +53,47 @@ export function featuresForRect(rect: WindowRect | null): string {
  */
 export function nudgeIntoRect(win: Window | null, rect: WindowRect | null, delayMs = 300): void {
   if (!win || !rect) return;
-  setTimeout(() => {
-    try {
-      if (win.closed) return;
-      const centerX = win.screenX + win.outerWidth / 2;
-      const centerY = win.screenY + win.outerHeight / 2;
-      const inside =
-        centerX >= rect.x && centerX <= rect.x + rect.width &&
-        centerY >= rect.y && centerY <= rect.y + rect.height;
-      if (inside) return;
-      win.moveTo(Math.round(rect.x), Math.round(rect.y));
-      win.resizeTo(Math.round(rect.width), Math.round(rect.height));
-    } catch {
-      /* janela fechada ou bloqueada — desiste */
-    }
-  }, delayMs);
-}
 
+  const alvo = {
+    x: Math.round(rect.x),
+    y: Math.round(rect.y),
+    width: Math.round(rect.width),
+    height: Math.round(rect.height),
+  };
+
+  // Duas passadas: o navegador costuma reencaixar a janela logo depois de
+  // abrir, e a segunda corrige o que sobrou. Mais que isso vira cabo de guerra
+  // com o gerenciador de janelas.
+  const tentativas = [delayMs, delayMs + 500];
+
+  for (const atraso of tentativas) {
+    setTimeout(() => {
+      try {
+        if (win.closed) return;
+        const foraDeLugar =
+          Math.abs(win.screenX - alvo.x) > 2 || Math.abs(win.screenY - alvo.y) > 2;
+        const tamanhoErrado =
+          Math.abs(win.outerWidth - alvo.width) > 2 ||
+          Math.abs(win.outerHeight - alvo.height) > 2;
+
+        if (foraDeLugar) win.moveTo(alvo.x, alvo.y);
+        if (tamanhoErrado) win.resizeTo(alvo.width, alvo.height);
+        // Reposicionar depois de redimensionar: alguns gerenciadores deslocam
+        // a janela ao mudar o tamanho.
+        if (tamanhoErrado && !foraDeLugar) win.moveTo(alvo.x, alvo.y);
+      } catch {
+        /* janela fechada ou bloqueada — desiste */
+      }
+    }, atraso);
+  }
+}
 
 /**
  * Abre (ou foca) a janela de projeção de uma feature.
  *
  * Síncrona de propósito: `window.open` precisa rodar no mesmo task do gesto do
- * usuário, senão o bloqueador de popup barra a janela.
+ * usuário, senão o bloqueador de popup barra a janela. Por isso o chamador
+ * resolve a geometria ANTES e passa a string de features pronta.
  */
 export function openWebWindow(
   feature: string,

@@ -9,8 +9,8 @@
 const { screen } = require("electron");
 const userStore = require("./userStore.js");
 const { resolveWantedId, rolesFromUserData } = require("./monitorPrefs.js");
-const { roleOfFeature } = require("./displayRoles.js");
 const monitorConfig = require("./monitorConfig.js");
+const monitorIdentity = require("./monitorIdentityBridge.cjs");
 
 const PREF_KEY = "monitor_prefs";
 const USER_DATA_KEY = "user_data";
@@ -196,7 +196,7 @@ function setPreferred(featureId, displayId) {
   const userData = _readUserData();
   if (!monitorConfig.getConfig(userData)) return;
 
-  const role = roleOfFeature(featureId);
+  const role = monitorIdentity.roles().roleOfFeature(featureId);
   if (!role) return;
 
   const connected = screen.getAllDisplays();

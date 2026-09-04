@@ -1,5 +1,3 @@
-"use strict";
-
 /**
  * displayRoles.js — Papéis de monitor.
  *
@@ -10,10 +8,14 @@
  * A vantagem prática: quando um monitor some, o papel fica órfão e a janela
  * simplesmente não abre — em vez de invadir a tela do operador.
  *
- * Módulo PURO: sem `require("electron")`, sem I/O.
+ * Módulo PURO: sem dependências, sem I/O.
+ *
+ * ESM porque o renderer e o web/PWA também precisam do mapa feature→papel
+ * (o Vite não converte CommonJS de arquivos do projeto). O main process
+ * chega aqui pela ponte em `monitorIdentityBridge.cjs`.
  */
 
-const ROLES = {
+export const ROLES = {
   /** Tela que a congregação vê. */
   PROJECTION: "projection",
   /** Retorno / stage display, visível ao músico e ao operador. */
@@ -26,7 +28,7 @@ const ROLES = {
  * Papel de cada feature conhecida. Serve de allowlist na migração: chave fora
  * daqui não é interpretada, vai para quarentena.
  */
-const FEATURE_ROLE = {
+export const FEATURE_ROLE = {
   // Apresentação
   musicas: ROLES.PROJECTION,
   music: ROLES.PROJECTION,
@@ -65,24 +67,24 @@ const FEATURE_ROLE = {
  * Feature histórica de cada papel. O voto dela pesa mais na derivação, porque
  * é a que o usuário configurava de fato na tela de Opções.
  */
-const CANONICAL_FEATURE = {
+export const CANONICAL_FEATURE = {
   [ROLES.PROJECTION]: "musicas",
   [ROLES.STAGE]: "retorno",
   [ROLES.OPERATOR]: "operador",
 };
 
-const CANONICAL_WEIGHT = 10;
+export const CANONICAL_WEIGHT = 10;
 
 /**
  * Papel padrão de famílias de features criadas dinamicamente, onde não dá para
  * listar cada nome. Ex.: "transmission:/obs/bible" (uma por rota de captura).
  */
-const FEATURE_PREFIX_ROLE = {
+export const FEATURE_PREFIX_ROLE = {
   "transmission:": ROLES.PROJECTION,
 };
 
 /** Papel de uma feature, ou null se ela não for conhecida. */
-function roleOfFeature(feature) {
+export function roleOfFeature(feature) {
   if (Object.prototype.hasOwnProperty.call(FEATURE_ROLE, feature)) {
     return FEATURE_ROLE[feature];
   }
@@ -114,7 +116,7 @@ function roleOfFeature(feature) {
  *               sumir em silêncio, já que agora elas seguem o papel
  *   unknown   — chaves fora da allowlist, em quarentena
  */
-function deriveRoles(prefs, resolveId) {
+export function deriveRoles(prefs, resolveId) {
   const votes = {
     [ROLES.PROJECTION]: new Map(),
     [ROLES.STAGE]: new Map(),
@@ -159,12 +161,3 @@ function deriveRoles(prefs, resolveId) {
   return { roles, divergent, unknown };
 }
 
-module.exports = {
-  ROLES,
-  FEATURE_ROLE,
-  FEATURE_PREFIX_ROLE,
-  CANONICAL_FEATURE,
-  CANONICAL_WEIGHT,
-  roleOfFeature,
-  deriveRoles,
-};

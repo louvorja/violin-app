@@ -172,7 +172,7 @@
     "monitors": {
       "title": "Monitores",
       "identify": "Identificar Monitores",
-      "no_displays": "Nenhum monitor adicional disponível (modo web ou monitor único).",
+      "no_displays": "Nenhum monitor adicional disponível.",
       "primary": "Tela principal",
       "secondary": "Tela de retorno",
       "primary_short": "Principal",
@@ -192,7 +192,11 @@
       "web_prompt": "O navegador precisa da sua permissão para listar os monitores conectados.",
       "web_detect": "Detectar monitores",
       "web_denied": "Permissão negada. Libere \"Gerenciamento de janelas\" no cadeado da barra de endereços e recarregue.",
-      "web_unsupported": "Este navegador não sabe listar monitores. Use o aplicativo, ou arraste a janela de projeção para o projetor e aperte F11."
+      "web_unsupported": "Este navegador não sabe listar monitores. Use o aplicativo, ou arraste a janela de projeção para o projetor e aperte F11.",
+      "web_single": "Apenas um monitor conectado. Conecte um segundo monitor ou projetor para projetar em tela separada.",
+      "auto_fullscreen_title": "Tela cheia automática",
+      "auto_fullscreen_blocked": "A projeção precisa de um clique para entrar em tela cheia — limitação do navegador. No aplicativo para computador isso é automático.",
+      "auto_fullscreen_granted": "A projeção entra em tela cheia sozinha."
     },
     "slides": {
       "title": "Slides de Músicas",
@@ -1265,6 +1269,7 @@
   },
   "projection": {
     "enter_fullscreen": "Entrar em tela cheia",
-    "fullscreen_hint": "Você também pode apertar F11"
+    "fullscreen_hint": "Você também pode apertar F11",
+    "fullscreen_auto_hint": "Um clique é necessário porque o navegador não permite que sites entrem em tela cheia sozinhos. No aplicativo para computador a projeção já abre em tela cheia, sem clique."
   }
 }

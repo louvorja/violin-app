@@ -150,13 +150,24 @@ export function useDisplays(): {
 
   /** Atribui um monitor a um papel (Projeção / Retorno / Operador). */
   async function setRole(role: string, displayId: number | string | null): Promise<void> {
+    // O identificador chega do <select> como string. Cada plataforma usa um
+    // formato próprio — id numérico no Electron, "screen-N" no navegador — e a
+    // conversão precisa acontecer aqui, não no template: converter para número
+    // no web produzia NaN e a escolha era descartada em silêncio.
     if (!Platform.displays?.setRole) {
       WebRoles.setRole(role, displayId == null ? null : String(displayId));
       await refresh();
       return;
     }
+
+    const nativeId = displayId == null ? null : Number(displayId);
+    if (nativeId != null && !Number.isFinite(nativeId)) {
+      console.error("[useDisplays] id de monitor inválido:", displayId);
+      return;
+    }
+
     try {
-      await Platform.displays.setRole(role, displayId as number | null);
+      await Platform.displays.setRole(role, nativeId);
       await refresh();
     } catch (err) {
       console.error("[useDisplays] setRole falhou:", err);
@@ -191,7 +202,11 @@ export function useDisplays(): {
   }
 
   async function identify(durationMs = 5000): Promise<void> {
-    if (!Platform.displays) return;
+    if (!Platform.displays) {
+      // No navegador, um popup por tela — é o mais próximo das janelas nativas.
+      WebDisplays.identify(durationMs);
+      return;
+    }
     try {
       await Platform.displays.identify(durationMs);
     } catch (err) {
@@ -199,31 +214,40 @@ export function useDisplays(): {
     }
   }
 
-  let removeListener: (() => void) | null = null;
+  const cleanups: (() => void)[] = [];
 
   onMounted(() => {
     refresh();
 
-    // O main avisa quando um monitor é conectado, desconectado ou muda de
-    // resolução. Antes isso era aproximado pelo evento `focus` da janela, então
-    // a tela de Opções ficava mostrando monitores fantasmas enquanto aberta.
+    // Desktop: o main avisa quando um monitor é conectado, desconectado ou muda
+    // de resolução.
     const api = Platform.displays as { onChanged?: (cb: () => void) => () => void } | null;
     if (api?.onChanged) {
-      removeListener = api.onChanged(() => refresh());
+      cleanups.push(api.onChanged(() => refresh()));
       return;
     }
 
-    // Web/PWA (e Electron antigo, sem o evento): melhor esforço.
+    // Navegador: `screenschange` avisa quando uma tela entra ou sai. Sem isso a
+    // lista só atualizava ao recarregar a página.
+    cleanups.push(WebDisplays.onChange(() => refresh()));
+
+    // Rede de segurança para quando não há evento nenhum: sem permissão
+    // concedida, ou navegador sem a Window Management API (Firefox/Safari).
     if (typeof window !== "undefined") {
       const handler = () => refresh();
       window.addEventListener("focus", handler);
-      removeListener = () => window.removeEventListener("focus", handler);
+      cleanups.push(() => window.removeEventListener("focus", handler));
     }
   });
 
   onBeforeUnmount(() => {
-    if (removeListener) removeListener();
-    removeListener = null;
+    for (const cleanup of cleanups.splice(0)) {
+      try {
+        cleanup();
+      } catch (err) {
+        console.error("[useDisplays] cleanup falhou:", err);
+      }
+    }
   });
 
   return {

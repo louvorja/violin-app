@@ -20,7 +20,6 @@
 
 const monitorIdentity = require("../monitorIdentityBridge.cjs");
 const { resolveWantedId, rolesFromUserData } = require("../monitorPrefs.js");
-const { ROLES, deriveRoles } = require("../displayRoles.js");
 
 const SCHEMA_VERSION = 2;
 
@@ -71,14 +70,14 @@ function _roleEntry(id, connected) {
 function buildConfig({ prefs, userData, connected }) {
   const legacyRoles = rolesFromUserData(userData);
   const resolve = (raw) => resolveWantedId(raw, legacyRoles);
-  const { roles, divergent, unknown } = deriveRoles(prefs, resolve);
+  const { roles, divergent, unknown } = monitorIdentity.roles().deriveRoles(prefs, resolve);
 
   const config = {
     schema_version: SCHEMA_VERSION,
     roles: {
-      [ROLES.PROJECTION]: _roleEntry(roles[ROLES.PROJECTION], connected),
-      [ROLES.STAGE]: _roleEntry(roles[ROLES.STAGE], connected),
-      [ROLES.OPERATOR]: _roleEntry(roles[ROLES.OPERATOR], connected),
+      [monitorIdentity.roles().ROLES.PROJECTION]: _roleEntry(roles[monitorIdentity.roles().ROLES.PROJECTION], connected),
+      [monitorIdentity.roles().ROLES.STAGE]: _roleEntry(roles[monitorIdentity.roles().ROLES.STAGE], connected),
+      [monitorIdentity.roles().ROLES.OPERATOR]: _roleEntry(roles[monitorIdentity.roles().ROLES.OPERATOR], connected),
     },
     legacy_features: divergent,
     legacy_unknown: unknown,

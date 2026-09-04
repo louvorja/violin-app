@@ -172,7 +172,7 @@
     "monitors": {
       "title": "Monitores",
       "identify": "Identificar Monitores",
-      "no_displays": "Ningún monitor adicional disponible (modo web o monitor único).",
+      "no_displays": "Ningún monitor adicional disponible.",
       "primary": "Pantalla principal",
       "secondary": "Pantalla de Retorno",
       "primary_short": "Principal",
@@ -192,7 +192,11 @@
       "web_prompt": "El navegador necesita su permiso para listar los monitores conectados.",
       "web_detect": "Detectar monitores",
       "web_denied": "Permiso denegado. Habilite \"Gestión de ventanas\" en el candado de la barra de direcciones y recargue.",
-      "web_unsupported": "Este navegador no sabe listar monitores. Use la aplicación, o arrastre la ventana de proyección al proyector y pulse F11."
+      "web_unsupported": "Este navegador no sabe listar monitores. Use la aplicación, o arrastre la ventana de proyección al proyector y pulse F11.",
+      "web_single": "Solo hay un monitor conectado. Conecte un segundo monitor o proyector para proyectar en pantalla separada.",
+      "auto_fullscreen_title": "Pantalla completa automática",
+      "auto_fullscreen_blocked": "La proyección necesita un clic para entrar en pantalla completa — limitación del navegador. En la aplicación de escritorio es automático.",
+      "auto_fullscreen_granted": "La proyección entra en pantalla completa automáticamente."
     },
     "slides": {
       "title": "Diapositivas de Músicas",
@@ -1265,6 +1269,7 @@
   },
   "projection": {
     "enter_fullscreen": "Entrar en pantalla completa",
-    "fullscreen_hint": "También puede pulsar F11"
+    "fullscreen_hint": "También puede pulsar F11",
+    "fullscreen_auto_hint": "Se necesita un clic porque el navegador no permite que los sitios entren en pantalla completa por sí solos. En la aplicación de escritorio la proyección ya abre en pantalla completa, sin clic."
   }
 }
