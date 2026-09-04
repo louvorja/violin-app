@@ -17,8 +17,9 @@ const RETURN_URL = "/return"
 const URL_BASE = "/projection"
 export const PROJECTION_URL = {
   BASE: URL_BASE,
-  MUSIC: `${URL_BASE}/${PROJECTION_TYPE.MUSIC}`,
-  OPERATOR: `${URL_BASE}/${PROJECTION_TYPE.OPERATOR}`,
+  // A projeção de música é a própria rota base; o operador tem rota própria.
+  MUSIC: URL_BASE,
+  OPERATOR: "/operator",
   RETURN: URL_BASE + RETURN_URL,
   BIBLE: URL_BASE + "/" + PROJECTION_TYPE.BIBLE,
   BIBLE_RETURN: URL_BASE + "/" + PROJECTION_TYPE.BIBLE + RETURN_URL,

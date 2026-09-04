@@ -2,9 +2,9 @@
  * @category helper-puro — Abre/fecha janelas auxiliares (Projection / Return /
  * Operator) respeitando as preferências do usuário em $userdata.
  *
- * No Electron usa Platform.windows.open (IPC) para posicionar a janela no
- * monitor configurado. Em web/PWA cai em window.open() (mesma origem,
- * BroadcastChannel cruza).
+ * Toda abertura passa por `Projection.ts`, a porta única de janelas: é ela que
+ * decide entre `Platform.windows` (Electron) e `window.open` (web/PWA) e mantém
+ * o registry por feature. Aqui só ficam as regras de QUAIS janelas abrir.
  *
  * Replica fmMusica + fmMusicaRetorno + fmMusicaOperador do Delphi: ao iniciar
  * uma música, as janelas escolhidas em "Configurações → Slides de Músicas"
@@ -15,76 +15,25 @@ import Platform from "@/helpers/Platform";
 import $userdata from "@/helpers/UserData";
 import { PROJECTION_TYPE, PROJECTION_URL } from "@/constants/Projection";
 import { KEYS } from "@/constants/UserDataKeys";
-
-interface DisplayPlatform {
-  open: (opts: {
-    route: string;
-    feature: string;
-    monitorId?: number | null;
-    fullscreen?: boolean;
-    frame?: boolean;
-    alwaysOnTop?: boolean;
-    useHttpUrl?: boolean;
-  }) => Promise<{ id: number }>;
-  close: (feature: string) => Promise<void>;
-  listOpen: () => Promise<string[]>;
-}
+import { close as closeWindow, isOpen as isWindowOpen, open as openWindow } from "@/helpers/Projection";
 
 interface DisplaysAPI {
   getPrefs: () => Promise<Record<string, number | string | null>>;
+  getPreferred: (feature: string) => Promise<{ id: number } | null>;
 }
-
-const _openWebWindows: Record<string, Window | null> = {};
 
 async function _open(
   route: string,
   feature: string,
   monitorId: number | null,
   fullscreen: boolean,
-  alwaysOnTop = false,
-  useHttpUrl = false
+  alwaysOnTop = false
 ): Promise<void> {
-  const desktopApi = (Platform as { windows?: DisplayPlatform }).windows;
-  if (Platform.isDesktop && desktopApi) {
-    try {
-      await desktopApi.open({
-        route,
-        feature: `media:${feature}`,
-        monitorId: monitorId ?? null,
-        fullscreen,
-        frame: !fullscreen,
-        alwaysOnTop,
-        useHttpUrl,
-      });
-      return;
-    } catch (e) {
-      console.warn(`[ProjectionWindows] IPC open falhou (${feature}), fallback web:`, e);
-    }
-  }
-  // Fallback web/PWA
-  const existing = _openWebWindows[feature];
-  if (existing && !existing.closed) {
-    existing.focus();
-    return;
-  }
-  const features = fullscreen
-    ? "popup=yes,noopener,noreferrer,width=1280,height=720,toolbar=no,location=no,menubar=no,status=no,scrollbars=no,resizable=yes"
-    : "popup=yes,noopener,noreferrer,width=1280,height=720,toolbar=no,location=no,menubar=no,status=no,scrollbars=no,resizable=yes";
-  _openWebWindows[feature] = window.open(route, `louvorja_${feature}`, features);
+  await openWindow({ route, feature, monitorId, fullscreen, alwaysOnTop });
 }
 
 async function _close(feature: string): Promise<void> {
-  const desktopApi = (Platform as { windows?: DisplayPlatform }).windows;
-  if (Platform.isDesktop && desktopApi) {
-    try {
-      await desktopApi.close(`media:${feature}`);
-    } catch {
-      /* noop */
-    }
-  }
-  const win = _openWebWindows[feature];
-  if (win && !win.closed) win.close();
-  _openWebWindows[feature] = null;
+  await closeWindow(feature);
 }
 
 /**
@@ -93,51 +42,31 @@ async function _close(feature: string): Promise<void> {
  * renderizam dentro dela, sem abrir janelas separadas.
  */
 async function isBackgroundOpen(): Promise<boolean> {
-  try {
-    const api = (Platform as { windows?: DisplayPlatform }).windows;
-    if (Platform.isDesktop && api?.listOpen) {
-      const open = (await api.listOpen()) as string[];
-      return open.includes("media:" + PROJECTION_TYPE.BACKGROUND);
-    }
-  } catch {
-    /* noop */
-  }
-  return false;
+  return await isWindowOpen(PROJECTION_TYPE.BACKGROUND);
 }
 
-async function _readPrefs(): Promise<Record<string, number | null>> {
+/**
+ * Onde (e se) a janela de uma feature deve abrir.
+ *
+ * O desktop resolve pelo papel de monitor e devolve o display já reconhecido —
+ * se o monitor do papel não está presente, `open` é false e a janela não abre,
+ * em vez de cair na tela do operador. No web não há monitor a escolher: basta
+ * saber se a feature tem um papel atribuído.
+ */
+async function _target(feature: string): Promise<{ open: boolean; monitorId: number | null }> {
   const api = (Platform as { displays?: DisplaysAPI }).displays;
-  let raw: Record<string, number | string | null>;
-  if (Platform.isDesktop && api) {
+  if (Platform.isDesktop && api?.getPreferred) {
     try {
-      raw = await api.getPrefs();
+      const pref = await api.getPreferred(feature);
+      return { open: !!pref, monitorId: pref?.id ?? null };
     } catch {
-      raw = {};
+      return { open: false, monitorId: null };
     }
-  } else {
-    raw = ($userdata.get(KEYS.OPTIONS.DISPLAYS.PREFERRED, {}) as Record<string, number | string | null>) ?? {};
   }
 
-  const primaryId = ($userdata.get(KEYS.OPTIONS.DISPLAYS.PRIMARY, null) as number | null) ?? null;
-  const secondaryId = ($userdata.get(KEYS.OPTIONS.DISPLAYS.SECONDARY, null) as number | null) ?? null;
-
-  const resolved: Record<string, number | null> = {};
-  for (const [key, val] of Object.entries(raw)) {
-    resolved[key] = _resolveMonitorId(val, primaryId, secondaryId);
-  }
-  return resolved;
-}
-
-function _resolveMonitorId(
-  raw: number | string | null | undefined,
-  primaryId: number | null,
-  secondaryId: number | null
-): number | null {
-  if (raw == null) return null;
-  if (typeof raw === "number") return raw > 0 ? raw : null;
-  if (raw === "primary") return primaryId && primaryId > 0 ? primaryId : null;
-  if (raw === "secondary") return secondaryId && secondaryId > 0 ? secondaryId : null;
-  return null;
+  const roles =
+    ($userdata.get(KEYS.OPTIONS.DISPLAYS.FEATURE_ROLES, {}) as Record<string, string>) ?? {};
+  return { open: !!roles[feature], monitorId: null };
 }
 
 /**
@@ -154,35 +83,32 @@ function _resolveMonitorId(
 export async function openProjectionWindows(): Promise<void> {
   if (await isBackgroundOpen()) return;
 
-  const prefs = await _readPrefs();
   const fullscreen = $userdata.get(KEYS.OPTIONS.FULLSCREEN, true) as boolean;
   const alwaysOnTop = $userdata.get(KEYS.OPTIONS.ALWAYS_ON_TOP, true) as boolean;
   const openOperator = $userdata.get(KEYS.OPTIONS.OPEN_OPERATOR, false) as boolean;
   const openReturn = ($userdata.get(KEYS.OPTIONS.OPEN_RETURN, false) as boolean);
 
-  const projMonitor = prefs[PROJECTION_TYPE.MUSIC] ?? null;
-  if (projMonitor != null) {
-    // Monitor explícito (atual ou outro) → janela separada respeitando
-    // a opção de fullscreen e always-on-top.
-    await _open(PROJECTION_URL.BASE, PROJECTION_TYPE.MUSIC, projMonitor, fullscreen, alwaysOnTop);
+  const projection = await _target(PROJECTION_TYPE.MUSIC);
+  if (projection.open) {
+    await _open(
+      PROJECTION_URL.BASE, PROJECTION_TYPE.MUSIC, projection.monitorId, fullscreen, alwaysOnTop
+    );
   }
 
   if (openReturn) {
-    const returnMonitor = prefs[PROJECTION_TYPE.RETURN];
-    if (returnMonitor != null) {
+    const ret = await _target(PROJECTION_TYPE.RETURN);
+    if (ret.open) {
       await _open(
-        PROJECTION_URL.RETURN,
-        PROJECTION_TYPE.RETURN,
-        returnMonitor,
-        fullscreen,
-        alwaysOnTop)
+        PROJECTION_URL.RETURN, PROJECTION_TYPE.RETURN, ret.monitorId, fullscreen, alwaysOnTop
+      );
     }
   }
 
   if (openOperator) {
     // Operador NÃO usa always-on-top (o operador precisa interagir com a
     // janela principal sem que o overlay roube foco).
-    await _open("/operator", PROJECTION_TYPE.OPERATOR, prefs[PROJECTION_TYPE.OPERATOR] ?? null, false, false);
+    const op = await _target(PROJECTION_TYPE.OPERATOR);
+    await _open(PROJECTION_URL.OPERATOR, PROJECTION_TYPE.OPERATOR, op.monitorId, false, false);
   }
 }
 
@@ -196,31 +122,24 @@ export async function openProjectionWindows(): Promise<void> {
 export async function openFileProjectionWindows(): Promise<void> {
   if (await isBackgroundOpen()) return;
 
-  const prefs = await _readPrefs();
   const fullscreen = ($userdata.get(KEYS.OPTIONS.FILE_PROJECTION.FULLSCREEN, true) as boolean);
   const alwaysOnTop = ($userdata.get(KEYS.OPTIONS.FILE_PROJECTION.ALWAYS_ON_TOP, true) as boolean);
 
-  // Projeção de arquivo — fallback para monitor de música se não configurado
-  const fileProjMonitor =
-    prefs[PROJECTION_TYPE.FILE] ??
-    prefs[PROJECTION_TYPE.MUSIC] ??
-    null;
-  if (fileProjMonitor != null) {
-    await _open(PROJECTION_URL.FILE, PROJECTION_TYPE.FILE, fileProjMonitor, fullscreen, alwaysOnTop, true);
+  // Projeção de arquivo — cai na configuração de música quando não tem a sua.
+  let file = await _target(PROJECTION_TYPE.FILE);
+  if (!file.open) file = await _target(PROJECTION_TYPE.MUSIC);
+  if (file.open) {
+    await _open(PROJECTION_URL.FILE, PROJECTION_TYPE.FILE, file.monitorId, fullscreen, alwaysOnTop);
   }
 
   // Retorno de arquivo — respeita a opção específica de arquivo
   const openFileReturn = $userdata.get(KEYS.OPTIONS.FILE_PROJECTION.SHOW_RETURN, false) as boolean;
   if (openFileReturn) {
-    const returnMonitor = prefs[PROJECTION_TYPE.FILE_RETURN];
-    if (returnMonitor != null) {
+    const ret = await _target(PROJECTION_TYPE.FILE_RETURN);
+    if (ret.open) {
       await _open(
-        PROJECTION_URL.FILE_RETURN,
-        PROJECTION_TYPE.FILE_RETURN,
-        returnMonitor,
-        fullscreen,
-        alwaysOnTop,
-        true
+        PROJECTION_URL.FILE_RETURN, PROJECTION_TYPE.FILE_RETURN, ret.monitorId,
+        fullscreen, alwaysOnTop
       );
     }
   }
@@ -230,22 +149,20 @@ export async function openFileProjectionWindows(): Promise<void> {
  * Abre a janela de projeção de Anúncios (reutiliza preferências de arquivo).
  */
 export async function openAnnouncementsWindow(): Promise<void> {
-  const prefs = await _readPrefs();
   const fullscreen = $userdata.get(KEYS.OPTIONS.FILE_PROJECTION.FULLSCREEN, true) as boolean;
   const alwaysOnTop = $userdata.get(
     KEYS.OPTIONS.FILE_PROJECTION.ALWAYS_ON_TOP,
     true
   ) as boolean;
-  const monitor =
-    prefs[PROJECTION_TYPE.FILE] ?? prefs[PROJECTION_TYPE.MUSIC] ?? null;
-  if (monitor != null) {
+  let target = await _target(PROJECTION_TYPE.FILE);
+  if (!target.open) target = await _target(PROJECTION_TYPE.MUSIC);
+  if (target.open) {
     await _open(
       PROJECTION_URL.ANNOUNCEMENTS,
       PROJECTION_TYPE.ANNOUNCEMENTS,
-      monitor,
+      target.monitorId,
       fullscreen,
-      alwaysOnTop,
-      true
+      alwaysOnTop
     );
   }
 }
@@ -263,26 +180,25 @@ export async function closeAnnouncementsWindow(): Promise<void> {
 export async function openVideoProjectionWindows(): Promise<void> {
   if (await isBackgroundOpen()) return;
 
-  const prefs = await _readPrefs();
   const fullscreen = ($userdata.get(KEYS.OPTIONS.ONLINE_VIDEO_PROJECTION.FULLSCREEN, true) as boolean);
   const alwaysOnTop = ($userdata.get(KEYS.OPTIONS.ONLINE_VIDEO_PROJECTION.ALWAYS_ON_TOP, true) as boolean);
 
-  const videoMonitor = prefs[PROJECTION_TYPE.ONLINE_VIDEO] ?? prefs[PROJECTION_TYPE.MUSIC] ?? null;
-  if (videoMonitor != null) {
-    await _open(PROJECTION_URL.FILE, PROJECTION_TYPE.FILE, videoMonitor, fullscreen, alwaysOnTop, true);
+  let video = await _target(PROJECTION_TYPE.ONLINE_VIDEO);
+  if (!video.open) video = await _target(PROJECTION_TYPE.MUSIC);
+  if (video.open) {
+    await _open(PROJECTION_URL.FILE, PROJECTION_TYPE.FILE, video.monitorId, fullscreen, alwaysOnTop);
   }
 
   const openVideoReturn = $userdata.get(KEYS.OPTIONS.ONLINE_VIDEO_PROJECTION.SHOW_RETURN, false) as boolean;
   if (openVideoReturn) {
-    const returnMonitor = prefs[PROJECTION_TYPE.ONLINE_VIDEO_RETURN] ?? null;
-    if (returnMonitor != null) {
+    const ret = await _target(PROJECTION_TYPE.ONLINE_VIDEO_RETURN);
+    if (ret.open) {
       await _open(
         PROJECTION_URL.FILE_RETURN,
         PROJECTION_TYPE.ONLINE_VIDEO_RETURN,
-        returnMonitor,
+        ret.monitorId,
         fullscreen,
-        alwaysOnTop,
-        true
+        alwaysOnTop
       );
     }
   }
@@ -294,23 +210,23 @@ export async function openVideoProjectionWindows(): Promise<void> {
 export async function openBibleWindow(): Promise<void> {
   if (await isBackgroundOpen()) return;
 
-  const prefs = await _readPrefs();
-  const monitorId = prefs[PROJECTION_TYPE.BIBLE] ?? prefs[PROJECTION_TYPE.MUSIC] ?? null;
+  let bible = await _target(PROJECTION_TYPE.BIBLE);
+  if (!bible.open) bible = await _target(PROJECTION_TYPE.MUSIC);
   const openReturn = ($userdata.get(KEYS.MODULES.BIBLE.SHOW_RETURN, false) as boolean);
   const fullscreen = $userdata.get(KEYS.OPTIONS.FULLSCREEN, true) as boolean;
   const alwaysOnTop = $userdata.get(KEYS.OPTIONS.ALWAYS_ON_TOP, true) as boolean;
 
-  if (monitorId != null) {
-    await _open(PROJECTION_URL.BIBLE, PROJECTION_TYPE.BIBLE, monitorId, fullscreen, alwaysOnTop);
+  if (bible.open) {
+    await _open(PROJECTION_URL.BIBLE, PROJECTION_TYPE.BIBLE, bible.monitorId, fullscreen, alwaysOnTop);
   }
 
   if (openReturn) {
-    const returnMonitor = prefs[PROJECTION_TYPE.BIBLE_RETURN] ?? null;
-    if (returnMonitor != null) {
+    const ret = await _target(PROJECTION_TYPE.BIBLE_RETURN);
+    if (ret.open) {
       await _open(
         PROJECTION_URL.BIBLE_RETURN,
         PROJECTION_TYPE.BIBLE_RETURN,
-        returnMonitor,
+        ret.monitorId,
         fullscreen,
         alwaysOnTop
       );
@@ -325,22 +241,23 @@ export async function openBibleWindow(): Promise<void> {
  * estiver configurado, não projeta.
  */
 export async function openBackgroundProjectionWindows(): Promise<void> {
-  const primaryMonitorId = $userdata.get(KEYS.OPTIONS.DISPLAYS.PRIMARY, null) as number | null;
-  if (primaryMonitorId != null && primaryMonitorId > 0) {
-    await _open(PROJECTION_URL.BACKGROUND, PROJECTION_TYPE.BACKGROUND, primaryMonitorId, true, false, true);
+  const background = await _target(PROJECTION_TYPE.BACKGROUND);
+  if (background.open) {
+    await _open(
+      PROJECTION_URL.BACKGROUND, PROJECTION_TYPE.BACKGROUND, background.monitorId, true, false
+    );
   }
 
   const showReturn = $userdata.get(KEYS.MODULES.BACKGROUND_PROJECTION.SHOW_RETURN, false) as boolean;
   if (showReturn) {
-    const secondaryMonitorId = $userdata.get(KEYS.OPTIONS.DISPLAYS.SECONDARY, null) as number | null;
-    if (secondaryMonitorId != null && secondaryMonitorId > 0) {
+    const ret = await _target(PROJECTION_TYPE.BACKGROUND_RETURN);
+    if (ret.open) {
       await _open(
         PROJECTION_URL.BACKGROUND_RETURN,
         PROJECTION_TYPE.BACKGROUND_RETURN,
-        secondaryMonitorId,
+        ret.monitorId,
         true,
-        false,
-        true
+        false
       );
     }
   }

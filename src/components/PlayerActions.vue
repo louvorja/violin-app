@@ -88,17 +88,17 @@
         <v-list-item
           prepend-icon="mdi-monitor"
           :title="$t('shell.proj_open_projection')"
-          @click="openWindow('/projection')"
+          @click="openWindow(PROJECTION_TYPE.MUSIC)"
         />
         <v-list-item
           prepend-icon="mdi-monitor-eye"
           :title="$t('shell.proj_open_return')"
-          @click="openWindow('/projection/return')"
+          @click="openWindow(PROJECTION_TYPE.RETURN)"
         />
         <v-list-item
           prepend-icon="mdi-view-grid-outline"
           :title="$t('shell.proj_open_operator')"
-          @click="openWindow('/operator')"
+          @click="openWindow(PROJECTION_TYPE.OPERATOR)"
         />
       </v-list>
     </v-menu>
@@ -140,6 +140,8 @@
 <script setup>
 import { useDisplay } from "vuetify";
 import LScreenBtn from "@/components/buttons/Screen.vue";
+import { open as openProjection } from "@/helpers/Projection";
+import { PROJECTION_TYPE, PROJECTION_URL } from "@/constants/Projection";
 
 defineProps({
   location: { type: String, default: "" },
@@ -157,14 +159,17 @@ defineEmits(["go-to-slide", "maximize", "fullscreen", "close"]);
 
 const display = useDisplay();
 
-function openWindow(route) {
-  // Em web, abre popup sem chrome do navegador; no Electron cai no handler
-  // de BrowserWindow. Mantém a experiência mínima para projeção/operador.
-  const features =
-    "popup=yes,noopener,noreferrer,width=1280,height=720,toolbar=no,location=no,menubar=no,status=no,scrollbars=no,resizable=yes";
-  const name = `louvorja_${String(route)
-    .replace(/[^a-zA-Z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")}`;
-  window.open(route, name, features);
+const ROUTE_OF_FEATURE = {
+  [PROJECTION_TYPE.MUSIC]: PROJECTION_URL.MUSIC,
+  [PROJECTION_TYPE.RETURN]: PROJECTION_URL.RETURN,
+  [PROJECTION_TYPE.OPERATOR]: PROJECTION_URL.OPERATOR,
+};
+
+function openWindow(feature) {
+  openProjection({
+    feature,
+    route: ROUTE_OF_FEATURE[feature],
+    fullscreen: feature !== PROJECTION_TYPE.OPERATOR,
+  });
 }
 </script>

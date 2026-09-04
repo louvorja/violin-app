@@ -140,6 +140,7 @@ import {
   getFallbackFeature,
   isUsingFallback,
 } from "@/helpers/Projection";
+import { PROJECTION_TYPE } from "@/constants/Projection";
 
 const props = defineProps({
   /** Identificador único da projeção (ex: "bible", "music"). Default: derivado de `module`. */
@@ -170,7 +171,17 @@ const ROUTE_BY_MODULE = {
 
 const is_mobile = computed(() => AppData.get("is_mobile"));
 
-const featureName = computed(() => props.feature || props.module || "default");
+// O player usa module="media", mas a janela que o Media abre em /projection é a
+// feature canônica "musicas". Sem o alias, o botão abriria uma segunda janela na
+// mesma rota e nunca refletiria a projeção já aberta.
+const FEATURE_BY_MODULE = {
+  media: PROJECTION_TYPE.MUSIC,
+  music: PROJECTION_TYPE.MUSIC,
+};
+
+const featureName = computed(
+  () => props.feature || FEATURE_BY_MODULE[props.module] || props.module || "default"
+);
 const routePath = computed(() => props.route || ROUTE_BY_MODULE[props.module] || null);
 const isProjectionMode = computed(() => !!routePath.value);
 

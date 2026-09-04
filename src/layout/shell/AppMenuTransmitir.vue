@@ -1,13 +1,14 @@
 <template>
   <div class="opt">
     <section v-if="!isDesktop" class="opt-section">
-      <p class="opt-hint">{{ $t("options.transmission.desktop_only") }}</p>
+      <p class="opt-empty">{{ $t("options.transmission.desktop_only") }}</p>
     </section>
 
     <template v-else>
       <!-- Servidor: start/stop + token + port + external routes toggle -->
       <section class="opt-section">
         <h3 class="opt-section-title">
+          <v-icon :icon="ICONS.UI.SERVER" size="18" />
           {{ $t("options.transmission.http_server") }}
           <span class="font-italic text-sm-body-small ml-5">
             {{ $t("options.transmission.http_server_hint") }}
@@ -100,7 +101,10 @@
 
       <!-- URLs de transmissão (compatibilidade Delphi) -->
       <section v-if="httpServer.running && externalRoutesEnabled" class="opt-section">
-        <h3 class="opt-section-title">{{ $t("options.transmission.urls_section") }}</h3>
+        <h3 class="opt-section-title">
+          <v-icon :icon="ICONS.UI.LINK" size="18" />
+          {{ $t("options.transmission.urls_section") }}
+        </h3>
         <p class="opt-hint">{{ $t("options.transmission.urls_hint") }}</p>
 
         <div class="tx-urls">
@@ -131,7 +135,10 @@
 
       <!-- Atalhos globais -->
       <section class="opt-section">
-        <h3 class="opt-section-title">{{ $t("options.transmission.shortcuts_title") }}</h3>
+        <h3 class="opt-section-title">
+          <v-icon :icon="ICONS.UI.KEYBOARD" size="18" />
+          {{ $t("options.transmission.shortcuts_title") }}
+        </h3>
         <label class="opt-checkbox">
           <input
             type="checkbox"
@@ -146,7 +153,10 @@
 
     <!-- Janelas locais — abre uma view como BrowserWindow -->
     <section class="opt-section">
-      <h3 class="opt-section-title">{{ $t("options.transmission.local_windows") }}</h3>
+      <h3 class="opt-section-title">
+        <v-icon :icon="ICONS.UI.WINDOW_RESTORE" size="18" />
+        {{ $t("options.transmission.local_windows") }}
+      </h3>
       <p class="opt-hint">{{ $t("options.transmission.local_windows_hint") }}</p>
       <div class="tx-local">
         <div v-for="win in localWindows" :key="win.route" class="tx-local-row">
@@ -154,17 +164,13 @@
           <div class="tx-local-info">
             <div class="tx-local-title">{{ $t(win.titleKey) }}</div>
           </div>
-          <select
+          <MonitorSelect
             v-if="displays.length"
-            class="opt-select opt-select--inline tx-local-select"
-            :value="getPref(featureKey(win.route)) ?? ''"
-            @change="setPref(featureKey(win.route), $event.target.value)"
-          >
-            <option value="">{{ $t("options.slides.same_window") }}</option>
-            <option v-for="d in displays" :key="d.id" :value="d.id">
-              {{ d.label || `Monitor ${d.id}` }}
-            </option>
-          </select>
+            inline
+            class="tx-local-select"
+            :model-value="getPref(featureKey(win.route))"
+            @update:model-value="setPref(featureKey(win.route), $event)"
+          />
           <v-btn
             size="small"
             class="opt-btn opt-btn--small"
@@ -209,12 +215,17 @@
 <script setup>
 import { computed, nextTick, onMounted, ref } from "vue";
 import { useDisplays } from "@/composables/useDisplays";
+import MonitorSelect from "@/components/inputs/MonitorSelect.vue";
 import Platform from "@/helpers/Platform";
+import { open as openProjection } from "@/helpers/Projection";
 import { ICONS } from "@/config/Icons";
 import QRCode from "qrcode";
 
 const isDesktop = computed(() => Platform.isDesktop);
-const { displays, getPreferred, setPreferred } = useDisplays();
+const { displays, getFeatureRole, setFeatureRole } = useDisplays();
+
+/** Papel de cada janela de transmissão. Carregado sob demanda (passa pelo IPC). */
+const featureRoles = ref({});
 
 const FULLSCREEN_ROUTES = [
   "/projection",
@@ -307,11 +318,17 @@ function featureKey(route) {
   return `transmission:${route}`;
 }
 function getPref(feature) {
-  return getPreferred(feature);
+  if (featureRoles.value[feature] === undefined) {
+    featureRoles.value[feature] = "";
+    getFeatureRole(feature).then((role) => {
+      featureRoles.value = { ...featureRoles.value, [feature]: role ?? "" };
+    });
+  }
+  return featureRoles.value[feature];
 }
-function setPref(feature, displayId) {
-  const id = displayId === "" ? null : Number(displayId);
-  setPreferred(feature, id);
+function setPref(feature, role) {
+  featureRoles.value = { ...featureRoles.value, [feature]: role };
+  setFeatureRole(feature, role || null);
 }
 
 function remoteUrl(link) {
@@ -430,25 +447,14 @@ async function setHttpServerPort(port) {
 
 async function openLocalWindow(win) {
   const { route } = win;
-  if (Platform.windows) {
-    const feature = featureKey(route);
-    const fullscreen = FULLSCREEN_ROUTES.some((r) => route.startsWith(r));
-    const frame = FRAMED_ROUTES.some((r) => route.startsWith(r));
-    const monitorId = getPref(feature) ?? null;
-    try {
-      await Platform.windows.open({
-        route,
-        feature,
-        fullscreen,
-        frame,
-        ...(monitorId !== null ? { monitorId } : {}),
-      });
-      return;
-    } catch (e) {
-      console.error("[Transmitir] open:", e);
-    }
-  }
-  window.open(window.location.origin + route, "_blank", "noopener,noreferrer");
+  const fullscreen = FULLSCREEN_ROUTES.some((r) => route.startsWith(r));
+  await openProjection({
+    route,
+    feature: featureKey(route),
+    fullscreen,
+    frame: FRAMED_ROUTES.some((r) => route.startsWith(r)),
+    monitorId: getPref(featureKey(route)) ?? null,
+  });
 }
 
 async function toggleGlobalShortcuts(enabled) {

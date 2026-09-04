@@ -17,7 +17,8 @@
 import Fuse from "fuse.js";
 import Modules from "@/helpers/Modules";
 import Media from "@/composables/useMedia";
-import Platform from "@/helpers/Platform";
+import { open as openProjection } from "@/helpers/Projection";
+import { PROJECTION_TYPE, PROJECTION_URL } from "@/constants/Projection";
 
 let _loaded = false;
 let _commands = [];
@@ -182,20 +183,11 @@ function staticCommands(t) {
       icon: "mdi-presentation",
       category: "action",
       run: () => {
-        if (Platform.isDesktop && Platform.windows) {
-          Platform.windows.open({
-            route: "/projection",
-            feature: "shell:projection",
-            fullscreen: true,
-          });
-        } else {
-          const name = "louvorja_projection";
-          window.open(
-            "/projection",
-            name,
-            "popup=yes,noopener,noreferrer,width=1280,height=720,toolbar=no,location=no,menubar=no,status=no,scrollbars=no,resizable=yes"
-          );
-        }
+        openProjection({
+          route: PROJECTION_URL.MUSIC,
+          feature: PROJECTION_TYPE.MUSIC,
+          fullscreen: true,
+        });
       },
     },
     {
@@ -205,20 +197,11 @@ function staticCommands(t) {
       icon: "mdi-view-grid",
       category: "action",
       run: () => {
-        if (Platform.isDesktop && Platform.windows) {
-          Platform.windows.open({
-            route: "/operator",
-            feature: "shell:operator",
-            fullscreen: false,
-          });
-        } else {
-          const name = "louvorja_operator";
-          window.open(
-            "/operator",
-            name,
-            "popup=yes,noopener,noreferrer,width=1280,height=720,toolbar=no,location=no,menubar=no,status=no,scrollbars=no,resizable=yes"
-          );
-        }
+        openProjection({
+          route: PROJECTION_URL.OPERATOR,
+          feature: PROJECTION_TYPE.OPERATOR,
+          fullscreen: false,
+        });
       },
     },
   ];

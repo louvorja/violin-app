@@ -37,6 +37,7 @@ import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import ModuleFormatDrawer from "@/components/ModuleFormatDrawer.vue";
 import UserData from "@/helpers/UserData";
+import { open as openProjection } from "@/helpers/Projection";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { useModuleProjection } from "@/composables/useModuleProjection";
@@ -135,7 +136,9 @@ function openFullscreen() {
     h24: is24h ? "1" : "0",
     sec: showSeconds ? "1" : "0",
   });
-  window.open(`/clock?${params}`, "_blank", "noopener,noreferrer,width=800,height=400");
+  // Feature própria: a projeção do módulo (feature "clock") usa outra rota,
+  // e um registry compartilhado só focaria a janela errada.
+  openProjection({ feature: "clock_fullscreen", route: `/clock?${params}` });
 }
 
 function close() {
