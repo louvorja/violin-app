@@ -223,7 +223,7 @@ const selectedLabel = computed(() => (selectedItem.value ? labelOf(selectedItem.
   min-width: var(--reka-select-trigger-width);
   max-height: 280px;
   overflow: hidden;
-  z-index: 2400;
+  z-index: var(--lj-z-popup);
 }
 
 .lj-select__viewport {

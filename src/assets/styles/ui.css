@@ -70,6 +70,24 @@
   --lj-ui-float-border: 1px solid var(--lj-surface-border-strong);
   --lj-ui-float-shadow: var(--lj-shadow-2);
 
+  /* ---------------------------------------------------------------------
+   * Camadas
+   *
+   * A ordem não é "quem é mais importante", e sim QUEM PODE ABRIR DENTRO DE
+   * QUEM. Um select, um menu ou um popover aparecem com frequência dentro de
+   * um diálogo — logo precisam ficar ACIMA dele, nunca abaixo. Numerar o
+   * diálogo por último parece natural e está errado: era o que deixava todo
+   * select de formulário em diálogo invisível e inclicável.
+   *
+   * Tooltip vem acima dos painéis porque descreve o que está sob o ponteiro,
+   * inclusive dentro deles. Toast vem por último: avisa o usuário mesmo com
+   * um diálogo modal aberto.
+   * ------------------------------------------------------------------- */
+  --lj-z-dialog: 2500;
+  --lj-z-popup: 2600;
+  --lj-z-tooltip: 2700;
+  --lj-z-toast: 2800;
+
   --lj-ui-disabled-opacity: 0.45;
 
   /* Tooltip é a única superfície invertida do sistema — escura sobre a

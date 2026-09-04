@@ -15,35 +15,34 @@
     >
       <!-- Toolbar -->
       <div class="media-toolbar">
-        <v-tabs v-model="libraryFilter" density="compact" color="primary">
-          <v-tab value="all">{{ t("all") }}</v-tab>
-          <v-tab value="image">{{ t("images") }}</v-tab>
-          <v-tab value="video">{{ t("videos") }}</v-tab>
-          <v-tab value="pdf">{{ t("documents") }}</v-tab>
-        </v-tabs>
-        <v-spacer />
-        <v-btn size="small" variant="tonal" @click="addFiles">
-          <v-icon start icon="mdi-plus" />
+        <LjTabs
+          :model-value="libraryFilter"
+          :tabs="filterTabs"
+          :aria-label="t('library')"
+          @update:model-value="libraryFilter = $event as LibraryFilter"
+        />
+        <span class="lj-u-spacer" />
+        <LjButton size="sm" variant="subtle" :icon="ICONS.ACTIONS.ADD" @click="addFiles">
           {{ t("add_files") }}
-        </v-btn>
+        </LjButton>
       </div>
 
-      <v-divider />
+      <LjDivider />
 
       <!-- Split -->
       <div class="media-split">
         <!-- Library -->
         <div class="media-library">
-          <v-text-field
-            v-model="searchQuery"
-            density="compact"
-            hide-details
-            :placeholder="t('search')"
-            prepend-inner-icon="mdi-magnify"
-            clearable
-            variant="plain"
-            class="media-search"
-          />
+          <div class="media-search">
+            <LjInput
+              v-model="searchQuery"
+              clearable
+              :icon="ICONS.ACTIONS.SEARCH"
+              :placeholder="t('search')"
+              :aria-label="t('search')"
+            />
+          </div>
+
           <!-- Chips de categorias (filtro) -->
           <div v-if="categories.length || uncategorizedCount > 0" class="media-chips">
             <span class="media-chips-title">{{ t("categories") }}</span>
@@ -56,19 +55,21 @@
               @click="toggleCategoryChip(cat.id)"
             >
               <span class="media-chip-icon-wrap">
-                <Icon v-if="cat.iconType === 'icon'" :icon="cat.icon" size="14" />
-                <v-img v-else :src="cat.icon" width="14" height="14" />
+                <Icon v-if="cat.iconType === 'icon'" :icon="cat.icon" :size="14" />
+                <img v-else :src="cat.icon" class="media-chip-img" alt="" />
               </span>
               <span class="media-chip-name">{{ cat.name }}</span>
               <span class="media-chip-count">
                 {{ files.filter((f) => f.categoryId === cat.id).length }}
               </span>
               <button
+                type="button"
                 class="media-chip-add"
                 :title="t('add_files')"
+                :aria-label="t('add_files')"
                 @click.stop="beginAddWithCategory(cat.id)"
               >
-                <v-icon icon="mdi-plus" size="12" />
+                <Icon :icon="ICONS.ACTIONS.ADD" :size="12" />
               </button>
             </div>
             <div
@@ -78,16 +79,18 @@
               @click="toggleCategoryChip(UNCATEGORIZED_ID)"
             >
               <span class="media-chip-icon-wrap">
-                <v-icon icon="mdi-file-multiple" size="14" />
+                <Icon :icon="ICONS.UI.FILE_MULTIPLE" :size="14" />
               </span>
               <span class="media-chip-name">{{ t("uncategorized") }}</span>
               <span class="media-chip-count">{{ uncategorizedCount }}</span>
               <button
+                type="button"
                 class="media-chip-add"
                 :title="t('add_files')"
+                :aria-label="t('add_files')"
                 @click.stop="beginAddWithCategory(UNCATEGORIZED_ID)"
               >
-                <v-icon icon="mdi-plus" size="12" />
+                <Icon :icon="ICONS.ACTIONS.ADD" :size="12" />
               </button>
             </div>
           </div>
@@ -98,65 +101,68 @@
               class="media-grid-item"
               @click="addToPlaylist(file)"
             >
-              <v-img
+              <img
                 v-if="file.thumb"
                 :src="file.thumb"
                 class="media-grid-item-thumb"
-                contain
-                height="70"
+                alt=""
+                loading="lazy"
               />
               <div v-else class="media-grid-item-thumb media-grid-item-thumb--icon">
-                <v-icon
-                  :icon="
-                    file.type === 'image'
-                      ? 'mdi-image'
-                      : file.type === 'pdf'
-                        ? 'mdi-file-pdf-box'
-                        : 'mdi-video'
-                  "
-                  color="grey"
-                  size="28"
-                />
+                <Icon :icon="fileTypeIcon(file.type)" :size="28" />
               </div>
               <div class="media-grid-item-name">{{ file.name }}</div>
               <div v-if="categoryName(file.categoryId)" class="media-grid-item-category">
                 {{ categoryName(file.categoryId) }}
               </div>
               <div class="media-grid-item-actions">
-                <v-btn variant="text" size="x-small" @click.stop="startRename(file)">
-                  <v-icon size="16" :icon="ICONS.ACTIONS.EDIT" />
-                </v-btn>
-
-                <v-btn variant="text" size="x-small" @click.stop="removeFile(file)">
-                  <v-icon :icon="ICONS.ACTIONS.DELETE" size="16" />
-                </v-btn>
+                <LjButton
+                  size="sm"
+                  variant="ghost"
+                  icon-only
+                  :icon="ICONS.ACTIONS.EDIT"
+                  :title="t('rename')"
+                  :aria-label="t('rename')"
+                  @click.stop="startRename(file)"
+                />
+                <LjButton
+                  size="sm"
+                  variant="ghost"
+                  icon-only
+                  :icon="ICONS.ACTIONS.DELETE"
+                  :title="t('delete')"
+                  :aria-label="t('delete')"
+                  @click.stop="removeFile(file)"
+                />
               </div>
             </div>
           </div>
           <div v-else class="media-empty">
-            <v-icon icon="mdi-folder-open-outline" size="48" color="grey" />
-            <p>{{ t("empty_library") }}</p>
+            <LjEmpty :icon="ICONS.UI.FOLDER_OPEN" :title="t('empty_library')" />
           </div>
         </div>
 
-        <v-divider vertical />
+        <LjDivider vertical />
 
         <!-- Playlist -->
         <div class="media-playlist">
           <div class="media-playlist-header">
-            <v-icon icon="mdi-format-list-bulleted" size="16" />
+            <Icon :icon="ICONS.FORMAT.LIST_BULLETED" :size="16" />
             <span>{{ t("playlist") }} ({{ playlist.length }})</span>
-            <v-spacer />
-            <v-btn
+            <span class="lj-u-spacer" />
+            <LjButton
               v-if="playlist.length"
-              icon="mdi-delete-outline"
-              size="x-small"
-              variant="text"
-              color="red"
+              size="sm"
+              variant="ghost"
+              icon-only
+              class="media-btn-danger"
+              :icon="ICONS.ACTIONS.DELETE"
+              :title="t('clear')"
+              :aria-label="t('clear')"
               @click="clearPlaylist"
             />
           </div>
-          <v-divider />
+          <LjDivider />
           <div v-if="playlist.length" class="media-playlist-items">
             <div
               v-for="(item, i) in playlist"
@@ -166,30 +172,35 @@
               @click="playIndex(i)"
             >
               <div class="media-playlist-item-icon">
-                <v-icon :icon="item.typeIcon" color="grey" size="18" />
+                <Icon :icon="item.typeIcon" :size="18" />
               </div>
               <div class="media-playlist-item-name">{{ item.name }}</div>
               <div class="media-playlist-item-actions">
-                <v-btn
+                <LjButton
                   v-if="i === currentIndex && isPlaying"
-                  icon="mdi-play-circle"
-                  size="x-small"
-                  variant="text"
-                  color="primary"
+                  size="sm"
+                  variant="ghost"
+                  icon-only
+                  class="media-btn-accent"
+                  :icon="ICONS.PLAYER.PLAY"
+                  :title="t('project')"
+                  :aria-label="t('project')"
                   @click.stop="playIndex(i)"
                 />
-                <v-btn
-                  icon="mdi-close"
-                  size="x-small"
-                  variant="text"
+                <LjButton
+                  size="sm"
+                  variant="ghost"
+                  icon-only
+                  :icon="ICONS.ACTIONS.CLOSE"
+                  :title="t('remove_from_playlist')"
+                  :aria-label="t('remove_from_playlist')"
                   @click.stop="removeFromPlaylist(i)"
                 />
               </div>
             </div>
           </div>
           <div v-else class="media-empty">
-            <v-icon icon="mdi-playlist-remove" size="48" color="grey" />
-            <p>{{ t("empty_playlist") }}</p>
+            <LjEmpty :icon="ICONS.PLAYER.PLAYLIST_REMOVE" :title="t('empty_playlist')" />
           </div>
         </div>
       </div>
@@ -197,25 +208,29 @@
       <!-- Player bar -->
       <div v-if="isPlaying && currentItem" class="media-playerbar">
         <div class="media-playerbar-info">
-          <v-icon :icon="currentItem.typeIcon" size="16" />
+          <Icon :icon="currentItem.typeIcon" :size="16" />
           <span class="media-playerbar-name">{{ currentItem.name }}</span>
           <span class="media-playerbar-index">{{ currentIndex + 1 }} / {{ playlist.length }}</span>
         </div>
         <div class="media-playerbar-controls">
-          <v-btn
+          <LjButton
+            icon-only
+            variant="ghost"
             :icon="ICONS.PLAYER.PREV"
-            size="small"
-            variant="text"
+            :title="t('prev')"
+            :aria-label="t('prev')"
             :disabled="
               currentIndex <= 0 &&
               (!currentItem || currentItem.type !== 'pdf' || currentPdfPage <= 1)
             "
             @click="prev"
           />
-          <v-btn
+          <LjButton
+            icon-only
+            variant="ghost"
             :icon="ICONS.PLAYER.NEXT"
-            size="small"
-            variant="text"
+            :title="t('next')"
+            :aria-label="t('next')"
             :disabled="
               currentIndex >= playlist.length - 1 &&
               (!currentItem ||
@@ -224,42 +239,40 @@
             "
             @click="next"
           />
-          <v-btn
+          <LjButton
+            icon-only
+            variant="ghost"
+            class="media-btn-danger"
             :icon="ICONS.PLAYER.STOP"
-            size="small"
-            variant="text"
-            color="error"
+            :title="t('stop')"
+            :aria-label="t('stop')"
             @click="stop"
           />
         </div>
       </div>
 
       <!-- Rename dialog -->
-      <v-dialog v-model="showRenameDialog" max-width="400">
-        <v-card>
-          <v-card-title class="text-body-1 font-weight-medium">
-            <v-icon icon="mdi-pencil-outline" class="mr-1" />
+      <LjDialog
+        v-model="showRenameDialog"
+        size="sm"
+        :title="t('rename')"
+        :icon="ICONS.ACTIONS.EDIT_OUTLINE"
+      >
+        <div class="media-rename">
+          <LjInput
+            v-model="renameInput"
+            autofocus
+            :aria-label="t('rename')"
+            @keydown.enter="confirmRename"
+          />
+        </div>
+        <template #footer>
+          <LjButton size="sm" @click="showRenameDialog = false">{{ t("cancel") }}</LjButton>
+          <LjButton size="sm" variant="primary" :disabled="!renameInput" @click="confirmRename">
             {{ t("rename") }}
-          </v-card-title>
-          <v-card-text>
-            <v-text-field
-              v-model="renameInput"
-              density="compact"
-              hide-details
-              variant="outlined"
-              autofocus
-              @keydown.enter="confirmRename"
-            />
-          </v-card-text>
-          <v-card-actions>
-            <v-spacer />
-            <v-btn variant="text" @click="showRenameDialog = false">{{ t("cancel") }}</v-btn>
-            <v-btn variant="tonal" color="primary" :disabled="!renameInput" @click="confirmRename">
-              {{ t("rename") }}
-            </v-btn>
-          </v-card-actions>
-        </v-card>
-      </v-dialog>
+          </LjButton>
+        </template>
+      </LjDialog>
 
       <!-- Hidden file input -->
       <input
@@ -267,30 +280,31 @@
         type="file"
         multiple
         accept="image/*,video/*,.pdf,.heic,.heif"
-        style="display: none"
+        class="media-file-input"
         @change="onFilesSelected"
       />
 
       <!-- Seleção de categoria na importação -->
-      <v-dialog v-model="showCategorySelect" max-width="360">
-        <v-card>
-          <v-card-title class="text-body-1 font-weight-medium">
-            {{ t("select_category") }}
-          </v-card-title>
-          <v-list>
-            <v-list-item
-              :title="t('uncategorized')"
-              @click="selectCategoryForImport(UNCATEGORIZED_ID)"
-            />
-            <v-list-item
-              v-for="cat in categories"
-              :key="cat.id"
-              :title="cat.name"
-              @click="selectCategoryForImport(cat.id)"
-            />
-          </v-list>
-        </v-card>
-      </v-dialog>
+      <LjDialog v-model="showCategorySelect" size="sm" :title="t('select_category')">
+        <div class="media-cat-list">
+          <button
+            type="button"
+            class="media-cat-option"
+            @click="selectCategoryForImport(UNCATEGORIZED_ID)"
+          >
+            {{ t("uncategorized") }}
+          </button>
+          <button
+            v-for="cat in categories"
+            :key="cat.id"
+            type="button"
+            class="media-cat-option"
+            @click="selectCategoryForImport(cat.id)"
+          >
+            {{ cat.name }}
+          </button>
+        </div>
+      </LjDialog>
 
       <!-- Gerenciar Categorias -->
       <CategoryManagerDialog
@@ -315,6 +329,7 @@ import CategoryManagerDialog, {
   type CategoryFileData,
 } from "@/components/CategoryManagerDialog.vue";
 import Icon from "@/components/Icon.vue";
+import { LjButton, LjDialog, LjDivider, LjEmpty, LjInput, LjTabs } from "@/components/ui";
 import $broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
@@ -355,6 +370,16 @@ interface PlaylistItem {
   typeIcon: string;
 }
 
+/** Filtro de tipo da barra de abas. */
+type LibraryFilter = "all" | MediaFile["type"];
+
+/** Ícone que representa o tipo do arquivo — na grade e na playlist. */
+function fileTypeIcon(type: MediaFile["type"]): string {
+  if (type === "image") return ICONS.MEDIA.IMAGE;
+  if (type === "pdf") return ICONS.UI.FILE_PDF;
+  return ICONS.MEDIA.VIDEO_FILE;
+}
+
 /* ------------------------------------------------------------------ */
 /*  IDB helpers                                                        */
 /* ------------------------------------------------------------------ */
@@ -389,7 +414,15 @@ async function deleteFile(id: string): Promise<void> {
 const moduleContainer = ref<{ t(key: string): string } | null>(null);
 const t = (key: string): string => moduleContainer.value?.t(key) || key;
 
-const libraryFilter = ref<"all" | "image" | "video" | "pdf">("all");
+const libraryFilter = ref<LibraryFilter>("all");
+
+const filterTabs = computed(() => [
+  { value: "all", label: t("all") },
+  { value: "image", label: t("images") },
+  { value: "video", label: t("videos") },
+  { value: "pdf", label: t("documents") },
+]);
+
 const searchQuery = ref("");
 const files = ref<MediaFile[]>([]);
 
@@ -899,12 +932,7 @@ function loadPlaylist(): void {
   if (saved?.length) {
     playlist.value = saved.map((item) => ({
       ...item,
-      typeIcon:
-        item.type === "image"
-          ? "mdi-image"
-          : item.type === "pdf"
-            ? "mdi-file-pdf-box"
-            : "mdi-video",
+      typeIcon: fileTypeIcon(item.type),
     }));
   }
 }
@@ -915,8 +943,7 @@ function addToPlaylist(file: MediaFile): void {
     name: file.name,
     path: file.path,
     type: file.type,
-    typeIcon:
-      file.type === "image" ? "mdi-image" : file.type === "pdf" ? "mdi-file-pdf-box" : "mdi-video",
+    typeIcon: fileTypeIcon(file.type),
   };
   playlist.value.push(item);
   savePlaylist();
@@ -1160,8 +1187,8 @@ onBeforeUnmount(() => {
 .media-toolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 12px;
+  gap: var(--lj-space-4);
+  padding: var(--lj-space-2) var(--lj-space-5);
   min-height: 40px;
   flex-shrink: 0;
 }
@@ -1173,54 +1200,68 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
+/* Bloco, não flex: `flex-direction` e `gap` aqui são inertes. Mantido como
+   estava — ligar o flex muda a altura da grade e da área vazia. */
 .media-library {
   flex-direction: column;
   flex: 1;
   min-height: 0;
   overflow: hidden;
-  padding: 8px;
-  gap: 4px;
+  padding: var(--lj-space-4);
+  gap: var(--lj-space-2);
   min-width: 0;
+}
+
+.media-search {
+  margin-bottom: var(--lj-space-5);
+}
+
+.media-search :deep(.lj-input) {
+  width: 100%;
 }
 
 .media-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-  gap: 8px;
+  gap: var(--lj-space-4);
   overflow-y: auto;
   flex: 1;
   min-height: 0;
   align-content: start;
   align-items: start;
-  padding-bottom: 8px;
+  padding-bottom: var(--lj-space-4);
 }
 
 .media-grid-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 8px 4px;
-  border-radius: 8px;
+  gap: var(--lj-space-2);
+  padding: var(--lj-space-4) var(--lj-space-2);
+  border-radius: var(--lj-radius-lg);
   cursor: pointer;
-  transition: background 0.15s;
+  transition:
+    background var(--lj-transition-normal),
+    border-color var(--lj-transition-normal);
   border: 1px solid transparent;
   position: relative;
 }
 
 .media-grid-item:hover {
-  background: rgba(var(--v-theme-primary), 0.06);
-  border-color: rgba(var(--v-theme-primary), 0.15);
+  background: var(--lj-surface-bg-hover);
+  border-color: var(--lj-surface-border);
 }
 
 .media-grid-item-actions {
   position: absolute;
-  top: 6px;
-  right: 0px;
+  top: var(--lj-space-3);
+  right: 0;
   display: flex;
   opacity: 0;
-  transition: opacity 0.12s;
-  background-color: rgb(255 255 255 / 0.71);
+  transition: opacity var(--lj-transition-fast);
+  border-radius: var(--lj-radius-sm);
+  /* Translúcido de propósito: a miniatura continua legível por baixo. */
+  background: color-mix(in srgb, var(--lj-surface-bg) 80%, transparent);
 }
 
 .media-grid-item:hover .media-grid-item-actions {
@@ -1229,20 +1270,22 @@ onBeforeUnmount(() => {
 
 .media-grid-item-thumb {
   width: 100%;
-  border-radius: 6px;
+  height: 70px;
+  object-fit: contain;
+  border-radius: var(--lj-radius-lg);
   overflow: hidden;
-  background: var(--v-surface-variant);
+  background: var(--lj-surface-bg-soft);
 }
 
 .media-grid-item-thumb--icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 70px;
+  color: var(--lj-text-subtle);
 }
 
 .media-grid-item-name {
-  font-size: 11px;
+  font-size: var(--lj-text-sm);
   line-height: 1.3;
   text-align: center;
   overflow: hidden;
@@ -1252,12 +1295,13 @@ onBeforeUnmount(() => {
   -webkit-box-orient: vertical;
   word-break: break-all;
   width: 100%;
+  color: var(--lj-text);
 }
 
 .media-grid-item-category {
-  font-size: 9px;
-  padding: 0 6px 2px;
-  color: rgba(var(--lj-on-surface-ch), 0.55);
+  font-size: var(--lj-text-xs);
+  padding: 0 var(--lj-space-3) var(--lj-space-1);
+  color: var(--lj-text-subtle);
   text-align: center;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1270,56 +1314,71 @@ onBeforeUnmount(() => {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  padding: 4px 8px 8px;
+  gap: var(--lj-space-3);
+  padding: var(--lj-space-2) var(--lj-space-4) var(--lj-space-4);
 }
+
 .media-chips-title {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--lj-text-sm);
+  font-weight: var(--lj-weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: rgba(var(--lj-on-surface-ch), 0.6);
+  color: var(--lj-text-muted);
 }
+
 .media-chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 10px;
-  border-radius: 20px;
+  gap: var(--lj-space-2);
+  padding: var(--lj-space-1) var(--lj-space-5);
+  /* Pílula — o raio acompanha a altura, fora da escala de raios do sistema. */
+  border-radius: 999px;
   border: 1.5px solid var(--chip-color);
   background: transparent;
   color: var(--chip-color);
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--lj-text-base);
   font-family: inherit;
   transition:
-    background 0.12s,
-    opacity 0.12s;
+    background var(--lj-transition-fast),
+    opacity var(--lj-transition-fast);
   opacity: 0.55;
   outline: none;
   white-space: nowrap;
 }
+
 .media-chip:hover {
   opacity: 0.85;
 }
+
 .media-chip--active {
   background: color-mix(in srgb, var(--chip-color) 20%, transparent);
   opacity: 1;
 }
+
 .media-chip--uncategorized {
-  --chip-color: #607d8b;
+  --chip-color: var(--lj-text-subtle);
 }
+
 .media-chip-icon-wrap {
   display: flex;
   align-items: center;
 }
+
+.media-chip-img {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+}
+
 .media-chip-count {
-  font-size: 10px;
+  font-size: var(--lj-text-xs);
   background: color-mix(in srgb, var(--chip-color) 30%, transparent);
-  border-radius: 10px;
-  padding: 0 5px;
+  border-radius: 999px;
+  padding: 0 var(--lj-space-3);
   line-height: 16px;
 }
+
 .media-chip-add {
   display: flex;
   align-items: center;
@@ -1334,9 +1393,10 @@ onBeforeUnmount(() => {
   padding: 0;
   opacity: 0.6;
   transition:
-    opacity 0.1s,
-    background 0.1s;
+    opacity var(--lj-transition-fast),
+    background var(--lj-transition-fast);
 }
+
 .media-chip-add:hover {
   opacity: 1;
   background: color-mix(in srgb, var(--chip-color) 20%, transparent);
@@ -1353,45 +1413,49 @@ onBeforeUnmount(() => {
 .media-playlist-header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  font-size: 13px;
-  font-weight: 500;
+  gap: var(--lj-space-3);
+  padding: var(--lj-space-4) var(--lj-space-5);
+  font-size: var(--lj-text-md);
+  font-weight: var(--lj-weight-medium);
+  color: var(--lj-text);
   flex-shrink: 0;
 }
 
 .media-playlist-items {
   flex: 1;
   overflow-y: auto;
-  padding: 4px 0;
+  padding: var(--lj-space-2) 0;
 }
 
 .media-playlist-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
+  gap: var(--lj-space-4);
+  padding: var(--lj-space-3) var(--lj-space-5);
   cursor: pointer;
-  transition: background 0.12s;
+  transition: background var(--lj-transition-fast);
   border-left: 3px solid transparent;
 }
 
 .media-playlist-item:hover {
-  background: rgba(var(--v-theme-primary), 0.04);
+  background: var(--lj-surface-bg-hover);
 }
 
 .media-playlist-item--active {
-  background: rgba(var(--v-theme-primary), 0.08);
-  border-left-color: rgb(var(--v-theme-primary));
+  background: var(--lj-ui-accent-soft);
+  border-left-color: var(--lj-ui-accent);
 }
 
 .media-playlist-item-icon {
+  display: flex;
   flex-shrink: 0;
+  color: var(--lj-text-subtle);
 }
 
 .media-playlist-item-name {
   flex: 1;
-  font-size: 12px;
+  font-size: var(--lj-text-base);
+  color: var(--lj-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1399,9 +1463,9 @@ onBeforeUnmount(() => {
 
 .media-playlist-item-actions {
   display: flex;
-  gap: 2px;
+  gap: var(--lj-space-1);
   opacity: 0;
-  transition: opacity 0.12s;
+  transition: opacity var(--lj-transition-fast);
 }
 
 .media-playlist-item:hover .media-playlist-item-actions {
@@ -1411,68 +1475,63 @@ onBeforeUnmount(() => {
 .media-playerbar {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 6px 16px;
-  border-top: 1px solid rgba(var(--v-border-color), 0.3);
-  background: rgba(var(--v-theme-primary), 0.04);
+  gap: var(--lj-space-5);
+  padding: var(--lj-space-3) var(--lj-space-6);
+  border-top: 1px solid var(--lj-surface-border);
+  background: var(--lj-surface-bg-soft);
   flex-shrink: 0;
 }
 
 .media-playerbar-info {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--lj-space-3);
   flex: 1;
   min-width: 0;
+  color: var(--lj-text);
 }
 
 .media-playerbar-name {
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--lj-text-base);
+  font-weight: var(--lj-weight-medium);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .media-playerbar-index {
-  font-size: 11px;
-  color: rgba(var(--v-theme-on-surface), 0.5);
+  font-size: var(--lj-text-sm);
+  color: var(--lj-text-subtle);
   flex-shrink: 0;
 }
 
 .media-playerbar-controls {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--lj-space-1);
   flex-shrink: 0;
+}
+
+/* Botão fantasma tingido: a forma vem do primitivo, a cor de estado daqui. */
+.media-playlist-header .media-btn-danger,
+.media-playerbar-controls .media-btn-danger {
+  color: var(--lj-danger);
+}
+
+.media-playlist-header .media-btn-danger:hover,
+.media-playerbar-controls .media-btn-danger:hover {
+  background: var(--lj-danger-soft);
+  color: var(--lj-danger);
+}
+
+.media-playlist-item-actions .media-btn-accent {
+  color: var(--lj-ui-accent-text);
 }
 
 .media-root--drag-over {
-  outline: 3px dashed rgb(var(--v-theme-primary));
+  outline: 3px dashed var(--lj-ui-accent);
   outline-offset: -6px;
-  background: rgba(var(--v-theme-primary), 0.04);
-}
-
-.media-search {
-  flex-shrink: 0;
-  margin-bottom: 12px;
-}
-.media-search :deep(.v-field) {
-  min-height: 28px;
-}
-.media-search :deep(.v-field__input) {
-  padding-top: 0;
-  padding-bottom: 0;
-  min-height: 26px;
-  font-size: 20px;
-}
-.media-search :deep(.v-field__append-inner),
-.media-search :deep(.v-field__prepend-inner) {
-  padding-top: 0;
-  padding-bottom: 0;
-}
-.media-search :deep(.v-field__prepend-inner i) {
-  font-size: 30px;
+  background: var(--lj-ui-accent-soft);
 }
 
 .media-empty {
@@ -1480,10 +1539,50 @@ onBeforeUnmount(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
   flex: 1;
   min-height: 0;
-  color: rgba(var(--v-theme-on-surface), 0.4);
-  font-size: 13px;
+  padding: var(--lj-space-6);
+}
+
+.media-file-input {
+  display: none;
+}
+
+/* ── Diálogos ── */
+
+/* `class` num LjInput cai no <input> interno (inheritAttrs: false), não na
+   moldura — a largura tem de vir do envoltório, via :deep(). */
+.media-rename :deep(.lj-input) {
+  width: 100%;
+}
+
+.media-cat-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-1);
+}
+
+.media-cat-option {
+  display: flex;
+  align-items: center;
+  min-height: var(--lj-ui-h-lg);
+  padding: 0 var(--lj-space-5);
+  border: none;
+  border-radius: var(--lj-radius-sm);
+  background: transparent;
+  color: var(--lj-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--lj-transition-fast);
+}
+
+.media-cat-option:hover {
+  background: var(--lj-surface-bg-hover);
+}
+
+.media-cat-option:focus-visible {
+  outline: none;
+  box-shadow: var(--lj-ui-focus);
 }
 </style>

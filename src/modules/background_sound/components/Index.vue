@@ -26,15 +26,21 @@
           @click="toggleCategoryChip(cat.id)"
         >
           <span class="bgs-chip-icon-wrap">
-            <Icon v-if="cat.iconType === 'icon'" :icon="cat.icon" size="14" />
-            <v-img v-else :src="cat.icon" width="14" height="14" />
+            <Icon v-if="cat.iconType === 'icon'" :icon="cat.icon" :size="14" />
+            <img v-else :src="cat.icon" class="bgs-chip-img" alt="" />
           </span>
           <span class="bgm-chip-name">{{ cat.name }}</span>
           <span class="bgs-chip-count">
             {{ libraryFiles.filter((f) => f.categoryId === cat.id).length }}
           </span>
-          <button class="bgs-chip-add" :title="t('add_audio')" @click.stop="addAudioFiles(cat.id)">
-            <v-icon icon="mdi-plus" size="12" />
+          <button
+            type="button"
+            class="bgs-chip-add"
+            :title="t('add_audio')"
+            :aria-label="t('add_audio')"
+            @click.stop="addAudioFiles(cat.id)"
+          >
+            <Icon :icon="ICONS.ACTIONS.ADD" :size="12" />
           </button>
         </div>
         <!-- Virtual: arquivos sem categoria -->
@@ -42,20 +48,22 @@
           v-if="uncategorizedCount > 0"
           class="bgs-chip"
           :class="{ 'bgm-chip--active': selectedCategoryIds.has(UNCATEGORIZED_ID) }"
-          style="--chip-color: #607d8b"
+          :style="{ '--chip-color': UNCATEGORIZED_COLOR }"
           @click="toggleCategoryChip(UNCATEGORIZED_ID)"
         >
           <span class="bgs-chip-icon-wrap">
-            <v-icon icon="mdi-music-note-outline" size="14" />
+            <Icon :icon="ICONS.MUSIC.NOTE_OUTLINE" :size="14" />
           </span>
           <span class="bgm-chip-name">{{ t("uncategorized") }}</span>
           <span class="bgs-chip-count">{{ uncategorizedCount }}</span>
           <button
+            type="button"
             class="bgs-chip-add"
             :title="t('add_audio')"
+            :aria-label="t('add_audio')"
             @click.stop="addAudioFiles(UNCATEGORIZED_ID)"
           >
-            <v-icon icon="mdi-plus" size="12" />
+            <Icon :icon="ICONS.ACTIONS.ADD" :size="12" />
           </button>
         </div>
       </div>
@@ -71,31 +79,30 @@
         >
           <div class="bgs-audio-card-top">
             <div class="bgs-audio-card-play">
-              <v-btn
-                :icon="
-                  bg.currentFile.value?.id === item.file.id && bg.isPlaying.value
-                    ? 'mdi-pause-circle'
-                    : 'mdi-play-circle'
-                "
-                size="small"
-                variant="text"
-                color="white"
+              <LjButton
+                size="lg"
+                variant="ghost"
+                icon-only
+                :icon="isCurrentPlaying(item.file.id) ? ICONS.PLAYER.PAUSE : ICONS.PLAYER.PLAY"
+                :aria-label="isCurrentPlaying(item.file.id) ? t('pause') : t('play')"
                 @click.stop="toggleFile(item.file)"
               />
             </div>
             <div class="bgs-audio-card-actions">
-              <v-btn
-                icon="mdi-pencil"
-                size="x-small"
-                variant="text"
-                class="bgs-audio-card-edit"
+              <LjButton
+                size="sm"
+                variant="ghost"
+                icon-only
+                :icon="ICONS.ACTIONS.EDIT"
+                :aria-label="t('edit_audio')"
                 @click.stop="openEditFile(item)"
               />
-              <v-btn
-                icon="mdi-close"
-                size="x-small"
-                variant="text"
-                class="bgs-audio-card-remove"
+              <LjButton
+                size="sm"
+                variant="ghost"
+                icon-only
+                :icon="ICONS.ACTIONS.CLOSE"
+                :aria-label="t('remove_title')"
                 @click.stop="removeFile(item.categoryId, item.file)"
               />
             </div>
@@ -104,7 +111,7 @@
             <span class="bgs-audio-card-name">{{ item.displayName }}</span>
             <div class="bgs-audio-card-footer">
               <span class="bgs-audio-card-cat">
-                <Icon :icon="item.icon" size="20" />
+                <Icon :icon="item.icon" :size="20" />
                 {{ item.categoryName }}
               </span>
               <span v-if="item.ext" class="bgs-audio-card-ext">{{ item.ext }}</span>
@@ -112,13 +119,11 @@
           </div>
         </div>
       </div>
-      <div v-else-if="categories.length" class="bgs-empty">
-        <v-icon icon="mdi-music-note-off" size="48" color="grey" />
-        <p>{{ t("no_files") }}</p>
-      </div>
       <div v-else class="bgs-empty">
-        <v-icon icon="mdi-music-note-off" size="48" color="grey" />
-        <p>{{ t("no_categories") }}</p>
+        <LjEmpty
+          :icon="ICONS.MUSIC.NO_AUDIO"
+          :title="categories.length ? t('no_files') : t('no_categories')"
+        />
       </div>
 
       <!-- Category Manager -->
@@ -134,80 +139,73 @@
       />
 
       <!-- Add audio dialog -->
-      <v-dialog v-model="showAddAudioDialog" max-width="400">
-        <v-card>
-          <v-card-title class="text-body-1 font-weight-medium d-flex align-center ga-2">
-            <v-icon :icon="ICONS.MEDIA.ADD" />
-            {{ t("add_audio") }}
-          </v-card-title>
-          <v-card-text>
-            <v-list density="compact">
-              <v-list-subheader>{{ t("select_category") }}</v-list-subheader>
-              <v-list-item :title="t('uncategorized')" @click="addAudioFiles(UNCATEGORIZED_ID)">
-                <template #prepend>
-                  <span class="mr-5">
-                    <v-icon icon="mdi-music-note-outline" size="35" />
-                  </span>
-                </template>
-              </v-list-item>
-              <v-list-item
-                v-for="cat in categories"
-                :key="cat.id"
-                :title="cat.name"
-                @click="addAudioFiles(cat.id)"
-              >
-                <template #prepend>
-                  <span class="mr-5">
-                    <Icon v-if="cat.iconType === 'icon'" :icon="cat.icon" size="35" />
-                    <v-img v-else :src="cat.icon" width="35" height="35" />
-                  </span>
-                </template>
-              </v-list-item>
-            </v-list>
-          </v-card-text>
-          <v-card-actions>
-            <v-spacer />
-            <v-btn variant="text" @click="showAddAudioDialog = false">{{ t("close") }}</v-btn>
-          </v-card-actions>
-        </v-card>
-      </v-dialog>
+      <LjDialog
+        v-model="showAddAudioDialog"
+        size="sm"
+        :title="t('add_audio')"
+        :icon="ICONS.MEDIA.ADD"
+      >
+        <p class="bgs-dialog-hint">{{ t("select_category") }}</p>
+        <div class="bgs-cat-options">
+          <button type="button" class="bgs-cat-option" @click="addAudioFiles(UNCATEGORIZED_ID)">
+            <span class="bgs-cat-option-icon">
+              <Icon :icon="ICONS.MUSIC.NOTE_OUTLINE" :size="28" />
+            </span>
+            <span class="bgs-cat-option-name">{{ t("uncategorized") }}</span>
+          </button>
+          <button
+            v-for="cat in categories"
+            :key="cat.id"
+            type="button"
+            class="bgs-cat-option"
+            @click="addAudioFiles(cat.id)"
+          >
+            <span class="bgs-cat-option-icon">
+              <Icon v-if="cat.iconType === 'icon'" :icon="cat.icon" :size="28" />
+              <img v-else :src="cat.icon" class="bgs-cat-option-img" alt="" />
+            </span>
+            <span class="bgs-cat-option-name">{{ cat.name }}</span>
+          </button>
+        </div>
+
+        <template #footer>
+          <LjButton size="sm" @click="showAddAudioDialog = false">{{ t("close") }}</LjButton>
+        </template>
+      </LjDialog>
 
       <!-- Edit file dialog -->
-      <v-dialog v-model="showEditFileDialog" max-width="480">
-        <v-card>
-          <v-card-title class="text-body-1 font-weight-medium d-flex align-center ga-2">
-            <v-icon icon="mdi-pencil" />
-            {{ t("edit_audio") }}
-          </v-card-title>
-          <v-card-text>
-            <v-text-field
-              v-model="editFileForm.name"
-              :label="editingFileItem?.file.fileName"
-              :placeholder="editingFileItem?.file.fileName || ''"
-              variant="outlined"
-              density="compact"
-              hide-details
-              class="mb-4"
-            />
-            <input
-              ref="editFileInput"
-              type="file"
-              accept="audio/*"
-              style="display: none"
-              @change="onEditFileSelected"
-            />
-            <v-btn variant="tonal" block @click="editFileInput?.click()">
-              <v-icon start icon="mdi-file-music" />
-              {{ editFileForm.newFile ? editFileForm.newFile.name : t("change_file") }}
-            </v-btn>
-          </v-card-text>
-          <v-card-actions>
-            <v-spacer />
-            <v-btn variant="text" @click="cancelEditFile">{{ t("cancel") }}</v-btn>
-            <v-btn variant="tonal" color="primary" @click="saveFileEdit">{{ t("save") }}</v-btn>
-          </v-card-actions>
-        </v-card>
-      </v-dialog>
+      <LjDialog v-model="showEditFileDialog" :title="t('edit_audio')" :icon="ICONS.ACTIONS.EDIT">
+        <LjField layout="column" :label="editingFileItem?.file.fileName">
+          <LjInput
+            v-model="editFileForm.name"
+            :placeholder="editingFileItem?.file.fileName || ''"
+          />
+        </LjField>
+
+        <input
+          ref="editFileInput"
+          type="file"
+          accept="audio/*"
+          class="bgs-file-input"
+          @change="onEditFileSelected"
+        />
+
+        <div class="bgs-change-file">
+          <LjButton
+            variant="subtle"
+            block
+            :icon="ICONS.MUSIC.AUDIO"
+            @click="editFileInput?.click()"
+          >
+            {{ editFileForm.newFile ? editFileForm.newFile.name : t("change_file") }}
+          </LjButton>
+        </div>
+
+        <template #footer>
+          <LjButton size="sm" @click="cancelEditFile">{{ t("cancel") }}</LjButton>
+          <LjButton size="sm" variant="primary" @click="saveFileEdit">{{ t("save") }}</LjButton>
+        </template>
+      </LjDialog>
 
       <!-- Hidden file input -->
       <input
@@ -215,7 +213,7 @@
         type="file"
         multiple
         accept="audio/*"
-        style="display: none"
+        class="bgs-file-input"
         @change="onAudioFilesSelected"
       />
     </div>
@@ -235,6 +233,7 @@ import { KEYS } from "@/constants/UserDataKeys";
 import Alert from "@/helpers/Alert";
 import { ICONS } from "@/config/Icons";
 import Icon from "@/components/Icon.vue";
+import { LjButton, LjDialog, LjEmpty, LjField, LjInput } from "@/components/ui";
 import { AUDIO_EXT } from "@/constants/FileTypes";
 import CategoryManagerDialog, { CategoryFileData } from "@/components/CategoryManagerDialog.vue";
 import $idb from "@/helpers/IndexedDB";
@@ -328,6 +327,12 @@ const selectedCategoryIds = ref(new Set<string>());
 
 /** Id virtual dos arquivos adicionados sem categoria. */
 const UNCATEGORIZED_ID = "";
+
+/**
+ * Cor do chip virtual "Sem categoria". É dado, não token de tema: as demais
+ * cores de chip vêm do cadastro da categoria, e esta ocupa o mesmo lugar.
+ */
+const UNCATEGORIZED_COLOR = "#607d8b";
 
 const uncategorizedCount = computed(() => {
   const ids = new Set(categories.value.map((c) => c.id));
@@ -477,8 +482,8 @@ const visibleFiles = computed(() => {
         file: f,
         categoryId: UNCATEGORIZED_ID,
         categoryName: t("uncategorized"),
-        color: "#607d8b",
-        icon: "mdi-music-note-outline",
+        color: UNCATEGORIZED_COLOR,
+        icon: ICONS.MUSIC.NOTE_OUTLINE,
         displayName:
           f.name || (f.fileName.match(audioExts) ? f.fileName.replace(audioExts, "") : f.fileName),
         ext: f.fileName.match(audioExts)?.[1]?.toUpperCase() || "",
@@ -492,7 +497,7 @@ const visibleFiles = computed(() => {
       categoryId: cat.id,
       categoryName: cat.name,
       color: cat.color,
-      icon: cat.iconType === "icon" ? cat.icon : "mdi-music",
+      icon: cat.iconType === "icon" ? cat.icon : ICONS.MUSIC.MUSIC,
       displayName: f.name || (extMatch ? f.fileName.replace(audioExts, "") : f.fileName),
       ext: extMatch ? extMatch[1].toUpperCase() : "",
     });
@@ -502,10 +507,10 @@ const visibleFiles = computed(() => {
 
 const volumeIcon = computed(() => {
   const v = bg.volume.value;
-  if (v <= 0 || isMuted.value) return "mdi-volume-mute";
-  if (v <= 20) return "mdi-volume-low";
-  if (v <= 50) return "mdi-volume-medium";
-  return "mdi-volume-high";
+  if (v <= 0 || isMuted.value) return ICONS.PLAYER.VOLUME_MUTE;
+  if (v <= 20) return ICONS.PLAYER.VOLUME_LOW;
+  if (v <= 50) return ICONS.PLAYER.VOLUME_MEDIUM;
+  return ICONS.PLAYER.VOLUME_HIGH;
 });
 
 /* ------------------------------------------------------------------ */
@@ -589,7 +594,7 @@ async function onDrop(e: DragEvent): Promise<void> {
   if (valid.length === 0) {
     Alert.error({
       title: t("add_audio"),
-      text: "Tipo de arquivo não suportado. Use mp3, wav, ogg, flac, etc.",
+      text: t("unsupported_file_type"),
     });
     return;
   }
@@ -597,7 +602,7 @@ async function onDrop(e: DragEvent): Promise<void> {
   if (valid.length < droppedFiles.length) {
     Alert.info({
       title: t("add_audio"),
-      text: `${valid.length} de ${droppedFiles.length} arquivos são suportados. Os demais foram ignorados.`,
+      text: t("partial_files_supported", { valid: valid.length, total: droppedFiles.length }),
     });
   }
 
@@ -749,6 +754,11 @@ const createdObjectUrls = new Map<string, string>();
 /* ------------------------------------------------------------------ */
 /*  Playback                                                           */
 /* ------------------------------------------------------------------ */
+
+/** A faixa é a que está no ar e tocando — decide o ícone do botão do card. */
+function isCurrentPlaying(fileId: string): boolean {
+  return bg.currentFile.value?.id === fileId && bg.isPlaying.value;
+}
 
 function toggleFile(file: MediaFile): void {
   if (bg.currentFile.value?.id === file.id && bg.isPlaying.value) {
@@ -944,7 +954,7 @@ async function migrateFromOldStructure(): Promise<void> {
     const newCat: CategoryFileData = {
       id: cat.id,
       name: cat.name,
-      icon: cat.icon || "mdi-music",
+      icon: cat.icon || ICONS.MUSIC.MUSIC,
       iconType: cat.iconType || "icon",
       iconData: cat.iconData,
       iconMime: cat.iconMime,
@@ -999,46 +1009,52 @@ onBeforeUnmount(() => {
   font-family: var(--lj-font-shell);
 }
 .bgm-root--drag-over {
-  outline: 2px dashed rgb(var(--v-theme-primary));
+  outline: 2px dashed var(--lj-ui-accent);
   outline-offset: -2px;
 }
 
 /* ── Empty ── */
 .bgs-empty {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
   flex: 1;
-  color: rgba(var(--v-theme-on-surface), 0.4);
-  font-size: 13px;
+  min-height: 0;
+  padding: var(--lj-space-6);
 }
 
 /* ── Category chips ── */
 .bgs-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  padding: 6px 12px;
+  align-items: center;
+  gap: var(--lj-space-3);
+  padding: var(--lj-space-3) var(--lj-space-5);
   flex-shrink: 0;
+}
+.bgm-header-title {
+  font-size: var(--lj-text-xs);
+  font-weight: var(--lj-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--lj-group-label-color, var(--lj-text-subtle));
 }
 .bgs-chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
+  gap: var(--lj-space-2);
+  padding: var(--lj-space-2) 10px;
   border-radius: 20px;
   border: 1.5px solid var(--chip-color);
   background: transparent;
   color: var(--chip-color);
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--lj-text-base);
   font-family: inherit;
   transition:
-    background 0.12s,
-    color 0.12s,
-    opacity 0.12s;
+    background var(--lj-transition-normal),
+    color var(--lj-transition-normal),
+    opacity var(--lj-transition-normal);
   opacity: 0.5;
   outline: none;
   white-space: nowrap;
@@ -1054,8 +1070,13 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
 }
+.bgs-chip-img {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+}
 .bgs-chip-count {
-  font-size: 10px;
+  font-size: var(--lj-text-xs);
   background: color-mix(in srgb, var(--chip-color) 30%, transparent);
   border-radius: 10px;
   padding: 0 5px;
@@ -1075,20 +1096,25 @@ onBeforeUnmount(() => {
   padding: 0;
   opacity: 0.6;
   transition:
-    opacity 0.1s,
-    background 0.1s;
+    opacity var(--lj-transition-fast),
+    background var(--lj-transition-fast);
 }
 .bgs-chip-add:hover {
   opacity: 1;
   background: color-mix(in srgb, var(--chip-color) 20%, transparent);
+}
+.bgs-chip-add:focus-visible {
+  outline: none;
+  opacity: 1;
+  box-shadow: var(--lj-ui-focus);
 }
 
 /* ── Audio cards grid ── */
 .bgs-audio-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 8px;
-  padding: 6px 12px;
+  gap: var(--lj-space-4);
+  padding: var(--lj-space-3) var(--lj-space-5);
   overflow-y: auto;
   flex: 1;
   min-height: 0;
@@ -1099,17 +1125,17 @@ onBeforeUnmount(() => {
   flex-direction: column;
   padding: 14px;
   border-radius: 10px;
-  background: color-mix(in srgb, var(--card-color) 85%, white);
+  background: color-mix(in srgb, var(--card-color) 85%, var(--lj-white));
   position: relative;
   min-height: 80px;
   cursor: pointer;
   transition:
-    transform 0.12s,
-    box-shadow 0.12s;
+    transform var(--lj-transition-normal),
+    box-shadow var(--lj-transition-normal);
 }
 .bgs-audio-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--lj-shadow-3);
 }
 .bgs-audio-card-top {
   display: flex;
@@ -1123,36 +1149,54 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 0;
 }
-.bgs-audio-card-edit,
-.bgs-audio-card-remove {
-  flex-shrink: 0;
-  opacity: 0.5;
-  transition: opacity 0.1s;
-  color: rgba(255, 255, 255, 0.7);
+
+/* O card é uma superfície colorida e saturada: os botões precisam do contraste
+   do branco, não do texto da superfície do tema. O primitivo é envolvido para
+   que o :deep() saia do consumidor, sem tocar no catálogo. */
+.bgs-audio-card-play :deep(.lj-btn),
+.bgs-audio-card-actions :deep(.lj-btn) {
+  border-color: transparent;
+  background: transparent;
 }
-.bgs-audio-card-edit:hover,
-.bgs-audio-card-remove:hover {
+.bgs-audio-card-play :deep(.lj-btn) {
+  color: var(--lj-white);
+}
+.bgs-audio-card-actions :deep(.lj-btn) {
+  color: var(--lj-text-on-navy-muted);
+  opacity: 0.5;
+  transition: opacity var(--lj-transition-fast);
+}
+.bgs-audio-card-play :deep(.lj-btn:hover),
+.bgs-audio-card-actions :deep(.lj-btn:hover) {
+  background: var(--lj-white-alpha-20);
+  color: var(--lj-white);
   opacity: 1;
+}
+.bgs-audio-card-play :deep(.lj-btn:focus-visible),
+.bgs-audio-card-actions :deep(.lj-btn:focus-visible) {
+  opacity: 1;
+  box-shadow: 0 0 0 2px var(--lj-white-alpha-50);
+  border-color: transparent;
 }
 .bgs-audio-card-body {
   flex: 1;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 2px;
-  margin-top: 6px;
+  gap: var(--lj-space-1);
+  margin-top: var(--lj-space-3);
   min-height: 0;
 }
 .bgs-audio-card-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 4px;
+  gap: var(--lj-space-2);
 }
 .bgs-audio-card-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: white;
+  font-size: var(--lj-text-lg);
+  font-weight: var(--lj-weight-semibold);
+  color: var(--lj-white);
   overflow: hidden;
   text-overflow: ellipsis;
   text-wrap: wrap;
@@ -1162,19 +1206,87 @@ onBeforeUnmount(() => {
   -webkit-box-orient: vertical;
 }
 .bgs-audio-card-cat {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.7);
+  font-size: var(--lj-text-sm);
+  color: var(--lj-text-on-navy-muted);
   display: inline-flex;
   align-items: center;
   gap: 3px;
 }
 .bgs-audio-card-ext {
   font-size: 9px;
-  font-weight: 600;
-  background: rgba(255, 255, 255, 0.2);
-  padding: 1px 4px;
-  border-radius: 3px;
+  font-weight: var(--lj-weight-semibold);
+  background: var(--lj-white-alpha-20);
+  padding: 1px var(--lj-space-2);
+  border-radius: var(--lj-radius-sm);
   text-transform: uppercase;
   letter-spacing: 0.3px;
+}
+
+/* ── Diálogos ── */
+.bgs-file-input {
+  display: none;
+}
+.bgs-dialog-hint {
+  margin: 0 0 var(--lj-space-4);
+  font-size: var(--lj-text-sm);
+  font-weight: var(--lj-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--lj-text-subtle);
+}
+.bgs-cat-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-2);
+}
+.bgs-cat-option {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-5);
+  width: 100%;
+  padding: var(--lj-space-3) var(--lj-space-4);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--lj-ui-radius);
+  color: var(--lj-text);
+  font-family: inherit;
+  font-size: var(--lj-text-base);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--lj-transition-fast),
+    border-color var(--lj-transition-fast);
+}
+.bgs-cat-option:hover {
+  background: var(--lj-surface-bg-hover);
+}
+.bgs-cat-option:focus-visible {
+  outline: none;
+  border-color: var(--lj-ui-accent);
+  box-shadow: var(--lj-ui-focus);
+}
+.bgs-cat-option-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  color: var(--lj-text-muted);
+}
+.bgs-cat-option-img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+.bgs-cat-option-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bgs-change-file {
+  margin-top: var(--lj-space-5);
 }
 </style>

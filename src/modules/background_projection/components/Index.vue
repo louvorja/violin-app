@@ -14,47 +14,45 @@
     >
       <!-- Toolbar -->
       <div class="bg-toolbar">
-        <v-tabs v-model="libraryFilter" density="compact" color="primary">
-          <v-tab value="all">{{ t("all") }}</v-tab>
-          <v-tab value="image">{{ t("images") }}</v-tab>
-          <v-tab value="video">{{ t("videos") }}</v-tab>
-        </v-tabs>
-        <v-spacer />
+        <LjTabs
+          :model-value="libraryFilter"
+          :tabs="filterTabs"
+          :aria-label="t('library')"
+          @update:model-value="libraryFilter = $event as LibraryFilter"
+        />
+        <span class="lj-u-spacer" />
       </div>
 
       <!-- Category chips -->
       <div v-if="categories.length || uncategorizedCount > 0" class="bg-category-chips">
-        <v-chip
+        <button
           v-for="cat in categories"
           :key="cat.id"
-          :color="cat.color"
-          :variant="selectedCategoryIds.has(cat.id) ? 'flat' : 'outlined'"
-          size="small"
+          type="button"
+          class="bg-chip"
+          :class="{ 'bg-chip--on': selectedCategoryIds.has(cat.id) }"
+          :style="{ '--bg-chip-color': cat.color }"
+          :aria-pressed="selectedCategoryIds.has(cat.id)"
           @click="toggleCategoryChip(cat.id)"
         >
-          <v-icon start :icon="cat.iconType === 'icon' ? cat.icon : ''" size="14" />
-          <v-img
-            v-if="cat.iconType === 'image'"
-            :src="cat.icon"
-            width="14"
-            height="14"
-            class="mr-1"
-          />
+          <Icon v-if="cat.iconType === 'icon'" :icon="cat.icon" :size="14" />
+          <img v-else-if="cat.iconType === 'image'" :src="cat.icon" class="bg-chip__img" alt="" />
           {{ cat.name }}
-        </v-chip>
+        </button>
         <!-- Virtual: arquivos sem categoria -->
-        <v-chip
+        <button
           v-if="uncategorizedCount > 0"
-          color="#607D8B"
-          :variant="selectedCategoryIds.has(UNCATEGORIZED_ID) ? 'flat' : 'outlined'"
-          size="small"
+          type="button"
+          class="bg-chip bg-chip--uncategorized"
+          :class="{ 'bg-chip--on': selectedCategoryIds.has(UNCATEGORIZED_ID) }"
+          :aria-pressed="selectedCategoryIds.has(UNCATEGORIZED_ID)"
           @click="toggleCategoryChip(UNCATEGORIZED_ID)"
         >
           {{ t("uncategorized") }} ({{ uncategorizedCount }})
-        </v-chip>
+        </button>
       </div>
 
-      <v-divider />
+      <LjDivider />
 
       <!-- Grid -->
       <div v-if="filteredFiles.length" class="bg-grid">
@@ -65,12 +63,14 @@
           @mouseenter="onHoverStart(file)"
           @mouseleave="onHoverEnd"
         >
-          <div
+          <button
+            type="button"
             class="bg-grid-thumb"
             :class="{
               'bg-grid-thumb--selected': selectedId === file.id,
               'bg-grid-thumb--playing': selectedId === file.id && isPlaying,
             }"
+            :title="file.name"
             @click="playFile(file)"
           >
             <img v-if="file.thumb" :src="file.thumb" class="bg-grid-img" alt="" />
@@ -82,73 +82,77 @@
               muted
               autoplay
             />
-            <div v-else class="bg-grid-icon">
-              <v-icon :icon="file.type === 'image' ? 'mdi-image' : 'mdi-video'" size="32" />
-            </div>
-            <div class="bg-grid-badge">{{ fileBadge(file) }}</div>
-            <!--            <div class="bg-grid-category">-->
-            <!--              {{ file.categoryId }}-->
-            <!--            </div>-->
-            <div v-if="selectedId === file.id && !isPlaying" class="bg-grid-check">
-              <v-icon icon="mdi-check-circle" size="22" color="success" />
-            </div>
-            <div v-if="selectedId === file.id && isPlaying" class="bg-grid-playing">
-              <v-icon icon="mdi-play-circle" size="20" color="white" />
-            </div>
-          </div>
+            <span v-else class="bg-grid-icon">
+              <Icon
+                :icon="file.type === 'image' ? ICONS.MEDIA.IMAGE : ICONS.MEDIA.VIDEO_FILE"
+                :size="32"
+              />
+            </span>
+            <span class="bg-grid-badge">{{ fileBadge(file) }}</span>
+            <span v-if="selectedId === file.id && !isPlaying" class="bg-grid-check">
+              <Icon :icon="ICONS.UI.CHECK_CIRCLE" :size="22" class="bg-grid-check__icon" />
+            </span>
+            <span v-if="selectedId === file.id && isPlaying" class="bg-grid-playing">
+              <Icon :icon="ICONS.PLAYER.PLAY" :size="20" class="bg-grid-playing__icon" />
+            </span>
+          </button>
           <div class="bg-grid-name">{{ file.name }}</div>
           <div class="bg-grid-actions">
-            <v-btn variant="text" size="x-small" @click.stop="startRename(file)">
-              <v-icon size="16" :icon="ICONS.ACTIONS.EDIT" />
-            </v-btn>
-            <v-btn variant="text" size="x-small" @click.stop="removeFile(file)">
-              <v-icon :icon="ICONS.ACTIONS.DELETE" size="16" />
-            </v-btn>
+            <LjButton
+              size="sm"
+              variant="ghost"
+              icon-only
+              :icon="ICONS.ACTIONS.EDIT"
+              :aria-label="t('rename')"
+              :title="t('rename')"
+              @click.stop="startRename(file)"
+            />
+            <LjButton
+              size="sm"
+              variant="ghost"
+              icon-only
+              class="bg-grid-actions__danger"
+              :icon="ICONS.ACTIONS.DELETE"
+              :aria-label="t('delete')"
+              :title="t('delete')"
+              @click.stop="removeFile(file)"
+            />
           </div>
         </div>
       </div>
       <div v-else class="bg-empty">
-        <v-icon icon="mdi-image-multiple" size="48" color="grey" />
-        <p>{{ t("empty_library") }}</p>
+        <LjEmpty :icon="ICONS.MEDIA.IMAGE_MULTIPLE" :title="t('empty_library')" />
       </div>
 
       <!-- Rename dialog -->
-      <v-dialog v-model="showRenameDialog" max-width="400">
-        <v-card>
-          <v-card-title class="text-body-1 font-weight-medium">
-            <v-icon icon="mdi-pencil-outline" class="mr-1" />
+      <LjDialog
+        v-model="showRenameDialog"
+        size="sm"
+        :title="t('rename')"
+        :icon="ICONS.ACTIONS.EDIT_OUTLINE"
+      >
+        <LjField layout="column" :label="t('name')">
+          <LjInput v-model="renameInput" autofocus @keydown.enter="confirmRename" />
+        </LjField>
+
+        <LjField layout="column" :label="t('category')" class="bg-rename-field">
+          <LjSelect
+            :model-value="renameCategoryId"
+            :items="categories"
+            item-value="id"
+            item-label="name"
+            :placeholder="t('uncategorized')"
+            @update:model-value="renameCategoryId = String($event)"
+          />
+        </LjField>
+
+        <template #footer>
+          <LjButton size="sm" @click="showRenameDialog = false">{{ t("cancel") }}</LjButton>
+          <LjButton size="sm" variant="primary" :disabled="!renameInput" @click="confirmRename">
             {{ t("rename") }}
-          </v-card-title>
-          <v-card-text>
-            <v-text-field
-              v-model="renameInput"
-              density="compact"
-              hide-details
-              variant="outlined"
-              autofocus
-              @keydown.enter="confirmRename"
-            />
-            <v-select
-              v-model="renameCategoryId"
-              :items="categories"
-              item-title="name"
-              item-value="id"
-              :label="t('category')"
-              density="compact"
-              hide-details
-              variant="outlined"
-              class="mt-3"
-            />
-          </v-card-text>
-          <v-card-actions>
-            <v-spacer />
-            <v-btn variant="text" @click="showRenameDialog = false">{{ t("cancel") }}</v-btn>
-            <v-btn variant="tonal" color="primary" :disabled="!renameInput" @click="confirmRename">
-              {{ t("rename") }}
-            </v-btn>
-          </v-card-actions>
-        </v-card>
-      </v-dialog>
+          </LjButton>
+        </template>
+      </LjDialog>
 
       <!-- Category Manager -->
       <CategoryManagerDialog
@@ -163,46 +167,37 @@
       />
 
       <!-- Category Select Dialog -->
-      <v-dialog v-model="showCategorySelect" max-width="400">
-        <v-card>
-          <v-card-title class="text-body-1 font-weight-medium">
-            {{ t("select_category") }}
-          </v-card-title>
-          <v-card-text>
-            <v-list density="compact">
-              <v-list-item
-                :title="t('uncategorized')"
-                @click="selectCategoryForImport(UNCATEGORIZED_ID)"
-              >
-                <template #prepend>
-                  <v-icon icon="mdi-image-multiple-outline" size="24" class="mr-3" />
-                </template>
-              </v-list-item>
-              <v-list-item
-                v-for="cat in categories"
-                :key="cat.id"
-                :title="cat.name"
-                @click="selectCategoryForImport(cat.id)"
-              >
-                <template #prepend>
-                  <v-icon
-                    v-if="cat.iconType === 'icon'"
-                    :icon="cat.icon"
-                    :color="cat.color"
-                    size="24"
-                    class="mr-3"
-                  />
-                  <v-img v-else :src="cat.icon" width="24" height="24" class="mr-3" />
-                </template>
-              </v-list-item>
-            </v-list>
-          </v-card-text>
-          <v-card-actions>
-            <v-spacer />
-            <v-btn variant="text" @click="showCategorySelect = false">{{ t("cancel") }}</v-btn>
-          </v-card-actions>
-        </v-card>
-      </v-dialog>
+      <LjDialog v-model="showCategorySelect" size="sm" :title="t('select_category')">
+        <div class="bg-catlist">
+          <button
+            type="button"
+            class="bg-catlist__item"
+            @click="selectCategoryForImport(UNCATEGORIZED_ID)"
+          >
+            <span class="bg-catlist__icon">
+              <Icon :icon="ICONS.MEDIA.IMAGE_MULTIPLE_OUTLINE" :size="24" />
+            </span>
+            <span class="bg-catlist__name">{{ t("uncategorized") }}</span>
+          </button>
+          <button
+            v-for="cat in categories"
+            :key="cat.id"
+            type="button"
+            class="bg-catlist__item"
+            @click="selectCategoryForImport(cat.id)"
+          >
+            <span class="bg-catlist__icon" :style="{ color: cat.color }">
+              <Icon v-if="cat.iconType === 'icon'" :icon="cat.icon" :size="24" />
+              <img v-else :src="cat.icon" class="bg-catlist__img" alt="" />
+            </span>
+            <span class="bg-catlist__name">{{ cat.name }}</span>
+          </button>
+        </div>
+
+        <template #footer>
+          <LjButton size="sm" @click="showCategorySelect = false">{{ t("cancel") }}</LjButton>
+        </template>
+      </LjDialog>
 
       <!-- Hidden file input -->
       <input
@@ -210,7 +205,7 @@
         type="file"
         multiple
         accept="image/*,video/*"
-        style="display: none"
+        class="bg-file-input"
         @change="onFilesSelected"
       />
     </div>
@@ -221,6 +216,18 @@
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
+import Icon from "@/components/Icon.vue";
+import {
+  LjButton,
+  LjDialog,
+  LjDivider,
+  LjEmpty,
+  LjField,
+  LjInput,
+  LjSelect,
+  LjTabs,
+} from "@/components/ui";
+import type { LjTab } from "@/components/ui";
 import $broadcast from "@/helpers/Broadcast";
 import Alert from "@/helpers/Alert";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
@@ -305,7 +312,18 @@ const moduleContainer = ref<{ t(key: string, named?: Record<string, unknown>): s
 const t = (key: string, named?: Record<string, unknown>): string =>
   moduleContainer.value?.t(key, named as any) || key;
 
-const libraryFilter = ref<"all" | "image" | "video">("all");
+type LibraryFilter = "all" | "image" | "video";
+
+const libraryFilter = ref<LibraryFilter>("all");
+
+// As abas são recalculadas a cada troca de idioma: `t` depende do
+// ModuleContainer montado, então a lista precisa ser computada, não estática.
+const filterTabs = computed<LjTab[]>(() => [
+  { value: "all", label: t("all") },
+  { value: "image", label: t("images") },
+  { value: "video", label: t("videos") },
+]);
+
 const searchQuery = ref("");
 const files = ref<BgFile[]>([]);
 const selectedId = ref<string | null>(null);
@@ -857,55 +875,114 @@ onMounted(async () => {
   overflow: hidden;
 }
 .bg-root--drag-over {
-  outline: 2px dashed rgb(var(--v-theme-primary));
+  outline: 2px dashed var(--lj-ui-accent);
   outline-offset: -2px;
 }
-.bg-category-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 8px 16px;
-  flex-shrink: 0;
-}
+
+/* ── Barra de filtros ── */
 .bg-toolbar {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 16px;
+  gap: var(--lj-space-5);
+  padding: var(--lj-space-4) var(--lj-space-6);
   flex-shrink: 0;
 }
+
+/* ── Chips de categoria ──
+   A cor vem do banco (category.color) e entra por variável inline, para que
+   traço, texto e preenchimento do estado ligado saiam todos dela. Sem cor
+   definida, o chip cai no acento do sistema. */
+.bg-category-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lj-space-3);
+  padding: var(--lj-space-4) var(--lj-space-6);
+  flex-shrink: 0;
+}
+.bg-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lj-space-2);
+  height: var(--lj-ui-h-sm);
+  padding-inline: var(--lj-ui-px-sm);
+  border: 1px solid var(--bg-chip-color, var(--lj-ui-accent));
+  border-radius: var(--lj-ui-radius);
+  background: transparent;
+  color: var(--bg-chip-color, var(--lj-ui-accent-text));
+  font-family: inherit;
+  font-size: var(--lj-ui-font-sm);
+  font-weight: var(--lj-weight-medium);
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  outline: none;
+  transition:
+    background var(--lj-transition-fast),
+    color var(--lj-transition-fast);
+}
+.bg-chip:hover {
+  background: color-mix(in srgb, var(--bg-chip-color, var(--lj-ui-accent)) 15%, transparent);
+}
+.bg-chip:focus-visible {
+  box-shadow: var(--lj-ui-focus);
+}
+.bg-chip--on {
+  background: var(--bg-chip-color, var(--lj-ui-accent));
+  color: var(--lj-white);
+}
+/* O chip virtual não tem categoria no banco, então não tem cor própria. */
+.bg-chip--uncategorized {
+  --bg-chip-color: var(--lj-gray-500);
+}
+.bg-chip__img {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+}
+
+/* ── Grade da biblioteca ── */
 .bg-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 8px;
-  padding: 12px;
+  gap: var(--lj-space-4);
+  padding: var(--lj-space-5);
   overflow-y: auto;
   flex: 1;
 }
 .bg-grid-item {
   cursor: pointer;
   overflow: hidden;
-  background: rgba(var(--v-theme-surface), 0.3);
-  border-radius: 6px;
+  background: var(--lj-surface-bg-soft);
+  border-radius: var(--lj-radius-lg);
 }
 .bg-grid-item:hover .bg-grid-thumb {
-  border: 4px solid rgba(var(--v-theme-primary), 0.5);
+  border-color: var(--lj-ui-accent);
 }
 .bg-grid-thumb {
+  display: block;
   position: relative;
+  width: 100%;
   aspect-ratio: 16 / 9;
+  padding: 0;
   overflow: hidden;
-  background: #111;
+  background: var(--lj-color-projection-bg);
   border: 2px solid transparent;
-  border-radius: 4px;
+  border-radius: var(--lj-radius-md);
+  cursor: pointer;
+  outline: none;
   transition:
-    border-color 0.15s,
-    box-shadow 0.15s;
+    border-color var(--lj-transition-normal),
+    box-shadow var(--lj-transition-normal);
+}
+.bg-grid-thumb:focus-visible {
+  box-shadow: var(--lj-ui-focus);
 }
 .bg-grid-thumb--selected {
-  border: 4px solid rgba(var(--v-theme-primary), 0.5);
-  box-shadow: 0 0 0 2px rgba(var(--v-theme-primary), 0.3);
+  border-color: var(--lj-ui-accent);
+  box-shadow: 0 0 0 2px var(--lj-ui-accent-soft);
 }
+/* Véu claro sobre a miniatura marcada — o "check" precisa de contraste sobre
+   qualquer imagem. */
 .bg-grid-thumb--selected::after {
   content: "";
   position: absolute;
@@ -917,9 +994,10 @@ onMounted(async () => {
   display: flex;
 }
 .bg-grid-thumb--playing {
-  border-color: #27ae60;
+  border-color: var(--lj-success);
 }
 .bg-grid-img {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -930,47 +1008,44 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--lj-white-alpha-25);
 }
 .bg-grid-badge {
   position: absolute;
-  top: 4px;
-  right: 4px;
-  font-size: 9px;
-  font-weight: 700;
-  background: rgba(0, 0, 0, 0.7);
-  color: #fff;
-  padding: 2px 5px;
-  border-radius: 3px;
+  top: var(--lj-space-2);
+  right: var(--lj-space-2);
+  font-size: var(--lj-text-xs);
+  font-weight: var(--lj-weight-bold);
+  background: var(--lj-black-alpha-75);
+  color: var(--lj-white);
+  padding: var(--lj-space-1) var(--lj-space-3);
+  border-radius: var(--lj-radius-sm);
   letter-spacing: 0.5px;
-}
-.bg-grid-category {
-  position: absolute;
-  bottom: 4px;
-  left: 4px;
-  font-size: 9px;
-  font-weight: 700;
-  background: rgba(0, 0, 0, 0.7);
-  color: #fff;
-  padding: 2px 5px;
-  border-radius: 3px;
-  letter-spacing: 0.5px;
+  line-height: 1.4;
 }
 .bg-grid-playing {
   position: absolute;
-  bottom: 4px;
-  right: 4px;
+  bottom: var(--lj-space-2);
+  right: var(--lj-space-2);
+  display: flex;
+}
+.bg-grid-playing__icon {
+  color: var(--lj-white);
 }
 .bg-grid-check {
   position: absolute;
-  top: 4px;
-  left: 4px;
+  top: var(--lj-space-2);
+  left: var(--lj-space-2);
   display: none;
-  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.6));
+  filter: drop-shadow(0 1px 3px var(--lj-black-alpha-40));
+}
+.bg-grid-check__icon {
+  color: var(--lj-success);
 }
 .bg-grid-name {
-  padding: 4px 6px;
-  font-size: 11px;
+  padding: var(--lj-space-2) var(--lj-space-3);
+  font-size: var(--lj-text-sm);
+  color: var(--lj-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -979,21 +1054,88 @@ onMounted(async () => {
   display: flex;
   justify-content: flex-end;
   gap: 0;
-  padding: 0 2px 4px;
+  padding: 0 var(--lj-space-1) var(--lj-space-2);
   opacity: 0;
-  transition: opacity 0.12s;
+  transition: opacity var(--lj-transition-normal);
 }
-.bg-grid-item:hover .bg-grid-actions {
+.bg-grid-item:hover .bg-grid-actions,
+.bg-grid-item:focus-within .bg-grid-actions {
   opacity: 1;
 }
+/* O seletor é composto de propósito: `.lj-btn--ghost:hover` do primitivo tem a
+   mesma especificidade de uma classe isolada com escopo, e o desempate por
+   ordem de injeção não é garantido. */
+.bg-grid-actions .bg-grid-actions__danger:hover {
+  color: var(--lj-danger);
+}
+
+/* ── Biblioteca vazia ── */
 .bg-empty {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
   flex: 1;
-  gap: 8px;
-  color: rgba(var(--v-theme-on-surface), 0.4);
-  font-size: 13px;
+  padding: var(--lj-space-7);
+}
+
+/* ── Diálogo de renomear ── */
+.bg-rename-field {
+  margin-top: var(--lj-space-5);
+}
+
+/* ── Diálogo de escolha de categoria ──
+   Lista de opções: sem primitivo de lista no catálogo, é markup próprio com
+   os mesmos tokens de superfície e foco dos demais controles. */
+.bg-catlist {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-1);
+}
+.bg-catlist__item {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-5);
+  width: 100%;
+  padding: var(--lj-space-4) var(--lj-space-5);
+  border: none;
+  border-radius: var(--lj-radius-sm);
+  background: transparent;
+  color: var(--lj-text);
+  font-family: inherit;
+  font-size: var(--lj-text-base);
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+  transition: background var(--lj-transition-fast);
+}
+.bg-catlist__item:hover {
+  background: var(--lj-surface-bg-hover);
+}
+.bg-catlist__item:focus-visible {
+  box-shadow: var(--lj-ui-focus);
+}
+.bg-catlist__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+.bg-catlist__img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+.bg-catlist__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bg-file-input {
+  display: none;
 }
 </style>

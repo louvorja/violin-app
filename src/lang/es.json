@@ -1211,7 +1211,12 @@
       "animation_duration": "Duración de la entrada",
       "exit_animation_duration": "Duración de la salida",
       "background_color": "Color de fondo del avatar",
-      "bg_transparent": "Fondo transparente"
+      "bg_transparent": "Fondo transparente",
+      "bg_opacity": "Opacidad del fondo",
+      "bg_swatches": "Colores sugeridos",
+      "anchor_left": "Izquierda",
+      "anchor_center": "Centro",
+      "anchor_right": "Derecha"
     },
     "musics": {
       "title": "Músicas",

@@ -321,6 +321,12 @@
         <LjField label="Confirme o nome" layout="column">
           <LjInput v-model="demoText" placeholder="Culto de sábado" />
         </LjField>
+        <!-- Select dentro de diálogo: o caso que a escala de camadas conserta.
+             Com o diálogo numerado acima dos painéis, este menu abria ATRÁS
+             dele — invisível e inclicável. -->
+        <LjField label="Mover itens para" layout="column">
+          <LjSelect v-model="demoFont" :items="fontItems" />
+        </LjField>
         <template #footer>
           <LjButton size="sm" @click="dialogOpen = false">Cancelar</LjButton>
           <LjButton size="sm" variant="danger" @click="dialogOpen = false">Excluir</LjButton>

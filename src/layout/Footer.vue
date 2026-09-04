@@ -13,7 +13,7 @@
     <BackgroundSoundPlayer v-if="hasBgSound" />
     <FileProjectionBar v-if="hasProjection" />
     <div v-if="playlist.isActive.value" class="playlist-bar">
-      <v-icon icon="mdi-playlist-music" size="14" class="playlist-bar-icon" />
+      <Icon :icon="ICONS.PLAYER.PLAYLIST" :size="14" class="playlist-bar-icon" />
       <span class="playlist-bar-name">{{ playlist.currentPlaylist.value?.name }}</span>
       <span class="playlist-bar-meta">
         {{ playlist.playedCount.value }}/{{ playlist.totalSongs.value }} ·
@@ -21,41 +21,46 @@
         {{ formatDuration(playlist.totalDuration.value) }}
       </span>
       <div class="playlist-bar-controls">
-        <button
-          type="button"
-          class="player-btn"
-          :disabled="playlist.currentIndex.value <= 0"
-          :title="$t('shell.player.prev')"
-          @click="playlist.playPrev()"
-        >
-          <v-icon icon="mdi-skip-previous" size="18" />
-        </button>
-        <button
-          type="button"
-          class="player-btn"
-          :disabled="playlist.currentIndex.value >= playlist.totalSongs.value - 1"
-          :title="$t('shell.player.next')"
-          @click="playlist.playNext()"
-        >
-          <v-icon icon="mdi-skip-next" size="18" />
-        </button>
-        <button
-          type="button"
-          class="player-btn player-btn--danger"
-          :title="$t('shell.player.close')"
-          @click="playlist.stopPlaylist()"
-        >
-          <v-icon icon="mdi-close" size="16" />
-        </button>
+        <LjTooltip :text="$t('shell.player.prev')">
+          <button
+            type="button"
+            class="player-btn"
+            :disabled="playlist.currentIndex.value <= 0"
+            :aria-label="$t('shell.player.prev')"
+            @click="playlist.playPrev()"
+          >
+            <Icon :icon="ICONS.PLAYER.PREV" :size="18" />
+          </button>
+        </LjTooltip>
+        <LjTooltip :text="$t('shell.player.next')">
+          <button
+            type="button"
+            class="player-btn"
+            :disabled="playlist.currentIndex.value >= playlist.totalSongs.value - 1"
+            :aria-label="$t('shell.player.next')"
+            @click="playlist.playNext()"
+          >
+            <Icon :icon="ICONS.PLAYER.NEXT" :size="18" />
+          </button>
+        </LjTooltip>
+        <LjTooltip :text="$t('shell.player.close')">
+          <button
+            type="button"
+            class="player-btn player-btn--danger"
+            :aria-label="$t('shell.player.close')"
+            @click="playlist.stopPlaylist()"
+          >
+            <Icon :icon="ICONS.ACTIONS.CLOSE" :size="16" />
+          </button>
+        </LjTooltip>
       </div>
     </div>
     <div v-if="hasPlayer" class="player">
       <div class="player-title" :class="{ 'player-title--youtube': isYouTube }">
-        <v-icon
-          :icon="isYouTube ? 'mdi-youtube' : 'mdi-music'"
-          size="14"
+        <Icon
+          :icon="isYouTube ? ICONS.MEDIA.YOUTUBE : ICONS.MEDIA.AUDIO"
+          :size="14"
           class="player-title-icon"
-          :color="isYouTube ? '#fff' : undefined"
         />
         <span class="player-title-text lj-u-truncate">
           <template v-if="isYouTube">{{ $t("shell.playing_youtube") }}:</template>
@@ -66,82 +71,94 @@
 
       <div class="player-row">
         <div class="player-controls">
-          <button
-            v-if="hasSlides"
-            type="button"
-            class="player-btn"
-            :title="$t('shell.player.first')"
-            :disabled="!canPrev"
-            @click="firstSlide()"
-          >
-            <v-icon icon="mdi-skip-previous" size="22" />
-          </button>
-          <button
-            v-if="hasSlides"
-            type="button"
-            class="player-btn"
-            :title="$t('shell.player.prev')"
-            :disabled="!canPrev"
-            @click="prevSlide()"
-          >
-            <v-icon icon="mdi-chevron-left" size="22" />
-          </button>
-          <button
+          <LjTooltip v-if="hasSlides" :text="$t('shell.player.first')">
+            <button
+              type="button"
+              class="player-btn"
+              :disabled="!canPrev"
+              :aria-label="$t('shell.player.first')"
+              @click="firstSlide()"
+            >
+              <Icon :icon="ICONS.PLAYER.PREV" :size="22" />
+            </button>
+          </LjTooltip>
+          <LjTooltip v-if="hasSlides" :text="$t('shell.player.prev')">
+            <button
+              type="button"
+              class="player-btn"
+              :disabled="!canPrev"
+              :aria-label="$t('shell.player.prev')"
+              @click="prevSlide()"
+            >
+              <Icon :icon="ICONS.ACTIONS.PREVIOUS" :size="22" />
+            </button>
+          </LjTooltip>
+          <LjTooltip v-if="hasAudio" :text="$t('shell.player.rewind')">
+            <button
+              type="button"
+              class="player-btn"
+              :aria-label="$t('shell.player.rewind')"
+              @click="rewind()"
+            >
+              <Icon :icon="ICONS.PLAYER.REWIND_10" :size="20" />
+            </button>
+          </LjTooltip>
+          <LjTooltip
             v-if="hasAudio"
-            type="button"
-            class="player-btn"
-            :title="$t('shell.player.rewind')"
-            @click="rewind()"
+            :text="isPaused ? $t('shell.player.play') : $t('shell.player.pause')"
           >
-            <v-icon icon="mdi-rewind-10" size="20" />
-          </button>
-          <button
-            v-if="hasAudio"
-            type="button"
-            class="player-btn player-btn--primary"
-            :title="isPaused ? $t('shell.player.play') : $t('shell.player.pause')"
-            @click="togglePlay"
-          >
-            <v-icon :icon="isPaused ? 'mdi-play' : 'mdi-pause'" size="24" />
-          </button>
-          <button
-            v-if="hasAudio"
-            type="button"
-            class="player-btn"
-            :title="$t('shell.player.forward')"
-            @click="forward()"
-          >
-            <v-icon icon="mdi-fast-forward-10" size="20" />
-          </button>
-          <button
-            v-if="hasSlides"
-            type="button"
-            class="player-btn"
-            :title="$t('shell.player.next')"
-            :disabled="!canNext"
-            @click="nextSlide()"
-          >
-            <v-icon icon="mdi-chevron-right" size="22" />
-          </button>
-          <button
-            v-if="hasSlides"
-            type="button"
-            class="player-btn"
-            :title="$t('shell.player.last')"
-            :disabled="!canNext"
-            @click="lastSlide()"
-          >
-            <v-icon icon="mdi-skip-next" size="22" />
-          </button>
-          <span class="player-divider" />
-          <button
-            type="button"
-            class="player-btn player-btn--close"
-            :title="$t('shell.player.close')"
-            @click="closeMedia()"
-          >
-            <v-icon icon="mdi-close" size="20" />
-          </button>
+            <button
+              type="button"
+              class="player-btn player-btn--primary"
+              :aria-label="isPaused ? $t('shell.player.play') : $t('shell.player.pause')"
+              @click="togglePlay"
+            >
+              <Icon :icon="isPaused ? ICONS.PLAYER.PLAYER : ICONS.PLAYER.PAUSE_PLAIN" :size="24" />
+            </button>
+          </LjTooltip>
+          <LjTooltip v-if="hasAudio" :text="$t('shell.player.forward')">
+            <button
+              type="button"
+              class="player-btn"
+              :aria-label="$t('shell.player.forward')"
+              @click="forward()"
+            >
+              <Icon :icon="ICONS.PLAYER.FORWARD_10" :size="20" />
+            </button>
+          </LjTooltip>
+          <LjTooltip v-if="hasSlides" :text="$t('shell.player.next')">
+            <button
+              type="button"
+              class="player-btn"
+              :disabled="!canNext"
+              :aria-label="$t('shell.player.next')"
+              @click="nextSlide()"
+            >
+              <Icon :icon="ICONS.ACTIONS.NEXT" :size="22" />
+            </button>
+          </LjTooltip>
+          <LjTooltip v-if="hasSlides" :text="$t('shell.player.last')">
+            <button
+              type="button"
+              class="player-btn"
+              :disabled="!canNext"
+              :aria-label="$t('shell.player.last')"
+              @click="lastSlide()"
+            >
+              <Icon :icon="ICONS.PLAYER.NEXT" :size="22" />
+            </button>
+          </LjTooltip>
+          <LjDivider vertical />
+          <LjTooltip :text="$t('shell.player.close')">
+            <button
+              type="button"
+              class="player-btn player-btn--close"
+              :aria-label="$t('shell.player.close')"
+              @click="closeMedia()"
+            >
+              <Icon :icon="ICONS.ACTIONS.CLOSE" :size="20" />
+            </button>
+          </LjTooltip>
         </div>
 
         <div v-if="!hasAudio" class="player-slide-text" v-html="slideText" />
@@ -152,25 +169,29 @@
             <span class="player-time-sep">/</span>
             {{ shortTime(duration) }}
           </span>
-          <span v-if="hasSlides" class="player-counter">
+          <LjChip v-if="hasSlides" class="player-counter">
             {{ slideIndex + 1 }} / {{ totalSlides }}
-          </span>
-          <button
-            type="button"
-            class="player-btn player-btn--small"
-            :title="$t('shell.player.maximize')"
-            @click="maximizeMedia()"
-          >
-            <v-icon icon="mdi-open-in-app" size="16" />
-          </button>
-          <button
-            type="button"
-            class="player-btn player-btn--small"
-            :title="$t('shell.player.fullscreen')"
-            @click="fullscreenMedia()"
-          >
-            <v-icon icon="mdi-fullscreen" size="16" />
-          </button>
+          </LjChip>
+          <LjTooltip :text="$t('shell.player.maximize')">
+            <button
+              type="button"
+              class="player-btn player-btn--small"
+              :aria-label="$t('shell.player.maximize')"
+              @click="maximizeMedia()"
+            >
+              <Icon :icon="ICONS.UI.OPEN_IN_APP" :size="16" />
+            </button>
+          </LjTooltip>
+          <LjTooltip :text="$t('shell.player.fullscreen')">
+            <button
+              type="button"
+              class="player-btn player-btn--small"
+              :aria-label="$t('shell.player.fullscreen')"
+              @click="fullscreenMedia()"
+            >
+              <Icon :icon="ICONS.PLAYER.FULLSCREEN" :size="16" />
+            </button>
+          </LjTooltip>
         </div>
       </div>
 
@@ -203,6 +224,9 @@ import Database from "@/helpers/Database";
 import DateTime from "@/helpers/DateTime";
 import BackgroundSoundPlayer from "@/components/BackgroundSoundPlayer.vue";
 import FileProjectionBar from "@/components/FileProjectionBar.vue";
+import Icon from "@/components/Icon.vue";
+import { LjChip, LjDivider, LjTooltip } from "@/components/ui";
+import { ICONS } from "@/config/Icons";
 import { useFileProjection } from "@/composables/useFileProjection";
 import { usePlaylistPlayback } from "@/modules/musics/composables/usePlaylistPlayback";
 
@@ -234,7 +258,6 @@ const hasAudio = computed(() => {
 });
 
 const hasSlides = computed(() => {
-  console.log(media.value);
   if (
     media.value?.config?.is_youtube ||
     media.value?.config?.video_file ||
@@ -445,9 +468,12 @@ onMounted(loadDBVersion);
   letter-spacing: 0.02em;
 }
 
+/* O vermelho do YouTube é identidade externa: não varia com o tema, por isso
+   tem token próprio em vez de sair da paleta funcional. O ícone herda a cor
+   do container (currentColor), sem prop de cor no Icon. */
 .player-title--youtube {
-  background: #c0392b;
-  color: #fff;
+  background: var(--lj-player-youtube-bg);
+  color: var(--lj-white);
 }
 
 .player-title--youtube .player-title-icon {
@@ -470,6 +496,9 @@ onMounted(loadDBVersion);
   flex-shrink: 0;
 }
 
+/* Botão de transporte: dimensão fixa herdada do Delphi (36x38), fora da escala
+   sm/md/lg dos primitivos — por isso segue markup próprio. Traço, raio, foco e
+   opacidade de desabilitado vêm dos contratos de `ui.css`. */
 .player-btn {
   width: var(--lj-player-btn-width);
   height: var(--lj-player-btn-height);
@@ -480,10 +509,11 @@ onMounted(loadDBVersion);
   border: 1px solid transparent;
   color: var(--lj-text);
   cursor: pointer;
-  border-radius: var(--lj-radius-xs);
+  border-radius: var(--lj-ui-radius);
   transition:
     background var(--lj-transition-fast),
-    border-color var(--lj-transition-fast);
+    border-color var(--lj-transition-fast),
+    box-shadow var(--lj-transition-fast);
   outline: none;
   font-family: inherit;
 }
@@ -493,20 +523,26 @@ onMounted(loadDBVersion);
   border-color: var(--lj-surface-border-strong);
 }
 
+.player-btn:focus-visible {
+  box-shadow: var(--lj-ui-focus);
+  border-color: var(--lj-ui-accent);
+}
+
 .player-btn:disabled {
-  opacity: 0.35;
+  opacity: var(--lj-ui-disabled-opacity);
   cursor: not-allowed;
 }
 
 .player-btn--primary {
   width: var(--lj-player-btn-primary-width);
-  background: var(--lj-navy);
-  color: var(--lj-white);
-  border-color: color-mix(in srgb, var(--lj-navy) 70%, black);
+  background: var(--lj-ui-accent);
+  color: var(--lj-ui-accent-fg);
+  border-color: var(--lj-ui-accent-press);
 }
 
 .player-btn--primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--lj-navy) 90%, white 10%);
+  background: var(--lj-ui-accent-hover);
+  border-color: var(--lj-ui-accent-hover);
 }
 
 .player-btn--close {
@@ -523,11 +559,13 @@ onMounted(loadDBVersion);
   height: 28px;
 }
 
-.player-divider {
-  width: 1px;
+/* LjDivider vertical estica por padrão; aqui ele é um traço curto entre os
+   grupos de botões, com a altura original de 24px. */
+.player-controls :deep(.lj-divider--vertical) {
+  align-self: center;
   height: 24px;
+  min-height: 0;
   margin: 0 var(--lj-space-3);
-  background: var(--lj-divider);
 }
 
 .player-slide-text {
@@ -565,14 +603,14 @@ onMounted(loadDBVersion);
   opacity: 0.5;
 }
 
-.player-counter {
-  font-variant-numeric: tabular-nums;
-  font-weight: var(--lj-weight-semibold);
-  background: var(--lj-hover-bg);
-  padding: 2px var(--lj-space-4);
-  border-radius: var(--lj-radius-xs);
+/* Contador de slides: o LjChip dá a superfície e o traço; o tamanho de fonte e
+   a largura mínima são mantidos para o número não encolher durante o culto. */
+.player-meta :deep(.player-counter) {
   min-width: 50px;
-  text-align: center;
+  justify-content: center;
+  font-size: var(--lj-text-base);
+  font-weight: var(--lj-weight-semibold);
+  font-variant-numeric: tabular-nums;
 }
 
 /* Timeline gauge */
@@ -604,13 +642,13 @@ onMounted(loadDBVersion);
   top: 0;
   left: 0;
   bottom: 0;
-  background: linear-gradient(180deg, var(--lj-navy-dark), var(--lj-navy-darker));
+  background: linear-gradient(180deg, var(--lj-ui-accent), var(--lj-ui-accent-press));
   transition: width 0.1s linear;
   box-shadow: 0 0 8px var(--lj-gold-alpha-60);
 }
 
 .player-gauge-fill--paused {
-  background: linear-gradient(180deg, var(--lj-navy-active), var(--lj-navy));
+  background: linear-gradient(180deg, var(--lj-ui-accent-hover), var(--lj-ui-accent));
   box-shadow: none;
   transition: width 0.1s linear;
 }

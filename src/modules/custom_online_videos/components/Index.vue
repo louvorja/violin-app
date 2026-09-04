@@ -17,15 +17,21 @@
           @click="toggleCategoryChip(cat.id)"
         >
           <span class="cv-chip-icon-wrap">
-            <Icon v-if="cat.iconType === 'icon'" :icon="cat.icon" size="14" />
-            <v-img v-else :src="cat.icon" width="14" height="14" />
+            <Icon v-if="cat.iconType === 'icon'" :icon="cat.icon" :size="14" />
+            <img v-else :src="cat.icon" class="cv-chip-img" alt="" />
           </span>
           <span class="cv-chip-name">{{ cat.name }}</span>
           <span class="cv-chip-count">
             {{ videos.filter((v) => v.categoryId === cat.id).length }}
           </span>
-          <button class="cv-chip-add" :title="t('add_video')" @click.stop="openAdd(cat.id)">
-            <v-icon icon="mdi-plus" size="12" />
+          <button
+            type="button"
+            class="cv-chip-add"
+            :title="t('add_video')"
+            :aria-label="t('add_video')"
+            @click.stop="openAdd(cat.id)"
+          >
+            <Icon :icon="ICONS.ACTIONS.ADD" :size="12" />
           </button>
         </div>
         <div
@@ -35,41 +41,66 @@
           @click="toggleCategoryChip(UNCATEGORIZED_ID)"
         >
           <span class="cv-chip-icon-wrap">
-            <v-icon icon="mdi-youtube" size="14" />
+            <Icon :icon="ICONS.MEDIA.YOUTUBE" :size="14" />
           </span>
           <span class="cv-chip-name">{{ t("uncategorized") }}</span>
           <span class="cv-chip-count">{{ uncategorizedCount }}</span>
-          <button class="cv-chip-add" :title="t('add_video')" @click.stop="openAdd()">
-            <v-icon icon="mdi-plus" size="12" />
+          <button
+            type="button"
+            class="cv-chip-add"
+            :title="t('add_video')"
+            :aria-label="t('add_video')"
+            @click.stop="openAdd()"
+          >
+            <Icon :icon="ICONS.ACTIONS.ADD" :size="12" />
           </button>
         </div>
       </div>
 
-      <div v-if="!videos.length" class="cv-empty">
-        {{ categories.length ? t("empty") : t("no_categories") }}
-      </div>
+      <LjEmpty
+        v-if="!videos.length"
+        class="cv-empty"
+        :icon="ICONS.MEDIA.YOUTUBE"
+        :title="categories.length ? t('empty') : t('no_categories')"
+      />
 
       <!-- List view -->
       <div v-else-if="viewMode === 'list'" class="cv-list">
         <template v-for="v in filteredVideos" :key="v.id">
           <div class="cv-list-item" :class="{ 'cv-list-item--active': projectingId === v.id }">
-            <v-icon icon="mdi-youtube" size="20" color="#e74c3c" />
+            <Icon :icon="ICONS.MEDIA.YOUTUBE" :size="20" class="cv-youtube" />
             <span class="cv-list-name">{{ v.name }}</span>
             <span v-if="categoryName(v.categoryId)" class="cv-list-category">
               {{ categoryName(v.categoryId) }}
             </span>
-            <v-spacer />
-            <v-btn
-              size="x-small"
-              variant="tonal"
-              color="primary"
+            <span class="lj-u-spacer" />
+            <LjButton
+              size="sm"
+              variant="primary"
               :disabled="projectingId == v.id"
               @click="projectVideo(v)"
             >
               {{ t("project") }}
-            </v-btn>
-            <v-btn size="x-small" variant="text" icon="mdi-pencil" @click="openEdit(v)" />
-            <v-btn size="x-small" variant="text" icon="mdi-delete" @click="confirmDelete(v)" />
+            </LjButton>
+            <LjButton
+              size="sm"
+              variant="ghost"
+              icon-only
+              :icon="ICONS.ACTIONS.EDIT"
+              :title="t('edit')"
+              :aria-label="t('edit')"
+              @click="openEdit(v)"
+            />
+            <LjButton
+              size="sm"
+              variant="ghost"
+              icon-only
+              class="cv-btn-danger"
+              :icon="ICONS.ACTIONS.DELETE"
+              :title="t('delete')"
+              :aria-label="t('delete')"
+              @click="confirmDelete(v)"
+            />
           </div>
         </template>
       </div>
@@ -77,7 +108,8 @@
       <!-- Grid / Thumbnail view -->
       <div v-else class="cv-grid">
         <template v-for="v in filteredVideos" :key="v.id">
-          <div
+          <LjCard
+            flush
             class="cv-grid-card"
             :class="{ 'cv-grid-card--active': projectingId === v.id }"
             @click="projectVideo(v)"
@@ -85,10 +117,10 @@
             <div class="cv-grid-thumb">
               <img v-if="thumbUrls[v.id]" :src="thumbUrls[v.id]" alt="" class="cv-grid-img" />
               <div v-else class="cv-grid-placeholder">
-                <v-icon icon="mdi-youtube" size="40" color="#e74c3c" />
+                <Icon :icon="ICONS.MEDIA.YOUTUBE" :size="40" class="cv-youtube" />
               </div>
               <div class="cv-grid-overlay">
-                <v-icon icon="mdi-play-circle" size="36" color="#fff" />
+                <Icon :icon="ICONS.PLAYER.PLAY" :size="36" class="cv-grid-play" />
               </div>
             </div>
             <div class="cv-grid-name">{{ v.name }}</div>
@@ -96,60 +128,66 @@
               {{ categoryName(v.categoryId) }}
             </div>
             <div class="cv-grid-actions">
-              <v-btn size="x-small" variant="text" icon="mdi-pencil" @click.stop="openEdit(v)" />
-              <v-btn
-                size="x-small"
-                variant="text"
-                icon="mdi-delete"
+              <LjButton
+                size="sm"
+                variant="ghost"
+                icon-only
+                :icon="ICONS.ACTIONS.EDIT"
+                :title="t('edit')"
+                :aria-label="t('edit')"
+                @click.stop="openEdit(v)"
+              />
+              <LjButton
+                size="sm"
+                variant="ghost"
+                icon-only
+                class="cv-btn-danger"
+                :icon="ICONS.ACTIONS.DELETE"
+                :title="t('delete')"
+                :aria-label="t('delete')"
                 @click.stop="confirmDelete(v)"
               />
             </div>
-          </div>
+          </LjCard>
         </template>
       </div>
     </div>
 
     <!-- Add / Edit dialog -->
-    <v-dialog v-model="dialogOpen" max-width="480" @keydown.esc="dialogOpen = false">
-      <v-card>
-        <v-card-title>{{ editingId ? t("edit_title") : t("add_title") }}</v-card-title>
-        <v-card-text>
-          <v-text-field
-            v-if="editingId"
-            v-model="formName"
-            :label="t('name')"
-            :placeholder="t('name_placeholder')"
-            variant="outlined"
-            density="compact"
-            autofocus
-            @keydown.enter="saveVideo"
-          />
-          <v-text-field
-            v-model="formUrl"
-            :label="t('url')"
-            :placeholder="t('url_placeholder')"
-            variant="outlined"
-            density="compact"
-            :autofocus="!editingId"
-            @keydown.enter="saveVideo"
-          />
-          <v-select
-            v-model="formCategoryId"
-            :label="t('select_category')"
-            :items="categorySelectItems"
-            variant="outlined"
-            density="compact"
-          />
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn variant="text" @click="dialogOpen = false">{{ t("cancel") }}</v-btn>
-          <v-btn color="primary" variant="tonal" :loading="saving" @click="saveVideo">
-            {{ t("save") }}
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <LjDialog
+      v-model="dialogOpen"
+      :title="editingId ? t('edit_title') : t('add_title')"
+      :icon="editingId ? ICONS.ACTIONS.EDIT : ICONS.ACTIONS.ADD"
+    >
+      <LjField v-if="editingId" layout="column" :label="t('name')">
+        <LjInput
+          v-model="formName"
+          autofocus
+          :placeholder="t('name_placeholder')"
+          @keydown.enter="saveVideo"
+        />
+      </LjField>
+
+      <LjField layout="column" :label="t('url')">
+        <LjInput
+          v-model="formUrl"
+          :autofocus="!editingId"
+          :placeholder="t('url_placeholder')"
+          @keydown.enter="saveVideo"
+        />
+      </LjField>
+
+      <LjField layout="column" :label="t('select_category')">
+        <LjSelect v-model="formCategoryId" :items="categorySelectItems" item-label="title" />
+      </LjField>
+
+      <template #footer>
+        <LjButton size="sm" @click="dialogOpen = false">{{ t("cancel") }}</LjButton>
+        <LjButton size="sm" variant="primary" :loading="saving" @click="saveVideo">
+          {{ t("save") }}
+        </LjButton>
+      </template>
+    </LjDialog>
 
     <!-- Gerenciar Categorias -->
     <CategoryManagerDialog
@@ -171,6 +209,7 @@ import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import CategoryManagerDialog, { CategoryFileData } from "@/components/CategoryManagerDialog.vue";
 import Icon from "@/components/Icon.vue";
+import { LjButton, LjCard, LjDialog, LjEmpty, LjField, LjInput, LjSelect } from "@/components/ui";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import $alert from "@/helpers/Alert";
 import $idb from "@/helpers/IndexedDB";
@@ -553,24 +592,21 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   width: 100%;
-  padding: 4px 8px;
-  gap: 8px;
+  padding: var(--lj-space-2) var(--lj-space-4);
+  gap: var(--lj-space-4);
 }
 
 .cv-body {
   display: flex;
   flex-direction: column;
-  padding: 8px 12px;
-  gap: 8px;
+  padding: var(--lj-space-4) var(--lj-space-5);
+  gap: var(--lj-space-4);
   overflow-y: auto;
   flex: 1;
 }
 
 .cv-empty {
-  text-align: center;
-  padding: 32px 16px;
-  color: rgba(var(--lj-on-surface-ch), 0.5);
-  font-size: 13px;
+  margin-top: var(--lj-space-6);
 }
 
 /* ── Chips de categorias (filtro) ── */
@@ -578,57 +614,74 @@ onBeforeUnmount(() => {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: var(--lj-space-3);
 }
+
 .cv-chips-title {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--lj-text-sm);
+  font-weight: var(--lj-weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: rgba(var(--lj-on-surface-ch), 0.6);
-  margin-right: 2px;
+  color: var(--lj-text-muted);
+  margin-right: var(--lj-space-1);
 }
+
+/* A cor vem da categoria (dado do usuário), então entra por `--chip-color`
+   no style inline — o resto do desenho é todo token. */
 .cv-chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--lj-space-2);
   padding: 3px 10px;
   border-radius: 20px;
   border: 1.5px solid var(--chip-color);
   background: transparent;
   color: var(--chip-color);
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--lj-text-base);
   font-family: inherit;
   transition:
-    background 0.12s,
-    color 0.12s,
-    opacity 0.12s;
+    background var(--lj-transition-normal),
+    color var(--lj-transition-normal),
+    opacity var(--lj-transition-normal);
   opacity: 0.5;
   outline: none;
   white-space: nowrap;
 }
+
 .cv-chip:hover {
   opacity: 0.85;
 }
+
 .cv-chip--active {
   background: color-mix(in srgb, var(--chip-color) 20%, transparent);
   opacity: 1;
 }
+
+/* "Sem categoria" não tem cor própria — herda o cinza de texto do tema. */
 .cv-chip--uncategorized {
-  --chip-color: #607d8b;
+  --chip-color: var(--lj-text-muted);
 }
+
 .cv-chip-icon-wrap {
   display: flex;
   align-items: center;
 }
+
+.cv-chip-img {
+  width: 14px;
+  height: 14px;
+  object-fit: cover;
+}
+
 .cv-chip-count {
-  font-size: 10px;
+  font-size: var(--lj-text-xs);
   background: color-mix(in srgb, var(--chip-color) 30%, transparent);
   border-radius: 10px;
   padding: 0 5px;
   line-height: 16px;
 }
+
 .cv-chip-add {
   display: flex;
   align-items: center;
@@ -643,56 +696,81 @@ onBeforeUnmount(() => {
   padding: 0;
   opacity: 0.6;
   transition:
-    opacity 0.1s,
-    background 0.1s;
+    opacity var(--lj-transition-fast),
+    background var(--lj-transition-fast);
 }
+
 .cv-chip-add:hover {
   opacity: 1;
   background: color-mix(in srgb, var(--chip-color) 20%, transparent);
 }
 
+.cv-chip-add:focus-visible {
+  outline: none;
+  box-shadow: var(--lj-ui-focus);
+}
+
 /* Etiqueta de categoria no item/card */
 .cv-list-category,
 .cv-grid-category {
-  font-size: 10px;
-  padding: 1px 6px;
+  font-size: var(--lj-text-xs);
+  padding: 1px var(--lj-space-3);
   border-radius: 10px;
-  background: rgba(var(--lj-on-surface-ch), 0.08);
-  color: rgba(var(--lj-on-surface-ch), 0.6);
+  background: var(--lj-surface-bg-active);
+  color: var(--lj-text-muted);
   white-space: nowrap;
 }
+
 .cv-grid-category {
-  margin: 0 8px 2px;
+  margin: 0 var(--lj-space-4) var(--lj-space-1);
   display: inline-block;
   width: fit-content;
 }
 
-/* List view */
+/* O vermelho aqui é a marca do YouTube, não estado de controle. */
+.cv-youtube {
+  color: var(--lj-danger);
+}
+
+/* Especificidade acima do primitivo: a raiz do LjButton carrega tanto o escopo
+   dele quanto o desta tela, e os dois seletores empatariam em 0-2-0. */
+.cv-list-item .cv-btn-danger,
+.cv-grid-actions .cv-btn-danger {
+  color: var(--lj-danger);
+}
+
+.cv-list-item .cv-btn-danger:hover,
+.cv-grid-actions .cv-btn-danger:hover {
+  background: var(--lj-danger-soft);
+  color: var(--lj-danger);
+}
+
+/* ── Lista ── */
 .cv-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--lj-space-1);
 }
 
 .cv-list-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border-radius: 4px;
-  transition: background 0.15s;
+  gap: var(--lj-space-4);
+  padding: var(--lj-space-3) var(--lj-space-4);
+  border-radius: var(--lj-radius-md);
+  transition: background var(--lj-transition-normal);
 }
 
 .cv-list-item:hover {
-  background: rgba(var(--lj-on-surface-ch), 0.05);
+  background: var(--lj-surface-bg-hover);
 }
 
 .cv-list-item--active {
-  background: rgba(231, 76, 60, 0.1);
+  background: var(--lj-ui-accent-soft);
 }
 
 .cv-list-name {
-  font-size: 13px;
+  font-size: var(--lj-text-md);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -700,37 +778,37 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
-/* Grid view */
+/* ── Grade de miniaturas ── */
 .cv-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 12px;
+  gap: var(--lj-space-5);
 }
 
-.cv-grid-card {
-  border-radius: 6px;
+.cv-grid .cv-grid-card {
+  border: 2px solid transparent;
+  border-radius: var(--lj-radius-lg);
   overflow: hidden;
   cursor: pointer;
-  background: rgba(var(--lj-on-surface-ch), 0.04);
+  background: var(--lj-surface-bg-soft);
   transition:
-    transform 0.15s,
-    box-shadow 0.15s;
-  border: 2px solid transparent;
+    transform var(--lj-transition-normal),
+    box-shadow var(--lj-transition-normal);
 }
 
-.cv-grid-card:hover {
+.cv-grid .cv-grid-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--lj-shadow-3);
 }
 
-.cv-grid-card--active {
-  border-color: #e74c3c;
+.cv-grid .cv-grid-card--active {
+  border-color: var(--lj-ui-accent);
 }
 
 .cv-grid-thumb {
   position: relative;
   aspect-ratio: 16 / 9;
-  background: #111;
+  background: var(--lj-gray-900);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -757,19 +835,23 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.3);
+  background: var(--lj-black-alpha-30);
   opacity: 0;
-  transition: opacity 0.2s;
+  transition: opacity var(--lj-transition-slow);
 }
 
 .cv-grid-card:hover .cv-grid-overlay {
   opacity: 1;
 }
 
+.cv-grid-play {
+  color: var(--lj-white);
+}
+
 .cv-grid-name {
-  padding: 6px 8px 2px;
-  font-size: 12px;
-  font-weight: 500;
+  padding: var(--lj-space-3) var(--lj-space-4) var(--lj-space-1);
+  font-size: var(--lj-text-base);
+  font-weight: var(--lj-weight-medium);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -778,6 +860,7 @@ onBeforeUnmount(() => {
 .cv-grid-actions {
   display: flex;
   justify-content: flex-end;
-  padding: 0 4px 4px;
+  gap: var(--lj-space-1);
+  padding: 0 var(--lj-space-2) var(--lj-space-2);
 }
 </style>

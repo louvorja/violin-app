@@ -109,7 +109,7 @@ const timerStyle = computed(() => ({
 <style>
 .lj-toast {
   position: fixed;
-  z-index: 2700;
+  z-index: var(--lj-z-toast);
   bottom: var(--lj-space-7);
   left: 50%;
   transform: translateX(-50%);

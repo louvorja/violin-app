@@ -33,7 +33,7 @@ withDefaults(
 /* Tooltip é a única superfície flutuante invertida do sistema: fundo escuro
    sobre a interface clara, para não competir com menus e popovers. */
 .lj-tooltip {
-  z-index: 2600;
+  z-index: var(--lj-z-tooltip);
   display: flex;
   align-items: center;
   gap: var(--lj-space-3);

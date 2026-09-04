@@ -1,100 +1,88 @@
 <template>
-  <v-dialog
+  <LjDialog
     :model-value="modelValue"
-    max-width="720"
+    :title="t('video_search.title')"
+    :icon="ICONS.ACTIONS.SEARCH"
+    size="lg"
     @update:model-value="$emit('update:modelValue', $event)"
-    @keydown.escape="$emit('update:modelValue', false)"
   >
-    <v-card class="lvs-card">
-      <header class="lvs-header">
-        <v-icon icon="mdi-magnify" size="18" />
-        <span>{{ t("video_search.title") }}</span>
-        <v-spacer />
-        <button class="lvs-close" @click="$emit('update:modelValue', false)">
-          <v-icon icon="mdi-close" size="14" />
-        </button>
-      </header>
+    <LjField layout="column" :label="t('video_search.find_label')">
+      <LjInput
+        ref="inputEl"
+        v-model="query"
+        autocomplete="off"
+        @keydown.enter.prevent="selectFirstMatch"
+        @keydown.down.prevent="moveSelection(1)"
+        @keydown.up.prevent="moveSelection(-1)"
+      />
+    </LjField>
 
-      <div class="lvs-filter">
-        <label for="lvs-q">{{ t("video_search.find_label") }}</label>
-        <input
-          id="lvs-q"
-          ref="inputEl"
-          v-model="query"
-          type="text"
-          class="lvs-input"
-          autocomplete="off"
-          @keydown.enter.prevent="selectFirstMatch"
-          @keydown.down.prevent="moveSelection(1)"
-          @keydown.up.prevent="moveSelection(-1)"
-        />
-      </div>
+    <div class="lvs-table-wrap">
+      <table class="lvs-table">
+        <thead>
+          <tr>
+            <th class="lvs-col-source">{{ t("video_search.col_source") }}</th>
+            <th class="lvs-col-video">{{ t("video_search.col_video") }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-if="!filteredRows.length">
+            <td colspan="2" class="lvs-empty">
+              {{ query ? t("video_search.empty_search") : t("video_search.empty") }}
+            </td>
+          </tr>
+          <tr
+            v-for="(row, i) in filteredRows"
+            :key="`${row.id}-${i}`"
+            :class="{ 'is-active': i === activeIndex }"
+            @mouseenter="activeIndex = i"
+            @click="selectRow(row)"
+            @dblclick="selectRow(row)"
+          >
+            <td class="lvs-source-cell">
+              <img
+                v-if="row.source === 'online' && row.iconUrl && !failedIcons.has(row.id)"
+                :src="row.iconUrl"
+                alt=""
+                class="lvs-source-img"
+                loading="lazy"
+                @error="failedIcons.add(row.id)"
+              />
+              <Icon
+                v-else-if="row.source === 'online'"
+                :icon="ICONS.MODULES.ONLINE_VIDEOS"
+                :size="13"
+                class="lvs-source-icon"
+              />
+              <Icon
+                v-else
+                :icon="ICONS.MODULES.CUSTOM_ONLINE_VIDEOS"
+                :size="13"
+                class="lvs-source-icon"
+              />
+              {{ row.sourceLabel }}
+            </td>
+            <td>{{ row.name }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
-      <div class="lvs-table-wrap">
-        <table class="lvs-table">
-          <thead>
-            <tr>
-              <th class="lvs-col-source">{{ t("video_search.col_source") }}</th>
-              <th class="lvs-col-video">{{ t("video_search.col_video") }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="!filteredRows.length">
-              <td colspan="2" class="lvs-empty">
-                {{ query ? t("video_search.empty_search") : t("video_search.empty") }}
-              </td>
-            </tr>
-            <tr
-              v-for="(row, i) in filteredRows"
-              :key="`${row.id}-${i}`"
-              :class="{ 'is-active': i === activeIndex }"
-              @mouseenter="activeIndex = i"
-              @click="selectRow(row)"
-              @dblclick="selectRow(row)"
-            >
-              <td class="lvs-source-cell">
-                <img
-                  v-if="row.source === 'online' && row.iconUrl && !failedIcons.has(row.id)"
-                  :src="row.iconUrl"
-                  alt=""
-                  class="lvs-source-img"
-                  loading="lazy"
-                  @error="failedIcons.add(row.id)"
-                />
-                <v-icon
-                  v-else-if="row.source === 'online'"
-                  :icon="ICONS.MODULES.ONLINE_VIDEOS"
-                  size="13"
-                  class="lvs-source-icon"
-                />
-                <v-icon
-                  v-else
-                  :icon="ICONS.MODULES.CUSTOM_ONLINE_VIDEOS"
-                  size="13"
-                  class="lvs-source-icon"
-                />
-                {{ row.sourceLabel }}
-              </td>
-              <td>{{ row.name }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <footer class="lvs-footer">
-        <span class="lvs-count">{{ filteredRows.length }} / {{ allRows.length }}</span>
-        <v-spacer />
-        <button class="lvs-btn" @click="$emit('update:modelValue', false)">
-          {{ t("actions.cancel") }}
-        </button>
-      </footer>
-    </v-card>
-  </v-dialog>
+    <template #footer>
+      <span class="lvs-count">{{ filteredRows.length }} / {{ allRows.length }}</span>
+      <span class="lj-u-spacer" />
+      <LjButton size="sm" @click="$emit('update:modelValue', false)">
+        {{ t("actions.cancel") }}
+      </LjButton>
+    </template>
+  </LjDialog>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import Icon from "@/components/Icon.vue";
+import { LjButton, LjDialog, LjField, LjInput } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import pt from "../lang/pt.json";
 import es from "../lang/es.json";
@@ -151,7 +139,7 @@ const t = (key: string) => _t(key, locale.value);
 
 const query = ref("");
 const activeIndex = ref(0);
-const inputEl = ref<HTMLInputElement | null>(null);
+const inputEl = ref<{ focus: () => void } | null>(null);
 const failedIcons = ref(new Set<string>());
 
 function sourceLabel(v: VideoSearchItem): string {
@@ -197,6 +185,8 @@ watch(
     if (v) {
       query.value = "";
       activeIndex.value = 0;
+      // O campo só existe depois que o diálogo monta o conteúdo; o nextTick
+      // roda depois do autofoco do próprio diálogo, então o foco fica aqui.
       nextTick(() => inputEl.value?.focus());
     }
   }
@@ -219,92 +209,36 @@ function selectRow(row: Row) {
 }
 </script>
 
+<!-- O corpo do diálogo viaja num portal, mas é compilado AQUI (slot do
+     consumidor), então o Vue carimba o atributo de escopo nele e `scoped`
+     funciona normalmente. -->
 <style scoped>
-.lvs-card {
-  background: var(--lj-surface-bg);
-  color: var(--lj-text);
-  border-radius: 6px;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-.lvs-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.1));
-  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  font-weight: 500;
-}
-.lvs-close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border: none;
-  background: transparent;
-  border-radius: 3px;
-  color: rgba(var(--lj-on-surface-ch), 0.6);
-  cursor: pointer;
-}
-.lvs-close:hover {
-  background: rgba(220, 38, 38, 0.15);
-  color: #dc2626;
-}
-
-.lvs-filter {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 12px 14px;
-  border-bottom: 1px solid rgba(var(--v-border-color), 0.2);
-  background: rgba(var(--lj-on-surface-ch), 0.03);
-}
-.lvs-filter label {
-  font-size: 12px;
-  color: var(--lj-text);
-}
-.lvs-input {
-  height: 30px;
-  padding: 0 8px;
-  border: 1px solid rgba(var(--v-border-color), 0.5);
-  border-radius: 3px;
-  background: var(--lj-surface-bg);
-  color: var(--lj-text);
-  font-size: 13px;
-  font-family: inherit;
-  outline: none;
-}
-.lvs-input:focus {
-  border-color: var(--lj-navy);
-  box-shadow: var(--lj-shadow-focus-navy-sm);
-}
-
+/* Tabela não tem primitivo equivalente no catálogo: markup nativo sobre os
+   tokens, com cabeçalho fixo enquanto a lista rola. */
 .lvs-table-wrap {
   max-height: 50vh;
   overflow-y: auto;
-  border-bottom: 1px solid rgba(var(--v-border-color), 0.2);
+  border: 1px solid var(--lj-surface-border);
+  border-radius: var(--lj-radius-md);
 }
 .lvs-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: var(--lj-text-base);
 }
 .lvs-table thead th {
   position: sticky;
   top: 0;
   z-index: 1;
-  background: var(--lj-gray-50);
+  background: var(--lj-surface-bg-soft);
   text-align: left;
-  padding: 8px 12px;
-  font-weight: 500;
-  border-bottom: 1px solid rgba(var(--v-border-color), 0.3);
+  padding: var(--lj-space-4) var(--lj-space-5);
+  font-weight: var(--lj-weight-medium);
+  border-bottom: 1px solid var(--lj-surface-border);
 }
 .lvs-table tbody td {
-  padding: 6px 12px;
-  border-bottom: 1px solid rgba(var(--v-border-color), 0.12);
+  padding: var(--lj-space-3) var(--lj-space-5);
+  border-bottom: 1px solid var(--lj-surface-divider);
   cursor: pointer;
   white-space: nowrap;
   overflow: hidden;
@@ -312,18 +246,18 @@ function selectRow(row: Row) {
 }
 .lvs-table tbody tr:hover,
 .lvs-table tbody tr.is-active {
-  background: rgba(var(--lj-navy-ch), 0.1);
+  background: var(--lj-ui-accent-soft);
 }
 .lvs-col-source {
   width: 32%;
 }
 .lvs-source-cell {
-  color: rgba(var(--lj-on-surface-ch), 0.7);
-  font-size: 12px;
+  color: var(--lj-text-muted);
+  font-size: var(--lj-text-base);
 }
 .lvs-source-icon {
   vertical-align: -2px;
-  margin-right: 2px;
+  margin-right: var(--lj-space-1);
 }
 .lvs-source-img {
   width: 14px;
@@ -335,35 +269,13 @@ function selectRow(row: Row) {
 }
 .lvs-empty {
   text-align: center;
-  padding: 24px 12px;
-  color: rgba(var(--lj-on-surface-ch), 0.55);
+  padding: var(--lj-space-8) var(--lj-space-5);
+  color: var(--lj-text-subtle);
   cursor: default;
 }
 
-.lvs-footer {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  background: rgba(var(--lj-on-surface-ch), 0.02);
-}
 .lvs-count {
-  font-size: 11px;
-  color: rgba(var(--lj-on-surface-ch), 0.6);
-}
-.lvs-btn {
-  display: inline-flex;
-  align-items: center;
-  height: 28px;
-  padding: 0 12px;
-  background: transparent;
-  border: 1px solid rgba(var(--v-border-color), 0.5);
-  border-radius: 3px;
-  cursor: pointer;
-  color: var(--lj-text);
-  font-size: 12px;
-}
-.lvs-btn:hover {
-  background: rgba(var(--lj-on-surface-ch), 0.06);
+  font-size: var(--lj-text-sm);
+  color: var(--lj-text-muted);
 }
 </style>

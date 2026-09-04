@@ -1,5 +1,5 @@
 <template>
-  <v-app :class="{ 'shell-fading-in': !ready }">
+  <div class="shell-root" :class="{ 'shell-fading-in': !ready }">
     <AppSystemBar />
 
     <RibbonBar />
@@ -7,7 +7,7 @@
     <!-- PageControl interno (tabs dos módulos abertos) -->
     <OpenModulesTabs />
 
-    <v-main
+    <main
       class="shell-main"
       :class="{ 'shell-main--active': footerActive }"
       :style="{ '--footer-height': footerHeight }"
@@ -26,7 +26,7 @@
              (evita duplicar conteúdo) -->
         <ShellLiturgyPanel v-if="!liturgyModuleOpen" class="shell-sidebar" />
       </div>
-    </v-main>
+    </main>
 
     <AppFooter />
 
@@ -45,95 +45,74 @@
     />
 
     <!-- Bundle download overlay (before startup check) -->
-    <v-overlay v-model="bundleLoading" class="align-center justify-center" persistent>
-      <v-card class="pa-5" max-width="540">
-        <div class="d-flex flex-column ga-4">
-          <div class="d-flex align-center ga-3">
-            <span class="text-body-1 font-weight-medium">
-              {{ t("startup_check.bundle_downloading") }}
-            </span>
-          </div>
-          <v-progress-linear
-            :model-value="bundleDownloadPercent"
-            :indeterminate="
-              sync.bundleProgress.value.phase === 'download' &&
-              !sync.bundleProgress.value.bytesTotal
-            "
-            color="primary"
-            height="8"
-            rounded
-          />
-          <div class="d-flex justify-space-between text-caption text-medium-emphasis">
-            <span v-if="bundleDownloadDetail">
-              {{ bundleDownloadDetail }}
-            </span>
-            <span v-else-if="bundleDownloadPercent > 0">{{ bundleDownloadPercent }}%</span>
-            <span v-else>{{ t("startup_check.bundle_preparing") }}</span>
-            <span
-              v-if="sync.bundleProgress.value.detail"
-              class="text-truncate ml-2"
-              style="max-width: 260px"
-            >
-              {{ formatBackgroundTaskDetail(sync.bundleProgress.value.detail, t) }}
-            </span>
-          </div>
-          <div v-if="bundleRetryAttempt > 1" class="text-caption text-medium-emphasis text-center">
-            {{
-              t("startup_check.bundle_retry", { attempt: bundleRetryAttempt, max: bundleRetryMax })
-            }}
-          </div>
+    <LjDialog
+      v-model="bundleLoading"
+      :title="t('startup_check.bundle_downloading')"
+      :icon="ICONS.UI.PROGRESS_DOWNLOAD"
+      size="md"
+      persistent
+    >
+      <div class="shell-bundle">
+        <LjProgress
+          :value="bundleDownloadPercent"
+          :indeterminate="
+            sync.bundleProgress.value.phase === 'download' && !sync.bundleProgress.value.bytesTotal
+          "
+          :height="8"
+        />
+        <div class="shell-bundle__row">
+          <span v-if="bundleDownloadDetail">
+            {{ bundleDownloadDetail }}
+          </span>
+          <span v-else-if="bundleDownloadPercent > 0">{{ bundleDownloadPercent }}%</span>
+          <span v-else>{{ t("startup_check.bundle_preparing") }}</span>
+          <span v-if="sync.bundleProgress.value.detail" class="shell-bundle__file lj-u-truncate">
+            {{ formatBackgroundTaskDetail(sync.bundleProgress.value.detail, t) }}
+          </span>
         </div>
+        <div v-if="bundleRetryAttempt > 1" class="shell-bundle__retry">
+          {{
+            t("startup_check.bundle_retry", { attempt: bundleRetryAttempt, max: bundleRetryMax })
+          }}
+        </div>
+      </div>
 
-        <v-divider class="my-3" />
-
-        <v-card-actions>
-          <v-btn
-            variant="text"
-            prepend-icon="mdi-window-minimize"
-            size="small"
-            @click="bundleLoading = false"
-          >
-            {{ t("startup_check.minimize") }}
-          </v-btn>
-          <v-spacer />
-          <v-btn
-            variant="outlined"
-            color="error"
-            prepend-icon="mdi-stop"
-            size="small"
-            @click="onBundleCancel"
-          >
-            {{ t("options.collections_download.cancel") }}
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-overlay>
+      <template #footer>
+        <LjButton
+          size="sm"
+          variant="ghost"
+          :icon="ICONS.UI.WINDOW_MINIMIZE"
+          @click="bundleLoading = false"
+        >
+          {{ t("startup_check.minimize") }}
+        </LjButton>
+        <span class="lj-u-spacer" />
+        <LjButton size="sm" variant="danger" :icon="ICONS.PLAYER.STOP" @click="onBundleCancel">
+          {{ t("options.collections_download.cancel") }}
+        </LjButton>
+      </template>
+    </LjDialog>
 
     <!-- Bundle error dialog -->
-    <v-dialog v-model="bundleErrorOpen" max-width="420" :scrim="true">
-      <v-card>
-        <v-toolbar color="transparent" density="compact" class="px-2 pt-2">
-          <v-icon icon="mdi-alert-circle" color="error" class="mr-2" />
-          <v-toolbar-title class="text-body-1 font-weight-bold">
-            {{ t("startup_check.bundle_error_title") }}
-          </v-toolbar-title>
-        </v-toolbar>
-        <v-divider />
-        <v-card-text>
-          <p class="text-body-2">{{ bundleError }}</p>
-          <p class="text-caption text-medium-emphasis mt-2">
-            {{ t("startup_check.bundle_error_hint") }}
-          </p>
-        </v-card-text>
-        <v-card-actions class="pa-4">
-          <v-spacer />
-          <v-btn variant="outlined" prepend-icon="mdi-check" @click="bundleErrorOpen = false">
-            {{ t("actions.close") }}
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-  </v-app>
+    <LjDialog
+      v-model="bundleErrorOpen"
+      :title="t('startup_check.bundle_error_title')"
+      :icon="ICONS.UI.ALERT_CIRCLE"
+      icon-variant="danger"
+      size="sm"
+    >
+      <p class="shell-bundle-error__text">{{ bundleError }}</p>
+      <p class="shell-bundle-error__hint">
+        {{ t("startup_check.bundle_error_hint") }}
+      </p>
+
+      <template #footer>
+        <LjButton size="sm" :icon="ICONS.UI.CHECK" @click="bundleErrorOpen = false">
+          {{ t("actions.close") }}
+        </LjButton>
+      </template>
+    </LjDialog>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -141,6 +120,7 @@ import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useTheme, useDisplay } from "vuetify";
 
+import { LjButton, LjDialog, LjProgress } from "@/components/ui";
 import AppSystemBar from "@/layout/SystemBar.vue";
 import AppFooter from "@/layout/Footer.vue";
 import AppModules from "@/layout/Modules.vue";
@@ -163,6 +143,7 @@ import packageJson from "@root/package.json";
 import $appdata from "@/helpers/AppData";
 import $userdata from "@/helpers/UserData";
 import Platform from "@/helpers/Platform";
+import { ICONS } from "@/config/Icons";
 import { KEYS } from "@/constants/UserDataKeys";
 import $popup from "@/helpers/Popup";
 import Broadcast from "@/helpers/Broadcast";
@@ -802,27 +783,72 @@ onBeforeUnmount(() => {
 });
 </script>
 
+<!-- Sem `scoped`: o corpo dos diálogos sai por um portal para fora da árvore
+     do componente, onde regra com escopo não casaria. O isolamento vem do
+     prefixo `shell-`. -->
 <style>
-.shell-main.shell-main > .v-main__wrap {
+.shell-bundle {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  overflow: hidden;
+  gap: var(--lj-space-5);
 }
 
-/* Fade-in rápido (antes 256ms herdado do AlphaBlend Delphi) */
-.v-application.shell-fading-in {
-  opacity: 0;
+.shell-bundle__row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--lj-space-4);
+  font-size: var(--lj-text-sm);
+  color: var(--lj-text-muted);
 }
-.v-application {
-  transition: opacity 120ms ease-out;
+
+.shell-bundle__file {
+  max-width: 260px;
+}
+
+.shell-bundle__retry {
+  text-align: center;
+  font-size: var(--lj-text-sm);
+  color: var(--lj-text-muted);
+}
+
+.shell-bundle-error__text {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.shell-bundle-error__hint {
+  margin: var(--lj-space-4) 0 0;
+  font-size: var(--lj-text-sm);
+  color: var(--lj-text-muted);
 }
 </style>
 
 <style scoped>
+/* Raiz da shell — coluna que ocupa a janela inteira. O contexto de tema e de
+   layout do Vuetify continua vindo do `v-app` de App.vue, um nível acima. */
+.shell-root {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  max-width: 100%;
+  height: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  backface-visibility: hidden;
+  transition: opacity 120ms ease-out;
+}
+
+/* Fade-in rápido (antes 256ms herdado do AlphaBlend Delphi) */
+.shell-root.shell-fading-in {
+  opacity: 0;
+}
+
 .shell-main {
   display: flex;
+  flex: 1 0 auto;
   flex-direction: column;
+  max-width: 100%;
   overflow: hidden;
   transition: padding-bottom 0.3s ease;
 }

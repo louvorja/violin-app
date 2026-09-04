@@ -99,7 +99,7 @@ function onDismiss(event: Event): void {
 .lj-dialog__overlay {
   position: fixed;
   inset: 0;
-  z-index: 2500;
+  z-index: var(--lj-z-dialog);
   background: var(--lj-black-alpha-40);
   animation: lj-dialog-fade var(--lj-transition-normal);
 }
@@ -108,7 +108,7 @@ function onDismiss(event: Event): void {
   position: fixed;
   top: 50%;
   left: 50%;
-  z-index: 2501;
+  z-index: calc(var(--lj-z-dialog) + 1);
   display: flex;
   flex-direction: column;
   transform: translate(-50%, -50%);

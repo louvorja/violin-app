@@ -158,6 +158,10 @@
   --lj-footer-bg: var(--lj-surface-bg);
   --lj-footer-border: var(--lj-surface-border-strong);
 
+  /* Faixa do título quando a fonte é YouTube — vermelho da marca externa,
+     igual nos dois temas (não faz parte da paleta funcional). */
+  --lj-player-youtube-bg: #c0392b;
+
   /* Gauge do player */
   --lj-player-gauge-light-start: #c4d8ef;
   --lj-player-gauge-light-end: #aabfd5;

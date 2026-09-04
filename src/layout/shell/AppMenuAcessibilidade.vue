@@ -2,7 +2,7 @@
   <div class="opt">
     <section class="opt-section">
       <h3 class="opt-section-title">
-        <v-icon :icon="ICONS.UI.ACCESSIBILITY" size="18" />
+        <Icon :icon="ICONS.UI.ACCESSIBILITY" :size="18" />
         {{ $t("accessibility.title") }}
       </h3>
 
@@ -24,637 +24,553 @@
       </div>
     </section>
 
-    <v-alert
-      type="info"
-      variant="tonal"
-      density="compact"
-      icon="mdi-information-outline"
-      class="mt-2"
-      closable
-      close-icon="mdi-close"
-      style="font-size: 13px"
+    <LjAlert
+      v-if="internetHintVisible"
+      variant="info"
+      :icon="ICONS.UI.INFORMATION_OUTLINE"
+      dismissible
+      class="acc-hint"
+      @dismiss="internetHintVisible = false"
     >
       {{ $t("accessibility.internet_hint") }}
-    </v-alert>
+    </LjAlert>
 
-    <v-tabs v-model="activeTab" density="compact" color="primary" class="mt-2">
-      <v-tab value="avatar">
-        <v-icon icon="mdi-human-greeting" class="mr-2" size="16" />
-        {{ $t("accessibility.tabs.avatar") }}
-      </v-tab>
-      <v-tab value="musics">
-        <Icon :icon="ICONS.MUSIC.MUSIC" class="mr-2" size="16" />
-        {{ $t("accessibility.tabs.musics") }}
-      </v-tab>
-      <v-tab value="bible">
-        <v-icon :icon="ICONS.BIBLE.BIBLE" class="mr-2" size="16" />
-        {{ $t("accessibility.tabs.bible") }}
-      </v-tab>
-      <v-tab value="storage">
-        <v-icon icon="mdi-harddisk" class="mr-2" size="16" />
-        {{ $t("accessibility.tabs.storage") }}
-      </v-tab>
-    </v-tabs>
+    <!-- O traço sob as abas vem do próprio LjTabs; não há divisória extra. -->
+    <LjTabs
+      v-model="activeTab"
+      :tabs="tabItems"
+      :aria-label="$t('accessibility.title')"
+      class="acc-tabs"
+    />
 
-    <v-divider />
-
-    <v-window v-model="activeTab" class="mt-5">
+    <div class="acc-panes">
       <!-- ═══ Aba Avatar ═══ -->
-      <v-window-item value="avatar">
-        <section class="opt-section">
-          <v-row class="mt-5">
-            <v-col cols="12" md="4">
-              <div class="opt-row">
-                <span class="opt-label">{{ $t("accessibility.avatar.enable_projection") }}</span>
-                <v-switch
-                  v-model="librasEnabled"
-                  density="compact"
-                  color="primary"
-                  hide-details
-                  @update:model-value="toggleLibrasEnabled"
-                />
-              </div>
-              <div class="opt-row">
-                <span class="opt-label">{{ $t("accessibility.avatar.translate_musics") }}</span>
-                <v-switch
-                  v-model="librasMusicsEnabled"
-                  density="compact"
-                  color="primary"
-                  hide-details
-                  :disabled="!librasEnabled"
-                  @update:model-value="toggleMusicsEnabled"
-                />
-              </div>
-              <div class="opt-row">
-                <span class="opt-label">{{ $t("accessibility.avatar.translate_bible") }}</span>
-                <v-switch
-                  v-model="librasBibleEnabled"
-                  density="compact"
-                  color="primary"
-                  hide-details
-                  :disabled="!librasEnabled"
-                  @update:model-value="toggleBibleEnabled"
-                />
-              </div>
-              <div class="opt-row">
-                <span class="opt-label">{{ $t("accessibility.avatar.show_on_obs") }}</span>
-                <v-switch
-                  v-model="showOnObs"
-                  density="compact"
-                  color="primary"
-                  hide-details
-                  @update:model-value="toggleShowOnObs"
-                />
-              </div>
-            </v-col>
+      <section v-if="isBooted('avatar')" v-show="activeTab === 'avatar'" class="opt-section">
+        <div class="acc-grid acc-grid--3">
+          <div>
+            <div class="opt-row">
+              <span class="opt-label">{{ $t("accessibility.avatar.enable_projection") }}</span>
+              <LjSwitch v-model="librasEnabled" @update:model-value="toggleLibrasEnabled" />
+            </div>
+            <div class="opt-row">
+              <span class="opt-label">{{ $t("accessibility.avatar.translate_musics") }}</span>
+              <LjSwitch
+                v-model="librasMusicsEnabled"
+                :disabled="!librasEnabled"
+                @update:model-value="toggleMusicsEnabled"
+              />
+            </div>
+            <div class="opt-row">
+              <span class="opt-label">{{ $t("accessibility.avatar.translate_bible") }}</span>
+              <LjSwitch
+                v-model="librasBibleEnabled"
+                :disabled="!librasEnabled"
+                @update:model-value="toggleBibleEnabled"
+              />
+            </div>
+            <div class="opt-row">
+              <span class="opt-label">{{ $t("accessibility.avatar.show_on_obs") }}</span>
+              <LjSwitch v-model="showOnObs" @update:model-value="toggleShowOnObs" />
+            </div>
+          </div>
 
-            <v-col cols="12" md="4">
-              <p class="opt-hint">{{ $t("accessibility.avatar.hint") }}</p>
-              <div class="opt-download-scroll">
-                <div class="opt-download-list">
-                  <label
-                    v-for="option in avatarOptions"
-                    :key="option.value"
-                    class="opt-checkbox opt-album"
-                  >
-                    <input
-                      type="radio"
-                      :value="option.value"
-                      :checked="selectedAvatar === option.value"
-                      @change="selectAvatar(option.value)"
-                    />
-                    <span>{{ option.label }}</span>
-                  </label>
-                </div>
-              </div>
-            </v-col>
-            <v-col cols="12" md="4">
-              <!-- Cor de fundo do avatar -->
-              <span class="opt-label">{{ $t("accessibility.avatar.background_color") }}</span>
-              <div class="opt-row">
-                <v-switch
-                  v-model="transparentBg"
-                  density="compact"
-                  color="primary"
-                  hide-details
-                  :label="t('accessibility.avatar.bg_transparent')"
-                  @update:model-value="toggleTransparentBg"
-                />
-              </div>
-
-              <div v-if="!transparentBg" class="mt-2">
-                <v-color-input
-                  :model-value="bgColor"
-                  pip-variant="flat"
-                  color-pip
-                  mode="rgba"
-                  show-swatches
-                  hide-actions
-                  :swatches="bgSwatches"
-                  density="compact"
-                  width="100%"
-                  max-width="340"
-                  @update:model-value="setBgColor"
-                />
-              </div>
-            </v-col>
-          </v-row>
-
-          <div class="opt-divider" />
-
-          <v-row class="align-start">
-            <v-col cols="12" lg="4">
-              <!-- Posição -->
-              <div class="opt-label mb-1">{{ $t("accessibility.avatar.position") }}</div>
-              <div class="position-options">
-                <button
-                  v-for="a in anchorOptions"
-                  :key="a.value"
-                  type="button"
-                  class="position-btn"
-                  :class="{ 'position-btn--active': currentAnchor === a.value }"
-                  @click="setAnchor(a.value)"
+          <div>
+            <p class="opt-hint">{{ $t("accessibility.avatar.hint") }}</p>
+            <div class="opt-download-scroll">
+              <div class="opt-download-list">
+                <label
+                  v-for="option in avatarOptions"
+                  :key="option.value"
+                  class="opt-checkbox opt-album"
                 >
-                  <v-icon :icon="a.icon" size="18" class="mr-1" />
-                  {{ a.label }}
-                </button>
+                  <input
+                    type="radio"
+                    :value="option.value"
+                    :checked="selectedAvatar === option.value"
+                    @change="selectAvatar(option.value)"
+                  />
+                  <span>{{ option.label }}</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <!-- Cor de fundo do avatar -->
+            <span class="opt-label">{{ $t("accessibility.avatar.background_color") }}</span>
+            <div class="opt-row">
+              <LjSwitch
+                v-model="transparentBg"
+                :label="t('accessibility.avatar.bg_transparent')"
+                @update:model-value="toggleTransparentBg"
+              />
+            </div>
+
+            <!-- Sem primitivo de cor no catálogo: seletor nativo do sistema,
+                 paleta em botões e alfa em slider. O valor gravado continua
+                 sendo o mesmo hex de 8 dígitos de antes. -->
+            <div v-if="!transparentBg" class="acc-color">
+              <div class="acc-color__pick">
+                <input
+                  type="color"
+                  class="opt-color"
+                  :value="bgColorHex"
+                  :aria-label="$t('accessibility.avatar.background_color')"
+                  @input="setBgColorHex(($event.target as HTMLInputElement).value)"
+                />
+                <span class="acc-color__value">{{ bgColorHex }}</span>
               </div>
 
-              <div class="opt-row">
-                <span class="opt-label">{{ $t("accessibility.avatar.show_border") }}</span>
-                <v-switch
-                  v-model="showBorder"
-                  density="compact"
-                  color="primary"
-                  class="ml-2 mt-5"
-                  hide-details
-                  @update:model-value="toggleShowBorder"
+              <div
+                class="acc-color__swatches"
+                role="group"
+                :aria-label="$t('accessibility.avatar.bg_swatches')"
+              >
+                <button
+                  v-for="hex in bgSwatchHexes"
+                  :key="hex"
+                  type="button"
+                  class="acc-color__swatch"
+                  :class="{ 'acc-color__swatch--active': bgColorHex === hex }"
+                  :style="{ background: hex }"
+                  :title="hex"
+                  :aria-label="hex"
+                  :aria-pressed="bgColorHex === hex"
+                  @click="setBgColorHex(hex)"
                 />
               </div>
-            </v-col>
 
-            <v-col cols="12" lg="3">
-              <!-- Deslocamento -->
-              <div class="opt-label mb-1">{{ $t("accessibility.avatar.align_hint") }}</div>
-              <v-row dense class="mt-2">
-                <v-col cols="6">
-                  <v-text-field
-                    :model-value="currentOffsetX"
-                    :label="$t('accessibility.avatar.offset_x')"
-                    type="number"
-                    density="compact"
-                    hide-details
-                    variant="outlined"
-                    suffix="px"
-                    @update:model-value="setOffsetX(Number($event))"
-                  />
-                </v-col>
-                <v-col cols="6">
-                  <v-text-field
-                    :model-value="currentOffsetY"
-                    :label="$t('accessibility.avatar.offset_y')"
-                    type="number"
-                    density="compact"
-                    hide-details
-                    variant="outlined"
-                    suffix="px"
-                    @update:model-value="setOffsetY(Number($event))"
-                  />
-                </v-col>
-              </v-row>
+              <LjField :label="$t('accessibility.avatar.bg_opacity')" layout="column">
+                <LjSlider
+                  :model-value="bgAlphaPercent"
+                  :min="0"
+                  :max="100"
+                  :step="1"
+                  show-value
+                  unit="%"
+                  @update:model-value="setBgAlphaPercent"
+                />
+              </LjField>
+            </div>
+          </div>
+        </div>
 
-              <!-- Tamanho -->
-              <div class="opt-label mt-5 mb-3">{{ $t("accessibility.avatar.size_hint") }}</div>
-              <v-row dense>
-                <v-col cols="6">
-                  <v-text-field
-                    :model-value="currentWidth"
-                    :label="$t('accessibility.avatar.width')"
-                    type="number"
-                    density="compact"
-                    hide-details
-                    variant="outlined"
-                    suffix="px"
-                    :min="100"
-                    @update:model-value="setWidth(Number($event))"
-                  />
-                </v-col>
-                <v-col cols="6">
-                  <v-text-field
-                    :model-value="currentHeight"
-                    :label="$t('accessibility.avatar.height')"
-                    type="number"
-                    density="compact"
-                    hide-details
-                    variant="outlined"
-                    suffix="px"
-                    :min="150"
-                    @update:model-value="setHeight(Number($event))"
-                  />
-                </v-col>
-              </v-row>
-            </v-col>
+        <div class="opt-divider" />
 
-            <v-col cols="12" lg="5">
+        <div class="acc-grid acc-grid--435">
+          <div>
+            <!-- Posição -->
+            <div class="opt-label acc-block-label">{{ $t("accessibility.avatar.position") }}</div>
+            <div class="position-options">
+              <button
+                v-for="a in anchorOptions"
+                :key="a.value"
+                type="button"
+                class="position-btn"
+                :class="{ 'position-btn--active': currentAnchor === a.value }"
+                :aria-pressed="currentAnchor === a.value"
+                @click="setAnchor(a.value)"
+              >
+                <Icon :icon="a.icon" :size="18" />
+                {{ a.label }}
+              </button>
+            </div>
+
+            <div class="opt-row acc-row--spaced">
+              <span class="opt-label">{{ $t("accessibility.avatar.show_border") }}</span>
+              <LjSwitch v-model="showBorder" @update:model-value="toggleShowBorder" />
+            </div>
+          </div>
+
+          <div>
+            <!-- Deslocamento -->
+            <div class="opt-label acc-block-label">{{ $t("accessibility.avatar.align_hint") }}</div>
+            <div class="acc-pair">
+              <LjField :label="$t('accessibility.avatar.offset_x')" layout="column">
+                <LjInput
+                  :model-value="currentOffsetX"
+                  type="number"
+                  @update:model-value="setOffsetX(Number($event))"
+                >
+                  <template #suffix><span class="acc-suffix">px</span></template>
+                </LjInput>
+              </LjField>
+              <LjField :label="$t('accessibility.avatar.offset_y')" layout="column">
+                <LjInput
+                  :model-value="currentOffsetY"
+                  type="number"
+                  @update:model-value="setOffsetY(Number($event))"
+                >
+                  <template #suffix><span class="acc-suffix">px</span></template>
+                </LjInput>
+              </LjField>
+            </div>
+
+            <!-- Tamanho -->
+            <div class="opt-label acc-block-label acc-block-label--gap">
+              {{ $t("accessibility.avatar.size_hint") }}
+            </div>
+            <div class="acc-pair">
+              <LjField :label="$t('accessibility.avatar.width')" layout="column">
+                <LjInput
+                  :model-value="currentWidth"
+                  type="number"
+                  :min="100"
+                  @update:model-value="setWidth(Number($event))"
+                >
+                  <template #suffix><span class="acc-suffix">px</span></template>
+                </LjInput>
+              </LjField>
+              <LjField :label="$t('accessibility.avatar.height')" layout="column">
+                <LjInput
+                  :model-value="currentHeight"
+                  type="number"
+                  :min="150"
+                  @update:model-value="setHeight(Number($event))"
+                >
+                  <template #suffix><span class="acc-suffix">px</span></template>
+                </LjInput>
+              </LjField>
+            </div>
+          </div>
+
+          <div class="acc-anim">
+            <div class="acc-pair">
               <!-- Animação de entrada -->
-              <v-row dense>
-                <v-col>
-                  <div class="opt-label mb-2">
-                    <span class="opt-label">{{ $t("accessibility.avatar.animation") }}</span>
-                  </div>
-                  <v-select
-                    v-model="currentAnimation"
-                    :items="animationOptions"
-                    density="compact"
-                    hide-details
-                    variant="outlined"
-                    @update:model-value="setAnimation"
-                  />
-                </v-col>
-                <v-col>
-                  <!-- Duração da entrada -->
-                  <span class="opt-label">{{ $t("accessibility.avatar.animation_duration") }}</span>
-                  <v-slider
-                    v-model="currentAnimationDuration"
-                    :min="0"
-                    :max="3000"
-                    :step="100"
-                    density="compact"
-                    hide-details
-                    color="primary"
-                    thumb-label
-                    :thumb-size="12"
-                    @update:model-value="setAnimationDuration"
-                  >
-                    <template #thumb-label="{ modelValue }">{{ modelValue }}ms</template>
-                  </v-slider>
-                </v-col>
-              </v-row>
+              <LjField :label="$t('accessibility.avatar.animation')" layout="column">
+                <LjSelect
+                  v-model="currentAnimation"
+                  :items="animationOptions"
+                  item-label="title"
+                  @update:model-value="setAnimation(String($event))"
+                />
+              </LjField>
+              <!-- Duração da entrada -->
+              <LjField :label="$t('accessibility.avatar.animation_duration')" layout="column">
+                <LjSlider
+                  v-model="currentAnimationDuration"
+                  :min="0"
+                  :max="3000"
+                  :step="100"
+                  show-value
+                  unit="ms"
+                  @update:model-value="setAnimationDuration"
+                />
+              </LjField>
+            </div>
 
-              <v-row dense class="mt-8">
-                <v-col>
-                  <!-- Animação de saída -->
-                  <div class="opt-label mb-2">
-                    <span class="opt-label">{{ $t("accessibility.avatar.exit_animation") }}</span>
-                  </div>
-                  <v-select
-                    v-model="currentExitAnimation"
-                    :items="animationOptions"
-                    density="compact"
-                    hide-details
-                    variant="outlined"
-                    @update:model-value="setExitAnimation"
-                  />
-                </v-col>
-                <v-col>
-                  <!-- Duração da saída -->
-                  <span class="opt-label">
-                    {{ $t("accessibility.avatar.exit_animation_duration") }}
-                  </span>
-                  <v-slider
-                    v-model="currentExitAnimationDuration"
-                    :min="0"
-                    :max="3000"
-                    :step="100"
-                    density="compact"
-                    hide-details
-                    color="primary"
-                    thumb-label
-                    :thumb-size="12"
-                    @update:model-value="setExitAnimationDuration"
-                  >
-                    <template #thumb-label="{ modelValue }">{{ modelValue }}ms</template>
-                  </v-slider>
-                </v-col>
-              </v-row>
-            </v-col>
-          </v-row>
+            <div class="acc-pair">
+              <!-- Animação de saída -->
+              <LjField :label="$t('accessibility.avatar.exit_animation')" layout="column">
+                <LjSelect
+                  v-model="currentExitAnimation"
+                  :items="animationOptions"
+                  item-label="title"
+                  @update:model-value="setExitAnimation(String($event))"
+                />
+              </LjField>
+              <!-- Duração da saída -->
+              <LjField :label="$t('accessibility.avatar.exit_animation_duration')" layout="column">
+                <LjSlider
+                  v-model="currentExitAnimationDuration"
+                  :min="0"
+                  :max="3000"
+                  :step="100"
+                  show-value
+                  unit="ms"
+                  @update:model-value="setExitAnimationDuration"
+                />
+              </LjField>
+            </div>
+          </div>
+        </div>
 
-          <!--       TODO atualizar api para suportar essas opções
+        <!--       TODO atualizar api para suportar essas opções
            Opções desativadas, pois a api nao suporta atualmente
 -->
-          <div class="opt-divider d-none" />
-          <v-row class="align-start d-none">
-            <v-col cols="12" sm="3">
-              <!-- Velocidade dos gestos -->
-              <span class="opt-label">{{ $t("accessibility.avatar.speed") }}</span>
-              <v-select
+        <div class="opt-divider acc-hidden" />
+        <div class="acc-grid acc-grid--3 acc-hidden">
+          <!-- Velocidade dos gestos -->
+          <LjField :label="$t('accessibility.avatar.speed')" layout="column">
+            <div class="acc-select--narrow">
+              <LjSelect
                 v-model="currentSpeed"
                 :items="speedOptions"
-                density="compact"
-                hide-details
-                variant="outlined"
-                style="max-width: 160px"
-                @update:model-value="setSpeed"
+                item-label="title"
+                @update:model-value="setSpeed(Number($event))"
               />
-            </v-col>
+            </div>
+          </LjField>
 
-            <v-col cols="12" sm="3">
-              <!-- Emoção -->
-              <span class="opt-label">{{ $t("accessibility.avatar.emotion") }}</span>
-              <v-select
+          <!-- Emoção -->
+          <LjField :label="$t('accessibility.avatar.emotion')" layout="column">
+            <div class="acc-select--narrow">
+              <LjSelect
                 v-model="currentEmotion"
                 :items="emotionOptions"
-                density="compact"
-                hide-details
-                variant="outlined"
-                style="max-width: 160px"
-                @update:model-value="setEmotion"
+                item-label="title"
+                @update:model-value="setEmotion(String($event))"
               />
-            </v-col>
+            </div>
+          </LjField>
 
-            <v-col cols="12" sm="4">
-              <!-- Sotaque -->
-              <span class="opt-label">{{ $t("accessibility.avatar.region") }}</span>
-              <v-select
+          <!-- Sotaque -->
+          <LjField :label="$t('accessibility.avatar.region')" layout="column">
+            <div class="acc-select--wide">
+              <LjSelect
                 v-model="currentRegion"
                 :items="regionOptions"
-                density="compact"
-                hide-details
-                variant="outlined"
-                style="max-width: 300px"
-                @update:model-value="setRegion"
+                item-label="title"
+                @update:model-value="setRegion(String($event))"
               />
-            </v-col>
-          </v-row>
-        </section>
-      </v-window-item>
+            </div>
+          </LjField>
+        </div>
+      </section>
 
       <!-- ═══ Aba Músicas ═══ -->
-      <v-window-item value="musics">
-        <section class="opt-section">
-          <p class="opt-hint">{{ $t("accessibility.musics.hint") }}</p>
+      <section v-if="isBooted('musics')" v-show="activeTab === 'musics'" class="opt-section">
+        <p class="opt-hint">{{ $t("accessibility.musics.hint") }}</p>
 
-          <div class="opt-folder-actions" style="margin-bottom: 8px">
-            <button
-              type="button"
-              class="opt-btn opt-btn--small"
-              :disabled="translating"
-              @click="selectAll"
-            >
-              {{ $t("accessibility.musics.select_all") }}
-            </button>
-            <button
-              type="button"
-              class="opt-btn opt-btn--small"
-              :disabled="translating"
-              @click="deselectAll"
-            >
-              {{ $t("accessibility.musics.deselect_all") }}
-            </button>
-          </div>
+        <div class="opt-folder-actions acc-actions--below">
+          <LjButton size="sm" :disabled="translating" @click="selectAll">
+            {{ $t("accessibility.musics.select_all") }}
+          </LjButton>
+          <LjButton size="sm" :disabled="translating" @click="deselectAll">
+            {{ $t("accessibility.musics.deselect_all") }}
+          </LjButton>
+        </div>
 
-          <div v-if="loadingCatalog" class="opt-hint">
-            <v-progress-linear indeterminate color="primary" class="mb-2" />
-          </div>
+        <div v-if="loadingCatalog" class="opt-hint">
+          <LjProgress indeterminate class="acc-loading" />
+        </div>
 
-          <div v-else class="opt-download-scroll">
-            <div class="opt-download-list">
-              <!-- Hinário Adventista -->
-              <div v-if="hymnalIds.length" class="opt-cat opt-cat--special">
-                <label class="opt-checkbox opt-cat-header">
-                  <input
-                    type="checkbox"
-                    :checked="selectedHymnal"
-                    :disabled="translating"
-                    @change="selectedHymnal = ($event.target as HTMLInputElement).checked"
-                  />
-                  <strong>{{ $t("options.collections_download.hymnal") }}</strong>
-                  <small class="opt-download-count">
-                    · {{ hymnalIds.length }} {{ $t("options.collections_download.songs") }}
-                  </small>
-                  <small v-if="isHymnalCached" class="opt-download-count">
-                    · {{ $t("accessibility.musics.cached") }}
-                  </small>
-                </label>
-              </div>
-
-              <!-- Hinário 1996 -->
-              <div
-                v-if="hymnal1996Enabled && hymnal1996Ids.length"
-                class="opt-cat opt-cat--special"
-              >
-                <label class="opt-checkbox opt-cat-header">
-                  <input
-                    type="checkbox"
-                    :checked="selectedHymnal1996"
-                    :disabled="translating"
-                    @change="selectedHymnal1996 = ($event.target as HTMLInputElement).checked"
-                  />
-                  <strong>{{ $t("options.collections_download.hymnal_1996") }}</strong>
-                  <small class="opt-download-count">
-                    · {{ hymnal1996Ids.length }} {{ $t("options.collections_download.songs") }}
-                  </small>
-                  <small v-if="isHymnal1996Cached" class="opt-download-count">
-                    · {{ $t("accessibility.musics.cached") }}
-                  </small>
-                </label>
-              </div>
-
-              <!-- Categorias > Álbuns -->
-              <div v-for="cat in categories" :key="cat.id_category" class="opt-cat">
-                <label class="opt-checkbox opt-cat-header">
-                  <input
-                    :ref="(el) => setCategoryCheckboxRef(cat.id_category, el)"
-                    type="checkbox"
-                    :checked="isCategoryFullySelected(cat)"
-                    :disabled="translating"
-                    @change="toggleCategory(cat, ($event.target as HTMLInputElement).checked)"
-                  />
-                  <strong>{{ cat.name }}</strong>
-                  <small v-if="cat.albums" class="opt-download-count">
-                    · {{ cat.albums.length }} {{ $t("options.collections_download.albums") }}
-                  </small>
-                </label>
-
-                <div class="opt-cat-albums">
-                  <label
-                    v-for="album in cat.albums || []"
-                    :key="album.id_album"
-                    class="opt-checkbox opt-album"
-                  >
-                    <input
-                      type="checkbox"
-                      :checked="selectedAlbums.has(album.id_album)"
-                      :disabled="translating"
-                      @change="
-                        toggleAlbum(album.id_album, ($event.target as HTMLInputElement).checked)
-                      "
-                    />
-                    <span>{{ album.name }}</span>
-                    <small v-if="album.subtitle" class="opt-download-count">
-                      · {{ album.subtitle }}
-                    </small>
-                    <small v-if="isAlbumCached(album.id_album)" class="opt-download-count">
-                      · {{ $t("accessibility.musics.cached") }}
-                    </small>
-                  </label>
-                </div>
-              </div>
+        <div v-else class="opt-download-scroll">
+          <div class="opt-download-list">
+            <!-- Hinário Adventista -->
+            <div v-if="hymnalIds.length" class="opt-cat opt-cat--special">
+              <label class="opt-checkbox opt-cat-header">
+                <input
+                  type="checkbox"
+                  :checked="selectedHymnal"
+                  :disabled="translating"
+                  @change="selectedHymnal = ($event.target as HTMLInputElement).checked"
+                />
+                <strong>{{ $t("options.collections_download.hymnal") }}</strong>
+                <small class="opt-download-count">
+                  · {{ hymnalIds.length }} {{ $t("options.collections_download.songs") }}
+                </small>
+                <small v-if="isHymnalCached" class="opt-download-count">
+                  · {{ $t("accessibility.musics.cached") }}
+                </small>
+              </label>
             </div>
-          </div>
 
-          <!-- Progresso -->
-          <ProgressBar
-            v-if="translating"
-            class="libras-progress"
-            :done="musicProgress.done"
-            :total="musicProgress.total"
-            :current="musicProgress.current"
-            :completed-msg="completedMsg"
-            show-cancel
-            :cancel-label="$t('accessibility.musics.cancel')"
-            @cancel="sync.cancelLibrasDownloads()"
-          >
-            <template #label>
-              {{
-                $t("accessibility.musics.progress", {
-                  done: musicProgress.done,
-                  total: musicProgress.total,
-                  percent: musicPercent,
-                })
-              }}
-            </template>
-          </ProgressBar>
+            <!-- Hinário 1996 -->
+            <div v-if="hymnal1996Enabled && hymnal1996Ids.length" class="opt-cat opt-cat--special">
+              <label class="opt-checkbox opt-cat-header">
+                <input
+                  type="checkbox"
+                  :checked="selectedHymnal1996"
+                  :disabled="translating"
+                  @change="selectedHymnal1996 = ($event.target as HTMLInputElement).checked"
+                />
+                <strong>{{ $t("options.collections_download.hymnal_1996") }}</strong>
+                <small class="opt-download-count">
+                  · {{ hymnal1996Ids.length }} {{ $t("options.collections_download.songs") }}
+                </small>
+                <small v-if="isHymnal1996Cached" class="opt-download-count">
+                  · {{ $t("accessibility.musics.cached") }}
+                </small>
+              </label>
+            </div>
 
-          <div class="opt-actions" style="margin-top: 8px">
-            <button
-              type="button"
-              class="opt-btn"
-              :disabled="translating || !hasAnySelection"
-              @click="translateSelected"
-            >
-              <v-icon icon="mdi-translate" size="14" class="mr-1" />
-              {{ $t("accessibility.musics.translate") }}
-            </button>
-            <button
-              type="button"
-              class="opt-btn"
-              :disabled="translating || !hasPendingRemovals || saving"
-              @click="saveSelection"
-            >
-              <v-icon icon="mdi-content-save" size="14" class="mr-1" />
-              {{ saving ? $t("accessibility.musics.saving") : $t("accessibility.musics.save") }}
-            </button>
-          </div>
-        </section>
-      </v-window-item>
+            <!-- Categorias > Álbuns -->
+            <div v-for="cat in categories" :key="cat.id_category" class="opt-cat">
+              <label class="opt-checkbox opt-cat-header">
+                <input
+                  :ref="(el) => setCategoryCheckboxRef(cat.id_category, el)"
+                  type="checkbox"
+                  :checked="isCategoryFullySelected(cat)"
+                  :disabled="translating"
+                  @change="toggleCategory(cat, ($event.target as HTMLInputElement).checked)"
+                />
+                <strong>{{ cat.name }}</strong>
+                <small v-if="cat.albums" class="opt-download-count">
+                  · {{ cat.albums.length }} {{ $t("options.collections_download.albums") }}
+                </small>
+              </label>
 
-      <!-- ═══ Aba Bíblia ═══ -->
-      <v-window-item value="bible">
-        <section class="opt-section">
-          <p class="opt-hint">{{ $t("accessibility.bible.hint") }}</p>
-
-          <div v-if="loadingBible" class="opt-hint">
-            <v-progress-linear indeterminate color="primary" class="mb-2" />
-          </div>
-
-          <div v-else class="opt-download-scroll">
-            <div class="opt-download-list">
-              <div v-for="ver in bibleVersions" :key="ver.id_bible_version" class="opt-cat">
-                <label class="opt-checkbox opt-cat-header">
+              <div class="opt-cat-albums">
+                <label
+                  v-for="album in cat.albums || []"
+                  :key="album.id_album"
+                  class="opt-checkbox opt-album"
+                >
                   <input
                     type="checkbox"
-                    :checked="selectedBibleVersions.has(ver.id_bible_version)"
-                    :disabled="translatingBible"
+                    :checked="selectedAlbums.has(album.id_album)"
+                    :disabled="translating"
                     @change="
-                      toggleBibleVersion(
-                        ver.id_bible_version,
-                        ($event.target as HTMLInputElement).checked
-                      )
+                      toggleAlbum(album.id_album, ($event.target as HTMLInputElement).checked)
                     "
                   />
-                  <strong>{{ ver.name }}</strong>
-                  <small v-if="ver.abbreviation" class="opt-download-count">
-                    · {{ ver.abbreviation }}
+                  <span>{{ album.name }}</span>
+                  <small v-if="album.subtitle" class="opt-download-count">
+                    · {{ album.subtitle }}
                   </small>
-                  <small
-                    v-if="isBibleVersionCached(ver.id_bible_version)"
-                    class="opt-download-count"
-                  >
-                    · {{ $t("accessibility.bible.cached") }}
+                  <small v-if="isAlbumCached(album.id_album)" class="opt-download-count">
+                    · {{ $t("accessibility.musics.cached") }}
                   </small>
                 </label>
               </div>
             </div>
           </div>
+        </div>
 
-          <ProgressBar
-            v-if="translatingBible"
-            class="libras-progress"
-            :done="bibleProgress.done"
-            :total="bibleProgress.total"
-            :current="bibleProgress.current"
-            :completed-msg="bibleCompletedMsg"
-            show-cancel
-            :cancel-label="$t('accessibility.bible.cancel')"
-            @cancel="sync.cancelLibrasDownloads()"
+        <!-- Progresso -->
+        <ProgressBar
+          v-if="translating"
+          class="libras-progress"
+          :done="musicProgress.done"
+          :total="musicProgress.total"
+          :current="musicProgress.current"
+          :completed-msg="completedMsg"
+          show-cancel
+          :cancel-label="$t('accessibility.musics.cancel')"
+          @cancel="sync.cancelLibrasDownloads()"
+        >
+          <template #label>
+            {{
+              $t("accessibility.musics.progress", {
+                done: musicProgress.done,
+                total: musicProgress.total,
+                percent: musicPercent,
+              })
+            }}
+          </template>
+        </ProgressBar>
+
+        <div class="opt-actions acc-actions--above">
+          <LjButton
+            :icon="ICONS.UI.TRANSLATE"
+            :disabled="translating || !hasAnySelection"
+            @click="translateSelected"
           >
-            <template #label>
-              {{
-                $t("accessibility.bible.progress", {
-                  done: bibleProgress.done,
-                  total: bibleProgress.total,
-                  percent: biblePercent,
-                })
-              }}
-            </template>
-          </ProgressBar>
+            {{ $t("accessibility.musics.translate") }}
+          </LjButton>
+          <LjButton
+            :icon="ICONS.ACTIONS.SAVE"
+            :disabled="translating || !hasPendingRemovals || saving"
+            @click="saveSelection"
+          >
+            {{ saving ? $t("accessibility.musics.saving") : $t("accessibility.musics.save") }}
+          </LjButton>
+        </div>
+      </section>
 
-          <div class="opt-actions" style="margin-top: 8px">
-            <button
-              type="button"
-              class="opt-btn"
-              :disabled="translatingBible || selectedBibleVersions.size === 0"
-              @click="translateSelectedBibles"
-            >
-              <v-icon icon="mdi-translate" size="14" class="mr-1" />
-              {{ $t("accessibility.bible.translate") }}
-            </button>
-            <button
-              type="button"
-              class="opt-btn"
-              :disabled="translatingBible || !bibleHasPendingRemovals || savingBible"
-              @click="saveBibleSelection"
-            >
-              <v-icon icon="mdi-content-save" size="14" class="mr-1" />
-              {{ savingBible ? $t("accessibility.bible.saving") : $t("accessibility.bible.save") }}
-            </button>
+      <!-- ═══ Aba Bíblia ═══ -->
+      <section v-if="isBooted('bible')" v-show="activeTab === 'bible'" class="opt-section">
+        <p class="opt-hint">{{ $t("accessibility.bible.hint") }}</p>
+
+        <div v-if="loadingBible" class="opt-hint">
+          <LjProgress indeterminate class="acc-loading" />
+        </div>
+
+        <div v-else class="opt-download-scroll">
+          <div class="opt-download-list">
+            <div v-for="ver in bibleVersions" :key="ver.id_bible_version" class="opt-cat">
+              <label class="opt-checkbox opt-cat-header">
+                <input
+                  type="checkbox"
+                  :checked="selectedBibleVersions.has(ver.id_bible_version)"
+                  :disabled="translatingBible"
+                  @change="
+                    toggleBibleVersion(
+                      ver.id_bible_version,
+                      ($event.target as HTMLInputElement).checked
+                    )
+                  "
+                />
+                <strong>{{ ver.name }}</strong>
+                <small v-if="ver.abbreviation" class="opt-download-count">
+                  · {{ ver.abbreviation }}
+                </small>
+                <small v-if="isBibleVersionCached(ver.id_bible_version)" class="opt-download-count">
+                  · {{ $t("accessibility.bible.cached") }}
+                </small>
+              </label>
+            </div>
           </div>
-        </section>
-      </v-window-item>
+        </div>
+
+        <ProgressBar
+          v-if="translatingBible"
+          class="libras-progress"
+          :done="bibleProgress.done"
+          :total="bibleProgress.total"
+          :current="bibleProgress.current"
+          :completed-msg="bibleCompletedMsg"
+          show-cancel
+          :cancel-label="$t('accessibility.bible.cancel')"
+          @cancel="sync.cancelLibrasDownloads()"
+        >
+          <template #label>
+            {{
+              $t("accessibility.bible.progress", {
+                done: bibleProgress.done,
+                total: bibleProgress.total,
+                percent: biblePercent,
+              })
+            }}
+          </template>
+        </ProgressBar>
+
+        <div class="opt-actions acc-actions--above">
+          <LjButton
+            :icon="ICONS.UI.TRANSLATE"
+            :disabled="translatingBible || selectedBibleVersions.size === 0"
+            @click="translateSelectedBibles"
+          >
+            {{ $t("accessibility.bible.translate") }}
+          </LjButton>
+          <LjButton
+            :icon="ICONS.ACTIONS.SAVE"
+            :disabled="translatingBible || !bibleHasPendingRemovals || savingBible"
+            @click="saveBibleSelection"
+          >
+            {{ savingBible ? $t("accessibility.bible.saving") : $t("accessibility.bible.save") }}
+          </LjButton>
+        </div>
+      </section>
 
       <!-- ═══ Aba Armazenamento ═══ -->
-      <v-window-item value="storage">
-        <section class="opt-section">
-          <div class="opt-stats opt-stats--compact">
-            <div class="opt-stat">
-              <span class="opt-stat-label">{{ $t("accessibility.storage.gloss_entries") }}</span>
-              <span class="opt-stat-value">{{ stats.total_entries }}</span>
-            </div>
-            <div class="opt-stat">
-              <span class="opt-stat-label">{{ $t("accessibility.stats.bundles_size") }}</span>
-              <span class="opt-stat-value">{{ Libras.humanSize(stats.total_bundles_bytes) }}</span>
-            </div>
-            <div class="opt-stat">
-              <span class="opt-stat-label">{{ $t("accessibility.storage.total_size") }}</span>
-              <span class="opt-stat-value">{{ Libras.humanSize(stats.total_bytes) }}</span>
-            </div>
+      <section v-if="isBooted('storage')" v-show="activeTab === 'storage'" class="opt-section">
+        <div class="opt-stats opt-stats--compact">
+          <div class="opt-stat">
+            <span class="opt-stat-label">{{ $t("accessibility.storage.gloss_entries") }}</span>
+            <span class="opt-stat-value">{{ stats.total_entries }}</span>
           </div>
+          <div class="opt-stat">
+            <span class="opt-stat-label">{{ $t("accessibility.stats.bundles_size") }}</span>
+            <span class="opt-stat-value">{{ Libras.humanSize(stats.total_bundles_bytes) }}</span>
+          </div>
+          <div class="opt-stat">
+            <span class="opt-stat-label">{{ $t("accessibility.storage.total_size") }}</span>
+            <span class="opt-stat-value">{{ Libras.humanSize(stats.total_bytes) }}</span>
+          </div>
+        </div>
 
-          <div class="opt-actions">
-            <button type="button" class="opt-btn" @click="refreshStats">
-              <v-icon icon="mdi-refresh" size="14" class="mr-1" />
-              {{ $t("accessibility.storage.refresh") }}
-            </button>
-            <button type="button" class="opt-btn opt-btn--danger" @click="clearLibrasCache">
-              <v-icon icon="mdi-delete" size="14" class="mr-1" />
-              {{ $t("accessibility.storage.clear_cache") }}
-            </button>
-          </div>
-        </section>
-      </v-window-item>
-    </v-window>
+        <div class="opt-actions">
+          <LjButton :icon="ICONS.ACTIONS.REFRESH" @click="refreshStats">
+            {{ $t("accessibility.storage.refresh") }}
+          </LjButton>
+          <LjButton variant="danger" :icon="ICONS.ACTIONS.DELETE_FILLED" @click="clearLibrasCache">
+            {{ $t("accessibility.storage.clear_cache") }}
+          </LjButton>
+        </div>
+      </section>
+    </div>
   </div>
 </template>
 
@@ -670,6 +586,18 @@ import { useSyncManager } from "@/composables/useSyncManager";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
 import { formatBackgroundTaskDetail } from "@/helpers/BackgroundTaskDetail";
 import ProgressBar from "@/components/ProgressBar.vue";
+import {
+  LjAlert,
+  LjButton,
+  LjField,
+  LjInput,
+  LjProgress,
+  LjSelect,
+  LjSlider,
+  LjSwitch,
+  LjTabs,
+} from "@/components/ui";
+import type { LjTab } from "@/components/ui";
 import { BG_SWATCHES } from "@/config/Theme";
 import $broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
@@ -695,6 +623,31 @@ const { t, locale } = useI18n();
 const sync = useSyncManager();
 const bgTasks = useBackgroundTasks();
 const activeTab = ref("avatar");
+
+// O v-alert fechava a si mesmo; o LjAlert só avisa que o operador dispensou,
+// e quem esconde é esta tela.
+const internetHintVisible = ref(true);
+
+const tabItems = computed<LjTab[]>(() => [
+  { value: "avatar", label: t("accessibility.tabs.avatar"), icon: ICONS.UI.AVATAR },
+  { value: "musics", label: t("accessibility.tabs.musics"), icon: ICONS.MUSIC.MUSIC },
+  { value: "bible", label: t("accessibility.tabs.bible"), icon: ICONS.BIBLE.BIBLE },
+  { value: "storage", label: t("accessibility.tabs.storage"), icon: ICONS.UI.HARDDISK },
+]);
+
+// Mesma economia do v-window-item: o painel só é montado na primeira vez que
+// aparece e fica montado depois — a lista inteira de álbuns não é construída
+// enquanto o operador está noutra aba, e o que ele já rolou continua onde
+// estava quando ele volta.
+const bootedTabs = ref(new Set<string>([activeTab.value]));
+
+function isBooted(tab: string): boolean {
+  return bootedTabs.value.has(tab);
+}
+
+watch(activeTab, (tab) => {
+  if (!bootedTabs.value.has(tab)) bootedTabs.value = new Set(bootedTabs.value).add(tab);
+});
 
 function findTask(id: string) {
   return bgTasks.tasks.value.find((t) => t.id === id && t.status === "running");
@@ -963,6 +916,39 @@ function setBgColor(c: string) {
   $userdata.set(KEYS.MODULES.LIBRAS.BACKGROUND_COLOR, c);
 }
 
+// Sem primitivo de cor no catálogo, o v-color-input vira três peças: o seletor
+// nativo do sistema, a paleta em botões e o alfa num slider. O que é gravado
+// continua sendo o mesmo hex de 8 dígitos (#rrggbbaa) que a projeção já lê.
+const BG_COLOR_FALLBACK = "#000000ff";
+
+function toHex2(n: number): string {
+  return Math.max(0, Math.min(255, Math.round(n)))
+    .toString(16)
+    .padStart(2, "0");
+}
+
+const bgSwatchHexes = computed(() =>
+  bgSwatches.flat().map((c) => `#${toHex2(c.r)}${toHex2(c.g)}${toHex2(c.b)}`)
+);
+
+// Minúsculas porque é assim que o <input type="color"> devolve o valor: sem
+// normalizar, uma cor gravada em maiúsculas não casaria com a amostra da
+// paleta nem com o que o seletor nativo mostra.
+const bgColorHex = computed(() => (bgColor.value || BG_COLOR_FALLBACK).slice(0, 7).toLowerCase());
+
+const bgAlphaPercent = computed(() => {
+  const alpha = (bgColor.value || BG_COLOR_FALLBACK).slice(7, 9) || "ff";
+  return Math.round((parseInt(alpha, 16) / 255) * 100);
+});
+
+function setBgColorHex(hex: string): void {
+  setBgColor(`${hex}${toHex2((bgAlphaPercent.value / 100) * 255)}`);
+}
+
+function setBgAlphaPercent(percent: number): void {
+  setBgColor(`${bgColorHex.value}${toHex2((percent / 100) * 255)}`);
+}
+
 // Posição
 const currentAnchor = ref("bottom-right");
 const currentOffsetX = ref(20);
@@ -970,11 +956,23 @@ const currentOffsetY = ref(20);
 const currentWidth = ref(200);
 const currentHeight = ref(300);
 
-const anchorOptions = [
-  { value: "bottom-left", icon: "mdi-arrow-bottom-left", label: "Esquerda" },
-  { value: "bottom-center", icon: "mdi-arrow-down", label: "Centro" },
-  { value: "bottom-right", icon: "mdi-arrow-bottom-right", label: "Direita" },
-];
+const anchorOptions = computed(() => [
+  {
+    value: "bottom-left",
+    icon: ICONS.UI.ARROW_BOTTOM_LEFT,
+    label: t("accessibility.avatar.anchor_left"),
+  },
+  {
+    value: "bottom-center",
+    icon: ICONS.UI.ARROW_DOWN,
+    label: t("accessibility.avatar.anchor_center"),
+  },
+  {
+    value: "bottom-right",
+    icon: ICONS.UI.ARROW_BOTTOM_RIGHT,
+    label: t("accessibility.avatar.anchor_right"),
+  },
+]);
 
 function setAnchor(value: string) {
   currentAnchor.value = value;
@@ -1443,12 +1441,181 @@ async function clearLibrasCache(): Promise<void> {
 </script>
 
 <style scoped>
+/* ─── Ritmo vertical da tela ──────────────────────────────────────────────── */
+
+.acc-hint {
+  margin-top: var(--lj-space-4);
+}
+
+.acc-tabs {
+  margin-top: var(--lj-space-4);
+}
+
+.acc-panes {
+  margin-top: var(--lj-space-7);
+}
+
+/* ─── Colunas ─────────────────────────────────────────────────────────────
+   Substituem v-row/v-col: não há primitivo de grade no catálogo. As quebras
+   repetem os pontos do Vuetify que estavam em uso (md = 960px, lg = 1280px)
+   para a tela continuar dobrando nas mesmas larguras de janela. */
+
+.acc-grid {
+  display: grid;
+  align-items: start;
+  gap: var(--lj-space-6);
+}
+
+.acc-grid--3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.acc-grid--435 {
+  grid-template-columns: 4fr 3fr 5fr;
+}
+
+@media (max-width: 1279.98px) {
+  .acc-grid--435 {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 959.98px) {
+  .acc-grid--3 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Dois campos lado a lado (X/Y, largura/altura, animação/duração). */
+.acc-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--lj-space-4);
+  min-width: 0;
+}
+
+.acc-anim {
+  display: grid;
+  gap: var(--lj-space-8);
+  min-width: 0;
+}
+
+/* Rótulo que titula um bloco inteiro, e não um campo só. */
+.acc-block-label {
+  display: block;
+  margin-bottom: var(--lj-space-2);
+}
+
+.acc-block-label--gap {
+  margin-top: var(--lj-space-7);
+}
+
+.acc-row--spaced {
+  margin-top: var(--lj-space-7);
+}
+
+.acc-suffix {
+  padding-right: var(--lj-ui-px-md);
+  color: var(--lj-text-subtle);
+  font-size: var(--lj-ui-font-sm);
+}
+
+.acc-loading {
+  margin-bottom: var(--lj-space-4);
+}
+
+.acc-actions--above {
+  margin-top: var(--lj-space-4);
+}
+
+.acc-actions--below {
+  margin-bottom: var(--lj-space-4);
+}
+
+/* Bloco desativado enquanto a API não suporta velocidade/emoção/sotaque.
+   Era `d-none` do Vuetify; agora não depende mais do CSS dele. */
+.acc-hidden {
+  display: none;
+}
+
+.acc-select--narrow {
+  max-width: 160px;
+}
+
+.acc-select--wide {
+  max-width: 300px;
+}
+
+/* ─── Cor de fundo do avatar ──────────────────────────────────────────────
+   Sem primitivo de cor no catálogo: seletor nativo, paleta e alfa em peças
+   separadas, sobre os mesmos tokens dos demais controles. */
+
+.acc-color {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-4);
+  margin-top: var(--lj-space-4);
+  max-width: 340px;
+}
+
+.acc-color__pick {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-4);
+}
+
+.acc-color__value {
+  color: var(--lj-text-muted);
+  font-family: var(--lj-font-mono);
+  font-size: var(--lj-ui-font-sm);
+  text-transform: uppercase;
+}
+
+.acc-color__swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lj-space-2);
+}
+
+.acc-color__swatch {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--lj-surface-border-strong);
+  border-radius: var(--lj-radius-sm);
+  cursor: pointer;
+  transition: box-shadow var(--lj-transition-fast);
+}
+
+.acc-color__swatch:hover {
+  border-color: var(--lj-ui-accent);
+}
+
+.acc-color__swatch:focus-visible {
+  outline: none;
+  box-shadow: var(--lj-ui-focus);
+}
+
+.acc-color__swatch--active {
+  border-color: var(--lj-ui-accent);
+  box-shadow: var(--lj-ui-focus);
+}
+
+/* O campo numérico nasce com a largura natural do <input>; dentro da grade ele
+   precisa ocupar a coluna. O gatilho é renderizado pelo primitivo, então a
+   regra sai daqui via :deep(). */
+.acc-pair :deep(.lj-input) {
+  width: 100%;
+}
+
+/* ─── Listas de seleção ───────────────────────────────────────────────────── */
+
 .opt-cat {
   display: flex;
   flex-direction: column;
   gap: 4px;
   padding: 6px 8px;
-  border-bottom: 1px solid rgba(var(--v-border-color), 0.15);
+  border-bottom: 1px solid var(--lj-surface-border);
 }
 .opt-cat:last-child {
   border-bottom: 0;
@@ -1467,12 +1634,15 @@ async function clearLibrasCache(): Promise<void> {
 }
 .opt-divider {
   height: 1px;
-  background: rgba(var(--v-border-color), 0.15);
+  background: var(--lj-surface-border);
   margin: 12px 0;
 }
 .libras-progress {
   margin-top: 12px;
 }
+
+/* ─── Âncora da projeção ──────────────────────────────────────────────────── */
+
 .position-options {
   display: flex;
   gap: 6px;
@@ -1480,6 +1650,7 @@ async function clearLibrasCache(): Promise<void> {
 .position-btn {
   display: inline-flex;
   align-items: center;
+  gap: var(--lj-space-2);
   padding: 6px 12px;
   border: 2px solid var(--lj-surface-border-strong);
   border-radius: var(--lj-radius-md);
@@ -1490,12 +1661,19 @@ async function clearLibrasCache(): Promise<void> {
   font-size: var(--lj-text-sm);
 }
 .position-btn:hover {
-  border-color: var(--lj-navy-active);
+  border-color: var(--lj-ui-accent);
   color: var(--lj-text);
 }
+.position-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--lj-ui-focus);
+}
+/* O hover já pinta a borda de acento; sem preencher, "selecionado" e "sob o
+   ponteiro" ficavam quase iguais e a escolha atual sumia. */
 .position-btn--active {
-  border-color: var(--lj-orange);
-  background: var(--lj-surface-bg-hover);
-  color: var(--lj-text);
+  border-color: var(--lj-ui-accent);
+  background: var(--lj-ui-accent);
+  color: var(--lj-ui-accent-fg);
+  font-weight: var(--lj-weight-semibold);
 }
 </style>

@@ -1,77 +1,63 @@
 <template>
-  <v-dialog
+  <LjDialog
     :model-value="modelValue"
-    max-width="720"
+    :title="title"
+    :icon="icon"
+    size="lg"
     @update:model-value="$emit('update:modelValue', $event)"
-    @keydown.escape="$emit('update:modelValue', false)"
   >
-    <v-card class="lls-card">
-      <header class="lls-header">
-        <v-icon :icon="icon" size="18" />
-        <span>{{ title }}</span>
-        <v-spacer />
-        <button class="lls-close" @click="$emit('update:modelValue', false)">
-          <v-icon icon="mdi-close" size="14" />
-        </button>
-      </header>
+    <LjField layout="column" :label="t('library_search.find_label')">
+      <LjInput
+        ref="inputEl"
+        v-model="query"
+        autocomplete="off"
+        @keydown.enter.prevent="selectFirstMatch"
+        @keydown.down.prevent="moveSelection(1)"
+        @keydown.up.prevent="moveSelection(-1)"
+      />
+    </LjField>
 
-      <div class="lls-filter">
-        <label for="lls-q">{{ t("library_search.find_label") }}</label>
-        <input
-          id="lls-q"
-          ref="inputEl"
-          v-model="query"
-          type="text"
-          class="lls-input"
-          autocomplete="off"
-          @keydown.enter.prevent="selectFirstMatch"
-          @keydown.down.prevent="moveSelection(1)"
-          @keydown.up.prevent="moveSelection(-1)"
-        />
-      </div>
+    <div class="lls-table-wrap">
+      <table class="lls-table">
+        <thead>
+          <tr>
+            <th class="lls-col-icon" />
+            <th>{{ t("library_search.col_name") }}</th>
+            <th v-if="showDetail" class="lls-col-detail">{{ t("library_search.col_detail") }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-if="!filteredRows.length">
+            <td :colspan="showDetail ? 3 : 2" class="lls-empty">
+              {{ query ? t("library_search.empty_search") : t("library_search.empty") }}
+            </td>
+          </tr>
+          <tr
+            v-for="(row, i) in filteredRows"
+            :key="`${row.id}-${i}`"
+            :class="{ 'is-active': i === activeIndex }"
+            @mouseenter="activeIndex = i"
+            @click="selectRow(row)"
+            @dblclick="selectRow(row)"
+          >
+            <td class="lls-icon-cell">
+              <Icon :icon="row.icon" :size="16" />
+            </td>
+            <td>{{ row.name }}</td>
+            <td v-if="showDetail" class="lls-detail-cell">{{ row.detail }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
-      <div class="lls-table-wrap">
-        <table class="lls-table">
-          <thead>
-            <tr>
-              <th class="lls-col-icon" />
-              <th>{{ t("library_search.col_name") }}</th>
-              <th v-if="showDetail" class="lls-col-detail">{{ t("library_search.col_detail") }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="!filteredRows.length">
-              <td :colspan="showDetail ? 3 : 2" class="lls-empty">
-                {{ query ? t("library_search.empty_search") : t("library_search.empty") }}
-              </td>
-            </tr>
-            <tr
-              v-for="(row, i) in filteredRows"
-              :key="`${row.id}-${i}`"
-              :class="{ 'is-active': i === activeIndex }"
-              @mouseenter="activeIndex = i"
-              @click="selectRow(row)"
-              @dblclick="selectRow(row)"
-            >
-              <td class="lls-icon-cell">
-                <v-icon :icon="row.icon" size="16" />
-              </td>
-              <td>{{ row.name }}</td>
-              <td v-if="showDetail" class="lls-detail-cell">{{ row.detail }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <footer class="lls-footer">
-        <span class="lls-count">{{ filteredRows.length }} / {{ allRows.length }}</span>
-        <v-spacer />
-        <button class="lls-btn" @click="$emit('update:modelValue', false)">
-          {{ t("actions.cancel") }}
-        </button>
-      </footer>
-    </v-card>
-  </v-dialog>
+    <template #footer>
+      <span class="lls-count">{{ filteredRows.length }} / {{ allRows.length }}</span>
+      <span class="lj-u-spacer" />
+      <LjButton size="sm" @click="$emit('update:modelValue', false)">
+        {{ t("actions.cancel") }}
+      </LjButton>
+    </template>
+  </LjDialog>
 </template>
 
 <script setup lang="ts">
@@ -83,6 +69,9 @@
  */
 import { computed, nextTick, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import Icon from "@/components/Icon.vue";
+import { LjButton, LjDialog, LjField, LjInput } from "@/components/ui";
+import { ICONS } from "@/config/Icons";
 import pt from "../lang/pt.json";
 import es from "../lang/es.json";
 
@@ -119,7 +108,7 @@ const props = withDefaults(
     modelValue: false,
     items: () => [],
     title: "",
-    icon: "mdi-magnify",
+    icon: ICONS.ACTIONS.SEARCH,
     showDetail: false,
   }
 );
@@ -136,7 +125,7 @@ function t(key: string): string {
 
 const query = ref("");
 const activeIndex = ref(0);
-const inputEl = ref<HTMLInputElement | null>(null);
+const inputEl = ref<{ focus: () => void } | null>(null);
 
 const allRows = computed(() => props.items ?? []);
 
@@ -164,6 +153,8 @@ watch(
     if (v) {
       query.value = "";
       activeIndex.value = 0;
+      // O campo só existe depois que o diálogo monta o conteúdo; o nextTick
+      // roda depois do autofoco do próprio diálogo, então o foco fica aqui.
       nextTick(() => inputEl.value?.focus());
     }
   }
@@ -186,92 +177,36 @@ function selectRow(row: LibrarySearchItem): void {
 }
 </script>
 
+<!-- O corpo do diálogo viaja num portal, mas é compilado AQUI (slot do
+     consumidor), então o Vue carimba o atributo de escopo nele e `scoped`
+     funciona normalmente. -->
 <style scoped>
-.lls-card {
-  background: var(--lj-surface-bg);
-  color: var(--lj-text);
-  border-radius: 6px;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-.lls-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.1));
-  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  font-weight: 500;
-}
-.lls-close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border: none;
-  background: transparent;
-  border-radius: 3px;
-  color: rgba(var(--lj-on-surface-ch), 0.6);
-  cursor: pointer;
-}
-.lls-close:hover {
-  background: rgba(220, 38, 38, 0.15);
-  color: #dc2626;
-}
-
-.lls-filter {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 12px 14px;
-  border-bottom: 1px solid rgba(var(--v-border-color), 0.2);
-  background: rgba(var(--lj-on-surface-ch), 0.03);
-}
-.lls-filter label {
-  font-size: 12px;
-  color: var(--lj-text);
-}
-.lls-input {
-  height: 30px;
-  padding: 0 8px;
-  border: 1px solid rgba(var(--v-border-color), 0.5);
-  border-radius: 3px;
-  background: var(--lj-surface-bg);
-  color: var(--lj-text);
-  font-size: 13px;
-  font-family: inherit;
-  outline: none;
-}
-.lls-input:focus {
-  border-color: var(--lj-navy);
-  box-shadow: var(--lj-shadow-focus-navy-sm);
-}
-
+/* Tabela não tem primitivo equivalente no catálogo: markup nativo sobre os
+   tokens, com cabeçalho fixo enquanto a lista rola. */
 .lls-table-wrap {
   max-height: 50vh;
   overflow-y: auto;
-  border-bottom: 1px solid rgba(var(--v-border-color), 0.2);
+  border: 1px solid var(--lj-surface-border);
+  border-radius: var(--lj-radius-md);
 }
 .lls-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: var(--lj-text-base);
 }
 .lls-table thead th {
   position: sticky;
   top: 0;
   z-index: 1;
-  background: var(--lj-gray-50);
+  background: var(--lj-surface-bg-soft);
   text-align: left;
-  padding: 8px 12px;
-  font-weight: 500;
-  border-bottom: 1px solid rgba(var(--v-border-color), 0.3);
+  padding: var(--lj-space-4) var(--lj-space-5);
+  font-weight: var(--lj-weight-medium);
+  border-bottom: 1px solid var(--lj-surface-border);
 }
 .lls-table tbody td {
-  padding: 6px 12px;
-  border-bottom: 1px solid rgba(var(--v-border-color), 0.12);
+  padding: var(--lj-space-3) var(--lj-space-5);
+  border-bottom: 1px solid var(--lj-surface-divider);
   cursor: pointer;
   white-space: nowrap;
   overflow: hidden;
@@ -279,49 +214,30 @@ function selectRow(row: LibrarySearchItem): void {
 }
 .lls-table tbody tr:hover,
 .lls-table tbody tr.is-active {
-  background: rgba(var(--lj-navy-ch), 0.1);
+  background: var(--lj-ui-accent-soft);
 }
 .lls-col-icon {
   width: 34px;
+}
+.lls-icon-cell {
+  line-height: 0;
 }
 .lls-col-detail {
   width: 28%;
 }
 .lls-detail-cell {
-  color: rgba(var(--lj-on-surface-ch), 0.6);
-  font-size: 12px;
+  color: var(--lj-text-muted);
+  font-size: var(--lj-text-base);
 }
 .lls-empty {
   text-align: center;
-  padding: 24px 12px;
-  color: rgba(var(--lj-on-surface-ch), 0.55);
+  padding: var(--lj-space-8) var(--lj-space-5);
+  color: var(--lj-text-subtle);
   cursor: default;
 }
 
-.lls-footer {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  background: rgba(var(--lj-on-surface-ch), 0.02);
-}
 .lls-count {
-  font-size: 11px;
-  color: rgba(var(--lj-on-surface-ch), 0.6);
-}
-.lls-btn {
-  display: inline-flex;
-  align-items: center;
-  height: 28px;
-  padding: 0 12px;
-  background: transparent;
-  border: 1px solid rgba(var(--v-border-color), 0.5);
-  border-radius: 3px;
-  cursor: pointer;
-  color: var(--lj-text);
-  font-size: 12px;
-}
-.lls-btn:hover {
-  background: rgba(var(--lj-on-surface-ch), 0.06);
+  font-size: var(--lj-text-sm);
+  color: var(--lj-text-muted);
 }
 </style>

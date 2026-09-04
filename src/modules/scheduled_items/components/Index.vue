@@ -5,7 +5,14 @@
       <aside class="si-cats">
         <div class="si-cats-head">
           <span>{{ tt("categories") }}</span>
-          <v-btn icon="mdi-plus" size="x-small" variant="text" @click="openAddCategory" />
+          <LjButton
+            size="sm"
+            variant="ghost"
+            icon-only
+            :icon="ICONS.ACTIONS.ADD"
+            :aria-label="tt('new_category')"
+            @click="openAddCategory"
+          />
         </div>
         <div
           v-for="cat in categories"
@@ -15,20 +22,25 @@
           :style="{ '--cat-color': (cat.color as string) || '#1976d2' }"
           @click="selectedCategoryId = cat.id"
         >
-          <v-icon icon="mdi-calendar-check" size="16" />
+          <Icon :icon="ICONS.MODULES.SCHEDULED_ITEMS" :size="16" />
           <span class="si-cat-name">{{ cat.nome }}</span>
           <span class="si-cat-count">{{ itemsOf(cat.id).length }}</span>
           <span class="si-cat-actions">
-            <v-btn
-              icon="mdi-pencil"
-              size="xx-small"
-              variant="text"
+            <LjButton
+              size="sm"
+              variant="ghost"
+              icon-only
+              :icon="ICONS.ACTIONS.EDIT"
+              :aria-label="t('actions.edit')"
               @click.stop="openRenameCategory(cat)"
             />
-            <v-btn
-              icon="mdi-delete"
-              size="xx-small"
-              variant="text"
+            <LjButton
+              size="sm"
+              variant="ghost"
+              icon-only
+              class="si-cat-del"
+              :icon="ICONS.ACTIONS.DELETE"
+              :aria-label="t('actions.delete')"
               @click.stop="removeCategory(cat)"
             />
           </span>
@@ -42,45 +54,51 @@
       <!-- Calendário -->
       <div class="si-cal" @click.capture="onCalendarCaptureClick">
         <div class="si-cal-toolbar">
-          <v-btn icon="mdi-chevron-left" size="small" variant="text" @click="calShift(-1)" />
-          <v-btn icon="mdi-chevron-right" size="small" variant="text" @click="calShift(1)" />
-          <v-btn size="small" variant="tonal" class="si-cal-today" @click="goToday">
+          <LjButton
+            size="md"
+            variant="ghost"
+            icon-only
+            :icon="ICONS.ACTIONS.PREVIOUS"
+            :aria-label="t('actions.previous')"
+            @click="calShift(-1)"
+          />
+          <LjButton
+            size="md"
+            variant="ghost"
+            icon-only
+            :icon="ICONS.ACTIONS.NEXT"
+            :aria-label="t('actions.next')"
+            @click="calShift(1)"
+          />
+          <LjButton size="md" variant="subtle" @click="goToday">
             {{ tt("today") }}
-          </v-btn>
-          <v-btn-toggle
-            v-model="calendarType"
-            mandatory
-            density="compact"
-            variant="outlined"
-            divided
-            class="si-cal-type"
+          </LjButton>
+          <div class="si-cal-type" role="group" :aria-label="tt('view_mode')">
+            <LjButton
+              size="md"
+              :variant="calendarType === 'month' ? 'primary' : 'default'"
+              :aria-pressed="calendarType === 'month'"
+              @click="calendarType = 'month'"
+            >
+              {{ tt("view_month") }}
+            </LjButton>
+            <LjButton
+              size="md"
+              :variant="calendarType === 'week' ? 'primary' : 'default'"
+              :aria-pressed="calendarType === 'week'"
+              @click="calendarType = 'week'"
+            >
+              {{ tt("view_week") }}
+            </LjButton>
+          </div>
+          <LjButton
+            size="md"
+            class="si-cal-title"
+            :icon-end="ICONS.UI.CHEVRON_DOWN"
+            @click="yearMonthMenuOpen = true"
           >
-            <v-btn value="month" size="small">{{ tt("view_month") }}</v-btn>
-            <v-btn value="week" size="small">{{ tt("view_week") }}</v-btn>
-          </v-btn-toggle>
-          <v-menu v-model="yearMonthMenuOpen" :close-on-content-click="false" location="bottom">
-            <template #activator="{ props: menuProps }">
-              <v-btn class="si-cal-title" v-bind="menuProps">
-                {{ calTitle }}
-                <v-icon icon="mdi-chevron-down" size="14" class="ml-1" />
-              </v-btn>
-            </template>
-            <v-card>
-              <v-card-text class="pa-2 d-flex" style="gap: 8px; align-items: center">
-                <select v-model="pickerYear" class="lit-select">
-                  <option v-for="y in yearRange" :key="y" :value="y">{{ y }}</option>
-                </select>
-                <select v-model="pickerMonth" class="lit-select">
-                  <option v-for="(m, idx) in monthNames" :key="idx" :value="idx + 1">
-                    {{ m }}
-                  </option>
-                </select>
-                <v-btn size="small" color="primary" variant="tonal" @click="onYearMonthPick">
-                  OK
-                </v-btn>
-              </v-card-text>
-            </v-card>
-          </v-menu>
+            {{ calTitle }}
+          </LjButton>
         </div>
         <v-calendar
           ref="calendarRef"
@@ -102,170 +120,196 @@
       </div>
     </div>
 
+    <!-- Diálogo: ir para mês/ano -->
+    <LjDialog
+      v-model="yearMonthMenuOpen"
+      :title="tt('go_to_month')"
+      :icon="ICONS.CALENDAR.BLANK"
+      size="sm"
+    >
+      <div class="si-ym-row">
+        <select v-model="pickerYear" class="si-select" :aria-label="tt('year')">
+          <option v-for="y in yearRange" :key="y" :value="y">{{ y }}</option>
+        </select>
+        <select v-model="pickerMonth" class="si-select" :aria-label="tt('month')">
+          <option v-for="(m, idx) in monthNames" :key="idx" :value="idx + 1">
+            {{ m }}
+          </option>
+        </select>
+      </div>
+      <template #footer>
+        <LjButton size="sm" variant="primary" @click="onYearMonthPick">OK</LjButton>
+      </template>
+    </LjDialog>
+
     <!-- Diálogo: nova / renomear categoria -->
-    <v-dialog v-model="categoryDialog" max-width="360">
-      <v-card>
-        <v-card-title class="text-body-1 font-weight-medium">
-          {{ editingCatId ? tt("rename_category") : tt("new_category") }}
-        </v-card-title>
-        <v-card-text>
-          <v-text-field
-            v-model="categoryNameInput"
-            :label="tt('category_name')"
-            variant="outlined"
-            density="compact"
-            autofocus
-            @keydown.enter="confirmCategoryDialog"
-          />
-          <div class="si-color-row">
-            <label>{{ tt("color") }}</label>
-            <v-color-picker v-model="categoryColorInput" mode="hex" hide-inputs />
-          </div>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn variant="text" @click="categoryDialog = false">{{ t("actions.cancel") }}</v-btn>
-          <v-btn
-            color="primary"
-            variant="tonal"
-            :disabled="!categoryNameInput.trim()"
-            @click="confirmCategoryDialog"
-          >
-            {{ t("actions.save") }}
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <LjDialog
+      v-model="categoryDialog"
+      :title="editingCatId ? tt('rename_category') : tt('new_category')"
+      :icon="editingCatId ? ICONS.ACTIONS.EDIT : ICONS.ACTIONS.ADD"
+      size="sm"
+    >
+      <LjField layout="column" :label="tt('category_name')">
+        <LjInput v-model="categoryNameInput" autofocus @keydown.enter="confirmCategoryDialog" />
+      </LjField>
+      <label class="si-color-row">
+        <span class="si-color-label">{{ tt("color") }}</span>
+        <input v-model="categoryColorInput" type="color" class="si-color-input" />
+      </label>
+      <template #footer>
+        <LjButton size="sm" @click="categoryDialog = false">{{ t("actions.cancel") }}</LjButton>
+        <LjButton
+          size="sm"
+          variant="primary"
+          :disabled="!categoryNameInput.trim()"
+          @click="confirmCategoryDialog"
+        >
+          {{ t("actions.save") }}
+        </LjButton>
+      </template>
+    </LjDialog>
 
     <!-- Diálogo: agendamento do dia -->
-    <v-dialog v-model="entryDialog" max-width="550">
-      <v-card>
-        <v-card-title class="text-body-1 font-weight-medium si-entry-title">
-          {{ tt("entry_title") }} — {{ entryWeekday }},
-          <input v-model="entryDate" type="date" class="si-entry-date-input" />
-        </v-card-title>
-        <v-card-text>
-          <div class="si-entry-cat-row">
-            <span class="si-entry-cat-dot" :style="{ background: entryCategoryColor }" />
-            <select v-model="entryCategoryId" class="lit-select lit-select--full">
-              <option value="">{{ tt("pick_category") }}</option>
-              <option v-for="c in categories" :key="c.id" :value="c.id">
-                {{ c.nome }}
-              </option>
-            </select>
-          </div>
-          <div class="si-file-row">
-            <v-btn size="small" variant="tonal" @click="chooseEntryFile">
-              <v-icon start icon="mdi-paperclip" />
-              {{ tt("choose_file") }}
-            </v-btn>
-            <span v-if="entryFileName" class="si-file-name">{{ entryFileName }}</span>
-          </div>
-          <input ref="fileInput" type="file" style="display: none" @change="onFileSelected" />
-          <div v-if="entryFile || entryFileName" class="si-entry-detail">
-            <div class="si-entry-line">
-              <v-icon :icon="entryKindIcon" size="18" />
-              <span>{{ entryKindLabel }}</span>
-            </div>
-            <div class="si-entry-line si-entry-loc">
-              <v-icon :icon="ICONS.UI.FILE" size="16" />
-              <span>{{ entryFile || tt("web_only_name") }}</span>
-            </div>
-            <img
-              v-if="previewUrl && entryKind === 'image'"
-              :src="previewUrl"
-              class="si-entry-preview"
-              alt="preview"
-            />
-            <audio
-              v-else-if="previewUrl && entryKind === 'audio'"
-              :src="previewUrl"
-              controls
-              class="si-entry-preview"
-            />
-            <video
-              v-else-if="previewUrl && entryKind === 'video'"
-              :src="previewUrl"
-              controls
-              muted
-              class="si-entry-preview"
-              @loadeddata="onVideoLoaded"
-            />
-          </div>
-        </v-card-text>
-        <v-card-actions class="si-entry-actions">
-          <v-btn v-if="entryId" variant="text" color="error" @click="removeEntry">
-            {{ tt("remove") }}
-          </v-btn>
-          <v-spacer />
-          <v-btn variant="text" @click="entryDialog = false">{{ t("actions.cancel") }}</v-btn>
-          <v-btn
-            color="primary"
-            variant="tonal"
-            :disabled="(!entryFile && !entryId) || !entryCategoryId"
-            @click="saveEntry"
-          >
-            {{ t("actions.save") }}
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <LjDialog
+      v-model="entryDialog"
+      :title="tt('entry_title')"
+      :icon="ICONS.CALENDAR.CLOCK"
+      size="md"
+    >
+      <LjField layout="row" :label="tt('entry_date')" class="si-entry-when">
+        <div class="si-entry-when-row">
+          <LjInput v-model="entryDate" type="date" />
+          <span v-if="entryWeekday" class="si-entry-weekday">{{ entryWeekday }}</span>
+        </div>
+      </LjField>
+      <div class="si-entry-cat-row">
+        <span class="si-entry-cat-dot" :style="{ background: entryCategoryColor }" />
+        <select
+          v-model="entryCategoryId"
+          class="si-select si-select--full"
+          :aria-label="tt('pick_category')"
+        >
+          <option value="">{{ tt("pick_category") }}</option>
+          <option v-for="c in categories" :key="c.id" :value="c.id">
+            {{ c.nome }}
+          </option>
+        </select>
+      </div>
+      <div class="si-file-row">
+        <LjButton size="md" variant="subtle" :icon="ICONS.UI.FILE_PLUS" @click="chooseEntryFile">
+          {{ tt("choose_file") }}
+        </LjButton>
+        <span v-if="entryFileName" class="si-file-name">{{ entryFileName }}</span>
+      </div>
+      <input ref="fileInput" type="file" class="si-file-input" @change="onFileSelected" />
+      <div v-if="entryFile || entryFileName" class="si-entry-detail">
+        <div class="si-entry-line">
+          <Icon :icon="entryKindIcon" :size="18" />
+          <span>{{ entryKindLabel }}</span>
+        </div>
+        <div class="si-entry-line si-entry-loc">
+          <Icon :icon="ICONS.UI.FILE" :size="16" />
+          <span>{{ entryFile || tt("web_only_name") }}</span>
+        </div>
+        <img
+          v-if="previewUrl && entryKind === 'image'"
+          :src="previewUrl"
+          class="si-entry-preview"
+          alt="preview"
+        />
+        <audio
+          v-else-if="previewUrl && entryKind === 'audio'"
+          :src="previewUrl"
+          controls
+          class="si-entry-preview"
+        />
+        <video
+          v-else-if="previewUrl && entryKind === 'video'"
+          :src="previewUrl"
+          controls
+          muted
+          class="si-entry-preview"
+          @loadeddata="onVideoLoaded"
+        />
+      </div>
+      <template #footer>
+        <LjButton
+          v-if="entryId"
+          size="sm"
+          variant="danger"
+          class="si-footer-start"
+          @click="removeEntry"
+        >
+          {{ tt("remove") }}
+        </LjButton>
+        <LjButton size="sm" @click="entryDialog = false">{{ t("actions.cancel") }}</LjButton>
+        <LjButton
+          size="sm"
+          variant="primary"
+          :disabled="(!entryFile && !entryId) || !entryCategoryId"
+          @click="saveEntry"
+        >
+          {{ t("actions.save") }}
+        </LjButton>
+      </template>
+    </LjDialog>
 
     <!-- Diálogo: Adicionar Automaticamente -->
-    <v-dialog v-model="autoPopulateDialog" max-width="520">
-      <v-card>
-        <v-card-title class="text-body-1 font-weight-medium">
-          {{ tt("add_auto_dialog") }}
-        </v-card-title>
-        <v-card-text>
-          <div class="si-auto-cat">
-            <span class="si-entry-cat-dot" :style="{ background: autoCategoryColor }" />
-            <select v-model="autoPopulateTargetCat" class="lit-select lit-select--full">
-              <option value="">{{ tt("pick_category") }}</option>
-              <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.nome }}</option>
-            </select>
-          </div>
+    <LjDialog
+      v-model="autoPopulateDialog"
+      :title="tt('add_auto_dialog')"
+      :icon="ICONS.CALENDAR.MULTISELECT"
+      size="md"
+    >
+      <div class="si-auto-cat">
+        <span class="si-entry-cat-dot" :style="{ background: autoCategoryColor }" />
+        <select
+          v-model="autoPopulateTargetCat"
+          class="si-select si-select--full"
+          :aria-label="tt('pick_category')"
+        >
+          <option value="">{{ tt("pick_category") }}</option>
+          <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.nome }}</option>
+        </select>
+      </div>
 
-          <div class="si-auto-folder-row">
-            <v-btn
-              size="small"
-              variant="tonal"
-              :disabled="!Platform.isDesktop"
-              @click="chooseAutoFolder"
-            >
-              <v-icon start icon="mdi-folder-open" />
-              {{ tt("add_auto_choose_folder") }}
-            </v-btn>
-            <span v-if="autoPopulateFolder" class="si-file-name">{{ autoPopulateFolder }}</span>
-          </div>
+      <div class="si-auto-folder-row">
+        <LjButton
+          size="md"
+          variant="subtle"
+          :icon="ICONS.UI.FOLDER_OPEN"
+          :disabled="!Platform.isDesktop"
+          @click="chooseAutoFolder"
+        >
+          {{ tt("add_auto_choose_folder") }}
+        </LjButton>
+        <span v-if="autoPopulateFolder" class="si-file-name">{{ autoPopulateFolder }}</span>
+      </div>
 
-          <div class="si-auto-hint" v-html="tt('add_auto_hint')" />
+      <div class="si-auto-hint" v-html="tt('add_auto_hint')" />
 
-          <div
-            v-if="autoPopulateResult"
-            class="si-auto-result"
-            :class="{ 'si-auto-result--ok': autoPopulateResult.includes('sucesso') }"
-          >
-            {{ autoPopulateResult }}
-          </div>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn variant="text" @click="autoPopulateDialog = false">
-            {{ t("actions.cancel") }}
-          </v-btn>
-          <v-btn
-            color="primary"
-            variant="tonal"
-            :disabled="!autoPopulateFolder || !autoPopulateTargetCat || !Platform.isDesktop"
-            @click="executeAutoPopulate"
-          >
-            <v-icon start icon="mdi-magnify-scan" />
-            {{ tt("add_auto_scan") }}
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+      <div
+        v-if="autoPopulateResult"
+        class="si-auto-result"
+        :class="{ 'si-auto-result--ok': autoPopulateResult.includes('sucesso') }"
+      >
+        {{ autoPopulateResult }}
+      </div>
+      <template #footer>
+        <LjButton size="sm" @click="autoPopulateDialog = false">
+          {{ t("actions.cancel") }}
+        </LjButton>
+        <LjButton
+          size="sm"
+          variant="primary"
+          :icon="ICONS.ACTIONS.SEARCH"
+          :disabled="!autoPopulateFolder || !autoPopulateTargetCat || !Platform.isDesktop"
+          @click="executeAutoPopulate"
+        >
+          {{ tt("add_auto_scan") }}
+        </LjButton>
+      </template>
+    </LjDialog>
   </ModuleContainer>
 </template>
 
@@ -274,6 +318,8 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { useI18n } from "vue-i18n";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
+import Icon from "@/components/Icon.vue";
+import { LjButton, LjDialog, LjField, LjInput } from "@/components/ui";
 import $liturgy from "@/helpers/Liturgy";
 import Platform from "@/helpers/Platform";
 import $alert from "@/helpers/Alert";
@@ -335,10 +381,10 @@ const _lastClickedEventId = ref("");
 const entryKindIcon = computed(
   () =>
     ({
-      image: "mdi-image",
-      audio: "mdi-music-note",
-      video: "mdi-video",
-      other: "mdi-file-document",
+      image: ICONS.MEDIA.IMAGE,
+      audio: ICONS.MUSIC.NOTE,
+      video: ICONS.MEDIA.VIDEO_FILE,
+      other: ICONS.UI.FILE,
     })[entryKind.value]
 );
 
@@ -964,9 +1010,9 @@ function removeEntry(): void {
 <style scoped>
 .si-root {
   display: flex;
-  gap: 12px;
+  gap: var(--lj-space-5);
   height: 100%;
-  padding: 10px;
+  padding: var(--lj-space-4);
   overflow: hidden;
 }
 .si-cats {
@@ -974,39 +1020,39 @@ function removeEntry(): void {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  border-right: 1px solid rgba(var(--lj-on-surface-ch), 0.12);
-  padding-right: 10px;
+  gap: var(--lj-space-2);
+  border-right: 1px solid var(--lj-surface-border);
+  padding-right: var(--lj-space-4);
   overflow-y: auto;
 }
 .si-cats-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--lj-text-base);
+  font-weight: var(--lj-weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: rgba(var(--lj-on-surface-ch), 0.6);
-  padding: 0 2px 4px;
+  color: var(--lj-text-muted);
+  padding: 0 var(--lj-space-1) var(--lj-space-2);
 }
 .si-cat {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
-  border-radius: 6px;
+  gap: var(--lj-space-3);
+  padding: var(--lj-space-3) var(--lj-space-4);
+  border-radius: var(--lj-radius-lg);
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--lj-text-md);
   border-left: 3px solid var(--cat-color);
-  transition: background 0.15s;
+  transition: background var(--lj-transition-normal);
 }
 .si-cat:hover {
-  background: rgba(var(--lj-on-surface-ch), 0.06);
+  background: var(--lj-surface-bg-hover);
 }
 .si-cat--active {
   background: color-mix(in srgb, var(--cat-color) 18%, transparent);
-  font-weight: 500;
+  font-weight: var(--lj-weight-medium);
 }
 .si-cat-name {
   flex: 1;
@@ -1016,10 +1062,10 @@ function removeEntry(): void {
   white-space: nowrap;
 }
 .si-cat-count {
-  font-size: 10px;
+  font-size: var(--lj-text-xs);
   background: rgba(var(--lj-on-surface-ch), 0.1);
   border-radius: 10px;
-  padding: 0 6px;
+  padding: 0 var(--lj-space-3);
   line-height: 16px;
 }
 .si-cat-actions {
@@ -1029,10 +1075,19 @@ function removeEntry(): void {
 .si-cat:hover .si-cat-actions {
   display: inline-flex;
 }
+/* Seletor com o pai de propósito: empata em especificidade com a regra
+   `.lj-btn--ghost` do primitivo e o desempate por ordem não é garantido. */
+.si-cat-actions .si-cat-del {
+  color: var(--lj-danger);
+}
+.si-cat-actions .si-cat-del:hover {
+  background: var(--lj-danger-soft);
+  color: var(--lj-danger);
+}
 .si-hint {
-  font-size: 12px;
-  color: rgba(var(--lj-on-surface-ch), 0.55);
-  padding: 8px 4px;
+  font-size: var(--lj-text-base);
+  color: var(--lj-text-muted);
+  padding: var(--lj-space-4) var(--lj-space-2);
 }
 .si-cal {
   flex: 1;
@@ -1043,89 +1098,151 @@ function removeEntry(): void {
 .si-cal-toolbar {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 0 4px 8px;
+  gap: var(--lj-space-2);
+  padding: 0 var(--lj-space-2) var(--lj-space-4);
 }
-.si-cal-today {
-  font-size: 12px;
-  min-width: auto;
-  padding: 0 10px;
-  height: 28px;
-}
+/* Grupo mês/semana: os dois botões colados formam um único controle. */
 .si-cal-type {
-  height: 28px;
+  display: inline-flex;
+  gap: var(--lj-space-1);
 }
-.si-cal-type .v-btn {
-  font-size: 11px;
-  min-width: auto;
-  padding: 0 10px;
-  height: 100%;
+.si-cal-toolbar .si-cal-title {
+  font-weight: var(--lj-weight-semibold);
 }
 :deep(.v-event-more) {
   cursor: pointer;
-  font-weight: 500;
+  font-weight: var(--lj-weight-medium);
+}
+
+/* ── Controles nativos ainda sem primitivo ─────────────────────────────
+   O <select> nativo permanece por escolha: o painel flutuante do LjSelect
+   é desenhado abaixo do diálogo (z-index 2400 contra 2501), e aqui ele
+   vive dentro de diálogos. O traço, o raio e o anel de foco vêm do mesmo
+   contrato dos primitivos para não destoar ao lado deles. */
+.si-select {
+  height: var(--lj-ui-h-md);
+  padding: 0 var(--lj-space-4);
+  border: var(--lj-ui-border);
+  border-radius: var(--lj-ui-radius);
+  background: var(--lj-surface-bg);
+  color: var(--lj-text);
+  font-family: inherit;
+  font-size: var(--lj-ui-font-md);
+  outline: none;
+  cursor: pointer;
+}
+.si-select:hover {
+  border-color: var(--lj-ui-accent);
+}
+.si-select:focus-visible {
+  border-color: var(--lj-ui-accent);
+  box-shadow: var(--lj-ui-focus);
+}
+.si-select--full {
+  width: 100%;
+}
+.si-ym-row {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-4);
+}
+.si-ym-row .si-select {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Diálogo de categoria ──────────────────────────────────────────── */
+.si-color-row {
+  margin-top: var(--lj-space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-3);
+}
+.si-color-label {
+  font-size: var(--lj-text-base);
+  color: var(--lj-text-muted);
+}
+.si-color-input {
+  width: 100%;
+  height: var(--lj-ui-h-lg);
+  padding: 2px;
+  border: var(--lj-ui-border);
+  border-radius: var(--lj-ui-radius);
+  background: var(--lj-surface-bg);
+  cursor: pointer;
+}
+.si-color-input:focus-visible {
+  border-color: var(--lj-ui-accent);
+  box-shadow: var(--lj-ui-focus);
+  outline: none;
+}
+
+/* ── Diálogo de agendamento ────────────────────────────────────────── */
+.si-entry-when {
+  margin-bottom: var(--lj-space-5);
+}
+.si-entry-when-row {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-4);
+}
+/* A classe passada ao LjInput cai no <input> interno (ele usa inheritAttrs:
+   false), não na moldura. Por isso a medida vem do invólucro, com :deep. */
+.si-entry-when-row :deep(.lj-input) {
+  max-width: 170px;
+}
+.si-entry-weekday {
+  font-size: var(--lj-text-base);
+  color: var(--lj-text-muted);
+  text-transform: capitalize;
 }
 .si-entry-cat-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: var(--lj-space-4);
+  margin-bottom: var(--lj-space-5);
 }
 .si-entry-cat-dot {
   width: 14px;
   height: 14px;
   border-radius: 50%;
   flex-shrink: 0;
-  border: 1px solid rgba(0, 0, 0, 0.15);
-}
-.si-entry-meta {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: rgba(var(--lj-on-surface-ch), 0.55);
-  margin-bottom: 10px;
+  border: 1px solid var(--lj-surface-border-strong);
 }
 .si-file-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--lj-space-4);
   min-height: 36px;
 }
 .si-file-name {
-  font-size: 12px;
+  font-size: var(--lj-text-base);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   flex: 1;
   min-width: 0;
 }
-.si-color-row {
-  margin-top: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.si-color-row label {
-  font-size: 12px;
-  color: rgba(var(--lj-on-surface-ch), 0.6);
+.si-file-input {
+  display: none;
 }
 .si-entry-detail {
-  margin-top: 12px;
-  border-top: 1px solid rgba(var(--lj-on-surface-ch), 0.12);
-  padding-top: 10px;
+  margin-top: var(--lj-space-5);
+  border-top: 1px solid var(--lj-surface-divider);
+  padding-top: var(--lj-space-4);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--lj-space-4);
 }
 .si-entry-line {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 13px;
+  gap: var(--lj-space-4);
+  font-size: var(--lj-text-md);
 }
 .si-entry-loc {
-  color: rgba(var(--lj-on-surface-ch), 0.6);
-  font-size: 11px;
+  color: var(--lj-text-muted);
+  font-size: var(--lj-text-sm);
 }
 .si-entry-loc span {
   overflow: hidden;
@@ -1135,89 +1252,52 @@ function removeEntry(): void {
 .si-entry-preview {
   max-width: 100%;
   max-height: 220px;
-  border-radius: 6px;
-  margin-top: 4px;
+  border-radius: var(--lj-radius-lg);
+  margin-top: var(--lj-space-2);
 }
-.si-entry-preview[type="audio"] {
-  width: 100%;
-}
-.si-entry-title {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  white-space: nowrap;
-}
-.si-entry-date-input {
-  border: 1px solid rgba(var(--v-border-color), 0.5);
-  border-radius: 4px;
-  padding: 2px 6px;
-  font-size: 14px;
-  font-family: inherit;
-  background: var(--lj-surface-bg, #fff);
-  color: var(--lj-text, #000);
-  max-width: 170px;
-}
-.si-entry-date-input:focus {
-  border-color: #1a237e;
-  outline: none;
-}
-.si-entry-actions :first-child {
+/* Empurra "Remover agendamento" para a esquerda do rodapé do diálogo. */
+.si-footer-start {
   margin-right: auto;
 }
+
+/* ── Diálogo de auto-preenchimento ─────────────────────────────────── */
 .si-auto-cat {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: var(--lj-space-4);
+  margin-bottom: var(--lj-space-5);
 }
 .si-auto-folder-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: var(--lj-space-4);
+  margin-bottom: var(--lj-space-5);
 }
 .si-auto-hint {
-  font-size: 11px;
-  color: rgba(var(--lj-on-surface-ch), 0.6);
+  font-size: var(--lj-text-sm);
+  color: var(--lj-text-muted);
   line-height: 1.5;
-  padding: 8px 10px;
-  background: rgba(var(--lj-on-surface-ch), 0.04);
-  border-radius: 6px;
-  margin-bottom: 12px;
+  padding: var(--lj-space-4) var(--lj-space-5);
+  background: var(--lj-surface-bg-soft);
+  border-radius: var(--lj-radius-lg);
+  margin-bottom: var(--lj-space-5);
 }
 .si-auto-hint code {
-  font-size: 10px;
+  font-family: var(--lj-font-mono);
+  font-size: var(--lj-text-xs);
   background: rgba(var(--lj-on-surface-ch), 0.08);
-  padding: 1px 4px;
-  border-radius: 3px;
+  padding: 1px var(--lj-space-2);
+  border-radius: var(--lj-radius-sm);
 }
 .si-auto-result {
-  font-size: 12px;
-  padding: 6px 10px;
-  border-radius: 6px;
-  background: rgba(var(--v-error-color, #b00020), 0.08);
-  color: rgb(var(--v-theme-error, #b00020));
+  font-size: var(--lj-text-base);
+  padding: var(--lj-space-3) var(--lj-space-5);
+  border-radius: var(--lj-radius-lg);
+  background: var(--lj-danger-soft);
+  color: var(--lj-alert-error-color, var(--lj-danger));
 }
 .si-auto-result--ok {
-  background: rgba(var(--v-success-color, #4caf50), 0.08);
-  color: rgb(var(--v-theme-success, #4caf50));
-}
-.lit-select {
-  height: 30px;
-  padding: 0 8px;
-  border: 1px solid rgba(var(--v-border-color), 0.5);
-  border-radius: 3px;
-  background: var(--lj-surface-bg, #fff);
-  color: var(--lj-text, #000);
-  font-size: 13px;
-  font-family: inherit;
-  outline: none;
-  cursor: pointer;
-}
-.lit-select:focus {
-  border-color: #1a237e;
-}
-.lit-select--full {
-  width: 100%;
+  background: var(--lj-success-soft);
+  color: var(--lj-success);
 }
 </style>

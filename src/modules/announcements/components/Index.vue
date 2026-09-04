@@ -12,58 +12,125 @@
       <aside class="an-list">
         <div class="an-list-head">
           <span>{{ tt("list") }}</span>
-          <v-btn icon="mdi-plus" size="x-small" variant="text" @click="addAnnouncement" />
+          <LjButton
+            size="sm"
+            variant="ghost"
+            icon-only
+            :icon="ICONS.ACTIONS.ADD"
+            :title="tt('new')"
+            :aria-label="tt('new')"
+            @click="addAnnouncement"
+          />
         </div>
-        <draggable
-          :list="sorted"
-          item-key="id"
-          handle=".an-item"
-          :animation="150"
-          ghost-class="an-item--ghost"
-          @end="onDragEnd"
-        >
-          <template #item="{ element: a, index: i }">
-            <div
-              class="an-item"
-              :class="{ 'an-item--active': selectedId === a.id }"
-              @click="selectedId = a.id"
-              @contextmenu="onContextMenu($event, a)"
-            >
-              <v-icon icon="mdi-drag-vertical" size="small" class="an-drag-handle" />
-              <span class="an-item-order">{{ i + 1 }}</span>
-              <span class="an-item-name">{{ a.nome }}</span>
-              <v-btn
-                icon="mdi-delete"
-                size="xx-small"
-                variant="text"
-                class="an-item-delete"
-                @click.stop="removeAnnouncement(a)"
-              />
+
+        <!--
+          O catálogo não tem primitivo de menu de contexto: LjMenu abre por
+          clique no gatilho, não na posição do cursor. As peças do Reka UI são
+          montadas aqui — como MusicMenuTable já faz com os submenus —
+          reaproveitando as classes `lj-menu__*` publicadas pelo LjMenu, que
+          vive no bundle da shell e portanto sempre está carregado.
+
+          O gatilho envolve a lista inteira; qual item foi clicado é registrado
+          por `onContextMenu` no próprio item, que borbulha antes do Reka.
+        -->
+        <ContextMenuRoot>
+          <ContextMenuTrigger as-child>
+            <div class="an-list-drag" tabindex="-1">
+              <draggable
+                :list="sorted"
+                item-key="id"
+                handle=".an-item"
+                :animation="150"
+                ghost-class="an-item--ghost"
+                @end="onDragEnd"
+              >
+                <template #item="{ element: a, index: i }">
+                  <div
+                    class="an-item"
+                    :class="{ 'an-item--active': selectedId === a.id }"
+                    @click="selectedId = a.id"
+                    @contextmenu="onContextMenu(a)"
+                  >
+                    <Icon :icon="ICONS.ACTIONS.DRAG" :size="15" class="an-drag-handle" />
+                    <span class="an-item-order">{{ i + 1 }}</span>
+                    <span class="an-item-name">{{ a.nome }}</span>
+                    <LjButton
+                      size="sm"
+                      variant="ghost"
+                      icon-only
+                      :icon="ICONS.ACTIONS.DELETE"
+                      :title="tt('delete')"
+                      :aria-label="tt('delete')"
+                      class="an-item-delete"
+                      @click.stop="removeAnnouncement(a)"
+                    />
+                  </div>
+                </template>
+              </draggable>
             </div>
-          </template>
-        </draggable>
+          </ContextMenuTrigger>
+
+          <ContextMenuPortal>
+            <ContextMenuContent class="lj-ui-float lj-menu an-ctx">
+              <ContextMenuItem class="lj-menu__item" @select="ctxEdit">
+                <span class="lj-menu__mark">
+                  <Icon :icon="ICONS.ACTIONS.EDIT" :size="13" />
+                </span>
+                <span class="lj-menu__text">{{ tt("edit") }}</span>
+              </ContextMenuItem>
+              <ContextMenuItem class="lj-menu__item" @select="ctxDuplicate">
+                <span class="lj-menu__mark">
+                  <Icon :icon="ICONS.ACTIONS.COPY" :size="13" />
+                </span>
+                <span class="lj-menu__text">{{ tt("duplicate") }}</span>
+              </ContextMenuItem>
+              <ContextMenuItem class="lj-menu__item an-ctx__danger" @select="ctxDelete">
+                <span class="lj-menu__mark">
+                  <Icon :icon="ICONS.ACTIONS.DELETE" :size="13" />
+                </span>
+                <span class="lj-menu__text">{{ tt("delete") }}</span>
+              </ContextMenuItem>
+            </ContextMenuContent>
+          </ContextMenuPortal>
+        </ContextMenuRoot>
+
         <div v-if="!sorted.length" class="an-hint">{{ tt("empty") }}</div>
         <div class="an-project">
-          <v-btn block color="primary" variant="tonal" :disabled="!sorted.length" @click="project">
-            <v-icon start icon="mdi-play-circle" />
+          <LjButton
+            block
+            variant="primary"
+            :icon="ICONS.PLAYER.PLAY"
+            :disabled="!sorted.length"
+            @click="project"
+          >
             {{ tt("project") }}
-          </v-btn>
+          </LjButton>
           <div class="an-project-controls">
-            <v-btn
-              size="small"
-              variant="text"
-              icon="mdi-chevron-left"
+            <LjButton
+              size="sm"
+              variant="ghost"
+              icon-only
+              :icon="ICONS.ACTIONS.PREVIOUS"
+              :title="tt('prev')"
+              :aria-label="tt('prev')"
               :disabled="!projecting"
               @click="sendControl('prev')"
             />
-            <v-btn size="small" variant="tonal" :disabled="!projecting" @click="stopProject">
-              <v-icon start icon="mdi-stop" />
+            <LjButton
+              size="sm"
+              :icon="ICONS.PLAYER.STOP"
+              :disabled="!projecting"
+              @click="stopProject"
+            >
               {{ tt("stop") }}
-            </v-btn>
-            <v-btn
-              size="small"
-              variant="text"
-              icon="mdi-chevron-right"
+            </LjButton>
+            <LjButton
+              size="sm"
+              variant="ghost"
+              icon-only
+              :icon="ICONS.ACTIONS.NEXT"
+              :title="tt('next')"
+              :aria-label="tt('next')"
               :disabled="!projecting"
               @click="sendControl('next')"
             />
@@ -104,35 +171,23 @@
       <!-- Inputs -->
       <aside v-if="editing" class="an-inputs">
         <div class="an-inputs-scroll">
-          <v-text-field
-            v-model="editing.nome"
-            :label="tt('name')"
-            variant="outlined"
-            density="compact"
-            hide-details
-            @update:model-value="save"
-          />
+          <LjField layout="column" :label="tt('name')">
+            <LjInput v-model="editing.nome" @update:model-value="save" />
+          </LjField>
 
           <div class="an-section">{{ tt("texto") }}</div>
-          <v-textarea
-            v-model="editing.texto"
-            rows="2"
-            auto-grow
-            variant="outlined"
-            density="compact"
-            hide-details
-            @update:model-value="save"
-          />
+          <div class="an-textarea">
+            <LjTextarea v-model="editing.texto" :rows="2" @update:model-value="save" />
+          </div>
 
           <div class="an-section">{{ tt("imagem") }}</div>
           <div class="an-media-row">
-            <v-btn size="small" variant="tonal" @click="pickImage">
-              <v-icon start icon="mdi-image" />
+            <LjButton size="sm" :icon="ICONS.MEDIA.IMAGE" @click="pickImage">
               {{ tt("choose_image") }}
-            </v-btn>
-            <v-btn v-if="editing.imageData" size="small" variant="text" @click="clearImage">
+            </LjButton>
+            <LjButton v-if="editing.imageData" size="sm" variant="ghost" @click="clearImage">
               {{ tt("remove_media") }}
-            </v-btn>
+            </LjButton>
             <input
               ref="imageInput"
               type="file"
@@ -144,13 +199,12 @@
 
           <div class="an-section">{{ tt("video") }}</div>
           <div class="an-media-row">
-            <v-btn size="small" variant="tonal" @click="pickVideo">
-              <v-icon start icon="mdi-video" />
+            <LjButton size="sm" :icon="ICONS.MEDIA.VIDEO_FILE" @click="pickVideo">
               {{ tt("choose_video") }}
-            </v-btn>
-            <v-btn v-if="editing.videoData" size="small" variant="text" @click="clearVideo">
+            </LjButton>
+            <LjButton v-if="editing.videoData" size="sm" variant="ghost" @click="clearVideo">
               {{ tt("remove_media") }}
-            </v-btn>
+            </LjButton>
             <input
               ref="videoInput"
               type="file"
@@ -162,129 +216,95 @@
 
           <div class="an-section">{{ tt("personalization") }}</div>
           <div class="an-style-grid">
-            <div class="an-style-field">
-              <label>{{ tt("bg_color") }}</label>
-              <input
-                type="color"
-                class="an-color-input"
-                :value="editing.style?.bgColor || '#000000'"
-                @input="setStyle('bgColor', ($event.target as HTMLInputElement).value)"
-              />
-            </div>
-            <div class="an-style-field">
-              <label>{{ tt("text_color") }}</label>
-              <input
-                type="color"
-                class="an-color-input"
-                :value="editing.style?.textColor || '#ffffff'"
-                @input="setStyle('textColor', ($event.target as HTMLInputElement).value)"
-              />
-            </div>
-            <div class="an-style-field">
-              <label class="an-checkbox-label">
-                <input
-                  type="checkbox"
-                  :checked="editing.style?.textShadow || false"
-                  @change="setStyle('textShadow', ($event.target as HTMLInputElement).checked)"
+            <LjField layout="column" :label="tt('bg_color')">
+              <div class="an-color">
+                <LjInput
+                  type="color"
+                  :model-value="editing.style?.bgColor || '#000000'"
+                  @update:model-value="setStyle('bgColor', $event)"
                 />
-                {{ tt("text_shadow") }}
-              </label>
+              </div>
+            </LjField>
+            <LjField layout="column" :label="tt('text_color')">
+              <div class="an-color">
+                <LjInput
+                  type="color"
+                  :model-value="editing.style?.textColor || '#ffffff'"
+                  @update:model-value="setStyle('textColor', $event)"
+                />
+              </div>
+            </LjField>
+            <div class="an-style-field">
+              <LjCheckbox
+                :model-value="editing.style?.textShadow || false"
+                :label="tt('text_shadow')"
+                @update:model-value="setStyle('textShadow', $event)"
+              />
             </div>
             <template v-if="editing.style?.textShadow">
-              <div class="an-style-field">
-                <label>{{ tt("shadow_color") }}</label>
-                <input
-                  type="color"
-                  class="an-color-input"
-                  :value="editing.style?.textShadowColor || '#000000'"
-                  @input="setStyle('textShadowColor', ($event.target as HTMLInputElement).value)"
-                />
-              </div>
-              <div class="an-style-field">
-                <label>{{ tt("shadow_blur") }}: {{ editing.style?.textShadowBlur ?? 4 }}px</label>
-                <v-slider
+              <LjField layout="column" :label="tt('shadow_color')">
+                <div class="an-color">
+                  <LjInput
+                    type="color"
+                    :model-value="editing.style?.textShadowColor || '#000000'"
+                    @update:model-value="setStyle('textShadowColor', $event)"
+                  />
+                </div>
+              </LjField>
+              <LjField
+                layout="column"
+                :label="`${tt('shadow_blur')}: ${editing.style?.textShadowBlur ?? 4}px`"
+              >
+                <LjSlider
                   :model-value="editing.style?.textShadowBlur ?? 4"
-                  min="1"
-                  max="20"
-                  step="1"
-                  density="compact"
-                  hide-details
-                  thumb-label
+                  :min="1"
+                  :max="20"
+                  :step="1"
                   @update:model-value="setStyle('textShadowBlur', $event)"
                 />
-              </div>
+              </LjField>
             </template>
-            <div class="an-style-field">
-              <label>{{ tt("font_size") }}: {{ editing.style?.fontSize || 64 }}px</label>
-              <v-slider
+            <LjField
+              layout="column"
+              :label="`${tt('font_size')}: ${editing.style?.fontSize || 64}px`"
+            >
+              <LjSlider
                 :model-value="editing.style?.fontSize || 64"
-                min="24"
-                max="160"
-                step="4"
-                density="compact"
-                hide-details
-                thumb-label
+                :min="24"
+                :max="160"
+                :step="4"
                 @update:model-value="setStyle('fontSize', $event)"
               />
-            </div>
-            <div class="an-style-field">
-              <label>{{ tt("align") }}</label>
-              <v-select
+            </LjField>
+            <LjField layout="column" :label="tt('align')">
+              <LjSelect
+                size="sm"
                 :model-value="editing.style?.align || 'center'"
                 :items="[
-                  { title: tt('align_left'), value: 'left' },
-                  { title: tt('align_center'), value: 'center' },
-                  { title: tt('align_right'), value: 'right' },
+                  { label: tt('align_left'), value: 'left' },
+                  { label: tt('align_center'), value: 'center' },
+                  { label: tt('align_right'), value: 'right' },
                 ]"
-                variant="outlined"
-                density="compact"
-                hide-details
                 @update:model-value="setStyle('align', $event)"
               />
-            </div>
-            <div class="an-style-field">
-              <label>{{ tt("align_y") }}</label>
-              <v-select
+            </LjField>
+            <LjField layout="column" :label="tt('align_y')">
+              <LjSelect
+                size="sm"
                 :model-value="editing.style?.alignY || 'center'"
                 :items="[
-                  { title: tt('align_top'), value: 'flex-start' },
-                  { title: tt('align_center'), value: 'center' },
-                  { title: tt('align_bottom'), value: 'flex-end' },
+                  { label: tt('align_top'), value: 'flex-start' },
+                  { label: tt('align_center'), value: 'center' },
+                  { label: tt('align_bottom'), value: 'flex-end' },
                 ]"
-                variant="outlined"
-                density="compact"
-                hide-details
                 @update:model-value="setStyle('alignY', $event)"
               />
-            </div>
+            </LjField>
           </div>
         </div>
       </aside>
       <aside v-else class="an-inputs an-inputs--empty" />
     </div>
-
-    <!-- Menu contextual -->
-    <v-menu
-      v-model="contextMenu.show"
-      :target="[contextMenu.x, contextMenu.y]"
-      location="bottom"
-      @click:outside="closeContextMenu"
-    >
-      <v-list density="compact" nav>
-        <v-list-item @click="ctxEdit">
-          <template #prepend><v-icon icon="mdi-pencil" size="18" /></template>
-          <v-list-item-title>{{ tt("edit") }}</v-list-item-title>
-        </v-list-item>
-        <v-list-item @click="ctxDuplicate">
-          <template #prepend><v-icon icon="mdi-content-copy" size="18" /></template>
-          <v-list-item-title>{{ tt("duplicate") }}</v-list-item-title>
-        </v-list-item>
-        <v-list-item @click="ctxDelete">
-          <template #prepend><v-icon icon="mdi-delete" size="18" /></template>
-          <v-list-item-title class="text-error">{{ tt("delete") }}</v-list-item-title>
-        </v-list-item>
-      </v-list>
-    </v-menu>
   </ModuleContainer>
 </template>
 
@@ -292,8 +312,26 @@
 import { computed, onMounted, onBeforeUnmount, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import draggable from "vuedraggable";
+import {
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuPortal,
+  ContextMenuRoot,
+  ContextMenuTrigger,
+} from "reka-ui";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
+import Icon from "@/components/Icon.vue";
+import {
+  LjButton,
+  LjCheckbox,
+  LjField,
+  LjInput,
+  LjSelect,
+  LjSlider,
+  LjTextarea,
+} from "@/components/ui";
+import { ICONS } from "@/config/Icons";
 import { ensureRenderableImage, isHeic } from "@/helpers/ImageConvert";
 import $idb from "@/helpers/IndexedDB";
 import { DB_TABLE } from "@/constants/DbTables";
@@ -597,29 +635,25 @@ function onKeyDown(e: KeyboardEvent): void {
 
 // ─── Menu contextual ─────────────────────────────────────────────────
 
-const contextMenu = ref<{ show: boolean; x: number; y: number; item: Announcement | null }>({
-  show: false,
-  x: 0,
-  y: 0,
-  item: null,
-});
+// O ContextMenuRoot do Reka guarda o estado aberto/fechado e a posição do
+// cursor; aqui só resta lembrar sobre qual item o clique direito caiu.
+// Importante: este handler NÃO chama preventDefault — o gatilho do Reka
+// desiste de abrir quando o evento já vem cancelado (e ele mesmo cancela o
+// menu nativo do navegador depois).
+const contextMenuItem = ref<Announcement | null>(null);
 
-function onContextMenu(e: MouseEvent, a: Announcement): void {
-  e.preventDefault();
+function onContextMenu(a: Announcement): void {
   selectedId.value = a.id;
-  contextMenu.value = { show: true, x: e.clientX, y: e.clientY, item: a };
-}
-
-function closeContextMenu(): void {
-  contextMenu.value.show = false;
+  contextMenuItem.value = a;
 }
 
 function ctxEdit(): void {
-  closeContextMenu();
+  const a = contextMenuItem.value;
+  if (a) selectedId.value = a.id;
 }
 
 function ctxDuplicate(): void {
-  const a = contextMenu.value.item;
+  const a = contextMenuItem.value;
   if (!a) return;
   const max = sorted.value.length ? Math.max(...sorted.value.map((x) => x.ordem)) : 0;
   const dup: Announcement = {
@@ -639,12 +673,10 @@ function ctxDuplicate(): void {
   announcements.value.push(plain);
   void save();
   selectedId.value = plain.id;
-  closeContextMenu();
 }
 
 function ctxDelete(): void {
-  const a = contextMenu.value.item;
-  closeContextMenu();
+  const a = contextMenuItem.value;
   if (a) void removeAnnouncement(a);
 }
 
@@ -670,53 +702,62 @@ function close(): void {
 <style scoped>
 .an-root {
   display: flex;
-  gap: 10px;
+  gap: var(--lj-space-5);
   height: 100%;
-  padding: 10px;
+  padding: var(--lj-space-5);
   overflow: hidden;
 }
 .an-list {
   width: 200px;
   flex-shrink: 0;
-  border-right: 1px solid rgba(var(--lj-on-surface-ch), 0.12);
-  padding-right: 8px;
+  border-right: 1px solid var(--lj-surface-border);
+  padding-right: var(--lj-space-4);
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--lj-space-2);
   overflow-y: auto;
 }
 .an-list-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--lj-text-sm);
+  font-weight: var(--lj-weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: rgba(var(--lj-on-surface-ch), 0.6);
-  padding: 0 2px 4px;
+  color: var(--lj-text-subtle);
+  padding: 0 var(--lj-space-1) var(--lj-space-2);
 }
+
+/* Gatilho do menu de contexto: um invólucro sem estilo próprio, para o
+   clique direito valer em toda a lista. O tabindex="-1" existe só para o
+   Reka ter onde devolver o foco ao fechar o menu — de lá o keydown volta a
+   borbulhar até o ModuleContainer, que é quem faz a navegação por setas. */
+.an-list-drag:focus {
+  outline: none;
+}
+
 .an-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 6px;
-  border-radius: 6px;
+  gap: var(--lj-space-3);
+  padding: var(--lj-space-2) var(--lj-space-3);
+  border-radius: var(--lj-radius-lg);
   cursor: pointer;
-  font-size: 12px;
-  transition: background 0.15s;
+  font-size: var(--lj-text-base);
+  transition: background var(--lj-transition-normal);
 }
 .an-item:hover {
-  background: rgba(var(--lj-on-surface-ch), 0.06);
+  background: var(--lj-surface-bg-hover);
 }
 .an-item--active {
-  background: rgba(243, 156, 18, 0.16);
+  background: var(--lj-ui-accent-soft);
 }
 .an-item-order {
-  font-size: 10px;
+  font-size: var(--lj-text-xs);
   min-width: 16px;
   text-align: center;
-  background: rgba(var(--lj-on-surface-ch), 0.12);
+  background: var(--lj-surface-bg-active);
   border-radius: 8px;
   line-height: 16px;
 }
@@ -736,28 +777,30 @@ function close(): void {
 }
 .an-item--ghost {
   opacity: 0.4;
-  background: rgba(243, 156, 18, 0.1);
+  background: var(--lj-ui-accent-soft);
 }
 .an-item-delete {
   opacity: 0;
 }
-.an-item:hover .an-item-delete {
+.an-item:hover .an-item-delete,
+.an-item-delete:focus-visible {
   opacity: 0.6;
 }
 .an-hint {
-  font-size: 12px;
-  color: rgba(var(--lj-on-surface-ch), 0.55);
-  padding: 8px 4px;
+  font-size: var(--lj-text-base);
+  color: var(--lj-text-muted);
+  padding: var(--lj-space-4) var(--lj-space-2);
 }
 .an-project {
   margin-top: auto;
-  padding-top: 8px;
+  padding-top: var(--lj-space-4);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--lj-space-3);
 }
 .an-project-controls {
   display: flex;
+  align-items: center;
   justify-content: space-between;
 }
 
@@ -768,10 +811,10 @@ function close(): void {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(var(--lj-on-surface-ch), 0.12);
-  border-radius: 8px;
+  border: 1px solid var(--lj-surface-border);
+  border-radius: var(--lj-radius-lg);
   overflow: hidden;
-  background: #111;
+  background: var(--lj-color-projection-bg);
 }
 .an-preview-box {
   width: 100%;
@@ -780,7 +823,7 @@ function close(): void {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  padding: var(--lj-space-7);
   position: relative;
 }
 .an-preview-media {
@@ -792,7 +835,7 @@ function close(): void {
   text-align: center;
   word-break: break-word;
   line-height: 1.3;
-  padding: 10px;
+  padding: var(--lj-space-5);
 }
 .an-preview-text--over {
   position: absolute;
@@ -803,16 +846,16 @@ function close(): void {
   pointer-events: none;
 }
 .an-preview-empty {
-  color: rgba(255, 255, 255, 0.3);
-  font-size: 13px;
+  color: var(--lj-white-alpha-25);
+  font-size: var(--lj-text-md);
 }
 
 /* Inputs */
 .an-inputs {
   width: 260px;
   flex-shrink: 0;
-  border-left: 1px solid rgba(var(--lj-on-surface-ch), 0.12);
-  padding-left: 8px;
+  border-left: 1px solid var(--lj-surface-border);
+  padding-left: var(--lj-space-4);
   display: flex;
   flex-direction: column;
 }
@@ -821,56 +864,67 @@ function close(): void {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--lj-space-4);
 }
 .an-inputs--empty {
   flex: 0;
   border: none;
 }
 .an-section {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--lj-text-sm);
+  font-weight: var(--lj-weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: rgba(var(--lj-on-surface-ch), 0.6);
-  margin-top: 4px;
+  color: var(--lj-text-subtle);
+  margin-top: var(--lj-space-2);
 }
 .an-media-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--lj-space-4);
+  flex-wrap: wrap;
 }
 .an-style-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 8px 12px;
+  gap: var(--lj-space-4) var(--lj-space-5);
 }
 .an-style-field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  font-size: 11px;
-  color: rgba(var(--lj-on-surface-ch), 0.7);
+  gap: var(--lj-space-2);
 }
-.an-checkbox-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  font-size: 11px;
+
+/* O painel é estreito: o rótulo do LjField volta ao tamanho denso e a margem
+   inferior sai, porque quem espaça aqui é o gap do container. */
+.an-inputs :deep(.lj-field) {
+  margin-bottom: 0;
+  font-size: var(--lj-text-sm);
 }
-.an-checkbox-label input {
-  width: 14px;
-  height: 14px;
-  accent-color: var(--lj-navy, #f39c12);
+
+/* `field-sizing` devolve o crescimento automático que o campo tinha antes;
+   onde o navegador não suporta, ficam as 2 linhas do atributo `rows`. */
+.an-textarea :deep(.lj-textarea) {
+  field-sizing: content;
+  min-height: 48px;
+  max-height: 220px;
 }
-.an-color-input {
+
+.an-color :deep(.lj-input) {
   width: 100%;
-  height: 26px;
-  padding: 0;
-  border: 1px solid var(--lj-surface-border, #555);
-  border-radius: 3px;
+  padding-inline: var(--lj-space-2);
+}
+.an-color :deep(.lj-input__field) {
   cursor: pointer;
-  background: transparent;
+}
+</style>
+
+<!-- Sem `scoped`: o conteúdo do menu de contexto é emitido num portal no
+     <body>, fora da árvore deste componente, onde nenhuma regra com escopo
+     casaria. O isolamento vem do prefixo `an-ctx`. -->
+<style>
+.lj-menu__item.an-ctx__danger,
+.lj-menu__item.an-ctx__danger .lj-menu__mark {
+  color: var(--lj-danger);
 }
 </style>

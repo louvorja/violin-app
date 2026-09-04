@@ -183,7 +183,7 @@ function displayValue(item: unknown): string {
   min-width: var(--reka-combobox-trigger-width);
   max-height: 280px;
   overflow: hidden;
-  z-index: 2400;
+  z-index: var(--lj-z-popup);
 }
 
 .lj-combobox__viewport {

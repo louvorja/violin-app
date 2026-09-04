@@ -1,502 +1,419 @@
 <template>
-  <v-dialog
+  <LjDialog
     :model-value="modelValue"
-    max-width="640"
+    :title="isEditing ? t('dialog.edit_title') : t('dialog.add_title')"
+    :icon="isEditing ? ICONS.ACTIONS.EDIT : ICONS.ACTIONS.ADD"
+    size="lg"
     @update:model-value="$emit('update:modelValue', $event)"
-    @keydown.escape="$emit('update:modelValue', false)"
   >
-    <v-card class="lit-dialog">
-      <div class="lit-dialog-title">
-        <v-icon :icon="editIndex!! >= 0 ? 'mdi-pencil' : 'mdi-plus'" size="18" />
-        <span>{{ editIndex!! >= 0 ? t("dialog.edit_title") : t("dialog.add_title") }}</span>
-        <v-spacer />
-        <button class="lit-card-action" @click="$emit('update:modelValue', false)">
-          <v-icon icon="mdi-close" size="14" />
-        </button>
-      </div>
+    <!-- ─── Campos comuns a todos os tipos ─── -->
+    <div class="lif-row">
+      <LjField class="lif-field lif-field--type" :label="t('inputs.type')">
+        <LjSelect
+          :model-value="form.tipo"
+          :items="typeOptions"
+          @update:model-value="
+            setFormField('tipo', $event);
+            onTypeChange();
+          "
+        />
+      </LjField>
 
-      <div class="lit-dialog-header">
-        <div class="lit-field">
-          <label>{{ t("inputs.type") }}:</label>
-          <select
-            :value="form.tipo"
-            class="lit-select"
-            @change="
-              setFormField('tipo', inputVal($event));
-              onTypeChange();
+      <LjField
+        v-if="form.tipo !== LiturgyItemTypeEnum.ITENS_AGENDADOS"
+        class="lif-field lif-field--grow"
+        :label="t('inputs.item_name')"
+      >
+        <LjInput
+          :model-value="form.item"
+          data-testid="item-name"
+          :placeholder="t('inputs.item_name_placeholder')"
+          @update:model-value="setFormField('item', $event)"
+        />
+      </LjField>
+
+      <LjField class="lif-field lif-field--color" :label="t('inputs.color')">
+        <div class="lif-color">
+          <input
+            :value="form.cor"
+            type="color"
+            class="lif-color__swatch"
+            :aria-label="t('inputs.color')"
+            @input="setFormField('cor', ($event.target as HTMLInputElement).value)"
+          />
+          <button
+            type="button"
+            class="lif-color__toggle"
+            :title="t('inputs.color')"
+            :aria-expanded="presetsOpen"
+            :aria-label="t('inputs.color')"
+            @click.stop="presetsOpen = !presetsOpen"
+          >
+            <Icon :icon="ICONS.UI.MENU_DOWN" :size="14" />
+          </button>
+          <div v-if="presetsOpen" class="lif-color__presets" @click="presetsOpen = false">
+            <span
+              v-for="c in colors"
+              :key="c"
+              class="lif-color__preset"
+              :class="{ 'is-active': form.cor?.toLowerCase() === c.toLowerCase() }"
+              :style="{ background: c }"
+              @click="setFormField('cor', c)"
+            />
+          </div>
+        </div>
+      </LjField>
+
+      <LjField class="lif-field lif-field--time" :label="t('inputs.time')">
+        <!-- Um <input disabled> não dispara eventos de ponteiro, então o gatilho
+             do tooltip é o invólucro, não o campo. -->
+        <LjTooltip v-if="form.blocoId" :text="t('inputs.time_managed_by_bloco')">
+          <span class="lif-tip-anchor">
+            <LjInput :model-value="form.time" type="time" disabled />
+          </span>
+        </LjTooltip>
+        <LjInput
+          v-else
+          :model-value="form.time"
+          type="time"
+          @update:model-value="setFormField('time', $event)"
+        />
+      </LjField>
+
+      <LjField class="lif-field lif-field--duration" :label="t('inputs.duration_min')">
+        <LjInput
+          :model-value="form.duration"
+          type="number"
+          min="0"
+          @update:model-value="setFormField('duration', Number($event))"
+        />
+      </LjField>
+    </div>
+
+    <div
+      v-if="form.tipo !== LiturgyItemTypeEnum.BLOCO && blocoItems && blocoItems.length > 0"
+      class="lif-row"
+    >
+      <LjField class="lif-field lif-field--grow" :label="t('inputs.bloco_select')">
+        <LjSelect
+          :model-value="form.blocoId || ''"
+          :items="blocoOptions"
+          @update:model-value="setFormField('blocoId', $event)"
+        />
+      </LjField>
+    </div>
+
+    <!-- ─── Painel ANOTAÇÃO ─── -->
+    <section v-if="form.tipo === LiturgyItemTypeEnum.ANOTACAO" class="lif-panel">
+      <h3 class="lif-panel__title">{{ t("types.anotacao") }}</h3>
+      <LjField layout="column" :label="t('inputs.annotation')">
+        <LjTextarea
+          :model-value="form.subitem"
+          :rows="4"
+          :placeholder="t('inputs.annotation_placeholder')"
+          @update:model-value="setFormField('subitem', $event)"
+        />
+      </LjField>
+    </section>
+
+    <!-- ─── Painel SITE ─── -->
+    <section v-if="form.tipo === LiturgyItemTypeEnum.SITE" class="lif-panel">
+      <h3 class="lif-panel__title">{{ t("types.site") }}</h3>
+      <LjField layout="column" :label="t('inputs.url')">
+        <div class="lif-inline">
+          <LjInput
+            class="lif-inline__grow"
+            :model-value="form.url"
+            placeholder="https://"
+            @update:model-value="setFormField('url', $event)"
+            @blur="setFormField('url', Liturgy.validateUrl(form.url))"
+          />
+          <LjButton
+            variant="ghost"
+            icon-only
+            :icon="ICONS.UI.OPEN_IN_NEW"
+            :title="t('actions.open')"
+            :aria-label="t('actions.open')"
+            @click="openSite"
+          />
+        </div>
+      </LjField>
+    </section>
+
+    <!-- ─── Painel ARQUIVO ─── -->
+    <section v-if="form.tipo === LiturgyItemTypeEnum.ARQUIVO" class="lif-panel">
+      <h3 class="lif-panel__title">{{ t("types.arquivo") }}</h3>
+      <LjField layout="column" :label="t('inputs.file_path')">
+        <div class="lif-inline">
+          <LjInput
+            class="lif-inline__grow"
+            :model-value="form.dir"
+            :placeholder="t('inputs.file_path_placeholder')"
+            @update:model-value="setFormField('dir', $event)"
+          />
+          <LjButton
+            variant="ghost"
+            icon-only
+            :icon="ICONS.UI.FILE"
+            :title="t('actions.choose_file')"
+            :aria-label="t('actions.choose_file')"
+            @click="chooseFile"
+          />
+        </div>
+      </LjField>
+    </section>
+
+    <!-- ─── Painel MÚSICA ─── -->
+    <section v-if="form.tipo === LiturgyItemTypeEnum.MUSICA" class="lif-panel">
+      <LjCheckbox
+        :model-value="form.escolha"
+        :label="t('inputs.music_choose_later')"
+        @update:model-value="setMusicChoice($event)"
+      />
+
+      <LjField v-if="!form.escolha" class="lif-field lif-spaced" :label="t('inputs.music_select')">
+        <div class="lif-inline">
+          <LjSelect
+            class="lif-inline__grow"
+            :model-value="form.musica"
+            :items="musicOptions"
+            :placeholder="t('inputs.music_pick')"
+            @update:model-value="
+              setFormField('musica', Number($event));
+              onMusicChange();
             "
-          >
-            <option :value="LiturgyItemTypeEnum.ANOTACAO">{{ t("types.anotacao") }}</option>
-            <option :value="LiturgyItemTypeEnum.ANUNCIOS">{{ t("types.anuncios") }}</option>
-            <option :value="LiturgyItemTypeEnum.ARQUIVO">{{ t("types.arquivo") }}</option>
-            <option :value="LiturgyItemTypeEnum.MEDIA_LIBRARY">
-              {{ t("types.biblioteca-midia") }}
-            </option>
-            <option :value="LiturgyItemTypeEnum.BLOCO">{{ t("types.bloco") }}</option>
-            <option :value="LiturgyItemTypeEnum.ITENS_AGENDADOS">
-              {{ t("types.itens-agendados") }}
-            </option>
-            <option :value="LiturgyItemTypeEnum.MUSICA">{{ t("types.musica") }}</option>
-            <option :value="LiturgyItemTypeEnum.SITE">{{ t("types.site") }}</option>
-            <option :value="LiturgyItemTypeEnum.BG_SOUND">{{ t("types.som-de-fundo") }}</option>
-            <option :value="LiturgyItemTypeEnum.OVERLAY">{{ t("types.overlay") }}</option>
-            <option :value="LiturgyItemTypeEnum.VIDEO_ONLINE">{{ t("types.video-online") }}</option>
-          </select>
-        </div>
-
-        <div
-          v-if="form.tipo !== LiturgyItemTypeEnum.ITENS_AGENDADOS"
-          class="lit-field lit-field--grow"
-        >
-          <label>{{ t("inputs.item_name") }}:</label>
-          <input
-            :value="form.item"
-            type="text"
-            class="lit-input"
-            data-testid="item-name"
-            :placeholder="t('inputs.item_name_placeholder')"
-            @input="setFormField('item', inputVal($event))"
+          />
+          <LjButton
+            variant="ghost"
+            icon-only
+            :icon="ICONS.ACTIONS.SEARCH"
+            :title="t('music_search.title')"
+            :aria-label="t('music_search.title')"
+            @click="searchOpen = true"
           />
         </div>
+      </LjField>
 
-        <div class="lit-field lit-field--color">
-          <label>{{ t("inputs.color") }}:</label>
-          <div class="lit-color-picker">
-            <input
-              :value="form.cor"
-              type="color"
-              class="lit-color-input"
-              :aria-label="t('inputs.color')"
-              @input="setFormField('cor', inputVal($event))"
-            />
-            <button
-              type="button"
-              class="lit-color-toggle"
-              :title="t('inputs.color')"
-              @click.stop="presetsOpen = !presetsOpen"
-            >
-              <v-icon icon="mdi-menu-down" size="14" />
-            </button>
-            <div v-if="presetsOpen" class="lit-color-presets" @click="presetsOpen = false">
-              <span
-                v-for="c in colors"
-                :key="c"
-                class="lit-color-preset"
-                :class="{ 'is-active': form.cor?.toLowerCase() === c.toLowerCase() }"
-                :style="{ background: c }"
-                @click="setFormField('cor', c)"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div class="lit-field lit-field--medium">
-          <label>{{ t("inputs.time") }}:</label>
-          <v-tooltip v-if="form.blocoId" location="top" :open-delay="300">
-            <template #activator="{ props: tipProps }">
-              <input
-                :value="form.time"
-                type="time"
-                class="lit-input lit-input--small"
-                disabled
-                v-bind="tipProps"
-              />
-            </template>
-            {{ t("inputs.time_managed_by_bloco") }}
-          </v-tooltip>
-          <input
-            v-else
-            :value="form.time"
-            type="time"
-            class="lit-input lit-input--small"
-            @input="setFormField('time', inputVal($event))"
-          />
-        </div>
-
-        <div class="lit-field lit-field--small">
-          <label>{{ t("inputs.duration_min") }}:</label>
-          <input
-            :value="form.duration"
-            type="number"
-            min="0"
-            class="lit-input lit-input--small"
-            @input="setFormField('duration', inputNum($event))"
-          />
-        </div>
-      </div>
-
-      <div
-        v-if="form.tipo !== LiturgyItemTypeEnum.BLOCO && blocoItems && blocoItems.length > 0"
-        class="lit-dialog-header"
+      <LjField
+        v-if="!form.escolha && form.musica > 0"
+        class="lif-field lif-spaced"
+        :label="t('inputs.music_version_label')"
       >
-        <div class="lit-field lit-field--grow">
-          <label>{{ t("inputs.bloco_select") }}:</label>
-          <select
-            :value="form.blocoId || ''"
-            class="lit-select"
-            @change="setFormField('blocoId', inputVal($event))"
-          >
-            <option value="">{{ t("inputs.bloco_pick") }}</option>
-            <option v-for="b in blocoItems" :key="b.id" :value="b.id">
-              {{ b.item }} {{ b.time ? "— " + b.time : "" }}
-            </option>
-          </select>
-        </div>
-      </div>
+        <LjSelect
+          class="lif-fill"
+          :model-value="form.subtipo"
+          :items="availableVersions"
+          @update:model-value="onVersionChange(String($event))"
+        />
+      </LjField>
+    </section>
 
-      <!-- Painel ANOTAÇÃO -->
-      <div v-if="form.tipo === LiturgyItemTypeEnum.ANOTACAO" class="lit-panel">
-        <div class="lit-panel-title">{{ t("types.anotacao") }}</div>
-        <div class="lit-field">
-          <label>{{ t("inputs.annotation") }}</label>
-          <textarea
-            :value="form.subitem"
-            rows="4"
-            class="lit-input"
-            :placeholder="t('inputs.annotation_placeholder')"
-            @input="setFormField('subitem', inputVal($event))"
+    <!-- ─── Painel ITENS AGENDADOS ─── -->
+    <section v-if="form.tipo === 'itens-agendados'" class="lif-panel">
+      <h3 class="lif-panel__title">{{ t("types.itens-agendados") }}</h3>
+      <LjField layout="column" :label="t('inputs.scheduled_category')">
+        <div class="lif-inline">
+          <LjSelect
+            class="lif-inline__grow"
+            :model-value="String(form.id ?? '')"
+            :items="scheduledOptions"
+            :placeholder="t('inputs.scheduled_pick')"
+            @update:model-value="
+              setFormField('id', $event);
+              onScheduledCategoryChange();
+            "
+          />
+          <LjButton
+            variant="ghost"
+            icon-only
+            :icon="ICONS.UI.OPTIONS_OUTLINE"
+            :title="t('actions.scheduled_manage')"
+            :aria-label="t('actions.scheduled_manage')"
+            @click="openSchedulesDialog"
           />
         </div>
-      </div>
+      </LjField>
+      <p v-if="scheduledCategories?.length === 0" class="lif-hint">
+        {{ t("inputs.scheduled_empty") }}
+      </p>
+    </section>
 
-      <!-- Painel SITE -->
-      <div v-if="form.tipo === LiturgyItemTypeEnum.SITE" class="lit-panel">
-        <div class="lit-panel-title">{{ t("types.site") }}</div>
-        <div class="lit-field">
-          <label>{{ t("inputs.url") }}</label>
-          <div class="lit-input-row">
-            <input
-              :value="form.url"
-              type="text"
-              class="lit-input"
-              placeholder="https://"
-              @input="setFormField('url', inputVal($event))"
-              @blur="setFormField('url', Liturgy.validateUrl(form.url))"
-            />
-            <button class="lit-btn lit-btn--ghost" :title="t('actions.open')" @click="openSite">
-              <v-icon icon="mdi-open-in-new" size="14" />
-            </button>
-          </div>
+    <!-- ─── Painel VÍDEO ON-LINE ─── -->
+    <section v-if="form.tipo === 'video-online'" class="lif-panel">
+      <h3 class="lif-panel__title">{{ t("types.video-online") }}</h3>
+      <LjField layout="column" :label="t('inputs.video_select')">
+        <div>
+          <LjButton variant="ghost" :icon="ICONS.ACTIONS.SEARCH" @click="videoSearchOpen = true">
+            {{ t("inputs.video_search_btn") }}
+          </LjButton>
         </div>
-      </div>
+      </LjField>
+      <LjChip v-if="form.url" class="lif-selected" :icon="ICONS.MEDIA.YOUTUBE">
+        <span class="lif-selected__name">{{ selectedVideoName }}</span>
+      </LjChip>
+      <p v-if="!videosList?.length" class="lif-hint lif-spaced">
+        {{ t("inputs.video_empty") }}
+      </p>
+      <LiturgyVideoSearch
+        v-model="videoSearchOpen"
+        :videos-list="videosList"
+        @pick="onVideoSearchPicked"
+      />
+    </section>
 
-      <!-- Painel ARQUIVO -->
-      <div v-if="form.tipo === LiturgyItemTypeEnum.ARQUIVO" class="lit-panel">
-        <div class="lit-panel-title">{{ t("types.arquivo") }}</div>
-        <div class="lit-field">
-          <label>{{ t("inputs.file_path") }}</label>
-          <div class="lit-input-row">
-            <input
-              :value="form.dir"
-              type="text"
-              class="lit-input"
-              :placeholder="t('inputs.file_path_placeholder')"
-              @input="setFormField('dir', inputVal($event))"
-            />
-            <button
-              class="lit-btn lit-btn--ghost"
-              :title="t('actions.choose_file')"
-              @click="chooseFile"
-            >
-              <v-icon icon="mdi-file-outline" size="14" />
-            </button>
-          </div>
+    <!-- ─── Painel BIBLIOTECA DE MÍDIA ─── -->
+    <section v-if="form.tipo === LiturgyItemTypeEnum.MEDIA_LIBRARY" class="lif-panel">
+      <h3 class="lif-panel__title">{{ t("types.biblioteca-midia") }}</h3>
+      <LjField layout="column" :label="t('inputs.library_select')">
+        <div>
+          <LjButton variant="ghost" :icon="ICONS.ACTIONS.SEARCH" @click="openMediaLibrarySearch">
+            {{ t("inputs.library_search_btn") }}
+          </LjButton>
         </div>
-      </div>
+      </LjField>
+      <LjChip v-if="form.ref_id" class="lif-selected" :icon="mediaIconFor(form.subtipo)">
+        <span class="lif-selected__name">{{ form.item || form.subitem }}</span>
+      </LjChip>
+      <LiturgyLibrarySearch
+        v-model="librarySearchOpen"
+        :title="t('library_search.title_media')"
+        :icon="ICONS.MEDIA.LIBRARY"
+        :items="libraryItems"
+        @pick="onLibraryPicked"
+      />
+    </section>
 
-      <!-- Painel MÚSICA -->
-      <div v-if="form.tipo === LiturgyItemTypeEnum.MUSICA" class="lit-panel">
-        <label class="lit-check">
-          <input
-            type="checkbox"
-            :checked="form.escolha"
-            @change="setMusicChoice(($event.target as HTMLInputElement).checked)"
-          />
-          <span>{{ t("inputs.music_choose_later") }}</span>
-        </label>
-        <div v-if="!form.escolha" class="lit-field lit-field--inline mt-2">
-          <label class="lit-label-inline">{{ t("inputs.music_select") }}:</label>
-          <div class="lit-input-row lit-input-row--grow">
-            <select
-              :value="form.musica"
-              class="lit-select lit-select--full"
-              @change="
-                setFormField('musica', inputNum($event));
-                onMusicChange();
-              "
-            >
-              <option value="-1">{{ t("inputs.music_pick") }}</option>
-              <option v-for="m in musicsList" :key="m.id_music" :value="m.id_music">
-                {{ m.name }}
-              </option>
-            </select>
-            <button
-              class="lit-btn lit-btn--ghost"
-              :title="t('music_search.title')"
-              @click="searchOpen = true"
-            >
-              <v-icon icon="mdi-magnify" size="16" />
-            </button>
-          </div>
+    <!-- ─── Painel SOM DE FUNDO ─── -->
+    <section v-if="form.tipo === LiturgyItemTypeEnum.BG_SOUND" class="lif-panel">
+      <h3 class="lif-panel__title">{{ t("types.som-de-fundo") }}</h3>
+      <LjField layout="column" :label="t('inputs.sound_select')">
+        <div>
+          <LjButton variant="ghost" :icon="ICONS.ACTIONS.SEARCH" @click="openBgSoundSearch">
+            {{ t("inputs.sound_search_btn") }}
+          </LjButton>
         </div>
-        <div v-if="!form.escolha && form.musica > 0" class="lit-field lit-field--inline mt-2">
-          <label class="lit-label-inline">{{ t("inputs.music_version_label") }}:</label>
-          <select
-            :value="form.subtipo"
-            class="lit-select lit-select--full"
-            @change="onVersionChange($event)"
-          >
-            <option v-for="opt in availableVersions" :key="opt.value" :value="opt.value">
-              {{ opt.label }}
-            </option>
-          </select>
-        </div>
-      </div>
+      </LjField>
+      <LjChip v-if="form.ref_id" class="lif-selected" :icon="ICONS.MUSIC.PLAYBACK">
+        <span class="lif-selected__name">{{ form.item || form.subitem }}</span>
+      </LjChip>
+      <LiturgyLibrarySearch
+        v-model="bgSoundSearchOpen"
+        :title="t('library_search.title_sound')"
+        :icon="ICONS.MUSIC.PLAYBACK"
+        :items="bgSoundItems"
+        show-detail
+        @pick="onBgSoundPicked"
+      />
+    </section>
 
-      <!-- Painel ITENS AGENDADOS -->
-      <div v-if="form.tipo === 'itens-agendados'" class="lit-panel">
-        <div class="lit-panel-title">{{ t("types.itens-agendados") }}</div>
-        <div class="lit-field">
-          <label>{{ t("inputs.scheduled_category") }}</label>
-          <div class="lit-input-row">
-            <select
-              :value="form.id"
-              class="lit-select lit-select--full"
-              @change="
-                setFormField('id', inputVal($event));
-                onScheduledCategoryChange();
-              "
-            >
-              <option value="">{{ t("inputs.scheduled_pick") }}</option>
-              <option v-for="c in scheduledCategories" :key="c.id" :value="c.id">
-                {{ c.nome }}
-              </option>
-            </select>
-            <button
-              class="lit-btn lit-btn--ghost"
-              :title="t('actions.scheduled_manage')"
-              @click="openSchedulesDialog"
-            >
-              <v-icon icon="mdi-cog-outline" size="14" />
-            </button>
-          </div>
-        </div>
-        <div v-if="scheduledCategories?.length === 0" class="lit-hint">
-          {{ t("inputs.scheduled_empty") }}
-        </div>
-      </div>
-
-      <!-- Painel VÍDEO ON-LINE -->
-      <div v-if="form.tipo === 'video-online'" class="lit-panel">
-        <div class="lit-panel-title">{{ t("types.video-online") }}</div>
-        <div class="lit-field">
-          <label>{{ t("inputs.video_select") }}</label>
-          <button type="button" class="lit-btn lit-btn--ghost" @click="videoSearchOpen = true">
-            <v-icon icon="mdi-magnify" size="14" />
-            <span>{{ t("inputs.video_search_btn") }}</span>
-          </button>
-        </div>
-        <div v-if="form.url" class="lit-video-selected">
-          <v-icon icon="mdi-youtube" size="16" color="#e74c3c" />
-          <span class="lit-video-selected-name">{{ selectedVideoName }}</span>
-        </div>
-        <div v-if="!videosList?.length" class="lit-hint mt-2">
-          {{ t("inputs.video_empty") }}
-        </div>
-        <LiturgyVideoSearch
-          v-model="videoSearchOpen"
-          :videos-list="videosList"
-          @pick="onVideoSearchPicked"
-        />
-      </div>
-
-      <!-- Painel BIBLIOTECA DE MÍDIA -->
-      <div v-if="form.tipo === LiturgyItemTypeEnum.MEDIA_LIBRARY" class="lit-panel">
-        <div class="lit-panel-title">{{ t("types.biblioteca-midia") }}</div>
-        <div class="lit-field">
-          <label>{{ t("inputs.library_select") }}</label>
-          <button type="button" class="lit-btn lit-btn--ghost" @click="openMediaLibrarySearch">
-            <v-icon icon="mdi-magnify" size="14" />
-            <span>{{ t("inputs.library_search_btn") }}</span>
-          </button>
-        </div>
-        <div v-if="(form as LiturgyItem).ref_id" class="lit-video-selected">
-          <v-icon :icon="mediaIconFor((form as LiturgyItem).subtipo)" size="16" color="#8e44ad" />
-          <span class="lit-video-selected-name">
-            {{ (form as LiturgyItem).item || (form as LiturgyItem).subitem }}
-          </span>
-        </div>
-        <LiturgyLibrarySearch
-          v-model="librarySearchOpen"
-          :title="t('library_search.title_media')"
-          icon="mdi-library-outline"
-          :items="libraryItems"
-          @pick="onLibraryPicked"
-        />
-      </div>
-
-      <!-- Painel SOM DE FUNDO -->
-      <div v-if="form.tipo === LiturgyItemTypeEnum.BG_SOUND" class="lit-panel">
-        <div class="lit-panel-title">{{ t("types.som-de-fundo") }}</div>
-        <div class="lit-field">
-          <label>{{ t("inputs.sound_select") }}</label>
-          <button type="button" class="lit-btn lit-btn--ghost" @click="openBgSoundSearch">
-            <v-icon icon="mdi-magnify" size="14" />
-            <span>{{ t("inputs.sound_search_btn") }}</span>
-          </button>
-        </div>
-        <div v-if="(form as LiturgyItem).ref_id" class="lit-video-selected">
-          <v-icon icon="mdi-music-box-outline" size="16" color="#2196f3" />
-          <span class="lit-video-selected-name">
-            {{ (form as LiturgyItem).item || (form as LiturgyItem).subitem }}
-          </span>
-        </div>
-        <LiturgyLibrarySearch
-          v-model="bgSoundSearchOpen"
-          :title="t('library_search.title_sound')"
-          icon="mdi-music-box-outline"
-          :items="bgSoundItems"
-          show-detail
-          @pick="onBgSoundPicked"
-        />
-      </div>
-
-      <!-- Painel ANÚNCIOS -->
-      <div v-if="form.tipo === LiturgyItemTypeEnum.ANUNCIOS" class="lit-panel">
-        <div class="lit-panel-title">{{ t("types.anuncios") }}</div>
-        <div class="lit-field">
-          <label>{{ t("anuncios.select_label") }}</label>
-        </div>
-        <label class="lit-an-check lit-an-check--all">
-          <input
-            type="checkbox"
-            :checked="allAnnouncementsSelected"
-            @change="toggleAllAnnouncements(($event.target as HTMLInputElement).checked)"
-          />
+    <!-- ─── Painel ANÚNCIOS ─── -->
+    <section v-if="form.tipo === LiturgyItemTypeEnum.ANUNCIOS" class="lif-panel">
+      <h3 class="lif-panel__title">{{ t("types.anuncios") }}</h3>
+      <p class="lif-label">{{ t("anuncios.select_label") }}</p>
+      <div class="lif-checklist">
+        <LjCheckbox
+          :model-value="allAnnouncementsSelected"
+          @update:model-value="toggleAllAnnouncements($event)"
+        >
           <strong>{{ t("anuncios.all") }}</strong>
-        </label>
-        <label v-for="a in announcementItems" :key="a.id" class="lit-an-check">
-          <input
-            type="checkbox"
-            :checked="(form as LiturgyItem).anuncios_ids?.includes(a.id) ?? false"
-            @change="toggleAnnouncement(a.id, ($event.target as HTMLInputElement).checked)"
-          />
-          <span>{{ a.nome }}</span>
-        </label>
+        </LjCheckbox>
+        <LjCheckbox
+          v-for="a in announcementItems"
+          :key="a.id"
+          :model-value="form.anuncios_ids?.includes(a.id) ?? false"
+          :label="a.nome"
+          @update:model-value="toggleAnnouncement(a.id, $event)"
+        />
       </div>
+    </section>
 
-      <!-- Painel OVERLAY -->
-      <div v-if="form.tipo === LiturgyItemTypeEnum.OVERLAY" class="lit-panel">
-        <div class="lit-panel-title">{{ t("types.overlay") }}</div>
-        <div class="lit-field">
-          <label>{{ t("overlay.select_slot") }}</label>
-          <select
-            :value="(form as LiturgyItem).overlay_id"
-            class="lit-select"
-            @change="setFormField('overlay_id', inputVal($event))"
+    <!-- ─── Painel OVERLAY ─── -->
+    <section v-if="form.tipo === LiturgyItemTypeEnum.OVERLAY" class="lif-panel">
+      <h3 class="lif-panel__title">{{ t("types.overlay") }}</h3>
+      <LjField layout="column" :label="t('overlay.select_slot')">
+        <LjSelect
+          :model-value="form.overlay_id ?? ''"
+          :items="overlayOptions"
+          @update:model-value="setFormField('overlay_id', $event)"
+        />
+      </LjField>
+      <LjField layout="column" :label="t('overlay.action')" group>
+        <div class="lif-inline">
+          <LjButton
+            :variant="form.overlay_action !== 'deactivate' ? 'primary' : 'ghost'"
+            :icon="ICONS.UI.EYE"
+            @click="setFormField('overlay_action', 'activate')"
           >
-            <option value="">{{ t("overlay.select_slot") }}</option>
-            <option v-for="slot in overlaySlots" :key="slot.id" :value="slot.id">
-              {{ slot.name || slot.id }}
-            </option>
-          </select>
+            {{ t("overlay.activate") }}
+          </LjButton>
+          <LjButton
+            :variant="form.overlay_action === 'deactivate' ? 'danger' : 'ghost'"
+            :icon="ICONS.UI.EYE_OFF"
+            @click="setFormField('overlay_action', 'deactivate')"
+          >
+            {{ t("overlay.deactivate") }}
+          </LjButton>
         </div>
-        <div class="lit-field mt-2">
-          <label>{{ t("overlay.action") }}</label>
-          <div class="d-flex ga-2 mt-1">
-            <button
-              type="button"
-              class="lit-btn"
-              :class="
-                (form as LiturgyItem).overlay_action !== 'deactivate'
-                  ? 'lit-btn--primary'
-                  : 'lit-btn--ghost'
-              "
-              @click="setFormField('overlay_action', 'activate')"
-            >
-              <v-icon icon="mdi-eye" size="14" />
-              <span>{{ t("overlay.activate") }}</span>
-            </button>
-            <button
-              type="button"
-              class="lit-btn"
-              :class="
-                (form as LiturgyItem).overlay_action === 'deactivate'
-                  ? 'lit-btn--danger'
-                  : 'lit-btn--ghost'
-              "
-              @click="setFormField('overlay_action', 'deactivate')"
-            >
-              <v-icon icon="mdi-eye-off" size="14" />
-              <span>{{ t("overlay.deactivate") }}</span>
-            </button>
-          </div>
-        </div>
-      </div>
+      </LjField>
+    </section>
 
-      <!-- Vincular Overlay (exceto bloco, overlay e musica "escolha") -->
-      <div
-        v-if="
-          form.tipo !== LiturgyItemTypeEnum.BLOCO &&
-          form.tipo !== LiturgyItemTypeEnum.OVERLAY &&
-          !(form.tipo === LiturgyItemTypeEnum.MUSICA && (form as LiturgyItem).escolha)
-        "
-        class="lit-panel"
+    <!-- ─── Vincular Overlay (exceto bloco, overlay e musica "escolha") ─── -->
+    <section
+      v-if="
+        form.tipo !== LiturgyItemTypeEnum.BLOCO &&
+        form.tipo !== LiturgyItemTypeEnum.OVERLAY &&
+        !(form.tipo === LiturgyItemTypeEnum.MUSICA && form.escolha)
+      "
+      class="lif-panel"
+    >
+      <LjCheckbox
+        :model-value="!!form.linked_overlay_id"
+        :label="t('overlay.link_overlay')"
+        @update:model-value="onLinkOverlayToggle($event)"
+      />
+      <div v-if="form.linked_overlay_id" class="lif-spaced">
+        <LjSelect
+          :model-value="form.linked_overlay_id"
+          :items="overlayOptions"
+          :aria-label="t('overlay.select_slot')"
+          @update:model-value="setFormField('linked_overlay_id', $event)"
+        />
+      </div>
+    </section>
+
+    <!-- ─── BLOCO ─── -->
+    <section v-if="form.tipo === LiturgyItemTypeEnum.BLOCO" class="lif-panel">
+      <h3 class="lif-panel__title">{{ t("types.bloco") }}</h3>
+      <p class="lif-hint">{{ t("inputs.bloco_hint") }}</p>
+    </section>
+
+    <LiturgyMusicSearch v-model="searchOpen" :musics-list="musicsList" @pick="onMusicPicked" />
+
+    <template #footer>
+      <LjButton
+        v-if="isEditing"
+        size="sm"
+        variant="danger"
+        :icon="ICONS.ACTIONS.DELETE"
+        @click="confirmRemove(editIndex, true)"
       >
-        <label class="lit-check">
-          <input
-            type="checkbox"
-            :checked="!!(form as LiturgyItem).linked_overlay_id"
-            @change="onLinkOverlayToggle($event)"
-          />
-          <span>{{ t("overlay.link_overlay") }}</span>
-        </label>
-        <div v-if="(form as LiturgyItem).linked_overlay_id" class="lit-field mt-2">
-          <select
-            :value="(form as LiturgyItem).linked_overlay_id"
-            class="lit-select"
-            @change="setFormField('linked_overlay_id', inputVal($event))"
-          >
-            <option value="">{{ t("overlay.select_slot") }}</option>
-            <option v-for="slot in overlaySlots" :key="slot.id" :value="slot.id">
-              {{ slot.name || slot.id }}
-            </option>
-          </select>
-        </div>
-      </div>
-
-      <!-- BLOCO -->
-      <div v-if="form.tipo === LiturgyItemTypeEnum.BLOCO" class="lit-panel">
-        <div class="lit-panel-title">{{ t("types.bloco") }}</div>
-        <div class="lit-hint">{{ t("inputs.bloco_hint") }}</div>
-      </div>
-
-      <LiturgyMusicSearch v-model="searchOpen" :musics-list="musicsList" @pick="onMusicPicked" />
-
-      <div class="lit-dialog-footer">
-        <button
-          v-if="editIndex!! >= 0"
-          class="lit-btn lit-btn--danger"
-          @click="confirmRemove(editIndex!!, true)"
-        >
-          <v-icon icon="mdi-delete" size="14" />
-          <span>{{ t("actions.delete") }}</span>
-        </button>
-        <v-spacer />
-        <button class="lit-btn lit-btn--ghost" @click="$emit('update:modelValue', false)">
-          {{ t("actions.cancel") }}
-        </button>
-        <button class="lit-btn-add" data-testid="item-save" @click="saveItem">
-          <v-icon
-            :icon="editIndex!! >= 0 ? 'mdi-content-save' : 'mdi-plus-circle'"
-            size="22"
-            color="#3a6fb5"
-          />
-          <span>{{ editIndex!! >= 0 ? t("actions.save") : t("actions.add") }}</span>
-        </button>
-      </div>
-    </v-card>
-  </v-dialog>
+        {{ t("actions.delete") }}
+      </LjButton>
+      <span class="lj-u-spacer" />
+      <LjButton size="sm" @click="$emit('update:modelValue', false)">
+        {{ t("actions.cancel") }}
+      </LjButton>
+      <LjButton
+        size="sm"
+        variant="primary"
+        data-testid="item-save"
+        :icon="isEditing ? ICONS.ACTIONS.SAVE : ICONS.ACTIONS.ADD"
+        @click="saveItem"
+      >
+        {{ isEditing ? t("actions.save") : t("actions.add") }}
+      </LjButton>
+    </template>
+  </LjDialog>
 </template>
 
 <script setup lang="ts">
@@ -504,6 +421,19 @@ import { ref, watch, computed, nextTick } from "vue";
 import { useI18n } from "vue-i18n";
 import pt from "../lang/pt.json";
 import es from "../lang/es.json";
+import Icon from "@/components/Icon.vue";
+import {
+  LjButton,
+  LjCheckbox,
+  LjChip,
+  LjDialog,
+  LjField,
+  LjInput,
+  LjSelect,
+  LjTextarea,
+  LjTooltip,
+} from "@/components/ui";
+import { ICONS } from "@/config/Icons";
 import Liturgy from "@/helpers/Liturgy";
 import DateTime from "@/helpers/DateTime";
 import LiturgyMusicSearch from "./LiturgyMusicSearch.vue";
@@ -567,23 +497,24 @@ defineEmits<{ "update:modelValue": [value: boolean] }>();
 const { locale } = useI18n();
 const t = (key: string) => _t(key, locale.value);
 
-function onLinkOverlayToggle(e: Event) {
-  const checked = (e.target as HTMLInputElement).checked;
+const isEditing = computed(() => props.editIndex >= 0);
+
+function onLinkOverlayToggle(checked: boolean) {
   props.setFormField("linked_overlay_id", checked ? props.overlaySlots?.[0]?.id || "" : "");
 }
 
 watch(
-  () => (props.form as LiturgyItem).musica,
+  () => props.form.musica,
   (newVal, oldVal) => {
-    if (newVal > 0 && newVal !== oldVal && !(props.form as LiturgyItem).escolha) {
-      const sub = (props.form as LiturgyItem).subtipo;
+    if (newVal > 0 && newVal !== oldVal && !props.form.escolha) {
+      const sub = props.form.subtipo;
       const hasInstr = hasInstrumental(Number(newVal));
       if (!sub || sub === "ja" || sub === "div") {
         props.setFormField("subtipo", "sung");
       } else if ((sub === "pb" || sub === "audio_pb") && !hasInstr) {
         props.setFormField("subtipo", "sung");
       }
-      updateDurationForVersion((props.form as LiturgyItem).subtipo || "sung");
+      updateDurationForVersion(props.form.subtipo || "sung");
     }
   }
 );
@@ -600,7 +531,7 @@ const availableVersions = computed((): VersionOption[] => {
     { value: "audio", label: t("inputs.music_version_audio-only") },
   ];
 
-  const musicId = (props.form as LiturgyItem).musica;
+  const musicId = props.form.musica;
   if (musicId > 0 && hasInstrumental(Number(musicId))) {
     base.splice(1, 0, { value: "pb", label: t("inputs.music_version_pb") });
     base.push({ value: "audio_pb", label: t("inputs.music_version_playback-only") });
@@ -609,17 +540,52 @@ const availableVersions = computed((): VersionOption[] => {
   return base;
 });
 
+/* ─── Opções dos selects ───
+   O <select> nativo comparava tudo como texto do DOM; o LjSelect compara o
+   valor de verdade. Onde o id pode chegar como número (categorias agendadas),
+   a lista é normalizada para string para o item selecionado continuar casando. */
+
+const typeOptions = computed(() => [
+  { value: LiturgyItemTypeEnum.ANOTACAO, label: t("types.anotacao") },
+  { value: LiturgyItemTypeEnum.ANUNCIOS, label: t("types.anuncios") },
+  { value: LiturgyItemTypeEnum.ARQUIVO, label: t("types.arquivo") },
+  { value: LiturgyItemTypeEnum.MEDIA_LIBRARY, label: t("types.biblioteca-midia") },
+  { value: LiturgyItemTypeEnum.BLOCO, label: t("types.bloco") },
+  { value: LiturgyItemTypeEnum.ITENS_AGENDADOS, label: t("types.itens-agendados") },
+  { value: LiturgyItemTypeEnum.MUSICA, label: t("types.musica") },
+  { value: LiturgyItemTypeEnum.SITE, label: t("types.site") },
+  { value: LiturgyItemTypeEnum.BG_SOUND, label: t("types.som-de-fundo") },
+  { value: LiturgyItemTypeEnum.OVERLAY, label: t("types.overlay") },
+  { value: LiturgyItemTypeEnum.VIDEO_ONLINE, label: t("types.video-online") },
+]);
+
+const blocoOptions = computed(() => [
+  { value: "", label: t("inputs.bloco_pick") },
+  ...props.blocoItems.map((b) => ({
+    value: b.id,
+    label: b.time ? `${b.item} — ${b.time}` : b.item,
+  })),
+]);
+
+const musicOptions = computed(() => [
+  { value: -1, label: t("inputs.music_pick") },
+  ...props.musicsList.map((m) => ({ value: Number(m.id_music), label: m.name })),
+]);
+
+const scheduledOptions = computed(() => [
+  { value: "", label: t("inputs.scheduled_pick") },
+  ...props.scheduledCategories.map((c) => ({ value: String(c.id), label: c.nome })),
+]);
+
+const overlayOptions = computed(() => [
+  { value: "", label: t("overlay.select_slot") },
+  ...props.overlaySlots.map((slot) => ({ value: slot.id, label: slot.name || slot.id })),
+]);
+
 function hasInstrumental(musicId: number): boolean {
   const m = props.musicsList?.find((x) => Number(x.id_music) === musicId);
   if (!m) return false;
   return !!(m as Record<string, unknown>).has_instrumental_music;
-}
-
-function inputVal(e: Event): string {
-  return (e.target as HTMLInputElement).value;
-}
-function inputNum(e: Event): number {
-  return +(e.target as HTMLInputElement).value;
 }
 
 const presetsOpen = ref(false);
@@ -627,7 +593,7 @@ const searchOpen = ref(false);
 
 function updateDurationForVersion(version: string, _music?: LiturgyMusicItem) {
   if (version === "lyric") return;
-  const musicId = (props.form as LiturgyItem).musica;
+  const musicId = props.form.musica;
   if (musicId <= 0) return;
   const m = _music || props.musicsList?.find((x) => Number(x.id_music) === musicId);
   if (!m) return;
@@ -651,10 +617,10 @@ function onVideoSearchPicked(v: { name: string; url: string }) {
 const videoSearchOpen = ref(false);
 
 const selectedVideoName = computed(() => {
-  const url = (props.form as LiturgyItem).url || "";
+  const url = props.form.url || "";
   if (!url) return "";
   const video: VideoSearchItem | undefined = props.videosList?.find((v) => v.url === url);
-  return video?.name || (props.form as LiturgyItem).item || url;
+  return video?.name || props.form.item || url;
 });
 
 // ─── Biblioteca de Mídia / Som de fundo ──────────────────────────────
@@ -665,13 +631,13 @@ const libraryItems = ref<LibrarySearchItem[]>([]);
 const bgSoundItems = ref<LibrarySearchItem[]>([]);
 
 const MEDIA_TYPE_ICONS: Record<string, string> = {
-  image: "mdi-image",
-  video: "mdi-video",
-  pdf: "mdi-file-pdf-box",
+  image: ICONS.MEDIA.IMAGE,
+  video: ICONS.MEDIA.VIDEO_FILE,
+  pdf: ICONS.UI.FILE_PDF,
 };
 
 function mediaIconFor(subtipo?: string): string {
-  return MEDIA_TYPE_ICONS[subtipo || ""] || "mdi-library-outline";
+  return MEDIA_TYPE_ICONS[subtipo || ""] || ICONS.MEDIA.LIBRARY;
 }
 
 async function openMediaLibrarySearch(): Promise<void> {
@@ -700,7 +666,7 @@ async function openBgSoundSearch(): Promise<void> {
   bgSoundItems.value = all.map((s) => ({
     id: s.id,
     name: s.fileName || s.name || s.id,
-    icon: "mdi-music-box-outline",
+    icon: ICONS.MUSIC.PLAYBACK,
     detail: s.mime?.replace("audio/", "").toUpperCase(),
   }));
   bgSoundSearchOpen.value = true;
@@ -733,7 +699,7 @@ interface AnnouncementOption {
 
 const announcementItems = ref<AnnouncementOption[]>([]);
 const allAnnouncementsSelected = computed(() => {
-  const ids = (props.form as LiturgyItem).anuncios_ids || [];
+  const ids = props.form.anuncios_ids || [];
   return announcementItems.value.length > 0 && ids.length === announcementItems.value.length;
 });
 
@@ -743,13 +709,13 @@ async function loadAnnouncementOptions(): Promise<void> {
   );
   announcementItems.value = all.sort((a, b) => a.ordem - b.ordem);
   // Item padrão para passar na validação de nome.
-  if (!(props.form as LiturgyItem).item) {
+  if (!props.form.item) {
     props.setFormField("item", t("types.anuncios"));
   }
 }
 
 watch(announcementItems, () => {
-  if (announcementItems.value.length && !(props.form as LiturgyItem).anuncios_ids?.length) {
+  if (announcementItems.value.length && !props.form.anuncios_ids?.length) {
     props.setFormField(
       "anuncios_ids",
       announcementItems.value.map((a) => a.id)
@@ -759,7 +725,7 @@ watch(announcementItems, () => {
 
 // Carrega a lista quando o tipo muda para Anúncios.
 watch(
-  () => (props.form as LiturgyItem).tipo,
+  () => props.form.tipo,
   (tipo) => {
     if (tipo === LiturgyItemTypeEnum.ANUNCIOS) {
       // nextTick garante que o DOM e o IDB estão prontos.
@@ -774,14 +740,13 @@ function toggleAllAnnouncements(checked: boolean): void {
 }
 
 function toggleAnnouncement(id: string, checked: boolean): void {
-  const ids = new Set((props.form as LiturgyItem).anuncios_ids || []);
+  const ids = new Set(props.form.anuncios_ids || []);
   if (checked) ids.add(id);
   else ids.delete(id);
   props.setFormField("anuncios_ids", [...ids]);
 }
 
-function onVersionChange(e: Event) {
-  const version = (e.target as HTMLSelectElement).value;
+function onVersionChange(version: string) {
   props.setFormField("subtipo", version);
   updateDurationForVersion(version);
 }
@@ -791,343 +756,229 @@ function onMusicPicked(music: LiturgyMusicItem) {
   if (!Number.isFinite(id)) return;
   props.setFormField("musica", id);
   props.onMusicChange();
-  if (!(props.form as LiturgyItem).escolha) {
-    updateDurationForVersion((props.form as LiturgyItem).subtipo || "sung", music);
+  if (!props.form.escolha) {
+    updateDurationForVersion(props.form.subtipo || "sung", music);
   }
 }
 </script>
 
+<!-- O corpo do diálogo viaja num portal, mas é compilado AQUI (slot do
+     consumidor), então o Vue carimba o atributo de escopo nele — inclusive na
+     raiz dos primitivos filhos — e `scoped` funciona normalmente. -->
 <style scoped>
-/* ====================== Dialog ====================== */
-.lit-dialog {
-  background: var(--lj-surface-bg);
-  color: var(--lj-text);
-  border-radius: 6px;
-  z-index: 10;
-  overflow: visible;
-}
-.lit-dialog-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.1));
-  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  font-weight: 500;
-}
-.lit-dialog-header {
+/* ====================== Linhas de campos ======================
+   Formulário denso: o rótulo fica à esquerda do controle, não acima, e vários
+   campos dividem a mesma linha. */
+.lif-row {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 14px;
-  padding: 12px 14px;
-  background: rgba(var(--lj-on-surface-ch), 0.02);
-  border-bottom: 1px solid rgba(var(--v-border-color), 0.2);
-}
-.lit-dialog-header .lit-field {
-  flex-direction: row;
-  align-items: center;
-  gap: 6px;
-}
-.lit-dialog-header .lit-field label {
-  font-size: 12px;
-  color: var(--lj-text);
-  font-weight: 400;
-  white-space: nowrap;
-}
-.lit-field--small input {
-  width: 60px;
-}
-.lit-field--medium input {
-  width: 80px;
-}
-.lit-dialog-footer {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  border-top: 1px solid rgba(var(--v-border-color), 0.2);
-  background: rgba(var(--lj-on-surface-ch), 0.02);
-}
-.lit-panel {
-  padding: 12px 14px 14px;
-  border-bottom: 1px solid rgba(var(--v-border-color), 0.2);
-}
-.lit-panel-title {
-  font-weight: 500;
-  font-size: 12px;
-  color: rgba(var(--lj-on-surface-ch), 0.7);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 8px;
+  align-items: flex-end;
+  gap: var(--lj-space-6);
+  margin-bottom: var(--lj-space-6);
 }
 
-/* ====================== Fields ====================== */
-.lit-field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex-shrink: 1;
+.lif-row :deep(.lj-field) {
+  margin-bottom: 0;
 }
-.lit-field--grow {
-  flex: 1;
-  min-width: 200px;
-}
-.lit-field--color {
-  flex-shrink: 0;
-}
-.lit-field-row {
-  display: flex;
-  gap: 14px;
-  align-items: center;
-  margin-top: 8px;
-}
-.lit-field label {
-  font-size: 11px;
-  color: rgba(var(--lj-on-surface-ch), 0.7);
-  font-weight: 500;
-}
-.lit-input,
-.lit-select {
-  height: 30px;
-  padding: 0 8px;
-  border: 1px solid rgba(var(--v-border-color), 0.5);
-  border-radius: 3px;
-  background: var(--lj-surface-bg);
-  color: var(--lj-text);
-  font-size: 13px;
-  font-family: inherit;
-  width: 100%;
-  outline: none;
-}
-.lit-input--small {
-  width: 70px;
-}
-.lit-input:focus,
-.lit-select:focus {
-  border-color: var(--lj-navy);
-  box-shadow: var(--lj-shadow-focus-navy-sm);
-}
-.lit-input:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  background: rgba(var(--lj-on-surface-ch), 0.04);
-}
-textarea.lit-input {
-  height: auto;
-  padding: 6px 8px;
-  resize: vertical;
-}
-.lit-input-row {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-}
-.lit-input-row .lit-input {
-  flex: 1;
-}
-.lit-select--full {
-  width: 100%;
-}
-.lit-radio {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  font-size: 12px;
-}
-.lit-check {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  font-size: 12px;
-  color: var(--lj-text);
-  user-select: none;
-}
-.lit-check input {
-  accent-color: var(--lj-navy);
-}
-.lit-field--inline {
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
-}
-.lit-label-inline {
-  font-size: 12px;
+
+/* O LjField reserva 180px para o rótulo em `row`, medida das telas de Opções.
+   Aqui os rótulos são curtos e o formulário é denso, então o rótulo encolhe
+   até o texto e o controle fica com a largura restante. */
+.lif-row :deep(.lj-field__label),
+.lif-panel :deep(.lj-field__label) {
+  min-width: 0;
   white-space: nowrap;
 }
-.lit-input-row--grow {
+
+.lif-row :deep(.lj-field__label) {
+  color: var(--lj-text);
+}
+
+.lif-panel :deep(.lj-field--row .lj-field__control) {
   flex: 1;
   min-width: 0;
 }
-.lit-hint {
-  font-size: 11px;
-  color: rgba(var(--lj-on-surface-ch), 0.6);
-  padding: 4px 0;
+
+.lif-field--grow {
+  flex: 1;
+  min-width: 200px;
 }
-.lit-video-selected {
+
+.lif-field--grow :deep(.lj-field__control) {
+  flex: 1;
+}
+
+.lif-field--type :deep(.lj-select) {
+  width: 170px;
+}
+
+.lif-field--time :deep(.lj-input) {
+  width: 100px;
+}
+
+.lif-field--duration :deep(.lj-input) {
+  width: 72px;
+}
+
+.lif-field--color {
+  flex-shrink: 0;
+}
+
+/* O invólucro existe só para o tooltip ter um alvo que receba mouse: um
+   <input disabled> não dispara eventos de ponteiro. */
+.lif-tip-anchor {
+  display: inline-flex;
+}
+
+/* ====================== Painéis por tipo ====================== */
+.lif-panel {
+  padding-top: var(--lj-space-5);
+  border-top: 1px solid var(--lj-surface-divider);
+}
+
+.lif-panel + .lif-panel {
+  margin-top: var(--lj-space-5);
+}
+
+.lif-panel__title {
+  margin: 0 0 var(--lj-space-4);
+  color: var(--lj-text-muted);
+  font-size: var(--lj-text-base);
+  font-weight: var(--lj-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.lif-panel :deep(.lj-field:last-child) {
+  margin-bottom: 0;
+}
+
+.lif-label {
+  margin: 0 0 var(--lj-space-4);
+  color: var(--lj-text-muted);
+  font-size: var(--lj-text-base);
+  font-weight: var(--lj-weight-medium);
+}
+
+.lif-hint {
+  margin: 0;
+  padding: var(--lj-space-2) 0;
+  color: var(--lj-text-subtle);
+  font-size: var(--lj-text-sm);
+}
+
+.lif-spaced {
+  margin-top: var(--lj-space-4);
+}
+
+/* Campo + botão de ação na mesma linha (abrir site, escolher arquivo, buscar) */
+.lif-inline {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  border-radius: 3px;
-  background: rgba(var(--lj-on-surface-ch), 0.05);
+  gap: var(--lj-space-2);
 }
-.lit-video-selected-name {
-  font-size: 12px;
-  white-space: nowrap;
+
+.lif-inline .lif-inline__grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.lif-fill {
+  width: 100%;
+}
+
+.lif-checklist {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--lj-space-3);
+}
+
+/* Item já escolhido nos painéis de busca — nome longo trunca em vez de
+   empurrar a largura do diálogo. */
+.lif-selected {
+  max-width: 100%;
+}
+
+.lif-selected .lif-selected__name {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* ====================== Color picker ====================== */
-.lit-color-picker {
+/* ====================== Seletor de cor ======================
+   Sem primitivo equivalente no catálogo: o <input type="color"> nativo abre o
+   seletor do sistema e a paleta ao lado é atalho para as cores da liturgia. */
+.lif-color {
   display: inline-flex;
   align-items: center;
   position: relative;
 }
-.lit-color-input {
-  width: 30px;
-  height: 26px;
-  border: 1px solid rgba(var(--v-border-color), 0.5);
-  border-right: 0;
-  border-radius: 3px 0 0 3px;
-  cursor: pointer;
+
+.lif-color__swatch {
+  width: var(--lj-fixed-btn-width);
+  height: var(--lj-ui-h-md);
   padding: 0;
   background: transparent;
+  border: var(--lj-ui-border);
+  border-right: 0;
+  border-radius: var(--lj-ui-radius) 0 0 var(--lj-ui-radius);
+  cursor: pointer;
 }
-.lit-color-toggle {
-  height: 26px;
-  width: 18px;
-  border: 1px solid rgba(var(--v-border-color), 0.5);
-  border-radius: 0 3px 3px 0;
-  background: var(--lj-surface-bg);
+
+.lif-color__toggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
-  color: var(--lj-text);
+  width: 18px;
+  height: var(--lj-ui-h-md);
   padding: 0;
+  background: var(--lj-surface-bg);
+  border: var(--lj-ui-border);
+  border-radius: 0 var(--lj-ui-radius) var(--lj-ui-radius) 0;
+  color: var(--lj-text);
+  cursor: pointer;
 }
-.lit-color-toggle:hover {
-  background: rgba(var(--lj-on-surface-ch), 0.06);
+
+.lif-color__toggle:hover {
+  background: var(--lj-surface-bg-hover);
 }
-.lit-color-presets {
+
+.lif-color__toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--lj-ui-focus);
+  border-color: var(--lj-ui-accent);
+}
+
+.lif-color__presets {
   position: absolute;
-  top: calc(100% + 4px);
+  top: calc(100% + var(--lj-space-2));
   left: 0;
+  z-index: 1;
   display: grid;
   grid-template-columns: repeat(6, 1fr);
-  gap: 3px;
-  padding: 6px;
+  gap: var(--lj-space-2);
+  padding: var(--lj-space-3);
   background: var(--lj-surface-bg);
-  border: 1px solid rgba(var(--v-border-color), 0.5);
-  border-radius: 4px;
-  box-shadow: var(--lj-shadow-3);
+  border: var(--lj-ui-float-border);
+  border-radius: var(--lj-radius-md);
+  box-shadow: var(--lj-ui-float-shadow);
 }
-.lit-color-preset {
+
+.lif-color__preset {
   width: 18px;
   height: 18px;
-  border-radius: 3px;
+  border: var(--lj-ui-border);
+  border-radius: var(--lj-radius-xs);
   cursor: pointer;
-  border: 1.5px solid rgba(var(--v-border-color), 0.3);
 }
-.lit-color-preset:hover {
+
+.lif-color__preset:hover {
   transform: scale(1.15);
 }
-.lit-color-preset.is-active {
-  border-color: white;
-  box-shadow: 0 0 0 2px var(--lj-navy);
-}
 
-/* ====================== Buttons ====================== */
-.lit-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 28px;
-  padding: 0 10px;
-  border: 1px solid transparent;
-  border-radius: 3px;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  background: rgba(var(--lj-on-surface-ch), 0.06);
-  color: var(--lj-text);
-  transition:
-    background 0.15s,
-    border 0.15s;
-  white-space: nowrap;
-}
-.lit-btn:hover {
-  background: rgba(var(--lj-on-surface-ch), 0.12);
-}
-.lit-btn--ghost {
-  background: transparent;
-  border: 1px solid transparent;
-}
-.lit-btn--ghost:hover {
-  background: rgba(var(--lj-on-surface-ch), 0.06);
-  border-color: rgba(var(--v-border-color), 0.4);
-}
-.lit-btn--primary {
-  background: var(--lj-navy);
-  color: var(--lj-white);
-}
-.lit-btn--primary:hover {
-  filter: brightness(1.1);
-}
-.lit-btn--danger {
-  background: #dc2626;
-  color: white;
-}
-.lit-btn--danger:hover {
-  background: #b91c1c;
-}
-
-/* Botão "Adicionar" estilo Delphi (ícone + grande + label) */
-.lit-btn-add {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
-  border: 1px solid rgba(var(--v-border-color), 0.4);
-  border-radius: 4px;
-  background: var(--lj-surface-bg);
-  color: var(--lj-text);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition:
-    background 0.12s,
-    border 0.12s;
-}
-.lit-btn-add:hover {
-  background: rgba(var(--lj-navy-ch), 0.06);
-  border-color: rgba(var(--lj-navy-ch), 0.4);
-}
-
-.lit-card-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border: none;
-  border-radius: 3px;
-  background: transparent;
-  cursor: pointer;
-  color: inherit;
-  opacity: 0.6;
-  padding: 0;
-}
-.lit-card-action:hover {
-  background: rgba(var(--lj-on-surface-ch), 0.1);
-  opacity: 1;
-}
-
-.mt-2 {
-  margin-top: 8px;
+.lif-color__preset.is-active {
+  border-color: var(--lj-white);
+  box-shadow: 0 0 0 2px var(--lj-ui-accent);
 }
 </style>

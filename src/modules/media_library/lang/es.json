@@ -25,6 +25,7 @@
   "confirm_clear": "¿Limpiar lista de reproducción?",
   "rename": "Renombrar",
   "delete": "Eliminar",
+  "remove_from_playlist": "Quitar de la lista",
   "rename_placeholder": "Nuevo nombre...",
   "file_added": "Archivo añadido a la biblioteca",
   "added_to_playlist": "Añadido a la lista de reproducción",

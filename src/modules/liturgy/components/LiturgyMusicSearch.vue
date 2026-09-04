@@ -1,73 +1,59 @@
 <template>
-  <v-dialog
+  <LjDialog
     :model-value="modelValue"
-    max-width="720"
+    :title="t('music_search.title')"
+    :icon="ICONS.ACTIONS.SEARCH"
+    size="lg"
     @update:model-value="$emit('update:modelValue', $event)"
-    @keydown.escape="$emit('update:modelValue', false)"
   >
-    <v-card class="lms-card">
-      <header class="lms-header">
-        <v-icon icon="mdi-magnify" size="18" />
-        <span>{{ t("music_search.title") }}</span>
-        <v-spacer />
-        <button class="lms-close" @click="$emit('update:modelValue', false)">
-          <v-icon icon="mdi-close" size="14" />
-        </button>
-      </header>
+    <LjField layout="column" :label="t('music_search.find_label')">
+      <LjInput
+        ref="inputEl"
+        v-model="query"
+        autocomplete="off"
+        @keydown.enter.prevent="selectFirstMatch"
+        @keydown.down.prevent="moveSelection(1)"
+        @keydown.up.prevent="moveSelection(-1)"
+      />
+    </LjField>
 
-      <div class="lms-filter">
-        <label for="lms-q">{{ t("music_search.find_label") }}</label>
-        <input
-          id="lms-q"
-          ref="inputEl"
-          v-model="query"
-          type="text"
-          class="lms-input"
-          autocomplete="off"
-          @keydown.enter.prevent="selectFirstMatch"
-          @keydown.down.prevent="moveSelection(1)"
-          @keydown.up.prevent="moveSelection(-1)"
-        />
-      </div>
+    <div class="lms-table-wrap">
+      <table class="lms-table">
+        <thead>
+          <tr>
+            <th class="lms-col-album">{{ t("music_search.col_album") }}</th>
+            <th class="lms-col-music">{{ t("music_search.col_music") }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-if="!filteredRows.length">
+            <td colspan="2" class="lms-empty">
+              {{ query ? t("music_search.empty_search") : t("music_search.empty") }}
+            </td>
+          </tr>
+          <tr
+            v-for="(row, i) in filteredRows"
+            :key="`${row.id}-${i}`"
+            :class="{ 'is-active': i === activeIndex }"
+            @mouseenter="activeIndex = i"
+            @click="selectRow(row)"
+            @dblclick="selectRow(row)"
+          >
+            <td>{{ row.album }}</td>
+            <td>{{ row.name }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
-      <div class="lms-table-wrap">
-        <table class="lms-table">
-          <thead>
-            <tr>
-              <th class="lms-col-album">{{ t("music_search.col_album") }}</th>
-              <th class="lms-col-music">{{ t("music_search.col_music") }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="!filteredRows.length">
-              <td colspan="2" class="lms-empty">
-                {{ query ? t("music_search.empty_search") : t("music_search.empty") }}
-              </td>
-            </tr>
-            <tr
-              v-for="(row, i) in filteredRows"
-              :key="`${row.id}-${i}`"
-              :class="{ 'is-active': i === activeIndex }"
-              @mouseenter="activeIndex = i"
-              @click="selectRow(row)"
-              @dblclick="selectRow(row)"
-            >
-              <td>{{ row.album }}</td>
-              <td>{{ row.name }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <footer class="lms-footer">
-        <span class="lms-count">{{ filteredRows.length }} / {{ allRows.length }}</span>
-        <v-spacer />
-        <button class="lms-btn" @click="$emit('update:modelValue', false)">
-          {{ t("actions.cancel") }}
-        </button>
-      </footer>
-    </v-card>
-  </v-dialog>
+    <template #footer>
+      <span class="lms-count">{{ filteredRows.length }} / {{ allRows.length }}</span>
+      <span class="lj-u-spacer" />
+      <LjButton size="sm" @click="$emit('update:modelValue', false)">
+        {{ t("actions.cancel") }}
+      </LjButton>
+    </template>
+  </LjDialog>
 </template>
 
 <script setup lang="ts">
@@ -75,6 +61,8 @@ import { computed, nextTick, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import pt from "../lang/pt.json";
 import es from "../lang/es.json";
+import { LjButton, LjDialog, LjField, LjInput } from "@/components/ui";
+import { ICONS } from "@/config/Icons";
 import type { LiturgyMusicItem } from "@/types/Liturgy";
 
 const TRANSLATIONS: Record<string, Record<string, unknown>> = { pt, es };
@@ -118,7 +106,7 @@ const t = (key: string) => _t(key, locale.value);
 
 const query = ref("");
 const activeIndex = ref(0);
-const inputEl = ref<HTMLInputElement | null>(null);
+const inputEl = ref<{ focus: () => void } | null>(null);
 
 const allRows = computed<Row[]>(() => {
   const list = props.musicsList ?? [];
@@ -166,6 +154,8 @@ watch(
     if (v) {
       query.value = "";
       activeIndex.value = 0;
+      // O campo só existe depois que o diálogo monta o conteúdo; o nextTick
+      // roda depois do autofoco do próprio diálogo, então o foco fica aqui.
       nextTick(() => inputEl.value?.focus());
     }
   }
@@ -188,92 +178,36 @@ function selectRow(row: Row) {
 }
 </script>
 
+<!-- O corpo do diálogo viaja num portal, mas é compilado AQUI (slot do
+     consumidor), então o Vue carimba o atributo de escopo nele e `scoped`
+     funciona normalmente. -->
 <style scoped>
-.lms-card {
-  background: var(--lj-surface-bg);
-  color: var(--lj-text);
-  border-radius: 6px;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-.lms-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.1));
-  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  font-weight: 500;
-}
-.lms-close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border: none;
-  background: transparent;
-  border-radius: 3px;
-  color: rgba(var(--lj-on-surface-ch), 0.6);
-  cursor: pointer;
-}
-.lms-close:hover {
-  background: rgba(220, 38, 38, 0.15);
-  color: #dc2626;
-}
-
-.lms-filter {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 12px 14px;
-  border-bottom: 1px solid rgba(var(--v-border-color), 0.2);
-  background: rgba(var(--lj-on-surface-ch), 0.03);
-}
-.lms-filter label {
-  font-size: 12px;
-  color: var(--lj-text);
-}
-.lms-input {
-  height: 30px;
-  padding: 0 8px;
-  border: 1px solid rgba(var(--v-border-color), 0.5);
-  border-radius: 3px;
-  background: var(--lj-surface-bg);
-  color: var(--lj-text);
-  font-size: 13px;
-  font-family: inherit;
-  outline: none;
-}
-.lms-input:focus {
-  border-color: var(--lj-navy);
-  box-shadow: var(--lj-shadow-focus-navy-sm);
-}
-
+/* Tabela não tem primitivo equivalente no catálogo: markup nativo sobre os
+   tokens, com cabeçalho fixo enquanto a lista rola. */
 .lms-table-wrap {
   max-height: 50vh;
   overflow-y: auto;
-  border-bottom: 1px solid rgba(var(--v-border-color), 0.2);
+  border: 1px solid var(--lj-surface-border);
+  border-radius: var(--lj-radius-md);
 }
 .lms-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: var(--lj-text-base);
 }
 .lms-table thead th {
   position: sticky;
   top: 0;
   z-index: 1;
-  background: var(--lj-gray-50);
+  background: var(--lj-surface-bg-soft);
   text-align: left;
-  padding: 8px 12px;
-  font-weight: 500;
-  border-bottom: 1px solid rgba(var(--v-border-color), 0.3);
+  padding: var(--lj-space-4) var(--lj-space-5);
+  font-weight: var(--lj-weight-medium);
+  border-bottom: 1px solid var(--lj-surface-border);
 }
 .lms-table tbody td {
-  padding: 6px 12px;
-  border-bottom: 1px solid rgba(var(--v-border-color), 0.12);
+  padding: var(--lj-space-3) var(--lj-space-5);
+  border-bottom: 1px solid var(--lj-surface-divider);
   cursor: pointer;
   white-space: nowrap;
   overflow: hidden;
@@ -281,42 +215,20 @@ function selectRow(row: Row) {
 }
 .lms-table tbody tr:hover,
 .lms-table tbody tr.is-active {
-  background: rgba(var(--lj-navy-ch), 0.1);
+  background: var(--lj-ui-accent-soft);
 }
 .lms-col-album {
   width: 38%;
 }
 .lms-empty {
   text-align: center;
-  padding: 24px 12px;
-  color: rgba(var(--lj-on-surface-ch), 0.55);
+  padding: var(--lj-space-8) var(--lj-space-5);
+  color: var(--lj-text-subtle);
   cursor: default;
 }
 
-.lms-footer {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  background: rgba(var(--lj-on-surface-ch), 0.02);
-}
 .lms-count {
-  font-size: 11px;
-  color: rgba(var(--lj-on-surface-ch), 0.6);
-}
-.lms-btn {
-  display: inline-flex;
-  align-items: center;
-  height: 28px;
-  padding: 0 12px;
-  background: transparent;
-  border: 1px solid rgba(var(--v-border-color), 0.5);
-  border-radius: 3px;
-  cursor: pointer;
-  color: var(--lj-text);
-  font-size: 12px;
-}
-.lms-btn:hover {
-  background: rgba(var(--lj-on-surface-ch), 0.06);
+  font-size: var(--lj-text-sm);
+  color: var(--lj-text-muted);
 }
 </style>

@@ -34,6 +34,8 @@
   "close": "Cerrar",
   "remove_title": "Eliminar audio",
   "remove_confirm": "¿Eliminar \"{name}\"?",
+  "unsupported_file_type": "Tipo de archivo no compatible. Use mp3, wav, ogg, flac, etc.",
+  "partial_files_supported": "{valid} de {total} archivos son compatibles. Los demás fueron ignorados.",
   "edit_audio": "Editar audio",
   "audio_name": "Nombre del audio",
   "change_file": "Cambiar archivo",

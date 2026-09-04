@@ -51,7 +51,7 @@ const titleId = useId();
      O isolamento vem do prefixo `lj-` nas classes. -->
 <style>
 .lj-popover {
-  z-index: 2400;
+  z-index: var(--lj-z-popup);
   min-width: 220px;
   max-width: 360px;
   color: var(--lj-text);

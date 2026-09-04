@@ -106,7 +106,7 @@ const open = ref(false);
   max-height: min(400px, var(--reka-dropdown-menu-content-available-height, 400px));
   overflow-y: auto;
   padding: var(--lj-space-1);
-  z-index: 2400;
+  z-index: var(--lj-z-popup);
   color: var(--lj-text);
   font-family: var(--lj-font-shell);
   font-size: var(--lj-text-base);
