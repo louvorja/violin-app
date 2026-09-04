@@ -11,7 +11,6 @@
     compact
     compact_footer
     size="large"
-    :scroll-pos="scrollPos"
     dark
     @close="closeMedia()"
     @minimize="minimizeMedia()"
@@ -41,7 +40,7 @@
       </LjPopover>
     </template>
 
-    <div class="media-body">
+    <div class="media-body" :style="{ height: preview_height + 'px' }">
       <div class="media-preview-col">
         <Fullscreen
           v-if="!isYouTube"
@@ -60,9 +59,9 @@
           <img v-if="youtubeThumbnail" :src="youtubeThumbnail" alt="" class="media-thumbnail" />
         </div>
       </div>
-      <div v-if="width > 600">
+      <div v-if="width > 600" class="media-side">
         <!-- Slide list for music -->
-        <div v-if="!isYouTube" class="media-slides">
+        <div v-if="!isYouTube" ref="slides_list" class="media-slides">
           <button
             v-for="(item, index) in slides"
             :key="index"
@@ -130,7 +129,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue";
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
 import { useI18n } from "vue-i18n";
 import { useDisplay } from "vuetify";
 import { component as Fullscreen } from "vue-fullscreen";
@@ -162,8 +161,8 @@ const moduleId = manifest.id;
 const module_ = computed(() => Modules.get(moduleId));
 
 const preview_height = ref(0);
-const scrollPos = ref(0);
 const slideItem = ref(null);
+const slides_list = ref(null);
 
 const t = (text) => i18nT(`modules.${moduleId}.${text}`);
 
@@ -238,18 +237,19 @@ const fade_audio = computed({
   set: (value) => UserData.set("modules.media.fade_audio", value),
 });
 
-watch(slide_index, () => {
+watch(slide_index, async () => {
   if (!module_.value.show) return;
+  await nextTick();
+  const list = slides_list.value;
   const items = slideItem.value;
   // Os itens da lista são elementos nativos desde a migração; `$el` fica como
   // salvaguarda caso voltem a ser componentes.
-  const first = items && (items[0]?.$el ?? items[0]);
-  if (first) {
-    const height = first.offsetHeight;
-    setTimeout(() => {
-      scrollPos.value = slide_index.value * height - height;
-    }, 100);
-  }
+  const item = items && (items[slide_index.value]?.$el ?? items[slide_index.value]);
+  if (!list || !item) return;
+  // Centraliza em vez de medir por altura fixa: um slide com várias linhas de
+  // letra é mais alto que os outros, e a aritmética por índice desalinhava.
+  const top = item.offsetTop - (list.clientHeight - item.offsetHeight) / 2;
+  list.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
 });
 
 function pathFile(img) {
@@ -360,17 +360,22 @@ onBeforeUnmount(() => {
   flex-wrap: nowrap;
   align-items: stretch;
   justify-content: space-between;
+  overflow: hidden;
 }
 
 .media-preview-col {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
 }
 
 .media-preview {
-  position: sticky;
-  top: 0;
   width: 100%;
   overflow: hidden;
+}
+
+.media-side {
+  flex-shrink: 0;
+  min-height: 0;
 }
 
 .media-preview--youtube {
@@ -390,8 +395,14 @@ onBeforeUnmount(() => {
    primitivos usados aqui dentro leem tokens de superfície, então eles são
    redefinidos no escopo da faixa para render claro sobre fundo escuro. */
 .media-slides {
+  /* offsetParent dos itens: sem isso, o offsetTop usado para centralizar o
+     slide corrente é medido contra o card do diálogo e desalinha o scroll. */
+  position: relative;
+  flex-shrink: 0;
   width: 250px;
   height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--lj-color-projection-bg);
   color: var(--lj-white);
 
@@ -405,8 +416,8 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: var(--lj-space-4);
   width: 100%;
-  height: 58px;
-  padding: 0 var(--lj-space-6);
+  min-height: 58px;
+  padding: var(--lj-space-3) var(--lj-space-6);
   background: transparent;
   border: none;
   color: inherit;
@@ -470,6 +481,7 @@ onBeforeUnmount(() => {
 }
 
 .media-youtube {
+  flex-shrink: 0;
   width: 280px;
   padding: var(--lj-space-6);
   overflow-y: auto;

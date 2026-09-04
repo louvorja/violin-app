@@ -103,7 +103,6 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
-  scrollPos: Number,
   title: String,
   subtitle: String,
   icon: String,
@@ -166,16 +165,6 @@ watch(
   () => {
     checkScroll();
     windowResize();
-  }
-);
-
-watch(
-  () => props.scrollPos,
-  (value) => {
-    const el = main_container.value;
-    if (el) {
-      el.scrollTo({ top: value, behavior: "smooth" });
-    }
   }
 );
 
