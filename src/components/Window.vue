@@ -14,7 +14,7 @@
       <slot name="toolbar">
         <header class="lj-window-toolbar">
           <div v-if="icon" class="lj-window-icon">
-            <v-icon :icon="icon" size="20" />
+            <Icon :icon="icon" size="20" />
           </div>
           <div
             v-if="image && display.width.value > 500"
@@ -41,7 +41,7 @@
               :title="$t('shell.window.minimize')"
               @click="minimize()"
             >
-              <v-icon :icon="ICONS.ACTIONS.MINUS" size="16" />
+              <Icon :icon="ICONS.ACTIONS.MINUS" size="16" />
             </button>
             <button
               v-if="closable"
@@ -50,7 +50,7 @@
               :title="$t('alert.close')"
               @click="close()"
             >
-              <v-icon :icon="ICONS.ACTIONS.CLOSE" size="16" />
+              <Icon :icon="ICONS.ACTIONS.CLOSE" size="16" />
             </button>
           </div>
         </header>
@@ -95,6 +95,7 @@
 </template>
 
 <script setup>
+import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, watch, onMounted } from "vue";
 import { useDisplay } from "vuetify";

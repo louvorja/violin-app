@@ -9,7 +9,7 @@
       @click="setActiveDay(i)"
     >
       <span>
-        <v-icon
+        <Icon
           :icon="i === todayIndex ? ICONS.CALENDAR.STAR : ICONS.CALENDAR.BLANK_SOLID"
           size="16"
         />
@@ -20,6 +20,7 @@
 </template>
 
 <script setup lang="ts">
+import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 const props = withDefaults(
   defineProps<{

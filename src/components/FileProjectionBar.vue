@@ -2,7 +2,7 @@
   <div class="fpb-footer" @keydown.window="onKeydown">
     <div class="fpb-row">
       <div class="fpb-info">
-        <v-icon :icon="infoIcon" size="16" class="fpb-icon" />
+        <Icon :icon="infoIcon" size="16" class="fpb-icon" />
         <span class="fpb-name lj-u-truncate">{{ fp.currentItemName.value }}</span>
         <span v-if="fp.playlistLength.value > 1" class="fpb-index">
           {{ fp.currentIndex.value + 1 }} / {{ fp.playlistLength.value }}
@@ -39,6 +39,7 @@
 </template>
 
 <script setup lang="ts">
+import Icon from "@/components/Icon.vue";
 import { computed } from "vue";
 import { useFileProjection } from "@/composables/useFileProjection";
 import { ICONS } from "@/config/Icons";

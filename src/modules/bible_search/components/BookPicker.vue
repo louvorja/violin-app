@@ -16,7 +16,7 @@
         <template #item="{ props, item }">
           <v-list-item v-bind="props">
             <template #prepend>
-              <v-icon
+              <Icon
                 v-if="!downloadedVersions.has(item.id_bible_version)"
                 :icon="ICONS.ACTIONS.DOWNLOAD"
                 size="small"
@@ -28,7 +28,7 @@
         </template>
         <template #selection="{ item }">
           <div class="d-flex align-center overflow-hidden">
-            <v-icon
+            <Icon
               v-if="!downloadedVersions.has(item.id_bible_version)"
               :icon="ICONS.ACTIONS.DOWNLOAD"
               size="x-small"
@@ -43,7 +43,7 @@
       <label class="book-picker-label">{{ t("modules.bible_search.ribbon.filter.books") }}</label>
       <button class="book-picker-trigger" @click="toggleOpen">
         <span class="book-picker-summary">{{ bookSummary }}</span>
-        <v-icon :icon="ICONS.UI.CHEVRON_DOWN" size="14" />
+        <Icon :icon="ICONS.UI.CHEVRON_DOWN" size="14" />
       </button>
     </div>
     <Teleport to="body">
@@ -102,6 +102,7 @@
 </template>
 
 <script setup lang="ts">
+import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, reactive, onMounted, onUnmounted } from "vue";
 import { useI18n } from "vue-i18n";

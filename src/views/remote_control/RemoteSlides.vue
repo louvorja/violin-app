@@ -5,7 +5,7 @@
     </div>
     <template v-else>
       <div class="px-4 py-2 bg-surface-variant text-caption d-flex align-center">
-        <v-icon :icon="ICONS.MUSIC.NOTE" size="small" class="mr-1" />
+        <Icon :icon="ICONS.MUSIC.NOTE" size="small" class="mr-1" />
         <span class="text-truncate">{{ currentTitle }}</span>
       </div>
       <div class="remote-slides-grid pa-2">
@@ -26,6 +26,7 @@
 </template>
 
 <script setup lang="ts">
+import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { useI18n } from "vue-i18n";
 import { Slide } from "@/types/Slide";

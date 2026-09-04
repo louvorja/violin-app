@@ -29,7 +29,7 @@
         >
           <template #prepend>
             <v-avatar :color="item.cor || 'primary'" size="32" class="mr-2">
-              <v-icon :icon="liturgy.iconForItem(item)" color="white" size="18" />
+              <Icon :icon="liturgy.iconForItem(item)" color="white" size="18" />
             </v-avatar>
           </template>
           <template #append>
@@ -41,11 +41,11 @@
                 color="primary"
                 @click.stop="openChooseLater(item)"
               />
-              <v-icon v-if="isItemChecked(item)" :icon="ICONS.UI.CHECK_CIRCLE" color="success" />
+              <Icon v-if="isItemChecked(item)" :icon="ICONS.UI.CHECK_CIRCLE" color="success" />
             </div>
             <template v-else>
-              <v-icon v-if="isItemChecked(item)" :icon="ICONS.UI.CHECK_CIRCLE" color="success" />
-              <v-icon v-else :icon="ICONS.PLAYER.PLAY_OUTLINE" color="primary" />
+              <Icon v-if="isItemChecked(item)" :icon="ICONS.UI.CHECK_CIRCLE" color="success" />
+              <Icon v-else :icon="ICONS.PLAYER.PLAY_OUTLINE" color="primary" />
             </template>
           </template>
         </v-list-item>
@@ -55,6 +55,7 @@
 </template>
 
 <script setup lang="ts">
+import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { ref, onMounted } from "vue";
 import { useI18n } from "vue-i18n";

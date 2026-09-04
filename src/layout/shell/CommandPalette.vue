@@ -9,7 +9,7 @@
     <v-card class="cmd-palette" rounded="lg" elevation="8">
       <!-- Input de busca -->
       <div class="cmd-search">
-        <v-icon :icon="ICONS.ACTIONS.SEARCH" size="22" class="mr-2 text-medium-emphasis" />
+        <Icon :icon="ICONS.ACTIONS.SEARCH" size="22" class="mr-2 text-medium-emphasis" />
         <input
           ref="searchInput"
           v-model="query"
@@ -43,7 +43,7 @@
           v-if="!loading && results.length === 0"
           class="cmd-empty pa-6 text-center text-medium-emphasis"
         >
-          <v-icon :icon="ICONS.ACTIONS.SEARCH" size="36" class="mb-2 text-disabled" />
+          <Icon :icon="ICONS.ACTIONS.SEARCH" size="36" class="mb-2 text-disabled" />
           <div>{{ $t("shell.no_results") }}</div>
         </div>
 
@@ -61,7 +61,7 @@
             @click="execute(item)"
             @mouseenter="setActive(item)"
           >
-            <v-icon :icon="item.icon" size="18" class="cmd-item-icon" />
+            <Icon :icon="item.icon" size="18" class="cmd-item-icon" />
             <div class="cmd-item-body">
               <div class="cmd-item-title lj-u-truncate">
                 <template v-for="(part, i) in highlightParts(item.title)" :key="i">
@@ -106,6 +106,7 @@
 </template>
 
 <script setup>
+import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, watch, nextTick } from "vue";
 import { useI18n } from "vue-i18n";

@@ -43,7 +43,7 @@
     </div>
 
     <div v-else-if="!results.length && searched" class="pa-6 text-center text-medium-emphasis">
-      <v-icon :icon="ICONS.MUSIC.NO_AUDIO" size="36" class="mb-2" />
+      <Icon :icon="ICONS.MUSIC.NO_AUDIO" size="36" class="mb-2" />
       <div>{{ t("no_results") }}</div>
     </div>
 
@@ -95,7 +95,7 @@
 
     <div v-else class="flex-grow-1 d-flex align-center justify-center text-medium-emphasis">
       <div class="text-center">
-        <v-icon :icon="ICONS.ACTIONS.SEARCH" size="48" class="mb-2 text-disabled" />
+        <Icon :icon="ICONS.ACTIONS.SEARCH" size="48" class="mb-2 text-disabled" />
         <div>{{ t("search_placeholder") }}</div>
       </div>
     </div>
@@ -103,6 +103,7 @@
 </template>
 
 <script setup lang="ts">
+import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import type { ComponentPublicInstance } from "vue";
 import { nextTick, onMounted, ref } from "vue";

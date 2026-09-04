@@ -27,7 +27,7 @@
       <template #item="{ item, props }">
         <v-list-item v-bind="props">
           <template #append>
-            <v-icon
+            <Icon
               v-if="!downloadedVersions.has(item.id_bible_version)"
               :icon="ICONS.ACTIONS.DOWNLOAD_OUTLINE"
               size="small"
@@ -38,7 +38,7 @@
       </template>
       <template #selection="{ item }">
         <span>{{ item.name }}</span>
-        <v-icon
+        <Icon
           v-if="!downloadedVersions.has(item.id_bible_version)"
           :icon="ICONS.ACTIONS.DOWNLOAD_OUTLINE"
           size="small"
@@ -90,7 +90,7 @@
     >
       <v-divider class="my-4" />
       <div class="px-2 py-1 bg-surface-variant text-caption d-flex align-center mb-2">
-        <v-icon :icon="ICONS.BIBLE.BOOK_OPEN" size="small" class="mr-1" />
+        <Icon :icon="ICONS.BIBLE.BOOK_OPEN" size="small" class="mr-1" />
         <span class="text-truncate">{{ activeBible.reference }}</span>
       </div>
       <div class="remote-slides-grid">
@@ -113,6 +113,7 @@
 </template>
 
 <script setup lang="ts">
+import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { ref, onMounted } from "vue";
 import { useI18n } from "vue-i18n";

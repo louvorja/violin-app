@@ -63,13 +63,14 @@
       </div>
 
       <button class="quicknav-close" @click="model = false">
-        <v-icon size="18" :icon="ICONS.ACTIONS.CLOSE" />
+        <Icon size="18" :icon="ICONS.ACTIONS.CLOSE" />
       </button>
     </div>
   </v-dialog>
 </template>
 
 <script setup lang="ts">
+import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { computed, nextTick, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";

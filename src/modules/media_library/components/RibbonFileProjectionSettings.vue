@@ -27,7 +27,7 @@
         <div class="opt-format-field opt-field-bgimage">
           <div class="opt-bg-pick">
             <v-btn variant="outlined" size="x-small" @click="pick">
-              <v-icon start :icon="ICONS.ACTIONS.IMAGE_PLUS" size="14" />
+              <Icon start :icon="ICONS.ACTIONS.IMAGE_PLUS" size="14" />
               {{ $t("options.background.select") }}
             </v-btn>
             <span v-if="!currentBgImage" class="opt-bg-empty-text">
@@ -43,7 +43,7 @@
         <div v-if="wpImageUrl" class="rfps-preview">
           <img :src="wpImageUrl" class="rfps-preview-img" />
           <button class="rfps-preview-remove" @click="remove">
-            <v-icon :icon="ICONS.ACTIONS.CLOSE" size="15" />
+            <Icon :icon="ICONS.ACTIONS.CLOSE" size="15" />
           </button>
         </div>
       </div>
@@ -52,6 +52,7 @@
 </template>
 
 <script setup lang="ts">
+import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { ref, onMounted, onBeforeUnmount, computed } from "vue";
 import { useI18n } from "vue-i18n";

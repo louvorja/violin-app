@@ -20,7 +20,7 @@
 
       <!-- Mensagem quando vazio -->
       <div v-if="!gloss && !isTranslating" class="libras-empty">
-        <v-icon :icon="ICONS.MODULES.MUSICS" size="48" color="grey" class="mb-2" />
+        <Icon :icon="ICONS.MODULES.MUSICS" size="48" color="grey" class="mb-2" />
         <p>{{ t("libras.empty") }}</p>
       </div>
     </div>
@@ -28,6 +28,7 @@
 </template>
 
 <script setup lang="ts">
+import Icon from "@/components/Icon.vue";
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import ModuleContainer from "@/components/ModuleContainer.vue";

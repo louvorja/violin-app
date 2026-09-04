@@ -3,10 +3,10 @@
     <template #header>
       <div class="dx-header">
         <div class="dx-search-wrap">
-          <v-icon :icon="ICONS.ACTIONS.SEARCH" size="16" class="dx-search-icon" />
+          <Icon :icon="ICONS.ACTIONS.SEARCH" size="16" class="dx-search-icon" />
           <input v-model="search" type="text" class="dx-search-input" :placeholder="t('search')" />
           <button v-if="search" type="button" class="dx-search-clear" @click="search = ''">
-            <v-icon :icon="ICONS.ACTIONS.CLOSE" size="14" />
+            <Icon :icon="ICONS.ACTIONS.CLOSE" size="14" />
           </button>
         </div>
       </div>
@@ -27,7 +27,7 @@
       <template v-if="selectedAlbum">
         <div class="dx-back">
           <v-btn icon size="small" variant="text" @click="goBack">
-            <v-icon :icon="ICONS.UI.ARROW_LEFT" />
+            <Icon :icon="ICONS.UI.ARROW_LEFT" />
           </v-btn>
           <span class="dx-back-title">{{ selectedAlbum.name }}</span>
         </div>
@@ -38,7 +38,7 @@
         <div class="dx-list">
           <div v-for="(m, i) in filteredMusics" :key="m.id_music ?? i" class="dx-list-item">
             <button class="dx-list-play" :title="t('play')" @click="openMusicFor(m)">
-              <v-icon :icon="ICONS.PLAYER.PLAY" size="26" color="primary" />
+              <Icon :icon="ICONS.PLAYER.PLAY" size="26" color="primary" />
             </button>
             <span class="dx-list-name" @click="openMusicFor(m)">{{ m.name }}</span>
             <span v-if="m.duration" class="dx-list-duration">{{ m.duration }}</span>
@@ -73,10 +73,10 @@
                 @error="coverFailed.add(String(album.id_album))"
               />
               <div v-else class="dx-card-cover-fallback">
-                <v-icon :icon="ICONS.MUSIC.VINYL" size="32" color="#8e44ad" />
+                <Icon :icon="ICONS.MUSIC.VINYL" size="32" color="#8e44ad" />
               </div>
               <div class="dx-card-overlay">
-                <v-icon :icon="ICONS.PLAYER.PLAY" size="36" color="#fff" />
+                <Icon :icon="ICONS.PLAYER.PLAY" size="36" color="#fff" />
               </div>
             </div>
             <div class="dx-card-name">{{ album.name }}</div>
@@ -88,6 +88,7 @@
 </template>
 
 <script setup lang="ts">
+import Icon from "@/components/Icon.vue";
 import { computed, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { module as manifest } from "../manifest";

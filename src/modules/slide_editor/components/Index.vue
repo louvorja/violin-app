@@ -9,28 +9,30 @@
     <template #header>
       <div class="se-statusbar-inline">
         <button class="se-rename-btn" :title="t('labels.name')" @click="renameSong">
-          <v-icon size="14" :icon="ICONS.ACTIONS.EDIT_OUTLINE" />
+          <Icon size="14" :icon="ICONS.ACTIONS.EDIT_OUTLINE" />
         </button>
         <span v-if="dirty" class="se-dirty-dot" :title="t('actions.save')">●</span>
         <span class="se-status-cell">
-          <v-icon size="13" :icon="ICONS.MEDIA.IMAGE" />
+          <Icon size="13" :icon="ICONS.MEDIA.IMAGE" />
           <strong>{{ current + 1 }}</strong>
           /{{ slides.length }}
         </span>
         <span v-if="activeSlide.tempo_seconds > 0" class="se-status-cell">
-          <v-icon size="13" :icon="ICONS.TIMER.TIMER_OUTLINE" />
+          <Icon size="13" :icon="ICONS.TIMER.TIMER_OUTLINE" />
           {{ formatTime(activeSlide.tempo_seconds) }}
         </span>
         <span v-if="song.audio_name" class="se-status-cell">
-          <v-icon size="13" :color="audioPlaying ? 'success' : undefined">
-            {{ audioPlaying ? ICONS.MUSIC.NOTE_EIGHTH : ICONS.MUSIC.NOTE }}
-          </v-icon>
+          <Icon
+            size="13"
+            :color="audioPlaying ? 'success' : undefined"
+            :icon="audioPlaying ? ICONS.MUSIC.NOTE_EIGHTH : ICONS.MUSIC.NOTE"
+          />
           <span class="se-audio-time">
             {{ formatTime(audioCurrentTime) }} / {{ formatTime(audioDuration) }}
           </span>
         </span>
         <span class="se-status-cell">
-          <v-icon size="13" :icon="ICONS.FORMAT.ASPECT_RATIO" />
+          <Icon size="13" :icon="ICONS.FORMAT.ASPECT_RATIO" />
           {{ aspectRatioLabel }}
         </span>
       </div>
@@ -55,7 +57,7 @@
               >
                 <span class="se-thumb-num">{{ index + 1 }}</span>
                 <span v-if="element.tempo_seconds > 0" class="se-thumb-time">
-                  <v-icon size="9" :icon="ICONS.TIMER.CLOCK" />
+                  <Icon size="9" :icon="ICONS.TIMER.CLOCK" />
                   {{ formatTime(element.tempo_seconds) }}
                 </span>
                 <div
@@ -68,7 +70,7 @@
             </template>
           </draggable>
           <button class="se-slide-list-add" @click="actNewSlide">
-            <v-icon size="18" :icon="ICONS.ACTIONS.ADD_CIRCLE" />
+            <Icon size="18" :icon="ICONS.ACTIONS.ADD_CIRCLE" />
             <span>{{ t("actions.new_slide") }}</span>
           </button>
         </div>
@@ -108,9 +110,7 @@
             :title="audioPlaying ? 'Pausar' : 'Reproduzir'"
             @click="togglePlay"
           >
-            <v-icon size="22">
-              {{ audioPlaying ? ICONS.PLAYER.PAUSE_PLAIN : ICONS.PLAYER.PLAYER }}
-            </v-icon>
+            <Icon size="22" :icon="audioPlaying ? ICONS.PLAYER.PAUSE_PLAIN : ICONS.PLAYER.PLAYER" />
           </button>
           <div class="se-player-time">
             <span class="se-player-time-current">{{ formatTime(audioCurrentTime) }}</span>
@@ -130,7 +130,7 @@
             <div class="se-timeline-thumb" :style="{ left: `${timelineProgress}%` }" />
           </div>
           <div class="se-player-slide-badge" :title="song.audio_name">
-            <v-icon size="12" :icon="ICONS.MUSIC.NOTE" />
+            <Icon size="12" :icon="ICONS.MUSIC.NOTE" />
             {{ current + 1 }}/{{ slides.length }}
           </div>
         </div>
@@ -154,9 +154,9 @@
         <!-- ===== Texto ===== -->
         <details class="se-panel" open>
           <summary class="se-panel-head">
-            <v-icon size="14" :icon="ICONS.BIBLE.FORMAT_PARAGRAPH" />
+            <Icon size="14" :icon="ICONS.BIBLE.FORMAT_PARAGRAPH" />
             <span>{{ t("labels.main_text") }}</span>
-            <v-icon class="se-panel-chev" size="14" :icon="ICONS.UI.CHEVRON_DOWN" />
+            <Icon class="se-panel-chev" size="14" :icon="ICONS.UI.CHEVRON_DOWN" />
           </summary>
           <div class="se-panel-body">
             <textarea
@@ -187,7 +187,7 @@
                     markDirty();
                   "
                 >
-                  <v-icon size="14" :icon="ICONS.FORMAT.ALIGN_LEFT" />
+                  <Icon size="14" :icon="ICONS.FORMAT.ALIGN_LEFT" />
                 </button>
                 <button
                   type="button"
@@ -199,7 +199,7 @@
                     markDirty();
                   "
                 >
-                  <v-icon size="14" :icon="ICONS.FORMAT.ALIGN_CENTER" />
+                  <Icon size="14" :icon="ICONS.FORMAT.ALIGN_CENTER" />
                 </button>
                 <button
                   type="button"
@@ -211,7 +211,7 @@
                     markDirty();
                   "
                 >
-                  <v-icon size="14" :icon="ICONS.FORMAT.ALIGN_RIGHT" />
+                  <Icon size="14" :icon="ICONS.FORMAT.ALIGN_RIGHT" />
                 </button>
               </div>
             </div>
@@ -221,9 +221,9 @@
         <!-- ===== Cor & Tipografia ===== -->
         <details class="se-panel" open>
           <summary class="se-panel-head">
-            <v-icon size="14" :icon="ICONS.FORMAT.PALETTE_OUTLINE" />
+            <Icon size="14" :icon="ICONS.FORMAT.PALETTE_OUTLINE" />
             <span>Cor &amp; Tipografia</span>
-            <v-icon class="se-panel-chev" size="14" :icon="ICONS.UI.CHEVRON_DOWN" />
+            <Icon class="se-panel-chev" size="14" :icon="ICONS.UI.CHEVRON_DOWN" />
           </summary>
           <div class="se-panel-body">
             <div class="se-row-inline">
@@ -293,26 +293,26 @@
         <!-- ===== Imagem de Fundo ===== -->
         <details class="se-panel">
           <summary class="se-panel-head">
-            <v-icon size="14" :icon="ICONS.UI.IMAGE_OUTLINE" />
+            <Icon size="14" :icon="ICONS.UI.IMAGE_OUTLINE" />
             <span>Imagem de Fundo</span>
-            <v-icon class="se-panel-chev" size="14" :icon="ICONS.UI.CHEVRON_DOWN" />
+            <Icon class="se-panel-chev" size="14" :icon="ICONS.UI.CHEVRON_DOWN" />
           </summary>
           <div class="se-panel-body">
             <div v-if="activeImageUrl" class="se-img-preview-row">
               <div class="se-img-thumb" :style="{ backgroundImage: `url(${activeImageUrl})` }" />
               <div class="se-img-actions">
                 <button type="button" class="se-act-btn" @click="actSetImage">
-                  <v-icon size="14" :icon="ICONS.ACTIONS.IMAGE_EDIT" />
+                  <Icon size="14" :icon="ICONS.ACTIONS.IMAGE_EDIT" />
                   Trocar
                 </button>
                 <button type="button" class="se-act-btn" @click="actRemoveImage">
-                  <v-icon size="14" :icon="ICONS.UI.IMAGE_OFF" />
+                  <Icon size="14" :icon="ICONS.UI.IMAGE_OFF" />
                   Remover
                 </button>
               </div>
             </div>
             <button v-else type="button" class="se-img-empty" @click="actSetImage">
-              <v-icon size="20" :icon="ICONS.ACTIONS.IMAGE_PLUS" />
+              <Icon size="20" :icon="ICONS.ACTIONS.IMAGE_PLUS" />
               <span>Adicionar imagem de fundo</span>
             </button>
 
@@ -332,9 +332,9 @@
         <!-- ===== Replicar ===== -->
         <details class="se-panel">
           <summary class="se-panel-head">
-            <v-icon size="14" :icon="ICONS.ACTIONS.DUPLICATE" />
+            <Icon size="14" :icon="ICONS.ACTIONS.DUPLICATE" />
             <span>Replicar para</span>
-            <v-icon class="se-panel-chev" size="14" :icon="ICONS.UI.CHEVRON_DOWN" />
+            <Icon class="se-panel-chev" size="14" :icon="ICONS.UI.CHEVRON_DOWN" />
           </summary>
           <div class="se-panel-body">
             <div class="se-field">
@@ -346,7 +346,7 @@
                   :title="t('actions.replicate_bg_next')"
                   @click="replicateBg('next')"
                 >
-                  <v-icon size="14" :icon="ICONS.ACTIONS.NEXT_BOLD" />
+                  <Icon size="14" :icon="ICONS.ACTIONS.NEXT_BOLD" />
                   Seguinte
                 </button>
                 <button
@@ -355,7 +355,7 @@
                   :title="t('actions.replicate_bg_after')"
                   @click="replicateBg('after')"
                 >
-                  <v-icon size="14" :icon="ICONS.ACTIONS.EXPAND_RIGHT" />
+                  <Icon size="14" :icon="ICONS.ACTIONS.EXPAND_RIGHT" />
                   Todos seg.
                 </button>
                 <button
@@ -364,7 +364,7 @@
                   :title="t('actions.replicate_bg_all')"
                   @click="replicateBg('all')"
                 >
-                  <v-icon size="14" :icon="ICONS.FORMAT.LINE_SPACING" />
+                  <Icon size="14" :icon="ICONS.FORMAT.LINE_SPACING" />
                   Todos
                 </button>
               </div>
@@ -378,7 +378,7 @@
                   :title="t('actions.replicate_text_next')"
                   @click="replicateText('next')"
                 >
-                  <v-icon size="14" :icon="ICONS.ACTIONS.NEXT_BOLD" />
+                  <Icon size="14" :icon="ICONS.ACTIONS.NEXT_BOLD" />
                   Seguinte
                 </button>
                 <button
@@ -387,7 +387,7 @@
                   :title="t('actions.replicate_text_after')"
                   @click="replicateText('after')"
                 >
-                  <v-icon size="14" :icon="ICONS.ACTIONS.EXPAND_RIGHT" />
+                  <Icon size="14" :icon="ICONS.ACTIONS.EXPAND_RIGHT" />
                   Todos seg.
                 </button>
                 <button
@@ -396,7 +396,7 @@
                   :title="t('actions.replicate_text_all')"
                   @click="replicateText('all')"
                 >
-                  <v-icon size="14" :icon="ICONS.FORMAT.LINE_SPACING" />
+                  <Icon size="14" :icon="ICONS.FORMAT.LINE_SPACING" />
                   Todos
                 </button>
               </div>
@@ -414,6 +414,7 @@
 </template>
 
 <script setup>
+import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
 import draggable from "vuedraggable";

@@ -30,7 +30,7 @@
         :aria-label="`${$t('alert.close')}: ${t(getModule(m.id).title)}`"
         @click.stop="close(m.id)"
       >
-        <v-icon :icon="ICONS.ACTIONS.CLOSE" size="11" aria-hidden="true" />
+        <Icon :icon="ICONS.ACTIONS.CLOSE" size="11" aria-hidden="true" />
       </span>
     </v-btn>
   </div>

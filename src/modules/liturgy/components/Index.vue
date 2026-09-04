@@ -8,7 +8,7 @@
     @drop.prevent="onDrop"
   >
     <div v-if="isDraggingOver" class="liturgy-drop-overlay">
-      <v-icon :icon="ICONS.ACTIONS.ADD_CIRCLE" size="48" />
+      <Icon :icon="ICONS.ACTIONS.ADD_CIRCLE" size="48" />
       <span>{{ t("data.drop_hint") }}</span>
     </div>
 
@@ -104,11 +104,11 @@
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="copyDialog = false">
-            <v-icon :icon="ICONS.ACTIONS.CLOSE" size="16" class="mr-1" />
+            <Icon :icon="ICONS.ACTIONS.CLOSE" size="16" class="mr-1" />
             {{ t("copy.cancel") }}
           </v-btn>
           <v-btn variant="flat" color="primary" @click="doCopyLiturgy">
-            <v-icon :icon="ICONS.ACTIONS.COPY" size="16" class="mr-1" />
+            <Icon :icon="ICONS.ACTIONS.COPY" size="16" class="mr-1" />
             {{ t("copy.confirm") }}
           </v-btn>
         </v-card-actions>
@@ -129,6 +129,7 @@
 </template>
 
 <script setup lang="ts">
+import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
 import { useI18n } from "vue-i18n";

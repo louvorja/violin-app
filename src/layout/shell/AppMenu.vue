@@ -29,7 +29,7 @@
                 :aria-label="$t('alert.close')"
                 @click="close"
               >
-                <v-icon :icon="ICONS.ACTIONS.CLOSE" size="20" />
+                <Icon :icon="ICONS.ACTIONS.CLOSE" size="20" />
               </button>
               <span class="app-menu-header-title">
                 {{ activeItem?.label ? $t(activeItem.label) : $t("shell.appmenu") }}

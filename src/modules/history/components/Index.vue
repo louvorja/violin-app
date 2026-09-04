@@ -12,7 +12,7 @@
     </template>
 
     <div v-if="history.length === 0" class="pa-6 text-center">
-      <v-icon :icon="ICONS.MODULES.HISTORY" size="64" class="mb-4 text-disabled" />
+      <Icon :icon="ICONS.MODULES.HISTORY" size="64" class="mb-4 text-disabled" />
       <div class="text-body-1 mb-2">{{ t("data.empty") }}</div>
       <div class="text-body-2 text-disabled">{{ t("data.empty_hint") }}</div>
     </div>
@@ -47,6 +47,7 @@
 </template>
 
 <script setup>
+import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { ref, computed } from "vue";
 import { module as manifest } from "../manifest";

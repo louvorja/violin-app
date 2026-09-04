@@ -6,7 +6,7 @@
 
     <section v-if="isDesktop" class="opt-section">
       <h3 class="opt-section-title">
-        <v-icon :icon="ICONS.UI.SYNC_CLOUD" size="18" />
+        <Icon :icon="ICONS.UI.SYNC_CLOUD" size="18" />
         {{ $t("options.collections_download.connection") }}
       </h3>
       <div class="opt-row opt-row--col">
@@ -429,7 +429,7 @@
                   variant="tonal"
                   class="ml-2"
                 >
-                  <v-icon :icon="ICONS.PROJETOS.DELPHI" size="12" class="mr-1" />
+                  <Icon :icon="ICONS.PROJETOS.DELPHI" size="12" class="mr-1" />
                   {{ $t("options.storage.classic_version") }}
                 </v-chip>
               </label>
@@ -451,7 +451,7 @@
                     class="opt-btn"
                     @click="detectClassic"
                   >
-                    <v-icon :icon="ICONS.PROJETOS.DELPHI" size="14" class="mr-1" />
+                    <Icon :icon="ICONS.PROJETOS.DELPHI" size="14" class="mr-1" />
                     {{ $t("options.storage.use_classic_dir") }}
                   </button>
                 </div>
@@ -526,15 +526,15 @@
 
             <div class="opt-actions">
               <button type="button" class="opt-btn" @click="clearJson">
-                <v-icon :icon="ICONS.ACTIONS.DATABASE_REMOVE" size="14" class="mr-1" />
+                <Icon :icon="ICONS.ACTIONS.DATABASE_REMOVE" size="14" class="mr-1" />
                 {{ $t("options.storage.clear_cache") }}
               </button>
               <button type="button" class="opt-btn opt-btn--danger" @click="clearFiles">
-                <v-icon :icon="ICONS.ACTIONS.DELETE_FILLED" size="14" class="mr-1" />
+                <Icon :icon="ICONS.ACTIONS.DELETE_FILLED" size="14" class="mr-1" />
                 {{ $t("options.storage.clear_files") }}
               </button>
               <button type="button" class="opt-btn" :disabled="loading" @click="reloadStats">
-                <v-icon :icon="ICONS.ACTIONS.REFRESH" size="14" class="mr-1" />
+                <Icon :icon="ICONS.ACTIONS.REFRESH" size="14" class="mr-1" />
                 {{ $t("options.storage.refresh") }}
               </button>
               <button
@@ -544,7 +544,7 @@
                 :disabled="restoringDb || sync.bundleInstalling.value"
                 @click="restoreDatabase"
               >
-                <v-icon :icon="ICONS.ACTIONS.DATABASE_REFRESH" size="14" class="mr-1" />
+                <Icon :icon="ICONS.ACTIONS.DATABASE_REFRESH" size="14" class="mr-1" />
                 {{ $t("options.storage.restore_db") }}
               </button>
             </div>

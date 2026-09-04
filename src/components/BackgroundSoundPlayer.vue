@@ -2,7 +2,7 @@
   <div class="bgs-footer">
     <div class="bgs-footer-row">
       <div class="bgs-footer-info">
-        <v-icon :icon="ICONS.MODULES.BACKGROUND_SOUND" size="16" class="bgs-footer-icon" />
+        <Icon :icon="ICONS.MODULES.BACKGROUND_SOUND" size="16" class="bgs-footer-icon" />
         <span class="bgs-footer-file lj-u-truncate">
           {{ bg.currentFile.value?.name || bg.currentFile.value?.fileName }}
         </span>
@@ -56,7 +56,7 @@
       </div>
 
       <div class="bgs-footer-volume">
-        <v-icon :icon="volumeIcon" size="14" class="bgs-footer-vol-icon" @click="toggleMute" />
+        <Icon :icon="volumeIcon" size="14" class="bgs-footer-vol-icon" @click="toggleMute" />
         <v-slider
           :model-value="bg.volume.value"
           :min="0"
@@ -73,6 +73,7 @@
 </template>
 
 <script setup lang="ts">
+import Icon from "@/components/Icon.vue";
 import { computed, ref } from "vue";
 import { useBackgroundSound } from "@/composables/useBackgroundSound";
 import { saveSetting } from "@/helpers/SettingsStorage";

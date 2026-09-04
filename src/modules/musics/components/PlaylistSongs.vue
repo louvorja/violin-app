@@ -8,7 +8,7 @@
         :title="t('playlists.close')"
         @click="selectPlaylist(null)"
       >
-        <v-icon :icon="ICONS.ACTIONS.CLOSE" size="16" />
+        <Icon :icon="ICONS.ACTIONS.CLOSE" size="16" />
       </button>
     </div>
 
@@ -23,7 +23,7 @@
         }"
       >
         <span class="playlist-songs-item-index">
-          <v-icon
+          <Icon
             v-if="isPlayingSong(song.id_music)"
             :icon="ICONS.MEDIA.EQUALIZER"
             size="14"
@@ -42,7 +42,7 @@
             :title="t('playlists.play_song')"
             @click="playSong(song)"
           >
-            <v-icon
+            <Icon
               :icon="isPlayingSong(song.id_music) ? ICONS.PLAYER.PAUSE_PLAIN : ICONS.PLAYER.PLAYER"
               size="14"
             />
@@ -53,13 +53,13 @@
             :title="t('playlists.remove_song')"
             @click="removeSong(playlist.id, index)"
           >
-            <v-icon :icon="ICONS.ACTIONS.CLOSE" size="14" />
+            <Icon :icon="ICONS.ACTIONS.CLOSE" size="14" />
           </button>
         </div>
       </div>
 
       <div v-if="playlist.songs.length === 0" class="playlist-songs-empty">
-        <v-icon :icon="ICONS.MUSIC.NO_AUDIO" size="32" class="mb-2" />
+        <Icon :icon="ICONS.MUSIC.NO_AUDIO" size="32" class="mb-2" />
         <div>{{ t("playlists.no_songs") }}</div>
       </div>
     </div>
@@ -83,7 +83,7 @@
               v-bind="tp"
               @click="toggleShuffle"
             >
-              <v-icon :icon="ICONS.PLAYER.SHUFFLE" size="18" />
+              <Icon :icon="ICONS.PLAYER.SHUFFLE" size="18" />
             </button>
           </template>
         </v-tooltip>
@@ -96,13 +96,13 @@
               v-bind="tp"
               @click="toggleRepeat"
             >
-              <v-icon :icon="ICONS.PLAYER.REPEAT" size="18" />
+              <Icon :icon="ICONS.PLAYER.REPEAT" size="18" />
             </button>
           </template>
         </v-tooltip>
       </div>
       <button type="button" class="playlist-songs-play-btn" @click="playAll">
-        <v-icon :icon="ICONS.PLAYER.PLAYER" size="18" />
+        <Icon :icon="ICONS.PLAYER.PLAYER" size="18" />
         {{ t("playlists.play") }}
       </button>
     </div>
@@ -110,6 +110,7 @@
 </template>
 
 <script setup lang="ts">
+import Icon from "@/components/Icon.vue";
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import DateTime from "@/helpers/DateTime";

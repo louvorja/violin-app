@@ -2,7 +2,7 @@
   <div ref="root" class="opt">
     <section id="opt-sec-general" class="opt-section">
       <h3 class="opt-section-title">
-        <v-icon :icon="ICONS.UI.OPTIONS" size="18" />
+        <Icon :icon="ICONS.UI.OPTIONS" size="18" />
         <span>{{ $t("options.general.title") }}</span>
       </h3>
       <div class="opt-row opt-row--field">
@@ -99,7 +99,7 @@
             <span class="opt-label">{{ $t("options.background.title") }}</span>
             <div class="opt-bg-pick">
               <v-btn variant="outlined" size="small" @click="pickBgImage">
-                <v-icon start :icon="ICONS.ACTIONS.IMAGE_PLUS" size="14" />
+                <Icon start :icon="ICONS.ACTIONS.IMAGE_PLUS" size="14" />
                 {{ $t("options.background.select") }}
               </v-btn>
               <span v-if="!currentBgImage" class="opt-bg-empty-text">
@@ -153,7 +153,7 @@
 
     <section id="opt-sec-monitors" class="opt-section">
       <h3 class="opt-section-title">
-        <v-icon :icon="ICONS.UI.MONITORS" size="18" />
+        <Icon :icon="ICONS.UI.MONITORS" size="18" />
         <span>{{ $t("options.monitors.title") }}</span>
       </h3>
       <div v-if="displays.length === 0" class="opt-empty">
@@ -241,7 +241,7 @@
 
     <section id="opt-sec-bible" class="opt-section">
       <h3 class="opt-section-title">
-        <v-icon :icon="ICONS.BIBLE.BIBLE" size="18" />
+        <Icon :icon="ICONS.BIBLE.BIBLE" size="18" />
         <span>{{ $t("options.bible.title") }}</span>
       </h3>
       <div class="opt-row">
@@ -297,7 +297,7 @@
 
     <section id="opt-sec-slides" class="opt-section">
       <h3 class="opt-section-title">
-        <v-icon :icon="ICONS.MUSIC.MUSIC" size="18" />
+        <Icon :icon="ICONS.MUSIC.MUSIC" size="18" />
         <span>{{ $t("options.slides.title") }}</span>
       </h3>
       <div class="opt-row">
@@ -674,7 +674,7 @@
           </v-col>
         </v-row>
         <button type="button" class="opt-btn opt-btn--ghost" @click="restoreTextFormat">
-          <v-icon :icon="ICONS.ACTIONS.REFRESH" size="14" class="mr-1" />
+          <Icon :icon="ICONS.ACTIONS.REFRESH" size="14" class="mr-1" />
           {{ $t("options.slides.restore") }}
         </button>
       </div>
@@ -792,7 +792,7 @@
 
     <section id="opt-sec-videos" class="opt-section">
       <h3 class="opt-section-title">
-        <v-icon :icon="ICONS.MEDIA.YOUTUBE" size="18" />
+        <Icon :icon="ICONS.MEDIA.YOUTUBE" size="18" />
         <span>{{ $t("options.videos.title") }}</span>
       </h3>
       <div class="opt-row">
@@ -866,7 +866,7 @@
 
     <section id="opt-sec-player" class="opt-section">
       <h3 class="opt-section-title">
-        <v-icon :icon="ICONS.PLAYER.PLAY_PAUSE" size="18" />
+        <Icon :icon="ICONS.PLAYER.PLAY_PAUSE" size="18" />
         <span>{{ $t("options.player.title") }}</span>
       </h3>
       <div class="opt-row">
@@ -949,7 +949,7 @@
 
     <section id="opt-sec-file_projection" class="opt-section">
       <h3 class="opt-section-title">
-        <v-icon :icon="ICONS.UI.FILE" size="18" />
+        <Icon :icon="ICONS.UI.FILE" size="18" />
         <span>{{ $t("options.file_projection.title") }}</span>
       </h3>
       <div class="opt-row">
@@ -1019,7 +1019,7 @@
           <span class="opt-label">{{ $t("options.background.title") }}</span>
           <div class="opt-bg-pick">
             <v-btn variant="outlined" size="small" @click="pickFileProjBgImage">
-              <v-icon start :icon="ICONS.ACTIONS.IMAGE_PLUS" size="16" />
+              <Icon start :icon="ICONS.ACTIONS.IMAGE_PLUS" size="16" />
               {{ $t("options.background.select") }}
             </v-btn>
             <span v-if="!fileProjBgImageUrl" class="opt-bg-empty-text">
@@ -1033,7 +1033,7 @@
                 :title="$t('options.slides.remove_image')"
                 @click="removeFileProjBgImage"
               >
-                <v-icon :icon="ICONS.ACTIONS.CLOSE" size="15" />
+                <Icon :icon="ICONS.ACTIONS.CLOSE" size="15" />
               </button>
             </div>
           </div>
@@ -1061,7 +1061,7 @@
 
     <section id="opt-sec-utilities" class="opt-section">
       <h3 class="opt-section-title">
-        <v-icon :icon="ICONS.UI.TOOLS" size="18" />
+        <Icon :icon="ICONS.UI.TOOLS" size="18" />
         <span>{{ $t("options.utilities.title") }}</span>
       </h3>
       <div class="opt-row">
@@ -1100,7 +1100,7 @@
 
     <section id="opt-sec-privacy" class="opt-section">
       <h3 class="opt-section-title">
-        <v-icon :icon="ICONS.UI.PRIVACY" size="18" />
+        <Icon :icon="ICONS.UI.PRIVACY" size="18" />
         <span>{{ $t("options.privacy.title") }}</span>
       </h3>
       <div class="opt-row">
@@ -1119,6 +1119,7 @@
 </template>
 
 <script setup lang="ts">
+import Icon from "@/components/Icon.vue";
 import { computed, type ComputedRef, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { pickImageData } from "@/helpers/FilePicker";
 import { getSetting, saveSetting } from "@/helpers/SettingsStorage";

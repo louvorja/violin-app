@@ -3,10 +3,10 @@
     <template #header>
       <div class="ch-header">
         <div class="ch-search-wrap">
-          <v-icon :icon="ICONS.ACTIONS.SEARCH" size="16" class="ch-search-icon" />
+          <Icon :icon="ICONS.ACTIONS.SEARCH" size="16" class="ch-search-icon" />
           <input v-model="search" type="text" class="ch-search-input" :placeholder="t('search')" />
           <button v-if="search" type="button" class="ch-search-clear" @click="search = ''">
-            <v-icon :icon="ICONS.ACTIONS.CLOSE" size="14" />
+            <Icon :icon="ICONS.ACTIONS.CLOSE" size="14" />
           </button>
         </div>
       </div>
@@ -27,7 +27,7 @@
       <template v-if="selectedAlbum">
         <div class="ch-back">
           <v-btn icon size="small" variant="text" @click="goBack">
-            <v-icon :icon="ICONS.UI.ARROW_LEFT" />
+            <Icon :icon="ICONS.UI.ARROW_LEFT" />
           </v-btn>
           <span class="ch-back-title">{{ selectedAlbum.name }}</span>
         </div>
@@ -43,7 +43,7 @@
             @click="openLyricFor(m)"
           >
             <button class="ch-list-play" :title="t('play')">
-              <v-icon :icon="ICONS.PLAYER.PLAY" size="26" color="#e67e22" />
+              <Icon :icon="ICONS.PLAYER.PLAY" size="26" color="#e67e22" />
             </button>
             <span class="ch-list-name">{{ m.name }}</span>
             <span v-if="m.duration" class="ch-list-duration">{{ m.duration }}</span>
@@ -78,10 +78,10 @@
                 @error="coverFailed.add(String(album.id_album))"
               />
               <div v-else class="ch-card-cover-fallback">
-                <v-icon :icon="ICONS.MUSIC.PLAYBACK_MULTIPLE" size="32" color="#e67e22" />
+                <Icon :icon="ICONS.MUSIC.PLAYBACK_MULTIPLE" size="32" color="#e67e22" />
               </div>
               <div class="ch-card-overlay">
-                <v-icon :icon="ICONS.PLAYER.PLAY" size="36" color="#fff" />
+                <Icon :icon="ICONS.PLAYER.PLAY" size="36" color="#fff" />
               </div>
             </div>
             <div class="ch-card-name">{{ album.name }}</div>
@@ -93,6 +93,7 @@
 </template>
 
 <script setup lang="ts">
+import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, watch, onMounted } from "vue";
 import { useI18n } from "vue-i18n";

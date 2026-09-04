@@ -1,7 +1,7 @@
 <template>
   <aside class="lit-notes-panel">
     <header class="lit-notes-header">
-      <v-icon :icon="ICONS.UI.NOTE_EDIT" size="14" />
+      <Icon :icon="ICONS.UI.NOTE_EDIT" size="14" />
       <span>{{ t("notes.title") }}</span>
       <v-spacer />
       <span class="lit-notes-day">{{ dayLabel }}</span>
@@ -111,7 +111,7 @@
         @mousedown.prevent
         @click="exec('justifyLeft')"
       >
-        <v-icon :icon="ICONS.FORMAT.ALIGN_LEFT" size="14" />
+        <Icon :icon="ICONS.FORMAT.ALIGN_LEFT" size="14" />
       </button>
       <button
         class="lit-tb-btn"
@@ -119,7 +119,7 @@
         @mousedown.prevent
         @click="exec('justifyCenter')"
       >
-        <v-icon :icon="ICONS.FORMAT.ALIGN_CENTER" size="14" />
+        <Icon :icon="ICONS.FORMAT.ALIGN_CENTER" size="14" />
       </button>
       <button
         class="lit-tb-btn"
@@ -127,7 +127,7 @@
         @mousedown.prevent
         @click="exec('justifyRight')"
       >
-        <v-icon :icon="ICONS.FORMAT.ALIGN_RIGHT" size="14" />
+        <Icon :icon="ICONS.FORMAT.ALIGN_RIGHT" size="14" />
       </button>
 
       <div class="lit-tb-sep" />
@@ -138,7 +138,7 @@
         @mousedown.prevent
         @click="exec('insertUnorderedList')"
       >
-        <v-icon :icon="ICONS.FORMAT.LIST_BULLETED" size="14" />
+        <Icon :icon="ICONS.FORMAT.LIST_BULLETED" size="14" />
       </button>
       <button
         class="lit-tb-btn"
@@ -146,18 +146,19 @@
         @mousedown.prevent
         @click="exec('insertOrderedList')"
       >
-        <v-icon :icon="ICONS.FORMAT.LIST_NUMBERED" size="14" />
+        <Icon :icon="ICONS.FORMAT.LIST_NUMBERED" size="14" />
       </button>
     </div>
 
     <footer class="lit-notes-footer">
-      <v-icon :icon="ICONS.TIMER.CLOCK" size="12" />
+      <Icon :icon="ICONS.TIMER.CLOCK" size="12" />
       <span>{{ t("data.total") }}: {{ totalDuration }}min</span>
     </footer>
   </aside>
 </template>
 
 <script setup lang="ts">
+import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { ref, watch, onMounted } from "vue";
 import { useI18n } from "vue-i18n";

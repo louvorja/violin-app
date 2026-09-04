@@ -15,7 +15,7 @@
         @error="onThumbError($event)"
       />
       <div v-else class="ov-card-thumb-fallback">
-        <v-icon :icon="fallbackIcon" size="32" color="#e74c3c" />
+        <Icon :icon="fallbackIcon" size="32" color="#e74c3c" />
       </div>
       <button
         v-if="playAll"
@@ -23,10 +23,10 @@
         :title="t('play_all')"
         @click.stop="$emit('playAll')"
       >
-        <v-icon :icon="ICONS.PLAYER.PLAY" size="22" color="#fff" />
+        <Icon :icon="ICONS.PLAYER.PLAY" size="22" color="#fff" />
       </button>
       <div v-if="variant === 'video'" class="ov-card-play">
-        <v-icon :icon="ICONS.PLAYER.PLAY" size="28" color="#fff" />
+        <Icon :icon="ICONS.PLAYER.PLAY" size="28" color="#fff" />
       </div>
     </div>
     <div class="ov-card-body">
@@ -37,6 +37,7 @@
 </template>
 
 <script setup lang="ts">
+import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 /**
  * OnlineVideoCard — card de exibição do módulo Vídeos On-line.

@@ -29,7 +29,7 @@
               class="ov-thumb"
             />
             <div v-else class="ov-thumb-fallback">
-              <v-icon :icon="ICONS.MEDIA.YOUTUBE" size="28" color="#e74c3c" />
+              <Icon :icon="ICONS.MEDIA.YOUTUBE" size="28" color="#e74c3c" />
             </div>
             <div class="ov-card-title">{{ video.name }}</div>
           </div>
@@ -65,6 +65,7 @@
 </template>
 
 <script setup lang="ts">
+import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { computed } from "vue";
 import MusicSpotlight from "@/components/MusicSpotlight.vue";

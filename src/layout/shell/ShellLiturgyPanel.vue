@@ -8,9 +8,9 @@
         :aria-label="$t('shell.toggle_liturgy')"
         @click="toggleCollapsed"
       >
-        <v-icon :icon="collapsed ? ICONS.UI.BACK : ICONS.UI.CHEVRON_RIGHT" size="16" />
+        <Icon :icon="collapsed ? ICONS.UI.BACK : ICONS.UI.CHEVRON_RIGHT" size="16" />
       </button>
-      <v-icon :icon="ICONS.LITURGY.SCRIPT" size="14" class="liturgy-header-icon" />
+      <Icon :icon="ICONS.LITURGY.SCRIPT" size="14" class="liturgy-header-icon" />
       <span class="liturgy-header-title lj-u-truncate">{{ $t("shell.liturgy_title") }}</span>
       <span v-if="!collapsed && totals.count > 0" class="liturgy-totals">
         {{ totals.count }} · {{ totals.duration }}
@@ -23,16 +23,16 @@
         :aria-label="$t('shell.edit_liturgy')"
         @click="openLiturgy"
       >
-        <v-icon :icon="ICONS.ACTIONS.EDIT" size="13" />
+        <Icon :icon="ICONS.ACTIONS.EDIT" size="13" />
       </button>
     </div>
 
     <div v-if="!collapsed" class="liturgy-panel-body">
       <div v-if="items.length === 0" class="liturgy-empty">
-        <v-icon :icon="ICONS.CALENDAR.BLANK" size="32" class="mb-2" />
+        <Icon :icon="ICONS.CALENDAR.BLANK" size="32" class="mb-2" />
         <span>{{ $t("shell.liturgy_empty") }}</span>
         <button type="button" class="liturgy-add-btn" @click="openLiturgy">
-          <v-icon :icon="ICONS.ACTIONS.ADD" size="14" />
+          <Icon :icon="ICONS.ACTIONS.ADD" size="14" />
           {{ $t("shell.add_item") }}
         </button>
       </div>
@@ -48,7 +48,7 @@
           @dblclick="openLiturgy"
         >
           <span class="liturgy-item-bar" />
-          <v-icon :icon="iconForType(item.tipo)" size="14" class="liturgy-item-icon" />
+          <Icon :icon="iconForType(item.tipo)" size="14" class="liturgy-item-icon" />
           <span class="liturgy-item-content">
             <span class="liturgy-item-title lj-u-truncate">
               {{ item.item || item.subitem || "—" }}
@@ -67,6 +67,7 @@
 </template>
 
 <script setup>
+import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, onMounted } from "vue";
 import Liturgy from "@/helpers/Liturgy";

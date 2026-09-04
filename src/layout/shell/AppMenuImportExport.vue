@@ -2,14 +2,14 @@
   <div class="opt">
     <section class="opt-section">
       <h3 class="opt-section-title">
-        <v-icon :icon="ICONS.UI.IMPORT_EXPORT" size="18" />
+        <Icon :icon="ICONS.UI.IMPORT_EXPORT" size="18" />
         {{ $t("modules.liturgy.name") }}
       </h3>
 
       <div class="opt-actions-row">
         <div>
           <button type="button" class="opt-btn" :disabled="exporting" @click="doExport">
-            <v-icon :icon="ICONS.ACTIONS.DOWNLOAD" size="14" class="mr-1" />
+            <Icon :icon="ICONS.ACTIONS.DOWNLOAD" size="14" class="mr-1" />
             {{ $t("import_export.export.action") }}
           </button>
 
@@ -24,7 +24,7 @@
         </div>
         <div>
           <button type="button" class="opt-btn" @click="pickFile">
-            <v-icon :icon="ICONS.ACTIONS.UPLOAD" size="14" class="mr-1" />
+            <Icon :icon="ICONS.ACTIONS.UPLOAD" size="14" class="mr-1" />
             {{ $t("import_export.import.action") }}
           </button>
           <p class="opt-hint">{{ $t("import_export.import.hint") }}</p>
@@ -56,6 +56,7 @@
 </template>
 
 <script setup lang="ts">
+import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { ref } from "vue";
 import $liturgy from "@/helpers/Liturgy";

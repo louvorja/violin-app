@@ -24,10 +24,10 @@
               @click="toggleHistoryTerm(item as string)"
             >
               <template #prepend>
-                <v-icon size="small" class="text-medium-emphasis" :icon="ICONS.UI.HISTORY" />
+                <Icon size="small" class="text-medium-emphasis" :icon="ICONS.UI.HISTORY" />
               </template>
               <template #append>
-                <v-icon
+                <Icon
                   size="x-small"
                   class="text-medium-emphasis"
                   :icon="ICONS.ACTIONS.CANCEL"
@@ -87,7 +87,7 @@
         </main>
 
         <div v-else-if="noResults" class="bs-empty">
-          <v-icon :icon="ICONS.MODULES.BIBLE_SEARCH" size="48" color="primary" />
+          <Icon :icon="ICONS.MODULES.BIBLE_SEARCH" size="48" color="primary" />
           <p>{{ t("empty_hint") }}</p>
         </div>
       </template>
@@ -96,6 +96,7 @@
 </template>
 
 <script setup lang="ts">
+import Icon from "@/components/Icon.vue";
 import { ref, computed, onMounted, type Ref } from "vue";
 import { module as manifest } from "../manifest";
 import type { BibleBook, BibleVersion, BibleSearchResult } from "@/types/Bible";

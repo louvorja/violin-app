@@ -2,7 +2,7 @@
   <v-dialog v-model="dialog" max-width="680" scrollable>
     <v-card class="hk-card" rounded="lg">
       <header class="hk-header">
-        <v-icon :icon="ICONS.UI.KEYBOARD" size="22" class="hk-header-icon" />
+        <Icon :icon="ICONS.UI.KEYBOARD" size="22" class="hk-header-icon" />
         <span class="hk-header-title">{{ $t("hotkeys.title") }}</span>
         <v-spacer />
         <button
@@ -12,7 +12,7 @@
           :aria-label="$t('alert.close')"
           @click="dialog = false"
         >
-          <v-icon :icon="ICONS.ACTIONS.CLOSE" size="16" />
+          <Icon :icon="ICONS.ACTIONS.CLOSE" size="16" />
         </button>
       </header>
 
@@ -44,7 +44,7 @@
 
       <footer class="hk-footer">
         <span class="hk-tip">
-          <v-icon :icon="ICONS.UI.INFORMATION_OUTLINE" size="13" class="mr-1" />
+          <Icon :icon="ICONS.UI.INFORMATION_OUTLINE" size="13" class="mr-1" />
           {{ $t("hotkeys.tip", "Pressione Esc para fechar") }}
         </span>
       </footer>
@@ -53,6 +53,7 @@
 </template>
 
 <script setup>
+import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { computed } from "vue";
 import Hotkeys from "@/helpers/Hotkeys";
