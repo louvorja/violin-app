@@ -34,11 +34,11 @@
           </template>
           <template #append>
             <div v-if="isChooseLaterMusic(item)" class="d-flex align-center gap-1">
-              <v-btn
+              <LjButton
+                variant="ghost"
+                size="sm"
                 :icon="!isItemChecked(item) ? ICONS.ACTIONS.SEARCH : ''"
-                size="small"
-                variant="text"
-                color="primary"
+                icon-only
                 @click.stop="openChooseLater(item)"
               />
               <Icon v-if="isItemChecked(item)" :icon="ICONS.UI.CHECK_CIRCLE" color="success" />
@@ -55,6 +55,7 @@
 </template>
 
 <script setup lang="ts">
+import { LjButton } from "@/components/ui";
 import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { ref, onMounted } from "vue";

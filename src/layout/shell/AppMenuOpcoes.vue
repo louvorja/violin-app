@@ -98,10 +98,10 @@
           <div class="opt-row opt-row--field">
             <span class="opt-label">{{ $t("options.background.title") }}</span>
             <div class="opt-bg-pick">
-              <v-btn variant="outlined" size="small" @click="pickBgImage">
+              <LjButton variant="default" size="sm" @click="pickBgImage">
                 <Icon start :icon="ICONS.ACTIONS.IMAGE_PLUS" size="14" />
                 {{ $t("options.background.select") }}
-              </v-btn>
+              </LjButton>
               <span v-if="!currentBgImage" class="opt-bg-empty-text">
                 {{ $t("options.background.no_image") }}
               </span>
@@ -1018,10 +1018,10 @@
         <div class="opt-row">
           <span class="opt-label">{{ $t("options.background.title") }}</span>
           <div class="opt-bg-pick">
-            <v-btn variant="outlined" size="small" @click="pickFileProjBgImage">
+            <LjButton variant="default" size="sm" @click="pickFileProjBgImage">
               <Icon start :icon="ICONS.ACTIONS.IMAGE_PLUS" size="16" />
               {{ $t("options.background.select") }}
-            </v-btn>
+            </LjButton>
             <span v-if="!fileProjBgImageUrl" class="opt-bg-empty-text">
               {{ $t("options.background.no_image") }}
             </span>
@@ -1119,6 +1119,7 @@
 </template>
 
 <script setup lang="ts">
+import { LjButton } from "@/components/ui";
 import Icon from "@/components/Icon.vue";
 import { computed, type ComputedRef, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { pickImageData } from "@/helpers/FilePicker";

@@ -43,9 +43,9 @@
 
       <!-- Botão voltar -->
       <div v-else-if="level > 1" class="ov-back">
-        <v-btn icon size="small" variant="text" @click="goBack">
+        <LjButton variant="ghost" size="sm" icon="None" icon-only @click="goBack">
           <Icon :icon="ICONS.UI.ARROW_LEFT" />
-        </v-btn>
+        </LjButton>
         <span class="ov-back-title">{{ backTitle }}</span>
       </div>
 
@@ -112,6 +112,7 @@
 </template>
 
 <script setup lang="ts">
+import { LjButton } from "@/components/ui";
 import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, watch, onMounted } from "vue";

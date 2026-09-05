@@ -36,9 +36,9 @@
       </span>
 
       <div v-if="chips.length" class="draw-proj-chips">
-        <v-btn variant="elevated" :color="font_color">
+        <span class="draw-proj-label" :style="{ color: font_color }">
           {{ t("data.drawn") }}
-        </v-btn>
+        </span>
         <v-chip-group column>
           <v-chip
             v-for="c in chips"
@@ -184,6 +184,12 @@ useBroadcastListener(BROADCAST_TYPE.MODULE_FORMAT_CHANGED, (payload) => {
   align-items: center;
   gap: 1em;
   max-width: 90%;
+}
+
+.draw-proj-label {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .draw-proj-chip {

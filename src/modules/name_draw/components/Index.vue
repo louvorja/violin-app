@@ -32,16 +32,16 @@
             variant="outlined"
             :disabled="running"
           />
-          <v-btn
+          <LjButton
+            variant="primary"
+            size="sm"
             class="mt-2"
-            size="small"
-            color="primary"
             :disabled="running"
-            :prepend-icon="ICONS.UI.CHECK"
+            :icon="ICONS.UI.CHECK"
             @click="applyList"
           >
             {{ t("actions.apply") }}
-          </v-btn>
+          </LjButton>
           <div v-if="running" class="ndraw-list-drawer__lock text-caption text-medium-emphasis">
             {{ t("data.locked") }}
           </div>
@@ -86,6 +86,7 @@
 </template>
 
 <script setup>
+import { LjButton } from "@/components/ui";
 import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";

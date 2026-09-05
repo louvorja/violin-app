@@ -217,15 +217,15 @@
           </div>
         </div>
         <div class="bible-history-pane__footer">
-          <v-btn
+          <LjButton
+            variant="default"
+            size="sm"
             block
-            size="small"
-            variant="tonal"
             :disabled="history_selected === null"
             @click="removeHistoryEntry()"
           >
             {{ t("delete_selected") }}
-          </v-btn>
+          </LjButton>
         </div>
       </div>
     </div>
@@ -254,39 +254,40 @@
     <template #footer>
       <v-spacer />
       <v-divider vertical />
-      <v-btn
+      <LjButton
+        variant="ghost"
+        size="sm"
         :disabled="!(select_bible?.verses && select_bible.verses.length > 0)"
-        variant="text"
-        size="small"
-        :prepend-icon="ICONS.ACTIONS.CLEAN"
+        :icon="ICONS.ACTIONS.CLEAN"
         @click="clearText()"
       >
         {{ t("clear_text") }}
-      </v-btn>
+      </LjButton>
       <v-divider vertical />
-      <v-btn
+      <LjButton
+        variant="ghost"
+        size="sm"
         :disabled="!(select_bible?.verses && select_bible.verses.length > 0)"
-        variant="text"
-        size="small"
-        :prepend-icon="ICONS.ACTIONS.PREVIOUS"
+        :icon="ICONS.ACTIONS.PREVIOUS"
         @click="prevVerse()"
       >
         {{ t("prev_verse") }}
-      </v-btn>
-      <v-btn
+      </LjButton>
+      <LjButton
+        variant="ghost"
+        size="sm"
         :disabled="!(select_bible?.verses && select_bible.verses.length > 0)"
-        variant="text"
-        size="small"
-        :append-icon="ICONS.ACTIONS.NEXT"
+        :icon-end="ICONS.ACTIONS.NEXT"
         @click="nextVerse()"
       >
         {{ t("next_verse") }}
-      </v-btn>
+      </LjButton>
     </template>
   </ModuleContainer>
 </template>
 
 <script setup lang="ts">
+import { LjButton } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick, type Ref } from "vue";
 import { useI18n } from "vue-i18n";

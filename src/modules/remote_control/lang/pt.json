@@ -13,9 +13,10 @@
   },
   "info_module": "Executa as músicas de sua aplicação remotamente. Para que esse recurso funcione, este site precisa estar executando dentro da mesma rede do programa. Necessário que o programa esteja pelo menos na versão 26.3.",
   "labels": {
+    "connect": "Conectar",
+    "disconnect": "Desconectar",
     "ip": "IP da Conexão",
     "test_connection": "Testar Conexão",
-    "disconnect": "Desconectar",
     "token": "Token"
   }
 }

@@ -45,10 +45,10 @@
           class="mr-2"
           @keydown.enter="endAction.pickCustomUrl"
         />
-        <v-btn
+        <LjButton
+          variant="default"
           :icon="ICONS.UI.CHECK"
-          color="primary"
-          variant="tonal"
+          icon-only
           @click="endAction.pickCustomUrl"
         />
       </v-card-actions>
@@ -65,6 +65,7 @@
 </template>
 
 <script setup lang="ts">
+import { LjButton } from "@/components/ui";
 import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { computed } from "vue";

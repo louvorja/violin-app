@@ -30,15 +30,20 @@
       </v-card-text>
       <v-card-actions class="px-0">
         <v-spacer></v-spacer>
-        <v-btn color="info" :text="t('labels.test_connection')" @click="test" />
-        <v-btn v-if="!is_connected" color="success" text="Conectar" @click="connect" />
-        <v-btn v-else color="error" :text="t('labels.disconnect')" @click="disonnect" />
+        <LjButton @click="test">{{ t("labels.test_connection") }}</LjButton>
+        <LjButton v-if="!is_connected" variant="primary" @click="connect">
+          {{ t("labels.connect") }}
+        </LjButton>
+        <LjButton v-else variant="danger" @click="disonnect">
+          {{ t("labels.disconnect") }}
+        </LjButton>
       </v-card-actions>
     </v-card>
   </ModuleContainer>
 </template>
 
 <script setup lang="ts">
+import { LjButton } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, onMounted } from "vue";
 import { module as manifest } from "../manifest";

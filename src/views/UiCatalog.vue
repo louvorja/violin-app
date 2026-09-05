@@ -63,8 +63,8 @@
         <div class="cat__vs">
           <div class="cat__vs-col cat__vs-col--old">
             <span class="cat__vs-tag cat__vs-tag--old">Vuetify (Material)</span>
-            <v-btn color="primary" variant="flat" size="small">Salvar</v-btn>
-            <v-btn variant="tonal" size="small">Cancelar</v-btn>
+            <LjButton variant="default" size="sm">Salvar</LjButton>
+            <LjButton variant="default" size="sm">Cancelar</LjButton>
             <v-text-field density="compact" variant="outlined" hide-details placeholder="Buscar…" />
             <v-checkbox density="compact" hide-details label="Ativar recurso" />
             <v-switch density="compact" hide-details color="primary" label="Modo escuro" />

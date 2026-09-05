@@ -13,15 +13,9 @@
           :prepend-inner-icon="ICONS.ACTIONS.SEARCH"
           @keydown.enter="doSearch"
         />
-        <v-btn
-          variant="tonal"
-          color="primary"
-          :loading="loading"
-          :disabled="!search.trim()"
-          @click="doSearch"
-        >
+        <LjButton variant="primary" :loading="loading" :disabled="!search.trim()" @click="doSearch">
           {{ t("search") }}
-        </v-btn>
+        </LjButton>
         <v-chip v-if="results.length" size="small" variant="tonal">
           {{ t("results_count", { n: results.length }) }}
         </v-chip>
@@ -103,6 +97,7 @@
 </template>
 
 <script setup lang="ts">
+import { LjButton } from "@/components/ui";
 import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import type { ComponentPublicInstance } from "vue";

@@ -80,23 +80,25 @@
                   {{ t("slot.type_" + slot.type) }}
                 </v-chip>
                 <v-spacer />
-                <v-btn
+                <LjButton
+                  variant="ghost"
+                  size="sm"
                   :icon="ICONS.ACTIONS.EDIT_OUTLINE"
-                  size="x-small"
-                  variant="text"
+                  icon-only
                   @click="editSlot(i)"
                 />
-                <v-btn
+                <LjButton
+                  variant="ghost"
+                  size="sm"
                   :icon="ICONS.ACTIONS.DUPLICATE"
-                  size="x-small"
-                  variant="text"
+                  icon-only
                   @click="duplicateSlot(i)"
                 />
-                <v-btn
+                <LjButton
+                  variant="danger"
+                  size="sm"
                   :icon="ICONS.ACTIONS.DELETE"
-                  size="x-small"
-                  variant="text"
-                  color="error"
+                  icon-only
                   @click="removeSlot(i)"
                 />
               </div>
@@ -114,6 +116,7 @@
 </template>
 
 <script setup lang="ts">
+import { LjButton } from "@/components/ui";
 import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { ref, reactive, onMounted } from "vue";

@@ -103,14 +103,14 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn variant="text" @click="copyDialog = false">
+          <LjButton variant="ghost" @click="copyDialog = false">
             <Icon :icon="ICONS.ACTIONS.CLOSE" size="16" class="mr-1" />
             {{ t("copy.cancel") }}
-          </v-btn>
-          <v-btn variant="flat" color="primary" @click="doCopyLiturgy">
+          </LjButton>
+          <LjButton variant="primary" @click="doCopyLiturgy">
             <Icon :icon="ICONS.ACTIONS.COPY" size="16" class="mr-1" />
             {{ t("copy.confirm") }}
-          </v-btn>
+          </LjButton>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -129,6 +129,7 @@
 </template>
 
 <script setup lang="ts">
+import { LjButton } from "@/components/ui";
 import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from "vue";

@@ -1,11 +1,12 @@
 <template>
   <div class="d-flex align-center justify-center pa-1">
     <div>
-      <v-btn
+      <LjButton
+        variant="ghost"
+        size="sm"
         :disabled="loading"
         :icon="icon"
-        size="x-small"
-        variant="text"
+        icon-only
         @click="$emit('toggle')"
       />
     </div>
@@ -23,6 +24,7 @@
 </template>
 
 <script setup>
+import { LjButton } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 defineProps({
   volume: { type: Number, default: 100 },

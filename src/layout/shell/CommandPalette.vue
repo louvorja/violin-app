@@ -24,13 +24,13 @@
           @keydown.escape.prevent="close"
         />
         <kbd v-if="!query" class="cmd-kbd cmd-kbd--hint">Esc</kbd>
-        <v-btn
+        <LjButton
           v-else
+          variant="ghost"
+          size="sm"
           :icon="ICONS.ACTIONS.CLOSE"
-          size="x-small"
-          variant="text"
-          density="compact"
           :aria-label="$t('alert.close')"
+          icon-only
           @click="query = ''"
         />
       </div>
@@ -106,6 +106,7 @@
 </template>
 
 <script setup>
+import { LjButton } from "@/components/ui";
 import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, watch, nextTick } from "vue";

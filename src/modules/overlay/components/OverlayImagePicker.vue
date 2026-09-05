@@ -11,11 +11,11 @@
     <div v-if="selectedImage" class="image-picker-selected">
       <img :src="selectedImageUrl" class="image-picker-selected-img" alt="" />
       <div class="image-picker-selected-name">{{ selectedImage.name }}</div>
-      <v-btn
+      <LjButton
+        variant="danger"
+        size="sm"
         :icon="ICONS.ACTIONS.CLOSE"
-        size="x-small"
-        variant="text"
-        color="error"
+        icon-only
         @click="clearSelection"
       />
     </div>
@@ -31,14 +31,14 @@
       >
         <img :src="thumbUrl(img)" class="image-picker-thumb" alt="" />
         <div class="image-picker-name">{{ img.name }}</div>
-        <v-btn
-          variant="text"
-          size="x-small"
+        <LjButton
+          variant="ghost"
+          size="sm"
           class="image-picker-delete"
           @click.stop="deleteImage(img)"
         >
           <Icon :icon="ICONS.ACTIONS.DELETE" size="16" />
-        </v-btn>
+        </LjButton>
       </div>
     </div>
 
@@ -58,14 +58,15 @@
       @change="onFilesSelected"
     />
 
-    <v-btn size="small" variant="tonal" class="image-picker-upload-btn" @click="openFilePicker">
+    <LjButton variant="default" size="sm" class="image-picker-upload-btn" @click="openFilePicker">
       <Icon start :icon="ICONS.ACTIONS.UPLOAD" />
       {{ t("slot.image_library") }}
-    </v-btn>
+    </LjButton>
   </div>
 </template>
 
 <script setup>
+import { LjButton } from "@/components/ui";
 import Icon from "@/components/Icon.vue";
 import { ref, onMounted } from "vue";
 import { useI18n } from "vue-i18n";

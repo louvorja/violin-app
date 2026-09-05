@@ -1,12 +1,12 @@
 <template>
   <ModuleContainer ref="moduleContainer" :manifest="manifest" @close="close()">
     <template #right>
-      <v-btn
+      <LjButton
         v-if="history.length"
+        variant="ghost"
         :icon="ICONS.ACTIONS.DELETE"
-        variant="text"
-        density="compact"
         :title="t('actions.clear')"
+        icon-only
         @click="clearHistory()"
       />
     </template>
@@ -31,13 +31,12 @@
             :name="item.name"
             :has_instrumental_music="item.has_instrumental_music"
           />
-          <v-btn
+          <LjButton
+            variant="danger"
+            size="sm"
             :icon="ICONS.ACTIONS.CLOSE"
-            variant="text"
-            density="compact"
-            size="small"
-            color="error"
             :title="t('actions.remove')"
+            icon-only
             @click.stop="removeFromHistory(item.id_music)"
           />
         </template>
@@ -47,6 +46,7 @@
 </template>
 
 <script setup>
+import { LjButton } from "@/components/ui";
 import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { ref, computed } from "vue";

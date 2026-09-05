@@ -1,15 +1,14 @@
 <template>
   <div class="pa-4">
-    <v-btn
+    <LjButton
+      variant="default"
       block
-      color="primary"
-      variant="outlined"
-      :prepend-icon="ICONS.BIBLE.BOOK_SEARCH"
+      :icon="ICONS.BIBLE.BOOK_SEARCH"
       class="mb-4"
       @click="bibleSearchOpen = true"
     >
       {{ t("shell.quick_search_short") }}
-    </v-btn>
+    </LjButton>
 
     <v-divider class="mb-4" />
 
@@ -113,6 +112,7 @@
 </template>
 
 <script setup lang="ts">
+import { LjButton } from "@/components/ui";
 import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { ref, onMounted } from "vue";

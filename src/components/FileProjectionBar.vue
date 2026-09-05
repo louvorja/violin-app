@@ -9,28 +9,30 @@
         </span>
       </div>
       <div class="fpb-actions">
-        <v-btn
+        <LjButton
+          variant="ghost"
+          size="sm"
           :icon="ICONS.ACTIONS.PREVIOUS"
-          size="small"
-          variant="text"
           class="fpb-icon"
           :disabled="fp.currentIndex.value === 0"
+          icon-only
           @click="fp.prev()"
         />
-        <v-btn
+        <LjButton
+          variant="danger"
+          size="sm"
           :icon="ICONS.PLAYER.STOP"
-          size="small"
-          variant="text"
-          color="error"
           class="fpb-icon"
+          icon-only
           @click="fp.stopProjection()"
         />
-        <v-btn
+        <LjButton
+          variant="ghost"
+          size="sm"
           :icon="ICONS.ACTIONS.NEXT"
-          size="small"
-          variant="text"
           class="fpb-icon"
           :disabled="fp.currentIndex.value >= fp.playlistLength.value - 1"
+          icon-only
           @click="fp.next()"
         />
       </div>
@@ -39,6 +41,7 @@
 </template>
 
 <script setup lang="ts">
+import { LjButton } from "@/components/ui";
 import Icon from "@/components/Icon.vue";
 import { computed } from "vue";
 import { useFileProjection } from "@/composables/useFileProjection";

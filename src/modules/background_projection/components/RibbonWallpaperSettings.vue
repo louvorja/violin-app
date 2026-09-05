@@ -18,10 +18,10 @@
       <div class="rbw-group">
         <div class="opt-format-field opt-field-bgimage">
           <div class="opt-bg-pick">
-            <v-btn variant="outlined" size="x-small" @click="pick">
+            <LjButton variant="default" size="sm" @click="pick">
               <Icon start :icon="ICONS.ACTIONS.IMAGE_PLUS" size="14" />
               {{ $t("options.background.select") }}
-            </v-btn>
+            </LjButton>
             <span v-if="!currentBgImage" class="opt-bg-empty-text">
               {{ $t("options.background.no_image") }}
             </span>
@@ -44,6 +44,7 @@
 </template>
 
 <script setup lang="ts">
+import { LjButton } from "@/components/ui";
 import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { ref, onMounted, onBeforeUnmount, computed } from "vue";

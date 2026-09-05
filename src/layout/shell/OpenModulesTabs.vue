@@ -5,7 +5,7 @@
     role="tablist"
     :aria-label="$t('shell.open_modules')"
   >
-    <v-btn
+    <LjButton
       v-for="m in openModules"
       :key="m.id"
       type="button"
@@ -32,11 +32,12 @@
       >
         <Icon :icon="ICONS.ACTIONS.CLOSE" size="11" aria-hidden="true" />
       </span>
-    </v-btn>
+    </LjButton>
   </div>
 </template>
 
 <script setup>
+import { LjButton } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";

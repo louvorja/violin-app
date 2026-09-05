@@ -10,13 +10,13 @@
   >
     <div class="module-format-drawer__header">
       <span class="module-format-drawer__title">{{ t("components.customization.title") }}</span>
-      <v-btn
+      <LjButton
+        variant="default"
+        size="sm"
         :icon="ICONS.ACTIONS.RESTORE"
-        variant="tonal"
-        density="comfortable"
-        size="small"
         class="module-format-drawer__restore"
         :title="t('components.customization.restore')"
+        icon-only
         @click="restoreFormat()"
       />
     </div>
@@ -25,6 +25,7 @@
 </template>
 
 <script setup lang="ts">
+import { LjButton } from "@/components/ui";
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import FormatPanel from "@/components/FormatPanel.vue";

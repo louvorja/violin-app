@@ -13,9 +13,10 @@
   },
   "info_module": "Ejecuta las canciones de su aplicación de forma remota. Para que este recurso funcione, este sitio debe estar ejecutándose dentro de la misma red del programa. Es necesario que el programa esté al menos en la versión 26.3.",
   "labels": {
+    "connect": "Conectar",
+    "disconnect": "Desconectar",
     "ip": "IP de la Conexión",
     "test_connection": "Probar Conexión",
-    "disconnect": "Desconectar",
     "token": "Token"
   }
 }

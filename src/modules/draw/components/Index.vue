@@ -6,11 +6,12 @@
     @close="close()"
   >
     <template #right>
-      <v-btn
+      <LjButton
+        variant="ghost"
+        size="sm"
         :icon="ICONS.PLAYER.FULLSCREEN"
-        variant="text"
-        density="compact"
         :title="t('actions.fullscreen')"
+        icon-only
         @click="fullscreen = true"
       />
     </template>
@@ -69,23 +70,23 @@
       </div>
       <div class="draw-fs-remaining">{{ remaining }} / {{ total }}</div>
       <div class="draw-fs-actions">
-        <v-btn
-          :color="primaryColor"
+        <LjButton
+          variant="primary"
+          size="lg"
           :disabled="remaining === 0"
-          size="large"
-          :prepend-icon="ICONS.SORT.DICE"
+          :icon="ICONS.SORT.DICE"
           @click="drawNumber"
         >
           {{ t("actions.draw") }}
-        </v-btn>
-        <v-btn variant="tonal" size="large" :prepend-icon="ICONS.ACTIONS.RESTART" @click="reset">
+        </LjButton>
+        <LjButton size="lg" :icon="ICONS.ACTIONS.RESTART" @click="reset">
           {{ t("actions.reset") }}
-        </v-btn>
-        <v-btn
+        </LjButton>
+        <LjButton
+          variant="ghost"
+          size="lg"
           :icon="ICONS.PLAYER.FULLSCREEN_EXIT"
-          variant="text"
-          size="large"
-          color="white"
+          icon-only
           @click="fullscreen = false"
         />
       </div>
@@ -99,6 +100,7 @@
 </template>
 
 <script setup>
+import { LjButton } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, watch, nextTick, onBeforeUnmount } from "vue";
 import { module as manifest } from "../manifest";

@@ -26,9 +26,9 @@
       <!-- Nível 2: Músicas do álbum -->
       <template v-if="selectedAlbum">
         <div class="ch-back">
-          <v-btn icon size="small" variant="text" @click="goBack">
+          <LjButton variant="ghost" size="sm" icon="None" icon-only @click="goBack">
             <Icon :icon="ICONS.UI.ARROW_LEFT" />
-          </v-btn>
+          </LjButton>
           <span class="ch-back-title">{{ selectedAlbum.name }}</span>
         </div>
         <div class="ch-section-title">{{ t("musics") }}</div>
@@ -93,6 +93,7 @@
 </template>
 
 <script setup lang="ts">
+import { LjButton } from "@/components/ui";
 import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, watch, onMounted } from "vue";

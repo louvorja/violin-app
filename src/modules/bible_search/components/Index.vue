@@ -37,14 +37,13 @@
             </v-list-item>
           </template>
         </v-combobox>
-        <v-btn
-          variant="tonal"
-          color="primary"
+        <LjButton
+          variant="primary"
           :disabled="!(searchTerms.length && searchTerms.some((t) => t?.trim())) || searching"
           @click="doSearch"
         >
           {{ t("search") }}
-        </v-btn>
+        </LjButton>
       </div>
     </template>
 
@@ -75,15 +74,14 @@
         <main v-if="currentVerse" class="bs-verse">
           <div class="bs-verse-ref">{{ currentVerse.reference }}</div>
           <div class="bs-verse-text" v-html="highlight(currentVerse.text, searchTerms)" />
-          <v-btn
-            variant="tonal"
-            :color="isProjecting ? 'error' : 'primary'"
-            :prepend-icon="isProjecting ? ICONS.PROJECTION.STOP : ICONS.PROJECTION.START"
+          <LjButton
+            :variant="isProjecting ? 'danger' : 'primary'"
+            :icon="isProjecting ? ICONS.PROJECTION.STOP : ICONS.PROJECTION.START"
             class="bs-verse-project"
             @click="projectCurrent"
           >
             {{ t("ribbon.project") }}
-          </v-btn>
+          </LjButton>
         </main>
 
         <div v-else-if="noResults" class="bs-empty">
@@ -96,6 +94,7 @@
 </template>
 
 <script setup lang="ts">
+import { LjButton } from "@/components/ui";
 import Icon from "@/components/Icon.vue";
 import { ref, computed, onMounted, type Ref } from "vue";
 import { module as manifest } from "../manifest";

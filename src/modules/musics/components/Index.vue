@@ -120,23 +120,22 @@
           </td>
           <td class="text-right">{{ shortTime(item.duration) }}</td>
           <td v-if="selectedPlaylist" class="text-center">
-            <v-btn
+            <LjButton
               v-if="!isSongInPlaylist(selectedPlaylist.id, item.id_music)"
+              variant="ghost"
+              size="sm"
               :icon="ICONS.MEDIA.ADD"
-              variant="text"
-              density="compact"
-              size="small"
               :title="t('playlists.add_to_playlist')"
+              icon-only
               @click="addSongToPlaylist(item)"
             />
-            <v-btn
+            <LjButton
               v-else
+              variant="primary"
+              size="sm"
               :icon="ICONS.UI.CHECK"
-              variant="text"
-              density="compact"
-              size="small"
-              color="success"
               :title="t('playlists.remove_song')"
+              icon-only
               @click="removeSongFromPlaylist(item.id_music)"
             />
           </td>
@@ -179,6 +178,7 @@
 </template>
 
 <script setup>
+import { LjButton } from "@/components/ui";
 /* ########################################################### */
 /* ####### INSTALAÇÃO DO MODULO ############################## */
 /* ########################################################### */

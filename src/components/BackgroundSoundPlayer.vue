@@ -24,33 +24,34 @@
       </div>
 
       <div class="bgs-footer-actions">
-        <v-btn
+        <LjButton
           :icon="bg.repeat.value ? ICONS.PLAYER.LOOP : ICONS.PLAYER.LOOP_OFF"
-          size="small"
-          variant="text"
+          size="sm"
+          :variant="bg.repeat.value ? 'primary' : 'ghost'"
           class="bgs-footer-icon"
-          :color="bg.repeat.value ? 'primary' : ''"
+          icon-only
           @click="toggleRepeat"
         />
-        <v-btn
+        <LjButton
+          variant="ghost"
+          size="sm"
           :icon="bg.isPlaying.value ? ICONS.PLAYER.PAUSE : ICONS.PLAYER.PLAY"
-          size="small"
-          variant="text"
           class="bgs-footer-icon"
+          icon-only
           @click="bg.togglePlay(bg.fadeInMs.value, bg.fadeOutMs.value)"
         />
-        <v-btn
+        <LjButton
+          variant="danger"
+          size="sm"
           :icon="ICONS.PLAYER.STOP"
-          size="small"
-          variant="text"
-          color="error"
+          icon-only
           @click="bg.stop()"
         />
-        <v-btn
+        <LjButton
+          variant="danger"
+          size="sm"
           :icon="ICONS.CATEGORY.CLOSING"
-          size="small"
-          variant="text"
-          color="error"
+          icon-only
           @click="bg.stop(0)"
         />
       </div>
@@ -73,6 +74,7 @@
 </template>
 
 <script setup lang="ts">
+import { LjButton } from "@/components/ui";
 import Icon from "@/components/Icon.vue";
 import { computed, ref } from "vue";
 import { useBackgroundSound } from "@/composables/useBackgroundSound";

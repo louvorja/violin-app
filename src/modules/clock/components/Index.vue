@@ -6,11 +6,11 @@
     @close="close()"
   >
     <template #right>
-      <v-btn
+      <LjButton
+        variant="ghost"
         :icon="ICONS.PLAYER.FULLSCREEN"
-        variant="text"
-        density="compact"
         :title="t('actions.fullscreen')"
+        icon-only
         @click="openFullscreen"
       />
     </template>
@@ -32,6 +32,7 @@
 </template>
 
 <script setup>
+import { LjButton } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, onMounted, onBeforeUnmount } from "vue";
 import { module as manifest } from "../manifest";

@@ -5,17 +5,18 @@
         {{ mode == "dark" ? t("dark-themes") : t("light-themes") }}
       </div>
 
-      <v-btn
+      <button
         v-for="(theme, theme_id) in group"
         :key="theme_id"
-        icon
-        density="compact"
-        :variant="current == theme_id ? 'outlined' : 'text'"
-        class="mx-1"
+        type="button"
+        class="theme-swatch"
+        :class="{ 'is-current': current == theme_id }"
+        :aria-pressed="current == theme_id"
+        :title="theme_id"
         @click="setTheme(theme_id)"
       >
-        <v-avatar :color="theme.colors.primary" size="22" />
-      </v-btn>
+        <span class="theme-swatch__color" :style="{ background: theme.colors.primary }" />
+      </button>
     </div>
   </ModuleContainer>
 </template>
@@ -76,3 +77,39 @@ onMounted(() => {
   }
 });
 </script>
+
+<style scoped>
+.theme-swatch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--lj-ui-h-lg);
+  height: var(--lj-ui-h-lg);
+  margin-inline: var(--lj-space-2);
+  padding: 0;
+  background: transparent;
+  border: var(--lj-ui-border);
+  border-color: transparent;
+  border-radius: var(--lj-ui-radius);
+  cursor: pointer;
+}
+
+.theme-swatch:hover {
+  background: var(--lj-surface-bg-hover);
+}
+
+.theme-swatch:focus-visible {
+  outline: none;
+  box-shadow: var(--lj-ui-focus);
+}
+
+.theme-swatch.is-current {
+  border-color: var(--lj-ui-accent);
+}
+
+.theme-swatch__color {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+}
+</style>

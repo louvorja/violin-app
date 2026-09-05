@@ -22,33 +22,30 @@
         <template #append>
           <div class="d-flex align-center gap-3">
             <!-- Cantada (tag=1) -->
-            <v-btn
+            <LjButton
+              variant="ghost"
+              size="lg"
               :icon="ICONS.MUSIC.SLIDES_AUDIO"
-              size="large"
-              variant="text"
-              color="primary"
-              density="compact"
+              icon-only
               :title="t('ribbon.btn.sing')"
               @click.stop="openMusic(m, 1)"
             />
             <!-- Instrumental (tag=2) -->
-            <v-btn
+            <LjButton
+              variant="ghost"
+              size="lg"
               :icon="ICONS.MUSIC.SLIDES_PLAYBACK"
-              size="large"
-              variant="text"
-              color="primary"
-              density="compact"
+              icon-only
               :disabled="!m.has_instrumental_music"
               :title="t('ribbon.btn.playback')"
               @click.stop="openMusic(m, 2)"
             />
             <!-- Sem Áudio (tag=3) -->
-            <v-btn
+            <LjButton
+              variant="ghost"
+              size="lg"
               :icon="ICONS.MUSIC.SLIDES_ONLY"
-              size="large"
-              variant="text"
-              color="primary"
-              density="compact"
+              icon-only
               :title="t('ribbon.btn.no_audio')"
               @click.stop="openMusic(m, 3)"
             />
@@ -66,6 +63,7 @@
 </template>
 
 <script setup lang="ts">
+import { LjButton } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
