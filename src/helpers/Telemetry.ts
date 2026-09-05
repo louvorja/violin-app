@@ -14,7 +14,7 @@ import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
 
 const KEY = import.meta.env.VITE_POSTHOG_KEY ?? "";
-const HOST = import.meta.env.VITE_POSTHOG_HOST ?? "https://us.i.posthog.com";
+const HOST = import.meta.env.VITE_POSTHOG_HOST || "https://us.i.posthog.com";
 
 let _started = false;
 
@@ -102,6 +102,9 @@ export async function init(): Promise<void> {
 
   posthog.init(KEY, {
     api_host: HOST,
+    // Trava o comportamento padrão do SDK nesta data. Sem isto, atualizar a
+    // biblioteca pode ligar sozinha uma captura que este arquivo desligou.
+    defaults: "2026-05-30",
     // O distinct_id vem do UserData, então o PostHog não precisa de cookie
     // nem de chave própria no localStorage.
     persistence: "memory",
