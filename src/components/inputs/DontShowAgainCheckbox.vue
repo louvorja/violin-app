@@ -1,19 +1,15 @@
 <template>
-  <v-checkbox
+  <LjCheckbox
     :model-value="checked"
-    density="compact"
-    hide-details
+    :label="label"
     class="dont-show-again"
     @update:model-value="onChange"
-  >
-    <template #label>
-      <span class="text-label-small">{{ label }}</span>
-    </template>
-  </v-checkbox>
+  />
 </template>
 
 <script setup lang="ts">
 import { ref } from "vue";
+import { LjCheckbox } from "@/components/ui";
 import $userdata from "@/helpers/UserData";
 
 const props = defineProps<{
@@ -38,7 +34,7 @@ function onChange(v: boolean | null): void {
 
 <style scoped>
 .dont-show-again {
-  margin: 0;
   flex: 0 1 auto;
+  min-width: 0;
 }
 </style>
