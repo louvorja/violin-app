@@ -70,6 +70,22 @@
   --lj-ui-float-border: 1px solid var(--lj-surface-border-strong);
   --lj-ui-float-shadow: var(--lj-shadow-2);
 
+  /* Movimento das camadas flutuantes.
+   *
+   * Toda camada entra deslizando A PARTIR do gatilho — é o deslocamento que
+   * diz de onde ela veio, e por isso a direção depende do `data-side` que a
+   * Reka carimba, não de um valor fixo. O percurso é curto de propósito: o
+   * app é operado ao vivo, e quem está conduzindo um culto não pode esperar
+   * a interface terminar de se mexer. A saída é mais rápida que a entrada
+   * porque ninguém olha para o que está fechando.
+   *
+   * Continua valendo o `prefers-reduced-motion` global de main.css, que zera
+   * a duração — a Reka só remove a camada no animationend, e um keyframe de
+   * 0.01ms ainda dispara o evento. */
+  --lj-ui-float-shift: 4px;
+  --lj-ui-float-enter: 0.14s var(--lj-ease-out);
+  --lj-ui-float-exit: 0.1s var(--lj-ease-in);
+
   /* ---------------------------------------------------------------------
    * Camadas
    *
@@ -191,6 +207,83 @@
   border: var(--lj-ui-float-border);
   border-radius: var(--lj-radius-md);
   box-shadow: var(--lj-ui-float-shadow);
+}
+
+/* ---------------------------------------------------------------------------
+ * Entrada e saída das camadas flutuantes
+ *
+ * Um único conjunto de regras cobre menu, select, combobox, popover e tooltip:
+ * todos recebem `data-state` e `data-side` da Reka, então a animação mora aqui
+ * e não em cada primitivo. A escala é ancorada em --reka-popper-transform-origin,
+ * o ponto do gatilho que a Reka calcula — sem isso a camada cresce a partir do
+ * próprio centro e parece surgir de lugar nenhum.
+ * ------------------------------------------------------------------------- */
+.lj-ui-float[data-state],
+.lj-tooltip[data-state] {
+  transform-origin: var(--reka-popper-transform-origin, center);
+}
+
+/* O tooltip nao usa `open`: a Reka marca `delayed-open` quando ele venceu o
+   atraso de hover, e `instant-open` quando outro tooltip do grupo ja estava
+   aberto e o ponteiro so trocou de alvo. Os tres sao o estado visivel. */
+.lj-ui-float[data-state="open"],
+.lj-tooltip[data-state="open"],
+.lj-tooltip[data-state="delayed-open"],
+.lj-tooltip[data-state="instant-open"] {
+  animation: lj-float-in var(--lj-ui-float-enter);
+}
+
+.lj-ui-float[data-state="closed"],
+.lj-tooltip[data-state="closed"] {
+  animation: lj-float-out var(--lj-ui-float-exit);
+}
+
+.lj-ui-float[data-side="top"],
+.lj-tooltip[data-side="top"] {
+  --lj-float-from-x: 0;
+  --lj-float-from-y: var(--lj-ui-float-shift);
+}
+.lj-ui-float[data-side="bottom"],
+.lj-tooltip[data-side="bottom"] {
+  --lj-float-from-x: 0;
+  --lj-float-from-y: calc(-1 * var(--lj-ui-float-shift));
+}
+.lj-ui-float[data-side="left"],
+.lj-tooltip[data-side="left"] {
+  --lj-float-from-x: var(--lj-ui-float-shift);
+  --lj-float-from-y: 0;
+}
+.lj-ui-float[data-side="right"],
+.lj-tooltip[data-side="right"] {
+  --lj-float-from-x: calc(-1 * var(--lj-ui-float-shift));
+  --lj-float-from-y: 0;
+}
+
+@keyframes lj-float-in {
+  from {
+    opacity: 0;
+    transform: translate(var(--lj-float-from-x, 0), var(--lj-float-from-y, 0)) scale(0.97);
+  }
+}
+
+@keyframes lj-float-out {
+  to {
+    opacity: 0;
+    transform: translate(var(--lj-float-from-x, 0), var(--lj-float-from-y, 0)) scale(0.97);
+  }
+}
+
+/* Realce dos itens dentro das camadas. A Reka marca com [data-highlighted]
+   tanto o item sob o ponteiro quanto o navegado pelo teclado, então uma regra
+   só cobre mouse e setas — e o mesmo tempo do :hover dos controles mantém o
+   sistema coerente. Só a cor faz a transição: animar o fundo de um item que
+   troca a cada tecla de seta deixaria o realce arrastando atrás da seleção. */
+.lj-menu__item,
+.lj-select__item,
+.lj-combobox__item {
+  transition:
+    background var(--lj-transition-fast),
+    color var(--lj-transition-fast);
 }
 
 /* ---------------------------------------------------------------------------

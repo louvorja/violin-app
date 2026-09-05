@@ -101,7 +101,7 @@ function onDismiss(event: Event): void {
   inset: 0;
   z-index: var(--lj-z-dialog);
   background: var(--lj-black-alpha-40);
-  animation: lj-dialog-fade var(--lj-transition-normal);
+  animation: lj-dialog-fade var(--lj-ui-float-enter);
 }
 
 .lj-dialog {
@@ -122,7 +122,7 @@ function onDismiss(event: Event): void {
   font-family: var(--lj-font-shell);
   font-size: var(--lj-text-base);
   outline: none;
-  animation: lj-dialog-in var(--lj-transition-normal);
+  animation: lj-dialog-in var(--lj-ui-float-enter);
 }
 
 .lj-dialog--sm {
@@ -222,7 +222,7 @@ function onDismiss(event: Event): void {
 @keyframes lj-dialog-in {
   from {
     opacity: 0;
-    transform: translate(-50%, calc(-50% + 6px));
+    transform: translate(-50%, calc(-50% + var(--lj-ui-float-shift))) scale(0.97);
   }
 }
 </style>
