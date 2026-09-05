@@ -153,6 +153,10 @@
       "theme": "Apariencia del programa:",
       "language": "Idioma:",
       "ui_style": "Estilo de la interfaz:",
+      "ui_styles": {
+        "classic": "Clásico",
+        "violin": "Violin"
+      },
       "font": "Fuente de la interfaz:",
       "projection_font": "Fuente de Proyección:",
       "start_with_os": "Iniciar con el sistema operativo",

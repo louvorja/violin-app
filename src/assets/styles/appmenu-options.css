@@ -1,5 +1,9 @@
 .opt {
   font-family: var(--lj-font-shell);
+  /* A tela nunca fixou o próprio tamanho: quem estava dentro de .opt-row herdava
+     12px e quem não estava herdava os 16px do documento — era assim que os
+     checkboxes do bloco de formatação saíam maiores que todo o resto. */
+  font-size: var(--lj-text-base);
   color: var(--lj-text);
   max-width: 1600px;
 }
@@ -468,7 +472,11 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  min-width: 0;
+  /* O piso existe por causa dos combobox daqui: o gatilho é width:100% e, numa
+     coluna que podia encolher até o conteúdo, "Lado a lado" e "Preencher"
+     ficavam cortados. A linha já quebra (flex-wrap), então reservar largura
+     não espreme os vizinhos. */
+  min-width: 150px;
 }
 .opt-format-field--grow {
   flex: 1;

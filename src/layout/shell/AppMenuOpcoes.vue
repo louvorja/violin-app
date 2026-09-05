@@ -7,41 +7,34 @@
       </h3>
       <div class="opt-row">
         <label class="opt-label" for="opt-theme">{{ $t("options.general.theme") }}</label>
-        <select
+        <LjSelect
           id="opt-theme"
-          class="opt-select"
-          :value="getUserData(KEYS.OPTIONS.THEME, 'darkblue')"
-          @change="changeTheme($v($event))"
-        >
-          <option v-for="th in themes" :key="th.id" :value="th.id">{{ th.label }}</option>
-        </select>
+          :items="themes"
+          item-value="id"
+          item-label="label"
+          :model-value="getUserData(KEYS.OPTIONS.THEME, COLOR_THEMES.DEFAULT)"
+          @update:model-value="changeTheme(String($event))"
+        />
       </div>
 
       <div class="opt-row">
         <label class="opt-label" for="opt-language">{{ $t("options.general.language") }}</label>
-        <select
+        <LjSelect
           id="opt-language"
-          class="opt-select"
-          :value="getUserData(KEYS.OPTIONS.LANGUAGE, 'pt')"
-          @change="changeLanguage($v($event))"
-        >
-          <option value="pt">Português</option>
-          <option value="es">Español</option>
-        </select>
+          :items="opcoesIdioma"
+          :model-value="getUserData(KEYS.OPTIONS.LANGUAGE, 'pt')"
+          @update:model-value="changeLanguage(String($event))"
+        />
       </div>
 
       <div class="opt-row">
         <label class="opt-label" for="opt-ui-style">{{ $t("options.general.ui_style") }}</label>
-        <select
+        <LjSelect
           id="opt-ui-style"
-          class="opt-select"
-          :value="getUserData(KEYS.OPTIONS.UI_STYLE, THEMES.CLASSIC)"
-          @change="saveUserData(KEYS.OPTIONS.UI_STYLE, $v($event))"
-        >
-          <option v-for="t in THEMES" :key="t.toString()" :value="t">
-            {{ t.toString().toUpperCase() }}
-          </option>
-        </select>
+          :items="opcoesEstiloUi"
+          :model-value="getUserData(KEYS.OPTIONS.UI_STYLE, THEMES.CLASSIC)"
+          @update:model-value="saveUserData(KEYS.OPTIONS.UI_STYLE, $event)"
+        />
       </div>
 
       <div class="opt-row">
@@ -112,18 +105,12 @@
             <label class="opt-label" for="opt-bg-position">
               {{ $t("options.background.position") }}
             </label>
-            <select
+            <LjSelect
               id="opt-bg-position"
-              class="opt-select"
-              :value="bgPosition"
-              @change="onBgPositionChange"
-            >
-              <option value="cover">{{ $t("options.slides.pos_cover") }}</option>
-              <option value="contain">{{ $t("options.slides.pos_contain") }}</option>
-              <option value="center">{{ $t("options.slides.pos_center") }}</option>
-              <option value="stretch">{{ $t("options.slides.pos_stretch") }}</option>
-              <option value="tile">{{ $t("options.slides.pos_tile") }}</option>
-            </select>
+              :items="opcoesPosicaoFundo"
+              :model-value="bgPosition"
+              @update:model-value="onBgPositionChange"
+            />
           </div>
         </div>
 
@@ -225,17 +212,12 @@
           <label class="opt-label" :for="`opt-monitor-role-${role.role}`">
             {{ role.label }}
           </label>
-          <select
+          <LjSelect
             :id="`opt-monitor-role-${role.role}`"
-            class="opt-select"
-            :value="role.displayId ?? ''"
-            @change="setRole(role.role, $v($event) === '' ? null : $v($event))"
-          >
-            <option value="">{{ $t("options.slides.none") }}</option>
-            <option v-for="d in displays" :key="d.id" :value="d.id">
-              {{ d.label || `Monitor ${d.id}` }}
-            </option>
-          </select>
+            :items="opcoesMonitor"
+            :model-value="role.displayId ?? ''"
+            @update:model-value="setRole(role.role, $event === '' ? null : String($event))"
+          />
           <span v-if="role.warning" class="opt-monitor-warning">{{ role.warning }}</span>
         </div>
       </template>
@@ -317,16 +299,12 @@
         <label class="opt-label" for="opt-slides-align">
           {{ $t("options.slides.alignment") }}
         </label>
-        <select
+        <LjSelect
           id="opt-slides-align"
-          class="opt-select"
-          :value="getUserData(KEYS.OPTIONS.SLIDE.TEXT_ALIGN, 'center')"
-          @change="saveUserData(KEYS.OPTIONS.SLIDE.TEXT_ALIGN, $v($event))"
-        >
-          <option value="top">{{ $t("options.slides.align_top") }}</option>
-          <option value="center">{{ $t("options.slides.align_center") }}</option>
-          <option value="bottom">{{ $t("options.slides.align_bottom") }}</option>
-        </select>
+          :items="opcoesAlinhamento"
+          :model-value="getUserData(KEYS.OPTIONS.SLIDE.TEXT_ALIGN, 'center')"
+          @update:model-value="saveUserData(KEYS.OPTIONS.SLIDE.TEXT_ALIGN, $event)"
+        />
       </div>
       <div class="opt-row">
         <label class="opt-label" for="opt-slides-font">{{ $t("options.slides.font") }}</label>
@@ -427,6 +405,22 @@
           <span>{{ $t("options.slides.text_bg_blur_enabled") }}</span>
         </label>
       </div>
+      <div v-if="getUserData(KEYS.OPTIONS.SLIDE.TEXT_BG_BLUR_ENABLED, false)" class="opt-row">
+        <label class="opt-label" for="opt-text-bg-blur">
+          {{ $t("options.slides.text_bg_blur") }}
+        </label>
+        <input
+          id="opt-text-bg-blur"
+          type="range"
+          min="0"
+          max="30"
+          step="1"
+          class="opt-range"
+          :value="getUserData(KEYS.OPTIONS.SLIDE.TEXT_BG_BLUR, 12)"
+          @input="saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BG_BLUR, Number($v($event)))"
+        />
+        <span class="opt-range-val">{{ getUserData(KEYS.OPTIONS.SLIDE.TEXT_BG_BLUR, 12) }}px</span>
+      </div>
 
       <!-- Formatação de texto personalizada -->
       <div class="opt-row">
@@ -443,8 +437,8 @@
         v-if="getUserData(KEYS.OPTIONS.SLIDE.CUSTOM_TEXT_FORMAT, false)"
         class="opt-format-block"
       >
-        <v-row>
-          <v-col cols="12" sm="3">
+        <div class="opt-format-grid">
+          <div>
             <div class="opt-format-row">
               <label class="opt-format-field">
                 <span class="opt-format-label">{{ $t("options.slides.title_color") }}</span>
@@ -524,8 +518,8 @@
                 />
               </label>
             </div>
-          </v-col>
-          <v-col cols="12" sm="4">
+          </div>
+          <div>
             <label class="opt-checkbox opt-format-check">
               <input
                 type="checkbox"
@@ -603,38 +597,8 @@
                 </span>
               </label>
             </div>
-          </v-col>
-          <v-col cols="12" sm="5">
-            <label class="opt-checkbox opt-format-check">
-              <input
-                type="checkbox"
-                :checked="getUserData(KEYS.OPTIONS.SLIDE.TEXT_BG_BLUR_ENABLED, false)"
-                @change="saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BG_BLUR_ENABLED, $c($event))"
-              />
-              <span>{{ $t("options.slides.text_bg_blur_enabled") }}</span>
-            </label>
-
-            <div
-              v-if="getUserData(KEYS.OPTIONS.SLIDE.TEXT_BG_BLUR_ENABLED, false)"
-              class="opt-format-row"
-            >
-              <label class="opt-format-field">
-                <span class="opt-format-label">{{ $t("options.slides.text_bg_blur") }}</span>
-                <input
-                  type="range"
-                  min="0"
-                  max="30"
-                  step="1"
-                  class="opt-range"
-                  :value="getUserData(KEYS.OPTIONS.SLIDE.TEXT_BG_BLUR, 12)"
-                  @input="saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BG_BLUR, Number($v($event)))"
-                />
-                <span class="opt-range-val">
-                  {{ getUserData(KEYS.OPTIONS.SLIDE.TEXT_BG_BLUR, 12) }}px
-                </span>
-              </label>
-            </div>
-
+          </div>
+          <div>
             <label class="opt-checkbox opt-format-check">
               <input
                 type="checkbox"
@@ -673,8 +637,8 @@
                 </span>
               </label>
             </div>
-          </v-col>
-        </v-row>
+          </div>
+        </div>
         <button type="button" class="opt-btn opt-btn--ghost" @click="restoreTextFormat">
           <Icon :icon="ICONS.ACTIONS.REFRESH" size="14" class="mr-1" />
           {{ $t("options.slides.restore") }}
@@ -697,18 +661,17 @@
         class="opt-format-block"
       >
         <div class="opt-format-row">
-          <label class="opt-format-field">
-            <span class="opt-format-label">{{ $t("options.slides.text_case") }}</span>
-            <select
-              class="opt-select"
-              :value="textCaseAtual"
-              @change="saveUserData(KEYS.OPTIONS.SLIDE.RETURN_TEXT_CASE, $v($event))"
-            >
-              <option value="none">{{ $t("options.slides.case_normal") }}</option>
-              <option value="capitalize">{{ $t("options.slides.case_capitalize") }}</option>
-              <option value="uppercase">{{ $t("options.slides.case_uppercase") }}</option>
-            </select>
-          </label>
+          <div class="opt-format-field">
+            <label class="opt-format-label" for="opt-return-text-case">
+              {{ $t("options.slides.text_case") }}
+            </label>
+            <LjSelect
+              id="opt-return-text-case"
+              :items="opcoesCaixaTexto"
+              :model-value="textCaseAtual"
+              @update:model-value="saveUserData(KEYS.OPTIONS.SLIDE.RETURN_TEXT_CASE, $event)"
+            />
+          </div>
           <label class="opt-format-field">
             <span class="opt-format-label">{{ $t("options.slides.text_size") }}</span>
             <input
@@ -763,20 +726,17 @@
               @input="saveUserData(KEYS.OPTIONS.SLIDE.BG_IMAGE, $v($event))"
             />
           </label>
-          <label class="opt-format-field">
-            <span class="opt-format-label">{{ $t("options.slides.bg_position") }}</span>
-            <select
-              class="opt-select"
-              :value="getUserData(KEYS.OPTIONS.SLIDE.BG_POSITION, 'center')"
-              @change="saveUserData(KEYS.OPTIONS.SLIDE.BG_POSITION, $v($event))"
-            >
-              <option value="center">{{ $t("options.slides.pos_center") }}</option>
-              <option value="cover">{{ $t("options.slides.pos_cover") }}</option>
-              <option value="contain">{{ $t("options.slides.pos_contain") }}</option>
-              <option value="stretch">{{ $t("options.slides.pos_stretch") }}</option>
-              <option value="tile">{{ $t("options.slides.pos_tile") }}</option>
-            </select>
-          </label>
+          <div class="opt-format-field">
+            <label class="opt-format-label" for="opt-slides-bg-position">
+              {{ $t("options.slides.bg_position") }}
+            </label>
+            <LjSelect
+              id="opt-slides-bg-position"
+              :items="opcoesPosicaoFundo"
+              :model-value="getUserData(KEYS.OPTIONS.SLIDE.BG_POSITION, 'center')"
+              @update:model-value="saveUserData(KEYS.OPTIONS.SLIDE.BG_POSITION, $event)"
+            />
+          </div>
         </div>
       </div>
 
@@ -834,15 +794,12 @@
         <label class="opt-label" for="opt-youtube-action">
           {{ $t("options.videos.youtube_action") }}
         </label>
-        <select
+        <LjSelect
           id="opt-youtube-action"
-          class="opt-select"
-          :value="getUserData(KEYS.OPTIONS.YOUTUBE_ACTION, 'video')"
-          @change="saveUserData(KEYS.OPTIONS.YOUTUBE_ACTION, $v($event))"
-        >
-          <option value="video">{{ $t("options.videos.action_video") }}</option>
-          <option value="link">{{ $t("options.videos.action_link") }}</option>
-        </select>
+          :items="opcoesAcaoYoutube"
+          :model-value="getUserData(KEYS.OPTIONS.YOUTUBE_ACTION, 'video')"
+          @update:model-value="saveUserData(KEYS.OPTIONS.YOUTUBE_ACTION, $event)"
+        />
       </div>
       <div class="opt-row">
         <label class="opt-checkbox">
@@ -1045,18 +1002,12 @@
           <label class="opt-label" for="opt-fp-bg-position">
             {{ $t("options.background.position") }}
           </label>
-          <select
+          <LjSelect
             id="opt-fp-bg-position"
-            class="opt-select"
-            :value="fileProjBgPosition"
-            @change="onFileProjBgPosition"
-          >
-            <option value="cover">{{ $t("options.slides.pos_cover") }}</option>
-            <option value="contain">{{ $t("options.slides.pos_contain") }}</option>
-            <option value="center">{{ $t("options.slides.pos_center") }}</option>
-            <option value="stretch">{{ $t("options.slides.pos_stretch") }}</option>
-            <option value="tile">{{ $t("options.slides.pos_tile") }}</option>
-          </select>
+            :items="opcoesPosicaoFundo"
+            :model-value="fileProjBgPosition"
+            @update:model-value="onFileProjBgPosition"
+          />
         </div>
       </template>
     </section>
@@ -1121,7 +1072,7 @@
 </template>
 
 <script setup lang="ts">
-import { LjButton } from "@/components/ui";
+import { LjButton, LjSelect } from "@/components/ui";
 import Icon from "@/components/Icon.vue";
 import { computed, type ComputedRef, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { pickImageData } from "@/helpers/FilePicker";
@@ -1142,7 +1093,7 @@ import Telemetry from "@/helpers/Telemetry";
 import { ICONS } from "@/config/Icons";
 import { KEYS } from "@/constants/UserDataKeys";
 import { MAIN_BACKGROUND_ID, Settings } from "@/types/Settings";
-import { THEMES } from "@/config/Theme";
+import { THEMES, COLOR_THEMES } from "@/config/Theme";
 import { FONT } from "@/config/Fonts";
 
 interface ThemeOption {
@@ -1204,6 +1155,53 @@ const themes: ComputedRef<ThemeOption[]> = computed(() =>
 function getUserData<T = unknown>(key: string, defaultValue?: T): T {
   return $userdata.get<T>(key, defaultValue) as T;
 }
+
+// Listas dos combobox. Sempre `computed`: os rótulos passam pelo i18n e têm de
+// reagir à troca de idioma, que acontece nesta mesma tela.
+const opcoesIdioma = computed(() => [
+  { value: "pt", label: "Português" },
+  { value: "es", label: "Español" },
+]);
+
+const opcoesEstiloUi = computed(() =>
+  Object.values(THEMES).map((estilo) => ({
+    value: estilo,
+    // O valor gravado continua sendo o enum minúsculo — RibbonBar compara com
+    // THEMES.VIOLIN. Só o rótulo passou a vir do i18n, em vez do enum cru em
+    // caixa alta.
+    label: t(`options.general.ui_styles.${estilo}`),
+  }))
+);
+
+const opcoesPosicaoFundo = computed(() => [
+  { value: "cover", label: t("options.slides.pos_cover") },
+  { value: "contain", label: t("options.slides.pos_contain") },
+  { value: "center", label: t("options.slides.pos_center") },
+  { value: "stretch", label: t("options.slides.pos_stretch") },
+  { value: "tile", label: t("options.slides.pos_tile") },
+]);
+
+const opcoesAlinhamento = computed(() => [
+  { value: "top", label: t("options.slides.align_top") },
+  { value: "center", label: t("options.slides.align_center") },
+  { value: "bottom", label: t("options.slides.align_bottom") },
+]);
+
+const opcoesCaixaTexto = computed(() => [
+  { value: "none", label: t("options.slides.case_normal") },
+  { value: "capitalize", label: t("options.slides.case_capitalize") },
+  { value: "uppercase", label: t("options.slides.case_uppercase") },
+]);
+
+const opcoesAcaoYoutube = computed(() => [
+  { value: "video", label: t("options.videos.action_video") },
+  { value: "link", label: t("options.videos.action_link") },
+]);
+
+const opcoesMonitor = computed(() => [
+  { value: "", label: t("options.slides.none") },
+  ...displays.value.map((d) => ({ value: String(d.id), label: d.label || `Monitor ${d.id}` })),
+]);
 
 // "normal" é valor legado: não existe em CSS text-transform, e a projeção
 // passou a traduzi-lo para "none". O select precisa da mesma tradução, senão
@@ -1287,8 +1285,8 @@ function onBgColorChange(e: Event): void {
   scheduleSave();
 }
 
-function onBgPositionChange(e: Event): void {
-  bgPosition.value = (e.target as HTMLSelectElement).value;
+function onBgPositionChange(valor: string | number | null): void {
+  bgPosition.value = String(valor ?? "");
   scheduleSave();
 }
 
@@ -1489,8 +1487,8 @@ function onFileProjBgColor(e: Event): void {
   saveFileProjBg();
 }
 
-function onFileProjBgPosition(e: Event): void {
-  fileProjBgPosition.value = (e.target as HTMLSelectElement).value;
+function onFileProjBgPosition(valor: string | number | null): void {
+  fileProjBgPosition.value = String(valor ?? "");
   saveFileProjBg();
 }
 
@@ -1594,6 +1592,22 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+/* Era <v-row>/<v-col> do Vuetify, a última dependência do arquivo. Além da
+   grade, o v-col trazia a tipografia do Material junto: os rótulos aqui dentro
+   saíam com 16px numa tela cujo padrão é 12px. As frações 3/4/5 são as mesmas
+   que as colunas tinham. */
+.opt-format-grid {
+  display: grid;
+  grid-template-columns: 3fr 4fr 5fr;
+  gap: var(--lj-space-6);
+}
+
+@media (max-width: 600px) {
+  .opt-format-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .opt-divider {
   height: 1px;
   margin: var(--lj-space-5) 0;
