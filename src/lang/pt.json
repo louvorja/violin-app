@@ -1176,7 +1176,9 @@
     "bundle_importing_bible": "Importando Bíblias...",
     "bundle_importing_catalog": "Importando catálogo...",
     "bundle_importing_extras": "Importando complementos...",
-    "bundle_version_suffix": "Versão"
+    "bundle_version_suffix": "Versão",
+    "bundle_update_title": "Atualização do banco de dados",
+    "bundle_update_text": "Uma nova versão do banco de dados está disponível (v{version}). Deseja baixar agora?"
   },
   "accessibility": {
     "title": "Acessibilidade — Libras",

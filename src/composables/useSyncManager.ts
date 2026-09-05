@@ -746,7 +746,7 @@ export function useSyncManager() {
 
   // ─── Bundle Download ────────────────────────────────────────
 
-  async function downloadBundle(opts: { force?: boolean } = {}): Promise<boolean> {
+  async function downloadBundle(opts: { force?: boolean; version?: number } = {}): Promise<boolean> {
     if (bundleInstalling.value) return false;
 
     bundleInstalling.value = true;
@@ -768,6 +768,7 @@ export function useSyncManager() {
     try {
       await BundleInstaller.install({
         force: opts.force,
+        version: opts.version,
         signal,
         onProgress: (p: BundleProgress) => {
           bundleProgress.value = p;

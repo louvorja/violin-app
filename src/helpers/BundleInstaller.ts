@@ -159,10 +159,11 @@ export default {
 
   async install(opts: {
     force?: boolean;
+    version?: number;
     onProgress?: (p: BundleProgress) => void;
     signal?: AbortSignal;
   }): Promise<void> {
-    const { onProgress, signal } = opts;
+    const { version, onProgress, signal } = opts;
 
     abortCheck(signal);
     onProgress?.({ phase: "download", current: 0, total: 1 });
@@ -180,18 +181,33 @@ export default {
     $dev.write("[BundleInstaller] Bundle injetado", `${datasets.size} datasets`);
 
     // Grava marker confirmando instalação do bundle
-    const remote = await this.fetchRemoteConfig();
+    // Usa a versão recebida como parâmetro (evita fetchRemoteConfig redundante)
+    let markerVersion = version ?? 0;
+    if (!markerVersion) {
+      try {
+        const remote = await this.fetchRemoteConfig();
+        markerVersion = remote?.version_number ?? 0;
+      } catch {
+        // Se fetchRemoteConfig falhar, tenta ler do config local
+        try {
+          const localConfig = await $database.get<{ version_number?: number }>("config", { silent: true });
+          markerVersion = localConfig?.version_number ?? 0;
+        } catch {
+          // mantém 0
+        }
+      }
+    }
     await $idb.put(DB_TABLE.CACHE, {
       id: BUNDLE_MARKER_KEY,
       data: {
         id: BUNDLE_MARKER_KEY,
-        version_number: remote?.version_number ?? 0,
+        version_number: markerVersion,
         installed_at: new Date().toISOString(),
       } satisfies BundleMarker,
       ts: Date.now(),
       v: import.meta.env.VITE_DB_VERSION || "",
     });
-    $dev.write("[BundleInstaller] Marker gravado", `v${remote?.version_number ?? "?"}`);
+    $dev.write("[BundleInstaller] Marker gravado", `v${markerVersion}`);
   },
 
   /** Verifica se o bundle da versão informada já foi instalado. */

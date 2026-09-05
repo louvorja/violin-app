@@ -62,7 +62,8 @@ import { KEYS_LS } from "@/constants/LocalStorageKeys";
 import { buildAnchorStyle } from "@/types/Overlay";
 import type { OverlayAnchor } from "@/types/Overlay";
 import Libras from "@/helpers/Libras";
-
+import { DICTIONARY_BASE_URL } from "@/config/Libras";
+import { VLIBRAS_URL } from "@/config/Vlibras";
 const props = withDefaults(
   defineProps<{
     slideLyric?: string;
@@ -81,8 +82,7 @@ const props = withDefaults(
     bibleChapter: undefined,
   }
 );
-
-const unitySrc = "https://vlibras.gov.br/app/unity/index.html";
+const unitySrc = VLIBRAS_URL;
 
 const enabled = ref(false);
 const rawGloss = ref("");
@@ -270,7 +270,7 @@ function onUnityMessage(event: MessageEvent) {
       }
 
       if (region !== "BR") {
-        const regionUrl = `https://dicionario2.vlibras.gov.br/2018.3.1/WEBGL/${region}/`;
+        const regionUrl = `${DICTIONARY_BASE_URL}/${region}/`;
         sendToUnity("PlayerManager", "setBaseUrl", regionUrl);
       }
     }

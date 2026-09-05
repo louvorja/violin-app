@@ -47,8 +47,8 @@ export default [
       "no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
       "no-console": "off",
       radix: "error",
-      // Imports cruzando 2+ níveis devem usar alias (@/helpers/X) — nunca ../../
-      "no-restricted-imports": ["error", { patterns: ["../../*"] }],
+      // Imports entre src/ e electron/ devem usar alias (@/helpers/X) ou IPC
+      "no-restricted-imports": ["error", { patterns: ["../..electron/*", "../..src/*"] }],
     },
   },
   {
@@ -83,6 +83,8 @@ export default [
       "vitest.config.js",
       "scripts/**/*.mjs",
       "scripts/**/*.js",
+      "config/**/*.js",
+      "config/**/*.cjs",
     ],
     languageOptions: {
       globals: {

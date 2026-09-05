@@ -423,7 +423,7 @@ Helpers principais:
 | `ProjectionWindows.ts` | Abre/fecha janelas por feature (monitor-aware)                               |
 | `IndexedDB.ts`         | CRUD unificado no IndexedDB                                                  |
 | `Database.ts`          | JSONs do banco com cache em camadas (memória → IDB → rede) e stale-if-error  |
-| `BundleInstaller.ts`   | Download/extract/inject de bundle ZIP do banco (14 tabelas de catálogo)       |
+| `BundleInstaller.ts`   | Download/extract/inject de bundle ZIP do banco (14 tabelas de catálogo)      |
 | `ImageConvert.ts`      | HEIC/HEIF → JPEG (`heic2any`) na importação                                  |
 | `SljaConverter.js`     | Import/export `.slja` do editor legado Delphi (JSZip + INI)                  |
 | `SettingsStorage.ts`   | CRUD na tabela `settings` do IDB                                             |
@@ -435,18 +435,18 @@ Helpers principais:
 
 Composables principais:
 
-| Composable             | Função                                                                                     |
-|------------------------|--------------------------------------------------------------------------------------------|
-| `useMedia`             | Player de áudio/vídeo/youtube — sincronização de slides, crossfade, broadcast              |
-| `useBackgroundTasks`   | Singleton — gerencia tarefas de download em segundo plano (progresso, cancel, dismiss)     |
+| Composable             | Função                                                                                                           |
+|------------------------|------------------------------------------------------------------------------------------------------------------|
+| `useMedia`             | Player de áudio/vídeo/youtube — sincronização de slides, crossfade, broadcast                                    |
+| `useBackgroundTasks`   | Singleton — gerencia tarefas de download em segundo plano (progresso, cancel, dismiss)                           |
 | `useSyncManager`       | Downloads de coletâneas (FTP → HttpQueue), bíblia (HTTP sequencial), bundle do banco (ZIP) + scan de integridade |
-| `useBroadcastListener` | Listener de BroadcastChannel com cleanup automático via `onUnmounted`                      |
-| `useBroadcastSender`   | Envio de mensagens via BroadcastChannel                                                    |
-| `useFileProjection`    | Barra de controle de projeção de arquivos (mini-player no footer)                          |
-| `useProjectionState`   | Estado reativo da projeção (slides atuais, transições)                                     |
-| `useSlideStyle`        | Estilos dinâmicos de slides (cores, fontes, fundo)                                         |
-| `usePlaylists`         | CRUD de playlists com persistência em UserData (módulo músicas)                            |
-| `usePlaylistPlayback`  | Controle de reprodução sequencial de playlists (avanço automático, progresso)              |
+| `useBroadcastListener` | Listener de BroadcastChannel com cleanup automático via `onUnmounted`                                            |
+| `useBroadcastSender`   | Envio de mensagens via BroadcastChannel                                                                          |
+| `useFileProjection`    | Barra de controle de projeção de arquivos (mini-player no footer)                                                |
+| `useProjectionState`   | Estado reativo da projeção (slides atuais, transições)                                                           |
+| `useSlideStyle`        | Estilos dinâmicos de slides (cores, fontes, fundo)                                                               |
+| `usePlaylists`         | CRUD de playlists com persistência em UserData (módulo músicas)                                                  |
+| `usePlaylistPlayback`  | Controle de reprodução sequencial de playlists (avanço automático, progresso)                                    |
 
 ---
 
@@ -901,13 +901,13 @@ caixa de texto.
 
 ### Configurações (Opções → Slides → Formatação de texto)
 
-| Opção           | Chave (`KEYS.OPTIONS.SLIDE`)   | Default   | Descrição                             |
-|-----------------|--------------------------------|-----------|---------------------------------------|
-| Sombra no Texto | `SHADOW_ENABLED`               | `false`   | Ativa/desativa a sombra custom        |
-| Cor Sombra      | `SHADOW_COLOR`                 | `#000000` | Cor da sombra (color picker)          |
-| Desfoque        | `SHADOW_BLUR`                  | 12        | Raio de desfoque (0–30 px)            |
-| Desloc. X       | `SHADOW_OFFSET_X`              | 0         | Deslocamento horizontal (-20 a 20 px) |
-| Desloc. Y       | `SHADOW_OFFSET_Y`              | 2         | Deslocamento vertical (-20 a 20 px)   |
+| Opção           | Chave (`KEYS.OPTIONS.SLIDE`)    | Default   | Descrição                             |
+|-----------------|---------------------------------|-----------|---------------------------------------|
+| Sombra no Texto | `SHADOW_ENABLED`                | `false`   | Ativa/desativa a sombra custom        |
+| Cor Sombra      | `SHADOW_COLOR`                  | `#000000` | Cor da sombra (color picker)          |
+| Desfoque        | `SHADOW_BLUR`                   | 12        | Raio de desfoque (0–30 px)            |
+| Desloc. X       | `SHADOW_OFFSET_X`               | 0         | Deslocamento horizontal (-20 a 20 px) |
+| Desloc. Y       | `SHADOW_OFFSET_Y`               | 2         | Deslocamento vertical (-20 a 20 px)   |
 | Fundo borrado   | `TEXT_BG_BLUR_ENABLED`          | `false`   | Borra somente o fundo atrás do texto  |
 | Intensidade     | `TEXT_BG_BLUR`                  | 12        | Intensidade do blur (0–30 px)         |
 | Borda da caixa  | `TEXT_BORDER_ENABLED`           | `false`   | Ativa a borda da caixa de texto       |

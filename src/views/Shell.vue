@@ -147,6 +147,10 @@ import { KEYS } from "@/constants/UserDataKeys";
 import $popup from "@/helpers/Popup";
 import Broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
+import $alert from "@/helpers/Alert";
+import $database from "@/helpers/Database";
+import $idb from "@/helpers/IndexedDB";
+import { DB_TABLE } from "@/constants/DbTables";
 import type { BibleSearchResult } from "@/types/Bible";
 
 import { registerShell } from "@/composables/useShell";
@@ -363,26 +367,66 @@ async function _showPendingStartupCheck() {
   startupCheckOpen.value = true;
 }
 
-async function _checkBundleNeeded(): Promise<boolean> {
+async function _checkBundleNeeded(): Promise<{ needed: boolean; version?: number }> {
   try {
     const remote = await BundleInstaller.fetchRemoteConfig();
     console.info("[Shell] bundle check → remote version:", remote?.version_number ?? "null");
+
     if (!remote) {
-      console.warn("[Shell] bundle check → remote inacessível — tentando baixar bundle");
-      return true;
+      // API inacessível — checa localmente se o marker existe
+      const hasAnyData = await _hasLocalBundleData();
+      console.info("[Shell] bundle check → remote inacessível, local data:", hasAnyData);
+      if (hasAnyData) {
+        return { needed: false };
+      }
+      return { needed: true };
     }
 
     const installed = await BundleInstaller.isBundleInstalled(remote.version_number);
     console.info("[Shell] bundle check → installed for v" + remote.version_number + ":", installed);
-    return !installed;
+
+    if (installed) {
+      return { needed: false };
+    }
+
+    // Bundle não instalado para esta versão — verificar se há dados locais de versão anterior
+    const hasAnyData = await _hasLocalBundleData();
+    console.info(
+      "[Shell] bundle check → local data exists:",
+      hasAnyData,
+      "remote:",
+      remote.version_number
+    );
+    return { needed: true, version: remote.version_number };
   } catch (e) {
-    console.warn("[Shell] bundle check erro — assumindo bundle necessário:", e);
-    return true;
+    console.warn("[Shell] bundle check erro:", e);
+    const hasAnyData = await _hasLocalBundleData();
+    return { needed: !hasAnyData };
+  }
+}
+
+/** Verifica se existe qualquer dado de bundle no IndexedDB (marker ou dados de catálogo). */
+async function _hasLocalBundleData(): Promise<boolean> {
+  try {
+    // 1. Checa marker
+    const markerRow = await $idb.get<{ id: string; data?: { version_number?: number } }>(
+      DB_TABLE.CACHE,
+      "__bundle_marker__"
+    );
+    if (markerRow?.data?.version_number && markerRow.data.version_number > 0) return true;
+
+    // 2. Checa se existe config no banco (dados injetados)
+    const config = await $database.get<{ version_number?: number }>("config", { silent: true });
+    if (config && config.version_number && config.version_number > 0) return true;
+
+    return false;
+  } catch {
+    return false;
   }
 }
 
 /** Bundle download com retry (5x) + overlay bloqueante. Retorna true se OK, false se falhou/cancelou. */
-async function _showPendingBundleDownload(): Promise<boolean> {
+async function _showPendingBundleDownload(version?: number): Promise<boolean> {
   const MAX_RETRIES = 5;
   const RETRY_DELAY_MS = 5000;
 
@@ -394,7 +438,7 @@ async function _showPendingBundleDownload(): Promise<boolean> {
     bundleRetryMax.value = MAX_RETRIES;
     bundleError.value = null;
 
-    const ok = await sync.downloadBundle();
+    const ok = await sync.downloadBundle({ version });
     bundleLoading.value = false;
 
     if (ok) return true;
@@ -706,13 +750,39 @@ onMounted(() => {
 
   if (Platform.isDesktop) {
     (async () => {
-      const needsBundle = await _checkBundleNeeded();
-      console.info("[Shell] bundle check → needed:", needsBundle);
-      if (needsBundle) {
-        const ok = await _showPendingBundleDownload();
-        if (!ok) return;
+      const checkOnStart =
+        $userdata.get<boolean>(KEYS.OPTIONS.CHECK_UPDATES_ON_START, true) === true;
+      if (!checkOnStart) {
+        // Preferência desligada: pula verificação de bundle, segue o boot
+        _runStartupUpdateCheck();
+        return;
       }
-      _runStartupUpdateCheck();
+
+      const { needed, version } = await _checkBundleNeeded();
+      console.info("[Shell] bundle check → needed:", needed, "version:", version);
+
+      if (!needed) {
+        _runStartupUpdateCheck();
+        return;
+      }
+
+      // Bundle necessário — pergunta ao usuário se quer atualizar
+      $alert.yesno(
+        {
+          title: t("startup_check.bundle_update_title"),
+          text: t("startup_check.bundle_update_text", { version: version || "?" }),
+        },
+        (btn?: string) => {
+          if (btn === "yes") {
+            void _showPendingBundleDownload(version).then((ok) => {
+              if (ok) _runStartupUpdateCheck();
+            });
+          } else {
+            // Usuário recusou — continua o boot sem atualizar
+            _runStartupUpdateCheck();
+          }
+        }
+      );
     })();
   } else {
     _continueBootAfterUpdate();
