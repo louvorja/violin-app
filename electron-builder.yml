@@ -108,11 +108,18 @@ mac:
       arch:
         - x64
         - arm64
-  # Ícone próprio do macOS: 1024x1024 opaco, sem canal alpha. O macOS 26+
-  # recorta todo ícone no squircle e põe uma caixa cinza atrás do que tiver
-  # transparência — o icon-512.png é um círculo de cantos transparentes, e era
-  # isso que deixava o app destoando no Dock. Aqui o fundo branco cobre o
-  # canvas e o sistema faz o recorte. Windows e Linux seguem com o icon-512.png.
+  # Ícone próprio do macOS: 1024x1024 com a placa já desenhada — o squircle
+  # branco na grade da Apple (~82% do canvas), margem transparente em volta.
+  #
+  # O macOS 26+ recorta qualquer ícone nessa mesma forma, então lá tanto faz;
+  # medido, um quadrado opaco de borda a borda e esta placa saem pixel a pixel
+  # iguais. O que muda é o macOS 25 e anteriores, que NÃO recortam nada e
+  # desenham o .icns como veio: um quadrado opaco vira um quadrado branco de
+  # cantos vivos no Dock. Entregar a forma pronta serve as duas gerações.
+  #
+  # O que não serve é um desenho que deixe transparência DENTRO da placa (o
+  # icon-512.png é um círculo): aí o macOS 26+ mostra o cinza dele por baixo.
+  # Windows e Linux seguem com o icon-512.png.
   icon: build/icon-mac.png
   category: public.app-category.music
   # Assinatura + notarização (certificado Developer ID + credenciais Apple
