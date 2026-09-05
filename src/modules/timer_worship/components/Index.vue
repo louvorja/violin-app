@@ -5,7 +5,7 @@
     :style="{ minWidth: '320px' }"
     @close="close()"
   >
-    <div class="d-flex h-100">
+    <div class="mod-shell">
       <ModuleFormatDrawer v-model="show_format" :module-id="'timer_worship'" :manifest="manifest" />
       <div ref="container" class="tw-root" :style="rootStyle">
         <img v-if="bgImage" :src="bgImage" class="tw-bg-img" :style="imageStyle" alt="" />
@@ -343,6 +343,11 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.mod-shell {
+  display: flex;
+  height: 100%;
+}
+
 .tw-root {
   position: relative;
   display: flex;

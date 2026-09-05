@@ -1,13 +1,8 @@
 <template>
   <ModuleContainer :manifest="manifest" :style="{ minWidth: '300px' }" @close="close()">
-    <div class="d-flex h-100">
+    <div class="mod-shell">
       <ModuleFormatDrawer v-model="show_format" :module-id="'timer'" :manifest="manifest" />
-      <div
-        ref="container"
-        class="d-flex flex-column align-center pa-4 flex-grow-1"
-        style="gap: 16px"
-        :style="rootStyle"
-      >
+      <div ref="container" class="timer-stage" style="gap: 16px" :style="rootStyle">
         <img v-if="bgImage" :src="bgImage" class="sw-bg-img" :style="imageStyle" alt="" />
         <!-- Display -->
         <div
@@ -260,6 +255,18 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.mod-shell {
+  display: flex;
+  height: 100%;
+}
+
+.timer-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-grow: 1;
+}
+
 .sw-display {
   position: relative;
   z-index: 1;

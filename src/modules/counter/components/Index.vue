@@ -1,13 +1,8 @@
 <template>
   <ModuleContainer :manifest="manifest" :style="{ minWidth: '260px' }" @close="close()">
-    <div class="d-flex h-100">
+    <div class="mod-shell">
       <ModuleFormatDrawer v-model="show_format" :module-id="'counter'" :manifest="manifest" />
-      <div
-        ref="container"
-        class="d-flex flex-column align-center justify-center pa-6 flex-grow-1"
-        style="gap: 16px; position: relative"
-        :style="rootStyle"
-      >
+      <div ref="container" class="counter-stage" :style="rootStyle">
         <img v-if="bgImage" :src="bgImage" class="counter-bg-img" :style="imageStyle" alt="" />
         <div class="counter-display" :style="textStyle">{{ count }}</div>
       </div>
@@ -62,6 +57,21 @@ function close() {
 </script>
 
 <style scoped>
+.mod-shell {
+  display: flex;
+  height: 100%;
+}
+
+.counter-stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex-grow: 1;
+  gap: var(--lj-space-6);
+}
+
 .counter-display {
   position: relative;
   z-index: 1;

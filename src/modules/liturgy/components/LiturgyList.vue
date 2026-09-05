@@ -1,7 +1,7 @@
 <template>
   <div class="liturgy-list-area" :class="{ 'liturgy-list-area--locked': locked }">
     <div v-if="items.length === 0" class="liturgy-empty">
-      <Icon :icon="ICONS.LITURGY.SCRIPT" size="80" class="text-disabled" />
+      <Icon :icon="ICONS.LITURGY.SCRIPT" size="80" class="lj-u-faded" />
       <div class="liturgy-empty-title">{{ t("data.empty") }}</div>
       <div class="liturgy-empty-hint">{{ t("data.empty_hint") }}</div>
       <button

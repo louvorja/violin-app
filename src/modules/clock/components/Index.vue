@@ -15,17 +15,12 @@
       />
     </template>
 
-    <div class="d-flex h-100">
+    <div class="mod-shell">
       <ModuleFormatDrawer v-model="show_format" :module-id="'clock'" :manifest="manifest" />
-      <div
-        ref="container"
-        class="d-flex flex-column align-center justify-center pa-6 flex-grow-1"
-        style="gap: 4px"
-        :style="rootStyle"
-      >
+      <div ref="container" class="clock-stage" style="gap: 4px" :style="rootStyle">
         <img v-if="bgImage" :src="bgImage" class="clock-bg-img" :style="imageStyle" alt="" />
         <div class="clock-time" :style="textStyle">{{ time }}</div>
-        <div v-if="date" class="clock-date text-medium-emphasis">{{ date }}</div>
+        <div v-if="date" class="clock-date lj-u-muted">{{ date }}</div>
       </div>
     </div>
   </ModuleContainer>
@@ -171,6 +166,19 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.mod-shell {
+  display: flex;
+  height: 100%;
+}
+
+.clock-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex-grow: 1;
+}
+
 .clock-time {
   position: relative;
   z-index: 1;

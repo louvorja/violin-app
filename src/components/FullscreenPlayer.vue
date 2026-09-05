@@ -4,19 +4,9 @@
        não entrasse de fato (ex.: chamado fora de gesto do usuário), este
        overlay se sobrepunha ao preview inline e mostrava um Player duplicado
        sobre o do rodapé. -->
-  <div
-    v-if="actuallyFullscreen"
-    class="position-absolute w-100 h-100 top-0 left-0"
-    style="z-index: 9999"
-    @mousemove="mouseMove"
-  >
+  <div v-if="actuallyFullscreen" class="fsp-overlay" style="z-index: 9999" @mousemove="mouseMove">
     <transition name="slide-up">
-      <div
-        v-if="visible"
-        class="position-absolute w-100 bottom-0"
-        @mouseenter="mouseEnter"
-        @mouseleave="mouseLeave"
-      >
+      <div v-if="visible" class="fsp-bar" @mouseenter="mouseEnter" @mouseleave="mouseLeave">
         <l-player location="fullscreen" />
       </div>
     </transition>
@@ -76,6 +66,18 @@ function startHideTimer() {
 </script>
 
 <style scoped>
+.fsp-overlay {
+  position: absolute;
+  inset: 0;
+}
+
+.fsp-bar {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+}
+
 .slide-up-enter-active,
 .slide-up-leave-active {
   /* Subida/descida do player em fullscreen — antes 0.3s, agora 0.15s pra UX */

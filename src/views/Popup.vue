@@ -1,5 +1,5 @@
 <template>
-  <div class="w-100 h-100" style="background: #000">
+  <div class="w-100 lj-u-h-full" style="background: #000">
     <component :is="loadModuleComponent()" v-if="module" />
   </div>
 </template>

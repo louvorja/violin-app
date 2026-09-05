@@ -1,7 +1,7 @@
 <template>
   <div
     ref="container"
-    :class="['d-flex', `align-${verticalAlign}`, `justify-${horizontalAlign}`]"
+    :class="['lj-u-flex', `lj-u-align-${verticalAlign}`, `lj-u-justify-${horizontalAlign}`]"
     :style="{
       position: 'relative',
       background: backgroundColor,
@@ -26,7 +26,7 @@
       }"
     />
 
-    <div v-if="bible" class="d-flex flex-column">
+    <div v-if="bible" class="lj-u-col">
       <span
         v-if="displayText"
         :class="

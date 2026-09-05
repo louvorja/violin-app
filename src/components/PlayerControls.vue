@@ -1,5 +1,5 @@
 <template>
-  <div class="d-flex align-center justify-center py-1 flex-grow-1">
+  <div class="player-controls">
     <LjButton
       v-for="(button, key) in buttons"
       v-show="button.show && (compact === false || (compact === true && !button.compact))"
@@ -23,3 +23,13 @@ defineProps({
   loading: { type: Boolean, default: false },
 });
 </script>
+
+<style scoped>
+.player-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-grow: 1;
+  padding-block: var(--lj-space-1);
+}
+</style>

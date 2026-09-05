@@ -97,3 +97,105 @@
   flex: 1 1 auto;
   min-width: 0;
 }
+
+/* ── Substitutos das classes do Vuetify ───────────────────────
+ *
+ * Estes existem para tirar a folha `vuetify/styles` do caminho. Hoje 59 telas
+ * usam d-flex, flex-column, text-caption e afins sem que o projeto as defina —
+ * nada quebra enquanto a folha estiver importada, e tudo desmonta junto no dia
+ * em que ela sair. Cada tela migrada troca a classe do Vuetify pela daqui.
+ *
+ * A escala de espaçamento NÃO foi replicada de propósito: no Vuetify ela é
+ * 4px×n, e a daqui é a do Delphi (--lj-space-*). Margem solta (mr-1, mb-2) é
+ * quase sempre gap no container — resolva assim ao migrar, em vez de trazer a
+ * escala do Material junto.
+ * ------------------------------------------------------------ */
+.lj-u-flex {
+  display: flex;
+}
+
+.lj-u-col {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Cresce para ocupar a sobra. Diferente de .lj-u-fill, que também esconde
+   o transbordo — use este quando o conteúdo puder aparecer inteiro. */
+.lj-u-grow {
+  flex-grow: 1;
+}
+
+.lj-u-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lj-u-end {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.lj-u-h-full {
+  height: 100%;
+}
+
+/* ── Texto ──────────────────────────────────────────────────── */
+
+/* Pares de text-medium-emphasis e text-disabled. Aqui saem de token de cor,
+   não de opacidade: opacidade desbota também o fundo herdado, e sobre a
+   superfície escura da faixa de slides isso apagava o texto. */
+.lj-u-muted {
+  color: var(--lj-text-muted);
+}
+
+.lj-u-faded {
+  color: var(--lj-text-muted);
+  opacity: 0.6;
+}
+
+.lj-u-text-center {
+  text-align: center;
+}
+.lj-u-text-start {
+  text-align: start;
+}
+.lj-u-text-end {
+  text-align: end;
+}
+
+/* Equivalente de text-caption: o degrau abaixo do corpo, para legenda e
+   rodapé de campo. */
+.lj-u-caption {
+  font-size: var(--lj-text-sm);
+  line-height: 1.4;
+}
+
+/* ── Alinhamento escolhido em tempo de execução ───────────────
+ *
+ * As telas de projeção montam o nome da classe a partir da preferência do
+ * usuário (`align-${verticalAlign}`). Com nomes do Vuetify isso é uma bomba de
+ * efeito retardado: some junto com a folha, sem erro no console e no meio de um
+ * culto. Os nomes aqui são os mesmos valores que já vêm salvos em UserData —
+ * start | center | end — para o template só trocar o prefixo.
+ * ------------------------------------------------------------ */
+.lj-u-align-start {
+  align-items: flex-start;
+}
+.lj-u-align-center {
+  align-items: center;
+}
+.lj-u-align-end {
+  align-items: flex-end;
+}
+
+.lj-u-justify-start {
+  justify-content: flex-start;
+}
+.lj-u-justify-center {
+  justify-content: center;
+}
+.lj-u-justify-end {
+  justify-content: flex-end;
+}

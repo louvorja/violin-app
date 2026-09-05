@@ -138,24 +138,20 @@ próprios sobre [Reka UI](https://reka-ui.com) (headless), mantendo a densidade
 de desktop herdada do sistema Delphi original. Os primitivos ficam em
 `src/components/ui/` e a página `/ui` mostra todos eles lado a lado.
 
-**Em código novo, não use componentes Vuetify.** Importe de `@/components/ui`:
-
-```ts
-import { LjButton, LjSelect, LjDialog } from "@/components/ui";
-```
-
-Medidas, borda, raio e foco vêm de `assets/styles/ui.css`; cores e espaçamentos,
-de `tokens.css`. Para cor de estado use `--lj-ui-accent*`, nunca `--lj-navy`
-direto — a marca é acromática nos temas escuros.
+Medidas, borda, raio e foco saem de `assets/styles/ui.css`; cores e
+espaçamentos, de `tokens.css`. Quem for escrever código encontra as convenções e
+as armadilhas de cada troca em [CLAUDE.md](CLAUDE.md) e
+[docs/design-system.md](docs/design-system.md).
 
 ### Estado da migração
 
-| Frente                               | Situação                         |
-| ------------------------------------ | -------------------------------- |
-| Primitivos disponíveis               | 23                               |
-| Tags `<v-*>` no código               | 197, em 59 arquivos              |
-| Nomes `mdi-` soltos fora do catálogo | 0 — todos passam por `ICONS.*`   |
-| Ícones servidos pela webfont MDI     | 355 constantes, a trocar por SVG |
+| Frente                                | Situação                         |
+| ------------------------------------- | -------------------------------- |
+| Primitivos disponíveis                | 23                               |
+| Tags `<v-*>` no código                | 197, em 59 arquivos              |
+| Arquivos presos às classes do Vuetify | 51 — todos entre os 59 acima     |
+| Nomes `mdi-` soltos fora do catálogo  | 0 — todos passam por `ICONS.*`   |
+| Ícones servidos pela webfont MDI      | 355 constantes, a trocar por SVG |
 
 ### O que ainda prende o Vuetify
 
@@ -166,29 +162,18 @@ nenhuma delas aparece numa busca por `<v-`:
    comece com `mdi-`, e as 355 constantes de `ICONS.*` ainda são MDI. Enquanto
    isso valer, a maioria das telas monta um componente Vuetify por dentro mesmo
    sem citar nenhum. Sai quando o catálogo virar SVG.
-2. **As classes utilitárias.** 59 arquivos usam `d-flex`, `ma-*`, `pa-*`,
-   `text-caption` e afins, que vêm de `vuetify/styles` e não estão redefinidas
-   em `utilities.css`. Nada quebra hoje; tudo desmonta junto no dia da remoção.
+2. **As classes utilitárias.** 51 arquivos usam `d-flex`, `ma-*`, `pa-*`,
+   `text-caption` e afins, que vêm de `vuetify/styles`. Nada quebra hoje; tudo
+   desmonta junto no dia da remoção. Os equivalentes já existem em
+   `utilities.css` como `lj-u-*`, e nenhum arquivo depende mais só delas — todo
+   arquivo preso à folha também tem tag `<v-*>`, então a migração por tag cobre
+   os dois de uma vez.
 3. **`<v-app>` e os drawers.** `v-navigation-drawer` faz `inject` do layout e
    lança erro no _setup_ se não houver `<v-app>` acima. Enquanto os dois usos
    existirem, `App.vue` não pode largar o wrapper — é uma ordem de trabalho, não
    uma troca.
 
 Além disso, 13 arquivos leem `--v-theme-*` ou `--v-border-color` em CSS próprio.
-
-### Armadilhas ao migrar um componente
-
-As trocas abaixo não dão erro no console — falham em silêncio:
-
-| Vuetify             | Primitivo    | Cuidado                                                              |
-| ------------------- | ------------ | -------------------------------------------------------------------- |
-| `v-progress-linear` | `LjProgress` | a prop é `value`, **não** `model-value`                              |
-| `v-select`          | `LjSelect`   | a chave de rótulo é `itemLabel`, **não** `item-title`                |
-| `v-alert`           | `LjAlert`    | `type="error"` vira `variant="danger"`; `variant="tonal"` não existe |
-| `v-text-field`      | `LjInput`    | `class`/`style` pousam no `<input>` interno, não na moldura          |
-| `v-skeleton-loader` | `LjSkeleton` | `width`/`height` são strings CSS, não números                        |
-
-Detalhes e catálogo completo em [docs/design-system.md](docs/design-system.md).
 
 ---
 

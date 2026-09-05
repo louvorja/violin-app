@@ -1,5 +1,5 @@
 <template>
-  <div ref="container" class="d-flex" :class="alignClass" :style="containerStyle">
+  <div ref="container" class="lj-u-flex" :class="alignClass" :style="containerStyle">
     <img
       v-if="userdata.image"
       :src="userdata.image"
@@ -16,7 +16,7 @@
       }"
     />
 
-    <span class="text-right" :style="textStyle">
+    <span class="lj-u-text-end" :style="textStyle">
       {{ time }}
     </span>
   </div>
@@ -61,8 +61,16 @@ const hourCycle = computed(() => userdata.value.hour_cycle || "24h");
 const timeFormat = computed(() => userdata.value.time_format || "hh:mm:ss");
 
 const alignClass = computed(() => {
-  const vertical = { start: "align-start", center: "align-center", end: "align-end" };
-  const horizontal = { start: "justify-start", center: "justify-center", end: "justify-end" };
+  const vertical = {
+    start: "lj-u-align-start",
+    center: "lj-u-align-center",
+    end: "lj-u-align-end",
+  };
+  const horizontal = {
+    start: "lj-u-justify-start",
+    center: "lj-u-justify-center",
+    end: "lj-u-justify-end",
+  };
   return `${vertical[verticalAlign.value]} ${horizontal[horizontalAlign.value]}`;
 });
 

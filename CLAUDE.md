@@ -364,6 +364,32 @@ conteúdo flutuante é emitido lá dentro pela Reka. Pelo mesmo motivo, para
 estilizar o gatilho de um primitivo a partir do consumidor, envolva-o num
 elemento seu e use `:deep()`.
 
+#### Ao trocar um componente Vuetify pelo primitivo
+
+Estas cinco trocas **não** dão erro no console — falham em silêncio, e cada uma
+já custou uma tela quebrada sem ninguém notar:
+
+| Vuetify             | Primitivo    | Cuidado                                                              |
+| ------------------- | ------------ | -------------------------------------------------------------------- |
+| `v-progress-linear` | `LjProgress` | a prop é `value`, **não** `model-value`                              |
+| `v-select`          | `LjSelect`   | a chave de rótulo é `itemLabel`, **não** `item-title`                |
+| `v-alert`           | `LjAlert`    | `type="error"` vira `variant="danger"`; `variant="tonal"` não existe |
+| `v-text-field`      | `LjInput`    | `class`/`style` pousam no `<input>` interno, não na moldura          |
+| `v-skeleton-loader` | `LjSkeleton` | `width`/`height` são strings CSS, não números                        |
+
+Trocar a tag não basta: **as classes utilitárias também são do Vuetify.**
+`d-flex`, `flex-column`, `ma-*`, `pa-*`, `text-caption`, `text-medium-emphasis`
+e afins vêm de `vuetify/styles`. Ao migrar uma tela, troque também essas —
+`utilities.css` tem os equivalentes `lj-u-*`. Margem solta (`mr-1`, `mb-2`) é
+quase sempre `gap` no container; resolva assim em vez de trazer a escala de 4px
+do Material junto. Um arquivo sem nenhuma tag `<v-*>` mas cheio de `d-flex`
+continua preso à folha, e some inteiro no dia em que ela sair.
+
+Atenção especial a classe montada em tempo de execução
+(``:class="`align-${x}`"``): ela não aparece em busca por texto e falha calada
+— nas telas de projeção, ao vivo. Use os utilitários `lj-u-align-*` /
+`lj-u-justify-*`, cujos sufixos são os mesmos valores salvos em UserData.
+
 ### `KEYS.*` — UserData sempre por constante
 
 Toda leitura/escrita em `$userdata.get/set` e `$appdata.get/set` deve usar
