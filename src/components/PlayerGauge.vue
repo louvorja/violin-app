@@ -48,5 +48,8 @@ function onClick(e) {
   flex-grow: 1;
   min-width: 100px;
   cursor: pointer;
+  /* A janela do Mídia é chrome escuro: o acento do tema desaparece nela, e a
+     barra de volume era branca antes da migração. */
+  --lj-ui-accent: var(--lj-white);
 }
 </style>

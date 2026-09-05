@@ -8,6 +8,7 @@
           :class="`alert--${variant}`"
           role="alertdialog"
           aria-modal="true"
+          tabindex="-1"
         >
           <header v-if="alert.title" class="alert-header">
             <Icon :icon="iconForVariant" size="20" class="alert-header-icon" />
@@ -67,9 +68,14 @@ const box = ref(null);
 
 // O foco tem de entrar na caixa assim que ela abre: no prompt, o campo é o
 // primeiro elemento e sem isso o usuário não consegue digitar sem clicar antes.
+// Sem campo, o foco fica na própria caixa e NÃO no primeiro botão: um alerta de
+// confirmação abriria com a ação já armada, e um Enter reflexo a dispararia.
 watch(show, (visible) => {
   if (!visible) return;
-  nextTick(() => box.value?.querySelector("input, button")?.focus());
+  nextTick(() => {
+    const caixa = box.value;
+    (caixa?.querySelector("input, textarea") ?? caixa)?.focus();
+  });
 });
 
 const promptValue = computed({

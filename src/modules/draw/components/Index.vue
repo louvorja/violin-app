@@ -85,7 +85,7 @@
           />
         </div>
         <div v-if="drawn.length" class="draw-fs-history">
-          <LjChip v-for="n in drawn" :key="n" size="sm">{{ n }}</LjChip>
+          <LjChip v-for="n in drawn" :key="n">{{ n }}</LjChip>
         </div>
       </div>
     </Transition>

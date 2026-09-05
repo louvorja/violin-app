@@ -104,8 +104,6 @@ const seconds = ref(0);
 const alarmed = ref(false);
 let timer = null;
 
-const primaryColor = computed(() => (AppData.get("is_dark") ? undefined : "primary"));
-
 const showSeconds = computed(() => $userdata.get(KEYS.MODULES.STOPWATCH.SHOW_SECONDS, true));
 
 const display = computed(() => {

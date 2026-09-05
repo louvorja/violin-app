@@ -273,11 +273,6 @@ function compareFilterData() {
   cursor: default;
 }
 
-/* Linha selecionada */
-.__table-data.__table-data tbody tr.selected {
-  background: var(--lj-active-bg);
-}
-
 .__table-data-alert {
   margin: var(--lj-space-4);
 }

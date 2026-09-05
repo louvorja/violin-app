@@ -208,6 +208,7 @@ function close(): void {
 .ch-error {
   margin: var(--lj-space-4);
   max-height: 70px;
+  overflow: auto;
 }
 .ch-header {
   width: 100%;

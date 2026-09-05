@@ -11,7 +11,7 @@
     @close="closeLyric()"
   >
     <div v-if="lyLoading" class="ly-skeleton">
-      <LjSkeleton v-for="n in 5" :key="n" height="14px" />
+      <LjSkeleton v-for="n in 5" :key="n" height="8px" />
     </div>
     <div v-else>
       <div v-for="line in lyLines" :key="line.id_lyric">
@@ -57,6 +57,6 @@ function closeLyric() {
 .ly-skeleton {
   display: flex;
   flex-direction: column;
-  gap: var(--lj-space-5);
+  gap: var(--lj-space-3);
 }
 </style>

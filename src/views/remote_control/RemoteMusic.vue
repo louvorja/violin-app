@@ -5,6 +5,7 @@
       size="touch"
       clearable
       :placeholder="t('components.inputs.search')"
+      :aria-label="t('components.inputs.search')"
       :icon="ICONS.ACTIONS.SEARCH"
       @update:model-value="onMusicSearch"
     />

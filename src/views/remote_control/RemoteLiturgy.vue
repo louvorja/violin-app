@@ -28,6 +28,7 @@
           tabindex="0"
           @click="executeLiturgyItem(item)"
           @keydown.enter="executeLiturgyItem(item)"
+          @keydown.space.prevent="executeLiturgyItem(item)"
         >
           <span class="rl-item__badge" :style="{ background: item.cor || 'var(--lj-ui-accent)' }">
             <Icon :icon="liturgy.iconForItem(item)" color="white" size="18" />

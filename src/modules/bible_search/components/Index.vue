@@ -24,7 +24,7 @@
               @blur="confirmarRascunho"
               @keydown.enter="onSearchEnter"
               @keydown.esc="historyOpen = false"
-              @keydown.delete="onSearchBackspace"
+              @keydown.backspace="onSearchBackspace"
             />
           </div>
           <button
