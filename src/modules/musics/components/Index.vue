@@ -15,39 +15,39 @@
     <template v-if="userdata" #header>
       <div :class="classform.group">
         <div :class="classform.group_item" style="margin-top: 10px">
-          <Search
-            v-model="search"
-            style="width: 400px; height: 40px"
-            class="lj-u-gap-2"
-            :label="t('inputs.search')"
-            :error="data.filter_count <= 0"
-            :disabled="disabled"
-            :disabled-hint="t('inputs.search_disabled')"
-          />
-          <Checkbox
+          <LjField class="musics-search" :hint="disabled ? t('inputs.search_disabled') : ''">
+            <LjInput
+              v-model="search"
+              :placeholder="t('inputs.search')"
+              :icon="ICONS.ACTIONS.SEARCH"
+              :invalid="data.filter_count <= 0"
+              :disabled="disabled"
+              clearable
+            />
+          </LjField>
+          <LjCheckbox
             v-model="userdata.search.name"
             class="lj-u-gap-6"
             :label="t('inputs.filter_name')"
           />
-          <Checkbox
+          <LjCheckbox
             v-model="userdata.search.lyric"
             class="lj-u-gap-6"
             :label="t('inputs.filter_lyric')"
           />
-          <Checkbox
+          <LjCheckbox
             v-model="userdata.search.album"
             class="lj-u-gap-6"
             :label="t('inputs.filter_album')"
           />
-          <Checkbox
+          <LjCheckbox
             v-model="userdata.search.track"
             class="lj-u-gap-6"
             :label="t('inputs.filter_track')"
           />
-          <Checkbox
+          <LjSwitch
             v-model="userdata.filter.instrumental_music"
             class="lj-u-gap-6"
-            switch
             :label="t('inputs.filter_instrumental')"
           />
         </div>
@@ -178,7 +178,7 @@
 </template>
 
 <script setup>
-import { LjButton } from "@/components/ui";
+import { LjButton, LjCheckbox, LjField, LjInput, LjSwitch } from "@/components/ui";
 /* ########################################################### */
 /* ####### INSTALAÇÃO DO MODULO ############################## */
 /* ########################################################### */
@@ -193,8 +193,6 @@ import { module as manifest } from "../manifest";
 import { usePlaylists } from "../composables/usePlaylists";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import Table from "@/components/DataTable.vue";
-import Search from "@/components/inputs/LjSearch.vue";
-import Checkbox from "@/components/inputs/LjCheckbox.vue";
 import MusicMenuTable from "@/components/MusicMenuTable.vue";
 import LetterPaginate from "@/components/LetterPagination.vue";
 import PlaylistPanel from "./PlaylistPanel.vue";
@@ -304,3 +302,9 @@ function close() {
   search.value = "";
 }
 </script>
+
+<style scoped>
+.musics-search {
+  width: 400px;
+}
+</style>

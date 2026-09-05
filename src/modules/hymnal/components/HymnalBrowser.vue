@@ -10,7 +10,13 @@
     <template #header>
       <div :class="classform.group">
         <div :class="classform.group_item">
-          <l-search v-model="search" :label="t('inputs.search')" :error="data.filter_count <= 0" />
+          <LjInput
+            v-model="search"
+            :placeholder="t('inputs.search')"
+            :icon="ICONS.ACTIONS.SEARCH"
+            :invalid="data.filter_count <= 0"
+            clearable
+          />
         </div>
       </div>
     </template>
@@ -89,12 +95,13 @@
 </template>
 
 <script setup>
+import { ICONS } from "@/config/Icons";
+import { LjInput } from "@/components/ui";
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { getModules } from "@/config/modules";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import LTable from "@/components/DataTable.vue";
-import LSearch from "@/components/inputs/LjSearch.vue";
 import LMusicMenuTable from "@/components/MusicMenuTable.vue";
 import DateTime from "@/helpers/DateTime";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
