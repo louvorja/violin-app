@@ -6,6 +6,9 @@ import vuetify from "./plugins/vuetify";
 import { loadFonts } from "./plugins/webfontloader";
 import { createI18nInstance } from "./i18n";
 import VueFullscreen from "vue-fullscreen";
+// Antes dos estilos do projeto: a webfont MDI é a fonte dos ícones ainda não
+// migrados, e sai daqui junto com o último nome "mdi-" do Icons.ts.
+import "@mdi/font/css/materialdesignicons.css";
 import "./assets/styles/tokens.css";
 import "./assets/styles/ui.css";
 import "./assets/styles/markdown.css";

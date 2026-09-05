@@ -43,6 +43,34 @@ const mergedMdiAttrs = computed(() => {
   };
 });
 
+/**
+ * Nomes de cor do Vuetify que o app usa em `color="..."`.
+ *
+ * No ramo v-icon eles funcionam porque o Vuetify os resolve contra o tema. No
+ * ramo SVG viram `color: primary`, que o browser descarta sem avisar — o ícone
+ * simplesmente herda a cor do pai. Como o acervo está migrando para SVG, a
+ * tradução tem de acontecer aqui, senão a cor some de forma silenciosa nas
+ * telas que ainda passam o nome.
+ *
+ * Só nomes entram no mapa: `#e74c3c`, `var(--x)` e `currentColor` passam direto.
+ */
+const CORES: Record<string, string> = {
+  primary: "var(--lj-ui-accent)",
+  secondary: "var(--lj-text-muted)",
+  success: "var(--lj-success)",
+  warning: "var(--lj-warning)",
+  error: "var(--lj-danger)",
+  info: "var(--lj-info)",
+  white: "var(--lj-white)",
+  black: "var(--lj-gray-900)",
+  grey: "var(--lj-text-muted)",
+  gray: "var(--lj-text-muted)",
+};
+
+const resolvedColor = computed(() =>
+  props.color ? (CORES[props.color] ?? props.color) : undefined
+);
+
 const _svgModules = import.meta.glob("@/assets/icons/*.svg", {
   query: "?raw",
   import: "default",
@@ -114,8 +142,8 @@ const svgStyle = computed(() => {
     alignItems: "center",
     justifyContent: "center",
   };
-  if (props.color) {
-    result.color = props.color;
+  if (resolvedColor.value) {
+    result.color = resolvedColor.value;
   }
   return result;
 });

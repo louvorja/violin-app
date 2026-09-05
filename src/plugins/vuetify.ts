@@ -1,4 +1,3 @@
-import "@mdi/font/css/materialdesignicons.css";
 import { VProgress } from "vuetify/labs/VProgress";
 import "vuetify/styles";
 
