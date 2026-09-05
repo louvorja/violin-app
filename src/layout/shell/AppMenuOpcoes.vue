@@ -5,7 +5,7 @@
         <Icon :icon="ICONS.UI.OPTIONS" size="18" />
         <span>{{ $t("options.general.title") }}</span>
       </h3>
-      <div class="opt-row opt-row--field">
+      <div class="opt-row">
         <label class="opt-label" for="opt-theme">{{ $t("options.general.theme") }}</label>
         <select
           id="opt-theme"
@@ -17,7 +17,7 @@
         </select>
       </div>
 
-      <div class="opt-row opt-row--field">
+      <div class="opt-row">
         <label class="opt-label" for="opt-language">{{ $t("options.general.language") }}</label>
         <select
           id="opt-language"
@@ -30,7 +30,7 @@
         </select>
       </div>
 
-      <div class="opt-row opt-row--field">
+      <div class="opt-row">
         <label class="opt-label" for="opt-ui-style">{{ $t("options.general.ui_style") }}</label>
         <select
           id="opt-ui-style"
@@ -44,7 +44,7 @@
         </select>
       </div>
 
-      <div class="opt-row opt-row--field">
+      <div class="opt-row">
         <label class="opt-label" for="opt-font">{{ $t("options.general.font") }}</label>
         <SelectFont
           id="opt-font"
@@ -56,7 +56,7 @@
         />
       </div>
 
-      <div class="opt-row opt-row--field">
+      <div class="opt-row">
         <label class="opt-label" for="opt-projection-font">
           {{ $t("options.general.projection_font") }}
         </label>
@@ -82,7 +82,7 @@
       </div>
       <div class="opt-bg">
         <div class="opt-bg-fields">
-          <div class="opt-row opt-row--field">
+          <div class="opt-row">
             <label class="opt-label" for="opt-bg-color">
               {{ $t("options.background.color") }}
             </label>
@@ -95,7 +95,7 @@
             />
           </div>
 
-          <div class="opt-row opt-row--field">
+          <div class="opt-row">
             <span class="opt-label">{{ $t("options.background.title") }}</span>
             <div class="opt-bg-pick">
               <LjButton variant="default" size="sm" @click="pickBgImage">
@@ -108,7 +108,7 @@
             </div>
           </div>
 
-          <div class="opt-row opt-row--field">
+          <div class="opt-row">
             <label class="opt-label" for="opt-bg-position">
               {{ $t("options.background.position") }}
             </label>
@@ -177,7 +177,7 @@
         </template>
       </div>
 
-      <div v-else>
+      <template v-else>
         <div class="opt-monitors">
           <MonitorShape
             v-for="d in displays"
@@ -198,14 +198,16 @@
           </MonitorShape>
         </div>
 
-        <button type="button" class="opt-btn" @click="identify(5000)">
-          {{ $t("options.monitors.identify") }}
-        </button>
+        <div class="opt-actions">
+          <button type="button" class="opt-btn" @click="identify(5000)">
+            {{ $t("options.monitors.identify") }}
+          </button>
+        </div>
 
         <!-- Tela cheia automática: o site não pode pedir essa permissão nem
              consultá-la; só o usuário libera. Mostramos o estado deduzido da
              última projeção e como resolver. -->
-        <div v-if="autoFullscreen !== 'native'" class="opt-row opt-row--stack">
+        <div v-if="autoFullscreen !== 'native'" class="opt-row opt-row--col">
           <span class="opt-label">{{ $t("options.monitors.auto_fullscreen_title") }}</span>
           <div>
             <span v-if="autoFullscreen === 'granted'" class="opt-hint">
@@ -236,7 +238,7 @@
           </select>
           <span v-if="role.warning" class="opt-monitor-warning">{{ role.warning }}</span>
         </div>
-      </div>
+      </template>
     </section>
 
     <section id="opt-sec-bible" class="opt-section">
@@ -285,7 +287,7 @@
         />
       </div>
 
-      <div class="opt-row opt-row--field">
+      <div class="opt-row">
         <label class="opt-label" for="opt-bible-font">{{ $t("options.bible.font") }}</label>
         <SelectFont
           id="opt-bible-font"
@@ -326,7 +328,7 @@
           <option value="bottom">{{ $t("options.slides.align_bottom") }}</option>
         </select>
       </div>
-      <div class="opt-row opt-row--field">
+      <div class="opt-row">
         <label class="opt-label" for="opt-slides-font">{{ $t("options.slides.font") }}</label>
         <SelectFont
           id="opt-slides-font"
@@ -992,7 +994,7 @@
         </div>
       </div>
 
-      <v-divider class="opt-divider" />
+      <div class="opt-divider" />
 
       <div class="opt-row">
         <label class="opt-checkbox">
@@ -1086,7 +1088,7 @@
         </label>
       </div>
 
-      <div class="opt-row opt-row--field">
+      <div class="opt-row">
         <label class="opt-label" for="opt-utilities-font">
           {{ $t("options.utilities.font") }}
         </label>
@@ -1592,6 +1594,12 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.opt-divider {
+  height: 1px;
+  margin: var(--lj-space-5) 0;
+  background: var(--lj-surface-border);
+}
+
 /* Imagem de fundo: campos e pré-visualização seguem as mesmas colunas da
    seção, para o monitor não flutuar entre elas. */
 .opt-bg {
@@ -1607,12 +1615,5 @@ onMounted(async () => {
 
 .opt-bg-fields .opt-row:last-child {
   margin-bottom: 0;
-}
-
-.opt-bg .opt-bg-preview-wrap {
-  justify-content: flex-start;
-  width: auto;
-  height: auto;
-  margin-top: 0;
 }
 </style>

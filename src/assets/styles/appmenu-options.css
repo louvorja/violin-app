@@ -30,14 +30,21 @@
 
 /* Coluna de rótulos com largura fixa: é ela que alinha os controles entre
    linhas e entre colunas da grade. */
-.opt-section > .opt-row > .opt-label {
+.opt-section .opt-row:not(.opt-row--col) > .opt-label {
   flex: 0 0 180px;
 }
 
-.opt-section > .opt-row :is(.opt-select, .select-font, .lj-monitor-select) {
+.opt-section .opt-row :is(.opt-select, .select-font, .lj-monitor-select, .lj-select) {
   width: 100%;
   min-width: 0;
   max-width: 320px;
+}
+
+/* O modificador inline pede largura natural; sem esta regra a de cima o
+   alargava para 320px como qualquer outro campo. */
+.opt-section .opt-row .lj-monitor-select--inline {
+  width: auto;
+  max-width: none;
 }
 
 @media (max-width: 900px) {
@@ -78,13 +85,6 @@
   gap: var(--lj-space-4);
   margin-bottom: var(--lj-space-5);
   font-size: var(--lj-text-base);
-}
-
-/* Layout lado a lado: label seguido do controle (select) com bom espaçamento */
-.opt-row--field {
-  flex-direction: row;
-  align-items: center;
-  gap: var(--lj-space-6);
 }
 
 .opt-label {
