@@ -1343,19 +1343,24 @@ function onBgPositionChange(valor: string | number | null): void {
   scheduleSave();
 }
 
-async function scheduleSave(): Promise<void> {
-  if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(async () => {
-    const existing = (await getSetting<any>(MAIN_BACKGROUND_ID).catch(() => ({}))) || {};
+async function saveMainBg(): Promise<void> {
+  const existing = (await getSetting<any>(MAIN_BACKGROUND_ID).catch(() => ({}))) || {};
 
-    const settings: Settings = {
-      id: MAIN_BACKGROUND_ID,
-      ...existing,
-      color: bgColor.value,
-      position: bgPosition.value,
-    };
-    await saveSetting(settings);
-    notifyViews();
+  const settings: Settings = {
+    id: MAIN_BACKGROUND_ID,
+    ...existing,
+    color: bgColor.value,
+    position: bgPosition.value,
+  };
+  await saveSetting(settings);
+  notifyViews();
+}
+
+function scheduleSave(): void {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    void saveMainBg();
   }, 300);
 }
 
@@ -1399,9 +1404,25 @@ onMounted(async () => {
       wallpaperBlobUrl.value = URL.createObjectURL(blob);
     }
   }
+  // O fundo da projeção de arquivos só era lido ao ligar o interruptor. Quem
+  // abria as Opções com ele já ligado via os defaults, e qualquer edição
+  // gravava por cima da configuração real.
+  await loadFileProjBg();
 });
 
 onBeforeUnmount(() => {
+  // Descarrega o que estiver pendente: fechar o painel logo depois de soltar o
+  // mouse cancelaria a gravação sem ela nunca ter acontecido.
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+    void saveMainBg();
+  }
+  if (fpSaveTimer) {
+    clearTimeout(fpSaveTimer);
+    fpSaveTimer = null;
+    void saveFileProjBg();
+  }
   if (wallpaperBlobUrl.value) URL.revokeObjectURL(wallpaperBlobUrl.value);
   if (fileProjBlobUrl) URL.revokeObjectURL(fileProjBlobUrl);
 });
@@ -1527,24 +1548,45 @@ async function loadFileProjBg(): Promise<void> {
   }
 }
 
-function toggleFileProjBg(e: Event): void {
+async function toggleFileProjBg(e: Event): Promise<void> {
   const checked = (e.target as HTMLInputElement).checked;
-  $userdata.set("options.file_projection.background_enabled", checked);
+  $userdata.set(KEYS.OPTIONS.FILE_PROJECTION.BACKGROUND_ENABLED, checked);
   if (checked) {
-    loadFileProjBg();
+    await loadFileProjBg();
+    // saveFileProjBg também cria o registro de quem nunca configurou — sem ele
+    // o broadcast chega e a projeção não acha o que aplicar.
+    await saveFileProjBg();
   } else {
     notifyFileProjViews();
   }
 }
 
+/**
+ * Timer PRÓPRIO, separado do `saveTimer` do fundo principal.
+ *
+ * São dois registros e dois broadcasts distintos; compartilhar o timer faria a
+ * edição de um cancelar (clearTimeout) a gravação pendente do outro.
+ */
+let fpSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleFileProjSave(): void {
+  if (fpSaveTimer) clearTimeout(fpSaveTimer);
+  fpSaveTimer = setTimeout(() => {
+    fpSaveTimer = null;
+    void saveFileProjBg();
+  }, 300);
+}
+
 function onFileProjBgColor(e: Event): void {
   fileProjBgColor.value = (e.target as HTMLInputElement).value;
-  saveFileProjBg();
+  // Sem o debounce, arrastar no seletor de cor gravava no IndexedDB e disparava
+  // um broadcast por evento de movimento — com a projeção aberta ao vivo.
+  scheduleFileProjSave();
 }
 
 function onFileProjBgPosition(valor: string | number | null): void {
   fileProjBgPosition.value = String(valor ?? "");
-  saveFileProjBg();
+  scheduleFileProjSave();
 }
 
 async function pickFileProjBgImage(): Promise<void> {
@@ -1554,8 +1596,10 @@ async function pickFileProjBgImage(): Promise<void> {
   if (fileProjBlobUrl) URL.revokeObjectURL(fileProjBlobUrl);
   fileProjBlobUrl = URL.createObjectURL(blob);
   fileProjBgImageUrl.value = fileProjBlobUrl;
+  const existing = (await getSetting<any>(FP_STORAGE_ID).catch(() => ({}))) || {};
   await saveSetting({
     id: FP_STORAGE_ID,
+    ...existing,
     image: r.data,
     mime: r.mime,
     color: fileProjBgColor.value,
