@@ -390,6 +390,26 @@ caem na fonte de sistema do Chrome a 13,33px. Nada disso dá erro no console.
 Mexer nesse bloco muda a geometria do app inteiro de uma vez. Trate-o como
 contrato, não como folha de estilo comum.
 
+#### Camada teleportada precisa retomar o ponteiro
+
+Um diálogo modal da Reka — a janela de módulo, um `LjDialog`, um `LjDrawer`
+temporário — carimba `pointer-events: none` no `<body>` para tornar inerte tudo
+que está fora dele. Todo painel que o app teleporta para o `<body>` por conta
+própria está, por definição, fora: continua visível, continua acima na pilha de
+`--lj-z-*`, e não responde a clique nenhum.
+
+Foi assim que o alerta "Deseja fechar este slide?" ficou preso na tela com a
+janela do Mídia aberta — o operador via a pergunta, clicava, e nada acontecia,
+sem nada no console. Quem teleporta e recebe clique declara `pointer-events:
+auto`; `src/__tests__/CamadasTeleportadas.spec.ts` lista essas camadas e falha
+se alguma perder a linha. Os portais da própria Reka (`LjSelect`, `LjMenu`,
+`LjPopover`) não precisam: ela empilha as camadas dela sozinha.
+
+O outro lado do mesmo problema: para a Reka, um clique nessa camada é um clique
+*fora* do diálogo. `Window.vue` minimizava a janela quando o usuário respondia à
+confirmação — o handler de `pointer-down-outside` precisa ignorar o que vem de
+dentro do alerta.
+
 #### O Vuetify saiu — e não volta sem alguém notar
 
 `src/__tests__/SemVuetify.spec.ts` trava as quatro portas de volta: tag `<v-*>`,
