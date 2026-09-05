@@ -48,7 +48,7 @@
                   role="menuitem"
                   @click="selectItem(item)"
                 >
-                  <Icon :icon="item.icon" class="mr-2" />
+                  <Icon :icon="item.icon" />
                   <span class="app-menu-item-label lj-u-truncate">{{ $t(item.label) }}</span>
                 </button>
               </nav>
@@ -435,6 +435,7 @@ function onOpenOptions(e) {
 .app-menu-item {
   display: flex;
   align-items: center;
+  gap: var(--lj-space-4);
   height: 36px;
   padding: 0 var(--lj-space-7);
   background: transparent;
@@ -525,15 +526,12 @@ function onOpenOptions(e) {
 
   .app-menu-item {
     justify-content: center;
+    gap: 0;
     padding: 0;
   }
 
   .app-menu-item-label {
     display: none;
-  }
-
-  .app-menu-item :deep(.mr-2) {
-    margin-right: 0 !important;
   }
 }
 

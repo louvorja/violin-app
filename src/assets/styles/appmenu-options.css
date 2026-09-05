@@ -165,6 +165,13 @@
   margin-top: calc(var(--lj-space-2) * -1);
 }
 
+/* Dica que explica o botão logo acima. Sem folga ela encosta na borda dele e os
+   dois viram um bloco só. */
+.opt-btn ~ .opt-hint,
+.lj-btn ~ .opt-hint {
+  margin-top: var(--lj-space-3);
+}
+
 /* Alinhado ao contrato de `ui.css` para que estes controles legados fiquem
    indistinguíveis dos primitivos LjButton/LjSelect enquanto a migração da tela
    avança. Ao migrar o último `.opt-*`, este bloco sai junto. */
@@ -523,12 +530,18 @@
 }
 .opt-bg-pick {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: var(--lj-space-4);
 }
+
+/* A frase inteira ou nada: quebrada no meio ela fica mais alta que o botão ao
+   lado e a linha toda parece desalinhada. Quando não couber, o `wrap` do
+   contêiner a desce inteira para a linha de baixo. */
 .opt-bg-empty-text {
   font-size: 11px;
   color: var(--lj-text-muted);
+  white-space: nowrap;
 }
 .opt-bg-preview-wrap {
   flex: none;

@@ -99,6 +99,27 @@ describe("o Vuetify não voltou", () => {
     expect(achados).toEqual([]);
   });
 
+  it("a escala de espaçamento do Material não volta nem redeclarada", () => {
+    // Esta checagem ignora de propósito se a classe está declarada no repositório.
+    // Foi assim que `mr-2` sobreviveu no menu do app: a migração manteve o nome no
+    // template e escreveu uma regra local só para ele dentro de um @media — a
+    // checagem geral passou a considerá-la "declarada", e no resto das larguras o
+    // ícone ficou colado no rótulo. Espaçamento aqui é `gap` no contêiner ou uma
+    // classe com nome próprio, sempre em token --lj-space-*.
+    const ESCALA = /^(m|p)[atrblxysne]?-(auto|n?([0-9]|1[0-6]))$/;
+    const achados: string[] = [];
+    for (const f of vues) {
+      const tpl = template(readFileSync(f, "utf8"));
+      for (const m of tpl.matchAll(/(?:^|\s):?class="([^"]*)"/g)) {
+        for (const bruto of m[1].split(/[\s{}[\],:?()|&!=<>+]+/)) {
+          const c = bruto.replace(/['"`]/g, "");
+          if (c && ESCALA.test(c)) achados.push(`${f}: ${c}`);
+        }
+      }
+    }
+    expect(achados).toEqual([]);
+  });
+
   it("nenhum CSS lê variável --v-* do tema do Vuetify", () => {
     // A mais traiçoeira das quatro. `rgba(var(--v-border-color), .2)` sem o
     // pacote não fica "quase certo": a variável não existe, a declaração inteira

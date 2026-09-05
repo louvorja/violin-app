@@ -6,7 +6,7 @@
       <div class="liturgy-tl-empty-hint">{{ t("data.empty_hint") }}</div>
       <button
         v-if="!locked"
-        class="lit-btn lit-btn--primary mt-4"
+        class="lit-btn lit-btn--primary lit-btn--add"
         data-testid="liturgy-add-item"
         @click="openItemDialog()"
       >
@@ -465,8 +465,9 @@ function onDragMove(evt: Record<string, unknown>): boolean | void {
   color: var(--lj-navy);
   filter: brightness(1.1);
 }
-.mt-4 {
-  margin-top: 16px;
+/* Único botão solto abaixo da lista: a folga é dele, não da escala do Material. */
+.lit-btn--add {
+  margin-top: var(--lj-space-6);
 }
 
 /* ── Bloco drag ghost feedback ── */

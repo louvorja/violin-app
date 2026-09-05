@@ -12,14 +12,6 @@
             <Icon :icon="ICONS.ACTIONS.DOWNLOAD" size="14" />
             {{ $t("import_export.export.action") }}
           </button>
-
-          <input
-            ref="fileInput"
-            type="file"
-            accept=".json,.ja"
-            style="display: none"
-            @change="onFileSelected"
-          />
           <p class="opt-hint">{{ $t("import_export.export.hint") }}</p>
         </div>
         <div>
@@ -27,6 +19,15 @@
             <Icon :icon="ICONS.ACTIONS.UPLOAD" size="14" />
             {{ $t("import_export.import.action") }}
           </button>
+          <!-- O seletor de arquivo é do importar: estava na coluna do exportar,
+               entre o botão e a dica, e o `+` do CSS não enxergava por cima dele. -->
+          <input
+            ref="fileInput"
+            type="file"
+            accept=".json,.ja"
+            style="display: none"
+            @change="onFileSelected"
+          />
           <p class="opt-hint">{{ $t("import_export.import.hint") }}</p>
         </div>
       </div>
