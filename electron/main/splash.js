@@ -30,6 +30,9 @@ function show() {
   splashWindow = new BrowserWindow({
     width: w,
     height: h,
+    // Sem isto, w/h são a medida externa da janela no Windows, e o conteúdo
+    // recebe menos do que os 117px que o layout do splash.html espera.
+    useContentSize: true,
     x,
     y,
     frame: false,

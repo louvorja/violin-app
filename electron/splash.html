@@ -40,8 +40,11 @@
     }
 
     .splash-icon {
-      width: 117px;
-      height: 117px;
+      /* Quadrado do tamanho da altura que a janela realmente entregou, e não
+         117px fixos. O Windows não devolve ao conteúdo a altura pedida na
+         BrowserWindow, e o painel excedente saía cortado por baixo, levando o
+         logo junto. */
+      aspect-ratio: 1;
       flex-shrink: 0;
       display: flex;
       align-items: center;
@@ -50,8 +53,8 @@
     }
 
     .splash-logo {
-      width: 78px;
-      height: auto;
+      height: 69%;
+      width: auto;
       filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));
     }
 
