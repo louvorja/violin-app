@@ -45,8 +45,8 @@ três camadas: **memória → IndexedDB → rede**. Sem TTL por tempo — o cach
 até uma invalidação explícita ou nova versão do app, e sem rede o app continua
 funcionando com a última cópia (stale-if-error).
 
-Em **Opções → Atualizações** há dois botões de limpeza: *cache completo do
-programa* e *apenas coletâneas* (força re-download na próxima abertura).
+Em **Opções → Atualizações** há dois botões de limpeza: _cache completo do
+programa_ e _apenas coletâneas_ (força re-download na próxima abertura).
 
 Detalhes em [docs/architecture.md](docs/architecture.md#cache-do-banco-em-camadas-databasets).
 
@@ -113,20 +113,82 @@ personalizada** no texto:
 
 ## Stack
 
-| Tecnologia | Versão | Nota |
-|---|---|---|
-| Vue 3 + Composition API | ~3.5.x | `<script setup>` em todo o projeto |
-| Vuetify 4 | 4.1.2 | UI framework — versão fixa, sem `^` |
-| Pinia | ^3.x | Estado global (migrado de Vuex) |
-| Vue Router | 5.0.6 | Versão fixa, sem `^` |
-| Vue I18n | ^11.x | PT/ES |
-| TypeScript | ^6.x | Tipagem em todo o código |
-| Vite 7 | ^7.x | Build + dev server (porta 5002) |
-| Electron | ^41.x | Target desktop |
-| pdfjs-dist | ^6.x | Renderização de PDF |
-| idb | ^8.x | IndexedDB unificado |
-| heic2any | ^0.0.4 | Conversão HEIC/HEIF → JPEG na importação |
-| jszip | ^3.x | Import/export `.slja` e coletâneas |
+| Tecnologia              | Versão | Nota                                                                       |
+| ----------------------- | ------ | -------------------------------------------------------------------------- |
+| Vue 3 + Composition API | ~3.5.x | `<script setup>` em todo o projeto                                         |
+| Vuetify 4               | 4.1.2  | **Em remoção** — versão fixa, sem `^`. Ver [Design system](#design-system) |
+| Reka UI                 | ^2.x   | Base headless dos primitivos próprios                                      |
+| Pinia                   | ^3.x   | Estado global (migrado de Vuex)                                            |
+| Vue Router              | 5.0.6  | Versão fixa, sem `^`                                                       |
+| Vue I18n                | ^11.x  | PT/ES                                                                      |
+| TypeScript              | ^6.x   | Tipagem em todo o código                                                   |
+| Vite 7                  | ^7.x   | Build + dev server (porta 5002)                                            |
+| Electron                | ^41.x  | Target desktop                                                             |
+| pdfjs-dist              | ^6.x   | Renderização de PDF                                                        |
+| idb                     | ^8.x   | IndexedDB unificado                                                        |
+| heic2any                | ^0.0.4 | Conversão HEIC/HEIF → JPEG na importação                                   |
+| jszip                   | ^3.x   | Import/export `.slja` e coletâneas                                         |
+
+---
+
+## Design system
+
+A interface está saindo do Vuetify/Material para um catálogo de primitivos
+próprios sobre [Reka UI](https://reka-ui.com) (headless), mantendo a densidade
+de desktop herdada do sistema Delphi original. Os primitivos ficam em
+`src/components/ui/` e a página `/ui` mostra todos eles lado a lado.
+
+**Em código novo, não use componentes Vuetify.** Importe de `@/components/ui`:
+
+```ts
+import { LjButton, LjSelect, LjDialog } from "@/components/ui";
+```
+
+Medidas, borda, raio e foco vêm de `assets/styles/ui.css`; cores e espaçamentos,
+de `tokens.css`. Para cor de estado use `--lj-ui-accent*`, nunca `--lj-navy`
+direto — a marca é acromática nos temas escuros.
+
+### Estado da migração
+
+| Frente                               | Situação                         |
+| ------------------------------------ | -------------------------------- |
+| Primitivos disponíveis               | 23                               |
+| Tags `<v-*>` no código               | 197, em 59 arquivos              |
+| Nomes `mdi-` soltos fora do catálogo | 0 — todos passam por `ICONS.*`   |
+| Ícones servidos pela webfont MDI     | 355 constantes, a trocar por SVG |
+
+### O que ainda prende o Vuetify
+
+Zerar as tags `<v-*>` **não** remove a dependência. Três amarras seguem de pé, e
+nenhuma delas aparece numa busca por `<v-`:
+
+1. **A webfont dos ícones.** `Icon.vue` renderiza `<v-icon>` para todo nome que
+   comece com `mdi-`, e as 355 constantes de `ICONS.*` ainda são MDI. Enquanto
+   isso valer, a maioria das telas monta um componente Vuetify por dentro mesmo
+   sem citar nenhum. Sai quando o catálogo virar SVG.
+2. **As classes utilitárias.** 59 arquivos usam `d-flex`, `ma-*`, `pa-*`,
+   `text-caption` e afins, que vêm de `vuetify/styles` e não estão redefinidas
+   em `utilities.css`. Nada quebra hoje; tudo desmonta junto no dia da remoção.
+3. **`<v-app>` e os drawers.** `v-navigation-drawer` faz `inject` do layout e
+   lança erro no _setup_ se não houver `<v-app>` acima. Enquanto os dois usos
+   existirem, `App.vue` não pode largar o wrapper — é uma ordem de trabalho, não
+   uma troca.
+
+Além disso, 13 arquivos leem `--v-theme-*` ou `--v-border-color` em CSS próprio.
+
+### Armadilhas ao migrar um componente
+
+As trocas abaixo não dão erro no console — falham em silêncio:
+
+| Vuetify             | Primitivo    | Cuidado                                                              |
+| ------------------- | ------------ | -------------------------------------------------------------------- |
+| `v-progress-linear` | `LjProgress` | a prop é `value`, **não** `model-value`                              |
+| `v-select`          | `LjSelect`   | a chave de rótulo é `itemLabel`, **não** `item-title`                |
+| `v-alert`           | `LjAlert`    | `type="error"` vira `variant="danger"`; `variant="tonal"` não existe |
+| `v-text-field`      | `LjInput`    | `class`/`style` pousam no `<input>` interno, não na moldura          |
+| `v-skeleton-loader` | `LjSkeleton` | `width`/`height` são strings CSS, não números                        |
+
+Detalhes e catálogo completo em [docs/design-system.md](docs/design-system.md).
 
 ---
 
@@ -151,15 +213,15 @@ npm run test:e2e             # Testes end-to-end (Playwright)
 
 ## Documentação
 
-| Documento | Conteúdo |
-|---|---|
-| [docs/architecture.md](docs/architecture.md) | Stack, módulos, estado, comunicação, helpers, estrutura |
-| [docs/creating-modules.md](docs/creating-modules.md) | Como criar e registrar módulos |
-| [docs/broadcast.md](docs/broadcast.md) | BroadcastChannel — tipos, payloads, fluxos |
-| [docs/design-system.md](docs/design-system.md) | Tokens CSS, paleta, tipografia, espaçamento |
-| [docs/setup.md](docs/setup.md) | Configuração do ambiente, .env, servidor local |
-| [docs/security.md](docs/security.md) | CSP, headers HTTP, segurança |
-| [docs/env.md](docs/env.md) | Variáveis de ambiente |
+| Documento                                            | Conteúdo                                                |
+| ---------------------------------------------------- | ------------------------------------------------------- |
+| [docs/architecture.md](docs/architecture.md)         | Stack, módulos, estado, comunicação, helpers, estrutura |
+| [docs/creating-modules.md](docs/creating-modules.md) | Como criar e registrar módulos                          |
+| [docs/broadcast.md](docs/broadcast.md)               | BroadcastChannel — tipos, payloads, fluxos              |
+| [docs/design-system.md](docs/design-system.md)       | Primitivos, tokens CSS, paleta, tipografia, espaçamento |
+| [docs/setup.md](docs/setup.md)                       | Configuração do ambiente, .env, servidor local          |
+| [docs/security.md](docs/security.md)                 | CSP, headers HTTP, segurança                            |
+| [docs/env.md](docs/env.md)                           | Variáveis de ambiente                                   |
 
 ---
 
