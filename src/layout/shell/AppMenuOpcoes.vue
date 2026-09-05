@@ -125,8 +125,14 @@
             :remove-label="$t('options.slides.remove_image')"
             @remove="removeBgImage"
           >
-            <div class="opt-bg-preview-screen" :style="{ backgroundColor: bgColor }">
-              <img v-if="currentBgImage" :src="currentBgImage" class="opt-bg-preview-img" alt="" />
+            <div ref="bgPreviewEl" class="opt-bg-preview-screen" :style="estiloDaPrevia">
+              <img
+                v-if="currentBgImage"
+                :src="currentBgImage"
+                class="opt-bg-preview-probe"
+                alt=""
+                @load="medirImagemDeFundo"
+              />
             </div>
           </MonitorShape>
         </div>
@@ -1143,6 +1149,7 @@ import { KEYS } from "@/constants/UserDataKeys";
 import { MAIN_BACKGROUND_ID, Settings } from "@/types/Settings";
 import { THEMES, COLOR_THEMES } from "@/config/Theme";
 import { SLIDE_STYLE_DEFAULT } from "@/config/SlideStyle";
+import { estiloDeFundo } from "@/helpers/BackgroundStyle";
 import { FONT } from "@/config/Fonts";
 
 interface ThemeOption {
@@ -1291,6 +1298,33 @@ const roleRows = computed(() =>
 // Proporção do monitor usado no preview de fundo: mostra a tela em que o
 // fundo realmente vai aparecer, ou seja, a do papel "Projeção". Sem monitor
 // atribuído, usa o display físico primário; por último, 16:9.
+const bgPreviewEl = ref<HTMLElement | null>(null);
+const bgLarguraNatural = ref(0);
+
+function medirImagemDeFundo(e: Event): void {
+  bgLarguraNatural.value = (e.target as HTMLImageElement).naturalWidth || 0;
+}
+
+/**
+ * A prévia agora aplica o mesmo "Ajuste" da projeção.
+ *
+ * `center` e `tile` desenham a imagem em tamanho natural, então precisam da
+ * escala prévia÷monitor — sem ela, uma imagem de 1920px numa caixa de ~280px
+ * apareceria gigante e cortada, e o ladrilho mostraria menos de um bloco onde
+ * o telão mostra vários.
+ */
+const estiloDaPrevia = computed(() => {
+  const largura = bgPreviewEl.value?.clientWidth ?? 0;
+  const monitor = previewMonitorW.value || 0;
+  return estiloDeFundo({
+    color: bgColor.value,
+    imageUrl: currentBgImage.value,
+    position: bgPosition.value,
+    escala: largura && monitor ? largura / monitor : undefined,
+    larguraNatural: bgLarguraNatural.value || undefined,
+  });
+});
+
 const previewMonitor = computed(() => {
   const projection = roles.value.find((r) => r.role === "projection");
   const selected = displays.value.find((d) => d.id === projection?.displayId);

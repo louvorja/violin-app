@@ -35,6 +35,7 @@
 
 <script setup lang="ts">
 import { reactive, ref, computed, nextTick, onMounted, onBeforeUnmount } from "vue";
+import { estiloDeFundo } from "@/helpers/BackgroundStyle";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import Broadcast from "@/helpers/Broadcast";
@@ -92,25 +93,13 @@ const wpImageUrl = ref("");
 const wpPosition = ref("cover");
 let wpBlobUrl: string | null = null;
 
-const bgSizeMap: Record<string, string> = {
-  cover: "cover",
-  contain: "contain",
-  center: "auto",
-  stretch: "100% 100%",
-  tile: "auto",
-};
-const bgRepeatMap: Record<string, string> = { tile: "repeat" };
-
-const fallbackStyle = computed(() => {
-  const style: Record<string, string> = { background: wpColor.value };
-  if (wpImageUrl.value) {
-    style.backgroundImage = `url(${wpImageUrl.value})`;
-    style.backgroundSize = bgSizeMap[wpPosition.value] || "cover";
-    style.backgroundPosition = wpPosition.value === "tile" ? "0 0" : "center";
-    style.backgroundRepeat = bgRepeatMap[wpPosition.value] || "no-repeat";
-  }
-  return style;
-});
+const fallbackStyle = computed(() =>
+  estiloDeFundo({
+    color: wpColor.value,
+    imageUrl: wpImageUrl.value,
+    position: wpPosition.value,
+  })
+);
 
 async function renderPdfPage(pageNum: number): Promise<void> {
   const canvas = pdfCanvas.value;

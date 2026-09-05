@@ -552,10 +552,15 @@
   align-items: center;
   justify-content: center;
 }
-.opt-bg-preview-img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
+/* A imagem em si é desenhada como background da tela da prévia, com o mesmo
+   "Ajuste" da projeção. Este <img> não aparece: existe só para reportar o
+   naturalWidth do arquivo, que é o que permite escalar `center` e `tile`. */
+.opt-bg-preview-probe {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* Preview de projeção de arquivos — container com botão de remover */
