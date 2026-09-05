@@ -1,7 +1,6 @@
 <template>
-  <v-icon v-if="isMdi" :icon="icon" v-bind="mergedMdiAttrs" class="lj-icon" />
   <span
-    v-else-if="svgContent"
+    v-if="svgContent"
     class="lj-icon"
     :class="svgClassList"
     :style="svgStyle"
@@ -29,28 +28,13 @@ const props = withDefaults(defineProps<IconProps>(), {
 
 const attrs = useAttrs();
 
-const isMdi = computed(() => props.icon?.startsWith("mdi-"));
-
-const mergedMdiAttrs = computed(() => {
-  const a = attrs;
-  return {
-    ...a,
-    ...(props.size !== undefined ? { size: props.size } : {}),
-    ...(props.color !== undefined ? { color: props.color } : {}),
-    ...(props.start ? { start: true } : {}),
-    ...(props.end ? { end: true } : {}),
-    ...(props.disabled ? { disabled: true } : {}),
-  };
-});
-
 /**
- * Nomes de cor do Vuetify que o app usa em `color="..."`.
+ * Nomes de cor herdados do tema do Vuetify, que várias telas ainda passam em
+ * `color="..."`.
  *
- * No ramo v-icon eles funcionam porque o Vuetify os resolve contra o tema. No
- * ramo SVG viram `color: primary`, que o browser descarta sem avisar — o ícone
- * simplesmente herda a cor do pai. Como o acervo está migrando para SVG, a
- * tradução tem de acontecer aqui, senão a cor some de forma silenciosa nas
- * telas que ainda passam o nome.
+ * Sem tradução eles viram `color: primary` no style, que o browser descarta sem
+ * avisar: o ícone herda a cor do pai e ninguém percebe que a cor sumiu. Por isso
+ * o mapa fica aqui, e não numa varredura de templates.
  *
  * Só nomes entram no mapa: `#e74c3c`, `var(--x)` e `currentColor` passam direto.
  */
@@ -87,7 +71,7 @@ for (const [path, content] of Object.entries(_svgModules)) {
 }
 
 const svgContent = computed(() => {
-  if (!props.icon || isMdi.value) return null;
+  if (!props.icon) return null;
   const raw = _svgNameMap.get(props.icon);
   if (!raw) return null;
 

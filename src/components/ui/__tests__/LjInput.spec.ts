@@ -6,9 +6,7 @@ import { expectKeyExists, mountUi } from "./mountUi";
 /**
  * Fora do alcance do jsdom (e por isso sem teste):
  * - o anel de foco do wrapper (`:focus-within`) e o esmaecimento do estado
- *   desabilitado são só CSS — jsdom não calcula estilo de folha scoped;
- * - o ícone de prefixo cai num <v-icon> do Vuetify, que não está registrado
- *   nesta montagem; testar a presença dele mediria o dublê, não o primitivo.
+ *   desabilitado são só CSS — jsdom não calcula estilo de folha scoped.
  *
  * Sem teste porque hoje FALHARIA — são defeitos do componente, não do teste:
  * - `inheritAttrs: false` sem nenhum `v-bind="$attrs"`: name, maxlength,

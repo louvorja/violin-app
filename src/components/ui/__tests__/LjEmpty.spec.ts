@@ -37,9 +37,10 @@ describe("LjEmpty", () => {
   });
 
   it("mostra o ícone quando informado e nada quando não é", () => {
-    const comIcone = mountUi(LjEmpty, { props: { title: "Sem mídia", icon: "mdi-music-off" } });
+    const comIcone = mountUi(LjEmpty, { props: { title: "Sem mídia", icon: "music-off" } });
     expect(comIcone.find(ICONE).exists()).toBe(true);
-    expect(comIcone.find(ICONE).attributes("icon")).toBe("mdi-music-off");
+    // O ícone é um SVG embutido: o nome pedido sai no rótulo acessível.
+    expect(comIcone.find(ICONE).attributes("aria-label")).toBe("music-off");
 
     const semIcone = mountUi(LjEmpty, { props: { title: "Sem mídia" } });
     expect(semIcone.find(ICONE).exists()).toBe(false);
@@ -74,18 +75,17 @@ describe("LjEmpty", () => {
 
   it("mantém a ordem de leitura: ícone, título, descrição e ações", () => {
     const w = mountUi(LjEmpty, {
-      props: { title: "Nenhum resultado", description: "Tente outro termo.", icon: "mdi-magnify" },
+      props: { title: "Nenhum resultado", description: "Tente outro termo.", icon: "search" },
       slots: { default: "<button>Limpar busca</button>" },
     });
-    const ordem = Array.from(w.element.children).map(
-      (el) => (el as HTMLElement).className.split(" ")[0]
-    );
-    expect(ordem).toEqual([
-      "lj-empty__icon",
-      "lj-empty__title",
-      "lj-empty__desc",
-      "lj-empty__actions",
-    ]);
+    const partes = [ICONE, TITULO, DESC, ACOES];
+    // Casar por seletor, não pela primeira classe do elemento: o ícone carrega
+    // também a classe do próprio primitivo, e a ordem delas não é contrato.
+    const ordem = Array.from(w.element.children).map((el) => {
+      const alvo = el as HTMLElement;
+      return partes.find((sel) => alvo.matches(sel)) ?? alvo.className;
+    });
+    expect(ordem).toEqual(partes);
   });
 
   it("acompanha a troca de props: descrição aparece e some", async () => {
@@ -116,7 +116,7 @@ describe("LjEmpty", () => {
 
   it("não é interativo por conta própria: nada de botão ou link fora do slot", () => {
     const w = mountUi(LjEmpty, {
-      props: { title: "Nada aqui", description: "Sem itens.", icon: "mdi-magnify" },
+      props: { title: "Nada aqui", description: "Sem itens.", icon: "search" },
     });
     expect(w.findAll("button")).toHaveLength(0);
     expect(w.findAll("a")).toHaveLength(0);

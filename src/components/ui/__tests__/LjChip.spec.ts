@@ -75,7 +75,7 @@ describe("LjChip", () => {
 
   it("mostra o ícone sem engolir o rótulo", () => {
     const comIcone = mountUi(LjChip, {
-      props: { icon: "mdi-music" },
+      props: { icon: "music" },
       slots: { default: "áudio" },
     });
     expect(comIcone.find(".lj-icon").exists()).toBe(true);

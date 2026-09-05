@@ -16,7 +16,7 @@ import { expectKeyExists, mountUi } from "./mountUi";
 const ABAS: LjTab[] = [
   { value: "geral", label: "Geral" },
   { value: "biblia", label: "Bíblia", badge: 3 },
-  { value: "slides", label: "Slides", icon: "mdi-image", badge: 0 },
+  { value: "slides", label: "Slides", icon: "photo", badge: 0 },
 ];
 
 const montados: VueWrapper[] = [];
@@ -172,7 +172,7 @@ describe("LjTabs", () => {
 
     const icones = w.findAllComponents(Icon);
     expect(icones).toHaveLength(1);
-    expect(icones[0].props("icon")).toBe("mdi-image");
+    expect(icones[0].props("icon")).toBe("photo");
   });
 
   it("liga cada aba ao seu painel e mostra só o conteúdo ativo", async () => {

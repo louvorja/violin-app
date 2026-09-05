@@ -8,7 +8,7 @@
  */
 import { mount } from "@vue/test-utils";
 import { createI18n } from "vue-i18n";
-import { defineComponent, h, type Component } from "vue";
+import { h, type Component } from "vue";
 import pt from "@/lang/pt.json";
 import es from "@/lang/es.json";
 
@@ -24,22 +24,6 @@ export function makeI18n(locale: "pt" | "es" = "pt") {
   });
 }
 
-/**
- * Icon.vue delega ícones "mdi-" ao <v-icon> do Vuetify, que não é registrado
- * aqui — sem um substituto, todo teste de ícone via ausência onde há ícone.
- * Este dublê mantém a classe e expõe o nome do ícone, que é o que um teste
- * precisa afirmar.
- */
-const VIconStub = defineComponent({
-  name: "VIcon",
-  // Nenhuma prop declarada de propósito: assim `icon`, `class` e o resto caem em
-  // attrs e aparecem no DOM como o v-icon de verdade faria, e um teste pode
-  // afirmar tanto a classe quanto o nome do ícone.
-  setup:
-    (_props, { attrs }) =>
-    () =>
-      h("i", attrs),
-});
 
 /**
  * As opções ficam propositalmente frouxas: os genéricos de MountingOptions
@@ -59,7 +43,7 @@ export function mountUi<T extends Component>(
     global: {
       ...globalOpts,
       plugins: [...(globalOpts.plugins || []), makeI18n(locale)],
-      components: { VIcon: VIconStub, "v-icon": VIconStub, ...(globalOpts.components || {}) },
+      components: { ...(globalOpts.components || {}) },
     },
   });
 }

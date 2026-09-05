@@ -211,7 +211,7 @@ describe("LjDialog", () => {
     aberto = null;
     document.body.innerHTML = "";
 
-    await abrir({ icon: "mdi-alert" });
+    await abrir({ icon: "alert-triangle-filled" });
     expect(document.body.querySelector(".lj-dialog__icon")).not.toBeNull();
   });
 

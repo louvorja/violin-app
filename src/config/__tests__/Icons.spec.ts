@@ -1,17 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import { ICONS } from "../Icons";
 
 /**
- * Todo nome "mdi-*" que o app usa tem de existir no acervo instalado.
+ * Todo nome do catálogo tem de ter arquivo em `src/assets/icons/`.
  *
- * Este teste existe porque seis não existiam — e dois eram renderizados: o
- * cabeçalho do diálogo de inicialização e todo item de liturgia do tipo
- * overlay apareciam com um espaço vazio no lugar do ícone. Nada acusava:
- * o webfont simplesmente não desenha nada para uma classe que não conhece.
+ * Este teste existe porque seis nomes não existiam — e dois eram renderizados:
+ * o cabeçalho do diálogo de inicialização e todo item de liturgia do tipo
+ * overlay apareciam com um espaço vazio no lugar do ícone. Nada acusava. Com o
+ * acervo em SVG a falha é a mesma: `Icon.vue` não acha o arquivo, o `v-else-if`
+ * não renderiza nada e a tela sai com um buraco do tamanho do ícone.
  */
-const css = readFileSync("node_modules/@mdi/font/css/materialdesignicons.css", "utf8");
-const existentes = new Set([...css.matchAll(/^\.(mdi-[a-z0-9-]+)::before/gm)].map((m) => m[1]));
+const acervo = new Set(
+  readdirSync("src/assets/icons")
+    .filter((f) => f.endsWith(".svg"))
+    .map((f) => f.replace(/\.svg$/, ""))
+);
 
 function achataIcons(obj: Record<string, unknown>, prefixo = ""): [string, string][] {
   const saida: [string, string][] = [];
@@ -24,54 +28,67 @@ function achataIcons(obj: Record<string, unknown>, prefixo = ""): [string, strin
   return saida;
 }
 
+const catalogo = achataIcons(ICONS as unknown as Record<string, unknown>);
+
+function arquivosDeCodigo(dir: string, saida: string[] = []): string[] {
+  for (const entrada of readdirSync(dir)) {
+    const caminho = `${dir}/${entrada}`;
+    if (statSync(caminho).isDirectory()) {
+      if (entrada !== "__tests__" && entrada !== "assets") arquivosDeCodigo(caminho, saida);
+      continue;
+    }
+    if (/\.(vue|ts|js)$/.test(entrada)) saida.push(caminho);
+  }
+  return saida;
+}
+
 describe("catálogo de ícones", () => {
-  it("o acervo instalado foi lido", () => {
-    expect(existentes.size).toBeGreaterThan(7000);
+  it("o acervo foi lido", () => {
+    expect(acervo.size).toBeGreaterThan(200);
   });
 
-  it("toda constante ICONS.* aponta para um ícone que existe", () => {
-    const quebrados = achataIcons(ICONS as unknown as Record<string, unknown>)
-      .filter(([, valor]) => valor.startsWith("mdi-") && !existentes.has(valor))
+  it("toda constante ICONS.* aponta para um arquivo que existe", () => {
+    const quebrados = catalogo
+      .filter(([, valor]) => !acervo.has(valor))
       .map(([caminho, valor]) => `ICONS.${caminho} = ${valor}`);
     expect(quebrados).toEqual([]);
   });
 
-  it("nenhum nome mdi- solto no código aponta para ícone inexistente", () => {
-    // Cobre o que não passa pelo Icons.ts — helpers, manifests e templates.
-    const { execSync } = require("node:child_process") as typeof import("node:child_process");
-    const saida = execSync(
-      `grep -rhoE '"mdi-[a-z0-9-]+"' src --include='*.vue' --include='*.ts' --include='*.js' || true`,
-      { encoding: "utf8" }
-    );
-    const usados = [...new Set(saida.split("\n").map((l) => l.trim().replace(/"/g, "")))].filter(
-      Boolean
-    );
-    expect(usados.filter((n) => !existentes.has(n))).toEqual([]);
+  it("nenhum nome de ícone fica escrito fora do catálogo", () => {
+    // A troca de acervo acontece editando só o Icons.ts. Um nome escrito direto
+    // num template escapa dessa troca e sobrevive como ícone órfão. Foi assim
+    // que a família "mdi-" resistiu à primeira tentativa de migração.
+    const fora: string[] = [];
+    for (const caminho of arquivosDeCodigo("src")) {
+      if (caminho.endsWith("config/Icons.ts")) continue;
+      readFileSync(caminho, "utf8")
+        .split("\n")
+        .forEach((linha, i) => {
+          if (/^\s*(\*|\/\/)/.test(linha)) return; // menções em comentário
+          if (/(["'])mdi-[a-z0-9-]+\1/.test(linha)) fora.push(`${caminho}:${i + 1}`);
+        });
+    }
+    expect(fora).toEqual([]);
   });
 
-  it("nenhum nome mdi- fica hardcoded fora do catálogo", () => {
-    // A troca do acervo MDI acontece editando só o Icons.ts. Um nome escrito
-    // direto num template escapa dessa troca e sobrevive como ícone órfão.
-    const { readdirSync, statSync } = require("node:fs") as typeof import("node:fs");
-    const fora: string[] = [];
-    const visita = (dir: string) => {
-      for (const entrada of readdirSync(dir)) {
-        const caminho = `${dir}/${entrada}`;
-        if (statSync(caminho).isDirectory()) {
-          if (entrada !== "__tests__") visita(caminho);
-          continue;
-        }
-        if (!/\.(vue|ts|js)$/.test(entrada)) continue;
-        if (caminho.endsWith("config/Icons.ts")) continue;
-        readFileSync(caminho, "utf8")
-          .split("\n")
-          .forEach((linha, i) => {
-            if (/^\s*(\*|\/\/)/.test(linha)) return; // menções em comentário
-            if (/(["'])mdi-[a-z0-9-]+\1/.test(linha)) fora.push(`${caminho}:${i + 1}`);
-          });
-      }
-    };
-    visita("src");
-    expect(fora).toEqual([]);
+  it("todo SVG do acervo é referenciado por alguma constante", () => {
+    // Arquivo sem dono é peso morto no bundle: entra pelo import.meta.glob do
+    // Icon.vue, que é eager, e ninguém pede.
+    const usados = new Set(catalogo.map(([, valor]) => valor));
+    expect([...acervo].filter((nome) => !usados.has(nome)).sort()).toEqual([]);
+  });
+
+  it("os desenhos de contorno não trazem preenchimento próprio", () => {
+    // `Icon.vue` só repinta o SVG que NÃO usa currentColor — é assim que ele
+    // distingue as marcas do projeto, de cor fixa, dos ícones de interface. Um
+    // ícone de contorno com cor cravada escaparia da regra e ficaria preto em
+    // tema escuro, sem erro nenhum.
+    const suspeitos: string[] = [];
+    for (const nome of acervo) {
+      const svg = readFileSync(`src/assets/icons/${nome}.svg`, "utf8");
+      if (!svg.includes("currentColor")) continue;
+      if (/(?:fill|stroke)="#[0-9a-fA-F]/.test(svg)) suspeitos.push(nome);
+    }
+    expect(suspeitos).toEqual([]);
   });
 });

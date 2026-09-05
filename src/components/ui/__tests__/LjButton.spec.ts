@@ -36,16 +36,16 @@ describe("LjButton", () => {
   });
 
   it("troca o ícone pelo spinner enquanto carrega", () => {
-    const parado = mountUi(LjButton, { props: { icon: "mdi-plus" } });
+    const parado = mountUi(LjButton, { props: { icon: "plus" } });
     expect(parado.find(".lj-spinner").exists()).toBe(false);
 
-    const carregando = mountUi(LjButton, { props: { icon: "mdi-plus", loading: true } });
+    const carregando = mountUi(LjButton, { props: { icon: "plus", loading: true } });
     expect(carregando.find(".lj-spinner").exists()).toBe(true);
   });
 
   it("icon-only não renderiza rótulo — o nome acessível vem de fora", () => {
     const w = mountUi(LjButton, {
-      props: { icon: "mdi-pencil", iconOnly: true, "aria-label": "Editar" },
+      props: { icon: "pencil", iconOnly: true, "aria-label": "Editar" },
       slots: { default: "Editar" },
     });
     expect(w.find(".lj-btn__label").exists()).toBe(false);

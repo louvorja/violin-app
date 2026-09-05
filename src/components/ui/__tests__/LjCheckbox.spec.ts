@@ -19,9 +19,6 @@ import { mountUi } from "./mountUi";
  * - a caixinha visível só ganha cor pelas regras `:checked + .lj-check__box` e
  *   `:focus-visible + .lj-check__box` do CSS scoped; jsdom não resolve folha de
  *   estilo scoped, então "parece marcado" não é observável aqui;
- * - o ícone de check/menos dentro da caixinha cai num <v-icon> do Vuetify, que
- *   não está registrado nesta montagem — afirmar a presença dele mediria o
- *   dublê, não o primitivo;
  * - o esmaecimento e o `pointer-events: none` do estado desabilitado também são
  *   só CSS. O que dá para garantir (e está garantido abaixo) é o `disabled` no
  *   input, que é o que de fato barra teclado e leitor de tela.
