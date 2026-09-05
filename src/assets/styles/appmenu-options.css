@@ -89,10 +89,6 @@
   border-bottom: 1px solid var(--lj-surface-border);
 }
 
-.opt-section-title .v-icon {
-  color: var(--lj-text-muted);
-}
-
 .opt-row {
   display: flex;
   align-items: center;
@@ -680,19 +676,6 @@
   min-width: 40px;
   text-align: right;
   font-variant-numeric: tabular-nums;
-}
-
-/* No tema escuro o `primary` do Vuetify é #2e2e2e — some sobre a superfície
-   escura do painel. Estados selecionados usam a cor de texto e o acento da
-   shell (mesmo laranja do item ativo da barra lateral). */
-[data-theme="dark"] .app-menu-panel .v-tab--selected,
-[data-theme="dark"] .app-menu-panel .v-btn--active {
-  color: var(--lj-text);
-}
-
-[data-theme="dark"] .app-menu-panel .v-tab__slider {
-  background-color: var(--lj-orange);
-  opacity: 1;
 }
 
 /* Aviso ao lado do papel quando o monitor atribuído não está disponível. */

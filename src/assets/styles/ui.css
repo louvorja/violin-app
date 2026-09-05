@@ -119,8 +119,6 @@
    seguem o mesmo acento em vez de inventarem outro.
    O tema "black" fica de fora de propósito: apesar do nome, a superfície dele
    é clara (`dark: false`), e ali o cinza da marca contrasta bem. */
-:root.v-theme--dark,
-.v-theme--dark,
 [data-theme="dark"] {
   --lj-ui-accent: var(--lj-orange);
   --lj-ui-accent-hover: var(--lj-orange-dark);

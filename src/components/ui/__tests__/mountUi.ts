@@ -8,7 +8,7 @@
  */
 import { mount } from "@vue/test-utils";
 import { createI18n } from "vue-i18n";
-import { h, type Component } from "vue";
+import type { Component } from "vue";
 import pt from "@/lang/pt.json";
 import es from "@/lang/es.json";
 

@@ -10,7 +10,7 @@
  *   const endAction = useTimerEndAction("timer", KEYS.MODULES.TIMER);
  *   <TimerEndActionDialogs :end-action="endAction" />
  */
-import { ref, computed, reactive, type ComputedRef } from "vue";
+import { computed, reactive, type ComputedRef } from "vue";
 import { useI18n } from "vue-i18n";
 import $userdata from "@/helpers/UserData";
 import Platform from "@/helpers/Platform";
