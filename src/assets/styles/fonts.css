@@ -41,6 +41,23 @@
   line-gap-override: 0%;
 }
 
+/* Mesmo arquivo do FjallaOne, com nome próprio.
+   "Ministério Jovem" e "Fjalla One" são duas entradas do catálogo e apontavam
+   para a MESMA family — escolher uma fazia o campo passar a exibir a outra,
+   porque o select casa pelo valor. O arquivo não é duplicado em disco, só a
+   declaração. Os overrides de métrica são obrigatórios aqui: eles fixam a
+   baseline entre as fontes, e a projeção desenha caixa de fundo sobre texto
+   em caixa alta. */
+@font-face {
+  font-family: "MinisterioJovem";
+  src: url("../fonts/FjallaOne-Regular.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  ascent-override: 105%;
+  descent-override: 30%;
+  line-gap-override: 0%;
+}
+
 @font-face {
   font-family: "ImpactRegular";
   src: url("../fonts/impact-regular-6_ufonts.com.ttf") format("truetype");

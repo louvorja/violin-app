@@ -502,13 +502,14 @@
       "classic_import_confirm": "¿Desea copiar o mover las carpetas de medios de la versión clásica (musicas, capas e imágenes) a la nueva carpeta?"
     },
     "videos": {
-      "title": "Vídeos On-line",
-      "fullscreen": "Mostrar en pantalla completa",
-      "always_on_top": "Mantener siempre al frente",
-      "youtube_action": "Al ejecutar enlace de YouTube en la liturgia, abrir:",
-      "action_video": "Vídeo",
       "action_link": "Enlace en el navegador",
-      "show_return": "Mostrar en la pantalla de retorno"
+      "action_video": "Vídeo",
+      "always_on_top": "Mantener siempre al frente",
+      "fullscreen": "Mostrar en pantalla completa",
+      "open_return_at": "Pantalla de retorno del vídeo en:",
+      "show_return": "Mostrar en la pantalla de retorno",
+      "title": "Vídeos On-line",
+      "youtube_action": "Al ejecutar enlace de YouTube en la liturgia, abrir:"
     },
     "player": {
       "title": "Reproductor de Audio/Vídeo",

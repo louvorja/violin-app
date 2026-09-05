@@ -62,7 +62,7 @@ export const Fonts: FontOption[] = [
   { name: "Georgia", family: "Georgia, serif" },
   { name: "Helvetica", family: "Helvetica, sans-serif" },
   { name: "Ministério da Criança", family: "BetaniaPatmos", file: "BetaniaPatmos-Regular.ttf" },
-  { name: "Ministério Jovem", family: "FjallaOne", file: "FjallaOne-Regular.ttf" },
+  { name: "Ministério Jovem", family: "MinisterioJovem", file: "FjallaOne-Regular.ttf" },
   { name: "Open Sans", family: "OpenSans", file: "OpenSans-Regular.ttf" },
   { name: "Open Sans Extra Bold", family: "OpenSansExtraBold", file: "OpenSans-ExtraBold.ttf" },
   { name: "Open Sans Light", family: "OpenSansLight", file: "OpenSans-Light.ttf" },

@@ -215,7 +215,7 @@
           v-if="previewUrl && entryKind === 'image'"
           :src="previewUrl"
           class="si-entry-preview"
-          alt="preview"
+          alt=""
         />
         <audio
           v-else-if="previewUrl && entryKind === 'audio'"

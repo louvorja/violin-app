@@ -126,12 +126,7 @@
             @remove="removeBgImage"
           >
             <div class="opt-bg-preview-screen" :style="{ backgroundColor: bgColor }">
-              <img
-                v-if="currentBgImage"
-                :src="currentBgImage"
-                class="opt-bg-preview-img"
-                alt="img background"
-              />
+              <img v-if="currentBgImage" :src="currentBgImage" class="opt-bg-preview-img" alt="" />
             </div>
           </MonitorShape>
         </div>
@@ -865,7 +860,7 @@
       </div>
       <div v-if="vidProjShowReturn" class="opt-row">
         <label class="opt-label" for="opt-video-return-monitor">
-          {{ $t("options.slides.open_file_return_at") }}
+          {{ $t("options.videos.open_return_at") }}
         </label>
         <MonitorSelect
           id="opt-video-return-monitor"
@@ -1038,7 +1033,7 @@
               {{ $t("options.background.no_image") }}
             </span>
             <div v-else class="opt-bg-preview">
-              <img :src="fileProjBgImageUrl" class="opt-bg-preview-img" alt="image-preview" />
+              <img :src="fileProjBgImageUrl" class="opt-bg-preview-img" alt="" />
               <button
                 class="opt-bg-preview-remove"
                 type="button"
