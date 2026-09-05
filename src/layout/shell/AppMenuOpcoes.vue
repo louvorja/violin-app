@@ -437,90 +437,138 @@
         v-if="getUserData(KEYS.OPTIONS.SLIDE.CUSTOM_TEXT_FORMAT, false)"
         class="opt-format-block"
       >
-        <div class="opt-format-grid">
-          <div>
-            <div class="opt-format-row">
-              <label class="opt-format-field">
-                <span class="opt-format-label">{{ $t("options.slides.title_color") }}</span>
-                <input
-                  type="color"
-                  class="opt-color"
-                  :value="getUserData(KEYS.OPTIONS.SLIDE.TITLE_COLOR, '#ffd84d')"
-                  @input="saveUserData(KEYS.OPTIONS.SLIDE.TITLE_COLOR, $v($event))"
-                />
-              </label>
+        <!-- Banda A — os quatro elementos do slide (esquerda) e os três efeitos da caixa (direita) -->
+        <div class="fmt-top">
+          <table class="fmt-el">
+            <thead>
+              <tr>
+                <td class="fmt-el__corner"></td>
+                <th scope="col">{{ $t("options.slides.fmt_el_title") }}</th>
+                <th scope="col">{{ $t("options.slides.fmt_el_lyric") }}</th>
+                <th scope="col" :title="$t('options.slides.fmt_el_repeat_hint')">
+                  {{ $t("options.slides.fmt_el_repeat") }}
+                </th>
+                <th scope="col">{{ $t("options.slides.fmt_el_aux") }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">{{ $t("options.slides.fmt_attr_color") }}</th>
+                <td>
+                  <input
+                    type="color"
+                    class="opt-color"
+                    :aria-label="`${$t('options.slides.fmt_el_title')} — ${$t('options.slides.fmt_attr_color')}`"
+                    :value="
+                      getUserData(KEYS.OPTIONS.SLIDE.TITLE_COLOR, SLIDE_STYLE_DEFAULT.color_cover)
+                    "
+                    @input="saveUserData(KEYS.OPTIONS.SLIDE.TITLE_COLOR, $v($event))"
+                  />
+                </td>
+                <td>
+                  <input
+                    type="color"
+                    class="opt-color"
+                    :aria-label="`${$t('options.slides.fmt_el_lyric')} — ${$t('options.slides.fmt_attr_color')}`"
+                    :value="
+                      getUserData(KEYS.OPTIONS.SLIDE.TEXT_COLOR, SLIDE_STYLE_DEFAULT.color_lyric)
+                    "
+                    @input="saveUserData(KEYS.OPTIONS.SLIDE.TEXT_COLOR, $v($event))"
+                  />
+                </td>
+                <td>
+                  <input
+                    type="color"
+                    class="opt-color"
+                    :aria-label="`${$t('options.slides.fmt_el_repeat')} — ${$t('options.slides.fmt_attr_color')}`"
+                    :value="
+                      getUserData(KEYS.OPTIONS.SLIDE.REPEAT_COLOR, SLIDE_STYLE_DEFAULT.color_repeat)
+                    "
+                    @input="saveUserData(KEYS.OPTIONS.SLIDE.REPEAT_COLOR, $v($event))"
+                  />
+                </td>
+                <td>
+                  <input
+                    type="color"
+                    class="opt-color"
+                    :aria-label="`${$t('options.slides.fmt_el_aux')} — ${$t('options.slides.fmt_attr_color')}`"
+                    :value="
+                      getUserData(KEYS.OPTIONS.SLIDE.AUX_COLOR, SLIDE_STYLE_DEFAULT.color_aux)
+                    "
+                    @input="saveUserData(KEYS.OPTIONS.SLIDE.AUX_COLOR, $v($event))"
+                  />
+                </td>
+              </tr>
+              <tr>
+                <th scope="row" :title="$t('options.slides.fmt_attr_size_hint')">
+                  {{ $t("options.slides.fmt_attr_size") }}
+                </th>
+                <td>
+                  <input
+                    type="number"
+                    min="6"
+                    max="60"
+                    class="opt-input opt-input--num"
+                    :aria-label="`${$t('options.slides.fmt_el_title')} — ${$t('options.slides.fmt_attr_size')}`"
+                    :value="
+                      getUserData(
+                        KEYS.OPTIONS.SLIDE.TITLE_SIZE,
+                        SLIDE_STYLE_DEFAULT.font_size_cover
+                      )
+                    "
+                    @input="
+                      saveUserData(
+                        KEYS.OPTIONS.SLIDE.TITLE_SIZE,
+                        Number($v($event)) || SLIDE_STYLE_DEFAULT.font_size_cover
+                      )
+                    "
+                  />
+                </td>
+                <td>
+                  <input
+                    type="number"
+                    min="6"
+                    max="60"
+                    class="opt-input opt-input--num"
+                    :aria-label="`${$t('options.slides.fmt_el_lyric')} — ${$t('options.slides.fmt_attr_size')}`"
+                    :value="
+                      getUserData(KEYS.OPTIONS.SLIDE.BODY_SIZE, SLIDE_STYLE_DEFAULT.font_size_lyric)
+                    "
+                    @input="
+                      saveUserData(
+                        KEYS.OPTIONS.SLIDE.BODY_SIZE,
+                        Number($v($event)) || SLIDE_STYLE_DEFAULT.font_size_lyric
+                      )
+                    "
+                  />
+                </td>
+                <td class="fmt-el__inherit" :title="$t('options.slides.fmt_size_from_lyric_hint')">
+                  {{ $t("options.slides.fmt_size_from_lyric") }}
+                </td>
+                <td>
+                  <input
+                    type="number"
+                    min="6"
+                    max="60"
+                    class="opt-input opt-input--num"
+                    :aria-label="`${$t('options.slides.fmt_el_aux')} — ${$t('options.slides.fmt_attr_size')}`"
+                    :value="
+                      getUserData(KEYS.OPTIONS.SLIDE.AUX_SIZE, SLIDE_STYLE_DEFAULT.font_size_aux)
+                    "
+                    @input="
+                      saveUserData(
+                        KEYS.OPTIONS.SLIDE.AUX_SIZE,
+                        Number($v($event)) || SLIDE_STYLE_DEFAULT.font_size_aux
+                      )
+                    "
+                  />
+                </td>
+              </tr>
+            </tbody>
+          </table>
 
-              <label class="opt-format-field">
-                <span class="opt-format-label">{{ $t("options.slides.text_color") }}</span>
-                <input
-                  type="color"
-                  class="opt-color"
-                  :value="getUserData(KEYS.OPTIONS.SLIDE.TEXT_COLOR, '#ffffff')"
-                  @input="saveUserData(KEYS.OPTIONS.SLIDE.TEXT_COLOR, $v($event))"
-                />
-              </label>
-
-              <label class="opt-format-field">
-                <span class="opt-format-label">{{ $t("options.slides.repeat_color") }}</span>
-                <input
-                  type="color"
-                  class="opt-color"
-                  :value="getUserData(KEYS.OPTIONS.SLIDE.REPEAT_COLOR, '#bbbbbb')"
-                  @input="saveUserData(KEYS.OPTIONS.SLIDE.REPEAT_COLOR, $v($event))"
-                />
-              </label>
-
-              <label class="opt-format-field">
-                <span class="opt-format-label">{{ $t("options.slides.aux_color") }}</span>
-                <input
-                  type="color"
-                  class="opt-color"
-                  :value="getUserData(KEYS.OPTIONS.SLIDE.AUX_COLOR, '#cccccc')"
-                  @input="saveUserData(KEYS.OPTIONS.SLIDE.AUX_COLOR, $v($event))"
-                />
-              </label>
-            </div>
-
-            <div class="opt-format-row">
-              <label class="opt-format-field">
-                <span class="opt-format-label">{{ $t("options.slides.title_size") }}</span>
-                <input
-                  type="number"
-                  min="6"
-                  max="60"
-                  class="opt-input opt-input--num"
-                  :value="getUserData(KEYS.OPTIONS.SLIDE.TITLE_SIZE, 18)"
-                  @input="saveUserData(KEYS.OPTIONS.SLIDE.TITLE_SIZE, Number($v($event)) || 18)"
-                />
-              </label>
-
-              <label class="opt-format-field">
-                <span class="opt-format-label">{{ $t("options.slides.text_size_label") }}</span>
-                <input
-                  type="number"
-                  min="6"
-                  max="60"
-                  class="opt-input opt-input--num"
-                  :value="getUserData(KEYS.OPTIONS.SLIDE.BODY_SIZE, 14)"
-                  @input="saveUserData(KEYS.OPTIONS.SLIDE.BODY_SIZE, Number($v($event)) || 14)"
-                />
-              </label>
-
-              <label class="opt-format-field">
-                <span class="opt-format-label">{{ $t("options.slides.aux_size") }}</span>
-                <input
-                  type="number"
-                  min="6"
-                  max="60"
-                  class="opt-input opt-input--num"
-                  :value="getUserData(KEYS.OPTIONS.SLIDE.AUX_SIZE, 10)"
-                  @input="saveUserData(KEYS.OPTIONS.SLIDE.AUX_SIZE, Number($v($event)) || 10)"
-                />
-              </label>
-            </div>
-          </div>
-          <div>
-            <label class="opt-checkbox opt-format-check">
+          <div class="fmt-fx">
+            <label class="opt-checkbox">
               <input
                 type="checkbox"
                 :checked="getUserData(KEYS.OPTIONS.SLIDE.TEXT_BG_TRANSPARENT, false)"
@@ -529,7 +577,7 @@
               <span>{{ $t("options.slides.text_bg_transparent") }}</span>
             </label>
 
-            <label class="opt-checkbox opt-format-check ml-3">
+            <label class="opt-checkbox">
               <input
                 type="checkbox"
                 :checked="getUserData(KEYS.OPTIONS.SLIDE.SHADOW_ENABLED, false)"
@@ -538,68 +586,7 @@
               <span>{{ $t("options.slides.shadow_enabled") }}</span>
             </label>
 
-            <div
-              v-if="getUserData(KEYS.OPTIONS.SLIDE.SHADOW_ENABLED, false)"
-              class="opt-format-row"
-            >
-              <label class="opt-format-field">
-                <span class="opt-format-label">{{ $t("options.slides.shadow_color") }}</span>
-                <input
-                  type="color"
-                  class="opt-color"
-                  :value="getUserData(KEYS.OPTIONS.SLIDE.SHADOW_COLOR, '#000000')"
-                  @input="saveUserData(KEYS.OPTIONS.SLIDE.SHADOW_COLOR, $v($event))"
-                />
-              </label>
-              <label class="opt-format-field">
-                <span class="opt-format-label">{{ $t("options.slides.shadow_blur") }}</span>
-                <input
-                  type="range"
-                  min="0"
-                  max="30"
-                  step="1"
-                  class="opt-range"
-                  :value="getUserData(KEYS.OPTIONS.SLIDE.SHADOW_BLUR, 12)"
-                  @input="saveUserData(KEYS.OPTIONS.SLIDE.SHADOW_BLUR, Number($v($event)))"
-                />
-                <span class="opt-range-val">
-                  {{ getUserData(KEYS.OPTIONS.SLIDE.SHADOW_BLUR, 12) }}px
-                </span>
-              </label>
-              <label class="opt-format-field">
-                <span class="opt-format-label">{{ $t("options.slides.shadow_offset_x") }}</span>
-                <input
-                  type="range"
-                  min="-20"
-                  max="20"
-                  step="1"
-                  class="opt-range"
-                  :value="getUserData(KEYS.OPTIONS.SLIDE.SHADOW_OFFSET_X, 0)"
-                  @input="saveUserData(KEYS.OPTIONS.SLIDE.SHADOW_OFFSET_X, Number($v($event)))"
-                />
-                <span class="opt-range-val">
-                  {{ getUserData(KEYS.OPTIONS.SLIDE.SHADOW_OFFSET_X, 0) }}px
-                </span>
-              </label>
-              <label class="opt-format-field">
-                <span class="opt-format-label">{{ $t("options.slides.shadow_offset_y") }}</span>
-                <input
-                  type="range"
-                  min="-20"
-                  max="20"
-                  step="1"
-                  class="opt-range"
-                  :value="getUserData(KEYS.OPTIONS.SLIDE.SHADOW_OFFSET_Y, 2)"
-                  @input="saveUserData(KEYS.OPTIONS.SLIDE.SHADOW_OFFSET_Y, Number($v($event)))"
-                />
-                <span class="opt-range-val">
-                  {{ getUserData(KEYS.OPTIONS.SLIDE.SHADOW_OFFSET_Y, 2) }}px
-                </span>
-              </label>
-            </div>
-          </div>
-          <div>
-            <label class="opt-checkbox opt-format-check">
+            <label class="opt-checkbox">
               <input
                 type="checkbox"
                 :checked="getUserData(KEYS.OPTIONS.SLIDE.TEXT_BORDER_ENABLED, false)"
@@ -607,38 +594,103 @@
               />
               <span>{{ $t("options.slides.text_border_enabled") }}</span>
             </label>
-
-            <div
-              v-if="getUserData(KEYS.OPTIONS.SLIDE.TEXT_BORDER_ENABLED, false)"
-              class="opt-format-row"
-            >
-              <label class="opt-format-field">
-                <span class="opt-format-label">{{ $t("options.slides.text_border_color") }}</span>
-                <input
-                  type="color"
-                  class="opt-color"
-                  :value="getUserData(KEYS.OPTIONS.SLIDE.TEXT_BORDER_COLOR, '#ffffff')"
-                  @input="saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BORDER_COLOR, $v($event))"
-                />
-              </label>
-              <label class="opt-format-field">
-                <span class="opt-format-label">{{ $t("options.slides.text_border_width") }}</span>
-                <input
-                  type="range"
-                  min="1"
-                  max="10"
-                  step="1"
-                  class="opt-range"
-                  :value="getUserData(KEYS.OPTIONS.SLIDE.TEXT_BORDER_WIDTH, 2)"
-                  @input="saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BORDER_WIDTH, Number($v($event)))"
-                />
-                <span class="opt-range-val">
-                  {{ getUserData(KEYS.OPTIONS.SLIDE.TEXT_BORDER_WIDTH, 2) }}px
-                </span>
-              </label>
-            </div>
           </div>
         </div>
+
+        <!-- Banda B — parâmetros dos efeitos ligados. Cada linha nasce embaixo de
+             tudo, então nenhum controle existente muda de lugar quando um efeito é
+             ligado; a primeira etiqueta da linha ("Cor Sombra:") é quem a nomeia. -->
+        <div v-if="getUserData(KEYS.OPTIONS.SLIDE.SHADOW_ENABLED, false)" class="fmt-params">
+          <label class="fmt-field">
+            <span class="opt-format-label">{{ $t("options.slides.shadow_color") }}</span>
+            <input
+              type="color"
+              class="opt-color"
+              :value="
+                getUserData(KEYS.OPTIONS.SLIDE.SHADOW_COLOR, SLIDE_STYLE_DEFAULT.shadow_color)
+              "
+              @input="saveUserData(KEYS.OPTIONS.SLIDE.SHADOW_COLOR, $v($event))"
+            />
+          </label>
+          <label class="fmt-field">
+            <span class="opt-format-label">{{ $t("options.slides.shadow_blur") }}</span>
+            <input
+              type="range"
+              min="0"
+              max="30"
+              step="1"
+              class="opt-range"
+              :value="getUserData(KEYS.OPTIONS.SLIDE.SHADOW_BLUR, 12)"
+              @input="saveUserData(KEYS.OPTIONS.SLIDE.SHADOW_BLUR, Number($v($event)))"
+            />
+            <span class="opt-range-val">
+              {{ getUserData(KEYS.OPTIONS.SLIDE.SHADOW_BLUR, 12) }}px
+            </span>
+          </label>
+          <label class="fmt-field">
+            <span class="opt-format-label">{{ $t("options.slides.shadow_offset_x") }}</span>
+            <input
+              type="range"
+              min="-20"
+              max="20"
+              step="1"
+              class="opt-range"
+              :value="getUserData(KEYS.OPTIONS.SLIDE.SHADOW_OFFSET_X, 0)"
+              @input="saveUserData(KEYS.OPTIONS.SLIDE.SHADOW_OFFSET_X, Number($v($event)))"
+            />
+            <span class="opt-range-val">
+              {{ getUserData(KEYS.OPTIONS.SLIDE.SHADOW_OFFSET_X, 0) }}px
+            </span>
+          </label>
+          <label class="fmt-field">
+            <span class="opt-format-label">{{ $t("options.slides.shadow_offset_y") }}</span>
+            <input
+              type="range"
+              min="-20"
+              max="20"
+              step="1"
+              class="opt-range"
+              :value="getUserData(KEYS.OPTIONS.SLIDE.SHADOW_OFFSET_Y, 2)"
+              @input="saveUserData(KEYS.OPTIONS.SLIDE.SHADOW_OFFSET_Y, Number($v($event)))"
+            />
+            <span class="opt-range-val">
+              {{ getUserData(KEYS.OPTIONS.SLIDE.SHADOW_OFFSET_Y, 2) }}px
+            </span>
+          </label>
+        </div>
+
+        <div v-if="getUserData(KEYS.OPTIONS.SLIDE.TEXT_BORDER_ENABLED, false)" class="fmt-params">
+          <label class="fmt-field">
+            <span class="opt-format-label">{{ $t("options.slides.text_border_color") }}</span>
+            <input
+              type="color"
+              class="opt-color"
+              :value="
+                getUserData(
+                  KEYS.OPTIONS.SLIDE.TEXT_BORDER_COLOR,
+                  SLIDE_STYLE_DEFAULT.text_border_color
+                )
+              "
+              @input="saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BORDER_COLOR, $v($event))"
+            />
+          </label>
+          <label class="fmt-field">
+            <span class="opt-format-label">{{ $t("options.slides.text_border_width") }}</span>
+            <input
+              type="range"
+              min="1"
+              max="10"
+              step="1"
+              class="opt-range"
+              :value="getUserData(KEYS.OPTIONS.SLIDE.TEXT_BORDER_WIDTH, 2)"
+              @input="saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BORDER_WIDTH, Number($v($event)))"
+            />
+            <span class="opt-range-val">
+              {{ getUserData(KEYS.OPTIONS.SLIDE.TEXT_BORDER_WIDTH, 2) }}px
+            </span>
+          </label>
+        </div>
+
         <button type="button" class="opt-btn opt-btn--ghost" @click="restoreTextFormat">
           <Icon :icon="ICONS.ACTIONS.REFRESH" size="14" class="mr-1" />
           {{ $t("options.slides.restore") }}
@@ -1094,6 +1146,7 @@ import { ICONS } from "@/config/Icons";
 import { KEYS } from "@/constants/UserDataKeys";
 import { MAIN_BACKGROUND_ID, Settings } from "@/types/Settings";
 import { THEMES, COLOR_THEMES } from "@/config/Theme";
+import { SLIDE_STYLE_DEFAULT } from "@/config/SlideStyle";
 import { FONT } from "@/config/Fonts";
 
 interface ThemeOption {
@@ -1354,21 +1407,23 @@ onBeforeUnmount(() => {
 });
 
 function restoreTextFormat(): void {
-  saveUserData(KEYS.OPTIONS.SLIDE.TITLE_COLOR, "#ffd84d");
-  saveUserData(KEYS.OPTIONS.SLIDE.TEXT_COLOR, "#ffffff");
-  saveUserData(KEYS.OPTIONS.SLIDE.REPEAT_COLOR, "#bbbbbb");
-  saveUserData(KEYS.OPTIONS.SLIDE.AUX_COLOR, "#cccccc");
-  saveUserData(KEYS.OPTIONS.SLIDE.TITLE_SIZE, 18);
-  saveUserData(KEYS.OPTIONS.SLIDE.BODY_SIZE, 14);
-  saveUserData(KEYS.OPTIONS.SLIDE.AUX_SIZE, 10);
+  // Os literais daqui divergiam do que a projeção usa sem configuração —
+  // "Restaurar" devolvia um estado que nunca foi o padrão de ninguém.
+  saveUserData(KEYS.OPTIONS.SLIDE.TITLE_COLOR, SLIDE_STYLE_DEFAULT.color_cover);
+  saveUserData(KEYS.OPTIONS.SLIDE.TEXT_COLOR, SLIDE_STYLE_DEFAULT.color_lyric);
+  saveUserData(KEYS.OPTIONS.SLIDE.REPEAT_COLOR, SLIDE_STYLE_DEFAULT.color_repeat);
+  saveUserData(KEYS.OPTIONS.SLIDE.AUX_COLOR, SLIDE_STYLE_DEFAULT.color_aux);
+  saveUserData(KEYS.OPTIONS.SLIDE.TITLE_SIZE, SLIDE_STYLE_DEFAULT.font_size_cover);
+  saveUserData(KEYS.OPTIONS.SLIDE.BODY_SIZE, SLIDE_STYLE_DEFAULT.font_size_lyric);
+  saveUserData(KEYS.OPTIONS.SLIDE.AUX_SIZE, SLIDE_STYLE_DEFAULT.font_size_aux);
   saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BG_TRANSPARENT, false);
   saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BG_BLUR_ENABLED, false);
-  saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BG_BLUR, 12);
+  saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BG_BLUR, SLIDE_STYLE_DEFAULT.text_bg_blur);
   saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BORDER_ENABLED, false);
-  saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BORDER_COLOR, "#ffffff");
+  saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BORDER_COLOR, SLIDE_STYLE_DEFAULT.text_border_color);
   saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BORDER_WIDTH, 2);
   saveUserData(KEYS.OPTIONS.SLIDE.SHADOW_ENABLED, false);
-  saveUserData(KEYS.OPTIONS.SLIDE.SHADOW_COLOR, "#000000");
+  saveUserData(KEYS.OPTIONS.SLIDE.SHADOW_COLOR, SLIDE_STYLE_DEFAULT.shadow_color);
   saveUserData(KEYS.OPTIONS.SLIDE.SHADOW_BLUR, 12);
   saveUserData(KEYS.OPTIONS.SLIDE.SHADOW_OFFSET_X, 0);
   saveUserData(KEYS.OPTIONS.SLIDE.SHADOW_OFFSET_Y, 2);
@@ -1591,20 +1646,120 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-/* Era <v-row>/<v-col> do Vuetify, a última dependência do arquivo. Além da
-   grade, o v-col trazia a tipografia do Material junto: os rótulos aqui dentro
-   saíam com 16px numa tela cujo padrão é 12px. As frações 3/4/5 são as mesmas
-   que as colunas tinham. */
-.opt-format-grid {
-  display: grid;
-  grid-template-columns: 3fr 4fr 5fr;
-  gap: var(--lj-space-6);
+/* === Formatação de texto personalizada ==================================
+   Substitui .opt-format-grid (3fr 4fr 5fr), onde sombra e borda eram colunas
+   irmãs: a linha herdava a altura da coluna mais alta, então o efeito
+   desligado reservava o vão inteiro do vizinho ligado.
+
+   Banda A — a tabela dos quatro elementos do slide ao lado dos três
+   interruptores de efeito. Altura fixa (~81px), imune aos toggles.
+   Banda B — os parâmetros do efeito ligado, em linha cheia, abaixo de tudo. */
+.fmt-top {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: var(--lj-space-7);
 }
 
-@media (max-width: 600px) {
-  .opt-format-grid {
-    grid-template-columns: 1fr;
-  }
+/* --- Banda A · elementos do slide --------------------------------------
+   A propriedade é dita uma vez na coluna da esquerda e o elemento uma vez no
+   cabeçalho; nenhum rótulo carrega as duas informações (era daí que vinham os
+   dois "Texto:"). Cor e tamanho do mesmo elemento ficam na mesma coluna, um
+   debaixo do outro. <th scope> dá a leitura em modo de navegação; o nome
+   acessível de cada campo vem do aria-label composto no template, porque
+   scope não nomeia controle de formulário. */
+.fmt-el {
+  border-collapse: collapse;
+  font-size: var(--lj-text-base);
+}
+
+.fmt-el th,
+.fmt-el td {
+  padding: 0;
+  text-align: center;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+/* 72px = o campo numérico (64px) com folga para "Repetición" a 12px. Os
+   swatches de 38px ficam centrados na mesma trilha: as quatro cores leem
+   como a paleta do slide, e cada uma tem o nome do elemento em cima. */
+.fmt-el thead th,
+.fmt-el tbody td {
+  width: 72px;
+  padding-left: var(--lj-space-4);
+}
+
+.fmt-el thead th {
+  padding-bottom: var(--lj-space-2);
+  border-bottom: 1px solid var(--lj-surface-border);
+  font-weight: var(--lj-weight-medium);
+  color: var(--lj-text-muted);
+}
+
+/* Cor de texto cheia a 12px: é esta coluna que desambigua os sete campos, e
+   não pode ser o texto menos legível do bloco. */
+.fmt-el tbody th {
+  padding-right: var(--lj-space-4);
+  text-align: left;
+  font-weight: var(--lj-weight-medium);
+  color: var(--lj-text);
+}
+
+.fmt-el tbody tr:first-child th,
+.fmt-el tbody tr:first-child td {
+  padding-top: var(--lj-space-3);
+}
+
+.fmt-el tbody tr + tr th,
+.fmt-el tbody tr + tr td {
+  padding-top: var(--lj-space-2);
+}
+
+/* A repetição não tem tamanho próprio: useSlideStyle só sobrescreve a cor, e
+   o trecho repetido é desenhado com o tamanho da Letra. A célula fica
+   ocupada e diz de onde o valor vem, em vez de sumir da coluna. */
+.fmt-el__inherit {
+  font-size: var(--lj-text-sm);
+  color: var(--lj-text-subtle);
+  cursor: help;
+}
+
+/* --- Banda A · interruptores de efeito ---------------------------------
+   Empilhados: os três ficam sempre na mesma posição, e nenhum deles é
+   empurrado quando outro é ligado. */
+.fmt-fx {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-4);
+}
+
+/* --- Banda B · parâmetros do efeito ligado -----------------------------
+   Linha cheia, abaixo dos interruptores: ligar um efeito não desloca nenhum
+   controle existente — só o botão Restaurar desce. O recuo marca a
+   subordinação e a etiqueta do primeiro campo ("Cor Sombra:", "Cor da
+   borda:") nomeia a linha, sem repetir o texto do interruptor. */
+.fmt-params {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--lj-space-3) var(--lj-space-5);
+  min-height: var(--lj-ui-h-md);
+  padding-left: var(--lj-space-6);
+}
+
+.fmt-field {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-3);
+}
+
+/* O .opt-range global é flex:1 com piso de 80px. Numa linha cheia de ~880px o
+   slider solto da Espessura se esticaria por meia tela para uma faixa de 1 a
+   10; com pista fixa a linha termina onde o conteúdo termina. */
+.fmt-params .opt-range {
+  flex: 0 0 110px;
+  min-width: 0;
 }
 
 .opt-divider {
