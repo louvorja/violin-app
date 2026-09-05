@@ -91,20 +91,25 @@ const svgContent = computed(() => {
   const raw = _svgNameMap.get(props.icon);
   if (!raw) return null;
 
-  let svg = raw;
+  // Dois acervos convivem aqui. As marcas do projeto (ja.svg, hasd.svg…) trazem cor
+  // fixa no arquivo e precisam ser repintadas para atender `color`. Os ícones de
+  // interface já desenham em currentColor — repintá-los encheria de sólido todo
+  // ícone de contorno, cujo traçado é currentColor mas o preenchimento é "none".
+  const corFixa = !raw.includes("currentColor");
 
-  if (props.color) {
-    // Remove all hardcoded fill attributes so currentColor can cascade
-    svg = svg.replace(/\sfill="[^"]*"/g, "");
+  let svg = raw;
+  if (props.color && corFixa) {
+    svg = svg.replace(/fill="(?!none")[^"]*"/g, 'fill="currentColor"');
   }
 
-  // Remove fixed width/height from root svg, keep viewBox
-  svg = svg.replace(/<svg([^>]*)>/, (_match, attrs: string) => {
-    const cleaned = attrs.replace(/\s*width="[^"]*"/, "").replace(/\s*height="[^"]*"/, "");
-    return `<svg${cleaned} fill="currentColor" style="width:100%;height:100%">`;
-  });
-
-  return svg;
+  // Sem width/height próprios, o SVG obedece ao tamanho pedido no invólucro.
+  return svg.replace(
+    /<svg([^>]*)>/,
+    (_match, attrs: string) =>
+      `<svg${attrs
+        .replace(/\s*width="[^"]*"/, "")
+        .replace(/\s*height="[^"]*"/, "")} style="width:100%;height:100%">`
+  );
 });
 
 const sizeMap: Record<string, number> = {

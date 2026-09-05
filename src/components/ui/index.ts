@@ -14,6 +14,7 @@
 export { default as LjAlert } from "./LjAlert.vue";
 export { default as LjButton } from "./LjButton.vue";
 export { default as LjCard } from "./LjCard.vue";
+export { default as LjTable } from "./LjTable.vue";
 export { default as LjCheckbox } from "./LjCheckbox.vue";
 export { default as LjChip } from "./LjChip.vue";
 export { default as LjDivider } from "./LjDivider.vue";
@@ -28,8 +29,11 @@ export { default as LjTextarea } from "./LjTextarea.vue";
 export { default as LjToast } from "./LjToast.vue";
 
 /* — sobre Reka UI — */
+export { default as LjAccordion } from "./LjAccordion.vue";
+export { default as LjCalendar } from "./LjCalendar.vue";
 export { default as LjCombobox } from "./LjCombobox.vue";
 export { default as LjDialog } from "./LjDialog.vue";
+export { default as LjDrawer } from "./LjDrawer.vue";
 export { default as LjMenu } from "./LjMenu.vue";
 export { default as LjPopover } from "./LjPopover.vue";
 export { default as LjSelect } from "./LjSelect.vue";
@@ -41,3 +45,10 @@ export { ICON_SIZE } from "./types";
 export type { UiSize } from "./types";
 export type { LjMenuItem } from "./LjMenu.vue";
 export type { LjTab } from "./LjTabs.vue";
+export type { LjAccordionItem } from "./LjAccordion.vue";
+export type {
+  LjCalendarDay,
+  LjCalendarDayClick,
+  LjCalendarEventClick,
+  LjCalendarMoreClick,
+} from "./LjCalendar.vue";
