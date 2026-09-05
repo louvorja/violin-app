@@ -1,3 +1,88 @@
+/**
+ * Base do documento.
+ *
+ * Estas regras não são preferência de estilo: são o piso que o app inteiro
+ * assumia sem declarar. `box-sizing: border-box` e `line-height: 1.5` vinham do
+ * reset dentro de `vuetify/styles` (@layer vuetify-core.reset e .base). Cada
+ * medida do projeto — a altura dos controles em ui.css, o padding de toda
+ * moldura, a altura de linha de toda tabela — foi calibrada com esses dois
+ * valores em vigor. Sem eles, `width: 100%` mais padding passa a estourar o
+ * container e a caixa de linha encolhe de 1.5 para o `normal` do navegador
+ * (~1.2): o app inteiro muda de geometria de uma vez, sem um erro no console.
+ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  background-repeat: no-repeat;
+}
+
+html {
+  /* A fonte do documento. Vinha do reset do Vuetify, cuja variável de corpo era
+     ligada a esta pela folha de overrides — as duas saíram juntas. Sem a linha,
+     o documento cai no serifado padrão do navegador e só escapam as telas cujo
+     CSS declara a própria fonte; o resto vira Times, sem nada no console.
+     main.js troca o valor em tempo de execução, depois de hidratar o UserData. */
+  font-family: var(--lj-font-shell);
+  line-height: 1.5;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+  /* No controle remoto, aberto no celular, sem isto cada toque pisca um
+     retângulo cinza sobre o botão. */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/**
+ * Controles nativos.
+ *
+ * `font: inherit` é a regra mais importante desta folha. O navegador desenha
+ * <button>, <input>, <select> e <textarea> com uma fonte própria — no Chrome,
+ * a de sistema a 13,33px — em vez da fonte do documento. O reset do Vuetify
+ * corrigia isso para o app inteiro, e a interface tem botão nativo em setenta
+ * arquivos: sem a regra, cada um deles muda de fonte e de corpo de uma vez.
+ * `color: inherit` vale o mesmo para a cor: o padrão é `buttontext`, não a cor
+ * herdada do tema.
+ */
+button,
+input,
+optgroup,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+optgroup {
+  font-weight: bold;
+}
+
+button,
+[type="button"],
+[type="reset"],
+[type="submit"],
+[role="button"] {
+  cursor: pointer;
+}
+
+[disabled],
+[aria-disabled="true"] {
+  cursor: default;
+}
+
+/* O <input type="search"> do WebKit corta o próprio contorno de foco. */
+[type="search"] {
+  -webkit-appearance: textfield;
+  outline-offset: -2px;
+}
+
+::before,
+::after {
+  text-decoration: inherit;
+  vertical-align: inherit;
+}
+
 html,
 body {
   overflow: hidden !important;
@@ -38,27 +123,27 @@ body {
 }
 
 /* SCROLL DARK */
-.v-theme--dark *::-webkit-scrollbar-track {
+[data-theme="dark"] *::-webkit-scrollbar-track {
   background-color: #1a1919;
 }
 
-.v-theme--dark *::-webkit-scrollbar-track:hover {
+[data-theme="dark"] *::-webkit-scrollbar-track:hover {
   background-color: #141414;
 }
 
-.v-theme--dark *::-webkit-scrollbar-track:active {
+[data-theme="dark"] *::-webkit-scrollbar-track:active {
   background-color: #0f0f0f;
 }
 
-.v-theme--dark *::-webkit-scrollbar-thumb {
+[data-theme="dark"] *::-webkit-scrollbar-thumb {
   background-color: #111010;
 }
 
-.v-theme--dark *::-webkit-scrollbar-thumb:hover {
+[data-theme="dark"] *::-webkit-scrollbar-thumb:hover {
   background-color: #0c0b0b;
 }
 
-.v-theme--dark *::-webkit-scrollbar-thumb:active {
+[data-theme="dark"] *::-webkit-scrollbar-thumb:active {
   background-color: #030303;
 }
 

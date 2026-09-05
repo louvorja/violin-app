@@ -133,7 +133,7 @@ function formatDuration(total: number): string {
   width: 34px;
   height: 24px;
   padding: 0 3px;
-  border: 1px solid rgba(var(--v-border-color, 0 0 0), 0.4);
+  border: 1px solid var(--lj-surface-border-strong);
   border-radius: 3px;
   background: var(--lj-surface-bg, #fff);
   color: var(--lj-text, #000);

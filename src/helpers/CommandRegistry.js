@@ -169,9 +169,8 @@ function staticCommands(t) {
       keywords: ["tema", "dark", "light", "escuro", "claro"],
       icon: ICONS.UI.THEME_LIGHT_DARK,
       category: "action",
-      // run é injetado na palette porque precisa de acesso ao $vuetify
       run: () => {
-        // Fallback: dispara evento customizado para Shell.vue tratar
+        // Quem sabe trocar de tema é a shell; a palette só avisa.
         window.dispatchEvent(new CustomEvent("louvorja:toggle-theme"));
       },
     },

@@ -157,9 +157,9 @@ export const contextualPages: RibbonPage[] = [
 |------|-----------|------------------|
 | `action` | Botão que dispara `MODULE_RIBBON_ACTION` | action, icon, label |
 | `checkbox` | Checkbox via `optionKey` no UserData | optionKey |
-| `switch` | Vuetify v-switch | optionKey |
+| `switch` | `LjSwitch` | optionKey |
 | `select` | Select com opções | optionKey, options |
-| `slider` | Vuetify v-slider | optionKey, min, max, step |
+| `slider` | `LjSlider` | optionKey, min, max, step |
 | `screen` | Botão de projeção com monitor picker | feature, route |
 | `customCategory` | Grupo substituído por componente Vue | required import |
 
@@ -222,7 +222,7 @@ O comando `npm run validate:manifests` valida todos os manifest.ts:
 - `title`/`description` sempre via i18n (`${modulePath}.title`)
 - `showInMainMenu: boolean` obrigatório (`false` para módulos internos)
 - `defaultShowInMainMenu` para começar oculto no menu (ex: `hymnal_1996`)
-- `icon` **sempre** via `ICONS.*` de `src/config/Icons.ts` — nunca use strings `"mdi-*"` hardcoded
+- `icon` **sempre** via `ICONS.*` de `src/config/Icons.ts` — nunca escreva o nome do ícone direto
 - Botões de formatação: `ICONS.ACTIONS.FORMAT` e `ICONS.ACTIONS.RESTORE`
 - Ribbon buttons (`action`, `checkbox`, `switch`, `select`, `slider`): `icon` de `ICONS.*`
 - `$userdata.get/set` **sempre** via `KEYS.*` de `src/constants/UserDataKeys.ts` — nunca strings hardcoded

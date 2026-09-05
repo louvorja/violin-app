@@ -79,7 +79,7 @@ function onKeydown(e: KeyboardEvent): void {
   align-items: center;
   padding: 0 12px;
   background: linear-gradient(180deg, rgba(0, 0, 0, 0.02), rgba(0, 0, 0, 0.06));
-  border-top: 1px solid rgba(var(--v-border-color), 0.2);
+  border-top: 1px solid var(--lj-surface-border);
   font-size: 12px;
   gap: 8px;
 }

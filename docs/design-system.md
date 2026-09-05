@@ -584,40 +584,21 @@ src/modules/     ❌ não usar (CSS scoped próprio de cada módulo)
 
 ---
 
-## Personalização de componentes Vuetify
+## A base do documento
 
-Para ajustar globalmente o CSS de um componente Vuetify (ex: barra do
-`v-expansion-panel`, tabelas, botões), use o arquivo dedicado:
+`src/assets/styles/main.css` abre declarando `box-sizing: border-box`,
+`line-height: 1.5` e `font: inherit` nos controles nativos. Não são preferências
+de estilo: são o piso que o app assumia sem declarar, porque vinha do reset
+dentro de `vuetify/styles`. Cada medida deste sistema foi calibrada com eles em
+vigor.
 
-**`src/assets/styles/vuetify-overrides.css`**
+Sem `box-sizing`, `width: 100%` mais padding estoura o container. Sem
+`line-height`, toda caixa de linha encolhe de 1,5 para o `normal` do navegador.
+Sem `font: inherit`, os `<button>` nativos caem na fonte de sistema do Chrome a
+13,33px. Nenhum dos três dá erro no console.
 
-Esse arquivo é importado **por último** no `src/main.js`, depois do CSS global e
-do `vuetify/styles`, garantindo prioridade na cascata. É o lugar padrão para
-customizações de componentes Vuetify.
-
-### Exemplo — barra do collapse panel
-
-```css
-.v-expansion-panel-title {
-  padding: 8px 16px !important;
-  min-height: 40px;
-}
-
-.v-expansion-panel-text__wrapper {
-  padding-top: 4px !important;
-  padding-bottom: 8px !important;
-}
-```
-
-### Regras
-
-- Classes Vuetify seguem o padrão `.v-<componente>` (ex: `.v-expansion-panel-title`,
-  `.v-table`, `.v-btn`). Inspecione o DOM com DevTools para achar a classe exata.
-- Use `!important` quando o seletor Vuetify tiver alta especificidade — é comum
-  e aceito **somente** neste arquivo de overrides.
-- Prefira os tokens `var(--lj-*)` para cores/medidas quando possível, mantendo o
-  dark theme funcionando.
-- Não espalhe overrides de Vuetify em componentes: concentre aqui.
+Mexer nesse bloco muda a geometria do app inteiro de uma vez. Trate-o como
+contrato.
 
 ---
 
@@ -633,14 +614,14 @@ Veja todos lado a lado, nos 10 temas, na rota **`/ui`**.
 
 `LjButton` · `LjInput` · `LjTextarea` · `LjCheckbox` · `LjSwitch` · `LjField` ·
 `LjCard` · `LjChip` · `LjSpinner` · `LjProgress` · `LjSkeleton` · `LjEmpty` ·
-`LjAlert` · `LjDivider` · `LjToast`
+`LjAlert` · `LjDivider` · `LjToast` · `LjTable` · `LjCalendar`
 
 ### Sobre Reka UI — onde há comportamento acessível
 
 Foco preso, navegação por teclado, ARIA e portal:
 
 `LjSelect` · `LjCombobox` · `LjDialog` · `LjMenu` · `LjTooltip` · `LjTabs` ·
-`LjSlider` · `LjPopover`
+`LjSlider` · `LjPopover` · `LjAccordion` · `LjDrawer`
 
 ```ts
 import { LjButton, LjSelect, LjDialog } from "@/components/ui";
@@ -743,7 +724,6 @@ sempre. Use `null` (`icon?: string | null`).
 | `src/components/ui/`                      | Catálogo de primitivos (`index.ts` exporta todos)                    |
 | `src/views/UiCatalog.vue`                 | Página `/ui` — todos os primitivos nos 10 temas                      |
 | `src/assets/styles/utilities.css`         | Classes `.lj-u-*` (61 linhas)                                        |
-| `src/assets/styles/main.css`              | Reset global, scrollbar, `.no-select` legado                         |
-| `src/assets/styles/fonts.css`             | `@font-face DINCondensedBold`                                        |
-| `src/assets/styles/vuetify-overrides.css` | Overrides globais de componentes Vuetify                             |
-| `src/assets/styles/main.scss`             | Entry point que importa todos os arquivos acima                      |
+| `src/assets/styles/main.css`              | Base do documento (box-sizing, line-height, controles) e scrollbar   |
+| `src/assets/styles/fonts.css`             | Declarações `@font-face` do acervo de fontes                         |
+| `src/__tests__/SemVuetify.spec.ts`        | Trava a volta do Vuetify: tag, classe, variável, import, dependência  |

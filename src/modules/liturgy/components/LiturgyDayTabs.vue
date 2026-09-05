@@ -46,7 +46,7 @@ void props;
   gap: 4px;
   padding: 6px 8px;
   background: var(--lj-surface-bg);
-  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-bottom: 1px solid var(--lj-surface-border);
   flex-shrink: 0;
 }
 
@@ -60,7 +60,7 @@ void props;
   min-height: 30px;
   padding: 4px 10px;
   background: transparent;
-  border: 1px solid rgba(var(--v-border-color), 0.3);
+  border: 1px solid var(--lj-surface-border-strong);
   border-radius: 3px;
   cursor: pointer;
   color: var(--lj-text);

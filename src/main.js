@@ -2,13 +2,9 @@ import { createApp, watchEffect } from "vue";
 import { createPinia } from "pinia";
 import App from "./App.vue";
 import router from "./router";
-import vuetify from "./plugins/vuetify";
 import { loadFonts } from "./plugins/webfontloader";
 import { createI18nInstance } from "./i18n";
 import VueFullscreen from "vue-fullscreen";
-// Antes dos estilos do projeto: a webfont MDI é a fonte dos ícones ainda não
-// migrados, e sai daqui junto com o último nome "mdi-" do Icons.ts.
-import "@mdi/font/css/materialdesignicons.css";
 import "./assets/styles/tokens.css";
 import "./assets/styles/ui.css";
 import "./assets/styles/markdown.css";
@@ -16,7 +12,6 @@ import "./assets/styles/utilities.css";
 import "./assets/styles/main.css";
 import "./assets/styles/fonts.css";
 import "./assets/styles/appmenu-options.css";
-import "./assets/styles/vuetify-overrides.css";
 //Modules
 import ModuleManager from "@/helpers/ModuleManager";
 import $storage from "@/helpers/Storage";
@@ -52,6 +47,7 @@ import { BROADCAST_TYPE } from "@helpers/BroadcastTypes";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { KEYS } from "@/constants/UserDataKeys";
 import { FONT, resolveDefaultFont } from "@/config/Fonts";
+import { getTheme } from "@/config/Themes";
 
 loadFonts();
 
@@ -59,7 +55,6 @@ const app = createApp(App);
 
 app.use(createPinia());
 app.use(router);
-app.use(vuetify);
 app.use(VueFullscreen);
 
 // Em modo desktop (Electron), desregistra qualquer Service Worker que
@@ -110,6 +105,12 @@ watchEffect(() => {
   );
   document.documentElement.style.setProperty(FONT.UI.CSS_VAR, uiFont);
   document.documentElement.style.setProperty(FONT.PROJECTION.CSS_VAR, projectionFont);
+
+  // O tema pelo mesmo caminho: quem troca é a janela principal, mas os tokens
+  // vivem em [data-theme] no <html> de cada janela. Sem carimbar aqui, a
+  // projeção recebe o patch do UserData e continua pintando a paleta antiga —
+  // no telão, no meio do culto.
+  document.documentElement.dataset.theme = getTheme(UserData.get(KEYS.OPTIONS.THEME)).id;
 });
 
 function seedDefaultFonts() {
@@ -1031,10 +1032,10 @@ $storage.hydrate().then(async () => {
     const _ifMedia = (fn) => (e) => {
       if (_mediaIsActive()) {
         // preventDefault bloqueia ação default do browser (back/forward, scroll).
-        // stopImmediatePropagation garante que listeners internos do Vuetify
-        // (v-list/v-dialog focus trap) não vejam o evento e movam o foco em
-        // vez de navegar slides. Sem isso, com a janela do media (v-dialog)
-        // aberta as setas mexiam o foco do v-list ao invés de navegar.
+        // stopImmediatePropagation impede que a trava de foco do diálogo veja
+        // o evento e mova o foco em vez de navegar slides: com a janela do
+        // media aberta, as setas mexiam o foco da lista em vez de trocar de
+        // slide.
         if (e && typeof e.preventDefault === "function") e.preventDefault();
         if (e && typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
         fn();

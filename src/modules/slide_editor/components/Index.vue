@@ -1463,11 +1463,11 @@ function replicateText(scope) {
     opacity 0.12s;
 }
 .se-rename-btn:hover {
-  background: rgba(var(--v-theme-primary, 79, 70, 229), 0.1);
+  background: color-mix(in srgb, var(--lj-ui-accent) 10%, transparent);
   opacity: 1;
 }
 .se-dirty-dot {
-  color: rgb(var(--v-theme-warning, 251, 191, 36));
+  color: var(--lj-warning);
   font-size: 14px;
   flex-shrink: 0;
 }
@@ -1478,7 +1478,7 @@ function replicateText(scope) {
   opacity: 0.78;
 }
 .se-status-cell strong {
-  color: rgb(var(--v-theme-primary, 79, 70, 229));
+  color: var(--lj-ui-accent);
 }
 .se-audio-time {
   margin-left: 4px;
@@ -1500,8 +1500,8 @@ function replicateText(scope) {
 .se-slide-list {
   display: flex;
   flex-direction: column;
-  border-right: 1px solid rgba(var(--v-border-color, 0, 0, 0), 0.08);
-  background: rgba(var(--v-border-color, 0, 0, 0), 0.02);
+  border-right: 1px solid var(--lj-surface-divider);
+  background: var(--lj-surface-bg-soft);
   min-height: 0;
 }
 .se-slide-list-header {
@@ -1514,12 +1514,12 @@ function replicateText(scope) {
   letter-spacing: 0.06em;
   opacity: 0.5;
   font-weight: 600;
-  border-bottom: 1px solid rgba(var(--v-border-color, 0, 0, 0), 0.06);
+  border-bottom: 1px solid var(--lj-surface-divider);
   flex-shrink: 0;
 }
 .se-slide-list-count {
-  background: rgba(var(--v-theme-primary, 79, 70, 229), 0.12);
-  color: rgb(var(--v-theme-primary, 79, 70, 229));
+  background: color-mix(in srgb, var(--lj-ui-accent) 12%, transparent);
+  color: var(--lj-ui-accent);
   padding: 1px 6px;
   border-radius: 10px;
   font-size: 10px;
@@ -1552,8 +1552,8 @@ function replicateText(scope) {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 .se-thumb.is-active {
-  border-color: rgb(var(--v-theme-primary, 79, 70, 229));
-  box-shadow: 0 0 0 1px rgba(var(--v-theme-primary, 79, 70, 229), 0.4);
+  border-color: var(--lj-ui-accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--lj-ui-accent) 40%, transparent);
 }
 .se-thumb-num {
   position: absolute;
@@ -1572,7 +1572,7 @@ function replicateText(scope) {
   bottom: 4px;
   right: 6px;
   font-size: 9px;
-  color: rgb(var(--v-theme-success, 76, 175, 80));
+  color: var(--lj-success);
   background: rgba(0, 0, 0, 0.55);
   padding: 1px 5px;
   border-radius: 8px;
@@ -1594,9 +1594,9 @@ function replicateText(scope) {
   width: 100%;
   padding: 8px;
   background: transparent;
-  border: 1px dashed rgba(var(--v-border-color, 0, 0, 0), 0.2);
+  border: 1px dashed var(--lj-surface-border);
   border-radius: 6px;
-  color: rgb(var(--v-theme-primary, 79, 70, 229));
+  color: var(--lj-ui-accent);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -1609,8 +1609,8 @@ function replicateText(scope) {
     border-color 0.15s;
 }
 .se-slide-list-add:hover {
-  background: rgba(var(--v-theme-primary, 79, 70, 229), 0.06);
-  border-color: rgba(var(--v-theme-primary, 79, 70, 229), 0.5);
+  background: color-mix(in srgb, var(--lj-ui-accent) 6%, transparent);
+  border-color: color-mix(in srgb, var(--lj-ui-accent) 50%, transparent);
 }
 
 /* Preview stage */
@@ -1687,7 +1687,7 @@ function replicateText(scope) {
   display: flex;
   flex-direction: column;
   padding: 6px 8px 12px;
-  border-left: 1px solid rgba(var(--v-border-color, 0, 0, 0), 0.08);
+  border-left: 1px solid var(--lj-surface-divider);
   background: var(--lj-surface-bg, #fff);
   overflow-y: auto;
   overflow-x: hidden;
@@ -1703,7 +1703,7 @@ function replicateText(scope) {
 
 /* Accordion-style panel (uses <details>) */
 .se-panel {
-  border-top: 1px solid rgba(var(--v-border-color, 0, 0, 0), 0.06);
+  border-top: 1px solid var(--lj-surface-divider);
 }
 .se-panel:first-child {
   border-top: none;
@@ -1717,7 +1717,7 @@ function replicateText(scope) {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   font-weight: 600;
-  color: rgba(var(--v-theme-on-surface, 0, 0, 0), 0.7);
+  color: var(--lj-text-muted);
   cursor: pointer;
   user-select: none;
   list-style: none;
@@ -1739,7 +1739,7 @@ function replicateText(scope) {
   transform: rotate(180deg);
 }
 .se-panel-head:hover {
-  color: rgb(var(--v-theme-primary, 79, 70, 229));
+  color: var(--lj-ui-accent);
 }
 .se-panel-body {
   display: flex;
@@ -1760,7 +1760,7 @@ function replicateText(scope) {
   width: 100%;
   resize: vertical;
   padding: 6px 8px;
-  border: 1px solid rgba(var(--v-border-color, 0, 0, 0), 0.18);
+  border: 1px solid var(--lj-surface-border);
   border-radius: 4px;
   background: transparent;
   color: inherit;
@@ -1771,8 +1771,8 @@ function replicateText(scope) {
   transition: border-color 0.12s;
 }
 .se-textarea:focus {
-  border-color: rgb(var(--v-theme-primary, 79, 70, 229));
-  box-shadow: 0 0 0 2px rgba(var(--v-theme-primary, 79, 70, 229), 0.1);
+  border-color: var(--lj-ui-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--lj-ui-accent) 10%, transparent);
 }
 .se-textarea--aux {
   font-style: italic;
@@ -1790,7 +1790,7 @@ function replicateText(scope) {
   font-size: 10px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: rgba(var(--v-theme-on-surface, 0, 0, 0), 0.55);
+  color: var(--lj-text-subtle);
   font-weight: 500;
   flex-shrink: 0;
 }
@@ -1810,7 +1810,7 @@ function replicateText(scope) {
 .se-color-input {
   width: 32px;
   height: 22px;
-  border: 1px solid rgba(var(--v-border-color, 0, 0, 0), 0.2);
+  border: 1px solid var(--lj-surface-border);
   border-radius: 3px;
   background: none;
   cursor: pointer;
@@ -1822,7 +1822,7 @@ function replicateText(scope) {
   height: 22px;
   padding: 0 4px;
   font-size: 11px;
-  border: 1px solid rgba(var(--v-border-color, 0, 0, 0), 0.2);
+  border: 1px solid var(--lj-surface-border);
   border-radius: 3px;
   background: transparent;
   color: inherit;
@@ -1836,7 +1836,7 @@ function replicateText(scope) {
   height: 18px;
 }
 .se-num-input:focus {
-  border-color: rgb(var(--v-theme-primary, 79, 70, 229));
+  border-color: var(--lj-ui-accent);
 }
 .se-suffix {
   font-size: 10px;
@@ -1859,7 +1859,7 @@ function replicateText(scope) {
 /* Segmented control (alinhamento) */
 .se-seg {
   display: inline-flex;
-  border: 1px solid rgba(var(--v-border-color, 0, 0, 0), 0.2);
+  border: 1px solid var(--lj-surface-border);
   border-radius: 3px;
   overflow: hidden;
 }
@@ -1880,15 +1880,15 @@ function replicateText(scope) {
     color 0.12s;
 }
 .se-seg-btn + .se-seg-btn {
-  border-left: 1px solid rgba(var(--v-border-color, 0, 0, 0), 0.2);
+  border-left: 1px solid var(--lj-surface-border);
 }
 .se-seg-btn:hover {
-  background: rgba(var(--v-theme-primary, 79, 70, 229), 0.06);
+  background: color-mix(in srgb, var(--lj-ui-accent) 6%, transparent);
   opacity: 1;
 }
 .se-seg-btn.is-active {
-  background: rgba(var(--v-theme-primary, 79, 70, 229), 0.18);
-  color: rgb(var(--v-theme-primary, 79, 70, 229));
+  background: color-mix(in srgb, var(--lj-ui-accent) 18%, transparent);
+  color: var(--lj-ui-accent);
   opacity: 1;
 }
 
@@ -1904,7 +1904,7 @@ function replicateText(scope) {
   gap: 4px;
   padding: 4px 8px;
   font-size: 11px;
-  border: 1px solid rgba(var(--v-border-color, 0, 0, 0), 0.18);
+  border: 1px solid var(--lj-surface-border);
   border-radius: 4px;
   background: transparent;
   color: inherit;
@@ -1916,9 +1916,9 @@ function replicateText(scope) {
     color 0.12s;
 }
 .se-act-btn:hover:not(:disabled) {
-  background: rgba(var(--v-theme-primary, 79, 70, 229), 0.06);
-  border-color: rgba(var(--v-theme-primary, 79, 70, 229), 0.4);
-  color: rgb(var(--v-theme-primary, 79, 70, 229));
+  background: color-mix(in srgb, var(--lj-ui-accent) 6%, transparent);
+  border-color: color-mix(in srgb, var(--lj-ui-accent) 40%, transparent);
+  color: var(--lj-ui-accent);
 }
 .se-act-btn:disabled {
   opacity: 0.4;
@@ -1941,10 +1941,10 @@ function replicateText(scope) {
   width: 100%;
   min-height: 80px;
   padding: 14px;
-  border: 1px dashed rgba(var(--v-border-color, 0, 0, 0), 0.3);
+  border: 1px dashed var(--lj-surface-border-strong);
   border-radius: 6px;
-  background: rgba(var(--v-border-color, 0, 0, 0), 0.02);
-  color: rgba(var(--v-theme-on-surface, 0, 0, 0), 0.55);
+  background: var(--lj-surface-bg-soft);
+  color: var(--lj-text-subtle);
   cursor: pointer;
   font-size: 11px;
   font-family: inherit;
@@ -1954,9 +1954,9 @@ function replicateText(scope) {
     color 0.12s;
 }
 .se-img-empty:hover {
-  background: rgba(var(--v-theme-primary, 79, 70, 229), 0.06);
-  border-color: rgba(var(--v-theme-primary, 79, 70, 229), 0.5);
-  color: rgb(var(--v-theme-primary, 79, 70, 229));
+  background: color-mix(in srgb, var(--lj-ui-accent) 6%, transparent);
+  border-color: color-mix(in srgb, var(--lj-ui-accent) 50%, transparent);
+  color: var(--lj-ui-accent);
 }
 .se-img-preview-row {
   display: flex;
@@ -1969,8 +1969,8 @@ function replicateText(scope) {
   border-radius: 4px;
   background-size: cover;
   background-position: center;
-  background-color: rgba(var(--v-border-color, 0, 0, 0), 0.06);
-  border: 1px solid rgba(var(--v-border-color, 0, 0, 0), 0.15);
+  background-color: var(--lj-surface-bg-soft);
+  border: 1px solid var(--lj-surface-border);
   flex-shrink: 0;
 }
 .se-img-actions {
@@ -1992,7 +1992,7 @@ function replicateText(scope) {
   padding: 0 6px;
   font-size: 11px;
   font-family: inherit;
-  border: 1px solid rgba(var(--v-border-color, 0, 0, 0), 0.2);
+  border: 1px solid var(--lj-surface-border);
   border-radius: 3px;
   background: transparent;
   color: inherit;
@@ -2000,7 +2000,7 @@ function replicateText(scope) {
   cursor: pointer;
 }
 .se-select:focus {
-  border-color: rgb(var(--v-theme-primary, 79, 70, 229));
+  border-color: var(--lj-ui-accent);
 }
 
 /* ============ Coluna central (preview + player) ============ */
@@ -2048,7 +2048,7 @@ function replicateText(scope) {
   transform: scale(0.95);
 }
 .se-player-play.is-playing {
-  background: rgb(var(--v-theme-success, 76, 175, 80));
+  background: var(--lj-success);
   color: #fff;
 }
 .se-player-time {
@@ -2085,7 +2085,7 @@ function replicateText(scope) {
   top: 0;
   left: 0;
   height: 100%;
-  background: rgba(var(--v-theme-success, 76, 175, 80), 0.55);
+  background: color-mix(in srgb, var(--lj-success) 55%, transparent);
   border-radius: 4px;
   transition: width 0.08s linear;
   pointer-events: none;
@@ -2106,11 +2106,11 @@ function replicateText(scope) {
   transform: translateX(-50%) scaleY(1.4);
 }
 .se-timeline-marker.is-current {
-  background: rgb(var(--v-theme-primary, 79, 70, 229));
+  background: var(--lj-ui-accent);
   width: 3px;
   height: 14px;
   top: -3px;
-  box-shadow: 0 0 0 2px rgba(var(--v-theme-primary, 79, 70, 229), 0.25);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--lj-ui-accent) 25%, transparent);
 }
 .se-timeline-thumb {
   position: absolute;

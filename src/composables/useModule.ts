@@ -36,7 +36,7 @@ export interface ModuleManifest {
  *   import { useModule } from "@/composables/useModule";
  *   import { module as manifest } from "../manifest";
  *
- *   const { moduleId, module, userdata, appdata, t, $t, $i18n, $vuetify, proxy }
+ *   const { moduleId, module, userdata, appdata, t, $t, $i18n, proxy }
  *     = useModule(manifest);
  */
 export function useModule(manifest: ModuleManifest) {
@@ -71,7 +71,6 @@ export function useModule(manifest: ModuleManifest) {
   type ProxyWithHelpers = Record<string, unknown> & {
     $t?: (k: string) => string;
     $i18n?: unknown;
-    $vuetify?: unknown;
   };
   const _p = proxy as unknown as ProxyWithHelpers | null;
 
@@ -87,7 +86,6 @@ export function useModule(manifest: ModuleManifest) {
     t,
     $t:        _p?.$t,
     $i18n:     _p?.$i18n,
-    $vuetify:  _p?.$vuetify,
     $modules:  Modules,
     $media:    Media,
     $database: Database,

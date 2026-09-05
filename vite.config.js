@@ -1,6 +1,5 @@
 import { defineConfig, loadEnv } from "vite";
 import vue from "@vitejs/plugin-vue";
-import vuetify from "vite-plugin-vuetify";
 import { VitePWA } from "vite-plugin-pwa";
 import path from "path";
 
@@ -49,10 +48,6 @@ export default async ({ mode }) => {
   // Plugins base — sempre incluídos
   const plugins = [
     vue(),
-    // https://github.com/vuetifyjs/vuetify-loader/tree/next/packages/vite-plugin
-    vuetify({
-      autoImport: true,
-    }),
     // No desktop (Electron), CSP é gerenciado via session.webRequest no
     // main process, com política relaxada para janelas de projeção de vídeo
     // (YouTube IFrame Player API precisa de 'unsafe-inline' no script-src).
@@ -216,8 +211,8 @@ export default async ({ mode }) => {
             "vendor-i18n": ["vue-i18n"],
             // Busca full-text
             "vendor-fuse": ["fuse.js"],
-            // Vuetify NÃO entra aqui — vite-plugin-vuetify faz tree-shaking
-            // automático dos componentes; forçar um chunk único quebraria isso.
+            // Reka UI — o headless por trás dos primitivos
+            "vendor-reka": ["reka-ui"],
           },
         },
       },

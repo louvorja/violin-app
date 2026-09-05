@@ -27,7 +27,9 @@ Content-Security-Policy:
 
 **Notas:**
 
-- `style-src 'unsafe-inline'` é necessário para o Vuetify, que injeta estilos inline dinamicamente.
+- `style-src 'unsafe-inline'` continua necessário depois da saída do Vuetify: a Reka UI
+  escreve a posição do conteúdo flutuante em `style` inline, e as telas de projeção montam
+  fonte, cor e alinhamento por `:style` a partir das preferências do usuário.
 - `fonts.googleapis.com` e `fonts.gstatic.com` são necessários para o Roboto (via webfontloader).
   Se o Roboto for removido do webfontloader e servido localmente, essas origens podem ser removidas.
 - `connect-src` inclui `ws://localhost:*` apenas no meta tag (para HMR do Vite em dev).

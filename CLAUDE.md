@@ -5,7 +5,7 @@ Sistema de apresentação de letras de músicas e conteúdo bíblico para uso em
 ## Stack
 
 - **Vue 3** + Composition API
-- **Vuetify 4** (UI + temas claro/escuro) — travado em `~4.0.6` estável; ver `docs/adr/0001-vuetify-versao-estavel.md`
+- **Reka UI** (headless) sob os primitivos próprios em `src/components/ui/` — o Vuetify saiu do projeto
 - **Vuex 4** (estado global)
 - **Vue Router 5**
 - **Vue I18n 11** (PT/ES)
@@ -122,7 +122,7 @@ src/
 │   ├── timer/   # Temporizador (alarme sonoro via Web Audio API)
 │   ├── theme/
 │   └── transmission/    # Links para todas as views de projeção/OBS
-├── plugins/             # Plugins Vue (Vuetify, etc.)
+├── plugins/             # Plugins Vue
 ├── router/              # Rotas
 ├── store/               # Vuex store
 └── views/
@@ -161,7 +161,7 @@ Cada módulo em `src/modules/<id>/` segue esta estrutura:
   "name": "Nome",
   "description": "Descrição.",
   "category": "musics|bible|utilities",
-  "icon": "mdi-icon-name",
+  "icon": "nome-do-icone",
   "dependencies": []
 }
 ```
@@ -330,8 +330,8 @@ MusicMenuTable → usePlaylists.addSong() → playlist song
 
 ### `ICONS.*` — ícones sempre por constante
 
-Nunca use strings `"mdi-*"` hardcoded. Ícones de componentes, manifestos e
-ribbon buttons devem usar `ICONS.*` de `src/config/Icons.ts`:
+Nunca escreva o nome do ícone direto. Componentes, manifestos e botões da
+ribbon usam `ICONS.*` de `src/config/Icons.ts`:
 
 ```ts
 import { ICONS } from "@/config/Icons";
@@ -339,16 +339,28 @@ import { ICONS } from "@/config/Icons";
 // ✅ Correto
 icon: ICONS.PLAYER.PLAY;
 
-// ❌ Errado — string hardcoded
-icon: "mdi-play";
+// ❌ Errado — nome solto
+icon: "player-play-filled";
 ```
 
-### Primitivos — nunca componentes Vuetify em UI nova
+O acervo é o **Tabler**, em SVG, num arquivo por desenho sob
+`src/assets/icons/`. `Icon.vue` os embute inline e a cor sai por `currentColor`.
+A razão da regra é a troca de acervo: quando o app saiu do MDI, os 354 nomes do
+`Icons.ts` mudaram de uma vez, e qualquer nome escrito direto num template teria
+sobrevivido como ícone órfão — sem erro no console, só um buraco na tela.
+`Icons.spec.ts` trava isso, e também que todo nome tenha arquivo e todo arquivo
+tenha dono.
 
-A interface usa o catálogo fechado em `src/components/ui/` (veja `/ui` e
-`docs/design-system.md`). Não introduza `v-btn`, `v-select`, `v-dialog`,
-`v-menu`, `v-text-field` e afins em código novo — o app está migrando para fora
-do Material.
+As marcas do projeto (`ja`, `hasd`, `dbv`…) convivem no mesmo diretório. Elas
+têm cor fixa no arquivo, e é por isso que `Icon.vue` só repinta o SVG que **não**
+usa `currentColor`: repintar um desenho de contorno o encheria de sólido.
+
+### Primitivos — o catálogo é fechado
+
+A interface usa exclusivamente `src/components/ui/` (veja `/ui` e
+`docs/design-system.md`). Precisou de um controle que não existe? Ele entra no
+catálogo primeiro, com página no `/ui` — não como variação local dentro de uma
+tela.
 
 ```ts
 import { LjButton, LjSelect, LjDialog } from "@/components/ui";
@@ -364,31 +376,35 @@ conteúdo flutuante é emitido lá dentro pela Reka. Pelo mesmo motivo, para
 estilizar o gatilho de um primitivo a partir do consumidor, envolva-o num
 elemento seu e use `:deep()`.
 
-#### Ao trocar um componente Vuetify pelo primitivo
+#### A base do documento é nossa, e é frágil
 
-Estas cinco trocas **não** dão erro no console — falham em silêncio, e cada uma
-já custou uma tela quebrada sem ninguém notar:
+`src/assets/styles/main.css` abre declarando `box-sizing: border-box`,
+`line-height: 1.5` e `font: inherit` nos controles nativos. **Não são
+preferências de estilo** — são o piso que o app assumia sem declarar, porque
+vinha do reset dentro de `vuetify/styles`. Cada medida do projeto foi calibrada
+com eles em vigor: sem `box-sizing`, `width: 100%` mais padding estoura o
+container; sem `line-height`, toda caixa de linha encolhe de 1,5 para o `normal`
+do navegador; sem `font: inherit`, os `<button>` nativos de setenta arquivos
+caem na fonte de sistema do Chrome a 13,33px. Nada disso dá erro no console.
 
-| Vuetify             | Primitivo    | Cuidado                                                              |
-| ------------------- | ------------ | -------------------------------------------------------------------- |
-| `v-progress-linear` | `LjProgress` | a prop é `value`, **não** `model-value`                              |
-| `v-select`          | `LjSelect`   | a chave de rótulo é `itemLabel`, **não** `item-title`                |
-| `v-alert`           | `LjAlert`    | `type="error"` vira `variant="danger"`; `variant="tonal"` não existe |
-| `v-text-field`      | `LjInput`    | `class`/`style` pousam no `<input>` interno, não na moldura          |
-| `v-skeleton-loader` | `LjSkeleton` | `width`/`height` são strings CSS, não números                        |
+Mexer nesse bloco muda a geometria do app inteiro de uma vez. Trate-o como
+contrato, não como folha de estilo comum.
 
-Trocar a tag não basta: **as classes utilitárias também são do Vuetify.**
-`d-flex`, `flex-column`, `ma-*`, `pa-*`, `text-caption`, `text-medium-emphasis`
-e afins vêm de `vuetify/styles`. Ao migrar uma tela, troque também essas —
-`utilities.css` tem os equivalentes `lj-u-*`. Margem solta (`mr-1`, `mb-2`) é
-quase sempre `gap` no container; resolva assim em vez de trazer a escala de 4px
-do Material junto. Um arquivo sem nenhuma tag `<v-*>` mas cheio de `d-flex`
-continua preso à folha, e some inteiro no dia em que ela sair.
+#### O Vuetify saiu — e não volta sem alguém notar
 
-Atenção especial a classe montada em tempo de execução
-(``:class="`align-${x}`"``): ela não aparece em busca por texto e falha calada
-— nas telas de projeção, ao vivo. Use os utilitários `lj-u-align-*` /
-`lj-u-justify-*`, cujos sufixos são os mesmos valores salvos em UserData.
+`src/__tests__/SemVuetify.spec.ts` trava as quatro portas de volta: tag `<v-*>`,
+classe utilitária que o projeto não declara, import do pacote e a dependência no
+`package.json`. Vale a pena saber por que o teste existe: das quatro, só a
+primeira aparece numa busca por `<v-`. As classes (`d-flex`, `pa-4`,
+`text-caption`) funcionavam enquanto a folha estava importada e teriam desmontado
+juntas no dia em que ela saiu; e uma classe montada em tempo de execução
+(``:class="`align-${x}`"``) nem aparece numa busca por texto — falharia nas telas
+de projeção, ao vivo. Para esse caso existem `lj-u-align-*` e `lj-u-justify-*`,
+cujos sufixos são os mesmos valores já salvos em UserData.
+
+Espaçamento não tem utilitário de propósito: a escala do Material é 4px×n e a
+daqui é a do Delphi (`--lj-space-1..8` = 2, 4, 6, 8, 12, 16, 20, 24px). Margem
+entre irmãos é `gap` no container; padding de bloco é CSS `scoped` com token.
 
 ### `KEYS.*` — UserData sempre por constante
 
@@ -485,8 +501,8 @@ fechamento do diálogo de origem. É composto por:
   (`tasks`, `hasActiveTasks`, `activeCount`) consumido pelo `ShellTools.vue`.
   Mantém listeners IPC próprios para downloads de coletâneas que persistem
   independentemente do lifecycle dos componentes.
-- **`ShellTools.vue`** — botão `mdi-progress-download` com `v-badge` (contagem)
-  e `v-menu` com lista de tarefas, barras de progresso e botões de cancelamento/dismiss.
+- **`ShellTools.vue`** — botão de download com contagem e menu com a lista de
+  tarefas, barras de progresso e botões de cancelamento/dispensa.
 - **`useSyncManager.ts`** — registra tarefas (`sync-collections`, `sync-bible`) no singleton
   ao iniciar downloads. Atualiza progresso via callbacks IPC e refs.
 - **`Shell.vue`** — registra tarefa `app-update` quando o updater entra em `status: "downloading"`.
@@ -593,8 +609,8 @@ aceito como alias de `"__FONT_DEFAULT_UI__"`.
 
 Os defaults e marcadores ficam unificados em `FONT`: `FONT.UI.FALLBACK`,
 `FONT.UI.INHERIT`, `FONT.PROJECTION.FALLBACK`, `FONT.PROJECTION.INHERIT` e
-`FONT.DEFAULT`. O arquivo `vuetify-overrides.css` conecta `--v-font-body` e
-`--v-font-heading` a `--lj-font-shell`, incluindo dialogs e menus teleportados.
+`FONT.DEFAULT`. Os primitivos herdam a fonte da shell pela cascata, inclusive
+o conteúdo que a Reka teleporta para o `<body>`.
 
 ### SelectFont — Props
 

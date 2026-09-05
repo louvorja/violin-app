@@ -26,7 +26,7 @@ A aplicação é composta por:
 | Tecnologia   | Versão   | Uso                 |
 |--------------|----------|---------------------|
 | Vue          | 3.5      | Framework           |
-| Vuetify      | 4.0.6    | UI + temas          |
+| Reka UI      | ^2.x     | Base dos primitivos |
 | Pinia        | 3        | Estado global       |
 | Vue Router   | 5.0.6    | Rotas               |
 | Vue I18n     | 11       | Traduções PT/ES     |
@@ -111,9 +111,9 @@ export const contextualPages: RibbonPage[] = [
 |------------------|-------------------------------------------------|
 | `action`         | Botão padrão que dispara `MODULE_RIBBON_ACTION` |
 | `checkbox`       | Checkbox ligado a `optionKey` no UserData       |
-| `switch`         | Vuetify v-switch                                |
+| `switch`         | `LjSwitch`                                      |
 | `select`         | `<select>` com opções de `optionKey`            |
-| `slider`         | Vuetify v-slider com `min`/`max`/`step`         |
+| `slider`         | `LjSlider` com `min`/`max`/`step`               |
 | `screen`         | Botão de projeção com seletor de monitores      |
 | `customCategory` | Grupo inteiro substituído por componente Vue    |
 
@@ -503,11 +503,11 @@ timeout de segurança para o check não travar o boot.
 
 `ShellTools.vue` mostra dois indicadores no header:
 
-1. **Badge de atualização** — ícone amarelo pulsante (`mdi-download-circle`) quando
+1. **Badge de atualização** — ícone amarelo pulsante de download quando
    `appdata app_update_available` é verdadeiro. O clique abre a tela de Atualizações via
    evento `louvorja:open-updates` (escutado por `AppMenu.vue`).
 
-2. **Badge de processos em segundo plano** — ícone `mdi-progress-download` com
+2. **Badge de processos em segundo plano** — ícone de download em progresso com
    `v-badge` (contagem de tarefas ativas) quando `useBackgroundTasks.hasActiveTasks`
    é true. O clique abre um `v-menu` com a lista de tarefas, barras de progresso,
    detalhe (arquivo atual) e botões de cancelamento/dismiss.
@@ -538,7 +538,7 @@ fechamento do diálogo de origem. É composto por:
   (`tasks`, `hasActiveTasks`, `activeCount`) consumido pelo `ShellTools.vue`.
   Mantém listeners IPC próprios para downloads de coletâneas que persistem
   independentemente do lifecycle dos componentes.
-- **`ShellTools.vue`** — botão `mdi-progress-download` com `v-badge` (contagem)
+- **`ShellTools.vue`** — botão de download com contagem
   e `v-menu` com lista de tarefas, barras de progresso e botões de cancelamento/dismiss.
 - **`useSyncManager.ts`** — registra tarefas (`sync-collections`, `sync-bible`, `db-bundle`) no singleton
   ao iniciar downloads. Atualiza progresso via callbacks IPC e refs.
@@ -928,9 +928,9 @@ defaults concretos para evitar selects vazios (`—`) em instalações novas:
 
 Defaults e marcadores ficam no namespace `FONT`: `FONT.UI.FALLBACK`,
 `FONT.UI.INHERIT`, `FONT.PROJECTION.FALLBACK`, `FONT.PROJECTION.INHERIT` e
-`FONT.DEFAULT`. Em `vuetify-overrides.css`, `--v-font-body` e
-`--v-font-heading` apontam para `--lj-font-shell`, garantindo a fonte da
-interface também em dialogs, menus, selects e tooltips teleportados.
+`FONT.DEFAULT`. Os primitivos herdam a fonte da shell pela cascata, inclusive
+o conteúdo que a Reka teleporta para o `<body>` — dialogs, menus, selects e
+tooltips.
 
 ### SelectFont.vue — Props
 
@@ -1159,7 +1159,7 @@ npm run test:e2e             # Playwright
 ## 📦 Dependências principais
 
 - Vue 3.5 + Composition API
-- Vuetify 4 ~4.0.6
+- Reka UI ^2.x
 - Pinia 3
 - Vue Router 5
 - Vue I18n 11
@@ -1239,7 +1239,7 @@ Aliases em `vite.config.js`:
 
 ## 📐 Convenções de Código
 
-### `ICONS.*` — sempre, nunca `"mdi-*"` hardcoded
+### `ICONS.*` — sempre, nunca o nome do ícone solto
 
 Ícones de componentes e manifestos **devem** usar as constantes de `src/config/Icons.ts`:
 
@@ -1249,12 +1249,13 @@ import { ICONS } from "@/config/Icons";
 // ✅ Correto
 icon: ICONS.PLAYER.PLAY
 
-// ❌ Errado — string hardcoded
-icon: "mdi-play"
+// ❌ Errado — nome solto
+icon: "player-play-filled"
 ```
 
-Exceção: templates de módulos com `<v-icon icon="mdi-...">` inline são tolerados
-mas **prefira** extrair para `ICONS.*`.
+Sem exceção. Quando o app trocou o acervo MDI pelo Tabler, os 354 nomes do
+`Icons.ts` mudaram de uma vez; um nome escrito direto num template teria
+sobrevivido como ícone órfão, sem erro no console. `Icons.spec.ts` trava isso.
 
 ### `KEYS.*` — UserData/AppData nunca com string literal
 
@@ -1283,6 +1284,5 @@ via `KEYS.<GROUP>.<KEY>` no código.
 ## 📚 Referências
 
 - `src/helpers/BroadcastTypes.ts` — Contratos e payloads do BroadcastChannel
-- `docs/adr/0001-vuetify-versao-estavel.md` — Vuetify travado em ~4.0.6
 - `docs/adr/0002-vue-router-version.md` — Vue Router 5
 - `docs/adr/0003-modules-core-flat.md` — Sem diretório `modules/core/`

@@ -116,7 +116,6 @@ personalizada** no texto:
 | Tecnologia              | Versão | Nota                                                                       |
 | ----------------------- | ------ | -------------------------------------------------------------------------- |
 | Vue 3 + Composition API | ~3.5.x | `<script setup>` em todo o projeto                                         |
-| Vuetify 4               | 4.1.2  | **Em remoção** — versão fixa, sem `^`. Ver [Design system](#design-system) |
 | Reka UI                 | ^2.x   | Base headless dos primitivos próprios                                      |
 | Pinia                   | ^3.x   | Estado global (migrado de Vuex)                                            |
 | Vue Router              | 5.0.6  | Versão fixa, sem `^`                                                       |
@@ -133,47 +132,43 @@ personalizada** no texto:
 
 ## Design system
 
-A interface está saindo do Vuetify/Material para um catálogo de primitivos
-próprios sobre [Reka UI](https://reka-ui.com) (headless), mantendo a densidade
-de desktop herdada do sistema Delphi original. Os primitivos ficam em
-`src/components/ui/` e a página `/ui` mostra todos eles lado a lado.
+A interface roda sobre um catálogo fechado de primitivos próprios, construídos
+sobre [Reka UI](https://reka-ui.com) (headless), com a densidade de desktop
+herdada do sistema Delphi original. Os primitivos ficam em `src/components/ui/`
+e a página `/ui` mostra todos eles lado a lado.
 
-Medidas, borda, raio e foco saem de `assets/styles/ui.css`; cores e
-espaçamentos, de `tokens.css`. Quem for escrever código encontra as convenções e
-as armadilhas de cada troca em [CLAUDE.md](CLAUDE.md) e
+Medidas, borda, raio e foco saem de `assets/styles/ui.css`; cores e espaçamentos,
+de `tokens.css`; os utilitários `lj-u-*`, de `utilities.css`. As convenções para
+quem for escrever código estão em [CLAUDE.md](CLAUDE.md) e
 [docs/design-system.md](docs/design-system.md).
 
-### Estado da migração
+Ícones: acervo [Tabler](https://tabler.io/icons) em SVG, um arquivo por desenho
+sob `src/assets/icons/`, embutidos inline por `Icon.vue` e coloridos por
+`currentColor`. As marcas do projeto convivem no mesmo diretório. Todo nome passa
+por `ICONS.*` de `src/config/Icons.ts` — nunca escrito direto.
 
-| Frente                                | Situação                         |
-| ------------------------------------- | -------------------------------- |
-| Primitivos disponíveis                | 23                               |
-| Tags `<v-*>` no código                | 197, em 59 arquivos              |
-| Arquivos presos às classes do Vuetify | 51 — todos entre os 59 acima     |
-| Nomes `mdi-` soltos fora do catálogo  | 0 — todos passam por `ICONS.*`   |
-| Ícones servidos pela webfont MDI      | 355 constantes, a trocar por SVG |
+### A saída do Vuetify
 
-### O que ainda prende o Vuetify
+O projeto nasceu em Vuetify 4 e saiu dele por inteiro. Vale registrar o que a
+migração custou, porque a parte cara não era a que se vê:
 
-Zerar as tags `<v-*>` **não** remove a dependência. Três amarras seguem de pé, e
-nenhuma delas aparece numa busca por `<v-`:
+| Amarra                                    | Quantidade | Como falhava sem aviso                  |
+| ----------------------------------------- | ---------: | --------------------------------------- |
+| Tags `<v-*>`                              |        188 | tela vazia, nada no console             |
+| Classes utilitárias (`d-flex`, `pa-4`…)   |        293 | funcionavam até a folha sair, e sumiam  |
+| Variáveis CSS `--v-theme-*`               |         66 | declaração inválida: a borda some       |
+| Imports de API (`useDisplay`, `useTheme`) |         16 | erro de build — a única barulhenta      |
+| Nomes `mdi-` no catálogo de ícones        |        355 | buraco do tamanho do ícone              |
 
-1. **A webfont dos ícones.** `Icon.vue` renderiza `<v-icon>` para todo nome que
-   comece com `mdi-`, e as 355 constantes de `ICONS.*` ainda são MDI. Enquanto
-   isso valer, a maioria das telas monta um componente Vuetify por dentro mesmo
-   sem citar nenhum. Sai quando o catálogo virar SVG.
-2. **As classes utilitárias.** 51 arquivos usam `d-flex`, `ma-*`, `pa-*`,
-   `text-caption` e afins, que vêm de `vuetify/styles`. Nada quebra hoje; tudo
-   desmonta junto no dia da remoção. Os equivalentes já existem em
-   `utilities.css` como `lj-u-*`, e nenhum arquivo depende mais só delas — todo
-   arquivo preso à folha também tem tag `<v-*>`, então a migração por tag cobre
-   os dois de uma vez.
-3. **`<v-app>` e os drawers.** `v-navigation-drawer` faz `inject` do layout e
-   lança erro no _setup_ se não houver `<v-app>` acima. Enquanto os dois usos
-   existirem, `App.vue` não pode largar o wrapper — é uma ordem de trabalho, não
-   uma troca.
+Só a primeira linha aparece numa busca por `<v-`. E havia uma quinta amarra que
+não aparece em busca nenhuma: `vuetify/styles` fornecia o **reset do documento**
+— `box-sizing: border-box`, `line-height: 1.5` e `font: inherit` nos controles
+nativos. Cada medida do projeto tinha sido calibrada com eles em vigor, e o app
+tem `<button>` nativo em setenta arquivos. Hoje essa base é declarada no topo de
+`assets/styles/main.css`, e mexer nela muda a geometria do app inteiro de uma vez.
 
-Além disso, 13 arquivos leem `--v-theme-*` ou `--v-border-color` em CSS próprio.
+`src/__tests__/SemVuetify.spec.ts` tranca as portas de volta: tag, classe não
+declarada, variável `--v-*`, import e dependência no `package.json`.
 
 ---
 

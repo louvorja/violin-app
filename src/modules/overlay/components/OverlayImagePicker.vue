@@ -191,7 +191,7 @@ onMounted(() => {
   flex-direction: column;
   gap: 8px;
   padding: 8px;
-  border: 2px dashed rgba(var(--v-border-color), 0.3);
+  border: 2px dashed var(--lj-surface-border-strong);
   border-radius: 8px;
   transition:
     border-color 0.15s,
@@ -200,8 +200,8 @@ onMounted(() => {
 }
 
 .image-picker-root--drag-over {
-  border-color: rgb(var(--v-theme-primary));
-  background: rgba(var(--v-theme-primary), 0.06);
+  border-color: var(--lj-ui-accent);
+  background: color-mix(in srgb, var(--lj-ui-accent) 6%, transparent);
 }
 
 .image-picker-selected {
@@ -209,7 +209,7 @@ onMounted(() => {
   align-items: center;
   gap: 8px;
   padding: 6px;
-  background: rgba(var(--v-theme-primary), 0.06);
+  background: color-mix(in srgb, var(--lj-ui-accent) 6%, transparent);
   border-radius: 6px;
 }
 
@@ -247,11 +247,11 @@ onMounted(() => {
 }
 
 .image-picker-item:hover {
-  border-color: rgba(var(--v-theme-primary), 0.4);
+  border-color: color-mix(in srgb, var(--lj-ui-accent) 40%, transparent);
 }
 
 .image-picker-item--active {
-  border-color: rgb(var(--v-theme-primary));
+  border-color: var(--lj-ui-accent);
 }
 
 .image-picker-thumb {
@@ -294,7 +294,7 @@ onMounted(() => {
   align-items: center;
   gap: 6px;
   padding: 16px;
-  color: rgba(var(--v-theme-on-surface), 0.4);
+  color: var(--lj-text-subtle);
   font-size: 12px;
   text-align: center;
 }
