@@ -21,6 +21,7 @@
               :placeholder="searchTerms.length ? '' : t('search_placeholder')"
               :aria-label="t('search_placeholder')"
               @focus="openHistory"
+              @blur="confirmarRascunho"
               @keydown.enter="onSearchEnter"
               @keydown.esc="historyOpen = false"
               @keydown.delete="onSearchBackspace"
@@ -64,7 +65,7 @@
         </Teleport>
         <LjButton
           variant="primary"
-          :disabled="!(searchTerms.length && searchTerms.some((t) => t?.trim())) || searching"
+          :disabled="!(draft.trim() || searchTerms.some((t) => t?.trim())) || searching"
           @click="doSearch"
         >
           {{ t("search") }}
@@ -246,6 +247,7 @@ function onVersionChange(val: number): void {
 }
 
 async function doSearch(): Promise<void> {
+  confirmarRascunho();
   const terms = searchTerms.value.filter((t: string) => t?.trim());
   if (!terms.length) return;
 
@@ -310,13 +312,25 @@ function clearSearch(): void {
   draft.value = "";
 }
 
-function onSearchEnter(): void {
+/**
+ * Passa o que está digitado para a lista de termos.
+ *
+ * Não basta fazer isso no Enter: o combobox que saía daqui confirmava o texto
+ * ao perder o foco, então quem digitava e clicava direto em "Buscar" via a
+ * busca acontecer. Sem isto, o botão fica cinza com a palavra à vista no campo
+ * — parece aceita e não é.
+ */
+function confirmarRascunho(): void {
   const value = draft.value.trim();
-  if (value) {
-    if (!searchTerms.value.includes(value)) searchTerms.value.push(value);
-    draft.value = "";
-    return;
-  }
+  if (!value) return;
+  if (!searchTerms.value.includes(value)) searchTerms.value.push(value);
+  draft.value = "";
+}
+
+function onSearchEnter(): void {
+  const tinhaRascunho = !!draft.value.trim();
+  confirmarRascunho();
+  if (tinhaRascunho) return;
   if (searchTerms.value.length) doSearch();
 }
 

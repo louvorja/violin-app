@@ -593,8 +593,15 @@ function onKeydown(e: KeyboardEvent): void {
   if (!show.value) return;
   if (AppData.get("active_module") !== moduleId) return;
   if (bibleSpotlightOpen.value) return;
-  const tag = (e.target as HTMLElement)?.tagName;
+  const alvo = e.target as HTMLElement | null;
+  const tag = alvo?.tagName;
   if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+  // Os primitivos sobre Reka não são <input>: o gatilho do select é um <button>
+  // e a lista aberta é um <div> que recebe foco. Sem esta linha, digitar para
+  // achar a versão pelo teclado fecha o dropdown e abre a busca rápida por cima
+  // — e basta o gatilho estar em foco, porque a Reka devolve o foco a ele
+  // depois de escolher um item.
+  if (alvo?.closest('[role="combobox"], [role="listbox"], [contenteditable="true"]')) return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.key.length === 1) {
     e.preventDefault();

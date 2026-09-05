@@ -15,7 +15,7 @@
         v-if="!loading"
         sticky
         hover
-        class="w-100 lj-u-h-full"
+        class="w-100 lj-u-h-full album-tracks"
         :style="{ backgroundColor: module.data.color, color: '#FFF' }"
       >
         <thead>
@@ -88,5 +88,14 @@ const { loading, close: closeAlbum } = useAlbum();
    barra precisa seguir esse contraste, não o acento do tema. */
 .album-progress {
   --lj-ui-accent: var(--lj-white);
+}
+
+/* Pelo mesmo motivo, o realce da linha aqui é um véu translúcido e não a
+   superfície do tema: a cor da capa precisa continuar aparecendo por baixo,
+   senão o branco do texto some justamente na linha sob o cursor. A regra vence
+   a do primitivo por estar fora da camada `lj-table`, sem precisar de
+   !important. */
+.album-tracks :deep(tbody tr:hover) {
+  background: rgb(255 255 255 / 0.14);
 }
 </style>

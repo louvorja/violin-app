@@ -719,10 +719,12 @@ const calendarEvents = computed<CalEvent[]>(() => {
 
 /** Muda para modo semana focando no domingo da semana da data informada. */
 function switchToWeek(dateStr: string): void {
-  const d = new Date(`${dateStr}T00:00:00`);
-  const dow = d.getDay();
-  d.setDate(d.getDate() - dow); // volta para domingo
-  focusDate.value = d.toISOString().slice(0, 10);
+  // Entrega o dia clicado como está. Recuar até domingo aqui era necessário com
+  // a grade antiga, e agora é um erro: o LjCalendar deriva o primeiro dia da
+  // semana do locale, e em espanhol ele é segunda. Normalizar para domingo faria
+  // o primitivo recuar mais seis dias e desenhar a semana ANTERIOR — sem o dia
+  // que o usuário clicou, e sem os agendamentos que ele foi ver.
+  focusDate.value = dateStr;
   calendarType.value = "week";
 }
 

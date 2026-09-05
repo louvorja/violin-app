@@ -257,9 +257,20 @@ onBeforeUnmount(() => {
   gap: var(--lj-space-3);
 }
 .ndraw-fs-chips {
+  /* Uma linha que rola de lado, como o grupo de chips do Vuetify — não `wrap`.
+     O rodapé do ModuleContainer não encolhe, então cada linha nova sai da altura
+     da prévia do slide, que é a única conferência do operador sobre o que está
+     no telão. Com dezenas de sorteados isso comia a prévia inteira. */
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: var(--lj-space-2);
+  min-width: 0;
+  overflow-x: auto;
+  padding-block: var(--lj-space-1);
+}
+
+.ndraw-fs-chips > * {
+  flex: 0 0 auto;
 }
 .ndraw-fs-footer-progress {
   width: 400px;

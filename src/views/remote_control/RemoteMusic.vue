@@ -145,6 +145,13 @@ async function openMusic(music: MusicAlbum, tag: number = 3): Promise<void> {
   padding: var(--lj-space-6);
 }
 
+/* O LjInput é inline-flex e encolhe para a largura intrínseca do <input>; sem
+   isto a busca ocupava pouco mais da metade da tela do celular, com um vazio à
+   direita. O campo que saía daqui era 100%. */
+.rm-root > :deep(.lj-input) {
+  width: 100%;
+}
+
 .rm-list {
   margin: var(--lj-space-4) 0 0;
   padding: 0;
