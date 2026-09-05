@@ -75,6 +75,11 @@ interface SlideCfg {
  *      gated por `custom_text_format` e `custom_background` (toggles do Delphi).
  */
 const _readSlideOpts = (): SlideCfg => {
+  const _numeroNaFaixa = (chave: string, padrao: number, min: number, max: number): number => {
+    const n = Number($userdata.get<number>(chave, padrao));
+    return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : padrao;
+  };
+
   const legacy = ($userdata.get(KEYS.OPTIONS.SLIDE.SLIDES, {}) as Partial<typeof SLIDE_STYLE_DEFAULT>) ?? {};
   const merged: SlideCfg = { ...SLIDE_STYLE_DEFAULT, ...legacy };
 
@@ -102,6 +107,7 @@ const _readSlideOpts = (): SlideCfg => {
   const customTextFormat =
     $userdata.get<boolean>(KEYS.OPTIONS.SLIDE.CUSTOM_TEXT_FORMAT, false) === true;
   merged.text_border_enabled = false;
+  merged.shadow_enabled = false;
   if (customTextFormat) {
     const titleColor = $userdata.get<string>(KEYS.OPTIONS.SLIDE.TITLE_COLOR, null);
     const textColor = $userdata.get<string>(KEYS.OPTIONS.SLIDE.TEXT_COLOR, null);
@@ -135,12 +141,26 @@ const _readSlideOpts = (): SlideCfg => {
   const affectExternal = $userdata.get(KEYS.OPTIONS.SLIDE.AFFECT_EXTERNAL_SLIDES, null);
   if (typeof affectExternal === "boolean") merged.affect_external_slides = affectExternal;
 
-  // Sombra no texto
-  merged.shadow_enabled = $userdata.get<boolean>(KEYS.OPTIONS.SLIDE.SHADOW_ENABLED, false) === true;
-  merged.shadow_color = $userdata.get<string>(KEYS.OPTIONS.SLIDE.SHADOW_COLOR, "#000000") || "#000000";
-  merged.shadow_blur = Number($userdata.get<number>(KEYS.OPTIONS.SLIDE.SHADOW_BLUR, 12)) || 12;
-  merged.shadow_offset_x = Number($userdata.get<number>(KEYS.OPTIONS.SLIDE.SHADOW_OFFSET_X, 0)) || 0;
-  merged.shadow_offset_y = Number($userdata.get<number>(KEYS.OPTIONS.SLIDE.SHADOW_OFFSET_Y, 2)) || 2;
+  // Sombra no texto. O interruptor é o mesmo "Formatação de texto personalizada"
+  // da tela de Opções — lê-lo fora daquele gate deixava a sombra na projeção
+  // depois de o usuário desligar a formatação.
+  if (customTextFormat) {
+    merged.shadow_enabled =
+      $userdata.get<boolean>(KEYS.OPTIONS.SLIDE.SHADOW_ENABLED, false) === true;
+  }
+  merged.shadow_color =
+    $userdata.get<string>(KEYS.OPTIONS.SLIDE.SHADOW_COLOR, "#000000") || "#000000";
+  // Number(...) || default descartava o zero que o usuário escolheu: desfoque 0
+  // virava 12 e deslocamento 0 virava 2. Zero é valor legítimo nos três.
+  merged.shadow_blur = _numeroNaFaixa(KEYS.OPTIONS.SLIDE.SHADOW_BLUR, 12, 0, 30);
+  merged.shadow_offset_x = _numeroNaFaixa(KEYS.OPTIONS.SLIDE.SHADOW_OFFSET_X, 0, -20, 20);
+  merged.shadow_offset_y = _numeroNaFaixa(KEYS.OPTIONS.SLIDE.SHADOW_OFFSET_Y, 2, -20, 20);
+  merged.font_size_next = _numeroNaFaixa(
+    KEYS.OPTIONS.SLIDE.FONT_SIZE_NEXT,
+    SLIDE_STYLE_DEFAULT.font_size_next,
+    3,
+    15
+  );
 
   // Fundo personalizado
   if ($userdata.get(KEYS.OPTIONS.SLIDE.CUSTOM_BACKGROUND, false) as boolean) {
@@ -345,9 +365,18 @@ export function useSlideStyle(): SlideStyleAPI {
     transition: `opacity ${cfg.value.transition_speed_ms}ms linear`,
   }));
 
-  const textTransform = computed(() =>
-    $userdata.get(KEYS.OPTIONS.SLIDE.RETURN_TEXT_CASE, "uppercase") as string
-  );
+  const textTransform = computed(() => {
+    // O gate é o "Formatação de texto do retorno personalizada" da tela; sem
+    // ele o interruptor não controlava nada. O estado desligado continua sendo
+    // "uppercase": trocar para "none" mudaria o stage display de quem nunca
+    // abriu a opção — ao vivo, no meio de um culto.
+    const bruto = $userdata.get(KEYS.OPTIONS.SLIDE.CUSTOM_RETURN_TEXT_FORMAT, false)
+      ? String($userdata.get(KEYS.OPTIONS.SLIDE.RETURN_TEXT_CASE, "uppercase"))
+      : "uppercase";
+    // Valor legado: "normal" não existe em text-transform e era ignorado, então
+    // escolher "Normal" não desfazia o caixa alta.
+    return bruto === "normal" ? "none" : bruto;
+  });
 
   return { cfg, coverStyle, lyricStyle, auxStyle, nextStyle, bgStyle, rootStyle, repeatColor, textBoxStyle, textTransform };
 }

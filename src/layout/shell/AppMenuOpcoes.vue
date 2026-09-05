@@ -699,10 +699,10 @@
             <span class="opt-format-label">{{ $t("options.slides.text_case") }}</span>
             <select
               class="opt-select"
-              :value="getUserData(KEYS.OPTIONS.SLIDE.RETURN_TEXT_CASE, 'uppercase')"
+              :value="textCaseAtual"
               @change="saveUserData(KEYS.OPTIONS.SLIDE.RETURN_TEXT_CASE, $v($event))"
             >
-              <option value="normal">{{ $t("options.slides.case_normal") }}</option>
+              <option value="none">{{ $t("options.slides.case_normal") }}</option>
               <option value="capitalize">{{ $t("options.slides.case_capitalize") }}</option>
               <option value="uppercase">{{ $t("options.slides.case_uppercase") }}</option>
             </select>
@@ -714,8 +714,8 @@
               min="3"
               max="15"
               class="opt-input opt-input--num"
-              :value="getUserData(KEYS.OPTIONS.SLIDE.FONT_SIZE_NEXT, 6)"
-              @input="saveUserData(KEYS.OPTIONS.SLIDE.FONT_SIZE_NEXT, Number($v($event)) || 6)"
+              :value="getUserData(KEYS.OPTIONS.SLIDE.FONT_SIZE_NEXT, 5)"
+              @input="saveUserData(KEYS.OPTIONS.SLIDE.FONT_SIZE_NEXT, Number($v($event)) || 5)"
             />
           </label>
         </div>
@@ -1202,6 +1202,14 @@ const themes: ComputedRef<ThemeOption[]> = computed(() =>
 function getUserData<T = unknown>(key: string, defaultValue?: T): T {
   return $userdata.get<T>(key, defaultValue) as T;
 }
+
+// "normal" é valor legado: não existe em CSS text-transform, e a projeção
+// passou a traduzi-lo para "none". O select precisa da mesma tradução, senão
+// quem já tinha "normal" salvo abre as Opções com o campo em branco.
+const textCaseAtual = computed(() => {
+  const v = getUserData<string>(KEYS.OPTIONS.SLIDE.RETURN_TEXT_CASE, "uppercase");
+  return v === "normal" ? "none" : v;
+});
 
 /* ---- Helpers de evento para o template (TypeScript strict) ---- */
 function $v(e: Event): string {
