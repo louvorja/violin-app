@@ -10,31 +10,45 @@ Copie `.env.example` para `.env` e preencha os valores reais.
 
 ## Variáveis obrigatórias
 
-### `VITE_URL_DATABASE`
+### `VITE_URL_API`
 
 | Campo       | Valor                                    |
 |-------------|------------------------------------------|
 | Tipo        | URL (string)                             |
-| Exemplo     | `https://api.louvorja.workers.dev/json_db` |
-| Offline     | `http://localhost:7070/database`         |
-| Usado em    | `helpers/Path.ts`, `helpers/Database.ts`, `main.js`, `layout/shell/AppMenuAtualizacoes.vue` |
+| Exemplo     | `https://api.louvorja.workers.dev`       |
+| Offline     | `http://localhost:7070`                  |
+| Usado em    | `config/Api.ts`, `main.js`              |
 
-URL base do banco de dados JSON. Todas as chamadas de `$database.get(key)` resolvem para
-`{VITE_URL_DATABASE}/{key}`. Se ausente, nenhum dado de música/bíblia/coletânea carrega.
+URL base da API LouvorJA. Todas as URLs de banco de dados e arquivos são
+derivadas desta variável + os paths configurados abaixo.
 
 ---
 
-### `VITE_URL_FILES`
+### `VITE_PATH_JSON_DB`
 
 | Campo       | Valor                                    |
 |-------------|------------------------------------------|
-| Tipo        | URL (string)                             |
-| Exemplo     | `https://api.louvorja.workers.dev/file`  |
-| Offline     | `http://localhost:7070`                  |
-| Usado em    | `helpers/Path.ts`, `main.js`             |
+| Tipo        | path (string)                            |
+| Exemplo     | `/json_db`                               |
+| Padrão      | `/json_db`                               |
+| Usado em    | `config/Api.ts`                          |
 
-URL base para arquivos de mídia (MP3, imagens de slide). Usada por `Path.file(path)`.
-Se ausente, a reprodução de áudio e carregamento de imagens de fundo falham silenciosamente.
+Path para JSONs do banco de dados. Anexado a `VITE_URL_API`.
+URL resultante: `{VITE_URL_API}{VITE_PATH_JSON_DB}`
+
+---
+
+### `VITE_PATH_FILES`
+
+| Campo       | Valor                                    |
+|-------------|------------------------------------------|
+| Tipo        | path (string)                            |
+| Exemplo     | `/file`                                  |
+| Padrão      | `/file`                                  |
+| Usado em    | `config/Api.ts`                          |
+
+Path para arquivos de mídia (MP3, imagens de slide). Anexado a `VITE_URL_API`.
+URL resultante: `{VITE_URL_API}{VITE_PATH_FILES}`
 
 ---
 
@@ -44,13 +58,58 @@ Se ausente, a reprodução de áudio e carregamento de imagens de fundo falham s
 |-------------|------------------------------------------|
 | Tipo        | string (token opaco)                     |
 | Exemplo     | *(obtido com o administrador)*           |
-| Usado em    | `helpers/Database.ts`, `main.js`, `layout/shell/AppMenuAtualizacoes.vue` |
+| Usado em    | `config/Api.ts`, `main.js`              |
 
 Token enviado como header `Api-Token` em todas as requisições ao servidor louvorja.
 Obrigatório no servidor legado (`api.louvorja.com.br`), que responde 401 sem ele.
 A API em `api.louvorja.workers.dev` é somente leitura e não exige token — o header
 é enviado assim mesmo e simplesmente ignorado.
 Em desenvolvimento com servidor local (`npm run files`), pode ser deixado vazio.
+
+---
+
+## Variáveis de fallback
+
+### `VITE_URL_API_FALLBACK`
+
+| Campo       | Valor                                          |
+|-------------|------------------------------------------------|
+| Tipo        | URL (string)                                   |
+| Exemplo     | `https://api.louvorja.com.br`                  |
+| Padrão      | *(vazio)*                                      |
+| Usado em    | `config/Api.ts`, `main.js`                     |
+
+URL da API de fallback. Quando a API principal (`VITE_URL_API`) falha,
+as chamadas são repetidas automaticamente usando esta URL.
+Se ambas falharem, o app usa cache stale quando disponível.
+
+---
+
+### `VITE_URL_API_FALLBACK_TOKEN`
+
+| Campo       | Valor                                          |
+|-------------|------------------------------------------------|
+| Tipo        | string (token opaco)                           |
+| Exemplo     | *(token da API de fallback)*                   |
+| Padrão      | `VITE_API_TOKEN`                               |
+| Usado em    | `config/Api.ts`, `main.js`                     |
+
+Token de autenticação da API de fallback. Se vazio, herda o valor de `VITE_API_TOKEN`.
+
+---
+
+## Variáveis legadas (deprecated)
+
+### `VITE_URL_DATABASE` / `VITE_URL_FILES`
+
+| Campo       | Valor                                          |
+|-------------|------------------------------------------------|
+| Tipo        | URL (string)                                   |
+| Status      | **DEPRECATED** — mantidas por compatibilidade   |
+
+Variáveis antigas que são automaticamente convertidas para `VITE_URL_API`.
+O `config/Api.ts` extrai a origem removendo o sufixo `/json_db` ou `/file`.
+**Prefira usar `VITE_URL_API` + `VITE_PATH_JSON_DB` + `VITE_PATH_FILES`.**
 
 ---
 
@@ -127,26 +186,28 @@ via `process.env`, não exposta ao código Vue via `import.meta.env`.
 | Tipo        | `"desktop"` \| `""` (vazio = web/PWA)          |
 | Exemplo     | `VITE_TARGET=desktop npm run build`            |
 | Padrão      | `""` (build web/PWA)                           |
-| Usado em    | `vite.config.js` (fase Electron D0 — pendente) |
+| Usado em    | `vite.config.js`                               |
 
 Alvo do build. Quando `"desktop"`, desativa o plugin PWA/Service Worker e configura `base: "./"`.
-**Ainda não implementado no `vite.config.js`** — reservado para a fase D0 do roadmap Electron.
 O script `npm run electron:build` injetará essa variável automaticamente.
 
 ---
 
 ## Resumo
 
-| Variável          | Obrigatória | Fallback               | Contexto           |
-|-------------------|-------------|------------------------|--------------------|
-| `VITE_URL_DATABASE` | Sim       | —                      | `import.meta.env`  |
-| `VITE_URL_FILES`    | Sim       | —                      | `import.meta.env`  |
-| `VITE_API_TOKEN`    | Sim (prod)| *(sem auth em dev local)* | `import.meta.env` |
-| `VITE_APP_MODE`     | Não       | `"production"`         | `import.meta.env`  |
-| `VITE_APP_VERSION`  | Não       | `"—"`                  | `import.meta.env`  |
-| `VITE_DB_VERSION`   | Não       | `""` (TTL only)        | `import.meta.env`  |
-| `VITE_BASE_URL`     | Não       | `"/"`                  | `process.env`      |
-| `VITE_TARGET`       | Não       | `""` (web/PWA)         | `process.env`      |
+| Variável                | Obrigatória | Fallback                     | Contexto           |
+|-------------------------|-------------|------------------------------|--------------------|
+| `VITE_URL_API`          | Sim         | —                            | `import.meta.env`  |
+| `VITE_PATH_JSON_DB`     | Não         | `/json_db`                   | `import.meta.env`  |
+| `VITE_PATH_FILES`       | Não         | `/file`                      | `import.meta.env`  |
+| `VITE_API_TOKEN`        | Sim (prod)  | *(sem auth em dev local)*    | `import.meta.env`  |
+| `VITE_URL_API_FALLBACK` | Não         | *(vazio)*                    | `import.meta.env`  |
+| `VITE_URL_API_FALLBACK_TOKEN` | Não  | herda `VITE_API_TOKEN`       | `import.meta.env`  |
+| `VITE_APP_MODE`         | Não         | `"production"`               | `import.meta.env`  |
+| `VITE_APP_VERSION`      | Não         | `"—"`                        | `import.meta.env`  |
+| `VITE_DB_VERSION`       | Não         | `""` (TTL only)              | `import.meta.env`  |
+| `VITE_BASE_URL`         | Não         | `"/"`                        | `process.env`      |
+| `VITE_TARGET`           | Não         | `""` (web/PWA)               | `process.env`      |
 
 > `PERCY_TOKEN` (em `.env.example`) não é variável Vite — é usada exclusivamente pelo
 > CLI do Percy durante testes de regressão visual (`npm run test:visual`).

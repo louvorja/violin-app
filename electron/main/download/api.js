@@ -4,13 +4,11 @@ const path = require("path");
 const https = require("https");
 const http = require("http");
 const paths = require("../paths.js");
+const apiConfig = require("../apiConfig.js");
 
 const TTL_MS = 24 * 60 * 60 * 1000; // 24h
 const CACHE_FILE = () => path.join(paths.userData(), "configweb.json");
 
-// Preenchido por setConfig() no boot, a partir das variáveis do .env que o
-// renderer envia. Sem default: um endereço fixo aqui sobrevive à troca de
-// servidor no .env e faz o downloader falar com a API errada em silêncio.
 let _config = {
   paramsUrl: "",
   apiToken: "",
@@ -55,7 +53,21 @@ function httpRequest(url, headers = {}) {
 }
 
 /**
+ * Constrói URL de fallback para paramsUrl.
+ * Se paramsUrl aponta para a API principal, retorna o equivalente na API de fallback.
+ */
+function _getFallbackParamsUrl() {
+  const cfg = apiConfig.getConfig();
+  if (!cfg.apiUrlFallback || !_config.paramsUrl) return null;
+  if (_config.paramsUrl.startsWith(cfg.apiUrl)) {
+    return _config.paramsUrl.replace(cfg.apiUrl, cfg.apiUrlFallback);
+  }
+  return null;
+}
+
+/**
  * Lê params (com cache TTL diário). Retorna objeto com todos os endpoints.
+ * Tenta a API principal; se falhar, tenta a API de fallback.
  * @param {{ force?: boolean }} options
  * @returns {Promise<Record<string,string>>}
  */
@@ -77,12 +89,22 @@ async function getParams({ force = false } = {}) {
       return await fs.readJson(cacheFile);
     }
     throw new Error(
-      "download.api: paramsUrl não configurada. O renderer envia via setApiConfig no boot; verifique VITE_URL_DATABASE no .env."
+      "download.api: paramsUrl não configurada. O renderer envia via setApiConfig no boot."
     );
   }
 
   console.log(`[download.api] Buscando params: ${_config.paramsUrl}`);
-  const response = await httpRequest(_config.paramsUrl, { "Api-Token": _config.apiToken });
+  let response = await httpRequest(_config.paramsUrl, { "Api-Token": _config.apiToken });
+
+  // Fallback: se a API principal falhou, tenta a API de fallback
+  if (response.status !== 200) {
+    const fallbackUrl = _getFallbackParamsUrl();
+    if (fallbackUrl) {
+      const cfg = apiConfig.getConfig();
+      console.log(`[download.api] Fallback params: ${fallbackUrl}`);
+      response = await httpRequest(fallbackUrl, { "Api-Token": cfg.apiUrlFallbackToken || cfg.apiToken || "" });
+    }
+  }
 
   if (response.status !== 200) {
     // Fallback: usar cache stale se existir

@@ -14,6 +14,7 @@ import $path from "@/helpers/Path";
 import $dev from "@/helpers/Dev";
 import $idb from "@/helpers/IndexedDB";
 import { DB_TABLE } from "@/constants/DbTables";
+import { API_URL, API_TOKEN, API_URL_FALLBACK, API_URL_FALLBACK_TOKEN, apiOrigin } from "@/config/Api";
 
 interface CacheEntry<T> {
   id: string;
@@ -82,12 +83,6 @@ function isValidV(v: string | undefined): boolean {
 }
 
 // ───────────────────────── Roteamento ─────────────────────────
-
-/** Origem da API: VITE_URL_DATABASE sem o sufixo /json_db. */
-function apiOrigin(): string {
-  const base = (import.meta.env.VITE_URL_DATABASE as string) || "";
-  return base.replace(/\/json_db\/?$/, "").replace(/\/$/, "");
-}
 
 /**
  * URL de rede por chave. A maioria dos JSONs vive no json_db estático;
@@ -369,11 +364,23 @@ function fetchAndStore<T>(file: string, fresh: boolean): Promise<T | null> {
       ? `?_=${Date.now()}`
       : `?${new Date().toISOString().slice(0, 10).replace(/-/g, "")}`;
     $dev.write("Abrindo DB", `${url}${cacheBuster}`);
-    const response = await fetch(`${url}${cacheBuster}`, {
+    let response = await fetch(`${url}${cacheBuster}`, {
       headers: {
-        "Api-Token": import.meta.env.VITE_API_TOKEN as string,
+        "Api-Token": API_TOKEN,
       },
     });
+    // Fallback: se a API principal retornar erro de rede, tenta a API de fallback
+    if (!response.ok && API_URL_FALLBACK) {
+      const fallbackUrl = fetchUrlFor(file).replace(API_URL, API_URL_FALLBACK);
+      if (fallbackUrl !== url) {
+        $dev.write("Fallback DB", `${fallbackUrl}${cacheBuster}`);
+        response = await fetch(`${fallbackUrl}${cacheBuster}`, {
+          headers: {
+            "Api-Token": API_URL_FALLBACK_TOKEN,
+          },
+        });
+      }
+    }
     if (response.status === 404) return null;
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     let data = (await response.json()) as T;

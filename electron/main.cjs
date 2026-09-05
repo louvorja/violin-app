@@ -41,6 +41,7 @@ const splash = require("./main/splash.js");
 const storage = require("./main/storage.js");
 const classicVersion = require("./main/classicVersion.js");
 const mediaVariants = require("./main/mediaVariants.js");
+const { buildCsp } = require("./main/csp.js");
 
 function configureAppPaths() {
   // Mantém o identificador técnico do pacote separado do nome exibido.
@@ -328,16 +329,7 @@ app.whenReady().then(async () => {
   // Em dev, libera 'unsafe-inline'/'unsafe-eval' para o HMR do Vite e
   // YouTube IFrame API (que usa http://localhost:5002, origem HTTP real).
   if (isDev) {
-    const DEV_CSP =
-      "default-src 'self' http://localhost:* ws://localhost:*; " +
-      "script-src 'self' blob: 'unsafe-inline' 'unsafe-eval' http://localhost:* https://www.youtube.com https://*.doubleclick.net https://www.google.com https://vlibras.gov.br https://cdn.jsdelivr.net 'wasm-unsafe-eval'; " +
-      "style-src 'self' 'unsafe-inline' http://localhost:* https://fonts.googleapis.com; " +
-      "font-src 'self' data: http://localhost:* https://fonts.gstatic.com https://vlibras.gov.br https://cdn.jsdelivr.net; " +
-      "img-src 'self' blob: data: https: http://localhost:* https://*.ytimg.com https://*.youtube.com; " +
-      "media-src 'self' blob: https: http://localhost:* https://*.googlevideo.com; " +
-      "connect-src 'self' blob: http://localhost:* ws://localhost:* https://api.louvorja.com.br https://*.louvorja.com.br https://api.louvorja.workers.dev https://us.i.posthog.com https://us-assets.i.posthog.com https://*.youtube.com https://*.ytimg.com https://*.googlevideo.com https://*.googleapis.com https://fonts.gstatic.com https://www.gstatic.com https://*.doubleclick.net https://www.google.com https://*.google.com https://traducao2.vlibras.gov.br https://dicionario2.vlibras.gov.br https://repositorio.vlibras.gov.br https://cdn.jsdelivr.net; " +
-      "frame-src https://www.youtube.com https://www.youtube-nocookie.com https://vlibras.gov.br; " +
-      "worker-src 'self' blob:;";
+    const DEV_CSP = buildCsp("dev-desktop");
     session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
       callback({
         responseHeaders: {

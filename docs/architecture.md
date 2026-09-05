@@ -38,6 +38,49 @@ A aplicação é composta por:
 
 ---
 
+## 🔗 Configuração Central de API (`config/Api.ts`)
+
+Todas as URLs e tokens da API são derivados de um conjunto mínimo de variáveis
+de ambiente. Qualquer arquivo no renderer que precise de uma URL da API deve
+importar de `config/Api.ts` em vez de ler `import.meta.env` diretamente.
+
+### Fonte única de verdade
+
+```ts
+import { API_URL, API_URL_DB, API_URL_FILES, API_TOKEN, API_URL_FALLBACK } from "@/config/Api";
+```
+
+| Export             | Derivação                                       | Exemplo                                    |
+|--------------------|-------------------------------------------------|--------------------------------------------|
+| `API_URL`          | `VITE_URL_API`                                  | `https://api.louvorja.workers.dev`         |
+| `API_URL_DB`       | `API_URL + VITE_PATH_JSON_DB`                   | `https://api.louvorja.workers.dev/json_db` |
+| `API_URL_FILES`    | `API_URL + VITE_PATH_FILES`                     | `https://api.louvorja.workers.dev/file`    |
+| `API_TOKEN`        | `VITE_API_TOKEN`                                | `02@v2nFB2Dc`                              |
+| `API_URL_FALLBACK` | `VITE_URL_API_FALLBACK`                         | `https://api.louvorja.com.br`              |
+| `apiOrigin()`      | `API_URL`                                       | Usado por `Database.ts` para rotas REST    |
+| `getFallbackUrl()` | Substitui origem da API principal pela fallback |                                            |
+
+### Main process (`electron/main/apiConfig.js`)
+
+O main process não tem acesso a `import.meta.env`. As variáveis são recebidas
+do renderer via IPC `setRemoteConfig()` no boot (`main.js`).
+
+```js
+const apiConfig = require("./apiConfig.js");
+const cfg = apiConfig.getConfig();
+// cfg.apiUrl, cfg.apiUrlDb, cfg.apiUrlFiles, cfg.apiToken, cfg.apiUrlFallback
+```
+
+### Fallback automático
+
+Quando a API principal falha (erro de rede ou HTTP), as chamadas são repetidas
+automaticamente na API de fallback. Implementado em:
+- `src/helpers/Database.ts` — fetch com retry
+- `src/helpers/BundleInstaller.ts` — fetchRemoteConfig com retry
+- `electron/main/download/api.js` — getParams com retry
+
+---
+
 ## 🧩 Arquitetura Modular
 
 Cada módulo em `src/modules/<id>/` segue esta estrutura:
@@ -222,7 +265,7 @@ const wp = await getSetting("main");
 
 1. **Memória** — instantânea, vale na sessão.
 2. **IndexedDB** — tabela roteada pela chave (ver abaixo), com registros item a item.
-3. **Rede** — `VITE_URL_DATABASE` com header `Api-Token`; grava nas duas camadas acima.
+3. **Rede** — `API_URL_DB` (derivada de `VITE_URL_API`) com header `Api-Token`; grava nas duas camadas acima.
 
 **Roteamento** (`routeFor` em `Database.ts`) — a leitura reconstrói exatamente as
 formas antigas, então consumidores continuam usando `$database.get("pt_musics")`
@@ -244,8 +287,8 @@ sem alteração:
 (`Path.db`); `_collections_online`, `_doxology_albums` e `_children_albums`
 são **rotas REST** da API (`{origin}/{lang}/collections/online`,
 `{origin}/{lang}/albums/category/doxology` e
-`{origin}/{lang}/albums/category/children`, onde origin é `VITE_URL_DATABASE`
-sem o sufixo `/json_db`) e não existem como arquivos em `/json_db`.
+`{origin}/{lang}/albums/category/children`, onde origin é `API_URL` de `config/Api.ts`)
+e não existem como arquivos em `/json_db`.
 Toda resposta 200 é injetada automaticamente no IDB via `writeRouted`.
 
 - **Registro de item**: `{ id: "{chave}:{id}", file, dataId, seq, data, ts, v }` —
@@ -808,14 +851,37 @@ Toggle de ativação: `localStorage("libras_enabled")`.
 
 ### CSP (Content Security Policy)
 
-Domínios adicionados ao CSP para o VLibras:
+A CSP é gerenciada centralmente em `electron/main/csp.js` para o desktop e em
+`vite.config.js` para o web/PWA. Domínios de terceiros estão definidos uma única
+vez no objeto `DOMAINS` e compartilhados entre todos os contextos.
 
+**Contextos:**
+
+| Contexto             | Arquivo                          | Método                                  |
+|----------------------|----------------------------------|-----------------------------------------|
+| Prod desktop         | `electron/main/protocol.js`      | `buildCsp("prod-desktop")` via `csp.js` |
+| Dev desktop          | `electron/main.cjs`              | `buildCsp("dev-desktop")` via `csp.js`  |
+| Prod web/PWA         | `vite.config.js`                 | `buildCspMeta()` com `DOMAINS` local    |
+
+**Domínios base (csp.js / vite.config.js):**
+
+```js
+DOMAINS = {
+  youtube: ["www.youtube.com", "www.youtube-nocookie.com", "*.youtube.com", "*.ytimg.com", "*.googlevideo.com"],
+  google:  ["*.doubleclick.net", "www.google.com", "*.google.com", "*.googleapis.com", "fonts.gstatic.com", "www.gstatic.com"],
+  vlibras: ["traducao2.vlibras.gov.br", "dicionario2.vlibras.gov.br", "repositorio.vlibras.gov.br", "vlibras.gov.br"],
+  cdn:     ["cdn.jsdelivr.net", "static.cloudflareinsights.com"],
+  fonts:   ["fonts.googleapis.com"],
+}
 ```
-script-src   ... vlibras.gov.br cdn.jsdelivr.net
-connect-src  ... vlibras.gov.br traducao2.vlibras.gov.br dicionario2.vlibras.gov.br
-frame-src    ... vlibras.gov.br
-font-src     ... vlibras.gov.br
-```
+
+**Variações por contexto:**
+- **Dev desktop**: adiciona `http://localhost:* ws://localhost:*` em todas as diretivas + `unsafe-inline unsafe-eval`
+- **Prod desktop**: adiciona `file: louvorja:` schemes
+- **Prod web/PWA**: sem localhost, sem schemes customizados
+
+**API origins**: `connect-src` inclui dinamicamente as URLs de API (principal + fallback)
+via `apiConfig.getConfig()` (runtime) ou `process.env.VITE_URL_API` (build).
 
 ### Broadcast
 

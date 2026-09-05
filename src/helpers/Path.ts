@@ -1,5 +1,6 @@
 /** @category helper-puro — Constrói URLs do banco e arquivos. Seguro no Electron main process; sem APIs Vue. */
 import Platform from "@/helpers/Platform";
+import { API_URL_DB, API_URL_FILES } from "@/config/Api";
 
 const DB_KEY_RE = /^[a-zA-Z0-9_-]+$/;
 
@@ -9,7 +10,7 @@ export default {
    *
    * No desktop (Electron): retorna louvorja://json_db/<path> — servido via
    *   protocolo customizado com cache local em userData/json_db/.
-   * No web/PWA: retorna VITE_URL_DATABASE + <path> diretamente.
+   * No web/PWA: retorna API_URL_DB + <path> diretamente.
    *
    * @param path  Ex: "/pt_musics" ou "/music_123"
    */
@@ -21,16 +22,12 @@ export default {
     if (Platform.isDesktop) {
       return "louvorja://json_db/" + key;
     }
-    const base = import.meta.env.VITE_URL_DATABASE;
-    if (!base) {
-      // Sem fallback: retornar `"undefined/..."` faz a request 404 com erro
-      // críptico. Lançar aqui torna o problema visível no boot — o operador
-      // sabe que precisa configurar o `.env` ou rodar via Electron.
+    if (!API_URL_DB) {
       throw new Error(
-        "Path.db: VITE_URL_DATABASE não definida. Configure no .env ou abra o app via Electron."
+        "Path.db: URL da API não configurada. Configure VITE_URL_API no .env ou abra o app via Electron."
       );
     }
-    return base + "/" + key;
+    return API_URL_DB + "/" + key;
   },
 
   /**
@@ -38,7 +35,7 @@ export default {
    *
    * No desktop (Electron): retorna louvorja://files/<path> — servido via
    *   protocolo customizado a partir de userData/files/ (populado em D3).
-   * No web/PWA: retorna VITE_URL_FILES + <path> diretamente.
+   * No web/PWA: retorna API_URL_FILES + <path> diretamente.
    *
    * @param path  Ex: "/audio/12345.mp3"
    */
@@ -50,13 +47,12 @@ export default {
       const p = path.startsWith("/") ? path : "/" + path;
       return "louvorja://files" + p;
     }
-    const base = import.meta.env.VITE_URL_FILES;
-    if (!base) {
+    if (!API_URL_FILES) {
       throw new Error(
-        "Path.file: VITE_URL_FILES não definida. Configure no .env ou abra o app via Electron."
+        "Path.file: URL de arquivos não configurada. Configure VITE_URL_API no .env ou abra o app via Electron."
       );
     }
-    return base + path;
+    return API_URL_FILES + path;
   },
 
   /**

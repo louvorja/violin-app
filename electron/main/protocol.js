@@ -27,18 +27,16 @@ const path = require("path");
 const paths = require("./paths.js");
 const jsonCache = require("./jsonCache.js");
 const { variantsOf } = require("./mediaVariants.js");
+const apiConfig = require("./apiConfig.js");
+const { buildCsp } = require("./csp.js");
 
 // ---------------------------------------------------------------------------
 // Configuração de URLs remotas
 // ---------------------------------------------------------------------------
 
-/**
- * Config padrão aponta para produção; substituída via setRemoteConfig()
- * depois que o renderer lê as variáveis de ambiente do Vite.
- */
 let _config = {
-  databaseUrl: "https://api.louvorja.workers.dev/json_db",
-  filesUrl: "https://api.louvorja.workers.dev/file",
+  databaseUrl: "",
+  filesUrl: "",
   apiToken: "",
 };
 
@@ -50,6 +48,7 @@ let _config = {
  */
 function setRemoteConfig(cfg) {
   _config = { ..._config, ...cfg };
+  apiConfig.setConfig(cfg);
   console.log("[protocol] Remote config atualizada:", {
     databaseUrl: _config.databaseUrl,
     filesUrl: _config.filesUrl,
@@ -251,17 +250,7 @@ function handle() {
         }
 
         if (!isFileVideoProjection) {
-          const csp = [
-            "default-src 'self' file: louvorja:",
-            "script-src 'self' blob: file: louvorja: https://www.youtube.com https://*.doubleclick.net https://www.google.com https://vlibras.gov.br https://cdn.jsdelivr.net 'wasm-unsafe-eval'",
-            "style-src 'self' 'unsafe-inline' file: louvorja: https://fonts.googleapis.com",
-            "font-src 'self' data: file: louvorja: https://fonts.gstatic.com https://vlibras.gov.br https://cdn.jsdelivr.net",
-            "img-src 'self' blob: data: https: file: louvorja: https://*.ytimg.com https://*.youtube.com",
-            "media-src 'self' blob: https: file: louvorja: https://*.googlevideo.com",
-            "connect-src 'self' blob: louvorja: https://api.louvorja.com.br https://*.louvorja.com.br https://api.louvorja.workers.dev https://us.i.posthog.com https://us-assets.i.posthog.com http://localhost:* ws://localhost:* https://*.youtube.com https://*.ytimg.com https://*.googlevideo.com https://*.googleapis.com https://fonts.gstatic.com https://www.gstatic.com https://*.doubleclick.net https://www.google.com https://*.google.com https://traducao2.vlibras.gov.br https://dicionario2.vlibras.gov.br https://repositorio.vlibras.gov.br https://cdn.jsdelivr.net",
-            "frame-src https://www.youtube.com https://www.youtube-nocookie.com https://vlibras.gov.br",
-            "worker-src 'self' file: louvorja:",
-          ].join("; ");
+          const csp = buildCsp("prod-desktop");
           return new Response(response.body, {
             status: response.status,
             headers: {

@@ -17,6 +17,14 @@ import ModuleManager from "@/helpers/ModuleManager";
 import $storage from "@/helpers/Storage";
 import $alert from "@helpers/Alert";
 import Platform from "@/helpers/Platform";
+import {
+  API_URL,
+  API_URL_DB,
+  API_URL_FILES,
+  API_TOKEN,
+  API_URL_FALLBACK,
+  API_URL_FALLBACK_TOKEN,
+} from "@/config/Api";
 
 //Helpers
 import Modules from "@/helpers/Modules";
@@ -220,9 +228,12 @@ $storage.hydrate().then(async () => {
   if (Platform.isDesktop && Platform.protocol) {
     try {
       await Platform.protocol.setRemoteConfig({
-        databaseUrl: import.meta.env.VITE_URL_DATABASE,
-        filesUrl: import.meta.env.VITE_URL_FILES,
-        apiToken: import.meta.env.VITE_API_TOKEN,
+        apiUrl: API_URL,
+        databaseUrl: API_URL_DB,
+        filesUrl: API_URL_FILES,
+        apiToken: API_TOKEN,
+        apiUrlFallback: API_URL_FALLBACK,
+        apiUrlFallbackToken: API_URL_FALLBACK_TOKEN,
       });
     } catch (e) {
       console.warn("[main] Falha ao configurar protocolo louvorja://:", e);
@@ -232,18 +243,11 @@ $storage.hydrate().then(async () => {
   // D3 — Configurar API de download HTTPS no main process.
   // O token é opcional (mídia em /file/ é pública); filesUrl é o que importa.
   if (Platform.isDesktop && Platform.download) {
-    const apiToken = import.meta.env.VITE_API_TOKEN || "";
-    const filesUrl = import.meta.env.VITE_URL_FILES;
-    // O /params vive na raiz da mesma API do banco — derivar daqui evita que
-    // trocar de servidor no .env deixe o downloader apontando para o antigo.
-    const apiOrigin = (import.meta.env.VITE_URL_DATABASE || "")
-      .replace(/\/json_db\/?$/, "")
-      .replace(/\/$/, "");
     try {
       await Platform.download.setApiConfig({
-        paramsUrl: `${apiOrigin}/params?type=env`,
-        apiToken,
-        filesUrl,
+        paramsUrl: `${API_URL}/params?type=env`,
+        apiToken: API_TOKEN,
+        filesUrl: API_URL_FILES,
       });
     } catch (e) {
       console.warn("[main] Falha ao configurar downloader:", e);

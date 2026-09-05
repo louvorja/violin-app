@@ -2,11 +2,15 @@
 
 Este documento lista os headers HTTP que devem ser configurados no servidor de hospedagem
 da versão web/PWA do LouvorJA. Para o Electron, o CSP é aplicado via
-`session.defaultSession.webRequest.onHeadersReceived` em `electron/main.cjs`.
+`session.defaultSession.webRequest.onHeadersReceived` em `electron/main.cjs`
+usando a configuração central de `electron/main/csp.js`.
 
 ---
 
 ## Content-Security-Policy (CSP)
+
+A CSP é gerenciada centralmente em `electron/main/csp.js` (desktop) e `vite.config.js` (web).
+Domínios de terceiros estão definidos no objeto `DOMAINS` e compartilhados entre contextos.
 
 O `index.html` já inclui um `<meta http-equiv="Content-Security-Policy">` como fallback.
 No servidor, defina o header HTTP para que a política também cubra recursos não-HTML:
@@ -14,15 +18,14 @@ No servidor, defina o header HTTP para que a política também cubra recursos n�
 ```
 Content-Security-Policy:
   default-src 'self';
-  script-src 'self' vlibras.gov.br cdn.jsdelivr.net;
+  script-src 'self' blob: vlibras.gov.br cdn.jsdelivr.net *.doubleclick.net *.google.com *.googleapis.com fonts.gstatic.com www.gstatic.com 'wasm-unsafe-eval';
   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
-  font-src 'self' data: https://fonts.gstatic.com vlibras.gov.br;
+  font-src 'self' data: fonts.gstatic.com vlibras.gov.br cdn.jsdelivr.net;
   img-src 'self' data: https:;
   media-src 'self' blob: https:;
-  connect-src 'self' blob: https://api.louvorja.com.br https://*.louvorja.com.br https://api.louvorja.workers.dev
-             vlibras.gov.br traducao2.vlibras.gov.br dicionario2.vlibras.gov.br;
-  frame-src 'self' vlibras.gov.br;
-  worker-src 'self';
+  connect-src 'self' blob: https://api.louvorja.workers.dev https://api.louvorja.com.br https://*.louvorja.com.br vlibras.gov.br traducao2.vlibras.gov.br dicionario2.vlibras.gov.br https://*.youtube.com https://*.ytimg.com https://*.googlevideo.com https://*.googleapis.com https://cdn.jsdelivr.net https://static.cloudflareinsights.com;
+  frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com vlibras.gov.br;
+  worker-src 'self' blob:;
 ```
 
 **Notas:**
@@ -88,7 +91,7 @@ Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
 ## Exemplo — Nginx
 
 ```nginx
-add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https:; media-src 'self' blob: https:; connect-src 'self' blob: https://api.louvorja.com.br https://*.louvorja.com.br https://api.louvorja.workers.dev; worker-src 'self';" always;
+add_header Content-Security-Policy "default-src 'self'; script-src 'self' blob: vlibras.gov.br cdn.jsdelivr.net *.doubleclick.net *.google.com *.googleapis.com fonts.gstatic.com www.gstatic.com 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: fonts.gstatic.com vlibras.gov.br cdn.jsdelivr.net; img-src 'self' data: https:; media-src 'self' blob: https:; connect-src 'self' blob: https://api.louvorja.workers.dev https://api.louvorja.com.br https://*.louvorja.com.br vlibras.gov.br traducao2.vlibras.gov.br dicionario2.vlibras.gov.br https://*.youtube.com https://*.ytimg.com https://*.googlevideo.com https://*.googleapis.com https://cdn.jsdelivr.net https://static.cloudflareinsights.com; frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com vlibras.gov.br; worker-src 'self' blob:;" always;
 add_header X-Content-Type-Options "nosniff" always;
 add_header X-Frame-Options "DENY" always;
 add_header Referrer-Policy "strict-origin-when-cross-origin" always;
@@ -122,8 +125,10 @@ add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment
 ## Electron
 
 O Electron aplica CSP via `session.defaultSession.webRequest.onHeadersReceived` em
-`electron/main.cjs`. A política inclui `louvorja:` para o protocolo customizado de cache
-do banco de dados JSON.
+`electron/main.cjs`, usando `buildCsp("dev-desktop")` de `electron/main/csp.js`.
+
+Em produção, o protocolo `louvorja://` aplica CSP via header HTTP usando
+`buildCsp("prod-desktop")` de `electron/main/csp.js`.
 
 Para janelas secundárias abertas via `windowFactory.js` (Projection, Operator, etc.),
 a mesma session padrão aplica a política automaticamente.

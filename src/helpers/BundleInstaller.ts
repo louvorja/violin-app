@@ -10,6 +10,14 @@ import $idb from "@/helpers/IndexedDB";
 import $dev from "@/helpers/Dev";
 import { DB_TABLE } from "@/constants/DbTables";
 import type { BundleProgress } from "@/types/Database";
+import {
+  API_URL,
+  API_TOKEN,
+  API_URL_FALLBACK,
+  API_URL_FALLBACK_TOKEN,
+  API_URL_DB,
+  API_URL_DB_FALLBACK,
+} from "@/config/Api";
 
 const BUNDLE_MARKER_KEY = "__bundle_marker__";
 
@@ -38,12 +46,11 @@ const BUNDLE_TABLES = [
 ];
 
 function bundleUrl(): string {
-  const base = (import.meta.env.VITE_URL_DATABASE as string) || "";
-  return `${base.replace(/\/json_db\/?$/, "").replace(/\/$/, "")}/db/bundle`;
+  return `${API_URL}/db/bundle`;
 }
 
 function authHeaders(): Record<string, string> {
-  return { "Api-Token": import.meta.env.VITE_API_TOKEN as string };
+  return { "Api-Token": API_TOKEN };
 }
 
 /** Converte caminho do ZIP para chave lógica do banco. */
@@ -203,11 +210,23 @@ export default {
    * Retorna null se não conseguir acessar a API.
    */
   async fetchRemoteConfig(): Promise<{ version_number: number } | null> {
-    const base = (import.meta.env.VITE_URL_DATABASE as string) || "";
-    const res = await fetch(`${base.replace(/\/$/, "")}/config`, {
-      headers: { "Api-Token": import.meta.env.VITE_API_TOKEN as string },
-    });
-    if (!res.ok) return null;
-    return res.json();
+    try {
+      const res = await fetch(`${API_URL_DB}/config`, {
+        headers: { "Api-Token": API_TOKEN },
+      });
+      if (!res.ok) return null;
+      return res.json();
+    } catch {
+      if (!API_URL_FALLBACK) return null;
+      try {
+        const res = await fetch(`${API_URL_DB_FALLBACK}/config`, {
+          headers: { "Api-Token": API_URL_FALLBACK_TOKEN },
+        });
+        if (!res.ok) return null;
+        return res.json();
+      } catch {
+        return null;
+      }
+    }
   },
 };

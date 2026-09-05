@@ -2,6 +2,9 @@ import { defineConfig, loadEnv } from "vite";
 import vue from "@vitejs/plugin-vue";
 import { VitePWA } from "vite-plugin-pwa";
 import path from "path";
+import { createRequire } from "module";
+
+const require_ = createRequire(import.meta.url);
 
 function escapeRegex(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -9,6 +12,11 @@ function escapeRegex(str) {
 
 // https://vitejs.dev/config/
 export default async ({ mode }) => {
+  // -----------------------------------------------------------------------
+  // Domínios base compartilhados (fonte única: config/cspDomains.cjs)
+  // -----------------------------------------------------------------------
+  const { DOMAINS, DOMAINS_CSP } = require_("./config/cspDomains.cjs");
+
   const { visualizer } = await import("rollup-plugin-visualizer");
   // Load app-level env vars to node-level env vars.
   process.env = { ...process.env, ...loadEnv(mode, process.cwd()) };
@@ -16,34 +24,31 @@ export default async ({ mode }) => {
   // Detectar target: "desktop" (Electron) ou "web" (padrão PWA)
   const isDesktop = process.env.VITE_TARGET === "desktop";
 
-  // CSP só em build de produção. Em dev, Vite HMR injeta inline scripts.
-  // No desktop (Electron) o app carrega via file:// — `'self'` NÃO casa
-  // com origem null do file:// no Chromium, então precisamos liberar
-  // file: e louvorja: explicitamente. No web/PWA, mantém estrito.
-  const cspExtra = isDesktop ? " file: louvorja:" : "";
-  // YouTube domains needed for script-src and frame-src only on desktop
-  // (Electron projection windows carregam o IFrame Player API e criam
-  // iframes do YouTube). No web/PWA a projeção de vídeos pode não estar
-  // disponível ou usar rota diferente.
-  const cspDesktopYt = isDesktop
-    ? " https://www.youtube.com https://*.doubleclick.net https://www.google.com"
-    : "";
-  // frame-src precisa liberar YouTube e VLibras em ambos os targets.
-  // No web/PWA o avatar do VLibras usa um iframe para o player Unity.
-  const cspFrame =
-    " frame-src https://www.youtube.com https://www.youtube-nocookie.com https://vlibras.gov.br;";
-  const cspMeta =
-    `<meta http-equiv="Content-Security-Policy" content="` +
-    `default-src 'self'${cspExtra};` +
-    ` script-src 'self' blob:${cspExtra}${cspDesktopYt} https://vlibras.gov.br https://cdn.jsdelivr.net https://static.cloudflareinsights.com 'wasm-unsafe-eval';` +
-    ` style-src 'self' 'unsafe-inline'${cspExtra} https://fonts.googleapis.com;` +
-    ` font-src 'self' data:${cspExtra} https://fonts.gstatic.com https://vlibras.gov.br https://cdn.jsdelivr.net;` +
-    ` img-src 'self' data: https:${cspExtra};` +
-    ` media-src 'self' blob: https:${cspExtra};` +
-    ` connect-src 'self' blob:${cspExtra} https://api.louvorja.com.br https://*.louvorja.com.br https://api.louvorja.workers.dev https://us.i.posthog.com https://us-assets.i.posthog.com http://localhost:* ws://localhost:* https://*.youtube.com https://*.ytimg.com https://*.googlevideo.com https://*.googleapis.com https://www.google.com https://*.google.com https://traducao2.vlibras.gov.br https://dicionario2.vlibras.gov.br https://repositorio.vlibras.gov.br https://cdn.jsdelivr.net https://static.cloudflareinsights.com;` +
-    ` worker-src 'self' blob:${cspExtra};` +
-    `${cspFrame}` +
-    `">`;
+  // URLs da API para CSP (derivadas de VITE_URL_API)
+  const apiUrl = (process.env.VITE_URL_API || "").replace(/\/$/, "");
+  const apiUrlFallback = (process.env.VITE_URL_API_FALLBACK || "").replace(/\/$/, "");
+  const apiOrigins = [apiUrl, apiUrlFallback].filter(Boolean).join(" ");
+
+  function buildCspMeta() {
+    const api = DOMAINS.API.join(" ");
+    const cspApiConnect = apiOrigins ? ` ${apiOrigins} ${api}` : api;
+
+    return (
+      `<meta http-equiv="Content-Security-Policy" content="` +
+      `default-src 'self';` +
+      ` script-src 'self' blob: ${DOMAINS_CSP.SCRIPT} 'wasm-unsafe-eval';` +
+      ` style-src 'self' 'unsafe-inline' ${DOMAINS_CSP.STYLE};` +
+      ` font-src 'self' data: ${DOMAINS_CSP.FONT};` +
+      ` img-src 'self' data: ${DOMAINS_CSP.IMG};` +
+      ` media-src 'self' blob: ${DOMAINS_CSP.MEDIA};` +
+      ` connect-src 'self' blob: ${cspApiConnect} http://localhost:* ws://localhost:* ${DOMAINS_CSP.CONNECT};` +
+      ` worker-src 'self' blob:;` +
+      ` frame-src ${DOMAINS_CSP.FRAME};` +
+      `">`
+    );
+  }
+
+  const cspMeta = buildCspMeta();
 
   // Plugins base — sempre incluídos
   const plugins = [
@@ -76,8 +81,12 @@ export default async ({ mode }) => {
 
   // VitePWA só para target web — no Electron o protocolo file:// não suporta Service Workers
   if (!isDesktop) {
-    const dbUrl = process.env.VITE_URL_DATABASE ?? "";
-    const filesUrl = process.env.VITE_URL_FILES ?? "";
+    const dbUrl = process.env.VITE_URL_API
+      ? `${process.env.VITE_URL_API}${process.env.VITE_PATH_JSON_DB || "/json_db"}`
+      : (process.env.VITE_URL_DATABASE ?? "");
+    const filesUrl = process.env.VITE_URL_API
+      ? `${process.env.VITE_URL_API}${process.env.VITE_PATH_FILES || "/file"}`
+      : (process.env.VITE_URL_FILES ?? "");
 
     // Runtime caching: DB JSONs (stale-while-revalidate) + mídia (cache-first 30 dias).
     // Quando VITE_URL_* está definido, usa padrão preciso de URL; caso contrário, cai

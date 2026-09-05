@@ -46,6 +46,13 @@ src/
 │   ├── useBroadcastListener.ts
 │   ├── useBroadcastSender.ts
 │   └── useFileProjection.ts
+├── config/              # Configurações centrais
+│   ├── Api.ts           # URLs, tokens e fallback da API (fonte única de verdade)
+│   ├── Icons.ts         # Ícones MDI
+│   ├── Fonts.ts         # Config de fontes
+│   ├── Theme.ts         # Temas
+│   ├── Libras.ts        # URLs da API VLibras
+│   └── modules/         # Config de módulos
 ├── helpers/             # Utilitários e serviços
 │   ├── ModuleManager.js # Instala e registra módulos
 │   ├── Modules.js       # Abre/fecha/minimiza módulos
@@ -891,6 +898,8 @@ electron/
 ├── main.cjs              # Entry point do main process
 ├── preload.cjs           # contextBridge → window.louvorjaApi
 └── main/
+    ├── apiConfig.js      # Config central de URLs/tokens da API (shared)
+    ├── csp.js            # Config central de Content-Security-Policy
     ├── paths.js          # userData, tempDir
     ├── windows.js        # BrowserWindow factory
     ├── userStore.js      # JSON persistente em userData/ (D1)
@@ -915,6 +924,7 @@ electron/
 electron-builder.yml      # Config NSIS Win (D0)
 build/installer.nsh       # NSIS custom (D8)
 src/helpers/Platform.js   # Adapter web/desktop (D0)
+src/config/Api.ts         # Config central de URLs/tokens (renderer)
 ```
 
 ### Formatos de mídia — Opus e JPEG

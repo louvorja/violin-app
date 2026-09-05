@@ -226,6 +226,14 @@ import { useSyncManager } from "@/composables/useSyncManager";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
 import type { DbConfig } from "@/types/Database";
 import Alert from "@/helpers/Alert";
+import {
+  API_URL,
+  API_TOKEN,
+  API_URL_FALLBACK,
+  API_URL_FALLBACK_TOKEN,
+  API_URL_DB,
+  API_URL_DB_FALLBACK,
+} from "@/config/Api";
 import Snackbar from "@helpers/Snackbar";
 
 interface AppUpdateState {
@@ -503,9 +511,14 @@ async function checkDbUpdate(): Promise<void> {
   dbChecking.value = true;
   dbStatus.value = "idle";
   try {
-    const res = await fetch(`${import.meta.env.VITE_URL_DATABASE}/config`, {
-      headers: { "Api-Token": import.meta.env.VITE_API_TOKEN },
+    let res = await fetch(`${API_URL_DB}/config`, {
+      headers: { "Api-Token": API_TOKEN },
     });
+    if (!res.ok && API_URL_FALLBACK) {
+      res = await fetch(`${API_URL_DB_FALLBACK}/config`, {
+        headers: { "Api-Token": API_URL_FALLBACK_TOKEN },
+      });
+    }
     if (!res.ok) {
       throw new Error();
     }
