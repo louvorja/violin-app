@@ -1,0 +1,1 @@
+import{B as t}from"./index-Cq49InDV.js";import{A as i}from"./vendor-vue-BO0pwY9R.js";function u(o,a){const n=t.listen(r=>{(o==="*"||r.type===o||Array.isArray(o)&&o.includes(r.type))&&a(r.payload,r)});i(()=>n())}export{u};

@@ -1,0 +1,1 @@
+import{b as e,a6 as o}from"./index-Cq49InDV.js";import{c as t}from"./hymnalManifest-f4FFWxSk.js";const{module:a,contextualPages:l}=t({id:o.HYMNAL,name:"Hinário Adventista",color:"#c0392b",icon:e.MODULES.HYMNAL}),m=Object.freeze(Object.defineProperty({__proto__:null,contextualPages:l,module:a},Symbol.toStringTag,{value:"Module"}));export{m as _,a as m};
