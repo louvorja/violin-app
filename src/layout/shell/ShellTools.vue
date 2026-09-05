@@ -200,17 +200,17 @@ function openFavorites() {
 function toggleTheme() {
   try {
     const cur = vuetifyTheme.global.name.value || "darkblue";
-    const lastLight = $userdata.get("theme_last_light", null);
+    const lastLight = $userdata.get(KEYS.OPTIONS.THEME_LAST_LIGHT, null);
     const next =
       cur === "dark"
         ? lastLight && lastLight !== "dark"
           ? lastLight
           : "darkblue"
-        : ($userdata.set("theme_last_light", cur), "dark");
+        : ($userdata.set(KEYS.OPTIONS.THEME_LAST_LIGHT, cur), "dark");
     vuetifyTheme.change(next);
-    $userdata.set("theme", next);
+    $userdata.set(KEYS.OPTIONS.THEME, next);
     document.documentElement.dataset.theme = next;
-    $appdata.set("is_dark", next === "dark");
+    $appdata.set(KEYS.SHELL.IS_DARK, next === "dark");
   } catch (err) {
     console.error("[ShellTools] toggleTheme falhou:", err);
   }

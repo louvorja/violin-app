@@ -106,6 +106,7 @@
 </template>
 
 <script setup>
+import { KEYS } from "@/constants/UserDataKeys";
 import { LjButton } from "@/components/ui";
 import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
@@ -267,9 +268,9 @@ function _patchThemeCmd() {
       const current = theme.global.name.value;
       const next = current === "dark" ? "light" : "dark";
       theme.change(next);
-      UserData.set("theme", next);
+      UserData.set(KEYS.OPTIONS.THEME, next);
       document.documentElement.dataset.theme = next;
-      AppData.set("is_dark", theme.global.current.value.dark);
+      AppData.set(KEYS.SHELL.IS_DARK, theme.global.current.value.dark);
     };
   }
 }

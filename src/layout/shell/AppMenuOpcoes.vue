@@ -1544,11 +1544,10 @@ function getPref(feature: string): string {
 function changeTheme(selectedTheme: string): void {
   saveUserData(KEYS.OPTIONS.THEME, selectedTheme);
   theme.change(selectedTheme);
-  $userdata.set("theme", selectedTheme);
   document.documentElement.dataset.theme = selectedTheme;
   const isDark = selectedTheme === "dark";
-  $appdata.set("is_dark", isDark);
-  if (!isDark) $userdata.set("theme_last_light", selectedTheme);
+  $appdata.set(KEYS.SHELL.IS_DARK, isDark);
+  if (!isDark) $userdata.set(KEYS.OPTIONS.THEME_LAST_LIGHT, selectedTheme);
 }
 
 function changeLanguage(lang: string): void {

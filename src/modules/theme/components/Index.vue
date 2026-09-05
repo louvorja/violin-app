@@ -22,6 +22,7 @@
 </template>
 
 <script setup>
+import { KEYS } from "@/constants/UserDataKeys";
 /* ########################################################### */
 /* ####### INSTALAÇÃO DO MODULO ############################## */
 /* ########################################################### */
@@ -54,8 +55,11 @@ const themes = ref({
 function setTheme(theme_id) {
   current.value = theme_id;
   vuetifyTheme.global.name.value = current.value;
-  $userdata.set("theme", current.value);
-  $appdata.set("is_dark", vuetifyTheme.global.current.value.dark);
+  $userdata.set(KEYS.OPTIONS.THEME, current.value);
+  // Os tokens do design system pendurados em [data-theme] não entram sem isto —
+  // os outros três pontos que trocam tema já carimbavam o atributo.
+  document.documentElement.dataset.theme = current.value;
+  $appdata.set(KEYS.SHELL.IS_DARK, vuetifyTheme.global.current.value.dark);
 }
 
 /* ########################################################### */
