@@ -77,6 +77,9 @@ jobs:
         run: |
           security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
           security default-keychain -s build.keychain
+          # Definir o keychain padrão não o coloca na lista de busca, e é a
+          # lista que o electron-builder varre para achar o certificado.
+          security list-keychains -d user -s build.keychain
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
           security set-keychain-settings -lut 21600 build.keychain
           echo "$APPLE_CERTIFICATE_P12" | base64 --decode > cert.p12
@@ -97,9 +100,14 @@ jobs:
           VITE_APP_VERSION: ${{ github.ref_name }}
           # Assinatura/notarização macOS: usa o keychain importado acima.
           # Nos runners win/linux o certificado não existe → build sem assinatura.
+          #
+          # Sem CSC_LINK de propósito. Com ele o electron-builder ignora o
+          # keychain que o passo anterior montou e cria um temporário só dele,
+          # e o `security set-key-partition-list` desse keychain falha de forma
+          # intermitente no runner do macOS — foi o que derrubou o build da
+          # 2.0.0-beta.3 duas vezes seguidas. A descoberta automática acha o
+          # mesmo certificado na lista de busca, sem essa segunda montagem.
           CSC_IDENTITY_AUTO_DISCOVERY: true
-          CSC_LINK: ${{ secrets.APPLE_CERTIFICATE_P12 }}
-          CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_P12_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
