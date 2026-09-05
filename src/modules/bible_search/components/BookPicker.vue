@@ -315,6 +315,11 @@ onUnmounted(() => document.removeEventListener("click", onDocClick, true));
   text-align: left;
 }
 .book-picker-popover {
+  /* Camada teleportada para o <body>: um diálogo modal da Reka carimba
+     `pointer-events: none` lá para tornar inerte tudo que está fora dele, e
+     isso alcança este painel. Sem retomar o ponteiro, ele aparece e não
+     responde a clique. */
+  pointer-events: auto;
   position: fixed;
   z-index: var(--lj-z-popup);
   background: var(--lj-surface-bg);

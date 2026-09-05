@@ -113,6 +113,12 @@ function clickBtn(value) {
   position: fixed;
   inset: 0;
   z-index: calc(var(--lj-z-toast) + 1);
+  /* Estar por cima não basta. Um diálogo modal da Reka — a janela de módulo, por
+     exemplo — carimba `pointer-events: none` no <body> para tornar inerte tudo
+     que está fora dele, e este alerta é teleportado justamente para o <body>.
+     Sem retomar o ponteiro aqui, ele aparece na tela e não responde a clique
+     nenhum: o operador fica preso, com a pergunta à vista e sem saída. */
+  pointer-events: auto;
   display: flex;
   align-items: center;
   justify-content: center;

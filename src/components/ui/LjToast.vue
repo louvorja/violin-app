@@ -108,6 +108,11 @@ const timerStyle = computed(() => ({
      atributo de escopo. O isolamento vem do prefixo `lj-`. -->
 <style>
 .lj-toast {
+  /* Camada teleportada para o <body>: um diálogo modal da Reka carimba
+     `pointer-events: none` lá para tornar inerte tudo que está fora dele, e
+     isso alcança este painel. Sem retomar o ponteiro, ele aparece e não
+     responde a clique. */
+  pointer-events: auto;
   position: fixed;
   z-index: var(--lj-z-toast);
   bottom: var(--lj-space-7);

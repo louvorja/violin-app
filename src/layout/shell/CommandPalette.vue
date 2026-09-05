@@ -338,6 +338,11 @@ function highlightParts(text) {
 
 <style scoped>
 .cmd-overlay {
+  /* Camada teleportada para o <body>: um diálogo modal da Reka carimba
+     `pointer-events: none` lá para tornar inerte tudo que está fora dele, e
+     isso alcança este painel. Sem retomar o ponteiro, ele aparece e não
+     responde a clique. */
+  pointer-events: auto;
   position: fixed;
   inset: 0;
   z-index: var(--lj-z-dialog);

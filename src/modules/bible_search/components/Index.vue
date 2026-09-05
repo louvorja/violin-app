@@ -639,6 +639,11 @@ onUnmounted(() => document.removeEventListener("mousedown", onDocPointerDown, tr
   color: var(--lj-text);
 }
 .bs-history {
+  /* Camada teleportada para o <body>: um diálogo modal da Reka carimba
+     `pointer-events: none` lá para tornar inerte tudo que está fora dele, e
+     isso alcança este painel. Sem retomar o ponteiro, ele aparece e não
+     responde a clique. */
+  pointer-events: auto;
   position: fixed;
   z-index: var(--lj-z-popup);
   max-height: 280px;

@@ -224,6 +224,11 @@ function onEscapeKeyDown(event) {
 
 function onPointerDownOutside(event) {
   event.preventDefault();
+  // O alerta vive num teleporte para o <body>, então para a Reka um clique nele
+  // é um clique "fora" da janela. Minimizar por causa disso tiraria da tela
+  // exatamente aquilo que a pergunta está confirmando.
+  const alvo = event.detail?.originalEvent?.target;
+  if (alvo instanceof Element && alvo.closest(".alert-overlay")) return;
   minimize();
 }
 
