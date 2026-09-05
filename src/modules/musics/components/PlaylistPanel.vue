@@ -23,17 +23,15 @@
     </div>
 
     <div v-if="showCreate" class="playlist-panel-input-row">
-      <v-text-field
-        v-model="newName"
-        density="compact"
-        variant="outlined"
-        hide-details
-        autofocus
-        :placeholder="t('playlists.create_placeholder')"
-        class="playlist-panel-input"
-        @keydown.enter="create"
-        @keydown.esc="cancelCreate"
-      />
+      <div class="playlist-panel-input">
+        <LjInput
+          v-model="newName"
+          autofocus
+          :placeholder="t('playlists.create_placeholder')"
+          @keydown.enter="create"
+          @keydown.esc="cancelCreate"
+        />
+      </div>
       <button type="button" class="playlist-panel-btn" @click="create">
         <Icon :icon="ICONS.UI.CHECK" size="16" />
       </button>
@@ -43,17 +41,15 @@
     </div>
 
     <div v-if="showRenameId" class="playlist-panel-input-row">
-      <v-text-field
-        v-model="renameName"
-        density="compact"
-        variant="outlined"
-        hide-details
-        autofocus
-        :placeholder="t('playlists.rename')"
-        class="playlist-panel-input"
-        @keydown.enter="confirmRename"
-        @keydown.esc="cancelRename"
-      />
+      <div class="playlist-panel-input">
+        <LjInput
+          v-model="renameName"
+          autofocus
+          :placeholder="t('playlists.rename')"
+          @keydown.enter="confirmRename"
+          @keydown.esc="cancelRename"
+        />
+      </div>
       <button type="button" class="playlist-panel-btn" @click="confirmRename">
         <Icon :icon="ICONS.UI.CHECK" size="16" />
       </button>
@@ -114,6 +110,7 @@
 
 <script setup lang="ts">
 import Icon from "@/components/Icon.vue";
+import { LjInput } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
@@ -254,6 +251,12 @@ function onImport(): void {
 .playlist-panel-input {
   flex: 1;
   min-width: 0;
+}
+
+/* O invólucro é quem estica na linha: no LjInput, class e style pousam no
+   <input> interno, nunca na moldura. */
+.playlist-panel-input :deep(.lj-input) {
+  width: 100%;
 }
 
 .playlist-panel-list {

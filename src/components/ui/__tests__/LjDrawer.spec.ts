@@ -255,9 +255,14 @@ describe("LjDrawer — modo temporário", () => {
     expect(painel()!.hasAttribute("aria-describedby")).toBe(false);
   });
 
-  it("cabeçalho próprio também não deixa aria-labelledby órfão", async () => {
-    await montarTemporario({ title: "Ignorado" }, { slots: { header: "<b>Meu</b>" } });
-    expect(painel()!.hasAttribute("aria-labelledby")).toBe(false);
+  it("cabeçalho próprio nomeia o painel por um título invisível", async () => {
+    await montarTemporario({ title: "Formatação" }, { slots: { header: "<b>Meu</b>" } });
+    // Sem título visível, o nome ainda precisa existir: a Reka aponta
+    // aria-labelledby para um id que ela reserva, e um id órfão anuncia o
+    // painel sem nome nenhum.
+    const id = painel()!.getAttribute("aria-labelledby");
+    expect(id).toBeTruthy();
+    expect(document.getElementById(id as string)?.textContent).toBe("Formatação");
     expect(document.body.querySelector(".lj-drawer__title")).toBeNull();
   });
 
@@ -287,6 +292,29 @@ describe("LjDrawer — modo temporário", () => {
     expect(ativo.getAttribute("role")).toBe("dialog");
     expect(ativo.classList.contains("campo")).toBe(false);
   });
+});
+
+describe("LjDrawer — cabeçalho sem título", () => {
+  it("o slot de ações continua na tela quando não há título (permanente)", async () => {
+    const w = await montarPermanente(
+      {},
+      { slots: { actions: '<button class="restaurar">Restaurar</button>', default: "corpo" } }
+    );
+
+    expect(w.find(".restaurar").exists()).toBe(true);
+  });
+
+  it("o slot de ações e o botão de fechar continuam na tela sem título (temporário)", async () => {
+    await montarTemporario(
+      {},
+      { slots: { actions: '<button class="restaurar">Restaurar</button>', default: "corpo" } }
+    );
+    await macrotask();
+
+    expect(document.body.querySelector(".restaurar")).not.toBeNull();
+    expect(document.body.querySelector(".lj-drawer__close")).not.toBeNull();
+  });
+
 });
 
 /*

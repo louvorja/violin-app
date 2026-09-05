@@ -3,7 +3,7 @@
     <header class="lit-notes-header">
       <Icon :icon="ICONS.UI.NOTE_EDIT" size="14" />
       <span>{{ t("notes.title") }}</span>
-      <v-spacer />
+      <div class="lj-u-spacer" />
       <span class="lit-notes-day">{{ dayLabel }}</span>
     </header>
 
@@ -262,7 +262,7 @@ watch(() => props.noteHtml, syncFromProp);
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  border-left: 1px solid rgba(var(--v-border-color), 0.3);
+  border-left: 1px solid var(--lj-surface-border);
   background: var(--lj-surface-bg);
   min-height: 0;
 }
@@ -274,7 +274,7 @@ watch(() => props.noteHtml, syncFromProp);
   padding: 8px 10px;
   font-weight: 500;
   font-size: 12px;
-  border-bottom: 1px solid rgba(var(--v-border-color), 0.2);
+  border-bottom: 1px solid var(--lj-surface-divider);
   background: rgba(var(--lj-on-surface-ch), 0.04);
   flex-shrink: 0;
 }
@@ -311,7 +311,7 @@ watch(() => props.noteHtml, syncFromProp);
   flex-wrap: wrap;
   gap: 2px;
   padding: 4px 6px;
-  border-top: 1px solid rgba(var(--v-border-color), 0.2);
+  border-top: 1px solid var(--lj-surface-divider);
   background: rgba(var(--lj-on-surface-ch), 0.03);
   flex-shrink: 0;
 }
@@ -319,7 +319,7 @@ watch(() => props.noteHtml, syncFromProp);
 .lit-tb-select {
   height: 24px;
   padding: 0 4px;
-  border: 1px solid rgba(var(--v-border-color), 0.4);
+  border: 1px solid var(--lj-surface-border-strong);
   border-radius: 3px;
   background: var(--lj-surface-bg);
   color: var(--lj-text);
@@ -335,7 +335,7 @@ watch(() => props.noteHtml, syncFromProp);
 .lit-tb-sep {
   width: 1px;
   height: 16px;
-  background: rgba(var(--v-border-color), 0.5);
+  background: var(--lj-surface-border-strong);
   margin: 0 4px;
 }
 
@@ -355,7 +355,7 @@ watch(() => props.noteHtml, syncFromProp);
 }
 .lit-tb-btn:hover {
   background: rgba(var(--lj-on-surface-ch), 0.08);
-  border-color: rgba(var(--v-border-color), 0.4);
+  border-color: var(--lj-surface-border-strong);
 }
 .lit-tb-btn--bold {
   font-weight: 700;
@@ -381,7 +381,7 @@ watch(() => props.noteHtml, syncFromProp);
 }
 .lit-tb-color:hover {
   background: rgba(var(--lj-on-surface-ch), 0.08);
-  border-color: rgba(var(--v-border-color), 0.4);
+  border-color: var(--lj-surface-border-strong);
 }
 .lit-tb-color-icon {
   font-weight: 700;
@@ -404,7 +404,7 @@ watch(() => props.noteHtml, syncFromProp);
   padding: 6px 10px;
   font-size: 11px;
   color: rgba(var(--lj-on-surface-ch), 0.65);
-  border-top: 1px solid rgba(var(--v-border-color), 0.2);
+  border-top: 1px solid var(--lj-surface-divider);
   background: rgba(var(--lj-on-surface-ch), 0.03);
   flex-shrink: 0;
 }

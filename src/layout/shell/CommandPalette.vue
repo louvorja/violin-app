@@ -1,122 +1,115 @@
 <template>
-  <v-dialog
-    v-model="open"
-    max-width="640"
-    transition="dialog-top-transition"
-    :scrim="true"
-    @keydown.escape.stop="close"
-  >
-    <v-card class="cmd-palette" rounded="lg" elevation="8">
-      <!-- Input de busca -->
-      <div class="cmd-search">
-        <Icon :icon="ICONS.ACTIONS.SEARCH" size="22" class="mr-2 text-medium-emphasis" />
-        <input
-          ref="searchInput"
-          v-model="query"
-          :aria-label="$t('shell.search_placeholder')"
-          :placeholder="$t('shell.search_placeholder')"
-          class="cmd-input"
-          autocomplete="off"
-          spellcheck="false"
-          @keydown.down.prevent="moveDown"
-          @keydown.up.prevent="moveUp"
-          @keydown.enter.prevent="executeSelected"
-          @keydown.escape.prevent="close"
-        />
-        <kbd v-if="!query" class="cmd-kbd cmd-kbd--hint">Esc</kbd>
-        <LjButton
-          v-else
-          variant="ghost"
-          size="sm"
-          :icon="ICONS.ACTIONS.CLOSE"
-          :aria-label="$t('alert.close')"
-          icon-only
-          @click="query = ''"
-        />
-      </div>
+  <Teleport to="body">
+    <Transition name="cmd">
+      <div v-if="open" class="cmd-overlay" @click.self="close" @keydown.escape.stop="close">
+        <div class="cmd-palette" role="dialog" aria-modal="true">
+          <!-- Input de busca -->
+          <div class="cmd-search">
+            <Icon :icon="ICONS.ACTIONS.SEARCH" size="22" class="cmd-search-icon" />
+            <input
+              ref="searchInput"
+              v-model="query"
+              :aria-label="$t('shell.search_placeholder')"
+              :placeholder="$t('shell.search_placeholder')"
+              class="cmd-input"
+              autocomplete="off"
+              spellcheck="false"
+              @keydown.down.prevent="moveDown"
+              @keydown.up.prevent="moveUp"
+              @keydown.enter.prevent="executeSelected"
+              @keydown.escape.prevent="close"
+            />
+            <kbd v-if="!query" class="cmd-kbd cmd-kbd--hint">Esc</kbd>
+            <LjButton
+              v-else
+              variant="ghost"
+              size="sm"
+              :icon="ICONS.ACTIONS.CLOSE"
+              :aria-label="$t('alert.close')"
+              icon-only
+              @click="query = ''"
+            />
+          </div>
 
-      <v-divider />
+          <LjDivider />
 
-      <!-- Lista de resultados -->
-      <div ref="resultsContainer" class="cmd-results">
-        <div
-          v-if="!loading && results.length === 0"
-          class="cmd-empty pa-6 text-center text-medium-emphasis"
-        >
-          <Icon :icon="ICONS.ACTIONS.SEARCH" size="36" class="mb-2 text-disabled" />
-          <div>{{ $t("shell.no_results") }}</div>
-        </div>
-
-        <div v-if="loading" class="cmd-loading pa-4 text-center">
-          <v-progress-circular indeterminate size="24" />
-        </div>
-
-        <template v-for="(group, gkey) in groupedResults" :key="gkey">
-          <div class="cmd-group-label">{{ groupLabel(gkey) }}</div>
-          <button
-            v-for="item in group"
-            :key="item.id"
-            class="cmd-item"
-            :class="{ 'cmd-item--active': isSelected(item) }"
-            @click="execute(item)"
-            @mouseenter="setActive(item)"
-          >
-            <Icon :icon="item.icon" size="18" class="cmd-item-icon" />
-            <div class="cmd-item-body">
-              <div class="cmd-item-title lj-u-truncate">
-                <template v-for="(part, i) in highlightParts(item.title)" :key="i">
-                  <mark v-if="part.mark">{{ part.text }}</mark>
-                  <span v-else>{{ part.text }}</span>
-                </template>
-              </div>
-              <div v-if="item.subtitle" class="cmd-item-subtitle">{{ item.subtitle }}</div>
+          <!-- Lista de resultados -->
+          <div ref="resultsContainer" class="cmd-results">
+            <div v-if="!loading && results.length === 0" class="cmd-empty">
+              <Icon :icon="ICONS.ACTIONS.SEARCH" size="36" class="cmd-empty-icon lj-u-faded" />
+              <div>{{ $t("shell.no_results") }}</div>
             </div>
-            <kbd v-if="item.shortcut" class="cmd-kbd">{{ item.shortcut }}</kbd>
-          </button>
-        </template>
 
-        <button v-if="hasMore" class="cmd-load-more" @click="loadMore">
-          {{ $t("shell.load_more") }}
-        </button>
-      </div>
+            <div v-if="loading" class="cmd-loading">
+              <LjSpinner :size="24" />
+            </div>
 
-      <!-- Footer com hints -->
-      <v-divider />
-      <div class="cmd-footer">
-        <span>
-          <kbd>↑</kbd>
-          <kbd>↓</kbd>
-          {{ $t("shell.navigate") }}
-        </span>
-        <span>
-          <kbd>Enter</kbd>
-          {{ $t("shell.execute") }}
-        </span>
-        <span>
-          <kbd>Esc</kbd>
-          {{ $t("shell.close") }}
-        </span>
-        <v-spacer />
-        <span class="text-caption text-disabled">
-          {{ results.length }}{{ hasMore ? "+" : "" }} {{ $t("shell.results") }}
-        </span>
+            <template v-for="(group, gkey) in groupedResults" :key="gkey">
+              <div class="cmd-group-label">{{ groupLabel(gkey) }}</div>
+              <button
+                v-for="item in group"
+                :key="item.id"
+                class="cmd-item"
+                :class="{ 'cmd-item--active': isSelected(item) }"
+                @click="execute(item)"
+                @mouseenter="setActive(item)"
+              >
+                <Icon :icon="item.icon" size="18" class="cmd-item-icon" />
+                <div class="cmd-item-body">
+                  <div class="cmd-item-title lj-u-truncate">
+                    <template v-for="(part, i) in highlightParts(item.title)" :key="i">
+                      <mark v-if="part.mark">{{ part.text }}</mark>
+                      <span v-else>{{ part.text }}</span>
+                    </template>
+                  </div>
+                  <div v-if="item.subtitle" class="cmd-item-subtitle">{{ item.subtitle }}</div>
+                </div>
+                <kbd v-if="item.shortcut" class="cmd-kbd">{{ item.shortcut }}</kbd>
+              </button>
+            </template>
+
+            <button v-if="hasMore" class="cmd-load-more" @click="loadMore">
+              {{ $t("shell.load_more") }}
+            </button>
+          </div>
+
+          <!-- Footer com hints -->
+          <LjDivider />
+          <div class="cmd-footer">
+            <span>
+              <kbd>↑</kbd>
+              <kbd>↓</kbd>
+              {{ $t("shell.navigate") }}
+            </span>
+            <span>
+              <kbd>Enter</kbd>
+              {{ $t("shell.execute") }}
+            </span>
+            <span>
+              <kbd>Esc</kbd>
+              {{ $t("shell.close") }}
+            </span>
+            <div class="lj-u-spacer" />
+            <span class="lj-u-caption lj-u-faded">
+              {{ results.length }}{{ hasMore ? "+" : "" }} {{ $t("shell.results") }}
+            </span>
+          </div>
+        </div>
       </div>
-    </v-card>
-  </v-dialog>
+    </Transition>
+  </Teleport>
 </template>
 
 <script setup>
-import { KEYS } from "@/constants/UserDataKeys";
-import { LjButton } from "@/components/ui";
+import { LjButton, LjDivider, LjSpinner } from "@/components/ui";
 import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, watch, nextTick } from "vue";
 import { useI18n } from "vue-i18n";
-import { useTheme } from "vuetify";
+import { useAppTheme } from "@/composables/useAppTheme";
 import CommandRegistry from "@/helpers/CommandRegistry";
 import Database from "@/helpers/Database";
 import UserData from "@/helpers/UserData";
-import AppData from "@/helpers/AppData";
 
 const PAGE_SIZE = 50;
 
@@ -127,7 +120,7 @@ const props = defineProps({
 const emit = defineEmits(["update:modelValue"]);
 
 const { t } = useI18n();
-const theme = useTheme();
+const { toggleDark } = useAppTheme();
 
 const searchInput = ref(null);
 const resultsContainer = ref(null);
@@ -263,16 +256,7 @@ async function loadCommands() {
 
 function _patchThemeCmd() {
   const themeCmd = allCommands.value.find((c) => c.id === "theme:toggle");
-  if (themeCmd) {
-    themeCmd.run = () => {
-      const current = theme.global.name.value;
-      const next = current === "dark" ? "light" : "dark";
-      theme.change(next);
-      UserData.set(KEYS.OPTIONS.THEME, next);
-      document.documentElement.dataset.theme = next;
-      AppData.set(KEYS.SHELL.IS_DARK, theme.global.current.value.dark);
-    };
-  }
+  if (themeCmd) themeCmd.run = toggleDark;
 }
 
 function loadMore() {
@@ -353,11 +337,28 @@ function highlightParts(text) {
 </script>
 
 <style scoped>
-.cmd-palette.cmd-palette {
+.cmd-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--lj-z-dialog);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--lj-space-8);
+  background: var(--lj-black-alpha-40);
+}
+
+.cmd-palette {
   display: flex;
   flex-direction: column;
+  width: 100%;
+  max-width: 640px;
   max-height: 70vh;
+  overflow: hidden;
   background: var(--lj-popup-bg);
+  border-radius: var(--lj-radius-lg);
+  box-shadow: var(--lj-shadow-3);
+  color: var(--lj-text);
   font-family: var(--lj-font-shell);
 }
 
@@ -366,6 +367,11 @@ function highlightParts(text) {
   align-items: center;
   padding: var(--lj-space-5) var(--lj-space-6);
   border-bottom: 1px solid var(--lj-surface-divider);
+}
+
+.cmd-search-icon {
+  margin-right: var(--lj-space-4);
+  color: var(--lj-text-muted);
 }
 
 .cmd-input {
@@ -399,7 +405,13 @@ function highlightParts(text) {
   display: flex;
   flex-direction: column;
   align-items: center;
+  padding: var(--lj-space-8);
+  text-align: center;
   color: var(--lj-text-muted);
+}
+
+.cmd-empty-icon {
+  margin-bottom: var(--lj-space-4);
 }
 
 .cmd-group-label {
@@ -526,5 +538,25 @@ function highlightParts(text) {
   font-family: var(--lj-font-mono);
   margin: 0 2px;
   color: var(--lj-text);
+}
+
+.cmd-enter-active,
+.cmd-leave-active {
+  transition: opacity var(--lj-transition-normal);
+}
+
+.cmd-enter-active .cmd-palette,
+.cmd-leave-active .cmd-palette {
+  transition: transform var(--lj-transition-normal);
+}
+
+.cmd-enter-from,
+.cmd-leave-to {
+  opacity: 0;
+}
+
+.cmd-enter-from .cmd-palette,
+.cmd-leave-to .cmd-palette {
+  transform: translateY(-12px);
 }
 </style>

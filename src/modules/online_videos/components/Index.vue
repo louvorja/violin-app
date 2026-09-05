@@ -12,15 +12,8 @@
       </div>
     </template>
     <div class="ov-root">
-      <v-progress-linear v-if="loading" indeterminate />
-      <v-alert
-        v-if="error"
-        type="error"
-        :text="error"
-        variant="tonal"
-        class="ma-2"
-        style="max-height: 70px"
-      />
+      <LjProgress v-if="loading" indeterminate :height="4" />
+      <LjAlert v-if="error" variant="danger" :text="error" class="ov-error" />
 
       <!-- Resultados da busca (global — sobrepõe a navegação) -->
       <template v-if="searching">
@@ -112,7 +105,7 @@
 </template>
 
 <script setup lang="ts">
-import { LjButton } from "@/components/ui";
+import { LjAlert, LjButton, LjProgress } from "@/components/ui";
 import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, watch, onMounted } from "vue";
@@ -339,6 +332,10 @@ function close(): void {
   gap: 8px;
   height: 100%;
   overflow-y: auto;
+}
+.ov-error {
+  margin: var(--lj-space-4);
+  max-height: 70px;
 }
 .ov-header {
   width: 100%;

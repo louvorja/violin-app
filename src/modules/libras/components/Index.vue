@@ -3,7 +3,7 @@
     <div class="libras-root">
       <!-- Indicador de tradução -->
       <div v-if="isTranslating" class="libras-translating">
-        <v-progress-linear indeterminate color="primary" height="2" />
+        <LjProgress indeterminate :height="2" />
       </div>
 
       <!-- Texto original -->
@@ -20,7 +20,7 @@
 
       <!-- Mensagem quando vazio -->
       <div v-if="!gloss && !isTranslating" class="libras-empty">
-        <Icon :icon="ICONS.MODULES.MUSICS" size="48" color="grey" class="mb-2" />
+        <Icon :icon="ICONS.MODULES.MUSICS" size="48" color="grey" />
         <p>{{ t("libras.empty") }}</p>
       </div>
     </div>
@@ -29,6 +29,7 @@
 
 <script setup lang="ts">
 import Icon from "@/components/Icon.vue";
+import { LjProgress } from "@/components/ui";
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import ModuleContainer from "@/components/ModuleContainer.vue";
@@ -79,7 +80,7 @@ function close(): void {
 
 .libras-text--gloss {
   font-weight: 600;
-  color: rgb(var(--v-theme-primary));
+  color: var(--lj-ui-accent);
 }
 
 .libras-empty {
@@ -87,7 +88,14 @@ function close(): void {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: var(--lj-space-4);
   min-height: 150px;
   opacity: 0.5;
+}
+
+/* O reset do Vuetify zerava a margem de <p>; sem ele o parágrafo empurraria
+   o ícone para fora do centro. */
+.libras-empty p {
+  margin: 0;
 }
 </style>

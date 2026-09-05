@@ -7,7 +7,6 @@
       :disabled="loading || button.disabled"
       :icon="button.icon"
       :variant="button.highlight ? 'primary' : 'ghost'"
-      class="ma-1"
       size="sm"
       icon-only
       @click="button.click"
@@ -30,6 +29,9 @@ defineProps({
   align-items: center;
   justify-content: center;
   flex-grow: 1;
-  padding-block: var(--lj-space-1);
+  gap: var(--lj-space-4);
+  /* Os 6px verticais somam o padding que a faixa já tinha e a margem que cada
+     botão carregava: sem eles a linha de controles encolhe durante o culto. */
+  padding-block: var(--lj-space-3);
 }
 </style>

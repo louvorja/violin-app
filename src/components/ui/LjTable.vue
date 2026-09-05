@@ -10,6 +10,8 @@
       },
     ]"
     :style="maxHeight ? { maxHeight } : undefined"
+    :tabindex="maxHeight ? 0 : undefined"
+    :role="maxHeight ? 'region' : undefined"
   >
     <table class="lj-table__table">
       <slot />
@@ -37,7 +39,12 @@ withDefaults(
      * cresce com o conteúdo, quem rola é a página e o cabeçalho vai junto.
      */
     sticky?: boolean;
-    /** Altura máxima (comprimento CSS). É o que dá rolagem vertical própria. */
+    /**
+     * Altura máxima (comprimento CSS). É o que dá rolagem vertical própria — e,
+     * com ela, o contêiner entra na ordem de tabulação: uma área que rola sem
+     * receber foco é intransponível para quem opera só com teclado, e no meio
+     * de um culto não há mouse sobrando.
+     */
     maxHeight?: string;
   }>(),
   { density: "compact" }
@@ -46,6 +53,14 @@ withDefaults(
 
 <style scoped>
 .lj-table {
+  /* Altura de linha, não padding. O `<v-table>` que existia aqui antes impunha
+     36px na linha e 40px no cabeçalho por `height`, e as listas do app (músicas,
+     hinário, bíblia, coletâneas) foram desenhadas em cima disso. Só com padding
+     a linha cairia para ~27px: cabe mais linha na mesma altura, a lista encolhe
+     um quarto e o scroll infinito passa a pedir página em outro ritmo. */
+  --lj-table-row-h: 36px;
+  --lj-table-head-h: 40px;
+
   width: 100%;
   /* Rolagem contida para a página nunca rolar de lado. Só o eixo X interessa,
      mas a regra do CSS arrasta o Y junto — com o X rolável, `visible` no Y vira
@@ -98,6 +113,14 @@ withDefaults(
     transition: background var(--lj-transition-fast);
   }
 
+  /* Em tabela, `height` vale como piso: a célula cresce se o conteúdo pedir. */
+  .lj-table :deep(thead th) {
+    height: var(--lj-table-head-h);
+  }
+  .lj-table :deep(tbody td) {
+    height: var(--lj-table-row-h);
+  }
+
   .lj-table--compact :deep(th) {
     padding: var(--lj-space-3) var(--lj-space-4);
   }
@@ -105,6 +128,10 @@ withDefaults(
     padding: var(--lj-space-2) var(--lj-space-4);
   }
 
+  .lj-table--comfortable {
+    --lj-table-row-h: 48px;
+    --lj-table-head-h: 52px;
+  }
   .lj-table--comfortable :deep(th) {
     padding: var(--lj-space-4) var(--lj-space-5);
   }

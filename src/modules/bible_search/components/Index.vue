@@ -2,41 +2,66 @@
   <ModuleContainer ref="container" :manifest="manifest" @close="close">
     <template #header>
       <div class="bs-header">
-        <v-combobox
-          v-model="searchTerms"
-          :items="searchHistory"
-          :label="t('search_placeholder')"
-          variant="outlined"
-          density="compact"
-          hide-details
-          clearable
-          multiple
-          chips
-          no-filter
-          hide-no-data
-          class="bs-search-input"
-          @keydown.enter="onComboboxEnter"
-        >
-          <template #item="{ item }">
-            <v-list-item
-              :active="searchTerms.includes(item as string)"
-              :title="item as string"
-              @click="toggleHistoryTerm(item as string)"
+        <div ref="searchBoxRef" class="bs-search-input" @mousedown="openHistory">
+          <Icon :icon="ICONS.ACTIONS.SEARCH" size="small" class="bs-search-input__icon" />
+          <div class="bs-search-input__terms">
+            <LjChip
+              v-for="(term, i) in searchTerms"
+              :key="`${term}-${i}`"
+              size="sm"
+              removable
+              @remove="removeTerm(i)"
             >
-              <template #prepend>
-                <Icon size="small" class="text-medium-emphasis" :icon="ICONS.UI.HISTORY" />
-              </template>
-              <template #append>
-                <Icon
-                  size="x-small"
-                  class="text-medium-emphasis"
-                  :icon="ICONS.ACTIONS.CANCEL"
-                  @click.stop="removeFromHistory(item as string)"
-                />
-              </template>
-            </v-list-item>
-          </template>
-        </v-combobox>
+              {{ term }}
+            </LjChip>
+            <input
+              v-model="draft"
+              type="text"
+              class="bs-search-input__field"
+              :placeholder="searchTerms.length ? '' : t('search_placeholder')"
+              :aria-label="t('search_placeholder')"
+              @focus="openHistory"
+              @keydown.enter="onSearchEnter"
+              @keydown.esc="historyOpen = false"
+              @keydown.delete="onSearchBackspace"
+            />
+          </div>
+          <button
+            v-if="searchTerms.length || draft"
+            type="button"
+            class="bs-search-input__clear"
+            :aria-label="$t('components.ui.clear')"
+            @click="clearSearch"
+          >
+            <Icon :icon="ICONS.ACTIONS.CLOSE" size="x-small" />
+          </button>
+        </div>
+        <Teleport to="body">
+          <div
+            v-if="historyOpen && searchHistory.length"
+            ref="historyRef"
+            class="lj-ui-float bs-history"
+          >
+            <div
+              v-for="term in searchHistory"
+              :key="term"
+              class="bs-history__item"
+              :class="{ 'bs-history__item--active': searchTerms.includes(term) }"
+              @mousedown.prevent="toggleHistoryTerm(term)"
+            >
+              <Icon size="small" class="lj-u-muted" :icon="ICONS.UI.HISTORY" />
+              <span class="bs-history__label lj-u-truncate">{{ term }}</span>
+              <button
+                type="button"
+                class="bs-history__remove"
+                :aria-label="$t('components.ui.remove')"
+                @mousedown.stop.prevent="removeFromHistory(term)"
+              >
+                <Icon size="x-small" class="lj-u-muted" :icon="ICONS.ACTIONS.CANCEL" />
+              </button>
+            </div>
+          </div>
+        </Teleport>
         <LjButton
           variant="primary"
           :disabled="!(searchTerms.length && searchTerms.some((t) => t?.trim())) || searching"
@@ -50,8 +75,8 @@
     <div class="bs-body">
       <template v-if="searching">
         <div class="bs-body__loading">
-          <v-progress-circular indeterminate size="40" color="primary" />
-          <span class="mt-2 text-caption text-medium-emphasis">Buscando…</span>
+          <LjSpinner :size="40" />
+          <span class="lj-u-caption lj-u-muted">Buscando…</span>
         </div>
       </template>
       <template v-else>
@@ -94,9 +119,9 @@
 </template>
 
 <script setup lang="ts">
-import { LjButton } from "@/components/ui";
+import { LjButton, LjChip, LjSpinner } from "@/components/ui";
 import Icon from "@/components/Icon.vue";
-import { ref, computed, onMounted, type Ref } from "vue";
+import { ref, computed, onMounted, onUnmounted, watch, type Ref } from "vue";
 import { module as manifest } from "../manifest";
 import type { BibleBook, BibleVersion, BibleSearchResult } from "@/types/Bible";
 import ModuleContainer from "@/components/ModuleContainer.vue";
@@ -116,6 +141,11 @@ const t = (key: string, params?: Record<string, unknown>): string =>
   container.value?.t(key, params) || key;
 
 const searchTerms = ref<string[]>([]);
+/** Texto ainda não confirmado como termo — vira chip no Enter. */
+const draft = ref("");
+const searchBoxRef = ref<HTMLElement | null>(null);
+const historyRef = ref<HTMLElement | null>(null);
+const historyOpen = ref(false);
 const searchHistory = ref<string[]>(
   $userdata.get("modules.bible_search.search_history", []) as unknown as string[]
 );
@@ -271,13 +301,64 @@ function toggleHistoryTerm(term: string): void {
   }
 }
 
-function onComboboxEnter(e: KeyboardEvent): void {
-  const input = (e.target as HTMLInputElement)?.value;
-  if (!input?.trim() && searchTerms.value.length > 0) {
-    e.preventDefault();
-    doSearch();
-  }
+function removeTerm(index: number): void {
+  searchTerms.value.splice(index, 1);
 }
+
+function clearSearch(): void {
+  searchTerms.value = [];
+  draft.value = "";
+}
+
+function onSearchEnter(): void {
+  const value = draft.value.trim();
+  if (value) {
+    if (!searchTerms.value.includes(value)) searchTerms.value.push(value);
+    draft.value = "";
+    return;
+  }
+  if (searchTerms.value.length) doSearch();
+}
+
+/** Backspace com o campo vazio apaga o último termo, como num campo de tags. */
+function onSearchBackspace(): void {
+  if (draft.value) return;
+  searchTerms.value.pop();
+}
+
+function openHistory(): void {
+  if (!searchHistory.value.length) return;
+  historyOpen.value = true;
+  positionHistory();
+}
+
+// A lista sai num Teleport para não ser cortada pelo cabeçalho do módulo, então
+// a posição é calculada à mão a partir do retângulo do campo.
+function positionHistory(): void {
+  requestAnimationFrame(() => {
+    const pop = historyRef.value;
+    const box = searchBoxRef.value;
+    if (!pop || !box) return;
+    const r = box.getBoundingClientRect();
+    pop.style.top = `${r.bottom + 4}px`;
+    pop.style.left = `${r.left}px`;
+    pop.style.width = `${r.width}px`;
+  });
+}
+
+function onDocPointerDown(e: MouseEvent): void {
+  if (!historyOpen.value) return;
+  const target = e.target as Node;
+  if (searchBoxRef.value?.contains(target)) return;
+  if (historyRef.value?.contains(target)) return;
+  historyOpen.value = false;
+}
+
+// Cada chip que entra ou sai muda a altura do campo — a lista tem de acompanhar.
+// A contagem é a fonte: `watch` sobre o ref do array não vê push nem splice.
+watch([() => searchTerms.value.length, draft], () => {
+  if (historyOpen.value) positionHistory();
+});
 
 async function searchByReference(q: string): Promise<BibleSearchResult[]> {
   const refMatch = q.match(/^(\d?\s*[a-zA-Z\s]+?)\s+(\d+)(?:[\s:]+(\d+))?$/);
@@ -439,6 +520,8 @@ function openInBible(): void {
 
 function close(): void {
   searchTerms.value = [];
+  draft.value = "";
+  historyOpen.value = false;
   results.value = [];
   selectedIndex.value = 0;
 }
@@ -464,6 +547,7 @@ useBroadcastListener(BROADCAST_TYPE.MODULE_RIBBON_ACTION, (payload: unknown) => 
 });
 
 onMounted(async () => {
+  document.addEventListener("mousedown", onDocPointerDown, true);
   await loadBooks();
   await loadVersions();
   const savedVersion = $userdata.get("modules.bible_search.version", null);
@@ -471,6 +555,8 @@ onMounted(async () => {
     selectedVersionId.value = savedVersion as number;
   }
 });
+
+onUnmounted(() => document.removeEventListener("mousedown", onDocPointerDown, true));
 </script>
 
 <style scoped>
@@ -482,7 +568,97 @@ onMounted(async () => {
   margin-top: 10px;
 }
 .bs-search-input {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-3);
   flex: 1;
+  min-width: 0;
+  min-height: var(--lj-ui-h-lg);
+  padding: 2px var(--lj-space-4);
+  background: var(--lj-surface-bg);
+  border: var(--lj-ui-border);
+  border-radius: var(--lj-ui-radius);
+  color: var(--lj-text);
+  cursor: text;
+}
+.bs-search-input:focus-within {
+  border-color: var(--lj-ui-accent);
+  box-shadow: var(--lj-ui-focus);
+}
+.bs-search-input__icon {
+  color: var(--lj-text-subtle);
+  flex-shrink: 0;
+}
+.bs-search-input__terms {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--lj-space-2);
+  flex: 1;
+  min-width: 0;
+  padding-block: 2px;
+}
+.bs-search-input__field {
+  flex: 1;
+  min-width: 80px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+.bs-search-input__field::placeholder {
+  color: var(--lj-text-subtle);
+}
+.bs-search-input__clear {
+  display: inline-flex;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--lj-text-subtle);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.bs-search-input__clear:hover {
+  color: var(--lj-text);
+}
+.bs-history {
+  position: fixed;
+  z-index: var(--lj-z-popup);
+  max-height: 280px;
+  overflow-y: auto;
+  padding: var(--lj-space-1);
+  font-size: var(--lj-text-base);
+}
+.bs-history__item {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-3);
+  min-height: var(--lj-ui-h-md);
+  padding-inline: var(--lj-space-3);
+  border-radius: var(--lj-radius-xs);
+  color: var(--lj-text);
+  cursor: pointer;
+}
+.bs-history__item:hover {
+  background: var(--lj-surface-bg-hover);
+}
+.bs-history__item--active {
+  background: var(--lj-ui-accent-soft);
+}
+.bs-history__label {
+  flex: 1;
+  min-width: 0;
+}
+.bs-history__remove {
+  display: inline-flex;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
 }
 .bs-version-select {
   width: 200px;
@@ -517,13 +693,13 @@ onMounted(async () => {
   background: var(--lj-hover-bg);
 }
 .bs-result-item--active {
-  background: rgba(27, 79, 138, 0.12);
-  border-left: 3px solid var(--lj-navy);
+  background: var(--lj-ui-accent-soft);
+  border-left: 3px solid var(--lj-ui-accent);
 }
 .bs-result-ref {
   font-weight: 600;
   font-size: 13px;
-  color: var(--lj-navy);
+  color: var(--lj-ui-accent-text);
   margin-bottom: 2px;
 }
 .bs-result-preview {
@@ -545,7 +721,7 @@ onMounted(async () => {
 .bs-verse-ref {
   font-size: 14px;
   font-weight: 600;
-  color: var(--lj-navy);
+  color: var(--lj-ui-accent-text);
   margin-bottom: 16px;
 }
 .bs-verse-text {
@@ -573,5 +749,6 @@ onMounted(async () => {
   align-items: center;
   justify-content: center;
   gap: 8px;
+  color: var(--lj-ui-accent-text);
 }
 </style>

@@ -1,6 +1,6 @@
 import { computed, type ComputedRef } from "vue";
 import { useI18n } from "vue-i18n";
-import { useDisplay } from "vuetify";
+import { useViewport } from "@/composables/useViewport";
 import Media from "@/composables/useMedia";
 import { useAudioPlayback } from "@/composables/useAudioPlayback";
 import type { AudioPlayback } from "@/composables/useAudioPlayback";
@@ -75,7 +75,7 @@ export function usePlayerState(): {
   goToSlide: (index: number) => void;
 } {
   const { t }     = useI18n();
-  const { width } = useDisplay();
+  const { width } = useViewport();
   const audio     = useAudioPlayback();
 
   const media   = computed<Record<string, unknown>>(() => Modules.get("media") as Record<string, unknown>);

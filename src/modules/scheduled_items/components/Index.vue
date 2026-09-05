@@ -52,7 +52,7 @@
       </aside>
 
       <!-- Calendário -->
-      <div class="si-cal" @click.capture="onCalendarCaptureClick">
+      <div class="si-cal">
         <div class="si-cal-toolbar">
           <LjButton
             size="md"
@@ -100,8 +100,7 @@
             {{ calTitle }}
           </LjButton>
         </div>
-        <v-calendar
-          ref="calendarRef"
+        <LjCalendar
           :model-value="focusDate"
           :type="calendarType"
           :events="calendarEvents"
@@ -110,12 +109,10 @@
           :max-events="5"
           :event-height="calendarType === 'week' ? 20 : 18"
           :event-more-text="moreEventsText"
-          :event-timed="() => false"
-          :interval-height="calendarType === 'week' ? 0 : 48"
-          :interval-count="calendarType === 'week' ? 1 : 24"
           :locale="calLocale"
-          @click:day="(e, d) => onDayClick(d, e)"
-          @click:event="(_e, d) => onEventClick(d)"
+          @day-click="onDayClick"
+          @event-click="onEventClick"
+          @more-click="onMoreClick"
         />
       </div>
     </div>
@@ -314,12 +311,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import Icon from "@/components/Icon.vue";
-import { LjButton, LjDialog, LjField, LjInput } from "@/components/ui";
+import { LjButton, LjCalendar, LjDialog, LjField, LjInput } from "@/components/ui";
+import type {
+  LjCalendarDayClick,
+  LjCalendarEventClick,
+  LjCalendarMoreClick,
+} from "@/components/ui";
 import $liturgy from "@/helpers/Liturgy";
 import Platform from "@/helpers/Platform";
 import $alert from "@/helpers/Alert";
@@ -372,11 +374,6 @@ const autoCategoryColor = computed(() => {
   const cat = categories.value.find((c) => String(c.id) === String(autoPopulateTargetCat.value));
   return (cat?.cor as string) || (cat?.color as string) || "#1976d2";
 });
-
-/** Flag para distinguir clique em evento (.v-event) vs espaço vazio no dia. */
-const _lastClickWasEvent = ref(false);
-const _lastClickWasMore = ref(false);
-const _lastClickedEventId = ref("");
 
 const entryKindIcon = computed(
   () =>
@@ -622,18 +619,11 @@ function categoryName(catId?: string | number): string {
 
 // ─── Calendário ──────────────────────────────────────────────────────
 
-const calendarRef = ref<Record<string, unknown> | null>(null);
-
 const calLocale = computed(() => (locale.value === "es" ? "es" : "pt-BR"));
 
 /** Mês/ano em foco (YYYY-MM-DD — o dia 1º do mês navegado). */
 const focusDate = ref(new Date().toISOString().slice(0, 10));
 const calendarType = ref<"month" | "week">("month");
-
-// Re-stampa data-date quando o tipo ou data do calendário muda.
-watch([calendarType, focusDate], () => {
-  nextTick(() => _stampDataDates());
-});
 
 const yearMonthMenuOpen = ref(false);
 const now = new Date();
@@ -727,37 +717,6 @@ const calendarEvents = computed<CalEvent[]>(() => {
   });
 });
 
-/** Capture phase: detecta clique em .v-event-more, .v-event ou espaço vazio. */
-function onCalendarCaptureClick(e: MouseEvent): void {
-  const target = (e.target as HTMLElement) || null;
-
-  // 1) "+N more" → muda para semana
-  if (target?.closest?.(".v-event-more")) {
-    _lastClickWasEvent.value = false;
-    _lastClickWasMore.value = true;
-    _lastClickedEventId.value = "";
-    return;
-  }
-
-  // 2) Evento (.v-event) → guarda o ID do item correspondente
-  const eventEl = target?.closest?.(".v-event");
-  if (eventEl) {
-    _lastClickWasEvent.value = true;
-    _lastClickWasMore.value = false;
-    const eventText =
-      (eventEl.querySelector(".v-event-summary") as HTMLElement)?.textContent?.trim() || "";
-    // Encontra o calendarEvent pelo name (que é o que o VCalendar mostra)
-    const match = calendarEvents.value.find((c) => c.name === eventText || c.title === eventText);
-    _lastClickedEventId.value = match ? String(match.id) : "";
-    return;
-  }
-
-  // 3) Espaço vazio → adição
-  _lastClickWasEvent.value = false;
-  _lastClickWasMore.value = false;
-  _lastClickedEventId.value = "";
-}
-
 /** Muda para modo semana focando no domingo da semana da data informada. */
 function switchToWeek(dateStr: string): void {
   const d = new Date(`${dateStr}T00:00:00`);
@@ -767,70 +726,18 @@ function switchToWeek(dateStr: string): void {
   calendarType.value = "week";
 }
 
-function onDayClick(args: unknown, _nativeEvent?: Event): void {
-  _stampDataDates();
-
-  // Extrai a data dos args de @click:day (sempre confiável).
-  const a = (args || {}) as Record<string, unknown>;
-  let date: string | undefined;
-  const raw1 = a.date;
-  const raw2 = (a.day as Record<string, unknown> | undefined)?.date;
-  if (raw1 != null) {
-    date = raw1 instanceof Date ? raw1.toISOString().slice(0, 10) : String(raw1);
-  } else if (raw2 != null) {
-    date = raw2 instanceof Date ? raw2.toISOString().slice(0, 10) : String(raw2);
-  }
-  if (!date) date = new Date().toISOString().slice(0, 10);
-
-  // "+N more" → muda para semana da data clicada.
-  if (_lastClickWasMore.value) {
-    _lastClickWasMore.value = false;
-    _lastClickWasEvent.value = false;
-    switchToWeek(date);
-    return;
-  }
-
-  // Clique em evento → busca item existente e abre edição.
-  // Espaço vazio → abre criação (forceCreate = true).
-  const wasEventClick = _lastClickWasEvent.value;
-  const clickedEventId = _lastClickedEventId.value;
-  _lastClickWasEvent.value = false;
-  _lastClickWasMore.value = false;
-  _lastClickedEventId.value = "";
-  openEntryFor(
-    date,
-    clickedEventId ? undefined : undefined,
-    clickedEventId || undefined,
-    !wasEventClick
-  );
+/** Espaço vazio do dia — sempre criação, mesmo que o dia já tenha agendamento. */
+function onDayClick({ date }: LjCalendarDayClick): void {
+  openEntryFor(date, undefined, undefined, true);
 }
 
-function onEventClick(native: {
-  event?: {
-    input?: ScheduledItem;
-    start?: string;
-  };
-}): void {
-  const input = native?.event?.input as ScheduledItem | undefined;
-  if (!input) return;
-  selectedCategoryId.value = input.categoria as string | number;
-  openEntryFor(String(input.data), input.categoria as string | number);
+function onEventClick({ event, date }: LjCalendarEventClick<CalEvent>): void {
+  selectedCategoryId.value = event.categoria as string | number;
+  openEntryFor(date, undefined, String(event.id), false);
 }
 
-/**
- * Grava data-date em todas as células do dia do calendário.
- * O VCalendar não atribui data-date nativamente — usamos days do ref.
- */
-function _stampDataDates(): void {
-  const cal = calendarRef.value as Record<string, unknown> | null;
-  const days = (cal?.days as Array<{ date: string }> | undefined) || [];
-  if (!days.length) return;
-  const cells = document.querySelectorAll(".v-calendar-weekly__day, .v-calendar-daily__day");
-  cells.forEach((cell, i) => {
-    if (i < days.length && !cell.getAttribute("data-date")) {
-      cell.setAttribute("data-date", days[i].date);
-    }
-  });
+function onMoreClick({ date }: LjCalendarMoreClick<CalEvent>): void {
+  switchToWeek(date);
 }
 
 function openEntryFor(
@@ -1108,10 +1015,6 @@ function removeEntry(): void {
 }
 .si-cal-toolbar .si-cal-title {
   font-weight: var(--lj-weight-semibold);
-}
-:deep(.v-event-more) {
-  cursor: pointer;
-  font-weight: var(--lj-weight-medium);
 }
 
 /* ── Controles nativos ainda sem primitivo ─────────────────────────────

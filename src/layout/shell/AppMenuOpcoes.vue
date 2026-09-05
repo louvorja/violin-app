@@ -693,7 +693,7 @@
         </div>
 
         <button type="button" class="opt-btn opt-btn--ghost" @click="restoreTextFormat">
-          <Icon :icon="ICONS.ACTIONS.REFRESH" size="14" class="mr-1" />
+          <Icon :icon="ICONS.ACTIONS.REFRESH" size="14" />
           {{ $t("options.slides.restore") }}
         </button>
       </div>
@@ -1134,13 +1134,12 @@ import { getSetting, saveSetting } from "@/helpers/SettingsStorage";
 import Broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useI18n } from "vue-i18n";
-import { useTheme } from "vuetify";
+import { useAppTheme } from "@/composables/useAppTheme";
 import { useDisplays } from "@/composables/useDisplays";
 import WebDisplays from "@/helpers/projection/WebDisplays";
 import MonitorSelect from "@/components/inputs/MonitorSelect.vue";
 import SelectFont from "@/components/inputs/SelectFont.vue";
 import MonitorShape from "@/components/MonitorShape.vue";
-import $appdata from "@/helpers/AppData";
 import $userdata from "@/helpers/UserData";
 import Platform from "@/helpers/Platform";
 import Telemetry from "@/helpers/Telemetry";
@@ -1148,6 +1147,7 @@ import { ICONS } from "@/config/Icons";
 import { KEYS } from "@/constants/UserDataKeys";
 import { MAIN_BACKGROUND_ID, Settings } from "@/types/Settings";
 import { THEMES, COLOR_THEMES } from "@/config/Theme";
+import { isThemeId, THEME_IDS } from "@/config/Themes";
 import { SLIDE_STYLE_DEFAULT } from "@/config/SlideStyle";
 import { estiloDeFundo } from "@/helpers/BackgroundStyle";
 import { FONT } from "@/config/Fonts";
@@ -1180,7 +1180,7 @@ onMounted(() => {
 });
 
 const { t, locale } = useI18n();
-const theme = useTheme();
+const { setTheme } = useAppTheme();
 const {
   displays,
   roles,
@@ -1202,10 +1202,7 @@ const autoFullscreen = computed(() =>
 );
 
 const themes: ComputedRef<ThemeOption[]> = computed(() =>
-  Object.keys(theme.themes.value).map((id) => ({
-    id,
-    label: t(`options.general.themes.${id}`),
-  }))
+  THEME_IDS.map((id) => ({ id, label: t(`options.general.themes.${id}`) }))
 );
 
 function getUserData<T = unknown>(key: string, defaultValue?: T): T {
@@ -1682,12 +1679,8 @@ function getPref(feature: string): string {
 }
 
 function changeTheme(selectedTheme: string): void {
-  saveUserData(KEYS.OPTIONS.THEME, selectedTheme);
-  theme.change(selectedTheme);
-  document.documentElement.dataset.theme = selectedTheme;
-  const isDark = selectedTheme === "dark";
-  $appdata.set(KEYS.SHELL.IS_DARK, isDark);
-  if (!isDark) $userdata.set(KEYS.OPTIONS.THEME_LAST_LIGHT, selectedTheme);
+  if (!isThemeId(selectedTheme)) return;
+  setTheme(selectedTheme);
 }
 
 function changeLanguage(lang: string): void {

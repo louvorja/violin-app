@@ -1,43 +1,32 @@
 <template>
-  <v-dialog v-model="internalShow" max-width="420">
-    <v-card>
-      <v-toolbar density="compact" color="primary" flat>
-        <v-toolbar-title>{{ t("library.save_title") }}</v-toolbar-title>
-        <LjButton variant="ghost" icon="None" icon-only @click="internalShow = false">
-          <Icon :icon="ICONS.ACTIONS.CLOSE" />
-        </LjButton>
-      </v-toolbar>
-      <v-card-text class="pt-4">
-        <v-text-field
-          v-model="name"
-          :label="t('library.save_name_label')"
-          :placeholder="t('library.save_name_placeholder')"
-          :error-messages="nameError"
-          variant="outlined"
-          density="compact"
-          autofocus
-          hide-details="auto"
-          class="mb-2"
-          @keyup.enter="doSave"
-        />
-      </v-card-text>
-      <v-card-actions>
-        <v-spacer />
-        <LjButton variant="ghost" @click="internalShow = false">
-          {{ t("actions.cancel") }}
-        </LjButton>
-        <LjButton variant="primary" :disabled="!name.trim()" @click="doSave">
-          <Icon :icon="ICONS.ACTIONS.SAVE" size="16" class="mr-1" />
-          {{ t("actions.save") }}
-        </LjButton>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
+  <LjDialog v-model="internalShow" :title="t('library.save_title')" size="sm">
+    <LjField layout="column" :label="t('library.save_name_label')" :error="nameError">
+      <LjInput
+        v-model="name"
+        autofocus
+        :placeholder="t('library.save_name_placeholder')"
+        @keyup.enter="doSave"
+      />
+    </LjField>
+
+    <template #footer>
+      <LjButton variant="ghost" @click="internalShow = false">
+        {{ t("actions.cancel") }}
+      </LjButton>
+      <LjButton
+        variant="primary"
+        :icon="ICONS.ACTIONS.SAVE"
+        :disabled="!name.trim()"
+        @click="doSave"
+      >
+        {{ t("actions.save") }}
+      </LjButton>
+    </template>
+  </LjDialog>
 </template>
 
 <script setup lang="ts">
-import { LjButton } from "@/components/ui";
-import Icon from "@/components/Icon.vue";
+import { LjButton, LjDialog, LjField, LjInput } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, watch } from "vue";
 import { useI18n } from "vue-i18n";

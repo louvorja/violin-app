@@ -1,69 +1,65 @@
 <template>
-  <div class="pa-4">
-    <v-text-field
+  <div class="rm-root">
+    <LjInput
       v-model="musicSearch"
-      :label="t('components.inputs.search')"
-      :prepend-inner-icon="ICONS.ACTIONS.SEARCH"
+      size="touch"
       clearable
-      hide-details
-      density="compact"
-      variant="outlined"
+      :placeholder="t('components.inputs.search')"
+      :icon="ICONS.ACTIONS.SEARCH"
       @update:model-value="onMusicSearch"
     />
 
-    <v-list v-if="musicResults.length > 0" class="mt-2 bg-transparent">
-      <v-list-item
-        v-for="m in musicResults"
-        :key="m.id_music"
-        :title="m.name"
-        :subtitle="m.albums_names"
-        hover
-      >
-        <template #append>
-          <div class="d-flex align-center gap-3">
-            <!-- Cantada (tag=1) -->
-            <LjButton
-              variant="ghost"
-              size="lg"
-              :icon="ICONS.MUSIC.SLIDES_AUDIO"
-              icon-only
-              :title="t('ribbon.btn.sing')"
-              @click.stop="openMusic(m, 1)"
-            />
-            <!-- Instrumental (tag=2) -->
-            <LjButton
-              variant="ghost"
-              size="lg"
-              :icon="ICONS.MUSIC.SLIDES_PLAYBACK"
-              icon-only
-              :disabled="!m.has_instrumental_music"
-              :title="t('ribbon.btn.playback')"
-              @click.stop="openMusic(m, 2)"
-            />
-            <!-- Sem Áudio (tag=3) -->
-            <LjButton
-              variant="ghost"
-              size="lg"
-              :icon="ICONS.MUSIC.SLIDES_ONLY"
-              icon-only
-              :title="t('ribbon.btn.no_audio')"
-              @click.stop="openMusic(m, 3)"
-            />
-          </div>
-        </template>
-      </v-list-item>
-    </v-list>
-    <div v-else-if="musicSearch && !loadingMusics" class="text-center mt-8 text-medium-emphasis">
+    <ul v-if="musicResults.length > 0" class="rm-list">
+      <li v-for="m in musicResults" :key="m.id_music" class="rm-item">
+        <div class="rm-item__text">
+          <span class="rm-item__title lj-u-truncate">{{ m.name }}</span>
+          <span v-if="m.albums_names" class="rm-item__subtitle lj-u-truncate">
+            {{ m.albums_names }}
+          </span>
+        </div>
+        <div class="rm-item__actions">
+          <!-- Cantada (tag=1) -->
+          <LjButton
+            variant="ghost"
+            size="lg"
+            :icon="ICONS.MUSIC.SLIDES_AUDIO"
+            icon-only
+            :title="t('ribbon.btn.sing')"
+            @click.stop="openMusic(m, 1)"
+          />
+          <!-- Instrumental (tag=2) -->
+          <LjButton
+            variant="ghost"
+            size="lg"
+            :icon="ICONS.MUSIC.SLIDES_PLAYBACK"
+            icon-only
+            :disabled="!m.has_instrumental_music"
+            :title="t('ribbon.btn.playback')"
+            @click.stop="openMusic(m, 2)"
+          />
+          <!-- Sem Áudio (tag=3) -->
+          <LjButton
+            variant="ghost"
+            size="lg"
+            :icon="ICONS.MUSIC.SLIDES_ONLY"
+            icon-only
+            :title="t('ribbon.btn.no_audio')"
+            @click.stop="openMusic(m, 3)"
+          />
+        </div>
+      </li>
+    </ul>
+    <div v-else-if="musicSearch && !loadingMusics" class="rm-state lj-u-text-center lj-u-muted">
       {{ t("components.music_search.empty_search") }}
     </div>
-    <div v-else-if="loadingMusics" class="text-center mt-8">
-      <v-progress-circular indeterminate size="24" color="primary" />
+    <div v-else-if="loadingMusics" class="rm-state rm-state--loading lj-u-text-center">
+      <LjSpinner :size="24" />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { LjButton } from "@/components/ui";
+import { LjButton, LjInput, LjSpinner } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
@@ -145,7 +141,61 @@ async function openMusic(music: MusicAlbum, tag: number = 3): Promise<void> {
 </script>
 
 <style scoped>
-.gap-3 {
-  gap: 12px;
+.rm-root {
+  padding: var(--lj-space-6);
+}
+
+.rm-list {
+  margin: var(--lj-space-4) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Tela de dedo: a linha inteira é alvo, e a altura vem do conteúdo em corpo
+   de toque — não da densidade de mouse do resto do app. */
+.rm-item {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-5);
+  min-height: 56px;
+  padding: var(--lj-space-4) var(--lj-space-5);
+  border-radius: var(--lj-ui-radius);
+}
+
+.rm-item:hover {
+  background: var(--lj-surface-bg-hover);
+}
+
+.rm-item__text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--lj-space-1);
+  min-width: 0;
+}
+
+.rm-item__title {
+  color: var(--lj-text);
+  font-size: var(--lj-text-xl);
+}
+
+.rm-item__subtitle {
+  color: var(--lj-text-muted);
+  font-size: var(--lj-text-lg);
+}
+
+.rm-item__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-5);
+}
+
+.rm-state {
+  margin-top: var(--lj-space-8);
+  font-size: var(--lj-text-lg);
+}
+
+.rm-state--loading {
+  color: var(--lj-ui-accent);
 }
 </style>

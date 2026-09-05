@@ -5,52 +5,41 @@
     :style="{ minWidth: '340px' }"
     @close="close()"
   >
-    <div class="d-flex h-100">
+    <div class="ndraw-body">
       <ModuleFormatDrawer v-model="show_format" :module-id="'name_draw'" :manifest="manifest" />
 
-      <!-- Drawer direito — edição da lista de nomes a sortear -->
-      <v-navigation-drawer
-        v-model="showList"
-        temporary
-        absolute
-        :scrim="false"
-        location="end"
-        width="280"
-        class="ndraw-list-drawer"
-      >
-        <div class="ndraw-list-drawer__header">
-          <span class="ndraw-list-drawer__title">{{ t("data.list") }}</span>
-        </div>
-        <div class="ndraw-list-drawer__body">
-          <v-textarea
-            v-model="namesText"
-            :placeholder="t('inputs.names')"
-            rows="10"
-            auto-grow
-            density="compact"
-            hide-details
-            variant="outlined"
-            :disabled="running"
-          />
-          <LjButton
-            variant="primary"
-            size="sm"
-            class="mt-2"
-            :disabled="running"
-            :icon="ICONS.UI.CHECK"
-            @click="applyList"
-          >
-            {{ t("actions.apply") }}
-          </LjButton>
-          <div v-if="running" class="ndraw-list-drawer__lock text-caption text-medium-emphasis">
-            {{ t("data.locked") }}
+      <!-- Drawer direito — edição da lista de nomes a sortear.
+           O painel é permanente dentro de um host absoluto para sobrepor a
+           prévia em vez de estreitá-la: a prévia é WYSIWYG e o tamanho da
+           letra projetada vem da largura dela. -->
+      <div class="ndraw-list-host">
+        <LjDrawer v-model="showList" side="right" :width="280" :title="t('data.list')">
+          <div class="ndraw-list-drawer__body">
+            <LjTextarea
+              v-model="namesText"
+              :placeholder="t('inputs.names')"
+              :rows="10"
+              :disabled="running"
+            />
+            <LjButton
+              variant="primary"
+              size="sm"
+              :disabled="running"
+              :icon="ICONS.UI.CHECK"
+              @click="applyList"
+            >
+              {{ t("actions.apply") }}
+            </LjButton>
+            <div v-if="running" class="lj-u-caption lj-u-muted">
+              {{ t("data.locked") }}
+            </div>
           </div>
-        </div>
-      </v-navigation-drawer>
+        </LjDrawer>
+      </div>
 
       <!-- Preview WYSIWYG: mesmo componente da projeção /projection/module?module=name_draw.
            O que aparece aqui é exatamente o que será projetado. -->
-      <div class="flex-grow-1" style="min-width: 0; position: relative">
+      <div class="ndraw-preview">
         <div style="position: absolute; inset: 0">
           <NameDrawProjection
             :text="current || ''"
@@ -63,21 +52,15 @@
 
     <!-- Rodapé — nomes sorteados sempre visíveis -->
     <template #footer>
-      <div v-if="drawn.length" class="ndraw-fs-footer" style="gap: 6px">
-        <span class="text-caption text-medium-emphasis">{{ t("data.drawn") }}:</span>
-        <v-chip-group>
-          <v-chip v-for="n in drawn" :key="n" size="large" variant="tonal" :color="COLORS.PRIMARY">
-            {{ n }}
-          </v-chip>
-        </v-chip-group>
-        <div class="text-caption text-medium-emphasis">
-          <v-progress-linear
-            color="primary"
-            class="ndraw-fs-footer-progress"
-            :model-value="progressPercent"
-            :height="17"
-            rounded
-          />
+      <div v-if="drawn.length" class="ndraw-fs-footer">
+        <span class="lj-u-caption lj-u-muted">{{ t("data.drawn") }}:</span>
+        <div class="ndraw-fs-chips">
+          <LjChip v-for="n in drawn" :key="n" variant="primary">{{ n }}</LjChip>
+        </div>
+        <div class="lj-u-caption lj-u-muted">
+          <div class="ndraw-fs-footer-progress">
+            <LjProgress :value="progressPercent" :height="17" />
+          </div>
           {{ t("data.remaining") }}: {{ pool.length }} / {{ names.length }}
         </div>
       </div>
@@ -86,7 +69,7 @@
 </template>
 
 <script setup>
-import { LjButton } from "@/components/ui";
+import { LjButton, LjChip, LjDrawer, LjProgress, LjTextarea } from "@/components/ui";
 import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
@@ -96,7 +79,6 @@ import { useModuleProjection } from "@/composables/useModuleProjection";
 import { useModuleFormat } from "@/composables/useModuleFormat";
 import { ICONS } from "@/config/Icons";
 import { KEYS } from "@/constants/UserDataKeys";
-import { COLORS } from "@constants/Colors";
 import NameDrawProjection from "./NameDrawProjection.vue";
 
 const { show_format } = useModuleFormat("name_draw", manifest);
@@ -241,35 +223,43 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 
-.ndraw-list-drawer {
-  border-left: 1px solid var(--lj-surface-border);
-  background: var(--lj-surface-bg);
-  overflow: clip;
-}
-.ndraw-list-drawer__header {
+.ndraw-body {
+  position: relative;
   display: flex;
-  align-items: center;
-  padding: 4px 8px 4px 12px;
-  border-bottom: 1px solid var(--lj-surface-border);
-  background: var(--lj-surface-bg-soft, #eee);
+  height: 100%;
 }
-.ndraw-list-drawer__title {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  color: var(--lj-text-muted, #666);
+
+.ndraw-preview {
+  position: relative;
+  flex-grow: 1;
+  min-width: 0;
+}
+
+.ndraw-list-host {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
 }
 .ndraw-list-drawer__body {
-  padding: 12px;
-}
-.ndraw-list-drawer__lock {
-  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--lj-space-4);
+  padding: var(--lj-space-5);
 }
 
 .ndraw-fs-footer {
   display: flex;
   flex-direction: column;
+  gap: var(--lj-space-3);
+}
+.ndraw-fs-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lj-space-2);
 }
 .ndraw-fs-footer-progress {
   width: 400px;

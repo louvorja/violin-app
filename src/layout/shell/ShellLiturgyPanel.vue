@@ -29,7 +29,7 @@
 
     <div v-if="!collapsed" class="liturgy-panel-body">
       <div v-if="items.length === 0" class="liturgy-empty">
-        <Icon :icon="ICONS.CALENDAR.BLANK" size="32" class="mb-2" />
+        <Icon :icon="ICONS.CALENDAR.BLANK" size="32" class="liturgy-empty-icon" />
         <span>{{ $t("shell.liturgy_empty") }}</span>
         <button type="button" class="liturgy-add-btn" @click="openLiturgy">
           <Icon :icon="ICONS.ACTIONS.ADD" size="14" />
@@ -240,6 +240,10 @@ onMounted(() => {
   font-size: var(--lj-text-base);
   color: var(--lj-text-muted);
   gap: var(--lj-space-1);
+}
+
+.liturgy-empty-icon {
+  margin-bottom: var(--lj-space-4);
 }
 
 .liturgy-add-btn {

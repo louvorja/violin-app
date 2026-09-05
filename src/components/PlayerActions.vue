@@ -2,7 +2,7 @@
   <div class="player-actions">
     <!-- Modo de reprodução (cantada / instrumental / sem áudio / letra) -->
     <LjMenu
-      v-if="location !== 'fullscreen' && display.width.value > 350"
+      v-if="location !== 'fullscreen' && viewport.width.value > 350"
       :items="modeItems"
       side="bottom"
       align="end"
@@ -107,7 +107,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
-import { useDisplay } from "vuetify";
+import { useViewport } from "@/composables/useViewport";
 import LScreenBtn from "@/components/buttons/Screen.vue";
 import { LjButton, LjMenu, type LjMenuItem } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
@@ -148,7 +148,7 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
-const display = useDisplay();
+const viewport = useViewport();
 
 /**
  * `menu_modes` carrega a cor no vocabulário do Vuetify (info/success/error).
@@ -232,7 +232,7 @@ const compactItems = computed<LjMenuItem[]>(() => {
     action: button.click,
   }));
 
-  if (display.width.value <= 350) {
+  if (viewport.width.value <= 350) {
     items.push({ separator: true });
     for (const item of props.menuModes) {
       // O rótulo fica: quando o item está marcado o LjMenu troca o ícone pela

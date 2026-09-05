@@ -59,7 +59,7 @@
       </div>
 
       <div v-if="playlist.songs.length === 0" class="playlist-songs-empty">
-        <Icon :icon="ICONS.MUSIC.NO_AUDIO" size="32" class="mb-2" />
+        <Icon :icon="ICONS.MUSIC.NO_AUDIO" size="32" />
         <div>{{ t("playlists.no_songs") }}</div>
       </div>
     </div>
@@ -74,32 +74,26 @@
         · {{ formatDuration(getPlaylistDuration(playlist)) }}
       </div>
       <div class="playlist-songs-options">
-        <v-tooltip :text="t('playlists.shuffle')" location="top">
-          <template #activator="{ props: tp }">
-            <button
-              type="button"
-              class="playlist-songs-option-btn"
-              :class="{ 'playlist-songs-option-btn--active': shuffleEnabled }"
-              v-bind="tp"
-              @click="toggleShuffle"
-            >
-              <Icon :icon="ICONS.PLAYER.SHUFFLE" size="18" />
-            </button>
-          </template>
-        </v-tooltip>
-        <v-tooltip :text="t('playlists.repeat')" location="top">
-          <template #activator="{ props: tp }">
-            <button
-              type="button"
-              class="playlist-songs-option-btn"
-              :class="{ 'playlist-songs-option-btn--active': repeatEnabled }"
-              v-bind="tp"
-              @click="toggleRepeat"
-            >
-              <Icon :icon="ICONS.PLAYER.REPEAT" size="18" />
-            </button>
-          </template>
-        </v-tooltip>
+        <LjTooltip :text="t('playlists.shuffle')" side="top">
+          <button
+            type="button"
+            class="playlist-songs-option-btn"
+            :class="{ 'playlist-songs-option-btn--active': shuffleEnabled }"
+            @click="toggleShuffle"
+          >
+            <Icon :icon="ICONS.PLAYER.SHUFFLE" size="18" />
+          </button>
+        </LjTooltip>
+        <LjTooltip :text="t('playlists.repeat')" side="top">
+          <button
+            type="button"
+            class="playlist-songs-option-btn"
+            :class="{ 'playlist-songs-option-btn--active': repeatEnabled }"
+            @click="toggleRepeat"
+          >
+            <Icon :icon="ICONS.PLAYER.REPEAT" size="18" />
+          </button>
+        </LjTooltip>
       </div>
       <button type="button" class="playlist-songs-play-btn" @click="playAll">
         <Icon :icon="ICONS.PLAYER.PLAYER" size="18" />
@@ -111,6 +105,7 @@
 
 <script setup lang="ts">
 import Icon from "@/components/Icon.vue";
+import { LjTooltip } from "@/components/ui";
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import DateTime from "@/helpers/DateTime";
@@ -299,6 +294,7 @@ function playAll(): void {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: var(--lj-space-4);
   padding: var(--lj-space-8) var(--lj-space-4);
   color: var(--lj-text-muted);
   font-size: var(--lj-text-sm);

@@ -87,33 +87,21 @@
       :update-category-color="updateCategoryColor"
     />
 
-    <v-dialog v-model="copyDialog" max-width="400">
-      <v-card>
-        <v-card-title>{{ t("copy.title") }}</v-card-title>
-        <v-card-text>
-          <p class="text-body-2 mb-3">{{ t("copy.description") }}</p>
-          <v-select
-            v-model="copySourceDay"
-            :items="copyDayOptions"
-            item-title="label"
-            item-value="value"
-            :label="t('copy.select_label')"
-            hide-details
-          />
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <LjButton variant="ghost" @click="copyDialog = false">
-            <Icon :icon="ICONS.ACTIONS.CLOSE" size="16" class="mr-1" />
-            {{ t("copy.cancel") }}
-          </LjButton>
-          <LjButton variant="primary" @click="doCopyLiturgy">
-            <Icon :icon="ICONS.ACTIONS.COPY" size="16" class="mr-1" />
-            {{ t("copy.confirm") }}
-          </LjButton>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <LjDialog v-model="copyDialog" :title="t('copy.title')" size="sm">
+      <p class="liturgy-copy-desc">{{ t("copy.description") }}</p>
+      <LjField layout="column" :label="t('copy.select_label')">
+        <LjSelect v-model="copySourceDay" :items="copyDayOptions" />
+      </LjField>
+
+      <template #footer>
+        <LjButton variant="ghost" :icon="ICONS.ACTIONS.CLOSE" @click="copyDialog = false">
+          {{ t("copy.cancel") }}
+        </LjButton>
+        <LjButton variant="primary" :icon="ICONS.ACTIONS.COPY" @click="doCopyLiturgy">
+          {{ t("copy.confirm") }}
+        </LjButton>
+      </template>
+    </LjDialog>
 
     <LiturgySaveDialog v-model="saveDialog" :items="safeItems" @saved="onLiturgySaved" />
     <LiturgyLoadDialog v-model="loadDialog" :items="safeItems" @loaded="onLiturgyLoaded" />
@@ -129,7 +117,7 @@
 </template>
 
 <script setup lang="ts">
-import { LjButton } from "@/components/ui";
+import { LjButton, LjDialog, LjField, LjSelect } from "@/components/ui";
 import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
@@ -616,6 +604,12 @@ function onDragLeaveCustom(e: DragEvent) {
   display: flex;
   overflow: hidden;
   min-height: 0;
+}
+
+/* O corpo do diálogo já tem folga própria; ao parágrafo cabe só a distância
+   até o campo que vem embaixo. */
+.liturgy-copy-desc {
+  margin: 0 0 var(--lj-space-5);
 }
 
 .liturgy-drop-overlay {

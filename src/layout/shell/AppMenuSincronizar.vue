@@ -42,536 +42,506 @@
     </section>
 
     <!-- Abas: Coletâneas | Bíblia | Armazenamento -->
+    <!-- O traço sob as abas vem do próprio LjTabs; não há divisória extra. -->
     <template v-if="isDesktop">
-      <v-tabs v-model="activeTab" density="compact" color="primary" class="mt-2">
-        <v-tab value="collections">
-          <Icon :icon="ICONS.CUSTOM.LJA_COLOR" class="mr-2" />
-          {{ $t("options.collections_download.title") }}
-        </v-tab>
-        <v-tab value="bible">
-          <Icon :icon="ICONS.BIBLE.BIBLE" class="mr-2" />
-          {{ $t("options.bible_download.title") }}
-        </v-tab>
-        <v-tab value="storage">
-          <Icon :icon="ICONS.UI.HARDDISK" class="mr-2" />
-          {{ $t("options.storage.title") }}
-        </v-tab>
-      </v-tabs>
+      <LjTabs v-model="activeTab" :tabs="abas" class="sinc-tabs" />
 
-      <v-divider />
-
-      <v-window v-model="activeTab" class="mt-5">
+      <div class="sinc-panes">
         <!-- Coletâneas -->
-        <v-window-item value="collections">
-          <section class="opt-section">
-            <div class="opt-section-top">
-              <p class="opt-hint">{{ $t("options.collections_download.hint") }}</p>
+        <section
+          v-if="abaIniciada('collections')"
+          v-show="activeTab === 'collections'"
+          class="opt-section"
+        >
+          <div class="opt-section-top">
+            <p class="opt-hint">{{ $t("options.collections_download.hint") }}</p>
 
-              <div class="opt-stats opt-stats--compact">
-                <div class="opt-stat opt-stat--total">
-                  <span class="opt-stat-label">
-                    {{ $t("options.collections_download.disk_usage") }}
-                  </span>
-                  <span class="opt-stat-value">
-                    <template v-if="diskUsageLoading">
-                      {{ $t("options.collections_download.disk_usage_loading") }}
-                    </template>
-                    <template v-else>
-                      {{
-                        $t("options.collections_download.disk_usage_detail", {
-                          size: sync.humanSize(diskUsage.bytes),
-                          files: diskUsage.fileCount,
-                          albums: diskUsage.albumCount,
-                          hymnal: diskUsage.hymnalCached
-                            ? $t("options.collections_download.disk_usage_hymnal")
-                            : "",
-                        })
-                      }}
-                    </template>
-                  </span>
+            <div class="opt-stats opt-stats--compact">
+              <div class="opt-stat opt-stat--total">
+                <span class="opt-stat-label">
+                  {{ $t("options.collections_download.disk_usage") }}
+                </span>
+                <span class="opt-stat-value">
+                  <template v-if="diskUsageLoading">
+                    {{ $t("options.collections_download.disk_usage_loading") }}
+                  </template>
+                  <template v-else>
+                    {{
+                      $t("options.collections_download.disk_usage_detail", {
+                        size: sync.humanSize(diskUsage.bytes),
+                        files: diskUsage.fileCount,
+                        albums: diskUsage.albumCount,
+                        hymnal: diskUsage.hymnalCached
+                          ? $t("options.collections_download.disk_usage_hymnal")
+                          : "",
+                      })
+                    }}
+                  </template>
+                </span>
+              </div>
+            </div>
+
+            <div class="opt-folder-actions" style="margin-bottom: 8px">
+              <button
+                type="button"
+                class="opt-btn opt-btn--small"
+                :disabled="downloading || preparing || loadingCategories || scanningCache"
+                @click="selectAll"
+              >
+                {{ $t("options.collections_download.select_all") }}
+              </button>
+              <button
+                type="button"
+                class="opt-btn opt-btn--small"
+                :disabled="downloading || preparing || scanningCache"
+                @click="deselectAll"
+              >
+                {{ $t("options.collections_download.clear") }}
+              </button>
+              <button
+                type="button"
+                class="opt-btn opt-btn--small"
+                :disabled="loadingCategories || downloading || preparing || scanningCache"
+                @click="refreshCatalog"
+              >
+                {{
+                  loadingCategories
+                    ? $t("options.collections_download.loading")
+                    : $t("options.collections_download.refresh_catalog")
+                }}
+              </button>
+              <span
+                v-if="catalogTimestamp"
+                class="opt-hint"
+                style="margin: 0 0 0 auto; align-self: center"
+              >
+                {{ $t("options.collections_download.last_update", { time: catalogTimestamp }) }}
+              </span>
+            </div>
+          </div>
+
+          <div class="opt-download-scroll">
+            <div v-if="loadingCategories && !categories.length" class="opt-folder-path">
+              {{ $t("options.collections_download.loading") }}
+            </div>
+
+            <div v-else-if="scanningCache" class="opt-folder-path">
+              {{
+                $t("options.collections_download.scanning_cache", {
+                  done: scanCacheDone,
+                  total: scanCacheTotal,
+                })
+              }}
+            </div>
+
+            <div v-else class="opt-row opt-row--col">
+              <div class="opt-download-list">
+                <!-- Hinário Adventista (categoria especial) -->
+                <div v-if="hymnalIds.length" class="opt-cat opt-cat--special">
+                  <label class="opt-checkbox opt-cat-header">
+                    <input
+                      type="checkbox"
+                      :checked="selectedHymnal"
+                      :disabled="downloading || preparing || scanningCache || saving"
+                      @change="onHymnalToggle(($event.target as HTMLInputElement).checked)"
+                    />
+                    <strong>{{ $t("options.collections_download.hymnal") }}</strong>
+                    <small class="opt-download-count">
+                      · {{ hymnalIds.length }} {{ $t("options.collections_download.songs") }}
+                    </small>
+                  </label>
+                </div>
+
+                <!-- Hinário 1996 (visível apenas se habilitado nas opções de álbuns) -->
+                <div
+                  v-if="hymnal1996Enabled && hymnal1996Ids.length"
+                  class="opt-cat opt-cat--special"
+                >
+                  <label class="opt-checkbox opt-cat-header">
+                    <input
+                      type="checkbox"
+                      :checked="selectedHymnal1996"
+                      :disabled="downloading || preparing || scanningCache || saving"
+                      @change="onHymnal1996Toggle(($event.target as HTMLInputElement).checked)"
+                    />
+                    <strong>{{ $t("options.collections_download.hymnal_1996") }}</strong>
+                    <small class="opt-download-count">
+                      · {{ hymnal1996Ids.length }} {{ $t("options.collections_download.songs") }}
+                    </small>
+                  </label>
+                </div>
+
+                <!-- Coletâneas (categorias > albums) -->
+                <div v-for="cat in categories" :key="cat.id_category" class="opt-cat">
+                  <label class="opt-checkbox opt-cat-header">
+                    <input
+                      type="checkbox"
+                      :checked="isCategoryFullySelected(cat)"
+                      :indeterminate.prop="isCategoryPartiallySelected(cat)"
+                      :disabled="downloading || preparing || scanningCache || saving"
+                      @change="toggleCategory(cat, ($event.target as HTMLInputElement).checked)"
+                    />
+                    <strong>{{ cat.name }}</strong>
+                    <small v-if="cat.albums" class="opt-download-count">
+                      · {{ cat.albums.length }} {{ $t("options.collections_download.albums") }}
+                    </small>
+                  </label>
+
+                  <div class="opt-cat-albums">
+                    <label
+                      v-for="album in cat.albums || []"
+                      :key="album.id_album"
+                      class="opt-checkbox opt-album"
+                    >
+                      <input
+                        type="checkbox"
+                        :checked="selectedAlbums.has(album.id_album)"
+                        :disabled="downloading || preparing || scanningCache || saving"
+                        @change="
+                          toggleAlbum(album.id_album, ($event.target as HTMLInputElement).checked)
+                        "
+                      />
+                      <span>{{ album.name }}</span>
+                      <small v-if="album.subtitle" class="opt-download-count">
+                        · {{ album.subtitle }}
+                      </small>
+                    </label>
+                  </div>
                 </div>
               </div>
+            </div>
+          </div>
 
+          <div class="opt-section-bottom">
+            <ProgressBar
+              v-if="preparing"
+              class="opt-row opt-row--col"
+              :done="prepareDone"
+              :total="prepareTotal"
+            >
+              <template #label>
+                {{
+                  $t("options.collections_download.preparing", {
+                    done: prepareDone,
+                    total: prepareTotal,
+                  })
+                }}
+              </template>
+            </ProgressBar>
+
+            <ProgressBar
+              v-if="downloading"
+              class="opt-row opt-row--col"
+              :done="downloadedCount"
+              :total="totalDownloads"
+              :current="currentDownloadFile"
+              :failed="failedDownloadCount"
+              :completed-msg="completedMsg"
+              show-cancel
+              :cancel-label="$t('options.collections_download.cancel')"
+              @cancel="sync.cancelDownloads()"
+            >
+              <template #label>
+                {{
+                  $t("options.collections_download.progress", {
+                    done: downloadedCount,
+                    total: totalDownloads,
+                    percent: downloadPercent,
+                  })
+                }}
+              </template>
+              <template #failed>
+                {{ $t("options.collections_download.failed", { n: failedDownloadCount }) }}
+              </template>
+            </ProgressBar>
+
+            <p v-if="!ftpOk && !downloading && !preparing" class="opt-hint sinc-hint-gap">
+              {{ $t("options.collections_download.no_connection_hint") }}
+            </p>
+
+            <div class="opt-folder-actions">
+              <template v-if="!downloading && !preparing">
+                <button
+                  type="button"
+                  class="opt-btn opt-btn--primary"
+                  :disabled="!hasAnySelection || saving || scanningCache"
+                  @click="startDownloads"
+                >
+                  {{ $t("options.collections_download.start") }}
+                </button>
+                <button
+                  type="button"
+                  class="opt-btn"
+                  :disabled="!hasPendingRemovals || saving || scanningCache"
+                  @click="saveSelection"
+                >
+                  {{
+                    saving
+                      ? $t("options.collections_download.saving")
+                      : $t("options.collections_download.save")
+                  }}
+                </button>
+              </template>
+            </div>
+          </div>
+        </section>
+
+        <!-- Bíblia -->
+        <section v-if="abaIniciada('bible')" v-show="activeTab === 'bible'" class="opt-section">
+          <div class="opt-section-top">
+            <p class="opt-hint">{{ $t("options.bible_download.download_hint") }}</p>
+
+            <div v-if="bibleLoading" class="opt-row opt-row--col" style="padding: 16px 0">
+              <LjProgress indeterminate />
+              <span class="opt-folder-path" style="margin-top: 8px">
+                {{ $t("options.bible_download.loading") }}
+              </span>
+            </div>
+
+            <template v-else>
               <div class="opt-folder-actions" style="margin-bottom: 8px">
                 <button
                   type="button"
                   class="opt-btn opt-btn--small"
-                  :disabled="downloading || preparing || loadingCategories || scanningCache"
-                  @click="selectAll"
+                  :disabled="bibleDownloading || bibleLoading"
+                  @click="selectAllBibles"
                 >
-                  {{ $t("options.collections_download.select_all") }}
+                  {{ $t("options.bible_download.select_all") }}
                 </button>
                 <button
                   type="button"
                   class="opt-btn opt-btn--small"
-                  :disabled="downloading || preparing || scanningCache"
-                  @click="deselectAll"
+                  :disabled="bibleDownloading || bibleLoading"
+                  @click="deselectAllBibles"
                 >
-                  {{ $t("options.collections_download.clear") }}
+                  {{ $t("options.bible_download.clear") }}
                 </button>
                 <button
                   type="button"
                   class="opt-btn opt-btn--small"
-                  :disabled="loadingCategories || downloading || preparing || scanningCache"
-                  @click="refreshCatalog"
+                  :disabled="bibleLoading"
+                  @click="refreshBibleVersions"
                 >
-                  {{
-                    loadingCategories
-                      ? $t("options.collections_download.loading")
-                      : $t("options.collections_download.refresh_catalog")
-                  }}
+                  {{ $t("options.bible_download.refresh") }}
                 </button>
-                <span
-                  v-if="catalogTimestamp"
-                  class="opt-hint"
-                  style="margin: 0 0 0 auto; align-self: center"
-                >
-                  {{ $t("options.collections_download.last_update", { time: catalogTimestamp }) }}
-                </span>
+              </div>
+            </template>
+          </div>
+
+          <div v-if="!bibleLoading" class="opt-download-scroll">
+            <div class="opt-download-list">
+              <div v-for="ver in bibleVersions" :key="ver.id_bible_version" class="opt-cat">
+                <label class="opt-checkbox opt-cat-header">
+                  <input
+                    type="checkbox"
+                    :checked="selectedBibles.has(ver.id_bible_version)"
+                    :disabled="bibleDownloading"
+                    @change="
+                      toggleBibleVersion(
+                        ver.id_bible_version,
+                        ($event.target as HTMLInputElement).checked
+                      )
+                    "
+                  />
+                  <strong>{{ ver.name }}</strong>
+                  <small v-if="ver.abbreviation" class="opt-download-count">
+                    · {{ ver.abbreviation }}
+                  </small>
+                </label>
               </div>
             </div>
+          </div>
 
-            <div class="opt-download-scroll">
-              <div v-if="loadingCategories && !categories.length" class="opt-folder-path">
-                {{ $t("options.collections_download.loading") }}
-              </div>
-
-              <div v-else-if="scanningCache" class="opt-folder-path">
+          <div class="opt-section-bottom">
+            <ProgressBar
+              v-if="bibleDownloading"
+              class="opt-row opt-row--col"
+              :done="bibleDone"
+              :total="bibleTotal"
+              :current="
+                bibleCurrentFile
+                  ? formatBibleDownloadDetail(bibleCurrentFile, undefined, bibleVersions)
+                  : null
+              "
+              :completed-msg="bibleCompletedMsg"
+              show-cancel
+              :cancel-label="$t('options.bible_download.cancel')"
+              @cancel="sync.cancelDownloads()"
+            >
+              <template #label>
                 {{
-                  $t("options.collections_download.scanning_cache", {
-                    done: scanCacheDone,
-                    total: scanCacheTotal,
-                  })
+                  $t("options.bible_download.downloading", { done: bibleDone, total: bibleTotal })
                 }}
-              </div>
-
-              <div v-else class="opt-row opt-row--col">
-                <div class="opt-download-list">
-                  <!-- Hinário Adventista (categoria especial) -->
-                  <div v-if="hymnalIds.length" class="opt-cat opt-cat--special">
-                    <label class="opt-checkbox opt-cat-header">
-                      <input
-                        type="checkbox"
-                        :checked="selectedHymnal"
-                        :disabled="downloading || preparing || scanningCache || saving"
-                        @change="onHymnalToggle(($event.target as HTMLInputElement).checked)"
-                      />
-                      <strong>{{ $t("options.collections_download.hymnal") }}</strong>
-                      <small class="opt-download-count">
-                        · {{ hymnalIds.length }} {{ $t("options.collections_download.songs") }}
-                      </small>
-                    </label>
-                  </div>
-
-                  <!-- Hinário 1996 (visível apenas se habilitado nas opções de álbuns) -->
-                  <div
-                    v-if="hymnal1996Enabled && hymnal1996Ids.length"
-                    class="opt-cat opt-cat--special"
-                  >
-                    <label class="opt-checkbox opt-cat-header">
-                      <input
-                        type="checkbox"
-                        :checked="selectedHymnal1996"
-                        :disabled="downloading || preparing || scanningCache || saving"
-                        @change="onHymnal1996Toggle(($event.target as HTMLInputElement).checked)"
-                      />
-                      <strong>{{ $t("options.collections_download.hymnal_1996") }}</strong>
-                      <small class="opt-download-count">
-                        · {{ hymnal1996Ids.length }} {{ $t("options.collections_download.songs") }}
-                      </small>
-                    </label>
-                  </div>
-
-                  <!-- Coletâneas (categorias > albums) -->
-                  <div v-for="cat in categories" :key="cat.id_category" class="opt-cat">
-                    <label class="opt-checkbox opt-cat-header">
-                      <input
-                        type="checkbox"
-                        :checked="isCategoryFullySelected(cat)"
-                        :indeterminate.prop="isCategoryPartiallySelected(cat)"
-                        :disabled="downloading || preparing || scanningCache || saving"
-                        @change="toggleCategory(cat, ($event.target as HTMLInputElement).checked)"
-                      />
-                      <strong>{{ cat.name }}</strong>
-                      <small v-if="cat.albums" class="opt-download-count">
-                        · {{ cat.albums.length }} {{ $t("options.collections_download.albums") }}
-                      </small>
-                    </label>
-
-                    <div class="opt-cat-albums">
-                      <label
-                        v-for="album in cat.albums || []"
-                        :key="album.id_album"
-                        class="opt-checkbox opt-album"
-                      >
-                        <input
-                          type="checkbox"
-                          :checked="selectedAlbums.has(album.id_album)"
-                          :disabled="downloading || preparing || scanningCache || saving"
-                          @change="
-                            toggleAlbum(album.id_album, ($event.target as HTMLInputElement).checked)
-                          "
-                        />
-                        <span>{{ album.name }}</span>
-                        <small v-if="album.subtitle" class="opt-download-count">
-                          · {{ album.subtitle }}
-                        </small>
-                      </label>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="opt-section-bottom">
-              <ProgressBar
-                v-if="preparing"
-                class="opt-row opt-row--col"
-                :done="prepareDone"
-                :total="prepareTotal"
-              >
-                <template #label>
-                  {{
-                    $t("options.collections_download.preparing", {
-                      done: prepareDone,
-                      total: prepareTotal,
-                    })
-                  }}
-                </template>
-              </ProgressBar>
-
-              <ProgressBar
-                v-if="downloading"
-                class="opt-row opt-row--col"
-                :done="downloadedCount"
-                :total="totalDownloads"
-                :current="currentDownloadFile"
-                :failed="failedDownloadCount"
-                :completed-msg="completedMsg"
-                show-cancel
-                :cancel-label="$t('options.collections_download.cancel')"
-                @cancel="sync.cancelDownloads()"
-              >
-                <template #label>
-                  {{
-                    $t("options.collections_download.progress", {
-                      done: downloadedCount,
-                      total: totalDownloads,
-                      percent: downloadPercent,
-                    })
-                  }}
-                </template>
-                <template #failed>
-                  {{ $t("options.collections_download.failed", { n: failedDownloadCount }) }}
-                </template>
-              </ProgressBar>
-
-              <p v-if="!ftpOk && !downloading && !preparing" class="opt-hint pt-5">
-                {{ $t("options.collections_download.no_connection_hint") }}
-              </p>
-
-              <div class="opt-folder-actions">
-                <template v-if="!downloading && !preparing">
-                  <button
-                    type="button"
-                    class="opt-btn opt-btn--primary"
-                    :disabled="!hasAnySelection || saving || scanningCache"
-                    @click="startDownloads"
-                  >
-                    {{ $t("options.collections_download.start") }}
-                  </button>
-                  <button
-                    type="button"
-                    class="opt-btn"
-                    :disabled="!hasPendingRemovals || saving || scanningCache"
-                    @click="saveSelection"
-                  >
-                    {{
-                      saving
-                        ? $t("options.collections_download.saving")
-                        : $t("options.collections_download.save")
-                    }}
-                  </button>
-                </template>
-              </div>
-            </div>
-          </section>
-        </v-window-item>
-
-        <!-- Bíblia -->
-        <v-window-item value="bible">
-          <section class="opt-section">
-            <div class="opt-section-top">
-              <p class="opt-hint">{{ $t("options.bible_download.download_hint") }}</p>
-
-              <div v-if="bibleLoading" class="opt-row opt-row--col" style="padding: 16px 0">
-                <v-progress-linear indeterminate color="primary" />
-                <span class="opt-folder-path" style="margin-top: 8px">
-                  {{ $t("options.bible_download.loading") }}
-                </span>
-              </div>
-
-              <template v-else>
-                <div class="opt-folder-actions" style="margin-bottom: 8px">
-                  <button
-                    type="button"
-                    class="opt-btn opt-btn--small"
-                    :disabled="bibleDownloading || bibleLoading"
-                    @click="selectAllBibles"
-                  >
-                    {{ $t("options.bible_download.select_all") }}
-                  </button>
-                  <button
-                    type="button"
-                    class="opt-btn opt-btn--small"
-                    :disabled="bibleDownloading || bibleLoading"
-                    @click="deselectAllBibles"
-                  >
-                    {{ $t("options.bible_download.clear") }}
-                  </button>
-                  <button
-                    type="button"
-                    class="opt-btn opt-btn--small"
-                    :disabled="bibleLoading"
-                    @click="refreshBibleVersions"
-                  >
-                    {{ $t("options.bible_download.refresh") }}
-                  </button>
-                </div>
               </template>
-            </div>
+            </ProgressBar>
 
-            <div v-if="!bibleLoading" class="opt-download-scroll">
-              <div class="opt-download-list">
-                <div v-for="ver in bibleVersions" :key="ver.id_bible_version" class="opt-cat">
-                  <label class="opt-checkbox opt-cat-header">
-                    <input
-                      type="checkbox"
-                      :checked="selectedBibles.has(ver.id_bible_version)"
-                      :disabled="bibleDownloading"
-                      @change="
-                        toggleBibleVersion(
-                          ver.id_bible_version,
-                          ($event.target as HTMLInputElement).checked
-                        )
-                      "
-                    />
-                    <strong>{{ ver.name }}</strong>
-                    <small v-if="ver.abbreviation" class="opt-download-count">
-                      · {{ ver.abbreviation }}
-                    </small>
-                  </label>
-                </div>
-              </div>
-            </div>
-
-            <div class="opt-section-bottom">
-              <ProgressBar
-                v-if="bibleDownloading"
-                class="opt-row opt-row--col"
-                :done="bibleDone"
-                :total="bibleTotal"
-                :current="
-                  bibleCurrentFile
-                    ? formatBibleDownloadDetail(bibleCurrentFile, undefined, bibleVersions)
-                    : null
-                "
-                :completed-msg="bibleCompletedMsg"
-                show-cancel
-                :cancel-label="$t('options.bible_download.cancel')"
-                @cancel="sync.cancelDownloads()"
+            <div class="opt-folder-actions">
+              <button
+                v-if="!bibleDownloading"
+                type="button"
+                class="opt-btn opt-btn--primary"
+                :disabled="selectedBibles.size === 0"
+                @click="downloadBibleVersions"
               >
-                <template #label>
-                  {{
-                    $t("options.bible_download.downloading", { done: bibleDone, total: bibleTotal })
-                  }}
-                </template>
-              </ProgressBar>
-
-              <div class="opt-folder-actions">
-                <button
-                  v-if="!bibleDownloading"
-                  type="button"
-                  class="opt-btn opt-btn--primary"
-                  :disabled="selectedBibles.size === 0"
-                  @click="downloadBibleVersions"
-                >
-                  {{ $t("options.bible_download.download") }}
-                </button>
-                <button
-                  v-if="!bibleDownloading && bibleDownloadedBaseline.size > 0"
-                  type="button"
-                  class="opt-btn"
-                  :disabled="bibleSaving || !bibleHasPendingRemovals"
-                  @click="saveBibleSelection"
-                >
-                  {{
-                    bibleSaving
-                      ? $t("options.bible_download.saving")
-                      : $t("options.bible_download.save")
-                  }}
-                </button>
-              </div>
-            </div>
-          </section>
-        </v-window-item>
-
-        <!-- Armazenamento -->
-        <v-window-item value="storage">
-          <section class="opt-section">
-            <div class="opt-row opt-row--col mt-5">
-              <label class="opt-label">
-                {{ $t("options.storage.folder") }}
-                <v-chip
-                  v-if="useClassicDir"
-                  size="x-small"
-                  color="primary"
-                  variant="tonal"
-                  class="ml-2"
-                >
-                  <Icon :icon="ICONS.PROJETOS.DELPHI" size="12" class="mr-1" />
-                  {{ $t("options.storage.classic_version") }}
-                </v-chip>
-              </label>
-              <div class="opt-folder">
-                <code class="opt-folder-path">
-                  {{ storageStats?.filesDir || "—" }}
-                </code>
-
-                <div class="opt-folder-actions">
-                  <button type="button" class="opt-btn" @click="openFolder">
-                    {{ $t("options.storage.open_folder") }}
-                  </button>
-                  <button type="button" class="opt-btn" @click="changeFolder">
-                    {{ $t("options.storage.change_folder") }}
-                  </button>
-                  <button
-                    v-if="!useClassicDir"
-                    type="button"
-                    class="opt-btn"
-                    @click="detectClassic"
-                  >
-                    <Icon :icon="ICONS.PROJETOS.DELPHI" size="14" class="mr-1" />
-                    {{ $t("options.storage.use_classic_dir") }}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div class="opt-stats">
-              <div class="opt-stat">
-                <span class="opt-stat-label">{{ $t("options.storage.media_size") }}</span>
-                <span class="opt-stat-value">
-                  {{ sync.humanSize(storageStats?.files?.bytes) }}
-                  <small>({{ storageStats?.files?.count || 0 }} arq.)</small>
-                </span>
-              </div>
-              <div class="opt-stat">
-                <span class="opt-stat-label">Músicas (álbuns, músicas, letras)</span>
-                <span class="opt-stat-value">
-                  {{ sync.humanSize(storageStats?.music?.bytes) }}
-                  <small>({{ storageStats?.music?.count || 0 }} arq.)</small>
-                </span>
-              </div>
-              <div class="opt-stat">
-                <span class="opt-stat-label">{{ $t("options.storage.cache_size") }}</span>
-                <span class="opt-stat-value">
-                  {{ sync.humanSize(storageStats?.json?.bytes) }}
-                  <small>({{ storageStats?.json?.count || 0 }} arq.)</small>
-                </span>
-              </div>
-              <div class="opt-stat">
-                <span class="opt-stat-label">Bíblia</span>
-                <span class="opt-stat-value">
-                  {{ sync.humanSize(storageStats?.bible?.bytes) }}
-                  <small>({{ storageStats?.bible?.count || 0 }} arq.)</small>
-                </span>
-              </div>
-              <div class="opt-stat opt-stat--total">
-                <span class="opt-stat-label">{{ $t("options.storage.total") }}</span>
-                <span class="opt-stat-value">{{ sync.humanSize(storageStats?.total?.bytes) }}</span>
-              </div>
-            </div>
-
-            <div class="opt-row">
-              <label class="opt-checkbox">
-                <input
-                  type="checkbox"
-                  :checked="autoCache"
-                  @change="toggleAutoCache(($event.target as HTMLInputElement).checked)"
-                />
-                <span>{{ $t("options.storage.auto_cache") }}</span>
-              </label>
-            </div>
-            <p class="opt-hint">{{ $t("options.storage.auto_cache_hint") }}</p>
-
-            <div class="opt-row">
-              <label class="opt-label" for="opt-quota">{{ $t("options.storage.quota") }}</label>
-              <select
-                id="opt-quota"
-                class="opt-select"
-                :value="quotaGb"
-                @change="setQuotaGb(Number(($event.target as HTMLSelectElement).value))"
-              >
-                <option :value="0">{{ $t("options.storage.no_limit") }}</option>
-                <option :value="1">1 GB</option>
-                <option :value="2">2 GB</option>
-                <option :value="5">5 GB</option>
-                <option :value="10">10 GB</option>
-                <option :value="20">20 GB</option>
-                <option :value="50">50 GB</option>
-              </select>
-            </div>
-            <p class="opt-hint">{{ $t("options.storage.quota_hint") }}</p>
-
-            <div class="opt-actions">
-              <button type="button" class="opt-btn" @click="clearJson">
-                <Icon :icon="ICONS.ACTIONS.DATABASE_REMOVE" size="14" class="mr-1" />
-                {{ $t("options.storage.clear_cache") }}
-              </button>
-              <button type="button" class="opt-btn opt-btn--danger" @click="clearFiles">
-                <Icon :icon="ICONS.ACTIONS.DELETE_FILLED" size="14" class="mr-1" />
-                {{ $t("options.storage.clear_files") }}
-              </button>
-              <button type="button" class="opt-btn" :disabled="loading" @click="reloadStats">
-                <Icon :icon="ICONS.ACTIONS.REFRESH" size="14" class="mr-1" />
-                {{ $t("options.storage.refresh") }}
+                {{ $t("options.bible_download.download") }}
               </button>
               <button
-                v-if="Platform.isDesktop"
+                v-if="!bibleDownloading && bibleDownloadedBaseline.size > 0"
                 type="button"
                 class="opt-btn"
-                :disabled="restoringDb || sync.bundleInstalling.value"
-                @click="restoreDatabase"
+                :disabled="bibleSaving || !bibleHasPendingRemovals"
+                @click="saveBibleSelection"
               >
-                <Icon :icon="ICONS.ACTIONS.DATABASE_REFRESH" size="14" class="mr-1" />
-                {{ $t("options.storage.restore_db") }}
+                {{
+                  bibleSaving
+                    ? $t("options.bible_download.saving")
+                    : $t("options.bible_download.save")
+                }}
               </button>
             </div>
-            <div v-if="sync.bundleInstalling.value" class="mt-2">
-              <v-progress-linear
-                :model-value="bundleDownloadPercent"
-                :indeterminate="
-                  sync.bundleProgress.value.phase === 'download' &&
-                  !sync.bundleProgress.value.bytesTotal
-                "
-                color="primary"
-                height="6"
-                rounded
-              />
-              <div v-if="bundleDownloadDetail" class="opt-hint mt-1">
-                {{ bundleDownloadDetail }}
+          </div>
+        </section>
+
+        <!-- Armazenamento -->
+        <section v-if="abaIniciada('storage')" v-show="activeTab === 'storage'" class="opt-section">
+          <div class="opt-row opt-row--col sinc-row-gap">
+            <label class="opt-label sinc-storage-label">
+              {{ $t("options.storage.folder") }}
+              <LjChip v-if="useClassicDir" size="sm" variant="primary">
+                <Icon :icon="ICONS.PROJETOS.DELPHI" size="12" />
+                {{ $t("options.storage.classic_version") }}
+              </LjChip>
+            </label>
+            <div class="opt-folder">
+              <code class="opt-folder-path">
+                {{ storageStats?.filesDir || "—" }}
+              </code>
+
+              <div class="opt-folder-actions">
+                <button type="button" class="opt-btn" @click="openFolder">
+                  {{ $t("options.storage.open_folder") }}
+                </button>
+                <button type="button" class="opt-btn" @click="changeFolder">
+                  {{ $t("options.storage.change_folder") }}
+                </button>
+                <button v-if="!useClassicDir" type="button" class="opt-btn" @click="detectClassic">
+                  <Icon :icon="ICONS.PROJETOS.DELPHI" size="14" />
+                  {{ $t("options.storage.use_classic_dir") }}
+                </button>
               </div>
             </div>
-          </section>
-        </v-window-item>
-      </v-window>
+          </div>
+
+          <div class="opt-stats">
+            <div class="opt-stat">
+              <span class="opt-stat-label">{{ $t("options.storage.media_size") }}</span>
+              <span class="opt-stat-value">
+                {{ sync.humanSize(storageStats?.files?.bytes) }}
+                <small>({{ storageStats?.files?.count || 0 }} arq.)</small>
+              </span>
+            </div>
+            <div class="opt-stat">
+              <span class="opt-stat-label">Músicas (álbuns, músicas, letras)</span>
+              <span class="opt-stat-value">
+                {{ sync.humanSize(storageStats?.music?.bytes) }}
+                <small>({{ storageStats?.music?.count || 0 }} arq.)</small>
+              </span>
+            </div>
+            <div class="opt-stat">
+              <span class="opt-stat-label">{{ $t("options.storage.cache_size") }}</span>
+              <span class="opt-stat-value">
+                {{ sync.humanSize(storageStats?.json?.bytes) }}
+                <small>({{ storageStats?.json?.count || 0 }} arq.)</small>
+              </span>
+            </div>
+            <div class="opt-stat">
+              <span class="opt-stat-label">Bíblia</span>
+              <span class="opt-stat-value">
+                {{ sync.humanSize(storageStats?.bible?.bytes) }}
+                <small>({{ storageStats?.bible?.count || 0 }} arq.)</small>
+              </span>
+            </div>
+            <div class="opt-stat opt-stat--total">
+              <span class="opt-stat-label">{{ $t("options.storage.total") }}</span>
+              <span class="opt-stat-value">{{ sync.humanSize(storageStats?.total?.bytes) }}</span>
+            </div>
+          </div>
+
+          <div class="opt-row">
+            <label class="opt-checkbox">
+              <input
+                type="checkbox"
+                :checked="autoCache"
+                @change="toggleAutoCache(($event.target as HTMLInputElement).checked)"
+              />
+              <span>{{ $t("options.storage.auto_cache") }}</span>
+            </label>
+          </div>
+          <p class="opt-hint">{{ $t("options.storage.auto_cache_hint") }}</p>
+
+          <div class="opt-row">
+            <label class="opt-label" for="opt-quota">{{ $t("options.storage.quota") }}</label>
+            <select
+              id="opt-quota"
+              class="opt-select"
+              :value="quotaGb"
+              @change="setQuotaGb(Number(($event.target as HTMLSelectElement).value))"
+            >
+              <option :value="0">{{ $t("options.storage.no_limit") }}</option>
+              <option :value="1">1 GB</option>
+              <option :value="2">2 GB</option>
+              <option :value="5">5 GB</option>
+              <option :value="10">10 GB</option>
+              <option :value="20">20 GB</option>
+              <option :value="50">50 GB</option>
+            </select>
+          </div>
+          <p class="opt-hint">{{ $t("options.storage.quota_hint") }}</p>
+
+          <div class="opt-actions">
+            <button type="button" class="opt-btn" @click="clearJson">
+              <Icon :icon="ICONS.ACTIONS.DATABASE_REMOVE" size="14" />
+              {{ $t("options.storage.clear_cache") }}
+            </button>
+            <button type="button" class="opt-btn opt-btn--danger" @click="clearFiles">
+              <Icon :icon="ICONS.ACTIONS.DELETE_FILLED" size="14" />
+              {{ $t("options.storage.clear_files") }}
+            </button>
+            <button type="button" class="opt-btn" :disabled="loading" @click="reloadStats">
+              <Icon :icon="ICONS.ACTIONS.REFRESH" size="14" />
+              {{ $t("options.storage.refresh") }}
+            </button>
+            <button
+              v-if="Platform.isDesktop"
+              type="button"
+              class="opt-btn"
+              :disabled="restoringDb || sync.bundleInstalling.value"
+              @click="restoreDatabase"
+            >
+              <Icon :icon="ICONS.ACTIONS.DATABASE_REFRESH" size="14" />
+              {{ $t("options.storage.restore_db") }}
+            </button>
+          </div>
+          <div v-if="sync.bundleInstalling.value" class="sinc-block-gap">
+            <LjProgress
+              :value="bundleDownloadPercent"
+              :indeterminate="
+                sync.bundleProgress.value.phase === 'download' &&
+                !sync.bundleProgress.value.bytesTotal
+              "
+            />
+            <div v-if="bundleDownloadDetail" class="opt-hint sinc-detail-gap">
+              {{ bundleDownloadDetail }}
+            </div>
+          </div>
+        </section>
+      </div>
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref } from "vue";
+import { computed, onMounted, onBeforeUnmount, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import Platform from "@/helpers/Platform";
 import $userdata from "@/helpers/UserData";
@@ -579,6 +549,8 @@ import $alert from "@/helpers/Alert";
 import { KEYS, moduleShowInMainMenu } from "@/constants/UserDataKeys";
 import { ICONS } from "@/config/Icons";
 import Icon from "@/components/Icon.vue";
+import { LjChip, LjProgress, LjTabs } from "@/components/ui";
+import type { LjTab } from "@/components/ui";
 import { useSyncManager } from "@/composables/useSyncManager";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
 import {
@@ -649,6 +621,30 @@ const cachedHymnalBaseline = ref<boolean>(false);
 const cachedHymnal1996Baseline = ref<boolean>(false);
 
 const activeTab = ref<string>("collections");
+
+const abas = computed<LjTab[]>(() => [
+  {
+    value: "collections",
+    label: t("options.collections_download.title"),
+    icon: ICONS.CUSTOM.LJA_COLOR,
+  },
+  { value: "bible", label: t("options.bible_download.title"), icon: ICONS.BIBLE.BIBLE },
+  { value: "storage", label: t("options.storage.title"), icon: ICONS.UI.HARDDISK },
+]);
+
+// Mesma economia do v-window-item: a aba só é montada na primeira vez que
+// aparece e fica montada depois — a lista inteira de coletâneas não é
+// construída enquanto o operador está noutra aba, e o que ele já rolou
+// continua onde estava quando ele volta.
+const abasIniciadas = ref(new Set<string>([activeTab.value]));
+
+function abaIniciada(aba: string): boolean {
+  return abasIniciadas.value.has(aba);
+}
+
+watch(activeTab, (aba) => {
+  if (!abasIniciadas.value.has(aba)) abasIniciadas.value = new Set(abasIniciadas.value).add(aba);
+});
 
 // Bíblia — download de versões
 const bibleVersions = ref<BibleVersion[]>([]);
@@ -1310,7 +1306,7 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 4px;
   padding: 6px 8px;
-  border-bottom: 1px solid rgba(var(--v-border-color), 0.15);
+  border-bottom: 1px solid var(--lj-surface-divider);
 }
 .opt-cat:last-child {
   border-bottom: 0;
@@ -1332,5 +1328,37 @@ onBeforeUnmount(() => {
 }
 .opt-stats--compact {
   margin-bottom: 10px;
+}
+
+.sinc-tabs {
+  margin-top: var(--lj-space-4);
+}
+
+.sinc-panes {
+  margin-top: var(--lj-space-7);
+}
+
+.sinc-row-gap {
+  margin-top: var(--lj-space-7);
+}
+
+.sinc-hint-gap {
+  padding-top: var(--lj-space-7);
+}
+
+/* O respiro é do bloco de progresso, que só aparece durante o download: vindo
+   do irmão de cima, sumiria junto com ele. */
+.sinc-block-gap {
+  margin-top: var(--lj-space-4);
+}
+
+.sinc-detail-gap {
+  margin-top: var(--lj-space-2);
+}
+
+.sinc-storage-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lj-space-4);
 }
 </style>

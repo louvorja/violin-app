@@ -1,18 +1,11 @@
 <template>
-  <v-table fixed-header hover loading density="compact" class="__table-data">
-    <template #bottom>
-      <v-progress-linear v-if="loading" :color="primaryColor" indeterminate />
-      <v-alert
-        v-if="error"
-        type="error"
-        :text="error"
-        variant="tonal"
-        border="start"
-        class="ma-2"
-      />
-    </template>
-    <slot />
-  </v-table>
+  <div class="__table-data-wrap">
+    <LjTable hover sticky class="__table-data">
+      <slot />
+    </LjTable>
+    <LjProgress v-if="loading" indeterminate :height="2" />
+    <LjAlert v-if="error" variant="danger" :text="error" class="__table-data-alert" />
+  </div>
 </template>
 
 <script setup>
@@ -21,11 +14,11 @@
  * ordena e pagina (100 por vez via scroll ou RAF). Emite o estado via v-model.
  * Ver MusicMenuTable.vue para o widget de ações por linha — são componentes distintos.
  */
-import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue";
+import { ref, watch, onMounted, onBeforeUnmount } from "vue";
 import { useI18n } from "vue-i18n";
+import { LjAlert, LjProgress, LjTable } from "@/components/ui";
 import Database from "@/helpers/Database";
 import Strings from "@/helpers/Strings";
-import AppData from "@/helpers/AppData";
 
 // Debounce leve: aguarda `ms` ms de inatividade antes de executar `fn`.
 function debounce(fn, ms = 300) {
@@ -69,8 +62,6 @@ const loading = ref(true);
 let _paginateRaf = null;
 let _rafCycles = 0;
 const _RAF_MAX_CYCLES = 3;
-
-const primaryColor = computed(() => (AppData.get("is_dark") ? undefined : "primary"));
 
 // Versão com debounce de filterData para o watcher de search.
 const debouncedFilterData = debounce(function () {
@@ -265,59 +256,29 @@ function compareFilterData() {
 </script>
 
 <style>
-/* DataTable padronizado — usa tokens do design system */
-/* Duplicação de .__table-data garante especificidade (0,2,0)+(0,1,0) > Vuetify (0,2,0) sem !important */
-.__table-data.__table-data .v-table__wrapper {
-  overflow: initial;
-}
+/* Sem escopo de propósito: o conteúdo da tabela (thead/tbody) vem por slot e é
+   compilado no escopo de quem chama — regra com escopo daqui não o alcançaria.
+   Duplicar a classe garante especificidade acima do primitivo sem !important. */
 
-.__table-data.__table-data {
+/* A rolagem própria do LjTable fica desligada: quem rola é o módulo, e é o
+   scroll dele que alimenta a paginação. Com a tabela rolando por dentro, a
+   lista pararia nos primeiros 100 registros. É também o que faz o cabeçalho
+   grudar no topo do módulo. */
+.__table-data.__table-data.__table-data {
+  overflow: visible;
   font-family: var(--lj-font-shell);
-  font-size: var(--lj-text-base);
-}
-
-/* Cabeçalho */
-.__table-data.__table-data thead tr th {
-  background: var(--lj-surface-bg-soft);
-  color: var(--lj-text-muted);
-  font-size: var(--lj-text-xs);
-  font-weight: var(--lj-weight-semibold);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  border-bottom: 1px solid var(--lj-surface-border-strong);
-  padding: var(--lj-space-3) var(--lj-space-4);
-}
-
-/* Linhas */
-.__table-data.__table-data tbody tr {
-  transition: background var(--lj-transition-fast);
 }
 
 .__table-data.__table-data tbody tr:hover {
-  background: var(--lj-surface-bg-hover);
   cursor: default;
 }
 
-.__table-data.__table-data tbody td {
-  padding: var(--lj-space-2) var(--lj-space-4);
-  border-bottom: 1px solid var(--lj-surface-divider);
-  color: var(--lj-text);
-  font-size: var(--lj-text-base);
-}
-
 /* Linha selecionada */
-.__table-data.__table-data tbody tr.v-data-table-row--active,
 .__table-data.__table-data tbody tr.selected {
   background: var(--lj-active-bg);
 }
 
-/* Indicador de loading */
-.__table-data.__table-data .v-progress-linear {
-  height: 2px;
-}
-
-/* Empty state */
-.__table-data.__table-data + .v-alert {
-  margin-top: var(--lj-space-4);
+.__table-data-alert {
+  margin: var(--lj-space-4);
 }
 </style>

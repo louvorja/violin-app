@@ -45,7 +45,7 @@
     >
       <div class="libras-overlay-content">
         <div class="libras-overlay-label">LIBRAS</div>
-        <v-progress-linear indeterminate color="#2196F3" height="2" />
+        <LjProgress indeterminate :height="2" />
       </div>
     </div>
   </Teleport>
@@ -53,6 +53,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue";
+import { LjProgress } from "@/components/ui";
 import $broadcast from "@/helpers/Broadcast";
 import $userdata from "@/helpers/UserData";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
@@ -617,6 +618,16 @@ onBeforeUnmount(() => {
   letter-spacing: 0.1em;
   color: #2196f3;
   margin-bottom: 4px;
+}
+
+/* O overlay flutua sobre a projeção, fora do tema: as cores aqui são fixas de
+   propósito. LjProgress não expõe cor, então a barra é casada com o rótulo. */
+.libras-overlay-content :deep(.lj-progress__track) {
+  background: rgba(33, 150, 243, 0.3);
+}
+
+.libras-overlay-content :deep(.lj-progress__bar) {
+  background: #2196f3;
 }
 
 .libras-overlay-text {

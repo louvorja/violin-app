@@ -13,8 +13,8 @@
 /* — sem biblioteca — */
 export { default as LjAlert } from "./LjAlert.vue";
 export { default as LjButton } from "./LjButton.vue";
+export { default as LjCalendar } from "./LjCalendar.vue";
 export { default as LjCard } from "./LjCard.vue";
-export { default as LjTable } from "./LjTable.vue";
 export { default as LjCheckbox } from "./LjCheckbox.vue";
 export { default as LjChip } from "./LjChip.vue";
 export { default as LjDivider } from "./LjDivider.vue";
@@ -25,12 +25,12 @@ export { default as LjProgress } from "./LjProgress.vue";
 export { default as LjSkeleton } from "./LjSkeleton.vue";
 export { default as LjSpinner } from "./LjSpinner.vue";
 export { default as LjSwitch } from "./LjSwitch.vue";
+export { default as LjTable } from "./LjTable.vue";
 export { default as LjTextarea } from "./LjTextarea.vue";
 export { default as LjToast } from "./LjToast.vue";
 
 /* — sobre Reka UI — */
 export { default as LjAccordion } from "./LjAccordion.vue";
-export { default as LjCalendar } from "./LjCalendar.vue";
 export { default as LjCombobox } from "./LjCombobox.vue";
 export { default as LjDialog } from "./LjDialog.vue";
 export { default as LjDrawer } from "./LjDrawer.vue";

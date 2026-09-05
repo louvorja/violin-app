@@ -161,15 +161,13 @@
                 >
                   <label class="ribbon-field-label">{{ $t(btn.label) }}</label>
                   <div class="ribbon-slider-row">
-                    <v-slider
-                      :model-value="getSelectValue(btn)"
+                    <LjSlider
+                      class="ribbon-slider"
+                      :model-value="Number(getSelectValue(btn))"
                       :min="btn.min ?? 0"
                       :max="btn.max ?? 2000"
                       :step="btn.step ?? 100"
-                      density="compact"
-                      hide-details
-                      class="ribbon-slider"
-                      thumb-label
+                      :aria-label="$t(btn.label)"
                       @update:model-value="setSelectValue(btn, $event)"
                     />
                     <span class="ribbon-slider-value">{{ getSelectValue(btn) }}ms</span>
@@ -205,24 +203,12 @@
                   class="ribbon-switch"
                   :data-testid="`ribbon-btn-${btn.id}`"
                 >
-                  <v-switch
-                    :model-value="getCheckValue(btn)"
-                    density="compact"
-                    size="small"
-                    hide-details
-                    :label="$t(btn.label)"
-                    color="primary"
+                  <LjSwitch
                     class="ribbon-field-switch"
-                    :true-icon="ICONS.UI.CHECK"
-                    :false-icon="ICONS.ACTIONS.CLOSE"
+                    :model-value="getCheckValue(btn)"
+                    :label="$t(btn.label)"
                     @update:model-value="setCheckValue(btn, $event)"
-                  >
-                    <template #label>
-                      <span class="ribbon-field-switch">
-                        {{ $t(btn.label) }}
-                      </span>
-                    </template>
-                  </v-switch>
+                  />
                 </div>
                 <RibbonButtonComponent
                   v-else
@@ -250,7 +236,6 @@
 </template>
 
 <script setup lang="ts">
-import { ICONS } from "@/config/Icons";
 import { computed, type ComputedRef, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import RibbonScreenButton from "./RibbonScreenButton.vue";
@@ -275,6 +260,7 @@ import type { RibbonButton, RibbonGroup, RibbonPage } from "@/types/Ribbon";
 import RibbonButtonComponent from "@/layout/shell/RibbonButtonComponent.vue";
 import RibbonGroupComponent from "@/layout/shell/RibbonGroupComponent.vue";
 import RibbonTabs from "@/components/RibbonTabs.vue";
+import { LjSlider, LjSwitch } from "@/components/ui";
 import { THEMES } from "@/config/Theme";
 
 const { t } = useI18n();
@@ -830,7 +816,7 @@ useBroadcastListener(BROADCAST_TYPE.RIBBON_SELECT_PAGE, (payload: unknown) => {
   width: 140px;
   height: 24px;
   padding: 0 6px;
-  border: 1px solid rgba(var(--v-border-color), 0.4);
+  border: var(--lj-ui-border);
   border-radius: 3px;
   background: var(--lj-surface-bg);
   color: var(--lj-text);
@@ -861,7 +847,7 @@ useBroadcastListener(BROADCAST_TYPE.RIBBON_SELECT_PAGE, (payload: unknown) => {
 .ribbon-field-select {
   height: 24px;
   padding: 0 4px;
-  border: 1px solid rgba(var(--v-border-color), 0.4);
+  border: var(--lj-ui-border);
   border-radius: 3px;
   background: var(--lj-surface-bg);
   color: var(--lj-text);
@@ -878,7 +864,7 @@ useBroadcastListener(BROADCAST_TYPE.RIBBON_SELECT_PAGE, (payload: unknown) => {
 .ribbon-field-number {
   height: 24px;
   padding: 0 4px;
-  border: 1px solid rgba(var(--v-border-color), 0.4);
+  border: var(--lj-ui-border);
   border-radius: 3px;
   background: var(--lj-surface-bg);
   color: var(--lj-text);
@@ -930,7 +916,6 @@ useBroadcastListener(BROADCAST_TYPE.RIBBON_SELECT_PAGE, (payload: unknown) => {
   padding: 1px;
 }
 .ribbon-field-switch {
-  padding: 0;
   font-size: 14px;
 }
 </style>

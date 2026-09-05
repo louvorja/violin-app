@@ -56,32 +56,6 @@
         </div>
       </section>
 
-      <!-- ══════════ Comparação com Material ══════════ -->
-      <section class="cat__section">
-        <h2 class="cat__h2">Antes e depois</h2>
-        <p class="cat__lead">Os mesmos controles, Vuetify à esquerda e o catálogo à direita.</p>
-        <div class="cat__vs">
-          <div class="cat__vs-col cat__vs-col--old">
-            <span class="cat__vs-tag cat__vs-tag--old">Vuetify (Material)</span>
-            <LjButton variant="default" size="sm">Salvar</LjButton>
-            <LjButton variant="default" size="sm">Cancelar</LjButton>
-            <v-text-field density="compact" variant="outlined" hide-details placeholder="Buscar…" />
-            <v-checkbox density="compact" hide-details label="Ativar recurso" />
-            <v-switch density="compact" hide-details color="primary" label="Modo escuro" />
-            <v-progress-linear model-value="62" height="8" rounded />
-          </div>
-          <div class="cat__vs-col">
-            <span class="cat__vs-tag">Catálogo LouvorJA</span>
-            <LjButton variant="primary" :icon="ICONS.ACTIONS.SAVE">Salvar</LjButton>
-            <LjButton>Cancelar</LjButton>
-            <LjInput :icon="ICONS.ACTIONS.SEARCH" placeholder="Buscar…" />
-            <LjCheckbox v-model="demoCheck" label="Ativar recurso" />
-            <LjSwitch v-model="demoSwitch" label="Modo escuro" />
-            <LjProgress :value="62" />
-          </div>
-        </div>
-      </section>
-
       <!-- ══════════ Botão ══════════ -->
       <section class="cat__section">
         <h2 class="cat__h2">LjButton</h2>
@@ -304,6 +278,82 @@
         </p>
       </section>
 
+      <section class="cat__section">
+        <h2 class="cat__h2">Tabela</h2>
+        <p class="cat__lead">
+          Só a moldura: cabeçalho, listras, realce e rolagem contida. O conteúdo vem por slot, e
+          busca, ordenação e paginação continuam com quem usa. A altura de linha é de 36px porque é
+          a que as listas do app sempre tiveram — só padding as encolheria um quarto.
+        </p>
+        <LjTable striped hover sticky max-height="180px">
+          <thead>
+            <tr>
+              <th>Música</th>
+              <th>Álbum</th>
+              <th class="lj-u-text-end">Duração</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="m in musicasDemo" :key="m.nome">
+              <td>{{ m.nome }}</td>
+              <td>{{ m.album }}</td>
+              <td class="lj-u-text-end">{{ m.duracao }}</td>
+            </tr>
+          </tbody>
+        </LjTable>
+      </section>
+
+      <section class="cat__section">
+        <h2 class="cat__h2">Sanfona</h2>
+        <p class="cat__lead">
+          Um painel aberto por vez, ou vários com
+          <code>multiple</code>
+          . Teclado e ARIA vêm da Reka.
+        </p>
+        <LjAccordion v-model="sanfona" :items="sanfonaItens">
+          <template #hinario>Hinário Adventista — 613 hinos.</template>
+          <template #album>Álbuns por intérprete e coletânea.</template>
+          <template #usuario>Coletâneas montadas pelo próprio usuário.</template>
+        </LjAccordion>
+      </section>
+
+      <section class="cat__section">
+        <h2 class="cat__h2">Calendário</h2>
+        <p class="cat__lead">
+          Grade do mês ou da semana, com eventos posicionados por dia civil e corte com indicador.
+          Cada célula carrega a própria data em
+          <code>data-date</code>
+          , e as setas andam pela grade.
+        </p>
+        <LjCalendar
+          model-value="2026-09-15"
+          :events="agendaDemo"
+          :max-events="3"
+          locale="pt-BR"
+          aria-label="Exemplo de agenda"
+        />
+      </section>
+
+      <section class="cat__section">
+        <h2 class="cat__h2">Painel lateral</h2>
+        <p class="cat__lead">
+          Permanente empurra o conteúdo ao lado; temporário sobrepõe com trava de foco e fecha no
+          Esc.
+        </p>
+        <div class="cat-stack">
+          <LjButton size="sm" @click="drawerOpen = true">Abrir painel temporário</LjButton>
+        </div>
+      </section>
+
+      <LjDrawer v-model="drawerOpen" temporary side="right" :width="280" title="Formatação">
+        <template #actions>
+          <LjButton size="sm" variant="ghost">Restaurar</LjButton>
+        </template>
+        <LjField label="Tamanho da letra" layout="column">
+          <LjSlider v-model="demoSlider" :min="10" :max="60" />
+        </LjField>
+      </LjDrawer>
+
       <LjToast
         v-model="toastOpen"
         variant="success"
@@ -338,9 +388,10 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
-import { useTheme } from "vuetify";
+import { useAppTheme } from "@/composables/useAppTheme";
 import { ICONS } from "@/config/Icons";
 import { COLOR_THEMES } from "@/config/Theme";
+import { DEFAULT_THEME_ID, isThemeId, type ThemeId } from "@/config/Themes";
 import {
   LjButton,
   LjCard,
@@ -365,6 +416,11 @@ import {
   LjTabs,
   LjToast,
   LjTooltip,
+  LjAccordion,
+  LjCalendar,
+  LjDrawer,
+  LjTable,
+  type LjAccordionItem,
   type LjMenuItem,
   type LjTab,
   type UiSize,
@@ -379,7 +435,7 @@ const HEIGHTS: Record<UiSize, string> = {
 };
 const BUTTON_VARIANTS = ["default", "primary", "ghost", "danger", "subtle"] as const;
 const CHIP_VARIANTS = ["neutral", "primary", "success", "warning", "danger"] as const;
-const THEME_IDS = [...new Set(Object.values(COLOR_THEMES))];
+const THEME_IDS = [...new Set(Object.values(COLOR_THEMES))].filter(isThemeId);
 const themeItems = THEME_IDS.map((id) => ({ value: id, label: id }));
 const fontItems = ["Padrão", "Advent Sans", "Arial", "Calibri Bold", "DIN Condensed Bold"];
 const songItems = [
@@ -403,8 +459,8 @@ const menuItems: LjMenuItem[] = [
   { label: "Identificar monitores", icon: ICONS.ACTIONS.SEARCH, shortcut: "F9", action: () => {} },
 ];
 
-const vuetifyTheme = useTheme();
-const theme = ref<string>(COLOR_THEMES.DEFAULT);
+const { previewTheme } = useAppTheme();
+const theme = ref<ThemeId>(DEFAULT_THEME_ID);
 
 const demoText = ref("");
 const demoSearch = ref("Ó Deus de Amor");
@@ -420,15 +476,38 @@ const fontSize = ref(42);
 const tab = ref("geral");
 const dialogOpen = ref(false);
 const toastOpen = ref(false);
+const drawerOpen = ref(false);
+const demoSlider = ref(32);
+const sanfona = ref<string | string[] | undefined>("hinario");
 
-function applyTheme(id: string): void {
+const sanfonaItens: LjAccordionItem[] = [
+  { value: "hinario", label: "Hinário", icon: ICONS.MODULES.HYMNAL },
+  { value: "album", label: "Álbuns", icon: ICONS.MODULES.ALBUM },
+  { value: "usuario", label: "Coletâneas do usuário", icon: ICONS.MODULES.COLLECTIONS },
+];
+
+const musicasDemo = [
+  { nome: "Ó Deus de Amor", album: "Hinário Adventista", duracao: "3:12" },
+  { nome: "Castelo Forte", album: "Hinário Adventista", duracao: "2:48" },
+  { nome: "Vem, ó Cristo", album: "Arautos do Rei", duracao: "4:05" },
+  { nome: "Grandioso És Tu", album: "Hinário Adventista", duracao: "3:57" },
+  { nome: "Firme nas Promessas", album: "Novo Tempo", duracao: "3:20" },
+];
+
+const agendaDemo = [
+  { id: "1", name: "Ensaio do coral", start: "2026-09-09", color: "#0ea5e9" },
+  { id: "2", name: "Culto Jovem", start: "2026-09-12", color: "#f59e0b" },
+  { id: "3", name: "Escola Sabatina", start: "2026-09-12", color: "#22c55e" },
+  { id: "4", name: "Reunião de anciãos", start: "2026-09-12", color: "#a855f7" },
+  { id: "5", name: "Batismo", start: "2026-09-12", color: "#ef4444" },
+  { id: "6", name: "Semana de oração", start: "2026-09-21", end: "2026-09-26", color: "#6366f1" },
+];
+
+/* Só carimba o tema no documento: esta página é vitrine, não muda a
+   preferência salva do usuário. */
+function applyTheme(id: ThemeId): void {
   theme.value = id;
-  document.documentElement.dataset.theme = id;
-  try {
-    vuetifyTheme.change(id);
-  } catch {
-    /* tema sem equivalente no Vuetify — os tokens --lj-* já mudaram */
-  }
+  previewTheme(id);
 }
 
 onMounted(() => {
@@ -572,53 +651,6 @@ onMounted(() => {
   color: var(--lj-text-subtle);
   font-family: var(--lj-font-mono);
   font-size: var(--lj-text-xs);
-}
-
-.cat__vs {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: var(--lj-space-6);
-}
-
-.cat__vs-col {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--lj-space-5);
-  padding: var(--lj-space-6);
-  border: 1px solid var(--lj-surface-border);
-  border-radius: var(--lj-radius-md);
-}
-
-.cat__vs-col--old {
-  background: var(--lj-surface-bg-soft);
-}
-
-/* Só os campos ocupam a coluna toda; botões ficam no tamanho natural para
-   que a diferença de altura entre Material e catálogo fique visível. */
-.cat__vs-col :deep(.v-input),
-.cat__vs-col :deep(.lj-input),
-.cat__vs-col :deep(.lj-progress),
-.cat__vs-col :deep(.v-progress-linear) {
-  width: 100%;
-}
-
-.cat__vs-tag {
-  align-self: flex-start;
-  padding: 2px var(--lj-space-4);
-  width: auto !important;
-  background: var(--lj-ui-accent-soft);
-  border-radius: var(--lj-radius-xs);
-  color: var(--lj-ui-accent-text);
-  font-size: var(--lj-text-xs);
-  font-weight: var(--lj-weight-semibold);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.cat__vs-tag--old {
-  background: var(--lj-danger-soft);
-  color: var(--lj-alert-error-color, var(--lj-danger));
 }
 
 .cat-stack {

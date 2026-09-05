@@ -1,6 +1,6 @@
 <template>
-  <v-card theme="dark" class="w-100 pa-0 ma-0 d-flex align-center" :rounded="0">
-    <div class="d-flex flex-column flex-grow-1">
+  <div class="player">
+    <div class="player__main">
       <PlayerControls :buttons="buttons" :compact="compact" :loading="mediaLoading" />
       <PlayerProgress
         v-if="hasPlayback"
@@ -16,7 +16,7 @@
         @seek="seekToProgress"
       />
     </div>
-    <div class="d-flex flex-column">
+    <div class="player__side">
       <PlayerActions
         :location="location"
         :minimized="mediaMinimized"
@@ -41,7 +41,7 @@
         @seek="setVolume"
       />
     </div>
-  </v-card>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -82,3 +82,27 @@ const hasPlayback = computed(() => !!mediaConfig.value.audio || !!mediaConfig.va
 
 const compactButtons = computed(() => buttons.value.filter((item) => item.compact === true));
 </script>
+
+<style scoped>
+.player {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  background: var(--lj-footer-bg);
+  color: var(--lj-text);
+  /* O traço no topo separa o player do conteúdo — papel que a sombra do card
+     fazia antes, e que a barra precisa manter sobre o vídeo em tela cheia. */
+  border-top: 1px solid var(--lj-footer-border);
+}
+
+.player__main {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+}
+
+.player__side {
+  display: flex;
+  flex-direction: column;
+}
+</style>

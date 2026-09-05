@@ -13,8 +13,8 @@
     </template>
 
     <template v-if="userdata" #header>
-      <div :class="classform.group">
-        <div :class="classform.group_item" style="margin-top: 10px">
+      <div class="musics-form-group">
+        <div class="musics-form-item" style="margin-top: 10px">
           <LjField class="musics-search" :hint="disabled ? t('inputs.search_disabled') : ''">
             <LjInput
               v-model="search"
@@ -78,11 +78,11 @@
     >
       <thead>
         <tr>
-          <th class="text-left">{{ t("table.music_name") }}</th>
-          <th v-if="!compact" class="text-left">
+          <th class="lj-u-text-start">{{ t("table.music_name") }}</th>
+          <th v-if="!compact" class="lj-u-text-start">
             {{ t("table.album_name") }}
           </th>
-          <th class="text-right">{{ t("table.duration") }}</th>
+          <th class="lj-u-text-end">{{ t("table.duration") }}</th>
           <th v-if="selectedPlaylist" />
           <th />
         </tr>
@@ -95,31 +95,32 @@
         >
           <td>
             {{ item.name }}
-            <div v-if="compact" class="pb-1">
-              <v-chip
+            <div v-if="compact" class="musics-albums">
+              <LjChip
                 v-for="album in item.albums"
                 :key="album.id_album"
-                :color="primaryColor"
-                size="x-small"
+                :variant="chipVariant"
+                size="sm"
+                class="musics-album-chip"
                 @click="openAlbum(album.id_album)"
               >
                 {{ album.name }}
-              </v-chip>
+              </LjChip>
             </div>
           </td>
           <td v-if="!compact">
-            <v-chip
+            <LjChip
               v-for="album in item.albums"
               :key="album.id_album"
-              :color="primaryColor"
-              density="compact"
+              :variant="chipVariant"
+              class="musics-album-chip"
               @click="openAlbum(album.id_album)"
             >
               {{ album.name }}
-            </v-chip>
+            </LjChip>
           </td>
-          <td class="text-right">{{ shortTime(item.duration) }}</td>
-          <td v-if="selectedPlaylist" class="text-center">
+          <td class="lj-u-text-end">{{ shortTime(item.duration) }}</td>
+          <td v-if="selectedPlaylist" class="lj-u-text-center">
             <LjButton
               v-if="!isSongInPlaylist(selectedPlaylist.id, item.id_music)"
               variant="ghost"
@@ -140,7 +141,7 @@
             />
           </td>
           <td>
-            <div class="d-flex justify-end">
+            <div class="lj-u-flex lj-u-justify-end">
               <MusicMenuTable
                 :id_music="item.id_music"
                 :name="item.name"
@@ -153,20 +154,17 @@
       </tbody>
     </Table>
 
-    <v-alert
+    <LjAlert
       v-if="search && data.filter_count <= 0"
-      type="error"
+      variant="danger"
       :text="t('data.not_found')"
-      variant="tonal"
-      border="start"
-      class="ma-2"
-      style="max-height: 70px"
+      class="musics-alert"
     />
 
     <template #footer>
       <div class="w-100">
         <LetterPaginate v-model="letter" />
-        <div class="text-right">
+        <div class="lj-u-text-end">
           <small>
             {{ t("data.records") }}:
             {{ data.filter_count }}
@@ -178,12 +176,12 @@
 </template>
 
 <script setup>
-import { LjButton, LjCheckbox, LjField, LjInput, LjSwitch } from "@/components/ui";
+import { LjAlert, LjButton, LjCheckbox, LjChip, LjField, LjInput, LjSwitch } from "@/components/ui";
 /* ########################################################### */
 /* ####### INSTALAÇÃO DO MODULO ############################## */
 /* ########################################################### */
 import { computed, onMounted, ref } from "vue";
-import { useDisplay } from "vuetify";
+import { useViewport } from "@/composables/useViewport";
 import Media from "@/composables/useMedia";
 import AppData from "@/helpers/AppData";
 import DateTime from "@/helpers/DateTime";
@@ -235,7 +233,7 @@ function removeSongFromPlaylist(id_music) {
 /* -------------------------------------------------- */
 /* STATE                                              */
 /* -------------------------------------------------- */
-const { width: displayWidth } = useDisplay();
+const { width: displayWidth } = useViewport();
 
 const search = ref("");
 const data = ref([]);
@@ -270,13 +268,8 @@ const disabled = computed(() => {
   return !search_name.value && !search_lyric.value && !search_album.value && !search_track.value;
 });
 
-const classform = computed(() => ({
-  group: "d-flex flex-wrap",
-  group_item: "flex-shrink-1 flex-grow-1 d-flex flex-wrap justify-space-around",
-}));
-
 const compact = computed(() => displayWidth.value <= 800);
-const primaryColor = computed(() => (AppData.get("is_dark") ? undefined : "primary"));
+const chipVariant = computed(() => (AppData.get(KEYS.SHELL.IS_DARK) ? "neutral" : "primary"));
 const shortTime = (t) => DateTime.shortTime(t);
 
 const disabledAlbums = computed(() => {
@@ -306,5 +299,30 @@ function close() {
 <style scoped>
 .musics-search {
   width: 400px;
+}
+
+.musics-form-group {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.musics-form-item {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  justify-content: space-around;
+}
+
+.musics-albums {
+  padding-bottom: var(--lj-space-2);
+}
+
+.musics-album-chip {
+  cursor: pointer;
+}
+
+.musics-alert {
+  margin: var(--lj-space-4);
+  max-height: 70px;
 }
 </style>

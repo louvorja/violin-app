@@ -10,7 +10,9 @@
  *
  * Todo o estado vem dos stores, então não há cache local aqui: chamar o
  * composable em qualquer janela devolve o mesmo tema, já reativo a patches
- * vindos de outra janela.
+ * vindos de outra janela. Quem carimba `[data-theme]` nas janelas que não
+ * chamaram `setTheme` é o watchEffect global de main.js — sem ele a projeção
+ * ficaria com a paleta antiga enquanto o valor do tema já era o novo.
  */
 
 import { computed, type ComputedRef } from "vue";
@@ -52,15 +54,23 @@ export function useAppTheme(): AppThemeAPI {
   const isDark = computed<boolean>(() => getTheme(current.value).dark);
 
   function setTheme(id: ThemeId): void {
+    // `theme.id`, não `id`: getTheme já saneia um valor fora do registro, e
+    // gravar o cru deixaria o documento carimbado com algo que nenhum bloco
+    // [data-theme] casa — a paleta cai no default de :root e o estado
+    // inconsistente sobrevive ao restart.
     const theme = getTheme(id);
-    $userdata.set(KEYS.OPTIONS.THEME, id);
-    if (!theme.dark) $userdata.set(KEYS.OPTIONS.THEME_LAST_LIGHT, id);
-    stamp(id);
+    $userdata.set(KEYS.OPTIONS.THEME, theme.id);
+    if (!theme.dark) $userdata.set(KEYS.OPTIONS.THEME_LAST_LIGHT, theme.id);
+    stamp(theme.id);
     $appdata.set(KEYS.SHELL.IS_DARK, theme.dark);
   }
 
   function toggleDark(): void {
     if (!isDark.value) {
+      // Guardar aqui, e não só no setTheme: um perfil cujo tema foi escrito por
+      // um caminho antigo não tem THEME_LAST_LIGHT nenhum, e sem isto o
+      // primeiro retorno do escuro cairia no tema padrão em vez do dele.
+      $userdata.set(KEYS.OPTIONS.THEME_LAST_LIGHT, current.value);
       setTheme(DARK_THEME_ID);
       return;
     }

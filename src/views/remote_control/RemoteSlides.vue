@@ -1,25 +1,25 @@
 <template>
   <div>
-    <div v-if="slides.length === 0" class="pa-8 text-center text-medium-emphasis">
+    <div v-if="slides.length === 0" class="rs-empty lj-u-text-center lj-u-muted">
       {{ t("shell.operator_waiting") }}
     </div>
     <template v-else>
-      <div class="px-4 py-2 bg-surface-variant text-caption d-flex align-center">
-        <Icon :icon="ICONS.MUSIC.NOTE" size="small" class="mr-1" />
-        <span class="text-truncate">{{ currentTitle }}</span>
+      <div class="rs-ref lj-u-caption">
+        <Icon :icon="ICONS.MUSIC.NOTE" size="small" />
+        <span class="lj-u-truncate">{{ currentTitle }}</span>
       </div>
-      <div class="remote-slides-grid pa-2">
-        <v-card
+      <div class="rs-grid">
+        <button
           v-for="(s, i) in slides"
           :key="i"
-          class="slide-card"
-          :color="i === currentSlideIndex ? 'primary' : ''"
-          :variant="i === currentSlideIndex ? 'flat' : 'outlined'"
+          type="button"
+          class="rs-slide"
+          :class="{ 'is-active': i === currentSlideIndex }"
           @click="goToSlide(i)"
         >
-          <div class="slide-num">{{ i + 1 }}</div>
-          <div class="slide-text" v-html="s.lyric || s.name || '—'" />
-        </v-card>
+          <span class="rs-slide__num">{{ i + 1 }}</span>
+          <span class="rs-slide__text" v-html="s.lyric || s.name || '—'" />
+        </button>
       </div>
     </template>
   </div>
@@ -55,35 +55,72 @@ function goToSlide(index: number): void {
 </script>
 
 <style scoped>
-.remote-slides-grid {
+.rs-empty {
+  padding: var(--lj-space-8);
+  font-size: var(--lj-text-lg);
+}
+
+/* Faixa de identificação da música. Sobre o fundo suave da página ela só se
+   destaca com a superfície cheia, do mesmo jeito que as abas e o rodapé. */
+.rs-ref {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-2);
+  padding: var(--lj-space-4) var(--lj-space-6);
+  background: var(--lj-surface-bg);
+  border-bottom: 1px solid var(--lj-surface-border);
+  color: var(--lj-text-muted);
+}
+
+.rs-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 8px;
+  gap: var(--lj-space-4);
+  padding: var(--lj-space-4);
 }
-.slide-card {
-  aspect-ratio: 16/9;
+
+.rs-slide {
+  position: relative;
   display: flex;
   flex-direction: column;
-  padding: 8px;
-  cursor: pointer;
+  aspect-ratio: 16/9;
+  padding: var(--lj-space-4);
   overflow: hidden;
-  position: relative;
+  background: var(--lj-surface-bg);
+  border: var(--lj-ui-border);
+  border-radius: var(--lj-ui-radius);
+  color: var(--lj-text);
+  font: inherit;
+  cursor: pointer;
 }
-.slide-num {
+
+.rs-slide.is-active {
+  background: var(--lj-ui-accent);
+  border-color: var(--lj-ui-accent);
+  color: var(--lj-ui-accent-fg);
+}
+
+.rs-slide:focus-visible {
+  outline: none;
+  box-shadow: var(--lj-ui-focus);
+}
+
+.rs-slide__num {
   position: absolute;
-  top: 4px;
-  left: 4px;
-  font-size: 10px;
+  top: var(--lj-space-2);
+  left: var(--lj-space-2);
+  font-size: var(--lj-text-xs);
   opacity: 0.7;
 }
-.slide-text {
-  font-size: 11px;
+
+.rs-slide__text {
+  display: -webkit-box;
+  margin: auto;
+  overflow: hidden;
+  font-size: var(--lj-text-sm);
   line-height: 1.2;
   text-align: center;
-  margin: auto;
-  display: -webkit-box;
   -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
-  overflow: hidden;
 }
 </style>

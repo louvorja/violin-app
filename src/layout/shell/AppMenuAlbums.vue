@@ -9,18 +9,20 @@
 
       <!-- Pesquisa -->
       <div class="opt-row opt-row--col">
-        <v-text-field
-          v-model="search"
-          :label="$t('options.albums.search')"
-          density="compact"
-          hide-details
-          clearable
-          :prepend-inner-icon="ICONS.ACTIONS.SEARCH"
-          width="400px"
-        />
+        <div class="opt-albums-search">
+          <LjInput
+            v-model="search"
+            clearable
+            :icon="ICONS.ACTIONS.SEARCH"
+            :placeholder="$t('options.albums.search')"
+            :aria-label="$t('options.albums.search')"
+          />
+        </div>
       </div>
 
-      <v-divider class="my-3" />
+      <div class="opt-albums-divider">
+        <LjDivider />
+      </div>
 
       <div v-if="loading" class="opt-folder-path">
         {{ $t("options.albums.loading") }}
@@ -30,63 +32,51 @@
         {{ error }}
       </div>
 
-      <v-expansion-panels v-else v-model="expanded" multiple class="opt-panels">
-        <!-- Panel "Hinário" — primeiro, com o checkbox do Hinário 1996 -->
-        <v-expansion-panel>
-          <v-expansion-panel-title>
-            <strong>{{ $t("options.albums.hymnal_panel_title") }}</strong>
-          </v-expansion-panel-title>
-          <v-expansion-panel-text>
-            <div class="opt-cat-albums">
-              <label class="opt-checkbox opt-album">
-                <input
-                  type="checkbox"
-                  :checked="hymnal1996Enabled"
-                  @change="onHymnal1996Change(($event.target as HTMLInputElement).checked)"
-                />
-                <span>{{ $t("options.albums.enable_hymnal_1996") }}</span>
-              </label>
-            </div>
-          </v-expansion-panel-text>
-        </v-expansion-panel>
+      <LjAccordion v-else v-model="expandidos" :items="paineis" multiple>
+        <template #[PAINEL_HINARIO]>
+          <div class="opt-cat-albums">
+            <label class="opt-checkbox opt-album">
+              <input
+                type="checkbox"
+                :checked="hymnal1996Enabled"
+                @change="onHymnal1996Change(($event.target as HTMLInputElement).checked)"
+              />
+              <span>{{ $t("options.albums.enable_hymnal_1996") }}</span>
+            </label>
+          </div>
+        </template>
 
-        <!-- Demais categorias -->
-        <v-expansion-panel v-for="cat in filteredCategories" :key="cat.id_category">
-          <v-expansion-panel-title>
-            <strong>{{ cat.name }}</strong>
-          </v-expansion-panel-title>
-          <v-expansion-panel-text>
-            <div class="opt-cat-albums">
-              <label class="opt-checkbox opt-cat-header">
-                <input
-                  type="checkbox"
-                  :checked="isCategoryFullyActive(cat)"
-                  :indeterminate.prop="isCategoryPartiallyActive(cat)"
-                  @change="toggleCategory(cat, ($event.target as HTMLInputElement).checked)"
-                />
-                <span class="opt-cat-select-all">
-                  {{ $t("options.albums.select_all") }}
-                </span>
-              </label>
+        <template v-for="cat in filteredCategories" :key="cat.id_category" #[painelValue(cat)]>
+          <div class="opt-cat-albums">
+            <label class="opt-checkbox opt-cat-header">
+              <input
+                type="checkbox"
+                :checked="isCategoryFullyActive(cat)"
+                :indeterminate.prop="isCategoryPartiallyActive(cat)"
+                @change="toggleCategory(cat, ($event.target as HTMLInputElement).checked)"
+              />
+              <span class="opt-cat-select-all">
+                {{ $t("options.albums.select_all") }}
+              </span>
+            </label>
 
-              <label
-                v-for="album in visibleAlbums(cat)"
-                :key="album.id_album"
-                class="opt-checkbox opt-album"
-              >
-                <input
-                  type="checkbox"
-                  :checked="!disabledAlbums.has(Number(album.id_album))"
-                  @change="
-                    toggleAlbum(Number(album.id_album), ($event.target as HTMLInputElement).checked)
-                  "
-                />
-                <span>{{ album.name }}</span>
-              </label>
-            </div>
-          </v-expansion-panel-text>
-        </v-expansion-panel>
-      </v-expansion-panels>
+            <label
+              v-for="album in visibleAlbums(cat)"
+              :key="album.id_album"
+              class="opt-checkbox opt-album"
+            >
+              <input
+                type="checkbox"
+                :checked="!disabledAlbums.has(Number(album.id_album))"
+                @change="
+                  toggleAlbum(Number(album.id_album), ($event.target as HTMLInputElement).checked)
+                "
+              />
+              <span>{{ album.name }}</span>
+            </label>
+          </div>
+        </template>
+      </LjAccordion>
 
       <div v-if="!loading && !error && filteredCategories.length === 0" class="opt-folder-path">
         {{ $t("options.albums.no_results") }}
@@ -97,6 +87,8 @@
 
 <script setup lang="ts">
 import Icon from "@/components/Icon.vue";
+import { LjAccordion, LjDivider, LjInput } from "@/components/ui";
+import type { LjAccordionItem } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, watch, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
@@ -120,7 +112,7 @@ interface Category {
 
 const HYMNAL_1996_ALBUM_ID = 629;
 
-const { locale } = useI18n();
+const { t, locale } = useI18n();
 
 const categories = ref<Category[]>([]);
 const loading = ref<boolean>(false);
@@ -130,8 +122,15 @@ const disabledAlbums = ref<Set<number>>(new Set());
 const hymnal1996Enabled = ref<boolean>(false);
 
 const search = ref("");
-// Painel 0 = "Hinário" (sempre presente); demais = categorias visíveis.
-const expanded = ref<number[]>([0]);
+
+/** Painel sempre presente, antes das categorias. */
+const PAINEL_HINARIO = "hymnal";
+
+function painelValue(cat: Category): string {
+  return `cat-${cat.id_category}`;
+}
+
+const expandidos = ref<string[]>([PAINEL_HINARIO]);
 
 /* ---- Estado persistido ---- */
 
@@ -172,18 +171,21 @@ function visibleAlbums(cat: Category): Album[] {
   return categoryAlbums(cat).filter((a) => albumMatches(a, q));
 }
 
+const paineis = computed<LjAccordionItem[]>(() => [
+  { value: PAINEL_HINARIO, label: t("options.albums.hymnal_panel_title") },
+  ...filteredCategories.value.map((cat) => ({ value: painelValue(cat), label: cat.name })),
+]);
+
 /* ---- Auto-expandir conforme pesquisa ---- */
 
 watch(search, () => {
   const q = (search.value ?? "").trim();
   if (!q) {
-    expanded.value = [0];
+    expandidos.value = [PAINEL_HINARIO];
     return;
   }
-  // Painel "Hinário" (0) sempre expandido; expande categorias com resultado.
-  const idxs = [0];
-  filteredCategories.value.forEach((_, i) => idxs.push(i + 1));
-  expanded.value = idxs;
+  // Hinário sempre expandido; expande também as categorias com resultado.
+  expandidos.value = [PAINEL_HINARIO, ...filteredCategories.value.map(painelValue)];
 });
 
 /* ---- Toggle de álbuns/categorias ---- */
@@ -256,8 +258,12 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.opt-panels {
-  background: transparent;
+.opt-albums-search :deep(.lj-input) {
+  width: 400px;
+  max-width: 100%;
+}
+.opt-albums-divider {
+  margin: var(--lj-space-5) 0;
 }
 .opt-cat-albums {
   display: flex;

@@ -1,59 +1,41 @@
 <template>
-  <v-dialog v-model="dialog" max-width="680" scrollable>
-    <v-card class="hk-card" rounded="lg">
-      <header class="hk-header">
-        <Icon :icon="ICONS.UI.KEYBOARD" size="22" class="hk-header-icon" />
-        <span class="hk-header-title">{{ $t("hotkeys.title") }}</span>
-        <v-spacer />
-        <button
-          type="button"
-          class="hk-close"
-          :title="$t('alert.close')"
-          :aria-label="$t('alert.close')"
-          @click="dialog = false"
-        >
-          <Icon :icon="ICONS.ACTIONS.CLOSE" size="16" />
-        </button>
-      </header>
+  <LjDialog v-model="dialog" :title="$t('hotkeys.title')" :icon="ICONS.UI.KEYBOARD" size="md">
+    <div v-for="group in groups" :key="group.key" class="hk-group">
+      <h3 class="hk-group-title">
+        {{ $t("hotkeys.groups." + group.key, group.key) }}
+      </h3>
 
-      <div class="hk-body">
-        <div v-for="group in groups" :key="group.key" class="hk-group">
-          <h3 class="hk-group-title">
-            {{ $t("hotkeys.groups." + group.key, group.key) }}
-          </h3>
-
-          <div class="hk-list">
-            <div v-for="entry in group.entries" :key="entry.combo" class="hk-row">
-              <div class="hk-combo">
-                <template v-for="(part, i) in entry.comboParts" :key="i">
-                  <kbd class="hk-kbd">{{ part }}</kbd>
-                  <span v-if="i < entry.comboParts.length - 1" class="hk-plus">+</span>
-                </template>
-              </div>
-              <div class="hk-desc">
-                {{ $t(entry.description, entry.description) }}
-              </div>
-            </div>
+      <div class="hk-list">
+        <div v-for="entry in group.entries" :key="entry.combo" class="hk-row">
+          <div class="hk-combo">
+            <template v-for="(part, i) in entry.comboParts" :key="i">
+              <kbd class="hk-kbd">{{ part }}</kbd>
+              <span v-if="i < entry.comboParts.length - 1" class="hk-plus">+</span>
+            </template>
+          </div>
+          <div class="hk-desc">
+            {{ $t(entry.description, entry.description) }}
           </div>
         </div>
-
-        <div v-if="groups.length === 0" class="hk-empty">
-          {{ $t("shell.no_results") }}
-        </div>
       </div>
+    </div>
 
-      <footer class="hk-footer">
-        <span class="hk-tip">
-          <Icon :icon="ICONS.UI.INFORMATION_OUTLINE" size="13" class="mr-1" />
-          {{ $t("hotkeys.tip", "Pressione Esc para fechar") }}
-        </span>
-      </footer>
-    </v-card>
-  </v-dialog>
+    <div v-if="groups.length === 0" class="hk-empty">
+      {{ $t("shell.no_results") }}
+    </div>
+
+    <template #footer>
+      <span class="hk-tip">
+        <Icon :icon="ICONS.UI.INFORMATION_OUTLINE" size="13" />
+        {{ $t("hotkeys.tip", "Pressione Esc para fechar") }}
+      </span>
+    </template>
+  </LjDialog>
 </template>
 
 <script setup>
 import Icon from "@/components/Icon.vue";
+import { LjDialog } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { computed } from "vue";
 import Hotkeys from "@/helpers/Hotkeys";
@@ -97,61 +79,6 @@ const groups = computed(() => {
 </script>
 
 <style scoped>
-.hk-card.hk-card {
-  background: var(--lj-popup-bg);
-  font-family: var(--lj-font-shell);
-  display: flex;
-  flex-direction: column;
-  max-height: 80vh;
-}
-
-.hk-header {
-  display: flex;
-  align-items: center;
-  gap: var(--lj-space-3);
-  padding: var(--lj-space-5) var(--lj-space-6);
-  border-bottom: 1px solid var(--lj-surface-divider);
-  flex-shrink: 0;
-}
-
-.hk-header-icon {
-  color: var(--lj-navy);
-}
-
-.hk-header-title {
-  font-size: var(--lj-text-xl);
-  font-weight: var(--lj-weight-semibold);
-  color: var(--lj-text);
-}
-
-.hk-close {
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  border-radius: var(--lj-radius-sm);
-  color: var(--lj-text-muted);
-  cursor: pointer;
-  transition:
-    background var(--lj-transition-fast),
-    color var(--lj-transition-fast);
-  font-family: inherit;
-}
-
-.hk-close:hover {
-  background: var(--lj-danger);
-  color: var(--lj-white);
-}
-
-.hk-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--lj-space-5) var(--lj-space-6);
-}
-
 .hk-group {
   margin-bottom: var(--lj-space-7);
 }
@@ -228,18 +155,12 @@ const groups = computed(() => {
   color: var(--lj-text-muted);
 }
 
-.hk-footer {
-  padding: var(--lj-space-3) var(--lj-space-6);
-  border-top: 1px solid var(--lj-surface-divider);
-  background: var(--lj-surface-bg-soft);
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-}
-
+/* O rodapé do diálogo alinha à direita; a dica continua à esquerda. */
 .hk-tip {
   display: inline-flex;
   align-items: center;
+  gap: var(--lj-space-2);
+  margin-right: auto;
   font-size: var(--lj-text-sm);
   color: var(--lj-text-muted);
 }

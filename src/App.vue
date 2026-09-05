@@ -4,10 +4,10 @@
        o atraso compartilhado, para que passar o mouse de um botão a outro não
        reinicie a contagem a cada elemento. -->
   <TooltipProvider :delay-duration="400" :skip-delay-duration="300">
-    <v-app id="app-container">
+    <div id="app-container">
       <router-view />
       <WebFullscreenPrompt v-if="isProjectionRoute" />
-    </v-app>
+    </div>
   </TooltipProvider>
 </template>
 
@@ -31,7 +31,18 @@ const isProjectionRoute = computed(() => {
 </script>
 
 <style>
-#app-container > div {
+/* Raiz de layout do app. Reúne num só elemento o que o `v-app` fazia em dois:
+   a coluna que ocupa a janela inteira e a superfície do tema por baixo de todas
+   as rotas — inclusive as que não pintam fundo próprio. */
+#app-container {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  max-width: 100%;
   height: 100vh;
+  background: var(--lj-surface-bg);
+  color: var(--lj-text);
+  backface-visibility: hidden;
 }
 </style>

@@ -3,8 +3,14 @@
  *
  * O tema de verdade são os tokens `--lj-*` pendurados em `[data-theme="<id>"]`
  * no arquivo src/assets/styles/tokens.css — este registro só descreve o que o
- * JavaScript precisa saber sobre eles: o id carimbado no `<html>`, se o tema
- * pinta as superfícies escuras e a cor que o representa nas amostras.
+ * JavaScript precisa saber sobre eles: o id carimbado no `<html>` e se o tema
+ * pinta as superfícies escuras.
+ *
+ * A cor de cada tema NÃO entra aqui de propósito. Ela já existe como `--lj-navy`
+ * dentro do bloco do tema, e copiá-la para cá criaria uma terceira cópia da
+ * paleta que nada mantém em dia: bastaria alguém ajustar tokens.css para o
+ * usuário clicar numa cor e a interface pintar outra. Quem desenha uma amostra
+ * carimba `data-theme` no próprio elemento e lê `var(--lj-navy)` dali.
  *
  * Ao criar ou remover um tema aqui, criar ou remover também o bloco
  * `[data-theme="<id>"]` correspondente em tokens.css.
@@ -18,21 +24,19 @@ export interface AppTheme {
    * trocam apenas a paleta de marca `--lj-navy*`, mantendo o corpo claro.
    */
   dark: boolean;
-  /** Cor da amostra — é o `--lj-navy` do bloco do tema em tokens.css. */
-  swatch: string;
 }
 
 export const APP_THEMES = [
-  { id: "light", dark: false, swatch: "#29569b" },
-  { id: "dark", dark: true, swatch: "#2e2e2e" },
-  { id: "black", dark: false, swatch: "#2e2e2e" },
-  { id: "blue", dark: false, swatch: "#0b3d62" },
-  { id: "darkblue", dark: false, swatch: "#1b2a41" },
-  { id: "green", dark: false, swatch: "#077568" },
-  { id: "orange", dark: false, swatch: "#d24726" },
-  { id: "purple", dark: false, swatch: "#80397b" },
-  { id: "pink", dark: false, swatch: "#e91e63" },
-  { id: "terracota", dark: false, swatch: "#722f37" },
+  { id: "light", dark: false },
+  { id: "dark", dark: true },
+  { id: "black", dark: false },
+  { id: "blue", dark: false },
+  { id: "darkblue", dark: false },
+  { id: "green", dark: false },
+  { id: "orange", dark: false },
+  { id: "purple", dark: false },
+  { id: "pink", dark: false },
+  { id: "terracota", dark: false },
 ] as const satisfies readonly AppTheme[];
 
 export type ThemeId = (typeof APP_THEMES)[number]["id"];
@@ -44,15 +48,18 @@ export const DEFAULT_THEME_ID: ThemeId = "darkblue";
 /** Destino do botão de alternar claro/escuro. */
 export const DARK_THEME_ID: ThemeId = "dark";
 
-const BY_ID = new Map<string, AppTheme>(APP_THEMES.map((theme) => [theme.id, theme]));
+/** O elemento literal do registro: o `id` aqui é `ThemeId`, não `string`. */
+type AppThemeEntry = (typeof APP_THEMES)[number];
+
+const BY_ID = new Map<string, AppThemeEntry>(APP_THEMES.map((theme) => [theme.id, theme]));
 
 export function isThemeId(value: unknown): value is ThemeId {
   return typeof value === "string" && BY_ID.has(value);
 }
 
 /** Um id fora da lista cai no tema padrão em vez de deixar a tela sem tokens. */
-export function getTheme(id: string): AppTheme {
-  return BY_ID.get(id) ?? (BY_ID.get(DEFAULT_THEME_ID) as AppTheme);
+export function getTheme(id: string): AppThemeEntry {
+  return BY_ID.get(id) ?? (BY_ID.get(DEFAULT_THEME_ID) as AppThemeEntry);
 }
 
 export function isDarkTheme(id: string): boolean {

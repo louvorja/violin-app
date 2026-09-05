@@ -13,15 +13,8 @@
     </template>
 
     <div class="ch-root">
-      <v-progress-linear v-if="loading" indeterminate />
-      <v-alert
-        v-if="error"
-        type="error"
-        :text="error"
-        variant="tonal"
-        class="ma-2"
-        style="max-height: 70px"
-      />
+      <LjProgress v-if="loading" indeterminate :height="4" />
+      <LjAlert v-if="error" variant="danger" :text="error" class="ch-error" />
 
       <!-- Nível 2: Músicas do álbum -->
       <template v-if="selectedAlbum">
@@ -93,7 +86,7 @@
 </template>
 
 <script setup lang="ts">
-import { LjButton } from "@/components/ui";
+import { LjAlert, LjButton, LjProgress } from "@/components/ui";
 import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, watch, onMounted } from "vue";
@@ -211,6 +204,10 @@ function close(): void {
   gap: 8px;
   height: 100%;
   overflow-y: auto;
+}
+.ch-error {
+  margin: var(--lj-space-4);
+  max-height: 70px;
 }
 .ch-header {
   width: 100%;

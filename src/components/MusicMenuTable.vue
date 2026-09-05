@@ -100,7 +100,7 @@
  */
 import { computed, inject } from "vue";
 import { useI18n } from "vue-i18n";
-import { useDisplay } from "vuetify";
+import { useViewport } from "@/composables/useViewport";
 import {
   DropdownMenuItem,
   DropdownMenuPortal,
@@ -155,7 +155,7 @@ const props = defineProps<{
 }>();
 
 const { t } = useI18n();
-const { width } = useDisplay();
+const { width } = useViewport();
 
 const closeSpotlight = inject<() => void>("close-spotlight", () => {});
 

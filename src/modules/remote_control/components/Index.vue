@@ -1,35 +1,25 @@
 <template>
   <ModuleContainer ref="moduleContainer" :manifest="manifest">
-    <v-card flat>
-      <v-card-text class="px-0">
-        <small>{{ t("info_module") }}</small>
-      </v-card-text>
-      <v-card-text class="px-0">
-        <v-text-field
-          v-model="url"
-          :disabled="loading || is_connected"
-          :label="t('labels.ip')"
-          density="compact"
-          variant="outlined"
-          :prepend-icon="ICONS.UI.IP_NETWORK"
-          :hint="t('messages.get_ip')"
-          persistent-hint
-          :loading="loading ? 'warning' : false"
-        />
-        <v-text-field
-          v-model="token"
-          :disabled="loading || is_connected"
-          :label="t('labels.token')"
-          class="mt-3"
-          density="compact"
-          variant="outlined"
-          :prepend-icon="ICONS.UI.CODE_BRACES"
-          persistent-hint
-          :loading="loading ? 'warning' : false"
-        />
-      </v-card-text>
-      <v-card-actions class="px-0">
-        <v-spacer></v-spacer>
+    <div class="rcm-panel">
+      <p class="rcm-info">{{ t("info_module") }}</p>
+
+      <LjField layout="column" :label="t('labels.ip')" :hint="t('messages.get_ip')">
+        <LjInput v-model="url" :disabled="loading || is_connected" :icon="ICONS.UI.IP_NETWORK">
+          <template #suffix>
+            <LjSpinner v-if="loading" class="rcm-busy" />
+          </template>
+        </LjInput>
+      </LjField>
+
+      <LjField layout="column" :label="t('labels.token')">
+        <LjInput v-model="token" :disabled="loading || is_connected" :icon="ICONS.UI.CODE_BRACES">
+          <template #suffix>
+            <LjSpinner v-if="loading" class="rcm-busy" />
+          </template>
+        </LjInput>
+      </LjField>
+
+      <div class="rcm-actions">
         <LjButton @click="test">{{ t("labels.test_connection") }}</LjButton>
         <LjButton v-if="!is_connected" variant="primary" @click="connect">
           {{ t("labels.connect") }}
@@ -37,13 +27,13 @@
         <LjButton v-else variant="danger" @click="disonnect">
           {{ t("labels.disconnect") }}
         </LjButton>
-      </v-card-actions>
-    </v-card>
+      </div>
+    </div>
   </ModuleContainer>
 </template>
 
 <script setup lang="ts">
-import { LjButton } from "@/components/ui";
+import { LjButton, LjField, LjInput, LjSpinner } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, onMounted } from "vue";
 import { module as manifest } from "../manifest";
@@ -190,3 +180,30 @@ onMounted(() => {
   token.value = $userdata.get("remote.token") as string;
 });
 </script>
+
+<style scoped>
+/* Sem recuo lateral: o formulário encosta na borda do módulo, como no
+   `px-0` que ele tinha — o ModuleContainer não reserva margem própria. */
+.rcm-panel {
+  padding: var(--lj-space-6) 0;
+}
+
+.rcm-info {
+  margin: 0 0 var(--lj-space-6);
+  color: var(--lj-text-muted);
+  font-size: var(--lj-text-sm);
+  line-height: 1.5;
+}
+
+/* O indicador de "testando" mora no sufixo do campo: o primitivo não tem
+   estado de carregamento próprio, e sem ele o botão fica mudo na espera. */
+.rcm-busy {
+  color: var(--lj-warning);
+}
+
+.rcm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--lj-space-4);
+}
+</style>

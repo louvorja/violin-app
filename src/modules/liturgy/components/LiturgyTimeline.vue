@@ -1,7 +1,7 @@
 <template>
   <div class="liturgy-tl-area" :class="{ 'liturgy-tl-area--locked': locked }">
     <div v-if="items.length === 0" class="liturgy-tl-empty">
-      <Icon :icon="ICONS.LITURGY.SCRIPT" size="80" class="text-disabled" />
+      <Icon :icon="ICONS.LITURGY.SCRIPT" size="80" class="lj-u-faded" />
       <div class="liturgy-tl-empty-title">{{ t("data.empty") }}</div>
       <div class="liturgy-tl-empty-hint">{{ t("data.empty_hint") }}</div>
       <button
@@ -83,15 +83,17 @@
             </div>
 
             <template v-else>
-              <v-expand-transition>
+              <Transition name="tl-meta">
                 <div
                   v-if="!element.blocoId || !collapsedBlocos.has(element.blocoId)"
-                  class="tl-item-meta"
+                  class="tl-meta-collapse"
                 >
-                  <div class="tl-time">{{ element.time || "-:-" }}</div>
-                  <div class="tl-line" />
+                  <div class="tl-item-meta">
+                    <div class="tl-time">{{ element.time || "-:-" }}</div>
+                    <div class="tl-line" />
+                  </div>
                 </div>
-              </v-expand-transition>
+              </Transition>
               <div
                 class="tl-card"
                 :class="{
@@ -303,14 +305,38 @@ function onDragMove(evt: Record<string, unknown>): boolean | void {
 }
 
 /* ── Timeline meta (time + dot + line) ── */
-.tl-item-meta {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+/* A altura só é animável a partir de uma linha de grade: `0fr` a `1fr` vai de
+   zero à altura do conteúdo sem ninguém precisar medi-la. Por isso o invólucro
+   existe — ele carrega a posição na linha do item, e o miolo continua sendo a
+   coluna de tempo. */
+.tl-meta-collapse {
+  display: grid;
+  grid-template-rows: 1fr;
   align-self: center;
   width: 64px;
   flex-shrink: 0;
   z-index: 1;
+}
+.tl-item-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 0;
+  overflow: hidden;
+}
+.tl-meta-enter-active,
+.tl-meta-leave-active {
+  transition: grid-template-rows var(--lj-transition-normal);
+}
+.tl-meta-enter-from,
+.tl-meta-leave-to {
+  grid-template-rows: 0fr;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tl-meta-enter-active,
+  .tl-meta-leave-active {
+    transition: none;
+  }
 }
 .tl-time {
   font-size: 14px;

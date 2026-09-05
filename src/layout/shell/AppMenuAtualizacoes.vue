@@ -14,11 +14,11 @@
           <span>{{ formatLastCheck(lastAppCheck) }}</span>
         </div>
         <div v-if="appUpdate.status === 'downloading'" class="w-100">
-          <v-progress
-            color="primary"
+          <LjProgress
+            show-value
             :label="$t('options.updates.app_downloading')"
-            :model-value="appUpdate.progress"
-          ></v-progress>
+            :value="appUpdate.progress"
+          />
         </div>
         <div class="opt-folder-actions">
           <button
@@ -28,7 +28,7 @@
             :disabled="appUpdate.status === 'checking'"
             @click="checkAppUpdate"
           >
-            <Icon :icon="ICONS.ACTIONS.REFRESH" size="14" class="mr-1" />
+            <Icon :icon="ICONS.ACTIONS.REFRESH" size="14" />
             {{ $t("options.updates.check") }}
           </button>
           <button
@@ -37,7 +37,7 @@
             class="opt-btn opt-btn--primary"
             @click="startDownload"
           >
-            <Icon :icon="ICONS.ACTIONS.DOWNLOAD" size="14" class="mr-1" />
+            <Icon :icon="ICONS.ACTIONS.DOWNLOAD" size="14" />
             {{ $t("options.updates.app_update_button", { version: appUpdate.newVersion }) }}
           </button>
           <button
@@ -46,7 +46,7 @@
             class="opt-btn opt-btn--primary"
             @click="installUpdate"
           >
-            <Icon :icon="ICONS.ACTIONS.RESTART" size="14" class="mr-1" />
+            <Icon :icon="ICONS.ACTIONS.RESTART" size="14" />
             {{ $t("options.updates.install") }}
           </button>
           <button
@@ -55,7 +55,7 @@
             class="opt-btn"
             @click="openPackageFile"
           >
-            <Icon :icon="ICONS.ACTIONS.FOLDER_OPEN" size="14" class="mr-1" />
+            <Icon :icon="ICONS.ACTIONS.FOLDER_OPEN" size="14" />
             {{ $t("options.updates.open_package") }}
           </button>
         </div>
@@ -118,7 +118,7 @@
         <div class="opt-folder-path">{{ dbUpdateStatusText }}</div>
         <div class="opt-folder-actions">
           <button type="button" class="opt-btn" :disabled="dbChecking" @click="checkDbUpdate">
-            <Icon :icon="ICONS.ACTIONS.REFRESH" size="14" class="mr-1" />
+            <Icon :icon="ICONS.ACTIONS.REFRESH" size="14" />
             {{ $t("options.updates.check") }}
           </button>
           <button
@@ -127,20 +127,20 @@
             class="opt-btn opt-btn--primary"
             @click="applyDbUpdate"
           >
-            <Icon :icon="ICONS.ACTIONS.CLOUD_DOWNLOAD" size="14" class="mr-1" />
+            <Icon :icon="ICONS.ACTIONS.CLOUD_DOWNLOAD" size="14" />
             {{ $t("options.updates.apply") }}
           </button>
           <button type="button" class="opt-btn" @click="clearDbCache">
-            <Icon :icon="ICONS.UI.BROOM" size="14" class="mr-1" />
+            <Icon :icon="ICONS.UI.BROOM" size="14" />
             {{ $t("options.updates.clear_cache") }}
           </button>
           <button type="button" class="opt-btn" @click="clearCollectionsCache">
-            <Icon :icon="ICONS.UI.BROOM" size="14" class="mr-1" />
+            <Icon :icon="ICONS.UI.BROOM" size="14" />
             {{ $t("options.storage.clear_cache_collections") }}
           </button>
           <template v-if="isDesktop">
             <button type="button" class="opt-btn" :disabled="dbBackupBusy" @click="exportDatabase">
-              <Icon :icon="ICONS.ACTIONS.DOWNLOAD" size="14" class="mr-1" />
+              <Icon :icon="ICONS.ACTIONS.DOWNLOAD" size="14" />
               {{ $t("options.updates.export_db") }}
             </button>
             <button
@@ -149,7 +149,7 @@
               :disabled="dbBackupBusy"
               @click="pickImportDatabase"
             >
-              <Icon :icon="ICONS.ACTIONS.UPLOAD" size="14" class="mr-1" />
+              <Icon :icon="ICONS.ACTIONS.UPLOAD" size="14" />
               {{ $t("options.updates.import_db") }}
             </button>
             <button
@@ -158,7 +158,7 @@
               :disabled="dbBackupBusy"
               @click="reinstallDatabase"
             >
-              <Icon :icon="ICONS.ACTIONS.DATABASE_REFRESH" size="14" class="mr-1" />
+              <Icon :icon="ICONS.ACTIONS.DATABASE_REFRESH" size="14" />
               {{ $t("options.updates.reinstall_db") }}
             </button>
           </template>
@@ -171,40 +171,34 @@
           @change="onImportFileChange"
         />
       </div>
-      <div v-if="dbBackupState !== 'idle'" class="opt-folder-path mt-2">
+      <div v-if="dbBackupState !== 'idle'" class="opt-folder-path opt-block-gap">
         {{
           dbBackupState === "exporting"
             ? $t("options.updates.exporting_db")
             : $t("options.updates.importing_db")
         }}
       </div>
-      <div v-if="dbBackupState !== 'idle'" class="opt-backup-progress mt-2">
-        <v-progress
-          :model-value="dbBackupProgressPercent"
-          :label="dbBackupProgressLabel"
-          color="primary"
-          rounded
-        />
-        <div v-if="dbBackupProgressDetail" class="opt-folder-path mt-1">
+      <div v-if="dbBackupState !== 'idle'" class="opt-backup-progress opt-block-gap">
+        <LjProgress show-value :value="dbBackupProgressPercent" :label="dbBackupProgressLabel" />
+        <div v-if="dbBackupProgressDetail" class="opt-folder-path opt-detail-gap">
           {{ dbBackupProgressDetail }}
         </div>
       </div>
-      <div v-if="dbBundleDisplayActive" class="opt-row opt-row--col mt-2">
-        <div class="d-flex align-center ga-3 w-100">
-          <v-progress
-            class="flex-grow-1"
-            :model-value="dbBundleProgressPercent"
+      <div v-if="dbBundleDisplayActive" class="opt-row opt-row--col opt-block-gap">
+        <div class="lj-u-row lj-u-gap-5 w-100">
+          <LjProgress
+            show-value
+            class="opt-progress-fill"
+            :value="dbBundleProgressPercent"
             :label="$t('shell.background_tasks.db_bundle')"
             :indeterminate="dbBundleProgressPercent === 0"
-            color="primary"
-            rounded
           />
           <button type="button" class="opt-btn opt-btn--danger" @click="sync.cancelBundle()">
-            <Icon :icon="ICONS.ACTIONS.CANCEL" size="14" class="mr-1" />
+            <Icon :icon="ICONS.ACTIONS.CANCEL" size="14" />
             {{ $t("options.collections_download.cancel") }}
           </button>
         </div>
-        <div v-if="dbBundleDetail" class="opt-folder-path mt-1">
+        <div v-if="dbBundleDetail" class="opt-folder-path opt-detail-gap">
           {{ dbBundleDetail }}
         </div>
       </div>
@@ -214,6 +208,7 @@
 
 <script setup lang="ts">
 import Icon from "@/components/Icon.vue";
+import { LjProgress } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
@@ -751,3 +746,22 @@ onBeforeUnmount(() => {
   if (_pkgProgressUnsub) _pkgProgressUnsub();
 });
 </script>
+
+<style scoped>
+/* O respiro é dos blocos de progresso, que entram e saem conforme o estado do
+   download: se viesse do irmão de cima, sumiria junto com ele. */
+.opt-block-gap {
+  margin-top: var(--lj-space-4);
+}
+
+.opt-detail-gap {
+  margin-top: var(--lj-space-2);
+}
+
+/* A barra divide a linha com o botão de cancelar; `flex: 1` prevalece sobre a
+   largura de 100% que o primitivo assume quando ocupa a linha sozinho. */
+.opt-progress-fill {
+  flex: 1;
+  min-width: 0;
+}
+</style>

@@ -1,37 +1,38 @@
 <template>
   <ModuleContainer ref="moduleContainer" :manifest="manifest">
-    <div v-for="(group, mode) in themes" :key="mode" class="mb-3">
-      <div class="subtitle-1 font-weight-medium">
-        {{ mode == "dark" ? t("dark-themes") : t("light-themes") }}
+    <div v-for="group in groups" :key="group.mode" class="theme-group">
+      <div class="theme-group__title">
+        {{ group.mode == "dark" ? t("dark-themes") : t("light-themes") }}
       </div>
 
       <button
-        v-for="(theme, theme_id) in group"
-        :key="theme_id"
+        v-for="theme in group.themes"
+        :key="theme.id"
         type="button"
         class="theme-swatch"
-        :class="{ 'is-current': current == theme_id }"
-        :aria-pressed="current == theme_id"
-        :title="theme_id"
-        @click="setTheme(theme_id)"
+        :class="{ 'is-current': current == theme.id }"
+        :aria-pressed="current == theme.id"
+        :title="theme.id"
+        @click="setTheme(theme.id)"
       >
-        <span class="theme-swatch__color" :style="{ background: theme.colors.primary }" />
+        <!-- A cor vem do próprio tema: carimbar `data-theme` aqui faz o bloco
+             correspondente de tokens.css valer neste elemento, e `--lj-navy`
+             resolve sozinho. Assim a amostra nunca diverge da paleta real. -->
+        <span class="theme-swatch__color" :data-theme="theme.id" />
       </button>
     </div>
   </ModuleContainer>
 </template>
 
 <script setup>
-import { KEYS } from "@/constants/UserDataKeys";
 /* ########################################################### */
 /* ####### INSTALAÇÃO DO MODULO ############################## */
 /* ########################################################### */
-import { ref, onMounted } from "vue";
-import { useTheme } from "vuetify";
+import { ref } from "vue";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
-import $appdata from "@/helpers/AppData";
-import $userdata from "@/helpers/UserData";
+import { DARK_THEMES, LIGHT_THEMES } from "@/config/Themes";
+import { useAppTheme } from "@/composables/useAppTheme";
 const moduleContainer = ref(null);
 const t = (key) => {
   return moduleContainer.value?.t(key) || key;
@@ -40,49 +41,23 @@ const t = (key) => {
 /* ########################################################### */
 /* ########################################################### */
 
-const vuetifyTheme = useTheme();
+const { current, setTheme } = useAppTheme();
 
-const current = ref("");
-const themes = ref({
-  light: {},
-  dark: {},
-});
-
-/* ########################################################### */
-/* ###################### METHODS ############################# */
-/* ########################################################### */
-
-function setTheme(theme_id) {
-  current.value = theme_id;
-  vuetifyTheme.global.name.value = current.value;
-  $userdata.set(KEYS.OPTIONS.THEME, current.value);
-  // Os tokens do design system pendurados em [data-theme] não entram sem isto —
-  // os outros três pontos que trocam tema já carimbavam o atributo.
-  document.documentElement.dataset.theme = current.value;
-  $appdata.set(KEYS.SHELL.IS_DARK, vuetifyTheme.global.current.value.dark);
-}
-
-/* ########################################################### */
-/* ###################### MOUNTED ############################# */
-/* ########################################################### */
-
-onMounted(() => {
-  current.value = vuetifyTheme.global.name.value;
-  themes.value = { light: {}, dark: {} };
-
-  for (const key in vuetifyTheme.themes.value) {
-    const item = vuetifyTheme.themes.value[key];
-
-    if (item.dark) {
-      themes.value.dark[key] = item;
-    } else {
-      themes.value.light[key] = item;
-    }
-  }
-});
+const groups = [
+  { mode: "light", themes: LIGHT_THEMES },
+  { mode: "dark", themes: DARK_THEMES },
+];
 </script>
 
 <style scoped>
+.theme-group {
+  margin-bottom: var(--lj-space-5);
+}
+
+.theme-group__title {
+  font-weight: var(--lj-weight-medium);
+}
+
 .theme-swatch {
   display: inline-flex;
   align-items: center;
@@ -115,5 +90,6 @@ onMounted(() => {
   width: 22px;
   height: 22px;
   border-radius: 50%;
+  background: var(--lj-navy);
 }
 </style>

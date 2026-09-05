@@ -1,59 +1,51 @@
 <template>
   <!-- Diálogo de vídeo online -->
-  <v-dialog v-model="ui.showOnlineVideoDialog" max-width="560">
-    <v-card>
-      <v-card-title class="text-body-1 font-weight-bold">
-        {{ endAction.t("ribbon.online_video") }}
-      </v-card-title>
-      <v-card-text>
-        <v-text-field
-          v-model="ui.onlineVideoSearch"
-          :placeholder="endAction.t('ribbon.online_video_search')"
-          :prepend-inner-icon="ICONS.ACTIONS.SEARCH"
-          density="compact"
-          hide-details
-          clearable
-        />
-        <div class="ov-grid mt-2">
-          <div
-            v-for="video in videos"
-            :key="video.url"
-            class="ov-card"
-            @click="endAction.pickOnlineVideo(video)"
-          >
-            <img
-              v-if="endAction.getVideoThumb(video.url)"
-              :src="endAction.getVideoThumb(video.url)"
-              alt=""
-              loading="lazy"
-              class="ov-thumb"
-            />
-            <div v-else class="ov-thumb-fallback">
-              <Icon :icon="ICONS.MEDIA.YOUTUBE" size="28" color="#e74c3c" />
-            </div>
-            <div class="ov-card-title">{{ video.name }}</div>
+  <LjDialog v-model="ui.showOnlineVideoDialog" :title="endAction.t('ribbon.online_video')">
+    <div class="ov-body">
+      <LjInput
+        v-model="ui.onlineVideoSearch"
+        :placeholder="endAction.t('ribbon.online_video_search')"
+        :icon="ICONS.ACTIONS.SEARCH"
+        clearable
+      />
+      <div class="ov-grid">
+        <div
+          v-for="video in videos"
+          :key="video.url"
+          class="ov-card"
+          @click="endAction.pickOnlineVideo(video)"
+        >
+          <img
+            v-if="endAction.getVideoThumb(video.url)"
+            :src="endAction.getVideoThumb(video.url)"
+            alt=""
+            loading="lazy"
+            class="ov-thumb"
+          />
+          <div v-else class="ov-thumb-fallback">
+            <Icon :icon="ICONS.MEDIA.YOUTUBE" size="28" color="#e74c3c" />
           </div>
+          <div class="ov-card-title">{{ video.name }}</div>
         </div>
-      </v-card-text>
-      <v-card-actions>
-        <v-text-field
+      </div>
+    </div>
+
+    <template #footer>
+      <div class="ov-url">
+        <LjInput
           v-model="ui.onlineVideoUrl"
           :placeholder="endAction.t('ribbon.online_video_url')"
-          density="compact"
-          hide-details
-          variant="outlined"
-          class="mr-2"
           @keydown.enter="endAction.pickCustomUrl"
         />
-        <LjButton
-          variant="default"
-          :icon="ICONS.UI.CHECK"
-          icon-only
-          @click="endAction.pickCustomUrl"
-        />
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
+      </div>
+      <LjButton
+        variant="default"
+        :icon="ICONS.UI.CHECK"
+        icon-only
+        @click="endAction.pickCustomUrl"
+      />
+    </template>
+  </LjDialog>
 
   <!-- Diálogo de busca de música -->
   <MusicSpotlight
@@ -65,7 +57,7 @@
 </template>
 
 <script setup lang="ts">
-import { LjButton } from "@/components/ui";
+import { LjButton, LjDialog, LjInput } from "@/components/ui";
 import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { computed } from "vue";
@@ -82,6 +74,11 @@ const videos = computed(() => props.endAction.filteredVideos.value);
 </script>
 
 <style scoped>
+.ov-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-4);
+}
 .ov-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
@@ -119,5 +116,15 @@ const videos = computed(() => props.endAction.filteredVideos.value);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* O primitivo é inline-flex e não se estica sozinho; o invólucro é o caminho
+   para dar a ele o resto da linha do rodapé. */
+.ov-url {
+  flex: 1;
+  min-width: 0;
+}
+.ov-url :deep(.lj-input) {
+  width: 100%;
 }
 </style>

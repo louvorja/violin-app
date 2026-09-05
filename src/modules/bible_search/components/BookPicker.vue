@@ -1,43 +1,39 @@
 <template>
   <div class="bible-search-filter">
-    <div class="bible-search-filter-row">
-      <label class="book-picker-label">{{ t("modules.bible_search.ribbon.filter.version") }}</label>
-      <v-select
+    <div class="bible-search-filter-row bible-search-filter-row--version">
+      <label class="book-picker-label" :for="versionSelectId">
+        {{ t("modules.bible_search.ribbon.filter.version") }}
+      </label>
+      <LjSelect
+        :id="versionSelectId"
         v-model="versionId"
         :items="versions"
-        item-title="name"
         item-value="id_bible_version"
-        density="compact"
-        variant="outlined"
-        hide-details
-        class="book-picker-version-vselect"
+        item-label="name"
+        size="sm"
         @update:model-value="onVersionChange"
       >
-        <template #item="{ props, item }">
-          <v-list-item v-bind="props">
-            <template #prepend>
-              <Icon
-                v-if="!downloadedVersions.has(item.id_bible_version)"
-                :icon="ICONS.ACTIONS.DOWNLOAD"
-                size="small"
-                class="mr-2"
-              />
-            </template>
-            <v-list-item-title>{{ item.abbreviation }} - {{ item.name }}</v-list-item-title>
-          </v-list-item>
+        <template #item="{ item }">
+          <span class="book-picker-version-option">
+            <Icon
+              v-if="!downloadedVersions.has(item.id_bible_version)"
+              :icon="ICONS.ACTIONS.DOWNLOAD"
+              size="small"
+            />
+            <span>{{ item.abbreviation }} - {{ item.name }}</span>
+          </span>
         </template>
-        <template #selection="{ item }">
-          <div class="d-flex align-center overflow-hidden">
+        <template #value="{ item }">
+          <span v-if="item" class="book-picker-version-option">
             <Icon
               v-if="!downloadedVersions.has(item.id_bible_version)"
               :icon="ICONS.ACTIONS.DOWNLOAD"
               size="x-small"
-              class="mr-1"
             />
-            <span class="text-truncate">{{ item.abbreviation }} - {{ item.name }}</span>
-          </div>
+            <span class="lj-u-truncate">{{ item.abbreviation }} - {{ item.name }}</span>
+          </span>
         </template>
-      </v-select>
+      </LjSelect>
     </div>
     <div ref="triggerRef" class="bible-search-filter-row">
       <label class="book-picker-label">{{ t("modules.bible_search.ribbon.filter.books") }}</label>
@@ -103,8 +99,9 @@
 
 <script setup lang="ts">
 import Icon from "@/components/Icon.vue";
+import { LjSelect } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
-import { ref, computed, reactive, onMounted, onUnmounted } from "vue";
+import { ref, computed, reactive, onMounted, onUnmounted, useId } from "vue";
 import { useI18n } from "vue-i18n";
 import $database from "@/helpers/Database";
 import $userdata from "@/helpers/UserData";
@@ -113,6 +110,8 @@ import type { BibleVersion, BibleBook } from "@/types/Bible";
 import { BOOKS_OT, BOOKS_NT } from "@/constants/Bible";
 
 const { t } = useI18n();
+
+const versionSelectId = useId();
 
 const KEY = "modules.bible_search.books";
 const VERSION_KEY = "modules.bible_search.version";
@@ -279,56 +278,16 @@ onUnmounted(() => document.removeEventListener("click", onDocClick, true));
   letter-spacing: 0.4px;
   color: rgba(var(--lj-on-surface-ch), 0.55);
 }
-.book-picker-version-vselect {
+/* O gatilho do LjSelect é o elemento do primitivo: só chega aqui por :deep. */
+.bible-search-filter-row--version :deep(.lj-select) {
   height: 24px;
+  border-radius: var(--lj-radius-xs);
 }
-.book-picker-version-vselect :deep(.v-field) {
-  --v-field-padding-start: 6px;
-  --v-field-padding-end: 6px;
-  border-radius: 3px;
-  background: var(--lj-surface-bg);
-}
-.book-picker-version-vselect :deep(.v-field__input) {
-  min-height: 24px;
-  height: 24px;
-  padding-top: 0;
-  padding-bottom: 0;
-  font-size: 11px;
-  color: var(--lj-text);
-}
-.book-picker-version-vselect :deep(.v-field--focused .v-field__outline) {
-  --v-field-border-opacity: 1;
-  color: var(--lj-navy);
-}
-.book-picker-version-vselect :deep(.v-field__outline) {
-  --v-field-border-opacity: 0.4;
-}
-.book-picker-version-vselect :deep(.v-input__details) {
-  display: none;
-}
-.book-picker-version-vselect :deep(.v-field__append-inner) {
-  padding-top: 0;
+.book-picker-version-option {
+  display: flex;
   align-items: center;
-}
-.book-picker-version-vselect :deep(.v-select__selection-text) {
+  gap: 4px;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.book-picker-version-select {
-  height: 24px;
-  padding: 0 4px;
-  border: 1px solid rgba(var(--v-border-color), 0.4);
-  border-radius: 3px;
-  background: var(--lj-surface-bg);
-  color: var(--lj-text);
-  font-size: 11px;
-  font-family: inherit;
-  outline: none;
-}
-.book-picker-version-select:focus {
-  border-color: var(--lj-navy);
-  box-shadow: var(--lj-shadow-focus-navy-sm);
 }
 .book-picker-trigger {
   display: flex;
@@ -336,8 +295,8 @@ onUnmounted(() => document.removeEventListener("click", onDocClick, true));
   gap: 4px;
   height: 24px;
   padding: 0 8px;
-  border: 1px solid rgba(var(--v-border-color), 0.4);
-  border-radius: 3px;
+  border: var(--lj-ui-border);
+  border-radius: var(--lj-radius-xs);
   background: var(--lj-surface-bg);
   color: var(--lj-text);
   font-size: 11px;
@@ -347,7 +306,7 @@ onUnmounted(() => document.removeEventListener("click", onDocClick, true));
   white-space: nowrap;
 }
 .book-picker-trigger:hover {
-  border-color: var(--lj-navy);
+  border-color: var(--lj-ui-accent);
 }
 .book-picker-summary {
   flex: 1;
@@ -357,11 +316,11 @@ onUnmounted(() => document.removeEventListener("click", onDocClick, true));
 }
 .book-picker-popover {
   position: fixed;
-  z-index: 10000;
+  z-index: var(--lj-z-popup);
   background: var(--lj-surface-bg);
-  border: 1px solid rgba(var(--v-border-color), 0.3);
-  border-radius: 6px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  border: var(--lj-ui-float-border);
+  border-radius: var(--lj-radius-md);
+  box-shadow: var(--lj-ui-float-shadow);
   width: 420px;
   display: flex;
   flex-direction: column;
@@ -371,7 +330,7 @@ onUnmounted(() => document.removeEventListener("click", onDocClick, true));
   height: 32px;
   padding: 0 10px;
   border: none;
-  border-bottom: 1px solid rgba(var(--v-border-color), 0.3);
+  border-bottom: 1px solid var(--lj-surface-border);
   background: transparent;
   color: var(--lj-text);
   font-size: 13px;
@@ -393,7 +352,7 @@ onUnmounted(() => document.removeEventListener("click", onDocClick, true));
   min-width: 0;
 }
 .book-picker-group-ot {
-  border-right: 1px solid rgba(var(--v-border-color), 0.2);
+  border-right: 1px solid var(--lj-surface-divider);
   height: 100%;
 }
 .book-picker-group-title {
@@ -401,10 +360,10 @@ onUnmounted(() => document.removeEventListener("click", onDocClick, true));
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: var(--lj-navy);
+  color: var(--lj-ui-accent-text);
   margin-bottom: 6px;
   padding-bottom: 4px;
-  border-bottom: 1px solid rgba(var(--v-border-color), 0.25);
+  border-bottom: 1px solid var(--lj-surface-divider);
 }
 .book-picker-item {
   display: flex;
@@ -416,7 +375,7 @@ onUnmounted(() => document.removeEventListener("click", onDocClick, true));
   color: var(--lj-text);
 }
 .book-picker-item:hover {
-  background: rgba(var(--v-border-color), 0.06);
+  background: var(--lj-hover-bg);
 }
 .book-picker-item input {
   margin: 0;
@@ -427,15 +386,15 @@ onUnmounted(() => document.removeEventListener("click", onDocClick, true));
   align-items: center;
   gap: 4px;
   padding: 6px 8px;
-  border-top: 1px solid rgba(var(--v-border-color), 0.2);
+  border-top: 1px solid var(--lj-surface-divider);
   flex-wrap: wrap;
 }
 .book-picker-action {
   flex: 1;
   height: 24px;
   padding: 0 6px;
-  border: 1px solid rgba(var(--v-border-color), 0.35);
-  border-radius: 3px;
+  border: var(--lj-ui-border);
+  border-radius: var(--lj-radius-xs);
   background: var(--lj-surface-bg);
   color: var(--lj-text);
   font-size: 10px;
@@ -445,6 +404,6 @@ onUnmounted(() => document.removeEventListener("click", onDocClick, true));
   white-space: nowrap;
 }
 .book-picker-action:hover {
-  border-color: var(--lj-navy);
+  border-color: var(--lj-ui-accent);
 }
 </style>

@@ -143,3 +143,16 @@ describe("LjTable", () => {
     expect(Object.keys(w.props())).toHaveLength(5);
   });
 });
+
+describe("LjTable — área que rola alcança o teclado", () => {
+  it("com altura máxima o contêiner entra na ordem de tabulação", () => {
+    const w = mountUi(LjTable, { props: { maxHeight: "320px" }, slots: { default: "<tbody />" } });
+    expect(w.get(".lj-table").attributes("tabindex")).toBe("0");
+    expect(w.get(".lj-table").attributes("role")).toBe("region");
+  });
+
+  it("sem altura máxima não cria parada de tabulação", () => {
+    const w = mountUi(LjTable, { slots: { default: "<tbody />" } });
+    expect(w.get(".lj-table").attributes("tabindex")).toBeUndefined();
+  });
+});

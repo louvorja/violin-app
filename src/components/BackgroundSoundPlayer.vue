@@ -12,12 +12,9 @@
       </div>
 
       <div class="bgs-footer-progress">
-        <v-slider
+        <LjSlider
           :model-value="bg.progress.value"
           :max="100"
-          density="compact"
-          hide-details
-          color="var(--lj-orange-soft)"
           class="bgs-progress-slider"
           @update:model-value="bg.seek"
         />
@@ -58,14 +55,11 @@
 
       <div class="bgs-footer-volume">
         <Icon :icon="volumeIcon" size="14" class="bgs-footer-vol-icon" @click="toggleMute" />
-        <v-slider
+        <LjSlider
           :model-value="bg.volume.value"
           :min="0"
           :max="100"
-          density="compact"
-          hide-details
           class="bgs-volume-slider"
-          color="#FB8C00"
           @update:model-value="bg.setVolume"
         />
       </div>
@@ -74,7 +68,7 @@
 </template>
 
 <script setup lang="ts">
-import { LjButton } from "@/components/ui";
+import { LjButton, LjSlider } from "@/components/ui";
 import Icon from "@/components/Icon.vue";
 import { computed, ref } from "vue";
 import { useBackgroundSound } from "@/composables/useBackgroundSound";
@@ -164,11 +158,6 @@ function formatTime(seconds: number): string {
   flex: 1;
   min-width: 60px;
 }
-.bgs-progress-slider {
-  margin: 0;
-  padding: 0;
-  color: rgba(var(--lj-navy-active), 0.5);
-}
 .bgs-footer-actions {
   display: flex;
   align-items: center;
@@ -191,8 +180,21 @@ function formatTime(seconds: number): string {
 .bgs-vol-icon:hover {
   opacity: 1;
 }
-.bgs-volume-slider {
-  margin: 0;
-  padding: 0;
+
+/* A faixa é sempre navy (--lj-tabs-bg) em todos os temas, então o preenchimento
+   não pode seguir o acento: em tema claro o acento é navy e sumiria no fundo. */
+.bgs-progress-slider :deep(.lj-slider__range),
+.bgs-volume-slider :deep(.lj-slider__range) {
+  background: var(--lj-orange);
+}
+
+.bgs-progress-slider :deep(.lj-slider__thumb),
+.bgs-volume-slider :deep(.lj-slider__thumb) {
+  border-color: var(--lj-orange);
+}
+
+.bgs-progress-slider :deep(.lj-slider__track),
+.bgs-volume-slider :deep(.lj-slider__track) {
+  background: var(--lj-white-alpha-25);
 }
 </style>

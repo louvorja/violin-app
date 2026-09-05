@@ -3,7 +3,10 @@
     ref="raiz"
     class="lj-calendar"
     :class="`lj-calendar--${type}`"
-    :style="{ '--lj-calendar-event-h': `${eventHeight}px` }"
+    :style="{
+      '--lj-calendar-event-h': `${eventHeight}px`,
+      '--lj-calendar-rows': maxEvents,
+    }"
     role="grid"
     :aria-label="ariaLabel"
   >
@@ -50,6 +53,7 @@
               class="lj-calendar__event"
               :style="estiloDoEvento(evento)"
               :title="rotuloDoEvento(evento)"
+              tabindex="-1"
               @click.stop="emitirEvento(evento, dia, $event)"
             >
               <span class="lj-calendar__event-label">{{ rotuloDoEvento(evento) }}</span>
@@ -59,6 +63,7 @@
               v-if="dia.ocultos.length"
               type="button"
               class="lj-calendar__more"
+              tabindex="-1"
               @click.stop="emitirMais(dia, $event)"
             >
               {{ textoDeMais(dia.ocultos.length) }}
@@ -70,9 +75,12 @@
   </div>
 </template>
 
+<!-- Os tipos moram num bloco próprio porque `<script setup>` genérico não aceita
+     `export`: para receber o `T`, o compilador embrulha o setup numa função, e
+     o que está ali dentro deixa de ser topo de módulo. -->
 <script lang="ts">
 /** Dia civil em ISO curto — `YYYY-MM-DD`, sem hora e sem fuso. */
-type DiaIso = string;
+export type DiaIso = string;
 
 export interface LjCalendarDay {
   /** Dia civil da célula, o mesmo valor do atributo `data-date`. */
@@ -180,9 +188,19 @@ function isoDoDia(d: Date): DiaIso {
   return `${d.getFullYear()}-${mes}-${dia}`;
 }
 
+/**
+ * O `setHours` no fim não é redundante: `setDate` preserva a hora de parede, e
+ * num fuso cuja virada de horário de verão acontece à meia-noite (Santiago,
+ * Havana — e o Brasil até 2019) o dia da virada não existe às 00:00, então o
+ * motor normaliza para 01:00. Sem reancorar, o cursor anda uma hora adiantado
+ * de todos os dias seguintes, enquanto os limites da grade continuam à
+ * meia-noite: a comparação `cursor <= fim` derruba o último dia e a grade sai
+ * com um buraco.
+ */
 function somarDias(d: Date, n: number): Date {
   const saida = new Date(d);
   saida.setDate(saida.getDate() + n);
+  saida.setHours(0, 0, 0, 0);
   return saida;
 }
 
@@ -358,7 +376,13 @@ const dias = computed<CelulaDoDia[]>(() => {
       foraDoMes: props.type === "month" && cursor.getMonth() !== mes,
       hoje: date === hojeIso,
       fimDeSemana: fimDeSemana.value.includes(cursor.getDay()),
-      rotulo: capitalizar(formatadorLongo.value.format(cursor)),
+      // O rótulo carrega os eventos porque os chips saíram da fila do Tab: num
+      // grid ARIA quem anda é a seta, e o caminho de teclado até o conteúdo do
+      // dia é abrir a célula. Sem isto, um dia cheio e um dia vazio soam igual.
+      rotulo: [
+        capitalizar(formatadorLongo.value.format(cursor)),
+        ...todos.map((e) => rotuloDoEvento(e)),
+      ].join(" — "),
       eventos: visiveis,
       ocultos: todos.slice(visiveis.length),
     });
@@ -458,6 +482,9 @@ function aoTeclar(dia: CelulaDoDia, e: KeyboardEvent): void {
 
 <style scoped>
 .lj-calendar {
+  /* Altura da pastilha do número do dia — entra no cálculo da célula. */
+  --lj-calendar-daynum-h: 16px;
+
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
@@ -505,7 +532,15 @@ function aoTeclar(dia: CelulaDoDia, e: KeyboardEvent): void {
 }
 
 .lj-calendar--month .lj-calendar__week {
-  min-height: 62px;
+  /* A altura acompanha o teto de linhas, não um número fixo. Com um valor
+     cravado, uma célula cheia estourava a caixa e o `overflow: hidden` dos
+     eventos cortava a última linha — que é justamente o indicador "+N", o único
+     aviso de que o dia tem mais coisa. O somatório é o número do dia, a folga
+     entre ele e a lista, os espaços de 1px entre as tarjas e o padding. */
+  min-height: calc(
+    var(--lj-calendar-rows) * var(--lj-calendar-event-h) + (var(--lj-calendar-rows) - 1) * 1px +
+      var(--lj-calendar-daynum-h) + var(--lj-space-1) + 2 * var(--lj-space-2)
+  );
 }
 
 .lj-calendar__day {
@@ -548,7 +583,6 @@ function aoTeclar(dia: CelulaDoDia, e: KeyboardEvent): void {
 
 .lj-calendar__day--outside .lj-calendar__daynum {
   color: var(--lj-text-subtle);
-  opacity: 0.7;
 }
 
 .lj-calendar__daynum {
@@ -557,7 +591,7 @@ function aoTeclar(dia: CelulaDoDia, e: KeyboardEvent): void {
   justify-content: center;
   align-self: flex-start;
   min-width: 18px;
-  height: 16px;
+  height: var(--lj-calendar-daynum-h);
   padding-inline: var(--lj-space-1);
   border-radius: var(--lj-radius-xs);
   color: var(--lj-text-muted);
@@ -578,6 +612,10 @@ function aoTeclar(dia: CelulaDoDia, e: KeyboardEvent): void {
   gap: 1px;
   min-height: 0;
   overflow: hidden;
+}
+
+.lj-calendar--month .lj-calendar__events {
+  flex: 0 0 auto;
 }
 
 .lj-calendar--week .lj-calendar__events {
@@ -618,7 +656,9 @@ function aoTeclar(dia: CelulaDoDia, e: KeyboardEvent): void {
 }
 
 .lj-calendar__event:focus-visible {
-  box-shadow: var(--lj-ui-focus);
+  /* O contêiner dos eventos tem overflow hidden; um anel de fora seria
+     recortado nos quatro lados e não apareceria. */
+  box-shadow: inset var(--lj-ui-focus);
 }
 
 .lj-calendar__event-label {
@@ -649,6 +689,8 @@ function aoTeclar(dia: CelulaDoDia, e: KeyboardEvent): void {
 }
 
 .lj-calendar__more:focus-visible {
-  box-shadow: var(--lj-ui-focus);
+  /* O contêiner dos eventos tem overflow hidden; um anel de fora seria
+     recortado nos quatro lados e não apareceria. */
+  box-shadow: inset var(--lj-ui-focus);
 }
 </style>

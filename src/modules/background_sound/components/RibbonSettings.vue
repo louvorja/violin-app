@@ -6,14 +6,13 @@
           <label class="bgm-ribbon-label">
             {{ t(LANG_PATH + ".fade_in") }}
           </label>
-          <v-slider
+          <LjSlider
             v-model="fadeIn"
             :min="0"
             :max="10000"
             :step="1000"
-            density="compact"
-            hide-details
             class="bgm-ribbon-slider"
+            :aria-label="t(LANG_PATH + '.fade_in')"
             @update:model-value="save('fadeIn', $event)"
           />
           <span class="bgm-ribbon-value">{{ fadeIn / 1000 }}s</span>
@@ -22,40 +21,27 @@
           <label class="bgm-ribbon-label">
             {{ t(LANG_PATH + ".fade_out") }}
           </label>
-          <v-slider
+          <LjSlider
             v-model="fadeOut"
             :min="0"
             :max="10000"
             :step="1000"
-            density="compact"
-            hide-details
             class="bgm-ribbon-slider"
+            :aria-label="t(LANG_PATH + '.fade_out')"
             @update:model-value="save('fadeOut', $event)"
           />
           <span class="bgm-ribbon-value">{{ fadeOut / 1000 }}s</span>
         </div>
       </div>
       <div class="bgm-ribbon-switches">
-        <v-switch
+        <LjSwitch
           v-model="autoPause"
-          density="compact"
-          size="small"
-          hide-details
-          :true-icon="ICONS.UI.CHECK"
-          :false-icon="ICONS.ACTIONS.CLOSE"
           :label="t(LANG_PATH + '.auto_pause')"
-          color="primary"
           @update:model-value="save('autoPause', $event)"
         />
-        <v-switch
+        <LjSwitch
           v-model="repeat_"
-          density="compact"
-          size="small"
-          hide-details
-          :true-icon="ICONS.UI.CHECK"
-          :false-icon="ICONS.ACTIONS.CLOSE"
           :label="t(LANG_PATH + '.repeat')"
-          color="primary"
           @update:model-value="save('repeat', $event)"
         />
       </div>
@@ -66,7 +52,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
-import { ICONS } from "@/config/Icons";
+import { LjSlider, LjSwitch } from "@/components/ui";
 import { useBackgroundSound } from "@/composables/useBackgroundSound";
 import $modules from "@/helpers/Modules";
 import { ModuleEnum } from "@/enums/ModuleEnum";
@@ -145,13 +131,13 @@ onMounted(async () => {
   gap: 6px;
 }
 .bgm-ribbon-label {
-  font-size: 11px;
-  color: rgba(var(--v-theme-on-surface), 0.7);
+  font-size: var(--lj-text-sm);
+  color: var(--lj-text-muted);
   white-space: nowrap;
   min-width: 50px;
 }
 .bgm-ribbon-value {
-  font-size: 11px;
+  font-size: var(--lj-text-sm);
   font-weight: 500;
   min-width: 24px;
   text-align: right;

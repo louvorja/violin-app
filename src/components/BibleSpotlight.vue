@@ -1,79 +1,100 @@
 <template>
-  <v-dialog v-model="model" max-width="520">
-    <div
-      ref="cardRef"
-      class="quicknav-card"
-      tabindex="-1"
-      @mousedown.prevent="focusInput"
-      @touchend.prevent="focusInput"
-    >
-      <input
-        ref="inputRef"
-        class="quicknav-hidden-input"
-        type="text"
-        inputmode="text"
-        autocomplete="off"
-        autocorrect="off"
-        autocapitalize="off"
-        spellcheck="false"
-        @keydown="handleKeydown"
-        @input="onInput"
-        @compositionstart="onCompositionStart"
-        @compositionend="onCompositionEnd"
-      />
-      <div class="quicknav-steps">
-        <div :class="['quicknav-step', { current: activeStep === 0 }]">
-          <span class="quicknav-step-num">1</span>
-          <span>{{ t("modules.bible.quicknav.step_book") }}</span>
-        </div>
-        <div class="quicknav-arrow">→</div>
-        <div :class="['quicknav-step', { current: activeStep === 1 }]">
-          <span class="quicknav-step-num">2</span>
-          <span>{{ t("modules.bible.quicknav.step_chapter") }}</span>
-        </div>
-        <div class="quicknav-arrow">→</div>
-        <div :class="['quicknav-step', { current: activeStep === 2 }]">
-          <span class="quicknav-step-num">3</span>
-          <span>{{ t("modules.bible.quicknav.step_verse") }}</span>
-        </div>
-      </div>
+  <DialogRoot v-model:open="model">
+    <DialogPortal>
+      <DialogOverlay class="quicknav-overlay" />
+      <DialogContent as-child v-bind="{ 'aria-describedby': undefined }">
+        <div
+          ref="cardRef"
+          class="quicknav-card"
+          @mousedown.prevent="focusInput"
+          @touchend.prevent="focusInput"
+        >
+          <VisuallyHidden>
+            <DialogTitle>{{ t("modules.bible.title") }}</DialogTitle>
+          </VisuallyHidden>
+          <input
+            ref="inputRef"
+            class="quicknav-hidden-input"
+            type="text"
+            inputmode="text"
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="off"
+            spellcheck="false"
+            @keydown="handleKeydown"
+            @input="onInput"
+            @compositionstart="onCompositionStart"
+            @compositionend="onCompositionEnd"
+          />
+          <div class="quicknav-steps">
+            <div :class="['quicknav-step', { current: activeStep === 0 }]">
+              <span class="quicknav-step-num">1</span>
+              <span>{{ t("modules.bible.quicknav.step_book") }}</span>
+            </div>
+            <div class="quicknav-arrow">→</div>
+            <div :class="['quicknav-step', { current: activeStep === 1 }]">
+              <span class="quicknav-step-num">2</span>
+              <span>{{ t("modules.bible.quicknav.step_chapter") }}</span>
+            </div>
+            <div class="quicknav-arrow">→</div>
+            <div :class="['quicknav-step', { current: activeStep === 2 }]">
+              <span class="quicknav-step-num">3</span>
+              <span>{{ t("modules.bible.quicknav.step_verse") }}</span>
+            </div>
+          </div>
 
-      <div v-if="!books" class="quicknav-display">
-        <v-progress-circular indeterminate size="24" />
-      </div>
+          <div v-if="!books" class="quicknav-display">
+            <LjSpinner :size="24" />
+          </div>
 
-      <div v-else class="quicknav-display">
-        <div class="quicknav-hint">
-          <template v-if="activeStep === 0">{{ t("modules.bible.quicknav.hint_book") }}</template>
-          <template v-else-if="activeStep === 1">
-            {{ t("modules.bible.quicknav.hint_chapter") }}
-          </template>
-          <template v-else>{{ t("modules.bible.quicknav.hint_verse") }}</template>
-        </div>
-        <div class="quicknav-buffer">
-          <span class="quicknav-text">{{ buffer || "—" }}</span>
-          <span class="quicknav-cursor">|</span>
-        </div>
-        <div class="quicknav-preview">{{ feedback || " " }}</div>
-        <div class="quicknav-footer">
-          <span v-if="activeStep === 0" v-html="t('modules.bible.quicknav.foot_book')" />
-          <span v-else-if="activeStep === 1" v-html="t('modules.bible.quicknav.foot_chapter')" />
-          <span v-else v-html="t('modules.bible.quicknav.foot_verse')" />
-        </div>
-      </div>
+          <div v-else class="quicknav-display">
+            <div class="quicknav-hint">
+              <template v-if="activeStep === 0">
+                {{ t("modules.bible.quicknav.hint_book") }}
+              </template>
+              <template v-else-if="activeStep === 1">
+                {{ t("modules.bible.quicknav.hint_chapter") }}
+              </template>
+              <template v-else>{{ t("modules.bible.quicknav.hint_verse") }}</template>
+            </div>
+            <div class="quicknav-buffer">
+              <span class="quicknav-text">{{ buffer || "—" }}</span>
+              <span class="quicknav-cursor">|</span>
+            </div>
+            <div class="quicknav-preview">{{ feedback || " " }}</div>
+            <div class="quicknav-footer">
+              <span v-if="activeStep === 0" v-html="t('modules.bible.quicknav.foot_book')" />
+              <span
+                v-else-if="activeStep === 1"
+                v-html="t('modules.bible.quicknav.foot_chapter')"
+              />
+              <span v-else v-html="t('modules.bible.quicknav.foot_verse')" />
+            </div>
+          </div>
 
-      <button class="quicknav-close" @click="model = false">
-        <Icon size="18" :icon="ICONS.ACTIONS.CLOSE" />
-      </button>
-    </div>
-  </v-dialog>
+          <button class="quicknav-close" @click="model = false">
+            <Icon size="18" :icon="ICONS.ACTIONS.CLOSE" />
+          </button>
+        </div>
+      </DialogContent>
+    </DialogPortal>
+  </DialogRoot>
 </template>
 
 <script setup lang="ts">
 import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { computed, nextTick, ref, watch } from "vue";
+import {
+  DialogContent,
+  DialogOverlay,
+  DialogPortal,
+  DialogRoot,
+  DialogTitle,
+  VisuallyHidden,
+} from "reka-ui";
 import { useI18n } from "vue-i18n";
+import { LjSpinner } from "@/components/ui";
 import Database from "@/helpers/Database";
 import UserData from "@/helpers/UserData";
 import Modules from "@/helpers/Modules";
@@ -460,9 +481,22 @@ watch(model, async (val: boolean) => {
 });
 </script>
 
-<style scoped>
+<!-- Sem `scoped`: o cartao vai para um portal no <body> e o Vue nao carimba o
+     atributo de escopo la. O isolamento vem do prefixo `quicknav-`. -->
+<style>
+.quicknav-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--lj-z-dialog);
+  background: var(--lj-black-alpha-40);
+}
+
 .quicknav-card {
-  position: relative;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: calc(var(--lj-z-dialog) + 1);
   width: 480px;
   max-width: 90vw;
   background: var(--lj-surface-bg, #1e1e1e);

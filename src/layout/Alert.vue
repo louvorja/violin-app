@@ -1,59 +1,75 @@
 <template>
-  <v-dialog v-model="show" max-width="480" persistent :z-index="20000">
-    <div class="alert" :class="`alert--${variant}`">
-      <header v-if="alert.title" class="alert-header">
-        <Icon :icon="iconForVariant" size="20" class="alert-header-icon" />
-        <h3 class="alert-title">
-          <span v-if="alert.translate" v-html="$t(alert.title)" />
-          <span v-else v-html="alert.title" />
-        </h3>
-      </header>
-
-      <div v-if="alert.text" class="alert-body">
-        <p class="alert-text">
-          <span v-if="alert.translate" v-html="$t(alert.text)" />
-          <span v-else v-html="alert.text" />
-        </p>
-        <small v-if="alert.error" class="alert-error" v-html="alert.error" />
-      </div>
-
-      <div v-if="alert.prompt" class="alert-body alert-body--input">
-        <input
-          v-model="promptValue"
-          type="text"
-          class="alert-input"
-          :placeholder="alert.input_placeholder || ''"
-          @keydown.enter="clickBtn('ok')"
-        />
-      </div>
-
-      <footer class="alert-actions">
-        <button
-          v-for="(btn, index) in alert.buttons"
-          :key="index"
-          type="button"
-          class="alert-btn"
-          :class="`alert-btn--${btn.color || 'default'}`"
-          @click="clickBtn(btn.value)"
+  <Teleport to="body">
+    <Transition name="alert">
+      <div v-if="show" class="alert-overlay">
+        <div
+          ref="box"
+          class="alert"
+          :class="`alert--${variant}`"
+          role="alertdialog"
+          aria-modal="true"
         >
-          {{ $t(btn.text) }}
-        </button>
-      </footer>
-    </div>
-  </v-dialog>
+          <header v-if="alert.title" class="alert-header">
+            <Icon :icon="iconForVariant" size="20" class="alert-header-icon" />
+            <h3 class="alert-title">
+              <span v-if="alert.translate" v-html="$t(alert.title)" />
+              <span v-else v-html="alert.title" />
+            </h3>
+          </header>
+
+          <div v-if="alert.text" class="alert-body">
+            <p class="alert-text">
+              <span v-if="alert.translate" v-html="$t(alert.text)" />
+              <span v-else v-html="alert.text" />
+            </p>
+            <small v-if="alert.error" class="alert-error" v-html="alert.error" />
+          </div>
+
+          <div v-if="alert.prompt" class="alert-body alert-body--input">
+            <input
+              v-model="promptValue"
+              type="text"
+              class="alert-input"
+              :placeholder="alert.input_placeholder || ''"
+              @keydown.enter="clickBtn('ok')"
+            />
+          </div>
+
+          <footer class="alert-actions">
+            <button
+              v-for="(btn, index) in alert.buttons"
+              :key="index"
+              type="button"
+              class="alert-btn"
+              :class="`alert-btn--${btn.color || 'default'}`"
+              @click="clickBtn(btn.value)"
+            >
+              {{ $t(btn.text) }}
+            </button>
+          </footer>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
 </template>
 
 <script setup>
 import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
-import { computed } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import $appdata from "@/helpers/AppData";
 
 const alert = computed(() => $appdata.get("alert"));
 
-const show = computed({
-  get: () => alert.value?.show === true,
-  set: (v) => $appdata.set("alert.show", v),
+const show = computed(() => alert.value?.show === true);
+
+const box = ref(null);
+
+// O foco tem de entrar na caixa assim que ela abre: no prompt, o campo é o
+// primeiro elemento e sem isso o usuário não consegue digitar sem clicar antes.
+watch(show, (visible) => {
+  if (!visible) return;
+  nextTick(() => box.value?.querySelector("input, button")?.focus());
 });
 
 const promptValue = computed({
@@ -85,7 +101,23 @@ function clickBtn(value) {
 </script>
 
 <style scoped>
+/* Acima de diálogo, painel e dica: o alerta quase sempre é aberto de dentro
+   de um deles e é a única saída da ação em curso. */
+.alert-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--lj-z-toast) + 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--lj-space-8);
+  background: var(--lj-black-alpha-40);
+}
+
 .alert {
+  width: 100%;
+  max-width: 480px;
+  max-height: 100%;
   background: var(--lj-popup-bg);
   border-radius: var(--lj-radius-md);
   box-shadow: var(--lj-popup-shadow);
@@ -101,6 +133,7 @@ function clickBtn(value) {
   gap: var(--lj-space-3);
   padding: var(--lj-space-5) var(--lj-space-6) var(--lj-space-3);
   border-bottom: 1px solid var(--lj-surface-divider);
+  flex-shrink: 0;
 }
 
 .alert-header-icon {
@@ -128,6 +161,8 @@ function clickBtn(value) {
 .alert-body {
   padding: var(--lj-space-5) var(--lj-space-6);
   color: var(--lj-text);
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .alert-text {
@@ -172,6 +207,7 @@ function clickBtn(value) {
 
 .alert-actions {
   display: flex;
+  flex-shrink: 0;
   justify-content: flex-end;
   gap: var(--lj-space-3);
   padding: var(--lj-space-3) var(--lj-space-6);
@@ -244,5 +280,15 @@ function clickBtn(value) {
   background: var(--lj-success);
   color: var(--lj-white);
   border-color: var(--lj-success);
+}
+
+.alert-enter-active,
+.alert-leave-active {
+  transition: opacity var(--lj-transition-normal);
+}
+
+.alert-enter-from,
+.alert-leave-to {
+  opacity: 0;
 }
 </style>

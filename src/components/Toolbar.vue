@@ -1,7 +1,16 @@
 <template>
-  <v-slide-group show-arrows class="px-1">
+  <div class="lj-toolbar-strip">
     <slot />
-  </v-slide-group>
+  </div>
 </template>
 
 <script setup></script>
+
+<style scoped>
+.lj-toolbar-strip {
+  display: flex;
+  align-items: center;
+  padding-inline: var(--lj-space-2);
+  overflow-x: auto;
+}
+</style>

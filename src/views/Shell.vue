@@ -118,7 +118,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { useTheme, useDisplay } from "vuetify";
 
 import { LjButton, LjDialog, LjProgress } from "@/components/ui";
 import AppSystemBar from "@/layout/SystemBar.vue";
@@ -151,17 +150,18 @@ import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import type { BibleSearchResult } from "@/types/Bible";
 
 import { registerShell } from "@/composables/useShell";
+import { useAppTheme } from "@/composables/useAppTheme";
+import { useViewport } from "@/composables/useViewport";
 import { useFileProjection } from "@/composables/useFileProjection";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
 import { hasOpenWebWindows } from "@/helpers/projection/webWindow";
 import { formatBackgroundTaskDetail } from "@/helpers/BackgroundTaskDetail";
 import { useSyncManager } from "@/composables/useSyncManager";
-import { COLOR_THEMES } from "@/config/Theme";
 import BundleInstaller from "@/helpers/BundleInstaller";
 
 const { locale, t } = useI18n();
-const vuetifyTheme = useTheme();
-const display = useDisplay();
+const { applyStoredTheme } = useAppTheme();
+const { platform } = useViewport();
 const bgTasks = useBackgroundTasks();
 const sync = useSyncManager();
 
@@ -615,22 +615,7 @@ onMounted(() => {
   // (normais ou por crash) não deixam a chave "presada" como true
   $userdata.set(KEYS.MODULES.BACKGROUND_PROJECTION.IS_PLAYING, false);
 
-  // Tema
-  const savedTheme = $userdata.get<string>(KEYS.OPTIONS.THEME) || COLOR_THEMES.DEFAULT;
-  try {
-    vuetifyTheme.change(savedTheme);
-  } catch {
-    /* ignore */
-  }
-  // Aplica também no <html> via data-theme — os overrides em
-  // tokens.css ([data-theme="<id>"]) redefinem a paleta --lj-navy*
-  // para todo o documento.
-  document.documentElement.dataset.theme = savedTheme;
-  try {
-    $appdata.set(KEYS.SHELL.IS_DARK, !!vuetifyTheme.global.current.value?.dark);
-  } catch {
-    $appdata.set(KEYS.SHELL.IS_DARK, false);
-  }
+  applyStoredTheme();
 
   // Idioma
   const lang = $userdata.get<string>(KEYS.OPTIONS.LANGUAGE);
@@ -658,8 +643,8 @@ onMounted(() => {
     window.addEventListener("beforeunload", beforeUnloadHandler);
   }
 
-  $appdata.set(KEYS.SHELL.IS_MOBILE, display.platform.value.android || display.platform.value.ios);
-  if (display.platform.value.electron) {
+  $appdata.set(KEYS.SHELL.IS_MOBILE, platform.android || platform.ios);
+  if (platform.electron) {
     $appdata.set(KEYS.SHELL.IS_DESKTOP, true);
   } else {
     $appdata.set(KEYS.SHELL.IS_DESKTOP, false);
@@ -668,7 +653,7 @@ onMounted(() => {
 
   // Startup check — só no desktop.
   // O fluxo é: bundle download → update check → release notes → startup check → classic.
-  if (display.platform.value.electron) {
+  if (platform.electron) {
     const skippedNotesVersion = $userdata.get<string | null>(
       KEYS.OPTIONS.SKIP_RELEASE_NOTES_VERSION,
       null
@@ -824,8 +809,8 @@ onBeforeUnmount(() => {
 </style>
 
 <style scoped>
-/* Raiz da shell — coluna que ocupa a janela inteira. O contexto de tema e de
-   layout do Vuetify continua vindo do `v-app` de App.vue, um nível acima. */
+/* Raiz da shell — coluna que ocupa a janela inteira, dentro do
+   `#app-container` de App.vue, que já dá a altura de janela e a superfície. */
 .shell-root {
   position: relative;
   display: flex;

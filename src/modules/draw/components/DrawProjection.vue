@@ -1,7 +1,7 @@
 <template>
   <div
     ref="container"
-    :class="['d-flex', `align-${vertical_align}`, `justify-${horizontal_align}`]"
+    :class="['lj-u-flex', `lj-u-align-${vertical_align}`, `lj-u-justify-${horizontal_align}`]"
     :style="containerStyle"
   >
     <!--    Imagem de fundo -->
@@ -39,13 +39,11 @@
         <span class="draw-proj-label" :style="{ color: font_color }">
           {{ t("data.drawn") }}
         </span>
-        <v-chip-group column>
-          <v-chip
+        <div class="draw-proj-chip-list">
+          <span
             v-for="c in chips"
             :key="c"
             class="draw-proj-chip"
-            variant="elevated"
-            size="large"
             :style="{
               color: background_color,
               background: font_color,
@@ -53,8 +51,8 @@
             }"
           >
             {{ c }}
-          </v-chip>
-        </v-chip-group>
+          </span>
+        </div>
       </div>
     </div>
   </div>
@@ -192,11 +190,23 @@ useBroadcastListener(BROADCAST_TYPE.MODULE_FORMAT_CHANGED, (payload) => {
   text-transform: uppercase;
 }
 
+.draw-proj-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* Pílula com medidas em em: a fonte do chip é escolhida pelo usuário e
+   reescalada pelo tamanho do container, então altura fixa cortaria o número. */
 .draw-proj-chip {
+  display: inline-flex;
+  align-items: center;
   margin: 5px;
+  padding: 0.3em 0.9em;
+  border-radius: 999px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   line-height: 1.3;
-  background: rgba(0, 0, 0, 0.25);
+  box-shadow: var(--lj-shadow-1);
 }
 </style>

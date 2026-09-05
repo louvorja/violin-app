@@ -1,54 +1,51 @@
 <template>
   <ModuleContainer ref="container" :manifest="manifest" @close="close()">
     <template #header>
-      <div class="d-flex align-center music-search-header">
-        <v-text-field
+      <div class="music-search-header">
+        <LjInput
           ref="searchInput"
           v-model="search"
-          :label="t('search_placeholder')"
-          variant="outlined"
-          density="compact"
-          hide-details
           clearable
-          :prepend-inner-icon="ICONS.ACTIONS.SEARCH"
+          :icon="ICONS.ACTIONS.SEARCH"
+          :placeholder="t('search_placeholder')"
+          :aria-label="t('search_placeholder')"
           @keydown.enter="doSearch"
         />
         <LjButton variant="primary" :loading="loading" :disabled="!search.trim()" @click="doSearch">
           {{ t("search") }}
         </LjButton>
-        <v-chip v-if="results.length" size="small" variant="tonal">
+        <LjChip v-if="results.length" size="sm">
           {{ t("results_count", { n: results.length }) }}
-        </v-chip>
-        <v-chip
+        </LjChip>
+        <LjChip
           v-if="selectedIdMusic"
-          size="small"
-          color="primary"
-          variant="flat"
-          closable
-          @click:close="selectedIdMusic = null"
+          size="sm"
+          variant="primary"
+          removable
+          @remove="selectedIdMusic = null"
         >
           #{{ selectedIdMusic }}
-        </v-chip>
+        </LjChip>
       </div>
     </template>
 
-    <div v-if="loading" class="pa-6 text-center">
-      <v-progress-circular indeterminate size="24" />
+    <div v-if="loading" class="ms-state">
+      <LjSpinner :size="24" />
     </div>
 
-    <div v-else-if="!results.length && searched" class="pa-6 text-center text-medium-emphasis">
-      <Icon :icon="ICONS.MUSIC.NO_AUDIO" size="36" class="mb-2" />
+    <div v-else-if="!results.length && searched" class="ms-state lj-u-muted">
+      <Icon :icon="ICONS.MUSIC.NO_AUDIO" size="36" />
       <div>{{ t("no_results") }}</div>
     </div>
 
-    <div v-else-if="results.length" style="flex: 1; overflow: auto">
+    <div v-else-if="results.length" class="ms-scroll">
       <table class="music-search-table">
         <thead>
           <tr>
-            <th class="text-left">{{ t("music") }}</th>
-            <th class="text-left">{{ t("album") }}</th>
-            <th class="text-right">{{ t("duration") }}</th>
-            <th class="text-right">{{ t("actions") }}</th>
+            <th class="lj-u-text-start">{{ t("music") }}</th>
+            <th class="lj-u-text-start">{{ t("album") }}</th>
+            <th class="lj-u-text-end">{{ t("duration") }}</th>
+            <th class="lj-u-text-end">{{ t("actions") }}</th>
           </tr>
         </thead>
         <tbody>
@@ -60,22 +57,18 @@
             @click="selectedIdMusic = item.id_music"
           >
             <td>
-              <span v-if="item._custom" class="text-caption text-primary">&#9733;</span>
+              <span v-if="item._custom" class="ms-star">&#9733;</span>
               {{ item.name }}
             </td>
             <td>
-              <v-chip
-                v-for="album in item.albums"
-                :key="album.id_album"
-                size="x-small"
-                variant="tonal"
-                class="mr-1"
-              >
-                {{ album.name }}
-              </v-chip>
+              <div class="ms-albums">
+                <LjChip v-for="album in item.albums" :key="album.id_album" size="sm">
+                  {{ album.name }}
+                </LjChip>
+              </div>
             </td>
-            <td class="text-right text-caption">{{ shortTime(item.duration) }}</td>
-            <td class="text-right">
+            <td class="lj-u-text-end ms-duration">{{ shortTime(item.duration) }}</td>
+            <td class="lj-u-text-end">
               <MusicMenuTable
                 :id_music="Number(item.id_music)"
                 :name="item.name"
@@ -87,9 +80,9 @@
       </table>
     </div>
 
-    <div v-else class="flex-grow-1 d-flex align-center justify-center text-medium-emphasis">
-      <div class="text-center">
-        <Icon :icon="ICONS.ACTIONS.SEARCH" size="48" class="mb-2 text-disabled" />
+    <div v-else class="ms-empty lj-u-muted">
+      <div class="lj-u-text-center">
+        <Icon :icon="ICONS.ACTIONS.SEARCH" size="48" class="ms-empty__icon lj-u-faded" />
         <div>{{ t("search_placeholder") }}</div>
       </div>
     </div>
@@ -97,7 +90,7 @@
 </template>
 
 <script setup lang="ts">
-import { LjButton } from "@/components/ui";
+import { LjButton, LjChip, LjInput, LjSpinner } from "@/components/ui";
 import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import type { ComponentPublicInstance } from "vue";
@@ -141,7 +134,7 @@ const { t: $t, locale } = useI18n();
 const t = (key: string, named?: Record<string, unknown>): string =>
   named ? $t(`modules.${manifest.id}.${key}`, named) : $t(`modules.${manifest.id}.${key}`);
 
-const searchInput = ref<HTMLInputElement | null>(null);
+const searchInput = ref<InstanceType<typeof LjInput> | null>(null);
 const container = ref<ComponentPublicInstance | null>(null);
 const search = ref("");
 const results = ref<SearchResult[]>([]);
@@ -344,10 +337,39 @@ function shortTime(duration?: number | string): string {
 
 <style scoped>
 .music-search-header {
+  display: flex;
+  align-items: center;
   gap: 12px;
   flex: 1;
   min-width: 0;
   margin-top: 10px;
+}
+/* O LjInput é inline-flex e encolhe para o conteúdo: aqui ele toma a sobra. */
+.music-search-header :deep(.lj-input) {
+  flex: 1;
+  min-width: 0;
+}
+.ms-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--lj-space-4);
+  padding: var(--lj-space-8);
+  text-align: center;
+}
+.ms-scroll {
+  flex: 1;
+  overflow: auto;
+}
+.ms-empty {
+  flex-grow: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ms-empty__icon {
+  display: block;
+  margin: 0 auto var(--lj-space-4);
 }
 .music-search-table {
   width: 100%;
@@ -373,6 +395,21 @@ function shortTime(duration?: number | string): string {
   vertical-align: middle;
   z-index: 0;
 }
+/* Vence a regra de fonte da célula acima, que tem a mesma origem e mais peso
+   de seletor que o utilitário de legenda. */
+.music-search-table td.ms-duration {
+  font-size: var(--lj-text-sm);
+}
+.ms-star {
+  font-size: var(--lj-text-sm);
+  line-height: 1.4;
+  color: var(--lj-ui-accent-text);
+}
+.ms-albums {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lj-space-2);
+}
 .ms-row {
   cursor: pointer;
   transition: background 0.12s;
@@ -381,8 +418,8 @@ function shortTime(duration?: number | string): string {
   background: var(--lj-active-bg);
 }
 .ms-row--selected {
-  background: rgba(var(--lj-navy-ch), 0.1);
-  box-shadow: inset 3px 0 0 var(--lj-navy);
+  background: var(--lj-ui-accent-soft);
+  box-shadow: inset 3px 0 0 var(--lj-ui-accent);
 }
 .music-search-table :deep(.mmt) {
   justify-content: flex-end;

@@ -1,21 +1,16 @@
 <template>
   <div v-if="info" class="timer-end-ribbon-info">
     <span class="timer-end-ribbon-label">{{ t(langPath + ".ribbon.timer_end") }}</span>
-    <v-chip
-      variant="outlined"
-      size="small"
-      color="primary"
-      :prepend-icon="icon"
-      class="timer-end-ribbon-chip"
-    >
+    <LjChip variant="primary" size="md" :icon="icon" class="timer-end-ribbon-chip">
       {{ info }}
-    </v-chip>
+    </LjChip>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
+import { LjChip } from "@/components/ui";
 import $userdata from "@/helpers/UserData";
 import $modules from "@/helpers/Modules";
 import { MediaEnum } from "@/enums/MediaEnum";

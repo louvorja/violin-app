@@ -8,13 +8,19 @@
         class="lj-drawer lj-drawer--temporary"
         :class="`lj-drawer--${side}`"
         :style="estilo"
-        v-bind="{ ...semAriaOrfa(!!title && !$slots.header), ...$attrs }"
+        v-bind="{ ...semAriaOrfa(!!title), ...$attrs }"
         @open-auto-focus="focarPainel"
       >
-        <header v-if="title || $slots.header" class="lj-drawer__header">
+        <header class="lj-drawer__header">
           <slot name="header">
             <DialogTitle class="lj-drawer__title">{{ title }}</DialogTitle>
           </slot>
+          <!-- Com cabeçalho próprio o DialogTitle visível não existe, e a Reka
+               avisa no console a cada montagem porque procura o contexto dele,
+               não um nome acessível — um aria-label no painel não a satisfaz. -->
+          <VisuallyHidden v-if="$slots.header" as-child>
+            <DialogTitle>{{ title }}</DialogTitle>
+          </VisuallyHidden>
           <div v-if="$slots.actions" class="lj-drawer__actions"><slot name="actions" /></div>
           <DialogClose class="lj-drawer__close" :aria-label="t('actions.close')">
             <Icon :icon="ICONS.ACTIONS.CLOSE" :size="14" />
@@ -35,7 +41,7 @@
       :style="estilo"
       v-bind="$attrs"
     >
-      <header v-if="temCabecalho" class="lj-drawer__header">
+      <header v-if="title || $slots.header || $slots.actions" class="lj-drawer__header">
         <slot name="header">
           <span class="lj-drawer__title">{{ title }}</span>
         </slot>
@@ -47,7 +53,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, useSlots } from "vue";
+import { computed } from "vue";
 import {
   DialogClose,
   DialogContent,
@@ -55,6 +61,7 @@ import {
   DialogPortal,
   DialogRoot,
   DialogTitle,
+  VisuallyHidden,
 } from "reka-ui";
 import { useI18n } from "vue-i18n";
 import Icon from "@/components/Icon.vue";
@@ -78,8 +85,8 @@ const props = withDefaults(
     temporary?: boolean;
     /**
      * Vira o cabeçalho e, no modo temporário, o nome acessível do painel.
-     * Ao substituir o cabeçalho pelo slot `header`, passe um `aria-label` —
-     * ele cai no painel por atributo e volta a nomear o que foi aberto.
+     * Continua valendo com o slot `header`: ali o título vira um rótulo
+     * invisível, para o painel não abrir sem nome.
      */
     title?: string;
   }>(),
@@ -89,25 +96,21 @@ const props = withDefaults(
 const emit = defineEmits<{ "update:modelValue": [value: boolean] }>();
 
 const { t } = useI18n();
-const slots = useSlots();
 
 const aberto = computed({
   get: () => !!props.modelValue,
   set: (value) => emit("update:modelValue", value),
 });
 
-const temCabecalho = computed(() => !!props.title || !!slots.header);
-
-// O DialogTitle só existe quando o cabeçalho é o nosso.
-const temTitulo = computed(() => !!props.title && !slots.header);
-
 // A Reka aponta aria-labelledby e aria-describedby para ids que ela reserva,
-// existam ou não os elementos. Sobrando id órfão, o leitor de tela anuncia o
-// painel sem nome nenhum — pior do que não ter o atributo.
-const ariaSemOrfao = computed(() => ({
-  "aria-describedby": undefined,
-  ...(temTitulo.value ? {} : { "aria-labelledby": undefined }),
-}));
+// existam ou não os elementos. Id órfão faz o leitor de tela anunciar o painel
+// sem nome nenhum — pior do que não ter o atributo. Descrição o drawer nunca
+// tem; título existe sempre que `title` foi passado, visível ou invisível.
+function semAriaOrfa(temTitulo: boolean): Record<string, undefined> {
+  return temTitulo
+    ? { "aria-describedby": undefined }
+    : { "aria-describedby": undefined, "aria-labelledby": undefined };
+}
 
 const estilo = computed(
   () =>
@@ -201,6 +204,9 @@ function focarPainel(event: Event): void {
 }
 
 .lj-drawer__close {
+  /* O empurrão para a borda vinha do `flex: 1` do título, que deixa de existir
+     quando o cabeçalho vem por slot. */
+  margin-left: auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;

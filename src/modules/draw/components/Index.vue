@@ -16,9 +16,9 @@
       />
     </template>
 
-    <div class="d-flex h-100">
+    <div class="draw-body">
       <ModuleFormatDrawer v-model="show_format" :module-id="'draw'" :manifest="manifest" />
-      <div class="flex-grow-1" style="min-width: 0; position: relative">
+      <div class="draw-preview">
         <!-- Preview WYSIWYG: mesmo componente da projeção /projection/module?module=draw.
              O que aparece aqui é exatamente o que será projetado. -->
         <div style="position: absolute; inset: 0">
@@ -33,74 +33,67 @@
 
     <!-- Rodapé — números sorteados sempre visíveis -->
     <template #footer>
-      <div v-if="drawn.length" class="draw-fs-footer" style="gap: 6px">
-        <span class="text-caption text-medium-emphasis">{{ t("data.drawn") }}:</span>
-        <v-chip-group>
-          <v-chip v-for="n in drawn" :key="n" size="large" variant="tonal" :color="COLORS.PRIMARY">
-            {{ n }}
-          </v-chip>
-        </v-chip-group>
-        <div class="text-caption text-medium-emphasis">
-          <v-progress-linear
-            color="primary"
-            class="draw-fs-footer-progress"
-            :model-value="((total - remaining) / total) * 100"
-            :height="17"
-            rounded
-          >
-            <span style="color: #fff"></span>
-          </v-progress-linear>
+      <div v-if="drawn.length" class="draw-fs-footer">
+        <span class="lj-u-caption lj-u-muted">{{ t("data.drawn") }}:</span>
+        <div class="draw-fs-chips">
+          <LjChip v-for="n in drawn" :key="n" variant="primary">{{ n }}</LjChip>
+        </div>
+        <div class="lj-u-caption lj-u-muted">
+          <div class="draw-fs-footer-progress">
+            <LjProgress :value="((total - remaining) / total) * 100" :height="17" />
+          </div>
           {{ t("data.remaining") }}: {{ remaining }} / {{ total }}
         </div>
       </div>
     </template>
   </ModuleContainer>
 
-  <!-- Fullscreen overlay -->
-  <v-dialog v-model="fullscreen" fullscreen transition="fade-transition">
-    <div
-      ref="fsRoot"
-      class="draw-fs-root"
-      tabindex="0"
-      @keydown.space.prevent="drawNumber"
-      @keydown.esc="fullscreen = false"
-    >
-      <div class="draw-fs-number" :class="{ 'draw-animating': animating }">
-        {{ current ?? "—" }}
+  <!-- Fullscreen overlay — não há primitivo de diálogo em tela cheia -->
+  <Teleport to="body">
+    <Transition name="draw-fade">
+      <div
+        v-if="fullscreen"
+        ref="fsRoot"
+        class="draw-fs-root"
+        tabindex="0"
+        @keydown.space.prevent="drawNumber"
+        @keydown.esc="fullscreen = false"
+      >
+        <div class="draw-fs-number" :class="{ 'draw-animating': animating }">
+          {{ current ?? "—" }}
+        </div>
+        <div class="draw-fs-remaining">{{ remaining }} / {{ total }}</div>
+        <div class="draw-fs-actions">
+          <LjButton
+            variant="primary"
+            size="lg"
+            :disabled="remaining === 0"
+            :icon="ICONS.SORT.DICE"
+            @click="drawNumber"
+          >
+            {{ t("actions.draw") }}
+          </LjButton>
+          <LjButton size="lg" :icon="ICONS.ACTIONS.RESTART" @click="reset">
+            {{ t("actions.reset") }}
+          </LjButton>
+          <LjButton
+            variant="ghost"
+            size="lg"
+            :icon="ICONS.PLAYER.FULLSCREEN_EXIT"
+            icon-only
+            @click="fullscreen = false"
+          />
+        </div>
+        <div v-if="drawn.length" class="draw-fs-history">
+          <LjChip v-for="n in drawn" :key="n" size="sm">{{ n }}</LjChip>
+        </div>
       </div>
-      <div class="draw-fs-remaining">{{ remaining }} / {{ total }}</div>
-      <div class="draw-fs-actions">
-        <LjButton
-          variant="primary"
-          size="lg"
-          :disabled="remaining === 0"
-          :icon="ICONS.SORT.DICE"
-          @click="drawNumber"
-        >
-          {{ t("actions.draw") }}
-        </LjButton>
-        <LjButton size="lg" :icon="ICONS.ACTIONS.RESTART" @click="reset">
-          {{ t("actions.reset") }}
-        </LjButton>
-        <LjButton
-          variant="ghost"
-          size="lg"
-          :icon="ICONS.PLAYER.FULLSCREEN_EXIT"
-          icon-only
-          @click="fullscreen = false"
-        />
-      </div>
-      <div v-if="drawn.length" class="draw-fs-history">
-        <v-chip v-for="n in drawn" :key="n" size="small" variant="tonal" color="white">
-          {{ n }}
-        </v-chip>
-      </div>
-    </div>
-  </v-dialog>
+    </Transition>
+  </Teleport>
 </template>
 
 <script setup>
-import { LjButton } from "@/components/ui";
+import { LjButton, LjChip, LjProgress } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, watch, nextTick, onBeforeUnmount } from "vue";
 import { module as manifest } from "../manifest";
@@ -112,7 +105,6 @@ import { useModuleProjection } from "@/composables/useModuleProjection";
 import { useModuleFormat } from "@/composables/useModuleFormat";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
-import { COLORS } from "@constants/Colors";
 import DrawProjection from "./DrawProjection.vue";
 
 const { show_format } = useModuleFormat("draw", manifest);
@@ -322,16 +314,30 @@ onBeforeUnmount(() => {
   }
 }
 
+/* Corpo do módulo */
+.draw-body {
+  display: flex;
+  height: 100%;
+}
+.draw-preview {
+  position: relative;
+  flex-grow: 1;
+  min-width: 0;
+}
+
 /* Fullscreen */
 .draw-fs-root {
+  position: fixed;
+  inset: 0;
+  z-index: 2500;
   width: 100vw;
   height: 100vh;
-  background: #000;
+  background: var(--lj-color-projection-bg);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 24px;
+  gap: var(--lj-space-8);
   outline: none;
   cursor: default;
 }
@@ -339,7 +345,7 @@ onBeforeUnmount(() => {
   font-size: clamp(6rem, 30vw, 20rem);
   font-weight: 100;
   font-variant-numeric: tabular-nums;
-  color: #fff;
+  color: var(--lj-white);
   line-height: 1;
   transition:
     transform 0.25s,
@@ -347,26 +353,47 @@ onBeforeUnmount(() => {
 }
 .draw-fs-remaining {
   font-size: 1rem;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--lj-white-alpha-50);
   font-variant-numeric: tabular-nums;
 }
 .draw-fs-actions {
   display: flex;
-  gap: 12px;
+  gap: var(--lj-space-5);
   align-items: center;
 }
 .draw-fs-history {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--lj-space-3);
   justify-content: center;
   max-width: 80vw;
-  padding: 0 24px;
+  padding: 0 var(--lj-space-8);
+}
+/* Sobre o fundo preto da tela cheia o chip não pode seguir o tema da janela. */
+.draw-fs-history :deep(.lj-chip) {
+  background: var(--lj-white-alpha-10);
+  border-color: transparent;
+  color: var(--lj-white);
+}
+
+.draw-fade-enter-active,
+.draw-fade-leave-active {
+  transition: opacity var(--lj-transition-slow);
+}
+.draw-fade-enter-from,
+.draw-fade-leave-to {
+  opacity: 0;
 }
 
 .draw-fs-footer {
   display: flex;
   flex-direction: column;
+  gap: var(--lj-space-3);
+}
+.draw-fs-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lj-space-2);
 }
 .draw-fs-footer-progress {
   width: 400px;

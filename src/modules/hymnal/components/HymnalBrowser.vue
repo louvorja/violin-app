@@ -8,8 +8,8 @@
     @has-scroll="hasScroll"
   >
     <template #header>
-      <div :class="classform.group">
-        <div :class="classform.group_item">
+      <div class="hymnal-form-group">
+        <div class="hymnal-form-item search-box">
           <LjInput
             v-model="search"
             :placeholder="t('inputs.search')"
@@ -38,9 +38,9 @@
     >
       <thead>
         <tr>
-          <th class="text-right">{{ t("table.track") }}</th>
-          <th class="text-left">{{ t("table.music_name") }}</th>
-          <th class="text-right">{{ t("table.duration") }}</th>
+          <th class="lj-u-text-end">{{ t("table.track") }}</th>
+          <th class="lj-u-text-start">{{ t("table.music_name") }}</th>
+          <th class="lj-u-text-end">{{ t("table.duration") }}</th>
           <th />
         </tr>
       </thead>
@@ -51,15 +51,15 @@
           :class="{ 'hymnal-row--selected': selectedId === item.id_music }"
           @click="selectedId = item.id_music"
         >
-          <td class="text-right">
+          <td class="lj-u-text-end">
             {{ item.track }}
           </td>
           <td>
             {{ item.name }}
           </td>
-          <td class="text-right">{{ shortTime(item.duration) }}</td>
+          <td class="lj-u-text-end">{{ shortTime(item.duration) }}</td>
           <td>
-            <div class="d-flex justify-end">
+            <div class="lj-u-flex lj-u-justify-end">
               <l-music-menu-table
                 :id_music="item.id_music"
                 :name="item.name"
@@ -71,19 +71,16 @@
       </tbody>
     </l-table>
 
-    <v-alert
+    <LjAlert
       v-if="search && data.filter_count <= 0"
-      type="error"
+      variant="danger"
       :text="t('data.not_found')"
-      variant="tonal"
-      border="start"
-      class="ma-2"
-      style="max-height: 70px"
+      class="hymnal-alert"
     />
 
     <template #footer>
       <div class="w-100">
-        <div class="text-right">
+        <div class="lj-u-text-end">
           <small>
             {{ t("data.records") }}:
             {{ data.filter_count }}
@@ -96,7 +93,7 @@
 
 <script setup>
 import { ICONS } from "@/config/Icons";
-import { LjInput } from "@/components/ui";
+import { LjAlert, LjInput } from "@/components/ui";
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { getModules } from "@/config/modules";
@@ -131,11 +128,6 @@ const has_scroll = ref(false);
 const selectedId = ref(null);
 const sequenceQueue = ref([]);
 const _sequenceTimer = ref(null);
-
-const classform = computed(() => ({
-  group: "d-flex flex-wrap",
-  group_item: "flex-shrink-1 flex-grow-1 d-flex flex-wrap justify-space-around search-box",
-}));
 
 const t = (text) => i18nT(`modules.${props.moduleId}.${text}`);
 
@@ -383,6 +375,23 @@ function close() {
 </script>
 
 <style scoped>
+.hymnal-form-group {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.hymnal-form-item {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  justify-content: space-around;
+}
+
+.hymnal-alert {
+  margin: var(--lj-space-4);
+  max-height: 70px;
+}
+
 .search-box {
   flex-basis: 600px;
   width: 350px;

@@ -104,7 +104,7 @@
 <script setup>
 import { ref, computed, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
-import { useDisplay } from "vuetify";
+import { useViewport } from "@/composables/useViewport";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import Icon from "@/components/Icon.vue";
@@ -120,7 +120,7 @@ import { KEYS } from "@/constants/UserDataKeys";
 import { useShell } from "@/composables/useShell";
 
 const { locale } = useI18n();
-const { width } = useDisplay();
+const { width } = useViewport();
 const shell = useShell();
 
 const moduleContainer = ref(null);

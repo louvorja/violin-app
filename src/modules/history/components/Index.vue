@@ -11,21 +11,21 @@
       />
     </template>
 
-    <div v-if="history.length === 0" class="pa-6 text-center">
-      <Icon :icon="ICONS.MODULES.HISTORY" size="64" class="mb-4 text-disabled" />
-      <div class="text-body-1 mb-2">{{ t("data.empty") }}</div>
-      <div class="text-body-2 text-disabled">{{ t("data.empty_hint") }}</div>
+    <div v-if="history.length === 0" class="music-list-empty">
+      <Icon :icon="ICONS.MODULES.HISTORY" size="64" class="lj-u-faded" />
+      <div class="music-list-empty-text">
+        <div class="music-list-empty-title">{{ t("data.empty") }}</div>
+        <div class="music-list-empty-hint lj-u-faded">{{ t("data.empty_hint") }}</div>
+      </div>
     </div>
 
-    <v-list v-else density="compact">
-      <v-list-item
-        v-for="item in history"
-        :key="item.id_music"
-        :title="item.name"
-        :subtitle="relativeDate(item.opened_at)"
-        class="border-b"
-      >
-        <template #append>
+    <div v-else class="music-list" role="list">
+      <div v-for="item in history" :key="item.id_music" class="music-list-item" role="listitem">
+        <div class="music-list-item-info">
+          <span class="music-list-item-name">{{ item.name }}</span>
+          <span class="music-list-item-meta">{{ relativeDate(item.opened_at) }}</span>
+        </div>
+        <div class="music-list-item-actions">
           <MusicMenuTable
             :id_music="item.id_music"
             :name="item.name"
@@ -39,9 +39,9 @@
             icon-only
             @click.stop="removeFromHistory(item.id_music)"
           />
-        </template>
-      </v-list-item>
-    </v-list>
+        </div>
+      </div>
+    </div>
   </ModuleContainer>
 </template>
 
@@ -94,3 +94,68 @@ function removeFromHistory(id) {
 
 function close() {}
 </script>
+
+<style scoped>
+.music-list-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--lj-space-6);
+  padding: var(--lj-space-8);
+  text-align: center;
+}
+
+.music-list-empty-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-4);
+}
+
+.music-list-empty-title {
+  font-size: var(--lj-text-lg);
+}
+
+.music-list-empty-hint {
+  font-size: var(--lj-text-base);
+}
+
+.music-list-item {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-4);
+  min-height: 36px;
+  padding: var(--lj-space-3) var(--lj-space-5);
+  border-bottom: 1px solid var(--lj-surface-divider);
+  transition: background var(--lj-transition-fast);
+}
+
+.music-list-item:hover {
+  background: var(--lj-surface-bg-hover);
+}
+
+.music-list-item-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.music-list-item-name {
+  font-size: var(--lj-text-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.music-list-item-meta {
+  font-size: var(--lj-text-xs);
+  color: var(--lj-text-muted);
+}
+
+.music-list-item-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-2);
+  flex-shrink: 0;
+}
+</style>

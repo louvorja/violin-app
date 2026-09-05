@@ -21,7 +21,10 @@ beforeAll(() => {
 });
 
 afterAll(() => {
-  process.env.TZ = tzOriginal;
+  // Atribuir `undefined` a process.env grava a string "undefined", que o ICU não
+  // resolve e trata como UTC — o worker sairia daqui preso em UTC.
+  if (tzOriginal === undefined) delete process.env.TZ;
+  else process.env.TZ = tzOriginal;
 });
 
 interface Agendado {
@@ -322,7 +325,12 @@ describe("LjCalendar — corte com +N", () => {
   }));
 
   it("guarda a última linha para o indicador quando não cabe", () => {
-    const w = montar({ modelValue: "2026-02-01", events: cinco, maxEvents: 3, eventMoreText: "+{0} mais" });
+    const w = montar({
+      modelValue: "2026-02-01",
+      events: cinco,
+      maxEvents: 3,
+      eventMoreText: "+{0} mais",
+    });
 
     // Três linhas no total: duas de evento e uma de indicador.
     expect(chips(w, "2026-02-10")).toEqual(["Item 1", "Item 2"]);
@@ -400,7 +408,10 @@ describe("LjCalendar — cliques", () => {
 
     const emitido = w.emitted("dayClick");
     expect(emitido).toHaveLength(1);
-    const carga = emitido?.[0][0] as { date: string; day: { dayOfMonth: number; outside: boolean } };
+    const carga = emitido?.[0][0] as {
+      date: string;
+      day: { dayOfMonth: number; outside: boolean };
+    };
     expect(carga.date).toBe("2026-02-17");
     expect(carga.day.dayOfMonth).toBe(17);
     expect(carga.day.outside).toBe(false);
@@ -531,13 +542,80 @@ describe("LjCalendar — hoje", () => {
   });
 });
 
+/**
+ * O Brasil não tem horário de verão desde 2019, então o fuso da suíte acima
+ * nunca vira — um defeito de virada passaria intacto por ela. O app fala
+ * espanhol também, e Santiago ainda vira; pior, vira à MEIA-NOITE, o instante
+ * que não existe no dia da troca. É o caso que quebra a aritmética de dias.
+ */
+describe("LjCalendar — fuso que ainda vira o relógio", () => {
+  beforeAll(() => {
+    process.env.TZ = "America/Santiago";
+  });
+
+  afterAll(() => {
+    process.env.TZ = "America/Sao_Paulo";
+  });
+
+  it("o fuso escolhido de fato vira à meia-noite, senão o teste não prova nada", () => {
+    // 2026-09-06 é a entrada do horário de verão em Santiago: 24:00 vira 01:00.
+    const naVirada = new Date(2026, 8, 6);
+    expect(naVirada.getHours()).toBe(1);
+    expect(new Date(2026, 8, 5).getHours()).toBe(0);
+  });
+
+  it("a grade do mês da virada continua fechando em semanas inteiras", () => {
+    const w = montar({ modelValue: "2026-09-15", locale: "es-CL" });
+    const d = datas(w);
+
+    expect(d.length % 7).toBe(0);
+    expect(new Set(d).size).toBe(d.length);
+    expect(d).toContain("2026-09-30");
+    // es-CL começa a semana na segunda, então a grade fecha num domingo.
+    expect(d[d.length - 1]).toBe("2026-10-04");
+  });
+
+  it("evento que cruza a virada aparece em todos os dias, inclusive no último", () => {
+    const w = montar({
+      modelValue: "2026-09-15",
+      locale: "es-CL",
+      maxEvents: 99,
+      events: [{ id: "1", name: "Campanha", start: "2026-09-01", end: "2026-09-30" }] as Agendado[],
+    });
+
+    expect(chips(w, "2026-09-05")).toEqual(["Campanha"]);
+    expect(chips(w, "2026-09-06")).toEqual(["Campanha"]);
+    expect(chips(w, "2026-09-30")).toEqual(["Campanha"]);
+  });
+
+  it("a semana que contém a virada tem sete dias", () => {
+    const w = montar({ modelValue: "2026-09-06", type: "week", locale: "es-CL" });
+
+    expect(datas(w)).toHaveLength(7);
+  });
+});
+
+describe("LjCalendar — a célula acompanha o teto de linhas", () => {
+  it("a raiz publica o teto e a altura da tarja para o CSS dimensionar a célula", () => {
+    const w = montar({ modelValue: "2026-09-15", maxEvents: 5, eventHeight: 22 });
+    const estilo = w.get(".lj-calendar").attributes("style") ?? "";
+
+    // O jsdom não calcula altura; o que dá para garantir aqui é a ligação. Sem
+    // ela o CSS caía num valor fixo, a célula cheia estourava e o `overflow`
+    // cortava a última linha — que é o indicador "+N".
+    expect(estilo).toContain("--lj-calendar-rows: 5");
+    expect(estilo).toContain("--lj-calendar-event-h: 22px");
+  });
+});
+
 /*
  * Fora do alcance do jsdom:
  *
  * - Altura das células, corte por overflow e a rolagem da lista de eventos na
  *   semana: no jsdom todo elemento mede 0, então qualquer asserção de layout
- *   seria sobre o dublê. `maxEvents` é um teto declarado, não medido — é ele
- *   que os testes acima travam.
+ *   seria sobre o dublê. `maxEvents` é um teto declarado, e o teste acima trava
+ *   a ligação dele com o CSS; que a célula de fato cresce e não corta o "+N" só
+ *   se verifica em navegador.
  * - `color-mix()` no fundo do chip: o jsdom não resolve a função, e o valor
  *   lido de volta seria a string crua. Contraste da cor da categoria só se
  *   verifica em navegador.

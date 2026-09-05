@@ -9,7 +9,7 @@
       <div class="opt-actions-row">
         <div>
           <button type="button" class="opt-btn" :disabled="exporting" @click="doExport">
-            <Icon :icon="ICONS.ACTIONS.DOWNLOAD" size="14" class="mr-1" />
+            <Icon :icon="ICONS.ACTIONS.DOWNLOAD" size="14" />
             {{ $t("import_export.export.action") }}
           </button>
 
@@ -24,7 +24,7 @@
         </div>
         <div>
           <button type="button" class="opt-btn" @click="pickFile">
-            <Icon :icon="ICONS.ACTIONS.UPLOAD" size="14" class="mr-1" />
+            <Icon :icon="ICONS.ACTIONS.UPLOAD" size="14" />
             {{ $t("import_export.import.action") }}
           </button>
           <p class="opt-hint">{{ $t("import_export.import.hint") }}</p>

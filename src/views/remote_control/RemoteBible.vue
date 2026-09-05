@@ -1,109 +1,104 @@
 <template>
-  <div class="pa-4">
+  <div class="rb-root">
     <LjButton
       variant="default"
       block
       :icon="ICONS.BIBLE.BOOK_SEARCH"
-      class="mb-4"
+      class="rb-search"
       @click="bibleSearchOpen = true"
     >
       {{ t("shell.quick_search_short") }}
     </LjButton>
 
-    <v-divider class="mb-4" />
+    <LjDivider class="rb-rule-top" />
 
-    <v-select
-      v-model="bibleSelection.version"
-      :items="bibleData.versions"
-      item-title="name"
-      item-value="id_bible_version"
-      :label="t('options.bible.version')"
-      density="compact"
-      variant="outlined"
-      class="mb-3"
-      @update:model-value="onVersionSelect"
-    >
-      <template #item="{ item, props }">
-        <v-list-item v-bind="props">
-          <template #append>
+    <LjField layout="column" :label="t('options.bible.version')">
+      <LjSelect
+        size="touch"
+        :model-value="bibleSelection.version"
+        :items="bibleData.versions"
+        item-value="id_bible_version"
+        item-label="name"
+        @update:model-value="selectVersion"
+      >
+        <template #value="{ item }">
+          <span class="rb-version">
+            <span class="lj-u-truncate">{{ item?.name }}</span>
+            <Icon
+              v-if="item && !downloadedVersions.has(item.id_bible_version)"
+              :icon="ICONS.ACTIONS.DOWNLOAD_OUTLINE"
+              size="small"
+              color="warning"
+            />
+          </span>
+        </template>
+        <template #item="{ item }">
+          <span class="rb-version">
+            <span>{{ item.name }}</span>
             <Icon
               v-if="!downloadedVersions.has(item.id_bible_version)"
               :icon="ICONS.ACTIONS.DOWNLOAD_OUTLINE"
               size="small"
               color="warning"
             />
-          </template>
-        </v-list-item>
-      </template>
-      <template #selection="{ item }">
-        <span>{{ item.name }}</span>
-        <Icon
-          v-if="!downloadedVersions.has(item.id_bible_version)"
-          :icon="ICONS.ACTIONS.DOWNLOAD_OUTLINE"
-          size="small"
-          color="warning"
-          class="ml-1"
-        />
-      </template>
-    </v-select>
+          </span>
+        </template>
+      </LjSelect>
+    </LjField>
 
-    <v-select
-      v-model="bibleSelection.book"
-      :items="bibleData.books"
-      item-title="name"
-      item-value="id_bible_book"
-      :label="t('options.module.bible.book')"
-      density="compact"
-      variant="outlined"
-      class="mb-3"
-      @update:model-value="onBookSelect"
-    />
-    <v-row density="comfortable">
-      <v-col cols="6">
-        <v-select
-          v-model="bibleSelection.chapter"
+    <LjField layout="column" :label="t('options.module.bible.book')">
+      <LjSelect
+        size="touch"
+        :model-value="bibleSelection.book"
+        :items="bibleData.books"
+        item-value="id_bible_book"
+        item-label="name"
+        @update:model-value="selectBook"
+      />
+    </LjField>
+
+    <div class="rb-pair">
+      <LjField layout="column" :label="t('options.module.bible.chapter')">
+        <LjSelect
+          size="touch"
+          :model-value="bibleSelection.chapter"
           :items="bibleData.chapters"
-          :label="t('options.module.bible.chapter')"
-          density="compact"
-          variant="outlined"
           :disabled="!bibleSelection.book"
-          @update:model-value="onChapterSelect"
+          @update:model-value="selectChapter"
         />
-      </v-col>
-      <v-col cols="6">
-        <v-select
-          v-model="bibleSelection.verse"
+      </LjField>
+      <LjField layout="column" :label="t('options.module.bible.verses')">
+        <LjSelect
+          size="touch"
+          :model-value="bibleSelection.verse"
           :items="bibleData.verses"
-          :label="t('options.module.bible.verses')"
-          density="compact"
-          variant="outlined"
           :disabled="!bibleSelection.chapter"
-          @update:model-value="onVerseSelect"
+          @update:model-value="selectVerse"
         />
-      </v-col>
-    </v-row>
+      </LjField>
+    </div>
 
     <!-- Grade de versículos do capítulo atual -->
     <template
       v-if="activeBible.active && activeBible.chapterVerses && activeBible.chapterVerses.length > 0"
     >
-      <v-divider class="my-4" />
-      <div class="px-2 py-1 bg-surface-variant text-caption d-flex align-center mb-2">
-        <Icon :icon="ICONS.BIBLE.BOOK_OPEN" size="small" class="mr-1" />
-        <span class="text-truncate">{{ activeBible.reference }}</span>
+      <LjDivider class="rb-rule-mid" />
+      <div class="rb-ref lj-u-caption">
+        <Icon :icon="ICONS.BIBLE.BOOK_OPEN" size="small" />
+        <span class="lj-u-truncate">{{ activeBible.reference }}</span>
       </div>
-      <div class="remote-slides-grid">
-        <v-card
+      <div class="rb-grid">
+        <button
           v-for="(text, verse) in activeBible.chapterVerses"
           :key="verse"
-          class="slide-card"
-          :color="verse + 1 === activeBible.verse ? 'primary' : ''"
-          :variant="verse + 1 === activeBible.verse ? 'flat' : 'outlined'"
+          type="button"
+          class="rb-verse"
+          :class="{ 'is-active': verse + 1 === activeBible.verse }"
           @click="goToVerse(verse + 1)"
         >
-          <div class="slide-num">{{ verse + 1 }}</div>
-          <div class="slide-text" v-html="text" />
-        </v-card>
+          <span class="rb-verse__num">{{ verse + 1 }}</span>
+          <span class="rb-verse__text" v-html="text" />
+        </button>
       </div>
     </template>
 
@@ -112,7 +107,7 @@
 </template>
 
 <script setup lang="ts">
-import { LjButton } from "@/components/ui";
+import { LjButton, LjDivider, LjField, LjSelect } from "@/components/ui";
 import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { ref, onMounted } from "vue";
@@ -226,6 +221,34 @@ async function getPreferredBibleVersion(): Promise<number | null> {
     console.error("Erro ao buscar versão da bíblia:", e);
   }
   return null;
+}
+
+/**
+ * O LjSelect emite `string | number`; a seleção da bíblia é numérica. Cada
+ * atalho abaixo converte e reproduz a ordem que o `v-model` tinha: primeiro
+ * grava o valor, depois dispara o encadeamento de carga.
+ */
+function selectVersion(value: string | number): void {
+  bibleSelection.value.version = Number(value);
+  onVersionSelect();
+}
+
+function selectBook(value: string | number): void {
+  const id = Number(value);
+  bibleSelection.value.book = id;
+  onBookSelect(id);
+}
+
+function selectChapter(value: string | number): void {
+  const num = Number(value);
+  bibleSelection.value.chapter = num;
+  onChapterSelect(num);
+}
+
+function selectVerse(value: string | number): void {
+  const num = Number(value);
+  bibleSelection.value.verse = num;
+  onVerseSelect(num);
 }
 
 async function onVersionSelect(): Promise<void> {
@@ -469,35 +492,106 @@ defineExpose({
 </script>
 
 <style scoped>
-.remote-slides-grid {
+.rb-root {
+  padding: var(--lj-space-6);
+}
+
+.rb-search,
+.rb-rule-top {
+  margin-bottom: var(--lj-space-6);
+}
+
+.rb-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--lj-space-5);
+}
+
+.rb-rule-mid {
+  margin: var(--lj-space-6) 0;
+}
+
+/* Faixa de referência do capítulo aberto. Sobre o fundo suave da página ela
+   só se destaca com a superfície cheia, como as abas e o rodapé. */
+.rb-ref {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-2);
+  margin-bottom: var(--lj-space-4);
+  padding: var(--lj-space-2) var(--lj-space-4);
+  background: var(--lj-surface-bg);
+  border: 1px solid var(--lj-surface-border);
+  border-radius: var(--lj-ui-radius);
+  color: var(--lj-text-muted);
+}
+
+.rb-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 8px;
+  gap: var(--lj-space-4);
 }
-.slide-card {
-  aspect-ratio: 16/9;
+
+.rb-verse {
+  position: relative;
   display: flex;
   flex-direction: column;
-  padding: 8px;
-  cursor: pointer;
+  aspect-ratio: 16/9;
+  padding: var(--lj-space-4);
   overflow: hidden;
-  position: relative;
+  background: var(--lj-surface-bg);
+  border: var(--lj-ui-border);
+  border-radius: var(--lj-ui-radius);
+  color: var(--lj-text);
+  font: inherit;
+  cursor: pointer;
 }
-.slide-num {
+
+.rb-verse.is-active {
+  background: var(--lj-ui-accent);
+  border-color: var(--lj-ui-accent);
+  color: var(--lj-ui-accent-fg);
+}
+
+.rb-verse:focus-visible {
+  outline: none;
+  box-shadow: var(--lj-ui-focus);
+}
+
+.rb-verse__num {
   position: absolute;
-  top: 4px;
-  left: 4px;
-  font-size: 10px;
+  top: var(--lj-space-2);
+  left: var(--lj-space-2);
+  font-size: var(--lj-text-xs);
   opacity: 0.7;
 }
-.slide-text {
-  font-size: 11px;
+
+.rb-verse__text {
+  display: -webkit-box;
+  margin: auto;
+  overflow: hidden;
+  font-size: var(--lj-text-sm);
   line-height: 1.2;
   text-align: center;
-  margin: auto;
-  display: -webkit-box;
   -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
-  overflow: hidden;
+}
+</style>
+
+<!-- Sem `scoped`: o painel do LjSelect é emitido num portal no <body> e o Vue
+     não propaga o atributo de escopo para lá. O `:has` prende as regras à
+     página do controle remoto — é a única do app operada com o dedo, e o item
+     de 26px do catálogo é alvo de mouse. -->
+<style>
+.rb-version {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lj-space-2);
+  max-width: 100%;
+  min-width: 0;
+}
+
+body:has(.rb-root) .lj-select__item {
+  height: var(--lj-ui-h-touch);
+  font-size: var(--lj-ui-font-touch);
 }
 </style>

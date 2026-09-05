@@ -10,7 +10,9 @@
     size="small"
     @close="closeLyric()"
   >
-    <v-skeleton-loader v-if="lyLoading" type="text@5" />
+    <div v-if="lyLoading" class="ly-skeleton">
+      <LjSkeleton v-for="n in 5" :key="n" height="14px" />
+    </div>
     <div v-else>
       <div v-for="line in lyLines" :key="line.id_lyric">
         <b v-if="line.aux_lyric">{{ line.aux_lyric }}</b>
@@ -25,6 +27,7 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { module as manifest } from "../manifest";
 import Window from "@/components/Window.vue";
+import { LjSkeleton } from "@/components/ui";
 import { useLyric } from "@/composables/useLyric";
 import Modules from "@/helpers/Modules";
 import Path from "@/helpers/Path";
@@ -49,3 +52,11 @@ function closeLyric() {
   Media.closeLyric();
 }
 </script>
+
+<style scoped>
+.ly-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-5);
+}
+</style>

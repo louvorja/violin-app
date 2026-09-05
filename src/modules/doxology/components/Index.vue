@@ -13,15 +13,8 @@
     </template>
 
     <div class="dx-root">
-      <v-progress-linear v-if="loading" indeterminate />
-      <v-alert
-        v-if="error"
-        type="error"
-        :text="error"
-        variant="tonal"
-        class="ma-2"
-        style="max-height: 70px"
-      />
+      <LjProgress v-if="loading" indeterminate :height="4" />
+      <LjAlert v-if="error" variant="danger" :text="error" class="dx-error" />
 
       <!-- Nível 2: Músicas do álbum -->
       <template v-if="selectedAlbum">
@@ -88,7 +81,7 @@
 </template>
 
 <script setup lang="ts">
-import { LjButton } from "@/components/ui";
+import { LjAlert, LjButton, LjProgress } from "@/components/ui";
 import Icon from "@/components/Icon.vue";
 import { computed, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
@@ -205,6 +198,10 @@ function close(): void {
   gap: 8px;
   height: 100%;
   overflow-y: auto;
+}
+.dx-error {
+  margin: var(--lj-space-4);
+  max-height: 70px;
 }
 .dx-header {
   width: 100%;

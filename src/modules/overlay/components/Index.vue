@@ -7,7 +7,7 @@
     <div class="overlay-root">
       <!-- Header -->
 
-      <v-divider />
+      <LjDivider />
 
       <div class="overlay-body">
         <!-- Preview -->
@@ -68,18 +68,12 @@
             >
               <div class="overlay-slot-card-header">
                 <Icon :icon="ICONS.ACTIONS.DRAG" size="16" class="overlay-slot-drag" />
-                <v-switch
-                  v-model="slot.enabled"
-                  density="compact"
-                  hide-details
-                  color="primary"
-                  @update:model-value="persist"
-                />
+                <LjSwitch v-model="slot.enabled" @update:model-value="persist" />
                 <span class="overlay-slot-name">{{ slot.name }}</span>
-                <v-chip size="x-small" variant="tonal" class="overlay-slot-type">
+                <LjChip size="sm" class="overlay-slot-type">
                   {{ t("slot.type_" + slot.type) }}
-                </v-chip>
-                <v-spacer />
+                </LjChip>
+                <div class="lj-u-spacer" />
                 <LjButton
                   variant="ghost"
                   size="sm"
@@ -116,7 +110,7 @@
 </template>
 
 <script setup lang="ts">
-import { LjButton } from "@/components/ui";
+import { LjButton, LjChip, LjDivider, LjSwitch } from "@/components/ui";
 import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { ref, reactive, onMounted } from "vue";
@@ -385,7 +379,7 @@ onMounted(() => {
   padding: 8px 12px;
   font-size: 12px;
   font-weight: 500;
-  color: rgba(var(--v-theme-on-surface), 0.6);
+  color: var(--lj-text-muted);
   flex-shrink: 0;
 }
 
@@ -410,7 +404,7 @@ onMounted(() => {
   cursor: pointer;
 }
 .overlay-preview-slot--active {
-  outline: 2px solid rgb(var(--v-theme-primary));
+  outline: 2px solid var(--lj-ui-accent);
   outline-offset: -2px;
 }
 
@@ -437,7 +431,7 @@ onMounted(() => {
   justify-content: center;
   gap: 8px;
   flex: 1;
-  color: rgba(var(--v-theme-on-surface), 0.4);
+  color: var(--lj-text-subtle);
   font-size: 13px;
   padding: 24px;
   text-align: center;
@@ -448,15 +442,15 @@ onMounted(() => {
 }
 
 .overlay-slot-card {
-  border: 1px solid rgba(var(--v-border-color), 0.2);
+  border: 1px solid var(--lj-surface-border);
   border-radius: 8px;
   margin-bottom: 8px;
-  background: rgba(var(--v-theme-surface), 0.4);
+  background: var(--lj-surface-bg-soft);
   transition: border-color 0.15s;
 }
 
 .overlay-slot-card--active {
-  border-color: rgb(var(--v-theme-primary));
+  border-color: var(--lj-ui-accent);
 }
 
 .overlay-slot-card-header {
@@ -469,7 +463,7 @@ onMounted(() => {
 
 .overlay-slot-drag {
   cursor: grab;
-  color: rgba(var(--v-theme-on-surface), 0.3);
+  color: var(--lj-text-subtle);
 }
 
 .overlay-slot-name {
@@ -487,7 +481,7 @@ onMounted(() => {
 }
 
 .overlay-slot-editor {
-  border-top: 1px solid rgba(var(--v-border-color), 0.15);
+  border-top: 1px solid var(--lj-surface-divider);
   padding: 12px;
 }
 </style>

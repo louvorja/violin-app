@@ -1,21 +1,25 @@
 <template>
-  <v-dialog v-model="show" max-width="380" persistent>
-    <div class="loading">
-      <div class="loading-logo">
-        <LjLogo :size="48" />
-      </div>
-      <div class="loading-content">
-        <div class="loading-title">
-          Louvor
-          <b>JA</b>
+  <Teleport to="body">
+    <Transition name="loading">
+      <div v-if="show" class="loading-overlay">
+        <div class="loading" role="status">
+          <div class="loading-logo">
+            <LjLogo :size="48" />
+          </div>
+          <div class="loading-content">
+            <div class="loading-title">
+              Louvor
+              <b>JA</b>
+            </div>
+            <div class="loading-message">
+              <LjSpinner :size="14" :stroke-width="2" class="loading-spinner" />
+              <span>{{ message }}</span>
+            </div>
+          </div>
         </div>
-        <div class="loading-message">
-          <v-progress-circular color="primary" indeterminate size="14" width="2" class="mr-2" />
-          <span>{{ message }}</span>
-        </div>
       </div>
-    </div>
-  </v-dialog>
+    </Transition>
+  </Teleport>
 </template>
 
 <script setup>
@@ -23,6 +27,7 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import $appdata from "@/helpers/AppData";
 import LjLogo from "@/components/LjLogo.vue";
+import { LjSpinner } from "@/components/ui";
 
 const { t } = useI18n();
 
@@ -34,7 +39,20 @@ const message = computed(() => {
 </script>
 
 <style scoped>
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--lj-z-dialog);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--lj-space-8);
+  background: var(--lj-black-alpha-40);
+}
+
 .loading {
+  width: 100%;
+  max-width: 380px;
   display: flex;
   align-items: center;
   gap: var(--lj-space-5);
@@ -73,8 +91,23 @@ const message = computed(() => {
 .loading-message {
   display: flex;
   align-items: center;
+  gap: var(--lj-space-4);
   font-size: var(--lj-text-base);
   color: var(--lj-text-muted);
   margin-top: 8px;
+}
+
+.loading-spinner {
+  color: var(--lj-ui-accent);
+}
+
+.loading-enter-active,
+.loading-leave-active {
+  transition: opacity var(--lj-transition-normal);
+}
+
+.loading-enter-from,
+.loading-leave-to {
+  opacity: 0;
 }
 </style>

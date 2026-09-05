@@ -310,6 +310,10 @@
 .lj-dialog .lj-icon.lj-icon,
 .lj-popover .lj-icon.lj-icon,
 .lj-tabs .lj-icon.lj-icon,
+.lj-accordion .lj-icon.lj-icon,
+.lj-drawer .lj-icon.lj-icon,
+.lj-table .lj-icon.lj-icon,
+.lj-calendar .lj-icon.lj-icon,
 .lj-card__icon.lj-card__icon,
 .lj-empty__icon.lj-empty__icon {
   filter: none;

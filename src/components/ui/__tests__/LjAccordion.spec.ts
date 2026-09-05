@@ -12,7 +12,7 @@ import { mountUi } from "./mountUi";
  */
 const ITENS: LjAccordionItem[] = [
   { value: "hinario", label: "Hinário" },
-  { value: "corais", label: "Corais", icon: "mdi-music" },
+  { value: "corais", label: "Corais", icon: "music" },
   { value: "infantil", label: "Infantil" },
 ];
 
@@ -352,10 +352,10 @@ describe("LjAccordion", () => {
 
     const icones = w.findAllComponents(Icon);
     expect(icones.map((i) => i.props("icon"))).toEqual([
-      "mdi-chevron-right",
-      "mdi-chevron-right",
-      "mdi-music",
-      "mdi-chevron-right",
+      "chevron-right",
+      "chevron-right",
+      "music",
+      "chevron-right",
     ]);
   });
 
@@ -372,15 +372,32 @@ describe("LjAccordion", () => {
   });
 });
 
-/*
- * Fora do alcance do jsdom:
- *
- * - A animação de abrir e fechar depende de --reka-accordion-content-height, que
- *   a Reka calcula com getBoundingClientRect. No jsdom todo elemento mede 0, e a
- *   folha scoped do componente nem chega a ser aplicada — qualquer asserção sobre
- *   altura ou duração seria sobre o dublê, não sobre o componente. Também é por
- *   isso que o painel fechado some na hora aqui: sem animação computada, a Reka
- *   desmonta o conteúdo sem esperar animationend.
- * - A seta que gira em [data-state="open"] é só CSS; o que dá para travar aqui é
- *   o data-state do gatilho, que é o gancho dessa regra.
+/**
+ * O componente usa `defineModel`, e não o par computed/ref-interno que o
+ * LjTabs adota. A diferença só aparece num caso: v-model ligado, valor inicial
+ * indefinido e o pai não devolvendo o evento. Com o padrão do LjTabs a sanfona
+ * abre na tela enquanto o estado do pai continua indefinido — tela e modelo
+ * divergem, e nenhum outro caso desta suíte acusa isso.
  */
+describe("LjAccordion — v-model sem valor inicial", () => {
+  it("não abre na tela quando o pai recusa a mudança", async () => {
+    const recusado: unknown[] = [];
+    const Host = defineComponent({
+      setup: () => () =>
+        h(LjAccordion, {
+          items: ITENS,
+          modelValue: undefined,
+          "onUpdate:modelValue": (v: unknown) => recusado.push(v),
+        }),
+    });
+    const w = mountUi(Host, { attachTo: document.body });
+    montados.push(w as unknown as VueWrapper);
+
+    const gatilho = document.body.querySelectorAll<HTMLElement>(".lj-accordion__trigger")[0];
+    gatilho.click();
+    await flushPromises();
+
+    expect(recusado).toEqual(["hinario"]);
+    expect(gatilho.getAttribute("aria-expanded")).toBe("false");
+  });
+});

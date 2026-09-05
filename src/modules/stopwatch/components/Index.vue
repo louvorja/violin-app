@@ -5,14 +5,9 @@
     :style="{ minWidth: '300px' }"
     @close="close()"
   >
-    <div class="d-flex h-100">
+    <div class="lj-u-flex lj-u-h-full">
       <ModuleFormatDrawer v-model="show_format" :module-id="'stopwatch'" :manifest="manifest" />
-      <div
-        ref="container"
-        class="d-flex flex-column align-center pa-4 flex-grow-1"
-        style="gap: 16px"
-        :style="rootStyle"
-      >
+      <div ref="container" class="sw-body" :style="rootStyle">
         <img v-if="bgImage" :src="bgImage" class="sw-bg-img" :style="imageStyle" alt="" />
 
         <!-- Display -->
@@ -31,9 +26,9 @@
         </div>
 
         <!-- Mensagem de alarme -->
-        <v-chip v-if="alarmed" color="error" variant="tonal" :prepend-icon="ICONS.TIMER.ALARM">
+        <LjChip v-if="alarmed" variant="danger" :icon="ICONS.TIMER.ALARM" class="sw-alarm">
           {{ t("alarm.done") }}
-        </v-chip>
+        </LjChip>
       </div>
     </div>
   </ModuleContainer>
@@ -41,6 +36,7 @@
 
 <script setup>
 import { ICONS } from "@/config/Icons";
+import { LjChip } from "@/components/ui";
 import { ref, computed, watch, onBeforeUnmount } from "vue";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
@@ -187,6 +183,24 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+/* Padding e alinhamento vêm de `rootStyle` (formatação do usuário) e vencem
+   estes valores — que são só o ponto de partida. */
+.sw-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-grow: 1;
+  gap: var(--lj-space-6);
+  padding: var(--lj-space-6);
+}
+
+/* Sai da camada de fundo: a imagem é posicionada e cobriria um elemento
+   em fluxo normal. */
+.sw-alarm {
+  position: relative;
+  z-index: 1;
+}
+
 .sw-display {
   position: relative;
   z-index: 1;

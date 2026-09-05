@@ -123,7 +123,7 @@
 
     <!--    Modo de cor-->
     <LjTooltip :text="$t('shell.toggle_theme')" side="bottom">
-      <button type="button" class="shell-tool" @click="toggleTheme">
+      <button type="button" class="shell-tool" @click="toggleDark">
         <Icon :icon="isDark ? ICONS.UI.THEME_LIGHT : ICONS.UI.THEME_DARK" :size="sizeIcon" />
       </button>
     </LjTooltip>
@@ -147,7 +147,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { useTheme } from "vuetify";
 import $appdata from "@/helpers/AppData";
 import $userdata from "@/helpers/UserData";
 import $modules from "@/helpers/Modules";
@@ -160,6 +159,7 @@ import {
 import Broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBackgroundTasks, type BackgroundTask } from "@/composables/useBackgroundTasks";
+import { useAppTheme } from "@/composables/useAppTheme";
 import { formatBackgroundTaskDetail } from "@/helpers/BackgroundTaskDetail";
 import Icon from "@/components/Icon.vue";
 import { LjButton, LjPopover, LjProgress, LjTooltip } from "@/components/ui";
@@ -167,10 +167,8 @@ import { ICONS } from "@/config/Icons";
 import { COLORS } from "@constants/Colors";
 
 const { t } = useI18n();
-const vuetifyTheme = useTheme();
+const { isDark, toggleDark } = useAppTheme();
 const bgTasks = useBackgroundTasks();
-
-const isDark = computed(() => $appdata.get(KEYS.SHELL.IS_DARK, false));
 
 const hasUpdate = computed(() => $appdata.get(KEYS.SHELL.APP_UPDATE_AVAILABLE, false));
 
@@ -195,25 +193,6 @@ function openBibleSearch() {
 
 function openFavorites() {
   $modules.open("favorites");
-}
-
-function toggleTheme() {
-  try {
-    const cur = vuetifyTheme.global.name.value || "darkblue";
-    const lastLight = $userdata.get(KEYS.OPTIONS.THEME_LAST_LIGHT, null);
-    const next =
-      cur === "dark"
-        ? lastLight && lastLight !== "dark"
-          ? lastLight
-          : "darkblue"
-        : ($userdata.set(KEYS.OPTIONS.THEME_LAST_LIGHT, cur), "dark");
-    vuetifyTheme.change(next);
-    $userdata.set(KEYS.OPTIONS.THEME, next);
-    document.documentElement.dataset.theme = next;
-    $appdata.set(KEYS.SHELL.IS_DARK, next === "dark");
-  } catch (err) {
-    console.error("[ShellTools] toggleTheme falhou:", err);
-  }
 }
 
 function openAbout() {

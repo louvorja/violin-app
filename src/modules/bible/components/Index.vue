@@ -1,58 +1,70 @@
 <template>
   <ModuleContainer :manifest="manifest" compact :index="loading" @close="close()">
     <template #header>
-      <div class="d-flex align-center" style="gap: 12px; flex: 1; min-width: 0">
-        <l-select
-          v-model="bible.id_bible_version"
-          :label="t('version')"
+      <div class="bible-header">
+        <LjSelect
+          :model-value="bible.id_bible_version"
           :items="versions_list ?? []"
           item-value="value"
-          item-title="title"
+          item-label="title"
+          :placeholder="t('version')"
+          :aria-label="t('version')"
           @click="refreshDownloadedVersions"
+          @update:model-value="bible.id_bible_version = Number($event)"
         />
 
-        <v-checkbox
+        <LjCheckbox
           v-if="!compact"
           v-model="show_history"
           :label="t('show_history')"
-          density="compact"
-          hide-details
-          color="primary"
-          style="flex-shrink: 0"
+          class="bible-header__history"
         />
       </div>
 
       <!-- Os campos abaixo serão exibidos apenas no mobile / reolução pequena -->
-      <div v-if="compact">
-        <div class="my-2" />
-        <l-select
-          v-model="bible.id_bible_book"
-          :label="t('book')"
+      <div v-if="compact" class="bible-compact-fields">
+        <LjSelect
+          :model-value="bible.id_bible_book"
           :items="books ?? []"
           item-value="id_bible_book"
-          item-title="name"
-          item-subtitle="abbreviation"
+          item-label="name"
+          :placeholder="t('book')"
+          :aria-label="t('book')"
           :icon="ICONS.BIBLE.BOOK_OPEN_PAGE"
+          @update:model-value="bible.id_bible_book = Number($event)"
         />
-        <div class="my-2" />
-        <l-select
-          v-model="bible.chapter"
-          :label="t('chapter')"
+        <LjSelect
+          :model-value="bible.chapter"
           :items="chaptersList"
           item-value="id"
-          item-title="value"
+          item-label="value"
+          :placeholder="t('chapter')"
+          :aria-label="t('chapter')"
           :icon="ICONS.BIBLE.BOOKMARK"
+          @update:model-value="bible.chapter = Number($event)"
         />
-        <div class="my-2" />
-        <l-select
-          v-model="bible_verses"
-          :label="t('verses')"
-          :items="versesList"
-          item-value="id"
-          item-title="value"
-          multiple
-          :icon="ICONS.FORMAT.LIST_NUMBERED"
-        />
+        <LjPopover align="start">
+          <template #trigger>
+            <button type="button" class="bible-verses-trigger" :aria-label="t('verses')">
+              <Icon
+                :icon="ICONS.FORMAT.LIST_NUMBERED"
+                :size="15"
+                class="bible-verses-trigger__ic"
+              />
+              <span class="bible-verses-trigger__text lj-u-truncate">{{ versesSummary }}</span>
+              <Icon :icon="ICONS.UI.CHEVRON_DOWN" :size="15" class="bible-verses-trigger__ic" />
+            </button>
+          </template>
+          <div class="bible-verses-options">
+            <LjCheckbox
+              v-for="v in versesList"
+              :key="v.id"
+              :model-value="bible.verses.includes(v.id)"
+              :label="String(v.value)"
+              @update:model-value="toggleVerse(v.id)"
+            />
+          </div>
+        </LjPopover>
       </div>
     </template>
 
@@ -64,116 +76,101 @@
       <!-- Coluna Livros -->
       <div class="bible-col bible-col--books">
         <div class="bible-col__search">
-          <l-select
-            v-model="bible.id_bible_book"
-            :label="t('book')"
+          <LjSelect
+            :model-value="bible.id_bible_book"
             :items="books ?? []"
             item-value="id_bible_book"
-            item-title="name"
-            item-subtitle="abbreviation"
+            item-label="name"
+            :placeholder="t('book')"
+            :aria-label="t('book')"
             :icon="ICONS.BIBLE.BOOK_OPEN_PAGE"
+            @update:model-value="bible.id_bible_book = Number($event)"
           />
         </div>
         <div class="bible-col__grid">
-          <v-skeleton-loader
+          <LjSkeleton
             v-for="n in 10"
             v-show="loading_book"
             :key="n"
-            class="ma-1"
-            :height="80"
-            :width="100"
+            class="bible-skeleton-card"
+            width="100px"
+            height="80px"
           />
-          <v-card
+          <button
             v-for="b in books"
             :id="`listBook_${b.id_bible_book}`"
             :key="b.id_bible_book"
-            :color="b.color"
-            class="ma-1 d-flex align-center flex-column"
-            :height="80"
-            :width="100"
-            hover
-            :variant="b.id_bible_book == bible.id_bible_book ? 'flat' : 'tonal'"
+            type="button"
+            class="bible-card bible-card--book"
+            :class="b.id_bible_book == bible.id_bible_book ? 'is-filled' : 'is-tonal'"
+            :style="cardColors(b.color)"
             @click="selBook(b.id_bible_book)"
           >
-            <v-card-title class="flex-grow-1 pa-0 ma-0 text-h4 d-flex align-center">
-              {{ b.abbreviation }}
-            </v-card-title>
-            <v-card-text
-              class="flex-grow-0 pa-0 px-1 ma-0 text-caption text-truncate text-center w-100"
-            >
-              {{ b.name }}
-            </v-card-text>
-          </v-card>
+            <span class="bible-card__abbr">{{ b.abbreviation }}</span>
+            <span class="bible-card__name lj-u-truncate">{{ b.name }}</span>
+          </button>
         </div>
       </div>
 
       <!-- Coluna Capítulos -->
       <div class="bible-col bible-col--chapters">
         <div class="bible-col__search">
-          <l-select
-            v-model="bible.chapter"
-            :label="t('chapter')"
+          <LjSelect
+            :model-value="bible.chapter"
             :items="chaptersList"
             item-value="id"
-            item-title="value"
+            item-label="value"
+            :placeholder="t('chapter')"
+            :aria-label="t('chapter')"
             :icon="ICONS.BIBLE.BOOKMARK"
+            @update:model-value="bible.chapter = Number($event)"
           />
         </div>
         <div class="bible-col__grid">
-          <v-skeleton-loader
+          <LjSkeleton
             v-for="n in 10"
             v-show="loading_book"
             :key="n"
-            class="ma-1"
-            :height="40"
-            :width="40"
+            class="bible-skeleton-card"
+            width="40px"
+            height="40px"
           />
-          <v-card
+          <button
             v-for="chapter in chapters"
             :id="`listChapter_${chapter}`"
             :key="chapter"
-            :color="book?.color"
-            class="ma-1 d-flex align-center flex-column"
-            :height="40"
-            :width="40"
-            hover
-            :variant="chapter == bible.chapter ? 'flat' : 'tonal'"
+            type="button"
+            class="bible-card bible-card--chapter"
+            :class="chapter == bible.chapter ? 'is-filled' : 'is-tonal'"
+            :style="cardColors(book?.color)"
             @click="selChapter(chapter)"
           >
-            <v-card-title
-              class="flex-grow-1 pa-0 ma-0 d-flex align-center font-weight-regular"
-              style="font-size: 16px"
-            >
-              {{ chapter }}
-            </v-card-title>
-          </v-card>
+            <span class="bible-card__num">{{ chapter }}</span>
+          </button>
         </div>
       </div>
 
       <!-- Coluna Versículos -->
       <div class="bible-col bible-col--verses">
         <div class="bible-col__search">
-          <v-text-field
+          <LjInput
             v-model="verse_filter"
-            :label="t('locate')"
-            density="compact"
-            variant="outlined"
-            hide-details
             clearable
-            :prepend-inner-icon="ICONS.ACTIONS.SEARCH"
+            :icon="ICONS.ACTIONS.SEARCH"
+            :placeholder="t('locate')"
+            :aria-label="t('locate')"
           />
-          <v-checkbox
+          <LjCheckbox
             v-if="verse_filter"
             v-model="filterNavigateOnly"
             :label="t('filter_navigate_only')"
-            density="compact"
-            hide-details
-            class="mt-1"
-            color="primary"
           />
         </div>
         <div class="bible-col__verses-list">
-          <v-skeleton-loader v-show="loading_book || loading_verses" type="list-item-two-line" />
+          <div v-show="loading_book || loading_verses" class="bible-verse-skeleton">
+            <LjSkeleton width="35%" height="14px" />
+            <LjSkeleton height="14px" />
+          </div>
           <div v-show="!loading_book && !loading_verses" class="bible-verses-list">
             <div
               v-for="(verse, num) in filteredVerses"
@@ -234,7 +231,10 @@
     <div v-else class="bible-layout bible-layout--compact">
       <div class="bible-col bible-col--verses">
         <div class="bible-col__verses-list">
-          <v-skeleton-loader v-show="loading_book || loading_verses" type="list-item-two-line" />
+          <div v-show="loading_book || loading_verses" class="bible-verse-skeleton">
+            <LjSkeleton width="35%" height="14px" />
+            <LjSkeleton height="14px" />
+          </div>
           <div v-show="!loading_book && !loading_verses" class="bible-verses-list">
             <div
               v-for="(verse, num) in filteredVerses"
@@ -252,8 +252,8 @@
     </div>
 
     <template #footer>
-      <v-spacer />
-      <v-divider vertical />
+      <div class="lj-u-spacer" />
+      <LjDivider vertical />
       <LjButton
         variant="ghost"
         size="sm"
@@ -263,7 +263,7 @@
       >
         {{ t("clear_text") }}
       </LjButton>
-      <v-divider vertical />
+      <LjDivider vertical />
       <LjButton
         variant="ghost"
         size="sm"
@@ -287,12 +287,20 @@
 </template>
 
 <script setup lang="ts">
-import { LjButton } from "@/components/ui";
+import {
+  LjButton,
+  LjCheckbox,
+  LjDivider,
+  LjInput,
+  LjPopover,
+  LjSelect,
+  LjSkeleton,
+} from "@/components/ui";
+import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick, type Ref } from "vue";
 import { useI18n } from "vue-i18n";
-import LSelect from "@/components/inputs/LjSelect.vue";
-import { useDisplay } from "vuetify";
+import { useViewport } from "@/composables/useViewport";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import Screen from "../components/Screen.vue";
@@ -322,7 +330,7 @@ import { ModuleState } from "@/types/Module";
 const HISTORY_MAX = 30;
 
 const { t: i18nT, locale } = useI18n();
-const { width } = useDisplay();
+const { width } = useViewport();
 const moduleId = manifest.id;
 
 const module_ = computed(() => Modules.get(moduleId) as ModuleState | undefined);
@@ -430,6 +438,35 @@ watch(bibleSpotlightOpen, (val) => {
 
 const compact = computed(() => width.value <= 750);
 
+const versesSummary = computed(() => (bible.verses.length ? bible.verses.join(", ") : t("verses")));
+
+/**
+ * Preto ou branco sobre a cor do livro. Cada livro traz do banco uma cor
+ * própria, e o cartão selecionado a usa de fundo — sem escolher o texto pela
+ * luminância, os tons claros ficam ilegíveis.
+ */
+function contrastOn(hex?: string): string {
+  const match = /^#?([0-9a-f]{6})$/i.exec(hex ?? "");
+  if (!match) return "var(--lj-ui-accent-fg)";
+  const rgb = parseInt(match[1], 16);
+  const linear = (byte: number): number => {
+    const c = byte / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  };
+  const luminance =
+    0.2126 * linear((rgb >> 16) & 255) +
+    0.7152 * linear((rgb >> 8) & 255) +
+    0.0722 * linear(rgb & 255);
+  return luminance > 0.4 ? "var(--lj-gray-900)" : "var(--lj-white)";
+}
+
+function cardColors(color?: string): Record<string, string> {
+  return {
+    "--bible-card-color": color || "var(--lj-ui-accent)",
+    "--bible-card-fg": contrastOn(color),
+  };
+}
+
 const bible_verses = computed({
   get: (): number[] => bible.verses,
   set: (value: number[]) => {
@@ -451,6 +488,12 @@ const bible_verses = computed({
     }
   },
 });
+
+function toggleVerse(num: number): void {
+  bible_verses.value = bible.verses.includes(num)
+    ? bible.verses.filter((v) => v !== num)
+    : [...bible.verses, num];
+}
 
 watch(show, async (val) => {
   if (val && lang.value !== locale.value) {
@@ -1117,6 +1160,145 @@ useBroadcastListener(BROADCAST_TYPE.REQUEST_BIBLE_STATE, () => {
 </script>
 
 <style scoped>
+.bible-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.bible-header__history {
+  flex-shrink: 0;
+}
+
+.bible-compact-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-4);
+}
+
+.bible-verses-trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-ui-gap-md);
+  width: 100%;
+  height: var(--lj-ui-h-md);
+  padding-inline: var(--lj-ui-px-md);
+  background: var(--lj-surface-bg);
+  border: var(--lj-ui-border);
+  border-radius: var(--lj-ui-radius);
+  color: var(--lj-text);
+  font: inherit;
+  font-size: var(--lj-ui-font-md);
+  cursor: pointer;
+  outline: none;
+}
+
+.bible-verses-trigger:hover,
+.bible-verses-trigger[data-state="open"] {
+  border-color: var(--lj-ui-accent);
+}
+
+.bible-verses-trigger:focus-visible {
+  border-color: var(--lj-ui-accent);
+  box-shadow: var(--lj-ui-focus);
+}
+
+.bible-verses-trigger__ic {
+  color: var(--lj-text-subtle);
+}
+
+.bible-verses-trigger__text {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+
+.bible-verses-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lj-space-3) var(--lj-space-5);
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+/* Cartão de livro/capítulo. A cor vem do banco, por variável no style inline:
+   `is-tonal` a usa esmaecida no fundo e cheia no texto; `is-filled` inverte. */
+.bible-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin: var(--lj-space-2);
+  border: 1px solid transparent;
+  border-radius: var(--lj-radius-sm);
+  font-family: inherit;
+  cursor: pointer;
+  overflow: hidden;
+  transition: box-shadow var(--lj-transition-fast);
+}
+
+.bible-card:hover {
+  box-shadow: var(--lj-shadow-1);
+}
+
+.bible-card.is-tonal {
+  background: color-mix(in srgb, var(--bible-card-color) 12%, transparent);
+  color: var(--bible-card-color);
+}
+
+.bible-card.is-filled {
+  background: var(--bible-card-color);
+  color: var(--bible-card-fg);
+}
+
+.bible-card--book {
+  width: 100px;
+  height: 80px;
+  padding: 0;
+}
+
+.bible-card__abbr {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  font-size: 2.125rem;
+  font-weight: 400;
+  line-height: 2.5rem;
+}
+
+.bible-card__name {
+  flex-grow: 0;
+  width: 100%;
+  padding-inline: 4px;
+  font-size: var(--lj-text-sm);
+  line-height: 1.4;
+  text-align: center;
+}
+
+.bible-card--chapter {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+}
+
+.bible-card__num {
+  font-size: 16px;
+  font-weight: 400;
+}
+
+.bible-skeleton-card {
+  margin: var(--lj-space-2);
+}
+
+.bible-verse-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-3);
+  padding: var(--lj-space-5) var(--lj-space-4);
+}
+
 .bible-layout {
   position: relative;
   display: flex;
@@ -1160,8 +1342,16 @@ useBroadcastListener(BROADCAST_TYPE.REQUEST_BIBLE_STATE, () => {
 
 .bible-col__search {
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-2);
   padding: 8px 8px 6px;
   border-bottom: 1px solid var(--lj-surface-border);
+}
+
+/* O LjInput é inline-flex e encolhe para o conteúdo: aqui ele ocupa a coluna. */
+.bible-col__search :deep(.lj-input) {
+  width: 100%;
 }
 
 .bible-col__grid {

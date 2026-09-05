@@ -131,7 +131,7 @@
 <script setup>
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
 import { useI18n } from "vue-i18n";
-import { useDisplay } from "vuetify";
+import { useViewport } from "@/composables/useViewport";
 import { component as Fullscreen } from "vue-fullscreen";
 import { module as manifest } from "../manifest";
 import Window from "@/components/Window.vue";
@@ -156,7 +156,7 @@ import { useFileProjection } from "@/composables/useFileProjection";
 import Path from "@/helpers/Path";
 
 const { t: i18nT } = useI18n();
-const { width } = useDisplay();
+const { width } = useViewport();
 const moduleId = manifest.id;
 const module_ = computed(() => Modules.get(moduleId));
 

@@ -6,15 +6,15 @@
     </div>
     <div class="liturgy-ribbon-info__stats">
       <span class="liturgy-ribbon-info__stat">
-        <Icon :icon="ICONS.TIMER.CLOCK_START" size="13" class="mr-1" />
+        <Icon :icon="ICONS.TIMER.CLOCK_START" size="13" />
         {{ info.startTime || "—" }}
       </span>
       <span class="liturgy-ribbon-info__stat">
-        <Icon :icon="ICONS.TIMER.CLOCK_END" size="13" class="mr-1" />
+        <Icon :icon="ICONS.TIMER.CLOCK_END" size="13" />
         {{ info.endTime || "—" }}
       </span>
       <span class="liturgy-ribbon-info__stat">
-        <Icon :icon="ICONS.TIMER.TIMER_OUTLINE" size="13" class="mr-1" />
+        <Icon :icon="ICONS.TIMER.TIMER_OUTLINE" size="13" />
         {{ formattedDuration }}
       </span>
     </div>
@@ -93,6 +93,7 @@ const formattedDuration = computed(() => {
 .liturgy-ribbon-info__stat {
   display: inline-flex;
   align-items: center;
+  gap: var(--lj-space-2);
   white-space: nowrap;
 }
 </style>
