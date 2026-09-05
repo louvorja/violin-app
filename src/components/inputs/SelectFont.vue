@@ -3,6 +3,7 @@
        MonitorSelect.vue. -->
   <div class="select-font">
     <LjSelect
+      :id="id"
       v-model="model"
       :items="orderedFonts"
       item-value="family"
@@ -30,6 +31,15 @@ import { FONT, Fonts, resolveFont, type FontOption } from "@/config/Fonts";
 const props = withDefaults(
   defineProps<{
     modelValue?: string | null;
+    /**
+     * Vai ao <button role="combobox"> lá dentro, não a esta div.
+     *
+     * Sem declarar a prop, o id caía em $attrs e pousava no invólucro — que não
+     * é elemento rotulável. Os cinco `<label for>` da tela de Opções apontavam
+     * para ele: clicar no rótulo não focava nada e o campo ficava sem nome
+     * acessível.
+     */
+    id?: string;
     disabled?: boolean;
     showInterfaceDefault?: boolean;
     showProjectionDefault?: boolean;
