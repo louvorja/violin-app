@@ -63,9 +63,19 @@
 }
 
 /* Título gruda no topo enquanto a seção rola, indicando onde se está. */
+/* --lj-opt-scroll-pad espelha o padding-top de .app-menu-content (AppMenu.vue),
+   que é o container de rolagem desta tela. Um sticky em `top: 0` gruda abaixo
+   desse padding, e sobrava uma faixa da altura dele em que o conteúdo rolava à
+   vista, sem nada por cima — era o texto aparecendo acima do título da seção.
+   O topo negativo sobe o título até a borda real do scrollport; o padding
+   interno devolve a mesma altura, então nada se desloca. */
+.opt {
+  --lj-opt-scroll-pad: var(--lj-space-6);
+}
+
 .opt-section-title {
   position: sticky;
-  top: 0;
+  top: calc(-1 * var(--lj-opt-scroll-pad));
   z-index: 2;
   display: flex;
   align-items: center;
@@ -73,8 +83,8 @@
   font-size: var(--lj-text-xl);
   font-weight: var(--lj-weight-semibold);
   color: var(--lj-text);
-  margin: 0 0 var(--lj-space-6);
-  padding: var(--lj-space-5) 0 var(--lj-space-3);
+  margin: calc(-1 * var(--lj-opt-scroll-pad)) 0 var(--lj-space-6);
+  padding: calc(var(--lj-space-5) + var(--lj-opt-scroll-pad)) 0 var(--lj-space-3);
   background: var(--lj-surface-bg);
   border-bottom: 1px solid var(--lj-surface-border);
 }

@@ -992,12 +992,13 @@
           <input
             type="number"
             min="0"
-            max="5000"
+            max="3000"
             step="100"
             class="opt-input opt-input--num"
             style="width: 80px"
+            :aria-label="$t('options.file_projection.fade_duration')"
             :value="fileProjectionFadeDuration"
-            @input="setFileProj('fade_duration', Number($v($event)) || 500)"
+            @input="setFileProj('fade_duration', duracaoDeFade($v($event)))"
           />
           <span class="opt-unit">ms</span>
         </div>
@@ -1491,6 +1492,17 @@ const fileProjectionFade: ComputedRef<boolean> = computed(
 const fileProjectionFadeDuration: ComputedRef<number> = computed(
   () => $userdata.get(KEYS.OPTIONS.FILE_PROJECTION.FADE_DURATION, 500)!!
 );
+
+/**
+ * `Number(x) || 500` engolia o zero: quem digitava 0 para desligar o fade
+ * recebia 500ms de volta. E a caixa aceitava até 5000 enquanto o slider ao lado
+ * para em 3000, então os dois controles do mesmo valor discordavam.
+ */
+function duracaoDeFade(bruto: string): number {
+  const n = Number(bruto);
+  if (!Number.isFinite(n)) return 500;
+  return Math.min(3000, Math.max(0, n));
+}
 
 function setFileProj(key: string, value: any): void {
   $userdata.set(`options.file_projection.${key}`, value);
