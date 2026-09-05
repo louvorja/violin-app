@@ -117,6 +117,11 @@ function onDismiss(event: Event): void {
   background: var(--lj-surface-bg);
   border: var(--lj-ui-float-border);
   border-radius: var(--lj-radius-lg);
+  /* Recorta os cantos: o rodapé e o cabeçalho têm fundo próprio e vão de ponta
+     a ponta, então sem isto o retângulo deles aparece por fora da curva. Nada
+     dentro do diálogo depende de transbordar — o corpo já rola sozinho, e
+     select, menu e popover saem por portal, fora deste elemento. */
+  overflow: hidden;
   box-shadow: var(--lj-shadow-3);
   color: var(--lj-text);
   font-family: var(--lj-font-shell);
