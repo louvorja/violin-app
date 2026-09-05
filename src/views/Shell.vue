@@ -489,14 +489,20 @@ function _handleUpdaterState(
     $appdata.set(KEYS.SHELL.APP_UPDATE_VERSION, state.newVersion || "");
     // Download manual via dialog → o dialog já mostra o estado "instalar";
     // não reabrir as notas por cima. Segue para release notes / startup.
-    if (!updateDialogOpen.value) {
+    // Mesma guarda do ramo acima: baixar pelas Opções não é boot.
+    if (_startupCheckPending && !updateDialogOpen.value) {
       _continueBootAfterUpdate();
     }
   } else if (state.status === "not-available" || state.status === "error") {
     $appdata.set(KEYS.SHELL.APP_UPDATE_AVAILABLE, false);
-    _startupCheckPending = false;
-    // Sem update → seguir para a verificação inicial
-    _continueBootAfterUpdate();
+    // Só encadeia o boot quando este estado veio da verificação de abertura.
+    // O botão "Verificar" das Opções emite exatamente o mesmo estado, e sem a
+    // guarda ele reabria a Verificação Inicial por cima da tela de Opções.
+    if (_startupCheckPending) {
+      _startupCheckPending = false;
+      // Sem update → seguir para a verificação inicial
+      _continueBootAfterUpdate();
+    }
   }
 }
 
