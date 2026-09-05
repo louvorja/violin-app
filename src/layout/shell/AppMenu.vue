@@ -238,7 +238,13 @@ function close() {
 }
 
 function onKeydown(e) {
-  if (e.key === "Escape") close();
+  if (e.key !== "Escape") return;
+  // Um select, menu ou popover aberto dentro do painel também fecha no Escape,
+  // e a Reka não marca o evento como tratado. Sem esta guarda, fechar a lista
+  // de um combobox fechava as Opções inteiras junto — o usuário perdia a tela
+  // ao cancelar uma escolha. O atributo é emitido pelo PopperContent da Reka.
+  if (document.querySelector("[data-reka-popper-content-wrapper]")) return;
+  close();
 }
 
 function selectItem(item) {
