@@ -34,6 +34,8 @@
 import { reactive, ref, computed, nextTick, onMounted, onBeforeUnmount } from "vue";
 import { estiloDeFundo } from "@/helpers/BackgroundStyle";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
+import { useProjectionCloseNotice } from "@/composables/useProjectionCloseNotice";
+import { PROJECTION_TYPE } from "@/constants/Projection";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import Broadcast from "@/helpers/Broadcast";
 import Media from "@/composables/useMedia";
@@ -197,6 +199,8 @@ function _readPendingProjection(): void {
 }
 _readPendingProjection();
 setTimeout(_readPendingProjection, 500);
+
+useProjectionCloseNotice(PROJECTION_TYPE.FILE);
 
 useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION, (payload: unknown) => {
   _activateProjection((payload || {}) as FileProjectionState);

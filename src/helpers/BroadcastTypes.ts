@@ -99,6 +99,12 @@ export const BROADCAST_TYPE = Object.freeze({
    *  com noopener não devolve referência para o Projection.close() fechar. */
   MODULE_PROJECTION_CLOSE: "module_projection_close",
 
+  /** Uma janela de projeção sumiu — por ESC, pelo X ou pelo sistema.
+   *  Payload: { feature: string } (PROJECTION_TYPE.* ou id do módulo)
+   *  Emitido por: as views de projeção (useProjectionCloseNotice). Recebido por:
+   *  Shell — que desliga o estado que ficaria marcando projeção ligada. */
+  PROJECTION_CLOSED: "projection_closed",
+
   /** Texto do painel de recados. Emitido por message_board/Index.vue.
    *  Recebido por: (recepção futura). */
   MESSAGE_BOARD: "message_board",

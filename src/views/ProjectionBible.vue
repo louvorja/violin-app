@@ -84,6 +84,8 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
+import { useProjectionCloseNotice } from "@/composables/useProjectionCloseNotice";
+import { PROJECTION_TYPE } from "@/constants/Projection";
 import { useContainerSize } from "@/composables/useContainerSize";
 import Broadcast from "@/helpers/Broadcast";
 import UserData from "@/helpers/UserData";
@@ -191,6 +193,8 @@ const displayReference = computed(() => {
   if (!showVersion.value) return referenceOnlyText.value;
   return reference.value;
 });
+
+useProjectionCloseNotice(PROJECTION_TYPE.BIBLE);
 
 useBroadcastListener(BROADCAST_TYPE.BIBLE_VERSE, (payload) => {
   console.log("[ProjectionBible] Recebido BIBLE_VERSE:", payload);

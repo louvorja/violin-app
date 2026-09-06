@@ -45,6 +45,8 @@
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
+import { useProjectionCloseNotice } from "@/composables/useProjectionCloseNotice";
+import { PROJECTION_TYPE } from "@/constants/Projection";
 import $idb from "@/helpers/IndexedDB";
 import { DB_TABLE } from "@/constants/DbTables";
 
@@ -165,6 +167,8 @@ function next(): void {
 function prev(): void {
   if (index.value > 0) index.value--;
 }
+
+useProjectionCloseNotice(PROJECTION_TYPE.ANNOUNCEMENTS);
 
 useBroadcastListener(BROADCAST_TYPE.ANNOUNCEMENTS_STATE, (payload: unknown) => {
   applyState((payload || {}) as { slides?: AnnSlide[]; index?: number });

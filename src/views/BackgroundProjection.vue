@@ -130,6 +130,8 @@
 import { reactive, ref, computed, onMounted, onBeforeUnmount, nextTick } from "vue";
 import { estiloDeFundo } from "@/helpers/BackgroundStyle";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
+import { useProjectionCloseNotice } from "@/composables/useProjectionCloseNotice";
+import { PROJECTION_TYPE } from "@/constants/Projection";
 import { useProjectionState } from "@/composables/useProjectionState";
 import { useContainerSize } from "@/composables/useContainerSize";
 import $broadcast from "@/helpers/Broadcast";
@@ -315,6 +317,8 @@ const bibleDisplayReference = computed(() => {
   if (!bibleShowVersion.value) return bibleReferenceOnlyText.value;
   return bibleReference.value;
 });
+
+useProjectionCloseNotice(PROJECTION_TYPE.BACKGROUND);
 
 useBroadcastListener(BROADCAST_TYPE.BIBLE_VERSE, (payload: unknown) => {
   const p = payload as Record<string, unknown>;

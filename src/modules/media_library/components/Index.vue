@@ -518,7 +518,12 @@ async function handleDeleteCategory(id: string): Promise<void> {
 }
 const playlist = ref<PlaylistItem[]>([]);
 const currentIndex = ref(-1);
-const isPlaying = ref(false);
+// Fonte única com quem desliga a projeção de fora (fechar a janela pelo ESC).
+// Um ref local aqui deixava a barra do player acesa com o projetor apagado.
+const isPlaying = computed<boolean, boolean>({
+  get: () => $userdata.get<boolean>(KEYS.MODULES.MEDIA_LIBRARY.IS_PLAYING, false) === true,
+  set: (value: boolean) => $userdata.set(KEYS.MODULES.MEDIA_LIBRARY.IS_PLAYING, value),
+});
 const currentPdfPage = ref(1);
 const currentPdfTotalPages = ref(0);
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -924,7 +929,7 @@ function savePlaylist(): void {
 }
 
 function loadPlaylist(): void {
-  $userdata.set(KEYS.MODULES.MEDIA_LIBRARY.IS_PLAYING, false);
+  isPlaying.value = false;
   const saved = $userdata.get<
     { id: string; name: string; path: string; type: "image" | "video" | "pdf" }[]
   >(PLAYLIST_KEY, []);
@@ -1001,7 +1006,6 @@ async function playIndex(index: number): Promise<void> {
 
   currentIndex.value = index;
   isPlaying.value = true;
-  $userdata.set(KEYS.MODULES.MEDIA_LIBRARY.IS_PLAYING, true);
   currentPdfPage.value = 1;
   currentPdfTotalPages.value = 0;
 
@@ -1081,7 +1085,6 @@ async function prev(): Promise<void> {
 
 function stop(): void {
   isPlaying.value = false;
-  $userdata.set(KEYS.MODULES.MEDIA_LIBRARY.IS_PLAYING, false);
   currentIndex.value = -1;
   localStorage.removeItem("lj_file_projection");
   $broadcast.send(BROADCAST_TYPE.MEDIA_CLOSE, {});

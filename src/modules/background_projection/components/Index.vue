@@ -330,7 +330,12 @@ const selectedId = ref<string | null>(null);
 
 /** Id virtual dos arquivos adicionados sem categoria. */
 const UNCATEGORIZED_ID = "";
-const isPlaying = ref(false);
+// Fonte única com o ícone do header e com quem desliga a projeção de fora
+// (fechar a janela pelo ESC). Um ref local aqui já deixou os dois discordando.
+const isPlaying = computed<boolean, boolean>({
+  get: () => $userdata.get<boolean>(KEYS.MODULES.BACKGROUND_PROJECTION.IS_PLAYING, false) === true,
+  set: (value: boolean) => $userdata.set(KEYS.MODULES.BACKGROUND_PROJECTION.IS_PLAYING, value),
+});
 const fileInput = ref<HTMLInputElement | null>(null);
 const categories = ref<BgCategory[]>([]);
 const selectedCategoryIds = ref(new Set<string>());
@@ -784,7 +789,6 @@ async function togglePlay(): Promise<void> {
     return;
   }
   isPlaying.value = true;
-  $userdata.set(KEYS.MODULES.BACKGROUND_PROJECTION.IS_PLAYING, true);
   await openBackgroundProjectionWindows();
   $broadcast.send(BROADCAST_TYPE.BACKGROUND_PROJECTION, { active: false });
 }
@@ -799,7 +803,6 @@ async function clearProjection(): Promise<void> {
 async function stop(): Promise<void> {
   isPlaying.value = false;
   localStorage.removeItem(KEYS.PROJECTION.LJ_BACKGROUND_PROJECTION);
-  $userdata.set(KEYS.MODULES.BACKGROUND_PROJECTION.IS_PLAYING, false);
   $broadcast.send(BROADCAST_TYPE.MEDIA_CLOSE, {});
   await closeBackgroundProjectionWindows();
 }

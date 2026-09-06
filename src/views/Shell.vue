@@ -161,6 +161,7 @@ import { registerShell } from "@/composables/useShell";
 import { useAppTheme } from "@/composables/useAppTheme";
 import { useViewport } from "@/composables/useViewport";
 import { useFileProjection } from "@/composables/useFileProjection";
+import { useProjectionShutdown } from "@/composables/useProjectionShutdown";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
 import { hasOpenWebWindows } from "@/helpers/projection/webWindow";
 import { formatBackgroundTaskDetail } from "@/helpers/BackgroundTaskDetail";
@@ -195,6 +196,8 @@ const liturgyModuleOpen = computed(() => {
 });
 
 const fp = useFileProjection();
+
+useProjectionShutdown();
 
 const playerMinimized = computed(() => {
   try {
