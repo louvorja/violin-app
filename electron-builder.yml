@@ -75,7 +75,15 @@ publish:
 # Windows — NSIS installer
 # ---------------------------------------------------------------------------
 win:
-  target: nsis
+  # Intel/AMD e ARM no mesmo instalador: o NSIS embute as duas e escolhe a certa
+  # na hora de instalar, então o operador baixa um arquivo só e não precisa saber
+  # que processador tem a máquina. Sem `arch`, sairia só x64 — e os Windows on
+  # ARM ficariam de fora.
+  target:
+    - target: nsis
+      arch:
+        - x64
+        - arm64
   icon: build/icon-512.png
   # Code signing (opcional — requer certificado pago):
   # certificateFile: cert.pfx
@@ -164,10 +172,23 @@ mac:
 # host, a partir do v27 — hoje só em alpha. Quando ele estabilizar, atualizar a
 # dependência resolve isto e este comentário pode sair junto.
 linux:
+  # Um arquivo por arquitetura, aqui não há escolha: deb, rpm e AppImage carregam
+  # a arquitetura no próprio formato, e o gerenciador de pacotes recusa o que não
+  # casa com a máquina. Sem `arch` saía só x64, e quem roda ARM — de Raspberry a
+  # máquina virtual em Mac — ficava sem instalador.
   target:
-    - AppImage
-    - deb
-    - rpm
+    - target: AppImage
+      arch:
+        - x64
+        - arm64
+    - target: deb
+      arch:
+        - x64
+        - arm64
+    - target: rpm
+      arch:
+        - x64
+        - arm64
   icon: build/icon-512.png
   category: AudioVideo
   # O ambiente gráfico casa uma janela com o lançador comparando a identidade
