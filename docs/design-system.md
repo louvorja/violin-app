@@ -270,6 +270,38 @@ Exemplo:
 }
 ```
 
+### Camadas flutuantes — entram e saem
+
+Diálogo, menu, select, popover e tooltip não usam os tokens acima. Eles têm um
+par próprio, e a assimetria é deliberada: quem chega desacelera, quem sai
+acelera.
+
+| Token                  | Valor                  | Uso                     |
+| ---------------------- | ---------------------- | ----------------------- |
+| `--lj-ui-float-enter` | `0.14s ease-out`      | Abertura da camada      |
+| `--lj-ui-float-exit`  | `0.1s ease-in`        | Fechamento da camada    |
+| `--lj-ui-float-shift` | `4px`                  | Deslocamento da entrada |
+
+A Reka carimba `data-state` na camada, e é dele que a animação pende — **as duas
+direções são obrigatórias**:
+
+```css
+.minha-camada[data-state="open"] {
+  animation: lj-float-in var(--lj-ui-float-enter);
+}
+.minha-camada[data-state="closed"] {
+  animation: lj-float-out var(--lj-ui-float-exit);
+}
+```
+
+Esquecer o `closed` não dá erro: a camada só some seca, enquanto as vizinhas
+saem animadas — o mesmo gesto de fechar com duas resoluções na tela. Foi o que
+aconteceu com o `LjDialog`, que nasceu só com a entrada.
+
+O `closed` também é o que segura a camada montada: a Reka espera a animação
+terminar para desmontar. Uma animação que não termina deixa o overlay preso
+bloqueando cliques — teste o desmonte, não só a aparência.
+
 ---
 
 ## Dimensões de Componentes Shell
