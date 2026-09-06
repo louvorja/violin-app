@@ -215,6 +215,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   color: var(--lj-text);
+  min-height: 0;
   overflow: hidden;
   transition: width var(--lj-transition-slow);
   font-family: var(--lj-font-shell);
@@ -284,8 +285,13 @@ onMounted(() => {
 }
 
 /* Body */
+/* `min-height: 0` é o que faz o `overflow-y` valer: sem ele o padrão
+   `min-height: auto` deixa a lista crescer até o tamanho do conteúdo, o painel
+   estica para além da janela e a barra de rolagem nunca aparece — uma liturgia
+   de vinte itens simplesmente ficava com o fim cortado no rodapé. */
 .liturgy-panel-body {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: var(--lj-space-2) var(--lj-space-3) var(--lj-space-5);
 }

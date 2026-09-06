@@ -938,10 +938,17 @@ onBeforeUnmount(() => {
   opacity: 0;
 }
 
+/* `1 1 auto` + `min-height: 0`: o miolo recebe a altura que sobra entre a
+   ribbon e o player, e nunca a altura do que está dentro dele. Com `1 0 auto`
+   ele não encolhia, adotava o tamanho do conteúdo e transbordava a janela —
+   nenhum módulo revelava isso porque todos se posicionam em `absolute`, mas o
+   painel de liturgia cresce com a lista: numa liturgia de vinte itens o fim
+   ficava cortado no rodapé, e a rolagem interna nunca chegava a existir. */
 .shell-main {
   display: flex;
-  flex: 1 0 auto;
+  flex: 1 1 auto;
   flex-direction: column;
+  min-height: 0;
   max-width: 100%;
   overflow: hidden;
   transition: padding-bottom 0.3s ease;
