@@ -25,10 +25,9 @@ const TRAFFIC_LIGHT_POSITION = { x: 10, y: 11 };
  * @param {string} devUrl    URL do dev server (ex: "http://localhost:5002")
  * @param {string} prodHtmlPath  Caminho absoluto para dist/index.html
  * @param {string} preloadPath   Caminho absoluto para o preload.cjs
- * @param {string} httpBaseUrl   URL base do Express server (ex: "http://localhost:7070")
  * @returns {BrowserWindow}
  */
-function createMainWindow(devUrl, prodHtmlPath, preloadPath, httpBaseUrl) {
+function createMainWindow(devUrl, prodHtmlPath, preloadPath) {
   const isDev =
     process.env.ELECTRON_DEV === "1" ||
     !require("electron").app.isPackaged;
@@ -104,13 +103,21 @@ function createMainWindow(devUrl, prodHtmlPath, preloadPath, httpBaseUrl) {
 
   if (isDev) {
     win.loadURL(devUrl);
-  } else if (httpBaseUrl) {
-    // Produção: todas as janelas compartilham a origem do Express server
-    // para BroadcastChannel e YouTube IFrame API funcionarem.
-    win.loadURL(`${httpBaseUrl}/#/`);
   } else {
-    // Fallback: protocolo customizado (sem HTTP — YouTube não funciona)
-    win.loadURL("louvorja://app/index.html");
+    // Origem fixa, e é isso que importa aqui. Antes a janela carregava do
+    // servidor Express, cuja porta é sorteada quando a preferida está ocupada
+    // — e como o IndexedDB é isolado por origem, cada troca de porta zerava
+    // tudo que estava nele: o marcador de banco instalado e os dados que
+    // alimentam a lista de coletâneas. O sintoma era o app perguntar
+    // "deseja baixar o banco?" a cada abertura, mesmo depois de baixado, e a
+    // tela de coletâneas aparecer sem nada para selecionar.
+    //
+    // O motivo de outrora para preferir HTTP — o embed do YouTube exigir
+    // origem real — não se confirma: medido no Ubuntu 24.04, o mesmo embed
+    // responde 200 nas duas origens, e sob `http://localhost` ainda aparecem
+    // dois ERR_BLOCKED_BY_ORB que aqui não aparecem. O servidor Express segue
+    // no ar para o OBS; ele é que deixa de ser a origem das janelas.
+    win.loadURL("louvorja://app/index.html#/");
   }
 
   return win;

@@ -186,10 +186,6 @@ const DEV_URL = "http://localhost:5002";
 const isDev =
   process.env.ELECTRON_DEV === "1" || !app.isPackaged;
 
-// URL base do servidor HTTP embarcado — todas as janelas Electron
-// compartilham esta origem HTTP para que BroadcastChannel e YouTube
-// IFrame API funcionem. Atualizada em runtime com a porta real.
-let HTTP_BASE_URL = "http://localhost:7070";
 
 // ---------------------------------------------------------------------------
 // Estado da app
@@ -218,7 +214,7 @@ function createWindow() {
     console.log("[LouvorJA] userData:", paths.userData());
   }
 
-  mainWindow = createMainWindow(DEV_URL, prodHtmlPath, preloadPath, HTTP_BASE_URL);
+  mainWindow = createMainWindow(DEV_URL, prodHtmlPath, preloadPath);
 
   // DevTools na janela principal. Não abre sozinho nem em dev: quem quer o
   // console liga em "Opções do Desenvolvedor" (options.dev.devtools_main_window),
@@ -464,12 +460,10 @@ app.whenReady().then(async () => {
   // vídeos online (YouTube).
   try {
     const cfg = userStore.read("config") || {};
-    const httpResult = await httpServer.start({
+    await httpServer.start({
       port: cfg.httpServer?.port || 7070,
       mainWindow: null, // will be set after createWindow
     });
-    HTTP_BASE_URL = `http://localhost:${httpResult.port}`;
-
     // Aplica preferência de rotas externas salva (default: true)
     const externalEnabled = cfg.httpServer?.externalRoutesEnabled !== false;
     httpServer.setExternalRoutesEnabled(externalEnabled);
@@ -486,9 +480,9 @@ app.whenReady().then(async () => {
       app.exit(1);
       return; // encerra o boot — nada mais roda
     }
-    // Outros erros: mantém o fallback atual (louvorja://)
-    console.warn("[main] HTTP server não disponível, usando louvorja://:", e.message);
-    HTTP_BASE_URL = "";
+    // As janelas carregam por louvorja:// de qualquer forma; sem o servidor o
+    // que se perde são as rotas que o OBS consome.
+    console.warn("[main] HTTP server não disponível:", e.message);
   }
 
   // Mostrar splash imediatamente (antes da janela principal carregar)
@@ -883,10 +877,12 @@ ipcMain.handle("windows:open", (_event, options) => {
   // Todas as janelas Electron compartilham a mesma origem:
   //   - dev: http://localhost:5002 (Vite dev server)
   //   - prod: http://127.0.0.1:PORT (Express server)
-  // Isso garante que BroadcastChannel funcione entre todas as janelas
-  // e que o YouTube IFrame Player API aceite a origem (HTTP real).
-  // 127.0.0.1 (IPv4) evita cair no servidor da versão Delphi (IPv6).
-  const devUrl = isDev ? DEV_URL : (HTTP_BASE_URL ? `${HTTP_BASE_URL}/#` : "");
+  // Vazio em produção de propósito: sem `devUrl`, o windowFactory carrega a
+  // rota por `louvorja://app`, a mesma origem da janela principal. O
+  // BroadcastChannel exige isso — é o que leva o slide daqui até a projeção —
+  // e essa origem, diferente da do servidor Express, não muda quando a porta
+  // preferida está ocupada. Ver o comentário em windows.js.
+  const devUrl = isDev ? DEV_URL : "";
   // DevTools automático em janelas de projeção — controlado pela tela
   // "Opções do Desenvolvedor" (options.dev.devtools_projections).
   // null → deixa o windowFactory decidir (_isDevMode). true/false → override.
