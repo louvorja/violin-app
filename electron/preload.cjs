@@ -397,6 +397,13 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
     close: () => ipcRenderer.invoke("window:close"),
     isMaximized: () => ipcRenderer.invoke("window:isMaximized"),
     /**
+     * macOS: alinha os semáforos ao centro de uma barra de `barHeight` pontos.
+     * Para camadas que cobrem a systembar com um cabeçalho de outra altura.
+     * Sem argumento, devolve os botões à posição de repouso.
+     */
+    alignTrafficLights: (barHeight = null) =>
+      ipcRenderer.invoke("window:alignTrafficLights", barHeight),
+    /**
      * Escuta o evento "maximize"/"unmaximize" enviado pelo main quando o estado da
      * janela muda (ex: usuário arrasta para tela ou clica no controle nativo).
      * Retorna função de cleanup.

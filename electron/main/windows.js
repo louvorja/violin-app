@@ -8,6 +8,18 @@ const { BrowserWindow, shell } = require("electron");
 const path = require("path");
 
 /**
+ * Posição de repouso dos semáforos do macOS, alinhada ao centro da systembar.
+ *
+ * O `y` não é o topo do círculo: o macOS desenha o botão 1pt abaixo do valor
+ * pedido, então o centro sai em `y + 7` — 18 para a barra de 35pt, meio ponto
+ * abaixo do centro dela e o mais perto que se chega com `y` inteiro.
+ *
+ * Camadas que cobrem a systembar com uma barra mais alta pedem outra posição
+ * pelo IPC "window:alignTrafficLights", e voltam a esta ao fechar.
+ */
+const TRAFFIC_LIGHT_POSITION = { x: 10, y: 11 };
+
+/**
  * Cria a janela principal do LouvorJA.
  *
  * @param {string} devUrl    URL do dev server (ex: "http://localhost:5002")
@@ -42,7 +54,7 @@ function createMainWindow(devUrl, prodHtmlPath, preloadPath, httpBaseUrl) {
     //           sem duplicar o título.
     frame: false,
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
-    trafficLightPosition: process.platform === "darwin" ? { x: 10, y: 12 } : undefined,
+    trafficLightPosition: process.platform === "darwin" ? TRAFFIC_LIGHT_POSITION : undefined,
     autoHideMenuBar: true,
     webPreferences: {
       preload: preloadPath,
@@ -101,4 +113,4 @@ function createMainWindow(devUrl, prodHtmlPath, preloadPath, httpBaseUrl) {
   return win;
 }
 
-module.exports = { createMainWindow };
+module.exports = { createMainWindow, TRAFFIC_LIGHT_POSITION };

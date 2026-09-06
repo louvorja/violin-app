@@ -22,7 +22,7 @@ const path = require("path");
 const fs = require("fs-extra");
 
 const paths = require("./main/paths.js");
-const { createMainWindow } = require("./main/windows.js");
+const { createMainWindow, TRAFFIC_LIGHT_POSITION } = require("./main/windows.js");
 const userStore = require("./main/userStore.js");
 const protocolModule = require("./main/protocol.js");
 const jsonCache = require("./main/jsonCache.js");
@@ -993,6 +993,69 @@ ipcMain.handle("window:close", (event) => {
 ipcMain.handle("window:isMaximized", (event) => {
   const win = focusedOrMain(event);
   return win ? win.isMaximized() : false;
+});
+
+// Duração do deslocamento dos semáforos. Espelha a transição de entrada e saída
+// do painel do AppMenu (`--lj-transition-normal`, 0.2s): os botões são a metade
+// nativa de uma barra cuja outra metade desliza por CSS, e pular direto para a
+// posição final deixava as duas em ritmos diferentes.
+const TRAFFIC_LIGHT_ANIM_MS = 200;
+const _trafficLightAnim = new Map();
+
+/**
+ * Leva os semáforos até `alvoY` ao longo de TRAFFIC_LIGHT_ANIM_MS.
+ *
+ * A curva é um ease-out cúbico, aproximação do `cubic-bezier(0, 0, 0.2, 1)` que
+ * o painel usa no transform — num percurso de poucos pontos as duas não se
+ * distinguem. Só emite quando o valor inteiro muda, então o reposicionamento
+ * nativo é chamado uma vez por ponto percorrido, não a cada frame.
+ */
+function moveTrafficLights(win, alvoY) {
+  const emCurso = _trafficLightAnim.get(win.id);
+  if (emCurso) clearInterval(emCurso);
+
+  const origemY = (win.getWindowButtonPosition?.() || TRAFFIC_LIGHT_POSITION).y;
+  if (origemY === alvoY) return;
+
+  const inicio = Date.now();
+  let ultimoY = origemY;
+  const timer = setInterval(() => {
+    if (win.isDestroyed()) {
+      clearInterval(timer);
+      _trafficLightAnim.delete(win.id);
+      return;
+    }
+    const t = Math.min(1, (Date.now() - inicio) / TRAFFIC_LIGHT_ANIM_MS);
+    const y = Math.round(origemY + (alvoY - origemY) * (1 - Math.pow(1 - t, 3)));
+    if (y !== ultimoY) {
+      win.setWindowButtonPosition({ x: TRAFFIC_LIGHT_POSITION.x, y });
+      ultimoY = y;
+    }
+    if (t >= 1) {
+      clearInterval(timer);
+      _trafficLightAnim.delete(win.id);
+    }
+  }, 16);
+  _trafficLightAnim.set(win.id, timer);
+}
+
+// Alinha os semáforos do macOS ao centro de uma barra de `barHeight` pontos.
+// Existe porque camadas como o AppMenu cobrem a systembar com um cabeçalho mais
+// alto: sem descer os botões, eles ficam fora do eixo do título e do X, e o
+// conteúdo do cabeçalho tem de se espremer no topo para acompanhá-los.
+// `barHeight` nulo devolve a posição de repouso. Fora do macOS não faz nada.
+ipcMain.handle("window:alignTrafficLights", (event, barHeight) => {
+  if (process.platform !== "darwin") return { ok: false };
+  const win = focusedOrMain(event);
+  if (!win || win.isDestroyed() || !win.setWindowButtonPosition) return { ok: false };
+
+  let alvoY = TRAFFIC_LIGHT_POSITION.y;
+  if (Number.isFinite(barHeight) && barHeight > 0) {
+    // O macOS desenha o botão 1pt abaixo do pedido e ele tem 12pt: centro = y + 7.
+    alvoY = Math.max(0, Math.round(barHeight / 2 - 7));
+  }
+  moveTrafficLights(win, alvoY);
+  return { ok: true, y: alvoY };
 });
 
 // ---------------------------------------------------------------------------

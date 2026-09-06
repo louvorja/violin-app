@@ -15,7 +15,7 @@
     </button>
 
     <Teleport to="body">
-      <Transition name="app-menu">
+      <Transition name="app-menu" @enter="descerSemaforos" @leave="restaurarSemaforos">
         <div v-if="open" class="app-menu-overlay" @click.self="close">
           <div class="app-menu-panel" role="menu" :aria-label="$t('shell.appmenu')">
             <header
@@ -237,6 +237,46 @@ function close() {
   document.removeEventListener("keydown", onKeydown);
 }
 
+// Os semáforos do macOS ficam sobre o conteúdo, presos ao eixo da systembar, e
+// este painel cobre a systembar com um cabeçalho mais alto. Eles são a terceira
+// peça do mesmo gesto: a cortina desce, o cabeçalho cresce, os botões seguem a
+// borda — mesma curva, mesma duração.
+//
+// O disparo vem dos hooks da Transition, não de um watch sobre `open`: montar o
+// painel leva ~120ms, e nesse intervalo o watch já teria mandado os botões
+// descer sozinhos, à frente da cortina que ainda nem começou a se mover.
+//
+// A altura vem do token, não do elemento, porque no hook de entrada o cabeçalho
+// ainda está na altura inicial da animação.
+function descerSemaforos(el) {
+  if (!hasOverlayTrafficLights.value) return;
+  const altura = parseFloat(
+    getComputedStyle(document.documentElement).getPropertyValue("--lj-appmenu-header-height")
+  );
+  if (!(altura > 0)) return;
+
+  const mover = () => Platform.window?.alignTrafficLights?.(altura);
+
+  // Montar o painel atrasa o primeiro quadro da cortina em algumas dezenas de
+  // ms, e o hook de entrada corre antes disso. Sair junto com `transitionstart`
+  // é o que põe os botões no mesmo ritmo dela. Sem transição — reduced-motion —
+  // o evento nunca vem, e aí o lugar certo é agora.
+  if (parseFloat(getComputedStyle(el).transitionDuration) > 0) {
+    el.addEventListener("transitionstart", function aoIniciar(e) {
+      if (e.target !== el) return;
+      el.removeEventListener("transitionstart", aoIniciar);
+      mover();
+    });
+  } else {
+    mover();
+  }
+}
+
+function restaurarSemaforos() {
+  if (!hasOverlayTrafficLights.value) return;
+  Platform.window?.alignTrafficLights?.();
+}
+
 function onKeydown(e) {
   if (e.key !== "Escape") return;
   // Um select, menu ou popover aberto dentro do painel também fecha no Escape,
@@ -285,6 +325,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  restaurarSemaforos();
   window.removeEventListener("louvorja:open-updates", onOpenUpdates);
   window.removeEventListener("louvorja:open-options", onOpenOptions);
   window.removeEventListener("louvorja:open-about", onOpenAbout);
@@ -355,6 +396,7 @@ function onOpenOptions(e) {
   z-index: 1500;
   background: var(--lj-black-alpha-40);
   font-family: var(--lj-font-shell);
+  clip-path: inset(0 0 0 0);
 }
 
 .app-menu-panel {
@@ -370,17 +412,21 @@ function onOpenOptions(e) {
   display: flex;
   align-items: center;
   gap: var(--lj-space-5);
-  height: 56px;
+  height: var(--lj-appmenu-header-height);
   padding: 0 var(--lj-space-6);
   background: var(--lj-tabs-bg);
   color: var(--lj-white);
   flex-shrink: 0;
+  /* A janela é `frame: false` em toda plataforma e este painel cobre a
+     systembar, que é a única região de arrasto do app. Sem esta linha a janela
+     fica presa no lugar enquanto o menu está aberto. */
+  -webkit-app-region: drag;
 }
 
-/* macOS: traffic lights ocupam ~78px do canto superior esquerdo.
-   Empurra o conteúdo do header pra direita pra não sobrepor. */
-/* Só no app desktop em macOS: abre espaço para os semáforos, que ali ficam
-   sobre o conteúdo da janela. No navegador não se aplica. */
+/* Só no app desktop em macOS, onde os semáforos ficam sobre o conteúdo da
+   janela: abre espaço à direita deles. O alinhamento vertical é resolvido do
+   outro lado — `descerSemaforos` leva os botões ao centro deste cabeçalho,
+   porque encolher o cabeçalho até o eixo deles espremia o X a 2,5px do topo. */
 .app-menu-header--mac {
   padding-left: 88px;
 }
@@ -404,6 +450,7 @@ function onOpenOptions(e) {
   justify-content: center;
   transition: background var(--lj-transition-fast);
   font-family: inherit;
+  -webkit-app-region: no-drag;
 }
 
 .app-menu-back:hover {
@@ -484,27 +531,33 @@ function onOpenOptions(e) {
 
 /* Abertura do painel: o backdrop dissolve e a superfície sobe um pouco.
    Trocar de tela é só um fade — deslizar sugeriria navegação lateral. */
+/* A entrada é uma cortina, não um fade. O painel já nasce ocupando a faixa da
+   systembar — mesma altura e mesma cor, porque `--lj-titlebar-bg` e
+   `--lj-tabs-bg` são o mesmo navy — e desce revelando o resto da tela.
+   Nada fica translúcido em nenhum instante, e é isso que importa: com o
+   cross-fade anterior as abas da ribbon e o cabeçalho do painel ficavam
+   legíveis ao mesmo tempo, e os semáforos desciam sobre uma faixa que ainda
+   era a ribbon clara. O cabeçalho cresce junto para manter o X e o título
+   centrados na parte visível, e os semáforos acompanham essa mesma borda pelo
+   IPC — daí os três compartilharem a curva e a duração. */
 .app-menu-enter-active,
 .app-menu-leave-active {
-  transition: opacity var(--lj-transition-normal);
-}
-
-.app-menu-enter-active .app-menu-panel,
-.app-menu-leave-active .app-menu-panel {
-  transition:
-    opacity var(--lj-transition-normal),
-    transform 0.2s var(--lj-ease-out);
+  transition: clip-path 0.2s var(--lj-ease-out);
 }
 
 .app-menu-enter-from,
 .app-menu-leave-to {
-  opacity: 0;
+  clip-path: inset(0 0 calc(100% - var(--lj-systembar-height)) 0);
 }
 
-.app-menu-enter-from .app-menu-panel,
-.app-menu-leave-to .app-menu-panel {
-  opacity: 0;
-  transform: translateY(8px);
+.app-menu-enter-active .app-menu-header,
+.app-menu-leave-active .app-menu-header {
+  transition: height 0.2s var(--lj-ease-out);
+}
+
+.app-menu-enter-from .app-menu-header,
+.app-menu-leave-to .app-menu-header {
+  height: var(--lj-systembar-height);
 }
 
 .app-menu-screen-enter-active,

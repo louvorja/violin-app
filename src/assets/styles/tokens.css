@@ -233,6 +233,9 @@
    * 10. DIMENSÕES (px) — replicam fmMenu.dfm
    * ================================================================= */
   --lj-systembar-height: 35px;
+  /* Cabeçalho do painel do AppMenu. É token porque no macOS o JS precisa saber
+     a altura para descer os semáforos junto, e sem esperar o painel renderizar. */
+  --lj-appmenu-header-height: 56px;
   --lj-tab-height: 28px;
   --lj-ribbon-body-height: 105px;
   --lj-group-label-height: 18px;
