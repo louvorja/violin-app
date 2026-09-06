@@ -39,6 +39,7 @@ const updater = require("./main/updater.js");
 const powerBlocker = require("./main/powerBlocker.js");
 const splash = require("./main/splash.js");
 const storage = require("./main/storage.js");
+const docStore = require("./main/docStore.js");
 const mediaVariants = require("./main/mediaVariants.js");
 const { buildCsp } = require("./main/csp.js");
 
@@ -572,6 +573,8 @@ app.on("before-quit", async () => {
   } catch (e) {
     console.warn("[before-quit] Falha ao sincronizar user_data:", e?.message || e);
   }
+
+  docStore.flush();
 
   await httpServer.stop();
 });
@@ -1247,6 +1250,14 @@ ipcMain.handle("storage:removeFiles", (_e, remotePaths) => storage.removeFiles(r
 ipcMain.handle("storage:sizeOfPaths", (_e, remotePaths) => storage.sizeOfPaths(remotePaths));
 ipcMain.handle("storage:openDir", () => storage.openFilesDir());
 ipcMain.handle("storage:setDataDir", (_e, newDir, opts) => storage.setDataDir(newDir, opts));
+
+// ---------------------------------------------------------------------------
+// Documentos do usuário (biblioteca de liturgias, playlists, coletâneas)
+// ---------------------------------------------------------------------------
+
+ipcMain.handle("docs:read", (_e, colecao) => docStore.read(colecao));
+ipcMain.handle("docs:write", (_e, colecao, docs) => docStore.write(colecao, docs));
+ipcMain.handle("docs:list", () => docStore.list());
 ipcMain.handle("storage:enforceQuota", (_e, maxBytes) => storage.enforceQuota(maxBytes));
 
 /** Lista todos os arquivos de um diretório (recursivo, com caminhos relativos). */

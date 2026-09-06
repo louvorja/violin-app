@@ -12,7 +12,7 @@
  *
  * @category deve-virar-composable — Usa UserData apenas na migração.
  */
-import $idb from "@/helpers/IndexedDB";
+import $docs from "@/helpers/DocStore";
 import { DB_TABLE } from "@/constants/DbTables";
 import { KEYS } from "@/constants/UserDataKeys";
 import $userdata from "@/helpers/UserData";
@@ -32,8 +32,8 @@ async function hydrate(): Promise<void> {
 
   _hydrating = (async () => {
     const [cats, items] = await Promise.all([
-      $idb.getAll<ScheduledCategory>(TABLE_CATEGORIES),
-      $idb.getAll<ScheduledItem>(TABLE_ITEMS),
+      $docs.getAll<ScheduledCategory>(TABLE_CATEGORIES),
+      $docs.getAll<ScheduledItem>(TABLE_ITEMS),
     ]);
 
     // Migração legada (UserData → IDB) quando alvo vazio e origem tem dados.
@@ -44,7 +44,7 @@ async function hydrate(): Promise<void> {
           []
         ) || []) as ScheduledCategory[];
       for (const c of legacy) {
-        await $idb.put(TABLE_CATEGORIES, { ...c, id: String(c.id) });
+        await $docs.put(TABLE_CATEGORIES, { ...c, id: String(c.id) });
       }
     }
     if (!items.length) {
@@ -52,7 +52,7 @@ async function hydrate(): Promise<void> {
         ($userdata.get<ScheduledItem[]>(KEYS.MODULES.LITURGY.SCHEDULED_ITEMS, []) ||
           []) as ScheduledItem[];
       for (const i of legacy) {
-        await $idb.put(TABLE_ITEMS, { ...i, id: String(i.id) });
+        await $docs.put(TABLE_ITEMS, { ...i, id: String(i.id) });
       }
     }
 
@@ -90,15 +90,15 @@ export default {
     const i = _categories.findIndex((c) => String(c.id) === String(cat.id));
     if (i >= 0) _categories[i] = normalized;
     else _categories.push(normalized);
-    await $idb.put(TABLE_CATEGORIES, normalized);
+    await $docs.put(TABLE_CATEGORIES, normalized);
   },
 
   async deleteCategory(id: string | number): Promise<void> {
     _categories = _categories.filter((c) => String(c.id) !== String(id));
     const affected = _items.filter((i) => String(i.categoria) === String(id));
     _items = _items.filter((i) => String(i.categoria) !== String(id));
-    await $idb.del(TABLE_CATEGORIES, String(id));
-    for (const i of affected) await $idb.del(TABLE_ITEMS, String(i.id));
+    await $docs.del(TABLE_CATEGORIES, String(id));
+    for (const i of affected) await $docs.del(TABLE_ITEMS, String(i.id));
   },
 
   async saveItem(item: ScheduledItem): Promise<void> {
@@ -106,11 +106,11 @@ export default {
     const i = _items.findIndex((x) => String(x.id) === String(item.id));
     if (i >= 0) _items[i] = normalized;
     else _items.push(normalized);
-    await $idb.put(TABLE_ITEMS, normalized);
+    await $docs.put(TABLE_ITEMS, normalized);
   },
 
   async deleteItem(id: string | number): Promise<void> {
     _items = _items.filter((x) => String(x.id) !== String(id));
-    await $idb.del(TABLE_ITEMS, String(id));
+    await $docs.del(TABLE_ITEMS, String(id));
   },
 };

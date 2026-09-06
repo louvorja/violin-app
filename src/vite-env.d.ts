@@ -28,6 +28,11 @@ declare global {
       clearFiles: () => Promise<void>;
       setAutoCache: (enabled: boolean) => Promise<void>;
     };
+    docs: {
+      read: (colecao: string) => Promise<unknown[]>;
+      write: (colecao: string, docs: unknown[]) => Promise<{ ok: boolean }>;
+      list: () => Promise<string[]>;
+    };
     userStore: {
       read: (key: string) => Promise<unknown>;
       write: (key: string, data: unknown) => Promise<void>;

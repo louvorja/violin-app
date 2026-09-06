@@ -9,7 +9,7 @@
  *
  * @category helper-puro — Sem APIs Vue; sem acesso ao store.
  */
-import $idb from "@/helpers/IndexedDB";
+import $docs from "@/helpers/DocStore";
 import { DB_TABLE } from "@/constants/DbTables";
 
 const STORE_SONGS = DB_TABLE.CUSTOM_SONGS;
@@ -105,12 +105,12 @@ export function newCollection(nome = "Nova coletânea"): CustomCollection {
 }
 
 export async function listSongs(): Promise<CustomSong[]> {
-  const all = await $idb.getAll<CustomSong>(STORE_SONGS);
+  const all = await $docs.getAll<CustomSong>(STORE_SONGS);
   return all.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
 }
 
 export async function getSong(id: string): Promise<CustomSong | null> {
-  const rec = await $idb.get<CustomSong>(STORE_SONGS, id);
+  const rec = await $docs.get<CustomSong>(STORE_SONGS, id);
   return rec || null;
 }
 
@@ -118,12 +118,12 @@ export async function saveSong(song: CustomSong): Promise<CustomSong> {
   // Sanitiza reatividade do Vue (ref/reactive) antes do structured clone do IDB.
   const plain: CustomSong = JSON.parse(JSON.stringify(song));
   const updated: CustomSong = { ...plain, updatedAt: new Date().toISOString() };
-  await $idb.put(STORE_SONGS, updated);
+  await $docs.put(STORE_SONGS, updated);
   return updated;
 }
 
 export async function deleteSong(id: string): Promise<void> {
-  await $idb.del(STORE_SONGS, id);
+  await $docs.del(STORE_SONGS, id);
   const cols = await listCollections();
   for (const col of cols) {
     if (col.song_ids.includes(id)) {
@@ -134,24 +134,24 @@ export async function deleteSong(id: string): Promise<void> {
 }
 
 export async function listCollections(): Promise<CustomCollection[]> {
-  const all = await $idb.getAll<CustomCollection>(STORE_COLLECTIONS);
+  const all = await $docs.getAll<CustomCollection>(STORE_COLLECTIONS);
   return all.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 }
 
 export async function getCollection(id: string): Promise<CustomCollection | null> {
-  const rec = await $idb.get<CustomCollection>(STORE_COLLECTIONS, id);
+  const rec = await $docs.get<CustomCollection>(STORE_COLLECTIONS, id);
   return rec || null;
 }
 
 export async function saveCollection(col: CustomCollection): Promise<CustomCollection> {
   const plain: CustomCollection = JSON.parse(JSON.stringify(col));
   const updated: CustomCollection = { ...plain, updatedAt: new Date().toISOString() };
-  await $idb.put(STORE_COLLECTIONS, updated);
+  await $docs.put(STORE_COLLECTIONS, updated);
   return updated;
 }
 
 export async function deleteCollection(id: string): Promise<void> {
-  await $idb.del(STORE_COLLECTIONS, id);
+  await $docs.del(STORE_COLLECTIONS, id);
 }
 
 export default {

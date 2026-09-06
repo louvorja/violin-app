@@ -86,6 +86,17 @@ export default {
   },
 
   /**
+   * Documentos do usuário em arquivos, dentro da pasta de dados (biblioteca de
+   * liturgias, playlists, coletâneas). null no browser/PWA — lá o DocStore
+   * continua no IndexedDB.
+   *
+   * @returns {{ read, write, list } | null}
+   */
+  get docs() {
+    return api?.docs ?? null;
+  },
+
+  /**
    * Controle do protocolo customizado louvorja:// (D2).
    * Permite ao renderer configurar as URLs remotas no main process.
    * null quando rodando no browser/PWA.

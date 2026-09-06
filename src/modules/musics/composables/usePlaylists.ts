@@ -1,5 +1,5 @@
 import { ref, computed } from "vue";
-import $idb from "@/helpers/IndexedDB";
+import $docs from "@/helpers/DocStore";
 import $userdata from "@/helpers/UserData";
 import $dev from "@/helpers/Dev";
 import DateTime from "@/helpers/DateTime";
@@ -20,18 +20,18 @@ async function _persistAll(): Promise<void> {
   _saveTimer = setTimeout(async () => {
     for (const playlist of _playlists.value) {
       const plain: Playlist = JSON.parse(JSON.stringify(playlist));
-      await $idb.put(TABLE_PLAYLISTS, plain);
+      await $docs.put(TABLE_PLAYLISTS, plain);
     }
   }, 300);
 }
 
 async function _persistOne(playlist: Playlist): Promise<void> {
   const plain: Playlist = JSON.parse(JSON.stringify(playlist));
-  await $idb.put(TABLE_PLAYLISTS, plain);
+  await $docs.put(TABLE_PLAYLISTS, plain);
 }
 
 async function _deleteOne(id: string): Promise<void> {
-  await $idb.del(TABLE_PLAYLISTS, id);
+  await $docs.del(TABLE_PLAYLISTS, id);
 }
 
 function _generateId(): string {
@@ -61,7 +61,7 @@ export function usePlaylists() {
     async hydrate(): Promise<void> {
       if (_hydrated.value) return;
       try {
-        _playlists.value = await $idb.getAll<Playlist>(TABLE_PLAYLISTS);
+        _playlists.value = await $docs.getAll<Playlist>(TABLE_PLAYLISTS);
         _hydrated.value = true;
         $dev.write("playlists:hydrated", { count: _playlists.value.length });
       } catch (e) {

@@ -93,6 +93,19 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
   // D1 — Storage persistente em arquivos JSON (userData/storage/)
   // -------------------------------------------------------------------------
 
+  // -------------------------------------------------------------------------
+  // Documentos do usuário — liturgias salvas, playlists, coletâneas
+  // -------------------------------------------------------------------------
+
+  docs: {
+    /** Lê uma coleção inteira. */
+    read: (colecao) => ipcRenderer.invoke("docs:read", colecao),
+    /** Substitui a coleção inteira. */
+    write: (colecao, docs) => ipcRenderer.invoke("docs:write", colecao, docs),
+    /** Nomes das coleções já gravadas. */
+    list: () => ipcRenderer.invoke("docs:list"),
+  },
+
   userStore: {
     /** Lê o valor de uma chave (retorna null se não existir) */
     read: (key) => ipcRenderer.invoke("userStore:read", key),

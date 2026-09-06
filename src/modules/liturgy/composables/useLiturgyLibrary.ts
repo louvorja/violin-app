@@ -1,5 +1,5 @@
 import { ref } from "vue";
-import $idb from "@/helpers/IndexedDB";
+import $docs from "@/helpers/DocStore";
 import $liturgy from "@/helpers/Liturgy";
 import { DB_TABLE } from "@/constants/DbTables";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
@@ -55,7 +55,7 @@ export function useLiturgyLibrary() {
   async function list(filter?: string): Promise<LiturgyLibraryItem[]> {
     loading.value = true;
     try {
-      const all = await $idb.getAll<LiturgyLibraryItem>(TABLE);
+      const all = await $docs.getAll<LiturgyLibraryItem>(TABLE);
       if (filter) {
         const q = filter.toLowerCase();
         return all.filter((i) => i.name.toLowerCase().includes(q));
@@ -67,11 +67,11 @@ export function useLiturgyLibrary() {
   }
 
   async function get(id: string): Promise<LiturgyLibraryItem | undefined> {
-    return $idb.get<LiturgyLibraryItem>(TABLE, id);
+    return $docs.get<LiturgyLibraryItem>(TABLE, id);
   }
 
   async function getByName(name: string): Promise<LiturgyLibraryItem | undefined> {
-    const all = await $idb.getAll<LiturgyLibraryItem>(TABLE);
+    const all = await $docs.getAll<LiturgyLibraryItem>(TABLE);
     return all.find((i) => i.name.toLowerCase() === name.toLowerCase());
   }
 
@@ -92,7 +92,7 @@ export function useLiturgyLibrary() {
         binding: cleanData.binding !== undefined ? cleanData.binding : existing.binding,
         updatedAt: now,
       };
-      await $idb.put(TABLE, updated);
+      await $docs.put(TABLE, updated);
       return updated;
     }
 
@@ -105,12 +105,12 @@ export function useLiturgyLibrary() {
       createdAt: now,
       updatedAt: now,
     };
-    await $idb.put(TABLE, item);
+    await $docs.put(TABLE, item);
     return item;
   }
 
   async function remove(id: string): Promise<void> {
-    await $idb.del(TABLE, id);
+    await $docs.del(TABLE, id);
   }
 
   function exportToJson(items: LiturgyLibraryItem["items"], name: string): void {

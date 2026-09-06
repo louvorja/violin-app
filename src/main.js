@@ -39,6 +39,7 @@ import Liturgy from "@/helpers/Liturgy";
 import { IMAGE_EXT, AUDIO_EXT, VIDEO_EXT } from "@/constants/FileTypes";
 import { DB_TABLE } from "@/constants/DbTables";
 import $idb from "@/helpers/IndexedDB";
+import $docs from "@/helpers/DocStore";
 import ScheduledStore from "@/helpers/ScheduledStore";
 import ProjectionWindows from "@/helpers/ProjectionWindows";
 import Projection from "@/helpers/Projection";
@@ -710,6 +711,22 @@ $storage.hydrate().then(async () => {
 
     // Inicializa IndexedDB unificado (cria tabelas se necessário)
     await $idb.init();
+
+    // Documentos do usuário que ainda estejam no IndexedDB passam para os
+    // arquivos da pasta de dados. Antes do ScheduledStore.hydrate(), que já
+    // lê pela camada nova.
+    try {
+      await $docs.migrarDoIndexedDB([
+        DB_TABLE.LITURGY_LIBRARY,
+        DB_TABLE.SCHEDULED_CATEGORIES,
+        DB_TABLE.SCHEDULED_ITEMS,
+        DB_TABLE.MUSICS_PLAYLISTS,
+        DB_TABLE.CUSTOM_COLLECTIONS,
+        DB_TABLE.CUSTOM_SONGS,
+      ]);
+    } catch (e) {
+      console.warn("[main] migração de documentos falhou:", e);
+    }
 
     // Hidrata o cache de Itens Agendados (migra UserData → IDB se preciso).
     try {
