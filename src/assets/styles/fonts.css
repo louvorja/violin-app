@@ -78,11 +78,20 @@
   line-gap-override: 0%;
 }
 
+/* A fonte da interface, e a única com `swap`: são 352KB, e medido em 3G eles
+   ocupam a banda de 0,5s a 5,4s do boot. Sem `swap` o padrão é bloquear, e o
+   operador encara a tela montada e sem texto por todo esse tempo. Os
+   `*-override` abaixo é que tornam a troca suportável — alinham as métricas da
+   Inter às do fallback, então o texto reflui pouco quando ela entra.
+
+   As fontes de projeção seguem sem `swap` de propósito: lá a troca aconteceria
+   no telão, no meio do slide, diante da congregação. */
 @font-face {
   font-family: "InterVariable";
   src: url("../fonts/Inter-VariableFont_opsz,wght.woff2") format("woff2");
   font-weight: 100 900;
   font-style: normal;
+  font-display: swap;
   ascent-override: 105%;
   descent-override: 30%;
   line-gap-override: 0%;

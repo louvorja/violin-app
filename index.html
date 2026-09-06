@@ -17,6 +17,33 @@
          diante da congregação. A janela principal não passa por aqui — ela
          só é revelada depois de montada. */
       html, body { margin: 0; background: #000; }
+
+      /* Sinal de vida no navegador, onde não há splash nem janela a esconder:
+         medido em 3G, o app fica 5s sem pintar nada além deste preto.
+
+         `:empty` casa só enquanto o Vue não montou — no instante do mount o
+         seletor deixa de valer e o indicador se remove sozinho, sem script,
+         que a CSP de produção bloquearia de qualquer forma. O atraso mantém
+         o telão limpo no caso comum: em rede boa a shell chega antes dele. */
+      #app:empty::after {
+        content: "";
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        width: 28px;
+        height: 28px;
+        margin: -14px 0 0 -14px;
+        border: 2px solid rgba(255, 255, 255, 0.12);
+        border-top-color: rgba(255, 255, 255, 0.55);
+        border-radius: 50%;
+        animation: boot-spin 0.7s linear infinite, boot-fade 200ms ease-out 600ms both;
+      }
+      @keyframes boot-spin { to { transform: rotate(360deg); } }
+      @keyframes boot-fade { from { opacity: 0; } to { opacity: 1; } }
+
+      @media (prefers-reduced-motion: reduce) {
+        #app:empty::after { animation: boot-fade 200ms ease-out 600ms both; }
+      }
     </style>
 </head>
 
