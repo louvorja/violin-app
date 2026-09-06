@@ -58,6 +58,12 @@ function _create(): SlidesInstance {
   // Listener de GO_TO_SLIDE vindo do Operator ou outras janelas
   $broadcast.listen((msg) => {
     if (msg.type === BROADCAST_TYPE.GO_TO_SLIDE) {
+      // Só navega quem tem os slides. As janelas de projeção também escutam:
+      // sem esta guarda, cada uma respondia ao pedido caindo no índice 0 da
+      // própria lista vazia e transmitindo um slide nulo — a tela piscava a
+      // capa a cada avanço, o Libras reiniciava a animação do avatar e, quando
+      // o evento vazio chegava por último, a projeção ficava em branco.
+      if (!slides.value.length) return;
       goToSlide((msg.payload as { index: number }).index);
     } else if (msg.type === BROADCAST_TYPE.REQUEST_SLIDE_STATE) {
       // Janela secundária pediu o estado atual — reemite SLIDES_DATA (lista completa)
