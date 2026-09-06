@@ -104,6 +104,14 @@ function onDismiss(event: Event): void {
   animation: lj-dialog-fade var(--lj-ui-float-enter);
 }
 
+/* Sem par de saída o diálogo some seco, enquanto menu, select e popover saem
+   animados — o mesmo gesto de fechar tinha duas resoluções diferentes na tela.
+   Os tokens de entrada e saída são deliberadamente assimétricos: quem chega
+   desacelera, quem sai acelera. */
+.lj-dialog__overlay[data-state="closed"] {
+  animation: lj-dialog-fade-out var(--lj-ui-float-exit);
+}
+
 .lj-dialog {
   position: fixed;
   top: 50%;
@@ -128,6 +136,10 @@ function onDismiss(event: Event): void {
   font-size: var(--lj-text-base);
   outline: none;
   animation: lj-dialog-in var(--lj-ui-float-enter);
+}
+
+.lj-dialog[data-state="closed"] {
+  animation: lj-dialog-out var(--lj-ui-float-exit);
 }
 
 .lj-dialog--sm {
@@ -226,6 +238,19 @@ function onDismiss(event: Event): void {
 
 @keyframes lj-dialog-in {
   from {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + var(--lj-ui-float-shift))) scale(0.97);
+  }
+}
+
+@keyframes lj-dialog-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes lj-dialog-out {
+  to {
     opacity: 0;
     transform: translate(-50%, calc(-50% + var(--lj-ui-float-shift))) scale(0.97);
   }
