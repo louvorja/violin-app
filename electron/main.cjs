@@ -557,7 +557,7 @@ app.on("before-quit", async () => {
         keys: Object.keys(_userDataMain),
         favCount,
       });
-      userStore.write("user_data", _userDataMain);
+      _flushUserData();
       console.log("[before-quit] user_data sincronizado com sucesso");
     }
   } catch (e) {
@@ -730,25 +730,42 @@ ipcMain.handle("userdata:fetch", () => {
   }
 });
 
+/**
+ * Grava `user_data` no máximo uma vez a cada 300ms.
+ *
+ * Um slider de fonte ou um item arrastado na liturgia disparam dezenas de
+ * patches por segundo, e a pasta de dados agora costuma estar dentro do
+ * OneDrive ou do iCloud: cada gravação acorda o sincronizador. A janela conta
+ * a partir do primeiro patch, não do último — assim uma rajada longa ainda
+ * chega ao disco enquanto acontece, em vez de esperar ela terminar.
+ */
+let _userDataFlushTimer = null;
+
+function _flushUserData() {
+  if (_userDataFlushTimer) {
+    clearTimeout(_userDataFlushTimer);
+    _userDataFlushTimer = null;
+  }
+  try {
+    userStore.write("user_data", _userDataMain);
+  } catch (e) {
+    console.warn("[userdata] persist falhou:", e?.message || e);
+  }
+}
+
+function _scheduleUserDataFlush() {
+  if (_userDataFlushTimer) return;
+  _userDataFlushTimer = setTimeout(() => {
+    _userDataFlushTimer = null;
+    _flushUserData();
+  }, 300);
+}
+
 ipcMain.handle("userdata:patch", (event, payload) => {
   const sender = event.sender;
-  // Atualiza o espelho em memória + persiste sincronamente. Sem debounce —
-  // mudanças em "Opções" são esporádicas (não em rajada como drag-drop).
   if (payload && typeof payload.path === "string") {
-    try {
-      _walkSet(_userDataMain, payload.path, payload.value);
-      userStore.write("user_data", _userDataMain);
-      console.log(
-        `[userdata:patch] Persistiu: path="${payload.path}", value=`,
-        typeof payload.value === "object" && Array.isArray(payload.value)
-          ? `Array(${payload.value.length})`
-          : typeof payload.value === "object"
-          ? "Object"
-          : JSON.stringify(payload.value).slice(0, 100)
-      );
-    } catch (e) {
-      console.warn("[userdata:patch] persist falhou:", e?.message || e);
-    }
+    _walkSet(_userDataMain, payload.path, payload.value);
+    _scheduleUserDataFlush();
   } else {
     console.warn('[userdata:patch] payload inválido:', payload);
   }
