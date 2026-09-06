@@ -215,15 +215,35 @@ export default async ({ mode }) => {
     build: {
       rollupOptions: {
         output: {
-          manualChunks: {
-            // Framework core — raramente muda, longa vida no cache do browser
-            "vendor-vue": ["vue", "vue-router", "pinia"],
-            // i18n — muda só com novas traduções
-            "vendor-i18n": ["vue-i18n"],
-            // Busca full-text
-            "vendor-fuse": ["fuse.js"],
-            // Reka UI — o headless por trás dos primitivos
-            "vendor-reka": ["reka-ui"],
+          manualChunks(id) {
+            const emNodeModules = id.includes("node_modules");
+
+            if (emNodeModules) {
+              // i18n antes de vue: "vue-i18n" também casaria a regra do core.
+              // Muda só com novas traduções.
+              if (/[\\/]node_modules[\\/]@?vue-i18n|[\\/]node_modules[\\/]vue-i18n[\\/]/.test(id)) {
+                return "vendor-i18n";
+              }
+              // Framework core — raramente muda, longa vida no cache do browser
+              if (/[\\/]node_modules[\\/](vue|vue-router|pinia)[\\/]/.test(id)) return "vendor-vue";
+              // Busca full-text
+              if (/[\\/]node_modules[\\/]fuse\.js[\\/]/.test(id)) return "vendor-fuse";
+              // Reka UI — o headless por trás dos primitivos
+              if (/[\\/]node_modules[\\/]reka-ui[\\/]/.test(id)) return "vendor-reka";
+              return;
+            }
+
+            // O registro de módulos num pacote só. O boot instala todos, e
+            // separados eram uma ida à rede por módulo — medido em 3G, a fila
+            // custava mais que o conteúdo. Juntos, o boot desceu de 226
+            // arquivos para 23.
+            //
+            // O pacote é grande porque cada `index.ts` importa as traduções do
+            // módulo nos dois idiomas, de forma estática; é isso que pesa, não
+            // o registro. Os componentes seguem fora, sob demanda.
+            if (/[\\/]src[\\/]modules[\\/][^\\/]+[\\/]index\.ts$/.test(id)) {
+              return "modules-registry";
+            }
           },
         },
       },
