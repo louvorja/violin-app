@@ -9,6 +9,7 @@
 
 const { app, BrowserWindow, screen } = require("electron");
 const displays = require("./displays.js");
+const powerBlocker = require("./powerBlocker.js");
 
 /** Mantém referência das janelas abertas por feature para evitar duplicatas */
 const _openWindows = new Map();
@@ -292,6 +293,7 @@ function openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = f
   win.on("closed", () => {
     _openWindows.delete(feature);
     _windowMeta.delete(feature);
+    _syncPowerBlocker();
     if (useMacPrimaryKiosk && app.dock && typeof app.dock.show === "function") {
       setTimeout(() => {
         try { app.dock.show(); } catch (_) { /* ignore */ }
@@ -311,6 +313,7 @@ function openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = f
   }
 
   _openWindows.set(feature, win);
+  _syncPowerBlocker();
   _windowMeta.set(feature, {
     fullscreen,
     alwaysOnTop,
@@ -323,6 +326,25 @@ function openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = f
 }
 
 /**
+ * Impede a tela de apagar enquanto existir janela de projeção aberta.
+ *
+ * Um culto passa longos trechos sem ninguém tocar em teclado ou mouse — um
+ * slide fica no ar o hino inteiro. O descanso de tela do sistema conta esse
+ * tempo como ociosidade e apaga o projetor no meio da projeção; o GNOME ainda
+ * bloqueia a sessão em seguida. O Chromium só inibe isso por conta própria
+ * enquanto há vídeo tocando, o que não cobre slide nem versículo.
+ */
+function _syncPowerBlocker() {
+  const anyOpen = Array.from(_openWindows.values()).some((w) => w && !w.isDestroyed());
+  try {
+    if (anyOpen) powerBlocker.start();
+    else powerBlocker.stop();
+  } catch (e) {
+    console.warn("[windowFactory] powerBlocker:", e?.message || e);
+  }
+}
+
+/**
  * Coloca uma janela num display, usando os bounds ATUAIS dele.
  *
  * Reler os bounds importa: um projetor que renegocia 1080p→720p muda de
@@ -330,44 +352,87 @@ function openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = f
  * maior que a tela.
  */
 function _placeOnDisplay(win, display, meta) {
-  const bounds = display.bounds;
-  const overscan = meta.fullscreen && meta.isMac ? meta.overscan || 0 : 0;
+  const isLin = process.platform === "linux";
 
-  try {
-    if (win.isFullScreen && win.isFullScreen()) win.setFullScreen(false);
+  const apply = () => {
+    if (!win || win.isDestroyed()) return;
+    const bounds = display.bounds;
+    const overscan = meta.fullscreen && meta.isMac ? meta.overscan || 0 : 0;
 
-    if (meta.fullscreen) {
-      win.setBounds({
-        x: bounds.x - overscan,
-        y: bounds.y - overscan,
-        width: bounds.width + overscan * 2,
-        height: bounds.height + overscan * 2,
-      });
-    } else {
-      // Janela comum (operador): só muda de monitor, mantendo o tamanho que o
-      // usuário deixou. Esticá-la para cobrir a tela seria uma regressão.
-      const current = win.getBounds();
-      const width = Math.min(current.width, bounds.width);
-      const height = Math.min(current.height, bounds.height);
-      win.setBounds({
-        x: bounds.x + Math.round((bounds.width - width) / 2),
-        y: bounds.y + Math.round((bounds.height - height) / 2),
-        width,
-        height,
-      });
+    try {
+      if (win.isFullScreen && win.isFullScreen()) win.setFullScreen(false);
+
+      if (meta.fullscreen) {
+        win.setBounds({
+          x: bounds.x - overscan,
+          y: bounds.y - overscan,
+          width: bounds.width + overscan * 2,
+          height: bounds.height + overscan * 2,
+        });
+      } else {
+        // Janela comum (operador): só muda de monitor, mantendo o tamanho que o
+        // usuário deixou. Esticá-la para cobrir a tela seria uma regressão.
+        const current = win.getBounds();
+        const width = Math.min(current.width, bounds.width);
+        const height = Math.min(current.height, bounds.height);
+        win.setBounds({
+          x: bounds.x + Math.round((bounds.width - width) / 2),
+          y: bounds.y + Math.round((bounds.height - height) / 2),
+          width,
+          height,
+        });
+      }
+      if (!win.isVisible()) win.showInactive();
+
+      const goFullscreen = () => {
+        if (!win || win.isDestroyed()) return;
+        try {
+          win.setMenuBarVisibility(false);
+          if (!win.isFullScreen()) win.setFullScreen(true);
+          win.setAlwaysOnTop(true, "screen-saver");
+        } catch (e) {
+          console.warn("[windowFactory] Falha ao aplicar fullscreen:", e?.message || e);
+        }
+      };
+
+      if (meta.useDeferredFullscreen) {
+        // No X11 a geometria também chega ao WM de forma assíncrona: pedir
+        // fullscreen no mesmo tick do setBounds faz o WM usar a posição antiga
+        // e cobrir o monitor errado.
+        if (isLin) setTimeout(goFullscreen, 80);
+        else goFullscreen();
+      } else if (meta.useMacPresentationLevel) {
+        win.setAlwaysOnTop(true, "screen-saver");
+      }
+      _refocusMainWindow();
+    } catch (e) {
+      console.warn("[windowFactory] Falha ao reposicionar janela:", e?.message || e);
     }
-    if (!win.isVisible()) win.showInactive();
-    if (meta.useDeferredFullscreen) {
-      win.setMenuBarVisibility(false);
-      win.setFullScreen(true);
-      win.setAlwaysOnTop(true, "screen-saver");
-    } else if (meta.useMacPresentationLevel) {
-      win.setAlwaysOnTop(true, "screen-saver");
+  };
+
+  // Sair do fullscreen no X11 é assíncrono: o WM só solta a janela alguns
+  // frames depois. Um setBounds enviado no mesmo tick é descartado e a
+  // projeção volta para o monitor de onde saiu — foi assim que trocar o
+  // monitor da projeção não surtia efeito no Linux.
+  if (isLin && win && !win.isDestroyed() && win.isFullScreen && win.isFullScreen()) {
+    let done = false;
+    const proceed = () => {
+      if (done) return;
+      done = true;
+      setTimeout(apply, 60);
+    };
+    win.once("leave-full-screen", proceed);
+    // Rede de segurança: se o WM não emitir o evento, seguimos assim mesmo.
+    setTimeout(proceed, 400);
+    try {
+      win.setFullScreen(false);
+    } catch (_) {
+      proceed();
     }
-    _refocusMainWindow();
-  } catch (e) {
-    console.warn("[windowFactory] Falha ao reposicionar janela:", e?.message || e);
+    return;
   }
+
+  apply();
 }
 
 /**
