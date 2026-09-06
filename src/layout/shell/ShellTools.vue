@@ -66,7 +66,7 @@
             <template v-if="task.status === 'running'">
               <LjProgress :value="task.progress ?? 0" :indeterminate="!task.progress" :height="4" />
               <span class="bg-task__detail">
-                {{ formatTaskDetail(task.detail, t) || `${Math.round(task.progress)}%` }}
+                {{ formatTaskDetail(task.detail) || `${Math.round(task.progress)}%` }}
               </span>
             </template>
             <span v-else class="bg-task__detail">
@@ -179,8 +179,6 @@ function formatTaskDetail(detail: string | null | undefined): string {
   }
   return detail;
 }
-
-const isDark = computed(() => $appdata.get(KEYS.SHELL.IS_DARK, false));
 
 const hasUpdate = computed(() => $appdata.get(KEYS.SHELL.APP_UPDATE_AVAILABLE, false));
 
