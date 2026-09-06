@@ -30,7 +30,7 @@
 
         <SelectViewport class="lj-select__viewport">
           <template v-for="item in items" :key="String(valueOf(item))">
-            <SelectItem class="lj-select__item" :value="toInternal(valueOf(item))">
+            <SelectItem class="lj-select__item" :value="keyOf(valueOf(item))">
               <span class="lj-select__check">
                 <LjIcon :icon="ICONS.UI.CHECK" :size="12" />
               </span>
@@ -114,21 +114,26 @@ const isInvalid = computed(() => props.invalid || field?.invalid.value || false)
 defineOptions({ inheritAttrs: false });
 
 // O Reka reserva a string vazia para "sem seleção", mas no app "" é um valor
-// legítimo — "mesma janela", "fonte padrão". Traduzimos nos dois sentidos para
-// que os consumidores continuem usando "" normalmente.
+// legítimo — "mesma janela", "fonte padrão". Trocamos por um marcador para que
+// os consumidores continuem usando "" normalmente.
 const EMPTY = "\u0000lj-empty";
 
-function toInternal(value: Primitive): Primitive {
-  return value === "" ? EMPTY : value;
-}
-
-function fromInternal(value: Primitive): Primitive {
-  return value === EMPTY ? "" : value;
+// Item e valor se encontram por uma chave de texto, não por identidade: o
+// `Primitive` admite os dois tipos e o app cruza os dois — o id de monitor chega
+// da plataforma como número e a lista o oferece como texto. Comparados a seco,
+// não casavam, e o campo abria em branco com o monitor já atribuído. O valor
+// emitido é o do próprio item, então quem consome não vê a conversão.
+function keyOf(value: Primitive): string {
+  return value === "" ? EMPTY : String(value);
 }
 
 const model = computed({
-  get: () => (props.modelValue == null ? undefined : toInternal(props.modelValue)),
-  set: (value) => emit("update:modelValue", fromInternal(value as Primitive)),
+  get: () => (props.modelValue == null ? undefined : keyOf(props.modelValue)),
+  set: (key) => {
+    const item = props.items.find((i) => keyOf(valueOf(i)) === key);
+    if (item !== undefined) emit("update:modelValue", valueOf(item));
+    else emit("update:modelValue", key === EMPTY ? "" : (key as Primitive));
+  },
 });
 
 const iconSize = computed(() => ICON_SIZE[props.size]);
@@ -145,7 +150,11 @@ function labelOf(item: T): string {
     : String(item);
 }
 
-const selectedItem = computed(() => props.items.find((item) => valueOf(item) === props.modelValue));
+const selectedItem = computed(() =>
+  props.modelValue == null
+    ? undefined
+    : props.items.find((item) => keyOf(valueOf(item)) === keyOf(props.modelValue as Primitive))
+);
 
 const resolvedPlaceholder = computed(
   () => props.placeholder ?? t("components.ui.select_placeholder")

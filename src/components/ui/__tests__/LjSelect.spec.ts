@@ -199,6 +199,22 @@ describe("LjSelect", () => {
     expect(typeof w.emitted("update:modelValue")?.[0][0]).toBe("number");
   });
 
+  it("id em número casa com o item em texto: era o campo de monitor em branco", async () => {
+    const items = [
+      { value: "", label: "Nenhum" },
+      { value: "2528732444", label: "Monitor 1" },
+    ];
+    const w = montar({ items, modelValue: 2528732444 });
+    expect(rotulo().textContent).toBe("Monitor 1");
+    expect(gatilho().hasAttribute("data-placeholder")).toBe(false);
+
+    await abrir();
+    expect(opcoes()[1].getAttribute("aria-selected")).toBe("true");
+
+    await escolher(opcoes()[1]);
+    expect(w.emitted("update:modelValue")?.[0]).toEqual(["2528732444"]);
+  });
+
   it("leva o placeholder traduzido ao gatilho em PT e em ES", () => {
     expectKeyExists("components.ui.select_placeholder");
 
