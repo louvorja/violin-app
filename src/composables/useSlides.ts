@@ -23,8 +23,6 @@ interface SlidesInstance {
   nextSlide: ComputedRef<Slide | null>;
   totalSlides: ComputedRef<number>;
   setSlides: (newSlides: Slide[], newTimes: number[], newTitle: string) => void;
-  setTimes: (newTimes: number[]) => void;
-  timeForPosition: (index: number, fraction: number, duration: number) => number;
   bindAudio: (audioPlayback: AudioPlayback) => void;
   unbindAudio: () => void;
   broadcastSlide: () => void;
@@ -58,12 +56,6 @@ function _create(): SlidesInstance {
   // Listener de GO_TO_SLIDE vindo do Operator ou outras janelas
   $broadcast.listen((msg) => {
     if (msg.type === BROADCAST_TYPE.GO_TO_SLIDE) {
-      // Só navega quem tem os slides. As janelas de projeção também escutam:
-      // sem esta guarda, cada uma respondia ao pedido caindo no índice 0 da
-      // própria lista vazia e transmitindo um slide nulo — a tela piscava a
-      // capa a cada avanço, o Libras reiniciava a animação do avatar e, quando
-      // o evento vazio chegava por último, a projeção ficava em branco.
-      if (!slides.value.length) return;
       goToSlide((msg.payload as { index: number }).index);
     } else if (msg.type === BROADCAST_TYPE.REQUEST_SLIDE_STATE) {
       // Janela secundária pediu o estado atual — reemite SLIDES_DATA (lista completa)
@@ -89,21 +81,6 @@ function _create(): SlidesInstance {
     _lastBroadcastIndex = -1;
     _lastProgressSendAt = 0;
     _lastSlideProgressSent = -1;
-  }
-
-  // Trocar cantada por playback mantendo o slide no ar: as marcações dos dois
-  // áudios são independentes e chegam a divergir alguns segundos, então o que
-  // se preserva é o slide, não o instante do relógio.
-  function setTimes(newTimes: number[]): void {
-    times.value = newTimes ?? [];
-  }
-
-  /** Instante, na faixa vigente, do ponto `fraction` (0-1) dentro do slide `index`. */
-  function timeForPosition(index: number, fraction: number, duration: number): number {
-    const start = times.value[index] ?? 0;
-    const end   = times.value[index + 1] ?? duration;
-    if (!Number.isFinite(end) || end <= start) return start;
-    return start + Math.max(0, Math.min(1, fraction)) * (end - start);
   }
 
   function broadcastSlide(): void {
@@ -213,7 +190,7 @@ function _create(): SlidesInstance {
   return {
     slides, slideIndex, slideProgress, title,
     slide, nextSlide, totalSlides,
-    setSlides, setTimes, timeForPosition, bindAudio, unbindAudio, broadcastSlide,
+    setSlides, bindAudio, unbindAudio, broadcastSlide,
     goToSlide, goPrev, goNext, goFirst, goLast, reset,
   };
 }
