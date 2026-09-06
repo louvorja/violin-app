@@ -154,12 +154,7 @@
     "play": "Reproducir vídeo"
   },
   "music_search": {
-    "title": "Búsqueda de Músicas",
-    "find_label": "Localizar Música:",
-    "col_album": "Álbum",
-    "col_music": "Música",
-    "empty": "Ninguna música disponible.",
-    "empty_search": "Ninguna música encontrada para esta búsqueda."
+    "title": "Búsqueda de Músicas"
   },
   "video_search": {
     "title": "Búsqueda de Vídeos",

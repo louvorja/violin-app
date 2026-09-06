@@ -18,7 +18,6 @@ export const categories: Record<string, ModuleCategory> = {
       ModuleGroupEnum.CATEGORIES,
       ModuleGroupEnum.ONLINE_VIDEOS,
       ModuleGroupEnum.USER,
-      ModuleGroupEnum.SEARCH,
     ],
   },
   [ModuleCategoryEnum.WORSHIP]: {

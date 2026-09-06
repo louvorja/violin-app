@@ -9,7 +9,6 @@ export enum ModuleGroupEnum {
   MEDIA = "media",
   ONLINE_VIDEOS = "online_videos",
   REMOTE = "remote",
-  SEARCH = "search",
   TEXTS = "texts",
   THEME = "theme",
   TIME = "time",

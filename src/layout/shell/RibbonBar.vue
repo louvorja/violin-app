@@ -712,7 +712,6 @@ function executeButton(btn: RibbonButton): void {
       "hymnal_1996",
       "hymnal",
       "bible_search",
-      "music_search",
       "media_library",
       "overlay",
       "background_sound",

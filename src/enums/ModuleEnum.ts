@@ -27,7 +27,6 @@ export enum ModuleEnum {
   MEDIA = "media",
   MEDIA_LIBRARY = "media_library",
   MESSAGE_BOARD = "message_board",
-  MUSIC_SEARCH = "music_search",
   MUSICS = "musics",
   NAME_DRAW = "name_draw",
   ONLINE_VIDEOS = "online_videos",

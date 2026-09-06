@@ -135,6 +135,8 @@ import LMusicMenuTable from "@/components/MusicMenuTable.vue";
 import { LjButton, LjDialog, LjEmpty, LjInput, LjSpinner } from "@/components/ui";
 import Database from "@/helpers/Database";
 import Strings from "@/helpers/Strings";
+import { isHymnalTrack } from "@/helpers/Hymnal";
+import Fuse from "fuse.js";
 import Platform from "@/helpers/Platform";
 import $userdata from "@/helpers/UserData";
 import { ICONS } from "@/config/Icons";
@@ -156,6 +158,9 @@ const emit = defineEmits<{
 }>();
 
 const { t: i18nT, locale } = useI18n();
+
+const RESULT_LIMIT = 80;
+const FUZZY_MIN_LENGTH = 3;
 
 const search = ref<string>("");
 // O primitivo não expõe o <input> interno: o invólucro é o caminho até ele
@@ -182,16 +187,44 @@ const filteredMusics = computed<SearchMusicItem[]>(() => {
   const query = Strings.clean(search.value);
   if (!query) return [];
 
-  return sourceMusics.value
+  const exact = sourceMusics.value
     .filter((music: SearchMusicItem) => {
       return (
         Strings.clean(music.name).includes(query) ||
         Strings.clean(albumLabel(music)).includes(query) ||
-        String(music.track || "").includes(query)
+        String(music.track || "").includes(query) ||
+        isHymnalTrack(music, query)
       );
     })
-    .slice(0, 80);
+    .slice(0, RESULT_LIMIT);
+
+  if (exact.length) return exact;
+  return approximateMusics();
 });
+
+/**
+ * Rede de segurança para quem errou a digitação — mesma regra do módulo
+ * Músicas: só roda quando a busca por trecho não achou nada.
+ */
+function approximateMusics(): SearchMusicItem[] {
+  const query = Strings.fold(search.value);
+  if (query.length < FUZZY_MIN_LENGTH || /^\d+$/.test(query)) return [];
+
+  const entries = sourceMusics.value.map((music) => ({
+    music,
+    name: Strings.fold(music.name),
+    album: Strings.fold(albumLabel(music)),
+  }));
+
+  const fuse = new Fuse(entries, {
+    keys: ["name", "album"],
+    threshold: 0.35,
+    ignoreLocation: true,
+    minMatchCharLength: FUZZY_MIN_LENGTH,
+  });
+
+  return fuse.search(query, { limit: RESULT_LIMIT }).map((hit) => hit.item.music);
+}
 
 function t(key: string): string {
   return i18nT(`components.music_search.${key}`);

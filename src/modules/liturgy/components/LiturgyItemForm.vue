@@ -387,7 +387,12 @@
       <p class="lif-hint">{{ t("inputs.bloco_hint") }}</p>
     </section>
 
-    <LiturgyMusicSearch v-model="searchOpen" :musics-list="musicsList" @pick="onMusicPicked" />
+    <MusicSpotlight
+      v-model="searchOpen"
+      mode="pick"
+      :musics-list="musicsForSpotlight"
+      @pick="onMusicPicked"
+    />
 
     <template #footer>
       <LjButton
@@ -436,12 +441,13 @@ import {
 import { ICONS } from "@/config/Icons";
 import Liturgy from "@/helpers/Liturgy";
 import DateTime from "@/helpers/DateTime";
-import LiturgyMusicSearch from "./LiturgyMusicSearch.vue";
+import MusicSpotlight from "@/components/MusicSpotlight.vue";
 import LiturgyVideoSearch, { type VideoSearchItem } from "./LiturgyVideoSearch.vue";
 import LiturgyLibrarySearch, { type LibrarySearchItem } from "./LiturgyLibrarySearch.vue";
 import $idb from "@/helpers/IndexedDB";
 import { DB_TABLE } from "@/constants/DbTables";
 import type { LiturgyItem, LiturgyMusicItem, ScheduledCategory } from "@/types/Liturgy";
+import type { SearchMusicItem } from "@/types/Music";
 import type { OverlaySlot } from "@/types/Overlay";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 
@@ -591,7 +597,7 @@ function hasInstrumental(musicId: number): boolean {
 const presetsOpen = ref(false);
 const searchOpen = ref(false);
 
-function updateDurationForVersion(version: string, _music?: LiturgyMusicItem) {
+function updateDurationForVersion(version: string, _music?: LiturgyMusicItem | SearchMusicItem) {
   if (version === "lyric") return;
   const musicId = props.form.musica;
   if (musicId <= 0) return;
@@ -751,7 +757,11 @@ function onVersionChange(version: string) {
   updateDurationForVersion(version);
 }
 
-function onMusicPicked(music: LiturgyMusicItem) {
+const musicsForSpotlight = computed<SearchMusicItem[]>(
+  () => props.musicsList as unknown as SearchMusicItem[]
+);
+
+function onMusicPicked(music: SearchMusicItem) {
   const id = Number(music.id_music);
   if (!Number.isFinite(id)) return;
   props.setFormField("musica", id);
