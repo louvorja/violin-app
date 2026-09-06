@@ -5,6 +5,7 @@
  * Ao alterar URLs do VLibras, atualize AMBOS os arquivos.
  */
 export const VLIBRAS_URL = "https://vlibras.gov.br";
+export const VLIBRAS_UNITY_URL = VLIBRAS_URL + "/app/unity/index.html";
 export const VLIBRAS_DICT = "https://dicionario2.vlibras.gov.br";
 export const VLIBRAS_TRANSLATE = "https://traducao2.vlibras.gov.br";
 export const VLIBRAS_REPO = "https://repositorio.vlibras.gov.br";
