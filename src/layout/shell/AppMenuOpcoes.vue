@@ -207,7 +207,7 @@
           </div>
         </div>
 
-        <p class="opt-hint">{{ $t("options.monitors.assign_hint") }}</p>
+        <p class="opt-hint opt-hint--lead">{{ $t("options.monitors.assign_hint") }}</p>
 
         <div v-for="role in roleRows" :key="role.role" class="opt-row">
           <label class="opt-label" :for="`opt-monitor-role-${role.role}`">

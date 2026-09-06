@@ -168,6 +168,14 @@
   margin-top: var(--lj-space-3);
 }
 
+/* Dica que apresenta as linhas seguintes, e não o bloco anterior. Colada no que
+   vem antes ela é lida como legenda dele; a folga acima e a proximidade abaixo
+   dizem a quem ela pertence. */
+.opt-hint--lead {
+  margin-top: var(--lj-space-6);
+  margin-bottom: var(--lj-space-3);
+}
+
 /* Alinhado ao contrato de `ui.css` para que estes controles legados fiquem
    indistinguíveis dos primitivos LjButton/LjSelect enquanto a migração da tela
    avança. Ao migrar o último `.opt-*`, este bloco sai junto. */
