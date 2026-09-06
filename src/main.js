@@ -696,7 +696,7 @@ $storage.hydrate().then(async () => {
     });
   }
 
-  createI18nInstance().then(async (i18n) => {
+  createI18nInstance(UserData.get(KEYS.OPTIONS.LANGUAGE)).then(async (i18n) => {
     app.use(i18n);
     await ModuleManager.init(i18n);
 
