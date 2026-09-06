@@ -2,7 +2,7 @@
   <div class="opt">
     <section v-if="isDesktop" class="opt-section">
       <h3 class="opt-section-title">
-        <Icon :icon="ICONS.UI.CHECK_UPDATE" size="18" />
+        <LjIcon :icon="ICONS.UI.CHECK_UPDATE" size="18" />
         {{ $t("options.updates.app") }}
       </h3>
 
@@ -28,7 +28,7 @@
             :disabled="appUpdate.status === 'checking'"
             @click="checkAppUpdate"
           >
-            <Icon :icon="ICONS.ACTIONS.REFRESH" size="14" />
+            <LjIcon :icon="ICONS.ACTIONS.REFRESH" size="14" />
             {{ $t("options.updates.check") }}
           </button>
           <button
@@ -37,7 +37,7 @@
             class="opt-btn opt-btn--primary"
             @click="startDownload"
           >
-            <Icon :icon="ICONS.ACTIONS.DOWNLOAD" size="14" />
+            <LjIcon :icon="ICONS.ACTIONS.DOWNLOAD" size="14" />
             {{ $t("options.updates.app_update_button", { version: appUpdate.newVersion }) }}
           </button>
           <button
@@ -46,7 +46,7 @@
             class="opt-btn opt-btn--primary"
             @click="installUpdate"
           >
-            <Icon :icon="ICONS.ACTIONS.RESTART" size="14" />
+            <LjIcon :icon="ICONS.ACTIONS.RESTART" size="14" />
             {{ $t("options.updates.install") }}
           </button>
           <button
@@ -55,7 +55,7 @@
             class="opt-btn"
             @click="openPackageFile"
           >
-            <Icon :icon="ICONS.ACTIONS.FOLDER_OPEN" size="14" />
+            <LjIcon :icon="ICONS.ACTIONS.FOLDER_OPEN" size="14" />
             {{ $t("options.updates.open_package") }}
           </button>
         </div>
@@ -92,7 +92,7 @@
 
     <section class="opt-section">
       <h3 class="opt-section-title">
-        <Icon :icon="ICONS.UI.DATABASE" size="18" />
+        <LjIcon :icon="ICONS.UI.DATABASE" size="18" />
         {{ $t("options.updates.database") }}
       </h3>
 
@@ -118,7 +118,7 @@
         <div class="opt-folder-path">{{ dbUpdateStatusText }}</div>
         <div class="opt-folder-actions">
           <button type="button" class="opt-btn" :disabled="dbChecking" @click="checkDbUpdate">
-            <Icon :icon="ICONS.ACTIONS.REFRESH" size="14" />
+            <LjIcon :icon="ICONS.ACTIONS.REFRESH" size="14" />
             {{ $t("options.updates.check") }}
           </button>
           <button
@@ -127,20 +127,20 @@
             class="opt-btn opt-btn--primary"
             @click="applyDbUpdate"
           >
-            <Icon :icon="ICONS.ACTIONS.CLOUD_DOWNLOAD" size="14" />
+            <LjIcon :icon="ICONS.ACTIONS.CLOUD_DOWNLOAD" size="14" />
             {{ $t("options.updates.apply") }}
           </button>
           <button type="button" class="opt-btn" @click="clearDbCache">
-            <Icon :icon="ICONS.UI.BROOM" size="14" />
+            <LjIcon :icon="ICONS.UI.BROOM" size="14" />
             {{ $t("options.updates.clear_cache") }}
           </button>
           <button type="button" class="opt-btn" @click="clearCollectionsCache">
-            <Icon :icon="ICONS.UI.BROOM" size="14" />
+            <LjIcon :icon="ICONS.UI.BROOM" size="14" />
             {{ $t("options.storage.clear_cache_collections") }}
           </button>
           <template v-if="isDesktop">
             <button type="button" class="opt-btn" :disabled="dbBackupBusy" @click="exportDatabase">
-              <Icon :icon="ICONS.ACTIONS.DOWNLOAD" size="14" />
+              <LjIcon :icon="ICONS.ACTIONS.DOWNLOAD" size="14" />
               {{ $t("options.updates.export_db") }}
             </button>
             <button
@@ -149,7 +149,7 @@
               :disabled="dbBackupBusy"
               @click="pickImportDatabase"
             >
-              <Icon :icon="ICONS.ACTIONS.UPLOAD" size="14" />
+              <LjIcon :icon="ICONS.ACTIONS.UPLOAD" size="14" />
               {{ $t("options.updates.import_db") }}
             </button>
             <button
@@ -158,7 +158,7 @@
               :disabled="dbBackupBusy"
               @click="reinstallDatabase"
             >
-              <Icon :icon="ICONS.ACTIONS.DATABASE_REFRESH" size="14" />
+              <LjIcon :icon="ICONS.ACTIONS.DATABASE_REFRESH" size="14" />
               {{ $t("options.updates.reinstall_db") }}
             </button>
           </template>
@@ -194,7 +194,7 @@
             :indeterminate="dbBundleProgressPercent === 0"
           />
           <button type="button" class="opt-btn opt-btn--danger" @click="sync.cancelBundle()">
-            <Icon :icon="ICONS.ACTIONS.CANCEL" size="14" />
+            <LjIcon :icon="ICONS.ACTIONS.CANCEL" size="14" />
             {{ $t("options.collections_download.cancel") }}
           </button>
         </div>
@@ -207,8 +207,7 @@
 </template>
 
 <script setup lang="ts">
-import Icon from "@/components/Icon.vue";
-import { LjProgress } from "@/components/ui";
+import { LjIcon, LjProgress } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";

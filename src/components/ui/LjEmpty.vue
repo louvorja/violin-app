@@ -1,6 +1,6 @@
 <template>
   <div class="lj-empty">
-    <Icon v-if="icon" :icon="icon" :size="28" class="lj-empty__icon" />
+    <LjIcon v-if="icon" :icon="icon" :size="28" class="lj-empty__icon" />
     <p class="lj-empty__title">{{ title }}</p>
     <p v-if="description" class="lj-empty__desc">{{ description }}</p>
     <div v-if="$slots.default" class="lj-empty__actions"><slot /></div>
@@ -8,7 +8,7 @@
 </template>
 
 <script setup lang="ts">
-import Icon from "@/components/Icon.vue";
+import { LjIcon } from "@/components/ui";
 
 defineProps<{ icon?: string; title: string; description?: string }>();
 </script>

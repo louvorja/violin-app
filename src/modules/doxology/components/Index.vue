@@ -3,10 +3,10 @@
     <template #header>
       <div class="dx-header">
         <div class="dx-search-wrap">
-          <Icon :icon="ICONS.ACTIONS.SEARCH" size="16" class="dx-search-icon" />
+          <LjIcon :icon="ICONS.ACTIONS.SEARCH" size="16" class="dx-search-icon" />
           <input v-model="search" type="text" class="dx-search-input" :placeholder="t('search')" />
           <button v-if="search" type="button" class="dx-search-clear" @click="search = ''">
-            <Icon :icon="ICONS.ACTIONS.CLOSE" size="14" />
+            <LjIcon :icon="ICONS.ACTIONS.CLOSE" size="14" />
           </button>
         </div>
       </div>
@@ -20,7 +20,7 @@
       <template v-if="selectedAlbum">
         <div class="dx-back">
           <LjButton variant="ghost" size="sm" icon="None" icon-only @click="goBack">
-            <Icon :icon="ICONS.UI.ARROW_LEFT" />
+            <LjIcon :icon="ICONS.UI.ARROW_LEFT" />
           </LjButton>
           <span class="dx-back-title">{{ selectedAlbum.name }}</span>
         </div>
@@ -31,7 +31,7 @@
         <div class="dx-list">
           <div v-for="(m, i) in filteredMusics" :key="m.id_music ?? i" class="dx-list-item">
             <button class="dx-list-play" :title="t('play')" @click="openMusicFor(m)">
-              <Icon :icon="ICONS.PLAYER.PLAY" size="26" color="primary" />
+              <LjIcon :icon="ICONS.PLAYER.PLAY" size="26" color="primary" />
             </button>
             <span class="dx-list-name" @click="openMusicFor(m)">{{ m.name }}</span>
             <span v-if="m.duration" class="dx-list-duration">{{ m.duration }}</span>
@@ -66,10 +66,10 @@
                 @error="coverFailed.add(String(album.id_album))"
               />
               <div v-else class="dx-card-cover-fallback">
-                <Icon :icon="ICONS.MUSIC.VINYL" size="32" color="#8e44ad" />
+                <LjIcon :icon="ICONS.MUSIC.VINYL" size="32" color="#8e44ad" />
               </div>
               <div class="dx-card-overlay">
-                <Icon :icon="ICONS.PLAYER.PLAY" size="36" color="#fff" />
+                <LjIcon :icon="ICONS.PLAYER.PLAY" size="36" color="#fff" />
               </div>
             </div>
             <div class="dx-card-name">{{ album.name }}</div>
@@ -81,8 +81,7 @@
 </template>
 
 <script setup lang="ts">
-import { LjAlert, LjButton, LjProgress } from "@/components/ui";
-import Icon from "@/components/Icon.vue";
+import { LjAlert, LjButton, LjIcon, LjProgress } from "@/components/ui";
 import { computed, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { module as manifest } from "../manifest";

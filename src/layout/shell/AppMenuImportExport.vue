@@ -2,21 +2,21 @@
   <div class="opt">
     <section class="opt-section">
       <h3 class="opt-section-title">
-        <Icon :icon="ICONS.UI.IMPORT_EXPORT" size="18" />
+        <LjIcon :icon="ICONS.UI.IMPORT_EXPORT" size="18" />
         {{ $t("modules.liturgy.name") }}
       </h3>
 
       <div class="opt-actions-row">
         <div>
           <button type="button" class="opt-btn" :disabled="exporting" @click="doExport">
-            <Icon :icon="ICONS.ACTIONS.DOWNLOAD" size="14" />
+            <LjIcon :icon="ICONS.ACTIONS.DOWNLOAD" size="14" />
             {{ $t("import_export.export.action") }}
           </button>
           <p class="opt-hint">{{ $t("import_export.export.hint") }}</p>
         </div>
         <div>
           <button type="button" class="opt-btn" @click="pickFile">
-            <Icon :icon="ICONS.ACTIONS.UPLOAD" size="14" />
+            <LjIcon :icon="ICONS.ACTIONS.UPLOAD" size="14" />
             {{ $t("import_export.import.action") }}
           </button>
           <!-- O seletor de arquivo é do importar: estava na coluna do exportar,
@@ -57,7 +57,7 @@
 </template>
 
 <script setup lang="ts">
-import Icon from "@/components/Icon.vue";
+import { LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref } from "vue";
 import $liturgy from "@/helpers/Liturgy";

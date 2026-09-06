@@ -1,17 +1,20 @@
 <template>
   <span
-    v-if="svgContent"
+    v-if="tablerIcon || customSvg"
     class="lj-icon"
     :class="svgClassList"
     :style="svgStyle"
     role="img"
     :aria-label="icon"
-    v-html="svgContent"
-  />
+  >
+    <component :is="tablerIcon" v-if="tablerIcon" :size="resolvedSize" />
+    <span v-else class="lj-icon__custom" v-html="customSvg" />
+  </span>
 </template>
 
 <script setup lang="ts">
 import { computed, useAttrs } from "vue";
+import { TABLER_ICONS } from "./tablerIcons";
 
 interface IconProps {
   icon?: string;
@@ -55,6 +58,15 @@ const resolvedColor = computed(() =>
   props.color ? (CORES[props.color] ?? props.color) : undefined
 );
 
+/**
+ * Dois acervos, uma API só: quem chama passa um nome e não sabe a procedência.
+ *
+ * O ícone de interface vem do pacote `@tabler/icons-vue`. O que não está lá são
+ * as marcas do projeto (ja, iasd, dbv, hasd…), que seguem como arquivo — por
+ * isso a busca local continua, agora atendendo só a elas.
+ */
+const tablerIcon = computed(() => (props.icon ? TABLER_ICONS[props.icon] : undefined));
+
 const _svgModules = import.meta.glob("@/assets/icons/*.svg", {
   query: "?raw",
   import: "default",
@@ -70,15 +82,14 @@ for (const [path, content] of Object.entries(_svgModules)) {
   if (name) _svgNameMap.set(name, content);
 }
 
-const svgContent = computed(() => {
-  if (!props.icon) return null;
+const customSvg = computed(() => {
+  if (!props.icon || tablerIcon.value) return null;
   const raw = _svgNameMap.get(props.icon);
   if (!raw) return null;
 
-  // Dois acervos convivem aqui. As marcas do projeto (ja.svg, hasd.svg…) trazem cor
-  // fixa no arquivo e precisam ser repintadas para atender `color`. Os ícones de
-  // interface já desenham em currentColor — repintá-los encheria de sólido todo
-  // ícone de contorno, cujo traçado é currentColor mas o preenchimento é "none".
+  // As marcas trazem cor fixa no arquivo e precisam ser repintadas para atender
+  // `color`. As poucas que já desenham em currentColor ficam de fora: repintar
+  // um desenho de contorno o encheria de sólido.
   const corFixa = !raw.includes("currentColor");
 
   let svg = raw;
@@ -86,7 +97,8 @@ const svgContent = computed(() => {
     svg = svg.replace(/fill="(?!none")[^"]*"/g, 'fill="currentColor"');
   }
 
-  // Sem width/height próprios, o SVG obedece ao tamanho pedido no invólucro.
+  // Conteúdo de v-html não recebe o atributo de escopo, então o tamanho não
+  // pode sair do <style scoped> — vai inline, obedecendo ao invólucro.
   return svg.replace(
     /<svg([^>]*)>/,
     (_match, attrs: string) =>
@@ -144,9 +156,11 @@ const svgStyle = computed(() => {
   line-height: 0;
   filter: drop-shadow(0px 1px 1px rgba(0, 0, 0, 0.35));
 }
-.lj-icon svg {
+.lj-icon :deep(svg) {
   display: block;
-  filter: drop-shadow(0px 1px 1px rgba(0, 0, 0, 0.35));
+}
+.lj-icon__custom {
+  display: contents;
 }
 .lj-icon--start {
   margin-right: 0.5em;

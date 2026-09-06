@@ -9,7 +9,7 @@
           alt=""
           @error="onAvatarError"
         />
-        <Icon v-else :icon="ICONS.UI.ACCOUNT" :size="36" class="contributor-card__avatar-icon" />
+        <LjIcon v-else :icon="ICONS.UI.ACCOUNT" :size="36" class="contributor-card__avatar-icon" />
       </div>
 
       <div class="contributor-card__info">
@@ -24,7 +24,7 @@
               :delay="300"
             >
               <span class="contributor-card__role">
-                <Icon :icon="role.icon" :color="role.color" :size="18" />
+                <LjIcon :icon="role.icon" :color="role.color" :size="18" />
               </span>
             </LjTooltip>
           </template>
@@ -42,7 +42,7 @@
         target="_blank"
         rel="noopener noreferrer"
       >
-        <Icon :icon="link.icon" :size="18" />
+        <LjIcon :icon="link.icon" :size="18" />
       </a>
     </div>
   </LjCard>
@@ -50,8 +50,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import Icon from "@/components/Icon.vue";
-import { LjCard, LjTooltip } from "@/components/ui";
+import { LjCard, LjIcon, LjTooltip } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { Contributors, RoleContribuitor } from "@/config/Contributors";
 
@@ -165,7 +164,7 @@ const links = computed<ContributorLink[]>(() => {
   min-height: 0;
 }
 
-/* Icon.vue aplica drop-shadow por padrão — some sobre fundo de projeção,
+/* LjIcon aplica drop-shadow por padrão — some sobre fundo de projeção,
    borra sobre superfície de UI. */
 .contributor-card .lj-icon {
   filter: none;

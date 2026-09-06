@@ -2,7 +2,7 @@
   <div ref="root" class="opt">
     <section id="opt-sec-general" class="opt-section">
       <h3 class="opt-section-title">
-        <Icon :icon="ICONS.UI.OPTIONS" size="18" />
+        <LjIcon :icon="ICONS.UI.OPTIONS" size="18" />
         <span>{{ $t("options.general.title") }}</span>
       </h3>
       <div class="opt-row">
@@ -92,7 +92,7 @@
             <span class="opt-label">{{ $t("options.background.title") }}</span>
             <div class="opt-bg-pick">
               <LjButton variant="default" size="sm" @click="pickBgImage">
-                <Icon start :icon="ICONS.ACTIONS.IMAGE_PLUS" size="14" />
+                <LjIcon start :icon="ICONS.ACTIONS.IMAGE_PLUS" size="14" />
                 {{ $t("options.background.select") }}
               </LjButton>
               <span v-if="!currentBgImage" class="opt-bg-empty-text">
@@ -141,7 +141,7 @@
 
     <section id="opt-sec-monitors" class="opt-section">
       <h3 class="opt-section-title">
-        <Icon :icon="ICONS.UI.MONITORS" size="18" />
+        <LjIcon :icon="ICONS.UI.MONITORS" size="18" />
         <span>{{ $t("options.monitors.title") }}</span>
       </h3>
       <div v-if="displays.length === 0" class="opt-empty">
@@ -226,7 +226,7 @@
 
     <section id="opt-sec-bible" class="opt-section">
       <h3 class="opt-section-title">
-        <Icon :icon="ICONS.BIBLE.BIBLE" size="18" />
+        <LjIcon :icon="ICONS.BIBLE.BIBLE" size="18" />
         <span>{{ $t("options.bible.title") }}</span>
       </h3>
       <div class="opt-row">
@@ -282,7 +282,7 @@
 
     <section id="opt-sec-slides" class="opt-section">
       <h3 class="opt-section-title">
-        <Icon :icon="ICONS.MUSIC.MUSIC" size="18" />
+        <LjIcon :icon="ICONS.MUSIC.MUSIC" size="18" />
         <span>{{ $t("options.slides.title") }}</span>
       </h3>
       <div class="opt-row">
@@ -693,7 +693,7 @@
         </div>
 
         <button type="button" class="opt-btn opt-btn--ghost" @click="restoreTextFormat">
-          <Icon :icon="ICONS.ACTIONS.REFRESH" size="14" />
+          <LjIcon :icon="ICONS.ACTIONS.REFRESH" size="14" />
           {{ $t("options.slides.restore") }}
         </button>
       </div>
@@ -807,7 +807,7 @@
 
     <section id="opt-sec-videos" class="opt-section">
       <h3 class="opt-section-title">
-        <Icon :icon="ICONS.MEDIA.YOUTUBE" size="18" />
+        <LjIcon :icon="ICONS.MEDIA.YOUTUBE" size="18" />
         <span>{{ $t("options.videos.title") }}</span>
       </h3>
       <div class="opt-row">
@@ -878,7 +878,7 @@
 
     <section id="opt-sec-player" class="opt-section">
       <h3 class="opt-section-title">
-        <Icon :icon="ICONS.PLAYER.PLAY_PAUSE" size="18" />
+        <LjIcon :icon="ICONS.PLAYER.PLAY_PAUSE" size="18" />
         <span>{{ $t("options.player.title") }}</span>
       </h3>
       <div class="opt-row">
@@ -961,7 +961,7 @@
 
     <section id="opt-sec-file_projection" class="opt-section">
       <h3 class="opt-section-title">
-        <Icon :icon="ICONS.UI.FILE" size="18" />
+        <LjIcon :icon="ICONS.UI.FILE" size="18" />
         <span>{{ $t("options.file_projection.title") }}</span>
       </h3>
       <div class="opt-row">
@@ -1032,7 +1032,7 @@
           <span class="opt-label">{{ $t("options.background.title") }}</span>
           <div class="opt-bg-pick">
             <LjButton variant="default" size="sm" @click="pickFileProjBgImage">
-              <Icon start :icon="ICONS.ACTIONS.IMAGE_PLUS" size="16" />
+              <LjIcon start :icon="ICONS.ACTIONS.IMAGE_PLUS" size="16" />
               {{ $t("options.background.select") }}
             </LjButton>
             <span v-if="!fileProjBgImageUrl" class="opt-bg-empty-text">
@@ -1046,7 +1046,7 @@
                 :title="$t('options.slides.remove_image')"
                 @click="removeFileProjBgImage"
               >
-                <Icon :icon="ICONS.ACTIONS.CLOSE" size="15" />
+                <LjIcon :icon="ICONS.ACTIONS.CLOSE" size="15" />
               </button>
             </div>
           </div>
@@ -1068,7 +1068,7 @@
 
     <section id="opt-sec-utilities" class="opt-section">
       <h3 class="opt-section-title">
-        <Icon :icon="ICONS.UI.TOOLS" size="18" />
+        <LjIcon :icon="ICONS.UI.TOOLS" size="18" />
         <span>{{ $t("options.utilities.title") }}</span>
       </h3>
       <div class="opt-row">
@@ -1107,7 +1107,7 @@
 
     <section id="opt-sec-privacy" class="opt-section">
       <h3 class="opt-section-title">
-        <Icon :icon="ICONS.UI.PRIVACY" size="18" />
+        <LjIcon :icon="ICONS.UI.PRIVACY" size="18" />
         <span>{{ $t("options.privacy.title") }}</span>
       </h3>
       <div class="opt-row">
@@ -1126,8 +1126,7 @@
 </template>
 
 <script setup lang="ts">
-import { LjButton, LjSelect } from "@/components/ui";
-import Icon from "@/components/Icon.vue";
+import { LjButton, LjIcon, LjSelect } from "@/components/ui";
 import { computed, type ComputedRef, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { pickImageData } from "@/helpers/FilePicker";
 import { getSetting, saveSetting } from "@/helpers/SettingsStorage";

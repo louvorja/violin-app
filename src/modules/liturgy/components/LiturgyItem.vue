@@ -22,7 +22,7 @@
       >
         {{ props.element.duration }} {{ t("units.min") }}
       </LjChip>
-      <Icon
+      <LjIcon
         :icon="$liturgy.iconForItem(element)"
         size="40"
         :color="itemColor"
@@ -37,7 +37,7 @@
         </span>
         <span v-if="subtitleFor(element)" class="lit-card-subtitle">
           <template v-if="parsedSubtitle(element).icon">
-            <Icon :icon="parsedSubtitle(element).icon" :size="14" class="lit-card-sub-icon" />
+            <LjIcon :icon="parsedSubtitle(element).icon" :size="14" class="lit-card-sub-icon" />
           </template>
           {{ parsedSubtitle(element).text }}
           <LjChip
@@ -65,7 +65,7 @@
       <div v-if="element.tipo === 'video-online'" class="lit-card-music-actions">
         <LjTooltip :text="t('video.play')" :delay="700">
           <button class="lit-music-btn lit-music-btn--play" @click.stop="$emit('execute', element)">
-            <Icon :icon="ICONS.PLAYER.PLAY" :size="SIZE_ICON_MEDIA" />
+            <LjIcon :icon="ICONS.PLAYER.PLAY" :size="SIZE_ICON_MEDIA" />
           </button>
         </LjTooltip>
       </div>
@@ -74,13 +74,13 @@
       <div class="lit-card-end">
         <LjTooltip v-if="!locked" :text="t('actions.edit')" :delay="500">
           <button class="lit-card-action" @click.stop="$emit('edit', index)">
-            <Icon :icon="ICONS.ACTIONS.EDIT" :size="SIZE_ICON_TOOLS" />
+            <LjIcon :icon="ICONS.ACTIONS.EDIT" :size="SIZE_ICON_TOOLS" />
           </button>
         </LjTooltip>
 
         <LjTooltip v-if="!locked" :text="t('actions.clone')" :delay="500">
           <button class="lit-card-action" @click.stop="$emit('clone', index)">
-            <Icon :icon="ICONS.ACTIONS.COPY" :size="SIZE_ICON_TOOLS" />
+            <LjIcon :icon="ICONS.ACTIONS.COPY" :size="SIZE_ICON_TOOLS" />
           </button>
         </LjTooltip>
 
@@ -89,7 +89,7 @@
             class="lit-card-action lit-card-action--danger"
             @click.stop="$emit('confirm-remove', index)"
           >
-            <Icon :icon="ICONS.ACTIONS.DELETE" :size="SIZE_ICON_TOOLS" />
+            <LjIcon :icon="ICONS.ACTIONS.DELETE" :size="SIZE_ICON_TOOLS" />
           </button>
         </LjTooltip>
       </div>
@@ -104,7 +104,7 @@
           class="lit-version"
           @click="playVersion(opt.action)"
         >
-          <Icon :icon="opt.icon" :size="22" :color="opt.color" />
+          <LjIcon :icon="opt.icon" :size="22" :color="opt.color" />
           <span class="lit-version__label">{{ t(opt.labelKey) }}</span>
         </button>
       </div>
@@ -120,8 +120,7 @@ import es from "../lang/es.json";
 import type { LiturgyItem } from "@/types/Liturgy";
 import type { OverlaySlot } from "@/types/Overlay";
 import { ICONS } from "@/config/Icons";
-import Icon from "@/components/Icon.vue";
-import { LjCheckbox, LjChip, LjDialog, LjTooltip } from "@/components/ui";
+import { LjCheckbox, LjChip, LjDialog, LjIcon, LjTooltip } from "@/components/ui";
 import { MUSIC_ACTION, MusicAction } from "@/config/MusicAction";
 import { MusicActionEnum } from "@/enums/MusicActionEnum";
 import $liturgy from "@/helpers/Liturgy";

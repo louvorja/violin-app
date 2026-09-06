@@ -17,7 +17,7 @@
           @click="toggleCategoryChip(cat.id)"
         >
           <span class="cv-chip-icon-wrap">
-            <Icon v-if="cat.iconType === 'icon'" :icon="cat.icon" :size="14" />
+            <LjIcon v-if="cat.iconType === 'icon'" :icon="cat.icon" :size="14" />
             <img v-else :src="cat.icon" class="cv-chip-img" alt="" />
           </span>
           <span class="cv-chip-name">{{ cat.name }}</span>
@@ -31,7 +31,7 @@
             :aria-label="t('add_video')"
             @click.stop="openAdd(cat.id)"
           >
-            <Icon :icon="ICONS.ACTIONS.ADD" :size="12" />
+            <LjIcon :icon="ICONS.ACTIONS.ADD" :size="12" />
           </button>
         </div>
         <div
@@ -41,7 +41,7 @@
           @click="toggleCategoryChip(UNCATEGORIZED_ID)"
         >
           <span class="cv-chip-icon-wrap">
-            <Icon :icon="ICONS.MEDIA.YOUTUBE" :size="14" />
+            <LjIcon :icon="ICONS.MEDIA.YOUTUBE" :size="14" />
           </span>
           <span class="cv-chip-name">{{ t("uncategorized") }}</span>
           <span class="cv-chip-count">{{ uncategorizedCount }}</span>
@@ -52,7 +52,7 @@
             :aria-label="t('add_video')"
             @click.stop="openAdd()"
           >
-            <Icon :icon="ICONS.ACTIONS.ADD" :size="12" />
+            <LjIcon :icon="ICONS.ACTIONS.ADD" :size="12" />
           </button>
         </div>
       </div>
@@ -68,7 +68,7 @@
       <div v-else-if="viewMode === 'list'" class="cv-list">
         <template v-for="v in filteredVideos" :key="v.id">
           <div class="cv-list-item" :class="{ 'cv-list-item--active': projectingId === v.id }">
-            <Icon :icon="ICONS.MEDIA.YOUTUBE" :size="20" class="cv-youtube" />
+            <LjIcon :icon="ICONS.MEDIA.YOUTUBE" :size="20" class="cv-youtube" />
             <span class="cv-list-name">{{ v.name }}</span>
             <span v-if="categoryName(v.categoryId)" class="cv-list-category">
               {{ categoryName(v.categoryId) }}
@@ -117,10 +117,10 @@
             <div class="cv-grid-thumb">
               <img v-if="thumbUrls[v.id]" :src="thumbUrls[v.id]" alt="" class="cv-grid-img" />
               <div v-else class="cv-grid-placeholder">
-                <Icon :icon="ICONS.MEDIA.YOUTUBE" :size="40" class="cv-youtube" />
+                <LjIcon :icon="ICONS.MEDIA.YOUTUBE" :size="40" class="cv-youtube" />
               </div>
               <div class="cv-grid-overlay">
-                <Icon :icon="ICONS.PLAYER.PLAY" :size="36" class="cv-grid-play" />
+                <LjIcon :icon="ICONS.PLAYER.PLAY" :size="36" class="cv-grid-play" />
               </div>
             </div>
             <div class="cv-grid-name">{{ v.name }}</div>
@@ -208,8 +208,16 @@ import { ref, reactive, computed, onMounted, onBeforeUnmount } from "vue";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import CategoryManagerDialog, { CategoryFileData } from "@/components/CategoryManagerDialog.vue";
-import Icon from "@/components/Icon.vue";
-import { LjButton, LjCard, LjDialog, LjEmpty, LjField, LjInput, LjSelect } from "@/components/ui";
+import {
+  LjButton,
+  LjCard,
+  LjDialog,
+  LjEmpty,
+  LjField,
+  LjIcon,
+  LjInput,
+  LjSelect,
+} from "@/components/ui";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import $alert from "@/helpers/Alert";
 import $idb from "@/helpers/IndexedDB";

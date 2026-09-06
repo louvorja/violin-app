@@ -17,8 +17,8 @@
     >
       <AccordionHeader class="lj-accordion__header">
         <AccordionTrigger class="lj-accordion__trigger">
-          <Icon :icon="ICONS.UI.CHEVRON_RIGHT" :size="14" class="lj-accordion__chevron" />
-          <Icon v-if="item.icon" :icon="item.icon" :size="14" class="lj-accordion__icon" />
+          <LjIcon :icon="ICONS.UI.CHEVRON_RIGHT" :size="14" class="lj-accordion__chevron" />
+          <LjIcon v-if="item.icon" :icon="item.icon" :size="14" class="lj-accordion__icon" />
           <span class="lj-accordion__label">{{ item.label }}</span>
         </AccordionTrigger>
       </AccordionHeader>
@@ -35,6 +35,7 @@
 </template>
 
 <script setup lang="ts">
+import { LjIcon } from "@/components/ui";
 import { computed } from "vue";
 import {
   AccordionContent,
@@ -43,7 +44,6 @@ import {
   AccordionRoot,
   AccordionTrigger,
 } from "reka-ui";
-import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 
 export interface LjAccordionItem {

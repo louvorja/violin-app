@@ -8,7 +8,7 @@
       <!-- Servidor: start/stop + token + port + external routes toggle -->
       <section class="opt-section">
         <h3 class="opt-section-title">
-          <Icon :icon="ICONS.UI.SERVER" :size="18" />
+          <LjIcon :icon="ICONS.UI.SERVER" :size="18" />
           {{ $t("options.transmission.http_server") }}
           <span class="tx-title-hint">
             {{ $t("options.transmission.http_server_hint") }}
@@ -97,7 +97,7 @@
       <!-- URLs de transmissão (compatibilidade Delphi) -->
       <section v-if="httpServer.running && externalRoutesEnabled" class="opt-section">
         <h3 class="opt-section-title">
-          <Icon :icon="ICONS.UI.LINK" :size="18" />
+          <LjIcon :icon="ICONS.UI.LINK" :size="18" />
           {{ $t("options.transmission.urls_section") }}
         </h3>
         <p class="opt-hint">{{ $t("options.transmission.urls_hint") }}</p>
@@ -129,7 +129,7 @@
       <!-- Atalhos globais -->
       <section class="opt-section">
         <h3 class="opt-section-title">
-          <Icon :icon="ICONS.UI.KEYBOARD" :size="18" />
+          <LjIcon :icon="ICONS.UI.KEYBOARD" :size="18" />
           {{ $t("options.transmission.shortcuts_title") }}
         </h3>
         <LjCheckbox
@@ -144,13 +144,13 @@
     <!-- Janelas locais — abre uma view como BrowserWindow -->
     <section class="opt-section">
       <h3 class="opt-section-title">
-        <Icon :icon="ICONS.UI.WINDOW_RESTORE" :size="18" />
+        <LjIcon :icon="ICONS.UI.WINDOW_RESTORE" :size="18" />
         {{ $t("options.transmission.local_windows") }}
       </h3>
       <p class="opt-hint">{{ $t("options.transmission.local_windows_hint") }}</p>
       <div class="tx-local">
         <div v-for="win in localWindows" :key="win.route" class="tx-local-row">
-          <Icon :icon="win.icon" :size="18" />
+          <LjIcon :icon="win.icon" :size="18" />
           <div class="tx-local-info">
             <div class="tx-local-title">{{ $t(win.titleKey) }}</div>
           </div>
@@ -190,9 +190,8 @@
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
 import { useDisplays } from "@/composables/useDisplays";
-import Icon from "@/components/Icon.vue";
 import MonitorSelect from "@/components/inputs/MonitorSelect.vue";
-import { LjButton, LjCheckbox, LjDialog, LjInput } from "@/components/ui";
+import { LjButton, LjCheckbox, LjDialog, LjIcon, LjInput } from "@/components/ui";
 import Platform from "@/helpers/Platform";
 import { open as openProjection } from "@/helpers/Projection";
 import { ICONS } from "@/config/Icons";

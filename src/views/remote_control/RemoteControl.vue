@@ -108,7 +108,7 @@
       </div>
       <LjDivider />
       <button type="button" class="rc-action rc-action--danger" @click="closeMedia">
-        <Icon :icon="ICONS.ACTIONS.CANCEL" :size="20" />
+        <LjIcon :icon="ICONS.ACTIONS.CANCEL" :size="20" />
         <span>{{ t("remote_control.slides.close_projection") }}</span>
       </button>
     </footer>
@@ -136,12 +136,12 @@
       <LjDivider />
       <div class="rc-footer__split">
         <button type="button" class="rc-action" @click="closeBible">
-          <Icon :icon="ICONS.UI.MONITOR" :size="20" />
+          <LjIcon :icon="ICONS.UI.MONITOR" :size="20" />
           <span>{{ t("remote_control.bible.clear_screen") }}</span>
         </button>
         <button type="button" class="rc-action rc-action--end" @click="closeProjection">
           <span>{{ t("remote_control.bible.close_projection") }}</span>
-          <Icon :icon="ICONS.PROJECTION.SCREEN" :size="20" />
+          <LjIcon :icon="ICONS.PROJECTION.SCREEN" :size="20" />
         </button>
       </div>
     </footer>
@@ -168,7 +168,7 @@
       </div>
       <LjDivider />
       <button type="button" class="rc-action rc-action--danger" @click="annStop">
-        <Icon :icon="ICONS.ACTIONS.CANCEL" :size="20" />
+        <LjIcon :icon="ICONS.ACTIONS.CANCEL" :size="20" />
         <span>{{ t("remote_control.announcements.stop_projection") }}</span>
       </button>
     </footer>
@@ -207,8 +207,7 @@ import { useRoute } from "vue-router";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { isTokenInvalid, apiFetch } from "@/helpers/ApiClient";
-import Icon from "@/components/Icon.vue";
-import { LjButton, LjDialog, LjDivider, LjSpinner, LjTabs, LjToast } from "@/components/ui";
+import { LjButton, LjDialog, LjDivider, LjIcon, LjSpinner, LjTabs, LjToast } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import RemoteMusic from "./RemoteMusic.vue";
 import RemoteBible from "./RemoteBible.vue";

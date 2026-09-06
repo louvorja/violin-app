@@ -8,7 +8,7 @@
       :data-testid="testid"
       @click="primaryClick"
     >
-      <Icon
+      <LjIcon
         :icon="dynamicIcon"
         :size="size === 'large' ? 32 : 16"
         :color="dynamicIconColor"
@@ -25,7 +25,7 @@
           :title="$t('options.slides.open_at')"
           @click.stop
         >
-          <Icon :icon="ICONS.UI.CHEVRON_DOWN" :size="14" />
+          <LjIcon :icon="ICONS.UI.CHEVRON_DOWN" :size="14" />
         </button>
       </template>
     </LjMenu>
@@ -34,8 +34,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import Icon from "@/components/Icon.vue";
-import { LjMenu, type LjMenuItem } from "@/components/ui";
+import { LjIcon, LjMenu, type LjMenuItem } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import {
   listDisplays,

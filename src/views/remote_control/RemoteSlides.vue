@@ -5,7 +5,7 @@
     </div>
     <template v-else>
       <div class="rs-ref lj-u-caption">
-        <Icon :icon="ICONS.MUSIC.NOTE" size="small" />
+        <LjIcon :icon="ICONS.MUSIC.NOTE" size="small" />
         <span class="lj-u-truncate">{{ currentTitle }}</span>
       </div>
       <div class="rs-grid">
@@ -26,7 +26,7 @@
 </template>
 
 <script setup lang="ts">
-import Icon from "@/components/Icon.vue";
+import { LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { useI18n } from "vue-i18n";
 import { Slide } from "@/types/Slide";

@@ -5,7 +5,7 @@
         <div class="cmd-palette" role="dialog" aria-modal="true">
           <!-- Input de busca -->
           <div class="cmd-search">
-            <Icon :icon="ICONS.ACTIONS.SEARCH" size="22" class="cmd-search-icon" />
+            <LjIcon :icon="ICONS.ACTIONS.SEARCH" size="22" class="cmd-search-icon" />
             <input
               ref="searchInput"
               v-model="query"
@@ -36,7 +36,7 @@
           <!-- Lista de resultados -->
           <div ref="resultsContainer" class="cmd-results">
             <div v-if="!loading && results.length === 0" class="cmd-empty">
-              <Icon :icon="ICONS.ACTIONS.SEARCH" size="36" class="cmd-empty-icon lj-u-faded" />
+              <LjIcon :icon="ICONS.ACTIONS.SEARCH" size="36" class="cmd-empty-icon lj-u-faded" />
               <div>{{ $t("shell.no_results") }}</div>
             </div>
 
@@ -54,7 +54,7 @@
                 @click="execute(item)"
                 @mouseenter="setActive(item)"
               >
-                <Icon :icon="item.icon" size="18" class="cmd-item-icon" />
+                <LjIcon :icon="item.icon" size="18" class="cmd-item-icon" />
                 <div class="cmd-item-body">
                   <div class="cmd-item-title lj-u-truncate">
                     <template v-for="(part, i) in highlightParts(item.title)" :key="i">
@@ -101,8 +101,7 @@
 </template>
 
 <script setup>
-import { LjButton, LjDivider, LjSpinner } from "@/components/ui";
-import Icon from "@/components/Icon.vue";
+import { LjButton, LjDivider, LjIcon, LjSpinner } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, watch, nextTick } from "vue";
 import { useI18n } from "vue-i18n";

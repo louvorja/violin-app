@@ -30,7 +30,7 @@
         :title="$t('shell.window.minimize')"
         @click="minimize"
       >
-        <Icon :icon="ICONS.UI.WINDOW_MINIMIZE" size="14" />
+        <LjIcon :icon="ICONS.UI.WINDOW_MINIMIZE" size="14" />
       </button>
       <button
         type="button"
@@ -38,7 +38,10 @@
         :title="isMaximized ? $t('shell.window.restore') : $t('shell.window.maximize')"
         @click="toggleMaximize"
       >
-        <Icon :icon="isMaximized ? ICONS.UI.WINDOW_RESTORE : ICONS.UI.WINDOW_MAXIMIZE" size="14" />
+        <LjIcon
+          :icon="isMaximized ? ICONS.UI.WINDOW_RESTORE : ICONS.UI.WINDOW_MAXIMIZE"
+          size="14"
+        />
       </button>
       <button
         type="button"
@@ -46,14 +49,14 @@
         :title="$t('shell.window.close')"
         @click="closeWindow"
       >
-        <Icon :icon="ICONS.ACTIONS.CLOSE" size="14" />
+        <LjIcon :icon="ICONS.ACTIONS.CLOSE" size="14" />
       </button>
     </div>
   </div>
 </template>
 
 <script setup>
-import Icon from "@/components/Icon.vue";
+import { LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { useI18n } from "vue-i18n";

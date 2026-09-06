@@ -12,7 +12,7 @@
     </template>
 
     <div v-if="history.length === 0" class="music-list-empty">
-      <Icon :icon="ICONS.MODULES.HISTORY" size="64" class="lj-u-faded" />
+      <LjIcon :icon="ICONS.MODULES.HISTORY" size="64" class="lj-u-faded" />
       <div class="music-list-empty-text">
         <div class="music-list-empty-title">{{ t("data.empty") }}</div>
         <div class="music-list-empty-hint lj-u-faded">{{ t("data.empty_hint") }}</div>
@@ -46,8 +46,7 @@
 </template>
 
 <script setup>
-import { LjButton } from "@/components/ui";
-import Icon from "@/components/Icon.vue";
+import { LjButton, LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, computed } from "vue";
 import { module as manifest } from "../manifest";

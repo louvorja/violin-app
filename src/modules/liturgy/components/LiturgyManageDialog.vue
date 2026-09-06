@@ -20,7 +20,7 @@
           :aria-label="t('inputs.color')"
           @click.stop="presetsOpen = !presetsOpen"
         >
-          <Icon :icon="ICONS.UI.MENU_DOWN" :size="14" />
+          <LjIcon :icon="ICONS.UI.MENU_DOWN" :size="14" />
         </button>
         <div v-if="presetsOpen" class="lmd-color__presets" @click="presetsOpen = false">
           <span
@@ -86,8 +86,7 @@ import { computed, reactive, ref, useId, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import pt from "../lang/pt.json";
 import es from "../lang/es.json";
-import Icon from "@/components/Icon.vue";
-import { LjButton, LjDialog, LjField, LjInput, LjSelect } from "@/components/ui";
+import { LjButton, LjDialog, LjField, LjIcon, LjInput, LjSelect } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import $alert from "@/helpers/Alert";
 import $liturgy from "@/helpers/Liturgy";

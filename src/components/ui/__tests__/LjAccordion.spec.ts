@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, type VueWrapper } from "@vue/test-utils";
 import { defineComponent, h, ref } from "vue";
-import Icon from "@/components/Icon.vue";
+import LjIcon from "@/components/ui/LjIcon.vue";
 import LjAccordion, { type LjAccordionItem } from "../LjAccordion.vue";
 import { mountUi } from "./mountUi";
 
@@ -350,7 +350,7 @@ describe("LjAccordion", () => {
   it("mostra a seta de todos os gatilhos e o ícone só de quem pediu", () => {
     const w = montar();
 
-    const icones = w.findAllComponents(Icon);
+    const icones = w.findAllComponents(LjIcon);
     expect(icones.map((i) => i.props("icon"))).toEqual([
       "chevron-right",
       "chevron-right",

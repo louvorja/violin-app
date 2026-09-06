@@ -22,7 +22,7 @@
           :style="{ '--cat-color': (cat.color as string) || '#1976d2' }"
           @click="selectedCategoryId = cat.id"
         >
-          <Icon :icon="ICONS.MODULES.SCHEDULED_ITEMS" :size="16" />
+          <LjIcon :icon="ICONS.MODULES.SCHEDULED_ITEMS" :size="16" />
           <span class="si-cat-name">{{ cat.nome }}</span>
           <span class="si-cat-count">{{ itemsOf(cat.id).length }}</span>
           <span class="si-cat-actions">
@@ -201,11 +201,11 @@
       <input ref="fileInput" type="file" class="si-file-input" @change="onFileSelected" />
       <div v-if="entryFile || entryFileName" class="si-entry-detail">
         <div class="si-entry-line">
-          <Icon :icon="entryKindIcon" :size="18" />
+          <LjIcon :icon="entryKindIcon" :size="18" />
           <span>{{ entryKindLabel }}</span>
         </div>
         <div class="si-entry-line si-entry-loc">
-          <Icon :icon="ICONS.UI.FILE" :size="16" />
+          <LjIcon :icon="ICONS.UI.FILE" :size="16" />
           <span>{{ entryFile || tt("web_only_name") }}</span>
         </div>
         <img
@@ -315,8 +315,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
-import Icon from "@/components/Icon.vue";
-import { LjButton, LjCalendar, LjDialog, LjField, LjInput } from "@/components/ui";
+import { LjButton, LjCalendar, LjDialog, LjField, LjIcon, LjInput } from "@/components/ui";
 import type {
   LjCalendarDayClick,
   LjCalendarEventClick,

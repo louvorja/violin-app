@@ -1,7 +1,7 @@
 <template>
   <div class="liturgy-tl-area" :class="{ 'liturgy-tl-area--locked': locked }">
     <div v-if="items.length === 0" class="liturgy-tl-empty">
-      <Icon :icon="ICONS.LITURGY.SCRIPT" size="80" class="lj-u-faded" />
+      <LjIcon :icon="ICONS.LITURGY.SCRIPT" size="80" class="lj-u-faded" />
       <div class="liturgy-tl-empty-title">{{ t("data.empty") }}</div>
       <div class="liturgy-tl-empty-hint">{{ t("data.empty_hint") }}</div>
       <button
@@ -10,7 +10,7 @@
         data-testid="liturgy-add-item"
         @click="openItemDialog()"
       >
-        <Icon :icon="ICONS.ACTIONS.ADD" size="16" />
+        <LjIcon :icon="ICONS.ACTIONS.ADD" size="16" />
         <span>{{ t("actions.add") }}</span>
       </button>
     </div>
@@ -64,14 +64,14 @@
                   :title="t('actions.edit')"
                   @click.stop="openItemDialog(index)"
                 >
-                  <Icon :icon="ICONS.ACTIONS.EDIT" size="14" />
+                  <LjIcon :icon="ICONS.ACTIONS.EDIT" size="14" />
                 </button>
                 <button
                   class="tl-bloco-action tl-bloco-collapse"
                   :title="collapsedBlocos.has(element.id) ? 'Expandir' : 'Colapsar'"
                   @click.stop="toggleBlocoCollapse(element.id)"
                 >
-                  <Icon
+                  <LjIcon
                     :icon="
                       collapsedBlocos.has(element.id) ? ICONS.UI.CHEVRON_DOWN : ICONS.UI.CHEVRON_UP
                     "
@@ -127,7 +127,7 @@
 </template>
 
 <script setup lang="ts">
-import Icon from "@/components/Icon.vue";
+import { LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";

@@ -1,20 +1,20 @@
 <template>
   <div v-if="info" class="liturgy-ribbon-info">
     <div class="liturgy-ribbon-info__header">
-      <Icon :icon="ICONS_MODULE_LITURGY" :color="info.color" size="18" />
+      <LjIcon :icon="ICONS_MODULE_LITURGY" :color="info.color" size="18" />
       <span class="liturgy-ribbon-info__name">{{ info.name }}</span>
     </div>
     <div class="liturgy-ribbon-info__stats">
       <span class="liturgy-ribbon-info__stat">
-        <Icon :icon="ICONS.TIMER.CLOCK_START" size="13" />
+        <LjIcon :icon="ICONS.TIMER.CLOCK_START" size="13" />
         {{ info.startTime || "—" }}
       </span>
       <span class="liturgy-ribbon-info__stat">
-        <Icon :icon="ICONS.TIMER.CLOCK_END" size="13" />
+        <LjIcon :icon="ICONS.TIMER.CLOCK_END" size="13" />
         {{ info.endTime || "—" }}
       </span>
       <span class="liturgy-ribbon-info__stat">
-        <Icon :icon="ICONS.TIMER.TIMER_OUTLINE" size="13" />
+        <LjIcon :icon="ICONS.TIMER.TIMER_OUTLINE" size="13" />
         {{ formattedDuration }}
       </span>
     </div>
@@ -22,7 +22,7 @@
 </template>
 
 <script setup lang="ts">
-import Icon from "@/components/Icon.vue";
+import { LjIcon } from "@/components/ui";
 import { computed } from "vue";
 import $appdata from "@/helpers/AppData";
 import { ICONS } from "@/config/Icons";

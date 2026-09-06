@@ -3,7 +3,7 @@
     class="lj-input"
     :class="[`lj-ui-size-${size}`, { 'is-disabled': disabled, 'is-invalid': isInvalid }]"
   >
-    <Icon v-if="icon" :icon="icon" :size="iconSize" class="lj-input__icon" />
+    <LjIcon v-if="icon" :icon="icon" :size="iconSize" class="lj-input__icon" />
     <input
       :id="resolvedId"
       ref="inputEl"
@@ -25,16 +25,16 @@
       :aria-label="t('components.ui.clear')"
       @click="$emit('update:modelValue', '')"
     >
-      <Icon :icon="ICONS.ACTIONS.CLOSE" :size="iconSize" />
+      <LjIcon :icon="ICONS.ACTIONS.CLOSE" :size="iconSize" />
     </button>
     <slot name="suffix" />
   </div>
 </template>
 
 <script setup lang="ts">
+import { LjIcon } from "@/components/ui";
 import { computed, nextTick, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { useFieldContext } from "./fieldContext";
 import type { UiSize } from "./types";

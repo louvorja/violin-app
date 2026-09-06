@@ -1,7 +1,7 @@
 <template>
   <ModuleContainer ref="moduleContainer" :manifest="manifest" @close="close()">
     <div v-if="favorites.length === 0" class="music-list-empty">
-      <Icon :icon="ICONS.UI.STAR_OFF_OUTLINE" size="64" class="lj-u-faded" />
+      <LjIcon :icon="ICONS.UI.STAR_OFF_OUTLINE" size="64" class="lj-u-faded" />
       <div class="music-list-empty-text">
         <div class="music-list-empty-title">{{ t("data.empty") }}</div>
         <div class="music-list-empty-hint lj-u-faded">{{ t("data.empty_hint") }}</div>
@@ -18,7 +18,7 @@
     >
       <template #item="{ element }">
         <div class="music-list-item" role="listitem">
-          <Icon class="drag-handle" :icon="ICONS.ACTIONS.DRAG" size="small" color="grey" />
+          <LjIcon class="drag-handle" :icon="ICONS.ACTIONS.DRAG" size="small" color="grey" />
           <div class="music-list-item-info">
             <span class="music-list-item-name">{{ element.name }}</span>
           </div>
@@ -37,7 +37,7 @@
 </template>
 
 <script setup>
-import Icon from "@/components/Icon.vue";
+import { LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, computed } from "vue";
 import draggable from "vuedraggable";

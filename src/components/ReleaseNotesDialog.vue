@@ -12,7 +12,7 @@
     </div>
 
     <div v-else-if="error" class="rn-alert" role="alert">
-      <Icon :icon="ICONS.UI.ALERT" :size="ICON_SIZE.lg" class="rn-alert__icon" />
+      <LjIcon :icon="ICONS.UI.ALERT" :size="ICON_SIZE.lg" class="rn-alert__icon" />
       <span>{{ t("release_notes.error_offline") }}</span>
     </div>
 
@@ -29,7 +29,7 @@
 
       <div class="rn-actions">
         <a class="rn-link" :href="release.url" target="_blank" rel="noopener noreferrer">
-          <Icon :icon="ICONS.UI.OPEN_IN_NEW" :size="ICON_SIZE.sm" />
+          <LjIcon :icon="ICONS.UI.OPEN_IN_NEW" :size="ICON_SIZE.sm" />
           {{ t("release_notes.view_on_github") }}
         </a>
       </div>
@@ -54,9 +54,8 @@
 import { ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import Platform from "@/helpers/Platform";
-import Icon from "@/components/Icon.vue";
 import DontShowAgainCheckbox from "@/components/inputs/DontShowAgainCheckbox.vue";
-import { ICON_SIZE, LjButton, LjDialog, LjSpinner } from "@/components/ui";
+import { ICON_SIZE, LjButton, LjDialog, LjIcon, LjSpinner } from "@/components/ui";
 import { KEYS } from "@/constants/UserDataKeys";
 import packageJson from "@root/package.json";
 import { ICONS } from "@/config/Icons";

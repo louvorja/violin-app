@@ -13,7 +13,7 @@
         <!-- Preview -->
         <div class="overlay-preview-panel">
           <div class="overlay-preview-header">
-            <Icon :icon="ICONS.UI.EYE_OUTLINE" size="14" />
+            <LjIcon :icon="ICONS.UI.EYE_OUTLINE" size="14" />
             <span>{{ t("preview") }}</span>
           </div>
           <div class="overlay-preview-canvas-wrap">
@@ -55,7 +55,7 @@
         <!-- Slot list -->
         <div class="overlay-slot-list">
           <div v-if="localSlots.length === 0" class="overlay-empty">
-            <Icon :icon="ICONS.MODULES.OVERLAY" size="48" color="grey" />
+            <LjIcon :icon="ICONS.MODULES.OVERLAY" size="48" color="grey" />
             <p>{{ t("empty") }}</p>
           </div>
 
@@ -67,7 +67,7 @@
               :class="{ 'overlay-slot-card--active': editingSlot?.id === slot.id }"
             >
               <div class="overlay-slot-card-header">
-                <Icon :icon="ICONS.ACTIONS.DRAG" size="16" class="overlay-slot-drag" />
+                <LjIcon :icon="ICONS.ACTIONS.DRAG" size="16" class="overlay-slot-drag" />
                 <LjSwitch v-model="slot.enabled" @update:model-value="persist" />
                 <span class="overlay-slot-name">{{ slot.name }}</span>
                 <LjChip size="sm" class="overlay-slot-type">
@@ -110,8 +110,7 @@
 </template>
 
 <script setup lang="ts">
-import { LjButton, LjChip, LjDivider, LjSwitch } from "@/components/ui";
-import Icon from "@/components/Icon.vue";
+import { LjButton, LjChip, LjDivider, LjIcon, LjSwitch } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, reactive, onMounted } from "vue";
 import { module as manifest } from "../manifest";

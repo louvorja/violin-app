@@ -32,7 +32,7 @@
         <LjProgress v-if="loading" indeterminate :height="4" />
 
         <button type="button" class="col-nav-item" @click="openMusicSearch">
-          <Icon :icon="ICONS.ACTIONS.SEARCH" :size="16" />
+          <LjIcon :icon="ICONS.ACTIONS.SEARCH" :size="16" />
           <span class="col-nav-item__label">{{ t("music_search.title") }}</span>
         </button>
 
@@ -107,8 +107,7 @@ import { useI18n } from "vue-i18n";
 import { useViewport } from "@/composables/useViewport";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
-import Icon from "@/components/Icon.vue";
-import { LjButton, LjInput, LjMenu, LjProgress, LjSpinner } from "@/components/ui";
+import { LjButton, LjIcon, LjInput, LjMenu, LjProgress, LjSpinner } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import Strings from "@/helpers/Strings";
 import Database from "@/helpers/Database";

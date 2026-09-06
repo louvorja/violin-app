@@ -11,7 +11,7 @@
       :title="$t('shell.appmenu')"
       @click="toggle"
     >
-      <Icon :icon="ICONS.UI.OPTIONS" />
+      <LjIcon :icon="ICONS.UI.OPTIONS" />
     </button>
 
     <Teleport to="body">
@@ -29,7 +29,7 @@
                 :aria-label="$t('alert.close')"
                 @click="close"
               >
-                <Icon :icon="ICONS.ACTIONS.CLOSE" size="20" />
+                <LjIcon :icon="ICONS.ACTIONS.CLOSE" size="20" />
               </button>
               <span class="app-menu-header-title">
                 {{ activeItem?.label ? $t(activeItem.label) : $t("shell.appmenu") }}
@@ -48,7 +48,7 @@
                   role="menuitem"
                   @click="selectItem(item)"
                 >
-                  <Icon :icon="item.icon" />
+                  <LjIcon :icon="item.icon" />
                   <span class="app-menu-item-label lj-u-truncate">{{ $t(item.label) }}</span>
                 </button>
               </nav>
@@ -88,6 +88,7 @@
 </template>
 
 <script setup>
+import { LjIcon } from "@/components/ui";
 import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import AppMenuOpcoes from "./AppMenuOpcoes.vue";
 import AppMenuSobre from "./AppMenuSobre.vue";
@@ -100,7 +101,6 @@ import AppMenuAlbums from "./AppMenuAlbums.vue";
 import AppMenuDev from "./AppMenuDev.vue";
 import Platform from "@/helpers/Platform";
 import { ICONS } from "@/config/Icons";
-import Icon from "@/components/Icon.vue";
 
 // Detecta modo desenvolvimento — controla a visibilidade do item
 // "Desenvolvedor" no menu (recursos de dev são ocultados em produção).

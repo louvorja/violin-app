@@ -9,7 +9,7 @@
       @click="setActiveDay(i)"
     >
       <span>
-        <Icon
+        <LjIcon
           :icon="i === todayIndex ? ICONS.CALENDAR.STAR : ICONS.CALENDAR.BLANK_SOLID"
           size="16"
         />
@@ -20,7 +20,7 @@
 </template>
 
 <script setup lang="ts">
-import Icon from "@/components/Icon.vue";
+import { LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 const props = withDefaults(
   defineProps<{

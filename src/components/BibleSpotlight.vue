@@ -73,7 +73,7 @@
           </div>
 
           <button class="quicknav-close" @click="model = false">
-            <Icon size="18" :icon="ICONS.ACTIONS.CLOSE" />
+            <LjIcon size="18" :icon="ICONS.ACTIONS.CLOSE" />
           </button>
         </div>
       </DialogContent>
@@ -82,7 +82,6 @@
 </template>
 
 <script setup lang="ts">
-import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { computed, nextTick, ref, watch } from "vue";
 import {
@@ -94,7 +93,7 @@ import {
   VisuallyHidden,
 } from "reka-ui";
 import { useI18n } from "vue-i18n";
-import { LjSpinner } from "@/components/ui";
+import { LjIcon, LjSpinner } from "@/components/ui";
 import Database from "@/helpers/Database";
 import UserData from "@/helpers/UserData";
 import Modules from "@/helpers/Modules";

@@ -6,7 +6,7 @@
         <header v-if="title" class="lj-popover__header">
           <span :id="titleId" class="lj-popover__title">{{ title }}</span>
           <PopoverClose class="lj-popover__close" :aria-label="t('actions.close')">
-            <Icon :icon="ICONS.ACTIONS.CLOSE" :size="14" />
+            <LjIcon :icon="ICONS.ACTIONS.CLOSE" :size="14" />
           </PopoverClose>
         </header>
         <div class="lj-popover__body"><slot /></div>
@@ -16,10 +16,10 @@
 </template>
 
 <script setup lang="ts">
+import { LjIcon } from "@/components/ui";
 import { ref, useId } from "vue";
 import { PopoverClose, PopoverContent, PopoverPortal, PopoverRoot, PopoverTrigger } from "reka-ui";
 import { useI18n } from "vue-i18n";
-import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 
 const { t } = useI18n();

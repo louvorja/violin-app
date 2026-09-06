@@ -3,7 +3,7 @@
     <TabsList class="lj-tabs__list" :aria-label="ariaLabel">
       <TabsIndicator class="lj-tabs__indicator" />
       <TabsTrigger v-for="tab in tabs" :key="tab.value" class="lj-tabs__trigger" :value="tab.value">
-        <Icon v-if="tab.icon" :icon="tab.icon" :size="14" />
+        <LjIcon v-if="tab.icon" :icon="tab.icon" :size="14" />
         {{ tab.label }}
         <LjChip v-if="tab.badge !== undefined" size="sm">{{ tab.badge }}</LjChip>
       </TabsTrigger>
@@ -13,9 +13,9 @@
 </template>
 
 <script setup lang="ts">
+import { LjIcon } from "@/components/ui";
 import { computed, ref } from "vue";
 import { TabsIndicator, TabsList, TabsRoot, TabsTrigger } from "reka-ui";
-import Icon from "@/components/Icon.vue";
 import LjChip from "./LjChip.vue";
 
 export interface LjTab {

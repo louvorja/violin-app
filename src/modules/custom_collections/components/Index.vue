@@ -152,7 +152,7 @@
             <template #item="{ element }">
               <div class="cc-song-row">
                 <span class="cc-drag">
-                  <Icon :icon="ICONS.ACTIONS.DRAG" :size="16" />
+                  <LjIcon :icon="ICONS.ACTIONS.DRAG" :size="16" />
                 </span>
                 <span class="cc-song-row__text">
                   <span class="cc-song-row__name">{{ element.nome }}</span>
@@ -200,8 +200,7 @@ import { ref, computed, onMounted } from "vue";
 import draggable from "vuedraggable";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
-import Icon from "@/components/Icon.vue";
-import { LjButton, LjCard, LjEmpty, LjMenu, LjTabs, LjToast } from "@/components/ui";
+import { LjButton, LjCard, LjEmpty, LjIcon, LjMenu, LjTabs, LjToast } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import Modules from "@/helpers/Modules";
 import CustomSongs from "@/helpers/CustomSongs";

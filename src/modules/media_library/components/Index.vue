@@ -55,7 +55,7 @@
               @click="toggleCategoryChip(cat.id)"
             >
               <span class="media-chip-icon-wrap">
-                <Icon v-if="cat.iconType === 'icon'" :icon="cat.icon" :size="14" />
+                <LjIcon v-if="cat.iconType === 'icon'" :icon="cat.icon" :size="14" />
                 <img v-else :src="cat.icon" class="media-chip-img" alt="" />
               </span>
               <span class="media-chip-name">{{ cat.name }}</span>
@@ -69,7 +69,7 @@
                 :aria-label="t('add_files')"
                 @click.stop="beginAddWithCategory(cat.id)"
               >
-                <Icon :icon="ICONS.ACTIONS.ADD" :size="12" />
+                <LjIcon :icon="ICONS.ACTIONS.ADD" :size="12" />
               </button>
             </div>
             <div
@@ -79,7 +79,7 @@
               @click="toggleCategoryChip(UNCATEGORIZED_ID)"
             >
               <span class="media-chip-icon-wrap">
-                <Icon :icon="ICONS.UI.FILE_MULTIPLE" :size="14" />
+                <LjIcon :icon="ICONS.UI.FILE_MULTIPLE" :size="14" />
               </span>
               <span class="media-chip-name">{{ t("uncategorized") }}</span>
               <span class="media-chip-count">{{ uncategorizedCount }}</span>
@@ -90,7 +90,7 @@
                 :aria-label="t('add_files')"
                 @click.stop="beginAddWithCategory(UNCATEGORIZED_ID)"
               >
-                <Icon :icon="ICONS.ACTIONS.ADD" :size="12" />
+                <LjIcon :icon="ICONS.ACTIONS.ADD" :size="12" />
               </button>
             </div>
           </div>
@@ -109,7 +109,7 @@
                 loading="lazy"
               />
               <div v-else class="media-grid-item-thumb media-grid-item-thumb--icon">
-                <Icon :icon="fileTypeIcon(file.type)" :size="28" />
+                <LjIcon :icon="fileTypeIcon(file.type)" :size="28" />
               </div>
               <div class="media-grid-item-name">{{ file.name }}</div>
               <div v-if="categoryName(file.categoryId)" class="media-grid-item-category">
@@ -147,7 +147,7 @@
         <!-- Playlist -->
         <div class="media-playlist">
           <div class="media-playlist-header">
-            <Icon :icon="ICONS.FORMAT.LIST_BULLETED" :size="16" />
+            <LjIcon :icon="ICONS.FORMAT.LIST_BULLETED" :size="16" />
             <span>{{ t("playlist") }} ({{ playlist.length }})</span>
             <span class="lj-u-spacer" />
             <LjButton
@@ -172,7 +172,7 @@
               @click="playIndex(i)"
             >
               <div class="media-playlist-item-icon">
-                <Icon :icon="item.typeIcon" :size="18" />
+                <LjIcon :icon="item.typeIcon" :size="18" />
               </div>
               <div class="media-playlist-item-name">{{ item.name }}</div>
               <div class="media-playlist-item-actions">
@@ -208,7 +208,7 @@
       <!-- Player bar -->
       <div v-if="isPlaying && currentItem" class="media-playerbar">
         <div class="media-playerbar-info">
-          <Icon :icon="currentItem.typeIcon" :size="16" />
+          <LjIcon :icon="currentItem.typeIcon" :size="16" />
           <span class="media-playerbar-name">{{ currentItem.name }}</span>
           <span class="media-playerbar-index">{{ currentIndex + 1 }} / {{ playlist.length }}</span>
         </div>
@@ -328,8 +328,7 @@ import ModuleContainer from "@/components/ModuleContainer.vue";
 import CategoryManagerDialog, {
   type CategoryFileData,
 } from "@/components/CategoryManagerDialog.vue";
-import Icon from "@/components/Icon.vue";
-import { LjButton, LjDialog, LjDivider, LjEmpty, LjInput, LjTabs } from "@/components/ui";
+import { LjButton, LjDialog, LjDivider, LjEmpty, LjIcon, LjInput, LjTabs } from "@/components/ui";
 import $broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";

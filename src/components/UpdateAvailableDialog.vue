@@ -27,7 +27,7 @@
 
     <!-- Estado: baixado — pronto para instalar -->
     <div v-else-if="isDownloaded" class="ua-state">
-      <Icon :icon="ICONS.UI.CHECK_CIRCLE" :size="40" class="ua-state__ok" />
+      <LjIcon :icon="ICONS.UI.CHECK_CIRCLE" :size="40" class="ua-state__ok" />
       <span class="ua-state__label ua-state__label--strong">
         {{ t("options.updates.app_downloaded") }}
       </span>
@@ -89,9 +89,8 @@
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import Platform from "@/helpers/Platform";
-import Icon from "@/components/Icon.vue";
 import DontShowAgainCheckbox from "@/components/inputs/DontShowAgainCheckbox.vue";
-import { LjButton, LjDialog, LjProgress, LjSpinner } from "@/components/ui";
+import { LjButton, LjDialog, LjIcon, LjProgress, LjSpinner } from "@/components/ui";
 import { KEYS } from "@/constants/UserDataKeys";
 import { ICONS } from "@/config/Icons";
 

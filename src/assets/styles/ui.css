@@ -287,10 +287,10 @@
 /* ---------------------------------------------------------------------------
  * Ícones dentro de primitivos
  *
- * Icon.vue aplica drop-shadow em todo ícone — faz sentido sobre fundo de
+ * LjIcon aplica drop-shadow em todo ícone — faz sentido sobre fundo de
  * projeção, mas em controle de UI a 13px o glifo fica borrado.
  *
- * A classe vem repetida de propósito (`.lj-icon.lj-icon`): a regra do Icon.vue
+ * A classe vem repetida de propósito (`.lj-icon.lj-icon`): a regra do LjIcon
  * é `.lj-icon[data-v-…]`, de mesma especificidade que um seletor de duas
  * classes, e vence no desempate por ordem porque o CSS do componente é
  * injetado depois deste arquivo. Repetir a classe sobe a especificidade e

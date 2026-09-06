@@ -19,7 +19,7 @@
         <div class="opt-format-field opt-field-bgimage">
           <div class="opt-bg-pick">
             <LjButton variant="default" size="sm" @click="pick">
-              <Icon start :icon="ICONS.ACTIONS.IMAGE_PLUS" size="14" />
+              <LjIcon start :icon="ICONS.ACTIONS.IMAGE_PLUS" size="14" />
               {{ $t("options.background.select") }}
             </LjButton>
             <span v-if="!currentBgImage" class="opt-bg-empty-text">
@@ -35,7 +35,7 @@
         <div v-if="wpImageUrl" class="rbw-preview">
           <img :src="wpImageUrl" class="rbw-preview-img" />
           <button class="rbw-preview-remove" @click="remove">
-            <Icon :icon="ICONS.ACTIONS.CLOSE" size="15" />
+            <LjIcon :icon="ICONS.ACTIONS.CLOSE" size="15" />
           </button>
         </div>
       </div>
@@ -44,8 +44,7 @@
 </template>
 
 <script setup lang="ts">
-import { LjButton } from "@/components/ui";
-import Icon from "@/components/Icon.vue";
+import { LjButton, LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, onMounted, onBeforeUnmount, computed } from "vue";
 import { useI18n } from "vue-i18n";

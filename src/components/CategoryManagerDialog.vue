@@ -20,7 +20,7 @@
     <div v-else class="cat-manage-list">
       <div v-for="cat in categories" :key="cat.id" class="cat-manage-item">
         <div class="cat-manage-item-icon" :style="{ background: cat.color }">
-          <Icon v-if="cat.iconType === 'icon'" :icon="cat.icon" :size="18" />
+          <LjIcon v-if="cat.iconType === 'icon'" :icon="cat.icon" :size="18" />
           <img v-else :src="cat.icon" class="cat-manage-item-img" alt="" />
         </div>
         <span class="cat-manage-item-name lj-u-fill lj-u-truncate">{{ cat.name }}</span>
@@ -91,7 +91,7 @@
             :aria-pressed="form.icon === opt.value"
             @click="form.icon = opt.value"
           >
-            <Icon :icon="opt.value" :size="20" />
+            <LjIcon :icon="opt.value" :size="20" />
           </button>
         </div>
 
@@ -158,8 +158,7 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import Icon from "@/components/Icon.vue";
-import { LjButton, LjDialog, LjEmpty, LjField, LjInput } from "@/components/ui";
+import { LjButton, LjDialog, LjEmpty, LjField, LjIcon, LjInput } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { MediaFile } from "@/types/Media";
 

@@ -14,7 +14,7 @@
     <div v-if="filtered.length" class="llo-list">
       <div v-for="item in filtered" :key="item.id" class="llo-item">
         <button type="button" class="llo-item__main" @click="doLoad(item)">
-          <Icon
+          <LjIcon
             :icon="ICONS.MODULES.LITURGY"
             :size="18"
             :color="item.color || DEFAULT_COLOR"
@@ -66,8 +66,7 @@ import { ref, computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import pt from "../lang/pt.json";
 import es from "../lang/es.json";
-import Icon from "@/components/Icon.vue";
-import { LjAlert, LjButton, LjDialog, LjInput, LjProgress } from "@/components/ui";
+import { LjAlert, LjButton, LjDialog, LjIcon, LjInput, LjProgress } from "@/components/ui";
 import $alert from "@/helpers/Alert";
 import $liturgy from "@/helpers/Liturgy";
 import { useLiturgyLibrary } from "../composables/useLiturgyLibrary";

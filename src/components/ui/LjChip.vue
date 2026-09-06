@@ -1,6 +1,6 @@
 <template>
   <span class="lj-chip" :class="[`lj-chip--${variant}`, `lj-chip--${size}`]">
-    <Icon v-if="icon" :icon="icon" :size="size === 'sm' ? 11 : 13" />
+    <LjIcon v-if="icon" :icon="icon" :size="size === 'sm' ? 11 : 13" />
     <slot />
     <button
       v-if="removable"
@@ -9,14 +9,14 @@
       :aria-label="t('components.ui.remove')"
       @click.stop="$emit('remove')"
     >
-      <Icon :icon="ICONS.ACTIONS.CLOSE" :size="11" />
+      <LjIcon :icon="ICONS.ACTIONS.CLOSE" :size="11" />
     </button>
   </span>
 </template>
 
 <script setup lang="ts">
+import { LjIcon } from "@/components/ui";
 import { useI18n } from "vue-i18n";
-import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 
 const { t } = useI18n();

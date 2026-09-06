@@ -58,10 +58,10 @@
       <DropdownMenuSub v-for="(item, key) in menu" :key="key">
         <DropdownMenuSubTrigger class="lj-menu__item">
           <span class="lj-menu__mark">
-            <Icon :icon="ICONS.UI.MENU_LEFT" :size="15" />
+            <LjIcon :icon="ICONS.UI.MENU_LEFT" :size="15" />
           </span>
           <span class="lj-menu__text">{{ item.title }}</span>
-          <Icon :icon="item.icon" :size="15" class="mmt-sub__icon" />
+          <LjIcon :icon="item.icon" :size="15" class="mmt-sub__icon" />
         </DropdownMenuSubTrigger>
 
         <DropdownMenuPortal>
@@ -75,7 +75,7 @@
                 @select="subitem.click?.()"
               >
                 <span class="lj-menu__mark">
-                  <Icon v-if="subitem.icon" :icon="subitem.icon" :size="13" />
+                  <LjIcon v-if="subitem.icon" :icon="subitem.icon" :size="13" />
                 </span>
                 <span class="lj-menu__text">{{ subitem.title }}</span>
               </DropdownMenuItem>
@@ -113,8 +113,7 @@ import Favorites from "@/helpers/Favorites";
 import Liturgy from "@/helpers/Liturgy";
 import Media from "@/composables/useMedia";
 import $snackbar from "@/helpers/Snackbar";
-import Icon from "@/components/Icon.vue";
-import { LjButton, LjMenu } from "@/components/ui";
+import { LjButton, LjIcon, LjMenu } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { MusicActionEnum } from "@/enums/MusicActionEnum";
 import { usePlaylists } from "@/modules/musics/composables/usePlaylists";

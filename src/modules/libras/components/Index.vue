@@ -20,7 +20,7 @@
 
       <!-- Mensagem quando vazio -->
       <div v-if="!gloss && !isTranslating" class="libras-empty">
-        <Icon :icon="ICONS.MODULES.MUSICS" size="48" color="grey" />
+        <LjIcon :icon="ICONS.MODULES.MUSICS" size="48" color="grey" />
         <p>{{ t("libras.empty") }}</p>
       </div>
     </div>
@@ -28,8 +28,7 @@
 </template>
 
 <script setup lang="ts">
-import Icon from "@/components/Icon.vue";
-import { LjProgress } from "@/components/ui";
+import { LjIcon, LjProgress } from "@/components/ui";
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import ModuleContainer from "@/components/ModuleContainer.vue";

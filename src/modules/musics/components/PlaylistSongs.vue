@@ -8,7 +8,7 @@
         :title="t('playlists.close')"
         @click="selectPlaylist(null)"
       >
-        <Icon :icon="ICONS.ACTIONS.CLOSE" size="16" />
+        <LjIcon :icon="ICONS.ACTIONS.CLOSE" size="16" />
       </button>
     </div>
 
@@ -23,7 +23,7 @@
         }"
       >
         <span class="playlist-songs-item-index">
-          <Icon
+          <LjIcon
             v-if="isPlayingSong(song.id_music)"
             :icon="ICONS.MEDIA.EQUALIZER"
             size="14"
@@ -42,7 +42,7 @@
             :title="t('playlists.play_song')"
             @click="playSong(song)"
           >
-            <Icon
+            <LjIcon
               :icon="isPlayingSong(song.id_music) ? ICONS.PLAYER.PAUSE_PLAIN : ICONS.PLAYER.PLAYER"
               size="14"
             />
@@ -53,13 +53,13 @@
             :title="t('playlists.remove_song')"
             @click="removeSong(playlist.id, index)"
           >
-            <Icon :icon="ICONS.ACTIONS.CLOSE" size="14" />
+            <LjIcon :icon="ICONS.ACTIONS.CLOSE" size="14" />
           </button>
         </div>
       </div>
 
       <div v-if="playlist.songs.length === 0" class="playlist-songs-empty">
-        <Icon :icon="ICONS.MUSIC.NO_AUDIO" size="32" />
+        <LjIcon :icon="ICONS.MUSIC.NO_AUDIO" size="32" />
         <div>{{ t("playlists.no_songs") }}</div>
       </div>
     </div>
@@ -81,7 +81,7 @@
             :class="{ 'playlist-songs-option-btn--active': shuffleEnabled }"
             @click="toggleShuffle"
           >
-            <Icon :icon="ICONS.PLAYER.SHUFFLE" size="18" />
+            <LjIcon :icon="ICONS.PLAYER.SHUFFLE" size="18" />
           </button>
         </LjTooltip>
         <LjTooltip :text="t('playlists.repeat')" side="top">
@@ -91,12 +91,12 @@
             :class="{ 'playlist-songs-option-btn--active': repeatEnabled }"
             @click="toggleRepeat"
           >
-            <Icon :icon="ICONS.PLAYER.REPEAT" size="18" />
+            <LjIcon :icon="ICONS.PLAYER.REPEAT" size="18" />
           </button>
         </LjTooltip>
       </div>
       <button type="button" class="playlist-songs-play-btn" @click="playAll">
-        <Icon :icon="ICONS.PLAYER.PLAYER" size="18" />
+        <LjIcon :icon="ICONS.PLAYER.PLAYER" size="18" />
         {{ t("playlists.play") }}
       </button>
     </div>
@@ -104,8 +104,7 @@
 </template>
 
 <script setup lang="ts">
-import Icon from "@/components/Icon.vue";
-import { LjTooltip } from "@/components/ui";
+import { LjIcon, LjTooltip } from "@/components/ui";
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import DateTime from "@/helpers/DateTime";

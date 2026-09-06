@@ -11,15 +11,15 @@
     :aria-busy="loading || undefined"
   >
     <LjSpinner v-if="loading" :size="iconSize" />
-    <Icon v-else-if="icon" :icon="icon" :size="iconSize" />
+    <LjIcon v-else-if="icon" :icon="icon" :size="iconSize" />
     <span v-if="!iconOnly" class="lj-btn__label"><slot /></span>
-    <Icon v-if="iconEnd && !iconOnly" :icon="iconEnd" :size="iconSize" />
+    <LjIcon v-if="iconEnd && !iconOnly" :icon="iconEnd" :size="iconSize" />
   </button>
 </template>
 
 <script setup lang="ts">
+import { LjIcon } from "@/components/ui";
 import { computed } from "vue";
-import Icon from "@/components/Icon.vue";
 import LjSpinner from "./LjSpinner.vue";
 import type { UiSize } from "./types";
 import { ICON_SIZE } from "./types";

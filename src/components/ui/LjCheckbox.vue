@@ -10,8 +10,8 @@
       @change="onChange"
     />
     <span class="lj-check__box" aria-hidden="true">
-      <Icon v-if="indeterminate" :icon="ICONS.ACTIONS.MINUS" :size="11" />
-      <Icon v-else-if="modelValue" :icon="ICONS.UI.CHECK" :size="11" />
+      <LjIcon v-if="indeterminate" :icon="ICONS.ACTIONS.MINUS" :size="11" />
+      <LjIcon v-else-if="modelValue" :icon="ICONS.UI.CHECK" :size="11" />
     </span>
     <span v-if="label || $slots.default" class="lj-check__label">
       <slot>{{ label }}</slot>
@@ -20,8 +20,8 @@
 </template>
 
 <script setup lang="ts">
+import { LjIcon } from "@/components/ui";
 import { nextTick, ref, watch } from "vue";
-import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 
 const props = defineProps<{

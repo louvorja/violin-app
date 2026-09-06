@@ -26,7 +26,7 @@
           @click="toggleCategoryChip(cat.id)"
         >
           <span class="bgs-chip-icon-wrap">
-            <Icon v-if="cat.iconType === 'icon'" :icon="cat.icon" :size="14" />
+            <LjIcon v-if="cat.iconType === 'icon'" :icon="cat.icon" :size="14" />
             <img v-else :src="cat.icon" class="bgs-chip-img" alt="" />
           </span>
           <span class="bgm-chip-name">{{ cat.name }}</span>
@@ -40,7 +40,7 @@
             :aria-label="t('add_audio')"
             @click.stop="addAudioFiles(cat.id)"
           >
-            <Icon :icon="ICONS.ACTIONS.ADD" :size="12" />
+            <LjIcon :icon="ICONS.ACTIONS.ADD" :size="12" />
           </button>
         </div>
         <!-- Virtual: arquivos sem categoria -->
@@ -52,7 +52,7 @@
           @click="toggleCategoryChip(UNCATEGORIZED_ID)"
         >
           <span class="bgs-chip-icon-wrap">
-            <Icon :icon="ICONS.MUSIC.NOTE_OUTLINE" :size="14" />
+            <LjIcon :icon="ICONS.MUSIC.NOTE_OUTLINE" :size="14" />
           </span>
           <span class="bgm-chip-name">{{ t("uncategorized") }}</span>
           <span class="bgs-chip-count">{{ uncategorizedCount }}</span>
@@ -63,7 +63,7 @@
             :aria-label="t('add_audio')"
             @click.stop="addAudioFiles(UNCATEGORIZED_ID)"
           >
-            <Icon :icon="ICONS.ACTIONS.ADD" :size="12" />
+            <LjIcon :icon="ICONS.ACTIONS.ADD" :size="12" />
           </button>
         </div>
       </div>
@@ -111,7 +111,7 @@
             <span class="bgs-audio-card-name">{{ item.displayName }}</span>
             <div class="bgs-audio-card-footer">
               <span class="bgs-audio-card-cat">
-                <Icon :icon="item.icon" :size="20" />
+                <LjIcon :icon="item.icon" :size="20" />
                 {{ item.categoryName }}
               </span>
               <span v-if="item.ext" class="bgs-audio-card-ext">{{ item.ext }}</span>
@@ -149,7 +149,7 @@
         <div class="bgs-cat-options">
           <button type="button" class="bgs-cat-option" @click="addAudioFiles(UNCATEGORIZED_ID)">
             <span class="bgs-cat-option-icon">
-              <Icon :icon="ICONS.MUSIC.NOTE_OUTLINE" :size="28" />
+              <LjIcon :icon="ICONS.MUSIC.NOTE_OUTLINE" :size="28" />
             </span>
             <span class="bgs-cat-option-name">{{ t("uncategorized") }}</span>
           </button>
@@ -161,7 +161,7 @@
             @click="addAudioFiles(cat.id)"
           >
             <span class="bgs-cat-option-icon">
-              <Icon v-if="cat.iconType === 'icon'" :icon="cat.icon" :size="28" />
+              <LjIcon v-if="cat.iconType === 'icon'" :icon="cat.icon" :size="28" />
               <img v-else :src="cat.icon" class="bgs-cat-option-img" alt="" />
             </span>
             <span class="bgs-cat-option-name">{{ cat.name }}</span>
@@ -232,8 +232,7 @@ import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
 import Alert from "@/helpers/Alert";
 import { ICONS } from "@/config/Icons";
-import Icon from "@/components/Icon.vue";
-import { LjButton, LjDialog, LjEmpty, LjField, LjInput } from "@/components/ui";
+import { LjButton, LjDialog, LjEmpty, LjField, LjIcon, LjInput } from "@/components/ui";
 import { AUDIO_EXT } from "@/constants/FileTypes";
 import CategoryManagerDialog, { CategoryFileData } from "@/components/CategoryManagerDialog.vue";
 import $idb from "@/helpers/IndexedDB";

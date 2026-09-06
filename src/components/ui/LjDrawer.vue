@@ -23,7 +23,7 @@
           </VisuallyHidden>
           <div v-if="$slots.actions" class="lj-drawer__actions"><slot name="actions" /></div>
           <DialogClose class="lj-drawer__close" :aria-label="t('actions.close')">
-            <Icon :icon="ICONS.ACTIONS.CLOSE" :size="14" />
+            <LjIcon :icon="ICONS.ACTIONS.CLOSE" :size="14" />
           </DialogClose>
         </header>
         <div class="lj-drawer__body"><slot /></div>
@@ -53,6 +53,7 @@
 </template>
 
 <script setup lang="ts">
+import { LjIcon } from "@/components/ui";
 import { computed } from "vue";
 import {
   DialogClose,
@@ -64,7 +65,6 @@ import {
   VisuallyHidden,
 } from "reka-ui";
 import { useI18n } from "vue-i18n";
-import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 
 defineOptions({

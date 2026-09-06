@@ -11,7 +11,7 @@
         @mouseenter="pause"
         @mouseleave="resume"
       >
-        <Icon v-if="icon" :icon="icon" :size="17" class="lj-toast__icon" />
+        <LjIcon v-if="icon" :icon="icon" :size="17" class="lj-toast__icon" />
         <span class="lj-toast__text">{{ text }}</span>
         <button
           v-if="dismissible"
@@ -20,7 +20,7 @@
           :aria-label="t('actions.close')"
           @click.stop="close"
         >
-          <Icon :icon="ICONS.ACTIONS.CLOSE" :size="14" />
+          <LjIcon :icon="ICONS.ACTIONS.CLOSE" :size="14" />
         </button>
         <div v-if="timeout > 0" class="lj-toast__timer" :style="timerStyle" />
       </div>
@@ -29,9 +29,9 @@
 </template>
 
 <script setup lang="ts">
+import { LjIcon } from "@/components/ui";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 
 const props = withDefaults(

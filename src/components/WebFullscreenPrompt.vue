@@ -6,12 +6,12 @@
     :title="$t('projection.enter_fullscreen')"
     @click="onUserClick"
   >
-    <Icon :icon="ICONS.PLAYER.FULLSCREEN" size="20" />
+    <LjIcon :icon="ICONS.PLAYER.FULLSCREEN" size="20" />
   </button>
 </template>
 
 <script setup lang="ts">
-import Icon from "@/components/Icon.vue";
+import { LjIcon } from "@/components/ui";
 /**
  * Botão discreto para colocar a janela de projeção em tela cheia no navegador.
  *

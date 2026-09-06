@@ -31,7 +31,7 @@
           @keydown.space.prevent="executeLiturgyItem(item)"
         >
           <span class="rl-item__badge" :style="{ background: item.cor || 'var(--lj-ui-accent)' }">
-            <Icon :icon="liturgy.iconForItem(item)" color="white" size="18" />
+            <LjIcon :icon="liturgy.iconForItem(item)" color="white" size="18" />
           </span>
           <span class="rl-item__text">
             <span class="rl-item__title lj-u-truncate">{{ item.item }}</span>
@@ -47,11 +47,11 @@
               icon-only
               @click.stop="openChooseLater(item)"
             />
-            <Icon v-if="isItemChecked(item)" :icon="ICONS.UI.CHECK_CIRCLE" color="success" />
+            <LjIcon v-if="isItemChecked(item)" :icon="ICONS.UI.CHECK_CIRCLE" color="success" />
           </div>
           <template v-else>
-            <Icon v-if="isItemChecked(item)" :icon="ICONS.UI.CHECK_CIRCLE" color="success" />
-            <Icon v-else :icon="ICONS.PLAYER.PLAY_OUTLINE" color="primary" />
+            <LjIcon v-if="isItemChecked(item)" :icon="ICONS.UI.CHECK_CIRCLE" color="success" />
+            <LjIcon v-else :icon="ICONS.PLAYER.PLAY_OUTLINE" color="primary" />
           </template>
         </div>
       </li>
@@ -60,8 +60,7 @@
 </template>
 
 <script setup lang="ts">
-import { LjButton } from "@/components/ui";
-import Icon from "@/components/Icon.vue";
+import { LjButton, LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, onMounted } from "vue";
 import { useI18n } from "vue-i18n";

@@ -2,7 +2,7 @@
   <section class="lj-card" :class="{ 'lj-card--soft': soft, 'lj-card--flush': flush }">
     <header v-if="title || $slots.header" class="lj-card__header">
       <slot name="header">
-        <Icon v-if="icon" :icon="icon" :size="15" class="lj-card__icon" />
+        <LjIcon v-if="icon" :icon="icon" :size="15" class="lj-card__icon" />
         <h3 class="lj-card__title">{{ title }}</h3>
       </slot>
       <div v-if="$slots.actions" class="lj-card__actions"><slot name="actions" /></div>
@@ -13,7 +13,7 @@
 </template>
 
 <script setup lang="ts">
-import Icon from "@/components/Icon.vue";
+import { LjIcon } from "@/components/ui";
 
 defineProps<{ title?: string; icon?: string; soft?: boolean; flush?: boolean }>();
 </script>

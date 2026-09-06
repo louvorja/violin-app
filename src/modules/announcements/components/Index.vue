@@ -51,7 +51,7 @@
                     @click="selectedId = a.id"
                     @contextmenu="onContextMenu(a)"
                   >
-                    <Icon :icon="ICONS.ACTIONS.DRAG" :size="15" class="an-drag-handle" />
+                    <LjIcon :icon="ICONS.ACTIONS.DRAG" :size="15" class="an-drag-handle" />
                     <span class="an-item-order">{{ i + 1 }}</span>
                     <span class="an-item-name">{{ a.nome }}</span>
                     <LjButton
@@ -74,19 +74,19 @@
             <ContextMenuContent class="lj-ui-float lj-menu an-ctx">
               <ContextMenuItem class="lj-menu__item" @select="ctxEdit">
                 <span class="lj-menu__mark">
-                  <Icon :icon="ICONS.ACTIONS.EDIT" :size="13" />
+                  <LjIcon :icon="ICONS.ACTIONS.EDIT" :size="13" />
                 </span>
                 <span class="lj-menu__text">{{ tt("edit") }}</span>
               </ContextMenuItem>
               <ContextMenuItem class="lj-menu__item" @select="ctxDuplicate">
                 <span class="lj-menu__mark">
-                  <Icon :icon="ICONS.ACTIONS.COPY" :size="13" />
+                  <LjIcon :icon="ICONS.ACTIONS.COPY" :size="13" />
                 </span>
                 <span class="lj-menu__text">{{ tt("duplicate") }}</span>
               </ContextMenuItem>
               <ContextMenuItem class="lj-menu__item an-ctx__danger" @select="ctxDelete">
                 <span class="lj-menu__mark">
-                  <Icon :icon="ICONS.ACTIONS.DELETE" :size="13" />
+                  <LjIcon :icon="ICONS.ACTIONS.DELETE" :size="13" />
                 </span>
                 <span class="lj-menu__text">{{ tt("delete") }}</span>
               </ContextMenuItem>
@@ -321,11 +321,11 @@ import {
 } from "reka-ui";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
-import Icon from "@/components/Icon.vue";
 import {
   LjButton,
   LjCheckbox,
   LjField,
+  LjIcon,
   LjInput,
   LjSelect,
   LjSlider,

@@ -15,7 +15,7 @@
       :aria-selected="isActive(m.id)"
       @click="focus(m.id)"
     >
-      <Icon
+      <LjIcon
         :icon="getModule(m.id).icon"
         :color="getModule(m.id).color"
         size="20"
@@ -30,13 +30,14 @@
         :aria-label="`${$t('alert.close')}: ${t(getModule(m.id).title)}`"
         @click.stop="close(m.id)"
       >
-        <Icon :icon="ICONS.ACTIONS.CLOSE" size="11" aria-hidden="true" />
+        <LjIcon :icon="ICONS.ACTIONS.CLOSE" size="11" aria-hidden="true" />
       </span>
     </button>
   </div>
 </template>
 
 <script setup>
+import { LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
@@ -44,7 +45,6 @@ import $appdata from "@/helpers/AppData";
 import $userdata from "@/helpers/UserData";
 import $modules from "@/helpers/Modules";
 import { getModules } from "@/config/modules";
-import Icon from "@/components/Icon.vue";
 import { KEYS } from "@/constants/UserDataKeys";
 
 const { t } = useI18n();

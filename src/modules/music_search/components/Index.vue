@@ -34,7 +34,7 @@
     </div>
 
     <div v-else-if="!results.length && searched" class="ms-state lj-u-muted">
-      <Icon :icon="ICONS.MUSIC.NO_AUDIO" size="36" />
+      <LjIcon :icon="ICONS.MUSIC.NO_AUDIO" size="36" />
       <div>{{ t("no_results") }}</div>
     </div>
 
@@ -82,7 +82,7 @@
 
     <div v-else class="ms-empty lj-u-muted">
       <div class="lj-u-text-center">
-        <Icon :icon="ICONS.ACTIONS.SEARCH" size="48" class="ms-empty__icon lj-u-faded" />
+        <LjIcon :icon="ICONS.ACTIONS.SEARCH" size="48" class="ms-empty__icon lj-u-faded" />
         <div>{{ t("search_placeholder") }}</div>
       </div>
     </div>
@@ -90,8 +90,7 @@
 </template>
 
 <script setup lang="ts">
-import { LjButton, LjChip, LjInput, LjSpinner } from "@/components/ui";
-import Icon from "@/components/Icon.vue";
+import { LjButton, LjChip, LjIcon, LjInput, LjSpinner } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import type { ComponentPublicInstance } from "vue";
 import { nextTick, onMounted, ref } from "vue";

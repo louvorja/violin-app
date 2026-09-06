@@ -8,7 +8,7 @@
       :aria-label="ariaLabel"
       :aria-describedby="describedBy"
     >
-      <Icon v-if="icon" :icon="icon" :size="iconSize" class="lj-select__icon" />
+      <LjIcon v-if="icon" :icon="icon" :size="iconSize" class="lj-select__icon" />
       <!-- Sem seleção e sem slot próprio, o SelectValue fica sem filhos de
            propósito: é só assim que o Reka renderiza o texto do placeholder. -->
       <SelectValue
@@ -19,20 +19,20 @@
         <slot name="value" :item="selectedItem">{{ selectedLabel }}</slot>
       </SelectValue>
       <SelectValue v-else class="lj-select__value" :placeholder="resolvedPlaceholder" />
-      <Icon :icon="ICONS.UI.CHEVRON_DOWN" :size="iconSize" class="lj-select__caret" />
+      <LjIcon :icon="ICONS.UI.CHEVRON_DOWN" :size="iconSize" class="lj-select__caret" />
     </SelectTrigger>
 
     <SelectPortal>
       <SelectContent class="lj-ui-float lj-select__content" position="popper" :side-offset="4">
         <SelectScrollUpButton class="lj-select__scroll">
-          <Icon :icon="ICONS.UI.CHEVRON_UP" :size="13" />
+          <LjIcon :icon="ICONS.UI.CHEVRON_UP" :size="13" />
         </SelectScrollUpButton>
 
         <SelectViewport class="lj-select__viewport">
           <template v-for="item in items" :key="String(valueOf(item))">
             <SelectItem class="lj-select__item" :value="toInternal(valueOf(item))">
               <span class="lj-select__check">
-                <Icon :icon="ICONS.UI.CHECK" :size="12" />
+                <LjIcon :icon="ICONS.UI.CHECK" :size="12" />
               </span>
               <SelectItemText>
                 <slot name="item" :item="item">{{ labelOf(item) }}</slot>
@@ -42,7 +42,7 @@
         </SelectViewport>
 
         <SelectScrollDownButton class="lj-select__scroll">
-          <Icon :icon="ICONS.UI.CHEVRON_DOWN" :size="13" />
+          <LjIcon :icon="ICONS.UI.CHEVRON_DOWN" :size="13" />
         </SelectScrollDownButton>
       </SelectContent>
     </SelectPortal>
@@ -50,6 +50,7 @@
 </template>
 
 <script setup lang="ts" generic="T extends string | number | object">
+import { LjIcon } from "@/components/ui";
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 
@@ -65,7 +66,6 @@ import {
   SelectValue,
   SelectViewport,
 } from "reka-ui";
-import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { useFieldContext } from "./fieldContext";
 import type { UiSize } from "./types";

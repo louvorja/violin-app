@@ -117,7 +117,11 @@
           </div>
 
           <div v-for="it in categoryItems" :key="it.id" class="ls-row">
-            <Icon :icon="fileTypeIcon(String(it.arquivo || ''))" :size="16" class="ls-row__icon" />
+            <LjIcon
+              :icon="fileTypeIcon(String(it.arquivo || ''))"
+              :size="16"
+              class="ls-row__icon"
+            />
             <!-- `ScheduledItem` indexa campos como `unknown`: o v-model direto
                  não tipa, então a leitura vira string e a escrita é explícita. -->
             <LjInput
@@ -169,8 +173,7 @@ import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import pt from "../lang/pt.json";
 import es from "../lang/es.json";
-import Icon from "@/components/Icon.vue";
-import { LjButton, LjDialog, LjEmpty, LjInput } from "@/components/ui";
+import { LjButton, LjDialog, LjEmpty, LjIcon, LjInput } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import type { ScheduledCategory, ScheduledItem } from "@/types/Liturgy";
 

@@ -1323,6 +1323,12 @@ Sem exceção. Quando o app trocou o acervo MDI pelo Tabler, os 354 nomes do
 `Icons.ts` mudaram de uma vez; um nome escrito direto num template teria
 sobrevivido como ícone órfão, sem erro no console. `Icons.spec.ts` trava isso.
 
+O desenho vem do pacote `@tabler/icons-vue`, registrado em
+`src/components/ui/tablerIcons.ts` com um import nomeado por ícone usado — é o
+que mantém os 6250 do pacote fora do bundle. Só as marcas do projeto, que o
+Tabler não tem, seguem como arquivo em `src/assets/icons/`; o teste falha se
+alguém largar ali um SVG que o pacote já oferece.
+
 ### `KEYS.*` — UserData/AppData nunca com string literal
 
 Toda leitura/escrita em `$userdata.get/set` e `$appdata.get/set` **deve** usar

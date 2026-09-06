@@ -2,7 +2,7 @@
   <div class="opt">
     <section class="opt-section">
       <h3 class="opt-section-title">
-        <Icon :icon="ICONS.MODULES.ALBUM" size="18" />
+        <LjIcon :icon="ICONS.MODULES.ALBUM" size="18" />
         {{ $t("options.albums.title") }}
       </h3>
       <p class="opt-hint">{{ $t("options.albums.hint") }}</p>
@@ -86,8 +86,7 @@
 </template>
 
 <script setup lang="ts">
-import Icon from "@/components/Icon.vue";
-import { LjAccordion, LjDivider, LjInput } from "@/components/ui";
+import { LjAccordion, LjDivider, LjIcon, LjInput } from "@/components/ui";
 import type { LjAccordionItem } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, watch, onMounted } from "vue";

@@ -9,20 +9,20 @@
     <template #header>
       <div class="se-statusbar-inline">
         <button class="se-rename-btn" :title="t('labels.name')" @click="renameSong">
-          <Icon size="14" :icon="ICONS.ACTIONS.EDIT_OUTLINE" />
+          <LjIcon size="14" :icon="ICONS.ACTIONS.EDIT_OUTLINE" />
         </button>
         <span v-if="dirty" class="se-dirty-dot" :title="t('actions.save')">●</span>
         <span class="se-status-cell">
-          <Icon size="13" :icon="ICONS.MEDIA.IMAGE" />
+          <LjIcon size="13" :icon="ICONS.MEDIA.IMAGE" />
           <strong>{{ current + 1 }}</strong>
           /{{ slides.length }}
         </span>
         <span v-if="activeSlide.tempo_seconds > 0" class="se-status-cell">
-          <Icon size="13" :icon="ICONS.TIMER.TIMER_OUTLINE" />
+          <LjIcon size="13" :icon="ICONS.TIMER.TIMER_OUTLINE" />
           {{ formatTime(activeSlide.tempo_seconds) }}
         </span>
         <span v-if="song.audio_name" class="se-status-cell">
-          <Icon
+          <LjIcon
             size="13"
             :color="audioPlaying ? 'success' : undefined"
             :icon="audioPlaying ? ICONS.MUSIC.NOTE_EIGHTH : ICONS.MUSIC.NOTE"
@@ -32,7 +32,7 @@
           </span>
         </span>
         <span class="se-status-cell">
-          <Icon size="13" :icon="ICONS.FORMAT.ASPECT_RATIO" />
+          <LjIcon size="13" :icon="ICONS.FORMAT.ASPECT_RATIO" />
           {{ aspectRatioLabel }}
         </span>
       </div>
@@ -57,7 +57,7 @@
               >
                 <span class="se-thumb-num">{{ index + 1 }}</span>
                 <span v-if="element.tempo_seconds > 0" class="se-thumb-time">
-                  <Icon size="9" :icon="ICONS.TIMER.CLOCK" />
+                  <LjIcon size="9" :icon="ICONS.TIMER.CLOCK" />
                   {{ formatTime(element.tempo_seconds) }}
                 </span>
                 <div
@@ -70,7 +70,7 @@
             </template>
           </draggable>
           <button class="se-slide-list-add" @click="actNewSlide">
-            <Icon size="18" :icon="ICONS.ACTIONS.ADD_CIRCLE" />
+            <LjIcon size="18" :icon="ICONS.ACTIONS.ADD_CIRCLE" />
             <span>{{ t("actions.new_slide") }}</span>
           </button>
         </div>
@@ -110,7 +110,10 @@
             :title="audioPlaying ? 'Pausar' : 'Reproduzir'"
             @click="togglePlay"
           >
-            <Icon size="22" :icon="audioPlaying ? ICONS.PLAYER.PAUSE_PLAIN : ICONS.PLAYER.PLAYER" />
+            <LjIcon
+              size="22"
+              :icon="audioPlaying ? ICONS.PLAYER.PAUSE_PLAIN : ICONS.PLAYER.PLAYER"
+            />
           </button>
           <div class="se-player-time">
             <span class="se-player-time-current">{{ formatTime(audioCurrentTime) }}</span>
@@ -130,7 +133,7 @@
             <div class="se-timeline-thumb" :style="{ left: `${timelineProgress}%` }" />
           </div>
           <div class="se-player-slide-badge" :title="song.audio_name">
-            <Icon size="12" :icon="ICONS.MUSIC.NOTE" />
+            <LjIcon size="12" :icon="ICONS.MUSIC.NOTE" />
             {{ current + 1 }}/{{ slides.length }}
           </div>
         </div>
@@ -154,9 +157,9 @@
         <!-- ===== Texto ===== -->
         <details class="se-panel" open>
           <summary class="se-panel-head">
-            <Icon size="14" :icon="ICONS.BIBLE.FORMAT_PARAGRAPH" />
+            <LjIcon size="14" :icon="ICONS.BIBLE.FORMAT_PARAGRAPH" />
             <span>{{ t("labels.main_text") }}</span>
-            <Icon class="se-panel-chev" size="14" :icon="ICONS.UI.CHEVRON_DOWN" />
+            <LjIcon class="se-panel-chev" size="14" :icon="ICONS.UI.CHEVRON_DOWN" />
           </summary>
           <div class="se-panel-body">
             <textarea
@@ -187,7 +190,7 @@
                     markDirty();
                   "
                 >
-                  <Icon size="14" :icon="ICONS.FORMAT.ALIGN_LEFT" />
+                  <LjIcon size="14" :icon="ICONS.FORMAT.ALIGN_LEFT" />
                 </button>
                 <button
                   type="button"
@@ -199,7 +202,7 @@
                     markDirty();
                   "
                 >
-                  <Icon size="14" :icon="ICONS.FORMAT.ALIGN_CENTER" />
+                  <LjIcon size="14" :icon="ICONS.FORMAT.ALIGN_CENTER" />
                 </button>
                 <button
                   type="button"
@@ -211,7 +214,7 @@
                     markDirty();
                   "
                 >
-                  <Icon size="14" :icon="ICONS.FORMAT.ALIGN_RIGHT" />
+                  <LjIcon size="14" :icon="ICONS.FORMAT.ALIGN_RIGHT" />
                 </button>
               </div>
             </div>
@@ -221,9 +224,9 @@
         <!-- ===== Cor & Tipografia ===== -->
         <details class="se-panel" open>
           <summary class="se-panel-head">
-            <Icon size="14" :icon="ICONS.FORMAT.PALETTE_OUTLINE" />
+            <LjIcon size="14" :icon="ICONS.FORMAT.PALETTE_OUTLINE" />
             <span>Cor &amp; Tipografia</span>
-            <Icon class="se-panel-chev" size="14" :icon="ICONS.UI.CHEVRON_DOWN" />
+            <LjIcon class="se-panel-chev" size="14" :icon="ICONS.UI.CHEVRON_DOWN" />
           </summary>
           <div class="se-panel-body">
             <div class="se-row-inline">
@@ -293,26 +296,26 @@
         <!-- ===== Imagem de Fundo ===== -->
         <details class="se-panel">
           <summary class="se-panel-head">
-            <Icon size="14" :icon="ICONS.UI.IMAGE_OUTLINE" />
+            <LjIcon size="14" :icon="ICONS.UI.IMAGE_OUTLINE" />
             <span>Imagem de Fundo</span>
-            <Icon class="se-panel-chev" size="14" :icon="ICONS.UI.CHEVRON_DOWN" />
+            <LjIcon class="se-panel-chev" size="14" :icon="ICONS.UI.CHEVRON_DOWN" />
           </summary>
           <div class="se-panel-body">
             <div v-if="activeImageUrl" class="se-img-preview-row">
               <div class="se-img-thumb" :style="{ backgroundImage: `url(${activeImageUrl})` }" />
               <div class="se-img-actions">
                 <button type="button" class="se-act-btn" @click="actSetImage">
-                  <Icon size="14" :icon="ICONS.ACTIONS.IMAGE_EDIT" />
+                  <LjIcon size="14" :icon="ICONS.ACTIONS.IMAGE_EDIT" />
                   Trocar
                 </button>
                 <button type="button" class="se-act-btn" @click="actRemoveImage">
-                  <Icon size="14" :icon="ICONS.UI.IMAGE_OFF" />
+                  <LjIcon size="14" :icon="ICONS.UI.IMAGE_OFF" />
                   Remover
                 </button>
               </div>
             </div>
             <button v-else type="button" class="se-img-empty" @click="actSetImage">
-              <Icon size="20" :icon="ICONS.ACTIONS.IMAGE_PLUS" />
+              <LjIcon size="20" :icon="ICONS.ACTIONS.IMAGE_PLUS" />
               <span>Adicionar imagem de fundo</span>
             </button>
 
@@ -332,9 +335,9 @@
         <!-- ===== Replicar ===== -->
         <details class="se-panel">
           <summary class="se-panel-head">
-            <Icon size="14" :icon="ICONS.ACTIONS.DUPLICATE" />
+            <LjIcon size="14" :icon="ICONS.ACTIONS.DUPLICATE" />
             <span>Replicar para</span>
-            <Icon class="se-panel-chev" size="14" :icon="ICONS.UI.CHEVRON_DOWN" />
+            <LjIcon class="se-panel-chev" size="14" :icon="ICONS.UI.CHEVRON_DOWN" />
           </summary>
           <div class="se-panel-body">
             <div class="se-field">
@@ -346,7 +349,7 @@
                   :title="t('actions.replicate_bg_next')"
                   @click="replicateBg('next')"
                 >
-                  <Icon size="14" :icon="ICONS.ACTIONS.NEXT_BOLD" />
+                  <LjIcon size="14" :icon="ICONS.ACTIONS.NEXT_BOLD" />
                   Seguinte
                 </button>
                 <button
@@ -355,7 +358,7 @@
                   :title="t('actions.replicate_bg_after')"
                   @click="replicateBg('after')"
                 >
-                  <Icon size="14" :icon="ICONS.ACTIONS.EXPAND_RIGHT" />
+                  <LjIcon size="14" :icon="ICONS.ACTIONS.EXPAND_RIGHT" />
                   Todos seg.
                 </button>
                 <button
@@ -364,7 +367,7 @@
                   :title="t('actions.replicate_bg_all')"
                   @click="replicateBg('all')"
                 >
-                  <Icon size="14" :icon="ICONS.FORMAT.LINE_SPACING" />
+                  <LjIcon size="14" :icon="ICONS.FORMAT.LINE_SPACING" />
                   Todos
                 </button>
               </div>
@@ -378,7 +381,7 @@
                   :title="t('actions.replicate_text_next')"
                   @click="replicateText('next')"
                 >
-                  <Icon size="14" :icon="ICONS.ACTIONS.NEXT_BOLD" />
+                  <LjIcon size="14" :icon="ICONS.ACTIONS.NEXT_BOLD" />
                   Seguinte
                 </button>
                 <button
@@ -387,7 +390,7 @@
                   :title="t('actions.replicate_text_after')"
                   @click="replicateText('after')"
                 >
-                  <Icon size="14" :icon="ICONS.ACTIONS.EXPAND_RIGHT" />
+                  <LjIcon size="14" :icon="ICONS.ACTIONS.EXPAND_RIGHT" />
                   Todos seg.
                 </button>
                 <button
@@ -396,7 +399,7 @@
                   :title="t('actions.replicate_text_all')"
                   @click="replicateText('all')"
                 >
-                  <Icon size="14" :icon="ICONS.FORMAT.LINE_SPACING" />
+                  <LjIcon size="14" :icon="ICONS.FORMAT.LINE_SPACING" />
                   Todos
                 </button>
               </div>
@@ -414,7 +417,7 @@
 </template>
 
 <script setup>
-import Icon from "@/components/Icon.vue";
+import { LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
 import draggable from "vuedraggable";

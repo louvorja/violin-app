@@ -35,7 +35,7 @@
           :aria-pressed="selectedCategoryIds.has(cat.id)"
           @click="toggleCategoryChip(cat.id)"
         >
-          <Icon v-if="cat.iconType === 'icon'" :icon="cat.icon" :size="14" />
+          <LjIcon v-if="cat.iconType === 'icon'" :icon="cat.icon" :size="14" />
           <img v-else-if="cat.iconType === 'image'" :src="cat.icon" class="bg-chip__img" alt="" />
           {{ cat.name }}
         </button>
@@ -83,17 +83,17 @@
               autoplay
             />
             <span v-else class="bg-grid-icon">
-              <Icon
+              <LjIcon
                 :icon="file.type === 'image' ? ICONS.MEDIA.IMAGE : ICONS.MEDIA.VIDEO_FILE"
                 :size="32"
               />
             </span>
             <span class="bg-grid-badge">{{ fileBadge(file) }}</span>
             <span v-if="selectedId === file.id && !isPlaying" class="bg-grid-check">
-              <Icon :icon="ICONS.UI.CHECK_CIRCLE" :size="22" class="bg-grid-check__icon" />
+              <LjIcon :icon="ICONS.UI.CHECK_CIRCLE" :size="22" class="bg-grid-check__icon" />
             </span>
             <span v-if="selectedId === file.id && isPlaying" class="bg-grid-playing">
-              <Icon :icon="ICONS.PLAYER.PLAY" :size="20" class="bg-grid-playing__icon" />
+              <LjIcon :icon="ICONS.PLAYER.PLAY" :size="20" class="bg-grid-playing__icon" />
             </span>
           </button>
           <div class="bg-grid-name">{{ file.name }}</div>
@@ -175,7 +175,7 @@
             @click="selectCategoryForImport(UNCATEGORIZED_ID)"
           >
             <span class="bg-catlist__icon">
-              <Icon :icon="ICONS.MEDIA.IMAGE_MULTIPLE_OUTLINE" :size="24" />
+              <LjIcon :icon="ICONS.MEDIA.IMAGE_MULTIPLE_OUTLINE" :size="24" />
             </span>
             <span class="bg-catlist__name">{{ t("uncategorized") }}</span>
           </button>
@@ -187,7 +187,7 @@
             @click="selectCategoryForImport(cat.id)"
           >
             <span class="bg-catlist__icon" :style="{ color: cat.color }">
-              <Icon v-if="cat.iconType === 'icon'" :icon="cat.icon" :size="24" />
+              <LjIcon v-if="cat.iconType === 'icon'" :icon="cat.icon" :size="24" />
               <img v-else :src="cat.icon" class="bg-catlist__img" alt="" />
             </span>
             <span class="bg-catlist__name">{{ cat.name }}</span>
@@ -216,13 +216,13 @@
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
-import Icon from "@/components/Icon.vue";
 import {
   LjButton,
   LjDialog,
   LjDivider,
   LjEmpty,
   LjField,
+  LjIcon,
   LjInput,
   LjSelect,
   LjTabs,

@@ -3,7 +3,7 @@ import type { VueWrapper } from "@vue/test-utils";
 import { defineComponent, h, nextTick } from "vue";
 import { useI18n } from "vue-i18n";
 import { TabsContent } from "reka-ui";
-import Icon from "@/components/Icon.vue";
+import LjIcon from "@/components/ui/LjIcon.vue";
 import LjChip from "../LjChip.vue";
 import LjTabs, { type LjTab } from "../LjTabs.vue";
 import { expectKeyExists, mountUi } from "./mountUi";
@@ -170,7 +170,7 @@ describe("LjTabs", () => {
   it("mostra o ícone só nas abas que pedem ícone", () => {
     const w = montar({ props: { modelValue: "geral", tabs: ABAS } });
 
-    const icones = w.findAllComponents(Icon);
+    const icones = w.findAllComponents(LjIcon);
     expect(icones).toHaveLength(1);
     expect(icones[0].props("icon")).toBe("photo");
   });

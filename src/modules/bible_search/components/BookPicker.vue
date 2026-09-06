@@ -15,7 +15,7 @@
       >
         <template #item="{ item }">
           <span class="book-picker-version-option">
-            <Icon
+            <LjIcon
               v-if="!downloadedVersions.has(item.id_bible_version)"
               :icon="ICONS.ACTIONS.DOWNLOAD"
               size="small"
@@ -25,7 +25,7 @@
         </template>
         <template #value="{ item }">
           <span v-if="item" class="book-picker-version-option">
-            <Icon
+            <LjIcon
               v-if="!downloadedVersions.has(item.id_bible_version)"
               :icon="ICONS.ACTIONS.DOWNLOAD"
               size="x-small"
@@ -39,7 +39,7 @@
       <label class="book-picker-label">{{ t("modules.bible_search.ribbon.filter.books") }}</label>
       <button class="book-picker-trigger" @click="toggleOpen">
         <span class="book-picker-summary">{{ bookSummary }}</span>
-        <Icon :icon="ICONS.UI.CHEVRON_DOWN" size="14" />
+        <LjIcon :icon="ICONS.UI.CHEVRON_DOWN" size="14" />
       </button>
     </div>
     <Teleport to="body">
@@ -98,8 +98,7 @@
 </template>
 
 <script setup lang="ts">
-import Icon from "@/components/Icon.vue";
-import { LjSelect } from "@/components/ui";
+import { LjIcon, LjSelect } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, reactive, onMounted, onUnmounted, useId } from "vue";
 import { useI18n } from "vue-i18n";

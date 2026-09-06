@@ -15,7 +15,7 @@
           <slot name="toolbar">
             <header class="lj-window-toolbar">
               <div v-if="icon" class="lj-window-icon">
-                <Icon :icon="icon" size="20" />
+                <LjIcon :icon="icon" size="20" />
               </div>
               <div
                 v-if="image && viewport.width.value > 500"
@@ -42,7 +42,7 @@
                   :title="$t('shell.window.minimize')"
                   @click="minimize()"
                 >
-                  <Icon :icon="ICONS.ACTIONS.MINUS" size="16" />
+                  <LjIcon :icon="ICONS.ACTIONS.MINUS" size="16" />
                 </button>
                 <button
                   v-if="closable"
@@ -51,7 +51,7 @@
                   :title="$t('alert.close')"
                   @click="close()"
                 >
-                  <Icon :icon="ICONS.ACTIONS.CLOSE" size="16" />
+                  <LjIcon :icon="ICONS.ACTIONS.CLOSE" size="16" />
                 </button>
               </div>
             </header>
@@ -100,7 +100,7 @@
 </template>
 
 <script setup>
-import Icon from "@/components/Icon.vue";
+import { LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, watch, onMounted, useSlots } from "vue";
 import { DialogContent, DialogOverlay, DialogPortal, DialogRoot, DialogTitle } from "reka-ui";

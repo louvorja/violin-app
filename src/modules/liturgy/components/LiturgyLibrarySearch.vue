@@ -41,7 +41,7 @@
             @dblclick="selectRow(row)"
           >
             <td class="lls-icon-cell">
-              <Icon :icon="row.icon" :size="16" />
+              <LjIcon :icon="row.icon" :size="16" />
             </td>
             <td>{{ row.name }}</td>
             <td v-if="showDetail" class="lls-detail-cell">{{ row.detail }}</td>
@@ -69,8 +69,7 @@
  */
 import { computed, nextTick, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import Icon from "@/components/Icon.vue";
-import { LjButton, LjDialog, LjField, LjInput } from "@/components/ui";
+import { LjButton, LjDialog, LjField, LjIcon, LjInput } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import pt from "../lang/pt.json";
 import es from "../lang/es.json";

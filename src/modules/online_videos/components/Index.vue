@@ -3,10 +3,10 @@
     <template #header>
       <div class="ov-header">
         <div class="ov-search-wrap">
-          <Icon :icon="ICONS.ACTIONS.SEARCH" size="16" class="ov-search-icon" />
+          <LjIcon :icon="ICONS.ACTIONS.SEARCH" size="16" class="ov-search-icon" />
           <input v-model="search" type="text" class="ov-search-input" :placeholder="t('search')" />
           <button v-if="search" type="button" class="ov-search-clear" @click="search = ''">
-            <Icon :icon="ICONS.ACTIONS.CLOSE" size="14" />
+            <LjIcon :icon="ICONS.ACTIONS.CLOSE" size="14" />
           </button>
         </div>
       </div>
@@ -37,7 +37,7 @@
       <!-- Botão voltar -->
       <div v-else-if="level > 1" class="ov-back">
         <LjButton variant="ghost" size="sm" icon="None" icon-only @click="goBack">
-          <Icon :icon="ICONS.UI.ARROW_LEFT" />
+          <LjIcon :icon="ICONS.UI.ARROW_LEFT" />
         </LjButton>
         <span class="ov-back-title">{{ backTitle }}</span>
       </div>
@@ -105,8 +105,7 @@
 </template>
 
 <script setup lang="ts">
-import { LjAlert, LjButton, LjProgress } from "@/components/ui";
-import Icon from "@/components/Icon.vue";
+import { LjAlert, LjButton, LjIcon, LjProgress } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, watch, onMounted } from "vue";
 import { useI18n } from "vue-i18n";

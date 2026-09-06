@@ -48,7 +48,7 @@
         target="_blank"
         rel="noopener noreferrer"
       >
-        <Icon :icon="ICONS.UI.WEB" :size="16" />
+        <LjIcon :icon="ICONS.UI.WEB" :size="16" />
         {{ $t("about.links.website") }}
       </a>
       <a
@@ -57,11 +57,11 @@
         target="_blank"
         rel="noopener noreferrer"
       >
-        <Icon :icon="ICONS.SOCIAL.CAST" :size="16" />
+        <LjIcon :icon="ICONS.SOCIAL.CAST" :size="16" />
         {{ $t("about.links.online") }}
       </a>
       <a class="about-link" href="mailto:contato@louvorja.com.br" rel="noopener noreferrer">
-        <Icon :icon="ICONS.SOCIAL.EMAIL" :size="16" />
+        <LjIcon :icon="ICONS.SOCIAL.EMAIL" :size="16" />
         {{ $t("about.links.email") }}
       </a>
       <a
@@ -70,7 +70,7 @@
         target="_blank"
         rel="noopener noreferrer"
       >
-        <Icon
+        <LjIcon
           :icon="ICONS.SOCIAL.FACEBOOK"
           :size="16"
           class="about-link__icon about-link__icon--facebook"
@@ -83,7 +83,7 @@
         target="_blank"
         rel="noopener noreferrer"
       >
-        <Icon
+        <LjIcon
           :icon="ICONS.SOCIAL.INSTAGRAM"
           :size="16"
           class="about-link__icon about-link__icon--instagram"
@@ -96,7 +96,7 @@
         target="_blank"
         rel="noopener noreferrer"
       >
-        <Icon
+        <LjIcon
           :icon="ICONS.SOCIAL.WHATSAPP"
           :size="16"
           class="about-link__icon about-link__icon--whatsapp"
@@ -109,7 +109,7 @@
         target="_blank"
         rel="noopener noreferrer"
       >
-        <Icon
+        <LjIcon
           :icon="ICONS.SOCIAL.TELEGRAM"
           :size="16"
           class="about-link-icon--telegram about-link__icon about-link__icon--telegram"
@@ -122,7 +122,7 @@
         target="_blank"
         rel="noopener noreferrer"
       >
-        <Icon :icon="ICONS.UI.BUG" :size="16" />
+        <LjIcon :icon="ICONS.UI.BUG" :size="16" />
         {{ $t("shell.appmenu_items.feedback") }}
       </a>
     </div>
@@ -151,8 +151,7 @@ import { ref, computed, onMounted } from "vue";
 import packageJson from "@root/package.json";
 import Platform from "@/helpers/Platform";
 import $database from "@/helpers/Database";
-import Icon from "@/components/Icon.vue";
-import { LjCard } from "@/components/ui";
+import { LjCard, LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import LjLogo from "@/components/LjLogo.vue";
 import ContributorCard from "@/components/ContributorCard.vue";

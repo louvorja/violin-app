@@ -49,7 +49,7 @@
             :aria-label="t('inputs.color')"
             @click.stop="presetsOpen = !presetsOpen"
           >
-            <Icon :icon="ICONS.UI.MENU_DOWN" :size="14" />
+            <LjIcon :icon="ICONS.UI.MENU_DOWN" :size="14" />
           </button>
           <div v-if="presetsOpen" class="lif-color__presets" @click="presetsOpen = false">
             <span
@@ -421,13 +421,13 @@ import { ref, watch, computed, nextTick } from "vue";
 import { useI18n } from "vue-i18n";
 import pt from "../lang/pt.json";
 import es from "../lang/es.json";
-import Icon from "@/components/Icon.vue";
 import {
   LjButton,
   LjCheckbox,
   LjChip,
   LjDialog,
   LjField,
+  LjIcon,
   LjInput,
   LjSelect,
   LjTextarea,

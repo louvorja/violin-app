@@ -37,14 +37,14 @@
           class="image-picker-delete"
           @click.stop="deleteImage(img)"
         >
-          <Icon :icon="ICONS.ACTIONS.DELETE" size="16" />
+          <LjIcon :icon="ICONS.ACTIONS.DELETE" size="16" />
         </LjButton>
       </div>
     </div>
 
     <!-- Drag-drop zone -->
     <div v-if="images.length === 0 && !selectedImage" class="image-picker-empty">
-      <Icon :icon="ICONS.ACTIONS.IMAGE_PLUS" size="36" color="grey" />
+      <LjIcon :icon="ICONS.ACTIONS.IMAGE_PLUS" size="36" color="grey" />
       <p>{{ t("slot.drag_drop_hint") }}</p>
     </div>
 
@@ -59,15 +59,14 @@
     />
 
     <LjButton variant="default" size="sm" class="image-picker-upload-btn" @click="openFilePicker">
-      <Icon start :icon="ICONS.ACTIONS.UPLOAD" />
+      <LjIcon start :icon="ICONS.ACTIONS.UPLOAD" />
       {{ t("slot.image_library") }}
     </LjButton>
   </div>
 </template>
 
 <script setup>
-import { LjButton } from "@/components/ui";
-import Icon from "@/components/Icon.vue";
+import { LjButton, LjIcon } from "@/components/ui";
 import { ref, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
 import {

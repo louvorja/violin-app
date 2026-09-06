@@ -24,8 +24,8 @@
             @select="item.action?.()"
           >
             <span class="lj-menu__mark">
-              <Icon v-if="item.checked" :icon="ICONS.UI.CHECK" :size="12" />
-              <Icon v-else-if="item.icon" :icon="item.icon" :size="13" />
+              <LjIcon v-if="item.checked" :icon="ICONS.UI.CHECK" :size="12" />
+              <LjIcon v-else-if="item.icon" :icon="item.icon" :size="13" />
             </span>
             <span class="lj-menu__text">
               {{ item.label }}
@@ -40,7 +40,7 @@
             @select="item.action?.()"
           >
             <span class="lj-menu__mark">
-              <Icon v-if="item.icon" :icon="item.icon" :size="13" />
+              <LjIcon v-if="item.icon" :icon="item.icon" :size="13" />
             </span>
             <span class="lj-menu__text">
               {{ item.label }}
@@ -56,6 +56,7 @@
 </template>
 
 <script setup lang="ts">
+import { LjIcon } from "@/components/ui";
 import { ref } from "vue";
 import {
   DropdownMenuCheckboxItem,
@@ -67,7 +68,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "reka-ui";
-import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 
 export interface LjMenuItem {

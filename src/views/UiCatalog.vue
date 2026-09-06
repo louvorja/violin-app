@@ -56,6 +56,35 @@
         </div>
       </section>
 
+      <!-- ══════════ Ícones ══════════ -->
+      <section class="cat__section">
+        <h2 class="cat__h2">LjIcon</h2>
+        <p class="cat__lead">
+          Dois acervos atrás de uma prop só. O desenho de interface vem do pacote
+          <code>@tabler/icons-vue</code>
+          ; as marcas do projeto, que o Tabler não tem, seguem como arquivo em
+          <code>src/assets/icons/</code>
+          . Quem chama passa o nome por
+          <code>ICONS.*</code>
+          e não precisa saber a procedência.
+        </p>
+        <div class="cat__row">
+          <LjIcon :icon="ICONS.PLAYER.PLAY" size="x-small" />
+          <LjIcon :icon="ICONS.PLAYER.PLAY" size="small" />
+          <LjIcon :icon="ICONS.PLAYER.PLAY" />
+          <LjIcon :icon="ICONS.PLAYER.PLAY" size="large" />
+          <LjIcon :icon="ICONS.PLAYER.PLAY" size="x-large" />
+        </div>
+        <div class="cat__row" style="margin-top: 16px">
+          <LjIcon :icon="ICONS.ACTIONS.EDIT" color="primary" />
+          <LjIcon :icon="ICONS.ACTIONS.EDIT" color="success" />
+          <LjIcon :icon="ICONS.ACTIONS.EDIT" color="error" />
+          <LjIcon :icon="ICONS.ACTIONS.EDIT" disabled />
+          <LjIcon :icon="ICONS.CUSTOM.JA" size="large" />
+          <LjIcon :icon="ICONS.CUSTOM.IASD" size="large" />
+        </div>
+      </section>
+
       <!-- ══════════ Botão ══════════ -->
       <section class="cat__section">
         <h2 class="cat__h2">LjButton</h2>
@@ -412,6 +441,7 @@ import {
   LjDialog,
   LjMenu,
   LjPopover,
+  LjIcon,
   LjSlider,
   LjTabs,
   LjToast,

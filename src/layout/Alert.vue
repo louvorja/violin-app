@@ -11,7 +11,7 @@
           tabindex="-1"
         >
           <header v-if="alert.title" class="alert-header">
-            <Icon :icon="iconForVariant" size="20" class="alert-header-icon" />
+            <LjIcon :icon="iconForVariant" size="20" class="alert-header-icon" />
             <h3 class="alert-title">
               <span v-if="alert.translate" v-html="$t(alert.title)" />
               <span v-else v-html="alert.title" />
@@ -55,7 +55,7 @@
 </template>
 
 <script setup>
-import Icon from "@/components/Icon.vue";
+import { LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { computed, nextTick, ref, watch } from "vue";
 import $appdata from "@/helpers/AppData";

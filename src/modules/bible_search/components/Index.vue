@@ -3,7 +3,7 @@
     <template #header>
       <div class="bs-header">
         <div ref="searchBoxRef" class="bs-search-input" @mousedown="openHistory">
-          <Icon :icon="ICONS.ACTIONS.SEARCH" size="small" class="bs-search-input__icon" />
+          <LjIcon :icon="ICONS.ACTIONS.SEARCH" size="small" class="bs-search-input__icon" />
           <div class="bs-search-input__terms">
             <LjChip
               v-for="(term, i) in searchTerms"
@@ -34,7 +34,7 @@
             :aria-label="$t('components.ui.clear')"
             @click="clearSearch"
           >
-            <Icon :icon="ICONS.ACTIONS.CLOSE" size="x-small" />
+            <LjIcon :icon="ICONS.ACTIONS.CLOSE" size="x-small" />
           </button>
         </div>
         <Teleport to="body">
@@ -50,7 +50,7 @@
               :class="{ 'bs-history__item--active': searchTerms.includes(term) }"
               @mousedown.prevent="toggleHistoryTerm(term)"
             >
-              <Icon size="small" class="lj-u-muted" :icon="ICONS.UI.HISTORY" />
+              <LjIcon size="small" class="lj-u-muted" :icon="ICONS.UI.HISTORY" />
               <span class="bs-history__label lj-u-truncate">{{ term }}</span>
               <button
                 type="button"
@@ -58,7 +58,7 @@
                 :aria-label="$t('components.ui.remove')"
                 @mousedown.stop.prevent="removeFromHistory(term)"
               >
-                <Icon size="x-small" class="lj-u-muted" :icon="ICONS.ACTIONS.CANCEL" />
+                <LjIcon size="x-small" class="lj-u-muted" :icon="ICONS.ACTIONS.CANCEL" />
               </button>
             </div>
           </div>
@@ -111,7 +111,7 @@
         </main>
 
         <div v-else-if="noResults" class="bs-empty">
-          <Icon :icon="ICONS.MODULES.BIBLE_SEARCH" size="48" color="primary" />
+          <LjIcon :icon="ICONS.MODULES.BIBLE_SEARCH" size="48" color="primary" />
           <p>{{ t("empty_hint") }}</p>
         </div>
       </template>
@@ -120,8 +120,7 @@
 </template>
 
 <script setup lang="ts">
-import { LjButton, LjChip, LjSpinner } from "@/components/ui";
-import Icon from "@/components/Icon.vue";
+import { LjButton, LjChip, LjIcon, LjSpinner } from "@/components/ui";
 import { ref, computed, onMounted, onUnmounted, watch, type Ref } from "vue";
 import { module as manifest } from "../manifest";
 import type { BibleBook, BibleVersion, BibleSearchResult } from "@/types/Bible";

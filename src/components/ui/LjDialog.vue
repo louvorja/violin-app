@@ -12,7 +12,7 @@
         @interact-outside="onDismiss"
       >
         <header class="lj-dialog__header">
-          <Icon
+          <LjIcon
             v-if="icon"
             :icon="icon"
             :size="16"
@@ -21,7 +21,7 @@
           />
           <DialogTitle class="lj-dialog__title">{{ title }}</DialogTitle>
           <DialogClose v-if="!persistent" class="lj-dialog__close" :aria-label="t('actions.close')">
-            <Icon :icon="ICONS.ACTIONS.CLOSE" :size="15" />
+            <LjIcon :icon="ICONS.ACTIONS.CLOSE" :size="15" />
           </DialogClose>
         </header>
 
@@ -38,6 +38,7 @@
 </template>
 
 <script setup lang="ts">
+import { LjIcon } from "@/components/ui";
 import { computed } from "vue";
 import {
   DialogClose,
@@ -49,7 +50,6 @@ import {
   DialogTitle,
 } from "reka-ui";
 import { useI18n } from "vue-i18n";
-import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 
 const { t } = useI18n();

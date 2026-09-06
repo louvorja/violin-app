@@ -10,7 +10,7 @@
       <li v-for="ann in announcements" :key="ann.id">
         <button type="button" class="ra-item" @click="projectAnnouncement(ann)">
           <span class="ra-item__badge">
-            <Icon :icon="ICONS.MODULES.ANNOUNCEMENTS" size="18" />
+            <LjIcon :icon="ICONS.MODULES.ANNOUNCEMENTS" size="18" />
           </span>
           <span class="ra-item__text">
             <span class="ra-item__title lj-u-truncate">{{ ann.nome }}</span>
@@ -18,7 +18,7 @@
               {{ t("remote_control.announcements.with_image") }}
             </span>
           </span>
-          <Icon :icon="ICONS.PLAYER.PLAY_OUTLINE" color="primary" />
+          <LjIcon :icon="ICONS.PLAYER.PLAY_OUTLINE" color="primary" />
         </button>
       </li>
     </ul>
@@ -26,8 +26,7 @@
 </template>
 
 <script setup lang="ts">
-import Icon from "@/components/Icon.vue";
-import { LjSpinner } from "@/components/ui";
+import { LjIcon, LjSpinner } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, onMounted } from "vue";
 import { useI18n } from "vue-i18n";

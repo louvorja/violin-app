@@ -20,6 +20,7 @@ export { default as LjChip } from "./LjChip.vue";
 export { default as LjDivider } from "./LjDivider.vue";
 export { default as LjEmpty } from "./LjEmpty.vue";
 export { default as LjField } from "./LjField.vue";
+export { default as LjIcon } from "./LjIcon.vue";
 export { default as LjInput } from "./LjInput.vue";
 export { default as LjProgress } from "./LjProgress.vue";
 export { default as LjSkeleton } from "./LjSkeleton.vue";

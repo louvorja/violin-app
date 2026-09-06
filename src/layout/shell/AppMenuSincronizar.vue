@@ -6,7 +6,7 @@
 
     <section v-if="isDesktop" class="opt-section">
       <h3 class="opt-section-title">
-        <Icon :icon="ICONS.UI.SYNC_CLOUD" size="18" />
+        <LjIcon :icon="ICONS.UI.SYNC_CLOUD" size="18" />
         {{ $t("options.collections_download.connection") }}
       </h3>
       <div class="opt-row opt-row--col">
@@ -408,7 +408,7 @@
             <label class="opt-label sinc-storage-label">
               {{ $t("options.storage.folder") }}
               <LjChip v-if="useClassicDir" size="sm" variant="primary">
-                <Icon :icon="ICONS.PROJETOS.DELPHI" size="12" />
+                <LjIcon :icon="ICONS.PROJETOS.DELPHI" size="12" />
                 {{ $t("options.storage.classic_version") }}
               </LjChip>
             </label>
@@ -425,7 +425,7 @@
                   {{ $t("options.storage.change_folder") }}
                 </button>
                 <button v-if="!useClassicDir" type="button" class="opt-btn" @click="detectClassic">
-                  <Icon :icon="ICONS.PROJETOS.DELPHI" size="14" />
+                  <LjIcon :icon="ICONS.PROJETOS.DELPHI" size="14" />
                   {{ $t("options.storage.use_classic_dir") }}
                 </button>
               </div>
@@ -500,15 +500,15 @@
 
           <div class="opt-actions">
             <button type="button" class="opt-btn" @click="clearJson">
-              <Icon :icon="ICONS.ACTIONS.DATABASE_REMOVE" size="14" />
+              <LjIcon :icon="ICONS.ACTIONS.DATABASE_REMOVE" size="14" />
               {{ $t("options.storage.clear_cache") }}
             </button>
             <button type="button" class="opt-btn opt-btn--danger" @click="clearFiles">
-              <Icon :icon="ICONS.ACTIONS.DELETE_FILLED" size="14" />
+              <LjIcon :icon="ICONS.ACTIONS.DELETE_FILLED" size="14" />
               {{ $t("options.storage.clear_files") }}
             </button>
             <button type="button" class="opt-btn" :disabled="loading" @click="reloadStats">
-              <Icon :icon="ICONS.ACTIONS.REFRESH" size="14" />
+              <LjIcon :icon="ICONS.ACTIONS.REFRESH" size="14" />
               {{ $t("options.storage.refresh") }}
             </button>
             <button
@@ -518,7 +518,7 @@
               :disabled="restoringDb || sync.bundleInstalling.value"
               @click="restoreDatabase"
             >
-              <Icon :icon="ICONS.ACTIONS.DATABASE_REFRESH" size="14" />
+              <LjIcon :icon="ICONS.ACTIONS.DATABASE_REFRESH" size="14" />
               {{ $t("options.storage.restore_db") }}
             </button>
           </div>
@@ -548,8 +548,7 @@ import $userdata from "@/helpers/UserData";
 import $alert from "@/helpers/Alert";
 import { KEYS, moduleShowInMainMenu } from "@/constants/UserDataKeys";
 import { ICONS } from "@/config/Icons";
-import Icon from "@/components/Icon.vue";
-import { LjChip, LjProgress, LjTabs } from "@/components/ui";
+import { LjChip, LjIcon, LjProgress, LjTabs } from "@/components/ui";
 import type { LjTab } from "@/components/ui";
 import { useSyncManager } from "@/composables/useSyncManager";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";

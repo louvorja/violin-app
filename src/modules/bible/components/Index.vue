@@ -46,13 +46,13 @@
         <LjPopover align="start">
           <template #trigger>
             <button type="button" class="bible-verses-trigger" :aria-label="t('verses')">
-              <Icon
+              <LjIcon
                 :icon="ICONS.FORMAT.LIST_NUMBERED"
                 :size="15"
                 class="bible-verses-trigger__ic"
               />
               <span class="bible-verses-trigger__text lj-u-truncate">{{ versesSummary }}</span>
-              <Icon :icon="ICONS.UI.CHEVRON_DOWN" :size="15" class="bible-verses-trigger__ic" />
+              <LjIcon :icon="ICONS.UI.CHEVRON_DOWN" :size="15" class="bible-verses-trigger__ic" />
             </button>
           </template>
           <div class="bible-verses-options">
@@ -291,12 +291,12 @@ import {
   LjButton,
   LjCheckbox,
   LjDivider,
+  LjIcon,
   LjInput,
   LjPopover,
   LjSelect,
   LjSkeleton,
 } from "@/components/ui";
-import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick, type Ref } from "vue";
 import { useI18n } from "vue-i18n";

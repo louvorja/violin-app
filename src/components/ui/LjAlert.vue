@@ -4,7 +4,7 @@
     :class="`lj-alert--${variant}`"
     :role="variant === 'danger' ? 'alert' : 'status'"
   >
-    <Icon v-if="resolvedIcon" :icon="resolvedIcon" :size="16" class="lj-alert__icon" />
+    <LjIcon v-if="resolvedIcon" :icon="resolvedIcon" :size="16" class="lj-alert__icon" />
     <div class="lj-alert__body">
       <strong v-if="title" class="lj-alert__title">{{ title }}</strong>
       <div class="lj-alert__text">
@@ -18,15 +18,15 @@
       :aria-label="t('actions.close')"
       @click="$emit('dismiss')"
     >
-      <Icon :icon="ICONS.ACTIONS.CLOSE" :size="14" />
+      <LjIcon :icon="ICONS.ACTIONS.CLOSE" :size="14" />
     </button>
   </div>
 </template>
 
 <script setup lang="ts">
+import { LjIcon } from "@/components/ui";
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
-import Icon from "@/components/Icon.vue";
 import { ICONS } from "@/config/Icons";
 
 const props = withDefaults(

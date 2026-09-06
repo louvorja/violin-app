@@ -13,7 +13,7 @@
     <BackgroundSoundPlayer v-if="hasBgSound" />
     <FileProjectionBar v-if="hasProjection" />
     <div v-if="playlist.isActive.value" class="playlist-bar">
-      <Icon :icon="ICONS.PLAYER.PLAYLIST" :size="14" class="playlist-bar-icon" />
+      <LjIcon :icon="ICONS.PLAYER.PLAYLIST" :size="14" class="playlist-bar-icon" />
       <span class="playlist-bar-name">{{ playlist.currentPlaylist.value?.name }}</span>
       <span class="playlist-bar-meta">
         {{ playlist.playedCount.value }}/{{ playlist.totalSongs.value }} ·
@@ -29,7 +29,7 @@
             :aria-label="$t('shell.player.prev')"
             @click="playlist.playPrev()"
           >
-            <Icon :icon="ICONS.PLAYER.PREV" :size="18" />
+            <LjIcon :icon="ICONS.PLAYER.PREV" :size="18" />
           </button>
         </LjTooltip>
         <LjTooltip :text="$t('shell.player.next')">
@@ -40,7 +40,7 @@
             :aria-label="$t('shell.player.next')"
             @click="playlist.playNext()"
           >
-            <Icon :icon="ICONS.PLAYER.NEXT" :size="18" />
+            <LjIcon :icon="ICONS.PLAYER.NEXT" :size="18" />
           </button>
         </LjTooltip>
         <LjTooltip :text="$t('shell.player.close')">
@@ -50,14 +50,14 @@
             :aria-label="$t('shell.player.close')"
             @click="playlist.stopPlaylist()"
           >
-            <Icon :icon="ICONS.ACTIONS.CLOSE" :size="16" />
+            <LjIcon :icon="ICONS.ACTIONS.CLOSE" :size="16" />
           </button>
         </LjTooltip>
       </div>
     </div>
     <div v-if="hasPlayer" class="player">
       <div class="player-title" :class="{ 'player-title--youtube': isYouTube }">
-        <Icon
+        <LjIcon
           :icon="isYouTube ? ICONS.MEDIA.YOUTUBE : ICONS.MEDIA.AUDIO"
           :size="14"
           class="player-title-icon"
@@ -79,7 +79,7 @@
               :aria-label="$t('shell.player.first')"
               @click="firstSlide()"
             >
-              <Icon :icon="ICONS.PLAYER.PREV" :size="22" />
+              <LjIcon :icon="ICONS.PLAYER.PREV" :size="22" />
             </button>
           </LjTooltip>
           <LjTooltip v-if="hasSlides" :text="$t('shell.player.prev')">
@@ -90,7 +90,7 @@
               :aria-label="$t('shell.player.prev')"
               @click="prevSlide()"
             >
-              <Icon :icon="ICONS.ACTIONS.PREVIOUS" :size="22" />
+              <LjIcon :icon="ICONS.ACTIONS.PREVIOUS" :size="22" />
             </button>
           </LjTooltip>
           <LjTooltip v-if="hasAudio" :text="$t('shell.player.rewind')">
@@ -100,7 +100,7 @@
               :aria-label="$t('shell.player.rewind')"
               @click="rewind()"
             >
-              <Icon :icon="ICONS.PLAYER.REWIND_10" :size="20" />
+              <LjIcon :icon="ICONS.PLAYER.REWIND_10" :size="20" />
             </button>
           </LjTooltip>
           <LjTooltip
@@ -113,7 +113,10 @@
               :aria-label="isPaused ? $t('shell.player.play') : $t('shell.player.pause')"
               @click="togglePlay"
             >
-              <Icon :icon="isPaused ? ICONS.PLAYER.PLAYER : ICONS.PLAYER.PAUSE_PLAIN" :size="24" />
+              <LjIcon
+                :icon="isPaused ? ICONS.PLAYER.PLAYER : ICONS.PLAYER.PAUSE_PLAIN"
+                :size="24"
+              />
             </button>
           </LjTooltip>
           <LjTooltip v-if="hasAudio" :text="$t('shell.player.forward')">
@@ -123,7 +126,7 @@
               :aria-label="$t('shell.player.forward')"
               @click="forward()"
             >
-              <Icon :icon="ICONS.PLAYER.FORWARD_10" :size="20" />
+              <LjIcon :icon="ICONS.PLAYER.FORWARD_10" :size="20" />
             </button>
           </LjTooltip>
           <LjTooltip v-if="hasSlides" :text="$t('shell.player.next')">
@@ -134,7 +137,7 @@
               :aria-label="$t('shell.player.next')"
               @click="nextSlide()"
             >
-              <Icon :icon="ICONS.ACTIONS.NEXT" :size="22" />
+              <LjIcon :icon="ICONS.ACTIONS.NEXT" :size="22" />
             </button>
           </LjTooltip>
           <LjTooltip v-if="hasSlides" :text="$t('shell.player.last')">
@@ -145,7 +148,7 @@
               :aria-label="$t('shell.player.last')"
               @click="lastSlide()"
             >
-              <Icon :icon="ICONS.PLAYER.NEXT" :size="22" />
+              <LjIcon :icon="ICONS.PLAYER.NEXT" :size="22" />
             </button>
           </LjTooltip>
           <LjDivider vertical />
@@ -156,7 +159,7 @@
               :aria-label="$t('shell.player.close')"
               @click="closeMedia()"
             >
-              <Icon :icon="ICONS.ACTIONS.CLOSE" :size="20" />
+              <LjIcon :icon="ICONS.ACTIONS.CLOSE" :size="20" />
             </button>
           </LjTooltip>
         </div>
@@ -179,7 +182,7 @@
               :aria-label="$t('shell.player.maximize')"
               @click="maximizeMedia()"
             >
-              <Icon :icon="ICONS.UI.OPEN_IN_APP" :size="16" />
+              <LjIcon :icon="ICONS.UI.OPEN_IN_APP" :size="16" />
             </button>
           </LjTooltip>
           <LjTooltip :text="$t('shell.player.fullscreen')">
@@ -189,7 +192,7 @@
               :aria-label="$t('shell.player.fullscreen')"
               @click="fullscreenMedia()"
             >
-              <Icon :icon="ICONS.PLAYER.FULLSCREEN" :size="16" />
+              <LjIcon :icon="ICONS.PLAYER.FULLSCREEN" :size="16" />
             </button>
           </LjTooltip>
         </div>
@@ -224,8 +227,7 @@ import Database from "@/helpers/Database";
 import DateTime from "@/helpers/DateTime";
 import BackgroundSoundPlayer from "@/components/BackgroundSoundPlayer.vue";
 import FileProjectionBar from "@/components/FileProjectionBar.vue";
-import Icon from "@/components/Icon.vue";
-import { LjChip, LjDivider, LjTooltip } from "@/components/ui";
+import { LjChip, LjDivider, LjIcon, LjTooltip } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { useFileProjection } from "@/composables/useFileProjection";
 import { usePlaylistPlayback } from "@/modules/musics/composables/usePlaylistPlayback";

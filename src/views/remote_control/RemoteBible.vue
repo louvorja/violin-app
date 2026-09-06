@@ -24,7 +24,7 @@
         <template #value="{ item }">
           <span class="rb-version">
             <span class="lj-u-truncate">{{ item?.name }}</span>
-            <Icon
+            <LjIcon
               v-if="item && !downloadedVersions.has(item.id_bible_version)"
               :icon="ICONS.ACTIONS.DOWNLOAD_OUTLINE"
               size="small"
@@ -35,7 +35,7 @@
         <template #item="{ item }">
           <span class="rb-version">
             <span>{{ item.name }}</span>
-            <Icon
+            <LjIcon
               v-if="!downloadedVersions.has(item.id_bible_version)"
               :icon="ICONS.ACTIONS.DOWNLOAD_OUTLINE"
               size="small"
@@ -84,7 +84,7 @@
     >
       <LjDivider class="rb-rule-mid" />
       <div class="rb-ref lj-u-caption">
-        <Icon :icon="ICONS.BIBLE.BOOK_OPEN" size="small" />
+        <LjIcon :icon="ICONS.BIBLE.BOOK_OPEN" size="small" />
         <span class="lj-u-truncate">{{ activeBible.reference }}</span>
       </div>
       <div class="rb-grid">
@@ -107,8 +107,7 @@
 </template>
 
 <script setup lang="ts">
-import { LjButton, LjDivider, LjField, LjSelect } from "@/components/ui";
-import Icon from "@/components/Icon.vue";
+import { LjButton, LjDivider, LjField, LjIcon, LjSelect } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, onMounted } from "vue";
 import { useI18n } from "vue-i18n";

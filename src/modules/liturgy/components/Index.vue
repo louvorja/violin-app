@@ -8,7 +8,7 @@
     @drop.prevent="onDrop"
   >
     <div v-if="isDraggingOver" class="liturgy-drop-overlay">
-      <Icon :icon="ICONS.ACTIONS.ADD_CIRCLE" size="48" />
+      <LjIcon :icon="ICONS.ACTIONS.ADD_CIRCLE" size="48" />
       <span>{{ t("data.drop_hint") }}</span>
     </div>
 
@@ -117,8 +117,7 @@
 </template>
 
 <script setup lang="ts">
-import { LjButton, LjDialog, LjField, LjSelect } from "@/components/ui";
-import Icon from "@/components/Icon.vue";
+import { LjButton, LjDialog, LjField, LjIcon, LjSelect } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
 import { useI18n } from "vue-i18n";

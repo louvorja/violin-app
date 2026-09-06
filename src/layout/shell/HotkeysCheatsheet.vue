@@ -26,7 +26,7 @@
 
     <template #footer>
       <span class="hk-tip">
-        <Icon :icon="ICONS.UI.INFORMATION_OUTLINE" size="13" />
+        <LjIcon :icon="ICONS.UI.INFORMATION_OUTLINE" size="13" />
         {{ $t("hotkeys.tip", "Pressione Esc para fechar") }}
       </span>
     </template>
@@ -34,8 +34,7 @@
 </template>
 
 <script setup>
-import Icon from "@/components/Icon.vue";
-import { LjDialog } from "@/components/ui";
+import { LjDialog, LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { computed } from "vue";
 import Hotkeys from "@/helpers/Hotkeys";

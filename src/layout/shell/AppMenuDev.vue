@@ -56,15 +56,15 @@
 
       <div class="opt-folder-actions">
         <button type="button" class="opt-btn" @click="reloadAllWindows">
-          <Icon :icon="ICONS.ACTIONS.REFRESH" size="14" />
+          <LjIcon :icon="ICONS.ACTIONS.REFRESH" size="14" />
           {{ $t("options.dev.reload_all") }}
         </button>
         <button type="button" class="opt-btn" @click="openDevToolsConsole">
-          <Icon :icon="ICONS.UI.CONSOLE" size="14" />
+          <LjIcon :icon="ICONS.UI.CONSOLE" size="14" />
           {{ $t("options.dev.open_devtools_console") }}
         </button>
         <button type="button" class="opt-btn" @click="clearDbCache">
-          <Icon :icon="ICONS.UI.BROOM" size="14" />
+          <LjIcon :icon="ICONS.UI.BROOM" size="14" />
           {{ $t("options.dev.clear_db_cache") }}
         </button>
       </div>
@@ -105,7 +105,7 @@
 </template>
 
 <script setup lang="ts">
-import Icon from "@/components/Icon.vue";
+import { LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { onMounted, ref } from "vue";
 import $userdata from "@/helpers/UserData";

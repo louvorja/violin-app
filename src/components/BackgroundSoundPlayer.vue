@@ -2,7 +2,7 @@
   <div class="bgs-footer">
     <div class="bgs-footer-row">
       <div class="bgs-footer-info">
-        <Icon :icon="ICONS.MODULES.BACKGROUND_SOUND" size="16" class="bgs-footer-icon" />
+        <LjIcon :icon="ICONS.MODULES.BACKGROUND_SOUND" size="16" class="bgs-footer-icon" />
         <span class="bgs-footer-file lj-u-truncate">
           {{ bg.currentFile.value?.name || bg.currentFile.value?.fileName }}
         </span>
@@ -54,7 +54,7 @@
       </div>
 
       <div class="bgs-footer-volume">
-        <Icon :icon="volumeIcon" size="14" class="bgs-footer-vol-icon" @click="toggleMute" />
+        <LjIcon :icon="volumeIcon" size="14" class="bgs-footer-vol-icon" @click="toggleMute" />
         <LjSlider
           :model-value="bg.volume.value"
           :min="0"
@@ -68,8 +68,7 @@
 </template>
 
 <script setup lang="ts">
-import { LjButton, LjSlider } from "@/components/ui";
-import Icon from "@/components/Icon.vue";
+import { LjButton, LjIcon, LjSlider } from "@/components/ui";
 import { computed, ref } from "vue";
 import { useBackgroundSound } from "@/composables/useBackgroundSound";
 import { saveSetting } from "@/helpers/SettingsStorage";

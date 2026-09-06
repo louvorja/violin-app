@@ -9,7 +9,7 @@
     <!-- Detected -->
     <div v-else-if="view === 'detected'" class="cv-stack">
       <div class="cv-row">
-        <Icon :icon="ICONS.UI.CHECK" :size="18" class="cv-ok" />
+        <LjIcon :icon="ICONS.UI.CHECK" :size="18" class="cv-ok" />
         <span>{{ $t("classic.detected") }}</span>
       </div>
 
@@ -34,7 +34,7 @@
 
     <!-- Not found -->
     <div v-else-if="view === 'not_found'" class="cv-row">
-      <Icon :icon="ICONS.UI.ALERT" :size="18" class="cv-warn" />
+      <LjIcon :icon="ICONS.UI.ALERT" :size="18" class="cv-warn" />
       <span>{{ $t("classic.not_found") }}</span>
     </div>
 
@@ -53,8 +53,7 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import Icon from "@/components/Icon.vue";
-import { LjButton, LjChip, LjDialog, LjSpinner } from "@/components/ui";
+import { LjButton, LjChip, LjDialog, LjIcon, LjSpinner } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";

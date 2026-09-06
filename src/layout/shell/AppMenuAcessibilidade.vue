@@ -2,7 +2,7 @@
   <div class="opt">
     <section class="opt-section">
       <h3 class="opt-section-title">
-        <Icon :icon="ICONS.UI.ACCESSIBILITY" :size="18" />
+        <LjIcon :icon="ICONS.UI.ACCESSIBILITY" :size="18" />
         {{ $t("accessibility.title") }}
       </h3>
 
@@ -171,7 +171,7 @@
                 :aria-pressed="currentAnchor === a.value"
                 @click="setAnchor(a.value)"
               >
-                <Icon :icon="a.icon" :size="18" />
+                <LjIcon :icon="a.icon" :size="18" />
                 {{ a.label }}
               </button>
             </div>
@@ -590,6 +590,7 @@ import {
   LjAlert,
   LjButton,
   LjField,
+  LjIcon,
   LjInput,
   LjProgress,
   LjSelect,
@@ -604,7 +605,6 @@ import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
 import type { BibleVersion, BibleBook } from "@/types/Bible";
-import Icon from "@components/Icon.vue";
 import { LibrasCacheStats } from "@/types/Libras";
 import { KEYS_LS } from "@constants/LocalStorageKeys";
 

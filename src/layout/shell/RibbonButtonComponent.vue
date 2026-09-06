@@ -8,14 +8,14 @@
     :disabled="disabled"
     @click="$emit('click', $event)"
   >
-    <Icon :icon="icon" :size="iconSize" :color="iconColor" class="ribbon-btn-icon" />
+    <LjIcon :icon="icon" :size="iconSize" :color="iconColor" class="ribbon-btn-icon" />
     <span class="ribbon-btn-label">{{ label }}</span>
   </button>
 </template>
 
 <script setup>
+import { LjIcon } from "@/components/ui";
 import { computed } from "vue";
-import Icon from "@/components/Icon.vue";
 import { COLORS } from "@constants/Colors";
 
 const props = defineProps({

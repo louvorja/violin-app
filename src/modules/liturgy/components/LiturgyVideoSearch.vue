@@ -48,13 +48,13 @@
                 loading="lazy"
                 @error="failedIcons.add(row.id)"
               />
-              <Icon
+              <LjIcon
                 v-else-if="row.source === 'online'"
                 :icon="ICONS.MODULES.ONLINE_VIDEOS"
                 :size="13"
                 class="lvs-source-icon"
               />
-              <Icon
+              <LjIcon
                 v-else
                 :icon="ICONS.MODULES.CUSTOM_ONLINE_VIDEOS"
                 :size="13"
@@ -81,8 +81,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import Icon from "@/components/Icon.vue";
-import { LjButton, LjDialog, LjField, LjInput } from "@/components/ui";
+import { LjButton, LjDialog, LjField, LjIcon, LjInput } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import pt from "../lang/pt.json";
 import es from "../lang/es.json";

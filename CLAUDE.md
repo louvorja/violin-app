@@ -350,17 +350,26 @@ icon: ICONS.PLAYER.PLAY;
 icon: "player-play-filled";
 ```
 
-O acervo é o **Tabler**, em SVG, num arquivo por desenho sob
-`src/assets/icons/`. `Icon.vue` os embute inline e a cor sai por `currentColor`.
-A razão da regra é a troca de acervo: quando o app saiu do MDI, os 354 nomes do
-`Icons.ts` mudaram de uma vez, e qualquer nome escrito direto num template teria
-sobrevivido como ícone órfão — sem erro no console, só um buraco na tela.
-`Icons.spec.ts` trava isso, e também que todo nome tenha arquivo e todo arquivo
-tenha dono.
+O acervo é o **Tabler**, e vem do pacote `@tabler/icons-vue` — não de
+arquivo copiado para dentro do repositório, que congelaria na versão do dia da
+cópia. `src/components/ui/tablerIcons.ts` é o registro, com um import nomeado
+por ícone usado: resolver o nome a partir de `import * as` arrastaria os 6250
+do pacote para o bundle. `LjIcon` resolve contra esse registro.
 
-As marcas do projeto (`ja`, `hasd`, `dbv`…) convivem no mesmo diretório. Elas
-têm cor fixa no arquivo, e é por isso que `Icon.vue` só repinta o SVG que **não**
-usa `currentColor`: repintar um desenho de contorno o encheria de sólido.
+A razão da regra do `ICONS.*` é a troca de acervo: quando o app saiu do MDI, os
+354 nomes do `Icons.ts` mudaram de uma vez, e qualquer nome escrito direto num
+template teria sobrevivido como ícone órfão — sem erro no console, só um buraco
+na tela. `Icons.spec.ts` trava isso, e também que todo nome resolva e todo
+registro tenha dono.
+
+As marcas do projeto (`ja`, `hasd`, `dbv`…) não existem no Tabler e seguem como
+arquivo em `src/assets/icons/` — é o único conteúdo que o diretório aceita, e o
+teste falha se aparecer ali um SVG que o pacote já tem. Elas têm cor fixa no
+arquivo, e é por isso que `LjIcon` só repinta o SVG que **não** usa
+`currentColor`: repintar um desenho de contorno o encheria de sólido.
+
+Ícone novo entra em três passos: a constante em `Icons.ts`, o import e a entrada
+em `tablerIcons.ts`.
 
 ### Primitivos — o catálogo é fechado
 

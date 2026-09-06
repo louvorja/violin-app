@@ -20,7 +20,7 @@
       <!-- Conexão -->
       <div class="sc-conn">
         <LjSpinner v-if="sync.ftpChecking.value" :size="20" class="sc-conn__spinner" />
-        <Icon
+        <LjIcon
           v-else
           :icon="sync.ftpOk.value ? ICONS.UI.WIFI : ICONS.UI.WIFI_OFF"
           :size="20"
@@ -63,7 +63,7 @@
               :aria-expanded="expandedCategory === cat.id_category"
               @click="toggleExpandedCategory(cat.id_category)"
             >
-              <Icon
+              <LjIcon
                 :icon="
                   expandedCategory === cat.id_category
                     ? ICONS.UI.CHEVRON_DOWN
@@ -78,7 +78,7 @@
 
             <div v-if="expandedCategory === cat.id_category" class="sc-sublist">
               <div v-for="album in cat.albums || []" :key="album.id_album" class="sc-item">
-                <Icon
+                <LjIcon
                   :icon="
                     scanData.cachedAlbums.has(album.id_album)
                       ? ICONS.UI.CHECK_CIRCLE
@@ -95,7 +95,7 @@
 
           <!-- Hinário -->
           <div class="sc-item">
-            <Icon
+            <LjIcon
               :icon="scanData.hymnalCached ? ICONS.UI.CHECK_CIRCLE : ICONS.UI.CIRCLE_OUTLINE"
               :size="16"
               class="sc-item__mark"
@@ -134,7 +134,7 @@
 
         <div class="sc-list">
           <div v-for="ver in scanData.bibleVersions" :key="ver.id_bible_version" class="sc-item">
-            <Icon
+            <LjIcon
               :icon="
                 scanData.downloadedBibles.includes(ver.id_bible_version)
                   ? ICONS.UI.CHECK_CIRCLE
@@ -165,7 +165,7 @@
     <!-- Seleção de arquivos -->
     <div v-else-if="view === 'details'" class="sc-details">
       <header class="sc-section-head">
-        <Icon :icon="ICONS.MEDIA.DISC" :size="18" class="sc-section-head__icon" />
+        <LjIcon :icon="ICONS.MEDIA.DISC" :size="18" class="sc-section-head__icon" />
         <span class="sc-section-head__title">
           {{ $t("options.collections_download.title") }}
         </span>
@@ -196,7 +196,7 @@
       <LjDivider class="sc-details__rule" />
 
       <header class="sc-section-head">
-        <Icon :icon="ICONS.BIBLE.BOOK_BIBLE" :size="18" class="sc-section-head__icon" />
+        <LjIcon :icon="ICONS.BIBLE.BOOK_BIBLE" :size="18" class="sc-section-head__icon" />
         <span class="sc-section-head__title">{{ $t("options.bible_download.title") }}</span>
       </header>
 
@@ -215,7 +215,7 @@
     <div v-else class="sc-download">
       <section v-if="sync.downloading.value" class="sc-progress">
         <header class="sc-section-head">
-          <Icon :icon="ICONS.MEDIA.DISC" :size="18" class="sc-section-head__icon" />
+          <LjIcon :icon="ICONS.MEDIA.DISC" :size="18" class="sc-section-head__icon" />
           <span class="sc-section-head__title">
             {{ $t("options.collections_download.title") }}
           </span>
@@ -239,7 +239,7 @@
 
       <section v-if="sync.bibleDownloading.value" class="sc-progress">
         <header class="sc-section-head">
-          <Icon :icon="ICONS.BIBLE.BOOK_BIBLE" :size="18" class="sc-section-head__icon" />
+          <LjIcon :icon="ICONS.BIBLE.BOOK_BIBLE" :size="18" class="sc-section-head__icon" />
           <span class="sc-section-head__title">{{ $t("options.bible_download.title") }}</span>
         </header>
         <LjProgress :value="biblePercent" :height="8" />
@@ -265,7 +265,7 @@
       </section>
 
       <div v-if="!isBusy" class="sc-done">
-        <Icon :icon="ICONS.UI.CHECK_CIRCLE" :size="48" class="sc-done__icon" />
+        <LjIcon :icon="ICONS.UI.CHECK_CIRCLE" :size="48" class="sc-done__icon" />
         <div class="sc-done__title">{{ $t("options.collections_download.completed") }}</div>
         <div v-if="sync.downloadCompletedMsg.value" class="sc-done__detail">
           {{ sync.downloadCompletedMsg.value }}
@@ -363,7 +363,6 @@ import { KEYS } from "@/constants/UserDataKeys";
 import { useSyncManager } from "@/composables/useSyncManager";
 import type { BibleVersion } from "@/types/Bible";
 import { ICONS } from "@/config/Icons";
-import Icon from "@/components/Icon.vue";
 import DontShowAgainCheckbox from "@/components/inputs/DontShowAgainCheckbox.vue";
 import {
   LjAlert,
@@ -373,6 +372,7 @@ import {
   LjChip,
   LjDialog,
   LjDivider,
+  LjIcon,
   LjProgress,
   LjSpinner,
 } from "@/components/ui";

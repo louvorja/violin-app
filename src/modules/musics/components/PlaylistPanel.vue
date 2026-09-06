@@ -9,7 +9,7 @@
           :title="t('playlists.import')"
           @click="onImport"
         >
-          <Icon :icon="ICONS.ACTIONS.UPLOAD" size="16" />
+          <LjIcon :icon="ICONS.ACTIONS.UPLOAD" size="16" />
         </button>
         <button
           type="button"
@@ -17,7 +17,7 @@
           :title="t('playlists.create')"
           @click="showCreate = true"
         >
-          <Icon :icon="ICONS.ACTIONS.ADD" size="16" />
+          <LjIcon :icon="ICONS.ACTIONS.ADD" size="16" />
         </button>
       </div>
     </div>
@@ -33,10 +33,10 @@
         />
       </div>
       <button type="button" class="playlist-panel-btn" @click="create">
-        <Icon :icon="ICONS.UI.CHECK" size="16" />
+        <LjIcon :icon="ICONS.UI.CHECK" size="16" />
       </button>
       <button type="button" class="playlist-panel-btn" @click="cancelCreate">
-        <Icon :icon="ICONS.ACTIONS.CLOSE" size="16" />
+        <LjIcon :icon="ICONS.ACTIONS.CLOSE" size="16" />
       </button>
     </div>
 
@@ -51,10 +51,10 @@
         />
       </div>
       <button type="button" class="playlist-panel-btn" @click="confirmRename">
-        <Icon :icon="ICONS.UI.CHECK" size="16" />
+        <LjIcon :icon="ICONS.UI.CHECK" size="16" />
       </button>
       <button type="button" class="playlist-panel-btn" @click="cancelRename">
-        <Icon :icon="ICONS.ACTIONS.CLOSE" size="16" />
+        <LjIcon :icon="ICONS.ACTIONS.CLOSE" size="16" />
       </button>
     </div>
 
@@ -80,7 +80,7 @@
             :title="t('playlists.export')"
             @click.stop="onExport(playlist)"
           >
-            <Icon :icon="ICONS.ACTIONS.DOWNLOAD" size="14" />
+            <LjIcon :icon="ICONS.ACTIONS.DOWNLOAD" size="14" />
           </button>
           <button
             type="button"
@@ -88,7 +88,7 @@
             :title="t('playlists.rename')"
             @click.stop="startRename(playlist)"
           >
-            <Icon :icon="ICONS.ACTIONS.EDIT" size="14" />
+            <LjIcon :icon="ICONS.ACTIONS.EDIT" size="14" />
           </button>
           <button
             type="button"
@@ -96,7 +96,7 @@
             :title="t('playlists.delete')"
             @click.stop="onDelete(playlist)"
           >
-            <Icon :icon="ICONS.ACTIONS.DELETE" size="14" />
+            <LjIcon :icon="ICONS.ACTIONS.DELETE" size="14" />
           </button>
         </div>
       </div>
@@ -109,8 +109,7 @@
 </template>
 
 <script setup lang="ts">
-import Icon from "@/components/Icon.vue";
-import { LjInput } from "@/components/ui";
+import { LjIcon, LjInput } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";

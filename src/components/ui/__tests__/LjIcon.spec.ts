@@ -3,9 +3,13 @@ import { mount } from "@vue/test-utils";
 import LjIcon from "@/components/ui/LjIcon.vue";
 
 /**
- * A cor chega como CSS puro. Um nome de tema do Vuetify ("primary") é inválido
- * no style — o browser descarta sem avisar e o ícone herda a cor do pai. Estes
- * testes fixam a tradução que impede a cor de sumir em silêncio.
+ * O Vuetify saiu, mas os nomes de cor dele ficaram: uma dúzia de telas ainda
+ * passa `color="primary"`, `"grey"`, `"success"` num LjIcon. Como a cor vai
+ * para o style como CSS puro, esses nomes são inválidos ali — o browser
+ * descarta sem avisar e o ícone herda a cor do pai.
+ *
+ * Por isso o mapa de tradução não é resíduo: apagá-lo apaga a cor dessas telas,
+ * em silêncio. É o que estes testes seguram.
  */
 describe("LjIcon — cor", () => {
   const estilo = (color: string) =>

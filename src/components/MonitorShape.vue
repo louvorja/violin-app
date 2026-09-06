@@ -9,7 +9,7 @@
         type="button"
         @click="$emit('remove')"
       >
-        <Icon :icon="ICONS.ACTIONS.CLOSE" size="12" />
+        <LjIcon :icon="ICONS.ACTIONS.CLOSE" size="12" />
       </button>
     </div>
     <div class="lj-monitor__stand" :style="{ width: standW + 'px' }"></div>
@@ -17,7 +17,7 @@
 </template>
 
 <script setup lang="ts">
-import Icon from "@/components/Icon.vue";
+import { LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { computed } from "vue";
 

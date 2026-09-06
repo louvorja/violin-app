@@ -6,7 +6,7 @@
       side="bottom"
     >
       <button type="button" class="shell-tool" @click="toggleBackgroundProjection">
-        <Icon
+        <LjIcon
           :icon="!isBgPlaying ? ICONS.PROJECTION.START : ICONS.PROJECTION.STOP"
           :color="!isBgPlaying ? COLORS.SURFACE : COLORS.DANGER"
           :size="sizeIcon"
@@ -25,20 +25,20 @@
         :class="{ 'shell-tool--active': isLibrasEnabled }"
         @click="toggleLibras"
       >
-        <Icon
+        <LjIcon
           v-if="isLibrasEnabled"
           :icon="ICONS.UI.LIBRAS_ON"
           :size="sizeIcon"
           :color="COLORS.WARNING"
         />
-        <Icon v-else :icon="ICONS.UI.LIBRAS_OFF" :size="sizeIcon" />
+        <LjIcon v-else :icon="ICONS.UI.LIBRAS_OFF" :size="sizeIcon" />
       </button>
     </LjTooltip>
 
     <!--    Atualização disponível-->
     <LjTooltip v-if="hasUpdate" :text="$t('shell.appmenu_items.check_update')" side="bottom">
       <button type="button" class="shell-tool shell-tool--update" @click="openUpdates">
-        <Icon :icon="ICONS.UI.DOWNLOAD_CIRCLE" :size="sizeIcon" class="shell-tool--update-icon" />
+        <LjIcon :icon="ICONS.UI.DOWNLOAD_CIRCLE" :size="sizeIcon" class="shell-tool--update-icon" />
       </button>
     </LjTooltip>
 
@@ -51,7 +51,7 @@
           :class="{ 'shell-tool--active': bgTasks.hasActiveTasks.value }"
           :aria-label="t('shell.background_tasks.title')"
         >
-          <Icon
+          <LjIcon
             :icon="ICONS.UI.PROGRESS_DOWNLOAD"
             :color="bgTasks.hasActiveTasks.value ? COLORS.WARNING : undefined"
             :size="sizeIcon"
@@ -103,42 +103,42 @@
     <!--    Pesquisa Rápida-->
     <LjTooltip :text="$t('shell.quick_search')" side="bottom">
       <button type="button" class="shell-tool" @click="openCommandPalette">
-        <Icon :icon="ICONS.ACTIONS.SEARCH" :size="sizeIcon" />
+        <LjIcon :icon="ICONS.ACTIONS.SEARCH" :size="sizeIcon" />
       </button>
     </LjTooltip>
 
     <!--    Pesquisa Bíblia-->
     <LjTooltip :text="$t('shell.bible_quick_search')" side="bottom">
       <button type="button" class="shell-tool" @click="openBibleSearch">
-        <Icon :icon="ICONS.MODULES.BIBLE" :size="sizeIcon" />
+        <LjIcon :icon="ICONS.MODULES.BIBLE" :size="sizeIcon" />
       </button>
     </LjTooltip>
 
     <!--    Favoritos-->
     <LjTooltip :text="$t('ribbon.btn.favorites')" side="bottom">
       <button type="button" class="shell-tool" @click="openFavorites">
-        <Icon :icon="ICONS.UI.STAR" :size="sizeIcon" />
+        <LjIcon :icon="ICONS.UI.STAR" :size="sizeIcon" />
       </button>
     </LjTooltip>
 
     <!--    Modo de cor-->
     <LjTooltip :text="$t('shell.toggle_theme')" side="bottom">
       <button type="button" class="shell-tool" @click="toggleDark">
-        <Icon :icon="isDark ? ICONS.UI.THEME_LIGHT : ICONS.UI.THEME_DARK" :size="sizeIcon" />
+        <LjIcon :icon="isDark ? ICONS.UI.THEME_LIGHT : ICONS.UI.THEME_DARK" :size="sizeIcon" />
       </button>
     </LjTooltip>
 
     <!--    Sobre-->
     <LjTooltip :text="$t('shell.appmenu_items.about')" side="bottom">
       <button type="button" class="shell-tool" @click="openAbout">
-        <Icon :icon="ICONS.UI.INFORMATION_OUTLINE" :size="sizeIcon" />
+        <LjIcon :icon="ICONS.UI.INFORMATION_OUTLINE" :size="sizeIcon" />
       </button>
     </LjTooltip>
 
     <!--    Hotkeys-->
     <LjTooltip :text="$t('hotkeys.title')" side="bottom">
       <button type="button" class="shell-tool" @click="openHotkeys">
-        <Icon :icon="ICONS.UI.HELP" :size="sizeIcon" />
+        <LjIcon :icon="ICONS.UI.HELP" :size="sizeIcon" />
       </button>
     </LjTooltip>
   </div>
@@ -161,8 +161,7 @@ import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBackgroundTasks, type BackgroundTask } from "@/composables/useBackgroundTasks";
 import { useAppTheme } from "@/composables/useAppTheme";
 import { formatBackgroundTaskDetail } from "@/helpers/BackgroundTaskDetail";
-import Icon from "@/components/Icon.vue";
-import { LjButton, LjPopover, LjProgress, LjTooltip } from "@/components/ui";
+import { LjButton, LjIcon, LjPopover, LjProgress, LjTooltip } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { COLORS } from "@constants/Colors";
 

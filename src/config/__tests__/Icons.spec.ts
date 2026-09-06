@@ -1,17 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { ICONS } from "../Icons";
+import { TABLER_ICONS } from "@/components/ui/tablerIcons";
 
 /**
- * Todo nome do catálogo tem de ter arquivo em `src/assets/icons/`.
+ * Todo nome do catálogo tem de resolver em algum desenho.
  *
  * Este teste existe porque seis nomes não existiam — e dois eram renderizados:
  * o cabeçalho do diálogo de inicialização e todo item de liturgia do tipo
- * overlay apareciam com um espaço vazio no lugar do ícone. Nada acusava. Com o
- * acervo em SVG a falha é a mesma: `Icon.vue` não acha o arquivo, o `v-else-if`
- * não renderiza nada e a tela sai com um buraco do tamanho do ícone.
+ * overlay apareciam com um espaço vazio no lugar do ícone. Nada acusava, e a
+ * falha continua muda: `LjIcon` não acha o nome, não renderiza nada, e a tela
+ * sai com um buraco do tamanho do ícone.
  */
-const acervo = new Set(
+const marcas = new Set(
   readdirSync("src/assets/icons")
     .filter((f) => f.endsWith(".svg"))
     .map((f) => f.replace(/\.svg$/, ""))
@@ -42,16 +43,49 @@ function arquivosDeCodigo(dir: string, saida: string[] = []): string[] {
   return saida;
 }
 
+const pascal = (nome: string) =>
+  "Icon" +
+  nome
+    .split("-")
+    .map((p) => p[0].toUpperCase() + p.slice(1))
+    .join("");
+
+const vemDoPacote = (nome: string) =>
+  existsSync(`node_modules/@tabler/icons-vue/dist/esm/icons/${pascal(nome)}.mjs`);
+
 describe("catálogo de ícones", () => {
-  it("o acervo foi lido", () => {
-    expect(acervo.size).toBeGreaterThan(200);
+  it("o registro do pacote foi lido", () => {
+    expect(Object.keys(TABLER_ICONS).length).toBeGreaterThan(200);
   });
 
-  it("toda constante ICONS.* aponta para um arquivo que existe", () => {
+  it("toda constante ICONS.* resolve no pacote ou numa marca do projeto", () => {
     const quebrados = catalogo
-      .filter(([, valor]) => !acervo.has(valor))
+      .filter(([, valor]) => !TABLER_ICONS[valor] && !marcas.has(valor))
       .map(([caminho, valor]) => `ICONS.${caminho} = ${valor}`);
     expect(quebrados).toEqual([]);
+  });
+
+  it("o registro do pacote não guarda entrada que ninguém pede", () => {
+    const usados = new Set(catalogo.map(([, valor]) => valor));
+    expect(
+      Object.keys(TABLER_ICONS)
+        .filter((nome) => !usados.has(nome))
+        .sort()
+    ).toEqual([]);
+  });
+
+  it("src/assets/icons guarda só as marcas do projeto", () => {
+    // A porta que este teste tranca: SVG solto no repositório. O acervo de
+    // interface vem do pacote, e arquivo copiado ao lado dele congela na versão
+    // do dia da cópia — foi disso que a troca do MDI veio nos livrar. Marca
+    // nova é decisão consciente, e passa por ICONS.CUSTOM.
+    const declaradas = new Set(Object.values(ICONS.CUSTOM));
+    expect([...marcas].filter((nome) => !declaradas.has(nome)).sort()).toEqual([]);
+    expect([...declaradas].filter((nome) => !marcas.has(nome)).sort()).toEqual([]);
+  });
+
+  it("nenhuma marca duplica desenho que o pacote já tem", () => {
+    expect([...marcas].filter(vemDoPacote).sort()).toEqual([]);
   });
 
   it("nenhum nome de ícone fica escrito fora do catálogo", () => {
@@ -71,20 +105,12 @@ describe("catálogo de ícones", () => {
     expect(fora).toEqual([]);
   });
 
-  it("todo SVG do acervo é referenciado por alguma constante", () => {
-    // Arquivo sem dono é peso morto no bundle: entra pelo import.meta.glob do
-    // Icon.vue, que é eager, e ninguém pede.
-    const usados = new Set(catalogo.map(([, valor]) => valor));
-    expect([...acervo].filter((nome) => !usados.has(nome)).sort()).toEqual([]);
-  });
-
   it("os desenhos de contorno não trazem preenchimento próprio", () => {
-    // `Icon.vue` só repinta o SVG que NÃO usa currentColor — é assim que ele
-    // distingue as marcas do projeto, de cor fixa, dos ícones de interface. Um
-    // ícone de contorno com cor cravada escaparia da regra e ficaria preto em
-    // tema escuro, sem erro nenhum.
+    // `LjIcon` só repinta a marca que NÃO usa currentColor — é assim que ele
+    // distingue a de cor fixa da desenhada em contorno. Uma de contorno com cor
+    // cravada escaparia da regra e ficaria preta em tema escuro, sem erro nenhum.
     const suspeitos: string[] = [];
-    for (const nome of acervo) {
+    for (const nome of marcas) {
       const svg = readFileSync(`src/assets/icons/${nome}.svg`, "utf8");
       if (!svg.includes("currentColor")) continue;
       if (/(?:fill|stroke)="#[0-9a-fA-F]/.test(svg)) suspeitos.push(nome);
