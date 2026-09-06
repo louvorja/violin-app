@@ -34,6 +34,13 @@ const DOMAINS = {
   FONTS: [
     "https://fonts.googleapis.com"
   ],
+  // Destino da telemetria. Só o host de ingestão: o SDK vem do bundle, e
+  // `Telemetry.ts` desliga surveys e feature flags, que são o que faria o
+  // PostHog buscar configuração no domínio de assets. Espelha o padrão de
+  // `VITE_POSTHOG_HOST` — apontar o env para outra região pede uma linha aqui.
+  POSTHOG: [
+    "https://us.i.posthog.com"
+  ],
   YOUTUBE: [
     "https://www.youtube.com",
     "https://www.youtube-nocookie.com",
@@ -63,7 +70,8 @@ const google = DOMAINS.GOOGLE.join(" ");
 const youtube = DOMAINS.YOUTUBE.join(" ");
 const vlibras = DOMAINS.VLIBRAS.join(" ");
 const fonts = DOMAINS.FONTS.join(" ");
-const thirdParty = `${youtube} ${google} ${vlibras} ${cdn}`;
+const posthog = DOMAINS.POSTHOG.join(" ");
+const thirdParty = `${youtube} ${google} ${vlibras} ${cdn} ${posthog}`;
 
 const DOMAINS_CSP = {
   SCRIPT: `${cdn} ${google} ${youtube} ${vlibras}`,
