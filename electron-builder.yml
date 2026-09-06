@@ -155,3 +155,12 @@ linux:
     - rpm
   icon: build/icon-512.png
   category: AudioVideo
+  # O ambiente gráfico casa uma janela com o lançador comparando a identidade
+  # dela (WM_CLASS no X11, app_id no Wayland) com o .desktop instalado. Sem o
+  # par, a janela do LouvorJA aparece no dock do Ubuntu como um ícone genérico
+  # de engrenagem, solta do lançador — medido no Ubuntu 24.04.
+  # `syncDesktopName` faz o electron-builder carimbar os dois lados a partir do
+  # `desktopName` do package.json, que é o caminho que cobre X11 e Wayland; o
+  # `executableName` fica igual porque é dele que o Chromium deriva o WM_CLASS.
+  executableName: louvorja-violin
+  syncDesktopName: true
