@@ -91,19 +91,24 @@ export default {
   async migrarDoIndexedDB(colecoes: string[]): Promise<number> {
     if (!_desktop()) return 0;
 
-    let migradas = 0;
-    for (const colecao of colecoes) {
-      try {
-        if ((await _load<Doc>(colecao)).length) continue;
-        const antigos = await $idb.getAll<Doc>(colecao);
-        if (!antigos.length) continue;
-        await _save(colecao, antigos);
-        migradas++;
-        console.log(`[DocStore] ${colecao}: ${antigos.length} documentos migrados do IndexedDB`);
-      } catch (e) {
-        console.warn(`[DocStore] falha ao migrar "${colecao}":`, (e as Error).message);
-      }
-    }
-    return migradas;
+    // Em paralelo: cada coleção é uma ida ao disco pelo IPC, e enfileirá-las
+    // punha seis esperas entre o clique no ícone e a janela abrir. Elas não se
+    // cruzam — cada uma tem seu arquivo e sua entrada no cache.
+    const migradas = await Promise.all(
+      colecoes.map(async (colecao) => {
+        try {
+          if ((await _load<Doc>(colecao)).length) return false;
+          const antigos = await $idb.getAll<Doc>(colecao);
+          if (!antigos.length) return false;
+          await _save(colecao, antigos);
+          console.log(`[DocStore] ${colecao}: ${antigos.length} documentos migrados do IndexedDB`);
+          return true;
+        } catch (e) {
+          console.warn(`[DocStore] falha ao migrar "${colecao}":`, (e as Error).message);
+          return false;
+        }
+      })
+    );
+    return migradas.filter(Boolean).length;
   },
 };

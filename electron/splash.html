@@ -106,15 +106,6 @@
     @keyframes splash-spin {
       to { transform: rotate(360deg); }
     }
-
-    .splash-version {
-      position: absolute;
-      bottom: 6px;
-      right: 10px;
-      font-size: 10px;
-      color: rgba(255,255,255,0.4);
-      font-variant-numeric: tabular-nums;
-    }
   </style>
 </head>
 <body>
@@ -136,29 +127,9 @@
       <div class="splash-title">Louvor<b>JA</b></div>
       <div class="splash-info">
         <span class="splash-spinner"></span>
-        <span id="splash-status">Inicializando programa...</span>
+        <span>Inicializando programa...</span>
       </div>
     </div>
-    <div class="splash-version" id="splash-version"></div>
   </div>
-
-  <script>
-    if (window.electronAPI?.onStatus) {
-      window.electronAPI.onStatus((msg) => {
-        const el = document.getElementById('splash-status');
-        if (el) el.textContent = msg;
-      });
-    }
-    if (window.electronAPI?.version) {
-      const v = document.getElementById('splash-version');
-      if (v) v.textContent = 'v' + window.electronAPI.version;
-    }
-    if (window.electronAPI?.onClose) {
-      window.electronAPI.onClose(() => {
-        const root = document.getElementById('splash-root');
-        if (root) root.classList.add('splash--leaving');
-      });
-    }
-  </script>
 </body>
 </html>

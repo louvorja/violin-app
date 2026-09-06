@@ -737,6 +737,11 @@ $storage.hydrate().then(async () => {
 
     app.mount("#app");
 
+    // A janela principal está oculta esperando este aviso. Dois quadros de
+    // espera: montar só constrói o DOM, e revelar antes do primeiro paint
+    // mostraria a tela vazia que a janela oculta existe para esconder.
+    requestAnimationFrame(() => requestAnimationFrame(() => Platform.window?.signalAppReady?.()));
+
     // [077] Migração one-time após mount: Loading.vue já está no DOM e pode mostrar feedback.
     // Para 99% dos usuários (sem dados legados) é no-op instantâneo.
     const _legacyItems = UserData.get("modules.liturgy.items");

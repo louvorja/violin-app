@@ -195,6 +195,38 @@ const isDev =
 let mainWindow = null;
 
 // ---------------------------------------------------------------------------
+// Revelação da janela principal
+// ---------------------------------------------------------------------------
+
+/**
+ * Prazo para o renderer avisar que montou. Esgotado, a janela aparece de
+ * qualquer jeito: uma tela feia é melhor que um app que não abre.
+ */
+const REVEAL_FALLBACK_MS = 10000;
+
+/** @type {NodeJS.Timeout | null} */
+let _revealTimer = null;
+
+/**
+ * Mostra a janela principal e retira o splash, no mesmo instante.
+ *
+ * A janela nasce oculta e espera o "app:ready" que o renderer manda depois de
+ * montar a UI. O sinal óbvio — "ready-to-show" — não serve: ele avisa que o
+ * documento pintou o primeiro frame, e nesse ponto o Vue ainda está subindo,
+ * então o que aparecia era o fundo vazio do index.html. O splash saía junto,
+ * e sobrava uma tela preta entre ele e o app.
+ */
+function revealMainWindow() {
+  if (_revealTimer) {
+    clearTimeout(_revealTimer);
+    _revealTimer = null;
+  }
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (!mainWindow.isVisible()) mainWindow.show();
+  splash.close();
+}
+
+// ---------------------------------------------------------------------------
 // Inicialização da janela principal
 // ---------------------------------------------------------------------------
 
@@ -215,6 +247,15 @@ function createWindow() {
   }
 
   mainWindow = createMainWindow(DEV_URL, prodHtmlPath, preloadPath);
+
+  if (_revealTimer) clearTimeout(_revealTimer);
+  _revealTimer = setTimeout(revealMainWindow, REVEAL_FALLBACK_MS);
+
+  // Se o documento não carregou, o "app:ready" não vem — e esperar o prazo
+  // inteiro só atrasaria o que o operador tem de ver de qualquer jeito.
+  mainWindow.webContents.on("did-fail-load", (_e, _code, _desc, _url, isMainFrame) => {
+    if (isMainFrame) revealMainWindow();
+  });
 
   // DevTools na janela principal. Não abre sozinho nem em dev: quem quer o
   // console liga em "Opções do Desenvolvedor" (options.dev.devtools_main_window),
@@ -398,6 +439,11 @@ async function _bootstrapMonitorConfig() {
 }
 
 app.whenReady().then(async () => {
+  // Antes de qualquer trabalho: entre o clique no ícone e a janela existir há
+  // bootstrap de monitores, limpeza de cache e a subida do servidor HTTP, e
+  // nada disso dá sinal de vida ao operador.
+  splash.show();
+
   await _bootstrapMonitorConfig();
 
   // Limpa Service Workers herdados de execuções anteriores em modo PWA/dev.
@@ -485,22 +531,11 @@ app.whenReady().then(async () => {
     console.warn("[main] HTTP server não disponível:", e.message);
   }
 
-  // Mostrar splash imediatamente (antes da janela principal carregar)
-  splash.show();
-
   createWindow();
 
   // Atualizar mainWindow no HTTP server recém-criado
   if (mainWindow) {
     try { httpServer.setMainWindow(mainWindow); } catch (_) { /* ignore */ }
-  }
-
-  // Fechar splash quando a janela principal estiver pronta para mostrar
-  if (mainWindow) {
-    mainWindow.once("ready-to-show", () => {
-      // Pequeno delay para garantir que o usuário enxergue o splash
-      setTimeout(() => splash.close(), 350);
-    });
   }
 
   // macOS: reabrir janela quando o ícone do dock for clicado
@@ -1048,6 +1083,15 @@ function focusedOrMain(event) {
   }
   return mainWindow;
 }
+
+// O renderer montou a UI e já pintou um frame — hora de mostrar a janela.
+// Só a principal manda este sinal; projeção, operador e OBS carregam o mesmo
+// bundle e chegariam aqui à toa.
+ipcMain.on("app:ready", (event) => {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (event.sender !== mainWindow.webContents) return;
+  revealMainWindow();
+});
 
 ipcMain.handle("window:minimize", (event) => {
   const win = focusedOrMain(event);

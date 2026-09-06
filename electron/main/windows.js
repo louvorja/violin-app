@@ -47,7 +47,11 @@ function createMainWindow(devUrl, prodHtmlPath, preloadPath) {
     minHeight: 600,
     title: "LouvorJA Violin",
     icon: iconPath,
-    show: false, // Mostrar só quando pronto (evita flash branco)
+    // Quem revela a janela é revealMainWindow(), no main.cjs, ao receber o
+    // "app:ready" do renderer. Não usar "ready-to-show": ele dispara no
+    // primeiro frame do documento, quando o Vue ainda não montou e a tela é
+    // só o fundo vazio do index.html.
+    show: false,
     backgroundColor: "#1b2a41",
     // Title bar custom (replicar Delphi):
     //  - Win/Linux: frameless, SystemBar customizada com botões funcionais
@@ -64,11 +68,6 @@ function createMainWindow(devUrl, prodHtmlPath, preloadPath) {
       nodeIntegration: false,
       sandbox: false, // Necessário para BroadcastChannel funcionar entre janelas
     },
-  });
-
-  // Mostrar janela assim que estiver pronta para renderizar (evita flash branco)
-  win.once("ready-to-show", () => {
-    win.show();
   });
 
   // Handler para window.open() — necessário para janelas popup e projeção.

@@ -1,15 +1,14 @@
 "use strict";
 
 /**
- * Splash window — janela frameless 508×117 que aparece durante a inicialização.
- * Replica fmIniciando.dfm (Delphi): fundo #2D2D28, fade-in via AlphaBlend, mensagem
- * "Inicializando programa..." e fecha automaticamente após a janela principal abrir.
+ * Splash window — janela frameless 508×117 que cobre a inicialização inteira.
+ * Replica fmIniciando.dfm (Delphi): fundo #2D2D28, fade-in via AlphaBlend e a
+ * mensagem "Inicializando programa...".
  *
- * Uso:
- *   const splash = require("./splash.js");
- *   const win = splash.show();
- *   ...
- *   splash.close();
+ * Abre no primeiro instante do `whenReady` e sai quando a janela principal
+ * aparece pintada — quem fecha é `revealMainWindow()`, no main.cjs. O que ela
+ * mostra é fixo, e por isso a janela não tem preload: não há nada a dizer ao
+ * documento durante a espera.
  */
 
 const { BrowserWindow, screen } = require("electron");

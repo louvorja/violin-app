@@ -12,8 +12,10 @@
     <!--CSP_PROD-->
     <title>LouvorJA Violin</title>
     <style>
-      /* Evita flash branco entre a abertura da BrowserWindow e o primeiro
-         paint do Vue. As views da shell aplicam o fundo correto depois. */
+      /* Preto para o telão: nas janelas de projeção este é o fundo entre a
+         abertura e o primeiro paint do Vue, e um lampejo branco ali aparece
+         diante da congregação. A janela principal não passa por aqui — ela
+         só é revelada depois de montada. */
       html, body { margin: 0; background: #000; }
     </style>
 </head>

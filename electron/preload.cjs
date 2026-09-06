@@ -391,6 +391,12 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
   // -------------------------------------------------------------------------
 
   window: {
+    /**
+     * Avisa o main que a UI montou e já pintou. É este sinal que revela a
+     * janela principal, que nasce oculta para o operador não ver a tela vazia
+     * enquanto o app sobe. Dispare uma vez, depois do primeiro frame.
+     */
+    signalAppReady: () => ipcRenderer.send("app:ready"),
     minimize: () => ipcRenderer.invoke("window:minimize"),
     maximize: () => ipcRenderer.invoke("window:maximize"),
     unmaximize: () => ipcRenderer.invoke("window:unmaximize"),
