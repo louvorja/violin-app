@@ -12,7 +12,7 @@
  * - verify(remoteFiles): compara lista do servidor com local — retorna
  *   missing[] e damaged[] (tamanho diferente). Equivalente a
  *   fmArquivosFalta + integrity.diff.
- * - setFilesDir(newDir, options): move ou cria diretório custom de mídia.
+ * - setDataDir(newDir, options): aponta a pasta de dados para outro lugar.
  */
 
 const fs = require("fs-extra");
@@ -105,6 +105,8 @@ async function stats() {
   }
 
   return {
+    dataDir: paths.dataDir(),
+    dataDirIssue: paths.dataDirIssue(),
     filesDir,
     jsonDir,
     files: { bytes: filesStat.bytes, count: filesStat.files },
@@ -205,37 +207,39 @@ async function clearUnused(remoteFiles = []) {
 
 /** Abre a pasta de mídia no file explorer do SO. */
 async function openFilesDir() {
-  const dir = paths.filesDir();
+  const dir = paths.dataDir();
   await fs.ensureDir(dir);
   shell.openPath(dir);
   return { ok: true, dir };
 }
 
 /**
- * Define um novo diretório de mídia. Se moveExisting=true, copia o conteúdo
- * atual para o novo local antes de trocar (e remove o antigo).
+ * Aponta a pasta de dados para outro lugar. Com moveExisting=true leva junto
+ * o acervo (`files/`) e as preferências (`storage/`).
  *
  * @param {string} newDir
  * @param {object} options { moveExisting?: boolean }
  */
-async function setFilesDir(newDir, options = {}) {
+async function setDataDir(newDir, options = {}) {
   const moveExisting = options.moveExisting === true;
-  const oldDir = paths.filesDir();
+  const oldDir = paths.dataDir();
+  const abs = path.resolve(newDir);
 
-  if (moveExisting && (await fs.pathExists(oldDir)) && oldDir !== newDir) {
-    await fs.ensureDir(newDir);
-    await fs.copy(oldDir, newDir, { overwrite: true });
-    try {
-      await fs.remove(oldDir);
-    } catch (_) {
-      /* ignore */
+  await fs.ensureDir(abs);
+  if (abs === oldDir) return { ok: true, dir: abs };
+
+  if (moveExisting) {
+    for (const sub of ["files", "storage"]) {
+      const from = path.join(oldDir, sub);
+      if (!(await fs.pathExists(from))) continue;
+      // `move` renomeia quando é o mesmo volume — o acervo tem gigabytes e
+      // uma cópia byte a byte deixaria o operador esperando à toa.
+      await fs.move(from, path.join(abs, sub), { overwrite: true });
     }
-  } else {
-    await fs.ensureDir(newDir);
   }
 
-  paths.setFilesDir(newDir);
-  return { ok: true, dir: newDir };
+  paths.setDataDir(abs);
+  return { ok: true, dir: abs };
 }
 
 /**
@@ -398,6 +402,6 @@ module.exports = {
   checkJsonExists,
   removeJsonByPrefix,
   openFilesDir,
-  setFilesDir,
+  setDataDir,
   enforceQuota,
 };

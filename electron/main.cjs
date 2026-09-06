@@ -54,6 +54,107 @@ function configureAppPaths() {
 // cima do arquivo bom — o que o usuário não reescrevesse na sessão sumia.
 configureAppPaths();
 
+/**
+ * Leva as preferências de `<userData>/storage` para a pasta de dados.
+ *
+ * Copia em vez de mover: se a versão seguinte tiver que voltar atrás, o
+ * arquivo antigo continua onde estava. Roda antes de `_userDataMain` ser
+ * lido, mais abaixo neste módulo — depois seria tarde, o main já teria
+ * carregado um estado vazio.
+ */
+function migrateStorageToDataDir() {
+  const legacy = path.join(app.getPath("userData"), "storage");
+  const target = path.join(paths.dataDir(), "storage");
+  if (path.resolve(legacy) === path.resolve(target)) return;
+  if (!fs.existsSync(legacy)) return;
+  if (fs.existsSync(path.join(target, "user_data.json"))) return;
+
+  try {
+    fs.ensureDirSync(target);
+    let copiados = 0;
+    for (const nome of fs.readdirSync(legacy)) {
+      if (!nome.endsWith(".json")) continue;
+      const dest = path.join(target, nome);
+      if (fs.existsSync(dest)) continue;
+      fs.copySync(path.join(legacy, nome), dest);
+      copiados++;
+    }
+    if (copiados) console.log(`[main] Preferências migradas para ${target} (${copiados} arquivos)`);
+  } catch (e) {
+    console.warn("[main] Falha ao migrar preferências:", e?.message || e);
+  }
+}
+
+migrateStorageToDataDir();
+
+/** Um diretório que existe e tem pelo menos uma entrada dentro. */
+function _temConteudo(dir) {
+  try {
+    return fs.existsSync(dir) && fs.statSync(dir).isDirectory() && fs.readdirSync(dir).length > 0;
+  } catch (_) {
+    return false;
+  }
+}
+
+/**
+ * O que, dentro de `dir`, conta como acervo a mudar de lugar. `files/` e
+ * `storage/` ficam de fora porque são a estrutura nova: sem essa exceção a
+ * própria pasta de dados, recém-criada com as preferências dentro, passaria
+ * por origem de migração e encerraria a busca antes de olhar as outras.
+ */
+function _entradasDeAcervo(dir) {
+  try {
+    if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return [];
+    return fs
+      .readdirSync(dir)
+      .filter((nome) => nome !== "files" && nome !== "storage" && !nome.startsWith("."));
+  } catch (_) {
+    return [];
+  }
+}
+
+/**
+ * Recolhe o acervo para `<dados>/files`.
+ *
+ * O acervo passou por três endereços — pasta escolhida à mão, `Documents/
+ * LouvorJA Violin` solto na raiz e `<userData>/files` — e uma instalação
+ * antiga pode ter parado em qualquer um deles. Move entrada por entrada, e
+ * não a pasta inteira, porque no caso da raiz a origem é a própria pasta de
+ * dados: mover ela para dentro de si mesma não existe.
+ *
+ * Move em vez de copiar: `fs.move` renomeia quando origem e destino estão no
+ * mesmo volume, então gigabytes de MP3 mudam de lugar num piscar. Só o que
+ * ainda não existe no destino é movido — a migração pode ser interrompida e
+ * retomada no boot seguinte.
+ */
+function migrateMediaToDataDir(storageCfg = {}) {
+  const target = paths.filesDir();
+  if (_temConteudo(target)) return;
+
+  const candidatos = [storageCfg.filesDir, ...paths.legacyMediaDirs()].filter(Boolean);
+  for (const origem of candidatos) {
+    if (path.resolve(origem) === path.resolve(target)) continue;
+    const entradas = _entradasDeAcervo(origem);
+    if (!entradas.length) continue;
+
+    try {
+      fs.ensureDirSync(target);
+      let movidos = 0;
+      for (const nome of entradas) {
+        const dest = path.join(target, nome);
+        if (fs.existsSync(dest)) continue;
+        fs.moveSync(path.join(origem, nome), dest);
+        movidos++;
+      }
+      if (movidos) console.log(`[main] Acervo movido: ${origem} → ${target} (${movidos} entradas)`);
+      return;
+    } catch (e) {
+      console.warn(`[main] Falha ao mover acervo de ${origem}:`, e?.message || e);
+      return;
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Instância única
 // ---------------------------------------------------------------------------
@@ -405,35 +506,14 @@ app.whenReady().then(async () => {
     }
   });
 
-  // S2 — Aplicar config de armazenamento salva (pasta custom, auto-cache).
+  // S2 — Aplicar config de armazenamento salva e recolher o acervo espalhado
+  // pelas pastas que versões anteriores usaram.
   try {
     const storageCfg = userStore.read("storage") || {};
-    if (storageCfg.filesDir) {
-      paths.setFilesDir(storageCfg.filesDir);
-    }
     if (typeof storageCfg.autoCache === "boolean") {
       protocolModule.setAutoCacheEnabled(storageCfg.autoCache);
     }
-
-    // Migração one-shot: pasta legada (userData/files) → Documents/LouvorJA
-    if (!storageCfg.filesDir && !storageCfg.migratedToDocuments) {
-      const legacyDir = paths.legacyFilesDir();
-      const newDir = paths.filesDir();
-      if (
-        fs.existsSync(legacyDir) &&
-        legacyDir !== newDir &&
-        fs.readdirSync(legacyDir).length > 0
-      ) {
-        try {
-          fs.copySync(legacyDir, newDir, { overwrite: false, errorOnExist: false });
-          fs.removeSync(legacyDir);
-          console.log("[main] Migrou mídia: " + legacyDir + " → " + newDir);
-        } catch (mErr) {
-          console.warn("[main] Falha ao migrar mídia legada:", mErr.message);
-        }
-      }
-      userStore.write("storage", { ...storageCfg, migratedToDocuments: true });
-    }
+    migrateMediaToDataDir(storageCfg);
   } catch (e) {
     console.warn("[main] Falha ao aplicar storage config:", e.message);
   }
@@ -1140,7 +1220,7 @@ ipcMain.handle("storage:verify", (_e, remoteFiles) => storage.verify(remoteFiles
 ipcMain.handle("storage:removeFiles", (_e, remotePaths) => storage.removeFiles(remotePaths));
 ipcMain.handle("storage:sizeOfPaths", (_e, remotePaths) => storage.sizeOfPaths(remotePaths));
 ipcMain.handle("storage:openDir", () => storage.openFilesDir());
-ipcMain.handle("storage:setFilesDir", (_e, newDir, opts) => storage.setFilesDir(newDir, opts));
+ipcMain.handle("storage:setDataDir", (_e, newDir, opts) => storage.setDataDir(newDir, opts));
 ipcMain.handle("storage:enforceQuota", (_e, maxBytes) => storage.enforceQuota(maxBytes));
 
 /** Lista todos os arquivos de um diretório (recursivo, com caminhos relativos). */

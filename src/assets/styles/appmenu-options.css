@@ -168,6 +168,13 @@
   margin-top: var(--lj-space-3);
 }
 
+/* Dica que relata um problema — a pasta escolhida não aceitou escrita, por
+   exemplo. Cor de aviso porque o app seguiu funcionando noutro lugar: é um
+   recado, não um erro que impede o operador de trabalhar. */
+.opt-hint--warn {
+  color: var(--lj-warning-dark);
+}
+
 /* Dica que apresenta as linhas seguintes, e não o bloco anterior. Colada no que
    vem antes ela é lida como legenda dele; a folga acima e a proximidade abaixo
    dizem a quem ela pertence. */

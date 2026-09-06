@@ -8,7 +8,7 @@ declare global {
       chooseFile: () => Promise<string | null>;
       chooseImage: () => Promise<string | null>;
       chooseDir: () => Promise<string | null>;
-      setFilesDir: (dir: string, opts?: { moveExisting?: boolean }) => Promise<void>;
+      setDataDir: (dir: string, opts?: { moveExisting?: boolean }) => Promise<void>;
       enforceQuota: (maxBytes: number) => Promise<void>;
       checkLocal: (paths: string[]) => Promise<Record<string, boolean>>;
       removeFiles: (paths: string[]) => Promise<void>;
@@ -17,6 +17,8 @@ declare global {
       verify: (files: unknown) => Promise<unknown>;
       clearUnused: (files: unknown) => Promise<void>;
       stats: () => Promise<{
+        dataDir?: string;
+        dataDirIssue?: { wanted: string; reason: string } | null;
         filesDir?: string;
         files?: { bytes: number; count: number };
         json?: { bytes: number; count: number };

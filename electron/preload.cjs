@@ -283,7 +283,7 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
     /** Mostra dialog de seleção de imagem com filtro de tipos. Retorna o caminho completo ou null. */
     chooseImage: () => ipcRenderer.invoke("storage:chooseImage"),
     /** Define nova pasta de mídia (com opção de mover conteúdo). */
-    setFilesDir: (newDir, opts) => ipcRenderer.invoke("storage:setFilesDir", newDir, opts),
+    setDataDir: (newDir, opts) => ipcRenderer.invoke("storage:setDataDir", newDir, opts),
     /** Auto-limpeza FIFO ao ultrapassar maxBytes. */
     enforceQuota: (maxBytes) => ipcRenderer.invoke("storage:enforceQuota", maxBytes),
     /** Lista arquivos de um diretório local (para auto-populate). */

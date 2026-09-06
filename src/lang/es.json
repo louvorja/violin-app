@@ -470,7 +470,8 @@
     },
     "storage": {
       "title": "Almacenamiento",
-      "folder": "Carpeta de medios",
+      "folder": "Carpeta de datos",
+      "folder_fallback": "No pude escribir en {dir}; los datos están en la carpeta del programa. Elija otra carpeta o libere el acceso.",
       "open_folder": "Abrir carpeta",
       "change_folder": "Cambiar carpeta…",
       "media_size": "Medios (audio, imágenes)",

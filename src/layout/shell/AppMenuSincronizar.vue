@@ -410,8 +410,13 @@
             </label>
             <div class="opt-folder">
               <code class="opt-folder-path">
-                {{ storageStats?.filesDir || "—" }}
+                {{ storageStats?.dataDir || "—" }}
               </code>
+              <p v-if="storageStats?.dataDirIssue" class="opt-hint opt-hint--warn">
+                {{
+                  $t("options.storage.folder_fallback", { dir: storageStats.dataDirIssue.wanted })
+                }}
+              </p>
 
               <div class="opt-folder-actions">
                 <button type="button" class="opt-btn" @click="openFolder">
@@ -578,6 +583,8 @@ interface DiskUsage {
 }
 
 interface StorageStats {
+  dataDir?: string;
+  dataDirIssue?: { wanted: string; reason: string } | null;
   filesDir?: string;
   files?: { bytes: number; count: number };
   json?: { bytes: number; count: number };
@@ -1100,7 +1107,7 @@ async function changeFolder(): Promise<void> {
     if (btn === "cancel") return;
     const move = btn === "yes";
     try {
-      await Platform.storage?.setFilesDir(newDir, { moveExisting: move });
+      await Platform.storage?.setDataDir(newDir, { moveExisting: move });
       const cur = (await Platform.userStore?.read("storage")) || {};
       await Platform.userStore?.write("storage", { ...cur, filesDir: newDir });
       await Promise.all([reloadStats(), scanLocalCache({ force: true })]);

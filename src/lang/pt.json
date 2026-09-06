@@ -470,7 +470,8 @@
     },
     "storage": {
       "title": "Armazenamento",
-      "folder": "Pasta de mídia",
+      "folder": "Pasta de dados",
+      "folder_fallback": "Não consegui escrever em {dir}; os dados estão na pasta do programa. Escolha outra pasta ou libere o acesso.",
       "open_folder": "Abrir pasta",
       "change_folder": "Alterar pasta…",
       "media_size": "Mídia (áudio, imagens)",
