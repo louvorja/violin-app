@@ -1,16 +1,19 @@
 /**
- * ImageConvert.ts — Conversão de imagens que o Chromium não decodifica
- * nativamente (HEIC/HEIF — fotos de iPhone) para JPEG no momento da
- * importação, garantindo que thumb, preview e projeção funcionem.
+ * ImageConvert.ts — fronteira de importação de imagem: o que o Chromium
+ * consegue desenhar entra, o que não consegue é recusado com uma explicação.
  *
- * heic2any (libheif WASM) vem do bundle, então funciona offline em
- * Electron/Web/PWA, mas entra sob demanda: são 1,3MB e ele cria workers assim
- * que é avaliado. Estático, esse peso descia — e os workers subiam — em toda
- * tela que só queria saber se um arquivo é HEIC, coisa que `isHeic` responde
- * com uma expressão regular.
+ * HEIC/HEIF (fotos de iPhone) fica de fora. Converter exigia libheif, que é
+ * Emscripten e monta código com `new Function` — para funcionar o app teria de
+ * abrir `'unsafe-eval'` no `script-src`, e esse afrouxamento valeria para todas
+ * as telas, não só para a importação de fotos. Em produção o CSP nunca
+ * permitiu, então a conversão só funcionava em desenvolvimento, onde o CSP do
+ * Electron acrescenta `'unsafe-eval'` (`electron/main/csp.js`) — na mão do
+ * operador ela falhava com um erro de console e nada na tela.
  *
- * @category helper-puro — Sem APIs Vue; sem acesso ao store.
+ * @category deve-virar-composable — Avisa pelo Snackbar (Pinia); requer renderer.
  */
+import $snackbar from "@/helpers/Snackbar";
+import { i18nAtual } from "@/i18n";
 
 /** Detecta HEIC/HEIF pela extensão do nome ou pelo mime. */
 export function isHeic(name?: string | null, mime?: string | null): boolean {
@@ -19,23 +22,32 @@ export function isHeic(name?: string | null, mime?: string | null): boolean {
   return /\.(heic|heif)$/i.test(name);
 }
 
-/**
- * Converte um blob HEIC/HEIF para JPEG (quality 0.92).
- * Rejeita se a conversão falhar — o chamador decide manter o original.
- */
-export async function heicToJpeg(source: Blob): Promise<Blob> {
-  const { default: heic2any } = await import("heic2any");
-  const result = await heic2any({
-    blob: source,
-    toType: "image/jpeg",
-    quality: 0.92,
-  });
-  return Array.isArray(result) ? result[0] : result;
+/** Erro de formato recusado, para o chamador distinguir de falha de leitura. */
+export class FormatoNaoSuportadoError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "FormatoNaoSuportadoError";
+  }
+}
+
+function avisarHeic(): string {
+  const t = i18nAtual()?.global?.t;
+  const texto = t ? t("messages.heic_nao_suportado") : "Converta a foto para JPEG antes de importar.";
+  $snackbar.warning(texto, { timeout: 6000 });
+  return texto;
 }
 
 /**
- * Garante uma imagem renderizável: se o arquivo for HEIC/HEIF, converte para
- * JPEG e ajusta a extensão do nome. Caso contrário devolve os dados originais.
+ * Mantida para os chamadores que já sabiam separar HEIC do resto: hoje só
+ * avisa e recusa.
+ */
+export async function heicToJpeg(_source: Blob): Promise<Blob> {
+  throw new FormatoNaoSuportadoError(avisarHeic());
+}
+
+/**
+ * Garante uma imagem renderizável. Devolve os dados originais quando o formato
+ * serve, e recusa HEIC/HEIF avisando o operador.
  *
  * @param name   Nome do arquivo (ex.: "IMG_0001.heic").
  * @param source Blob com os bytes da imagem.
@@ -45,10 +57,8 @@ export async function ensureRenderableImage(
   name: string,
   source: Blob
 ): Promise<{ blob: Blob; name: string }> {
-  if (!isHeic(name)) return { blob: source, name };
-  const converted = await heicToJpeg(source);
-  const base = name.replace(/\.(heic|heif)$/i, "");
-  return { blob: converted, name: `${base}.jpg` };
+  if (!isHeic(name, source.type)) return { blob: source, name };
+  throw new FormatoNaoSuportadoError(avisarHeic());
 }
 
-export default { isHeic, heicToJpeg, ensureRenderableImage };
+export default { isHeic, heicToJpeg, ensureRenderableImage, FormatoNaoSuportadoError };

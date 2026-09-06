@@ -702,7 +702,8 @@
     "developer_mode_enabled": "Modo DESARROLLADOR activado!",
     "developer_mode_disabled": "Modo DESARROLLADOR desactivado!",
     "error_import_module": "Error al importar el módulo",
-    "misconfigured_module": "Este módulo está mal configurado. ¡La identificación ingresada en manifest.json debe tener el mismo nombre que la carpeta donde se encuentra!"
+    "misconfigured_module": "Este módulo está mal configurado. ¡La identificación ingresada en manifest.json debe tener el mismo nombre que la carpeta donde se encuentra!",
+    "heic_nao_suportado": "Esta foto está en HEIC, un formato que el programa no abre. Conviértela a JPEG e impórtala de nuevo."
   },
   "ribbon": {
     "pages": {
