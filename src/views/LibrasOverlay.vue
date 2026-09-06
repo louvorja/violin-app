@@ -1,7 +1,9 @@
 <template>
   <Teleport to="body">
-    <!-- Wrapper para posicionamento (separa transform de animação) -->
-    <div v-show="enabled" class="libras-anchor" :style="anchorStyle">
+    <!-- Wrapper para posicionamento (separa transform de animação).
+         v-if em vez de v-show: com o iframe montado, o player Unity do VLibras
+         baixa e chama a API mesmo com a tradução desligada. -->
+    <div v-if="shouldShow" class="libras-anchor" :style="anchorStyle">
       <!-- Player Unity no iframe -->
       <iframe
         ref="iframeRef"
