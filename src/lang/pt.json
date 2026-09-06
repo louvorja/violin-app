@@ -493,14 +493,7 @@
       "restore_db_done": "Banco de dados restaurado.",
       "restore_db_error": "Falha ao restaurar o banco de dados.",
       "move_confirm": "Mover o conteúdo atual para a nova pasta?",
-      "change_failed": "Falha ao alterar a pasta de mídia.",
-      "classic_version": "Versão clássica",
-      "use_classic_dir": "Usar diretório da versão clássica",
-      "classic_not_found": "Versão clássica não localizada em C:\\Program Files (x86)\\Louvor JA",
-      "classic_confirm": "Usar o mesmo diretório da versão clássica do LouvorJA?",
-      "classic_manual_prompt": "Não encontrei a instalação no diretório padrão. Deseja apontar manualmente o diretório raiz da instalação clássica?",
-      "classic_manual_invalid": "O diretório selecionado não parece ser a raiz da instalação clássica.",
-      "classic_import_confirm": "Deseja copiar ou mover as pastas de mídia da versão clássica (musicas, capas e imagens) para a nova pasta?"
+      "change_failed": "Falha ao alterar a pasta de mídia."
     },
     "videos": {
       "action_link": "Link no navegador",
@@ -1303,16 +1296,6 @@
     "dont_show_again": "Não mostrar novamente para esta versão",
     "view_on_github": "Ver no GitHub",
     "no_notes": "Nenhuma nota de versão para exibir."
-  },
-  "classic": {
-    "title": "Versão clássica detectada",
-    "scanning": "Verificando instalação da versão clássica...",
-    "detected": "Foi detectada a instalação da versão clássica do LouvorJA.",
-    "not_found": "Nenhuma instalação da versão clássica foi localizada.",
-    "language_detected": "Idioma detectado: {lang}",
-    "dont_show_again": "Não mostrar novamente",
-    "accept": "Usar diretório da versão clássica",
-    "decline": "Não usar"
   },
   "projection": {
     "enter_fullscreen": "Entrar em tela cheia",

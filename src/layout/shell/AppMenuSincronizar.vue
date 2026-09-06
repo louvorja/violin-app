@@ -407,10 +407,6 @@
           <div class="opt-row opt-row--col sinc-row-gap">
             <label class="opt-label sinc-storage-label">
               {{ $t("options.storage.folder") }}
-              <LjChip v-if="useClassicDir" size="sm" variant="primary">
-                <LjIcon :icon="ICONS.PROJETOS.DELPHI" size="12" />
-                {{ $t("options.storage.classic_version") }}
-              </LjChip>
             </label>
             <div class="opt-folder">
               <code class="opt-folder-path">
@@ -423,10 +419,6 @@
                 </button>
                 <button type="button" class="opt-btn" @click="changeFolder">
                   {{ $t("options.storage.change_folder") }}
-                </button>
-                <button v-if="!useClassicDir" type="button" class="opt-btn" @click="detectClassic">
-                  <LjIcon :icon="ICONS.PROJETOS.DELPHI" size="14" />
-                  {{ $t("options.storage.use_classic_dir") }}
                 </button>
               </div>
             </div>
@@ -555,7 +547,7 @@ import $userdata from "@/helpers/UserData";
 import $alert from "@/helpers/Alert";
 import { KEYS, moduleShowInMainMenu } from "@/constants/UserDataKeys";
 import { ICONS } from "@/config/Icons";
-import { LjChip, LjIcon, LjProgress, LjTabs } from "@/components/ui";
+import { LjIcon, LjProgress, LjTabs } from "@/components/ui";
 import type { LjTab } from "@/components/ui";
 import { useSyncManager } from "@/composables/useSyncManager";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
@@ -1079,75 +1071,6 @@ const quotaGb = computed({
   set: (v: number) => $userdata.set(KEYS.OPTIONS.STORAGE_QUOTA_GB, Number(v) || 0),
 });
 
-const useClassicDir = computed((): boolean => {
-  return $userdata.get<boolean>(KEYS.OPTIONS.USE_CLASSIC_DIR, false) === true;
-});
-
-async function persistClassicSelection(result: {
-  configDir: string;
-  lang: "pt" | "es" | null;
-}): Promise<void> {
-  const lang = result.lang || "pt";
-  $userdata.set(KEYS.OPTIONS.USE_CLASSIC_DIR, true);
-  $userdata.set(KEYS.OPTIONS.CLASSIC_LANG, lang);
-  const cur = (await Platform.userStore?.read("storage")) || {};
-  await Platform.userStore?.write("storage", {
-    ...cur,
-    classicDir: result.configDir,
-    classicLang: lang,
-    useClassicDir: true,
-  });
-  await Platform.storage?.setFilesDir?.(result.configDir, { moveExisting: false });
-  await Promise.all([reloadStats(), scanLocalCache({ force: true })]);
-}
-
-async function detectClassic(): Promise<void> {
-  if (!Platform.classic?.detect) return;
-  try {
-    const openManualSelection = async (): Promise<void> => {
-      const manualDir = await Platform.storage?.chooseDir?.();
-      if (!manualDir) return;
-
-      const manualResult = await Platform.classic?.detect?.(manualDir);
-      const hasClassicContent =
-        !!manualResult?.detected && Object.values(manualResult.folders || {}).some(Boolean);
-      if (!hasClassicContent) {
-        $alert.error({ text: "options.storage.classic_manual_invalid" });
-        return;
-      }
-
-      await persistClassicSelection(manualResult);
-    };
-
-    if (Platform.platform !== "win32") {
-      await openManualSelection();
-      return;
-    }
-
-    const result = await Platform.classic.detect();
-    if (!result.detected) {
-      $alert.yesno(
-        {
-          title: t("options.storage.classic_version"),
-          text: t("options.storage.classic_manual_prompt"),
-        },
-        async (btn?: string) => {
-          if (btn !== "yes") return;
-          await openManualSelection();
-        }
-      );
-      return;
-    }
-
-    $alert.yesno("options.storage.classic_confirm", (async (btn: string) => {
-      if (btn === "cancel") return;
-      await persistClassicSelection(result);
-    }) as (...args: unknown[]) => unknown);
-  } catch (e) {
-    console.warn("[Sincronizar] classic:detect falhou:", e);
-  }
-}
-
 async function reloadStats(): Promise<void> {
   loading.value = true;
   try {
@@ -1172,45 +1095,6 @@ async function openFolder(): Promise<void> {
 async function changeFolder(): Promise<void> {
   const newDir = await Platform?.storage?.chooseDir?.();
   if (!newDir) return;
-
-  if (useClassicDir.value) {
-    $alert.show(
-      {
-        title: "options.storage.change_folder",
-        text: "options.storage.classic_import_confirm",
-        buttons: [
-          { text: "actions.copy", color: "info", value: "copy" },
-          { text: "actions.move", color: "warning", value: "move" },
-          { text: "alert.cancel", color: "error", value: "cancel" },
-        ],
-      },
-      (async (btn: string) => {
-        if (btn === "cancel") return;
-        const move = btn === "move";
-        try {
-          const cur = (await Platform.userStore?.read("storage")) || {};
-          const classicDir = cur.classicDir || "";
-          const lang = cur.classicLang || "pt";
-          if (classicDir && Platform.storage?.importFromClassic) {
-            await Platform.storage.importFromClassic(classicDir, newDir, lang, {
-              moveExisting: move,
-            });
-          }
-          await Platform.storage?.setFilesDir?.(newDir, { moveExisting: false });
-          await Platform.userStore?.write("storage", {
-            ...cur,
-            filesDir: newDir,
-            useClassicDir: false,
-          });
-          $userdata.set(KEYS.OPTIONS.USE_CLASSIC_DIR, false);
-          await Promise.all([reloadStats(), scanLocalCache({ force: true })]);
-        } catch (e) {
-          $alert.error({ text: "options.storage.change_failed", error: e as Error });
-        }
-      }) as (...args: unknown[]) => unknown
-    );
-    return;
-  }
 
   $alert.yesno("options.storage.move_confirm", (async (btn: string) => {
     if (btn === "cancel") return;

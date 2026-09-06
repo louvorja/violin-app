@@ -25,16 +25,6 @@ declare global {
       clearJson: () => Promise<void>;
       clearFiles: () => Promise<void>;
       setAutoCache: (enabled: boolean) => Promise<void>;
-      importFromClassic: (classicDir: string, targetDir: string, lang: string, opts?: { moveExisting?: boolean }) => Promise<{ ok: boolean; error?: string }>;
-    };
-    classic: {
-      detect: (installDir?: string) => Promise<{
-        detected: boolean;
-        installDir: string;
-        configDir: string;
-        lang: "pt" | "es" | null;
-        folders: { capas: boolean; imagens: boolean; musicas: boolean };
-      }>;
     };
     userStore: {
       read: (key: string) => Promise<unknown>;

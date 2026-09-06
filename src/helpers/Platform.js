@@ -238,9 +238,6 @@ export default {
    * { detect() } — retorna { detected, installDir, configDir, lang, folders }.
    * null no browser/PWA.
    */
-  get classic() {
-    return api?.classic ?? null;
-  },
 
   /**
    * Iniciar com sistema operacional (F5.1).

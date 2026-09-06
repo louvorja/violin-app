@@ -39,7 +39,6 @@ const updater = require("./main/updater.js");
 const powerBlocker = require("./main/powerBlocker.js");
 const splash = require("./main/splash.js");
 const storage = require("./main/storage.js");
-const classicVersion = require("./main/classicVersion.js");
 const mediaVariants = require("./main/mediaVariants.js");
 const { buildCsp } = require("./main/csp.js");
 
@@ -437,23 +436,6 @@ app.whenReady().then(async () => {
     }
   } catch (e) {
     console.warn("[main] Falha ao aplicar storage config:", e.message);
-  }
-
-  // Classic version: aplicar diretório da versão Delphi se configurado.
-  try {
-    const storageCfg = userStore.read("storage") || {};
-    if (storageCfg.useClassicDir && storageCfg.classicDir) {
-      if (fs.existsSync(storageCfg.classicDir)) {
-        paths.setFilesDir(storageCfg.classicDir);
-        protocolModule.setClassicMode(true, storageCfg.classicLang || "pt");
-        console.log("[main] Modo clássico ativo:", storageCfg.classicDir);
-      } else {
-        console.warn("[main] Diretório clássico não encontrado:", storageCfg.classicDir);
-        userStore.write("storage", { ...storageCfg, useClassicDir: false });
-      }
-    }
-  } catch (e) {
-    console.warn("[main] Falha ao aplicar classic config:", e.message);
   }
 
   // D6 — Atalhos globais se configurados.
@@ -1254,65 +1236,3 @@ ipcMain.handle("storage:setAutoCache", (_e, enabled) => {
   return { ok: true };
 });
 
-// ---------------------------------------------------------------------------
-// IPC: Classic Version — detecção e importação da versão Delphi
-// ---------------------------------------------------------------------------
-
-ipcMain.handle("classic:detect", (_e, installDir) => classicVersion.detect(installDir));
-
-/**
- * Importa arquivos da versão clássica para um novo diretório,
- * remapeando as pastas (capas→covers, imagens→images, musicas→musics/<lang>).
- */
-ipcMain.handle("storage:importFromClassic", async (_e, classicDir, targetDir, lang, opts) => {
-  const moveExisting = opts?.moveExisting === true;
-
-  if (!classicDir || !targetDir) {
-    return { ok: false, error: "classicDir and targetDir required" };
-  }
-
-  // classicDir já é o config dir (C:\...\LouvorJA\config)
-  const configDir = classicDir;
-  if (!(await fs.pathExists(configDir))) {
-    return { ok: false, error: "config dir not found in classic install" };
-  }
-
-  await fs.ensureDir(targetDir);
-
-  const mapping = [
-    { from: "capas", to: "covers" },
-    { from: "imagens", to: "images" },
-  ];
-
-  for (const { from, to } of mapping) {
-    const srcDir = path.join(configDir, from);
-    const destDir = path.join(targetDir, to);
-    if (await fs.pathExists(srcDir)) {
-      await fs.ensureDir(destDir);
-      await fs.copy(srcDir, destDir, { overwrite: true });
-      if (moveExisting) {
-        try {
-          await fs.remove(srcDir);
-        } catch (_) {
-          /* ignore — may be locked */
-        }
-      }
-    }
-  }
-
-  const musicasDir = path.join(configDir, "musicas");
-  if (await fs.pathExists(musicasDir)) {
-    const destMusics = path.join(targetDir, "musics", lang || "pt");
-    await fs.ensureDir(destMusics);
-    await fs.copy(musicasDir, destMusics, { overwrite: true });
-    if (moveExisting) {
-      try {
-        await fs.remove(musicasDir);
-      } catch (_) {
-        /* ignore — may be locked */
-      }
-    }
-  }
-
-  return { ok: true };
-});

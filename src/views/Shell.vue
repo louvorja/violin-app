@@ -40,7 +40,6 @@
       @close="onReleaseNotesClose"
     />
     <StartupCheckDialog v-model="startupCheckOpen" />
-    <ClassicVersionDialog v-model="classicCheckOpen" />
     <UpdateAvailableDialog
       v-model="updateDialogOpen"
       :version="updateDialogVersion"
@@ -139,7 +138,6 @@ import OpenModulesTabs from "@/layout/shell/OpenModulesTabs.vue";
 import ShellLiturgyPanel from "@/layout/shell/ShellLiturgyPanel.vue";
 import HotkeysCheatsheet from "@/layout/shell/HotkeysCheatsheet.vue";
 import StartupCheckDialog from "@/components/StartupCheckDialog.vue";
-import ClassicVersionDialog from "@/components/ClassicVersionDialog.vue";
 import ReleaseNotesDialog from "@/components/ReleaseNotesDialog.vue";
 import type { ReleaseNotes } from "@/types/Update";
 import { shouldShowReleaseNotes } from "@/helpers/ReleaseNotesPolicy";
@@ -180,7 +178,6 @@ const musicSearchOpen = ref(false);
 const bibleSearchOpen = ref(false);
 const hotkeysOpen = ref(false);
 const startupCheckOpen = ref(false);
-const classicCheckOpen = ref(false);
 const bundleLoading = ref(false);
 const bundleCancelled = ref(false);
 const bundleRetryAttempt = ref(1);
@@ -305,7 +302,7 @@ let _startupCheckPending = false;
 let _pendingReleaseNotes = false;
 let _releaseNotesPromise: Promise<ReleaseNotes | null> | null = null;
 let _startupCheckTimeout: ReturnType<typeof setTimeout> | null = null;
-let _bootPhase: "idle" | "release-notes" | "startup" | "classic" | "done" = "idle";
+let _bootPhase: "idle" | "release-notes" | "startup" | "done" = "idle";
 let _startupCloseDeferred = false;
 
 watch(startupCheckOpen, (isOpen, wasOpen) => {
@@ -315,7 +312,7 @@ watch(startupCheckOpen, (isOpen, wasOpen) => {
     return;
   }
   _startupCloseDeferred = false;
-  void _showPendingClassicCheck();
+  _bootPhase = "done";
 });
 
 watch(
@@ -324,7 +321,7 @@ watch(
     if (_bootPhase !== "startup" || !_startupCloseDeferred) return;
     if (downloading || bibleDownloading) return;
     _startupCloseDeferred = false;
-    void _showPendingClassicCheck();
+    _bootPhase = "done";
   }
 );
 
@@ -366,8 +363,7 @@ async function _showPendingStartupCheck() {
   // num diálogo modal que só diz respeito à instalação do usuário final.
   const skip = Platform.isDev || $userdata.get<boolean>(KEYS.OPTIONS.SKIP_STARTUP_CHECK, false);
   if (skip) {
-    const shown = await _showPendingClassicCheck();
-    if (!shown) _bootPhase = "done";
+    _bootPhase = "done";
     return;
   }
 
@@ -469,21 +465,6 @@ async function _showPendingBundleDownload(version?: number): Promise<boolean> {
 function onBundleCancel(): void {
   bundleCancelled.value = true;
   sync.cancelBundle();
-}
-
-async function _showPendingClassicCheck(): Promise<boolean> {
-  if (!Platform.isDesktop || Platform.platform !== "win32") return false;
-  const skip = $userdata.get<boolean>(KEYS.OPTIONS.SKIP_CLASSIC_CHECK, false);
-  const alreadyUsing = $userdata.get<boolean>(KEYS.OPTIONS.USE_CLASSIC_DIR, false);
-  if (skip || alreadyUsing) return false;
-  if (!Platform.classic?.detect) return false;
-
-  const result = await Platform.classic.detect();
-  if (!result?.detected) return false;
-
-  _bootPhase = "classic";
-  classicCheckOpen.value = true;
-  return true;
 }
 
 function _handleUpdaterState(
@@ -713,7 +694,7 @@ onMounted(() => {
   }
 
   // Startup check — só no desktop.
-  // O fluxo é: bundle download → update check → release notes → startup check → classic.
+  // O fluxo é: bundle download → update check → release notes → startup check.
   if (platform.electron) {
     // As notas pertencem a uma atualização, não a uma versão. Sem registrar a
     // versão da execução anterior, uma instalação nova (chave vazia) contava
