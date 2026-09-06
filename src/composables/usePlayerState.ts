@@ -172,7 +172,7 @@ export function usePlayerState(): {
         active: cfg.mode === "instrumental",
         disabled: !has_instrumental_music.value,
         icon: ICONS.MUSIC.SLIDES_PLAYBACK,
-        tray_icon: ICONS.MUSIC.NOTE,
+        tray_icon: ICONS.MUSIC.PLAYBACK,
         click: () => open({ id_music: idMusic, mode: "instrumental", minimized }),
       },
       {

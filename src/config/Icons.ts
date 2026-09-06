@@ -185,7 +185,7 @@ export const ICONS = {
     TIMER_WORSHIP: "hourglass-low",
   },
   MUSIC: {
-    ALBUM: "disc",
+    ALBUM: "album",
     AUDIO: "file-music-filled",
     AUDIO_PLAYBACK: "file-music",
     CLEF: "clef",
@@ -202,11 +202,11 @@ export const ICONS = {
     PIANO: "piano",
     PLAYBACK: "disc",
     PLAYBACK_MULTIPLE: "disc",
-    SING: "microphone",
+    SING: "disc-filled",
     SLIDES_AUDIO: "slideshow",
     SLIDES_ONLY: "squares",
     SLIDES_PLAYBACK: "presentation",
-    SUNG: "microphone",
+    SUNG: "disc-filled",
     VINYL: "vinyl",
   },
   PLAYER: {
