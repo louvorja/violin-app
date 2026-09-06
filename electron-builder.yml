@@ -148,6 +148,21 @@ mac:
 # ---------------------------------------------------------------------------
 # Linux — AppImage
 # ---------------------------------------------------------------------------
+# O caminho oficial no Linux é deb e rpm: cobrem Ubuntu, Mint, Debian, Zorin,
+# MX e Pop de um lado, Fedora e openSUSE do outro — que é onde os operadores
+# estão. Instalam nativo, sem a camada de runtime que Flatpak e Snap carregam,
+# o que também importa no PC fraco de igreja.
+#
+# O AppImage fica para quem usa distro fora dessas duas famílias, e exige do
+# usuário `sudo apt install libfuse2t64` (ou equivalente): o Ubuntu 22.04+ e o
+# Fedora recente só trazem a FUSE 3, e o runtime que o electron-builder 26
+# embute ainda depende da 2 — sem ela o arquivo não abre, e a mensagem só
+# aparece para quem o executou pelo terminal. Medido no Ubuntu 24.04: com a
+# biblioteca instalada, o mesmo AppImage roda sem mais nenhum ajuste.
+#
+# O electron-builder passa a usar um runtime estático, que dispensa a FUSE do
+# host, a partir do v27 — hoje só em alpha. Quando ele estabilizar, atualizar a
+# dependência resolve isto e este comentário pode sair junto.
 linux:
   target:
     - AppImage
