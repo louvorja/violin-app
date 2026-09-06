@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // Mock de Platform antes de importar Path
 vi.mock("@/helpers/Platform", () => ({
@@ -8,18 +8,17 @@ vi.mock("@/helpers/Platform", () => ({
 
 import Path from "../Path.js";
 import Platform from "@/helpers/Platform";
+import { API_URL_DB, API_URL_FILES } from "@/config/Api";
 
-const DB_URL = "https://db.louvorja.com.br/json_db";
-const FILES_URL = "https://files.louvorja.com.br";
+// As URLs vêm de `config/Api`, que as calcula uma vez, na carga do módulo.
+// Cravar as variáveis de ambiente aqui não teria efeito: quando o `beforeEach`
+// roda, o Path já importou os valores. Por isso o alvo é a própria config —
+// o que estes testes fixam é a montagem do caminho, não o endereço do servidor.
+const DB_URL = API_URL_DB;
+const FILES_URL = API_URL_FILES;
 
 beforeEach(() => {
-  vi.stubEnv("VITE_URL_DATABASE", DB_URL);
-  vi.stubEnv("VITE_URL_FILES", FILES_URL);
   Platform.isDesktop = false;
-});
-
-afterEach(() => {
-  vi.unstubAllEnvs();
 });
 
 describe("Path.db — modo web", () => {
