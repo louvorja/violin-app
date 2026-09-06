@@ -24,7 +24,13 @@ const require = createRequire(import.meta.url);
 const electron = require("electron");
 
 const args = ["."];
-if (process.platform === "linux") args.push("--no-sandbox");
+if (process.platform === "linux") {
+  args.push("--no-sandbox");
+  // Mesma razão do `executableArgs` no electron-builder.yml: sob Wayland a
+  // projeção abre no monitor errado, e a plataforma gráfica é escolhida antes
+  // de o `main.cjs` rodar. Aqui é o equivalente do atalho .desktop.
+  args.push("--ozone-platform=x11");
+}
 
 const env = { ...process.env, ELECTRON_DEV: "1" };
 

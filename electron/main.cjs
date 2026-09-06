@@ -336,21 +336,26 @@ app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 // ---------------------------------------------------------------------------
 // Linux — Forçar X11 e desabilitar sandbox
 // ---------------------------------------------------------------------------
-// Ubuntu 22.04+ usa Wayland por padrão, mas screen.getAllDisplays() retorna
-// bounds incorretos no Wayland (todos os displays com mesmas coordenadas).
-// Isso quebra detecção de monitores e posicionamento de janelas de projeção.
-// Forçar X11 resolve: display bounds corretos + window positioning funciona.
+// O Ubuntu entrega sessão Wayland por padrão, e lá o Chromium não põe uma
+// janela num monitor escolhido: o protocolo não deixa o cliente saber nem
+// definir a própria posição. Medido no Ubuntu 24.04 com dois monitores — a
+// projeção abria em tela cheia SOBRE a tela do operador, com o app relatando
+// "resolvido" para o Monitor 2, e o projetor no papel de parede. A área útil
+// também vinha igual aos limites da tela, jogando a janela principal para
+// debaixo da barra do GNOME.
+//
+// Quem resolve é `--ozone-platform=x11`, que precisa vir da LINHA DE COMANDO:
+// quando este arquivo é avaliado, a plataforma gráfica já foi escolhida.
+// Ele mora no atalho .desktop, via `executableArgs` do electron-builder, e no
+// lançador de desenvolvimento. Nem `--ozone-platform-hint=x11` nem
+// `appendSwitch` daqui têm efeito — os dois foram medidos.
+//
 // O --no-sandbox é necessário para AppImage (ambiente isolado sem capabilities).
 if (process.platform === "linux") {
-  // Só forçamos X11 quando existe um servidor X para atender (nativo ou
-  // XWayland, ambos expõem DISPLAY). Numa sessão Wayland sem XWayland o
-  // switch não teria para onde apontar e o app não abriria — deixamos o
-  // Ozone escolher a plataforma nesse caso, mesmo custando a precisão dos
-  // bounds de monitor.
-  if (process.env.DISPLAY) {
-    app.commandLine.appendSwitch("ozone-platform-hint", "x11");
-  } else {
-    console.warn("[LouvorJA] Sem DISPLAY: Wayland nativo, bounds de monitor podem sair imprecisos.");
+  if (process.env.WAYLAND_DISPLAY && !app.commandLine.hasSwitch("ozone-platform")) {
+    console.warn(
+      "[LouvorJA] Sessão Wayland sem --ozone-platform=x11: a projeção pode abrir no monitor errado."
+    );
   }
   app.commandLine.appendSwitch("no-sandbox");
 }

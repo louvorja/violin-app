@@ -179,3 +179,16 @@ linux:
   # `executableName` fica igual porque é dele que o Chromium deriva o WM_CLASS.
   executableName: louvorja-violin
   syncDesktopName: true
+  # Numa sessão Wayland — o padrão do Ubuntu — o Chromium não consegue pôr uma
+  # janela num monitor escolhido: o protocolo não deixa o cliente saber nem
+  # definir a própria posição. Medido no Ubuntu 24.04 com dois monitores: a
+  # projeção abria em tela cheia SOBRE a tela do operador e o projetor ficava
+  # no papel de parede, com o app relatando "resolvido" para o Monitor 2. Sob
+  # XWayland tudo funciona, inclusive a área útil, que no Wayland vinha igual
+  # aos limites da tela (a janela principal ia parar embaixo da barra do GNOME).
+  #
+  # Só a forma abaixo tem efeito. `--ozone-platform-hint=x11` é ignorado, e
+  # `app.commandLine.appendSwitch` no main chega tarde demais — a plataforma já
+  # foi escolhida quando o script JS roda. Por isso vive aqui, no atalho.
+  executableArgs:
+    - --ozone-platform=x11
