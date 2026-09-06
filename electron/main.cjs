@@ -49,6 +49,12 @@ function configureAppPaths() {
   app.setPath("userData", path.join(app.getPath("appData"), "LouvorJA Violin"));
 }
 
+// Antes de tudo: o lock de instância única e a leitura de `_userDataMain` no
+// topo deste módulo já resolvem `userData`. Configurado tarde, o main lia as
+// preferências de um diretório vazio e depois gravava esse estado parcial por
+// cima do arquivo bom — o que o usuário não reescrevesse na sessão sumia.
+configureAppPaths();
+
 // ---------------------------------------------------------------------------
 // Instância única
 // ---------------------------------------------------------------------------
@@ -286,8 +292,6 @@ async function _bootstrapMonitorConfig() {
 }
 
 app.whenReady().then(async () => {
-  configureAppPaths();
-
   await _bootstrapMonitorConfig();
 
   // Limpa Service Workers herdados de execuções anteriores em modo PWA/dev.
