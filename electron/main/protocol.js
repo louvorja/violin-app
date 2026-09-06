@@ -41,6 +41,8 @@ let _config = {
   apiToken: "",
 };
 
+let _assinaturaLogada = "";
+
 /**
  * Atualiza a configuração de URLs remotas.
  * Chamado pelo renderer via IPC logo após montar o app (main.js).
@@ -50,10 +52,15 @@ let _config = {
 function setRemoteConfig(cfg) {
   _config = { ..._config, ...cfg };
   apiConfig.setConfig(cfg);
-  console.log("[protocol] Remote config atualizada:", {
-    databaseUrl: _config.databaseUrl,
-    filesUrl: _config.filesUrl,
-  });
+  // Cada janela que monta reenvia a mesma config; só o que muda vira log.
+  const assinatura = `${_config.databaseUrl}|${_config.filesUrl}`;
+  if (assinatura !== _assinaturaLogada) {
+    _assinaturaLogada = assinatura;
+    console.log("[protocol] Remote config atualizada:", {
+      databaseUrl: _config.databaseUrl,
+      filesUrl: _config.filesUrl,
+    });
+  }
 }
 
 /**
@@ -92,6 +99,65 @@ const _MIME_TYPES = {
   ".json": "application/json",
   ".txt": "text/plain",
 };
+/**
+ * Entrega um arquivo do disco respeitando o `Range` que o player pediu.
+ *
+ * `net.fetch(file://…)` não repassa esse cabeçalho: o áudio vinha inteiro, com
+ * status 200, e o Chromium passava a tratar como duração da faixa apenas o
+ * pedaço que já tinha em mãos. Avançar um slide para além disso encostava no
+ * "fim" e encerrava o hino no meio do culto.
+ */
+function _responderArquivo(caminho, request) {
+  const fileSize = fs.statSync(caminho).size;
+  const rangeHeader = request.headers.get("range");
+  const match = rangeHeader && rangeHeader.match(/^bytes=(\d+)-(\d*)$/);
+
+  if (!match) {
+    return new Response(fs.createReadStream(caminho), {
+      status: 200,
+      headers: {
+        "Content-Type": _getMimeType(caminho),
+        "Content-Length": String(fileSize),
+        "Accept-Ranges": "bytes",
+      },
+    });
+  }
+
+  const start = parseInt(match[1], 10);
+  const end = match[2] ? parseInt(match[2], 10) : fileSize - 1;
+  if (start >= fileSize) {
+    return new Response(null, {
+      status: 416,
+      headers: { "Content-Range": `bytes */${fileSize}` },
+    });
+  }
+
+  const stream = fs.createReadStream(caminho, { start, end });
+  const readable = new ReadableStream({
+    start(controller) {
+      stream.on("data", (chunk) => {
+        try { controller.enqueue(chunk); } catch {
+          // Consumer fechou o stream (seek/navegação) → para de ler do disco.
+          stream.destroy();
+        }
+      });
+      stream.on("end", () => { try { controller.close(); } catch { /* ignore */ } });
+      stream.on("error", (err) => { try { controller.error(err); } catch { /* ignore */ } });
+    },
+    cancel() { stream.destroy(); },
+  });
+
+  return new Response(readable, {
+    status: 206,
+    headers: {
+      "Content-Type": _getMimeType(caminho),
+      "Content-Length": String(end - start + 1),
+      "Content-Range": `bytes ${start}-${end}/${fileSize}`,
+      "Accept-Ranges": "bytes",
+    },
+  });
+}
+
 function _getMimeType(filePath) {
   const ext = path.extname(filePath).toLowerCase();
   return _MIME_TYPES[ext] || "application/octet-stream";
@@ -285,15 +351,19 @@ function handle() {
         // aceitando .mp3 onde o banco pede .opus, e .bmp onde pede .jpg.
         const achado = mediaResolver.resolveReadSync(rawRelative);
         if (achado) {
-          const fileUrl = pathToFileURL(achado.path).toString();
-          return electron.net.fetch(fileUrl);
+          return _responderArquivo(achado.path, request);
         }
 
         // Fallback: stream remoto. Cacheia se for request "completo" (sem Range).
         if (_config.filesUrl) {
           const remoteUrl = _config.filesUrl + (pathname.startsWith("/") ? pathname : "/" + pathname);
-          const isRangeRequest = !!request.headers.get("range");
+          const rangeHeader = request.headers.get("range");
+          const isRangeRequest = !!rangeHeader;
           const headers = _config.apiToken ? { "Api-Token": _config.apiToken } : {};
+          // Sem repassar o Range, o servidor devolve 200 com a faixa inteira e o
+          // player conclui que não dá para navegar nela: a duração vira o pedaço
+          // que chegou, e pular um slide adiante encosta nesse "fim".
+          if (rangeHeader) headers.Range = rangeHeader;
 
           try {
             const response = await electron.net.fetch(remoteUrl, { headers });
@@ -357,54 +427,7 @@ function handle() {
           return new Response("Not found", { status: 404 });
         }
 
-        const rangeHeader = request.headers.get("range");
-
-        // Suporte a Range requests (necessário para seeking em <audio>/<video>)
-        if (rangeHeader) {
-          const stat = fs.statSync(raw);
-          const fileSize = stat.size;
-          const match = rangeHeader.match(/^bytes=(\d+)-(\d*)$/);
-
-          if (match) {
-            const start = parseInt(match[1], 10);
-            const end = match[2] ? parseInt(match[2], 10) : fileSize - 1;
-            const chunkSize = end - start + 1;
-
-            const stream = fs.createReadStream(raw, { start, end });
-            const readable = new ReadableStream({
-              start(controller) {
-                stream.on("data", (chunk) => {
-                  try { controller.enqueue(chunk); } catch {
-                    // Consumer fechou o ReadableStream (seek/nav) →
-                    // para de ler do disco.
-                    stream.destroy();
-                  }
-                });
-                stream.on("end", () => {
-                  try { controller.close(); } catch { /* ignore */ }
-                });
-                stream.on("error", (err) => {
-                  try { controller.error(err); } catch { /* ignore */ }
-                });
-              },
-              cancel() {
-                stream.destroy();
-              },
-            });
-
-            return new Response(readable, {
-              status: 206,
-              headers: {
-                "Content-Type": _getMimeType(raw),
-                "Content-Length": String(chunkSize),
-                "Content-Range": `bytes ${start}-${end}/${fileSize}`,
-                "Accept-Ranges": "bytes",
-              },
-            });
-          }
-        }
-
-        return electron.net.fetch(pathToFileURL(raw).toString());
+        return _responderArquivo(raw, request);
       }
 
       // Host desconhecido

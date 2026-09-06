@@ -172,6 +172,12 @@ function _create(): AudioPlayback {
     setVolume(volume.value < 100 ? 100 : 0);
   }
 
+  // Encostar no fim faz o elemento disparar `ended`, e o fim de faixa encerra a
+  // música. Um seek nunca deve produzir isso: quando a faixa ainda está
+  // chegando, a duração conhecida é só o pedaço baixado, e pular para um slide
+  // adiante caía dentro dessa margem — o hino encerrava sozinho.
+  const _MARGEM_DO_FIM = 0.25;
+
   function seekTo(time: number): void {
     const el = getElement();
     if (!Number.isFinite(time) || time < 0) return;
@@ -179,7 +185,8 @@ function _create(): AudioPlayback {
       ? duration.value
       : el.duration;
     if (!Number.isFinite(d) || d <= 0) return;
-    el.currentTime = Math.max(0, Math.min(time, d));
+    const limite = Math.max(0, d - _MARGEM_DO_FIM);
+    el.currentTime = Math.max(0, Math.min(time, limite));
   }
 
   function advanceTime(delta: number): void {
