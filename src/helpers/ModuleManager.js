@@ -109,13 +109,32 @@ export default {
   async init(i18n) {
     this.i18n = i18n;
 
-    // eager: false → cada index.js é avaliado sob demanda (menor custo síncrono no boot).
     const modules = import.meta.glob("@/modules/**/index.ts");
+    const caminhos = Object.keys(modules);
 
-    for (const path in modules) {
+    // Buscar tudo de uma vez, instalar em ordem.
+    //
+    // Cada módulo é um chunk próprio, e pedi-los dentro do laço encadeava um
+    // round-trip por módulo: medido em 3G, trinta arquivos de 1 a 2KB entravam
+    // em fila indiana e somavam 4s — quase tudo espera de rede, com a shell
+    // parada até o último chegar. Juntos, custam praticamente uma ida só.
+    //
+    // A instalação continua na ordem das chaves do glob, que é estável: é ela
+    // que define a sequência dos módulos dentro de cada grupo do menu, montada
+    // por `push` em `module_group`.
+    const carregados = await Promise.all(
+      caminhos.map((path) =>
+        modules[path]().catch((e) => {
+          console.warn(`[ModuleManager] Falha ao carregar módulo ${path}:`, e);
+          return null;
+        })
+      )
+    );
+
+    for (const [i, path] of caminhos.entries()) {
+      const moduleExports = carregados[i];
+      if (!moduleExports) continue;
       try {
-        const moduleFactory = modules[path];
-        const moduleExports = await moduleFactory();
         const ModuleClass = moduleExports.default;
         if (typeof ModuleClass === "function") {
           const module = new ModuleClass();
@@ -130,7 +149,7 @@ export default {
           }
         }
       } catch (e) {
-        console.warn(`[ModuleManager] Falha ao carregar módulo ${path}:`, e);
+        console.warn(`[ModuleManager] Falha ao instalar módulo ${path}:`, e);
       }
     }
 
