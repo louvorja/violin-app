@@ -41,6 +41,9 @@ function createMainWindow(devUrl, prodHtmlPath, preloadPath, httpBaseUrl) {
   const win = new BrowserWindow({
     width: 1370,
     height: 800,
+    // Não subir daqui sem antes resolver a ribbon: num monitor 1024x768 — o de
+    // igreja com equipamento antigo — a área útil do Ubuntu é 958px, e um
+    // mínimo maior deixaria a janela maior que a tela inteira.
     minWidth: 900,
     minHeight: 600,
     title: "LouvorJA Violin",

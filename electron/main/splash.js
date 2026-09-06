@@ -24,8 +24,12 @@ function show() {
   const primary = screen.getPrimaryDisplay();
   const w = 508;
   const h = 117;
-  const x = Math.round(primary.bounds.x + (primary.workAreaSize.width - w) / 2);
-  const y = Math.round(primary.bounds.y + (primary.workAreaSize.height - h) / 2);
+  // workArea (e não bounds + workAreaSize): no Ubuntu o dock fica na lateral
+  // esquerda e o painel no topo, então a origem da área útil não coincide com
+  // a origem do monitor — misturar as duas jogava o splash fora do centro.
+  const area = primary.workArea;
+  const x = Math.round(area.x + (area.width - w) / 2);
+  const y = Math.round(area.y + (area.height - h) / 2);
 
   splashWindow = new BrowserWindow({
     width: w,

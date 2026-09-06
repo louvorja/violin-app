@@ -28,6 +28,10 @@ function _escapeHtml(text) {
  * @param {number} durationMs  Duração em ms (padrão: 5000)
  * @returns {number} Quantidade de displays identificados
  */
+const _isLinux = process.platform === "linux";
+/** Fundo do card — usado como cor da janela onde não há transparência. */
+const CARD_BG = "#6366f1";
+
 function show(durationMs = 5000) {
   // Fechar overlays anteriores se houver
   hide();
@@ -49,7 +53,11 @@ function show(durationMs = 5000) {
       width: CARD_W,
       height: CARD_H,
       frame: false,
-      transparent: true,
+      // Janela transparente no Linux depende de compositor ativo; onde não há
+      // (X11 puro, sessões leves) o card sai com fundo preto em volta dos
+      // cantos arredondados. Lá a janela é opaca e o card preenche tudo.
+      transparent: !_isLinux,
+      backgroundColor: _isLinux ? CARD_BG : undefined,
       alwaysOnTop: true,
       skipTaskbar: true,
       focusable: false,
@@ -69,6 +77,11 @@ function show(durationMs = 5000) {
     const suffix = isPrimary ? " — Principal" : "";
     // Nome real do aparelho, quando o sistema informa (vazio no Linux/X11).
     const name = typeof display.label === "string" ? display.label.trim() : "";
+    // Sem transparência não há o que arredondar nem onde projetar sombra: o
+    // card É a janela.
+    const cardBackground = _isLinux ? CARD_BG : "rgba(99, 102, 241, 0.92)";
+    const cardRadius = _isLinux ? "0" : "16px";
+    const cardShadow = _isLinux ? "none" : "0 12px 32px rgba(0, 0, 0, 0.45)";
     const html = `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><style>
   html, body {
@@ -85,9 +98,9 @@ function show(durationMs = 5000) {
     box-sizing: border-box;
     width: 100%;
     height: 100%;
-    background: rgba(99, 102, 241, 0.92);
-    border-radius: 16px;
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+    background: ${cardBackground};
+    border-radius: ${cardRadius};
+    box-shadow: ${cardShadow};
     display: flex;
     flex-direction: column;
     align-items: center;
