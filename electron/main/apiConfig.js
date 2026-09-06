@@ -17,6 +17,8 @@ let _config = {
   apiUrlFallbackToken: "",
 };
 
+let _assinaturaLogada = "";
+
 /**
  * Atualiza a configuração a partir dos valores do renderer.
  * Chamado pelo renderer via IPC no boot (main.js).
@@ -35,11 +37,17 @@ function setConfig(cfg) {
   if (cfg.databaseUrl) _config.apiUrlDb = cfg.databaseUrl;
   if (cfg.filesUrl) _config.apiUrlFiles = cfg.filesUrl;
 
-  console.log("[apiConfig] Config atualizada:", {
-    apiUrl: _config.apiUrl,
-    apiUrlDb: _config.apiUrlDb,
-    apiUrlFiles: _config.apiUrlFiles,
-  });
+  // O renderer reenvia a config a cada janela que monta; só interessa avisar
+  // quando o destino muda de verdade.
+  const assinatura = `${_config.apiUrl}|${_config.apiUrlDb}|${_config.apiUrlFiles}`;
+  if (assinatura !== _assinaturaLogada) {
+    _assinaturaLogada = assinatura;
+    console.log("[apiConfig] Config atualizada:", {
+      apiUrl: _config.apiUrl,
+      apiUrlDb: _config.apiUrlDb,
+      apiUrlFiles: _config.apiUrlFiles,
+    });
+  }
 }
 
 /** Retorna uma cópia da configuração atual. */

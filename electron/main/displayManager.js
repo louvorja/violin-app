@@ -28,6 +28,7 @@ const DEBOUNCE_MS = 500;
 const EVENTS = ["display-added", "display-removed", "display-metrics-changed"];
 
 let _bridge = null;
+let _ultimoResumo = "";
 let _timer = null;
 let _attached = false;
 
@@ -76,7 +77,13 @@ function apply() {
   if (promoted.length) parts.push(`papéis promovidos: ${promoted.join(", ")}`);
   if (windows.shown.length) parts.push(`janelas restauradas: ${windows.shown.join(", ")}`);
   if (windows.hidden.length) parts.push(`janelas escondidas: ${windows.hidden.join(", ")}`);
-  console.log(`[displays] Mudança detectada — ${parts.join("; ")}`);
+  // Abrir e fechar janela reavalia os monitores; sem nada de novo a dizer, o
+  // aviso só empurra o log de verdade para fora da tela.
+  const resumo = parts.join("; ");
+  if (resumo !== _ultimoResumo) {
+    _ultimoResumo = resumo;
+    console.log(`[displays] Mudança detectada — ${resumo}`);
+  }
 
   _broadcast("displays:changed", {
     displays: displays.list(),

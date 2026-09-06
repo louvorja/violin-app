@@ -128,7 +128,9 @@ function write(key, value) {
     } catch (_) {
       fs.moveSync(tmp, file, { overwrite: true });
     }
-    console.log(`[userStore] Gravou "${key}" em ${file}`);
+    if (process.env.LOUVORJA_DEBUG_STORAGE) {
+      console.log(`[userStore] Gravou "${key}" em ${file}`);
+    }
   } catch (e) {
     // Limpar arquivo temporário em caso de erro
     try { fs.removeSync(tmp); } catch (_) { /* ignorar */ }
