@@ -75,15 +75,17 @@ publish:
 # Windows — NSIS installer
 # ---------------------------------------------------------------------------
 win:
-  # Intel/AMD e ARM no mesmo instalador: o NSIS embute as duas e escolhe a certa
-  # na hora de instalar, então o operador baixa um arquivo só e não precisa saber
-  # que processador tem a máquina. Sem `arch`, sairia só x64 — e os Windows on
-  # ARM ficariam de fora.
-  target:
-    - target: nsis
-      arch:
-        - x64
-        - arm64
+  # Só x64, de propósito — e isso não deixa o Windows on ARM de fora: desde o
+  # Windows 11 ele executa binários x64 por emulação, então o mesmo instalador
+  # serve as duas máquinas.
+  #
+  # Declarar `arch: [x64, arm64]` aqui sairia caro: o electron-builder monta
+  # SEMPRE um instalador combinado com as duas dentro (`NsisTarget.js`, o
+  # `new Set([this.archs])` que abre `finishBuild`), e o `${arch}` no nome do
+  # arquivo apenas acrescenta os individuais em vez de substituí-lo. O resultado
+  # são três `.exe`, e o `latest.yml` aponta o combinado — 193MB que todo
+  # operador baixaria a cada atualização automática, para usar metade.
+  target: nsis
   icon: build/icon-512.png
   # Code signing (opcional — requer certificado pago):
   # certificateFile: cert.pfx
@@ -116,21 +118,23 @@ nsis:
   include: build/installer.nsh
 
 # ---------------------------------------------------------------------------
-# macOS — DMG (Intel x64 + Apple Silicon arm64)
-# Cross-build de x64 no runner ARM funciona sem Rosetta: o electron-builder
-# baixa os dists do Electron por arquitetura (não há módulos nativos).
-# O latest-mac.yml gerado lista ambos — o auto-update escolhe por arch.
+# macOS — DMG universal (Intel x64 + Apple Silicon arm64 no mesmo arquivo)
+#
+# Aqui vale o contrário do Windows: os dois processadores convivem no parque de
+# Macs em uso, e ninguém precisa descobrir qual tem antes de baixar. O binário
+# universal carrega as duas fatias e o sistema escolhe sozinho.
+#
+# Cross-build funciona sem Rosetta: o electron-builder baixa os dists do
+# Electron por arquitetura e funde (não há módulos nativos).
 # ---------------------------------------------------------------------------
 mac:
   target:
     - target: dmg
       arch:
-        - x64
-        - arm64
+        - universal
     - target: zip
       arch:
-        - x64
-        - arm64
+        - universal
   # Ícone próprio do macOS: 1024x1024 com a placa já desenhada — o squircle
   # branco na grade da Apple (~82% do canvas), margem transparente em volta.
   #
