@@ -69,8 +69,13 @@ const DOMAINS_CSP = {
   SCRIPT: `${cdn} ${google} ${youtube} ${vlibras}`,
   STYLE: `${fonts}`,
   FONT: `${DOMAINS.GOOGLE.filter((d) => d.includes("fonts.gstatic")).join(" ")} ${vlibras} ${cdn}`,
-  IMG: `${youtube}`,
-  MEDIA: `${youtube}`,
+  // A API entra nos três: dela vêm as capas (`<img>`), o áudio das músicas
+  // (`<audio>`) e os JSONs do banco (`fetch`). Faltando em IMG e MEDIA, o
+  // navegador barrava a capa e o áudio enquanto o `fetch` da mesma origem
+  // passava — o operador via "Ocorreu um erro ao carregar este áudio". Só o
+  // desktop escapava, porque lá o CSP libera `https:` inteiro.
+  IMG: `${api} ${youtube}`,
+  MEDIA: `${api} ${youtube}`,
   CONNECT: `${api} ${thirdParty}`,
   WORKER: ``,
   FRAME: `${youtube} ${vlibras}`,

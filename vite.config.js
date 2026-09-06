@@ -30,7 +30,9 @@ export default async ({ mode }) => {
 
   function buildCspMeta() {
     const api = DOMAINS.API.join(" ");
-    const cspApiConnect = apiOrigins ? ` ${apiOrigins} ${api}` : api;
+    // A origem vinda do ambiente vale para capa e áudio tanto quanto para o
+    // banco: um deploy apontado para outro host serve os três do mesmo lugar.
+    const cspApi = apiOrigins ? ` ${apiOrigins} ${api}` : api;
 
     return (
       `<meta http-equiv="Content-Security-Policy" content="` +
@@ -38,9 +40,9 @@ export default async ({ mode }) => {
       ` script-src 'self' blob: ${DOMAINS_CSP.SCRIPT} 'wasm-unsafe-eval';` +
       ` style-src 'self' 'unsafe-inline' ${DOMAINS_CSP.STYLE};` +
       ` font-src 'self' data: ${DOMAINS_CSP.FONT};` +
-      ` img-src 'self' data: ${DOMAINS_CSP.IMG};` +
-      ` media-src 'self' blob: ${DOMAINS_CSP.MEDIA};` +
-      ` connect-src 'self' blob: ${cspApiConnect} http://localhost:* ws://localhost:* ${DOMAINS_CSP.CONNECT};` +
+      ` img-src 'self' data: ${cspApi} ${DOMAINS_CSP.IMG};` +
+      ` media-src 'self' blob: ${cspApi} ${DOMAINS_CSP.MEDIA};` +
+      ` connect-src 'self' blob: ${cspApi} http://localhost:* ws://localhost:* ${DOMAINS_CSP.CONNECT};` +
       ` worker-src 'self' blob:;` +
       ` frame-src ${DOMAINS_CSP.FRAME};` +
       `">`
