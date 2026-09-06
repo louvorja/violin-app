@@ -362,7 +362,9 @@ async function _continueBootAfterUpdate(): Promise<void> {
 async function _showPendingStartupCheck() {
   if (!Platform.isDesktop) return;
 
-  const skip = $userdata.get<boolean>(KEYS.OPTIONS.SKIP_STARTUP_CHECK, false);
+  // Em desenvolvimento a verificação roda a cada recarga do Vite e prende o boot
+  // num diálogo modal que só diz respeito à instalação do usuário final.
+  const skip = Platform.isDev || $userdata.get<boolean>(KEYS.OPTIONS.SKIP_STARTUP_CHECK, false);
   if (skip) {
     const shown = await _showPendingClassicCheck();
     if (!shown) _bootPhase = "done";

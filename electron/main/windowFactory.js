@@ -74,7 +74,7 @@ function _isProjectionPresentationWindow(route, feature) {
  * @param {string} [options.devUrl]        Em dev: http://localhost:5002
  * @param {string} [options.prodHtmlPath]  Em prod: dist/index.html
  * @param {boolean|null} [options.devTools] Controle do DevTools automático (dev).
- *        null (default) → comportamento automático (_isDevMode). true/false → override.
+ *        null (default) → só com LJ_DEVTOOLS=1. true/false → override.
  * @returns {BrowserWindow}
  */
 function openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = false, preloadPath, devUrl, prodHtmlPath, width, height, alwaysOnTop = false, devTools = null }) {
@@ -157,15 +157,11 @@ function openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = f
 
   // Em modo dev, abre DevTools automaticamente em janelas de projeção/operador.
   // Em janelas fullscreen o atalho Ctrl+Shift+I pode não chegar até a página,
-  // então a forma mais confiável de inspecionar é abrir aqui.
-  // Também abre se LJ_DEVTOOLS=1 estiver setado (debug pontual em prod).
-  // O comportamento pode ser controlado pela tela "Opções do Desenvolvedor"
-  // (options.dev.devtools_projections) — o main.cjs passa `devTools` como override.
-  const _isDevMode =
-    process.env.ELECTRON_DEV === "1" ||
-    process.env.LJ_DEVTOOLS === "1" ||
-    !require("electron").app.isPackaged;
-  const _openDevTools = devTools != null ? !!devTools : _isDevMode;
+  // então a forma mais confiável de inspecionar é abrir aqui — mas sob pedido,
+  // não por padrão: em dev cada projeção aberta trazia um console junto.
+  // Liga-se pela tela "Opções do Desenvolvedor" (options.dev.devtools_projections,
+  // que o main.cjs passa em `devTools`), por LJ_DEVTOOLS=1 ou pelo atalho abaixo.
+  const _openDevTools = devTools != null ? !!devTools : process.env.LJ_DEVTOOLS === "1";
   if (_openDevTools) {
     win.webContents.once("did-finish-load", () => {
       try { win.webContents.openDevTools({ mode: "detach" }); } catch (_) { /* ignore */ }

@@ -113,12 +113,12 @@ function createWindow() {
 
   mainWindow = createMainWindow(DEV_URL, prodHtmlPath, preloadPath, HTTP_BASE_URL);
 
-  // DevTools automático na janela principal.
-  // Em dev abre por padrão; pode ser desligado na tela "Opções do Desenvolvedor"
-  // (options.dev.devtools_main_window). Em prod só abre com LJ_DEVTOOLS=1 no env.
+  // DevTools na janela principal. Não abre sozinho nem em dev: quem quer o
+  // console liga em "Opções do Desenvolvedor" (options.dev.devtools_main_window),
+  // usa LJ_DEVTOOLS=1 ou o atalho. Em prod, só com LJ_DEVTOOLS=1 no env.
   if (isDev) {
     const devOpt = _userDataMain?.options?.dev?.devtools_main_window;
-    const openDevTools = devOpt == null ? true : !!devOpt;
+    const openDevTools = devOpt == null ? process.env.LJ_DEVTOOLS === "1" : !!devOpt;
     if (openDevTools) mainWindow.webContents.openDevTools({ mode: "detach" });
   } else if (process.env.LJ_DEVTOOLS === "1") {
     mainWindow.webContents.openDevTools({ mode: "detach" });
