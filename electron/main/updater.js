@@ -532,7 +532,17 @@ function init({ channel = "latest", autoCheck = true, autoDownload = false, useB
       debug: (msg) => console.debug("[updater]", msg),
     };
 
-    autoUpdater.channel = channel;
+    // O canal fica em branco de propósito quando é o "latest" padrão.
+    //
+    // O GitHubProvider monta o canal atual como `updater.channel ||
+    // prerelease(versão instalada)`. Carimbar "latest" aqui vencia a segunda
+    // metade e derrubava a busca inteira: ele só aceita release cujo canal seja
+    // "alpha"/"beta" ou idêntico ao atual, e nenhuma pré-versão casa com
+    // "latest". O feed vinha cheio e o updater concluía "No published versions
+    // on GitHub" — daí o app caía no modo manual, que só baixa o instalador e
+    // pede para o operador abrir o arquivo. Sem esta linha, quem está numa beta
+    // recebe beta, e quem está numa estável recebe estável.
+    if (channel && channel !== "latest") autoUpdater.channel = channel;
     autoUpdater.autoDownload = _autoDownload;
     autoUpdater.autoInstallOnAppQuit = true;
 
