@@ -63,7 +63,7 @@ import { buildAnchorStyle } from "@/types/Overlay";
 import type { OverlayAnchor } from "@/types/Overlay";
 import Libras from "@/helpers/Libras";
 import { DICTIONARY_BASE_URL } from "@/config/Libras";
-import { VLIBRAS_URL } from "@/config/Vlibras";
+import { VLIBRAS_UNITY_URL } from "@/config/Vlibras";
 const props = withDefaults(
   defineProps<{
     slideLyric?: string;
@@ -82,7 +82,7 @@ const props = withDefaults(
     bibleChapter: undefined,
   }
 );
-const unitySrc = VLIBRAS_URL;
+const unitySrc = VLIBRAS_UNITY_URL;
 
 const enabled = ref(false);
 const rawGloss = ref("");

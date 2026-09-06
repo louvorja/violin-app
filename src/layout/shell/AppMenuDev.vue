@@ -60,7 +60,7 @@
           {{ $t("options.dev.reload_all") }}
         </button>
         <button type="button" class="opt-btn" @click="openDevToolsConsole">
-          <Icon :icon="ICONS.UI.CODE_BRACES" size="14" />
+          <Icon :icon="ICONS.UI.CONSOLE" size="14" />
           {{ $t("options.dev.open_devtools_console") }}
         </button>
         <button type="button" class="opt-btn" @click="clearDbCache">

@@ -296,6 +296,7 @@ export const ICONS = {
     CHEVRON_UP: "chevron-up",
     CIRCLE_OUTLINE: "circle",
     CODE_BRACES: "braces",
+    CONSOLE: "terminal-2",
     DASHBOARD: "layout-dashboard",
     DATABASE: "database",
     DEV: "code-dots",
