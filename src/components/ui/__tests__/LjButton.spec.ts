@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { defineComponent } from "vue";
+import { TooltipProvider } from "reka-ui";
 import LjButton from "../LjButton.vue";
 import { mountUi } from "./mountUi";
 
@@ -50,6 +52,29 @@ describe("LjButton", () => {
     });
     expect(w.find(".lj-btn__label").exists()).toBe(false);
     expect(w.attributes("aria-label")).toBe("Editar");
+  });
+
+  it("title em botão só-ícone vira tooltip do design system, não o do sistema", () => {
+    // O tooltip do Reka exige o provider único que a shell monta na raiz.
+    const host = defineComponent({
+      components: { TooltipProvider, LjButton },
+      template: `<TooltipProvider><LjButton icon="pencil" icon-only title="Editar" /></TooltipProvider>`,
+    });
+    const btn = mountUi(host).find("button");
+
+    // O nativo apareceria empilhado com o do design system — e só depois de um
+    // segundo parado, tarde demais para quem opera ao vivo.
+    expect(btn.attributes("title")).toBeUndefined();
+    expect(btn.attributes("aria-label")).toBe("Editar");
+  });
+
+  it("botão com rótulo visível mantém o title nativo — o texto já diz o que faz", () => {
+    const w = mountUi(LjButton, {
+      slots: { default: "Salvar" },
+      attrs: { title: "Salva e fecha" },
+    });
+    expect(w.attributes("title")).toBe("Salva e fecha");
+    expect(w.findComponent({ name: "LjTooltip" }).exists()).toBe(false);
   });
 
   it("cobre todas as variantes anunciadas", () => {

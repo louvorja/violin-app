@@ -88,14 +88,22 @@
       <!-- ══════════ Botão ══════════ -->
       <section class="cat__section">
         <h2 class="cat__h2">LjButton</h2>
+        <p class="cat__note">
+          Botão só-ícone com
+          <code>title</code>
+          ganha o tooltip do design system — passe o mouse sobre os dois abaixo. O atributo sai do
+          DOM (senão o tooltip do sistema apareceria junto) e vira o nome acessível quando não há
+          <code>aria-label</code>
+          .
+        </p>
         <div class="cat__row">
           <LjButton v-for="v in BUTTON_VARIANTS" :key="v" :variant="v">{{ v }}</LjButton>
         </div>
         <div class="cat__row">
           <LjButton :icon="ICONS.ACTIONS.ADD" variant="primary">Com ícone</LjButton>
           <LjButton :icon-end="ICONS.ACTIONS.NEXT">Ícone ao fim</LjButton>
-          <LjButton :icon="ICONS.ACTIONS.EDIT" icon-only />
-          <LjButton :icon="ICONS.ACTIONS.DELETE" icon-only variant="danger" />
+          <LjButton :icon="ICONS.ACTIONS.EDIT" icon-only title="Editar" />
+          <LjButton :icon="ICONS.ACTIONS.DELETE" icon-only variant="danger" title="Excluir" />
           <LjButton loading>Carregando</LjButton>
           <LjButton disabled>Desabilitado</LjButton>
         </div>
