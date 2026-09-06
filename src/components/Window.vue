@@ -229,7 +229,15 @@ function onPointerDownOutside(event) {
   // exatamente aquilo que a pergunta está confirmando.
   const alvo = event.detail?.originalEvent?.target;
   if (alvo instanceof Element && alvo.closest(".alert-overlay")) return;
-  minimize();
+
+  // Prioridade invertida em relação ao ESC, de propósito. O ESC é saída
+  // decisiva; o clique fora é "deixa de lado". Na janela do Mídia, que é a
+  // única minimizável, fechar interromperia a música no meio do culto.
+  // E chamar minimize() sempre era o que deixava o clique fora inerte em toda
+  // janela só fechável — álbum, letra e todo módulo sobre ModuleContainer
+  // emitiam "minimize" para ninguém.
+  if (props.minimizable) minimize();
+  else if (props.closable) close();
 }
 
 // Mesmo acordo do LjDialog: focar o primeiro controle abriria a janela com um
