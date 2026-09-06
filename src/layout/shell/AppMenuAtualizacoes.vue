@@ -229,9 +229,7 @@ import { KEYS } from "@/constants/UserDataKeys";
 import { useSyncManager } from "@/composables/useSyncManager";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
 import type { DbConfig } from "@/types/Database";
-import Alert from "@/helpers/Alert";
 import {
-  API_URL,
   API_TOKEN,
   API_URL_FALLBACK,
   API_URL_FALLBACK_TOKEN,
