@@ -445,6 +445,7 @@
       "refresh_catalog": "Actualizar colectáneas",
       "last_update": "Actualizado a las {time}",
       "scanning_cache": "Comprobando archivos ya descargados… ({done}/{total})",
+      "bundle_running": "Descargando la base de datos… la lista de colecciones aparecerá al terminar.",
       "disk_usage": "Uso en disco (colectáneas descargadas)",
       "disk_usage_loading": "Calculando uso en disco…",
       "disk_usage_detail": "{size} · {files} archivo(s) · {albums} álbum(es) completo(s){hymnal}",

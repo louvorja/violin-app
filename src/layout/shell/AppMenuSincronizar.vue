@@ -67,6 +67,18 @@
           <div class="opt-section-top">
             <p class="opt-hint">{{ $t("options.collections_download.hint") }}</p>
 
+            <div v-if="bundleEmDownload" class="opt-bundle-baixando">
+              <LjIcon :icon="ICONS.UI.PROGRESS_DOWNLOAD" size="16" />
+              <div class="opt-bundle-baixando__texto">
+                <span>{{ $t("options.collections_download.bundle_running") }}</span>
+                <LjProgress
+                  :value="bundleEmDownload.progress ?? 0"
+                  :indeterminate="bundleEmDownload.progress == null"
+                  :height="6"
+                />
+              </div>
+            </div>
+
             <div class="opt-stats opt-stats--compact">
               <div class="opt-stat opt-stat--total">
                 <span class="opt-stat-label">
@@ -612,6 +624,16 @@ const bgTasks = useBackgroundTasks();
 function findTask(id: string) {
   return bgTasks.tasks.value.find((t) => t.id === id && t.status === "running");
 }
+
+/**
+ * O banco baixando neste momento, se estiver.
+ *
+ * A lista de coletâneas desta tela é montada a partir do banco. Enquanto ele
+ * não chega, ela aparece sem nada para marcar e o uso em disco zerado — o que
+ * se parece exatamente com "não há nada para baixar" em vez de "ainda estou
+ * buscando". O id é o mesmo que `useSyncManager` registra ao instalar o bundle.
+ */
+const bundleEmDownload = computed(() => findTask("db-bundle"));
 
 /* ---- Estado ---- */
 
@@ -1299,5 +1321,25 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   gap: var(--lj-space-4);
+}
+.opt-bundle-baixando {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-4);
+  padding: var(--lj-space-4) var(--lj-space-5);
+  margin-bottom: var(--lj-space-4);
+  border: 1px solid var(--lj-body-border);
+  border-radius: var(--lj-radius-md);
+  background: var(--lj-body-bg);
+  color: var(--lj-text-muted);
+  font-size: var(--lj-text-base);
+}
+
+.opt-bundle-baixando__texto {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--lj-space-2);
+  min-width: 0;
 }
 </style>
