@@ -411,6 +411,8 @@
       "desktop_only": "Disponível apenas na versão desktop.",
       "connection": "Conexão",
       "check_connection": "Verificar conexão",
+      "open_startup_check": "Ver verificação inicial",
+      "startup_check_on_boot": "Fazer esta verificação ao iniciar o programa",
       "checking": "Verificando…",
       "connected": "Conectado",
       "disconnected": "Sem conexão",

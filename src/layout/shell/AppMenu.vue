@@ -322,6 +322,8 @@ onMounted(() => {
   window.addEventListener("louvorja:open-updates", onOpenUpdates);
   window.addEventListener("louvorja:open-options", onOpenOptions);
   window.addEventListener("louvorja:open-about", onOpenAbout);
+  // O diálogo da verificação inicial vive no Shell; o menu precisa sair da frente.
+  window.addEventListener("louvorja:open-startup-check", close);
 });
 
 onBeforeUnmount(() => {
@@ -329,6 +331,7 @@ onBeforeUnmount(() => {
   window.removeEventListener("louvorja:open-updates", onOpenUpdates);
   window.removeEventListener("louvorja:open-options", onOpenOptions);
   window.removeEventListener("louvorja:open-about", onOpenAbout);
+  window.removeEventListener("louvorja:open-startup-check", close);
   document.removeEventListener("keydown", onKeydown);
 });
 

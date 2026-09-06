@@ -37,7 +37,18 @@
           >
             {{ $t("options.collections_download.check_connection") }}
           </button>
+          <button type="button" class="opt-btn" @click="openStartupCheck">
+            {{ $t("options.collections_download.open_startup_check") }}
+          </button>
         </div>
+        <label class="opt-checkbox">
+          <input
+            type="checkbox"
+            :checked="startupCheckOnBoot"
+            @change="onStartupCheckOnBootChange(($event.target as HTMLInputElement).checked)"
+          />
+          <span>{{ $t("options.collections_download.startup_check_on_boot") }}</span>
+        </label>
       </div>
     </section>
 
@@ -611,6 +622,10 @@ const ftpChecking = computed(() => sync.ftpChecking.value);
 const ftpOk = computed(() => sync.ftpOk.value);
 const ftpError = computed(() => sync.ftpError.value);
 
+const startupCheckOnBoot = ref<boolean>(
+  $userdata.get<boolean>(KEYS.OPTIONS.SKIP_STARTUP_CHECK, false) !== true
+);
+
 const loadingCategories = ref<boolean>(false);
 const scanningCache = ref<boolean>(false);
 const scanCacheDone = ref<number>(0);
@@ -764,6 +779,17 @@ const bibleHasPendingRemovals = computed<boolean>(() => {
   }
   return false;
 });
+
+/* ---- Verificação inicial ---- */
+
+function onStartupCheckOnBootChange(enabled: boolean): void {
+  startupCheckOnBoot.value = enabled;
+  $userdata.set(KEYS.OPTIONS.SKIP_STARTUP_CHECK, !enabled);
+}
+
+function openStartupCheck(): void {
+  window.dispatchEvent(new CustomEvent("louvorja:open-startup-check"));
+}
 
 /* ---- Métodos de seleção (locais) ---- */
 

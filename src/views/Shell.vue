@@ -254,6 +254,9 @@ const onOpenMusicSearch = () => {
 const onOpenBibleSearch = () => {
   bibleSearchOpen.value = true;
 };
+const onOpenStartupCheck = () => {
+  startupCheckOpen.value = true;
+};
 
 let beforeUnloadHandler: ((e: BeforeUnloadEvent) => void) | null = null;
 
@@ -652,6 +655,7 @@ onMounted(() => {
   window.addEventListener("louvorja:open-hotkeys", onOpenHotkeys);
   window.addEventListener("louvorja:open-music-search", onOpenMusicSearch);
   window.addEventListener("louvorja:open-bible-search", onOpenBibleSearch);
+  window.addEventListener("louvorja:open-startup-check", onOpenStartupCheck);
 
   // Reseta estado da projeção background — garante que restarts
   // (normais ou por crash) não deixam a chave "presada" como true
@@ -840,6 +844,7 @@ onBeforeUnmount(() => {
   window.removeEventListener("louvorja:open-hotkeys", onOpenHotkeys);
   window.removeEventListener("louvorja:open-music-search", onOpenMusicSearch);
   window.removeEventListener("louvorja:open-bible-search", onOpenBibleSearch);
+  window.removeEventListener("louvorja:open-startup-check", onOpenStartupCheck);
 });
 </script>
 
