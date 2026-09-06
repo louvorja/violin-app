@@ -4,15 +4,45 @@ declare global {
     platform: string;
     version: string;
     isDev: boolean;
+    classic: {
+      detect: () => Promise<
+        Array<{ dir: string; configDir: string; lang: string | null; folders: Record<string, boolean> }>
+      >;
+      validate: (
+        dir: string
+      ) => Promise<{ ok: boolean; configDir?: string; folders?: Record<string, boolean>; error?: string }>;
+      getSource: () => Promise<{
+        dir: string | null;
+        lang: string | null;
+        enabled: boolean;
+        available: boolean;
+      }>;
+      setSource: (opts: {
+        dir: string | null;
+        lang?: string | null;
+        enabled?: boolean;
+      }) => Promise<{ ok: boolean; dir?: string | null; lang?: string | null; enabled?: boolean; error?: string }>;
+      import: (opts: {
+        dir: string;
+        lang?: string;
+        move?: boolean;
+      }) => Promise<{ ok: boolean; copiadas?: string[]; error?: string }>;
+    };
+    net: {
+      getStatus: () => Promise<{ online: boolean; since: number | null }>;
+      onStatus: (cb: (s: { online: boolean; since: number | null }) => void) => () => void;
+    };
     storage: {
       chooseFile: () => Promise<string | null>;
       chooseImage: () => Promise<string | null>;
       chooseDir: () => Promise<string | null>;
       setDataDir: (dir: string, opts?: { moveExisting?: boolean }) => Promise<void>;
       enforceQuota: (maxBytes: number) => Promise<void>;
-      checkLocal: (paths: string[]) => Promise<Record<string, boolean>>;
+      checkLocal: (paths: string[]) => Promise<Record<string, "own" | "classic" | false>>;
       removeFiles: (paths: string[]) => Promise<void>;
-      sizeOfPaths: (paths: string[]) => Promise<{ bytes: number; count: number }>;
+      sizeOfPaths: (
+        paths: string[]
+      ) => Promise<{ bytes: number; classicBytes: number; count: number; missing: number }>;
       openDir: () => Promise<void>;
       verify: (files: unknown) => Promise<unknown>;
       clearUnused: (files: unknown) => Promise<void>;

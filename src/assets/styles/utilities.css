@@ -199,3 +199,12 @@
 .lj-u-justify-end {
   justify-content: flex-end;
 }
+
+/* ------------------------------------------------------------
+ * Controle que depende de internet, com a internet fora.
+ * Aplicada pela diretiva `v-requires-network`.
+ * ------------------------------------------------------------ */
+.lj-requires-network--off {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

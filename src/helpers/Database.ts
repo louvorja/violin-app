@@ -10,6 +10,7 @@
  * Sem APIs Vue.
  */
 import $alert from "@/helpers/Alert";
+import { fetchWithTimeout, classifyNetworkError } from "@/helpers/Http";
 import $path from "@/helpers/Path";
 import $dev from "@/helpers/Dev";
 import $idb from "@/helpers/IndexedDB";
@@ -364,20 +365,22 @@ function fetchAndStore<T>(file: string, fresh: boolean): Promise<T | null> {
       ? `?_=${Date.now()}`
       : `?${new Date().toISOString().slice(0, 10).replace(/-/g, "")}`;
     $dev.write("Abrindo DB", `${url}${cacheBuster}`);
-    let response = await fetch(`${url}${cacheBuster}`, {
+    let response = await fetchWithTimeout(`${url}${cacheBuster}`, {
       headers: {
         "Api-Token": API_TOKEN,
       },
+      source: "database",
     });
     // Fallback: se a API principal retornar erro de rede, tenta a API de fallback
     if (!response.ok && API_URL_FALLBACK) {
       const fallbackUrl = fetchUrlFor(file).replace(API_URL, API_URL_FALLBACK);
       if (fallbackUrl !== url) {
         $dev.write("Fallback DB", `${fallbackUrl}${cacheBuster}`);
-        response = await fetch(`${fallbackUrl}${cacheBuster}`, {
+        response = await fetchWithTimeout(`${fallbackUrl}${cacheBuster}`, {
           headers: {
             "Api-Token": API_URL_FALLBACK_TOKEN,
           },
+          source: "database-fallback",
         });
       }
     }
@@ -500,7 +503,11 @@ export default {
         /* cache indisponível também */
       }
 
-      if (!opts.silent) {
+      // Sem rede o cache stale já foi tentado logo acima; insistir num diálogo
+      // modal por chamada enche a tela de avisos iguais no meio do culto, e o
+      // indicador de conexão no cabeçalho já conta a mesma história. Erro de
+      // verdade — 404, resposta inválida — continua aparecendo.
+      if (!opts.silent && classifyNetworkError(error) !== "network") {
         $alert.error({ text: "messages.file_database_not_found", error });
       }
       return null;

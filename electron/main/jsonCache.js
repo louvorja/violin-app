@@ -14,6 +14,7 @@ const path = require("path");
 const https = require("https");
 const http = require("http");
 const paths = require("./paths.js");
+const netHealth = require("./netHealth.js");
 
 // ---------------------------------------------------------------------------
 // Constantes
@@ -146,6 +147,8 @@ async function fetchJson(relPath, remoteBaseUrl, headers = {}) {
       const response = await httpRequest(remoteUrl, headers);
       console.log(`[jsonCache] Resposta de ${relPath}: status=${response.status}`);
 
+      netHealth.report(true, "jsonCache");
+
       if (response.status >= 200 && response.status < 300) {
         if (!response.body || response.body.length === 0) {
           throw new Error(`Resposta vazia do servidor para ${relPath}`);
@@ -213,6 +216,7 @@ async function fetchJson(relPath, remoteBaseUrl, headers = {}) {
 
       throw new Error(`HTTP ${response.status}`);
     } catch (e) {
+      netHealth.report(false, "jsonCache");
       if (fs.existsSync(localPath)) {
         console.warn(
           `[jsonCache] Erro de rede, usando stale: ${relPath} (${e.message})`

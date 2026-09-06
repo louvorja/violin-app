@@ -10,6 +10,7 @@ import $idb from "@/helpers/IndexedDB";
 import $dev from "@/helpers/Dev";
 import { DB_TABLE } from "@/constants/DbTables";
 import type { BundleProgress } from "@/types/Database";
+import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 import {
   API_URL,
   API_TOKEN,
@@ -83,7 +84,12 @@ export default {
     signal?: AbortSignal,
   ): Promise<ArrayBuffer> {
     abortCheck(signal);
-    const res = await fetch(bundleUrl(), { headers: authHeaders(), signal });
+    const res = await fetchWithTimeout(bundleUrl(), {
+      headers: authHeaders(),
+      signal,
+      timeout: NET_TIMEOUT.MEDIA,
+      source: "bundle",
+    });
     if (!res.ok) throw new Error(`Bundle download failed: HTTP ${res.status}`);
 
     const totalBytes = Number(res.headers.get("content-length") || 0);
@@ -227,16 +233,18 @@ export default {
    */
   async fetchRemoteConfig(): Promise<{ version_number: number } | null> {
     try {
-      const res = await fetch(`${API_URL_DB}/config`, {
+      const res = await fetchWithTimeout(`${API_URL_DB}/config`, {
         headers: { "Api-Token": API_TOKEN },
+        source: "bundle-config",
       });
       if (!res.ok) return null;
       return res.json();
     } catch {
       if (!API_URL_FALLBACK) return null;
       try {
-        const res = await fetch(`${API_URL_DB_FALLBACK}/config`, {
+        const res = await fetchWithTimeout(`${API_URL_DB_FALLBACK}/config`, {
           headers: { "Api-Token": API_URL_FALLBACK_TOKEN },
+          source: "bundle-config-fallback",
         });
         if (!res.ok) return null;
         return res.json();

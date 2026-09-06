@@ -33,6 +33,14 @@
         <LjChip size="sm" :variant="ftpChipVariant">{{ ftpLabel }}</LjChip>
       </div>
 
+      <!-- Baixar é opcional: o app toca direto do servidor -->
+      <LjAlert
+        v-if="sync.ftpOk.value"
+        variant="info"
+        :icon="ICONS.UI.INFORMATION_OUTLINE"
+        :text="$t('startup_check.online_hint')"
+      />
+
       <!-- Aviso de servidor indisponível -->
       <LjAlert
         v-if="!sync.ftpChecking.value && !sync.ftpOk.value"
@@ -89,6 +97,9 @@
                   :class="{ 'sc-item__mark--ok': scanData.cachedAlbums.has(album.id_album) }"
                 />
                 <span class="sc-item__name">{{ albumLabel(album) }}</span>
+                <span v-if="scanData.classicAlbums.has(album.id_album)" class="sc-item__origin">
+                  {{ $t("options.collections_download.from_classic") }}
+                </span>
               </div>
             </div>
           </div>
@@ -394,6 +405,7 @@ interface ScanData {
   categories: Category[];
   hymnalIds: number[];
   cachedAlbums: Set<number>;
+  classicAlbums: Set<number>;
   hymnalCached: boolean;
   bibleVersions: BibleVersion[];
   downloadedBibles: number[];
@@ -420,6 +432,7 @@ const scanData = ref<ScanData>({
   categories: [],
   hymnalIds: [],
   cachedAlbums: new Set(),
+  classicAlbums: new Set(),
   hymnalCached: false,
   bibleVersions: [],
   downloadedBibles: [],
@@ -522,6 +535,7 @@ async function startScan(): Promise<void> {
     categories: result.categories,
     hymnalIds: result.hymnalIds,
     cachedAlbums: result.cachedAlbums,
+    classicAlbums: result.classicAlbums,
     hymnalCached: result.hymnalCached,
     bibleVersions: result.bibleVersions,
     downloadedBibles: result.downloadedBibles,
@@ -911,5 +925,10 @@ onMounted(() => {
 .sc-footer__left {
   margin-right: auto;
   min-width: 0;
+}
+
+.sc-item__origin {
+  font-size: 0.85em;
+  opacity: 0.65;
 }
 </style>

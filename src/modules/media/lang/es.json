@@ -3,6 +3,7 @@
   "description": "Monta la diapositiva de la canción (función $media.open)",
   "alerts": {
     "not_loaded": "¡Ocurrió un error al cargar este audio!",
+    "not_loaded_offline": "No se pudo descargar este audio. Verifique la conexión y toque para intentar de nuevo.",
     "close": "¿Quieres cerrar esta presentacion?",
     "close_audio": "¿Quieres detener la musica?",
     "close_projection": "¿Quieres detener la proyección?",

@@ -10,6 +10,12 @@ export interface SnackbarAction {
   icon?: string;
   timeout?: number;
   action?: () => void;
+  /**
+   * Identidade da mensagem. Repetições da mesma chave em sequência curta são
+   * descartadas: sem rede, dez módulos falham quase juntos e a snackbar é
+   * estado único — o operador via a mesma frase piscar dez vezes.
+   */
+  key?: string;
 }
 
 type SnackbarData = string | SnackbarAction;
@@ -24,9 +30,17 @@ function getData(data: SnackbarData): {
   icon: string | null;
   timeout: number;
   action: (() => void) | null;
+  key: string | null;
 } {
   if (typeof data === "string") {
-    return { text: data, color: "info", icon: null, timeout: DEFAULT_TIMEOUT, action: null };
+    return {
+      text: data,
+      color: "info",
+      icon: null,
+      timeout: DEFAULT_TIMEOUT,
+      action: null,
+      key: null,
+    };
   }
   return {
     text: data.text,
@@ -34,8 +48,15 @@ function getData(data: SnackbarData): {
     icon: data.icon || null,
     timeout: data.timeout ?? DEFAULT_TIMEOUT,
     action: typeof data.action === "function" ? data.action : null,
+    key: data.key || null,
   };
 }
+
+/** Janela em que uma chave repetida é considerada a mesma mensagem. */
+const DEDUPE_MS = 10_000;
+
+let _lastKey: string | null = null;
+let _lastKeyAt = 0;
 
   /**
    * Exibe uma snackbar. Aceita opcionalmente uma função de ação que é
@@ -44,6 +65,12 @@ function getData(data: SnackbarData): {
 export default {
   show(data: SnackbarData): void {
     const d = getData(data);
+    if (d.key) {
+      const agora = Date.now();
+      if (d.key === _lastKey && agora - _lastKeyAt < DEDUPE_MS) return;
+      _lastKey = d.key;
+      _lastKeyAt = agora;
+    }
     _currentAction = d.action;
     $appdata.set("snackbar.show", true);
     $appdata.set("snackbar.text", d.text);
@@ -67,19 +94,19 @@ export default {
     return typeof _currentAction === "function";
   },
 
-  success(text: string, config?: { color?: string; icon?: string; timeout?: number }): void {
+  success(text: string, config?: Omit<SnackbarAction, "text">): void {
     this.show({ text, color: "success", icon: ICONS.UI.CHECK_CIRCLE, ...config });
   },
 
-  info(text: string, config?: { color?: string; icon?: string; timeout?: number }): void {
+  info(text: string, config?: Omit<SnackbarAction, "text">): void {
     this.show({ text, color: "info", icon: ICONS.UI.INFO_SOLID, ...config });
   },
 
-  error(text: string, config?: { color?: string; icon?: string; timeout?: number }): void {
+  error(text: string, config?: Omit<SnackbarAction, "text">): void {
     this.show({ text, color: "error", icon: ICONS.UI.ALERT_CIRCLE, ...config });
   },
 
-  warning(text: string, config?: { color?: string; icon?: string; timeout?: number }): void {
+  warning(text: string, config?: Omit<SnackbarAction, "text">): void {
     this.show({ text, color: "warning", icon: ICONS.UI.ALERT, ...config });
   },
 };

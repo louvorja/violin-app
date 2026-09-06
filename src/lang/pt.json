@@ -450,7 +450,8 @@
       "disk_usage": "Uso em disco (coletâneas baixadas)",
       "disk_usage_loading": "Calculando uso em disco…",
       "disk_usage_detail": "{size} · {files} arquivo(s) · {albums} álbum(ns) completo(s){hymnal}",
-      "disk_usage_hymnal": " · hinário"
+      "disk_usage_hymnal": " · hinário",
+      "from_classic": "acervo da versão clássica"
     },
     "bible_download": {
       "title": "Bíblia",
@@ -478,6 +479,25 @@
       "folder_fallback": "Não consegui escrever em {dir}; os dados estão na pasta do programa. Escolha outra pasta ou libere o acesso.",
       "open_folder": "Abrir pasta",
       "change_folder": "Alterar pasta…",
+      "classic": {
+        "title": "Acervo da versão clássica",
+        "hint": "Se você já usa o LouvorJA antigo neste computador, o app pode tocar as músicas direto da pasta dele — sem baixar tudo de novo. Nada é gravado nem apagado lá.",
+        "none": "Nenhuma pasta configurada.",
+        "unavailable": "A pasta configurada não está acessível agora. O acervo volta sozinho quando ela aparecer.",
+        "enabled": "Usar o acervo da versão clássica",
+        "detect": "Procurar automaticamente",
+        "choose": "Escolher pasta...",
+        "import": "Trazer para minha pasta",
+        "remove": "Parar de usar",
+        "not_found": "Não encontramos a instalação da versão clássica. Deseja escolher a pasta manualmente?",
+        "invalid": "Não encontramos o acervo nessa pasta. Escolha a pasta onde o LouvorJA antigo foi instalado.",
+        "applied": "Acervo da versão clássica em uso.",
+        "import_confirm": "Trazer as músicas e imagens da versão clássica para a pasta deste app. Copiar mantém os arquivos onde estão; mover os retira de lá, e o programa antigo deixa de encontrá-los.",
+        "import_done": "Arquivos copiados.",
+        "import_failed": "Não foi possível copiar os arquivos.",
+        "import_copy": "Copiar",
+        "import_move": "Mover"
+      },
       "media_size": "Mídia (áudio, imagens)",
       "cache_size": "Cache do banco",
       "libras_size": "Acessibilidade (Libras)",
@@ -902,6 +922,12 @@
     "favorites": "Favoritos",
     "history": "Histórico",
     "remote_connected": "Conectado remotamente",
+    "offline_title": "Sem conexão com a internet",
+    "offline_since": "Sem conexão desde {time}.",
+    "offline_detail": "O LouvorJA continua funcionando com o que já está no computador. Músicas e imagens que ainda não foram baixadas não abrem até a conexão voltar.",
+    "offline_action": "Esta ação precisa de internet.",
+    "offline_recheck": "Verificar novamente",
+    "offline_checking": "Verificando...",
     "live": "AO VIVO",
     "start_live": "Iniciar modo culto",
     "exit_live": "Sair do modo culto",
@@ -1144,6 +1170,7 @@
     "title": "Verificação Inicial",
     "scanning": "Verificando arquivos do sistema...",
     "connection_status": "Conexão com o servidor",
+    "online_hint": "Baixar é opcional: com internet, o LouvorJA toca as músicas direto do servidor e guarda no computador as que você usar.",
     "collections_status": "Coletâneas",
     "bible_status": "Bíblia",
     "storage_status": "Armazenamento",
@@ -1306,6 +1333,8 @@
   "projection": {
     "enter_fullscreen": "Entrar em tela cheia",
     "fullscreen_hint": "Você também pode apertar F11",
-    "fullscreen_auto_hint": "Um clique é necessário porque o navegador não permite que sites entrem em tela cheia sozinhos. No aplicativo para computador a projeção já abre em tela cheia, sem clique."
+    "fullscreen_auto_hint": "Um clique é necessário porque o navegador não permite que sites entrem em tela cheia sozinhos. No aplicativo para computador a projeção já abre em tela cheia, sem clique.",
+    "video_unavailable": "Vídeo indisponível",
+    "video_unavailable_hint": "Não foi possível carregar o vídeo. Verifique a conexão com a internet."
   }
 }

@@ -208,6 +208,7 @@ import { ref, reactive, computed, onMounted, onBeforeUnmount } from "vue";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import CategoryManagerDialog, { CategoryFileData } from "@/components/CategoryManagerDialog.vue";
+import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 import {
   LjButton,
   LjCard,
@@ -385,9 +386,9 @@ function buildEmbedUrl(url: string): string | null {
 
 async function fetchYoutubeTitle(ytId: string): Promise<string | null> {
   try {
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       `https://www.youtube.com/oembed?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${ytId}`)}&format=json`,
-      { signal: AbortSignal.timeout(5000) }
+      { timeout: NET_TIMEOUT.QUICK, source: "youtube-oembed", thirdParty: true }
     );
     if (!res.ok) return null;
     const json = await res.json();
@@ -442,7 +443,11 @@ async function fetchAndCacheThumbnail(v: VideoItem, ytId: string): Promise<void>
   ];
   for (const url of urls) {
     try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+      const res = await fetchWithTimeout(url, {
+        timeout: NET_TIMEOUT.QUICK,
+        source: "youtube-thumb",
+        thirdParty: true,
+      });
       if (!res.ok) continue;
       const blob = await res.blob();
       const buf = await blob.arrayBuffer();

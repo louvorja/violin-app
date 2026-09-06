@@ -16,11 +16,13 @@
       autoplay
       muted
     />
-    <div
-      v-else-if="fileProjection.type === 'youtube'"
-      ref="ytContainer"
-      class="file-projection__youtube"
-    />
+    <template v-else-if="fileProjection.type === 'youtube'">
+      <div v-show="!ytFailed" ref="ytContainer" class="file-projection__youtube" />
+      <div v-if="ytFailed" class="video-unavailable">
+        <span class="video-unavailable__title">{{ $t("projection.video_unavailable") }}</span>
+        <span class="video-unavailable__hint">{{ $t("projection.video_unavailable_hint") }}</span>
+      </div>
+    </template>
     <canvas
       v-else-if="fileProjection.type === 'pdf'"
       ref="pdfCanvas"
@@ -49,6 +51,7 @@ import {
   YTAPI,
   YTPlayer,
 } from "@/types/Media";
+import { loadYtApi } from "@/composables/useYouTubeApi";
 import { getDocument, GlobalWorkerOptions } from "pdfjs-dist";
 import pdfjsWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import $userdata from "@/helpers/UserData";
@@ -56,6 +59,7 @@ import { getSetting } from "@/helpers/SettingsStorage";
 import { Settings } from "@/types/Settings";
 import { KEYS } from "@/constants/UserDataKeys";
 import { SETTINGS_TABLE } from "@/constants/DbTables";
+import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 
 GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
@@ -81,6 +85,7 @@ let pdfDoc: import("pdfjs-dist").PDFDocumentProxy | null = null;
 let ytPlayer: YTPlayer | null = null;
 let ytSyncTimer: ReturnType<typeof setInterval> | null = null;
 let _ytInitializing = false;
+const ytFailed = ref(false);
 
 const _YT_SYNC_INTERVAL = 500;
 
@@ -133,7 +138,9 @@ async function loadPdf(url: string, pageNum = 1): Promise<void> {
       }
     }
     pdfDoc = null;
-    const data = await fetch(url).then((r) => r.arrayBuffer());
+    const data = await fetchWithTimeout(url, { timeout: NET_TIMEOUT.MEDIA, source: "file" }).then(
+      (r) => r.arrayBuffer()
+    );
     pdfDoc = await getDocument({ data }).promise;
     fileProjection.totalPages = pdfDoc.numPages;
     await renderPdfPage(pageNum);
@@ -294,26 +301,14 @@ function _embedUrlToId(url: string): string | null {
 }
 
 function _loadYtApi(cb: (YT: YTAPI) => void): void {
-  const yt = getYT();
-  if (yt?.Player) {
-    setTimeout(() => cb(yt), 0);
-    return;
-  }
-  const prev = (window as unknown as { onYouTubeIframeAPIReady?: () => void })
-    .onYouTubeIframeAPIReady;
-  (window as unknown as { onYouTubeIframeAPIReady: () => void }).onYouTubeIframeAPIReady = () => {
-    if (prev) prev();
-    const ytLoaded = getYT();
-    if (ytLoaded) setTimeout(() => cb(ytLoaded), 0);
-  };
-  if (!document.querySelector('script[src*="iframe_api"]')) {
-    const tag = document.createElement("script");
-    tag.src = "https://www.youtube.com/iframe_api";
-    tag.onerror = () => {
-      console.error("[FileProjection] Falha ao carregar YouTube IFrame API script");
-    };
-    document.head.appendChild(tag);
-  }
+  ytFailed.value = false;
+  loadYtApi()
+    .then(cb)
+    .catch((e: Error) => {
+      _ytInitializing = false;
+      ytFailed.value = true;
+      console.warn("[FileProjection] YouTube indisponível:", e?.message || e);
+    });
 }
 
 function _initYoutube(): void {
@@ -389,6 +384,7 @@ function _initYoutube(): void {
 
 function _destroyYoutube(): void {
   _ytInitializing = false;
+  ytFailed.value = false;
   if (ytSyncTimer) {
     clearInterval(ytSyncTimer);
     ytSyncTimer = null;
@@ -532,5 +528,27 @@ onBeforeUnmount(async () => {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
+}
+
+/* Um vídeo que não carrega deixava a tela em branco na frente da igreja. */
+.video-unavailable {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--lj-space-2);
+  width: 100%;
+  height: 100%;
+  color: rgb(255 255 255 / 62%);
+  text-align: center;
+}
+
+.video-unavailable__title {
+  font-size: 1.5rem;
+}
+
+.video-unavailable__hint {
+  font-size: 0.95rem;
+  color: rgb(255 255 255 / 42%);
 }
 </style>

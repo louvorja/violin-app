@@ -367,13 +367,20 @@ async function _showPendingStartupCheck() {
 
   // Em desenvolvimento a verificação roda a cada recarga do Vite e prende o boot
   // num diálogo modal que só diz respeito à instalação do usuário final.
-  const skip = Platform.isDev || $userdata.get<boolean>(KEYS.OPTIONS.SKIP_STARTUP_CHECK, false);
+  const skip =
+    Platform.isDev ||
+    $userdata.get<boolean>(KEYS.OPTIONS.SKIP_STARTUP_CHECK, false) ||
+    $userdata.get<boolean>(KEYS.OPTIONS.STARTUP_CHECK_DONE, false);
   if (skip) {
     _bootPhase = "done";
     return;
   }
 
   _bootPhase = "startup";
+  // Marcado na abertura, não no fechamento: se o scan travar, quem fecha o app
+  // não pode ser condenado a rever este diálogo em toda inicialização. Quem
+  // quiser revê-lo tem o botão em Sincronizar.
+  $userdata.set(KEYS.OPTIONS.STARTUP_CHECK_DONE, true);
   startupCheckOpen.value = true;
 }
 
@@ -697,7 +704,6 @@ onMounted(() => {
     $appdata.set(KEYS.SHELL.IS_DESKTOP, true);
   } else {
     $appdata.set(KEYS.SHELL.IS_DESKTOP, false);
-    $appdata.set(KEYS.SHELL.IS_ONLINE, true);
   }
 
   // Startup check — só no desktop.
@@ -706,11 +712,17 @@ onMounted(() => {
     // As notas pertencem a uma atualização, não a uma versão. Sem registrar a
     // versão da execução anterior, uma instalação nova (chave vazia) contava
     // como "mudou" e mostrava changelog para quem nunca atualizou nada.
+    const previousVersion = $userdata.get<string | null>(KEYS.OPTIONS.LAST_RUN_VERSION, null);
     _pendingReleaseNotes = shouldShowReleaseNotes({
-      previousVersion: $userdata.get<string | null>(KEYS.OPTIONS.LAST_RUN_VERSION, null),
+      previousVersion,
       seenVersion: $userdata.get<string | null>(KEYS.OPTIONS.SKIP_RELEASE_NOTES_VERSION, null),
       currentVersion: packageJson.version,
     });
+    // A verificação inicial é apresentação para instalação nova. Quem já rodava
+    // o app antes desta versão não deve ganhar um diálogo que nunca viu.
+    if (previousVersion && !$userdata.get<boolean>(KEYS.OPTIONS.STARTUP_CHECK_DONE, false)) {
+      $userdata.set(KEYS.OPTIONS.STARTUP_CHECK_DONE, true);
+    }
     $userdata.set(KEYS.OPTIONS.LAST_RUN_VERSION, packageJson.version);
     if (_pendingReleaseNotes && Platform.updater) {
       _releaseNotesPromise = Platform.updater.getReleaseNotes().catch(() => null);

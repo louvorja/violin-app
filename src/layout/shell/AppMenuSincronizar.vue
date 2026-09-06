@@ -219,7 +219,13 @@
                       <input
                         type="checkbox"
                         :checked="selectedAlbums.has(album.id_album)"
-                        :disabled="downloading || preparing || scanningCache || saving"
+                        :disabled="
+                          downloading ||
+                          preparing ||
+                          scanningCache ||
+                          saving ||
+                          classicAlbums.has(album.id_album)
+                        "
                         @change="
                           toggleAlbum(album.id_album, ($event.target as HTMLInputElement).checked)
                         "
@@ -227,6 +233,9 @@
                       <span>{{ album.name }}</span>
                       <small v-if="album.subtitle" class="opt-download-count">
                         · {{ album.subtitle }}
+                      </small>
+                      <small v-if="classicAlbums.has(album.id_album)" class="opt-download-count">
+                        · {{ $t("options.collections_download.from_classic") }}
                       </small>
                     </label>
                   </div>
@@ -285,6 +294,7 @@
             <div class="opt-folder-actions">
               <template v-if="!downloading && !preparing">
                 <button
+                  v-requires-network
                   type="button"
                   class="opt-btn opt-btn--primary"
                   :disabled="!hasAnySelection || saving || scanningCache"
@@ -447,6 +457,69 @@
                 </button>
                 <button type="button" class="opt-btn" @click="changeFolder">
                   {{ $t("options.storage.change_folder") }}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Acervo da versão clássica: leitura, nunca escrita -->
+          <div class="opt-row opt-row--col sinc-row-gap">
+            <label class="opt-label sinc-storage-label">
+              {{ $t("options.storage.classic.title") }}
+            </label>
+            <p class="opt-hint">{{ $t("options.storage.classic.hint") }}</p>
+
+            <div class="opt-folder">
+              <code v-if="classicDir" class="opt-folder-path">{{ classicDir }}</code>
+              <p v-else class="opt-hint">{{ $t("options.storage.classic.none") }}</p>
+
+              <p v-if="classicDir && !classicAvailable" class="opt-hint opt-hint--warn">
+                {{ $t("options.storage.classic.unavailable") }}
+              </p>
+
+              <label v-if="classicDir" class="opt-checkbox">
+                <input
+                  type="checkbox"
+                  :checked="classicEnabled"
+                  @change="onClassicToggle(($event.target as HTMLInputElement).checked)"
+                />
+                <span>{{ $t("options.storage.classic.enabled") }}</span>
+              </label>
+
+              <div class="opt-folder-actions">
+                <button
+                  type="button"
+                  class="opt-btn"
+                  :disabled="classicBusy"
+                  @click="detectClassic"
+                >
+                  {{ $t("options.storage.classic.detect") }}
+                </button>
+                <button
+                  type="button"
+                  class="opt-btn"
+                  :disabled="classicBusy"
+                  @click="chooseClassic"
+                >
+                  {{ $t("options.storage.classic.choose") }}
+                </button>
+                <button
+                  v-if="classicDir"
+                  type="button"
+                  class="opt-btn"
+                  :disabled="classicBusy"
+                  @click="importClassic"
+                >
+                  {{ $t("options.storage.classic.import") }}
+                </button>
+                <button
+                  v-if="classicDir"
+                  type="button"
+                  class="opt-btn"
+                  :disabled="classicBusy"
+                  @click="removeClassic"
+                >
+                  {{ $t("options.storage.classic.remove") }}
                 </button>
               </div>
             </div>
@@ -661,6 +734,12 @@ const selectedAlbums = ref<Set<number>>(new Set());
 const selectedHymnal = ref<boolean>(false);
 const selectedHymnal1996 = ref<boolean>(false);
 const cachedAlbumsBaseline = ref<Set<number>>(new Set());
+/**
+ * Álbuns que estão completos porque o acervo da versão clássica os tem. Ficam
+ * fora do baseline de remoção: desmarcar não apagaria nada — a pasta é de outro
+ * programa — e o álbum voltaria marcado na próxima verificação.
+ */
+const classicAlbums = ref<Set<number>>(new Set());
 const cachedHymnalBaseline = ref<boolean>(false);
 const cachedHymnal1996Baseline = ref<boolean>(false);
 
@@ -918,9 +997,12 @@ async function scanLocalCache({ force = false }: { force?: boolean } = {}): Prom
   scanCacheTotal.value = sync.scanProgress.value.total;
 
   selectedAlbums.value = result.cachedAlbums;
+  classicAlbums.value = new Set(result.classicAlbums);
   selectedHymnal.value = result.hymnalCached;
   selectedHymnal1996.value = result.hymnal1996Cached;
-  cachedAlbumsBaseline.value = new Set(result.cachedAlbums);
+  cachedAlbumsBaseline.value = new Set(
+    [...result.cachedAlbums].filter((id) => !result.classicAlbums.has(id))
+  );
   cachedHymnalBaseline.value = result.hymnalCached;
   cachedHymnal1996Baseline.value = result.hymnal1996Cached;
   scanningCache.value = false;
@@ -1165,6 +1247,151 @@ async function changeFolder(): Promise<void> {
   }) as (...args: unknown[]) => unknown);
 }
 
+// ─── Acervo da versão clássica ──────────────────────────────────────
+
+const classicDir = ref<string | null>(null);
+const classicLang = ref<string | null>(null);
+const classicEnabled = ref(false);
+const classicAvailable = ref(false);
+const classicBusy = ref(false);
+
+async function loadClassic(): Promise<void> {
+  if (!Platform.classic) return;
+  const s = await Platform.classic.getSource();
+  classicDir.value = s.dir;
+  classicLang.value = s.lang;
+  classicEnabled.value = s.enabled;
+  classicAvailable.value = s.available;
+}
+
+/** Depois de mudar a origem, o que estava "não baixado" pode ter virado outra coisa. */
+async function afterClassicChange(): Promise<void> {
+  await Promise.all([loadClassic(), reloadStats(), scanLocalCache({ force: true })]);
+}
+
+async function applyClassic(dir: string | null, lang?: string | null): Promise<void> {
+  classicBusy.value = true;
+  try {
+    const r = await Platform.classic!.setSource({ dir, lang, enabled: true });
+    if (!r.ok) {
+      $alert.error({ text: t("options.storage.classic.invalid") });
+      return;
+    }
+    await afterClassicChange();
+    if (dir) $snackbar.success(t("options.storage.classic.applied"));
+  } finally {
+    classicBusy.value = false;
+  }
+}
+
+async function detectClassic(): Promise<void> {
+  if (!Platform.classic) return;
+  classicBusy.value = true;
+  let achados: Awaited<ReturnType<NonNullable<typeof Platform.classic>["detect"]>> = [];
+  try {
+    achados = await Platform.classic.detect();
+  } finally {
+    classicBusy.value = false;
+  }
+
+  if (!achados.length) {
+    // Fora do Windows a instalação vive dentro do disco emulado do Wine, em
+    // caminho que só o dono conhece: cair no seletor é o comportamento útil.
+    $alert.yesno("options.storage.classic.not_found", ((btn: string) => {
+      if (btn === "yes") void chooseClassic();
+    }) as (...args: unknown[]) => unknown);
+    return;
+  }
+
+  await applyClassic(achados[0].dir, achados[0].lang);
+}
+
+async function chooseClassic(): Promise<void> {
+  const dir = await Platform?.storage?.chooseDir?.();
+  if (!dir) return;
+  await applyClassic(dir);
+}
+
+async function onClassicToggle(enabled: boolean): Promise<void> {
+  classicBusy.value = true;
+  try {
+    await Platform.classic!.setSource({
+      dir: classicDir.value,
+      lang: classicLang.value,
+      enabled,
+    });
+    await afterClassicChange();
+  } finally {
+    classicBusy.value = false;
+  }
+}
+
+async function removeClassic(): Promise<void> {
+  classicBusy.value = true;
+  try {
+    await Platform.classic!.setSource({ dir: null });
+    await afterClassicChange();
+  } finally {
+    classicBusy.value = false;
+  }
+}
+
+/**
+ * Trazer o acervo para a nossa pasta. Fica separado do resto de propósito: ler
+ * no lugar não gasta disco nem mexe no que é do outro programa, então copiar é
+ * escolha, não o caminho normal.
+ */
+/** Program Files exige elevação; uma remoção parcial deixaria o clássico quebrado. */
+function classicEmProgramFiles(): boolean {
+  return /program files/i.test(classicDir.value || "");
+}
+
+async function importClassic(): Promise<void> {
+  if (!classicDir.value) return;
+
+  const botoes = [
+    { text: "alert.cancel", color: "error", value: "cancel" },
+    { text: "options.storage.classic.import_copy", color: "info", value: "copy" },
+  ];
+  // Mover tira a mídia de quem ainda usa o programa antigo em paralelo, que é
+  // justamente o caso desta tela — então é a opção menos à mão, e some quando
+  // não daria para concluir.
+  if (!classicEmProgramFiles()) {
+    botoes.splice(1, 0, {
+      text: "options.storage.classic.import_move",
+      color: "warning",
+      value: "move",
+    });
+  }
+
+  $alert.show(
+    {
+      title: t("options.storage.classic.import"),
+      text: t("options.storage.classic.import_confirm"),
+      buttons: botoes,
+    },
+    (async (btn: string) => {
+      if (btn !== "copy" && btn !== "move") return;
+      classicBusy.value = true;
+      try {
+        const r = await Platform.classic!.import({
+          dir: classicDir.value!,
+          lang: classicLang.value || "pt",
+          move: btn === "move",
+        });
+        if (!r.ok) {
+          $alert.error({ text: t("options.storage.classic.import_failed") });
+          return;
+        }
+        await afterClassicChange();
+        $snackbar.success(t("options.storage.classic.import_done"));
+      } finally {
+        classicBusy.value = false;
+      }
+    }) as (...args: unknown[]) => unknown
+  );
+}
+
 async function toggleAutoCache(enabled: boolean): Promise<void> {
   $userdata.set(KEYS.OPTIONS.AUTO_CACHE_MEDIA, enabled);
   if (Platform?.storage?.setAutoCache) {
@@ -1253,7 +1480,13 @@ async function refreshDiskUsage(): Promise<void> {
 onMounted(async () => {
   if (!isDesktop.value) return;
   // Independentes entre si — em série a tela levava a soma dos quatro tempos.
-  await Promise.all([loadCatalog(), sync.checkFtp(), reloadStats(), loadBibleVersions()]);
+  await Promise.all([
+    loadCatalog(),
+    sync.checkFtp(),
+    reloadStats(),
+    loadBibleVersions(),
+    loadClassic(),
+  ]);
 });
 
 onBeforeUnmount(() => {

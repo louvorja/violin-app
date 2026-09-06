@@ -123,7 +123,17 @@ class HttpQueue extends EventEmitter {
           onProgress?.(bytes, total);
         });
         res.pipe(out);
-        out.on("finish", () => out.close(() => resolve()));
+        out.on("finish", () =>
+          out.close(() => {
+            // Conexão que cai no meio entrega um arquivo curto sem erro nenhum,
+            // e ele viraria acervo "baixado" que não toca.
+            if (total > 0 && bytes !== total) {
+              reject(new Error(`Download incompleto: ${bytes}/${total} bytes`));
+              return;
+            }
+            resolve();
+          })
+        );
         out.on("error", reject);
         res.on("error", reject);
       });

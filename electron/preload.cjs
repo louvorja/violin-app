@@ -272,6 +272,25 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
     get: () => ipcRenderer.invoke("app:getLoginItem"),
   },
 
+  // Acervo da versão clássica, usado só para leitura.
+  classic: {
+    detect: () => ipcRenderer.invoke("classic:detect"),
+    validate: (dir) => ipcRenderer.invoke("classic:validate", dir),
+    getSource: () => ipcRenderer.invoke("classic:getSource"),
+    setSource: (opts) => ipcRenderer.invoke("classic:setSource", opts),
+    import: (opts) => ipcRenderer.invoke("classic:import", opts),
+  },
+
+  // Estado da conexão, apurado pelo processo principal.
+  net: {
+    getStatus: () => ipcRenderer.invoke("net:getStatus"),
+    onStatus: (cb) => {
+      const handler = (_e, data) => cb(data);
+      ipcRenderer.on("net:status", handler);
+      return () => ipcRenderer.off("net:status", handler);
+    },
+  },
+
   // S2 — Armazenamento (visibilidade + gerenciamento)
   storage: {
     /** Estatísticas: tamanho ocupado por categoria + caminhos. */

@@ -316,6 +316,7 @@ import { useI18n } from "vue-i18n";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import { LjButton, LjCalendar, LjDialog, LjField, LjIcon, LjInput } from "@/components/ui";
+import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 import type {
   LjCalendarDayClick,
   LjCalendarEventClick,
@@ -455,7 +456,7 @@ function loadDuration(url: string, kind: "video" | "audio"): Promise<number | nu
 function loadHeicPreview(filePath: string): Promise<string | null> {
   return new Promise((resolve) => {
     const url = localUrl(filePath);
-    fetch(url)
+    fetchWithTimeout(url, { timeout: NET_TIMEOUT.MEDIA, source: "file" })
       .then((r) => r.blob())
       .then((blob) => heicToJpeg(blob))
       .then((jpeg) => resolve(URL.createObjectURL(jpeg)))

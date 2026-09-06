@@ -109,6 +109,8 @@
 <script setup>
 import { onMounted, onBeforeUnmount } from "vue";
 import log from "@modules/animation/scripts/log.js";
+import $snackbar from "@/helpers/Snackbar";
+import { i18nAtual } from "@/i18n";
 
 log("CreateAnimation.vue");
 
@@ -270,6 +272,15 @@ onMounted(() => {
       });
     };
   };
+  // Sem internet o script não chega e o relógio nunca é montado: a tela ficava
+  // em branco sem nada no console. Avisar é o mínimo — o módulo depende do CDN.
+  script.onerror = () => {
+    const t = i18nAtual()?.global?.t;
+    $snackbar.warning(t ? t("shell.offline_action") : "Esta ação precisa de internet.", {
+      key: "animation-cdn",
+    });
+  };
+
   document.body.appendChild(script);
 });
 

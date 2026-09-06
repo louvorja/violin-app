@@ -23,6 +23,7 @@
         <div class="opt-folder-actions">
           <button
             v-if="['idle', 'not-available', 'error'].includes(appUpdate.status)"
+            v-requires-network
             type="button"
             class="opt-btn"
             :disabled="appUpdate.status === 'checking'"
@@ -33,6 +34,7 @@
           </button>
           <button
             v-if="appUpdate.status === 'available'"
+            v-requires-network
             type="button"
             class="opt-btn opt-btn--primary"
             @click="startDownload"
@@ -121,12 +123,19 @@
       <div class="opt-row opt-row--col">
         <div class="opt-folder-path">{{ dbUpdateStatusText }}</div>
         <div class="opt-folder-actions">
-          <button type="button" class="opt-btn" :disabled="dbChecking" @click="checkDbUpdate">
+          <button
+            v-requires-network
+            type="button"
+            class="opt-btn"
+            :disabled="dbChecking"
+            @click="checkDbUpdate"
+          >
             <LjIcon :icon="ICONS.ACTIONS.REFRESH" size="14" />
             {{ $t("options.updates.check") }}
           </button>
           <button
             v-if="dbHasUpdate"
+            v-requires-network
             type="button"
             class="opt-btn opt-btn--primary"
             @click="applyDbUpdate"

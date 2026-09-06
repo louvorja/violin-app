@@ -41,6 +41,9 @@ const splash = require("./main/splash.js");
 const storage = require("./main/storage.js");
 const docStore = require("./main/docStore.js");
 const mediaVariants = require("./main/mediaVariants.js");
+const mediaResolver = require("./main/mediaResolver.js");
+const classicLibrary = require("./main/classicLibrary.js");
+const netHealth = require("./main/netHealth.js");
 const { buildCsp } = require("./main/csp.js");
 
 function configureAppPaths() {
@@ -565,6 +568,7 @@ app.whenReady().then(async () => {
       protocolModule.setAutoCacheEnabled(storageCfg.autoCache);
     }
     migrateMediaToDataDir(storageCfg);
+    aplicarAcervoClassico(storageCfg);
   } catch (e) {
     console.warn("[main] Falha ao aplicar storage config:", e.message);
   }
@@ -1372,33 +1376,124 @@ ipcMain.handle("storage:chooseImage", async (event) => {
 });
 
 /**
- * Verifica quais dos arquivos remotos JÁ ESTÃO no disco. Usado para
- * mostrar o indicador "✓ baixado / ⬇ online" nas listas de música.
+ * De onde cada arquivo remoto pode ser lido hoje. Alimenta o indicador
+ * "✓ baixado / ⬇ online" das listas de música.
+ *
+ * Devolve a ORIGEM, não um sim/não: um arquivo que só existe no acervo da
+ * versão clássica está disponível para tocar, mas não é nosso para apagar — e
+ * uma tela que não sabe distinguir oferece um botão de remover que não remove.
  *
  * @param {string[]} remotePaths
- * @returns {Object<string, boolean>}
+ * @returns {Object<string, "own"|"classic"|false>}
  */
 ipcMain.handle("storage:checkLocal", async (_e, remotePaths) => {
-  const filesDir = paths.filesDir();
   const out = {};
   for (const rel of (remotePaths || [])) {
     if (typeof rel !== "string") continue;
-    const cleaned = rel.replace(/^\/+/, "");
-    const localPath = path.resolve(filesDir, cleaned);
-    if (!localPath.startsWith(filesDir + path.sep) && localPath !== filesDir) {
-      out[rel] = false;
-      continue;
-    }
     try {
-      const found = await Promise.all(
-        mediaVariants.variantsOf(localPath).map((p) => fs.pathExists(p))
-      );
-      out[rel] = found.some(Boolean);
+      const achado = await mediaResolver.resolveRead(rel);
+      out[rel] = achado ? achado.origin : false;
     } catch {
       out[rel] = false;
     }
   }
   return out;
+});
+
+/**
+ * Liga o acervo da versão clássica como origem de leitura, se o usuário
+ * configurou um.
+ *
+ * Pasta ausente não apaga a configuração: HD externo desconectado ou pen drive
+ * fora não podem custar o ajuste que a pessoa fez.
+ */
+function aplicarAcervoClassico(storageCfg = {}) {
+  if (!storageCfg.classicEnabled || !storageCfg.classicDir) {
+    mediaResolver.clearClassicRoot();
+    return;
+  }
+  if (!fs.existsSync(storageCfg.classicDir)) {
+    console.warn("[main] Acervo clássico indisponível agora:", storageCfg.classicDir);
+    mediaResolver.clearClassicRoot();
+    return;
+  }
+  mediaResolver.setClassicRoot({
+    dir: storageCfg.classicDir,
+    lang: storageCfg.classicLang || null,
+  });
+  console.info("[main] Acervo clássico em uso (somente leitura):", storageCfg.classicDir);
+}
+
+// ---------------------------------------------------------------------------
+// IPC: acervo da versão clássica (somente leitura)
+// ---------------------------------------------------------------------------
+
+ipcMain.handle("classic:detect", () => classicLibrary.detect());
+
+ipcMain.handle("classic:validate", (_e, dir) => classicLibrary.validate(dir));
+
+/**
+ * Grava a escolha do usuário e aplica na hora. `dir` nulo desliga.
+ */
+ipcMain.handle("classic:setSource", (_e, { dir, lang, enabled } = {}) => {
+  const atual = userStore.read("storage") || {};
+  const cfg = { ...atual };
+
+  if (!dir) {
+    cfg.classicDir = null;
+    cfg.classicLang = null;
+    cfg.classicEnabled = false;
+  } else {
+    const r = classicLibrary.validate(dir);
+    if (!r.ok) return { ok: false, error: r.error };
+    cfg.classicDir = r.configDir;
+    cfg.classicLang = lang || classicLibrary.detectLanguage() || "pt";
+    cfg.classicEnabled = enabled !== false;
+  }
+
+  userStore.write("storage", cfg);
+  aplicarAcervoClassico(cfg);
+  return {
+    ok: true,
+    dir: cfg.classicDir,
+    lang: cfg.classicLang,
+    enabled: cfg.classicEnabled,
+  };
+});
+
+ipcMain.handle("classic:getSource", () => {
+  const cfg = userStore.read("storage") || {};
+  return {
+    dir: cfg.classicDir || null,
+    lang: cfg.classicLang || null,
+    enabled: !!cfg.classicEnabled,
+    available: !!(cfg.classicDir && fs.existsSync(cfg.classicDir)),
+  };
+});
+
+ipcMain.handle("classic:import", (_e, { dir, lang, move } = {}) =>
+  classicLibrary.importFrom(dir, { lang, move })
+);
+
+// ---------------------------------------------------------------------------
+// IPC: estado da conexão
+//
+// O main descobre antes do renderer — é ele quem busca catálogo e mídia o tempo
+// todo. Cada janela (projeção, operador, OBS) recebe o mesmo aviso, em vez de
+// cada uma sondar a rede por conta própria.
+// ---------------------------------------------------------------------------
+
+ipcMain.handle("net:getStatus", () => netHealth.status());
+
+netHealth.onChange((estado) => {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win || win.isDestroyed()) continue;
+    try {
+      win.webContents.send("net:status", estado);
+    } catch (_) {
+      /* janela indo embora */
+    }
+  }
 });
 
 /** Liga/desliga o auto-cache de mídia ao reproduzir (S1). */

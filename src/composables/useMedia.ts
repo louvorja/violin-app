@@ -6,6 +6,10 @@ import { KEYS } from "@/constants/UserDataKeys";
 import $datetime from "@/helpers/DateTime";
 import $path from "@/helpers/Path";
 import $alert from "@/helpers/Alert";
+import $snackbar from "@/helpers/Snackbar";
+import { NET_TIMEOUT, fetchWithTimeout } from "@/helpers/Http";
+import { reportNetworkResult } from "@/composables/useConnectivity";
+import { i18nAtual } from "@/i18n";
 import $modules from "@/helpers/Modules";
 import $database from "@/helpers/Database";
 import $history from "@/helpers/History";
@@ -90,11 +94,13 @@ function _loadAudioSrc(
   }
 
   request.responseType = "blob";
+  request.timeout = NET_TIMEOUT.MEDIA;
   request.onload = function (this: XMLHttpRequest) {
     if (_audioXhr === request) _audioXhr = null;
     $appdata.set(KEYS.MODULES.MEDIA.LOADING, false);
     if (_loadingId !== idCheck) return;
     if (this.status == 200) {
+      reportNetworkResult(true, "media");
       onSource(URL.createObjectURL(this.response as Blob), false);
     } else {
       _switchingMode = false;
@@ -107,19 +113,27 @@ function _loadAudioSrc(
       );
     }
   };
-  request.onerror = function () {
+  const falhaDeRede = function () {
     if (_audioXhr === request) _audioXhr = null;
     _switchingMode = false;
     $appdata.set(KEYS.MODULES.MEDIA.LOADING, false);
     if (_loadingId !== idCheck) return;
+    reportNetworkResult(false, "media");
     _self.close(true);
-    $alert.error(
-      { text: "modules.media.alerts.not_loaded", error: request.statusText || "" },
-      function (a?: unknown) {
-        if (a) retryFn(idCheck as string | number);
+    // Um modal aqui obriga o operador a fechar diálogo com o culto rolando, e
+    // sem rede ele volta a cada música. O aviso leva a repetição no clique.
+    const t = i18nAtual()?.global?.t;
+    $snackbar.warning(
+      t ? t("modules.media.alerts.not_loaded_offline") : "Não foi possível baixar este áudio.",
+      {
+        key: "media-offline",
+        timeout: 6000,
+        action: () => retryFn(idCheck as string | number),
       }
     );
   };
+  request.onerror = falhaDeRede;
+  request.ontimeout = falhaDeRede;
   request.onabort = function () {
     if (_audioXhr === request) _audioXhr = null;
   };
@@ -253,7 +267,12 @@ const _self = {
 
       $alert.info("modules.media.alerts.open_remote");
       try {
-        const response = await fetch(url, { method: "GET", mode: "cors" });
+        const response = await fetchWithTimeout(url, {
+          method: "GET",
+          mode: "cors",
+          timeout: NET_TIMEOUT.DEFAULT,
+          source: "open-song",
+        });
         const ret = await response.json();
         if (ret.status != "ok") {
           $alert.error({

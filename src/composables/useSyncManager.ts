@@ -45,14 +45,18 @@ interface StorageSizeResult {
   count: number;
 }
 
+/** De onde cada arquivo pode ser lido: pasta do app, acervo clássico, ou lugar nenhum. */
+type FileOrigin = "own" | "classic" | false;
+
 interface LocalCheckResult {
-  [remote: string]: boolean;
+  [remote: string]: FileOrigin;
 }
 
 type CleanupFn = () => void;
 
 export interface ScanResult {
   cachedAlbums: Set<number>;
+  classicAlbums: Set<number>;
   hymnalCached: boolean;
   downloadedBibles: number[];
   connectionOk: boolean;
@@ -73,6 +77,8 @@ const FTP_OK_TTL_MS = 60_000;
 
 interface ScanCacheResult {
   cachedAlbums: Set<number>;
+  /** Subconjunto de `cachedAlbums` que só está completo graças ao acervo clássico. */
+  classicAlbums: Set<number>;
   hymnalCached: boolean;
   hymnal1996Cached: boolean;
 }
@@ -226,7 +232,12 @@ export function useSyncManager() {
     { force = false }: { force?: boolean } = {}
   ): Promise<ScanCacheResult> {
     if (!Platform.storage?.checkLocal) {
-      return { cachedAlbums: new Set(), hymnalCached: false, hymnal1996Cached: false };
+      return {
+        cachedAlbums: new Set(),
+        classicAlbums: new Set(),
+        hymnalCached: false,
+        hymnal1996Cached: false,
+      };
     }
 
     if (
@@ -245,12 +256,18 @@ export function useSyncManager() {
     const totalSteps =
       albumIds.length + (hymnalIds.length ? 1 : 0) + (hymnal1996Ids.length ? 1 : 0);
     if (totalSteps === 0)
-      return { cachedAlbums: new Set(), hymnalCached: false, hymnal1996Cached: false };
+      return {
+        cachedAlbums: new Set(),
+        classicAlbums: new Set(),
+        hymnalCached: false,
+        hymnal1996Cached: false,
+      };
 
     scanning.value = true;
     scanProgress.value = { done: 0, total: totalSteps };
 
     const cachedAlbums = new Set<number>();
+    const classicAlbums = new Set<number>();
     const ALBUM_BATCH = 3;
 
     for (let i = 0; i < albumIds.length; i += ALBUM_BATCH) {
@@ -259,9 +276,10 @@ export function useSyncManager() {
         slice.map(async (id) => {
           try {
             const files = await collectAlbumFileList(id);
-            if (files.length > 0 && (await isFileListComplete(files))) {
-              cachedAlbums.add(id);
-            }
+            if (files.length === 0) return;
+            const origem = await originOfFileList(files);
+            if (origem) cachedAlbums.add(id);
+            if (origem === "classic") classicAlbums.add(id);
           } catch (e) {
             console.warn(`[useSyncManager] scan album ${id}:`, e);
           } finally {
@@ -294,7 +312,12 @@ export function useSyncManager() {
     }
 
     scanning.value = false;
-    const result: ScanCacheResult = { cachedAlbums, hymnalCached, hymnal1996Cached };
+    const result: ScanCacheResult = {
+      cachedAlbums,
+      classicAlbums,
+      hymnalCached,
+      hymnal1996Cached,
+    };
     scanCacheEntry = { lang, at: Date.now(), result: cloneScanResult(result) };
     return result;
   }
@@ -302,7 +325,11 @@ export function useSyncManager() {
   /** O chamador marca/desmarca álbuns sobre o Set devolvido — nunca entregue o
    *  mesmo objeto que ficou guardado. */
   function cloneScanResult(r: ScanCacheResult): ScanCacheResult {
-    return { ...r, cachedAlbums: new Set(r.cachedAlbums) };
+    return {
+      ...r,
+      cachedAlbums: new Set(r.cachedAlbums),
+      classicAlbums: new Set(r.classicAlbums),
+    };
   }
 
   function invalidateScanCache(): void {
@@ -314,6 +341,7 @@ export function useSyncManager() {
     hymnalIds: number[];
     hymnal1996Ids: number[];
     cachedAlbums: Set<number>;
+    classicAlbums: Set<number>;
     hymnalCached: boolean;
     hymnal1996Cached: boolean;
     bibleVersions: BibleVersion[];
@@ -321,7 +349,7 @@ export function useSyncManager() {
   }> {
     const { categories, hymnalIds, hymnal1996Ids } = await loadCatalog(lang);
     const { versions: bibleVersions } = await loadBibleVersions(lang);
-    const { cachedAlbums, hymnalCached, hymnal1996Cached } = await scanCache(
+    const { cachedAlbums, classicAlbums, hymnalCached, hymnal1996Cached } = await scanCache(
       lang,
       categories,
       hymnalIds,
@@ -343,6 +371,7 @@ export function useSyncManager() {
       hymnalIds,
       hymnal1996Ids,
       cachedAlbums,
+      classicAlbums,
       hymnalCached,
       hymnal1996Cached,
       bibleVersions,
@@ -638,11 +667,29 @@ export function useSyncManager() {
     return Database.get<T>(key);
   }
 
+  /**
+   * Um álbum inteiro disponível no acervo da versão clássica está completo do
+   * mesmo jeito: o operador consegue tocar tudo, e propor download seria pedir
+   * que ele baixe de novo o que já tem no disco.
+   */
   async function isFileListComplete(files: FileEntry[]): Promise<boolean> {
     if (!files.length || !Platform.storage?.checkLocal) return false;
     const remotes = files.map((f) => f.remote);
     const local = (await Platform.storage.checkLocal(remotes)) as LocalCheckResult;
-    return remotes.every((r) => local[r] === true);
+    return remotes.every((r) => local[r] === "own" || local[r] === "classic");
+  }
+
+  /**
+   * A origem predominante de uma lista: "classic" só quando algum arquivo vem
+   * de lá, para a interface poder marcar o álbum como acervo da versão antiga
+   * e não oferecer um botão de remover que não removeria nada.
+   */
+  async function originOfFileList(files: FileEntry[]): Promise<FileOrigin> {
+    if (!files.length || !Platform.storage?.checkLocal) return false;
+    const remotes = files.map((f) => f.remote);
+    const local = (await Platform.storage.checkLocal(remotes)) as LocalCheckResult;
+    if (!remotes.every((r) => local[r] === "own" || local[r] === "classic")) return false;
+    return remotes.some((r) => local[r] === "classic") ? "classic" : "own";
   }
 
   async function removeFilesFromCache(files: FileEntry[]): Promise<void> {
@@ -1112,6 +1159,7 @@ export function useSyncManager() {
     collectHymnalFileList,
     collectMusicFiles,
     isFileListComplete,
+    originOfFileList,
     removeFilesFromCache,
     invalidateScanCache,
     fetchJson,

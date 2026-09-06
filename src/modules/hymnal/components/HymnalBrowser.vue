@@ -111,6 +111,7 @@ import $appdata from "@/helpers/AppData";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
 import SljaConverter from "@/helpers/SljaConverter";
+import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 
 const props = defineProps({
   moduleId: { type: String, required: true },
@@ -226,7 +227,10 @@ async function exportMusic() {
         const sljaSlides = buildSljaSlides(data);
 
         const audioUrl = $path.file(filePath);
-        const audioResp = await fetch(audioUrl);
+        const audioResp = await fetchWithTimeout(audioUrl, {
+          timeout: NET_TIMEOUT.MEDIA,
+          source: "hymnal-export",
+        });
         if (!audioResp.ok) throw new Error(`HTTP ${audioResp.status}`);
         const audioBlob = await audioResp.blob();
 
@@ -245,7 +249,10 @@ async function exportMusic() {
         for (const imgPath of imagePaths) {
           try {
             const imgUrl = $path.file(imgPath);
-            const resp = await fetch(imgUrl);
+            const resp = await fetchWithTimeout(imgUrl, {
+              timeout: NET_TIMEOUT.MEDIA,
+              source: "hymnal-export",
+            });
             if (resp.ok) {
               const blob = await resp.blob();
               images.set(String(imgPath).split("/").pop(), blob);

@@ -18,7 +18,13 @@
         muted
         loop
       ></video>
-      <div v-else-if="fileState.type === 'youtube'" ref="ytContainer" class="layer-file"></div>
+      <template v-else-if="fileState.type === 'youtube'">
+        <div v-show="!ytFailed" ref="ytContainer" class="layer-file"></div>
+        <div v-if="ytFailed" class="layer-file video-unavailable">
+          <span class="video-unavailable__title">{{ $t("projection.video_unavailable") }}</span>
+          <span class="video-unavailable__hint">{{ $t("projection.video_unavailable_hint") }}</span>
+        </div>
+      </template>
       <canvas
         v-else-if="fileState.type === 'pdf'"
         ref="pdfCanvas"
@@ -147,6 +153,7 @@ import { MAIN_BACKGROUND_ID, Settings } from "@/types/Settings";
 import { KEYS } from "@/constants/UserDataKeys";
 import { SETTINGS_TABLE } from "@/constants/DbTables";
 import type { YTAPI, YTPlayer } from "@/types/Media";
+import { loadYtApi } from "@/composables/useYouTubeApi";
 import { getDocument, GlobalWorkerOptions } from "pdfjs-dist";
 import pdfjsWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { FONT, resolveFont } from "@/config/Fonts";
@@ -214,6 +221,7 @@ const pdfCanvas = ref<HTMLCanvasElement | null>(null);
 let pdfDoc: import("pdfjs-dist").PDFDocumentProxy | null = null;
 let currentPdfPage = ref(1);
 let _ytInitializing = false;
+const ytFailed = ref(false);
 let _ytSyncTimer: ReturnType<typeof setInterval> | null = null;
 
 const projActive = computed(() => !!slide.value);
@@ -449,23 +457,14 @@ function _embedUrlToId(url: string): string | null {
 }
 
 function _loadYtApi(cb: (YT: YTAPI) => void): void {
-  const yt = getYT();
-  if (yt?.Player) {
-    setTimeout(() => cb(yt), 0);
-    return;
-  }
-  const prev = (window as unknown as { onYouTubeIframeAPIReady?: () => void })
-    .onYouTubeIframeAPIReady;
-  (window as unknown as { onYouTubeIframeAPIReady: () => void }).onYouTubeIframeAPIReady = () => {
-    if (prev) prev();
-    const ytLoaded = getYT();
-    if (ytLoaded) setTimeout(() => cb(ytLoaded), 0);
-  };
-  if (!document.querySelector('script[src*="iframe_api"]')) {
-    const tag = document.createElement("script");
-    tag.src = "https://www.youtube.com/iframe_api";
-    document.head.appendChild(tag);
-  }
+  ytFailed.value = false;
+  loadYtApi()
+    .then(cb)
+    .catch((e: Error) => {
+      _ytInitializing = false;
+      ytFailed.value = true;
+      console.warn("[BackgroundProjection] YouTube indisponível:", e?.message || e);
+    });
 }
 
 function _initYoutube(): void {
@@ -532,6 +531,7 @@ function _destroyYoutube(): void {
     ytPlayer = null;
   }
   _ytInitializing = false;
+  ytFailed.value = false;
 }
 
 function _broadcastYtState(): void {
@@ -770,5 +770,27 @@ onBeforeUnmount(() => {
 }
 .fade-verse-leave-to {
   opacity: 0;
+}
+
+/* Um vídeo que não carrega deixava a tela em branco na frente da igreja. */
+.video-unavailable {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--lj-space-2);
+  width: 100%;
+  height: 100%;
+  color: rgb(255 255 255 / 62%);
+  text-align: center;
+}
+
+.video-unavailable__title {
+  font-size: 1.5rem;
+}
+
+.video-unavailable__hint {
+  font-size: 0.95rem;
+  color: rgb(255 255 255 / 42%);
 }
 </style>

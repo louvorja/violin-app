@@ -20,6 +20,7 @@ import { DB_TABLE } from "@/constants/DbTables";
 import type { Music } from "@/types/Music";
 import type { Lyric } from "@/types/Lyric";
 import type { BibleBook } from "@/types/Bible";
+import { fetchWithTimeout } from "@/helpers/Http";
 import {
   BUNDLE_URL,
   REQUEST_TIMEOUT,
@@ -46,11 +47,14 @@ export async function translateText(text: string): Promise<string | null> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
 
-    const response = await fetch(TRANSLATE_URL, {
+    const response = await fetchWithTimeout(TRANSLATE_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text: text.trim() }),
       signal: controller.signal,
+      timeout: REQUEST_TIMEOUT,
+      source: "libras-translate",
+      thirdParty: true,
     });
 
     clearTimeout(timer);
@@ -303,7 +307,12 @@ async function downloadBundleRaw(
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
 
-        const response = await fetch(url, { signal: controller.signal });
+        const response = await fetchWithTimeout(url, {
+          signal: controller.signal,
+          timeout: REQUEST_TIMEOUT,
+          source: "libras-bundle",
+          thirdParty: true,
+        });
         clearTimeout(timer);
 
         if (response.ok) return response.arrayBuffer();

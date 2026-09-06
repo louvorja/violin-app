@@ -36,6 +36,28 @@
     </LjTooltip>
 
     <!--    Atualização disponível-->
+    <!--    Sem conexão-->
+    <LjPopover v-if="!isOnline" :title="t('shell.offline_title')" side="bottom" align="end">
+      <template #trigger>
+        <button
+          type="button"
+          class="shell-tool shell-tool--offline"
+          :aria-label="t('shell.offline_title')"
+        >
+          <LjIcon :icon="ICONS.UI.WIFI_OFF" :size="sizeIcon" class="shell-tool--offline-icon" />
+        </button>
+      </template>
+      <div class="offline-panel">
+        <p v-if="offlineSinceLabel" class="offline-panel__since">
+          {{ t("shell.offline_since", { time: offlineSinceLabel }) }}
+        </p>
+        <p class="offline-panel__detail">{{ t("shell.offline_detail") }}</p>
+        <LjButton size="sm" variant="ghost" :disabled="rechecking" @click="recheckNetwork">
+          {{ rechecking ? t("shell.offline_checking") : t("shell.offline_recheck") }}
+        </LjButton>
+      </div>
+    </LjPopover>
+
     <LjTooltip v-if="hasUpdate" :text="$t('shell.appmenu_items.check_update')" side="bottom">
       <button type="button" class="shell-tool shell-tool--update" @click="openUpdates">
         <LjIcon :icon="ICONS.UI.DOWNLOAD_CIRCLE" :size="sizeIcon" class="shell-tool--update-icon" />
@@ -145,7 +167,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import $appdata from "@/helpers/AppData";
 import $userdata from "@/helpers/UserData";
@@ -159,6 +181,8 @@ import {
 import Broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBackgroundTasks, type BackgroundTask } from "@/composables/useBackgroundTasks";
+import { useConnectivity } from "@/composables/useConnectivity";
+import { localeTag } from "@/helpers/DateTime";
 import { useLibrasState } from "@/modules/libras/composables/useLibrasState";
 import { useAppTheme } from "@/composables/useAppTheme";
 import { formatBackgroundTaskDetail } from "@/helpers/BackgroundTaskDetail";
@@ -166,7 +190,7 @@ import { LjButton, LjIcon, LjPopover, LjProgress, LjTooltip } from "@/components
 import { ICONS } from "@/config/Icons";
 import { COLORS } from "@constants/Colors";
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const { isDark, toggleDark } = useAppTheme();
 const bgTasks = useBackgroundTasks();
 
@@ -188,6 +212,27 @@ const isBgPlaying = computed(() =>
 const { enabled: isLibrasEnabled, setEnabled: setLibrasEnabled } = useLibrasState();
 
 const sizeIcon = 16;
+
+const { isOnline, offlineSince, recheck } = useConnectivity();
+
+const offlineSinceLabel = computed(() => {
+  const t0 = offlineSince.value;
+  if (!t0) return "";
+  return new Date(t0).toLocaleTimeString(localeTag(locale.value), {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+});
+const rechecking = ref(false);
+
+async function recheckNetwork() {
+  rechecking.value = true;
+  try {
+    await recheck();
+  } finally {
+    rechecking.value = false;
+  }
+}
 
 function openUpdates() {
   window.dispatchEvent(new CustomEvent("louvorja:open-updates"));
@@ -285,11 +330,36 @@ function toggleLibras() {
   color: #ffb300;
   filter: drop-shadow(0 0 4px rgba(255, 179, 0, 0.6));
 }
+
+.shell-tool--offline {
+  opacity: 1;
+}
+
+.shell-tool--offline-icon {
+  color: #ffb300;
+}
 </style>
 
 <!-- Sem `scoped`: este conteúdo é renderizado dentro do popover, que vai para
      um portal no <body> e não recebe o atributo de escopo. -->
 <style>
+.offline-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--lj-space-3);
+  max-width: 320px;
+}
+
+.offline-panel__detail,
+.offline-panel__since {
+  margin: 0;
+}
+
+.offline-panel__since {
+  opacity: 0.7;
+}
+
 .bg-tasks {
   display: flex;
   flex-direction: column;

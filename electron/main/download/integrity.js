@@ -1,29 +1,41 @@
 "use strict";
-const fs = require("fs-extra");
-const path = require("path");
 const paths = require("../paths.js");
-const { variantsOf } = require("../mediaVariants.js");
+const { isSizeAcceptable } = require("../mediaRoots.js");
+const resolver = require("../mediaResolver.js");
 
 /**
- * Verifica se um arquivo local existe e bate o tamanho esperado. Aceita
- * variantes de extensão (.mp3 vale por .opus, .bmp por .jpg) para não
- * rebaixar acervo que já está no disco em outro formato.
+ * Verifica se um arquivo local existe e serve. Procura em todas as origens de
+ * leitura — a pasta de dados e, quando configurada, o acervo da versão clássica
+ * — aceitando variantes de extensão (.mp3 vale por .opus, .bmp por .jpg), para
+ * não rebaixar o que já está no disco em outro formato ou em outra pasta.
  *
- * @param {string} localPath  Caminho absoluto OU relativo a userData/files/
- * @param {number} expectedSize  Tamanho em bytes (0 = não checar)
- * @returns {{ exists:boolean, sizeOk:boolean, actualSize:number }}
+ * @param {string} localPath  Caminho relativo ao acervo (absoluto é aceito por
+ *   compatibilidade e tratado como já resolvido)
+ * @param {number} expectedSize  Tamanho em bytes (0 = catálogo não informa)
+ * @returns {{ exists:boolean, sizeOk:boolean, actualSize:number, origin:string|null }}
  */
 function checkFile(localPath, expectedSize = 0) {
-  const abs = path.isAbsolute(localPath)
-    ? localPath
-    : path.join(paths.filesDir(), localPath);
+  const rel = _paraRelativo(localPath);
+  const achado = resolver.resolveReadSync(rel);
+  if (!achado) return { exists: false, sizeOk: false, actualSize: 0, origin: null };
 
-  const found = variantsOf(abs).find((p) => fs.existsSync(p));
-  if (!found) return { exists: false, sizeOk: false, actualSize: 0 };
+  const actualSize = require("fs-extra").statSync(achado.path).size;
+  return {
+    exists: true,
+    sizeOk: isSizeAcceptable(actualSize, expectedSize),
+    actualSize,
+    origin: achado.origin,
+  };
+}
 
-  const actualSize = fs.statSync(found).size;
-  const sizeOk = expectedSize === 0 ? true : actualSize >= expectedSize;
-  return { exists: true, sizeOk, actualSize };
+/** O acervo é endereçado por caminho relativo; absolutos vêm de chamadas antigas. */
+function _paraRelativo(localPath) {
+  const path = require("path");
+  if (!path.isAbsolute(localPath)) return localPath;
+  const filesDir = paths.filesDir();
+  return localPath.startsWith(filesDir + path.sep)
+    ? localPath.slice(filesDir.length + 1)
+    : localPath;
 }
 
 /**

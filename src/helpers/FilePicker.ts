@@ -10,6 +10,7 @@
 
 import Platform from "@/helpers/Platform";
 import $path from "@/helpers/Path";
+import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 
 type ImagePicker = { storage?: { chooseImage?: () => Promise<string | string[] | null> } };
 
@@ -63,7 +64,7 @@ export async function pickImageData(): Promise<{ data: ArrayBuffer; mime: string
       const result = await api.storage.chooseImage();
       if (!result) return null;
       const filePath = Array.isArray(result) ? result[0] : result;
-      const res = await fetch($path.local(filePath));
+      const res = await fetchWithTimeout($path.local(filePath), { timeout: NET_TIMEOUT.MEDIA, source: "file" });
       return { data: await res.arrayBuffer(), mime: res.headers.get("content-type") || "image/png" };
     } catch (e) {
       console.warn("[FilePicker] chooseImage falhou, fallback web:", e);

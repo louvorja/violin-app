@@ -26,7 +26,8 @@ const fs = require("fs-extra");
 const path = require("path");
 const paths = require("./paths.js");
 const jsonCache = require("./jsonCache.js");
-const { variantsOf } = require("./mediaVariants.js");
+const mediaResolver = require("./mediaResolver.js");
+const netHealth = require("./netHealth.js");
 const apiConfig = require("./apiConfig.js");
 const { buildCsp } = require("./csp.js");
 
@@ -259,7 +260,6 @@ function handle() {
       // requests (não cacheamos partials).
       // ------------------------------------------------------------------
       if (host === "files") {
-        const filesDir = paths.filesDir();
         // Decodifica o pathname para resolver corretamente no filesystem.
         // Sem isso, caracteres especiais (%20, %C3%A1, etc.) ficam literais
         // no caminho e criam pastas duplicadas (ex: "Adoradores%205" ao lado
@@ -272,20 +272,20 @@ function handle() {
         } catch {
           rawRelative = pathname.replace(/^\/+/, "");
         }
-        const localPath = path.resolve(filesDir, rawRelative);
-
-        // Proteção path traversal: o caminho resolvido deve iniciar com filesDir
-        if (!localPath.startsWith(filesDir + path.sep) && localPath !== filesDir) {
+        // Onde gravar, se for preciso baixar. Também é o guard de path
+        // traversal: fora da pasta de dados, devolve null.
+        const localPath = mediaResolver.resolveWrite(rawRelative);
+        if (!localPath) {
           console.warn("[protocol] Path traversal bloqueado:", pathname);
           return new Response("Forbidden", { status: 403 });
         }
 
-        // Prioriza arquivo local sempre que existe (suporta Range, streaming, mime).
-        // Aceita variantes de extensão: o banco pede .opus/.jpg, mas o acervo
-        // em disco pode estar em .mp3/.bmp (instalação antiga ou modo clássico).
-        const localVariant = variantsOf(localPath).find((p) => fs.existsSync(p));
-        if (localVariant) {
-          const fileUrl = pathToFileURL(localVariant).toString();
+        // Prioriza o que já está no disco, em qualquer origem de leitura: a
+        // pasta de dados e, quando configurado, o acervo da versão clássica —
+        // aceitando .mp3 onde o banco pede .opus, e .bmp onde pede .jpg.
+        const achado = mediaResolver.resolveReadSync(rawRelative);
+        if (achado) {
+          const fileUrl = pathToFileURL(achado.path).toString();
           return electron.net.fetch(fileUrl);
         }
 
@@ -297,6 +297,8 @@ function handle() {
 
           try {
             const response = await electron.net.fetch(remoteUrl, { headers });
+            // Resposta é resposta: mesmo um 404 prova que o servidor respondeu.
+            netHealth.report(true, "protocol");
 
             if (!response.ok || response.status !== 200 || isRangeRequest) {
               return response; // não cacheamos parciais nem erros
@@ -317,6 +319,7 @@ function handle() {
               headers: response.headers,
             });
           } catch (fetchErr) {
+            netHealth.report(false, "protocol");
             console.warn("[protocol] Falha ao buscar remoto:", remoteUrl, fetchErr.message);
             return new Response("File not found locally and remote fetch failed", { status: 404 });
           }

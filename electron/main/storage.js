@@ -20,6 +20,8 @@ const path = require("path");
 const { shell } = require("electron");
 const paths = require("./paths.js");
 const { variantsOf } = require("./mediaVariants.js");
+const { isSizeAcceptable } = require("./mediaRoots.js");
+const mediaResolver = require("./mediaResolver.js");
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -138,9 +140,15 @@ async function clearFiles() {
 
 /**
  * Compara lista de arquivos remotos com locais. Retorna:
- * - missing: presentes no servidor, faltam no disco
- * - damaged: presentes no disco mas com tamanho diferente
- * - extra: presentes no disco mas não estão na lista do servidor
+ * - missing: presentes no servidor, faltam em TODAS as origens de leitura
+ * - damaged: presentes na nossa pasta mas com tamanho diferente
+ * - extra: presentes na nossa pasta e ausentes da lista do servidor
+ *
+ * `extra` é a única saída que alimenta remoção (`clearUnused`), e por isso é
+ * derivada exclusivamente de `_listAllFiles(filesDir)` — nunca do resolvedor.
+ * Um arquivo encontrado no acervo da versão clássica pode deixar de ser
+ * `missing`, mas jamais pode virar candidato a apagar: a pasta é de outro
+ * programa, que muita gente ainda usa em paralelo.
  *
  * @param {Array<{remote: string, expectedSize?: number}>} remoteFiles
  * @returns {Promise<{missing, damaged, extra}>}
@@ -165,7 +173,11 @@ async function verify(remoteFiles = []) {
   for (const [rel, item] of remoteMap.entries()) {
     const found = variantsOf(rel).find((c) => localSet.has(c));
     if (!found) {
-      missing.push(item);
+      // Antes de mandar baixar, olhar as outras origens de leitura: quem tem o
+      // acervo da versão clássica configurado já possui o arquivo, e listá-lo
+      // como faltando faria a verificação inicial propor rebaixar tudo.
+      const achado = await mediaResolver.resolveRead(rel);
+      if (!achado) missing.push(item);
       continue;
     }
     matched.add(found);
@@ -259,8 +271,8 @@ async function setDataDir(newDir, options = {}) {
  * @returns {Promise<{ bytes: number, count: number, missing: number }>}
  */
 async function sizeOfPaths(remoteRelPaths = []) {
-  const filesDir = paths.filesDir();
   let bytes = 0;
+  let classicBytes = 0;
   let count = 0;
   let missing = 0;
   const seen = new Set();
@@ -271,29 +283,24 @@ async function sizeOfPaths(remoteRelPaths = []) {
     if (seen.has(cleaned)) continue;
     seen.add(cleaned);
 
-    const localPath = path.resolve(filesDir, cleaned);
-    if (!localPath.startsWith(filesDir + path.sep) && localPath !== filesDir) {
-      missing += 1;
-      continue;
-    }
     try {
-      let counted = false;
-      for (const candidate of variantsOf(localPath)) {
-        if (!(await fs.pathExists(candidate))) continue;
-        const stat = await fs.stat(candidate);
-        if (!stat.isFile()) continue;
-        bytes += stat.size;
-        count += 1;
-        counted = true;
-        break;
+      const achado = await mediaResolver.resolveRead(cleaned);
+      if (!achado) {
+        missing += 1;
+        continue;
       }
-      if (!counted) missing += 1;
+      const stat = await fs.stat(achado.path);
+      // Somado à parte: o que está no acervo da versão clássica ocupa disco,
+      // mas remover o álbum não libera esse espaço — é pasta de outro programa.
+      if (achado.origin === "classic") classicBytes += stat.size;
+      else bytes += stat.size;
+      count += 1;
     } catch {
       missing += 1;
     }
   }
 
-  return { bytes, count, missing };
+  return { bytes, classicBytes, count, missing };
 }
 
 async function removeFiles(remoteRelPaths = []) {
@@ -307,8 +314,13 @@ async function removeFiles(remoteRelPaths = []) {
       continue;
     }
     try {
-      if (await fs.pathExists(localPath)) {
-        await fs.remove(localPath);
+      // Sem as variantes, remover um álbum deixava para trás o .mp3/.bmp do
+      // acervo antigo: o espaço não era liberado e o checkLocal, que aceita
+      // variante, seguia marcando o álbum como baixado.
+      for (const candidate of variantsOf(localPath)) {
+        if (!candidate.startsWith(filesDir + path.sep)) continue;
+        if (!(await fs.pathExists(candidate))) continue;
+        await fs.remove(candidate);
         removed += 1;
       }
     } catch (_) {

@@ -3,6 +3,7 @@
   "description": "Monta o slide da música (função $media.open)",
   "alerts": {
     "not_loaded": "Ocorreu um erro ao carregar este áudio!",
+    "not_loaded_offline": "Não foi possível baixar este áudio. Verifique a conexão e toque para tentar de novo.",
     "close": "Deseja fechar este slide?",
     "close_audio": "Deseja parar a música?",
     "close_projection": "Deseja encerrar a projeção?",

@@ -344,6 +344,7 @@ import { ensureRenderableImage, isHeic, heicToJpeg } from "@/helpers/ImageConver
 import { DB_TABLE } from "@/constants/DbTables";
 import { KEYS } from "@/constants/UserDataKeys";
 import { IMAGE_EXT, VIDEO_EXT } from "@/constants/FileTypes";
+import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -992,7 +993,9 @@ async function resolveRenderableUrl(item: PlaylistItem): Promise<string> {
   const cached = heicProjectionCache.get(item.id);
   if (cached) return cached;
 
-  const bytes = await fetch(raw).then((r) => r.blob());
+  const bytes = await fetchWithTimeout(raw, { timeout: NET_TIMEOUT.MEDIA, source: "file" }).then(
+    (r) => r.blob()
+  );
   const jpeg = await heicToJpeg(bytes);
   const url = URL.createObjectURL(jpeg);
   heicProjectionCache.set(item.id, url);

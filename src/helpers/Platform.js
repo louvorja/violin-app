@@ -128,6 +128,27 @@ export default {
   },
 
   /**
+   * Acervo da versão clássica em Delphi, usado só para LEITURA. Quem já tem o
+   * acervo baixado por lá não precisa baixar de novo.
+   *
+   * @returns {{ detect, validate, getSource, setSource, import } | null}
+   */
+  get classic() {
+    return api?.classic ?? null;
+  },
+
+  /**
+   * Estado da conexão apurado pelo processo principal (protocolo, cache de
+   * catálogo e downloads). No navegador não existe: lá o renderer é a única
+   * fonte que há.
+   *
+   * @returns {{ getStatus, onStatus } | null}
+   */
+  get net() {
+    return api?.net ?? null;
+  },
+
+  /**
    * Cliente de download FTP (D3).
    * Permite verificar conexão, baixar arquivos e monitorar progresso.
    * null quando rodando no browser/PWA.

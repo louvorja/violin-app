@@ -154,6 +154,7 @@ import AppData from "@/helpers/AppData";
 import Media from "@/composables/useMedia";
 import { useFileProjection } from "@/composables/useFileProjection";
 import Path from "@/helpers/Path";
+import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 
 const { t: i18nT } = useI18n();
 const { width } = useViewport();
@@ -205,7 +206,10 @@ function fetchYouTubeChannel(id) {
     ytChannelUrl.value = "";
     return;
   }
-  fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${id}&format=json`)
+  fetchWithTimeout(
+    `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${id}&format=json`,
+    { timeout: NET_TIMEOUT.QUICK, source: "youtube-oembed", thirdParty: true }
+  )
     .then((r) => r.json())
     .then((data) => {
       if (req !== ytChannelReq) return;

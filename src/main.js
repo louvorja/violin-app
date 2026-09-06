@@ -1,5 +1,7 @@
 import { createApp, watchEffect } from "vue";
 import { createPinia } from "pinia";
+import { useConnectivity } from "@/composables/useConnectivity";
+import requiresNetwork from "@/directives/requiresNetwork";
 import App from "./App.vue";
 import router from "./router";
 import { createI18nInstance } from "./i18n";
@@ -62,6 +64,7 @@ const app = createApp(App);
 app.use(createPinia());
 app.use(router);
 app.use(VueFullscreen);
+app.directive("requires-network", requiresNetwork);
 
 // Em modo desktop (Electron), desregistra qualquer Service Worker que
 // tenha sido registrado em sessões anteriores (ex.: usuário rodou em
@@ -734,6 +737,10 @@ $storage.hydrate().then(async () => {
     } catch (e) {
       console.warn("[main] ScheduledStore.hydrate falhou:", e);
     }
+
+    // Liga o diagnóstico de conexão antes de montar: as telas de projeção são
+    // rotas deste mesmo app e precisam do estado desde o primeiro quadro.
+    useConnectivity();
 
     app.mount("#app");
 

@@ -253,6 +253,8 @@ export const KEYS = {
     SKIP_RELEASE_NOTES_VERSION: `${OPTIONS}.skip_release_notes_version`,
     SKIP_UPDATE_NOTIFICATION_VERSION: `${OPTIONS}.skip_update_notification_version`,
     SKIP_STARTUP_CHECK: `${OPTIONS}.skip_startup_check`,
+    /** A verificação inicial já foi apresentada uma vez; é de instalação nova. */
+    STARTUP_CHECK_DONE: `${OPTIONS}.startup_check_done`,
     USE_BETA_UPDATES: `${OPTIONS}.use_beta_updates`,
     CHECK_UPDATES_ON_START: `${OPTIONS}.check_updates_on_start`,
     AUTO_DOWNLOAD_UPDATES: `${OPTIONS}.auto_download_updates`,

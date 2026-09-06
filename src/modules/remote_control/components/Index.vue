@@ -20,7 +20,7 @@
       </LjField>
 
       <div class="rcm-actions">
-        <LjButton @click="test">{{ t("labels.test_connection") }}</LjButton>
+        <LjButton v-requires-network @click="test">{{ t("labels.test_connection") }}</LjButton>
         <LjButton v-if="!is_connected" variant="primary" @click="connect">
           {{ t("labels.connect") }}
         </LjButton>
@@ -40,6 +40,7 @@ import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import $userdata from "@/helpers/UserData";
 import $alert from "@/helpers/Alert";
+import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 
 interface PingResponse {
   status?: string;
@@ -91,7 +92,9 @@ async function testUrl(url: string): Promise<TestResult> {
   }
 
   try {
-    const response = await fetch(url + "/api/ping?token=" + token.value, {
+    const response = await fetchWithTimeout(url + "/api/ping?token=" + token.value, {
+      timeout: NET_TIMEOUT.QUICK,
+      source: "remote-ping",
       method: "GET",
       mode: "cors",
     });
