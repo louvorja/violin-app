@@ -1299,8 +1299,6 @@
   },
   "release_notes": {
     "title": "Novedades de la versión",
-    "loading": "Cargando novedades...",
-    "error_offline": "No se pudieron obtener las novedades de la versión. Verifique su conexión a internet.",
     "dont_show_again": "No mostrar de nuevo para esta versión",
     "view_on_github": "Ver en GitHub",
     "no_notes": "No hay notas de versión para mostrar."

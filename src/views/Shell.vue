@@ -34,7 +34,11 @@
     <MusicSpotlight v-model="musicSearchOpen" />
     <BibleSpotlight v-model="bibleSearchOpen" @select="onBibleSelect" />
     <HotkeysCheatsheet v-model="hotkeysOpen" />
-    <ReleaseNotesDialog v-model="releaseNotesOpen" @close="onReleaseNotesClose" />
+    <ReleaseNotesDialog
+      v-model="releaseNotesOpen"
+      :release="releaseNotes"
+      @close="onReleaseNotesClose"
+    />
     <StartupCheckDialog v-model="startupCheckOpen" />
     <ClassicVersionDialog v-model="classicCheckOpen" />
     <UpdateAvailableDialog
@@ -137,6 +141,8 @@ import HotkeysCheatsheet from "@/layout/shell/HotkeysCheatsheet.vue";
 import StartupCheckDialog from "@/components/StartupCheckDialog.vue";
 import ClassicVersionDialog from "@/components/ClassicVersionDialog.vue";
 import ReleaseNotesDialog from "@/components/ReleaseNotesDialog.vue";
+import type { ReleaseNotes } from "@/types/Update";
+import { shouldShowReleaseNotes } from "@/helpers/ReleaseNotesPolicy";
 import UpdateAvailableDialog from "@/components/UpdateAvailableDialog.vue";
 import packageJson from "@root/package.json";
 import $appdata from "@/helpers/AppData";
@@ -182,6 +188,7 @@ const bundleRetryMax = ref(5);
 const bundleError = ref<string | null>(null);
 const bundleErrorOpen = ref(false);
 const releaseNotesOpen = ref(false);
+const releaseNotes = ref<ReleaseNotes | null>(null);
 const updateDialogOpen = ref(false);
 const updateDialogVersion = ref("");
 const ready = ref(false);
@@ -296,6 +303,7 @@ function _handleDisplaysChanged(payload: { hidden?: string[]; shown?: string[] }
 }
 let _startupCheckPending = false;
 let _pendingReleaseNotes = false;
+let _releaseNotesPromise: Promise<ReleaseNotes | null> | null = null;
 let _startupCheckTimeout: ReturnType<typeof setTimeout> | null = null;
 let _bootPhase: "idle" | "release-notes" | "startup" | "classic" | "done" = "idle";
 let _startupCloseDeferred = false;
@@ -324,30 +332,28 @@ function _openUpdatesScreen() {
   window.dispatchEvent(new CustomEvent("louvorja:open-updates"));
 }
 
-// Mostra release notes se pendente.
-function _showPendingReleaseNotes(): boolean {
+// Mostra as notas da versão, se houver o que mostrar. O conteúdo vem da API do
+// GitHub: abrir o diálogo antes de tê-lo em mãos dava um modal de erro no boot
+// de quem está sem internet — e o operador está offline justamente no culto.
+async function _showPendingReleaseNotes(): Promise<boolean> {
   if (!_pendingReleaseNotes) return false;
   _pendingReleaseNotes = false;
-  const skippedNotesVersion = $userdata.get<string | null>(
-    KEYS.OPTIONS.SKIP_RELEASE_NOTES_VERSION,
-    null
-  );
-  if (skippedNotesVersion !== packageJson.version) {
-    _bootPhase = "release-notes";
-    releaseNotesOpen.value = true;
-    return true;
-  }
-  return false;
+  const data = await _releaseNotesPromise;
+  if (!data) return false;
+  releaseNotes.value = data;
+  _bootPhase = "release-notes";
+  releaseNotesOpen.value = true;
+  return true;
 }
 
-function _continueBootAfterUpdate(): void {
+async function _continueBootAfterUpdate(): Promise<void> {
   _startupCheckPending = false;
   if (_startupCheckTimeout) {
     clearTimeout(_startupCheckTimeout);
     _startupCheckTimeout = null;
   }
 
-  const shown = _showPendingReleaseNotes();
+  const shown = await _showPendingReleaseNotes();
   if (!shown) {
     void _showPendingStartupCheck();
   }
@@ -521,7 +527,7 @@ function _handleUpdaterState(
         updateDialogOpen.value = true;
       } else {
         // Versão dispensada → seguir para release notes / startup
-        _continueBootAfterUpdate();
+        void _continueBootAfterUpdate();
       }
     } else if (_startupCheckPending && autoDownload) {
       // Auto-download ativo: download já começou, não mostrar dialog
@@ -535,7 +541,7 @@ function _handleUpdaterState(
     // não reabrir as notas por cima. Segue para release notes / startup.
     // Mesma guarda do ramo acima: baixar pelas Opções não é boot.
     if (_startupCheckPending && !updateDialogOpen.value) {
-      _continueBootAfterUpdate();
+      void _continueBootAfterUpdate();
     }
   } else if (state.status === "not-available" || state.status === "error") {
     $appdata.set(KEYS.SHELL.APP_UPDATE_AVAILABLE, false);
@@ -545,14 +551,14 @@ function _handleUpdaterState(
     if (_startupCheckPending) {
       _startupCheckPending = false;
       // Sem update → seguir para a verificação inicial
-      _continueBootAfterUpdate();
+      void _continueBootAfterUpdate();
     }
   }
 }
 
 async function _runStartupUpdateCheck() {
   if (!Platform.isDesktop || !Platform.updater) {
-    _continueBootAfterUpdate();
+    void _continueBootAfterUpdate();
     return;
   }
   const checkOnStart = $userdata.get<boolean>(KEYS.OPTIONS.CHECK_UPDATES_ON_START, true) === true;
@@ -565,7 +571,7 @@ async function _runStartupUpdateCheck() {
   );
   if (!checkOnStart) {
     // Preferência desligada: não checa, mas segue o fluxo normal de boot
-    _continueBootAfterUpdate();
+    void _continueBootAfterUpdate();
     return;
   }
   _startupCheckPending = true;
@@ -576,7 +582,7 @@ async function _runStartupUpdateCheck() {
     if (_startupCheckPending) {
       console.warn("[Shell] startup update check demorou demais — seguindo para startup check");
       _startupCheckPending = false;
-      _continueBootAfterUpdate();
+      void _continueBootAfterUpdate();
     }
   }, 15000);
 
@@ -590,13 +596,13 @@ async function _runStartupUpdateCheck() {
       // de boot para não depender do updater.
       console.warn("[Shell] startup update check retornou erro:", res?.error);
       if (_startupCheckPending) {
-        _continueBootAfterUpdate();
+        void _continueBootAfterUpdate();
       }
     }
   } catch (e) {
     console.warn("[Shell] startup update check falhou:", e);
     if (_startupCheckPending) {
-      _continueBootAfterUpdate();
+      void _continueBootAfterUpdate();
     }
   } finally {
     if (_startupCheckTimeout) {
@@ -624,6 +630,9 @@ defineExpose({ openCommandPalette, openHotkeysCheatsheet, openMusicSearch, openB
 
 // Ao fechar o modal de novidades: persiste a dispensa (se marcado).
 function onReleaseNotesClose() {
+  // Marcar aqui, e não num checkbox: quem fechava pelo botão ou pelo ESC não
+  // gravava nada, e as mesmas notas voltavam em todo boot, para sempre.
+  $userdata.set(KEYS.OPTIONS.SKIP_RELEASE_NOTES_VERSION, packageJson.version);
   if (_bootPhase === "release-notes") {
     void _showPendingStartupCheck();
   }
@@ -638,7 +647,7 @@ function onUpdateDialogDownload() {
 
 // Handler: dialog de update fechado (sem download) → seguir para release notes/startup
 function onUpdateDialogClose() {
-  _continueBootAfterUpdate();
+  void _continueBootAfterUpdate();
 }
 
 // Registra ações do shell no composable (substitui `$appdata.set("shell._ref")`)
@@ -704,11 +713,18 @@ onMounted(() => {
   // Startup check — só no desktop.
   // O fluxo é: bundle download → update check → release notes → startup check → classic.
   if (platform.electron) {
-    const skippedNotesVersion = $userdata.get<string | null>(
-      KEYS.OPTIONS.SKIP_RELEASE_NOTES_VERSION,
-      null
-    );
-    _pendingReleaseNotes = skippedNotesVersion !== packageJson.version;
+    // As notas pertencem a uma atualização, não a uma versão. Sem registrar a
+    // versão da execução anterior, uma instalação nova (chave vazia) contava
+    // como "mudou" e mostrava changelog para quem nunca atualizou nada.
+    _pendingReleaseNotes = shouldShowReleaseNotes({
+      previousVersion: $userdata.get<string | null>(KEYS.OPTIONS.LAST_RUN_VERSION, null),
+      seenVersion: $userdata.get<string | null>(KEYS.OPTIONS.SKIP_RELEASE_NOTES_VERSION, null),
+      currentVersion: packageJson.version,
+    });
+    $userdata.set(KEYS.OPTIONS.LAST_RUN_VERSION, packageJson.version);
+    if (_pendingReleaseNotes && Platform.updater) {
+      _releaseNotesPromise = Platform.updater.getReleaseNotes().catch(() => null);
+    }
   }
 
   // Auto-update: assina mudanças de estado do updater para acender o badge
@@ -785,7 +801,7 @@ onMounted(() => {
       );
     })();
   } else {
-    _continueBootAfterUpdate();
+    void _continueBootAfterUpdate();
   }
 
   // Bridge popup → main (replica popup ↔ shell)

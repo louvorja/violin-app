@@ -248,6 +248,7 @@ export const KEYS = {
     FULLSCREEN: `${OPTIONS}.fullscreen`,
     LAST_DB_CHECK: `${OPTIONS}.last_db_check`,
     LAST_APP_CHECK: `${OPTIONS}.last_app_check`,
+    LAST_RUN_VERSION: `${OPTIONS}.last_run_version`,
     DISABLED_ALBUMS: `${OPTIONS}.disabled_albums`,
     SKIP_RELEASE_NOTES_VERSION: `${OPTIONS}.skip_release_notes_version`,
     SKIP_UPDATE_NOTIFICATION_VERSION: `${OPTIONS}.skip_update_notification_version`,
