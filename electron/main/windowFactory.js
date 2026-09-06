@@ -46,6 +46,37 @@ function _refocusMainWindow() {
   }, 80);
 }
 
+/**
+ * Em qual monitor esta feature deve aparecer, ou `null` para não aparecer.
+ *
+ * NÃO gravamos preferência aqui: quem persiste a escolha do usuário é a UI
+ * (Screen.vue / RibbonScreenButton.vue / MonitorSelect.vue). Gravar na abertura
+ * já poluiu o mapa de preferências no passado com chaves que ninguém lê.
+ *
+ * O `null` existe por causa do último passo: quando a preferência não resolve,
+ * `getPreferredOrPrimary` entrega o monitor principal, que com o projetor
+ * desconectado é a tela onde o operador trabalha. Só freamos quando o papel
+ * ESTÁ configurado e o monitor dele não está aqui (`pending`). Quem nunca
+ * configurou nada — um monitor só, ou a igreja que espelha a imagem do
+ * operador — continua abrindo normalmente: ali a tela do operador É o projetor,
+ * e é isso que se quer.
+ */
+function _targetDisplay(feature, monitorId) {
+  if (monitorId !== undefined && monitorId !== null) {
+    const pedido = displays.connected().find((d) => d.id === monitorId);
+    if (pedido) return pedido;
+  }
+
+  const alvo = displays.getPreferredOrPrimary(feature);
+  if (displays.resolveFeature(feature).status === "pending" && _isOperatorDisplay(alvo)) {
+    console.warn(
+      `[windowFactory] ${feature}: monitor do papel ausente; não abro na tela do operador.`
+    );
+    return null;
+  }
+  return alvo;
+}
+
 /** O display informado é aquele onde a janela principal está? */
 function _isOperatorDisplay(display) {
   if (!display || !_mainWindow || _mainWindow.isDestroyed()) return false;
@@ -97,43 +128,27 @@ function _isProjectionPresentationWindow(route, feature) {
  */
 function openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = false, preloadPath, devUrl, prodHtmlPath, width, height, alwaysOnTop = false, devTools = null }) {
   // Se já existe janela para essa feature, mostra-a sem roubar o foco da main.
+  //
+  // Quando ela está escondida é porque o monitor dela sumiu e o `reconcile` a
+  // recolheu. Aí não basta mostrar: sem decidir o destino de novo, a janela
+  // reaparece onde o gerenciador a largou — a tela do operador. Era a sequência
+  // real do culto: cabo cai, projeção some, o operador clica para projetar o
+  // próximo e a letra abre em cima do trabalho dele.
   const existing = _openWindows.get(feature);
   if (existing && !existing.isDestroyed()) {
-    existing.showInactive();
+    if (existing.isVisible()) {
+      existing.showInactive();
+    } else {
+      const alvo = _targetDisplay(feature, monitorId);
+      if (!alvo) return null; // segue escondida
+      _placeOnDisplay(existing, alvo, _windowMeta.get(feature) || {});
+    }
     _refocusMainWindow();
     return existing;
   }
 
-  // Decidir display alvo.
-  // NÃO gravamos preferência aqui: quem persiste a escolha do usuário é a UI
-  // (Screen.vue / RibbonScreenButton.vue / MonitorSelect.vue). Gravar na
-  // abertura já poluiu o mapa de preferências no passado com chaves que nenhum
-  // leitor consulta.
-  let target;
-  if (monitorId !== undefined && monitorId !== null) {
-    target = displays.connected().find((d) => d.id === monitorId);
-  }
-  if (!target) {
-    // Sem monitor pedido, sobra a preferência — e, quando ela não resolve, o
-    // monitor principal. Esse último passo é o que precisa de freio: com o
-    // projetor desconectado, ele entrega a tela onde o operador trabalha, e a
-    // letra da música abre em cima do trabalho dele no meio do culto.
-    //
-    // Só freia quando o papel ESTÁ configurado e o monitor dele não está aqui
-    // (`pending`). Quem nunca configurou nada — um monitor só, ou a igreja que
-    // espelha a imagem do operador — continua abrindo normalmente: ali a tela
-    // do operador é o projetor, e é isso que se quer.
-    const escolha = displays.resolveFeature(feature);
-    const substituindo = escolha.status === "pending";
-    const alvo = displays.getPreferredOrPrimary(feature);
-    if (substituindo && _isOperatorDisplay(alvo)) {
-      console.warn(
-        `[windowFactory] ${feature}: monitor do papel ausente; não abro na tela do operador.`
-      );
-      return null;
-    }
-    target = alvo;
-  }
+  const target = _targetDisplay(feature, monitorId);
+  if (!target) return null;
 
   const bounds = target.bounds;
   const isMac = process.platform === "darwin";
