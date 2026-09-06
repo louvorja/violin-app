@@ -48,18 +48,18 @@ function validateKey(key) {
  * @returns {string}
  */
 function storageDir() {
-  return path.join(paths.userData(), "storage");
+  return path.join(paths.dataDir(), "storage");
 }
 
 /**
  * Garante que o diretório de storage existe (chamado na primeira operação).
  * Chamado por init() e pelos métodos individualmente como guard.
  */
-let _dirEnsured = false;
 function ensureDir() {
-  if (_dirEnsured) return;
+  // Sem cache: a pasta de dados muda em runtime quando o operador escolhe
+  // outra em "Armazenamento", e um destino lembrado deixaria a escrita
+  // seguinte apontando para um caminho que não existe mais.
   fs.ensureDirSync(storageDir());
-  _dirEnsured = true;
 }
 // NÃO chamar ensureDir no top-level — `app` ainda não está pronto durante imports.
 // As funções públicas chamam ensureDir() lazy quando necessário.
@@ -117,7 +117,17 @@ function write(key, value) {
 
   try {
     fs.writeJsonSync(tmp, value, { spaces: 2 });
-    fs.moveSync(tmp, file, { overwrite: true });
+    // `rename` do POSIX troca o arquivo num passo só: ou o leitor vê o valor
+    // antigo inteiro, ou o novo inteiro. O `moveSync` do fs-extra apaga o
+    // destino antes de renomear — uma janela em que `user_data.json` não
+    // existe, e uma queda de energia dentro dela leva junto todas as
+    // preferências do usuário. Ele fica só como fallback do Windows, onde
+    // `rename` recusa destino existente.
+    try {
+      fs.renameSync(tmp, file);
+    } catch (_) {
+      fs.moveSync(tmp, file, { overwrite: true });
+    }
     console.log(`[userStore] Gravou "${key}" em ${file}`);
   } catch (e) {
     // Limpar arquivo temporário em caso de erro
