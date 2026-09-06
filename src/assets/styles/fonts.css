@@ -13,7 +13,7 @@
 
 @font-face {
   font-family: "DINCondensedBold";
-  src: url("../fonts/din-condensed-bold.ttf") format("truetype");
+  src: url("../fonts/din-condensed-bold.woff2") format("woff2");
   font-weight: bold;
   font-style: normal;
   ascent-override: 105%;
@@ -23,7 +23,7 @@
 
 @font-face {
   font-family: "AdventSansLogo";
-  src: url("../fonts/AdventSans-Logo.otf") format("opentype");
+  src: url("../fonts/AdventSans-Logo.woff2") format("woff2");
   font-weight: normal;
   font-style: normal;
   ascent-override: 105%;
@@ -33,7 +33,7 @@
 
 @font-face {
   font-family: "FjallaOne";
-  src: url("../fonts/FjallaOne-Regular.ttf") format("truetype");
+  src: url("../fonts/FjallaOne-Regular.woff2") format("woff2");
   font-weight: normal;
   font-style: normal;
   ascent-override: 105%;
@@ -50,7 +50,7 @@
    em caixa alta. */
 @font-face {
   font-family: "MinisterioJovem";
-  src: url("../fonts/FjallaOne-Regular.ttf") format("truetype");
+  src: url("../fonts/FjallaOne-Regular.woff2") format("woff2");
   font-weight: normal;
   font-style: normal;
   ascent-override: 105%;
@@ -60,7 +60,7 @@
 
 @font-face {
   font-family: "ImpactRegular";
-  src: url("../fonts/impact-regular-6_ufonts.com.ttf") format("truetype");
+  src: url("../fonts/impact-regular-6_ufonts.com.woff2") format("woff2");
   font-weight: normal;
   font-style: normal;
   ascent-override: 105%;
@@ -70,7 +70,7 @@
 
 @font-face {
   font-family: "CalibriBold";
-  src: url("../fonts/calibri-bold.ttf") format("truetype");
+  src: url("../fonts/calibri-bold.woff2") format("woff2");
   font-weight: bold;
   font-style: normal;
   ascent-override: 105%;
@@ -80,7 +80,7 @@
 
 @font-face {
   font-family: "InterVariable";
-  src: url("../fonts/Inter-VariableFont_opsz,wght.ttf") format("truetype");
+  src: url("../fonts/Inter-VariableFont_opsz,wght.woff2") format("woff2");
   font-weight: 100 900;
   font-style: normal;
   ascent-override: 105%;
@@ -90,7 +90,7 @@
 
 @font-face {
   font-family: "RobotoVariable";
-  src: url("../fonts/Roboto-VariableFont_wdth,wght.ttf") format("truetype");
+  src: url("../fonts/Roboto-VariableFont_wdth,wght.woff2") format("woff2");
   font-weight: 100 900;
   font-style: normal;
   ascent-override: 105%;
@@ -100,7 +100,7 @@
 
 @font-face {
   font-family: "BetaniaPatmos";
-  src: url("../fonts/BetaniaPatmos-Regular.ttf") format("truetype");
+  src: url("../fonts/BetaniaPatmos-Regular.woff2") format("woff2");
   font-weight: normal;
   font-style: normal;
   ascent-override: 105%;
@@ -110,7 +110,7 @@
 
 @font-face {
   font-family: "OpenSans";
-  src: url("../fonts/OpenSans-Regular.ttf") format("truetype");
+  src: url("../fonts/OpenSans-Regular.woff2") format("woff2");
   font-weight: normal;
   font-style: normal;
   ascent-override: 105%;
@@ -120,7 +120,7 @@
 
 @font-face {
   font-family: "OpenSansLight";
-  src: url("../fonts/OpenSans-Light.ttf") format("truetype");
+  src: url("../fonts/OpenSans-Light.woff2") format("woff2");
   font-weight: normal;
   font-style: normal;
   ascent-override: 105%;
@@ -130,7 +130,7 @@
 
 @font-face {
   font-family: "OpenSansSemiBold";
-  src: url("../fonts/OpenSans-Semibold.ttf") format("truetype");
+  src: url("../fonts/OpenSans-Semibold.woff2") format("woff2");
   font-weight: normal;
   font-style: normal;
   ascent-override: 105%;
@@ -140,7 +140,7 @@
 
 @font-face {
   font-family: "OpenSansExtraBold";
-  src: url("../fonts/OpenSans-ExtraBold.ttf") format("truetype");
+  src: url("../fonts/OpenSans-ExtraBold.woff2") format("woff2");
   font-weight: normal;
   font-style: normal;
   ascent-override: 105%;

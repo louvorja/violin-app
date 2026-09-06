@@ -17,7 +17,6 @@ export default async ({ mode }) => {
   // -----------------------------------------------------------------------
   const { DOMAINS, DOMAINS_CSP } = require_("./config/cspDomains.cjs");
 
-  const { visualizer } = await import("rollup-plugin-visualizer");
   // Load app-level env vars to node-level env vars.
   process.env = { ...process.env, ...loadEnv(mode, process.cwd()) };
 
@@ -69,15 +68,18 @@ export default async ({ mode }) => {
         ]),
   ];
 
-  // Bundle visualizer — gera dist/stats.html a cada build
-  plugins.push(
-    visualizer({
-      filename: "dist/stats.html",
-      open: false,
-      gzipSize: true,
-      brotliSize: true,
-    })
-  );
+  // Bundle visualizer — só sob ANALYZE=1; o relatório pesa ~1 MB e iria no pacote
+  if (process.env.ANALYZE) {
+    const { visualizer } = await import("rollup-plugin-visualizer");
+    plugins.push(
+      visualizer({
+        filename: "dist/stats.html",
+        open: false,
+        gzipSize: true,
+        brotliSize: true,
+      })
+    );
+  }
 
   // VitePWA só para target web — no Electron o protocolo file:// não suporta Service Workers
   if (!isDesktop) {

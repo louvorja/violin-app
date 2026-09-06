@@ -52,22 +52,22 @@ const LEGACY_UI_FALLBACK =
 export const Fonts: FontOption[] = [
   { name: "Padrão da Interface", family: FONT.UI.INHERIT },
   { name: "Padrão da Projecão", family: FONT.PROJECTION.INHERIT },
-  { name: "Advent Sans", family: "AdventSansLogo", file: "AdventSans-Logo.otf" },
+  { name: "Advent Sans", family: "AdventSansLogo", file: "AdventSans-Logo.woff2" },
   { name: "Arial", family: "Arial, sans-serif" },
-  { name: "Aventureiros", family: "InterVariable", file: "Inter-VariableFont_opsz,wght.ttf" },
-  { name: "Calibri Bold", family: "CalibriBold", file: "calibri-bold.ttf" },
-  { name: "Desbravadores", family: "ImpactRegular", file: "impact-regular-6_ufonts.com.ttf" },
-  { name: "DIN Condensed Bold", family: "DINCondensedBold", file: "din-condensed-bold.ttf" },
-  { name: "Fjalla One", family: "FjallaOne", file: "FjallaOne-Regular.ttf" },
+  { name: "Aventureiros", family: "InterVariable", file: "Inter-VariableFont_opsz,wght.woff2" },
+  { name: "Calibri Bold", family: "CalibriBold", file: "calibri-bold.woff2" },
+  { name: "Desbravadores", family: "ImpactRegular", file: "impact-regular-6_ufonts.com.woff2" },
+  { name: "DIN Condensed Bold", family: "DINCondensedBold", file: "din-condensed-bold.woff2" },
+  { name: "Fjalla One", family: "FjallaOne", file: "FjallaOne-Regular.woff2" },
   { name: "Georgia", family: "Georgia, serif" },
   { name: "Helvetica", family: "Helvetica, sans-serif" },
-  { name: "Ministério da Criança", family: "BetaniaPatmos", file: "BetaniaPatmos-Regular.ttf" },
-  { name: "Ministério Jovem", family: "MinisterioJovem", file: "FjallaOne-Regular.ttf" },
-  { name: "Open Sans", family: "OpenSans", file: "OpenSans-Regular.ttf" },
-  { name: "Open Sans Extra Bold", family: "OpenSansExtraBold", file: "OpenSans-ExtraBold.ttf" },
-  { name: "Open Sans Light", family: "OpenSansLight", file: "OpenSans-Light.ttf" },
-  { name: "Open Sans Semi Bold", family: "OpenSansSemiBold", file: "OpenSans-Semibold.ttf" },
-  { name: "Roboto", family: "RobotoVariable", file: "Roboto-VariableFont_wdth,wght.ttf" },
+  { name: "Ministério da Criança", family: "BetaniaPatmos", file: "BetaniaPatmos-Regular.woff2" },
+  { name: "Ministério Jovem", family: "MinisterioJovem", file: "FjallaOne-Regular.woff2" },
+  { name: "Open Sans", family: "OpenSans", file: "OpenSans-Regular.woff2" },
+  { name: "Open Sans Extra Bold", family: "OpenSansExtraBold", file: "OpenSans-ExtraBold.woff2" },
+  { name: "Open Sans Light", family: "OpenSansLight", file: "OpenSans-Light.woff2" },
+  { name: "Open Sans Semi Bold", family: "OpenSansSemiBold", file: "OpenSans-Semibold.woff2" },
+  { name: "Roboto", family: "RobotoVariable", file: "Roboto-VariableFont_wdth,wght.woff2" },
   { name: "Tahoma", family: "Tahoma, sans-serif" },
   { name: "Times New Roman", family: "'Times New Roman', serif" },
   { name: "Verdana", family: "Verdana, sans-serif" },
@@ -85,7 +85,7 @@ export const Fonts: FontOption[] = [
 export function resolveFont(
   saved: string | null | undefined,
   fallback: string,
-  defaultFont?: string,
+  defaultFont?: string
 ): string {
   if (typeof saved !== "string" || !saved.trim()) return fallback;
   if (saved === FONT.UI.INHERIT || saved === LEGACY_UI_FAMILY || saved === LEGACY_UI_FALLBACK) {
@@ -99,10 +99,7 @@ export function resolveFont(
 }
 
 /** Resolve os selects de Geral, que precisam produzir uma família concreta. */
-export function resolveDefaultFont(
-  saved: string | null | undefined,
-  fallback: string,
-): string {
+export function resolveDefaultFont(saved: string | null | undefined, fallback: string): string {
   if (typeof saved !== "string" || !saved.trim()) return fallback;
   if (
     saved === FONT.DEFAULT ||

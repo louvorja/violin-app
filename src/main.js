@@ -2,7 +2,6 @@ import { createApp, watchEffect } from "vue";
 import { createPinia } from "pinia";
 import App from "./App.vue";
 import router from "./router";
-import { loadFonts } from "./plugins/webfontloader";
 import { createI18nInstance } from "./i18n";
 import VueFullscreen from "vue-fullscreen";
 import "./assets/styles/tokens.css";
@@ -56,8 +55,6 @@ import { ModuleEnum } from "@/enums/ModuleEnum";
 import { KEYS } from "@/constants/UserDataKeys";
 import { FONT, resolveDefaultFont } from "@/config/Fonts";
 import { getTheme } from "@/config/Themes";
-
-loadFonts();
 
 const app = createApp(App);
 

@@ -8,7 +8,7 @@
  *
  * @category deve-virar-composable — lê e grava preferências via UserData.
  */
-import posthog from "posthog-js";
+import type { PostHog } from "posthog-js";
 import Platform from "@/helpers/Platform";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
@@ -17,6 +17,7 @@ const KEY = import.meta.env.VITE_POSTHOG_KEY ?? "";
 const HOST = import.meta.env.VITE_POSTHOG_HOST || "https://us.i.posthog.com";
 
 let _started = false;
+let _ph: PostHog | null = null;
 
 /**
  * Projeção, retorno, OBS, operador e popups rodam o mesmo `main.js`. Sem este
@@ -82,23 +83,26 @@ export function isEnabled(): boolean {
 export function setEnabled(enabled: boolean): void {
   $userdata.set(KEYS.OPTIONS.TELEMETRY, enabled);
   if (!enabled) {
-    if (_started) posthog.opt_out_capturing();
+    _ph?.opt_out_capturing();
     return;
   }
-  if (_started) posthog.opt_in_capturing({ captureEventName: false });
+  if (_ph) _ph.opt_in_capturing({ captureEventName: false });
   else void init();
 }
 
 /** Zera o identificador anônimo — o usuário volta a contar como instalação nova. */
 export function resetId(): void {
   $userdata.set(KEYS.OPTIONS.TELEMETRY_ID, "");
-  if (_started) posthog.reset();
+  _ph?.reset();
 }
 
 export async function init(): Promise<void> {
   if (_started) return;
   if (!KEY || !isMainWindow() || !isEnabled() || Platform.isDev) return;
   _started = true;
+
+  const { default: posthog } = await import("posthog-js");
+  _ph = posthog;
 
   posthog.init(KEY, {
     api_host: HOST,
