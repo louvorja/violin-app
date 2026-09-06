@@ -286,61 +286,6 @@ const ribbonStore = useRibbonStore();
 
 const inputValues = reactive<Record<string, string>>({});
 
-// ---------------------------------------------------------------------------
-// Rolagem da ribbon quando os grupos não cabem
-// ---------------------------------------------------------------------------
-// A ribbon precisa de cerca de 1050px em português para mostrar os cinco grupos.
-// Abaixo disso ela já rolava — `overflow-x: auto` sempre esteve aqui —, mas de
-// um jeito que ninguém encontra: num monitor 1024x768, o de igreja com
-// equipamento antigo, sobram 82px escondidos à direita, e o que denuncia isso é
-// uma barra de 4px quase da cor do fundo. Some o botão "Buscar Música" e o
-// operador conclui que ele não existe.
-//
-// Duas coisas resolvem sem mexer no layout nem no tamanho mínimo da janela (que
-// não pode subir: a área útil desse monitor é 958px). A roda do mouse passa a
-// rolar na horizontal, porque o gesto nativo para isso é Shift+roda e ninguém
-// descobre sozinho; e a borda ganha uma sombra enquanto houver conteúdo além
-// dela, que é o sinal de que ainda há o que ver.
-
-const corpoRibbon = ref<HTMLElement | null>(null);
-const sobraNoInicio = ref(false);
-const sobraNoFim = ref(false);
-
-function medirSobra(): void {
-  const el = corpoRibbon.value;
-  if (!el) return;
-  sobraNoInicio.value = el.scrollLeft > 1;
-  sobraNoFim.value = el.scrollWidth - el.clientWidth - el.scrollLeft > 1;
-}
-
-function rolarComRoda(e: WheelEvent): void {
-  const el = corpoRibbon.value;
-  if (!el || el.scrollWidth <= el.clientWidth) return;
-  // Trackpad com gesto horizontal já manda deltaX; aí o navegador faz melhor.
-  if (e.deltaX !== 0) return;
-  e.preventDefault();
-  el.scrollLeft += e.deltaY;
-}
-
-let observador: ResizeObserver | null = null;
-onMounted(() => {
-  medirSobra();
-  if (typeof ResizeObserver === "undefined") return;
-  // Reage tanto ao redimensionamento da janela quanto à troca de aba, que muda
-  // a largura total dos grupos sem mudar a do container.
-  observador = new ResizeObserver(medirSobra);
-  if (corpoRibbon.value) {
-    observador.observe(corpoRibbon.value);
-    for (const filho of corpoRibbon.value.children) observador.observe(filho);
-  }
-});
-onBeforeUnmount(() => observador?.disconnect());
-
-watch(
-  () => ribbonStore.activePage,
-  () => nextTick(medirSobra)
-);
-
 const { displays, getFeatureRole, setFeatureRole } = useDisplays();
 
 /** Papel de cada botão da ribbon. Carregado sob demanda (passa pelo IPC). */
@@ -482,6 +427,62 @@ const activeGroups: ComputedRef<RibbonGroup[]> = computed(() => {
     buttons: (g.buttons || []).filter((b) => !b.module || isModuleVisible(b.module)),
   }));
 });
+
+// ---------------------------------------------------------------------------
+// Rolagem da ribbon quando os grupos não cabem
+// ---------------------------------------------------------------------------
+// A ribbon precisa de cerca de 1050px em português para mostrar os cinco grupos.
+// Abaixo disso ela já rolava — `overflow-x: auto` sempre esteve aqui —, mas de
+// um jeito que ninguém encontra: num monitor 1024x768, o de igreja com
+// equipamento antigo, sobram 82px escondidos à direita, e o que denuncia isso é
+// uma barra de 4px quase da cor do fundo. Some o botão "Buscar Música" e o
+// operador conclui que ele não existe.
+//
+// Duas coisas resolvem sem mexer no layout nem no tamanho mínimo da janela (que
+// não pode subir: a área útil desse monitor é 958px). A roda do mouse passa a
+// rolar na horizontal, porque o gesto nativo para isso é Shift+roda e ninguém
+// descobre sozinho; e a borda ganha uma sombra enquanto houver conteúdo além
+// dela, que é o sinal de que ainda há o que ver.
+
+const corpoRibbon = ref<HTMLElement | null>(null);
+const sobraNoInicio = ref(false);
+const sobraNoFim = ref(false);
+
+function medirSobra(): void {
+  const el = corpoRibbon.value;
+  if (!el) return;
+  sobraNoInicio.value = el.scrollLeft > 1;
+  sobraNoFim.value = el.scrollWidth - el.clientWidth - el.scrollLeft > 1;
+}
+
+function rolarComRoda(e: WheelEvent): void {
+  const el = corpoRibbon.value;
+  if (!el || el.scrollWidth <= el.clientWidth) return;
+  // Trackpad com gesto horizontal já manda deltaX; aí o navegador faz melhor.
+  if (e.deltaX !== 0) return;
+  e.preventDefault();
+  el.scrollLeft += e.deltaY;
+}
+
+// Duas coisas mudam se há sobra, e cada uma pede um gatilho. A largura do
+// container muda quando a janela é redimensionada — daí o observer. A largura
+// do conteúdo muda quando os grupos são outros, sem o container mudar de
+// tamanho: acontece ao trocar de aba e também quando um módulo aberto acrescenta
+// a aba contextual dele, que não passa por `activePage`. Por isso o watch olha
+// os grupos em si.
+let observador: ResizeObserver | null = null;
+onMounted(() => {
+  medirSobra();
+  if (typeof ResizeObserver === "undefined" || !corpoRibbon.value) return;
+  observador = new ResizeObserver(medirSobra);
+  observador.observe(corpoRibbon.value);
+});
+onBeforeUnmount(() => observador?.disconnect());
+
+watch(
+  () => activeGroups.value.map((g) => g.id).join(","),
+  () => nextTick(medirSobra)
+);
 const isContextualActive: ComputedRef<boolean> = computed(() => !!activePageObj.value?.contextual);
 const visiblePages: ComputedRef<RibbonPage[]> = computed(() => ribbonStore.visiblePages);
 
