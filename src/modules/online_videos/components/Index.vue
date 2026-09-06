@@ -356,7 +356,7 @@ function close(): void {
   width: 100%;
   padding: 6px 28px 6px 30px;
   border: 1px solid rgba(var(--lj-on-surface-ch), 0.15);
-  border-radius: 6px;
+  border-radius: var(--lj-radius-md);
   background: rgba(var(--lj-on-surface-ch), 0.04);
   color: var(--lj-text);
   font-family: inherit;

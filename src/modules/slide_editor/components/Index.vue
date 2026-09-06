@@ -1457,7 +1457,7 @@ function replicateText(scope) {
   padding: 0;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: var(--lj-radius-sm);
   cursor: pointer;
   color: inherit;
   opacity: 0.55;
@@ -1535,7 +1535,7 @@ function replicateText(scope) {
 .se-thumb {
   position: relative;
   aspect-ratio: 16 / 9;
-  border-radius: 6px;
+  border-radius: var(--lj-radius-md);
   cursor: pointer;
   margin-bottom: 6px;
   overflow: hidden;
@@ -1543,7 +1543,7 @@ function replicateText(scope) {
   background-position: center;
   border: 2px solid transparent;
   transition:
-    border-color 0.15s,
+    border-color var(--lj-transition-normal),
     transform 0.1s;
   display: flex;
   align-items: center;
@@ -1567,7 +1567,7 @@ function replicateText(scope) {
   color: white;
   background: rgba(0, 0, 0, 0.55);
   padding: 1px 5px;
-  border-radius: 8px;
+  border-radius: var(--lj-radius-lg);
   font-family: monospace;
 }
 .se-thumb-time {
@@ -1578,7 +1578,7 @@ function replicateText(scope) {
   color: var(--lj-success);
   background: rgba(0, 0, 0, 0.55);
   padding: 1px 5px;
-  border-radius: 8px;
+  border-radius: var(--lj-radius-lg);
   font-family: monospace;
   display: inline-flex;
   align-items: center;
@@ -1598,7 +1598,7 @@ function replicateText(scope) {
   padding: 8px;
   background: transparent;
   border: 1px dashed var(--lj-surface-border);
-  border-radius: 6px;
+  border-radius: var(--lj-radius-md);
   color: var(--lj-ui-accent);
   cursor: pointer;
   display: flex;
@@ -1608,8 +1608,8 @@ function replicateText(scope) {
   font-size: 12px;
   margin-top: 4px;
   transition:
-    background 0.15s,
-    border-color 0.15s;
+    background var(--lj-transition-normal),
+    border-color var(--lj-transition-normal);
 }
 .se-slide-list-add:hover {
   background: color-mix(in srgb, var(--lj-ui-accent) 6%, transparent);
@@ -1659,7 +1659,7 @@ function replicateText(scope) {
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  border-radius: 4px;
+  border-radius: var(--lj-radius-sm);
   box-shadow:
     0 0 0 1px rgba(255, 255, 255, 0.06),
     0 12px 40px rgba(0, 0, 0, 0.5),
@@ -1735,7 +1735,7 @@ function replicateText(scope) {
   white-space: nowrap;
 }
 .se-panel-chev {
-  transition: transform 0.15s;
+  transition: transform var(--lj-transition-normal);
   opacity: 0.55;
 }
 .se-panel[open] .se-panel-chev {
@@ -1764,7 +1764,7 @@ function replicateText(scope) {
   resize: vertical;
   padding: 6px 8px;
   border: 1px solid var(--lj-surface-border);
-  border-radius: 4px;
+  border-radius: var(--lj-radius-sm);
   background: transparent;
   color: inherit;
   font-family: inherit;
@@ -1814,7 +1814,7 @@ function replicateText(scope) {
   width: 32px;
   height: 22px;
   border: 1px solid var(--lj-surface-border);
-  border-radius: 3px;
+  border-radius: var(--lj-radius-xs);
   background: none;
   cursor: pointer;
   padding: 0;
@@ -1826,7 +1826,7 @@ function replicateText(scope) {
   padding: 0 4px;
   font-size: 11px;
   border: 1px solid var(--lj-surface-border);
-  border-radius: 3px;
+  border-radius: var(--lj-radius-xs);
   background: transparent;
   color: inherit;
   outline: none;
@@ -1863,7 +1863,7 @@ function replicateText(scope) {
 .se-seg {
   display: inline-flex;
   border: 1px solid var(--lj-surface-border);
-  border-radius: 3px;
+  border-radius: var(--lj-radius-xs);
   overflow: hidden;
 }
 .se-seg-btn {
@@ -1908,7 +1908,7 @@ function replicateText(scope) {
   padding: 4px 8px;
   font-size: 11px;
   border: 1px solid var(--lj-surface-border);
-  border-radius: 4px;
+  border-radius: var(--lj-radius-sm);
   background: transparent;
   color: inherit;
   cursor: pointer;
@@ -1945,7 +1945,7 @@ function replicateText(scope) {
   min-height: 80px;
   padding: 14px;
   border: 1px dashed var(--lj-surface-border-strong);
-  border-radius: 6px;
+  border-radius: var(--lj-radius-md);
   background: var(--lj-surface-bg-soft);
   color: var(--lj-text-subtle);
   cursor: pointer;
@@ -1969,7 +1969,7 @@ function replicateText(scope) {
 .se-img-thumb {
   width: 80px;
   aspect-ratio: 16 / 9;
-  border-radius: 4px;
+  border-radius: var(--lj-radius-sm);
   background-size: cover;
   background-position: center;
   background-color: var(--lj-surface-bg-soft);
@@ -1996,7 +1996,7 @@ function replicateText(scope) {
   font-size: 11px;
   font-family: inherit;
   border: 1px solid var(--lj-surface-border);
-  border-radius: 3px;
+  border-radius: var(--lj-radius-xs);
   background: transparent;
   color: inherit;
   outline: none;
@@ -2079,7 +2079,7 @@ function replicateText(scope) {
   position: relative;
   height: 8px;
   background: rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
+  border-radius: var(--lj-radius-sm);
   cursor: pointer;
   min-width: 0;
 }
@@ -2089,7 +2089,7 @@ function replicateText(scope) {
   left: 0;
   height: 100%;
   background: color-mix(in srgb, var(--lj-success) 55%, transparent);
-  border-radius: 4px;
+  border-radius: var(--lj-radius-sm);
   transition: width 0.08s linear;
   pointer-events: none;
 }

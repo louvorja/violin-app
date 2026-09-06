@@ -86,11 +86,11 @@ const videos = computed(() => props.endAction.filteredVideos.value);
   overflow-y: auto;
 }
 .ov-card {
-  border-radius: 6px;
+  border-radius: var(--lj-radius-md);
   overflow: hidden;
   background: rgba(var(--lj-on-surface-ch), 0.04);
   cursor: pointer;
-  transition: transform 0.15s;
+  transition: transform var(--lj-transition-normal);
 }
 .ov-card:hover {
   transform: translateY(-2px);

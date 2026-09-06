@@ -224,7 +224,7 @@ defineExpose({
   cursor: pointer;
   user-select: none;
   background: color-mix(in srgb, var(--cat-color, var(--lj-divider)) 10%, transparent);
-  border-radius: 8px;
+  border-radius: var(--lj-radius-lg);
 }
 .rl-bloco-line {
   flex: 1;
@@ -249,7 +249,7 @@ defineExpose({
   color: var(--lj-orange);
   background: var(--lj-orange-soft);
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--lj-radius-sm);
   text-transform: none;
   letter-spacing: 0;
   display: inline-flex;

@@ -222,7 +222,7 @@ function close(): void {
   width: 100%;
   padding: 6px 28px 6px 30px;
   border: 1px solid rgba(var(--lj-on-surface-ch), 0.15);
-  border-radius: 6px;
+  border-radius: var(--lj-radius-md);
   background: rgba(var(--lj-on-surface-ch), 0.04);
   color: var(--lj-text);
   font-family: inherit;
@@ -271,13 +271,13 @@ function close(): void {
   gap: 10px;
 }
 .dx-card {
-  border-radius: 6px;
+  border-radius: var(--lj-radius-md);
   overflow: hidden;
   background: rgba(var(--lj-on-surface-ch), 0.04);
   cursor: pointer;
   transition:
-    transform 0.15s,
-    box-shadow 0.15s;
+    transform var(--lj-transition-normal),
+    box-shadow var(--lj-transition-normal);
 }
 .dx-card:hover {
   transform: translateY(-2px);
@@ -334,15 +334,15 @@ function close(): void {
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
-  border-radius: 6px;
+  border-radius: var(--lj-radius-md);
   border: 1px solid rgba(var(--lj-on-surface-ch), 0.14);
   background: rgba(var(--lj-on-surface-ch), 0.03);
   cursor: pointer;
   transition:
-    background 0.15s,
-    border-color 0.15s,
-    transform 0.15s,
-    box-shadow 0.15s;
+    background var(--lj-transition-normal),
+    border-color var(--lj-transition-normal),
+    transform var(--lj-transition-normal),
+    box-shadow var(--lj-transition-normal);
 }
 .dx-list-item:hover {
   background: rgba(var(--lj-on-surface-ch), 0.06);

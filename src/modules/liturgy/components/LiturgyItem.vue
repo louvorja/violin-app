@@ -312,8 +312,8 @@ const t = (key: string) => _t(key, locale.value);
   box-shadow: var(--lj-shadow-2);
   min-height: 50px;
   transition:
-    background 0.15s,
-    border-color 0.15s;
+    background var(--lj-transition-normal),
+    border-color var(--lj-transition-normal);
   overflow: hidden;
   position: relative;
 }
@@ -406,7 +406,7 @@ const t = (key: string) => _t(key, locale.value);
   height: 30px;
   border: none;
   background: transparent;
-  border-radius: 3px;
+  border-radius: var(--lj-radius-xs);
   cursor: pointer;
   color: rgba(var(--lj-on-surface-ch), 0.7);
   display: flex;
@@ -439,7 +439,7 @@ const t = (key: string) => _t(key, locale.value);
   justify-content: center;
   width: 32px;
   height: 32px;
-  border-radius: 3px;
+  border-radius: var(--lj-radius-xs);
   color: rgba(var(--lj-on-surface-ch), 0.6);
   padding: 0;
   user-select: none;

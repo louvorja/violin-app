@@ -134,7 +134,7 @@ function formatDuration(total: number): string {
   height: 24px;
   padding: 0 3px;
   border: 1px solid var(--lj-surface-border-strong);
-  border-radius: 3px;
+  border-radius: var(--lj-radius-xs);
   background: var(--lj-surface-bg, #fff);
   color: var(--lj-text, #000);
   font-size: 11px;

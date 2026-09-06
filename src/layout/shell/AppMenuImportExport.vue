@@ -362,7 +362,7 @@ async function onFileSelected(e: Event): Promise<void> {
   max-height: 200px;
   overflow-y: auto;
   background: rgba(127, 127, 127, 0.06);
-  border-radius: 6px;
+  border-radius: var(--lj-radius-md);
   padding: 8px 12px;
   font-size: 0.82rem;
 }

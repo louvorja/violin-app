@@ -817,7 +817,7 @@ useBroadcastListener(BROADCAST_TYPE.RIBBON_SELECT_PAGE, (payload: unknown) => {
   height: 24px;
   padding: 0 6px;
   border: var(--lj-ui-border);
-  border-radius: 3px;
+  border-radius: var(--lj-radius-xs);
   background: var(--lj-surface-bg);
   color: var(--lj-text);
   font-size: 11px;
@@ -848,7 +848,7 @@ useBroadcastListener(BROADCAST_TYPE.RIBBON_SELECT_PAGE, (payload: unknown) => {
   height: 24px;
   padding: 0 4px;
   border: var(--lj-ui-border);
-  border-radius: 3px;
+  border-radius: var(--lj-radius-xs);
   background: var(--lj-surface-bg);
   color: var(--lj-text);
   font-size: 11px;
@@ -865,7 +865,7 @@ useBroadcastListener(BROADCAST_TYPE.RIBBON_SELECT_PAGE, (payload: unknown) => {
   height: 24px;
   padding: 0 4px;
   border: var(--lj-ui-border);
-  border-radius: 3px;
+  border-radius: var(--lj-radius-xs);
   background: var(--lj-surface-bg);
   color: var(--lj-text);
   font-size: 11px;

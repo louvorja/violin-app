@@ -108,14 +108,14 @@ onBeforeUnmount(() => {
   height: 34px;
   padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.25);
-  border-radius: 6px;
+  border-radius: var(--lj-radius-md);
   background: rgba(0, 0, 0, 0.45);
   color: #fff;
   cursor: pointer;
   opacity: 0.55;
   transition:
-    opacity 0.15s ease,
-    background 0.15s ease;
+    opacity var(--lj-transition-normal),
+    background var(--lj-transition-normal);
 }
 
 .wfp:hover {

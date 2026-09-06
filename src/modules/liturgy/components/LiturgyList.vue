@@ -156,15 +156,15 @@ const t = (key: string) => _t(key, locale.value);
   height: 28px;
   padding: 0 10px;
   border: 1px solid transparent;
-  border-radius: 3px;
+  border-radius: var(--lj-radius-xs);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   background: rgba(var(--lj-on-surface-ch), 0.06);
   color: var(--lj-text);
   transition:
-    background 0.15s,
-    border 0.15s;
+    background var(--lj-transition-normal),
+    border var(--lj-transition-normal);
   white-space: nowrap;
 }
 .lit-btn:hover {

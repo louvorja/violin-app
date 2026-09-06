@@ -1400,11 +1400,11 @@ useBroadcastListener(BROADCAST_TYPE.REQUEST_BIBLE_STATE, () => {
   align-items: flex-start;
   gap: 10px;
   padding: 10px 14px;
-  border-radius: 6px;
+  border-radius: var(--lj-radius-md);
   background: rgba(0, 0, 0, 0.78);
   color: #f1f1f1;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background var(--lj-transition-normal);
   user-select: none;
 }
 
@@ -1456,10 +1456,10 @@ useBroadcastListener(BROADCAST_TYPE.REQUEST_BIBLE_STATE, () => {
 .bible-history-item {
   padding: 8px 10px;
   margin: 2px 0;
-  border-radius: 4px;
+  border-radius: var(--lj-radius-sm);
   cursor: pointer;
   color: rgba(255, 255, 255, 0.85);
-  transition: background 0.15s ease;
+  transition: background var(--lj-transition-normal);
 }
 
 .bible-history-item:hover {

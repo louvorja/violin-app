@@ -606,7 +606,7 @@ onBeforeUnmount(() => {
 
 .libras-overlay-content {
   background: rgba(0, 0, 0, 0.85);
-  border-radius: 8px;
+  border-radius: var(--lj-radius-lg);
   padding: 12px 16px;
   backdrop-filter: blur(8px);
   pointer-events: none;

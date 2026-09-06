@@ -125,7 +125,7 @@ body {
 .obs-bible-content {
   background: rgba(0, 0, 0, 0.82);
   border-left: 4px solid #6366f1;
-  border-radius: 4px;
+  border-radius: var(--lj-radius-sm);
   padding: 20px 28px;
   max-width: 860px;
   width: 100%;
@@ -149,8 +149,8 @@ body {
 /* Transição rápida — fade-in/out de versículos. */
 .fade-verse-enter-active {
   transition:
-    opacity 0.15s ease,
-    transform 0.15s ease;
+    opacity var(--lj-transition-normal),
+    transform var(--lj-transition-normal);
 }
 .fade-verse-leave-active {
   transition: opacity 0.12s ease;

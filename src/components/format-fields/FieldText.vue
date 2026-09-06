@@ -20,7 +20,7 @@ defineEmits(["update:modelValue"]);
   font-size: 12px;
   padding: 4px 6px;
   border: 1px solid var(--lj-surface-border);
-  border-radius: 3px;
+  border-radius: var(--lj-radius-xs);
   background: var(--lj-surface-bg);
   color: inherit;
   width: 100%;

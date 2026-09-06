@@ -758,7 +758,7 @@ function close(): void {
   min-width: 16px;
   text-align: center;
   background: var(--lj-surface-bg-active);
-  border-radius: 8px;
+  border-radius: var(--lj-radius-lg);
   line-height: 16px;
 }
 .an-item-name {

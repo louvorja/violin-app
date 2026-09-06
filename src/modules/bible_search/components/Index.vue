@@ -705,7 +705,7 @@ onUnmounted(() => document.removeEventListener("mousedown", onDocPointerDown, tr
   padding: 8px 12px;
   cursor: pointer;
   border-bottom: 1px solid var(--lj-surface-border);
-  transition: background 0.15s;
+  transition: background var(--lj-transition-normal);
 }
 .bs-result-item:hover {
   background: var(--lj-hover-bg);

@@ -226,7 +226,7 @@ onMounted(() => {
 }
 .liturgy-panel-body::-webkit-scrollbar-thumb {
   background: var(--lj-scrollbar-thumb-bg);
-  border-radius: 3px;
+  border-radius: var(--lj-radius-xs);
 }
 
 /* Empty state */

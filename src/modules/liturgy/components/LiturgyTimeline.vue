@@ -374,7 +374,7 @@ function onDragMove(evt: Record<string, unknown>): boolean | void {
   cursor: grab;
   user-select: none;
   background: color-mix(in srgb, var(--cat-color, var(--lj-divider)) 10%, transparent);
-  border-radius: 8px;
+  border-radius: var(--lj-radius-lg);
 }
 .tl-bloco:active {
   cursor: grabbing;
@@ -402,7 +402,7 @@ function onDragMove(evt: Record<string, unknown>): boolean | void {
   color: var(--lj-orange);
   background: var(--lj-orange-soft);
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--lj-radius-sm);
   text-transform: none;
   letter-spacing: 0;
   display: inline-flex;
@@ -410,7 +410,7 @@ function onDragMove(evt: Record<string, unknown>): boolean | void {
 }
 .tl-bloco-action {
   opacity: 0;
-  transition: opacity 0.15s;
+  transition: opacity var(--lj-transition-normal);
   border: none;
   background: transparent;
   cursor: pointer;
@@ -420,7 +420,7 @@ function onDragMove(evt: Record<string, unknown>): boolean | void {
   justify-content: center;
   width: 22px;
   height: 22px;
-  border-radius: 3px;
+  border-radius: var(--lj-radius-xs);
   flex-shrink: 0;
 }
 .tl-bloco:hover .tl-bloco-action {
@@ -443,15 +443,15 @@ function onDragMove(evt: Record<string, unknown>): boolean | void {
   height: 28px;
   padding: 0 10px;
   border: 1px solid transparent;
-  border-radius: 3px;
+  border-radius: var(--lj-radius-xs);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   background: rgba(var(--lj-on-surface-ch), 0.06);
   color: var(--lj-text);
   transition:
-    background 0.15s,
-    border 0.15s;
+    background var(--lj-transition-normal),
+    border var(--lj-transition-normal);
   white-space: nowrap;
 }
 .lit-btn:hover {

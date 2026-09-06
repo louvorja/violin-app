@@ -191,10 +191,10 @@ onMounted(() => {
   gap: 8px;
   padding: 8px;
   border: 2px dashed var(--lj-surface-border-strong);
-  border-radius: 8px;
+  border-radius: var(--lj-radius-lg);
   transition:
-    border-color 0.15s,
-    background 0.15s;
+    border-color var(--lj-transition-normal),
+    background var(--lj-transition-normal);
   min-height: 100px;
 }
 
@@ -209,14 +209,14 @@ onMounted(() => {
   gap: 8px;
   padding: 6px;
   background: color-mix(in srgb, var(--lj-ui-accent) 6%, transparent);
-  border-radius: 6px;
+  border-radius: var(--lj-radius-md);
 }
 
 .image-picker-selected-img {
   width: 40px;
   height: 40px;
   object-fit: cover;
-  border-radius: 4px;
+  border-radius: var(--lj-radius-sm);
 }
 
 .image-picker-selected-name {
@@ -238,7 +238,7 @@ onMounted(() => {
 .image-picker-item {
   position: relative;
   aspect-ratio: 1;
-  border-radius: 6px;
+  border-radius: var(--lj-radius-md);
   overflow: hidden;
   cursor: pointer;
   border: 2px solid transparent;

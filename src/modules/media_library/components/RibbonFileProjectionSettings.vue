@@ -198,7 +198,7 @@ onBeforeUnmount(() => {
   width: 35px;
   height: 20px;
   border: 1px solid #555;
-  border-radius: 4px;
+  border-radius: var(--lj-radius-sm);
   cursor: pointer;
   padding: 0;
   background: transparent;
@@ -238,7 +238,7 @@ onBeforeUnmount(() => {
   width: 80px;
   padding: 0 4px;
   border: 1px solid #555;
-  border-radius: 3px;
+  border-radius: var(--lj-radius-xs);
   font-size: 10px;
   font-family: inherit;
   outline: none;

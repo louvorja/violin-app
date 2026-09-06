@@ -61,7 +61,7 @@ void props;
   padding: 4px 10px;
   background: transparent;
   border: 1px solid var(--lj-surface-border-strong);
-  border-radius: 3px;
+  border-radius: var(--lj-radius-xs);
   cursor: pointer;
   color: var(--lj-text);
   font-size: 12px;

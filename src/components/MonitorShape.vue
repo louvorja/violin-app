@@ -69,7 +69,7 @@ const standW = computed(() => Math.max(40, screenW.value * 0.3));
 
 .lj-monitor__screen {
   position: relative;
-  border-radius: 8px;
+  border-radius: var(--lj-radius-lg);
   border: 10px solid #2c2c2c;
   box-shadow:
     0 4px 12px rgba(0, 0, 0, 0.4),

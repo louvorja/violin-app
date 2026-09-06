@@ -617,7 +617,7 @@ function onDragLeaveCustom(e: DragEvent) {
   z-index: 100;
   background: rgba(var(--lj-navy-ch), 0.15);
   border: 3px dashed var(--lj-navy);
-  border-radius: 6px;
+  border-radius: var(--lj-radius-md);
   display: flex;
   flex-direction: column;
   align-items: center;

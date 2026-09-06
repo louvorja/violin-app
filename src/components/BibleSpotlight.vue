@@ -626,7 +626,7 @@ watch(model, async (val: boolean) => {
   font-size: 10px;
   font-family: inherit;
   background: var(--lj-surface-border, #333);
-  border-radius: 4px;
+  border-radius: var(--lj-radius-sm);
   border: 1px solid var(--lj-text-muted, #555);
   margin: 0 2px;
 }
@@ -640,11 +640,11 @@ watch(model, async (val: boolean) => {
   cursor: pointer;
   padding: 4px;
   color: var(--lj-text-muted, #888);
-  border-radius: 6px;
+  border-radius: var(--lj-radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s ease;
+  transition: background var(--lj-transition-normal);
 }
 
 .quicknav-close:hover {

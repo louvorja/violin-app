@@ -393,7 +393,7 @@ onMounted(() => {
   inset: 0;
   background: #111;
   overflow: hidden;
-  border-radius: 8px;
+  border-radius: var(--lj-radius-lg);
 }
 
 .overlay-preview-slot {
@@ -442,10 +442,10 @@ onMounted(() => {
 
 .overlay-slot-card {
   border: 1px solid var(--lj-surface-border);
-  border-radius: 8px;
+  border-radius: var(--lj-radius-lg);
   margin-bottom: 8px;
   background: var(--lj-surface-bg-soft);
-  transition: border-color 0.15s;
+  transition: border-color var(--lj-transition-normal);
 }
 
 .overlay-slot-card--active {

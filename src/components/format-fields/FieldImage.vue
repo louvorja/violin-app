@@ -87,7 +87,7 @@ async function browse(): Promise<void> {
   width: 26px;
   height: 26px;
   border: 1px solid var(--lj-surface-border);
-  border-radius: 3px;
+  border-radius: var(--lj-radius-xs);
   background: var(--lj-surface-bg);
   color: inherit;
   cursor: pointer;

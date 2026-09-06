@@ -21,7 +21,7 @@ defineEmits(["update:modelValue"]);
   height: 26px;
   padding: 0;
   border: 1px solid var(--lj-surface-border);
-  border-radius: 3px;
+  border-radius: var(--lj-radius-xs);
   cursor: pointer;
   background: transparent;
 }
