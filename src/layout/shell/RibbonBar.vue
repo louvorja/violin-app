@@ -26,11 +26,18 @@
 
     <div
       id="ribbon-tabpanel"
+      ref="corpoRibbon"
       class="ribbon-body"
       role="tabpanel"
       tabindex="0"
       :aria-labelledby="'ribbon-tab-' + ribbonStore.activePage"
-      :class="{ 'ribbon-body--ctx': isContextualActive }"
+      :class="{
+        'ribbon-body--ctx': isContextualActive,
+        'ribbon-body--sobra-inicio': sobraNoInicio,
+        'ribbon-body--sobra-fim': sobraNoFim,
+      }"
+      @wheel="rolarComRoda"
+      @scroll="medirSobra"
     >
       <RibbonGroupComponent
         v-for="group in activeGroups"
@@ -236,7 +243,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, type ComputedRef, reactive, ref, watch } from "vue";
+import {
+  computed,
+  type ComputedRef,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  reactive,
+  ref,
+  watch,
+} from "vue";
 import { useI18n } from "vue-i18n";
 import RibbonScreenButton from "./RibbonScreenButton.vue";
 import AppMenu from "./AppMenu.vue";
@@ -269,6 +285,61 @@ const modules: RibbonPage[] = getRibbonModules;
 const ribbonStore = useRibbonStore();
 
 const inputValues = reactive<Record<string, string>>({});
+
+// ---------------------------------------------------------------------------
+// Rolagem da ribbon quando os grupos não cabem
+// ---------------------------------------------------------------------------
+// A ribbon precisa de cerca de 1050px em português para mostrar os cinco grupos.
+// Abaixo disso ela já rolava — `overflow-x: auto` sempre esteve aqui —, mas de
+// um jeito que ninguém encontra: num monitor 1024x768, o de igreja com
+// equipamento antigo, sobram 82px escondidos à direita, e o que denuncia isso é
+// uma barra de 4px quase da cor do fundo. Some o botão "Buscar Música" e o
+// operador conclui que ele não existe.
+//
+// Duas coisas resolvem sem mexer no layout nem no tamanho mínimo da janela (que
+// não pode subir: a área útil desse monitor é 958px). A roda do mouse passa a
+// rolar na horizontal, porque o gesto nativo para isso é Shift+roda e ninguém
+// descobre sozinho; e a borda ganha uma sombra enquanto houver conteúdo além
+// dela, que é o sinal de que ainda há o que ver.
+
+const corpoRibbon = ref<HTMLElement | null>(null);
+const sobraNoInicio = ref(false);
+const sobraNoFim = ref(false);
+
+function medirSobra(): void {
+  const el = corpoRibbon.value;
+  if (!el) return;
+  sobraNoInicio.value = el.scrollLeft > 1;
+  sobraNoFim.value = el.scrollWidth - el.clientWidth - el.scrollLeft > 1;
+}
+
+function rolarComRoda(e: WheelEvent): void {
+  const el = corpoRibbon.value;
+  if (!el || el.scrollWidth <= el.clientWidth) return;
+  // Trackpad com gesto horizontal já manda deltaX; aí o navegador faz melhor.
+  if (e.deltaX !== 0) return;
+  e.preventDefault();
+  el.scrollLeft += e.deltaY;
+}
+
+let observador: ResizeObserver | null = null;
+onMounted(() => {
+  medirSobra();
+  if (typeof ResizeObserver === "undefined") return;
+  // Reage tanto ao redimensionamento da janela quanto à troca de aba, que muda
+  // a largura total dos grupos sem mudar a do container.
+  observador = new ResizeObserver(medirSobra);
+  if (corpoRibbon.value) {
+    observador.observe(corpoRibbon.value);
+    for (const filho of corpoRibbon.value.children) observador.observe(filho);
+  }
+});
+onBeforeUnmount(() => observador?.disconnect());
+
+watch(
+  () => ribbonStore.activePage,
+  () => nextTick(medirSobra)
+);
 
 const { displays, getFeatureRole, setFeatureRole } = useDisplays();
 
@@ -794,6 +865,31 @@ useBroadcastListener(BROADCAST_TYPE.RIBBON_SELECT_PAGE, (payload: unknown) => {
 
 .ribbon-body::-webkit-scrollbar {
   height: 4px;
+}
+
+/* Sombra na borda enquanto houver grupo além dela.
+   `inset` porque o elemento é o próprio container de rolagem: a sombra fica
+   presa à borda visível em vez de deslizar junto com o conteúdo. */
+.ribbon-body {
+  --lj-ribbon-sombra: var(--lj-black-alpha-18);
+}
+
+[data-theme="dark"] .ribbon-body {
+  --lj-ribbon-sombra: var(--lj-white-alpha-18);
+}
+
+.ribbon-body--sobra-fim {
+  box-shadow: inset -20px 0 14px -14px var(--lj-ribbon-sombra);
+}
+
+.ribbon-body--sobra-inicio {
+  box-shadow: inset 20px 0 14px -14px var(--lj-ribbon-sombra);
+}
+
+.ribbon-body--sobra-inicio.ribbon-body--sobra-fim {
+  box-shadow:
+    inset 20px 0 14px -14px var(--lj-ribbon-sombra),
+    inset -20px 0 14px -14px var(--lj-ribbon-sombra);
 }
 
 .ribbon-empty {
