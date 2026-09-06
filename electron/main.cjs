@@ -304,7 +304,16 @@ app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 // Forçar X11 resolve: display bounds corretos + window positioning funciona.
 // O --no-sandbox é necessário para AppImage (ambiente isolado sem capabilities).
 if (process.platform === "linux") {
-  app.commandLine.appendSwitch("ozone-platform-hint", "x11");
+  // Só forçamos X11 quando existe um servidor X para atender (nativo ou
+  // XWayland, ambos expõem DISPLAY). Numa sessão Wayland sem XWayland o
+  // switch não teria para onde apontar e o app não abriria — deixamos o
+  // Ozone escolher a plataforma nesse caso, mesmo custando a precisão dos
+  // bounds de monitor.
+  if (process.env.DISPLAY) {
+    app.commandLine.appendSwitch("ozone-platform-hint", "x11");
+  } else {
+    console.warn("[LouvorJA] Sem DISPLAY: Wayland nativo, bounds de monitor podem sair imprecisos.");
+  }
   app.commandLine.appendSwitch("no-sandbox");
 }
 
