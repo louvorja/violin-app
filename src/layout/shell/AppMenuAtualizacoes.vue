@@ -49,8 +49,12 @@
             <LjIcon :icon="ICONS.ACTIONS.RESTART" size="14" />
             {{ $t("options.updates.install") }}
           </button>
+          <!-- Só quando o download foi manual: é esse caminho que deixa um
+               arquivo em `packagePath` para abrir. Preso a deb/rpm, o botão
+               aparecia mesmo com o updater cuidando de tudo, e aí não havia
+               pacote nenhum para ele abrir. -->
           <button
-            v-if="appUpdate.status === 'downloaded' && isDebRpm"
+            v-if="appUpdate.status === 'downloaded' && appUpdate.packagePath"
             type="button"
             class="opt-btn"
             @click="openPackageFile"
@@ -235,6 +239,7 @@ import {
   API_URL_DB_FALLBACK,
 } from "@/config/Api";
 import Snackbar from "@helpers/Snackbar";
+import { fetchWithTimeout } from "@/helpers/Http";
 
 interface AppUpdateState {
   status: string;
@@ -267,10 +272,6 @@ const dbLatestConfig = ref<DbConfig | null>(null);
 const dbCacheCleared = ref<boolean>(false);
 const lastDbCheck = ref<string | null>(null);
 const lastAppCheck = ref<string | null>(null);
-
-// Instalação Linux (deb/rpm) — download manual via GitHub API
-const isDebRpm = ref(false);
-const installType = ref<string>("");
 
 // Opções da tela
 const useBeta = ref(false);
@@ -435,50 +436,12 @@ async function checkAppUpdate(): Promise<void> {
 
 async function startDownload(): Promise<void> {
   if (!Platform.updater) return;
-  if (isDebRpm.value) {
-    try {
-      const res = await Platform.updater.downloadPackage();
-      if (res && res.ok) {
-        $alert.yesno(
-          {
-            title: t("options.updates.app_install_title"),
-            text: t("options.updates.app_downloaded_to", { path: res.path || "" }),
-            translate: false,
-          },
-          (btn?: string) => {
-            if (btn === "yes") openPackageFile();
-          }
-        );
-      } else if (res && !res.ok && res.error) {
-        $alert.yesno(
-          {
-            title: t("options.updates.app_install_title"),
-            text: t("options.updates.app_asset_missing"),
-            translate: false,
-          },
-          (btn?: string) => {
-            if (btn === "yes") Platform.updater?.openReleasePage();
-          }
-        );
-      }
-    } catch (e) {
-      console.error("[Atualizações] downloadPackage:", e);
-      const msg = String(e && (e as Error).message ? (e as Error).message : e);
-      $alert.yesno(
-        {
-          title: t("options.updates.app_install_title"),
-          text: `${t("options.updates.app_asset_missing")}\n\n${msg}`,
-          translate: false,
-        },
-        (btn?: string) => {
-          if (btn === "yes") Platform.updater?.openReleasePage();
-        }
-      );
-    }
-    return;
-  }
 
-  // Win/mac/AppImage/deb — electron-updater baixa em background
+  // Todos os formatos pelo mesmo caminho. O deb e o rpm tinham um desvio para
+  // baixar o pacote à mão, de quando a verificação de versão falhava e o
+  // updater não chegava a agir; hoje ele baixa e instala os dois. Quando o
+  // updater realmente não estiver disponível, o próprio main cai no download
+  // manual — sem precisar que a tela decida isso por ele.
   try {
     await Platform.updater.download();
   } catch (e) {
@@ -487,11 +450,11 @@ async function startDownload(): Promise<void> {
 }
 
 async function installUpdate(): Promise<void> {
-  // deb/rpm: abre o pacote no gerenciador de pacotes
-  if (isDebRpm.value) {
-    await openPackageFile();
-    return;
-  }
+  // O electron-updater instala deb e rpm sozinho, pedindo a senha de
+  // administrador — no Linux o programa fica numa pasta protegida. Este desvio
+  // para "abrir o pacote" existia de quando a verificação falhava e o download
+  // era feito à mão; com o updater fazendo o download, não há arquivo no
+  // caminho manual, e o botão respondia "Nenhum pacote baixado".
   await Platform.updater?.install();
 }
 
@@ -511,12 +474,14 @@ async function checkDbUpdate(): Promise<void> {
   dbChecking.value = true;
   dbStatus.value = "idle";
   try {
-    let res = await fetch(`${API_URL_DB}/config`, {
+    let res = await fetchWithTimeout(`${API_URL_DB}/config`, {
       headers: { "Api-Token": API_TOKEN },
+      source: "db-config",
     });
     if (!res.ok && API_URL_FALLBACK) {
-      res = await fetch(`${API_URL_DB_FALLBACK}/config`, {
+      res = await fetchWithTimeout(`${API_URL_DB_FALLBACK}/config`, {
         headers: { "Api-Token": API_URL_FALLBACK_TOKEN },
+        source: "db-config-fallback",
       });
     }
     if (!res.ok) {
@@ -715,10 +680,6 @@ onMounted(async () => {
 
   if (Platform.isDesktop && Platform.updater) {
     try {
-      // Tipo de instalação Linux (deb/rpm)
-      installType.value = (await Platform.updater.getInstallType()) || "";
-      isDebRpm.value = installType.value === "deb" || installType.value === "rpm";
-
       appUpdate.value = (await Platform.updater.status()) as AppUpdateState;
       let prevStatus = appUpdate.value.status;
       _appUpdateUnsub = Platform.updater.onStateChange((s: AppUpdateState) => {
@@ -726,7 +687,9 @@ onMounted(async () => {
         // Ao concluir o download do electron-updater, avisa para reiniciar.
         // Mostra apenas na TRANSIÇÃO para "downloaded" (senão ao abrir a tela
         // com download já concluído em background repetiria o prompt).
-        if (s.status === "downloaded" && prevStatus !== "downloaded" && !isDebRpm.value) {
+        // Vale para deb e rpm também: eles ficavam de fora porque a instalação
+        // não era automática, e agora é.
+        if (s.status === "downloaded" && prevStatus !== "downloaded") {
           $alert.yesno(
             {
               title: t("options.updates.app_install_title"),
