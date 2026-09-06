@@ -1,4 +1,4 @@
-import { Component } from "vue";
+import { Component, CSSProperties } from "vue";
 
 export interface RibbonPage {
   id: string
@@ -26,6 +26,7 @@ export interface RibbonButton {
   disabled?: boolean;
   color?: string;
   size?: "small";
+  style?: CSSProperties;
   type?: "screen" | "checkbox" | "switch" | "action_input" | "select" | "slider" | "number";
   feature?: string;
   route?: string;

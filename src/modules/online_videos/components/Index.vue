@@ -120,6 +120,8 @@ import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import Media from "@/composables/useMedia";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import $database from "@/helpers/Database";
+import $userdata from "@/helpers/UserData";
+import { KEYS } from "@/constants/UserDataKeys";
 import type { RibbonAction } from "@/types/Ribbon";
 
 const { t: i18nT, locale } = useI18n();
@@ -294,6 +296,7 @@ function buildEmbedUrl(videoId: string): string {
 
 async function projectVideo(video: OnlineVideo): Promise<void> {
   projectingId.value = video.video_id;
+  $userdata.set(KEYS.MODULES.ONLINE_VIDEOS.IS_PROJECTING, true);
   await Media.openYouTube(buildEmbedUrl(video.video_id), video.title);
 }
 
@@ -306,18 +309,25 @@ useBroadcastListener(BROADCAST_TYPE.MODULE_RIBBON_ACTION, (payload: unknown) => 
     const id = extractYoutubeId(url);
     if (!id) return;
     projectingId.value = id;
+    $userdata.set(KEYS.MODULES.ONLINE_VIDEOS.IS_PROJECTING, true);
     Media.openYouTube(buildEmbedUrl(id), url);
-  } else if (data.action === "stop") {
+  } else if (data.action === "toggle") {
     if (projectingId.value) {
       projectingId.value = "";
+      $userdata.set(KEYS.MODULES.ONLINE_VIDEOS.IS_PROJECTING, false);
       Media.close(true);
+    } else {
+      // Sem vídeo selecionado — não faz nada
     }
+  } else if (data.action === "settings") {
+    window.dispatchEvent(new CustomEvent("louvorja:open-options", { detail: { tab: "videos" } }));
   }
 });
 
 function close(): void {
   if (projectingId.value) {
     projectingId.value = "";
+    $userdata.set(KEYS.MODULES.ONLINE_VIDEOS.IS_PROJECTING, false);
     Media.close(true);
   }
 }

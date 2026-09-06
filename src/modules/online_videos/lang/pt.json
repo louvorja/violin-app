@@ -12,6 +12,11 @@
   "play_all": "Reproduzir todas",
   "actions": { "project": "Projetar", "stop": "Parar" },
   "ribbon": {
-    "title_ctx": "Vídeos On-line"
+    "title_ctx": "Vídeos On-line",
+    "monitor": "Monitor",
+    "show_return": "Exibir retorno",
+    "return_monitor": "Monitor retorno",
+    "project": "Projetar",
+    "project_stop": "Parar projeção"
   }
 }

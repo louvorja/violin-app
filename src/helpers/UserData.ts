@@ -109,12 +109,20 @@ export default {
     // de gravar. No desktop apenas atualizamos o cache local em memória
     // (sincronia visual com a UI atual) e deixamos o main persistir.
     if (Platform.isDesktop) {
-      // Atualiza só o _desktopCache — mantém leituras síncronas
-      // consistentes durante a sessão sem persistir no disco a partir
-      // daqui (main já cuida da persistência via userdata:patch).
+      // Atualiza o _desktopCache — mantém leituras síncronas
+      // consistentes durante a sessão.
+      const state = useUserDataStore().$state;
       try {
-        $storage.setLocalCache("user_data", useUserDataStore().$state);
+        $storage.setLocalCache("user_data", state);
       } catch (_) { /* ignore — método pode não existir em web */ }
+      // Grava no disco — se o IPC userdata:patch ainda não chegou ao main
+      // (ex: usuário fechou o app imediatamente após a mudança), o
+      // before-quit escreveria _userDataMain desatualizado. Esta escrita é
+      // segura porque o handler userdata:patch do main sobrescreve com o
+      // mesmo valor (ou mais novo, se outro set() disparou entrementes).
+      try {
+        $storage.set("user_data", state);
+      } catch (_) { /* ignore */ }
       return;
     }
     if (_saveTimer !== null) clearTimeout(_saveTimer);
@@ -152,6 +160,7 @@ export default {
             _suppressBroadcast = true;
             try {
               _hydrateStore(fresh as Record<string, unknown>);
+              console.info("[UserData] load → skip_startup_check:", (fresh as Record<string, unknown>)?.options && typeof (fresh as Record<string, unknown>).options === "object" ? (fresh as Record<string, unknown>).options : "N/A");
             } finally {
               _suppressBroadcast = false;
             }

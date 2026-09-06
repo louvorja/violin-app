@@ -20,7 +20,7 @@ defineProps({
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--lj-body-divider);
-  padding: var(--lj-space-2) var(--lj-space-3) 0;
+  padding: var(--lj-space-1) var(--lj-space-2) 0;
   flex-shrink: 0;
   height: 100%;
   width: max-content;
@@ -32,7 +32,7 @@ defineProps({
 
 .ribbon-group-content {
   display: flex;
-  flex-direction: column;
+  /*flex-direction: column;*/
   align-items: stretch;
   flex: 1 1 auto;
   gap: var(--lj-space-2);
@@ -48,7 +48,7 @@ defineProps({
 
 .ribbon-group--web .ribbon-group-content {
   display: flex;
-  flex-direction: column;
+  /*flex-direction: column;*/
   align-items: stretch;
   flex: 1 1 auto;
   gap: var(--lj-space-2);

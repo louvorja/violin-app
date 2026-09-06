@@ -28,7 +28,8 @@ const checked = ref($userdata.get(props.storageKey, false) === marked());
 // pela janela do app perdia a escolha, porque só um dos caminhos persistia.
 function onChange(v: boolean | null): void {
   checked.value = !!v;
-  $userdata.set(props.storageKey, v ? marked() : false);
+  const value = v ? marked() : false;
+  $userdata.set(props.storageKey, value);
 }
 </script>
 

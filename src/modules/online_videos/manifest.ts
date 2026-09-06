@@ -77,11 +77,14 @@ export const contextualPages: RibbonPage[] = [
           {
             id: `${moduleId}_personal_url`,
             type: "action_input",
-            icon: ICONS.UI.OPEN_IN_NEW,
+            icon: ICONS.PROJECTION.START,
             label: "ribbon.btn.online_videos_personal_url",
             placeholder: "ribbon.btn.online_videos_personal_url_placeholder",
             action: `${moduleId}_personal_url`,
             color: "#3498db",
+            style: {
+              width: "400px",
+            }
           },
           {
             id: `${moduleId}_toggle`,

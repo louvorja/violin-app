@@ -114,6 +114,7 @@
                     v-model="inputValues[btn.id]"
                     :type="btn.inputType || 'text'"
                     class="ribbon-action-input__field"
+                    :style="btn.style"
                     :placeholder="$t(btn.placeholder || '')"
                     @keydown.enter.prevent="executeInputAction(btn)"
                     @change="btn.inputType === 'time' && executeInputAction(btn)"
@@ -124,13 +125,13 @@
                     :icon-color="resolveBtnColor(btn)"
                     :label="$t(btn.label)"
                     size="medium"
+                    :style="btn.style"
                     :testid="`ribbon-btn-${btn.id}`"
                     @click="executeInputAction(btn)"
                   />
                 </div>
                 <div
                   v-else-if="btn.type === 'select'"
-                  v-show="isDependencyMet(btn)"
                   class="ribbon-field-wrap"
                   :data-testid="`ribbon-btn-${btn.id}`"
                 >
@@ -386,7 +387,7 @@ function setCheckValue(btn: RibbonButton, checked: boolean | null): void {
 function isDependencyMet(btn: RibbonButton): boolean {
   if (btn.dependsOnOption) {
     const val = $userdata.get(btn.dependsOnOption.path, "") as string;
-    return val === btn.dependsOnOption.value;
+    return val.toString() === btn.dependsOnOption.value;
   }
   if (!btn.dependsOn) return true;
   const group = activeGroups.value?.find((g) => g.buttons?.some((b) => b.id === btn.dependsOn));
@@ -847,7 +848,13 @@ useBroadcastListener(BROADCAST_TYPE.RIBBON_SELECT_PAGE, (payload: unknown) => {
   justify-content: start;
   align-content: start;
   overflow-x: auto;
-  overflow-y: hidden;
+  overflow-y: auto;
+  min-height: 0;
+  scrollbar-width: none;
+}
+
+.ribbon-group-track--compact-desktop::-webkit-scrollbar {
+  display: none;
 }
 
 .ribbon-group-item {
@@ -931,6 +938,19 @@ useBroadcastListener(BROADCAST_TYPE.RIBBON_SELECT_PAGE, (payload: unknown) => {
   gap: 3px;
   padding: 4px 6px;
   min-width: 140px;
+}
+
+.ribbon-group-item--compact .ribbon-field-wrap,
+.ribbon-group-item--compact .ribbon-action-input {
+  flex-direction: row;
+  align-items: center;
+  min-width: 0;
+  gap: 6px;
+  padding: 2px 6px;
+}
+
+.ribbon-group-item--compact .ribbon-action-input__field {
+  width: 90px;
 }
 
 .ribbon-field-label {

@@ -55,8 +55,8 @@ export const contextualPages: RibbonPage[] = [
         buttons: [
           { id: `${moduleId}_hour_cycle`, type: "select", label: "components.customization.hour_cycle", optionKey: `modules.${moduleId}.hour_cycle`, defaultValue: "24h", options: [{ value: "12h", label: "components.format_panel.time_12h" }, { value: "24h", label: "components.format_panel.time_24h" }] },
           { id: `${moduleId}_time_format`, type: "select", label: "components.customization.time_format", optionKey: `modules.${moduleId}.time_format`, defaultValue: "hh:mm:ss", options: [{ value: "hh:mm:ss", label: "components.format_panel.time_hms" }, { value: "hh:mm", label: "components.format_panel.time_hm" }] },
-          { id: `${moduleId}_show_date`, type: "switch", label: "components.customization.show_date", optionKey: `modules.${moduleId}.show_date`, defaultValue: true },
           { id: `${moduleId}_date_format`, type: "select", label: "components.customization.date_format", optionKey: `modules.${moduleId}.date_format`, defaultValue: "long", options: [{ value: "long", label: "components.format_panel.date_long" }, { value: "medium", label: "components.format_panel.date_medium" }, { value: "short", label: "components.format_panel.date_short" }, { value: "weekday", label: "components.format_panel.date_weekday" }, { value: "month_year", label: "components.format_panel.date_month_year" }, { value: "weekday_only", label: "components.format_panel.date_weekday_only" }] },
+          { id: `${moduleId}_show_date`, type: "switch", label: "components.customization.show_date", optionKey: `modules.${moduleId}.show_date`, defaultValue: true },
         ],
       },
       {
