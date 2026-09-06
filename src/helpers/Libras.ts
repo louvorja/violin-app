@@ -581,21 +581,30 @@ export async function translateBibleChapter(
 export async function getCacheStats(): Promise<LibrasCacheStats> {
   const entries = await listCached();
   let totalGlossBytes = 0;
-  let totalBundlesBytes = 0;
   let musicCount = 0;
   let bibleCount = 0;
 
   for (const e of entries) {
     totalGlossBytes += e.gloss?.length * 2 || 0; // ~2 bytes por char UTF-8
-    totalBundlesBytes += e.bundles_size || 0;
     if (e.type === "music") musicCount++;
     if (e.type === "bible") bibleCount++;
   }
+
+  // Os bundles são medidos na própria tabela: o `bundles_size` da entrada de
+  // gloss só é preenchido pelo download em lote, e fica zerado nos bundles
+  // baixados durante a projeção.
+  let totalBundlesBytes = 0;
+  let bundlesCount = 0;
+  await $idb.each<{ size?: number; data?: unknown[] }>(DB_TABLE.LIBRAS_BUNDLES, (b) => {
+    totalBundlesBytes += b.size || b.data?.length || 0;
+    bundlesCount++;
+  });
 
   return {
     total_entries: entries.length,
     music_count: musicCount,
     bible_count: bibleCount,
+    bundles_count: bundlesCount,
     total_gloss_bytes: totalGlossBytes,
     total_bundles_bytes: totalBundlesBytes,
     total_bytes: totalGlossBytes + totalBundlesBytes,

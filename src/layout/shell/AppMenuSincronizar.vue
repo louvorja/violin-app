@@ -461,9 +461,16 @@
                 <small>({{ storageStats?.bible?.count || 0 }} arq.)</small>
               </span>
             </div>
+            <div class="opt-stat">
+              <span class="opt-stat-label">{{ $t("options.storage.libras_size") }}</span>
+              <span class="opt-stat-value">
+                {{ sync.humanSize(librasStats?.total_bytes) }}
+                <small>({{ librasFileCount }} arq.)</small>
+              </span>
+            </div>
             <div class="opt-stat opt-stat--total">
               <span class="opt-stat-label">{{ $t("options.storage.total") }}</span>
-              <span class="opt-stat-value">{{ sync.humanSize(storageStats?.total?.bytes) }}</span>
+              <span class="opt-stat-value">{{ sync.humanSize(totalStorageBytes) }}</span>
             </div>
           </div>
 
@@ -558,7 +565,9 @@ import {
 } from "@/helpers/BackgroundTaskDetail";
 import ProgressBar from "@/components/ProgressBar.vue";
 import $snackbar from "@/helpers/Snackbar";
+import Libras from "@/helpers/Libras";
 import type { BibleVersion } from "@/types/Bible";
+import type { LibrasCacheStats } from "@/types/Libras";
 
 /* ---- Tipos ---- */
 
@@ -1049,7 +1058,16 @@ async function saveBibleSelection(): Promise<void> {
 /* ---- Storage ---- */
 
 const storageStats = ref<StorageStats | null>(null);
+const librasStats = ref<LibrasCacheStats | null>(null);
 const loading = ref<boolean>(false);
+
+const librasFileCount = computed<number>(
+  () => (librasStats.value?.total_entries || 0) + (librasStats.value?.bundles_count || 0)
+);
+
+const totalStorageBytes = computed<number>(
+  () => (storageStats.value?.total?.bytes || 0) + (librasStats.value?.total_bytes || 0)
+);
 
 const autoCache = computed({
   get: (): boolean => $userdata.get(KEYS.OPTIONS.AUTO_CACHE_MEDIA, true) === true,
@@ -1131,15 +1149,20 @@ async function detectClassic(): Promise<void> {
 }
 
 async function reloadStats(): Promise<void> {
-  if (!Platform?.storage?.stats) return;
   loading.value = true;
   try {
-    storageStats.value = (await Platform.storage.stats()) as StorageStats;
+    if (Platform?.storage?.stats) {
+      storageStats.value = (await Platform.storage.stats()) as StorageStats;
+    }
   } catch (e) {
     console.warn("[Sincronizar] storage.stats falhou:", e);
-  } finally {
-    loading.value = false;
   }
+  try {
+    librasStats.value = await Libras.getCacheStats();
+  } catch (e) {
+    console.warn("[Sincronizar] libras.getCacheStats falhou:", e);
+  }
+  loading.value = false;
 }
 
 async function openFolder(): Promise<void> {

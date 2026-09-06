@@ -16,6 +16,7 @@ export interface LibrasCacheStats {
   total_entries: number;
   music_count: number;
   bible_count: number;
+  bundles_count: number;
   total_gloss_bytes: number;
   total_bundles_bytes: number;
   total_bytes: number;

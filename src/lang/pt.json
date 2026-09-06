@@ -475,6 +475,7 @@
       "change_folder": "Alterar pasta…",
       "media_size": "Mídia (áudio, imagens)",
       "cache_size": "Cache do banco",
+      "libras_size": "Acessibilidade (Libras)",
       "total": "Total",
       "auto_cache": "Salvar automaticamente ao reproduzir",
       "auto_cache_hint": "Quando ligado, músicas tocadas online ficam disponíveis offline depois.",

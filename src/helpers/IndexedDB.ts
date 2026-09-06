@@ -68,6 +68,16 @@ export default {
     await (await getDb()).clear(table);
   },
 
+  /** Percorre a tabela registro a registro — usar quando `getAll` traria bytes demais. */
+  async each<T = unknown>(table: string, fn: (value: T) => void): Promise<void> {
+    const db = await getDb();
+    let cursor = await db.transaction(table).store.openCursor();
+    while (cursor) {
+      fn(cursor.value as T);
+      cursor = await cursor.continue();
+    }
+  },
+
 
   /**
    * === Métodos para Tabela Settings

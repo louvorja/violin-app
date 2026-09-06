@@ -475,6 +475,7 @@
       "change_folder": "Cambiar carpeta…",
       "media_size": "Medios (audio, imágenes)",
       "cache_size": "Caché del banco",
+      "libras_size": "Accesibilidad (Libras)",
       "total": "Total",
       "auto_cache": "Guardar automáticamente al reproducir",
       "auto_cache_hint": "Cuando está activado, las músicas reproducidas online quedan disponibles offline después.",

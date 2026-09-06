@@ -658,6 +658,7 @@ const stats = ref<LibrasCacheStats>({
   total_entries: 0,
   music_count: 0,
   bible_count: 0,
+  bundles_count: 0,
   total_gloss_bytes: 0,
   total_bundles_bytes: 0,
   total_bytes: 0,
