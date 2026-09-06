@@ -23,6 +23,8 @@ interface SlidesInstance {
   nextSlide: ComputedRef<Slide | null>;
   totalSlides: ComputedRef<number>;
   setSlides: (newSlides: Slide[], newTimes: number[], newTitle: string) => void;
+  setTimes: (newTimes: number[]) => void;
+  timeForPosition: (index: number, fraction: number, duration: number) => number;
   bindAudio: (audioPlayback: AudioPlayback) => void;
   unbindAudio: () => void;
   broadcastSlide: () => void;
@@ -87,6 +89,21 @@ function _create(): SlidesInstance {
     _lastBroadcastIndex = -1;
     _lastProgressSendAt = 0;
     _lastSlideProgressSent = -1;
+  }
+
+  // Trocar cantada por playback mantendo o slide no ar: as marcações dos dois
+  // áudios são independentes e chegam a divergir alguns segundos, então o que
+  // se preserva é o slide, não o instante do relógio.
+  function setTimes(newTimes: number[]): void {
+    times.value = newTimes ?? [];
+  }
+
+  /** Instante, na faixa vigente, do ponto `fraction` (0-1) dentro do slide `index`. */
+  function timeForPosition(index: number, fraction: number, duration: number): number {
+    const start = times.value[index] ?? 0;
+    const end   = times.value[index + 1] ?? duration;
+    if (!Number.isFinite(end) || end <= start) return start;
+    return start + Math.max(0, Math.min(1, fraction)) * (end - start);
   }
 
   function broadcastSlide(): void {
@@ -196,7 +213,7 @@ function _create(): SlidesInstance {
   return {
     slides, slideIndex, slideProgress, title,
     slide, nextSlide, totalSlides,
-    setSlides, bindAudio, unbindAudio, broadcastSlide,
+    setSlides, setTimes, timeForPosition, bindAudio, unbindAudio, broadcastSlide,
     goToSlide, goPrev, goNext, goFirst, goLast, reset,
   };
 }

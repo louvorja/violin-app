@@ -13,6 +13,9 @@ export interface AudioPlayback {
   isFading: Ref<boolean>;
   getElement: () => HTMLAudioElement;
   setSrc: (src: string, lazy?: boolean) => void;
+  prepare: (src: string, lazy?: boolean, seekHint?: number) => Promise<HTMLAudioElement>;
+  release: (el: HTMLAudioElement) => void;
+  takeOver: (next: HTMLAudioElement, startTime: (duration: number) => number, play: boolean) => Promise<void>;
   setDurationHint: (seconds: number) => void;
   play: (onError?: (e: unknown) => void) => void;
   pause: (callback?: () => void) => void;
@@ -84,6 +87,18 @@ function _create(): AudioPlayback {
     _playing = false;
   }
 
+  function _listen(el: HTMLAudioElement): void {
+    el.addEventListener("timeupdate", _syncTime);
+    el.addEventListener("progress", _syncTime);
+    el.addEventListener("loadedmetadata", _syncTime);
+  }
+
+  function _unlisten(el: HTMLAudioElement): void {
+    el.removeEventListener("timeupdate", _syncTime);
+    el.removeEventListener("progress", _syncTime);
+    el.removeEventListener("loadedmetadata", _syncTime);
+  }
+
   function getElement(): HTMLAudioElement {
     if (!_el) {
       _el = document.getElementById("__audio") as HTMLAudioElement | null;
@@ -93,12 +108,127 @@ function _create(): AudioPlayback {
         _el.preload = "auto";
         document.body.appendChild(_el);
       }
-      _el.addEventListener("timeupdate", _syncTime);
-      _el.addEventListener("progress", _syncTime);
-      _el.addEventListener("loadedmetadata", _syncTime);
+      _listen(_el);
     }
     _el.autoplay = true;
     return _el;
+  }
+
+  /**
+   * Carrega uma faixa num elemento à parte, sem tocar em quem está no ar.
+   * Resolve quando ela já dá para tocar — é o que permite trocar de faixa sem
+   * o buraco de silêncio da decodificação.
+   */
+  function prepare(src: string, lazy = false, seekHint = 0): Promise<HTMLAudioElement> {
+    return new Promise((resolve, reject) => {
+      const el = document.createElement("audio");
+      el.preload = "auto";
+      el.autoplay = false;
+      el.volume = volume.value / 100;
+      el.dataset.lazy = lazy ? "1" : "";
+      el.src = src;
+
+      // Faixa que vem por streaming bufferiza a partir do zero; sem levá-la já
+      // para perto do ponto de entrada, o salto na hora da troca vira espera
+      // de rede — justo o silêncio que se quer evitar.
+      const posicionar = (): void => {
+        const d = el.duration;
+        if (seekHint > 0 && Number.isFinite(d) && d > 0) {
+          el.currentTime = Math.max(0, Math.min(seekHint, d));
+        }
+      };
+
+      let encerrado = false;
+      const encerrar = (): void => {
+        encerrado = true;
+        clearTimeout(prazo);
+        el.removeEventListener("loadedmetadata", posicionar);
+        el.removeEventListener("canplay", pronto);
+        el.removeEventListener("error", falhou);
+      };
+      const pronto = (): void => {
+        if (encerrado) return;
+        encerrar();
+        resolve(el);
+      };
+      const falhou = (): void => {
+        if (encerrado) return;
+        encerrar();
+        _descartar(el);
+        reject(new Error("prepare: falha ao carregar " + src));
+      };
+      // Rede ruim não pode deixar a troca pendurada — quem chamou decide o que
+      // fazer com um elemento que ainda vai engasgar.
+      const prazo = setTimeout(pronto, 10000);
+
+      el.addEventListener("loadedmetadata", posicionar);
+      el.addEventListener("canplay", pronto);
+      el.addEventListener("error", falhou);
+      el.load();
+    });
+  }
+
+  function _descartar(el: HTMLAudioElement): void {
+    el.pause();
+    if (el.src && el.src.startsWith("blob:")) {
+      try { URL.revokeObjectURL(el.src); } catch (_) { /* ignore */ }
+    }
+    _detachSource(el);
+    el.remove();
+  }
+
+  /**
+   * Promove ao ar a faixa preparada, posicionada em `startTime`. Quando ela
+   * entra tocando, a anterior só sai depois que a nova começou de fato — sem
+   * isso sobra um silêncio entre uma e outra.
+   */
+  function takeOver(
+    next: HTMLAudioElement,
+    startTime: (duration: number) => number,
+    play: boolean,
+  ): Promise<void> {
+    const d = isNaN(next.duration) || !isFinite(next.duration) ? 0 : next.duration;
+    const alvo = startTime(d);
+    if (Number.isFinite(alvo) && alvo > 0) {
+      next.currentTime = d > 0 ? Math.max(0, Math.min(alvo, d)) : alvo;
+    }
+    next.volume = volume.value / 100;
+
+    const promover = (): void => {
+      const anterior = _el;
+      if (anterior && anterior !== next) {
+        _unlisten(anterior);
+        _descartar(anterior);
+      }
+      next.id = "__audio";
+      next.autoplay = true;
+      if (!next.isConnected) document.body.appendChild(next);
+      _el = next;
+      isLazy.value = next.dataset.lazy === "1";
+      _listen(next);
+      _syncTime();
+    };
+
+    if (!play) {
+      _stopRaf();
+      promover();
+      next.pause();
+      isPaused.value = true;
+      return Promise.resolve();
+    }
+
+    const tocando = (): void => {
+      promover();
+      _playing = !next.paused;
+      isPaused.value = next.paused;
+      if (_playing) _startRaf();
+    };
+    const p = next.play();
+    if (!p) {
+      tocando();
+      return Promise.resolve();
+    }
+    return p.then(tocando, tocando);
   }
 
   function setSrc(src: string, lazy = false): void {
@@ -255,9 +385,7 @@ function _create(): AudioPlayback {
   function cleanup(): void {
     _stopRaf();
     if (_el) {
-      _el.removeEventListener("timeupdate", _syncTime);
-      _el.removeEventListener("progress", _syncTime);
-      _el.removeEventListener("loadedmetadata", _syncTime);
+      _unlisten(_el);
       if (_el.parentNode) _el.parentNode.removeChild(_el);
       _el = null;
     }
@@ -265,7 +393,7 @@ function _create(): AudioPlayback {
 
   return {
     volume, currentTime, duration, progress, buffered, isPaused, isFading,
-    getElement, setSrc, setDurationHint,
+    getElement, setSrc, prepare, release: _descartar, takeOver, setDurationHint,
     play, pause, stop,
     setVolume, toggleVolume, seekTo, advanceTime,
     fadeIn, fadeOut, onTimeUpdate,

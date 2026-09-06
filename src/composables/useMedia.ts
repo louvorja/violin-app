@@ -24,6 +24,7 @@ import { Music } from "@/types/Music";
 import { LyricOpenParams } from "@/types/Lyric";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { MediaOpenParams } from "@/types/Media";
+import { MusicActionEnum } from "@/enums/MusicActionEnum";
 import AudioLibrary from "@/helpers/AudioLibrary";
 
 const _audio = useAudioPlayback();
@@ -37,6 +38,9 @@ let _playlistOnEnd: (() => boolean) | null = null;
 // o early-return pelo _loadingId já as ignore, a request continuava
 // drenando bytes da rede e ocupando handlers).
 let _audioXhr: XMLHttpRequest | null = null;
+// Troca de modo em andamento: a faixa antiga segue tocando até a nova assumir,
+// e chegar ao fim dela não é motivo para encerrar a música.
+let _switchingMode = false;
 
 // YouTube mode
 let _ytUnlisten: (() => void) | null = null;
@@ -57,12 +61,15 @@ function _loadAudioSrc(
   audioUrl: string,
   idCheck: string | number | null,
   retryFn: (id: string | number) => void,
+  onSource: (src: string, lazy: boolean) => void = (src, lazy) => {
+    _audio.setSrc(src, lazy);
+    _self.pause(false);
+  },
 ): void {
   if ($appdata.get(KEYS.SHELL.IS_ONLINE) && $userdata.get(KEYS.MODULES.MEDIA.LAZY_LOAD)) {
     $appdata.set(KEYS.MODULES.MEDIA.CONFIG.LAZY, true);
-    _audio.setSrc(audioUrl, true);
     $appdata.set(KEYS.MODULES.MEDIA.LOADING, false);
-    _self.pause(false);
+    onSource(audioUrl, true);
     return;
   }
 
@@ -77,6 +84,7 @@ function _loadAudioSrc(
     request.open("GET", audioUrl, true);
   } catch (error) {
     if (_audioXhr === request) _audioXhr = null;
+    _switchingMode = false;
     $appdata.set(KEYS.MODULES.MEDIA.LOADING, false);
     _self.close(true);
     $alert.error({ text: "modules.media.alerts.not_loaded", error }, function (a?: unknown) {
@@ -93,9 +101,9 @@ function _loadAudioSrc(
     if (_loadingId !== idCheck) return;
     if (this.status == 200) {
       if (ehRemota(audioUrl)) reportNetworkResult(true, "media");
-      _audio.setSrc(URL.createObjectURL(this.response as Blob), false);
-      _self.pause(false);
+      onSource(URL.createObjectURL(this.response as Blob), false);
     } else {
+      _switchingMode = false;
       _self.close(true);
       $alert.error(
         { text: "modules.media.alerts.not_loaded", error: request.statusText || "" },
@@ -107,6 +115,7 @@ function _loadAudioSrc(
   };
   const falhaDeRede = function () {
     if (_audioXhr === request) _audioXhr = null;
+    _switchingMode = false;
     $appdata.set(KEYS.MODULES.MEDIA.LOADING, false);
     if (_loadingId !== idCheck) return;
     // No desktop o áudio vem por `louvorja://`, que é o protocolo lendo disco:
@@ -173,7 +182,7 @@ _audio.onTimeUpdate((ct, d) => {
   $appdata.set(KEYS.MODULES.MEDIA.CONFIG.PROGRESS, _audio.progress.value);
   $appdata.set(KEYS.MODULES.MEDIA.CONFIG.BUFFERED, _audio.buffered.value);
 
-  if (!_audio.isPaused.value && ct >= d && d > 0) {
+  if (!_audio.isPaused.value && ct >= d && d > 0 && !_switchingMode) {
     if (_playlistOnEnd) {
       const handled = _playlistOnEnd();
       if (!handled) {
@@ -226,6 +235,16 @@ function _buildSlidesFrom(data: Music): Slide[] {
         };
       }),
   ];
+}
+
+/** Marcações de troca de slide da faixa pedida — cantada e playback têm as suas. */
+function _timesFor(slides: Slide[], mode: string): number[] {
+  if (mode !== MusicActionEnum.AUDIO && mode !== MusicActionEnum.INSTRUMENTAL) return [];
+  return slides.map((item) =>
+    $datetime.toNumber(
+      (mode === MusicActionEnum.AUDIO ? item.time : item.instrumental_time) as string
+    )
+  );
 }
 
 const _self = {
@@ -315,13 +334,7 @@ const _self = {
     this.setAlbumInfo(id_album);
 
     const slidesArray = _buildSlidesFrom(data);
-    let timesArray: number[] = [];
-
-    if (mode == "audio" || mode == "instrumental") {
-      timesArray = slidesArray.map((item) =>
-        $datetime.toNumber(mode == "audio" ? item.time : item.instrumental_time)
-      );
-    }
+    const timesArray = _timesFor(slidesArray, mode);
 
     const audioUrl =
       mode == "audio" || mode == "instrumental"
@@ -341,6 +354,107 @@ const _self = {
       retryFn: (id) => _self.open(id),
       minimized: !!minimized,
       mode,
+    });
+  },
+
+  /**
+   * Troca cantada ↔ playback ↔ sem áudio na música que já está no ar sem voltar
+   * ao começo: o slide continua onde estava e a faixa nova entra no ponto
+   * equivalente. Fora desse caso (YouTube, só-áudio, nada aberto) delega ao
+   * `open`, que recomeça do zero.
+   */
+  switchMode(mode: MusicActionEnum): void {
+    const idMusic = $appdata.get(KEYS.MODULES.MEDIA.ID_MUSIC) as string | number | null;
+    if (idMusic == null) return;
+
+    const keepsPosition =
+      !_isYouTube() &&
+      !$appdata.get(KEYS.MODULES.MEDIA.CONFIG.AUDIO_ONLY) &&
+      _slides.totalSlides.value > 0;
+    if (!keepsPosition) {
+      this.open({ id_music: idMusic, mode, minimized: this.isMinimized() });
+      return;
+    }
+
+    const current = $appdata.get(KEYS.MODULES.MEDIA.CONFIG.MODE) as string;
+    if (mode === current) return;
+
+    const data = $appdata.get(KEYS.MODULES.MEDIA.DATA) as Music | null;
+    const file =
+      mode === MusicActionEnum.AUDIO        ? (data?.url_music as string | undefined) :
+      mode === MusicActionEnum.INSTRUMENTAL ? (data?.url_instrumental_music as string | undefined) :
+      undefined;
+    if (mode !== MusicActionEnum.NO_AUDIO && !file) return;
+
+    const hadAudio = current === MusicActionEnum.AUDIO || current === MusicActionEnum.INSTRUMENTAL;
+
+    if (mode === MusicActionEnum.NO_AUDIO) {
+      _slides.unbindAudio();
+      _audio.stop();
+      _audio.currentTime.value = 0;
+      _audio.duration.value    = 0;
+      _audio.progress.value    = 0;
+      _audio.buffered.value    = 0;
+      _slides.setTimes([]);
+      $appdata.set(KEYS.MODULES.MEDIA.CONFIG.MODE, mode);
+      $appdata.set(KEYS.MODULES.MEDIA.CONFIG.AUDIO, "");
+      $appdata.set(KEYS.MODULES.MEDIA.CONFIG.CURRENT_TIME, 0);
+      $appdata.set(KEYS.MODULES.MEDIA.CONFIG.DURATION, 0);
+      $appdata.set(KEYS.MODULES.MEDIA.CONFIG.PROGRESS, 0);
+      $appdata.set(KEYS.MODULES.MEDIA.CONFIG.BUFFERED, 0);
+      $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED, true);
+      _slides.broadcastSlide();
+      return;
+    }
+
+    const audioUrl = $path.file(file as string);
+    _loadingId = idMusic;
+    _switchingMode = true;
+    $appdata.set(KEYS.MODULES.MEDIA.LOADING, true);
+    $appdata.set(KEYS.MODULES.MEDIA.CONFIG.MODE, mode);
+    $appdata.set(KEYS.MODULES.MEDIA.CONFIG.AUDIO, audioUrl);
+
+    // A faixa que está no ar continua tocando enquanto a nova baixa: quem troca
+    // no meio do louvor não pode ficar com a igreja em silêncio pelo tempo do
+    // download. Por isso o ponto de retomada só é lido aqui, quando a faixa
+    // nova assume — lê-lo no clique faria o áudio voltar o que tocou desde lá.
+    _loadAudioSrc(audioUrl, idMusic, (id) => _self.open(id), (src, lazy) => {
+      _audio
+        .prepare(src, lazy, _audio.currentTime.value)
+        .then((faixa) => {
+          // Outra música entrou no ar durante o carregamento: esta não serve
+          // mais, e o blob dela só sai da memória se alguém soltar.
+          if (_loadingId !== idMusic) {
+            _audio.release(faixa);
+            return;
+          }
+          _switchingMode = false;
+
+          // Lido só agora, com a faixa nova pronta para entrar: ler no clique
+          // faria o áudio voltar tudo que tocou enquanto ela carregava.
+          const slideIndex = _slides.slideIndex.value;
+          const fraction   = hadAudio ? _slides.slideProgress.value / 100 : 0;
+          const playing    = !hadAudio || !_audio.isPaused.value;
+
+          // Com o watcher ligado, o tempo da faixa nova ainda em zero jogaria a
+          // projeção na capa e de volta, à vista da igreja.
+          _slides.unbindAudio();
+          _slides.setTimes(_timesFor(_slides.slides.value, mode));
+
+          return _audio
+            .takeOver(faixa, (d) => _slides.timeForPosition(slideIndex, fraction, d), playing)
+            .then(() => {
+              _slides.bindAudio(_audio);
+              $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED, !playing);
+              if (!playing) _self.broadcastSlide();
+            });
+        })
+        .catch(() => {
+          // A faixa não quis carregar em paralelo; o caminho normal reabre a
+          // música e traz junto o tratamento de erro de sempre.
+          _switchingMode = false;
+          _self.open({ id_music: idMusic, mode, minimized: _self.isMinimized() });
+        });
     });
   },
 
@@ -708,6 +822,7 @@ const _self = {
   },
 
   clearVariables(): void {
+    _switchingMode = false;
     _slides.reset();
     _audio.reset();
     $appdata.set(KEYS.MODULES.MEDIA.DATA, {});
