@@ -37,7 +37,10 @@ jobs:
               dist_electron/*.AppImage
               dist_electron/*.deb
               dist_electron/*.rpm
-              dist_electron/latest-linux.yml
+              # O curinga cobre o `latest-linux-arm64.yml`. Nomeado à mão, só o
+              # x64 subia: os pacotes ARM iam para a release sem o arquivo que
+              # o updater procura, e a máquina ARM levava 404 ao verificar.
+              dist_electron/latest-linux*.yml
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
