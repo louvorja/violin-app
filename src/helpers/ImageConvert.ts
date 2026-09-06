@@ -3,12 +3,14 @@
  * nativamente (HEIC/HEIF — fotos de iPhone) para JPEG no momento da
  * importação, garantindo que thumb, preview e projeção funcionem.
  *
- * heic2any (libheif WASM) é importado estaticamente — embarcado no bundle,
- * funciona offline em Electron/Web/PWA.
+ * heic2any (libheif WASM) vem do bundle, então funciona offline em
+ * Electron/Web/PWA, mas entra sob demanda: são 1,3MB e ele cria workers assim
+ * que é avaliado. Estático, esse peso descia — e os workers subiam — em toda
+ * tela que só queria saber se um arquivo é HEIC, coisa que `isHeic` responde
+ * com uma expressão regular.
  *
  * @category helper-puro — Sem APIs Vue; sem acesso ao store.
  */
-import heic2any from "heic2any";
 
 /** Detecta HEIC/HEIF pela extensão do nome ou pelo mime. */
 export function isHeic(name?: string | null, mime?: string | null): boolean {
@@ -22,6 +24,7 @@ export function isHeic(name?: string | null, mime?: string | null): boolean {
  * Rejeita se a conversão falhar — o chamador decide manter o original.
  */
 export async function heicToJpeg(source: Blob): Promise<Blob> {
+  const { default: heic2any } = await import("heic2any");
   const result = await heic2any({
     blob: source,
     toType: "image/jpeg",
