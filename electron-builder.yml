@@ -106,8 +106,6 @@ nsis:
   multiLanguageInstaller: true
   # Script NSIS customizado (protocolo louvorja://, etc.)
   include: build/installer.nsh
-  # Arquivos de licença por idioma (exibidos na tela de licença do instalador)
-  # licenseFile: build/license_pt.txt
 
 # ---------------------------------------------------------------------------
 # macOS — DMG (Intel x64 + Apple Silicon arm64)
