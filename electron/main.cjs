@@ -392,6 +392,13 @@ async function _bootstrapMonitorConfig() {
   const bridge = {
     getUserData: () => _userDataMain,
     saveUserData: () => _persistUserDataFromMain("options.displays"),
+    // Onde o operador está trabalhando. Projeção e Retorno usam isso para não
+    // ocupar essa tela no lugar de um monitor que sumiu — ver
+    // `_substituiTelaDoOperador` em monitorConfig.js.
+    getOperatorDisplay: () =>
+      mainWindow && !mainWindow.isDestroyed()
+        ? screen.getDisplayMatching(mainWindow.getBounds())
+        : null,
   };
   displays.configure(bridge);
   displayManager.init(bridge);
@@ -929,7 +936,9 @@ ipcMain.handle("windows:open", (_event, options) => {
     prodHtmlPath,
     devTools: devToolsOpt == null ? null : !!devToolsOpt,
   });
-  return { id: win.id };
+  // `null` quando o windowFactory recusou abrir na tela do operador. O
+  // renderer avisa o operador em vez de deixar o clique sem resposta.
+  return win ? { id: win.id } : { id: null, refused: "operator-screen" };
 });
 
 /** Fecha a janela de uma feature */

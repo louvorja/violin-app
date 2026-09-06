@@ -46,6 +46,22 @@ function _refocusMainWindow() {
   }, 80);
 }
 
+/** O display informado é aquele onde a janela principal está? */
+function _isOperatorDisplay(display) {
+  if (!display || !_mainWindow || _mainWindow.isDestroyed()) return false;
+  try {
+    const b = _mainWindow.getBounds();
+    return (
+      display.bounds.x <= b.x + b.width / 2 &&
+      b.x + b.width / 2 < display.bounds.x + display.bounds.width &&
+      display.bounds.y <= b.y + b.height / 2 &&
+      b.y + b.height / 2 < display.bounds.y + display.bounds.height
+    );
+  } catch (_) {
+    return false;
+  }
+}
+
 function _routePath(route) {
   return String(route || "").split("?")[0].split("#")[0];
 }
@@ -76,7 +92,8 @@ function _isProjectionPresentationWindow(route, feature) {
  * @param {string} [options.prodHtmlPath]  Em prod: dist/index.html
  * @param {boolean|null} [options.devTools] Controle do DevTools automático (dev).
  *        null (default) → só com LJ_DEVTOOLS=1. true/false → override.
- * @returns {BrowserWindow}
+ * @returns {BrowserWindow|null} null quando abrir significaria ocupar a tela do
+ *   operador no lugar do monitor configurado — ver o bloco de decisão abaixo.
  */
 function openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = false, preloadPath, devUrl, prodHtmlPath, width, height, alwaysOnTop = false, devTools = null }) {
   // Se já existe janela para essa feature, mostra-a sem roubar o foco da main.
@@ -96,7 +113,27 @@ function openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = f
   if (monitorId !== undefined && monitorId !== null) {
     target = displays.connected().find((d) => d.id === monitorId);
   }
-  if (!target) target = displays.getPreferredOrPrimary(feature);
+  if (!target) {
+    // Sem monitor pedido, sobra a preferência — e, quando ela não resolve, o
+    // monitor principal. Esse último passo é o que precisa de freio: com o
+    // projetor desconectado, ele entrega a tela onde o operador trabalha, e a
+    // letra da música abre em cima do trabalho dele no meio do culto.
+    //
+    // Só freia quando o papel ESTÁ configurado e o monitor dele não está aqui
+    // (`pending`). Quem nunca configurou nada — um monitor só, ou a igreja que
+    // espelha a imagem do operador — continua abrindo normalmente: ali a tela
+    // do operador é o projetor, e é isso que se quer.
+    const escolha = displays.resolveFeature(feature);
+    const substituindo = escolha.status === "pending";
+    const alvo = displays.getPreferredOrPrimary(feature);
+    if (substituindo && _isOperatorDisplay(alvo)) {
+      console.warn(
+        `[windowFactory] ${feature}: monitor do papel ausente; não abro na tela do operador.`
+      );
+      return null;
+    }
+    target = alvo;
+  }
 
   const bounds = target.bounds;
   const isMac = process.platform === "darwin";

@@ -256,3 +256,66 @@ describe("rolesSummary", () => {
     });
   });
 });
+
+/**
+ * O projetor cai no meio do culto. Sobra a tela do operador, que se parece o
+ * bastante com o que estava guardado para passar no limiar de similaridade —
+ * medido em 0,639 com monitores parecidos e 0,897 com dois idênticos. O papel
+ * voltava "resolvido", sem aviso, e a projeção abria em cima do trabalho dele.
+ *
+ * O contraponto é o espelhamento, comum em igreja pequena: o sistema reporta um
+ * monitor só, que é ao mesmo tempo a tela do operador e o projetor, e projetar
+ * nele é justamente o que se quer. O que separa os dois casos é a posição na
+ * área de trabalho — no espelhamento o monitor guardado é o que está lá.
+ */
+describe("tela do operador", () => {
+  /** Segundo monitor idêntico ao do operador, como um par comprado junto. */
+  const GEMEO = {
+    id: 9, label: "Built-in Retina Display", primary: false, internal: true,
+    bounds: { x: 1728, y: 0, width: 1728, height: 1117 }, scaleFactor: 2, rotation: 0,
+  };
+
+  it("não a entrega no lugar do monitor de projeção que sumiu", () => {
+    migrate({ musicas: 9 }, [LAPTOP, GEMEO]);
+    const semGemeo = monitorConfig.resolveRole({
+      userData, role: "projection", connected: [LAPTOP], operatorDisplay: LAPTOP,
+    });
+    expect(semGemeo.status).toBe(STATUS.PENDING);
+    expect(semGemeo.reason).toBe("operator-screen");
+    expect(semGemeo.display).toBeNull();
+  });
+
+  it("sem saber onde o operador está, resolve como antes", () => {
+    migrate({ musicas: 9 }, [LAPTOP, GEMEO]);
+    const semOperador = monitorConfig.resolveRole({
+      userData, role: "projection", connected: [LAPTOP],
+    });
+    expect(semOperador.status).toBe(STATUS.RESOLVED);
+  });
+
+  it("continua projetando no espelhamento, onde há um monitor só", () => {
+    migrate({ musicas: 1 }, [LAPTOP]);
+    const espelhado = monitorConfig.resolveRole({
+      userData, role: "projection", connected: [LAPTOP], operatorDisplay: LAPTOP,
+    });
+    expect(espelhado.status).toBe(STATUS.RESOLVED);
+    expect(espelhado.display).toBe(LAPTOP);
+  });
+
+  it("não atrapalha o papel do próprio operador", () => {
+    migrate({ operador: 1 }, BOTH);
+    const operador = monitorConfig.resolveRole({
+      userData, role: "operator", connected: [LAPTOP], operatorDisplay: LAPTOP,
+    });
+    expect(operador.status).toBe(STATUS.RESOLVED);
+  });
+
+  it("com o projetor presente, nada muda", () => {
+    migrate({ musicas: 2 }, BOTH);
+    const normal = monitorConfig.resolveRole({
+      userData, role: "projection", connected: BOTH, operatorDisplay: LAPTOP,
+    });
+    expect(normal.status).toBe(STATUS.RESOLVED);
+    expect(normal.display).toBe(PROJECTOR);
+  });
+});

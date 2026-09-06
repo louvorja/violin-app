@@ -90,9 +90,39 @@ function reconcile({ userData, connected }) {
  * Único candidato plausível para uma projeção: um monitor externo, que não é o
  * principal (onde o operador trabalha).
  */
-function _soleExternalCandidate(connected) {
-  const candidates = (connected || []).filter((d) => !d.primary && d.internal !== true);
+function _soleExternalCandidate(connected, operatorDisplay) {
+  const candidates = (connected || []).filter(
+    (d) =>
+      !d.primary &&
+      d.internal !== true &&
+      !(operatorDisplay && d.id === operatorDisplay.id)
+  );
   return candidates.length === 1 ? candidates[0] : null;
+}
+
+/**
+ * A tela onde o operador trabalha está sendo posta no lugar do monitor que
+ * sumiu?
+ *
+ * Com o projetor desconectado sobra um candidato só — a tela do operador — e
+ * ela se parece o bastante com o que estava guardado para passar no limiar:
+ * medido em 0,639 contra 0,6 com dois monitores parecidos, e 0,897 com dois
+ * idênticos. O papel voltava "resolvido", sem aviso, e a letra da música abria
+ * em cima do trabalho do operador no meio do culto.
+ *
+ * O que separa esse caso do espelhamento — onde o sistema reporta um monitor
+ * só, que é ao mesmo tempo a tela do operador e o projetor, e projetar nele é
+ * exatamente o que a igreja quer — é a POSIÇÃO. No espelhamento o monitor
+ * guardado é o que está lá, na mesma origem. Aqui o guardado estava em outro
+ * lugar, e o app está substituindo por falta de opção.
+ *
+ * Então: a tela do operador continua valendo quando é o mesmo lugar de sempre,
+ * e nunca como substituta.
+ */
+function _substituiTelaDoOperador({ role, display, saved, candidate, operatorDisplay }) {
+  if (role === monitorIdentity.roles().ROLES.OPERATOR) return false;
+  if (!operatorDisplay || !display || display.id !== operatorDisplay.id) return false;
+  return !monitorIdentity.get().sameSlot(saved, candidate);
 }
 
 /**
@@ -105,7 +135,7 @@ function _soleExternalCandidate(connected) {
  *
  * @returns {{status: string, display: object|null, reason: string|null}}
  */
-function resolveRole({ userData, role, connected }) {
+function resolveRole({ userData, role, connected, operatorDisplay }) {
   const config = getConfig(userData);
   if (!config || config.use_legacy_resolver) {
     return { status: STATUS.NONE, display: null, reason: "no-v2-config" };
@@ -123,7 +153,19 @@ function resolveRole({ userData, role, connected }) {
     const match = monitorIdentity.get().matchIdentity(entry.identity, candidates);
     if (match.status === "resolved") {
       const index = candidates.indexOf(match.candidate);
-      return { status: STATUS.RESOLVED, display: list[index], reason: null };
+      const display = list[index];
+      if (
+        _substituiTelaDoOperador({
+          role,
+          display,
+          saved: entry.identity,
+          candidate: candidates[index],
+          operatorDisplay,
+        })
+      ) {
+        return { status: STATUS.PENDING, display: null, reason: "operator-screen" };
+      }
+      return { status: STATUS.RESOLVED, display, reason: null };
     }
     if (match.status === "ambiguous") {
       return { status: STATUS.AMBIGUOUS, display: null, reason: "twin-monitors" };
@@ -133,7 +175,7 @@ function resolveRole({ userData, role, connected }) {
   // Pendente, ou salvo mas desaparecido. Se só existe um monitor externo, ele é
   // quase certamente o projetor — usamos, mas sinalizamos para a UI avisar.
   if (role !== monitorIdentity.roles().ROLES.OPERATOR) {
-    const sole = _soleExternalCandidate(list);
+    const sole = _soleExternalCandidate(list, operatorDisplay);
     if (sole) return { status: STATUS.INFERRED, display: sole, reason: "sole-external" };
   }
 
@@ -175,7 +217,7 @@ function setFeatureRole({ userData, feature, role }) {
 }
 
 /** Resolve o monitor de uma feature, pelo papel dela. */
-function resolveFeature({ userData, feature, connected }) {
+function resolveFeature({ userData, feature, connected, operatorDisplay }) {
   const role = featureRole(userData, feature);
   if (!role) {
     // Distingue "o usuário escolheu mesma janela" de "essa feature não existe",
@@ -188,16 +230,16 @@ function resolveFeature({ userData, feature, connected }) {
       role: null,
     };
   }
-  return { ...resolveRole({ userData, role, connected }), role };
+  return { ...resolveRole({ userData, role, connected, operatorDisplay }), role };
 }
 
 /**
  * Estado de cada papel, para a UI mostrar o que está configurado e avisar
  * quando um monitor sumiu ou ficou ambíguo.
  */
-function rolesSummary({ userData, connected }) {
+function rolesSummary({ userData, connected, operatorDisplay }) {
   return Object.values(monitorIdentity.roles().ROLES).map((role) => {
-    const resolved = resolveRole({ userData, role, connected });
+    const resolved = resolveRole({ userData, role, connected, operatorDisplay });
     return {
       role,
       status: resolved.status,

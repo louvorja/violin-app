@@ -209,7 +209,8 @@
       "web_single": "Solo hay un monitor conectado. Conecte un segundo monitor o proyector para proyectar en pantalla separada.",
       "auto_fullscreen_title": "Pantalla completa automática",
       "auto_fullscreen_blocked": "La proyección necesita un clic para entrar en pantalla completa — limitación del navegador. En la aplicación de escritorio es automático.",
-      "auto_fullscreen_granted": "La proyección entra en pantalla completa automáticamente."
+      "auto_fullscreen_granted": "La proyección entra en pantalla completa automáticamente.",
+      "projection_withheld": "El monitor de proyección no está conectado. La ventana no se abrió para no ocupar su pantalla."
     },
     "slides": {
       "affect_external": "Formato de texto y fondo personalizados afectan diapositivas externas",

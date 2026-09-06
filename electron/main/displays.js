@@ -92,6 +92,25 @@ function _saveUserData() {
 }
 
 /**
+ * O monitor onde a janela principal está — a tela em que o operador trabalha.
+ *
+ * Vem do main porque só ele tem a janela. Volta pela lista com id único: o
+ * `screen` do Electron entrega o id repetido entre monitores iguais, e é
+ * justamente essa comparação que precisa ser confiável aqui.
+ *
+ * @param {Array} conectados  saída de connected(), para não listar duas vezes
+ */
+function _operatorDisplay(conectados) {
+  const raw = _bridge && _bridge.getOperatorDisplay ? _bridge.getOperatorDisplay() : null;
+  if (!raw || !raw.bounds) return null;
+  return (
+    conectados.find(
+      (d) => d.bounds.x === raw.bounds.x && d.bounds.y === raw.bounds.y
+    ) || null
+  );
+}
+
+/**
  * Resolve o monitor de uma feature, com o status da decisão.
  *
  * Usa os papéis (v2) quando disponíveis; cai no mapa por feature enquanto a
@@ -106,7 +125,12 @@ function resolveFeature(featureId) {
 
   const v2 = monitorConfig.getConfig(userData);
   if (v2 && !v2.use_legacy_resolver) {
-    return monitorConfig.resolveFeature({ userData, feature: featureId, connected: conectados });
+    return monitorConfig.resolveFeature({
+      userData,
+      feature: featureId,
+      connected: conectados,
+      operatorDisplay: _operatorDisplay(conectados),
+    });
   }
 
   const prefs = userStore.read(PREF_KEY) || {};
@@ -158,9 +182,11 @@ function getPreferredOrPrimary(featureId) {
  * @returns {{role: string, status: string, reason: string|null, displayId: number|null}[]}
  */
 function getRoles() {
+  const conectados = connected();
   return monitorConfig.rolesSummary({
     userData: _readUserData(),
-    connected: connected(),
+    connected: conectados,
+    operatorDisplay: _operatorDisplay(conectados),
   });
 }
 

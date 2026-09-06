@@ -40,7 +40,16 @@ export const createI18nInstance = async (localeInicial) => {
       .catch((e) => console.warn(`[i18n] idioma "${outro}" não carregou:`, e));
   }
 
+  _instancia = i18n;
   return i18n;
 };
+
+/**
+ * A instância viva, para código que precisa de texto traduzido e não roda
+ * dentro de `setup()` — helpers chamados de handlers, por exemplo, onde
+ * `useI18n()` não existe. Vazio antes do boot.
+ */
+let _instancia = null;
+export const i18nAtual = () => _instancia;
 
 export default createI18nInstance;

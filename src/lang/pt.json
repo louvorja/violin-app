@@ -209,7 +209,8 @@
       "web_single": "Apenas um monitor conectado. Conecte um segundo monitor ou projetor para projetar em tela separada.",
       "auto_fullscreen_title": "Tela cheia automática",
       "auto_fullscreen_blocked": "A projeção precisa de um clique para entrar em tela cheia — limitação do navegador. No aplicativo para computador isso é automático.",
-      "auto_fullscreen_granted": "A projeção entra em tela cheia sozinha."
+      "auto_fullscreen_granted": "A projeção entra em tela cheia sozinha.",
+      "projection_withheld": "O monitor de projeção não está conectado. A janela não foi aberta para não ocupar a sua tela."
     },
     "slides": {
       "affect_external": "Formatação de texto e fundo personalizados afetam slides externos",

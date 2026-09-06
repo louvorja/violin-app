@@ -97,6 +97,21 @@ export function withUniqueIds(all, primary) {
   });
 }
 
+/**
+ * As duas identidades ocupam o mesmo lugar na área de trabalho?
+ *
+ * Serve para separar "é o mesmo monitor de sempre" de "estou pondo outro no
+ * lugar do que sumiu". Duas telas nunca compartilham origem, então a posição
+ * responde isso sem depender de resolução, nome ou ordem de enumeração — que
+ * mudam por conta própria.
+ */
+export function sameSlot(a, b) {
+  const oa = a && a.nativeOrigin;
+  const ob = b && b.nativeOrigin;
+  if (!oa || !ob) return false;
+  return oa.x === ob.x && oa.y === ob.y;
+}
+
 /** Identidade vazia — schema fixo, todos os campos sempre presentes. */
 export function emptyIdentity() {
   return {

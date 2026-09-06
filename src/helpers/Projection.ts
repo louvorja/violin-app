@@ -25,6 +25,8 @@ import {
 import WebRoles from "@/helpers/projection/WebRoles";
 import WebDisplays from "@/helpers/projection/WebDisplays";
 import { roleOfFeature } from "@/helpers/DisplayRoles";
+import $snackbar from "@/helpers/Snackbar";
+import { i18nAtual } from "@/i18n";
 
 /**
  * Fallback hierárquico — quando uma feature não tem monitor explicitamente
@@ -333,7 +335,7 @@ export async function open(opts: OpenOptions): Promise<void> {
   const api = await _getWindowsApi();
   if (api?.open) {
     try {
-      await api.open({
+      const r = await api.open({
         route: opts.route,
         feature: opts.feature,
         monitorId: monitorId ?? null,
@@ -341,6 +343,12 @@ export async function open(opts: OpenOptions): Promise<void> {
         frame,
         alwaysOnTop,
       });
+      // O main recusa abrir na tela do operador quando o monitor do papel não
+      // está conectado. Sem aviso o clique ficaria sem resposta nenhuma.
+      if (r && r.refused) {
+        const t = i18nAtual()?.global?.t;
+        if (t) $snackbar.warning(t("options.monitors.projection_withheld"));
+      }
       return;
     } catch (e) {
       console.warn("[Projection] windows.open falhou, fallback web:", e);
