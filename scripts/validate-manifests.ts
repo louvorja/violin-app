@@ -17,6 +17,58 @@ const VALID_CUSTOMIZATION_TYPES = new Set([
 ])
 const VALID_MODULE_OPTION_SIZES = new Set(["small", "medium", "large"])
 
+/**
+ * Campos de primeiro nível de um bloco — `[chave, corpo]` para cada
+ * `chave: { … }`, respeitando aninhamento.
+ *
+ * O corpo não pode ser lido "até o primeiro `}`": os manifests escrevem os
+ * rótulos como `` `${modulePath}.customization.x` ``, e a interpolação fecha
+ * chave no meio da linha — o campo era cortado antes do próprio `label`.
+ */
+function camposDoBloco(bloco: string): Array<[string, string]> {
+  const campos: Array<[string, string]> = []
+  const abertura = /(\w+):\s*\{/g
+  let m: RegExpExecArray | null
+
+  while ((m = abertura.exec(bloco)) !== null) {
+    const inicioCorpo = m.index + m[0].length
+    let nivel = 1
+    let i = inicioCorpo
+    for (; i < bloco.length && nivel > 0; i++) {
+      if (bloco[i] === "{") nivel++
+      else if (bloco[i] === "}") nivel--
+    }
+    if (nivel !== 0) break
+    campos.push([m[1], bloco.slice(inicioCorpo, i - 1)])
+    abertura.lastIndex = i
+  }
+  return campos
+}
+
+/**
+ * Conteúdo entre as chaves de `<chave>: { … }`, contando os pares.
+ *
+ * Delimitar isso por expressão regular não funciona: num `customization: {}`
+ * vazio o fechamento é imediato, a busca seguia arquivo adentro e acabava
+ * pegando as páginas contextuais — cada `dependsOnOption` virava um campo de
+ * customização sem `type`, `label` e `default`.
+ */
+function extrairBloco(conteudo: string, chave: string): string | null {
+  const inicio = conteudo.search(new RegExp(`${chave}:\\s*\\{`))
+  if (inicio < 0) return null
+
+  const abre = conteudo.indexOf("{", inicio)
+  let nivel = 0
+  for (let i = abre; i < conteudo.length; i++) {
+    if (conteudo[i] === "{") nivel++
+    else if (conteudo[i] === "}") {
+      nivel--
+      if (nivel === 0) return conteudo.slice(abre + 1, i)
+    }
+  }
+  return null
+}
+
 function formatRow(moduleId: string, status: "ok" | "warn" | "error", detail: string) {
   const icon = status === "ok" ? "✓" : status === "warn" ? "⚠" : "✗"
   return `  ${icon} ${moduleId} — ${detail}`
@@ -178,24 +230,15 @@ function validate() {
     }
 
     // ── customization (se presente) ──
-    const customMatch = content.match(/customization:\s*\{([\s\S]*?)\}\s*\n\s*\}/)
-    if (customMatch) {
-      const block = customMatch[1]
-      // Extrai cada campo: chave: { type: "...", label: "...", default: ... }
-      const fieldRegex = /(\w+):\s*\{([^}]+)\}/g
-      let fieldMatch
-      while ((fieldMatch = fieldRegex.exec(block)) !== null) {
-        const [, key, fieldBody] = fieldMatch
+    const block = extrairBloco(content, "customization")
+    if (block !== null) {
+      for (const [key, fieldBody] of camposDoBloco(block)) {
         const typeMatch = fieldBody.match(/type:\s*"([^"]+)"/)
         if (!typeMatch) {
           console.log(formatRow(moduleId, "error", `customization.${key}: "type" obrigatório`))
           errors++
         } else if (!VALID_CUSTOMIZATION_TYPES.has(typeMatch[1])) {
           console.log(formatRow(moduleId, "error", `customization.${key}.type: tipo desconhecido "${typeMatch[1]}"`))
-          errors++
-        }
-        if (!fieldBody.includes("label:")) {
-          console.log(formatRow(moduleId, "error", `customization.${key}: "label" obrigatório`))
           errors++
         }
         if (!fieldBody.includes("default:")) {
