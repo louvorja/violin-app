@@ -7,6 +7,7 @@ import type { AudioPlayback } from "@/composables/useAudioPlayback";
 import Modules from "@/helpers/Modules";
 import AppData from "@/helpers/AppData";
 import { ICONS } from "@/config/Icons";
+import { MusicActionEnum } from "@/enums/MusicActionEnum";
 
 export interface PlayerButton {
   show: boolean;
@@ -65,6 +66,7 @@ export function usePlayerState(): {
   next: () => void;
   last: () => void;
   open: (data: unknown) => void;
+  switchMode: (mode: MusicActionEnum) => void;
   openLyric: () => void;
   maximize: () => void;
   close: () => void;
@@ -152,9 +154,7 @@ export function usePlayerState(): {
   });
 
   const menu_modes = computed<MenuMode[]>(() => {
-    const cfg       = (media.value?.config as Record<string, unknown>) ?? {};
-    const idMusic   = media.value?.id_music;
-    const minimized = media.value?.minimized as boolean | undefined;
+    const cfg = (media.value?.config as Record<string, unknown>) ?? {};
     return [
       {
         mode: "audio",
@@ -163,7 +163,7 @@ export function usePlayerState(): {
         active: cfg.mode === "audio",
         icon: ICONS.MUSIC.SLIDES_AUDIO,
         tray_icon: ICONS.MUSIC.SUNG,
-        click: () => open({ id_music: idMusic, mode: "audio", minimized }),
+        click: () => switchMode(MusicActionEnum.AUDIO),
       },
       {
         mode: "instrumental",
@@ -173,7 +173,7 @@ export function usePlayerState(): {
         disabled: !has_instrumental_music.value,
         icon: ICONS.MUSIC.SLIDES_PLAYBACK,
         tray_icon: ICONS.MUSIC.PLAYBACK,
-        click: () => open({ id_music: idMusic, mode: "instrumental", minimized }),
+        click: () => switchMode(MusicActionEnum.INSTRUMENTAL),
       },
       {
         mode: "no_audio",
@@ -182,7 +182,7 @@ export function usePlayerState(): {
         active: cfg.mode === "no_audio",
         icon: ICONS.MUSIC.SLIDES_ONLY,
         tray_icon: ICONS.MUSIC.OFF,
-        click: () => open({ id_music: idMusic, minimized }),
+        click: () => switchMode(MusicActionEnum.NO_AUDIO),
       },
       { title: "-" },
       {
@@ -208,6 +208,7 @@ export function usePlayerState(): {
   function next():          void { Media.nextSlide(); }
   function last():          void { Media.lastSlide(); }
   function open(data: unknown): void { Media.open(data as Parameters<typeof Media.open>[0]); }
+  function switchMode(mode: MusicActionEnum): void { Media.switchMode(mode); }
   function openLyric():     void { Media.openLyric(); }
   function maximize():      void { Media.maximize(); }
   function close():         void { Media.close(); }
@@ -229,7 +230,7 @@ export function usePlayerState(): {
     audio, media, slides, has_instrumental_music, compact, is_mobile,
     volume_icon, slide_text, buttons, menu_modes, mode,
     playToggle, rewind, forward, first, prev, next, last,
-    open, openLyric, maximize, close, fullscreen, toggleVolume, setVolume,
+    open, switchMode, openLyric, maximize, close, fullscreen, toggleVolume, setVolume,
     seekToProgress, goToSlide,
   };
 }
