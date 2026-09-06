@@ -17,6 +17,7 @@ directories:
 files:
   - dist/**/*
   - electron/**/*
+  - config/**/*
   - package.json
   - public/ico/**/*
 
@@ -35,6 +36,22 @@ extraResources: [
 # normalmente, mas mantemos unpacked como precaução cross-platform).
 asarUnpack:
   - public/ico/**/*
+
+# Locales do Chromium — o app fala PT e ES; sem este filtro entram ~660 idiomas
+# (com variantes de gênero), ~47 MB só de .lproj/.pak
+electronLanguages:
+  - pt
+  - pt_BR
+  - pt-BR
+  - pt_PT
+  - pt-PT
+  - es
+  - es_419
+  - es-419
+  - en
+  - en_GB
+  - en-GB
+  - en-US
 
 # Compressão máxima para reduzir tamanho do instalador
 compression: maximum
