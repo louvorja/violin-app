@@ -57,8 +57,9 @@ src/
 │   ├── ModuleManager.js # Instala e registra módulos
 │   ├── Modules.js       # Abre/fecha/minimiza módulos
 │   ├── AppData.js       # Estado global (get/set por notação de ponto)
-│   ├── UserData.js      # Dados do usuário + persistência em localStorage (com debounce 300ms)
-│   ├── Storage.js       # Wrapper de localStorage/sessionStorage
+│   ├── UserData.js      # Preferências do usuário (no desktop, gravadas pelo main)
+│   ├── Storage.js       # Wrapper de localStorage/sessionStorage (web) e userStore (desktop)
+│   ├── DocStore.ts      # Documentos do usuário em arquivos na pasta de dados
 │   ├── Database.js      # Carrega JSONs do banco com cache de sessão
 │   ├── Media.js         # Controla reprodução (áudio + slides + broadcast)
 │   ├── Broadcast.js     # BroadcastChannel("louvorja") — multi-listener via addEventListener
@@ -187,7 +188,7 @@ import $userdata from "@/helpers/UserData";
 $appdata.get("user_data.theme");
 $appdata.set("user_data.theme", "dark");
 
-// Dados do usuário (persistidos em localStorage automaticamente)
+// Preferências do usuário (persistidas automaticamente — ver "Onde moram os dados")
 $userdata.get("theme");
 $userdata.set("theme", "dark");
 ```
@@ -211,6 +212,44 @@ $userdata.set("theme", "dark");
 }
 ```
 
+## Onde moram os dados
+
+Tudo que é do usuário fica numa **pasta de dados única** — `Documents/LouvorJA Violin`
+por padrão, trocável em "Sincronizar Arquivos → Armazenamento". No `userData` do
+sistema sobra apenas a âncora `data-location.json`, que diz onde essa pasta está:
+alguém precisa saber o endereço antes de abri-la.
+
+```
+<dados>/
+├── files/      acervo — áudio, capas, imagens
+├── storage/    preferências — user_data.json, config.json, monitor_prefs.json
+└── library/    documentos — liturgias salvas, playlists, coletâneas, itens agendados
+```
+
+A divisão que importa é entre **documento** e **cache**:
+
+|          | Documento                                                                             | Cache                                                         |
+| -------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| O quê    | preferências, liturgias salvas, playlists, coletâneas personalizadas, itens agendados | `json_db/`, catálogos baixados, bundles do Libras, thumbnails |
+| Onde     | pasta de dados                                                                        | `userData`                                                    |
+| Se sumir | o operador perde trabalho que ele fez à mão                                           | o app baixa de novo                                           |
+
+Ao criar armazenamento novo, classifique primeiro: documento vai para a pasta de
+dados via `DocStore`; cache pode ficar onde for mais barato.
+
+No desktop **o main é o único escritor**. O renderer nunca grava em disco por conta
+própria: `$userdata.set` manda um patch por IPC e `DocStore` manda a coleção. Os dois
+gravam em lote (janela de 300ms) e de forma atômica — a pasta costuma estar dentro do
+OneDrive ou do iCloud, e gravar a cada tecla acordaria o sincronizador sem parar.
+
+No navegador nada disso vale: lá o `Storage` usa localStorage e o `DocStore` delega ao
+IndexedDB. **Não há paridade entre web e desktop** — a ponte é exportar e importar.
+
+O IndexedDB continua sendo a casa dos catálogos baixados e das coleções que guardam
+binário (imagens de overlay, biblioteca de mídia, miniaturas, sons de fundo). Estas
+últimas ainda não têm caminho para a pasta de dados: vão precisar do arquivo gravado
+ao lado, em `library/<colecao>/<id>.<ext>`, com o JSON guardando só o metadado.
+
 ## Helpers vs Composables
 
 `src/helpers/` contém dois tipos de artefatos — mantenha a distinção ao criar novos arquivos.
@@ -228,6 +267,7 @@ $userdata.set("theme", "dark");
 | `helpers/DateTime.js`        | helper-puro           |                                                                             |
 | `helpers/Database.ts`        | helper-puro           | Cache via sessionStorage                                                    |
 | `helpers/Storage.ts`         | helper-puro           | Seguro no Electron main process                                             |
+| `helpers/DocStore.ts`        | helper-puro           | Documentos do usuário; mesma API do IndexedDB.ts, grava em arquivo          |
 | `helpers/Platform.js`        | helper-puro           | Seguro no Electron main process                                             |
 | `helpers/Broadcast.ts`       | helper-puro           | Baixo nível; use `useBroadcastListener`/`useBroadcastSender` em componentes |
 | `helpers/BroadcastTypes.ts`  | helper-puro           | Só tipos e constantes                                                       |
@@ -290,15 +330,14 @@ interface Playlist {
 
 ### Persistência
 
-Playlists são salvas em `UserData` via chaves:
-
-- `KEYS.MODULES.MUSICS.PLAYLISTS` — array de `Playlist[]`
-- `KEYS.MODULES.MUSICS.SELECTED_PLAYLIST` — ID da playlist selecionada
+As playlists são documentos: ficam em `<dados>/library/musics.playlists.json`, via
+`DocStore` (ver "Onde moram os dados"). Só a seleção atual — que é preferência, não
+documento — continua em `UserData`, na chave `KEYS.MODULES.MUSICS.SELECTED_PLAYLIST`.
 
 ### Fluxo de Dados
 
 ```
-PlaylistPanel → usePlaylists.createPlaylist() → UserData persist
+PlaylistPanel → usePlaylists.createPlaylist() → DocStore → arquivo
 PlaylistSongs → usePlaylistPlayback.playPlaylist() → Media.open()
 Footer.vue    → usePlaylistPlayback (barra de playlist)
 MusicMenuTable → usePlaylists.addSong() → playlist song
@@ -422,7 +461,7 @@ se alguma perder a linha. Os portais da própria Reka (`LjSelect`, `LjMenu`,
 `LjPopover`) não precisam: ela empilha as camadas dela sozinha.
 
 O outro lado do mesmo problema: para a Reka, um clique nessa camada é um clique
-*fora* do diálogo. `Window.vue` minimizava a janela quando o usuário respondia à
+_fora_ do diálogo. `Window.vue` minimizava a janela quando o usuário respondia à
 confirmação — o handler de `pointer-down-outside` precisa ignorar o que vem de
 dentro do alerta.
 
@@ -887,7 +926,7 @@ Vue Renderer (BrowserWindow)
 | Fase    | Objetivo                                                                                                                                | Duração  | Status          |
 | ------- | --------------------------------------------------------------------------------------------------------------------------------------- | -------- | --------------- |
 | **D0**  | Bootstrap Electron — empacota Vue atual em janela nativa, mantém PWA                                                                    | 1-2 dias | ⏳ próximo      |
-| **D1**  | UserData persistente em `app.getPath("userData")` (substitui localStorage no desktop)                                                   | 1 dia    | —               |
+| **D1**  | UserData persistente em arquivo (substitui localStorage no desktop) — hoje em `<dados>/storage`                                         | 1 dia    | ✅ implementado |
 | **D2**  | Cache de JSON do banco em `userData/json_db/` via custom protocol `louvorja://`                                                         | 1-2 dias | —               |
 | **D3**  | **Download HTTPS de mídia** ⭐ — `HttpQueue` baixa áudio/imagens de `VITE_URL_FILES`                                                    | 3-4 dias | ✅ implementado |
 | **D4**  | **Multi-monitor real** ⭐ — `BrowserWindow` por monitor, "Identificar Monitores" 5s overlay                                             | 2-3 dias | —               |
@@ -909,9 +948,10 @@ electron/
 └── main/
     ├── apiConfig.js      # Config central de URLs/tokens da API (shared)
     ├── csp.js            # Config central de Content-Security-Policy
-    ├── paths.js          # userData, tempDir
+    ├── paths.js          # pasta de dados (âncora + fallback), userData, tempDir
     ├── windows.js        # BrowserWindow factory
-    ├── userStore.js      # JSON persistente em userData/ (D1)
+    ├── userStore.js      # preferências em <dados>/storage (D1)
+    ├── docStore.js       # documentos do usuário em <dados>/library
     ├── jsonCache.js      # Cache de <api>/json_db (D2)
     ├── protocol.js       # louvorja:// custom protocol (D2)
     ├── mediaVariants.js  # extensões intercambiáveis (.opus/.mp3, .jpg/.bmp)
@@ -938,9 +978,9 @@ src/config/Api.ts         # Config central de URLs/tokens (renderer)
 
 ### Formatos de mídia — Opus e JPEG
 
-A API serve áudio em **Opus** e capas em **JPEG**; o acervo antigo (e a
-instalação Delphi usada pelo modo clássico) tem os mesmos arquivos em MP3 e
-BMP. `electron/main/mediaVariants.js` define os grupos de extensões
+A API serve áudio em **Opus** e capas em **JPEG**; o acervo antigo tem os mesmos
+arquivos em MP3 e BMP — quem baixou pelas versões anteriores continua com eles no
+disco. `electron/main/mediaVariants.js` define os grupos de extensões
 intercambiáveis e exporta `variantsOf(caminho)`, que devolve os candidatos
 equivalentes na ordem de preferência — sem tocar no disco.
 
