@@ -160,11 +160,15 @@ export function useDisplays(): {
       return;
     }
 
-    const nativeId = displayId == null ? null : Number(displayId);
-    if (nativeId != null && !Number.isFinite(nativeId)) {
-      console.error("[useDisplays] id de monitor inválido:", displayId);
-      return;
-    }
+    // O id volta como número, porque é assim que o main o compara. A exceção
+    // é a chave composta ("<id>@<x>,<y>") que ele dá a monitores do mesmo
+    // modelo, cujo id o Electron entrega repetido: essa passa inteira, porque
+    // convertê-la daria NaN e a escolha do operador iria para o lixo. Ver
+    // `connected()` em electron/main/displays.js.
+    const nativeId =
+      displayId == null || !/^-?\d+$/.test(String(displayId))
+        ? (displayId ?? null)
+        : Number(displayId);
 
     try {
       await Platform.displays.setRole(role, nativeId);

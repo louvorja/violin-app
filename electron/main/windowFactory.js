@@ -7,7 +7,7 @@
  * Integra com displays.js para persistir preferências de monitor por feature.
  */
 
-const { app, BrowserWindow, screen } = require("electron");
+const { app, BrowserWindow } = require("electron");
 const displays = require("./displays.js");
 const powerBlocker = require("./powerBlocker.js");
 
@@ -94,7 +94,7 @@ function openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = f
   // leitor consulta.
   let target;
   if (monitorId !== undefined && monitorId !== null) {
-    target = screen.getAllDisplays().find((d) => d.id === monitorId);
+    target = displays.connected().find((d) => d.id === monitorId);
   }
   if (!target) target = displays.getPreferredOrPrimary(feature);
 
@@ -102,8 +102,7 @@ function openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = f
   const isMac = process.platform === "darwin";
   const isWin = process.platform === "win32";
   const isLin = process.platform === "linux";
-  const primaryDisplay = screen.getPrimaryDisplay();
-  const useMacPrimaryKiosk = fullscreen && isMac && target.id === primaryDisplay.id;
+  const useMacPrimaryKiosk = fullscreen && isMac && !!target.primary;
   const useMacPresentationLevel = fullscreen && isMac && _isProjectionPresentationWindow(route, feature);
   // Em macOS Liquid Retina, o sistema pode aplicar máscara de cantos
   // arredondados na NSWindow, revelando o wallpaper nas bordas. Aumentamos a

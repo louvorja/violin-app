@@ -7,6 +7,7 @@ import {
   matchIdentity,
   scoreIdentity,
   vetoReason,
+  withUniqueIds,
 } from "../monitorIdentity.mjs";
 
 /** Projetor externo 1080p — o monitor de projeção típico. */
@@ -181,5 +182,56 @@ describe("matchIdentities", () => {
 
   it("não quebra sem identidades salvas", () => {
     expect(matchIdentities({}, [projector()])).toEqual({});
+  });
+});
+
+/**
+ * Medido numa dupla de monitores idênticos: os dois voltaram do Electron com o
+ * mesmo id, 20570490453689664 — valor acima de 2^53, onde o `double` do
+ * JavaScript só representa múltiplos de 4 e engole o índice da saída, que é o
+ * que o Chromium usa para separá-los.
+ */
+describe("withUniqueIds", () => {
+  const GEMEO = 20570490453689664;
+  const esquerda = {
+    id: GEMEO,
+    label: "QEMU Monitor",
+    bounds: { x: 0, y: 0, width: 1280, height: 800 },
+    internal: false,
+  };
+  const direita = {
+    ...esquerda,
+    bounds: { x: 1280, y: 0, width: 1280, height: 720 },
+  };
+
+  it("separa dois monitores que o sistema entrega com o mesmo id", () => {
+    const ids = withUniqueIds([esquerda, direita], esquerda).map((d) => d.id);
+    expect(new Set(ids).size).toBe(2);
+  });
+
+  it("acha o monitor certo pelo id que ele mesmo publicou", () => {
+    const lista = withUniqueIds([esquerda, direita], esquerda);
+    const achado = lista.find((d) => d.id === lista[1].id);
+    expect(achado.bounds).toEqual(direita.bounds);
+  });
+
+  it("marca um único principal", () => {
+    const lista = withUniqueIds([esquerda, direita], direita);
+    expect(lista.filter((d) => d.primary)).toHaveLength(1);
+    expect(lista.find((d) => d.primary).bounds).toEqual(direita.bounds);
+  });
+
+  it("preserva o id do sistema quando não há repetição", () => {
+    const outro = { ...direita, id: 999 };
+    expect(withUniqueIds([esquerda, outro], esquerda).map((d) => d.id)).toEqual([
+      GEMEO,
+      999,
+    ]);
+  });
+
+  it("mantém o id estável entre chamadas, que é o que a preferência grava", () => {
+    const a = withUniqueIds([esquerda, direita], esquerda).map((d) => d.id);
+    const b = withUniqueIds([esquerda, direita], esquerda).map((d) => d.id);
+    expect(a).toEqual(b);
   });
 });

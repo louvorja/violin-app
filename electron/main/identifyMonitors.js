@@ -7,8 +7,8 @@
  * resolução e indicação de "Principal". Fecha automaticamente após o tempo definido.
  */
 
-const { BrowserWindow, screen } = require("electron");
-const { orderDisplays } = require("./displays.js");
+const { BrowserWindow } = require("electron");
+const { connected } = require("./displays.js");
 
 const _activeWindows = [];
 
@@ -38,8 +38,7 @@ function show(durationMs = 5000) {
 
   // Mesma ordem geométrica de displays.list(), senão o número mostrado aqui
   // não corresponderia ao que o usuário escolhe nas Opções.
-  const allDisplays = orderDisplays(screen.getAllDisplays());
-  const primary = screen.getPrimaryDisplay();
+  const allDisplays = connected();
 
   // Card pequeno no canto inferior direito de cada monitor (não ocupa a tela toda).
   const CARD_W = 320;
@@ -73,7 +72,7 @@ function show(durationMs = 5000) {
 
     win.setIgnoreMouseEvents(true);
 
-    const isPrimary = display.id === primary.id;
+    const isPrimary = display.primary;
     const suffix = isPrimary ? " — Principal" : "";
     // Nome real do aparelho, quando o sistema informa (vazio no Linux/X11).
     const name = typeof display.label === "string" ? display.label.trim() : "";

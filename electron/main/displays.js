@@ -16,17 +16,32 @@ const PREF_KEY = "monitor_prefs";
 const USER_DATA_KEY = "user_data";
 
 /**
+ * Monitores conectados, em ordem geométrica e com `id` único.
+ *
+ * O id que o Electron entrega repete entre monitores do mesmo modelo — ver
+ * `withUniqueIds` em monitorIdentity.mjs, que explica por quê e desempata.
+ * Toda busca de monitor no main deve partir daqui, e não de
+ * `screen.getAllDisplays()`.
+ *
+ * @returns {Array}
+ */
+function connected() {
+  return monitorIdentity.get().withUniqueIds(
+    orderDisplays(screen.getAllDisplays()),
+    screen.getPrimaryDisplay()
+  );
+}
+
+/**
  * Lista todos os displays conectados, com info útil para UI.
  * @returns {Array}
  */
 function list() {
-  const primary = screen.getPrimaryDisplay();
-
   // Ordem geométrica (esquerda → direita, topo → base) em vez da ordem de
   // enumeração do sistema, que muda quando o usuário rearranja os monitores.
   // Assim o "Monitor 2" de hoje é o mesmo de ontem, e o número bate com a
   // posição física que o operador enxerga.
-  return orderDisplays(screen.getAllDisplays()).map((d, i) => {
+  return connected().map((d, i) => {
     const name = typeof d.label === "string" ? d.label.trim() : "";
     return {
       id: d.id,
@@ -40,7 +55,7 @@ function list() {
       scaleFactor: d.scaleFactor,
       rotation: d.rotation,
       internal: d.internal,
-      primary: d.id === primary.id,
+      primary: d.primary,
       index: i,
     };
   });
@@ -87,11 +102,11 @@ function _saveUserData() {
  */
 function resolveFeature(featureId) {
   const userData = _readUserData();
-  const connected = screen.getAllDisplays();
+  const conectados = connected();
 
   const v2 = monitorConfig.getConfig(userData);
   if (v2 && !v2.use_legacy_resolver) {
-    return monitorConfig.resolveFeature({ userData, feature: featureId, connected });
+    return monitorConfig.resolveFeature({ userData, feature: featureId, connected: conectados });
   }
 
   const prefs = userStore.read(PREF_KEY) || {};
@@ -99,7 +114,7 @@ function resolveFeature(featureId) {
   if (wantedId == null) {
     return { status: monitorConfig.STATUS.NONE, display: null, reason: null, role: null };
   }
-  const display = connected.find((d) => d.id === wantedId) || null;
+  const display = conectados.find((d) => d.id === wantedId) || null;
   return {
     status: display ? monitorConfig.STATUS.RESOLVED : monitorConfig.STATUS.PENDING,
     display,
@@ -133,7 +148,9 @@ function getPreferred(featureId) {
  * @returns {Electron.Display}
  */
 function getPreferredOrPrimary(featureId) {
-  return getPreferred(featureId) || screen.getPrimaryDisplay();
+  // O principal vem de `connected()`, não de `getPrimaryDisplay()`: só ali o
+  // `id` é único, e quem recebe este display costuma gravá-lo.
+  return getPreferred(featureId) || connected().find((d) => d.primary);
 }
 
 /**
@@ -143,7 +160,7 @@ function getPreferredOrPrimary(featureId) {
 function getRoles() {
   return monitorConfig.rolesSummary({
     userData: _readUserData(),
-    connected: screen.getAllDisplays(),
+    connected: connected(),
   });
 }
 
@@ -155,11 +172,11 @@ function getRoles() {
  */
 function setRole(role, displayId) {
   const userData = _readUserData();
-  const connected = screen.getAllDisplays();
-  const display = displayId == null ? null : connected.find((d) => d.id === displayId) || null;
+  const conectados = connected();
+  const display = displayId == null ? null : conectados.find((d) => d.id === displayId) || null;
   if (displayId != null && !display) return false;
 
-  const ok = monitorConfig.setRoleDisplay({ userData, role, display, connected });
+  const ok = monitorConfig.setRoleDisplay({ userData, role, display, connected: conectados });
   if (ok) _saveUserData();
   return ok;
 }
@@ -199,12 +216,12 @@ function setPreferred(featureId, displayId) {
   const role = monitorIdentity.roles().roleOfFeature(featureId);
   if (!role) return;
 
-  const connected = screen.getAllDisplays();
+  const conectados = connected();
   const wantedId = resolveWantedId(displayId, rolesFromUserData(userData));
-  const display = wantedId == null ? null : connected.find((d) => d.id === wantedId) || null;
+  const display = wantedId == null ? null : conectados.find((d) => d.id === wantedId) || null;
   if (wantedId != null && !display) return; // monitor desconhecido — não mexe no papel
 
-  monitorConfig.setRoleDisplay({ userData, role, display, connected });
+  monitorConfig.setRoleDisplay({ userData, role, display, connected: conectados });
   _saveUserData();
 }
 
@@ -218,6 +235,7 @@ function getPrefs() {
 
 module.exports = {
   list,
+  connected,
   orderDisplays,
   configure,
   resolveFeature,

@@ -53,6 +53,50 @@ export const ASPECT_ONLY_POINTS = 8;
 export const ACCEPT_THRESHOLD = 0.6;
 export const MARGIN = 0.1;
 
+/**
+ * Devolve cópias dos displays com `id` que realmente distingue um do outro, e
+ * `primary` marcado em um só.
+ *
+ * O `id` que o Electron entrega não serve para isso. Ele deriva do EDID, e dois
+ * monitores do mesmo modelo cujo fabricante deixou o número de série em branco
+ * — o par de projetores que a igreja compra junto — produzem o mesmo valor. O
+ * Chromium ainda separa os dois pelo índice da saída, gravado nos bits baixos
+ * do id; só que esse número passa de 2^53 e vira `double` ao cruzar para o
+ * JavaScript, faixa em que só existem múltiplos de 4. Os bits que distinguiam
+ * se perdem no caminho.
+ *
+ * O estrago era mudo: com ids iguais, `find(d => d.id === escolhido)` devolvia
+ * sempre o primeiro. O operador escolhia o Monitor 2, a tela de Opções
+ * confirmava "resolvido", e a letra da música abria por cima da tela dele.
+ *
+ * Só o monitor repetido ganha sufixo. Quem já tem id próprio continua com ele,
+ * que é o valor gravado nas preferências de quem configurou o app antes.
+ *
+ * @param {object[]} all      displays na ordem em que devem ser numerados
+ * @param {object} primary    o display principal, para marcar `primary`
+ */
+export function withUniqueIds(all, primary) {
+  const lista = all || [];
+
+  const vistos = new Set();
+  const repetidos = new Set();
+  for (const d of lista) {
+    if (vistos.has(d.id)) repetidos.add(d.id);
+    vistos.add(d.id);
+  }
+
+  // A origem desempata porque é única por definição: duas telas não ocupam o
+  // mesmo ponto da área de trabalho.
+  const chave = (d) =>
+    repetidos.has(d.id) ? `${d.id}@${d.bounds.x},${d.bounds.y}` : d.id;
+  const principal = primary ? chave(primary) : null;
+
+  return lista.map((d) => {
+    const id = chave(d);
+    return { ...d, id, primary: id === principal };
+  });
+}
+
 /** Identidade vazia — schema fixo, todos os campos sempre presentes. */
 export function emptyIdentity() {
   return {
