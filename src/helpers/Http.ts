@@ -11,8 +11,14 @@ export const NET_TIMEOUT = {
   QUICK: 5000,
   /** Catálogo, configuração, API. */
   DEFAULT: 10000,
-  /** Áudio e imagem — arquivo grande em rede ruim é lento, não morto. */
+  /** Arquivo grande: só a espera pela resposta é limitada, nunca a transferência. */
   MEDIA: 30000,
+  /**
+   * Teto para uma transferência inteira, onde não dá para separar resposta de
+   * corpo (XHR). Generoso de propósito: numa 3G de igreja um áudio leva bem
+   * mais de 30s, e cortar isso seria pior que o problema que o prazo evita.
+   */
+  STALLED: 120000,
 } as const;
 
 export type NetworkErrorKind = "network" | "http" | "other";
@@ -56,7 +62,7 @@ function report(ok: boolean, source: string): void {
  * protocolo `louvorja://`. Uma falha ali é arquivo que não existe, não internet
  * que caiu — reportar isso derrubaria o app para offline com a rede intacta.
  */
-function ehRemota(input: RequestInfo | URL): boolean {
+export function ehRemota(input: RequestInfo | URL): boolean {
   const url = input instanceof Request ? input.url : String(input);
   return /^https?:/i.test(url);
 }
@@ -78,8 +84,16 @@ export function classifyNetworkError(e: unknown): NetworkErrorKind {
 }
 
 /**
- * `fetch` com prazo. Qualquer resposta HTTP — inclusive 500 — conta como rede
- * viva: o servidor foi alcançado, o problema é outro.
+ * `fetch` com prazo até a RESPOSTA — não até o fim da transferência.
+ *
+ * A diferença é o que separa "desistir de uma rede morta" de "cortar o download
+ * de quem está numa 3G": `AbortSignal.timeout` mataria a leitura do corpo no
+ * meio, e um áudio de alguns megabytes passa fácil de trinta segundos numa
+ * conexão de igreja. Como `await fetch` resolve quando os cabeçalhos chegam, o
+ * prazo é cancelado ali e o corpo flui pelo tempo que precisar.
+ *
+ * Qualquer resposta HTTP — inclusive 500 — conta como rede viva: o servidor foi
+ * alcançado, o problema é outro.
  */
 export async function fetchWithTimeout(
   input: RequestInfo | URL,
@@ -93,16 +107,21 @@ export async function fetchWithTimeout(
     ...rest
   } = init;
 
-  const signals = [AbortSignal.timeout(timeout)];
+  const controller = new AbortController();
+  const prazo = setTimeout(() => controller.abort(new DOMException("Timeout", "TimeoutError")), timeout);
+
+  const signals = [controller.signal];
   if (signal) signals.push(signal);
 
   const remota = ehRemota(input);
 
   try {
     const response = await fetch(input, { ...rest, signal: AbortSignal.any(signals) });
+    clearTimeout(prazo);
     if (remota) report(true, source);
     return response;
   } catch (e) {
+    clearTimeout(prazo);
     // Cancelamento nosso (trocar de música, fechar a tela) não é falha de rede.
     if (signal?.aborted) throw e;
     if (remota && !thirdParty && classifyNetworkError(e) === "network") report(false, source);

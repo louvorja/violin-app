@@ -319,7 +319,13 @@ function handle() {
               headers: response.headers,
             });
           } catch (fetchErr) {
-            netHealth.report(false, "protocol");
+            // De propósito não reporta falha ao netHealth: aqui passa arquivo a
+            // arquivo, e uma requisição pode morrer por motivo que nada tem a
+            // ver com a rede — o renderer cancelou ao trocar de slide, o nome
+            // tem caractere que o servidor recusa, o arquivo não existe lá.
+            // Contar isso como internet fora acendia o aviso de "sem conexão"
+            // no meio de um culto com a rede perfeita. O sinal de falha fica
+            // com o catálogo (jsonCache) e com a sondagem explícita.
             console.warn("[protocol] Falha ao buscar remoto:", remoteUrl, fetchErr.message);
             return new Response("File not found locally and remote fetch failed", { status: 404 });
           }

@@ -7,7 +7,7 @@ import $datetime from "@/helpers/DateTime";
 import $path from "@/helpers/Path";
 import $alert from "@/helpers/Alert";
 import $snackbar from "@/helpers/Snackbar";
-import { NET_TIMEOUT, fetchWithTimeout } from "@/helpers/Http";
+import { NET_TIMEOUT, fetchWithTimeout, ehRemota } from "@/helpers/Http";
 import { reportNetworkResult } from "@/composables/useConnectivity";
 import { i18nAtual } from "@/i18n";
 import $modules from "@/helpers/Modules";
@@ -94,13 +94,13 @@ function _loadAudioSrc(
   }
 
   request.responseType = "blob";
-  request.timeout = NET_TIMEOUT.MEDIA;
+  request.timeout = NET_TIMEOUT.STALLED;
   request.onload = function (this: XMLHttpRequest) {
     if (_audioXhr === request) _audioXhr = null;
     $appdata.set(KEYS.MODULES.MEDIA.LOADING, false);
     if (_loadingId !== idCheck) return;
     if (this.status == 200) {
-      reportNetworkResult(true, "media");
+      if (ehRemota(audioUrl)) reportNetworkResult(true, "media");
       onSource(URL.createObjectURL(this.response as Blob), false);
     } else {
       _switchingMode = false;
@@ -118,7 +118,10 @@ function _loadAudioSrc(
     _switchingMode = false;
     $appdata.set(KEYS.MODULES.MEDIA.LOADING, false);
     if (_loadingId !== idCheck) return;
-    reportNetworkResult(false, "media");
+    // No desktop o áudio vem por `louvorja://`, que é o protocolo lendo disco:
+    // falhar ali é arquivo ausente, não internet fora. Reportar isso derrubava
+    // o app para offline com a rede intacta.
+    if (ehRemota(audioUrl)) reportNetworkResult(false, "media");
     _self.close(true);
     // Um modal aqui obriga o operador a fechar diálogo com o culto rolando, e
     // sem rede ele volta a cada música. O aviso leva a repetição no clique.
