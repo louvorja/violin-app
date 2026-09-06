@@ -87,6 +87,19 @@ function _create(): AudioPlayback {
     _playing = false;
   }
 
+  /**
+   * Onde a faixa pode ser posicionada sem encostar no fim. Encostar dispara
+   * `ended`, e o fim de faixa encerra a música — nenhuma navegação de slide
+   * deve conseguir isso, ainda mais porque a duração conhecida pode ser só o
+   * pedaço já baixado.
+   */
+  const _MARGEM_DO_FIM = 0.25;
+
+  function _posicaoSegura(time: number, duracao: number): number {
+    if (!Number.isFinite(duracao) || duracao <= 0) return Math.max(0, time);
+    return Math.max(0, Math.min(time, Math.max(0, duracao - _MARGEM_DO_FIM)));
+  }
+
   function _listen(el: HTMLAudioElement): void {
     el.addEventListener("timeupdate", _syncTime);
     el.addEventListener("progress", _syncTime);
@@ -134,7 +147,7 @@ function _create(): AudioPlayback {
       const posicionar = (): void => {
         const d = el.duration;
         if (seekHint > 0 && Number.isFinite(d) && d > 0) {
-          el.currentTime = Math.max(0, Math.min(seekHint, d));
+          el.currentTime = _posicaoSegura(seekHint, d);
         }
       };
 
@@ -190,7 +203,7 @@ function _create(): AudioPlayback {
     const d = isNaN(next.duration) || !isFinite(next.duration) ? 0 : next.duration;
     const alvo = startTime(d);
     if (Number.isFinite(alvo) && alvo > 0) {
-      next.currentTime = d > 0 ? Math.max(0, Math.min(alvo, d)) : alvo;
+      next.currentTime = _posicaoSegura(alvo, d);
     }
     next.volume = volume.value / 100;
 
@@ -302,12 +315,6 @@ function _create(): AudioPlayback {
     setVolume(volume.value < 100 ? 100 : 0);
   }
 
-  // Encostar no fim faz o elemento disparar `ended`, e o fim de faixa encerra a
-  // música. Um seek nunca deve produzir isso: quando a faixa ainda está
-  // chegando, a duração conhecida é só o pedaço baixado, e pular para um slide
-  // adiante caía dentro dessa margem — o hino encerrava sozinho.
-  const _MARGEM_DO_FIM = 0.25;
-
   function seekTo(time: number): void {
     const el = getElement();
     if (!Number.isFinite(time) || time < 0) return;
@@ -315,8 +322,7 @@ function _create(): AudioPlayback {
       ? duration.value
       : el.duration;
     if (!Number.isFinite(d) || d <= 0) return;
-    const limite = Math.max(0, d - _MARGEM_DO_FIM);
-    el.currentTime = Math.max(0, Math.min(time, limite));
+    el.currentTime = _posicaoSegura(time, d);
   }
 
   function advanceTime(delta: number): void {
