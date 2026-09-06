@@ -78,20 +78,47 @@
   line-gap-override: 0%;
 }
 
-/* A fonte da interface, e a única com `swap`: são 352KB, e medido em 3G eles
-   ocupam a banda de 0,5s a 5,4s do boot. Sem `swap` o padrão é bloquear, e o
-   operador encara a tela montada e sem texto por todo esse tempo. Os
-   `*-override` abaixo é que tornam a troca suportável — alinham as métricas da
-   Inter às do fallback, então o texto reflui pouco quando ela entra.
-
-   As fontes de projeção seguem sem `swap` de propósito: lá a troca aconteceria
-   no telão, no meio do slide, diante da congregação. */
+/* A fonte da interface, em duas declarações, e a única com `swap`.
+ *
+ * A Inter completa tem 352KB e carrega grego, cirílico e vietnamita, que
+ * nenhuma das duas línguas do app usa. Medido em 3G, ela terminava junto com a
+ * shell — disputando banda com o próprio JS que faltava para a tela abrir. O
+ * recorte para latin tem 158KB e é o que o app pede na prática.
+ *
+ * A completa continua aqui embaixo como rede: pelas regras de `unicode-range`,
+ * quem vem depois vence nos pontos que as duas cobrem, então o recorte atende o
+ * latin e a original só desce se aparecer um caractere fora dele — um título
+ * com grego, por exemplo. Ninguém vê tofu por causa do corte.
+ *
+ * Para regerar o recorte: `subset-font` (harfbuzzjs, sem Python) sobre a
+ * original, com os mesmos intervalos do `unicode-range` abaixo. O arquivo
+ * original fica no repositório e é a fonte de verdade.
+ *
+ * `swap` porque o padrão é bloquear: sem ele o operador encara a tela montada e
+ * sem texto até a fonte chegar. Os `*-override` alinham as métricas ao
+ * fallback, então o texto reflui pouco quando ela entra. As fontes de projeção
+ * seguem sem `swap` de propósito — lá a troca apareceria no telão, no meio do
+ * slide, diante da congregação. */
 @font-face {
   font-family: "InterVariable";
   src: url("../fonts/Inter-VariableFont_opsz,wght.woff2") format("woff2");
   font-weight: 100 900;
   font-style: normal;
   font-display: swap;
+  ascent-override: 105%;
+  descent-override: 30%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: "InterVariable";
+  src: url("../fonts/Inter-Variable-latin.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range:
+    U+0020-024F, U+2000-206F, U+20A0-20BF, U+2122, U+2190-21FF, U+2200-22FF, U+25A0-25FF,
+    U+FB00-FB06;
   ascent-override: 105%;
   descent-override: 30%;
   line-gap-override: 0%;
