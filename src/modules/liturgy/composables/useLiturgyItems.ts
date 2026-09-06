@@ -1,34 +1,20 @@
+import { useLiturgyI18n, chaveLiturgia } from "../i18n";
+import { agruparPorBloco, prepararAgenda } from "../agenda";
+import { useLiturgyExecution } from "./useLiturgyExecution";
 import { ref, computed, type Ref, type WritableComputedRef } from "vue";
-import { useI18n } from "vue-i18n";
 import $liturgy from "@/helpers/Liturgy";
-import $media from "@/composables/useMedia";
 import $database from "@/helpers/Database";
 import { ICONS } from "@/config/Icons";
-import { isHeic, heicToJpeg } from "@/helpers/ImageConvert";
-import { KEYS } from "@/constants/UserDataKeys";
 import $alert from "@/helpers/Alert";
-import $path from "@/helpers/Path";
-import $broadcast from "@/helpers/Broadcast";
-import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
-import { useFileProjection } from "@/composables/useFileProjection";
-import {
-  openFileProjectionWindows,
-  openAnnouncementsWindow,
-} from "@/helpers/ProjectionWindows";
-import $appdata from "@/helpers/AppData";
-import $userdata from "@/helpers/UserData";
 import $idb from "@/helpers/IndexedDB";
 import { DB_TABLE } from "@/constants/DbTables";
 import Platform from "@/helpers/Platform";
-import pt from "../lang/pt.json";
-import es from "../lang/es.json";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import { MusicActionEnum } from "@/enums/MusicActionEnum";
-import { useBackgroundSound } from "@/composables/useBackgroundSound";
-import { readAllSlots as readAllOverlaySlots, writeSlot as writeOverlaySlot } from "@/helpers/Overlay";
+import { readAllSlots as readAllOverlaySlots } from "@/helpers/Overlay";
 import type { OverlaySlot } from "@/types/Overlay";
 import type { LiturgyItem, ScheduledCategory, LiturgyMusicItem } from "@/types/Liturgy";
-import { AUDIO_EXT, IMAGE_EXT, VIDEO_EXT } from "@constants/FileTypes";
+import { AUDIO_EXT, VIDEO_EXT } from "@constants/FileTypes";
 
 interface VideoItem {
   id: string;
@@ -55,19 +41,6 @@ interface OnlineApiData {
   channels?: { channel_id: string; default_image: string }[];
   playlists?: { playlist_id: string; channel_id: string; title: string }[];
   videos?: OnlineApiVideo[];
-}
-
-const TRANSLATIONS: Record<string, Record<string, unknown>> = { pt, es };
-
-function _t(key: string, locale: string): string {
-  const dict = TRANSLATIONS[locale] ?? TRANSLATIONS.pt;
-  const path = key.split(".");
-  let cur: unknown = dict;
-  for (const k of path) {
-    if (cur && typeof cur === "object" && k in cur) cur = (cur as Record<string, unknown>)[k];
-    else return key;
-  }
-  return typeof cur === "string" ? cur : key;
 }
 
 export const COLORS = [
@@ -107,73 +80,13 @@ export const DEFAULT_FORM = (): LiturgyItem => ({
   linked_overlay_id: "",
 });
 
-function _groupItemsByBloco(list: LiturgyItem[]): LiturgyItem[] {
-  const result: LiturgyItem[] = [];
-  let pending: LiturgyItem[] = [];
-  let currentBloco: LiturgyItem | null = null;
-
-  for (const item of list) {
-    if (item.tipo === LiturgyItemTypeEnum.BLOCO) {
-      if (currentBloco) {
-        result.push(currentBloco);
-        result.push(...pending);
-      } else if (pending.length > 0) {
-        result.push(...pending);
-      }
-      currentBloco = item;
-      pending = [];
-    } else {
-      pending.push(item);
-    }
-  }
-  if (currentBloco) {
-    result.push(currentBloco);
-    result.push(...pending);
-  } else if (pending.length > 0) {
-    result.push(...pending);
-  }
-
-  return result;
-}
-
-function _addMinutes(time: string, minutes: number): string {
-  if (!time) return "";
-  const [h, m] = time.split(":").map(Number);
-  if (isNaN(h) || isNaN(m)) return time;
-  const total = h * 60 + m + minutes;
-  const newH = Math.floor(total / 60) % 24;
-  const newM = total % 60;
-  return `${String(newH).padStart(2, "0")}:${String(newM).padStart(2, "0")}`;
-}
-
-function _autoAssignTimes(list: LiturgyItem[]): LiturgyItem[] {
-  const result: LiturgyItem[] = [];
-  let prevEnd = "";
-
-  for (const item of list) {
-    if (item.tipo === LiturgyItemTypeEnum.BLOCO) {
-      prevEnd = item.time || "";
-      result.push(item);
-    } else if (item.blocoId) {
-      const newTime = prevEnd || "";
-      const dur = Number(item.duration) || 0;
-      prevEnd = newTime ? _addMinutes(newTime, dur) : "";
-      result.push({ ...item, time: newTime });
-    } else {
-      result.push(item);
-    }
-  }
-
-  return result;
-}
-
 export function useLiturgyItems(
   activeDay: Ref<number>,
   scheduledCategories: Ref<ScheduledCategory[]>
 ) {
-  const i18n = useI18n();
-  const getLocale = (): string => (typeof i18n.locale.value === "string" ? i18n.locale.value : "pt");
-  const t = (key: string): string => _t(key, getLocale());
+  const { t, locale } = useLiturgyI18n();
+  /** Prefixo de idioma das tabelas do banco (`pt_musics`, `es_musics`). */
+  const idioma = (): string => (typeof locale.value === "string" ? locale.value : "pt");
 
   const dialog = ref(false);
   const editIndex = ref(-1);
@@ -184,12 +97,21 @@ export function useLiturgyItems(
   const overlaySlots = ref<OverlaySlot[]>([]);
   const overlaySlotsLoaded = ref(false);
 
+  const { executeItem, playMusic, openLyric, openUrl, openFile, isYoutube } =
+    useLiturgyExecution();
+
+  async function loadOverlaySlots(): Promise<void> {
+    if (overlaySlotsLoaded.value) return;
+    overlaySlots.value = await readAllOverlaySlots();
+    overlaySlotsLoaded.value = true;
+  }
+
   const items: WritableComputedRef<LiturgyItem[]> = computed({
     get() {
-      return _autoAssignTimes(_groupItemsByBloco($liturgy.list(activeDay.value)));
+      return prepararAgenda($liturgy.list(activeDay.value));
     },
     set(val: LiturgyItem[]) {
-      $liturgy.set(_autoAssignTimes(_groupItemsByBloco(val)), activeDay.value);
+      $liturgy.set(prepararAgenda(val), activeDay.value);
     },
   });
 
@@ -242,7 +164,7 @@ export function useLiturgyItems(
       }
     }
 
-    items.value = _groupItemsByBloco(repositioned);
+    items.value = agruparPorBloco(repositioned);
   }
 
   function adjustBlocoAssignment(itemId: string): void {
@@ -280,11 +202,6 @@ export function useLiturgyItems(
       $liturgy.update(itemId, { blocoId: currBlocoId }, activeDay.value);
       items.value = [...items.value];
     }
-  }
-
-  function isYoutube(url: string | undefined | null): boolean {
-    if (!url) return false;
-    return /youtu\.?be/i.test(url);
   }
 
   function subtitleFor(item: LiturgyItem): string {
@@ -326,12 +243,14 @@ export function useLiturgyItems(
 
   function removeDone(): void {
     menuOpen.value = false;
-    if (!confirm(t("dialog.remove_done_confirm"))) return;
-    const toRemove = items.value
-      .filter((i) => i.tipo !== LiturgyItemTypeEnum.BLOCO && $liturgy.isCheckedToday(i))
-      .map((i) => i.id);
-    toRemove.forEach((id) => $liturgy.remove(id, activeDay.value));
-    items.value = [...items.value];
+    $alert.yesno({ text: chaveLiturgia("dialog.remove_done_confirm") }, (btn?: string) => {
+      if (btn !== "yes") return;
+      const toRemove = items.value
+        .filter((i) => i.tipo !== LiturgyItemTypeEnum.BLOCO && $liturgy.isCheckedToday(i))
+        .map((i) => i.id);
+      toRemove.forEach((id) => $liturgy.remove(id, activeDay.value));
+      items.value = [...items.value];
+    });
   }
 
   /* ============== Dialog ============== */
@@ -535,22 +454,25 @@ export function useLiturgyItems(
 
   function confirmRemove(index?: number, fromDialog = false): void {
     if (index === undefined || index < 0 || index >= items.value.length) return;
-    if (!confirm(t("dialog.remove_confirm"))) return;
     const item = items.value[index];
     const id = item.id;
 
-    if (item.tipo === LiturgyItemTypeEnum.BLOCO) {
-      const list = $liturgy.list(activeDay.value);
-      for (const child of list) {
-        if (child.blocoId === id) {
-          $liturgy.update(child.id, { blocoId: undefined }, activeDay.value);
+    $alert.yesno({ text: chaveLiturgia("dialog.remove_confirm") }, (btn?: string) => {
+      if (btn !== "yes") return;
+
+      if (item.tipo === LiturgyItemTypeEnum.BLOCO) {
+        const list = $liturgy.list(activeDay.value);
+        for (const child of list) {
+          if (child.blocoId === id) {
+            $liturgy.update(child.id, { blocoId: undefined }, activeDay.value);
+          }
         }
       }
-    }
 
-    $liturgy.remove(id, activeDay.value);
-    items.value = [...items.value];
-    if (fromDialog) dialog.value = false;
+      $liturgy.remove(id, activeDay.value);
+      items.value = [...items.value];
+      if (fromDialog) dialog.value = false;
+    });
   }
 
   function cloneItem(index: number): void {
@@ -567,453 +489,12 @@ export function useLiturgyItems(
 
   function confirmClear(stopTimer?: () => void): void {
     if (!items.value.length) return;
-    if (!confirm(t("dialog.clear_confirm"))) return;
-    $liturgy.clear(activeDay.value);
-    items.value = [];
-    if (stopTimer) stopTimer();
-  }
-
-  /* ============== Item execution ============== */
-  function executeItem(item: LiturgyItem): void {
-    switch (item.tipo) {
-      case LiturgyItemTypeEnum.MUSICA:
-        playMusic(item, item.subtipo || "sung");
-        break;
-      case LiturgyItemTypeEnum.SITE:
-        executeSite(item);
-        break;
-      case LiturgyItemTypeEnum.ARQUIVO:
-        openFile(item);
-        break;
-      case LiturgyItemTypeEnum.ITENS_AGENDADOS: {
-        const activeDate = $liturgy.getActiveDate();
-        const sched = $liturgy.findScheduledForToday(item.id, activeDate);
-        const arquivo = sched ? String((sched as Record<string, unknown>).arquivo || "") : "";
-        if (arquivo) {
-          // Segue o fluxo de projeção de arquivos:
-          // vídeo → projeção; áudio → reprodutor principal do programa.
-          void openFile({
-            ...item,
-            tipo: LiturgyItemTypeEnum.ARQUIVO,
-            dir: arquivo,
-          } as LiturgyItem);
-        } else {
-          alert(t("dialog.scheduled_not_found"));
-        }
-        break;
-      }
-      case LiturgyItemTypeEnum.VIDEO_ONLINE:
-        executeOnlineVideo(item);
-        break;
-      case LiturgyItemTypeEnum.MEDIA_LIBRARY:
-        void executeMediaLibraryItem(item);
-        break;
-      case LiturgyItemTypeEnum.BG_SOUND:
-        void executeBgSoundItem(item);
-        break;
-      case LiturgyItemTypeEnum.ANUNCIOS:
-        void executeAnnouncements(item);
-        break;
-      case LiturgyItemTypeEnum.ANOTACAO:
-        alert(item.item + (item.subitem ? "\n\n" + item.subitem : ""));
-        break;
-      case LiturgyItemTypeEnum.OVERLAY:
-        void toggleOverlay(item);
-        break;
-    }
-
-    // Após execução, ativar overlay vinculado (se houver)
-    void activateLinkedOverlay(item);
-  }
-
-  async function playMusic(item: LiturgyItem, mode = "sung"): Promise<void> {
-    if (item.escolha || !item.id_music) {
-      alert(t("dialog.music_choose_first"));
-      return;
-    }
-
-    if (mode === "audio" || mode === "audio_pb") {
-      $media.stop();
-      await $media.openAudio({
-        id_music: item.id_music,
-        mode: (mode === "audio_pb" ? "instrumental" : "audio") as MusicActionEnum,
-      });
-      return;
-    }
-
-    const map: Record<string, { id_music: number; mode: MusicActionEnum }> = {
-      sung: { id_music: item.id_music, mode: MusicActionEnum.AUDIO },
-      pb: { id_music: item.id_music, mode: MusicActionEnum.INSTRUMENTAL },
-      lyric: { id_music: item.id_music, mode: MusicActionEnum.NO_AUDIO },
-      no_audio: { id_music: item.id_music, mode: MusicActionEnum.NO_AUDIO },
-    };
-    $media.open(map[mode] || map.sung);
-  }
-
-  function openLyric(musica: number): void {
-    if (!musica || Number.isNaN(musica) || musica === -1) {
-      alert(t("dialog.music_choose_first"));
-      return;
-    }
-
-    $media.openLyric({ id_music: musica }).catch((err: unknown) => {
-      console.warn("[useLiturgyItems] openLyric falhou:", err);
+    $alert.yesno({ text: chaveLiturgia("dialog.clear_confirm") }, (btn?: string) => {
+      if (btn !== "yes") return;
+      $liturgy.clear(activeDay.value);
+      items.value = [];
+      if (stopTimer) stopTimer();
     });
-  }
-
-  function openUrl(url: string): void {
-    if (!url) return;
-    const valid = $liturgy.validateUrl(url);
-    window.open(valid, "_blank", "noopener,noreferrer");
-  }
-
-  function extractYoutubeId(url: string): string | null {
-    const m = url.match(
-      /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/)([a-zA-Z0-9_-]{11})/
-    );
-    return m ? m[1] : null;
-  }
-
-  function buildEmbedUrl(url: string): string | null {
-    const id = extractYoutubeId(url);
-    if (!id) return null;
-    return `https://www.youtube.com/embed/${id}?autoplay=1&rel=0&controls=0`;
-  }
-
-  function executeSite(item: LiturgyItem): void {
-    const url = item.url || "";
-    if (!url) return;
-
-    if (isYoutube(url) && $userdata.get(KEYS.OPTIONS.YOUTUBE_ACTION, "video") === "video") {
-      const embedUrl = buildEmbedUrl(url);
-      if (embedUrl) {
-        $media.openYouTube(embedUrl, item.item || "");
-        return;
-      }
-    }
-
-    openUrl(url);
-  }
-
-  function executeOnlineVideo(item: LiturgyItem): void {
-    const url = item.url || "";
-    if (!url) return;
-
-    const embedUrl = buildEmbedUrl(url);
-    if (!embedUrl) {
-      $alert.error({ text: "modules.custom_online_videos.invalid_url" });
-      return;
-    }
-    $media.openYouTube(embedUrl, item.item || item.subitem || url);
-  }
-
-  /**
-   * Item da Biblioteca de Mídia: re-resolve o registro por ref_id (o path
-   * pode ser blob e morrer entre sessões) e reaproveita a execução de
-   * ARQUIVO (imagem/vídeo/pdf → projeção; pdf paginado).
-   */
-  async function executeMediaLibraryItem(item: LiturgyItem): Promise<void> {
-    let target = item.dir;
-    let typeHint = item.subtipo || undefined;
-    if (item.ref_id) {
-      const rec = await $idb.get<{ path?: string; type?: string }>(
-        DB_TABLE.MEDIA_LIBRARY,
-        item.ref_id
-      );
-      if (rec?.path) target = rec.path;
-      if (rec?.type) typeHint = rec.type;
-    }
-    if (!target) {
-      $alert.error({ text: t("alerts.media_not_found") });
-      return;
-    }
-    // Blob URLs só valem no documento de origem — a projeção re-resolve
-    // via IDB usando a referência da biblioteca.
-    const extraPayload =
-      target.startsWith("blob:") && item.ref_id
-        ? { libRef: { table: DB_TABLE.MEDIA_LIBRARY, id: item.ref_id } }
-        : undefined;
-    await openFile({ ...item, dir: target }, typeHint, extraPayload);
-  }
-
-  /** Anúncios: envia os slides selecionados (na ordem) para a projeção. */
-  async function executeAnnouncements(item: LiturgyItem): Promise<void> {
-    const all = (
-      await $idb.getAll<{
-        id: string;
-        nome: string;
-        ordem: number;
-        texto?: string;
-        imageData?: ArrayBuffer;
-        imageMime?: string;
-        videoData?: ArrayBuffer;
-        videoMime?: string;
-        style?: Record<string, unknown>;
-      }>(DB_TABLE.ANNOUNCEMENTS)
-    ).sort((a, b) => a.ordem - b.ordem);
-
-    const ids = item.anuncios_ids || [];
-    const selected = ids.length ? all.filter((a) => ids.includes(String(a.id))) : all;
-    if (!selected.length) {
-      $alert.error({ text: t("alerts.media_not_found") });
-      return;
-    }
-
-    const payload = {
-      slides: selected.map((a) => ({
-        id: String(a.id),
-        nome: a.nome,
-        ordem: a.ordem,
-        texto: a.texto,
-        imageData: a.imageData,
-        imageMime: a.imageMime,
-        videoData: a.videoData,
-        videoMime: a.videoMime,
-        style: a.style,
-      })),
-      index: 0,
-    };
-    // Salva no IDB (cache) — padrão do módulo announcements para fallback da projection.
-    // ArrayBuffer é preservado nativamente pelo IDB (diferente de localStorage/JSON).
-    await $idb.put(DB_TABLE.CACHE, {
-      id: "announcements_projection_state",
-      data: payload,
-      ts: Date.now(),
-    });
-    $appdata.set(KEYS.MODULES.MEDIA.IS_PLAYING, true);
-    // Ativa a barra de controles global.
-    const fp = useFileProjection();
-    fp.start("announcements", selected[0]?.nome || "", selected.length, 0);
-    await openAnnouncementsWindow();
-    // Espera a janela de projeção montar antes de enviar o broadcast.
-    await new Promise((r) => setTimeout(r, 300));
-    $broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_STATE, payload);
-  }
-
-  /* ============== Overlay ============== */
-  async function toggleOverlay(item: LiturgyItem): Promise<void> {
-    if (!item.overlay_id) return;
-    const slots = await readAllOverlaySlots();
-    const slot = slots.find((s) => s.id === item.overlay_id);
-    if (!slot) return;
-
-    slot.enabled = item.overlay_action === "activate";
-    await writeOverlaySlot(slot);
-
-    if (slot.enabled) $userdata.set(KEYS.MODULES.OVERLAY.ENABLED, true);
-
-    $broadcast.send(BROADCAST_TYPE.OVERLAY_CONFIG_CHANGED, {
-      enabled: slot.enabled,
-      slot,
-    });
-  }
-
-  async function activateLinkedOverlay(item: LiturgyItem): Promise<void> {
-    if (!item.linked_overlay_id) return;
-    const slots = await readAllOverlaySlots();
-    const slot = slots.find((s) => s.id === item.linked_overlay_id);
-    if (!slot) return;
-
-    slot.enabled = true;
-    await writeOverlaySlot(slot);
-
-    $userdata.set(KEYS.MODULES.OVERLAY.ENABLED, true);
-
-    $broadcast.send(BROADCAST_TYPE.OVERLAY_CONFIG_CHANGED, {
-      enabled: true,
-      slot,
-    });
-  }
-
-  async function loadOverlaySlots(): Promise<void> {
-    if (overlaySlotsLoaded.value) return;
-    overlaySlots.value = await readAllOverlaySlots();
-    overlaySlotsLoaded.value = true;
-  }
-
-
-  let lastLiturgicalSoundUrl: string | null = null;
-
-  /** Converte o registro em uma URL tocável na janela atual. */
-  function resolvePlayableSoundUrl(rec: {
-    path: string;
-    data?: ArrayBuffer;
-    mime?: string;
-  }): string {
-    const p = rec.path || "";
-    // Blob morto de sessão anterior + bytes no IDB → recria localmente.
-    if (rec.data && rec.mime && (!p || p.startsWith("blob:") || !/^(https?|louvorja):/i.test(p))) {
-      if (lastLiturgicalSoundUrl) URL.revokeObjectURL(lastLiturgicalSoundUrl);
-      lastLiturgicalSoundUrl = URL.createObjectURL(
-        new Blob([rec.data], { type: rec.mime })
-      );
-      return lastLiturgicalSoundUrl;
-    }
-    // URLs completas passam direto.
-    if (/^(https?|blob|data|louvorja):/i.test(p)) return p;
-    // Caminho absoluto no desktop → protocolo local.
-    if (Platform.isDesktop && p.startsWith("/")) return "louvorja://local" + p;
-    if (Platform.isDesktop && /^[A-Za-z]:\\/.test(p))
-      return "louvorja://local/" + p.replace(/\\/g, "/");
-    return p;
-  }
-
-  /** Som de fundo: reproduz no PLAYER do módulo Som de Fundo (fade/volume). */
-  async function executeBgSoundItem(item: LiturgyItem): Promise<void> {
-    if (!item.ref_id) {
-      $alert.error({ text: t("alerts.media_not_found") });
-      return;
-    }
-    // Mesmo arquivo tocando? Alterna stop/play.
-    if ($bgSound.currentFile.value?.id === item.ref_id) {
-      $bgSound.togglePlay();
-      return;
-    }
-    const rec = await $idb.get<{
-      id: string;
-      name: string;
-      fileName?: string;
-      path: string;
-      data?: ArrayBuffer;
-      mime?: string;
-    }>(DB_TABLE.BACKGROUND_SOUND_LIBRARY, item.ref_id);
-    if (!rec) {
-      $alert.error({ text: t("alerts.media_not_found") });
-      return;
-    }
-    const displayName = rec.fileName || rec.name;
-    $bgSound.playFile({
-      id: rec.id,
-      name: displayName,
-      fileName: displayName,
-      path: resolvePlayableSoundUrl(rec),
-      data: rec.data,
-      mime: rec.mime,
-    });
-  }
-
-  function _persistFileProjection(payload: Record<string, unknown>): void {
-    try {
-      localStorage.setItem("lj_file_projection", JSON.stringify(payload));
-    } catch (e) {
-      console.error(e);
-    }
-  }
-
-  function _resolveFileUrl(dir: string): string {
-    if (!dir) return "";
-    // blob:/data: usam UM único barra após o esquema — passam direto.
-    if (/^(blob|data):/i.test(dir)) return dir;
-    if (/^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(dir)) return dir;
-    if (Platform.isDesktop) {
-      if (dir.startsWith("/")) return "louvorja://local" + dir;
-      if (/^[A-Za-z]:\\/.test(dir)) return "louvorja://local/" + dir.replace(/\\/g, "/");
-    }
-    return $path.file(dir);
-  }
-
-  /** Cache de objectURLs para HEIC→JPEG (evita reconverter a cada projeção). */
-  const _heicProjectionCache = new Map<string, string>();
-
-  /** Se o arquivo for HEIC/HEIF, converte para JPEG e devolve um objectURL. */
-  async function _resolveRenderableUrl(dir: string): Promise<string> {
-    const ext = dir.split(".").pop()?.toLowerCase() || "";
-    if (ext !== "heic" && ext !== "heif") return _resolveFileUrl(dir);
-    const raw = _resolveFileUrl(dir);
-    const cached = _heicProjectionCache.get(dir);
-    if (cached) return cached;
-    try {
-      const blob = await fetch(raw).then((r) => r.blob());
-      const jpeg = await heicToJpeg(blob);
-      const url = URL.createObjectURL(jpeg);
-      _heicProjectionCache.set(dir, url);
-      return url;
-    } catch {
-      return raw;
-    }
-  }
-
-  async function openFile(
-    item: LiturgyItem,
-    typeHint?: string,
-    extraPayload?: Record<string, unknown>
-  ): Promise<void> {
-    const dir = item.dir || "";
-    const ext = dir.split(".").pop()?.toLowerCase() || "";
-    // HEIC/HEIF: converte para JPEG antes de enviar à projeção.
-    const url = await _resolveRenderableUrl(dir);
-
-    if (
-      !url ||
-      (!dir.includes("/") &&
-        !dir.includes("\\") &&
-        !/^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(dir) &&
-        !dir.startsWith("/"))
-    ) {
-      $alert.error({ text: url, title: "modules.media.alerts.file_not_found" });
-      return;
-    }
-
-    // Tipo efetivo: extensão do caminho; sem extensão (ex.: blob URLs),
-    // usa o hint informado pelo chamador (subtipo do item).
-    let kind = "";
-    if (IMAGE_EXT.includes(ext)) kind = "image";
-    else if (VIDEO_EXT.includes(ext)) kind = "video";
-    else if (AUDIO_EXT.includes(ext)) kind = "audio";
-    else if (ext === "pdf") kind = "pdf";
-    else if (typeHint) kind = typeHint;
-
-    if (kind === "image" || kind === "pdf") {
-      const fadeDur =
-        ($userdata.get(KEYS.OPTIONS.FILE_PROJECTION.FADE, true) as boolean) !== false
-          ? ($userdata.get(KEYS.OPTIONS.FILE_PROJECTION.FADE_DURATION, 500) as number) || 500
-          : 0;
-      const payload = {
-        url,
-        type: kind,
-        title: item.item || "",
-        fadeDuration: fadeDur,
-        ...extraPayload,
-      };
-      _persistFileProjection(payload);
-
-      await openFileProjectionWindows().catch((e: unknown) => {
-        $alert.error(e as string);
-        console.error(e);
-      });
-      $broadcast.send(BROADCAST_TYPE.FILE_PROJECTION, payload);
-    } else if (kind === "video") {
-      const fadeDur =
-        ($userdata.get(KEYS.OPTIONS.FILE_PROJECTION.FADE, true) as boolean) !== false
-          ? ($userdata.get(KEYS.OPTIONS.FILE_PROJECTION.FADE_DURATION, 500) as number) || 500
-          : 0;
-      const payload = {
-        url,
-        type: "video",
-        title: item.item || "",
-        fadeDuration: fadeDur,
-        ...extraPayload,
-      };
-      _persistFileProjection(payload);
-      await openFileProjectionWindows().catch((e: unknown) => {
-        $alert.error(e as string);
-        console.error(e);
-      });
-      $broadcast.send(BROADCAST_TYPE.FILE_PROJECTION, payload);
-      $media.openAudio({ url, title: item.item || "" });
-      $appdata.set(KEYS.MODULES.MEDIA.CONFIG.VIDEO_FILE, true);
-    } else if (kind === "audio") {
-      $media.openAudio({ url, title: item.item || "" });
-    } else if (!kind && !typeHint) {
-      // Tipo desconhecido sem hint: comportamento legado (abrir com SO).
-      if (Platform.isDesktop && (Platform.api as unknown as Record<string, unknown>)?.openPath) {
-        ((Platform.api as unknown as Record<string, unknown>).openPath as (path: string) => void)(dir);
-      } else {
-        openUrl(dir);
-      }
-    } else {
-      $alert.error({ text: url, title: "modules.media.alerts.file_not_found" });
-    }
   }
 
   function openSite(): void {
@@ -1136,7 +617,7 @@ export function useLiturgyItems(
   async function loadMusicsList(): Promise<void> {
     try {
       const data = await $database.get<LiturgyMusicItem[] | { data: LiturgyMusicItem[] }>(
-        `${getLocale()}_musics`
+        `${idioma()}_musics`
       );
       musicsCache.value = Array.isArray(data) ? data : data?.data || [];
     } catch {
@@ -1161,9 +642,6 @@ export function useLiturgyItems(
     path: string;
     mime?: string;
   }
-
-  /** Instância compartilhada com o módulo Som de Fundo (mesmo player). */
-  const $bgSound = useBackgroundSound();
 
   async function loadMediaLibraryEntries(): Promise<MediaLibraryEntry[]> {
     return $idb.getAll<MediaLibraryEntry>(DB_TABLE.MEDIA_LIBRARY);
@@ -1193,7 +671,7 @@ export function useLiturgyItems(
 
   /** Cache em camadas (memória → tabelas online_* no IDB → rede) via Database. */
   async function loadOnlineApiVideos(): Promise<OnlineApiData | null> {
-    return $database.get<OnlineApiData>(`${getLocale()}_collections_online`, {
+    return $database.get<OnlineApiData>(`${idioma()}_collections_online`, {
       silent: true,
     });
   }

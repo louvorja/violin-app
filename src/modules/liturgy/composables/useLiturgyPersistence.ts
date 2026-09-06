@@ -1,30 +1,13 @@
 import { ref, computed, type Ref, type ComputedRef } from "vue";
-import { useI18n } from "vue-i18n";
+import { useLiturgyI18n, chaveLiturgia } from "../i18n";
 import $liturgy from "@/helpers/Liturgy";
 import $userdata from "@/helpers/UserData";
 import $alert from "@/helpers/Alert";
 import { KEYS } from "@/constants/UserDataKeys";
 import type { ScheduledCategory, ScheduledItem } from "@/types/Liturgy";
-import pt from "../lang/pt.json";
-import es from "../lang/es.json";
-
-const TRANSLATIONS: Record<string, Record<string, unknown>> = { pt, es };
-
-function _t(key: string, locale: string): string {
-  const dict = TRANSLATIONS[locale] || TRANSLATIONS.pt;
-  const path = key.split(".");
-  let cur: unknown = dict;
-  for (const k of path) {
-    if (cur && typeof cur === "object" && k in cur) cur = (cur as Record<string, unknown>)[k];
-    else return key;
-  }
-  return typeof cur === "string" ? cur : key;
-}
 
 export function useLiturgyPersistence() {
-  const i18n = useI18n();
-  const getLocale = (): string => (typeof i18n.locale.value === "string" ? i18n.locale.value : "pt");
-  const t = (key: string): string => _t(key, getLocale());
+  const { t } = useLiturgyI18n();
 
   // Sempre inicia no dia de hoje (não restaura último selecionado).
   const activeDay: Ref<number> = ref(new Date().getDay());
@@ -63,13 +46,6 @@ export function useLiturgyPersistence() {
     return _scheduledItemsCache.value
       .filter((i) => i.categoria === activeCatId.value)
       .sort((a, b) => String(a.data || "").localeCompare(String(b.data || "")));
-  });
-
-  const noteDays: ComputedRef<string[]> = computed(() => {
-    const dict = TRANSLATIONS[getLocale()] || TRANSLATIONS.pt;
-    return (dict as Record<string, Record<string, unknown>>).notes?.days as string[] || [
-      "Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab",
-    ];
   });
 
   const currentNote: ComputedRef<string> = computed(() => $liturgy.getDayNote(activeDay.value) ?? "");
@@ -144,10 +120,12 @@ export function useLiturgyPersistence() {
   }
 
   function removeCategory(id: string | number): void {
-    if (!confirm(t("schedules.remove_category_confirm"))) return;
-    $liturgy.removeScheduledCategory(id);
-    _refreshScheduled();
-    if (activeCatId.value === id) activeCatId.value = null;
+    $alert.yesno({ text: chaveLiturgia("schedules.remove_category_confirm") }, (btn?: string) => {
+      if (btn !== "yes") return;
+      $liturgy.removeScheduledCategory(id);
+      _refreshScheduled();
+      if (activeCatId.value === id) activeCatId.value = null;
+    });
   }
 
   function updateCategoryColor(id: string | number, color: string): void {
@@ -173,9 +151,11 @@ export function useLiturgyPersistence() {
   }
 
   function removeScheduled(id: string | number): void {
-    if (!confirm(t("dialog.remove_confirm"))) return;
-    $liturgy.removeScheduledItemEntry(id);
-    _refreshScheduled();
+    $alert.yesno({ text: chaveLiturgia("dialog.remove_confirm") }, (btn?: string) => {
+      if (btn !== "yes") return;
+      $liturgy.removeScheduledItemEntry(id);
+      _refreshScheduled();
+    });
   }
 
   return {
@@ -192,7 +172,6 @@ export function useLiturgyPersistence() {
     scheduledCategories,
     activeCategory,
     categoryItems,
-    noteDays,
     currentNote,
     setActiveCatId,
     toggleNotes,

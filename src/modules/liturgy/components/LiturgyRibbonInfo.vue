@@ -64,17 +64,17 @@ const formattedDuration = computed(() => {
 .liturgy-ribbon-info {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 2px 8px;
-  font-size: 11px;
+  gap: var(--lj-space-1);
+  padding: var(--lj-space-1) var(--lj-space-4);
+  font-size: var(--lj-text-sm);
   min-width: 180px;
 }
 
 .liturgy-ribbon-info__header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-weight: 600;
+  gap: var(--lj-space-3);
+  font-weight: var(--lj-weight-semibold);
   color: var(--lj-text);
 }
 
@@ -86,8 +86,8 @@ const formattedDuration = computed(() => {
 
 .liturgy-ribbon-info__stats {
   display: flex;
-  gap: 10px;
-  color: var(--lj-text-secondary);
+  gap: var(--lj-space-5);
+  color: var(--lj-text-muted);
 }
 
 .liturgy-ribbon-info__stat {

@@ -28,69 +28,102 @@
     </div>
 
     <div v-if="!collapsed" class="liturgy-panel-body">
-      <div v-if="items.length === 0" class="liturgy-empty">
-        <LjIcon :icon="ICONS.CALENDAR.BLANK" size="32" class="liturgy-empty-icon" />
-        <span>{{ $t("shell.liturgy_empty") }}</span>
-        <button type="button" class="liturgy-add-btn" @click="openLiturgy">
-          <LjIcon :icon="ICONS.ACTIONS.ADD" size="14" />
+      <LjEmpty
+        v-if="items.length === 0"
+        :icon="ICONS.CALENDAR.BLANK"
+        :title="$t('shell.liturgy_empty')"
+      >
+        <LjButton size="sm" variant="primary" :icon="ICONS.ACTIONS.ADD" @click="openLiturgy">
           {{ $t("shell.add_item") }}
-        </button>
-      </div>
+        </LjButton>
+      </LjEmpty>
 
       <ul v-else class="liturgy-items">
-        <li
-          v-for="item in items"
-          :key="item.id"
-          class="liturgy-item"
-          :class="{ 'liturgy-item--checked': isChecked(item) }"
-          :style="{ '--item-color': item.cor || '#4F0000' }"
-          @click="executeItem(item)"
-          @dblclick="openLiturgy"
-        >
-          <span class="liturgy-item-bar" />
-          <LjIcon :icon="iconForType(item.tipo)" size="14" class="liturgy-item-icon" />
-          <span class="liturgy-item-content">
-            <span class="liturgy-item-title lj-u-truncate">
-              {{ item.item || item.subitem || "—" }}
-            </span>
-            <span v-if="item.subitem && item.subitem !== item.item" class="liturgy-item-sub">
-              {{ item.subitem }}
-            </span>
-          </span>
-          <span v-if="Number(item.duration) > 0" class="liturgy-item-duration">
-            {{ item.duration }}m
-          </span>
-        </li>
+        <template v-for="item in items" :key="item.id">
+          <!-- Bloco é rótulo de trecho do culto, não item executável. -->
+          <li
+            v-if="item.tipo === LiturgyItemTypeEnum.BLOCO"
+            class="liturgy-bloco"
+            :style="corDoItem(item)"
+          >
+            <span class="liturgy-bloco-name lj-u-truncate">{{ item.item }}</span>
+            <span v-if="item.time" class="liturgy-bloco-time">{{ item.time }}</span>
+          </li>
+
+          <li
+            v-else
+            class="liturgy-item-wrap"
+            :class="{ 'liturgy-item-wrap--nested': item.blocoId }"
+            :style="corDoBloco(item)"
+          >
+            <button
+              type="button"
+              class="liturgy-item"
+              :class="{ 'liturgy-item--checked': isChecked(item) }"
+              :style="corDoItem(item)"
+              :title="tooltipDoItem(item)"
+              @click="executar(item)"
+            >
+              <span class="liturgy-item-bar" />
+              <LjIcon :icon="$liturgy.iconForItem(item)" size="14" class="liturgy-item-icon" />
+              <span class="liturgy-item-content">
+                <span class="liturgy-item-title lj-u-truncate">
+                  {{ item.item || item.subitem || "—" }}
+                </span>
+                <span v-if="item.subitem && item.subitem !== item.item" class="liturgy-item-sub">
+                  {{ item.subitem }}
+                </span>
+              </span>
+              <span v-if="item.time" class="liturgy-item-meta">{{ item.time }}</span>
+              <span v-else-if="Number(item.duration) > 0" class="liturgy-item-meta">
+                {{ item.duration }}min
+              </span>
+            </button>
+          </li>
+        </template>
       </ul>
     </div>
+
+    <MusicSpotlight v-model="escolhaAberta" mode="pick" @pick="onMusicaEscolhida" />
   </aside>
 </template>
 
 <script setup>
-import { LjIcon } from "@/components/ui";
+import { LjButton, LjEmpty, LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, onMounted } from "vue";
-import Liturgy from "@/helpers/Liturgy";
+import { useI18n } from "vue-i18n";
+import MusicSpotlight from "@/components/MusicSpotlight.vue";
+import $liturgy from "@/helpers/Liturgy";
 import $userdata from "@/helpers/UserData";
 import $modules from "@/helpers/Modules";
-import $media from "@/composables/useMedia";
+import { KEYS } from "@/constants/UserDataKeys";
+import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
+import { useLiturgyExecution } from "@/modules/liturgy/composables/useLiturgyExecution";
+import { prepararAgenda } from "@/modules/liturgy/agenda";
 
-const TYPE_ICONS = {
-  musica: ICONS.MUSIC.MUSIC,
-  anotacao: ICONS.UI.NOTE_TEXT_OUTLINE,
-  arquivo: ICONS.UI.FILE,
-  site: ICONS.UI.WEB,
-  categoria: ICONS.UI.FOLDER,
-  itensAgendados: ICONS.CALENDAR.CLOCK,
-};
+const { t } = useI18n();
+
+/**
+ * A execução vem do módulo Liturgia — a mesma função que a tela cheia usa.
+ * O painel antes tinha uma cópia reduzida que só sabia tocar música e abrir
+ * site: anúncio, overlay, som de fundo, vídeo, arquivo e item agendado caíam
+ * todos em "abre a tela de liturgia", o que no meio de um culto é devolver o
+ * trabalho para o operador.
+ */
+const { executeItem, playMusic } = useLiturgyExecution();
 
 const collapsed = ref(false);
+const escolhaAberta = ref(false);
+const itemEmEscolha = ref(null);
 
-const items = computed(() => Liturgy.list());
+// Mesma preparação da tela cheia: os itens agrupados sob o bloco e com a
+// hora calculada. Sem ela o painel mostrava outra ordem e nenhum horário.
+const items = computed(() => prepararAgenda($liturgy.list()));
 
 const totals = computed(() => {
   const arr = items.value;
-  const count = arr.length;
+  const count = arr.filter((i) => i.tipo !== LiturgyItemTypeEnum.BLOCO).length;
   const totalMin = arr.reduce((s, i) => s + (Number(i.duration) || 0), 0);
   let duration = "—";
   if (totalMin > 0) {
@@ -103,43 +136,73 @@ const totals = computed(() => {
 
 function toggleCollapsed() {
   collapsed.value = !collapsed.value;
-  $userdata.set("shell.liturgy_collapsed", collapsed.value);
-}
-
-function iconForType(tipo) {
-  return TYPE_ICONS[tipo] || ICONS.UI.DOT_SMALL;
+  $userdata.set(KEYS.SHELL.LITURGY_COLLAPSED, collapsed.value);
 }
 
 function isChecked(item) {
-  return Liturgy.isCheckedToday(item);
+  return $liturgy.isCheckedToday(item);
+}
+
+/** A cor do item é dado do operador; entra como variável, não como token. */
+function corDoItem(item) {
+  return item.cor ? { "--item-color": item.cor } : {};
+}
+
+/** Cor do bloco a que o item pertence, para a faixa tonal de fundo. */
+function corDoBloco(item) {
+  if (!item.blocoId) return {};
+  const bloco = items.value.find(
+    (i) => i.tipo === LiturgyItemTypeEnum.BLOCO && i.id === item.blocoId
+  );
+  return bloco?.cor ? { "--bloco-color": bloco.cor } : {};
+}
+
+/** Música ainda sem hino definido — o item existe, o dado não. */
+function precisaEscolherMusica(item) {
+  return item.tipo === LiturgyItemTypeEnum.MUSICA && (item.escolha || !item.id_music);
+}
+
+function tooltipDoItem(item) {
+  const nome = item.item || item.subitem || "";
+  return precisaEscolherMusica(item) ? `${nome} — ${t("shell.liturgy_pick_music")}` : nome;
 }
 
 function openLiturgy() {
   $modules.open("liturgy");
 }
 
-function executeItem(item) {
-  if (item.tipo === "musica" && item.id_music) {
-    try {
-      $media.open({
-        id_music: item.id_music,
-        //TODO criar uma opção noas configuraçÕes para o usuario escolher o modo de audio a ser executado (cantado, PB ou sem audio)
-        mode: item.subtipo === "ja" ? "audio" : "audio",
-      });
-    } catch (err) {
-      console.error("[Liturgy] Falha ao abrir música:", err);
-    }
+function marcar(item) {
+  if ($userdata.get(KEYS.MODULES.LITURGY.MARK_ON_ACCESS, true) === false) return;
+  if ($liturgy.isCheckedToday(item)) return;
+  $liturgy.toggleChecked(item.id);
+}
+
+function executar(item) {
+  if (precisaEscolherMusica(item)) {
+    itemEmEscolha.value = item;
+    escolhaAberta.value = true;
     return;
   }
-  if (item.tipo === "site" && item.url) {
-    if (typeof window !== "undefined") window.open(item.url, "_blank", "noopener,noreferrer");
-    return;
-  }
-  openLiturgy();
+  executeItem(item);
+  marcar(item);
+}
+
+/**
+ * Hino escolhido na hora: toca sem gravar no item. A liturgia guarda a
+ * intenção ("um hino aqui"), e qual hino foi cantado neste domingo é decisão do
+ * culto — quem quiser fixar edita o item na tela do módulo.
+ */
+function onMusicaEscolhida(music) {
+  const item = itemEmEscolha.value;
+  itemEmEscolha.value = null;
+  const id = Number(music.id_music);
+  if (!item || !Number.isFinite(id)) return;
+  playMusic({ ...item, id_music: id, musica: id, escolha: false }, "sung");
+  marcar(item);
 }
 
 onMounted(() => {
-  collapsed.value = $userdata.get("shell.liturgy_collapsed", false);
+  collapsed.value = $userdata.get(KEYS.SHELL.LITURGY_COLLAPSED, false);
 });
 </script>
 
@@ -177,8 +240,8 @@ onMounted(() => {
 }
 
 .liturgy-icon-btn {
-  width: 22px;
-  height: 22px;
+  width: var(--lj-ui-h-sm);
+  height: var(--lj-ui-h-sm);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -196,6 +259,12 @@ onMounted(() => {
 
 .liturgy-icon-btn:hover {
   background: var(--lj-hover-bg);
+  opacity: 1;
+}
+
+.liturgy-icon-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--lj-ui-focus);
   opacity: 1;
 }
 
@@ -229,44 +298,7 @@ onMounted(() => {
   border-radius: var(--lj-radius-xs);
 }
 
-/* Empty state */
-.liturgy-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 32px var(--lj-space-5);
-  text-align: center;
-  font-size: var(--lj-text-base);
-  color: var(--lj-text-muted);
-  gap: var(--lj-space-1);
-}
-
-.liturgy-empty-icon {
-  margin-bottom: var(--lj-space-4);
-}
-
-.liturgy-add-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--lj-space-1);
-  margin-top: var(--lj-space-5);
-  padding: var(--lj-space-2) var(--lj-space-5);
-  background: var(--lj-navy);
-  color: var(--lj-white);
-  border: none;
-  border-radius: var(--lj-radius-sm);
-  font-size: var(--lj-text-sm);
-  cursor: pointer;
-  transition: filter var(--lj-transition-fast);
-  font-family: inherit;
-}
-
-.liturgy-add-btn:hover {
-  filter: brightness(1.1);
-}
-
-/* Items */
+/* Itens */
 .liturgy-items {
   list-style: none;
   margin: 0;
@@ -276,27 +308,75 @@ onMounted(() => {
   gap: var(--lj-space-1);
 }
 
+/* Bloco: rótulo do trecho, sem afordância de clique. */
+.liturgy-bloco {
+  display: flex;
+  align-items: baseline;
+  gap: var(--lj-space-3);
+  margin-top: var(--lj-space-4);
+  padding: var(--lj-space-2) var(--lj-space-2) var(--lj-space-1);
+  border-bottom: 1px solid var(--item-color, var(--lj-surface-border-strong));
+  color: var(--item-color, var(--lj-text-muted));
+  font-size: var(--lj-text-xs);
+  font-weight: var(--lj-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  user-select: none;
+}
+
+.liturgy-bloco:first-child {
+  margin-top: 0;
+}
+
+.liturgy-bloco-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.liturgy-bloco-time {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+
+/* Pertencer ao bloco é dito pela faixa tonal na cor dele — a mesma leitura da
+   tela cheia. Um recuo aqui tiraria o item de bloco da coluna do item solto. */
+.liturgy-item-wrap--nested {
+  padding: 1px var(--lj-space-2);
+  margin: 0 calc(var(--lj-space-2) * -1);
+  background: color-mix(in srgb, var(--bloco-color, var(--lj-surface-border)) 8%, transparent);
+}
+
 .liturgy-item {
   position: relative;
   display: flex;
   align-items: center;
   gap: var(--lj-space-3);
+  width: 100%;
   padding: var(--lj-space-2) var(--lj-space-4) var(--lj-space-2) var(--lj-space-6);
   background: var(--lj-surface-bg);
   border: 1px solid var(--lj-surface-border);
   border-radius: var(--lj-radius-sm);
+  color: inherit;
+  font-family: inherit;
+  font-size: var(--lj-text-base);
+  text-align: left;
   cursor: pointer;
   transition:
     background var(--lj-transition-fast),
     border-color var(--lj-transition-fast),
     transform 0.05s;
-  font-size: var(--lj-text-base);
   user-select: none;
 }
 
 .liturgy-item:hover {
   background: var(--lj-surface-bg-hover);
   border-color: var(--lj-surface-border-strong);
+}
+
+.liturgy-item:focus-visible {
+  outline: none;
+  box-shadow: var(--lj-ui-focus);
+  border-color: var(--lj-ui-accent);
 }
 
 .liturgy-item:active {
@@ -309,7 +389,7 @@ onMounted(() => {
   top: var(--lj-space-2);
   bottom: var(--lj-space-2);
   width: 3px;
-  background: var(--item-color);
+  background: var(--item-color, var(--lj-surface-border-strong));
   border-radius: 0 var(--lj-radius-xs) var(--lj-radius-xs) 0;
 }
 
@@ -339,7 +419,7 @@ onMounted(() => {
   line-height: 1.2;
 }
 
-.liturgy-item-duration {
+.liturgy-item-meta {
   font-size: var(--lj-text-xs);
   font-variant-numeric: tabular-nums;
   opacity: 0.7;

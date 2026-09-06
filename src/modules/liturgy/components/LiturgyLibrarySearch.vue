@@ -67,25 +67,10 @@
  * fundo, …). Filtro sem acentos + navegação por teclado, no padrão dos
  * demais dialogs de busca do módulo.
  */
+import { useLiturgyI18n } from "../i18n";
 import { computed, nextTick, ref, watch } from "vue";
-import { useI18n } from "vue-i18n";
 import { LjButton, LjDialog, LjField, LjIcon, LjInput } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
-import pt from "../lang/pt.json";
-import es from "../lang/es.json";
-
-const TRANSLATIONS: Record<string, Record<string, unknown>> = { pt, es };
-
-function _t(key: string, locale: string): string {
-  const dict = TRANSLATIONS[locale] ?? TRANSLATIONS.pt;
-  const path = key.split(".");
-  let cur: unknown = dict;
-  for (const k of path) {
-    if (cur && typeof cur === "object" && k in cur) cur = (cur as Record<string, unknown>)[k];
-    else return key;
-  }
-  return typeof cur === "string" ? cur : key;
-}
 
 export interface LibrarySearchItem {
   id: string;
@@ -117,10 +102,7 @@ const emit = defineEmits<{
   pick: [item: LibrarySearchItem];
 }>();
 
-const { locale } = useI18n();
-function t(key: string): string {
-  return _t(key, locale.value);
-}
+const { t } = useLiturgyI18n();
 
 const query = ref("");
 const activeIndex = ref(0);

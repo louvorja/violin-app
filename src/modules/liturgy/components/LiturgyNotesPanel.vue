@@ -14,28 +14,32 @@
       :data-placeholder="t('notes.placeholder')"
       @input="onEditorInput"
       @blur="onEditorInput"
+      @keyup="guardarSelecao"
+      @mouseup="guardarSelecao"
     />
 
     <div class="lit-notes-toolbar">
-      <select
-        class="lit-tb-select"
-        :title="t('notes.font')"
-        :value="fontName"
-        @change="
-          exec('fontName', ($event.target as HTMLSelectElement).value);
-          fontName = ($event.target as HTMLSelectElement).value;
-        "
-      >
-        <option v-for="f in FONTS" :key="f" :value="f">{{ f }}</option>
-      </select>
-      <select
-        class="lit-tb-select lit-tb-select--num"
-        :title="t('notes.size')"
-        :value="fontSize"
-        @change="changeSize(($event.target as HTMLSelectElement).value)"
-      >
-        <option v-for="s in SIZES" :key="s" :value="s">{{ s }}</option>
-      </select>
+      <!-- O invólucro existe porque o Vue não carimba o atributo de escopo no
+           gatilho do LjSelect — ele é emitido lá dentro, pela Reka. Sem ele, a
+           largura declarada aqui não casa com nada e o campo estica na barra. -->
+      <span class="lit-tb-font">
+        <LjSelect
+          v-model="fontName"
+          size="sm"
+          :items="fontItems"
+          :aria-label="t('notes.font')"
+          @update:model-value="exec('fontName', String($event))"
+        />
+      </span>
+      <span class="lit-tb-size">
+        <LjSelect
+          v-model="fontSize"
+          size="sm"
+          :items="sizeItems"
+          :aria-label="t('notes.size')"
+          @update:model-value="changeSize(String($event))"
+        />
+      </span>
 
       <div class="lit-tb-sep" />
 
@@ -89,7 +93,7 @@
         />
       </label>
       <label class="lit-tb-color" :title="t('notes.bg_color')">
-        <span class="lit-tb-color-icon" style="background: #ffeb3b">A</span>
+        <span class="lit-tb-color-icon" :style="{ background: bgColor }">A</span>
         <input
           type="color"
           :value="bgColor"
@@ -158,25 +162,10 @@
 </template>
 
 <script setup lang="ts">
-import { LjIcon } from "@/components/ui";
+import { useLiturgyI18n } from "../i18n";
+import { LjIcon, LjSelect } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, watch, onMounted } from "vue";
-import { useI18n } from "vue-i18n";
-import pt from "../lang/pt.json";
-import es from "../lang/es.json";
-
-const TRANSLATIONS: Record<string, Record<string, unknown>> = { pt, es };
-
-function _t(key: string, locale: string): string {
-  const dict = TRANSLATIONS[locale] ?? TRANSLATIONS.pt;
-  const path = key.split(".");
-  let cur: unknown = dict;
-  for (const k of path) {
-    if (cur && typeof cur === "object" && k in cur) cur = (cur as Record<string, unknown>)[k];
-    else return key;
-  }
-  return typeof cur === "string" ? cur : key;
-}
 
 const props = withDefaults(
   defineProps<{
@@ -188,29 +177,63 @@ const props = withDefaults(
   { dayLabel: "", noteHtml: "", totalDuration: 0 }
 );
 
-const { locale } = useI18n();
-const t = (key: string) => _t(key, locale.value);
+const { t } = useLiturgyI18n();
 
 const editor = ref<HTMLElement | null>(null);
 
 const FONTS = ["Tahoma", "Arial", "Times New Roman", "Verdana", "Georgia", "Courier New"];
 const SIZES = [8, 10, 12, 14, 16, 18, 20, 24, 28, 32];
 
+const fontItems = FONTS.map((f) => ({ value: f, label: f }));
+const sizeItems = SIZES.map((s) => ({ value: String(s), label: String(s) }));
+
 const fontName = ref("Tahoma");
-const fontSize = ref<number | string>(12);
+const fontSize = ref("12");
+/** Cores do texto que o operador escreve — dado dele, não token do tema. */
 const textColor = ref("#000000");
 const bgColor = ref("#ffeb3b");
 
-function exec(cmd: string, value?: string) {
+/**
+ * `execCommand` age sobre a seleção corrente do documento. Os botões da barra
+ * usam `@mousedown.prevent` para nunca tirar o cursor de dentro do editor, mas
+ * o seletor de fonte abre um painel que recebe foco de verdade, e o seletor de
+ * cor abre a janela do sistema: nos dois casos a seleção do operador se perde
+ * no caminho e a formatação cairia no lugar errado — ou em lugar nenhum.
+ * Guardamos o trecho antes de sair e o devolvemos antes de formatar.
+ */
+let selecaoGuardada: Range | null = null;
+
+function guardarSelecao() {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || !editor.value) return;
+  const range = sel.getRangeAt(0);
+  if (editor.value.contains(range.commonAncestorContainer)) {
+    selecaoGuardada = range.cloneRange();
+  }
+}
+
+function restaurarSelecao() {
   if (!editor.value) return;
   editor.value.focus();
+  if (!selecaoGuardada) return;
+  const sel = window.getSelection();
+  sel?.removeAllRanges();
+  sel?.addRange(selecaoGuardada);
+}
+
+function exec(cmd: string, value?: string) {
+  if (!editor.value) return;
+  restaurarSelecao();
   // execCommand é deprecated mas continua funcionando em Electron/Chrome para edição local.
   document.execCommand(cmd, false, value);
+  guardarSelecao();
   emitInput();
 }
 
 function changeSize(v: string) {
   fontSize.value = v;
+  if (!editor.value) return;
+  restaurarSelecao();
   // execCommand fontSize aceita 1-7. Usamos um span com CSS via styleWithCSS.
   document.execCommand("styleWithCSS", false, "true");
   document.execCommand("fontSize", false, "7");
@@ -222,6 +245,7 @@ function changeSize(v: string) {
     span.innerHTML = f.innerHTML;
     f.replaceWith(span);
   });
+  guardarSelecao();
   emitInput();
 }
 
@@ -259,6 +283,7 @@ watch(() => props.noteHtml, syncFromProp);
 <style scoped>
 .lit-notes-panel {
   width: 320px;
+  min-width: 0;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -270,17 +295,17 @@ watch(() => props.noteHtml, syncFromProp);
 .lit-notes-header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 10px;
-  font-weight: 500;
-  font-size: 12px;
+  gap: var(--lj-space-3);
+  padding: var(--lj-space-4) var(--lj-space-5);
+  font-weight: var(--lj-weight-medium);
+  font-size: var(--lj-text-base);
   border-bottom: 1px solid var(--lj-surface-divider);
   background: rgba(var(--lj-on-surface-ch), 0.04);
   flex-shrink: 0;
 }
 .lit-notes-day {
-  font-size: 11px;
-  color: rgba(var(--lj-on-surface-ch), 0.7);
+  font-size: var(--lj-text-sm);
+  color: var(--lj-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -288,11 +313,11 @@ watch(() => props.noteHtml, syncFromProp);
 .lit-notes-area {
   flex: 1;
   margin: 0;
-  padding: 10px 12px;
+  padding: var(--lj-space-5);
   border: 0;
   background: var(--lj-surface-bg);
   color: var(--lj-text);
-  font-size: 13px;
+  font-size: var(--lj-text-md);
   font-family: Tahoma, sans-serif;
   outline: none;
   line-height: 1.5;
@@ -301,7 +326,7 @@ watch(() => props.noteHtml, syncFromProp);
 }
 .lit-notes-area:empty::before {
   content: attr(data-placeholder);
-  color: rgba(var(--lj-on-surface-ch), 0.4);
+  color: var(--lj-text-subtle);
   pointer-events: none;
 }
 
@@ -309,53 +334,49 @@ watch(() => props.noteHtml, syncFromProp);
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 2px;
-  padding: 4px 6px;
+  gap: var(--lj-space-1);
+  padding: var(--lj-space-2) var(--lj-space-3);
   border-top: 1px solid var(--lj-surface-divider);
   background: rgba(var(--lj-on-surface-ch), 0.03);
   flex-shrink: 0;
 }
 
-.lit-tb-select {
-  height: 24px;
-  padding: 0 4px;
-  border: 1px solid var(--lj-surface-border-strong);
-  border-radius: var(--lj-radius-xs);
-  background: var(--lj-surface-bg);
-  color: var(--lj-text);
-  font-size: 11px;
-  font-family: inherit;
-  outline: none;
-  cursor: pointer;
+.lit-tb-font :deep(.lj-select) {
+  width: 116px;
 }
-.lit-tb-select--num {
-  width: 50px;
+.lit-tb-size :deep(.lj-select) {
+  width: 60px;
 }
 
 .lit-tb-sep {
   width: 1px;
-  height: 16px;
+  height: var(--lj-space-6);
   background: var(--lj-surface-border-strong);
-  margin: 0 4px;
+  margin: 0 var(--lj-space-2);
 }
 
 .lit-tb-btn {
   width: 26px;
-  height: 24px;
+  height: var(--lj-ui-h-sm);
   border: 1px solid transparent;
   border-radius: var(--lj-radius-xs);
   background: transparent;
   color: var(--lj-text);
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--lj-text-base);
   font-family: inherit;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 .lit-tb-btn:hover {
-  background: rgba(var(--lj-on-surface-ch), 0.08);
+  background: var(--lj-surface-bg-hover);
   border-color: var(--lj-surface-border-strong);
+}
+.lit-tb-btn:focus-visible,
+.lit-tb-color:focus-within {
+  outline: none;
+  box-shadow: var(--lj-ui-focus);
 }
 .lit-tb-btn--bold {
   font-weight: 700;
@@ -370,7 +391,7 @@ watch(() => props.noteHtml, syncFromProp);
 .lit-tb-color {
   position: relative;
   width: 26px;
-  height: 24px;
+  height: var(--lj-ui-h-sm);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -380,15 +401,15 @@ watch(() => props.noteHtml, syncFromProp);
   overflow: hidden;
 }
 .lit-tb-color:hover {
-  background: rgba(var(--lj-on-surface-ch), 0.08);
+  background: var(--lj-surface-bg-hover);
   border-color: var(--lj-surface-border-strong);
 }
 .lit-tb-color-icon {
-  font-weight: 700;
-  font-size: 12px;
+  font-weight: var(--lj-weight-bold);
+  font-size: var(--lj-text-base);
   line-height: 1;
   pointer-events: none;
-  padding: 0 2px;
+  padding: 0 var(--lj-space-1);
 }
 .lit-tb-color input[type="color"] {
   position: absolute;
@@ -400,10 +421,10 @@ watch(() => props.noteHtml, syncFromProp);
 .lit-notes-footer {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  font-size: 11px;
-  color: rgba(var(--lj-on-surface-ch), 0.65);
+  gap: var(--lj-space-3);
+  padding: var(--lj-space-3) var(--lj-space-5);
+  font-size: var(--lj-text-sm);
+  color: var(--lj-text-muted);
   border-top: 1px solid var(--lj-surface-divider);
   background: rgba(var(--lj-on-surface-ch), 0.03);
   flex-shrink: 0;

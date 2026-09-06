@@ -12,6 +12,7 @@
         <LjIcon
           :icon="i === todayIndex ? ICONS.CALENDAR.STAR : ICONS.CALENDAR.BLANK_SOLID"
           size="16"
+          class="lit-daytab__icon"
         />
         {{ label }}
       </span>
@@ -43,8 +44,8 @@ void props;
 .lit-daytabs {
   display: flex;
   align-items: stretch;
-  gap: 4px;
-  padding: 6px 8px;
+  gap: var(--lj-space-2);
+  padding: var(--lj-space-3) var(--lj-space-4);
   background: var(--lj-surface-bg);
   border-bottom: 1px solid var(--lj-surface-border);
   flex-shrink: 0;
@@ -56,28 +57,34 @@ void props;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  min-height: 30px;
-  padding: 4px 10px;
+  gap: var(--lj-space-1);
+  min-height: var(--lj-ui-h-lg);
+  padding: var(--lj-space-2) var(--lj-space-5);
   background: transparent;
-  border: 1px solid var(--lj-surface-border-strong);
-  border-radius: var(--lj-radius-xs);
+  border: var(--lj-ui-border);
+  border-radius: var(--lj-ui-radius);
   cursor: pointer;
   color: var(--lj-text);
-  font-size: 12px;
+  font-size: var(--lj-text-base);
   transition:
-    background 0.12s,
-    border 0.12s;
+    background var(--lj-transition-normal),
+    border var(--lj-transition-normal);
 }
 .lit-daytab:hover {
   background: rgba(var(--lj-on-surface-ch), 0.06);
 }
 .lit-daytab.is-active {
-  background: rgba(var(--lj-on-surface-ch), 0.1);
-  border-color: rgba(var(--lj-navy-ch), 0.6);
-  font-weight: 600;
+  background: var(--lj-ui-accent-soft);
+  border-color: var(--lj-ui-accent);
+  color: var(--lj-ui-accent-text);
+  font-weight: var(--lj-weight-semibold);
 }
-.lit-daytab.is-today :deep(.v-icon) {
-  color: #f7c948;
+
+.lit-daytab:focus-visible {
+  outline: none;
+  box-shadow: var(--lj-ui-focus);
+}
+.lit-daytab.is-today .lit-daytab__icon {
+  color: var(--lj-orange);
 }
 </style>

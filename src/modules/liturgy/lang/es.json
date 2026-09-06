@@ -48,7 +48,9 @@
     "toggle_lock": "Modo presentación",
     "toggle_notes": "Anotaciones por día",
     "prev_item": "Ítem anterior",
-    "next_item": "Siguiente ítem"
+    "next_item": "Siguiente ítem",
+    "expand": "Expandir",
+    "collapse": "Contraer"
   },
   "types": {
     "anotacao": "Anotación",
@@ -237,7 +239,16 @@
     "duplicate_prefix": "Copia de",
     "duplicate_prefix_n": "Copia ({n}) de",
     "duplicate_success": "Liturgia duplicada como \"{name}\".",
-    "delete_confirm": "Eliminar la liturgia \"<b>{name}</b>\"?"
+    "delete_confirm": "Eliminar la liturgia \"<b>{name}</b>\"?",
+    "weekday_sunday": "Domingo",
+    "weekday_monday": "Lunes",
+    "weekday_tuesday": "Martes",
+    "weekday_wednesday": "Miércoles",
+    "weekday_thursday": "Jueves",
+    "weekday_friday": "Viernes",
+    "weekday_saturday": "Sábado",
+    "manage_success": "Liturgia actualizada.",
+    "import_invalid": "Archivo inválido."
   },
   "alerts": {
     "media_not_found": "Ítem no encontrado en la biblioteca. Puede haber sido eliminado."
@@ -262,12 +273,5 @@
     "deactivate": "Desactivar",
     "link_overlay": "Vincular Overlay",
     "linked_overlay": "Overlay vinculado"
-  },
-  "library.weekday_sunday": "Domingo",
-  "library.weekday_monday": "Lunes",
-  "library.weekday_tuesday": "Martes",
-  "library.weekday_wednesday": "Miércoles",
-  "library.weekday_thursday": "Jueves",
-  "library.weekday_friday": "Viernes",
-  "library.weekday_saturday": "Sábado"
+  }
 }

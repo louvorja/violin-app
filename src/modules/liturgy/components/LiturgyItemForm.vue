@@ -422,10 +422,8 @@
 </template>
 
 <script setup lang="ts">
+import { useLiturgyI18n } from "../i18n";
 import { ref, watch, computed, nextTick } from "vue";
-import { useI18n } from "vue-i18n";
-import pt from "../lang/pt.json";
-import es from "../lang/es.json";
 import {
   LjButton,
   LjCheckbox,
@@ -450,19 +448,6 @@ import type { LiturgyItem, LiturgyMusicItem, ScheduledCategory } from "@/types/L
 import type { SearchMusicItem } from "@/types/Music";
 import type { OverlaySlot } from "@/types/Overlay";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
-
-const TRANSLATIONS: Record<string, Record<string, unknown>> = { pt, es };
-
-function _t(key: string, locale: string): string {
-  const dict = TRANSLATIONS[locale] ?? TRANSLATIONS.pt;
-  const path = key.split(".");
-  let cur: unknown = dict;
-  for (const k of path) {
-    if (cur && typeof cur === "object" && k in cur) cur = (cur as Record<string, unknown>)[k];
-    else return key;
-  }
-  return typeof cur === "string" ? cur : key;
-}
 
 const props = withDefaults(
   defineProps<{
@@ -500,8 +485,7 @@ const props = withDefaults(
 
 defineEmits<{ "update:modelValue": [value: boolean] }>();
 
-const { locale } = useI18n();
-const t = (key: string) => _t(key, locale.value);
+const { t } = useLiturgyI18n();
 
 const isEditing = computed(() => props.editIndex >= 0);
 

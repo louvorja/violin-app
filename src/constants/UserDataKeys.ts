@@ -295,6 +295,7 @@ export const KEYS = {
     BIBLE_DOWNLOADED_VERSIONS: `${STORAGE}.bible_downloaded_versions`,
   },
   SHELL: {
+    LITURGY_COLLAPSED: "shell.liturgy_collapsed",
     IS_DARK: "is_dark",
     IS_DEV: "is_dev",
     IS_MOBILE: "is_mobile",

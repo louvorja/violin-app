@@ -1,18 +1,21 @@
 <template>
   <div class="liturgy-tl-area" :class="{ 'liturgy-tl-area--locked': locked }">
     <div v-if="items.length === 0" class="liturgy-tl-empty">
-      <LjIcon :icon="ICONS.LITURGY.SCRIPT" size="80" class="lj-u-faded" />
-      <div class="liturgy-tl-empty-title">{{ t("data.empty") }}</div>
-      <div class="liturgy-tl-empty-hint">{{ t("data.empty_hint") }}</div>
-      <button
-        v-if="!locked"
-        class="lit-btn lit-btn--primary lit-btn--add"
-        data-testid="liturgy-add-item"
-        @click="openItemDialog()"
+      <LjEmpty
+        :icon="ICONS.LITURGY.SCRIPT"
+        :title="t('data.empty')"
+        :description="t('data.empty_hint')"
       >
-        <LjIcon :icon="ICONS.ACTIONS.ADD" size="16" />
-        <span>{{ t("actions.add") }}</span>
-      </button>
+        <LjButton
+          v-if="!locked"
+          variant="primary"
+          :icon="ICONS.ACTIONS.ADD"
+          data-testid="liturgy-add-item"
+          @click="openItemDialog()"
+        >
+          {{ t("actions.add") }}
+        </LjButton>
+      </LjEmpty>
     </div>
     <div v-else class="liturgy-tl-scroll">
       <draggable
@@ -68,7 +71,9 @@
                 </button>
                 <button
                   class="tl-bloco-action tl-bloco-collapse"
-                  :title="collapsedBlocos.has(element.id) ? 'Expandir' : 'Colapsar'"
+                  :title="
+                    collapsedBlocos.has(element.id) ? t('actions.expand') : t('actions.collapse')
+                  "
                   @click.stop="toggleBlocoCollapse(element.id)"
                 >
                   <LjIcon
@@ -89,7 +94,7 @@
                   class="tl-meta-collapse"
                 >
                   <div class="tl-item-meta">
-                    <div class="tl-time">{{ element.time || "-:-" }}</div>
+                    <div v-if="element.time" class="tl-time">{{ element.time }}</div>
                     <div class="tl-line" />
                   </div>
                 </div>
@@ -127,30 +132,15 @@
 </template>
 
 <script setup lang="ts">
-import { LjIcon } from "@/components/ui";
+import { useLiturgyI18n } from "../i18n";
+import { LjButton, LjEmpty, LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref } from "vue";
-import { useI18n } from "vue-i18n";
 import draggable from "vuedraggable";
 import LiturgyItemComponent from "./LiturgyItem.vue";
-import pt from "../lang/pt.json";
-import es from "../lang/es.json";
 import type { LiturgyItem } from "@/types/Liturgy";
 import type { OverlaySlot } from "@/types/Overlay";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
-
-const TRANSLATIONS: Record<string, Record<string, unknown>> = { pt, es };
-
-function _t(key: string, locale: string): string {
-  const dict = TRANSLATIONS[locale] ?? TRANSLATIONS.pt;
-  const path = key.split(".");
-  let cur: unknown = dict;
-  for (const k of path) {
-    if (cur && typeof cur === "object" && k in cur) cur = (cur as Record<string, unknown>)[k];
-    else return key;
-  }
-  return typeof cur === "string" ? cur : key;
-}
 
 const props = withDefaults(
   defineProps<{
@@ -180,8 +170,7 @@ const props = withDefaults(
   }
 );
 
-const { locale } = useI18n();
-const t = (key: string) => _t(key, locale.value);
+const { t } = useLiturgyI18n();
 
 const draggingBlocoId = ref<string | null>(null);
 const collapsedBlocos = ref(new Set<string>());
@@ -248,28 +237,16 @@ function onDragMove(evt: Record<string, unknown>): boolean | void {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 8px 0;
+  padding: var(--lj-space-4) 0;
 }
 
-/* ── Empty state ── */
+/* ── Estado vazio ── */
 .liturgy-tl-empty {
   flex: 1;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  text-align: center;
-  padding: 40px;
-}
-.liturgy-tl-empty-title {
-  font-size: 18px;
-  font-weight: 500;
-  margin-top: 12px;
-}
-.liturgy-tl-empty-hint {
-  font-size: 13px;
-  color: rgba(var(--lj-on-surface-ch), 0.6);
-  margin-top: 4px;
+  padding: var(--lj-space-8);
 }
 
 /* ── Draggable list ── */
@@ -277,7 +254,7 @@ function onDragMove(evt: Record<string, unknown>): boolean | void {
   display: flex;
   flex-direction: column;
   gap: 0;
-  padding: 0 8px;
+  padding: 0 var(--lj-space-4);
 }
 
 /* ── Item wrapper ── */
@@ -292,9 +269,11 @@ function onDragMove(evt: Record<string, unknown>): boolean | void {
 }
 
 /* ── Item nested inside a Bloco ── */
+/* Pertencer ao bloco é dito pela faixa tonal na cor dele, que cobre a linha
+   inteira. Um recuo por cima disso desalinharia a coluna dos cartões: o item
+   solto, que não tem faixa, ficaria 12px à esquerda de todos os outros. */
 .tl-item--in-bloco {
-  margin-left: 24px;
-  padding: 4px 0 4px 12px;
+  padding: var(--lj-space-2) 0;
   background: color-mix(in srgb, var(--bloco-color, var(--lj-surface-border)) 6%, transparent);
 }
 .tl-item--bloco-collapsed {
@@ -339,18 +318,18 @@ function onDragMove(evt: Record<string, unknown>): boolean | void {
   }
 }
 .tl-time {
-  font-size: 14px;
-  font-weight: 800;
-  color: var(--lj-navy);
+  font-size: var(--lj-text-lg);
+  font-weight: var(--lj-weight-bold);
+  color: var(--lj-ui-accent-text);
   text-align: center;
-  margin-bottom: 4px;
+  margin-bottom: var(--lj-space-2);
   line-height: 1;
 }
 .tl-line {
   width: 2px;
   flex: 1;
   background: var(--lj-divider);
-  min-height: 12px;
+  min-height: var(--lj-space-5);
 }
 .tl-item--checked .tl-time {
   text-decoration: line-through;
@@ -361,16 +340,16 @@ function onDragMove(evt: Record<string, unknown>): boolean | void {
 .tl-card {
   flex: 1;
   min-width: 0;
-  padding: 4px 10px;
+  padding: var(--lj-space-2) var(--lj-space-5);
 }
 
 /* ── Bloco (divider style) ── */
 .tl-bloco {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin: 16px 0 4px 0;
-  padding: 6px 12px;
+  gap: var(--lj-space-5);
+  margin: var(--lj-space-6) 0 var(--lj-space-2);
+  padding: var(--lj-space-3) var(--lj-space-5);
   cursor: grab;
   user-select: none;
   background: color-mix(in srgb, var(--cat-color, var(--lj-divider)) 10%, transparent);
@@ -388,20 +367,20 @@ function onDragMove(evt: Record<string, unknown>): boolean | void {
 .tl-bloco-text {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 15px;
-  font-weight: 700;
+  gap: var(--lj-space-4);
+  font-size: var(--lj-text-lg);
+  font-weight: var(--lj-weight-bold);
   color: var(--cat-color, var(--lj-text));
   text-transform: uppercase;
   letter-spacing: 0.08em;
   white-space: nowrap;
 }
 .tl-bloco-time {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--lj-orange);
-  background: var(--lj-orange-soft);
-  padding: 2px 8px;
+  font-size: var(--lj-text-md);
+  font-weight: var(--lj-weight-semibold);
+  color: var(--lj-ui-accent-text);
+  background: var(--lj-ui-accent-soft);
+  padding: var(--lj-space-1) var(--lj-space-4);
   border-radius: var(--lj-radius-sm);
   text-transform: none;
   letter-spacing: 0;
@@ -418,10 +397,16 @@ function onDragMove(evt: Record<string, unknown>): boolean | void {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: var(--lj-ui-h-sm);
+  height: var(--lj-ui-h-sm);
   border-radius: var(--lj-radius-xs);
   flex-shrink: 0;
+}
+
+.tl-bloco-action:focus-visible {
+  opacity: 1;
+  outline: none;
+  box-shadow: var(--lj-ui-focus);
 }
 .tl-bloco:hover .tl-bloco-action {
   opacity: 1;
@@ -433,41 +418,6 @@ function onDragMove(evt: Record<string, unknown>): boolean | void {
 /* ── Ghost ── */
 .tl-card--ghost {
   opacity: 0.4;
-}
-
-/* ── Buttons ── */
-.lit-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 28px;
-  padding: 0 10px;
-  border: 1px solid transparent;
-  border-radius: var(--lj-radius-xs);
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  background: rgba(var(--lj-on-surface-ch), 0.06);
-  color: var(--lj-text);
-  transition:
-    background var(--lj-transition-normal),
-    border var(--lj-transition-normal);
-  white-space: nowrap;
-}
-.lit-btn:hover {
-  background: rgba(var(--lj-on-surface-ch), 0.12);
-}
-.lit-btn--primary {
-  background: var(--lj-navy);
-  color: var(--lj-white);
-}
-.lit-btn--primary:hover {
-  color: var(--lj-navy);
-  filter: brightness(1.1);
-}
-/* Único botão solto abaixo da lista: a folga é dele, não da escala do Material. */
-.lit-btn--add {
-  margin-top: var(--lj-space-6);
 }
 
 /* ── Bloco drag ghost feedback ── */
@@ -490,6 +440,6 @@ function onDragMove(evt: Record<string, unknown>): boolean | void {
   pointer-events: none;
 }
 .tl-bloco--collapsed {
-  margin-bottom: 12px;
+  margin-bottom: var(--lj-space-5);
 }
 </style>

@@ -113,10 +113,8 @@
 </template>
 
 <script setup lang="ts">
+import { useLiturgyI18n } from "../i18n";
 import { computed, ref, toRef } from "vue";
-import { useI18n } from "vue-i18n";
-import pt from "../lang/pt.json";
-import es from "../lang/es.json";
 import type { LiturgyItem } from "@/types/Liturgy";
 import type { OverlaySlot } from "@/types/Overlay";
 import { ICONS } from "@/config/Icons";
@@ -132,7 +130,6 @@ interface ActionOption {
   labelKey: string;
 }
 
-const TRANSLATIONS: Record<string, Record<string, unknown>> = { pt, es };
 const SIZE_ICON_TOOLS = "16";
 const SIZE_ICON_MEDIA = "20";
 
@@ -230,17 +227,6 @@ function playVersion(action: string) {
   emit("play-music", props.element, action);
 }
 
-function _t(key: string, locale: string): string {
-  const dict = TRANSLATIONS[locale] ?? TRANSLATIONS.pt;
-  const path = key.split(".");
-  let cur: unknown = dict;
-  for (const k of path) {
-    if (cur && typeof cur === "object" && k in cur) cur = (cur as Record<string, unknown>)[k];
-    else return key;
-  }
-  return typeof cur === "string" ? cur : key;
-}
-
 const props = withDefaults(
   defineProps<{
     element: LiturgyItem;
@@ -292,8 +278,7 @@ const emit = defineEmits<{
   "toggle-checked": [element: LiturgyItem];
 }>();
 
-const { locale } = useI18n();
-const t = (key: string) => _t(key, locale.value);
+const { t } = useLiturgyI18n();
 </script>
 
 <style scoped>
@@ -311,6 +296,7 @@ const t = (key: string) => _t(key, locale.value);
   border-radius: var(--lj-radius-md);
   box-shadow: var(--lj-shadow-2);
   min-height: 50px;
+  border: 1px solid transparent;
   transition:
     background var(--lj-transition-normal),
     border-color var(--lj-transition-normal);
@@ -318,15 +304,14 @@ const t = (key: string) => _t(key, locale.value);
   position: relative;
 }
 .lit-card:hover {
-  background: rgb(var(--lj-navy-ch) / 10%);
+  background: var(--lj-surface-bg-hover);
 }
 .lit-card--checked {
-  border-color: rgb(var(--lj-navy-ch) / 60%);
-  background: rgb(var(--lj-navy-ch) / 20%);
+  background: var(--lj-ui-accent-soft);
 }
 
 .lit-card--locked {
-  border-left: 3px solid rgba(var(--lj-navy-ch), 0.3);
+  border-left: 3px solid var(--lj-surface-border-strong);
 }
 
 .lit-card-text {
@@ -334,7 +319,7 @@ const t = (key: string) => _t(key, locale.value);
   text-align: left;
   background: transparent;
   border: none;
-  padding: 6px 12px;
+  padding: var(--lj-space-3) var(--lj-space-5);
   cursor: pointer;
   display: flex;
   flex-direction: column;
@@ -346,23 +331,23 @@ const t = (key: string) => _t(key, locale.value);
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
-  padding: 0 2px 0 8px;
+  padding: 0 var(--lj-space-1) 0 var(--lj-space-4);
 }
 .lit-card-duration {
   margin-left: var(--lj-space-4);
 }
 .lit-card-icon {
   flex-shrink: 0;
-  margin-right: 4px;
-  margin-left: 10px;
+  margin-right: var(--lj-space-2);
+  margin-left: var(--lj-space-5);
 }
 .lit-card-icon--checked {
   text-decoration: line-through;
   opacity: 0.6;
 }
 .lit-card-title {
-  font-weight: 600;
-  font-size: 14px;
+  font-weight: var(--lj-weight-semibold);
+  font-size: var(--lj-text-lg);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -373,12 +358,12 @@ const t = (key: string) => _t(key, locale.value);
 }
 
 .lit-card-subtitle {
-  font-size: 11px;
-  color: rgba(var(--lj-on-surface-ch), 0.6);
+  font-size: var(--lj-text-sm);
+  color: var(--lj-text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-top: 2px;
+  margin-top: var(--lj-space-1);
 }
 
 .lit-card-sub-icon {
@@ -398,23 +383,23 @@ const t = (key: string) => _t(key, locale.value);
   display: flex;
   align-items: center;
   gap: 1px;
-  padding: 0 6px;
+  padding: 0 var(--lj-space-3);
   border-left: 1px solid var(--lj-surface-border);
 }
 .lit-music-btn {
-  width: 30px;
-  height: 30px;
+  width: var(--lj-fixed-btn-width);
+  height: var(--lj-fixed-btn-width);
   border: none;
   background: transparent;
   border-radius: var(--lj-radius-xs);
   cursor: pointer;
-  color: rgba(var(--lj-on-surface-ch), 0.7);
+  color: var(--lj-text-muted);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 .lit-music-btn:hover {
-  background: rgba(var(--lj-navy-ch), 0.12);
+  background: var(--lj-surface-bg-hover);
 }
 .lit-music-btn--play,
 .lit-music-btn--play:hover {
@@ -425,11 +410,10 @@ const t = (key: string) => _t(key, locale.value);
   display: flex;
   align-items: center;
   border-left: 1px solid var(--lj-surface-border);
-  padding: 0 4px;
-  gap: 2px;
+  padding: 0 var(--lj-space-2);
+  gap: var(--lj-space-1);
 }
 
-.lit-card-grip,
 .lit-card-action {
   background: transparent;
   border: none;
@@ -440,31 +424,29 @@ const t = (key: string) => _t(key, locale.value);
   width: 32px;
   height: 32px;
   border-radius: var(--lj-radius-xs);
-  color: rgba(var(--lj-on-surface-ch), 0.6);
+  color: var(--lj-text-muted);
   padding: 0;
   user-select: none;
   flex-shrink: 0;
 }
-.lit-card-grip {
-  cursor: grab;
-}
-.lit-card-grip:active {
-  cursor: grabbing;
-}
 .lit-card-action:hover {
-  background: rgba(var(--lj-on-surface-ch), 0.08);
+  background: var(--lj-surface-bg-hover);
   color: var(--lj-text);
+}
+
+.lit-card-action:focus-visible,
+.lit-music-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--lj-ui-focus);
+}
+
+.lit-card-text:focus-visible {
+  outline: none;
+  box-shadow: inset var(--lj-ui-focus);
 }
 .lit-card-action--danger,
 .lit-card-action--danger:hover {
   color: var(--lj-danger);
-}
-
-.lit-category .lit-card-action {
-  color: var(--lj-text-on-navy);
-}
-.lit-category .lit-card-action:hover {
-  background: var(--lj-black-alpha-20);
 }
 </style>
 

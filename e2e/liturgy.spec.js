@@ -30,7 +30,7 @@ test("adicionar item à liturgia", async ({ page }) => {
 
   // Clicar no botão "Adicionar"
   await page.locator('[data-testid="liturgy-add-item"]').last().click();
-  await expect(page.locator(".lit-dialog")).toBeVisible({ timeout: 3000 });
+  await expect(page.locator(".lj-dialog")).toBeVisible({ timeout: 3000 });
   await page.locator('[data-testid="item-name"]').fill("Item de Teste E2E");
   await page.locator('[data-testid="item-save"]').click();
   await expect(page.locator(".liturgy-body")).toContainText("Item de Teste E2E", { timeout: 3000 });

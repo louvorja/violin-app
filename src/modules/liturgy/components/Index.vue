@@ -117,12 +117,10 @@
 </template>
 
 <script setup lang="ts">
+import { useLiturgyI18n } from "../i18n";
 import { LjButton, LjDialog, LjField, LjIcon, LjSelect } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
-import { useI18n } from "vue-i18n";
-import pt from "../lang/pt.json";
-import es from "../lang/es.json";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import Modules from "@/helpers/Modules";
 import Broadcast from "@/helpers/Broadcast";
@@ -147,21 +145,7 @@ import LiturgyManageDialog from "./LiturgyManageDialog.vue";
 import { useLiturgyLibrary } from "../composables/useLiturgyLibrary";
 import { useLiturgyAutoLoad } from "../composables/useLiturgyAutoLoad";
 
-const TRANSLATIONS: Record<string, Record<string, unknown>> = { pt, es };
-
-function _t(key: string, locale: string): string {
-  const dict = TRANSLATIONS[locale] ?? TRANSLATIONS.pt;
-  const path = key.split(".");
-  let cur: unknown = dict;
-  for (const k of path) {
-    if (cur && typeof cur === "object" && k in cur) cur = (cur as Record<string, unknown>)[k];
-    else return key;
-  }
-  return typeof cur === "string" ? cur : key;
-}
-
-const { locale } = useI18n();
-const t = (key: string) => _t(key, locale.value);
+const { t } = useLiturgyI18n();
 
 const el = ref<HTMLElement | null>(null);
 const module_ = computed(() => Modules.get("liturgy") as { show: boolean } | null);
@@ -318,12 +302,17 @@ const colors = COLORS;
 const defaultColor = DEFAULT_COLOR;
 const safeItems = computed((): LiturgyItem[] => (items.value as LiturgyItem[] | null) ?? []);
 
-const dayLabels = computed(() => {
-  if (locale.value === "es") {
-    return ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
-  }
-  return ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
-});
+const DIAS = [
+  "sunday",
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+] as const;
+
+const dayLabels = computed(() => DIAS.map((dia) => t(`library.weekday_${dia}`)));
 
 const copyDialog = ref(false);
 const copySourceDay = ref(0);
@@ -360,13 +349,13 @@ function syncLiturgyForDay(day: number) {
 
 async function updateAppDataLiturgyInfo(_items: LiturgyItem[], liturgyId: string | null) {
   let name = "";
-  let color = "#00004F";
+  let color = DEFAULT_COLOR;
 
   if (liturgyId) {
     const libItem = await liturgyLibrary.get(liturgyId);
     if (libItem) {
       name = libItem.name;
-      color = libItem.color || "#00004F";
+      color = libItem.color || DEFAULT_COLOR;
     }
   }
 
@@ -426,7 +415,7 @@ async function onLiturgyManaged() {
   const id = $liturgy.getCurrentLiturgyId();
   if (id) $liturgy.setDayLiturgyId(activeDay.value, id);
   await updateAppDataLiturgyInfo(safeItems.value, $liturgy.getCurrentLiturgyId());
-  $snackbar.success("Liturgia atualizada!");
+  $snackbar.success(t("library.manage_success"));
 }
 
 let _broadcastUnlisten: (() => void) | null = null;
@@ -516,7 +505,7 @@ function clearDayDialog() {
 function doExport() {
   const id = $liturgy.getCurrentLiturgyId();
   if (!id) {
-    $snackbar.warning("Nenhuma liturgia selecionada.");
+    $snackbar.warning(t("library.no_liturgy_selected"));
     return;
   }
   liturgyLibrary.get(id).then((item) => {
@@ -535,7 +524,7 @@ function doImport() {
     const text = await file.text();
     const parsed = liturgyLibrary.parseImport(text);
     if (!parsed) {
-      $snackbar.error("Arquivo inválido.");
+      $snackbar.error(t("library.import_invalid"));
       return;
     }
     const existing = await liturgyLibrary.getByName(parsed.name);
@@ -595,7 +584,7 @@ function onDragLeaveCustom(e: DragEvent) {
   position: absolute;
   inset: 0;
   overflow: hidden;
-  font-size: 13px;
+  font-size: var(--lj-text-md);
 }
 
 .liturgy-body {
@@ -615,17 +604,17 @@ function onDragLeaveCustom(e: DragEvent) {
   position: absolute;
   inset: 0;
   z-index: 100;
-  background: rgba(var(--lj-navy-ch), 0.15);
-  border: 3px dashed var(--lj-navy);
+  background: var(--lj-ui-accent-soft);
+  border: 3px dashed var(--lj-ui-accent);
   border-radius: var(--lj-radius-md);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  color: var(--lj-navy);
-  font-size: 16px;
-  font-weight: 600;
+  gap: var(--lj-space-5);
+  color: var(--lj-ui-accent-text);
+  font-size: var(--lj-text-xl);
+  font-weight: var(--lj-weight-semibold);
   pointer-events: none;
 }
 </style>

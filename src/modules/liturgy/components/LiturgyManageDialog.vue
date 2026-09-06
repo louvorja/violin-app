@@ -82,10 +82,8 @@
 </template>
 
 <script setup lang="ts">
+import { useLiturgyI18n } from "../i18n";
 import { computed, reactive, ref, useId, watch } from "vue";
-import { useI18n } from "vue-i18n";
-import pt from "../lang/pt.json";
-import es from "../lang/es.json";
 import { LjButton, LjDialog, LjField, LjIcon, LjInput, LjSelect } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import $alert from "@/helpers/Alert";
@@ -93,19 +91,7 @@ import $liturgy from "@/helpers/Liturgy";
 import { useLiturgyLibrary } from "../composables/useLiturgyLibrary";
 import { COLORS } from "../composables/useLiturgyItems";
 
-const TRANSLATIONS: Record<string, Record<string, unknown>> = { pt, es };
-function _t(key: string, locale: string): string {
-  const dict = TRANSLATIONS[locale] ?? TRANSLATIONS.pt;
-  const path = key.split(".");
-  let cur: unknown = dict;
-  for (const k of path) {
-    if (cur && typeof cur === "object" && k in cur) cur = (cur as Record<string, unknown>)[k];
-    else return key;
-  }
-  return typeof cur === "string" ? cur : key;
-}
-const { locale } = useI18n();
-const t = (key: string) => _t(key, locale.value);
+const { t } = useLiturgyI18n();
 
 const emit = defineEmits<{
   (e: "update:modelValue", v: boolean): void;

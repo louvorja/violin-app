@@ -169,26 +169,11 @@
 </template>
 
 <script setup lang="ts">
+import { useLiturgyI18n } from "../i18n";
 import { ref } from "vue";
-import { useI18n } from "vue-i18n";
-import pt from "../lang/pt.json";
-import es from "../lang/es.json";
 import { LjButton, LjDialog, LjEmpty, LjIcon, LjInput } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import type { ScheduledCategory, ScheduledItem } from "@/types/Liturgy";
-
-const TRANSLATIONS: Record<string, Record<string, unknown>> = { pt, es };
-
-function _t(key: string, locale: string): string {
-  const dict = TRANSLATIONS[locale] ?? TRANSLATIONS.pt;
-  const path = key.split(".");
-  let cur: unknown = dict;
-  for (const k of path) {
-    if (cur && typeof cur === "object" && k in cur) cur = (cur as Record<string, unknown>)[k];
-    else return key;
-  }
-  return typeof cur === "string" ? cur : key;
-}
 
 const props = withDefaults(
   defineProps<{
@@ -217,8 +202,7 @@ const props = withDefaults(
 
 defineEmits<{ "update:modelValue": [value: boolean] }>();
 
-const { locale } = useI18n();
-const t = (key: string) => _t(key, locale.value);
+const { t } = useLiturgyI18n();
 
 /** Cor de uma categoria ainda sem cor escolhida — dado, não token de tema. */
 const DEFAULT_CATEGORY_COLOR = "#1976d2";
