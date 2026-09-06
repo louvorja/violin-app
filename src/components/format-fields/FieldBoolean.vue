@@ -36,7 +36,7 @@ defineEmits(["update:modelValue"]);
   position: relative;
   width: 36px;
   height: 18px;
-  border-radius: 999px;
+  border-radius: var(--lj-radius-pill);
   background: var(--lj-surface-border, #ccc);
   transition: background var(--lj-transition-normal);
 }

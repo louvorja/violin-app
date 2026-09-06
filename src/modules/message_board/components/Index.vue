@@ -451,7 +451,7 @@ function close() {
     transform 0.3s;
 }
 .fade-slide-leave-active {
-  transition: opacity 0.2s;
+  transition: opacity var(--lj-transition-normal);
 }
 .fade-slide-enter-from {
   opacity: 0;

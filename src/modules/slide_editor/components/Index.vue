@@ -1524,7 +1524,7 @@ function replicateText(scope) {
   background: color-mix(in srgb, var(--lj-ui-accent) 12%, transparent);
   color: var(--lj-ui-accent);
   padding: 1px 6px;
-  border-radius: 10px;
+  border-radius: var(--lj-radius-pill);
   font-size: 10px;
 }
 .se-slide-list-body {
@@ -1771,7 +1771,7 @@ function replicateText(scope) {
   font-size: 12px;
   line-height: 1.45;
   outline: none;
-  transition: border-color 0.12s;
+  transition: border-color var(--lj-transition-fast);
 }
 .se-textarea:focus {
   border-color: var(--lj-ui-accent);
@@ -2131,7 +2131,7 @@ function replicateText(scope) {
   align-items: center;
   gap: 3px;
   padding: 2px 8px;
-  border-radius: 12px;
+  border-radius: var(--lj-radius-pill);
   background: rgba(255, 255, 255, 0.1);
   font-size: 10px;
   font-family: monospace;

@@ -276,6 +276,7 @@
   --lj-radius-sm: 4px; /* botões padrão */
   --lj-radius-md: 6px; /* popups, cards */
   --lj-radius-lg: 8px; /* dialogs */
+  --lj-radius-pill: 999px; /* pílula: chip, badge, trilho de switch e slider */
   --lj-radius-tab: 6px 6px 0 0; /* tabs */
 
   /* =================================================================
@@ -319,7 +320,6 @@
   /* =================================================================
    * 15. ANIMAÇÕES
    * ================================================================= */
-  --lj-fade-duration: 256ms;
 
   /* Curva cubic-bezier "standard" (Material/iOS) — saída acelerada, entrada smooth */
   --lj-ease: cubic-bezier(0.4, 0, 0.2, 1);

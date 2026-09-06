@@ -207,7 +207,7 @@ onBeforeUnmount(() => {
   position: relative;
   width: 120px;
   height: 80px;
-  border-radius: 2px;
+  border-radius: var(--lj-radius-xs);
   overflow: hidden;
   border: 1px solid #555;
   flex-shrink: 0;

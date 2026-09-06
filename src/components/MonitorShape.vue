@@ -101,7 +101,7 @@ const standW = computed(() => Math.max(40, screenW.value * 0.3));
   justify-content: center;
   padding: 0;
   opacity: 0.9;
-  transition: opacity 0.1s;
+  transition: opacity var(--lj-transition-fast);
 }
 
 .lj-monitor__remove:hover {

@@ -316,7 +316,7 @@ function close(): void {
   align-items: center;
   justify-content: center;
   opacity: 0;
-  transition: opacity 0.2s;
+  transition: opacity var(--lj-transition-normal);
   background: rgba(0, 0, 0, 0.35);
 }
 .ch-card:hover .ch-card-overlay {

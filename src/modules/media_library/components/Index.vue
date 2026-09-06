@@ -1331,7 +1331,7 @@ onBeforeUnmount(() => {
   gap: var(--lj-space-2);
   padding: var(--lj-space-1) var(--lj-space-5);
   /* Pílula — o raio acompanha a altura, fora da escala de raios do sistema. */
-  border-radius: 999px;
+  border-radius: var(--lj-radius-pill);
   border: 1.5px solid var(--chip-color);
   background: transparent;
   color: var(--chip-color);
@@ -1373,7 +1373,7 @@ onBeforeUnmount(() => {
 .media-chip-count {
   font-size: var(--lj-text-xs);
   background: color-mix(in srgb, var(--chip-color) 30%, transparent);
-  border-radius: 999px;
+  border-radius: var(--lj-radius-pill);
   padding: 0 var(--lj-space-3);
   line-height: 16px;
 }

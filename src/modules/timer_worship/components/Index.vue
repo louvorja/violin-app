@@ -364,7 +364,7 @@ onBeforeUnmount(() => {
   font-weight: 300;
   letter-spacing: 0.05em;
   font-variant-numeric: tabular-nums;
-  transition: color 0.3s;
+  transition: color var(--lj-transition-slow);
   white-space: pre-line;
 }
 .tw-bg-img {

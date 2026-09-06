@@ -641,7 +641,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: var(--lj-space-2);
   padding: 3px 10px;
-  border-radius: 20px;
+  border-radius: var(--lj-radius-pill);
   border: 1.5px solid var(--chip-color);
   background: transparent;
   color: var(--chip-color);
@@ -685,7 +685,7 @@ onBeforeUnmount(() => {
 .cv-chip-count {
   font-size: var(--lj-text-xs);
   background: color-mix(in srgb, var(--chip-color) 30%, transparent);
-  border-radius: 10px;
+  border-radius: var(--lj-radius-pill);
   padding: 0 5px;
   line-height: 16px;
 }
@@ -723,7 +723,7 @@ onBeforeUnmount(() => {
 .cv-grid-category {
   font-size: var(--lj-text-xs);
   padding: 1px var(--lj-space-3);
-  border-radius: 10px;
+  border-radius: var(--lj-radius-md);
   background: var(--lj-surface-bg-active);
   color: var(--lj-text-muted);
   white-space: nowrap;

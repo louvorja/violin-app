@@ -263,7 +263,7 @@ onBeforeUnmount(() => {
   background: rgba(239, 180, 0, 0.12);
   border: 1px solid rgba(239, 180, 0, 0.4);
   padding: 5px 5px 0 5px;
-  border-radius: 2px;
+  border-radius: var(--lj-radius-xs);
   flex-shrink: 0;
   text-transform: uppercase;
 }

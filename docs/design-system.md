@@ -213,13 +213,20 @@ Escala de 8 passos com base de 4px.
 
 ## Border Radius
 
-| Token             | Valor         | Uso                     |
-| ----------------- | ------------- | ----------------------- |
-| `--lj-radius-xs`  | `2px`         | Tags, badges pequenos   |
-| `--lj-radius-sm`  | `3px`         | Botões padrão           |
-| `--lj-radius-md`  | `4px`         | Popups, cards           |
-| `--lj-radius-lg`  | `6px`         | Dialogs                 |
-| `--lj-radius-tab` | `4px 4px 0 0` | Tabs (topo arredondado) |
+| Token              | Valor         | Uso                         |
+| ------------------ | ------------- | --------------------------- |
+| `--lj-radius-xs`   | `3px`         | Tags, badges pequenos         |
+| `--lj-radius-sm`   | `4px`         | Botões padrão                 |
+| `--lj-radius-md`   | `6px`         | Popups, cards                 |
+| `--lj-radius-lg`   | `8px`         | Dialogs                       |
+| `--lj-radius-pill` | `999px`       | Chip, badge, switch, slider   |
+| `--lj-radius-tab`  | `6px 6px 0 0` | Tabs (topo arredondado)       |
+
+A pílula existe porque o valor sozinho não diz a intenção: doze lugares tinham
+chegado nela por conta própria, com `10px`, `12px`, `20px` e `999px` — todos
+maiores que metade da altura do elemento, que é o ponto em que o navegador
+arredonda por completo. Números diferentes, mesmo desenho na tela. Use o token
+quando a forma pedida for a cápsula, não um canto arredondado.
 
 ---
 
@@ -257,10 +264,13 @@ Exemplo:
 
 | Token                    | Valor        | Uso                                   |
 | ------------------------ | ------------ | ------------------------------------- |
-| `--lj-fade-duration`     | `256ms`      | Duração de fades Vue (`<transition>`) |
 | `--lj-transition-fast`   | `0.08s ease` | Hover imediato (botões, ícones)       |
 | `--lj-transition-normal` | `0.15s ease` | Transição padrão de estado            |
 | `--lj-transition-slow`   | `0.25s ease` | Abertura de painel, drawer            |
+
+Fade de `<Transition>` do Vue usa `--lj-transition-slow`. A exceção é a projeção,
+que lê `--fade-ms` em tempo de execução porque a duração do fade é ajuste do
+operador, não do design system.
 
 Exemplo:
 

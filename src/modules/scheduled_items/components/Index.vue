@@ -972,7 +972,7 @@ function removeEntry(): void {
 .si-cat-count {
   font-size: var(--lj-text-xs);
   background: rgba(var(--lj-on-surface-ch), 0.1);
-  border-radius: 10px;
+  border-radius: var(--lj-radius-pill);
   padding: 0 var(--lj-space-3);
   line-height: 16px;
 }

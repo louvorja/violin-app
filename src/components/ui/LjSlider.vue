@@ -89,7 +89,7 @@ const model = computed({
   flex: 1;
   height: 4px;
   background: var(--lj-surface-bg-active);
-  border-radius: 999px;
+  border-radius: var(--lj-radius-pill);
 }
 
 .lj-slider__range {

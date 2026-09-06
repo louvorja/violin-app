@@ -411,7 +411,7 @@ function shortTime(duration?: number | string): string {
 }
 .ms-row {
   cursor: pointer;
-  transition: background 0.12s;
+  transition: background var(--lj-transition-fast);
 }
 .ms-row:hover {
   background: var(--lj-active-bg);

@@ -203,7 +203,7 @@ useBroadcastListener(BROADCAST_TYPE.MODULE_FORMAT_CHANGED, (payload) => {
   align-items: center;
   margin: 5px;
   padding: 0.3em 0.9em;
-  border-radius: 999px;
+  border-radius: var(--lj-radius-pill);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   line-height: 1.3;

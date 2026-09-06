@@ -242,7 +242,7 @@ onMounted(() => {
   overflow: hidden;
   cursor: pointer;
   border: 2px solid transparent;
-  transition: border-color 0.12s;
+  transition: border-color var(--lj-transition-fast);
 }
 
 .image-picker-item:hover {
@@ -279,7 +279,7 @@ onMounted(() => {
   top: 0;
   right: 0;
   opacity: 0;
-  transition: opacity 0.12s;
+  transition: opacity var(--lj-transition-fast);
   background-color: rgb(255 255 255 / 0.74);
 }
 

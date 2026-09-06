@@ -74,7 +74,7 @@ function onChange(event: Event): void {
   flex-shrink: 0;
   background: var(--lj-surface-bg-active);
   border: 1px solid var(--lj-surface-border-strong);
-  border-radius: 999px;
+  border-radius: var(--lj-radius-pill);
   transition:
     background var(--lj-transition-fast),
     border-color var(--lj-transition-fast),

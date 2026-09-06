@@ -500,7 +500,7 @@ watch(model, async (val: boolean) => {
   max-width: 90vw;
   background: var(--lj-surface-bg, #1e1e1e);
   border: 1px solid var(--lj-surface-border, #444);
-  border-radius: 16px;
+  border-radius: var(--lj-radius-md);
   padding: 32px 36px 28px;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
   display: flex;
@@ -521,12 +521,12 @@ watch(model, async (val: boolean) => {
   align-items: center;
   gap: 6px;
   padding: 6px 14px;
-  border-radius: 20px;
+  border-radius: var(--lj-radius-pill);
   font-size: 13px;
   font-weight: 500;
   color: var(--lj-text-muted, #888);
   background: transparent;
-  transition: all 0.2s ease;
+  transition: all var(--lj-transition-normal);
 }
 
 .quicknav-step.current {

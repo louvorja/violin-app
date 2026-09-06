@@ -62,7 +62,7 @@ const rounded = computed(() => Math.max(0, Math.min(100, Math.round(props.value)
   width: 100%;
   overflow: hidden;
   background: var(--lj-surface-bg-active);
-  border-radius: 999px;
+  border-radius: var(--lj-radius-pill);
 }
 
 .lj-progress__bar {

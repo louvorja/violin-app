@@ -1043,7 +1043,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: var(--lj-space-2);
   padding: var(--lj-space-2) 10px;
-  border-radius: 20px;
+  border-radius: var(--lj-radius-pill);
   border: 1.5px solid var(--chip-color);
   background: transparent;
   color: var(--chip-color);
@@ -1077,7 +1077,7 @@ onBeforeUnmount(() => {
 .bgs-chip-count {
   font-size: var(--lj-text-xs);
   background: color-mix(in srgb, var(--chip-color) 30%, transparent);
-  border-radius: 10px;
+  border-radius: var(--lj-radius-pill);
   padding: 0 5px;
   line-height: 16px;
 }
@@ -1123,7 +1123,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   padding: 14px;
-  border-radius: 10px;
+  border-radius: var(--lj-radius-md);
   background: color-mix(in srgb, var(--card-color) 85%, var(--lj-white));
   position: relative;
   min-height: 80px;

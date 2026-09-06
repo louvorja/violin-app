@@ -308,7 +308,7 @@ const t = (key: string) => _t(key, locale.value);
   align-items: center;
   flex: 1;
   background: var(--lj-surface-bg);
-  border-radius: 10px;
+  border-radius: var(--lj-radius-md);
   box-shadow: var(--lj-shadow-2);
   min-height: 50px;
   transition:
