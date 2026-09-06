@@ -7,12 +7,110 @@
  *   imagens/<file> — imagens opcionais
  *
  * Convenção de codificação:
+ *   - o INI é gravado em CP1252, como o Delphi faz: ele lê com TIniFile, ou
+ *     seja, a API GetPrivateProfileString do Windows, que entende ANSI e
+ *     UTF-16 — em UTF-8 os acentos chegam lá como mojibake
  *   - letra/letra_aux: pipe `|` representa quebra de linha (Delphi: \r\n)
  *   - cor: #RRGGBB (HTML hex)
- *   - tempo: HH:MM:SS (campo `tempo_hms`) é source-of-truth; `tempo` em bytes BASS é ignorado
+ *   - tempo: posição em bytes do stream BASS decodificado, que é o campo que o
+ *     Delphi lê ao importar; `tempo_hms` (HH:MM:SS) é o mesmo instante em forma
+ *     legível e tem prioridade na leitura, por não depender da taxa do áudio
  *
  * @category helper-puro — Sem APIs Vue; sem acesso ao store.
  */
+
+/**
+ * A faixa 0x80–0x9F em ordem de byte — o único trecho em que o CP1252 diverge
+ * de Latin-1. É onde moram as aspas curvas e o travessão que vêm colados do
+ * Word. As cinco posições sem caractere ficam com o próprio código de controle.
+ */
+const CP1252_HIGH = "€\u0081‚ƒ„…†‡ˆ‰Š‹Œ\u008dŽ\u008f\u0090‘’“”•–—˜™š›œ\u009džŸ";
+
+function cp1252Byte(codePoint) {
+  if (codePoint < 0x80 || (codePoint >= 0xa0 && codePoint <= 0xff)) return codePoint;
+  const index = CP1252_HIGH.indexOf(String.fromCodePoint(codePoint));
+  return index < 0 ? -1 : 0x80 + index;
+}
+
+/**
+ * Codifica o INI para os bytes que o Delphi espera — ver "Convenção de
+ * codificação" no topo.
+ *
+ * O que não existe no CP1252 sai sem o acento (`ā` → `a`); o que nem assim
+ * couber vira `?`, como em qualquer conversão para ANSI do Windows.
+ */
+function encodeCp1252(text) {
+  const bytes = [];
+  for (const ch of String(text)) {
+    const direct = cp1252Byte(ch.codePointAt(0));
+    if (direct >= 0) {
+      bytes.push(direct);
+      continue;
+    }
+    let wrote = false;
+    for (const base of ch.normalize("NFD").replace(/\p{M}+/gu, "")) {
+      const mapped = cp1252Byte(base.codePointAt(0));
+      if (mapped >= 0) {
+        bytes.push(mapped);
+        wrote = true;
+      }
+    }
+    if (!wrote) bytes.push(0x3f);
+  }
+  return new Uint8Array(bytes);
+}
+
+/** 44100 Hz, estéreo, 16-bit — o formato do acervo, usado quando o header não diz. */
+const DEFAULT_BYTES_PER_SECOND = 44100 * 2 * 2;
+
+const MPEG_SAMPLE_RATES = {
+  0: [11025, 12000, 8000], // MPEG 2.5
+  2: [22050, 24000, 16000], // MPEG 2
+  3: [44100, 48000, 32000], // MPEG 1
+};
+
+async function readMp3Format(blob) {
+  const head = new Uint8Array(await blob.slice(0, 10).arrayBuffer());
+
+  let offset = 0;
+  if (head[0] === 0x49 && head[1] === 0x44 && head[2] === 0x33) {
+    offset =
+      10 +
+      (((head[6] & 0x7f) << 21) |
+        ((head[7] & 0x7f) << 14) |
+        ((head[8] & 0x7f) << 7) |
+        (head[9] & 0x7f));
+  }
+
+  const buf = new Uint8Array(await blob.slice(offset, offset + 8192).arrayBuffer());
+  for (let i = 0; i + 3 < buf.length; i++) {
+    if (buf[i] !== 0xff || (buf[i + 1] & 0xe0) !== 0xe0) continue;
+
+    const rates = MPEG_SAMPLE_RATES[(buf[i + 1] >> 3) & 0x03];
+    const layer = (buf[i + 1] >> 1) & 0x03;
+    const bitrate = (buf[i + 2] >> 4) & 0x0f;
+    const rateIndex = (buf[i + 2] >> 2) & 0x03;
+    if (!rates || layer === 0 || bitrate === 0 || bitrate === 0x0f || rateIndex === 3) continue;
+
+    return {
+      sampleRate: rates[rateIndex],
+      channels: ((buf[i + 3] >> 6) & 0x03) === 3 ? 1 : 2,
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Bytes por segundo do stream como o BASS o decodifica (PCM 16-bit) — a unidade
+ * do campo `tempo`. Lê o header do MP3, que é o formato do acervo; para os
+ * demais o default serve de aproximação.
+ */
+async function audioBytesPerSecond(blob) {
+  if (!blob) return DEFAULT_BYTES_PER_SECOND;
+  const format = await readMp3Format(blob);
+  return format ? format.sampleRate * format.channels * 2 : DEFAULT_BYTES_PER_SECOND;
+}
 
 function parseIniWithSections(text) {
   const sections = {};
@@ -82,7 +180,7 @@ function encodeLetra(letra) {
   return letra.replace(/\r\n/g, "|").replace(/\n/g, "|");
 }
 
-function parseSlja(iniText) {
+function parseSlja(iniText, bytesPerSecond = DEFAULT_BYTES_PER_SECOND) {
   const sections = parseIniWithSections(iniText);
   const geral = sections["Geral"] || sections["_default"] || {};
   const slidesCount = parseInt(geral.slides || "0", 10);
@@ -105,7 +203,9 @@ function parseSlja(iniText) {
       cor_fundo: sec.cor_fundo || "#000000",
       imagem: sec.imagem || "",
       imagem_posicao: parseInt(sec.imagem_posicao || "5", 10),
-      tempo_seconds: hmsToSeconds(sec.tempo_hms || sec.tempo),
+      tempo_seconds: sec.tempo_hms
+        ? hmsToSeconds(sec.tempo_hms)
+        : Math.round(Number(sec.tempo || 0) / bytesPerSecond),
       text_align: sec.text_align || "center",
     });
   }
@@ -178,7 +278,12 @@ function resolveSongName(data = {}, fileName = "") {
     .replace(/\.(slja|lja)$/i, "");
 }
 
-function buildIniFromSlides({ meta = {}, slides = [], audioPath = "" }) {
+function buildIniFromSlides({
+  meta = {},
+  slides = [],
+  audioPath = "",
+  bytesPerSecond = DEFAULT_BYTES_PER_SECOND,
+}) {
   const sections = {};
   const order = ["Geral"];
 
@@ -214,7 +319,7 @@ function buildIniFromSlides({ meta = {}, slides = [], audioPath = "" }) {
 
     const seconds = Number(s.tempo_seconds || 0);
     sec.tempo_hms = secondsToHms(seconds);
-    sec.tempo = String(seconds);
+    sec.tempo = String(Math.round(seconds * bytesPerSecond));
 
     sections[name] = sec;
   });
@@ -237,7 +342,6 @@ async function loadSlja(file) {
   } catch {
     iniText = new TextDecoder("windows-1252").decode(iniBytes);
   }
-  const parsed = parseSlja(iniText);
 
   // Varredura da raiz com normalização de separador — zips gerados pelo
   // Delphi gravam entradas como "imagens\foto.png" (barra invertida), que
@@ -269,6 +373,8 @@ async function loadSlja(file) {
   });
 
   await Promise.all(pending);
+
+  const parsed = parseSlja(iniText, await audioBytesPerSecond(audio));
 
   return { ...parsed, audio, audioName, images };
 }
@@ -315,8 +421,9 @@ async function writeSlja({
     meta: { ...meta, ...(nome ? { nome } : {}) },
     slides: slidesForIni,
     audioPath,
+    bytesPerSecond: await audioBytesPerSecond(audio),
   });
-  zip.file("slides.lja", iniText);
+  zip.file("slides.lja", encodeCp1252(iniText));
 
   if (images && images.size > 0) {
     for (const [path, blob] of images.entries()) {
@@ -335,6 +442,8 @@ export default {
   buildIniFromSlides,
   parseIniWithSections,
   stringifyIni,
+  encodeCp1252,
+  audioBytesPerSecond,
   hmsToSeconds,
   secondsToHms,
   decodeLetra,

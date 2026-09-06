@@ -200,6 +200,84 @@ describe("SljaConverter — round trip export/import", () => {
   });
 });
 
+describe("SljaConverter — compatibilidade com o Delphi", () => {
+  /** Lê o slides.lja como o TIniFile do Delphi leria: bytes ANSI, sem BOM. */
+  async function readIniAsDelphi(blob) {
+    const zip = await JSZip.loadAsync(blob);
+    const bytes = await zip.file("slides.lja").async("uint8array");
+    return new TextDecoder("windows-1252").decode(bytes);
+  }
+
+  it("grava o INI em CP1252, e não em UTF-8", async () => {
+    const blob = await SljaConverter.writeSlja({
+      slides: [
+        { tipo: "CAPA", letra: "Casa de Benção" },
+        { tipo: "LETRA", letra: "Minha casa será um pedaço do céu" },
+      ],
+      nome: "Casa de Benção",
+    });
+
+    const ini = await readIniAsDelphi(blob);
+    expect(ini).toContain("nome=Casa de Benção");
+    expect(ini).toContain("letra=Minha casa será um pedaço do céu");
+    expect(ini).not.toContain("BenÃ§Ã£o");
+  });
+
+  it("a tabela CP1252 fecha com o decodificador nos 256 bytes", () => {
+    const allBytes = new Uint8Array(256).map((_, i) => i);
+    const text = new TextDecoder("windows-1252").decode(allBytes);
+    expect([...SljaConverter.encodeCp1252(text)]).toEqual([...allBytes]);
+  });
+
+  it("o que não cabe no CP1252 perde o acento, não o texto", () => {
+    const bytes = SljaConverter.encodeCp1252("Kraḍa — “aspas” 😀");
+    expect(new TextDecoder("windows-1252").decode(bytes)).toBe("Krada — “aspas” ?");
+  });
+
+  it("grava tempo em bytes do stream BASS, na taxa do MP3 do pacote", async () => {
+    // Header MPEG2 Layer III, 22050 Hz, mono → 22050 × 1 × 2 = 44100 bytes/s
+    const mp3 = new Blob([new Uint8Array([0xff, 0xf3, 0x90, 0xc0, ...new Array(60).fill(0)])]);
+    expect(await SljaConverter.audioBytesPerSecond(mp3)).toBe(44100);
+
+    const blob = await SljaConverter.writeSlja({
+      slides: [
+        { tipo: "CAPA", letra: "Hino", tempo_seconds: 0 },
+        { tipo: "LETRA", letra: "estrofe", tempo_seconds: 12 },
+      ],
+      audio: mp3,
+      audioName: "hino.mp3",
+    });
+
+    const ini = await readIniAsDelphi(blob);
+    expect(ini).toContain("tempo=529200"); // 12s × 44100
+    expect(ini).toContain("tempo_hms=00:00:12");
+
+    // O nosso lado continua lendo segundos, via tempo_hms
+    const data = await SljaConverter.loadSlja(blob);
+    expect(data.slides.map((s) => s.tempo_seconds)).toEqual([0, 12]);
+  });
+
+  it("INI do Delphi sem tempo_hms tem o tempo lido como bytes, não segundos", async () => {
+    const ini = [
+      "[Geral]",
+      "slides=1",
+      "url_musica=audio\\hino.mp3",
+      "",
+      "[Slide:1]",
+      "tipo=LETRA",
+      "letra=estrofe",
+      "tempo=5292000", // 30s a 44100 Hz estéreo
+    ].join("\r\n");
+
+    const zip = new JSZip();
+    zip.file("slides.lja", ini);
+    zip.file("audio\\hino.mp3", new Uint8Array([1, 2, 3]));
+
+    const data = await SljaConverter.loadSlja(await zip.generateAsync({ type: "blob" }));
+    expect(data.slides[0].tempo_seconds).toBe(30);
+  });
+});
+
 describe("SljaConverter — resolveSongName", () => {
   it("[Geral].nome tem prioridade sobre o primeiro slide e o arquivo", () => {
     const data = {
