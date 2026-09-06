@@ -30,13 +30,14 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from "vue";
+import { onMounted } from "vue";
 import { useProjectionState } from "@/composables/useProjectionState";
 import OverlayRenderer from "@/components/OverlayRenderer.vue";
 import LibrasOverlay from "@/views/LibrasOverlay.vue";
+import { useLibrasState } from "@/modules/libras/composables/useLibrasState";
 
 const { slide } = useProjectionState();
-const showLibrasObs = ref(localStorage.getItem("libras_show_on_obs") === "true");
+const { showOnObs: showLibrasObs } = useLibrasState();
 
 onMounted(() => {
   document.body.style.margin = "0";

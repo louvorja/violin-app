@@ -1,6 +1,7 @@
 <template>
   <OverlayRenderer />
   <LibrasOverlay
+    v-if="showLibrasObs"
     :verse-text="text"
     :bible-version="version"
     :bible-book-id="bookId"
@@ -24,9 +25,11 @@ import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import UserData from "@/helpers/UserData";
 import OverlayRenderer from "@/components/OverlayRenderer.vue";
 import LibrasOverlay from "@/views/LibrasOverlay.vue";
+import { useLibrasState } from "@/modules/libras/composables/useLibrasState";
 
 const MID = "modules.bible";
 
+const { showOnObs: showLibrasObs } = useLibrasState();
 const text = ref("");
 const reference = ref("");
 const book = ref("");

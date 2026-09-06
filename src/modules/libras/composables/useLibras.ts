@@ -11,11 +11,13 @@ import { ref, onUnmounted } from "vue";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import Libras from "@/helpers/Libras";
+import { useLibrasState } from "./useLibrasState";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
 import $dev from "@/helpers/Dev";
 
 export function useLibras() {
+  const { scopeEnabled } = useLibrasState();
   const gloss = ref<string>("");
   const originalText = ref<string>("");
   const isTranslating = ref(false);
@@ -27,6 +29,12 @@ export function useLibras() {
    * se não encontrar, chama a API.
    */
   async function translateSlide(text: string, musicId?: number): Promise<void> {
+    if (!scopeEnabled("music")) {
+      gloss.value = "";
+      originalText.value = "";
+      return;
+    }
+
     if (!text?.trim()) {
       gloss.value = "";
       originalText.value = "";

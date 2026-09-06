@@ -29,7 +29,7 @@
 
     <!-- Overlay com texto formatado (só exibe se habilitado no Dev) -->
     <div
-      v-if="enabled && displayText && showTextOverlay"
+      v-if="shouldShow && displayText && showTextOverlay"
       class="libras-overlay"
       :style="overlayStyle"
     >
@@ -41,7 +41,7 @@
 
     <!-- Indicador de tradução (só exibe se habilitado no Dev) -->
     <div
-      v-if="enabled && isTranslating && showTextOverlay"
+      v-if="shouldShow && isTranslating && showTextOverlay"
       class="libras-overlay"
       :style="overlayStyle"
     >
@@ -64,6 +64,7 @@ import { KEYS_LS } from "@/constants/LocalStorageKeys";
 import { buildAnchorStyle } from "@/types/Overlay";
 import type { OverlayAnchor } from "@/types/Overlay";
 import Libras from "@/helpers/Libras";
+import { useLibrasState } from "@/modules/libras/composables/useLibrasState";
 import { DICTIONARY_BASE_URL } from "@/config/Libras";
 import { VLIBRAS_UNITY_URL } from "@/config/Vlibras";
 const props = withDefaults(
@@ -86,7 +87,7 @@ const props = withDefaults(
 );
 const unitySrc = VLIBRAS_UNITY_URL;
 
-const enabled = ref(false);
+const { scopeEnabled } = useLibrasState();
 const rawGloss = ref("");
 const isTranslating = ref(false);
 const iframeRef = ref<HTMLIFrameElement | null>(null);
@@ -183,18 +184,7 @@ const overlayStyle = computed(() => {
 
 // ─── Checagem de permissão por tipo ────────────────────────────────────────
 
-function isTypeEnabled(): boolean {
-  if (!enabled.value) return false;
-  if (props.type === "music") {
-    return localStorage.getItem(KEYS_LS.LIBRAS.MUSICS_ENABLED) !== "false";
-  }
-  if (props.type === "bible") {
-    return localStorage.getItem(KEYS_LS.LIBRAS.BIBLE_ENABLED) !== "false";
-  }
-  return true;
-}
-
-const shouldShow = computed(() => isTypeEnabled());
+const shouldShow = computed(() => scopeEnabled(props.type));
 
 const hasContent = computed(() => {
   if (props.type === "music") return isMediaActive.value;
@@ -336,9 +326,8 @@ function startExitAnimation() {
   }, exitAnimationDuration.value + 100);
 }
 
-function disable() {
+function resetPlayback() {
   stopUnity();
-  enabled.value = false;
   rawGloss.value = "";
   isTranslating.value = false;
   settingsApplied = false;
@@ -409,6 +398,14 @@ async function translateAndShow(text: string): Promise<void> {
 
 // ─── Watch ──────────────────────────────────────────────────────────────────
 
+watch(shouldShow, (show) => {
+  if (show) {
+    settingsApplied = false;
+  } else {
+    resetPlayback();
+  }
+});
+
 watch(hasContent, (has) => {
   if (has && unityReady && shouldShow.value) {
     isExiting.value = false;
@@ -440,11 +437,8 @@ watch(
 // ─── Init ───────────────────────────────────────────────────────────────────
 
 let unlistenMediaClose: (() => void) | null = null;
-let unlistenLibrasToggle: (() => void) | null = null;
 
 onMounted(() => {
-  enabled.value = localStorage.getItem(KEYS_LS.LIBRAS.ENABLED) === "true";
-
   unlistenMediaClose = $broadcast.listen((msg: { type: string }) => {
     if (msg.type === BROADCAST_TYPE.MEDIA_CLOSE) {
       sendToUnity("PlayerManager", "stopAll", "");
@@ -457,24 +451,10 @@ onMounted(() => {
       isMediaActive.value = false;
     }
   });
-
-  // Reagir em tempo real ao toggle do Libras
-  unlistenLibrasToggle = $broadcast.listen((msg: { type: string; payload?: unknown }) => {
-    if (msg.type === BROADCAST_TYPE.LIBRAS_TOGGLE) {
-      const p = msg.payload as Record<string, unknown> | undefined;
-      enabled.value = p?.enabled === true;
-      if (!enabled.value) {
-        disable();
-      } else {
-        settingsApplied = false;
-      }
-    }
-  });
 });
 
 onBeforeUnmount(() => {
   unlistenMediaClose?.();
-  unlistenLibrasToggle?.();
   window.removeEventListener("message", onUnityMessage);
   stopUnity();
 });

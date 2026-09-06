@@ -600,13 +600,12 @@ import {
 } from "@/components/ui";
 import type { LjTab } from "@/components/ui";
 import { BG_SWATCHES } from "@/config/Theme";
-import $broadcast from "@/helpers/Broadcast";
-import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
 import type { BibleVersion, BibleBook } from "@/types/Bible";
 import { LibrasCacheStats } from "@/types/Libras";
 import { KEYS_LS } from "@constants/LocalStorageKeys";
+import { useLibrasState } from "@/modules/libras/composables/useLibrasState";
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────
 
@@ -733,10 +732,16 @@ const biblePercent = computed(() =>
 
 // Avatar
 const selectedAvatar = ref("icaro");
-const librasEnabled = ref(false);
-const librasMusicsEnabled = ref(true);
-const librasBibleEnabled = ref(true);
-const showOnObs = ref(false);
+const {
+  enabled: librasEnabled,
+  musicsEnabled: librasMusicsEnabled,
+  bibleEnabled: librasBibleEnabled,
+  showOnObs,
+  setEnabled: setLibrasEnabled,
+  setMusicsEnabled,
+  setBibleEnabled,
+  setShowOnObs,
+} = useLibrasState();
 const showBorder = ref(false);
 const avatarOptions = computed(() => [
   { value: "icaro", label: t("accessibility.avatar.icaro") },
@@ -751,24 +756,19 @@ function selectAvatar(value: string) {
 }
 
 function toggleLibrasEnabled(value: boolean | null) {
-  librasEnabled.value = value === true;
-  localStorage.setItem(KEYS_LS.LIBRAS.ENABLED, String(value === true));
-  $broadcast.send(BROADCAST_TYPE.LIBRAS_TOGGLE, { enabled: value === true });
+  setLibrasEnabled(value === true);
 }
 
 function toggleShowOnObs(value: boolean | null) {
-  showOnObs.value = value === true;
-  localStorage.setItem(KEYS_LS.LIBRAS.SHOW_ON_OBS, String(value === true));
+  setShowOnObs(value === true);
 }
 
 function toggleMusicsEnabled(value: boolean | null) {
-  librasMusicsEnabled.value = value === true;
-  localStorage.setItem(KEYS_LS.LIBRAS.MUSICS_ENABLED, String(value === true));
+  setMusicsEnabled(value === true);
 }
 
 function toggleBibleEnabled(value: boolean | null) {
-  librasBibleEnabled.value = value === true;
-  localStorage.setItem(KEYS_LS.LIBRAS.BIBLE_ENABLED, String(value === true));
+  setBibleEnabled(value === true);
 }
 
 function setCategoryCheckboxRef(id: number, el: unknown): void {
@@ -1026,11 +1026,7 @@ const bibleHasPendingRemovals = computed<boolean>(() => {
 // ─── Init ───────────────────────────────────────────────────────────────────
 
 onMounted(async () => {
-  selectedAvatar.value = localStorage.getItem("libras_avatar") || "icaro";
-  librasEnabled.value = localStorage.getItem("libras_enabled") === "true";
-  librasMusicsEnabled.value = localStorage.getItem("libras_musics_enabled") !== "false";
-  librasBibleEnabled.value = localStorage.getItem("libras_bible_enabled") !== "false";
-  showOnObs.value = localStorage.getItem("libras_show_on_obs") === "true";
+  selectedAvatar.value = localStorage.getItem(KEYS_LS.LIBRAS.AVATAR) || "icaro";
   currentAnchor.value =
     $userdata.get<string>(KEYS.MODULES.LIBRAS.ANCHOR, "bottom-right") || "bottom-right";
   currentOffsetX.value = $userdata.get<number>(KEYS.MODULES.LIBRAS.OFFSET_X, -20) as number;

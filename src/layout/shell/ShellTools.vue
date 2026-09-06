@@ -145,7 +145,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import $appdata from "@/helpers/AppData";
 import $userdata from "@/helpers/UserData";
@@ -159,6 +159,7 @@ import {
 import Broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBackgroundTasks, type BackgroundTask } from "@/composables/useBackgroundTasks";
+import { useLibrasState } from "@/modules/libras/composables/useLibrasState";
 import { useAppTheme } from "@/composables/useAppTheme";
 import { formatBackgroundTaskDetail } from "@/helpers/BackgroundTaskDetail";
 import { LjButton, LjIcon, LjPopover, LjProgress, LjTooltip } from "@/components/ui";
@@ -184,7 +185,7 @@ const hasUpdate = computed(() => $appdata.get(KEYS.SHELL.APP_UPDATE_AVAILABLE, f
 const isBgPlaying = computed(() =>
   $userdata.get<boolean>(KEYS.MODULES.BACKGROUND_PROJECTION.IS_PLAYING, false)
 );
-const isLibrasEnabled = ref(localStorage.getItem("libras_enabled") === "true");
+const { enabled: isLibrasEnabled, setEnabled: setLibrasEnabled } = useLibrasState();
 
 const sizeIcon = 16;
 
@@ -246,19 +247,8 @@ function confirmCancel(task: BackgroundTask): void {
 }
 
 function toggleLibras() {
-  const next = !isLibrasEnabled.value;
-  isLibrasEnabled.value = next;
-  localStorage.setItem("libras_enabled", String(next));
-  Broadcast.send(BROADCAST_TYPE.LIBRAS_TOGGLE, { enabled: next });
+  setLibrasEnabled(!isLibrasEnabled.value);
 }
-
-// Sincronizar estado quando outro componente altera o toggle
-Broadcast.listen((msg: { type: string; payload: unknown }) => {
-  if (msg.type === BROADCAST_TYPE.LIBRAS_TOGGLE) {
-    const p = msg.payload as Record<string, unknown>;
-    isLibrasEnabled.value = p?.enabled === true;
-  }
-});
 </script>
 
 <style scoped>
