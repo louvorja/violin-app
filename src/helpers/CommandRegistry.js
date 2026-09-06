@@ -6,6 +6,7 @@
  *   - id: string único
  *   - title: label exibido
  *   - keywords: array de strings adicionais para fuzzy match
+ *   - tracks?: number[] — números de hino da música (busca por número exato)
  *   - icon: mdi-icon-name
  *   - category: "action" | "module" | "music" | "hymn" | "bible" | "favorite" | "recent"
  *   - shortcut?: string (ex: "Ctrl+K") — apenas exibido, não registra
@@ -20,6 +21,8 @@ import Media from "@/composables/useMedia";
 import { open as openProjection } from "@/helpers/Projection";
 import { PROJECTION_TYPE, PROJECTION_URL } from "@/constants/Projection";
 import { ICONS } from "@/config/Icons";
+import { hymnalTracks } from "@/helpers/Hymnal";
+import { KEYS } from "@/constants/UserDataKeys";
 
 let _loaded = false;
 let _commands = [];
@@ -209,7 +212,7 @@ function staticCommands(t) {
 
 /** Pega comandos dinâmicos: músicas, favoritos, histórico recente */
 async function dynamicCommands($database, $userdata) {
-  const lang = $userdata.get("language", "pt");
+  const lang = $userdata.get(KEYS.OPTIONS.LANGUAGE, "pt") || "pt";
   const dynamic = [];
 
   // Favoritos
@@ -250,13 +253,15 @@ async function dynamicCommands($database, $userdata) {
       const limited = musics.slice(0, 5000);
       limited.forEach((m) => {
         if (!m || !m.id_music) return;
+        const tracks = hymnalTracks(m);
         dynamic.push({
           id: `music:${m.id_music}`,
           title: m.name || String(m.id_music),
           keywords: ["musica"],
+          tracks,
           icon: ICONS.MUSIC.NOTE,
           category: "music",
-          subtitle: m.album || "",
+          subtitle: m.albums_names || "",
           run: () =>
             Media.open({
               id_music: m.id_music,

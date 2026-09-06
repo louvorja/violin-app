@@ -13,50 +13,49 @@
     </template>
 
     <template v-if="userdata" #header>
-      <div class="musics-form-group">
-        <div class="musics-form-item" style="margin-top: 10px">
-          <LjField class="musics-search" :hint="disabled ? t('inputs.search_disabled') : ''">
-            <LjInput
-              v-model="search"
-              :placeholder="t('inputs.search')"
-              :icon="ICONS.ACTIONS.SEARCH"
-              :invalid="data.filter_count <= 0"
-              :disabled="disabled"
-              clearable
-            />
-          </LjField>
-          <LjCheckbox
-            v-model="userdata.search.name"
-            class="lj-u-gap-6"
-            :label="t('inputs.filter_name')"
-          />
-          <LjCheckbox
-            v-model="userdata.search.lyric"
-            class="lj-u-gap-6"
-            :label="t('inputs.filter_lyric')"
-          />
-          <LjCheckbox
-            v-model="userdata.search.album"
-            class="lj-u-gap-6"
-            :label="t('inputs.filter_album')"
-          />
-          <LjCheckbox
-            v-model="userdata.search.track"
-            class="lj-u-gap-6"
-            :label="t('inputs.filter_track')"
-          />
-          <LjSwitch
-            v-model="userdata.filter.instrumental_music"
-            class="lj-u-gap-6"
-            :label="t('inputs.filter_instrumental')"
-          />
+      <div class="musics-searchbar">
+        <LjInput
+          v-model="search"
+          :placeholder="t('inputs.search')"
+          :aria-label="t('inputs.search')"
+          :icon="ICONS.ACTIONS.SEARCH"
+          :invalid="data.filter_count <= 0"
+          :disabled="disabled"
+          clearable
+        />
+
+        <div class="musics-searchbar__scope" role="group" :aria-labelledby="scopeLabelId">
+          <span :id="scopeLabelId" class="musics-searchbar__label">
+            {{ t("inputs.search_in") }}
+          </span>
+          <LjCheckbox v-model="userdata.search.name" :label="t('inputs.filter_name')" />
+          <LjCheckbox v-model="userdata.search.lyric" :label="t('inputs.filter_lyric')" />
+          <LjCheckbox v-model="userdata.search.album" :label="t('inputs.filter_album')" />
+          <LjCheckbox v-model="userdata.search.track" :label="t('inputs.filter_track')" />
         </div>
+
+        <p v-if="disabled" class="musics-searchbar__warning">
+          <LjIcon :icon="ICONS.UI.ALERT" :size="14" />
+          {{ t("inputs.search_disabled") }}
+        </p>
+
+        <LjSwitch
+          v-model="userdata.filter.instrumental_music"
+          :label="t('inputs.filter_instrumental')"
+        />
       </div>
     </template>
 
     <template v-if="selectedPlaylist" #right>
       <PlaylistSongs :playlist="selectedPlaylist" />
     </template>
+
+    <LjAlert
+      v-if="data.is_fuzzy"
+      variant="info"
+      :text="t('data.approximate')"
+      class="musics-alert"
+    />
 
     <Table
       v-model="data"
@@ -176,11 +175,11 @@
 </template>
 
 <script setup>
-import { LjAlert, LjButton, LjCheckbox, LjChip, LjField, LjInput, LjSwitch } from "@/components/ui";
+import { LjAlert, LjButton, LjCheckbox, LjChip, LjIcon, LjInput, LjSwitch } from "@/components/ui";
 /* ########################################################### */
 /* ####### INSTALAÇÃO DO MODULO ############################## */
 /* ########################################################### */
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, useId } from "vue";
 import { useViewport } from "@/composables/useViewport";
 import Media from "@/composables/useMedia";
 import AppData from "@/helpers/AppData";
@@ -235,6 +234,7 @@ function removeSongFromPlaylist(id_music) {
 /* -------------------------------------------------- */
 const { width: displayWidth } = useViewport();
 
+const scopeLabelId = useId();
 const search = ref("");
 const data = ref([]);
 const scroll = ref({});
@@ -297,20 +297,44 @@ function close() {
 </script>
 
 <style scoped>
-.musics-search {
-  width: 400px;
+.musics-searchbar {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--lj-space-4) var(--lj-space-8);
+  min-width: 0;
 }
 
-.musics-form-group {
-  display: flex;
-  flex-wrap: wrap;
+/* O LjInput não herda class no wrapper (inheritAttrs: false manda os attrs
+   para o <input>), então a medida do campo vem daqui. */
+.musics-searchbar :deep(.lj-input) {
+  flex: 0 1 320px;
+  min-width: 160px;
 }
 
-.musics-form-item {
+.musics-searchbar__scope {
   display: flex;
-  flex: 1 1 auto;
   flex-wrap: wrap;
-  justify-content: space-around;
+  align-items: center;
+  gap: var(--lj-space-3) var(--lj-space-5);
+}
+
+.musics-searchbar__label {
+  font-size: var(--lj-text-sm);
+  font-weight: var(--lj-weight-semibold);
+  color: var(--lj-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.musics-searchbar__warning {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lj-space-2);
+  margin: 0;
+  font-size: var(--lj-text-sm);
+  color: var(--lj-warning);
 }
 
 .musics-albums {

@@ -19,6 +19,13 @@ import { useI18n } from "vue-i18n";
 import { LjAlert, LjProgress, LjTable } from "@/components/ui";
 import Database from "@/helpers/Database";
 import Strings from "@/helpers/Strings";
+import { isHymnalTrack } from "@/helpers/Hymnal";
+import Fuse from "fuse.js";
+
+/** Campos onde o operador erra a digitação — nome da música e do álbum. */
+const FUZZY_FIELDS = ["name", "albums_names"];
+const FUZZY_MIN_LENGTH = 3;
+const FUZZY_LIMIT = 100;
 
 // Debounce leve: aguarda `ms` ms de inatividade antes de executar `fn`.
 function debounce(fn, ms = 300) {
@@ -54,6 +61,7 @@ const { t } = useI18n();
 
 const all_data = ref([]);
 const filter_data = ref([]);
+const is_fuzzy = ref(false);
 const data = ref([]);
 const limit = ref(0);
 const error = ref(null);
@@ -101,6 +109,7 @@ watch(data, () => {
     filter_count: filter_data.value.length,
     count: data.value.length,
     data: data.value,
+    is_fuzzy: is_fuzzy.value,
   });
 });
 
@@ -166,49 +175,91 @@ function filterData() {
     ? Object.keys(props.filter).filter((key) => props.filter[key] === true)
     : [];
 
-  filter_data.value = all_data.value
-    .filter((item) => {
-      const searchableCondition =
-        searchable.length === 0 ||
-        value == "" ||
-        searchable.some((key) => {
-          if (key === "track" && item.albums) {
-            return item.albums.some((album) => {
-              const isHymnal = album.name && album.type == "hymnal";
-              return isHymnal && album.pivot && Number(album.pivot.track) === Number(value);
-            });
-          }
+  // Recorte que não depende do texto digitado: é sobre ele que a busca —
+  // exata ou aproximada — corre.
+  const base = all_data.value.filter((item) => {
+    const filterCondition =
+      filter.length === 0 || filter.some((key) => item[key] === true || item[key] === 1);
 
-          if (!isNaN(item[key]) && !isNaN(value)) {
-            return Number(item[key]) === Number(value);
-          } else if (isNaN(item[key])) {
-            return Strings.clean(item[key]).includes(value);
-          } else {
-            return false;
-          }
-        });
+    const initialLetter =
+      props.letter === "" ||
+      (props.letter === "#"
+        ? /^[^a-zA-Z]/.test(item.name.normalize("NFD").replace(/[̀-ͯ]/g, ""))
+        : item.name.normalize("NFD").replace(/[̀-ͯ]/g, "").startsWith(props.letter));
 
-      const filterCondition =
-        filter.length === 0 || filter.some((key) => item[key] === true || item[key] === 1);
+    // Álbuns desativados: oculta a música se NÃO pertencer a nenhum álbum ativo.
+    const disabled = props.disabled_albums || [];
+    const albumActive =
+      !Array.isArray(item.albums) ||
+      item.albums.length === 0 ||
+      item.albums.some((a) => !disabled.includes(a.id_album));
 
-      const initialLetter =
-        props.letter === "" ||
-        (props.letter === "#"
-          ? /^[^a-zA-Z]/.test(item.name.normalize("NFD").replace(/[̀-ͯ]/g, ""))
-          : item.name.normalize("NFD").replace(/[̀-ͯ]/g, "").startsWith(props.letter));
+    return filterCondition && initialLetter && albumActive;
+  });
 
-      // Álbuns desativados: oculta a música se NÃO pertencer a nenhum álbum ativo.
-      const disabled = props.disabled_albums || [];
-      const albumActive =
-        !Array.isArray(item.albums) ||
-        item.albums.length === 0 ||
-        item.albums.some((a) => !disabled.includes(a.id_album));
+  is_fuzzy.value = false;
 
-      return searchableCondition && filterCondition && initialLetter && albumActive;
+  if (searchable.length === 0 || value === "") {
+    filter_data.value = base;
+    paginateData();
+    return;
+  }
+
+  const exact = base.filter((item) =>
+    searchable.some((key) => {
+      if (key === "track" && item.albums) {
+        return isHymnalTrack(item, value);
+      }
+
+      if (!isNaN(item[key]) && !isNaN(value)) {
+        return Number(item[key]) === Number(value);
+      } else if (isNaN(item[key])) {
+        return Strings.clean(item[key]).includes(value);
+      } else {
+        return false;
+      }
     })
-    .slice();
+  );
+
+  if (exact.length > 0) {
+    filter_data.value = exact;
+    paginateData();
+    return;
+  }
+
+  const approximate = fuzzySearch(base, searchable);
+  is_fuzzy.value = approximate.length > 0;
+  filter_data.value = approximate;
 
   paginateData();
+}
+
+/**
+ * Rede de segurança para quem errou a digitação: só roda quando a busca por
+ * trecho não achou nada, e só nos campos curtos — a letra é texto longo, onde
+ * a aproximação custa caro e acerta qualquer coisa.
+ */
+function fuzzySearch(base, searchable) {
+  const fields = FUZZY_FIELDS.filter((key) => searchable.includes(key));
+  const query = Strings.fold(props.search);
+  if (!fields.length || query.length < FUZZY_MIN_LENGTH || /^\d+$/.test(query)) return [];
+
+  const entries = base.map((item) => {
+    const entry = { item };
+    fields.forEach((key) => {
+      entry[key] = Strings.fold(item[key]);
+    });
+    return entry;
+  });
+
+  const fuse = new Fuse(entries, {
+    keys: fields,
+    threshold: 0.35,
+    ignoreLocation: true,
+    minMatchCharLength: FUZZY_MIN_LENGTH,
+  });
+
+  return fuse.search(query, { limit: FUZZY_LIMIT }).map((hit) => hit.item.item);
 }
 
 function paginateData() {

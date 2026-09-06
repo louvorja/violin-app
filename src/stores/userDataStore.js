@@ -63,7 +63,7 @@ export const useUserDataStore = defineStore("userData", {
           name: true,
           lyric: false,
           album: false,
-          track: false,
+          track: true,
         },
         filter: {
           instrumental_music: false,

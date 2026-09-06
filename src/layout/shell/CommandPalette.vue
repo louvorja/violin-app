@@ -149,12 +149,12 @@ const _rawResults = computed(() => {
     return [...recents, ...favs, ...actions, ...modules];
   }
 
-  // Número exato: prioriza hit direto por id
+  // Só dígitos: quem digita "123" está atrás do hino 123, não de um nome.
   const numMatch = query.value.trim().match(/^\d+$/);
   if (numMatch) {
     const num = parseInt(numMatch[0], 10);
     const exactHits = allCommands.value.filter(
-      (c) => c.category === "music" && c.id === `music:${num}`
+      (c) => c.category === "music" && c.tracks?.includes(num)
     );
     if (exactHits.length > 0) {
       const { results: fuseHits } = CommandRegistry.search(query.value, { limit: 500 });
