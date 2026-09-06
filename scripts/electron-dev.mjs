@@ -26,10 +26,16 @@ const electron = require("electron");
 const args = ["."];
 if (process.platform === "linux") args.push("--no-sandbox");
 
-const filho = spawn(electron, args, {
-  stdio: "inherit",
-  env: { ...process.env, ELECTRON_DEV: "1" },
-});
+const env = { ...process.env, ELECTRON_DEV: "1" };
+
+// Herdada, essa variável faz o binário do Electron rodar como Node puro: o
+// `main.cjs` é avaliado, mas `require("electron").app` vem indefinido e o boot
+// quebra no primeiro acesso. Ferramentas que rodam dentro do Electron — o VS
+// Code é uma — a definem para os processos que lançam, e o wrapper oficial do
+// pacote não a remove.
+delete env.ELECTRON_RUN_AS_NODE;
+
+const filho = spawn(electron, args, { stdio: "inherit", env });
 
 // Sem isto o Ctrl+C encerra este processo e deixa a janela do Electron órfã,
 // e o `concurrently -k` do script de dev não consegue derrubar o par.
