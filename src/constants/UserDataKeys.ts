@@ -124,6 +124,9 @@ export const KEYS = {
       EFFECT_DURATION: `${MODULES}.${ModuleEnum.NAME_DRAW}.effect_duration`,
       NAMES: `${MODULES}.${ModuleEnum.NAME_DRAW}.names`,
     },
+    ONLINE_VIDEOS: {
+      IS_PROJECTING: `${MODULES}.${ModuleEnum.ONLINE_VIDEOS}.is_projecting`,
+    },
     OVERLAY: {
       ENABLED: `${MODULES}.${ModuleEnum.OVERLAY}.enabled`,
     },
