@@ -211,6 +211,7 @@ import { LjIcon, LjProgress } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import { localeTag } from "@/helpers/DateTime";
 import Platform from "@/helpers/Platform";
 import $alert from "@/helpers/Alert";
 import $database from "@/helpers/Database";
@@ -554,7 +555,7 @@ async function applyDbUpdate(): Promise<void> {
 
 function formatLastCheck(iso: string): string {
   const d = new Date(iso);
-  return d.toLocaleString();
+  return d.toLocaleString(localeTag(locale.value));
 }
 
 async function clearDbCache(): Promise<void> {

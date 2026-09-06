@@ -73,6 +73,7 @@ import { useLiturgyLibrary } from "../composables/useLiturgyLibrary";
 import { DEFAULT_COLOR } from "../composables/useLiturgyItems";
 import type { LiturgyItem } from "@/types/Liturgy";
 import { ICONS } from "@/config/Icons";
+import { localeTag } from "@/helpers/DateTime";
 
 const props = defineProps<{
   modelValue: boolean;
@@ -124,7 +125,7 @@ watch(internalShow, async (v) => {
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
-  return d.toLocaleDateString();
+  return d.toLocaleDateString(localeTag(locale.value));
 }
 
 async function doLoad(item: Awaited<ReturnType<typeof library.list>>[number]) {

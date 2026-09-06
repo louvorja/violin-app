@@ -30,6 +30,8 @@
 import { LjButton } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, onMounted, onBeforeUnmount } from "vue";
+import { useI18n } from "vue-i18n";
+import { localeTag } from "@/helpers/DateTime";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import ModuleFormatDrawer from "@/components/ModuleFormatDrawer.vue";
@@ -41,6 +43,7 @@ import { useModuleProjection } from "@/composables/useModuleProjection";
 import { useModuleFormat } from "@/composables/useModuleFormat";
 import { useModuleBodyStyle } from "@/composables/useModuleBodyStyle";
 
+const { locale } = useI18n();
 const { fmt, show_format } = useModuleFormat("clock", manifest);
 const { rootStyle, textStyle, bgImage, imageStyle, container } = useModuleBodyStyle("clock");
 
@@ -80,7 +83,7 @@ function read() {
 
 function formatTime(now) {
   const { is24h, showSeconds } = read();
-  return now.toLocaleTimeString([], {
+  return now.toLocaleTimeString(localeTag(locale.value), {
     hour: "2-digit",
     minute: "2-digit",
     ...(showSeconds ? { second: "2-digit" } : {}),
@@ -92,7 +95,7 @@ function formatDate(now) {
   const { showDate, dateFormat } = read();
   if (!showDate) return "";
   const opts = DATE_FORMATS[dateFormat] || DATE_FORMATS.long;
-  return now.toLocaleDateString([], opts);
+  return now.toLocaleDateString(localeTag(locale.value), opts);
 }
 
 // Quando user muda qualquer config do clock (FormatPanel ou ribbon),

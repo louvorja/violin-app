@@ -1,3 +1,16 @@
+/**
+ * Converte o idioma do app na tag que `toLocaleDateString` e amigos entendem.
+ *
+ * Sem passar tag alguma — `toLocaleDateString([])` ou sem argumento — essas
+ * funções usam o locale do SISTEMA, não o idioma escolhido no app. Num Ubuntu
+ * em inglês o relógio projetava "Sunday, September 06" no telão com o app
+ * inteiro em português, e nada disso aparece em quem desenvolve numa máquina
+ * já configurada em pt-BR.
+ */
+export function localeTag(appLocale: string | null | undefined): string {
+  return appLocale === "es" ? "es" : "pt-BR";
+}
+
 /** @category helper-puro — Formatação de tempo HH:MM:SS. Sem APIs Vue; sem acesso ao store. */
 export default {
   shortTime(time: number | string): string {

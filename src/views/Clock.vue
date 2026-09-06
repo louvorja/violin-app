@@ -7,7 +7,10 @@
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from "vue";
+import { useI18n } from "vue-i18n";
+import { localeTag } from "@/helpers/DateTime";
 
+const { locale } = useI18n();
 const time = ref("");
 const date = ref("");
 const timer = ref(null);
@@ -23,13 +26,14 @@ function _onKey(e) {
 
 function tick() {
   const now = new Date();
-  time.value = now.toLocaleTimeString([], {
+  const tag = localeTag(locale.value);
+  time.value = now.toLocaleTimeString(tag, {
     hour: "2-digit",
     minute: "2-digit",
     ...(showSeconds.value ? { second: "2-digit" } : {}),
     hour12: !show24h.value,
   });
-  date.value = now.toLocaleDateString([], {
+  date.value = now.toLocaleDateString(tag, {
     weekday: "long",
     day: "2-digit",
     month: "long",

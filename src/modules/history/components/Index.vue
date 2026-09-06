@@ -49,11 +49,15 @@
 import { LjButton, LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, computed } from "vue";
+import { useI18n } from "vue-i18n";
+import { localeTag } from "@/helpers/DateTime";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import MusicMenuTable from "@/components/MusicMenuTable.vue";
 import AppData from "@/helpers/AppData";
 import History from "@/helpers/History";
+
+const { locale } = useI18n();
 
 const moduleContainer = ref(null);
 
@@ -76,7 +80,7 @@ function relativeDate(ts) {
   if (d.toDateString() === yesterday.toDateString()) return t("time.yesterday");
   const sameYear = d.getFullYear() === today.getFullYear();
   return d.toLocaleDateString(
-    [],
+    localeTag(locale.value),
     sameYear
       ? { day: "2-digit", month: "short" }
       : { day: "2-digit", month: "2-digit", year: "2-digit" }
