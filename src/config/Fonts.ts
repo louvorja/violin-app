@@ -18,15 +18,38 @@ export interface FontOption {
   file?: string;
 }
 
+/**
+ * A fonte da interface é empacotada, e a mesma nos três sistemas.
+ *
+ * A alternativa — `system-ui` na frente, deixando cada SO escolher — deixa a
+ * interface com cara nativa, mas dá a cada plataforma uma métrica diferente
+ * para as mesmas medidas. Esta interface é densa (a escala de corpo vai de 10
+ * a 12px) e herdou do Delphi medidas que foram tiradas uma vez só: a folga que
+ * cabe uma métrica não cabe a outra. No Linux nem dá para saber qual é — o
+ * `system-ui` de lá é Cantarell no GNOME, DejaVu Sans em boa parte das
+ * distros, e ambas são bem mais largas que SF Pro e Segoe UI.
+ *
+ * O valor precisa continuar idêntico ao `--lj-font-shell` de tokens.css: o
+ * token pinta o primeiro frame e este valor o substitui logo depois da
+ * hidratação do UserData. Enquanto os dois discordaram, todo boot trocava a
+ * fonte da interface inteira no meio do caminho.
+ */
+const UI_STACK =
+  '"InterVariable", "Inter", "Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, "Helvetica Neue", "Tahoma", sans-serif';
+
+/**
+ * Stack do sistema, default por um ciclo de versão. Fica reconhecida como
+ * legada para que quem a tenha gravada volte ao padrão — ver
+ * `_isLegacyUiFallback`.
+ */
+const UI_SYSTEM_STACK =
+  'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", "Helvetica Neue", Arial, sans-serif';
+
 /** Defaults concretos, marcadores persistidos e variáveis CSS do sistema. */
 export const FONT = {
   DEFAULT: "__DEFAULT__",
   UI: {
-    // Fonte do sistema primeiro: SF Pro no macOS, Segoe UI no Windows, a do
-    // desktop no Linux. Assim a interface acompanha o visual do SO em vez de
-    // impor a Inter, que continua disponível na lista como escolha explícita.
-    FALLBACK:
-      'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", "Helvetica Neue", Arial, sans-serif',
+    FALLBACK: UI_STACK,
     INHERIT: "__FONT_DEFAULT_UI__",
     CSS_VAR: "--lj-font-shell",
   },
@@ -39,14 +62,6 @@ export const FONT = {
 
 /** Marcador aceito apenas para dados persistidos por versões antigas. */
 const LEGACY_UI_FAMILY = "__UI_FONT__";
-
-/**
- * Fallback da interface até a versão anterior, gravado literalmente em
- * `options.font` no primeiro boot. Sem tratá-lo como legado, quem já usava o
- * app continuaria preso à Inter e nunca veria a fonte do sistema.
- */
-const LEGACY_UI_FALLBACK =
-  '"InterVariable", "Inter", "Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, "Helvetica Neue", "Tahoma", sans-serif';
 
 /** Lista de fontes disponíveis para seleção. */
 export const Fonts: FontOption[] = [
@@ -74,6 +89,18 @@ export const Fonts: FontOption[] = [
 ];
 
 /**
+ * Um valor gravado por versão anterior como se fosse escolha do usuário.
+ * `seedDefaultFonts` semeia a stack padrão literalmente em `options.font`, e
+ * cada vez que esse padrão muda o valor antigo fica no disco. Sem reconhecê-lo
+ * aqui, quem já abriu o app uma vez nunca veria o padrão novo — foi o que
+ * prendeu os usuários na Inter quando o default virou a fonte do sistema, e o
+ * que prenderia o Linux em `system-ui` agora.
+ */
+function _isLegacyUiFallback(saved: string): boolean {
+  return saved === LEGACY_UI_FAMILY || saved === UI_SYSTEM_STACK;
+}
+
+/**
  * Resolve o valor CSS font-family a partir da chave salva no UserData.
  *
  * Valores especiais:
@@ -88,7 +115,7 @@ export function resolveFont(
   defaultFont?: string
 ): string {
   if (typeof saved !== "string" || !saved.trim()) return fallback;
-  if (saved === FONT.UI.INHERIT || saved === LEGACY_UI_FAMILY || saved === LEGACY_UI_FALLBACK) {
+  if (saved === FONT.UI.INHERIT || _isLegacyUiFallback(saved)) {
     return `var(${FONT.UI.CSS_VAR}, ${FONT.UI.FALLBACK})`;
   }
   if (saved === FONT.PROJECTION.INHERIT) {
@@ -105,8 +132,7 @@ export function resolveDefaultFont(saved: string | null | undefined, fallback: s
     saved === FONT.DEFAULT ||
     saved === FONT.UI.INHERIT ||
     saved === FONT.PROJECTION.INHERIT ||
-    saved === LEGACY_UI_FAMILY ||
-    saved === LEGACY_UI_FALLBACK
+    _isLegacyUiFallback(saved)
   ) {
     return fallback;
   }
