@@ -134,6 +134,18 @@ export default async ({ mode }) => {
           cacheableResponse: { statuses: [0, 200] },
         },
       },
+      // Conversor de HEIC — guardado no primeiro uso, e não antes. Fica fora do
+      // precache (ver `globIgnores`), então quem nunca importou foto de iPhone
+      // não baixa os 3MB; quem importou uma vez continua conseguindo offline.
+      {
+        urlPattern: /\/assets\/heic-to-[^/]*\.js$/,
+        handler: "CacheFirst",
+        options: {
+          cacheName: "louvorja-heic",
+          expiration: { maxEntries: 2, maxAgeSeconds: 90 * 24 * 3600 },
+          cacheableResponse: { statuses: [0, 200] },
+        },
+      },
     ];
 
     plugins.push(
@@ -144,6 +156,13 @@ export default async ({ mode }) => {
         },
         workbox: {
           globPatterns: ["**/*.{html,js,css,svg,png,woff,woff2}"],
+          // O conversor de HEIC passa dos 2MiB que o workbox aceita precachear,
+          // e o build falha por isso em vez de apenas avisar. Subir o limite
+          // seria a correção errada: ele empurraria 3MB para o primeiro acesso
+          // de todo mundo, quando o arquivo só interessa a quem importa foto de
+          // iPhone. Fora do precache, ele desce sob demanda e o
+          // `runtimeCaching` acima o guarda a partir daí.
+          globIgnores: ["**/heic-to-*.js"],
           runtimeCaching,
         },
         manifest: {
