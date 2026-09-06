@@ -769,6 +769,18 @@ onMounted(() => {
         return;
       }
 
+      // Quem já recusou esta versão não é perguntado de novo. A recusa vale só
+      // para o número que estava na tela: quando sair uma versão nova do banco,
+      // a pergunta volta. Sem isso o diálogo reaparecia a cada abertura do app,
+      // porque a checagem só compara o que está instalado com o que existe no
+      // servidor e não tinha como saber que a resposta já havia sido dada.
+      const recusada = $userdata.get<number | null>(KEYS.OPTIONS.BUNDLE_DECLINED_VERSION, null);
+      if (version != null && recusada === version) {
+        console.info("[Shell] bundle v" + version + " já recusado — não perguntar de novo");
+        _runStartupUpdateCheck();
+        return;
+      }
+
       // Bundle necessário — pergunta ao usuário se quer atualizar
       $alert.yesno(
         {
@@ -781,7 +793,9 @@ onMounted(() => {
               if (ok) _runStartupUpdateCheck();
             });
           } else {
-            // Usuário recusou — continua o boot sem atualizar
+            if (version != null) {
+              $userdata.set(KEYS.OPTIONS.BUNDLE_DECLINED_VERSION, version);
+            }
             _runStartupUpdateCheck();
           }
         }

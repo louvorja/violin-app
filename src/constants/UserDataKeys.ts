@@ -256,6 +256,8 @@ export const KEYS = {
     USE_BETA_UPDATES: `${OPTIONS}.use_beta_updates`,
     CHECK_UPDATES_ON_START: `${OPTIONS}.check_updates_on_start`,
     AUTO_DOWNLOAD_UPDATES: `${OPTIONS}.auto_download_updates`,
+    /** Versão do banco que o usuário recusou baixar; não é perguntada de novo. */
+    BUNDLE_DECLINED_VERSION: `${OPTIONS}.bundle_declined_version`,
     AUTO_CACHE_MEDIA: `${OPTIONS}.auto_cache_media`,
     STORAGE_QUOTA_GB: `${OPTIONS}.storage_quota_gb`,
     OPEN_RETURN: `${OPTIONS}.open_return`,
