@@ -182,6 +182,15 @@
           />
         </LjField>
 
+        <LjField layout="column" :label="t('select_category')">
+          <LjSelect
+            :model-value="editFileForm.categoryId"
+            :items="editCategorySelectItems"
+            item-label="title"
+            @update:model-value="editFileForm.categoryId = String($event)"
+          />
+        </LjField>
+
         <input
           ref="editFileInput"
           type="file"
@@ -232,7 +241,7 @@ import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
 import Alert from "@/helpers/Alert";
 import { ICONS } from "@/config/Icons";
-import { LjButton, LjDialog, LjEmpty, LjField, LjIcon, LjInput } from "@/components/ui";
+import { LjButton, LjDialog, LjEmpty, LjField, LjIcon, LjInput, LjSelect } from "@/components/ui";
 import { AUDIO_EXT } from "@/constants/FileTypes";
 import CategoryManagerDialog, { CategoryFileData } from "@/components/CategoryManagerDialog.vue";
 import $idb from "@/helpers/IndexedDB";
@@ -356,10 +365,16 @@ let dragCounter = 0;
 
 const showEditFileDialog = ref(false);
 const editingFileItem = ref<{ file: MediaFile; categoryId: string } | null>(null);
-const editFileForm = ref<{ name: string; fileName: string; newFile: File | null }>({
+const editFileForm = ref<{
+  name: string;
+  fileName: string;
+  newFile: File | null;
+  categoryId: string;
+}>({
   name: "",
   fileName: "",
   newFile: null,
+  categoryId: "",
 });
 const editFileInput = ref<HTMLInputElement | null>(null);
 
@@ -503,6 +518,11 @@ const visibleFiles = computed(() => {
   }
   return result;
 });
+
+const editCategorySelectItems = computed(() => [
+  { title: t("uncategorized"), value: UNCATEGORIZED_ID },
+  ...categories.value.map((c) => ({ title: c.name, value: c.id })),
+]);
 
 const volumeIcon = computed(() => {
   const v = bg.volume.value;
@@ -693,7 +713,12 @@ async function doRemove(fileId: string): Promise<void> {
 
 function openEditFile(item: { file: MediaFile; categoryId: string }): void {
   editingFileItem.value = item;
-  editFileForm.value = { name: item.file.name, fileName: item.file.fileName, newFile: null };
+  editFileForm.value = {
+    name: item.file.name,
+    fileName: item.file.fileName,
+    newFile: null,
+    categoryId: item.categoryId,
+  };
   showEditFileDialog.value = true;
 }
 
@@ -714,6 +739,7 @@ async function saveFileEdit(): Promise<void> {
   if (!storedFile) return;
 
   storedFile.name = editFileForm.value.name.trim();
+  storedFile.categoryId = editFileForm.value.categoryId;
 
   if (editFileForm.value.newFile) {
     const filePath = (editFileForm.value.newFile as any).path;
