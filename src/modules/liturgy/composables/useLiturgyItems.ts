@@ -13,6 +13,8 @@ import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import { MusicActionEnum } from "@/enums/MusicActionEnum";
 import { readAllSlots as readAllOverlaySlots } from "@/helpers/Overlay";
 import type { OverlaySlot } from "@/types/Overlay";
+import { useBroadcastListener } from "@/composables/useBroadcastListener";
+import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import type { LiturgyItem, ScheduledCategory, LiturgyMusicItem } from "@/types/Liturgy";
 import { AUDIO_EXT, VIDEO_EXT } from "@constants/FileTypes";
 
@@ -105,6 +107,11 @@ export function useLiturgyItems(
     overlaySlots.value = await readAllOverlaySlots();
     overlaySlotsLoaded.value = true;
   }
+
+  useBroadcastListener(BROADCAST_TYPE.OVERLAY_CONFIG_CHANGED, () => {
+    overlaySlotsLoaded.value = false;
+    overlaySlots.value = [];
+  });
 
   const items: WritableComputedRef<LiturgyItem[]> = computed({
     get() {

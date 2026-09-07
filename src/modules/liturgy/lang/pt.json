@@ -272,6 +272,7 @@
     "activate": "Ativar",
     "deactivate": "Desativar",
     "link_overlay": "Vincular Overlay",
-    "linked_overlay": "Overlay vinculado"
+    "linked_overlay": "Overlay vinculado",
+    "no_slots": "Nenhum overlay disponível. Crie slots no módulo Overlay."
   }
 }

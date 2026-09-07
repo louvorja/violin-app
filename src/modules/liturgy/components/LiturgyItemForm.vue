@@ -368,9 +368,13 @@
     >
       <LjCheckbox
         :model-value="!!form.linked_overlay_id"
+        :disabled="overlaySlots.length === 0"
         :label="t('overlay.link_overlay')"
         @update:model-value="onLinkOverlayToggle($event)"
       />
+      <p v-if="overlaySlots.length === 0" class="lif-hint">
+        {{ t("overlay.no_slots") }}
+      </p>
       <div v-if="form.linked_overlay_id" class="lif-spaced">
         <LjSelect
           :model-value="form.linked_overlay_id"
