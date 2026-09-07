@@ -184,7 +184,6 @@
 
           <div>
             <!-- Deslocamento -->
-            <div class="opt-label acc-block-label">{{ $t("accessibility.avatar.align_hint") }}</div>
             <div class="acc-pair">
               <LjField :label="$t('accessibility.avatar.offset_x')" layout="column">
                 <LjInput
@@ -207,10 +206,7 @@
             </div>
 
             <!-- Tamanho -->
-            <div class="opt-label acc-block-label acc-block-label--gap">
-              {{ $t("accessibility.avatar.size_hint") }}
-            </div>
-            <div class="acc-pair">
+            <div class="acc-pair acc-block-label--gap">
               <LjField :label="$t('accessibility.avatar.width')" layout="column">
                 <LjInput
                   :model-value="currentWidth"
@@ -259,7 +255,7 @@
               </LjField>
             </div>
 
-            <div class="acc-pair">
+            <div class="acc-pair acc-block-label--gap">
               <!-- Animação de saída -->
               <LjField :label="$t('accessibility.avatar.exit_animation')" layout="column">
                 <LjSelect
@@ -1493,7 +1489,6 @@ async function clearLibrasCache(): Promise<void> {
 
 .acc-anim {
   display: grid;
-  gap: var(--lj-space-8);
   min-width: 0;
 }
 
