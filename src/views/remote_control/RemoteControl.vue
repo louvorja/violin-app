@@ -325,8 +325,8 @@ useBroadcastListener(BROADCAST_TYPE.BIBLE_VERSE, async (payload) => {
     return;
   }
 
-  if (payload.bookId && payload.chapter) {
-    activeBible.value.bookId = Number(payload.bookId);
+  if (payload.book_id && payload.chapter) {
+    activeBible.value.bookId = Number(payload.book_id);
     activeBible.value.chapter = payload.chapter;
     activeBible.value.verse = payload.verses?.[0] || 1;
     await loadBibleChapter();

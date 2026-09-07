@@ -1093,11 +1093,11 @@ useBroadcastListener(BROADCAST_TYPE.BIBLE_VERSE, async (payload: any) => {
   if (!payload || !payload.text) return;
 
   // Navegar até o livro/capítulo/versículo quando vindo de fora (bible_search, spotlight)
-  if (payload.bookId && payload.chapter) {
-    const changedBook = payload.bookId !== bible.id_bible_book;
+  if (payload.book_id && payload.chapter) {
+    const changedBook = payload.book_id !== bible.id_bible_book;
     const changedChap = payload.chapter !== bible.chapter;
 
-    if (changedBook) await selBook(payload.bookId);
+    if (changedBook) await selBook(payload.book_id);
     if (changedChap || changedBook) await selChapter(payload.chapter);
 
     if (payload.verses?.length) {
@@ -1122,7 +1122,7 @@ useBroadcastListener(BROADCAST_TYPE.BIBLE_VERSE, async (payload: any) => {
       scriptural_reference: payload.reference,
       verses: payload.verses || [],
       chapter: payload.chapter || select_bible.chapter,
-      id_bible_book: payload.bookId || select_bible.id_bible_book,
+      id_bible_book: payload.book_id || select_bible.id_bible_book,
     });
   }
 });

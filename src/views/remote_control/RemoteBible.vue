@@ -127,7 +127,7 @@ interface FullBibleCache {
 }
 
 interface LoadBibleChapterPayload {
-  bookId: string | number;
+  book_id: string | number;
   chapter: number;
   verses?: number[];
 }
@@ -468,8 +468,8 @@ onMounted(() => {
 
 defineExpose({
   loadBibleChapter: async (payload: LoadBibleChapterPayload): Promise<void> => {
-    if (payload.bookId && payload.chapter) {
-      const bId = Number(payload.bookId);
+    if (payload.book_id && payload.chapter) {
+      const bId = Number(payload.book_id);
       bibleSelection.value.book = bId;
       bibleSelection.value.chapter = payload.chapter;
       bibleSelection.value.verse = payload.verses?.[0] || 1;
