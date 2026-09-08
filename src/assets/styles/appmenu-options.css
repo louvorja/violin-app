@@ -84,6 +84,7 @@
   font-weight: var(--lj-weight-semibold);
   color: var(--lj-text);
   margin: calc(-1 * var(--lj-opt-scroll-pad)) 0 var(--lj-space-6);
+  margin-left: -10px;
   padding: calc(var(--lj-space-5) + var(--lj-opt-scroll-pad)) 0 var(--lj-space-3);
   background: var(--lj-surface-bg);
   border-bottom: 1px solid var(--lj-surface-border);
