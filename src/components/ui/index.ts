@@ -17,6 +17,7 @@ export { default as LjCalendar } from "./LjCalendar.vue";
 export { default as LjCard } from "./LjCard.vue";
 export { default as LjCheckbox } from "./LjCheckbox.vue";
 export { default as LjChip } from "./LjChip.vue";
+export { default as LjCopyButton } from "./LjCopyButton.vue";
 export { default as LjDivider } from "./LjDivider.vue";
 export { default as LjEmpty } from "./LjEmpty.vue";
 export { default as LjField } from "./LjField.vue";
