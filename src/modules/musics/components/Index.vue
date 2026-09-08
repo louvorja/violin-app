@@ -15,6 +15,7 @@
     <template v-if="userdata" #header>
       <div class="musics-searchbar">
         <LjInput
+          v-if="!disabled"
           v-model="search"
           :placeholder="t('inputs.search')"
           :aria-label="t('inputs.search')"
@@ -23,6 +24,11 @@
           :disabled="disabled"
           clearable
         />
+
+        <p v-if="disabled" class="musics-searchbar__warning">
+          <LjIcon :icon="ICONS.UI.ALERT" :size="14" />
+          {{ t("inputs.search_disabled") }}
+        </p>
 
         <div class="musics-searchbar__scope" role="group" :aria-labelledby="scopeLabelId">
           <span :id="scopeLabelId" class="musics-searchbar__label">
@@ -33,11 +39,6 @@
           <LjCheckbox v-model="userdata.search.album" :label="t('inputs.filter_album')" />
           <LjCheckbox v-model="userdata.search.track" :label="t('inputs.filter_track')" />
         </div>
-
-        <p v-if="disabled" class="musics-searchbar__warning">
-          <LjIcon :icon="ICONS.UI.ALERT" :size="14" />
-          {{ t("inputs.search_disabled") }}
-        </p>
 
         <LjSwitch
           v-model="userdata.filter.instrumental_music"
