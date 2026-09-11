@@ -237,6 +237,7 @@ import {
   openBackgroundProjectionWindows,
 } from "@/helpers/ProjectionWindows";
 import Platform from "@/helpers/Platform";
+import $path from "@/helpers/Path";
 import { ICONS } from "@/config/Icons";
 import $idb from "@/helpers/IndexedDB";
 import { DB_TABLE } from "@/constants/DbTables";
@@ -383,8 +384,8 @@ async function readFileData(file: File): Promise<{ data: ArrayBuffer; mime: stri
 }
 
 function buildThumbPath(filePath: string): string | undefined {
-  if (Platform.isDesktop && filePath.startsWith("/")) {
-    return "louvorja://local" + filePath;
+  if (Platform.isDesktop) {
+    return $path.local(filePath);
   }
   return undefined;
 }
@@ -436,7 +437,7 @@ function generateVideoThumbnail(videoUrl: string): Promise<string | undefined> {
 function resolvePath(raw: string): string {
   if (raw.startsWith("http") || raw.startsWith("blob:") || raw.startsWith("louvorja://"))
     return raw;
-  if (Platform.isDesktop && raw.startsWith("/")) return "louvorja://local" + raw;
+  if (Platform.isDesktop) return $path.local(raw);
   return raw;
 }
 

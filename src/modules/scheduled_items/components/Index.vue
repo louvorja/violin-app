@@ -324,6 +324,7 @@ import type {
 } from "@/components/ui";
 import $liturgy from "@/helpers/Liturgy";
 import Platform from "@/helpers/Platform";
+import $path from "@/helpers/Path";
 import $alert from "@/helpers/Alert";
 import { ICONS } from "@/config/Icons";
 import { isHeic, heicToJpeg } from "@/helpers/ImageConvert";
@@ -412,9 +413,7 @@ function basenameOf(p: string): string {
 }
 function localUrl(p: string): string {
   if (!Platform.isDesktop) return "";
-  if (p.startsWith("/")) return "louvorja://local" + p;
-  if (/^[A-Za-z]:\\/.test(p)) return "louvorja://local/" + p.replace(/\\/g, "/");
-  return "louvorja://local/" + p;
+  return $path.local(p);
 }
 
 // Libera o objectURL e reseta o estado do formulário ao fechar o diálogo.

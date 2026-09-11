@@ -416,7 +416,10 @@ function handle() {
       // ------------------------------------------------------------------
       if (host === "local") {
         // pathname vem percent-encoded (ex: %20 → espaço): decodifica
-        const raw = decodeURIComponent(pathname);
+        let raw = decodeURIComponent(pathname);
+
+        // Windows: strip leading / antes da letra de drive (/C:/... → C:/...)
+        if (/^\/[A-Za-z]:\//.test(raw)) raw = raw.slice(1);
 
         if (!raw || raw.includes("..")) {
           console.warn("[protocol] local: path traversal bloqueado:", pathname);

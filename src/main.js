@@ -288,10 +288,7 @@ $storage.hydrate().then(async () => {
               /** Resolve um path de arquivo para URL reproduzível. */
               function resolveFileUrl(p) {
                 if (/^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(p)) return p;
-                if (Platform.isDesktop) {
-                  if (p.startsWith("/")) return "louvorja://local" + p;
-                  if (/^[A-Za-z]:\\/.test(p)) return "louvorja://local/" + p.replace(/\\/g, "/");
-                }
+                if (Platform.isDesktop) return Path.local(p);
                 return Path.file(p);
               }
 
@@ -414,10 +411,8 @@ $storage.hydrate().then(async () => {
                           bgUrl = URL.createObjectURL(new Blob([bgRec.data], { type: bgRec.mime }));
                         } else if (/^(https?|blob|data|louvorja):/i.test(bgUrl)) {
                           // passa direto
-                        } else if (Platform.isDesktop && bgUrl.startsWith("/")) {
-                          bgUrl = "louvorja://local" + bgUrl;
-                        } else if (Platform.isDesktop && /^[A-Za-z]:\\/.test(bgUrl)) {
-                          bgUrl = "louvorja://local/" + bgUrl.replace(/\\/g, "/");
+                        } else if (Platform.isDesktop) {
+                          bgUrl = Path.local(bgUrl);
                         }
                         const bg = useBackgroundSound();
                         bg.playFile({

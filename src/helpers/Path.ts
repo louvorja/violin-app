@@ -64,11 +64,11 @@ export default {
    */
   local(filePath: string): string {
     const normalized = filePath.replace(/\\/g, "/");
-    const withSlash = normalized.startsWith("/") ? normalized : `/${normalized}`;
-    const encoded = withSlash
-      .split("/")
-      .map((p) => encodeURIComponent(p))
-      .join("/");
-    return "louvorja://local" + encoded;
+    // Windows: C:/Users/... → louvorja://local/C:/Users/...
+    if (/^[A-Za-z]:\//.test(normalized)) {
+      return "louvorja://local/" + normalized;
+    }
+    // Unix: /Users/... → louvorja://local/Users/...
+    return "louvorja://local" + normalized;
   },
 };

@@ -321,9 +321,7 @@ export function useLiturgyExecution() {
     // URLs completas passam direto.
     if (/^(https?|blob|data|louvorja):/i.test(p)) return p;
     // Caminho absoluto no desktop → protocolo local.
-    if (Platform.isDesktop && p.startsWith("/")) return "louvorja://local" + p;
-    if (Platform.isDesktop && /^[A-Za-z]:\\/.test(p))
-      return "louvorja://local/" + p.replace(/\\/g, "/");
+    if (Platform.isDesktop) return $path.local(p);
     return p;
   }
 
@@ -374,10 +372,7 @@ export function useLiturgyExecution() {
     // blob:/data: usam UM único barra após o esquema — passam direto.
     if (/^(blob|data):/i.test(dir)) return dir;
     if (/^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(dir)) return dir;
-    if (Platform.isDesktop) {
-      if (dir.startsWith("/")) return "louvorja://local" + dir;
-      if (/^[A-Za-z]:\\/.test(dir)) return "louvorja://local/" + dir.replace(/\\/g, "/");
-    }
+    if (Platform.isDesktop) return $path.local(dir);
     return $path.file(dir);
   }
 

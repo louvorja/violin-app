@@ -1,6 +1,7 @@
 import $idb from "@/helpers/IndexedDB";
 import { DB_TABLE } from "@/constants/DbTables";
 import Platform from "@/helpers/Platform";
+import Path from "@/helpers/Path";
 import type { OverlayImageRecord, OverlaySlot } from "@/types/Overlay";
 import { IMAGE_EXT } from "@/constants/FileTypes";
 
@@ -49,8 +50,7 @@ export async function deleteImage(id: string): Promise<void> {
 
 export function resolveImageUrl(record: OverlayImageRecord | null): string {
   if (!record) return "";
-  if (Platform.isDesktop && record.path && record.path.startsWith("/"))
-    return "louvorja://local" + record.path;
+  if (Platform.isDesktop && record.path) return Path.local(record.path);
   if (record.data) {
     const blob = new Blob([record.data], { type: record.mime || "image/png" });
     return URL.createObjectURL(blob);

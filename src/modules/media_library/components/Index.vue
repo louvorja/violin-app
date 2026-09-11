@@ -337,6 +337,7 @@ import $media from "@/composables/useMedia";
 import $appdata from "@/helpers/AppData";
 import $userdata from "@/helpers/UserData";
 import Platform from "@/helpers/Platform";
+import $path from "@/helpers/Path";
 import $alert from "@/helpers/Alert";
 import { ICONS } from "@/config/Icons";
 import $idb from "@/helpers/IndexedDB";
@@ -785,8 +786,8 @@ const currentItem = computed(() =>
 /* ------------------------------------------------------------------ */
 
 function buildThumbPath(filePath: string): string | undefined {
-  if (Platform.isDesktop && filePath.startsWith("/")) {
-    return "louvorja://local" + filePath;
+  if (Platform.isDesktop) {
+    return $path.local(filePath);
   }
   return undefined;
 }
@@ -974,7 +975,7 @@ function clearPlaylist(): void {
 function resolvePath(raw: string): string {
   if (raw.startsWith("http") || raw.startsWith("blob:") || raw.startsWith("louvorja://"))
     return raw;
-  if (Platform.isDesktop && raw.startsWith("/")) return "louvorja://local" + raw;
+  if (Platform.isDesktop) return $path.local(raw);
   return raw;
 }
 

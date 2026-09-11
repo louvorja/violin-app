@@ -122,9 +122,7 @@ export function useTimerEndAction(moduleId: string, keys: TimerEndActionKeys) {
 
   function resolveFilePath(path: string, file?: File): string {
     if (Platform.isDesktop && path) {
-      if (path.startsWith("/")) return "louvorja://local" + path;
-      if (/^[A-Za-z]:\\/.test(path)) return "louvorja://local/" + path.replace(/\\/g, "/");
-      return path;
+      return $path.local(path);
     }
     if (file) return URL.createObjectURL(file);
     return path;
