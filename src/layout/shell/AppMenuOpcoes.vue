@@ -771,13 +771,26 @@
           </label>
           <label class="opt-format-field opt-format-field--grow">
             <span class="opt-format-label">{{ $t("options.slides.bg_image") }}</span>
-            <input
-              type="text"
-              class="opt-input"
-              :value="getUserData(KEYS.OPTIONS.SLIDE.BG_IMAGE, '')"
-              :placeholder="$t('options.slides.bg_image_placeholder')"
-              @input="saveUserData(KEYS.OPTIONS.SLIDE.BG_IMAGE, $v($event))"
-            />
+            <div class="opt-bg-pick">
+              <LjButton variant="default" size="sm" @click="pickSlideBgImage">
+                <LjIcon start :icon="ICONS.ACTIONS.IMAGE_PLUS" size="16" />
+                {{ $t("options.background.select") }}
+              </LjButton>
+              <span v-if="!slideBgImageUrl" class="opt-bg-empty-text">
+                {{ $t("options.background.no_image") }}
+              </span>
+              <div v-else class="opt-bg-preview">
+                <img :src="slideBgImageUrl" class="opt-bg-preview-img" alt="" />
+                <button
+                  class="opt-bg-preview-remove"
+                  type="button"
+                  :title="$t('options.slides.remove_image')"
+                  @click="removeSlideBgImage"
+                >
+                  <LjIcon :icon="ICONS.ACTIONS.CLOSE" size="15" />
+                </button>
+              </div>
+            </div>
           </label>
           <div class="opt-format-field">
             <label class="opt-format-label" for="opt-slides-bg-position">
@@ -1434,6 +1447,7 @@ onMounted(async () => {
   // abria as Opções com ele já ligado via os defaults, e qualquer edição
   // gravava por cima da configuração real.
   await loadFileProjBg();
+  await loadSlideBg();
 });
 
 onBeforeUnmount(() => {
@@ -1451,6 +1465,7 @@ onBeforeUnmount(() => {
   }
   if (wallpaperBlobUrl.value) URL.revokeObjectURL(wallpaperBlobUrl.value);
   if (fileProjBlobUrl) URL.revokeObjectURL(fileProjBlobUrl);
+  if (slideBgBlobUrl) URL.revokeObjectURL(slideBgBlobUrl);
 });
 
 function restoreTextFormat(): void {
@@ -1531,6 +1546,51 @@ function duracaoDeFade(bruto: string): number {
 
 function setFileProj(key: string, value: any): void {
   $userdata.set(`options.file_projection.${key}`, value);
+}
+
+/* ── Slide Custom Background Image ── */
+
+const SLIDE_BG_STORAGE_ID = "slide_custom_background";
+let slideBgBlobUrl: string | null = null;
+const slideBgImageUrl = ref("");
+
+async function loadSlideBg(): Promise<void> {
+  const s = await getSetting<any>(SLIDE_BG_STORAGE_ID).catch(() => null);
+  if (s?.image) {
+    if (slideBgBlobUrl) URL.revokeObjectURL(slideBgBlobUrl);
+    const blob = new Blob([s.image], { type: s.mime || "image/png" });
+    slideBgBlobUrl = URL.createObjectURL(blob);
+    slideBgImageUrl.value = slideBgBlobUrl;
+    $userdata.set(KEYS.OPTIONS.SLIDE.BG_IMAGE, slideBgBlobUrl);
+  } else {
+    if (slideBgBlobUrl) {
+      URL.revokeObjectURL(slideBgBlobUrl);
+      slideBgBlobUrl = null;
+    }
+    slideBgImageUrl.value = "";
+    $userdata.set(KEYS.OPTIONS.SLIDE.BG_IMAGE, "");
+  }
+}
+
+async function pickSlideBgImage(): Promise<void> {
+  const r = await pickImageData();
+  if (!r) return;
+  const blob = new Blob([r.data], { type: r.mime });
+  if (slideBgBlobUrl) URL.revokeObjectURL(slideBgBlobUrl);
+  slideBgBlobUrl = URL.createObjectURL(blob);
+  slideBgImageUrl.value = slideBgBlobUrl;
+  $userdata.set(KEYS.OPTIONS.SLIDE.BG_IMAGE, slideBgBlobUrl);
+  await saveSetting({ id: SLIDE_BG_STORAGE_ID, image: r.data, mime: r.mime });
+}
+
+async function removeSlideBgImage(): Promise<void> {
+  if (slideBgBlobUrl) {
+    URL.revokeObjectURL(slideBgBlobUrl);
+    slideBgBlobUrl = null;
+  }
+  slideBgImageUrl.value = "";
+  $userdata.set(KEYS.OPTIONS.SLIDE.BG_IMAGE, "");
+  await saveSetting({ id: SLIDE_BG_STORAGE_ID, image: null, mime: null });
 }
 
 /* ── File Projection Background ── */
