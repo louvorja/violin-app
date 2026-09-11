@@ -356,7 +356,7 @@
           v-else
           size="sm"
           variant="danger"
-          :icon="ICONS.PLAYER.STOP"
+          :icon="ICONS.ACTIONS.CANCEL"
           @click="sync.cancelDownloads()"
         >
           {{ $t("options.collections_download.cancel") }}
