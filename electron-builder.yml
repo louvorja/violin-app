@@ -86,6 +86,7 @@ win:
   # são três `.exe`, e o `latest.yml` aponta o combinado — 193MB que todo
   # operador baixaria a cada atualização automática, para usar metade.
   target: nsis
+  artifactName: "${productName}-Setup-${version}.${ext}"
   icon: build/icon-512.png
   # Code signing (opcional — requer certificado pago):
   # certificateFile: cert.pfx
@@ -135,6 +136,7 @@ mac:
     - target: zip
       arch:
         - universal
+  artifactName: "${productName}-${version}.${ext}"
   # Ícone próprio do macOS: 1024x1024 com a placa já desenhada — o squircle
   # branco na grade da Apple (~82% do canvas), margem transparente em volta.
   #
