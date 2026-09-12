@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
 import { createRequire } from "module";
-import { join } from "path";
+import { join, resolve } from "path";
 
 const require = createRequire(import.meta.url);
 const {
@@ -59,26 +59,26 @@ describe("candidatesFor", () => {
 
   it("põe a pasta própria na frente da clássica", () => {
     const c = candidatesFor("musics/pt/A/B.opus", RAIZES);
-    expect(c[0]).toEqual({ path: join("/dados/files", "musics/pt/A/B.opus"), origin: "own" });
+    expect(c[0]).toEqual({ path: resolve("/dados/files", "musics/pt/A/B.opus"), origin: "own" });
     expect(c.map((x) => x.origin)).toEqual(["own", "own", "classic", "classic"]);
   });
 
   it("oferece o formato antigo dentro de cada raiz", () => {
     const c = candidatesFor("musics/pt/A/B.opus", RAIZES);
     expect(c.map((x) => x.path)).toEqual([
-      join("/dados/files", "musics/pt/A/B.opus"),
-      join("/dados/files", "musics/pt/A/B.mp3"),
-      join("/classico/config", "musicas/A/B.opus"),
-      join("/classico/config", "musicas/A/B.mp3"),
+      resolve("/dados/files", "musics/pt/A/B.opus"),
+      resolve("/dados/files", "musics/pt/A/B.mp3"),
+      resolve("/classico/config", "musicas/A/B.opus"),
+      resolve("/classico/config", "musicas/A/B.mp3"),
     ]);
   });
 
   it("marca a origem, que é o que a interface usa para não mentir no botão remover", () => {
     const c = candidatesFor("covers/9.jpg", RAIZES);
     expect(c.filter((x) => x.origin === "classic").map((x) => x.path)).toEqual([
-      join("/classico/config", "capas/9.jpg"),
-      join("/classico/config", "capas/9.jpeg"),
-      join("/classico/config", "capas/9.bmp"),
+      resolve("/classico/config", "capas/9.jpg"),
+      resolve("/classico/config", "capas/9.jpeg"),
+      resolve("/classico/config", "capas/9.bmp"),
     ]);
   });
 
@@ -121,8 +121,8 @@ describe("classicSearchDirs", () => {
  */
 describe("joinDentroDe", () => {
   it("resolve caminho normal", () => {
-    expect(joinDentroDe("/dados/files", "covers/1.jpg")).toBe(join("/dados/files", "covers/1.jpg"));
-    expect(joinDentroDe("/dados/files", "/covers/1.jpg")).toBe(join("/dados/files", "covers/1.jpg"));
+    expect(joinDentroDe("/dados/files", "covers/1.jpg")).toBe(resolve("/dados/files", "covers/1.jpg"));
+    expect(joinDentroDe("/dados/files", "/covers/1.jpg")).toBe(resolve("/dados/files", "covers/1.jpg"));
   });
 
   it("recusa o que sobe de pasta", () => {
@@ -137,7 +137,7 @@ describe("joinDentroDe", () => {
 
   it("aceita subir e voltar sem sair", () => {
     expect(joinDentroDe("/dados/files", "covers/../covers/1.jpg")).toBe(
-      join("/dados/files", "covers/1.jpg")
+      resolve("/dados/files", "covers/1.jpg")
     );
   });
 });
