@@ -46,7 +46,9 @@ function toClassicRel(rel, lang) {
 }
 
 function _dentroDe(abs, dir) {
-  return abs === dir || abs.startsWith(dir + path.sep);
+  const normAbs = path.normalize(abs);
+  const normDir = path.normalize(dir);
+  return normAbs === normDir || normAbs.startsWith(normDir + path.sep);
 }
 
 /**
