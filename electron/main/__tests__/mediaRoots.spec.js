@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
 import { createRequire } from "module";
+import { join } from "path";
 
 const require = createRequire(import.meta.url);
 const {
@@ -58,26 +59,26 @@ describe("candidatesFor", () => {
 
   it("põe a pasta própria na frente da clássica", () => {
     const c = candidatesFor("musics/pt/A/B.opus", RAIZES);
-    expect(c[0]).toEqual({ path: "/dados/files/musics/pt/A/B.opus", origin: "own" });
+    expect(c[0]).toEqual({ path: join("/dados/files", "musics/pt/A/B.opus"), origin: "own" });
     expect(c.map((x) => x.origin)).toEqual(["own", "own", "classic", "classic"]);
   });
 
   it("oferece o formato antigo dentro de cada raiz", () => {
     const c = candidatesFor("musics/pt/A/B.opus", RAIZES);
     expect(c.map((x) => x.path)).toEqual([
-      "/dados/files/musics/pt/A/B.opus",
-      "/dados/files/musics/pt/A/B.mp3",
-      "/classico/config/musicas/A/B.opus",
-      "/classico/config/musicas/A/B.mp3",
+      join("/dados/files", "musics/pt/A/B.opus"),
+      join("/dados/files", "musics/pt/A/B.mp3"),
+      join("/classico/config", "musicas/A/B.opus"),
+      join("/classico/config", "musicas/A/B.mp3"),
     ]);
   });
 
   it("marca a origem, que é o que a interface usa para não mentir no botão remover", () => {
     const c = candidatesFor("covers/9.jpg", RAIZES);
     expect(c.filter((x) => x.origin === "classic").map((x) => x.path)).toEqual([
-      "/classico/config/capas/9.jpg",
-      "/classico/config/capas/9.jpeg",
-      "/classico/config/capas/9.bmp",
+      join("/classico/config", "capas/9.jpg"),
+      join("/classico/config", "capas/9.jpeg"),
+      join("/classico/config", "capas/9.bmp"),
     ]);
   });
 
@@ -104,7 +105,7 @@ describe("classicSearchDirs", () => {
 
   it("fora do Windows procura dentro do disco emulado do Wine", () => {
     const dirs = classicSearchDirs({ platform: "darwin", home: "/Users/x" });
-    expect(dirs.some((d) => d.includes(".wine/drive_c"))).toBe(true);
+    expect(dirs.some((d) => d.includes(".wine/drive_c") || d.includes(".wine\\drive_c"))).toBe(true);
     expect(dirs.some((d) => d.includes("CrossOver"))).toBe(true);
   });
 
@@ -120,8 +121,8 @@ describe("classicSearchDirs", () => {
  */
 describe("joinDentroDe", () => {
   it("resolve caminho normal", () => {
-    expect(joinDentroDe("/dados/files", "covers/1.jpg")).toBe("/dados/files/covers/1.jpg");
-    expect(joinDentroDe("/dados/files", "/covers/1.jpg")).toBe("/dados/files/covers/1.jpg");
+    expect(joinDentroDe("/dados/files", "covers/1.jpg")).toBe(join("/dados/files", "covers/1.jpg"));
+    expect(joinDentroDe("/dados/files", "/covers/1.jpg")).toBe(join("/dados/files", "covers/1.jpg"));
   });
 
   it("recusa o que sobe de pasta", () => {
@@ -136,7 +137,7 @@ describe("joinDentroDe", () => {
 
   it("aceita subir e voltar sem sair", () => {
     expect(joinDentroDe("/dados/files", "covers/../covers/1.jpg")).toBe(
-      "/dados/files/covers/1.jpg"
+      join("/dados/files", "covers/1.jpg")
     );
   });
 });
