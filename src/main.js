@@ -629,6 +629,30 @@ $storage.hydrate().then(async () => {
         case "http:drawing-name":
           Broadcast.send(BROADCAST_TYPE.DRAWING_NAME, { name: data.name });
           break;
+        case "http:projections-close": {
+          Media.close(true);
+          Broadcast.send(BROADCAST_TYPE.BIBLE_RIBBON_ACTION, { action: "stop" });
+          const fp = useFileProjection();
+          if (fp.isProjecting.value) {
+            fp.stopProjection();
+            Projection.close("announcements");
+          }
+          const moduleIds = [
+            ModuleEnum.COUNTER,
+            ModuleEnum.DRAW,
+            ModuleEnum.NAME_DRAW,
+            ModuleEnum.MESSAGE_BOARD,
+            ModuleEnum.STOPWATCH,
+            ModuleEnum.TIMER,
+            ModuleEnum.CLOCK,
+          ];
+          for (const id of moduleIds) {
+            Broadcast.send(BROADCAST_TYPE.MODULE_PROJECTION_VALUE, { module: id, active: false });
+            Projection.close(id);
+            Broadcast.send(BROADCAST_TYPE.MODULE_PROJECTION_CLOSE, { module: id });
+          }
+          break;
+        }
         default:
           console.warn("Evento desconhecido:", eventType);
           break;

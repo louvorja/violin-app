@@ -29,6 +29,7 @@ const paths = require("../paths.js");
 const userStore = require("../userStore.js");
 const jsonCache = require("../jsonCache.js");
 const protocolModule = require("../protocol.js");
+const devices = require("../devices.js");
 const { setupAuth } = require("./auth.js");
 const { setupRoutes } = require("./routes.js");
 const events = require("./events.js");
@@ -153,6 +154,8 @@ function _isDev() {
  * @returns {Promise<{ port: number, token: string }>}
  */
 async function start({ port, mainWindow } = {}) {
+  // Sempre atualiza _mainWindow se fornecido (chamado no boot e re-start).
+  if (mainWindow) _mainWindow = mainWindow;
   if (_server) return Promise.resolve({ port: _port, token: _token });
 
   // Resolve a porta: param > userStore > 7070.
@@ -184,10 +187,19 @@ async function start({ port, mainWindow } = {}) {
     next();
   });
 
+  // Log global de todos os requests (diagnóstico)
+  app.use((req, res, next) => {
+    const ip = req.ip || req.socket?.remoteAddress || "";
+    if (!ip.includes("127.0.0.1") && !ip.includes("::1")) {
+      console.log(`[httpServer] ${req.method} ${req.originalUrl} from ${ip}`);
+    }
+    next();
+  });
+
   app.use((req, res, next) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Api-Token");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Api-Token, X-Token, X-Device-Id, X-Device-Token");
     if (req.method === "OPTIONS") return res.sendStatus(204);
     next();
   });
@@ -205,6 +217,8 @@ async function start({ port, mainWindow } = {}) {
    */
   const EXTERNAL_PREFIXES = ['/events', '/api', '/legacy'];
   const EXTERNAL_PATHS = new Set(['/musica', '/biblia', '/controle', '/remote', '/relogio', '/projecao']);
+  // /api/register-device é acessado por devices novos (não autenticados) — nunca bloquear.
+  const EXTERNAL_EXEMPT = new Set(['/api/register-device']);
 
   function _isLocalhost(ip) {
     return (
@@ -218,12 +232,15 @@ async function start({ port, mainWindow } = {}) {
   app.use((req, res, next) => {
     if (_externalRoutesEnabled) return next();
     const p = req.path;
+    // Exceções nunca são bloqueadas (register-device precisa acessível de qualquer IP).
+    if (EXTERNAL_EXEMPT.has(p)) return next();
     if (
       EXTERNAL_PREFIXES.some(pref => p.startsWith(pref)) ||
       EXTERNAL_PATHS.has(p)
     ) {
       const ip = req.ip || req.socket?.remoteAddress || "";
       if (!_isLocalhost(ip)) {
+        console.log(`[httpServer] Gate bloqueou: ${req.method} ${p} de ${ip}`);
         return res.status(404).json({
           error: 'Rotas externas desabilitadas. Acesse via localhost.',
         });
@@ -232,9 +249,41 @@ async function start({ port, mainWindow } = {}) {
     next();
   });
 
+  // ─── Registro de dispositivos (ANTES do auth — device ainda não tem permissões) ───
+  app.post("/api/register-device", (req, res) => {
+    console.log(`[httpServer] POST /api/register-device body=`, JSON.stringify(req.body), `ip=${req.ip}`);
+    const { token, name, model, platform } = req.body || {};
+    if (!token || typeof token !== "string" || token.length < 8) {
+      console.warn(`[httpServer] POST /api/register-device: token inválido (${typeof token}, len=${token?.length})`);
+      return res.status(400).json({ status: "error", message: "Token inválido" });
+    }
+    const validPlatforms = ["android", "ios", "web"];
+    const devPlatform = validPlatforms.includes(platform) ? platform : "web";
+    const device = devices.addPending({ token, name: name || "Dispositivo", model: model || "", platform: devPlatform });
+    console.log(`[httpServer] Device registrado: ${device.name} (${device.platform}) model=${device.model} id=${device.id.slice(0, 8)} token=${device.token.slice(0, 8)}...`);
+    console.log(`[httpServer] _mainWindow=${!!_mainWindow} destroyed=${_mainWindow?.isDestroyed()}`);
+    // Notifica o renderer para abrir diálogo de permissões
+    if (_mainWindow && !_mainWindow.isDestroyed()) {
+      try {
+        _mainWindow.webContents.send("devices:pending", device);
+        console.log(`[httpServer] devices:pending enviado com sucesso`);
+      } catch (e) {
+        console.error("[httpServer] Falha ao enviar devices:pending:", e?.message || e);
+      }
+    } else {
+      console.warn("[httpServer] _mainWindow indisponível — device registrado mas diálogo não abriu");
+    }
+    res.json({ status: "pending", message: "Aguardando aprovação do host", device });
+  });
+
   // Token resolvido a cada request — `resetToken()` muda `_token` em
   // memória e o middleware passa a validar o novo automaticamente.
-  app.use(setupAuth(() => _token));
+  app.use(setupAuth(
+    () => _token,
+    (token) => devices.findByToken(token),
+    (id) => devices.findById(id),
+    () => devices.isOnlyAuthorized(),
+  ));
 
   // SSE — clients remotos (OBS/celular) recebem slide_change, bible_verse,
   // module_projection_value etc. Auth já passou (token query ou localhost).

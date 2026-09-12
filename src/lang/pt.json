@@ -61,7 +61,8 @@
       "remove": "Remover",
       "select_placeholder": "Selecione...",
       "search_placeholder": "Buscar...",
-      "no_results": "Nenhum resultado."
+      "no_results": "Nenhum resultado.",
+      "copied": "Copiado"
     },
     "inputs": {
       "search": "Buscar"
@@ -326,7 +327,36 @@
       "win_operator": "Operador",
       "win_clock": "Relógio",
       "remote_control": "Controle Remoto",
-      "qr_code": "QR Code"
+      "qr_code": "QR Code",
+      "devices_section": "Dispositivos Autorizados",
+      "devices_hint": "Dispositivos que podem acessar o servidor HTTP com permissões específicas.",
+      "only_authorized_devices": "Permitir somente dispositivos cadastrados",
+      "only_authorized_hint": "Quando ativado, apenas dispositivos cadastrados podem acessar a API. Localhost sempre tem acesso.",
+      "no_devices": "Nenhum dispositivo autorizado.",
+      "add_device": "Adicionar Dispositivo",
+      "scan_qr": "Escanear QR Code",
+      "device_qr_hint": "Escaneie este QR code com o navegador do dispositivo para cadastro.",
+      "device_name": "Nome do dispositivo",
+      "device_permissions": "Permissões",
+      "permissions_title": "Permissões do Dispositivo",
+      "edit_device": "Editar Dispositivo",
+      "approve_device": "Aprovar",
+      "edit": "Editar",
+      "reject_device": "Rejeitar",
+      "remove_confirm_title": "Excluir Dispositivo",
+      "remove_confirm_text": "Deseja realmente excluir este dispositivo? Ele não poderá mais acessar o programa.",
+      "platform_android": "Android",
+      "platform_ios": "iOS",
+      "platform_web": "Web",
+      "device_platform_label": "Plataforma",
+      "no_permissions": "Sem permissões",
+      "permission_root": "Acesso total",
+      "permission_music": "Músicas",
+      "permission_bible": "Bíblia",
+      "permission_liturgy": "Liturgia",
+      "permission_announce": "Anúncios",
+      "select_all": "Selecionar todas",
+      "deselect_all": "Desmarcar todas"
     },
     "module": {
       "bible": {
@@ -601,7 +631,8 @@
   "remote_control": {
     "tabs": {
       "slides": "Slides",
-      "announcements": "Anúncios"
+      "announcements": "Anúncios",
+      "shortcuts": "Atalhos"
     },
     "bible": {
       "clear_screen": "Limpar a Tela",
@@ -620,6 +651,17 @@
       "controls": "Controles de Anúncios",
       "stop_projection": "Encerrar Projeção",
       "projection_closed": "Projeção de anúncios encerrada"
+    },
+    "shortcuts": {
+      "nav_group": "Navegação",
+      "media_group": "Mídia",
+      "general_group": "Geral",
+      "play_pause": "Play / Pause",
+      "close_projection": "Encerrar Projeção",
+      "prev_music": "Música Anterior",
+      "next_music": "Próxima Música",
+      "overlay": "Overlay",
+      "background": "Projeção de Fundo"
     },
     "errors": {
       "generic": "Erro"

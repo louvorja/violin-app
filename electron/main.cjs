@@ -44,6 +44,7 @@ const mediaVariants = require("./main/mediaVariants.js");
 const mediaResolver = require("./main/mediaResolver.js");
 const classicLibrary = require("./main/classicLibrary.js");
 const netHealth = require("./main/netHealth.js");
+const devices = require("./main/devices.js");
 const { buildCsp } = require("./main/csp.js");
 
 function configureAppPaths() {
@@ -273,6 +274,7 @@ function createWindow() {
 
   mainWindow.on("closed", () => {
     mainWindow = null;
+    try { httpServer.setMainWindow(null); } catch (_) { /* noop */ }
   });
 
   // D6 — Registrar janela principal no módulo de atalhos globais
@@ -1001,6 +1003,12 @@ ipcMain.handle("httpServer:setExternalRoutes", (_e, enabled) => {
 /** Regenera o token e persiste em userStore. Retorna o novo token. */
 ipcMain.handle("httpServer:resetToken", () => httpServer.resetToken());
 
+/** Retorna as configurações de dispositivos (only_authorized_devices etc.). */
+ipcMain.handle("httpServer:getDeviceSettings", () => devices.getSettings());
+
+/** Atualiza as configurações de dispositivos. */
+ipcMain.handle("httpServer:setDeviceSettings", (_e, settings) => devices.updateSettings(settings));
+
 /**
  * Bridge `Broadcast.send()` (renderer) → SSE clients remotos.
  *
@@ -1075,6 +1083,24 @@ ipcMain.handle("shortcuts:savePreference", (_e, enabled) => {
   } catch (e) {
     return { ok: false, error: e.message };
   }
+});
+
+// ---------------------------------------------------------------------------
+// IPC handlers de dispositivos autorizados
+// ---------------------------------------------------------------------------
+
+/** Retorna a lista de dispositivos autorizados. */
+ipcMain.handle("devices:list", () => devices.list());
+
+/** Salva a lista completa de dispositivos (chamado pelo renderer). */
+ipcMain.handle("devices:save", (_e, deviceList) => {
+  devices.save(deviceList);
+  // Fan-out para todas as janelas
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (!w || w.isDestroyed()) continue;
+    try { w.webContents.send("devices:changed", deviceList); } catch (_) { /* noop */ }
+  }
+  return { ok: true };
 });
 
 // ---------------------------------------------------------------------------

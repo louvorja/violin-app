@@ -1,7 +1,16 @@
 import { ModuleEnum } from "@/enums/ModuleEnum";
 
 export const DB_NAME = "louvorja-violin";
-export const DB_VERSION = 1;
+
+/**
+ * Incrementar DB_VERSION quando adicionar novas tabelas para poder atualizar o banco somente quando
+ * for fazer a release para PRD.
+ * Para testes, use `indexedDB.deleteDatabase("louvorja")` no console do navegador para resetar o banco
+ *
+ * v1 → v2: adicionada tabela "devices" (dispositivos autorizados)
+ */
+export const DB_VERSION = 2;
+
 /**
  * Nomes de todas as tabelas do banco IndexedDB unificado `louvorja`.
  * Cada módulo usa o prefixo do módulo seguido do nome da entidade.
@@ -59,6 +68,8 @@ export const DB_TABLE = {
   LIBRAS_MUSICS: "libras.musics",
   LIBRAS_BIBLE: "libras.bible",
   LIBRAS_BUNDLES: "libras.bundles",
+  // ─── Dispositivos autorizados ───
+  DEVICES: "devices",
 } as const;
 
 export type DbTable = (typeof DB_TABLE)[keyof typeof DB_TABLE];

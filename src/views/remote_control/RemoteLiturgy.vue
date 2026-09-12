@@ -67,7 +67,7 @@ import { useI18n } from "vue-i18n";
 import type { LiturgyItem } from "@/types/Liturgy";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import Liturgy from "@/helpers/Liturgy";
-import { apiFetch } from "@/helpers/ApiClient";
+import { apiFetch, postApi } from "@/helpers/ApiClient";
 
 const props = defineProps<{
   token?: string;
@@ -101,7 +101,7 @@ async function executeLiturgyItem(item: LiturgyItem): Promise<void> {
     return;
   }
   try {
-    const res = await apiFetch(`/api/liturgy-execute?id=${item.id}&tag=audio&token=${props.token}`);
+    const res = await postApi("/api/liturgy-execute", { id: item.id, tag: "audio" }, props.token);
     if (res.ok) {
       emit("show-snackbar", t("components.music_menu.execute") + ": " + item.item);
       if (item.tipo === "musica") {

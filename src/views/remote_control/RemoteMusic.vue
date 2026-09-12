@@ -66,7 +66,7 @@ import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { MusicAlbum, MusicItem } from "@/types/Music";
 import type { ChooseLaterItem } from "@/types/Liturgy";
-import { apiFetch } from "@/helpers/ApiClient";
+import { apiFetch, postApi } from "@/helpers/ApiClient";
 
 const props = defineProps<{
   token?: string;
@@ -125,8 +125,10 @@ async function openMusic(music: MusicAlbum, tag: number = 3): Promise<void> {
       emit("update:choose-later-item", null);
     }
 
-    const res = await apiFetch(
-      `/api/open-song?id=${music.id_music}&tag=${tag}&token=${props.token}&id_liturgy=${idLiturgy}`
+    const res = await postApi(
+      "/api/open-song",
+      { id: music.id_music, tag, id_liturgy: idLiturgy },
+      props.token
     );
     if (res.ok) {
       emit("show-snackbar", t("components.music_menu.execute") + ": " + music.name);

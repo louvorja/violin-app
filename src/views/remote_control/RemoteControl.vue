@@ -81,6 +81,11 @@
           @update:ann-projecting="annProjecting = $event"
         />
       </div>
+
+      <!-- Tab Atalhos -->
+      <div v-if="isBooted('shortcuts')" v-show="tab === 'shortcuts'" class="rc-pane">
+        <remote-shortcuts :token="token" @show-snackbar="showSnackbar" />
+      </div>
     </div>
 
     <!-- Controles fixos na parte inferior -->
@@ -206,7 +211,7 @@ import { useI18n } from "vue-i18n";
 import { useRoute } from "vue-router";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
-import { isTokenInvalid, apiFetch } from "@/helpers/ApiClient";
+import { isTokenInvalid, apiFetch, postApi } from "@/helpers/ApiClient";
 import { LjButton, LjDialog, LjDivider, LjIcon, LjSpinner, LjTabs, LjToast } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import RemoteMusic from "./RemoteMusic.vue";
@@ -214,13 +219,14 @@ import RemoteBible from "./RemoteBible.vue";
 import RemoteLiturgy from "./RemoteLiturgy.vue";
 import RemoteSlides from "./RemoteSlides.vue";
 import RemoteAnnouncements from "./RemoteAnnouncements.vue";
+import RemoteShortcuts from "./RemoteShortcuts.vue";
 
 /** @typedef {import('@/types/Bible').ActiveBibleState} ActiveBibleState */
 
 const { t } = useI18n();
 const route = useRoute();
 
-const tab = ref("music");
+const tab = ref("shortcuts");
 const loading = ref(true);
 const snackbar = ref({ show: false, text: "", color: "" });
 const token = computed(() => getToken());
@@ -232,6 +238,11 @@ const liturgyRef = ref(null);
 const announcementsRef = ref(null);
 
 const tabItems = computed(() => [
+  {
+    value: "shortcuts",
+    label: t("remote_control.tabs.shortcuts"),
+    icon: ICONS.UI.KEYBOARD,
+  },
   { value: "music", label: t("module_group.musics.title"), icon: ICONS.MUSIC.NOTE },
   { value: "bible", label: t("module_group.bible.title"), icon: ICONS.BIBLE.BOOK_OPEN },
   { value: "liturgy", label: t("modules.liturgy.name"), icon: ICONS.FORMAT.LIST_BULLETED },
@@ -386,7 +397,7 @@ function nextVerseRemote() {
     activeBible.value.verse = newVerse;
     updateVerseReference(newVerse);
   }
-  apiFetch(`/api/bible?action=next&token=${token.value}`).catch(() =>
+  postApi("/api/bible", { action: "next" }, token.value).catch(() =>
     showSnackbar(t("remote_control.errors.generic"), "error")
   );
 }
@@ -398,7 +409,7 @@ function prevVerseRemote() {
     activeBible.value.verse = newVerse;
     updateVerseReference(newVerse);
   }
-  apiFetch(`/api/bible?action=prev&token=${token.value}`).catch(() =>
+  postApi("/api/bible", { action: "prev" }, token.value).catch(() =>
     showSnackbar(t("remote_control.errors.generic"), "error")
   );
 }
@@ -412,7 +423,7 @@ function updateVerseReference(verse) {
 
 async function closeBible() {
   try {
-    await apiFetch(`/api/bible?action=close&token=${token.value}`);
+    await postApi("/api/bible", { action: "close" }, token.value);
     activeBible.value.active = false;
     showSnackbar(t("remote_control.bible.screen_cleaned"));
   } catch (e) {
@@ -421,7 +432,7 @@ async function closeBible() {
 }
 async function closeProjection() {
   try {
-    await apiFetch(`/api/song-slides?action=close&token=${token.value}`);
+    await postApi("/api/song-slides", { action: "close" }, token.value);
     activeBible.value.active = false;
     activeBible.value.chapterVerses = [];
     showSnackbar(t("remote_control.bible.projection_closed"));
@@ -444,14 +455,14 @@ function prevSlide() {
 
 function goToSlide(index) {
   currentSlideIndex.value = index;
-  apiFetch(`/api/song-slides?action=go-to-slide&index=${index}&token=${token.value}`).catch(() =>
+  postApi("/api/song-slides", { action: "go-to-slide", index }, token.value).catch(() =>
     showSnackbar(t("remote_control.slides.error_change"), "error")
   );
 }
 
 async function closeMedia() {
   try {
-    await apiFetch(`/api/song-slides?action=close&token=${token.value}`);
+    await postApi("/api/song-slides", { action: "close" }, token.value);
     slides.value = [];
     currentTitle.value = "";
     showSnackbar(t("remote_control.slides.projection_closed"));
@@ -465,20 +476,20 @@ function showSnackbar(text, color = "success") {
 }
 
 function annNext() {
-  apiFetch(`/api/announcements?action=next&token=${token.value}`).catch(() =>
+  postApi("/api/announcements", { action: "next" }, token.value).catch(() =>
     showSnackbar(t("remote_control.errors.generic"), "error")
   );
 }
 
 function annPrev() {
-  apiFetch(`/api/announcements?action=prev&token=${token.value}`).catch(() =>
+  postApi("/api/announcements", { action: "prev" }, token.value).catch(() =>
     showSnackbar(t("remote_control.errors.generic"), "error")
   );
 }
 
 async function annStop() {
   try {
-    await apiFetch(`/api/announcements?action=stop&token=${token.value}`);
+    await postApi("/api/announcements", { action: "stop" }, token.value);
     annProjecting.value = false;
     showSnackbar(t("remote_control.announcements.projection_closed"));
   } catch (e) {

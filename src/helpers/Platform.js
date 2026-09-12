@@ -195,6 +195,24 @@ export default {
   },
 
   /**
+   * Gerenciamento de dispositivos autorizados.
+   * Permite listar, salvar e escutar mudanças na lista de devices.
+   * null quando rodando no browser/PWA.
+   *
+   * @returns {{ list, save, onChanged } | null}
+   */
+  /**
+   * API de dispositivos autorizados (D-extension).
+   * Permite cadastrar devices remotos com permissões granulares.
+   * null quando rodando no browser/PWA.
+   *
+   * @returns {{ list, save, onChanged, onPending } | null}
+   */
+  get devices() {
+    return api?.devices ?? null;
+  },
+
+  /**
    * Atalhos globais OS-level via globalShortcut do Electron (D6).
    * Funcionam mesmo com app minimizado ou outra janela em foco.
    * null quando rodando no browser/PWA.

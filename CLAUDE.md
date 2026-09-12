@@ -930,7 +930,7 @@ Vue Renderer (BrowserWindow)
 | **D2**  | Cache de JSON do banco em `userData/json_db/` via custom protocol `louvorja://`                                                         | 1-2 dias | —               |
 | **D3**  | **Download HTTPS de mídia** ⭐ — `HttpQueue` baixa áudio/imagens de `VITE_URL_FILES`                                                    | 3-4 dias | ✅ implementado |
 | **D4**  | **Multi-monitor real** ⭐ — `BrowserWindow` por monitor, "Identificar Monitores" 5s overlay                                             | 2-3 dias | —               |
-| **D5**  | Servidor HTTP embarcado — Express porta 7070, replica 7 endpoints do `fmTransmitir.pas`                                                 | 2 dias   | —               |
+| **D5**  | Servidor HTTP embarcado — Express porta 7070, 16+ endpoints, auth por device, modo restrito | 2 dias   | ✅ implementado |
 | **D6**  | Atalhos globais OS-level — `globalShortcut` + roteamento contextual (substitui `FormKeyUp`)                                             | 1 dia    | —               |
 | **D7**  | Player polish — `requestAnimationFrame` para sincronia ±50ms, conversor `.slja` legado                                                  | 2-3 dias | —               |
 | **D8**  | Auto-update + distribuição — `electron-updater` (win/mac/AppImage) + GitHub API p/ deb/rpm, opções de beta/check-on-start/auto-download | 1-2 dias | ✅ implementado |
@@ -960,15 +960,17 @@ electron/
     ├── identifyMonitors.js # Overlay 5s "Monitor N" (D4)
     ├── shortcuts.js      # globalShortcut (D6)
     ├── updater.js        # Auto-update: electron-updater + GitHub API (deb/rpm) (D8)
+    ├── devices.js        # Device auth: CRUD + only_authorized_devices flag
     ├── download/
     │   ├── api.js        # <api>/params (D3)
     │   ├── httpQueue.js  # fila HTTPS + pool de workers (D3)
     │   └── integrity.js  # existência + tamanho, aceitando variantes (D3)
     └── httpServer/
         ├── index.js      # Express (D5)
-        ├── auth.js       # token + bypass localhost (D5)
-        ├── routes.js     # /api/ping, /api/song-slides, etc. (D5)
-        └── static.js     # serve userData/server/ (D5)
+        ├── auth.js       # token + device auth + only_authorized_devices (D5)
+        ├── routes.js     # /api/ping, /api/keyboard, /api/song-slides, etc. (D5)
+        ├── events.js     # SSE /events (D5)
+        └── spa.js        # SPA + aliases Delphi (D5)
 
 electron-builder.yml      # Config NSIS Win (D0)
 build/installer.nsh       # NSIS custom (D8)

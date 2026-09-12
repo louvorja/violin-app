@@ -112,7 +112,7 @@ import { ICONS } from "@/config/Icons";
 import { ref, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
 import BibleSpotlight from "@/components/BibleSpotlight.vue";
-import { apiFetch } from "@/helpers/ApiClient";
+import { apiFetch, postApi } from "@/helpers/ApiClient";
 import type {
   ActiveBibleState,
   Bible,
@@ -378,12 +378,16 @@ function projectVerse(): void {
 
   emit("update:active-bible", newActive);
 
-  apiFetch(
-    `/api/bible?text=${encodeURIComponent(text)}&reference=${encodeURIComponent(
-      reference
-    )}&bookId=${bibleSelection.value.book}&chapter=${bibleSelection.value.chapter}&verse=${
-      bibleSelection.value.verse
-    }&token=${props.token}`
+  postApi(
+    "/api/bible",
+    {
+      text,
+      reference,
+      bookId: bibleSelection.value.book,
+      chapter: bibleSelection.value.chapter,
+      verse: bibleSelection.value.verse,
+    },
+    props.token
   )
     .then((res: Response) => {
       if (!res.ok) emit("show-snackbar", "Erro ao projetar bíblia", "error");
@@ -397,10 +401,10 @@ async function onBibleSearchSelect(res: BibleSearchResult): Promise<void> {
   const bookId = res.bookId ?? res.id_bible_book;
 
   try {
-    const resProject = await apiFetch(
-      `/api/bible?text=${encodeURIComponent(res.text)}&reference=${encodeURIComponent(
-        res.reference
-      )}&bookId=${bookId}&chapter=${res.chapter}&verse=${res.verse}&token=${props.token}`
+    const resProject = await postApi(
+      "/api/bible",
+      { text: res.text, reference: res.reference, bookId, chapter: res.chapter, verse: res.verse },
+      props.token
     );
     if (resProject.ok) {
       emit("show-snackbar", t("components.music_menu.execute") + ": " + res.reference);
@@ -445,10 +449,16 @@ function goToVerse(num: number): void {
   const text = props.activeBible.chapterVerses[num - 1];
   const reference = `${book.name} ${props.activeBible.chapter}:${num}`;
 
-  apiFetch(
-    `/api/bible?text=${encodeURIComponent(text)}&reference=${encodeURIComponent(reference)}&bookId=${
-      props.activeBible.bookId
-    }&chapter=${props.activeBible.chapter}&verse=${num}&token=${props.token}`
+  postApi(
+    "/api/bible",
+    {
+      text,
+      reference,
+      bookId: props.activeBible.bookId,
+      chapter: props.activeBible.chapter,
+      verse: num,
+    },
+    props.token
   ).catch(() => emit("show-snackbar", "Erro ao projetar bíblia", "error"));
 
   emit("update:active-bible", {

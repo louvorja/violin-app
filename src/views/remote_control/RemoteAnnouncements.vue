@@ -30,7 +30,7 @@ import { LjIcon, LjSpinner } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
-import { apiFetch } from "@/helpers/ApiClient";
+import { apiFetch, postApi } from "@/helpers/ApiClient";
 
 interface Announcement {
   id: string;
@@ -71,8 +71,10 @@ async function fetchAnnouncements(): Promise<void> {
 
 async function projectAnnouncement(ann: Announcement): Promise<void> {
   try {
-    const res = await apiFetch(
-      `/api/announcements?action=project&ids=${ann.id}&token=${props.token}`
+    const res = await postApi(
+      "/api/announcements",
+      { action: "project", ids: [ann.id] },
+      props.token
     );
     if (res.ok) {
       emit("update:ann-projecting", true);

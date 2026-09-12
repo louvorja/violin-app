@@ -191,6 +191,25 @@ npm run test:e2e             # Testes end-to-end (Playwright)
 
 ---
 
+## Controle Remoto e Servidor HTTP
+
+O app desktop (Electron) inclui um servidor HTTP embarcado (Express, porta 7070)
+que permite:
+
+- **Controle remoto** — smartphones e tablets acessam `/controle` para controlar
+  músicas, bíblia, liturgia e anúncios
+- **Captura OBS** — `/obs`, `/obs/bible` para captura transparente
+- **Projeção** — `/projecao`, `/musica?transmissao` para monitores secundários
+- **SSE** — `/events` para atualizações em tempo real
+
+**Autenticação:** token global (5 chars) ou dispositivos cadastrados com
+permissões. Modo restrito opcional bloqueia devices não cadastrados.
+
+**Detalhes:** [docs/security.md](docs/security.md#autenticação-do-servidor-http-embarcado),
+[docs/architecture.md](docs/architecture.md#-servidor-http-embarcado-d5)
+
+---
+
 ## Documentação
 
 | Documento                                            | Conteúdo                                                |

@@ -40,7 +40,9 @@
 
         <div class="tx-token-row">
           <span class="tx-token-label">{{ $t("options.transmission.token_label") }}</span>
-          <code class="tx-token">{{ httpServer.token }}</code>
+          <LjCopyButton :value="httpServer.token || ''" class="tx-token">
+            {{ httpServer.token }}
+          </LjCopyButton>
           <LjButton size="sm" :icon="ICONS.ACTIONS.RESTART" @click="resetToken">
             {{ $t("options.transmission.token_reset") }}
           </LjButton>
@@ -92,6 +94,61 @@
             }}
           </p>
         </div>
+        <div>
+          <LjCheckbox
+            :model-value="onlyAuthorizedDevices"
+            :label="$t('options.transmission.only_authorized_devices')"
+            @update:model-value="toggleOnlyAuthorized"
+          />
+          <p class="opt-hint">{{ $t("options.transmission.only_authorized_hint") }}</p>
+        </div>
+      </section>
+
+      <!-- Dispositivos autorizados -->
+      <section v-if="httpServer.running && externalRoutesEnabled" class="opt-section">
+        <div class="tx-devices-header">
+          <h3 class="opt-section-title">
+            <LjIcon :icon="ICONS.UI.MONITORS" :size="18" />
+            {{ $t("options.transmission.devices_section") }}
+          </h3>
+          <LjButton size="sm" :icon="ICONS.ACTIONS.ADD" @click="addNewDevice">
+            {{ $t("options.transmission.add_device") }}
+          </LjButton>
+        </div>
+        <p class="opt-hint">{{ $t("options.transmission.devices_hint") }}</p>
+
+        <div v-if="devices.length" class="tx-devices">
+          <div v-for="device in devices" :key="device.id" class="tx-device-row">
+            <div class="tx-device-info">
+              <LjIcon :icon="ICONS.UI.MONITORS" :size="18" />
+              <div>
+                <div class="tx-device-name">{{ device.name }}</div>
+                <div class="tx-device-meta">
+                  {{ $t("options.transmission.device_platform_label") }}:
+                  {{ $t(`options.transmission.platform_${device.platform}`) }}
+                  <template v-if="device.model">· {{ device.model }}</template>
+                  ·
+                  {{
+                    device.permissions.map((p) => $t(DEVICE_PERMISSION_LABELS[p])).join(", ") ||
+                    $t("options.transmission.no_permissions")
+                  }}
+                </div>
+              </div>
+            </div>
+            <LjButton size="sm" :icon="ICONS.UI.OPTIONS_OUTLINE" @click="editDevice(device)">
+              {{ $t("options.transmission.edit") }}
+            </LjButton>
+            <LjButton
+              size="sm"
+              variant="danger"
+              :icon="ICONS.ACTIONS.DELETE"
+              @click="requestDeleteDevice(device)"
+            >
+              {{ $t("actions.delete") }}
+            </LjButton>
+          </div>
+        </div>
+        <p v-else class="opt-hint">{{ $t("options.transmission.no_devices") }}</p>
       </section>
 
       <!-- URLs de transmissão (compatibilidade Delphi) -->
@@ -185,20 +242,90 @@
       </LjButton>
     </template>
   </LjDialog>
+
+  <!-- QR Code de cadastro de dispositivo -->
+  <LjDialog
+    v-model="showDeviceQrDialog"
+    size="sm"
+    :icon="ICONS.UI.QRCODE"
+    :title="$t('options.transmission.scan_qr')"
+  >
+    <div class="qr-body">
+      <canvas ref="deviceQrCanvas" class="qr-canvas" />
+      <code class="qr-url">{{ deviceQrUrl }}</code>
+      <p class="opt-hint" style="margin-top: 8px; text-align: center">
+        {{ $t("options.transmission.device_qr_hint") }}
+      </p>
+    </div>
+    <template #footer>
+      <LjButton size="sm" @click="showDeviceQrDialog = false">
+        {{ $t("alert.close") }}
+      </LjButton>
+    </template>
+  </LjDialog>
+
+  <!-- Diálogo de permissões do device -->
+  <DevicePermissionsDialog
+    :device="dialogDevice"
+    :is-pending="isPendingDialog"
+    @save="onDeviceSave"
+    @reject="onDeviceReject"
+    @close="onDeviceDialogClose"
+  />
+
+  <!-- Confirmar exclusão de dispositivo -->
+  <LjDialog
+    v-model="confirmDeleteDevice"
+    size="sm"
+    :icon="ICONS.ACTIONS.DELETE"
+    :title="$t('options.transmission.remove_confirm_title')"
+  >
+    <template v-if="confirmDeleteDevice">
+      <p>{{ $t("options.transmission.remove_confirm_text") }}</p>
+      <div class="tx-confirm-device">
+        <LjIcon :icon="ICONS.UI.MONITORS" :size="20" />
+        <div>
+          <div class="tx-confirm-device-name">{{ confirmDeleteDevice.name }}</div>
+          <div class="tx-confirm-device-meta">
+            {{ $t(`options.transmission.platform_${confirmDeleteDevice.platform}`) }}
+            <template v-if="confirmDeleteDevice.model">· {{ confirmDeleteDevice.model }}</template>
+          </div>
+        </div>
+      </div>
+    </template>
+    <template #footer>
+      <LjButton size="sm" @click="confirmDeleteDevice = null">{{ $t("alert.cancel") }}</LjButton>
+      <LjButton size="sm" variant="danger" @click="confirmDeleteDeviceAction">
+        {{ $t("actions.delete") }}
+      </LjButton>
+    </template>
+  </LjDialog>
 </template>
 
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
 import { useDisplays } from "@/composables/useDisplays";
+import { useDevices } from "@/composables/useDevices";
 import MonitorSelect from "@/components/inputs/MonitorSelect.vue";
-import { LjButton, LjCheckbox, LjDialog, LjIcon, LjInput } from "@/components/ui";
+import DevicePermissionsDialog from "@/components/DevicePermissionsDialog.vue";
+import { LjButton, LjCheckbox, LjCopyButton, LjDialog, LjIcon, LjInput } from "@/components/ui";
 import Platform from "@/helpers/Platform";
 import { open as openProjection } from "@/helpers/Projection";
 import { ICONS } from "@/config/Icons";
+import { DEVICE_PERMISSION_LABELS } from "@/types/Device";
 import QRCode from "qrcode";
 
 const isDesktop = computed(() => Platform.isDesktop);
 const { displays, getFeatureRole, setFeatureRole } = useDisplays();
+const {
+  devices,
+  updateDevice,
+  removeDevice,
+  pendingDevice,
+  generatePendingToken,
+  acceptPendingDevice,
+  rejectPendingDevice,
+} = useDevices();
 
 /** Papel de cada janela de transmissão. Carregado sob demanda (passa pelo IPC). */
 const featureRoles = ref({});
@@ -277,6 +404,12 @@ const showQrDialog = ref(false);
 const qrUrl = ref("");
 const qrTitle = ref("");
 const qrCanvas = ref(null);
+const showDeviceQrDialog = ref(false);
+const deviceQrUrl = ref("");
+const deviceQrCanvas = ref(null);
+const editingDevice = ref(null);
+const confirmDeleteDevice = ref(null);
+const onlyAuthorizedDevices = ref(false);
 
 // IP "público" preferido — primeiro não-loopback. Cai pra 127.0.0.1
 // quando a máquina não tem interface de rede ativa (raro: notebook offline).
@@ -357,6 +490,78 @@ watch(
   { flush: "post" }
 );
 
+// --- Dispositivos ---
+async function addNewDevice() {
+  const token = generatePendingToken();
+  if (!token) return;
+  const url = `${baseUrl.value}/register-device?token=${token}`;
+  deviceQrUrl.value = url;
+  showDeviceQrDialog.value = true;
+}
+
+/** Device sendo editado — pending (recém-cadastrado) ou existente. */
+const dialogDevice = computed(() => pendingDevice.value || editingDevice.value);
+const isPendingDialog = computed(() => !!pendingDevice.value);
+
+function editDevice(device) {
+  editingDevice.value = device;
+}
+
+async function onDeviceSave(id, name, permissions) {
+  if (isPendingDialog.value && pendingDevice.value?.id === id) {
+    // Device pendente — aceitar com permissões definidas
+    await acceptPendingDevice(name, permissions);
+  } else {
+    // Device existente — atualizar
+    await updateDevice(id, { name, permissions });
+  }
+  editingDevice.value = null;
+}
+
+async function onDeviceReject(id) {
+  if (isPendingDialog.value && pendingDevice.value?.id === id) {
+    await rejectPendingDevice();
+  } else {
+    await removeDevice(id);
+  }
+  editingDevice.value = null;
+}
+
+function onDeviceDialogClose() {
+  editingDevice.value = null;
+}
+
+function requestDeleteDevice(device) {
+  confirmDeleteDevice.value = device;
+}
+
+async function confirmDeleteDeviceAction() {
+  if (!confirmDeleteDevice.value) return;
+  await removeDevice(confirmDeleteDevice.value.id);
+  confirmDeleteDevice.value = null;
+}
+
+watch(pendingDevice, (val) => {
+  if (val) showDeviceQrDialog.value = false;
+});
+
+watch(
+  [deviceQrCanvas, deviceQrUrl],
+  async ([canvas, url]) => {
+    if (!canvas || !url) return;
+    try {
+      await QRCode.toCanvas(canvas, url, {
+        width: 240,
+        margin: 1,
+        color: { dark: "#000", light: "#fff" },
+      });
+    } catch (e) {
+      console.error("[Transmitir] QRCode device:", e);
+    }
+  },
+  { flush: "post" }
+);
+
 async function toggleHttpServer() {
   if (!Platform.httpServer) return;
   httpServerLoading.value = true;
@@ -403,7 +608,7 @@ async function refreshStatus() {
     const s = await Platform.httpServer.status();
     httpServer.value = s;
     externalRoutesEnabled.value = s.externalRoutesEnabled !== false;
-  } catch (_) {
+  } catch {
     httpServer.value = { running: false, port: null, token: null };
     externalRoutesEnabled.value = false;
   }
@@ -452,6 +657,16 @@ async function toggleGlobalShortcuts(enabled) {
   }
 }
 
+async function toggleOnlyAuthorized(enabled) {
+  onlyAuthorizedDevices.value = enabled;
+  if (!Platform.httpServer?.setDeviceSettings) return;
+  try {
+    await Platform.httpServer.setDeviceSettings({ only_authorized_devices: enabled });
+  } catch (e) {
+    console.error("[Transmitir] setDeviceSettings:", e);
+  }
+}
+
 async function toggleUseHostname(enabled) {
   useHostname.value = enabled;
   if (!Platform.userStore) return;
@@ -474,6 +689,10 @@ onMounted(async () => {
       httpServerPort.value = cfg.httpServer?.port ?? 7070;
       useHostname.value = cfg.httpServer?.useHostname ?? false;
       hostname.value = await Platform.httpServer.hostname();
+      if (Platform.httpServer.getDeviceSettings) {
+        const ds = await Platform.httpServer.getDeviceSettings();
+        onlyAuthorizedDevices.value = ds.only_authorized_devices === true;
+      }
     } catch (e) {
       console.warn("[Transmitir] init:", e);
     }
@@ -537,12 +756,17 @@ onMounted(async () => {
   color: var(--lj-text-muted);
   font-size: var(--lj-text-base);
 }
-.tx-token {
+:deep(.tx-token) {
   font-family: var(--lj-font-mono);
   letter-spacing: 0.08em;
   padding: var(--lj-space-1) var(--lj-space-4);
   background: var(--lj-surface-bg-active);
   border-radius: var(--lj-radius-md);
+  cursor: pointer;
+  transition: background 150ms;
+}
+:deep(.tx-token:hover) {
+  background: var(--lj-surface-bg-hover);
 }
 .tx-port-label {
   margin-left: var(--lj-space-8);
@@ -560,6 +784,45 @@ onMounted(async () => {
 }
 
 /* Lista de URLs de transmissão. */
+/* Dispositivos autorizados */
+.tx-devices-header {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-3);
+}
+.tx-devices-header .opt-section-title {
+  flex: 1;
+  margin-bottom: 0;
+}
+.tx-devices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-3);
+}
+.tx-device-row {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-3);
+  padding: var(--lj-space-3) var(--lj-space-4);
+  background: var(--lj-surface-bg-hover);
+  border-radius: var(--lj-radius-lg);
+}
+.tx-device-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-3);
+}
+.tx-device-name {
+  font-weight: var(--lj-weight-medium);
+  font-size: var(--lj-text-sm);
+}
+.tx-device-meta {
+  font-size: var(--lj-text-xs);
+  color: var(--lj-text-subtle);
+}
+
 .tx-urls {
   display: flex;
   flex-direction: column;
@@ -629,5 +892,22 @@ onMounted(async () => {
   word-break: break-all;
   text-align: center;
   max-width: 100%;
+}
+.tx-confirm-device {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-3);
+  padding: var(--lj-space-3) var(--lj-space-4);
+  background: var(--lj-surface-bg-hover);
+  border-radius: var(--lj-radius-lg);
+  margin-top: var(--lj-space-3);
+}
+.tx-confirm-device-name {
+  font-weight: var(--lj-weight-medium);
+  font-size: var(--lj-text-sm);
+}
+.tx-confirm-device-meta {
+  font-size: var(--lj-text-xs);
+  color: var(--lj-text-subtle);
 }
 </style>
