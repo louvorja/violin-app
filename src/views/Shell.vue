@@ -499,7 +499,9 @@ function _handleUpdaterState(
   );
 
   if (state.status === "downloading") {
-    bgTasks.registerTask("app-update", "shell.background_tasks.app_update");
+    bgTasks.registerTask("app-update", "shell.background_tasks.app_update", () => {
+      Platform.updater?.cancel();
+    });
     bgTasks.updateTask("app-update", { progress: state.progress ?? 0 });
   } else if (state.status === "downloaded") {
     bgTasks.completeTask("app-update");

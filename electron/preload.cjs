@@ -463,6 +463,8 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
     check: () => ipcRenderer.invoke("updater:check"),
     /** Inicia o download da atualização disponível. Retorna { ok, error? }. */
     download: () => ipcRenderer.invoke("updater:download"),
+    /** Cancela o download em andamento. */
+    cancel: () => ipcRenderer.invoke("updater:cancel"),
     /** Fecha o app e instala a atualização baixada. */
     install: () => ipcRenderer.invoke("updater:install"),
     /** Retorna o estado atual do updater (snapshot). */

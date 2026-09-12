@@ -210,7 +210,7 @@ export default {
    * Permite verificar, baixar e instalar atualizações do app desktop.
    * null quando rodando no browser/PWA.
    *
-   * @returns {{ check, download, install, status, setOptions,
+   * @returns {{ check, download, cancel, install, status, setOptions,
    *             downloadPackage, openPackage, openReleasePage, getReleaseNotes,
    *             getInstallType, onPackageProgress, onStateChange } | null}
    */

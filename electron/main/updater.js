@@ -70,6 +70,9 @@ let _checkedViaGithub = false;
 // Amostragem de taxa de download (download manual via GitHub API).
 let _dlSample = { time: 0, received: 0, rate: 0 };
 
+// AbortController para cancelar download em andamento
+let _downloadAbortController = null;
+
 _state.version = app.getVersion() || "0.0.0";
 
 // ---------------------------------------------------------------------------
@@ -324,10 +327,15 @@ async function downloadPackage(sender) {
   _dlSample = { time: 0, received: 0, rate: 0 };
   _setState({ status: "downloading", progress: 0, newVersion: info.version, error: null, bytesPerSecond: 0, transferred: 0, total: asset.size || 0 });
 
+  _downloadAbortController = new AbortController();
   try {
     await new Promise((resolve, reject) => {
+      const onAbort = () => reject(new Error("cancelled"));
+      _downloadAbortController.signal.addEventListener("abort", onAbort);
+
       const download = (url) => {
         https.get(url, { headers: { "User-Agent": "LouvorJA" } }, (res) => {
+          if (_downloadAbortController.signal.aborted) { res.resume(); return; }
           if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
             res.resume();
             return download(res.headers.location);
@@ -348,8 +356,14 @@ async function downloadPackage(sender) {
     return { ok: true, path: dest };
   } catch (e) {
     try { await fs.remove(tmp); } catch (_) { /* ignore */ }
-    _setState({ status: "error", error: e.message || String(e) });
+    if (e.message === "cancelled") {
+      _setState({ status: "available", error: null });
+    } else {
+      _setState({ status: "error", error: e.message || String(e) });
+    }
     throw e;
+  } finally {
+    _downloadAbortController = null;
   }
 }
 
@@ -673,6 +687,21 @@ async function downloadUpdate(sender) {
 }
 
 /**
+ * Cancela o download em andamento (manual ou electron-updater).
+ */
+function cancelDownload() {
+  // Cancela download manual (GitHub API)
+  if (_downloadAbortController) {
+    _downloadAbortController.abort();
+    _downloadAbortController = null;
+  }
+  // Cancela download via electron-updater
+  if (autoUpdater && autoUpdater.isUpdaterActive() && typeof autoUpdater.cancelDownload === "function") {
+    try { autoUpdater.cancelDownload(); } catch (_) { /* ignore */ }
+  }
+}
+
+/**
  * Fecha o app e instala a atualização baixada.
  * - Win/mac/AppImage/deb/rpm (produção): electron-updater.
  * - Dev ou check via GitHub API: abre o pacote baixado e fecha o app
@@ -703,6 +732,7 @@ module.exports = {
   setMainWindow,
   checkForUpdates,
   downloadUpdate,
+  cancelDownload,
   quitAndInstall,
   status,
   setOptions,

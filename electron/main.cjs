@@ -1221,6 +1221,9 @@ ipcMain.handle("updater:check", () => updater.checkForUpdates());
 /** Inicia o download da atualização disponível (quando autoDownload=false). */
 ipcMain.handle("updater:download", (event) => updater.downloadUpdate(event.sender));
 
+/** Cancela o download em andamento (manual ou electron-updater). */
+ipcMain.handle("updater:cancel", () => updater.cancelDownload());
+
 /** Fecha o app e instala a atualização baixada. */
 ipcMain.handle("updater:install", () => updater.quitAndInstall());
 
