@@ -48,6 +48,17 @@ export function useOverlayState(): OverlayStateReturn {
     refresh();
   });
 
+  // Escuta toggle de overlay via atalho (Ctrl+O) sem depender do módulo estar aberto
+  useBroadcastListener(BROADCAST_TYPE.MODULE_RIBBON_ACTION, (payload: unknown) => {
+    const p = payload as { module?: string; action?: string } | null;
+    if (p?.module === "overlay" && p?.action === "toggle") {
+      enabled.value = !enabled.value;
+      $userdata.set(KEYS.MODULES.OVERLAY.ENABLED, enabled.value);
+      $broadcast.send(BROADCAST_TYPE.OVERLAY_CONFIG_CHANGED, { enabled: enabled.value });
+      refresh();
+    }
+  });
+
   useBroadcastListener(BROADCAST_TYPE.MODULE_PROJECTION_VALUE, (payload) => {
     const p = payload as { module?: string; text?: string; reference?: string };
     if (p.module) {
