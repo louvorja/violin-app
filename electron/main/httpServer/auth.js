@@ -107,7 +107,8 @@ function setupAuth(getToken, findDeviceByToken, findDeviceById, isOnlyAuthorized
       (req.headers && req.headers["x-token"]);
 
     if (!provided) {
-      return res.status(401).json({
+      console.log(`[auth] ${req.method} ${req.path} de ${ip} — token ausente`);
+        return res.status(401).json({
         status: "error",
         message: "Token ausente",
         code: "MISSING_TOKEN",
@@ -141,6 +142,7 @@ function setupAuth(getToken, findDeviceByToken, findDeviceById, isOnlyAuthorized
       return next();
     }
 
+    console.log(`[auth] ${req.method} ${req.path} de ${ip} — token inválido (provided="${String(provided).slice(0, 8)}...")`);
     return res.status(401).json({
       status: "error",
       message: "Token inválido",

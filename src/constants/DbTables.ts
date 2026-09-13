@@ -70,6 +70,8 @@ export const DB_TABLE = {
   LIBRAS_BUNDLES: "libras.bundles",
   // ─── Dispositivos autorizados ───
   DEVICES: "devices",
+  // ─── Chat ───
+  CHAT_MESSAGES: "chat.messages",
 } as const;
 
 export type DbTable = (typeof DB_TABLE)[keyof typeof DB_TABLE];

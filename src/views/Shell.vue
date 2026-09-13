@@ -13,7 +13,12 @@
       :style="{ '--footer-height': footerHeight }"
     >
       <div class="shell-grid">
-        <div class="shell-center">
+        <ChatDrawer />
+
+        <div
+          class="shell-center"
+          :class="{ 'shell-center--drawer-pinned': isPinned && isChatOpen }"
+        >
           <div class="shell-content">
             <AppLoading />
             <AppAlert />
@@ -167,12 +172,20 @@ import { hasOpenWebWindows } from "@/helpers/projection/webWindow";
 import { formatBackgroundTaskDetail } from "@/helpers/BackgroundTaskDetail";
 import { useSyncManager } from "@/composables/useSyncManager";
 import BundleInstaller from "@/helpers/BundleInstaller";
+import ChatDrawer from "@/components/ChatDrawer.vue";
+import { useChat } from "@/composables/useChat";
 
 const { locale, t } = useI18n();
 const { applyStoredTheme } = useAppTheme();
 const { platform } = useViewport();
 const bgTasks = useBackgroundTasks();
 const sync = useSyncManager();
+const {
+  toggleOpen: toggleChat,
+  loadHistory: loadChatHistory,
+  isPinned,
+  isOpen: isChatOpen,
+} = useChat();
 
 const cmdPaletteOpen = ref(false);
 const musicSearchOpen = ref(false);
@@ -668,6 +681,10 @@ onMounted(() => {
   window.addEventListener("louvorja:open-music-search", onOpenMusicSearch);
   window.addEventListener("louvorja:open-bible-search", onOpenBibleSearch);
   window.addEventListener("louvorja:open-startup-check", onOpenStartupCheck);
+  window.addEventListener("louvorja:toggle-chat", toggleChat);
+
+  // Carrega histórico do chat
+  loadChatHistory();
 
   // Reseta estado da projeção background — garante que restarts
   // (normais ou por crash) não deixam a chave "presada" como true
@@ -876,6 +893,7 @@ onBeforeUnmount(() => {
   window.removeEventListener("louvorja:open-music-search", onOpenMusicSearch);
   window.removeEventListener("louvorja:open-bible-search", onOpenBibleSearch);
   window.removeEventListener("louvorja:open-startup-check", onOpenStartupCheck);
+  window.removeEventListener("louvorja:toggle-chat", toggleChat);
 });
 </script>
 
@@ -960,6 +978,7 @@ onBeforeUnmount(() => {
   padding-bottom: var(--footer-height);
 }
 .shell-grid {
+  position: relative;
   display: flex;
   flex: 1;
   min-height: 0;
@@ -971,6 +990,11 @@ onBeforeUnmount(() => {
   flex-direction: column;
   min-width: 0;
   overflow: hidden;
+  margin-left: 0;
+  transition: margin-left 0.35s var(--lj-ease);
+}
+.shell-center--drawer-pinned {
+  margin-left: 300px;
 }
 .shell-content {
   flex: 1;

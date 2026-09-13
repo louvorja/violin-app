@@ -355,6 +355,7 @@
       "permission_bible": "Biblia",
       "permission_liturgy": "Liturgia",
       "permission_announce": "Anuncios",
+      "permission_chat": "Chat",
       "select_all": "Seleccionar todas",
       "deselect_all": "Desmarcar todas"
     },
@@ -1203,6 +1204,7 @@
     "pause": "Pausar/reanudar reproducción",
     "ctrl_shift_f2": "Limpiar caché y recargar datos",
     "ctrl_alt_d": "Alternar modo desarrollador",
+    "ctrl_i": "Abrir/cerrar chat",
     "prev_slide": "Diapositiva anterior",
     "next_slide": "Siguiente diapositiva",
     "bible_prev_verse": "Versículo anterior",
@@ -1379,5 +1381,18 @@
     "fullscreen_auto_hint": "Se necesita un clic porque el navegador no permite que los sitios entren en pantalla completa por sí solos. En la aplicación de escritorio la proyección ya abre en pantalla completa, sin clic.",
     "video_unavailable": "Video no disponible",
     "video_unavailable_hint": "No se pudo cargar el video. Verifique la conexión a internet."
+  },
+  "chat": {
+    "title": "Chat",
+    "placeholder": "Escribe tu mensaje...",
+    "send": "Enviar",
+    "auto_open_on": "Abrir automáticamente con nuevos mensajes",
+    "auto_open_off": "No abrir automáticamente",
+    "pin": "Fijar panel",
+    "unpin": "Desfijar panel",
+    "empty": "Ningún mensaje aún",
+    "toggle": "Chat",
+    "clear": "Limpiar mensajes",
+    "confirm_clear": "¿Estás seguro de que deseas limpiar todos los mensajes?"
   }
 }

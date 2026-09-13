@@ -261,7 +261,7 @@ $storage.hydrate().then(async () => {
   // D5 — Conectar eventos do servidor HTTP às ações do app.
   if (Platform.isDesktop) {
     Platform.onHttpEvent(async (eventType, data) => {
-      const action = data.action;
+      const action = data?.action;
       switch (eventType) {
         case "http:song-slides":
           switch (action) {
@@ -878,6 +878,32 @@ $storage.hydrate().then(async () => {
         description: "hotkeys.ctrl_m",
         group: "media",
         label: "Ctrl+M",
+      }
+    );
+
+    // Ctrl+I: Chat toggle
+    Hotkeys.register(
+      "Ctrl+i",
+      () => {
+        window.dispatchEvent(new CustomEvent("louvorja:toggle-chat"));
+      },
+      {
+        context: "global",
+        description: "hotkeys.ctrl_i",
+        group: "general",
+        label: "Ctrl+I",
+      }
+    );
+    Hotkeys.register(
+      "Meta+i",
+      () => {
+        window.dispatchEvent(new CustomEvent("louvorja:toggle-chat"));
+      },
+      {
+        context: "global",
+        description: "hotkeys.ctrl_i",
+        group: "general",
+        label: "Cmd+I",
       }
     );
 

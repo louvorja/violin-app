@@ -7,7 +7,7 @@
  * - liturgy: executar itens da liturgia
  * - announce: controlar anúncios
  */
-export type DevicePermission = "root" | "music" | "bible" | "liturgy" | "announce";
+export type DevicePermission = "root" | "music" | "bible" | "liturgy" | "announce" | "chat";
 
 /** Lista completa de permissões disponíveis. */
 export const DEVICE_PERMISSIONS: DevicePermission[] = [
@@ -16,6 +16,7 @@ export const DEVICE_PERMISSIONS: DevicePermission[] = [
   "bible",
   "liturgy",
   "announce",
+  "chat",
 ];
 
 /** Mapa permissão → chave de tradução (para UI). */
@@ -25,6 +26,7 @@ export const DEVICE_PERMISSION_LABELS: Record<DevicePermission, string> = {
   bible: "options.transmission.permission_bible",
   liturgy: "options.transmission.permission_liturgy",
   announce: "options.transmission.permission_announce",
+  chat: "options.transmission.permission_chat",
 };
 
 /**

@@ -1,5 +1,28 @@
 <template>
   <div class="shell-tools">
+    <!--    Atualização disponível-->
+    <!--    Sem conexão-->
+    <LjPopover v-if="!isOnline" :title="t('shell.offline_title')" side="bottom" align="end">
+      <template #trigger>
+        <button
+          type="button"
+          class="shell-tool shell-tool--offline"
+          :aria-label="t('shell.offline_title')"
+        >
+          <LjIcon :icon="ICONS.UI.WIFI_OFF" :size="sizeIcon" class="shell-tool--offline-icon" />
+        </button>
+      </template>
+      <div class="offline-panel">
+        <p v-if="offlineSinceLabel" class="offline-panel__since">
+          {{ t("shell.offline_since", { time: offlineSinceLabel }) }}
+        </p>
+        <p class="offline-panel__detail">{{ t("shell.offline_detail") }}</p>
+        <LjButton size="sm" variant="ghost" :disabled="rechecking" @click="recheckNetwork">
+          {{ rechecking ? t("shell.offline_checking") : t("shell.offline_recheck") }}
+        </LjButton>
+      </div>
+    </LjPopover>
+
     <!--    Projeção de Fundo-->
     <LjTooltip
       :text="isBgPlaying ? 'Desativar projeção de fundo' : 'Ativar projeção de fundo'"
@@ -35,32 +58,24 @@
       </button>
     </LjTooltip>
 
-    <!--    Atualização disponível-->
-    <!--    Sem conexão-->
-    <LjPopover v-if="!isOnline" :title="t('shell.offline_title')" side="bottom" align="end">
-      <template #trigger>
-        <button
-          type="button"
-          class="shell-tool shell-tool--offline"
-          :aria-label="t('shell.offline_title')"
-        >
-          <LjIcon :icon="ICONS.UI.WIFI_OFF" :size="sizeIcon" class="shell-tool--offline-icon" />
-        </button>
-      </template>
-      <div class="offline-panel">
-        <p v-if="offlineSinceLabel" class="offline-panel__since">
-          {{ t("shell.offline_since", { time: offlineSinceLabel }) }}
-        </p>
-        <p class="offline-panel__detail">{{ t("shell.offline_detail") }}</p>
-        <LjButton size="sm" variant="ghost" :disabled="rechecking" @click="recheckNetwork">
-          {{ rechecking ? t("shell.offline_checking") : t("shell.offline_recheck") }}
-        </LjButton>
-      </div>
-    </LjPopover>
-
     <LjTooltip v-if="hasUpdate" :text="$t('shell.appmenu_items.check_update')" side="bottom">
       <button type="button" class="shell-tool shell-tool--update" @click="openUpdates">
         <LjIcon :icon="ICONS.UI.DOWNLOAD_CIRCLE" :size="sizeIcon" class="shell-tool--update-icon" />
+      </button>
+    </LjTooltip>
+
+    <!--    Chat-->
+    <LjTooltip :text="t('chat.toggle')" side="bottom">
+      <button
+        type="button"
+        class="shell-tool"
+        :class="{ 'shell-tool--active': chatOpen }"
+        @click="toggleChat"
+      >
+        <LjIcon :icon="ICONS.UI.MESSAGE_BULLETED" :size="sizeIcon" />
+        <span v-if="unreadCount > 0" class="shell-tool__badge">
+          {{ unreadCount > 99 ? "99+" : unreadCount }}
+        </span>
       </button>
     </LjTooltip>
 
@@ -182,6 +197,7 @@ import Broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBackgroundTasks, type BackgroundTask } from "@/composables/useBackgroundTasks";
 import { useConnectivity } from "@/composables/useConnectivity";
+import { useChat } from "@/composables/useChat";
 import { localeTag } from "@/helpers/DateTime";
 import { useLibrasState } from "@/modules/libras/composables/useLibrasState";
 import { useAppTheme } from "@/composables/useAppTheme";
@@ -193,6 +209,7 @@ import { COLORS } from "@constants/Colors";
 const { t, locale } = useI18n();
 const { isDark, toggleDark } = useAppTheme();
 const bgTasks = useBackgroundTasks();
+const { isOpen: chatOpen, unreadCount, toggleOpen: toggleChat } = useChat();
 
 function formatTaskDetail(detail: string | null | undefined): string {
   if (!detail) return "";
@@ -270,7 +287,7 @@ async function toggleBackgroundProjection() {
     if (stored) {
       try {
         Broadcast.send(BROADCAST_TYPE.BACKGROUND_PROJECTION, JSON.parse(stored));
-      } catch (_) {
+      } catch {
         /* ignore */
       }
     }
@@ -337,6 +354,22 @@ function toggleLibras() {
 
 .shell-tool--offline-icon {
   color: #ffb300;
+}
+
+.shell-tool__badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--lj-danger, #ef4444);
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
 }
 </style>
 

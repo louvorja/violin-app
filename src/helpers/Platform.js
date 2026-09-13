@@ -318,7 +318,7 @@ export default {
    *
    * null no browser/PWA — sem main process, sem encaminhamento.
    *
-   * @returns {{ broadcast, onRequestState } | null}
+   * @returns {{ broadcast, onRequestState, onChatMessage } | null}
    */
   get transmission() {
     return api?.transmission ?? null;

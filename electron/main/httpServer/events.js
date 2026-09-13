@@ -38,6 +38,7 @@ const REMOTE_RELAY_TYPES = new Set([
   "module_projection_value",
   "module_format_changed",
   "message_board",
+  "chat_message",
 ]);
 
 /** @type {Set<{ res: import('http').ServerResponse, id: number }>} */

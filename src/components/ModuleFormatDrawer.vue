@@ -103,7 +103,7 @@ const model = computed({
    inteira da coluna. */
 .module-format-drawer-enter-active,
 .module-format-drawer-leave-active {
-  transition: transform 0.35s var(--lj-ease);
+  transition: transform 0.5s var(--lj-ease);
 }
 
 .module-format-drawer-enter-from,

@@ -169,6 +169,12 @@ export const BROADCAST_TYPE = Object.freeze({
    *  Recebido por: useOverlayState (re-lê do IndexedDB). */
   OVERLAY_CONFIG_CHANGED: "overlay_config_changed",
 
+  /** Mensagem de chat entre dispositivos.
+   *  Payload: { id, sender, deviceId?, text, timestamp }
+   *  Emitido por: useChat (app local) e SSE bridge (devices remotos).
+   *  Recebido por: useChat (atualiza UI). */
+  CHAT_MESSAGE: "chat_message",
+
   // ─── In-app (hotkeys / HTTP events → módulos) ────────────────────────────
 
   /** Número sorteado via HTTP externo. Recebido por: módulo draw. */

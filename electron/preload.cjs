@@ -379,6 +379,16 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
       ipcRenderer.on("transmission:request-state", handler);
       return () => ipcRenderer.off("transmission:request-state", handler);
     },
+
+    /**
+     * Mensagem de chat recebida de device remoto via HTTP/IPC.
+     * O main process envia quando POST /api/chat é chamado.
+     */
+    onChatMessage(cb) {
+      const handler = (_e, msg) => cb(msg);
+      ipcRenderer.on("transmission:chat-message", handler);
+      return () => ipcRenderer.off("transmission:chat-message", handler);
+    },
   },
 
   // -------------------------------------------------------------------------

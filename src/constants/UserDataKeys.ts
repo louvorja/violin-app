@@ -315,4 +315,8 @@ export const KEYS = {
     LJ_FILE_PROJECTION: "lj_file_projection",
     LJ_YOUTUBE_PROJECTION: "lj_youtube_projection",
   },
+  CHAT: {
+    AUTO_OPEN: "chat.auto_open",
+    IS_PINNED: "chat.is_pinned",
+  },
 };

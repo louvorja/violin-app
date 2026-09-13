@@ -17,6 +17,9 @@ const _sorteios = {
   name: { last: null, history: [] },
 };
 
+/** Rate limit simples: 1 msg/seg por device. */
+const _chatRateLimit = new Map();
+
 function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDatabaseUrl, getApiToken }) {
 
   /** Retorna mainWindow apenas se existir e não estiver destruída. */
@@ -57,6 +60,8 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
       return res.status(400).json({ error: "key faltando ou janela indisponível" });
     }
     try {
+      // Foca na janela principal antes de enviar o evento
+      mainWindow.focus();
       mainWindow.webContents.sendInputEvent({ type: "keyDown", keyCode: key, modifiers });
       mainWindow.webContents.sendInputEvent({ type: "keyUp", keyCode: key, modifiers });
       res.json({ status: "ok", key, modifiers });
@@ -433,6 +438,65 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
     }
     mainWindow.webContents.send("http:projections-close");
     res.json({ status: "ok", action: "projections-close" });
+  });
+
+  // ---------------------------------------------------------------
+  // POST /api/chat — enviar mensagem de chat
+  // Body: { text: string, sender: string }
+  // Headers: X-Device-Id (opcional)
+  // ---------------------------------------------------------------
+  app.post("/api/chat", (req, res) => {
+    const { text, sender } = req.body || {};
+    if (!text || typeof text !== "string" || text.trim().length === 0) {
+      return res.status(400).json({ error: "text obrigatório" });
+    }
+    if (text.length > 2000) {
+      return res.status(400).json({ error: "text excede 2000 caracteres" });
+    }
+
+    // Rate limit: 1 msg/seg por device
+    const deviceId = req.headers && req.headers["x-device-id"];
+    const rateKey = deviceId || req.ip;
+    const now = Date.now();
+    const last = _chatRateLimit.get(rateKey) || 0;
+    if (now - last < 1000) {
+      return res.status(429).json({ error: "Rate limit: 1 msg/seg" });
+    }
+    _chatRateLimit.set(rateKey, now);
+
+    // Verifica permissão "chat" do device (se identificado)
+    if (deviceId) {
+      const device = devices.findById(String(deviceId));
+      if (device && device.permissions && !device.permissions.includes("chat") && !device.permissions.includes("root")) {
+        return res.status(403).json({ error: "Device sem permissão de chat" });
+      }
+    }
+
+    const msg = {
+      id: crypto.randomUUID(),
+      sender: sender || "Dispositivo",
+      deviceId: deviceId || undefined,
+      text: text.trim(),
+      timestamp: new Date().toISOString(),
+    };
+
+    // Publica via SSE para todos os clients conectados
+    const events = require("./events.js");
+    events.publish({ type: "chat_message", payload: msg });
+
+    // Envia IPC para o renderer local (BroadcastChannel)
+    const mainWindow = getValidMainWindow();
+    console.log(`[httpServer] POST /api/chat: mainWindow=${!!mainWindow}, destroyed=${mainWindow?.isDestroyed()}`);
+    if (mainWindow) {
+      try {
+        mainWindow.webContents.send("transmission:chat-message", msg);
+        console.log(`[httpServer] POST /api/chat: IPC enviado com sucesso`);
+      } catch (e) {
+        console.error("[httpServer] POST /api/chat: IPC falhou:", e?.message || e);
+      }
+    }
+
+    res.json({ ok: true, id: msg.id });
   });
 
   // ---------------------------------------------------------------
