@@ -71,6 +71,7 @@
                     <AppMenuAtualizacoes v-else-if="activeItem?.id === 'updates'" />
                     <AppMenuImportExport v-else-if="activeItem?.id === 'import_export'" />
                     <AppMenuAlbums v-else-if="activeItem?.id === 'albums'" />
+                    <AppMenuLicencas v-else-if="activeItem?.id === 'licenses'" />
                     <AppMenuDev v-else-if="activeItem?.id === 'dev'" />
 
                     <p v-else class="app-menu-content-placeholder">
@@ -99,12 +100,16 @@ import AppMenuAtualizacoes from "./AppMenuAtualizacoes.vue";
 import AppMenuImportExport from "./AppMenuImportExport.vue";
 import AppMenuAlbums from "./AppMenuAlbums.vue";
 import AppMenuDev from "./AppMenuDev.vue";
+import AppMenuLicencas from "./AppMenuLicencas.vue";
 import Platform from "@/helpers/Platform";
+import $alert from "@/helpers/Alert";
 import { ICONS } from "@/config/Icons";
+import { useI18n } from "vue-i18n";
 
 // Detecta modo desenvolvimento — controla a visibilidade do item
 // "Desenvolvedor" no menu (recursos de dev são ocultados em produção).
 const isDev = Platform.isDev;
+const { t } = useI18n();
 
 /**
  * True só quando os semáforos do macOS ficam POR CIMA do conteúdo — ou seja,
@@ -203,9 +208,15 @@ const items = computed(() => [
     action: openDonation,
   },
   {
+    id: "licenses",
+    label: "shell.appmenu_items.licenses",
+    icon: ICONS.UI.INFORMATION_OUTLINE,
+    inline: true,
+  },
+  {
     id: "exit",
     label: "shell.appmenu_items.exit",
-    icon: ICONS.UI.INFORMATION_OUTLINE,
+    icon: ICONS.UI.EXIT,
     action: exitApp,
   },
 ]);
@@ -313,15 +324,21 @@ function openDonation() {
 }
 
 function exitApp() {
-  if (typeof window === "undefined") return;
-  if (window.louvorjaApi?.window?.close) window.louvorjaApi.window.close();
-  else window.close();
+  $alert.yesno({ title: t("shell.appmenu_items.exit"), text: t("shell.exit_confirm") }, (btn) => {
+    if (btn !== "yes") return;
+    close();
+    setTimeout(() => {
+      if (window.louvorjaApi?.window?.close) window.louvorjaApi.window.close();
+      else window.close();
+    }, 0);
+  });
 }
 
 onMounted(() => {
   window.addEventListener("louvorja:open-updates", onOpenUpdates);
   window.addEventListener("louvorja:open-options", onOpenOptions);
   window.addEventListener("louvorja:open-about", onOpenAbout);
+  window.addEventListener("louvorja:open-licenses", onOpenLicenses);
   // O diálogo da verificação inicial vive no Shell; o menu precisa sair da frente.
   window.addEventListener("louvorja:open-startup-check", close);
 });
@@ -331,6 +348,7 @@ onBeforeUnmount(() => {
   window.removeEventListener("louvorja:open-updates", onOpenUpdates);
   window.removeEventListener("louvorja:open-options", onOpenOptions);
   window.removeEventListener("louvorja:open-about", onOpenAbout);
+  window.removeEventListener("louvorja:open-licenses", onOpenLicenses);
   window.removeEventListener("louvorja:open-startup-check", close);
   document.removeEventListener("keydown", onKeydown);
 });
@@ -341,6 +359,10 @@ function onOpenUpdates() {
 
 function onOpenAbout() {
   openAt("about");
+}
+
+function onOpenLicenses() {
+  openAt("licenses");
 }
 
 /**
