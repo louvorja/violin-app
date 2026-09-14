@@ -18,6 +18,40 @@ import { SLIDE_STYLE_DEFAULT } from "@/config/SlideStyle";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { FONT, resolveFont } from "@/config/Fonts";
+import { getSetting } from "@/helpers/SettingsStorage";
+
+const SLIDE_BG_STORAGE_ID = "slide_custom_background";
+
+/**
+ * Cache da imagem de fundo resolvida a partir do IndexedDB.
+ * Blob URLs são efêmeras — não podem ser persistidas em UserData.
+ * O binário fica seguro no IndexedDB; aqui criamos a blob URL uma
+ * vez por sessão e reutilizamos.
+ */
+let _slideBgBlobUrl: string | null = null;
+let _slideBgResolving = false;
+const _slideBgReady = ref(false);
+
+async function _resolveSlideBgFromIdb(): Promise<void> {
+  if (_slideBgResolving) return;
+  _slideBgResolving = true;
+  try {
+    const s = await getSetting<any>(SLIDE_BG_STORAGE_ID).catch(() => null);
+    if (s?.image) {
+      const blob = new Blob([s.image], { type: s.mime || "image/png" });
+      if (_slideBgBlobUrl) URL.revokeObjectURL(_slideBgBlobUrl);
+      _slideBgBlobUrl = URL.createObjectURL(blob);
+    } else {
+      if (_slideBgBlobUrl) {
+        URL.revokeObjectURL(_slideBgBlobUrl);
+        _slideBgBlobUrl = null;
+      }
+    }
+  } finally {
+    _slideBgResolving = false;
+    _slideBgReady.value = true;
+  }
+}
 
 export type SlideOption = Record<string, unknown> | null;
 
@@ -167,14 +201,17 @@ const _readSlideOpts = (): SlideCfg => {
     merged.custom_background_active = true;
     const bgTransparent = $userdata.get<boolean>(KEYS.OPTIONS.SLIDE.BG_TRANSPARENT, false) === true;
     const bgColor = $userdata.get<string>(KEYS.OPTIONS.SLIDE.BG_COLOR, null);
-    const bgImage = $userdata.get<string>(KEYS.OPTIONS.SLIDE.BG_IMAGE, null);
     const bgPos = $userdata.get<string>(KEYS.OPTIONS.SLIDE.BG_POSITION, null);
     merged.background_color = bgTransparent
       ? "transparent"
       : typeof bgColor === "string"
         ? bgColor
         : merged.background_color;
-    if (typeof bgImage === "string") merged.background_image = bgImage;
+    // Imagem resolvida do IndexedDB (blob URL cacheada em memória).
+    // O valor antigo em UserData era uma blob URL efêmera que morria no
+    // unmount do painel de Opções; agora o binário mora no IndexedDB e
+    // a blob URL é criada uma vez por sessão.
+    if (_slideBgBlobUrl) merged.background_image = _slideBgBlobUrl;
     if (typeof bgPos === "string") {
       const map: Record<string, string> = {
         center: "center center",
@@ -201,7 +238,16 @@ export function useSlideStyle(): SlideStyleAPI {
     _tick.value += 1;
   });
 
-  const cfg = computed(() => { void _tick.value; return _readSlideOpts(); });
+  // Resolve imagem de fundo do IndexedDB na primeira uso (uma vez por sessão).
+  if (!_slideBgResolving && !_slideBgReady.value) {
+    _resolveSlideBgFromIdb();
+  }
+
+  const cfg = computed(() => {
+    void _tick.value;
+    void _slideBgReady.value; // dependência reativa — re-avalia quando o IndexedDB resolve
+    return _readSlideOpts();
+  });
 
   function _baseFont(slide: SlideOption): string {
     const fromSlide = slide && typeof slide.font === "string" ? slide.font : null;

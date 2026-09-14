@@ -1465,7 +1465,6 @@ onBeforeUnmount(() => {
   }
   if (wallpaperBlobUrl.value) URL.revokeObjectURL(wallpaperBlobUrl.value);
   if (fileProjBlobUrl) URL.revokeObjectURL(fileProjBlobUrl);
-  if (slideBgBlobUrl) URL.revokeObjectURL(slideBgBlobUrl);
 });
 
 function restoreTextFormat(): void {
@@ -1561,14 +1560,12 @@ async function loadSlideBg(): Promise<void> {
     const blob = new Blob([s.image], { type: s.mime || "image/png" });
     slideBgBlobUrl = URL.createObjectURL(blob);
     slideBgImageUrl.value = slideBgBlobUrl;
-    $userdata.set(KEYS.OPTIONS.SLIDE.BG_IMAGE, slideBgBlobUrl);
   } else {
     if (slideBgBlobUrl) {
       URL.revokeObjectURL(slideBgBlobUrl);
       slideBgBlobUrl = null;
     }
     slideBgImageUrl.value = "";
-    $userdata.set(KEYS.OPTIONS.SLIDE.BG_IMAGE, "");
   }
 }
 
@@ -1579,7 +1576,6 @@ async function pickSlideBgImage(): Promise<void> {
   if (slideBgBlobUrl) URL.revokeObjectURL(slideBgBlobUrl);
   slideBgBlobUrl = URL.createObjectURL(blob);
   slideBgImageUrl.value = slideBgBlobUrl;
-  $userdata.set(KEYS.OPTIONS.SLIDE.BG_IMAGE, slideBgBlobUrl);
   await saveSetting({ id: SLIDE_BG_STORAGE_ID, image: r.data, mime: r.mime });
 }
 
@@ -1589,7 +1585,6 @@ async function removeSlideBgImage(): Promise<void> {
     slideBgBlobUrl = null;
   }
   slideBgImageUrl.value = "";
-  $userdata.set(KEYS.OPTIONS.SLIDE.BG_IMAGE, "");
   await saveSetting({ id: SLIDE_BG_STORAGE_ID, image: null, mime: null });
 }
 
