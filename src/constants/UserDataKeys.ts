@@ -275,6 +275,7 @@ export const KEYS = {
       ONLINE_VIDEO: `${OPTIONS_DISPLAYS}.online_video`,
       ONLINE_VIDEO_RETURN: `${OPTIONS_DISPLAYS}.online_video_return`,
     },
+    SELECTED_IP: `${OPTIONS}.selected_ip`,
     START_WITH_OS: `${OPTIONS}.start_with_os`,
     TELEMETRY: `${OPTIONS}.telemetry`,
     TELEMETRY_ID: `${OPTIONS}.telemetry_id`,

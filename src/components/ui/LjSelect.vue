@@ -230,7 +230,7 @@ const selectedLabel = computed(() => (selectedItem.value ? labelOf(selectedItem.
    largo que o campo é a assinatura visual de menu Material. */
 .lj-select__content {
   min-width: var(--reka-select-trigger-width);
-  max-height: 280px;
+  max-height: 300px;
   overflow: hidden;
   z-index: var(--lj-z-popup);
 }

@@ -23,7 +23,7 @@ const express = require("express");
 const path = require("path");
 const fs = require("fs-extra");
 const net = require("net");
-const { app: electronApp } = require("electron");
+const { app: electronApp, BrowserWindow } = require("electron");
 
 const paths = require("../paths.js");
 const userStore = require("../userStore.js");
@@ -170,7 +170,10 @@ async function start({ port, mainWindow } = {}) {
     }
   }
   _token = _loadOrCreateToken();
-  _mainWindow = mainWindow || null;
+  // Não descarta uma janela já registrada quando o caller não passa uma
+  // (ex.: renderer reinicia o servidor sem conhecer a janela).
+  if (mainWindow) _mainWindow = mainWindow;
+  else if (_mainWindow && _mainWindow.isDestroyed()) _mainWindow = null;
 
   // Configura events.js para reescrever louvorja://* nos payloads SSE
   // usando as URLs HTTPS reais (clients remotos não conhecem o protocolo).
@@ -261,17 +264,25 @@ async function start({ port, mainWindow } = {}) {
     const devPlatform = validPlatforms.includes(platform) ? platform : "web";
     const device = devices.addPending({ token, name: name || "Dispositivo", model: model || "", platform: devPlatform });
     console.log(`[httpServer] Device registrado: ${device.name} (${device.platform}) model=${device.model} id=${device.id.slice(0, 8)} token=${device.token.slice(0, 8)}...`);
-    console.log(`[httpServer] _mainWindow=${!!_mainWindow} destroyed=${_mainWindow?.isDestroyed()}`);
-    // Notifica o renderer para abrir diálogo de permissões
-    if (_mainWindow && !_mainWindow.isDestroyed()) {
-      try {
-        _mainWindow.webContents.send("devices:pending", device);
-        console.log(`[httpServer] devices:pending enviado com sucesso`);
-      } catch (e) {
-        console.error("[httpServer] Falha ao enviar devices:pending:", e?.message || e);
+
+    // Notifica TODAS as janelas: a principal pode não estar exibindo o menu
+    // Transmissão, e janelas auxiliares também podem querer reagir. Além do
+    // evento "pending" (abre o diálogo), envia a lista atualizada para o
+    // fallback de devices sem permissão.
+    const windows = BrowserWindow.getAllWindows().filter((w) => w && !w.isDestroyed());
+    if (windows.length) {
+      const currentList = devices.list();
+      for (const w of windows) {
+        try {
+          w.webContents.send("devices:pending", device);
+          w.webContents.send("devices:changed", currentList);
+        } catch (e) {
+          console.error("[httpServer] Falha ao enviar devices:pending:", e?.message || e);
+        }
       }
+      console.log(`[httpServer] devices:pending enviado para ${windows.length} janela(s)`);
     } else {
-      console.warn("[httpServer] _mainWindow indisponível — device registrado mas diálogo não abriu");
+      console.warn("[httpServer] Nenhuma janela disponível — device registrado mas diálogo não abriu");
     }
     res.json({ status: "pending", message: "Aguardando aprovação do host", device });
   });
@@ -283,6 +294,8 @@ async function start({ port, mainWindow } = {}) {
     (token) => devices.findByToken(token),
     (id) => devices.findById(id),
     () => devices.isOnlyAuthorized(),
+    // Device pareado mas ainda sem permissões pode conferir a conexão.
+    { allowUnapprovedPaths: ["/api/ping"] },
   ));
 
   // SSE — clients remotos (OBS/celular) recebem slide_change, bible_verse,
@@ -377,7 +390,8 @@ function stop() {
 
     _server.close(() => {
       _server = null;
-      _mainWindow = null;
+      // A referência da janela é mantida: o `closed` da janela principal
+      // (main.cjs) é quem zera quando ela realmente é destruída.
       // O token permanece em memória/userStore — startup futuro reaproveita.
       console.log("[httpServer] Parado.");
       resolve();

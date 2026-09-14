@@ -64,8 +64,8 @@
       </button>
     </LjTooltip>
 
-    <!--    Chat-->
-    <LjTooltip :text="t('chat.toggle')" side="bottom">
+    <!--    Chat (somente desktop)-->
+    <LjTooltip v-if="Platform.isDesktop" :text="t('chat.toggle')" side="bottom">
       <button
         type="button"
         class="shell-tool"
@@ -197,6 +197,7 @@ import Broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBackgroundTasks, type BackgroundTask } from "@/composables/useBackgroundTasks";
 import { useConnectivity } from "@/composables/useConnectivity";
+import Platform from "@/helpers/Platform";
 import { useChat } from "@/composables/useChat";
 import { localeTag } from "@/helpers/DateTime";
 import { useLibrasState } from "@/modules/libras/composables/useLibrasState";
@@ -359,12 +360,12 @@ function toggleLibras() {
 .shell-tool__badge {
   position: absolute;
   top: 2px;
-  right: 2px;
+  right: 235px;
   min-width: 16px;
   height: 16px;
   padding: 0 4px;
   border-radius: 8px;
-  background: var(--lj-danger, #ef4444);
+  background: var(--lj-warning, #ef4444);
   color: white;
   font-size: 10px;
   font-weight: 600;

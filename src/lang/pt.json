@@ -306,6 +306,8 @@
       "http_server_hint": "O servidor HTTP é necessário para a projeção de vídeos do YouTube e para a comunicação entre janelas (BroadcastChannel).",
       "port": "Porta do servidor HTTP",
       "port_hint": "Reinicie o servidor para aplicar. Porta padrão: 7070",
+      "select_ip": "Endereço IP",
+      "select_ip_hint": "Selecione qual IP exibir nas URLs e QR Codes.",
       "copy": "Copiar",
       "copied": "Copiado",
       "open_window": "Abrir",
@@ -629,11 +631,23 @@
       "special_thanks": "Agradecimentos Especiais"
     }
   },
+  "licenses": {
+    "intro": "O LouvorJA Violin é um software livre e código aberto, licenciado sob a MIT. Agradecemos todas as bibliotecas e ferramentas de código aberto que tornam este projeto possível.",
+    "libraries": "Bibliotecas e Ferramentas"
+  },
   "remote_control": {
     "tabs": {
       "slides": "Slides",
       "announcements": "Anúncios",
       "shortcuts": "Atalhos"
+    },
+    "music": {
+      "mode_title": "Executar como",
+      "mode_sung": "Cantado",
+      "mode_playback": "Playback",
+      "mode_lyric": "Letra",
+      "mode_audio_only": "Somente áudio",
+      "mode_playback_only": "Somente playback"
     },
     "bible": {
       "clear_screen": "Limpar a Tela",
@@ -1029,6 +1043,7 @@
       "toggle_live": "Iniciar/sair modo culto"
     },
     "live_active": "MODO CULTO ATIVO",
+    "exit_confirm": "Deseja realmente sair e fechar o programa?",
     "appmenu": "Menu",
     "about": "Sobre",
     "transmission": "Transmissão",
@@ -1083,6 +1098,7 @@
       "albums": "Ativar/Desativar Álbuns",
       "dev": "Desenvolvedor",
       "donate": "Faça sua Doação",
+      "licenses": "Licenças",
       "exit": "Sair"
     },
     "window": {

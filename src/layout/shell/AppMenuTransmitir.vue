@@ -39,32 +39,54 @@
         </div>
 
         <div class="tx-token-row">
-          <span class="tx-token-label">{{ $t("options.transmission.token_label") }}</span>
-          <LjCopyButton :value="httpServer.token || ''" class="tx-token">
-            {{ httpServer.token }}
-          </LjCopyButton>
-          <LjButton size="sm" :icon="ICONS.ACTIONS.RESTART" @click="resetToken">
-            {{ $t("options.transmission.token_reset") }}
-          </LjButton>
-
-          <label class="opt-label tx-port-label" for="tx-port">
-            {{ $t("options.transmission.port") }}
-          </label>
-          <!-- O invólucro dá ao CSS com escopo onde se prender: a classe passada
-               ao LjInput cairia no <input> interno, que não recebe o atributo. -->
-          <span class="tx-port">
-            <LjInput
-              id="tx-port"
+          <div>
+            <label class="opt-label" for="tx-ip">
+              {{ $t("options.transmission.select_ip") }}
+            </label>
+            <p class="opt-hint">{{ $t("options.transmission.select_ip_hint") }}</p>
+            <LjSelect
+              id="tx-ip"
               size="sm"
-              type="number"
-              placeholder="7070"
-              :model-value="httpServerPort"
-              min="1"
-              max="65535"
-              @change="setHttpServerPort(Number($event.target.value))"
+              style="width: 130px"
+              :items="localIps.map((ip) => ({ value: ip, label: ip }))"
+              :model-value="selectedIp"
+              @update:model-value="selectedIp = String($event)"
             />
-          </span>
-          <p class="opt-hint">{{ $t("options.transmission.port_hint") }}</p>
+          </div>
+
+          <div style="margin: 0 20px 0 20px">
+            <label class="opt-label" for="tx-port">
+              {{ $t("options.transmission.port") }}
+            </label>
+            <p class="opt-hint">{{ $t("options.transmission.port_hint") }}</p>
+            <span class="tx-port">
+              <LjInput
+                id="tx-port"
+                size="sm"
+                type="number"
+                placeholder="7070"
+                :model-value="httpServerPort"
+                min="1"
+                max="65535"
+                @change="setHttpServerPort(Number($event.target.value))"
+              />
+            </span>
+          </div>
+          <div>
+            <span class="tx-token-label">{{ $t("options.transmission.token_label") }}</span>
+            <p class="opt-hint">{{ $t("options.transmission.port_hint") }}</p>
+            <LjCopyButton :value="httpServer.token || ''" class="tx-token">
+              {{ httpServer.token }}
+            </LjCopyButton>
+            <LjButton
+              size="sm"
+              style="margin-left: 10px"
+              :icon="ICONS.ACTIONS.RESTART"
+              @click="resetToken"
+            >
+              {{ $t("options.transmission.token_reset") }}
+            </LjButton>
+          </div>
         </div>
 
         <LjCheckbox
@@ -89,7 +111,7 @@
               $t("options.transmission.use_hostname_hint", {
                 hostname: hostname || "...",
                 port: httpServer.port,
-                ip: primaryHost,
+                ip: selectedIp || primaryHost,
               })
             }}
           </p>
@@ -308,8 +330,18 @@ import { useDisplays } from "@/composables/useDisplays";
 import { useDevices } from "@/composables/useDevices";
 import MonitorSelect from "@/components/inputs/MonitorSelect.vue";
 import DevicePermissionsDialog from "@/components/DevicePermissionsDialog.vue";
-import { LjButton, LjCheckbox, LjCopyButton, LjDialog, LjIcon, LjInput } from "@/components/ui";
+import {
+  LjButton,
+  LjCheckbox,
+  LjCopyButton,
+  LjDialog,
+  LjIcon,
+  LjInput,
+  LjSelect,
+} from "@/components/ui";
 import Platform from "@/helpers/Platform";
+import $userdata from "@/helpers/UserData";
+import { KEYS } from "@/constants/UserDataKeys";
 import { open as openProjection } from "@/helpers/Projection";
 import { ICONS } from "@/config/Icons";
 import { DEVICE_PERMISSION_LABELS } from "@/types/Device";
@@ -396,6 +428,7 @@ const httpServerLoading = ref(false);
 const httpServerPort = ref(7070);
 const externalRoutesEnabled = ref(true);
 const localIps = ref([]);
+const selectedIp = ref("");
 const copiedKey = ref(null);
 const globalShortcutsEnabled = ref(false);
 const useHostname = ref(false);
@@ -417,9 +450,28 @@ const primaryHost = computed(() => {
   return localIps.value.find((ip) => ip !== "127.0.0.1") || "127.0.0.1";
 });
 
+// Seletor de IP — persistido em UserData.
+// Se o IP salvo não estiver mais na lista de interfaces, volta para o primaryHost.
+watch(
+  localIps,
+  (ips) => {
+    if (ips.length && !ips.includes(selectedIp.value)) {
+      selectedIp.value = primaryHost.value;
+    }
+  },
+  { immediate: true }
+);
+
+watch(selectedIp, (ip) => {
+  if (ip) $userdata.set(KEYS.OPTIONS.SELECTED_IP, ip);
+});
+
 const baseUrl = computed(() => {
   if (!httpServer.value.running) return "";
-  const h = useHostname.value && hostname.value.trim() ? hostname.value.trim() : primaryHost.value;
+  const h =
+    useHostname.value && hostname.value.trim()
+      ? hostname.value.trim()
+      : selectedIp.value || primaryHost.value;
   return `http://${h}:${httpServer.value.port}`;
 });
 
@@ -689,6 +741,8 @@ onMounted(async () => {
       httpServerPort.value = cfg.httpServer?.port ?? 7070;
       useHostname.value = cfg.httpServer?.useHostname ?? false;
       hostname.value = await Platform.httpServer.hostname();
+      const savedIp = $userdata.get < string > (KEYS.OPTIONS.SELECTED_IP, "");
+      selectedIp.value = savedIp && localIps.value.includes(savedIp) ? savedIp : primaryHost.value;
       if (Platform.httpServer.getDeviceSettings) {
         const ds = await Platform.httpServer.getDeviceSettings();
         onlyAuthorizedDevices.value = ds.only_authorized_devices === true;
@@ -749,8 +803,8 @@ onMounted(async () => {
 .tx-token-row {
   display: flex;
   align-items: center;
-  gap: var(--lj-space-4);
-  margin: var(--lj-space-4) 0;
+  gap: var(--lj-space-3);
+  margin: var(--lj-space-3) 0;
 }
 .tx-token-label {
   color: var(--lj-text-muted);

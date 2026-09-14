@@ -562,7 +562,7 @@ async function executeAutoPopulate(): Promise<void> {
     const parts: string[] = [];
     if (created) parts.push(tt("add_auto_created").replace("{n}", String(created)));
     if (updated) parts.push(tt("add_auto_updated").replace("{n}", String(updated)));
-    autoPopulateResult.value = parts.join(". ") + ".";
+    autoPopulateResult.value = parts.join(". \n") + ".";
     void refresh();
     selectedCategoryId.value = catId;
   } else {
@@ -1196,6 +1196,7 @@ function removeEntry(): void {
 .si-auto-result {
   font-size: var(--lj-text-base);
   padding: var(--lj-space-3) var(--lj-space-5);
+  white-space: pre-line;
   border-radius: var(--lj-radius-lg);
   background: var(--lj-danger-soft);
   color: var(--lj-alert-error-color, var(--lj-danger));

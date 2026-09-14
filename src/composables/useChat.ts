@@ -17,11 +17,7 @@ let _loadingHistory = false;
 const _pendingDuringLoad: ChatMessage[] = [];
 
 function _onMessage(msg: ChatMessage, remote = false): void {
-  console.log("[useChat] _onMessage:", msg.id, "remote:", remote, "sender:", msg.sender, "text:", msg.text);
-  if (messages.value.some((m) => m.id === msg.id)) {
-    console.log("[useChat] duplicata ignorada:", msg.id);
-    return;
-  }
+  if (messages.value.some((m) => m.id === msg.id)) return;
 
   if (_loadingHistory) {
     _pendingDuringLoad.push(msg);

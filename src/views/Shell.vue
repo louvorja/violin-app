@@ -13,7 +13,7 @@
       :style="{ '--footer-height': footerHeight }"
     >
       <div class="shell-grid">
-        <ChatDrawer />
+        <ChatDrawer v-if="Platform.isDesktop" />
 
         <div
           class="shell-center"

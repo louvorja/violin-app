@@ -17,8 +17,35 @@ const _sorteios = {
   name: { last: null, history: [] },
 };
 
-/** Rate limit simples: 1 msg/seg por device. */
+/** Rate limit simples: 1 msg/500ms por device. */
 const _chatRateLimit = new Map();
+
+/** Modos de execução de música aceitos pelo /api/open-song. */
+const SONG_MODES = new Set([
+  "audio",
+  "instrumental",
+  "no_audio",
+  "audio-only",
+  "playback-only",
+]);
+
+/** Mapa legado tag → mode (clients antigos que só enviam `tag`). */
+const SONG_TAG_MODES = { 1: "audio", 2: "instrumental", 3: "no_audio" };
+
+/**
+ * Resolve o modo de execução da música.
+ *
+ * Prioridade: `mode` válido > `tag` legado > `"audio"` (Cantado). Assim os
+ * clients novos escolhem o modo explicitamente, os antigos continuam
+ * funcionando pelo `tag`, e uma requisição sem nenhum dos dois abre cantado.
+ */
+function _resolveSongMode(body) {
+  const rawMode = body && body.mode;
+  if (typeof rawMode === "string" && SONG_MODES.has(rawMode)) return rawMode;
+  const tag = parseInt((body && body.tag) || "", 10);
+  if (SONG_TAG_MODES[tag]) return SONG_TAG_MODES[tag];
+  return "audio";
+}
 
 function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDatabaseUrl, getApiToken }) {
 
@@ -31,9 +58,19 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
 
   // ---------------------------------------------------------------
   // /api/ping — health check
+  //
+  // Único path acessível a devices cadastrados ainda SEM permissões
+  // (ver `allowUnapprovedPaths` no auth). O app usa `authorized` para
+  // saber se o host já aprovou o pareamento.
   // ---------------------------------------------------------------
   app.get("/api/ping", (req, res) => {
-    res.json({ status: "ok", app: "LouvorJA" });
+    const info = req.authInfo || { kind: "unknown", authorized: false, permissions: [] };
+    res.json({
+      status: "ok",
+      app: "LouvorJA",
+      authorized: info.authorized === true,
+      permissions: Array.isArray(info.permissions) ? info.permissions : [],
+    });
   });
 
   // ---------------------------------------------------------------
@@ -170,21 +207,21 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
 
   // ---------------------------------------------------------------
   // POST /api/open-song — abre música para projeção
-  // Body: { id: number, tag?: number, id_liturgy?: string }
-  // tag: 1=audio, 2=instrumental, 3=no_audio
+  // Body: { id: number, mode?: string, tag?: number, id_liturgy?: string }
+  //
+  // mode: audio | instrumental | no_audio | audio-only | playback-only
+  // tag (legado): 1=audio, 2=instrumental, 3=no_audio
   // ---------------------------------------------------------------
   app.post("/api/open-song", (req, res) => {
     const mainWindow = getValidMainWindow();
     const id = parseInt(req.body && req.body.id, 10);
-    const tag = parseInt((req.body && req.body.tag) || "3", 10);
     const id_liturgy = req.body && req.body.id_liturgy;
 
     if (isNaN(id) || !mainWindow) {
       return res.status(400).json({ error: "id inválido ou janela indisponível" });
     }
 
-    const modeMap = { 1: "audio", 2: "instrumental", 3: "no_audio" };
-    const mode = modeMap[tag] || "no_audio";
+    const mode = _resolveSongMode(req.body);
 
     mainWindow.webContents.send("http:open-song", { id_music: id, mode, id: id_liturgy });
     res.json({ status: "ok", id, mode });
@@ -472,9 +509,10 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
       }
     }
 
+    const deviceName = deviceId && devices.findById(String(deviceId))?.name;
     const msg = {
       id: crypto.randomUUID(),
-      sender: sender || "Dispositivo",
+      sender: deviceName || sender || "Dispositivo",
       deviceId: deviceId || undefined,
       text: text.trim(),
       timestamp: new Date().toISOString(),
@@ -484,16 +522,12 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
     const events = require("./events.js");
     events.publish({ type: "chat_message", payload: msg });
 
-    // Envia IPC para o renderer local (BroadcastChannel)
+    // Envia IPC para o renderer local
     const mainWindow = getValidMainWindow();
-    console.log(`[httpServer] POST /api/chat: mainWindow=${!!mainWindow}, destroyed=${mainWindow?.isDestroyed()}`);
     if (mainWindow) {
       try {
         mainWindow.webContents.send("transmission:chat-message", msg);
-        console.log(`[httpServer] POST /api/chat: IPC enviado com sucesso`);
-      } catch (e) {
-        console.error("[httpServer] POST /api/chat: IPC falhou:", e?.message || e);
-      }
+      } catch (_) { /* noop */ }
     }
 
     res.json({ ok: true, id: msg.id });
@@ -657,4 +691,4 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
   });
 }
 
-module.exports = { setupRoutes };
+module.exports = { setupRoutes, resolveSongMode: _resolveSongMode };

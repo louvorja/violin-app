@@ -36,6 +36,7 @@ import { useFileProjection } from "@/composables/useFileProjection";
 import { useBackgroundSound } from "@/composables/useBackgroundSound";
 import Path from "@/helpers/Path";
 import Media from "@/composables/useMedia";
+import { MusicActionEnum } from "@/enums/MusicActionEnum";
 import Broadcast from "@/helpers/Broadcast";
 import Liturgy from "@/helpers/Liturgy";
 import { IMAGE_EXT, AUDIO_EXT, VIDEO_EXT } from "@/constants/FileTypes";
@@ -60,6 +61,36 @@ import { FONT, resolveDefaultFont } from "@/config/Fonts";
 import { getTheme } from "@/config/Themes";
 
 const app = createApp(App);
+
+/**
+ * Executa uma música no modo escolhido (vindo do `POST /api/open-song`).
+ *
+ * - `audio`         → slides + faixa cantada
+ * - `instrumental`  → slides + playback
+ * - `no_audio`      → somente slides (Letra)
+ * - `audio-only`    → somente o áudio, sem abrir slides
+ * - `playback-only` → somente o playback, sem abrir slides
+ */
+async function openSongByMode(idMusic, mode) {
+  switch (mode) {
+    case MusicActionEnum.NO_AUDIO:
+      await Media.open({ id_music: idMusic, mode: MusicActionEnum.NO_AUDIO });
+      break;
+    case MusicActionEnum.AUDIO_ONLY:
+      await Media.openAudio(idMusic);
+      break;
+    case MusicActionEnum.PLAYBACK_ONLY:
+      await Media.openAudio({ id_music: idMusic, mode: MusicActionEnum.INSTRUMENTAL });
+      break;
+    case MusicActionEnum.INSTRUMENTAL:
+      await Media.open({ id_music: idMusic, mode: MusicActionEnum.INSTRUMENTAL });
+      break;
+    case MusicActionEnum.AUDIO:
+    default:
+      await Media.open({ id_music: idMusic, mode: MusicActionEnum.AUDIO });
+      break;
+  }
+}
 
 app.use(createPinia());
 app.use(router);
@@ -596,15 +627,16 @@ $storage.hydrate().then(async () => {
               break;
           }
           break;
-        case "http:open-song":
+        case "http:open-song": {
           console.log("[http:open-song] Abrindo música:", data);
-          Media.open({ id_music: data.id_music, mode: data.mode });
+          await openSongByMode(data.id_music, data.mode);
 
           // Se veio de um item da liturgia (Choose Later), marca ele como checked
           if (data.id) {
             Liturgy.toggleChecked(data.id);
           }
           break;
+        }
         case "http:drawing-number":
           Broadcast.send(BROADCAST_TYPE.DRAWING_NUMBER, { number: data.number });
           break;

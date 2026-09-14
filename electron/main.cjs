@@ -280,6 +280,11 @@ function createWindow() {
   // D6 — Registrar janela principal no módulo de atalhos globais
   shortcuts.setMainWindow(mainWindow);
 
+  // HTTP server — o diálogo de aprovação de dispositivos é enviado para a
+  // janela principal. Precisa ser re-registrada sempre que a janela é
+  // (re)criada (boot e reabertura pelo dock no macOS).
+  try { httpServer.setMainWindow(mainWindow); } catch (_) { /* noop */ }
+
   // D4 — Registrar janela principal no windowFactory: janelas auxiliares
   // (projeção/operador/retorno) devolvem o foco à main após abrir.
   windowFactory.setMainWindow(mainWindow);
@@ -549,11 +554,7 @@ app.whenReady().then(async () => {
   }
 
   createWindow();
-
-  // Atualizar mainWindow no HTTP server recém-criado
-  if (mainWindow) {
-    try { httpServer.setMainWindow(mainWindow); } catch (_) { /* ignore */ }
-  }
+  // A janela principal já se registra no HTTP server dentro de createWindow().
 
   // macOS: reabrir janela quando o ícone do dock for clicado
   app.on("activate", () => {

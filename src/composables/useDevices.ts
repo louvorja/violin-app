@@ -22,6 +22,20 @@ let _listenersAttached = false;
 let _cleanup: (() => void) | null = null;
 let _cleanupPending: (() => void) | null = null;
 
+/**
+ * Fallback: qualquer device cadastrado sem permissões é tratado como
+ * pendente. Garante que a tela de permissões abra mesmo quando o evento
+ * `devices:pending` se perdeu (janela recriada, renderer sem listener, etc.).
+ */
+function _syncPendingFromList(list: Device[]) {
+  if (_pendingDevice.value) return;
+  const orphan = list.find((d) => !d.permissions || d.permissions.length === 0);
+  if (orphan) {
+    console.log("[useDevices] device sem permissões detectado:", orphan.name);
+    _pendingDevice.value = orphan;
+  }
+}
+
 function _attachListeners() {
   if (_listenersAttached) return;
   _listenersAttached = true;
@@ -39,6 +53,7 @@ function _attachListeners() {
     _cleanup = api.onChanged((list: Device[]) => {
       console.log("[useDevices] onChanged:", list?.length, "devices");
       _devices.value = Array.isArray(list) ? list : [];
+      _syncPendingFromList(_devices.value);
     });
   }
   if (api?.onPending) {
@@ -54,6 +69,7 @@ function _attachListeners() {
       console.log("[useDevices] load inicial:", list?.length, "devices");
       _devices.value = Array.isArray(list) ? list : [];
       _loaded.value = true;
+      _syncPendingFromList(_devices.value);
     }).catch((e) => {
       console.error("[useDevices] load inicial:", e);
     });
@@ -157,6 +173,11 @@ export function useDevices() {
 
   /**
    * Aceita o device pendente (define permissões e salva).
+   *
+   * O device já existe na lista (foi gravado pelo main no
+   * `POST /api/register-device`), então aqui ele é ATUALIZADO — não
+   * duplicado. O append só vale como fallback caso a lista local ainda
+   * não tenha recebido o `devices:changed`.
    */
   async function acceptPendingDevice(
     name: string,
@@ -165,8 +186,12 @@ export function useDevices() {
     if (!_pendingDevice.value) return null;
     const device = _pendingDevice.value;
     const updated: Device = { ...device, name, permissions };
-    _devices.value = [..._devices.value, updated];
+    const exists = _devices.value.some((d) => d.id === device.id);
+    _devices.value = exists
+      ? _devices.value.map((d) => (d.id === device.id ? updated : d))
+      : [..._devices.value, updated];
     _pendingDevice.value = null;
+    _pendingToken.value = null;
     await _sync();
     return updated;
   }
