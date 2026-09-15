@@ -174,6 +174,7 @@ import { useSyncManager } from "@/composables/useSyncManager";
 import BundleInstaller from "@/helpers/BundleInstaller";
 import ChatDrawer from "@/components/ChatDrawer.vue";
 import { useChat } from "@/composables/useChat";
+import ScheduledStore from "@/helpers/ScheduledStore";
 
 const { locale, t } = useI18n();
 const { applyStoredTheme } = useAppTheme();
@@ -275,6 +276,16 @@ const onOpenStartupCheck = () => {
 };
 
 let beforeUnloadHandler: ((e: BeforeUnloadEvent) => void) | null = null;
+
+/**
+ * pagehide garante que escritas pendentes no ScheduledStore (itens agendados)
+ * sejam flushadas antes do unload. Diferente de beforeunload, funciona sem
+ * cancelar o close no Electron e o browser mantém a página viva até as
+ * Promises resolverem (dentro do limite de tempo do browser).
+ */
+function onPageHide() {
+  void ScheduledStore.flush();
+}
 
 /**
  * Só vale avisar antes de recarregar quando o reload destrói algo em curso:
@@ -718,6 +729,9 @@ onMounted(() => {
     window.addEventListener("beforeunload", beforeUnloadHandler);
   }
 
+  // pagehide: flush de itens agendados antes do unload (web + Electron).
+  window.addEventListener("pagehide", onPageHide);
+
   $appdata.set(KEYS.SHELL.IS_MOBILE, platform.android || platform.ios);
   if (platform.electron) {
     $appdata.set(KEYS.SHELL.IS_DESKTOP, true);
@@ -870,6 +884,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   if (beforeUnloadHandler) window.removeEventListener("beforeunload", beforeUnloadHandler);
+  window.removeEventListener("pagehide", onPageHide);
   if (messageHandler) window.removeEventListener("message", messageHandler);
 
   if (_updaterUnsub) {

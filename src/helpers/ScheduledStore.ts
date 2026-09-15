@@ -26,6 +26,19 @@ let _items: ScheduledItem[] = [];
 let _hydrated = false;
 let _hydrating: Promise<void> | null = null;
 
+/**
+ * Promises de escrita pendentes. Cada save/delete adiciona aqui e remove
+ * ao resolver. `flush()` aguarda todas — usado pelo `pagehide` handler
+ * no Shell.vue para garantir que dados cheguem ao IDB antes do unload.
+ */
+const _pending = new Set<Promise<void>>();
+
+function _track<T extends Promise<void>>(promise: T): T {
+  _pending.add(promise);
+  void promise.finally(() => _pending.delete(promise));
+  return promise;
+}
+
 async function hydrate(): Promise<void> {
   if (_hydrated) return;
   if (_hydrating) return _hydrating;
@@ -85,20 +98,26 @@ export default {
     return _items;
   },
 
+  /** Aguarda todas as escritas pendentes ao IDB. Chamado no pagehide. */
+  async flush(): Promise<void> {
+    if (!_pending.size) return;
+    await Promise.all([..._pending]);
+  },
+
   async saveCategory(cat: ScheduledCategory): Promise<void> {
     const normalized = { ...cat, id: String(cat.id) };
     const i = _categories.findIndex((c) => String(c.id) === String(cat.id));
     if (i >= 0) _categories[i] = normalized;
     else _categories.push(normalized);
-    await $docs.put(TABLE_CATEGORIES, normalized);
+    await _track($docs.put(TABLE_CATEGORIES, normalized));
   },
 
   async deleteCategory(id: string | number): Promise<void> {
     _categories = _categories.filter((c) => String(c.id) !== String(id));
     const affected = _items.filter((i) => String(i.categoria) === String(id));
     _items = _items.filter((i) => String(i.categoria) !== String(id));
-    await $docs.del(TABLE_CATEGORIES, String(id));
-    for (const i of affected) await $docs.del(TABLE_ITEMS, String(i.id));
+    await _track($docs.del(TABLE_CATEGORIES, String(id)));
+    for (const i of affected) await _track($docs.del(TABLE_ITEMS, String(i.id)));
   },
 
   async saveItem(item: ScheduledItem): Promise<void> {
@@ -106,11 +125,11 @@ export default {
     const i = _items.findIndex((x) => String(x.id) === String(item.id));
     if (i >= 0) _items[i] = normalized;
     else _items.push(normalized);
-    await $docs.put(TABLE_ITEMS, normalized);
+    await _track($docs.put(TABLE_ITEMS, normalized));
   },
 
   async deleteItem(id: string | number): Promise<void> {
     _items = _items.filter((x) => String(x.id) !== String(id));
-    await $docs.del(TABLE_ITEMS, String(id));
+    await _track($docs.del(TABLE_ITEMS, String(id)));
   },
 };

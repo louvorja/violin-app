@@ -293,8 +293,8 @@
         {{ autoPopulateResult }}
       </div>
       <template #footer>
-        <LjButton size="sm" @click="autoPopulateDialog = false">
-          {{ t("actions.cancel") }}
+        <LjButton size="sm" :icon="ICONS.ACTIONS.CLOSE" @click="autoPopulateDialog = false">
+          {{ t("actions.close") }}
         </LjButton>
         <LjButton
           size="sm"
@@ -323,6 +323,7 @@ import type {
   LjCalendarMoreClick,
 } from "@/components/ui";
 import $liturgy from "@/helpers/Liturgy";
+import ScheduledStore from "@/helpers/ScheduledStore";
 import Platform from "@/helpers/Platform";
 import $path from "@/helpers/Path";
 import $alert from "@/helpers/Alert";
@@ -337,6 +338,19 @@ import { AUDIO_EXT, IMAGE_EXT, VIDEO_EXT } from "@/constants/FileTypes";
 const { t, locale } = useI18n();
 function tt(key: string): string {
   return t(`modules.scheduled_items.${key}`);
+}
+function uid(prefix = "item_"): string {
+  const d = new Date();
+  const pad = (n: number, l = 2) => String(n).padStart(l, "0");
+  const stamp =
+    d.getFullYear() +
+    pad(d.getMonth() + 1) +
+    pad(d.getDate()) +
+    pad(d.getHours()) +
+    pad(d.getMinutes()) +
+    pad(d.getSeconds()) +
+    pad(d.getMilliseconds(), 3);
+  return prefix + stamp + Math.floor(Math.random() * 1000);
 }
 
 // ─── Estado ──────────────────────────────────────────────────────────
@@ -541,29 +555,48 @@ async function executeAutoPopulate(): Promise<void> {
     const year = `20${yy}`;
     const date = `${year}-${mm}-${dd}`;
     const path = `${autoPopulateFolder.value}/${file}`;
+    const nome =
+      m[4] ||
+      (path
+        ? path
+            .split(/[\\/]/)
+            .pop()
+            ?.replace(/\.[^.]+$/, "") || ""
+        : "");
     // Verifica se já existe item para essa categoria+dia — se sim, sobrescreve.
     const existing = existingItems.find((i) => i.data === date && String(i.categoria) === catId);
     if (existing) {
-      $liturgy.updateScheduledItemEntry(existing.id, {
-        arquivo: path,
-        nome: m[4],
-      });
+      await ScheduledStore.saveItem({ ...existing, arquivo: path, nome });
       updated++;
     } else {
-      $liturgy.addScheduledItemEntry(catId, date, m[4], path, "E");
+      const id = uid("sch_");
+      await ScheduledStore.saveItem({
+        id,
+        categoria: catId,
+        data: date,
+        nome,
+        arquivo: path,
+        arquivo_info: "E",
+      });
       created++;
     }
   }
   if (created > 0 || updated > 0) {
     // Salva a pasta na categoria para pré-preenchimento futuro.
-    $liturgy.updateScheduledCategory(autoPopulateTargetCat.value, {
-      auto_folder: autoPopulateFolder.value,
-    });
+    const cat = $liturgy
+      .scheduledCategories()
+      .find((c) => String(c.id) === String(autoPopulateTargetCat.value));
+    if (cat) {
+      await ScheduledStore.saveCategory({
+        ...cat,
+        auto_folder: autoPopulateFolder.value,
+      });
+    }
     const parts: string[] = [];
     if (created) parts.push(tt("add_auto_created").replace("{n}", String(created)));
     if (updated) parts.push(tt("add_auto_updated").replace("{n}", String(updated)));
     autoPopulateResult.value = parts.join(". \n") + ".";
-    void refresh();
+    await refresh();
     selectedCategoryId.value = catId;
   } else {
     autoPopulateResult.value = tt("add_auto_no_files");
@@ -584,27 +617,29 @@ function openRenameCategory(cat: ScheduledCategory): void {
   categoryDialog.value = true;
 }
 
-function confirmCategoryDialog(): void {
+async function confirmCategoryDialog(): Promise<void> {
   const nome = categoryNameInput.value.trim();
   if (!nome) return;
   const cor = categoryColorInput.value;
   if (editingCatId.value != null) {
-    $liturgy.updateScheduledCategory(editingCatId.value, { nome, cor });
+    const cat = $liturgy
+      .scheduledCategories()
+      .find((c) => String(c.id) === String(editingCatId.value));
+    if (cat) await ScheduledStore.saveCategory({ ...cat, nome, cor });
   } else {
-    const id = $liturgy.addScheduledCategory(nome);
-    // Cor para o calendário (definida pelo usuário).
-    $liturgy.updateScheduledCategory(id, { cor });
+    const id = uid("cat_");
+    await ScheduledStore.saveCategory({ id, nome, cor } as ScheduledCategory);
     selectedCategoryId.value = id;
   }
   categoryDialog.value = false;
-  void refresh();
+  await refresh();
 }
 
-function removeCategory(cat: ScheduledCategory): void {
+async function removeCategory(cat: ScheduledCategory): Promise<void> {
   if (!confirm(tt("delete_category"))) return;
   if (String(selectedCategoryId.value) === String(cat.id)) selectedCategoryId.value = "";
-  $liturgy.removeScheduledCategory(cat.id);
-  void refresh();
+  await ScheduledStore.deleteCategory(cat.id);
+  await refresh();
 }
 
 function itemsOf(catId: string | number): ScheduledItem[] {
@@ -876,42 +911,45 @@ async function saveEntry(): Promise<void> {
   const nome = categoryName(catId);
   const arquivo = entryFile.value || entryFileName.value;
   const dur = entryDuration.value ?? undefined;
+  const jpegData = heicJpegBlob ? await heicJpegBlob.arrayBuffer() : undefined;
   if (entryId.value) {
-    $liturgy.updateScheduledItemEntry(entryId.value, {
-      data: entryDate.value,
-      categoria: catId,
-      nome,
-      arquivo,
-      ...(dur != null ? { duracao: dur } : {}),
-      ...(heicJpegBlob ? { arquivo_jpeg: await heicJpegBlob.arrayBuffer() } : {}),
-    });
-  } else {
-    const jpegData = heicJpegBlob ? await heicJpegBlob.arrayBuffer() : undefined;
-    const id = $liturgy.addScheduledItemEntry(
-      String(catId),
-      entryDate.value,
-      nome,
-      arquivo,
-      "E",
-      dur
-    );
-    // Salva arquivo_jpeg separadamente (addScheduledItemEntry não suporta o campo).
-    if (jpegData) {
-      $liturgy.updateScheduledItemEntry(id, { arquivo_jpeg: jpegData });
+    const cur = $liturgy.scheduledItems().find((i) => String(i.id) === String(entryId.value));
+    if (cur) {
+      await ScheduledStore.saveItem({
+        ...cur,
+        data: entryDate.value,
+        categoria: catId,
+        nome,
+        arquivo,
+        ...(dur != null ? { duracao: dur } : {}),
+        ...(jpegData ? { arquivo_jpeg: jpegData } : {}),
+      });
     }
+  } else {
+    const id = uid("sch_");
+    await ScheduledStore.saveItem({
+      id,
+      categoria: String(catId),
+      data: entryDate.value,
+      nome,
+      arquivo,
+      arquivo_info: "E",
+      ...(dur != null ? { duracao: dur } : {}),
+      ...(jpegData ? { arquivo_jpeg: jpegData } : {}),
+    });
     entryId.value = id;
   }
-  void refresh();
+  await refresh();
   entryDialog.value = false;
 }
 
-function removeEntry(): void {
+async function removeEntry(): Promise<void> {
   if (!entryId.value) return;
   if (!confirm(tt("remove_confirm"))) return;
-  $liturgy.removeScheduledItemEntry(entryId.value);
+  await ScheduledStore.deleteItem(entryId.value);
   entryId.value = null;
   entryDialog.value = false;
-  void refresh();
+  await refresh();
 }
 </script>
 
