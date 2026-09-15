@@ -73,7 +73,7 @@
         @click="toggleChat"
       >
         <LjIcon :icon="ICONS.UI.MESSAGE_BULLETED" :size="sizeIcon" />
-        <span v-if="unreadCount > 0" class="shell-tool__badge">
+        <span v-if="unreadCount > 0 && !chatOpen" class="shell-tool__badge">
           {{ unreadCount > 99 ? "99+" : unreadCount }}
         </span>
       </button>

@@ -51,7 +51,21 @@
             class="chat-drawer__msg"
             :class="{ 'chat-drawer__msg--local': !msg.deviceId }"
           >
-            <span class="chat-drawer__sender">{{ msg.sender }}</span>
+            <span class="chat-drawer__sender">
+              <LjIcon
+                v-if="msg.deviceId && msg.platform === 'android'"
+                :icon="ICONS.UI.ANDROID"
+                :size="12"
+                class="chat-drawer__platform-icon"
+              />
+              <LjIcon
+                v-else-if="msg.deviceId && msg.platform === 'ios'"
+                :icon="ICONS.UI.APPLE"
+                :size="12"
+                class="chat-drawer__platform-icon"
+              />
+              {{ msg.sender }}
+            </span>
             <span class="chat-drawer__text">{{ msg.text }}</span>
             <span class="chat-drawer__time">{{ formatTime(msg.timestamp) }}</span>
           </div>
@@ -268,6 +282,14 @@ watch(
   font-weight: 600;
   opacity: 0.7;
   margin-bottom: 2px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.chat-drawer__platform-icon {
+  opacity: 0.8;
+  flex-shrink: 0;
 }
 
 .chat-drawer__text {

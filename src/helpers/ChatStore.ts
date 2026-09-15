@@ -9,6 +9,7 @@ export interface ChatMessage {
   id: string;
   sender: string;
   deviceId?: string;
+  platform?: "android" | "ios" | "web";
   text: string;
   timestamp: string;
 }

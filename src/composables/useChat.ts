@@ -36,6 +36,7 @@ function _onMessage(msg: ChatMessage, remote = false): void {
 
   if (autoOpenOnNew.value && remote) {
     isOpen.value = true;
+    unreadCount.value = 0;
   }
 }
 
