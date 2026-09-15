@@ -36,9 +36,14 @@
 
       <!-- Botão voltar -->
       <div v-else-if="level > 1" class="ov-back">
-        <LjButton variant="ghost" size="sm" icon="None" icon-only @click="goBack">
-          <LjIcon :icon="ICONS.UI.ARROW_LEFT" />
-        </LjButton>
+        <LjButton
+          variant="primary"
+          size="md"
+          :icon="ICONS.UI.ARROW_LEFT"
+          icon-only
+          style="margin-right: 10px"
+          @click="goBack"
+        />
         <span class="ov-back-title">{{ backTitle }}</span>
       </div>
 
@@ -105,7 +110,7 @@
 </template>
 
 <script setup lang="ts">
-import { LjAlert, LjButton, LjIcon, LjProgress } from "@/components/ui";
+import { LjAlert, LjButton, LjIcon, LjPopover, LjProgress } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, watch, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
@@ -123,6 +128,7 @@ import $database from "@/helpers/Database";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
 import type { RibbonAction } from "@/types/Ribbon";
+import { LjTooltip } from "@components/ui";
 
 const { t: i18nT, locale } = useI18n();
 const t = (key: string): string => i18nT(`modules.online_videos.${key}`);
