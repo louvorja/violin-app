@@ -305,7 +305,7 @@
       "http_server": "Servidor",
       "server_running": "Rodando na porta {port}",
       "server_stopped": "Servidor desligado",
-      "server_stopped_hint": "Servidor parado. Projeção de vídeos YouTube pode não funcionar. Reinicie para aplicar alterações de porta.",
+      "server_stopped_hint": "Servidor parado. Projeção de vídeos YouTube pode não funcionar.",
       "start_server": "Ligar",
       "stop_server": "Desligar",
       "restart_server": "Reiniciar",

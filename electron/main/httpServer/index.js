@@ -265,12 +265,16 @@ async function start({ port, mainWindow } = {}) {
     const device = devices.addPending({ token, name: name || "Dispositivo", model: model || "", platform: devPlatform });
     console.log(`[httpServer] Device registrado: ${device.name} (${device.platform}) model=${device.model} id=${device.id.slice(0, 8)} token=${device.token.slice(0, 8)}...`);
 
-    // Notifica TODAS as janelas: a principal pode não estar exibindo o menu
-    // Transmissão, e janelas auxiliares também podem querer reagir. Além do
-    // evento "pending" (abre o diálogo), envia a lista atualizada para o
-    // fallback de devices sem permissão.
+    // Foca a janela principal para que o operador veja o diálogo de aprovação
     const windows = BrowserWindow.getAllWindows().filter((w) => w && !w.isDestroyed());
     if (windows.length) {
+      // Prioriza a janela principal (Shell)
+      const mainWin = windows.find((w) => !w.isDestroyed() && !w.isMinimized());
+      if (mainWin) {
+        try { mainWin.focus(); } catch (_) { /* noop */ }
+      } else if (windows.length > 0) {
+        try { windows[0].show(); windows[0].focus(); } catch (_) { /* noop */ }
+      }
       const currentList = devices.list();
       for (const w of windows) {
         try {

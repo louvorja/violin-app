@@ -305,7 +305,7 @@
       "http_server": "Servidor",
       "server_running": "En ejecución en el puerto {port}",
       "server_stopped": "Servidor apagado",
-      "server_stopped_hint": "Servidor detenido. La proyección de videos YouTube puede no funcionar. Reinicie para aplicar cambios de puerto.",
+      "server_stopped_hint": "Servidor detenido. La proyección de videos YouTube puede no funcionar.",
       "start_server": "Encender",
       "stop_server": "Apagar",
       "restart_server": "Reiniciar",
