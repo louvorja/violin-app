@@ -136,12 +136,13 @@ interface SlideCfg {
   show_title_first_slide: boolean;
   text_align: "top" | "center" | "bottom";
   transition_speed_ms: number;
-  text_bg_transparent: boolean;
+  text_bg_opacity: number;
   text_bg_blur_enabled: boolean;
   text_bg_blur: number;
   text_border_enabled: boolean;
   text_border_color: string;
   text_border_width: number;
+  text_border_radius: number;
   affect_external_slides: boolean;
   custom_background_active: boolean;
   shadow_enabled: boolean;
@@ -216,7 +217,9 @@ const _readSlideOpts = (): SlideCfg => {
     const titleSize = Number($userdata.get<number>(KEYS.OPTIONS.SLIDE.TITLE_SIZE, null) ?? NaN);
     const bodySize = Number($userdata.get<number>(KEYS.OPTIONS.SLIDE.BODY_SIZE, null) ?? NaN);
     const auxSize = Number($userdata.get<number>(KEYS.OPTIONS.SLIDE.AUX_SIZE, null) ?? NaN);
-    const textBgTransparent = $userdata.get<boolean>(KEYS.OPTIONS.SLIDE.TEXT_BG_TRANSPARENT, null);
+    const textBgOpacity = _numeroNaFaixa(
+      KEYS.OPTIONS.SLIDE.TEXT_BG_OPACITY, 75, 0, 100
+    );
     const textBorderWidth = Number(
       $userdata.get<number>(KEYS.OPTIONS.SLIDE.TEXT_BORDER_WIDTH, 2)
     );
@@ -227,7 +230,7 @@ const _readSlideOpts = (): SlideCfg => {
     if (Number.isFinite(titleSize) && titleSize > 0) merged.font_size_cover = titleSize;
     if (Number.isFinite(bodySize) && bodySize > 0) merged.font_size_lyric = bodySize;
     if (Number.isFinite(auxSize) && auxSize > 0) merged.font_size_aux = auxSize;
-    if (typeof textBgTransparent === "boolean") merged.text_bg_transparent = textBgTransparent;
+    merged.text_bg_opacity = textBgOpacity;
     merged.text_border_enabled =
       $userdata.get<boolean>(KEYS.OPTIONS.SLIDE.TEXT_BORDER_ENABLED, false) === true;
     merged.text_border_color =
@@ -235,6 +238,9 @@ const _readSlideOpts = (): SlideCfg => {
     merged.text_border_width = Number.isFinite(textBorderWidth)
       ? Math.min(10, Math.max(1, textBorderWidth))
       : 2;
+    merged.text_border_radius = _numeroNaFaixa(
+      KEYS.OPTIONS.SLIDE.TEXT_BORDER_RADIUS, 0, 0, 50
+    );
   }
 
   // Flag global de "afetar slides externos"
@@ -559,12 +565,15 @@ export function useSlideStyle(): SlideStyleAPI {
       ? `blur(${cfg.value.text_bg_blur}px)`
       : "none";
     return {
-      backgroundColor: cfg.value.text_bg_transparent ? "transparent" : "rgba(0, 0, 0, 0.75)",
+      backgroundColor: `rgba(0, 0, 0, ${cfg.value.text_bg_opacity / 100})`,
       backdropFilter,
       WebkitBackdropFilter: backdropFilter,
       border: cfg.value.text_border_enabled
         ? `${cfg.value.text_border_width}px solid ${cfg.value.text_border_color}`
         : "none",
+      borderRadius: cfg.value.text_border_radius
+        ? `${cfg.value.text_border_radius}px`
+        : undefined,
       boxSizing: "border-box",
     };
   }

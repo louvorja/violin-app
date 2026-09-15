@@ -569,13 +569,20 @@
           </table>
 
           <div class="fmt-fx">
-            <label class="opt-checkbox">
+            <label class="fmt-field">
+              <span class="opt-format-label">{{ $t("options.slides.text_bg_opacity") }}</span>
               <input
-                type="checkbox"
-                :checked="getUserData(KEYS.OPTIONS.SLIDE.TEXT_BG_TRANSPARENT, false)"
-                @change="saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BG_TRANSPARENT, $c($event))"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                class="opt-range"
+                :value="getUserData(KEYS.OPTIONS.SLIDE.TEXT_BG_OPACITY, 75)"
+                @input="saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BG_OPACITY, Number($v($event)))"
               />
-              <span>{{ $t("options.slides.text_bg_transparent") }}</span>
+              <span class="opt-range-val">
+                {{ getUserData(KEYS.OPTIONS.SLIDE.TEXT_BG_OPACITY, 75) }}%
+              </span>
             </label>
 
             <label class="opt-checkbox">
@@ -688,6 +695,21 @@
             />
             <span class="opt-range-val">
               {{ getUserData(KEYS.OPTIONS.SLIDE.TEXT_BORDER_WIDTH, 2) }}px
+            </span>
+          </label>
+          <label class="fmt-field">
+            <span class="opt-format-label">{{ $t("options.slides.text_border_radius") }}</span>
+            <input
+              type="range"
+              min="0"
+              max="50"
+              step="1"
+              class="opt-range"
+              :value="getUserData(KEYS.OPTIONS.SLIDE.TEXT_BORDER_RADIUS, 0)"
+              @input="saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BORDER_RADIUS, Number($v($event)))"
+            />
+            <span class="opt-range-val">
+              {{ getUserData(KEYS.OPTIONS.SLIDE.TEXT_BORDER_RADIUS, 0) }}px
             </span>
           </label>
         </div>
@@ -1665,12 +1687,13 @@ function restoreTextFormat(): void {
   saveUserData(KEYS.OPTIONS.SLIDE.TITLE_SIZE, SLIDE_STYLE_DEFAULT.font_size_cover);
   saveUserData(KEYS.OPTIONS.SLIDE.BODY_SIZE, SLIDE_STYLE_DEFAULT.font_size_lyric);
   saveUserData(KEYS.OPTIONS.SLIDE.AUX_SIZE, SLIDE_STYLE_DEFAULT.font_size_aux);
-  saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BG_TRANSPARENT, false);
+  saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BG_OPACITY, SLIDE_STYLE_DEFAULT.text_bg_opacity);
   saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BG_BLUR_ENABLED, false);
   saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BG_BLUR, SLIDE_STYLE_DEFAULT.text_bg_blur);
   saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BORDER_ENABLED, false);
   saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BORDER_COLOR, SLIDE_STYLE_DEFAULT.text_border_color);
   saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BORDER_WIDTH, 2);
+  saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BORDER_RADIUS, 0);
   saveUserData(KEYS.OPTIONS.SLIDE.SHADOW_ENABLED, false);
   saveUserData(KEYS.OPTIONS.SLIDE.SHADOW_COLOR, SLIDE_STYLE_DEFAULT.shadow_color);
   saveUserData(KEYS.OPTIONS.SLIDE.SHADOW_BLUR, 12);
