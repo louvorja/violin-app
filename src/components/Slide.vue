@@ -187,9 +187,17 @@ const rootStyle = computed(() => ({
   "--lj-aux-size": cfg.value.font_size_aux,
 }));
 
-// Fade-in da preview ao montar (espelha o AlphaBlend do fmMusica Delphi)
+// Fade-in da preview ao montar (espelha o AlphaBlend do fmMusica Delphi).
+// Gate em document.fonts.ready: o slide fica em opacity:0 até a fonte de
+// projeção estar carregada e rasterizada. Sem isso, o browser renderiza com a
+// fonte do sistema (FOUT) e troca para a woff2 — o flash aparece no telão.
 const ready = ref(false);
-onMounted(() => {
+onMounted(async () => {
+  try {
+    await document.fonts.ready;
+  } catch {
+    /* font-loading API ausente — segue com fade-in imediato */
+  }
   requestAnimationFrame(() =>
     requestAnimationFrame(() => {
       ready.value = true;

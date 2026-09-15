@@ -9,6 +9,9 @@
  *
  * Os valores abaixo (1.05 / 0.30) fixam a baseline no mesmo ponto em todas
  * elas e cobrem o maior glifo acentuado do acervo (À da BetaniaPatmos, 1.043em).
+ *
+ * `swap` em todas: o Slide.vue tem gate `document.fonts.ready` que mantém
+ * opacity:0 até a fonte estar carregada — a troca happenwhile invisible.
  */
 
 @font-face {
@@ -16,6 +19,7 @@
   src: url("../fonts/din-condensed-bold.woff2") format("woff2");
   font-weight: bold;
   font-style: normal;
+  font-display: swap;
   ascent-override: 105%;
   descent-override: 30%;
   line-gap-override: 0%;
@@ -26,6 +30,7 @@
   src: url("../fonts/AdventSans-Logo.woff2") format("woff2");
   font-weight: normal;
   font-style: normal;
+  font-display: swap;
   ascent-override: 105%;
   descent-override: 30%;
   line-gap-override: 0%;
@@ -36,6 +41,7 @@
   src: url("../fonts/FjallaOne-Regular.woff2") format("woff2");
   font-weight: normal;
   font-style: normal;
+  font-display: swap;
   ascent-override: 105%;
   descent-override: 30%;
   line-gap-override: 0%;
@@ -53,6 +59,7 @@
   src: url("../fonts/FjallaOne-Regular.woff2") format("woff2");
   font-weight: normal;
   font-style: normal;
+  font-display: swap;
   ascent-override: 105%;
   descent-override: 30%;
   line-gap-override: 0%;
@@ -63,6 +70,7 @@
   src: url("../fonts/impact-regular-6_ufonts.com.woff2") format("woff2");
   font-weight: normal;
   font-style: normal;
+  font-display: swap;
   ascent-override: 105%;
   descent-override: 30%;
   line-gap-override: 0%;
@@ -73,12 +81,13 @@
   src: url("../fonts/calibri-bold.woff2") format("woff2");
   font-weight: bold;
   font-style: normal;
+  font-display: swap;
   ascent-override: 105%;
   descent-override: 30%;
   line-gap-override: 0%;
 }
 
-/* A fonte da interface, em duas declarações, e a única com `swap`.
+/* A fonte da interface, em duas declarações.
  *
  * A Inter completa tem 352KB e carrega grego, cirílico e vietnamita, que
  * nenhuma das duas línguas do app usa. Medido em 3G, ela terminava junto com a
@@ -97,8 +106,9 @@
  * `swap` porque o padrão é bloquear: sem ele o operador encara a tela montada e
  * sem texto até a fonte chegar. Os `*-override` alinham as métricas ao
  * fallback, então o texto reflui pouco quando ela entra. As fontes de projeção
- * seguem sem `swap` de propósito — lá a troca apareceria no telão, no meio do
- * slide, diante da congregação. */
+ * também usam `swap` agora — o Slide.vue tem gate `document.fonts.ready` que
+ * mantém opacity:0 até a fonte estar carregada, então a troca happenwhile
+ * invisible. */
 @font-face {
   font-family: "InterVariable";
   src: url("../fonts/Inter-VariableFont_opsz,wght.woff2") format("woff2");
@@ -129,6 +139,7 @@
   src: url("../fonts/Roboto-VariableFont_wdth,wght.woff2") format("woff2");
   font-weight: 100 900;
   font-style: normal;
+  font-display: swap;
   ascent-override: 105%;
   descent-override: 30%;
   line-gap-override: 0%;
@@ -139,6 +150,7 @@
   src: url("../fonts/BetaniaPatmos-Regular.woff2") format("woff2");
   font-weight: normal;
   font-style: normal;
+  font-display: swap;
   ascent-override: 105%;
   descent-override: 30%;
   line-gap-override: 0%;
@@ -149,6 +161,7 @@
   src: url("../fonts/OpenSans-Regular.woff2") format("woff2");
   font-weight: normal;
   font-style: normal;
+  font-display: swap;
   ascent-override: 105%;
   descent-override: 30%;
   line-gap-override: 0%;
@@ -159,6 +172,7 @@
   src: url("../fonts/OpenSans-Light.woff2") format("woff2");
   font-weight: normal;
   font-style: normal;
+  font-display: swap;
   ascent-override: 105%;
   descent-override: 30%;
   line-gap-override: 0%;
@@ -169,6 +183,7 @@
   src: url("../fonts/OpenSans-Semibold.woff2") format("woff2");
   font-weight: normal;
   font-style: normal;
+  font-display: swap;
   ascent-override: 105%;
   descent-override: 30%;
   line-gap-override: 0%;
@@ -179,6 +194,7 @@
   src: url("../fonts/OpenSans-ExtraBold.woff2") format("woff2");
   font-weight: normal;
   font-style: normal;
+  font-display: swap;
   ascent-override: 105%;
   descent-override: 30%;
   line-gap-override: 0%;
