@@ -267,6 +267,25 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
+.align-start {
+  align-items: flex-start;
+}
+.align-center {
+  align-items: center;
+}
+.align-end {
+  align-items: flex-end;
+}
+.justify-start {
+  justify-content: flex-start;
+}
+.justify-center {
+  justify-content: center;
+}
+.justify-end {
+  justify-content: flex-end;
+}
+
 .module-projection__content {
   position: relative;
   z-index: 1;

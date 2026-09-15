@@ -59,11 +59,14 @@ export function useModuleBodyStyle(moduleId: string) {
   const image_fit = computed(() => read<string>("image_fit", "cover"));
 
   // Alinhamento do conteúdo do body.
+  // Módulos usam flex-direction: column, então:
+  //   justifyContent → eixo vertical (main axis)
+  //   alignItems     → eixo horizontal (cross axis)
   const alignItems = computed(() =>
-    vertical_align.value === "start" ? "flex-start" : vertical_align.value === "end" ? "flex-end" : "center"
+    horizontal_align.value === "start" ? "flex-start" : horizontal_align.value === "end" ? "flex-end" : "center"
   );
   const justifyContent = computed(() =>
-    horizontal_align.value === "start" ? "flex-start" : horizontal_align.value === "end" ? "flex-end" : "center"
+    vertical_align.value === "start" ? "flex-start" : vertical_align.value === "end" ? "flex-end" : "center"
   );
 
   /** Estilos do container do body (fundo + padding + alinhamento). */
