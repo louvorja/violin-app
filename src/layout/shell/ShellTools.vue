@@ -88,11 +88,17 @@
           :class="{ 'shell-tool--active': bgTasks.hasActiveTasks.value }"
           :aria-label="t('shell.background_tasks.title')"
         >
-          <LjIcon
-            :icon="ICONS.UI.PROGRESS_DOWNLOAD"
-            :color="bgTasks.hasActiveTasks.value ? COLORS.WARNING : undefined"
-            :size="sizeIcon"
-          />
+          <LjTooltip
+            v-if="Platform.isDesktop"
+            :text="t('shell.background_tasks.title')"
+            side="bottom"
+          >
+            <LjIcon
+              :icon="ICONS.UI.PROGRESS_DOWNLOAD"
+              :color="bgTasks.hasActiveTasks.value ? COLORS.WARNING : undefined"
+              :size="sizeIcon"
+            />
+          </LjTooltip>
         </button>
       </template>
 
