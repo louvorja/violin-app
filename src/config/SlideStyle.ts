@@ -36,4 +36,23 @@ export const SLIDE_STYLE_DEFAULT = Object.freeze({
   shadow_blur: 12,
   shadow_offset_x: 0,
   shadow_offset_y: 2,
+
+  // Fundo da tela de retorno (independente do fundo dos slides)
+  custom_return_background_active: false,
+  return_bg_top_color: "#1a201a", // verde escuro atual (hardcoded)
+  return_bg_top_image: "",
+  return_bg_top_position: "center center",
+  return_bg_bottom_color: "#1d251d", // topo do gradiente atual
+  return_bg_bottom_image: "",
+  return_bg_bottom_position: "center center",
+
+  // Formatação de texto do retorno
+  return_height_bottom: 18, // vh — painel inferior
+  return_font_size_cover: 14, // vh — capa no retorno
+  return_font_size_lyric: 11, // vh — letra no retorno
+  return_top_text_case: "uppercase",
+  return_top_text_align: "center",
+  return_bottom_text_case: "uppercase",
+  return_bottom_text_align: "center",
+  custom_return_text_format_active: false,
 });

@@ -142,6 +142,12 @@ export const BROADCAST_TYPE = Object.freeze({
   WALLPAPER_UPDATE: "wallpaper_update",
   FILE_PROJECTION_BG_UPDATE: "file_projection_bg_update",
 
+  /** Imagem de fundo da tela de retorno (topo/rodapé) foi alterada.
+   *  Payload: {} (vazio — as views re-leem do IndexedDB via refreshReturnBg)
+   *  Emitido por: AppMenuOpcoes (após pick/remove de imagem retorno).
+   *  Recebido por: useSlideStyle (re-resolve blob URLs do IndexedDB). */
+  RETURN_BG_CHANGED: "return_bg_changed",
+
   /** Sincronização de vídeo entre o player principal e a projeção.
    *  Payload: { currentTime: number, isPaused: boolean }
    *  Emitido por: useMedia.ts (onTimeUpdate + goToTime + pause/play).

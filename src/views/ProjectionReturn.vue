@@ -2,7 +2,14 @@
   <OverlayRenderer />
   <div class="return-root" :class="{ 'return-root--ready': ready }">
     <!-- Slide atual ocupa quase toda a tela (alClient) -->
-    <div class="return-current">
+    <div
+      class="return-current"
+      :style="
+        slideStyle.cfg.value.custom_return_background_active
+          ? { background: slideStyle.returnTopBgStyle().backgroundColor }
+          : undefined
+      "
+    >
       <!-- Progresso total da música (barra no topo) -->
       <div v-if="slideStyle.cfg.value.show_progress_bar" class="return-track-progress-bar">
         <div
@@ -13,10 +20,10 @@
 
       <!-- Imagem de fundo do slide atual -->
       <div
-        v-if="(slide && slide.url_image) || slideStyle.cfg.value.background_image"
-        :key="slide?.url_image || slideStyle.cfg.value.background_image"
+        v-if="returnTopBgInline"
+        :key="returnTopHasImage ? slideStyle.cfg.value.return_bg_top_image : slide?.url_image"
         class="return-bg"
-        :style="slideStyle.bgStyle(slide)"
+        :style="returnTopBgInline"
       />
 
       <div class="return-current-text">
@@ -42,7 +49,20 @@
     </div>
 
     <!-- Painel fixo no rodapé com próximo slide + contador (alBottom Delphi) -->
-    <div class="return-bottom">
+    <div
+      class="return-bottom"
+      :style="{
+        height: returnBottomHeight,
+        ...(slideStyle.cfg.value.custom_return_background_active
+          ? slideStyle.returnBottomBgStyle()
+          : {}),
+      }"
+    >
+      <div
+        v-if="returnBottomBgInline"
+        class="return-bg"
+        :style="{ ...returnBottomBgInline, position: 'absolute', inset: 0, opacity: 0.7 }"
+      />
       <div class="return-bottom-grid">
         <div>
           <span class="return-next-label">{{ t("shell.proj_return_next") }}</span>
@@ -52,7 +72,10 @@
             class="return-next-content"
             :style="{
               ...slideStyle.nextStyle(nextSlide),
-              textTransform: slideStyle.textTransform.value,
+              textTransform: slideStyle.returnBottomTextTransform.value,
+              textAlign: slideStyle.cfg.value.custom_return_text_format_active
+                ? slideStyle.cfg.value.return_bottom_text_align
+                : undefined,
             }"
             v-html="nextSlide?.lyric || nextSlide?.name || '—'"
           />
@@ -77,17 +100,75 @@ const slideStyle = useSlideStyle();
 
 const ready = ref(false);
 
+const returnTopHasImage = computed(
+  () =>
+    slideStyle.cfg.value.custom_return_background_active &&
+    !!slideStyle.cfg.value.return_bg_top_image
+);
+
+/** Estilo de fundo do painel superior: retorno próprio OU apenas a imagem do slide (sem fundo personalizado). */
+const returnTopBgInline = computed(() => {
+  if (returnTopHasImage.value) {
+    const s = slideStyle.returnTopBgStyle();
+    return {
+      backgroundImage: s.backgroundImage,
+      backgroundSize: s.backgroundSize,
+      backgroundPosition: s.backgroundPosition,
+      backgroundRepeat: s.backgroundRepeat,
+      position: "absolute",
+      inset: 0,
+      opacity: 0.7,
+    };
+  }
+  // Sem fundo de retorno: usa só a imagem do slide, ignorando o fundo
+  // personalizado da projeção (que não deve vazar para o retorno).
+  const slideUrl = slide.value?.url_image;
+  if (!slideUrl) return null;
+  return {
+    backgroundImage: `url(${slideUrl})`,
+    backgroundSize: "cover",
+    backgroundPosition: "center center",
+    backgroundRepeat: "no-repeat",
+    position: "absolute",
+    inset: 0,
+    opacity: 0.7,
+  };
+});
+
+const returnBottomHeight = computed(() => {
+  const h = slideStyle.cfg.value.return_height_bottom;
+  return `${h}vh`;
+});
+
+/** Estilo de fundo do painel inferior: retorno próprio OU fallback com cor sólida. */
+const returnBottomBgInline = computed(() => {
+  if (
+    slideStyle.cfg.value.custom_return_background_active &&
+    !!slideStyle.cfg.value.return_bg_bottom_image
+  ) {
+    const s = slideStyle.returnBottomBgStyle();
+    return {
+      backgroundImage: s.backgroundImage,
+      backgroundSize: s.backgroundSize,
+      backgroundPosition: s.backgroundPosition,
+      backgroundRepeat: s.backgroundRepeat,
+    };
+  }
+  return null;
+});
+
 // Reusa coverStyle / lyricStyle do composable, com tamanhos menores
 // para o stage display (Return é menor que Projection fullscreen).
 const textStyle = computed(() => {
   const base = isCover.value
     ? slideStyle.coverStyle(slide.value)
     : slideStyle.lyricStyle(slide.value);
-  // Ajuste para o painel de retorno (font menor, mantém cores e família).
+  const cfg = slideStyle.cfg.value;
+  const sizePct = isCover.value ? cfg.return_font_size_cover : cfg.return_font_size_lyric;
   return {
     ...base,
-    fontSize: `clamp(24px, ${isCover.value ? 14 : 11}vh, 160px)`,
-    textTransform: slideStyle.textTransform.value,
+    fontSize: `clamp(24px, ${sizePct}vh, 160px)`,
+    textTransform: slideStyle.returnTopTextTransform.value,
   };
 });
 
@@ -98,10 +179,16 @@ function _onKey(e) {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   document.body.style.margin = "0";
   document.body.style.overflow = "hidden";
   document.body.style.background = "#293329";
+
+  try {
+    await document.fonts.ready;
+  } catch {
+    /* font-loading API ausente — segue com fade-in imediato */
+  }
 
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
@@ -144,7 +231,7 @@ onBeforeUnmount(() => {
   flex: 1;
   position: relative;
   overflow: hidden;
-  background: #1a201a;
+  background: #1a201a; /* fallback quando fundo retorno não está ativo */
 }
 
 .return-bg {
@@ -226,12 +313,14 @@ onBeforeUnmount(() => {
 
 /* Painel inferior (alBottom Delphi: 39px) com próximo slide */
 .return-bottom {
+  position: relative;
   flex: 0 0 auto;
-  height: 18vh;
+  height: 18vh; /* fallback quando formatação retorno não está ativa */
   min-height: 90px;
   width: 100%;
-  background: linear-gradient(180deg, #1d251d, #131b13);
+  background: linear-gradient(180deg, #1d251d, #131b13); /* fallback */
   border-top: 2px solid #efb400;
+  overflow: hidden;
   display: flex;
   align-items: center;
   margin: 0;
@@ -239,6 +328,8 @@ onBeforeUnmount(() => {
 }
 
 .return-bottom-grid {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: auto 1fr auto;
   gap: 16px;

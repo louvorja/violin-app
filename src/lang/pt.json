@@ -217,6 +217,8 @@
       "affect_external": "Formatação de texto e fundo personalizados afetam slides externos",
       "align_bottom": "Rodapé",
       "align_center": "Centro",
+      "align_left": "Esquerda",
+      "align_right": "Direita",
       "align_top": "Topo",
       "alignment": "Alinhamento da letra:",
       "always_on_top": "Exibir músicas sempre em primeiro plano",
@@ -232,6 +234,7 @@
       "case_uppercase": "MAIÚSCULA",
       "custom_background": "Fundo personalizado",
       "custom_return_text_format": "Formatação de texto do retorno personalizada",
+      "custom_return_background": "Fundo da tela de retorno personalizado",
       "custom_text_format": "Formatação de texto personalizada",
       "fmt_attr_color": "Cor",
       "fmt_attr_size": "Tamanho (%)",
@@ -280,7 +283,12 @@
       "text_size_label": "Texto:",
       "title": "Slides de Músicas",
       "title_color": "Cor Título:",
-      "title_size": "Tam. Título:"
+      "title_size": "Tam. Título:",
+      "return_bg_top": "Parte superior (slide atual):",
+      "return_bg_bottom": "Parte inferior (próxima frase):",
+      "return_font_size_cover": "Tam. capa:",
+      "return_font_size_lyric": "Tam. letra:",
+      "return_height_bottom": "Altura rodapé (vh):"
     },
     "background": {
       "title": "Imagem de Fundo",

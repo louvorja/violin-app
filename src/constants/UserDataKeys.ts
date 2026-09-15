@@ -235,6 +235,24 @@ export const KEYS = {
       RETURN_TEXT_CASE: `${OPTIONS_SLIDE}.return_text_case`,
       FONT_SIZE_NEXT: `${OPTIONS_SLIDE}.font_size_next`,
       AFFECT_EXTERNAL_SLIDES: `${OPTIONS}.affect_external_slides`,
+
+      // Fundo da tela de retorno (independente do fundo dos slides)
+      CUSTOM_RETURN_BACKGROUND: `${OPTIONS_SLIDE}.custom_return_background`,
+      RETURN_BG_TOP_COLOR: `${OPTIONS_SLIDE}.return_bg_top_color`,
+      RETURN_BG_TOP_POSITION: `${OPTIONS_SLIDE}.return_bg_top_position`,
+      RETURN_BG_BOTTOM_COLOR: `${OPTIONS_SLIDE}.return_bg_bottom_color`,
+      RETURN_BG_BOTTOM_POSITION: `${OPTIONS_SLIDE}.return_bg_bottom_position`,
+
+      // Formatação de texto do retorno — expandido
+      RETURN_HEIGHT_BOTTOM: `${OPTIONS_SLIDE}.return_height_bottom`,
+      RETURN_FONT_SIZE_COVER: `${OPTIONS_SLIDE}.return_font_size_cover`,
+      RETURN_FONT_SIZE_LYRIC: `${OPTIONS_SLIDE}.return_font_size_lyric`,
+      // Topo (slide atual)
+      RETURN_TOP_TEXT_CASE: `${OPTIONS_SLIDE}.return_top_text_case`,
+      RETURN_TOP_TEXT_ALIGN: `${OPTIONS_SLIDE}.return_top_text_align`,
+      // Rodapé (próxima frase)
+      RETURN_BOTTOM_TEXT_CASE: `${OPTIONS_SLIDE}.return_bottom_text_case`,
+      RETURN_BOTTOM_TEXT_ALIGN: `${OPTIONS_SLIDE}.return_bottom_text_align`,
     },
     ALWAYS_ON_TOP: `${OPTIONS}.always_on_top`,
     FILE_PROJECTION: {

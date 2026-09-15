@@ -55,10 +55,17 @@ describe("useSlideStyle — leitura das opções", () => {
     expect(useSlideStyle().cfg.value.shadow_blur).toBe(12);
   });
 
-  it("lê o tamanho do próximo slide da chave que a tela grava", () => {
+  it("lê o tamanho do próximo slide só quando o retorno personalizado está ativo", () => {
+    // Sem o gate ligado, font_size_next fica no padrão
     $userdata.set(K.FONT_SIZE_NEXT, 12);
+    expect(useSlideStyle().cfg.value.font_size_next).toBe(SLIDE_STYLE_DEFAULT.font_size_next);
+
+    // Com o gate ligado, lê o valor salvo
+    $userdata.set(K.CUSTOM_RETURN_TEXT_FORMAT, true);
     expect(useSlideStyle().cfg.value.font_size_next).toBe(12);
-    $userdata.set(K.FONT_SIZE_NEXT, undefined);
+
+    // Desligando o gate, reverte ao padrão
+    $userdata.set(K.CUSTOM_RETURN_TEXT_FORMAT, false);
     expect(useSlideStyle().cfg.value.font_size_next).toBe(SLIDE_STYLE_DEFAULT.font_size_next);
   });
 

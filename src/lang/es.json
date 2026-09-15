@@ -217,6 +217,8 @@
       "affect_external": "Formato de texto y fondo personalizados afectan diapositivas externas",
       "align_bottom": "Abajo",
       "align_center": "Centro",
+      "align_left": "Izquierda",
+      "align_right": "Derecha",
       "align_top": "Arriba",
       "alignment": "Alineación de la letra:",
       "always_on_top": "Mostrar músicas siempre al frente",
@@ -232,6 +234,7 @@
       "case_uppercase": "MAYÚSCULA",
       "custom_background": "Fondo personalizado",
       "custom_return_text_format": "Formato de texto de retorno personalizado",
+      "custom_return_background": "Fondo de pantalla de retorno personalizado",
       "custom_text_format": "Formato de texto personalizado",
       "fmt_attr_color": "Color",
       "fmt_attr_size": "Tamaño (%)",
@@ -280,7 +283,12 @@
       "text_size_label": "Texto:",
       "title": "Diapositivas de Músicas",
       "title_color": "Color Título:",
-      "title_size": "Tam. Título:"
+      "title_size": "Tam. Título:",
+      "return_bg_top": "Parte superior (diapositiva actual):",
+      "return_bg_bottom": "Parte inferior (próxima frase):",
+      "return_font_size_cover": "Tam. portada:",
+      "return_font_size_lyric": "Tam. letra:",
+      "return_height_bottom": "Altura pie (vh):"
     },
     "background": {
       "title": "Imagen de Fondo",

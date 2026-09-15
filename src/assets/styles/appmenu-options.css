@@ -520,6 +520,16 @@
   align-self: center;
   margin-top: 18px;
 }
+.opt-format-group-label {
+  display: block;
+  width: 100%;
+  font-size: var(--lj-text-sm);
+  font-weight: var(--lj-weight-semibold);
+  color: var(--lj-text);
+  padding: var(--lj-space-2) 0;
+  border-bottom: 1px solid var(--lj-surface-border);
+  margin-bottom: var(--lj-space-2);
+}
 
 .opt-color {
   width: 38px;
