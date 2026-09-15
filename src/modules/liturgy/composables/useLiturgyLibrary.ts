@@ -1,6 +1,6 @@
 import { ref } from "vue";
 import $docs from "@/helpers/DocStore";
-import $liturgy from "@/helpers/Liturgy";
+import $liturgy, { toLocalDate } from "@/helpers/Liturgy";
 import { DB_TABLE } from "@/constants/DbTables";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import type { LiturgyItem } from "@/types/Liturgy";
@@ -153,7 +153,7 @@ export function useLiturgyLibrary() {
       return String(date.getDay()) === value;
     }
     if (type === "date") {
-      return date.toISOString().slice(0, 10) === value;
+      return toLocalDate(date) === value;
     }
     if (type === "thirteenth_sabbath") {
       return $liturgy.isDecimoTerceiroSabado(date);

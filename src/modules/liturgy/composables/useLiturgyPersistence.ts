@@ -1,6 +1,6 @@
 import { ref, computed, type Ref, type ComputedRef } from "vue";
 import { useLiturgyI18n, chaveLiturgia } from "../i18n";
-import $liturgy from "@/helpers/Liturgy";
+import $liturgy, { toLocalDate } from "@/helpers/Liturgy";
 import $userdata from "@/helpers/UserData";
 import $alert from "@/helpers/Alert";
 import { KEYS } from "@/constants/UserDataKeys";
@@ -135,7 +135,7 @@ export function useLiturgyPersistence() {
 
   function addScheduledItem(): void {
     if (!activeCatId.value) return;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = toLocalDate(new Date());
     $liturgy.addScheduledItemEntry(String(activeCatId.value), today, "", "");
     _refreshScheduled();
   }

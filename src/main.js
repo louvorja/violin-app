@@ -371,7 +371,8 @@ $storage.hydrate().then(async () => {
                     break;
                   }
                   case "itens-agendados": {
-                    const sched = Liturgy.findScheduledForToday(litItem.id);
+                    const activeDate = Liturgy.getActiveDate();
+                    const sched = Liturgy.findScheduledForToday(litItem.id, activeDate);
                     const arquivo = sched ? String((sched && sched.arquivo) || "") : "";
                     if (arquivo) {
                       const url = resolveFileUrl(arquivo);
