@@ -72,7 +72,12 @@ const libraries = [
     url: "https://mozilla.github.io/pdf.js",
   },
   { name: "PostHog", version: "1.427", license: "MIT / Apache-2.0", url: "https://posthog.com" },
-  { name: "QRCode", version: "1.5", license: "MIT", url: "https://github.com/soldair/node-qrcode" },
+  {
+    name: "qr-code-styling",
+    version: "1.5",
+    license: "MIT",
+    url: "https://github.com/nicedoc/qr-code-styling",
+  },
   {
     name: "HEIC to",
     version: "1.5",

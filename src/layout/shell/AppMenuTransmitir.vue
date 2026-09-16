@@ -255,7 +255,7 @@
     :title="qrTitle ? $t(qrTitle) : ''"
   >
     <div class="qr-body">
-      <canvas ref="qrCanvas" class="qr-canvas" />
+      <div ref="qrContainer" class="qr-canvas" />
       <code class="qr-url">{{ qrUrl }}</code>
     </div>
     <template #footer>
@@ -273,7 +273,7 @@
     :title="$t('options.transmission.scan_qr')"
   >
     <div class="qr-body">
-      <canvas ref="deviceQrCanvas" class="qr-canvas" />
+      <div ref="deviceQrContainer" class="qr-canvas" />
       <code class="qr-url">{{ deviceQrUrl }}</code>
       <p class="opt-hint" style="margin-top: 8px; text-align: center">
         {{ $t("options.transmission.device_qr_hint") }}
@@ -345,7 +345,8 @@ import { KEYS } from "@/constants/UserDataKeys";
 import { open as openProjection } from "@/helpers/Projection";
 import { ICONS } from "@/config/Icons";
 import { DEVICE_PERMISSION_LABELS } from "@/types/Device";
-import QRCode from "qrcode";
+import QRCodeStyling from "qr-code-styling";
+import logoUrl from "@/assets/img/logo.svg";
 
 const isDesktop = computed(() => Platform.isDesktop);
 const { displays, getFeatureRole, setFeatureRole } = useDisplays();
@@ -436,10 +437,10 @@ const hostname = ref("");
 const showQrDialog = ref(false);
 const qrUrl = ref("");
 const qrTitle = ref("");
-const qrCanvas = ref(null);
+const qrContainer = ref(null);
 const showDeviceQrDialog = ref(false);
 const deviceQrUrl = ref("");
-const deviceQrCanvas = ref(null);
+const deviceQrContainer = ref(null);
 const editingDevice = ref(null);
 const confirmDeleteDevice = ref(null);
 const onlyAuthorizedDevices = ref(false);
@@ -526,15 +527,32 @@ function showQrCode(link) {
 // o conteúdo monta: o desenho fica preso à referência (e à URL, para o caso de
 // abrir outro link com o diálogo já montado), não a um tick após abrir.
 watch(
-  [qrCanvas, qrUrl],
-  async ([canvas, url]) => {
-    if (!canvas || !url) return;
+  [qrContainer, qrUrl],
+  async ([container, url]) => {
+    if (!container || !url) return;
     try {
-      await QRCode.toCanvas(canvas, url, {
+      const qr = new QRCodeStyling({
         width: 240,
-        margin: 1,
-        color: { dark: "#000", light: "#fff" },
+        height: 240,
+        type: "canvas",
+        data: url,
+        image: logoUrl,
+        dotsOptions: {
+          type: "rounded",
+          color: "#000",
+        },
+        cornersSquareOptions: {
+          type: "rounded",
+        },
+        backgroundOptions: {
+          color: "#fff",
+        },
+        imageOptions: {
+          crossOrigin: "anonymous",
+          margin: 10,
+        },
       });
+      await qr.append(container);
     } catch (e) {
       console.error("[Transmitir] QRCode:", e);
     }
@@ -598,15 +616,32 @@ watch(pendingDevice, (val) => {
 });
 
 watch(
-  [deviceQrCanvas, deviceQrUrl],
-  async ([canvas, url]) => {
-    if (!canvas || !url) return;
+  [deviceQrContainer, deviceQrUrl],
+  async ([container, url]) => {
+    if (!container || !url) return;
     try {
-      await QRCode.toCanvas(canvas, url, {
+      const qr = new QRCodeStyling({
         width: 240,
-        margin: 1,
-        color: { dark: "#000", light: "#fff" },
+        height: 240,
+        type: "canvas",
+        data: url,
+        image: logoUrl,
+        dotsOptions: {
+          type: "rounded",
+          color: "#000",
+        },
+        cornersSquareOptions: {
+          type: "rounded",
+        },
+        backgroundOptions: {
+          color: "#fff",
+        },
+        imageOptions: {
+          crossOrigin: "anonymous",
+          margin: 10,
+        },
       });
+      await qr.append(container);
     } catch (e) {
       console.error("[Transmitir] QRCode device:", e);
     }
@@ -741,7 +776,7 @@ onMounted(async () => {
       httpServerPort.value = cfg.httpServer?.port ?? 7070;
       useHostname.value = cfg.httpServer?.useHostname ?? false;
       hostname.value = await Platform.httpServer.hostname();
-      const savedIp = $userdata.get < string > (KEYS.OPTIONS.SELECTED_IP, "");
+      const savedIp = String($userdata.get(KEYS.OPTIONS.SELECTED_IP, ""));
       selectedIp.value = savedIp && localIps.value.includes(savedIp) ? savedIp : primaryHost.value;
       if (Platform.httpServer.getDeviceSettings) {
         const ds = await Platform.httpServer.getDeviceSettings();
