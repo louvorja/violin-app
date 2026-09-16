@@ -243,7 +243,8 @@ const selectedLabel = computed(() => (selectedItem.value ? labelOf(selectedItem.
   display: flex;
   align-items: center;
   gap: var(--lj-space-2);
-  height: var(--lj-ui-h-md);
+  height: auto;
+  padding: 5px;
   padding-inline: var(--lj-space-2) var(--lj-space-5);
   border-radius: var(--lj-radius-xs);
   color: var(--lj-text);
