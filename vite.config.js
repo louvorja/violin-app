@@ -1,6 +1,7 @@
 import { defineConfig, loadEnv } from "vite";
 import vue from "@vitejs/plugin-vue";
 import { VitePWA } from "vite-plugin-pwa";
+import posthogRollupPlugin from "@posthog/rollup-plugin";
 import path from "path";
 import { createRequire } from "module";
 
@@ -22,6 +23,8 @@ export default async ({ mode }) => {
 
   // Detectar target: "desktop" (Electron) ou "web" (padrão PWA)
   const isDesktop = process.env.VITE_TARGET === "desktop";
+  const posthogApiKey = process.env.POSTHOG_API_KEY;
+  const posthogProjectId = process.env.POSTHOG_PROJECT_ID;
 
   // URLs da API para CSP (derivadas de VITE_URL_API)
   const apiUrl = (process.env.VITE_URL_API || "").replace(/\/$/, "");
@@ -69,6 +72,25 @@ export default async ({ mode }) => {
           },
         ]),
   ];
+
+  // O plugin injeta a associação entre o bundle e seus source maps e os
+  // envia ao PostHog. Sem as duas credenciais ele não é carregado: builds
+  // locais, forks e PRs continuam sem depender da conta de observabilidade.
+  if (posthogApiKey && posthogProjectId) {
+    plugins.push(
+      posthogRollupPlugin({
+        personalApiKey: posthogApiKey,
+        projectId: posthogProjectId,
+        host: process.env.POSTHOG_HOST || process.env.VITE_POSTHOG_HOST,
+        sourcemaps: {
+          enabled: true,
+          releaseName: "louvorja-violin",
+          releaseVersion: process.env.VITE_APP_VERSION || process.env.GITHUB_SHA || "local",
+          deleteAfterUpload: true,
+        },
+      })
+    );
+  }
 
   // Bundle visualizer — só sob ANALYZE=1; o relatório pesa ~1 MB e iria no pacote
   if (process.env.ANALYZE) {

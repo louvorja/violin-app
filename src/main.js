@@ -60,11 +60,18 @@ import { FONT, resolveDefaultFont } from "@/config/Fonts";
 import { getTheme } from "@/config/Themes";
 
 const app = createApp(App);
+Telemetry.installVueErrorHandler(app);
 
 app.use(createPinia());
 app.use(router);
 app.use(VueFullscreen);
 app.directive("requires-network", requiresNetwork);
+router.afterEach((to, from) => {
+  Telemetry.track("route_changed", {
+    to: to.name || to.path,
+    from: from.name || from.path,
+  });
+});
 
 // Em modo desktop (Electron), desregistra qualquer Service Worker que
 // tenha sido registrado em sessões anteriores (ex.: usuário rodou em
@@ -760,8 +767,8 @@ $storage.hydrate().then(async () => {
     // ---------------------------------------------------------------------------
     Hotkeys.init();
 
-    // Métrica de uso agregada. Não bloqueia o boot e é no-op fora da janela
-    // principal, em dev, ou quando o usuário desliga nas Opções.
+    // Observabilidade de uso e diagnóstico. Não bloqueia o boot e é no-op em
+    // dev ou quando o usuário desliga a opção nas Opções.
     void Telemetry.init();
 
     // --- Geral ---

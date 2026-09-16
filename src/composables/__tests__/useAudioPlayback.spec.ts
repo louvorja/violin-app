@@ -1,6 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { useAudioPlayback } from "@/composables/useAudioPlayback";
 
+vi.mock("@/helpers/Telemetry", () => ({
+  default: {
+    track: vi.fn(),
+    log: vi.fn(),
+    captureException: vi.fn(),
+  },
+}));
+import Telemetry from "@/helpers/Telemetry";
+
 const audio = useAudioPlayback();
 
 function stubPlay(rejection: Error | null) {
@@ -20,6 +29,8 @@ function namedError(name: string, message: string): Error {
 
 describe("useAudioPlayback.play", () => {
   beforeEach(() => {
+    audio.reset();
+    vi.clearAllMocks();
     audio.getElement().removeAttribute("src");
   });
 
@@ -54,5 +65,39 @@ describe("useAudioPlayback.play", () => {
     audio.play();
 
     expect(el.play).not.toHaveBeenCalled();
+  });
+
+  it("registra buffering e recuperação com o contexto da tentativa", () => {
+    const el = audio.getElement();
+    audio.setTelemetryContext({ playback_id: "p-buffer", id_music: 42, mode: "audio" });
+
+    el.dispatchEvent(new Event("waiting"));
+    el.dispatchEvent(new Event("playing"));
+
+    expect(Telemetry.track).toHaveBeenCalledWith(
+      "music_buffering_started",
+      expect.objectContaining({ playback_id: "p-buffer", id_music: 42, trigger: "waiting" }),
+    );
+    expect(Telemetry.track).toHaveBeenCalledWith(
+      "music_buffering_recovered",
+      expect.objectContaining({ playback_id: "p-buffer" }),
+    );
+    expect(Telemetry.track).toHaveBeenCalledWith(
+      "music_play_started",
+      expect.objectContaining({ playback_id: "p-buffer" }),
+    );
+  });
+
+  it("não promove a faixa nova quando play() rejeita durante a troca", async () => {
+    const current = audio.getElement();
+    current.setAttribute("src", "blob:atual");
+    const next = document.createElement("audio");
+    next.setAttribute("src", "blob:nova");
+    next.play = vi.fn(() => Promise.reject(namedError("NotSupportedError", "codec"))) as unknown as HTMLMediaElement["play"];
+    next.pause = vi.fn();
+
+    await expect(audio.takeOver(next, () => 0, true)).rejects.toMatchObject({ name: "NotSupportedError" });
+    expect(audio.getElement()).toBe(current);
+    expect(next.play).toHaveBeenCalledOnce();
   });
 });
