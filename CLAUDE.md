@@ -2,11 +2,13 @@
 
 Sistema de apresentação de letras de músicas e conteúdo bíblico para uso em cultos e eventos religiosos. Versão web/desktop do sistema original em Delphi (`louvorja-desktop`).
 
+> **Contexto para agentes:** comece por `AGENTS.md` e use `docs/architecture.md` como a visão arquitetural atual. Este arquivo conserva detalhes e contexto histórico; quando houver conflito, o código e esses dois documentos prevalecem.
+
 ## Stack
 
 - **Vue 3** + Composition API
 - **Reka UI** (headless) sob os primitivos próprios em `src/components/ui/` — o Vuetify saiu do projeto
-- **Vuex 4** (estado global)
+- **Pinia 3** (estado global)
 - **Vue Router 5**
 - **Vue I18n 11** (PT/ES)
 - **Vite 7** (build)
@@ -132,7 +134,7 @@ src/
 │   └── transmission/    # Links para todas as views de projeção/OBS
 ├── plugins/             # Plugins Vue
 ├── router/              # Rotas
-├── store/               # Vuex store
+├── stores/              # Stores Pinia
 └── views/
     ├── Main.vue             # Tela principal
     ├── Popup.vue            # Janela popup para módulos
@@ -148,12 +150,12 @@ src/
 
 ## Convenções de Módulos
 
-Cada módulo em `src/modules/<id>/` segue esta estrutura:
+Cada módulo em `src/modules/<id>/` é descrito por TypeScript. Use `src/modules/clock/` como exemplo completo e `src/types/Module.ts` como contrato.
 
 ```
 <id>/
-├── manifest.json        # Metadados do módulo
-├── index.js             # Registra o módulo (messages, customization)
+├── manifest.ts          # Exporta module e, opcionalmente, contextualPages
+├── index.ts             # Registra o runtime do módulo
 ├── components/          # Componentes Vue do módulo
 │   └── Index.vue        # Componente principal
 └── lang/                # Traduções do módulo
@@ -161,24 +163,31 @@ Cada módulo em `src/modules/<id>/` segue esta estrutura:
     └── es.json
 ```
 
-**manifest.json mínimo:**
+**manifest.ts mínimo:**
 
-```json
-{
-  "id": "module_id",
-  "name": "Nome",
-  "description": "Descrição.",
-  "category": "musics|bible|utilities",
-  "icon": "nome-do-icone",
-  "dependencies": []
+```ts
+import type { Module } from "@/types/Module"
+import { ModuleEnum } from "@/enums/ModuleEnum"
+import { ModuleCategoryEnum } from "@/enums/ModuleCategoryEnum"
+import { ModuleGroupEnum } from "@/enums/ModuleGroupEnum"
+import { ICONS } from "@/config/Icons"
+
+export const module: Module = {
+  id: ModuleEnum.CLOCK,
+  title: "modules.clock.title",
+  icon: ICONS.MODULES.CLOCK,
+  category: ModuleCategoryEnum.UTILITIES,
+  group: ModuleGroupEnum.TIME,
+  order: 2,
+  showInMainMenu: true,
 }
 ```
 
-**Chaves de tradução** ficam em `modules.<id>.<key>` no i18n global.
+O registry em `src/config/modules/index.ts` descobre todos os `manifest.ts`. Para um módulo novo, adicione antes seu identificador em `ModuleEnum` e use enums/grupos existentes ou crie os contratos correspondentes. As **chaves de tradução** ficam em `modules.<id>.<key>` no i18n global.
 
 ## Estado Global
 
-O estado fica no Vuex store, acessado via helpers:
+O estado global usa Pinia e é acessado pelos helpers de estado:
 
 ```js
 import $appdata from "@/helpers/AppData";
@@ -265,7 +274,7 @@ ao lado, em `library/<colecao>/<id>.<ext>`, com o JSON guardando só o metadado.
 | `helpers/Path.ts`            | helper-puro           | Seguro no Electron main process                                             |
 | `helpers/Strings.js`         | helper-puro           |                                                                             |
 | `helpers/DateTime.js`        | helper-puro           |                                                                             |
-| `helpers/Database.ts`        | helper-puro           | Cache via sessionStorage                                                    |
+| `helpers/Database.ts`        | helper-puro           | Memória → IndexedDB → rede; devolve cache anterior em erro                  |
 | `helpers/Storage.ts`         | helper-puro           | Seguro no Electron main process                                             |
 | `helpers/DocStore.ts`        | helper-puro           | Documentos do usuário; mesma API do IndexedDB.ts, grava em arquivo          |
 | `helpers/Platform.js`        | helper-puro           | Seguro no Electron main process                                             |
@@ -275,7 +284,7 @@ ao lado, em `library/<colecao>/<id>.<ext>`, com o JSON guardando só o metadado.
 | `helpers/Hotkeys.js`         | helper-puro           | Event listeners in-window, sem reatividade Vue                              |
 | `helpers/Shortcuts.js`       | helper-puro           | Atalhos globais OS-level (Electron)                                         |
 | `helpers/SljaConverter.js`   | helper-puro           | Conversão de slides `.slja`                                                 |
-| `helpers/ModuleTypes.js`     | helper-puro           | Factory e validação de `manifest.json`                                      |
+| `types/Module.ts` + `scripts/validate-manifests.ts` | contrato/validador | Tipos e validação dos `manifest.ts`                         |
 | `helpers/Libras.ts`          | helper-puro           | Tradução PT-BR → Libras (API VLibras, cache IndexedDB)                      |
 | `helpers/AppData.ts`         | deve-virar-composable | Camada de acesso ao Pinia (dot-notation); candidato a `useAppState`         |
 | `helpers/UserData.ts`        | deve-virar-composable | Preferências persistidas via AppData                                        |
@@ -699,7 +708,9 @@ o conteúdo que a Reka teleporta para o `<body>`.
 
 ---
 
-## Plano de Migração (Delphi → Vue)
+## Registro histórico de migração (Delphi → Vue)
+
+> Este é um retrato histórico de funcionalidades e não um plano executável. Antes de retomar qualquer item marcado como roadmap, confirme a necessidade no código, nas issues atuais e em `docs/architecture.md`.
 
 O sistema original em Delphi (`louvorja-desktop`) possui 33 módulos, banco SQLite com 74+ queries, servidor HTTP embarcado, sincronismo de áudio BASS24 e suporte a múltiplos monitores. A migração está organizada em 7 fases.
 
@@ -866,12 +877,15 @@ FASE 7 (atualização)           ← independente
 ## Comandos
 
 ```bash
-npm run dev          # Servidor de desenvolvimento web/PWA → http://localhost:5002
-npm run host         # Dev exposto na rede local (http://<ip>:5002) — útil para testes mobile
-npm run build        # Build de produção (web/PWA)
-npm run files        # Servidor de arquivos local → http://localhost:7070 (serve ./files/)
-npm run electron:dev   # Desenvolvimento desktop (Electron + Vite) — após D0
-npm run electron:build # Build .exe instalável — após D0
+npm run dev                     # Servidor de desenvolvimento web/PWA → http://localhost:5002
+npm run electron:dev            # Desenvolvimento desktop (Electron + Vite)
+npm run build                   # Build de produção web/PWA
+npm run electron:build          # Empacota a versão desktop
+npm run validate:agent-context  # Confere se o contexto curto ainda corresponde ao código
+npm run validate:manifests      # Valida contratos de módulos
+npm run typecheck               # Verifica TypeScript e SFCs
+npm test                        # Testes unitários
+npm run lint                    # Lint
 ```
 
 > **Porta 5002**: deliberada. O Electron usa `http://localhost:5002` como `DEV_URL` em
@@ -882,15 +896,15 @@ npm run electron:build # Build .exe instalável — após D0
 > na porta 7070 com CORS aberto. Use quando precisar desenvolver offline — aponte `VITE_URL_DATABASE`
 > e `VITE_URL_FILES` para `http://localhost:7070/database` e `http://localhost:7070` respectivamente.
 > A pasta `./files/` não está no repositório; popule-a com uma cópia local do banco JSON + MP3.
-> No Electron (fase D5), será substituído por um servidor Express embarcado na mesma porta 7070.
+> No Electron, o servidor Express embarcado já é usado pela aplicação desktop.
 
 ---
 
-## Migração para Desktop Nativo (Electron)
+## Registro histórico do Electron
 
-**Status**: planejada, em implementação a partir de 2026-05-01.
+> O Electron já é parte do produto. Esta seção preserva decisões e referências antigas; confirme qualquer estado de implementação no diretório `electron/` e em `docs/architecture.md`.
 
-A versão web/PWA atual é a base. A próxima etapa é empacotá-la como **app desktop nativo** (`.exe` instalável no Windows, opcionalmente Mac/Linux) mantendo o PWA web em paralelo.
+A aplicação mantém web/PWA e desktop Electron em paralelo, usando o mesmo renderer Vue.
 
 ### Decisões fundamentais
 
@@ -921,7 +935,7 @@ Vue Renderer (BrowserWindow)
   └── ...          ─┘
 ```
 
-### Roadmap Desktop (D0–D10)
+### Marco histórico desktop (D0–D10)
 
 | Fase    | Objetivo                                                                                                                                | Duração  | Status          |
 | ------- | --------------------------------------------------------------------------------------------------------------------------------------- | -------- | --------------- |
@@ -939,7 +953,7 @@ Vue Renderer (BrowserWindow)
 
 **Caminho crítico para MVP** (instalável + baixa músicas + multi-monitor): D0→D1→D2→D3→D4 + D8 ≈ **2-3 semanas**.
 
-### Estrutura Electron (será criada a partir de D0)
+### Estrutura Electron de referência
 
 ```
 electron/
@@ -1018,7 +1032,7 @@ Mantida 100%. Endpoints usados:
 - `GET <files_url>/musics/<lang>/<Album>/<faixa>.opus` — mídia por HTTPS (o endpoint `/ftp` foi descontinuado)
 - Cache TTL diário em `userData/configweb.json` (substitui `configweb.ja` do Delphi)
 
-Veja `/Users/juanaleixo/.claude/plans/ticklish-purring-flurry.md` para o plano detalhado com todos os arquivos, riscos e critérios de verificação por fase.
+Planos externos antigos não são fonte de verdade para implementação; consulte o código e a documentação atual antes de agir.
 
 ### Spec dos forms Delphi (read-only references)
 
