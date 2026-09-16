@@ -9,9 +9,9 @@ const slides = useSlides();
 const SUNG = [0, 10, 20, 30];
 const PLAYBACK = [0, 8, 19, 28];
 
-function abrir(times: number[]): void {
+function abrir(times: number[], playbackId?: string): void {
   const lista: Slide[] = times.map((_, i) => ({ lyric: `slide ${i}` }));
-  slides.setSlides(lista, times, "Música");
+  slides.setSlides(lista, times, "Música", playbackId);
 }
 
 describe("useSlides.timeForPosition", () => {
@@ -69,6 +69,20 @@ describe("useSlides e o pedido de troca de slide entre janelas", () => {
 
     expect(slides.slideIndex.value).toBe(2);
     expect(tipos).toContain(BROADCAST_TYPE.SLIDE_CHANGE);
+  });
+
+  it("propaga o playback_id para correlacionar a projeção com o player", () => {
+    slides.reset();
+    abrir(SUNG, "p-slides");
+    let change: unknown;
+    const parar = $broadcast.listen((msg) => {
+      if (msg.type === BROADCAST_TYPE.SLIDE_CHANGE) change = msg.payload;
+    });
+
+    slides.goToSlide(1);
+    parar();
+
+    expect(change).toEqual(expect.objectContaining({ playback_id: "p-slides" }));
   });
 
   it("a janela sem slides ignora o pedido em vez de transmitir um slide vazio", () => {

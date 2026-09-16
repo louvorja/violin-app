@@ -7,8 +7,7 @@
  *
  * @category deve-virar-composable — lê e grava preferências via UserData.
  */
-import type { PostHog } from "posthog-js";
-import type { CapturedNetworkRequest } from "@posthog/types";
+import type { CapturedNetworkRequest, PostHog } from "posthog-js";
 import Platform from "@/helpers/Platform";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
@@ -26,6 +25,7 @@ const MAX_PROPERTY_DEPTH = 6;
 const MAX_ARRAY_ITEMS = 100;
 const MAX_STRING_LENGTH = 20_000;
 const SENSITIVE_KEY = /(password|passwd|secret|token|authorization|cookie|api[-_]?key)/i;
+const SENSITIVE_QUERY = /([?&](?:access[-_]?token|refresh[-_]?token|token|auth(?:orization)?|api[-_]?key|client[-_]?secret|secret|password|jwt)=)[^&\s]+/gi;
 
 type LogLevel = "trace" | "debug" | "info" | "warn" | "error" | "fatal";
 type PostHogWithLogs = PostHog & {
@@ -37,10 +37,14 @@ type PostHogWithLogs = PostHog & {
   }) => void;
 };
 
+function sanitizeString(value: string): string {
+  return value.slice(0, MAX_STRING_LENGTH).replace(SENSITIVE_QUERY, "$1[REDACTED]");
+}
+
 function serializableValue(value: unknown, depth = 0): unknown {
   if (value === undefined) return undefined;
   if (value == null || ["string", "number", "boolean"].includes(typeof value)) {
-    return typeof value === "string" ? value.slice(0, MAX_STRING_LENGTH) : value;
+    return typeof value === "string" ? sanitizeString(value) : value;
   }
   if (value instanceof Date) return value.toISOString();
   if (depth >= MAX_PROPERTY_DEPTH) return "[max-depth]";
@@ -77,7 +81,7 @@ function serializableProperties(properties: Record<string, unknown> = {}): Recor
 
 function baseContext(): Record<string, unknown> {
   return {
-    route: typeof window !== "undefined" ? `${window.location.pathname}${window.location.hash}` : "",
+    route: typeof window !== "undefined" ? sanitizeString(`${window.location.pathname}${window.location.hash}`) : "",
     window_role: windowRole(),
     online: typeof navigator !== "undefined" ? navigator.onLine : undefined,
     elapsed_ms: typeof performance !== "undefined" ? Math.round(performance.now()) : undefined,
@@ -85,8 +89,10 @@ function baseContext(): Record<string, unknown> {
 }
 
 function errorProperties(error: unknown): Record<string, unknown> {
-  if (error instanceof Error) return { name: error.name, message: error.message, stack: error.stack };
-  return { message: String(error) };
+  if (error instanceof Error) {
+    return { name: error.name, message: sanitizeString(error.message), stack: error.stack ? sanitizeString(error.stack) : undefined };
+  }
+  return { message: sanitizeString(String(error)) };
 }
 
 export function breadcrumb(event: string, properties: Record<string, unknown> = {}): void {
@@ -124,18 +130,19 @@ export function captureException(error: unknown, properties: Record<string, unkn
  */
 export function log(level: LogLevel, message: string, properties: Record<string, unknown> = {}): void {
   if (!isEnabled()) return;
+  const safeMessage = sanitizeString(message);
   const attributes = { ...baseContext(), ...serializableProperties(properties) };
   const ph = _ph as PostHogWithLogs | null;
   const logger = ph?.logger?.[level];
   if (logger) {
-    logger(message.slice(0, MAX_STRING_LENGTH), attributes);
+    logger(safeMessage, attributes);
     return;
   }
   if (ph?.captureLog) {
-    ph.captureLog({ body: message.slice(0, MAX_STRING_LENGTH), level, attributes });
+    ph.captureLog({ body: safeMessage, level, attributes });
     return;
   }
-  ph?.capture("telemetry_log", { level, message: message.slice(0, MAX_STRING_LENGTH), ...attributes });
+  ph?.capture("telemetry_log", { level, message: safeMessage, ...attributes });
 }
 
 /** Instala os handlers uma única vez em cada renderer. */
@@ -189,6 +196,32 @@ function osName(): string {
   if (/Mac OS X/i.test(ua)) return "darwin";
   if (/Linux/i.test(ua)) return "linux";
   return "unknown";
+}
+
+/** Hosts do backend que podem receber IDs de sessão do PostHog.
+ *
+ * O SDK exige hostnames (não URLs completas) e só deve anexar os headers às
+ * APIs do próprio produto. Assim, arquivos de terceiros, YouTube e links
+ * digitados pelo usuário não recebem contexto de rastreamento.
+ */
+function tracingHosts(): string[] {
+  const configured = [
+    import.meta.env.VITE_URL_API,
+    import.meta.env.VITE_URL_API_FALLBACK,
+    import.meta.env.VITE_URL_DATABASE,
+    import.meta.env.VITE_URL_FILES,
+  ];
+  const hosts = new Set<string>();
+  for (const value of configured) {
+    if (!value) continue;
+    try {
+      const hostname = new URL(String(value)).hostname;
+      if (hostname) hosts.add(hostname);
+    } catch {
+      // URL inválida não deve impedir o bootstrap do aplicativo.
+    }
+  }
+  return [...hosts];
 }
 
 async function appVersion(): Promise<string> {
@@ -258,8 +291,9 @@ export async function init(): Promise<void> {
     persistence: "memory",
     bootstrap: { distinctID: anonId() },
     autocapture: true,
-    capture_pageview: true,
+    capture_pageview: "history_change",
     capture_pageleave: true,
+    capture_exceptions: true,
     disable_session_recording: false,
     session_recording: {
       // Inputs continuam mascarados; textos e ações do produto são úteis
@@ -273,10 +307,7 @@ export async function init(): Promise<void> {
       // redigimos credenciais antes de o valor sair do dispositivo.
       maskCapturedNetworkRequestFn: (request: CapturedNetworkRequest) => {
         if (request?.name) {
-          request.name = request.name.replace(
-            /([?&](?:token|auth|authorization|api[-_]?key)=)[^&]+/gi,
-            "$1[REDACTED]",
-          );
+          request.name = sanitizeString(request.name);
         }
         return request;
       },
@@ -286,6 +317,9 @@ export async function init(): Promise<void> {
       environment: import.meta.env.MODE || "unknown",
       serviceVersion: import.meta.env.VITE_APP_VERSION || "unknown",
     },
+    // Liga traces de Worker/API ao mesmo replay e sessão do renderer, sem
+    // vazar IDs do PostHog para hosts arbitrários de mídia.
+    tracing_headers: tracingHosts(),
     enable_recording_console_log: true,
     capture_performance: { web_vitals: true, network_timing: true },
     capture_heatmaps: true,

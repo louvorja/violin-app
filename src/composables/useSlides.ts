@@ -22,7 +22,8 @@ interface SlidesInstance {
   slide: ComputedRef<Slide | null>;
   nextSlide: ComputedRef<Slide | null>;
   totalSlides: ComputedRef<number>;
-  setSlides: (newSlides: Slide[], newTimes: number[], newTitle: string) => void;
+  setSlides: (newSlides: Slide[], newTimes: number[], newTitle: string, playbackId?: string) => void;
+  setPlaybackId: (playbackId?: string) => void;
   setTimes: (newTimes: number[]) => void;
   timeForPosition: (index: number, fraction: number, duration: number) => number;
   bindAudio: (audioPlayback: AudioPlayback) => void;
@@ -48,6 +49,7 @@ function _create(): SlidesInstance {
   let _lastBroadcastIndex = -1;
   let _lastProgressSendAt = 0;
   let _lastSlideProgressSent = -1;
+  let _playbackId: string | undefined;
   let _stopAudioWatch: (() => void) | null = null;
   let _audio: AudioPlayback | null = null;
 
@@ -74,21 +76,27 @@ function _create(): SlidesInstance {
           slides:      slides.value.map((s) => toRaw(s)),
           title:       title.value,
           slide_index: slideIndex.value,
+          playback_id: _playbackId,
         });
         broadcastSlide();
       }
     }
   });
 
-  function setSlides(newSlides: Slide[], newTimes: number[], newTitle: string): void {
+  function setSlides(newSlides: Slide[], newTimes: number[], newTitle: string, playbackId?: string): void {
     slides.value        = newSlides ?? [];
     times.value         = newTimes ?? [];
     title.value         = newTitle ?? "";
+    _playbackId         = playbackId;
     slideIndex.value    = 0;
     slideProgress.value = 0;
     _lastBroadcastIndex = -1;
     _lastProgressSendAt = 0;
     _lastSlideProgressSent = -1;
+  }
+
+  function setPlaybackId(playbackId?: string): void {
+    _playbackId = playbackId;
   }
 
   // Trocar cantada por playback mantendo o slide no ar: as marcações dos dois
@@ -115,6 +123,7 @@ function _create(): SlidesInstance {
       title:        title.value,
       progress:     _audio?.progress.value ?? 0,
       total_slides: totalSlides.value,
+      playback_id: _playbackId,
       // Presente apenas em dev/test — mede latência cross-window até o receptor (Projection)
       ...(import.meta.env.DEV ? { _ts: Date.now() } : {}),
     });
@@ -124,6 +133,7 @@ function _create(): SlidesInstance {
     $broadcast.send(BROADCAST_TYPE.SLIDE_PROGRESS, {
       slide_index: idx,
       slide_progress: slideProgress.value,
+      playback_id: _playbackId,
     });
   }
 
@@ -179,6 +189,7 @@ function _create(): SlidesInstance {
           $broadcast.send(BROADCAST_TYPE.SLIDE_PROGRESS, {
             slide_index: si,
             slide_progress: sp,
+            playback_id: _playbackId,
           });
         }
 
@@ -205,6 +216,7 @@ function _create(): SlidesInstance {
     times.value         = [];
     slideProgress.value = 0;
     title.value         = "";
+    _playbackId         = undefined;
     _lastBroadcastIndex = -1;
     _lastProgressSendAt = 0;
     _lastSlideProgressSent = -1;
@@ -213,7 +225,7 @@ function _create(): SlidesInstance {
   return {
     slides, slideIndex, slideProgress, title,
     slide, nextSlide, totalSlides,
-    setSlides, setTimes, timeForPosition, bindAudio, unbindAudio, broadcastSlide,
+    setSlides, setPlaybackId, setTimes, timeForPosition, bindAudio, unbindAudio, broadcastSlide,
     goToSlide, goPrev, goNext, goFirst, goLast, reset,
   };
 }

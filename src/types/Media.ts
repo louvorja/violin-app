@@ -21,6 +21,9 @@ export interface VideoMediaState {
   currentTime: number;
   isPaused: boolean;
   duration: number;
+  /** YouTube PlayerState, quando a origem é a projeção online. */
+  state?: number;
+  playback_id?: string;
 }
 
 export interface FileProjectionState {
@@ -28,6 +31,7 @@ export interface FileProjectionState {
   type: string;
   url: string;
   title: string;
+  playback_id?: string;
   page?: number;
   totalPages?: number;
   /** Referência para re-resolver URLs blob via IndexedDB na janela alvo. */

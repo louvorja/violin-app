@@ -59,6 +59,7 @@ import pdfjsWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { Settings } from "@/types/Settings";
 import { SETTINGS_TABLE } from "@/constants/DbTables";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
+import Telemetry from "@/helpers/Telemetry";
 
 GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
@@ -160,6 +161,7 @@ function _activateProjection(p: FileProjectionState): void {
   fileProjection.type = p.type || "image";
   fileProjection.url = p.url || "";
   fileProjection.title = p.title || "";
+  fileProjection.playback_id = p.playback_id;
   console.log("[FileProjectionReturn] Ativado:", p.type, p.url?.substring(0, 60));
   if (p.type === "youtube") nextTick(() => _initYoutube());
   if (p.type === "pdf") nextTick(() => loadPdf(p.url, p.page || 1));
@@ -334,6 +336,11 @@ function _initYoutube(): void {
       events: {
         onReady: () => {
           _ytInitializing = false;
+          Telemetry.track("music_youtube_player_ready", {
+            playback_id: fileProjection.playback_id,
+            source_type: "youtube",
+            window_role: "auxiliary_return",
+          });
           if (ytPlayer) ytPlayer.playVideo();
           setTimeout(() => {
             if (ytPlayer) ytPlayer.playVideo();
@@ -350,6 +357,11 @@ function _initYoutube(): void {
           }
         },
         onStateChange: (e: { data: number }) => {
+          Telemetry.track("music_youtube_state_changed", {
+            playback_id: fileProjection.playback_id,
+            state: e.data,
+            window_role: "auxiliary_return",
+          });
           _broadcastYtState();
           const yt = getYT();
           if (e.data === yt?.PlayerState.ENDED) {
@@ -359,6 +371,17 @@ function _initYoutube(): void {
         },
         onError: (e: number) => {
           console.error("[FileProjectionReturn] YouTube player error:", e);
+          Telemetry.track("music_playback_failed", {
+            playback_id: fileProjection.playback_id,
+            stage: "youtube_player",
+            reason: `youtube_${e}`,
+            provider_code: e,
+            window_role: "auxiliary_return",
+          });
+          Telemetry.captureException(new Error(`YouTube player error ${e}`), {
+            playback_id: fileProjection.playback_id,
+            operation: "youtube_player",
+          });
         },
       },
     });
@@ -374,6 +397,8 @@ function _broadcastYtState(): void {
       currentTime: ytPlayer.getCurrentTime(),
       isPaused: ytPlayer.getPlayerState() !== yt.PlayerState.PLAYING,
       duration: ytPlayer.getDuration() || 0,
+      state: ytPlayer.getPlayerState(),
+      playback_id: fileProjection.playback_id,
     } as VideoMediaState);
   } catch {
     /* ignore */
