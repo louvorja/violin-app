@@ -21,9 +21,8 @@ test("adicionar item à liturgia", async ({ page }) => {
   // na primeira renderização de Modules.vue — networkidle sinaliza que todos terminaram
   await page.waitForLoadState("networkidle", { timeout: 30000 });
 
-  // Abrir módulo liturgia via ribbon
-  await page.locator("#ribbon-tab-collections").click();
-  await page.locator('[data-testid="ribbon-btn-liturgy"]').click();
+  // A liturgia fica no painel lateral; o botão de edição abre o módulo completo.
+  await page.getByRole("button", { name: "Editar liturgia" }).click();
 
   // Aguardar o módulo liturgia renderizar
   await expect(page.locator(".liturgy-page")).toBeVisible({ timeout: 10000 });

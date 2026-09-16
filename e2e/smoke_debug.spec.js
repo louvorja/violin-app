@@ -17,7 +17,7 @@ test("sanity: BroadcastChannel funciona entre páginas no mesmo contexto", async
     window._bcReceived = null;
     const ch = new BroadcastChannel("louvorja");
     ch.addEventListener("message", (e) => {
-      window._bcReceived = e.data;
+      if (e.data?.type === "TEST_BC") window._bcReceived = e.data;
     });
   });
 

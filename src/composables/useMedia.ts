@@ -21,6 +21,7 @@ import { useLyric } from "@/composables/useLyric";
 import { useAlbum } from "@/composables/useAlbum";
 import { openProjectionWindows, openVideoProjectionWindows, closeProjectionWindows } from "@/helpers/ProjectionWindows";
 import { Music } from "@/types/Music";
+import type { Lyric } from "@/types/Lyric";
 import { LyricOpenParams } from "@/types/Lyric";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { MediaOpenParams } from "@/types/Media";
@@ -295,9 +296,17 @@ _audio.onTimeUpdate((ct, d) => {
 
 });
 
+function _lyricEntries(data: Music): Lyric[] {
+  const lyric = data?.lyric;
+  if (Array.isArray(lyric)) return lyric;
+  if (lyric && typeof lyric === "object") return Object.values(lyric);
+  return [];
+}
+
 function _buildSlidesFrom(data: Music): Slide[] {
   let prev_image: string | undefined = data?.url_image as string | undefined;
   let prev_image_position: string | number | undefined = data?.image_position;
+  const lyricEntries = _lyricEntries(data);
 
   return [
     {
@@ -309,7 +318,7 @@ function _buildSlidesFrom(data: Music): Slide[] {
       image_position:       data?.image_position,
       id_music:             data?.id_music,
     },
-    ...(data?.lyric || [])
+    ...lyricEntries
       .filter((lyric) => lyric.show_slide === 1)
       .sort((a, b) => a.order - b.order)
       .map((lyric) => {
@@ -461,7 +470,7 @@ const _self = {
       duration: data.duration,
       has_audio: !!data.url_music,
       has_instrumental_audio: !!data.url_instrumental_music,
-      slides_count: Array.isArray(data.lyric) ? data.lyric.length : undefined,
+      slides_count: _lyricEntries(data).length,
       stage: "metadata_only",
     });
     Telemetry.track("music_metadata_resolved", _telemetryFor(playbackContext, {
@@ -469,7 +478,7 @@ const _self = {
       duration: data.duration,
       has_audio: !!data.url_music,
       has_instrumental_audio: !!data.url_instrumental_music,
-      slides_count: Array.isArray(data.lyric) ? data.lyric.length : undefined,
+      slides_count: _lyricEntries(data).length,
     }));
     $appdata.set(KEYS.MODULES.MEDIA.DATA, data);
     $history.add(id_music, data.name, !!data.url_instrumental_music);

@@ -10,8 +10,8 @@ interface NavigatorSnapshot {
 }
 
 const RELEASES_BASE_URL = "https://github.com/louvorja/violin-app/releases";
-// Nome efetivamente publicado pelo electron-builder. Ele sanitiza os espaços
-// de `productName` como pontos ao montar o asset da release.
+// Nome explícito definido em electron-builder.yml para coincidir com o asset
+// publicado e com os nomes registrados nos arquivos latest*.yml.
 const RELEASE_ASSET_PRODUCT_NAME = "LouvorJA.Violin";
 
 /**

@@ -86,7 +86,6 @@ win:
   # são três `.exe`, e o `latest.yml` aponta o combinado — 193MB que todo
   # operador baixaria a cada atualização automática, para usar metade.
   target: nsis
-  artifactName: "${productName}-Setup-${version}.${ext}"
   icon: build/icon-512.png
   # Code signing (opcional — requer certificado pago):
   # certificateFile: cert.pfx
@@ -101,6 +100,11 @@ win:
 nsis:
   # Instalador com wizard (não one-click) — usuário pode escolher pasta
   oneClick: false
+  # O nome precisa ser explícito: o electron-builder usa outra normalização
+  # no latest.yml quando recebe o productName com espaços.
+  # O mesmo nome aqui garante que o arquivo publicado e o arquivo apontado
+  # pelo atualizador sejam exatamente iguais.
+  artifactName: "LouvorJA.Violin-Setup-${version}.${ext}"
   # Solicitar elevação de privilégios se necessário
   allowElevation: true
   # Permitir ao usuário escolher o diretório de instalação
@@ -136,7 +140,7 @@ mac:
     - target: zip
       arch:
         - universal
-  artifactName: "${productName}-${version}.${ext}"
+  artifactName: "LouvorJA.Violin-${version}.${ext}"
   # Ícone próprio do macOS: 1024x1024 com a placa já desenhada — o squircle
   # branco na grade da Apple (~82% do canvas), margem transparente em volta.
   #
@@ -158,6 +162,9 @@ mac:
   hardenedRuntime: true
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
+
+dmg:
+  artifactName: "LouvorJA.Violin-${version}.${ext}"
 
 # ---------------------------------------------------------------------------
 # Linux — AppImage
@@ -219,3 +226,9 @@ linux:
   # foi escolhida quando o script JS roda. Por isso vive aqui, no atalho.
   executableArgs:
     - --ozone-platform=x11
+
+appImage:
+  # O metadata de atualização normaliza o espaço do productName como hífen.
+  # Declarar o mesmo nome no arquivo impede que ele aponte para um AppImage
+  # inexistente depois da publicação.
+  artifactName: "LouvorJA-Violin-${version}-${arch}.${ext}"

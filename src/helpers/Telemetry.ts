@@ -95,6 +95,30 @@ function errorProperties(error: unknown): Record<string, unknown> {
   return { message: sanitizeString(String(error)) };
 }
 
+/**
+ * Cria um Error novo antes de entregar a exceção ao SDK.
+ *
+ * Sanitizar apenas as propriedades adicionais não basta: o PostHog também
+ * lê message/stack do primeiro argumento de captureException. Nunca passe o
+ * objeto de erro original, que pode carregar dados vindos da rede ou do
+ * processo principal.
+ */
+function safeError(error: unknown): Error {
+  let message = "Erro não identificado";
+  try {
+    message = error instanceof Error ? error.message : String(error);
+  } catch {
+    message = "Erro não serializável";
+  }
+
+  const safe = new Error(sanitizeString(message));
+  if (error instanceof Error) {
+    safe.name = sanitizeString(error.name || "Error");
+    if (error.stack) safe.stack = sanitizeString(error.stack);
+  }
+  return safe;
+}
+
 export function breadcrumb(event: string, properties: Record<string, unknown> = {}): void {
   if (!isEnabled()) return;
   _breadcrumbs.push({ at: new Date().toISOString(), event, properties: serializableProperties(properties) });
@@ -111,14 +135,15 @@ export function track(event: string, properties: Record<string, unknown> = {}): 
 
 export function captureException(error: unknown, properties: Record<string, unknown> = {}): void {
   if (!isEnabled()) return;
+  const sanitized = safeError(error);
   const enriched = {
     ...baseContext(),
-    ...errorProperties(error),
+    ...errorProperties(sanitized),
     ...serializableProperties(properties),
     breadcrumbs: _breadcrumbs.slice(-50),
   };
-  if (_ph) _ph.captureException(error, enriched);
-  else if (_pendingExceptions.length < 20) _pendingExceptions.push({ error, properties: enriched });
+  if (_ph) _ph.captureException(sanitized, enriched);
+  else if (_pendingExceptions.length < 20) _pendingExceptions.push({ error: sanitized, properties: enriched });
 }
 
 /**
@@ -302,6 +327,10 @@ export async function init(): Promise<void> {
       // hidden/file fogem ao maskAllInputs padrão e podem carregar token ou
       // caminho local; ocultá-los não reduz a reprodução das ações do usuário.
       blockSelector: 'input[type="hidden"], input[type="file"]',
+      // Não registrar headers nem bodies: podem conter tokens, cookies ou
+      // conteúdo completo de requisições, mesmo quando a URL foi redigida.
+      recordHeaders: false,
+      recordBody: false,
       // URLs são sempre registradas pelo network recording. O controle remoto
       // ainda aceita instalações antigas com token na query string, portanto
       // redigimos credenciais antes de o valor sair do dispositivo.

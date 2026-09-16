@@ -75,6 +75,7 @@ describe("Telemetry", () => {
         capture_dead_clicks: true,
         rageclick: true,
         enable_recording_console_log: true,
+        session_recording: expect.objectContaining({ recordHeaders: false, recordBody: false }),
         tracing_headers: expect.arrayContaining(["api.example.test"]),
       }),
     );
@@ -192,5 +193,9 @@ describe("Telemetry", () => {
       expect.objectContaining({ message: expect.stringContaining("token=[REDACTED]") }),
     );
     expect(posthog.captureException.mock.lastCall?.[1]?.message).not.toContain("segredo");
+    const capturedError = posthog.captureException.mock.lastCall?.[0];
+    expect(capturedError).toBeInstanceOf(Error);
+    expect((capturedError as Error).message).not.toContain("segredo");
+    expect((capturedError as Error).stack).not.toContain("segredo");
   });
 });

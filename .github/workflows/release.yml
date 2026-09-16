@@ -4,9 +4,9 @@ on:
   push:
     tags:
       # Releases estáveis: vMAJOR.MINOR.PATCH (ex: v1.28.0)
-      - 'v*.*.*'
+      - "v*.*.*"
       # Pre-releases: vMAJOR.MINOR.PATCH-IDENT (ex: v1.28.0-preview.1, v1.28.0-rc.1)
-      - 'v*.*.*-*'
+      - "v*.*.*-*"
   workflow_dispatch:
 
 jobs:
@@ -47,14 +47,26 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '24'
-          cache: 'npm'
+          node-version: "24"
+          cache: "npm"
 
       - name: Instalar dependências
         run: npm ci
 
+      - name: Conferir versão da release
+        run: npm run validate:release-version
+
       - name: Rodar testes
         run: npm test
+
+      - name: Rodar lint
+        run: npm run lint
+
+      - name: Instalar navegador dos testes E2E
+        run: npx playwright install chromium
+
+      - name: Rodar testes E2E
+        run: npm run test:e2e
 
       - name: Habilitar long paths (Windows)
         if: matrix.platform == 'win'
@@ -120,6 +132,9 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
+      - name: Conferir arquivos do atualizador
+        run: npm run validate:release-artifacts
+
       - name: Upload instalador
         uses: actions/upload-artifact@v4
         with:
@@ -158,161 +173,24 @@ jobs:
             echo "title=LouvorJA Violin ${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Obter PR associado ao commit
-        id: pr
-        uses: actions-ecosystem/action-get-merged-pull-request@v1
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Gerar changelog
-        id: changelog
-        run: |
-          # tornar o script tolerante a greps vazios
-          set +e
-          REPO="${GITHUB_REPOSITORY}"
-
-          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-          if [ -n "$PREV_TAG" ]; then
-            RANGE="$PREV_TAG..HEAD"
-          else
-            RANGE="HEAD"
-          fi
-
-          echo "" > changelog.md
-
-          COMMITS=$(git log $RANGE --pretty=format:"%s%x09%H" --no-merges || true)
-
-          # FEAT
-          FEAT=$(printf '%s\n' "$COMMITS" | grep -E "^feat(\([^)]*\))?(!)?:" || true)
-          if [ -n "$FEAT" ]; then
-            echo "## ✨ Novidades" >> changelog.md
-            printf '%s\n' "$FEAT" | while IFS=$'	' read -r MSG HASH; do
-              MSG="${MSG#feat*:}"
-              MSG="${MSG# }"
-              echo "- $MSG ([ver commit](https://github.com/$REPO/commit/$HASH))" >> changelog.md
-            done
-            echo "" >> changelog.md
-          fi
-
-          # FIX
-          FIX=$(printf '%s\n' "$COMMITS" | grep -E "^fix(\([^)]*\))?(!)?:" || true)
-          if [ -n "$FIX" ]; then
-            echo "## 🐞 Correções" >> changelog.md
-            printf '%s\n' "$FIX" | while IFS=$'	' read -r MSG HASH; do
-              MSG="${MSG#fix*:}"
-              MSG="${MSG# }"
-              echo "- $MSG ([ver commit](https://github.com/$REPO/commit/$HASH))" >> changelog.md
-            done
-            echo "" >> changelog.md
-          fi
-
-          # REFACTOR
-          REFACTOR=$(printf '%s\n' "$COMMITS" | grep -E "^refactor(\([^)]*\))?(!)?:" || true)
-          if [ -n "$REFACTOR" ]; then
-            echo "## 🔧 Aprimoramentos" >> changelog.md
-            printf '%s\n' "$REFACTOR" | while IFS=$'	' read -r MSG HASH; do
-              MSG="${MSG#refactor*:}"
-              MSG="${MSG# }"
-              echo "- $MSG ([ver commit](https://github.com/$REPO/commit/$HASH))" >> changelog.md
-            done
-            echo "" >> changelog.md
-          fi
-
-          # PERF
-          PERF=$(printf '%s\n' "$COMMITS" | grep -E "^perf(\([^)]*\))?(!)?:" || true)
-          if [ -n "$PERF" ]; then
-            echo "## ⚡ Melhorias de performance" >> changelog.md
-            printf '%s\n' "$PERF" | while IFS=$'	' read -r MSG HASH; do
-              MSG="${MSG#perf*:}"
-              MSG="${MSG# }"
-              echo "- $MSG ([ver commit](https://github.com/$REPO/commit/$HASH))" >> changelog.md
-            done
-            echo "" >> changelog.md
-          fi
-
-          # DOCS
-          DOCS=$(printf '%s\n' "$COMMITS" | grep -E "^docs(\([^)]*\))?(!)?:" || true)
-          if [ -n "$DOCS" ]; then
-            echo "## 📝 Documentação" >> changelog.md
-            printf '%s\n' "$DOCS" | while IFS=$'	' read -r MSG HASH; do
-              MSG="${MSG#docs*:}"
-              MSG="${MSG# }"
-              echo "- $MSG ([ver commit](https://github.com/$REPO/commit/$HASH))" >> changelog.md
-            done
-            echo "" >> changelog.md
-          fi
-
-          # TEST
-          TEST=$(printf '%s\n' "$COMMITS" | grep -E "^test(\([^)]*\))?(!)?:" || true)
-          if [ -n "$TEST" ]; then
-            echo "## 🧪 Testes" >> changelog.md
-            printf '%s\n' "$TEST" | while IFS=$'	' read -r MSG HASH; do
-              MSG="${MSG#test*:}"
-              MSG="${MSG# }"
-              echo "- $MSG ([ver commit](https://github.com/$REPO/commit/$HASH))" >> changelog.md
-            done
-            echo "" >> changelog.md
-          fi
-
-          # CHORE
-          CHORE=$(printf '%s\n' "$COMMITS" | grep -E "^chore(\([^)]*\))?(!)?:" || true)
-          if [ -n "$CHORE" ]; then
-            echo "## 📦 Tarefas internas" >> changelog.md
-            printf '%s\n' "$CHORE" | while IFS=$'	' read -r MSG HASH; do
-              MSG="${MSG#chore*:}"
-              MSG="${MSG# }"
-              echo "- $MSG ([ver commit](https://github.com/$REPO/commit/$HASH))" >> changelog.md
-            done
-            echo "" >> changelog.md
-          fi
-
-          # OUTRAS MUDANÇAS
-          OTHER=$(printf '%s\n' "$COMMITS" | grep -vE "^(feat|fix|refactor|perf|docs|test|chore)(\([^)]*\))?(!)?:" || true)
-          if [ -n "$OTHER" ]; then
-            echo "## 🔹 Outras mudanças" >> changelog.md
-            printf '%s\n' "$OTHER" | while IFS=$'	' read -r MSG HASH; do
-              MSG="${MSG# }"
-              echo "- $MSG ([ver commit](https://github.com/$REPO/commit/$HASH))" >> changelog.md
-            done
-            echo "" >> changelog.md
-          fi
-
-          CHANGELOG=$(cat changelog.md)
-          if [ -z "$(echo "$CHANGELOG" | tr -d '[:space:]')" ]; then
-            CHANGELOG="Nenhuma mudança encontrada."
-          fi
-          DELIM=$(head -c 32 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 32)
-          echo "changelog<<$DELIM" >> $GITHUB_OUTPUT
-          printf '%s\n' "$CHANGELOG" >> $GITHUB_OUTPUT
-          echo "$DELIM" >> $GITHUB_OUTPUT
-      
-      
-
       - name: Montar texto final da release
         id: notes
         env:
-          PR_BODY: ${{ steps.pr.outputs.body }}
-          CHANGELOG_TEXT: ${{ steps.changelog.outputs.changelog }}
+          RELEASE_NOTES_FILE: .github/release-notes/${{ github.ref_name }}.md
         run: |
-          # tornar tolerante a comandos que retornam !=0
-          set +e
-
-          # ler variáveis de ambiente (já definidas pelo runner de forma segura)
-          MAIN_TEXT="$PR_BODY"
-          if [ -z "$MAIN_TEXT" ]; then
-            MAIN_TEXT="$(git log -1 --pretty=format:%B)"
+          set -euo pipefail
+          if [[ ! -s "$RELEASE_NOTES_FILE" ]]; then
+            echo "::error::Notas ausentes: $RELEASE_NOTES_FILE"
+            exit 1
           fi
 
-          # montar body final e enviar para GITHUB_OUTPUT preservando quebras de linha
-          DELIM_BODY=$(head -c 32 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 32)
+          RELEASE_NOTES=$(cat "$RELEASE_NOTES_FILE")
+          DELIM_BODY="RELEASE_NOTES_${GITHUB_RUN_ID}"
           {
             printf 'body<<%s\n' "$DELIM_BODY"
-            printf '%s\n' "$MAIN_TEXT"
-            printf '\n---\n\n# 🔥 Changelog \n\n'
-            printf '%s\n' "$CHANGELOG_TEXT"
+            printf '%s\n' "$RELEASE_NOTES"
             printf '%s\n' "$DELIM_BODY"
           } >> "$GITHUB_OUTPUT"
-      
 
       - name: Criar/atualizar release
         uses: softprops/action-gh-release@v2
