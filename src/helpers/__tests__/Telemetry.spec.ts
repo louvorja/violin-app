@@ -38,6 +38,7 @@ async function loadTelemetry() {
   vi.resetModules();
   vi.stubEnv("VITE_POSTHOG_KEY", "test-key");
   vi.stubEnv("VITE_URL_API", "https://api.example.test/v1");
+  vi.stubEnv("VITE_APP_VERSION", "2.0.0-beta.8");
   window.history.replaceState({}, "", "/");
   return import("@/helpers/Telemetry");
 }
@@ -84,7 +85,10 @@ describe("Telemetry", () => {
       capture_unhandled_rejections: true,
       capture_console_errors: true,
     });
-    expect(posthog.capture).toHaveBeenCalledWith("app_opened", expect.any(Object));
+    expect(posthog.capture).toHaveBeenCalledWith(
+      "app_opened",
+      expect.objectContaining({ app_version: "2.0.0-beta.8" }),
+    );
   });
 
   it("inicializa também janelas auxiliares para não perder seus erros", async () => {

@@ -11,6 +11,7 @@ import type { CapturedNetworkRequest, PostHog } from "posthog-js";
 import Platform from "@/helpers/Platform";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
+import packageJson from "@root/package.json";
 
 const KEY = import.meta.env.VITE_POSTHOG_KEY ?? "";
 const HOST = import.meta.env.VITE_POSTHOG_HOST || "https://us.i.posthog.com";
@@ -254,10 +255,11 @@ async function appVersion(): Promise<string> {
   if (fromEnv) return String(fromEnv);
   try {
     const status = (await Platform.updater?.status?.()) as { version?: string } | undefined;
-    return String(status?.version ?? "");
+    if (status?.version) return String(status.version);
   } catch {
-    return "";
+    // Web/PWA não tem updater; segue para a versão canônica empacotada abaixo.
   }
+  return typeof packageJson.version === "string" ? packageJson.version : "";
 }
 
 /** UUID aleatório por instalação. Não deriva de nada da máquina. */
