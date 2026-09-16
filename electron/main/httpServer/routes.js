@@ -103,6 +103,36 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
     return win;
   }
 
+  /**
+   * Consulta o estado atual da projeção de letras na janela principal.
+   *
+   * Mesmo padrão de `replyChannel` do `/api/announcements?action=list`: o
+   * renderer responde no canal IPC e esse valor vira a resposta HTTP. Sem isso
+   * o cliente remoto só sabia dos slides por push (`slides_data`) e ficava com a
+   * aba vazia quando o evento se perdia.
+   */
+  function askSlideState(mainWindow, res) {
+    const { ipcMain } = require("electron");
+    const channel = "_song_slides_state_reply_" + Date.now();
+    let sent = false;
+    const timeout = setTimeout(() => {
+      if (sent) return;
+      sent = true;
+      ipcMain.removeAllListeners(channel);
+      res.status(504).json({ error: "Timeout ao consultar o estado dos slides" });
+    }, 3000);
+    ipcMain.once(channel, (_event, data) => {
+      if (sent) return;
+      sent = true;
+      clearTimeout(timeout);
+      res.json(data);
+    });
+    mainWindow.webContents.send("http:song-slides", {
+      action: "playing-check",
+      replyChannel: channel,
+    });
+  }
+
   // ---------------------------------------------------------------
   // /api/ping — health check
   //
@@ -203,6 +233,11 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
       return res.status(400).json({ error: "action inválida", valid: validActions });
     }
 
+    // `playing-check` é consulta (não comando): devolve o estado atual.
+    if (action === "playing-check") {
+      return askSlideState(mainWindow, res);
+    }
+
     const payload = { action };
     if (action === "go-to-slide") {
       payload.index = parseInt(req.body.index, 10);
@@ -210,6 +245,21 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
 
     mainWindow.webContents.send("http:song-slides", payload);
     res.json({ status: "ok", action, payload });
+  });
+
+  // ---------------------------------------------------------------
+  // GET /api/song-slides?action=playing-check — mesma consulta por GET
+  // (clientes que só fazem GET usam esta forma).
+  // ---------------------------------------------------------------
+  app.get("/api/song-slides", (req, res) => {
+    if (req.query.action !== "playing-check") {
+      return res.status(400).json({ error: "action inválida para GET", valid: ["playing-check"] });
+    }
+    const mainWindow = getValidMainWindow();
+    if (!mainWindow) {
+      return res.status(503).json({ error: "Janela principal não disponível" });
+    }
+    return askSlideState(mainWindow, res);
   });
 
   // ---------------------------------------------------------------

@@ -315,6 +315,28 @@ $storage.hydrate().then(async () => {
             case "go-to-slide":
               Media.goToSlide(data.index);
               break;
+            case "playing-check": {
+              // Consulta de estado (aba Slides do app remoto e pull-to-refresh).
+              //
+              // `Media.slides()` devolve objetos reativos do Vue (Proxy) e o IPC do
+              // Electron serializa com o structured clone do V8, que não aceita
+              // Proxy ("An object could not be cloned"). O round-trip por JSON
+              // planifica tudo — é também o formato que o cliente recebe no `res.json`.
+              const slides = JSON.parse(JSON.stringify(Media.slides() || []));
+              const last = Broadcast.getLastPayload(BROADCAST_TYPE.SLIDE_CHANGE) || {};
+              const reply = {
+                status: "ok",
+                supported: true,
+                playing: slides.length > 0,
+                slides,
+                currentSlideIndex: Number(last.slide_index) || 0,
+                title: last.title || "",
+              };
+              if (data?.replyChannel && Platform.api?.send) {
+                Platform.api.send(data.replyChannel, reply);
+              }
+              break;
+            }
             case "liturgy-execute": {
               const litItem = Liturgy.get(data.id);
               if (!litItem) {
