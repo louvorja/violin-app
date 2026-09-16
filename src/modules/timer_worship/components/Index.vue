@@ -57,8 +57,8 @@ const { rootStyle, textStyle, alertStyle, bgImage, imageStyle, container } = use
 );
 const endAction = useTimerEndAction(ModuleEnum.TIMER_WORSHIP, KEYS.MODULES.TIMER_WORSHIP);
 
-const moduleContainer = ref<{ t(key: string): string } | null>(null);
-const t = (key: string): string => moduleContainer.value?.t(key) || key;
+const moduleContainer = ref<{ tm(key: string): string } | null>(null);
+const tm = (key: string): string => moduleContainer.value?.tm(key) || key;
 
 const mode = computed<TimerMode>({
   get: () => $userdata.get<TimerMode>(KEYS.MODULES.TIMER_WORSHIP.MODE, "down") ?? "down",
@@ -173,7 +173,7 @@ async function playMp3(id: string): Promise<void> {
   try {
     await Media.openAudio({
       url: sound.url,
-      title: t(sound.label.split(".").slice(2).join(".")),
+      title: tm(sound.label.split(".").slice(2).join(".")),
     });
   } catch {
     /* noop */

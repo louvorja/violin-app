@@ -14,7 +14,7 @@
         <div class="overlay-preview-panel">
           <div class="overlay-preview-header">
             <LjIcon :icon="ICONS.UI.EYE_OUTLINE" size="14" />
-            <span>{{ t("preview") }}</span>
+            <span>{{ tm("preview") }}</span>
           </div>
           <div class="overlay-preview-canvas-wrap">
             <div ref="previewRef" class="overlay-preview-canvas">
@@ -56,7 +56,7 @@
         <div class="overlay-slot-list">
           <div v-if="localSlots.length === 0" class="overlay-empty">
             <LjIcon :icon="ICONS.MODULES.OVERLAY" size="48" color="grey" />
-            <p>{{ t("empty") }}</p>
+            <p>{{ tm("empty") }}</p>
           </div>
 
           <div v-else class="overlay-slots">
@@ -71,7 +71,7 @@
                 <LjSwitch v-model="slot.enabled" @update:model-value="persist" />
                 <span class="overlay-slot-name">{{ slot.name }}</span>
                 <LjChip size="sm" class="overlay-slot-type">
-                  {{ t("slot.type_" + slot.type) }}
+                  {{ tm("slot.type_" + slot.type) }}
                 </LjChip>
                 <div class="lj-u-spacer" />
                 <LjButton
@@ -136,11 +136,11 @@ import {
   type OverlaySlot,
 } from "@/types/Overlay";
 
-const moduleContainer = ref<{ t(key: string, named?: Record<string, unknown>): string } | null>(
+const moduleContainer = ref<{ tm(key: string, named?: Record<string, unknown>): string } | null>(
   null
 );
-const t = (key: string, named?: Record<string, unknown>): string =>
-  moduleContainer.value?.t(key, named) || key;
+const tm = (key: string, named?: Record<string, unknown>): string =>
+  moduleContainer.value?.tm(key, named) || key;
 
 const enabled = ref(false);
 const localSlots = reactive<OverlaySlot[]>([]);

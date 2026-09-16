@@ -102,8 +102,9 @@ import { LjButton, LjIcon, LjTooltip } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { useChat } from "@/composables/useChat";
 import $alert from "@/helpers/Alert";
+import { localeTag } from "@/helpers/DateTime";
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const {
   messages,
   isOpen,
@@ -122,7 +123,7 @@ const inputEl = ref<HTMLInputElement | null>(null);
 
 function formatTime(timestamp: string): string {
   const d = new Date(timestamp);
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleTimeString(localeTag(locale.value), { hour: "2-digit", minute: "2-digit" });
 }
 
 function onSend(): void {

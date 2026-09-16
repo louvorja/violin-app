@@ -112,15 +112,44 @@ export default class extends BaseModule {
 Chaves do módulo ficam em `src/modules/<id>/lang/{pt,es}.json` e são mergeadas no
 i18n global sob `modules.<id>.*` no boot (`ModuleManager`).
 
-**Duas formas de acessar tradução dentro do módulo:**
+**Convenção padronizada:**
 
-| Helper | Quando usar | Exemplo |
-|--------|------------|---------|
-| `tt("key")` | Chaves **do módulo** (prefixo automático `modules.<id>.`) | `tt("entry_title")` |
+| Função | Escopo | Exemplo |
+|--------|--------|---------|
+| `tm("key")` | Chaves **do módulo** (prefixo automático `modules.<id>.`) | `tm("entry_title")` |
 | `t("namespace.key")` | Chaves **globais** compartilhadas | `t("actions.save")`, `t("alert.yes")` |
 
 > ⚠️ Nunca use `t("save")` para uma chave do módulo — isso procura na raiz global
-> e não encontra. Use `tt("save")` para chaves do módulo.
+> e não encontra. Use `tm("save")` para chaves do módulo.
+
+### Como obter `t()` e `tm()`
+
+**Dentro do componente Index.vue (usa ModuleContainer):**
+
+```ts
+const moduleContainer = ref(null);
+const tm = (key) => moduleContainer.value?.tm(key) || key;
+```
+
+**Dentro de um componente filhado (sem ModuleContainer):**
+
+```ts
+import { useModuleI18n } from "@/composables/useModuleI18n";
+const { t, tm, locale } = useModuleI18n("meu_modulo");
+```
+
+**No template:**
+
+```vue
+<!-- Tradução do módulo -->
+<LjButton>{{ tm("entry_title") }}</LjButton>
+
+<!-- Tradução global -->
+<LjButton>{{ t("actions.save") }}</LjButton>
+
+<!-- Ou $t() para globais no template -->
+<LjField :label="$t('components.ui.clear')" />
+```
 
 Detalhes completos em `docs/i18n.md`.
 

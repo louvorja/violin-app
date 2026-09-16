@@ -153,12 +153,13 @@ const userdata = computed(() => {
   );
 });
 
-const t = (key, named) =>
+/** Traduções do módulo: tm("title") → modules.<id>.title */
+const tm = (key, named) =>
   named
     ? i18nT(`modules.${moduleId.value}.${key}`, named)
     : i18nT(`modules.${moduleId.value}.${key}`);
 
-defineExpose({ userdata, t, moduleId, module: module_ });
+defineExpose({ userdata, tm, moduleId, module: module_ });
 </script>
 
 <style scoped>

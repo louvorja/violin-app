@@ -5,7 +5,7 @@
         v-if="history.length"
         variant="ghost"
         :icon="ICONS.ACTIONS.DELETE"
-        :title="t('actions.clear')"
+        :title="tm('actions.clear')"
         icon-only
         @click="clearHistory()"
       />
@@ -14,8 +14,8 @@
     <div v-if="history.length === 0" class="music-list-empty">
       <LjIcon :icon="ICONS.MODULES.HISTORY" size="64" class="lj-u-faded" />
       <div class="music-list-empty-text">
-        <div class="music-list-empty-title">{{ t("data.empty") }}</div>
-        <div class="music-list-empty-hint lj-u-faded">{{ t("data.empty_hint") }}</div>
+        <div class="music-list-empty-title">{{ tm("data.empty") }}</div>
+        <div class="music-list-empty-hint lj-u-faded">{{ tm("data.empty_hint") }}</div>
       </div>
     </div>
 
@@ -35,7 +35,7 @@
             variant="danger"
             size="sm"
             :icon="ICONS.ACTIONS.CLOSE"
-            :title="t('actions.remove')"
+            :title="tm('actions.remove')"
             icon-only
             @click.stop="removeFromHistory(item.id_music)"
           />
@@ -63,21 +63,21 @@ const moduleContainer = ref(null);
 
 const history = computed(() => AppData.get("user_data.history", []));
 
-const t = (key) => moduleContainer.value?.t(key) || key;
+const tm = (key) => moduleContainer.value?.tm(key) || key;
 
 function relativeDate(ts) {
   if (!ts) return "";
   const now = Date.now();
   const diff = Math.floor((now - ts) / 1000);
-  if (diff < 60) return t("time.now");
-  if (diff < 3600) return t("time.minutes").replace("[n]", Math.floor(diff / 60));
-  if (diff < 86400) return t("time.hours").replace("[n]", Math.floor(diff / 3600));
+  if (diff < 60) return tm("time.now");
+  if (diff < 3600) return tm("time.minutes").replace("[n]", Math.floor(diff / 60));
+  if (diff < 86400) return tm("time.hours").replace("[n]", Math.floor(diff / 3600));
 
   const d = new Date(ts);
   const today = new Date();
   const yesterday = new Date(today);
   yesterday.setDate(today.getDate() - 1);
-  if (d.toDateString() === yesterday.toDateString()) return t("time.yesterday");
+  if (d.toDateString() === yesterday.toDateString()) return tm("time.yesterday");
   const sameYear = d.getFullYear() === today.getFullYear();
   return d.toLocaleDateString(
     localeTag(locale.value),

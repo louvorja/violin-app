@@ -16,7 +16,7 @@
     >
       <!-- Category chips -->
       <div v-if="categories.length || uncategorizedCount > 0" class="bgs-chips">
-        <span class="bgm-header-title">{{ t("categories") }}</span>
+        <span class="bgm-header-title">{{ tm("categories") }}</span>
         <div
           v-for="cat in categories"
           :key="cat.id"
@@ -36,8 +36,8 @@
           <button
             type="button"
             class="bgs-chip-add"
-            :title="t('add_audio')"
-            :aria-label="t('add_audio')"
+            :title="tm('add_audio')"
+            :aria-label="tm('add_audio')"
             @click.stop="addAudioFiles(cat.id)"
           >
             <LjIcon :icon="ICONS.ACTIONS.ADD" :size="12" />
@@ -54,13 +54,13 @@
           <span class="bgs-chip-icon-wrap">
             <LjIcon :icon="ICONS.MUSIC.NOTE_OUTLINE" :size="14" />
           </span>
-          <span class="bgm-chip-name">{{ t("uncategorized") }}</span>
+          <span class="bgm-chip-name">{{ tm("uncategorized") }}</span>
           <span class="bgs-chip-count">{{ uncategorizedCount }}</span>
           <button
             type="button"
             class="bgs-chip-add"
-            :title="t('add_audio')"
-            :aria-label="t('add_audio')"
+            :title="tm('add_audio')"
+            :aria-label="tm('add_audio')"
             @click.stop="addAudioFiles(UNCATEGORIZED_ID)"
           >
             <LjIcon :icon="ICONS.ACTIONS.ADD" :size="12" />
@@ -84,7 +84,7 @@
                 variant="ghost"
                 icon-only
                 :icon="isCurrentPlaying(item.file.id) ? ICONS.PLAYER.PAUSE : ICONS.PLAYER.PLAY"
-                :aria-label="isCurrentPlaying(item.file.id) ? t('pause') : t('play')"
+                :aria-label="isCurrentPlaying(item.file.id) ? tm('pause') : tm('play')"
                 @click.stop="toggleFile(item.file)"
               />
             </div>
@@ -94,7 +94,7 @@
                 variant="ghost"
                 icon-only
                 :icon="ICONS.ACTIONS.EDIT"
-                :aria-label="t('edit_audio')"
+                :aria-label="tm('edit_audio')"
                 @click.stop="openEditFile(item)"
               />
               <LjButton
@@ -102,7 +102,7 @@
                 variant="ghost"
                 icon-only
                 :icon="ICONS.ACTIONS.CLOSE"
-                :aria-label="t('remove_title')"
+                :aria-label="tm('remove_title')"
                 @click.stop="removeFile(item.categoryId, item.file)"
               />
             </div>
@@ -122,7 +122,7 @@
       <div v-else class="bgs-empty">
         <LjEmpty
           :icon="ICONS.MUSIC.NO_AUDIO"
-          :title="categories.length ? t('no_files') : t('no_categories')"
+          :title="categories.length ? tm('no_files') : tm('no_categories')"
         />
       </div>
 
@@ -142,16 +142,16 @@
       <LjDialog
         v-model="showAddAudioDialog"
         size="sm"
-        :title="t('add_audio')"
+        :title="tm('add_audio')"
         :icon="ICONS.MEDIA.ADD"
       >
-        <p class="bgs-dialog-hint">{{ t("select_category") }}</p>
+        <p class="bgs-dialog-hint">{{ tm("select_category") }}</p>
         <div class="bgs-cat-options">
           <button type="button" class="bgs-cat-option" @click="addAudioFiles(UNCATEGORIZED_ID)">
             <span class="bgs-cat-option-icon">
               <LjIcon :icon="ICONS.MUSIC.NOTE_OUTLINE" :size="28" />
             </span>
-            <span class="bgs-cat-option-name">{{ t("uncategorized") }}</span>
+            <span class="bgs-cat-option-name">{{ tm("uncategorized") }}</span>
           </button>
           <button
             v-for="cat in categories"
@@ -169,12 +169,12 @@
         </div>
 
         <template #footer>
-          <LjButton size="sm" @click="showAddAudioDialog = false">{{ t("close") }}</LjButton>
+          <LjButton size="sm" @click="showAddAudioDialog = false">{{ tm("close") }}</LjButton>
         </template>
       </LjDialog>
 
       <!-- Edit file dialog -->
-      <LjDialog v-model="showEditFileDialog" :title="t('edit_audio')" :icon="ICONS.ACTIONS.EDIT">
+      <LjDialog v-model="showEditFileDialog" :title="tm('edit_audio')" :icon="ICONS.ACTIONS.EDIT">
         <LjField layout="column" :label="editingFileItem?.file.fileName">
           <LjInput
             v-model="editFileForm.name"
@@ -182,7 +182,7 @@
           />
         </LjField>
 
-        <LjField layout="column" :label="t('select_category')">
+        <LjField layout="column" :label="tm('select_category')">
           <LjSelect
             :model-value="editFileForm.categoryId"
             :items="editCategorySelectItems"
@@ -206,13 +206,13 @@
             :icon="ICONS.MUSIC.AUDIO"
             @click="editFileInput?.click()"
           >
-            {{ editFileForm.newFile ? editFileForm.newFile.name : t("change_file") }}
+            {{ editFileForm.newFile ? editFileForm.newFile.name : tm("change_file") }}
           </LjButton>
         </div>
 
         <template #footer>
-          <LjButton size="sm" @click="cancelEditFile">{{ t("cancel") }}</LjButton>
-          <LjButton size="sm" variant="primary" @click="saveFileEdit">{{ t("save") }}</LjButton>
+          <LjButton size="sm" @click="cancelEditFile">{{ tm("cancel") }}</LjButton>
+          <LjButton size="sm" variant="primary" @click="saveFileEdit">{{ tm("save") }}</LjButton>
         </template>
       </LjDialog>
 
@@ -319,11 +319,11 @@ async function getFilesByCategory(categoryId: string): Promise<BgSoundFile[]> {
 /*  Module helpers                                                     */
 /* ------------------------------------------------------------------ */
 
-const moduleContainer = ref<{ t(key: string, named?: Record<string, unknown>): string } | null>(
+const moduleContainer = ref<{ tm(key: string, named?: Record<string, unknown>): string } | null>(
   null
 );
-const t = (key: string, named?: Record<string, unknown>): string =>
-  moduleContainer.value?.t(key, named as any) || key;
+const tm = (key: string, named?: Record<string, unknown>): string =>
+  moduleContainer.value?.tm(key, named as any) || key;
 
 /* ------------------------------------------------------------------ */
 /*  State                                                              */
@@ -495,7 +495,7 @@ const visibleFiles = computed(() => {
       result.push({
         file: f,
         categoryId: UNCATEGORIZED_ID,
-        categoryName: t("uncategorized"),
+        categoryName: tm("uncategorized"),
         color: UNCATEGORIZED_COLOR,
         icon: ICONS.MUSIC.NOTE_OUTLINE,
         displayName:
@@ -520,7 +520,7 @@ const visibleFiles = computed(() => {
 });
 
 const editCategorySelectItems = computed(() => [
-  { title: t("uncategorized"), value: UNCATEGORIZED_ID },
+  { title: tm("uncategorized"), value: UNCATEGORIZED_ID },
   ...categories.value.map((c) => ({ title: c.name, value: c.id })),
 ]);
 
@@ -612,16 +612,16 @@ async function onDrop(e: DragEvent): Promise<void> {
 
   if (valid.length === 0) {
     Alert.error({
-      title: t("add_audio"),
-      text: t("unsupported_file_type"),
+      title: tm("add_audio"),
+      text: tm("unsupported_file_type"),
     });
     return;
   }
 
   if (valid.length < droppedFiles.length) {
     Alert.info({
-      title: t("add_audio"),
-      text: t("partial_files_supported", { valid: valid.length, total: droppedFiles.length }),
+      title: tm("add_audio"),
+      text: tm("partial_files_supported", { valid: valid.length, total: droppedFiles.length }),
     });
   }
 
@@ -699,7 +699,7 @@ async function onAudioFilesSelected(e: Event): Promise<void> {
 
 async function removeFile(categoryId: string, file: MediaFile): Promise<void> {
   Alert.yesno(
-    { title: t("remove_title"), text: t("remove_confirm", { name: file.name || file.fileName }) },
+    { title: tm("remove_title"), text: tm("remove_confirm", { name: file.name || file.fileName }) },
     () => doRemove(file.id)
   );
 }

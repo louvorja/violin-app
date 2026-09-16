@@ -3,10 +3,6 @@
     "name": "Louvor JA"
   },
   "modules": {
-    "liturgy": {
-      "name": "Liturgia",
-      "empty": "Nenhum item na liturgia de hoje."
-    },
     "invalid": {
       "title": "#Erro#"
     }

@@ -1,14 +1,14 @@
 <template>
   <div class="editor-root">
-    <LjTabs v-model="activeTab" :tabs="tabItems" :aria-label="t('title')" class="editor-tabs" />
+    <LjTabs v-model="activeTab" :tabs="tabItems" :aria-label="tm('title')" class="editor-tabs" />
 
     <!-- Content tab -->
     <div v-if="activeTab === 'content'" class="editor-pane">
-      <LjField :label="t('slot.name')" layout="column">
+      <LjField :label="tm('slot.name')" layout="column">
         <LjInput :model-value="m.name" @update:model-value="set('name', $event)" />
       </LjField>
 
-      <LjField :label="t('slot.type')" layout="column">
+      <LjField :label="tm('slot.type')" layout="column">
         <LjSelect
           :model-value="m.type"
           :items="typeOptions"
@@ -19,7 +19,7 @@
         />
       </LjField>
 
-      <LjField v-if="m.type === 'text'" :label="t('slot.content')" layout="column">
+      <LjField v-if="m.type === 'text'" :label="tm('slot.content')" layout="column">
         <LjTextarea
           :model-value="m.content"
           :rows="3"
@@ -27,7 +27,7 @@
         />
       </LjField>
 
-      <LjField v-if="m.type === 'module_mirror'" :label="t('slot.module_source')" layout="column">
+      <LjField v-if="m.type === 'module_mirror'" :label="tm('slot.module_source')" layout="column">
         <LjSelect
           :model-value="m.source_module"
           :items="moduleOptions"
@@ -42,7 +42,7 @@
 
     <!-- Position tab -->
     <div v-if="activeTab === 'position'" class="editor-pane">
-      <LjField :label="t('position.anchor')" layout="column" group>
+      <LjField :label="tm('position.anchor')" layout="column" group>
         <div class="anchor-grid">
           <button
             v-for="anchor in anchors"
@@ -50,7 +50,7 @@
             type="button"
             class="anchor-cell"
             :class="{ 'anchor-cell--active': m.position.anchor === anchor }"
-            :aria-label="t('anchors.' + anchor)"
+            :aria-label="tm('anchors.' + anchor)"
             :aria-pressed="m.position.anchor === anchor"
             @click="
               m.position.anchor = anchor;
@@ -63,7 +63,7 @@
       </LjField>
 
       <div class="editor-grid">
-        <LjField :label="t('position.offset_x')" layout="column">
+        <LjField :label="tm('position.offset_x')" layout="column">
           <LjInput
             :model-value="m.position.offset_x"
             type="number"
@@ -75,7 +75,7 @@
             <template #suffix><span class="editor-suffix">px</span></template>
           </LjInput>
         </LjField>
-        <LjField :label="t('position.offset_y')" layout="column">
+        <LjField :label="tm('position.offset_y')" layout="column">
           <LjInput
             :model-value="m.position.offset_y"
             type="number"
@@ -92,7 +92,7 @@
 
     <!-- Appearance tab -->
     <div v-if="activeTab === 'appearance'" class="editor-pane">
-      <LjField :label="t('style.font')" layout="column">
+      <LjField :label="tm('style.font')" layout="column">
         <SelectFont
           :model-value="m.style.font"
           @update:model-value="
@@ -102,7 +102,7 @@
         />
       </LjField>
 
-      <LjField :label="t('style.font_size')" layout="column">
+      <LjField :label="tm('style.font_size')" layout="column">
         <LjSlider
           :model-value="m.style.font_size"
           :min="1"
@@ -117,7 +117,7 @@
       </LjField>
 
       <div class="editor-grid">
-        <LjField :label="t('style.color')" layout="column">
+        <LjField :label="tm('style.color')" layout="column">
           <div class="editor-color">
             <LjInput
               :model-value="m.style.color"
@@ -129,7 +129,7 @@
             />
           </div>
         </LjField>
-        <LjField :label="t('style.background')" layout="column">
+        <LjField :label="tm('style.background')" layout="column">
           <div class="editor-color">
             <LjInput
               :model-value="m.style.background"
@@ -143,7 +143,7 @@
         </LjField>
       </div>
 
-      <LjField :label="t('style.opacity')" layout="column">
+      <LjField :label="tm('style.opacity')" layout="column">
         <LjSlider
           :model-value="m.style.opacity"
           :min="0"
@@ -156,7 +156,7 @@
         />
       </LjField>
 
-      <LjField :label="t('style.text_align')" layout="column">
+      <LjField :label="tm('style.text_align')" layout="column">
         <LjSelect
           :model-value="m.style.text_align"
           :items="alignOptions"
@@ -170,7 +170,7 @@
       <div class="editor-grid editor-checkboxes">
         <LjCheckbox
           :model-value="m.style.text_shadow"
-          :label="t('style.text_shadow')"
+          :label="tm('style.text_shadow')"
           @update:model-value="
             m.style.text_shadow = $event;
             emitChange();
@@ -178,7 +178,7 @@
         />
         <LjCheckbox
           :model-value="m.style.box_shadow"
-          :label="t('style.box_shadow')"
+          :label="tm('style.box_shadow')"
           @update:model-value="
             m.style.box_shadow = $event;
             emitChange();
@@ -186,7 +186,7 @@
         />
       </div>
 
-      <LjField :label="t('style.padding')" layout="column">
+      <LjField :label="tm('style.padding')" layout="column">
         <LjInput
           :model-value="m.style.padding"
           @update:model-value="
@@ -196,7 +196,7 @@
         />
       </LjField>
 
-      <LjField :label="t('style.border_radius')" layout="column">
+      <LjField :label="tm('style.border_radius')" layout="column">
         <LjInput
           :model-value="m.style.border_radius"
           @update:model-value="
@@ -206,7 +206,7 @@
         />
       </LjField>
 
-      <LjField :label="t('style.border')" layout="column">
+      <LjField :label="tm('style.border')" layout="column">
         <LjInput
           :model-value="m.style.border"
           placeholder="1px solid #fff"
@@ -220,7 +220,7 @@
       <template v-if="m.type === 'image'">
         <hr class="editor-divider" />
 
-        <LjField :label="t('style.image_scale')" layout="column">
+        <LjField :label="tm('style.image_scale')" layout="column">
           <LjSlider
             :model-value="m.style.image_scale"
             :min="10"
@@ -234,7 +234,7 @@
           />
         </LjField>
 
-        <LjField :label="t('style.image_fit')" layout="column">
+        <LjField :label="tm('style.image_fit')" layout="column">
           <LjSelect
             :model-value="m.style.object_fit"
             :items="fitOptions"
@@ -249,7 +249,7 @@
 
     <!-- Animation tab -->
     <div v-if="activeTab === 'animation'" class="editor-pane">
-      <LjField :label="t('animation.entrance')" layout="column">
+      <LjField :label="tm('animation.entrance')" layout="column">
         <LjSelect
           :model-value="m.style.animation"
           :items="animationOptions"
@@ -260,7 +260,7 @@
         />
       </LjField>
 
-      <LjField :label="t('animation.exit')" layout="column">
+      <LjField :label="tm('animation.exit')" layout="column">
         <LjSelect
           :model-value="m.style.animation_exit"
           :items="animationOptions"
@@ -271,7 +271,7 @@
         />
       </LjField>
 
-      <LjField :label="t('animation.duration')" layout="column">
+      <LjField :label="tm('animation.duration')" layout="column">
         <LjSlider
           :model-value="m.style.animation_duration"
           :min="100"
@@ -290,7 +290,7 @@
     <div v-if="activeTab === 'visibility'" class="editor-pane">
       <LjCheckbox
         :model-value="m.show_on_return"
-        :label="t('visibility.show_on_return')"
+        :label="tm('visibility.show_on_return')"
         @update:model-value="
           m.show_on_return = $event;
           emitChange();
@@ -298,7 +298,7 @@
       />
       <LjCheckbox
         :model-value="m.show_on_obs"
-        :label="t('visibility.show_on_obs')"
+        :label="tm('visibility.show_on_obs')"
         @update:model-value="
           m.show_on_obs = $event;
           emitChange();
@@ -334,7 +334,7 @@ const emit = defineEmits(["change"]);
 const activeTab = ref("content");
 
 const { t: _t } = useI18n();
-const t = (key) => _t(`modules.overlay.${key}`);
+const tm = (key) => _t(`modules.overlay.${key}`);
 
 const m = reactive({ ...props.slotData, style: { ...props.slotData.style } });
 
@@ -377,17 +377,17 @@ const anchors = OVERLAY_ANCHORS;
 // Os rótulos das abas eram interpolados no template e reagiam à troca de
 // idioma; o LjTabs recebe a lista pronta, então ela precisa ser computada.
 const tabItems = computed(() => [
-  { value: "content", label: t("slot.content") },
-  { value: "position", label: t("position.title") },
-  { value: "appearance", label: t("style.title") },
-  { value: "animation", label: t("animation.title") },
-  { value: "visibility", label: t("visibility.title") },
+  { value: "content", label: tm("slot.content") },
+  { value: "position", label: tm("position.title") },
+  { value: "appearance", label: tm("style.title") },
+  { value: "animation", label: tm("animation.title") },
+  { value: "visibility", label: tm("visibility.title") },
 ]);
 
 const typeOptions = [
-  { label: t("slot.type_text"), value: "text" },
-  { label: t("slot.type_image"), value: "image" },
-  { label: t("slot.type_module_mirror"), value: "module_mirror" },
+  { label: tm("slot.type_text"), value: "text" },
+  { label: tm("slot.type_image"), value: "image" },
+  { label: tm("slot.type_module_mirror"), value: "module_mirror" },
 ];
 
 const moduleOptions = [
@@ -398,22 +398,22 @@ const moduleOptions = [
 ];
 
 const animationOptions = OVERLAY_ANIMATIONS.map((a) => ({
-  label: t("animations." + a),
+  label: tm("animations." + a),
   value: a,
 }));
 
 const alignOptions = [
-  { label: t("style.align_left"), value: "left" },
-  { label: t("style.align_center"), value: "center" },
-  { label: t("style.align_right"), value: "right" },
+  { label: tm("style.align_left"), value: "left" },
+  { label: tm("style.align_center"), value: "center" },
+  { label: tm("style.align_right"), value: "right" },
 ];
 
 const fitOptions = [
-  { label: t("style.fit_contain"), value: "contain" },
-  { label: t("style.fit_cover"), value: "cover" },
-  { label: t("style.fit_fill"), value: "fill" },
-  { label: t("style.fit_none"), value: "none" },
-  { label: t("style.fit_scale_down"), value: "scale-down" },
+  { label: tm("style.fit_contain"), value: "contain" },
+  { label: tm("style.fit_cover"), value: "cover" },
+  { label: tm("style.fit_fill"), value: "fill" },
+  { label: tm("style.fit_none"), value: "none" },
+  { label: tm("style.fit_scale_down"), value: "scale-down" },
 ];
 
 function onTypeChange() {

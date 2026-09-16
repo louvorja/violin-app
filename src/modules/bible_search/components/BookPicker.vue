@@ -2,7 +2,7 @@
   <div class="bible-search-filter">
     <div class="bible-search-filter-row bible-search-filter-row--version">
       <label class="book-picker-label" :for="versionSelectId">
-        {{ t("modules.bible_search.ribbon.filter.version") }}
+        {{ tm("ribbon.filter.version") }}
       </label>
       <LjSelect
         :id="versionSelectId"
@@ -36,7 +36,7 @@
       </LjSelect>
     </div>
     <div ref="triggerRef" class="bible-search-filter-row">
-      <label class="book-picker-label">{{ t("modules.bible_search.ribbon.filter.books") }}</label>
+      <label class="book-picker-label">{{ tm("ribbon.filter.books") }}</label>
       <button class="book-picker-trigger" @click="toggleOpen">
         <span class="book-picker-summary">{{ bookSummary }}</span>
         <LjIcon :icon="ICONS.UI.CHEVRON_DOWN" size="14" />
@@ -48,12 +48,12 @@
           v-model="filter"
           type="text"
           class="book-picker-filter"
-          :placeholder="t('modules.bible_search.ribbon.filter.book_filter')"
+          :placeholder="tm('modules.bible_search.ribbon.filter.book_filter')"
         />
         <div class="book-picker-body">
           <div class="book-picker-group book-picker-group-ot">
             <div class="book-picker-group-title">
-              {{ t("modules.bible_search.ribbon.filter.ot") }}
+              {{ tm("ribbon.filter.ot") }}
             </div>
             <label v-for="book in filteredOt" :key="book.id_bible_book" class="book-picker-item">
               <input
@@ -66,7 +66,7 @@
           </div>
           <div class="book-picker-group">
             <div class="book-picker-group-title">
-              {{ t("modules.bible_search.ribbon.filter.nt") }}
+              {{ tm("ribbon.filter.nt") }}
             </div>
             <label v-for="book in filteredNt" :key="book.id_bible_book" class="book-picker-item">
               <input
@@ -80,16 +80,16 @@
         </div>
         <div class="book-picker-footer">
           <button class="book-picker-action" @click="selectOt">
-            {{ t("modules.bible_search.ribbon.filter.ot") }}
+            {{ tm("ribbon.filter.ot") }}
           </button>
           <button class="book-picker-action" @click="selectNt">
-            {{ t("modules.bible_search.ribbon.filter.nt") }}
+            {{ tm("ribbon.filter.nt") }}
           </button>
           <button class="book-picker-action" @click="selectAll">
-            {{ t("modules.bible_search.ribbon.filter.select_all") }}
+            {{ tm("ribbon.filter.select_all") }}
           </button>
           <button class="book-picker-action" @click="clearAll">
-            {{ t("modules.bible_search.ribbon.filter.clear_all") }}
+            {{ tm("ribbon.filter.clear_all") }}
           </button>
         </div>
       </div>
@@ -108,7 +108,9 @@ import { KEYS } from "@/constants/UserDataKeys";
 import type { BibleVersion, BibleBook } from "@/types/Bible";
 import { BOOKS_OT, BOOKS_NT } from "@/constants/Bible";
 
-const { t } = useI18n();
+const { t: i18nT } = useI18n();
+const tm = (key: string, named?: Record<string, unknown>) =>
+  named ? i18nT(`modules.bible_search.${key}`, named) : i18nT(`modules.bible_search.${key}`);
 
 const versionSelectId = useId();
 
@@ -204,17 +206,17 @@ function selectNt() {
 
 const bookSummary = computed(() => {
   const count = selected.size;
-  if (!count) return t("modules.bible_search.ribbon.filter.books");
-  if (count === allBooks.value.length) return t("modules.bible_search.ribbon.filter.select_all");
-  if (count === 1) return t("modules.bible_search.ribbon.filter.book_selected", { n: count });
+  if (!count) return tm("ribbon.filter.books");
+  if (count === allBooks.value.length) return tm("ribbon.filter.select_all");
+  if (count === 1) return tm("ribbon.filter.book_selected", { n: count });
 
   const allOt = BOOKS_OT.every((id) => selected.has(id));
   const allNt = BOOKS_NT.every((id) => selected.has(id));
 
-  if (count === BOOKS_OT.length && allOt) return t("modules.bible_search.ribbon.filter.ot");
-  if (count === BOOKS_NT.length && allNt) return t("modules.bible_search.ribbon.filter.nt");
+  if (count === BOOKS_OT.length && allOt) return tm("ribbon.filter.ot");
+  if (count === BOOKS_NT.length && allNt) return tm("ribbon.filter.nt");
 
-  return t("modules.bible_search.ribbon.filter.books_selected", { n: count });
+  return tm("ribbon.filter.books_selected", { n: count });
 });
 
 function toggleOpen() {

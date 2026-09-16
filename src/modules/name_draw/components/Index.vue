@@ -13,11 +13,11 @@
            prévia em vez de estreitá-la: a prévia é WYSIWYG e o tamanho da
            letra projetada vem da largura dela. -->
       <div class="ndraw-list-host">
-        <LjDrawer v-model="showList" side="right" :width="280" :title="t('data.list')">
+        <LjDrawer v-model="showList" side="right" :width="280" :title="tm('data.list')">
           <div class="ndraw-list-drawer__body">
             <LjTextarea
               v-model="namesText"
-              :placeholder="t('inputs.names')"
+              :placeholder="tm('inputs.names')"
               :rows="10"
               :disabled="running"
             />
@@ -28,10 +28,10 @@
               :icon="ICONS.UI.CHECK"
               @click="applyList"
             >
-              {{ t("actions.apply") }}
+              {{ tm("actions.apply") }}
             </LjButton>
             <div v-if="running" class="lj-u-caption lj-u-muted">
-              {{ t("data.locked") }}
+              {{ tm("data.locked") }}
             </div>
           </div>
         </LjDrawer>
@@ -53,7 +53,7 @@
     <!-- Rodapé — nomes sorteados sempre visíveis -->
     <template #footer>
       <div v-if="drawn.length" class="ndraw-fs-footer">
-        <span class="lj-u-caption lj-u-muted">{{ t("data.drawn") }}:</span>
+        <span class="lj-u-caption lj-u-muted">{{ tm("data.drawn") }}:</span>
         <div class="ndraw-fs-chips">
           <LjChip v-for="n in drawn" :key="n" variant="primary">{{ n }}</LjChip>
         </div>
@@ -61,7 +61,7 @@
           <div class="ndraw-fs-footer-progress">
             <LjProgress :value="progressPercent" :height="17" />
           </div>
-          {{ t("data.remaining") }}: {{ pool.length }} / {{ names.length }}
+          {{ tm("data.remaining") }}: {{ pool.length }} / {{ names.length }}
         </div>
       </div>
     </template>
@@ -115,7 +115,7 @@ const progressPercent = computed(() =>
   names.value.length ? (drawn.value.length / names.value.length) * 100 : 0
 );
 
-const t = (key) => moduleContainer.value?.t(key) || key;
+const tm = (key) => moduleContainer.value?.tm(key) || key;
 
 // Carrega a lista persistida do UserData e prepara o textarea.
 function loadNames() {

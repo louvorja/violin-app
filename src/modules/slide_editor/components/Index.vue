@@ -8,10 +8,10 @@
   >
     <template #header>
       <div class="se-statusbar-inline">
-        <button class="se-rename-btn" :title="t('labels.name')" @click="renameSong">
+        <button class="se-rename-btn" :title="tm('labels.name')" @click="renameSong">
           <LjIcon size="14" :icon="ICONS.ACTIONS.EDIT_OUTLINE" />
         </button>
-        <span v-if="dirty" class="se-dirty-dot" :title="t('actions.save')">●</span>
+        <span v-if="dirty" class="se-dirty-dot" :title="tm('actions.save')">●</span>
         <span class="se-status-cell">
           <LjIcon size="13" :icon="ICONS.MEDIA.IMAGE" />
           <strong>{{ current + 1 }}</strong>
@@ -43,7 +43,7 @@
       <!-- Coluna esquerda: lista de slides -->
       <aside class="se-slide-list">
         <div class="se-slide-list-header">
-          <span class="se-slide-list-title">{{ t("labels.slides") }}</span>
+          <span class="se-slide-list-title">{{ tm("labels.slides") }}</span>
           <span class="se-slide-list-count">{{ slides.length }}</span>
         </div>
         <div class="se-slide-list-body">
@@ -71,7 +71,7 @@
           </draggable>
           <button class="se-slide-list-add" @click="actNewSlide">
             <LjIcon size="18" :icon="ICONS.ACTIONS.ADD_CIRCLE" />
-            <span>{{ t("actions.new_slide") }}</span>
+            <span>{{ tm("actions.new_slide") }}</span>
           </button>
         </div>
       </aside>
@@ -158,7 +158,7 @@
         <details class="se-panel" open>
           <summary class="se-panel-head">
             <LjIcon size="14" :icon="ICONS.BIBLE.FORMAT_PARAGRAPH" />
-            <span>{{ t("labels.main_text") }}</span>
+            <span>{{ tm("labels.main_text") }}</span>
             <LjIcon class="se-panel-chev" size="14" :icon="ICONS.UI.CHEVRON_DOWN" />
           </summary>
           <div class="se-panel-body">
@@ -166,15 +166,15 @@
               v-model="activeSlide.letra"
               class="se-textarea"
               rows="4"
-              :placeholder="t('labels.main_text')"
+              :placeholder="tm('labels.main_text')"
               @input="markDirty"
             />
-            <label class="se-field-label">{{ t("labels.aux_text") }}</label>
+            <label class="se-field-label">{{ tm("labels.aux_text") }}</label>
             <textarea
               v-model="activeSlide.letra_aux"
               class="se-textarea se-textarea--aux"
               rows="2"
-              :placeholder="t('labels.aux_text')"
+              :placeholder="tm('labels.aux_text')"
               @input="markDirty"
             />
             <div class="se-row-inline">
@@ -230,22 +230,22 @@
           </summary>
           <div class="se-panel-body">
             <div class="se-row-inline">
-              <label class="se-field-label">{{ t("labels.background") }}</label>
+              <label class="se-field-label">{{ tm("labels.background") }}</label>
               <input
                 v-model="activeSlide.cor_fundo"
                 type="color"
                 class="se-color-input"
-                :title="t('labels.color')"
+                :title="tm('labels.color')"
                 @change="markDirty"
               />
             </div>
             <div class="se-row-inline">
-              <label class="se-field-label">{{ t("labels.main_text") }}</label>
+              <label class="se-field-label">{{ tm("labels.main_text") }}</label>
               <input
                 v-model="activeSlide.cor_letra"
                 type="color"
                 class="se-color-input"
-                :title="t('labels.color')"
+                :title="tm('labels.color')"
                 @change="markDirty"
               />
               <input
@@ -254,18 +254,18 @@
                 min="1"
                 max="100"
                 class="se-num-input"
-                :title="t('labels.size')"
+                :title="tm('labels.size')"
                 @change="markDirty"
               />
               <span class="se-suffix">%</span>
             </div>
             <div class="se-row-inline">
-              <label class="se-field-label">{{ t("labels.aux_text") }}</label>
+              <label class="se-field-label">{{ tm("labels.aux_text") }}</label>
               <input
                 v-model="activeSlide.cor_letra_aux"
                 type="color"
                 class="se-color-input"
-                :title="t('labels.color')"
+                :title="tm('labels.color')"
                 @change="markDirty"
               />
               <input
@@ -274,7 +274,7 @@
                 min="1"
                 max="100"
                 class="se-num-input"
-                :title="t('labels.size')"
+                :title="tm('labels.size')"
                 @change="markDirty"
               />
               <span class="se-suffix">%</span>
@@ -288,7 +288,7 @@
                   markDirty();
                 "
               />
-              <span>{{ t("labels.transparent_bg") }}</span>
+              <span>{{ tm("labels.transparent_bg") }}</span>
             </label>
           </div>
         </details>
@@ -320,7 +320,7 @@
             </button>
 
             <div v-if="activeImageUrl" class="se-row-inline">
-              <label class="se-field-label">{{ t("labels.position") }}</label>
+              <label class="se-field-label">{{ tm("labels.position") }}</label>
               <select
                 v-model.number="activeSlide.imagem_posicao"
                 class="se-select"
@@ -341,12 +341,12 @@
           </summary>
           <div class="se-panel-body">
             <div class="se-field">
-              <label class="se-field-label">{{ t("labels.replicate_bg") }}</label>
+              <label class="se-field-label">{{ tm("labels.replicate_bg") }}</label>
               <div class="se-actions-row">
                 <button
                   type="button"
                   class="se-act-btn se-act-btn--small"
-                  :title="t('actions.replicate_bg_next')"
+                  :title="tm('actions.replicate_bg_next')"
                   @click="replicateBg('next')"
                 >
                   <LjIcon size="14" :icon="ICONS.ACTIONS.NEXT_BOLD" />
@@ -355,7 +355,7 @@
                 <button
                   type="button"
                   class="se-act-btn se-act-btn--small"
-                  :title="t('actions.replicate_bg_after')"
+                  :title="tm('actions.replicate_bg_after')"
                   @click="replicateBg('after')"
                 >
                   <LjIcon size="14" :icon="ICONS.ACTIONS.EXPAND_RIGHT" />
@@ -364,7 +364,7 @@
                 <button
                   type="button"
                   class="se-act-btn se-act-btn--small"
-                  :title="t('actions.replicate_bg_all')"
+                  :title="tm('actions.replicate_bg_all')"
                   @click="replicateBg('all')"
                 >
                   <LjIcon size="14" :icon="ICONS.FORMAT.LINE_SPACING" />
@@ -373,12 +373,12 @@
               </div>
             </div>
             <div class="se-field">
-              <label class="se-field-label">{{ t("labels.replicate_text") }}</label>
+              <label class="se-field-label">{{ tm("labels.replicate_text") }}</label>
               <div class="se-actions-row">
                 <button
                   type="button"
                   class="se-act-btn se-act-btn--small"
-                  :title="t('actions.replicate_text_next')"
+                  :title="tm('actions.replicate_text_next')"
                   @click="replicateText('next')"
                 >
                   <LjIcon size="14" :icon="ICONS.ACTIONS.NEXT_BOLD" />
@@ -387,7 +387,7 @@
                 <button
                   type="button"
                   class="se-act-btn se-act-btn--small"
-                  :title="t('actions.replicate_text_after')"
+                  :title="tm('actions.replicate_text_after')"
                   @click="replicateText('after')"
                 >
                   <LjIcon size="14" :icon="ICONS.ACTIONS.EXPAND_RIGHT" />
@@ -396,7 +396,7 @@
                 <button
                   type="button"
                   class="se-act-btn se-act-btn--small"
-                  :title="t('actions.replicate_text_all')"
+                  :title="tm('actions.replicate_text_all')"
                   @click="replicateText('all')"
                 >
                   <LjIcon size="14" :icon="ICONS.FORMAT.LINE_SPACING" />
@@ -460,7 +460,7 @@ const audioPlaying = ref(false);
 const audioCurrentTime = ref(0);
 const audioDuration = ref(0);
 
-const t = (key) => moduleContainer.value?.t(key) || key;
+const tm = (key) => moduleContainer.value?.tm(key) || key;
 
 const activeSlide = computed(() => slides.value[current.value] || CustomSongs.newSlide());
 
@@ -471,7 +471,7 @@ const transparentBg = computed({
   },
 });
 
-const songTitle = computed(() => song.value.nome || t("data.untitled"));
+const songTitle = computed(() => song.value.nome || tm("data.untitled"));
 
 function askName(title, defaultValue) {
   return new Promise((resolve) => {
@@ -480,7 +480,7 @@ function askName(title, defaultValue) {
 }
 
 async function renameSong() {
-  const name = await askName(t("labels.name"), song.value.nome || "");
+  const name = await askName(tm("labels.name"), song.value.nome || "");
   if (name && name !== song.value.nome) {
     song.value.nome = name;
     markDirty();
@@ -488,9 +488,9 @@ async function renameSong() {
 }
 
 const aspectRatioLabel = computed(() => {
-  if (aspectRatio.value === "full") return t("actions.fullscreen_view");
-  if (aspectRatio.value === "4-3") return t("actions.ratio_4_3");
-  return t("actions.ratio_16_9");
+  if (aspectRatio.value === "full") return tm("actions.fullscreen_view");
+  if (aspectRatio.value === "4-3") return tm("actions.ratio_4_3");
+  return tm("actions.ratio_16_9");
 });
 
 const POSITION_MAP = {
@@ -839,7 +839,7 @@ onBeforeUnmount(() => {
 function confirmDiscard() {
   if (!dirty.value) return true;
   return new Promise((resolve) => {
-    $alert.yesno({ title: t("data.discard_changes"), translate: false }, (resp) =>
+    $alert.yesno({ title: tm("data.discard_changes"), translate: false }, (resp) =>
       resolve(resp === "yes")
     );
   });
@@ -857,7 +857,7 @@ async function actNew() {
     const ok = await confirmDiscard();
     if (!ok) return;
   }
-  song.value = CustomSongs.newSong(t("data.untitled"));
+  song.value = CustomSongs.newSong(tm("data.untitled"));
   current.value = 0;
   dirty.value = false;
   AudioLibrary.clearSession();
@@ -896,7 +896,7 @@ async function onLoadSlja(e) {
     const newSong = {
       id: crypto.randomUUID(),
       // Nome: [Geral].nome → letra do 1º slide (capa) → nome do arquivo.
-      nome: SljaConverter.resolveSongName(data, file.name) || t("data.untitled"),
+      nome: SljaConverter.resolveSongName(data, file.name) || tm("data.untitled"),
       audio_token: audioToken,
       audio_name: audioName,
       slides: data.slides.map((s) => {
@@ -938,7 +938,7 @@ async function onLoadSlja(e) {
     current.value = 0;
     dirty.value = false;
   } catch (err) {
-    alert(t("data.invalid_file") + "\n\n" + (err?.message || err));
+    alert(tm("data.invalid_file") + "\n\n" + (err?.message || err));
   }
 }
 
@@ -1022,13 +1022,13 @@ async function actSave() {
     song.value = saved;
     dirty.value = false;
     $alert.info({
-      title: t("actions.save"),
+      title: tm("actions.save"),
       text: songTitle.value,
       translate: false,
     });
   } catch (err) {
     $alert.error({
-      title: t("data.save_error"),
+      title: tm("data.save_error"),
       text: String(err?.message || err),
       translate: false,
     });
@@ -1036,7 +1036,7 @@ async function actSave() {
 }
 
 async function actSaveAs() {
-  const name = await askName(t("actions.save_as"), song.value.nome || t("data.untitled"));
+  const name = await askName(tm("actions.save_as"), song.value.nome || tm("data.untitled"));
   if (!name) return;
   try {
     const materialized = await materializeMedia(song.value);
@@ -1051,13 +1051,13 @@ async function actSaveAs() {
     song.value = saved;
     dirty.value = false;
     $alert.info({
-      title: t("actions.save_as"),
+      title: tm("actions.save_as"),
       text: name,
       translate: false,
     });
   } catch (err) {
     $alert.error({
-      title: t("data.save_error"),
+      title: tm("data.save_error"),
       text: String(err?.message || err),
       translate: false,
     });
@@ -1079,7 +1079,7 @@ async function downloadSlja(name) {
     a.click();
     URL.revokeObjectURL(url);
   } catch (err) {
-    alert(t("data.invalid_file") + "\n\n" + (err?.message || err));
+    alert(tm("data.invalid_file") + "\n\n" + (err?.message || err));
   }
 }
 
@@ -1296,7 +1296,7 @@ async function onPickAudio(e) {
 function requireAudio() {
   if (!audioEl.value) {
     $alert.info({
-      title: t("data.no_audio"),
+      title: tm("data.no_audio"),
       text: "Anexe um arquivo de áudio para usar este recurso.",
       translate: false,
     });

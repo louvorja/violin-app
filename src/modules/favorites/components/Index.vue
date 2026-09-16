@@ -3,8 +3,8 @@
     <div v-if="favorites.length === 0" class="music-list-empty">
       <LjIcon :icon="ICONS.UI.STAR_OFF_OUTLINE" size="64" class="lj-u-faded" />
       <div class="music-list-empty-text">
-        <div class="music-list-empty-title">{{ t("data.empty") }}</div>
-        <div class="music-list-empty-hint lj-u-faded">{{ t("data.empty_hint") }}</div>
+        <div class="music-list-empty-title">{{ tm("data.empty") }}</div>
+        <div class="music-list-empty-hint lj-u-faded">{{ tm("data.empty_hint") }}</div>
       </div>
     </div>
 
@@ -54,12 +54,12 @@ const favorites = computed({
   set: (val) => Favorites.reorder(val),
 });
 
-const t = (key) => moduleContainer.value?.t(key) || key;
+const tm = (key) => moduleContainer.value?.tm(key) || key;
 
 function extraMenu(item) {
   return [
     {
-      title: t("actions.remove"),
+      title: tm("actions.remove"),
       icon: ICONS.UI.STAR_OFF,
       click: () => Favorites.remove(item.id_music),
     },

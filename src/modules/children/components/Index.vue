@@ -4,7 +4,7 @@
       <div class="ch-header">
         <div class="ch-search-wrap">
           <LjIcon :icon="ICONS.ACTIONS.SEARCH" size="16" class="ch-search-icon" />
-          <input v-model="search" type="text" class="ch-search-input" :placeholder="t('search')" />
+          <input v-model="search" type="text" class="ch-search-input" :placeholder="tm('search')" />
           <button v-if="search" type="button" class="ch-search-clear" @click="search = ''">
             <LjIcon :icon="ICONS.ACTIONS.CLOSE" size="14" />
           </button>
@@ -24,9 +24,9 @@
           </LjButton>
           <span class="ch-back-title">{{ selectedAlbum.name }}</span>
         </div>
-        <div class="ch-section-title">{{ t("musics") }}</div>
+        <div class="ch-section-title">{{ tm("musics") }}</div>
         <div v-if="!filteredMusics.length && !loading" class="ch-empty">
-          {{ t("empty_musics") }}
+          {{ tm("empty_musics") }}
         </div>
         <div class="ch-list">
           <div
@@ -35,7 +35,7 @@
             class="ch-list-item"
             @click="openLyricFor(m)"
           >
-            <button class="ch-list-play" :title="t('play')">
+            <button class="ch-list-play" :title="tm('play')">
               <LjIcon :icon="ICONS.PLAYER.PLAY" size="26" color="#e67e22" />
             </button>
             <span class="ch-list-name">{{ m.name }}</span>
@@ -51,9 +51,9 @@
 
       <!-- Nível 1: Álbuns (pulado quando só existe um) -->
       <template v-else>
-        <div class="ch-section-title">{{ t("albums") }}</div>
+        <div class="ch-section-title">{{ tm("albums") }}</div>
         <div v-if="!filteredAlbums.length && !loading" class="ch-empty">
-          {{ t("empty_albums") }}
+          {{ tm("empty_albums") }}
         </div>
         <div class="ch-grid">
           <div
@@ -113,7 +113,7 @@ interface AlbumMusic {
 }
 
 const { t: i18nT, locale } = useI18n();
-const t = (key: string): string => i18nT(`modules.children.${key}`);
+const tm = (key: string): string => i18nT(`modules.children.${key}`);
 
 const loading = ref(false);
 const error = ref<string | null>(null);
@@ -177,7 +177,7 @@ async function loadData(): Promise<void> {
     if (data.length === 1) await openAlbum(data[0]);
   } else {
     console.warn("[children] falha ao carregar álbuns");
-    error.value = t("load_error");
+    error.value = tm("load_error");
   }
   loading.value = false;
 }

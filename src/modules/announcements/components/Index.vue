@@ -11,14 +11,14 @@
       <!-- Lista ordenada -->
       <aside class="an-list">
         <div class="an-list-head">
-          <span>{{ tt("list") }}</span>
+          <span>{{ tm("list") }}</span>
           <LjButton
             size="sm"
             variant="ghost"
             icon-only
             :icon="ICONS.ACTIONS.ADD"
-            :title="tt('new')"
-            :aria-label="tt('new')"
+            :title="tm('new')"
+            :aria-label="tm('new')"
             @click="addAnnouncement"
           />
         </div>
@@ -59,8 +59,8 @@
                       variant="ghost"
                       icon-only
                       :icon="ICONS.ACTIONS.DELETE"
-                      :title="tt('delete')"
-                      :aria-label="tt('delete')"
+                      :title="tm('delete')"
+                      :aria-label="tm('delete')"
                       class="an-item-delete"
                       @click.stop="removeAnnouncement(a)"
                     />
@@ -76,25 +76,25 @@
                 <span class="lj-menu__mark">
                   <LjIcon :icon="ICONS.ACTIONS.EDIT" :size="13" />
                 </span>
-                <span class="lj-menu__text">{{ tt("edit") }}</span>
+                <span class="lj-menu__text">{{ tm("edit") }}</span>
               </ContextMenuItem>
               <ContextMenuItem class="lj-menu__item" @select="ctxDuplicate">
                 <span class="lj-menu__mark">
                   <LjIcon :icon="ICONS.ACTIONS.COPY" :size="13" />
                 </span>
-                <span class="lj-menu__text">{{ tt("duplicate") }}</span>
+                <span class="lj-menu__text">{{ tm("duplicate") }}</span>
               </ContextMenuItem>
               <ContextMenuItem class="lj-menu__item an-ctx__danger" @select="ctxDelete">
                 <span class="lj-menu__mark">
                   <LjIcon :icon="ICONS.ACTIONS.DELETE" :size="13" />
                 </span>
-                <span class="lj-menu__text">{{ tt("delete") }}</span>
+                <span class="lj-menu__text">{{ tm("delete") }}</span>
               </ContextMenuItem>
             </ContextMenuContent>
           </ContextMenuPortal>
         </ContextMenuRoot>
 
-        <div v-if="!sorted.length" class="an-hint">{{ tt("empty") }}</div>
+        <div v-if="!sorted.length" class="an-hint">{{ tm("empty") }}</div>
         <div class="an-project">
           <LjButton
             block
@@ -103,7 +103,7 @@
             :disabled="!sorted.length"
             @click="project"
           >
-            {{ tt("project") }}
+            {{ tm("project") }}
           </LjButton>
           <div class="an-project-controls">
             <LjButton
@@ -111,8 +111,8 @@
               variant="ghost"
               icon-only
               :icon="ICONS.ACTIONS.PREVIOUS"
-              :title="tt('prev')"
-              :aria-label="tt('prev')"
+              :title="tm('prev')"
+              :aria-label="tm('prev')"
               :disabled="!projecting"
               @click="sendControl('prev')"
             />
@@ -122,15 +122,15 @@
               :disabled="!projecting"
               @click="stopProject"
             >
-              {{ tt("stop") }}
+              {{ tm("stop") }}
             </LjButton>
             <LjButton
               size="sm"
               variant="ghost"
               icon-only
               :icon="ICONS.ACTIONS.NEXT"
-              :title="tt('next')"
-              :aria-label="tt('next')"
+              :title="tm('next')"
+              :aria-label="tm('next')"
               :disabled="!projecting"
               @click="sendControl('next')"
             />
@@ -165,28 +165,28 @@
             {{ editing.texto }}
           </div>
         </div>
-        <div v-else class="an-preview-empty">{{ tt("empty") }}</div>
+        <div v-else class="an-preview-empty">{{ tm("empty") }}</div>
       </div>
 
       <!-- Inputs -->
       <aside v-if="editing" class="an-inputs">
         <div class="an-inputs-scroll">
-          <LjField layout="column" :label="tt('name')">
+          <LjField layout="column" :label="tm('name')">
             <LjInput v-model="editing.nome" @update:model-value="save" />
           </LjField>
 
-          <div class="an-section">{{ tt("texto") }}</div>
+          <div class="an-section">{{ tm("texto") }}</div>
           <div class="an-textarea">
             <LjTextarea v-model="editing.texto" :rows="2" @update:model-value="save" />
           </div>
 
-          <div class="an-section">{{ tt("imagem") }}</div>
+          <div class="an-section">{{ tm("imagem") }}</div>
           <div class="an-media-row">
             <LjButton size="sm" :icon="ICONS.MEDIA.IMAGE" @click="pickImage">
-              {{ tt("choose_image") }}
+              {{ tm("choose_image") }}
             </LjButton>
             <LjButton v-if="editing.imageData" size="sm" variant="ghost" @click="clearImage">
-              {{ tt("remove_media") }}
+              {{ tm("remove_media") }}
             </LjButton>
             <input
               ref="imageInput"
@@ -197,13 +197,13 @@
             />
           </div>
 
-          <div class="an-section">{{ tt("video") }}</div>
+          <div class="an-section">{{ tm("video") }}</div>
           <div class="an-media-row">
             <LjButton size="sm" :icon="ICONS.MEDIA.VIDEO_FILE" @click="pickVideo">
-              {{ tt("choose_video") }}
+              {{ tm("choose_video") }}
             </LjButton>
             <LjButton v-if="editing.videoData" size="sm" variant="ghost" @click="clearVideo">
-              {{ tt("remove_media") }}
+              {{ tm("remove_media") }}
             </LjButton>
             <input
               ref="videoInput"
@@ -214,9 +214,9 @@
             />
           </div>
 
-          <div class="an-section">{{ tt("personalization") }}</div>
+          <div class="an-section">{{ tm("personalization") }}</div>
           <div class="an-style-grid">
-            <LjField layout="column" :label="tt('bg_color')">
+            <LjField layout="column" :label="tm('bg_color')">
               <div class="an-color">
                 <LjInput
                   type="color"
@@ -225,7 +225,7 @@
                 />
               </div>
             </LjField>
-            <LjField layout="column" :label="tt('text_color')">
+            <LjField layout="column" :label="tm('text_color')">
               <div class="an-color">
                 <LjInput
                   type="color"
@@ -237,12 +237,12 @@
             <div class="an-style-field">
               <LjCheckbox
                 :model-value="editing.style?.textShadow || false"
-                :label="tt('text_shadow')"
+                :label="tm('text_shadow')"
                 @update:model-value="setStyle('textShadow', $event)"
               />
             </div>
             <template v-if="editing.style?.textShadow">
-              <LjField layout="column" :label="tt('shadow_color')">
+              <LjField layout="column" :label="tm('shadow_color')">
                 <div class="an-color">
                   <LjInput
                     type="color"
@@ -253,7 +253,7 @@
               </LjField>
               <LjField
                 layout="column"
-                :label="`${tt('shadow_blur')}: ${editing.style?.textShadowBlur ?? 4}px`"
+                :label="`${tm('shadow_blur')}: ${editing.style?.textShadowBlur ?? 4}px`"
               >
                 <LjSlider
                   :model-value="editing.style?.textShadowBlur ?? 4"
@@ -266,7 +266,7 @@
             </template>
             <LjField
               layout="column"
-              :label="`${tt('font_size')}: ${editing.style?.fontSize || 64}px`"
+              :label="`${tm('font_size')}: ${editing.style?.fontSize || 64}px`"
             >
               <LjSlider
                 :model-value="editing.style?.fontSize || 64"
@@ -276,26 +276,26 @@
                 @update:model-value="setStyle('fontSize', $event)"
               />
             </LjField>
-            <LjField layout="column" :label="tt('align')">
+            <LjField layout="column" :label="tm('align')">
               <LjSelect
                 size="sm"
                 :model-value="editing.style?.align || 'center'"
                 :items="[
-                  { label: tt('align_left'), value: 'left' },
-                  { label: tt('align_center'), value: 'center' },
-                  { label: tt('align_right'), value: 'right' },
+                  { label: tm('align_left'), value: 'left' },
+                  { label: tm('align_center'), value: 'center' },
+                  { label: tm('align_right'), value: 'right' },
                 ]"
                 @update:model-value="setStyle('align', $event)"
               />
             </LjField>
-            <LjField layout="column" :label="tt('align_y')">
+            <LjField layout="column" :label="tm('align_y')">
               <LjSelect
                 size="sm"
                 :model-value="editing.style?.alignY || 'center'"
                 :items="[
-                  { label: tt('align_top'), value: 'flex-start' },
-                  { label: tt('align_center'), value: 'center' },
-                  { label: tt('align_bottom'), value: 'flex-end' },
+                  { label: tm('align_top'), value: 'flex-start' },
+                  { label: tm('align_center'), value: 'center' },
+                  { label: tm('align_bottom'), value: 'flex-end' },
                 ]"
                 @update:model-value="setStyle('alignY', $event)"
               />
@@ -365,9 +365,9 @@ interface Announcement {
   style: AnnStyle;
 }
 
-const { t } = useI18n();
-function tt(key: string): string {
-  return t(`modules.announcements.${key}`);
+const { t: i18nT } = useI18n();
+function tm(key: string): string {
+  return i18nT(`modules.announcements.${key}`);
 }
 
 const announcements = ref<Announcement[]>([]);
@@ -476,7 +476,7 @@ function addAnnouncement(): void {
   const max = sorted.value.length ? Math.max(...sorted.value.map((a) => a.ordem)) : 0;
   const a: Announcement = {
     id: crypto.randomUUID(),
-    nome: `${tt("new")} ${max + 1}`,
+    nome: `${tm("new")} ${max + 1}`,
     ordem: max + 1,
     style: {
       bgColor: "#000000",
@@ -495,7 +495,7 @@ function addAnnouncement(): void {
 }
 
 async function removeAnnouncement(a: Announcement): Promise<void> {
-  if (!confirm(tt("delete_confirm"))) return;
+  if (!confirm(tm("delete_confirm"))) return;
   await $idb.del(TABLE, a.id);
   announcements.value = announcements.value.filter((x) => x.id !== a.id);
   if (selectedId.value === a.id) selectedId.value = null;

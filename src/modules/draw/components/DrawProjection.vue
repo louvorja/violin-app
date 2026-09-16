@@ -37,7 +37,7 @@
 
       <div v-if="chips.length" class="draw-proj-chips">
         <span class="draw-proj-label" :style="{ color: font_color }">
-          {{ t("data.drawn") }}
+          {{ tm("data.drawn") }}
         </span>
         <div class="draw-proj-chip-list">
           <span
@@ -86,7 +86,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const module = getModule(ModuleEnum.DRAW);
 const { t: i18nT } = useI18n();
-const t = (text: string): string => i18nT(`modules.${module?.id}.${text}`);
+const tm = (text: string): string => i18nT(`modules.${module?.id}.${text}`);
 
 const { container, fontSizePc } = useContainerSize();
 

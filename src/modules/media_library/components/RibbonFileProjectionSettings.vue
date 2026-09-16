@@ -1,50 +1,52 @@
 <template>
-  <div class="rfps-container">
-    <div class="rfps-col">
-      <div class="rfps-group">
-        <input type="checkbox" :checked="enabled" @change="onToggle" />
-        <label class="rfps-label">{{ $t("options.file_projection.custom_background") }}</label>
-      </div>
-    </div>
-  </div>
-  <div v-if="enabled" class="rfps-container">
-    <div class="rfps-col">
-      <div class="rfps-group">
-        <input type="color" class="rfps-color" :value="wpColor" @input="onColor" />
-        <label class="rfps-label">{{ $t(modulePrefix + ".bg_color") }}</label>
-      </div>
-      <div class="rfps-group">
-        <select class="rfps-select" :value="wpPosition" @change="onPos">
-          <option value="cover">Cover</option>
-          <option value="contain">Contain</option>
-          <option value="center">Center</option>
-          <option value="stretch">Stretch</option>
-          <option value="tile">Tile</option>
-        </select>
-        <label class="rfps-label">{{ $t(modulePrefix + ".bg_position") }}</label>
-      </div>
-      <div class="rfps-group">
-        <div class="opt-format-field opt-field-bgimage">
-          <div class="opt-bg-pick">
-            <LjButton variant="default" size="sm" @click="pick">
-              <LjIcon start :icon="ICONS.ACTIONS.IMAGE_PLUS" size="14" />
-              {{ $t("options.background.select") }}
-            </LjButton>
-            <span v-if="!currentBgImage" class="opt-bg-empty-text">
-              {{ $t("options.background.no_image") }}
-            </span>
-          </div>
-          <span class="rfps-label">{{ $t("options.background.title") }}</span>
+  <div class="rfps-root">
+    <div class="rfps-container">
+      <div class="rfps-col">
+        <div class="rfps-group">
+          <input type="checkbox" :checked="enabled" @change="onToggle" />
+          <label class="rfps-label">{{ $t("options.file_projection.custom_background") }}</label>
         </div>
       </div>
     </div>
-    <div class="rfps-col">
-      <div class="rfps-group">
-        <div v-if="wpImageUrl" class="rfps-preview">
-          <img :src="wpImageUrl" class="rfps-preview-img" />
-          <button class="rfps-preview-remove" @click="remove">
-            <LjIcon :icon="ICONS.ACTIONS.CLOSE" size="15" />
-          </button>
+    <div v-if="enabled" class="rfps-container">
+      <div class="rfps-col">
+        <div class="rfps-group">
+          <input type="color" class="rfps-color" :value="wpColor" @input="onColor" />
+          <label class="rfps-label">{{ tm("bg_color") }}</label>
+        </div>
+        <div class="rfps-group">
+          <select class="rfps-select" :value="wpPosition" @change="onPos">
+            <option value="cover">Cover</option>
+            <option value="contain">Contain</option>
+            <option value="center">Center</option>
+            <option value="stretch">Stretch</option>
+            <option value="tile">Tile</option>
+          </select>
+          <label class="rfps-label">{{ tm("bg_position") }}</label>
+        </div>
+        <div class="rfps-group">
+          <div class="opt-format-field opt-field-bgimage">
+            <div class="opt-bg-pick">
+              <LjButton variant="default" size="sm" @click="pick">
+                <LjIcon start :icon="ICONS.ACTIONS.IMAGE_PLUS" size="14" />
+                {{ $t("options.background.select") }}
+              </LjButton>
+              <span v-if="!currentBgImage" class="opt-bg-empty-text">
+                {{ $t("options.background.no_image") }}
+              </span>
+            </div>
+            <span class="rfps-label">{{ $t("options.background.title") }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="rfps-col">
+        <div class="rfps-group">
+          <div v-if="wpImageUrl" class="rfps-preview">
+            <img :src="wpImageUrl" class="rfps-preview-img" />
+            <button class="rfps-preview-remove" @click="remove">
+              <LjIcon :icon="ICONS.ACTIONS.CLOSE" size="15" />
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -64,8 +66,9 @@ import { getSetting, saveSetting } from "@/helpers/SettingsStorage";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import Broadcast from "@/helpers/Broadcast";
 
-const { t } = useI18n();
+const { t: i18nT } = useI18n();
 const modulePrefix = $modules.getPath(ModuleEnum.MEDIA_LIBRARY);
+const tm = (key: string) => i18nT(`modules.media_library.${key}`);
 const currentBgImage = computed(() => wpImageUrl.value);
 
 const STORAGE_ID = "file_projection_background";

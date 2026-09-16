@@ -17,8 +17,8 @@
         <LjInput
           v-if="!disabled"
           v-model="search"
-          :placeholder="t('inputs.search')"
-          :aria-label="t('inputs.search')"
+          :placeholder="tm('inputs.search')"
+          :aria-label="tm('inputs.search')"
           :icon="ICONS.ACTIONS.SEARCH"
           :invalid="data.filter_count <= 0"
           :disabled="disabled"
@@ -27,22 +27,22 @@
 
         <p v-if="disabled" class="musics-searchbar__warning">
           <LjIcon :icon="ICONS.UI.ALERT" :size="14" />
-          {{ t("inputs.search_disabled") }}
+          {{ tm("inputs.search_disabled") }}
         </p>
 
         <div class="musics-searchbar__scope" role="group" :aria-labelledby="scopeLabelId">
           <span :id="scopeLabelId" class="musics-searchbar__label">
-            {{ t("inputs.search_in") }}
+            {{ tm("inputs.search_in") }}
           </span>
-          <LjCheckbox v-model="userdata.search.name" :label="t('inputs.filter_name')" />
-          <LjCheckbox v-model="userdata.search.lyric" :label="t('inputs.filter_lyric')" />
-          <LjCheckbox v-model="userdata.search.album" :label="t('inputs.filter_album')" />
-          <LjCheckbox v-model="userdata.search.track" :label="t('inputs.filter_track')" />
+          <LjCheckbox v-model="userdata.search.name" :label="tm('inputs.filter_name')" />
+          <LjCheckbox v-model="userdata.search.lyric" :label="tm('inputs.filter_lyric')" />
+          <LjCheckbox v-model="userdata.search.album" :label="tm('inputs.filter_album')" />
+          <LjCheckbox v-model="userdata.search.track" :label="tm('inputs.filter_track')" />
         </div>
 
         <LjSwitch
           v-model="userdata.filter.instrumental_music"
-          :label="t('inputs.filter_instrumental')"
+          :label="tm('inputs.filter_instrumental')"
         />
       </div>
     </template>
@@ -54,7 +54,7 @@
     <LjAlert
       v-if="data.is_fuzzy"
       variant="info"
-      :text="t('data.approximate')"
+      :text="tm('data.approximate')"
       class="musics-alert"
     />
 
@@ -78,11 +78,11 @@
     >
       <thead>
         <tr>
-          <th class="lj-u-text-start">{{ t("table.music_name") }}</th>
+          <th class="lj-u-text-start">{{ tm("table.music_name") }}</th>
           <th v-if="!compact" class="lj-u-text-start">
-            {{ t("table.album_name") }}
+            {{ tm("table.album_name") }}
           </th>
-          <th class="lj-u-text-end">{{ t("table.duration") }}</th>
+          <th class="lj-u-text-end">{{ tm("table.duration") }}</th>
           <th v-if="selectedPlaylist" />
           <th />
         </tr>
@@ -126,7 +126,7 @@
               variant="ghost"
               size="sm"
               :icon="ICONS.MEDIA.ADD"
-              :title="t('playlists.add_to_playlist')"
+              :title="tm('playlists.add_to_playlist')"
               icon-only
               @click="addSongToPlaylist(item)"
             />
@@ -135,7 +135,7 @@
               variant="primary"
               size="sm"
               :icon="ICONS.UI.CHECK"
-              :title="t('playlists.remove_song')"
+              :title="tm('playlists.remove_song')"
               icon-only
               @click="removeSongFromPlaylist(item.id_music)"
             />
@@ -157,7 +157,7 @@
     <LjAlert
       v-if="search && data.filter_count <= 0"
       variant="danger"
-      :text="t('data.not_found')"
+      :text="tm('data.not_found')"
       class="musics-alert"
     />
 
@@ -166,7 +166,7 @@
         <LetterPaginate v-model="letter" />
         <div class="lj-u-text-end">
           <small>
-            {{ t("data.records") }}:
+            {{ tm("data.records") }}:
             {{ data.filter_count }}
           </small>
         </div>
@@ -199,8 +199,8 @@ import { ICONS } from "@/config/Icons";
 import Telemetry from "@/helpers/Telemetry";
 
 const moduleContainer = ref(null);
-const t = (key) => {
-  return moduleContainer.value?.t(key) || key;
+const tm = (key) => {
+  return moduleContainer.value?.tm(key) || key;
 };
 const userdata = computed(() => {
   return moduleContainer.value?.userdata;

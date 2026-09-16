@@ -185,6 +185,34 @@ export const module: Module = {
 
 O registry em `src/config/modules/index.ts` descobre todos os `manifest.ts`. Para um módulo novo, adicione antes seu identificador em `ModuleEnum` e use enums/grupos existentes ou crie os contratos correspondentes. As **chaves de tradução** ficam em `modules.<id>.<key>` no i18n global.
 
+## Convenção i18n: `t()` e `tm()`
+
+| Função | Escopo | Exemplo |
+|--------|--------|---------|
+| `t()` | Traduções **GLOBAIS** (`useI18n().t()`) | `t("actions.save")`, `t("shell.title")` |
+| `tm()` | Traduções do **MÓDULO** (`modules.<id>.xxx`) | `tm("title")` → `modules.bible.title` |
+
+**Dentro de um componente que usa `ModuleContainer`:**
+```ts
+const moduleContainer = ref(null);
+const tm = (key) => moduleContainer.value?.tm(key) || key;
+```
+
+**Dentro de um componente filhado (sem ModuleContainer):**
+```ts
+import { useModuleI18n } from "@/composables/useModuleI18n";
+const { t, tm, locale } = useModuleI18n("bible");
+```
+
+**No template:**
+```vue
+<LjButton>{{ tm("entry_title") }}</LjButton>       <!-- módulo -->
+<LjButton>{{ t("actions.save") }}</LjButton>        <!-- global -->
+<LjField :label="$t('components.ui.clear')" />      <!-- global via $t -->
+```
+
+Detalhes completos em `docs/i18n.md`.
+
 ## Estado Global
 
 O estado global usa Pinia e é acessado pelos helpers de estado:

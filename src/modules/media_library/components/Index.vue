@@ -18,12 +18,12 @@
         <LjTabs
           :model-value="libraryFilter"
           :tabs="filterTabs"
-          :aria-label="t('library')"
+          :aria-label="tm('library')"
           @update:model-value="libraryFilter = $event as LibraryFilter"
         />
         <span class="lj-u-spacer" />
         <LjButton size="sm" variant="subtle" :icon="ICONS.ACTIONS.ADD" @click="addFiles">
-          {{ t("add_files") }}
+          {{ tm("add_files") }}
         </LjButton>
       </div>
 
@@ -38,14 +38,14 @@
               v-model="searchQuery"
               clearable
               :icon="ICONS.ACTIONS.SEARCH"
-              :placeholder="t('search')"
-              :aria-label="t('search')"
+              :placeholder="tm('search')"
+              :aria-label="tm('search')"
             />
           </div>
 
           <!-- Chips de categorias (filtro) -->
           <div v-if="categories.length || uncategorizedCount > 0" class="media-chips">
-            <span class="media-chips-title">{{ t("categories") }}</span>
+            <span class="media-chips-title">{{ tm("categories") }}</span>
             <div
               v-for="cat in categories"
               :key="cat.id"
@@ -65,8 +65,8 @@
               <button
                 type="button"
                 class="media-chip-add"
-                :title="t('add_files')"
-                :aria-label="t('add_files')"
+                :title="tm('add_files')"
+                :aria-label="tm('add_files')"
                 @click.stop="beginAddWithCategory(cat.id)"
               >
                 <LjIcon :icon="ICONS.ACTIONS.ADD" :size="12" />
@@ -81,13 +81,13 @@
               <span class="media-chip-icon-wrap">
                 <LjIcon :icon="ICONS.UI.FILE_MULTIPLE" :size="14" />
               </span>
-              <span class="media-chip-name">{{ t("uncategorized") }}</span>
+              <span class="media-chip-name">{{ tm("uncategorized") }}</span>
               <span class="media-chip-count">{{ uncategorizedCount }}</span>
               <button
                 type="button"
                 class="media-chip-add"
-                :title="t('add_files')"
-                :aria-label="t('add_files')"
+                :title="tm('add_files')"
+                :aria-label="tm('add_files')"
                 @click.stop="beginAddWithCategory(UNCATEGORIZED_ID)"
               >
                 <LjIcon :icon="ICONS.ACTIONS.ADD" :size="12" />
@@ -121,8 +121,8 @@
                   variant="ghost"
                   icon-only
                   :icon="ICONS.ACTIONS.EDIT"
-                  :title="t('rename')"
-                  :aria-label="t('rename')"
+                  :title="tm('rename')"
+                  :aria-label="tm('rename')"
                   @click.stop="startRename(file)"
                 />
                 <LjButton
@@ -130,15 +130,15 @@
                   variant="ghost"
                   icon-only
                   :icon="ICONS.ACTIONS.DELETE"
-                  :title="t('delete')"
-                  :aria-label="t('delete')"
+                  :title="tm('delete')"
+                  :aria-label="tm('delete')"
                   @click.stop="removeFile(file)"
                 />
               </div>
             </div>
           </div>
           <div v-else class="media-empty">
-            <LjEmpty :icon="ICONS.UI.FOLDER_OPEN" :title="t('empty_library')" />
+            <LjEmpty :icon="ICONS.UI.FOLDER_OPEN" :title="tm('empty_library')" />
           </div>
         </div>
 
@@ -148,7 +148,7 @@
         <div class="media-playlist">
           <div class="media-playlist-header">
             <LjIcon :icon="ICONS.FORMAT.LIST_BULLETED" :size="16" />
-            <span>{{ t("playlist") }} ({{ playlist.length }})</span>
+            <span>{{ tm("playlist") }} ({{ playlist.length }})</span>
             <span class="lj-u-spacer" />
             <LjButton
               v-if="playlist.length"
@@ -157,8 +157,8 @@
               icon-only
               class="media-btn-danger"
               :icon="ICONS.ACTIONS.DELETE"
-              :title="t('clear')"
-              :aria-label="t('clear')"
+              :title="tm('clear')"
+              :aria-label="tm('clear')"
               @click="clearPlaylist"
             />
           </div>
@@ -183,8 +183,8 @@
                   icon-only
                   class="media-btn-accent"
                   :icon="ICONS.PLAYER.PLAY"
-                  :title="t('project')"
-                  :aria-label="t('project')"
+                  :title="tm('project')"
+                  :aria-label="tm('project')"
                   @click.stop="playIndex(i)"
                 />
                 <LjButton
@@ -192,15 +192,15 @@
                   variant="ghost"
                   icon-only
                   :icon="ICONS.ACTIONS.CLOSE"
-                  :title="t('remove_from_playlist')"
-                  :aria-label="t('remove_from_playlist')"
+                  :title="tm('remove_from_playlist')"
+                  :aria-label="tm('remove_from_playlist')"
                   @click.stop="removeFromPlaylist(i)"
                 />
               </div>
             </div>
           </div>
           <div v-else class="media-empty">
-            <LjEmpty :icon="ICONS.PLAYER.PLAYLIST_REMOVE" :title="t('empty_playlist')" />
+            <LjEmpty :icon="ICONS.PLAYER.PLAYLIST_REMOVE" :title="tm('empty_playlist')" />
           </div>
         </div>
       </div>
@@ -217,8 +217,8 @@
             icon-only
             variant="ghost"
             :icon="ICONS.PLAYER.PREV"
-            :title="t('prev')"
-            :aria-label="t('prev')"
+            :title="tm('prev')"
+            :aria-label="tm('prev')"
             :disabled="
               currentIndex <= 0 &&
               (!currentItem || currentItem.type !== 'pdf' || currentPdfPage <= 1)
@@ -229,8 +229,8 @@
             icon-only
             variant="ghost"
             :icon="ICONS.PLAYER.NEXT"
-            :title="t('next')"
-            :aria-label="t('next')"
+            :title="tm('next')"
+            :aria-label="tm('next')"
             :disabled="
               currentIndex >= playlist.length - 1 &&
               (!currentItem ||
@@ -244,8 +244,8 @@
             variant="ghost"
             class="media-btn-danger"
             :icon="ICONS.PLAYER.STOP"
-            :title="t('stop')"
-            :aria-label="t('stop')"
+            :title="tm('stop')"
+            :aria-label="tm('stop')"
             @click="stop"
           />
         </div>
@@ -255,21 +255,21 @@
       <LjDialog
         v-model="showRenameDialog"
         size="sm"
-        :title="t('rename')"
+        :title="tm('rename')"
         :icon="ICONS.ACTIONS.EDIT_OUTLINE"
       >
         <div class="media-rename">
           <LjInput
             v-model="renameInput"
             autofocus
-            :aria-label="t('rename')"
+            :aria-label="tm('rename')"
             @keydown.enter="confirmRename"
           />
         </div>
         <template #footer>
-          <LjButton size="sm" @click="showRenameDialog = false">{{ t("cancel") }}</LjButton>
+          <LjButton size="sm" @click="showRenameDialog = false">{{ tm("cancel") }}</LjButton>
           <LjButton size="sm" variant="primary" :disabled="!renameInput" @click="confirmRename">
-            {{ t("rename") }}
+            {{ tm("rename") }}
           </LjButton>
         </template>
       </LjDialog>
@@ -285,14 +285,14 @@
       />
 
       <!-- Seleção de categoria na importação -->
-      <LjDialog v-model="showCategorySelect" size="sm" :title="t('select_category')">
+      <LjDialog v-model="showCategorySelect" size="sm" :title="tm('select_category')">
         <div class="media-cat-list">
           <button
             type="button"
             class="media-cat-option"
             @click="selectCategoryForImport(UNCATEGORIZED_ID)"
           >
-            {{ t("uncategorized") }}
+            {{ tm("uncategorized") }}
           </button>
           <button
             v-for="cat in categories"
@@ -412,16 +412,16 @@ async function deleteFile(id: string): Promise<void> {
 /*  State                                                              */
 /* ------------------------------------------------------------------ */
 
-const moduleContainer = ref<{ t(key: string): string } | null>(null);
-const t = (key: string): string => moduleContainer.value?.t(key) || key;
+const moduleContainer = ref<{ tm(key: string): string } | null>(null);
+const tm = (key: string): string => moduleContainer.value?.tm(key) || key;
 
 const libraryFilter = ref<LibraryFilter>("all");
 
 const filterTabs = computed(() => [
-  { value: "all", label: t("all") },
-  { value: "image", label: t("images") },
-  { value: "video", label: t("videos") },
-  { value: "pdf", label: t("documents") },
+  { value: "all", label: tm("all") },
+  { value: "image", label: tm("images") },
+  { value: "video", label: tm("videos") },
+  { value: "pdf", label: tm("documents") },
 ]);
 
 const searchQuery = ref("");
