@@ -245,7 +245,7 @@ const tabItems = computed(() => [
   },
   { value: "music", label: t("module_group.musics.title"), icon: ICONS.MUSIC.NOTE },
   { value: "bible", label: t("module_group.bible.title"), icon: ICONS.BIBLE.BOOK_OPEN },
-  { value: "liturgy", label: t("modules.liturgy.name"), icon: ICONS.FORMAT.LIST_BULLETED },
+  { value: "liturgy", label: t("modules.liturgy.title"), icon: ICONS.FORMAT.LIST_BULLETED },
   { value: "slides", label: t("remote_control.tabs.slides"), icon: ICONS.UI.VIEW_GRID },
   {
     value: "announcements",
