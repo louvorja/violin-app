@@ -379,9 +379,26 @@ export function resetId(): void {
   _ph.register({ app_version: _appVersion, sdk_version: _sdkVersion });
 }
 
+/**
+ * Falha de inicialização não pode ficar muda: sem isto, um SDK quebrado (por
+ * exemplo, quota/IndexedDB do Chromium bloqueada por antivírus) some sem
+ * nenhum evento nem log — exatamente o cenário que a telemetria existe para
+ * diagnosticar. `_started`/`_ph` voltam ao estado inicial para permitir nova
+ * tentativa numa chamada futura (ex.: `setEnabled(true)` manual).
+ */
 export async function init(): Promise<void> {
   if (_started) return;
   if (!KEY || !isEnabled() || Platform.isDev) return;
+  try {
+    await _init();
+  } catch (error) {
+    _started = false;
+    _ph = null;
+    console.error("[Telemetry] falha ao inicializar:", error);
+  }
+}
+
+async function _init(): Promise<void> {
   const { default: posthog } = await import("posthog-js");
   const version = (await appVersion()) || "unknown";
   _appVersion = version;

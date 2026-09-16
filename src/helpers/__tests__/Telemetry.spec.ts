@@ -129,6 +129,27 @@ describe("Telemetry", () => {
     );
   });
 
+  it("não trava silenciosamente quando o SDK falha ao inicializar, e loga o erro", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    posthog.init.mockImplementationOnce(() => {
+      throw new Error("quota database bloqueada");
+    });
+    const Telemetry = await loadTelemetry();
+
+    await expect(Telemetry.init()).resolves.toBeUndefined();
+    expect(consoleError).toHaveBeenCalledWith(
+      "[Telemetry] falha ao inicializar:",
+      expect.objectContaining({ message: "quota database bloqueada" }),
+    );
+
+    // `_started` volta ao estado inicial: uma nova tentativa (ex.: religar a
+    // opção manualmente) não fica travada permanentemente pela falha anterior.
+    await Telemetry.init();
+    expect(posthog.init).toHaveBeenCalledTimes(2);
+
+    consoleError.mockRestore();
+  });
+
   it("enfileira eventos disparados antes do init() terminar e os envia depois", async () => {
     const Telemetry = await loadTelemetry();
     const initPromise = Telemetry.init();
