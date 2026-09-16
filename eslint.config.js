@@ -108,6 +108,8 @@ export default [
       "dist/**",
       "dev-dist/**",
       "coverage/**",
+      "playwright-report/**",
+      "test-results/**",
       "node/**",
       "src/modules/animation/dependencies/**",
       "electron/**",
