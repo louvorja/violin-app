@@ -339,6 +339,7 @@ function _initYoutube(): void {
       height: "100%",
       width: "100%",
       videoId: id,
+      origin: window.location.origin,
       playerVars: {
         autoplay: 1,
         mute: 1,
