@@ -574,6 +574,7 @@ onMounted(async () => {
   justify-content: center;
   justify-content: safe center;
   overflow-x: auto;
+  overflow-y: hidden;
   scrollbar-width: none;
 }
 
