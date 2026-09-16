@@ -503,6 +503,10 @@ export async function init(): Promise<void> {
     platform: Platform.isDesktop ? "desktop" : "web",
     os: osName(),
     app_version: version,
+    // Explícito em vez de depender só do `register()` acima: o evento
+    // inicial é o mais consultado para saber qual SDK está em campo, e não
+    // deve ficar refém de como o SDK aplica super properties.
+    sdk_version: sdkVersion,
     replay_ready: replayReady,
     locale: $userdata.get<string>(KEYS.OPTIONS.LANGUAGE, "pt"),
     pwa: typeof window !== "undefined" && window.matchMedia?.("(display-mode: standalone)").matches,

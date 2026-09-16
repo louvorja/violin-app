@@ -93,7 +93,7 @@ describe("Telemetry", () => {
     expect(posthog.register).toHaveBeenCalledWith({ app_version: "2.0.0-beta.8", sdk_version: "1.433.7" });
     expect(posthog.capture).toHaveBeenCalledWith(
       "app_opened",
-      expect.objectContaining({ app_version: "2.0.0-beta.8", replay_ready: true }),
+      expect.objectContaining({ app_version: "2.0.0-beta.8", sdk_version: "1.433.7", replay_ready: true }),
     );
   });
 
