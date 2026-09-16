@@ -993,6 +993,7 @@
       "download_for": "Descargar para {platform}",
       "view_downloads": "Ver descargas para computadora",
       "all_systems": "Todos los sistemas",
+      "view_downloads_for": "Ver descargas para {platform}",
       "available_for": "Windows, macOS y Linux",
       "version": "Versión {version}",
       "platform": {

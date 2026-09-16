@@ -10,6 +10,9 @@ interface NavigatorSnapshot {
 }
 
 const RELEASES_BASE_URL = "https://github.com/louvorja/violin-app/releases";
+// Nome efetivamente publicado pelo electron-builder. Ele sanitiza os espaços
+// de `productName` como pontos ao montar o asset da release.
+const RELEASE_ASSET_PRODUCT_NAME = "LouvorJA.Violin";
 
 /**
  * Detecta apenas sistemas para os quais publicamos um instalador desktop.
@@ -45,21 +48,19 @@ export function desktopReleaseUrl(version: string): string {
 }
 
 /**
- * Windows e macOS têm um único artefato recomendado e podem baixar direto.
- * Linux abre a release: o usuário precisa escolher entre deb, rpm e AppImage,
- * além da arquitetura x64/arm64.
+ * Windows e macOS têm um único instalador recomendado e baixam diretamente.
+ * Linux abre a release para escolher formato e arquitetura.
  */
 export function desktopDownloadUrl(platform: DesktopDownloadPlatform, version: string): string {
   const cleanVersion = normalizeVersion(version);
-  const releaseUrl = desktopReleaseUrl(cleanVersion);
   const assetName =
     platform === "windows"
-      ? `LouvorJA Violin-Setup-${cleanVersion}.exe`
+      ? `${RELEASE_ASSET_PRODUCT_NAME}-Setup-${cleanVersion}.exe`
       : platform === "macos"
-        ? `LouvorJA Violin-${cleanVersion}.dmg`
+        ? `${RELEASE_ASSET_PRODUCT_NAME}-${cleanVersion}.dmg`
         : null;
 
-  if (!assetName) return releaseUrl;
+  if (!assetName) return desktopReleaseUrl(cleanVersion);
 
   return `${RELEASES_BASE_URL}/download/v${encodeURIComponent(cleanVersion)}/${encodeURIComponent(assetName)}`;
 }
