@@ -17,12 +17,14 @@
 
         <div
           class="shell-center"
-          :class="{ 'shell-center--drawer-pinned': isPinned && isChatOpen }"
+          :class="{ 'shell-content--desktop-download': showDesktopDownload ,
+          'shell-center--drawer-pinned': isPinned && isChatOpen }"
         >
           <div class="shell-content">
             <AppLoading />
             <AppAlert />
             <AppSnackbar />
+            <DesktopDownloadPrompt v-if="showDesktopDownload" />
             <AppModules />
           </div>
         </div>
@@ -147,6 +149,7 @@ import ReleaseNotesDialog from "@/components/ReleaseNotesDialog.vue";
 import type { ReleaseNotes } from "@/types/Update";
 import { shouldShowReleaseNotes } from "@/helpers/ReleaseNotesPolicy";
 import UpdateAvailableDialog from "@/components/UpdateAvailableDialog.vue";
+import DesktopDownloadPrompt from "@/components/DesktopDownloadPrompt.vue";
 import packageJson from "@root/package.json";
 import $appdata from "@/helpers/AppData";
 import $userdata from "@/helpers/UserData";
@@ -172,13 +175,14 @@ import { hasOpenWebWindows } from "@/helpers/projection/webWindow";
 import { formatBackgroundTaskDetail } from "@/helpers/BackgroundTaskDetail";
 import { useSyncManager } from "@/composables/useSyncManager";
 import BundleInstaller from "@/helpers/BundleInstaller";
+import { detectDesktopDownloadPlatform } from "@/helpers/DesktopDownload";
 import ChatDrawer from "@/components/ChatDrawer.vue";
 import { useChat } from "@/composables/useChat";
 import ScheduledStore from "@/helpers/ScheduledStore";
 
 const { locale, t } = useI18n();
 const { applyStoredTheme } = useAppTheme();
-const { platform } = useViewport();
+const { platform, width } = useViewport();
 const bgTasks = useBackgroundTasks();
 const sync = useSyncManager();
 const {
@@ -204,6 +208,17 @@ const releaseNotes = ref<ReleaseNotes | null>(null);
 const updateDialogOpen = ref(false);
 const updateDialogVersion = ref("");
 const ready = ref(false);
+const browserDesktopPlatform =
+  typeof navigator === "undefined" ? "other" : detectDesktopDownloadPlatform(navigator);
+
+const showDesktopDownload = computed(() => {
+  return (
+    !Platform.isDesktop &&
+    browserDesktopPlatform !== "other" &&
+    width.value >= 720 &&
+    !$appdata.get<string | null>("active_module", null)
+  );
+});
 
 const liturgyModuleOpen = computed(() => {
   return $appdata.get<boolean>(KEYS.MODULES.LITURGY.SHOW, false) === true;
@@ -1030,6 +1045,11 @@ onBeforeUnmount(() => {
   background-position: center center;
   background-size: 140px 140px;
   pointer-events: none;
+  transition: opacity 120ms ease-out;
+}
+
+.shell-content--desktop-download::before {
+  opacity: 0;
 }
 .shell-sidebar {
   flex-shrink: 0;

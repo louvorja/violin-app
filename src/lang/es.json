@@ -1054,6 +1054,20 @@
     "live_active": "MODO CULTO ACTIVO",
     "exit_confirm": "¿Desea realmente salir y cerrar el programa?",
     "appmenu": "Menú",
+    "desktop_download": {
+      "title": "LouvorJA en la computadora de la iglesia",
+      "description": "Instale la aplicación para tener la colección disponible sin conexión, integración con sus archivos y actualizaciones automáticas.",
+      "download_for": "Descargar para {platform}",
+      "view_downloads": "Ver descargas para computadora",
+      "all_systems": "Todos los sistemas",
+      "available_for": "Windows, macOS y Linux",
+      "version": "Versión {version}",
+      "platform": {
+        "windows": "Windows",
+        "macos": "macOS",
+        "linux": "Linux"
+      }
+    },
     "about": "Acerca de",
     "transmission": "Transmisión",
     "downloads": "Descargas",
