@@ -481,11 +481,23 @@ async function checkDbUpdate(): Promise<void> {
   dbChecking.value = true;
   dbStatus.value = "idle";
   try {
-    let res = await fetchWithTimeout(`${API_URL_DB}/config`, {
-      headers: { "Api-Token": API_TOKEN },
-      source: "db-config",
-    });
-    if (!res.ok && API_URL_FALLBACK) {
+    let res: Response;
+    try {
+      res = await fetchWithTimeout(`${API_URL_DB}/config`, {
+        headers: { "Api-Token": API_TOKEN },
+        source: "db-config",
+      });
+      if (!res.ok && API_URL_FALLBACK) {
+        res = await fetchWithTimeout(`${API_URL_DB_FALLBACK}/config`, {
+          headers: { "Api-Token": API_URL_FALLBACK_TOKEN },
+          source: "db-config-fallback",
+        });
+      }
+    } catch (e) {
+      // Timeout/DNS/rede instável lançam antes de chegar num `res.ok` —
+      // sem este catch, uma falha transitória no host principal nunca
+      // chegava a tentar o legado, mesmo com ele configurado.
+      if (!API_URL_FALLBACK) throw e;
       res = await fetchWithTimeout(`${API_URL_DB_FALLBACK}/config`, {
         headers: { "Api-Token": API_URL_FALLBACK_TOKEN },
         source: "db-config-fallback",
