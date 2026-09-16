@@ -37,6 +37,7 @@ vi.mock("@/helpers/Platform", () => ({
 async function loadTelemetry() {
   vi.resetModules();
   vi.stubEnv("VITE_POSTHOG_KEY", "test-key");
+  vi.stubEnv("VITE_URL_API", "https://api.example.test/v1");
   window.history.replaceState({}, "", "/");
   return import("@/helpers/Telemetry");
 }
@@ -67,12 +68,14 @@ describe("Telemetry", () => {
       "test-key",
       expect.objectContaining({
         autocapture: true,
-        capture_pageview: true,
+        capture_pageview: "history_change",
+        capture_exceptions: true,
         disable_session_recording: false,
         capture_heatmaps: true,
         capture_dead_clicks: true,
         rageclick: true,
         enable_recording_console_log: true,
+        tracing_headers: expect.arrayContaining(["api.example.test"]),
       }),
     );
     expect(posthog.startExceptionAutocapture).toHaveBeenCalledWith({
@@ -127,11 +130,13 @@ describe("Telemetry", () => {
     Telemetry.setEnabled(false);
 
     Telemetry.track("must_not_be_sent", { name: "Teste" });
+    Telemetry.log("error", "must_not_be_sent", { name: "Teste" });
     Telemetry.captureException(new Error("must_not_be_sent"));
 
     expect(posthog.opt_out_capturing).toHaveBeenCalledOnce();
     expect(posthog.capture).not.toHaveBeenCalledWith("must_not_be_sent", expect.anything());
     expect(posthog.captureException).not.toHaveBeenCalled();
+    expect(posthog.logger.error).not.toHaveBeenCalled();
   });
 
   it("envia transições detalhadas como log estruturado e remove credenciais", async () => {
@@ -150,6 +155,18 @@ describe("Telemetry", () => {
     );
   });
 
+  it("mascara tokens na mensagem de logs", async () => {
+    const Telemetry = await loadTelemetry();
+    await Telemetry.init();
+
+    Telemetry.log("error", "GET /audio?token=segredo");
+
+    expect(posthog.logger.error).toHaveBeenCalledWith(
+      "GET /audio?token=[REDACTED]",
+      expect.any(Object),
+    );
+  });
+
   it("mascara tokens de URLs capturadas pelo replay", async () => {
     const Telemetry = await loadTelemetry();
     await Telemetry.init();
@@ -162,5 +179,18 @@ describe("Telemetry", () => {
     });
     expect(masked.name).toContain("token=[REDACTED]");
     expect(masked.name).not.toContain("segredo");
+  });
+
+  it("mascara tokens que apareçam na mensagem de uma exceção", async () => {
+    const Telemetry = await loadTelemetry();
+    await Telemetry.init();
+
+    Telemetry.captureException(new Error("GET https://api.example.test/audio?token=segredo"));
+
+    expect(posthog.captureException).toHaveBeenLastCalledWith(
+      expect.any(Error),
+      expect.objectContaining({ message: expect.stringContaining("token=[REDACTED]") }),
+    );
+    expect(posthog.captureException.mock.lastCall?.[1]?.message).not.toContain("segredo");
   });
 });

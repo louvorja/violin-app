@@ -99,6 +99,7 @@ import type { YTAPI, YTPlayer } from "@/types/Media";
 import { loadYtApi } from "@/composables/useYouTubeApi";
 import { getDocument, GlobalWorkerOptions } from "pdfjs-dist";
 import pdfjsWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import Telemetry from "@/helpers/Telemetry";
 
 GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
@@ -155,7 +156,11 @@ const { slide, title, progress } = useProjectionState();
 
 /* ── File projection state ── */
 
-const fileState = reactive({ active: false, type: "", url: "" });
+const fileState = reactive<{ active: boolean; type: string; url: string; playback_id?: string }>({
+  active: false,
+  type: "",
+  url: "",
+});
 const projVideoRef = ref<HTMLVideoElement | null>(null);
 const ytContainer = ref<HTMLDivElement | null>(null);
 let ytPlayer: YTPlayer | null = null;
@@ -197,7 +202,7 @@ useBroadcastListener(BROADCAST_TYPE.BACKGROUND_PROJECTION, (payload: unknown) =>
 });
 
 useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION, (payload: unknown) => {
-  const p = payload as { type?: string; url?: string; page?: number };
+  const p = payload as { type?: string; url?: string; page?: number; playback_id?: string };
   if (p?.url) {
     if (pdfDoc) {
       try {
@@ -210,18 +215,20 @@ useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION, (payload: unknown) => {
     fileState.active = true;
     fileState.type = p.type || "image";
     fileState.url = p.url;
+    fileState.playback_id = p.playback_id;
     reloadWallpaper();
     if (p.type === "pdf") nextTick(() => loadPdf(p.url!, p.page || 1));
   }
 });
 
 useBroadcastListener(BROADCAST_TYPE.ONLINE_VIDEO_PROJECTION, (payload: unknown) => {
-  const p = payload as { type?: string; url?: string };
+  const p = payload as { type?: string; url?: string; playback_id?: string };
   if (p?.url) {
     _destroyYoutube();
     fileState.active = true;
     fileState.type = p.type || "youtube";
     fileState.url = p.url;
+    fileState.playback_id = p.playback_id;
     reloadWallpaper();
     if (p.type === "youtube") nextTick(() => _initYoutube());
   }
@@ -317,6 +324,11 @@ function _initYoutube(): void {
       events: {
         onReady: () => {
           _ytInitializing = false;
+          Telemetry.track("music_youtube_player_ready", {
+            playback_id: fileState.playback_id,
+            source_type: "youtube",
+            window_role: "background_projection_return",
+          });
           if (ytPlayer) ytPlayer.playVideo();
           _broadcastYtState();
           _startYtSync();
@@ -329,8 +341,26 @@ function _initYoutube(): void {
             console.error("Erro ao desativar o captions do Youtube");
           }
         },
-        onStateChange: () => {
+        onStateChange: (e: { data: number }) => {
+          Telemetry.track("music_youtube_state_changed", {
+            playback_id: fileState.playback_id,
+            state: e.data,
+            window_role: "background_projection_return",
+          });
           _broadcastYtState();
+        },
+        onError: (e: number) => {
+          Telemetry.track("music_playback_failed", {
+            playback_id: fileState.playback_id,
+            stage: "youtube_player",
+            reason: `youtube_${e}`,
+            provider_code: e,
+            window_role: "background_projection_return",
+          });
+          Telemetry.captureException(new Error(`YouTube player error ${e}`), {
+            playback_id: fileState.playback_id,
+            operation: "youtube_player",
+          });
         },
       },
     });
@@ -363,6 +393,8 @@ function _broadcastYtState(): void {
       currentTime: ytPlayer.getCurrentTime(),
       isPaused: ytPlayer.getPlayerState() !== yt.PlayerState.PLAYING,
       duration: ytPlayer.getDuration() || 0,
+      state: ytPlayer.getPlayerState(),
+      playback_id: fileState.playback_id,
     });
   } catch {
     /* ignore */

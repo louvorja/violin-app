@@ -77,9 +77,15 @@ function _playSongAt(index: number): void {
   const song = playlist.songs[index];
   _advanceLock.value = true;
   $dev.write("playlist:play", { index, name: song.name });
-  Telemetry.track("music_playlist_play", { playlist_id: _currentPlaylistId.value, index, id_music: song.id_music, name: song.name });
 
   Media.open({ id_music: song.id_music, mode: MusicActionEnum.AUDIO });
+  Telemetry.track("music_playlist_play", {
+    playlist_id: _currentPlaylistId.value,
+    index,
+    id_music: song.id_music,
+    name: song.name,
+    playback_id: Media.getActivePlaybackId(),
+  });
 
   _playedSongs.value = new Set([..._playedSongs.value, song.id_music]);
   setTimeout(() => { _advanceLock.value = false; }, 800);
@@ -130,7 +136,12 @@ function _onSongEnded(): boolean {
   if (!_isActive.value) return false;
   if (_advanceLock.value) return true;
   const playlist = currentPlaylist.value;
-  Telemetry.track("music_playlist_song_ended", { playlist_id: _currentPlaylistId.value, index: _currentIndex.value, id_music: playlist?.songs[_currentIndex.value]?.id_music });
+  Telemetry.track("music_playlist_song_ended", {
+    playlist_id: _currentPlaylistId.value,
+    index: _currentIndex.value,
+    id_music: playlist?.songs[_currentIndex.value]?.id_music,
+    playback_id: Media.getActivePlaybackId(),
+  });
   if (!playlist) { _stopInternal(); return true; }
 
   const nextIdx = _nextIndex();

@@ -232,6 +232,7 @@ export interface SlideChangePayload {
   title?: string;
   progress: number;
   total_slides: number;
+  playback_id?: string;
   /** Timestamp de emissão (Date.now()) — presente apenas em dev/test para medir latência cross-window. */
   _ts?: number;
 }
@@ -240,12 +241,15 @@ export interface SlideProgressPayload {
   slide_index: number;
   /** 0-100. */
   slide_progress: number;
+  playback_id?: string;
 }
 
 export interface SlidesDataPayload {
   slides: Record<string, unknown>[];
   title: string;
   slide_index: number;
+  /** ID correlacionável da tentativa de reprodução que originou os slides. */
+  playback_id?: string;
 }
 
 export interface GoToSlidePayload {

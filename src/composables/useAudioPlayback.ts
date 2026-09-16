@@ -25,7 +25,7 @@ export interface AudioPlayback {
   getElement: () => HTMLAudioElement;
   setTelemetryContext: (context: AudioTelemetryContext | null) => void;
   setSrc: (src: string, lazy?: boolean) => void;
-  prepare: (src: string, lazy?: boolean, seekHint?: number) => Promise<HTMLAudioElement>;
+  prepare: (src: string, lazy?: boolean, seekHint?: number, telemetryContext?: AudioTelemetryContext) => Promise<HTMLAudioElement>;
   release: (el: HTMLAudioElement) => void;
   takeOver: (next: HTMLAudioElement, startTime: (duration: number) => number, play: boolean) => Promise<void>;
   setDurationHint: (seconds: number) => void;
@@ -60,6 +60,8 @@ function _create(): AudioPlayback {
   let _playing = false;
   const _timeCallbacks: TimeCallback[] = [];
   let _telemetryContext: AudioTelemetryContext | null = null;
+  const _elementTelemetryContext = new WeakMap<HTMLMediaElement, AudioTelemetryContext>();
+  const _listening = new WeakSet<HTMLAudioElement>();
   let _bufferingSince = 0;
   let _lastProgressAt = 0;
   let _lastProgressTime = 0;
@@ -68,7 +70,7 @@ function _create(): AudioPlayback {
   function _telemetryProps(el: HTMLMediaElement, extra: Record<string, unknown> = {}): Record<string, unknown> {
     const error = el.error;
     return {
-      ...(_telemetryContext || {}),
+      ...(_elementTelemetryContext.get(el) || _telemetryContext || {}),
       current_time: Number.isFinite(el.currentTime) ? Number(el.currentTime.toFixed(3)) : 0,
       duration: Number.isFinite(el.duration) ? Number(el.duration.toFixed(3)) : 0,
       ready_state: el.readyState,
@@ -86,7 +88,7 @@ function _create(): AudioPlayback {
   }
 
   function _trackMediaEvent(el: HTMLMediaElement, eventName: string): void {
-    if (!_telemetryContext) return;
+    if (!_elementTelemetryContext.has(el) && !_telemetryContext) return;
     const now = Date.now();
     if (eventName === "waiting" || eventName === "stalled") {
       if (!_bufferingSince) {
@@ -225,21 +227,25 @@ function _create(): AudioPlayback {
   }
 
   function _listen(el: HTMLAudioElement): void {
+    if (_listening.has(el)) return;
     el.addEventListener("timeupdate", _syncTime);
     el.addEventListener("progress", _syncTime);
     el.addEventListener("loadedmetadata", _syncTime);
     for (const eventName of ["loadstart", "loadedmetadata", "canplay", "canplaythrough", "playing", "waiting", "stalled", "suspend", "durationchange", "pause", "ended", "error", "abort"]) {
       el.addEventListener(eventName, _onMediaEvent);
     }
+    _listening.add(el);
   }
 
   function _unlisten(el: HTMLAudioElement): void {
+    if (!_listening.has(el)) return;
     el.removeEventListener("timeupdate", _syncTime);
     el.removeEventListener("progress", _syncTime);
     el.removeEventListener("loadedmetadata", _syncTime);
     for (const eventName of ["loadstart", "loadedmetadata", "canplay", "canplaythrough", "playing", "waiting", "stalled", "suspend", "durationchange", "pause", "ended", "error", "abort"]) {
       el.removeEventListener(eventName, _onMediaEvent);
     }
+    _listening.delete(el);
   }
 
   function getElement(): HTMLAudioElement {
@@ -251,8 +257,8 @@ function _create(): AudioPlayback {
         _el.preload = "auto";
         document.body.appendChild(_el);
       }
-      _listen(_el);
     }
+    _listen(_el);
     _el.autoplay = true;
     return _el;
   }
@@ -262,9 +268,11 @@ function _create(): AudioPlayback {
    * Resolve quando ela já dá para tocar — é o que permite trocar de faixa sem
    * o buraco de silêncio da decodificação.
    */
-  function prepare(src: string, lazy = false, seekHint = 0): Promise<HTMLAudioElement> {
+  function prepare(src: string, lazy = false, seekHint = 0, telemetryContext?: AudioTelemetryContext): Promise<HTMLAudioElement> {
     return new Promise((resolve, reject) => {
       const el = document.createElement("audio");
+      const context = telemetryContext || _telemetryContext;
+      if (context) _elementTelemetryContext.set(el, context);
       el.preload = "auto";
       el.autoplay = false;
       el.volume = volume.value / 100;
@@ -363,6 +371,9 @@ function _create(): AudioPlayback {
       next.autoplay = true;
       if (!next.isConnected) document.body.appendChild(next);
       _el = next;
+      if (!_elementTelemetryContext.has(next) && _telemetryContext) {
+        _elementTelemetryContext.set(next, _telemetryContext);
+      }
       isLazy.value = next.dataset.lazy === "1";
       _listen(next);
       _syncTime();
@@ -419,7 +430,7 @@ function _create(): AudioPlayback {
     // alerta de "erro ao carregar áudio" — mas aqui o áudio só ainda não
     // chegou: o onload do XHR chama play() de novo assim que o blob existir.
     if (!el.getAttribute("src")) {
-      if (_telemetryContext) {
+      if (_telemetryContext || _elementTelemetryContext.has(el)) {
         Telemetry.track("music_play_deferred", _telemetryProps(el, { stage: "play_request", reason: "source_not_ready" }));
       }
       return;
@@ -551,6 +562,7 @@ function _create(): AudioPlayback {
   }
 
   function reset(): void {
+    _stopRaf();
     volume.value      = 100;
     currentTime.value = 0;
     duration.value    = 0;
@@ -560,6 +572,13 @@ function _create(): AudioPlayback {
     isFading.value    = false;
     isLazy.value      = false;
     _telemetryContext = null;
+    if (_el) {
+      // Não deixe eventos enfileirados da faixa anterior atravessarem o novo
+      // contexto no mesmo elemento DOM. `getElement` reinstala de forma
+      // idempotente os listeners quando a próxima faixa precisar dele.
+      _unlisten(_el);
+      _elementTelemetryContext.delete(_el);
+    }
     _stopWatchdog();
   }
 
@@ -574,7 +593,13 @@ function _create(): AudioPlayback {
 
   return {
     volume, currentTime, duration, progress, buffered, isPaused, isFading,
-    getElement, setTelemetryContext: (context) => { _telemetryContext = context; }, setSrc, prepare, release: _descartar, takeOver, setDurationHint,
+    getElement, setTelemetryContext: (context) => {
+      _telemetryContext = context;
+      if (_el) {
+        if (context) _elementTelemetryContext.set(_el, context);
+        else _elementTelemetryContext.delete(_el);
+      }
+    }, setSrc, prepare, release: _descartar, takeOver, setDurationHint,
     play, pause, stop,
     setVolume, toggleVolume, seekTo, advanceTime,
     fadeIn, fadeOut, onTimeUpdate,

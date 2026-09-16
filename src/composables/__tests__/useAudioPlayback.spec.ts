@@ -100,4 +100,41 @@ describe("useAudioPlayback.play", () => {
     expect(audio.getElement()).toBe(current);
     expect(next.play).toHaveBeenCalledOnce();
   });
+
+  it("classifica erro de decodificação do elemento de mídia", () => {
+    const el = audio.getElement();
+    audio.setTelemetryContext({ playback_id: "p-decode", id_music: 7, mode: "instrumental" });
+    Object.defineProperty(el, "error", {
+      configurable: true,
+      value: { code: 3, message: "decode failed" },
+    });
+
+    el.dispatchEvent(new Event("error"));
+
+    expect(Telemetry.track).toHaveBeenCalledWith(
+      "music_playback_failed",
+      expect.objectContaining({ playback_id: "p-decode", stage: "media_element", reason: "decode" }),
+    );
+  });
+
+  it("detecta quando o relógio do áudio fica travado durante a reprodução", async () => {
+    vi.useFakeTimers();
+    try {
+      const el = stubPlay(null);
+      Object.defineProperty(el, "paused", { configurable: true, value: false });
+      audio.setTelemetryContext({ playback_id: "p-stalled", id_music: 99, mode: "audio" });
+
+      audio.play();
+      await Promise.resolve();
+      await Promise.resolve();
+      vi.advanceTimersByTime(6000);
+
+      expect(Telemetry.track).toHaveBeenCalledWith(
+        "music_playback_stalled",
+        expect.objectContaining({ playback_id: "p-stalled", reason: "time_not_advancing" }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
