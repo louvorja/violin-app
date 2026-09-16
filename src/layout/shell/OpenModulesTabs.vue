@@ -1,38 +1,47 @@
 <template>
   <div
     v-if="openModules.length > 0"
-    class="subtabs"
+    class="subtabs-wrapper"
     role="tablist"
     :aria-label="$t('shell.open_modules')"
   >
-    <button
-      v-for="m in openModules"
-      :key="m.id"
-      type="button"
-      role="tab"
-      class="subtab"
-      :class="{ 'subtab--active': isActive(m.id) }"
-      :aria-selected="isActive(m.id)"
-      @click="focus(m.id)"
+    <draggable
+      :list="openModules"
+      item-key="id"
+      class="subtabs"
+      ghost-class="subtab--ghost"
+      :animation="150"
+      @end="onReorder"
     >
-      <LjIcon
-        :icon="getModule(m.id).icon"
-        :color="getModule(m.id).color"
-        size="20"
-        class="subtab-icon"
-        aria-hidden="true"
-      />
-      <span class="subtab-label lj-u-truncate">{{ t(getModule(m.id).title) }}</span>
-      <span
-        role="button"
-        tabindex="-1"
-        class="subtab-close"
-        :aria-label="`${$t('alert.close')}: ${t(getModule(m.id).title)}`"
-        @click.stop="close(m.id)"
-      >
-        <LjIcon :icon="ICONS.ACTIONS.CLOSE" size="11" aria-hidden="true" />
-      </span>
-    </button>
+      <template #item="{ element: m }">
+        <button
+          type="button"
+          role="tab"
+          class="subtab"
+          :class="{ 'subtab--active': isActive(m.id) }"
+          :aria-selected="isActive(m.id)"
+          @click="focus(m.id)"
+        >
+          <LjIcon
+            :icon="getModule(m.id).icon"
+            :color="getModule(m.id).color"
+            size="20"
+            class="subtab-icon"
+            aria-hidden="true"
+          />
+          <span class="subtab-label lj-u-truncate">{{ t(getModule(m.id).title) }}</span>
+          <span
+            role="button"
+            tabindex="-1"
+            class="subtab-close"
+            :aria-label="`${$t('alert.close')}: ${t(getModule(m.id).title)}`"
+            @click.stop="close(m.id)"
+          >
+            <LjIcon :icon="ICONS.ACTIONS.CLOSE" size="11" aria-hidden="true" />
+          </span>
+        </button>
+      </template>
+    </draggable>
   </div>
 </template>
 
@@ -41,6 +50,7 @@ import { LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
+import draggable from "vuedraggable";
 import $appdata from "@/helpers/AppData";
 import $userdata from "@/helpers/UserData";
 import $modules from "@/helpers/Modules";
@@ -49,15 +59,23 @@ import { KEYS } from "@/constants/UserDataKeys";
 
 const { t } = useI18n();
 const modules = getModules;
-const openModules = computed(() => {
-  const modules = $appdata.get("modules") || {};
-  const skip = new Set(["media", "lyric", "album"]);
-  const order = $userdata.get(KEYS.MODULES.OPEN_ORDER, []);
-  const orderMap = new Map(order.map((id, i) => [id, i]));
-  return Object.values(modules)
-    .filter((m) => m && m.show === true && !skip.has(m.id) && m.popup !== true)
-    .sort((a, b) => (orderMap.get(a.id) ?? Infinity) - (orderMap.get(b.id) ?? Infinity));
+const openModules = computed({
+  get() {
+    const modules = $appdata.get("modules") || {};
+    const skip = new Set(["media", "lyric", "album"]);
+    const order = $userdata.get(KEYS.MODULES.OPEN_ORDER, []);
+    const orderMap = new Map(order.map((id, i) => [id, i]));
+    return Object.values(modules)
+      .filter((m) => m && m.show === true && !skip.has(m.id) && m.popup !== true)
+      .sort((a, b) => (orderMap.get(a.id) ?? Infinity) - (orderMap.get(b.id) ?? Infinity));
+  },
+  set() {},
 });
+
+function onReorder() {
+  const ids = openModules.value.map((m) => m.id);
+  $userdata.set(KEYS.MODULES.OPEN_ORDER, ids);
+}
 
 function isActive(id) {
   return $appdata.get("active_module") === id;
@@ -76,6 +94,10 @@ function close(id) {
 </script>
 
 <style scoped>
+.subtabs-wrapper {
+  flex-shrink: 0;
+}
+
 .subtabs {
   display: flex;
   align-items: flex-end;
@@ -83,7 +105,6 @@ function close(id) {
   padding: 0 var(--lj-space-2);
   background: var(--lj-subtabs-bg);
   border-bottom: 1px solid var(--lj-subtabs-border);
-  flex-shrink: 0;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
@@ -174,5 +195,9 @@ function close(id) {
   opacity: 1;
   background: var(--lj-subtab-close-hover-bg);
   color: var(--lj-orange-dark);
+}
+
+.subtab--ghost {
+  opacity: 0.4;
 }
 </style>
