@@ -102,8 +102,9 @@ const lastClicks = ref(new Map<string, number>());
 
 function send(key: string, modifiers?: string[]) {
   const now = Date.now();
-  if ((lastClicks.value.get(key) ?? 0) + COOLDOWN_MS > now) return;
-  lastClicks.value.set(key, now);
+  const cooldownKey = `${key}:${(modifiers || []).join(",")}`;
+  if ((lastClicks.value.get(cooldownKey) ?? 0) + COOLDOWN_MS > now) return;
+  lastClicks.value.set(cooldownKey, now);
 
   postApi("/api/keyboard", { key, modifiers: modifiers || [] }, props.token).catch(() =>
     emit("show-snackbar", t("remote_control.errors.generic"), "error")

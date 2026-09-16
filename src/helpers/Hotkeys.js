@@ -108,16 +108,21 @@ function _focusIsInForm() {
 
 function _onKeyDown(e) {
   // Camadas flutuantes do design system (menu, select, combobox, popover,
-  // diálogo) tratam as próprias teclas — Escape fecha a camada, setas navegam
+  // tooltip) tratam as próprias teclas — Escape fecha a camada, setas navegam
   // os itens. Este listener roda em `capture` na window, antes de todos, e
   // chama preventDefault: sem esta guarda ele neutralizaria o fechamento e
-  // ainda dispararia o atalho global por baixo do diálogo aberto.
+  // ainda dispararia o atalho global por baixo da camada aberta.
   //
   // O critério é o FOCO, não a mera presença da camada: tooltip também é uma
   // camada, mas nunca recebe foco nem consome teclado. Testar só a presença
   // desligava todos os atalhos enquanto o operador passasse o mouse por um
   // botão da barra — inaceitável num app conduzido ao vivo.
-  if (document.activeElement?.closest?.("[data-dismissable-layer]")) return;
+  //
+  // Exceção: Window dialogs (.lj-window) usam reka-ui DialogContent que
+  // também adiciona data-dismissable-layer, mas são janelas de módulo, não
+  // popups flutuantes. Atalhos devem funcionar normalmente com elas abertas.
+  const _layerEl = document.activeElement?.closest?.("[data-dismissable-layer]");
+  if (_layerEl && !_layerEl.closest(".lj-window")) return;
 
   const combo = _comboFromEvent(e);
   const handlers = _registry.get(combo);

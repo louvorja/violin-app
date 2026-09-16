@@ -1308,6 +1308,7 @@ $storage.hydrate().then(async () => {
         description: "hotkeys.ctrl_left",
         group: "navigation",
         label: "Ctrl+←",
+        allowInForm: true,
       }
     );
     Hotkeys.register(
@@ -1320,6 +1321,7 @@ $storage.hydrate().then(async () => {
         description: "hotkeys.ctrl_right",
         group: "navigation",
         label: "Ctrl+→",
+        allowInForm: true,
       }
     );
 
@@ -1337,10 +1339,11 @@ $storage.hydrate().then(async () => {
       description: "hotkeys.space",
       group: "media",
       label: "Space",
+      allowInForm: true,
     });
     Hotkeys.register("Pause", _togglePlayPause, {
       context: "media",
-      allowInForm: false,
+      allowInForm: true,
       description: "hotkeys.pause",
       group: "media",
       label: "Pause",

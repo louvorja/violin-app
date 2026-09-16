@@ -336,7 +336,7 @@
       "remote_control": "Control Remoto",
       "qr_code": "Código QR",
       "devices_section": "Dispositivos Autorizados",
-      "devices_hint": "Dispositivos que pueden acceder al servidor HTTP con permisos específicos.",
+      "devices_hint": "Dispositivos que pueden acceder al servidor HTTP con permisos específicos. Instala la app Violin Remote para acceder",
       "only_authorized_devices": "Permitir solo dispositivos registrados",
       "only_authorized_hint": "Cuando está activo, solo los dispositivos registrados pueden acceder a la API. Localhost siempre tiene acceso.",
       "no_devices": "Ningún dispositivo autorizado.",

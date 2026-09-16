@@ -212,6 +212,7 @@
         <div v-for="role in roleRows" :key="role.role" class="opt-row">
           <label class="opt-label" :for="`opt-monitor-role-${role.role}`">
             {{ role.label }}
+            <span v-if="role.warning" class="opt-monitor-warning">{{ role.warning }}</span>
           </label>
           <LjSelect
             :id="`opt-monitor-role-${role.role}`"
@@ -219,7 +220,6 @@
             :model-value="role.displayId ?? ''"
             @update:model-value="setRole(role.role, $event === '' ? null : String($event))"
           />
-          <span v-if="role.warning" class="opt-monitor-warning">{{ role.warning }}</span>
         </div>
       </template>
     </section>
