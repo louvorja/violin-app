@@ -595,8 +595,8 @@
     },
     "privacy": {
       "title": "Privacidad",
-      "telemetry": "Enviar métricas de uso anónimas",
-      "telemetry_hint": "Ayuda a entender cuántas personas usan LouvorJA, en qué sistemas y versiones. Son datos agregados y anónimos: nunca enviamos canciones, versículos ni ningún contenido proyectado."
+      "telemetry": "Enviar telemetría de uso y diagnóstico",
+      "telemetry_hint": "Ayuda a diagnosticar fallos y entender cómo se usa LouvorJA. Se pueden enviar eventos, canciones y sesiones cuando esta opción está activa."
     },
     "dev": {
       "title": "Desarrollador",

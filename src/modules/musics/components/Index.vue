@@ -180,7 +180,7 @@ import { LjAlert, LjButton, LjCheckbox, LjChip, LjIcon, LjInput, LjSwitch } from
 /* ########################################################### */
 /* ####### INSTALAÇÃO DO MODULO ############################## */
 /* ########################################################### */
-import { computed, onMounted, ref, useId } from "vue";
+import { computed, onMounted, ref, useId, watch } from "vue";
 import { useViewport } from "@/composables/useViewport";
 import Media from "@/composables/useMedia";
 import AppData from "@/helpers/AppData";
@@ -196,6 +196,7 @@ import LetterPaginate from "@/components/LetterPagination.vue";
 import PlaylistPanel from "./PlaylistPanel.vue";
 import PlaylistSongs from "./PlaylistSongs.vue";
 import { ICONS } from "@/config/Icons";
+import Telemetry from "@/helpers/Telemetry";
 
 const moduleContainer = ref(null);
 const t = (key) => {
@@ -209,6 +210,7 @@ const { selectedPlaylist, hydrate, addSong, removeSong, isSongInPlaylist } = use
 
 onMounted(() => {
   hydrate();
+  Telemetry.track("music_module_opened", { compact: compact.value });
 });
 
 function addSongToPlaylist(item) {
@@ -241,6 +243,14 @@ const data = ref([]);
 const scroll = ref({});
 const has_scroll = ref(false);
 const letter = ref("");
+
+let searchTimer;
+watch(search, (value) => {
+  if (searchTimer) clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    if (value.trim()) Telemetry.track("music_search", { query: value, length: value.length });
+  }, 700);
+});
 
 /* -------------------------------------------------- */
 /* COMPUTEDS                                          */
@@ -289,10 +299,12 @@ function hasScroll(value) {
 }
 
 function openAlbum(id_album) {
+  Telemetry.track("music_album_opened", { id_album });
   Media.openAlbum(id_album);
 }
 
 function close() {
+  Telemetry.track("music_module_closed");
   search.value = "";
 }
 </script>

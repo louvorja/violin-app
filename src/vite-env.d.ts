@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 declare global {
   interface LouvorjaApi {
+    on?: (_channel: string, _handler: (_payload: unknown) => void) => () => void;
     platform: string;
     version: string;
     isDev: boolean;

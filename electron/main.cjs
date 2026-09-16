@@ -198,6 +198,24 @@ const isDev =
 /** @type {BrowserWindow | null} */
 let mainWindow = null;
 
+// Encaminha falhas do processo principal para o renderer enquanto ele ainda
+// está vivo. O monitor não altera o comportamento padrão do Node após uma
+// exceção não tratada, mas permite registrar o diagnóstico antes do crash.
+function reportMainProcessError(source, error) {
+  const payload = {
+    source,
+    message: String(error?.message || error),
+    stack: error?.stack ? String(error.stack).slice(0, 20_000) : undefined,
+  };
+  try {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("telemetry:main-error", payload);
+  } catch (_) { /* processo pode estar encerrando */ }
+  console.error(`[${source}]`, payload.message);
+}
+
+process.on("uncaughtExceptionMonitor", (error) => reportMainProcessError("electron.uncaught_exception", error));
+process.on("unhandledRejection", (reason) => reportMainProcessError("electron.unhandled_rejection", reason));
+
 // ---------------------------------------------------------------------------
 // Revelação da janela principal
 // ---------------------------------------------------------------------------
@@ -251,6 +269,12 @@ function createWindow() {
   }
 
   mainWindow = createMainWindow(DEV_URL, prodHtmlPath, preloadPath);
+  mainWindow.webContents.on("render-process-gone", (_event, details) => {
+    reportMainProcessError(
+      "electron.render_process_gone",
+      new Error(`${details.reason || "unknown"}:${details.exitCode ?? ""}`),
+    );
+  });
 
   if (_revealTimer) clearTimeout(_revealTimer);
   _revealTimer = setTimeout(revealMainWindow, REVEAL_FALLBACK_MS);
@@ -1531,4 +1555,3 @@ ipcMain.handle("storage:setAutoCache", (_e, enabled) => {
   protocolModule.setAutoCacheEnabled(!!enabled);
   return { ok: true };
 });
-

@@ -7,6 +7,7 @@ import { MusicActionEnum } from "@/enums/MusicActionEnum";
 import Media from "@/composables/useMedia";
 import type { Playlist, PlaylistSong } from "@/types/Music";
 import { usePlaylists } from "./usePlaylists";
+import Telemetry from "@/helpers/Telemetry";
 
 const _isActive = ref(false);
 const _currentPlaylistId = ref<string | null>(null);
@@ -76,6 +77,7 @@ function _playSongAt(index: number): void {
   const song = playlist.songs[index];
   _advanceLock.value = true;
   $dev.write("playlist:play", { index, name: song.name });
+  Telemetry.track("music_playlist_play", { playlist_id: _currentPlaylistId.value, index, id_music: song.id_music, name: song.name });
 
   Media.open({ id_music: song.id_music, mode: MusicActionEnum.AUDIO });
 
@@ -84,6 +86,7 @@ function _playSongAt(index: number): void {
 }
 
 function _stopInternal(): void {
+  if (_isActive.value) Telemetry.track("music_playlist_stopped", { playlist_id: _currentPlaylistId.value, index: _currentIndex.value, played_count: _playedSongs.value.size });
   _isActive.value = false;
   _currentPlaylistId.value = null;
   _currentIndex.value = 0;
@@ -127,6 +130,7 @@ function _onSongEnded(): boolean {
   if (!_isActive.value) return false;
   if (_advanceLock.value) return true;
   const playlist = currentPlaylist.value;
+  Telemetry.track("music_playlist_song_ended", { playlist_id: _currentPlaylistId.value, index: _currentIndex.value, id_music: playlist?.songs[_currentIndex.value]?.id_music });
   if (!playlist) { _stopInternal(); return true; }
 
   const nextIdx = _nextIndex();

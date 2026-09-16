@@ -6,6 +6,7 @@ import DateTime from "@/helpers/DateTime";
 import { KEYS } from "@/constants/UserDataKeys";
 import { DB_TABLE } from "@/constants/DbTables";
 import type { Playlist, PlaylistSong } from "@/types/Music";
+import Telemetry from "@/helpers/Telemetry";
 
 const TABLE_PLAYLISTS = DB_TABLE.MUSICS_PLAYLISTS;
 
@@ -63,6 +64,7 @@ export function usePlaylists() {
       try {
         _playlists.value = await $docs.getAll<Playlist>(TABLE_PLAYLISTS);
         _hydrated.value = true;
+        Telemetry.track("music_playlists_hydrated", { playlist_count: _playlists.value.length, songs_count: _playlists.value.reduce((n, p) => n + p.songs.length, 0) });
         $dev.write("playlists:hydrated", { count: _playlists.value.length });
       } catch (e) {
         $dev.write("playlists:hydrate_error", { error: String(e) });
@@ -80,6 +82,7 @@ export function usePlaylists() {
       _playlists.value = [..._playlists.value, playlist];
       await _persistOne(playlist);
       $dev.write("playlists:create", { id: playlist.id, name });
+      Telemetry.track("music_playlist_created", { playlist_id: playlist.id, name });
       return playlist;
     },
 
@@ -89,6 +92,7 @@ export function usePlaylists() {
       );
       const updated = _playlists.value.find((p) => p.id === id);
       if (updated) await _persistOne(updated);
+      Telemetry.track("music_playlist_renamed", { playlist_id: id, name });
     },
 
     async deletePlaylist(id: string): Promise<void> {
@@ -98,11 +102,13 @@ export function usePlaylists() {
         $userdata.set(KEYS.MODULES.MUSICS.SELECTED_PLAYLIST, null);
       }
       await _deleteOne(id);
+      Telemetry.track("music_playlist_deleted", { playlist_id: id });
     },
 
     selectPlaylist(id: string | null): void {
       _selectedPlaylistId.value = id;
       $userdata.set(KEYS.MODULES.MUSICS.SELECTED_PLAYLIST, id);
+      Telemetry.track("music_playlist_selected", { playlist_id: id });
     },
 
     async addSong(playlistId: string, song: PlaylistSong): Promise<void> {
@@ -117,6 +123,7 @@ export function usePlaylists() {
       });
       const updated = _playlists.value.find((p) => p.id === playlistId);
       if (updated) await _persistOne(updated);
+      Telemetry.track("music_playlist_song_added", { playlist_id: playlistId, id_music: song.id_music, name: song.name, duration: song.duration });
     },
 
     async removeSong(playlistId: string, index: number): Promise<void> {
@@ -128,6 +135,7 @@ export function usePlaylists() {
       });
       const updated = _playlists.value.find((p) => p.id === playlistId);
       if (updated) await _persistOne(updated);
+      Telemetry.track("music_playlist_song_removed", { playlist_id: playlistId, index });
     },
 
     async moveSong(playlistId: string, from: number, to: number): Promise<void> {
@@ -140,6 +148,7 @@ export function usePlaylists() {
       });
       const updated = _playlists.value.find((p) => p.id === playlistId);
       if (updated) await _persistOne(updated);
+      Telemetry.track("music_playlist_song_moved", { playlist_id: playlistId, from, to });
     },
 
     getPlaylistDuration(playlist: Playlist): number {
