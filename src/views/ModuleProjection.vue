@@ -6,7 +6,7 @@
     v-else
     ref="container"
     class="module-projection"
-    :class="[`align-${vertical_align}`, `justify-${horizontal_align}`]"
+    :class="[`lj-u-align-${vertical_align}`, `lj-u-justify-${horizontal_align}`]"
     :style="{
       background: background_color || '#000000',
       padding: `${border_spacing_px}px`,
