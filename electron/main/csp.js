@@ -65,7 +65,7 @@ function buildCsp(context) {
 
     `frame-src ${DOMAINS_CSP.FRAME}`,
 
-    `worker-src 'self'${isDev ? " blob:" : ` blob:${desktopSchemes}`}`,
+    `worker-src 'self'${isDev ? " blob:" : ` blob:${desktopSchemes}`} ${DOMAINS_CSP.WORKER}`,
   ];
 
   return directives.join("; ");

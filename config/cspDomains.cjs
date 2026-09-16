@@ -34,12 +34,12 @@ const DOMAINS = {
   FONTS: [
     "https://fonts.googleapis.com"
   ],
-  // Destino da telemetria. Só o host de ingestão: o SDK vem do bundle, e
-  // `Telemetry.ts` desliga surveys e feature flags, que são o que faria o
-  // PostHog buscar configuração no domínio de assets. Espelha o padrão de
-  // `VITE_POSTHOG_HOST` — apontar o env para outra região pede uma linha aqui.
+  // Destino da telemetria e dos bundles lazy (Replay, Logs e Error Tracking).
+  // O SDK vem parcialmente no bundle, mas o recorder do Replay é carregado
+  // em runtime. O wildcard acompanha os hosts de ingestão e de assets das
+  // regiões US/EU, conforme a orientação do SDK.
   POSTHOG: [
-    "https://us.i.posthog.com"
+    "https://*.posthog.com"
   ],
   YOUTUBE: [
     "https://www.youtube.com",
@@ -74,7 +74,7 @@ const posthog = DOMAINS.POSTHOG.join(" ");
 const thirdParty = `${youtube} ${google} ${vlibras} ${cdn} ${posthog}`;
 
 const DOMAINS_CSP = {
-  SCRIPT: `${cdn} ${google} ${youtube} ${vlibras}`,
+  SCRIPT: `${cdn} ${google} ${youtube} ${vlibras} ${posthog}`,
   STYLE: `${fonts}`,
   FONT: `${DOMAINS.GOOGLE.filter((d) => d.includes("fonts.gstatic")).join(" ")} ${vlibras} ${cdn}`,
   // A API entra nos três: dela vêm as capas (`<img>`), o áudio das músicas
@@ -85,7 +85,7 @@ const DOMAINS_CSP = {
   IMG: `${api} ${youtube}`,
   MEDIA: `${api} ${youtube}`,
   CONNECT: `${api} ${thirdParty}`,
-  WORKER: ``,
+  WORKER: `data:`,
   FRAME: `${youtube} ${vlibras}`,
 };
 

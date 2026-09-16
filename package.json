@@ -83,7 +83,7 @@
     "lint-staged": "^16.4.0",
     "pdfjs-dist": "^6.1.200",
     "pinia": "^3.0.4",
-    "posthog-js": "^1.427.1",
+    "posthog-js": "^1.433.7",
     "prettier": "^3.8.3",
     "qrcode": "^1.5.4",
     "reka-ui": "^2.10.4",

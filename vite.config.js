@@ -23,7 +23,10 @@ export default async ({ mode }) => {
   // canonical fallback for web/PWA deploys, which do not have Electron's
   // updater API available at runtime.
   const loadedEnv = loadEnv(mode, process.cwd());
-  const appVersion = loadedEnv.VITE_APP_VERSION || packageVersion;
+  const appVersion = String(loadedEnv.VITE_APP_VERSION || packageVersion || "unknown").replace(
+    /^v(?=\d)/,
+    ""
+  );
   process.env = { ...process.env, ...loadedEnv, VITE_APP_VERSION: appVersion };
 
   // Detectar target: "desktop" (Electron) ou "web" (padrão PWA)
@@ -51,7 +54,7 @@ export default async ({ mode }) => {
       ` img-src 'self' data: ${cspApi} ${DOMAINS_CSP.IMG};` +
       ` media-src 'self' blob: ${cspApi} ${DOMAINS_CSP.MEDIA};` +
       ` connect-src 'self' blob: ${cspApi} http://localhost:* ws://localhost:* ${DOMAINS_CSP.CONNECT};` +
-      ` worker-src 'self' blob:;` +
+      ` worker-src 'self' blob: ${DOMAINS_CSP.WORKER};` +
       ` frame-src ${DOMAINS_CSP.FRAME};` +
       `">`
     );

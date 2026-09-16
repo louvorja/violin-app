@@ -18,14 +18,14 @@ No servidor, defina o header HTTP para que a política também cubra recursos n�
 ```
 Content-Security-Policy:
   default-src 'self';
-  script-src 'self' blob: vlibras.gov.br cdn.jsdelivr.net *.doubleclick.net *.google.com *.googleapis.com fonts.gstatic.com www.gstatic.com 'wasm-unsafe-eval';
+  script-src 'self' blob: vlibras.gov.br cdn.jsdelivr.net *.doubleclick.net *.google.com *.googleapis.com fonts.gstatic.com www.gstatic.com https://*.posthog.com 'wasm-unsafe-eval';
   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
   font-src 'self' data: fonts.gstatic.com vlibras.gov.br cdn.jsdelivr.net;
   img-src 'self' data: https:;
   media-src 'self' blob: https:;
-  connect-src 'self' blob: https://api.louvorja.workers.dev https://api.louvorja.com.br https://*.louvorja.com.br vlibras.gov.br traducao2.vlibras.gov.br dicionario2.vlibras.gov.br https://*.youtube.com https://*.ytimg.com https://*.googlevideo.com https://*.googleapis.com https://cdn.jsdelivr.net https://static.cloudflareinsights.com;
+  connect-src 'self' blob: https://api.louvorja.workers.dev https://api.louvorja.com.br https://*.louvorja.com.br vlibras.gov.br traducao2.vlibras.gov.br dicionario2.vlibras.gov.br https://*.youtube.com https://*.ytimg.com https://*.googlevideo.com https://*.googleapis.com https://cdn.jsdelivr.net https://static.cloudflareinsights.com https://*.posthog.com;
   frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com vlibras.gov.br;
-  worker-src 'self' blob:;
+  worker-src 'self' blob: data:;
 ```
 
 **Notas:**
@@ -35,6 +35,10 @@ Content-Security-Policy:
   fonte, cor e alinhamento por `:style` a partir das preferências do usuário.
 - `fonts.googleapis.com` e `fonts.gstatic.com` são necessários para o Roboto (via webfontloader).
   Se o Roboto for removido do webfontloader e servido localmente, essas origens podem ser removidas.
+- `https://*.posthog.com` em `script-src` e `connect-src` cobre tanto a ingestão de eventos
+  quanto os bundles carregados em runtime pelo SDK (Session Replay, Logs, Error Tracking) —
+  eles não vêm no bundle principal. `worker-src` precisa de `data:` porque o worker do
+  Session Replay é instanciado a partir de uma Blob/data URI gerada pelo próprio SDK.
 - `connect-src` inclui `ws://localhost:*` apenas no meta tag (para HMR do Vite em dev).
   No servidor de produção, a diretiva acima, sem `ws://localhost:*`, é suficiente.
 - Se no futuro for necessário remover `'unsafe-inline'` de styles, a alternativa é usar
@@ -91,7 +95,7 @@ Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
 ## Exemplo — Nginx
 
 ```nginx
-add_header Content-Security-Policy "default-src 'self'; script-src 'self' blob: vlibras.gov.br cdn.jsdelivr.net *.doubleclick.net *.google.com *.googleapis.com fonts.gstatic.com www.gstatic.com 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: fonts.gstatic.com vlibras.gov.br cdn.jsdelivr.net; img-src 'self' data: https:; media-src 'self' blob: https:; connect-src 'self' blob: https://api.louvorja.workers.dev https://api.louvorja.com.br https://*.louvorja.com.br vlibras.gov.br traducao2.vlibras.gov.br dicionario2.vlibras.gov.br https://*.youtube.com https://*.ytimg.com https://*.googlevideo.com https://*.googleapis.com https://cdn.jsdelivr.net https://static.cloudflareinsights.com; frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com vlibras.gov.br; worker-src 'self' blob:;" always;
+add_header Content-Security-Policy "default-src 'self'; script-src 'self' blob: vlibras.gov.br cdn.jsdelivr.net *.doubleclick.net *.google.com *.googleapis.com fonts.gstatic.com www.gstatic.com https://*.posthog.com 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: fonts.gstatic.com vlibras.gov.br cdn.jsdelivr.net; img-src 'self' data: https:; media-src 'self' blob: https:; connect-src 'self' blob: https://api.louvorja.workers.dev https://api.louvorja.com.br https://*.louvorja.com.br vlibras.gov.br traducao2.vlibras.gov.br dicionario2.vlibras.gov.br https://*.youtube.com https://*.ytimg.com https://*.googlevideo.com https://*.googleapis.com https://cdn.jsdelivr.net https://static.cloudflareinsights.com https://*.posthog.com; frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com vlibras.gov.br; worker-src 'self' blob: data:;" always;
 add_header X-Content-Type-Options "nosniff" always;
 add_header X-Frame-Options "DENY" always;
 add_header Referrer-Policy "strict-origin-when-cross-origin" always;

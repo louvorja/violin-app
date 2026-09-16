@@ -2,9 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const state: Record<string, unknown> = {};
 const posthog = {
+  LIB_VERSION: "1.433.7",
   init: vi.fn(),
   capture: vi.fn(),
   captureException: vi.fn(),
+  register: vi.fn(),
   logger: {
     trace: vi.fn(),
     debug: vi.fn(),
@@ -14,6 +16,9 @@ const posthog = {
     fatal: vi.fn(),
   },
   captureLog: vi.fn(),
+  sessionRecordingStarted: vi.fn(() => true),
+  startSessionRecording: vi.fn(),
+  stopSessionRecording: vi.fn(),
   addExceptionStep: vi.fn(),
   startExceptionAutocapture: vi.fn(),
   opt_in_capturing: vi.fn(),
@@ -85,10 +90,30 @@ describe("Telemetry", () => {
       capture_unhandled_rejections: true,
       capture_console_errors: true,
     });
+    expect(posthog.register).toHaveBeenCalledWith({ app_version: "2.0.0-beta.8", sdk_version: "1.433.7" });
     expect(posthog.capture).toHaveBeenCalledWith(
       "app_opened",
-      expect.objectContaining({ app_version: "2.0.0-beta.8" }),
+      expect.objectContaining({ app_version: "2.0.0-beta.8", replay_ready: true }),
     );
+  });
+
+  it("emite app_opened com replay_ready=false quando o recorder não inicia a tempo", async () => {
+    vi.useFakeTimers();
+    posthog.sessionRecordingStarted.mockReturnValue(false);
+    try {
+      const Telemetry = await loadTelemetry();
+      const initPromise = Telemetry.init();
+      await vi.advanceTimersByTimeAsync(6_000);
+      await initPromise;
+
+      expect(posthog.capture).toHaveBeenCalledWith(
+        "app_opened",
+        expect.objectContaining({ replay_ready: false }),
+      );
+    } finally {
+      posthog.sessionRecordingStarted.mockReturnValue(true);
+      vi.useRealTimers();
+    }
   });
 
   it("inicializa também janelas auxiliares para não perder seus erros", async () => {

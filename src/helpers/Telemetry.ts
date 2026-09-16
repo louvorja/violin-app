@@ -7,7 +7,7 @@
  *
  * @category deve-virar-composable — lê e grava preferências via UserData.
  */
-import type { CapturedNetworkRequest, PostHog } from "posthog-js";
+import type { CapturedNetworkRequest, LogAttributes, PostHog } from "posthog-js";
 import Platform from "@/helpers/Platform";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
@@ -18,6 +18,8 @@ const HOST = import.meta.env.VITE_POSTHOG_HOST || "https://us.i.posthog.com";
 
 let _started = false;
 let _ph: PostHog | null = null;
+let _appVersion = typeof packageJson.version === "string" && packageJson.version ? packageJson.version : "unknown";
+let _sdkVersion = "unknown";
 let _installed = false;
 const _pendingExceptions: Array<{ error: unknown; properties?: Record<string, unknown> }> = [];
 const _breadcrumbs: Array<{ at: string; event: string; properties?: Record<string, unknown> }> = [];
@@ -25,6 +27,8 @@ const MAX_BREADCRUMBS = 150;
 const MAX_PROPERTY_DEPTH = 6;
 const MAX_ARRAY_ITEMS = 100;
 const MAX_STRING_LENGTH = 20_000;
+const REPLAY_READY_TIMEOUT_MS = 5_000;
+const REPLAY_READY_POLL_MS = 100;
 const SENSITIVE_KEY = /(password|passwd|secret|token|authorization|cookie|api[-_]?key)/i;
 const SENSITIVE_QUERY = /([?&](?:access[-_]?token|refresh[-_]?token|token|auth(?:orization)?|api[-_]?key|client[-_]?secret|secret|password|jwt)=)[^&\s]+/gi;
 
@@ -38,8 +42,16 @@ type PostHogWithLogs = PostHog & {
   }) => void;
 };
 
+type PostHogWithReplay = PostHog & {
+  sessionRecordingStarted?: () => boolean;
+};
+
 function sanitizeString(value: string): string {
   return value.slice(0, MAX_STRING_LENGTH).replace(SENSITIVE_QUERY, "$1[REDACTED]");
+}
+
+function normalizeVersion(value: unknown): string {
+  return typeof value === "string" ? value.trim().replace(/^v(?=\d)/, "") : "";
 }
 
 function serializableValue(value: unknown, depth = 0): unknown {
@@ -82,6 +94,8 @@ function serializableProperties(properties: Record<string, unknown> = {}): Recor
 
 function baseContext(): Record<string, unknown> {
   return {
+    app_version: _appVersion,
+    sdk_version: _sdkVersion,
     route: typeof window !== "undefined" ? sanitizeString(`${window.location.pathname}${window.location.hash}`) : "",
     window_role: windowRole(),
     online: typeof navigator !== "undefined" ? navigator.onLine : undefined,
@@ -94,6 +108,32 @@ function errorProperties(error: unknown): Record<string, unknown> {
     return { name: error.name, message: sanitizeString(error.message), stack: error.stack ? sanitizeString(error.stack) : undefined };
   }
   return { message: sanitizeString(String(error)) };
+}
+
+function isSessionRecordingStarted(posthog: PostHogWithReplay): boolean {
+  try {
+    return typeof posthog.sessionRecordingStarted === "function" && posthog.sessionRecordingStarted();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * O recorder do Replay é carregado de forma assíncrona pelo SDK. Aguarda a
+ * ativação para que o evento inicial não seja capturado antes da gravação.
+ * O limite evita bloquear o boot quando CSP, bloqueador ou rede impedirem o
+ * carregamento do recorder; nesse caso o evento ainda é enviado com
+ * replay_ready=false para diagnóstico.
+ */
+async function waitForSessionRecording(posthog: PostHog): Promise<boolean> {
+  const replay = posthog as PostHogWithReplay;
+  if (typeof replay.sessionRecordingStarted !== "function") return false;
+  const deadline = Date.now() + REPLAY_READY_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    if (isSessionRecordingStarted(replay)) return true;
+    await new Promise((resolve) => setTimeout(resolve, REPLAY_READY_POLL_MS));
+  }
+  return isSessionRecordingStarted(replay);
 }
 
 /**
@@ -251,15 +291,16 @@ function tracingHosts(): string[] {
 }
 
 async function appVersion(): Promise<string> {
-  const fromEnv = import.meta.env.VITE_APP_VERSION;
-  if (fromEnv) return String(fromEnv);
+  const fromEnv = normalizeVersion(import.meta.env.VITE_APP_VERSION);
+  if (fromEnv) return fromEnv;
   try {
     const status = (await Platform.updater?.status?.()) as { version?: string } | undefined;
-    if (status?.version) return String(status.version);
+    const installedVersion = normalizeVersion(status?.version);
+    if (installedVersion) return installedVersion;
   } catch {
     // Web/PWA não tem updater; segue para a versão canônica empacotada abaixo.
   }
-  return typeof packageJson.version === "string" ? packageJson.version : "";
+  return normalizeVersion(packageJson.version) || "unknown";
 }
 
 /** UUID aleatório por instalação. Não deriva de nada da máquina. */
@@ -288,23 +329,38 @@ export function setEnabled(enabled: boolean): void {
   if (!enabled) {
     _breadcrumbs.length = 0;
     _pendingExceptions.length = 0;
+    _ph?.stopSessionRecording();
     _ph?.opt_out_capturing();
     return;
   }
-  if (_ph) _ph.opt_in_capturing({ captureEventName: false });
+  if (_ph) {
+    _ph.opt_in_capturing({ captureEventName: false });
+    _ph.register({ app_version: _appVersion, sdk_version: _sdkVersion });
+    _ph.startSessionRecording();
+  }
   else void init();
 }
 
 /** Zera o identificador anônimo — o usuário volta a contar como instalação nova. */
 export function resetId(): void {
   $userdata.set(KEYS.OPTIONS.TELEMETRY_ID, "");
-  _ph?.reset();
+  if (_ph) {
+    _ph.reset();
+    _ph.register({ app_version: _appVersion, sdk_version: _sdkVersion });
+  }
 }
 
 export async function init(): Promise<void> {
   if (_started) return;
   if (!KEY || !isEnabled() || Platform.isDev) return;
   const { default: posthog } = await import("posthog-js");
+  const version = (await appVersion()) || "unknown";
+  _appVersion = version;
+  const sdkVersion =
+    typeof (posthog as PostHog & { LIB_VERSION?: unknown }).LIB_VERSION === "string"
+      ? String((posthog as PostHog & { LIB_VERSION?: unknown }).LIB_VERSION)
+      : "unknown";
+  _sdkVersion = sdkVersion;
   _started = true;
   _ph = posthog;
 
@@ -321,7 +377,18 @@ export async function init(): Promise<void> {
     capture_pageview: "history_change",
     capture_pageleave: true,
     capture_exceptions: true,
+    error_tracking: {
+      captureExtensionExceptions: false,
+      exception_steps: { enabled: true, max_bytes: 32_768 },
+    },
     disable_session_recording: false,
+    disable_external_dependency_loading: false,
+    disable_surveys: true,
+    disable_surveys_automatic_display: true,
+    disable_product_tours: true,
+    disable_conversations: true,
+    disable_web_experiments: true,
+    opt_in_site_apps: false,
     session_recording: {
       // Inputs continuam mascarados; textos e ações do produto são úteis
       // para entender o caminho que levou ao erro.
@@ -346,7 +413,16 @@ export async function init(): Promise<void> {
     logs: {
       serviceName: "louvorja-violin",
       environment: import.meta.env.MODE || "unknown",
-      serviceVersion: import.meta.env.VITE_APP_VERSION || "unknown",
+      serviceVersion: version,
+      // Console output pode conter dados de terceiros ou conteúdo sensível.
+      // Logs estruturados passam pelo helper sanitizado; o console continua
+      // disponível no Replay apenas quando o usuário autorizou.
+      captureConsoleLogs: false,
+      beforeSend: (record) => ({
+        ...record,
+        body: sanitizeString(record.body),
+        attributes: record.attributes ? (serializableProperties(record.attributes) as LogAttributes) : undefined,
+      }),
     },
     // Liga traces de Worker/API ao mesmo replay e sessão do renderer, sem
     // vazar IDs do PostHog para hosts arbitrários de mídia.
@@ -356,6 +432,13 @@ export async function init(): Promise<void> {
     capture_heatmaps: true,
     capture_dead_clicks: true,
     rageclick: true,
+    before_send: (capture) => {
+      if (!capture) return null;
+      capture.properties = serializableProperties(capture.properties);
+      if (capture.$set) capture.$set = serializableProperties(capture.$set);
+      if (capture.$set_once) capture.$set_once = serializableProperties(capture.$set_once);
+      return capture;
+    },
     // Evita apenas metadados duplicados ou credenciais que possam aparecer em
     // URLs; propriedades de música e ações do usuário são intencionais.
     property_denylist: [
@@ -377,19 +460,22 @@ export async function init(): Promise<void> {
   // sobrevive ao reload. Sem reconciliar aqui, quem desligasse e religasse a
   // opção ficaria sem telemetria para sempre, com o toggle marcado.
   posthog.opt_in_capturing({ captureEventName: false });
-
-  posthog.capture("app_opened", {
-    platform: Platform.isDesktop ? "desktop" : "web",
-    os: osName(),
-    app_version: await appVersion(),
-    locale: $userdata.get<string>(KEYS.OPTIONS.LANGUAGE, "pt"),
-    pwa: typeof window !== "undefined" && window.matchMedia?.("(display-mode: standalone)").matches,
-    window_role: windowRole(),
-  });
+  posthog.register({ app_version: version, sdk_version: sdkVersion });
   posthog.startExceptionAutocapture({
     capture_unhandled_errors: true,
     capture_unhandled_rejections: true,
     capture_console_errors: true,
+  });
+
+  const replayReady = await waitForSessionRecording(posthog);
+  posthog.capture("app_opened", {
+    platform: Platform.isDesktop ? "desktop" : "web",
+    os: osName(),
+    app_version: version,
+    replay_ready: replayReady,
+    locale: $userdata.get<string>(KEYS.OPTIONS.LANGUAGE, "pt"),
+    pwa: typeof window !== "undefined" && window.matchMedia?.("(display-mode: standalone)").matches,
+    window_role: windowRole(),
   });
   for (const pending of _pendingExceptions.splice(0)) posthog.captureException(pending.error, pending.properties);
 }
