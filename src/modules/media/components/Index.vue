@@ -347,7 +347,7 @@ onMounted(() => {
   _syncFullscreenFlag();
 });
 
-onBeforeUnmountm(() => {
+onBeforeUnmount(() => {
   window.removeEventListener("keydown", _onKeyNav, { capture: true });
   document.removeEventListener("fullscreenchange", _syncFullscreenFlag);
 });
