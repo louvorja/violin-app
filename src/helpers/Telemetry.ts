@@ -21,7 +21,9 @@ let _ph: PostHog | null = null;
 let _appVersion = typeof packageJson.version === "string" && packageJson.version ? packageJson.version : "unknown";
 let _sdkVersion = "unknown";
 let _installed = false;
+let _nativeAutocaptureActive = false;
 const _pendingExceptions: Array<{ error: unknown; properties?: Record<string, unknown> }> = [];
+const _pendingEvents: Array<{ event: string; properties: Record<string, unknown> }> = [];
 const _breadcrumbs: Array<{ at: string; event: string; properties?: Record<string, unknown> }> = [];
 const MAX_BREADCRUMBS = 150;
 const MAX_PROPERTY_DEPTH = 6;
@@ -171,7 +173,12 @@ export function track(event: string, properties: Record<string, unknown> = {}): 
   if (!isEnabled()) return;
   const enriched = { ...baseContext(), ...serializableProperties(properties) };
   breadcrumb(event, properties);
-  _ph?.capture(event, enriched);
+  if (_ph) _ph.capture(event, enriched);
+  // `init()` é assíncrono (import dinâmico do SDK + resolução da versão); a
+  // navegação inicial do router dispara antes dele terminar. Sem fila, esse
+  // primeiro `route_changed` — e qualquer evento disparado nesse intervalo —
+  // desaparecia em silêncio.
+  else if (_pendingEvents.length < 50) _pendingEvents.push({ event, properties: enriched });
 }
 
 export function captureException(error: unknown, properties: Record<string, unknown> = {}): void {
@@ -211,12 +218,26 @@ export function log(level: LogLevel, message: string, properties: Record<string,
   ph?.capture("telemetry_log", { level, message: safeMessage, ...attributes });
 }
 
-/** Instala os handlers uma única vez em cada renderer. */
+/**
+ * Instala os handlers uma única vez em cada renderer.
+ *
+ * Os listeners de `window.error`/`unhandledrejection` só cobrem o intervalo
+ * antes de `init()` terminar: depois que `startExceptionAutocapture` liga o
+ * autocapture nativo do SDK (que também escuta esses mesmos eventos globais,
+ * via `window.onerror`/`window.onunhandledrejection`), manter os dois ativos
+ * duplicaria toda exceção não tratada. `_nativeAutocaptureActive` faz a troca.
+ */
 export function installGlobalHandlers(): void {
   if (_installed || typeof window === "undefined") return;
   _installed = true;
-  window.addEventListener("error", (event) => captureException(event.error || new Error(event.message), { source: "window.error", filename: event.filename, line: event.lineno, column: event.colno }));
-  window.addEventListener("unhandledrejection", (event) => captureException(event.reason, { source: "unhandledrejection" }));
+  window.addEventListener("error", (event) => {
+    if (_nativeAutocaptureActive) return;
+    captureException(event.error || new Error(event.message), { source: "window.error", filename: event.filename, line: event.lineno, column: event.colno });
+  });
+  window.addEventListener("unhandledrejection", (event) => {
+    if (_nativeAutocaptureActive) return;
+    captureException(event.reason, { source: "unhandledrejection" });
+  });
   window.louvorjaApi?.on?.("telemetry:main-error", (payload) => {
     const data = payload && typeof payload === "object" ? payload as Record<string, unknown> : { message: String(payload) };
     captureException(new Error(String(data.message || "Electron main process error")), {
@@ -329,6 +350,7 @@ export function setEnabled(enabled: boolean): void {
   if (!enabled) {
     _breadcrumbs.length = 0;
     _pendingExceptions.length = 0;
+    _pendingEvents.length = 0;
     _ph?.stopSessionRecording();
     _ph?.opt_out_capturing();
     return;
@@ -343,11 +365,18 @@ export function setEnabled(enabled: boolean): void {
 
 /** Zera o identificador anônimo — o usuário volta a contar como instalação nova. */
 export function resetId(): void {
-  $userdata.set(KEYS.OPTIONS.TELEMETRY_ID, "");
-  if (_ph) {
-    _ph.reset();
-    _ph.register({ app_version: _appVersion, sdk_version: _sdkVersion });
-  }
+  const id = crypto.randomUUID();
+  $userdata.set(KEYS.OPTIONS.TELEMETRY_ID, id);
+  if (!_ph) return;
+  // `reset()` também limpa o consentimento e devolve o SDK ao padrão da
+  // config (aqui, capturando) — sem reforçar o opt-out logo em seguida,
+  // quem tivesse desligado a telemetria a teria religada por engano. O
+  // bootstrap evita a janela em que o distinct_id do SDK diverge do que
+  // fica salvo em UserData até o próximo boot.
+  _ph.reset({ bootstrap: { distinctID: id, isIdentifiedID: false } });
+  if (isEnabled()) _ph.opt_in_capturing({ captureEventName: false });
+  else _ph.opt_out_capturing();
+  _ph.register({ app_version: _appVersion, sdk_version: _sdkVersion });
 }
 
 export async function init(): Promise<void> {
@@ -466,8 +495,10 @@ export async function init(): Promise<void> {
     capture_unhandled_rejections: true,
     capture_console_errors: true,
   });
+  _nativeAutocaptureActive = true;
 
   const replayReady = await waitForSessionRecording(posthog);
+  for (const pending of _pendingEvents.splice(0)) posthog.capture(pending.event, pending.properties);
   posthog.capture("app_opened", {
     platform: Platform.isDesktop ? "desktop" : "web",
     os: osName(),

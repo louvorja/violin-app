@@ -129,6 +129,66 @@ describe("Telemetry", () => {
     );
   });
 
+  it("enfileira eventos disparados antes do init() terminar e os envia depois", async () => {
+    const Telemetry = await loadTelemetry();
+    const initPromise = Telemetry.init();
+    // init() ainda está no primeiro `await` (import dinâmico do SDK) — `_ph`
+    // não existe neste ponto, exatamente como a navegação inicial do router.
+    Telemetry.track("route_changed", { to: "home" });
+    expect(posthog.capture).not.toHaveBeenCalledWith("route_changed", expect.anything());
+
+    await initPromise;
+
+    expect(posthog.capture).toHaveBeenCalledWith("route_changed", expect.objectContaining({ to: "home" }));
+  });
+
+  it("não duplica a captura de erros globais depois que o autocapture nativo do SDK assume", async () => {
+    const Telemetry = await loadTelemetry();
+
+    // Antes do init(): nenhum autocapture nativo ainda existe — o listener
+    // manual é a única rede de segurança para um crash no boot.
+    window.dispatchEvent(new ErrorEvent("error", { error: new Error("crash no boot"), message: "crash no boot" }));
+    await Telemetry.init();
+    expect(posthog.captureException).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "crash no boot" }),
+      expect.anything(),
+    );
+
+    posthog.captureException.mockClear();
+
+    // Depois do init(): startExceptionAutocapture já assumiu os mesmos
+    // eventos globais — reportar de novo pelo listener manual duplicaria.
+    window.dispatchEvent(new ErrorEvent("error", { error: new Error("crash depois"), message: "crash depois" }));
+    expect(posthog.captureException).not.toHaveBeenCalled();
+  });
+
+  it("resetId() gera o distinct_id via bootstrap e reforça o consentimento atual", async () => {
+    const Telemetry = await loadTelemetry();
+    await Telemetry.init();
+    posthog.opt_in_capturing.mockClear();
+
+    Telemetry.resetId();
+
+    expect(posthog.reset).toHaveBeenLastCalledWith(
+      expect.objectContaining({ bootstrap: expect.objectContaining({ isIdentifiedID: false }) }),
+    );
+    expect(posthog.opt_in_capturing).toHaveBeenCalled();
+    expect(posthog.opt_out_capturing).not.toHaveBeenCalled();
+
+    Telemetry.setEnabled(false);
+    posthog.reset.mockClear();
+    posthog.opt_in_capturing.mockClear();
+    posthog.opt_out_capturing.mockClear();
+
+    // `reset()` sozinho devolveria o SDK ao consentimento padrão da config
+    // (capturando); reforçar o opt-out evita religar quem desligou.
+    Telemetry.resetId();
+
+    expect(posthog.reset).toHaveBeenCalledOnce();
+    expect(posthog.opt_out_capturing).toHaveBeenCalledOnce();
+    expect(posthog.opt_in_capturing).not.toHaveBeenCalled();
+  });
+
   it("mantém músicas e remove segredos inclusive em propriedades aninhadas", async () => {
     const Telemetry = await loadTelemetry();
     await Telemetry.init();
