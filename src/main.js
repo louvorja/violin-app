@@ -255,6 +255,7 @@ $storage.hydrate().then(async () => {
       await Platform.download.setApiConfig({
         paramsUrl: `${API_URL}/params?type=env`,
         apiToken: API_TOKEN,
+        apiUrl: API_URL,
         filesUrl: API_URL_FILES,
       });
     } catch (e) {
