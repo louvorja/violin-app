@@ -40,7 +40,7 @@
       >
         <span
           v-if="text"
-          class="module-projection__text"
+          :class="['module-projection__text', `module-projection__text--${moduleId}`]"
           :style="{
             color: color || font_color || '#FFFFFF',
             fontSize: font_size_px + 'px',
@@ -60,6 +60,7 @@
             fontSize: ref_font_size_px + 'px',
             fontFamily: reference_font || font || FONT.PROJECTION.FALLBACK,
             textAlign: extraAlign,
+            ...(moduleId === ModuleEnum.CLOCK ? { fontWeight: 300, letterSpacing: '0.05em' } : {}),
           }"
         >
           {{ extra }}
@@ -83,6 +84,7 @@ import { ModuleEnum } from "@/enums/ModuleEnum";
 import DrawProjection from "@/modules/draw/components/DrawProjection.vue";
 import NameDrawProjection from "@/modules/name_draw/components/NameDrawProjection.vue";
 import { useContainerSize } from "@/composables/useContainerSize";
+import { horizontalTextAlign, moduleCustomizationDefault } from "@/helpers/ModuleFormatting";
 
 const route = useRoute();
 
@@ -109,8 +111,9 @@ const _tick = ref(0);
 function ud(key, fallback = null) {
   void _tick.value;
   if (!moduleId.value) return fallback;
-  const v = UserData.get(`${MID.value}.${key}`, fallback);
-  return v == null ? fallback : v;
+  const manifestDefault = moduleCustomizationDefault(moduleId.value, key, fallback);
+  const v = UserData.get(`${MID.value}.${key}`, manifestDefault);
+  return v == null ? manifestDefault : v;
 }
 
 const font = computed(() => {
@@ -139,10 +142,15 @@ const image_opacity = computed(() => ud("image_opacity", 100));
 const image_fit = computed(() => ud("image_fit", "cover"));
 
 const textAlign = computed(() => {
-  const h = horizontal_align.value;
-  return h === "start" ? "left" : h === "end" ? "right" : "center";
+  return horizontalTextAlign(horizontal_align.value);
 });
-const extraAlign = computed(() => (horizontal_align.value === "start" ? "left" : "right"));
+const extraAlign = computed(() =>
+  moduleId.value === ModuleEnum.CLOCK
+    ? textAlign.value
+    : horizontal_align.value === "start"
+      ? "left"
+      : "right"
+);
 
 const textShadowStyle = computed(() => {
   if (!text_shadow.value) return {};
@@ -298,6 +306,28 @@ onBeforeUnmount(() => {
 .module-projection__text {
   white-space: pre-wrap;
   line-height: 1.4;
+}
+
+/* Os módulos utilitários usam estes mesmos pesos e métricas no preview do
+   programa. Sem a classe, a projeção caía no peso normal do navegador e o
+   relógio/cronômetros pareciam ter outra formatação, mesmo com a mesma fonte
+   e tamanho configurados. */
+.module-projection__text--clock {
+  font-weight: 300;
+  letter-spacing: 0.1em;
+  font-variant-numeric: tabular-nums;
+}
+.module-projection__text--counter {
+  font-weight: 200;
+  font-variant-numeric: tabular-nums;
+}
+.module-projection__text--stopwatch,
+.module-projection__text--timer,
+.module-projection__text--timer_worship {
+  font-weight: 300;
+  letter-spacing: 0.05em;
+  font-variant-numeric: tabular-nums;
+  white-space: pre-line;
 }
 
 .module-projection__extra {

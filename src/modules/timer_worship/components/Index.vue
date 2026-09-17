@@ -20,10 +20,7 @@
           }"
           :style="[textStyle, alertActive ? alertStyle : null]"
         >
-          {{ display }}
-        </div>
-        <div v-if="showTargetTime" class="tw-display" :style="textStyle">
-          {{ targetTime }}
+          {{ projecao }}
         </div>
       </div>
     </div>
@@ -112,7 +109,7 @@ const display = computed<string>(() => {
 });
 
 const projecao = computed<string>(() => {
-  return showTargetTime.value ? `${display.value} \n ${targetTime.value}` : display.value;
+  return showTargetTime.value ? `${display.value}\n${targetTime.value}` : display.value;
 });
 
 // Defaults sonoros — setIfNull garante que existam antes do primeiro uso

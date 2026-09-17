@@ -28,6 +28,12 @@ export const module: Module = {
     text_background_enabled: { type: "boolean", default: false },
     text_background_color: { type: "color", default: "transparent" },
     font_size: { type: "font-size", default: 30 },
+    // A data é uma segunda linha visual do relógio. Declarar seus campos no
+    // manifesto faz a janela principal e todas as projeções usarem o mesmo
+    // contrato, inclusive em instalações antigas sem essas chaves salvas.
+    reference_font: { type: "font", default: FONT.PROJECTION.INHERIT },
+    reference_font_color: { type: "color", default: "#9aa3ad" },
+    reference_font_size: { type: "font-size", default: 10 },
     text_shadow: { type: "boolean", default: false },
     text_shadow_color: { type: "color", default: "#000000" },
     text_shadow_blur: { type: "font-size", default: 4 },

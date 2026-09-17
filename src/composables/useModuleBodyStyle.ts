@@ -19,6 +19,7 @@ import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { useContainerSize } from "@/composables/useContainerSize";
 import { FONT, resolveFont } from "@/config/Fonts";
+import { horizontalTextAlign, moduleCustomizationDefault } from "@/helpers/ModuleFormatting";
 
 export function useModuleBodyStyle(moduleId: string) {
   // Força re-leitura do UserData quando formatação muda.
@@ -40,8 +41,9 @@ export function useModuleBodyStyle(moduleId: string) {
 
   function read<T = unknown>(key: string, fallback: T): T {
     void tick.value;
-    const v = UserData.get<T>(`modules.${moduleId}.${key}`, fallback);
-    return v == null ? fallback : v;
+    const manifestDefault = moduleCustomizationDefault(moduleId, key, fallback);
+    const v = UserData.get<T>(`modules.${moduleId}.${key}`, manifestDefault);
+    return v == null ? manifestDefault : v;
   }
 
   const font = computed(() =>
@@ -49,6 +51,9 @@ export function useModuleBodyStyle(moduleId: string) {
   );
   const font_color = computed(() => read<string>("font_color", "#FFFFFF"));
   const font_size = computed(() => read<number>("font_size", 50));
+  const text_shadow = computed(() => read<boolean>("text_shadow", false));
+  const text_shadow_color = computed(() => read<string>("text_shadow_color", "#000000"));
+  const text_shadow_blur = computed(() => read<number>("text_shadow_blur", 4));
   const alert_color = computed(() => read<string>("alert_color", "#E74C3C"));
   const background_color = computed(() => read<string>("background_color", "#000000"));
   const border_spacing = computed(() => read<number>("border_spacing", 10));
@@ -57,6 +62,17 @@ export function useModuleBodyStyle(moduleId: string) {
   const image = computed(() => read<string>("image", ""));
   const image_opacity = computed(() => read<number>("image_opacity", 100));
   const image_fit = computed(() => read<string>("image_fit", "cover"));
+  const reference_font = computed(() =>
+    resolveFont(read<string | null>("reference_font", font.value), font.value, font.value)
+  );
+  const reference_font_color = computed(() =>
+    read<string>("reference_font_color", font_color.value)
+  );
+  const reference_font_size = computed(() => read<number>("reference_font_size", 10));
+  const text_background_enabled = computed(() => read<boolean>("text_background_enabled", false));
+  const text_background_color = computed(() =>
+    read<string>("text_background_color", "transparent")
+  );
 
   // Alinhamento do conteúdo do body.
   // Módulos usam flex-direction: column, então:
@@ -72,7 +88,7 @@ export function useModuleBodyStyle(moduleId: string) {
   /** Estilos do container do body (fundo + padding + alinhamento). */
   const rootStyle = computed<CSSProperties>(() => ({
     background: background_color.value,
-    padding: `${border_spacing.value}px`,
+    padding: `${Number(border_spacing.value) || 10}px`,
     alignItems: alignItems.value,
     justifyContent: justifyContent.value,
   }));
@@ -82,6 +98,29 @@ export function useModuleBodyStyle(moduleId: string) {
     fontFamily: font.value,
     color: font_color.value,
     fontSize: `${fontSizePc(font_size.value)}px`,
+    lineHeight: 1.4,
+    textAlign: horizontalTextAlign(horizontal_align.value),
+    width: "100%",
+    boxSizing: "border-box",
+    backgroundColor: text_background_enabled.value
+      ? text_background_color.value || "transparent"
+      : "transparent",
+    ...(text_shadow.value
+      ? {
+          textShadow: `0 0 ${text_shadow_blur.value || 4}px ${text_shadow_color.value || "#000000"}, 0 0 ${text_shadow_blur.value || 4}px ${text_shadow_color.value || "#000000"}`,
+        }
+      : {}),
+  }));
+
+  /** Estilos da referência/linha auxiliar (data, horário-alvo, etc.). */
+  const referenceStyle = computed<CSSProperties>(() => ({
+    fontFamily: reference_font.value,
+    color: reference_font_color.value,
+    fontSize: `${fontSizePc(reference_font_size.value)}px`,
+    lineHeight: 1.5,
+    textAlign: horizontalTextAlign(horizontal_align.value),
+    width: "100%",
+    boxSizing: "border-box",
   }));
 
   /** Cor do alerta (estado de alarme). */
@@ -96,5 +135,13 @@ export function useModuleBodyStyle(moduleId: string) {
     objectFit: image_fit.value as CSSProperties["objectFit"],
   }));
 
-  return { rootStyle, textStyle, alertStyle, bgImage, imageStyle, container };
+  return {
+    rootStyle,
+    textStyle,
+    referenceStyle,
+    alertStyle,
+    bgImage,
+    imageStyle,
+    container,
+  };
 }

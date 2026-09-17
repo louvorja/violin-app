@@ -49,12 +49,7 @@
             color: font_color || '#FFFFFF',
             fontSize: font_size_px + 'px',
             fontFamily: font || FONT.PROJECTION.FALLBACK,
-            textAlign:
-              horizontal_align === 'start'
-                ? 'left'
-                : horizontal_align === 'end'
-                  ? 'right'
-                  : 'center',
+            textAlign: horizontalTextAlign(horizontal_align),
             ...textShadowStyle,
           }"
         >
@@ -68,7 +63,7 @@
             color: reference_font_color || '#FB8C00',
             fontSize: ref_font_size_px + 'px',
             fontFamily: reference_font || FONT.PROJECTION.FALLBACK,
-            textAlign: horizontal_align === 'start' ? 'left' : 'right',
+            textAlign: horizontalTextAlign(horizontal_align),
           }"
         >
           {{ displayReference }}
@@ -90,6 +85,7 @@ import { useContainerSize } from "@/composables/useContainerSize";
 import Broadcast from "@/helpers/Broadcast";
 import UserData from "@/helpers/UserData";
 import { FONT, resolveFont } from "@/config/Fonts";
+import { horizontalTextAlign, moduleCustomizationDefault } from "@/helpers/ModuleFormatting";
 import OverlayRenderer from "@/components/OverlayRenderer.vue";
 import LibrasOverlay from "@/views/LibrasOverlay.vue";
 
@@ -113,8 +109,9 @@ const _tick = ref(0);
 function ud(key, fallback = null) {
   // _tick.value força recompute quando UserData muda externamente
   void _tick.value;
-  const v = UserData.get(`${MID}.${key}`, fallback);
-  return v == null ? fallback : v;
+  const manifestDefault = moduleCustomizationDefault("bible", key, fallback);
+  const v = UserData.get(`${MID}.${key}`, manifestDefault);
+  return v == null ? manifestDefault : v;
 }
 
 const font = computed(() => {
@@ -143,7 +140,7 @@ const image_fit = computed(() => ud("image_fit", "cover"));
 
 const font_size_px = computed(() => fontSizePc(font_size.value));
 const ref_font_size_px = computed(() => fontSizePc(reference_font_size.value));
-const border_spacing_px = computed(() => fontSizePc(border_spacing.value));
+const border_spacing_px = computed(() => Number(border_spacing.value) || 10);
 
 const textShadowStyle = computed(() => {
   if (!text_shadow.value) return {};

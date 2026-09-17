@@ -76,6 +76,12 @@
             v-if="bibleActive && (bibleDisplayText || bibleDisplayReference)"
             :key="bibleDisplayText + bibleDisplayReference"
             class="bible-content"
+            :style="{
+              padding: `${bibleBorderSpacing}px`,
+              backgroundColor: bibleTextBackgroundEnabled
+                ? bibleTextBackgroundColor || 'transparent'
+                : 'transparent',
+            }"
           >
             <span
               v-if="bibleDisplayText"
@@ -157,6 +163,7 @@ import { loadYtApi } from "@/composables/useYouTubeApi";
 import { getDocument, GlobalWorkerOptions } from "pdfjs-dist";
 import pdfjsWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { FONT, resolveFont } from "@/config/Fonts";
+import { horizontalTextAlign, moduleCustomizationDefault } from "@/helpers/ModuleFormatting";
 import Telemetry from "@/helpers/Telemetry";
 
 GlobalWorkerOptions.workerSrc = pdfjsWorker;
@@ -253,8 +260,9 @@ const _bibleTick = ref(0);
 
 function bud(key: string, fallback: unknown = null): unknown {
   void _bibleTick.value;
-  const v = $userdata.get(`modules.bible.${key}`, fallback);
-  return v == null ? fallback : v;
+  const manifestDefault = moduleCustomizationDefault("bible", key, fallback);
+  const v = $userdata.get(`modules.bible.${key}`, manifestDefault);
+  return v == null ? manifestDefault : v;
 }
 
 const bibleFont = computed(() =>
@@ -275,6 +283,11 @@ const bibleHorizontalAlign = computed(() => bud("horizontal_align", "center") as
 const bibleShowReference = computed(() => bud("show_reference", true) as boolean);
 const bibleShowVersion = computed(() => bud("show_version", true) as boolean);
 const bibleReferenceOnly = computed(() => bud("reference_only", false) as boolean);
+const bibleBorderSpacing = computed(() => Number(bud("border_spacing", 10)) || 10);
+const bibleTextBackgroundEnabled = computed(() => bud("text_background_enabled", false) as boolean);
+const bibleTextBackgroundColor = computed(
+  () => bud("text_background_color", "transparent") as string
+);
 
 const bibleFontSizePx = computed(() => fontSizePc(bibleFontSize.value));
 const bibleRefFontSizePx = computed(() => fontSizePc(bibleRefFontSize.value));
@@ -286,13 +299,7 @@ const bibleTextShadowStyle = computed(() => {
   return { textShadow: `0 0 ${blur}px ${color}, 0 0 ${blur}px ${color}` };
 });
 
-const bibleTextAlign = computed(() =>
-  bibleHorizontalAlign.value === "start"
-    ? "left"
-    : bibleHorizontalAlign.value === "end"
-      ? "right"
-      : "center"
-);
+const bibleTextAlign = computed(() => horizontalTextAlign(bibleHorizontalAlign.value));
 
 function numbersInterval(numbers: number[]): string {
   if (!numbers || numbers.length === 0) return "";

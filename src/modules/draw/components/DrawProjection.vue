@@ -21,7 +21,16 @@
       }"
     />
 
-    <div v-if="active && (text || chips.length)" class="draw-proj-content">
+    <div
+      v-if="active && (text || chips.length)"
+      class="draw-proj-content"
+      :style="{
+        textAlign: horizontalTextAlign(horizontal_align),
+        backgroundColor: text_background_enabled
+          ? text_background_color || 'transparent'
+          : 'transparent',
+      }"
+    >
       <span
         v-if="text"
         class="draw-proj-number"
@@ -68,6 +77,7 @@ import { useI18n } from "vue-i18n";
 import { getModule } from "@/config/modules";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { FONT, resolveFont } from "@/config/Fonts";
+import { horizontalTextAlign, moduleCustomizationDefault } from "@/helpers/ModuleFormatting";
 
 interface Props {
   text?: string;
@@ -95,8 +105,9 @@ const tick = ref(0);
 
 function ud<T>(key: string, fallback: T): T {
   void tick.value;
-  const v = UserData.get<T>(`modules.draw.${key}`, fallback);
-  return v == null ? fallback : v;
+  const manifestDefault = moduleCustomizationDefault(ModuleEnum.DRAW, key, fallback);
+  const v = UserData.get<T>(`modules.draw.${key}`, manifestDefault);
+  return v == null ? manifestDefault : v;
 }
 
 const background_color = computed(() => ud("background_color", "#000000"));
@@ -106,6 +117,8 @@ const font_size = computed(() => ud("font_size", 50));
 const text_shadow = computed(() => ud("text_shadow", false));
 const text_shadow_color = computed(() => ud("text_shadow_color", "#000000"));
 const text_shadow_blur = computed(() => ud("text_shadow_blur", 4));
+const text_background_enabled = computed(() => ud("text_background_enabled", false));
+const text_background_color = computed(() => ud("text_background_color", "transparent"));
 const chip_font_size = computed(() => ud("chip_font_size", 12));
 const border_spacing = computed(() => ud("border_spacing", 10));
 const vertical_align = computed<CSSProperties["alignItems"]>(
@@ -165,6 +178,7 @@ useBroadcastListener(BROADCAST_TYPE.MODULE_FORMAT_CHANGED, (payload) => {
   justify-content: center;
   gap: 0.4em;
   max-width: 100%;
+  width: 100%;
 }
 
 .draw-proj-number {

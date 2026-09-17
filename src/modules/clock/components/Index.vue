@@ -17,10 +17,10 @@
 
     <div class="mod-shell">
       <ModuleFormatDrawer v-model="show_format" :module-id="'clock'" :manifest="manifest" />
-      <div ref="container" class="clock-stage" style="gap: 4px" :style="rootStyle">
+      <div ref="container" class="clock-stage" :style="rootStyle">
         <img v-if="bgImage" :src="bgImage" class="clock-bg-img" :style="imageStyle" alt="" />
         <div class="clock-time" :style="textStyle">{{ time }}</div>
-        <div v-if="date" class="clock-date lj-u-muted">{{ date }}</div>
+        <div v-if="date" class="clock-date" :style="referenceStyle">{{ date }}</div>
       </div>
     </div>
   </ModuleContainer>
@@ -45,7 +45,8 @@ import { useModuleBodyStyle } from "@/composables/useModuleBodyStyle";
 
 const { locale } = useI18n();
 const { fmt, show_format } = useModuleFormat("clock", manifest);
-const { rootStyle, textStyle, bgImage, imageStyle, container } = useModuleBodyStyle("clock");
+const { rootStyle, textStyle, referenceStyle, bgImage, imageStyle, container } =
+  useModuleBodyStyle("clock");
 
 const projection = useModuleProjection("clock", {
   onAction(action) {
@@ -193,7 +194,9 @@ onBeforeUnmount(() => {
 .clock-date {
   position: relative;
   z-index: 1;
-  font-size: 0.9rem;
+  margin-top: 0.4em;
+  font-weight: 300;
+  letter-spacing: 0.05em;
 }
 .clock-bg-img {
   position: absolute;
