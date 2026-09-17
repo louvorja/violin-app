@@ -258,6 +258,7 @@ import {
 } from "@/config/Api";
 import Snackbar from "@helpers/Snackbar";
 import { fetchWithTimeout } from "@/helpers/Http";
+import Telemetry from "@/helpers/Telemetry";
 
 interface AppUpdateState {
   status: string;
@@ -283,6 +284,7 @@ const appUpdate = ref<AppUpdateState>({
 });
 let _appUpdateUnsub: (() => void) | null = null;
 let _pkgProgressUnsub: (() => void) | null = null;
+let _lastAppProgressBucket = -1;
 
 const dbChecking = ref<boolean>(false);
 const dbStatus = ref<UpdateStatus>("idle");
@@ -446,6 +448,8 @@ function onAutoDownloadChange(v: boolean): void {
 /* ---- App update ---- */
 async function checkAppUpdate(): Promise<void> {
   if (!Platform.updater) return;
+  const startedAt = Date.now();
+  Telemetry.track("app_update_check_started");
   try {
     const res = await Platform.updater.check();
     // Só registra a última verificação quando o check concluiu com sucesso.
@@ -453,14 +457,23 @@ async function checkAppUpdate(): Promise<void> {
       const ts = new Date().toISOString();
       lastAppCheck.value = ts;
       $userdata.set(KEYS.OPTIONS.LAST_APP_CHECK, ts);
+      Telemetry.track("app_update_check_completed", {
+        available: !!res.state && (res.state as AppUpdateState).status === "available",
+        duration_ms: Date.now() - startedAt,
+      });
     }
   } catch (e) {
     console.error("[Atualizações] checkApp:", e);
+    Telemetry.captureException(e, { source: "app_update_check" });
+    Telemetry.track("app_update_check_failed", { duration_ms: Date.now() - startedAt });
   }
 }
 
 async function startDownload(): Promise<void> {
   if (!Platform.updater) return;
+  const startedAt = Date.now();
+  _lastAppProgressBucket = -1;
+  Telemetry.track("app_update_download_started", { version: appUpdate.value.newVersion });
 
   // Todos os formatos pelo mesmo caminho. O deb e o rpm tinham um desvio para
   // baixar o pacote à mão, de quando a verificação de versão falhava e o
@@ -469,8 +482,11 @@ async function startDownload(): Promise<void> {
   // manual — sem precisar que a tela decida isso por ele.
   try {
     await Platform.updater.download();
+    Telemetry.track("app_update_download_completed", { duration_ms: Date.now() - startedAt });
   } catch (e) {
     console.error("[Atualizações] download:", e);
+    Telemetry.captureException(e, { source: "app_update_download" });
+    Telemetry.track("app_update_download_failed", { duration_ms: Date.now() - startedAt });
   }
 }
 
@@ -480,6 +496,7 @@ async function installUpdate(): Promise<void> {
   // para "abrir o pacote" existia de quando a verificação falhava e o download
   // era feito à mão; com o updater fazendo o download, não há arquivo no
   // caminho manual, e o botão respondia "Nenhum pacote baixado".
+  Telemetry.track("app_update_install_requested", { version: appUpdate.value.newVersion });
   await Platform.updater?.install();
 }
 
@@ -763,6 +780,11 @@ onMounted(async () => {
       _pkgProgressUnsub = Platform.updater.onPackageProgress((d: { percent: number }) => {
         if (d && typeof d.percent === "number") {
           appUpdate.value = { ...appUpdate.value, status: "downloading", progress: d.percent };
+          const bucket = Math.min(100, Math.floor(d.percent / 25) * 25);
+          if (bucket !== _lastAppProgressBucket) {
+            _lastAppProgressBucket = bucket;
+            Telemetry.track("app_update_download_progress", { percent_bucket: bucket });
+          }
         }
       });
       pushOptions();
