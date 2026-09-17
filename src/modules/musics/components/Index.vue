@@ -180,7 +180,7 @@ import { LjAlert, LjButton, LjCheckbox, LjChip, LjIcon, LjInput, LjSwitch } from
 /* ########################################################### */
 /* ####### INSTALAÇÃO DO MODULO ############################## */
 /* ########################################################### */
-import { computed, onMounted, ref, useId, watch } from "vue";
+import { computed, nextTick, onMounted, ref, useId, watch } from "vue";
 import { useViewport } from "@/composables/useViewport";
 import Media from "@/composables/useMedia";
 import AppData from "@/helpers/AppData";
@@ -208,10 +208,74 @@ const userdata = computed(() => {
 
 const { selectedPlaylist, hydrate, addSong, removeSong, isSongInPlaylist } = usePlaylists();
 
-onMounted(() => {
-  hydrate();
+const musicPageStartedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
+let musicFirstPaintReported = false;
+let musicDataVisibleReported = false;
+
+onMounted(async () => {
   Telemetry.track("music_module_opened", { compact: compact.value });
+  const playlistStartedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
+  await hydrate();
+  const playlistDurationMs = Math.max(
+    0,
+    Math.round(
+      (typeof performance !== "undefined" ? performance.now() : Date.now()) - playlistStartedAt
+    )
+  );
+  Telemetry.track("music_page_stage", {
+    stage: "playlists_ready",
+    duration_ms: playlistDurationMs,
+  });
+  Telemetry.histogram("louvorja.music.page.stage.duration", playlistDurationMs, {
+    stage: "playlists_ready",
+  });
+
+  requestAnimationFrame(() =>
+    requestAnimationFrame(async () => {
+      await nextTick();
+      if (musicFirstPaintReported) return;
+      musicFirstPaintReported = true;
+      const durationMs = Math.max(
+        0,
+        Math.round(
+          (typeof performance !== "undefined" ? performance.now() : Date.now()) - musicPageStartedAt
+        )
+      );
+      Telemetry.track("music_page_stage", {
+        stage: "first_paint",
+        duration_ms: durationMs,
+        rendered_rows: data.value?.count || 0,
+      });
+      Telemetry.histogram("louvorja.music.page.stage.duration", durationMs, {
+        stage: "first_paint",
+      });
+    })
+  );
 });
+
+watch(
+  () => data.value?.count,
+  (count) => {
+    if (musicDataVisibleReported || typeof count !== "number") return;
+    musicDataVisibleReported = true;
+    const durationMs = Math.max(
+      0,
+      Math.round(
+        (typeof performance !== "undefined" ? performance.now() : Date.now()) - musicPageStartedAt
+      )
+    );
+    Telemetry.track("music_page_stage", {
+      stage: "data_visible",
+      duration_ms: durationMs,
+      rendered_rows: count,
+      total_rows: data.value?.total_count || 0,
+    });
+    Telemetry.histogram("louvorja.music.page.stage.duration", durationMs, {
+      stage: "data_visible",
+    });
+  },
+  { flush: "post" }
+);
 
 function addSongToPlaylist(item) {
   if (!selectedPlaylist.value) return;
