@@ -4,6 +4,7 @@ import { getRibbonModules } from "@/config/modules";
 import type { RibbonPage } from "@/types/Ribbon";
 import $appdata from "@/helpers/AppData";
 import $modules from "@/helpers/Modules";
+import Telemetry from "@/helpers/Telemetry";
 
 export const useRibbonStore = defineStore("ribbon", () => {
   const pages: RibbonPage[] = getRibbonModules;
@@ -21,7 +22,13 @@ export const useRibbonStore = defineStore("ribbon", () => {
   );
 
   function selectPage(id: string) {
+    const previousPage = activePage.value;
+    if (previousPage === id) {
+      Telemetry.track("ribbon_page_focused", { page_id: id });
+      return;
+    }
     activePage.value = id;
+    Telemetry.track("ribbon_page_opened", { page_id: id, from_page: previousPage });
     const page = pages.find((p) => p.id === id);
     if (page?.defaultModule) $modules.open(page.defaultModule);
   }
