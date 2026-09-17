@@ -328,24 +328,31 @@ onBeforeUnmount(() => {
   /* Base para o `cqh` de `nextStyle()` (useSlideStyle.ts) — a fonte do
    * próximo slide precisa ser % deste painel, não da tela inteira. */
   container-type: size;
+  /* Guarda final: a fonte já é limitada antes do layout, mas uma fonte local
+   * com métricas incomuns nunca pode desenhar fora da moldura do retorno. */
+  overflow: clip;
 }
 
 .return-bottom-grid {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
   gap: 16px;
   width: 100%;
+  height: 100%;
+  min-height: 0;
   align-items: center;
 }
 
 .return-next-text {
   display: flex;
   flex-direction: column;
-  gap: 15px;
+  justify-content: center;
   overflow: hidden;
   min-width: 0;
+  min-height: 0;
+  height: 100%;
   font-size: 14px;
 }
 
@@ -378,6 +385,7 @@ onBeforeUnmount(() => {
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   overflow: hidden;
+  max-height: 100%;
 }
 
 .return-counter {
@@ -390,5 +398,8 @@ onBeforeUnmount(() => {
   padding-left: 12px;
   border-left: 3px solid rgba(239, 180, 0, 0.3);
   align-self: center;
+  white-space: nowrap;
+  line-height: 1;
+  max-height: 100%;
 }
 </style>

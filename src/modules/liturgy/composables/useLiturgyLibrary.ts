@@ -43,10 +43,23 @@ function _normalizeLiturgyItem(raw: unknown): LiturgyItem | null {
     escolha: r.escolha === true,
     has_instrumental_music: r.has_instrumental_music === true,
     // Campos opcionais — preservados se presentes
-    ...(typeof r.id_music === "number" ? { id_music: r.id_music } : {}),
+    ...(typeof r.id_music === "number" && Number.isFinite(r.id_music)
+      ? { id_music: r.id_music }
+      : typeof r.id_music === "string" && r.id_music.trim() !== "" && Number.isFinite(Number(r.id_music))
+        ? { id_music: Number(r.id_music) }
+        : {}),
     ...(typeof r.time === "string" ? { time: r.time } : {}),
     ...(typeof r.checked === "string" ? { checked: r.checked } : {}),
     ...(typeof r.blocoId === "string" ? { blocoId: r.blocoId } : {}),
+    ...(typeof r.ref_id === "string" ? { ref_id: r.ref_id } : {}),
+    ...(Array.isArray(r.anuncios_ids)
+      ? { anuncios_ids: r.anuncios_ids.filter((id): id is string => typeof id === "string") }
+      : {}),
+    ...(typeof r.overlay_id === "string" ? { overlay_id: r.overlay_id } : {}),
+    ...(r.overlay_action === "activate" || r.overlay_action === "deactivate"
+      ? { overlay_action: r.overlay_action }
+      : {}),
+    ...(typeof r.linked_overlay_id === "string" ? { linked_overlay_id: r.linked_overlay_id } : {}),
   };
 }
 
@@ -98,11 +111,18 @@ function _mapJaItemFields(id: string, fields: Record<string, string>): Record<st
     item: fields.item ?? "",
     subitem: fields.subitem ?? "",
     cor: _delphiColorToHex(fields.cor),
+    duration: fields.duration ?? fields.duracao ?? 0,
+    time: fields.time ?? fields.horario ?? undefined,
     dir: fields.dir ?? "",
     dir_info: fields.dir_info || "E",
     url: fields.url ?? "",
     musica: fields.musica !== undefined ? Number(fields.musica) : -1,
+    id_music:
+      fields.musica !== undefined && Number.isFinite(Number(fields.musica)) && Number(fields.musica) > 0
+        ? Number(fields.musica)
+        : undefined,
     escolha: fields.escolha === "1",
+    has_instrumental_music: fields.has_instrumental_music === "1" || fields.instrumental === "1",
     checked: fields.checked || undefined,
   };
 }

@@ -66,6 +66,11 @@ function _create(): AudioPlayback {
   let _lastProgressAt = 0;
   let _lastProgressTime = 0;
   let _watchdog: ReturnType<typeof setInterval> | null = null;
+  let _listenedSeconds = 0;
+  let _lastListenedTime = 0;
+  let _lastListeningReportAt = 0;
+  let _listeningStartedReported = false;
+  const LISTENING_REPORT_INTERVAL_MS = 30_000;
 
   function _telemetryProps(el: HTMLMediaElement, extra: Record<string, unknown> = {}): Record<string, unknown> {
     const error = el.error;
@@ -87,6 +92,34 @@ function _create(): AudioPlayback {
     };
   }
 
+  function _reportListening(el: HTMLMediaElement, reason: string, force = false): void {
+    if (!_telemetryContext) return;
+    const current = Number.isFinite(el.currentTime) ? el.currentTime : _lastListenedTime;
+    const delta = current - _lastListenedTime;
+    // Saltos grandes normalmente são seek/troca de faixa, não tempo ouvido.
+    if (delta > 0 && delta <= 5) _listenedSeconds += delta;
+    _lastListenedTime = current;
+    const now = Date.now();
+    if (!force && now - _lastListeningReportAt < LISTENING_REPORT_INTERVAL_MS) return;
+    const duration = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : 0;
+    const completionRatio = duration > 0 ? Math.min(1, current / duration) : undefined;
+    Telemetry.track("music_listening_progress", _telemetryProps(el, {
+      listened_seconds: Number(_listenedSeconds.toFixed(2)),
+      completion_ratio: completionRatio,
+      listening_reason: reason,
+    }));
+    Telemetry.histogram("louvorja.music.listened.seconds", _listenedSeconds, {
+      mode: _telemetryContext.mode || "unknown",
+    });
+    if (reason === "ended" || (completionRatio !== undefined && completionRatio >= 0.9)) {
+      Telemetry.track("music_listening_completed", _telemetryProps(el, {
+        listened_seconds: Number(_listenedSeconds.toFixed(2)),
+        completion_ratio: completionRatio,
+      }));
+    }
+    _lastListeningReportAt = now;
+  }
+
   function _trackMediaEvent(el: HTMLMediaElement, eventName: string): void {
     if (!_elementTelemetryContext.has(el) && !_telemetryContext) return;
     const now = Date.now();
@@ -106,6 +139,12 @@ function _create(): AudioPlayback {
         _bufferingSince = 0;
       }
       Telemetry.track("music_play_started", _telemetryProps(el));
+      if (!_listeningStartedReported) {
+        _listeningStartedReported = true;
+        _lastListenedTime = Number.isFinite(el.currentTime) ? el.currentTime : 0;
+        _lastListeningReportAt = now;
+        Telemetry.track("music_listening_started", _telemetryProps(el, { listening_mode: "audio" }));
+      }
       return;
     }
     if (eventName === "loadedmetadata" || eventName === "canplay" || eventName === "canplaythrough") {
@@ -120,14 +159,17 @@ function _create(): AudioPlayback {
       return;
     }
     if (eventName === "ended") {
+      _reportListening(el, "ended", true);
       Telemetry.track("music_playback_ended", _telemetryProps(el, { ended_reason: "media_ended" }));
       return;
     }
     if (eventName === "pause") {
+      _reportListening(el, "paused", true);
       Telemetry.track("music_playback_paused", _telemetryProps(el, { stage: "media_element" }));
       return;
     }
     if (eventName === "abort") {
+      _reportListening(el, "aborted", true);
       Telemetry.track("music_playback_aborted", _telemetryProps(el, { stage: "media_element" }));
     }
   }
@@ -199,6 +241,7 @@ function _create(): AudioPlayback {
         return;
       }
       _syncTime();
+      if (_el && _playing) _reportListening(_el, "heartbeat");
       _rafId = requestAnimationFrame(tick);
     };
     _rafId = requestAnimationFrame(tick);
@@ -572,6 +615,10 @@ function _create(): AudioPlayback {
     isFading.value    = false;
     isLazy.value      = false;
     _telemetryContext = null;
+    _listenedSeconds = 0;
+    _lastListenedTime = 0;
+    _lastListeningReportAt = 0;
+    _listeningStartedReported = false;
     if (_el) {
       // Não deixe eventos enfileirados da faixa anterior atravessarem o novo
       // contexto no mesmo elemento DOM. `getElement` reinstala de forma
@@ -594,6 +641,12 @@ function _create(): AudioPlayback {
   return {
     volume, currentTime, duration, progress, buffered, isPaused, isFading,
     getElement, setTelemetryContext: (context) => {
+      if (context?.playback_id !== _telemetryContext?.playback_id) {
+        _listenedSeconds = 0;
+        _lastListenedTime = 0;
+        _lastListeningReportAt = 0;
+        _listeningStartedReported = false;
+      }
       _telemetryContext = context;
       if (_el) {
         if (context) _elementTelemetryContext.set(_el, context);

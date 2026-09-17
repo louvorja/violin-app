@@ -349,29 +349,37 @@ Remoto, Sincronizar e StartupCheck.
 
 ## 🖥️ Versão clássica (Delphi)
 
-A detecção da versão clássica é feita em `electron/main/classicVersion.js`.
-O app considera a instalação presente quando a pasta raiz padrão existe e a
-subpasta `config/` também está presente em `C:\Program Files (x86)\Louvor JA`.
+A detecção da versão clássica é feita em `electron/main/classicLibrary.js`,
+usando os palpites de `electron/main/mediaRoots.js`. O app aceita tanto a raiz
+da instalação quanto a própria pasta `config/`; mídia em `capas/`, `imagens/`
+ou `musicas/` basta para validar, assim como um `config/database.db` não vazio.
+No Windows, os dois `Program Files` e as pastas expostas por
+`ProgramFiles`/`ProgramFiles(x86)` são consultados — a unidade não é fixada em
+`C:`.
 
 ### Fluxo de login
 
-- `Shell.vue` só abre o `ClassicVersionDialog` quando a detecção retorna sucesso
-  e `SKIP_CLASSIC_CHECK`/`USE_CLASSIC_DIR` não bloqueiam o fluxo.
-- A verificação inicial da versão clássica só roda no **Windows**.
-- O checkbox do dialog grava `SKIP_CLASSIC_CHECK`, evitando reaparecer no login.
-- O dialog mostra o diretório detectado e permite aceitar ou recusar o uso do
-  diretório clássico.
+- A configuração é explícita na seção **Armazenamento** de
+  `AppMenuSincronizar.vue`; o app não ativa uma pasta de outro programa sem a
+  confirmação do operador.
+- `storage.classicDir`, `storage.classicLang` e `storage.classicEnabled` são
+  aplicados pelo processo principal sem reiniciar a aplicação.
+- O idioma é lido primeiro do arquivo `.translate` junto à instalação Delphi;
+  os marcadores `%APPDATA%/LouvorJA/configPT.ja` e `configES.ja` são fallback.
+  Se ambos existem e não há `.translate`, não se adivinha o idioma.
 
 ### Sincronização e importação
 
 - Em `AppMenuSincronizar.vue`, o botão de versão clássica aparece em todo o
   desktop, não apenas no Windows.
 - Quando a instalação padrão não é encontrada, o usuário pode apontar
-  manualmente o diretório raiz da instalação clássica.
-- O caminho salvo fica em `storage.classicDir` e a flag `storage.useClassicDir`
-  ativa o modo clássico.
-- Quando o modo clássico está ativo, o diretório em runtime é atualizado sem
-  reiniciar a aplicação.
+  manualmente o diretório raiz ou `config` da instalação clássica.
+- O modo clássico é **somente leitura**: o catálogo JSON/bundle atual continua
+  sendo a fonte de verdade; a resolução de mídia consulta primeiro `files/` do
+  Violin e depois o acervo Delphi. O `database.db` antigo não é sobrescrito nem
+  importado automaticamente.
+- Quando o modo clássico está ativo, a origem em runtime é atualizada sem
+  reiniciar a aplicação e o cache de disponibilidade é refeito.
 - Ao trocar a pasta, o alerta oferece `Copiar` / `Mover` / `Cancelar`.
 - A importação clássica copia apenas as pastas de mídia:
   - `capas` → `covers`
@@ -492,7 +500,7 @@ via `Platform.updater`. O comportamento varia conforme a plataforma:
 
 | Instalação          | Check                              | Download / Instalação                                                      |
 |---------------------|------------------------------------|----------------------------------------------------------------------------|
-| **Windows (NSIS)**  | electron-updater (provider GitHub) | electron-updater — `.exe` + blockmap (diferencial) + instalação silenciosa |
+| **Windows (NSIS)**  | electron-updater (provider GitHub) | Instalação por usuário em `%LOCALAPPDATA%\Programs`; `.exe` + blockmap (diferencial). Cópias legadas em `Program Files` pedem UAC explícito |
 | **macOS (DMG/zip)** | electron-updater                   | electron-updater — `.zip` (substitui o `.app`)                             |
 | **Linux AppImage**  | electron-updater                   | electron-updater — substitui o AppImage                                    |
 | **Linux deb/rpm**   | electron-updater                   | electron-updater — via `dpkg`/`apt`/`rpm` (exige sudo)                     |
@@ -529,9 +537,23 @@ Persistidas em `user_data.options` e aplicadas em runtime via `Platform.updater.
    badge de atualização na `ShellTools`.
 5. Estado propagado ao renderer via IPC `updater:state` (`Platform.updater.onStateChange`).
 
+No Windows, o instalador assistido fixa o modo por usuário (`perMachine: false`,
+sem elevação no caminho normal) e grava o protocolo `louvorja://` em
+`HKCU\Software\Classes`. Uma instalação antiga que tenha sido registrada por
+usuário dentro de `Program Files` é reconhecida pelo script NSIS e atualizada
+no mesmo diretório somente depois da confirmação do UAC; o updater não tenta
+fazê-lo silenciosamente ao fechar o app (`installRequiresElevation`). Isso evita
+o estado anterior, em que a atualização falhava sem aviso e deixava uma segunda
+cópia concorrente.
+
 A ordem do fluxo de boot é: **atualização → release notes → startup check**.
 Cada etapa encadeia na próxima apenas quando concluída (ou dispensada), e há um
 timeout de segurança para o check não travar o boot.
+
+No Electron, a migração única de liturgia termina ainda atrás do splash antes
+do renderer enviar `app:ready`. Assim o overlay global de migração não aparece
+por um único frame entre o splash e a Shell — especialmente em instalações
+Windows que ainda carregam o formato legado.
 
 ### Diálogos e dispensa
 

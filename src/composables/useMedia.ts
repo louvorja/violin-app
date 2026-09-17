@@ -19,7 +19,11 @@ import { useSlides } from "@/composables/useSlides";
 import type { Slide } from "@/composables/useSlides";
 import { useLyric } from "@/composables/useLyric";
 import { useAlbum } from "@/composables/useAlbum";
-import { openProjectionWindows, openVideoProjectionWindows, closeProjectionWindows } from "@/helpers/ProjectionWindows";
+import {
+  openProjectionWindows,
+  openVideoProjectionWindows,
+  closeProjectionWindows,
+} from "@/helpers/ProjectionWindows";
 import { Music } from "@/types/Music";
 import type { Lyric } from "@/types/Lyric";
 import { LyricOpenParams } from "@/types/Lyric";
@@ -31,8 +35,8 @@ import Telemetry from "@/helpers/Telemetry";
 
 const _audio = useAudioPlayback();
 const _slides = useSlides();
-const _lyric  = useLyric();
-const _album  = useAlbum();
+const _lyric = useLyric();
+const _album = useAlbum();
 let _loadingId: string | number | null = null;
 let _playlistOnEnd: (() => boolean) | null = null;
 // XHR atual de download de áudio — abortado ao trocar de música rapidamente
@@ -47,8 +51,11 @@ let _activePlayback: AudioTelemetryContext | null = null;
 
 function _newPlaybackId(): string {
   try {
-    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
-  } catch { /* ambientes antigos sem randomUUID */ }
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function")
+      return crypto.randomUUID();
+  } catch {
+    /* ambientes antigos sem randomUUID */
+  }
   return `playback-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
@@ -56,7 +63,10 @@ function _audioTelemetry(extra: Record<string, unknown> = {}): Record<string, un
   return { ...(_activePlayback || {}), ...extra };
 }
 
-function _telemetryFor(context: AudioTelemetryContext, extra: Record<string, unknown> = {}): Record<string, unknown> {
+function _telemetryFor(
+  context: AudioTelemetryContext,
+  extra: Record<string, unknown> = {}
+): Record<string, unknown> {
   return { ...context, ...extra };
 }
 
@@ -99,7 +109,7 @@ function _loadAudioSrc(
     _audio.setSrc(src, lazy);
     _self.pause(false);
   },
-  deferAudioContext = false,
+  deferAudioContext = false
 ): void {
   // Captura o contexto desta tentativa. Callbacks de XHR podem chegar depois
   // que outra faixa assumiu `_activePlayback`; usar o contexto global nesse
@@ -111,14 +121,24 @@ function _loadAudioSrc(
     requestContext ? _telemetryFor(requestContext, extra) : extra;
   const startedAt = Date.now();
   const requestRetry = (): void => {
-    Telemetry.track("music_retry_requested", requestTelemetry({ id_music: idCheck, source_type: _sourceType(audioUrl) }));
+    Telemetry.track(
+      "music_retry_requested",
+      requestTelemetry({ id_music: idCheck, source_type: _sourceType(audioUrl) })
+    );
     if (idCheck != null) retryFn(idCheck);
   };
   if (_activePlayback) {
     _activePlayback = { ..._activePlayback, source_type: _sourceType(audioUrl) };
     if (!deferAudioContext) _audio.setTelemetryContext(_activePlayback);
   }
-  Telemetry.track("music_audio_load_started", requestTelemetry({ id_music: idCheck, remote: ehRemota(audioUrl), source_type: _sourceType(audioUrl) }));
+  Telemetry.track(
+    "music_audio_load_started",
+    requestTelemetry({
+      id_music: idCheck,
+      remote: ehRemota(audioUrl),
+      source_type: _sourceType(audioUrl),
+    })
+  );
   if ($appdata.get(KEYS.SHELL.IS_ONLINE) && $userdata.get(KEYS.MODULES.MEDIA.LAZY_LOAD)) {
     if (_activePlayback) {
       _activePlayback = { ..._activePlayback, lazy: true };
@@ -127,7 +147,10 @@ function _loadAudioSrc(
     }
     $appdata.set(KEYS.MODULES.MEDIA.CONFIG.LAZY, true);
     $appdata.set(KEYS.MODULES.MEDIA.LOADING, false);
-    Telemetry.track("music_audio_streaming_started", requestTelemetry({ id_music: idCheck, source_type: _sourceType(audioUrl) }));
+    Telemetry.track(
+      "music_audio_streaming_started",
+      requestTelemetry({ id_music: idCheck, source_type: _sourceType(audioUrl) })
+    );
     onSource(audioUrl, true);
     return;
   }
@@ -136,7 +159,11 @@ function _loadAudioSrc(
   if (_audioXhr) {
     const previousRequest = _audioXhr;
     _audioXhr = null;
-    try { previousRequest.abort(); } catch (_) { /* ignore */ }
+    try {
+      previousRequest.abort();
+    } catch (_) {
+      /* ignore */
+    }
   }
   const request = new XMLHttpRequest();
   _audioXhr = request;
@@ -146,7 +173,10 @@ function _loadAudioSrc(
     if (_audioXhr === request) _audioXhr = null;
     _switchingMode = false;
     $appdata.set(KEYS.MODULES.MEDIA.LOADING, false);
-    Telemetry.captureException(error, requestTelemetry({ operation: "music_audio_request_open", id_music: idCheck }));
+    Telemetry.captureException(
+      error,
+      requestTelemetry({ operation: "music_audio_request_open", id_music: idCheck })
+    );
     _self.close(true);
     $alert.error({ text: "modules.media.alerts.not_loaded", error }, function (a?: unknown) {
       if (a) requestRetry();
@@ -162,24 +192,66 @@ function _loadAudioSrc(
     if (!isCurrentRequest || _loadingId !== idCheck) return;
     $appdata.set(KEYS.MODULES.MEDIA.LOADING, false);
     const elapsed = Date.now() - startedAt;
-    if (this.status >= 200 && this.status < 300 && this.response instanceof Blob && this.response.size > 0) {
-      Telemetry.track("music_audio_loaded", requestTelemetry({ id_music: idCheck, status: this.status, bytes: this.response.size, content_type: this.response.type, elapsed_ms: elapsed }));
-      Telemetry.track("music_audio_transfer_completed", requestTelemetry({ id_music: idCheck, status: this.status, bytes: this.response.size, content_type: this.response.type, elapsed_ms: elapsed }));
+    if (
+      this.status >= 200 &&
+      this.status < 300 &&
+      this.response instanceof Blob &&
+      this.response.size > 0
+    ) {
+      Telemetry.histogram("louvorja.music.audio.load.duration", elapsed, {
+        outcome: "completed",
+        source_type: _sourceType(audioUrl),
+      });
+      Telemetry.track(
+        "music_audio_loaded",
+        requestTelemetry({
+          id_music: idCheck,
+          status: this.status,
+          bytes: this.response.size,
+          content_type: this.response.type,
+          elapsed_ms: elapsed,
+        })
+      );
+      Telemetry.track(
+        "music_audio_transfer_completed",
+        requestTelemetry({
+          id_music: idCheck,
+          status: this.status,
+          bytes: this.response.size,
+          content_type: this.response.type,
+          elapsed_ms: elapsed,
+        })
+      );
       if (ehRemota(audioUrl)) reportNetworkResult(true, "media");
       onSource(URL.createObjectURL(this.response as Blob), false);
     } else {
+      Telemetry.histogram("louvorja.music.audio.load.duration", elapsed, {
+        outcome: "invalid_response",
+        source_type: _sourceType(audioUrl),
+      });
       _switchingMode = false;
       _self.close(true);
-      Telemetry.track("music_audio_load_failed", requestTelemetry({
-        id_music: idCheck,
-        reason: this.status >= 200 && this.status < 300 ? "empty_or_invalid_body" : "http_status",
-        status: this.status,
-        status_text: request.statusText,
-        bytes: this.response?.size,
-        content_type: this.response?.type,
-        elapsed_ms: elapsed,
-      }));
-      Telemetry.track("music_playback_failed", requestTelemetry({ stage: "transfer", reason: this.status >= 200 && this.status < 300 ? "empty_or_invalid_body" : "http_status", status: this.status, elapsed_ms: elapsed }));
+      Telemetry.track(
+        "music_audio_load_failed",
+        requestTelemetry({
+          id_music: idCheck,
+          reason: this.status >= 200 && this.status < 300 ? "empty_or_invalid_body" : "http_status",
+          status: this.status,
+          status_text: request.statusText,
+          bytes: this.response?.size,
+          content_type: this.response?.type,
+          elapsed_ms: elapsed,
+        })
+      );
+      Telemetry.track(
+        "music_playback_failed",
+        requestTelemetry({
+          stage: "transfer",
+          reason: this.status >= 200 && this.status < 300 ? "empty_or_invalid_body" : "http_status",
+          status: this.status,
+          elapsed_ms: elapsed,
+        })
+      );
       $alert.error(
         { text: "modules.media.alerts.not_loaded", error: request.statusText || "" },
         function (a?: unknown) {
@@ -200,8 +272,29 @@ function _loadAudioSrc(
     if (ehRemota(audioUrl)) reportNetworkResult(false, "media");
     _self.close(true);
     const reason = event?.type === "timeout" ? "timeout" : "network_error";
-    Telemetry.track("music_audio_load_failed", requestTelemetry({ id_music: idCheck, reason, remote: ehRemota(audioUrl), elapsed_ms: Date.now() - startedAt }));
-    Telemetry.track("music_playback_failed", requestTelemetry({ stage: "transfer", reason, remote: ehRemota(audioUrl), elapsed_ms: Date.now() - startedAt }));
+    const elapsed = Date.now() - startedAt;
+    Telemetry.histogram("louvorja.music.audio.load.duration", elapsed, {
+      outcome: reason,
+      source_type: _sourceType(audioUrl),
+    });
+    Telemetry.track(
+      "music_audio_load_failed",
+      requestTelemetry({
+        id_music: idCheck,
+        reason,
+        remote: ehRemota(audioUrl),
+        elapsed_ms: elapsed,
+      })
+    );
+    Telemetry.track(
+      "music_playback_failed",
+      requestTelemetry({
+        stage: "transfer",
+        reason,
+        remote: ehRemota(audioUrl),
+        elapsed_ms: Date.now() - startedAt,
+      })
+    );
     // Um modal aqui obriga o operador a fechar diálogo com o culto rolando, e
     // sem rede ele volta a cada música. O aviso leva a repetição no clique.
     const t = i18nAtual()?.global?.t;
@@ -222,8 +315,14 @@ function _loadAudioSrc(
     if (!isCurrentRequest || _loadingId !== idCheck) return;
     _switchingMode = false;
     $appdata.set(KEYS.MODULES.MEDIA.LOADING, false);
-    Telemetry.track("music_audio_load_failed", requestTelemetry({ id_music: idCheck, reason: "aborted", elapsed_ms: Date.now() - startedAt }));
-    Telemetry.track("music_playback_failed", requestTelemetry({ stage: "transfer", reason: "aborted" }));
+    Telemetry.track(
+      "music_audio_load_failed",
+      requestTelemetry({ id_music: idCheck, reason: "aborted", elapsed_ms: Date.now() - startedAt })
+    );
+    Telemetry.track(
+      "music_playback_failed",
+      requestTelemetry({ stage: "transfer", reason: "aborted" })
+    );
   };
 
   // LOADING só cai nos handlers: o blob ainda está sendo baixado aqui, e
@@ -234,8 +333,14 @@ function _loadAudioSrc(
   } catch (error) {
     if (_audioXhr === request) _audioXhr = null;
     $appdata.set(KEYS.MODULES.MEDIA.LOADING, false);
-    Telemetry.captureException(error, requestTelemetry({ operation: "music_audio_request_send", id_music: idCheck }));
-    Telemetry.track("music_playback_failed", requestTelemetry({ stage: "transfer", reason: "request_send" }));
+    Telemetry.captureException(
+      error,
+      requestTelemetry({ operation: "music_audio_request_send", id_music: idCheck })
+    );
+    Telemetry.track(
+      "music_playback_failed",
+      requestTelemetry({ stage: "transfer", reason: "request_send" })
+    );
     _self.close(true);
   }
 }
@@ -289,11 +394,13 @@ _audio.onTimeUpdate((ct, d) => {
   // Sincronia contínua de vídeo: broadcast periódico para manter o <video>
   // das janelas de projeção sincronizado com o <audio> oculto.
   const now = Date.now();
-  if (!$appdata.get(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED) && now - _lastVideoSync >= _VIDEO_SYNC_INTERVAL) {
+  if (
+    !$appdata.get(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED) &&
+    now - _lastVideoSync >= _VIDEO_SYNC_INTERVAL
+  ) {
     _lastVideoSync = now;
     _broadcastVideoState();
   }
-
 });
 
 function _lyricEntries(data: Music): Lyric[] {
@@ -310,29 +417,29 @@ function _buildSlidesFrom(data: Music): Slide[] {
 
   return [
     {
-      lyric:                data?.name,
-      cover:                true,
-      time:                 "00:00:00",
-      instrumental_time:    "00:00:00",
-      url_image:            data?.url_image as string | undefined,
-      image_position:       data?.image_position,
-      id_music:             data?.id_music,
+      lyric: data?.name,
+      cover: true,
+      time: "00:00:00",
+      instrumental_time: "00:00:00",
+      url_image: data?.url_image as string | undefined,
+      image_position: data?.image_position,
+      id_music: data?.id_music,
     },
     ...lyricEntries
       .filter((lyric) => lyric.show_slide === 1)
       .sort((a, b) => a.order - b.order)
       .map((lyric) => {
         if (lyric.url_image) {
-          prev_image          = lyric.url_image as string;
+          prev_image = lyric.url_image as string;
           prev_image_position = lyric.image_position;
         }
         return {
           ...lyric,
-          cover:          false,
-          lyric:          lyric.lyric ? lyric.lyric.replace(/[\r\n]+/g, "<br>") : "",
-          url_image:      prev_image,
+          cover: false,
+          lyric: lyric.lyric ? lyric.lyric.replace(/[\r\n]+/g, "<br>") : "",
+          url_image: prev_image,
           image_position: prev_image_position,
-          id_music:       data?.id_music,
+          id_music: data?.id_music,
         };
       }),
   ];
@@ -362,7 +469,11 @@ const _self = {
     $dev.write("open media", params);
     const playback_id = _newPlaybackId();
     const requestedMode = params.mode || "no_audio";
-    const playbackContext: AudioTelemetryContext = { playback_id, id_music: params.id_music, mode: requestedMode };
+    const playbackContext: AudioTelemetryContext = {
+      playback_id,
+      id_music: params.id_music,
+      mode: requestedMode,
+    };
     Telemetry.track("music_open_requested", {
       playback_id,
       id_music: params.id_music,
@@ -380,7 +491,10 @@ const _self = {
 
       $alert.info("modules.media.alerts.open_remote");
       const remoteStartedAt = Date.now();
-      Telemetry.track("music_remote_open_started", _telemetryFor(playbackContext, { stage: "remote_request" }));
+      Telemetry.track(
+        "music_remote_open_started",
+        _telemetryFor(playbackContext, { stage: "remote_request" })
+      );
       try {
         const response = await fetchWithTimeout(`${baseUrl}/api/open-song?token=${token}`, {
           method: "POST",
@@ -391,9 +505,25 @@ const _self = {
           source: "open-song",
         });
         const ret = await response.json();
-        Telemetry.track("music_remote_open_completed", _telemetryFor(playbackContext, { status: response.status, ok: response.ok, elapsed_ms: Date.now() - remoteStartedAt, response_code: ret?.code }));
+        Telemetry.track(
+          "music_remote_open_completed",
+          _telemetryFor(playbackContext, {
+            status: response.status,
+            ok: response.ok,
+            elapsed_ms: Date.now() - remoteStartedAt,
+            response_code: ret?.code,
+          })
+        );
         if (ret.status != "ok") {
-          Telemetry.track("music_playback_failed", _telemetryFor(playbackContext, { stage: "remote_request", reason: ret.code || "remote_rejected", status: response.status, response_code: ret.code }));
+          Telemetry.track(
+            "music_playback_failed",
+            _telemetryFor(playbackContext, {
+              stage: "remote_request",
+              reason: ret.code || "remote_rejected",
+              status: response.status,
+              response_code: ret.code,
+            })
+          );
           $alert.error({
             text:
               ret.code == "INVALID_TOKEN"
@@ -403,8 +533,21 @@ const _self = {
           });
         }
       } catch (error) {
-        Telemetry.captureException(error, _telemetryFor(playbackContext, { operation: "music_remote_open", elapsed_ms: Date.now() - remoteStartedAt }));
-        Telemetry.track("music_playback_failed", _telemetryFor(playbackContext, { stage: "remote_request", reason: "remote_open_failed", elapsed_ms: Date.now() - remoteStartedAt }));
+        Telemetry.captureException(
+          error,
+          _telemetryFor(playbackContext, {
+            operation: "music_remote_open",
+            elapsed_ms: Date.now() - remoteStartedAt,
+          })
+        );
+        Telemetry.track(
+          "music_playback_failed",
+          _telemetryFor(playbackContext, {
+            stage: "remote_request",
+            reason: "remote_open_failed",
+            elapsed_ms: Date.now() - remoteStartedAt,
+          })
+        );
         $alert.error({ text: "modules.remote_control.messages.error", error });
       }
       return;
@@ -435,24 +578,68 @@ const _self = {
     const id_music = params.id_music;
     const minimizeOnStart = $userdata.get(KEYS.OPTIONS.MINIMIZE_ON_START, false);
     const minimized = params.minimized !== undefined ? params.minimized : minimizeOnStart;
-    const id_album  = params.id_album  ? params.id_album  : null;
+    const id_album = params.id_album ? params.id_album : null;
     let mode: string = params.mode ? params.mode : "no_audio";
 
     _loadingId = id_music ?? null;
     $appdata.set(KEYS.MODULES.MEDIA.LOADING, true);
 
     let data: Music | null;
+    const metadataStartedAt = Date.now();
+    Telemetry.track("music_metadata_load_started", _telemetryFor(playbackContext, { id_music }));
+    let metadataTimeout: ReturnType<typeof setTimeout> | null = null;
     try {
-      data = await $database.get<Music>(`music_${id_music}`);
+      const metadataRequest = $database.get<Music>(`music_${id_music}`);
+      const metadataDeadline = new Promise<never>((_, reject) => {
+        metadataTimeout = setTimeout(
+          () => reject(new Error(`Music metadata timeout: ${id_music}`)),
+          NET_TIMEOUT.DEFAULT + 5000
+        );
+      });
+      data = await Promise.race([metadataRequest, metadataDeadline]);
     } catch (error) {
-      Telemetry.captureException(error, _telemetryFor(playbackContext, { operation: "music_metadata_load" }));
-      Telemetry.track("music_open_failed", _telemetryFor(playbackContext, { id_music, reason: "metadata_exception" }));
+      const message = error instanceof Error ? error.message : String(error);
+      const reason = message.includes("metadata timeout")
+        ? "metadata_timeout"
+        : "metadata_exception";
+      Telemetry.captureException(
+        error,
+        _telemetryFor(playbackContext, {
+          operation: "music_metadata_load",
+          elapsed_ms: Date.now() - metadataStartedAt,
+          reason,
+        })
+      );
+      Telemetry.track(
+        "music_open_failed",
+        _telemetryFor(playbackContext, {
+          id_music,
+          reason,
+          elapsed_ms: Date.now() - metadataStartedAt,
+        })
+      );
       if (_loadingId === id_music && _activePlayback?.playback_id === playback_id) this.close(true);
       return;
+    } finally {
+      if (metadataTimeout) clearTimeout(metadataTimeout);
     }
+    Telemetry.track(
+      "music_metadata_load_completed",
+      _telemetryFor(playbackContext, {
+        id_music,
+        found: data != null,
+        elapsed_ms: Date.now() - metadataStartedAt,
+      })
+    );
     const isCurrentPlayback = _activePlayback?.playback_id === playback_id;
     if (data == null || _loadingId !== id_music || !isCurrentPlayback) {
-      Telemetry.track("music_open_failed", _telemetryFor(playbackContext, { id_music, reason: data == null ? "not_found" : "superseded" }));
+      Telemetry.track(
+        "music_open_failed",
+        _telemetryFor(playbackContext, {
+          id_music,
+          reason: data == null ? "not_found" : "superseded",
+        })
+      );
       if (data == null && _loadingId === id_music && isCurrentPlayback) this.close(true);
       return;
     }
@@ -468,13 +655,16 @@ const _self = {
       slides_count: _lyricEntries(data).length,
       stage: "metadata_only",
     });
-    Telemetry.track("music_metadata_resolved", _telemetryFor(playbackContext, {
-      name: data.name,
-      duration: data.duration,
-      has_audio: !!data.url_music,
-      has_instrumental_audio: !!data.url_instrumental_music,
-      slides_count: _lyricEntries(data).length,
-    }));
+    Telemetry.track(
+      "music_metadata_resolved",
+      _telemetryFor(playbackContext, {
+        name: data.name,
+        duration: data.duration,
+        has_audio: !!data.url_music,
+        has_instrumental_audio: !!data.url_instrumental_music,
+        slides_count: _lyricEntries(data).length,
+      })
+    );
     $appdata.set(KEYS.MODULES.MEDIA.DATA, data);
     $history.add(id_music, data.name, !!data.url_instrumental_music);
 
@@ -490,7 +680,13 @@ const _self = {
     if (mode == "audio" || mode == "instrumental") {
       const rawAudioPath = mode == "audio" ? data.url_music : data.url_instrumental_music;
       if (!rawAudioPath) {
-        Telemetry.track("music_playback_failed", _telemetryFor(playbackContext, { stage: "source_resolution", reason: "audio_path_missing" }));
+        Telemetry.track(
+          "music_playback_failed",
+          _telemetryFor(playbackContext, {
+            stage: "source_resolution",
+            reason: "audio_path_missing",
+          })
+        );
         $appdata.set(KEYS.MODULES.MEDIA.LOADING, false);
         this.close(true);
         return;
@@ -498,8 +694,17 @@ const _self = {
       try {
         audioUrl = $path.file(rawAudioPath as string);
       } catch (error) {
-        Telemetry.captureException(error, _telemetryFor(playbackContext, { operation: "music_source_resolution" }));
-        Telemetry.track("music_playback_failed", _telemetryFor(playbackContext, { stage: "source_resolution", reason: "invalid_audio_path" }));
+        Telemetry.captureException(
+          error,
+          _telemetryFor(playbackContext, { operation: "music_source_resolution" })
+        );
+        Telemetry.track(
+          "music_playback_failed",
+          _telemetryFor(playbackContext, {
+            stage: "source_resolution",
+            reason: "invalid_audio_path",
+          })
+        );
         $appdata.set(KEYS.MODULES.MEDIA.LOADING, false);
         this.close(true);
         return;
@@ -529,7 +734,12 @@ const _self = {
     const idMusic = $appdata.get(KEYS.MODULES.MEDIA.ID_MUSIC) as string | number | null;
     if (idMusic == null) return;
     const previousPlaybackId = _activePlayback?.playback_id;
-    Telemetry.track("music_mode_switch_requested", { playback_id: previousPlaybackId, id_music: idMusic, mode, previous_mode: $appdata.get(KEYS.MODULES.MEDIA.CONFIG.MODE) });
+    Telemetry.track("music_mode_switch_requested", {
+      playback_id: previousPlaybackId,
+      id_music: idMusic,
+      mode,
+      previous_mode: $appdata.get(KEYS.MODULES.MEDIA.CONFIG.MODE),
+    });
 
     const keepsPosition =
       !_isYouTube() &&
@@ -545,11 +755,21 @@ const _self = {
 
     const data = $appdata.get(KEYS.MODULES.MEDIA.DATA) as Music | null;
     const file =
-      mode === MusicActionEnum.AUDIO        ? (data?.url_music as string | undefined) :
-      mode === MusicActionEnum.INSTRUMENTAL ? (data?.url_instrumental_music as string | undefined) :
-      undefined;
+      mode === MusicActionEnum.AUDIO
+        ? (data?.url_music as string | undefined)
+        : mode === MusicActionEnum.INSTRUMENTAL
+          ? (data?.url_instrumental_music as string | undefined)
+          : undefined;
     if (mode !== MusicActionEnum.NO_AUDIO && !file) {
-      Telemetry.track("music_mode_switch_failed", _audioTelemetry({ id_music: idMusic, mode, previous_mode: current, reason: "audio_path_missing" }));
+      Telemetry.track(
+        "music_mode_switch_failed",
+        _audioTelemetry({
+          id_music: idMusic,
+          mode,
+          previous_mode: current,
+          reason: "audio_path_missing",
+        })
+      );
       return;
     }
 
@@ -567,11 +787,14 @@ const _self = {
       };
       _setPlaybackContext(noAudioContext);
       _slides.setPlaybackId(noAudioContext.playback_id);
-      Telemetry.track("music_mode_switch_started", _telemetryFor(noAudioContext, { id_music: idMusic, mode, previous_mode: current }));
+      Telemetry.track(
+        "music_mode_switch_started",
+        _telemetryFor(noAudioContext, { id_music: idMusic, mode, previous_mode: current })
+      );
       _audio.currentTime.value = 0;
-      _audio.duration.value    = 0;
-      _audio.progress.value    = 0;
-      _audio.buffered.value    = 0;
+      _audio.duration.value = 0;
+      _audio.progress.value = 0;
+      _audio.buffered.value = 0;
       _slides.setTimes([]);
       $appdata.set(KEYS.MODULES.MEDIA.CONFIG.MODE, mode);
       $appdata.set(KEYS.MODULES.MEDIA.CONFIG.AUDIO, "");
@@ -581,7 +804,10 @@ const _self = {
       $appdata.set(KEYS.MODULES.MEDIA.CONFIG.BUFFERED, 0);
       $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED, true);
       _slides.broadcastSlide();
-      Telemetry.track("music_mode_switch_completed", _telemetryFor(noAudioContext, { id_music: idMusic, mode, previous_mode: current }));
+      Telemetry.track(
+        "music_mode_switch_completed",
+        _telemetryFor(noAudioContext, { id_music: idMusic, mode, previous_mode: current })
+      );
       return;
     }
 
@@ -589,8 +815,19 @@ const _self = {
     try {
       audioUrl = $path.file(file as string);
     } catch (error) {
-      Telemetry.captureException(error, _audioTelemetry({ operation: "music_mode_source_resolution" }));
-      Telemetry.track("music_mode_switch_failed", _audioTelemetry({ id_music: idMusic, mode, previous_mode: current, reason: "invalid_audio_path" }));
+      Telemetry.captureException(
+        error,
+        _audioTelemetry({ operation: "music_mode_source_resolution" })
+      );
+      Telemetry.track(
+        "music_mode_switch_failed",
+        _audioTelemetry({
+          id_music: idMusic,
+          mode,
+          previous_mode: current,
+          reason: "invalid_audio_path",
+        })
+      );
       return;
     }
     const switchPlaybackId = _newPlaybackId();
@@ -605,7 +842,10 @@ const _self = {
     // contexto do elemento de áudio antigo até o takeover, mas já reservamos
     // o ID novo para callbacks da requisição e do preparo.
     _activePlayback = switchContext;
-    Telemetry.track("music_mode_switch_started", _telemetryFor(switchContext, { id_music: idMusic, mode, previous_mode: current }));
+    Telemetry.track(
+      "music_mode_switch_started",
+      _telemetryFor(switchContext, { id_music: idMusic, mode, previous_mode: current })
+    );
     _loadingId = idMusic;
     _switchingMode = true;
     $appdata.set(KEYS.MODULES.MEDIA.LOADING, true);
@@ -616,49 +856,69 @@ const _self = {
     // no meio do louvor não pode ficar com a igreja em silêncio pelo tempo do
     // download. Por isso o ponto de retomada só é lido aqui, quando a faixa
     // nova assume — lê-lo no clique faria o áudio voltar o que tocou desde lá.
-    _loadAudioSrc(audioUrl, idMusic, (id) => _self.open(id), (src, lazy) => {
-      _audio
-        .prepare(src, lazy, _audio.currentTime.value, switchContext)
-        .then((faixa) => {
-          // Outra música entrou no ar durante o carregamento: esta não serve
-          // mais, e o blob dela só sai da memória se alguém soltar.
-          if (_loadingId !== idMusic) {
-            _audio.release(faixa);
-            return;
-          }
-          _switchingMode = false;
+    _loadAudioSrc(
+      audioUrl,
+      idMusic,
+      (id) => _self.open(id),
+      (src, lazy) => {
+        _audio
+          .prepare(src, lazy, _audio.currentTime.value, switchContext)
+          .then((faixa) => {
+            // Outra música entrou no ar durante o carregamento: esta não serve
+            // mais, e o blob dela só sai da memória se alguém soltar.
+            if (_loadingId !== idMusic) {
+              _audio.release(faixa);
+              return;
+            }
+            _switchingMode = false;
 
-          // Lido só agora, com a faixa nova pronta para entrar: ler no clique
-          // faria o áudio voltar tudo que tocou enquanto ela carregava.
-          const slideIndex = _slides.slideIndex.value;
-          const fraction   = hadAudio ? _slides.slideProgress.value / 100 : 0;
-          const playing    = !hadAudio || !_audio.isPaused.value;
+            // Lido só agora, com a faixa nova pronta para entrar: ler no clique
+            // faria o áudio voltar tudo que tocou enquanto ela carregava.
+            const slideIndex = _slides.slideIndex.value;
+            const fraction = hadAudio ? _slides.slideProgress.value / 100 : 0;
+            const playing = !hadAudio || !_audio.isPaused.value;
 
-          // Com o watcher ligado, o tempo da faixa nova ainda em zero jogaria a
-          // projeção na capa e de volta, à vista da igreja.
-          _slides.unbindAudio();
-          _slides.setTimes(_timesFor(_slides.slides.value, mode));
+            // Com o watcher ligado, o tempo da faixa nova ainda em zero jogaria a
+            // projeção na capa e de volta, à vista da igreja.
+            _slides.unbindAudio();
+            _slides.setTimes(_timesFor(_slides.slides.value, mode));
 
-          return _audio
-            .takeOver(faixa, (d) => _slides.timeForPosition(slideIndex, fraction, d), playing)
-            .then(() => {
-              _setPlaybackContext(switchContext);
-              _slides.setPlaybackId(switchPlaybackId);
-              _slides.bindAudio(_audio);
-              $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED, !playing);
-              if (!playing) _self.broadcastSlide();
-              Telemetry.track("music_mode_switch_completed", _telemetryFor(switchContext, { id_music: idMusic, mode, previous_mode: current }));
-            });
-        })
-        .catch((error) => {
-          // A faixa não quis carregar em paralelo; o caminho normal reabre a
-          // música e traz junto o tratamento de erro de sempre.
-          _switchingMode = false;
-          Telemetry.captureException(error, _telemetryFor(switchContext, { operation: "music_mode_switch_prepare" }));
-          Telemetry.track("music_mode_switch_failed", _telemetryFor(switchContext, { id_music: idMusic, mode, previous_mode: current, reason: error?.name || "prepare_failed" }));
-          _self.open({ id_music: idMusic, mode, minimized: _self.isMinimized() });
-        });
-    }, true);
+            return _audio
+              .takeOver(faixa, (d) => _slides.timeForPosition(slideIndex, fraction, d), playing)
+              .then(() => {
+                _setPlaybackContext(switchContext);
+                _slides.setPlaybackId(switchPlaybackId);
+                _slides.bindAudio(_audio);
+                $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED, !playing);
+                if (!playing) _self.broadcastSlide();
+                Telemetry.track(
+                  "music_mode_switch_completed",
+                  _telemetryFor(switchContext, { id_music: idMusic, mode, previous_mode: current })
+                );
+              });
+          })
+          .catch((error) => {
+            // A faixa não quis carregar em paralelo; o caminho normal reabre a
+            // música e traz junto o tratamento de erro de sempre.
+            _switchingMode = false;
+            Telemetry.captureException(
+              error,
+              _telemetryFor(switchContext, { operation: "music_mode_switch_prepare" })
+            );
+            Telemetry.track(
+              "music_mode_switch_failed",
+              _telemetryFor(switchContext, {
+                id_music: idMusic,
+                mode,
+                previous_mode: current,
+                reason: error?.name || "prepare_failed",
+              })
+            );
+            _self.open({ id_music: idMusic, mode, minimized: _self.isMinimized() });
+          });
+      },
+      true
+    );
   },
 
   /**
@@ -687,7 +947,11 @@ const _self = {
   }): Promise<void> {
     $dev.write("open custom song", song?.nome);
     const playback_id = _newPlaybackId();
-    const playbackContext: AudioTelemetryContext = { playback_id, mode: "audio", title: song?.nome };
+    const playbackContext: AudioTelemetryContext = {
+      playback_id,
+      mode: "audio",
+      title: song?.nome,
+    };
     Telemetry.track("custom_music_opened", {
       playback_id,
       name: song?.nome,
@@ -706,7 +970,10 @@ const _self = {
       if (s.imagem) {
         urlImage = (await AudioLibrary.resolveImage(s.imagem)) || undefined;
         if (_activePlayback?.playback_id !== playback_id) {
-          Telemetry.track("custom_music_open_failed", _telemetryFor(playbackContext, { reason: "superseded" }));
+          Telemetry.track(
+            "custom_music_open_failed",
+            _telemetryFor(playbackContext, { reason: "superseded" })
+          );
           return;
         }
       }
@@ -736,12 +1003,21 @@ const _self = {
       ? (await AudioLibrary.resolveAudio(song.audio_token)) || null
       : null;
     if (_activePlayback?.playback_id !== playback_id) {
-      Telemetry.track("custom_music_open_failed", _telemetryFor(playbackContext, { reason: "superseded" }));
+      Telemetry.track(
+        "custom_music_open_failed",
+        _telemetryFor(playbackContext, { reason: "superseded" })
+      );
       return;
     }
 
     if (song.audio_token && !audioUrl) {
-      Telemetry.track("music_playback_failed", _telemetryFor(playbackContext, { stage: "source_resolution", reason: "custom_audio_not_found" }));
+      Telemetry.track(
+        "music_playback_failed",
+        _telemetryFor(playbackContext, {
+          stage: "source_resolution",
+          reason: "custom_audio_not_found",
+        })
+      );
     }
 
     _loadingId = null;
@@ -778,12 +1054,12 @@ const _self = {
   }): void {
     const projectionContext: AudioTelemetryContext | null = opts.playbackId
       ? {
-        playback_id: opts.playbackId,
-        id_music: opts.idCheck,
-        mode: opts.mode,
-        source_type: opts.audioUrl ? _sourceType(opts.audioUrl) : "none",
-        title: opts.title,
-      }
+          playback_id: opts.playbackId,
+          id_music: opts.idCheck,
+          mode: opts.mode,
+          source_type: opts.audioUrl ? _sourceType(opts.audioUrl) : "none",
+          title: opts.title,
+        }
       : null;
     if (opts.playbackId) {
       _setPlaybackContext(projectionContext);
@@ -851,7 +1127,7 @@ const _self = {
       if (!force) {
         const key = "modules.media.alerts.close";
         const self = this;
-        $alert.yesno({title: key}, function (btn?: string) {
+        $alert.yesno({ title: key }, function (btn?: string) {
           if (btn == "yes") self.close(true);
         });
         return;
@@ -885,7 +1161,7 @@ const _self = {
       const key = $appdata.get(KEYS.MODULES.MEDIA.CONFIG.AUDIO_ONLY)
         ? "modules.media.alerts.close_audio"
         : "modules.media.alerts.close";
-      $alert.yesno({title: key}, function (btn?: string) {
+      $alert.yesno({ title: key }, function (btn?: string) {
         if (btn == "yes") self.close(true);
       });
       return;
@@ -922,7 +1198,10 @@ const _self = {
     } else if (typeof params != "object") {
       params = { id_music: params };
     }
-    Telemetry.track("music_lyrics_opened", { id_music: params.id_music, id_album: params.id_album });
+    Telemetry.track("music_lyrics_opened", {
+      id_music: params.id_music,
+      id_album: params.id_album,
+    });
 
     const ok = await _lyric.open(params as LyricOpenParams);
     if (!ok) {
@@ -955,8 +1234,17 @@ const _self = {
     }
     const playback_id = _newPlaybackId();
     const audioMode = params.mode || "audio";
-    const playbackContext: AudioTelemetryContext = { playback_id, id_music: params.id_music, mode: audioMode, title: params.title };
-    Telemetry.track("music_audio_open_requested", { playback_id, id_music: params.id_music, mode: audioMode });
+    const playbackContext: AudioTelemetryContext = {
+      playback_id,
+      id_music: params.id_music,
+      mode: audioMode,
+      title: params.title,
+    };
+    Telemetry.track("music_audio_open_requested", {
+      playback_id,
+      id_music: params.id_music,
+      mode: audioMode,
+    });
     $dev.write("open audio", params);
 
     _audio.stop();
@@ -979,7 +1267,13 @@ const _self = {
       $appdata.set(KEYS.MODULES.MEDIA.CONFIG.AUDIO_ONLY, true);
 
       const audioUrl = params.url;
-      _setPlaybackContext({ playback_id, id_music: null, mode: audioMode, source_type: _sourceType(audioUrl), title: params.title });
+      _setPlaybackContext({
+        playback_id,
+        id_music: null,
+        mode: audioMode,
+        source_type: _sourceType(audioUrl),
+        title: params.title,
+      });
       $appdata.set(KEYS.MODULES.MEDIA.CONFIG.AUDIO, audioUrl);
 
       const volume = $appdata.get(KEYS.MODULES.MEDIA.CONFIG.VOLUME);
@@ -999,14 +1293,26 @@ const _self = {
     try {
       data = await $database.get<Music>(`music_${id_music}`);
     } catch (error) {
-      Telemetry.captureException(error, _telemetryFor(playbackContext, { operation: "music_audio_metadata_load" }));
-      Telemetry.track("music_audio_open_failed", _telemetryFor(playbackContext, { id_music, reason: "metadata_exception" }));
+      Telemetry.captureException(
+        error,
+        _telemetryFor(playbackContext, { operation: "music_audio_metadata_load" })
+      );
+      Telemetry.track(
+        "music_audio_open_failed",
+        _telemetryFor(playbackContext, { id_music, reason: "metadata_exception" })
+      );
       if (_loadingId === id_music && _activePlayback?.playback_id === playback_id) this.close(true);
       return;
     }
     const isCurrentPlayback = _activePlayback?.playback_id === playback_id;
     if (data == null || _loadingId !== id_music || !isCurrentPlayback) {
-      Telemetry.track("music_audio_open_failed", _telemetryFor(playbackContext, { id_music, reason: data == null ? "not_found" : "superseded" }));
+      Telemetry.track(
+        "music_audio_open_failed",
+        _telemetryFor(playbackContext, {
+          id_music,
+          reason: data == null ? "not_found" : "superseded",
+        })
+      );
       if (data == null && _loadingId === id_music && isCurrentPlayback) this.close(true);
       return;
     }
@@ -1026,7 +1332,10 @@ const _self = {
 
     const rawAudioPath = mode == "instrumental" ? data.url_instrumental_music : data.url_music;
     if (!rawAudioPath) {
-      Telemetry.track("music_playback_failed", _telemetryFor(playbackContext, { stage: "source_resolution", reason: "audio_path_missing" }));
+      Telemetry.track(
+        "music_playback_failed",
+        _telemetryFor(playbackContext, { stage: "source_resolution", reason: "audio_path_missing" })
+      );
       this.close(true);
       return;
     }
@@ -1034,12 +1343,24 @@ const _self = {
     try {
       audioUrl = $path.file(rawAudioPath as string);
     } catch (error) {
-      Telemetry.captureException(error, _telemetryFor(playbackContext, { operation: "music_audio_source_resolution" }));
-      Telemetry.track("music_playback_failed", _telemetryFor(playbackContext, { stage: "source_resolution", reason: "invalid_audio_path" }));
+      Telemetry.captureException(
+        error,
+        _telemetryFor(playbackContext, { operation: "music_audio_source_resolution" })
+      );
+      Telemetry.track(
+        "music_playback_failed",
+        _telemetryFor(playbackContext, { stage: "source_resolution", reason: "invalid_audio_path" })
+      );
       this.close(true);
       return;
     }
-    _setPlaybackContext({ playback_id, id_music, mode, source_type: _sourceType(audioUrl), title: data.name });
+    _setPlaybackContext({
+      playback_id,
+      id_music,
+      mode,
+      source_type: _sourceType(audioUrl),
+      title: data.name,
+    });
     $appdata.set(KEYS.MODULES.MEDIA.CONFIG.AUDIO, audioUrl);
 
     _loadAudioSrc(audioUrl, id_music, (id) => _self.openAudio(id));
@@ -1050,7 +1371,12 @@ const _self = {
   async openYouTube(url: string, title: string): Promise<void> {
     $dev.write("open youtube", { url, title });
     const playback_id = _newPlaybackId();
-    const youtubeContext: AudioTelemetryContext = { playback_id, mode: "youtube", source_type: "youtube", title };
+    const youtubeContext: AudioTelemetryContext = {
+      playback_id,
+      mode: "youtube",
+      source_type: "youtube",
+      title,
+    };
     Telemetry.track("music_youtube_requested", { playback_id, title });
 
     if (_isYouTube()) this.close(true);
@@ -1077,7 +1403,10 @@ const _self = {
     this.minimize();
 
     try {
-      localStorage.setItem(KEYS.PROJECTION.LJ_YOUTUBE_PROJECTION, JSON.stringify({ url, type: "youtube", title, playback_id }));
+      localStorage.setItem(
+        KEYS.PROJECTION.LJ_YOUTUBE_PROJECTION,
+        JSON.stringify({ url, type: "youtube", title, playback_id })
+      );
     } catch {
       /* ignore */
     }
@@ -1086,12 +1415,23 @@ const _self = {
       await openVideoProjectionWindows();
       Telemetry.track("music_youtube_projection_opened", _telemetryFor(youtubeContext));
     } catch (error) {
-      Telemetry.captureException(error, _telemetryFor(youtubeContext, { operation: "youtube_projection_open" }));
-      Telemetry.track("music_playback_failed", _telemetryFor(youtubeContext, { stage: "youtube_projection", reason: "window_open_failed" }));
+      Telemetry.captureException(
+        error,
+        _telemetryFor(youtubeContext, { operation: "youtube_projection_open" })
+      );
+      Telemetry.track(
+        "music_playback_failed",
+        _telemetryFor(youtubeContext, { stage: "youtube_projection", reason: "window_open_failed" })
+      );
       return;
     }
 
-    $broadcast.send(BROADCAST_TYPE.ONLINE_VIDEO_PROJECTION, { url, type: "youtube", title, playback_id });
+    $broadcast.send(BROADCAST_TYPE.ONLINE_VIDEO_PROJECTION, {
+      url,
+      type: "youtube",
+      title,
+      playback_id,
+    });
 
     _ytUnlisten = $broadcast.listen((msg) => {
       if (msg.type !== BROADCAST_TYPE.YOUTUBE_STATE) return;
@@ -1101,16 +1441,30 @@ const _self = {
       _ytStateReceived = true;
       if (typeof p.state === "number") {
         if (p.state !== _ytLastState) {
-          if (p.state === 1) Telemetry.track("music_youtube_play_started", _telemetryFor(youtubeContext, { state: p.state }));
-          if (p.state === 3) Telemetry.track("music_youtube_buffering_started", _telemetryFor(youtubeContext, { state: p.state }));
-          if (p.state === 0) Telemetry.track("music_playback_ended", _telemetryFor(youtubeContext, { ended_reason: "youtube_ended" }));
+          if (p.state === 1)
+            Telemetry.track(
+              "music_youtube_play_started",
+              _telemetryFor(youtubeContext, { state: p.state })
+            );
+          if (p.state === 3)
+            Telemetry.track(
+              "music_youtube_buffering_started",
+              _telemetryFor(youtubeContext, { state: p.state })
+            );
+          if (p.state === 0)
+            Telemetry.track(
+              "music_playback_ended",
+              _telemetryFor(youtubeContext, { ended_reason: "youtube_ended" })
+            );
           _ytLastState = p.state;
         }
       }
-      _audio.currentTime.value = typeof p.currentTime === "number" ? p.currentTime : _audio.currentTime.value;
+      _audio.currentTime.value =
+        typeof p.currentTime === "number" ? p.currentTime : _audio.currentTime.value;
       _audio.duration.value = typeof p.duration === "number" ? p.duration : _audio.duration.value;
       _audio.isPaused.value = typeof p.isPaused === "boolean" ? p.isPaused : _audio.isPaused.value;
-      _audio.progress.value = _audio.duration.value > 0 ? (_audio.currentTime.value / _audio.duration.value) * 100 : 0;
+      _audio.progress.value =
+        _audio.duration.value > 0 ? (_audio.currentTime.value / _audio.duration.value) * 100 : 0;
 
       $appdata.set(KEYS.MODULES.MEDIA.CONFIG.CURRENT_TIME, _audio.currentTime.value);
       $appdata.set(KEYS.MODULES.MEDIA.CONFIG.DURATION, _audio.duration.value);
@@ -1119,7 +1473,14 @@ const _self = {
     });
     _ytWatchdog = setTimeout(() => {
       if (_isYouTube() && !_ytStateReceived) {
-        Telemetry.track("music_playback_failed", _telemetryFor(youtubeContext, { stage: "youtube_projection", reason: "no_player_state", timeout_ms: 15000 }));
+        Telemetry.track(
+          "music_playback_failed",
+          _telemetryFor(youtubeContext, {
+            stage: "youtube_projection",
+            reason: "no_player_state",
+            timeout_ms: 15000,
+          })
+        );
       }
       _ytWatchdog = null;
     }, 15000);
@@ -1135,7 +1496,11 @@ const _self = {
     if (_audioXhr) {
       const currentRequest = _audioXhr;
       _audioXhr = null;
-      try { currentRequest.abort(); } catch { /* troca/fechamento já em andamento */ }
+      try {
+        currentRequest.abort();
+      } catch {
+        /* troca/fechamento já em andamento */
+      }
     }
     _slides.reset();
     _audio.reset();
@@ -1210,7 +1575,11 @@ const _self = {
     if (_isYouTube()) {
       const newTime = Math.max(0, _audio.currentTime.value + time);
       $broadcast.send(BROADCAST_TYPE.YOUTUBE_CONTROL, { action: "seekTo", value: newTime });
-    } else if (_audio.duration.value > 0 && Number.isFinite(_audio.duration.value) && $appdata.get(KEYS.MODULES.MEDIA.CONFIG.AUDIO) != "") {
+    } else if (
+      _audio.duration.value > 0 &&
+      Number.isFinite(_audio.duration.value) &&
+      $appdata.get(KEYS.MODULES.MEDIA.CONFIG.AUDIO) != ""
+    ) {
       _audio.advanceTime(time);
       _broadcastVideoState();
     }
@@ -1252,14 +1621,20 @@ const _self = {
       _broadcastVideoState();
     } else {
       const self = this;
-      _audio.play((e) => {
-        $alert.error({ text: "modules.media.alerts.not_loaded", error: e || "" }, function (a?: unknown) {
-          if (a) self.open($appdata.get(KEYS.MODULES.MEDIA.ID_MUSIC) as string | number);
-        });
-      }, () => {
-        $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED, false);
-        _broadcastVideoState();
-      });
+      _audio.play(
+        (e) => {
+          $alert.error(
+            { text: "modules.media.alerts.not_loaded", error: e || "" },
+            function (a?: unknown) {
+              if (a) self.open($appdata.get(KEYS.MODULES.MEDIA.ID_MUSIC) as string | number);
+            }
+          );
+        },
+        () => {
+          $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED, false);
+          _broadcastVideoState();
+        }
+      );
       if (fade_audio && !isVideo) {
         _audio.fadeIn($appdata.get(KEYS.MODULES.MEDIA.CONFIG.VOLUME) as number, () => {
           $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_FADING, false);
@@ -1273,10 +1648,18 @@ const _self = {
     }
   },
 
-  firstSlide(): void { _slides.goFirst(); },
-  prevSlide():  void { _slides.goPrev();  },
-  nextSlide():  void { _slides.goNext();  },
-  lastSlide():  void { _slides.goLast();  },
+  firstSlide(): void {
+    _slides.goFirst();
+  },
+  prevSlide(): void {
+    _slides.goPrev();
+  },
+  nextSlide(): void {
+    _slides.goNext();
+  },
+  lastSlide(): void {
+    _slides.goLast();
+  },
 
   setVolume(val: number): void {
     _audio.setVolume(val);
@@ -1299,9 +1682,9 @@ const _self = {
     _album.setAlbumInfo(id_album, module);
   },
 
-    registerPlaylistEndHandler(handler: () => boolean): void {
-      _playlistOnEnd = handler;
-    },
+  registerPlaylistEndHandler(handler: () => boolean): void {
+    _playlistOnEnd = handler;
+  },
 
   unregisterPlaylistEndHandler(): void {
     _playlistOnEnd = null;

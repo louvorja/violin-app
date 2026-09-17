@@ -14,13 +14,14 @@
  * ordena e pagina (100 por vez via scroll ou RAF). Emite o estado via v-model.
  * Ver MusicMenuTable.vue para o widget de ações por linha — são componentes distintos.
  */
-import { ref, watch, onMounted, onBeforeUnmount } from "vue";
+import { ref, watch, onMounted, onBeforeUnmount, nextTick } from "vue";
 import { useI18n } from "vue-i18n";
 import { LjAlert, LjProgress, LjTable } from "@/components/ui";
 import Database from "@/helpers/Database";
 import Strings from "@/helpers/Strings";
 import { isHymnalTrack } from "@/helpers/Hymnal";
 import Fuse from "fuse.js";
+import Telemetry from "@/helpers/Telemetry";
 
 /** Campos onde o operador erra a digitação — nome da música e do álbum. */
 const FUZZY_FIELDS = ["name", "albums_names"];
@@ -69,7 +70,11 @@ const last_filter = ref({});
 const loading = ref(true);
 let _paginateRaf = null;
 let _rafCycles = 0;
-const _RAF_MAX_CYCLES = 3;
+// O contêiner do módulo agora informa o scroll real ao DataTable. Não fazer
+// ciclos automáticos aqui: renderizar centenas de linhas antes do primeiro
+// paint era o principal custo ao abrir Músicas. Tabelas grandes avançam pelo
+// scroll; listas pequenas já cabem na primeira página.
+const _RAF_MAX_CYCLES = 0;
 
 // Versão com debounce de filterData para o watcher de search.
 const debouncedFilterData = debounce(function () {
@@ -134,104 +139,176 @@ onBeforeUnmount(() => {
 });
 
 async function loadData() {
+  const LOAD_TIMEOUT_MS = 30_000;
+  const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
+  const reportLoad = (outcome, extra = {}) => {
+    const durationMs = Math.max(
+      0,
+      Math.round((typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt)
+    );
+    Telemetry.track("data_table_loaded", {
+      table_file: props.file || "unknown",
+      outcome,
+      duration_ms: durationMs,
+      ...extra,
+    });
+    Telemetry.histogram("louvorja.data_table.load.duration", durationMs, {
+      table_file: props.file || "unknown",
+      outcome,
+    });
+  };
+
   all_data.value = [];
   filter_data.value = [];
   data.value = [];
+  error.value = null;
   loading.value = true;
+  let loadTimeout;
 
-  all_data.value = await Database.get(props.file);
+  try {
+    const timeout = new Promise((_, reject) => {
+      loadTimeout = setTimeout(
+        () => reject(new Error(`DataTable load timeout: ${props.file || "unknown"}`)),
+        LOAD_TIMEOUT_MS
+      );
+    });
+    all_data.value = await Promise.race([Database.get(props.file), timeout]);
 
-  if (all_data.value == null) {
+    if (all_data.value == null) {
+      error.value = t("components.datatable.alerts.not_found");
+      reportLoad("not_found");
+      return;
+    }
+
+    if (props.sort_by) {
+      all_data.value.sort((a, b) => Strings.sort(a[props.sort_by], b[props.sort_by]));
+    }
+    filterData();
+    await nextTick();
+    reportLoad("ready", {
+      total_rows: all_data.value.length,
+      rendered_rows: data.value.length,
+      filtered_rows: filter_data.value.length,
+    });
+  } catch (loadError) {
     error.value = t("components.datatable.alerts.not_found");
+    const errorMessage = loadError instanceof Error ? loadError.message : String(loadError);
+    const outcome = errorMessage.includes("load timeout") ? "timeout" : "error";
+    reportLoad(outcome, {
+      error: errorMessage,
+    });
+    Telemetry.captureException(loadError, {
+      source: "data_table.load",
+      table_file: props.file || "unknown",
+    });
+  } finally {
+    if (loadTimeout) clearTimeout(loadTimeout);
     loading.value = false;
-    return;
   }
-
-  if (props.sort_by) {
-    all_data.value.sort((a, b) => Strings.sort(a[props.sort_by], b[props.sort_by]));
-  }
-  filterData();
 }
 
 function filterData() {
-  limit.value = 0;
-  _rafCycles = 0;
-  let value = Strings.clean(props.search);
+  const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
+  const reportFilter = () => {
+    const durationMs = Math.max(
+      0,
+      Math.round((typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt)
+    );
+    Telemetry.track("data_table_filter_completed", {
+      table_file: props.file || "unknown",
+      duration_ms: durationMs,
+      query_length: Strings.clean(props.search).length,
+      result_count: filter_data.value.length,
+      rendered_count: data.value.length,
+      fuzzy: is_fuzzy.value,
+    });
+    Telemetry.histogram("louvorja.data_table.filter.duration", durationMs, {
+      table_file: props.file || "unknown",
+    });
+  };
 
-  // Gate de performance: com search_min_length configurado, só filtra a partir
-  // do mínimo de caracteres (buscas curtas mostram a lista base). Buscas
-  // numéricas escapam do gate — match exato por nº do hino/track.
-  const belowMin =
-    props.search_min_length > 0 &&
-    value.length > 0 &&
-    value.length < props.search_min_length &&
-    !/^\d+$/.test(value);
-  if (belowMin) value = "";
+  try {
+    limit.value = 0;
+    _rafCycles = 0;
+    let value = Strings.clean(props.search);
 
-  const searchable = props.searchable_fields
-    ? Object.keys(props.searchable_fields).filter((key) => props.searchable_fields[key] === true)
-    : [];
-  const filter = props.filter
-    ? Object.keys(props.filter).filter((key) => props.filter[key] === true)
-    : [];
+    // Gate de performance: com search_min_length configurado, só filtra a partir
+    // do mínimo de caracteres (buscas curtas mostram a lista base). Buscas
+    // numéricas escapam do gate — match exato por nº do hino/track.
+    const belowMin =
+      props.search_min_length > 0 &&
+      value.length > 0 &&
+      value.length < props.search_min_length &&
+      !/^\d+$/.test(value);
+    if (belowMin) value = "";
 
-  // Recorte que não depende do texto digitado: é sobre ele que a busca —
-  // exata ou aproximada — corre.
-  const base = all_data.value.filter((item) => {
-    const filterCondition =
-      filter.length === 0 || filter.some((key) => item[key] === true || item[key] === 1);
+    const searchable = props.searchable_fields
+      ? Object.keys(props.searchable_fields).filter((key) => props.searchable_fields[key] === true)
+      : [];
+    const filter = props.filter
+      ? Object.keys(props.filter).filter((key) => props.filter[key] === true)
+      : [];
 
-    const initialLetter =
-      props.letter === "" ||
-      (props.letter === "#"
-        ? /^[^a-zA-Z]/.test(item.name.normalize("NFD").replace(/[̀-ͯ]/g, ""))
-        : item.name.normalize("NFD").replace(/[̀-ͯ]/g, "").startsWith(props.letter));
+    // Recorte que não depende do texto digitado: é sobre ele que a busca —
+    // exata ou aproximada — corre.
+    const base = all_data.value.filter((item) => {
+      const filterCondition =
+        filter.length === 0 || filter.some((key) => item[key] === true || item[key] === 1);
 
-    // Álbuns desativados: oculta a música se NÃO pertencer a nenhum álbum ativo.
-    const disabled = props.disabled_albums || [];
-    const albumActive =
-      !Array.isArray(item.albums) ||
-      item.albums.length === 0 ||
-      item.albums.some((a) => !disabled.includes(a.id_album));
+      const initialLetter =
+        props.letter === "" ||
+        (props.letter === "#"
+          ? /^[^a-zA-Z]/.test(item.name.normalize("NFD").replace(/[̀-ͯ]/g, ""))
+          : item.name.normalize("NFD").replace(/[̀-ͯ]/g, "").startsWith(props.letter));
 
-    return filterCondition && initialLetter && albumActive;
-  });
+      // Álbuns desativados: oculta a música se NÃO pertencer a nenhum álbum ativo.
+      const disabled = props.disabled_albums || [];
+      const albumActive =
+        !Array.isArray(item.albums) ||
+        item.albums.length === 0 ||
+        item.albums.some((a) => !disabled.includes(a.id_album));
 
-  is_fuzzy.value = false;
+      return filterCondition && initialLetter && albumActive;
+    });
 
-  if (searchable.length === 0 || value === "") {
-    filter_data.value = base;
+    is_fuzzy.value = false;
+
+    if (searchable.length === 0 || value === "") {
+      filter_data.value = base;
+      paginateData();
+      return;
+    }
+
+    const exact = base.filter((item) =>
+      searchable.some((key) => {
+        if (key === "track" && item.albums) {
+          return isHymnalTrack(item, value);
+        }
+
+        if (!isNaN(item[key]) && !isNaN(value)) {
+          return Number(item[key]) === Number(value);
+        } else if (isNaN(item[key])) {
+          return Strings.clean(item[key]).includes(value);
+        } else {
+          return false;
+        }
+      })
+    );
+
+    if (exact.length > 0) {
+      filter_data.value = exact;
+      paginateData();
+      return;
+    }
+
+    const approximate = fuzzySearch(base, searchable);
+    is_fuzzy.value = approximate.length > 0;
+    filter_data.value = approximate;
+
     paginateData();
-    return;
+  } finally {
+    reportFilter();
   }
-
-  const exact = base.filter((item) =>
-    searchable.some((key) => {
-      if (key === "track" && item.albums) {
-        return isHymnalTrack(item, value);
-      }
-
-      if (!isNaN(item[key]) && !isNaN(value)) {
-        return Number(item[key]) === Number(value);
-      } else if (isNaN(item[key])) {
-        return Strings.clean(item[key]).includes(value);
-      } else {
-        return false;
-      }
-    })
-  );
-
-  if (exact.length > 0) {
-    filter_data.value = exact;
-    paginateData();
-    return;
-  }
-
-  const approximate = fuzzySearch(base, searchable);
-  is_fuzzy.value = approximate.length > 0;
-  filter_data.value = approximate;
-
-  paginateData();
 }
 
 /**

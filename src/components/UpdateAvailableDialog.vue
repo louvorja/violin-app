@@ -31,6 +31,9 @@
       <span class="ua-state__label ua-state__label--strong">
         {{ t("options.updates.app_downloaded") }}
       </span>
+      <p v-if="appUpdate.installRequiresElevation" class="ua-hint ua-hint--warning">
+        {{ t("options.updates.app_install_admin_required") }}
+      </p>
     </div>
 
     <!-- Estado: erro -->
@@ -42,6 +45,9 @@
     <!-- Estado: disponível — conteúdo principal -->
     <template v-else>
       <p class="ua-description">{{ t("options.updates.update_dialog_description") }}</p>
+      <p v-if="appUpdate.installRequiresElevation" class="ua-hint ua-hint--warning">
+        {{ t("options.updates.app_install_admin_required") }}
+      </p>
       <div v-if="releaseNotes" class="ua-notes">
         <div v-if="releaseNotesHtml" class="lj-md" v-html="releaseNotesHtml" />
         <pre v-else class="ua-notes__raw">{{ releaseNotes }}</pre>
@@ -104,6 +110,7 @@ interface AppUpdateState {
   transferred?: number;
   total?: number;
   packagePath?: string | null;
+  installRequiresElevation?: boolean;
 }
 
 const props = defineProps<{
@@ -127,6 +134,7 @@ const appUpdate = ref<AppUpdateState>({
   progress: 0,
   newVersion: null,
   error: null,
+  installRequiresElevation: false,
 });
 
 let _unsub: (() => void) | null = null;
@@ -287,6 +295,10 @@ function onClose() {
   margin: 0;
   color: var(--lj-text-muted);
   line-height: 1.5;
+}
+
+.ua-hint--warning {
+  color: var(--lj-warning-dark, var(--lj-warning));
 }
 
 .ua-description {

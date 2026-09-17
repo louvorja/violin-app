@@ -5,6 +5,7 @@ vi.mock("@/helpers/Telemetry", () => ({
   default: {
     track: vi.fn(),
     log: vi.fn(),
+    histogram: vi.fn(),
     captureException: vi.fn(),
   },
 }));

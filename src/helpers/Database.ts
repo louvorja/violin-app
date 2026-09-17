@@ -15,13 +15,52 @@ import $path from "@/helpers/Path";
 import $dev from "@/helpers/Dev";
 import $idb from "@/helpers/IndexedDB";
 import { DB_TABLE } from "@/constants/DbTables";
-import { API_URL, API_TOKEN, API_URL_FALLBACK, API_URL_FALLBACK_TOKEN, apiOrigin } from "@/config/Api";
+import {
+  API_URL,
+  API_TOKEN,
+  API_URL_FALLBACK,
+  API_URL_FALLBACK_TOKEN,
+  apiOrigin,
+} from "@/config/Api";
 
 interface CacheEntry<T> {
   id: string;
   data: T;
   ts: number;
   v: string;
+}
+
+export interface DatabaseTiming {
+  file: string;
+  source:
+    | "memory"
+    | "indexeddb"
+    | "network"
+    | "stale-memory"
+    | "stale-indexeddb"
+    | "not-found"
+    | "error";
+  duration_ms: number;
+  fresh: boolean;
+}
+
+type DatabaseTimingReporter = (timing: DatabaseTiming) => void;
+let _timingReporter: DatabaseTimingReporter | null = null;
+
+/** Observabilidade opcional da origem do dado sem acoplar o cache ao PostHog. */
+export function setDatabaseTimingReporter(fn: DatabaseTimingReporter | null): void {
+  _timingReporter = fn;
+}
+
+function reportTiming(timing: Omit<DatabaseTiming, "duration_ms">, startedAt: number): void {
+  try {
+    _timingReporter?.({
+      ...timing,
+      duration_ms: Math.max(0, Date.now() - startedAt),
+    });
+  } catch {
+    /* diagnóstico nunca altera a leitura do banco */
+  }
 }
 
 /**
@@ -127,8 +166,7 @@ function routeFor(file: string): Route | null {
   }
   if (/^music_\d+$/.test(file)) return { kind: "detail-music", table: DB_TABLE.MUSICS };
   if (/^album_\d+$/.test(file)) return { kind: "single", table: DB_TABLE.ALBUMS };
-  if (/^bible_\d+_\d+_\d+$/.test(file))
-    return { kind: "single", table: DB_TABLE.BIBLE_CHAPTERS };
+  if (/^bible_\d+_\d+_\d+$/.test(file)) return { kind: "single", table: DB_TABLE.BIBLE_CHAPTERS };
   if (/_(categories|bible_version|bible_book)$/.test(file)) {
     const table = file.endsWith("_categories")
       ? DB_TABLE.MUSIC_CATEGORIES
@@ -199,8 +237,7 @@ async function readRouted<T>(file: string, r: Route | null): Promise<T | null> {
     data = row && isValidV(row.v) ? (row.data as T) : null;
     return data;
   }
-  if (r.kind === "items")
-    data = (await readItems<T>(file, r.table!)) as unknown as T | null;
+  if (r.kind === "items") data = (await readItems<T>(file, r.table!)) as unknown as T | null;
   else if (r.kind === "composite-online")
     data = (await readCompositeOnline(file)) as unknown as T | null;
   else if (r.kind === "detail-music")
@@ -283,12 +320,7 @@ async function writeRouted(file: string, data: unknown, r: Route | null): Promis
   }
   if (r.kind === "items") {
     if (Array.isArray(data)) {
-      await writeItems(
-        file,
-        r.table!,
-        r.idKey!,
-        data as Array<Record<string, unknown>>
-      );
+      await writeItems(file, r.table!, r.idKey!, data as Array<Record<string, unknown>>);
     } else {
       // Anomalia: resposta não-array cai no formato legado.
       await writeRouted(file, data, null);
@@ -361,28 +393,43 @@ function fetchAndStore<T>(file: string, fresh: boolean): Promise<T | null> {
     // Cache-buster: data + timestamp quando fresh, evita CDN/proxy
     // servir versão antiga após "Atualizar coletâneas" no UI.
     const url = fetchUrlFor(file);
+    const fallbackUrl = API_URL_FALLBACK ? url.replace(API_URL, API_URL_FALLBACK) : "";
     const cacheBuster = fresh
       ? `?_=${Date.now()}`
       : `?${new Date().toISOString().slice(0, 10).replace(/-/g, "")}`;
     $dev.write("Abrindo DB", `${url}${cacheBuster}`);
-    let response = await fetchWithTimeout(`${url}${cacheBuster}`, {
-      headers: {
-        "Api-Token": API_TOKEN,
-      },
-      source: "database",
-    });
-    // Fallback: se a API principal retornar erro de rede, tenta a API de fallback
-    if (!response.ok && API_URL_FALLBACK) {
-      const fallbackUrl = fetchUrlFor(file).replace(API_URL, API_URL_FALLBACK);
-      if (fallbackUrl !== url) {
-        $dev.write("Fallback DB", `${fallbackUrl}${cacheBuster}`);
-        response = await fetchWithTimeout(`${fallbackUrl}${cacheBuster}`, {
-          headers: {
-            "Api-Token": API_URL_FALLBACK_TOKEN,
-          },
-          source: "database-fallback",
-        });
-      }
+    let response: Response;
+    try {
+      response = await fetchWithTimeout(`${url}${cacheBuster}`, {
+        headers: {
+          "Api-Token": API_TOKEN,
+        },
+        source: "database",
+      });
+    } catch (primaryError) {
+      // Timeout/DNS também precisam cair para o host alternativo. Antes, o
+      // fallback só era usado quando a API respondia com HTTP ruim, deixando
+      // o catálogo da igreja sem dados durante uma falha transitória.
+      if (!fallbackUrl || fallbackUrl === url) throw primaryError;
+      $dev.write("Fallback DB", `${fallbackUrl}${cacheBuster}`);
+      response = await fetchWithTimeout(`${fallbackUrl}${cacheBuster}`, {
+        headers: {
+          "Api-Token": API_URL_FALLBACK_TOKEN,
+        },
+        source: "database-fallback",
+      });
+    }
+
+    // Fallback também para HTTP 5xx/404. 404 continua significando dataset
+    // ausente, mas só depois de dar uma chance ao servidor alternativo.
+    if (!response.ok && fallbackUrl && fallbackUrl !== url) {
+      $dev.write("Fallback DB", `${fallbackUrl}${cacheBuster}`);
+      response = await fetchWithTimeout(`${fallbackUrl}${cacheBuster}`, {
+        headers: {
+          "Api-Token": API_URL_FALLBACK_TOKEN,
+        },
+        source: "database-fallback",
+      });
     }
     if (response.status === 404) return null;
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -465,12 +512,15 @@ export default {
     file: string,
     opts: { fresh?: boolean; silent?: boolean } = {}
   ): Promise<T | null> {
+    const startedAt = Date.now();
+    const fresh = opts.fresh === true;
     try {
       if (!opts.fresh) {
         // 1) Memória — instantâneo (mesma sessão).
         const mem = _memory.get(file);
         if (mem && isValidV(mem.v)) {
           $dev.write(`Lendo DB da memória`, file);
+          reportTiming({ file, source: "memory", fresh }, startedAt);
           return mem.data as T;
         }
 
@@ -479,17 +529,21 @@ export default {
         if (routed !== null) {
           $dev.write(`Lendo DB do cache IDB`, file);
           _memory.set(file, { id: file, data: routed, ts: Date.now(), v: getVersion() });
+          reportTiming({ file, source: "indexeddb", fresh }, startedAt);
           return routed;
         }
       }
 
-      return await fetchAndStore<T>(file, !!opts.fresh);
+      const fetched = await fetchAndStore<T>(file, fresh);
+      reportTiming({ file, source: fetched === null ? "not-found" : "network", fresh }, startedAt);
+      return fetched;
     } catch (error) {
       // Stale-if-error: sem rede/protocolo indisponível, qualquer cache existente
       // (mesmo antigo) é preferível a quebrar — essencial para uso offline.
       const mem = _memory.get(file);
       if (mem && isValidV(mem.v)) {
         $dev.write(`Rede falhou — usando memória`, file);
+        reportTiming({ file, source: "stale-memory", fresh }, startedAt);
         return mem.data as T;
       }
       try {
@@ -497,6 +551,7 @@ export default {
         if (routed !== null) {
           _memory.set(file, { id: file, data: routed, ts: Date.now(), v: getVersion() });
           $dev.write(`Rede falhou — usando cache IDB`, file);
+          reportTiming({ file, source: "stale-indexeddb", fresh }, startedAt);
           return routed;
         }
       } catch {
@@ -510,6 +565,7 @@ export default {
       if (!opts.silent && classifyNetworkError(error) !== "network") {
         $alert.error({ text: "messages.file_database_not_found", error });
       }
+      reportTiming({ file, source: "error", fresh }, startedAt);
       return null;
     }
   },
@@ -568,7 +624,9 @@ export default {
     try {
       const all = await $idb.getAll<ItemRow>(table);
       return new Set(
-        all.filter((r) => typeof r.file === "string" && r.file.startsWith(filePrefix)).map((r) => r.file)
+        all
+          .filter((r) => typeof r.file === "string" && r.file.startsWith(filePrefix))
+          .map((r) => r.file)
       );
     } catch {
       return new Set();
@@ -579,7 +637,5 @@ export default {
 /** Remove todas as linhas de um dataset (por `file`) dentro de uma tabela. */
 async function purgeFileRows(table: string, file: string): Promise<void> {
   const all = await $idb.getAll<ItemRow>(table);
-  await Promise.all(
-    all.filter((r) => r.file === file).map((r) => $idb.del(table, r.id))
-  );
+  await Promise.all(all.filter((r) => r.file === file).map((r) => $idb.del(table, r.id)));
 }

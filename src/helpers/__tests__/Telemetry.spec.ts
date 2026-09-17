@@ -16,6 +16,7 @@ const posthog = {
     fatal: vi.fn(),
   },
   captureLog: vi.fn(),
+  metrics: { histogram: vi.fn() },
   sessionRecordingStarted: vi.fn(() => true),
   startSessionRecording: vi.fn(),
   stopSessionRecording: vi.fn(),
@@ -24,6 +25,7 @@ const posthog = {
   opt_in_capturing: vi.fn(),
   opt_out_capturing: vi.fn(),
   reset: vi.fn(),
+  is_capturing: vi.fn(() => true),
 };
 
 vi.mock("posthog-js", () => ({ default: posthog }));
@@ -44,6 +46,7 @@ async function loadTelemetry() {
   vi.stubEnv("VITE_POSTHOG_KEY", "test-key");
   vi.stubEnv("VITE_URL_API", "https://api.example.test/v1");
   vi.stubEnv("VITE_APP_VERSION", "2.0.0-beta.8");
+  vi.stubEnv("VITE_POSTHOG_SDK_VERSION", "1.433.7");
   window.history.replaceState({}, "", "/");
   return import("@/helpers/Telemetry");
 }
@@ -82,7 +85,11 @@ describe("Telemetry", () => {
         rageclick: true,
         enable_recording_console_log: true,
         session_recording: expect.objectContaining({ recordHeaders: false, recordBody: false }),
-        tracing_headers: expect.arrayContaining(["api.example.test"]),
+        metrics: expect.objectContaining({
+          serviceName: "louvorja-violin",
+          network: expect.objectContaining({ name: "louvorja.http.client.duration" }),
+        }),
+        tracing_headers: [],
       }),
     );
     expect(posthog.startExceptionAutocapture).toHaveBeenCalledWith({
@@ -90,11 +97,34 @@ describe("Telemetry", () => {
       capture_unhandled_rejections: true,
       capture_console_errors: true,
     });
-    expect(posthog.register).toHaveBeenCalledWith({ app_version: "2.0.0-beta.8", sdk_version: "1.433.7" });
+    expect(posthog.register).toHaveBeenCalledWith(
+      expect.objectContaining({ app_version: "2.0.0-beta.8", sdk_version: "1.433.7" }),
+    );
     expect(posthog.capture).toHaveBeenCalledWith(
       "app_opened",
       expect.objectContaining({ app_version: "2.0.0-beta.8", sdk_version: "1.433.7", replay_ready: true }),
+      { send_instantly: true },
     );
+  });
+
+  it("usa a versão embutida quando o singleton não expõe LIB_VERSION", async () => {
+    const previous = posthog.LIB_VERSION;
+    delete (posthog as { LIB_VERSION?: string }).LIB_VERSION;
+    try {
+      const Telemetry = await loadTelemetry();
+      await Telemetry.init();
+
+      expect(posthog.register).toHaveBeenCalledWith(
+        expect.objectContaining({ app_version: "2.0.0-beta.8", sdk_version: "1.433.7" }),
+      );
+      expect(posthog.capture).toHaveBeenCalledWith(
+        "app_opened",
+        expect.objectContaining({ sdk_version: "1.433.7" }),
+        { send_instantly: true },
+      );
+    } finally {
+      posthog.LIB_VERSION = previous;
+    }
   });
 
   it("emite app_opened com replay_ready=false quando o recorder não inicia a tempo", async () => {
@@ -109,6 +139,7 @@ describe("Telemetry", () => {
       expect(posthog.capture).toHaveBeenCalledWith(
         "app_opened",
         expect.objectContaining({ replay_ready: false }),
+        { send_instantly: true },
       );
     } finally {
       posthog.sessionRecordingStarted.mockReturnValue(true);
@@ -123,9 +154,17 @@ describe("Telemetry", () => {
     await Telemetry.init();
 
     expect(posthog.init).toHaveBeenCalledOnce();
+    expect(posthog.init.mock.calls[0][1]).toEqual(expect.objectContaining({
+      autocapture: false,
+      disable_session_recording: true,
+      capture_heatmaps: false,
+      capture_dead_clicks: false,
+      rageclick: false,
+    }));
     expect(posthog.capture).toHaveBeenCalledWith(
       "app_opened",
       expect.objectContaining({ window_role: "auxiliary" }),
+      { send_instantly: true },
     );
   });
 
@@ -263,6 +302,19 @@ describe("Telemetry", () => {
     expect(posthog.logger.warn).toHaveBeenCalledWith(
       "music media buffering",
       expect.objectContaining({ playback_id: "p-1", nested: { stage: "waiting" } }),
+    );
+  });
+
+  it("envia histogramas de performance com dimensões de baixa cardinalidade", async () => {
+    const Telemetry = await loadTelemetry();
+    await Telemetry.init();
+
+    Telemetry.histogram("louvorja.test.duration", 123, { window_role: "main" });
+
+    expect(posthog.metrics.histogram).toHaveBeenCalledWith(
+      "louvorja.test.duration",
+      123,
+      { unit: "ms", attributes: { window_role: "main" } },
     );
   });
 

@@ -98,22 +98,24 @@ win:
 #   header.bmp      — cabeçalho do instalador (150x57 px, formato BMP)
 #   sidebar.bmp     — barra lateral do instalador (164x314 px, formato BMP)
 nsis:
-  # Instalador com wizard (não one-click) — usuário pode escolher pasta
+  # Instalador com wizard (não one-click), mas sempre no escopo do usuário.
   oneClick: false
+  # Não oferecer a escolha "todos os usuários": o app precisa atualizar sem
+  # UAC e os dados/atalhos pertencem ao usuário que o executa.
+  perMachine: false
   # O nome precisa ser explícito: o electron-builder usa outra normalização
   # no latest.yml quando recebe o productName com espaços.
   # O mesmo nome aqui garante que o arquivo publicado e o arquivo apontado
   # pelo atualizador sejam exatamente iguais.
   artifactName: "LouvorJA.Violin-Setup-${version}.${ext}"
-  # Solicitar elevação de privilégios se necessário
-  allowElevation: true
+  # O modo normal não pede admin. O script customizado ainda eleva
+  # explicitamente quando encontra uma instalação antiga em Program Files,
+  # para atualizá-la no lugar sem criar uma segunda cópia.
+  allowElevation: false
   # Instalação sempre por usuário (%LOCALAPPDATA%\Programs\...), sem pedir
   # admin — os dados do usuário já vivem em Documents, não na pasta do app.
-  # Deixar escolher a pasta permitia apontar para C:\Program Files: os
-  # arquivos ficam protegidos por admin, mas o instalador continua
-  # registrado como "por usuário" por baixo dos panos, e o autoupdate (que
-  # não pede elevação nesse modo) passa a falhar em silêncio a cada versão.
-  # Foi exatamente o que aconteceu no PC de uma igreja em 2026-09-16.
+  # Uma instalação antiga que tenha escolhido C:\Program Files é tratada como
+  # legado pelo script NSIS e só é atualizada após confirmação do UAC.
   allowToChangeInstallationDirectory: false
   # Criar atalho na área de trabalho
   createDesktopShortcut: true

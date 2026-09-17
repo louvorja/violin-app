@@ -19,7 +19,30 @@
 
 const { app, BrowserWindow, ipcMain, screen, session, dialog } = require("electron");
 const path = require("path");
+const os = require("os");
+const { randomUUID } = require("crypto");
 const fs = require("fs-extra");
+const { configureSystemCertificates } = require("./main/systemCertificates.js");
+
+// O processo principal usa `https` para updater, catálogo e mídia. No
+// Windows, acrescente as raízes que o SO confia antes de qualquer módulo poder
+// abrir uma conexão; isso cobre proxy/antivírus da rede da igreja sem desligar
+// a validação TLS.
+const nodeTrustStore = configureSystemCertificates();
+if (process.platform === "win32") {
+  if (nodeTrustStore.error) {
+    console.warn("[main] trust store do Windows indisponível:", nodeTrustStore.error);
+  } else {
+    console.info(
+      "[main] trust store do Windows carregado:",
+      JSON.stringify({
+        defaults: nodeTrustStore.defaultCount,
+        system: nodeTrustStore.systemCount,
+        added: nodeTrustStore.addedCount,
+      })
+    );
+  }
+}
 
 const paths = require("./main/paths.js");
 const { createMainWindow, TRAFFIC_LIGHT_POSITION } = require("./main/windows.js");
@@ -44,8 +67,11 @@ const mediaVariants = require("./main/mediaVariants.js");
 const mediaResolver = require("./main/mediaResolver.js");
 const classicLibrary = require("./main/classicLibrary.js");
 const netHealth = require("./main/netHealth.js");
-const devices = require("./main/devices.js");
+const telemetryErrorQueue = require("./main/telemetryErrorQueue.js");
 const { buildCsp } = require("./main/csp.js");
+
+const diagnosticLogsRequested =
+  process.env.LJ_LOGS === "1" || process.argv.some((arg) => arg.toLowerCase() === "--lj-logs");
 
 function configureAppPaths() {
   // Mantém o identificador técnico do pacote separado do nome exibido.
@@ -167,20 +193,37 @@ function migrateMediaToDataDir(storageCfg = {}) {
 // do IndexedDB, fica sem os dados e renderiza a janela quebrada. Quem chega
 // depois encerra e devolve o foco para a janela que já está aberta.
 if (!app.requestSingleInstanceLock()) {
+  console.warn("[LouvorJA] Segunda instância detectada; encerrando este processo.");
   app.quit();
-} else {
-  app.on("second-instance", () => {
-    if (!mainWindow || mainWindow.isDestroyed()) return;
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.show();
-    mainWindow.focus();
-  });
-
-  // -------------------------------------------------------------------------
-  // D2 — Registrar scheme louvorja:// como privilegiado ANTES do app.whenReady
-  // -------------------------------------------------------------------------
-  protocolModule.register();
+  // `app.quit()` é assíncrono. Sem sair do módulo aqui, o segundo processo
+  // ainda registrava `whenReady` e podia criar a própria janela antes de
+  // terminar — exatamente o duplo app observado no macOS.
+  return;
 }
+console.log("[LouvorJA] Instância única: lock adquirido.");
+
+function focusMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  if (process.platform === "darwin") app.focus({ steal: true });
+  mainWindow.focus();
+  return true;
+}
+
+app.on("second-instance", () => {
+  // Durante o bootstrap a primeira janela ainda pode não existir. O processo
+  // secundário já foi encerrado; a janela original continuará sendo criada,
+  // portanto não abrimos outra nem perdemos o lock.
+  if (!focusMainWindow()) {
+    console.log("[LouvorJA] Instância principal ainda inicializando; mantendo a única janela.");
+  }
+});
+
+// -------------------------------------------------------------------------
+// D2 — Registrar scheme louvorja:// como privilegiado ANTES do app.whenReady
+// -------------------------------------------------------------------------
+protocolModule.register();
 
 // ---------------------------------------------------------------------------
 // Constantes
@@ -190,6 +233,16 @@ const DEV_URL = "http://localhost:5002";
 const isDev =
   process.env.ELECTRON_DEV === "1" || !app.isPackaged;
 
+console.log("[LouvorJA] Runtime principal:", JSON.stringify({
+  appVersion: app.getVersion(),
+  packaged: app.isPackaged,
+  electron: process.versions.electron,
+  chromium: process.versions.chrome,
+  node: process.versions.node,
+  platform: process.platform,
+  diagnosticLogs: diagnosticLogsRequested,
+}));
+
 
 // ---------------------------------------------------------------------------
 // Estado da app
@@ -198,15 +251,33 @@ const isDev =
 /** @type {BrowserWindow | null} */
 let mainWindow = null;
 
+const MAIN_ERROR_QUEUE_PATH = path.join(paths.userData(), "telemetry-main-errors.json");
+
+function _readPendingMainErrors() {
+  return telemetryErrorQueue.read(MAIN_ERROR_QUEUE_PATH);
+}
+
+function _ackMainError(id) {
+  return telemetryErrorQueue.acknowledge(MAIN_ERROR_QUEUE_PATH, id);
+}
+
 // Encaminha falhas do processo principal para o renderer enquanto ele ainda
 // está vivo. O monitor não altera o comportamento padrão do Node após uma
 // exceção não tratada, mas permite registrar o diagnóstico antes do crash.
 function reportMainProcessError(source, error) {
+  const id = randomUUID();
   const payload = {
+    id,
     source,
+    name: String(error?.name || "Error"),
     message: String(error?.message || error),
     stack: error?.stack ? String(error.stack).slice(0, 20_000) : undefined,
+    at: new Date().toISOString(),
   };
+  // O renderer pode estar travado ou o processo pode morrer antes de o IPC
+  // chegar. A fila permite enviar o stack no próximo boot e evita perda muda
+  // justamente no caso mais importante: uncaughtException.
+  telemetryErrorQueue.enqueue(MAIN_ERROR_QUEUE_PATH, payload);
   try {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("telemetry:main-error", payload);
   } catch (_) { /* processo pode estar encerrando */ }
@@ -348,14 +419,18 @@ function createWindow() {
     try { mainWindow.webContents.send("window:maximizeChange", false); } catch (_) { /* ignore */ }
   });
 
-  // Em DEV, redireciona erros/warnings do renderer para o terminal (opcional —
-  // controlado pela tela "Opções do Desenvolvedor").
-  const logsEnabled = isDev
-    ? (_userDataMain?.options?.dev?.logs_terminal == null
-        ? true
-        : !!_userDataMain.options.dev.logs_terminal)
-    : false;
+  // Encaminha erros/warnings do renderer para o terminal. Em produção fica
+  // disponível de forma explícita com LJ_LOGS=1; quando o exe foi chamado de
+  // um CMD/PowerShell, liga automaticamente para facilitar diagnóstico da
+  // instalação da igreja. A preferência do menu continua podendo desligar.
+  const logsPreference = _userDataMain?.options?.dev?.logs_terminal;
+  const logsEnabled = diagnosticLogsRequested
+    || (isDev && logsPreference !== false)
+    || ((process.stdout?.isTTY || process.stderr?.isTTY) && logsPreference !== false)
+    || logsPreference === true;
   configureLogForwarding(mainWindow, logsEnabled);
+
+  console.log("[LouvorJA] Logs do renderer:", logsEnabled ? "ativos" : "desligados", "(--lj-logs ou LJ_LOGS=1 para forçar)");
 
   console.log("[LouvorJA] Janela principal criada.");
 }
@@ -685,6 +760,37 @@ ipcMain.handle("app:info", () => {
   };
 });
 
+// Diagnóstico explícito do renderer. O console-message do Chromium cobre
+// apenas warn/error (e pode estar desativado no build de produção); este canal
+// leva o estado do PostHog ao mesmo terminal que iniciou o executável. O
+// payload é validado aqui porque atravessa IPC, mesmo vindo do nosso preload.
+ipcMain.on("telemetry:renderer-log", (_event, payload) => {
+  if (!payload || typeof payload !== "object") return;
+  const level = ["trace", "debug", "info", "warn", "error", "fatal"].includes(payload.level)
+    ? payload.level
+    : "info";
+  const message = typeof payload.message === "string"
+    ? payload.message.slice(0, 500)
+    : "diagnóstico sem mensagem";
+  let details = "";
+  if (payload.details && typeof payload.details === "object") {
+    try {
+      details = ` ${JSON.stringify(payload.details).slice(0, 4000)}`;
+    } catch (_) {
+      details = " [detalhes não serializáveis]";
+    }
+  }
+  const line = `[renderer:telemetry:${level}] ${message}${details}`;
+  if (level === "error" || level === "fatal") console.error(line);
+  else if (level === "warn") console.warn(line);
+  else console.log(line);
+});
+
+ipcMain.handle("telemetry:pending-main-errors", () => _readPendingMainErrors());
+ipcMain.handle("telemetry:ack-main-error", (_event, id) => ({
+  ok: _ackMainError(typeof id === "string" ? id : ""),
+}));
+
 // ---------------------------------------------------------------------------
 // Ferramentas de desenvolvimento (tela "Opções do Desenvolvedor")
 // ---------------------------------------------------------------------------
@@ -712,8 +818,15 @@ function configureLogForwarding(win, enabled) {
   if (!enabled) return;
 
   const handler = (_e, level, message, line, source) => {
-    if (level < 2) return; // ignora log/info, só warn (2) e error (3)
-    const tag = level === 2 ? "warn" : "error";
+    // Os diagnósticos do PostHog usam o canal IPC dedicado abaixo; não
+    // imprima a mesma linha uma segunda vez via console-message.
+    if (typeof message === "string" && message.startsWith("[Telemetry]")) return;
+    // Em modo diagnóstico (`LJ_LOGS=1`) ou quando o executável foi iniciado
+    // de um terminal, inclui info/log para acompanhar o boot do renderer.
+    // Sem isso, mantém o comportamento enxuto de só encaminhar warn/error.
+    const verbose = diagnosticLogsRequested || !!process.stdout?.isTTY || !!process.stderr?.isTTY;
+    if (level < 2 && !verbose) return;
+    const tag = level === 0 ? "debug" : level === 1 ? "info" : level === 2 ? "warn" : "error";
     const src = source ? source.split("/").pop() : "";
     const prefix = `[renderer:${tag}]${src ? " " + src + ":" + line : ""}`;
     console.log(prefix, message);
@@ -1482,7 +1595,21 @@ function aplicarAcervoClassico(storageCfg = {}) {
 // IPC: acervo da versão clássica (somente leitura)
 // ---------------------------------------------------------------------------
 
-ipcMain.handle("classic:detect", () => classicLibrary.detect());
+ipcMain.handle("classic:detect", () => {
+  const achados = classicLibrary.detect();
+  console.info(
+    "[main] Acervo clássico detectado:",
+    JSON.stringify(
+      achados.map((item) => ({
+        dir: item.dir,
+        configDir: item.configDir,
+        lang: item.lang,
+        folders: item.folders,
+      }))
+    )
+  );
+  return achados;
+});
 
 ipcMain.handle("classic:validate", (_e, dir) => classicLibrary.validate(dir));
 
@@ -1501,8 +1628,19 @@ ipcMain.handle("classic:setSource", (_e, { dir, lang, enabled } = {}) => {
     const r = classicLibrary.validate(dir);
     if (!r.ok) return { ok: false, error: r.error };
     cfg.classicDir = r.configDir;
-    cfg.classicLang = lang || classicLibrary.detectLanguage() || "pt";
+    // O marcador do idioma do Delphi fica no `%APPDATA%` e pode não estar no
+    // diretório padrão do processo (instalação portátil, outro usuário ou
+    // Wine). Passe também o config escolhido para que a detecção seja feita
+    // no contexto da instalação apontada, em vez de usar sempre a primeira
+    // configuração encontrada no computador.
+    cfg.classicLang = lang || classicLibrary.detectLanguage(os.homedir(), r.configDir) || "pt";
     cfg.classicEnabled = enabled !== false;
+    console.info("[main] Acervo clássico selecionado:", JSON.stringify({
+      configDir: cfg.classicDir,
+      lang: cfg.classicLang,
+      enabled: cfg.classicEnabled,
+      folders: r.folders,
+    }));
   }
 
   userStore.write("storage", cfg);

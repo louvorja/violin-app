@@ -5,6 +5,29 @@ declare global {
     platform: string;
     version: string;
     isDev: boolean;
+    runtime?: {
+      electron?: string;
+      chrome?: string;
+      node?: string;
+    };
+    telemetry?: {
+      log: (payload: {
+        level: "trace" | "debug" | "info" | "warn" | "error" | "fatal";
+        message: string;
+        details?: Record<string, unknown>;
+      }) => void;
+      getPendingMainErrors?: () => Promise<
+        Array<{
+          id: string;
+          source: string;
+          name?: string;
+          message: string;
+          stack?: string;
+          at?: string;
+        }>
+      >;
+      ackMainError?: (id: string) => Promise<{ ok: boolean }>;
+    };
     classic: {
       detect: () => Promise<
         Array<{ dir: string; configDir: string; lang: string | null; folders: Record<string, boolean> }>
@@ -127,6 +150,7 @@ declare global {
         progress: number;
         error: string | null;
         packagePath?: string | null;
+        installRequiresElevation?: boolean;
       }>;
       setOptions: (opts: {
         useBeta?: boolean;
@@ -155,6 +179,7 @@ declare global {
         transferred?: number;
         total?: number;
         packagePath?: string | null;
+        installRequiresElevation?: boolean;
       }) => void) => () => void;
     };
     powerBlocker: Record<string, unknown>;

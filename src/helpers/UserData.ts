@@ -101,8 +101,8 @@ export default {
    */
   save(): void {
     // Em desktop (Electron) o main process é a fonte da verdade — toda
-    // chamada `userdata:patch` IPC já atualiza `_userDataMain` e persiste
-    // sincronamente no disco via userStore.write. Se o renderer também
+    // chamada `userdata:patch` IPC já atualiza `_userDataMain` e agenda a
+    // persistência no disco via userStore.write. Se o renderer também
     // chamasse Storage.set("user_data", $state) com debounce, teríamos
     // duas escritas concorrentes no mesmo arquivo, com risco do snapshot
     // velho do renderer (300ms atrás) sobrescrever o que o main acabou
@@ -115,14 +115,12 @@ export default {
       try {
         $storage.setLocalCache("user_data", state);
       } catch (_) { /* ignore — método pode não existir em web */ }
-      // Grava no disco — se o IPC userdata:patch ainda não chegou ao main
-      // (ex: usuário fechou o app imediatamente após a mudança), o
-      // before-quit escreveria _userDataMain desatualizado. Esta escrita é
-      // segura porque o handler userdata:patch do main sobrescreve com o
-      // mesmo valor (ou mais novo, se outro set() disparou entrementes).
-      try {
-        $storage.set("user_data", state);
-      } catch (_) { /* ignore */ }
+      // Não chamar `$storage.set` no desktop: ele envia um segundo
+      // `userStore:write` completo enquanto `userdata:patch` já está a caminho
+      // do main. Em pastas sincronizadas pelo OneDrive isso gerava `EPERM`
+      // (dois renomes de user_data.json.tmp) e podia deixar a preferência sem
+      // persistir. O patch IPC é a única escrita de desktop; o handler
+      // `before-quit` ainda faz o flush final se o app fechar imediatamente.
       return;
     }
     if (_saveTimer !== null) clearTimeout(_saveTimer);

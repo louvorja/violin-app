@@ -5,6 +5,7 @@ import $dev from "./Dev";
 import $alert from "./Alert";
 import { moduleShowInMainMenu } from "@/constants/UserDataKeys";
 import { ICONS } from "@/config/Icons";
+import Telemetry from "@/helpers/Telemetry";
 
 /**
  * ModuleManager — lifecycle de módulos (boot-time).
@@ -96,6 +97,10 @@ export default {
       return true;
     } catch (error) {
       console.error(`Failed to install module ${module.manifest.id}:`, error);
+      Telemetry.captureException(error, {
+        source: "module_install",
+        module_id: module.manifest.id,
+      });
       return false;
     }
   },
@@ -126,6 +131,7 @@ export default {
       caminhos.map((path) =>
         modules[path]().catch((e) => {
           console.warn(`[ModuleManager] Falha ao carregar módulo ${path}:`, e);
+          Telemetry.captureException(e, { source: "module_chunk_load", module_path: path });
           return null;
         })
       )
@@ -150,6 +156,7 @@ export default {
         }
       } catch (e) {
         console.warn(`[ModuleManager] Falha ao instalar módulo ${path}:`, e);
+        Telemetry.captureException(e, { source: "module_manager_init", module_path: path });
       }
     }
 

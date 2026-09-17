@@ -3,6 +3,7 @@ import $dev from "@/helpers/Dev";
 import $appdata from "@/helpers/AppData";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
+import Telemetry from "@/helpers/Telemetry";
 
 /**
  * Modules — runtime de módulos (open / close / query).
@@ -15,7 +16,8 @@ import { KEYS } from "@/constants/UserDataKeys";
  * Comportamento (replica PageControl Delphi):
  * - Abrir um módulo embedded fecha automaticamente os outros embedded.
  * - Módulos popup (album, lyric, media) coexistem com embedded.
- * - O Modules.vue só monta os módulos com show=true ou minimized=true.
+ * - O Modules.vue monta apenas o módulo embedded ativo (e popups/minimizados)
+ *   e mantém os demais em cache para alternância rápida.
  */
 
 export default {
@@ -37,9 +39,12 @@ export default {
       return;
     }
     $dev.write("open", id);
+    const wasVisible = $appdata.get(`modules.${id}.show`, false) === true;
+    if (!wasVisible) Telemetry.markStart("module.open", id, { module_id: id });
 
     $appdata.set(`modules.${id}.show`, true);
     $appdata.set("active_module", id);
+    Telemetry.track(wasVisible ? "module_focused" : "module_opened", { module_id: id });
 
     // Track tab opening order (first opened = leftmost).
     // Ordem ESTÁVEL: focar/reabrir um módulo não o move para o fim;
@@ -77,6 +82,7 @@ export default {
 
       $appdata.set("active_module", next?.id || null);
     }
+    Telemetry.track("module_closed", { module_id: id });
   },
 
   /**

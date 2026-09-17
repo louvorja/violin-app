@@ -30,17 +30,19 @@ const fs = require("fs-extra");
 const path = require("path");
 const https = require("https");
 const http = require("http");
+const { installRequiresWindowsElevation } = require("./windowsInstallScope.js");
 
 const GITHUB_OWNER = "louvorja";
 const GITHUB_REPO = "violin-app";
 const GITHUB_RELEASES_URL = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases?per_page=20`;
 
 let autoUpdater = null;
+const _installRequiresElevation = installRequiresWindowsElevation();
 
 /** @type {import("electron").BrowserWindow | null} */
 let _mainWindow = null;
 
-/** @type {{ status: string, version: string, newVersion: string|null, releaseNotes: string|null, progress: number, bytesPerSecond: number, transferred: number, total: number, error: string|null, packagePath: string|null }} */
+/** @type {{ status: string, version: string, newVersion: string|null, releaseNotes: string|null, progress: number, bytesPerSecond: number, transferred: number, total: number, error: string|null, packagePath: string|null, installRequiresElevation: boolean }} */
 let _state = {
   status: "idle",
   version: "0.0.0", // Atualizado abaixo com app.getVersion() (package.json)
@@ -52,6 +54,10 @@ let _state = {
   total: 0,
   error: null,
   packagePath: null,
+  // Uma cópia antiga em Program Files não pode ser substituída por um
+  // instalador silencioso disparado ao fechar o app. O renderer usa esta flag
+  // para pedir confirmação explícita; o NSIS customizado faz a elevação.
+  installRequiresElevation: _installRequiresElevation,
 };
 
 // Opções em runtime (aplicadas a cada check)
@@ -558,7 +564,10 @@ function init({ channel = "latest", autoCheck = true, autoDownload = false, useB
     // recebe beta, e quem está numa estável recebe estável.
     if (channel && channel !== "latest") autoUpdater.channel = channel;
     autoUpdater.autoDownload = _autoDownload;
-    autoUpdater.autoInstallOnAppQuit = true;
+    // Instalações atuais por usuário continuam simples. Para o legado em
+    // Program Files, nunca esconda uma falha de UAC ao encerrar o programa:
+    // o operador verá o estado baixado e clicará em "Instalar".
+    autoUpdater.autoInstallOnAppQuit = !_installRequiresElevation;
 
     // ----- Eventos -----------------------------------------------------------
 
@@ -613,7 +622,16 @@ function init({ channel = "latest", autoCheck = true, autoDownload = false, useB
     }
   }
 
-  console.log("[updater] Inicializado. autoUpdater:", !!autoUpdater, "| autoDownload:", _autoDownload, "| useBeta:", _useBeta);
+  console.log(
+    "[updater] Inicializado. autoUpdater:",
+    !!autoUpdater,
+    "| autoDownload:",
+    _autoDownload,
+    "| useBeta:",
+    _useBeta,
+    "| installRequiresElevation:",
+    _installRequiresElevation
+  );
 }
 
 /**

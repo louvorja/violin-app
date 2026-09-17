@@ -80,7 +80,6 @@ onBeforeUnmount(() => {
   font-size: clamp(1rem, 3vw, 2.5rem);
   font-weight: 300;
   color: rgba(255, 255, 255, 0.6);
-  text-transform: capitalize;
   letter-spacing: 0.05em;
 }
 </style>

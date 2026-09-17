@@ -102,6 +102,17 @@
         {{ $t("options.updates.database") }}
       </h3>
 
+      <div class="opt-row">
+        <label class="opt-checkbox">
+          <input
+            type="checkbox"
+            :checked="checkDbOnStart"
+            @change="onCheckDbOnStartChange($c($event))"
+          />
+          <span>{{ $t("options.updates.check_db_updates_on_start") }}</span>
+        </label>
+      </div>
+
       <div class="opt-row opt-row--spread">
         <label class="opt-label">{{ $t("options.updates.current_version") }}</label>
         <strong v-if="dbCurrentConfig">
@@ -247,6 +258,7 @@ import {
 } from "@/config/Api";
 import Snackbar from "@helpers/Snackbar";
 import { fetchWithTimeout } from "@/helpers/Http";
+import Telemetry from "@/helpers/Telemetry";
 
 interface AppUpdateState {
   status: string;
@@ -255,6 +267,7 @@ interface AppUpdateState {
   newVersion: string | null;
   error: string | null;
   packagePath?: string | null;
+  installRequiresElevation?: boolean;
 }
 
 type UpdateStatus = "idle" | "checking" | "ok" | "available" | "error";
@@ -271,6 +284,7 @@ const appUpdate = ref<AppUpdateState>({
 });
 let _appUpdateUnsub: (() => void) | null = null;
 let _pkgProgressUnsub: (() => void) | null = null;
+let _lastAppProgressBucket = -1;
 
 const dbChecking = ref<boolean>(false);
 const dbStatus = ref<UpdateStatus>("idle");
@@ -282,7 +296,8 @@ const lastAppCheck = ref<string | null>(null);
 
 // Opções da tela
 const useBeta = ref(false);
-const checkOnStart = ref(false);
+const checkOnStart = ref(true);
+const checkDbOnStart = ref(true);
 const autoDownload = ref(false);
 
 // Sync manager (bundle download)
@@ -355,8 +370,8 @@ const dbBackupProgressDetail = computed<string>(() => {
 const dbHasUpdate = computed<boolean>(
   () =>
     !!dbLatestConfig.value &&
-    !!dbCurrentConfig.value &&
-    dbLatestConfig.value.version_number !== dbCurrentConfig.value.version_number
+    (!dbCurrentConfig.value ||
+      dbLatestConfig.value.version_number > dbCurrentConfig.value.version_number)
 );
 
 const appVersion = computed<string>(() => appUpdate.value.version || Platform.api?.version || "?");
@@ -419,6 +434,11 @@ function onCheckOnStartChange(v: boolean): void {
   pushOptions();
 }
 
+function onCheckDbOnStartChange(v: boolean): void {
+  checkDbOnStart.value = v;
+  $userdata.set(KEYS.OPTIONS.CHECK_DB_UPDATES_ON_START, v);
+}
+
 function onAutoDownloadChange(v: boolean): void {
   autoDownload.value = v;
   $userdata.set(KEYS.OPTIONS.AUTO_DOWNLOAD_UPDATES, v);
@@ -428,6 +448,8 @@ function onAutoDownloadChange(v: boolean): void {
 /* ---- App update ---- */
 async function checkAppUpdate(): Promise<void> {
   if (!Platform.updater) return;
+  const startedAt = Date.now();
+  Telemetry.track("app_update_check_started");
   try {
     const res = await Platform.updater.check();
     // Só registra a última verificação quando o check concluiu com sucesso.
@@ -435,14 +457,23 @@ async function checkAppUpdate(): Promise<void> {
       const ts = new Date().toISOString();
       lastAppCheck.value = ts;
       $userdata.set(KEYS.OPTIONS.LAST_APP_CHECK, ts);
+      Telemetry.track("app_update_check_completed", {
+        available: !!res.state && (res.state as AppUpdateState).status === "available",
+        duration_ms: Date.now() - startedAt,
+      });
     }
   } catch (e) {
     console.error("[Atualizações] checkApp:", e);
+    Telemetry.captureException(e, { source: "app_update_check" });
+    Telemetry.track("app_update_check_failed", { duration_ms: Date.now() - startedAt });
   }
 }
 
 async function startDownload(): Promise<void> {
   if (!Platform.updater) return;
+  const startedAt = Date.now();
+  _lastAppProgressBucket = -1;
+  Telemetry.track("app_update_download_started", { version: appUpdate.value.newVersion });
 
   // Todos os formatos pelo mesmo caminho. O deb e o rpm tinham um desvio para
   // baixar o pacote à mão, de quando a verificação de versão falhava e o
@@ -451,8 +482,11 @@ async function startDownload(): Promise<void> {
   // manual — sem precisar que a tela decida isso por ele.
   try {
     await Platform.updater.download();
+    Telemetry.track("app_update_download_completed", { duration_ms: Date.now() - startedAt });
   } catch (e) {
     console.error("[Atualizações] download:", e);
+    Telemetry.captureException(e, { source: "app_update_download" });
+    Telemetry.track("app_update_download_failed", { duration_ms: Date.now() - startedAt });
   }
 }
 
@@ -462,6 +496,7 @@ async function installUpdate(): Promise<void> {
   // para "abrir o pacote" existia de quando a verificação falhava e o download
   // era feito à mão; com o updater fazendo o download, não há arquivo no
   // caminho manual, e o botão respondia "Nenhum pacote baixado".
+  Telemetry.track("app_update_install_requested", { version: appUpdate.value.newVersion });
   await Platform.updater?.install();
 }
 
@@ -502,6 +537,20 @@ async function _fetchDbConfig(): Promise<Response> {
   }
 }
 
+function isValidDbConfig(value: unknown): value is DbConfig {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const data = value as Partial<DbConfig>;
+  return (
+    typeof data.datetime === "string" &&
+    typeof data.latest_updated === "string" &&
+    typeof data.version === "number" &&
+    Number.isFinite(data.version) &&
+    typeof data.version_number === "number" &&
+    Number.isFinite(data.version_number) &&
+    data.version_number >= 0
+  );
+}
+
 const DB_CHECK_RETRIES = 3;
 const DB_CHECK_RETRY_DELAY_MS = 1500;
 
@@ -517,17 +566,19 @@ async function checkDbUpdate(): Promise<void> {
     for (let attempt = 1; attempt <= DB_CHECK_RETRIES; attempt++) {
       try {
         res = await _fetchDbConfig();
-        break;
+        if (res.ok) break;
+        if (attempt === DB_CHECK_RETRIES) throw new Error(`HTTP ${res.status}`);
       } catch (e) {
         if (attempt === DB_CHECK_RETRIES) throw e;
-        await new Promise((r) => setTimeout(r, DB_CHECK_RETRY_DELAY_MS));
       }
+      await new Promise((r) => setTimeout(r, DB_CHECK_RETRY_DELAY_MS));
     }
     if (!res || !res.ok) {
       throw new Error();
     }
-    const data: DbConfig = await res.json();
-    dbLatestConfig.value = data ?? null;
+    const data: unknown = await res.json();
+    if (!isValidDbConfig(data)) throw new Error("Resposta de configuração do banco inválida");
+    dbLatestConfig.value = data;
     dbStatus.value = dbHasUpdate.value ? "available" : "ok";
     lastDbCheck.value = new Date().toISOString();
     $userdata.set(KEYS.OPTIONS.LAST_DB_CHECK, lastDbCheck.value);
@@ -700,7 +751,8 @@ async function reinstallDatabase(): Promise<void> {
 
 async function loadCurrentDbVersion(): Promise<void> {
   try {
-    dbCurrentConfig.value = await $database.get<DbConfig>("config", { silent: true });
+    const data = await $database.get<DbConfig>("config", { silent: true });
+    dbCurrentConfig.value = isValidDbConfig(data) ? data : null;
   } catch {
     dbCurrentConfig.value = null;
   }
@@ -715,36 +767,24 @@ onMounted(async () => {
   const savedBeta = $userdata.get<boolean | null>(KEYS.OPTIONS.USE_BETA_UPDATES, null);
   useBeta.value = savedBeta == null ? true : savedBeta;
   checkOnStart.value = $userdata.get<boolean>(KEYS.OPTIONS.CHECK_UPDATES_ON_START, true) === true;
+  checkDbOnStart.value =
+    $userdata.get<boolean>(KEYS.OPTIONS.CHECK_DB_UPDATES_ON_START, true) === true;
   autoDownload.value = $userdata.get<boolean>(KEYS.OPTIONS.AUTO_DOWNLOAD_UPDATES, false) === true;
 
   if (Platform.isDesktop && Platform.updater) {
     try {
       appUpdate.value = (await Platform.updater.status()) as AppUpdateState;
-      let prevStatus = appUpdate.value.status;
       _appUpdateUnsub = Platform.updater.onStateChange((s: AppUpdateState) => {
         appUpdate.value = s;
-        // Ao concluir o download do electron-updater, avisa para reiniciar.
-        // Mostra apenas na TRANSIÇÃO para "downloaded" (senão ao abrir a tela
-        // com download já concluído em background repetiria o prompt).
-        // Vale para deb e rpm também: eles ficavam de fora porque a instalação
-        // não era automática, e agora é.
-        if (s.status === "downloaded" && prevStatus !== "downloaded") {
-          $alert.yesno(
-            {
-              title: t("options.updates.app_install_title"),
-              text: t("options.updates.app_restart_prompt", { version: s.newVersion }),
-              translate: false,
-            },
-            (btn?: string) => {
-              if (btn === "yes") installUpdate();
-            }
-          );
-        }
-        prevStatus = s.status;
       });
       _pkgProgressUnsub = Platform.updater.onPackageProgress((d: { percent: number }) => {
         if (d && typeof d.percent === "number") {
           appUpdate.value = { ...appUpdate.value, status: "downloading", progress: d.percent };
+          const bucket = Math.min(100, Math.floor(d.percent / 25) * 25);
+          if (bucket !== _lastAppProgressBucket) {
+            _lastAppProgressBucket = bucket;
+            Telemetry.track("app_update_download_progress", { percent_bucket: bucket });
+          }
         }
       });
       pushOptions();

@@ -194,7 +194,6 @@ onBeforeUnmount(() => {
   position: relative;
   z-index: 1;
   font-size: 0.9rem;
-  text-transform: capitalize;
 }
 .clock-bg-img {
   position: absolute;

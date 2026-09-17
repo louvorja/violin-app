@@ -1136,7 +1136,6 @@ async function removeEntry(): Promise<void> {
 .si-entry-weekday {
   font-size: var(--lj-text-base);
   color: var(--lj-text-muted);
-  text-transform: capitalize;
 }
 .si-entry-cat-row {
   display: flex;

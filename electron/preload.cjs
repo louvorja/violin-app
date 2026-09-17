@@ -40,11 +40,25 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
   /** true quando rodando em desenvolvimento (ELECTRON_DEV=1 ou executável não empacotado). */
   isDev: process.env.ELECTRON_DEV === "1" || process.defaultApp,
 
+  /** Versões do runtime para diagnosticar diferenças entre instalações Windows. */
+  runtime: {
+    electron: process.versions.electron,
+    chrome: process.versions.chrome,
+    node: process.versions.node,
+  },
+
   /**
    * Sentinela para o Platform.js adapter detectar se está rodando no Electron.
    * No browser/PWA, window.louvorjaApi não existe (undefined), então isDesktop = false.
    */
   isDesktop: true,
+
+  /** Diagnóstico do renderer no terminal que iniciou o Electron. */
+  telemetry: {
+    log: (payload) => ipcRenderer.send("telemetry:renderer-log", payload),
+    getPendingMainErrors: () => ipcRenderer.invoke("telemetry:pending-main-errors"),
+    ackMainError: (id) => ipcRenderer.invoke("telemetry:ack-main-error", id),
+  },
 
   // -------------------------------------------------------------------------
   // IPC helpers internos para fases futuras.

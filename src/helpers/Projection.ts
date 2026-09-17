@@ -27,6 +27,7 @@ import WebDisplays from "@/helpers/projection/WebDisplays";
 import { roleOfFeature } from "@/helpers/DisplayRoles";
 import $snackbar from "@/helpers/Snackbar";
 import { i18nAtual } from "@/i18n";
+import Telemetry from "@/helpers/Telemetry";
 
 /**
  * Fallback hierárquico — quando uma feature não tem monitor explicitamente
@@ -316,6 +317,24 @@ function _webRectForMonitor(
 
 /** Abre a janela de projeção no monitor escolhido (ou no preferido). */
 export async function open(opts: OpenOptions): Promise<void> {
+  const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
+  const elapsed = () => Math.max(0, Math.round((typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt));
+  const report = (outcome: string, extra: Record<string, unknown> = {}) => {
+    const durationMs = elapsed();
+    Telemetry.track("projection_window_opened", {
+      feature: opts.feature,
+      route: opts.route,
+      target: Platform.isDesktop ? "electron" : "web",
+      outcome,
+      duration_ms: durationMs,
+      ...extra,
+    });
+    Telemetry.histogram("louvorja.projection.open.duration", durationMs, {
+      feature: opts.feature,
+      outcome,
+    });
+  };
+
   // Web/PWA primeiro e sem nenhum `await` antes: qualquer espera aqui consome a
   // ativação transitória do clique e o popup é bloqueado.
   if (!Platform.isDesktop) {
@@ -324,6 +343,7 @@ export async function open(opts: OpenOptions): Promise<void> {
     const rect = _webRectForMonitor(opts.monitorId) ?? _webRectFor(opts.feature);
     const win = openWebWindow(opts.feature, opts.route, featuresForRect(rect));
     nudgeIntoRect(win, rect);
+    report(win ? "opened" : "blocked");
     return;
   }
 
@@ -349,14 +369,17 @@ export async function open(opts: OpenOptions): Promise<void> {
         const t = i18nAtual()?.global?.t;
         if (t) $snackbar.warning(t("options.monitors.projection_withheld"));
       }
+      report(r?.refused ? "refused" : "opened", { window_id: r?.id ?? null });
       return;
     } catch (e) {
       console.warn("[Projection] windows.open falhou, fallback web:", e);
+      report("fallback", { error: e instanceof Error ? e.message : String(e) });
     }
   }
 
   // A API desktop falhou — último recurso.
-  openWebWindow(opts.feature, opts.route);
+  const win = openWebWindow(opts.feature, opts.route);
+  report(win ? "fallback_opened" : "fallback_blocked");
 }
 
 /** Fecha a janela da feature, se estiver aberta. */

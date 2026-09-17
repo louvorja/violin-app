@@ -34,6 +34,12 @@ jobs:
         run: |
           version=$(node -p "require('./package.json').version")
           echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: validate PostHog source maps
+        run: npm run validate:observability-release
+        env:
+          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+          POSTHOG_PROJECT_ID: ${{ vars.POSTHOG_PROJECT_ID }}
+          REQUIRE_POSTHOG_SOURCEMAPS: "true"
       - name: build project
         run: npm run build
         env:
@@ -45,6 +51,10 @@ jobs:
           VITE_APP_VERSION: ${{ steps.app_version.outputs.version }}
           VITE_POSTHOG_KEY: ${{ vars.VITE_POSTHOG_KEY }}
           VITE_POSTHOG_HOST: ${{ vars.VITE_POSTHOG_HOST }}
+          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+          POSTHOG_PROJECT_ID: ${{ vars.POSTHOG_PROJECT_ID }}
+          POSTHOG_HOST: ${{ vars.POSTHOG_HOST }}
+          REQUIRE_POSTHOG_SOURCEMAPS: "true"
       - name: copy CNAME to dist (if exists)
         run: |
           if [ -f CNAME ]; then

@@ -153,13 +153,14 @@ Se não definida, o build usa automaticamente a versão do `package.json`.
 | Campo       | Valor |
 |-------------|-------|
 | Tipo        | chave pessoal de escrita / ID do projeto |
-| Obrigatória | somente para publicar source maps |
-| Usado em    | `vite.config.js`, durante o build de release |
+| Obrigatória | releases/deploys de produção |
+| Usado em    | `vite.config.js` e `scripts/validate-observability-release.mjs` |
 
 Quando as duas variáveis estão presentes, o plugin oficial do PostHog gera,
 injeta e envia os source maps da versão. `POSTHOG_API_KEY` deve ficar apenas
-em secrets do CI; `POSTHOG_PROJECT_ID` pode ficar em variables. Sem elas, o
-build continua normal, mas stacks de produção permanecem minificados.
+em secrets do CI; `POSTHOG_PROJECT_ID` pode ficar em variables. As pipelines de
+release e deploy falham antes do build quando elas estão ausentes, evitando
+publicar uma versão cujos stacks de produção permaneceriam minificados.
 
 ---
 

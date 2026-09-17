@@ -69,6 +69,20 @@ describe("useSlideStyle — leitura das opções", () => {
     expect(useSlideStyle().cfg.value.font_size_next).toBe(SLIDE_STYLE_DEFAULT.font_size_next);
   });
 
+  it("limita o próximo slide a duas linhas dentro do painel de retorno", () => {
+    $userdata.set(K.FONT_SIZE_NEXT, 15);
+
+    const style = useSlideStyle().nextStyle();
+
+    // 15 preserva a escolha do operador como tamanho preferido, mas o teto
+    // de 41.6667cqh reserva 2 × line-height 1.2 dentro do painel que é o
+    // query container. Sem esse teto, a letra invadia o slide atual e a
+    // área segura da tela de retorno.
+    expect(style.fontSize).toMatch(
+      /min\(83\.3333\d*cqh, calc\(41\.6667cqh - 1px\)\)/,
+    );
+  });
+
   it("o caixa do retorno obedece ao próprio interruptor", () => {
     $userdata.set(K.RETURN_TEXT_CASE, "capitalize");
     $userdata.set(K.CUSTOM_RETURN_TEXT_FORMAT, false);
