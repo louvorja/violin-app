@@ -2,9 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const state: Record<string, unknown> = {};
 const posthog = {
+  LIB_VERSION: "1.433.7",
   init: vi.fn(),
   capture: vi.fn(),
   captureException: vi.fn(),
+  register: vi.fn(),
   logger: {
     trace: vi.fn(),
     debug: vi.fn(),
@@ -14,6 +16,9 @@ const posthog = {
     fatal: vi.fn(),
   },
   captureLog: vi.fn(),
+  sessionRecordingStarted: vi.fn(() => true),
+  startSessionRecording: vi.fn(),
+  stopSessionRecording: vi.fn(),
   addExceptionStep: vi.fn(),
   startExceptionAutocapture: vi.fn(),
   opt_in_capturing: vi.fn(),
@@ -38,6 +43,7 @@ async function loadTelemetry() {
   vi.resetModules();
   vi.stubEnv("VITE_POSTHOG_KEY", "test-key");
   vi.stubEnv("VITE_URL_API", "https://api.example.test/v1");
+  vi.stubEnv("VITE_APP_VERSION", "2.0.0-beta.8");
   window.history.replaceState({}, "", "/");
   return import("@/helpers/Telemetry");
 }
@@ -75,6 +81,7 @@ describe("Telemetry", () => {
         capture_dead_clicks: true,
         rageclick: true,
         enable_recording_console_log: true,
+        session_recording: expect.objectContaining({ recordHeaders: false, recordBody: false }),
         tracing_headers: expect.arrayContaining(["api.example.test"]),
       }),
     );
@@ -83,7 +90,30 @@ describe("Telemetry", () => {
       capture_unhandled_rejections: true,
       capture_console_errors: true,
     });
-    expect(posthog.capture).toHaveBeenCalledWith("app_opened", expect.any(Object));
+    expect(posthog.register).toHaveBeenCalledWith({ app_version: "2.0.0-beta.8", sdk_version: "1.433.7" });
+    expect(posthog.capture).toHaveBeenCalledWith(
+      "app_opened",
+      expect.objectContaining({ app_version: "2.0.0-beta.8", sdk_version: "1.433.7", replay_ready: true }),
+    );
+  });
+
+  it("emite app_opened com replay_ready=false quando o recorder não inicia a tempo", async () => {
+    vi.useFakeTimers();
+    posthog.sessionRecordingStarted.mockReturnValue(false);
+    try {
+      const Telemetry = await loadTelemetry();
+      const initPromise = Telemetry.init();
+      await vi.advanceTimersByTimeAsync(6_000);
+      await initPromise;
+
+      expect(posthog.capture).toHaveBeenCalledWith(
+        "app_opened",
+        expect.objectContaining({ replay_ready: false }),
+      );
+    } finally {
+      posthog.sessionRecordingStarted.mockReturnValue(true);
+      vi.useRealTimers();
+    }
   });
 
   it("inicializa também janelas auxiliares para não perder seus erros", async () => {
@@ -97,6 +127,87 @@ describe("Telemetry", () => {
       "app_opened",
       expect.objectContaining({ window_role: "auxiliary" }),
     );
+  });
+
+  it("não trava silenciosamente quando o SDK falha ao inicializar, e loga o erro", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    posthog.init.mockImplementationOnce(() => {
+      throw new Error("quota database bloqueada");
+    });
+    const Telemetry = await loadTelemetry();
+
+    await expect(Telemetry.init()).resolves.toBeUndefined();
+    expect(consoleError).toHaveBeenCalledWith(
+      "[Telemetry] falha ao inicializar:",
+      expect.objectContaining({ message: "quota database bloqueada" }),
+    );
+
+    // `_started` volta ao estado inicial: uma nova tentativa (ex.: religar a
+    // opção manualmente) não fica travada permanentemente pela falha anterior.
+    await Telemetry.init();
+    expect(posthog.init).toHaveBeenCalledTimes(2);
+
+    consoleError.mockRestore();
+  });
+
+  it("enfileira eventos disparados antes do init() terminar e os envia depois", async () => {
+    const Telemetry = await loadTelemetry();
+    const initPromise = Telemetry.init();
+    // init() ainda está no primeiro `await` (import dinâmico do SDK) — `_ph`
+    // não existe neste ponto, exatamente como a navegação inicial do router.
+    Telemetry.track("route_changed", { to: "home" });
+    expect(posthog.capture).not.toHaveBeenCalledWith("route_changed", expect.anything());
+
+    await initPromise;
+
+    expect(posthog.capture).toHaveBeenCalledWith("route_changed", expect.objectContaining({ to: "home" }));
+  });
+
+  it("não duplica a captura de erros globais depois que o autocapture nativo do SDK assume", async () => {
+    const Telemetry = await loadTelemetry();
+
+    // Antes do init(): nenhum autocapture nativo ainda existe — o listener
+    // manual é a única rede de segurança para um crash no boot.
+    window.dispatchEvent(new ErrorEvent("error", { error: new Error("crash no boot"), message: "crash no boot" }));
+    await Telemetry.init();
+    expect(posthog.captureException).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "crash no boot" }),
+      expect.anything(),
+    );
+
+    posthog.captureException.mockClear();
+
+    // Depois do init(): startExceptionAutocapture já assumiu os mesmos
+    // eventos globais — reportar de novo pelo listener manual duplicaria.
+    window.dispatchEvent(new ErrorEvent("error", { error: new Error("crash depois"), message: "crash depois" }));
+    expect(posthog.captureException).not.toHaveBeenCalled();
+  });
+
+  it("resetId() gera o distinct_id via bootstrap e reforça o consentimento atual", async () => {
+    const Telemetry = await loadTelemetry();
+    await Telemetry.init();
+    posthog.opt_in_capturing.mockClear();
+
+    Telemetry.resetId();
+
+    expect(posthog.reset).toHaveBeenLastCalledWith(
+      expect.objectContaining({ bootstrap: expect.objectContaining({ isIdentifiedID: false }) }),
+    );
+    expect(posthog.opt_in_capturing).toHaveBeenCalled();
+    expect(posthog.opt_out_capturing).not.toHaveBeenCalled();
+
+    Telemetry.setEnabled(false);
+    posthog.reset.mockClear();
+    posthog.opt_in_capturing.mockClear();
+    posthog.opt_out_capturing.mockClear();
+
+    // `reset()` sozinho devolveria o SDK ao consentimento padrão da config
+    // (capturando); reforçar o opt-out evita religar quem desligou.
+    Telemetry.resetId();
+
+    expect(posthog.reset).toHaveBeenCalledOnce();
+    expect(posthog.opt_out_capturing).toHaveBeenCalledOnce();
+    expect(posthog.opt_in_capturing).not.toHaveBeenCalled();
   });
 
   it("mantém músicas e remove segredos inclusive em propriedades aninhadas", async () => {
@@ -192,5 +303,9 @@ describe("Telemetry", () => {
       expect.objectContaining({ message: expect.stringContaining("token=[REDACTED]") }),
     );
     expect(posthog.captureException.mock.lastCall?.[1]?.message).not.toContain("segredo");
+    const capturedError = posthog.captureException.mock.lastCall?.[0];
+    expect(capturedError).toBeInstanceOf(Error);
+    expect((capturedError as Error).message).not.toContain("segredo");
+    expect((capturedError as Error).stack).not.toContain("segredo");
   });
 });

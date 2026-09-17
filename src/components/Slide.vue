@@ -20,6 +20,7 @@
     <div class="lj-slide__content">
       <div
         v-if="showCenteredText"
+        data-testid="slide-content"
         class="lj-slide__text"
         :class="[
           isCover ? 'lj-slide__text--cover' : 'lj-slide__text--lyric',

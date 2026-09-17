@@ -37,19 +37,21 @@ describe("DesktopDownload", () => {
     ).toBe("other");
   });
 
-  it("gera download direto para Windows e macOS", () => {
-    expect(desktopDownloadUrl("windows", "2.0.0-beta.7")).toBe(
-      "https://github.com/louvorja/violin-app/releases/download/v2.0.0-beta.7/LouvorJA%20Violin-Setup-2.0.0-beta.7.exe"
-    );
-    expect(desktopDownloadUrl("macos", "v2.0.0-beta.7")).toBe(
-      "https://github.com/louvorja/violin-app/releases/download/v2.0.0-beta.7/LouvorJA%20Violin-2.0.0-beta.7.dmg"
-    );
-  });
-
-  it("leva Linux e plataformas desconhecidas à release correta", () => {
+  it("leva à página da release correspondente à versão web", () => {
     const releaseUrl = "https://github.com/louvorja/violin-app/releases/tag/v2.0.0-beta.7";
     expect(desktopReleaseUrl("v2.0.0-beta.7")).toBe(releaseUrl);
-    expect(desktopDownloadUrl("linux", "2.0.0-beta.7")).toBe(releaseUrl);
-    expect(desktopDownloadUrl("other", "2.0.0-beta.7")).toBe(releaseUrl);
+    expect(desktopReleaseUrl("2.0.0-beta.7")).toBe(releaseUrl);
+  });
+
+  it("usa os nomes reais dos instaladores publicados", () => {
+    expect(desktopDownloadUrl("windows", "2.0.0-beta.7")).toBe(
+      "https://github.com/louvorja/violin-app/releases/download/v2.0.0-beta.7/LouvorJA.Violin-Setup-2.0.0-beta.7.exe"
+    );
+    expect(desktopDownloadUrl("macos", "v2.0.0-beta.7")).toBe(
+      "https://github.com/louvorja/violin-app/releases/download/v2.0.0-beta.7/LouvorJA.Violin-2.0.0-beta.7.dmg"
+    );
+    expect(desktopDownloadUrl("linux", "2.0.0-beta.7")).toBe(
+      "https://github.com/louvorja/violin-app/releases/tag/v2.0.0-beta.7"
+    );
   });
 });

@@ -477,21 +477,53 @@ async function openPackageFile(): Promise<void> {
   }
 }
 
-async function checkDbUpdate(): Promise<void> {
-  dbChecking.value = true;
-  dbStatus.value = "idle";
+async function _fetchDbConfig(): Promise<Response> {
   try {
-    let res = await fetchWithTimeout(`${API_URL_DB}/config`, {
+    const res = await fetchWithTimeout(`${API_URL_DB}/config`, {
       headers: { "Api-Token": API_TOKEN },
       source: "db-config",
     });
     if (!res.ok && API_URL_FALLBACK) {
-      res = await fetchWithTimeout(`${API_URL_DB_FALLBACK}/config`, {
+      return await fetchWithTimeout(`${API_URL_DB_FALLBACK}/config`, {
         headers: { "Api-Token": API_URL_FALLBACK_TOKEN },
         source: "db-config-fallback",
       });
     }
-    if (!res.ok) {
+    return res;
+  } catch (e) {
+    // Timeout/DNS/rede instável lançam antes de chegar num `res.ok` —
+    // sem este catch, uma falha transitória no host principal nunca
+    // chegava a tentar o legado, mesmo com ele configurado.
+    if (!API_URL_FALLBACK) throw e;
+    return await fetchWithTimeout(`${API_URL_DB_FALLBACK}/config`, {
+      headers: { "Api-Token": API_URL_FALLBACK_TOKEN },
+      source: "db-config-fallback",
+    });
+  }
+}
+
+const DB_CHECK_RETRIES = 3;
+const DB_CHECK_RETRY_DELAY_MS = 1500;
+
+async function checkDbUpdate(): Promise<void> {
+  dbChecking.value = true;
+  dbStatus.value = "idle";
+  try {
+    let res: Response | undefined;
+    // Wi-Fi de igreja soluça por meio segundo o tempo todo (ver
+    // useConnectivity.ts) — uma tentativa só, sem retry, transformava
+    // qualquer soluço passageiro em "Não foi possível verificar.",
+    // mesmo com a API respondendo normalmente segundos depois.
+    for (let attempt = 1; attempt <= DB_CHECK_RETRIES; attempt++) {
+      try {
+        res = await _fetchDbConfig();
+        break;
+      } catch (e) {
+        if (attempt === DB_CHECK_RETRIES) throw e;
+        await new Promise((r) => setTimeout(r, DB_CHECK_RETRY_DELAY_MS));
+      }
+    }
+    if (!res || !res.ok) {
       throw new Error();
     }
     const data: DbConfig = await res.json();

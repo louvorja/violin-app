@@ -25,7 +25,7 @@ export default defineConfig({
     // Em CI, --force garante re-otimização de deps após npm ci (que limpa node_modules/.vite/).
     // Localmente, evitar --force: limpar o cache a cada run gera 504 Outdated Optimize Dep
     // quando múltiplas páginas carregam simultaneamente durante a re-otimização.
-    command: process.env.CI ? "node node_modules/.bin/vite --force" : "node node_modules/.bin/vite",
+    command: process.env.CI ? "npx vite --force" : "npx vite",
     url: "http://localhost:5002",
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,

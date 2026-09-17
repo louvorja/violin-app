@@ -7,11 +7,13 @@ const { HttpQueue } = require("./httpQueue.js");
 
 let _activeQueue = null;
 let _filesUrl = "";
+let _apiUrl = "";
 let _apiToken = "";
 
 function setApiConfig(cfg) {
   apiClient.setConfig(cfg);
   if (cfg?.filesUrl) _filesUrl = cfg.filesUrl;
+  if (cfg?.apiUrl) _apiUrl = cfg.apiUrl;
   if (cfg?.apiToken) _apiToken = cfg.apiToken;
 }
 
@@ -19,18 +21,11 @@ async function getParams(force = false) {
   return await apiClient.getParams({ force });
 }
 
-/**
- * Verifica disponibilidade do servidor de arquivos via HEAD.
- * As mídias vêm por HTTPS a partir de filesUrl.
- */
-function checkConnection() {
+/** Sonda um único host via HEAD. Resolve, nunca rejeita. */
+function _probeHost(urlStr) {
   return new Promise((resolve) => {
-    if (!_filesUrl) {
-      resolve({ ok: false, error: "filesUrl não configurada" });
-      return;
-    }
     try {
-      const url = new URL(_filesUrl);
+      const url = new URL(urlStr);
       const lib = url.protocol === "https:" ? https : http;
       const req = lib.request(
         { method: "HEAD", host: url.hostname, port: url.port || (url.protocol === "https:" ? 443 : 80), path: url.pathname || "/", headers: _apiToken ? { "Api-Token": _apiToken } : {} },
@@ -54,6 +49,20 @@ function checkConnection() {
       resolve({ ok: false, error: e.message });
     }
   });
+}
+
+/**
+ * Verifica conectividade sondando arquivos e API em paralelo — qualquer um
+ * respondendo já conta como "online". Um único host de mídia fora do ar
+ * (CDN lenta, manutenção) não pode, sozinho, marcar a internet como caída
+ * quando a API principal está saudável.
+ */
+async function checkConnection() {
+  const hosts = [_filesUrl, _apiUrl].filter(Boolean);
+  if (!hosts.length) return { ok: false, error: "nenhuma URL configurada" };
+  const results = await Promise.all(hosts.map(_probeHost));
+  const success = results.find((r) => r.ok);
+  return success || results[0];
 }
 
 /**
