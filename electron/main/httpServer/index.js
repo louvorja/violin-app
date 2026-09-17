@@ -84,10 +84,14 @@ function _randomPort(excluded) {
  * listener na porta, independente da família de endereço.
  *
  * @param {number} port
- * @param {number} [timeoutMs]
+ * @param {number} [timeoutMs] Em loopback uma porta ocupada recusa (RST) em
+ *   poucos ms; o timeout só é pago quando algo intercepta o probe sem
+ *   responder (firewall/antivírus de rede) — e isso pode se repetir a cada
+ *   porta sorteada antes de a janela aparecer. 500ms nesse cenário chegava a
+ *   somar segundos de boot; 200ms ainda é folgado para localhost.
  * @returns {Promise<{ inUse: boolean }>}
  */
-function _probePort(port, timeoutMs = 500) {
+function _probePort(port, timeoutMs = 200) {
   return new Promise((resolve) => {
     const hosts = ["127.0.0.1", "::1"];
     let remaining = hosts.length;
