@@ -116,6 +116,7 @@ import { useI18n } from "vue-i18n";
 import DateTime from "@/helpers/DateTime";
 import { usePlaylists } from "../composables/usePlaylists";
 import type { Playlist } from "@/types/Music";
+import Telemetry from "@/helpers/Telemetry";
 
 const { t: i18nT } = useI18n();
 const tm = (key: string, named?: Record<string, unknown>) =>
@@ -180,14 +181,33 @@ async function onDelete(playlist: Playlist): Promise<void> {
 
 function onExportm(playlist: Playlist): void {
   const data = exportPlaylist(playlist.id);
-  if (!data) return;
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${playlist.name}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
+  if (!data) {
+    Telemetry.track("music_playlist_export_failed", {
+      playlist_id: playlist.id,
+      reason: "not_found",
+    });
+    return;
+  }
+  try {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${playlist.name}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    Telemetry.track("music_playlist_exported", {
+      playlist_id: playlist.id,
+      song_count: playlist.songs.length,
+      format: "json",
+    });
+  } catch (error) {
+    Telemetry.captureException(error, { source: "music_playlist_export" });
+    Telemetry.track("music_playlist_export_failed", {
+      playlist_id: playlist.id,
+      reason: "exception",
+    });
+  }
 }
 
 function onImport(): void {
@@ -197,12 +217,18 @@ function onImport(): void {
   input.onchange = async (e: Event) => {
     const file = (e.target as HTMLInputElement).files?.[0];
     if (!file) return;
+    Telemetry.track("music_playlist_import_started", {
+      size_bytes: Math.min(Math.max(0, file.size || 0), 10 * 1024 * 1024),
+      format: "json",
+    });
     try {
       const text = await file.text();
       const data = JSON.parse(text);
       await importPlaylist(data);
-    } catch {
-      /* ignore invalid JSON */
+      Telemetry.track("music_playlist_imported", { format: "json" });
+    } catch (error) {
+      Telemetry.captureException(error, { source: "music_playlist_import" });
+      Telemetry.track("music_playlist_import_failed", { format: "json", reason: "exception" });
     }
   };
   input.click();
