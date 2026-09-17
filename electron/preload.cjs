@@ -344,6 +344,11 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
     setAutoCache: (enabled) => ipcRenderer.invoke("storage:setAutoCache", enabled),
   },
 
+  /** Abre um arquivo no programa padrão do sistema operacional. */
+  shell: {
+    openPath: (filePath) => ipcRenderer.invoke("shell:openPath", filePath),
+  },
+
   // -------------------------------------------------------------------------
   // D5 — Servidor HTTP embarcado
   // -------------------------------------------------------------------------

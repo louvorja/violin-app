@@ -1187,6 +1187,18 @@
           <span>{{ $t("options.player.lazy_load") }}</span>
         </label>
       </div>
+
+      <div v-if="isDesktop" class="opt-row opt-row--col">
+        <label class="opt-checkbox">
+          <input
+            type="checkbox"
+            :checked="getUserData(KEYS.OPTIONS.USE_SYSTEM_MEDIA_PLAYER, false)"
+            @change="saveUserData(KEYS.OPTIONS.USE_SYSTEM_MEDIA_PLAYER, $c($event))"
+          />
+          <span>{{ $t("options.player.use_system_media_player") }}</span>
+        </label>
+        <p class="opt-hint">{{ $t("options.player.use_system_media_player_hint") }}</p>
+      </div>
     </section>
 
     <section id="opt-sec-file_projection" class="opt-section">

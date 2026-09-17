@@ -585,7 +585,9 @@
       "fade_audio": "Aplicar fundido al iniciar/parar audio",
       "fade_audio_hint": "Cuando está activado, el audio sube gradualmente al reproducir y baja antes de detener. Por defecto desactivado para respuesta inmediata.",
       "lazy_load": "Cargar audios bajo demanda",
-      "show_return": "Mostrar en la pantalla de retorno"
+      "show_return": "Mostrar en la pantalla de retorno",
+      "use_system_media_player": "Abrir audio y vídeo en el programa de Windows",
+      "use_system_media_player_hint": "Cuando está activado, los archivos .mp3, .mp4 y similares de la liturgia se abren en el programa predeterminado del sistema. Si no hay asociación, se usa el reproductor interno."
     },
     "file_projection": {
       "title": "Proyección de Archivos",

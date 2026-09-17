@@ -284,6 +284,8 @@ export const KEYS = {
     /** Versão do banco que o usuário recusou baixar; não é perguntada de novo. */
     BUNDLE_DECLINED_VERSION: `${OPTIONS}.bundle_declined_version`,
     AUTO_CACHE_MEDIA: `${OPTIONS}.auto_cache_media`,
+    /** Abre arquivos de áudio/vídeo da liturgia no programa padrão do SO. */
+    USE_SYSTEM_MEDIA_PLAYER: `${OPTIONS}.use_system_media_player`,
     STORAGE_QUOTA_GB: `${OPTIONS}.storage_quota_gb`,
     OPEN_RETURN: `${OPTIONS}.open_return`,
     OPEN_OPERATOR: `${OPTIONS}.open_operator`,

@@ -7,6 +7,9 @@ export interface MediaOpenParams {
   minimized?: boolean;
   url?: string;
   title?: string;
+  /** Fonte direta da liturgia/biblioteca. Vídeos usam HTMLVideoElement para
+   * preservar a faixa de áudio e o relógio de reprodução. */
+  mediaType?: "audio" | "video";
 }
 
 export interface MediaConfig {

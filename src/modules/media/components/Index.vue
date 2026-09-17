@@ -48,7 +48,24 @@
           class="media-preview"
           :style="{ height: preview_height + 'px' }"
         >
-          <l-slide v-if="slide" :slide="slideForRenderer" :title="config?.title || ''" />
+          <div v-if="isLocalVideo" class="media-video-stage">
+            <video
+              v-show="!videoPreviewFailed"
+              ref="videoPreview"
+              class="media-video-preview"
+              :src="config?.audio || ''"
+              autoplay
+              muted
+              playsinline
+              @error="onVideoPreviewError"
+              @loadedmetadata="syncVideoPreview"
+            />
+            <div v-if="videoPreviewFailed" class="media-video-error">
+              <span>{{ $t("projection.video_unavailable") }}</span>
+              <small>{{ $t("projection.video_unavailable_hint") }}</small>
+            </div>
+          </div>
+          <l-slide v-else-if="slide" :slide="slideForRenderer" :title="config?.title || ''" />
           <l-fullscreen-player v-if="fullscreen" />
         </Fullscreen>
         <div
@@ -155,6 +172,8 @@ import Media from "@/composables/useMedia";
 import { useFileProjection } from "@/composables/useFileProjection";
 import Path from "@/helpers/Path";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
+import { useAudioPlayback } from "@/composables/useAudioPlayback";
+import Telemetry from "@/helpers/Telemetry";
 
 const { t: i18nT } = useI18n();
 const { width } = useViewport();
@@ -173,11 +192,18 @@ const config = computed(() => Media.config());
 const slide_index = computed(() => config.value?.slide_index);
 const slides = computed(() => Media.slides());
 const slide = computed(() => Media.slide());
+const playback = useAudioPlayback();
+const videoPreview = ref(null);
+const videoPreviewFailed = ref(false);
+let videoSyncTimer = null;
 
 // O Slide.vue já resolve url_image relativo via Path.file internamente, então
 // repassamos o slide bruto. (Ainda mantemos pathFile() em Path.file via
 // computed para o image do <Window>.)
 const slideForRenderer = computed(() => slide.value);
+const isLocalVideo = computed(
+  () => !!config.value?.video_file && !!config.value?.audio && !config.value?.is_youtube
+);
 
 const isYouTube = computed(() => !!config.value?.is_youtube);
 const youtubeId = computed(() => {
@@ -206,7 +232,7 @@ function fetchYouTubeChannel(id) {
     ytChannelUrl.value = "";
     return;
   }
-  fetchWithTimeoutm(
+  fetchWithTimeout(
     `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${id}&format=json`,
     { timeout: NET_TIMEOUT.QUICK, source: "youtube-oembed", thirdParty: true }
   )
@@ -218,6 +244,53 @@ function fetchYouTubeChannel(id) {
     })
     .catch(() => {});
 }
+
+function onVideoPreviewError(event) {
+  videoPreviewFailed.value = true;
+  const video = event?.currentTarget;
+  Telemetry.log("error", "media local video preview error", {
+    code: video?.error?.code,
+    message: video?.error?.message,
+    source_type: "local_video_preview",
+    title: config.value?.title || "",
+  });
+}
+
+function syncVideoPreview() {
+  const video = videoPreview.value;
+  if (!video || !isLocalVideo.value) return;
+  const source = playback.getElement();
+  if (
+    Number.isFinite(source.currentTime) &&
+    Math.abs(video.currentTime - source.currentTime) > 0.35
+  ) {
+    try {
+      video.currentTime = source.currentTime;
+    } catch {
+      /* ainda sem metadata */
+    }
+  }
+  if (source.paused) {
+    if (!video.paused) video.pause();
+  } else if (video.paused) {
+    video.play().catch(() => {});
+  }
+}
+
+watch(
+  () => [isLocalVideo.value, config.value?.audio],
+  async () => {
+    videoPreviewFailed.value = false;
+    await nextTick();
+    const video = videoPreview.value;
+    if (video) {
+      video.load();
+      video.play().catch(() => {});
+      syncVideoPreview();
+    }
+  },
+  { immediate: true }
+);
 watch(
   youtubeId,
   (id) => {
@@ -343,6 +416,7 @@ onMounted(() => {
   // ou v-list. Com stopImmediatePropagation neutraliza o handler global Hotkeys.
   window.addEventListener("keydown", _onKeyNav, { capture: true });
   document.addEventListener("fullscreenchange", _syncFullscreenFlag);
+  videoSyncTimer = window.setInterval(syncVideoPreview, 250);
   // Sync inicial — corrige flag herdado de sessão anterior se já estiver torto.
   _syncFullscreenFlag();
 });
@@ -350,6 +424,10 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener("keydown", _onKeyNav, { capture: true });
   document.removeEventListener("fullscreenchange", _syncFullscreenFlag);
+  if (videoSyncTimer) {
+    window.clearInterval(videoSyncTimer);
+    videoSyncTimer = null;
+  }
 });
 </script>
 
@@ -375,6 +453,37 @@ onBeforeUnmount(() => {
 .media-preview {
   width: 100%;
   overflow: hidden;
+}
+
+.media-video-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+}
+
+.media-video-preview {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+.media-video-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--lj-space-2);
+  color: var(--lj-white);
+  text-align: center;
+}
+
+.media-video-error small {
+  color: var(--lj-white-alpha-70);
 }
 
 .media-side {

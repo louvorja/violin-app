@@ -27,6 +27,7 @@ const {
   Tray,
   Menu,
   nativeImage,
+  shell,
 } = require("electron");
 const path = require("path");
 const os = require("os");
@@ -1592,6 +1593,50 @@ ipcMain.handle("storage:verify", (_e, remoteFiles) => storage.verify(remoteFiles
 ipcMain.handle("storage:removeFiles", (_e, remotePaths) => storage.removeFiles(remotePaths));
 ipcMain.handle("storage:sizeOfPaths", (_e, remotePaths) => storage.sizeOfPaths(remotePaths));
 ipcMain.handle("storage:openDir", () => storage.openFilesDir());
+
+/** Abre um arquivo de mídia no aplicativo padrão do sistema. */
+ipcMain.handle("shell:openPath", async (_event, filePath) => {
+  if (typeof filePath !== "string" || !filePath.trim()) {
+    return { ok: false, error: "caminho vazio" };
+  }
+
+  const raw = filePath.trim();
+  let resolved = path.isAbsolute(raw) ? path.resolve(raw) : null;
+  if (!resolved) {
+    // Caminhos relativos do banco apontam para a pasta de mídia escolhida.
+    // Nunca permitimos que `..` escape dela.
+    const relative = raw.replace(/^[\\/]+/, "");
+    const roots = [paths.filesDir(), ...paths.legacyMediaDirs()];
+    resolved = roots
+      .map((root) => path.resolve(root, relative))
+      .find((candidate, index) => {
+        const root = path.resolve(roots[index]);
+        return (
+          (candidate === root || candidate.startsWith(root + path.sep)) &&
+          fs.existsSync(candidate)
+        );
+      }) || null;
+  }
+
+  if (!resolved || !fs.existsSync(resolved)) {
+    console.warn("[shell] arquivo para abrir não encontrado:", raw);
+    return { ok: false, error: "arquivo não encontrado" };
+  }
+  try {
+    const stat = await fs.stat(resolved);
+    if (!stat.isFile()) return { ok: false, error: "o caminho não é um arquivo" };
+    const error = await shell.openPath(resolved);
+    if (error) {
+      console.warn("[shell] falha ao abrir arquivo:", resolved, error);
+      return { ok: false, path: resolved, error };
+    }
+    console.info("[shell] arquivo aberto no programa padrão:", resolved);
+    return { ok: true, path: resolved };
+  } catch (error) {
+    console.error("[shell] exceção ao abrir arquivo:", resolved, error);
+    return { ok: false, path: resolved, error: error?.message || String(error) };
+  }
+});
 ipcMain.handle("storage:setDataDir", (_e, newDir, opts) => storage.setDataDir(newDir, opts));
 
 // ---------------------------------------------------------------------------

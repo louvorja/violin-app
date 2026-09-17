@@ -585,7 +585,9 @@
       "fade_audio": "Aplicar fade ao iniciar/parar áudio",
       "fade_audio_hint": "Quando ativado, o áudio aumenta gradualmente ao tocar e diminui antes de parar. Por padrão desligado para resposta imediata.",
       "lazy_load": "Carregar áudios sob demanda",
-      "show_return": "Exibir na tela de retorno"
+      "show_return": "Exibir na tela de retorno",
+      "use_system_media_player": "Abrir áudio e vídeo no programa do Windows",
+      "use_system_media_player_hint": "Quando ativado, arquivos .mp3, .mp4 e similares da liturgia são abertos no programa padrão do sistema. Se não houver associação, o player interno é usado."
     },
     "file_projection": {
       "title": "Projeção de Arquivos",

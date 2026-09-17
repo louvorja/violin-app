@@ -442,8 +442,48 @@ $storage.hydrate().then(async () => {
                 return Path.file(p);
               }
 
+              async function openWithSystemPlayer(filePath, kind) {
+                if (
+                  !Platform.isDesktop ||
+                  !filePath ||
+                  /^(blob|data):/i.test(filePath) ||
+                  UserData.get(KEYS.OPTIONS.USE_SYSTEM_MEDIA_PLAYER, false) !== true
+                ) {
+                  return false;
+                }
+                const result = await Platform.api?.shell?.openPath?.(filePath);
+                if (result?.ok) {
+                  Telemetry.track("liturgy_media_external_opened", {
+                    kind,
+                    path: result.path || "",
+                    source: "http",
+                  });
+                  return true;
+                }
+                Telemetry.track("liturgy_media_external_open_failed", {
+                  kind,
+                  reason: result?.error || "unknown",
+                  source: "http",
+                });
+                console.warn(
+                  "[http] programa externo não abriu o arquivo:",
+                  result?.error || filePath
+                );
+                return false;
+              }
+
               /** Abre projeção de arquivo por extensão (imagem/vídeo/áudio/pdf). */
-              function projectByExt(url, ext, title, libRef) {
+              async function projectByExt(url, ext, title, libRef, sourcePath = url) {
+                if (
+                  (AUDIO_EXT.includes(ext) || VIDEO_EXT.includes(ext)) &&
+                  (await openWithSystemPlayer(
+                    sourcePath,
+                    VIDEO_EXT.includes(ext) ? "video" : "audio"
+                  ))
+                ) {
+                  Media.close(true);
+                  return;
+                }
                 if (IMAGE_EXT.includes(ext)) {
                   const p = { url, type: "image", title };
                   try {
@@ -462,10 +502,9 @@ $storage.hydrate().then(async () => {
                   }
                   ProjectionWindows.openFileProjectionWindows().catch(() => {});
                   Broadcast.send(BROADCAST_TYPE.FILE_PROJECTION, p);
-                  Media.openAudio({ url, title });
-                  AppData.set("modules.media.config.video_file", true);
+                  await Media.openAudio({ url, title, mediaType: "video" });
                 } else if (AUDIO_EXT.includes(ext)) {
-                  Media.openAudio({ url, title });
+                  await Media.openAudio({ url, title, mediaType: "audio" });
                 } else {
                   const p = { url, type: "pdf", title };
                   if (libRef) p.libRef = libRef;
@@ -497,7 +536,7 @@ $storage.hydrate().then(async () => {
                       const url = resolveFileUrl(arquivo);
                       if (url) {
                         const ext = arquivo.split(".").pop().toLowerCase();
-                        projectByExt(url, ext, litItem.item || "");
+                        await projectByExt(url, ext, litItem.item || "", undefined, arquivo);
                       }
                     }
                     break;
@@ -507,7 +546,7 @@ $storage.hydrate().then(async () => {
                     const url = resolveFileUrl(dir);
                     if (url) {
                       const ext = dir.split(".").pop().toLowerCase();
-                      projectByExt(url, ext, litItem.item || "");
+                      await projectByExt(url, ext, litItem.item || "", undefined, dir);
                     }
                     break;
                   }
@@ -542,7 +581,7 @@ $storage.hydrate().then(async () => {
                     }
                     const recExt = (rec.name || rec.path).split(".").pop().toLowerCase();
                     const libRef = { table: DB_TABLE.MEDIA_LIBRARY, id: refId };
-                    projectByExt(recUrl, recExt, litItem.item || "", libRef);
+                    await projectByExt(recUrl, recExt, litItem.item || "", libRef, rec.path);
                     break;
                   }
                   case "som-de-fundo": {

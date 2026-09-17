@@ -139,3 +139,15 @@ describe("useAudioPlayback.play", () => {
     }
   });
 });
+
+describe("useAudioPlayback.media element", () => {
+  it("usa um elemento de vídeo oculto para arquivos de vídeo e volta ao áudio", () => {
+    const video = audio.setElementKind("video");
+    expect(video.tagName).toBe("VIDEO");
+    expect(video.style.display).toBe("none");
+
+    const audioElement = audio.setElementKind("audio");
+    expect(audioElement.tagName).toBe("AUDIO");
+    expect(audioElement).not.toBe(video);
+  });
+});

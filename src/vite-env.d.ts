@@ -82,6 +82,13 @@ declare global {
       clearFiles: () => Promise<void>;
       setAutoCache: (enabled: boolean) => Promise<void>;
     };
+    shell: {
+      openPath: (filePath: string) => Promise<{
+        ok: boolean;
+        path?: string;
+        error?: string;
+      }>;
+    };
     docs: {
       read: (colecao: string) => Promise<unknown[]>;
       write: (colecao: string, docs: unknown[]) => Promise<{ ok: boolean }>;

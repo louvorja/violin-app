@@ -8,14 +8,27 @@
       class="file-projection__media"
       alt=""
     />
-    <video
-      v-else-if="fileProjection.type === 'video'"
-      ref="videoRef"
-      :src="fileProjection.url"
-      class="file-projection__media"
-      autoplay
-      muted
-    />
+    <template v-else-if="fileProjection.type === 'video'">
+      <video
+        v-show="!videoFailed"
+        ref="videoRef"
+        :src="fileProjection.url"
+        class="file-projection__media"
+        autoplay
+        muted
+        playsinline
+        @loadedmetadata="onVideoReady"
+        @canplay="onVideoReady"
+        @playing="onVideoPlaying"
+        @waiting="onVideoBuffering"
+        @stalled="onVideoBuffering"
+        @error="onVideoError"
+      />
+      <div v-if="videoFailed" class="video-unavailable">
+        <span class="video-unavailable__title">{{ $t("projection.video_unavailable") }}</span>
+        <span class="video-unavailable__hint">{{ $t("projection.video_unavailable_hint") }}</span>
+      </div>
+    </template>
     <template v-else-if="fileProjection.type === 'youtube'">
       <div v-show="!ytFailed" ref="ytContainer" class="file-projection__youtube" />
       <div v-if="ytFailed" class="video-unavailable">
@@ -33,7 +46,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, computed, nextTick, onMounted, onBeforeUnmount } from "vue";
+import { reactive, ref, computed, nextTick, watch, onMounted, onBeforeUnmount } from "vue";
 import { estiloDeFundo } from "@/helpers/BackgroundStyle";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { useProjectionCloseNotice } from "@/composables/useProjectionCloseNotice";
@@ -78,6 +91,7 @@ const fileProjection = reactive<FileProjectionState>({
 });
 
 const videoRef = ref<HTMLVideoElement | null>(null);
+const videoFailed = ref(false);
 const ytContainer = ref<HTMLDivElement | null>(null);
 const pdfCanvas = ref<HTMLCanvasElement | null>(null);
 
@@ -176,9 +190,100 @@ async function _activateProjection(p: FileProjectionState): Promise<void> {
   fileProjection.title = p.title || "";
   fileProjection.playback_id = p.playback_id;
   console.log("[FileProjection] Ativado:", p.type, p.url?.substring(0, 60));
+  if (p.type === "video") {
+    videoFailed.value = false;
+    await nextTick();
+    _prepareVideo();
+  }
   if (p.type === "youtube") nextTick(() => _initYoutube());
   if (p.type === "pdf") nextTick(() => loadPdf(p.url, p.page || 1));
 }
+
+function _prepareVideo(): void {
+  const el = videoRef.value;
+  if (!el || !fileProjection.active || fileProjection.type !== "video") return;
+  videoFailed.value = false;
+  el.muted = true;
+  el.playsInline = true;
+  el.load();
+  el.play().catch((error) => {
+    // O erro de codec chega também pelo evento `error`; este log captura o
+    // caso em que o Windows bloqueia autoplay ou o arquivo ainda não tem
+    // metadata sem deixar a projeção totalmente preta e sem explicação.
+    console.warn("[FileProjection] vídeo não iniciou:", error?.name || error);
+    Telemetry.log("warn", "file projection video play rejected", {
+      name: error?.name,
+      message: error?.message,
+      ready_state: el.readyState,
+      network_state: el.networkState,
+      source_type: "file_projection_video",
+    });
+  });
+}
+
+function onVideoReady(): void {
+  const el = videoRef.value;
+  if (!el) return;
+  videoFailed.value = false;
+  Telemetry.track("file_projection_video_ready", {
+    playback_id: fileProjection.playback_id,
+    duration: Number.isFinite(el.duration) ? el.duration : 0,
+    width: el.videoWidth,
+    height: el.videoHeight,
+  });
+  if (el.paused) el.play().catch(() => {});
+}
+
+function onVideoPlaying(): void {
+  Telemetry.track("file_projection_video_playing", {
+    playback_id: fileProjection.playback_id,
+  });
+}
+
+function onVideoBuffering(event: Event): void {
+  const el = event.currentTarget as HTMLVideoElement | null;
+  Telemetry.log("warn", "file projection video buffering", {
+    playback_id: fileProjection.playback_id,
+    trigger: event.type,
+    current_time: el && Number.isFinite(el.currentTime) ? el.currentTime : 0,
+    ready_state: el?.readyState,
+  });
+}
+
+function onVideoError(event: Event): void {
+  const el = event.currentTarget as HTMLVideoElement | null;
+  videoFailed.value = true;
+  const code = el?.error?.code;
+  const reason = code === 3 ? "decode" : code === 4 ? "source_not_supported" : "unknown";
+  console.error("[FileProjection] vídeo local falhou:", {
+    code,
+    message: el?.error?.message,
+    src: fileProjection.url?.substring(0, 100),
+  });
+  Telemetry.track("file_projection_video_failed", {
+    playback_id: fileProjection.playback_id,
+    reason,
+    code,
+    message: el?.error?.message,
+    ready_state: el?.readyState,
+    network_state: el?.networkState,
+  });
+  Telemetry.captureException(new Error(`File projection video ${reason}`), {
+    playback_id: fileProjection.playback_id,
+    operation: "file_projection_video",
+    reason,
+  });
+}
+
+watch(
+  () => [fileProjection.active, fileProjection.type, fileProjection.url],
+  async ([active, type]) => {
+    if (active && type === "video") {
+      await nextTick();
+      _prepareVideo();
+    }
+  }
+);
 
 function _readPendingProjection(): void {
   if (fileProjection.active) return;
@@ -263,14 +368,24 @@ useBroadcastListener(BROADCAST_TYPE.VIDEO_STATE, (payload: unknown) => {
     if (data.isPaused && !el.paused) {
       el.pause();
     } else if (!data.isPaused && el.paused) {
-      el.play().catch(() => {});
+      el.play().catch((error) => {
+        Telemetry.log("warn", "file projection video sync play rejected", {
+          playback_id: fileProjection.playback_id,
+          name: error?.name,
+          message: error?.message,
+        });
+      });
     }
   }
 
   if (typeof data.currentTime === "number") {
     const drift = Math.abs(el.currentTime - data.currentTime);
-    if (drift > 1.5) {
-      el.currentTime = data.currentTime;
+    if (drift > 1.5 && el.readyState >= 1) {
+      try {
+        el.currentTime = Math.max(0, data.currentTime);
+      } catch {
+        /* metadata ainda não chegou */
+      }
     }
   }
 });

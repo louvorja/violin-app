@@ -172,6 +172,40 @@ export function useLiturgyExecution() {
     window.open(valid, "_blank", "noopener,noreferrer");
   }
 
+  /**
+   * Abre o arquivo no reprodutor associado do sistema quando o operador
+   * ativou essa preferência. O caminho original é necessário no Windows;
+   * URLs `louvorja://` e `blob:` só existem dentro do app e seguem no player
+   * embutido como fallback.
+   */
+  async function openWithSystemPlayer(dir: string, kind: string): Promise<boolean> {
+    if (!Platform.isDesktop || !dir || /^(blob|data):/i.test(dir)) return false;
+    const api = Platform.api as LouvorjaApi | null;
+    if (!api?.shell?.openPath) return false;
+    try {
+      Telemetry.track("liturgy_media_external_open_requested", {
+        kind,
+        extension: dir.split(".").pop()?.toLowerCase() || "",
+      });
+      const result = await api.shell.openPath(dir);
+      if (result?.ok) {
+        Telemetry.track("liturgy_media_external_opened", {
+          kind,
+          path: result.path || "",
+        });
+        return true;
+      }
+      Telemetry.track("liturgy_media_external_open_failed", {
+        kind,
+        reason: result?.error || "unknown",
+      });
+      console.warn("[Liturgy] programa externo não abriu o arquivo:", result?.error || dir);
+    } catch (error) {
+      reportExecutionError(error, "open_external_media", { kind });
+    }
+    return false;
+  }
+
   function extractYoutubeId(url: string): string | null {
     const m = url.match(
       /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/)([a-zA-Z0-9_-]{11})/
@@ -469,6 +503,26 @@ export function useLiturgyExecution() {
   ): Promise<void> {
     const dir = item.dir || "";
     const ext = dir.split(".").pop()?.toLowerCase() || "";
+    // Tipo efetivo: extensão do caminho; sem extensão (ex.: blob URLs),
+    // usa o hint informado pelo chamador (subtipo do item).
+    let kind = "";
+    if (IMAGE_EXT.includes(ext)) kind = "image";
+    else if (VIDEO_EXT.includes(ext)) kind = "video";
+    else if (AUDIO_EXT.includes(ext)) kind = "audio";
+    else if (ext === "pdf") kind = "pdf";
+    else if (typeHint) kind = typeHint;
+
+    if (
+      (kind === "audio" || kind === "video") &&
+      Boolean($userdata.get(KEYS.OPTIONS.USE_SYSTEM_MEDIA_PLAYER, false)) &&
+      (await openWithSystemPlayer(dir, kind))
+    ) {
+      // Não deixe uma projeção anterior congelada enquanto o Windows assume
+      // a reprodução deste arquivo.
+      $media.close(true);
+      return;
+    }
+
     // HEIC/HEIF: converte para JPEG antes de enviar à projeção.
     const url = await _resolveRenderableUrl(dir);
 
@@ -483,15 +537,6 @@ export function useLiturgyExecution() {
       $alert.error({ text: url, title: "modules.media.alerts.file_not_found" });
       return;
     }
-
-    // Tipo efetivo: extensão do caminho; sem extensão (ex.: blob URLs),
-    // usa o hint informado pelo chamador (subtipo do item).
-    let kind = "";
-    if (IMAGE_EXT.includes(ext)) kind = "image";
-    else if (VIDEO_EXT.includes(ext)) kind = "video";
-    else if (AUDIO_EXT.includes(ext)) kind = "audio";
-    else if (ext === "pdf") kind = "pdf";
-    else if (typeHint) kind = typeHint;
 
     if (kind === "image" || kind === "pdf") {
       const fadeDur =
@@ -532,21 +577,16 @@ export function useLiturgyExecution() {
         console.error(e);
       });
       $broadcast.send(BROADCAST_TYPE.FILE_PROJECTION, payload);
-      void $media.openAudio({ url, title: item.item || "" }).catch((error: unknown) => {
+      void $media.openAudio({ url, title: item.item || "", mediaType: "video" }).catch((error: unknown) => {
         reportExecutionError(error, "open_video_file", { kind });
       });
-      $appdata.set(KEYS.MODULES.MEDIA.CONFIG.VIDEO_FILE, true);
     } else if (kind === "audio") {
-      void $media.openAudio({ url, title: item.item || "" }).catch((error: unknown) => {
+      void $media.openAudio({ url, title: item.item || "", mediaType: "audio" }).catch((error: unknown) => {
         reportExecutionError(error, "open_audio_file", { kind });
       });
     } else if (!kind && !typeHint) {
       // Tipo desconhecido sem hint: comportamento legado (abrir com SO).
-      if (Platform.isDesktop && (Platform.api as unknown as Record<string, unknown>)?.openPath) {
-        ((Platform.api as unknown as Record<string, unknown>).openPath as (path: string) => void)(dir);
-      } else {
-        openUrl(dir);
-      }
+      if (!(await openWithSystemPlayer(dir, "unknown"))) openUrl(dir);
     } else {
       reportMissingResource("open_file", "renderable_file");
       $alert.error({ text: url, title: "modules.media.alerts.file_not_found" });

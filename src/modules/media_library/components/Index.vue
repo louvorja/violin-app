@@ -346,6 +346,7 @@ import { DB_TABLE } from "@/constants/DbTables";
 import { KEYS } from "@/constants/UserDataKeys";
 import { IMAGE_EXT, VIDEO_EXT } from "@/constants/FileTypes";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
+import Telemetry from "@/helpers/Telemetry";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -1021,6 +1022,29 @@ async function playIndex(index: number): Promise<void> {
     payload.page = 1;
   }
 
+  if (
+    isVideo &&
+    Boolean($userdata.get(KEYS.OPTIONS.USE_SYSTEM_MEDIA_PLAYER, false)) &&
+    Platform.isDesktop &&
+    !item.path.startsWith("blob:") &&
+    Platform.api?.shell?.openPath
+  ) {
+    const external = await Platform.api.shell.openPath(item.path);
+    if (external?.ok) {
+      Telemetry.track("media_library_external_opened", {
+        kind: "video",
+        path: external.path || "",
+      });
+      $media.close(true);
+      isPlaying.value = false;
+      return;
+    }
+    Telemetry.track("media_library_external_open_failed", {
+      kind: "video",
+      reason: external?.error || "unknown",
+    });
+  }
+
   localStorage.setItem(KEYS.PROJECTION.LJ_FILE_PROJECTION, JSON.stringify(payload));
 
   await openFileProjectionWindows();
@@ -1028,8 +1052,7 @@ async function playIndex(index: number): Promise<void> {
   $broadcast.send(BROADCAST_TYPE.FILE_PROJECTION, payload);
 
   if (isVideo) {
-    $media.openAudio({ url, title: item.name });
-    $appdata.set("modules.media.config.video_file", true);
+    await $media.openAudio({ url, title: item.name, mediaType: "video" });
   } else {
     $media.stop();
     $appdata.set("modules.media.config.video_file", false);

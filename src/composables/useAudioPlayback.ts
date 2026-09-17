@@ -3,6 +3,7 @@ import { detachMediaSource as _detachSource } from "@/helpers/Dom";
 import Telemetry from "@/helpers/Telemetry";
 
 type TimeCallback = (currentTime: number, duration: number) => void;
+export type MediaElementKind = "audio" | "video";
 
 export interface AudioTelemetryContext {
   playback_id: string;
@@ -22,12 +23,14 @@ export interface AudioPlayback {
   buffered: Ref<number>;
   isPaused: Ref<boolean>;
   isFading: Ref<boolean>;
-  getElement: () => HTMLAudioElement;
+  getElement: () => HTMLMediaElement;
+  /** Troca o elemento de mídia usado pelo player sem perder o estado reativo. */
+  setElementKind: (kind: MediaElementKind) => HTMLMediaElement;
   setTelemetryContext: (context: AudioTelemetryContext | null) => void;
   setSrc: (src: string, lazy?: boolean) => void;
   prepare: (src: string, lazy?: boolean, seekHint?: number, telemetryContext?: AudioTelemetryContext) => Promise<HTMLAudioElement>;
-  release: (el: HTMLAudioElement) => void;
-  takeOver: (next: HTMLAudioElement, startTime: (duration: number) => number, play: boolean) => Promise<void>;
+  release: (el: HTMLMediaElement) => void;
+  takeOver: (next: HTMLMediaElement, startTime: (duration: number) => number, play: boolean) => Promise<void>;
   setDurationHint: (seconds: number) => void;
   play: (onError?: (e: unknown) => void, onStarted?: () => void) => void;
   pause: (callback?: () => void) => void;
@@ -55,13 +58,14 @@ function _create(): AudioPlayback {
   const isFading    = ref(false);
   const isLazy      = ref(false);
 
-  let _el: HTMLAudioElement | null = null;
+  let _el: HTMLMediaElement | null = null;
+  let _elementKind: MediaElementKind = "audio";
   let _rafId: number | null = null;
   let _playing = false;
   const _timeCallbacks: TimeCallback[] = [];
   let _telemetryContext: AudioTelemetryContext | null = null;
   const _elementTelemetryContext = new WeakMap<HTMLMediaElement, AudioTelemetryContext>();
-  const _listening = new WeakSet<HTMLAudioElement>();
+  const _listening = new WeakSet<HTMLMediaElement>();
   let _bufferingSince = 0;
   let _lastProgressAt = 0;
   let _lastProgressTime = 0;
@@ -269,7 +273,7 @@ function _create(): AudioPlayback {
     return Math.max(0, Math.min(time, Math.max(0, duracao - _MARGEM_DO_FIM)));
   }
 
-  function _listen(el: HTMLAudioElement): void {
+  function _listen(el: HTMLMediaElement): void {
     if (_listening.has(el)) return;
     el.addEventListener("timeupdate", _syncTime);
     el.addEventListener("progress", _syncTime);
@@ -280,7 +284,7 @@ function _create(): AudioPlayback {
     _listening.add(el);
   }
 
-  function _unlisten(el: HTMLAudioElement): void {
+  function _unlisten(el: HTMLMediaElement): void {
     if (!_listening.has(el)) return;
     el.removeEventListener("timeupdate", _syncTime);
     el.removeEventListener("progress", _syncTime);
@@ -291,19 +295,44 @@ function _create(): AudioPlayback {
     _listening.delete(el);
   }
 
-  function getElement(): HTMLAudioElement {
+  function getElement(): HTMLMediaElement {
     if (!_el) {
       _el = document.getElementById("__audio") as HTMLAudioElement | null;
+      if (_el && _el.tagName.toLowerCase() !== _elementKind) {
+        _el.remove();
+        _el = null;
+      }
       if (!_el) {
-        _el = document.createElement("audio");
+        _el = document.createElement(_elementKind);
         _el.id = "__audio";
         _el.preload = "auto";
+        _el.setAttribute("aria-hidden", "true");
+        _el.style.display = "none";
         document.body.appendChild(_el);
       }
     }
+    // O elemento é a fonte de áudio/relógio do player; nunca deve aparecer
+    // como um retângulo preto na janela principal quando o tipo for vídeo.
+    _el.setAttribute("aria-hidden", "true");
+    _el.style.display = "none";
     _listen(_el);
     _el.autoplay = true;
     return _el;
+  }
+
+  function setElementKind(kind: MediaElementKind): HTMLMediaElement {
+    if (kind !== "audio" && kind !== "video") kind = "audio";
+    if (_elementKind === kind && _el) return getElement();
+    if (_el) {
+      _stopRaf();
+      _unlisten(_el);
+      _el.pause();
+      _detachSource(_el);
+      _el.remove();
+      _el = null;
+    }
+    _elementKind = kind;
+    return getElement();
   }
 
   /**
@@ -378,7 +407,7 @@ function _create(): AudioPlayback {
     });
   }
 
-  function _descartar(el: HTMLAudioElement): void {
+  function _descartar(el: HTMLMediaElement): void {
     el.pause();
     if (el.src && el.src.startsWith("blob:")) {
       try { URL.revokeObjectURL(el.src); } catch (_) { /* ignore */ }
@@ -393,7 +422,7 @@ function _create(): AudioPlayback {
    * isso sobra um silêncio entre uma e outra.
    */
   function takeOver(
-    next: HTMLAudioElement,
+    next: HTMLMediaElement,
     startTime: (duration: number) => number,
     play: boolean,
   ): Promise<void> {
@@ -640,7 +669,7 @@ function _create(): AudioPlayback {
 
   return {
     volume, currentTime, duration, progress, buffered, isPaused, isFading,
-    getElement, setTelemetryContext: (context) => {
+    getElement, setElementKind, setTelemetryContext: (context) => {
       if (context?.playback_id !== _telemetryContext?.playback_id) {
         _listenedSeconds = 0;
         _lastListenedTime = 0;

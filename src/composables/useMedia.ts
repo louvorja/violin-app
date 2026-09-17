@@ -101,6 +101,10 @@ function _isYouTube(): boolean {
   return !!$appdata.get(KEYS.MODULES.MEDIA.CONFIG.IS_YOUTUBE);
 }
 
+function _keepVideoProjectionOnLoadError(): boolean {
+  return Boolean($appdata.get(KEYS.MODULES.MEDIA.CONFIG.VIDEO_FILE, false));
+}
+
 function _loadAudioSrc(
   audioUrl: string,
   idCheck: string | number | null,
@@ -177,7 +181,7 @@ function _loadAudioSrc(
       error,
       requestTelemetry({ operation: "music_audio_request_open", id_music: idCheck })
     );
-    _self.close(true);
+    if (!_keepVideoProjectionOnLoadError()) _self.close(true);
     $alert.error({ text: "modules.media.alerts.not_loaded", error }, function (a?: unknown) {
       if (a) requestRetry();
     });
@@ -230,7 +234,7 @@ function _loadAudioSrc(
         source_type: _sourceType(audioUrl),
       });
       _switchingMode = false;
-      _self.close(true);
+      if (!_keepVideoProjectionOnLoadError()) _self.close(true);
       Telemetry.track(
         "music_audio_load_failed",
         requestTelemetry({
@@ -270,7 +274,7 @@ function _loadAudioSrc(
     // falhar ali é arquivo ausente, não internet fora. Reportar isso derrubava
     // o app para offline com a rede intacta.
     if (ehRemota(audioUrl)) reportNetworkResult(false, "media");
-    _self.close(true);
+    if (!_keepVideoProjectionOnLoadError()) _self.close(true);
     const reason = event?.type === "timeout" ? "timeout" : "network_error";
     const elapsed = Date.now() - startedAt;
     Telemetry.histogram("louvorja.music.audio.load.duration", elapsed, {
@@ -341,7 +345,7 @@ function _loadAudioSrc(
       "music_playback_failed",
       requestTelemetry({ stage: "transfer", reason: "request_send" })
     );
-    _self.close(true);
+    if (!_keepVideoProjectionOnLoadError()) _self.close(true);
   }
 }
 
@@ -571,6 +575,10 @@ const _self = {
     }
 
     this.clearVariables();
+    // O player compartilhado também reproduz arquivos de vídeo. Um
+    // HTMLAudioElement consegue tocar alguns MP4, mas falha silenciosamente em
+    // outros codecs e deixa a projeção visual sem relógio confiável.
+    _audio.setElementKind("audio");
     // `clearVariables` encerra o contexto anterior; a requisição de metadata
     // pertence à tentativa que acabou de ser criada acima.
     _setPlaybackContext(playbackContext);
@@ -961,6 +969,7 @@ const _self = {
 
     _audio.stop();
     this.clearVariables();
+    _audio.setElementKind("audio");
     _setPlaybackContext(playbackContext);
 
     const slidesArray: Slide[] = [];
@@ -1249,6 +1258,7 @@ const _self = {
 
     _audio.stop();
     this.clearVariables();
+    _audio.setElementKind(params.mediaType === "video" ? "video" : "audio");
     _setPlaybackContext(playbackContext);
     // Sinal para módulos como Som de Fundo (auto-pausa).
     $appdata.set(KEYS.MODULES.MEDIA.IS_PLAYING, true);
@@ -1257,6 +1267,13 @@ const _self = {
 
     // Modo URL direta (ex: arquivo de áudio da liturgia) — pula busca no banco
     if (params.url) {
+      const isVideo = params.mediaType === "video";
+      console.info("[Media] arquivo direto solicitado:", {
+        kind: isVideo ? "video" : "audio",
+        source_type: _sourceType(params.url),
+        extension: params.url.split("?")[0].split(".").pop()?.toLowerCase() || "",
+        title: params.title || "",
+      });
       _loadingId = null;
       $appdata.set(KEYS.MODULES.MEDIA.LOADING, true);
       $appdata.set(KEYS.MODULES.MEDIA.CONFIG.TITLE, params.title || "");
@@ -1264,7 +1281,8 @@ const _self = {
       $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED, true);
       $appdata.set(KEYS.MODULES.MEDIA.CONFIG.SLIDE_INDEX, 0);
       $appdata.set(KEYS.MODULES.MEDIA.CONFIG.LAST_SLIDE, 1);
-      $appdata.set(KEYS.MODULES.MEDIA.CONFIG.AUDIO_ONLY, true);
+      $appdata.set(KEYS.MODULES.MEDIA.CONFIG.AUDIO_ONLY, !isVideo);
+      $appdata.set(KEYS.MODULES.MEDIA.CONFIG.VIDEO_FILE, isVideo);
 
       const audioUrl = params.url;
       _setPlaybackContext({
@@ -1626,7 +1644,10 @@ const _self = {
           $alert.error(
             { text: "modules.media.alerts.not_loaded", error: e || "" },
             function (a?: unknown) {
-              if (a) self.open($appdata.get(KEYS.MODULES.MEDIA.ID_MUSIC) as string | number);
+              const id = $appdata.get(KEYS.MODULES.MEDIA.ID_MUSIC) as string | number | null;
+              // Arquivos diretos da liturgia não têm id_music. Não tente
+              // reabrir o banco com null após um erro de codec do vídeo.
+              if (a && id != null) self.open(id);
             }
           );
         },
