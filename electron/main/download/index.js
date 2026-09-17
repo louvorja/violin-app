@@ -22,31 +22,53 @@ async function getParams(force = false) {
 }
 
 /** Sonda um único host via HEAD. Resolve, nunca rejeita. */
-function _probeHost(urlStr) {
+function _probeHost(urlStr, signal) {
   return new Promise((resolve) => {
+    let req = null;
+    let settled = false;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      signal?.removeEventListener("abort", onAbort);
+      resolve(result);
+    };
+    const onAbort = () => {
+      req?.destroy();
+      finish({ ok: false, error: "Sonda cancelada" });
+    };
+
+    if (signal?.aborted) {
+      finish({ ok: false, error: "Sonda cancelada" });
+      return;
+    }
+    signal?.addEventListener("abort", onAbort, { once: true });
     try {
       const url = new URL(urlStr);
       const lib = url.protocol === "https:" ? https : http;
-      const req = lib.request(
+      req = lib.request(
         { method: "HEAD", host: url.hostname, port: url.port || (url.protocol === "https:" ? 443 : 80), path: url.pathname || "/", headers: _apiToken ? { "Api-Token": _apiToken } : {} },
         (res) => {
+          if (settled) {
+            res.resume();
+            return;
+          }
           // 200/204/301/302/403/404 todos indicam servidor up. Só 5xx ou erro de rede falham.
           if (res.statusCode >= 500) {
-            resolve({ ok: false, error: `HTTP ${res.statusCode}` });
+            finish({ ok: false, error: `HTTP ${res.statusCode}` });
           } else {
-            resolve({ ok: true, host: url.hostname });
+            finish({ ok: true, host: url.hostname });
           }
           res.resume();
         }
       );
-      req.on("error", (e) => resolve({ ok: false, error: e.message }));
+      req.on("error", (e) => finish({ ok: false, error: e.message }));
       req.setTimeout(15000, () => {
         req.destroy(new Error("Timeout"));
-        resolve({ ok: false, error: "Timeout" });
+        finish({ ok: false, error: "Timeout" });
       });
       req.end();
     } catch (e) {
-      resolve({ ok: false, error: e.message });
+      finish({ ok: false, error: e.message });
     }
   });
 }
@@ -60,9 +82,37 @@ function _probeHost(urlStr) {
 async function checkConnection() {
   const hosts = [_filesUrl, _apiUrl].filter(Boolean);
   if (!hosts.length) return { ok: false, error: "nenhuma URL configurada" };
-  const results = await Promise.all(hosts.map(_probeHost));
-  const success = results.find((r) => r.ok);
-  return success || results[0];
+
+  // A resposta útil deve liberar a interface imediatamente. Antes, um CDN
+  // que não respondia fazia a API saudável esperar 15s porque Promise.all só
+  // concluía quando o pior host terminava. As sondas perdedoras são abortadas
+  // para não deixar sockets/requests pendurados no processo principal.
+  const controllers = hosts.map(() => new AbortController());
+  return await new Promise((resolve) => {
+    let pending = hosts.length;
+    let firstFailure = null;
+    let settled = false;
+
+    hosts.forEach((host, index) => {
+      _probeHost(host, controllers[index].signal).then((result) => {
+        if (settled) return;
+        if (result.ok) {
+          settled = true;
+          controllers.forEach((controller, otherIndex) => {
+            if (otherIndex !== index) controller.abort();
+          });
+          resolve(result);
+          return;
+        }
+        firstFailure ||= result;
+        pending -= 1;
+        if (pending === 0) {
+          settled = true;
+          resolve(firstFailure || result);
+        }
+      });
+    });
+  });
 }
 
 /**

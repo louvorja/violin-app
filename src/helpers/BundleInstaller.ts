@@ -78,6 +78,14 @@ function abortCheck(signal?: AbortSignal): void {
   signal?.throwIfAborted();
 }
 
+function parseRemoteVersion(value: unknown): { version_number: number } | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const version = (value as { version_number?: unknown }).version_number;
+  return typeof version === "number" && Number.isFinite(version) && version >= 0
+    ? { version_number: version }
+    : null;
+}
+
 export default {
   async fetchBundle(
     onProgress?: (p: BundleProgress) => void,
@@ -178,6 +186,13 @@ export default {
     abortCheck(signal);
     const datasets = await this.extractBundle(buffer, onProgress, signal);
 
+    // Um ZIP vazio, HTML de portal cativo ou resposta de outro endpoint não
+    // pode limpar o catálogo já instalado. Valide a estrutura mínima antes de
+    // tocar no IndexedDB.
+    if (datasets.size === 0 || !datasets.has("config")) {
+      throw new Error("Bundle inválido: configuração do banco ausente");
+    }
+
     abortCheck(signal);
     await clearBundleTables();
     $dev.write("[BundleInstaller] Tabelas limpas");
@@ -227,6 +242,31 @@ export default {
     }
   },
 
+  /** Retorna a versão do último bundle instalado, sem buscar na rede. */
+  async getInstalledBundleVersion(): Promise<number | null> {
+    try {
+      const marker = await $idb.get<{ data?: { version_number?: unknown } }>(
+        DB_TABLE.CACHE,
+        BUNDLE_MARKER_KEY,
+      );
+      const markerVersion = marker?.data?.version_number;
+      if (typeof markerVersion === "number" && Number.isFinite(markerVersion) && markerVersion >= 0) {
+        return markerVersion;
+      }
+
+      // Instalações anteriores ao marker ainda têm o dataset `config` no
+      // cache normalizado/legado. Ler diretamente o IDB evita disparar uma
+      // requisição durante a decisão de boot offline.
+      const config = await $idb.get<{ data?: { version_number?: unknown } }>(DB_TABLE.CACHE, "config");
+      const configVersion = config?.data?.version_number;
+      return typeof configVersion === "number" && Number.isFinite(configVersion) && configVersion >= 0
+        ? configVersion
+        : null;
+    } catch {
+      return null;
+    }
+  },
+
   /**
    * Verifica se o bundle remoto tem versão diferente da local.
    * Retorna null se não conseguir acessar a API.
@@ -246,25 +286,36 @@ export default {
   },
 
   async _fetchRemoteConfigOnce(): Promise<{ version_number: number } | null> {
-    try {
-      const res = await fetchWithTimeout(`${API_URL_DB}/config`, {
-        headers: { "Api-Token": API_TOKEN },
-        source: "bundle-config",
+    const fetchConfig = async (
+      url: string,
+      token: string,
+      source: string,
+    ): Promise<{ version_number: number } | null> => {
+      const res = await fetchWithTimeout(url, {
+        headers: { "Api-Token": token },
+        source,
       });
       if (!res.ok) return null;
-      return res.json();
+      return parseRemoteVersion(await res.json());
+    };
+
+    try {
+      const primary = await fetchConfig(`${API_URL_DB}/config`, API_TOKEN, "bundle-config");
+      if (primary) return primary;
     } catch {
-      if (!API_URL_FALLBACK) return null;
-      try {
-        const res = await fetchWithTimeout(`${API_URL_DB_FALLBACK}/config`, {
-          headers: { "Api-Token": API_URL_FALLBACK_TOKEN },
-          source: "bundle-config-fallback",
-        });
-        if (!res.ok) return null;
-        return res.json();
-      } catch {
-        return null;
-      }
+      // Abaixo o fallback também é tentado quando a conexão lança (timeout,
+      // DNS), não apenas quando a API respondeu com HTTP ruim.
+    }
+
+    if (!API_URL_FALLBACK) return null;
+    try {
+      return await fetchConfig(
+        `${API_URL_DB_FALLBACK}/config`,
+        API_URL_FALLBACK_TOKEN,
+        "bundle-config-fallback",
+      );
+    } catch {
+      return null;
     }
   },
 };

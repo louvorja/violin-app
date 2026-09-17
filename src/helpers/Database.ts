@@ -361,28 +361,43 @@ function fetchAndStore<T>(file: string, fresh: boolean): Promise<T | null> {
     // Cache-buster: data + timestamp quando fresh, evita CDN/proxy
     // servir versão antiga após "Atualizar coletâneas" no UI.
     const url = fetchUrlFor(file);
+    const fallbackUrl = API_URL_FALLBACK ? url.replace(API_URL, API_URL_FALLBACK) : "";
     const cacheBuster = fresh
       ? `?_=${Date.now()}`
       : `?${new Date().toISOString().slice(0, 10).replace(/-/g, "")}`;
     $dev.write("Abrindo DB", `${url}${cacheBuster}`);
-    let response = await fetchWithTimeout(`${url}${cacheBuster}`, {
-      headers: {
-        "Api-Token": API_TOKEN,
-      },
-      source: "database",
-    });
-    // Fallback: se a API principal retornar erro de rede, tenta a API de fallback
-    if (!response.ok && API_URL_FALLBACK) {
-      const fallbackUrl = fetchUrlFor(file).replace(API_URL, API_URL_FALLBACK);
-      if (fallbackUrl !== url) {
-        $dev.write("Fallback DB", `${fallbackUrl}${cacheBuster}`);
-        response = await fetchWithTimeout(`${fallbackUrl}${cacheBuster}`, {
-          headers: {
-            "Api-Token": API_URL_FALLBACK_TOKEN,
-          },
-          source: "database-fallback",
-        });
-      }
+    let response: Response;
+    try {
+      response = await fetchWithTimeout(`${url}${cacheBuster}`, {
+        headers: {
+          "Api-Token": API_TOKEN,
+        },
+        source: "database",
+      });
+    } catch (primaryError) {
+      // Timeout/DNS também precisam cair para o host alternativo. Antes, o
+      // fallback só era usado quando a API respondia com HTTP ruim, deixando
+      // o catálogo da igreja sem dados durante uma falha transitória.
+      if (!fallbackUrl || fallbackUrl === url) throw primaryError;
+      $dev.write("Fallback DB", `${fallbackUrl}${cacheBuster}`);
+      response = await fetchWithTimeout(`${fallbackUrl}${cacheBuster}`, {
+        headers: {
+          "Api-Token": API_URL_FALLBACK_TOKEN,
+        },
+        source: "database-fallback",
+      });
+    }
+
+    // Fallback também para HTTP 5xx/404. 404 continua significando dataset
+    // ausente, mas só depois de dar uma chance ao servidor alternativo.
+    if (!response.ok && fallbackUrl && fallbackUrl !== url) {
+      $dev.write("Fallback DB", `${fallbackUrl}${cacheBuster}`);
+      response = await fetchWithTimeout(`${fallbackUrl}${cacheBuster}`, {
+        headers: {
+          "Api-Token": API_URL_FALLBACK_TOKEN,
+        },
+        source: "database-fallback",
+      });
     }
     if (response.status === 404) return null;
     if (!response.ok) throw new Error(`HTTP ${response.status}`);

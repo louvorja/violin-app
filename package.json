@@ -24,6 +24,7 @@
     "validate:agent-context": "tsx scripts/validate-agent-context.ts",
     "validate:release-version": "node scripts/validate-release-version.mjs",
     "validate:release-artifacts": "node scripts/validate-release-artifacts.mjs",
+    "validate:observability-release": "node scripts/validate-observability-release.mjs",
     "prebuild": "npm run validate:agent-context && npm run validate:manifests && npm run validate:release-version && npm run typecheck",
     "build": "vite build",
     "lint": "eslint .",

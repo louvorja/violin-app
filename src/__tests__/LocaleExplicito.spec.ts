@@ -58,4 +58,18 @@ describe("formatação de data e hora", () => {
         infratores.join("\n"),
     ).toEqual([]);
   });
+
+  it("não capitaliza palavras internas das datas em português", () => {
+    const alvos = [
+      "src/views/Clock.vue",
+      "src/modules/clock/components/Index.vue",
+      "src/modules/scheduled_items/components/Index.vue",
+    ];
+
+    const infratores = alvos.filter((caminho) =>
+      /text-transform\s*:\s*capitalize/.test(readFileSync(caminho, "utf8")),
+    );
+
+    expect(infratores).toEqual([]);
+  });
 });

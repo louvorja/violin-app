@@ -2,6 +2,7 @@ import { ref, computed, onMounted, type Ref, type ComputedRef } from "vue";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import $broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
+import Telemetry from "@/helpers/Telemetry";
 
 export type Slide = Record<string, unknown> | null;
 
@@ -67,6 +68,14 @@ export function useProjectionState(): ProjectionStateReturn {
     slideIndex.value  = (p.slide_index as number) ?? 0;
     totalSlides.value = (p.total_slides as number) ?? (p.last_slide as number) ?? 0;
 
+    if (typeof p._ts === "number") {
+      Telemetry.track("projection_broadcast_received", {
+        broadcast_type: BROADCAST_TYPE.SLIDE_CHANGE,
+        slide_index: p.slide_index,
+        playback_id: p.playback_id,
+        latency_ms: Math.max(0, Date.now() - p._ts),
+      });
+    }
     if (import.meta.env.DEV && typeof p._ts === "number") {
       const log = (window as { __ljLatencyLog?: number[] }).__ljLatencyLog;
       if (Array.isArray(log)) log.push(Date.now() - (p._ts as number));

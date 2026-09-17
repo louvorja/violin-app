@@ -106,17 +106,24 @@ function candidatesFor(rel, roots = []) {
  * usuário — nunca para ativar sozinho: fora do Windows ela vive dentro do
  * disco C emulado do Wine, em caminho que só o dono conhece.
  *
- * @param {{platform?: string, home?: string}} env
+ * @param {{platform?: string, home?: string, env?: object}} options
  * @returns {string[]}
  */
-function classicSearchDirs({ platform = process.platform, home = "" } = {}) {
+function classicSearchDirs({ platform = process.platform, home = "", env = process.env } = {}) {
   if (platform === "win32") {
-    return [
+    const dirs = [
       "C:\\Program Files (x86)\\Louvor JA",
       "C:\\Program Files\\Louvor JA",
       "C:\\Program Files (x86)\\LouvorJA",
       "C:\\Program Files\\LouvorJA",
     ];
+    // Não presumir a unidade C: — o instalador legado pode estar em outra
+    // unidade e o Windows expõe os diretórios reais por estas variáveis.
+    for (const base of [env?.ProgramFiles, env?.["ProgramFiles(x86)"]]) {
+      if (!base) continue;
+      for (const nome of ["Louvor JA", "LouvorJA"]) dirs.push(path.join(base, nome));
+    }
+    return [...new Set(dirs)];
   }
 
   if (!home) return [];

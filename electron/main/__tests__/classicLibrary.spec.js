@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 const require = createRequire(import.meta.url);
-const { validate } = require("../classicLibrary.js");
+const { validate, detectLanguage } = require("../classicLibrary.js");
 
 /**
  * O usuário aponta a pasta da versão clássica na mão, e ninguém sabe de cor a
@@ -23,6 +23,12 @@ describe("validate", () => {
     mkdirSync(join(base, "instalacao", "config", "musicas"), { recursive: true });
     writeFileSync(join(base, "instalacao", "config", "musicas", "faixa.mp3"), "x");
     mkdirSync(join(base, "vazia", "config", "musicas"), { recursive: true });
+    mkdirSync(join(base, "so-banco", "config"), { recursive: true });
+    writeFileSync(join(base, "so-banco", "config", "database.db"), "SQLite format 3\0");
+    mkdirSync(join(base, "es", "config"), { recursive: true });
+    writeFileSync(join(base, "es", "config", "database.db"), "SQLite format 3\0");
+    writeFileSync(join(base, "es", "config", "configES.ja"), "lang=ES\n");
+    writeFileSync(join(base, "es", "LoorJA.translate"), "_=ES\n");
   });
 
   afterAll(() => rmSync(base, { recursive: true, force: true }));
@@ -53,5 +59,21 @@ describe("validate", () => {
   it("recusa caminho vazio", () => {
     expect(validate("").ok).toBe(false);
     expect(validate(null).ok).toBe(false);
+  });
+
+  it("aceita instalação que ainda baixou apenas o banco", () => {
+    const r = validate(join(base, "so-banco"));
+    expect(r.ok).toBe(true);
+    expect(r.folders.database).toBe(true);
+    expect(r.folders.musicas).toBe(false);
+  });
+
+  it("detecta o idioma pelo marcador da instalação selecionada", () => {
+    expect(detectLanguage(join(base, "es"), join(base, "es", "config"))).toBe("es");
+  });
+
+  it("prioriza o arquivo .translate da instalação sobre configurações antigas", () => {
+    writeFileSync(join(base, "es", "config", "configPT.ja"), "lang=PT\n");
+    expect(detectLanguage(join(base, "es"), join(base, "es", "config"))).toBe("es");
   });
 });

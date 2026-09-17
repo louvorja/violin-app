@@ -32,7 +32,11 @@
       <aside v-if="$slots.left" class="module-embedded-left">
         <slot name="left" />
       </aside>
-      <main class="module-embedded-content">
+      <main
+        ref="embeddedContent"
+        class="module-embedded-content"
+        @scroll.passive="onEmbeddedScroll"
+      >
         <slot />
       </main>
       <aside v-if="$slots.right" class="module-embedded-right">
@@ -47,7 +51,16 @@
 </template>
 
 <script setup>
-import { computed, watch, onMounted } from "vue";
+import {
+  computed,
+  watch,
+  onMounted,
+  onBeforeUnmount,
+  onActivated,
+  onDeactivated,
+  nextTick,
+  ref,
+} from "vue";
 import { useI18n } from "vue-i18n";
 import Window from "@/components/Window.vue";
 import Modules from "@/helpers/Modules";
@@ -69,6 +82,10 @@ const props = defineProps({
 });
 
 const emit = defineEmits(["close", "minimize", "scroll", "hasScroll", "show"]);
+
+const embeddedContent = ref(null);
+let embeddedResizeObserver = null;
+let embeddedMutationObserver = null;
 
 const { t: i18nT } = useI18n();
 
@@ -132,10 +149,63 @@ function onHasScroll(value) {
   emit("hasScroll", value);
 }
 
+/**
+ * O modo embedded rola no próprio `<main>`, não no componente Window. Sem
+ * repassar estas métricas, DataTable acreditava que não havia scroll e
+ * renderizava 300–400 linhas por RAF para "preencher" o espaço — justamente
+ * o atraso visível ao abrir Músicas. O mesmo contrato do Window vale para os
+ * dois modos agora.
+ */
+function onEmbeddedScroll() {
+  const el = embeddedContent.value;
+  if (!el) return;
+  emit("scroll", {
+    scroll_bottom: Math.max(0, el.scrollHeight - el.scrollTop - el.clientHeight),
+  });
+  emit("hasScroll", el.scrollHeight > el.clientHeight);
+}
+
+function observeEmbeddedContent() {
+  const el = embeddedContent.value;
+  if (!el) return;
+  embeddedResizeObserver?.disconnect();
+  embeddedMutationObserver?.disconnect();
+  nextTick(onEmbeddedScroll);
+
+  if (typeof ResizeObserver !== "undefined") {
+    embeddedResizeObserver = new ResizeObserver(onEmbeddedScroll);
+    embeddedResizeObserver.observe(el);
+  }
+  if (typeof MutationObserver !== "undefined") {
+    embeddedMutationObserver = new MutationObserver(onEmbeddedScroll);
+    embeddedMutationObserver.observe(el, { childList: true, subtree: true });
+  }
+}
+
 onMounted(() => {
   if (moduleId.value) {
     AppData.set(`modules.${moduleId.value}.popup`, props.popup);
   }
+  if (!props.popup) observeEmbeddedContent();
+});
+
+onActivated(() => {
+  if (!props.popup) observeEmbeddedContent();
+});
+
+function stopEmbeddedObservers() {
+  embeddedResizeObserver?.disconnect();
+  embeddedMutationObserver?.disconnect();
+  embeddedResizeObserver = null;
+  embeddedMutationObserver = null;
+}
+
+onDeactivated(() => {
+  if (!props.popup) stopEmbeddedObservers();
+});
+
+onBeforeUnmount(() => {
+  stopEmbeddedObservers();
 });
 
 // Métodos expostos para módulos que usam ref="moduleContainer" (musics, etc.)

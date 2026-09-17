@@ -22,11 +22,12 @@ describe("download.checkConnection", () => {
     await Promise.all(servers.splice(0).map((s) => new Promise((resolve) => s.close(resolve))));
   });
 
-  function startServer(statusCode) {
+  function startServer(statusCode, delayMs = 0) {
     return new Promise((resolve) => {
       const server = http.createServer((req, res) => {
         res.statusCode = statusCode;
-        res.end();
+        const timer = setTimeout(() => res.end(), delayMs);
+        res.on("close", () => clearTimeout(timer));
       });
       server.listen(0, "127.0.0.1", () => {
         servers.push(server);
@@ -68,5 +69,17 @@ describe("download.checkConnection", () => {
     const result = await download.checkConnection();
 
     expect(result.ok).toBe(false);
+  });
+
+  it("retorna assim que um host responde e cancela o host lento", async () => {
+    const filesUrl = await startServer(200, 1000);
+    const apiUrl = await startServer(204);
+    download.setApiConfig({ filesUrl, apiUrl });
+
+    const startedAt = Date.now();
+    const result = await download.checkConnection();
+
+    expect(result.ok).toBe(true);
+    expect(Date.now() - startedAt).toBeLessThan(500);
   });
 });

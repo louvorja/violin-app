@@ -233,7 +233,7 @@ export interface SlideChangePayload {
   progress: number;
   total_slides: number;
   playback_id?: string;
-  /** Timestamp de emissão (Date.now()) — presente apenas em dev/test para medir latência cross-window. */
+  /** Timestamp de emissão (Date.now()) para medir latência cross-window. */
   _ts?: number;
 }
 

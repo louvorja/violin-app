@@ -102,6 +102,17 @@
         {{ $t("options.updates.database") }}
       </h3>
 
+      <div class="opt-row">
+        <label class="opt-checkbox">
+          <input
+            type="checkbox"
+            :checked="checkDbOnStart"
+            @change="onCheckDbOnStartChange($c($event))"
+          />
+          <span>{{ $t("options.updates.check_db_updates_on_start") }}</span>
+        </label>
+      </div>
+
       <div class="opt-row opt-row--spread">
         <label class="opt-label">{{ $t("options.updates.current_version") }}</label>
         <strong v-if="dbCurrentConfig">
@@ -255,6 +266,7 @@ interface AppUpdateState {
   newVersion: string | null;
   error: string | null;
   packagePath?: string | null;
+  installRequiresElevation?: boolean;
 }
 
 type UpdateStatus = "idle" | "checking" | "ok" | "available" | "error";
@@ -282,7 +294,8 @@ const lastAppCheck = ref<string | null>(null);
 
 // Opções da tela
 const useBeta = ref(false);
-const checkOnStart = ref(false);
+const checkOnStart = ref(true);
+const checkDbOnStart = ref(true);
 const autoDownload = ref(false);
 
 // Sync manager (bundle download)
@@ -355,8 +368,8 @@ const dbBackupProgressDetail = computed<string>(() => {
 const dbHasUpdate = computed<boolean>(
   () =>
     !!dbLatestConfig.value &&
-    !!dbCurrentConfig.value &&
-    dbLatestConfig.value.version_number !== dbCurrentConfig.value.version_number
+    (!dbCurrentConfig.value ||
+      dbLatestConfig.value.version_number > dbCurrentConfig.value.version_number)
 );
 
 const appVersion = computed<string>(() => appUpdate.value.version || Platform.api?.version || "?");
@@ -417,6 +430,11 @@ function onCheckOnStartChange(v: boolean): void {
   checkOnStart.value = v;
   $userdata.set(KEYS.OPTIONS.CHECK_UPDATES_ON_START, v);
   pushOptions();
+}
+
+function onCheckDbOnStartChange(v: boolean): void {
+  checkDbOnStart.value = v;
+  $userdata.set(KEYS.OPTIONS.CHECK_DB_UPDATES_ON_START, v);
 }
 
 function onAutoDownloadChange(v: boolean): void {
@@ -502,6 +520,20 @@ async function _fetchDbConfig(): Promise<Response> {
   }
 }
 
+function isValidDbConfig(value: unknown): value is DbConfig {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const data = value as Partial<DbConfig>;
+  return (
+    typeof data.datetime === "string" &&
+    typeof data.latest_updated === "string" &&
+    typeof data.version === "number" &&
+    Number.isFinite(data.version) &&
+    typeof data.version_number === "number" &&
+    Number.isFinite(data.version_number) &&
+    data.version_number >= 0
+  );
+}
+
 const DB_CHECK_RETRIES = 3;
 const DB_CHECK_RETRY_DELAY_MS = 1500;
 
@@ -517,17 +549,19 @@ async function checkDbUpdate(): Promise<void> {
     for (let attempt = 1; attempt <= DB_CHECK_RETRIES; attempt++) {
       try {
         res = await _fetchDbConfig();
-        break;
+        if (res.ok) break;
+        if (attempt === DB_CHECK_RETRIES) throw new Error(`HTTP ${res.status}`);
       } catch (e) {
         if (attempt === DB_CHECK_RETRIES) throw e;
-        await new Promise((r) => setTimeout(r, DB_CHECK_RETRY_DELAY_MS));
       }
+      await new Promise((r) => setTimeout(r, DB_CHECK_RETRY_DELAY_MS));
     }
     if (!res || !res.ok) {
       throw new Error();
     }
-    const data: DbConfig = await res.json();
-    dbLatestConfig.value = data ?? null;
+    const data: unknown = await res.json();
+    if (!isValidDbConfig(data)) throw new Error("Resposta de configuração do banco inválida");
+    dbLatestConfig.value = data;
     dbStatus.value = dbHasUpdate.value ? "available" : "ok";
     lastDbCheck.value = new Date().toISOString();
     $userdata.set(KEYS.OPTIONS.LAST_DB_CHECK, lastDbCheck.value);
@@ -700,7 +734,8 @@ async function reinstallDatabase(): Promise<void> {
 
 async function loadCurrentDbVersion(): Promise<void> {
   try {
-    dbCurrentConfig.value = await $database.get<DbConfig>("config", { silent: true });
+    const data = await $database.get<DbConfig>("config", { silent: true });
+    dbCurrentConfig.value = isValidDbConfig(data) ? data : null;
   } catch {
     dbCurrentConfig.value = null;
   }
@@ -715,32 +750,15 @@ onMounted(async () => {
   const savedBeta = $userdata.get<boolean | null>(KEYS.OPTIONS.USE_BETA_UPDATES, null);
   useBeta.value = savedBeta == null ? true : savedBeta;
   checkOnStart.value = $userdata.get<boolean>(KEYS.OPTIONS.CHECK_UPDATES_ON_START, true) === true;
+  checkDbOnStart.value =
+    $userdata.get<boolean>(KEYS.OPTIONS.CHECK_DB_UPDATES_ON_START, true) === true;
   autoDownload.value = $userdata.get<boolean>(KEYS.OPTIONS.AUTO_DOWNLOAD_UPDATES, false) === true;
 
   if (Platform.isDesktop && Platform.updater) {
     try {
       appUpdate.value = (await Platform.updater.status()) as AppUpdateState;
-      let prevStatus = appUpdate.value.status;
       _appUpdateUnsub = Platform.updater.onStateChange((s: AppUpdateState) => {
         appUpdate.value = s;
-        // Ao concluir o download do electron-updater, avisa para reiniciar.
-        // Mostra apenas na TRANSIÇÃO para "downloaded" (senão ao abrir a tela
-        // com download já concluído em background repetiria o prompt).
-        // Vale para deb e rpm também: eles ficavam de fora porque a instalação
-        // não era automática, e agora é.
-        if (s.status === "downloaded" && prevStatus !== "downloaded") {
-          $alert.yesno(
-            {
-              title: t("options.updates.app_install_title"),
-              text: t("options.updates.app_restart_prompt", { version: s.newVersion }),
-              translate: false,
-            },
-            (btn?: string) => {
-              if (btn === "yes") installUpdate();
-            }
-          );
-        }
-        prevStatus = s.status;
       });
       _pkgProgressUnsub = Platform.updater.onPackageProgress((d: { percent: number }) => {
         if (d && typeof d.percent === "number") {

@@ -18,7 +18,6 @@
             class="shell-content"
             :class="{ 'shell-content--desktop-download': showDesktopDownload }"
           >
-            <AppLoading />
             <AppAlert />
             <AppSnackbar />
             <DesktopDownloadPrompt v-if="showDesktopDownload" />
@@ -133,7 +132,6 @@ import AppModules from "@/layout/Modules.vue";
 import AppAlert from "@/layout/Alert.vue";
 import AppSnackbar from "@/layout/SnackbarBar.vue";
 import $snackbar from "@/helpers/Snackbar";
-import AppLoading from "@/layout/Loading.vue";
 import CommandPalette from "@/layout/shell/CommandPalette.vue";
 import MusicSpotlight from "@components/MusicSpotlight.vue";
 import BibleSpotlight from "@components/BibleSpotlight.vue";
@@ -157,9 +155,6 @@ import $popup from "@/helpers/Popup";
 import Broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import $alert from "@/helpers/Alert";
-import $database from "@/helpers/Database";
-import $idb from "@/helpers/IndexedDB";
-import { DB_TABLE } from "@/constants/DbTables";
 import type { BibleSearchResult } from "@/types/Bible";
 
 import { registerShell } from "@/composables/useShell";
@@ -417,9 +412,18 @@ async function _checkBundleNeeded(): Promise<{ needed: boolean; version?: number
     }
 
     const installed = await BundleInstaller.isBundleInstalled(remote.version_number);
-    console.info("[Shell] bundle check → installed for v" + remote.version_number + ":", installed);
+    const installedVersion = await BundleInstaller.getInstalledBundleVersion();
+    console.info(
+      "[Shell] bundle check → installed for v" + remote.version_number + ":",
+      installed,
+      "local version:",
+      installedVersion
+    );
 
-    if (installed) {
+    // Nunca rebaixe um catálogo mais novo para obedecer a uma API atrasada ou
+    // que acabou de fazer rollback. O marker exato continua sendo o caminho
+    // normal; a comparação >= protege instalações legadas e rollbacks.
+    if (installed || (installedVersion != null && installedVersion >= remote.version_number)) {
       return { needed: false };
     }
 
@@ -442,18 +446,8 @@ async function _checkBundleNeeded(): Promise<{ needed: boolean; version?: number
 /** Verifica se existe qualquer dado de bundle no IndexedDB (marker ou dados de catálogo). */
 async function _hasLocalBundleData(): Promise<boolean> {
   try {
-    // 1. Checa marker
-    const markerRow = await $idb.get<{ id: string; data?: { version_number?: number } }>(
-      DB_TABLE.CACHE,
-      "__bundle_marker__"
-    );
-    if (markerRow?.data?.version_number && markerRow.data.version_number > 0) return true;
-
-    // 2. Checa se existe config no banco (dados injetados)
-    const config = await $database.get<{ version_number?: number }>("config", { silent: true });
-    if (config && config.version_number && config.version_number > 0) return true;
-
-    return false;
+    const version = await BundleInstaller.getInstalledBundleVersion();
+    return version != null && version > 0;
   } catch {
     return false;
   }
@@ -503,6 +497,7 @@ function _handleUpdaterState(
     newVersion?: string | null;
     progress?: number;
     error?: string | null;
+    installRequiresElevation?: boolean;
   } | null
 ) {
   if (!state) return;
@@ -552,6 +547,14 @@ function _handleUpdaterState(
   } else if (state.status === "downloaded") {
     $appdata.set(KEYS.SHELL.APP_UPDATE_AVAILABLE, true);
     $appdata.set(KEYS.SHELL.APP_UPDATE_VERSION, state.newVersion || "");
+    // Uma cópia antiga em Program Files não pode instalar em silêncio ao
+    // fechar o app. Mostre o diálogo mesmo quando o download aconteceu em
+    // background, para que o operador veja a permissão UAC necessária.
+    if (state.installRequiresElevation && state.newVersion && !updateDialogOpen.value) {
+      updateDialogVersion.value = state.newVersion;
+      updateDialogOpen.value = true;
+      _startupCheckPending = false;
+    }
     // Download manual via dialog → o dialog já mostra o estado "instalar";
     // não reabrir as notas por cima. Segue para release notes / startup.
     // Mesma guarda do ramo acima: baixar pelas Opções não é boot.

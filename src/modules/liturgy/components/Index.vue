@@ -515,45 +515,60 @@ function doExport() {
 }
 
 async function _importJsonFile(file: File): Promise<void> {
-  const text = await file.text();
-  const parsed = liturgyLibrary.parseImport(text);
-  if (!parsed) {
+  try {
+    const text = await file.text();
+    const parsed = liturgyLibrary.parseImport(text);
+    if (!parsed) {
+      $snackbar.error(t("library.import_invalid"));
+      return;
+    }
+    const existing = await liturgyLibrary.getByName(parsed.name);
+    if (existing) {
+      $alert.yesno(
+        { title: t("library.import_title"), text: t("library.save_overwrite_confirm") },
+        async (btn?: string) => {
+          if (btn !== "yes") return;
+          try {
+            await liturgyLibrary.save({ id: existing.id, name: parsed.name, items: parsed.items });
+            $snackbar.success(t("library.import_success"));
+          } catch (error) {
+            console.error("[Liturgia] import JSON falhou:", error);
+            $snackbar.error(t("library.import_invalid"));
+          }
+        }
+      );
+    } else {
+      await liturgyLibrary.save({ name: parsed.name, items: parsed.items });
+      $snackbar.success(t("library.import_success"));
+    }
+  } catch (error) {
+    console.error("[Liturgia] leitura do JSON falhou:", error);
     $snackbar.error(t("library.import_invalid"));
-    return;
-  }
-  const existing = await liturgyLibrary.getByName(parsed.name);
-  if (existing) {
-    $alert.yesno(
-      { title: t("library.import_title"), text: t("library.save_overwrite_confirm") },
-      async (btn?: string) => {
-        if (btn !== "yes") return;
-        await liturgyLibrary.save({ id: existing.id, name: parsed.name, items: parsed.items });
-        $snackbar.success(t("library.import_success"));
-      }
-    );
-  } else {
-    await liturgyLibrary.save({ name: parsed.name, items: parsed.items });
-    $snackbar.success(t("library.import_success"));
   }
 }
 
 // O `.ja` do Delphi é INI em Windows-1252, não UTF-8 — decodificar como texto
 // simples trocaria todo acento por lixo (`Ã§Ã£o` em vez de `ção`).
 async function _importJaFile(file: File): Promise<void> {
-  const buffer = await file.arrayBuffer();
-  const text = new TextDecoder("windows-1252").decode(buffer);
-  const parsed = parseJaImport(text);
-  if (!parsed || parsed.length === 0) {
+  try {
+    const buffer = await file.arrayBuffer();
+    const text = new TextDecoder("windows-1252").decode(buffer);
+    const parsed = parseJaImport(text);
+    if (!parsed || parsed.length === 0) {
+      $snackbar.error(t("library.import_invalid"));
+      return;
+    }
+    // Um `.ja` pode trazer várias liturgias salvas juntas (ex.: culto e escola
+    // sabatina); confirmar sobrescrita uma a uma travaria o import numa fila de
+    // diálogos. Cada uma entra como item novo na biblioteca.
+    for (const liturgy of parsed) {
+      await liturgyLibrary.save({ name: liturgy.name, items: liturgy.items });
+    }
+    $snackbar.success(t("library.import_success"));
+  } catch (error) {
+    console.error("[Liturgia] leitura do .ja falhou:", error);
     $snackbar.error(t("library.import_invalid"));
-    return;
   }
-  // Um `.ja` pode trazer várias liturgias salvas juntas (ex.: culto e escola
-  // sabatina); confirmar sobrescrita uma a uma travaria o import numa fila de
-  // diálogos. Cada uma entra como item novo na biblioteca.
-  for (const liturgy of parsed) {
-    await liturgyLibrary.save({ name: liturgy.name, items: liturgy.items });
-  }
-  $snackbar.success(t("library.import_success"));
 }
 
 function doImport() {

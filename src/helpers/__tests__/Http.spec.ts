@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   fetchWithTimeout,
   setNetworkReporter,
+  setNetworkTimingReporter,
   classifyNetworkError,
   ehRemota,
   NET_TIMEOUT,
@@ -13,14 +14,18 @@ import {
  */
 describe("fetchWithTimeout", () => {
   let relatos: Array<[boolean, string]>;
+  let timings: Array<Record<string, unknown>>;
 
   beforeEach(() => {
     relatos = [];
+    timings = [];
     setNetworkReporter((ok, source) => relatos.push([ok, source]));
+    setNetworkTimingReporter((timing) => timings.push(timing as unknown as Record<string, unknown>));
   });
 
   afterEach(() => {
     setNetworkReporter(null);
+    setNetworkTimingReporter(null);
     vi.restoreAllMocks();
     vi.useRealTimers();
   });
@@ -61,6 +66,16 @@ describe("fetchWithTimeout", () => {
     return fetchWithTimeout("https://exemplo.test/x", { source: "teste" }).then(() => {
       expect(relatos).toEqual([[true, "teste"]]);
     });
+  });
+
+  it("registra duração e status sem expor a URL", async () => {
+    vi.stubGlobal("fetch", () => Promise.resolve(new Response("", { status: 204 })));
+    await fetchWithTimeout("https://exemplo.test/segredo?token=nao-enviar", { source: "db" });
+
+    expect(timings).toEqual([
+      expect.objectContaining({ source: "db", status: 204, outcome: "response", remote: true }),
+    ]);
+    expect(JSON.stringify(timings)).not.toContain("token");
   });
 
   it("falha em arquivo local não vira falha de internet", async () => {

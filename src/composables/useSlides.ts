@@ -2,6 +2,7 @@ import { ref, computed, watch, toRaw, type Ref, type ComputedRef } from "vue";
 import $broadcast from "@/helpers/Broadcast";
 import type { AudioPlayback } from "@/composables/useAudioPlayback";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
+import Telemetry from "@/helpers/Telemetry";
 
 export interface Slide {
   lyric?: string;
@@ -124,8 +125,9 @@ function _create(): SlidesInstance {
       progress:     _audio?.progress.value ?? 0,
       total_slides: totalSlides.value,
       playback_id: _playbackId,
-      // Presente apenas em dev/test — mede latência cross-window até o receptor (Projection)
-      ...(import.meta.env.DEV ? { _ts: Date.now() } : {}),
+      // Permite medir a latência real entre a janela do operador e as janelas
+      // auxiliares sem enviar o conteúdo da letra.
+      _ts: Date.now(),
     });
 
     // Também reenviamos o progresso do SLIDE atual (0-100) para janelas

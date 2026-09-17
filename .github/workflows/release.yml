@@ -56,6 +56,12 @@ jobs:
       - name: Conferir versão da release
         run: npm run validate:release-version
 
+      - name: Conferir source maps do PostHog
+        run: npm run validate:observability-release
+        env:
+          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+          POSTHOG_PROJECT_ID: ${{ vars.POSTHOG_PROJECT_ID }}
+
       - name: Rodar testes
         run: npm test
 

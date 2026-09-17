@@ -37,8 +37,20 @@ export interface FetchOptions extends RequestInit {
 }
 
 type NetworkReporter = (ok: boolean, source: string) => void;
+export interface NetworkTiming {
+  source: string;
+  duration_ms: number;
+  status?: number;
+  ok?: boolean;
+  outcome: "response" | "network_error" | "cancelled";
+  remote: boolean;
+  third_party: boolean;
+}
+
+type NetworkTimingReporter = (timing: NetworkTiming) => void;
 
 let _reporter: NetworkReporter | null = null;
+let _timingReporter: NetworkTimingReporter | null = null;
 
 /**
  * Liga o helper ao estado de conectividade. Fica invertido de propósito: este
@@ -47,6 +59,11 @@ let _reporter: NetworkReporter | null = null;
  */
 export function setNetworkReporter(fn: NetworkReporter | null): void {
   _reporter = fn;
+}
+
+/** Observabilidade opcional de duração/status sem acoplar este helper ao PostHog. */
+export function setNetworkTimingReporter(fn: NetworkTimingReporter | null): void {
+  _timingReporter = fn;
 }
 
 function report(ok: boolean, source: string): void {
@@ -114,17 +131,34 @@ export async function fetchWithTimeout(
   if (signal) signals.push(signal);
 
   const remota = ehRemota(input);
+  const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
+
+  const reportTiming = (timing: Omit<NetworkTiming, "duration_ms">): void => {
+    try {
+      _timingReporter?.({
+        ...timing,
+        duration_ms: Math.max(0, Math.round((typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt)),
+      });
+    } catch {
+      /* métricas nunca podem alterar a chamada de rede */
+    }
+  };
 
   try {
     const response = await fetch(input, { ...rest, signal: AbortSignal.any(signals) });
     clearTimeout(prazo);
     if (remota) report(true, source);
+    reportTiming({ source, status: response.status, ok: response.ok, outcome: "response", remote: remota, third_party: thirdParty });
     return response;
   } catch (e) {
     clearTimeout(prazo);
     // Cancelamento nosso (trocar de música, fechar a tela) não é falha de rede.
-    if (signal?.aborted) throw e;
+    if (signal?.aborted) {
+      reportTiming({ source, outcome: "cancelled", remote: remota, third_party: thirdParty });
+      throw e;
+    }
     if (remota && !thirdParty && classifyNetworkError(e) === "network") report(false, source);
+    reportTiming({ source, outcome: "network_error", remote: remota, third_party: thirdParty });
     throw e;
   }
 }

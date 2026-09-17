@@ -69,7 +69,11 @@ const last_filter = ref({});
 const loading = ref(true);
 let _paginateRaf = null;
 let _rafCycles = 0;
-const _RAF_MAX_CYCLES = 3;
+// O contêiner do módulo agora informa o scroll real ao DataTable. Não fazer
+// ciclos automáticos aqui: renderizar centenas de linhas antes do primeiro
+// paint era o principal custo ao abrir Músicas. Tabelas grandes avançam pelo
+// scroll; listas pequenas já cabem na primeira página.
+const _RAF_MAX_CYCLES = 0;
 
 // Versão com debounce de filterData para o watcher de search.
 const debouncedFilterData = debounce(function () {

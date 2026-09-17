@@ -15,7 +15,8 @@ import { KEYS } from "@/constants/UserDataKeys";
  * Comportamento (replica PageControl Delphi):
  * - Abrir um módulo embedded fecha automaticamente os outros embedded.
  * - Módulos popup (album, lyric, media) coexistem com embedded.
- * - O Modules.vue só monta os módulos com show=true ou minimized=true.
+ * - O Modules.vue monta apenas o módulo embedded ativo (e popups/minimizados)
+ *   e mantém os demais em cache para alternância rápida.
  */
 
 export default {

@@ -152,6 +152,33 @@ function seedDefaultFonts() {
   }
 }
 
+/**
+ * As verificações de atualização são preferências independentes e precisam
+ * existir no disco desde a primeira execução. Antes dependíamos apenas do
+ * fallback `get(..., true)`: a UI aparecia marcada, mas uma instalação com um
+ * snapshot antigo/ausente podia iniciar sem disparar a verificação até o
+ * usuário abrir Opções e tocar no checkbox.
+ */
+function seedDefaultUpdatePreferences() {
+  const seeds = [
+    [KEYS.OPTIONS.CHECK_UPDATES_ON_START, true],
+    [KEYS.OPTIONS.CHECK_DB_UPDATES_ON_START, true],
+    [KEYS.OPTIONS.SKIP_STARTUP_CHECK, false],
+  ];
+
+  let changed = false;
+  for (const [key, value] of seeds) {
+    if (UserData.get(key, null) == null) {
+      UserData.set(key, value);
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    console.info("[main] Startup update checks enabled by default (first run)");
+  }
+}
+
 // Exposição em dev para debug rápido no DevTools de qualquer janela.
 // Permite inspecionar `__userdata.get("options.custom_background")` ou
 // `__userdata.get()` (state inteiro) direto no console — útil para
@@ -218,7 +245,19 @@ function _shell() {
 // No web/PWA é no-op síncrono (resolve imediatamente).
 // No Electron carrega os dados de userData/storage/ para o cache em memória.
 // ---------------------------------------------------------------------------
+const _bootStartedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
+
+function _bootStage(stage, properties = {}) {
+  const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+  Telemetry.track("app_boot_stage", {
+    stage,
+    duration_ms: Math.max(0, Math.round(now - _bootStartedAt)),
+    ...properties,
+  });
+}
+
 $storage.hydrate().then(async () => {
+  _bootStage("storage_hydrated");
   // As três etapas abaixo não dependem uma da outra (cada uma é uma
   // configuração isolada por IPC) — rodá-las em série só soma round-trips
   // ao caminho crítico do boot sem nenhum ganho de corretude.
@@ -232,6 +271,7 @@ $storage.hydrate().then(async () => {
     try {
       await UserData.load();
       seedDefaultFonts();
+      seedDefaultUpdatePreferences();
     } catch (e) {
       console.warn("[main] UserData.load falhou:", e);
     }
@@ -268,6 +308,7 @@ $storage.hydrate().then(async () => {
       : Promise.resolve();
 
   await Promise.all([userDataReady, protocolReady, downloadReady]);
+  _bootStage("remote_config_ready");
 
   // D6 — Inicializar listener de atalhos globais (no-op no browser/PWA).
   Shortcuts.init();
@@ -725,6 +766,7 @@ $storage.hydrate().then(async () => {
     }
 
     await Promise.all([moduleManagerReady, idbReady]);
+    _bootStage("dependencies_ready");
 
     // Documentos do usuário que ainda estejam no IndexedDB passam para os
     // arquivos da pasta de dados. Antes do ScheduledStore.hydrate(), que já
@@ -754,22 +796,39 @@ $storage.hydrate().then(async () => {
     useConnectivity();
 
     app.mount("#app");
+    _bootStage("mounted");
+
+    // [077] Migração one-time após mount. O Loading.vue já está no DOM, mas a
+    // janela ainda fica atrás do splash: se a migração for rápida, mostrar o
+    // overlay e escondê-lo no frame seguinte aparece como um popup piscando.
+    // Para 99% dos usuários (sem dados legados) é no-op instantâneo.
+    try {
+      const _legacyItems = UserData.get("modules.liturgy.items");
+      if (Array.isArray(_legacyItems) && _legacyItems.length > 0) {
+        AppData.set("loading", i18n.global.t("alert.migrating"));
+        await Liturgy.migrate();
+      } else {
+        await Liturgy.migrate();
+      }
+    } catch (e) {
+      // Uma migração corrompida não pode manter o splash até o fallback de
+      // 10s. O app segue com os dados crus e deixa o erro observável no log.
+      console.warn("[main] migração de liturgia falhou:", e);
+    } finally {
+      AppData.set("loading", false);
+    }
 
     // A janela principal está oculta esperando este aviso. Dois quadros de
     // espera: montar só constrói o DOM, e revelar antes do primeiro paint
-    // mostraria a tela vazia que a janela oculta existe para esconder.
-    requestAnimationFrame(() => requestAnimationFrame(() => Platform.window?.signalAppReady?.()));
-
-    // [077] Migração one-time após mount: Loading.vue já está no DOM e pode mostrar feedback.
-    // Para 99% dos usuários (sem dados legados) é no-op instantâneo.
-    const _legacyItems = UserData.get("modules.liturgy.items");
-    if (Array.isArray(_legacyItems) && _legacyItems.length > 0) {
-      AppData.set("loading", i18n.global.t("alert.migrating"));
-      await Liturgy.migrate();
-      AppData.set("loading", false);
-    } else {
-      await Liturgy.migrate();
-    }
+    // mostraria a tela vazia que a janela oculta existe para esconder. O
+    // sinal vem depois da migração para que o overlay transitório acima nunca
+    // seja exibido ao operador.
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        _bootStage("first_paint");
+        Platform.window?.signalAppReady?.();
+      })
+    );
 
     // ---------------------------------------------------------------------------
     // M2 — Registrar atalhos de teclado in-window após o app montar.
@@ -778,7 +837,7 @@ $storage.hydrate().then(async () => {
 
     // Observabilidade de uso e diagnóstico. Não bloqueia o boot e é no-op em
     // dev ou quando o usuário desliga a opção nas Opções.
-    void Telemetry.init();
+    void Telemetry.init().then(() => _bootStage("telemetry_ready"));
 
     // --- Geral ---
 

@@ -7,6 +7,7 @@ import { createRequire } from "module";
 
 const require_ = createRequire(import.meta.url);
 const { version: packageVersion } = require_("./package.json");
+const { version: posthogSdkPackageVersion } = require_("posthog-js/package.json");
 
 function escapeRegex(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -27,7 +28,18 @@ export default async ({ mode }) => {
     /^v(?=\d)/,
     ""
   );
-  process.env = { ...process.env, ...loadedEnv, VITE_APP_VERSION: appVersion };
+  // O singleton do posthog-js não expõe a versão da biblioteca em runtime.
+  // Injeta a versão exata do pacote no bundle para que o diagnóstico e os
+  // eventos identifiquem a combinação que realmente foi distribuída.
+  const posthogSdkVersion = String(
+    loadedEnv.VITE_POSTHOG_SDK_VERSION || posthogSdkPackageVersion || "unknown"
+  );
+  process.env = {
+    ...process.env,
+    ...loadedEnv,
+    VITE_APP_VERSION: appVersion,
+    VITE_POSTHOG_SDK_VERSION: posthogSdkVersion,
+  };
 
   // Detectar target: "desktop" (Electron) ou "web" (padrão PWA)
   const isDesktop = process.env.VITE_TARGET === "desktop";

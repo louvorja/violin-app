@@ -29,26 +29,89 @@ function _temConteudo(dir) {
   }
 }
 
+function _detectLanguageMarker(base) {
+  if (!base) return null;
+  // O Delphi renomeia `config.ja` para `configPT.ja`/`configES.ja`. As
+  // versões muito antigas deixavam o sufixo sem extensão, por isso os dois
+  // formatos continuam válidos.
+  const encontrados = new Set();
+  for (const marker of ["configPT.ja", "configPT", "configES.ja", "configES"]) {
+    try {
+      if (fs.existsSync(path.join(base, marker))) {
+        encontrados.add(marker.toLowerCase().includes("configes") ? "es" : "pt");
+      }
+    } catch {
+      /* tenta o próximo marcador */
+    }
+  }
+  // O clássico mantém um arquivo de configuração por idioma; se a pessoa já
+  // alternou entre PT e ES, ambos podem existir e nenhum deles diz qual mídia
+  // está na instalação. Nesse caso é mais seguro não adivinhar.
+  return encontrados.size === 1 ? [...encontrados][0] : null;
+}
+
+function _detectTranslationFile(base) {
+  if (!base) return null;
+  try {
+    for (const name of fs.readdirSync(base)) {
+      if (!/\.translate$/i.test(name)) continue;
+      const text = fs.readFileSync(path.join(base, name), "utf8");
+      const lang = text.match(/^\s*_\s*=\s*(PT|ES)\s*$/im)?.[1];
+      if (lang) return lang.toLowerCase();
+    }
+  } catch {
+    /* instalação pode estar parcialmente acessível */
+  }
+  return null;
+}
+
 /**
  * O idioma da instalação clássica, que decide se `musicas/` responde por
- * `musics/pt` ou por `musics/es`. Marcado por um arquivo em `%APPDATA%`.
+ * `musics/pt` ou por `musics/es`. O marcador do legado vive em `%APPDATA%`,
+ * mas aceitamos também o diretório selecionado para diagnosticar instalações
+ * copiadas/portáteis.
  *
  * @param {string} [home]
+ * @param {string|null} [configDir]
  * @returns {"pt"|"es"|null}
  */
-function detectLanguage(home = os.homedir()) {
-  const bases = [
-    path.join(home, "AppData", "Roaming", "LouvorJA"),
-    // Wine: o %APPDATA% do Windows emulado mora dentro do disco C do bottle.
-    path.join(home, ".wine", "drive_c", "users", os.userInfo().username, "AppData", "Roaming", "LouvorJA"),
-  ];
+function detectLanguage(home = os.homedir(), configDir = null) {
+  const bases = [];
+  if (configDir) {
+    bases.push(configDir, path.dirname(configDir));
+    const translated = _detectTranslationFile(path.dirname(configDir));
+    if (translated) return translated;
+  }
+
+  const appData = process.env.APPDATA;
+  if (appData) bases.push(path.join(appData, "LouvorJA"));
+  bases.push(path.join(home, "AppData", "Roaming", "LouvorJA"));
+  // Wine: o %APPDATA% do Windows emulado mora dentro do disco C do bottle.
+  try {
+    bases.push(
+      path.join(
+        home,
+        ".wine",
+        "drive_c",
+        "users",
+        os.userInfo().username,
+        "AppData",
+        "Roaming",
+        "LouvorJA"
+      )
+    );
+  } catch {
+    /* ambiente sem userInfo — as bases anteriores ainda são suficientes */
+  }
+
+  const vistos = new Set();
   for (const base of bases) {
-    try {
-      if (fs.existsSync(path.join(base, "configPT"))) return "pt";
-      if (fs.existsSync(path.join(base, "configES"))) return "es";
-    } catch {
-      /* próxima base */
-    }
+    if (!base) continue;
+    const normalizado = path.resolve(base);
+    if (vistos.has(normalizado)) continue;
+    vistos.add(normalizado);
+    const lang = _detectLanguageMarker(normalizado);
+    if (lang) return lang;
   }
   return null;
 }
@@ -72,7 +135,18 @@ function validate(dir) {
       folders[sub] = _temConteudo(path.join(configDir, sub));
       if (folders[sub]) algum = true;
     }
-    if (algum) return { ok: true, configDir, folders };
+    // Uma instalação recém-instalada pode ter só o banco baixado; rejeitá-la
+    // aqui fazia a detecção dizer "não encontrado" até o primeiro download de
+    // mídia, embora fosse justamente um legado válido para sincronizar.
+    folders.database = (() => {
+      try {
+        const stat = fs.statSync(path.join(configDir, "database.db"));
+        return stat.isFile() && stat.size > 0;
+      } catch {
+        return false;
+      }
+    })();
+    if (algum || folders.database) return { ok: true, configDir, folders };
   }
 
   return { ok: false, error: "no-content" };
@@ -86,11 +160,19 @@ function validate(dir) {
  * @returns {Array<{ dir: string, configDir: string, lang: string|null, folders: object }>}
  */
 function detect() {
-  const lang = detectLanguage();
   const achados = [];
   for (const dir of classicSearchDirs({ home: os.homedir() })) {
     const r = validate(dir);
-    if (r.ok) achados.push({ dir, configDir: r.configDir, lang, folders: r.folders });
+    if (r.ok) {
+      const configDir = path.resolve(r.configDir);
+      if (achados.some((item) => path.resolve(item.configDir) === configDir)) continue;
+      achados.push({
+        dir,
+        configDir: r.configDir,
+        lang: detectLanguage(os.homedir(), r.configDir),
+        folders: r.folders,
+      });
+    }
   }
   return achados;
 }

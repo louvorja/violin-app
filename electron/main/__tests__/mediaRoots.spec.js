@@ -103,6 +103,15 @@ describe("classicSearchDirs", () => {
     expect(dirs.length).toBeGreaterThan(1);
   });
 
+  it("inclui a unidade indicada pelas variáveis do Windows", () => {
+    const dirs = classicSearchDirs({
+      platform: "win32",
+      env: { ProgramFiles: "D:\\Apps", "ProgramFiles(x86)": "E:\\Apps32" },
+    });
+    expect(dirs.some((d) => /D:[\\/]Apps[\\/]Louvor JA$/.test(d))).toBe(true);
+    expect(dirs.some((d) => /E:[\\/]Apps32[\\/]LouvorJA$/.test(d))).toBe(true);
+  });
+
   it("fora do Windows procura dentro do disco emulado do Wine", () => {
     const dirs = classicSearchDirs({ platform: "darwin", home: "/Users/x" });
     expect(dirs.some((d) => d.includes(".wine/drive_c") || d.includes(".wine\\drive_c"))).toBe(true);

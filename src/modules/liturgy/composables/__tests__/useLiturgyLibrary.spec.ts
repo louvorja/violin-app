@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseJaImport } from "../useLiturgyLibrary";
+import { parseJaImport, useLiturgyLibrary } from "../useLiturgyLibrary";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 
 // Recorte fiel de um `liturgia.ja` real (formato Delphi/TIniFile), com dois
@@ -81,6 +81,12 @@ describe("parseJaImport", () => {
     expect(musicaItem.musica).toBe(-1);
   });
 
+  it("preserva o id da música selecionada no formato legado", () => {
+    const result = parseJaImport(`[Geral]\n1=item_music\n[item_music]\ntipo=musica\nmusica=42\nsubtipo=ja\nitem=Louvor\n`)!;
+    expect(result[0].items[0].id_music).toBe(42);
+    expect(result[0].items[0].musica).toBe(42);
+  });
+
   it("preserva acentos (o chamador decodifica o arquivo como windows-1252)", () => {
     const result = parseJaImport(JA_SAMPLE)!;
     const musicaItem = result
@@ -92,5 +98,31 @@ describe("parseJaImport", () => {
       .find((l) => l.name === "Escola Sabatina")!
       .items.find((i) => i.item.includes("Cronômetro"));
     expect(cronometro).toBeDefined();
+  });
+
+  it("preserva referências de mídia e overlay no import JSON", () => {
+    const library = useLiturgyLibrary();
+    const parsed = library.parseImport(
+      JSON.stringify({
+        name: "Culto",
+        items: [
+          {
+            id: "media-1",
+            tipo: "biblioteca-midia",
+            item: "Vídeo",
+            ref_id: "media-42",
+            anuncios_ids: ["a1", 7, "a2"],
+            linked_overlay_id: "overlay-1",
+            overlay_action: "activate",
+          },
+        ],
+      }),
+    );
+    expect(parsed?.items[0]).toMatchObject({
+      ref_id: "media-42",
+      anuncios_ids: ["a1", "a2"],
+      linked_overlay_id: "overlay-1",
+      overlay_action: "activate",
+    });
   });
 });
