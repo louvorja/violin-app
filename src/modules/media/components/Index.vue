@@ -40,7 +40,11 @@
       </LjPopover>
     </template>
 
-    <div class="media-body" :style="{ height: preview_height + 'px' }">
+    <div
+      class="media-body"
+      :class="{ 'media-body--video': isLocalVideo }"
+      :style="{ height: preview_height + 'px' }"
+    >
       <div class="media-preview-col">
         <Fullscreen
           v-if="!isYouTube"
@@ -76,7 +80,15 @@
           <img v-if="youtubeThumbnail" :src="youtubeThumbnail" alt="" class="media-thumbnail" />
         </div>
       </div>
-      <div v-if="width > 600" class="media-side">
+      <div v-if="width > 600 && !isLocalVideo" class="media-side">
+        <div v-if="!isYouTube" class="media-side__header">
+          <span class="media-side__title">{{ tm("general.slides") }}</span>
+          <span class="media-side__count">
+            {{
+              slides.length ? `${Math.min(slide_index + 1, slides.length)}/${slides.length}` : "—"
+            }}
+          </span>
+        </div>
         <!-- Slide list for music -->
         <div v-if="!isYouTube" ref="slides_list" class="media-slides">
           <button
@@ -450,6 +462,13 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
+/* Vídeo local não possui slides. Remover a coluna lateral deixa a prévia usar
+   toda a largura disponível, em vez de reservar 250px de uma lista vazia. */
+.media-body--video .media-preview-col {
+  flex: 1 1 100%;
+  width: 100%;
+}
+
 .media-preview {
   width: 100%;
   overflow: hidden;
@@ -463,6 +482,10 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   background: #000;
+}
+
+.media-body--video .media-video-stage {
+  border-radius: var(--lj-radius-sm);
 }
 
 .media-video-preview {
@@ -487,8 +510,36 @@ onBeforeUnmount(() => {
 }
 
 .media-side {
+  display: flex;
+  flex-direction: column;
   flex-shrink: 0;
+  width: 270px;
   min-height: 0;
+  border-left: 1px solid var(--lj-white-alpha-12);
+  background: var(--lj-color-projection-bg);
+}
+
+.media-side__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 auto;
+  min-height: 46px;
+  padding: 0 var(--lj-space-5);
+  border-bottom: 1px solid var(--lj-white-alpha-12);
+  color: var(--lj-white-alpha-70);
+}
+
+.media-side__title {
+  font-size: var(--lj-text-base);
+  font-weight: var(--lj-weight-semibold);
+  letter-spacing: 0.03em;
+}
+
+.media-side__count {
+  color: var(--lj-white-alpha-50);
+  font-size: var(--lj-text-sm);
+  font-variant-numeric: tabular-nums;
 }
 
 .media-preview--youtube {
@@ -512,8 +563,9 @@ onBeforeUnmount(() => {
      slide corrente é medido contra o card do diálogo e desalinha o scroll. */
   position: relative;
   flex-shrink: 0;
-  width: 250px;
-  height: 100%;
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   background: var(--lj-color-projection-bg);
@@ -529,7 +581,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: var(--lj-space-4);
   width: 100%;
-  min-height: 58px;
+  min-height: 60px;
   padding: var(--lj-space-3) var(--lj-space-6);
   background: transparent;
   border: none;
@@ -551,6 +603,7 @@ onBeforeUnmount(() => {
 
 .media-slide.is-active {
   background: var(--lj-white-alpha-18);
+  box-shadow: inset 3px 0 0 var(--lj-orange);
 }
 
 .media-slide__number {
@@ -595,7 +648,7 @@ onBeforeUnmount(() => {
 
 .media-youtube {
   flex-shrink: 0;
-  width: 280px;
+  width: 100%;
   padding: var(--lj-space-6);
   overflow-y: auto;
   color: var(--lj-white);

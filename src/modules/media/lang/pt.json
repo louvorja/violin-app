@@ -21,7 +21,8 @@
     "channel": "Canal",
     "post_date": "Data de publicação",
     "views": "Visualizações",
-    "video_link": "Link do vídeo"
+    "video_link": "Link do vídeo",
+    "slides": "Slides"
   },
   "inputs": {
     "lazy_load": "Carregamento Dinâmico",

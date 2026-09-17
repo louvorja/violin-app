@@ -1021,6 +1021,12 @@ async function playIndex(index: number): Promise<void> {
   if (item.type === "pdf") {
     payload.page = 1;
   }
+  // A blob URL only exists in the renderer that owns the library. The return
+  // projection runs in another window, so give it the IndexedDB reference to
+  // recreate the bytes before autoplaying the video there.
+  if (item.path.startsWith("blob:")) {
+    payload.libRef = { table: DB_TABLE.MEDIA_LIBRARY, id: item.id };
+  }
 
   if (
     isVideo &&
