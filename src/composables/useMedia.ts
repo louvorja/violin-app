@@ -486,15 +486,8 @@ const _self = {
     if ($userdata.get(KEYS.REMOTE.IS_CONNECTED)) {
       _setPlaybackContext(playbackContext);
       const tag = params.mode == "audio" ? 1 : params.mode == "instrumental" ? 2 : 3;
-
-      const url =
-        $userdata.get(KEYS.REMOTE.URL) +
-        "/api/open-song?id=" +
-        params.id_music +
-        "&tag=" +
-        tag +
-        "&token=" +
-        $userdata.get(KEYS.REMOTE.TOKEN);
+      const baseUrl = $userdata.get(KEYS.REMOTE.URL);
+      const token = $userdata.get(KEYS.REMOTE.TOKEN);
 
       $alert.info("modules.media.alerts.open_remote");
       const remoteStartedAt = Date.now();
@@ -503,8 +496,10 @@ const _self = {
         _telemetryFor(playbackContext, { stage: "remote_request" })
       );
       try {
-        const response = await fetchWithTimeout(url, {
-          method: "GET",
+        const response = await fetchWithTimeout(`${baseUrl}/api/open-song?token=${token}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: params.id_music, tag }),
           mode: "cors",
           timeout: NET_TIMEOUT.DEFAULT,
           source: "open-song",

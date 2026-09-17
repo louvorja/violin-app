@@ -9,6 +9,14 @@ import { ICONS } from "@/config/Icons";
 
 const DEFAULT_COLOR = "#4F0000";
 
+/** Formata Date → "YYYY-MM-DD" no fuso local (evita o bug do toISOString em UTC). */
+export function toLocalDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function uid(prefix = "item_"): string {
   const d = new Date();
   const pad = (n: number, l = 2) => String(n).padStart(l, "0");
@@ -463,7 +471,7 @@ export default {
   },
 
   findScheduledForToday(categoriaId: string | number, date = new Date()): ScheduledItem | undefined {
-    const iso = date.toISOString().slice(0, 10);
+    const iso = toLocalDate(date);
     const catStr = String(categoriaId);
     const all = this.scheduledItems().filter((i) => String(i.categoria) === catStr);
     return all.find((i) => i.data === iso);

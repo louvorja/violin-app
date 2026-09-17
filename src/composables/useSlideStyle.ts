@@ -18,6 +18,85 @@ import { SLIDE_STYLE_DEFAULT } from "@/config/SlideStyle";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { FONT, resolveFont } from "@/config/Fonts";
+import { getSetting } from "@/helpers/SettingsStorage";
+
+const SLIDE_BG_STORAGE_ID = "slide_custom_background";
+const RETURN_BG_TOP_STORAGE_ID = "return_custom_bg_top";
+const RETURN_BG_BOTTOM_STORAGE_ID = "return_custom_bg_bottom";
+
+/**
+ * Cache da imagem de fundo resolvida a partir do IndexedDB.
+ * Blob URLs são efêmeras — não podem ser persistidas em UserData.
+ * O binário fica seguro no IndexedDB; aqui criamos a blob URL uma
+ * vez por sessão e reutilizamos.
+ */
+let _slideBgBlobUrl: string | null = null;
+let _slideBgResolving = false;
+const _slideBgReady = ref(false);
+
+async function _resolveSlideBgFromIdb(): Promise<void> {
+  if (_slideBgResolving) return;
+  _slideBgResolving = true;
+  try {
+    const s = await getSetting<any>(SLIDE_BG_STORAGE_ID).catch(() => null);
+    if (s?.image) {
+      const blob = new Blob([s.image], { type: s.mime || "image/png" });
+      if (_slideBgBlobUrl) URL.revokeObjectURL(_slideBgBlobUrl);
+      _slideBgBlobUrl = URL.createObjectURL(blob);
+    } else {
+      if (_slideBgBlobUrl) {
+        URL.revokeObjectURL(_slideBgBlobUrl);
+        _slideBgBlobUrl = null;
+      }
+    }
+  } finally {
+    _slideBgResolving = false;
+    _slideBgReady.value = true;
+  }
+}
+
+let _returnTopBlobUrl: string | null = null;
+let _returnBottomBlobUrl: string | null = null;
+let _returnBgResolving = false;
+const _returnBgReady = ref(false);
+
+async function _resolveReturnBgFromIdb(): Promise<void> {
+  if (_returnBgResolving) return;
+  _returnBgResolving = true;
+  try {
+    const [top, bottom] = await Promise.all([
+      getSetting<any>(RETURN_BG_TOP_STORAGE_ID).catch(() => null),
+      getSetting<any>(RETURN_BG_BOTTOM_STORAGE_ID).catch(() => null),
+    ]);
+    if (top?.image) {
+      const blob = new Blob([top.image], { type: top.mime || "image/png" });
+      if (_returnTopBlobUrl) URL.revokeObjectURL(_returnTopBlobUrl);
+      _returnTopBlobUrl = URL.createObjectURL(blob);
+    } else {
+      if (_returnTopBlobUrl) { URL.revokeObjectURL(_returnTopBlobUrl); _returnTopBlobUrl = null; }
+    }
+    if (bottom?.image) {
+      const blob = new Blob([bottom.image], { type: bottom.mime || "image/png" });
+      if (_returnBottomBlobUrl) URL.revokeObjectURL(_returnBottomBlobUrl);
+      _returnBottomBlobUrl = URL.createObjectURL(blob);
+    } else {
+      if (_returnBottomBlobUrl) { URL.revokeObjectURL(_returnBottomBlobUrl); _returnBottomBlobUrl = null; }
+    }
+  } finally {
+    _returnBgResolving = false;
+    _returnBgReady.value = true;
+  }
+}
+
+/**
+ * Força re-resolução das imagens de fundo do retorno a partir do IndexedDB.
+ * Chamado pelo AppMenuOpcoes após salvar/remover imagens.
+ */
+export function refreshReturnBg(): void {
+  _returnBgResolving = false;
+  _returnBgReady.value = false;
+  void _resolveReturnBgFromIdb();
+}
 
 export type SlideOption = Record<string, unknown> | null;
 
@@ -28,10 +107,14 @@ interface SlideStyleAPI {
   auxStyle:           (slide?: SlideOption) => CSSProperties;
   nextStyle:          (slide?: SlideOption) => CSSProperties;
   bgStyle:            (slide?: SlideOption) => CSSProperties;
+  returnTopBgStyle:   () => CSSProperties;
+  returnBottomBgStyle:() => CSSProperties;
   rootStyle:          ComputedRef<CSSProperties>;
   repeatColor:        () => string;
   textBoxStyle:       () => CSSProperties;
   textTransform:      ComputedRef<string>;
+  returnTopTextTransform:    ComputedRef<string>;
+  returnBottomTextTransform: ComputedRef<string>;
 }
 
 interface SlideCfg {
@@ -53,12 +136,13 @@ interface SlideCfg {
   show_title_first_slide: boolean;
   text_align: "top" | "center" | "bottom";
   transition_speed_ms: number;
-  text_bg_transparent: boolean;
+  text_bg_opacity: number;
   text_bg_blur_enabled: boolean;
   text_bg_blur: number;
   text_border_enabled: boolean;
   text_border_color: string;
   text_border_width: number;
+  text_border_radius: number;
   affect_external_slides: boolean;
   custom_background_active: boolean;
   shadow_enabled: boolean;
@@ -66,6 +150,23 @@ interface SlideCfg {
   shadow_blur: number;
   shadow_offset_x: number;
   shadow_offset_y: number;
+  // Fundo da tela de retorno
+  custom_return_background_active: boolean;
+  return_bg_top_color: string;
+  return_bg_top_image: string;
+  return_bg_top_position: string;
+  return_bg_bottom_color: string;
+  return_bg_bottom_image: string;
+  return_bg_bottom_position: string;
+  // Formatação do retorno
+  return_height_bottom: number;
+  return_font_size_cover: number;
+  return_font_size_lyric: number;
+  return_top_text_case: string;
+  return_top_text_align: string;
+  return_bottom_text_case: string;
+  return_bottom_text_align: string;
+  custom_return_text_format_active: boolean;
 }
 
 /**
@@ -116,7 +217,9 @@ const _readSlideOpts = (): SlideCfg => {
     const titleSize = Number($userdata.get<number>(KEYS.OPTIONS.SLIDE.TITLE_SIZE, null) ?? NaN);
     const bodySize = Number($userdata.get<number>(KEYS.OPTIONS.SLIDE.BODY_SIZE, null) ?? NaN);
     const auxSize = Number($userdata.get<number>(KEYS.OPTIONS.SLIDE.AUX_SIZE, null) ?? NaN);
-    const textBgTransparent = $userdata.get<boolean>(KEYS.OPTIONS.SLIDE.TEXT_BG_TRANSPARENT, null);
+    const textBgOpacity = _numeroNaFaixa(
+      KEYS.OPTIONS.SLIDE.TEXT_BG_OPACITY, 75, 0, 100
+    );
     const textBorderWidth = Number(
       $userdata.get<number>(KEYS.OPTIONS.SLIDE.TEXT_BORDER_WIDTH, 2)
     );
@@ -127,7 +230,7 @@ const _readSlideOpts = (): SlideCfg => {
     if (Number.isFinite(titleSize) && titleSize > 0) merged.font_size_cover = titleSize;
     if (Number.isFinite(bodySize) && bodySize > 0) merged.font_size_lyric = bodySize;
     if (Number.isFinite(auxSize) && auxSize > 0) merged.font_size_aux = auxSize;
-    if (typeof textBgTransparent === "boolean") merged.text_bg_transparent = textBgTransparent;
+    merged.text_bg_opacity = textBgOpacity;
     merged.text_border_enabled =
       $userdata.get<boolean>(KEYS.OPTIONS.SLIDE.TEXT_BORDER_ENABLED, false) === true;
     merged.text_border_color =
@@ -135,6 +238,9 @@ const _readSlideOpts = (): SlideCfg => {
     merged.text_border_width = Number.isFinite(textBorderWidth)
       ? Math.min(10, Math.max(1, textBorderWidth))
       : 2;
+    merged.text_border_radius = _numeroNaFaixa(
+      KEYS.OPTIONS.SLIDE.TEXT_BORDER_RADIUS, 0, 0, 50
+    );
   }
 
   // Flag global de "afetar slides externos"
@@ -155,26 +261,23 @@ const _readSlideOpts = (): SlideCfg => {
   merged.shadow_blur = _numeroNaFaixa(KEYS.OPTIONS.SLIDE.SHADOW_BLUR, 12, 0, 30);
   merged.shadow_offset_x = _numeroNaFaixa(KEYS.OPTIONS.SLIDE.SHADOW_OFFSET_X, 0, -20, 20);
   merged.shadow_offset_y = _numeroNaFaixa(KEYS.OPTIONS.SLIDE.SHADOW_OFFSET_Y, 2, -20, 20);
-  merged.font_size_next = _numeroNaFaixa(
-    KEYS.OPTIONS.SLIDE.FONT_SIZE_NEXT,
-    SLIDE_STYLE_DEFAULT.font_size_next,
-    3,
-    15
-  );
 
   // Fundo personalizado
   if ($userdata.get(KEYS.OPTIONS.SLIDE.CUSTOM_BACKGROUND, false) as boolean) {
     merged.custom_background_active = true;
     const bgTransparent = $userdata.get<boolean>(KEYS.OPTIONS.SLIDE.BG_TRANSPARENT, false) === true;
     const bgColor = $userdata.get<string>(KEYS.OPTIONS.SLIDE.BG_COLOR, null);
-    const bgImage = $userdata.get<string>(KEYS.OPTIONS.SLIDE.BG_IMAGE, null);
     const bgPos = $userdata.get<string>(KEYS.OPTIONS.SLIDE.BG_POSITION, null);
     merged.background_color = bgTransparent
       ? "transparent"
       : typeof bgColor === "string"
         ? bgColor
         : merged.background_color;
-    if (typeof bgImage === "string") merged.background_image = bgImage;
+    // Imagem resolvida do IndexedDB (blob URL cacheada em memória).
+    // O valor antigo em UserData era uma blob URL efêmera que morria no
+    // unmount do painel de Opções; agora o binário mora no IndexedDB e
+    // a blob URL é criada uma vez por sessão.
+    if (_slideBgBlobUrl) merged.background_image = _slideBgBlobUrl;
     if (typeof bgPos === "string") {
       const map: Record<string, string> = {
         center: "center center",
@@ -191,6 +294,73 @@ const _readSlideOpts = (): SlideCfg => {
     if (typeof globalBg === "string") merged.background_color = globalBg;
   }
 
+  // Fundo da tela de retorno (independente do fundo dos slides)
+  if ($userdata.get(KEYS.OPTIONS.SLIDE.CUSTOM_RETURN_BACKGROUND, false) as boolean) {
+    merged.custom_return_background_active = true;
+    const topColor = $userdata.get<string>(KEYS.OPTIONS.SLIDE.RETURN_BG_TOP_COLOR, null);
+    const bottomColor = $userdata.get<string>(KEYS.OPTIONS.SLIDE.RETURN_BG_BOTTOM_COLOR, null);
+    const topPos = $userdata.get<string>(KEYS.OPTIONS.SLIDE.RETURN_BG_TOP_POSITION, null);
+    const bottomPos = $userdata.get<string>(KEYS.OPTIONS.SLIDE.RETURN_BG_BOTTOM_POSITION, null);
+    if (typeof topColor === "string") merged.return_bg_top_color = topColor;
+    if (typeof bottomColor === "string") merged.return_bg_bottom_color = bottomColor;
+    if (_returnTopBlobUrl) merged.return_bg_top_image = _returnTopBlobUrl;
+    if (_returnBottomBlobUrl) merged.return_bg_bottom_image = _returnBottomBlobUrl;
+    if (typeof topPos === "string") {
+      const map: Record<string, string> = {
+        center: "center center", cover: "center center", contain: "center center",
+        stretch: "center center", tile: "0 0",
+      };
+      merged.return_bg_top_position = map[topPos] || topPos;
+    }
+    if (typeof bottomPos === "string") {
+      const map: Record<string, string> = {
+        center: "center center", cover: "center center", contain: "center center",
+        stretch: "center center", tile: "0 0",
+      };
+      merged.return_bg_bottom_position = map[bottomPos] || bottomPos;
+    }
+  }
+
+  // Formatação de texto do retorno — tamanhos, estilo e alinhamento
+  const customReturnText =
+    $userdata.get<boolean>(KEYS.OPTIONS.SLIDE.CUSTOM_RETURN_TEXT_FORMAT, false) === true;
+  merged.custom_return_text_format_active = customReturnText;
+  if (customReturnText) {
+    const returnHeightBottom = _numeroNaFaixa(
+      KEYS.OPTIONS.SLIDE.RETURN_HEIGHT_BOTTOM,
+      SLIDE_STYLE_DEFAULT.return_height_bottom, 8, 50
+    );
+    const returnCoverSize = _numeroNaFaixa(
+      KEYS.OPTIONS.SLIDE.RETURN_FONT_SIZE_COVER,
+      SLIDE_STYLE_DEFAULT.return_font_size_cover, 6, 60
+    );
+    const returnLyricSize = _numeroNaFaixa(
+      KEYS.OPTIONS.SLIDE.RETURN_FONT_SIZE_LYRIC,
+      SLIDE_STYLE_DEFAULT.return_font_size_lyric, 6, 60
+    );
+    merged.return_height_bottom = returnHeightBottom;
+    merged.return_font_size_cover = returnCoverSize;
+    merged.return_font_size_lyric = returnLyricSize;
+
+    // Próximo slide — tamanho do texto no rodapé
+    merged.font_size_next = _numeroNaFaixa(
+      KEYS.OPTIONS.SLIDE.FONT_SIZE_NEXT,
+      SLIDE_STYLE_DEFAULT.font_size_next, 3, 15
+    );
+
+    // Topo — estilo e alinhamento
+    const topCase = $userdata.get<string>(KEYS.OPTIONS.SLIDE.RETURN_TOP_TEXT_CASE, null);
+    const topAlign = $userdata.get<string>(KEYS.OPTIONS.SLIDE.RETURN_TOP_TEXT_ALIGN, null);
+    if (typeof topCase === "string") merged.return_top_text_case = topCase;
+    if (typeof topAlign === "string") merged.return_top_text_align = topAlign;
+
+    // Rodapé — estilo e alinhamento
+    const bottomCase = $userdata.get<string>(KEYS.OPTIONS.SLIDE.RETURN_BOTTOM_TEXT_CASE, null);
+    const bottomAlign = $userdata.get<string>(KEYS.OPTIONS.SLIDE.RETURN_BOTTOM_TEXT_ALIGN, null);
+    if (typeof bottomCase === "string") merged.return_bottom_text_case = bottomCase;
+    if (typeof bottomAlign === "string") merged.return_bottom_text_align = bottomAlign;
+  }
+
   return merged;
 };
 
@@ -201,7 +371,30 @@ export function useSlideStyle(): SlideStyleAPI {
     _tick.value += 1;
   });
 
-  const cfg = computed(() => { void _tick.value; return _readSlideOpts(); });
+  // Re resolve imagens de fundo do retorno quando outra janela altera
+  // (pick/remove no AppMenuOpcoes da janela principal).
+  useBroadcastListener(BROADCAST_TYPE.RETURN_BG_CHANGED, () => {
+    refreshReturnBg();
+  });
+
+  // Resolve imagem de fundo do IndexedDB na primeira uso (uma vez por sessão).
+  if (!_slideBgResolving && !_slideBgReady.value) {
+    _resolveSlideBgFromIdb();
+  }
+  if (!_returnBgResolving && !_returnBgReady.value) {
+    _resolveReturnBgFromIdb();
+  }
+
+  const cfg = computed(() => {
+    void _tick.value;
+    void _slideBgReady.value; // dependência reativa — re-avalia quando o IndexedDB resolve
+    void _returnBgReady.value;
+    // Re-avalia quando o checkbox de fundo personalizado ou retorno é toggleado
+    void $userdata.get<boolean>(KEYS.OPTIONS.SLIDE.CUSTOM_BACKGROUND, false);
+    void $userdata.get<boolean>(KEYS.OPTIONS.SLIDE.CUSTOM_RETURN_BACKGROUND, false);
+    void $userdata.get<boolean>(KEYS.OPTIONS.SLIDE.CUSTOM_RETURN_TEXT_FORMAT, false);
+    return _readSlideOpts();
+  });
 
   function _baseFont(slide: SlideOption): string {
     const fromSlide = slide && typeof slide.font === "string" ? slide.font : null;
@@ -293,15 +486,7 @@ export function useSlideStyle(): SlideStyleAPI {
     const sizePct = cfg.value.font_size_next;
     return {
       fontFamily: _baseFont(slide ?? null),
-      // `cqh` do painel do rodapé (`.return-bottom`, container query),
-      // não `vh` da tela inteira. O fator 100/18 preserva o tamanho visual
-      // que a opção tinha quando era calculada contra o viewport inteiro.
-      //
-      // Só isso ainda deixava duas linhas extrapolarem o painel com valores
-      // altos (8–15). O segundo teto reserva a altura do content box para
-      // duas linhas de line-height 1.2: 2 * 1.2 * 41.6667cqh = 100cqh.
-      // O 1px de folga evita arredondamento subpixel no Chromium/Windows.
-      fontSize: `clamp(14px, min(${sizePct * (100 / 18)}cqh, calc(41.6667cqh - 1px)), 120px)`,
+      fontSize: `clamp(20px, ${sizePct}vh, 200px)`,
       color: cfg.value.color_next,
       opacity: 0.85,
       fontWeight: 600,
@@ -347,6 +532,28 @@ export function useSlideStyle(): SlideStyleAPI {
     };
   }
 
+  function returnTopBgStyle(): CSSProperties {
+    const url = cfg.value.return_bg_top_image || "";
+    return {
+      backgroundImage: url ? `url(${url})` : undefined,
+      backgroundSize: "cover",
+      backgroundPosition: cfg.value.return_bg_top_position,
+      backgroundColor: cfg.value.return_bg_top_color,
+      backgroundRepeat: "no-repeat",
+    };
+  }
+
+  function returnBottomBgStyle(): CSSProperties {
+    const url = cfg.value.return_bg_bottom_image || "";
+    return {
+      backgroundImage: url ? `url(${url})` : undefined,
+      backgroundSize: "cover",
+      backgroundPosition: cfg.value.return_bg_bottom_position,
+      backgroundColor: cfg.value.return_bg_bottom_color,
+      backgroundRepeat: "no-repeat",
+    };
+  }
+
   /** Cor para texto repetido (refrão). */
   function repeatColor(): string {
     return cfg.value.color_repeat;
@@ -358,12 +565,15 @@ export function useSlideStyle(): SlideStyleAPI {
       ? `blur(${cfg.value.text_bg_blur}px)`
       : "none";
     return {
-      backgroundColor: cfg.value.text_bg_transparent ? "transparent" : "rgba(0, 0, 0, 0.75)",
+      backgroundColor: `rgba(0, 0, 0, ${cfg.value.text_bg_opacity / 100})`,
       backdropFilter,
       WebkitBackdropFilter: backdropFilter,
       border: cfg.value.text_border_enabled
         ? `${cfg.value.text_border_width}px solid ${cfg.value.text_border_color}`
         : "none",
+      borderRadius: cfg.value.text_border_radius
+        ? `${cfg.value.text_border_radius}px`
+        : undefined,
       boxSizing: "border-box",
     };
   }
@@ -386,5 +596,24 @@ export function useSlideStyle(): SlideStyleAPI {
     return bruto === "normal" ? "none" : bruto;
   });
 
-  return { cfg, coverStyle, lyricStyle, auxStyle, nextStyle, bgStyle, rootStyle, repeatColor, textBoxStyle, textTransform };
+  const _normalizeTextCase = (v: string | null | undefined): string => {
+    const raw = v ?? "uppercase";
+    return raw === "normal" ? "none" : raw;
+  };
+
+  const returnTopTextTransform = computed(() => {
+    if (cfg.value.custom_return_text_format_active) {
+      return _normalizeTextCase(cfg.value.return_top_text_case);
+    }
+    return "uppercase";
+  });
+
+  const returnBottomTextTransform = computed(() => {
+    if (cfg.value.custom_return_text_format_active) {
+      return _normalizeTextCase(cfg.value.return_bottom_text_case);
+    }
+    return "uppercase";
+  });
+
+  return { cfg, coverStyle, lyricStyle, auxStyle, nextStyle, bgStyle, returnTopBgStyle, returnBottomBgStyle, rootStyle, repeatColor, textBoxStyle, textTransform, returnTopTextTransform, returnBottomTextTransform };
 }

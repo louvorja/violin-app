@@ -3,10 +3,6 @@
     "name": "Louvor JA"
   },
   "modules": {
-    "liturgy": {
-      "name": "Liturgia",
-      "empty": "Ningún ítem en la liturgia de hoy."
-    },
     "invalid": {
       "title": "#Error#"
     }
@@ -61,7 +57,8 @@
       "remove": "Quitar",
       "select_placeholder": "Seleccione...",
       "search_placeholder": "Buscar...",
-      "no_results": "Ningún resultado."
+      "no_results": "Ningún resultado.",
+      "copied": "Copiado"
     },
     "inputs": {
       "search": "Buscar"
@@ -216,6 +213,8 @@
       "affect_external": "Formato de texto y fondo personalizados afectan diapositivas externas",
       "align_bottom": "Abajo",
       "align_center": "Centro",
+      "align_left": "Izquierda",
+      "align_right": "Derecha",
       "align_top": "Arriba",
       "alignment": "Alineación de la letra:",
       "always_on_top": "Mostrar músicas siempre al frente",
@@ -231,6 +230,7 @@
       "case_uppercase": "MAYÚSCULA",
       "custom_background": "Fondo personalizado",
       "custom_return_text_format": "Formato de texto de retorno personalizado",
+      "custom_return_background": "Fondo de pantalla de retorno personalizado",
       "custom_text_format": "Formato de texto personalizado",
       "fmt_attr_color": "Color",
       "fmt_attr_size": "Tamaño (%)",
@@ -269,17 +269,23 @@
       "show_title": "Mostrar título de la música en la primera diapositiva",
       "text_bg_blur": "Intensidad del desenfoque:",
       "text_bg_blur_enabled": "Fondo desenfocado",
-      "text_bg_transparent": "Fondo de Texto Transparente",
+      "text_bg_opacity": "Opacidad del Fondo del Texto",
       "text_border_color": "Color del borde:",
       "text_border_enabled": "Borde del cuadro de texto",
       "text_border_width": "Grosor del borde:",
+      "text_border_radius": "Redondez del borde:",
       "text_case": "Estilo de letra:",
       "text_color": "Texto:",
       "text_size": "Tamaño del texto:",
       "text_size_label": "Texto:",
       "title": "Diapositivas de Músicas",
       "title_color": "Color Título:",
-      "title_size": "Tam. Título:"
+      "title_size": "Tam. Título:",
+      "return_bg_top": "Parte superior (diapositiva actual):",
+      "return_bg_bottom": "Parte inferior (próxima frase):",
+      "return_font_size_cover": "Tam. portada:",
+      "return_font_size_lyric": "Tam. letra:",
+      "return_height_bottom": "Altura pie (vh):"
     },
     "background": {
       "title": "Imagen de Fondo",
@@ -295,7 +301,7 @@
       "http_server": "Servidor",
       "server_running": "En ejecución en el puerto {port}",
       "server_stopped": "Servidor apagado",
-      "server_stopped_hint": "Servidor detenido. La proyección de videos YouTube puede no funcionar. Reinicie para aplicar cambios de puerto.",
+      "server_stopped_hint": "Servidor detenido. La proyección de videos YouTube puede no funcionar.",
       "start_server": "Encender",
       "stop_server": "Apagar",
       "restart_server": "Reiniciar",
@@ -305,6 +311,8 @@
       "http_server_hint": "El servidor HTTP es necesario para la proyección de videos de YouTube y para la comunicación entre ventanas (BroadcastChannel).",
       "port": "Puerto del servidor HTTP",
       "port_hint": "Reinicie el servidor para aplicar. Puerto predeterminado: 7070",
+      "select_ip": "Dirección IP",
+      "select_ip_hint": "Seleccione qué IP mostrar en las URLs y códigos QR.",
       "copy": "Copiar",
       "copied": "Copiado",
       "open_window": "Abrir",
@@ -326,7 +334,42 @@
       "win_operator": "Operador",
       "win_clock": "Reloj",
       "remote_control": "Control Remoto",
-      "qr_code": "Código QR"
+      "qr_code": "Código QR",
+      "devices_section": "Dispositivos Autorizados",
+      "devices_hint": "Dispositivos que pueden acceder al servidor HTTP con permisos específicos. Instala la app Violin Remote para acceder",
+      "only_authorized_devices": "Permitir solo dispositivos registrados",
+      "only_authorized_hint": "Cuando está activo, solo los dispositivos registrados pueden acceder a la API. Localhost siempre tiene acceso.",
+      "no_devices": "Ningún dispositivo autorizado.",
+      "add_device": "Agregar Dispositivo",
+      "scan_qr": "Escanear Código QR",
+      "device_qr_hint": "Escanee este código QR con el navegador del dispositivo para registrarse.",
+      "device_name": "Nombre del dispositivo",
+      "device_permissions": "Permisos",
+      "permissions_title": "Permisos del Dispositivo",
+      "edit_device": "Editar Dispositivo",
+      "approve_device": "Aprobar",
+      "edit": "Editar",
+      "reject_device": "Rechazar",
+      "remove_confirm_title": "Eliminar Dispositivo",
+      "remove_confirm_text": "¿Desea realmente eliminar este dispositivo? No podrá acceder más al programa.",
+      "platform_android": "Android",
+      "platform_ios": "iOS",
+      "platform_web": "Web",
+      "device_platform_label": "Plataforma",
+      "no_permissions": "Sin permisos",
+      "permission_root": "Acceso total",
+      "permission_music": "Músicas",
+      "permission_bible": "Biblia",
+      "permission_liturgy": "Liturgia",
+      "permission_announce": "Anuncios",
+      "permission_chat": "Chat",
+      "select_all": "Seleccionar todas",
+      "deselect_all": "Desmarcar todas",
+      "app_dialog_title": "Violin Remote",
+      "app_dialog_description": "Descargue Violin Remote y use su celular como control remoto de LouvorJA. Escanee el código QR para instalar.",
+      "app_dialog_android": "Disponible en Google Play",
+      "app_dialog_ios": "Disponible en App Store",
+      "app_download_label": "Descargue la app"
     },
     "module": {
       "bible": {
@@ -601,10 +644,23 @@
       "special_thanks": "Agradecimientos Especiales"
     }
   },
+  "licenses": {
+    "intro": "LouvorJA Violin es un software libre y de código abierto, licenciado bajo MIT. Agradecemos todas las bibliotecas y herramientas de código abierto que hacen posible este proyecto.",
+    "libraries": "Bibliotecas y Herramientas"
+  },
   "remote_control": {
     "tabs": {
       "slides": "Diapositivas",
-      "announcements": "Anuncios"
+      "announcements": "Anuncios",
+      "shortcuts": "Atajos"
+    },
+    "music": {
+      "mode_title": "Ejecutar como",
+      "mode_sung": "Cantado",
+      "mode_playback": "Playback",
+      "mode_lyric": "Letra",
+      "mode_audio_only": "Solo audio",
+      "mode_playback_only": "Solo playback"
     },
     "bible": {
       "clear_screen": "Limpiar la Pantalla",
@@ -623,6 +679,17 @@
       "controls": "Controles de Anuncios",
       "stop_projection": "Finalizar Proyección",
       "projection_closed": "Proyección de anuncios finalizada"
+    },
+    "shortcuts": {
+      "nav_group": "Navegación",
+      "media_group": "Medios",
+      "general_group": "General",
+      "play_pause": "Play / Pausa",
+      "close_projection": "Finalizar Proyección",
+      "prev_music": "Música Anterior",
+      "next_music": "Siguiente Música",
+      "overlay": "Overlay",
+      "background": "Proyección de Fondo"
     },
     "errors": {
       "generic": "Error"
@@ -989,6 +1056,7 @@
       "toggle_live": "Iniciar/salir modo culto"
     },
     "live_active": "MODO CULTO ACTIVO",
+    "exit_confirm": "¿Desea realmente salir y cerrar el programa?",
     "appmenu": "Menú",
     "desktop_download": {
       "title": "LouvorJA en la computadora de la iglesia",
@@ -1058,6 +1126,7 @@
       "albums": "Activar/Desactivar Álbumes",
       "dev": "Desarrollador",
       "donate": "Haga su Donación",
+      "licenses": "Licencias",
       "exit": "Salir"
     },
     "window": {
@@ -1179,6 +1248,7 @@
     "pause": "Pausar/reanudar reproducción",
     "ctrl_shift_f2": "Limpiar caché y recargar datos",
     "ctrl_alt_d": "Alternar modo desarrollador",
+    "ctrl_i": "Abrir/cerrar chat",
     "prev_slide": "Diapositiva anterior",
     "next_slide": "Siguiente diapositiva",
     "bible_prev_verse": "Versículo anterior",
@@ -1355,5 +1425,18 @@
     "fullscreen_auto_hint": "Se necesita un clic porque el navegador no permite que los sitios entren en pantalla completa por sí solos. En la aplicación de escritorio la proyección ya abre en pantalla completa, sin clic.",
     "video_unavailable": "Video no disponible",
     "video_unavailable_hint": "No se pudo cargar el video. Verifique la conexión a internet."
+  },
+  "chat": {
+    "title": "Chat",
+    "placeholder": "Escribe tu mensaje...",
+    "send": "Enviar",
+    "auto_open_on": "Abrir automáticamente con nuevos mensajes",
+    "auto_open_off": "No abrir automáticamente",
+    "pin": "Fijar panel",
+    "unpin": "Desfijar panel",
+    "empty": "Ningún mensaje aún",
+    "toggle": "Chat",
+    "clear": "Limpiar mensajes",
+    "confirm_clear": "¿Estás seguro de que deseas limpiar todos los mensajes?"
   }
 }

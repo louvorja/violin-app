@@ -13,7 +13,13 @@
       :style="{ '--footer-height': footerHeight }"
     >
       <div class="shell-grid">
-        <div class="shell-center">
+        <ChatDrawer v-if="Platform.isDesktop" />
+
+        <div
+          class="shell-center"
+          :class="{ 'shell-content--desktop-download': showDesktopDownload ,
+          'shell-center--drawer-pinned': isPinned && isChatOpen }"
+        >
           <div
             class="shell-content"
             :class="{ 'shell-content--desktop-download': showDesktopDownload }"
@@ -168,12 +174,21 @@ import { formatBackgroundTaskDetail } from "@/helpers/BackgroundTaskDetail";
 import { useSyncManager } from "@/composables/useSyncManager";
 import BundleInstaller from "@/helpers/BundleInstaller";
 import { detectDesktopDownloadPlatform } from "@/helpers/DesktopDownload";
+import ChatDrawer from "@/components/ChatDrawer.vue";
+import { useChat } from "@/composables/useChat";
+import ScheduledStore from "@/helpers/ScheduledStore";
 
 const { locale, t } = useI18n();
 const { applyStoredTheme } = useAppTheme();
 const { platform, width } = useViewport();
 const bgTasks = useBackgroundTasks();
 const sync = useSyncManager();
+const {
+  toggleOpen: toggleChat,
+  loadHistory: loadChatHistory,
+  isPinned,
+  isOpen: isChatOpen,
+} = useChat();
 
 const cmdPaletteOpen = ref(false);
 const musicSearchOpen = ref(false);
@@ -274,6 +289,16 @@ const onOpenStartupCheck = () => {
 };
 
 let beforeUnloadHandler: ((e: BeforeUnloadEvent) => void) | null = null;
+
+/**
+ * pagehide garante que escritas pendentes no ScheduledStore (itens agendados)
+ * sejam flushadas antes do unload. Diferente de beforeunload, funciona sem
+ * cancelar o close no Electron e o browser mantém a página viva até as
+ * Promises resolverem (dentro do limite de tempo do browser).
+ */
+function onPageHide() {
+  void ScheduledStore.flush();
+}
 
 /**
  * Só vale avisar antes de recarregar quando o reload destrói algo em curso:
@@ -688,6 +713,10 @@ onMounted(() => {
   window.addEventListener("louvorja:open-music-search", onOpenMusicSearch);
   window.addEventListener("louvorja:open-bible-search", onOpenBibleSearch);
   window.addEventListener("louvorja:open-startup-check", onOpenStartupCheck);
+  window.addEventListener("louvorja:toggle-chat", toggleChat);
+
+  // Carrega histórico do chat
+  loadChatHistory();
 
   // Reseta estado da projeção background — garante que restarts
   // (normais ou por crash) não deixam a chave "presada" como true
@@ -720,6 +749,9 @@ onMounted(() => {
     };
     window.addEventListener("beforeunload", beforeUnloadHandler);
   }
+
+  // pagehide: flush de itens agendados antes do unload (web + Electron).
+  window.addEventListener("pagehide", onPageHide);
 
   $appdata.set(KEYS.SHELL.IS_MOBILE, platform.android || platform.ios);
   if (platform.electron) {
@@ -873,6 +905,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   if (beforeUnloadHandler) window.removeEventListener("beforeunload", beforeUnloadHandler);
+  window.removeEventListener("pagehide", onPageHide);
   if (messageHandler) window.removeEventListener("message", messageHandler);
 
   if (_updaterUnsub) {
@@ -896,6 +929,7 @@ onBeforeUnmount(() => {
   window.removeEventListener("louvorja:open-music-search", onOpenMusicSearch);
   window.removeEventListener("louvorja:open-bible-search", onOpenBibleSearch);
   window.removeEventListener("louvorja:open-startup-check", onOpenStartupCheck);
+  window.removeEventListener("louvorja:toggle-chat", toggleChat);
 });
 </script>
 
@@ -980,6 +1014,7 @@ onBeforeUnmount(() => {
   padding-bottom: var(--footer-height);
 }
 .shell-grid {
+  position: relative;
   display: flex;
   flex: 1;
   min-height: 0;
@@ -991,6 +1026,11 @@ onBeforeUnmount(() => {
   flex-direction: column;
   min-width: 0;
   overflow: hidden;
+  margin-left: 0;
+  transition: margin-left 0.35s var(--lj-ease);
+}
+.shell-center--drawer-pinned {
+  margin-left: 300px;
 }
 .shell-content {
   flex: 1;

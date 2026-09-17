@@ -11,3 +11,16 @@ export async function apiFetch(input: RequestInfo | URL, init?: FetchOptions): P
   }
   return res
 }
+
+export function postApi(
+  path: string,
+  body: Record<string, unknown>,
+  token?: string,
+): Promise<Response> {
+  const url = token ? `${path}?token=${token}` : path
+  return apiFetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  })
+}

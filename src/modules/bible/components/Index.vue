@@ -7,8 +7,8 @@
           :items="versions_list ?? []"
           item-value="value"
           item-label="title"
-          :placeholder="t('version')"
-          :aria-label="t('version')"
+          :placeholder="tm('version')"
+          :aria-label="tm('version')"
           @click="refreshDownloadedVersions"
           @update:model-value="bible.id_bible_version = Number($event)"
         />
@@ -16,7 +16,7 @@
         <LjCheckbox
           v-if="!compact"
           v-model="show_history"
-          :label="t('show_history')"
+          :label="tm('show_history')"
           class="bible-header__history"
         />
       </div>
@@ -28,8 +28,8 @@
           :items="books ?? []"
           item-value="id_bible_book"
           item-label="name"
-          :placeholder="t('book')"
-          :aria-label="t('book')"
+          :placeholder="tm('book')"
+          :aria-label="tm('book')"
           :icon="ICONS.BIBLE.BOOK_OPEN_PAGE"
           @update:model-value="bible.id_bible_book = Number($event)"
         />
@@ -38,14 +38,14 @@
           :items="chaptersList"
           item-value="id"
           item-label="value"
-          :placeholder="t('chapter')"
-          :aria-label="t('chapter')"
+          :placeholder="tm('chapter')"
+          :aria-label="tm('chapter')"
           :icon="ICONS.BIBLE.BOOKMARK"
           @update:model-value="bible.chapter = Number($event)"
         />
         <LjPopover align="start">
           <template #trigger>
-            <button type="button" class="bible-verses-trigger" :aria-label="t('verses')">
+            <button type="button" class="bible-verses-trigger" :aria-label="tm('verses')">
               <LjIcon
                 :icon="ICONS.FORMAT.LIST_NUMBERED"
                 :size="15"
@@ -81,8 +81,8 @@
             :items="books ?? []"
             item-value="id_bible_book"
             item-label="name"
-            :placeholder="t('book')"
-            :aria-label="t('book')"
+            :placeholder="tm('book')"
+            :aria-label="tm('book')"
             :icon="ICONS.BIBLE.BOOK_OPEN_PAGE"
             @update:model-value="bible.id_bible_book = Number($event)"
           />
@@ -120,8 +120,8 @@
             :items="chaptersList"
             item-value="id"
             item-label="value"
-            :placeholder="t('chapter')"
-            :aria-label="t('chapter')"
+            :placeholder="tm('chapter')"
+            :aria-label="tm('chapter')"
             :icon="ICONS.BIBLE.BOOKMARK"
             @update:model-value="bible.chapter = Number($event)"
           />
@@ -157,13 +157,13 @@
             v-model="verse_filter"
             clearable
             :icon="ICONS.ACTIONS.SEARCH"
-            :placeholder="t('locate')"
-            :aria-label="t('locate')"
+            :placeholder="tm('locate')"
+            :aria-label="tm('locate')"
           />
           <LjCheckbox
             v-if="verse_filter"
             v-model="filterNavigateOnly"
-            :label="t('filter_navigate_only')"
+            :label="tm('filter_navigate_only')"
           />
         </div>
         <div class="bible-col__verses-list">
@@ -193,11 +193,11 @@
       <!-- Coluna Histórico -->
       <div v-if="show_history" class="bible-col bible-col--history">
         <div class="bible-history-pane__title">
-          {{ t("history") }}
+          {{ tm("history") }}
         </div>
         <div class="bible-history-pane__list">
           <div v-if="!history.length" class="bible-history-pane__empty">
-            {{ t("no_history") }}
+            {{ tm("no_history") }}
           </div>
           <div
             v-for="(entry, idx) in history"
@@ -221,7 +221,7 @@
             :disabled="history_selected === null"
             @click="removeHistoryEntry()"
           >
-            {{ t("delete_selected") }}
+            {{ tm("delete_selected") }}
           </LjButton>
         </div>
       </div>
@@ -259,9 +259,9 @@
         size="sm"
         :disabled="!(select_bible?.verses && select_bible.verses.length > 0)"
         :icon="ICONS.ACTIONS.CLEAN"
-        @click="clearText()"
+        @click="clearTextm()"
       >
-        {{ t("clear_text") }}
+        {{ tm("clear_text") }}
       </LjButton>
       <LjDivider vertical />
       <LjButton
@@ -271,7 +271,7 @@
         :icon="ICONS.ACTIONS.PREVIOUS"
         @click="prevVerse()"
       >
-        {{ t("prev_verse") }}
+        {{ tm("prev_verse") }}
       </LjButton>
       <LjButton
         variant="ghost"
@@ -280,7 +280,7 @@
         :icon-end="ICONS.ACTIONS.NEXT"
         @click="nextVerse()"
       >
-        {{ t("next_verse") }}
+        {{ tm("next_verse") }}
       </LjButton>
     </template>
   </ModuleContainer>
@@ -396,7 +396,7 @@ const select_bible = reactive<BibleSelectionData>({
   text: null,
 });
 
-const t = (text: string): string => i18nT(`modules.${moduleId}.${text}`);
+const tm = (text: string): string => i18nT(`modules.${moduleId}.${text}`);
 
 const book = computed(() => books.value.find((b) => b.id_bible_book == bible.id_bible_book));
 const version = computed(() =>
@@ -438,7 +438,9 @@ watch(bibleSpotlightOpen, (val) => {
 
 const compact = computed(() => width.value <= 750);
 
-const versesSummary = computed(() => (bible.verses.length ? bible.verses.join(", ") : t("verses")));
+const versesSummary = computed(() =>
+  bible.verses.length ? bible.verses.join(", ") : tm("verses")
+);
 
 /**
  * Preto ou branco sobre a cor do livro. Cada livro traz do banco uma cor
@@ -1008,7 +1010,7 @@ function getSelectedVerses(keys: number[]): string {
   return result;
 }
 
-function clearText(): void {
+function clearTextm(): void {
   UserData.set(KEYS.MODULES.BIBLE.IS_PLAYING, false);
   bible.verses = [];
   Object.assign(select_bible, {
@@ -1029,7 +1031,7 @@ function clearText(): void {
 }
 
 function clean(): void {
-  clearText();
+  clearTextm();
   ProjectionWindows.closeProjectionWindows();
 }
 
@@ -1065,7 +1067,7 @@ async function stopProjection(): Promise<void> {
 useBroadcastListener(BROADCAST_TYPE.BIBLE_RIBBON_ACTION, (payload: any) => {
   switch (payload?.action) {
     case "clear":
-      clearText();
+      clearTextm();
       break;
     case "prev_verse":
       prevVerse();

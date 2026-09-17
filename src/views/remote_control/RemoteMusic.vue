@@ -11,7 +11,7 @@
     />
 
     <ul v-if="musicResults.length > 0" class="rm-list">
-      <li v-for="m in musicResults" :key="m.id_music" class="rm-item">
+      <li v-for="m in musicResults" :key="m.id_music" class="rm-item" @click="openVersionPicker(m)">
         <div class="rm-item__text">
           <span class="rm-item__title lj-u-truncate">{{ m.name }}</span>
           <span v-if="m.albums_names" class="rm-item__subtitle lj-u-truncate">
@@ -19,33 +19,13 @@
           </span>
         </div>
         <div class="rm-item__actions">
-          <!-- Cantada (tag=1) -->
           <LjButton
             variant="ghost"
             size="lg"
-            :icon="ICONS.MUSIC.SLIDES_AUDIO"
+            :icon="ICONS.PLAYER.PLAY_OUTLINE"
             icon-only
-            :title="t('ribbon.btn.sing')"
-            @click.stop="openMusic(m, 1)"
-          />
-          <!-- Instrumental (tag=2) -->
-          <LjButton
-            variant="ghost"
-            size="lg"
-            :icon="ICONS.MUSIC.SLIDES_PLAYBACK"
-            icon-only
-            :disabled="!m.has_instrumental_music"
-            :title="t('ribbon.btn.playback')"
-            @click.stop="openMusic(m, 2)"
-          />
-          <!-- Sem Áudio (tag=3) -->
-          <LjButton
-            variant="ghost"
-            size="lg"
-            :icon="ICONS.MUSIC.SLIDES_ONLY"
-            icon-only
-            :title="t('ribbon.btn.no_audio')"
-            @click.stop="openMusic(m, 3)"
+            :title="t('components.music_menu.execute')"
+            @click.stop="openVersionPicker(m)"
           />
         </div>
       </li>
@@ -56,17 +36,40 @@
     <div v-else-if="loadingMusics" class="rm-state rm-state--loading lj-u-text-center">
       <LjSpinner :size="24" />
     </div>
+
+    <LjDialog
+      v-model="versionPickerOpen"
+      size="sm"
+      :icon="ICONS.MUSIC.SING"
+      :title="selectedMusic?.name || ''"
+    >
+      <div class="rm-versions">
+        <p class="rm-versions__hint">{{ t("remote_control.music.mode_title") }}</p>
+        <button
+          v-for="opt in MUSIC_VERSIONS"
+          :key="opt.mode"
+          type="button"
+          class="rm-version"
+          :disabled="opt.needsPlayback && !selectedHasInstrumental"
+          @click="playVersion(opt.mode)"
+        >
+          <LjIcon :icon="opt.icon" :size="22" />
+          <span class="rm-version__label">{{ t(opt.labelKey) }}</span>
+        </button>
+      </div>
+    </LjDialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { LjButton, LjInput, LjSpinner } from "@/components/ui";
+import { LjButton, LjDialog, LjIcon, LjInput, LjSpinner } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { MusicAlbum, MusicItem } from "@/types/Music";
 import type { ChooseLaterItem } from "@/types/Liturgy";
-import { apiFetch } from "@/helpers/ApiClient";
+import { apiFetch, postApi } from "@/helpers/ApiClient";
+import { MusicActionEnum } from "@/enums/MusicActionEnum";
 
 const props = defineProps<{
   token?: string;
@@ -86,6 +89,61 @@ const musicSearch = ref<string>("");
 const musicResults = ref<MusicItem[]>([]);
 const loadingMusics = ref<boolean>(false);
 let searchTimeout: ReturnType<typeof setTimeout> | null = null;
+
+/** Música selecionada para escolha do modo de execução. */
+const selectedMusic = ref<MusicItem | null>(null);
+const versionPickerOpen = ref<boolean>(false);
+
+/** Playback/Somente playback só valem quando a música tem faixa instrumental. */
+const selectedHasInstrumental = computed<boolean>(
+  () => !!selectedMusic.value?.has_instrumental_music
+);
+
+/**
+ * Modos de execução oferecidos. Os `mode` batem com o `/api/open-song`:
+ *  - audio          → slides + faixa cantada
+ *  - instrumental   → slides + playback
+ *  - no_audio       → somente slides (Letra)
+ *  - audio-only     → somente o áudio, sem slides
+ *  - playback-only  → somente o playback, sem slides
+ */
+const MUSIC_VERSIONS: {
+  mode: MusicActionEnum;
+  labelKey: string;
+  icon: string;
+  needsPlayback: boolean;
+}[] = [
+  {
+    mode: MusicActionEnum.AUDIO,
+    labelKey: "remote_control.music.mode_sung",
+    icon: ICONS.MUSIC.SING,
+    needsPlayback: false,
+  },
+  {
+    mode: MusicActionEnum.INSTRUMENTAL,
+    labelKey: "remote_control.music.mode_playback",
+    icon: ICONS.MUSIC.PLAYBACK,
+    needsPlayback: true,
+  },
+  {
+    mode: MusicActionEnum.NO_AUDIO,
+    labelKey: "remote_control.music.mode_lyric",
+    icon: ICONS.MUSIC.LYRIC,
+    needsPlayback: false,
+  },
+  {
+    mode: MusicActionEnum.AUDIO_ONLY,
+    labelKey: "remote_control.music.mode_audio_only",
+    icon: ICONS.MUSIC.AUDIO,
+    needsPlayback: false,
+  },
+  {
+    mode: MusicActionEnum.PLAYBACK_ONLY,
+    labelKey: "remote_control.music.mode_playback_only",
+    icon: ICONS.MUSIC.AUDIO_PLAYBACK,
+    needsPlayback: true,
+  },
+];
 
 async function onMusicSearch(): Promise<void> {
   if (!musicSearch.value || musicSearch.value.length < 2) {
@@ -116,7 +174,17 @@ async function onMusicSearch(): Promise<void> {
   }, 300);
 }
 
-async function openMusic(music: MusicAlbum, tag: number = 3): Promise<void> {
+function openVersionPicker(music: MusicItem): void {
+  selectedMusic.value = music;
+  versionPickerOpen.value = true;
+}
+
+function playVersion(mode: MusicActionEnum): void {
+  versionPickerOpen.value = false;
+  if (selectedMusic.value) void openMusic(selectedMusic.value, mode);
+}
+
+async function openMusic(music: MusicAlbum, mode: MusicActionEnum): Promise<void> {
   try {
     const idLiturgy = props.chooseLaterItem?.id || "";
 
@@ -125,8 +193,10 @@ async function openMusic(music: MusicAlbum, tag: number = 3): Promise<void> {
       emit("update:choose-later-item", null);
     }
 
-    const res = await apiFetch(
-      `/api/open-song?id=${music.id_music}&tag=${tag}&token=${props.token}&id_liturgy=${idLiturgy}`
+    const res = await postApi(
+      "/api/open-song",
+      { id: music.id_music, mode, id_liturgy: idLiturgy },
+      props.token
     );
     if (res.ok) {
       emit("show-snackbar", t("components.music_menu.execute") + ": " + music.name);
@@ -168,6 +238,7 @@ async function openMusic(music: MusicAlbum, tag: number = 3): Promise<void> {
   min-height: 56px;
   padding: var(--lj-space-4) var(--lj-space-5);
   border-radius: var(--lj-ui-radius);
+  cursor: pointer;
 }
 
 .rm-item:hover {
@@ -205,5 +276,47 @@ async function openMusic(music: MusicAlbum, tag: number = 3): Promise<void> {
 
 .rm-state--loading {
   color: var(--lj-ui-accent);
+}
+
+.rm-versions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-2);
+}
+
+.rm-versions__hint {
+  margin: 0 0 var(--lj-space-2);
+  color: var(--lj-text-muted);
+  font-size: var(--lj-text-sm);
+}
+
+.rm-version {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-5);
+  width: 100%;
+  padding: var(--lj-space-4) var(--lj-space-5);
+  background: transparent;
+  border: none;
+  border-radius: var(--lj-ui-radius);
+  color: var(--lj-text);
+  font-family: var(--lj-font-shell);
+  font-size: var(--lj-text-base);
+  text-align: left;
+  cursor: pointer;
+}
+
+.rm-version:hover:not(:disabled) {
+  background: var(--lj-surface-bg-hover);
+}
+
+.rm-version:focus-visible {
+  outline: none;
+  box-shadow: var(--lj-ui-focus);
+}
+
+.rm-version:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 </style>

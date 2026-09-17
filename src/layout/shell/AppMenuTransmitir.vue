@@ -39,30 +39,54 @@
         </div>
 
         <div class="tx-token-row">
-          <span class="tx-token-label">{{ $t("options.transmission.token_label") }}</span>
-          <code class="tx-token">{{ httpServer.token }}</code>
-          <LjButton size="sm" :icon="ICONS.ACTIONS.RESTART" @click="resetToken">
-            {{ $t("options.transmission.token_reset") }}
-          </LjButton>
-
-          <label class="opt-label tx-port-label" for="tx-port">
-            {{ $t("options.transmission.port") }}
-          </label>
-          <!-- O invólucro dá ao CSS com escopo onde se prender: a classe passada
-               ao LjInput cairia no <input> interno, que não recebe o atributo. -->
-          <span class="tx-port">
-            <LjInput
-              id="tx-port"
+          <div>
+            <label class="opt-label" for="tx-ip">
+              {{ $t("options.transmission.select_ip") }}
+            </label>
+            <p class="opt-hint">{{ $t("options.transmission.select_ip_hint") }}</p>
+            <LjSelect
+              id="tx-ip"
               size="sm"
-              type="number"
-              placeholder="7070"
-              :model-value="httpServerPort"
-              min="1"
-              max="65535"
-              @change="setHttpServerPort(Number($event.target.value))"
+              style="width: 130px"
+              :items="localIps.map((ip) => ({ value: ip, label: ip }))"
+              :model-value="selectedIp"
+              @update:model-value="selectedIp = String($event)"
             />
-          </span>
-          <p class="opt-hint">{{ $t("options.transmission.port_hint") }}</p>
+          </div>
+
+          <div style="margin: 0 20px 0 20px">
+            <label class="opt-label" for="tx-port">
+              {{ $t("options.transmission.port") }}
+            </label>
+            <p class="opt-hint">{{ $t("options.transmission.port_hint") }}</p>
+            <span class="tx-port">
+              <LjInput
+                id="tx-port"
+                size="sm"
+                type="number"
+                placeholder="7070"
+                :model-value="httpServerPort"
+                min="1"
+                max="65535"
+                @change="setHttpServerPort(Number($event.target.value))"
+              />
+            </span>
+          </div>
+          <div>
+            <span class="tx-token-label">{{ $t("options.transmission.token_label") }}</span>
+            <p class="opt-hint">{{ $t("options.transmission.port_hint") }}</p>
+            <LjCopyButton :value="httpServer.token || ''" class="tx-token">
+              {{ httpServer.token }}
+            </LjCopyButton>
+            <LjButton
+              size="sm"
+              style="margin-left: 10px"
+              :icon="ICONS.ACTIONS.RESTART"
+              @click="resetToken"
+            >
+              {{ $t("options.transmission.token_reset") }}
+            </LjButton>
+          </div>
         </div>
 
         <LjCheckbox
@@ -87,11 +111,76 @@
               $t("options.transmission.use_hostname_hint", {
                 hostname: hostname || "...",
                 port: httpServer.port,
-                ip: primaryHost,
+                ip: selectedIp || primaryHost,
               })
             }}
           </p>
         </div>
+        <div>
+          <LjCheckbox
+            :model-value="onlyAuthorizedDevices"
+            :label="$t('options.transmission.only_authorized_devices')"
+            @update:model-value="toggleOnlyAuthorized"
+          />
+          <p class="opt-hint">{{ $t("options.transmission.only_authorized_hint") }}</p>
+        </div>
+      </section>
+
+      <!-- Dispositivos autorizados -->
+      <section v-if="httpServer.running && externalRoutesEnabled" class="opt-section">
+        <div class="tx-devices-header">
+          <h3 class="opt-section-title">
+            <LjIcon :icon="ICONS.UI.MONITORS" :size="18" />
+            {{ $t("options.transmission.devices_section") }}
+          </h3>
+          <LjButton size="sm" :icon="ICONS.ACTIONS.ADD" @click="addNewDevice">
+            {{ $t("options.transmission.add_device") }}
+          </LjButton>
+        </div>
+        <p class="opt-hint">{{ $t("options.transmission.devices_hint") }}</p>
+
+        <div class="tx-app-download">
+          <span class="tx-app-download__label">
+            {{ $t("options.transmission.app_download_label") }}
+          </span>
+          <LjButton size="md" :icon="ICONS.UI.ANDROID" @click="showAppDialog('android')">
+            Android
+          </LjButton>
+          <LjButton size="md" :icon="ICONS.UI.APPLE" @click="showAppDialog('ios')">iOS</LjButton>
+        </div>
+
+        <div v-if="devices.length" class="tx-devices">
+          <div v-for="device in devices" :key="device.id" class="tx-device-row">
+            <div class="tx-device-info">
+              <LjIcon :icon="ICONS.UI.MONITORS" :size="18" />
+              <div>
+                <div class="tx-device-name">{{ device.name }}</div>
+                <div class="tx-device-meta">
+                  {{ $t("options.transmission.device_platform_label") }}:
+                  {{ $t(`options.transmission.platform_${device.platform}`) }}
+                  <template v-if="device.model">· {{ device.model }}</template>
+                  ·
+                  {{
+                    device.permissions.map((p) => $t(DEVICE_PERMISSION_LABELS[p])).join(", ") ||
+                    $t("options.transmission.no_permissions")
+                  }}
+                </div>
+              </div>
+            </div>
+            <LjButton size="sm" :icon="ICONS.UI.OPTIONS_OUTLINE" @click="editDevice(device)">
+              {{ $t("options.transmission.edit") }}
+            </LjButton>
+            <LjButton
+              size="sm"
+              variant="danger"
+              :icon="ICONS.ACTIONS.DELETE"
+              @click="requestDeleteDevice(device)"
+            >
+              {{ $t("actions.delete") }}
+            </LjButton>
+          </div>
+        </div>
+        <p v-else class="opt-hint">{{ $t("options.transmission.no_devices") }}</p>
       </section>
 
       <!-- URLs de transmissão (compatibilidade Delphi) -->
@@ -176,11 +265,103 @@
     :title="qrTitle ? $t(qrTitle) : ''"
   >
     <div class="qr-body">
-      <canvas ref="qrCanvas" class="qr-canvas" />
+      <div ref="qrContainer" class="qr-canvas" />
       <code class="qr-url">{{ qrUrl }}</code>
     </div>
     <template #footer>
       <LjButton size="sm" @click="showQrDialog = false">
+        {{ $t("alert.close") }}
+      </LjButton>
+    </template>
+  </LjDialog>
+
+  <!-- QR Code de cadastro de dispositivo -->
+  <LjDialog
+    v-model="showDeviceQrDialog"
+    size="sm"
+    :icon="ICONS.UI.QRCODE"
+    :title="$t('options.transmission.scan_qr')"
+  >
+    <div class="qr-body">
+      <div ref="deviceQrContainer" class="qr-canvas" />
+      <code class="qr-url">{{ deviceQrUrl }}</code>
+      <p class="opt-hint" style="margin-top: 8px; text-align: center">
+        {{ $t("options.transmission.device_qr_hint") }}
+      </p>
+    </div>
+    <template #footer>
+      <LjButton size="sm" @click="showDeviceQrDialog = false">
+        {{ $t("alert.close") }}
+      </LjButton>
+    </template>
+  </LjDialog>
+
+  <!-- Diálogo de permissões do device -->
+  <DevicePermissionsDialog
+    :device="dialogDevice"
+    :is-pending="isPendingDialog"
+    @save="onDeviceSave"
+    @reject="onDeviceReject"
+    @close="onDeviceDialogClose"
+  />
+
+  <!-- Confirmar exclusão de dispositivo -->
+  <LjDialog
+    v-model="confirmDeleteDevice"
+    size="sm"
+    :icon="ICONS.ACTIONS.DELETE"
+    :title="$t('options.transmission.remove_confirm_title')"
+  >
+    <template v-if="confirmDeleteDevice">
+      <p>{{ $t("options.transmission.remove_confirm_text") }}</p>
+      <div class="tx-confirm-device">
+        <LjIcon :icon="ICONS.UI.MONITORS" :size="20" />
+        <div>
+          <div class="tx-confirm-device-name">{{ confirmDeleteDevice.name }}</div>
+          <div class="tx-confirm-device-meta">
+            {{ $t(`options.transmission.platform_${confirmDeleteDevice.platform}`) }}
+            <template v-if="confirmDeleteDevice.model">· {{ confirmDeleteDevice.model }}</template>
+          </div>
+        </div>
+      </div>
+    </template>
+    <template #footer>
+      <LjButton size="sm" @click="confirmDeleteDevice = null">{{ $t("alert.cancel") }}</LjButton>
+      <LjButton size="sm" variant="danger" @click="confirmDeleteDeviceAction">
+        {{ $t("actions.delete") }}
+      </LjButton>
+    </template>
+  </LjDialog>
+
+  <!-- Violin Remote — Download da loja -->
+  <LjDialog
+    v-model="showAppStoreDialog"
+    size="sm"
+    :icon="appStorePlatform === 'android' ? ICONS.UI.ANDROID : ICONS.UI.APPLE"
+    :title="$t('options.transmission.app_dialog_title')"
+  >
+    <div class="app-store-dialog">
+      <p class="app-store-dialog__desc">
+        {{ $t("options.transmission.app_dialog_description") }}
+      </p>
+      <div class="qr-canvas-wrapper">
+        <div ref="appStoreQrContainer" class="qr-canvas" />
+        <img
+          :src="appStorePlatform === 'android' ? playStoreUrl : appStoreUrl"
+          class="qr-center-icon"
+          alt=""
+        />
+      </div>
+      <a class="app-store-dialog__link" :href="storesUrl" target="_blank" rel="noopener noreferrer">
+        {{
+          appStorePlatform === "android"
+            ? $t("options.transmission.app_dialog_android")
+            : $t("options.transmission.app_dialog_ios")
+        }}
+      </a>
+    </div>
+    <template #footer>
+      <LjButton :icon="ICONS.ACTIONS.CLOSE" size="sm" @click="showAppStoreDialog = false">
         {{ $t("alert.close") }}
       </LjButton>
     </template>
@@ -190,15 +371,41 @@
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
 import { useDisplays } from "@/composables/useDisplays";
+import { useDevices } from "@/composables/useDevices";
 import MonitorSelect from "@/components/inputs/MonitorSelect.vue";
-import { LjButton, LjCheckbox, LjDialog, LjIcon, LjInput } from "@/components/ui";
+import DevicePermissionsDialog from "@/components/DevicePermissionsDialog.vue";
+import {
+  LjButton,
+  LjCheckbox,
+  LjCopyButton,
+  LjDialog,
+  LjIcon,
+  LjInput,
+  LjSelect,
+} from "@/components/ui";
 import Platform from "@/helpers/Platform";
+import $userdata from "@/helpers/UserData";
+import { KEYS } from "@/constants/UserDataKeys";
 import { open as openProjection } from "@/helpers/Projection";
 import { ICONS } from "@/config/Icons";
-import QRCode from "qrcode";
+import { DEVICE_PERMISSION_LABELS } from "@/types/Device";
+import QRCodeStyling from "qr-code-styling";
+import logoUrl from "@/assets/img/logo.svg";
+
+const playStoreUrl = new URL("@/assets/img/play-store.svg", import.meta.url).href;
+const appStoreUrl = new URL("@/assets/img/app-store.svg", import.meta.url).href;
 
 const isDesktop = computed(() => Platform.isDesktop);
 const { displays, getFeatureRole, setFeatureRole } = useDisplays();
+const {
+  devices,
+  updateDevice,
+  removeDevice,
+  pendingDevice,
+  generatePendingToken,
+  acceptPendingDevice,
+  rejectPendingDevice,
+} = useDevices();
 
 /** Papel de cada janela de transmissão. Carregado sob demanda (passa pelo IPC). */
 const featureRoles = ref({});
@@ -269,6 +476,7 @@ const httpServerLoading = ref(false);
 const httpServerPort = ref(7070);
 const externalRoutesEnabled = ref(true);
 const localIps = ref([]);
+const selectedIp = ref("");
 const copiedKey = ref(null);
 const globalShortcutsEnabled = ref(false);
 const useHostname = ref(false);
@@ -276,7 +484,27 @@ const hostname = ref("");
 const showQrDialog = ref(false);
 const qrUrl = ref("");
 const qrTitle = ref("");
-const qrCanvas = ref(null);
+const qrContainer = ref(null);
+const showDeviceQrDialog = ref(false);
+const deviceQrUrl = ref("");
+const deviceQrContainer = ref(null);
+const editingDevice = ref(null);
+const confirmDeleteDevice = ref(null);
+const onlyAuthorizedDevices = ref(false);
+
+const STORES_URLS = {
+  android: "https://play.google.com/store/apps/details?id=br.com.louvorja.violin_remote",
+  ios: "https://apps.apple.com/app/violin-remote/id6810058446",
+};
+const showAppStoreDialog = ref(false);
+const appStorePlatform = ref("android");
+const appStoreQrContainer = ref(null);
+const storesUrl = computed(() => STORES_URLS[appStorePlatform.value]);
+
+function showAppDialog(platform) {
+  appStorePlatform.value = platform;
+  showAppStoreDialog.value = true;
+}
 
 // IP "público" preferido — primeiro não-loopback. Cai pra 127.0.0.1
 // quando a máquina não tem interface de rede ativa (raro: notebook offline).
@@ -284,9 +512,28 @@ const primaryHost = computed(() => {
   return localIps.value.find((ip) => ip !== "127.0.0.1") || "127.0.0.1";
 });
 
+// Seletor de IP — persistido em UserData.
+// Se o IP salvo não estiver mais na lista de interfaces, volta para o primaryHost.
+watch(
+  localIps,
+  (ips) => {
+    if (ips.length && !ips.includes(selectedIp.value)) {
+      selectedIp.value = primaryHost.value;
+    }
+  },
+  { immediate: true }
+);
+
+watch(selectedIp, (ip) => {
+  if (ip) $userdata.set(KEYS.OPTIONS.SELECTED_IP, ip);
+});
+
 const baseUrl = computed(() => {
   if (!httpServer.value.running) return "";
-  const h = useHostname.value && hostname.value.trim() ? hostname.value.trim() : primaryHost.value;
+  const h =
+    useHostname.value && hostname.value.trim()
+      ? hostname.value.trim()
+      : selectedIp.value || primaryHost.value;
   return `http://${h}:${httpServer.value.port}`;
 });
 
@@ -341,17 +588,154 @@ function showQrCode(link) {
 // o conteúdo monta: o desenho fica preso à referência (e à URL, para o caso de
 // abrir outro link com o diálogo já montado), não a um tick após abrir.
 watch(
-  [qrCanvas, qrUrl],
-  async ([canvas, url]) => {
-    if (!canvas || !url) return;
+  [qrContainer, qrUrl],
+  async ([container, url]) => {
+    if (!container || !url) return;
     try {
-      await QRCode.toCanvas(canvas, url, {
+      const qr = new QRCodeStyling({
         width: 240,
-        margin: 1,
-        color: { dark: "#000", light: "#fff" },
+        height: 240,
+        type: "canvas",
+        data: url,
+        image: logoUrl,
+        dotsOptions: {
+          type: "rounded",
+          color: "#000",
+        },
+        cornersSquareOptions: {
+          type: "rounded",
+        },
+        backgroundOptions: {
+          color: "#fff",
+        },
+        imageOptions: {
+          crossOrigin: "anonymous",
+          margin: 10,
+        },
       });
+      await qr.append(container);
     } catch (e) {
       console.error("[Transmitir] QRCode:", e);
+    }
+  },
+  { flush: "post" }
+);
+
+// --- Dispositivos ---
+async function addNewDevice() {
+  const token = generatePendingToken();
+  if (!token) return;
+  const url = `${baseUrl.value}/register-device?token=${token}`;
+  deviceQrUrl.value = url;
+  showDeviceQrDialog.value = true;
+}
+
+/** Device sendo editado — pending (recém-cadastrado) ou existente. */
+const dialogDevice = computed(() => pendingDevice.value || editingDevice.value);
+const isPendingDialog = computed(() => !!pendingDevice.value);
+
+function editDevice(device) {
+  editingDevice.value = device;
+}
+
+async function onDeviceSave(id, name, permissions) {
+  if (isPendingDialog.value && pendingDevice.value?.id === id) {
+    // Device pendente — aceitar com permissões definidas
+    await acceptPendingDevice(name, permissions);
+  } else {
+    // Device existente — atualizar
+    await updateDevice(id, { name, permissions });
+  }
+  editingDevice.value = null;
+}
+
+async function onDeviceReject(id) {
+  if (isPendingDialog.value && pendingDevice.value?.id === id) {
+    await rejectPendingDevice();
+  } else {
+    await removeDevice(id);
+  }
+  editingDevice.value = null;
+}
+
+function onDeviceDialogClose() {
+  editingDevice.value = null;
+}
+
+function requestDeleteDevice(device) {
+  confirmDeleteDevice.value = device;
+}
+
+async function confirmDeleteDeviceAction() {
+  if (!confirmDeleteDevice.value) return;
+  await removeDevice(confirmDeleteDevice.value.id);
+  confirmDeleteDevice.value = null;
+}
+
+watch(pendingDevice, (val) => {
+  if (val) showDeviceQrDialog.value = false;
+});
+
+watch(
+  [deviceQrContainer, deviceQrUrl],
+  async ([container, url]) => {
+    if (!container || !url) return;
+    try {
+      const qr = new QRCodeStyling({
+        width: 240,
+        height: 240,
+        type: "canvas",
+        data: url,
+        image: logoUrl,
+        dotsOptions: {
+          type: "rounded",
+          color: "#000",
+        },
+        cornersSquareOptions: {
+          type: "rounded",
+        },
+        backgroundOptions: {
+          color: "#fff",
+        },
+        imageOptions: {
+          crossOrigin: "anonymous",
+          margin: 10,
+        },
+      });
+      await qr.append(container);
+    } catch (e) {
+      console.error("[Transmitir] QRCode device:", e);
+    }
+  },
+  { flush: "post" }
+);
+
+// QR Code — Violin Remote (loja)
+watch(
+  [appStoreQrContainer, storesUrl, appStorePlatform],
+  async ([container, url]) => {
+    if (!container || !url) return;
+    container.innerHTML = "";
+    try {
+      const qr = new QRCodeStyling({
+        width: 240,
+        height: 240,
+        type: "canvas",
+        data: url,
+        dotsOptions: {
+          type: "rounded",
+          color: "#000",
+        },
+        cornersSquareOptions: {
+          type: "rounded",
+        },
+        backgroundOptions: {
+          color: "#fff",
+        },
+      });
+      await qr.append(container);
+    } catch (e) {
+      console.error("[Transmitir] QRCode store:", e);
     }
   },
   { flush: "post" }
@@ -403,7 +787,7 @@ async function refreshStatus() {
     const s = await Platform.httpServer.status();
     httpServer.value = s;
     externalRoutesEnabled.value = s.externalRoutesEnabled !== false;
-  } catch (_) {
+  } catch {
     httpServer.value = { running: false, port: null, token: null };
     externalRoutesEnabled.value = false;
   }
@@ -452,6 +836,16 @@ async function toggleGlobalShortcuts(enabled) {
   }
 }
 
+async function toggleOnlyAuthorized(enabled) {
+  onlyAuthorizedDevices.value = enabled;
+  if (!Platform.httpServer?.setDeviceSettings) return;
+  try {
+    await Platform.httpServer.setDeviceSettings({ only_authorized_devices: enabled });
+  } catch (e) {
+    console.error("[Transmitir] setDeviceSettings:", e);
+  }
+}
+
 async function toggleUseHostname(enabled) {
   useHostname.value = enabled;
   if (!Platform.userStore) return;
@@ -474,6 +868,12 @@ onMounted(async () => {
       httpServerPort.value = cfg.httpServer?.port ?? 7070;
       useHostname.value = cfg.httpServer?.useHostname ?? false;
       hostname.value = await Platform.httpServer.hostname();
+      const savedIp = String($userdata.get(KEYS.OPTIONS.SELECTED_IP, ""));
+      selectedIp.value = savedIp && localIps.value.includes(savedIp) ? savedIp : primaryHost.value;
+      if (Platform.httpServer.getDeviceSettings) {
+        const ds = await Platform.httpServer.getDeviceSettings();
+        onlyAuthorizedDevices.value = ds.only_authorized_devices === true;
+      }
     } catch (e) {
       console.warn("[Transmitir] init:", e);
     }
@@ -530,19 +930,24 @@ onMounted(async () => {
 .tx-token-row {
   display: flex;
   align-items: center;
-  gap: var(--lj-space-4);
-  margin: var(--lj-space-4) 0;
+  gap: var(--lj-space-3);
+  margin: var(--lj-space-3) 0;
 }
 .tx-token-label {
   color: var(--lj-text-muted);
   font-size: var(--lj-text-base);
 }
-.tx-token {
+:deep(.tx-token) {
   font-family: var(--lj-font-mono);
   letter-spacing: 0.08em;
   padding: var(--lj-space-1) var(--lj-space-4);
   background: var(--lj-surface-bg-active);
   border-radius: var(--lj-radius-md);
+  cursor: pointer;
+  transition: background 150ms;
+}
+:deep(.tx-token:hover) {
+  background: var(--lj-surface-bg-hover);
 }
 .tx-port-label {
   margin-left: var(--lj-space-8);
@@ -560,6 +965,45 @@ onMounted(async () => {
 }
 
 /* Lista de URLs de transmissão. */
+/* Dispositivos autorizados */
+.tx-devices-header {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-3);
+}
+.tx-devices-header .opt-section-title {
+  flex: 1;
+  margin-bottom: 0;
+}
+.tx-devices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-3);
+}
+.tx-device-row {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-3);
+  padding: var(--lj-space-3) var(--lj-space-4);
+  background: var(--lj-surface-bg-hover);
+  border-radius: var(--lj-radius-lg);
+}
+.tx-device-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-3);
+}
+.tx-device-name {
+  font-weight: var(--lj-weight-medium);
+  font-size: var(--lj-text-sm);
+}
+.tx-device-meta {
+  font-size: var(--lj-text-xs);
+  color: var(--lj-text-subtle);
+}
+
 .tx-urls {
   display: flex;
   flex-direction: column;
@@ -622,6 +1066,21 @@ onMounted(async () => {
   border-radius: var(--lj-radius-lg);
   max-width: 100%;
 }
+.qr-canvas-wrapper {
+  position: relative;
+  display: inline-flex;
+}
+.qr-center-icon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  background: #fff;
+  padding: 4px;
+}
 .qr-url {
   font-family: var(--lj-font-mono);
   font-size: var(--lj-text-base);
@@ -629,5 +1088,62 @@ onMounted(async () => {
   word-break: break-all;
   text-align: center;
   max-width: 100%;
+}
+.tx-confirm-device {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-3);
+  padding: var(--lj-space-3) var(--lj-space-4);
+  background: var(--lj-surface-bg-hover);
+  border-radius: var(--lj-radius-lg);
+  margin-top: var(--lj-space-3);
+}
+.tx-confirm-device-name {
+  font-weight: var(--lj-weight-medium);
+  font-size: var(--lj-text-sm);
+}
+.tx-confirm-device-meta {
+  font-size: var(--lj-text-xs);
+  color: var(--lj-text-subtle);
+}
+
+.tx-devices-header__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-1);
+}
+
+.tx-app-download {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-2);
+  margin-bottom: var(--lj-space-5);
+}
+.tx-app-download__label {
+  font-size: var(--lj-text-sm);
+  font-weight: var(--lj-weight-medium);
+  color: var(--lj-text-muted);
+}
+
+.app-store-dialog {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--lj-space-4);
+  text-align: center;
+}
+.app-store-dialog__desc {
+  color: var(--lj-text);
+  line-height: 1.5;
+}
+.app-store-dialog__link {
+  font-weight: var(--lj-weight-semibold);
+  color: var(--lj-ui-accent);
+  font-size: var(--lj-text-sm);
+  text-decoration: none;
+  cursor: pointer;
+}
+.app-store-dialog__link:hover {
+  text-decoration: underline;
 }
 </style>

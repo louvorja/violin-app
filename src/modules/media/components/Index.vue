@@ -3,7 +3,7 @@
     v-model="module_.show"
     :title="config?.title"
     :subtitle="
-      config?.subtitle + (config?.track > 0 ? ' | ' + t('general.track') + ' ' + config.track : '')
+      config?.subtitle + (config?.track > 0 ? ' | ' + tm('general.track') + ' ' + config.track : '')
     "
     :image="config?.image ? pathFile(config.image) : ''"
     closable
@@ -30,11 +30,11 @@
         </template>
 
         <div class="media-options">
-          <LjTooltip :text="t('inputs.lazy_load_tooltip')" side="bottom">
-            <LjSwitch v-model="lazy_load" :label="t('inputs.lazy_load')" />
+          <LjTooltip :text="tm('inputs.lazy_load_tooltip')" side="bottom">
+            <LjSwitch v-model="lazy_load" :label="tm('inputs.lazy_load')" />
           </LjTooltip>
-          <LjTooltip :text="t('inputs.fade_audio_tooltip')" side="bottom">
-            <LjSwitch v-model="fade_audio" :label="t('inputs.fade_audio')" />
+          <LjTooltip :text="tm('inputs.fade_audio_tooltip')" side="bottom">
+            <LjSwitch v-model="fade_audio" :label="tm('inputs.fade_audio')" />
           </LjTooltip>
         </div>
       </LjPopover>
@@ -99,7 +99,7 @@
         </div>
         <!-- YouTube info panel -->
         <div v-else class="media-youtube">
-          <div class="media-youtube__label">{{ t("general.channel") }}</div>
+          <div class="media-youtube__label">{{ tm("general.channel") }}</div>
           <div class="media-youtube__value">
             <a v-if="ytChannelUrl" :href="ytChannelUrl" target="_blank" class="media-youtube__link">
               {{ ytChannel || "—" }}
@@ -108,7 +108,7 @@
           </div>
           <LjDivider class="media-youtube__divider" />
           <div class="media-youtube__label">
-            {{ t("general.video_link") }}
+            {{ tm("general.video_link") }}
           </div>
           <a
             v-if="youtubeWatchUrl"
@@ -165,7 +165,7 @@ const preview_height = ref(0);
 const slideItem = ref(null);
 const slides_list = ref(null);
 
-const t = (text) => i18nT(`modules.${moduleId}.${text}`);
+const tm = (text) => i18nT(`modules.${moduleId}.${text}`);
 
 const is_online = computed(() => AppData.get("is_online"));
 const loading = computed(() => module_.value.loading);
@@ -206,7 +206,7 @@ function fetchYouTubeChannel(id) {
     ytChannelUrl.value = "";
     return;
   }
-  fetchWithTimeout(
+  fetchWithTimeoutm(
     `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${id}&format=json`,
     { timeout: NET_TIMEOUT.QUICK, source: "youtube-oembed", thirdParty: true }
   )

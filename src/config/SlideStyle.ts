@@ -23,12 +23,13 @@ export const SLIDE_STYLE_DEFAULT = Object.freeze({
   show_title_first_slide: true,
   text_align: "center" as "top" | "center" | "bottom",
   transition_speed_ms: 120, // fade-in da tela inteira (rápido — antes 256ms)
-  text_bg_transparent: false, // caixa de texto atrás da letra (translúcida quando false)
+  text_bg_opacity: 75, // % — opacidade do fundo do texto (0=transparente, 100=opaco)
   text_bg_blur_enabled: false,
   text_bg_blur: 12,
   text_border_enabled: false,
   text_border_color: "#FFFFFF",
   text_border_width: 2,
+  text_border_radius: 0,
   affect_external_slides: true, // formatação personalizada vence formatação do slide externo
   custom_background_active: false, // toggle "Fundo personalizado" ligado pelo usuário
   shadow_enabled: false,
@@ -36,4 +37,23 @@ export const SLIDE_STYLE_DEFAULT = Object.freeze({
   shadow_blur: 12,
   shadow_offset_x: 0,
   shadow_offset_y: 2,
+
+  // Fundo da tela de retorno (independente do fundo dos slides)
+  custom_return_background_active: false,
+  return_bg_top_color: "#1a201a", // verde escuro atual (hardcoded)
+  return_bg_top_image: "",
+  return_bg_top_position: "center center",
+  return_bg_bottom_color: "#1d251d", // topo do gradiente atual
+  return_bg_bottom_image: "",
+  return_bg_bottom_position: "center center",
+
+  // Formatação de texto do retorno
+  return_height_bottom: 18, // vh — painel inferior
+  return_font_size_cover: 14, // vh — capa no retorno
+  return_font_size_lyric: 11, // vh — letra no retorno
+  return_top_text_case: "uppercase",
+  return_top_text_align: "center",
+  return_bottom_text_case: "uppercase",
+  return_bottom_text_align: "center",
+  custom_return_text_format_active: false,
 });

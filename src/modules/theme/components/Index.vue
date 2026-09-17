@@ -2,7 +2,7 @@
   <ModuleContainer ref="moduleContainer" :manifest="manifest">
     <div v-for="group in groups" :key="group.mode" class="theme-group">
       <div class="theme-group__title">
-        {{ group.mode == "dark" ? t("dark-themes") : t("light-themes") }}
+        {{ group.mode === "dark" ? tm("dark-themes") : tm("light-themes") }}
       </div>
 
       <button
@@ -10,8 +10,8 @@
         :key="theme.id"
         type="button"
         class="theme-swatch"
-        :class="{ 'is-current': current == theme.id }"
-        :aria-pressed="current == theme.id"
+        :class="{ 'is-current': current === theme.id }"
+        :aria-pressed="current === theme.id"
         :title="theme.id"
         @click="setTheme(theme.id)"
       >
@@ -34,8 +34,8 @@ import ModuleContainer from "@/components/ModuleContainer.vue";
 import { DARK_THEMES, LIGHT_THEMES } from "@/config/Themes";
 import { useAppTheme } from "@/composables/useAppTheme";
 const moduleContainer = ref(null);
-const t = (key) => {
-  return moduleContainer.value?.t(key) || key;
+const tm = (key) => {
+  return moduleContainer.value?.tm(key) || key;
 };
 /* ########################################################### */
 /* ########################################################### */

@@ -3,7 +3,7 @@
     <section class="opt-section">
       <h3 class="opt-section-title">
         <LjIcon :icon="ICONS.UI.IMPORT_EXPORT" size="18" />
-        {{ $t("modules.liturgy.name") }}
+        {{ $t("shell.appmenu_items.import_export") }}
       </h3>
 
       <div class="opt-actions-row">

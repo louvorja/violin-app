@@ -244,9 +244,21 @@ useBroadcastListener(BROADCAST_TYPE.VIDEO_STATE, (payload: unknown) => {
   const el = videoRef.value;
   if (!el) return;
   const data = payload as VideoMediaState;
-  el.pause();
-  if (typeof data.currentTime === "number") el.currentTime = data.currentTime;
-  if (typeof data.isPaused === "boolean" && !data.isPaused) el.play().catch(() => {});
+
+  if (typeof data.isPaused === "boolean") {
+    if (data.isPaused && !el.paused) {
+      el.pause();
+    } else if (!data.isPaused && el.paused) {
+      el.play().catch(() => {});
+    }
+  }
+
+  if (typeof data.currentTime === "number") {
+    const drift = Math.abs(el.currentTime - data.currentTime);
+    if (drift > 1.5) {
+      el.currentTime = data.currentTime;
+    }
+  }
 });
 
 useBroadcastListener(BROADCAST_TYPE.VIDEO_STATE, (payload: unknown) => {
@@ -325,6 +337,7 @@ function _initYoutube(): void {
       height: "100%",
       width: "100%",
       videoId: id,
+      origin: window.location.origin,
       playerVars: {
         autoplay: 1,
         mute: 1,

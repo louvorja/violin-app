@@ -136,3 +136,55 @@ Em produção, o protocolo `louvorja://` aplica CSP via header HTTP usando
 
 Para janelas secundárias abertas via `windowFactory.js` (Projection, Operator, etc.),
 a mesma session padrão aplica a política automaticamente.
+
+---
+
+## Autenticação do servidor HTTP embarcado
+
+O servidor Express (porta 7070) protege endpoints `/api/*` e `/events` para
+requests remotos. Localhost sempre bypassa (segurança via firewall do SO).
+
+### Modos de autenticação
+
+| Modo                          | Como chega                           | Validado por                          |
+| ----------------------------- | ------------------------------------ | ------------------------------------- |
+| Token global (5 chars A-Z0-9) | `?token=`, body `token`, `X-Token`  | Comparação case-insensitive           |
+| Device com par                | `X-Device-Id` + `X-Device-Token`    | Busca device pelo id, valida token    |
+| Device token only (legado)    | Qualquer um dos acima                | Busca device pelo token               |
+
+### Modo restrito (`only_authorized_devices`)
+
+Quando ativado via **Transmissão → Dispositivos → "Permitir somente dispositivos
+cadastrados"**:
+
+- Apenas devices com permissões são aceitos (par id+token ou token-only)
+- Token global legado é **bloqueado** (retorna 403 `DEVICE_NOT_AUTHORIZED`)
+- Localhost continua tendo acesso total
+- Persistido em `device_settings.json` via `devices.js`
+- Endpoint `POST /api/settings/devices` para alternar via API
+
+**Fluxo:**
+
+```
+Request remoto
+  ├─ Device com X-Device-Id + X-Device-Token?
+  │   ├─ Par válido → ✅ next()
+  │   └─ Par inválido → ❌ 403 DEVICE_NOT_AUTHORIZED
+  ├─ Token fornecido?
+  │   ├─ onlyAuthorized ATIVO?
+  │   │   ├─ Token é device válido? → ✅ next()
+  │   │   └─ Token é global ou inválido? → ❌ 403
+  │   └─ onlyAuthorized INATIVO?
+  │       ├─ Token global? → ✅ next()
+  │       ├─ Token device válido? → ✅ next()
+  │       └─ Inválido? → ❌ 401
+  └─ Sem token → ❌ 401 MISSING_TOKEN
+```
+
+### Endpoints POST
+
+Todos os endpoints de comando usam **POST** com `Content-Type: application/json`.
+O token vai na query string (`?token=...`) para não misturar com o body.
+
+Antes, usavam GET com query string para tudo — a migração para POST separa
+leitura (GET) de escrita/comando (POST), alinhando com boas práticas HTTP.

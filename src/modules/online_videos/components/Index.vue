@@ -4,7 +4,7 @@
       <div class="ov-header">
         <div class="ov-search-wrap">
           <LjIcon :icon="ICONS.ACTIONS.SEARCH" size="16" class="ov-search-icon" />
-          <input v-model="search" type="text" class="ov-search-input" :placeholder="t('search')" />
+          <input v-model="search" type="text" class="ov-search-input" :placeholder="tm('search')" />
           <button v-if="search" type="button" class="ov-search-clear" @click="search = ''">
             <LjIcon :icon="ICONS.ACTIONS.CLOSE" size="14" />
           </button>
@@ -17,8 +17,8 @@
 
       <!-- Resultados da busca (global — sobrepõe a navegação) -->
       <template v-if="searching">
-        <div class="ov-section-title">{{ t("search_results") }}</div>
-        <div v-if="!searchResults.length" class="ov-empty">{{ t("empty") }}</div>
+        <div class="ov-section-title">{{ tm("search_results") }}</div>
+        <div v-if="!searchResults.length" class="ov-empty">{{ tm("empty") }}</div>
         <div class="ov-grid">
           <OnlineVideoCard
             v-for="video in searchResults"
@@ -36,16 +36,21 @@
 
       <!-- Botão voltar -->
       <div v-else-if="level > 1" class="ov-back">
-        <LjButton variant="ghost" size="sm" icon="None" icon-only @click="goBack">
-          <LjIcon :icon="ICONS.UI.ARROW_LEFT" />
-        </LjButton>
+        <LjButton
+          variant="primary"
+          size="md"
+          :icon="ICONS.UI.ARROW_LEFT"
+          icon-only
+          style="margin-right: 10px"
+          @click="goBack"
+        />
         <span class="ov-back-title">{{ backTitle }}</span>
       </div>
 
       <!-- Nível 1: Canais -->
       <template v-if="!searching && level === 1">
-        <div class="ov-section-title">{{ t("channels") }}</div>
-        <div v-if="!channels.length && !loading" class="ov-empty">{{ t("empty") }}</div>
+        <div class="ov-section-title">{{ tm("channels") }}</div>
+        <div v-if="!channels.length && !loading" class="ov-empty">{{ tm("empty") }}</div>
         <div class="ov-grid">
           <OnlineVideoCard
             v-for="ch in channels"
@@ -64,8 +69,8 @@
 
       <!-- Nível 2: Playlists do canal -->
       <template v-if="!searching && level === 2">
-        <div class="ov-section-title">{{ t("playlists") }}</div>
-        <div v-if="!playlists.length" class="ov-empty">{{ t("empty") }}</div>
+        <div class="ov-section-title">{{ tm("playlists") }}</div>
+        <div v-if="!playlists.length" class="ov-empty">{{ tm("empty") }}</div>
         <div class="ov-grid">
           <OnlineVideoCard
             v-for="pl in playlists"
@@ -75,8 +80,8 @@
             :entity="pl"
             variant="playlist"
             play-all
-            :first-video-id="firstVideoIdOfPlaylist(pl.playlist_id) ?? ''"
-            :subtitle="`${videosOf(pl.playlist_id)} ${t('videos_count')}`"
+            :first-video-id="firstVideoIdOfPlaylistm(pl.playlist_id) ?? ''"
+            :subtitle="`${videosOf(pl.playlist_id)} ${tm('videos_count')}`"
             @select="selectPlaylist(pl)"
             @play-all="playPlaylistVideos(pl.playlist_id)"
           />
@@ -85,8 +90,8 @@
 
       <!-- Nível 3: Vídeos da playlist -->
       <template v-if="!searching && level === 3">
-        <div class="ov-section-title">{{ t("videos") }}</div>
-        <div v-if="!videos.length" class="ov-empty">{{ t("empty") }}</div>
+        <div class="ov-section-title">{{ tm("videos") }}</div>
+        <div v-if="!videos.length" class="ov-empty">{{ tm("empty") }}</div>
         <div class="ov-grid">
           <OnlineVideoCard
             v-for="video in videos"
@@ -105,7 +110,7 @@
 </template>
 
 <script setup lang="ts">
-import { LjAlert, LjButton, LjIcon, LjProgress } from "@/components/ui";
+import { LjAlert, LjButton, LjIcon, LjPopover, LjProgress } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, watch, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
@@ -123,9 +128,10 @@ import $database from "@/helpers/Database";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
 import type { RibbonAction } from "@/types/Ribbon";
+import { LjTooltip } from "@components/ui";
 
 const { t: i18nT, locale } = useI18n();
-const t = (key: string): string => i18nT(`modules.online_videos.${key}`);
+const tm = (key: string): string => i18nT(`modules.online_videos.${key}`);
 
 const loading = ref(false);
 const error = ref<string | null>(null);
@@ -201,7 +207,7 @@ const videos = computed(() => {
 });
 
 /** Primeiro vídeo da playlist pela ordem original (capa do card). */
-function firstVideoIdOfPlaylist(playlistId: string): string | null {
+function firstVideoIdOfPlaylistm(playlistId: string): string | null {
   const list = (apiData.value?.videos ?? [])
     .filter((v) => v.playlist_id === playlistId)
     .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
@@ -272,7 +278,7 @@ async function loadData(): Promise<void> {
     apiData.value = data;
   } else {
     console.warn("[online_videos] falha ao carregar catálogo");
-    error.value = t("load_error");
+    error.value = tm("load_error");
   }
   loading.value = false;
 }

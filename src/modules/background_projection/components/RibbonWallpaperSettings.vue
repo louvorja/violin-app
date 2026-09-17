@@ -3,7 +3,7 @@
     <div class="rbw-col">
       <div class="rbw-group">
         <input type="color" class="rbw-color" :value="wpColor" @input="onColor" />
-        <label class="rbw-label">{{ $t(modulePrefix + ".bg_color") }}</label>
+        <label class="rbw-label">{{ tm("bg_color") }}</label>
       </div>
       <div class="rbw-group">
         <select class="rbw-select" :value="wpPosition" @change="onPos">
@@ -13,7 +13,7 @@
           <option value="stretch">Stretch</option>
           <option value="tile">Tile</option>
         </select>
-        <label class="rbw-label">{{ $t(modulePrefix + ".bg_position") }}</label>
+        <label class="rbw-label">{{ tm("bg_position") }}</label>
       </div>
       <div class="rbw-group">
         <div class="opt-format-field opt-field-bgimage">
@@ -56,8 +56,9 @@ import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import Broadcast from "@/helpers/Broadcast";
 import { MAIN_BACKGROUND_ID, Settings } from "@/types/Settings";
 
-const { t } = useI18n();
+const { t: i18nT } = useI18n();
 const modulePrefix = $modules.getPath(ModuleEnum.BACKGROUND_PROJECTION);
+const tm = (key: string) => i18nT(`modules.background_projection.${key}`);
 const currentBgImage = computed(() => wpImageUrl.value);
 
 const wpColor = ref("#000033");

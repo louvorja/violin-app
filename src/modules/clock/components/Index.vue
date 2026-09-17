@@ -9,7 +9,7 @@
       <LjButton
         variant="ghost"
         :icon="ICONS.PLAYER.FULLSCREEN"
-        :title="t('actions.fullscreen')"
+        :title="tm('actions.fullscreen')"
         icon-only
         @click="openFullscreen"
       />
@@ -60,7 +60,7 @@ const time = ref("");
 const date = ref("");
 let timer = null;
 
-const t = (key) => moduleContainer.value?.t(key) || key;
+const tm = (key) => moduleContainer.value?.tm(key) || key;
 
 const DATE_FORMATS = {
   long: { weekday: "long", day: "2-digit", month: "long", year: "numeric" },

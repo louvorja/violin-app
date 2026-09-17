@@ -185,6 +185,34 @@ export const module: Module = {
 
 O registry em `src/config/modules/index.ts` descobre todos os `manifest.ts`. Para um módulo novo, adicione antes seu identificador em `ModuleEnum` e use enums/grupos existentes ou crie os contratos correspondentes. As **chaves de tradução** ficam em `modules.<id>.<key>` no i18n global.
 
+## Convenção i18n: `t()` e `tm()`
+
+| Função | Escopo | Exemplo |
+|--------|--------|---------|
+| `t()` | Traduções **GLOBAIS** (`useI18n().t()`) | `t("actions.save")`, `t("shell.title")` |
+| `tm()` | Traduções do **MÓDULO** (`modules.<id>.xxx`) | `tm("title")` → `modules.bible.title` |
+
+**Dentro de um componente que usa `ModuleContainer`:**
+```ts
+const moduleContainer = ref(null);
+const tm = (key) => moduleContainer.value?.tm(key) || key;
+```
+
+**Dentro de um componente filhado (sem ModuleContainer):**
+```ts
+import { useModuleI18n } from "@/composables/useModuleI18n";
+const { t, tm, locale } = useModuleI18n("bible");
+```
+
+**No template:**
+```vue
+<LjButton>{{ tm("entry_title") }}</LjButton>       <!-- módulo -->
+<LjButton>{{ t("actions.save") }}</LjButton>        <!-- global -->
+<LjField :label="$t('components.ui.clear')" />      <!-- global via $t -->
+```
+
+Detalhes completos em `docs/i18n.md`.
+
 ## Estado Global
 
 O estado global usa Pinia e é acessado pelos helpers de estado:
@@ -944,7 +972,7 @@ Vue Renderer (BrowserWindow)
 | **D2**  | Cache de JSON do banco em `userData/json_db/` via custom protocol `louvorja://`                                                         | 1-2 dias | —               |
 | **D3**  | **Download HTTPS de mídia** ⭐ — `HttpQueue` baixa áudio/imagens de `VITE_URL_FILES`                                                    | 3-4 dias | ✅ implementado |
 | **D4**  | **Multi-monitor real** ⭐ — `BrowserWindow` por monitor, "Identificar Monitores" 5s overlay                                             | 2-3 dias | —               |
-| **D5**  | Servidor HTTP embarcado — Express porta 7070, replica 7 endpoints do `fmTransmitir.pas`                                                 | 2 dias   | —               |
+| **D5**  | Servidor HTTP embarcado — Express porta 7070, 16+ endpoints, auth por device, modo restrito | 2 dias   | ✅ implementado |
 | **D6**  | Atalhos globais OS-level — `globalShortcut` + roteamento contextual (substitui `FormKeyUp`)                                             | 1 dia    | —               |
 | **D7**  | Player polish — `requestAnimationFrame` para sincronia ±50ms, conversor `.slja` legado                                                  | 2-3 dias | —               |
 | **D8**  | Auto-update + distribuição — `electron-updater` (win/mac/AppImage) + GitHub API p/ deb/rpm, opções de beta/check-on-start/auto-download | 1-2 dias | ✅ implementado |
@@ -974,15 +1002,17 @@ electron/
     ├── identifyMonitors.js # Overlay 5s "Monitor N" (D4)
     ├── shortcuts.js      # globalShortcut (D6)
     ├── updater.js        # Auto-update: electron-updater + GitHub API (deb/rpm) (D8)
+    ├── devices.js        # Device auth: CRUD + only_authorized_devices flag
     ├── download/
     │   ├── api.js        # <api>/params (D3)
     │   ├── httpQueue.js  # fila HTTPS + pool de workers (D3)
     │   └── integrity.js  # existência + tamanho, aceitando variantes (D3)
     └── httpServer/
         ├── index.js      # Express (D5)
-        ├── auth.js       # token + bypass localhost (D5)
-        ├── routes.js     # /api/ping, /api/song-slides, etc. (D5)
-        └── static.js     # serve userData/server/ (D5)
+        ├── auth.js       # token + device auth + only_authorized_devices (D5)
+        ├── routes.js     # /api/ping, /api/keyboard, /api/song-slides, etc. (D5)
+        ├── events.js     # SSE /events (D5)
+        └── spa.js        # SPA + aliases Delphi (D5)
 
 electron-builder.yml      # Config NSIS Win (D0)
 build/installer.nsh       # NSIS custom (D8)

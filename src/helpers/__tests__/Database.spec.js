@@ -44,6 +44,18 @@ vi.mock("@/helpers/Alert", () => ({
   default: { error: vi.fn(), info: vi.fn(), show: vi.fn() },
 }));
 
+vi.mock("@/config/Api", () => ({
+  API_URL: "https://api.test",
+  API_TOKEN: "",
+  API_URL_FALLBACK: "",
+  API_URL_DB_FALLBACK: "",
+  API_URL_FALLBACK_TOKEN: "",
+  apiOrigin: () => "https://api.test",
+  API_URL_DB: "https://api.test/json_db",
+  API_URL_FILES: "https://api.test/file",
+  getTokenForUrl: () => "",
+}));
+
 const fetchMock = vi.fn();
 globalThis.fetch = fetchMock;
 

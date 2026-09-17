@@ -363,6 +363,10 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
     hostname: () => ipcRenderer.invoke("httpServer:hostname"),
     /** Regenera token (revoga acessos antigos). Retorna novo token. */
     resetToken: () => ipcRenderer.invoke("httpServer:resetToken"),
+    /** Retorna configurações de dispositivos (only_authorized_devices etc.). */
+    getDeviceSettings: () => ipcRenderer.invoke("httpServer:getDeviceSettings"),
+    /** Atualiza configurações de dispositivos. */
+    setDeviceSettings: (settings) => ipcRenderer.invoke("httpServer:setDeviceSettings", settings),
   },
 
   /**
@@ -388,6 +392,16 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
       const handler = () => cb();
       ipcRenderer.on("transmission:request-state", handler);
       return () => ipcRenderer.off("transmission:request-state", handler);
+    },
+
+    /**
+     * Mensagem de chat recebida de device remoto via HTTP/IPC.
+     * O main process envia quando POST /api/chat é chamado.
+     */
+    onChatMessage(cb) {
+      const handler = (_e, msg) => cb(msg);
+      ipcRenderer.on("transmission:chat-message", handler);
+      return () => ipcRenderer.off("transmission:chat-message", handler);
     },
   },
 
@@ -416,6 +430,32 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
       const handler = (_e, data) => cb(data);
       ipcRenderer.on("shortcut", handler);
       return () => ipcRenderer.off("shortcut", handler);
+    },
+  },
+
+  // -------------------------------------------------------------------------
+  // Dispositivos autorizados
+  // -------------------------------------------------------------------------
+
+  devices: {
+    /** Retorna a lista de dispositivos autorizados. */
+    list: () => ipcRenderer.invoke("devices:list"),
+    /** Salva a lista completa de dispositivos e notifica outras janelas. */
+    save: (deviceList) => ipcRenderer.invoke("devices:save", deviceList),
+    /** Escuta mudanças na lista de dispositivos (fan-out do main). */
+    onChanged(cb) {
+      const handler = (_e, data) => cb(data);
+      ipcRenderer.on("devices:changed", handler);
+      return () => ipcRenderer.off("devices:changed", handler);
+    },
+    /** Escuta device pendente (recém-registrado, aguardando permissões). */
+    onPending(cb) {
+      const handler = (_e, data) => {
+        console.log("[preload] devices:pending recebido:", data?.name, data?.platform, data?.model);
+        cb(data);
+      };
+      ipcRenderer.on("devices:pending", handler);
+      return () => ipcRenderer.off("devices:pending", handler);
     },
   },
 
@@ -527,6 +567,7 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
       "http:drawing-number",
       "http:drawing-name",
       "http:libras-bundle",
+      "http:projections-close",
     ];
     const handlers = events.map((evt) => {
       const handler = (_e, data) => cb(evt, data);

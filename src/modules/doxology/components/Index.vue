@@ -4,7 +4,7 @@
       <div class="dx-header">
         <div class="dx-search-wrap">
           <LjIcon :icon="ICONS.ACTIONS.SEARCH" size="16" class="dx-search-icon" />
-          <input v-model="search" type="text" class="dx-search-input" :placeholder="t('search')" />
+          <input v-model="search" type="text" class="dx-search-input" :placeholder="tm('search')" />
           <button v-if="search" type="button" class="dx-search-clear" @click="search = ''">
             <LjIcon :icon="ICONS.ACTIONS.CLOSE" size="14" />
           </button>
@@ -24,13 +24,13 @@
           </LjButton>
           <span class="dx-back-title">{{ selectedAlbum.name }}</span>
         </div>
-        <div class="dx-section-title">{{ t("musics") }}</div>
+        <div class="dx-section-title">{{ tm("musics") }}</div>
         <div v-if="!filteredMusics.length && !loading" class="dx-empty">
-          {{ t("empty_musics") }}
+          {{ tm("empty_musics") }}
         </div>
         <div class="dx-list">
           <div v-for="(m, i) in filteredMusics" :key="m.id_music ?? i" class="dx-list-item">
-            <button class="dx-list-play" :title="t('play')" @click="openMusicFor(m)">
+            <button class="dx-list-play" :title="tm('play')" @click="openMusicFor(m)">
               <LjIcon :icon="ICONS.PLAYER.PLAY" size="26" color="primary" />
             </button>
             <span class="dx-list-name" @click="openMusicFor(m)">{{ m.name }}</span>
@@ -46,9 +46,9 @@
 
       <!-- Nível 1: Álbuns -->
       <template v-else>
-        <div class="dx-section-title">{{ t("albums") }}</div>
+        <div class="dx-section-title">{{ tm("albums") }}</div>
         <div v-if="!filteredAlbums.length && !loading" class="dx-empty">
-          {{ t("empty_albums") }}
+          {{ tm("empty_albums") }}
         </div>
         <div class="dx-grid">
           <div
@@ -109,7 +109,7 @@ interface AlbumMusic {
 }
 
 const { t: i18nT, locale } = useI18n();
-const t = (key: string): string => i18nT(`modules.doxology.${key}`);
+const tm = (key: string): string => i18nT(`modules.doxology.${key}`);
 
 const loading = ref(false);
 const error = ref<string | null>(null);
@@ -171,7 +171,7 @@ async function loadData(): Promise<void> {
     albums.value = data;
   } else {
     console.warn("[doxology] falha ao carregar álbuns");
-    error.value = t("load_error");
+    error.value = tm("load_error");
   }
   loading.value = false;
 }

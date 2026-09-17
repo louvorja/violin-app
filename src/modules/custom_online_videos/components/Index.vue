@@ -7,7 +7,7 @@
     <div class="cv-body">
       <!-- Chips de categorias (filtro) -->
       <div v-if="categories.length || uncategorizedCount > 0" class="cv-chips">
-        <span class="cv-chips-title">{{ t("categories") }}</span>
+        <span class="cv-chips-title">{{ tm("categories") }}</span>
         <div
           v-for="cat in categories"
           :key="cat.id"
@@ -27,8 +27,8 @@
           <button
             type="button"
             class="cv-chip-add"
-            :title="t('add_video')"
-            :aria-label="t('add_video')"
+            :title="tm('add_video')"
+            :aria-label="tm('add_video')"
             @click.stop="openAdd(cat.id)"
           >
             <LjIcon :icon="ICONS.ACTIONS.ADD" :size="12" />
@@ -43,13 +43,13 @@
           <span class="cv-chip-icon-wrap">
             <LjIcon :icon="ICONS.MEDIA.YOUTUBE" :size="14" />
           </span>
-          <span class="cv-chip-name">{{ t("uncategorized") }}</span>
+          <span class="cv-chip-name">{{ tm("uncategorized") }}</span>
           <span class="cv-chip-count">{{ uncategorizedCount }}</span>
           <button
             type="button"
             class="cv-chip-add"
-            :title="t('add_video')"
-            :aria-label="t('add_video')"
+            :title="tm('add_video')"
+            :aria-label="tm('add_video')"
             @click.stop="openAdd()"
           >
             <LjIcon :icon="ICONS.ACTIONS.ADD" :size="12" />
@@ -61,7 +61,7 @@
         v-if="!videos.length"
         class="cv-empty"
         :icon="ICONS.MEDIA.YOUTUBE"
-        :title="categories.length ? t('empty') : t('no_categories')"
+        :title="categories.length ? tm('empty') : tm('no_categories')"
       />
 
       <!-- List view -->
@@ -80,15 +80,15 @@
               :disabled="projectingId == v.id"
               @click="projectVideo(v)"
             >
-              {{ t("project") }}
+              {{ tm("project") }}
             </LjButton>
             <LjButton
               size="sm"
               variant="ghost"
               icon-only
               :icon="ICONS.ACTIONS.EDIT"
-              :title="t('edit')"
-              :aria-label="t('edit')"
+              :title="tm('edit')"
+              :aria-label="tm('edit')"
               @click="openEdit(v)"
             />
             <LjButton
@@ -97,8 +97,8 @@
               icon-only
               class="cv-btn-danger"
               :icon="ICONS.ACTIONS.DELETE"
-              :title="t('delete')"
-              :aria-label="t('delete')"
+              :title="tm('delete')"
+              :aria-label="tm('delete')"
               @click="confirmDelete(v)"
             />
           </div>
@@ -133,8 +133,8 @@
                 variant="ghost"
                 icon-only
                 :icon="ICONS.ACTIONS.EDIT"
-                :title="t('edit')"
-                :aria-label="t('edit')"
+                :title="tm('edit')"
+                :aria-label="tm('edit')"
                 @click.stop="openEdit(v)"
               />
               <LjButton
@@ -143,8 +143,8 @@
                 icon-only
                 class="cv-btn-danger"
                 :icon="ICONS.ACTIONS.DELETE"
-                :title="t('delete')"
-                :aria-label="t('delete')"
+                :title="tm('delete')"
+                :aria-label="tm('delete')"
                 @click.stop="confirmDelete(v)"
               />
             </div>
@@ -156,35 +156,35 @@
     <!-- Add / Edit dialog -->
     <LjDialog
       v-model="dialogOpen"
-      :title="editingId ? t('edit_title') : t('add_title')"
+      :title="editingId ? tm('edit_title') : tm('add_title')"
       :icon="editingId ? ICONS.ACTIONS.EDIT : ICONS.ACTIONS.ADD"
     >
-      <LjField v-if="editingId" layout="column" :label="t('name')">
+      <LjField v-if="editingId" layout="column" :label="tm('name')">
         <LjInput
           v-model="formName"
           autofocus
-          :placeholder="t('name_placeholder')"
+          :placeholder="tm('name_placeholder')"
           @keydown.enter="saveVideo"
         />
       </LjField>
 
-      <LjField layout="column" :label="t('url')">
+      <LjField layout="column" :label="tm('url')">
         <LjInput
           v-model="formUrl"
           :autofocus="!editingId"
-          :placeholder="t('url_placeholder')"
+          :placeholder="tm('url_placeholder')"
           @keydown.enter="saveVideo"
         />
       </LjField>
 
-      <LjField layout="column" :label="t('select_category')">
+      <LjField layout="column" :label="tm('select_category')">
         <LjSelect v-model="formCategoryId" :items="categorySelectItems" item-label="title" />
       </LjField>
 
       <template #footer>
-        <LjButton size="sm" @click="dialogOpen = false">{{ t("cancel") }}</LjButton>
+        <LjButton size="sm" @click="dialogOpen = false">{{ tm("cancel") }}</LjButton>
         <LjButton size="sm" variant="primary" :loading="saving" @click="saveVideo">
-          {{ t("save") }}
+          {{ tm("save") }}
         </LjButton>
       </template>
     </LjDialog>
@@ -249,8 +249,8 @@ const STORE_CATEGORY = DB_TABLE.CUSTOM_ONLINE_VIDEOS_CATEGORIES;
 /** Id virtual dos vídeos adicionados sem categoria. */
 const UNCATEGORIZED_ID = "";
 
-const moduleContainer = ref<{ t(key: string): string } | null>(null);
-const t = (key: string): string => moduleContainer.value?.t(key) || key;
+const moduleContainer = ref<{ tm(key: string): string } | null>(null);
+const tm = (key: string): string => moduleContainer.value?.tm(key) || key;
 
 const videos = ref<VideoItem[]>([]);
 const viewMode = ref<string>("grid");
@@ -312,7 +312,7 @@ const filteredVideos = computed(() => {
 });
 
 const categorySelectItems = computed(() => [
-  { title: t("uncategorized"), value: UNCATEGORIZED_ID },
+  { title: tm("uncategorized"), value: UNCATEGORIZED_ID },
   ...categories.value.map((c) => ({ title: c.name, value: c.id })),
 ]);
 
@@ -533,7 +533,7 @@ async function saveVideo(): Promise<void> {
 }
 
 async function confirmDelete(v: VideoItem): Promise<void> {
-  if (!confirm(t("confirm_delete"))) return;
+  if (!confirm(tm("confirm_delete"))) return;
   await deleteVideoInternal(v.id);
   videos.value = videos.value.filter((x) => x.id !== v.id);
 }

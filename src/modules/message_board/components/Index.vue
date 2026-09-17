@@ -12,13 +12,13 @@
       <Transition name="mb-drawer">
         <aside v-if="showList" class="mb-list-drawer">
           <div class="mb-list-drawer__header">
-            <span class="mb-list-drawer__title">{{ t("data.list") }}</span>
+            <span class="mb-list-drawer__title">{{ tm("data.list") }}</span>
           </div>
 
           <div class="mb-list-drawer__body">
             <LjTextarea
               v-model="draft"
-              :placeholder="t('inputs.message')"
+              :placeholder="tm('inputs.message')"
               :rows="3"
               @keydown.ctrl.enter.prevent="addMessage"
             />
@@ -30,10 +30,10 @@
                 :disabled="!draft.trim()"
                 @click="addMessage"
               >
-                {{ t("actions.add") }}
+                {{ tm("actions.add") }}
               </LjButton>
               <LjChip v-if="showing" variant="success" size="sm" :icon="ICONS.UI.CHECK_CIRCLE">
-                {{ t("data.showing") }}
+                {{ tm("data.showing") }}
               </LjChip>
             </div>
           </div>
@@ -41,7 +41,7 @@
           <LjDivider />
 
           <p v-if="messages.length === 0" class="mb-list-drawer__empty">
-            {{ t("data.empty") }}
+            {{ tm("data.empty") }}
           </p>
 
           <ul v-else class="mb-list">
@@ -61,8 +61,8 @@
                   icon-only
                   :icon="ICONS.PROJECTION.PRESENT"
                   :class="activeIndex === i ? 'mb-msg__present--on' : 'mb-msg__present'"
-                  :title="t('actions.present')"
-                  :aria-label="t('actions.present')"
+                  :title="tm('actions.present')"
+                  :aria-label="tm('actions.present')"
                   @click.stop="present(i)"
                 />
                 <LjButton
@@ -71,8 +71,8 @@
                   icon-only
                   :icon="ICONS.ACTIONS.CLOSE"
                   class="mb-msg__remove"
-                  :title="t('actions.remove')"
-                  :aria-label="t('actions.remove')"
+                  :title="tm('actions.remove')"
+                  :aria-label="tm('actions.remove')"
                   @click.stop="removeMessage(i)"
                 />
               </div>
@@ -88,7 +88,7 @@
           {{ messages[activeIndex]?.text || "" }}
         </div>
         <div v-else class="mb-preview-hint">
-          {{ t("data.empty") }}
+          {{ tm("data.empty") }}
         </div>
       </div>
     </div>
@@ -103,8 +103,8 @@
           icon-only
           class="mb-tools__danger"
           :icon="ICONS.PLAYER.STOP"
-          :title="t('actions.clear_board')"
-          :aria-label="t('actions.clear_board')"
+          :title="tm('actions.clear_board')"
+          :aria-label="tm('actions.clear_board')"
           @click="clearPresentation"
         />
         <LjButton
@@ -112,8 +112,8 @@
           variant="ghost"
           icon-only
           :icon="ICONS.PLAYER.FULLSCREEN"
-          :title="t('actions.fullscreen')"
-          :aria-label="t('actions.fullscreen')"
+          :title="tm('actions.fullscreen')"
+          :aria-label="tm('actions.fullscreen')"
           @click="fullscreen = true"
         />
       </div>
@@ -136,7 +136,7 @@
         <Transition name="fade-slide" mode="out-in">
           <div :key="fsText" class="mb-fs-text" :style="textStyle">{{ fsText || "" }}</div>
         </Transition>
-        <div class="mb-fs-hint">{{ t("data.esc_hint") }}</div>
+        <div class="mb-fs-hint">{{ tm("data.esc_hint") }}</div>
       </div>
     </Transition>
   </Teleport>
@@ -183,7 +183,7 @@ const fsText = ref("");
 
 const showing = computed(() => activeIndex.value >= 0);
 
-const t = (key) => moduleContainer.value?.t(key) || key;
+const tm = (key) => moduleContainer.value?.tm(key) || key;
 
 watch(fullscreen, (val) => {
   if (val) {

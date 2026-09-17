@@ -70,6 +70,7 @@ export interface YTPlayerOptions {
   height: string;
   width: string;
   videoId: string;
+  origin?: string;
   playerVars: {
     autoplay: number;
     mute: number;

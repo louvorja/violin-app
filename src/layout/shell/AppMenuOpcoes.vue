@@ -212,6 +212,7 @@
         <div v-for="role in roleRows" :key="role.role" class="opt-row">
           <label class="opt-label" :for="`opt-monitor-role-${role.role}`">
             {{ role.label }}
+            <span v-if="role.warning" class="opt-monitor-warning">{{ role.warning }}</span>
           </label>
           <LjSelect
             :id="`opt-monitor-role-${role.role}`"
@@ -219,7 +220,6 @@
             :model-value="role.displayId ?? ''"
             @update:model-value="setRole(role.role, $event === '' ? null : String($event))"
           />
-          <span v-if="role.warning" class="opt-monitor-warning">{{ role.warning }}</span>
         </div>
       </template>
     </section>
@@ -569,13 +569,20 @@
           </table>
 
           <div class="fmt-fx">
-            <label class="opt-checkbox">
+            <label class="fmt-field">
+              <span class="opt-format-label">{{ $t("options.slides.text_bg_opacity") }}</span>
               <input
-                type="checkbox"
-                :checked="getUserData(KEYS.OPTIONS.SLIDE.TEXT_BG_TRANSPARENT, false)"
-                @change="saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BG_TRANSPARENT, $c($event))"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                class="opt-range"
+                :value="getUserData(KEYS.OPTIONS.SLIDE.TEXT_BG_OPACITY, 75)"
+                @input="saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BG_OPACITY, Number($v($event)))"
               />
-              <span>{{ $t("options.slides.text_bg_transparent") }}</span>
+              <span class="opt-range-val">
+                {{ getUserData(KEYS.OPTIONS.SLIDE.TEXT_BG_OPACITY, 75) }}%
+              </span>
             </label>
 
             <label class="opt-checkbox">
@@ -690,6 +697,21 @@
               {{ getUserData(KEYS.OPTIONS.SLIDE.TEXT_BORDER_WIDTH, 2) }}px
             </span>
           </label>
+          <label class="fmt-field">
+            <span class="opt-format-label">{{ $t("options.slides.text_border_radius") }}</span>
+            <input
+              type="range"
+              min="0"
+              max="50"
+              step="1"
+              class="opt-range"
+              :value="getUserData(KEYS.OPTIONS.SLIDE.TEXT_BORDER_RADIUS, 0)"
+              @input="saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BORDER_RADIUS, Number($v($event)))"
+            />
+            <span class="opt-range-val">
+              {{ getUserData(KEYS.OPTIONS.SLIDE.TEXT_BORDER_RADIUS, 0) }}px
+            </span>
+          </label>
         </div>
 
         <button type="button" class="opt-btn opt-btn--ghost" @click="restoreTextFormat">
@@ -713,27 +735,98 @@
         v-if="getUserData(KEYS.OPTIONS.SLIDE.CUSTOM_RETURN_TEXT_FORMAT, false)"
         class="opt-format-block"
       >
+        <!-- Parte superior (slide atual) -->
         <div class="opt-format-row">
+          <span class="opt-format-group-label">{{ $t("options.slides.return_bg_top") }}</span>
+        </div>
+        <div class="opt-format-row">
+          <label class="opt-format-field">
+            <span class="opt-format-label">{{ $t("options.slides.return_font_size_cover") }}</span>
+            <input
+              type="number"
+              class="opt-input opt-input--num"
+              :value="getUserData(KEYS.OPTIONS.SLIDE.RETURN_FONT_SIZE_COVER, 14)"
+              @input="
+                saveUserData(KEYS.OPTIONS.SLIDE.RETURN_FONT_SIZE_COVER, Number($v($event)) || 14)
+              "
+            />
+          </label>
+          <label class="opt-format-field">
+            <span class="opt-format-label">{{ $t("options.slides.return_font_size_lyric") }}</span>
+            <input
+              type="number"
+              class="opt-input opt-input--num"
+              :value="getUserData(KEYS.OPTIONS.SLIDE.RETURN_FONT_SIZE_LYRIC, 11)"
+              @input="
+                saveUserData(KEYS.OPTIONS.SLIDE.RETURN_FONT_SIZE_LYRIC, Number($v($event)) || 11)
+              "
+            />
+          </label>
           <div class="opt-format-field">
-            <label class="opt-format-label" for="opt-return-text-case">
+            <label class="opt-format-label" for="opt-return-top-text-case">
               {{ $t("options.slides.text_case") }}
             </label>
             <LjSelect
-              id="opt-return-text-case"
+              id="opt-return-top-text-case"
               :items="opcoesCaixaTexto"
-              :model-value="textCaseAtual"
-              @update:model-value="saveUserData(KEYS.OPTIONS.SLIDE.RETURN_TEXT_CASE, $event)"
+              :model-value="getUserData(KEYS.OPTIONS.SLIDE.RETURN_TOP_TEXT_CASE, 'uppercase')"
+              @update:model-value="saveUserData(KEYS.OPTIONS.SLIDE.RETURN_TOP_TEXT_CASE, $event)"
             />
           </div>
+        </div>
+
+        <!-- Parte inferior (próxima frase) -->
+        <div class="opt-format-row">
+          <span class="opt-format-group-label">{{ $t("options.slides.return_bg_bottom") }}</span>
+        </div>
+        <div class="opt-format-row">
           <label class="opt-format-field">
             <span class="opt-format-label">{{ $t("options.slides.text_size") }}</span>
             <input
               type="number"
-              min="3"
-              max="15"
               class="opt-input opt-input--num"
               :value="getUserData(KEYS.OPTIONS.SLIDE.FONT_SIZE_NEXT, 5)"
               @input="saveUserData(KEYS.OPTIONS.SLIDE.FONT_SIZE_NEXT, Number($v($event)) || 5)"
+            />
+          </label>
+          <div class="opt-format-field">
+            <label class="opt-format-label" for="opt-return-bottom-text-case">
+              {{ $t("options.slides.text_case") }}
+            </label>
+            <LjSelect
+              id="opt-return-bottom-text-case"
+              :items="opcoesCaixaTexto"
+              :model-value="getUserData(KEYS.OPTIONS.SLIDE.RETURN_BOTTOM_TEXT_CASE, 'uppercase')"
+              @update:model-value="saveUserData(KEYS.OPTIONS.SLIDE.RETURN_BOTTOM_TEXT_CASE, $event)"
+            />
+          </div>
+          <div class="opt-format-field">
+            <label class="opt-format-label" for="opt-return-bottom-text-align">
+              {{ $t("options.slides.alignment") }}
+            </label>
+            <LjSelect
+              id="opt-return-bottom-text-align"
+              :items="opcoesAlinhamentoHorizontal"
+              :model-value="getUserData(KEYS.OPTIONS.SLIDE.RETURN_BOTTOM_TEXT_ALIGN, 'center')"
+              @update:model-value="
+                saveUserData(KEYS.OPTIONS.SLIDE.RETURN_BOTTOM_TEXT_ALIGN, $event)
+              "
+            />
+          </div>
+        </div>
+
+        <!-- Altura do rodapé -->
+        <div class="opt-format-row">
+          <label class="opt-format-field">
+            <span class="opt-format-label">{{ $t("options.slides.return_height_bottom") }}</span>
+            <input
+              type="number"
+              class="opt-input opt-input--num"
+              max="40"
+              :value="getUserData(KEYS.OPTIONS.SLIDE.RETURN_HEIGHT_BOTTOM, 18)"
+              @input="
+                saveUserData(KEYS.OPTIONS.SLIDE.RETURN_HEIGHT_BOTTOM, Number($v($event)) || 18)
+              "
             />
           </label>
         </div>
@@ -801,6 +894,119 @@
               :items="opcoesPosicaoFundo"
               :model-value="getUserData(KEYS.OPTIONS.SLIDE.BG_POSITION, 'center')"
               @update:model-value="saveUserData(KEYS.OPTIONS.SLIDE.BG_POSITION, $event)"
+            />
+          </div>
+        </div>
+      </div>
+
+      <!-- Fundo da tela de retorno personalizado -->
+      <div class="opt-row">
+        <label class="opt-checkbox">
+          <input
+            type="checkbox"
+            :checked="getUserData(KEYS.OPTIONS.SLIDE.CUSTOM_RETURN_BACKGROUND, false)"
+            @change="saveUserData(KEYS.OPTIONS.SLIDE.CUSTOM_RETURN_BACKGROUND, $c($event))"
+          />
+          <span>{{ $t("options.slides.custom_return_background") }}</span>
+        </label>
+      </div>
+      <div
+        v-if="getUserData(KEYS.OPTIONS.SLIDE.CUSTOM_RETURN_BACKGROUND, false)"
+        class="opt-format-block"
+      >
+        <!-- Parte superior (slide atual) -->
+        <div class="opt-format-row">
+          <span class="opt-format-group-label">{{ $t("options.slides.return_bg_top") }}</span>
+          <label class="opt-format-field">
+            <span class="opt-format-label">{{ $t("options.slides.bg_color") }}</span>
+            <input
+              type="color"
+              class="opt-color"
+              :value="getUserData(KEYS.OPTIONS.SLIDE.RETURN_BG_TOP_COLOR, '#1a201a')"
+              @input="saveUserData(KEYS.OPTIONS.SLIDE.RETURN_BG_TOP_COLOR, $v($event))"
+            />
+          </label>
+          <label class="opt-format-field opt-format-field--grow">
+            <span class="opt-format-label">{{ $t("options.slides.bg_image") }}</span>
+            <div class="opt-bg-pick">
+              <LjButton variant="default" size="sm" @click="pickReturnTopImage">
+                <LjIcon start :icon="ICONS.ACTIONS.IMAGE_PLUS" size="16" />
+                {{ $t("options.background.select") }}
+              </LjButton>
+              <span v-if="!returnTopImageUrl" class="opt-bg-empty-text">
+                {{ $t("options.background.no_image") }}
+              </span>
+              <div v-else class="opt-bg-preview">
+                <img :src="returnTopImageUrl" class="opt-bg-preview-img" alt="" />
+                <button
+                  class="opt-bg-preview-remove"
+                  type="button"
+                  :title="$t('options.slides.remove_image')"
+                  @click="removeReturnTopImage"
+                >
+                  <LjIcon :icon="ICONS.ACTIONS.CLOSE" size="15" />
+                </button>
+              </div>
+            </div>
+          </label>
+          <div class="opt-format-field">
+            <label class="opt-format-label" for="opt-return-top-bg-position">
+              {{ $t("options.slides.bg_position") }}
+            </label>
+            <LjSelect
+              id="opt-return-top-bg-position"
+              :items="opcoesPosicaoFundo"
+              :model-value="getUserData(KEYS.OPTIONS.SLIDE.RETURN_BG_TOP_POSITION, 'center')"
+              @update:model-value="saveUserData(KEYS.OPTIONS.SLIDE.RETURN_BG_TOP_POSITION, $event)"
+            />
+          </div>
+        </div>
+        <!-- Parte inferior (próxima frase) -->
+        <div class="opt-format-row">
+          <span class="opt-format-group-label">{{ $t("options.slides.return_bg_bottom") }}</span>
+          <label class="opt-format-field">
+            <span class="opt-format-label">{{ $t("options.slides.bg_color") }}</span>
+            <input
+              type="color"
+              class="opt-color"
+              :value="getUserData(KEYS.OPTIONS.SLIDE.RETURN_BG_BOTTOM_COLOR, '#1d251d')"
+              @input="saveUserData(KEYS.OPTIONS.SLIDE.RETURN_BG_BOTTOM_COLOR, $v($event))"
+            />
+          </label>
+          <label class="opt-format-field opt-format-field--grow">
+            <span class="opt-format-label">{{ $t("options.slides.bg_image") }}</span>
+            <div class="opt-bg-pick">
+              <LjButton variant="default" size="sm" @click="pickReturnBottomImage">
+                <LjIcon start :icon="ICONS.ACTIONS.IMAGE_PLUS" size="16" />
+                {{ $t("options.background.select") }}
+              </LjButton>
+              <span v-if="!returnBottomImageUrl" class="opt-bg-empty-text">
+                {{ $t("options.background.no_image") }}
+              </span>
+              <div v-else class="opt-bg-preview">
+                <img :src="returnBottomImageUrl" class="opt-bg-preview-img" alt="" />
+                <button
+                  class="opt-bg-preview-remove"
+                  type="button"
+                  :title="$t('options.slides.remove_image')"
+                  @click="removeReturnBottomImage"
+                >
+                  <LjIcon :icon="ICONS.ACTIONS.CLOSE" size="15" />
+                </button>
+              </div>
+            </div>
+          </label>
+          <div class="opt-format-field">
+            <label class="opt-format-label" for="opt-return-bottom-bg-position">
+              {{ $t("options.slides.bg_position") }}
+            </label>
+            <LjSelect
+              id="opt-return-bottom-bg-position"
+              :items="opcoesPosicaoFundo"
+              :model-value="getUserData(KEYS.OPTIONS.SLIDE.RETURN_BG_BOTTOM_POSITION, 'center')"
+              @update:model-value="
+                saveUserData(KEYS.OPTIONS.SLIDE.RETURN_BG_BOTTOM_POSITION, $event)
+              "
             />
           </div>
         </div>
@@ -1163,6 +1369,7 @@ import { isThemeId, THEME_IDS } from "@/config/Themes";
 import { SLIDE_STYLE_DEFAULT } from "@/config/SlideStyle";
 import { estiloDeFundo } from "@/helpers/BackgroundStyle";
 import { FONT } from "@/config/Fonts";
+import { refreshReturnBg } from "@/composables/useSlideStyle";
 
 interface ThemeOption {
   id: string;
@@ -1252,6 +1459,12 @@ const opcoesAlinhamento = computed(() => [
   { value: "bottom", label: t("options.slides.align_bottom") },
 ]);
 
+const opcoesAlinhamentoHorizontal = computed(() => [
+  { value: "left", label: t("options.slides.align_left") },
+  { value: "center", label: t("options.slides.align_center") },
+  { value: "right", label: t("options.slides.align_right") },
+]);
+
 const opcoesCaixaTexto = computed(() => [
   { value: "none", label: t("options.slides.case_normal") },
   { value: "capitalize", label: t("options.slides.case_capitalize") },
@@ -1271,10 +1484,6 @@ const opcoesMonitor = computed(() => [
 // "normal" é valor legado: não existe em CSS text-transform, e a projeção
 // passou a traduzi-lo para "none". O select precisa da mesma tradução, senão
 // quem já tinha "normal" salvo abre as Opções com o campo em branco.
-const textCaseAtual = computed(() => {
-  const v = getUserData<string>(KEYS.OPTIONS.SLIDE.RETURN_TEXT_CASE, "uppercase");
-  return v === "normal" ? "none" : v;
-});
 
 /* ---- Helpers de evento para o template (TypeScript strict) ---- */
 function $v(e: Event): string {
@@ -1448,6 +1657,7 @@ onMounted(async () => {
   // gravava por cima da configuração real.
   await loadFileProjBg();
   await loadSlideBg();
+  await loadReturnBgs();
 });
 
 onBeforeUnmount(() => {
@@ -1465,7 +1675,6 @@ onBeforeUnmount(() => {
   }
   if (wallpaperBlobUrl.value) URL.revokeObjectURL(wallpaperBlobUrl.value);
   if (fileProjBlobUrl) URL.revokeObjectURL(fileProjBlobUrl);
-  if (slideBgBlobUrl) URL.revokeObjectURL(slideBgBlobUrl);
 });
 
 function restoreTextFormat(): void {
@@ -1478,12 +1687,13 @@ function restoreTextFormat(): void {
   saveUserData(KEYS.OPTIONS.SLIDE.TITLE_SIZE, SLIDE_STYLE_DEFAULT.font_size_cover);
   saveUserData(KEYS.OPTIONS.SLIDE.BODY_SIZE, SLIDE_STYLE_DEFAULT.font_size_lyric);
   saveUserData(KEYS.OPTIONS.SLIDE.AUX_SIZE, SLIDE_STYLE_DEFAULT.font_size_aux);
-  saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BG_TRANSPARENT, false);
+  saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BG_OPACITY, SLIDE_STYLE_DEFAULT.text_bg_opacity);
   saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BG_BLUR_ENABLED, false);
   saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BG_BLUR, SLIDE_STYLE_DEFAULT.text_bg_blur);
   saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BORDER_ENABLED, false);
   saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BORDER_COLOR, SLIDE_STYLE_DEFAULT.text_border_color);
   saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BORDER_WIDTH, 2);
+  saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BORDER_RADIUS, 0);
   saveUserData(KEYS.OPTIONS.SLIDE.SHADOW_ENABLED, false);
   saveUserData(KEYS.OPTIONS.SLIDE.SHADOW_COLOR, SLIDE_STYLE_DEFAULT.shadow_color);
   saveUserData(KEYS.OPTIONS.SLIDE.SHADOW_BLUR, 12);
@@ -1561,14 +1771,12 @@ async function loadSlideBg(): Promise<void> {
     const blob = new Blob([s.image], { type: s.mime || "image/png" });
     slideBgBlobUrl = URL.createObjectURL(blob);
     slideBgImageUrl.value = slideBgBlobUrl;
-    $userdata.set(KEYS.OPTIONS.SLIDE.BG_IMAGE, slideBgBlobUrl);
   } else {
     if (slideBgBlobUrl) {
       URL.revokeObjectURL(slideBgBlobUrl);
       slideBgBlobUrl = null;
     }
     slideBgImageUrl.value = "";
-    $userdata.set(KEYS.OPTIONS.SLIDE.BG_IMAGE, "");
   }
 }
 
@@ -1579,7 +1787,6 @@ async function pickSlideBgImage(): Promise<void> {
   if (slideBgBlobUrl) URL.revokeObjectURL(slideBgBlobUrl);
   slideBgBlobUrl = URL.createObjectURL(blob);
   slideBgImageUrl.value = slideBgBlobUrl;
-  $userdata.set(KEYS.OPTIONS.SLIDE.BG_IMAGE, slideBgBlobUrl);
   await saveSetting({ id: SLIDE_BG_STORAGE_ID, image: r.data, mime: r.mime });
 }
 
@@ -1589,8 +1796,93 @@ async function removeSlideBgImage(): Promise<void> {
     slideBgBlobUrl = null;
   }
   slideBgImageUrl.value = "";
-  $userdata.set(KEYS.OPTIONS.SLIDE.BG_IMAGE, "");
   await saveSetting({ id: SLIDE_BG_STORAGE_ID, image: null, mime: null });
+}
+
+/* ── Return Background Images (top + bottom) ── */
+
+const RETURN_BG_TOP_STORAGE_ID = "return_custom_bg_top";
+const RETURN_BG_BOTTOM_STORAGE_ID = "return_custom_bg_bottom";
+let returnTopBlobUrl: string | null = null;
+let returnBottomBlobUrl: string | null = null;
+const returnTopImageUrl = ref("");
+const returnBottomImageUrl = ref("");
+
+async function loadReturnBgs(): Promise<void> {
+  const [top, bottom] = await Promise.all([
+    getSetting<any>(RETURN_BG_TOP_STORAGE_ID).catch(() => null),
+    getSetting<any>(RETURN_BG_BOTTOM_STORAGE_ID).catch(() => null),
+  ]);
+  if (top?.image) {
+    if (returnTopBlobUrl) URL.revokeObjectURL(returnTopBlobUrl);
+    const blob = new Blob([top.image], { type: top.mime || "image/png" });
+    returnTopBlobUrl = URL.createObjectURL(blob);
+    returnTopImageUrl.value = returnTopBlobUrl;
+  } else {
+    if (returnTopBlobUrl) {
+      URL.revokeObjectURL(returnTopBlobUrl);
+      returnTopBlobUrl = null;
+    }
+    returnTopImageUrl.value = "";
+  }
+  if (bottom?.image) {
+    if (returnBottomBlobUrl) URL.revokeObjectURL(returnBottomBlobUrl);
+    const blob = new Blob([bottom.image], { type: bottom.mime || "image/png" });
+    returnBottomBlobUrl = URL.createObjectURL(blob);
+    returnBottomImageUrl.value = returnBottomBlobUrl;
+  } else {
+    if (returnBottomBlobUrl) {
+      URL.revokeObjectURL(returnBottomBlobUrl);
+      returnBottomBlobUrl = null;
+    }
+    returnBottomImageUrl.value = "";
+  }
+}
+
+async function pickReturnTopImage(): Promise<void> {
+  const r = await pickImageData();
+  if (!r) return;
+  const blob = new Blob([r.data], { type: r.mime });
+  if (returnTopBlobUrl) URL.revokeObjectURL(returnTopBlobUrl);
+  returnTopBlobUrl = URL.createObjectURL(blob);
+  returnTopImageUrl.value = returnTopBlobUrl;
+  await saveSetting({ id: RETURN_BG_TOP_STORAGE_ID, image: r.data, mime: r.mime });
+  refreshReturnBg();
+  Broadcast.send(BROADCAST_TYPE.RETURN_BG_CHANGED, {});
+}
+
+async function removeReturnTopImage(): Promise<void> {
+  if (returnTopBlobUrl) {
+    URL.revokeObjectURL(returnTopBlobUrl);
+    returnTopBlobUrl = null;
+  }
+  returnTopImageUrl.value = "";
+  await saveSetting({ id: RETURN_BG_TOP_STORAGE_ID, image: null, mime: null });
+  refreshReturnBg();
+  Broadcast.send(BROADCAST_TYPE.RETURN_BG_CHANGED, {});
+}
+
+async function pickReturnBottomImage(): Promise<void> {
+  const r = await pickImageData();
+  if (!r) return;
+  const blob = new Blob([r.data], { type: r.mime });
+  if (returnBottomBlobUrl) URL.revokeObjectURL(returnBottomBlobUrl);
+  returnBottomBlobUrl = URL.createObjectURL(blob);
+  returnBottomImageUrl.value = returnBottomBlobUrl;
+  await saveSetting({ id: RETURN_BG_BOTTOM_STORAGE_ID, image: r.data, mime: r.mime });
+  refreshReturnBg();
+  Broadcast.send(BROADCAST_TYPE.RETURN_BG_CHANGED, {});
+}
+
+async function removeReturnBottomImage(): Promise<void> {
+  if (returnBottomBlobUrl) {
+    URL.revokeObjectURL(returnBottomBlobUrl);
+    returnBottomBlobUrl = null;
+  }
+  returnBottomImageUrl.value = "";
+  await saveSetting({ id: RETURN_BG_BOTTOM_STORAGE_ID, image: null, mime: null });
+  refreshReturnBg();
+  Broadcast.send(BROADCAST_TYPE.RETURN_BG_CHANGED, {});
 }
 
 /* ── File Projection Background ── */

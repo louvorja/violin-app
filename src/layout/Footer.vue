@@ -305,22 +305,10 @@ const slideText = computed(() => {
 const shortTime = (t) => DateTime.shortTime(t);
 const formatDuration = (seconds) => DateTime.shortTime(seconds);
 const firstSlide = () => Media.firstSlide();
-const prevSlide = () => {
-  if (playlist.isActive.value) {
-    playlist.playPrev();
-  } else {
-    Media.prevSlide();
-  }
-};
+const prevSlide = () => Media.prevSlide();
 const rewind = () => Media.advanceTime(-10);
 const forward = () => Media.advanceTime(10);
-const nextSlide = () => {
-  if (playlist.isActive.value) {
-    playlist.playNext();
-  } else {
-    Media.nextSlide();
-  }
-};
+const nextSlide = () => Media.nextSlide();
 const lastSlide = () => Media.lastSlide();
 const closeMedia = () => {
   if (playlist.isActive.value) {

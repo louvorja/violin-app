@@ -1152,6 +1152,48 @@ A porta base é **7070** (ou a salva no `userStore`). Se estiver em uso:
    ("Não foi possível iniciar o aplicativo — não foi possível reservar uma
    porta") e fecha ao clicar OK.
 
+### Autenticação
+
+O middleware de auth (`auth.js`) protege `/api/*` e `/events` para requests
+remotos. Localhost sempre bypassa.
+
+**Três caminhos de autenticação:**
+
+1. **Token global** (5 chars A-Z0-9) — query `?token=`, body `token`, ou header `X-Token`
+2. **Device com par** — headers `X-Device-Id` + `X-Device-Token` (novo)
+3. **Device com token only** — busca por token sem id (legado/retrocompatível)
+
+**Modo restrito (`only_authorized_devices`):**
+
+Quando ativado (via Transmissão → Dispositivos → checkbox), apenas devices
+cadastrados com permissões são aceitos. Token global legado é bloqueado.
+Persistido em `device_settings.json` via `devices.js`.
+
+### Endpoints da API
+
+| Método | Endpoint                          | Body / Query                                  | Descrição                                  |
+| ------ | --------------------------------- | --------------------------------------------- | ------------------------------------------ |
+| GET    | `/api/ping`                       | —                                             | Health check                               |
+| GET    | `/api/clock`                      | —                                             | Hora do servidor                           |
+| POST   | `/api/keyboard`                   | `{ key, modifiers? }`                         | Simula tecla (Electron `sendInputEvent`)   |
+| POST   | `/api/song-slides`                | `{ action, index? }`                          | Controle de slides (next/prev/close/go-to) |
+| POST   | `/api/bible`                      | `{ action?, text?, reference?, bookId?... }`  | Projeta versículo ou navega bíblia         |
+| POST   | `/api/liturgy-execute`            | `{ id, tag? }`                                | Executa item da liturgia                   |
+| POST   | `/api/open-song`                  | `{ id, tag?, id_liturgy? }`                   | Abre música para projeção                  |
+| POST   | `/api/projections/close`          | `{}`                                          | Encerra todas as projeções ativas          |
+| POST   | `/api/announcements`              | `{ action, ids? }`                            | Projeta/anuncia (next/prev/stop/project)   |
+| POST   | `/api/settings/devices`           | `{ only_authorized_devices }`                 | Lê/grava flag de modo restrito             |
+| GET    | `/api/music-search`               | `?q=...&lang=pt`                              | Busca músicas (somente leitura)            |
+| GET    | `/api/bible-downloaded`           | `?lang=pt`                                    | Versões da bíblia baixadas                |
+| GET    | `/api/liturgy`                    | —                                             | Itens da liturgia atual                    |
+| GET    | `/api/announcements?action=list`  | —                                             | Lista de anúncios                          |
+| GET    | `/api/user-data`                  | `?path=...`                                   | Lê valor do user_data                      |
+| GET    | `/api/db/:path`                   | —                                             | JSON do banco (cache local ou remoto)      |
+| GET    | `/libras/:token`                  | —                                             | Bundle de animação VLibras                 |
+| POST   | `/api/register-device`            | `{ token, name, model, platform }`            | Cadastro de device (antes do auth)         |
+
+Todos os endpoints POST exigem `Content-Type: application/json`.
+
 
 ---
 

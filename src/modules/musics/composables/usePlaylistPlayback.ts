@@ -5,6 +5,8 @@ import DateTime from "@/helpers/DateTime";
 import { KEYS } from "@/constants/UserDataKeys";
 import { MusicActionEnum } from "@/enums/MusicActionEnum";
 import Media from "@/composables/useMedia";
+import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
+import $broadcast from "@/helpers/Broadcast";
 import type { Playlist, PlaylistSong } from "@/types/Music";
 import { usePlaylists } from "./usePlaylists";
 import Telemetry from "@/helpers/Telemetry";
@@ -185,6 +187,11 @@ function playPrev(): void {
 }
 
 Media.registerPlaylistEndHandler(_onSongEnded);
+
+$broadcast.listen((msg) => {
+  if (msg.type === BROADCAST_TYPE.MEDIA_PREV_MUSIC && _isActive.value) playPrev();
+  if (msg.type === BROADCAST_TYPE.MEDIA_NEXT_MUSIC && _isActive.value) playNext();
+});
 
 onUnmounted(() => {
   Media.unregisterPlaylistEndHandler();

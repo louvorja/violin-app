@@ -45,7 +45,7 @@
     <!-- Drag-drop zone -->
     <div v-if="images.length === 0 && !selectedImage" class="image-picker-empty">
       <LjIcon :icon="ICONS.ACTIONS.IMAGE_PLUS" size="36" color="grey" />
-      <p>{{ t("slot.drag_drop_hint") }}</p>
+      <p>{{ tm("slot.drag_drop_hint") }}</p>
     </div>
 
     <!-- Hidden file input -->
@@ -60,7 +60,7 @@
 
     <LjButton variant="default" size="sm" class="image-picker-upload-btn" @click="openFilePicker">
       <LjIcon start :icon="ICONS.ACTIONS.UPLOAD" />
-      {{ t("slot.image_library") }}
+      {{ tm("slot.image_library") }}
     </LjButton>
   </div>
 </template>
@@ -79,7 +79,7 @@ import { ensureRenderableImage } from "@/helpers/ImageConvert";
 import { ICONS } from "@/config/Icons";
 
 const { t: _t } = useI18n();
-const t = (key) => _t(`modules.overlay.${key}`);
+const tm = (key) => _t(`modules.overlay.${key}`);
 
 const props = defineProps({
   selectedId: { type: String, default: "" },

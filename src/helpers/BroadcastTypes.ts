@@ -142,6 +142,12 @@ export const BROADCAST_TYPE = Object.freeze({
   WALLPAPER_UPDATE: "wallpaper_update",
   FILE_PROJECTION_BG_UPDATE: "file_projection_bg_update",
 
+  /** Imagem de fundo da tela de retorno (topo/rodapé) foi alterada.
+   *  Payload: {} (vazio — as views re-leem do IndexedDB via refreshReturnBg)
+   *  Emitido por: AppMenuOpcoes (após pick/remove de imagem retorno).
+   *  Recebido por: useSlideStyle (re-resolve blob URLs do IndexedDB). */
+  RETURN_BG_CHANGED: "return_bg_changed",
+
   /** Sincronização de vídeo entre o player principal e a projeção.
    *  Payload: { currentTime: number, isPaused: boolean }
    *  Emitido por: useMedia.ts (onTimeUpdate + goToTime + pause/play).
@@ -168,6 +174,12 @@ export const BROADCAST_TYPE = Object.freeze({
   /** Alteração na config do overlay (salva no IndexedDB).
    *  Recebido por: useOverlayState (re-lê do IndexedDB). */
   OVERLAY_CONFIG_CHANGED: "overlay_config_changed",
+
+  /** Mensagem de chat entre dispositivos.
+   *  Payload: { id, sender, deviceId?, text, timestamp }
+   *  Emitido por: useChat (app local) e SSE bridge (devices remotos).
+   *  Recebido por: useChat (atualiza UI). */
+  CHAT_MESSAGE: "chat_message",
 
   // ─── In-app (hotkeys / HTTP events → módulos) ────────────────────────────
 

@@ -17,7 +17,7 @@
         <LjTabs
           :model-value="libraryFilter"
           :tabs="filterTabs"
-          :aria-label="t('library')"
+          :aria-label="tm('library')"
           @update:model-value="libraryFilter = $event as LibraryFilter"
         />
         <span class="lj-u-spacer" />
@@ -48,7 +48,7 @@
           :aria-pressed="selectedCategoryIds.has(UNCATEGORIZED_ID)"
           @click="toggleCategoryChip(UNCATEGORIZED_ID)"
         >
-          {{ t("uncategorized") }} ({{ uncategorizedCount }})
+          {{ tm("uncategorized") }} ({{ uncategorizedCount }})
         </button>
       </div>
 
@@ -103,8 +103,8 @@
               variant="ghost"
               icon-only
               :icon="ICONS.ACTIONS.EDIT"
-              :aria-label="t('rename')"
-              :title="t('rename')"
+              :aria-label="tm('rename')"
+              :title="tm('rename')"
               @click.stop="startRename(file)"
             />
             <LjButton
@@ -113,43 +113,43 @@
               icon-only
               class="bg-grid-actions__danger"
               :icon="ICONS.ACTIONS.DELETE"
-              :aria-label="t('delete')"
-              :title="t('delete')"
+              :aria-label="tm('delete')"
+              :title="tm('delete')"
               @click.stop="removeFile(file)"
             />
           </div>
         </div>
       </div>
       <div v-else class="bg-empty">
-        <LjEmpty :icon="ICONS.MEDIA.IMAGE_MULTIPLE" :title="t('empty_library')" />
+        <LjEmpty :icon="ICONS.MEDIA.IMAGE_MULTIPLE" :title="tm('empty_library')" />
       </div>
 
       <!-- Rename dialog -->
       <LjDialog
         v-model="showRenameDialog"
         size="sm"
-        :title="t('rename')"
+        :title="tm('rename')"
         :icon="ICONS.ACTIONS.EDIT_OUTLINE"
       >
-        <LjField layout="column" :label="t('name')">
+        <LjField layout="column" :label="tm('name')">
           <LjInput v-model="renameInput" autofocus @keydown.enter="confirmRename" />
         </LjField>
 
-        <LjField layout="column" :label="t('category')" class="bg-rename-field">
+        <LjField layout="column" :label="tm('category')" class="bg-rename-field">
           <LjSelect
             :model-value="renameCategoryId"
             :items="categories"
             item-value="id"
             item-label="name"
-            :placeholder="t('uncategorized')"
+            :placeholder="tm('uncategorized')"
             @update:model-value="renameCategoryId = String($event)"
           />
         </LjField>
 
         <template #footer>
-          <LjButton size="sm" @click="showRenameDialog = false">{{ t("cancel") }}</LjButton>
+          <LjButton size="sm" @click="showRenameDialog = false">{{ tm("cancel") }}</LjButton>
           <LjButton size="sm" variant="primary" :disabled="!renameInput" @click="confirmRename">
-            {{ t("rename") }}
+            {{ tm("rename") }}
           </LjButton>
         </template>
       </LjDialog>
@@ -167,7 +167,7 @@
       />
 
       <!-- Category Select Dialog -->
-      <LjDialog v-model="showCategorySelect" size="sm" :title="t('select_category')">
+      <LjDialog v-model="showCategorySelect" size="sm" :title="tm('select_category')">
         <div class="bg-catlist">
           <button
             type="button"
@@ -177,7 +177,7 @@
             <span class="bg-catlist__icon">
               <LjIcon :icon="ICONS.MEDIA.IMAGE_MULTIPLE_OUTLINE" :size="24" />
             </span>
-            <span class="bg-catlist__name">{{ t("uncategorized") }}</span>
+            <span class="bg-catlist__name">{{ tm("uncategorized") }}</span>
           </button>
           <button
             v-for="cat in categories"
@@ -195,7 +195,7 @@
         </div>
 
         <template #footer>
-          <LjButton size="sm" @click="showCategorySelect = false">{{ t("cancel") }}</LjButton>
+          <LjButton size="sm" @click="showCategorySelect = false">{{ tm("cancel") }}</LjButton>
         </template>
       </LjDialog>
 
@@ -307,11 +307,11 @@ async function deleteCategoryById(id: string): Promise<void> {
   await $idb.del(STORE_CATEGORIES, id);
 }
 
-const moduleContainer = ref<{ t(key: string, named?: Record<string, unknown>): string } | null>(
+const moduleContainer = ref<{ tm(key: string, named?: Record<string, unknown>): string } | null>(
   null
 );
-const t = (key: string, named?: Record<string, unknown>): string =>
-  moduleContainer.value?.t(key, named as any) || key;
+const tm = (key: string, named?: Record<string, unknown>): string =>
+  moduleContainer.value?.tm(key, named as any) || key;
 
 type LibraryFilter = "all" | "image" | "video";
 
@@ -320,9 +320,9 @@ const libraryFilter = ref<LibraryFilter>("all");
 // As abas são recalculadas a cada troca de idioma: `t` depende do
 // ModuleContainer montado, então a lista precisa ser computada, não estática.
 const filterTabs = computed<LjTab[]>(() => [
-  { value: "all", label: t("all") },
-  { value: "image", label: t("images") },
-  { value: "video", label: t("videos") },
+  { value: "all", label: tm("all") },
+  { value: "image", label: tm("images") },
+  { value: "video", label: tm("videos") },
 ]);
 
 const searchQuery = ref("");
@@ -750,13 +750,13 @@ async function onDrop(e: DragEvent): Promise<void> {
   }
 
   if (valid.length === 0) {
-    Alert.error({ text: t("alert_type_not_supported") });
+    Alert.error({ text: tm("alert_type_not_supported") });
     return;
   }
 
   if (valid.length < droppedFiles.length) {
     Alert.info({
-      text: t("alert_some_ignored", { count: valid.length, total: droppedFiles.length }),
+      text: tm("alert_some_ignored", { count: valid.length, total: droppedFiles.length }),
     });
   }
 

@@ -10,7 +10,7 @@
         variant="ghost"
         size="sm"
         :icon="ICONS.PLAYER.FULLSCREEN"
-        :title="t('actions.fullscreen')"
+        :title="tm('actions.fullscreen')"
         icon-only
         @click="fullscreen = true"
       />
@@ -34,7 +34,7 @@
     <!-- Rodapé — números sorteados sempre visíveis -->
     <template #footer>
       <div v-if="drawn.length" class="draw-fs-footer">
-        <span class="lj-u-caption lj-u-muted">{{ t("data.drawn") }}:</span>
+        <span class="lj-u-caption lj-u-muted">{{ tm("data.drawn") }}:</span>
         <div class="draw-fs-chips">
           <LjChip v-for="n in drawn" :key="n" variant="primary">{{ n }}</LjChip>
         </div>
@@ -42,7 +42,7 @@
           <div class="draw-fs-footer-progress">
             <LjProgress :value="((total - remaining) / total) * 100" :height="17" />
           </div>
-          {{ t("data.remaining") }}: {{ remaining }} / {{ total }}
+          {{ tm("data.remaining") }}: {{ remaining }} / {{ total }}
         </div>
       </div>
     </template>
@@ -71,10 +71,10 @@
             :icon="ICONS.SORT.DICE"
             @click="drawNumber"
           >
-            {{ t("actions.draw") }}
+            {{ tm("actions.draw") }}
           </LjButton>
           <LjButton size="lg" :icon="ICONS.ACTIONS.RESTART" @click="reset">
-            {{ t("actions.reset") }}
+            {{ tm("actions.reset") }}
           </LjButton>
           <LjButton
             variant="ghost"
@@ -173,7 +173,7 @@ const pool = computed(() => {
   return all;
 });
 
-const t = (key) => moduleContainer.value?.t(key) || key;
+const tm = (key) => moduleContainer.value?.tm(key) || key;
 
 watch(fullscreen, (val) => {
   if (val) nextTick(() => fsRoot.value?.focus());

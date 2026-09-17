@@ -1,9 +1,9 @@
 <template>
   <ModuleContainer ref="moduleContainer" :manifest="manifest">
     <div class="rcm-panel">
-      <p class="rcm-info">{{ t("info_module") }}</p>
+      <p class="rcm-info">{{ tm("info_module") }}</p>
 
-      <LjField layout="column" :label="t('labels.ip')" :hint="t('messages.get_ip')">
+      <LjField layout="column" :label="$t('labels.ip')" :hint="$t('messages.get_ip')">
         <LjInput v-model="url" :disabled="loading || is_connected" :icon="ICONS.UI.IP_NETWORK">
           <template #suffix>
             <LjSpinner v-if="loading" class="rcm-busy" />
@@ -11,7 +11,7 @@
         </LjInput>
       </LjField>
 
-      <LjField layout="column" :label="t('labels.token')">
+      <LjField layout="column" :label="$t('labels.token')">
         <LjInput v-model="token" :disabled="loading || is_connected" :icon="ICONS.UI.CODE_BRACES">
           <template #suffix>
             <LjSpinner v-if="loading" class="rcm-busy" />
@@ -20,12 +20,12 @@
       </LjField>
 
       <div class="rcm-actions">
-        <LjButton v-requires-network @click="test">{{ t("labels.test_connection") }}</LjButton>
+        <LjButton v-requires-network @click="test">{{ tm("labels.test_connection") }}</LjButton>
         <LjButton v-if="!is_connected" variant="primary" @click="connect">
-          {{ t("labels.connect") }}
+          {{ tm("labels.connect") }}
         </LjButton>
         <LjButton v-else variant="danger" @click="disonnect">
-          {{ t("labels.disconnect") }}
+          {{ tm("labels.disconnect") }}
         </LjButton>
       </div>
     </div>
@@ -57,8 +57,8 @@ interface TestResult {
   invalid_url?: string;
 }
 
-const moduleContainer = ref<{ t(key: string): string } | null>(null);
-const t = (key: string): string => moduleContainer.value?.t(key) || key;
+const moduleContainer = ref<{ tm(key: string): string } | null>(null);
+const tm = (key: string): string => moduleContainer.value?.tm(key) || key;
 
 const url = ref<string>("");
 const token = ref<string>("");

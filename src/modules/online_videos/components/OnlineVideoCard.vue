@@ -20,7 +20,7 @@
       <button
         v-if="playAll"
         class="ov-card-play-all"
-        :title="t('play_all')"
+        :title="tm('play_all')"
         @click.stop="$emit('playAll')"
       >
         <LjIcon :icon="ICONS.PLAYER.PLAY" size="22" color="#fff" />
@@ -52,9 +52,7 @@ import { ICONS } from "@/config/Icons";
  * O avanço troca o src DIRETO no elemento, sem depender de re-render.
  */
 import { computed, ref } from "vue";
-import { useI18n } from "vue-i18n";
-import pt from "../lang/pt.json";
-import es from "../lang/es.json";
+import { useModuleI18n } from "@/composables/useModuleI18n";
 
 export interface Channel {
   channel_id: string;
@@ -111,17 +109,7 @@ const props = withDefaults(
 
 defineEmits<{ select: []; playAll: [] }>();
 
-const TRANSLATIONS: Record<string, Record<string, unknown>> = { pt, es };
-const { locale } = useI18n();
-function t(key: string): string {
-  const dict = TRANSLATIONS[locale.value] ?? TRANSLATIONS.pt;
-  let cur: unknown = dict;
-  for (const k of key.split(".")) {
-    if (cur && typeof cur === "object" && k in cur) cur = (cur as Record<string, unknown>)[k];
-    else return key;
-  }
-  return typeof cur === "string" ? cur : key;
-}
+const { tm, locale } = useModuleI18n("online_videos");
 
 /**
  * Normaliza tamanho para CSS: número puro ("220" | 220) ganha "px";

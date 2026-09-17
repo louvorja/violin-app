@@ -3,6 +3,7 @@
 const path = require("path");
 const fs = require("fs");
 const jsonCache = require("../jsonCache.js");
+const devices = require("../devices.js");
 
 const KEY_LITURGY_DAYS = "modules.liturgy.days";
 const KEY_LITURGY_ACTIVE_DAY = "modules.liturgy.active_day";
@@ -16,13 +17,137 @@ const _sorteios = {
   name: { last: null, history: [] },
 };
 
+/** Rate limit simples: 1 msg/500ms por device. */
+const _chatRateLimit = new Map();
+
+/** Modos de execução de música aceitos pelo /api/open-song. */
+const SONG_MODES = new Set([
+  "audio",
+  "instrumental",
+  "no_audio",
+  "audio-only",
+  "playback-only",
+]);
+
+/** Mapa legado tag → mode (clients antigos que só enviam `tag`). */
+const SONG_TAG_MODES = { 1: "audio", 2: "instrumental", 3: "no_audio" };
+
+/**
+ * Resolve o modo de execução da música.
+ *
+ * Prioridade: `mode` válido > `tag` legado > `"audio"` (Cantado). Assim os
+ * clients novos escolhem o modo explicitamente, os antigos continuam
+ * funcionando pelo `tag`, e uma requisição sem nenhum dos dois abre cantado.
+ */
+function _resolveSongMode(body) {
+  const rawMode = body && body.mode;
+  if (typeof rawMode === "string" && SONG_MODES.has(rawMode)) return rawMode;
+  const tag = parseInt((body && body.tag) || "", 10);
+  if (SONG_TAG_MODES[tag]) return SONG_TAG_MODES[tag];
+  return "audio";
+}
+
+/**
+ * Códigos VK legados (modo clássico do app) → nomes de tecla do DOM.
+ * O modo clássico remapeia as setas para números (37/38/39/40…).
+ */
+const LEGACY_VK_KEYS = {
+  13: "Enter",
+  27: "Escape",
+  32: "Space",
+  35: "End",
+  36: "Home",
+  37: "ArrowLeft",
+  38: "ArrowUp",
+  39: "ArrowRight",
+  40: "ArrowDown",
+};
+
+/** Aliases aceitos → nome DOM usado pelo `Hotkeys` do renderer. */
+const KEY_ALIASES = {
+  arrowleft: "ArrowLeft",
+  arrowright: "ArrowRight",
+  arrowup: "ArrowUp",
+  arrowdown: "ArrowDown",
+  esc: "Escape",
+  " ": "Space",
+  space: "Space",
+  return: "Enter",
+};
+
+/**
+ * Normaliza o nome da tecla recebido do client para o nome DOM.
+ *
+ * O app manda `ArrowRight`/`Space`/`Home`… (e o modo clássico, códigos VK).
+ * O `Hotkeys` do renderer compara por `KeyboardEvent.key`, então a chave
+ * precisa chegar no formato DOM.
+ */
+function normalizeKeyName(rawKey) {
+  const str = String(rawKey ?? "");
+  // Espaço literal (" ") é uma tecla, não whitespace a aparar.
+  if (str === " ") return "Space";
+  const trimmed = str.trim();
+  if (!trimmed) return null;
+  if (LEGACY_VK_KEYS[trimmed]) return LEGACY_VK_KEYS[trimmed];
+  const alias = KEY_ALIASES[trimmed.toLowerCase()];
+  if (alias) return alias;
+  return trimmed;
+}
+
 function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDatabaseUrl, getApiToken }) {
+
+  /** Retorna mainWindow apenas se existir e não estiver destruída. */
+  function getValidMainWindow() {
+    const win = getMainWindow();
+    if (!win || win.isDestroyed()) return null;
+    return win;
+  }
+
+  /**
+   * Consulta o estado atual da projeção de letras na janela principal.
+   *
+   * Mesmo padrão de `replyChannel` do `/api/announcements?action=list`: o
+   * renderer responde no canal IPC e esse valor vira a resposta HTTP. Sem isso
+   * o cliente remoto só sabia dos slides por push (`slides_data`) e ficava com a
+   * aba vazia quando o evento se perdia.
+   */
+  function askSlideState(mainWindow, res) {
+    const { ipcMain } = require("electron");
+    const channel = "_song_slides_state_reply_" + Date.now();
+    let sent = false;
+    const timeout = setTimeout(() => {
+      if (sent) return;
+      sent = true;
+      ipcMain.removeAllListeners(channel);
+      res.status(504).json({ error: "Timeout ao consultar o estado dos slides" });
+    }, 3000);
+    ipcMain.once(channel, (_event, data) => {
+      if (sent) return;
+      sent = true;
+      clearTimeout(timeout);
+      res.json(data);
+    });
+    mainWindow.webContents.send("http:song-slides", {
+      action: "playing-check",
+      replyChannel: channel,
+    });
+  }
 
   // ---------------------------------------------------------------
   // /api/ping — health check
+  //
+  // Único path acessível a devices cadastrados ainda SEM permissões
+  // (ver `allowUnapprovedPaths` no auth). O app usa `authorized` para
+  // saber se o host já aprovou o pareamento.
   // ---------------------------------------------------------------
   app.get("/api/ping", (req, res) => {
-    res.json({ status: "ok", app: "LouvorJA" });
+    const info = req.authInfo || { kind: "unknown", authorized: false, permissions: [] };
+    res.json({
+      status: "ok",
+      app: "LouvorJA",
+      authorized: info.authorized === true,
+      permissions: Array.isArray(info.permissions) ? info.permissions : [],
+    });
   });
 
   // ---------------------------------------------------------------
@@ -38,57 +163,84 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
   });
 
   // ---------------------------------------------------------------
-  // /api/keyboard?key=N — simular tecla
+  // POST /api/keyboard — simular tecla
+  // Body: { key: string, modifiers?: string[] }
+  //
+  // Injeta um KeyboardEvent sintético no renderer em vez de usar
+  // `webContents.sendInputEvent`. Dois motivos:
+  //  1. `sendInputEvent` exige a BrowserWindow EM FOCO (ver docs do Electron),
+  //     e o controle remoto é usado justamente com o desktop em segundo plano;
+  //  2. `sendInputEvent.keyCode` só aceita códigos de Accelerator ("Right"),
+  //     não nomes DOM ("ArrowRight") — era o que o app enviava.
+  // O evento sintético cai no `Hotkeys` do renderer, reaproveitando todo o
+  // roteamento já existente (Media × Bíblia).
   // ---------------------------------------------------------------
-  app.get("/api/keyboard", (req, res) => {
-    const mainWindow = getMainWindow();
-    const key = req.query.key;
-    if (!key || !mainWindow) {
+  app.post("/api/keyboard", (req, res) => {
+    const mainWindow = getValidMainWindow();
+    const rawKey = req.body && req.body.key;
+    const modifiers = (req.body && req.body.modifiers) || [];
+    if (!rawKey || !mainWindow) {
       return res.status(400).json({ error: "key faltando ou janela indisponível" });
     }
+
+    const key = normalizeKeyName(rawKey);
+    if (!key) {
+      return res.status(400).json({ error: `key inválida: ${rawKey}` });
+    }
+
+    const mods = new Set(
+      (Array.isArray(modifiers) ? modifiers : []).map((m) => String(m).toLowerCase())
+    );
+    const event = {
+      key,
+      bubbles: true,
+      cancelable: true,
+      ctrlKey: mods.has("control") || mods.has("ctrl"),
+      metaKey: mods.has("meta") || mods.has("cmd") || mods.has("command"),
+      altKey: mods.has("alt"),
+      shiftKey: mods.has("shift"),
+    };
+
     try {
-      mainWindow.webContents.sendInputEvent({
-        type: "keyDown",
-        keyCode: key,
-      });
-      mainWindow.webContents.sendInputEvent({
-        type: "keyUp",
-        keyCode: key,
-      });
-      res.json({ status: "ok", key });
+      // `executeJavaScript` roda independente de foco/minimização.
+      mainWindow.webContents
+        .executeJavaScript(
+          `window.dispatchEvent(new KeyboardEvent("keydown", ${JSON.stringify(event)}))`
+        )
+        .catch(() => { /* janela ainda carregando ou destruída */ });
+      res.json({ status: "ok", key, modifiers });
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
   });
 
   // ---------------------------------------------------------------
-  // /api/song-slides?action=next|previous|playing-check|close|go-to-slide
-  // Despacha eventos pro renderer via webContents.send
+  // POST /api/song-slides — ações de slides
+  // Body: { action: string, index?: number }
   // ---------------------------------------------------------------
-  app.get("/api/song-slides", (req, res) => {
-    const mainWindow = getMainWindow();
-    const action = req.query.action;
+  app.post("/api/song-slides", (req, res) => {
+    const mainWindow = getValidMainWindow();
+    const action = req.body && req.body.action;
     if (!mainWindow) {
       return res.status(503).json({ error: "Janela principal não disponível" });
     }
 
     const validActions = [
-      "next",
-      "previous",
-      "playing-check",
-      "close",
-      "go-to-slide",
-      "bible-next",
-      "bible-prev",
-      "bible-close",
+      "next", "previous", "playing-check", "close",
+      "go-to-slide", "bible-next", "bible-prev", "bible-close",
     ];
     if (!validActions.includes(action)) {
       return res.status(400).json({ error: "action inválida", valid: validActions });
     }
 
+    // `playing-check` é consulta (não comando): devolve o estado atual.
+    if (action === "playing-check") {
+      return askSlideState(mainWindow, res);
+    }
+
     const payload = { action };
     if (action === "go-to-slide") {
-      payload.index = parseInt(req.query.index, 10);
+      payload.index = parseInt(req.body.index, 10);
     }
 
     mainWindow.webContents.send("http:song-slides", payload);
@@ -96,16 +248,32 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
   });
 
   // ---------------------------------------------------------------
-  // /api/bible?text=...&reference=...
-  // Projeta um versículo da bíblia ou encerra a projeção
+  // GET /api/song-slides?action=playing-check — mesma consulta por GET
+  // (clientes que só fazem GET usam esta forma).
   // ---------------------------------------------------------------
-  app.get("/api/bible", (req, res) => {
-    const mainWindow = getMainWindow();
+  app.get("/api/song-slides", (req, res) => {
+    if (req.query.action !== "playing-check") {
+      return res.status(400).json({ error: "action inválida para GET", valid: ["playing-check"] });
+    }
+    const mainWindow = getValidMainWindow();
+    if (!mainWindow) {
+      return res.status(503).json({ error: "Janela principal não disponível" });
+    }
+    return askSlideState(mainWindow, res);
+  });
+
+  // ---------------------------------------------------------------
+  // POST /api/bible — projeta versículo ou encerra projeção
+  // Body: { action?: "close"|"next"|"prev", text?, reference?, bookId?, chapter?, verse? }
+  // ---------------------------------------------------------------
+  app.post("/api/bible", (req, res) => {
+    const mainWindow = getValidMainWindow();
     if (!mainWindow) {
       return res.status(503).json({ error: "Janela principal não disponível" });
     }
 
-    const action = req.query.action;
+    const { action, text, reference, bookId, chapter, verse } = req.body || {};
+
     if (action === "close") {
       const payload = { action: "bible-close" };
       mainWindow.webContents.send("http:song-slides", payload);
@@ -123,12 +291,6 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
       mainWindow.webContents.send("http:song-slides", payload);
       return res.json({ status: "ok", action: "bible-prev", payload });
     }
-
-    const text = req.query.text;
-    const reference = req.query.reference;
-    const bookId = req.query.bookId;
-    const chapter = req.query.chapter;
-    const verse = req.query.verse;
 
     if (!text || !reference) {
       return res.status(400).json({ error: "text e reference são obrigatórios (ou action=close)" });
@@ -152,57 +314,49 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
   });
 
   // ---------------------------------------------------------------
-  // /api/liturgy-execute?id=...
-  // Executa um item da liturgia
+  // POST /api/liturgy-execute — executa item da liturgia
+  // Body: { id: string, tag?: string }
   // ---------------------------------------------------------------
-  app.get("/api/liturgy-execute", (req, res) => {
-    const mainWindow = getMainWindow();
+  app.post("/api/liturgy-execute", (req, res) => {
+    const mainWindow = getValidMainWindow();
     if (!mainWindow) {
       return res.status(503).json({ error: "Janela principal não disponível" });
     }
-    const id = req.query.id;
+    const id = req.body && req.body.id;
     if (!id) {
       return res.status(400).json({ error: "id é obrigatório" });
     }
 
-    const payload = {
-      action: "liturgy-execute",
-      id,
-      tag: req.query.tag,
-    };
-
+    const payload = { action: "liturgy-execute", id, tag: req.body.tag };
     mainWindow.webContents.send("http:song-slides", payload);
     res.json({ status: "ok", action: "liturgy-execute", payload });
   });
 
   // ---------------------------------------------------------------
-  // /api/open-song?id=N&tag=1|2|3&id_liturgy=...
-  // tag: 1=audio, 2=instrumental, 3=no_audio
+  // POST /api/open-song — abre música para projeção
+  // Body: { id: number, mode?: string, tag?: number, id_liturgy?: string }
+  //
+  // mode: audio | instrumental | no_audio | audio-only | playback-only
+  // tag (legado): 1=audio, 2=instrumental, 3=no_audio
   // ---------------------------------------------------------------
-  app.get("/api/open-song", (req, res) => {
-    const mainWindow = getMainWindow();
-    const id = parseInt(req.query.id, 10);
-    const tag = parseInt(req.query.tag || "3", 10);
-    const id_liturgy = req.query.id_liturgy;
+  app.post("/api/open-song", (req, res) => {
+    const mainWindow = getValidMainWindow();
+    const id = parseInt(req.body && req.body.id, 10);
+    const id_liturgy = req.body && req.body.id_liturgy;
 
     if (isNaN(id) || !mainWindow) {
       return res.status(400).json({ error: "id inválido ou janela indisponível" });
     }
 
-    const modeMap = { 1: "audio", 2: "instrumental", 3: "no_audio" };
-    const mode = modeMap[tag] || "no_audio";
+    const mode = _resolveSongMode(req.body);
 
-    console.log("[httpServer] /api/open-song", { id, mode, id_liturgy });
     mainWindow.webContents.send("http:open-song", { id_music: id, mode, id: id_liturgy });
     res.json({ status: "ok", id, mode });
   });
 
-  /**
-   * /api/music-search?q=...&lang=pt&token=...
-   *
-   * Pesquisa músicas no cache JSON local do host. Não depende de API externa.
-   * Retorna no máximo 20 resultados filtrados por nome da música ou álbum.
-   */
+  // ---------------------------------------------------------------
+  // /api/music-search?q=...&lang=pt (GET — somente leitura)
+  // ---------------------------------------------------------------
   app.get("/api/music-search", (req, res) => {
     const q = req.query.q;
     if (!q || q.length < 2) {
@@ -246,20 +400,26 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
   });
 
   // ---------------------------------------------------------------
-  // /api/drawing-number?action=get-last|draw
+  // /api/drawing-number
+  // GET  action=get-last — consulta último sorteado
+  // POST action=draw     — sortear número
   // ---------------------------------------------------------------
   app.get("/api/drawing-number", (req, res) => {
-    const mainWindow = getMainWindow();
     const action = req.query.action;
-
     if (action === "get-last") {
       return res.json({ status: "ok", last: _sorteios.number.last });
     }
+    res.status(400).json({ error: "action inválida", valid: ["get-last"] });
+  });
+
+  app.post("/api/drawing-number", (req, res) => {
+    const mainWindow = getValidMainWindow();
+    const { action, min, max } = req.body || {};
 
     if (action === "draw") {
-      const min = parseInt(req.query.min || "1", 10);
-      const max = parseInt(req.query.max || "100", 10);
-      const num = Math.floor(Math.random() * (max - min + 1)) + min;
+      const minVal = parseInt(min || "1", 10);
+      const maxVal = parseInt(max || "100", 10);
+      const num = Math.floor(Math.random() * (maxVal - minVal + 1)) + minVal;
       _sorteios.number.last = num;
       _sorteios.number.history.push(num);
 
@@ -270,22 +430,28 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
       return res.json({ status: "ok", number: num, history: _sorteios.number.history });
     }
 
-    res.status(400).json({ error: "action inválida", valid: ["get-last", "draw"] });
+    res.status(400).json({ error: "action inválida", valid: ["draw"] });
   });
 
   // ---------------------------------------------------------------
-  // /api/drawing-name?action=get-last|draw&names=A,B,C
+  // /api/drawing-name
+  // GET  action=get-last — consulta último sorteado
+  // POST action=draw     — sortear nome
   // ---------------------------------------------------------------
   app.get("/api/drawing-name", (req, res) => {
-    const mainWindow = getMainWindow();
     const action = req.query.action;
-
     if (action === "get-last") {
       return res.json({ status: "ok", last: _sorteios.name.last });
     }
+    res.status(400).json({ error: "action inválida", valid: ["get-last"] });
+  });
+
+  app.post("/api/drawing-name", (req, res) => {
+    const mainWindow = getValidMainWindow();
+    const { action, names: namesRaw } = req.body || {};
 
     if (action === "draw") {
-      const namesStr = req.query.names || "";
+      const namesStr = namesRaw || "";
       const names = namesStr.split(",").map((n) => n.trim()).filter(Boolean);
 
       if (names.length === 0) {
@@ -303,11 +469,11 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
       return res.json({ status: "ok", name, history: _sorteios.name.history });
     }
 
-    res.status(400).json({ error: "action inválida", valid: ["get-last", "draw"] });
+    res.status(400).json({ error: "action inválida", valid: ["draw"] });
   });
 
   // ---------------------------------------------------------------
-  // /api/bible-downloaded — versões da Bíblia baixadas no host
+  // /api/bible-downloaded — versões da Bíblia baixadas no host (GET)
   // ---------------------------------------------------------------
   app.get("/api/bible-downloaded", (req, res) => {
     const lang = req.query.lang || "pt";
@@ -323,7 +489,6 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
         return res.json({ status: "ok", downloaded: [] });
       }
 
-      // Flag de versões baixadas (persistida pelo AppMenuSincronizar).
       const userData = typeof getUserData === "function" ? getUserData() : {};
       const flaggedVersions = new Set(
         Array.isArray(userData?.storage?.bible_downloaded_versions)
@@ -333,7 +498,6 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
 
       const downloaded = [];
       for (const v of versions) {
-        // Se a versão está na flag, já foi baixada — sem verificar disco.
         if (flaggedVersions.has(v.id_bible_version)) {
           downloaded.push(v.id_bible_version);
           continue;
@@ -362,11 +526,12 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
   });
 
   // ---------------------------------------------------------------
-  // /api/announcements?action=list|project|next|prev|stop
-  // Controle remoto de anúncios
+  // /api/announcements
+  // GET  action=list       — lista anúncios (somente leitura)
+  // POST action=project|next|prev|stop — controle de anúncios
   // ---------------------------------------------------------------
   app.get("/api/announcements", (req, res) => {
-    const mainWindow = getMainWindow();
+    const mainWindow = getValidMainWindow();
     const action = req.query.action || "list";
 
     if (action === "list") {
@@ -375,11 +540,16 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
       }
       const { ipcMain } = require("electron");
       const channel = "_announcements_list_reply_" + Date.now();
+      let sent = false;
       const timeout = setTimeout(() => {
+        if (sent) return;
+        sent = true;
         ipcMain.removeAllListeners(channel);
         res.status(504).json({ error: "Timeout ao buscar anúncios" });
       }, 5000);
       ipcMain.once(channel, (_event, data) => {
+        if (sent) return;
+        sent = true;
         clearTimeout(timeout);
         res.json(data);
       });
@@ -387,12 +557,19 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
       return;
     }
 
+    res.status(400).json({ error: "action inválida para GET, use POST para comandos" });
+  });
+
+  app.post("/api/announcements", (req, res) => {
+    const mainWindow = getValidMainWindow();
     if (!mainWindow) {
       return res.status(503).json({ error: "Janela principal não disponível" });
     }
 
+    const action = req.body && req.body.action;
+
     if (action === "project") {
-      const ids = req.query.ids ? req.query.ids.split(",").filter(Boolean) : [];
+      const ids = req.body.ids || [];
       mainWindow.webContents.send("http:song-slides", { action: "announcements-project", ids });
       return res.json({ status: "ok", action: "announcements-project" });
     }
@@ -412,13 +589,90 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
       return res.json({ status: "ok", action: "announcements-stop" });
     }
 
-    res.status(400).json({ error: "action inválida", valid: ["list", "project", "next", "prev", "stop"] });
+    res.status(400).json({ error: "action inválida", valid: ["project", "next", "prev", "stop"] });
   });
 
   // ---------------------------------------------------------------
-  // /libras/:token — bundles de animação VLibras (IndexedDB via IPC)
-  // Serve arquivos de animação para o player Unity localmente.
-  // O renderer grava os bundles no IndexedDB; o main process lê via IPC.
+  // POST /api/projections/close — encerra todas as projeções ativas
+  // ---------------------------------------------------------------
+  app.post("/api/projections/close", (req, res) => {
+    const mainWindow = getValidMainWindow();
+    if (!mainWindow) {
+      return res.status(503).json({ error: "Janela principal não disponível" });
+    }
+    mainWindow.webContents.send("http:projections-close");
+    res.json({ status: "ok", action: "projections-close" });
+  });
+
+  // ---------------------------------------------------------------
+  // POST /api/chat — enviar mensagem de chat
+  // Body: { text: string, sender: string }
+  // Headers: X-Device-Id (opcional)
+  // ---------------------------------------------------------------
+  app.post("/api/chat", (req, res) => {
+    const { text, sender } = req.body || {};
+    if (!text || typeof text !== "string" || text.trim().length === 0) {
+      return res.status(400).json({ error: "text obrigatório" });
+    }
+    if (text.length > 2000) {
+      return res.status(400).json({ error: "text excede 2000 caracteres" });
+    }
+
+    // Rate limit: 1 msg/seg por device
+    const deviceId = req.headers && req.headers["x-device-id"];
+    const rateKey = deviceId || req.ip;
+    const now = Date.now();
+    const last = _chatRateLimit.get(rateKey) || 0;
+    if (now - last < 1000) {
+      return res.status(429).json({ error: "Rate limit: 1 msg/seg" });
+    }
+    _chatRateLimit.set(rateKey, now);
+
+    // Verifica permissão "chat" do device (se identificado)
+    if (deviceId) {
+      const device = devices.findById(String(deviceId));
+      if (device && device.permissions && !device.permissions.includes("chat") && !device.permissions.includes("root")) {
+        return res.status(403).json({ error: "Device sem permissão de chat" });
+      }
+    }
+
+    const foundDevice = deviceId ? devices.findById(String(deviceId)) : null;
+    const deviceName = foundDevice?.name;
+
+    // Id gerado pelo client (app) para casar a mensagem otimista com o eco SSE
+    // e evitar duplicata na tela. Aceita só strings curtas; senão gera um UUID.
+    const rawId = req.body && req.body.id;
+    const id =
+      typeof rawId === "string" && rawId.trim().length > 0 && rawId.trim().length <= 64
+        ? rawId.trim()
+        : crypto.randomUUID();
+
+    const msg = {
+      id,
+      sender: deviceName || sender || "Dispositivo",
+      deviceId: deviceId || undefined,
+      platform: foundDevice?.platform || undefined,
+      text: text.trim(),
+      timestamp: new Date().toISOString(),
+    };
+
+    // Publica via SSE para todos os clients conectados
+    const events = require("./events.js");
+    events.publish({ type: "chat_message", payload: msg });
+
+    // Envia IPC para o renderer local
+    const mainWindow = getValidMainWindow();
+    if (mainWindow) {
+      try {
+        mainWindow.webContents.send("transmission:chat-message", msg);
+      } catch (_) { /* noop */ }
+    }
+
+    res.json({ ok: true, id: msg.id });
+  });
+
+  // ---------------------------------------------------------------
+  // /libras/:token — bundles de animação VLibras (GET)
   // ---------------------------------------------------------------
   app.get("/libras/:token", async (req, res) => {
     const token = req.params.token;
@@ -429,12 +683,17 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
     try {
       const { ipcMain } = require("electron");
       const channel = "_libras_bundle_reply_" + Date.now();
+      let sent = false;
       const timeout = setTimeout(() => {
+        if (sent) return;
+        sent = true;
         ipcMain.removeAllListeners(channel);
         res.status(504).json({ error: "Timeout ao buscar bundle" });
       }, 5000);
 
       ipcMain.once(channel, (_event, data) => {
+        if (sent) return;
+        sent = true;
         clearTimeout(timeout);
         if (data && data.data) {
           const buffer = Buffer.from(data.data);
@@ -446,7 +705,7 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
         res.status(404).json({ error: "Bundle não encontrado", token });
       });
 
-      const mainWindow = getMainWindow();
+      const mainWindow = getValidMainWindow();
       if (mainWindow) {
         mainWindow.webContents.send("http:libras-bundle", { token, replyChannel: channel });
       } else {
@@ -461,20 +720,12 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
   });
 
   // ---------------------------------------------------------------
-  // /api/liturgy — itens da liturgia do dia
+  // /api/liturgy — itens da liturgia do dia (GET)
   // ---------------------------------------------------------------
   app.get("/api/liturgy", (req, res) => {
-    // Como os dados estão em user_data no main process, podemos ler direto
     const userData = typeof getUserData === "function" ? getUserData() : {};
     const day = req.query.day != null ? parseInt(req.query.day, 10) : new Date().getDay();
 
-    // console.log("[routes] userData keys:", Object.keys(userData));
-    // console.log("[routes] KEY_DAYS:", KEY_DAYS);
-
-    /**
-     * Helper para ler valores via dot-notation em objetos puros (Main process).
-     * Replicando comportamento do helper AppData do Renderer.
-     */
     function getByPath(obj, path, fallback) {
       if (!path || !obj) return fallback;
       const keys = path.split(".");
@@ -486,12 +737,9 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
       return cur;
     }
 
-    // Caminhos fixos conforme solicitado pelo usuário
-
     const allDays = getByPath(userData, KEY_LITURGY_DAYS, {});
     let items = allDays[day] || [];
 
-    // Se a lista do dia estiver vazia, tenta pegar do dia configurado como ativo no sistema
     if (items.length === 0) {
       const activeDay = getByPath(userData, KEY_LITURGY_ACTIVE_DAY, day);
       if (activeDay !== day) {
@@ -504,8 +752,7 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
   });
 
   // ---------------------------------------------------------------
-  // /api/user-data?path=...
-  // Obtém dados do usuário (somente leitura para o remoto)
+  // /api/user-data?path=... (GET — somente leitura)
   // ---------------------------------------------------------------
   app.get("/api/user-data", (req, res) => {
     const path = req.query.path;
@@ -528,29 +775,14 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
     res.json({ status: "ok", path, value });
   });
 
-  /**
-   * GET /api/db/:path(*)?token=...
-   *
-   * Lê qualquer JSON do cache local (userData/json_db/). Se o arquivo
-   * não existir no cache, busca da API remota (VITE_URL_DATABASE), salva
-   * no disco e retorna o conteúdo — funciona como cache-on-read para
-   * capítulos bíblicos e outros JSONs não baixados previamente.
-   *
-   * Substitui Database.get() nas páginas de controle remoto, evitando
-   * chamadas diretas à API externa (api.louvorja.com.br) quando acessadas
-   * de outro dispositivo na rede.
-   *
-   * O path é sanitizado contra path traversal antes de resolver
-   * via jsonCache.safeLocalPath(). O auth middleware (token) já
-   * protege este endpoint — apenas clients com token válido ou
-   * localhost conseguem acessá-lo.
-   */
+  // ---------------------------------------------------------------
+  // GET /api/db/:path(*) — cache JSON (somente leitura)
+  // ---------------------------------------------------------------
   app.get("/api/db/:path(*)", async (req, res) => {
     const rawPath = req.params.path;
     if (!rawPath) {
       return res.status(400).json({ error: "path é obrigatório" });
     }
-    // Sanitiza: remove leading slashes e prevent path traversal
     const sanitized = rawPath.replace(/^\/+/g, "").replace(/\.\.\//g, "");
     try {
       const filePath = jsonCache.safeLocalPath(sanitized);
@@ -559,7 +791,6 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
         return res.json(JSON.parse(raw));
       }
 
-      // Não está em cache — buscar da API remota e salvar no disco
       const databaseUrl = typeof getDatabaseUrl === "function" ? getDatabaseUrl() : "";
       const apiToken = typeof getApiToken === "function" ? getApiToken() : "";
       const headers = apiToken ? { "Api-Token": apiToken } : {};
@@ -579,9 +810,27 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
     }
   });
 
-  // Aliases compat-Delphi (`/música`, `/biblia`) e a rota raiz `/` agora
-  // são tratados pelo middleware `spa.js` — ele entrega a SPA Vue (com
-  // injeção do bridge SSE) ou redireciona para a hash form correspondente.
+  // ---------------------------------------------------------------
+  // GET/POST /api/settings/devices — configurações de dispositivos
+  // GET: retorna { only_authorized_devices: boolean }
+  // POST: { only_authorized_devices: boolean } — grava e retorna novo estado
+  // ---------------------------------------------------------------
+  app.get("/api/settings/devices", (_req, res) => {
+    res.json(devices.getSettings());
+  });
+
+  app.post("/api/settings/devices", (req, res) => {
+    const body = req.body || {};
+    if (typeof body.only_authorized_devices !== "boolean") {
+      return res.status(400).json({ error: "only_authorized_devices deve ser boolean" });
+    }
+    const updated = devices.updateSettings({ only_authorized_devices: body.only_authorized_devices });
+    res.json(updated);
+  });
 }
 
-module.exports = { setupRoutes };
+module.exports = {
+  setupRoutes,
+  resolveSongMode: _resolveSongMode,
+  normalizeKeyName,
+};

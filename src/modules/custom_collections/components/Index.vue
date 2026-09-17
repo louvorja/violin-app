@@ -2,25 +2,25 @@
   <ModuleContainer ref="moduleContainer" :manifest="manifest" @show="onShow" @close="onClose">
     <template #header>
       <div class="cc-toolbar">
-        <LjTabs v-model="activeTab" :tabs="tabItems" :aria-label="t('title')" />
+        <LjTabs v-model="activeTab" :tabs="tabItems" :aria-label="tm('title')" />
         <span class="lj-u-spacer" />
         <template v-if="activeTab === 'songs'">
           <LjButton size="sm" :icon="ICONS.ACTIONS.ADD" @click="actNewSong">
-            {{ t("actions.new_song") }}
+            {{ tm("actions.new_song") }}
           </LjButton>
           <LjButton size="sm" variant="subtle" :icon="ICONS.ACTIONS.IMPORT" @click="actImport">
-            {{ t("actions.import") }}
+            {{ tm("actions.import") }}
           </LjButton>
         </template>
         <LjButton v-else size="sm" :icon="ICONS.ACTIONS.ADD" @click="actNewCollection">
-          {{ t("actions.new_collection") }}
+          {{ tm("actions.new_collection") }}
         </LjButton>
       </div>
     </template>
 
     <!-- Aba: Músicas -->
     <div v-if="activeTab === 'songs'" class="cc-pane">
-      <LjEmpty v-if="songs.length === 0" :title="t('data.empty_songs')" />
+      <LjEmpty v-if="songs.length === 0" :title="tm('data.empty_songs')" />
       <div v-else class="cc-song-grid">
         <LjCard
           v-for="s in songs"
@@ -38,8 +38,8 @@
                 variant="ghost"
                 icon-only
                 :icon="ICONS.ACTIONS.EDIT"
-                :title="t('actions.edit')"
-                :aria-label="t('actions.edit')"
+                :title="tm('actions.edit')"
+                :aria-label="tm('actions.edit')"
                 @click.stop="openInEditor(s)"
               />
               <LjButton
@@ -48,8 +48,8 @@
                 icon-only
                 class="cc-song__danger"
                 :icon="ICONS.ACTIONS.DELETE"
-                :title="t('actions.delete')"
-                :aria-label="t('actions.delete')"
+                :title="tm('actions.delete')"
+                :aria-label="tm('actions.delete')"
                 @click.stop="confirmDeleteSong(s)"
               />
               <LjMenu :items="songMenuItems(s)" side="bottom" align="end">
@@ -59,8 +59,8 @@
                     variant="ghost"
                     icon-only
                     :icon="ICONS.UI.DOTS_VERTICAL"
-                    :title="t('actions.more')"
-                    :aria-label="t('actions.more')"
+                    :title="tm('actions.more')"
+                    :aria-label="tm('actions.more')"
                     @click.stop
                   />
                 </template>
@@ -73,8 +73,8 @@
           <div class="cc-song__info">
             <span class="cc-song__name">{{ s.nome }}</span>
             <span class="cc-song__meta">
-              {{ s.slides.length }} {{ t("labels.slides") }}
-              <template v-if="s.audio_token">· {{ t("labels.audio") }}</template>
+              {{ s.slides.length }} {{ tm("labels.slides") }}
+              <template v-if="s.audio_token">· {{ tm("labels.audio") }}</template>
             </span>
           </div>
         </LjCard>
@@ -101,7 +101,7 @@
               <span class="cc-col-item__text">
                 <span class="cc-col-item__name">{{ c.nome }}</span>
                 <span class="cc-col-item__sub">
-                  {{ c.song_ids.length }} {{ t("labels.songs_count") }}
+                  {{ c.song_ids.length }} {{ tm("labels.songs_count") }}
                 </span>
               </span>
             </button>
@@ -112,15 +112,15 @@
                   variant="ghost"
                   icon-only
                   :icon="ICONS.UI.DOTS_VERTICAL"
-                  :title="t('actions.more')"
-                  :aria-label="t('actions.more')"
+                  :title="tm('actions.more')"
+                  :aria-label="tm('actions.more')"
                   @click.stop
                 />
               </template>
             </LjMenu>
           </li>
         </ul>
-        <p v-else class="cc-col-empty">{{ t("data.empty_collections") }}</p>
+        <p v-else class="cc-col-empty">{{ tm("data.empty_collections") }}</p>
       </div>
 
       <div class="cc-col-detail">
@@ -132,7 +132,7 @@
             <LjMenu :items="addSongMenuItems" side="bottom" align="end">
               <template #trigger>
                 <LjButton size="sm" variant="subtle" :icon="ICONS.ACTIONS.ADD">
-                  {{ t("actions.add_to_collection") }}
+                  {{ tm("actions.add_to_collection") }}
                 </LjButton>
               </template>
             </LjMenu>
@@ -140,7 +140,7 @@
 
           <LjEmpty
             v-if="selectedCollectionSongs.length === 0"
-            :title="t('data.empty_collection_songs')"
+            :title="tm('data.empty_collection_songs')"
           />
           <draggable
             v-else
@@ -157,7 +157,7 @@
                 <span class="cc-song-row__text">
                   <span class="cc-song-row__name">{{ element.nome }}</span>
                   <span class="cc-song-row__sub">
-                    {{ element.slides.length }} {{ t("labels.slides") }}
+                    {{ element.slides.length }} {{ tm("labels.slides") }}
                   </span>
                 </span>
                 <LjButton
@@ -165,8 +165,8 @@
                   variant="ghost"
                   icon-only
                   :icon="ICONS.ACTIONS.EDIT"
-                  :title="t('actions.edit')"
-                  :aria-label="t('actions.edit')"
+                  :title="tm('actions.edit')"
+                  :aria-label="tm('actions.edit')"
                   @click="openInEditor(element)"
                 />
                 <LjButton
@@ -174,8 +174,8 @@
                   variant="ghost"
                   icon-only
                   :icon="ICONS.ACTIONS.CLOSE"
-                  :title="t('actions.remove_from_collection')"
-                  :aria-label="t('actions.remove_from_collection')"
+                  :title="tm('actions.remove_from_collection')"
+                  :aria-label="tm('actions.remove_from_collection')"
                   @click="removeSongFromCollection(element.id)"
                 />
               </div>
@@ -252,11 +252,11 @@ async function resolvePreviewImages(list) {
   songPreviewImages.value = map;
 }
 
-const t = (key, named) => moduleContainer.value?.t(key, named) || key;
+const tm = (key, named) => moduleContainer.value?.tm(key, named) || key;
 
 const tabItems = computed(() => [
-  { value: "songs", label: t("tabs.songs") },
-  { value: "collections", label: t("tabs.collections") },
+  { value: "songs", label: tm("tabs.songs") },
+  { value: "collections", label: tm("tabs.collections") },
 ]);
 
 const selectedCollection = computed(
@@ -287,16 +287,16 @@ const songsNotInSelected = computed(() => {
 
 function songMenuItems(s) {
   return [
-    { label: t("actions.export"), icon: ICONS.ACTIONS.DOWNLOAD, action: () => exportSong(s) },
-    { label: t("actions.rename"), icon: ICONS.ACTIONS.RENAME, action: () => renameSong(s) },
+    { label: tm("actions.export"), icon: ICONS.ACTIONS.DOWNLOAD, action: () => exportSong(s) },
+    { label: tm("actions.rename"), icon: ICONS.ACTIONS.RENAME, action: () => renameSong(s) },
   ];
 }
 
 function collectionMenuItems(c) {
   return [
-    { label: t("actions.rename"), icon: ICONS.ACTIONS.RENAME, action: () => renameCollection(c) },
+    { label: tm("actions.rename"), icon: ICONS.ACTIONS.RENAME, action: () => renameCollection(c) },
     {
-      label: t("actions.delete"),
+      label: tm("actions.delete"),
       icon: ICONS.ACTIONS.DELETE,
       action: () => confirmDeleteCollection(c),
     },
@@ -307,7 +307,7 @@ function collectionMenuItems(c) {
 // LjMenu sai em caixa alta, e aqui o texto é uma frase inteira.
 const addSongMenuItems = computed(() => {
   if (songsNotInSelected.value.length === 0) {
-    return [{ label: t("data.empty_songs"), disabled: true, action: () => undefined }];
+    return [{ label: tm("data.empty_songs"), disabled: true, action: () => undefined }];
   }
   return songsNotInSelected.value.map((s) => ({
     label: s.nome,
@@ -364,7 +364,7 @@ async function executeSong(s) {
 }
 
 async function actNewSong() {
-  const nome = await askName(t("actions.new_song"), t("actions.new_song"));
+  const nome = await askName(tm("actions.new_song"), tm("actions.new_song"));
   if (!nome) return;
   const s = CustomSongs.newSong(nome);
   await CustomSongs.saveSong(s);
@@ -373,7 +373,7 @@ async function actNewSong() {
 }
 
 async function renameSong(s) {
-  const nome = await askName(t("actions.rename"), s.nome);
+  const nome = await askName(tm("actions.rename"), s.nome);
   if (!nome) return;
   s.nome = nome;
   await CustomSongs.saveSong(s);
@@ -381,7 +381,7 @@ async function renameSong(s) {
 }
 
 async function confirmDeleteSong(s) {
-  if (!confirm(t("data.confirm_delete_song"))) return;
+  if (!confirm(tm("data.confirm_delete_song"))) return;
   await CustomSongs.deleteSong(s.id);
   await loadAll();
 }
@@ -515,14 +515,14 @@ async function onImportSlja(e) {
     }
   }
   await loadAll();
-  const text = t("data.import_result", { ok }) + (fail ? t("data.import_failed", { fail }) : "");
+  const text = tm("data.import_result", { ok }) + (fail ? tm("data.import_failed", { fail }) : "");
   showStatus(text, fail ? "warning" : "success");
 }
 
 // ===== Collections =====
 
 async function actNewCollection() {
-  const nome = await askName(t("actions.new_collection"), t("actions.new_collection"));
+  const nome = await askName(tm("actions.new_collection"), tm("actions.new_collection"));
   if (!nome) return;
   const c = CustomSongs.newCollection(nome);
   await CustomSongs.saveCollection(c);
@@ -531,7 +531,7 @@ async function actNewCollection() {
 }
 
 async function renameCollection(c) {
-  const nome = await askName(t("actions.rename"), c.nome);
+  const nome = await askName(tm("actions.rename"), c.nome);
   if (!nome) return;
   c.nome = nome;
   await CustomSongs.saveCollection(c);
@@ -539,7 +539,7 @@ async function renameCollection(c) {
 }
 
 async function confirmDeleteCollection(c) {
-  if (!confirm(t("data.confirm_delete_collection"))) return;
+  if (!confirm(tm("data.confirm_delete_collection"))) return;
   await CustomSongs.deleteCollection(c.id);
   if (selectedCollectionId.value === c.id) selectedCollectionId.value = null;
   await loadAll();

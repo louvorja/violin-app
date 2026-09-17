@@ -369,10 +369,16 @@ function createWindow() {
 
   mainWindow.on("closed", () => {
     mainWindow = null;
+    try { httpServer.setMainWindow(null); } catch (_) { /* noop */ }
   });
 
   // D6 — Registrar janela principal no módulo de atalhos globais
   shortcuts.setMainWindow(mainWindow);
+
+  // HTTP server — o diálogo de aprovação de dispositivos é enviado para a
+  // janela principal. Precisa ser re-registrada sempre que a janela é
+  // (re)criada (boot e reabertura pelo dock no macOS).
+  try { httpServer.setMainWindow(mainWindow); } catch (_) { /* noop */ }
 
   // D4 — Registrar janela principal no windowFactory: janelas auxiliares
   // (projeção/operador/retorno) devolvem o foco à main após abrir.
@@ -647,11 +653,7 @@ app.whenReady().then(async () => {
   }
 
   createWindow();
-
-  // Atualizar mainWindow no HTTP server recém-criado
-  if (mainWindow) {
-    try { httpServer.setMainWindow(mainWindow); } catch (_) { /* ignore */ }
-  }
+  // A janela principal já se registra no HTTP server dentro de createWindow().
 
   // macOS: reabrir janela quando o ícone do dock for clicado
   app.on("activate", () => {
@@ -1139,6 +1141,12 @@ ipcMain.handle("httpServer:setExternalRoutes", (_e, enabled) => {
 /** Regenera o token e persiste em userStore. Retorna o novo token. */
 ipcMain.handle("httpServer:resetToken", () => httpServer.resetToken());
 
+/** Retorna as configurações de dispositivos (only_authorized_devices etc.). */
+ipcMain.handle("httpServer:getDeviceSettings", () => devices.getSettings());
+
+/** Atualiza as configurações de dispositivos. */
+ipcMain.handle("httpServer:setDeviceSettings", (_e, settings) => devices.updateSettings(settings));
+
 /**
  * Bridge `Broadcast.send()` (renderer) → SSE clients remotos.
  *
@@ -1213,6 +1221,24 @@ ipcMain.handle("shortcuts:savePreference", (_e, enabled) => {
   } catch (e) {
     return { ok: false, error: e.message };
   }
+});
+
+// ---------------------------------------------------------------------------
+// IPC handlers de dispositivos autorizados
+// ---------------------------------------------------------------------------
+
+/** Retorna a lista de dispositivos autorizados. */
+ipcMain.handle("devices:list", () => devices.list());
+
+/** Salva a lista completa de dispositivos (chamado pelo renderer). */
+ipcMain.handle("devices:save", (_e, deviceList) => {
+  devices.save(deviceList);
+  // Fan-out para todas as janelas
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (!w || w.isDestroyed()) continue;
+    try { w.webContents.send("devices:changed", deviceList); } catch (_) { /* noop */ }
+  }
+  return { ok: true };
 });
 
 // ---------------------------------------------------------------------------

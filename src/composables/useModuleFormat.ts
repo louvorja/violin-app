@@ -12,10 +12,11 @@
  * necessidade de duplicar nada.
  */
 
-import { reactive, computed, ref } from "vue";
+import { computed, ref } from "vue";
 import UserData from "@/helpers/UserData";
 import Broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
+import { useBroadcastListener } from "@/composables/useBroadcastListener";
 
 interface CustomizationField {
   type: string;
@@ -32,8 +33,28 @@ interface ModuleManifest {
 export function useModuleFormat(moduleId: string, manifest: ModuleManifest) {
   const customization = computed(() => manifest.customization || {});
 
+  // Tick ref — força re-leitura do UserData quando broadcast chega.
+  const _tick = ref(0);
+
+  useBroadcastListener(BROADCAST_TYPE.MODULE_FORMAT_CHANGED, (payload) => {
+    const p = payload as { module?: string } | null;
+    if (p && p.module === moduleId) _tick.value += 1;
+  });
+
+  useBroadcastListener(BROADCAST_TYPE.USERDATA_PATCH, (payload) => {
+    const p = payload as { path?: string } | null;
+    if (
+      p &&
+      typeof p.path === "string" &&
+      p.path.startsWith(`modules.${moduleId}.`)
+    ) {
+      _tick.value += 1;
+    }
+  });
+
   const fmt = new Proxy({} as Record<string, unknown>, {
     get(_, key) {
+      void _tick.value;
       return UserData.get(`modules.${moduleId}.${String(key)}`, null);
     },
     set(_, key, value) {
@@ -59,14 +80,10 @@ export function useModuleFormat(moduleId: string, manifest: ModuleManifest) {
     });
   }
 
-  // Reactive view — força recálculo quando o broadcast chega de fora
-  // (ex: outra janela alterou via projection).
-  const reactiveView = reactive({} as Record<string, unknown>);
-
   // Toggle do painel "Formatar" — estado de sessão, não persistido.
   const show_format = ref(false);
 
-  return { fmt, restoreFormat, customization, reactiveView, show_format };
+  return { fmt, restoreFormat, customization, show_format };
 }
 
 const FONT_OPTIONS = [

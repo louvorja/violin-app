@@ -164,6 +164,21 @@ publicar uma versão cujos stacks de produção permaneceriam minificados.
 
 ---
 
+### `POSTHOG_API_KEY` / `POSTHOG_PROJECT_ID`
+
+| Campo       | Valor |
+|-------------|-------|
+| Tipo        | chave pessoal de escrita / ID do projeto |
+| Obrigatória | somente para publicar source maps |
+| Usado em    | `vite.config.js`, durante o build de release |
+
+Quando as duas variáveis estão presentes, o plugin oficial do PostHog gera,
+injeta e envia os source maps da versão. `POSTHOG_API_KEY` deve ficar apenas
+em secrets do CI; `POSTHOG_PROJECT_ID` pode ficar em variables. Sem elas, o
+build continua normal, mas stacks de produção permanecem minificados.
+
+---
+
 ### `VITE_DB_VERSION`
 
 | Campo       | Valor                                          |

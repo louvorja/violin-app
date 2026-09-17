@@ -5,7 +5,7 @@
       <button
         type="button"
         class="playlist-songs-close"
-        :title="t('playlists.close')"
+        :title="tm('playlists.close')"
         @click="selectPlaylist(null)"
       >
         <LjIcon :icon="ICONS.ACTIONS.CLOSE" size="16" />
@@ -39,7 +39,7 @@
           <button
             type="button"
             class="playlist-songs-btn"
-            :title="t('playlists.play_song')"
+            :title="tm('playlists.play_song')"
             @click="playSong(song)"
           >
             <LjIcon
@@ -50,7 +50,7 @@
           <button
             type="button"
             class="playlist-songs-btn playlist-songs-btn--danger"
-            :title="t('playlists.remove_song')"
+            :title="tm('playlists.remove_song')"
             @click="removeSong(playlist.id, index)"
           >
             <LjIcon :icon="ICONS.ACTIONS.CLOSE" size="14" />
@@ -60,7 +60,7 @@
 
       <div v-if="playlist.songs.length === 0" class="playlist-songs-empty">
         <LjIcon :icon="ICONS.MUSIC.NO_AUDIO" size="32" />
-        <div>{{ t("playlists.no_songs") }}</div>
+        <div>{{ tm("playlists.no_songs") }}</div>
       </div>
     </div>
 
@@ -68,13 +68,13 @@
       <div class="playlist-songs-summary">
         {{
           playlist.songs.length > 1
-            ? t("playlists.song_count_plural", { n: playlist.songs.length })
-            : t("playlists.song_count", { n: playlist.songs.length })
+            ? tm("playlists.song_count_plural", { n: playlist.songs.length })
+            : tm("playlists.song_count", { n: playlist.songs.length })
         }}
         · {{ formatDuration(getPlaylistDuration(playlist)) }}
       </div>
       <div class="playlist-songs-options">
-        <LjTooltip :text="t('playlists.shuffle')" side="top">
+        <LjTooltip :text="tm('playlists.shuffle')" side="top">
           <button
             type="button"
             class="playlist-songs-option-btn"
@@ -84,7 +84,7 @@
             <LjIcon :icon="ICONS.PLAYER.SHUFFLE" size="18" />
           </button>
         </LjTooltip>
-        <LjTooltip :text="t('playlists.repeat')" side="top">
+        <LjTooltip :text="tm('playlists.repeat')" side="top">
           <button
             type="button"
             class="playlist-songs-option-btn"
@@ -97,7 +97,7 @@
       </div>
       <button type="button" class="playlist-songs-play-btn" @click="playAll">
         <LjIcon :icon="ICONS.PLAYER.PLAYER" size="18" />
-        {{ t("playlists.play") }}
+        {{ tm("playlists.play") }}
       </button>
     </div>
   </div>
@@ -122,7 +122,7 @@ const props = defineProps<{
 }>();
 
 const { t: i18nT } = useI18n();
-const t = (key: string, named?: Record<string, unknown>) =>
+const tm = (key: string, named?: Record<string, unknown>) =>
   named ? i18nT(`modules.musics.${key}`, named) : i18nT(`modules.musics.${key}`);
 const { selectPlaylist, removeSong, getPlaylistDuration } = usePlaylists();
 const { playPlaylist, currentSong, playedSongs } = usePlaylistPlayback();

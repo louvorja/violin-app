@@ -8,20 +8,20 @@
 
       <!-- Texto original -->
       <div v-if="originalText" class="libras-original">
-        <div class="libras-label">{{ t("libras.original") }}</div>
+        <div class="libras-label">{{ tm("libras.original") }}</div>
         <div class="libras-text">{{ originalText }}</div>
       </div>
 
       <!-- Gloss Libras -->
       <div v-if="gloss" class="libras-gloss">
-        <div class="libras-label">{{ t("libras.gloss") }}</div>
+        <div class="libras-label">{{ tm("libras.gloss") }}</div>
         <div class="libras-text libras-text--gloss">{{ gloss }}</div>
       </div>
 
       <!-- Mensagem quando vazio -->
       <div v-if="!gloss && !isTranslating" class="libras-empty">
         <LjIcon :icon="ICONS.MODULES.MUSICS" size="48" color="grey" />
-        <p>{{ t("libras.empty") }}</p>
+        <p>{{ tm("libras.empty") }}</p>
       </div>
     </div>
   </ModuleContainer>
@@ -37,7 +37,8 @@ import { module as manifest } from "../manifest";
 import { useLibras } from "../composables/useLibras";
 import Modules from "@/helpers/Modules";
 
-const { t } = useI18n();
+const { t: i18nT } = useI18n();
+const tm = (key: string) => i18nT(`modules.libras.${key}`);
 const moduleContainer = ref<InstanceType<typeof ModuleContainer> | null>(null);
 
 const { gloss, originalText, isTranslating, clear } = useLibras();

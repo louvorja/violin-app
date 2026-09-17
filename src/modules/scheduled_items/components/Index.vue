@@ -4,13 +4,13 @@
       <!-- Categorias -->
       <aside class="si-cats">
         <div class="si-cats-head">
-          <span>{{ tt("categories") }}</span>
+          <span>{{ tm("categories") }}</span>
           <LjButton
             size="sm"
             variant="ghost"
             icon-only
             :icon="ICONS.ACTIONS.ADD"
-            :aria-label="tt('new_category')"
+            :aria-label="tm('new_category')"
             @click="openAddCategory"
           />
         </div>
@@ -45,9 +45,9 @@
             />
           </span>
         </div>
-        <div v-if="!categories.length" class="si-hint">{{ tt("no_categories") }}</div>
+        <div v-if="!categories.length" class="si-hint">{{ tm("no_categories") }}</div>
         <div v-else-if="!selectedCategoryId" class="si-hint">
-          {{ tt("select_category_hint") }}
+          {{ tm("select_category_hint") }}
         </div>
       </aside>
 
@@ -71,16 +71,16 @@
             @click="calShift(1)"
           />
           <LjButton size="md" variant="subtle" @click="goToday">
-            {{ tt("today") }}
+            {{ tm("today") }}
           </LjButton>
-          <div class="si-cal-type" role="group" :aria-label="tt('view_mode')">
+          <div class="si-cal-type" role="group" :aria-label="tm('view_mode')">
             <LjButton
               size="md"
               :variant="calendarType === 'month' ? 'primary' : 'default'"
               :aria-pressed="calendarType === 'month'"
               @click="calendarType = 'month'"
             >
-              {{ tt("view_month") }}
+              {{ tm("view_month") }}
             </LjButton>
             <LjButton
               size="md"
@@ -88,7 +88,7 @@
               :aria-pressed="calendarType === 'week'"
               @click="calendarType = 'week'"
             >
-              {{ tt("view_week") }}
+              {{ tm("view_week") }}
             </LjButton>
           </div>
           <LjButton
@@ -120,15 +120,15 @@
     <!-- Diálogo: ir para mês/ano -->
     <LjDialog
       v-model="yearMonthMenuOpen"
-      :title="tt('go_to_month')"
+      :title="tm('go_to_month')"
       :icon="ICONS.CALENDAR.BLANK"
       size="sm"
     >
       <div class="si-ym-row">
-        <select v-model="pickerYear" class="si-select" :aria-label="tt('year')">
+        <select v-model="pickerYear" class="si-select" :aria-label="tm('year')">
           <option v-for="y in yearRange" :key="y" :value="y">{{ y }}</option>
         </select>
-        <select v-model="pickerMonth" class="si-select" :aria-label="tt('month')">
+        <select v-model="pickerMonth" class="si-select" :aria-label="tm('month')">
           <option v-for="(m, idx) in monthNames" :key="idx" :value="idx + 1">
             {{ m }}
           </option>
@@ -142,15 +142,15 @@
     <!-- Diálogo: nova / renomear categoria -->
     <LjDialog
       v-model="categoryDialog"
-      :title="editingCatId ? tt('rename_category') : tt('new_category')"
+      :title="editingCatId ? tm('rename_category') : tm('new_category')"
       :icon="editingCatId ? ICONS.ACTIONS.EDIT : ICONS.ACTIONS.ADD"
       size="sm"
     >
-      <LjField layout="column" :label="tt('category_name')">
+      <LjField layout="column" :label="tm('category_name')">
         <LjInput v-model="categoryNameInput" autofocus @keydown.enter="confirmCategoryDialog" />
       </LjField>
       <label class="si-color-row">
-        <span class="si-color-label">{{ tt("color") }}</span>
+        <span class="si-color-label">{{ tm("color") }}</span>
         <input v-model="categoryColorInput" type="color" class="si-color-input" />
       </label>
       <template #footer>
@@ -169,11 +169,11 @@
     <!-- Diálogo: agendamento do dia -->
     <LjDialog
       v-model="entryDialog"
-      :title="tt('entry_title')"
+      :title="tm('entry_title')"
       :icon="ICONS.CALENDAR.CLOCK"
       size="md"
     >
-      <LjField layout="row" :label="tt('entry_date')" class="si-entry-when">
+      <LjField layout="row" :label="tm('entry_date')" class="si-entry-when">
         <div class="si-entry-when-row">
           <LjInput v-model="entryDate" type="date" />
           <span v-if="entryWeekday" class="si-entry-weekday">{{ entryWeekday }}</span>
@@ -184,9 +184,9 @@
         <select
           v-model="entryCategoryId"
           class="si-select si-select--full"
-          :aria-label="tt('pick_category')"
+          :aria-label="tm('pick_category')"
         >
-          <option value="">{{ tt("pick_category") }}</option>
+          <option value="">{{ tm("pick_category") }}</option>
           <option v-for="c in categories" :key="c.id" :value="c.id">
             {{ c.nome }}
           </option>
@@ -194,7 +194,7 @@
       </div>
       <div class="si-file-row">
         <LjButton size="md" variant="subtle" :icon="ICONS.UI.FILE_PLUS" @click="chooseEntryFile">
-          {{ tt("choose_file") }}
+          {{ tm("choose_file") }}
         </LjButton>
         <span v-if="entryFileName" class="si-file-name">{{ entryFileName }}</span>
       </div>
@@ -206,7 +206,7 @@
         </div>
         <div class="si-entry-line si-entry-loc">
           <LjIcon :icon="ICONS.UI.FILE" :size="16" />
-          <span>{{ entryFile || tt("web_only_name") }}</span>
+          <span>{{ entryFile || tm("web_only_name") }}</span>
         </div>
         <img
           v-if="previewUrl && entryKind === 'image'"
@@ -237,7 +237,7 @@
           class="si-footer-start"
           @click="removeEntry"
         >
-          {{ tt("remove") }}
+          {{ tm("remove") }}
         </LjButton>
         <LjButton size="sm" @click="entryDialog = false">{{ t("actions.cancel") }}</LjButton>
         <LjButton
@@ -254,7 +254,7 @@
     <!-- Diálogo: Adicionar Automaticamente -->
     <LjDialog
       v-model="autoPopulateDialog"
-      :title="tt('add_auto_dialog')"
+      :title="tm('add_auto_dialog')"
       :icon="ICONS.CALENDAR.MULTISELECT"
       size="md"
     >
@@ -263,9 +263,9 @@
         <select
           v-model="autoPopulateTargetCat"
           class="si-select si-select--full"
-          :aria-label="tt('pick_category')"
+          :aria-label="tm('pick_category')"
         >
-          <option value="">{{ tt("pick_category") }}</option>
+          <option value="">{{ tm("pick_category") }}</option>
           <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.nome }}</option>
         </select>
       </div>
@@ -278,12 +278,12 @@
           :disabled="!Platform.isDesktop"
           @click="chooseAutoFolder"
         >
-          {{ tt("add_auto_choose_folder") }}
+          {{ tm("add_auto_choose_folder") }}
         </LjButton>
         <span v-if="autoPopulateFolder" class="si-file-name">{{ autoPopulateFolder }}</span>
       </div>
 
-      <div class="si-auto-hint" v-html="tt('add_auto_hint')" />
+      <div class="si-auto-hint" v-html="tm('add_auto_hint')" />
 
       <div
         v-if="autoPopulateResult"
@@ -293,8 +293,8 @@
         {{ autoPopulateResult }}
       </div>
       <template #footer>
-        <LjButton size="sm" @click="autoPopulateDialog = false">
-          {{ t("actions.cancel") }}
+        <LjButton size="sm" :icon="ICONS.ACTIONS.CLOSE" @click="autoPopulateDialog = false">
+          {{ t("actions.close") }}
         </LjButton>
         <LjButton
           size="sm"
@@ -303,7 +303,7 @@
           :disabled="!autoPopulateFolder || !autoPopulateTargetCat || !Platform.isDesktop"
           @click="executeAutoPopulate"
         >
-          {{ tt("add_auto_scan") }}
+          {{ tm("add_auto_scan") }}
         </LjButton>
       </template>
     </LjDialog>
@@ -323,6 +323,7 @@ import type {
   LjCalendarMoreClick,
 } from "@/components/ui";
 import $liturgy from "@/helpers/Liturgy";
+import ScheduledStore from "@/helpers/ScheduledStore";
 import Platform from "@/helpers/Platform";
 import $path from "@/helpers/Path";
 import $alert from "@/helpers/Alert";
@@ -335,8 +336,21 @@ import type { ScheduledCategory, ScheduledItem } from "@/types/Liturgy";
 import { AUDIO_EXT, IMAGE_EXT, VIDEO_EXT } from "@/constants/FileTypes";
 
 const { t, locale } = useI18n();
-function tt(key: string): string {
+function tm(key: string): string {
   return t(`modules.scheduled_items.${key}`);
+}
+function uid(prefix = "item_"): string {
+  const d = new Date();
+  const pad = (n: number, l = 2) => String(n).padStart(l, "0");
+  const stamp =
+    d.getFullYear() +
+    pad(d.getMonth() + 1) +
+    pad(d.getDate()) +
+    pad(d.getHours()) +
+    pad(d.getMinutes()) +
+    pad(d.getSeconds()) +
+    pad(d.getMilliseconds(), 3);
+  return prefix + stamp + Math.floor(Math.random() * 1000);
 }
 
 // ─── Estado ──────────────────────────────────────────────────────────
@@ -389,10 +403,10 @@ const entryKindIcon = computed(
 const entryKindLabel = computed(
   () =>
     ({
-      image: tt("kind_image"),
-      audio: tt("kind_audio"),
-      video: tt("kind_video"),
-      other: tt("kind_other"),
+      image: tm("kind_image"),
+      audio: tm("kind_audio"),
+      video: tm("kind_video"),
+      other: tm("kind_other"),
     })[entryKind.value]
 );
 
@@ -506,7 +520,7 @@ const autoPopulateTargetCat = ref<string | number>("");
 
 function openAutoPopulate(): void {
   if (!Platform.isDesktop) {
-    $alert.error({ text: tt("add_auto_desktop_only") });
+    $alert.error({ text: tm("add_auto_desktop_only") });
     return;
   }
   autoPopulateTargetCat.value = selectedCategoryId.value || categories.value[0]?.id || "";
@@ -527,7 +541,7 @@ async function executeAutoPopulate(): Promise<void> {
   const catId = String(autoPopulateTargetCat.value);
   const files = await Platform.readDir(autoPopulateFolder.value);
   if (!files || !files.length) {
-    autoPopulateResult.value = tt("add_auto_no_files");
+    autoPopulateResult.value = tm("add_auto_no_files");
     return;
   }
   let created = 0;
@@ -541,32 +555,51 @@ async function executeAutoPopulate(): Promise<void> {
     const year = `20${yy}`;
     const date = `${year}-${mm}-${dd}`;
     const path = `${autoPopulateFolder.value}/${file}`;
+    const nome =
+      m[4] ||
+      (path
+        ? path
+            .split(/[\\/]/)
+            .pop()
+            ?.replace(/\.[^.]+$/, "") || ""
+        : "");
     // Verifica se já existe item para essa categoria+dia — se sim, sobrescreve.
     const existing = existingItems.find((i) => i.data === date && String(i.categoria) === catId);
     if (existing) {
-      $liturgy.updateScheduledItemEntry(existing.id, {
-        arquivo: path,
-        nome: m[4],
-      });
+      await ScheduledStore.saveItem({ ...existing, arquivo: path, nome });
       updated++;
     } else {
-      $liturgy.addScheduledItemEntry(catId, date, m[4], path, "E");
+      const id = uid("sch_");
+      await ScheduledStore.saveItem({
+        id,
+        categoria: catId,
+        data: date,
+        nome,
+        arquivo: path,
+        arquivo_info: "E",
+      });
       created++;
     }
   }
   if (created > 0 || updated > 0) {
     // Salva a pasta na categoria para pré-preenchimento futuro.
-    $liturgy.updateScheduledCategory(autoPopulateTargetCat.value, {
-      auto_folder: autoPopulateFolder.value,
-    });
+    const cat = $liturgy
+      .scheduledCategories()
+      .find((c) => String(c.id) === String(autoPopulateTargetCat.value));
+    if (cat) {
+      await ScheduledStore.saveCategory({
+        ...cat,
+        auto_folder: autoPopulateFolder.value,
+      });
+    }
     const parts: string[] = [];
-    if (created) parts.push(tt("add_auto_created").replace("{n}", String(created)));
-    if (updated) parts.push(tt("add_auto_updated").replace("{n}", String(updated)));
-    autoPopulateResult.value = parts.join(". ") + ".";
-    void refresh();
+    if (created) parts.push(tm("add_auto_created").replace("{n}", String(created)));
+    if (updated) parts.push(tm("add_auto_updated").replace("{n}", String(updated)));
+    autoPopulateResult.value = parts.join(". \n") + ".";
+    await refresh();
     selectedCategoryId.value = catId;
   } else {
-    autoPopulateResult.value = tt("add_auto_no_files");
+    autoPopulateResult.value = tm("add_auto_no_files");
   }
 }
 
@@ -584,27 +617,29 @@ function openRenameCategory(cat: ScheduledCategory): void {
   categoryDialog.value = true;
 }
 
-function confirmCategoryDialog(): void {
+async function confirmCategoryDialog(): Promise<void> {
   const nome = categoryNameInput.value.trim();
   if (!nome) return;
   const cor = categoryColorInput.value;
   if (editingCatId.value != null) {
-    $liturgy.updateScheduledCategory(editingCatId.value, { nome, cor });
+    const cat = $liturgy
+      .scheduledCategories()
+      .find((c) => String(c.id) === String(editingCatId.value));
+    if (cat) await ScheduledStore.saveCategory({ ...cat, nome, cor });
   } else {
-    const id = $liturgy.addScheduledCategory(nome);
-    // Cor para o calendário (definida pelo usuário).
-    $liturgy.updateScheduledCategory(id, { cor });
+    const id = uid("cat_");
+    await ScheduledStore.saveCategory({ id, nome, cor } as ScheduledCategory);
     selectedCategoryId.value = id;
   }
   categoryDialog.value = false;
-  void refresh();
+  await refresh();
 }
 
-function removeCategory(cat: ScheduledCategory): void {
-  if (!confirm(tt("delete_category"))) return;
+async function removeCategory(cat: ScheduledCategory): Promise<void> {
+  if (!confirm(tm("delete_category"))) return;
   if (String(selectedCategoryId.value) === String(cat.id)) selectedCategoryId.value = "";
-  $liturgy.removeScheduledCategory(cat.id);
-  void refresh();
+  await ScheduledStore.deleteCategory(cat.id);
+  await refresh();
 }
 
 function itemsOf(catId: string | number): ScheduledItem[] {
@@ -817,7 +852,7 @@ async function onFileSelected(e: Event): Promise<void> {
   const filePath =
     Platform.webUtils?.getPathForFile?.(f) || (f as unknown as { path?: string }).path || "";
   if (!Platform.isDesktop || !filePath) {
-    $alert.error({ text: tt("desktop_only_hint") });
+    $alert.error({ text: tm("desktop_only_hint") });
   }
   entryFile.value = filePath || "";
   entryFileName.value = f.name;
@@ -869,49 +904,52 @@ async function saveEntry(): Promise<void> {
       String(i.id) !== String(entryId.value ?? "")
   );
   if (duplicate) {
-    $alert.error({ text: tt("duplicate_category_day") });
+    $alert.error({ text: tm("duplicate_category_day") });
     return;
   }
 
   const nome = categoryName(catId);
   const arquivo = entryFile.value || entryFileName.value;
   const dur = entryDuration.value ?? undefined;
+  const jpegData = heicJpegBlob ? await heicJpegBlob.arrayBuffer() : undefined;
   if (entryId.value) {
-    $liturgy.updateScheduledItemEntry(entryId.value, {
-      data: entryDate.value,
-      categoria: catId,
-      nome,
-      arquivo,
-      ...(dur != null ? { duracao: dur } : {}),
-      ...(heicJpegBlob ? { arquivo_jpeg: await heicJpegBlob.arrayBuffer() } : {}),
-    });
-  } else {
-    const jpegData = heicJpegBlob ? await heicJpegBlob.arrayBuffer() : undefined;
-    const id = $liturgy.addScheduledItemEntry(
-      String(catId),
-      entryDate.value,
-      nome,
-      arquivo,
-      "E",
-      dur
-    );
-    // Salva arquivo_jpeg separadamente (addScheduledItemEntry não suporta o campo).
-    if (jpegData) {
-      $liturgy.updateScheduledItemEntry(id, { arquivo_jpeg: jpegData });
+    const cur = $liturgy.scheduledItems().find((i) => String(i.id) === String(entryId.value));
+    if (cur) {
+      await ScheduledStore.saveItem({
+        ...cur,
+        data: entryDate.value,
+        categoria: catId,
+        nome,
+        arquivo,
+        ...(dur != null ? { duracao: dur } : {}),
+        ...(jpegData ? { arquivo_jpeg: jpegData } : {}),
+      });
     }
+  } else {
+    const id = uid("sch_");
+    await ScheduledStore.saveItem({
+      id,
+      categoria: String(catId),
+      data: entryDate.value,
+      nome,
+      arquivo,
+      arquivo_info: "E",
+      ...(dur != null ? { duracao: dur } : {}),
+      ...(jpegData ? { arquivo_jpeg: jpegData } : {}),
+    });
     entryId.value = id;
   }
-  void refresh();
+  await refresh();
   entryDialog.value = false;
 }
 
-function removeEntry(): void {
+async function removeEntry(): Promise<void> {
   if (!entryId.value) return;
-  if (!confirm(tt("remove_confirm"))) return;
-  $liturgy.removeScheduledItemEntry(entryId.value);
+  if (!confirm(tm("remove_confirm"))) return;
+  await ScheduledStore.deleteItem(entryId.value);
   entryId.value = null;
   entryDialog.value = false;
-  void refresh();
+  await refresh();
 }
 </script>
 
@@ -1195,6 +1233,7 @@ function removeEntry(): void {
 .si-auto-result {
   font-size: var(--lj-text-base);
   padding: var(--lj-space-3) var(--lj-space-5);
+  white-space: pre-line;
   border-radius: var(--lj-radius-lg);
   background: var(--lj-danger-soft);
   color: var(--lj-alert-error-color, var(--lj-danger));

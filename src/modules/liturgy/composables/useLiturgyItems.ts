@@ -211,9 +211,34 @@ export function useLiturgyItems(
     }
   }
 
+  const ICON_MAP: Record<string, string> = {
+    mp4: ICONS.MEDIA.VIDEO, webm: ICONS.MEDIA.VIDEO, mkv: ICONS.MEDIA.VIDEO,
+    mov: ICONS.MEDIA.VIDEO, avi: ICONS.MEDIA.VIDEO, m4v: ICONS.MEDIA.VIDEO,
+    mp3: ICONS.MEDIA.AUDIO, wav: ICONS.MEDIA.AUDIO, ogg: ICONS.MEDIA.AUDIO,
+    flac: ICONS.MEDIA.AUDIO, aac: ICONS.MEDIA.AUDIO, m4a: ICONS.MEDIA.AUDIO,
+    opus: ICONS.MEDIA.AUDIO, wma: ICONS.MEDIA.AUDIO,
+    jpg: ICONS.MEDIA.IMAGE, jpeg: ICONS.MEDIA.IMAGE, png: ICONS.MEDIA.IMAGE,
+    webp: ICONS.MEDIA.IMAGE, gif: ICONS.MEDIA.IMAGE, bmp: ICONS.MEDIA.IMAGE,
+    heic: ICONS.MEDIA.IMAGE, heif: ICONS.MEDIA.IMAGE,
+    pdf: ICONS.UI.FILE,
+  };
+
   function subtitleFor(item: LiturgyItem): string {
     if (item.tipo === LiturgyItemTypeEnum.MUSICA && item.escolha)
       return t("placeholders.music_choose");
+    // ITENS_AGENDADOS: re-resolve dinamicamente contra a data ativa (não snapshot).
+    if (item.tipo === LiturgyItemTypeEnum.ITENS_AGENDADOS) {
+      const activeDate = $liturgy.getActiveDate();
+      const sched = $liturgy.findScheduledForToday(item.id, activeDate);
+      const arquivo = sched ? String((sched as Record<string, unknown>).arquivo || "") : "";
+      if (arquivo) {
+        const ext = arquivo.split(".").pop()?.toLowerCase() || "";
+        const icon = ICON_MAP[ext] || ICONS.UI.FILE;
+        const filename = arquivo.split(/[\\/]/).pop() || arquivo;
+        return `${icon}|||${filename}`;
+      }
+      return "";
+    }
     return item.subitem || "";
   }
 

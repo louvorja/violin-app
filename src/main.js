@@ -36,6 +36,7 @@ import { useFileProjection } from "@/composables/useFileProjection";
 import { useBackgroundSound } from "@/composables/useBackgroundSound";
 import Path from "@/helpers/Path";
 import Media from "@/composables/useMedia";
+import { MusicActionEnum } from "@/enums/MusicActionEnum";
 import Broadcast from "@/helpers/Broadcast";
 import Liturgy from "@/helpers/Liturgy";
 import { IMAGE_EXT, AUDIO_EXT, VIDEO_EXT } from "@/constants/FileTypes";
@@ -61,6 +62,36 @@ import { getTheme } from "@/config/Themes";
 
 const app = createApp(App);
 Telemetry.installVueErrorHandler(app);
+
+/**
+ * Executa uma música no modo escolhido (vindo do `POST /api/open-song`).
+ *
+ * - `audio`         → slides + faixa cantada
+ * - `instrumental`  → slides + playback
+ * - `no_audio`      → somente slides (Letra)
+ * - `audio-only`    → somente o áudio, sem abrir slides
+ * - `playback-only` → somente o playback, sem abrir slides
+ */
+async function openSongByMode(idMusic, mode) {
+  switch (mode) {
+    case MusicActionEnum.NO_AUDIO:
+      await Media.open({ id_music: idMusic, mode: MusicActionEnum.NO_AUDIO });
+      break;
+    case MusicActionEnum.AUDIO_ONLY:
+      await Media.openAudio(idMusic);
+      break;
+    case MusicActionEnum.PLAYBACK_ONLY:
+      await Media.openAudio({ id_music: idMusic, mode: MusicActionEnum.INSTRUMENTAL });
+      break;
+    case MusicActionEnum.INSTRUMENTAL:
+      await Media.open({ id_music: idMusic, mode: MusicActionEnum.INSTRUMENTAL });
+      break;
+    case MusicActionEnum.AUDIO:
+    default:
+      await Media.open({ id_music: idMusic, mode: MusicActionEnum.AUDIO });
+      break;
+  }
+}
 
 app.use(createPinia());
 app.use(router);
@@ -358,7 +389,7 @@ $storage.hydrate().then(async () => {
   // D5 — Conectar eventos do servidor HTTP às ações do app.
   if (Platform.isDesktop) {
     Platform.onHttpEvent(async (eventType, data) => {
-      const action = data.action;
+      const action = data?.action;
       switch (eventType) {
         case "http:song-slides":
           switch (action) {
@@ -374,6 +405,28 @@ $storage.hydrate().then(async () => {
             case "go-to-slide":
               Media.goToSlide(data.index);
               break;
+            case "playing-check": {
+              // Consulta de estado (aba Slides do app remoto e pull-to-refresh).
+              //
+              // `Media.slides()` devolve objetos reativos do Vue (Proxy) e o IPC do
+              // Electron serializa com o structured clone do V8, que não aceita
+              // Proxy ("An object could not be cloned"). O round-trip por JSON
+              // planifica tudo — é também o formato que o cliente recebe no `res.json`.
+              const slides = JSON.parse(JSON.stringify(Media.slides() || []));
+              const last = Broadcast.getLastPayload(BROADCAST_TYPE.SLIDE_CHANGE) || {};
+              const reply = {
+                status: "ok",
+                supported: true,
+                playing: slides.length > 0,
+                slides,
+                currentSlideIndex: Number(last.slide_index) || 0,
+                title: last.title || "",
+              };
+              if (data?.replyChannel && Platform.api?.send) {
+                Platform.api.send(data.replyChannel, reply);
+              }
+              break;
+            }
             case "liturgy-execute": {
               const litItem = Liturgy.get(data.id);
               if (!litItem) {
@@ -437,7 +490,8 @@ $storage.hydrate().then(async () => {
                     break;
                   }
                   case "itens-agendados": {
-                    const sched = Liturgy.findScheduledForToday(litItem.id);
+                    const activeDate = Liturgy.getActiveDate();
+                    const sched = Liturgy.findScheduledForToday(litItem.id, activeDate);
                     const arquivo = sched ? String((sched && sched.arquivo) || "") : "";
                     if (arquivo) {
                       const url = resolveFileUrl(arquivo);
@@ -693,15 +747,16 @@ $storage.hydrate().then(async () => {
               break;
           }
           break;
-        case "http:open-song":
+        case "http:open-song": {
           console.log("[http:open-song] Abrindo música:", data);
-          Media.open({ id_music: data.id_music, mode: data.mode });
+          await openSongByMode(data.id_music, data.mode);
 
           // Se veio de um item da liturgia (Choose Later), marca ele como checked
           if (data.id) {
             Liturgy.toggleChecked(data.id);
           }
           break;
+        }
         case "http:drawing-number":
           Broadcast.send(BROADCAST_TYPE.DRAWING_NUMBER, { number: data.number });
           break;
@@ -726,6 +781,30 @@ $storage.hydrate().then(async () => {
         case "http:drawing-name":
           Broadcast.send(BROADCAST_TYPE.DRAWING_NAME, { name: data.name });
           break;
+        case "http:projections-close": {
+          Media.close(true);
+          Broadcast.send(BROADCAST_TYPE.BIBLE_RIBBON_ACTION, { action: "stop" });
+          const fp = useFileProjection();
+          if (fp.isProjecting.value) {
+            fp.stopProjection();
+            Projection.close("announcements");
+          }
+          const moduleIds = [
+            ModuleEnum.COUNTER,
+            ModuleEnum.DRAW,
+            ModuleEnum.NAME_DRAW,
+            ModuleEnum.MESSAGE_BOARD,
+            ModuleEnum.STOPWATCH,
+            ModuleEnum.TIMER,
+            ModuleEnum.CLOCK,
+          ];
+          for (const id of moduleIds) {
+            Broadcast.send(BROADCAST_TYPE.MODULE_PROJECTION_VALUE, { module: id, active: false });
+            Projection.close(id);
+            Broadcast.send(BROADCAST_TYPE.MODULE_PROJECTION_CLOSE, { module: id });
+          }
+          break;
+        }
         default:
           console.warn("Evento desconhecido:", eventType);
           break;
@@ -971,6 +1050,32 @@ $storage.hydrate().then(async () => {
         description: "hotkeys.ctrl_m",
         group: "media",
         label: "Ctrl+M",
+      }
+    );
+
+    // Ctrl+I: Chat toggle
+    Hotkeys.register(
+      "Ctrl+i",
+      () => {
+        window.dispatchEvent(new CustomEvent("louvorja:toggle-chat"));
+      },
+      {
+        context: "global",
+        description: "hotkeys.ctrl_i",
+        group: "general",
+        label: "Ctrl+I",
+      }
+    );
+    Hotkeys.register(
+      "Meta+i",
+      () => {
+        window.dispatchEvent(new CustomEvent("louvorja:toggle-chat"));
+      },
+      {
+        context: "global",
+        description: "hotkeys.ctrl_i",
+        group: "general",
+        label: "Cmd+I",
       }
     );
 
@@ -1313,6 +1418,7 @@ $storage.hydrate().then(async () => {
         description: "hotkeys.ctrl_left",
         group: "navigation",
         label: "Ctrl+←",
+        allowInForm: true,
       }
     );
     Hotkeys.register(
@@ -1325,6 +1431,7 @@ $storage.hydrate().then(async () => {
         description: "hotkeys.ctrl_right",
         group: "navigation",
         label: "Ctrl+→",
+        allowInForm: true,
       }
     );
 
@@ -1342,10 +1449,11 @@ $storage.hydrate().then(async () => {
       description: "hotkeys.space",
       group: "media",
       label: "Space",
+      allowInForm: true,
     });
     Hotkeys.register("Pause", _togglePlayPause, {
       context: "media",
-      allowInForm: false,
+      allowInForm: true,
       description: "hotkeys.pause",
       group: "media",
       label: "Pause",

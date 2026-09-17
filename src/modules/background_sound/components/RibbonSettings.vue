@@ -4,7 +4,7 @@
       <div class="bgm-ribbon-sliders">
         <div class="bgm-ribbon-row">
           <label class="bgm-ribbon-label">
-            {{ t(LANG_PATH + ".fade_in") }}
+            {{ tm("fade_in") }}
           </label>
           <LjSlider
             v-model="fadeIn"
@@ -12,14 +12,14 @@
             :max="10000"
             :step="1000"
             class="bgm-ribbon-slider"
-            :aria-label="t(LANG_PATH + '.fade_in')"
+            :aria-label="tm('fade_in')"
             @update:model-value="save('fadeIn', $event)"
           />
           <span class="bgm-ribbon-value">{{ fadeIn / 1000 }}s</span>
         </div>
         <div class="bgm-ribbon-row">
           <label class="bgm-ribbon-label">
-            {{ t(LANG_PATH + ".fade_out") }}
+            {{ tm("fade_out") }}
           </label>
           <LjSlider
             v-model="fadeOut"
@@ -27,7 +27,7 @@
             :max="10000"
             :step="1000"
             class="bgm-ribbon-slider"
-            :aria-label="t(LANG_PATH + '.fade_out')"
+            :aria-label="tm('fade_out')"
             @update:model-value="save('fadeOut', $event)"
           />
           <span class="bgm-ribbon-value">{{ fadeOut / 1000 }}s</span>
@@ -36,12 +36,12 @@
       <div class="bgm-ribbon-switches">
         <LjSwitch
           v-model="autoPause"
-          :label="t(LANG_PATH + '.auto_pause')"
+          :label="tm('auto_pause')"
           @update:model-value="save('autoPause', $event)"
         />
         <LjSwitch
           v-model="repeat_"
-          :label="t(LANG_PATH + '.repeat')"
+          :label="tm('repeat')"
           @update:model-value="save('repeat', $event)"
         />
       </div>
@@ -60,9 +60,10 @@ import { getSetting, saveSetting } from "@/helpers/SettingsStorage";
 import { BackgroundSoundSettings } from "@/types/Settings";
 import { SETTINGS_TABLE } from "@/constants/DbTables";
 
-const { t } = useI18n();
+const { t: i18nT } = useI18n();
 
 const LANG_PATH = $modules.getPath(ModuleEnum.BACKGROUND_SOUND);
+const tm = (key: string) => i18nT(`modules.background_sound.${key}`);
 
 const DEFAULTS: BackgroundSoundSettings = {
   fadeIn: 3000,

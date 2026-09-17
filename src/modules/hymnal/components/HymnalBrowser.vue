@@ -12,7 +12,7 @@
         <div class="hymnal-form-item search-box">
           <LjInput
             v-model="search"
-            :placeholder="t('inputs.search')"
+            :placeholder="tm('inputs.search')"
             :icon="ICONS.ACTIONS.SEARCH"
             :invalid="data.filter_count <= 0"
             clearable
@@ -38,9 +38,9 @@
     >
       <thead>
         <tr>
-          <th class="lj-u-text-end">{{ t("table.track") }}</th>
-          <th class="lj-u-text-start">{{ t("table.music_name") }}</th>
-          <th class="lj-u-text-end">{{ t("table.duration") }}</th>
+          <th class="lj-u-text-end">{{ tm("table.track") }}</th>
+          <th class="lj-u-text-start">{{ tm("table.music_name") }}</th>
+          <th class="lj-u-text-end">{{ tm("table.duration") }}</th>
           <th />
         </tr>
       </thead>
@@ -74,7 +74,7 @@
     <LjAlert
       v-if="search && data.filter_count <= 0"
       variant="danger"
-      :text="t('data.not_found')"
+      :text="tm('data.not_found')"
       class="hymnal-alert"
     />
 
@@ -82,7 +82,7 @@
       <div class="w-100">
         <div class="lj-u-text-end">
           <small>
-            {{ t("data.records") }}:
+            {{ tm("data.records") }}:
             {{ data.filter_count }}
           </small>
         </div>
@@ -130,7 +130,7 @@ const selectedId = ref(null);
 const sequenceQueue = ref([]);
 const _sequenceTimer = ref(null);
 
-const t = (text) => i18nT(`modules.${props.moduleId}.${text}`);
+const tm = (text) => i18nT(`modules.${props.moduleId}.${text}`);
 
 const disabledAlbums = computed(() => {
   return $userdata.get(KEYS.OPTIONS.DISABLED_ALBUMS, []) || [];
@@ -227,14 +227,14 @@ async function exportMusic() {
         const sljaSlides = buildSljaSlides(data);
 
         const audioUrl = $path.file(filePath);
-        const audioResp = await fetchWithTimeout(audioUrl, {
+        const audioResp = await fetchWithTimeoutm(audioUrl, {
           timeout: NET_TIMEOUT.MEDIA,
           source: "hymnal-export",
         });
         if (!audioResp.ok) throw new Error(`HTTP ${audioResp.status}`);
         const audioBlob = await audioResp.blob();
 
-        const imagePaths = new Set();
+        const imagePaths = new Setm();
         if (data.url_image) imagePaths.add(data.url_image);
         const lyricList = data.lyric
           ? Array.isArray(data.lyric)
@@ -249,7 +249,7 @@ async function exportMusic() {
         for (const imgPath of imagePaths) {
           try {
             const imgUrl = $path.file(imgPath);
-            const resp = await fetchWithTimeout(imgUrl, {
+            const resp = await fetchWithTimeoutm(imgUrl, {
               timeout: NET_TIMEOUT.MEDIA,
               source: "hymnal-export",
             });
@@ -277,7 +277,7 @@ async function exportMusic() {
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(url), 10000);
+        setTimeoutm(() => URL.revokeObjectURL(url), 10000);
       } catch (err) {
         console.error(`[${props.moduleId}] exportMusic erro:`, err);
         $alert.error(`modules.${props.moduleId}.export_error`);
@@ -305,7 +305,7 @@ function _pollSequence() {
   } else if (!show && sequenceQueue.value.length) {
     if (_lastSeqProgress >= 0.95) {
       _clearSequenceTimer();
-      const nextId = sequenceQueue.value.shift();
+      const nextId = sequenceQueue.value.shiftm();
       Media.open({ id_music: nextId, mode: "audio" });
       _lastSeqProgress = 0;
     } else if (_lastSeqProgress > 0 && _lastSeqProgress < 0.95) {

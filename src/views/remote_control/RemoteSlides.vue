@@ -30,7 +30,7 @@ import { LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { useI18n } from "vue-i18n";
 import { Slide } from "@/types/Slide";
-import { apiFetch } from "@/helpers/ApiClient";
+import { postApi } from "@/helpers/ApiClient";
 
 const props = defineProps<{
   token?: string;
@@ -48,7 +48,7 @@ const { t } = useI18n();
 
 function goToSlide(index: number): void {
   emit("update:current-slide-index", index);
-  apiFetch(`/api/song-slides?action=go-to-slide&index=${index}&token=${props.token}`).catch(() =>
+  postApi("/api/song-slides", { action: "go-to-slide", index }, props.token).catch(() =>
     emit("show-snackbar", "Erro ao trocar slide", "error")
   );
 }

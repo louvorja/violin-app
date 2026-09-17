@@ -18,8 +18,8 @@
               v-model="draft"
               type="text"
               class="bs-search-input__field"
-              :placeholder="searchTerms.length ? '' : t('search_placeholder')"
-              :aria-label="t('search_placeholder')"
+              :placeholder="searchTerms.length ? '' : tm('search_placeholder')"
+              :aria-label="tm('search_placeholder')"
               @focus="openHistory"
               @blur="confirmarRascunho"
               @keydown.enter="onSearchEnter"
@@ -68,7 +68,7 @@
           :disabled="!(draft.trim() || searchTerms.some((t) => t?.trim())) || searching"
           @click="doSearch"
         >
-          {{ t("search") }}
+          {{ tm("search") }}
         </LjButton>
       </div>
     </template>
@@ -83,7 +83,7 @@
       <template v-else>
         <aside v-if="results.length" class="bs-results">
           <div class="bs-results-header">
-            <small>{{ t("results_count", { n: results.length }) }}</small>
+            <small>{{ tm("results_count", { n: results.length }) }}</small>
           </div>
           <div
             v-for="(res, i) in results"
@@ -106,13 +106,13 @@
             class="bs-verse-project"
             @click="projectCurrent"
           >
-            {{ t("ribbon.project") }}
+            {{ tm("ribbon.project") }}
           </LjButton>
         </main>
 
         <div v-else-if="noResults" class="bs-empty">
           <LjIcon :icon="ICONS.MODULES.BIBLE_SEARCH" size="48" color="primary" />
-          <p>{{ t("empty_hint") }}</p>
+          <p>{{ tm("empty_hint") }}</p>
         </div>
       </template>
     </div>
@@ -136,9 +136,11 @@ import Fuse from "fuse.js";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { ICONS } from "@/config/Icons";
 
-const container = ref<{ t: (key: string, named?: Record<string, unknown>) => string } | null>(null);
-const t = (key: string, params?: Record<string, unknown>): string =>
-  container.value?.t(key, params) || key;
+const container = ref<{ tm: (key: string, named?: Record<string, unknown>) => string } | null>(
+  null
+);
+const tm = (key: string, params?: Record<string, unknown>): string =>
+  container.value?.tm(key, params) || key;
 
 const searchTerms = ref<string[]>([]);
 /** Texto ainda não confirmado como termo — vira chip no Enter. */

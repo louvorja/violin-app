@@ -8,8 +8,8 @@
               variant="ghost"
               icon-only
               :icon="ICONS.UI.MENU"
-              :title="t('categories')"
-              :aria-label="t('categories')"
+              :title="tm('categories')"
+              :aria-label="tm('categories')"
             />
           </template>
         </LjMenu>
@@ -20,20 +20,20 @@
           variant="ghost"
           icon-only
           :icon="ICONS.ACTIONS.SEARCH"
-          :title="t('music_search.title')"
-          :aria-label="t('music_search.title')"
+          :title="tm('music_search.title')"
+          :aria-label="tm('music_search.title')"
           @click="openMusicSearch"
         />
       </div>
     </template>
 
     <template #left>
-      <nav v-if="!compact" class="col-sidebar" :aria-label="t('title')">
+      <nav v-if="!compact" class="col-sidebar" :aria-label="tm('title')">
         <LjProgress v-if="loading" indeterminate :height="4" />
 
         <button type="button" class="col-nav-item" @click="openMusicSearch">
           <LjIcon :icon="ICONS.ACTIONS.SEARCH" :size="16" />
-          <span class="col-nav-item__label">{{ t("music_search.title") }}</span>
+          <span class="col-nav-item__label">{{ tm("music_search.title") }}</span>
         </button>
 
         <hr class="col-divider" />
@@ -57,7 +57,7 @@
           :aria-current="id_category === 0 ? 'true' : undefined"
           @click="setCategory(0)"
         >
-          <span class="col-nav-item__label">{{ t("all_collections") }}</span>
+          <span class="col-nav-item__label">{{ tm("all_collections") }}</span>
         </button>
       </nav>
     </template>
@@ -70,7 +70,7 @@
           v-model="search"
           clearable
           :icon="ICONS.ACTIONS.SEARCH"
-          :placeholder="t('music_search.title')"
+          :placeholder="tm('music_search.title')"
         />
       </div>
 
@@ -180,12 +180,12 @@ function onScroll(event) {
   if (el.scrollTop + el.clientHeight >= el.scrollHeight - 200) showMore();
 }
 
-const t = (key) => moduleContainer.value?.t(key) || key;
+const tm = (key) => moduleContainer.value?.tm(key) || key;
 const pathFile = (img) => Path.file(img);
 
 // Título da barra compacta: nome da categoria atual ou "todas as coletâneas".
 const currentCategoryName = computed(() => {
-  if (!id_category.value) return t("all_collections");
+  if (!id_category.value) return tm("all_collections");
   return categories.value.find((c) => c.id_category === id_category.value)?.name || "";
 });
 
@@ -198,7 +198,7 @@ const categoryMenuItems = computed(() => [
   })),
   { separator: true },
   {
-    label: t("all_collections"),
+    label: tm("all_collections"),
     checked: id_category.value === 0,
     action: () => setCategory(0),
   },

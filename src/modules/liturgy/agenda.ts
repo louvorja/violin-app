@@ -51,12 +51,12 @@ function somarMinutos(time: string, minutes: number): string {
 
 /**
  * Relógio da liturgia: um bloco carimba a hora de início do trecho e cada item
- * seguinte começa quando o anterior termina.
+ * seguinte começa quando o anterior termina — incluindo itens fora do bloco.
  *
- * A contagem não para no fim do bloco. Antes ela parava, e o item solto logo
- * abaixo — um vídeo, um anúncio — aparecia com `-:-` mesmo com o horário
- * perfeitamente determinado pelo que vinha antes. Item solto no topo da lista
- * continua sem hora, e aí é o certo: não há de onde começar a contar.
+ * Antes, itens sem blocoId usavam `item.time || prevEnd`, o que pegava o valor
+ * salvo de uma computação anterior em vez de recalcular a partir do fim do item
+ * anterior. O resultado era que alterações de duração ou reordenação não
+ * afetavam os horários de itens soltos.
  */
 function atribuirHorarios(list: LiturgyItem[]): LiturgyItem[] {
   const result: LiturgyItem[] = [];
@@ -70,8 +70,7 @@ function atribuirHorarios(list: LiturgyItem[]): LiturgyItem[] {
     }
 
     const dur = Number(item.duration) || 0;
-    // Hora escrita à mão num item solto reinicia a contagem a partir dela.
-    const inicio = item.blocoId ? prevEnd : item.time || prevEnd;
+    const inicio = prevEnd;
     prevEnd = inicio ? somarMinutos(inicio, dur) : "";
     result.push({ ...item, time: inicio });
   }

@@ -6,7 +6,7 @@
     </template>
 
     <!-- Your main content -->
-    <h1>{{ t("title") }} | Clock With Anime.js</h1>
+    <h1>{{ tm("title") }} | Clock With Anime.js</h1>
     <button @click="openShowAnimation = !openShowAnimation">Show Animation</button>
     <br />
     <button @click="openEditAnimation = !openEditAnimation">Edit Animation</button>
@@ -25,8 +25,8 @@ import EditAnimation from "./modals/EditAnimation.vue";
 
 // ---- Obrigatório para tradução -------
 const moduleContainer = ref(null);
-const t = (key) => {
-  return moduleContainer.value?.t(key) || key;
+const tm = (key) => {
+  return moduleContainer.value?.tm(key) || key;
 };
 
 // ---------------------------------------

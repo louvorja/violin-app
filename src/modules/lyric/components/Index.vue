@@ -3,7 +3,7 @@
     v-model="module_.show"
     :title="lyConfig.title"
     :subtitle="
-      lyConfig.subtitle + (lyConfig.track > 0 ? ' | ' + t('track') + ' ' + lyConfig.track : '')
+      lyConfig.subtitle + (lyConfig.track > 0 ? ' | ' + tm('track') + ' ' + lyConfig.track : '')
     "
     :image="lyConfig.image ? lyricImageUrl : ''"
     closable
@@ -46,7 +46,7 @@ const lyricImageUrl = computed(() =>
   lyConfig.value?.image ? Path.file(lyConfig.value.image) : ""
 );
 
-const t = (text) => i18nT(`modules.${moduleId}.${text}`);
+const tm = (text) => i18nT(`modules.${moduleId}.${text}`);
 
 function closeLyric() {
   Media.closeLyric();

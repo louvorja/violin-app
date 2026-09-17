@@ -1,12 +1,12 @@
 <template>
   <div class="playlist-panel">
     <div class="playlist-panel-header">
-      <span class="playlist-panel-title">{{ t("playlists.title") }}</span>
+      <span class="playlist-panel-title">{{ tm("playlists.title") }}</span>
       <div class="playlist-panel-actions">
         <button
           type="button"
           class="playlist-panel-btn"
-          :title="t('playlists.import')"
+          :title="tm('playlists.import')"
           @click="onImport"
         >
           <LjIcon :icon="ICONS.ACTIONS.UPLOAD" size="16" />
@@ -14,7 +14,7 @@
         <button
           type="button"
           class="playlist-panel-btn playlist-panel-btn--primary"
-          :title="t('playlists.create')"
+          :title="tm('playlists.create')"
           @click="showCreate = true"
         >
           <LjIcon :icon="ICONS.ACTIONS.ADD" size="16" />
@@ -27,7 +27,7 @@
         <LjInput
           v-model="newName"
           autofocus
-          :placeholder="t('playlists.create_placeholder')"
+          :placeholder="tm('playlists.create_placeholder')"
           @keydown.enter="create"
           @keydown.esc="cancelCreate"
         />
@@ -45,7 +45,7 @@
         <LjInput
           v-model="renameName"
           autofocus
-          :placeholder="t('playlists.rename')"
+          :placeholder="tm('playlists.rename')"
           @keydown.enter="confirmRename"
           @keydown.esc="cancelRename"
         />
@@ -69,7 +69,7 @@
         <div class="playlist-panel-item-info">
           <span class="playlist-panel-item-name">{{ playlist.name }}</span>
           <span class="playlist-panel-item-meta">
-            {{ t("playlists.song_count", { n: playlist.songs.length }) }}
+            {{ tm("playlists.song_count", { n: playlist.songs.length }) }}
             · {{ formatDuration(getPlaylistDuration(playlist)) }}
           </span>
         </div>
@@ -77,15 +77,15 @@
           <button
             type="button"
             class="playlist-panel-btn playlist-panel-btn--sm"
-            :title="t('playlists.export')"
-            @click.stop="onExport(playlist)"
+            :title="tm('playlists.export')"
+            @click.stop="onExportm(playlist)"
           >
             <LjIcon :icon="ICONS.ACTIONS.DOWNLOAD" size="14" />
           </button>
           <button
             type="button"
             class="playlist-panel-btn playlist-panel-btn--sm"
-            :title="t('playlists.rename')"
+            :title="tm('playlists.rename')"
             @click.stop="startRename(playlist)"
           >
             <LjIcon :icon="ICONS.ACTIONS.EDIT" size="14" />
@@ -93,7 +93,7 @@
           <button
             type="button"
             class="playlist-panel-btn playlist-panel-btn--sm playlist-panel-btn--danger"
-            :title="t('playlists.delete')"
+            :title="tm('playlists.delete')"
             @click.stop="onDelete(playlist)"
           >
             <LjIcon :icon="ICONS.ACTIONS.DELETE" size="14" />
@@ -102,7 +102,7 @@
       </div>
 
       <div v-if="playlists.length === 0" class="playlist-panel-empty">
-        {{ t("playlists.empty") }}
+        {{ tm("playlists.empty") }}
       </div>
     </div>
   </div>
@@ -118,7 +118,7 @@ import { usePlaylists } from "../composables/usePlaylists";
 import type { Playlist } from "@/types/Music";
 
 const { t: i18nT } = useI18n();
-const t = (key: string, named?: Record<string, unknown>) =>
+const tm = (key: string, named?: Record<string, unknown>) =>
   named ? i18nT(`modules.musics.${key}`, named) : i18nT(`modules.musics.${key}`);
 const {
   playlists,
@@ -174,11 +174,11 @@ function cancelRename(): void {
 }
 
 async function onDelete(playlist: Playlist): Promise<void> {
-  if (!confirm(t("playlists.delete_confirm", { name: playlist.name }))) return;
+  if (!confirm(tm("playlists.delete_confirm", { name: playlist.name }))) return;
   await deletePlaylist(playlist.id);
 }
 
-function onExport(playlist: Playlist): void {
+function onExportm(playlist: Playlist): void {
   const data = exportPlaylist(playlist.id);
   if (!data) return;
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });

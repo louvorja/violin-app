@@ -210,12 +210,13 @@ export const KEYS = {
       TITLE_COLOR: `${OPTIONS_SLIDE}.title_color`,
       TEXT_COLOR: `${OPTIONS_SLIDE}.text_color`,
       REPEAT_COLOR: `${OPTIONS_SLIDE}.repeat_color`,
-      TEXT_BG_TRANSPARENT: `${OPTIONS_SLIDE}.text_bg_transparent`,
+      TEXT_BG_OPACITY: `${OPTIONS_SLIDE}.text_bg_opacity`,
       TEXT_BG_BLUR_ENABLED: `${OPTIONS_SLIDE}.text_bg_blur_enabled`,
       TEXT_BG_BLUR: `${OPTIONS_SLIDE}.text_bg_blur`,
       TEXT_BORDER_ENABLED: `${OPTIONS_SLIDE}.text_border_enabled`,
       TEXT_BORDER_COLOR: `${OPTIONS_SLIDE}.text_border_color`,
       TEXT_BORDER_WIDTH: `${OPTIONS_SLIDE}.text_border_width`,
+      TEXT_BORDER_RADIUS: `${OPTIONS_SLIDE}.text_border_radius`,
       TITLE_SIZE: `${OPTIONS_SLIDE}.title_size`,
       BODY_SIZE: `${OPTIONS_SLIDE}.body_size`,
       AUX_SIZE: `${OPTIONS_SLIDE}.aux_size`,
@@ -235,6 +236,24 @@ export const KEYS = {
       RETURN_TEXT_CASE: `${OPTIONS_SLIDE}.return_text_case`,
       FONT_SIZE_NEXT: `${OPTIONS_SLIDE}.font_size_next`,
       AFFECT_EXTERNAL_SLIDES: `${OPTIONS}.affect_external_slides`,
+
+      // Fundo da tela de retorno (independente do fundo dos slides)
+      CUSTOM_RETURN_BACKGROUND: `${OPTIONS_SLIDE}.custom_return_background`,
+      RETURN_BG_TOP_COLOR: `${OPTIONS_SLIDE}.return_bg_top_color`,
+      RETURN_BG_TOP_POSITION: `${OPTIONS_SLIDE}.return_bg_top_position`,
+      RETURN_BG_BOTTOM_COLOR: `${OPTIONS_SLIDE}.return_bg_bottom_color`,
+      RETURN_BG_BOTTOM_POSITION: `${OPTIONS_SLIDE}.return_bg_bottom_position`,
+
+      // Formatação de texto do retorno — expandido
+      RETURN_HEIGHT_BOTTOM: `${OPTIONS_SLIDE}.return_height_bottom`,
+      RETURN_FONT_SIZE_COVER: `${OPTIONS_SLIDE}.return_font_size_cover`,
+      RETURN_FONT_SIZE_LYRIC: `${OPTIONS_SLIDE}.return_font_size_lyric`,
+      // Topo (slide atual)
+      RETURN_TOP_TEXT_CASE: `${OPTIONS_SLIDE}.return_top_text_case`,
+      RETURN_TOP_TEXT_ALIGN: `${OPTIONS_SLIDE}.return_top_text_align`,
+      // Rodapé (próxima frase)
+      RETURN_BOTTOM_TEXT_CASE: `${OPTIONS_SLIDE}.return_bottom_text_case`,
+      RETURN_BOTTOM_TEXT_ALIGN: `${OPTIONS_SLIDE}.return_bottom_text_align`,
     },
     ALWAYS_ON_TOP: `${OPTIONS}.always_on_top`,
     FILE_PROJECTION: {
@@ -279,6 +298,7 @@ export const KEYS = {
       ONLINE_VIDEO: `${OPTIONS_DISPLAYS}.online_video`,
       ONLINE_VIDEO_RETURN: `${OPTIONS_DISPLAYS}.online_video_return`,
     },
+    SELECTED_IP: `${OPTIONS}.selected_ip`,
     START_WITH_OS: `${OPTIONS}.start_with_os`,
     TELEMETRY: `${OPTIONS}.telemetry`,
     TELEMETRY_ID: `${OPTIONS}.telemetry_id`,
@@ -318,5 +338,9 @@ export const KEYS = {
     LJ_BACKGROUND_PROJECTION: "lj_background_projection",
     LJ_FILE_PROJECTION: "lj_file_projection",
     LJ_YOUTUBE_PROJECTION: "lj_youtube_projection",
+  },
+  CHAT: {
+    AUTO_OPEN: "chat.auto_open",
+    IS_PINNED: "chat.is_pinned",
   },
 };

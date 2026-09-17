@@ -36,7 +36,7 @@
 
       <div v-if="chips.length" class="ndraw-proj-chips">
         <span class="ndraw-proj-label" :style="{ color: font_color }">
-          {{ t("data.drawn") }}
+          {{ tm("data.drawn") }}
         </span>
         <div class="ndraw-proj-chip-list">
           <span
@@ -85,7 +85,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const module = getModule(ModuleEnum.NAME_DRAW);
 const { t: i18nT } = useI18n();
-const t = (text: string): string => i18nT(`modules.${module?.id}.${text}`);
+const tm = (text: string): string => i18nT(`modules.${module?.id}.${text}`);
 
 const { container, fontSizePc } = useContainerSize();
 

@@ -27,7 +27,7 @@
 
         <!-- Mensagem de alarme -->
         <LjChip v-if="alarmed" variant="danger" :icon="ICONS.TIMER.ALARM" class="sw-alarm">
-          {{ t("alarm.done") }}
+          {{ tm("alarm.done") }}
         </LjChip>
       </div>
     </div>
@@ -122,7 +122,7 @@ const display = computed(() => {
     : `${sign}${String(m).padStart(2, "0")}`;
 });
 
-const t = (key) => moduleContainer.value?.t(key) || key;
+const tm = (key) => moduleContainer.value?.tm(key) || key;
 
 watch(
   display,
