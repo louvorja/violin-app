@@ -1113,6 +1113,16 @@ async function _init(): Promise<void> {
       // hidden/file fogem ao maskAllInputs padrão e podem carregar token ou
       // caminho local; ocultá-los não reduz a reprodução das ações do usuário.
       blockSelector: 'input[type="hidden"], input[type="file"]',
+      // Mantém as fontes locais disponíveis no snapshot; sem isso o Replay
+      // pode mostrar o DOM, mas o texto da projeção fica visualmente ausente
+      // ou com dimensões erradas.
+      collectFonts: isMainWindow,
+      // PDFs e previews podem ser pintados em canvas. Dois frames por segundo
+      // é suficiente para diagnosticar o conteúdo sem transformar o Replay em
+      // uma gravação de vídeo contínua. A janela de projeção segue sem Replay.
+      captureCanvas: isMainWindow
+        ? { recordCanvas: true, canvasFps: 2, canvasQuality: "0.2" }
+        : { recordCanvas: false },
       // Não registrar headers nem bodies: podem conter tokens, cookies ou
       // conteúdo completo de requisições, mesmo quando a URL foi redigida.
       recordHeaders: false,
@@ -1172,7 +1182,14 @@ async function _init(): Promise<void> {
     rageclick: isMainWindow,
     before_send: (capture) => {
       if (!capture) return null;
+      // `token` is injected by PostHog and is required by `/e/`. It matches
+      // the generic secret-key sanitizer, but removing it makes the SDK drop
+      // every event before opening the network request. Preserve only this
+      // exact SDK field; user-provided nested token fields remain redacted.
+      const ingestionToken =
+        typeof capture.properties?.token === "string" ? capture.properties.token : undefined;
       capture.properties = serializableProperties(capture.properties);
+      if (ingestionToken) capture.properties.token = ingestionToken;
       if (capture.$set) capture.$set = serializableProperties(capture.$set);
       if (capture.$set_once) capture.$set_once = serializableProperties(capture.$set_once);
       return capture;

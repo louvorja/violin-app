@@ -85,7 +85,12 @@ describe("Telemetry", () => {
         capture_dead_clicks: true,
         rageclick: true,
         enable_recording_console_log: true,
-        session_recording: expect.objectContaining({ recordHeaders: false, recordBody: false }),
+        session_recording: expect.objectContaining({
+          recordHeaders: false,
+          recordBody: false,
+          collectFonts: true,
+          captureCanvas: { recordCanvas: true, canvasFps: 2, canvasQuality: "0.2" },
+        }),
         metrics: expect.objectContaining({
           serviceName: "louvorja-violin",
           network: expect.objectContaining({ name: "louvorja.http.client.duration" }),
@@ -223,6 +228,30 @@ describe("Telemetry", () => {
     expect(posthog.captureException).not.toHaveBeenCalled();
   });
 
+  it("encaminha console.error tratado para Error Tracking com stack e fonte", async () => {
+    const Telemetry = await loadTelemetry();
+    await Telemetry.init();
+    const bridge = (
+      console as typeof console & {
+        __louvorjaTelemetryConsoleBridge?: { originalError: (...args: unknown[]) => void };
+      }
+    ).__louvorjaTelemetryConsoleBridge;
+    expect(bridge).toBeDefined();
+    const originalError = bridge?.originalError;
+    if (bridge) bridge.originalError = vi.fn();
+
+    try {
+      console.error("[Liturgia] import falhou", new Error("arquivo inválido"));
+      expect(posthog.captureException).toHaveBeenCalledWith(
+        expect.objectContaining({ message: "arquivo inválido" }),
+        expect.objectContaining({ source: "console.error", console_message: expect.stringContaining("import falhou") }),
+      );
+    } finally {
+      if (bridge && originalError) bridge.originalError = originalError;
+      Telemetry.setEnabled(false);
+    }
+  });
+
   it("resetId() gera o distinct_id via bootstrap e reforça o consentimento atual", async () => {
     const Telemetry = await loadTelemetry();
     await Telemetry.init();
@@ -272,6 +301,30 @@ describe("Telemetry", () => {
       "music_opened",
       expect.objectContaining({ nested: { album: "Hinário" } }),
     );
+  });
+
+  it("preserva o token de ingestão exigido pelo PostHog sem liberar tokens do produto", async () => {
+    const Telemetry = await loadTelemetry();
+    await Telemetry.init();
+
+    const config = posthog.init.mock.calls[0][1] as {
+      before_send: (capture: {
+        event: string;
+        properties: Record<string, unknown>;
+      }) => { properties: Record<string, unknown> };
+    };
+    const sanitized = config.before_send({
+      event: "test_event",
+      properties: {
+        token: "phc_public_project_key",
+        api_token: "nao-enviar",
+        nested: { token: "nao-enviar-tambem", name: "ok" },
+      },
+    });
+
+    expect(sanitized.properties.token).toBe("phc_public_project_key");
+    expect(sanitized.properties.api_token).toBeUndefined();
+    expect(sanitized.properties.nested).toEqual({ name: "ok" });
   });
 
   it("interrompe captura e descarta o contexto pendente quando a opção é desligada", async () => {
