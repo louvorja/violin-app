@@ -66,6 +66,7 @@ import Window from "@/components/Window.vue";
 import Modules from "@/helpers/Modules";
 import AppData from "@/helpers/AppData";
 import UserData from "@/helpers/UserData";
+import Telemetry from "@/helpers/Telemetry";
 
 const props = defineProps({
   manifest: { type: Object, required: true },
@@ -86,6 +87,9 @@ const emit = defineEmits(["close", "minimize", "scroll", "hasScroll", "show"]);
 const embeddedContent = ref(null);
 let embeddedResizeObserver = null;
 let embeddedMutationObserver = null;
+const moduleLifecycleStartedAt =
+  typeof performance !== "undefined" ? performance.now() : Date.now();
+let firstPaintReported = false;
 
 const { t: i18nT } = useI18n();
 
@@ -187,10 +191,52 @@ onMounted(() => {
     AppData.set(`modules.${moduleId.value}.popup`, props.popup);
   }
   if (!props.popup) observeEmbeddedContent();
+  const durationMs = Math.max(
+    0,
+    Math.round(
+      (typeof performance !== "undefined" ? performance.now() : Date.now()) -
+        moduleLifecycleStartedAt
+    )
+  );
+  Telemetry.track("module_view_mounted", {
+    module_id: moduleId.value,
+    popup: props.popup,
+    duration_ms: durationMs,
+  });
+  Telemetry.histogram("louvorja.module.mount.duration", durationMs, {
+    module_id: moduleId.value || "unknown",
+    popup: props.popup,
+  });
+  const reportFirstPaint = () => {
+    if (firstPaintReported) return;
+    firstPaintReported = true;
+    const firstPaintMs = Math.max(
+      0,
+      Math.round(
+        (typeof performance !== "undefined" ? performance.now() : Date.now()) -
+          moduleLifecycleStartedAt
+      )
+    );
+    Telemetry.track("module_view_first_paint", {
+      module_id: moduleId.value,
+      popup: props.popup,
+      duration_ms: firstPaintMs,
+    });
+    Telemetry.histogram("louvorja.module.first_paint.duration", firstPaintMs, {
+      module_id: moduleId.value || "unknown",
+      popup: props.popup,
+    });
+  };
+  if (typeof requestAnimationFrame === "function") {
+    requestAnimationFrame(() => requestAnimationFrame(reportFirstPaint));
+  } else {
+    setTimeout(reportFirstPaint, 100);
+  }
 });
 
 onActivated(() => {
   if (!props.popup) observeEmbeddedContent();
+  Telemetry.track("module_view_activated", { module_id: moduleId.value, popup: props.popup });
 });
 
 function stopEmbeddedObservers() {
