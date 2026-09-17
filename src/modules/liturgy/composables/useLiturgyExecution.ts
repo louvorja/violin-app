@@ -23,6 +23,7 @@ import {
 import type { LiturgyItem } from "@/types/Liturgy";
 import { AUDIO_EXT, IMAGE_EXT, VIDEO_EXT } from "@constants/FileTypes";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
+import Telemetry from "@/helpers/Telemetry";
 import { useLiturgyI18n, chaveLiturgia } from "../i18n";
 
 /**
@@ -38,6 +39,19 @@ import { useLiturgyI18n, chaveLiturgia } from "../i18n";
  */
 export function useLiturgyExecution() {
   const { t } = useLiturgyI18n();
+
+  function reportExecutionError(
+    error: unknown,
+    operation: string,
+    properties: Record<string, unknown> = {}
+  ): void {
+    Telemetry.captureException(error, { source: `liturgy.execution.${operation}`, ...properties });
+    Telemetry.track("liturgy_execution_failed", { operation, ...properties });
+  }
+
+  function reportMissingResource(operation: string, resource: string): void {
+    Telemetry.track("liturgy_resource_missing", { operation, resource });
+  }
 
   /** Instância compartilhada com o módulo Som de Fundo (mesmo player). */
   const $bgSound = useBackgroundSound();
@@ -57,7 +71,9 @@ export function useLiturgyExecution() {
         executeSite(item);
         break;
       case LiturgyItemTypeEnum.ARQUIVO:
-        openFile(item);
+        void openFile(item).catch((error: unknown) => {
+          reportExecutionError(error, "open_file", { has_path: !!item.dir });
+        });
         break;
       case LiturgyItemTypeEnum.ITENS_AGENDADOS: {
         const activeDate = $liturgy.getActiveDate();
@@ -70,7 +86,9 @@ export function useLiturgyExecution() {
             ...item,
             tipo: LiturgyItemTypeEnum.ARQUIVO,
             dir: arquivo,
-          } as LiturgyItem);
+          } as LiturgyItem).catch((error: unknown) => {
+            reportExecutionError(error, "open_scheduled_file", { has_path: true });
+          });
         } else {
           $alert.error({ text: chaveLiturgia("dialog.scheduled_not_found") });
         }
@@ -103,16 +121,21 @@ export function useLiturgyExecution() {
 
   async function playMusic(item: LiturgyItem, mode = "sung"): Promise<void> {
     if (item.escolha || !item.id_music) {
+      reportMissingResource("play_music", "music_selection");
       $alert.info({ text: chaveLiturgia("dialog.music_choose_first") });
       return;
     }
 
     if (mode === "audio" || mode === "audio_pb") {
-      $media.stop();
-      await $media.openAudio({
-        id_music: item.id_music,
-        mode: (mode === "audio_pb" ? "instrumental" : "audio") as MusicActionEnum,
-      });
+      try {
+        $media.stop();
+        await $media.openAudio({
+          id_music: item.id_music,
+          mode: (mode === "audio_pb" ? "instrumental" : "audio") as MusicActionEnum,
+        });
+      } catch (error) {
+        reportExecutionError(error, "play_music_audio", { mode });
+      }
       return;
     }
 
@@ -122,16 +145,22 @@ export function useLiturgyExecution() {
       lyric: { id_music: item.id_music, mode: MusicActionEnum.NO_AUDIO },
       no_audio: { id_music: item.id_music, mode: MusicActionEnum.NO_AUDIO },
     };
-    $media.open(map[mode] || map.sung);
+    try {
+      $media.open(map[mode] || map.sung);
+    } catch (error) {
+      reportExecutionError(error, "play_music", { mode });
+    }
   }
 
   function openLyric(musica: number): void {
     if (!musica || Number.isNaN(musica) || musica === -1) {
+      reportMissingResource("open_lyric", "music_selection");
       $alert.info({ text: chaveLiturgia("dialog.music_choose_first") });
       return;
     }
 
     $media.openLyric({ id_music: musica }).catch((err: unknown) => {
+      reportExecutionError(err, "open_lyric", { has_music_id: true });
       console.warn("[useLiturgyItems] openLyric falhou:", err);
     });
   }
@@ -188,116 +217,140 @@ export function useLiturgyExecution() {
    * ARQUIVO (imagem/vídeo/pdf → projeção; pdf paginado).
    */
   async function executeMediaLibraryItem(item: LiturgyItem): Promise<void> {
-    let target = item.dir;
-    let typeHint = item.subtipo || undefined;
-    if (item.ref_id) {
-      const rec = await $idb.get<{ path?: string; type?: string }>(
-        DB_TABLE.MEDIA_LIBRARY,
-        item.ref_id
-      );
-      if (rec?.path) target = rec.path;
-      if (rec?.type) typeHint = rec.type;
+    try {
+      let target = item.dir;
+      let typeHint = item.subtipo || undefined;
+      if (item.ref_id) {
+        const rec = await $idb.get<{ path?: string; type?: string }>(
+          DB_TABLE.MEDIA_LIBRARY,
+          item.ref_id
+        );
+        if (rec?.path) target = rec.path;
+        if (rec?.type) typeHint = rec.type;
+      }
+      if (!target) {
+        reportMissingResource("execute_media_library", "media_library_item");
+        $alert.error({ text: t("alerts.media_not_found") });
+        return;
+      }
+      // Blob URLs só valem no documento de origem — a projeção re-resolve
+      // via IDB usando a referência da biblioteca.
+      const extraPayload =
+        target.startsWith("blob:") && item.ref_id
+          ? { libRef: { table: DB_TABLE.MEDIA_LIBRARY, id: item.ref_id } }
+          : undefined;
+      await openFile({ ...item, dir: target }, typeHint, extraPayload);
+    } catch (error) {
+      reportExecutionError(error, "execute_media_library", { has_ref_id: !!item.ref_id });
     }
-    if (!target) {
-      $alert.error({ text: t("alerts.media_not_found") });
-      return;
-    }
-    // Blob URLs só valem no documento de origem — a projeção re-resolve
-    // via IDB usando a referência da biblioteca.
-    const extraPayload =
-      target.startsWith("blob:") && item.ref_id
-        ? { libRef: { table: DB_TABLE.MEDIA_LIBRARY, id: item.ref_id } }
-        : undefined;
-    await openFile({ ...item, dir: target }, typeHint, extraPayload);
   }
 
   /** Anúncios: envia os slides selecionados (na ordem) para a projeção. */
   async function executeAnnouncements(item: LiturgyItem): Promise<void> {
-    const all = (
-      await $idb.getAll<{
-        id: string;
-        nome: string;
-        ordem: number;
-        texto?: string;
-        imageData?: ArrayBuffer;
-        imageMime?: string;
-        videoData?: ArrayBuffer;
-        videoMime?: string;
-        style?: Record<string, unknown>;
-      }>(DB_TABLE.ANNOUNCEMENTS)
-    ).sort((a, b) => a.ordem - b.ordem);
+    try {
+      const all = (
+        await $idb.getAll<{
+          id: string;
+          nome: string;
+          ordem: number;
+          texto?: string;
+          imageData?: ArrayBuffer;
+          imageMime?: string;
+          videoData?: ArrayBuffer;
+          videoMime?: string;
+          style?: Record<string, unknown>;
+        }>(DB_TABLE.ANNOUNCEMENTS)
+      ).sort((a, b) => a.ordem - b.ordem);
 
-    const ids = item.anuncios_ids || [];
-    const selected = ids.length ? all.filter((a) => ids.includes(String(a.id))) : all;
-    if (!selected.length) {
-      $alert.error({ text: t("alerts.media_not_found") });
-      return;
+      const ids = item.anuncios_ids || [];
+      const selected = ids.length ? all.filter((a) => ids.includes(String(a.id))) : all;
+      if (!selected.length) {
+        reportMissingResource("execute_announcements", "announcement");
+        $alert.error({ text: t("alerts.media_not_found") });
+        return;
+      }
+
+      const payload = {
+        slides: selected.map((a) => ({
+          id: String(a.id),
+          nome: a.nome,
+          ordem: a.ordem,
+          texto: a.texto,
+          imageData: a.imageData,
+          imageMime: a.imageMime,
+          videoData: a.videoData,
+          videoMime: a.videoMime,
+          style: a.style,
+        })),
+        index: 0,
+      };
+      // Salva no IDB (cache) — padrão do módulo announcements para fallback da projection.
+      // ArrayBuffer é preservado nativamente pelo IDB (diferente de localStorage/JSON).
+      await $idb.put(DB_TABLE.CACHE, {
+        id: "announcements_projection_state",
+        data: payload,
+        ts: Date.now(),
+      });
+      $appdata.set(KEYS.MODULES.MEDIA.IS_PLAYING, true);
+      // Ativa a barra de controles global.
+      const fp = useFileProjection();
+      fp.start("announcements", selected[0]?.nome || "", selected.length, 0);
+      await openAnnouncementsWindow();
+      // Espera a janela de projeção montar antes de enviar o broadcast.
+      await new Promise((r) => setTimeout(r, 300));
+      $broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_STATE, payload);
+    } catch (error) {
+      reportExecutionError(error, "execute_announcements");
     }
-
-    const payload = {
-      slides: selected.map((a) => ({
-        id: String(a.id),
-        nome: a.nome,
-        ordem: a.ordem,
-        texto: a.texto,
-        imageData: a.imageData,
-        imageMime: a.imageMime,
-        videoData: a.videoData,
-        videoMime: a.videoMime,
-        style: a.style,
-      })),
-      index: 0,
-    };
-    // Salva no IDB (cache) — padrão do módulo announcements para fallback da projection.
-    // ArrayBuffer é preservado nativamente pelo IDB (diferente de localStorage/JSON).
-    await $idb.put(DB_TABLE.CACHE, {
-      id: "announcements_projection_state",
-      data: payload,
-      ts: Date.now(),
-    });
-    $appdata.set(KEYS.MODULES.MEDIA.IS_PLAYING, true);
-    // Ativa a barra de controles global.
-    const fp = useFileProjection();
-    fp.start("announcements", selected[0]?.nome || "", selected.length, 0);
-    await openAnnouncementsWindow();
-    // Espera a janela de projeção montar antes de enviar o broadcast.
-    await new Promise((r) => setTimeout(r, 300));
-    $broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_STATE, payload);
   }
 
   /* ============== Overlay ============== */
   async function toggleOverlay(item: LiturgyItem): Promise<void> {
     if (!item.overlay_id) return;
-    const slots = await readAllOverlaySlots();
-    const slot = slots.find((s) => s.id === item.overlay_id);
-    if (!slot) return;
+    try {
+      const slots = await readAllOverlaySlots();
+      const slot = slots.find((s) => s.id === item.overlay_id);
+      if (!slot) {
+        reportMissingResource("toggle_overlay", "overlay_slot");
+        return;
+      }
 
-    slot.enabled = item.overlay_action === "activate";
-    await writeOverlaySlot(slot);
+      slot.enabled = item.overlay_action === "activate";
+      await writeOverlaySlot(slot);
 
-    if (slot.enabled) $userdata.set(KEYS.MODULES.OVERLAY.ENABLED, true);
+      if (slot.enabled) $userdata.set(KEYS.MODULES.OVERLAY.ENABLED, true);
 
-    $broadcast.send(BROADCAST_TYPE.OVERLAY_CONFIG_CHANGED, {
-      enabled: slot.enabled,
-      slot,
-    });
+      $broadcast.send(BROADCAST_TYPE.OVERLAY_CONFIG_CHANGED, {
+        enabled: slot.enabled,
+        slot,
+      });
+    } catch (error) {
+      reportExecutionError(error, "toggle_overlay");
+    }
   }
 
   async function activateLinkedOverlay(item: LiturgyItem): Promise<void> {
     if (!item.linked_overlay_id) return;
-    const slots = await readAllOverlaySlots();
-    const slot = slots.find((s) => s.id === item.linked_overlay_id);
-    if (!slot) return;
+    try {
+      const slots = await readAllOverlaySlots();
+      const slot = slots.find((s) => s.id === item.linked_overlay_id);
+      if (!slot) {
+        reportMissingResource("activate_linked_overlay", "overlay_slot");
+        return;
+      }
 
-    slot.enabled = true;
-    await writeOverlaySlot(slot);
+      slot.enabled = true;
+      await writeOverlaySlot(slot);
 
-    $userdata.set(KEYS.MODULES.OVERLAY.ENABLED, true);
+      $userdata.set(KEYS.MODULES.OVERLAY.ENABLED, true);
 
-    $broadcast.send(BROADCAST_TYPE.OVERLAY_CONFIG_CHANGED, {
-      enabled: true,
-      slot,
-    });
+      $broadcast.send(BROADCAST_TYPE.OVERLAY_CONFIG_CHANGED, {
+        enabled: true,
+        slot,
+      });
+    } catch (error) {
+      reportExecutionError(error, "activate_linked_overlay");
+    }
   }
 
 
@@ -328,6 +381,7 @@ export function useLiturgyExecution() {
   /** Som de fundo: reproduz no PLAYER do módulo Som de Fundo (fade/volume). */
   async function executeBgSoundItem(item: LiturgyItem): Promise<void> {
     if (!item.ref_id) {
+      reportMissingResource("execute_background_sound", "background_sound");
       $alert.error({ text: t("alerts.media_not_found") });
       return;
     }
@@ -336,33 +390,39 @@ export function useLiturgyExecution() {
       $bgSound.togglePlay();
       return;
     }
-    const rec = await $idb.get<{
-      id: string;
-      name: string;
-      fileName?: string;
-      path: string;
-      data?: ArrayBuffer;
-      mime?: string;
-    }>(DB_TABLE.BACKGROUND_SOUND_LIBRARY, item.ref_id);
-    if (!rec) {
-      $alert.error({ text: t("alerts.media_not_found") });
-      return;
+    try {
+      const rec = await $idb.get<{
+        id: string;
+        name: string;
+        fileName?: string;
+        path: string;
+        data?: ArrayBuffer;
+        mime?: string;
+      }>(DB_TABLE.BACKGROUND_SOUND_LIBRARY, item.ref_id);
+      if (!rec) {
+        reportMissingResource("execute_background_sound", "background_sound");
+        $alert.error({ text: t("alerts.media_not_found") });
+        return;
+      }
+      const displayName = rec.fileName || rec.name;
+      $bgSound.playFile({
+        id: rec.id,
+        name: displayName,
+        fileName: displayName,
+        path: resolvePlayableSoundUrl(rec),
+        data: rec.data,
+        mime: rec.mime,
+      });
+    } catch (error) {
+      reportExecutionError(error, "execute_background_sound", { has_ref_id: true });
     }
-    const displayName = rec.fileName || rec.name;
-    $bgSound.playFile({
-      id: rec.id,
-      name: displayName,
-      fileName: displayName,
-      path: resolvePlayableSoundUrl(rec),
-      data: rec.data,
-      mime: rec.mime,
-    });
   }
 
   function _persistFileProjection(payload: Record<string, unknown>): void {
     try {
       localStorage.setItem("lj_file_projection", JSON.stringify(payload));
     } catch (e) {
+      reportExecutionError(e, "persist_file_projection");
       console.error(e);
     }
   }
@@ -395,7 +455,8 @@ export function useLiturgyExecution() {
       const url = URL.createObjectURL(jpeg);
       _heicProjectionCache.set(dir, url);
       return url;
-    } catch {
+    } catch (error) {
+      reportExecutionError(error, "resolve_renderable_file", { extension: ext });
       return raw;
     }
   }
@@ -417,6 +478,7 @@ export function useLiturgyExecution() {
         !/^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(dir) &&
         !dir.startsWith("/"))
     ) {
+      reportMissingResource("open_file", "file");
       $alert.error({ text: url, title: "modules.media.alerts.file_not_found" });
       return;
     }
@@ -445,6 +507,7 @@ export function useLiturgyExecution() {
       _persistFileProjection(payload);
 
       await openFileProjectionWindows().catch((e: unknown) => {
+        reportExecutionError(e, "open_file_projection", { kind });
         $alert.error(e as string);
         console.error(e);
       });
@@ -463,6 +526,7 @@ export function useLiturgyExecution() {
       };
       _persistFileProjection(payload);
       await openFileProjectionWindows().catch((e: unknown) => {
+        reportExecutionError(e, "open_file_projection", { kind });
         $alert.error(e as string);
         console.error(e);
       });
@@ -470,7 +534,9 @@ export function useLiturgyExecution() {
       $media.openAudio({ url, title: item.item || "" });
       $appdata.set(KEYS.MODULES.MEDIA.CONFIG.VIDEO_FILE, true);
     } else if (kind === "audio") {
-      $media.openAudio({ url, title: item.item || "" });
+      void $media.openAudio({ url, title: item.item || "" }).catch((error: unknown) => {
+        reportExecutionError(error, "open_audio_file", { kind });
+      });
     } else if (!kind && !typeHint) {
       // Tipo desconhecido sem hint: comportamento legado (abrir com SO).
       if (Platform.isDesktop && (Platform.api as unknown as Record<string, unknown>)?.openPath) {
@@ -479,6 +545,7 @@ export function useLiturgyExecution() {
         openUrl(dir);
       }
     } else {
+      reportMissingResource("open_file", "renderable_file");
       $alert.error({ text: url, title: "modules.media.alerts.file_not_found" });
     }
   }

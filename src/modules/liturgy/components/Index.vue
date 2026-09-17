@@ -144,6 +144,7 @@ import LiturgyLoadDialog from "./LiturgyLoadDialog.vue";
 import LiturgyManageDialog from "./LiturgyManageDialog.vue";
 import { useLiturgyLibrary, parseJaImport } from "../composables/useLiturgyLibrary";
 import { useLiturgyAutoLoad } from "../composables/useLiturgyAutoLoad";
+import Telemetry from "@/helpers/Telemetry";
 
 const { t } = useLiturgyI18n();
 
@@ -326,6 +327,23 @@ const manageDialog = ref(false);
 const liturgyLibrary = useLiturgyLibrary();
 const liturgyAutoLoad = useLiturgyAutoLoad();
 
+function importTelemetryProperties(file: File, format: "json" | "ja") {
+  return {
+    format,
+    size_bytes: Math.min(Math.max(0, file.size || 0), 50 * 1024 * 1024),
+    mime_type: file.type || "unknown",
+  };
+}
+
+function reportLiturgyError(
+  error: unknown,
+  operation: string,
+  properties: Record<string, unknown> = {}
+): void {
+  Telemetry.captureException(error, { source: `liturgy.${operation}`, ...properties });
+  Telemetry.track("liturgy_operation_failed", { operation, ...properties });
+}
+
 watch(
   [items, () => $liturgy.getCurrentLiturgyId()],
   ([_items, id]) => {
@@ -399,6 +417,7 @@ async function saveLiturgyDirect() {
     await updateAppDataLiturgyInfo(items, id);
     $snackbar.success(t("library.save_success"));
   } catch (e) {
+    reportLiturgyError(e, "save_direct", { has_liturgy_id: true });
     console.error("[Liturgia] saveLiturgyDirect falhou:", e);
     $snackbar.error(t("library.save_error"));
   }
@@ -506,19 +525,39 @@ function doExport() {
   const id = $liturgy.getCurrentLiturgyId();
   if (!id) {
     $snackbar.warning(t("library.no_liturgy_selected"));
+    Telemetry.track("liturgy_operation_blocked", { operation: "export", reason: "not_selected" });
     return;
   }
-  liturgyLibrary.get(id).then((item) => {
-    if (!item) return;
-    liturgyLibrary.exportToJson(item.items, item.name);
-  });
+  liturgyLibrary
+    .get(id)
+    .then((item) => {
+      if (!item) {
+        Telemetry.track("liturgy_resource_missing", {
+          resource: "library_item",
+          operation: "export",
+        });
+        return;
+      }
+      liturgyLibrary.exportToJson(item.items, item.name);
+      Telemetry.track("liturgy_export_completed", {
+        format: "json",
+        item_count: item.items.length,
+      });
+    })
+    .catch((error: unknown) => {
+      reportLiturgyError(error, "export", { format: "json" });
+      console.error("[Liturgia] export falhou:", error);
+    });
 }
 
 async function _importJsonFile(file: File): Promise<void> {
+  const properties = importTelemetryProperties(file, "json");
+  Telemetry.track("liturgy_import_started", properties);
   try {
     const text = await file.text();
     const parsed = liturgyLibrary.parseImport(text);
     if (!parsed) {
+      Telemetry.track("liturgy_import_failed", { ...properties, reason: "invalid_format" });
       $snackbar.error(t("library.import_invalid"));
       return;
     }
@@ -530,8 +569,14 @@ async function _importJsonFile(file: File): Promise<void> {
           if (btn !== "yes") return;
           try {
             await liturgyLibrary.save({ id: existing.id, name: parsed.name, items: parsed.items });
+            Telemetry.track("liturgy_import_completed", {
+              ...properties,
+              overwritten: true,
+              item_count: parsed.items.length,
+            });
             $snackbar.success(t("library.import_success"));
           } catch (error) {
+            reportLiturgyError(error, "import_json_save", properties);
             console.error("[Liturgia] import JSON falhou:", error);
             $snackbar.error(t("library.import_invalid"));
           }
@@ -539,9 +584,15 @@ async function _importJsonFile(file: File): Promise<void> {
       );
     } else {
       await liturgyLibrary.save({ name: parsed.name, items: parsed.items });
+      Telemetry.track("liturgy_import_completed", {
+        ...properties,
+        overwritten: false,
+        item_count: parsed.items.length,
+      });
       $snackbar.success(t("library.import_success"));
     }
   } catch (error) {
+    reportLiturgyError(error, "import_json", properties);
     console.error("[Liturgia] leitura do JSON falhou:", error);
     $snackbar.error(t("library.import_invalid"));
   }
@@ -550,11 +601,14 @@ async function _importJsonFile(file: File): Promise<void> {
 // O `.ja` do Delphi é INI em Windows-1252, não UTF-8 — decodificar como texto
 // simples trocaria todo acento por lixo (`Ã§Ã£o` em vez de `ção`).
 async function _importJaFile(file: File): Promise<void> {
+  const properties = importTelemetryProperties(file, "ja");
+  Telemetry.track("liturgy_import_started", properties);
   try {
     const buffer = await file.arrayBuffer();
     const text = new TextDecoder("windows-1252").decode(buffer);
     const parsed = parseJaImport(text);
     if (!parsed || parsed.length === 0) {
+      Telemetry.track("liturgy_import_failed", { ...properties, reason: "invalid_format" });
       $snackbar.error(t("library.import_invalid"));
       return;
     }
@@ -564,8 +618,14 @@ async function _importJaFile(file: File): Promise<void> {
     for (const liturgy of parsed) {
       await liturgyLibrary.save({ name: liturgy.name, items: liturgy.items });
     }
+    Telemetry.track("liturgy_import_completed", {
+      ...properties,
+      liturgy_count: parsed.length,
+      item_count: parsed.reduce((total, liturgy) => total + liturgy.items.length, 0),
+    });
     $snackbar.success(t("library.import_success"));
   } catch (error) {
+    reportLiturgyError(error, "import_ja", properties);
     console.error("[Liturgia] leitura do .ja falhou:", error);
     $snackbar.error(t("library.import_invalid"));
   }
