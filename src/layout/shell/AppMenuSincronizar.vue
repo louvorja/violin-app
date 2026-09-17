@@ -144,17 +144,30 @@
           </div>
 
           <div class="opt-download-scroll">
-            <div v-if="loadingCategories && !categories.length" class="opt-folder-path">
-              {{ $t("options.collections_download.loading") }}
-            </div>
-
-            <div v-else-if="scanningCache" class="opt-folder-path">
-              {{
-                $t("options.collections_download.scanning_cache", {
-                  done: scanCacheDone,
-                  total: scanCacheTotal,
-                })
-              }}
+            <div
+              v-if="loadingCategories || scanningCache"
+              class="sinc-loading"
+              role="status"
+              aria-live="polite"
+            >
+              <LjProgress indeterminate :height="4" />
+              <div class="sinc-loading__copy">
+                <span>
+                  {{
+                    loadingCategories && !categories.length
+                      ? $t("options.collections_download.loading")
+                      : scanningCache
+                        ? $t("options.collections_download.scanning_cache", {
+                            done: scanCacheDone,
+                            total: scanCacheTotal,
+                          })
+                        : $t("options.collections_download.loading")
+                  }}
+                </span>
+                <small v-if="scanningCache && scanCacheTotal === 0">
+                  {{ $t("options.collections_download.waiting_for_catalog") }}
+                </small>
+              </div>
             </div>
 
             <div v-else class="opt-row opt-row--col">
@@ -769,6 +782,17 @@ watch(activeTab, (aba) => {
   if (!abasIniciadas.value.has(aba)) abasIniciadas.value = new Set(abasIniciadas.value).add(aba);
 });
 
+// O scan atualiza o progresso no composable a cada lote. Espelhar essa ref
+// aqui evita que a tela fique parada em "0/0" durante a primeira consulta.
+watch(
+  () => sync.scanProgress.value,
+  (progress) => {
+    scanCacheDone.value = progress.done;
+    scanCacheTotal.value = progress.total;
+  },
+  { immediate: true }
+);
+
 // Bíblia — download de versões
 const bibleVersions = ref<BibleVersion[]>([]);
 const selectedBibles = ref<Set<number>>(new Set());
@@ -985,28 +1009,34 @@ async function refreshCatalog(): Promise<void> {
 async function scanLocalCache({ force = false }: { force?: boolean } = {}): Promise<void> {
   if (!Platform.storage?.checkLocal) return;
   scanningCache.value = true;
+  scanCacheDone.value = 0;
+  scanCacheTotal.value = 0;
 
-  const result = await sync.scanCache(
-    locale.value,
-    categories.value,
-    hymnalIds.value,
-    hymnal1996Ids.value,
-    { force }
-  );
-  scanCacheDone.value = sync.scanProgress.value.done;
-  scanCacheTotal.value = sync.scanProgress.value.total;
+  try {
+    const result = await sync.scanCache(
+      locale.value,
+      categories.value,
+      hymnalIds.value,
+      hymnal1996Ids.value,
+      { force }
+    );
 
-  selectedAlbums.value = result.cachedAlbums;
-  classicAlbums.value = new Set(result.classicAlbums);
-  selectedHymnal.value = result.hymnalCached;
-  selectedHymnal1996.value = result.hymnal1996Cached;
-  cachedAlbumsBaseline.value = new Set(
-    [...result.cachedAlbums].filter((id) => !result.classicAlbums.has(id))
-  );
-  cachedHymnalBaseline.value = result.hymnalCached;
-  cachedHymnal1996Baseline.value = result.hymnal1996Cached;
-  scanningCache.value = false;
-  await refreshDiskUsage();
+    selectedAlbums.value = result.cachedAlbums;
+    classicAlbums.value = new Set(result.classicAlbums);
+    selectedHymnal.value = result.hymnalCached;
+    selectedHymnal1996.value = result.hymnal1996Cached;
+    cachedAlbumsBaseline.value = new Set(
+      [...result.cachedAlbums].filter((id) => !result.classicAlbums.has(id))
+    );
+    cachedHymnalBaseline.value = result.hymnalCached;
+    cachedHymnal1996Baseline.value = result.hymnal1996Cached;
+    await refreshDiskUsage();
+  } catch (e) {
+    // A local permission/read error must not leave the pane disabled forever.
+    console.error("[Sincronizar] scanLocalCache:", e);
+  } finally {
+    scanningCache.value = false;
+  }
 }
 
 /* ---- Download de coleções ---- */
@@ -1548,6 +1578,27 @@ onBeforeUnmount(() => {
 
 .sinc-detail-gap {
   margin-top: var(--lj-space-2);
+}
+
+.sinc-loading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-4);
+  padding: var(--lj-space-7) var(--lj-space-5);
+  border: 1px solid var(--lj-body-border);
+  border-radius: var(--lj-radius-md);
+  background: var(--lj-body-bg);
+}
+
+.sinc-loading__copy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-2);
+  color: var(--lj-text-muted);
+}
+
+.sinc-loading__copy small {
+  font-size: var(--lj-text-sm);
 }
 
 .sinc-storage-label {
