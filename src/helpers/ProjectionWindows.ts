@@ -160,9 +160,7 @@ export async function openFileProjectionWindows(): Promise<void> {
   const openOperator = $userdata.get(KEYS.OPTIONS.OPEN_OPERATOR, false) as boolean;
   if (openOperator) {
     const op = await _target(PROJECTION_TYPE.OPERATOR);
-    if (op.open) {
-      await _open(PROJECTION_URL.OPERATOR, PROJECTION_TYPE.OPERATOR, op.monitorId, false, false);
-    }
+    await _open(PROJECTION_URL.OPERATOR, PROJECTION_TYPE.OPERATOR, op.monitorId, false, false);
   }
 }
 

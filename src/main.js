@@ -491,7 +491,7 @@ $storage.hydrate().then(async () => {
                   } catch (_) {
                     /* ignore */
                   }
-                  ProjectionWindows.openFileProjectionWindows().catch(() => {});
+                  await ProjectionWindows.openFileProjectionWindows().catch(() => {});
                   Broadcast.send(BROADCAST_TYPE.FILE_PROJECTION, p);
                 } else if (VIDEO_EXT.includes(ext)) {
                   const p = { url, type: "video", title };
@@ -500,7 +500,7 @@ $storage.hydrate().then(async () => {
                   } catch (_) {
                     /* ignore */
                   }
-                  ProjectionWindows.openFileProjectionWindows().catch(() => {});
+                  await ProjectionWindows.openFileProjectionWindows().catch(() => {});
                   Broadcast.send(BROADCAST_TYPE.FILE_PROJECTION, p);
                   await Media.openAudio({ url, title, mediaType: "video" });
                 } else if (AUDIO_EXT.includes(ext)) {
@@ -513,7 +513,7 @@ $storage.hydrate().then(async () => {
                   } catch (_) {
                     /* ignore */
                   }
-                  ProjectionWindows.openFileProjectionWindows().catch(() => {});
+                  await ProjectionWindows.openFileProjectionWindows().catch(() => {});
                   Broadcast.send(BROADCAST_TYPE.FILE_PROJECTION, p);
                 }
               }
