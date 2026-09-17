@@ -493,8 +493,8 @@ const confirmDeleteDevice = ref(null);
 const onlyAuthorizedDevices = ref(false);
 
 const STORES_URLS = {
-  android: "https://play.google.com/store/apps/details?id=com.louvorja.violin",
-  ios: "https://apps.apple.com/app/violin-remote/id0000000000",
+  android: "https://play.google.com/store/apps/details?id=br.com.louvorja.violin_remote",
+  ios: "https://apps.apple.com/app/violin-remote/id6810058446",
 };
 const showAppStoreDialog = ref(false);
 const appStorePlatform = ref("android");
