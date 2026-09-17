@@ -236,6 +236,9 @@ onBeforeUnmount(() => {
   align-items: center;
   margin: 0;
   padding: 8px;
+  /* Base para o `cqh` de `nextStyle()` (useSlideStyle.ts) — a fonte do
+   * próximo slide precisa ser % deste painel, não da tela inteira. */
+  container-type: size;
 }
 
 .return-bottom-grid {
@@ -276,6 +279,14 @@ onBeforeUnmount(() => {
   word-wrap: break-word;
   overflow-wrap: break-word;
   flex: 1;
+  /* Segunda camada de proteção: se mesmo com o `cqh` corrigido a fonte
+   * configurada não couber em duas linhas, corta com reticências no fim
+   * da 2ª linha em vez de cortar no meio de uma linha pelo overflow do
+   * `.return-next-text` pai — nunca mais "comido" de forma ilegível. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 
 .return-counter {

@@ -293,7 +293,15 @@ export function useSlideStyle(): SlideStyleAPI {
     const sizePct = cfg.value.font_size_next;
     return {
       fontFamily: _baseFont(slide ?? null),
-      fontSize: `clamp(14px, ${sizePct}vh, 120px)`,
+      // `cqh` do painel do rodapé (`.return-bottom`, container query),
+      // não `vh` da tela inteira. Esse painel mede ~18% da altura da
+      // janela — calcular contra os 100% cheios faz a % configurada
+      // mentir sobre o espaço real, e com o texto do próximo slide em
+      // duas linhas (em vez de uma) o resultado estoura o painel e o
+      // `overflow: hidden` corta a segunda linha. O fator 100/18
+      // preserva o tamanho visual de quem já tinha essa opção calibrada
+      // para `vh` — ver `.return-bottom` em ProjectionReturn.vue.
+      fontSize: `clamp(14px, ${sizePct * (100 / 18)}cqh, 120px)`,
       color: cfg.value.color_next,
       opacity: 0.85,
       fontWeight: 600,
