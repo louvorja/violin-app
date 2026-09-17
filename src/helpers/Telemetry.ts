@@ -7,10 +7,17 @@
  *
  * @category deve-virar-composable — lê e grava preferências via UserData.
  */
-import type { CaptureResult, CapturedNetworkRequest, LogAttributes, PostHog, RequestResponse } from "posthog-js";
+import type {
+  CaptureResult,
+  CapturedNetworkRequest,
+  LogAttributes,
+  PostHog,
+  RequestResponse,
+} from "posthog-js";
 import Platform from "@/helpers/Platform";
 import $userdata from "@/helpers/UserData";
 import { fetchWithTimeout, setNetworkTimingReporter } from "@/helpers/Http";
+import { setDatabaseTimingReporter } from "@/helpers/Database";
 import { KEYS } from "@/constants/UserDataKeys";
 import packageJson from "@root/package.json";
 
@@ -20,7 +27,8 @@ const BUILD_SDK_VERSION = normalizeVersion(import.meta.env.VITE_POSTHOG_SDK_VERS
 
 let _started = false;
 let _ph: PostHog | null = null;
-let _appVersion = typeof packageJson.version === "string" && packageJson.version ? packageJson.version : "unknown";
+let _appVersion =
+  typeof packageJson.version === "string" && packageJson.version ? packageJson.version : "unknown";
 let _appVersionSource = "package_json_fallback";
 let _sdkVersion = BUILD_SDK_VERSION || "unknown";
 let _installed = false;
@@ -37,11 +45,14 @@ const REPLAY_READY_TIMEOUT_MS = 5_000;
 const REPLAY_READY_POLL_MS = 100;
 const POSTHOG_PROBE_TIMEOUT_MS = 3_500;
 const SENSITIVE_KEY = /(password|passwd|secret|token|authorization|cookie|api[-_]?key)/i;
-const SENSITIVE_QUERY = /([?&](?:access[-_]?token|refresh[-_]?token|token|auth(?:orization)?|api[-_]?key|client[-_]?secret|secret|password|jwt)=)[^&\s]+/gi;
+const SENSITIVE_QUERY =
+  /([?&](?:access[-_]?token|refresh[-_]?token|token|auth(?:orization)?|api[-_]?key|client[-_]?secret|secret|password|jwt)=)[^&\s]+/gi;
 
 type LogLevel = "trace" | "debug" | "info" | "warn" | "error" | "fatal";
 type PostHogWithLogs = PostHog & {
-  logger?: Partial<Record<LogLevel, (_message: string, _attributes?: Record<string, unknown>) => void>>;
+  logger?: Partial<
+    Record<LogLevel, (_message: string, _attributes?: Record<string, unknown>) => void>
+  >;
   captureLog?: (_record: {
     body: string;
     level: LogLevel;
@@ -52,7 +63,11 @@ type PostHogWithLogs = PostHog & {
 type MetricAttributes = Record<string, string | number | boolean>;
 type PostHogWithMetrics = PostHog & {
   metrics?: {
-    histogram: (name: string, value: number, options?: { unit?: string; attributes?: MetricAttributes }) => void;
+    histogram: (
+      name: string,
+      value: number,
+      options?: { unit?: string; attributes?: MetricAttributes }
+    ) => void;
   };
 };
 
@@ -119,12 +134,17 @@ function serializableProperties(properties: Record<string, unknown> = {}): Recor
  * diagnósticos curtos no processo principal, que os imprime no CMD/PowerShell
  * que iniciou o executável. Falhar nesse caminho nunca pode afetar o app.
  */
-function diagnostic(level: DiagnosticLevel, message: string, details: Record<string, unknown> = {}): void {
+function diagnostic(
+  level: DiagnosticLevel,
+  message: string,
+  details: Record<string, unknown> = {}
+): void {
   const safeMessage = sanitizeString(message);
   const safeDetails = serializableProperties(details);
   try {
-    const logger = (console as unknown as Record<DiagnosticLevel, (...args: unknown[]) => void>)[level]
-      || console.info;
+    const logger =
+      (console as unknown as Record<DiagnosticLevel, (...args: unknown[]) => void>)[level] ||
+      console.info;
     logger(`[Telemetry] ${safeMessage}`, safeDetails);
   } catch {
     // O console pode ser substituído por um host de teste ou por uma extensão.
@@ -150,12 +170,17 @@ function diagnostic(level: DiagnosticLevel, message: string, details: Record<str
  * poderia esconder um loop de falha. O terminal continua recebendo a linha
  * pelo mesmo canal IPC, mas este helper é deliberadamente local.
  */
-function transportDiagnostic(level: DiagnosticLevel, message: string, details: Record<string, unknown> = {}): void {
+function transportDiagnostic(
+  level: DiagnosticLevel,
+  message: string,
+  details: Record<string, unknown> = {}
+): void {
   const safeMessage = sanitizeString(message);
   const safeDetails = serializableProperties(details);
   try {
-    const logger = (console as unknown as Record<DiagnosticLevel, (...args: unknown[]) => void>)[level]
-      || console.info;
+    const logger =
+      (console as unknown as Record<DiagnosticLevel, (...args: unknown[]) => void>)[level] ||
+      console.info;
     logger(`[Telemetry] ${safeMessage}`, safeDetails);
   } catch {
     // O diagnóstico nunca pode interferir no envio nem no fluxo da aplicação.
@@ -188,18 +213,26 @@ function runtimeContext(): Record<string, unknown> {
 
 function sdkIdentity(posthog: PostHog): Record<string, unknown> {
   try {
-    const getDistinctId = typeof posthog.get_distinct_id === "function" ? posthog.get_distinct_id() : undefined;
-    const getSessionId = typeof posthog.get_session_id === "function" ? posthog.get_session_id() : undefined;
-    const deviceId = typeof posthog.get_property === "function" ? posthog.get_property("$device_id") : undefined;
+    const getDistinctId =
+      typeof posthog.get_distinct_id === "function" ? posthog.get_distinct_id() : undefined;
+    const getSessionId =
+      typeof posthog.get_session_id === "function" ? posthog.get_session_id() : undefined;
+    const deviceId =
+      typeof posthog.get_property === "function" ? posthog.get_property("$device_id") : undefined;
     return {
       capturing: typeof posthog.is_capturing === "function" ? posthog.is_capturing() : undefined,
-      loaded: "__loaded" in posthog ? Boolean((posthog as PostHog & { __loaded?: unknown }).__loaded) : undefined,
+      loaded:
+        "__loaded" in posthog
+          ? Boolean((posthog as PostHog & { __loaded?: unknown }).__loaded)
+          : undefined,
       distinct_id_suffix: idSuffix(getDistinctId),
       session_id_suffix: idSuffix(getSessionId),
       device_id_suffix: idSuffix(deviceId),
     };
   } catch (error) {
-    return { identity_error: error instanceof Error ? sanitizeString(error.message) : String(error) };
+    return {
+      identity_error: error instanceof Error ? sanitizeString(error.message) : String(error),
+    };
   }
 }
 
@@ -222,7 +255,10 @@ function baseContext(): Record<string, unknown> {
     app_version_source: _appVersionSource,
     sdk_version: _sdkVersion,
     ...runtimeContext(),
-    route: typeof window !== "undefined" ? sanitizeString(`${window.location.pathname}${window.location.hash}`) : "",
+    route:
+      typeof window !== "undefined"
+        ? sanitizeString(`${window.location.pathname}${window.location.hash}`)
+        : "",
     window_role: windowRole(),
     window_feature: windowFeature(),
     online: typeof navigator !== "undefined" ? navigator.onLine : undefined,
@@ -232,7 +268,11 @@ function baseContext(): Record<string, unknown> {
 
 function errorProperties(error: unknown): Record<string, unknown> {
   if (error instanceof Error) {
-    return { name: error.name, message: sanitizeString(error.message), stack: error.stack ? sanitizeString(error.stack) : undefined };
+    return {
+      name: error.name,
+      message: sanitizeString(error.message),
+      stack: error.stack ? sanitizeString(error.stack) : undefined,
+    };
   }
   return { message: sanitizeString(String(error)) };
 }
@@ -248,7 +288,9 @@ function replayLinkProperties(): Record<string, unknown> {
 
 function isSessionRecordingStarted(posthog: PostHogWithReplay): boolean {
   try {
-    return typeof posthog.sessionRecordingStarted === "function" && posthog.sessionRecordingStarted();
+    return (
+      typeof posthog.sessionRecordingStarted === "function" && posthog.sessionRecordingStarted()
+    );
   } catch {
     return false;
   }
@@ -279,7 +321,9 @@ async function probePostHog(): Promise<void> {
   if (typeof fetch !== "function") return;
   const startedAt = Date.now();
   const controller = typeof AbortController === "function" ? new AbortController() : null;
-  const timeout = controller ? setTimeout(() => controller.abort(), POSTHOG_PROBE_TIMEOUT_MS) : null;
+  const timeout = controller
+    ? setTimeout(() => controller.abort(), POSTHOG_PROBE_TIMEOUT_MS)
+    : null;
   try {
     const response = await fetchWithTimeout(`${HOST.replace(/\/$/, "")}/e/`, {
       method: "GET",
@@ -298,19 +342,20 @@ async function probePostHog(): Promise<void> {
         ? "probe PostHog alcançou o endpoint (GET rejeitado como esperado)"
         : "probe do endpoint PostHog respondeu",
       {
-      status: response.status,
-      ok: response.ok,
-      reachable: true,
-      probe_method: "GET",
-      expected_ingestion_method: "POST",
-      method_probe_expected_rejection: methodRejectedAsExpected,
-      // /e/ aceita POST; um GET de diagnóstico costuma responder 400/405/415
-      // e ainda assim confirma que DNS, TLS, proxy e CSP chegaram ao host.
-      method_probe_accepted: response.ok,
-      duration_ms: Date.now() - startedAt,
-      online: typeof navigator !== "undefined" ? navigator.onLine : undefined,
-      access_control_allow_origin: response.headers?.get("access-control-allow-origin") || undefined,
-      },
+        status: response.status,
+        ok: response.ok,
+        reachable: true,
+        probe_method: "GET",
+        expected_ingestion_method: "POST",
+        method_probe_expected_rejection: methodRejectedAsExpected,
+        // /e/ aceita POST; um GET de diagnóstico costuma responder 400/405/415
+        // e ainda assim confirma que DNS, TLS, proxy e CSP chegaram ao host.
+        method_probe_accepted: response.ok,
+        duration_ms: Date.now() - startedAt,
+        online: typeof navigator !== "undefined" ? navigator.onLine : undefined,
+        access_control_allow_origin:
+          response.headers?.get("access-control-allow-origin") || undefined,
+      }
     );
   } catch (error) {
     diagnostic("warn", "endpoint PostHog inacessível", {
@@ -374,7 +419,7 @@ async function importPostHogWithTransportDiagnostics(): Promise<typeof import("p
               status,
               accepted: status >= 200 && status < 300,
               duration_ms: Date.now() - startedAt,
-            },
+            }
           );
           return response;
         },
@@ -388,7 +433,7 @@ async function importPostHogWithTransportDiagnostics(): Promise<typeof import("p
             error: error instanceof Error ? error.message : String(error),
           });
           throw error;
-        },
+        }
       );
     } catch (error) {
       transportDiagnostic("warn", "falha síncrona ao enviar lote ao PostHog", {
@@ -438,8 +483,13 @@ function safeError(error: unknown): Error {
 
 export function breadcrumb(event: string, properties: Record<string, unknown> = {}): void {
   if (!isEnabled()) return;
-  _breadcrumbs.push({ at: new Date().toISOString(), event, properties: serializableProperties(properties) });
-  if (_breadcrumbs.length > MAX_BREADCRUMBS) _breadcrumbs.splice(0, _breadcrumbs.length - MAX_BREADCRUMBS);
+  _breadcrumbs.push({
+    at: new Date().toISOString(),
+    event,
+    properties: serializableProperties(properties),
+  });
+  if (_breadcrumbs.length > MAX_BREADCRUMBS)
+    _breadcrumbs.splice(0, _breadcrumbs.length - MAX_BREADCRUMBS);
   _ph?.addExceptionStep(event, serializableProperties(properties));
 }
 
@@ -466,16 +516,27 @@ export function captureException(error: unknown, properties: Record<string, unkn
     breadcrumbs: _breadcrumbs.slice(-50),
   };
   if (_ph) _ph.captureException(sanitized, enriched);
-  else if (_pendingExceptions.length < 20) _pendingExceptions.push({ error: sanitized, properties: enriched });
+  else if (_pendingExceptions.length < 20)
+    _pendingExceptions.push({ error: sanitized, properties: enriched });
 }
 
 /** Começa uma medição de duração sem bloquear o fluxo funcional. */
-export function startPerformance(name: string, properties: Record<string, unknown> = {}): PerformanceSpan {
-  return { name, startedAt: typeof performance !== "undefined" ? performance.now() : Date.now(), properties };
+export function startPerformance(
+  name: string,
+  properties: Record<string, unknown> = {}
+): PerformanceSpan {
+  return {
+    name,
+    startedAt: typeof performance !== "undefined" ? performance.now() : Date.now(),
+    properties,
+  };
 }
 
 /** Registra uma medição agregável no PostHog e devolve a duração em milissegundos. */
-export function finishPerformance(span: PerformanceSpan, properties: Record<string, unknown> = {}): number {
+export function finishPerformance(
+  span: PerformanceSpan,
+  properties: Record<string, unknown> = {}
+): number {
   const now = typeof performance !== "undefined" ? performance.now() : Date.now();
   const durationMs = Math.max(0, Math.round(now - span.startedAt));
   track("performance_measurement", {
@@ -509,7 +570,8 @@ export function histogram(name: string, value: number, attributes: MetricAttribu
       // Métricas são best-effort; o evento detalhado continua sendo enviado.
     }
   }
-  if (_pendingMetrics.length < 100) _pendingMetrics.push({ name: safeName, value, attributes: safeAttributes });
+  if (_pendingMetrics.length < 100)
+    _pendingMetrics.push({ name: safeName, value, attributes: safeAttributes });
 }
 
 /**
@@ -519,7 +581,11 @@ export function histogram(name: string, value: number, attributes: MetricAttribu
  * `waiting` → `playing`) sem transformar cada detalhe em uma exceção. O
  * fallback para `capture` mantém compatibilidade com versões antigas do SDK.
  */
-export function log(level: LogLevel, message: string, properties: Record<string, unknown> = {}): void {
+export function log(
+  level: LogLevel,
+  message: string,
+  properties: Record<string, unknown> = {}
+): void {
   if (!isEnabled()) return;
   const safeMessage = sanitizeString(message);
   const attributes = { ...baseContext(), ...serializableProperties(properties) };
@@ -550,14 +616,22 @@ export function installGlobalHandlers(): void {
   _installed = true;
   window.addEventListener("error", (event) => {
     if (_nativeAutocaptureActive) return;
-    captureException(event.error || new Error(event.message), { source: "window.error", filename: event.filename, line: event.lineno, column: event.colno });
+    captureException(event.error || new Error(event.message), {
+      source: "window.error",
+      filename: event.filename,
+      line: event.lineno,
+      column: event.colno,
+    });
   });
   window.addEventListener("unhandledrejection", (event) => {
     if (_nativeAutocaptureActive) return;
     captureException(event.reason, { source: "unhandledrejection" });
   });
   window.louvorjaApi?.on?.("telemetry:main-error", (payload) => {
-    const data = payload && typeof payload === "object" ? payload as Record<string, unknown> : { message: String(payload) };
+    const data =
+      payload && typeof payload === "object"
+        ? (payload as Record<string, unknown>)
+        : { message: String(payload) };
     const mainError = new Error(String(data.message || "Electron main process error"));
     if (typeof data.name === "string" && data.name) mainError.name = sanitizeString(data.name);
     if (typeof data.stack === "string" && data.stack) mainError.stack = sanitizeString(data.stack);
@@ -572,7 +646,9 @@ export function installGlobalHandlers(): void {
   window.addEventListener("offline", () => diagnostic("warn", "renderer ficou offline"));
 }
 
-export function installVueErrorHandler(app: { config: { errorHandler?: (_err: unknown, _instance: unknown, _info: string) => void } }): void {
+export function installVueErrorHandler(app: {
+  config: { errorHandler?: (_err: unknown, _instance: unknown, _info: string) => void };
+}): void {
   const previous = app.config.errorHandler;
   app.config.errorHandler = (err, instance, info) => {
     captureException(err, { source: "vue", info });
@@ -701,8 +777,7 @@ export function setEnabled(enabled: boolean): void {
     _ph.opt_in_capturing({ captureEventName: false });
     _ph.register({ app_version: _appVersion, sdk_version: _sdkVersion });
     if (windowRole() === "main") _ph.startSessionRecording();
-  }
-  else void init();
+  } else void init();
 }
 
 /** Zera o identificador anônimo — o usuário volta a contar como instalação nova. */
@@ -857,7 +932,9 @@ async function _init(): Promise<void> {
       beforeSend: (record) => ({
         ...record,
         body: sanitizeString(record.body),
-        attributes: record.attributes ? (serializableProperties(record.attributes) as LogAttributes) : undefined,
+        attributes: record.attributes
+          ? (serializableProperties(record.attributes) as LogAttributes)
+          : undefined,
       }),
     },
     metrics: {
@@ -871,7 +948,8 @@ async function _init(): Promise<void> {
         attributes: (request, response) => ({
           route: networkMetricPath(request.url),
           method: request.method,
-          status_class: response.status == null ? "missing" : `${Math.floor(response.status / 100)}xx`,
+          status_class:
+            response.status == null ? "missing" : `${Math.floor(response.status / 100)}xx`,
           window_role: windowRole(),
         }),
       },
@@ -950,24 +1028,32 @@ async function _init(): Promise<void> {
   if (metrics?.histogram && _pendingMetrics.length > 0) {
     const pendingMetrics = _pendingMetrics.splice(0);
     for (const pending of pendingMetrics) {
-      metrics.histogram(pending.name, pending.value, { unit: "ms", attributes: pending.attributes });
+      metrics.histogram(pending.name, pending.value, {
+        unit: "ms",
+        attributes: pending.attributes,
+      });
     }
     diagnostic("debug", "métricas pendentes enviadas após init", { count: pendingMetrics.length });
   }
   const replayReady = isSessionRecordingStarted(posthog);
-  const appOpened = posthog.capture("app_opened", {
-    platform: Platform.isDesktop ? "desktop" : "web",
-    os: osName(),
-    app_version: version,
-    // Explícito em vez de depender só do `register()` acima: o evento
-    // inicial é o mais consultado para saber qual SDK está em campo, e não
-    // deve ficar refém de como o SDK aplica super properties.
-    sdk_version: sdkVersion,
-    replay_ready: replayReady,
-    locale: $userdata.get<string>(KEYS.OPTIONS.LANGUAGE, "pt"),
-    pwa: typeof window !== "undefined" && window.matchMedia?.("(display-mode: standalone)").matches,
-    window_role: windowRole(),
-  }, { send_instantly: true });
+  const appOpened = posthog.capture(
+    "app_opened",
+    {
+      platform: Platform.isDesktop ? "desktop" : "web",
+      os: osName(),
+      app_version: version,
+      // Explícito em vez de depender só do `register()` acima: o evento
+      // inicial é o mais consultado para saber qual SDK está em campo, e não
+      // deve ficar refém de como o SDK aplica super properties.
+      sdk_version: sdkVersion,
+      replay_ready: replayReady,
+      locale: $userdata.get<string>(KEYS.OPTIONS.LANGUAGE, "pt"),
+      pwa:
+        typeof window !== "undefined" && window.matchMedia?.("(display-mode: standalone)").matches,
+      window_role: windowRole(),
+    },
+    { send_instantly: true }
+  );
   diagnostic("info", "evento app_opened solicitado ao SDK", {
     ...captureResultDetails(appOpened),
     capture_called: true,
@@ -985,21 +1071,30 @@ async function _init(): Promise<void> {
   void waitForSessionRecording(posthog)
     .then((ready) => {
       if (!ready || replayReady) return;
-      posthog.capture("session_replay_ready", {
-        ...baseContext(),
-        platform: Platform.isDesktop ? "desktop" : "web",
-        window_role: windowRole(),
-        replay_ready: true,
-      }, { send_instantly: true });
+      posthog.capture(
+        "session_replay_ready",
+        {
+          ...baseContext(),
+          platform: Platform.isDesktop ? "desktop" : "web",
+          window_role: windowRole(),
+          replay_ready: true,
+        },
+        { send_instantly: true }
+      );
       diagnostic("info", "session replay pronto após o boot");
     })
-    .catch((error) => diagnostic("warn", "falha ao aguardar session replay", {
-      error: error instanceof Error ? error.message : String(error),
-    }));
+    .catch((error) =>
+      diagnostic("warn", "falha ao aguardar session replay", {
+        error: error instanceof Error ? error.message : String(error),
+      })
+    );
   const pendingExceptions = _pendingExceptions.splice(0);
-  for (const pending of pendingExceptions) posthog.captureException(pending.error, pending.properties);
+  for (const pending of pendingExceptions)
+    posthog.captureException(pending.error, pending.properties);
   if (pendingExceptions.length > 0) {
-    diagnostic("debug", "exceções pendentes enviadas após init", { count: pendingExceptions.length });
+    diagnostic("debug", "exceções pendentes enviadas após init", {
+      count: pendingExceptions.length,
+    });
   }
 
   void flushPendingMainErrors();
@@ -1015,7 +1110,9 @@ async function flushPendingMainErrors(): Promise<void> {
     for (const item of pending) {
       if (!item || typeof item !== "object") continue;
       const data = item as Record<string, unknown>;
-      const error = new Error(typeof data.message === "string" ? data.message : "Electron main process error");
+      const error = new Error(
+        typeof data.message === "string" ? data.message : "Electron main process error"
+      );
       if (typeof data.name === "string" && data.name) error.name = sanitizeString(data.name);
       if (typeof data.stack === "string" && data.stack) error.stack = sanitizeString(data.stack);
       captureException(error, {
@@ -1046,19 +1143,23 @@ function scheduleDomDiagnostic(posthog: PostHog): void {
     const root = document.querySelector("#app");
     const rect = slide?.getBoundingClientRect();
     const style = slide ? getComputedStyle(slide) : null;
-    posthog.capture("dom_ready", {
-      ...baseContext(),
-      dom_ready: true,
-      has_app_root: !!root,
-      has_projection_stage: !!document.querySelector(".projection-stage"),
-      has_slide: !!slide,
-      has_slide_text: !!slide?.textContent?.trim(),
-      slide_text_length: slide?.textContent?.trim().length || 0,
-      slide_opacity: style?.opacity ? Number(style.opacity) : undefined,
-      slide_visibility: style?.visibility || undefined,
-      slide_width: rect ? Math.round(rect.width) : 0,
-      slide_height: rect ? Math.round(rect.height) : 0,
-    }, { send_instantly: true });
+    posthog.capture(
+      "dom_ready",
+      {
+        ...baseContext(),
+        dom_ready: true,
+        has_app_root: !!root,
+        has_projection_stage: !!document.querySelector(".projection-stage"),
+        has_slide: !!slide,
+        has_slide_text: !!slide?.textContent?.trim(),
+        slide_text_length: slide?.textContent?.trim().length || 0,
+        slide_opacity: style?.opacity ? Number(style.opacity) : undefined,
+        slide_visibility: style?.visibility || undefined,
+        slide_width: rect ? Math.round(rect.width) : 0,
+        slide_height: rect ? Math.round(rect.height) : 0,
+      },
+      { send_instantly: true }
+    );
   };
   if (typeof requestAnimationFrame === "function") {
     requestAnimationFrame(() => requestAnimationFrame(report));
@@ -1075,6 +1176,14 @@ setNetworkTimingReporter((timing) => {
     source: timing.source,
     outcome: timing.outcome,
     window_role: windowRole(),
+  });
+});
+setDatabaseTimingReporter((timing) => {
+  const dataset = timing.file.replace(/_\d+$/g, "_:id").slice(0, 100);
+  track("database_read", { ...timing, dataset });
+  histogram("louvorja.database.read.duration", timing.duration_ms, {
+    source: timing.source,
+    dataset,
   });
 });
 

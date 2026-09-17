@@ -207,6 +207,7 @@ const userdata = computed(() => {
 });
 
 const { selectedPlaylist, hydrate, addSong, removeSong, isSongInPlaylist } = usePlaylists();
+const data = ref([]);
 
 const musicPageStartedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
 let musicFirstPaintReported = false;
@@ -303,7 +304,6 @@ const { width: displayWidth } = useViewport();
 
 const scopeLabelId = useId();
 const search = ref("");
-const data = ref([]);
 const scroll = ref({});
 const has_scroll = ref(false);
 const letter = ref("");
