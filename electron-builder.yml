@@ -107,8 +107,14 @@ nsis:
   artifactName: "LouvorJA.Violin-Setup-${version}.${ext}"
   # Solicitar elevação de privilégios se necessário
   allowElevation: true
-  # Permitir ao usuário escolher o diretório de instalação
-  allowToChangeInstallationDirectory: true
+  # Instalação sempre por usuário (%LOCALAPPDATA%\Programs\...), sem pedir
+  # admin — os dados do usuário já vivem em Documents, não na pasta do app.
+  # Deixar escolher a pasta permitia apontar para C:\Program Files: os
+  # arquivos ficam protegidos por admin, mas o instalador continua
+  # registrado como "por usuário" por baixo dos panos, e o autoupdate (que
+  # não pede elevação nesse modo) passa a falhar em silêncio a cada versão.
+  # Foi exatamente o que aconteceu no PC de uma igreja em 2026-09-16.
+  allowToChangeInstallationDirectory: false
   # Criar atalho na área de trabalho
   createDesktopShortcut: true
   # Criar atalho no menu iniciar
