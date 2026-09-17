@@ -77,6 +77,7 @@ describe("Telemetry", () => {
       "test-key",
       expect.objectContaining({
         autocapture: true,
+        api_transport: "fetch",
         capture_pageview: "history_change",
         capture_exceptions: true,
         disable_session_recording: false,
@@ -95,7 +96,7 @@ describe("Telemetry", () => {
     expect(posthog.startExceptionAutocapture).toHaveBeenCalledWith({
       capture_unhandled_errors: true,
       capture_unhandled_rejections: true,
-      capture_console_errors: true,
+      capture_console_errors: false,
     });
     expect(posthog.register).toHaveBeenCalledWith(
       expect.objectContaining({ app_version: "2.0.0-beta.8", sdk_version: "1.433.7" }),
@@ -103,7 +104,7 @@ describe("Telemetry", () => {
     expect(posthog.capture).toHaveBeenCalledWith(
       "app_opened",
       expect.objectContaining({ app_version: "2.0.0-beta.8", sdk_version: "1.433.7", replay_ready: true }),
-      { send_instantly: true },
+      { send_instantly: true, transport: "fetch" },
     );
   });
 
@@ -120,7 +121,7 @@ describe("Telemetry", () => {
       expect(posthog.capture).toHaveBeenCalledWith(
         "app_opened",
         expect.objectContaining({ sdk_version: "1.433.7" }),
-        { send_instantly: true },
+        { send_instantly: true, transport: "fetch" },
       );
     } finally {
       posthog.LIB_VERSION = previous;
@@ -139,7 +140,7 @@ describe("Telemetry", () => {
       expect(posthog.capture).toHaveBeenCalledWith(
         "app_opened",
         expect.objectContaining({ replay_ready: false }),
-        { send_instantly: true },
+        { send_instantly: true, transport: "fetch" },
       );
     } finally {
       posthog.sessionRecordingStarted.mockReturnValue(true);
@@ -164,7 +165,7 @@ describe("Telemetry", () => {
     expect(posthog.capture).toHaveBeenCalledWith(
       "app_opened",
       expect.objectContaining({ window_role: "auxiliary" }),
-      { send_instantly: true },
+      { send_instantly: true, transport: "fetch" },
     );
   });
 

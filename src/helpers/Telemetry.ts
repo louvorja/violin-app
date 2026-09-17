@@ -33,11 +33,13 @@ let _appVersionSource = "package_json_fallback";
 let _sdkVersion = BUILD_SDK_VERSION || "unknown";
 let _installed = false;
 let _nativeAutocaptureActive = false;
+let _responsivenessCleanup: (() => void) | null = null;
 const _pendingExceptions: Array<{ error: unknown; properties?: Record<string, unknown> }> = [];
 const _pendingEvents: Array<{ event: string; properties: Record<string, unknown> }> = [];
 const _pendingMetrics: Array<{ name: string; value: number; attributes: MetricAttributes }> = [];
 const _pendingSpans = new Map<string, PerformanceSpan>();
 const _breadcrumbs: Array<{ at: string; event: string; properties?: Record<string, unknown> }> = [];
+const _explicitErrors = new WeakSet<object>();
 const MAX_BREADCRUMBS = 150;
 const MAX_PROPERTY_DEPTH = 6;
 const MAX_ARRAY_ITEMS = 100;
@@ -45,6 +47,16 @@ const MAX_STRING_LENGTH = 20_000;
 const REPLAY_READY_TIMEOUT_MS = 5_000;
 const REPLAY_READY_POLL_MS = 100;
 const POSTHOG_PROBE_TIMEOUT_MS = 3_500;
+const PERFORMANCE_BUDGETS: Array<{ match: RegExp; warn: number; critical: number }> = [
+  { match: /route\.transition|route_transition/, warn: 1_000, critical: 5_000 },
+  { match: /module\.(open|mount|first_paint)/, warn: 500, critical: 2_000 },
+  { match: /data_table\.(load|filter)/, warn: 500, critical: 3_000 },
+  { match: /database\.(read|bundle)/, warn: 1_000, critical: 10_000 },
+  { match: /projection\.(open|broadcast)/, warn: 500, critical: 3_000 },
+  { match: /music\.(audio|metadata|page|playlists)/, warn: 1_000, critical: 8_000 },
+  { match: /http\.client/, warn: 1_000, critical: 5_000 },
+  { match: /ui\.(long_task|stall)/, warn: 250, critical: 1_000 },
+];
 const SENSITIVE_KEY = /(password|passwd|secret|token|authorization|cookie|api[-_]?key)/i;
 const SENSITIVE_QUERY =
   /([?&](?:access[-_]?token|refresh[-_]?token|token|auth(?:orization)?|api[-_]?key|client[-_]?secret|secret|password|jwt)=)[^&\s]+/gi;
@@ -77,6 +89,13 @@ type PostHogWithReplay = PostHog & {
 };
 
 type DiagnosticLevel = "trace" | "debug" | "info" | "warn" | "error" | "fatal";
+
+type ConsoleTelemetryBridge = {
+  originalError: (...args: unknown[]) => void;
+  originalWarn: (...args: unknown[]) => void;
+  captureException: (args: unknown[]) => void;
+  captureWarning: (args: unknown[]) => void;
+};
 
 export interface PerformanceSpan {
   name: string;
@@ -508,6 +527,7 @@ export function track(event: string, properties: Record<string, unknown> = {}): 
 
 export function captureException(error: unknown, properties: Record<string, unknown> = {}): void {
   if (!isEnabled()) return;
+  if (error && typeof error === "object") _explicitErrors.add(error);
   const sanitized = safeError(error);
   const enriched = {
     ...baseContext(),
@@ -581,6 +601,26 @@ export function histogram(name: string, value: number, attributes: MetricAttribu
       ["string", "number", "boolean"].includes(typeof item)
     )
   ) as MetricAttributes;
+  const budget = PERFORMANCE_BUDGETS.find((candidate) => candidate.match.test(safeName));
+  if (budget && value >= budget.warn) {
+    const severity = value >= budget.critical ? "critical" : "slow";
+    track("performance_slow", {
+      metric_name: safeName,
+      duration_ms: Math.round(value),
+      severity,
+      warn_budget_ms: budget.warn,
+      critical_budget_ms: budget.critical,
+      ...safeAttributes,
+    });
+    log(severity === "critical" ? "error" : "warn", "performance budget exceeded", {
+      metric_name: safeName,
+      duration_ms: Math.round(value),
+      severity,
+      warn_budget_ms: budget.warn,
+      critical_budget_ms: budget.critical,
+      ...safeAttributes,
+    });
+  }
   const metrics = (_ph as PostHogWithMetrics | null)?.metrics;
   if (metrics?.histogram) {
     try {
@@ -592,6 +632,86 @@ export function histogram(name: string, value: number, attributes: MetricAttribu
   }
   if (_pendingMetrics.length < 100)
     _pendingMetrics.push({ name: safeName, value, attributes: safeAttributes });
+}
+
+/**
+ * Mede travamentos que não aparecem como exceção: tarefas longas e atraso do
+ * event loop. O monitor fica apenas na janela principal; projetor/controle
+ * remoto não devem produzir uma segunda sessão de performance para o mesmo
+ * culto. Histograma é agregado pelo SDK, enquanto eventos detalhados são
+ * amostrados para manter o custo e o ruído sob controle.
+ */
+function startResponsivenessMonitor(): void {
+  if (
+    _responsivenessCleanup ||
+    typeof window === "undefined" ||
+    windowRole() !== "main" ||
+    import.meta.env.MODE === "test"
+  ) {
+    return;
+  }
+
+  const cleanups: Array<() => void> = [];
+  let lastLongTaskEventAt = 0;
+
+  if (typeof PerformanceObserver === "function") {
+    try {
+      const observer = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          const durationMs = Math.round(entry.duration);
+          if (!Number.isFinite(durationMs) || durationMs < 100) continue;
+
+          histogram("louvorja.ui.long_task.duration", durationMs, {
+            window_role: windowRole(),
+          });
+
+          const now = Date.now();
+          if (durationMs < 250 || now - lastLongTaskEventAt < 5_000) continue;
+          lastLongTaskEventAt = now;
+          track("ui_long_task", {
+            duration_ms: durationMs,
+            entry_type: entry.entryType,
+            entry_name: entry.name,
+            start_time_ms: Math.round(entry.startTime),
+          });
+        }
+      });
+      observer.observe({ type: "longtask", buffered: true });
+      cleanups.push(() => observer.disconnect());
+    } catch (error) {
+      // Safari/WebView mais antigo pode expor PerformanceObserver sem suportar
+      // o tipo longtask. O detector de atraso abaixo continua funcionando.
+      diagnostic("debug", "PerformanceObserver longtask indisponível", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  const intervalMs = 1_000;
+  let previousTick = typeof performance !== "undefined" ? performance.now() : Date.now();
+  const timer = window.setInterval(() => {
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    const driftMs = Math.max(0, Math.round(now - previousTick - intervalMs));
+    previousTick = now;
+    // Timers são deliberadamente estrangulados quando a aba está em segundo
+    // plano; isso não é um travamento do renderer.
+    if (document.visibilityState === "hidden" || driftMs < 250) return;
+
+    track("ui_thread_stall", {
+      duration_ms: driftMs,
+      expected_interval_ms: intervalMs,
+      route: routePath(),
+    });
+    histogram("louvorja.ui.stall.duration", driftMs, {
+      window_role: windowRole(),
+    });
+  }, intervalMs);
+  cleanups.push(() => window.clearInterval(timer));
+
+  _responsivenessCleanup = () => {
+    for (const cleanup of cleanups.splice(0)) cleanup();
+    _responsivenessCleanup = null;
+  };
 }
 
 /**
@@ -634,6 +754,63 @@ export function log(
 export function installGlobalHandlers(): void {
   if (_installed || typeof window === "undefined") return;
   _installed = true;
+  const consoleState = console as typeof console & {
+    __louvorjaTelemetryConsoleBridge?: ConsoleTelemetryBridge;
+  };
+  const reportConsoleMessage = (args: unknown[]): { message: string; errorObject?: Error } => {
+    const parts = args.map((value) => {
+      try {
+        return value instanceof Error ? value.message : typeof value === "string" ? value : String(value);
+      } catch {
+        return "[unserializable]";
+      }
+    });
+    return {
+      message: sanitizeString(parts.join(" ")),
+      errorObject: args.find((value): value is Error => value instanceof Error),
+    };
+  };
+  const captureConsoleException = (args: unknown[]) => {
+    const { message, errorObject } = reportConsoleMessage(args);
+    if (!message || message.startsWith("[Telemetry]") || message.startsWith("[PostHog")) return;
+    if (errorObject && _explicitErrors.has(errorObject)) return;
+    captureException(errorObject || new Error(message), {
+      source: "console.error",
+      console_message: message,
+    });
+  };
+  const captureConsoleWarning = (args: unknown[]) => {
+    const { message, errorObject } = reportConsoleMessage(args);
+    if (!message || message.startsWith("[Telemetry]") || message.startsWith("[PostHog")) return;
+    log("warn", message, {
+      source: "console.warn",
+      error_name: errorObject?.name,
+      error_stack: errorObject?.stack,
+    });
+  };
+  const existingBridge = consoleState.__louvorjaTelemetryConsoleBridge;
+  if (existingBridge) {
+    // Mantém o wrapper original, mas aponta para o módulo atual. Isso evita
+    // capturas presas a um singleton antigo durante HMR e nos testes.
+    existingBridge.captureException = captureConsoleException;
+    existingBridge.captureWarning = captureConsoleWarning;
+  } else {
+    const bridge: ConsoleTelemetryBridge = {
+      originalError: console.error.bind(console),
+      originalWarn: console.warn.bind(console),
+      captureException: captureConsoleException,
+      captureWarning: captureConsoleWarning,
+    };
+    consoleState.error = (...args: unknown[]) => {
+      bridge.originalError(...args);
+      bridge.captureException(args);
+    };
+    consoleState.warn = (...args: unknown[]) => {
+      bridge.originalWarn(...args);
+      bridge.captureWarning(args);
+    };
+    consoleState.__louvorjaTelemetryConsoleBridge = bridge;
+  }
   window.addEventListener("error", (event) => {
     if (_nativeAutocaptureActive) return;
     captureException(event.error || new Error(event.message), {
@@ -790,6 +967,7 @@ export function setEnabled(enabled: boolean): void {
     _pendingEvents.length = 0;
     _pendingMetrics.length = 0;
     _pendingSpans.clear();
+    _responsivenessCleanup?.();
     _ph?.stopSessionRecording();
     _ph?.opt_out_capturing();
     return;
@@ -797,7 +975,10 @@ export function setEnabled(enabled: boolean): void {
   if (_ph) {
     _ph.opt_in_capturing({ captureEventName: false });
     _ph.register({ app_version: _appVersion, sdk_version: _sdkVersion });
-    if (windowRole() === "main") _ph.startSessionRecording();
+    if (windowRole() === "main") {
+      _ph.startSessionRecording();
+      startResponsivenessMonitor();
+    }
   } else void init();
 }
 
@@ -872,6 +1053,10 @@ async function _init(): Promise<void> {
 
   posthog.init(KEY, {
     api_host: HOST,
+    // Electron also exposes `sendBeacon`, and the SDK can prefer it after a
+    // pagehide. Keep normal event delivery on fetch so the transport wrapper
+    // below can report the real HTTP result (and so failed requests retry).
+    api_transport: "fetch",
     loaded: () => {
       // Este callback confirma que o SDK carregou no renderer. Falhas de
       // envio continuam passando por on_request_error abaixo, que é o sinal
@@ -1021,6 +1206,23 @@ async function _init(): Promise<void> {
     window_route: routePath(),
     telemetry_schema_version: 2,
   });
+  // `capture()` returning undefined only means that the SDK did not return a
+  // payload to the caller. This hook is the stronger signal that the event
+  // passed consent/bot filters and reached the SDK's request pipeline.
+  if (typeof posthog.on === "function") {
+    let capturedDiagnostics = 0;
+    posthog.on("eventCaptured", (data: { event?: unknown; uuid?: unknown }) => {
+      const event = typeof data?.event === "string" ? data.event : "unknown";
+      if (event !== "app_opened" && capturedDiagnostics >= 5) return;
+      capturedDiagnostics += 1;
+      diagnostic("debug", "evento aceito pelo pipeline do PostHog", {
+        event,
+        uuid_suffix: idSuffix(data?.uuid),
+        captured_count: capturedDiagnostics,
+        api_transport: "fetch",
+      });
+    });
+  }
   diagnostic("info", "SDK PostHog inicializado", {
     ...runtimeContext(),
     app_version: version,
@@ -1033,7 +1235,9 @@ async function _init(): Promise<void> {
     posthog.startExceptionAutocapture({
       capture_unhandled_errors: true,
       capture_unhandled_rejections: true,
-      capture_console_errors: true,
+      // `installGlobalHandlers` owns console.error so caught errors also carry
+      // a stable source and are deduplicated against explicit captures.
+      capture_console_errors: false,
     });
     _nativeAutocaptureActive = true;
   } else {
@@ -1073,7 +1277,7 @@ async function _init(): Promise<void> {
         typeof window !== "undefined" && window.matchMedia?.("(display-mode: standalone)").matches,
       window_role: windowRole(),
     },
-    { send_instantly: true }
+    { send_instantly: true, transport: "fetch" }
   );
   diagnostic("info", "evento app_opened solicitado ao SDK", {
     ...captureResultDetails(appOpened),
@@ -1100,7 +1304,7 @@ async function _init(): Promise<void> {
           window_role: windowRole(),
           replay_ready: true,
         },
-        { send_instantly: true }
+        { send_instantly: true, transport: "fetch" }
       );
       diagnostic("info", "session replay pronto após o boot");
     })
@@ -1120,6 +1324,7 @@ async function _init(): Promise<void> {
 
   void flushPendingMainErrors();
   scheduleDomDiagnostic(posthog);
+  startResponsivenessMonitor();
 }
 
 async function flushPendingMainErrors(): Promise<void> {
@@ -1179,7 +1384,7 @@ function scheduleDomDiagnostic(posthog: PostHog): void {
         slide_width: rect ? Math.round(rect.width) : 0,
         slide_height: rect ? Math.round(rect.height) : 0,
       },
-      { send_instantly: true }
+      { send_instantly: true, transport: "fetch" }
     );
   };
   if (typeof requestAnimationFrame === "function") {
