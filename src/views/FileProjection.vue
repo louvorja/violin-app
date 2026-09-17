@@ -1,7 +1,7 @@
 <template>
   <OverlayRenderer />
   <div class="fp-wallpaper" :style="fallbackStyle"></div>
-  <div v-if="fileProjection.active" class="file-projection" @click="fileProjection.active = false">
+  <div v-if="fileProjection.active" class="file-projection">
     <img
       v-if="fileProjection.type === 'image'"
       :src="fileProjection.url"
@@ -14,6 +14,7 @@
         ref="videoRef"
         :src="fileProjection.url"
         class="file-projection__media"
+        :style="{ backgroundColor: wpColor }"
         autoplay
         muted
         playsinline
@@ -640,8 +641,10 @@ useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION_BG_UPDATE, () => {
 onMounted(async () => {
   document.body.style.margin = "0";
   document.body.style.overflow = "hidden";
+  document.body.style.background = "#000";
   window.addEventListener("keydown", _onKey);
   await reloadWallpaper();
+  document.body.style.background = wpColor.value;
 });
 
 onBeforeUnmount(async () => {

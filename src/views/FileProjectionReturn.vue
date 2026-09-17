@@ -15,6 +15,7 @@
           ref="videoRef"
           :src="fileProjection.url"
           class="return-file-projection__media"
+          :style="{ backgroundColor: wpColor }"
           autoplay
           muted
           playsinline
@@ -643,6 +644,7 @@ onMounted(async () => {
   document.body.style.background = "#000";
 
   await reloadWallpaper();
+  document.body.style.background = wpColor.value;
 
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {

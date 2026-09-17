@@ -1,14 +1,18 @@
 <template>
   <OverlayRenderer />
-  <div class="return-root" :class="{ 'return-root--ready': ready }">
+  <div
+    class="return-root"
+    :class="{ 'return-root--ready': ready }"
+    :style="{ backgroundColor: returnRootBackground }"
+  >
     <!-- Slide atual ocupa quase toda a tela (alClient) -->
     <div
       class="return-current"
-      :style="
-        slideStyle.cfg.value.custom_return_background_active
-          ? { background: slideStyle.returnTopBgStyle().backgroundColor }
-          : undefined
-      "
+      :style="{
+        backgroundColor: slideStyle.cfg.value.custom_return_background_active
+          ? slideStyle.returnTopBgStyle().backgroundColor
+          : slideStyle.cfg.value.background_color,
+      }"
     >
       <!-- Progresso total da música (barra no topo) -->
       <div v-if="slideStyle.cfg.value.show_progress_bar" class="return-track-progress-bar">
@@ -53,6 +57,9 @@
       class="return-bottom"
       :style="{
         height: returnBottomHeight,
+        backgroundColor: slideStyle.cfg.value.custom_return_background_active
+          ? slideStyle.returnBottomBgStyle().backgroundColor
+          : slideStyle.cfg.value.background_color,
         ...(slideStyle.cfg.value.custom_return_background_active
           ? slideStyle.returnBottomBgStyle()
           : {}),
@@ -99,6 +106,13 @@ const { slide, isCover, progress, slideProgress, title, slideIndex, totalSlides,
 const slideStyle = useSlideStyle();
 
 const ready = ref(false);
+
+const returnRootBackground = computed(() => {
+  const cfg = slideStyle.cfg.value;
+  return cfg.custom_return_background_active
+    ? cfg.return_bg_top_color || cfg.background_color || "#000000"
+    : cfg.background_color || "#000000";
+});
 
 const returnTopHasImage = computed(
   () =>
@@ -182,7 +196,7 @@ function _onKey(e) {
 onMounted(async () => {
   document.body.style.margin = "0";
   document.body.style.overflow = "hidden";
-  document.body.style.background = "#293329";
+  document.body.style.background = returnRootBackground.value;
 
   try {
     await document.fonts.ready;
@@ -215,7 +229,7 @@ onBeforeUnmount(() => {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: #293329;
+  background: #000;
   font-family: var(--lj-font-projection);
   opacity: 0;
   transition: opacity 120ms linear;
@@ -231,7 +245,7 @@ onBeforeUnmount(() => {
   flex: 1;
   position: relative;
   overflow: hidden;
-  background: #1a201a; /* fallback quando fundo retorno não está ativo */
+  background: #000; /* fallback antes da configuração reativa carregar */
 }
 
 .return-bg {
@@ -318,7 +332,7 @@ onBeforeUnmount(() => {
   height: 18vh; /* fallback quando formatação retorno não está ativa */
   min-height: 90px;
   width: 100%;
-  background: linear-gradient(180deg, #1d251d, #131b13); /* fallback */
+  background: #000; /* fallback antes da configuração reativa carregar */
   border-top: 2px solid #efb400;
   overflow: hidden;
   display: flex;

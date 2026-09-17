@@ -141,11 +141,20 @@ export async function openFileProjectionWindows(): Promise<void> {
     await _open(PROJECTION_URL.FILE, PROJECTION_TYPE.FILE, file.monitorId, fullscreen, alwaysOnTop);
   }
 
-  // Retorno de arquivo — respeita a opção específica de arquivo
-  const openFileReturn = $userdata.get(KEYS.OPTIONS.FILE_PROJECTION.SHOW_RETURN, false) as boolean;
+  // Retorno de arquivo — respeita a opção específica de arquivo e herda a
+  // opção geral de retorno para instalações que já usavam esse fluxo.
+  // A opção geral de retorno é o fallback histórico para quem já usava
+  // "Abrir Tela de Retorno" antes da configuração específica do player.
+  const openFileReturn =
+    ($userdata.get(KEYS.OPTIONS.FILE_PROJECTION.SHOW_RETURN, false) as boolean) ||
+    ($userdata.get(KEYS.OPTIONS.OPEN_RETURN, false) as boolean);
   if (openFileReturn) {
-    const ret = await _target(PROJECTION_TYPE.FILE_RETURN);
+    let ret = await _target(PROJECTION_TYPE.FILE_RETURN);
+    if (!ret.open) ret = await _target(PROJECTION_TYPE.RETURN);
     if (ret.open) {
+      // Não deixe a janela de retorno de músicas (PRÓX/1/0) ocupar o mesmo
+      // papel enquanto um arquivo está sendo projetado.
+      await _close(PROJECTION_TYPE.RETURN);
       await _open(
         PROJECTION_URL.FILE_RETURN, PROJECTION_TYPE.FILE_RETURN, ret.monitorId,
         fullscreen, alwaysOnTop
