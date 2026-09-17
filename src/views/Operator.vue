@@ -2,18 +2,51 @@
   <div
     ref="root"
     class="op-root"
+    :class="{ 'op-root--video': videoActive }"
     role="application"
     :aria-label="t('shell.operator_label')"
     tabindex="0"
   >
-    <!-- Header -->
     <div class="op-header">
       <span class="op-title">{{ title || "—" }}</span>
-      <span class="op-hint">{{ t("shell.operator_hint") }}</span>
+      <span class="op-hint">
+        {{ videoActive ? t("shell.operator_video_hint") : t("shell.operator_hint") }}
+      </span>
     </div>
 
-    <!-- Grade de slides -->
-    <div v-if="slides.length === 0" class="op-empty">{{ t("shell.operator_waiting") }}</div>
+    <!-- Vídeo de arquivo: substitui os slides antigos enquanto a mídia está no ar. -->
+    <div v-if="videoActive" class="op-video">
+      <div class="op-video-frame">
+        <video
+          v-show="!videoFailed"
+          ref="videoRef"
+          :src="videoUrl"
+          class="op-video-media"
+          autoplay
+          muted
+          playsinline
+          preload="auto"
+          @loadedmetadata="onVideoReady"
+          @canplay="onVideoReady"
+          @playing="onVideoPlaying"
+          @waiting="onVideoBuffering"
+          @stalled="onVideoBuffering"
+          @error="onVideoError"
+        />
+        <div v-if="videoFailed" class="op-video-error">
+          <span>{{ t("shell.operator_video_error") }}</span>
+          <small>{{ videoTitle || "—" }}</small>
+        </div>
+      </div>
+      <div class="op-video-caption">
+        <span class="op-video-badge">{{ t("shell.operator_video") }}</span>
+        <span class="op-video-title">{{ videoTitle || "—" }}</span>
+      </div>
+    </div>
+
+    <div v-else-if="slides.length === 0" class="op-empty">
+      {{ t("shell.operator_waiting") }}
+    </div>
 
     <div v-else class="op-grid" role="grid">
       <div
@@ -35,8 +68,7 @@
       </div>
     </div>
 
-    <!-- Barra de progresso -->
-    <div class="op-progress-bar">
+    <div v-if="!videoActive" class="op-progress-bar">
       <div class="op-progress-fill" :style="{ width: progress + '%' }" />
     </div>
   </div>
@@ -48,6 +80,9 @@ import { useI18n } from "vue-i18n";
 import $broadcast from "@/helpers/Broadcast";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
+import $idb from "@/helpers/IndexedDB";
+import { DB_TABLE } from "@/constants/DbTables";
+import Telemetry from "@/helpers/Telemetry";
 
 const { t } = useI18n();
 const root = ref(null);
@@ -55,11 +90,168 @@ const slides = ref([]);
 const currentIndex = ref(0);
 const title = ref("");
 const progress = ref(0);
+const videoActive = ref(false);
+const videoUrl = ref("");
+const videoTitle = ref("");
+const videoFailed = ref(false);
+const videoRef = ref(null);
+let videoActivation = 0;
+let videoObjectUrl = "";
+
+function revokeVideoObjectUrl() {
+  if (!videoObjectUrl) return;
+  URL.revokeObjectURL(videoObjectUrl);
+  videoObjectUrl = "";
+}
+
+async function activateVideo(payload) {
+  const activation = ++videoActivation;
+  videoActive.value = false;
+  videoFailed.value = false;
+  slides.value = [];
+  progress.value = 0;
+  revokeVideoObjectUrl();
+
+  let url = typeof payload?.url === "string" ? payload.url : "";
+  if (payload?.libRef?.id && url.startsWith("blob:")) {
+    try {
+      const rec = await $idb.get(payload.libRef.table || DB_TABLE.MEDIA_LIBRARY, payload.libRef.id);
+      if (activation !== videoActivation) return;
+      if (rec?.data && rec.mime) {
+        url = URL.createObjectURL(new Blob([rec.data], { type: rec.mime }));
+        videoObjectUrl = url;
+      } else {
+        console.warn("[Operator] dados do vídeo do acervo ausentes:", payload.libRef.id);
+      }
+    } catch (error) {
+      console.warn("[Operator] não foi possível resolver vídeo do acervo:", error);
+    }
+  }
+  if (activation !== videoActivation) return;
+  videoUrl.value = url;
+  videoTitle.value = payload?.title || "";
+  title.value = videoTitle.value;
+  videoFailed.value = false;
+  videoActive.value = payload?.type === "video" && !!url;
+  await nextTick();
+  if (videoActive.value) prepareVideo();
+}
+
+function prepareVideo() {
+  const el = videoRef.value;
+  if (!el || !videoActive.value) return;
+  el.muted = true;
+  el.playsInline = true;
+  el.load();
+  el.play().catch((error) => {
+    console.warn("[Operator] vídeo não iniciou sozinho:", error?.name || error);
+    Telemetry.log("warn", "operator video play rejected", {
+      name: error?.name,
+      message: error?.message,
+      ready_state: el.readyState,
+      network_state: el.networkState,
+    });
+  });
+}
+
+function onVideoReady() {
+  const el = videoRef.value;
+  if (!el) return;
+  videoFailed.value = false;
+  console.info("[Operator] vídeo pronto:", {
+    title: videoTitle.value,
+    duration: Number.isFinite(el.duration) ? Number(el.duration.toFixed(3)) : 0,
+    width: el.videoWidth,
+    height: el.videoHeight,
+  });
+  if (el.paused) el.play().catch(() => {});
+}
+
+function onVideoPlaying() {
+  console.info("[Operator] vídeo reproduzindo:", {
+    title: videoTitle.value,
+    current_time: Number.isFinite(videoRef.value?.currentTime)
+      ? Number(videoRef.value.currentTime.toFixed(3))
+      : 0,
+  });
+}
+
+function onVideoBuffering(event) {
+  const el = event.currentTarget;
+  console.warn("[Operator] vídeo aguardando dados:", {
+    trigger: event.type,
+    current_time: Number.isFinite(el?.currentTime) ? Number(el.currentTime.toFixed(3)) : 0,
+    ready_state: el?.readyState,
+    network_state: el?.networkState,
+  });
+}
+
+function onVideoError(event) {
+  const el = event.currentTarget;
+  videoFailed.value = true;
+  console.error("[Operator] vídeo local falhou:", {
+    code: el?.error?.code,
+    message: el?.error?.message,
+    src: videoUrl.value.substring(0, 100),
+  });
+  Telemetry.track("operator_video_failed", {
+    code: el?.error?.code,
+    message: el?.error?.message,
+  });
+}
 
 useBroadcastListener(BROADCAST_TYPE.SLIDES_DATA, (payload) => {
+  videoActivation++;
+  revokeVideoObjectUrl();
+  videoActive.value = false;
+  videoFailed.value = false;
   slides.value = payload.slides || [];
   title.value = payload.title || "";
   currentIndex.value = payload.slide_index ?? 0;
+});
+
+useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION, (payload) => {
+  if (payload?.type === "video" && payload?.url) {
+    void activateVideo(payload);
+  } else {
+    videoActivation++;
+    revokeVideoObjectUrl();
+    videoActive.value = false;
+    videoFailed.value = false;
+    slides.value = [];
+    progress.value = 0;
+    title.value = payload?.title || "";
+  }
+});
+
+useBroadcastListener(BROADCAST_TYPE.VIDEO_STATE, (payload) => {
+  if (!videoActive.value) return;
+  const el = videoRef.value;
+  if (!el) return;
+  if (typeof payload?.isPaused === "boolean") {
+    if (payload.isPaused && !el.paused) el.pause();
+    else if (!payload.isPaused && el.paused) {
+      el.play().catch((error) => {
+        console.warn("[Operator] vídeo não iniciou na sincronia:", error?.name || error);
+      });
+    }
+  }
+  if (typeof payload?.currentTime === "number" && el.readyState >= 1) {
+    const drift = Math.abs(el.currentTime - payload.currentTime);
+    if (drift > 1.5) {
+      const duration = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : Infinity;
+      el.currentTime = Math.max(0, Math.min(payload.currentTime, duration));
+    }
+  }
+});
+
+useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, () => {
+  videoActivation++;
+  revokeVideoObjectUrl();
+  videoActive.value = false;
+  videoFailed.value = false;
+  videoUrl.value = "";
+  videoTitle.value = "";
 });
 
 useBroadcastListener(BROADCAST_TYPE.SLIDE_CHANGE, (payload) => {
@@ -78,6 +270,13 @@ function goTo(index) {
 }
 
 function onKey(e) {
+  if (videoActive.value) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      window.close();
+    }
+    return;
+  }
   if (e.key === "ArrowRight" || e.key === "ArrowDown") {
     e.preventDefault();
     if (currentIndex.value < slides.value.length - 1) goTo(currentIndex.value + 1);
@@ -117,6 +316,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener("keydown", onKey);
+  revokeVideoObjectUrl();
 });
 </script>
 
@@ -138,6 +338,9 @@ body {
   background: #232323;
   outline: none;
   font-family: var(--lj-font-projection);
+}
+.op-root--video {
+  background: #111;
 }
 .op-header {
   display: flex;
@@ -173,6 +376,71 @@ body {
   font-size: 1.2rem;
   text-transform: uppercase;
   letter-spacing: 0.1em;
+}
+.op-video {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: #111;
+}
+.op-video-frame {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: #000;
+  border: 1px solid #3e3e3e;
+}
+.op-video-media {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+.op-video-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  color: rgba(255, 255, 255, 0.8);
+  text-align: center;
+}
+.op-video-error small {
+  max-width: 80%;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.5);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.op-video-caption {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 28px;
+  color: rgba(255, 255, 255, 0.72);
+}
+.op-video-badge {
+  flex-shrink: 0;
+  padding: 3px 8px;
+  border: 1px solid rgba(239, 180, 0, 0.6);
+  border-radius: 999px;
+  color: #efb400;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.op-video-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .op-grid {
   flex: 1;

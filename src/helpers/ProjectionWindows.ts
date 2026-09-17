@@ -152,6 +152,18 @@ export async function openFileProjectionWindows(): Promise<void> {
       );
     }
   }
+
+  // O operador também é útil para arquivos de vídeo: a janela troca a grade
+  // de slides pela prévia do vídeo enquanto ele está no ar. Respeitamos a
+  // mesma opção usada para músicas e deixamos `openWindow` fazer a operação
+  // idempotente quando a janela já estiver aberta.
+  const openOperator = $userdata.get(KEYS.OPTIONS.OPEN_OPERATOR, false) as boolean;
+  if (openOperator) {
+    const op = await _target(PROJECTION_TYPE.OPERATOR);
+    if (op.open) {
+      await _open(PROJECTION_URL.OPERATOR, PROJECTION_TYPE.OPERATOR, op.monitorId, false, false);
+    }
+  }
 }
 
 /**
