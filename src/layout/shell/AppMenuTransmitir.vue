@@ -139,6 +139,16 @@
         </div>
         <p class="opt-hint">{{ $t("options.transmission.devices_hint") }}</p>
 
+        <div class="tx-app-download">
+          <span class="tx-app-download__label">
+            {{ $t("options.transmission.app_download_label") }}
+          </span>
+          <LjButton size="md" :icon="ICONS.UI.ANDROID" @click="showAppDialog('android')">
+            Android
+          </LjButton>
+          <LjButton size="md" :icon="ICONS.UI.APPLE" @click="showAppDialog('ios')">iOS</LjButton>
+        </div>
+
         <div v-if="devices.length" class="tx-devices">
           <div v-for="device in devices" :key="device.id" class="tx-device-row">
             <div class="tx-device-info">
@@ -322,6 +332,40 @@
       </LjButton>
     </template>
   </LjDialog>
+
+  <!-- Violin Remote — Download da loja -->
+  <LjDialog
+    v-model="showAppStoreDialog"
+    size="sm"
+    :icon="appStorePlatform === 'android' ? ICONS.UI.ANDROID : ICONS.UI.APPLE"
+    :title="$t('options.transmission.app_dialog_title')"
+  >
+    <div class="app-store-dialog">
+      <p class="app-store-dialog__desc">
+        {{ $t("options.transmission.app_dialog_description") }}
+      </p>
+      <div class="qr-canvas-wrapper">
+        <div ref="appStoreQrContainer" class="qr-canvas" />
+        <img
+          :src="appStorePlatform === 'android' ? playStoreUrl : appStoreUrl"
+          class="qr-center-icon"
+          alt=""
+        />
+      </div>
+      <a class="app-store-dialog__link" :href="storesUrl" target="_blank" rel="noopener noreferrer">
+        {{
+          appStorePlatform === "android"
+            ? $t("options.transmission.app_dialog_android")
+            : $t("options.transmission.app_dialog_ios")
+        }}
+      </a>
+    </div>
+    <template #footer>
+      <LjButton :icon="ICONS.ACTIONS.CLOSE" size="sm" @click="showAppStoreDialog = false">
+        {{ $t("alert.close") }}
+      </LjButton>
+    </template>
+  </LjDialog>
 </template>
 
 <script setup>
@@ -347,6 +391,9 @@ import { ICONS } from "@/config/Icons";
 import { DEVICE_PERMISSION_LABELS } from "@/types/Device";
 import QRCodeStyling from "qr-code-styling";
 import logoUrl from "@/assets/img/logo.svg";
+
+const playStoreUrl = new URL("@/assets/img/play-store.svg", import.meta.url).href;
+const appStoreUrl = new URL("@/assets/img/app-store.svg", import.meta.url).href;
 
 const isDesktop = computed(() => Platform.isDesktop);
 const { displays, getFeatureRole, setFeatureRole } = useDisplays();
@@ -444,6 +491,20 @@ const deviceQrContainer = ref(null);
 const editingDevice = ref(null);
 const confirmDeleteDevice = ref(null);
 const onlyAuthorizedDevices = ref(false);
+
+const STORES_URLS = {
+  android: "https://play.google.com/store/apps/details?id=com.louvorja.violin",
+  ios: "https://apps.apple.com/app/violin-remote/id0000000000",
+};
+const showAppStoreDialog = ref(false);
+const appStorePlatform = ref("android");
+const appStoreQrContainer = ref(null);
+const storesUrl = computed(() => STORES_URLS[appStorePlatform.value]);
+
+function showAppDialog(platform) {
+  appStorePlatform.value = platform;
+  showAppStoreDialog.value = true;
+}
 
 // IP "público" preferido — primeiro não-loopback. Cai pra 127.0.0.1
 // quando a máquina não tem interface de rede ativa (raro: notebook offline).
@@ -644,6 +705,37 @@ watch(
       await qr.append(container);
     } catch (e) {
       console.error("[Transmitir] QRCode device:", e);
+    }
+  },
+  { flush: "post" }
+);
+
+// QR Code — Violin Remote (loja)
+watch(
+  [appStoreQrContainer, storesUrl, appStorePlatform],
+  async ([container, url]) => {
+    if (!container || !url) return;
+    container.innerHTML = "";
+    try {
+      const qr = new QRCodeStyling({
+        width: 240,
+        height: 240,
+        type: "canvas",
+        data: url,
+        dotsOptions: {
+          type: "rounded",
+          color: "#000",
+        },
+        cornersSquareOptions: {
+          type: "rounded",
+        },
+        backgroundOptions: {
+          color: "#fff",
+        },
+      });
+      await qr.append(container);
+    } catch (e) {
+      console.error("[Transmitir] QRCode store:", e);
     }
   },
   { flush: "post" }
@@ -974,6 +1066,21 @@ onMounted(async () => {
   border-radius: var(--lj-radius-lg);
   max-width: 100%;
 }
+.qr-canvas-wrapper {
+  position: relative;
+  display: inline-flex;
+}
+.qr-center-icon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  background: #fff;
+  padding: 4px;
+}
 .qr-url {
   font-family: var(--lj-font-mono);
   font-size: var(--lj-text-base);
@@ -998,5 +1105,45 @@ onMounted(async () => {
 .tx-confirm-device-meta {
   font-size: var(--lj-text-xs);
   color: var(--lj-text-subtle);
+}
+
+.tx-devices-header__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-1);
+}
+
+.tx-app-download {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-2);
+  margin-bottom: var(--lj-space-5);
+}
+.tx-app-download__label {
+  font-size: var(--lj-text-sm);
+  font-weight: var(--lj-weight-medium);
+  color: var(--lj-text-muted);
+}
+
+.app-store-dialog {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--lj-space-4);
+  text-align: center;
+}
+.app-store-dialog__desc {
+  color: var(--lj-text);
+  line-height: 1.5;
+}
+.app-store-dialog__link {
+  font-weight: var(--lj-weight-semibold);
+  color: var(--lj-ui-accent);
+  font-size: var(--lj-text-sm);
+  text-decoration: none;
+  cursor: pointer;
+}
+.app-store-dialog__link:hover {
+  text-decoration: underline;
 }
 </style>

@@ -364,7 +364,12 @@
       "permission_announce": "Anúncios",
       "permission_chat": "Chat",
       "select_all": "Selecionar todas",
-      "deselect_all": "Desmarcar todas"
+      "deselect_all": "Desmarcar todas",
+      "app_dialog_title": "Violin Remote",
+      "app_dialog_description": "Baixe o Violin Remote e use seu celular como controle remoto do LouvorJA. Escaneie o QR Code para instalar.",
+      "app_dialog_android": "Disponível na Google Play",
+      "app_dialog_ios": "Disponível na App Store",
+      "app_download_label": "Baixe o app"
     },
     "module": {
       "bible": {
