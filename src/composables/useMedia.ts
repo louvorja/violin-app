@@ -198,6 +198,10 @@ function _loadAudioSrc(
       this.response instanceof Blob &&
       this.response.size > 0
     ) {
+      Telemetry.histogram("louvorja.music.audio.load.duration", elapsed, {
+        outcome: "completed",
+        source_type: _sourceType(audioUrl),
+      });
       Telemetry.track(
         "music_audio_loaded",
         requestTelemetry({
@@ -221,6 +225,10 @@ function _loadAudioSrc(
       if (ehRemota(audioUrl)) reportNetworkResult(true, "media");
       onSource(URL.createObjectURL(this.response as Blob), false);
     } else {
+      Telemetry.histogram("louvorja.music.audio.load.duration", elapsed, {
+        outcome: "invalid_response",
+        source_type: _sourceType(audioUrl),
+      });
       _switchingMode = false;
       _self.close(true);
       Telemetry.track(
