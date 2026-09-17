@@ -69,11 +69,11 @@ describe("fetchWithTimeout", () => {
   });
 
   it("registra duração e status sem expor a URL", async () => {
-    vi.stubGlobal("fetch", () => Promise.resolve(new Response("", { status: 204 })));
+    vi.stubGlobal("fetch", () => Promise.resolve(new Response("ok", { status: 201 })));
     await fetchWithTimeout("https://exemplo.test/segredo?token=nao-enviar", { source: "db" });
 
     expect(timings).toEqual([
-      expect.objectContaining({ source: "db", status: 204, outcome: "response", remote: true }),
+      expect.objectContaining({ source: "db", status: 201, outcome: "response", remote: true }),
     ]);
     expect(JSON.stringify(timings)).not.toContain("token");
   });
