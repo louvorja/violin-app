@@ -272,13 +272,18 @@ function _loadAudioSrc(
     if (ehRemota(audioUrl)) reportNetworkResult(false, "media");
     _self.close(true);
     const reason = event?.type === "timeout" ? "timeout" : "network_error";
+    const elapsed = Date.now() - startedAt;
+    Telemetry.histogram("louvorja.music.audio.load.duration", elapsed, {
+      outcome: reason,
+      source_type: _sourceType(audioUrl),
+    });
     Telemetry.track(
       "music_audio_load_failed",
       requestTelemetry({
         id_music: idCheck,
         reason,
         remote: ehRemota(audioUrl),
-        elapsed_ms: Date.now() - startedAt,
+        elapsed_ms: elapsed,
       })
     );
     Telemetry.track(
