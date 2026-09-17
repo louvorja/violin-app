@@ -117,6 +117,13 @@ function _create(): SlidesInstance {
 
   function broadcastSlide(): void {
     const idx = slideIndex.value;
+    Telemetry.track("projection_slide_broadcast", {
+      slide_index: idx,
+      total_slides: totalSlides.value,
+      has_slide: !!slide.value,
+      has_next_slide: !!nextSlide.value,
+      playback_id: _playbackId,
+    });
     $broadcast.send(BROADCAST_TYPE.SLIDE_CHANGE, {
       slide_index:  idx,
       slide:        toRaw(slide.value),

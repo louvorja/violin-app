@@ -86,10 +86,11 @@ export function useLiturgyExecution() {
             ...item,
             tipo: LiturgyItemTypeEnum.ARQUIVO,
             dir: arquivo,
-          } as LiturgyItem).catch((error: unknown) => {
+        } as LiturgyItem).catch((error: unknown) => {
             reportExecutionError(error, "open_scheduled_file", { has_path: true });
           });
         } else {
+          reportMissingResource("execute_scheduled_item", "scheduled_file");
           $alert.error({ text: chaveLiturgia("dialog.scheduled_not_found") });
         }
         break;
@@ -531,7 +532,9 @@ export function useLiturgyExecution() {
         console.error(e);
       });
       $broadcast.send(BROADCAST_TYPE.FILE_PROJECTION, payload);
-      $media.openAudio({ url, title: item.item || "" });
+      void $media.openAudio({ url, title: item.item || "" }).catch((error: unknown) => {
+        reportExecutionError(error, "open_video_file", { kind });
+      });
       $appdata.set(KEYS.MODULES.MEDIA.CONFIG.VIDEO_FILE, true);
     } else if (kind === "audio") {
       void $media.openAudio({ url, title: item.item || "" }).catch((error: unknown) => {
