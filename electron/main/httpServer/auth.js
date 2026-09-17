@@ -11,25 +11,18 @@
  *  - Localhost (127.0.0.1, ::1) bypassa sempre — a segurança nesse caso
  *    vem do firewall do SO (apenas processos da mesma máquina alcançam).
  *
- * Três caminhos de autenticação:
- *  1. Token global (5 chars A-Z0-9) — o mesmo para todos os clients legados
- *  2. Device com X-Device-Id + X-Device-Token — par id+token (novo)
- *  3. Device com token only (legado/retrocompatível) — busca por token
+ * Dois caminhos de autenticação:
+ *  1. Token global (5 chars A-Z0-9) — aceito via query (?token=), body ou
+ *     header X-Token. Valida apenas o token (sem id de device).
+ *  2. Device com X-Device-Id + X-Device-Token — par id+token (recomendado).
+ *     Busca o device pelo id e valida que o token bate.
  *
- * Quando `only_authorized_devices` está ativo, apenas dispositivos
- * cadastrados com permissões são aceitos (além de localhost).
+ * Devices NÃO devem enviar o token via query/body/header solto — o path
+ * de token-only aceita apenas o token global. O cadastro de devices
+ * deve usar sempre o par de headers X-Device-Id + X-Device-Token.
  *
- * Exceção controlada por `opts.allowUnapprovedPaths`: um device cadastrado
- * porém ainda SEM permissões (recém-pareado) pode acessar apenas esses paths
- * — na prática só `/api/ping`, para o app conferir a conexão antes da
- * aprovação do host. O gate de `only_authorized_devices` roda ANTES dessa
- * exceção: no modo restrito, o device pendente continua bloqueado.
- *
- * IMPORTANTE — o token é resolvido DINAMICAMENTE em cada request via
- * `getToken()`. Antes recebíamos a string e congelávamos na closure: ao
- * clicar em "Gerar novo" no menu Transmissão, `_token` mudava na memória
- * mas o middleware continuava validando o antigo, gerando 401 nos clients
- * que já tinham recarregado a página com o token novo.
+ * Quando `only_authorized_devices` está ativo, apenas o token global é
+ * aceito via query/body. Devices devem usar o par de headers.
  *
  * `req.authInfo` é anexado a cada request autenticado:
  *   { kind, authorized, permissions, deviceId? }
@@ -166,16 +159,11 @@ function setupAuth(getToken, findDeviceByToken, findDeviceById, isOnlyAuthorized
       });
     }
 
-    // --- Modo restrito: apenas devices autorizados ---
+    // --- Modo restrito: apenas o token global é aceito via query/body ---
     if (onlyAuthorized) {
-      const dev = typeof findDeviceByToken === "function" ? findDeviceByToken(String(provided)) : null;
-      if (_hasPermissions(dev)) {
-        req.authInfo = {
-          kind: "device",
-          authorized: true,
-          permissions: dev.permissions,
-          deviceId: dev.id,
-        };
+      const expected = resolve();
+      if (expected && String(provided).toUpperCase() === String(expected).toUpperCase()) {
+        req.authInfo = { kind: "global", authorized: true, permissions: ["root"] };
         return next();
       }
       return res.status(403).json({
@@ -185,35 +173,11 @@ function setupAuth(getToken, findDeviceByToken, findDeviceById, isOnlyAuthorized
       });
     }
 
-    // --- Modo aberto (padrão) ---
+    // --- Modo aberto (padrão): apenas token global via query/body ---
     const expected = resolve();
 
-    // Token global — mantém compatibilidade com clients legados
     if (expected && String(provided).toUpperCase() === String(expected).toUpperCase()) {
       req.authInfo = { kind: "global", authorized: true, permissions: ["root"] };
-      return next();
-    }
-
-    const dev = typeof findDeviceByToken === "function" ? findDeviceByToken(String(provided)) : null;
-    if (_hasPermissions(dev)) {
-      req.authInfo = {
-        kind: "device",
-        authorized: true,
-        permissions: dev.permissions,
-        deviceId: dev.id,
-      };
-      return next();
-    }
-    // Device cadastrado, porém ainda sem permissões: libera apenas os paths
-    // de exceção (ex.: /api/ping) para o app conferir a conexão antes da
-    // aprovação do host.
-    if (dev && isUnapprovedAllowed) {
-      req.authInfo = {
-        kind: "device-pending",
-        authorized: false,
-        permissions: [],
-        deviceId: dev.id,
-      };
       return next();
     }
 

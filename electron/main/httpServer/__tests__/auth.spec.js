@@ -54,14 +54,16 @@ function run(middleware, req) {
   });
 }
 
-describe("setupAuth — exceção do /api/ping para device pendente", () => {
+describe("setupAuth — localhost", () => {
   it("libera localhost com authorized=true", async () => {
     const out = await run(buildMiddleware([pendingDevice]), makeRequest({ path: PING, ip: "127.0.0.1" }));
     expect(out.status).toBe(200);
     expect(out.authInfo.kind).toBe("localhost");
     expect(out.authInfo.authorized).toBe(true);
   });
+});
 
+describe("setupAuth — par X-Device-Id + X-Device-Token", () => {
   it("aceita device pendente via par id+token no /api/ping", async () => {
     const out = await run(
       buildMiddleware([pendingDevice]),
@@ -75,26 +77,86 @@ describe("setupAuth — exceção do /api/ping para device pendente", () => {
     expect(out.authInfo.authorized).toBe(false);
   });
 
-  it("aceita device pendente via ?token no /api/ping", async () => {
+  it("bloqueia device pendente fora do /api/ping via par id+token", async () => {
     const out = await run(
       buildMiddleware([pendingDevice]),
-      makeRequest({ path: PING, query: { token: pendingDevice.token } }),
+      makeRequest({
+        path: OPEN_SONG,
+        headers: { "x-device-id": pendingDevice.id, "x-device-token": pendingDevice.token },
+      }),
     );
-    expect(out.status).toBe(200);
-    expect(out.authInfo.kind).toBe("device-pending");
-    expect(out.authInfo.authorized).toBe(false);
+    expect(out.status).toBe(401);
+    expect(out.body.code).toBe("MISSING_TOKEN");
   });
 
-  it("bloqueia device pendente fora do /api/ping", async () => {
+  it("device aprovado acessa qualquer rota via par id+token", async () => {
+    const out = await run(
+      buildMiddleware([approvedDevice]),
+      makeRequest({
+        path: OPEN_SONG,
+        headers: { "x-device-id": approvedDevice.id, "x-device-token": approvedDevice.token },
+      }),
+    );
+    expect(out.status).toBe(200);
+    expect(out.authInfo.kind).toBe("device");
+    expect(out.authInfo.authorized).toBe(true);
+    expect(out.authInfo.permissions).toContain("remote");
+  });
+});
+
+describe("setupAuth — token via query/body (apenas token global)", () => {
+  it("token global no /api/ping resolve como authorized", async () => {
     const out = await run(
       buildMiddleware([pendingDevice]),
-      makeRequest({ path: OPEN_SONG, query: { token: pendingDevice.token } }),
+      makeRequest({ path: PING, query: { token: "abc1d" } }),
+    );
+    expect(out.status).toBe(200);
+    expect(out.authInfo.kind).toBe("global");
+    expect(out.authInfo.authorized).toBe(true);
+  });
+
+  it("device token via ?token é rejeitado (não busca device)", async () => {
+    const out = await run(
+      buildMiddleware([approvedDevice]),
+      makeRequest({ path: OPEN_SONG, query: { token: approvedDevice.token } }),
     );
     expect(out.status).toBe(401);
     expect(out.body.code).toBe("INVALID_TOKEN");
   });
 
-  it("bloqueia device pendente no /api/ping quando only_authorized_devices está ativo", async () => {
+  it("device pendente via ?token é rejeitado", async () => {
+    const out = await run(
+      buildMiddleware([pendingDevice]),
+      makeRequest({ path: PING, query: { token: pendingDevice.token } }),
+    );
+    expect(out.status).toBe(401);
+    expect(out.body.code).toBe("INVALID_TOKEN");
+  });
+
+  it("sem token retorna 401", async () => {
+    const out = await run(
+      buildMiddleware([]),
+      makeRequest({ path: PING }),
+    );
+    expect(out.status).toBe(401);
+    expect(out.body.code).toBe("MISSING_TOKEN");
+  });
+});
+
+describe("setupAuth — only_authorized_devices", () => {
+  it("device pendente via par id+token é bloqueado com 403", async () => {
+    const out = await run(
+      buildMiddleware([pendingDevice], { onlyAuthorized: true }),
+      makeRequest({
+        path: PING,
+        headers: { "x-device-id": pendingDevice.id, "x-device-token": pendingDevice.token },
+      }),
+    );
+    expect(out.status).toBe(403);
+    expect(out.body.code).toBe("DEVICE_NOT_AUTHORIZED");
+  });
+
+  it("device token via ?token é rejeitado no modo restrito", async () => {
     const out = await run(
       buildMiddleware([pendingDevice], { onlyAuthorized: true }),
       makeRequest({ path: PING, query: { token: pendingDevice.token } }),
@@ -103,21 +165,10 @@ describe("setupAuth — exceção do /api/ping para device pendente", () => {
     expect(out.body.code).toBe("DEVICE_NOT_AUTHORIZED");
   });
 
-  it("device aprovado acessa qualquer rota com authorized=true", async () => {
+  it("token global é aceito no modo restrito", async () => {
     const out = await run(
-      buildMiddleware([approvedDevice]),
-      makeRequest({ path: OPEN_SONG, query: { token: approvedDevice.token } }),
-    );
-    expect(out.status).toBe(200);
-    expect(out.authInfo.kind).toBe("device");
-    expect(out.authInfo.authorized).toBe(true);
-    expect(out.authInfo.permissions).toContain("remote");
-  });
-
-  it("token global no /api/ping resolve como authorized", async () => {
-    const out = await run(
-      buildMiddleware([pendingDevice]),
-      makeRequest({ path: PING, query: { token: "abc1d" } }),
+      buildMiddleware([], { onlyAuthorized: true }),
+      makeRequest({ path: OPEN_SONG, query: { token: "abc1d" } }),
     );
     expect(out.status).toBe(200);
     expect(out.authInfo.kind).toBe("global");

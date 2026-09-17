@@ -330,6 +330,9 @@ async function start({ port, mainWindow } = {}) {
     distDir: paths.webBuild(),
     getToken: () => _token,
     getUserData: () => getUserData(),
+    // Em dev, `LJ_SERVE_DIST=1` faz os clients REMOTOS (celular, OBS) receberem
+    // o bundle de produção; localhost continua no Vite (HMR).
+    serveDistToRemote: process.env.LJ_SERVE_DIST === "1",
   });
 
   return new Promise((resolve, reject) => {
