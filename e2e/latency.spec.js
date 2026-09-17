@@ -13,6 +13,8 @@
  * Meta: p95 < 50ms (spec D7 do roadmap desktop).
  */
 import { test, expect } from "@playwright/test";
+import ptMusics from "./fixtures/pt_musics.json";
+import music1 from "./fixtures/music_1.json";
 
 const N_ITERATIONS = 100;
 
@@ -20,6 +22,10 @@ test("latência slide_change cross-window p95 <50ms", async ({ browser }) => {
   test.setTimeout(60_000);
 
   const context = await browser.newContext();
+
+  await context.route("http://e2e.mock/**", (route) => route.fulfill({ json: [] }));
+  await context.route("**/pt_musics*", (route) => route.fulfill({ json: ptMusics }));
+  await context.route("**/music_1*", (route) => route.fulfill({ json: music1 }));
 
   // Inicializa o array de latência antes de qualquer script da página
   await context.addInitScript(() => {
@@ -30,18 +36,27 @@ test("latência slide_change cross-window p95 <50ms", async ({ browser }) => {
   const projPage = await context.newPage();
   await projPage.goto("/projection");
 
-  // Abre janela principal para inicializar useSlides (via useMedia no main.js)
+  // Abre janela principal e carrega uma música sem áudio para que useSlides
+  // tenha slides reais antes de medir GO_TO_SLIDE.
   const mainPage = await context.newPage();
   await mainPage.goto("/");
 
-  // Aguarda a app montar (v-app indica que Vue + Pinia estão prontos)
-  await mainPage.locator("#app-container").waitFor({ state: "attached", timeout: 30_000 });
-  // Um rAF extra garante que o listener GO_TO_SLIDE do useSlides esteja registrado
-  await mainPage.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+  await mainPage.locator("#ribbon-tab-collections").waitFor({ state: "visible", timeout: 20_000 });
+  await mainPage
+    .locator('[data-testid="modules-ready"]')
+    .waitFor({ state: "attached", timeout: 15_000 });
+  await mainPage.waitForLoadState("networkidle", { timeout: 30_000 });
+  await mainPage.locator("#ribbon-tab-collections").click();
+  await mainPage.locator('[data-testid="ribbon-btn-musics"]').click();
+  await expect(mainPage.locator('[data-testid="music-row-1"]')).toBeVisible({ timeout: 10_000 });
+  await mainPage.locator('[data-testid="music-row-1"] [data-testid="mmt-btn-no-audio"]').click();
 
   // Aguarda projPage estar montada e com o listener SLIDE_CHANGE pronto
   await projPage.locator("body").waitFor({ state: "attached", timeout: 10_000 });
   await projPage.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+  await expect(projPage.locator('[data-testid="slide-content"]')).toContainText("Aleluia", {
+    timeout: 10_000,
+  });
 
   // Garante que o log começa vazio
   await projPage.evaluate(() => {

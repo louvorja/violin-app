@@ -6,6 +6,7 @@ import path from "path";
 import { createRequire } from "module";
 
 const require_ = createRequire(import.meta.url);
+const { version: packageVersion } = require_("./package.json");
 
 function escapeRegex(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -18,8 +19,15 @@ export default async ({ mode }) => {
   // -----------------------------------------------------------------------
   const { DOMAINS, DOMAINS_CSP } = require_("./config/cspDomains.cjs");
 
-  // Load app-level env vars to node-level env vars.
-  process.env = { ...process.env, ...loadEnv(mode, process.cwd()) };
+  // Load app-level env vars to node-level env vars. The package version is the
+  // canonical fallback for web/PWA deploys, which do not have Electron's
+  // updater API available at runtime.
+  const loadedEnv = loadEnv(mode, process.cwd());
+  const appVersion = String(loadedEnv.VITE_APP_VERSION || packageVersion || "unknown").replace(
+    /^v(?=\d)/,
+    ""
+  );
+  process.env = { ...process.env, ...loadedEnv, VITE_APP_VERSION: appVersion };
 
   // Detectar target: "desktop" (Electron) ou "web" (padrão PWA)
   const isDesktop = process.env.VITE_TARGET === "desktop";
@@ -46,7 +54,7 @@ export default async ({ mode }) => {
       ` img-src 'self' data: ${cspApi} ${DOMAINS_CSP.IMG};` +
       ` media-src 'self' blob: ${cspApi} ${DOMAINS_CSP.MEDIA};` +
       ` connect-src 'self' blob: ${cspApi} http://localhost:* ws://localhost:* ${DOMAINS_CSP.CONNECT};` +
-      ` worker-src 'self' blob:;` +
+      ` worker-src 'self' blob: ${DOMAINS_CSP.WORKER};` +
       ` frame-src ${DOMAINS_CSP.FRAME};` +
       `">`
     );
@@ -85,7 +93,7 @@ export default async ({ mode }) => {
         sourcemaps: {
           enabled: true,
           releaseName: "louvorja-violin",
-          releaseVersion: process.env.VITE_APP_VERSION || process.env.GITHUB_SHA || "local",
+          releaseVersion: appVersion || process.env.GITHUB_SHA || "local",
           deleteAfterUpload: true,
         },
       })

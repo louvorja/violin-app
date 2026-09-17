@@ -14,6 +14,8 @@ export enum LiturgyItemTypeEnum {
 
 const LEGACY_MAP: Record<string, LiturgyItemTypeEnum> = {
   categoria: LiturgyItemTypeEnum.BLOCO,
+  // Import do `.ja` do Delphi: mesmo tipo, grafia sem hífen.
+  itensagendados: LiturgyItemTypeEnum.ITENS_AGENDADOS,
 };
 
 export namespace LiturgyItemTypeEnum {

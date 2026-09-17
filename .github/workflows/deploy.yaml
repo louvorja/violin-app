@@ -29,6 +29,11 @@ jobs:
           git show dist:CNAME > CNAME || echo "CNAME not found, skipping"
       - name: install dependencies
         run: npm install
+      - name: read app version
+        id: app_version
+        run: |
+          version=$(node -p "require('./package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: build project
         run: npm run build
         env:
@@ -37,6 +42,7 @@ jobs:
           VITE_URL_DATABASE: ${{ vars.VITE_URL_DATABASE }}
           VITE_URL_FILES: ${{ vars.VITE_URL_FILES }}
           VITE_API_TOKEN: ${{ secrets.VITE_API_TOKEN }}
+          VITE_APP_VERSION: ${{ steps.app_version.outputs.version }}
           VITE_POSTHOG_KEY: ${{ vars.VITE_POSTHOG_KEY }}
           VITE_POSTHOG_HOST: ${{ vars.VITE_POSTHOG_HOST }}
       - name: copy CNAME to dist (if exists)

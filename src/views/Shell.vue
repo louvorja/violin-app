@@ -20,7 +20,10 @@
           :class="{ 'shell-content--desktop-download': showDesktopDownload ,
           'shell-center--drawer-pinned': isPinned && isChatOpen }"
         >
-          <div class="shell-content">
+          <div
+            class="shell-content"
+            :class="{ 'shell-content--desktop-download': showDesktopDownload }"
+          >
             <AppLoading />
             <AppAlert />
             <AppSnackbar />
@@ -817,7 +820,7 @@ onMounted(() => {
   if (Platform.isDesktop) {
     (async () => {
       const checkOnStart =
-        $userdata.get<boolean>(KEYS.OPTIONS.CHECK_UPDATES_ON_START, true) === true;
+        $userdata.get<boolean>(KEYS.OPTIONS.CHECK_DB_UPDATES_ON_START, true) === true;
       if (!checkOnStart) {
         // Preferência desligada: pula verificação de bundle, segue o boot
         _runStartupUpdateCheck();

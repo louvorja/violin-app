@@ -250,48 +250,55 @@ function _shell() {
 // No Electron carrega os dados de userData/storage/ para o cache em memória.
 // ---------------------------------------------------------------------------
 $storage.hydrate().then(async () => {
+  // As três etapas abaixo não dependem uma da outra (cada uma é uma
+  // configuração isolada por IPC) — rodá-las em série só soma round-trips
+  // ao caminho crítico do boot sem nenhum ganho de corretude.
+
   // Hidrata o Pinia userDataStore a partir do Storage em TODAS as janelas
   // (principal, projeção, operador, OBS). Antes só Shell.vue chamava load(),
   // mas as janelas auxiliares de projeção não montam Shell — viviam com o
   // state default e ignoravam Opções salvas (fundo personalizado, tamanho
   // de fonte, alinhamento, etc.).
-  try {
-    await UserData.load();
-    seedDefaultFonts();
-  } catch (e) {
-    console.warn("[main] UserData.load falhou:", e);
-  }
+  const userDataReady = (async () => {
+    try {
+      await UserData.load();
+      seedDefaultFonts();
+    } catch (e) {
+      console.warn("[main] UserData.load falhou:", e);
+    }
+  })();
 
   // D2 — Configurar URLs remotas no main process para o protocolo louvorja://.
   // O renderer lê as variáveis Vite e envia ao main antes de montar a UI.
-  if (Platform.isDesktop && Platform.protocol) {
-    try {
-      await Platform.protocol.setRemoteConfig({
-        apiUrl: API_URL,
-        databaseUrl: API_URL_DB,
-        filesUrl: API_URL_FILES,
-        apiToken: API_TOKEN,
-        apiUrlFallback: API_URL_FALLBACK,
-        apiUrlFallbackToken: API_URL_FALLBACK_TOKEN,
-      });
-    } catch (e) {
-      console.warn("[main] Falha ao configurar protocolo louvorja://:", e);
-    }
-  }
+  const protocolReady =
+    Platform.isDesktop && Platform.protocol
+      ? Platform.protocol
+          .setRemoteConfig({
+            apiUrl: API_URL,
+            databaseUrl: API_URL_DB,
+            filesUrl: API_URL_FILES,
+            apiToken: API_TOKEN,
+            apiUrlFallback: API_URL_FALLBACK,
+            apiUrlFallbackToken: API_URL_FALLBACK_TOKEN,
+          })
+          .catch((e) => console.warn("[main] Falha ao configurar protocolo louvorja://:", e))
+      : Promise.resolve();
 
   // D3 — Configurar API de download HTTPS no main process.
   // O token é opcional (mídia em /file/ é pública); filesUrl é o que importa.
-  if (Platform.isDesktop && Platform.download) {
-    try {
-      await Platform.download.setApiConfig({
-        paramsUrl: `${API_URL}/params?type=env`,
-        apiToken: API_TOKEN,
-        filesUrl: API_URL_FILES,
-      });
-    } catch (e) {
-      console.warn("[main] Falha ao configurar downloader:", e);
-    }
-  }
+  const downloadReady =
+    Platform.isDesktop && Platform.download
+      ? Platform.download
+          .setApiConfig({
+            paramsUrl: `${API_URL}/params?type=env`,
+            apiToken: API_TOKEN,
+            apiUrl: API_URL,
+            filesUrl: API_URL_FILES,
+          })
+          .catch((e) => console.warn("[main] Falha ao configurar downloader:", e))
+      : Promise.resolve();
+
+  await Promise.all([userDataReady, protocolReady, downloadReady]);
 
   // D6 — Inicializar listener de atalhos globais (no-op no browser/PWA).
   Shortcuts.init();
@@ -782,7 +789,10 @@ $storage.hydrate().then(async () => {
 
   createI18nInstance(UserData.get(KEYS.OPTIONS.LANGUAGE)).then(async (i18n) => {
     app.use(i18n);
-    await ModuleManager.init(i18n);
+    // Sem dependência mútua: um registra módulos no Pinia/i18n, o outro só
+    // abre o IndexedDB. Rodar em série custava um round-trip de I/O à toa.
+    const moduleManagerReady = ModuleManager.init(i18n);
+    const idbReady = $idb.init();
 
     if (import.meta.env.DEV) {
       try {
@@ -793,8 +803,7 @@ $storage.hydrate().then(async () => {
       }
     }
 
-    // Inicializa IndexedDB unificado (cria tabelas se necessário)
-    await $idb.init();
+    await Promise.all([moduleManagerReady, idbReady]);
 
     // Documentos do usuário que ainda estejam no IndexedDB passam para os
     // arquivos da pasta de dados. Antes do ScheduledStore.hydrate(), que já

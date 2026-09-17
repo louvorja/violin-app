@@ -8,6 +8,7 @@ import type { LiturgyLibraryItem } from "@/types/LiturgyLibrary";
 
 const TABLE = DB_TABLE.LITURGY_LIBRARY;
 const DEFAULT_COLOR = "#00004F";
+const JA_GROUP_KEY = /^\d+$/;
 
 /**
  * Normaliza um item de liturgia importado (JSON externo) para um `LiturgyItem`
@@ -47,6 +48,112 @@ function _normalizeLiturgyItem(raw: unknown): LiturgyItem | null {
     ...(typeof r.checked === "string" ? { checked: r.checked } : {}),
     ...(typeof r.blocoId === "string" ? { blocoId: r.blocoId } : {}),
   };
+}
+
+/**
+ * Parser mínimo do formato INI do Delphi (`TIniFile`): seções `[Nome]` e
+ * pares `chave=valor`, uma seção corrente por vez. Split no primeiro `=`
+ * apenas — caminhos de arquivo no `.ja` legado não contêm `=`.
+ */
+function _parseIniSections(text: string): Record<string, Record<string, string>> {
+  const sections: Record<string, Record<string, string>> = {};
+  let current: Record<string, string> | null = null;
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const sectionMatch = line.match(/^\[(.+)\]$/);
+    if (sectionMatch) {
+      current = {};
+      sections[sectionMatch[1]] = current;
+      continue;
+    }
+    if (!current) continue;
+    const idx = line.indexOf("=");
+    if (idx === -1) continue;
+    current[line.slice(0, idx)] = line.slice(idx + 1);
+  }
+  return sections;
+}
+
+/**
+ * Converte uma cor `TColor` do Delphi (`$00BBGGRR`, hex invertido, sem canal
+ * alfa real) para `#RRGGBB`. Ex.: `$004F0000` (a cor padrão do LouvorJA
+ * clássico) vira `#00004F` — mesmo valor já usado como `DEFAULT_COLOR` aqui.
+ */
+function _delphiColorToHex(value: string | undefined): string {
+  if (!value || !value.startsWith("$")) return DEFAULT_COLOR;
+  const hex = value.slice(1).padStart(8, "0");
+  const bb = hex.slice(2, 4);
+  const gg = hex.slice(4, 6);
+  const rr = hex.slice(6, 8);
+  return `#${rr}${gg}${bb}`.toUpperCase();
+}
+
+/** Mapeia os campos de uma seção `[item_<id>]` do `.ja` para o formato cru que `_normalizeLiturgyItem` espera. */
+function _mapJaItemFields(id: string, fields: Record<string, string>): Record<string, unknown> {
+  return {
+    id,
+    tipo: fields.tipo ?? "",
+    subtipo: fields.subtipo ?? "",
+    item: fields.item ?? "",
+    subitem: fields.subitem ?? "",
+    cor: _delphiColorToHex(fields.cor),
+    dir: fields.dir ?? "",
+    dir_info: fields.dir_info || "E",
+    url: fields.url ?? "",
+    musica: fields.musica !== undefined ? Number(fields.musica) : -1,
+    escolha: fields.escolha === "1",
+    checked: fields.checked || undefined,
+  };
+}
+
+/**
+ * Nome para um grupo sem item "categoria" — usa o prefixo de horário do
+ * primeiro item (ex.: "18h55: Cronometro" → "Liturgia importada — 18h55"),
+ * já que "Liturgia importada 1/2/3" não ajuda a diferenciar duas liturgias
+ * de dias distintos no mesmo arquivo.
+ */
+function _jaFallbackName(firstItem: LiturgyItem | undefined, index: number): string {
+  const timeMatch = firstItem?.item.match(/^(\d{1,2}h\d{2})/);
+  return timeMatch ? `Liturgia importada — ${timeMatch[1]}` : `Liturgia importada ${index + 1}`;
+}
+
+/**
+ * Faz o parse de um `liturgia.ja` (formato Delphi, INI em Windows-1252 — o
+ * chamador precisa decodificar o arquivo com esse charset antes de passar o
+ * texto aqui). Um `.ja` pode conter mais de uma liturgia salva: a seção
+ * `[Geral]` lista uma chave numérica por liturgia, cujo valor é a ordem dos
+ * itens (`item_id;item_id;...`). O nome de cada uma vem do primeiro item do
+ * tipo "categoria" no grupo, quando existir.
+ */
+export function parseJaImport(text: string): { name: string; items: LiturgyItem[] }[] | null {
+  const sections = _parseIniSections(text);
+  const geral = sections["Geral"];
+  if (!geral) return null;
+
+  const groupKeys = Object.keys(geral)
+    .filter((k) => JA_GROUP_KEY.test(k))
+    .sort((a, b) => Number(a) - Number(b));
+  if (groupKeys.length === 0) return null;
+
+  const liturgies: { name: string; items: LiturgyItem[] }[] = [];
+  groupKeys.forEach((key, index) => {
+    const ids = geral[key]
+      .split(";")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const rawItems = ids
+      .map((id) => (sections[id] ? _mapJaItemFields(id, sections[id]) : null))
+      .filter((i): i is Record<string, unknown> => i !== null);
+    const items = rawItems.map(_normalizeLiturgyItem).filter((i): i is LiturgyItem => i !== null);
+    if (items.length === 0) return;
+
+    const firstBloco = items.find((i) => i.tipo === LiturgyItemTypeEnum.BLOCO);
+    const name = firstBloco?.item.trim() || _jaFallbackName(items[0], index);
+    liturgies.push({ name, items });
+  });
+
+  return liturgies.length > 0 ? liturgies : null;
 }
 
 export function useLiturgyLibrary() {

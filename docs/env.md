@@ -135,15 +135,31 @@ independente do `mode` do Vite.
 |-------------|------------------------------------------------|
 | Tipo        | string semver                                  |
 | Exemplo     | `1.27.0`                                       |
-| Padrão      | `"—"` (fallback no display)                   |
-| Usado em    | legado — substituído por `app.getVersion()`    |
+| Padrão      | versão de `package.json`                       |
+| Usado em    | build web/PWA e telemetria; no desktop, também `app.getVersion()` |
 
-> **Legado.** No desktop (Electron) a versão exibida na tela **Atualizações**
+> No desktop (Electron) a versão exibida na tela **Atualizações**
 > (`layout/shell/AppMenuAtualizacoes.vue`) vem de `app.getVersion()`
 > (package.json via `electron/main/updater.js`), não desta variável.
-> Mantida para compatibilidade com o build web/PWA.
+> No build web/PWA, quando a variável não é definida, o Vite injeta a versão
+> do `package.json`. Uma versão explícita continua tendo precedência.
 
-Se não definida, o display usa `"—"` como fallback.
+Se não definida, o build usa automaticamente a versão do `package.json`.
+
+---
+
+### `POSTHOG_API_KEY` / `POSTHOG_PROJECT_ID`
+
+| Campo       | Valor |
+|-------------|-------|
+| Tipo        | chave pessoal de escrita / ID do projeto |
+| Obrigatória | somente para publicar source maps |
+| Usado em    | `vite.config.js`, durante o build de release |
+
+Quando as duas variáveis estão presentes, o plugin oficial do PostHog gera,
+injeta e envia os source maps da versão. `POSTHOG_API_KEY` deve ficar apenas
+em secrets do CI; `POSTHOG_PROJECT_ID` pode ficar em variables. Sem elas, o
+build continua normal, mas stacks de produção permanecem minificados.
 
 ---
 
@@ -219,7 +235,7 @@ O script `npm run electron:build` injetará essa variável automaticamente.
 | `VITE_URL_API_FALLBACK` | Não         | *(vazio)*                    | `import.meta.env`  |
 | `VITE_URL_API_FALLBACK_TOKEN` | Não  | herda `VITE_API_TOKEN`       | `import.meta.env`  |
 | `VITE_APP_MODE`         | Não         | `"production"`               | `import.meta.env`  |
-| `VITE_APP_VERSION`      | Não         | `"—"`                        | `import.meta.env`  |
+| `VITE_APP_VERSION`      | Não         | versão de `package.json`     | `import.meta.env`  |
 | `VITE_DB_VERSION`       | Não         | `""` (TTL only)              | `import.meta.env`  |
 | `VITE_BASE_URL`         | Não         | `"/"`                        | `process.env`      |
 | `VITE_TARGET`           | Não         | `""` (web/PWA)               | `process.env`      |

@@ -1061,6 +1061,7 @@
       "download_for": "Baixar para {platform}",
       "view_downloads": "Ver downloads para computador",
       "all_systems": "Todos os sistemas",
+      "view_downloads_for": "Ver downloads para {platform}",
       "available_for": "Windows, macOS e Linux",
       "version": "Versão {version}",
       "platform": {

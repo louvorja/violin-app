@@ -10,7 +10,8 @@ export interface Music {
   url_image?: string;
   url_music?: string;
   url_instrumental_music?: string;
-  lyric?: Lyric[];
+  /** O acervo antigo entrega as letras como objeto indexado; o novo, como lista. */
+  lyric?: Lyric[] | Record<string, Lyric>;
   albums?: Album[];
 }
 
