@@ -67,6 +67,9 @@ function createMainWindow(devUrl, prodHtmlPath, preloadPath) {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false, // Necessário para BroadcastChannel funcionar entre janelas
+      // Minimizar a janela principal não pode suspender o relógio/módulos que
+      // enviam estado para as projeções abertas durante o culto.
+      backgroundThrottling: false,
     },
   });
 

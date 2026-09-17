@@ -17,8 +17,10 @@
 
         <div
           class="shell-center"
-          :class="{ 'shell-content--desktop-download': showDesktopDownload ,
-          'shell-center--drawer-pinned': isPinned && isChatOpen }"
+          :class="{
+            'shell-content--desktop-download': showDesktopDownload,
+            'shell-center--drawer-pinned': isPinned && isChatOpen,
+          }"
         >
           <div
             class="shell-content"
@@ -170,6 +172,7 @@ import { useFileProjection } from "@/composables/useFileProjection";
 import { useProjectionShutdown } from "@/composables/useProjectionShutdown";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
 import { hasOpenWebWindows } from "@/helpers/projection/webWindow";
+import { open as openProjection } from "@/helpers/Projection";
 import { formatBackgroundTaskDetail } from "@/helpers/BackgroundTaskDetail";
 import { useSyncManager } from "@/composables/useSyncManager";
 import BundleInstaller from "@/helpers/BundleInstaller";
@@ -315,6 +318,33 @@ function _hasWorkInProgress(): boolean {
 }
 
 let messageHandler: ((event: MessageEvent) => void) | null = null;
+let clockBootTimer: ReturnType<typeof setTimeout> | null = null;
+let clockBootAttempted = false;
+
+/** Abre o relógio em uma janela independente quando o operador optou por isso. */
+function openClockProjectionOnBoot(): void {
+  if (clockBootAttempted || !Platform.isDesktop) return;
+  clockBootAttempted = true;
+  if (!$userdata.get<boolean>(KEYS.OPTIONS.CLOCK_PROJECTION_ON_BOOT, false)) return;
+
+  // Aguarda o primeiro frame da shell para não competir com o carregamento da
+  // janela principal. A rota /clock tem seu próprio timer, então a projeção
+  // continua viva mesmo quando a janela principal for minimizada.
+  clockBootTimer = setTimeout(() => {
+    clockBootTimer = null;
+    void openProjection({
+      feature: "clock_fullscreen",
+      route: "/clock",
+      fullscreen: true,
+    })
+      .then(() => {
+        console.info("[Shell] projeção do relógio aberta no boot");
+      })
+      .catch((error) => {
+        console.warn("[Shell] falha ao abrir projeção do relógio no boot:", error);
+      });
+  }, 250);
+}
 
 // ---------------------------------------------------------------------------
 // Auto-update (D8): verificação ao iniciar + badge na ShellTools
@@ -874,6 +904,8 @@ onMounted(() => {
     void _continueBootAfterUpdate();
   }
 
+  openClockProjectionOnBoot();
+
   // Bridge popup → main (replica popup ↔ shell)
   messageHandler = (event) => {
     if (event.origin !== window.location.origin) return;
@@ -904,6 +936,10 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  if (clockBootTimer) {
+    clearTimeout(clockBootTimer);
+    clockBootTimer = null;
+  }
   if (beforeUnloadHandler) window.removeEventListener("beforeunload", beforeUnloadHandler);
   window.removeEventListener("pagehide", onPageHide);
   if (messageHandler) window.removeEventListener("message", messageHandler);

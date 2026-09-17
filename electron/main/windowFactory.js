@@ -541,6 +541,11 @@ function close(feature) {
   }
 }
 
+/** Fecha todas as janelas auxiliares antes de um encerramento explícito. */
+function closeAll() {
+  for (const feature of listOpen()) close(feature);
+}
+
 /**
  * Lista features com janelas abertas.
  * @returns {string[]}
@@ -561,4 +566,4 @@ function getWindow(feature) {
   return w && !w.isDestroyed() ? w : null;
 }
 
-module.exports = { openOnMonitor, close, listOpen, getWindow, setMainWindow, reconcile };
+module.exports = { openOnMonitor, close, closeAll, listOpen, getWindow, setMainWindow, reconcile };

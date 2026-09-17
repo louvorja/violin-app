@@ -17,7 +17,17 @@
  *   D6: globalShortcut
  */
 
-const { app, BrowserWindow, ipcMain, screen, session, dialog } = require("electron");
+const {
+  app,
+  BrowserWindow,
+  ipcMain,
+  screen,
+  session,
+  dialog,
+  Tray,
+  Menu,
+  nativeImage,
+} = require("electron");
 const path = require("path");
 const os = require("os");
 const { randomUUID } = require("crypto");
@@ -203,6 +213,18 @@ if (!app.requestSingleInstanceLock()) {
 console.log("[LouvorJA] Instância única: lock adquirido.");
 
 function focusMainWindow() {
+  // A projeção pode continuar aberta depois de a janela principal ser
+  // destruída (por exemplo, após uma falha de renderer no macOS). Nesse caso
+  // a segunda instância e o clique no Dock precisam recriar a janela, em vez
+  // de apenas registrar que ela ainda não existe.
+  if ((!mainWindow || mainWindow.isDestroyed()) && appBootstrapped && app.isReady()) {
+    try {
+      createWindow();
+    } catch (error) {
+      console.error("[lifecycle] Falha ao recriar a janela principal:", error);
+      return false;
+    }
+  }
   if (!mainWindow || mainWindow.isDestroyed()) return false;
   if (mainWindow.isMinimized()) mainWindow.restore();
   mainWindow.show();
@@ -250,6 +272,10 @@ console.log("[LouvorJA] Runtime principal:", JSON.stringify({
 
 /** @type {BrowserWindow | null} */
 let mainWindow = null;
+let appBootstrapped = false;
+let isQuitting = false;
+/** @type {Electron.Tray | null} */
+let appTray = null;
 
 const MAIN_ERROR_QUEUE_PATH = path.join(paths.userData(), "telemetry-main-errors.json");
 
@@ -319,6 +345,53 @@ function revealMainWindow() {
   splash.close();
 }
 
+function _trayIconPath() {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, "app.asar.unpacked", "public", "ico", "favicon-32x32.png")
+    : path.join(__dirname, "..", "public", "ico", "favicon-32x32.png");
+}
+
+/**
+ * Mantém um caminho explícito para sair quando a janela principal está em
+ * segundo plano por causa de uma projeção. A bandeja é criada só no Windows:
+ * no macOS o Dock é o ponto nativo de reabertura e no Linux o gerenciador de
+ * janelas já oferece o item minimizado.
+ */
+function createAppTray() {
+  if (process.platform !== "win32" || appTray) return;
+
+  try {
+    let icon = nativeImage.createFromPath(_trayIconPath());
+    if (icon.isEmpty()) icon = nativeImage.createEmpty();
+    appTray = new Tray(icon);
+    appTray.setToolTip("LouvorJA Violin");
+    appTray.setContextMenu(
+      Menu.buildFromTemplate([
+        { label: "Abrir LouvorJA Violin", click: () => focusMainWindow() },
+        { type: "separator" },
+        { label: "Encerrar LouvorJA Violin", click: () => quitApplication() },
+      ])
+    );
+    appTray.on("click", () => focusMainWindow());
+    appTray.on("double-click", () => focusMainWindow());
+    console.info("[lifecycle] Bandeja do Windows criada.");
+  } catch (error) {
+    // A bandeja é um mecanismo de recuperação, não pode impedir o app de
+    // iniciar caso o shell não aceite o ícone ou o ambiente não tenha tray.
+    appTray = null;
+    console.warn("[lifecycle] Bandeja do Windows indisponível:", error?.message || error);
+  }
+}
+
+function quitApplication() {
+  isQuitting = true;
+  console.info("[lifecycle] Encerramento solicitado pela bandeja.");
+  try { windowFactory.closeAll(); } catch (error) {
+    console.warn("[lifecycle] Falha ao fechar projeções antes de sair:", error?.message || error);
+  }
+  app.quit();
+}
+
 // ---------------------------------------------------------------------------
 // Inicialização da janela principal
 // ---------------------------------------------------------------------------
@@ -340,6 +413,23 @@ function createWindow() {
   }
 
   mainWindow = createMainWindow(DEV_URL, prodHtmlPath, preloadPath);
+
+  // Fechar a janela principal durante uma projeção não pode destruir a fonte
+  // de estado que alimenta as janelas auxiliares. No Windows mantemos o item
+  // visível na barra de tarefas; no macOS escondemos a janela para preservar o
+  // comportamento esperado do Dock. O menu da bandeja oferece o encerramento
+  // real quando o operador terminar o culto.
+  mainWindow.on("close", (event) => {
+    if (isQuitting) return;
+    const projections = windowFactory.listOpen();
+    if (!projections.length) return;
+
+    event.preventDefault();
+    if (process.platform === "darwin") mainWindow.hide();
+    else if (!mainWindow.isMinimized()) mainWindow.minimize();
+    console.info("[lifecycle] Janela principal mantida em segundo plano:", projections);
+  });
+
   mainWindow.webContents.on("render-process-gone", (_event, details) => {
     reportMainProcessError(
       "electron.render_process_gone",
@@ -368,8 +458,24 @@ function createWindow() {
   }
 
   mainWindow.on("closed", () => {
+    const projections = windowFactory.listOpen();
     mainWindow = null;
     try { httpServer.setMainWindow(null); } catch (_) { /* noop */ }
+    try { windowFactory.setMainWindow(null); } catch (_) { /* noop */ }
+
+    // Se o sistema fechar a janela sem entregar o evento cancelável (por
+    // exemplo, uma falha do renderer ou encerramento pelo shell), não deixe
+    // as projeções órfãs nem o lock de instância sem uma janela recuperável.
+    if (!isQuitting && projections.length && app.isReady()) {
+      console.warn("[lifecycle] Janela principal fechada durante projeção; recriando.", projections);
+      setTimeout(() => {
+        if (!isQuitting && !mainWindow) {
+          try { createWindow(); } catch (error) {
+            console.error("[lifecycle] Falha ao recuperar janela principal:", error);
+          }
+        }
+      }, 100);
+    }
   });
 
   // D6 — Registrar janela principal no módulo de atalhos globais
@@ -653,12 +759,16 @@ app.whenReady().then(async () => {
   }
 
   createWindow();
+  appBootstrapped = true;
+  createAppTray();
   // A janela principal já se registra no HTTP server dentro de createWindow().
 
-  // macOS: reabrir janela quando o ícone do dock for clicado
+  // macOS: reabrir janela quando o ícone do dock for clicado. Não usamos
+  // getAllWindows() aqui: uma projeção aberta conta como janela e deixava o
+  // Dock sem recriar a janela principal.
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
+    if (!focusMainWindow()) {
+      console.warn("[lifecycle] activate sem janela principal disponível.");
     }
   });
 
@@ -701,6 +811,10 @@ app.on("window-all-closed", () => {
 
 // D5 — Parar servidor HTTP antes de quit
 app.on("before-quit", async () => {
+  // O listener de close da janela principal usa esta flag para diferenciar um
+  // encerramento explícito de um clique acidental no X durante projeção.
+  isQuitting = true;
+
   // Sincronizar _userDataMain em disco ANTES de sair.
   // Garante que mudanças feitas no últimosMilissegundos (ex: adicionar favorito e sair)
   // sejam persistidas. Sem isso, mudanças via IPC async podem ser perdidas se o app
@@ -730,6 +844,10 @@ app.on("before-quit", async () => {
 app.on("will-quit", () => {
   shortcuts.disable();
   powerBlocker.stop();
+  if (appTray) {
+    try { appTray.destroy(); } catch (_) { /* ignore */ }
+    appTray = null;
+  }
 });
 
 // ---------------------------------------------------------------------------

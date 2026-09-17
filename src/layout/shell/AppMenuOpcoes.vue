@@ -73,6 +73,17 @@
           <span>{{ $t("options.general.start_with_os") }}</span>
         </label>
       </div>
+      <div v-if="isDesktop" class="opt-row opt-row--col">
+        <label class="opt-checkbox">
+          <input
+            type="checkbox"
+            :checked="getUserData(KEYS.OPTIONS.CLOCK_PROJECTION_ON_BOOT, false)"
+            @change="saveUserData(KEYS.OPTIONS.CLOCK_PROJECTION_ON_BOOT, $c($event))"
+          />
+          <span>{{ $t("options.general.clock_projection_on_boot") }}</span>
+        </label>
+        <p class="opt-hint">{{ $t("options.general.clock_projection_on_boot_hint") }}</p>
+      </div>
       <div class="opt-bg">
         <div class="opt-bg-fields">
           <div class="opt-row">

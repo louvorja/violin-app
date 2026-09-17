@@ -157,6 +157,8 @@
       "font": "Fuente de la interfaz:",
       "projection_font": "Fuente de Proyección:",
       "start_with_os": "Iniciar con el sistema operativo",
+      "clock_projection_on_boot": "Proyectar el reloj al iniciar",
+      "clock_projection_on_boot_hint": "Abre el reloj en pantalla completa en el monitor de retorno al iniciar el programa.",
       "themes": {
         "light": "Claro",
         "dark": "Oscuro",

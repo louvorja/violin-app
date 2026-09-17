@@ -287,6 +287,8 @@ export const KEYS = {
     STORAGE_QUOTA_GB: `${OPTIONS}.storage_quota_gb`,
     OPEN_RETURN: `${OPTIONS}.open_return`,
     OPEN_OPERATOR: `${OPTIONS}.open_operator`,
+    /** Abre a projeção independente do relógio ao iniciar o desktop. */
+    CLOCK_PROJECTION_ON_BOOT: `${OPTIONS}.clock_projection_on_boot`,
     DISPLAYS: {
       PREFERRED: `${OPTIONS_DISPLAYS}.monitor_preferred`,
       /** Papel de monitor escolhido por módulo (web/PWA; no desktop vive em roles). */

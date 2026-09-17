@@ -50,6 +50,10 @@ const FEATURE_GROUP: Record<string, "presentation" | "return"> = {
   timer: "presentation",
   // Stage display / monitor de retorno (visível ao músico/operador)
   clock: "return",
+  // A tela de relógio independente usada no boot mantém a mesma escolha do
+  // monitor de retorno, sem depender de um módulo Clock montado na janela
+  // principal.
+  clock_fullscreen: "return",
 };
 
 const GROUP_TO_FEATURE = {
