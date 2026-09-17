@@ -247,19 +247,29 @@ async function probePostHog(): Promise<void> {
       thirdParty: true,
       signal: controller?.signal,
     });
+    const methodRejectedAsExpected = [400, 405, 415].includes(response.status);
     // GET em /e/ pode responder 404/405 por método, mas isso já prova que o
     // host e o CORS foram alcançados; só a exceção indica bloqueio de rede.
-    diagnostic("info", "probe do endpoint PostHog respondeu", {
+    diagnostic(
+      "info",
+      methodRejectedAsExpected
+        ? "probe PostHog alcançou o endpoint (GET rejeitado como esperado)"
+        : "probe do endpoint PostHog respondeu",
+      {
       status: response.status,
       ok: response.ok,
       reachable: true,
-      // /e/ aceita POST; um GET de diagnóstico costuma responder 400/404/405
+      probe_method: "GET",
+      expected_ingestion_method: "POST",
+      method_probe_expected_rejection: methodRejectedAsExpected,
+      // /e/ aceita POST; um GET de diagnóstico costuma responder 400/405/415
       // e ainda assim confirma que DNS, TLS, proxy e CSP chegaram ao host.
       method_probe_accepted: response.ok,
       duration_ms: Date.now() - startedAt,
       online: typeof navigator !== "undefined" ? navigator.onLine : undefined,
       access_control_allow_origin: response.headers?.get("access-control-allow-origin") || undefined,
-    });
+      },
+    );
   } catch (error) {
     diagnostic("warn", "endpoint PostHog inacessível", {
       error: error instanceof Error ? error.message : String(error),
@@ -822,7 +832,12 @@ async function flushPendingMainErrors(): Promise<void> {
       });
       if (typeof data.id === "string") await api.ackMainError?.(data.id);
     }
-    if (pending.length > 0) diagnostic("info", "erros persistidos do processo principal enviados", { count: pending.length });
+    if (pending.length > 0) {
+      diagnostic("info", "erros persistidos do processo principal encaminhados ao SDK", {
+        count: pending.length,
+        capture_requested: pending.length,
+      });
+    }
   } catch (error) {
     diagnostic("warn", "falha ao recuperar erros persistidos do processo principal", {
       error: error instanceof Error ? error.message : String(error),
@@ -860,7 +875,7 @@ function scheduleDomDiagnostic(posthog: PostHog): void {
 
 installGlobalHandlers();
 setNetworkTimingReporter((timing) => {
-  if (timing.source === "posthog-probe") return;
+  if (timing.source === "posthog-probe" || !timing.remote) return;
   track("network_request", { ...timing });
 });
 
