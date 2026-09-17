@@ -122,6 +122,12 @@ function diagnostic(level: DiagnosticLevel, message: string, details: Record<str
     // O console pode ser substituído por um host de teste ou por uma extensão.
   }
   try {
+    const logger = (_ph as PostHogWithLogs | null)?.logger?.[level];
+    logger?.(safeMessage, safeDetails);
+  } catch {
+    // Logs estruturados são best-effort e não podem impedir o bootstrap.
+  }
+  try {
     if (typeof window !== "undefined") {
       window.louvorjaApi?.telemetry?.log?.({ level, message: safeMessage, details: safeDetails });
     }
