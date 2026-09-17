@@ -139,6 +139,7 @@ onBeforeUnmount(() => {
 });
 
 async function loadData() {
+  const LOAD_TIMEOUT_MS = 30_000;
   const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
   const reportLoad = (outcome, extra = {}) => {
     const durationMs = Math.max(
@@ -162,9 +163,16 @@ async function loadData() {
   data.value = [];
   error.value = null;
   loading.value = true;
+  let loadTimeout;
 
   try {
-    all_data.value = await Database.get(props.file);
+    const timeout = new Promise((_, reject) => {
+      loadTimeout = setTimeout(
+        () => reject(new Error(`DataTable load timeout: ${props.file || "unknown"}`)),
+        LOAD_TIMEOUT_MS
+      );
+    });
+    all_data.value = await Promise.race([Database.get(props.file), timeout]);
 
     if (all_data.value == null) {
       error.value = t("components.datatable.alerts.not_found");
@@ -184,14 +192,17 @@ async function loadData() {
     });
   } catch (loadError) {
     error.value = t("components.datatable.alerts.not_found");
-    reportLoad("error", {
-      error: loadError instanceof Error ? loadError.message : String(loadError),
+    const errorMessage = loadError instanceof Error ? loadError.message : String(loadError);
+    const outcome = errorMessage.includes("load timeout") ? "timeout" : "error";
+    reportLoad(outcome, {
+      error: errorMessage,
     });
     Telemetry.captureException(loadError, {
       source: "data_table.load",
       table_file: props.file || "unknown",
     });
   } finally {
+    if (loadTimeout) clearTimeout(loadTimeout);
     loading.value = false;
   }
 }

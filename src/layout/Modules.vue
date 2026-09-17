@@ -14,6 +14,7 @@
 import { defineAsyncComponent, computed, type Component } from "vue";
 import $appdata from "@/helpers/AppData";
 import $modules from "@/helpers/Modules";
+import Telemetry from "@/helpers/Telemetry";
 
 interface ModuleState {
   id: string;
@@ -42,6 +43,11 @@ function buildAsyncComponent(moduleId: string): Component {
     },
     onError(err, _retry, fail) {
       console.error(`[Modules] erro ao carregar "${moduleId}":`, err);
+      Telemetry.captureException(err, { source: "module_async_load", module_id: moduleId });
+      Telemetry.track("module_load_failed", {
+        module_id: moduleId,
+        reason: err instanceof Error ? err.name : "unknown",
+      });
       fail();
     },
     delay: 0,

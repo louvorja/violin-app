@@ -66,10 +66,50 @@ app.use(createPinia());
 app.use(router);
 app.use(VueFullscreen);
 app.directive("requires-network", requiresNetwork);
+const _routeStartedAt = new Map();
+router.beforeEach((to) => {
+  const key = to.fullPath;
+  const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
+  const timeout = setTimeout(() => {
+    if (!_routeStartedAt.has(key)) return;
+    Telemetry.log("warn", "route transition timeout", {
+      to: to.name || to.path,
+      timeout_ms: 10000,
+    });
+    Telemetry.track("route_transition_timeout", { to: to.name || to.path, timeout_ms: 10000 });
+  }, 10000);
+  _routeStartedAt.set(key, { startedAt, timeout });
+  Telemetry.track("route_transition_started", { to: to.name || to.path });
+});
 router.afterEach((to, from) => {
   Telemetry.track("route_changed", {
     to: to.name || to.path,
     from: from.name || from.path,
+  });
+  const entry = _routeStartedAt.get(to.fullPath);
+  if (!entry) return;
+  clearTimeout(entry.timeout);
+  const durationMs = Math.max(
+    0,
+    Math.round(
+      (typeof performance !== "undefined" ? performance.now() : Date.now()) - entry.startedAt
+    )
+  );
+  Telemetry.track("route_transition_completed", {
+    to: to.name || to.path,
+    from: from.name || from.path,
+    duration_ms: durationMs,
+  });
+  Telemetry.histogram("louvorja.route.transition.duration", durationMs, {
+    route: String(to.name || to.path),
+  });
+  _routeStartedAt.delete(to.fullPath);
+});
+router.onError((error, to, from) => {
+  Telemetry.captureException(error, {
+    source: "router",
+    to: to?.fullPath || to?.path,
+    from: from?.fullPath || from?.path,
   });
 });
 
