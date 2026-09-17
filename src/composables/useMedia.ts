@@ -156,6 +156,11 @@ function _loadAudioSrc(
       requestTelemetry({ id_music: idCheck, source_type: _sourceType(audioUrl) })
     );
     onSource(audioUrl, true);
+    console.info("[Media] arquivo direto em streaming:", {
+      kind: $appdata.get(KEYS.MODULES.MEDIA.CONFIG.VIDEO_FILE, false) ? "video" : "audio",
+      source_type: _sourceType(audioUrl),
+      id_music: idCheck,
+    });
     return;
   }
 
@@ -227,7 +232,14 @@ function _loadAudioSrc(
         })
       );
       if (ehRemota(audioUrl)) reportNetworkResult(true, "media");
-      onSource(URL.createObjectURL(this.response as Blob), false);
+      const sourceUrl = URL.createObjectURL(this.response as Blob);
+      onSource(sourceUrl, false);
+      console.info("[Media] arquivo direto transferido:", {
+        source_type: _sourceType(audioUrl),
+        bytes: this.response.size,
+        content_type: this.response.type || "unknown",
+        elapsed_ms: elapsed,
+      });
     } else {
       Telemetry.histogram("louvorja.music.audio.load.duration", elapsed, {
         outcome: "invalid_response",

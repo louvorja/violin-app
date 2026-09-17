@@ -225,6 +225,14 @@ function onVideoReady(): void {
   const el = videoRef.value;
   if (!el) return;
   videoFailed.value = false;
+  console.info("[FileProjection] vídeo pronto:", {
+    playback_id: fileProjection.playback_id,
+    duration: Number.isFinite(el.duration) ? Number(el.duration.toFixed(3)) : 0,
+    width: el.videoWidth,
+    height: el.videoHeight,
+    ready_state: el.readyState,
+    network_state: el.networkState,
+  });
   Telemetry.track("file_projection_video_ready", {
     playback_id: fileProjection.playback_id,
     duration: Number.isFinite(el.duration) ? el.duration : 0,
@@ -235,6 +243,11 @@ function onVideoReady(): void {
 }
 
 function onVideoPlaying(): void {
+  const el = videoRef.value;
+  console.info("[FileProjection] vídeo reproduzindo:", {
+    playback_id: fileProjection.playback_id,
+    current_time: el && Number.isFinite(el.currentTime) ? Number(el.currentTime.toFixed(3)) : 0,
+  });
   Telemetry.track("file_projection_video_playing", {
     playback_id: fileProjection.playback_id,
   });
@@ -242,6 +255,13 @@ function onVideoPlaying(): void {
 
 function onVideoBuffering(event: Event): void {
   const el = event.currentTarget as HTMLVideoElement | null;
+  console.warn("[FileProjection] vídeo aguardando dados:", {
+    playback_id: fileProjection.playback_id,
+    trigger: event.type,
+    current_time: el && Number.isFinite(el.currentTime) ? Number(el.currentTime.toFixed(3)) : 0,
+    ready_state: el?.readyState,
+    network_state: el?.networkState,
+  });
   Telemetry.log("warn", "file projection video buffering", {
     playback_id: fileProjection.playback_id,
     trigger: event.type,
