@@ -40,6 +40,7 @@ export default {
     }
     $dev.write("open", id);
     const wasVisible = $appdata.get(`modules.${id}.show`, false) === true;
+    if (!wasVisible) Telemetry.markStart("module.open", id, { module_id: id });
 
     $appdata.set(`modules.${id}.show`, true);
     $appdata.set("active_module", id);

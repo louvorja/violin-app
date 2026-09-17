@@ -36,6 +36,7 @@ let _nativeAutocaptureActive = false;
 const _pendingExceptions: Array<{ error: unknown; properties?: Record<string, unknown> }> = [];
 const _pendingEvents: Array<{ event: string; properties: Record<string, unknown> }> = [];
 const _pendingMetrics: Array<{ name: string; value: number; attributes: MetricAttributes }> = [];
+const _pendingSpans = new Map<string, PerformanceSpan>();
 const _breadcrumbs: Array<{ at: string; event: string; properties?: Record<string, unknown> }> = [];
 const MAX_BREADCRUMBS = 150;
 const MAX_PROPERTY_DEPTH = 6;
@@ -532,6 +533,25 @@ export function startPerformance(
   };
 }
 
+export function markStart(
+  name: string,
+  key: string,
+  properties: Record<string, unknown> = {}
+): void {
+  _pendingSpans.set(`${name}:${key}`, startPerformance(name, properties));
+}
+
+export function markEnd(
+  name: string,
+  key: string,
+  properties: Record<string, unknown> = {}
+): number | null {
+  const span = _pendingSpans.get(`${name}:${key}`);
+  if (!span) return null;
+  _pendingSpans.delete(`${name}:${key}`);
+  return finishPerformance(span, properties);
+}
+
 /** Registra uma medição agregável no PostHog e devolve a duração em milissegundos. */
 export function finishPerformance(
   span: PerformanceSpan,
@@ -769,6 +789,7 @@ export function setEnabled(enabled: boolean): void {
     _pendingExceptions.length = 0;
     _pendingEvents.length = 0;
     _pendingMetrics.length = 0;
+    _pendingSpans.clear();
     _ph?.stopSessionRecording();
     _ph?.opt_out_capturing();
     return;
@@ -1198,6 +1219,8 @@ export default {
   log,
   startPerformance,
   finishPerformance,
+  markStart,
+  markEnd,
   histogram,
   installVueErrorHandler,
 };

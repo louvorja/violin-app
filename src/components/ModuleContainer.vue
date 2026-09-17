@@ -189,6 +189,10 @@ function observeEmbeddedContent() {
 onMounted(() => {
   if (moduleId.value) {
     AppData.set(`modules.${moduleId.value}.popup`, props.popup);
+    Telemetry.markEnd("module.open", moduleId.value, {
+      module_id: moduleId.value,
+      popup: props.popup,
+    });
   }
   if (!props.popup) observeEmbeddedContent();
   const durationMs = Math.max(
