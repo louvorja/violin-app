@@ -320,13 +320,18 @@ export async function open(opts: OpenOptions): Promise<void> {
   const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
   const elapsed = () => Math.max(0, Math.round((typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt));
   const report = (outcome: string, extra: Record<string, unknown> = {}) => {
+    const durationMs = elapsed();
     Telemetry.track("projection_window_opened", {
       feature: opts.feature,
       route: opts.route,
       target: Platform.isDesktop ? "electron" : "web",
       outcome,
-      duration_ms: elapsed(),
+      duration_ms: durationMs,
       ...extra,
+    });
+    Telemetry.histogram("louvorja.projection.open.duration", durationMs, {
+      feature: opts.feature,
+      outcome,
     });
   };
 

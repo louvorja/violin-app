@@ -3,6 +3,7 @@ import $dev from "@/helpers/Dev";
 import $appdata from "@/helpers/AppData";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
+import Telemetry from "@/helpers/Telemetry";
 
 /**
  * Modules — runtime de módulos (open / close / query).
@@ -38,9 +39,11 @@ export default {
       return;
     }
     $dev.write("open", id);
+    const wasVisible = $appdata.get(`modules.${id}.show`, false) === true;
 
     $appdata.set(`modules.${id}.show`, true);
     $appdata.set("active_module", id);
+    Telemetry.track(wasVisible ? "module_focused" : "module_opened", { module_id: id });
 
     // Track tab opening order (first opened = leftmost).
     // Ordem ESTÁVEL: focar/reabrir um módulo não o move para o fim;
@@ -78,6 +81,7 @@ export default {
 
       $appdata.set("active_module", next?.id || null);
     }
+    Telemetry.track("module_closed", { module_id: id });
   },
 
   /**

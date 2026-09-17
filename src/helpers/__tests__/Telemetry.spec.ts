@@ -16,6 +16,7 @@ const posthog = {
     fatal: vi.fn(),
   },
   captureLog: vi.fn(),
+  metrics: { histogram: vi.fn() },
   sessionRecordingStarted: vi.fn(() => true),
   startSessionRecording: vi.fn(),
   stopSessionRecording: vi.fn(),
@@ -84,6 +85,10 @@ describe("Telemetry", () => {
         rageclick: true,
         enable_recording_console_log: true,
         session_recording: expect.objectContaining({ recordHeaders: false, recordBody: false }),
+        metrics: expect.objectContaining({
+          serviceName: "louvorja-violin",
+          network: expect.objectContaining({ name: "louvorja.http.client.duration" }),
+        }),
         tracing_headers: [],
       }),
     );
@@ -297,6 +302,19 @@ describe("Telemetry", () => {
     expect(posthog.logger.warn).toHaveBeenCalledWith(
       "music media buffering",
       expect.objectContaining({ playback_id: "p-1", nested: { stage: "waiting" } }),
+    );
+  });
+
+  it("envia histogramas de performance com dimensões de baixa cardinalidade", async () => {
+    const Telemetry = await loadTelemetry();
+    await Telemetry.init();
+
+    Telemetry.histogram("louvorja.test.duration", 123, { window_role: "main" });
+
+    expect(posthog.metrics.histogram).toHaveBeenCalledWith(
+      "louvorja.test.duration",
+      123,
+      { unit: "ms", attributes: { window_role: "main" } },
     );
   });
 

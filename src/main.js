@@ -249,11 +249,13 @@ const _bootStartedAt = typeof performance !== "undefined" ? performance.now() : 
 
 function _bootStage(stage, properties = {}) {
   const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+  const durationMs = Math.max(0, Math.round(now - _bootStartedAt));
   Telemetry.track("app_boot_stage", {
     stage,
-    duration_ms: Math.max(0, Math.round(now - _bootStartedAt)),
+    duration_ms: durationMs,
     ...properties,
   });
+  Telemetry.histogram("louvorja.boot.stage.duration", durationMs, { stage });
 }
 
 $storage.hydrate().then(async () => {

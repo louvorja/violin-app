@@ -69,11 +69,15 @@ export function useProjectionState(): ProjectionStateReturn {
     totalSlides.value = (p.total_slides as number) ?? (p.last_slide as number) ?? 0;
 
     if (typeof p._ts === "number") {
+      const latencyMs = Math.max(0, Date.now() - p._ts);
       Telemetry.track("projection_broadcast_received", {
         broadcast_type: BROADCAST_TYPE.SLIDE_CHANGE,
         slide_index: p.slide_index,
         playback_id: p.playback_id,
-        latency_ms: Math.max(0, Date.now() - p._ts),
+        latency_ms: latencyMs,
+      });
+      Telemetry.histogram("louvorja.projection.broadcast.latency", latencyMs, {
+        window_role: "auxiliary",
       });
     }
     if (import.meta.env.DEV && typeof p._ts === "number") {

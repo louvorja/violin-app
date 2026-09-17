@@ -27,6 +27,7 @@ let _installed = false;
 let _nativeAutocaptureActive = false;
 const _pendingExceptions: Array<{ error: unknown; properties?: Record<string, unknown> }> = [];
 const _pendingEvents: Array<{ event: string; properties: Record<string, unknown> }> = [];
+const _pendingMetrics: Array<{ name: string; value: number; attributes: MetricAttributes }> = [];
 const _breadcrumbs: Array<{ at: string; event: string; properties?: Record<string, unknown> }> = [];
 const MAX_BREADCRUMBS = 150;
 const MAX_PROPERTY_DEPTH = 6;
@@ -46,6 +47,13 @@ type PostHogWithLogs = PostHog & {
     level: LogLevel;
     attributes?: Record<string, unknown>;
   }) => void;
+};
+
+type MetricAttributes = Record<string, string | number | boolean>;
+type PostHogWithMetrics = PostHog & {
+  metrics?: {
+    histogram: (name: string, value: number, options?: { unit?: string; attributes?: MetricAttributes }) => void;
+  };
 };
 
 type PostHogWithReplay = PostHog & {
@@ -136,6 +144,31 @@ function diagnostic(level: DiagnosticLevel, message: string, details: Record<str
   }
 }
 
+/**
+ * Diagnósticos de transporte não passam pelo logger do próprio PostHog:
+ * registrar a resposta de `/e/` pelo logger criaria outra requisição e
+ * poderia esconder um loop de falha. O terminal continua recebendo a linha
+ * pelo mesmo canal IPC, mas este helper é deliberadamente local.
+ */
+function transportDiagnostic(level: DiagnosticLevel, message: string, details: Record<string, unknown> = {}): void {
+  const safeMessage = sanitizeString(message);
+  const safeDetails = serializableProperties(details);
+  try {
+    const logger = (console as unknown as Record<DiagnosticLevel, (...args: unknown[]) => void>)[level]
+      || console.info;
+    logger(`[Telemetry] ${safeMessage}`, safeDetails);
+  } catch {
+    // O diagnóstico nunca pode interferir no envio nem no fluxo da aplicação.
+  }
+  try {
+    if (typeof window !== "undefined") {
+      window.louvorjaApi?.telemetry?.log?.({ level, message: safeMessage, details: safeDetails });
+    }
+  } catch {
+    // O processo principal pode não estar disponível em testes ou no PWA.
+  }
+}
+
 function idSuffix(value: unknown): string | undefined {
   if (typeof value !== "string" || !value) return undefined;
   return value.length > 8 ? `…${value.slice(-8)}` : value;
@@ -202,6 +235,15 @@ function errorProperties(error: unknown): Record<string, unknown> {
     return { name: error.name, message: sanitizeString(error.message), stack: error.stack ? sanitizeString(error.stack) : undefined };
   }
   return { message: sanitizeString(String(error)) };
+}
+
+function replayLinkProperties(): Record<string, unknown> {
+  try {
+    const url = _ph?.get_session_replay_url?.({ withTimestamp: true, timestampLookBack: 30 });
+    return typeof url === "string" && url ? { replay_url: url } : {};
+  } catch {
+    return {};
+  }
 }
 
 function isSessionRecordingStarted(posthog: PostHogWithReplay): boolean {
@@ -281,6 +323,95 @@ async function probePostHog(): Promise<void> {
   }
 }
 
+function requestUrl(input: Parameters<NonNullable<typeof globalThis.fetch>>[0]): string {
+  if (typeof input === "string") return input;
+  if (input instanceof URL) return input.toString();
+  if (typeof Request !== "undefined" && input instanceof Request) return input.url;
+  return "";
+}
+
+function requestPath(url: string): string {
+  try {
+    return new URL(url).pathname || "/";
+  } catch {
+    return "unknown";
+  }
+}
+
+function isPostHogIngestionRequest(url: string): boolean {
+  const path = requestPath(url);
+  return path.endsWith("/e/") || path.endsWith("/e");
+}
+
+/**
+ * O SDK captura `fetch` quando o módulo é carregado. Envolver apenas durante
+ * o import dinâmico faz o próprio transporte do PostHog reportar respostas
+ * 2xx e falhas de rede, sem trocar o fetch da aplicação nem depender de APIs
+ * internas instáveis do SDK.
+ */
+async function importPostHogWithTransportDiagnostics(): Promise<typeof import("posthog-js")> {
+  const originalFetch = globalThis.fetch;
+  if (typeof originalFetch !== "function") return import("posthog-js");
+
+  type Fetch = NonNullable<typeof globalThis.fetch>;
+  const wrappedFetch = ((input: Parameters<Fetch>[0], init?: Parameters<Fetch>[1]) => {
+    const url = requestUrl(input);
+    if (!isPostHogIngestionRequest(url)) return originalFetch.call(globalThis, input, init);
+    const startedAt = Date.now();
+    const method = typeof init?.method === "string" ? init.method : "GET";
+    try {
+      return originalFetch.call(globalThis, input, init).then(
+        (response) => {
+          const status = response.status;
+          transportDiagnostic(
+            status >= 200 && status < 300 ? "info" : "warn",
+            status >= 200 && status < 300
+              ? "PostHog aceitou o lote de eventos"
+              : "PostHog rejeitou o lote de eventos",
+            {
+              endpoint: requestPath(url),
+              method,
+              status,
+              accepted: status >= 200 && status < 300,
+              duration_ms: Date.now() - startedAt,
+            },
+          );
+          return response;
+        },
+        (error) => {
+          transportDiagnostic("warn", "falha de rede ao enviar lote ao PostHog", {
+            endpoint: requestPath(url),
+            method,
+            status: 0,
+            accepted: false,
+            duration_ms: Date.now() - startedAt,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          throw error;
+        },
+      );
+    } catch (error) {
+      transportDiagnostic("warn", "falha síncrona ao enviar lote ao PostHog", {
+        endpoint: requestPath(url),
+        method,
+        status: 0,
+        accepted: false,
+        duration_ms: Date.now() - startedAt,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  }) as Fetch;
+
+  globalThis.fetch = wrappedFetch;
+  try {
+    return await import("posthog-js");
+  } finally {
+    // Não altere o fetch do produto depois que o SDK capturou a referência.
+    if (globalThis.fetch === wrappedFetch) globalThis.fetch = originalFetch;
+  }
+}
+
 /**
  * Cria um Error novo antes de entregar a exceção ao SDK.
  *
@@ -330,6 +461,7 @@ export function captureException(error: unknown, properties: Record<string, unkn
   const enriched = {
     ...baseContext(),
     ...errorProperties(sanitized),
+    ...replayLinkProperties(),
     ...serializableProperties(properties),
     breadcrumbs: _breadcrumbs.slice(-50),
   };
@@ -352,7 +484,32 @@ export function finishPerformance(span: PerformanceSpan, properties: Record<stri
     ...(span.properties || {}),
     ...properties,
   });
+  histogram(`louvorja.performance.${span.name}.duration`, durationMs, {
+    window_role: windowRole(),
+    ...(span.properties || {}),
+  });
   return durationMs;
+}
+
+/** Registra um histograma agregado, sem colocar ids/URLs de alta cardinalidade nas séries. */
+export function histogram(name: string, value: number, attributes: MetricAttributes = {}): void {
+  if (!isEnabled() || !Number.isFinite(value)) return;
+  const safeName = name.replace(/[^a-zA-Z0-9_.-]/g, "_").slice(0, 120);
+  const safeAttributes = Object.fromEntries(
+    Object.entries(attributes).filter(([, item]) =>
+      ["string", "number", "boolean"].includes(typeof item)
+    )
+  ) as MetricAttributes;
+  const metrics = (_ph as PostHogWithMetrics | null)?.metrics;
+  if (metrics?.histogram) {
+    try {
+      metrics.histogram(safeName, value, { unit: "ms", attributes: safeAttributes });
+      return;
+    } catch {
+      // Métricas são best-effort; o evento detalhado continua sendo enviado.
+    }
+  }
+  if (_pendingMetrics.length < 100) _pendingMetrics.push({ name: safeName, value, attributes: safeAttributes });
 }
 
 /**
@@ -453,6 +610,18 @@ function windowFeature(): string {
   return route.replace(/^\//, "").split("/")[0] || "main";
 }
 
+function networkMetricPath(url: string): string {
+  try {
+    const pathname = new URL(url).pathname || "/";
+    return pathname
+      .replace(/\b[0-9a-f]{8,}\b/gi, ":id")
+      .replace(/\/\d+(?=\/|$)/g, "/:id")
+      .slice(0, 120);
+  } catch {
+    return "unknown";
+  }
+}
+
 function osName(): string {
   if (Platform.isDesktop) return Platform.platform ?? "unknown";
   const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
@@ -523,6 +692,7 @@ export function setEnabled(enabled: boolean): void {
     _breadcrumbs.length = 0;
     _pendingExceptions.length = 0;
     _pendingEvents.length = 0;
+    _pendingMetrics.length = 0;
     _ph?.stopSessionRecording();
     _ph?.opt_out_capturing();
     return;
@@ -592,7 +762,7 @@ export async function init(): Promise<void> {
 }
 
 async function _init(): Promise<void> {
-  const { default: posthog } = await import("posthog-js");
+  const { default: posthog } = await importPostHogWithTransportDiagnostics();
   const version = (await appVersion()) || "unknown";
   _appVersion = version;
   const sdkVersion =
@@ -690,6 +860,22 @@ async function _init(): Promise<void> {
         attributes: record.attributes ? (serializableProperties(record.attributes) as LogAttributes) : undefined,
       }),
     },
+    metrics: {
+      serviceName: "louvorja-violin",
+      environment: import.meta.env.MODE || "unknown",
+      serviceVersion: version,
+      // A extensão Metrics agrega histogramas no cliente antes de enviar,
+      // evitando um evento por requisição e mantendo as séries consultáveis.
+      network: {
+        name: "louvorja.http.client.duration",
+        attributes: (request, response) => ({
+          route: networkMetricPath(request.url),
+          method: request.method,
+          status_class: response.status == null ? "missing" : `${Math.floor(response.status / 100)}xx`,
+          window_role: windowRole(),
+        }),
+      },
+    },
     // Não enviar os headers opcionais de tracing para a API do produto. O
     // Worker público não os lista no Access-Control-Allow-Headers; no Electron
     // isso transformava cada GET do banco em preflight rejeitado por CORS.
@@ -759,6 +945,14 @@ async function _init(): Promise<void> {
   for (const pending of pendingEvents) posthog.capture(pending.event, pending.properties);
   if (pendingEvents.length > 0) {
     diagnostic("debug", "eventos pendentes enviados após init", { count: pendingEvents.length });
+  }
+  const metrics = (posthog as PostHogWithMetrics).metrics;
+  if (metrics?.histogram && _pendingMetrics.length > 0) {
+    const pendingMetrics = _pendingMetrics.splice(0);
+    for (const pending of pendingMetrics) {
+      metrics.histogram(pending.name, pending.value, { unit: "ms", attributes: pending.attributes });
+    }
+    diagnostic("debug", "métricas pendentes enviadas após init", { count: pendingMetrics.length });
   }
   const replayReady = isSessionRecordingStarted(posthog);
   const appOpened = posthog.capture("app_opened", {
@@ -877,6 +1071,11 @@ installGlobalHandlers();
 setNetworkTimingReporter((timing) => {
   if (timing.source === "posthog-probe" || !timing.remote) return;
   track("network_request", { ...timing });
+  histogram("louvorja.http.client.duration", timing.duration_ms, {
+    source: timing.source,
+    outcome: timing.outcome,
+    window_role: windowRole(),
+  });
 });
 
 export default {
@@ -890,5 +1089,6 @@ export default {
   log,
   startPerformance,
   finishPerformance,
+  histogram,
   installVueErrorHandler,
 };
