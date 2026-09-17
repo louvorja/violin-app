@@ -486,7 +486,12 @@ export function useSlideStyle(): SlideStyleAPI {
     const sizePct = cfg.value.font_size_next;
     return {
       fontFamily: _baseFont(slide ?? null),
-      fontSize: `clamp(20px, ${sizePct}vh, 200px)`,
+      // O próximo slide vive no painel de retorno, que é um container de
+      // consulta menor que a viewport. Calcular em `vh` permite que duas
+      // linhas ultrapassem o painel e sejam cortadas pelo overflow.
+      // O fator 100/18 preserva a escala configurada historicamente, enquanto
+      // o teto reserva espaço para duas linhas de line-height 1.2.
+      fontSize: `clamp(14px, min(${sizePct * (100 / 18)}cqh, calc(41.6667cqh - 1px)), 120px)`,
       color: cfg.value.color_next,
       opacity: 0.85,
       fontWeight: 600,

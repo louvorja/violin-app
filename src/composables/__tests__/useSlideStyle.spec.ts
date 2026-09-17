@@ -70,6 +70,7 @@ describe("useSlideStyle — leitura das opções", () => {
   });
 
   it("limita o próximo slide a duas linhas dentro do painel de retorno", () => {
+    $userdata.set(K.CUSTOM_RETURN_TEXT_FORMAT, true);
     $userdata.set(K.FONT_SIZE_NEXT, 15);
 
     const style = useSlideStyle().nextStyle();
