@@ -11,6 +11,7 @@ import $dev from "@/helpers/Dev";
 import { DB_TABLE } from "@/constants/DbTables";
 import type { BundleProgress } from "@/types/Database";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
+import Telemetry from "@/helpers/Telemetry";
 import {
   API_URL,
   API_TOKEN,
@@ -89,7 +90,7 @@ function parseRemoteVersion(value: unknown): { version_number: number } | null {
 export default {
   async fetchBundle(
     onProgress?: (p: BundleProgress) => void,
-    signal?: AbortSignal,
+    signal?: AbortSignal
   ): Promise<ArrayBuffer> {
     abortCheck(signal);
     const res = await fetchWithTimeout(bundleUrl(), {
@@ -178,63 +179,127 @@ export default {
     signal?: AbortSignal;
   }): Promise<void> {
     const { version, onProgress, signal } = opts;
+    const installStartedAt = Date.now();
+    Telemetry.track("database_bundle_install_started", {
+      version: version ?? null,
+      force: opts.force === true,
+    });
 
-    abortCheck(signal);
-    onProgress?.({ phase: "download", current: 0, total: 1 });
-    const buffer = await this.fetchBundle(onProgress, signal);
+    try {
+      abortCheck(signal);
+      onProgress?.({ phase: "download", current: 0, total: 1 });
+      const downloadStartedAt = Date.now();
+      const buffer = await this.fetchBundle(onProgress, signal);
+      const downloadMs = Date.now() - downloadStartedAt;
+      Telemetry.track("database_bundle_stage_completed", {
+        stage: "download",
+        duration_ms: downloadMs,
+        bytes: buffer.byteLength,
+      });
+      Telemetry.histogram("louvorja.database.bundle.stage.duration", downloadMs, {
+        stage: "download",
+      });
 
-    abortCheck(signal);
-    const datasets = await this.extractBundle(buffer, onProgress, signal);
+      abortCheck(signal);
+      const extractStartedAt = Date.now();
+      const datasets = await this.extractBundle(buffer, onProgress, signal);
+      const extractMs = Date.now() - extractStartedAt;
+      Telemetry.track("database_bundle_stage_completed", {
+        stage: "extract",
+        duration_ms: extractMs,
+        datasets: datasets.size,
+      });
+      Telemetry.histogram("louvorja.database.bundle.stage.duration", extractMs, {
+        stage: "extract",
+      });
 
-    // Um ZIP vazio, HTML de portal cativo ou resposta de outro endpoint não
-    // pode limpar o catálogo já instalado. Valide a estrutura mínima antes de
-    // tocar no IndexedDB.
-    if (datasets.size === 0 || !datasets.has("config")) {
-      throw new Error("Bundle inválido: configuração do banco ausente");
-    }
+      // Um ZIP vazio, HTML de portal cativo ou resposta de outro endpoint não
+      // pode limpar o catálogo já instalado. Valide a estrutura mínima antes de
+      // tocar no IndexedDB.
+      if (datasets.size === 0 || !datasets.has("config")) {
+        throw new Error("Bundle inválido: configuração do banco ausente");
+      }
 
-    abortCheck(signal);
-    await clearBundleTables();
-    $dev.write("[BundleInstaller] Tabelas limpas");
+      abortCheck(signal);
+      await clearBundleTables();
+      $dev.write("[BundleInstaller] Tabelas limpas");
 
-    abortCheck(signal);
-    await this.injectBundle(datasets, onProgress, signal);
-    $dev.write("[BundleInstaller] Bundle injetado", `${datasets.size} datasets`);
+      abortCheck(signal);
+      const injectStartedAt = Date.now();
+      await this.injectBundle(datasets, onProgress, signal);
+      const injectMs = Date.now() - injectStartedAt;
+      Telemetry.track("database_bundle_stage_completed", {
+        stage: "inject",
+        duration_ms: injectMs,
+        datasets: datasets.size,
+      });
+      Telemetry.histogram("louvorja.database.bundle.stage.duration", injectMs, { stage: "inject" });
+      $dev.write("[BundleInstaller] Bundle injetado", `${datasets.size} datasets`);
 
-    // Grava marker confirmando instalação do bundle
-    // Usa a versão recebida como parâmetro (evita fetchRemoteConfig redundante)
-    let markerVersion = version ?? 0;
-    if (!markerVersion) {
-      try {
-        const remote = await this.fetchRemoteConfig();
-        markerVersion = remote?.version_number ?? 0;
-      } catch {
-        // Se fetchRemoteConfig falhar, tenta ler do config local
+      // Grava marker confirmando instalação do bundle
+      // Usa a versão recebida como parâmetro (evita fetchRemoteConfig redundante)
+      let markerVersion = version ?? 0;
+      if (!markerVersion) {
         try {
-          const localConfig = await $database.get<{ version_number?: number }>("config", { silent: true });
-          markerVersion = localConfig?.version_number ?? 0;
+          const remote = await this.fetchRemoteConfig();
+          markerVersion = remote?.version_number ?? 0;
         } catch {
-          // mantém 0
+          // Se fetchRemoteConfig falhar, tenta ler do config local
+          try {
+            const localConfig = await $database.get<{ version_number?: number }>("config", {
+              silent: true,
+            });
+            markerVersion = localConfig?.version_number ?? 0;
+          } catch {
+            // mantém 0
+          }
         }
       }
-    }
-    await $idb.put(DB_TABLE.CACHE, {
-      id: BUNDLE_MARKER_KEY,
-      data: {
+      await $idb.put(DB_TABLE.CACHE, {
         id: BUNDLE_MARKER_KEY,
-        version_number: markerVersion,
-        installed_at: new Date().toISOString(),
-      } satisfies BundleMarker,
-      ts: Date.now(),
-      v: import.meta.env.VITE_DB_VERSION || "",
-    });
-    $dev.write("[BundleInstaller] Marker gravado", `v${markerVersion}`);
+        data: {
+          id: BUNDLE_MARKER_KEY,
+          version_number: markerVersion,
+          installed_at: new Date().toISOString(),
+        } satisfies BundleMarker,
+        ts: Date.now(),
+        v: import.meta.env.VITE_DB_VERSION || "",
+      });
+      const totalMs = Date.now() - installStartedAt;
+      Telemetry.track("database_bundle_install_completed", {
+        version: markerVersion,
+        datasets: datasets.size,
+        duration_ms: totalMs,
+      });
+      Telemetry.histogram("louvorja.database.bundle.install.duration", totalMs, {
+        outcome: "completed",
+      });
+      $dev.write("[BundleInstaller] Marker gravado", `v${markerVersion}`);
+    } catch (error) {
+      const durationMs = Date.now() - installStartedAt;
+      Telemetry.captureException(error, {
+        source: "database_bundle_install",
+        version: version ?? null,
+      });
+      Telemetry.track("database_bundle_install_failed", {
+        version: version ?? null,
+        duration_ms: durationMs,
+        reason: error instanceof Error ? error.name : "unknown",
+      });
+      Telemetry.histogram("louvorja.database.bundle.install.duration", durationMs, {
+        outcome: "failed",
+      });
+      throw error;
+    }
   },
 
   /** Verifica se o bundle da versão informada já foi instalado. */
   async isBundleInstalled(expectedVersion: number): Promise<boolean> {
     try {
-      const row = await $idb.get<{ id: string; data: BundleMarker }>(DB_TABLE.CACHE, BUNDLE_MARKER_KEY);
+      const row = await $idb.get<{ id: string; data: BundleMarker }>(
+        DB_TABLE.CACHE,
+        BUNDLE_MARKER_KEY
+      );
       if (!row?.data) return false;
       return row.data.version_number === expectedVersion;
     } catch {
@@ -247,19 +312,28 @@ export default {
     try {
       const marker = await $idb.get<{ data?: { version_number?: unknown } }>(
         DB_TABLE.CACHE,
-        BUNDLE_MARKER_KEY,
+        BUNDLE_MARKER_KEY
       );
       const markerVersion = marker?.data?.version_number;
-      if (typeof markerVersion === "number" && Number.isFinite(markerVersion) && markerVersion >= 0) {
+      if (
+        typeof markerVersion === "number" &&
+        Number.isFinite(markerVersion) &&
+        markerVersion >= 0
+      ) {
         return markerVersion;
       }
 
       // Instalações anteriores ao marker ainda têm o dataset `config` no
       // cache normalizado/legado. Ler diretamente o IDB evita disparar uma
       // requisição durante a decisão de boot offline.
-      const config = await $idb.get<{ data?: { version_number?: unknown } }>(DB_TABLE.CACHE, "config");
+      const config = await $idb.get<{ data?: { version_number?: unknown } }>(
+        DB_TABLE.CACHE,
+        "config"
+      );
       const configVersion = config?.data?.version_number;
-      return typeof configVersion === "number" && Number.isFinite(configVersion) && configVersion >= 0
+      return typeof configVersion === "number" &&
+        Number.isFinite(configVersion) &&
+        configVersion >= 0
         ? configVersion
         : null;
     } catch {
@@ -289,7 +363,7 @@ export default {
     const fetchConfig = async (
       url: string,
       token: string,
-      source: string,
+      source: string
     ): Promise<{ version_number: number } | null> => {
       const res = await fetchWithTimeout(url, {
         headers: { "Api-Token": token },
@@ -312,7 +386,7 @@ export default {
       return await fetchConfig(
         `${API_URL_DB_FALLBACK}/config`,
         API_URL_FALLBACK_TOKEN,
-        "bundle-config-fallback",
+        "bundle-config-fallback"
       );
     } catch {
       return null;
