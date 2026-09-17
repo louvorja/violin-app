@@ -232,6 +232,20 @@ export default {
    * Retorna null se não conseguir acessar a API.
    */
   async fetchRemoteConfig(): Promise<{ version_number: number } | null> {
+    // Wi-Fi de igreja soluça por meio segundo o tempo todo (ver
+    // useConnectivity.ts) — sem retry, essa checagem roda no boot e um
+    // soluço passageiro fazia o app achar que precisa rebaixar tudo (ou
+    // não achar uma atualização real), mesmo com a API saudável segundos
+    // depois.
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const result = await this._fetchRemoteConfigOnce();
+      if (result !== null) return result;
+      if (attempt < 3) await new Promise((r) => setTimeout(r, 1500));
+    }
+    return null;
+  },
+
+  async _fetchRemoteConfigOnce(): Promise<{ version_number: number } | null> {
     try {
       const res = await fetchWithTimeout(`${API_URL_DB}/config`, {
         headers: { "Api-Token": API_TOKEN },
