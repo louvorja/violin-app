@@ -80,6 +80,7 @@ import { useI18n } from "vue-i18n";
 import $broadcast from "@/helpers/Broadcast";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
+import { KEYS } from "@/constants/UserDataKeys";
 import $idb from "@/helpers/IndexedDB";
 import { DB_TABLE } from "@/constants/DbTables";
 import Telemetry from "@/helpers/Telemetry";
@@ -310,6 +311,21 @@ onMounted(() => {
   root.value?.focus();
   // Captura setas globalmente — sem depender do foco do root
   window.addEventListener("keydown", onKey);
+  // Uma janela de operador recém-criada pode perder o broadcast transitório
+  // que abriu o vídeo. Reaproveitar o payload persistido evita a tela vazia
+  // ao fechar/reabrir a janela durante a mesma reprodução.
+  try {
+    const stored = localStorage.getItem(KEYS.PROJECTION.LJ_FILE_PROJECTION);
+    if (stored) {
+      const pending = JSON.parse(stored);
+      if (pending?.type === "video" && pending?.url) {
+        console.info("[Operator] reidratando vídeo pendente");
+        void activateVideo(pending);
+      }
+    }
+  } catch (error) {
+    console.warn("[Operator] não foi possível reidratar vídeo pendente:", error);
+  }
   // Solicita estado atual (caso a música já tenha aberto antes desta janela)
   $broadcast.send(BROADCAST_TYPE.REQUEST_SLIDE_STATE);
 });

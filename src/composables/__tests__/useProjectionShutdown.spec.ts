@@ -4,6 +4,7 @@ import { defineComponent } from "vue";
 import { mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import $userdata from "@/helpers/UserData";
+import $appdata from "@/helpers/AppData";
 import Broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { KEYS } from "@/constants/UserDataKeys";
@@ -103,6 +104,22 @@ describe("useProjectionShutdown", () => {
     await vi.advanceTimersByTimeAsync(1000);
 
     expect($userdata.get(KEYS.MODULES.BIBLE.IS_PLAYING)).toBe(false);
+  });
+
+  it("preserva o vídeo e o payload quando só a janela de projeção é fechada", async () => {
+    const payload = JSON.stringify({ url: "louvorja://local/video.mp4", type: "video" });
+    localStorage.setItem(KEYS.PROJECTION.LJ_FILE_PROJECTION, payload);
+    $appdata.set(KEYS.MODULES.MEDIA.IS_PLAYING, true);
+    $appdata.set(KEYS.MODULES.MEDIA.CONFIG.VIDEO_FILE, true);
+    $userdata.set(KEYS.MODULES.MEDIA_LIBRARY.IS_PLAYING, true);
+    montarJanelaPrincipal();
+
+    Broadcast.send(BROADCAST_TYPE.PROJECTION_CLOSED, { feature: PROJECTION_TYPE.FILE });
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(localStorage.getItem(KEYS.PROJECTION.LJ_FILE_PROJECTION)).toBe(payload);
+    expect($userdata.get(KEYS.MODULES.MEDIA_LIBRARY.IS_PLAYING)).toBe(false);
+    expect(janelasAbertas.has(PROJECTION_TYPE.FILE_RETURN)).toBe(false);
   });
 });
 

@@ -1199,6 +1199,16 @@ const _self = {
     // música anterior.
     _slides.reset();
 
+    // O payload de arquivo é apenas o cache de reabertura enquanto a mídia
+    // está ativa. Remover no fechamento explícito evita ressuscitar um vídeo
+    // antigo caso todas as janelas de projeção já tenham sido fechadas.
+    try {
+      localStorage.removeItem(KEYS.PROJECTION.LJ_FILE_PROJECTION);
+      localStorage.removeItem(KEYS.PROJECTION.LJ_YOUTUBE_PROJECTION);
+    } catch {
+      /* ignore */
+    }
+
     // Avisa janelas locais (Projection, ProjectionReturn) e clients
     // remotos (SSE) para limparem a tela. Sem este broadcast, OBS continua
     // mostrando a letra mesmo depois de fechar a música.

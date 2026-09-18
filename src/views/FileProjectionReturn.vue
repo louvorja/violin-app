@@ -318,7 +318,9 @@ function _readPendingProjection(): void {
     if (stored) {
       const p: FileProjectionState = JSON.parse(stored);
       if (p?.url) _activateProjection(p);
-      localStorage.removeItem(KEYS.PROJECTION.LJ_FILE_PROJECTION);
+      // Não remova aqui: a janela principal e a projeção principal podem
+      // montar em ordem diferente. O payload é o cache de reidratação para
+      // reabrir a tela durante uma reprodução e só deve sair em MEDIA_CLOSE.
       return;
     }
   } catch {

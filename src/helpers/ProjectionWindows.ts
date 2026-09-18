@@ -145,9 +145,18 @@ export async function openFileProjectionWindows(): Promise<void> {
   // opção geral de retorno para instalações que já usavam esse fluxo.
   // A opção geral de retorno é o fallback histórico para quem já usava
   // "Abrir Tela de Retorno" antes da configuração específica do player.
+  const genericReturnOpen = await isWindowOpen(PROJECTION_TYPE.RETURN);
   const openFileReturn =
     ($userdata.get(KEYS.OPTIONS.FILE_PROJECTION.SHOW_RETURN, false) as boolean) ||
-    ($userdata.get(KEYS.OPTIONS.OPEN_RETURN, false) as boolean);
+    ($userdata.get(KEYS.OPTIONS.OPEN_RETURN, false) as boolean) ||
+    // Se o retorno musical já está na tela, troque-o pelo retorno de arquivo
+    // mesmo que a preferência tenha sido alterada depois de ele abrir. Isso
+    // evita deixar PRÓX/1/0 congelado ao iniciar um vídeo.
+    genericReturnOpen;
+  console.info("[ProjectionWindows] retorno de arquivo:", {
+    enabled: openFileReturn,
+    genericReturnOpen,
+  });
   if (openFileReturn) {
     let ret = await _target(PROJECTION_TYPE.FILE_RETURN);
     if (!ret.open) ret = await _target(PROJECTION_TYPE.RETURN);
@@ -159,6 +168,12 @@ export async function openFileProjectionWindows(): Promise<void> {
         PROJECTION_URL.FILE_RETURN, PROJECTION_TYPE.FILE_RETURN, ret.monitorId,
         fullscreen, alwaysOnTop
       );
+    } else if (genericReturnOpen) {
+      // A janela existente pode ter sido aberta antes de a preferência de
+      // monitor ser reconciliada. Fechá-la é melhor que exibir um retorno
+      // musical vazio sobre o vídeo; a próxima execução resolverá o monitor
+      // assim que ele voltar a ficar disponível.
+      await _close(PROJECTION_TYPE.RETURN);
     }
   }
 

@@ -11,6 +11,7 @@ import Broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { useFileProjection } from "@/composables/useFileProjection";
+import $appdata from "@/helpers/AppData";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
 import { PROJECTION_TYPE } from "@/constants/Projection";
@@ -42,13 +43,28 @@ async function desligar(feature: string): Promise<void> {
       await closeProjection(PROJECTION_TYPE.BIBLE_RETURN);
       break;
 
-    case PROJECTION_TYPE.FILE:
+    case PROJECTION_TYPE.FILE: {
+      // Fechar só a janela de projeção não é parar o vídeo. O player continua
+      // ativo na janela principal e precisa conseguir reabrir a projeção com
+      // o mesmo payload (em especial depois de o operador fechar/reabrir a
+      // tela durante o culto). O estado persistido só é invalidado pelo
+      // caminho explícito de MEDIA_CLOSE.
+      const mediaPlaying =
+        $appdata.get<boolean>(KEYS.MODULES.MEDIA.IS_PLAYING, false) === true ||
+        $appdata.get<boolean>(KEYS.MODULES.MEDIA.CONFIG.VIDEO_FILE, false) === true;
+      // O botão do acervo deve voltar a permitir "projetar" o mesmo item,
+      // mesmo que o player interno continue tocando sem a janela.
       $userdata.set(KEYS.MODULES.MEDIA_LIBRARY.IS_PLAYING, false);
-      localStorage.removeItem(KEYS.PROJECTION.LJ_FILE_PROJECTION);
-      Broadcast.send(BROADCAST_TYPE.FILE_PROJECTION, { action: "clear" });
-      useFileProjection().stop();
+      if (!mediaPlaying) {
+        localStorage.removeItem(KEYS.PROJECTION.LJ_FILE_PROJECTION);
+        Broadcast.send(BROADCAST_TYPE.FILE_PROJECTION, { action: "clear" });
+        useFileProjection().stop();
+      } else {
+        console.info("[ProjectionShutdown] projeção de arquivo fechada; vídeo continua ativo");
+      }
       await closeProjection(PROJECTION_TYPE.FILE_RETURN);
       break;
+    }
 
     case PROJECTION_TYPE.ANNOUNCEMENTS:
       useFileProjection().stopProjection();
