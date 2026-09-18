@@ -249,12 +249,15 @@
   --lj-sidebar-collapsed: 28px;
   --lj-appmenu-width: 44px;
   --lj-opt-select-width: 220px;
+  --lj-opt-label-width: 160px;
+  --lj-opt-section-icon-slot: 24px;
 
   --lj-fixed-btn-width: 30px;
   --lj-large-btn-width: 86px;
   --lj-large-btn-height: 70px;
   --lj-small-btn-width: 140px;
   --lj-small-btn-height: 22px;
+  --lj-ribbon-field-label-width: 120px;
 
   --lj-player-btn-width: 36px;
   --lj-player-btn-primary-width: 55px;

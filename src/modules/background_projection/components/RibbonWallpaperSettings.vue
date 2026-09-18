@@ -18,8 +18,7 @@
       <div class="rbw-group">
         <div class="opt-format-field opt-field-bgimage">
           <div class="opt-bg-pick">
-            <LjButton variant="default" size="sm" @click="pick">
-              <LjIcon start :icon="ICONS.ACTIONS.IMAGE_PLUS" size="14" />
+            <LjButton variant="default" size="sm" :icon="ICONS.ACTIONS.IMAGE_PLUS" @click="pick">
               {{ $t("options.background.select") }}
             </LjButton>
             <span v-if="!currentBgImage" class="opt-bg-empty-text">

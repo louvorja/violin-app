@@ -8,9 +8,8 @@
   max-width: 1600px;
 }
 
-/* Os campos preenchem a largura disponível em colunas de ~400px em vez de
-   empilharem numa coluna só; tudo que não é uma linha de campo (listas,
-   previews, blocos de formatação) atravessa a grade inteira. */
+/* Base compartilhada pelas telas do App Menu. Mantém o grid para páginas que
+   organizam conteúdo independente em colunas. */
 .opt-section {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
@@ -26,7 +25,7 @@
 }
 
 /* Dentro da grade os controles cedem largura em vez de vazar para a célula
-   vizinha — sem isso os selects de largura fixa se sobrepõem. */
+   vizinha. */
 .opt-section > .opt-row,
 .opt-section > .opt-row > *:not(.opt-label) {
   min-width: 0;
@@ -56,6 +55,91 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Opções usa pares de decisões relacionados. O grid é limitado a duas colunas
+   para que a distribuição não salte para uma terceira coluna em monitores
+   largos. Os espaçamentos seguem a cadência dos campos do design system. */
+.opt--settings .opt-section {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: var(--lj-space-6);
+  row-gap: var(--lj-space-5);
+}
+
+.opt--settings .opt-label {
+  min-width: var(--lj-opt-label-width);
+}
+
+.opt--settings .opt-section .opt-row:not(.opt-row--col) > .opt-label {
+  flex-basis: var(--lj-opt-label-width);
+}
+
+.opt--settings .opt-section > .opt-row {
+  margin-bottom: 0;
+}
+
+/* A dica faz parte da própria linha e não acrescenta um segundo espaçamento
+   antes do próximo item da grade. */
+.opt--settings .opt-section > .opt-row--col > .opt-hint:last-child {
+  margin-bottom: 0;
+}
+
+.opt--settings .opt-row--clock {
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.opt--settings .opt-row--clock > .opt-hint {
+  flex: 1 1 320px;
+  min-width: 0;
+  margin: 0;
+}
+
+.opt--settings .opt-bg {
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.8fr);
+  column-gap: var(--lj-space-6);
+}
+
+.opt--settings .opt-bg-pick {
+  flex-wrap: nowrap;
+}
+
+@media (max-width: 1200px) {
+  .opt--settings .opt-section,
+  .opt--settings .opt-bg {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .opt--settings .opt-bg-pick {
+    flex-wrap: wrap;
+  }
+}
+
+@media (min-width: 1201px) {
+  .opt--settings .opt-row--clock {
+    flex-wrap: nowrap;
+  }
+
+  .opt--settings #opt-sec-general .opt-bg {
+    grid-template-columns: minmax(500px, 1.2fr) minmax(220px, 0.8fr);
+  }
+
+  /* No desktop largo, a prévia acompanha o bloco de fundo sem reservar uma
+     faixa extra abaixo dele. */
+  .opt--settings .opt-bg-preview-wrap {
+    transform: translate(calc(-1 * var(--lj-space-6)), calc(-1 * var(--lj-space-6)));
+    margin-bottom: calc(-1 * var(--lj-space-6));
+  }
+}
+
+@media (max-width: 1200px) {
+  .opt--settings .opt-row--clock {
+    flex-wrap: wrap;
+  }
+}
+
 .opt-download-scroll {
   overflow-y: auto;
   max-height: calc(85vh - 340px);
@@ -88,6 +172,16 @@
   padding: calc(var(--lj-space-5) + var(--lj-opt-scroll-pad)) 0 var(--lj-space-3);
   background: var(--lj-surface-bg);
   border-bottom: 1px solid var(--lj-surface-border);
+}
+
+/* Os SVGs têm desenhos internos com pesos ópticos diferentes. Um slot comum
+   mantém todos os títulos alinhados e deixa o ícone respirar sem alterar o
+   tamanho real do desenho. A sombra global do LjIcon pesa demais neste nível. */
+.opt-section-title > .lj-icon {
+  flex: 0 0 var(--lj-opt-section-icon-slot);
+  width: var(--lj-opt-section-icon-slot) !important;
+  height: var(--lj-opt-section-icon-slot) !important;
+  filter: none !important;
 }
 
 .opt-row {
@@ -142,10 +236,47 @@
 }
 
 .opt-checkbox input {
-  width: 16px;
-  height: 16px;
+  appearance: none;
+  position: relative;
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  margin: 0;
+  border: var(--lj-ui-border);
+  border-radius: var(--lj-radius-xs);
+  background: var(--lj-surface-bg);
   cursor: pointer;
-  accent-color: var(--lj-navy);
+  transition:
+    background var(--lj-transition-fast),
+    border-color var(--lj-transition-fast),
+    box-shadow var(--lj-transition-fast);
+}
+
+.opt-checkbox input:checked {
+  border-color: var(--lj-ui-accent);
+  background: var(--lj-ui-accent);
+}
+
+.opt-checkbox input:checked::after {
+  position: absolute;
+  top: 1px;
+  left: 4px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--lj-ui-accent-fg);
+  border-width: 0 2px 2px 0;
+  content: "";
+  transform: rotate(45deg);
+}
+
+.opt-checkbox input:focus-visible {
+  border-color: var(--lj-ui-accent);
+  box-shadow: var(--lj-ui-focus);
+  outline: none;
+}
+
+.opt-checkbox:hover input {
+  border-color: var(--lj-ui-accent);
 }
 
 /* Descrição curta do que vem antes dela. A aproximação só vale quando há de
@@ -552,16 +683,17 @@
 }
 .opt-bg-pick {
   display: flex;
+  flex-direction: row;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--lj-space-4);
 }
 
-/* A frase inteira ou nada: quebrada no meio ela fica mais alta que o botão ao
-   lado e a linha toda parece desalinhada. Quando não couber, o `wrap` do
-   contêiner a desce inteira para a linha de baixo. */
+/* O estado vazio fica abaixo do botão de forma intencional. Assim a relação
+   entre ação e estado não muda quando a largura da grade varia. */
 .opt-bg-empty-text {
-  font-size: 11px;
+  font-size: var(--lj-text-sm);
+  line-height: 1.4;
   color: var(--lj-text-muted);
   white-space: nowrap;
 }
@@ -572,7 +704,7 @@
   flex-direction: column;
   align-items: center;
   gap: var(--lj-space-2);
-  padding-top: var(--lj-space-2);
+  padding-top: 0;
 }
 
 .opt-bg-preview-caption {

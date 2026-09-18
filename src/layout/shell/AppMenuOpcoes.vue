@@ -1,5 +1,5 @@
 <template>
-  <div ref="root" class="opt">
+  <div ref="root" class="opt opt--settings">
     <section id="opt-sec-general" class="opt-section">
       <h3 class="opt-section-title">
         <LjIcon :icon="ICONS.UI.OPTIONS" size="18" />
@@ -73,17 +73,6 @@
           <span>{{ $t("options.general.start_with_os") }}</span>
         </label>
       </div>
-      <div v-if="isDesktop" class="opt-row opt-row--col">
-        <label class="opt-checkbox">
-          <input
-            type="checkbox"
-            :checked="getUserData(KEYS.OPTIONS.CLOCK_PROJECTION_ON_BOOT, false)"
-            @change="saveUserData(KEYS.OPTIONS.CLOCK_PROJECTION_ON_BOOT, $c($event))"
-          />
-          <span>{{ $t("options.general.clock_projection_on_boot") }}</span>
-        </label>
-        <p class="opt-hint">{{ $t("options.general.clock_projection_on_boot_hint") }}</p>
-      </div>
       <div class="opt-bg">
         <div class="opt-bg-fields">
           <div class="opt-row">
@@ -102,8 +91,12 @@
           <div class="opt-row">
             <span class="opt-label">{{ $t("options.background.title") }}</span>
             <div class="opt-bg-pick">
-              <LjButton variant="default" size="sm" @click="pickBgImage">
-                <LjIcon start :icon="ICONS.ACTIONS.IMAGE_PLUS" size="14" />
+              <LjButton
+                variant="default"
+                size="sm"
+                :icon="ICONS.ACTIONS.IMAGE_PLUS"
+                @click="pickBgImage"
+              >
                 {{ $t("options.background.select") }}
               </LjButton>
               <span v-if="!currentBgImage" class="opt-bg-empty-text">
@@ -876,8 +869,12 @@
           <label class="opt-format-field opt-format-field--grow">
             <span class="opt-format-label">{{ $t("options.slides.bg_image") }}</span>
             <div class="opt-bg-pick">
-              <LjButton variant="default" size="sm" @click="pickSlideBgImage">
-                <LjIcon start :icon="ICONS.ACTIONS.IMAGE_PLUS" size="16" />
+              <LjButton
+                variant="default"
+                size="sm"
+                :icon="ICONS.ACTIONS.IMAGE_PLUS"
+                @click="pickSlideBgImage"
+              >
                 {{ $t("options.background.select") }}
               </LjButton>
               <span v-if="!slideBgImageUrl" class="opt-bg-empty-text">
@@ -940,8 +937,12 @@
           <label class="opt-format-field opt-format-field--grow">
             <span class="opt-format-label">{{ $t("options.slides.bg_image") }}</span>
             <div class="opt-bg-pick">
-              <LjButton variant="default" size="sm" @click="pickReturnTopImage">
-                <LjIcon start :icon="ICONS.ACTIONS.IMAGE_PLUS" size="16" />
+              <LjButton
+                variant="default"
+                size="sm"
+                :icon="ICONS.ACTIONS.IMAGE_PLUS"
+                @click="pickReturnTopImage"
+              >
                 {{ $t("options.background.select") }}
               </LjButton>
               <span v-if="!returnTopImageUrl" class="opt-bg-empty-text">
@@ -987,8 +988,12 @@
           <label class="opt-format-field opt-format-field--grow">
             <span class="opt-format-label">{{ $t("options.slides.bg_image") }}</span>
             <div class="opt-bg-pick">
-              <LjButton variant="default" size="sm" @click="pickReturnBottomImage">
-                <LjIcon start :icon="ICONS.ACTIONS.IMAGE_PLUS" size="16" />
+              <LjButton
+                variant="default"
+                size="sm"
+                :icon="ICONS.ACTIONS.IMAGE_PLUS"
+                @click="pickReturnBottomImage"
+              >
                 {{ $t("options.background.select") }}
               </LjButton>
               <span v-if="!returnBottomImageUrl" class="opt-bg-empty-text">
@@ -1273,8 +1278,12 @@
         <div class="opt-row">
           <span class="opt-label">{{ $t("options.background.title") }}</span>
           <div class="opt-bg-pick">
-            <LjButton variant="default" size="sm" @click="pickFileProjBgImage">
-              <LjIcon start :icon="ICONS.ACTIONS.IMAGE_PLUS" size="16" />
+            <LjButton
+              variant="default"
+              size="sm"
+              :icon="ICONS.ACTIONS.IMAGE_PLUS"
+              @click="pickFileProjBgImage"
+            >
               {{ $t("options.background.select") }}
             </LjButton>
             <span v-if="!fileProjBgImageUrl" class="opt-bg-empty-text">
@@ -1322,6 +1331,18 @@
           :model-value="getUserData(KEYS.OPTIONS.UTILITIES_MONITOR, '') ?? ''"
           @update:model-value="saveUserData(KEYS.OPTIONS.UTILITIES_MONITOR, $event || null)"
         />
+      </div>
+
+      <div v-if="isDesktop" class="opt-row opt-row--clock">
+        <label class="opt-checkbox">
+          <input
+            type="checkbox"
+            :checked="getUserData(KEYS.OPTIONS.CLOCK_PROJECTION_ON_BOOT, false)"
+            @change="saveUserData(KEYS.OPTIONS.CLOCK_PROJECTION_ON_BOOT, $c($event))"
+          />
+          <span>{{ $t("options.general.clock_projection_on_boot") }}</span>
+        </label>
+        <p class="opt-hint">{{ $t("options.general.clock_projection_on_boot_hint") }}</p>
       </div>
 
       <div class="opt-row">

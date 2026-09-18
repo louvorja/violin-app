@@ -12,12 +12,12 @@
       placeholder="—"
     >
       <template #value="{ item }">
-        <span :style="{ fontFamily: fontPreview(item?.family || '') }">
-          {{ item?.name || "—" }}
-        </span>
+        <span class="select-font__value">{{ item?.name || "—" }}</span>
       </template>
       <template #item="{ item }">
-        <span :style="{ fontFamily: fontPreview(item.family) }">{{ item.name }}</span>
+        <span class="select-font__preview" :style="{ fontFamily: fontPreview(item.family) }">
+          {{ item.name }}
+        </span>
       </template>
     </LjSelect>
   </div>
@@ -26,7 +26,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import LjSelect from "@/components/ui/LjSelect.vue";
-import { FONT, Fonts, resolveFont, type FontOption } from "@/config/Fonts";
+import { FONT, Fonts, resolveDefaultFont, resolveFont, type FontOption } from "@/config/Fonts";
 
 const props = withDefaults(
   defineProps<{
@@ -57,7 +57,21 @@ const props = withDefaults(
 const emit = defineEmits<{ "update:modelValue": [value: string] }>();
 
 const model = computed({
-  get: () => props.modelValue ?? "",
+  get: () => {
+    const value = props.modelValue ?? "";
+    const isUiFallback =
+      props.defaultFont === FONT.UI.FALLBACK &&
+      resolveDefaultFont(value, props.defaultFont) === props.defaultFont;
+    const isDefaultMarker =
+      !value ||
+      value === FONT.DEFAULT ||
+      value === FONT.UI.INHERIT ||
+      value === FONT.PROJECTION.INHERIT;
+    if (props.defaultFont && (isUiFallback || isDefaultMarker)) {
+      return FONT.DEFAULT;
+    }
+    return value;
+  },
   set: (value) => emit("update:modelValue", value as string),
 });
 
@@ -96,5 +110,18 @@ const orderedFonts = computed<FontOption[]>(() => {
 
 .select-font :deep(.lj-select) {
   width: 100%;
+}
+
+/* A fonte escolhida é uma prévia de projeção, não a fonte da interface. Ela
+   fica somente nos itens do menu; o valor fechado permanece legível e alinhado
+   com os demais campos da tela de Opções. */
+.select-font__value {
+  display: block;
+  font-family: var(--lj-font-shell);
+}
+
+.select-font__preview {
+  display: inline-block;
+  line-height: 1.35;
 }
 </style>

@@ -912,32 +912,33 @@ useBroadcastListener(BROADCAST_TYPE.RIBBON_SELECT_PAGE, (payload: unknown) => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 2px 0;
+  gap: var(--lj-space-2);
+  padding: var(--lj-space-1) 0;
+  font-size: var(--lj-text-base);
 }
 .ribbon-action-input__field {
-  width: 140px;
-  height: 24px;
-  padding: 0 6px;
+  width: var(--lj-small-btn-width);
+  height: var(--lj-ui-h-sm);
+  padding: 0 var(--lj-ui-px-sm);
   border: var(--lj-ui-border);
-  border-radius: var(--lj-radius-xs);
+  border-radius: var(--lj-ui-radius);
   background: var(--lj-surface-bg);
   color: var(--lj-text);
-  font-size: 11px;
-  font-family: inherit;
+  font: inherit;
   outline: none;
 }
 .ribbon-action-input__field:focus {
-  border-color: var(--lj-navy);
-  box-shadow: var(--lj-shadow-focus-navy-sm);
+  border-color: var(--lj-ui-accent);
+  box-shadow: var(--lj-ui-focus);
 }
 
 .ribbon-field-wrap {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding: 4px 6px;
-  min-width: 140px;
+  gap: var(--lj-space-2);
+  padding: var(--lj-space-1) var(--lj-space-3);
+  min-width: var(--lj-small-btn-width);
+  font-size: var(--lj-text-base);
 }
 
 .ribbon-group-item--compact .ribbon-field-wrap,
@@ -945,8 +946,8 @@ useBroadcastListener(BROADCAST_TYPE.RIBBON_SELECT_PAGE, (payload: unknown) => {
   flex-direction: row;
   align-items: center;
   min-width: 0;
-  gap: 6px;
-  padding: 2px 6px;
+  gap: var(--lj-ui-gap-md);
+  padding: var(--lj-space-1) var(--lj-space-3);
 }
 
 .ribbon-group-item--compact .ribbon-action-input__field {
@@ -954,59 +955,62 @@ useBroadcastListener(BROADCAST_TYPE.RIBBON_SELECT_PAGE, (payload: unknown) => {
 }
 
 .ribbon-field-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  color: rgba(var(--lj-on-surface-ch), 0.55);
+  color: var(--lj-text-muted);
+  font-size: inherit;
+  font-weight: var(--lj-weight-medium);
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.ribbon-group-item--field .ribbon-field-label {
+  min-width: var(--lj-ribbon-field-label-width);
 }
 
 .ribbon-field-select {
-  height: 24px;
-  padding: 0 4px;
+  height: var(--lj-ui-h-sm);
+  padding: 0 var(--lj-ui-px-sm);
   border: var(--lj-ui-border);
-  border-radius: var(--lj-radius-xs);
+  border-radius: var(--lj-ui-radius);
   background: var(--lj-surface-bg);
   color: var(--lj-text);
-  font-size: 11px;
-  font-family: inherit;
+  font: inherit;
   outline: none;
 }
 
 .ribbon-field-select:focus {
-  border-color: var(--lj-navy);
-  box-shadow: var(--lj-shadow-focus-navy-sm);
+  border-color: var(--lj-ui-accent);
+  box-shadow: var(--lj-ui-focus);
 }
 
 .ribbon-field-number {
-  height: 24px;
-  padding: 0 4px;
+  height: var(--lj-ui-h-sm);
+  padding: 0 var(--lj-ui-px-sm);
   border: var(--lj-ui-border);
-  border-radius: var(--lj-radius-xs);
+  border-radius: var(--lj-ui-radius);
   background: var(--lj-surface-bg);
   color: var(--lj-text);
-  font-size: 11px;
-  font-family: inherit;
+  font: inherit;
   outline: none;
   width: 90px;
 }
 
 .ribbon-field-number:focus {
-  border-color: var(--lj-navy);
-  box-shadow: var(--lj-shadow-focus-navy-sm);
+  border-color: var(--lj-ui-accent);
+  box-shadow: var(--lj-ui-focus);
 }
 
 .ribbon-slider-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--lj-ui-gap-md);
 }
 .ribbon-slider {
   flex: 1;
   min-width: 100px;
 }
 .ribbon-slider-value {
-  font-size: 10px;
-  font-weight: 500;
+  font-size: var(--lj-text-sm);
+  font-weight: var(--lj-weight-medium);
   color: var(--lj-text);
   white-space: nowrap;
   min-width: 32px;
@@ -1016,9 +1020,9 @@ useBroadcastListener(BROADCAST_TYPE.RIBBON_SELECT_PAGE, (payload: unknown) => {
 .ribbon-field-checkbox {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 2px 2px;
-  font-size: 11px;
+  gap: var(--lj-ui-gap-sm);
+  padding: var(--lj-space-1);
+  font-size: var(--lj-text-base);
   cursor: pointer;
   white-space: nowrap;
   color: var(--lj-text);
@@ -1029,9 +1033,9 @@ useBroadcastListener(BROADCAST_TYPE.RIBBON_SELECT_PAGE, (payload: unknown) => {
 }
 
 .ribbon-switch {
-  padding: 1px;
+  padding: var(--lj-space-1);
 }
 .ribbon-field-switch {
-  font-size: 14px;
+  font-size: var(--lj-text-base);
 }
 </style>
