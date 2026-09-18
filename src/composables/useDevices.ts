@@ -72,6 +72,7 @@ function _attachListeners() {
       _syncPendingFromList(_devices.value);
     }).catch((e) => {
       console.error("[useDevices] load inicial:", e);
+      // Não marca _loaded como true — permite retry via loadDevices()
     });
   }
 }

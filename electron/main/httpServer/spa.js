@@ -72,10 +72,11 @@ function _injectBridge(html, token, initialHash) {
   if (html.includes("window.LJ_SSE_BRIDGE_INJECTED")) return html;
   const cleaned = _stripCspMeta(html);
   const bridge = _bridgeScript(token, initialHash);
+  const baseTag = '<base href="/">';
   if (cleaned.includes("</head>")) {
-    return cleaned.replace("</head>", bridge + "</head>");
+    return cleaned.replace("</head>", baseTag + bridge + "</head>");
   }
-  return bridge + cleaned;
+  return baseTag + bridge + cleaned;
 }
 
 /**
@@ -87,11 +88,12 @@ function _injectBridge(html, token, initialHash) {
 function _injectMinimalBridge(html, initialHash) {
   if (html.includes("window.LJ_SSE_BRIDGE_INJECTED")) return html;
   const cleaned = _stripCspMeta(html);
+  const baseTag = '<base href="/">';
   const script = `<script>${_initialRouteScript(initialHash)}</script>`;
   if (cleaned.includes("</head>")) {
-    return cleaned.replace("</head>", script + "</head>");
+    return cleaned.replace("</head>", baseTag + script + "</head>");
   }
-  return script + cleaned;
+  return baseTag + script + cleaned;
 }
 
 function _pathToHash(pathname) {
@@ -316,54 +318,36 @@ function _carryToken(req) {
 }
 
 /**
- * Instala o middleware SPA no app Express.
- *
- * @param {import('express').Application} app
- * @param {{ isDev: boolean, distDir: string, getToken: () => string|null, getUserData?: () => Record<string, unknown> }} opts
+ * Monta o SPA estático (dist) no app Express.
+ * @param {{ distDir: string, getToken: () => string|null, apenasRemotos?: boolean }} opts
  */
-function install(app, { isDev, distDir, getToken, getUserData }) {
-  _setupAliases(app);
+function _setupStaticSpa(app, { distDir, getToken, apenasRemotos = false }) {
+  const deveServir = (req) => {
+    if (!apenasRemotos) return true;
+    const ip = req.ip || req.socket?.remoteAddress || "";
+    return !_isLocalhost(ip);
+  };
 
-  if (isDev) {
-    const proxy = _createDevProxyHandler(getToken);
-    // Tudo que não bater em /api ou /events vai pro proxy. As rotas SPA
-    // são entregues como o index.html injetado, e os assets do Vite ficam
-    // disponíveis em /src/, /node_modules/, /@vite/, /@id/ etc.
-    app.use((req, res, next) => {
-      if (req.path.startsWith("/api/") || req.path === "/events") return next();
-      if (req.path === "/" && !_allowHttpRoot(getUserData)) {
-        return res.status(404).send("A rota raiz do servidor HTTP está desativada em desenvolvimento.");
-      }
-      return proxy(req, res);
-    });
-    return;
-  }
-
-  // Produção: estáticos do dist + fallback para index.html.
-  app.use(
-    express.static(distDir, {
-      // index.html é entregue pelo handler abaixo (com injeção); evita
-      // que express.static responda direto e bypasse a injeção.
+  app.use((req, res, next) => {
+    if (!deveServir(req)) return next();
+    return express.static(distDir, {
       index: false,
       setHeaders(res, file) {
-        // Assets com hash são imutáveis — cache agressivo.
         if (/\.[a-f0-9]{8,}\.(js|css|woff2?)$/i.test(file)) {
           res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
         }
       },
-    })
-  );
+    })(req, res, next);
+  });
 
   const indexHandler = _createStaticIndexHandler(distDir, getToken);
 
-  // Rotas SPA conhecidas (Vue Router), incluindo os redirects emitidos
-  // pelos aliases acima quando o cliente segue o 302.
   for (const route of SPA_ROUTES) {
-    app.get(route, indexHandler);
+    app.get(route, (req, res, next) => (deveServir(req) ? indexHandler(req, res) : next()));
   }
 
-  // History fallback para qualquer outro GET sem extensão.
   app.use((req, res, next) => {
+    if (!deveServir(req)) return next();
     if (req.method !== "GET") return next();
     if (req.path.startsWith("/api/") || req.path === "/events") return next();
     if (req.path === "/") {
@@ -378,6 +362,47 @@ function install(app, { isDev, distDir, getToken, getUserData }) {
     }
     return indexHandler(req, res);
   });
+}
+
+/**
+ * Instala o middleware SPA no app Express.
+ *
+ * @param {import('express').Application} app
+ * @param {{ isDev: boolean, distDir: string, getToken: () => string|null, getUserData?: () => Record<string, unknown>, serveDistToRemote?: boolean }} opts
+ */
+function install(app, { isDev, distDir, getToken, getUserData, serveDistToRemote = false }) {
+  _setupAliases(app);
+
+  if (isDev) {
+    const proxy = _createDevProxyHandler(getToken);
+    if (serveDistToRemote) {
+      if (fs.existsSync(path.join(distDir, "index.html"))) {
+        _setupStaticSpa(app, { distDir, getToken, apenasRemotos: true });
+        console.log("[httpServer] LJ_SERVE_DIST=1: clients remotos usam o dist; localhost segue no Vite.");
+      } else {
+        console.warn(`[httpServer] LJ_SERVE_DIST=1 ignorado: ${path.join(distDir, "index.html")} não existe (rode o build).`);
+      }
+    }
+    // Tudo que não bater em /api ou /events vai pro proxy. As rotas SPA
+    // são entregues como o index.html injetado, e os assets do Vite ficam
+    // disponíveis em /src/, /node_modules/, /@vite/, /@id/ etc.
+    // Para clientes remotos, rejeita rotas desconhecidas (igual production).
+    app.use((req, res, next) => {
+      if (req.path.startsWith("/api/") || req.path === "/events") return next();
+      if (req.path === "/" && !_allowHttpRoot(getUserData)) {
+        return res.status(404).send("A rota raiz do servidor HTTP está desativada em desenvolvimento.");
+      }
+      const ip = req.ip || req.socket?.remoteAddress || "";
+      if (!_isLocalhost(ip) && req.method === "GET" && !_isAllowedSpaPath(req.path)) {
+        return res.status(404).send("Rota não encontrada.");
+      }
+      return proxy(req, res);
+    });
+    return;
+  }
+
+  // Produção: estáticos do dist + fallback para index.html.
+  _setupStaticSpa(app, { distDir, getToken, apenasRemotos: false });
 }
 
 module.exports = { install, SPA_ROUTES };

@@ -68,6 +68,7 @@ const monitorIdentity = require("./main/monitorIdentityBridge.cjs");
 const windowFactory = require("./main/windowFactory.js");
 const identifyMonitors = require("./main/identifyMonitors.js");
 const httpServer = require("./main/httpServer/index.js");
+const devices = require("./main/devices.js");
 const shortcuts = require("./main/shortcuts.js");
 const updater = require("./main/updater.js");
 const powerBlocker = require("./main/powerBlocker.js");

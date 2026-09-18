@@ -278,6 +278,8 @@ import {
   IconWorld,
   IconX,
   IconYoga,
+  IconThumbUp,
+  IconThumbDown,
 } from "@tabler/icons-vue";
 
 /**
@@ -547,6 +549,8 @@ export const TABLER_ICONS: Record<string, FunctionalComponent<SVGAttributes>> = 
   "sun-moon": IconSunMoon,
   tag: IconTag,
   "terminal-2": IconTerminal2,
+  "thumb-up" : IconThumbUp,
+  "thumb-down" : IconThumbDown,
   tools: IconTools,
   transfer: IconTransfer,
   "transition-right": IconTransitionRight,
@@ -584,6 +588,7 @@ export const ICONS = {
     ADD: "plus",
     ADD_BOX: "square-plus",
     ADD_CIRCLE: "circle-plus",
+    APROVE: "thumb-up",
     CANCEL: "circle-x-filled",
     CHECK_CIRCLE: "circle-check",
     CLEAN: "eraser",
@@ -624,6 +629,7 @@ export const ICONS = {
     PREVIOUS_BOLD: "arrow-big-left",
     redo: "arrow-forward-up",
     REFRESH: "refresh",
+    REJECT: "thumb-down",
     RENAME: "cursor-text",
     RESTART: "rotate-clockwise",
     RESTORE: "restore",

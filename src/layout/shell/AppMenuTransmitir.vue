@@ -284,13 +284,26 @@
   >
     <div class="qr-body">
       <div ref="deviceQrContainer" class="qr-canvas" />
-      <code class="qr-url">{{ deviceQrUrl }}</code>
       <p class="opt-hint" style="margin-top: 8px; text-align: center">
         {{ $t("options.transmission.device_qr_hint") }}
       </p>
+      <div class="store-badges">
+        <img
+          :src="playStoreLogo"
+          alt="Play Store"
+          class="store-badge"
+          @click="showAppDialog('android')"
+        />
+        <img
+          :src="appStoreLogo"
+          alt="App Store"
+          class="store-badge"
+          @click="showAppDialog('ios')"
+        />
+      </div>
     </div>
     <template #footer>
-      <LjButton size="sm" @click="showDeviceQrDialog = false">
+      <LjButton size="sm" :icon="ICONS.ACTIONS.CLOSE" @click="showDeviceQrDialog = false">
         {{ $t("alert.close") }}
       </LjButton>
     </template>
@@ -307,10 +320,11 @@
 
   <!-- Confirmar exclusão de dispositivo -->
   <LjDialog
-    v-model="confirmDeleteDevice"
     size="sm"
     :icon="ICONS.ACTIONS.DELETE"
     :title="$t('options.transmission.remove_confirm_title')"
+    :model-value="showConfirmDeleteDialog"
+    @update:model-value="onConfirmDeleteDialogClose"
   >
     <template v-if="confirmDeleteDevice">
       <p>{{ $t("options.transmission.remove_confirm_text") }}</p>
@@ -326,8 +340,15 @@
       </div>
     </template>
     <template #footer>
-      <LjButton size="sm" @click="confirmDeleteDevice = null">{{ $t("alert.cancel") }}</LjButton>
-      <LjButton size="sm" variant="danger" @click="confirmDeleteDeviceAction">
+      <LjButton size="sm" :icon="ICONS.ACTIONS.CANCEL" @click="onConfirmDeleteDialogClose">
+        {{ $t("alert.cancel") }}
+      </LjButton>
+      <LjButton
+        size="sm"
+        :icon="ICONS.ACTIONS.DELETE"
+        variant="danger"
+        @click="confirmDeleteDeviceAction"
+      >
         {{ $t("actions.delete") }}
       </LjButton>
     </template>
@@ -347,7 +368,7 @@
       <div class="qr-canvas-wrapper">
         <div ref="appStoreQrContainer" class="qr-canvas" />
         <img
-          :src="appStorePlatform === 'android' ? playStoreUrl : appStoreUrl"
+          :src="appStorePlatform === 'android' ? playStoreLogo : appStoreLogo"
           class="qr-center-icon"
           alt=""
         />
@@ -392,13 +413,14 @@ import { DEVICE_PERMISSION_LABELS } from "@/types/Device";
 import QRCodeStyling from "qr-code-styling";
 import logoUrl from "@/assets/img/logo.svg";
 
-const playStoreUrl = new URL("@/assets/img/play-store.svg", import.meta.url).href;
-const appStoreUrl = new URL("@/assets/img/app-store.svg", import.meta.url).href;
+const playStoreLogo = new URL("@/assets/img/play-store.svg", import.meta.url).href;
+const appStoreLogo = new URL("@/assets/img/app-store.svg", import.meta.url).href;
 
 const isDesktop = computed(() => Platform.isDesktop);
 const { displays, getFeatureRole, setFeatureRole } = useDisplays();
 const {
   devices,
+  loadDevices,
   updateDevice,
   removeDevice,
   pendingDevice,
@@ -487,9 +509,12 @@ const qrTitle = ref("");
 const qrContainer = ref(null);
 const showDeviceQrDialog = ref(false);
 const deviceQrUrl = ref("");
+const storeQrUrl = ref("");
 const deviceQrContainer = ref(null);
+const storeQrContainer = ref(null);
 const editingDevice = ref(null);
 const confirmDeleteDevice = ref(null);
+const showConfirmDeleteDialog = ref(false);
 const onlyAuthorizedDevices = ref(false);
 
 const STORES_URLS = {
@@ -613,7 +638,7 @@ watch(
           margin: 10,
         },
       });
-      await qr.append(container);
+      qr.append(container);
     } catch (e) {
       console.error("[Transmitir] QRCode:", e);
     }
@@ -625,8 +650,12 @@ watch(
 async function addNewDevice() {
   const token = generatePendingToken();
   if (!token) return;
-  const url = `${baseUrl.value}/register-device?token=${token}`;
-  deviceQrUrl.value = url;
+  const host =
+    useHostname.value && hostname.value.trim()
+      ? hostname.value.trim()
+      : selectedIp.value || primaryHost.value;
+
+  deviceQrUrl.value = `violin-remote://register?token=${token}&host=${encodeURIComponent(host)}&port=${httpServer.value.port}`;
   showDeviceQrDialog.value = true;
 }
 
@@ -662,14 +691,25 @@ function onDeviceDialogClose() {
   editingDevice.value = null;
 }
 
+function onConfirmDeleteDialogClose() {
+  showConfirmDeleteDialog.value = false;
+  setTimeout(() => {
+    confirmDeleteDevice.value = null;
+  }, 250);
+}
+
 function requestDeleteDevice(device) {
   confirmDeleteDevice.value = device;
+  showConfirmDeleteDialog.value = true;
 }
 
 async function confirmDeleteDeviceAction() {
   if (!confirmDeleteDevice.value) return;
   await removeDevice(confirmDeleteDevice.value.id);
-  confirmDeleteDevice.value = null;
+  showConfirmDeleteDialog.value = false;
+  setTimeout(() => {
+    confirmDeleteDevice.value = null;
+  }, 250);
 }
 
 watch(pendingDevice, (val) => {
@@ -702,13 +742,36 @@ watch(
           margin: 10,
         },
       });
-      await qr.append(container);
+      qr.append(container);
     } catch (e) {
       console.error("[Transmitir] QRCode device:", e);
     }
   },
   { flush: "post" }
 );
+
+// QR Code da loja (Play Store / App Store)
+watch([storeQrContainer, storeQrUrl], async ([container, url]) => {
+  if (!container || !url) return;
+  try {
+    const qr = new QRCodeStyling({
+      width: 240,
+      height: 240,
+      type: "canvas",
+      data: url,
+      dotsOptions: {
+        type: "rounded",
+        color: "#000",
+      },
+      backgroundOptions: { color: "transparent" },
+      cornersOptions: { type: "extra-rounded" },
+    });
+    container.innerHTML = "";
+    qr.append(container);
+  } catch (e) {
+    console.error("QRCode rendering error:", e);
+  }
+});
 
 // QR Code — Violin Remote (loja)
 watch(
@@ -733,7 +796,7 @@ watch(
           color: "#fff",
         },
       });
-      await qr.append(container);
+      qr.append(container);
     } catch (e) {
       console.error("[Transmitir] QRCode store:", e);
     }
@@ -878,6 +941,9 @@ onMounted(async () => {
       console.warn("[Transmitir] init:", e);
     }
   }
+  // Recarrega dispositivos no mount — garante que a lista está atualizada
+  // mesmo que o load singleton anterior tenha falhado.
+  loadDevices().catch(() => {});
   if (Platform.shortcuts) {
     try {
       const s = await Platform.shortcuts.status();
@@ -1145,5 +1211,21 @@ onMounted(async () => {
 }
 .app-store-dialog__link:hover {
   text-decoration: underline;
+}
+
+.store-badges {
+  display: flex;
+  justify-content: center;
+  gap: 50px;
+  margin-top: 12px;
+}
+.store-badge {
+  height: 32px;
+  cursor: pointer;
+  opacity: 0.85;
+  transition: opacity 0.2s;
+}
+.store-badge:hover {
+  opacity: 1;
 }
 </style>

@@ -259,14 +259,18 @@ async function start({ port, mainWindow } = {}) {
   // ─── Registro de dispositivos (ANTES do auth — device ainda não tem permissões) ───
   app.post("/api/register-device", (req, res) => {
     console.log(`[httpServer] POST /api/register-device body=`, JSON.stringify(req.body), `ip=${req.ip}`);
-    const { token, name, model, platform } = req.body || {};
+    const { token, name, model, platform, fingerprint } = req.body || {};
     if (!token || typeof token !== "string" || token.length < 8) {
       console.warn(`[httpServer] POST /api/register-device: token inválido (${typeof token}, len=${token?.length})`);
       return res.status(400).json({ status: "error", message: "Token inválido" });
     }
+    if (!fingerprint || typeof fingerprint !== "string") {
+      console.warn(`[httpServer] POST /api/register-device: fingerprint obrigatório`);
+      return res.status(400).json({ status: "error", message: "Fingerprint obrigatório" });
+    }
     const validPlatforms = ["android", "ios", "web"];
     const devPlatform = validPlatforms.includes(platform) ? platform : "web";
-    const device = devices.addPending({ token, name: name || "Dispositivo", model: model || "", platform: devPlatform });
+    const device = devices.addPending({ token, name: name || "Dispositivo", model: model || "", platform: devPlatform, fingerprint });
     console.log(`[httpServer] Device registrado: ${device.name} (${device.platform}) model=${device.model} id=${device.id.slice(0, 8)} token=${device.token.slice(0, 8)}...`);
 
     // Foca a janela principal para que o operador veja o diálogo de aprovação

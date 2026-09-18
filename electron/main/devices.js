@@ -128,21 +128,34 @@ function save(devices) {
  * Adiciona um device pendente (pré-registro antes de definir permissões).
  * Chamado quando o device faz POST /api/register-device.
  *
- * Gera um UUID para `id` (índice da tabela) e armazena o `token` separado.
- * Deduplica por token — se o mesmo QR code for escaneado duas vezes,
- * retorna o device existente.
+ * O `id` é o fingerprint fornecido pelo aparelho (hardware fingerprint no
+ * Android, identifierForVendor no iOS). Se já existe um device com esse
+ * fingerprint, sobrescreve os dados (mantendo as permissões definidas pelo
+ * operador).
  *
- * @param {{token:string, name:string, model:string, platform:string}} info
- * @returns {object} device criado (sem permissões ainda)
+ * @param {{token:string, name:string, model:string, platform:string, fingerprint:string}} info
+ * @returns {object} device (sem permissões ainda, ou com as existentes)
  */
 function addPending(info) {
   if (!_devices.length) _load();
-  // Deduplica: se o token já foi registrado, retorna o existente.
-  const existing = _devices.find((d) => d.token === info.token);
-  if (existing) return existing;
+
+  const fingerprint = info.fingerprint || "";
+  if (fingerprint) {
+    // Procura por fingerprint existente e sobrescreve.
+    const existing = _devices.find((d) => d.id === fingerprint);
+    if (existing) {
+      existing.token = info.token;
+      existing.name = info.name || existing.name;
+      existing.model = info.model || existing.model;
+      existing.platform = info.platform || existing.platform;
+      existing.registeredAt = new Date().toISOString();
+      _persist();
+      return existing;
+    }
+  }
 
   const device = {
-    id: crypto.randomUUID(),
+    id: fingerprint || crypto.randomUUID(),
     token: info.token,
     name: info.name || "Dispositivo",
     model: info.model || "",
