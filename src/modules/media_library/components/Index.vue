@@ -937,10 +937,14 @@ function loadPlaylist(): void {
     { id: string; name: string; path: string; type: "image" | "video" | "pdf" }[]
   >(PLAYLIST_KEY, []);
   if (saved?.length) {
-    playlist.value = saved.map((item) => ({
-      ...item,
-      typeIcon: fileTypeIcon(item.type),
-    }));
+    playlist.value = saved.map((item) => {
+      const libFile = files.value.find((f) => f.id === item.id);
+      return {
+        ...item,
+        path: libFile?.path || item.path,
+        typeIcon: fileTypeIcon(item.type),
+      };
+    });
   }
 }
 
@@ -1177,7 +1181,6 @@ onMounted(async () => {
   files.value = await loadLibrary();
   await loadCategories();
   selectAllCategoriesAndUncategorized();
-  loadPlaylist();
   for (const f of files.value) {
     if (f.path.startsWith("blob:")) {
       if (f.data && f.mime) {
@@ -1200,6 +1203,7 @@ onMounted(async () => {
       generateAndStoreThumb(f);
     }
   }
+  loadPlaylist();
 });
 
 onBeforeUnmount(() => {
