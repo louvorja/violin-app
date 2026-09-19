@@ -21,7 +21,17 @@ jobs:
         run: npm ci
 
       - name: Rodar testes
-        run: npm test
+        # Ver o comentário equivalente em release.yml: retry curto por causa de
+        # uma corrida conhecida no teardown do Vitest (RPC onUserConsoleLog),
+        # não relacionada aos testes em si.
+        run: |
+          for attempt in 1 2; do
+            if npm test; then
+              exit 0
+            fi
+            echo "::warning::Tentativa $attempt/2 falhou (possível corrida de teardown do Vitest) — tentando de novo"
+          done
+          exit 1
 
       - name: Build web
         run: npm run build

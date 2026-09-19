@@ -63,7 +63,19 @@ jobs:
           POSTHOG_PROJECT_ID: ${{ vars.POSTHOG_PROJECT_ID }}
 
       - name: Rodar testes
-        run: npm test
+        # O Vitest ocasionalmente falha no teardown com "Closing rpc while
+        # onUserConsoleLog was pending" — uma corrida entre o encerramento do
+        # worker e um console.log/warn/error ainda em trânsito, sem relação
+        # com os testes em si (todos passam antes do erro aparecer). Retry
+        # curto em vez de mascarar com dangerouslyIgnoreUnhandledErrors.
+        run: |
+          for attempt in 1 2; do
+            if npm test; then
+              exit 0
+            fi
+            echo "::warning::Tentativa $attempt/2 falhou (possível corrida de teardown do Vitest) — tentando de novo"
+          done
+          exit 1
 
       - name: Rodar lint
         run: npm run lint
