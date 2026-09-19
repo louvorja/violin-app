@@ -353,6 +353,22 @@ describe("Telemetry", () => {
     );
   });
 
+  it("só registra em evento o primeiro, o último e o slide sem conteúdo de uma troca", async () => {
+    const { isProjectionMilestone } = await loadTelemetry();
+
+    expect(isProjectionMilestone(0, 12, true)).toBe(true);
+    expect(isProjectionMilestone(11, 12, true)).toBe(true);
+    expect(isProjectionMilestone(5, 12, false)).toBe(true);
+    expect(isProjectionMilestone(5, 12, true)).toBe(false);
+    expect(isProjectionMilestone(1, 12, true)).toBe(false);
+    expect(isProjectionMilestone(10, 12, true)).toBe(false);
+    // Sem posição ou total legíveis, a leitura fica registrada em vez de sumir.
+    expect(isProjectionMilestone(undefined, 12, true)).toBe(true);
+    expect(isProjectionMilestone(3, undefined, true)).toBe(true);
+    // Uma faixa de um slide só é ao mesmo tempo primeiro e último.
+    expect(isProjectionMilestone(0, 1, true)).toBe(true);
+  });
+
   it("registra leituras do banco fora da memória e deixa acertos de 0 ms só no histograma", async () => {
     const Telemetry = await loadTelemetry();
     await Telemetry.init();

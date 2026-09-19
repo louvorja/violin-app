@@ -2,7 +2,7 @@ import { ref, computed, watch, toRaw, type Ref, type ComputedRef } from "vue";
 import $broadcast from "@/helpers/Broadcast";
 import type { AudioPlayback } from "@/composables/useAudioPlayback";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
-import Telemetry from "@/helpers/Telemetry";
+import Telemetry, { isProjectionMilestone } from "@/helpers/Telemetry";
 
 export interface Slide {
   lyric?: string;
@@ -117,13 +117,15 @@ function _create(): SlidesInstance {
 
   function broadcastSlide(): void {
     const idx = slideIndex.value;
-    Telemetry.track("projection_slide_broadcast", {
-      slide_index: idx,
-      total_slides: totalSlides.value,
-      has_slide: !!slide.value,
-      has_next_slide: !!nextSlide.value,
-      playback_id: _playbackId,
-    });
+    if (isProjectionMilestone(idx, totalSlides.value, !!slide.value)) {
+      Telemetry.track("projection_slide_broadcast", {
+        slide_index: idx,
+        total_slides: totalSlides.value,
+        has_slide: !!slide.value,
+        has_next_slide: !!nextSlide.value,
+        playback_id: _playbackId,
+      });
+    }
     $broadcast.send(BROADCAST_TYPE.SLIDE_CHANGE, {
       slide_index:  idx,
       slide:        toRaw(slide.value),

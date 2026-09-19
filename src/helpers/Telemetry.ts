@@ -122,6 +122,19 @@ function normalizeVersion(value: unknown): string {
   return typeof value === "string" ? value.trim().replace(/^v(?=\d)/, "") : "";
 }
 
+/**
+ * Marcos de uma troca de slide: o primeiro, o último e o que chega sem conteúdo.
+ * Emissor e receptores usam a mesma regra, então o cruzamento enviado × recebido
+ * segue valendo; a latência de cada troca continua inteira no histograma.
+ */
+export function isProjectionMilestone(index: unknown, total: unknown, hasSlide: boolean): boolean {
+  if (!hasSlide) return true;
+  const position = Number(index);
+  const count = Number(total);
+  if (!Number.isFinite(position) || !Number.isFinite(count)) return true;
+  return position <= 0 || position >= count - 1;
+}
+
 export function isBenignException(properties: Record<string, unknown> | undefined): boolean {
   const list = properties?.$exception_list;
   if (!Array.isArray(list) || list.length === 0) return false;
@@ -664,22 +677,18 @@ export function histogram(name: string, value: number, attributes: MetricAttribu
 
 /**
  * Mede travamentos que não aparecem como exceção: tarefas longas e, onde essa
- * API não existe, atraso do event loop. O monitor fica apenas na janela
- * principal; projetor/controle
- * remoto não devem produzir uma segunda sessão de performance para o mesmo
- * culto. Histograma é agregado pelo SDK, enquanto eventos detalhados são
- * amostrados para manter o custo e o ruído sob controle.
+ * API não existe, atraso do event loop. Só a janela principal envia eventos
+ * detalhados: projetor/controle remoto não devem produzir uma segunda sessão
+ * de performance para o mesmo culto. As janelas auxiliares alimentam apenas o
+ * histograma, agregado pelo SDK, para que um projetor que trava ao vivo apareça
+ * nas métricas sem gerar evento algum.
  */
 function startResponsivenessMonitor(): void {
-  if (
-    _responsivenessCleanup ||
-    typeof window === "undefined" ||
-    windowRole() !== "main" ||
-    import.meta.env.MODE === "test"
-  ) {
+  if (_responsivenessCleanup || typeof window === "undefined" || import.meta.env.MODE === "test") {
     return;
   }
 
+  const isMain = windowRole() === "main";
   const cleanups: Array<() => void> = [];
   let lastLongTaskEventAt = 0;
   let longTaskObserved = false;
@@ -694,6 +703,7 @@ function startResponsivenessMonitor(): void {
           histogram("louvorja.ui.long_task.duration", durationMs, {
             window_role: windowRole(),
           });
+          if (!isMain) continue;
 
           const now = Date.now();
           if (durationMs < UI_JANK_BUDGET.warn || now - lastLongTaskEventAt < 5_000) continue;
@@ -725,7 +735,7 @@ function startResponsivenessMonitor(): void {
   // relógio: chegou a reportar 40 s de "travamento" numa janela que emitia
   // eventos no meio do intervalo, sem nenhuma long task acima de 3,6 s. Aqui
   // ele só serve de reserva para quem não expõe a API.
-  if (!longTaskObserved) {
+  if (isMain && !longTaskObserved) {
     const intervalMs = 1_000;
     let previousTick = typeof performance !== "undefined" ? performance.now() : Date.now();
     let visibilityChanged = false;
@@ -1025,10 +1035,8 @@ export function setEnabled(enabled: boolean): void {
   if (_ph) {
     _ph.opt_in_capturing({ captureEventName: false });
     _ph.register({ app_version: _appVersion, sdk_version: _sdkVersion });
-    if (windowRole() === "main") {
-      _ph.startSessionRecording();
-      startResponsivenessMonitor();
-    }
+    if (windowRole() === "main") _ph.startSessionRecording();
+    startResponsivenessMonitor();
   } else void init();
 }
 

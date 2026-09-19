@@ -2,7 +2,7 @@ import { ref, computed, onMounted, type Ref, type ComputedRef } from "vue";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import $broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
-import Telemetry from "@/helpers/Telemetry";
+import Telemetry, { isProjectionMilestone } from "@/helpers/Telemetry";
 
 export type Slide = Record<string, unknown> | null;
 
@@ -70,12 +70,14 @@ export function useProjectionState(): ProjectionStateReturn {
 
     if (typeof p._ts === "number") {
       const latencyMs = Math.max(0, Date.now() - p._ts);
-      Telemetry.track("projection_broadcast_received", {
-        broadcast_type: BROADCAST_TYPE.SLIDE_CHANGE,
-        slide_index: p.slide_index,
-        playback_id: p.playback_id,
-        latency_ms: latencyMs,
-      });
+      if (isProjectionMilestone(slideIndex.value, totalSlides.value, !!slide.value)) {
+        Telemetry.track("projection_broadcast_received", {
+          broadcast_type: BROADCAST_TYPE.SLIDE_CHANGE,
+          slide_index: p.slide_index,
+          playback_id: p.playback_id,
+          latency_ms: latencyMs,
+        });
+      }
       Telemetry.histogram("louvorja.projection.broadcast.latency", latencyMs, {
         window_role: "auxiliary",
       });
