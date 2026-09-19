@@ -3,6 +3,8 @@ import $dev from "@/helpers/Dev";
 import $appdata from "@/helpers/AppData";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
+import { PROGRESS_UI_INTERVAL_MS } from "@/constants/Playback";
+import { createRateGate } from "@/helpers/RateGate";
 import $datetime from "@/helpers/DateTime";
 import $path from "@/helpers/Path";
 import $alert from "@/helpers/Alert";
@@ -389,12 +391,22 @@ watch(
 let _lastVideoSync = 0;
 const _VIDEO_SYNC_INTERVAL = 500; // ms entre broadcasts de sincronia
 
+const _uiSyncGate = createRateGate(PROGRESS_UI_INTERVAL_MS);
+let _uiSyncTime = 0;
+let _uiSyncDuration = 0;
+
 // Callback de timeUpdate: mantém $appdata de timing e fecha ao fim da música.
 _audio.onTimeUpdate((ct, d) => {
-  $appdata.set(KEYS.MODULES.MEDIA.CONFIG.CURRENT_TIME, ct);
-  $appdata.set(KEYS.MODULES.MEDIA.CONFIG.DURATION, d);
-  $appdata.set(KEYS.MODULES.MEDIA.CONFIG.PROGRESS, _audio.progress.value);
-  $appdata.set(KEYS.MODULES.MEDIA.CONFIG.BUFFERED, _audio.buffered.value);
+  // Salto de posição (seek) ou duração nova aparece na hora; o resto segue o ritmo do gate.
+  const jumped = Math.abs(ct - _uiSyncTime) > 1 || d !== _uiSyncDuration;
+  if (_uiSyncGate(jumped)) {
+    _uiSyncTime = ct;
+    _uiSyncDuration = d;
+    $appdata.set(KEYS.MODULES.MEDIA.CONFIG.CURRENT_TIME, ct);
+    $appdata.set(KEYS.MODULES.MEDIA.CONFIG.DURATION, d);
+    $appdata.set(KEYS.MODULES.MEDIA.CONFIG.PROGRESS, _audio.progress.value);
+    $appdata.set(KEYS.MODULES.MEDIA.CONFIG.BUFFERED, _audio.buffered.value);
+  }
 
   if (!_audio.isPaused.value && ct >= d && d > 0 && !_switchingMode) {
     if (_playlistOnEnd) {

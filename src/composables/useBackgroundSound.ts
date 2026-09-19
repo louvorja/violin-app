@@ -1,6 +1,8 @@
 import { ref } from "vue";
 import { MediaFile } from "@/types/Media";
 import { detachMediaSource } from "@/helpers/Dom";
+import { PROGRESS_UI_INTERVAL_MS } from "@/constants/Playback";
+import { createRateGate } from "@/helpers/RateGate";
 
 const _audio = new Audio();
 const isPlaying = ref(false);
@@ -31,6 +33,8 @@ function _clearFade(): void {
   }
 }
 
+const _uiSyncGate = createRateGate(PROGRESS_UI_INTERVAL_MS);
+
 function _startRaf(): void {
   _stopRaf();
   const tick = (): void => {
@@ -38,9 +42,14 @@ function _startRaf(): void {
       _rafId = null;
       return;
     }
-    currentTime.value = isNaN(_audio.currentTime) ? 0 : _audio.currentTime;
-    duration.value = isNaN(_audio.duration) || !isFinite(_audio.duration) ? 0 : _audio.duration;
-    progress.value = duration.value > 0 ? (currentTime.value / duration.value) * 100 : 0;
+    const ct = isNaN(_audio.currentTime) ? 0 : _audio.currentTime;
+    const d = isNaN(_audio.duration) || !isFinite(_audio.duration) ? 0 : _audio.duration;
+    const jumped = Math.abs(ct - currentTime.value) > 1 || d !== duration.value;
+    if (_uiSyncGate(jumped)) {
+      currentTime.value = ct;
+      duration.value = d;
+      progress.value = d > 0 ? (ct / d) * 100 : 0;
+    }
     _rafId = requestAnimationFrame(tick);
   };
   _rafId = requestAnimationFrame(tick);
