@@ -190,15 +190,19 @@ const groupedResults = computed(() => {
 
 const activeItem = computed(() => results.value[selectedIndex.value] || null);
 
-watch(open, (v) => {
-  if (v) {
-    query.value = "";
-    selectedIndex.value = 0;
-    visibleCount.value = PAGE_SIZE;
-    loadCommands();
-    nextTick(() => searchInput.value?.focus());
-  }
-});
+watch(
+  open,
+  (v) => {
+    if (v) {
+      query.value = "";
+      selectedIndex.value = 0;
+      visibleCount.value = PAGE_SIZE;
+      loadCommands();
+      nextTick(() => searchInput.value?.focus());
+    }
+  },
+  { immediate: true }
+);
 
 watch(query, () => {
   selectedIndex.value = 0;
