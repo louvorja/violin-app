@@ -259,7 +259,7 @@
         size="sm"
         :disabled="!(select_bible?.verses && select_bible.verses.length > 0)"
         :icon="ICONS.ACTIONS.CLEAN"
-        @click="clearTextm()"
+        @click="clearText()"
       >
         {{ tm("clear_text") }}
       </LjButton>
@@ -1010,7 +1010,7 @@ function getSelectedVerses(keys: number[]): string {
   return result;
 }
 
-function clearTextm(): void {
+function clearText(): void {
   UserData.set(KEYS.MODULES.BIBLE.IS_PLAYING, false);
   bible.verses = [];
   Object.assign(select_bible, {
@@ -1031,7 +1031,7 @@ function clearTextm(): void {
 }
 
 function clean(): void {
-  clearTextm();
+  clearText();
   ProjectionWindows.closeProjectionWindows();
 }
 
@@ -1067,7 +1067,7 @@ async function stopProjection(): Promise<void> {
 useBroadcastListener(BROADCAST_TYPE.BIBLE_RIBBON_ACTION, (payload: any) => {
   switch (payload?.action) {
     case "clear":
-      clearTextm();
+      clearText();
       break;
     case "prev_verse":
       prevVerse();

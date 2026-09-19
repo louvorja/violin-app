@@ -80,7 +80,7 @@
             :entity="pl"
             variant="playlist"
             play-all
-            :first-video-id="firstVideoIdOfPlaylistm(pl.playlist_id) ?? ''"
+            :first-video-id="firstVideoIdOfPlaylist(pl.playlist_id) ?? ''"
             :subtitle="`${videosOf(pl.playlist_id)} ${tm('videos_count')}`"
             @select="selectPlaylist(pl)"
             @play-all="playPlaylistVideos(pl.playlist_id)"
@@ -207,7 +207,7 @@ const videos = computed(() => {
 });
 
 /** Primeiro vídeo da playlist pela ordem original (capa do card). */
-function firstVideoIdOfPlaylistm(playlistId: string): string | null {
+function firstVideoIdOfPlaylist(playlistId: string): string | null {
   const list = (apiData.value?.videos ?? [])
     .filter((v) => v.playlist_id === playlistId)
     .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));

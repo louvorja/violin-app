@@ -78,7 +78,7 @@
             type="button"
             class="playlist-panel-btn playlist-panel-btn--sm"
             :title="tm('playlists.export')"
-            @click.stop="onExportm(playlist)"
+            @click.stop="onExport(playlist)"
           >
             <LjIcon :icon="ICONS.ACTIONS.DOWNLOAD" size="14" />
           </button>
@@ -179,7 +179,7 @@ async function onDelete(playlist: Playlist): Promise<void> {
   await deletePlaylist(playlist.id);
 }
 
-function onExportm(playlist: Playlist): void {
+function onExport(playlist: Playlist): void {
   const data = exportPlaylist(playlist.id);
   if (!data) {
     Telemetry.track("music_playlist_export_failed", {

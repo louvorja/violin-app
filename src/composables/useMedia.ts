@@ -51,6 +51,11 @@ let _audioXhr: XMLHttpRequest | null = null;
 let _switchingMode = false;
 let _activePlayback: AudioTelemetryContext | null = null;
 
+// typeof null === "object": sem tratar null aqui, open(null) estourava lendo params.mode.
+function _openParams(params: MediaOpenParams | string | number | null | undefined): MediaOpenParams {
+  return params != null && typeof params === "object" ? params : { id_music: params ?? undefined };
+}
+
 function _newPlaybackId(): string {
   try {
     if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function")
@@ -490,9 +495,7 @@ const _self = {
   },
 
   async open(params: MediaOpenParams | string | number): Promise<void> {
-    if (typeof params != "object") {
-      params = { id_music: params };
-    }
+    params = _openParams(params);
 
     $dev.write("open media", params);
     const playback_id = _newPlaybackId();
@@ -1272,9 +1275,7 @@ const _self = {
   },
 
   async openAudio(params: MediaOpenParams | string | number): Promise<void> {
-    if (typeof params != "object") {
-      params = { id_music: params };
-    }
+    params = _openParams(params);
     const playback_id = _newPlaybackId();
     const audioMode = params.mode || "audio";
     const playbackContext: AudioTelemetryContext = {

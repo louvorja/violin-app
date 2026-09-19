@@ -227,14 +227,14 @@ async function exportMusic() {
         const sljaSlides = buildSljaSlides(data);
 
         const audioUrl = $path.file(filePath);
-        const audioResp = await fetchWithTimeoutm(audioUrl, {
+        const audioResp = await fetchWithTimeout(audioUrl, {
           timeout: NET_TIMEOUT.MEDIA,
           source: "hymnal-export",
         });
         if (!audioResp.ok) throw new Error(`HTTP ${audioResp.status}`);
         const audioBlob = await audioResp.blob();
 
-        const imagePaths = new Setm();
+        const imagePaths = new Set();
         if (data.url_image) imagePaths.add(data.url_image);
         const lyricList = data.lyric
           ? Array.isArray(data.lyric)
@@ -249,7 +249,7 @@ async function exportMusic() {
         for (const imgPath of imagePaths) {
           try {
             const imgUrl = $path.file(imgPath);
-            const resp = await fetchWithTimeoutm(imgUrl, {
+            const resp = await fetchWithTimeout(imgUrl, {
               timeout: NET_TIMEOUT.MEDIA,
               source: "hymnal-export",
             });
@@ -277,7 +277,7 @@ async function exportMusic() {
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        setTimeoutm(() => URL.revokeObjectURL(url), 10000);
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
       } catch (err) {
         console.error(`[${props.moduleId}] exportMusic erro:`, err);
         $alert.error(`modules.${props.moduleId}.export_error`);
@@ -305,7 +305,7 @@ function _pollSequence() {
   } else if (!show && sequenceQueue.value.length) {
     if (_lastSeqProgress >= 0.95) {
       _clearSequenceTimer();
-      const nextId = sequenceQueue.value.shiftm();
+      const nextId = sequenceQueue.value.shift();
       Media.open({ id_music: nextId, mode: "audio" });
       _lastSeqProgress = 0;
     } else if (_lastSeqProgress > 0 && _lastSeqProgress < 0.95) {

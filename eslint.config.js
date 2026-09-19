@@ -2,6 +2,7 @@ import pluginVue from "eslint-plugin-vue";
 import js from "@eslint/js";
 import eslintConfigPrettier from "eslint-config-prettier";
 import tseslint from "typescript-eslint";
+import globals from "globals";
 
 export default [
   js.configs.recommended,
@@ -11,12 +12,21 @@ export default [
     // @typescript-eslint/parser delegado para blocos <script lang="ts">
     files: ["**/*.vue"],
     languageOptions: {
+      globals: {
+        ...globals.browser,
+        ...globals.es2021,
+        // Tipos ambientes (src/vite-env.d.ts e lib.dom) usados nos blocos <script lang="ts">
+        LouvorjaApi: "readonly",
+        FullscreenOptions: "readonly",
+      },
       parserOptions: {
         parser: tseslint.parser,
       },
     },
     rules: {
-      "no-undef": "off",
+      // Sem isto, um identificador com letra a mais (fetchWithTimeoutm) passava
+      // no lint e só falhava em uso, nos SFCs com <script> em JS puro.
+      "no-undef": "error",
     },
   },
   {
