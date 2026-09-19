@@ -68,6 +68,7 @@ jobs:
         # worker e um console.log/warn/error ainda em trânsito, sem relação
         # com os testes em si (todos passam antes do erro aparecer). Retry
         # curto em vez de mascarar com dangerouslyIgnoreUnhandledErrors.
+        shell: bash
         run: |
           for attempt in 1 2; do
             if npm test; then
