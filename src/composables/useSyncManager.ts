@@ -12,6 +12,7 @@ import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
 import Libras from "@/helpers/Libras";
 import BundleInstaller from "@/helpers/BundleInstaller";
 import { formatBackgroundTaskDetail } from "@/helpers/BackgroundTaskDetail";
+import { RUNTIME_PERFORMANCE } from "@/helpers/RuntimePerformance";
 import type { Music } from "@/types/Music";
 import type { BibleBook } from "@/types/Bible";
 
@@ -520,24 +521,33 @@ export function useSyncManager() {
       return 0;
     }
 
-    for (const ch of toDownload) {
-      if (bibleCancelled.value) break;
-      const key = `bible_${ch.versionId}_${ch.bookId}_${ch.n}`;
-      const detail = formatBackgroundTaskDetail(key, t, bibleVersions);
-      bibleProgress.value = { ...bibleProgress.value, currentFile: detail || key };
-      try {
-        await Database.get(key, { fresh: true, silent: true });
-      } catch (e) {
-        console.warn(`[useSyncManager] falha ao baixar ${key}:`, e);
-      }
-      bibleProgress.value = { ...bibleProgress.value, done: bibleProgress.value.done + 1 };
-      bgTasks.updateTask("sync-bible", {
-        progress:
-          toDownload.length > 0
-            ? Math.round((bibleProgress.value.done / toDownload.length) * 100)
-            : 0,
-        detail: detail || key,
-      });
+    // O download é uma tarefa de fundo, mas cada capítulo ainda passa pelo
+    // renderer → protocolo Electron → rede → IndexedDB. Um capítulo por vez
+    // deixa uma versão inteira lenta demais; 16+ em paralelo satura justamente
+    // os PCs fracos. O limite acompanha o perfil sem transformar a operação em
+    // uma rajada de conexões/transações.
+    const batchSize = RUNTIME_PERFORMANCE.lowResource ? 2 : RUNTIME_PERFORMANCE.constrained ? 3 : 4;
+    let completed = 0;
+    for (let i = 0; i < toDownload.length && !bibleCancelled.value; i += batchSize) {
+      const batch = toDownload.slice(i, i + batchSize);
+      await Promise.all(
+        batch.map(async (ch) => {
+          const key = `bible_${ch.versionId}_${ch.bookId}_${ch.n}`;
+          const detail = formatBackgroundTaskDetail(key, t, bibleVersions);
+          bibleProgress.value = { ...bibleProgress.value, currentFile: detail || key };
+          try {
+            await Database.get(key, { fresh: true, silent: true });
+          } catch (e) {
+            console.warn(`[useSyncManager] falha ao baixar ${key}:`, e);
+          }
+          completed += 1;
+          bibleProgress.value = { ...bibleProgress.value, done: completed };
+          bgTasks.updateTask("sync-bible", {
+            progress: toDownload.length > 0 ? Math.round((completed / toDownload.length) * 100) : 0,
+            detail: detail || key,
+          });
+        })
+      );
     }
 
     bibleProgress.value = { ...bibleProgress.value, currentFile: "" };
@@ -633,7 +643,11 @@ export function useSyncManager() {
     musicIds: number[],
     files: Map<string, FileEntry>
   ): Promise<void> {
-    const BATCH = 16;
+    // `scanCache` pode chamar esta função para até três álbuns ao mesmo tempo.
+    // 16 por álbum virava até 48 leituras de metadados concorrentes, cada uma
+    // com rede e persistência no IDB. Reduzimos a rajada sem perder o ganho de
+    // paralelismo em máquinas normais.
+    const BATCH = RUNTIME_PERFORMANCE.lowResource ? 2 : RUNTIME_PERFORMANCE.constrained ? 4 : 8;
     for (let i = 0; i < musicIds.length; i += BATCH) {
       const slice = musicIds.slice(i, i + BATCH);
       await Promise.all(
