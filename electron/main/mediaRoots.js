@@ -68,6 +68,17 @@ function joinDentroDe(dir, rel) {
 }
 
 /**
+ * `..` como segmento do caminho, com `/` ou `\`. Quem sobe de pasta é recusado;
+ * o mesmo trecho dentro de um nome, como em "Aleluia...mp3", é arquivo legítimo.
+ *
+ * @param {string} caminho
+ * @returns {boolean}
+ */
+function temSegmentoPai(caminho) {
+  return String(caminho).split(/[\\/]/).some((segmento) => segmento === "..");
+}
+
+/**
  * Todos os arquivos que podem satisfazer `rel`, em ordem de preferência: a raiz
  * primária antes das extras, e dentro de cada uma o formato pedido antes das
  * variantes equivalentes (.mp3 por .opus, .bmp por .jpg).
@@ -161,5 +172,6 @@ module.exports = {
   candidatesFor,
   classicSearchDirs,
   joinDentroDe,
+  temSegmentoPai,
   CLASSIC_FOLDERS,
 };

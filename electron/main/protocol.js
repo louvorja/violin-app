@@ -27,6 +27,7 @@ const path = require("path");
 const paths = require("./paths.js");
 const jsonCache = require("./jsonCache.js");
 const mediaResolver = require("./mediaResolver.js");
+const { temSegmentoPai } = require("./mediaRoots.js");
 const netHealth = require("./netHealth.js");
 const apiConfig = require("./apiConfig.js");
 const { buildCsp } = require("./csp.js");
@@ -421,7 +422,7 @@ function handle() {
         // Windows: strip leading / antes da letra de drive (/C:/... → C:/...)
         if (/^\/[A-Za-z]:\//.test(raw)) raw = raw.slice(1);
 
-        if (!raw || raw.includes("..")) {
+        if (!raw || temSegmentoPai(raw)) {
           console.warn("[protocol] local: path traversal bloqueado:", pathname);
           return new Response("Forbidden", { status: 403 });
         }

@@ -10,6 +10,7 @@ const {
   classicSearchDirs,
   joinDentroDe,
   isSizeAcceptable,
+  temSegmentoPai,
 } = require("../mediaRoots.js");
 
 /**
@@ -175,5 +176,20 @@ describe("isSizeAcceptable", () => {
 
   it("aceita arquivo maior que o esperado, que é o caso do mp3 no lugar do opus", () => {
     expect(isSizeAcceptable(4_000_000, 1_200_000)).toBe(true);
+  });
+});
+
+describe("temSegmentoPai", () => {
+  it("reconhece '..' como segmento, com / ou \\", () => {
+    expect(temSegmentoPai("/home/ana/../../etc/passwd")).toBe(true);
+    expect(temSegmentoPai("C:\\Users\\ana\\..\\x.mp3")).toBe(true);
+    expect(temSegmentoPai("..")).toBe(true);
+  });
+
+  it("aceita reticências e pontos duplos dentro de um nome de arquivo", () => {
+    expect(temSegmentoPai("/home/ana/Aleluia...mp3")).toBe(false);
+    expect(temSegmentoPai("/home/ana/Hino 1..mp3")).toBe(false);
+    expect(temSegmentoPai("/home/ana/.../a.mp3")).toBe(false);
+    expect(temSegmentoPai("/home/ana/..oculto/a.mp3")).toBe(false);
   });
 });

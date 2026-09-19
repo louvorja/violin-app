@@ -88,3 +88,28 @@ describe("Path.file — modo desktop", () => {
     expect(Path.file("img/thumb.jpg")).toBe("louvorja://files/img/thumb.jpg");
   });
 });
+
+describe("Path.local", () => {
+  it("codifica acento e espaço em caminho Unix", () => {
+    expect(Path.local("/home/ana/Área de trabalho/hino.mp3")).toBe(
+      "louvorja://local/home/ana/%C3%81rea%20de%20trabalho/hino.mp3"
+    );
+  });
+
+  it("codifica #, ? e %, que truncariam ou quebrariam a URL", () => {
+    expect(Path.local("/m/Hino #1?.mp3")).toBe("louvorja://local/m/Hino%20%231%3F.mp3");
+    expect(Path.local("/m/100% Deus.mp3")).toBe("louvorja://local/m/100%25%20Deus.mp3");
+  });
+
+  it("mantém a letra do drive e troca barras invertidas no Windows", () => {
+    expect(Path.local("C:\\Users\\ana\\Música\\a.mp3")).toBe(
+      "louvorja://local/C:/Users/ana/M%C3%BAsica/a.mp3"
+    );
+  });
+
+  it("volta ao caminho original quando decodificado como o protocolo faz", () => {
+    const raw = "/home/ana/Hino #1 (ao vivo)?.mp3";
+    const { pathname } = new URL(Path.local(raw));
+    expect(decodeURIComponent(pathname)).toBe(raw);
+  });
+});

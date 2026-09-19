@@ -64,11 +64,14 @@ export default {
    */
   local(filePath: string): string {
     const normalized = filePath.replace(/\\/g, "/");
+    // Cada segmento é codificado: `#`, `?` e `%` no nome truncavam ou quebravam a URL.
+    const encode = (path: string): string => path.split("/").map(encodeURIComponent).join("/");
     // Windows: C:/Users/... → louvorja://local/C:/Users/...
-    if (/^[A-Za-z]:\//.test(normalized)) {
-      return "louvorja://local/" + normalized;
+    const drive = normalized.match(/^([A-Za-z]:)\/(.*)$/);
+    if (drive) {
+      return `louvorja://local/${drive[1]}/${encode(drive[2])}`;
     }
     // Unix: /Users/... → louvorja://local/Users/...
-    return "louvorja://local" + normalized;
+    return "louvorja://local" + encode(normalized);
   },
 };
