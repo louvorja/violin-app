@@ -173,12 +173,11 @@ router.onError((error, to, from) => {
 
 // Em modo desktop (Electron), desregistra qualquer Service Worker que
 // tenha sido registrado em sessões anteriores (ex.: usuário rodou em
-// modo PWA e depois trocou para Electron) e limpa caches do workbox.
-// Sem isso, o SW pode interceptar requests de assets nas janelas
-// auxiliares (Projection, Operator) e servir JS desatualizado, ignorando
-// as mudanças de código mais recentes — sintoma: fix aplicado na main
-// mas projeção continua com comportamento antigo.
-if (Platform.isDesktop && typeof navigator !== "undefined") {
+// modo PWA e depois trocou para Electron) e limpa caches do workbox. A
+// origem/storage partition é compartilhada entre BrowserWindows: o renderer
+// principal já faz essa limpeza para todas as janelas. Repetir o scan em cada
+// Projection/Operator só disputa I/O e pode atrasar a abertura dessas telas.
+if (Platform.isDesktop && !isAuxiliaryRenderer && typeof navigator !== "undefined") {
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker
       .getRegistrations()
