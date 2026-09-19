@@ -96,7 +96,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick } from "vue";
+import { ref, watch, nextTick, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
 import { LjButton, LjIcon, LjTooltip } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
@@ -110,12 +110,20 @@ const {
   isOpen,
   isPinned,
   autoOpenOnNew,
+  loadHistory,
   sendMessage,
   setOpen,
   togglePin,
   setAutoOpen,
   clearHistory,
 } = useChat();
+
+// O histórico é uma leitura de disco/IPC e não participa do boot do operador.
+// O listener singleton do useChat já recebe mensagens desde o início; aqui
+// apenas hidratamos o histórico quando o drawer realmente entra na tela.
+onMounted(() => {
+  void loadHistory();
+});
 
 const newMessage = ref("");
 const messagesContainer = ref<HTMLDivElement | null>(null);

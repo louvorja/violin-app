@@ -296,16 +296,11 @@ export default async ({ mode }) => {
               return;
             }
 
-            // O registro de módulos num pacote só. O boot instala todos, e
-            // separados eram uma ida à rede por módulo — medido em 3G, a fila
-            // custava mais que o conteúdo. Juntos, o boot desceu de 226
-            // arquivos para 23.
-            //
-            // O pacote é grande porque cada `index.ts` importa as traduções do
-            // módulo nos dois idiomas, de forma estática; é isso que pesa, não
-            // o registro. Os componentes seguem fora, sob demanda.
-            if (/[\\/]src[\\/]modules[\\/][^\\/]+[\\/]index\.ts$/.test(id)) {
-              return "modules-registry";
+            // Manifestos são metadados do menu e são carregados juntos pelo
+            // ModuleManager. Mantê-los em um chunk compartilhado evita 37
+            // requisições no boot sem trazer as traduções dos módulos.
+            if (/[\\/]src[\\/]modules[\\/][^\\/]+[\\/]manifest\.ts$/.test(id)) {
+              return "modules-manifests";
             }
           },
         },

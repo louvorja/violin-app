@@ -1,5 +1,4 @@
 import { createRouter, createWebHashHistory, createWebHistory } from "vue-router";
-import Popup from "@/views/Popup.vue";
 import { PROJECTION_URL } from "@/constants/Projection";
 
 const routes = [
@@ -11,7 +10,7 @@ const routes = [
   {
     path: "/popup",
     name: "Popup",
-    component: Popup,
+    component: () => import("@/views/Popup.vue"),
   },
   {
     path: PROJECTION_URL.BASE,

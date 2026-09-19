@@ -79,7 +79,6 @@
                   :label="$t(resolveBtnLabel(btn))"
                   :size="btn.size || 'large'"
                   :active="isButtonActive(btn)"
-                  :hidden="!isButtonActive(btn)"
                   :disabled="btn.disabled"
                   :testid="`ribbon-btn-${btn.id}`"
                   @click="executeButton(btn)"
@@ -226,7 +225,6 @@
                   :label="$t(resolveBtnLabel(btn))"
                   :size="btn.size || 'small'"
                   :active="isButtonActive(btn)"
-                  :hidden="!isButtonActive(btn)"
                   :disabled="btn.disabled"
                   :testid="`ribbon-btn-${btn.id}`"
                   @click="executeButton(btn)"
@@ -324,7 +322,16 @@ async function loadDynamicOptions(): Promise<void> {
     dynamicSelectOptions.books = bookData as DynamicOption[];
   }
 }
-loadDynamicOptions();
+
+let dynamicOptionsPromise: Promise<void> | null = null;
+
+function ensureDynamicOptions(): void {
+  if (dynamicOptionsPromise) return;
+  dynamicOptionsPromise = loadDynamicOptions().catch((error) => {
+    dynamicOptionsPromise = null;
+    console.warn("[RibbonBar] opções dinâmicas indisponíveis:", error);
+  });
+}
 
 function getModuleIdForGroup(group: RibbonGroup): string | null {
   if (group.modules?.length) return group.modules[0];
@@ -428,6 +435,17 @@ const activeGroups: ComputedRef<RibbonGroup[]> = computed(() => {
     buttons: (g.buttons || []).filter((b) => !b.module || isModuleVisible(b.module)),
   }));
 });
+
+// As opções dinâmicas só aparecem em páginas contextuais. Não faça duas
+// leituras de Bíblia durante o boot da tela inicial se o operador nunca abrir
+// uma ribbon que as usa.
+watch(
+  () => activeGroups.value.some((group) => group.buttons?.some((button) => button.dynamicOptions)),
+  (needsDynamicOptions) => {
+    if (needsDynamicOptions) ensureDynamicOptions();
+  },
+  { immediate: true }
+);
 
 // ---------------------------------------------------------------------------
 // Rolagem da ribbon quando os grupos não cabem

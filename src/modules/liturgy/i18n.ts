@@ -5,7 +5,8 @@ const PREFIXO = `modules.${module.id}.`;
 
 /**
  * `t` do módulo — resolve contra `modules.liturgy.*` na instância única do
- * vue-i18n, a mesma onde o ModuleManager funde o `lang/` do módulo em boot.
+ * vue-i18n, a mesma onde o ModuleManager funde o `lang/` do módulo quando a
+ * aba é aberta.
  *
  * Existe porque cada arquivo daqui importava `lang/pt.json` e `lang/es.json`
  * direto e reimplementava a busca por caminho: treze cópias do mesmo resolvedor,

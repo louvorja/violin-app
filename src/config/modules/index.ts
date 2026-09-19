@@ -1,4 +1,4 @@
-import type { RibbonPage, RibbonGroup } from "@/types/Ribbon"
+import type { RibbonPage, RibbonGroup } from "@/types/Ribbon";
 import { Module, ModuleRibbon } from "@/types/Module";
 import { groups } from "@/config/modules/ribbon/groups";
 import { categories } from "@/config/modules/ribbon/categories";
@@ -7,17 +7,21 @@ import { moduleShowInMainMenu } from "@/constants/UserDataKeys";
 
 const modules = import.meta.glob<ModuleRibbon>("@/modules/*/manifest.ts", {
   eager: true,
-})
+});
 
-const allModules: Module[] = []
-const contextualPages: RibbonPage[] = []
+const allModules: Module[] = [];
+const allManifests: Module[] = [];
+const contextualPages: RibbonPage[] = [];
 
 for (const mod of Object.values(modules)) {
+  if (mod.module?.id) {
+    allManifests.push(mod.module);
+  }
   if (mod.module?.id && mod.module.showInMainMenu) {
-    allModules.push(mod.module)
+    allModules.push(mod.module);
   }
   if (mod.contextualPages?.length) {
-    contextualPages.push(...mod.contextualPages)
+    contextualPages.push(...mod.contextualPages);
   }
 }
 
@@ -102,7 +106,7 @@ export function buildRibbonPages(): RibbonPage[] {
  * @param {string }id id do módulo
  */
 export function getModule(id: string): Module | undefined {
-  return allModules.find((m) => m.id === id)
+  return allModules.find((m) => m.id === id);
 }
 
 /**
@@ -117,9 +121,15 @@ export function getModuleTitle(id: string): string {
 /**
  * Retorna Todos os modulos no formato Record<string, Module>
  */
-export const getModules: Record<string, Module> = {}
+export const getModules: Record<string, Module> = {};
 for (const m of allModules) {
-  getModules[m.id] = m
+  getModules[m.id] = m;
+}
+
+/** Todos os manifests, incluindo módulos de sistema que não aparecem na Ribbon. */
+export const getAllModules: Record<string, Module> = {};
+for (const m of allManifests) {
+  getAllModules[m.id] = m;
 }
 
 /**
@@ -129,10 +139,10 @@ for (const m of allModules) {
  * `showInMainMenu`). Permite ocultar/mostrar qualquer módulo em runtime.
  */
 export function isModuleVisible(id: string): boolean {
-  const mod = getModules[id]
-  if (!mod) return false
-  const fallback = mod.defaultShowInMainMenu ?? mod.showInMainMenu !== false
-  return $userdata.get(moduleShowInMainMenu(id), fallback) === true
+  const mod = getModules[id];
+  if (!mod) return false;
+  const fallback = mod.defaultShowInMainMenu ?? mod.showInMainMenu !== false;
+  return $userdata.get(moduleShowInMainMenu(id), fallback) === true;
 }
 
-export const getRibbonModules: RibbonPage[] = buildRibbonPages()
+export const getRibbonModules: RibbonPage[] = buildRibbonPages();

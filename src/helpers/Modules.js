@@ -40,10 +40,14 @@ export default {
     }
     $dev.write("open", id);
     const wasVisible = $appdata.get(`modules.${id}.show`, false) === true;
+    const wasActive = $appdata.get("active_module") === id;
     if (!wasVisible) Telemetry.markStart("module.open", id, { module_id: id });
 
-    $appdata.set(`modules.${id}.show`, true);
-    $appdata.set("active_module", id);
+    // Não dispare duas atualizações reativas ao apenas focar uma aba já
+    // aberta. No primeiro open ainda são necessárias as duas escritas, mas em
+    // trocas normais só active_module muda — o DOM da aba já está no cache.
+    if (!wasVisible) $appdata.set(`modules.${id}.show`, true);
+    if (!wasActive) $appdata.set("active_module", id);
     Telemetry.track(wasVisible ? "module_focused" : "module_opened", { module_id: id });
 
     // Track tab opening order (first opened = leftmost).

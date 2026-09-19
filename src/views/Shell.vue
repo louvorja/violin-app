@@ -13,7 +13,7 @@
       :style="{ '--footer-height': footerHeight }"
     >
       <div class="shell-grid">
-        <ChatDrawer v-if="Platform.isDesktop" />
+        <ChatDrawer v-if="Platform.isDesktop && (isChatOpen || isPinned)" />
 
         <div
           class="shell-center"
@@ -41,17 +41,19 @@
 
     <AppFooter />
 
-    <CommandPalette v-model="cmdPaletteOpen" />
-    <MusicSpotlight v-model="musicSearchOpen" />
-    <BibleSpotlight v-model="bibleSearchOpen" @select="onBibleSelect" />
-    <HotkeysCheatsheet v-model="hotkeysOpen" />
+    <CommandPalette v-if="cmdPaletteOpen" v-model="cmdPaletteOpen" />
+    <MusicSpotlight v-if="musicSearchOpen" v-model="musicSearchOpen" />
+    <BibleSpotlight v-if="bibleSearchOpen" v-model="bibleSearchOpen" @select="onBibleSelect" />
+    <HotkeysCheatsheet v-if="hotkeysOpen" v-model="hotkeysOpen" />
     <ReleaseNotesDialog
+      v-if="releaseNotesOpen"
       v-model="releaseNotesOpen"
       :release="releaseNotes"
       @close="onReleaseNotesClose"
     />
-    <StartupCheckDialog v-model="startupCheckOpen" />
+    <StartupCheckDialog v-if="startupCheckOpen" v-model="startupCheckOpen" />
     <UpdateAvailableDialog
+      v-if="updateDialogOpen"
       v-model="updateDialogOpen"
       :version="updateDialogVersion"
       @start-download="onUpdateDialogDownload"
@@ -130,7 +132,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
+import { ref, computed, onMounted, onBeforeUnmount, watch, defineAsyncComponent } from "vue";
 import { useI18n } from "vue-i18n";
 
 import { LjButton, LjDialog, LjProgress } from "@/components/ui";
@@ -140,18 +142,26 @@ import AppModules from "@/layout/Modules.vue";
 import AppAlert from "@/layout/Alert.vue";
 import AppSnackbar from "@/layout/SnackbarBar.vue";
 import $snackbar from "@/helpers/Snackbar";
-import CommandPalette from "@/layout/shell/CommandPalette.vue";
-import MusicSpotlight from "@components/MusicSpotlight.vue";
-import BibleSpotlight from "@components/BibleSpotlight.vue";
+const CommandPalette = defineAsyncComponent(() => import("@/layout/shell/CommandPalette.vue"));
+const MusicSpotlight = defineAsyncComponent(() => import("@components/MusicSpotlight.vue"));
+const BibleSpotlight = defineAsyncComponent(() => import("@components/BibleSpotlight.vue"));
 import RibbonBar from "@/layout/shell/RibbonBar.vue";
 import OpenModulesTabs from "@/layout/shell/OpenModulesTabs.vue";
 import ShellLiturgyPanel from "@/layout/shell/ShellLiturgyPanel.vue";
-import HotkeysCheatsheet from "@/layout/shell/HotkeysCheatsheet.vue";
-import StartupCheckDialog from "@/components/StartupCheckDialog.vue";
-import ReleaseNotesDialog from "@/components/ReleaseNotesDialog.vue";
+const HotkeysCheatsheet = defineAsyncComponent(
+  () => import("@/layout/shell/HotkeysCheatsheet.vue")
+);
+const StartupCheckDialog = defineAsyncComponent(
+  () => import("@/components/StartupCheckDialog.vue")
+);
+const ReleaseNotesDialog = defineAsyncComponent(
+  () => import("@/components/ReleaseNotesDialog.vue")
+);
 import type { ReleaseNotes } from "@/types/Update";
 import { shouldShowReleaseNotes } from "@/helpers/ReleaseNotesPolicy";
-import UpdateAvailableDialog from "@/components/UpdateAvailableDialog.vue";
+const UpdateAvailableDialog = defineAsyncComponent(
+  () => import("@/components/UpdateAvailableDialog.vue")
+);
 import DesktopDownloadPrompt from "@/components/DesktopDownloadPrompt.vue";
 import packageJson from "@root/package.json";
 import $appdata from "@/helpers/AppData";
@@ -177,7 +187,7 @@ import { formatBackgroundTaskDetail } from "@/helpers/BackgroundTaskDetail";
 import { useSyncManager } from "@/composables/useSyncManager";
 import BundleInstaller from "@/helpers/BundleInstaller";
 import { detectDesktopDownloadPlatform } from "@/helpers/DesktopDownload";
-import ChatDrawer from "@/components/ChatDrawer.vue";
+const ChatDrawer = defineAsyncComponent(() => import("@/components/ChatDrawer.vue"));
 import { useChat } from "@/composables/useChat";
 import ScheduledStore from "@/helpers/ScheduledStore";
 
@@ -186,12 +196,7 @@ const { applyStoredTheme } = useAppTheme();
 const { platform, width } = useViewport();
 const bgTasks = useBackgroundTasks();
 const sync = useSyncManager();
-const {
-  toggleOpen: toggleChat,
-  loadHistory: loadChatHistory,
-  isPinned,
-  isOpen: isChatOpen,
-} = useChat();
+const { toggleOpen: toggleChat, isPinned, isOpen: isChatOpen } = useChat();
 
 const cmdPaletteOpen = ref(false);
 const musicSearchOpen = ref(false);
@@ -744,9 +749,6 @@ onMounted(() => {
   window.addEventListener("louvorja:open-bible-search", onOpenBibleSearch);
   window.addEventListener("louvorja:open-startup-check", onOpenStartupCheck);
   window.addEventListener("louvorja:toggle-chat", toggleChat);
-
-  // Carrega histórico do chat
-  loadChatHistory();
 
   // Reseta estado da projeção background — garante que restarts
   // (normais ou por crash) não deixam a chave "presada" como true

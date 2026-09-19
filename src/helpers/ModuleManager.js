@@ -2,10 +2,19 @@
 import $appdata from "./AppData";
 import $userdata from "./UserData";
 import $dev from "./Dev";
-import $alert from "./Alert";
 import { moduleShowInMainMenu } from "@/constants/UserDataKeys";
 import { ICONS } from "@/config/Icons";
 import Telemetry from "@/helpers/Telemetry";
+import BaseModule from "@/modules/BaseModule";
+import { getAllModules } from "@/config/modules";
+import { moduleTitleFallback } from "@/config/modules/titles";
+
+// Os manifests são metadados pequenos e precisam existir para montar a Ribbon.
+// As traduções, porém, são o conteúdo pesado do boot e só entram quando um
+// módulo é realmente aberto. Os `index.ts` dos módulos eram apenas wrappers
+// idênticos que importavam pt.json + es.json para todos os 37 módulos.
+const _translationLoaders = import.meta.glob("@/modules/*/lang/*.json");
+const _translationPromises = new Map();
 
 /**
  * ModuleManager — lifecycle de módulos (boot-time).
@@ -27,6 +36,44 @@ import Telemetry from "@/helpers/Telemetry";
 export default {
   /** Referência ao i18n, injetada por init(). */
   i18n: null,
+
+  /**
+   * Carrega as duas línguas de um módulo na primeira utilização. Carregar as
+   * duas mantém a troca de idioma instantânea depois que a aba foi aberta,
+   * sem pagar o custo das traduções de módulos que nunca foram usados.
+   */
+  ensureTranslations(moduleId) {
+    if (!this.i18n) return Promise.resolve();
+    if (_translationPromises.has(moduleId)) return _translationPromises.get(moduleId);
+
+    const locales = ["pt", "es"];
+    const promise = Promise.all(
+      locales.map(async (locale) => {
+        const path = `/src/modules/${moduleId}/lang/${locale}.json`;
+        const loader = _translationLoaders[path];
+        if (typeof loader !== "function") return;
+        const loaded = await loader();
+        const translations = loaded?.default ?? loaded;
+        if (!translations || typeof translations !== "object") return;
+        this.i18n.global.mergeLocaleMessage(locale, {
+          modules: { [moduleId]: translations },
+        });
+      })
+    ).catch((error) => {
+      _translationPromises.delete(moduleId);
+      Telemetry.captureException(error, {
+        source: "module_translation_load",
+        module_id: moduleId,
+      });
+      // Tradução é melhoria de conteúdo, não pré-condição para montar a aba.
+      // Em offline/chunk desatualizado a tela funcional ainda deve abrir com
+      // os títulos de metadata e as chaves globais disponíveis.
+      return undefined;
+    });
+
+    _translationPromises.set(moduleId, promise);
+    return promise;
+  },
 
   /**
    * Instala um único módulo: registra no store, carrega i18n e customization.
@@ -80,6 +127,22 @@ export default {
         });
       }
 
+      // O título fica disponível desde o boot, mesmo antes de o JSON completo
+      // do módulo ser carregado sob demanda. O arquivo lazy substitui esse
+      // fallback assim que a aba é aberta.
+      if (manifest.name || manifest.id) {
+        this.i18n.global.mergeLocaleMessage("pt", {
+          modules: {
+            [manifest.id]: { title: moduleTitleFallback("pt", manifest.id, manifest.name) },
+          },
+        });
+        this.i18n.global.mergeLocaleMessage("es", {
+          modules: {
+            [manifest.id]: { title: moduleTitleFallback("es", manifest.id, manifest.name) },
+          },
+        });
+      }
+
       // Inicializa valores padrão de customização (não sobrescreve preferências salvas).
       if (manifest.customization) {
         Object.entries(manifest.customization).forEach(([key, customization]) => {
@@ -114,49 +177,18 @@ export default {
   async init(i18n) {
     this.i18n = i18n;
 
-    const modules = import.meta.glob("@/modules/**/index.ts");
-    const caminhos = Object.keys(modules);
-
-    // Buscar tudo de uma vez, instalar em ordem.
-    //
-    // Cada módulo é um chunk próprio, e pedi-los dentro do laço encadeava um
-    // round-trip por módulo: medido em 3G, trinta arquivos de 1 a 2KB entravam
-    // em fila indiana e somavam 4s — quase tudo espera de rede, com a shell
-    // parada até o último chegar. Juntos, custam praticamente uma ida só.
-    //
-    // A instalação continua na ordem das chaves do glob, que é estável: é ela
-    // que define a sequência dos módulos dentro de cada grupo do menu, montada
-    // por `push` em `module_group`.
-    const carregados = await Promise.all(
-      caminhos.map((path) =>
-        modules[path]().catch((e) => {
-          console.warn(`[ModuleManager] Falha ao carregar módulo ${path}:`, e);
-          Telemetry.captureException(e, { source: "module_chunk_load", module_path: path });
-          return null;
-        })
-      )
+    // Os manifests já são metadados suficientes para construir o registro.
+    // Registrar um BaseModule diretamente evita importar 37 wrappers que
+    // puxavam as traduções completas dos dois idiomas para o caminho crítico.
+    const manifests = Object.values(getAllModules).sort((a, b) =>
+      String(a.id).localeCompare(String(b.id))
     );
-
-    for (const [i, path] of caminhos.entries()) {
-      const moduleExports = carregados[i];
-      if (!moduleExports) continue;
+    for (const manifest of manifests) {
       try {
-        const ModuleClass = moduleExports.default;
-        if (typeof ModuleClass === "function") {
-          const module = new ModuleClass();
-          const parts = path.split("/");
-          if (module?.manifest?.id !== parts[parts.length - 2]) {
-            $alert.error({
-              text: "messages.misconfigured_module",
-              error: path,
-            });
-          } else {
-            await this.installModule(module);
-          }
-        }
+        await this.installModule(new BaseModule(manifest));
       } catch (e) {
-        console.warn(`[ModuleManager] Falha ao instalar módulo ${path}:`, e);
-        Telemetry.captureException(e, { source: "module_manager_init", module_path: path });
+        console.warn(`[ModuleManager] Falha ao instalar módulo ${manifest.id}:`, e);
+        Telemetry.captureException(e, { source: "module_manager_init", module_id: manifest.id });
       }
     }
 

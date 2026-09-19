@@ -64,6 +64,32 @@ const app = createApp(App);
 Telemetry.installVueErrorHandler(app);
 
 /**
+ * Renderers auxiliares exibem estado recebido por BroadcastChannel/IPC. Eles
+ * não precisam instalar a Ribbon, migrar documentos do operador ou registrar
+ * atalhos/HTTP globais — tudo isso pertence à janela principal.
+ */
+const AUXILIARY_ROUTE_PREFIXES = [
+  "/projection",
+  "/projecao",
+  "/obs",
+  "/operator",
+  "/clock",
+  "/relogio",
+  "/popup",
+  "/remote",
+];
+
+function initialRoutePath() {
+  if (typeof window === "undefined") return "/";
+  return window.location.hash.replace(/^#/, "").split("?")[0] || window.location.pathname || "/";
+}
+
+const isAuxiliaryRenderer = AUXILIARY_ROUTE_PREFIXES.some((prefix) => {
+  const route = initialRoutePath();
+  return route === prefix || route.startsWith(`${prefix}/`);
+});
+
+/**
  * Executa uma música no modo escolhido (vindo do `POST /api/open-song`).
  *
  * - `audio`         → slides + faixa cantada
@@ -369,7 +395,7 @@ $storage.hydrate().then(async () => {
   // D3 — Configurar API de download HTTPS no main process.
   // O token é opcional (mídia em /file/ é pública); filesUrl é o que importa.
   const downloadReady =
-    Platform.isDesktop && Platform.download
+    !isAuxiliaryRenderer && Platform.isDesktop && Platform.download
       ? Platform.download
           .setApiConfig({
             paramsUrl: `${API_URL}/params?type=env`,
@@ -383,11 +409,12 @@ $storage.hydrate().then(async () => {
   await Promise.all([userDataReady, protocolReady, downloadReady]);
   _bootStage("remote_config_ready");
 
-  // D6 — Inicializar listener de atalhos globais (no-op no browser/PWA).
-  Shortcuts.init();
+  // D6 — Atalhos globais pertencem à janela principal. Registrar o mesmo
+  // conjunto em cada projeção só cria trabalho e pode disputar o registro IPC.
+  if (!isAuxiliaryRenderer) Shortcuts.init();
 
   // D5 — Conectar eventos do servidor HTTP às ações do app.
-  if (Platform.isDesktop) {
+  if (Platform.isDesktop && !isAuxiliaryRenderer) {
     Platform.onHttpEvent(async (eventType, data) => {
       const action = data?.action;
       switch (eventType) {
@@ -913,7 +940,7 @@ $storage.hydrate().then(async () => {
     app.use(i18n);
     // Sem dependência mútua: um registra módulos no Pinia/i18n, o outro só
     // abre o IndexedDB. Rodar em série custava um round-trip de I/O à toa.
-    const moduleManagerReady = ModuleManager.init(i18n);
+    const moduleManagerReady = isAuxiliaryRenderer ? Promise.resolve() : ModuleManager.init(i18n);
     const idbReady = $idb.init();
 
     if (import.meta.env.DEV) {
@@ -928,54 +955,58 @@ $storage.hydrate().then(async () => {
     await Promise.all([moduleManagerReady, idbReady]);
     _bootStage("dependencies_ready");
 
-    // Documentos do usuário que ainda estejam no IndexedDB passam para os
-    // arquivos da pasta de dados. Antes do ScheduledStore.hydrate(), que já
-    // lê pela camada nova.
-    try {
-      await $docs.migrarDoIndexedDB([
-        DB_TABLE.LITURGY_LIBRARY,
-        DB_TABLE.SCHEDULED_CATEGORIES,
-        DB_TABLE.SCHEDULED_ITEMS,
-        DB_TABLE.MUSICS_PLAYLISTS,
-        DB_TABLE.CUSTOM_COLLECTIONS,
-        DB_TABLE.CUSTOM_SONGS,
-      ]);
-    } catch (e) {
-      console.warn("[main] migração de documentos falhou:", e);
-    }
+    if (!isAuxiliaryRenderer) {
+      // Documentos do usuário que ainda estejam no IndexedDB passam para os
+      // arquivos da pasta de dados. Antes do ScheduledStore.hydrate(), que já
+      // lê pela camada nova.
+      try {
+        await $docs.migrarDoIndexedDB([
+          DB_TABLE.LITURGY_LIBRARY,
+          DB_TABLE.SCHEDULED_CATEGORIES,
+          DB_TABLE.SCHEDULED_ITEMS,
+          DB_TABLE.MUSICS_PLAYLISTS,
+          DB_TABLE.CUSTOM_COLLECTIONS,
+          DB_TABLE.CUSTOM_SONGS,
+        ]);
+      } catch (e) {
+        console.warn("[main] migração de documentos falhou:", e);
+      }
 
-    // Hidrata o cache de Itens Agendados (migra UserData → IDB se preciso).
-    try {
-      await ScheduledStore.hydrate();
-    } catch (e) {
-      console.warn("[main] ScheduledStore.hydrate falhou:", e);
+      // Hidrata o cache de Itens Agendados (migra UserData → IDB se preciso).
+      try {
+        await ScheduledStore.hydrate();
+      } catch (e) {
+        console.warn("[main] ScheduledStore.hydrate falhou:", e);
+      }
     }
 
     // Liga o diagnóstico de conexão antes de montar: as telas de projeção são
     // rotas deste mesmo app e precisam do estado desde o primeiro quadro.
-    useConnectivity();
+    if (!isAuxiliaryRenderer) useConnectivity();
 
     app.mount("#app");
     _bootStage("mounted");
 
-    // [077] Migração one-time após mount. O Loading.vue já está no DOM, mas a
-    // janela ainda fica atrás do splash: se a migração for rápida, mostrar o
-    // overlay e escondê-lo no frame seguinte aparece como um popup piscando.
-    // Para 99% dos usuários (sem dados legados) é no-op instantâneo.
-    try {
-      const _legacyItems = UserData.get("modules.liturgy.items");
-      if (Array.isArray(_legacyItems) && _legacyItems.length > 0) {
-        AppData.set("loading", i18n.global.t("alert.migrating"));
-        await Liturgy.migrate();
-      } else {
-        await Liturgy.migrate();
+    if (!isAuxiliaryRenderer) {
+      // [077] Migração one-time após mount. O Loading.vue já está no DOM, mas a
+      // janela ainda fica atrás do splash: se a migração for rápida, mostrar o
+      // overlay e escondê-lo no frame seguinte aparece como um popup piscando.
+      // Para 99% dos usuários (sem dados legados) é no-op instantâneo.
+      try {
+        const _legacyItems = UserData.get("modules.liturgy.items");
+        if (Array.isArray(_legacyItems) && _legacyItems.length > 0) {
+          AppData.set("loading", i18n.global.t("alert.migrating"));
+          await Liturgy.migrate();
+        } else {
+          await Liturgy.migrate();
+        }
+      } catch (e) {
+        // Uma migração corrompida não pode manter o splash até o fallback de
+        // 10s. O app segue com os dados crus e deixa o erro observável no log.
+        console.warn("[main] migração de liturgia falhou:", e);
+      } finally {
+        AppData.set("loading", false);
       }
-    } catch (e) {
-      // Uma migração corrompida não pode manter o splash até o fallback de
-      // 10s. O app segue com os dados crus e deixa o erro observável no log.
-      console.warn("[main] migração de liturgia falhou:", e);
-    } finally {
-      AppData.set("loading", false);
     }
 
     // A janela principal está oculta esperando este aviso. Dois quadros de
@@ -993,11 +1024,16 @@ $storage.hydrate().then(async () => {
     // ---------------------------------------------------------------------------
     // M2 — Registrar atalhos de teclado in-window após o app montar.
     // ---------------------------------------------------------------------------
-    Hotkeys.init();
+    if (!isAuxiliaryRenderer) Hotkeys.init();
 
     // Observabilidade de uso e diagnóstico. Não bloqueia o boot e é no-op em
     // dev ou quando o usuário desliga a opção nas Opções.
     void Telemetry.init().then(() => _bootStage("telemetry_ready"));
+
+    // O restante deste callback registra atalhos e ações da janela principal.
+    // Projeções/OBS/operador já possuem seus próprios handlers de teclado e
+    // recebem comandos pelo BroadcastChannel.
+    if (isAuxiliaryRenderer) return;
 
     // --- Geral ---
 

@@ -90,17 +90,17 @@
 
 <script setup>
 import { LjIcon } from "@/components/ui";
-import { ref, computed, onMounted, onBeforeUnmount } from "vue";
-import AppMenuOpcoes from "./AppMenuOpcoes.vue";
-import AppMenuSobre from "./AppMenuSobre.vue";
-import AppMenuTransmitir from "./AppMenuTransmitir.vue";
-import AppMenuSincronizar from "./AppMenuSincronizar.vue";
-import AppMenuAcessibilidade from "./AppMenuAcessibilidade.vue";
-import AppMenuAtualizacoes from "./AppMenuAtualizacoes.vue";
-import AppMenuImportExport from "./AppMenuImportExport.vue";
-import AppMenuAlbums from "./AppMenuAlbums.vue";
-import AppMenuDev from "./AppMenuDev.vue";
-import AppMenuLicencas from "./AppMenuLicencas.vue";
+import { ref, computed, onMounted, onBeforeUnmount, defineAsyncComponent } from "vue";
+const AppMenuOpcoes = defineAsyncComponent(() => import("./AppMenuOpcoes.vue"));
+const AppMenuSobre = defineAsyncComponent(() => import("./AppMenuSobre.vue"));
+const AppMenuTransmitir = defineAsyncComponent(() => import("./AppMenuTransmitir.vue"));
+const AppMenuSincronizar = defineAsyncComponent(() => import("./AppMenuSincronizar.vue"));
+const AppMenuAcessibilidade = defineAsyncComponent(() => import("./AppMenuAcessibilidade.vue"));
+const AppMenuAtualizacoes = defineAsyncComponent(() => import("./AppMenuAtualizacoes.vue"));
+const AppMenuImportExport = defineAsyncComponent(() => import("./AppMenuImportExport.vue"));
+const AppMenuAlbums = defineAsyncComponent(() => import("./AppMenuAlbums.vue"));
+const AppMenuDev = defineAsyncComponent(() => import("./AppMenuDev.vue"));
+const AppMenuLicencas = defineAsyncComponent(() => import("./AppMenuLicencas.vue"));
 import Platform from "@/helpers/Platform";
 import $alert from "@/helpers/Alert";
 import { ICONS } from "@/config/Icons";
