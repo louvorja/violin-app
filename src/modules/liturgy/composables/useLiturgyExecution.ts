@@ -21,6 +21,7 @@ import {
   writeSlot as writeOverlaySlot,
 } from "@/helpers/Overlay";
 import type { LiturgyItem } from "@/types/Liturgy";
+import { getSong as getCustomSong } from "@/helpers/CustomSongs";
 import { AUDIO_EXT, IMAGE_EXT, VIDEO_EXT } from "@constants/FileTypes";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 import Telemetry from "@/helpers/Telemetry";
@@ -123,6 +124,21 @@ export function useLiturgyExecution() {
   async function playMusic(item: LiturgyItem, mode = "sung"): Promise<void> {
     if (item.escolha || !item.id_music) {
       reportMissingResource("play_music", "music_selection");
+      $alert.info({ text: chaveLiturgia("dialog.music_choose_first") });
+      return;
+    }
+
+    // Música personalizada (custom_collections) → executa via openCustomSong
+    if (item.ref_id && item.id_music < 0) {
+      try {
+        const song = await getCustomSong(item.ref_id);
+        if (song) {
+          $media.openCustomSong(song);
+          return;
+        }
+      } catch (error) {
+        reportExecutionError(error, "play_custom_music", { ref_id: item.ref_id });
+      }
       $alert.info({ text: chaveLiturgia("dialog.music_choose_first") });
       return;
     }

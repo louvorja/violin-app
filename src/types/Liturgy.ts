@@ -33,6 +33,8 @@ export interface LiturgyItem {
 export interface LiturgyMusicItem {
   id_music: number | string
   name: string
+  /** UUID de música personalizada (custom_collections). Presente apenas para músicas fora do catálogo principal. */
+  custom_song_id?: string
   [key: string]: unknown
 }
 

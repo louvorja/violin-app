@@ -231,6 +231,8 @@ function t(key: string): string {
 }
 
 function albumLabel(music: SearchMusicItem): string {
+  if ((music as unknown as Record<string, unknown>).custom_song_id)
+    return "Coletânea personalizada";
   if (music.albums_names) return music.albums_names;
   if (music.album) return music.album;
   if (Array.isArray(music.albums)) {

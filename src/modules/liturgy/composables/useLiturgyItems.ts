@@ -16,6 +16,7 @@ import type { OverlaySlot } from "@/types/Overlay";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import type { LiturgyItem, ScheduledCategory, LiturgyMusicItem } from "@/types/Liturgy";
+import { listSongs as listCustomSongs } from "@/helpers/CustomSongs";
 import { AUDIO_EXT, VIDEO_EXT } from "@constants/FileTypes";
 
 interface VideoItem {
@@ -403,6 +404,10 @@ export function useLiturgyItems(
           built.subtipo = f.subtipo || MusicActionEnum.SUNG;
           built.subitem = t("data.music_prefix") + " " + (m?.name || `#${f.musica}`);
           built.id_music = Number(f.musica);
+          // Música personalizada → salva UUID em ref_id
+          if (m?.custom_song_id) {
+            built.ref_id = m.custom_song_id;
+          }
         }
         break;
       }
@@ -655,7 +660,18 @@ export function useLiturgyItems(
       const data = await $database.get<LiturgyMusicItem[] | { data: LiturgyMusicItem[] }>(
         `${idioma()}_musics`
       );
-      musicsCache.value = Array.isArray(data) ? data : data?.data || [];
+      const catalog = Array.isArray(data) ? data : data?.data || [];
+
+      // Músicas personalizadas (custom_collections) — IDs virtuais negativos
+      // Começam em -2 para evitar conflito com o placeholder -1 do select.
+      const customSongs = await listCustomSongs();
+      const customItems: LiturgyMusicItem[] = customSongs.map((s, i) => ({
+        id_music: -(i + 2),
+        name: s.nome,
+        custom_song_id: s.id,
+      }));
+
+      musicsCache.value = [...catalog, ...customItems];
     } catch {
       musicsCache.value = [];
     }

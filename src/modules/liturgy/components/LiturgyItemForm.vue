@@ -567,10 +567,15 @@ const blocoOptions = computed(() => [
   })),
 ]);
 
-const musicOptions = computed(() => [
-  { value: -1, label: t("inputs.music_pick") },
-  ...props.musicsList.map((m) => ({ value: Number(m.id_music), label: m.name })),
-]);
+const musicOptions = computed(() => {
+  const placeholder = { value: -1, label: t("inputs.music_pick") };
+  const options = props.musicsList.map((m) => ({
+    value: Number(m.id_music),
+    label: m.custom_song_id ? `♪ ${m.name}` : m.name,
+  }));
+  options.sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+  return [placeholder, ...options];
+});
 
 const scheduledOptions = computed(() => [
   { value: "", label: t("inputs.scheduled_pick") },
