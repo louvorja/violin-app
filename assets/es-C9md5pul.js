@@ -1,0 +1,3 @@
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{};e._posthogReleaseId=e._posthogReleaseId||"01a0b81f-92bc-0000-60a4-3520e1bb3b78";var n=(new e.Error).stack;n&&(e._posthogChunkIds=e._posthogChunkIds||{},e._posthogChunkIds[n]="038e9fa9-16ca-5346-a2c4-1e5841ec2da8")}catch(e){}}();const o="Reloj",t="Reloj digital con fecha y hora.",e={title_ctx:"Configurar Reloj"},l={toggle_format:"Alternar 12h/24h",toggle_seconds:"Mostrar/ocultar segundos",fullscreen:"Abrir en pantalla completa"},n={title:o,description:t,ribbon:e,actions:l};export{l as actions,n as default,t as description,e as ribbon,o as title};
+
+//# chunkId=038e9fa9-16ca-5346-a2c4-1e5841ec2da8

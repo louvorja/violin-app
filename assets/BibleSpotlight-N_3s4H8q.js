@@ -1,0 +1,3 @@
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{};e._posthogReleaseId=e._posthogReleaseId||"01a0b81f-92bc-0000-60a4-3520e1bb3b78";var n=(new e.Error).stack;n&&(e._posthogChunkIds=e._posthogChunkIds||{},e._posthogChunkIds[n]="41506f4f-6e97-5dfb-9f88-74eef1fd52af")}catch(e){}}();import{_ as o}from"./BibleSpotlight.vue_vue_type_style_index_0_lang-CJxs6aTH.js";import"./vendor-vue-C3ZjOKnZ.js";import"./modules-manifests-BURSCBq0.js";import"./vendor-i18n-HMWn3lM9.js";import"./vendor-reka-BOa8gzNQ.js";import"./index-DIBWVIFr.js";export{o as default};
+
+//# chunkId=41506f4f-6e97-5dfb-9f88-74eef1fd52af

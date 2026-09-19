@@ -1,0 +1,3 @@
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{};e._posthogReleaseId=e._posthogReleaseId||"01a0b81f-92bc-0000-60a4-3520e1bb3b78";var n=(new e.Error).stack;n&&(e._posthogChunkIds=e._posthogChunkIds||{},e._posthogChunkIds[n]="45165092-edff-52f4-a5be-981feeb1af02")}catch(e){}}();const a="Aparência",s="Fornece ferramentas para customização das cores do programa.",e={title:a,description:s,"light-themes":"Temas Claros","dark-themes":"Temas Escuros"};export{e as default,s as description,a as title};
+
+//# chunkId=45165092-edff-52f4-a5be-981feeb1af02

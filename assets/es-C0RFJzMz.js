@@ -1,0 +1,3 @@
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{};e._posthogReleaseId=e._posthogReleaseId||"01a0b81f-92bc-0000-60a4-3520e1bb3b78";var n=(new e.Error).stack;n&&(e._posthogChunkIds=e._posthogChunkIds||{},e._posthogChunkIds[n]="a55da350-190b-564c-bf07-cf5abad1618c")}catch(e){}}();const a="Apariencia",e="Proporciona herramientas para personalizar los colores del programa.",s={title:a,description:e,"light-themes":"Temas Claros","dark-themes":"Temas Oscuros"};export{s as default,e as description,a as title};
+
+//# chunkId=a55da350-190b-564c-bf07-cf5abad1618c

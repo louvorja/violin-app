@@ -1,0 +1,3 @@
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{};e._posthogReleaseId=e._posthogReleaseId||"01a0b81f-92bc-0000-60a4-3520e1bb3b78";var n=(new e.Error).stack;n&&(e._posthogChunkIds=e._posthogChunkIds||{},e._posthogChunkIds[n]="71e71b54-14c2-5140-b74a-7af900e2de6e")}catch(e){}}();const s="Colecciones Diversas",c="Lista las colecciones",o="Todas las Colecciones",e="Categorías",t={title:"Localizar Músicas"},a={title:s,description:c,all_collections:o,categories:e,music_search:t};export{o as all_collections,e as categories,a as default,c as description,t as music_search,s as title};
+
+//# chunkId=71e71b54-14c2-5140-b74a-7af900e2de6e
