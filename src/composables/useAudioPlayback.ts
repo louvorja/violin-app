@@ -76,6 +76,17 @@ function _create(): AudioPlayback {
   let _listeningStartedReported = false;
   const LISTENING_REPORT_INTERVAL_MS = 30_000;
 
+  // Só a extensão: o suficiente para separar formato sem suporte de arquivo bloqueado.
+  function _srcExtension(el: HTMLMediaElement): string | undefined {
+    try {
+      const name = new URL(el.currentSrc || el.src).pathname.split("/").pop() || "";
+      const ext = name.includes(".") ? (name.split(".").pop() as string).toLowerCase() : "";
+      return /^[a-z0-9]{1,5}$/.test(ext) ? ext : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   function _telemetryProps(el: HTMLMediaElement, extra: Record<string, unknown> = {}): Record<string, unknown> {
     const error = el.error;
     return {
@@ -158,8 +169,9 @@ function _create(): AudioPlayback {
     if (eventName === "error") {
       const reason = el.error?.code === 1 ? "aborted" : el.error?.code === 2 ? "network" :
         el.error?.code === 3 ? "decode" : el.error?.code === 4 ? "source_not_supported" : "unknown";
-      Telemetry.track("music_playback_failed", _telemetryProps(el, { stage: "media_element", reason }));
-      Telemetry.log("error", "music media error", _telemetryProps(el, { stage: "media_element", reason }));
+      const failure = { stage: "media_element", reason, file_ext: _srcExtension(el) };
+      Telemetry.track("music_playback_failed", _telemetryProps(el, failure));
+      Telemetry.log("error", "music media error", _telemetryProps(el, failure));
       return;
     }
     if (eventName === "ended") {

@@ -663,8 +663,9 @@ export function histogram(name: string, value: number, attributes: MetricAttribu
 }
 
 /**
- * Mede travamentos que não aparecem como exceção: tarefas longas e atraso do
- * event loop. O monitor fica apenas na janela principal; projetor/controle
+ * Mede travamentos que não aparecem como exceção: tarefas longas e, onde essa
+ * API não existe, atraso do event loop. O monitor fica apenas na janela
+ * principal; projetor/controle
  * remoto não devem produzir uma segunda sessão de performance para o mesmo
  * culto. Histograma é agregado pelo SDK, enquanto eventos detalhados são
  * amostrados para manter o custo e o ruído sob controle.
@@ -681,6 +682,7 @@ function startResponsivenessMonitor(): void {
 
   const cleanups: Array<() => void> = [];
   let lastLongTaskEventAt = 0;
+  let longTaskObserved = false;
 
   if (typeof PerformanceObserver === "function") {
     try {
@@ -702,10 +704,12 @@ function startResponsivenessMonitor(): void {
             entry_type: entry.entryType,
             entry_name: entry.name,
             start_time_ms: Math.round(entry.startTime),
+            route: routePath(),
           });
         }
       });
       observer.observe({ type: "longtask", buffered: true });
+      longTaskObserved = true;
       cleanups.push(() => observer.disconnect());
     } catch (error) {
       // Safari/WebView mais antigo pode expor PerformanceObserver sem suportar
@@ -716,37 +720,43 @@ function startResponsivenessMonitor(): void {
     }
   }
 
-  const intervalMs = 1_000;
-  let previousTick = typeof performance !== "undefined" ? performance.now() : Date.now();
-  let visibilityChanged = false;
-  const markVisibilityChange = () => {
-    visibilityChanged = true;
-  };
-  document.addEventListener("visibilitychange", markVisibilityChange);
-  cleanups.push(() => document.removeEventListener("visibilitychange", markVisibilityChange));
-  const timer = window.setInterval(() => {
-    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
-    const driftMs = Math.max(0, Math.round(now - previousTick - intervalMs));
-    previousTick = now;
-    const crossedVisibilityChange = visibilityChanged;
-    visibilityChanged = false;
-    // Timers são estrangulados em segundo plano. O primeiro tick depois de a
-    // janela voltar carrega todo o atraso acumulado e a aba já está visível:
-    // isso não é travamento do renderer.
-    if (document.visibilityState === "hidden" || crossedVisibilityChange) return;
-    if (driftMs < UI_JANK_BUDGET.warn) return;
+  // Onde o longtask existe (Chromium/Electron), ele mede o travamento real. O
+  // atraso de timer também dispara com timer estrangulado e com salto de
+  // relógio: chegou a reportar 40 s de "travamento" numa janela que emitia
+  // eventos no meio do intervalo, sem nenhuma long task acima de 3,6 s. Aqui
+  // ele só serve de reserva para quem não expõe a API.
+  if (!longTaskObserved) {
+    const intervalMs = 1_000;
+    let previousTick = typeof performance !== "undefined" ? performance.now() : Date.now();
+    let visibilityChanged = false;
+    const markVisibilityChange = () => {
+      visibilityChanged = true;
+    };
+    document.addEventListener("visibilitychange", markVisibilityChange);
+    cleanups.push(() => document.removeEventListener("visibilitychange", markVisibilityChange));
+    const timer = window.setInterval(() => {
+      const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+      const driftMs = Math.max(0, Math.round(now - previousTick - intervalMs));
+      previousTick = now;
+      const crossedVisibilityChange = visibilityChanged;
+      visibilityChanged = false;
+      // O primeiro tick depois de a janela voltar do segundo plano carrega todo
+      // o atraso acumulado e a aba já está visível: não é travamento.
+      if (document.visibilityState === "hidden" || crossedVisibilityChange) return;
+      if (driftMs < UI_JANK_BUDGET.warn) return;
 
-    track("ui_thread_stall", {
-      duration_ms: driftMs,
-      severity: driftMs >= UI_JANK_BUDGET.critical ? "critical" : "slow",
-      expected_interval_ms: intervalMs,
-      route: routePath(),
-    });
-    histogram("louvorja.ui.stall.duration", driftMs, {
-      window_role: windowRole(),
-    });
-  }, intervalMs);
-  cleanups.push(() => window.clearInterval(timer));
+      track("ui_thread_stall", {
+        duration_ms: driftMs,
+        severity: driftMs >= UI_JANK_BUDGET.critical ? "critical" : "slow",
+        expected_interval_ms: intervalMs,
+        route: routePath(),
+      });
+      histogram("louvorja.ui.stall.duration", driftMs, {
+        window_role: windowRole(),
+      });
+    }, intervalMs);
+    cleanups.push(() => window.clearInterval(timer));
+  }
 
   _responsivenessCleanup = () => {
     for (const cleanup of cleanups.splice(0)) cleanup();
