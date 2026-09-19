@@ -11,7 +11,8 @@
 <script setup>
 /**
  * Container genérico de tabela: carrega JSON via Database, filtra por busca/letra/filter,
- * ordena e pagina (100 por vez via scroll ou RAF). Emite o estado via v-model.
+ * ordena e pagina em lotes adaptados ao equipamento via scroll. Emite o estado
+ * via v-model.
  * Ver MusicMenuTable.vue para o widget de ações por linha — são componentes distintos.
  */
 import { ref, watch, onMounted, onBeforeUnmount, nextTick } from "vue";
@@ -22,6 +23,7 @@ import Strings from "@/helpers/Strings";
 import { isHymnalTrack } from "@/helpers/Hymnal";
 import Fuse from "fuse.js";
 import Telemetry from "@/helpers/Telemetry";
+import { RUNTIME_PERFORMANCE } from "@/helpers/RuntimePerformance";
 
 /** Campos onde o operador erra a digitação — nome da música e do álbum. */
 const FUZZY_FIELDS = ["name", "albums_names"];
@@ -340,7 +342,7 @@ function fuzzySearch(base, searchable) {
 }
 
 function paginateData() {
-  const PAGE_SIZE = 100;
+  const PAGE_SIZE = RUNTIME_PERFORMANCE.tablePageSize;
   const searching = Strings.clean(props.search).length > 0;
 
   // Durante a busca, os resultados ficam limitados a no máximo 100.

@@ -160,6 +160,38 @@ export const contextualPages: RibbonPage[] = [
 | `screen`         | Botão de projeção com seletor de monitores      |
 | `customCategory` | Grupo inteiro substituído por componente Vue    |
 
+### Ciclo de vida e desempenho das abas
+
+`src/layout/Modules.vue` importa o componente de cada módulo sob demanda. Para
+módulos embedded, somente a aba ativa fica no DOM; um `KeepAlive` limitado
+conserva as últimas telas comuns dentro de um limite adaptado a `deviceMemory` e
+`hardwareConcurrency` (`src/helpers/RuntimePerformance.ts`). Relógio,
+cronômetros e liturgia ficam em uma faixa persistente separada porque podem
+continuar alimentando uma projeção enquanto outra aba está ativa. Popups como
+mídia, letra e álbum continuam coexistindo fora desse limite.
+
+Listeners registrados por `useBroadcastListener` são removidos durante a
+desativação de uma aba KeepAlive e registrados novamente na ativação. Assim,
+trocar de aba preserva o estado visual sem manter callbacks de módulos inativos
+processando cada evento cross-window.
+
+Tabelas grandes usam paginação incremental. O tamanho inicial também segue o
+perfil de recursos, para evitar montar centenas de linhas e componentes antes do
+primeiro paint; o scroll continua carregando as páginas seguintes.
+Em listas de músicas, o menu de cada linha permanece disponível, mas as ações
+rápidas só montam seus botões quando a linha recebe mouse ou foco; isso evita
+criar centenas de botões e ícones a cada troca de aba.
+
+O registro usa os manifests compactos; os wrappers `src/modules/*/index.ts` não
+entram no caminho crítico. Os textos completos de cada módulo são carregados
+quando a aba é aberta, enquanto os títulos curtos permanecem disponíveis no
+boot para a Ribbon.
+
+No Electron, a janela principal usa o throttling normal do Chromium quando não
+há projeção visível. O `windowFactory` desliga esse throttling somente enquanto
+uma janela auxiliar de projeção está visível, preservando relógios e timers no
+telão sem manter CPU alta quando o operador minimiza o app.
+
 ---
 
 ## 🔄 Gerenciamento de Estado
@@ -393,6 +425,8 @@ No Windows, os dois `Program Files` e as pastas expostas por
 
 - Tradução global em `src/lang/pt.json` e `src/lang/es.json`
 - Tradução por módulo em `src/modules/<id>/lang/`
+- Traduções completas de módulo são carregadas sob demanda na primeira abertura;
+  títulos curtos de todos os módulos ficam no metadata de boot para a Ribbon.
 - Chave de tradução: `modules.<id>.<key>` no i18n global
 - Helper `tt(key)` prefixa `modules.<id>.` automaticamente — usar para chaves do módulo
 - Helper `t(key)` acessa chaves globais (ex.: `t("actions.save")`) — usar para chaves compartilhadas
@@ -1332,7 +1366,8 @@ sequenceDiagram
 
     main->>idb: cria tabelas se necessário
     main->>i18n: carrega traduções
-    main->>mm: registra módulos (manifest.ts)
+    main->>mm: registra manifests compactos
+    mm-->>main: traduções completas ficam lazy por módulo
     main->>app: monta Vue app
     app-->>main: montado
     main->>hk: registra atalhos

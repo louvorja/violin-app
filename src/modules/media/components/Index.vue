@@ -208,6 +208,7 @@ const playback = useAudioPlayback();
 const videoPreview = ref(null);
 const videoPreviewFailed = ref(false);
 let videoSyncTimer = null;
+let mediaMounted = false;
 
 // O Slide.vue já resolve url_image relativo via Path.file internamente, então
 // repassamos o slide bruto. (Ainda mantemos pathFile() em Path.file via
@@ -289,6 +290,21 @@ function syncVideoPreview() {
   }
 }
 
+function stopVideoSyncTimer() {
+  if (videoSyncTimer) {
+    window.clearInterval(videoSyncTimer);
+    videoSyncTimer = null;
+  }
+}
+
+function updateVideoSyncTimer() {
+  if (!mediaMounted || !isLocalVideo.value) {
+    stopVideoSyncTimer();
+    return;
+  }
+  if (!videoSyncTimer) videoSyncTimer = window.setInterval(syncVideoPreview, 250);
+}
+
 watch(
   () => [isLocalVideo.value, config.value?.audio],
   async () => {
@@ -300,6 +316,7 @@ watch(
       video.play().catch(() => {});
       syncVideoPreview();
     }
+    updateVideoSyncTimer();
   },
   { immediate: true }
 );
@@ -424,22 +441,22 @@ function _syncFullscreenFlag() {
 }
 
 onMounted(() => {
+  mediaMounted = true;
   // capture:true → o listener fica antes de qualquer handler interno do v-dialog
   // ou v-list. Com stopImmediatePropagation neutraliza o handler global Hotkeys.
   window.addEventListener("keydown", _onKeyNav, { capture: true });
   document.addEventListener("fullscreenchange", _syncFullscreenFlag);
-  videoSyncTimer = window.setInterval(syncVideoPreview, 250);
+  // Não manter polling quando a mídia aberta é apenas áudio ou YouTube.
+  updateVideoSyncTimer();
   // Sync inicial — corrige flag herdado de sessão anterior se já estiver torto.
   _syncFullscreenFlag();
 });
 
 onBeforeUnmount(() => {
+  mediaMounted = false;
   window.removeEventListener("keydown", _onKeyNav, { capture: true });
   document.removeEventListener("fullscreenchange", _syncFullscreenFlag);
-  if (videoSyncTimer) {
-    window.clearInterval(videoSyncTimer);
-    videoSyncTimer = null;
-  }
+  stopVideoSyncTimer();
 });
 </script>
 

@@ -1,6 +1,12 @@
 <template>
-  <div class="mmt">
-    <template v-if="!compact">
+  <div
+    class="mmt"
+    @mouseenter="quickActionsHovered = true"
+    @mouseleave="quickActionsHovered = false"
+    @focusin="quickActionsFocused = true"
+    @focusout="quickActionsFocused = false"
+  >
+    <template v-if="!compact && showQuickActions">
       <LjButton
         v-for="btn in buttons"
         :key="btn.testid"
@@ -98,7 +104,7 @@
  * do próprio conteúdo flutuante: os níveis aninhados são montados ali com as peças
  * do Reka UI que o `LjMenu` já usa, reaproveitando as classes `lj-menu__*`.
  */
-import { computed, inject } from "vue";
+import { computed, inject, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useViewport } from "@/composables/useViewport";
 import {
@@ -144,22 +150,32 @@ interface ExtraMenuItem {
   click: () => void;
 }
 
-const props = defineProps<{
-  id_music: number;
-  name: string;
-  has_instrumental_music: boolean | number;
-  color?: string;
-  extraMenu?: ExtraMenuItem[];
-  showPlaylistMenu?: boolean;
-}>();
+const props = withDefaults(
+  defineProps<{
+    id_music: number;
+    name: string;
+    has_instrumental_music: boolean | number;
+    color?: string;
+    extraMenu?: ExtraMenuItem[];
+    showPlaylistMenu?: boolean;
+    /** Monta ações rápidas apenas quando a linha é explorada, reduzindo o custo da tabela. */
+    deferQuickActions?: boolean;
+  }>(),
+  { deferQuickActions: true }
+);
 
 const { t } = useI18n();
 const { width } = useViewport();
+const quickActionsHovered = ref(false);
+const quickActionsFocused = ref(false);
 
 const closeSpotlight = inject<() => void>("close-spotlight", () => {});
 
 const is_favorite = computed(() => Favorites.isFavorite(props.id_music));
 const compact = computed(() => width.value <= 550);
+const showQuickActions = computed(
+  () => !props.deferQuickActions || quickActionsHovered.value || quickActionsFocused.value
+);
 
 /**
  * A cor vem do consumidor (a tabela de álbuns pinta a linha de branco sobre a

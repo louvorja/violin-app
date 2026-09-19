@@ -31,9 +31,10 @@ import Platform from "@/helpers/Platform";
 const CHANNEL_NAME = "louvorja";
 
 /**
- * Tipos que representam ESTADO contínuo (replay no listener registrar e
- * encaminhamento via SSE). Eventos transitórios in-app (hotkeys, ribbon
- * actions, command palette, requests) ficam fora.
+ * Tipos que representam ESTADO contínuo e precisam de replay quando um
+ * listener registra. O relay SSE usa o subconjunto `TRANSMISSION_TYPES`
+ * abaixo; eventos transitórios in-app (hotkeys, ribbon actions, command
+ * palette, requests) ficam fora de ambos.
  */
 const STATEFUL_TYPES = new Set<string>([
   BROADCAST_TYPE.SLIDE_CHANGE,
@@ -52,9 +53,33 @@ const STATEFUL_TYPES = new Set<string>([
   BROADCAST_TYPE.LIBRAS_TOGGLE,
 ]);
 
+/**
+ * Subconjunto que o servidor HTTP realmente relay-a para clientes SSE.
+ *
+ * Estado como progresso de slide, arquivo e wallpaper continua sendo
+ * stateful para o BroadcastChannel local, mas não existe no contrato SSE
+ * (`electron/main/httpServer/events.js`). Mantê-lo fora deste conjunto evita
+ * um IPC por emissão apenas para o processo principal descartar a mensagem.
+ */
+const TRANSMISSION_TYPES = new Set<string>([
+  BROADCAST_TYPE.SLIDE_CHANGE,
+  BROADCAST_TYPE.SLIDES_DATA,
+  BROADCAST_TYPE.MEDIA_CLOSE,
+  BROADCAST_TYPE.BIBLE_VERSE,
+  BROADCAST_TYPE.BIBLE_FORMAT_CHANGED,
+  BROADCAST_TYPE.MODULE_PROJECTION_VALUE,
+  BROADCAST_TYPE.MODULE_FORMAT_CHANGED,
+  BROADCAST_TYPE.MESSAGE_BOARD,
+]);
+
 let channel: BroadcastChannel | null = null;
 const _localListeners = new Set<(msg: BroadcastMessage) => void>();
 const _lastByType = new Map<string, Map<string, BroadcastMessage>>();
+
+export interface BroadcastListenOptions {
+  /** Repassa o último estado conhecido ao registrar o listener. */
+  replay?: boolean;
+}
 
 function _cacheKey(msg: BroadcastMessage): string {
   return (msg.payload as Record<string, unknown> | undefined)?.module
@@ -84,7 +109,11 @@ function _deliverLocal(msg: BroadcastMessage): void {
     }
   }
   for (const cb of _localListeners) {
-    try { cb(msg); } catch { /* noop */ }
+    try {
+      cb(msg);
+    } catch {
+      /* noop */
+    }
   }
 }
 
@@ -141,15 +170,22 @@ export default {
     // Encaminhamento para clients SSE remotos. O main process filtra para
     // só aceitar da janela principal — nas janelas auxiliares isso vira
     // no-op silencioso e nada é duplicado.
-    if (STATEFUL_TYPES.has(type)) {
+    if (TRANSMISSION_TYPES.has(type)) {
       const t = Platform.transmission;
       if (t && typeof t.broadcast === "function") {
-        try { t.broadcast(msg); } catch { /* noop */ }
+        try {
+          t.broadcast(msg);
+        } catch {
+          /* noop */
+        }
       }
     }
   },
 
-  listen(callback: (msg: BroadcastMessage) => void): () => void {
+  listen(
+    callback: (msg: BroadcastMessage) => void,
+    options: BroadcastListenOptions = {}
+  ): () => void {
     getChannel(); // garante a inscrição cross-window
     _localListeners.add(callback);
 
@@ -158,9 +194,15 @@ export default {
     // tocando) precisam ver o estado atual sem esperar a próxima emissão.
     // O cache é aninhado (tipo → module_id → mensagem) para suportar
     // múltiplos módulos emitindo o mesmo tipo (ex: MODULE_PROJECTION_VALUE).
-    for (const inner of _lastByType.values()) {
-      for (const msg of inner.values()) {
-        try { callback(msg); } catch { /* noop */ }
+    if (options.replay !== false) {
+      for (const inner of _lastByType.values()) {
+        for (const msg of inner.values()) {
+          try {
+            callback(msg);
+          } catch {
+            /* noop */
+          }
+        }
       }
     }
 

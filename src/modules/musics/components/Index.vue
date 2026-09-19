@@ -147,6 +147,7 @@
                 :name="item.name"
                 :has_instrumental_music="item.has_instrumental_music"
                 :show-playlist-menu="true"
+                defer-quick-actions
               />
             </div>
           </td>

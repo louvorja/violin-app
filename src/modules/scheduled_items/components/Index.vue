@@ -311,7 +311,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
@@ -497,12 +497,27 @@ async function refresh(): Promise<void> {
 }
 
 // Popula categorias/itens ao abrir o módulo (o cache já foi hidratado no boot).
+// O módulo fica em KeepAlive; não atualize a cada 3s enquanto outra aba está
+// ativa, porque isso acorda o renderer sem trazer informação útil ao operador.
+function startRefreshTimer(): void {
+  if (_refreshTimer != null) return;
+  _refreshTimer = setInterval(() => void refresh(), 3000);
+}
+
+function stopRefreshTimer(): void {
+  if (_refreshTimer == null) return;
+  clearInterval(_refreshTimer);
+  _refreshTimer = null;
+}
+
 onMounted(() => {
   void refresh();
-  _refreshTimer = setInterval(() => void refresh(), 3000);
+  startRefreshTimer();
 });
+onActivated(startRefreshTimer);
+onDeactivated(stopRefreshTimer);
 onBeforeUnmount(() => {
-  if (_refreshTimer != null) clearInterval(_refreshTimer);
+  stopRefreshTimer();
 });
 
 // ─── Ribbon action: Adicionar Automaticamente ──────────────────────────
