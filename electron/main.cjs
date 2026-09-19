@@ -69,6 +69,7 @@ const windowFactory = require("./main/windowFactory.js");
 const identifyMonitors = require("./main/identifyMonitors.js");
 const httpServer = require("./main/httpServer/index.js");
 const devices = require("./main/devices.js");
+const youtubeReferer = require("./main/youtubeReferer.js");
 const shortcuts = require("./main/shortcuts.js");
 const updater = require("./main/updater.js");
 const powerBlocker = require("./main/powerBlocker.js");
@@ -707,6 +708,9 @@ app.whenReady().then(async () => {
 
   // D2 — Instalar handler do protocolo louvorja://
   protocolModule.handle();
+
+  // O embed do YouTube recusa (erro 153) quem não envia um Referer https.
+  youtubeReferer.install(session.defaultSession, require("../package.json").homepage);
 
   // CSP via headers (defense-in-depth) apenas para dev / HTTP.
   // Em prod, CSP é gerenciado pelo protocol handler (protocol.js) que

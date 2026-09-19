@@ -119,8 +119,10 @@ function createMainWindow(devUrl, prodHtmlPath, preloadPath) {
     // O motivo de outrora para preferir HTTP — o embed do YouTube exigir
     // origem real — não se confirma: medido no Ubuntu 24.04, o mesmo embed
     // responde 200 nas duas origens, e sob `http://localhost` ainda aparecem
-    // dois ERR_BLOCKED_BY_ORB que aqui não aparecem. O servidor Express segue
-    // no ar para o OBS; ele é que deixa de ser a origem das janelas.
+    // dois ERR_BLOCKED_BY_ORB que aqui não aparecem. O que o player cobra não
+    // é a origem, e sim um Referer https; sem ele responde 200 e depois falha
+    // com o erro 153 (ver youtubeReferer.js). O servidor Express segue no ar
+    // para o OBS; ele é que deixa de ser a origem das janelas.
     win.loadURL("louvorja://app/index.html#/");
   }
 
