@@ -572,6 +572,20 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
   },
 
   /**
+   * Arquivos que o sistema mandou abrir neste app (duplo clique num .slja,
+   * "Abrir com"). `subscribe` escuta os que chegam; `ready` avisa o main que o
+   * listener existe e devolve os que chegaram antes dele.
+   */
+  openFiles: {
+    subscribe(cb) {
+      const handler = (_e, paths) => cb(paths);
+      ipcRenderer.on("app:open-files", handler);
+      return () => ipcRenderer.off("app:open-files", handler);
+    },
+    ready: () => ipcRenderer.invoke("app:open-files-ready"),
+  },
+
+  /**
    * Registra um callback para eventos emitidos pelo servidor HTTP ao renderer.
    * Eventos: "http:song-slides", "http:open-song", "http:drawing-number", "http:drawing-name"
    * Retorna função de cleanup que remove todos os listeners.

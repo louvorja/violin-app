@@ -41,6 +41,7 @@ import { MusicActionEnum } from "@/enums/MusicActionEnum";
 import Broadcast from "@/helpers/Broadcast";
 import Liturgy from "@/helpers/Liturgy";
 import { IMAGE_EXT, AUDIO_EXT, VIDEO_EXT } from "@/constants/FileTypes";
+import { openSlja, SLJA_EXT } from "@/helpers/SljaPlayer";
 import { DB_TABLE } from "@/constants/DbTables";
 import $idb from "@/helpers/IndexedDB";
 import $docs from "@/helpers/DocStore";
@@ -501,6 +502,10 @@ $storage.hydrate().then(async () => {
 
               /** Abre projeção de arquivo por extensão (imagem/vídeo/áudio/pdf). */
               async function projectByExt(url, ext, title, libRef, sourcePath = url) {
+                if (ext === SLJA_EXT) {
+                  await openSlja(url, { title, origin: "remote" });
+                  return;
+                }
                 if (
                   (AUDIO_EXT.includes(ext) || VIDEO_EXT.includes(ext)) &&
                   (await openWithSystemPlayer(
@@ -1040,6 +1045,14 @@ $storage.hydrate().then(async () => {
     // Projeções/OBS/operador já possuem seus próprios handlers de teclado e
     // recebem comandos pelo BroadcastChannel.
     if (isAuxiliaryRenderer) return;
+
+    // Arquivos .slja que o sistema mandou abrir aqui (duplo clique, "Abrir
+    // com"). Cada um assume a projeção no lugar do anterior, então só o último
+    // de uma entrega em lote importa.
+    Platform.onOpenFiles((files) => {
+      const file = files[files.length - 1];
+      if (file) void openSlja(Path.local(file), { origin: "system" });
+    });
 
     // --- Geral ---
 

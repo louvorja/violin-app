@@ -60,6 +60,26 @@ compression: maximum
 asar: true
 
 # ---------------------------------------------------------------------------
+# Associação de arquivos — .slja (apresentação de slides do LouvorJA)
+# ---------------------------------------------------------------------------
+# Faz o sistema reconhecer o formato como do app e oferecê-lo em "Abrir com":
+#   Windows — o NSIS grava a classe em HKCU, o mesmo escopo do protocolo
+#             louvorja://, sem pedir UAC;
+#   macOS   — CFBundleDocumentTypes no Info.plist;
+#   Linux   — MimeType no .desktop e o tipo em /usr/share/mime (deb e rpm; o
+#             AppImage só declara o MimeType, o resto fica com o integrador).
+# O arquivo chega ao app por electron/main/fileOpen.js.
+#
+# Sem `icon`: o electron-builder procura build/slja.ico e build/slja.icns e,
+# não achando, usa o ícone do app.
+fileAssociations:
+  - ext: slja
+    name: Slides LouvorJA
+    description: Apresentação de slides do LouvorJA
+    mimeType: application/x-louvorja-slides
+    role: Viewer
+
+# ---------------------------------------------------------------------------
 # Publicação de releases — GitHub Releases (electron-updater)
 # ---------------------------------------------------------------------------
 # O electron-updater vai buscar aqui por novas versões.

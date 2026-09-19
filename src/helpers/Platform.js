@@ -270,6 +270,27 @@ export default {
   },
 
   /**
+   * Arquivos que o sistema mandou abrir neste app (duplo clique num .slja,
+   * "Abrir com", arrastar sobre o ícone). Entrega os que chegaram antes do
+   * listener existir e, depois, os seguintes. No-op no browser/PWA.
+   *
+   * @param {(paths: string[]) => void} cb  Caminhos absolutos.
+   * @returns {() => void} cleanup
+   */
+  onOpenFiles(cb) {
+    const openFiles = api?.openFiles;
+    if (!openFiles) return () => {};
+    const off = openFiles.subscribe(cb);
+    openFiles
+      .ready()
+      .then((paths) => {
+        if (paths?.length) cb(paths);
+      })
+      .catch((e) => console.warn("[Platform] open-files ready falhou:", e));
+    return off;
+  },
+
+  /**
    * Gerenciamento de armazenamento local (S2): stats, clear, verify,
    * setFilesDir, openDir, checkLocal, checkJson, removeFiles, sizeOfPaths, setAutoCache.
    * null no browser/PWA — controle só no desktop.

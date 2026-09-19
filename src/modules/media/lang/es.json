@@ -8,6 +8,7 @@
     "close_audio": "¿Quieres detener la musica?",
     "close_projection": "¿Quieres detener la proyección?",
     "file_not_found": "Archivo no encontrado.",
+    "slja_open_failed": "No se pudo abrir este archivo de diapositivas (.slja). Comprueba que exista y no esté dañado.",
     "open_remote": "La música se abre en tu aplicación de escritorio.",
     "open_remote_error": "Se produjo un error al reproducir tu música en la aplicación de escritorio. Comprueba si la transmisión está activada o desactiva la conexión remota para reproducirla en esta ubicación."
   },

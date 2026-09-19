@@ -22,6 +22,7 @@ import {
 } from "@/helpers/Overlay";
 import type { LiturgyItem } from "@/types/Liturgy";
 import { getSong as getCustomSong } from "@/helpers/CustomSongs";
+import { openSlja, SLJA_EXT } from "@/helpers/SljaPlayer";
 import { AUDIO_EXT, IMAGE_EXT, VIDEO_EXT } from "@constants/FileTypes";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 import Telemetry from "@/helpers/Telemetry";
@@ -526,6 +527,7 @@ export function useLiturgyExecution() {
     else if (VIDEO_EXT.includes(ext)) kind = "video";
     else if (AUDIO_EXT.includes(ext)) kind = "audio";
     else if (ext === "pdf") kind = "pdf";
+    else if (ext === SLJA_EXT) kind = SLJA_EXT;
     else if (typeHint) kind = typeHint;
 
     if (
@@ -600,6 +602,10 @@ export function useLiturgyExecution() {
       void $media.openAudio({ url, title: item.item || "", mediaType: "audio" }).catch((error: unknown) => {
         reportExecutionError(error, "open_audio_file", { kind });
       });
+    } else if (kind === SLJA_EXT) {
+      // Apresentação .slja toca aqui dentro: entregar ao SO abriria o programa
+      // associado (no Windows, o LouvorJA antigo) e tiraria o operador do app.
+      await openSlja(url, { title: item.item, origin: "liturgy" });
     } else if (!kind && !typeHint) {
       // Tipo desconhecido sem hint: comportamento legado (abrir com SO).
       if (!(await openWithSystemPlayer(dir, "unknown"))) openUrl(dir);

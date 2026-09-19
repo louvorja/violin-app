@@ -468,6 +468,7 @@ Helpers principais:
 | `BundleInstaller.ts`   | Download/extract/inject de bundle ZIP do banco (14 tabelas de catálogo)      |
 | `ImageConvert.ts`      | HEIC/HEIF → JPEG (`heic2any`) na importação                                  |
 | `SljaConverter.js`     | Import/export `.slja` do editor legado Delphi (JSZip + INI)                  |
+| `SljaPlayer.ts`        | `openSlja()` — apresenta um `.slja` na projeção do app, sem gravar nada      |
 | `SettingsStorage.ts`   | CRUD na tabela `settings` do IDB                                             |
 | `FilePicker.ts`        | `pickImage()` e `pickImageData()` — seletor de imagens                       |
 | `UserData.ts`          | Preferências do usuário (Pinia + persistência)                               |
@@ -850,6 +851,40 @@ cacheado por item (`heicProjectionCache`).
 O protocolo `louvorja://local` registra os MIME `.heic/.heif`, e a constante
 compartilhada `IMAGE_EXT` (`src/constants/FileTypes.ts`) inclui
 `heic/heif` em todos os accepts/filtros.
+
+---
+
+## 📂 Arquivos `.slja` (apresentação de slides)
+
+Um `.slja` é um pacote ZIP do LouvorJA clássico (slides, áudio, imagens).
+**Abrir** um `.slja` significa apresentá-lo dentro do app, como uma música
+personalizada — nunca entregá-lo ao sistema (`shell.openPath`), que abriria o
+programa associado (no Windows, o aplicativo antigo). `openSlja()`
+(`src/helpers/SljaPlayer.ts`) é o único caminho: lê o pacote, cria `blob:` URLs
+para áudio e imagens e chama `Media.openCustomSong()`. Nada é gravado; as URLs
+da apresentação anterior são liberadas quando a próxima assume. Importar para
+as Coletâneas continua sendo do módulo `custom_collections`.
+
+Quem chama `openSlja()`:
+
+| Origem                                             | Onde                                             |
+|----------------------------------------------------|--------------------------------------------------|
+| Item de liturgia / item agendado com arquivo `.slja` | `useLiturgyExecution.openFile()`               |
+| Liturgia executada pelo controle remoto (HTTP)     | `projectByExt()` em `src/main.js`                |
+| Duplo clique / "Abrir com" no sistema operacional  | `Platform.onOpenFiles()` em `src/main.js`        |
+
+**Associação com o sistema.** `fileAssociations` em `electron-builder.yml`
+declara a extensão: NSIS grava a classe em HKCU (ou HKLM no upgrade legado por
+máquina), o macOS recebe `CFBundleDocumentTypes` e o Linux, o `MimeType` no
+`.desktop` mais o tipo em `/usr/share/mime` (deb/rpm; o AppImage só declara o
+`MimeType`). O arquivo chega ao main de três jeitos, tratados em
+`electron/main/fileOpen.js`: argv do processo (Windows/Linux, app fechado),
+argv do `second-instance` (app aberto) e o evento `open-file` (macOS). No
+Linux o `%U` do `.desktop` entrega `file://…`, por isso a extração converte
+URLs. Como o renderer só escuta depois de subir, uma fila segura o que chegou:
+o renderer chama `app:open-files-ready`, recebe o que estava esperando e passa
+a receber os seguintes por `app:open-files`. Vários arquivos numa entrega
+apresentam só o último — cada um substituiria o anterior na projeção.
 
 ---
 

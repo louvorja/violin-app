@@ -195,6 +195,10 @@ declare global {
     transmission: Record<string, unknown>;
     appLogin: Record<string, unknown>;
     onHttpEvent: (cb: (eventType: string, data: unknown) => void) => () => void;
+    openFiles: {
+      subscribe: (cb: (paths: string[]) => void) => () => void;
+      ready: () => Promise<string[]>;
+    };
   }
 
   interface Window {

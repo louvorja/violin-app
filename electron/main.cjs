@@ -73,6 +73,7 @@ const youtubeReferer = require("./main/youtubeReferer.js");
 const shortcuts = require("./main/shortcuts.js");
 const updater = require("./main/updater.js");
 const powerBlocker = require("./main/powerBlocker.js");
+const fileOpen = require("./main/fileOpen.js");
 const splash = require("./main/splash.js");
 const storage = require("./main/storage.js");
 const docStore = require("./main/docStore.js");
@@ -249,13 +250,28 @@ function focusMainWindow() {
   return true;
 }
 
-app.on("second-instance", () => {
+// Arquivos .slja que o sistema pediu para abrir aqui (duplo clique, "Abrir com").
+// O app aberto pelo próprio arquivo o recebe no argv; o renderer só liga o
+// listener depois de subir, e a fila segura o que chegou até lá.
+const fileOpenQueue = fileOpen.createQueue();
+fileOpenQueue.push(fileOpen.extractSljaPaths(process.argv));
+
+app.on("second-instance", (_event, argv, workingDirectory) => {
+  fileOpenQueue.push(fileOpen.extractSljaPaths(argv, workingDirectory));
   // Durante o bootstrap a primeira janela ainda pode não existir. O processo
   // secundário já foi encerrado; a janela original continuará sendo criada,
   // portanto não abrimos outra nem perdemos o lock.
   if (!focusMainWindow()) {
     console.log("[LouvorJA] Instância principal ainda inicializando; mantendo a única janela.");
   }
+});
+
+// macOS entrega o arquivo por este evento, com o app aberto ou não — e ele
+// pode disparar antes do `ready`, por isso o registro é feito já aqui.
+app.on("open-file", (event, filePath) => {
+  event.preventDefault();
+  fileOpenQueue.push(fileOpen.extractSljaPaths([filePath]));
+  focusMainWindow();
 });
 
 // -------------------------------------------------------------------------
@@ -445,6 +461,10 @@ function createWindow() {
     else if (!mainWindow.isMinimized()) mainWindow.minimize();
     console.info("[lifecycle] Janela principal mantida em segundo plano:", projections);
   });
+
+  // Recarregar a página derruba o listener do renderer; até ele voltar a
+  // avisar que está pronto, o que chegar precisa ficar na fila.
+  mainWindow.webContents.on("did-start-loading", () => fileOpenQueue.reset());
 
   mainWindow.webContents.on("render-process-gone", (_event, details) => {
     reportMainProcessError(
@@ -1431,6 +1451,14 @@ ipcMain.on("app:ready", (event) => {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   if (event.sender !== mainWindow.webContents) return;
   revealMainWindow();
+});
+
+// O renderer da janela principal já escuta os arquivos abertos pelo sistema:
+// entrega o que chegou antes dele e passa a encaminhar os seguintes.
+ipcMain.handle("app:open-files-ready", (event) => {
+  if (!mainWindow || mainWindow.isDestroyed()) return [];
+  if (event.sender !== mainWindow.webContents) return [];
+  return fileOpenQueue.ready(event.sender);
 });
 
 ipcMain.handle("window:minimize", (event) => {
