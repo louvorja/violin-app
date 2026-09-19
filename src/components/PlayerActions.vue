@@ -113,6 +113,8 @@ import { LjButton, LjMenu, type LjMenuItem } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { open as openProjection } from "@/helpers/Projection";
 import { PROJECTION_TYPE, PROJECTION_URL } from "@/constants/Projection";
+import $userdata from "@/helpers/UserData";
+import { KEYS } from "@/constants/UserDataKeys";
 import type { MenuMode, PlayerButton, Slide } from "@/composables/usePlayerState";
 
 const props = withDefaults(
@@ -251,10 +253,16 @@ const ROUTE_OF_FEATURE: Record<string, string> = {
 };
 
 function openWindow(feature: string): void {
+  const isOperator = feature === PROJECTION_TYPE.OPERATOR;
   openProjection({
     feature,
     route: ROUTE_OF_FEATURE[feature],
-    fullscreen: feature !== PROJECTION_TYPE.OPERATOR,
+    // O menu do player precisa respeitar as mesmas preferências usadas pelo
+    // fluxo automático de mídia. Antes ele sempre forçava fullscreen para
+    // música/retorno, então essas janelas nunca viravam uma janela normal com
+    // botão na barra de tarefas do Windows.
+    fullscreen: isOperator ? false : $userdata.get(KEYS.OPTIONS.FULLSCREEN, true) === true,
+    alwaysOnTop: isOperator ? false : $userdata.get(KEYS.OPTIONS.ALWAYS_ON_TOP, true) === true,
   });
 }
 </script>

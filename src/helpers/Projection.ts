@@ -354,6 +354,9 @@ export async function open(opts: OpenOptions): Promise<void> {
   const monitorId = opts.monitorId ?? (await getPreferredMonitor(opts.feature));
   const fullscreen = opts.fullscreen ?? true;
   const alwaysOnTop = opts.alwaysOnTop ?? false;
+  const showInTaskbar =
+    opts.showInTaskbar ??
+    ($userdata.get(KEYS.OPTIONS.SHOW_PROJECTIONS_IN_TASKBAR, true) as boolean);
   const frame = opts.frame ?? !fullscreen;
 
   const api = await _getWindowsApi();
@@ -366,6 +369,7 @@ export async function open(opts: OpenOptions): Promise<void> {
         fullscreen,
         frame,
         alwaysOnTop,
+        showInTaskbar,
       });
       // O main recusa abrir na tela do operador quando o monitor do papel não
       // está conectado. Sem aviso o clique ficaria sem resposta nenhuma.

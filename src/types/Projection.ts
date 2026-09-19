@@ -19,6 +19,7 @@ export interface OpenOptions {
   monitorId?: number | string | null;
   fullscreen?: boolean;
   alwaysOnTop?: boolean;
+  showInTaskbar?: boolean;
   frame?: boolean;
 }
 

@@ -341,6 +341,17 @@
         </label>
       </div>
 
+      <div v-if="isDesktop" class="opt-row">
+        <label class="opt-checkbox">
+          <input
+            type="checkbox"
+            :checked="getUserData(KEYS.OPTIONS.SHOW_PROJECTIONS_IN_TASKBAR, true)"
+            @change="saveUserData(KEYS.OPTIONS.SHOW_PROJECTIONS_IN_TASKBAR, $c($event))"
+          />
+          <span>{{ $t("options.slides.show_in_taskbar") }}</span>
+        </label>
+      </div>
+
       <!--      Configurações da tela do operador  -->
       <div class="opt-row">
         <label class="opt-checkbox">
@@ -1603,6 +1614,9 @@ const previewMonitorH: ComputedRef<number> = computed(() => previewMonitor.value
 
 function saveUserData(key: string, value: unknown): void {
   $userdata.set(key, value);
+  if (key === KEYS.OPTIONS.SHOW_PROJECTIONS_IN_TASKBAR) {
+    void Platform.windows?.setTaskbarVisibility?.(value === true);
+  }
   if (key === KEYS.OPTIONS.FONT || key === KEYS.OPTIONS.PROJECTION_FONT) {
     Broadcast.send(BROADCAST_TYPE.SLIDE_FONT_CHANGED, {});
   } else if (key === KEYS.MODULES.BIBLE.FONT) {

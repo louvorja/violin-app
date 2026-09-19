@@ -31,6 +31,54 @@ let _mainWindow = null;
  */
 function setMainWindow(win) {
   _mainWindow = win;
+  _syncMainBackgroundThrottling();
+}
+
+/** Retorna se uma janela está realmente ativa para fins de renderização. */
+function _isWindowActive(win) {
+  if (!win || win.isDestroyed()) return false;
+  try {
+    return win.isVisible() && !(win.isMinimized && win.isMinimized());
+  } catch (_) {
+    return false;
+  }
+}
+
+/** Suspende timers/renderização de uma janela auxiliar escondida ou minimizada. */
+function _syncAuxBackgroundThrottling(win) {
+  if (!win || win.isDestroyed()) return;
+  try {
+    win.webContents.setBackgroundThrottling(!_isWindowActive(win));
+  } catch (_) {
+    /* Electron antigo ou renderer já destruído. */
+  }
+}
+
+function _shouldSkipTaskbar(meta) {
+  return (
+    meta?.fullscreen === true &&
+    (process.platform === "win32" || process.platform === "linux") &&
+    meta?.showInTaskbar !== true
+  );
+}
+
+/**
+ * A janela principal só precisa continuar sem throttling quando uma janela de
+ * apresentação visível depende dos timers do renderer (slides, vídeo, Bíblia).
+ * Janelas auxiliares escondidas por monitor desconectado não justificam o
+ * custo de CPU.
+ */
+function _syncMainBackgroundThrottling() {
+  if (!_mainWindow || _mainWindow.isDestroyed()) return;
+  const projectionVisible = Array.from(_openWindows.entries()).some(([feature, win]) => {
+    const meta = _windowMeta.get(feature) || {};
+    return _isProjectionPresentationWindow(meta.route, feature) && _isWindowActive(win);
+  });
+  try {
+    _mainWindow.webContents.setBackgroundThrottling(!projectionVisible);
+  } catch (_) {
+    /* Electron antigo: a opção inicial continua sendo segura. */
+  }
 }
 
 /** Devolve o foco à janela principal (se viva) após abrir uma janela auxiliar. */
@@ -116,6 +164,7 @@ function _isProjectionPresentationWindow(route, feature) {
  * @param {number} [options.monitorId]     ID do display Electron. Se omitido, usa preferência salva.
  * @param {boolean} [options.fullscreen=true]
  * @param {boolean} [options.frame=false]
+ * @param {boolean} [options.showInTaskbar=true] Exibe a janela fullscreen na taskbar.
  * @param {number} [options.width]         Largura quando não fullscreen
  * @param {number} [options.height]        Altura quando não fullscreen
  * @param {string} options.preloadPath
@@ -126,7 +175,7 @@ function _isProjectionPresentationWindow(route, feature) {
  * @returns {BrowserWindow|null} null quando abrir significaria ocupar a tela do
  *   operador no lugar do monitor configurado — ver o bloco de decisão abaixo.
  */
-function openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = false, preloadPath, devUrl, prodHtmlPath, width, height, alwaysOnTop = false, devTools = null }) {
+function openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = false, preloadPath, devUrl, prodHtmlPath, width, height, alwaysOnTop = false, showInTaskbar = true, devTools = null }) {
   // Se já existe janela para essa feature, mostra-a sem roubar o foco da main.
   //
   // Quando ela está escondida é porque o monitor dela sumiu e o `reconcile` a
@@ -143,6 +192,9 @@ function openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = f
       if (!alvo) return null; // segue escondida
       _placeOnDisplay(existing, alvo, _windowMeta.get(feature) || {});
     }
+    _syncAuxBackgroundThrottling(existing);
+    _syncMainBackgroundThrottling();
+    _syncPowerBlocker();
     _refocusMainWindow();
     return existing;
   }
@@ -190,15 +242,16 @@ function openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = f
     backgroundColor: "#000000",
     transparent: false,
     hasShadow: false,
-    // Em fullscreen no Windows queremos que a janela viva fora do
-    // taskbar (skipTaskbar) — evita acidentalmente trazer foco pra cá
-    // e perder z-order no projetor.
-    skipTaskbar: fullscreen && (isWin || isLin),
+    // Fullscreen continua acima de tudo, mas pode permanecer visível na barra
+    // de tarefas para o operador localizar/fechar a janela pelo Windows.
+    skipTaskbar: _shouldSkipTaskbar({ fullscreen, showInTaskbar }),
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      // A janela é criada oculta; os listeners de show/hide/minimize/restore
+      // alternam isso para true enquanto ela não estiver sendo apresentada.
       backgroundThrottling: false,
       // Garante que o renderer pinte antes da gente chamar show()
       paintWhenInitiallyHidden: true,
@@ -206,6 +259,29 @@ function openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = f
   };
 
   const win = new BrowserWindow(winOpts);
+  const windowMeta = {
+    route,
+    feature,
+    fullscreen,
+    alwaysOnTop,
+    showInTaskbar,
+    useDeferredFullscreen,
+    useMacPresentationLevel,
+    isMac,
+    overscan,
+  };
+  _windowMeta.set(feature, windowMeta);
+
+  const syncWindowActivity = () => {
+    _syncAuxBackgroundThrottling(win);
+    _syncMainBackgroundThrottling();
+    _syncPowerBlocker();
+  };
+  win.on("show", syncWindowActivity);
+  win.on("hide", syncWindowActivity);
+  win.on("minimize", syncWindowActivity);
+  win.on("restore", syncWindowActivity);
+  _syncAuxBackgroundThrottling(win);
 
   // Em modo dev, abre DevTools automaticamente em janelas de projeção/operador.
   // Em janelas fullscreen o atalho Ctrl+Shift+I pode não chegar até a página,
@@ -287,6 +363,8 @@ function openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = f
     if (_shown || win.isDestroyed()) return;
     _shown = true;
     win.showInactive();
+    _syncAuxBackgroundThrottling(win);
+    _syncMainBackgroundThrottling();
     _applyDeferredFullscreen();
     if (fullscreen && (isWin || isLin)) {
       // No Windows o "always on top: screen-saver" é o único nível que
@@ -344,6 +422,7 @@ function openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = f
   win.on("closed", () => {
     _openWindows.delete(feature);
     _windowMeta.delete(feature);
+    _syncMainBackgroundThrottling();
     _syncPowerBlocker();
     if (useMacPrimaryKiosk && app.dock && typeof app.dock.show === "function") {
       setTimeout(() => {
@@ -364,20 +443,14 @@ function openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = f
   }
 
   _openWindows.set(feature, win);
+  _syncAuxBackgroundThrottling(win);
+  _syncMainBackgroundThrottling();
   _syncPowerBlocker();
-  _windowMeta.set(feature, {
-    fullscreen,
-    alwaysOnTop,
-    useDeferredFullscreen,
-    useMacPresentationLevel,
-    isMac,
-    overscan,
-  });
   return win;
 }
 
 /**
- * Impede a tela de apagar enquanto existir janela de projeção aberta.
+ * Impede a tela de apagar enquanto existir apresentação visível em tela cheia.
  *
  * Um culto passa longos trechos sem ninguém tocar em teclado ou mouse — um
  * slide fica no ar o hino inteiro. O descanso de tela do sistema conta esse
@@ -386,9 +459,12 @@ function openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = f
  * enquanto há vídeo tocando, o que não cobre slide nem versículo.
  */
 function _syncPowerBlocker() {
-  const anyOpen = Array.from(_openWindows.values()).some((w) => w && !w.isDestroyed());
+  const anyPresentationVisible = Array.from(_openWindows.entries()).some(([feature, win]) => {
+    const meta = _windowMeta.get(feature) || {};
+    return meta.fullscreen === true && _isWindowActive(win);
+  });
   try {
-    if (anyOpen) powerBlocker.start();
+    if (anyPresentationVisible) powerBlocker.start();
     else powerBlocker.stop();
   } catch (e) {
     console.warn("[windowFactory] powerBlocker:", e?.message || e);
@@ -519,13 +595,18 @@ function reconcile(resolveDisplay) {
         try { win.hide(); } catch (_) { /* ignore */ }
         hidden.push(feature);
       }
+      _syncAuxBackgroundThrottling(win);
       continue;
     }
 
     const wasHidden = !win.isVisible();
     _placeOnDisplay(win, display, meta);
+    _syncAuxBackgroundThrottling(win);
     if (wasHidden) shown.push(feature);
   }
+
+  _syncMainBackgroundThrottling();
+  _syncPowerBlocker();
 
   return { shown, hidden };
 }
@@ -566,4 +647,32 @@ function getWindow(feature) {
   return w && !w.isDestroyed() ? w : null;
 }
 
-module.exports = { openOnMonitor, close, closeAll, listOpen, getWindow, setMainWindow, reconcile };
+/** Aplica a preferência de visibilidade na barra às janelas já abertas. */
+function setTaskbarVisibility(show) {
+  const showInTaskbar = show === true;
+  let updated = 0;
+  for (const [feature, win] of _openWindows.entries()) {
+    if (!win || win.isDestroyed()) continue;
+    const meta = _windowMeta.get(feature) || {};
+    meta.showInTaskbar = showInTaskbar;
+    _windowMeta.set(feature, meta);
+    try {
+      win.setSkipTaskbar(_shouldSkipTaskbar(meta));
+      updated += 1;
+    } catch (error) {
+      console.warn(`[windowFactory] Falha ao atualizar taskbar de ${feature}:`, error?.message || error);
+    }
+  }
+  return { ok: true, updated };
+}
+
+module.exports = {
+  openOnMonitor,
+  close,
+  closeAll,
+  listOpen,
+  getWindow,
+  setMainWindow,
+  setTaskbarVisibility,
+  reconcile,
+};

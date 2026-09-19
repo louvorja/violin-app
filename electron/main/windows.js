@@ -67,9 +67,11 @@ function createMainWindow(devUrl, prodHtmlPath, preloadPath) {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false, // Necessário para BroadcastChannel funcionar entre janelas
-      // Minimizar a janela principal não pode suspender o relógio/módulos que
-      // enviam estado para as projeções abertas durante o culto.
-      backgroundThrottling: false,
+      // O throttling da janela principal é desativado dinamicamente apenas
+      // enquanto há uma projeção visível. Com o app minimizado e sem telão,
+      // deixar o Chromium rodar timers/renderização em velocidade normal
+      // desperdiça CPU em máquinas Windows mais fracas.
+      backgroundThrottling: true,
     },
   });
 

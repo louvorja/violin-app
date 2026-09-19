@@ -278,6 +278,9 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
     /** Liga/desliga always-on-top de uma janela aberta */
     setAlwaysOnTop: (feature, on) =>
       ipcRenderer.invoke("windows:setAlwaysOnTop", feature, on),
+    /** Mostra/oculta janelas de projeção fullscreen na barra de tarefas */
+    setTaskbarVisibility: (show) =>
+      ipcRenderer.invoke("windows:setTaskbarVisibility", show),
   },
 
   // F5.1 — Iniciar com o sistema operacional

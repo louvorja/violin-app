@@ -256,6 +256,7 @@ export const KEYS = {
       RETURN_BOTTOM_TEXT_ALIGN: `${OPTIONS_SLIDE}.return_bottom_text_align`,
     },
     ALWAYS_ON_TOP: `${OPTIONS}.always_on_top`,
+    SHOW_PROJECTIONS_IN_TASKBAR: `${OPTIONS}.show_projections_in_taskbar`,
     FILE_PROJECTION: {
       ALWAYS_ON_TOP: `${OPTIONS_FILE_PROJECTION}.always_on_top`,
       BACKGROUND_ENABLED: `${OPTIONS_FILE_PROJECTION}.background_enabled`,

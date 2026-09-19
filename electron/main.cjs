@@ -1580,6 +1580,14 @@ ipcMain.handle("windows:setAlwaysOnTop", (_event, feature, alwaysOnTop) => {
   }
 });
 
+ipcMain.handle("windows:setTaskbarVisibility", (_event, show) => {
+  try {
+    return windowFactory.setTaskbarVisibility(!!show);
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+});
+
 // ---------------------------------------------------------------------------
 // IPC: Storage (S2) — visibilidade e gerenciamento da pasta de mídia + cache
 // ---------------------------------------------------------------------------
