@@ -135,7 +135,7 @@ function formatTime(timestamp: string): string {
 }
 
 function onSend(): void {
-  const text = newMessage.value.trim();
+  const text = newMessage.value;
   if (!text) return;
   sendMessage(text);
   newMessage.value = "";
@@ -316,6 +316,7 @@ watch(
 /* Input */
 .chat-drawer__input {
   display: flex;
+  align-items: center;
   gap: 6px;
   padding: 8px;
   border-top: 1px solid var(--lj-surface-border);

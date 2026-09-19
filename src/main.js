@@ -1524,7 +1524,6 @@ $storage.hydrate().then(async () => {
       description: "hotkeys.space",
       group: "media",
       label: "Space",
-      allowInForm: true,
     });
     Hotkeys.register("Pause", _togglePlayPause, {
       context: "media",

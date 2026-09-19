@@ -93,7 +93,7 @@ export function useChat() {
     const msg: ChatMessage = {
       id: crypto.randomUUID(),
       sender: "Operador",
-      text: text.trim(),
+      text: text,
       timestamp: new Date().toISOString(),
     };
 
