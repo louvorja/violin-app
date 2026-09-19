@@ -89,6 +89,19 @@ const diagnosticLogsRequested =
 function configureAppPaths() {
   // Mantém o identificador técnico do pacote separado do nome exibido.
   app.setName("LouvorJA Violin");
+
+  // O teste E2E do Electron precisa de um userData isolado: sem isso o lock de
+  // instância única encontra a cópia que o operador já está usando e encerra
+  // o processo de teste antes de criar a janela. A variável nunca é definida
+  // em builds normais.
+  const e2eUserData = process.env.LJ_E2E_USER_DATA?.trim();
+  if (e2eUserData) {
+    const isolatedRoot = path.resolve(e2eUserData);
+    app.setPath("userData", isolatedRoot);
+    app.setPath("documents", path.join(isolatedRoot, "documents"));
+    return;
+  }
+
   app.setPath("userData", path.join(app.getPath("appData"), "LouvorJA Violin"));
 }
 
@@ -674,20 +687,19 @@ app.whenReady().then(async () => {
   // nada disso dá sinal de vida ao operador.
   splash.show();
 
-  await _bootstrapMonitorConfig();
-
-  // Limpa Service Workers herdados de execuções anteriores em modo PWA/dev.
-  // Em prod desktop o app é file:// e não usa SW, mas se o usuário já abriu
-  // o app via dev server / PWA, o SW persistido pode interceptar requests
-  // e servir assets antigos (chunks com hash diferente). Sintoma: tela
-  // branca após upgrade de versão. Limpamos uma vez por boot — barato.
-  try {
-    await session.defaultSession.clearStorageData({
-      storages: ["serviceworkers", "cachestorage"],
-    });
-  } catch (e) {
-    console.warn("[main] Falha ao limpar SW/caches:", e?.message || e);
-  }
+  // A identificação de monitores e a limpeza dos caches de desenvolvimento
+  // são independentes. Em máquinas lentas não faz sentido somar os dois
+  // tempos, e o executável empacotado nem usa Service Worker: sua origem é
+  // `louvorja://`, não o servidor PWA/dev.
+  const monitorBootstrap = _bootstrapMonitorConfig();
+  const devCacheCleanup = isDev
+    ? session.defaultSession
+        .clearStorageData({ storages: ["serviceworkers", "cachestorage"] })
+        .catch((e) => {
+          console.warn("[main] Falha ao limpar SW/caches:", e?.message || e);
+        })
+    : Promise.resolve();
+  await Promise.all([monitorBootstrap, devCacheCleanup]);
 
   // Dock icon no macOS — SÓ em dev, onde não há bundle e o Dock mostraria o
   // ícone genérico do Electron. Em produção o .icns do .app já está correto e

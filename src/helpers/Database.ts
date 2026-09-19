@@ -192,7 +192,7 @@ function rowValid(row: ItemRow | undefined | null): row is ItemRow {
 
 /** Dataset "items": linhas do arquivo, válidas e na ordem original. */
 async function readItems<T>(file: string, table: string): Promise<T[] | null> {
-  const all = await $idb.getAll<ItemRow>(table);
+  const all = await $idb.getAllByPrefix<ItemRow>(table, `${file}:`);
   const meta = all.find((r) => r.file === file && r.dataId === META_ID);
   if (!rowValid(meta)) return null;
   const rows = all.filter((r) => r.file === file && r.dataId !== META_ID);
@@ -274,14 +274,14 @@ async function writeItems(
   idKey: string,
   arr: Array<Record<string, unknown>>
 ): Promise<void> {
-  const all = await $idb.getAll<ItemRow>(table);
+  const all = await $idb.getAllByPrefix<ItemRow>(table, `${file}:`);
   const prev = new Map<string, ItemRow>();
   for (const r of all) {
     if (r.file === file && r.dataId !== META_ID) prev.set(r.dataId, r);
   }
 
   const puts: ItemRow[] = [];
-  const dels: Promise<void>[] = [];
+  const deleteIds: string[] = [];
   const seen = new Set<string>();
 
   for (let seq = 0; seq < arr.length; seq++) {
@@ -300,11 +300,11 @@ async function writeItems(
     puts.push(makeRow(file, dataId, seq, item));
   }
   for (const [dataId, row] of prev) {
-    if (!seen.has(dataId)) dels.push($idb.del(table, row.id));
+    if (!seen.has(dataId)) deleteIds.push(row.id);
   }
 
   puts.push(makeRow(file, META_ID, -1, null));
-  await Promise.all([...puts.map((r) => $idb.put(table, r)), ...dels]);
+  await $idb.putMany(table, puts, deleteIds);
 }
 
 async function writeRouted(file: string, data: unknown, r: Route | null): Promise<void> {

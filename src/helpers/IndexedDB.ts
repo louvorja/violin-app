@@ -48,9 +48,39 @@ export default {
     return (await getDb()).getAll(table);
   },
 
+  /**
+   * Retorna somente os registros cujas chaves começam com `prefix`.
+   * As tabelas normalizadas usam o arquivo lógico como prefixo da chave
+   * (`pt_musics:123`), então não é necessário trazer outras línguas/detalhes
+   * para o renderer só para filtrá-los depois.
+   */
+  async getAllByPrefix<T = unknown>(table: string, prefix: string): Promise<T[]> {
+    if (!prefix) return this.getAll<T>(table);
+    const db = await getDb();
+    const range = IDBKeyRange.bound(prefix, `${prefix}\uffff`);
+    return db.getAll(table, range);
+  },
+
   /** Salva (insere ou atualiza) um registro. O objeto precisa ter um campo `id`. */
   async put<T extends { id: string }>(table: string, value: T): Promise<void> {
     await (await getDb()).put(table, value);
+  },
+
+  /**
+   * Insere/atualiza e remove registros dentro de uma única transação.
+   * O catálogo de músicas pode ter milhares de linhas; uma transação por
+   * `put()` bloqueia o event loop e custa muito mais em máquinas fracas.
+   */
+  async putMany<T extends { id: string }>(
+    table: string,
+    values: readonly T[],
+    deleteIds: readonly string[] = []
+  ): Promise<void> {
+    if (!values.length && !deleteIds.length) return;
+    const tx = (await getDb()).transaction(table, "readwrite");
+    for (const value of values) await tx.store.put(value);
+    for (const id of deleteIds) await tx.store.delete(id);
+    await tx.done;
   },
 
   /** Remove um registro pelo id. */

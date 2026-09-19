@@ -90,6 +90,7 @@ test("navegação permanece utilizável no perfil PC fraco", async ({ browser })
   await expect(closeButton).toHaveCount(0, { timeout: 15_000 });
 
   const secondOpenMs = await clickAndMeasure(page, musicButton, () => waitForMusicRows(page));
+  const secondRenderedRows = await page.locator('[data-testid^="music-row-"]').count();
 
   console.log(
     JSON.stringify(
@@ -102,6 +103,7 @@ test("navegação permanece utilizável no perfil PC fraco", async ({ browser })
         first_open_ms: firstOpenMs,
         second_open_ms: secondOpenMs,
         rendered_rows: renderedRows,
+        second_rendered_rows: secondRenderedRows,
         row_buttons_before_hover: rowButtons,
         long_tasks_ms: await page.evaluate(() => window.__ljPerformanceLongTasks || []),
       },
@@ -112,6 +114,7 @@ test("navegação permanece utilizável no perfil PC fraco", async ({ browser })
 
   // O perfil de 2 GB/2 threads deve usar a página reduzida de RuntimePerformance.
   expect(renderedRows).toBeLessThanOrEqual(40);
+  expect(secondRenderedRows).toBeLessThanOrEqual(renderedRows);
   expect(rowButtons).toBe(1);
   expect(secondOpenMs).toBeLessThan(3_000);
 

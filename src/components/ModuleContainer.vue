@@ -162,11 +162,20 @@ function onHasScroll(value) {
  */
 function onEmbeddedScroll() {
   const el = embeddedContent.value;
-  if (!el) return;
+  // KeepAlive reanexa o módulo antes do primeiro layout. Nesse instante o
+  // browser informa clientHeight/scrollHeight como zero, o que parece um
+  // scroll no fim e faz DataTable paginar uma página extra a cada reabertura.
+  // Espere o ResizeObserver/nextTick seguinte, quando há uma viewport real.
+  if (!el || el.clientHeight <= 0 || el.scrollHeight <= 0) return;
+  const hasOverflow = el.scrollHeight > el.clientHeight + 1;
+  emit("hasScroll", hasOverflow);
+  // Enquanto a lista ainda cabe na viewport, scroll_bottom=0 não significa
+  // que o operador chegou ao fim. Emiti-lo nesse momento faz DataTable
+  // adicionar uma página durante a reativação do KeepAlive.
+  if (!hasOverflow) return;
   emit("scroll", {
     scroll_bottom: Math.max(0, el.scrollHeight - el.scrollTop - el.clientHeight),
   });
-  emit("hasScroll", el.scrollHeight > el.clientHeight);
 }
 
 function observeEmbeddedContent() {

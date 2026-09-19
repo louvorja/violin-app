@@ -24,8 +24,15 @@ vi.mock("@/helpers/IndexedDB", () => ({
   default: {
     get: vi.fn(async (t, id) => tbl(t).get(id)),
     getAll: vi.fn(async (t) => Array.from(tbl(t).values())),
+    getAllByPrefix: vi.fn(async (t, prefix) =>
+      Array.from(tbl(t).values()).filter((value) => value.id.startsWith(prefix))
+    ),
     put: vi.fn(async (t, v) => {
       tbl(t).set(v.id, v);
+    }),
+    putMany: vi.fn(async (t, values, deleteIds = []) => {
+      for (const value of values) tbl(t).set(value.id, value);
+      for (const id of deleteIds) tbl(t).delete(id);
     }),
     del: vi.fn(async (t, id) => {
       tbl(t).delete(id);
