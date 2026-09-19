@@ -1,15 +1,15 @@
 <template>
   <div class="video-monitors">
     <div class="video-monitors-field">
-      <label class="video-monitors-label">{{ tm("ribbon.fields.monitor") }}</label>
+      <label class="video-monitors-label">{{ t("ribbon.fields.monitor") }}</label>
       <MonitorSelect :model-value="videoMonitor" @update:model-value="setVideoMonitor" />
       <label class="video-monitors-checkbox">
         <input type="checkbox" :checked="showReturn" @change="toggleReturn" />
-        <span>{{ tm("ribbon.fields.show_return") }}</span>
+        <span>{{ t("ribbon.fields.show_return") }}</span>
       </label>
     </div>
     <div v-if="showReturn" class="video-monitors-field">
-      <label class="video-monitors-label">{{ tm("ribbon.fields.return_monitor") }}</label>
+      <label class="video-monitors-label">{{ t("ribbon.fields.return_monitor") }}</label>
       <MonitorSelect :model-value="returnMonitor" @update:model-value="setReturnMonitor" />
     </div>
   </div>
@@ -25,8 +25,7 @@ import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
 import { PROJECTION_TYPE } from "@/constants/Projection";
 
-const { t: i18nT } = useI18n();
-const tm = (key: string) => i18nT(`modules.custom_online_videos.${key}`);
+const { t } = useI18n();
 const { getFeatureRole, setFeatureRole } = useDisplays();
 
 const showReturn = ref(false);

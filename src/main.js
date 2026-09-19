@@ -941,6 +941,7 @@ $storage.hydrate().then(async () => {
     app.use(i18n);
     // Sem dependência mútua: um registra módulos no Pinia/i18n, o outro só
     // abre o IndexedDB. Rodar em série custava um round-trip de I/O à toa.
+    if (isAuxiliaryRenderer) ModuleManager.bindI18n(i18n);
     const moduleManagerReady = isAuxiliaryRenderer ? Promise.resolve() : ModuleManager.init(i18n);
     const idbReady = $idb.init();
 

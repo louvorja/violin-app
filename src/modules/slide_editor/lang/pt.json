@@ -52,6 +52,7 @@
     "ratio_16_9": "16:9"
   },
   "labels": {
+    "name": "Nome",
     "main_text": "Texto Principal",
     "aux_text": "Texto Auxiliar",
     "slides": "Slides",

@@ -15,6 +15,7 @@ import { moduleTitleFallback } from "@/config/modules/titles";
 // idênticos que importavam pt.json + es.json para todos os 37 módulos.
 const _translationLoaders = import.meta.glob("@/modules/*/lang/*.json");
 const _translationPromises = new Map();
+const _translationsLoaded = new Set();
 
 /**
  * ModuleManager — lifecycle de módulos (boot-time).
@@ -34,8 +35,31 @@ const _translationPromises = new Map();
  *               └─ $userdata.setIfNull(...)              ← defaults de customização
  */
 export default {
-  /** Referência ao i18n, injetada por init(). */
+  /** Referência ao i18n, injetada por bindI18n(). */
   i18n: null,
+
+  /**
+   * Liga o gerenciador ao i18n. Uma chave `modules.<id>.*` ausente pede a
+   * tradução daquele módulo, e o vue-i18n redesenha quando ela chega — quem lê
+   * texto de outro módulo (BibleSpotlight, alertas do player, controle remoto)
+   * não precisa lembrar de pedir. Renderers auxiliares, que não rodam init(),
+   * chamam só este método.
+   */
+  bindI18n(i18n) {
+    this.i18n = i18n;
+    // Com handler de chave ausente o vue-i18n para de avisar; o aviso de dev
+    // volta aqui, só para o que continua ausente com o módulo já carregado.
+    i18n.global.setMissingHandler((locale, key) => {
+      const moduleId = /^modules\.([^.]+)\./.exec(key)?.[1];
+      if (moduleId && !_translationsLoaded.has(moduleId)) {
+        void this.ensureTranslations(moduleId);
+        return;
+      }
+      if (import.meta.env.DEV && locale === i18n.global.fallbackLocale.value) {
+        console.warn(`[i18n] chave ausente "${key}"`);
+      }
+    });
+  },
 
   /**
    * Carrega as duas línguas de um módulo na primeira utilização. Carregar as
@@ -59,17 +83,21 @@ export default {
           modules: { [moduleId]: translations },
         });
       })
-    ).catch((error) => {
-      _translationPromises.delete(moduleId);
-      Telemetry.captureException(error, {
-        source: "module_translation_load",
-        module_id: moduleId,
+    )
+      .then(() => {
+        _translationsLoaded.add(moduleId);
+      })
+      .catch((error) => {
+        _translationPromises.delete(moduleId);
+        Telemetry.captureException(error, {
+          source: "module_translation_load",
+          module_id: moduleId,
+        });
+        // Tradução é melhoria de conteúdo, não pré-condição para montar a aba.
+        // Em offline/chunk desatualizado a tela funcional ainda deve abrir com
+        // os títulos de metadata e as chaves globais disponíveis.
+        return undefined;
       });
-      // Tradução é melhoria de conteúdo, não pré-condição para montar a aba.
-      // Em offline/chunk desatualizado a tela funcional ainda deve abrir com
-      // os títulos de metadata e as chaves globais disponíveis.
-      return undefined;
-    });
 
     _translationPromises.set(moduleId, promise);
     return promise;
@@ -175,7 +203,7 @@ export default {
    * Chamado em main.js após createApp(), antes do mount().
    */
   async init(i18n) {
-    this.i18n = i18n;
+    this.bindI18n(i18n);
 
     // Os manifests já são metadados suficientes para construir o registro.
     // Registrar um BaseModule diretamente evita importar 37 wrappers que

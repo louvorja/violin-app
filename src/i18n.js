@@ -3,7 +3,10 @@ import { createI18n } from "vue-i18n";
 const IDIOMAS = ["pt", "es"];
 const PADRAO = "pt";
 
-const carregar = (locale) => import(`./lang/${locale}.json`);
+// O `default` é o JSON puro. O namespace do `import()` é um objeto Module —
+// não extensível — que o Vue se recusa a tornar reativo: as traduções mescladas
+// depois do primeiro render (módulos sob demanda) nunca redesenhariam a tela.
+const carregar = (locale) => import(`./lang/${locale}.json`).then((m) => m.default);
 
 /**
  * @param {string} [localeInicial] idioma salvo em UserData; cai no padrão se
