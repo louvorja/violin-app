@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const state: Record<string, unknown> = {};
 const posthog = {
@@ -40,6 +40,13 @@ vi.mock("@/helpers/UserData", () => ({
 vi.mock("@/helpers/Platform", () => ({
   default: { isDesktop: false, isDev: false },
 }));
+vi.mock("@/helpers/Http", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/helpers/Http")>();
+  return {
+    ...actual,
+    fetchWithTimeout: vi.fn(async () => ({ ok: true, status: 200 } as Response)),
+  };
+});
 
 async function loadTelemetry() {
   vi.resetModules();
@@ -54,6 +61,13 @@ async function loadTelemetry() {
 beforeEach(() => {
   for (const key of Object.keys(state)) delete state[key];
   vi.clearAllMocks();
+  vi.spyOn(console, "info").mockImplementation(() => {});
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+  vi.spyOn(console, "debug").mockImplementation(() => {});
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 describe("Telemetry", () => {
