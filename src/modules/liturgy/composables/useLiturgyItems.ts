@@ -61,6 +61,8 @@ export const COLORS = [
 ];
 export const DEFAULT_COLOR = "#00004F";
 
+export const DEFAULT_FORM_ERRORS = (): Record<string, string> => ({});
+
 export const DEFAULT_FORM = (): LiturgyItem => ({
   id: "",
   tipo: LiturgyItemTypeEnum.ANOTACAO,
@@ -93,6 +95,7 @@ export function useLiturgyItems(
   const dialog = ref(false);
   const editIndex = ref(-1);
   const form = ref<LiturgyItem>(DEFAULT_FORM());
+  const formErrors = ref<Record<string, string>>(DEFAULT_FORM_ERRORS());
   const musicsCache = ref<LiturgyMusicItem[] | null>(null);
   const isDraggingOver = ref(false);
   const menuOpen = ref(false);
@@ -289,6 +292,7 @@ export function useLiturgyItems(
   function openItemDialog(index = -1): void {
     editIndex.value = index;
     form.value = index >= 0 ? { ...DEFAULT_FORM(), ...items.value[index] } : DEFAULT_FORM();
+    formErrors.value = DEFAULT_FORM_ERRORS();
     if (form.value.subtipo === "ja" || form.value.subtipo === "div") {
       form.value.subtipo = "sung";
     }
@@ -360,15 +364,15 @@ export function useLiturgyItems(
     const f = form.value;
 
     if (!f.tipo) {
-      ($alert as unknown as { warning?: (data: Record<string, unknown>) => void }).warning?.({ text: t("dialog.choose_type") });
+      formErrors.value = { tipo: t("dialog.choose_type") };
       return;
     }
     if (f.tipo !== LiturgyItemTypeEnum.ITENS_AGENDADOS && !String(f.item || "").trim()) {
-      ($alert as unknown as { warning?: (data: Record<string, unknown>) => void }).warning?.({ text: t("dialog.set_name") });
+      formErrors.value = { item: t("dialog.set_name") };
       return;
     }
     if (f.tipo === LiturgyItemTypeEnum.ITENS_AGENDADOS && !f.id) {
-      ($alert as unknown as { warning?: (data: Record<string, unknown>) => void }).warning?.({ text: t("dialog.choose_scheduled") });
+      formErrors.value = { id: t("dialog.choose_scheduled") };
       return;
     }
 
@@ -750,6 +754,9 @@ export function useLiturgyItems(
 
   function setFormField(field: string, value: unknown): void {
     (form.value as Record<string, unknown>)[field] = value;
+    if (formErrors.value[field]) {
+      delete formErrors.value[field];
+    }
   }
 
   function toggleMenuOpen(): void {
@@ -764,6 +771,7 @@ export function useLiturgyItems(
     dialog,
     editIndex,
     form,
+    formErrors,
     musicsCache,
     videosCache,
     isDraggingOver,

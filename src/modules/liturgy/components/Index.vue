@@ -53,6 +53,7 @@
       v-model:model-value="dialog"
       :edit-index="editIndex"
       :form="form"
+      :form-errors="formErrors"
       :colors="colors"
       :musics-list="musicsList"
       :scheduled-categories="scheduledCategories"
@@ -189,6 +190,7 @@ const {
   dialog,
   editIndex,
   form,
+  formErrors,
   isDraggingOver,
   items,
   totalDuration,

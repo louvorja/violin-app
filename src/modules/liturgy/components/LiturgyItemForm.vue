@@ -8,7 +8,11 @@
   >
     <!-- ─── Campos comuns a todos os tipos ─── -->
     <div class="lif-row">
-      <LjField class="lif-field lif-field--type" :label="t('inputs.type')">
+      <LjField
+        class="lif-field lif-field--type"
+        :label="t('inputs.type')"
+        :error="formErrors?.tipo"
+      >
         <LjSelect
           :model-value="form.tipo"
           :items="typeOptions"
@@ -23,6 +27,7 @@
         v-if="form.tipo !== LiturgyItemTypeEnum.ITENS_AGENDADOS"
         class="lif-field lif-field--grow"
         :label="t('inputs.item_name')"
+        :error="formErrors?.item"
       >
         <LjInput
           :model-value="form.item"
@@ -211,7 +216,7 @@
     <!-- ─── Painel ITENS AGENDADOS ─── -->
     <section v-if="form.tipo === 'itens-agendados'" class="lif-panel">
       <h3 class="lif-panel__title">{{ t("types.itens-agendados") }}</h3>
-      <LjField layout="column" :label="t('inputs.scheduled_category')">
+      <LjField layout="column" :label="t('inputs.scheduled_category')" :error="formErrors?.id">
         <div class="lif-inline">
           <LjSelect
             class="lif-inline__grow"
@@ -458,6 +463,7 @@ const props = withDefaults(
     modelValue?: boolean;
     editIndex?: number;
     form: LiturgyItem;
+    formErrors?: Record<string, string>;
     colors?: string[];
     musicsList?: LiturgyMusicItem[];
     scheduledCategories?: ScheduledCategory[];
