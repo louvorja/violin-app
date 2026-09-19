@@ -55,26 +55,34 @@
 
               <div class="app-menu-content">
                 <Transition name="app-menu-screen" mode="out-in">
-                  <div :key="activeItem?.id">
+                  <div :key="renderedItem?.id || 'loading'">
+                    <div
+                      v-if="!renderedItem"
+                      class="app-menu-content-placeholder"
+                      aria-busy="true"
+                    ></div>
                     <!-- O Sobre abre com hero próprio e mantém o título da página;
                        nas demais telas ele repetiria o header do painel. -->
-                    <h2 v-if="activeItem?.id === 'about'" class="app-menu-content-title">
+                    <h2 v-else-if="renderedItem.id === 'about'" class="app-menu-content-title">
                       {{ activeItem?.label ? $t(activeItem.label) : "" }}
                     </h2>
 
                     <!-- Painéis específicos por item -->
-                    <AppMenuOpcoes v-if="activeItem?.id === 'settings'" :initial-tab="optionsTab" />
-                    <AppMenuSobre v-else-if="activeItem?.id === 'about'" />
-                    <AppMenuTransmitir v-else-if="activeItem?.id === 'transmission'" />
-                    <AppMenuSincronizar v-else-if="activeItem?.id === 'sync'" />
-                    <AppMenuAcessibilidade v-else-if="activeItem?.id === 'accessibility'" />
-                    <AppMenuAtualizacoes v-else-if="activeItem?.id === 'updates'" />
-                    <AppMenuImportExport v-else-if="activeItem?.id === 'import_export'" />
-                    <AppMenuAlbums v-else-if="activeItem?.id === 'albums'" />
-                    <AppMenuLicencas v-else-if="activeItem?.id === 'licenses'" />
-                    <AppMenuDev v-else-if="activeItem?.id === 'dev'" />
+                    <AppMenuOpcoes
+                      v-if="renderedItem?.id === 'settings'"
+                      :initial-tab="optionsTab"
+                    />
+                    <AppMenuSobre v-else-if="renderedItem?.id === 'about'" />
+                    <AppMenuTransmitir v-else-if="renderedItem?.id === 'transmission'" />
+                    <AppMenuSincronizar v-else-if="renderedItem?.id === 'sync'" />
+                    <AppMenuAcessibilidade v-else-if="renderedItem?.id === 'accessibility'" />
+                    <AppMenuAtualizacoes v-else-if="renderedItem?.id === 'updates'" />
+                    <AppMenuImportExport v-else-if="renderedItem?.id === 'import_export'" />
+                    <AppMenuAlbums v-else-if="renderedItem?.id === 'albums'" />
+                    <AppMenuLicencas v-else-if="renderedItem?.id === 'licenses'" />
+                    <AppMenuDev v-else-if="renderedItem?.id === 'dev'" />
 
-                    <p v-else class="app-menu-content-placeholder">
+                    <p v-else-if="renderedItem" class="app-menu-content-placeholder">
                       {{ $t("shell.appmenu_content_placeholder") }}
                     </p>
                   </div>
@@ -127,6 +135,11 @@ const hasOverlayTrafficLights = computed(
 const open = ref(false);
 const trigger = ref(null);
 const activeItem = ref(null);
+const renderedItem = ref(null);
+let renderTimer = null;
+// No Windows, a montagem do painel pesado compete com a animação da cortina
+// no mesmo renderer. As outras plataformas não precisam pagar este atraso.
+const CONTENT_DELAY_MS = Platform.platform === "win32" ? 220 : 0;
 
 // Aba inicial da tela de Opções quando aberta programaticamente
 // (ex: botão "Configurações" da ribbon da Liturgia → aba Slides).
@@ -229,7 +242,9 @@ function toggle() {
 function openMenu() {
   open.value = true;
   optionsTab.value = "general";
-  activeItem.value = items.value.find((i) => i.id === "settings") || items.value[0];
+  const item = items.value.find((i) => i.id === "settings") || items.value[0];
+  activeItem.value = item;
+  scheduleRenderedItem(item);
   document.addEventListener("keydown", onKeydown);
 }
 
@@ -239,13 +254,34 @@ function openMenu() {
  */
 function openAt(itemId) {
   open.value = true;
-  activeItem.value = items.value.find((i) => i.id === itemId) || items.value[0];
+  const item = items.value.find((i) => i.id === itemId) || items.value[0];
+  activeItem.value = item;
+  scheduleRenderedItem(item);
   document.addEventListener("keydown", onKeydown);
 }
 
 function close() {
   open.value = false;
+  clearRenderTimer();
+  renderedItem.value = null;
   document.removeEventListener("keydown", onKeydown);
+}
+
+function clearRenderTimer() {
+  if (renderTimer !== null) {
+    clearTimeout(renderTimer);
+    renderTimer = null;
+  }
+}
+
+/** Monta painéis pesados depois da cortina, sem bloquear seus primeiros frames. */
+function scheduleRenderedItem(item) {
+  clearRenderTimer();
+  renderedItem.value = null;
+  renderTimer = setTimeout(() => {
+    renderTimer = null;
+    if (open.value && activeItem.value?.id === item?.id) renderedItem.value = item;
+  }, CONTENT_DELAY_MS);
 }
 
 // Os semáforos do macOS ficam sobre o conteúdo, presos ao eixo da systembar, e
@@ -300,7 +336,10 @@ function onKeydown(e) {
 
 function selectItem(item) {
   activeItem.value = item;
-  if (item.inline) return; // Renderiza dentro do menu, não fecha
+  if (item.inline) {
+    scheduleRenderedItem(item);
+    return;
+  } // Renderiza dentro do menu, não fecha
   close();
   setTimeout(() => {
     try {
@@ -344,6 +383,8 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  clearRenderTimer();
+  renderedItem.value = null;
   restaurarSemaforos();
   window.removeEventListener("louvorja:open-updates", onOpenUpdates);
   window.removeEventListener("louvorja:open-options", onOpenOptions);
