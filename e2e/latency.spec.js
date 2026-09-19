@@ -51,7 +51,7 @@ test("latência slide_change cross-window p95 <50ms", async ({ browser }) => {
   const musicRow = mainPage.locator('[data-testid="music-row-1"]');
   await expect(musicRow).toBeVisible({ timeout: 10_000 });
   // Botão só renderiza no hover/foco da linha — ver deferQuickActions em MusicMenuTable.vue
-  await musicRow.locator(".mmt").hover();
+  await musicRow.hover();
   await musicRow.locator('[data-testid="mmt-btn-no-audio"]').click();
 
   // Aguarda projPage estar montada e com o listener SLIDE_CHANGE pronto

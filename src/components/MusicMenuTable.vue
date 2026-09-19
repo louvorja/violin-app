@@ -1,26 +1,23 @@
 <template>
-  <div
-    class="mmt"
-    @mouseenter="quickActionsHovered = true"
-    @mouseleave="quickActionsHovered = false"
-    @focusin="quickActionsFocused = true"
-    @focusout="quickActionsFocused = false"
-  >
-    <template v-if="!compact && showQuickActions">
-      <LjButton
-        v-for="btn in buttons"
-        :key="btn.testid"
-        size="md"
-        variant="ghost"
-        icon-only
-        :icon="btn.icon"
-        :class="{ 'mmt-btn--star': btn.icon === ICONS.UI.STAR }"
-        :style="colorStyle"
-        :disabled="btn.disabled"
-        :title="btn.title"
-        :data-testid="'mmt-btn-' + btn.testid"
-        @click="btn.click"
-      />
+  <div ref="root" class="mmt">
+    <template v-if="!compact">
+      <template v-if="showQuickActions">
+        <LjButton
+          v-for="btn in buttons"
+          :key="btn.testid"
+          size="md"
+          variant="ghost"
+          icon-only
+          :icon="btn.icon"
+          :class="{ 'mmt-btn--star': btn.icon === ICONS.UI.STAR }"
+          :style="colorStyle"
+          :disabled="btn.disabled"
+          :title="btn.title"
+          :data-testid="'mmt-btn-' + btn.testid"
+          @click="btn.click"
+        />
+      </template>
+      <span v-else class="mmt-reserve" :style="{ '--mmt-quick-count': QUICK_ACTION_COUNT }" />
     </template>
 
     <LjMenu side="left" align="start">
@@ -107,6 +104,7 @@
 import { computed, inject, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useViewport } from "@/composables/useViewport";
+import { useRowReveal } from "@/composables/useRowReveal";
 import {
   DropdownMenuItem,
   DropdownMenuPortal,
@@ -164,18 +162,20 @@ const props = withDefaults(
   { deferQuickActions: true }
 );
 
+// Quantos botões rápidos `buttons` devolve; o espaço reservado antes de montá-los
+// depende disso, e o E2E `row-actions` acusa se a tabela deslocar.
+const QUICK_ACTION_COUNT = 7;
+
 const { t } = useI18n();
 const { width } = useViewport();
-const quickActionsHovered = ref(false);
-const quickActionsFocused = ref(false);
+const root = ref<HTMLElement | null>(null);
+const revealed = useRowReveal(root);
 
 const closeSpotlight = inject<() => void>("close-spotlight", () => {});
 
 const is_favorite = computed(() => Favorites.isFavorite(props.id_music));
 const compact = computed(() => width.value <= 550);
-const showQuickActions = computed(
-  () => !props.deferQuickActions || quickActionsHovered.value || quickActionsFocused.value
-);
+const showQuickActions = computed(() => !props.deferQuickActions || revealed.value);
 
 /**
  * A cor vem do consumidor (a tabela de álbuns pinta a linha de branco sobre a
@@ -356,6 +356,14 @@ const menu = computed<MenuItem[]>(() => [
   align-items: center;
   gap: var(--lj-space-1);
   flex-wrap: nowrap;
+}
+
+/* Guarda o lugar dos botões rápidos até serem montados: sem isso a tabela inteira desloca ao passar o mouse. */
+.mmt-reserve {
+  flex: none;
+  width: calc(
+    var(--mmt-quick-count) * var(--lj-ui-h-md) + (var(--mmt-quick-count) - 1) * var(--lj-space-1)
+  );
 }
 
 /*

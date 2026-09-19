@@ -57,7 +57,7 @@ test("barra de progresso do Footer respeita o limite de mutações do replay", a
 
   const linha = page.locator('[data-testid="music-row-1"]');
   await expect(linha).toBeVisible({ timeout: 10_000 });
-  await linha.locator(".mmt").hover();
+  await linha.hover();
   await linha.locator('[data-testid="mmt-btn-sing"]').click();
 
   // O operador toca com o player minimizado no Footer; é ali que o gauge aparece.

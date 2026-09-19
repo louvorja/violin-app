@@ -50,7 +50,7 @@ test("abrir música sem áudio → slide aparece em /projection", async ({ brows
 
   // Abrir a música sem áudio (botão só renderiza no hover/foco da linha — ver deferQuickActions)
   const musicRow = mainPage.locator('[data-testid="music-row-1"]');
-  await musicRow.locator(".mmt").hover();
+  await musicRow.hover();
   await musicRow.locator('[data-testid="mmt-btn-no-audio"]').click();
 
   // Verificar que o slide (capa) aparece na projeção com o nome da música
