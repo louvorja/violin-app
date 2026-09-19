@@ -17,7 +17,12 @@
          abertura e o primeiro paint do Vue, e um lampejo branco ali aparece
          diante da congregação. A janela principal não passa por aqui — ela
          só é revelada depois de montada. */
-      html, body { margin: 0; background: #000; }
+      html, body { margin: 0; background: #000; height: 100%; }
+
+      /* Cadeia de altura explícita: as telas de projeção usam `height: 100%`
+         (em vez de `100vh`, que resolve para 0 em alguns WebViews embarcados —
+         no celular o relógio/projeção ficava fora da tela). */
+      #app { height: 100%; }
 
       /* Sinal de vida no navegador, onde não há splash nem janela a esconder:
          medido em 3G, o app fica 5s sem pintar nada além deste preto.

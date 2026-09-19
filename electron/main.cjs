@@ -743,6 +743,10 @@ app.whenReady().then(async () => {
       port: cfg.httpServer?.port || 7070,
       mainWindow: null, // will be set after createWindow
     });
+    // Informa a porta ao windowFactory para que janelas de projeção
+    // carreguem via HTTP (origem padrão web necessária para YouTube).
+    const srvStatus = httpServer.status();
+    if (srvStatus?.port) windowFactory.setHttpPort(srvStatus.port);
     // Aplica preferência de rotas externas salva (default: true)
     const externalEnabled = cfg.httpServer?.externalRoutesEnabled !== false;
     httpServer.setExternalRoutesEnabled(externalEnabled);
@@ -1234,7 +1238,9 @@ ipcMain.handle("displays:identify", (_event, durationMs = 5000) => {
  * Retorna { port, token } do servidor iniciado.
  */
 ipcMain.handle("httpServer:start", async (_e, opts) => {
-  return await httpServer.start({ ...(opts || {}), mainWindow });
+  const result = await httpServer.start({ ...(opts || {}), mainWindow });
+  if (result?.port) windowFactory.setHttpPort(result.port);
+  return result;
 });
 
 /** Para o servidor HTTP. No-op se já parado. */
@@ -1287,6 +1293,14 @@ ipcMain.on("transmission:broadcast", (event, msg) => {
     httpServer.publish(msg);
   } catch (e) {
     console.warn("[transmission] publish falhou:", e?.message || e);
+  }
+  // Relay para todas as outras janelas Electron — necessário quando
+  // janelas de projeção carregam via HTTP (origem diferente da principal)
+  // e o BroadcastChannel cross-origin não funciona.
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (!w || w.isDestroyed()) continue;
+    if (w === mainWindow) continue;
+    try { w.webContents.send("broadcast:relay", msg); } catch (_) { /* noop */ }
   }
 });
 
@@ -1356,7 +1370,15 @@ ipcMain.handle("devices:list", () => devices.list());
 
 /** Salva a lista completa de dispositivos (chamado pelo renderer). */
 ipcMain.handle("devices:save", (_e, deviceList) => {
+  const prevCount = devices.list().length;
   devices.save(deviceList);
+  const newCount = devices.list().length;
+  console.log(`[devices] save: ${prevCount} → ${newCount} devices`);
+  if (newCount > 0) {
+    for (const d of devices.list()) {
+      console.log(`[devices]   - ${d.name} (${d.platform}) id=${d.id.slice(0, 8)}… token=${d.token.slice(0, 4)}… perms=[${(d.permissions || []).join(",")}]`);
+    }
+  }
   // Fan-out para todas as janelas
   for (const w of BrowserWindow.getAllWindows()) {
     if (!w || w.isDestroyed()) continue;

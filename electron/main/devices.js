@@ -3,8 +3,8 @@
 /**
  * Gerenciamento de dispositivos autorizados.
  *
- * Devices são persistidos em `userStore` (arquivo devices.json) e
- * mantidos em memória para acesso síncrono pelo auth middleware.
+ * Devices são mantidos em memória (sincronizados pelo renderer via IPC)
+ * e persistidos no IndexedDB do renderer.
  *
  * Cada device tem dois identificadores:
  *  - `id`: UUID criado pelo desktop (índice da tabela)
@@ -18,7 +18,6 @@
 const crypto = require("crypto");
 const userStore = require("./userStore.js");
 
-const STORAGE_KEY = "devices";
 const SETTINGS_KEY = "device_settings";
 
 /** @type {Array<{id:string,token:string,name:string,platform:string,registeredAt:string,permissions:string[]}>} */
@@ -26,15 +25,6 @@ let _devices = [];
 
 /** @type {{only_authorized_devices:boolean}|null} */
 let _settings = null;
-
-function _load() {
-  try {
-    const data = userStore.read(STORAGE_KEY);
-    _devices = Array.isArray(data) ? data : [];
-  } catch (_) {
-    _devices = [];
-  }
-}
 
 function _loadSettings() {
   try {
@@ -49,21 +39,14 @@ function _loadSettings() {
   }
 }
 
-function _persist() {
-  try {
-    userStore.write(STORAGE_KEY, _devices);
-  } catch (_) { /* noop */ }
-}
-
 function _persistSettings() {
   try {
     userStore.write(SETTINGS_KEY, _settings);
   } catch (_) { /* noop */ }
 }
 
-/** Retorna todos os dispositivos. */
+/** Retorna todos os dispositivos (cache em memória, sincronizado pelo renderer). */
 function list() {
-  if (!_devices.length) _load();
   return [..._devices];
 }
 
@@ -84,14 +67,14 @@ function updateSettings(partial) {
 /** Busca device pelo token de acesso (campo `token`). */
 function findByToken(token) {
   if (!token) return null;
-  if (!_devices.length) _load();
+
   return _devices.find((d) => d.token === token) || null;
 }
 
 /** Busca device pelo id (índice da tabela). */
 function findById(id) {
   if (!id) return null;
-  if (!_devices.length) _load();
+
   return _devices.find((d) => d.id === id) || null;
 }
 
@@ -101,7 +84,6 @@ function findById(id) {
  */
 function findByTokenAndId(token, id) {
   if (!token || !id) return null;
-  if (!_devices.length) _load();
   return _devices.find((d) => d.token === token && d.id === id) || null;
 }
 
@@ -115,13 +97,14 @@ function isOnlyAuthorized() {
 }
 
 /**
- * Salva a lista completa de dispositivos.
+ * Salva a lista completa de dispositivos no cache em memória.
  * Chamado pelo renderer via IPC devices:save.
  * @param {Array} devices
  */
 function save(devices) {
+  const count = Array.isArray(devices) ? devices.length : 0;
   _devices = Array.isArray(devices) ? devices : [];
-  _persist();
+  console.log(`[devices] cache atualizado: ${count} devices`);
 }
 
 /**
@@ -137,8 +120,6 @@ function save(devices) {
  * @returns {object} device (sem permissões ainda, ou com as existentes)
  */
 function addPending(info) {
-  if (!_devices.length) _load();
-
   const fingerprint = info.fingerprint || "";
   if (fingerprint) {
     // Procura por fingerprint existente e sobrescreve.
@@ -149,22 +130,20 @@ function addPending(info) {
       existing.model = info.model || existing.model;
       existing.platform = info.platform || existing.platform;
       existing.registeredAt = new Date().toISOString();
-      _persist();
       return existing;
     }
   }
 
   const device = {
-    id: fingerprint || crypto.randomUUID(),
+    id: info.fingerprint,
     token: info.token,
-    name: info.name || "Dispositivo",
-    model: info.model || "",
-    platform: info.platform || "web",
+    name: info.name,
+    model: info.model,
+    platform: info.platform,
     registeredAt: new Date().toISOString(),
     permissions: [],
   };
   _devices.push(device);
-  _persist();
   return device;
 }
 

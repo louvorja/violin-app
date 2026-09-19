@@ -390,6 +390,17 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
     broadcast: (msg) => ipcRenderer.send("transmission:broadcast", msg),
 
     /**
+     * Escuta broadcasts relayados pelo main process — necessário quando
+     * janelas de projeção carregam via HTTP (origem diferente) e o
+     * BroadcastChannel cross-origin não funciona.
+     */
+    onBroadcastRelay(cb) {
+      const handler = (_e, msg) => cb(msg);
+      ipcRenderer.on("broadcast:relay", handler);
+      return () => ipcRenderer.off("broadcast:relay", handler);
+    },
+
+    /**
      * Disparado pelo main process quando o servidor sobe — pede ao
      * renderer que reemita REQUEST_*_STATE para que slide/versículo/valor
      * de módulo atual seja capturado e enviado aos clients SSE recém-

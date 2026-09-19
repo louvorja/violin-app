@@ -17,9 +17,9 @@
  *  2. Device com X-Device-Id + X-Device-Token — par id+token (recomendado).
  *     Busca o device pelo id e valida que o token bate.
  *
- * Devices NÃO devem enviar o token via query/body/header solto — o path
- * de token-only aceita apenas o token global. O cadastro de devices
- * deve usar sempre o par de headers X-Device-Id + X-Device-Token.
+ * Devices devem usar o par de headers X-Device-Id + X-Device-Token quando
+ * possível (API calls). Para conexões SSE via browser/WebView (EventSource
+ * não suporta headers customizados), o device token é aceito via query string.
  *
  * Quando `only_authorized_devices` está ativo, apenas o token global é
  * aceito via query/body. Devices devem usar o par de headers.
@@ -148,10 +148,10 @@ function setupAuth(getToken, findDeviceByToken, findDeviceById, isOnlyAuthorized
     const provided =
       (req.query && req.query.token) ||
       (req.body && req.body.token) ||
-      (req.headers && req.headers["x-token"]);
+      (req.headers && req.headers["x-device-token"]);
 
     if (!provided) {
-      console.log(`[auth] ${req.method} ${req.path} de ${ip} — token ausente`);
+      console.log(`[auth] ${req.method} ${req.path} de ${ip} — token ausente (onlyAuthorized=${onlyAuthorized})`);
       return res.status(401).json({
         status: "error",
         message: "Token ausente",
@@ -159,13 +159,31 @@ function setupAuth(getToken, findDeviceByToken, findDeviceById, isOnlyAuthorized
       });
     }
 
-    // --- Modo restrito: apenas o token global é aceito via query/body ---
+    const expectedToken = resolve();
+    const tokenMatch = expectedToken && String(provided).toUpperCase() === String(expectedToken).toUpperCase();
+
+    // --- Modo restrito: token global ou device via query/body ---
     if (onlyAuthorized) {
-      const expected = resolve();
-      if (expected && String(provided).toUpperCase() === String(expected).toUpperCase()) {
+      if (tokenMatch) {
         req.authInfo = { kind: "global", authorized: true, permissions: ["root"] };
         return next();
       }
+      // Device token via query (browser/WebView — EventSource não aceita headers customizados).
+      if (findDeviceByToken) {
+        const device = findDeviceByToken(String(provided));
+        const hasPerms = device && _hasPermissions(device);
+        console.log(`[auth] ${req.method} ${req.path} — device-by-token lookup: found=${!!device} hasPerms=${hasPerms}`);
+        if (hasPerms) {
+          req.authInfo = {
+            kind: "device",
+            authorized: true,
+            permissions: device.permissions,
+            deviceId: device.id,
+          };
+          return next();
+        }
+      }
+      console.log(`[auth] ${req.method} ${req.path} de ${ip} — BLOQUEADO (onlyAuthorized, token não bateu)`);
       return res.status(403).json({
         status: "error",
         message: "Dispositivo não autorizado",
@@ -173,15 +191,29 @@ function setupAuth(getToken, findDeviceByToken, findDeviceById, isOnlyAuthorized
       });
     }
 
-    // --- Modo aberto (padrão): apenas token global via query/body ---
-    const expected = resolve();
-
-    if (expected && String(provided).toUpperCase() === String(expected).toUpperCase()) {
+    // --- Modo aberto (padrão): token global ou device via query/body ---
+    if (tokenMatch) {
       req.authInfo = { kind: "global", authorized: true, permissions: ["root"] };
       return next();
     }
 
-    console.log(`[auth] ${req.method} ${req.path} de ${ip} — token inválido (provided="${String(provided).slice(0, 8)}...")`);
+    // Device token via query (browser/WebView — EventSource não aceita headers customizados).
+    if (findDeviceByToken) {
+      const device = findDeviceByToken(String(provided));
+      const hasPerms = device && _hasPermissions(device);
+      console.log(`[auth] ${req.method} ${req.path} — device-by-token lookup: found=${!!device} hasPerms=${hasPerms}`);
+      if (hasPerms) {
+        req.authInfo = {
+          kind: "device",
+          authorized: true,
+          permissions: device.permissions,
+          deviceId: device.id,
+        };
+        return next();
+      }
+    }
+
+    console.log(`[auth] ${req.method} ${req.path} de ${ip} — REJEITADO (provided="${String(provided).slice(0, 8)}…")`);
     return res.status(401).json({
       status: "error",
       message: "Token inválido",

@@ -1,9 +1,11 @@
-import { ref, onMounted, onUnmounted } from "vue";
+import { ref, watch, onMounted, onUnmounted } from "vue";
 
 export function useContainerSize() {
   const container = ref<HTMLElement | null>(null);
   const width = ref(0);
   const height = ref(0);
+
+  let ro: ResizeObserver | null = null;
 
   function measure() {
     const el = container.value;
@@ -14,6 +16,15 @@ export function useContainerSize() {
     // Retry também quando o ref ainda não foi ligado ao DOM (ex: módulo
     // montado antes do layout do ModuleContainer) — evita font-size 0.
     if (width.value <= 0 || height.value <= 0) setTimeout(measure, 100);
+  }
+
+  function _attachObserver() {
+    if (ro) { ro.disconnect(); ro = null; }
+    const el = container.value;
+    if (el && typeof ResizeObserver !== "undefined") {
+      ro = new ResizeObserver(() => measure());
+      ro.observe(el);
+    }
   }
 
   // Tamanho proporcional ao menor lado do container (% do menor lado, /2).
@@ -36,8 +47,15 @@ export function useContainerSize() {
   onMounted(() => {
     measure();
     window.addEventListener("resize", measure);
+    _attachObserver();
   });
-  onUnmounted(() => window.removeEventListener("resize", measure));
+
+  watch(container, () => _attachObserver());
+
+  onUnmounted(() => {
+    window.removeEventListener("resize", measure);
+    if (ro) { ro.disconnect(); ro = null; }
+  });
 
   return { container, width, height, measure, fontSizePc, pctOfHeight };
 }

@@ -86,7 +86,7 @@ describe("setupAuth — par X-Device-Id + X-Device-Token", () => {
       }),
     );
     expect(out.status).toBe(401);
-    expect(out.body.code).toBe("MISSING_TOKEN");
+    expect(out.body.code).toBe("INVALID_TOKEN");
   });
 
   it("device aprovado acessa qualquer rota via par id+token", async () => {
@@ -115,19 +115,30 @@ describe("setupAuth — token via query/body (apenas token global)", () => {
     expect(out.authInfo.authorized).toBe(true);
   });
 
-  it("device token via ?token é rejeitado (não busca device)", async () => {
+  it("device aprovado via ?token é aceito (browser/WebView)", async () => {
     const out = await run(
       buildMiddleware([approvedDevice]),
       makeRequest({ path: OPEN_SONG, query: { token: approvedDevice.token } }),
+    );
+    expect(out.status).toBe(200);
+    expect(out.authInfo.kind).toBe("device");
+    expect(out.authInfo.authorized).toBe(true);
+    expect(out.authInfo.permissions).toContain("remote");
+  });
+
+  it("device pendente via ?token é rejeitado (sem permissões)", async () => {
+    const out = await run(
+      buildMiddleware([pendingDevice]),
+      makeRequest({ path: PING, query: { token: pendingDevice.token } }),
     );
     expect(out.status).toBe(401);
     expect(out.body.code).toBe("INVALID_TOKEN");
   });
 
-  it("device pendente via ?token é rejeitado", async () => {
+  it("token inválido via ?token é rejeitado", async () => {
     const out = await run(
-      buildMiddleware([pendingDevice]),
-      makeRequest({ path: PING, query: { token: pendingDevice.token } }),
+      buildMiddleware([]),
+      makeRequest({ path: PING, query: { token: "invalid" } }),
     );
     expect(out.status).toBe(401);
     expect(out.body.code).toBe("INVALID_TOKEN");
@@ -156,7 +167,18 @@ describe("setupAuth — only_authorized_devices", () => {
     expect(out.body.code).toBe("DEVICE_NOT_AUTHORIZED");
   });
 
-  it("device token via ?token é rejeitado no modo restrito", async () => {
+  it("device aprovado via ?token é aceito no modo restrito (browser/WebView)", async () => {
+    const out = await run(
+      buildMiddleware([approvedDevice], { onlyAuthorized: true }),
+      makeRequest({ path: PING, query: { token: approvedDevice.token } }),
+    );
+    expect(out.status).toBe(200);
+    expect(out.authInfo.kind).toBe("device");
+    expect(out.authInfo.authorized).toBe(true);
+    expect(out.authInfo.permissions).toContain("remote");
+  });
+
+  it("device pendente via ?token é bloqueado no modo restrito", async () => {
     const out = await run(
       buildMiddleware([pendingDevice], { onlyAuthorized: true }),
       makeRequest({ path: PING, query: { token: pendingDevice.token } }),

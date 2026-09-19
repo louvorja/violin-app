@@ -11,6 +11,10 @@
 import { ref, onBeforeUnmount } from "vue";
 import type { Device, DevicePermission } from "@/types/Device";
 import Platform from "@/helpers/Platform";
+import $idb from "@/helpers/IndexedDB";
+import { DB_TABLE } from "@/constants/DbTables";
+
+const DEVICE_IDB_KEY = "authorized_devices";
 
 const _devices = ref<Device[]>([]);
 const _loaded = ref(false);
@@ -36,16 +40,20 @@ function _syncPendingFromList(list: Device[]) {
   }
 }
 
-function _attachListeners() {
-  if (_listenersAttached) return;
-  _listenersAttached = true;
-
-  const api = Platform.devices as {
+function _getApi() {
+  return Platform.devices as {
     list?: () => Promise<Device[]>;
     save?: (devices: Device[]) => Promise<void>;
     onChanged?: (cb: (list: Device[]) => void) => () => void;
     onPending?: (cb: (device: Device) => void) => () => void;
   } | null;
+}
+
+function _attachListeners() {
+  if (_listenersAttached) return;
+  _listenersAttached = true;
+
+  const api = _getApi();
 
   console.log("[useDevices] _attachListeners Platform.devices:", !!api, "onPending:", !!api?.onPending, "onChanged:", !!api?.onChanged);
 
@@ -62,20 +70,32 @@ function _attachListeners() {
       _pendingDevice.value = device;
     });
   }
+}
 
-  // Carrega a lista inicial do main process (devices.json).
-  if (api?.list && !_loaded.value) {
-    api.list().then((list) => {
-      console.log("[useDevices] load inicial:", list?.length, "devices");
-      _devices.value = Array.isArray(list) ? list : [];
-      _loaded.value = true;
-      _syncPendingFromList(_devices.value);
-    }).catch((e) => {
-      console.error("[useDevices] load inicial:", e);
-      // Não marca _loaded como true — permite retry via loadDevices()
-    });
+/**
+ * Lê devices do IndexedDB e envia ao main process.
+ * Pode ser chamado de qualquer contexto (boot do renderer, mount de componente).
+ */
+async function syncFromIdb(): Promise<void> {
+  try {
+    const row = await $idb.get<{ id: string; devices: Device[] }>(DB_TABLE.DEVICES, DEVICE_IDB_KEY);
+    const list = row?.devices;
+    console.log("[useDevices] syncFromIdb:", list?.length ?? 0, "devices");
+    _devices.value = Array.isArray(list) ? list : [];
+    _loaded.value = true;
+    _syncPendingFromList(_devices.value);
+    // Envia para main process (cache em memória para auth middleware).
+    const api = _getApi();
+    if (api?.save) {
+      const plain = JSON.parse(JSON.stringify(_devices.value));
+      await api.save(plain);
+    }
+  } catch (e) {
+    console.error("[useDevices] syncFromIdb:", e);
   }
 }
+
+export { syncFromIdb };
 
 export function useDevices() {
   // Garante que os listeners estão ativos (singleton, only-once).
@@ -88,30 +108,39 @@ export function useDevices() {
   });
 
   /**
-   * Carrega a lista de dispositivos do main process.
+   * Recarrega devices do IndexedDB e sincroniza com main process.
    */
   async function loadDevices(): Promise<void> {
-    if (!Platform.devices) return;
-    try {
-      const list = await Platform.devices.list();
-      _devices.value = Array.isArray(list) ? list : [];
-      _loaded.value = true;
-    } catch (e) {
-      console.error("[useDevices] load:", e);
-    }
+    await syncFromIdb();
   }
 
   /**
-   * Sincroniza a lista atual com o main process.
+   * Sincroniza a lista atual com o main process (cache em memória).
    */
-  async function _sync(): Promise<void> {
+  async function _syncToMainProcess(): Promise<void> {
     if (!Platform.devices) return;
     try {
       const plain = JSON.parse(JSON.stringify(_devices.value));
       await Platform.devices.save(plain);
     } catch (e) {
-      console.error("[useDevices] sync:", e);
+      console.error("[useDevices] sync to main:", e);
     }
+  }
+
+  /**
+   * Persiste no IndexedDB e sincroniza com main process.
+   */
+  async function _sync(): Promise<void> {
+    try {
+      const plain = JSON.parse(JSON.stringify(_devices.value));
+      await $idb.put<{ id: string; devices: Device[] }>(DB_TABLE.DEVICES, {
+        id: DEVICE_IDB_KEY,
+        devices: plain,
+      });
+    } catch (e) {
+      console.error("[useDevices] sync IndexedDB:", e);
+    }
+    await _syncToMainProcess();
   }
 
   /**

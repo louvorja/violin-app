@@ -270,7 +270,7 @@ async function start({ port, mainWindow } = {}) {
     }
     const validPlatforms = ["android", "ios", "web"];
     const devPlatform = validPlatforms.includes(platform) ? platform : "web";
-    const device = devices.addPending({ token, name: name || "Dispositivo", model: model || "", platform: devPlatform, fingerprint });
+    const device = devices.addPending({ token, name: name || "Dispositivo", model, platform: devPlatform, fingerprint });
     console.log(`[httpServer] Device registrado: ${device.name} (${device.platform}) model=${device.model} id=${device.id.slice(0, 8)} token=${device.token.slice(0, 8)}...`);
 
     // Foca a janela principal para que o operador veja o diálogo de aprovação
@@ -352,7 +352,10 @@ async function start({ port, mainWindow } = {}) {
         _server = server;
         _port = port;
         _persistPort(port);
-        console.log(`[httpServer] Rodando em http://0.0.0.0:${_port} (token: ${_token})`);
+        console.log(`[httpServer] Rodando em http://0.0.0.0:${_port}`);
+        console.log(`[httpServer] Token global: "${_token}" (len=${_token ? _token.length : 0})`);
+        console.log(`[httpServer] Devices em memória: ${devices.list().length}`);
+        console.log(`[httpServer] only_authorized_devices: ${devices.isOnlyAuthorized()}`);
         // Pede à janela principal que reemita o estado atual (slide, versículo,
         // valores de módulos). Sem isso, ligar o servidor com música já tocando
         // deixaria o cliente SSE conectado mas sem nada para renderizar — os

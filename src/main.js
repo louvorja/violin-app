@@ -34,6 +34,7 @@ import UserData from "@/helpers/UserData";
 import AppData from "@/helpers/AppData";
 import { useFileProjection } from "@/composables/useFileProjection";
 import { useBackgroundSound } from "@/composables/useBackgroundSound";
+import { syncFromIdb as syncDevicesFromIdb } from "@/composables/useDevices";
 import Path from "@/helpers/Path";
 import Media from "@/composables/useMedia";
 import { MusicActionEnum } from "@/enums/MusicActionEnum";
@@ -954,6 +955,11 @@ $storage.hydrate().then(async () => {
 
     await Promise.all([moduleManagerReady, idbReady]);
     _bootStage("dependencies_ready");
+
+    // Sincroniza devices do IndexedDB para o main process (cache em memória).
+    // Deve rodar após $idb.init() e antes do app.mount() para garantir que
+    // o auth middleware tenha a lista disponível quando clients externos conectarem.
+    syncDevicesFromIdb().catch((e) => console.warn("[main] syncDevicesFromIdb falhou:", e));
 
     if (!isAuxiliaryRenderer) {
       // Documentos do usuário que ainda estejam no IndexedDB passam para os

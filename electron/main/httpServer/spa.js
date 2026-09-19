@@ -35,6 +35,7 @@ const SPA_ROUTES = new Set([
   "/projection",
   "/projection/return",
   "/projection/bible",
+  "/projection/bible/return",
   "/projection/module",
   "/projection/file",
   "/projection/file/return",
@@ -73,10 +74,11 @@ function _injectBridge(html, token, initialHash) {
   const cleaned = _stripCspMeta(html);
   const bridge = _bridgeScript(token, initialHash);
   const baseTag = '<base href="/">';
-  if (cleaned.includes("</head>")) {
-    return cleaned.replace("</head>", baseTag + bridge + "</head>");
+  const headContent = baseTag + bridge;
+  if (cleaned.includes("<head>")) {
+    return cleaned.replace("<head>", "<head>" + headContent);
   }
-  return baseTag + bridge + cleaned;
+  return headContent + cleaned;
 }
 
 /**
@@ -90,10 +92,11 @@ function _injectMinimalBridge(html, initialHash) {
   const cleaned = _stripCspMeta(html);
   const baseTag = '<base href="/">';
   const script = `<script>${_initialRouteScript(initialHash)}</script>`;
-  if (cleaned.includes("</head>")) {
-    return cleaned.replace("</head>", baseTag + script + "</head>");
+  const headContent = baseTag + script;
+  if (cleaned.includes("<head>")) {
+    return cleaned.replace("<head>", "<head>" + headContent);
   }
-  return baseTag + script + cleaned;
+  return headContent + cleaned;
 }
 
 function _pathToHash(pathname) {
@@ -159,8 +162,8 @@ function _bridgeScript(token, initialHash) {
       return u.searchParams.get('token') || '';
     } catch (e) { return ''; }
   }
-  var url = '/events';
-  var t = tokenFromUrl() || token;
+  let url = '/events';
+  const t = tokenFromUrl() || token;
   if (t) url += '?token=' + encodeURIComponent(t);
   function deliver(msg) {
     if (!msg || typeof msg.type !== 'string') return;
@@ -207,10 +210,12 @@ function _createStaticIndexHandler(distDir, getToken) {
       // (só LJ_HASH_ROUTING=true). Clients remotos (OBS, celular) recebem o
       // bridge SSE completo (hash routing + EventSource + buffer replay).
       const ip = req.ip || req.socket?.remoteAddress || "";
+      const isRemote = !_isLocalhost(ip);
       const initialHash = _pathToHash(req.path);
-      const html = _isLocalhost(ip)
-        ? _injectMinimalBridge(_cached, initialHash)
-        : _injectBridge(_cached, typeof getToken === "function" ? getToken() : null, initialHash);
+      const token = typeof getToken === "function" ? getToken() : null;
+      const html = isRemote
+        ? _injectBridge(_cached, token, initialHash)
+        : _injectMinimalBridge(_cached, initialHash);
       res.set("Content-Type", "text/html; charset=utf-8");
       res.set("Cache-Control", "no-cache");
       res.send(html);
@@ -386,15 +391,13 @@ function install(app, { isDev, distDir, getToken, getUserData, serveDistToRemote
     // Tudo que não bater em /api ou /events vai pro proxy. As rotas SPA
     // são entregues como o index.html injetado, e os assets do Vite ficam
     // disponíveis em /src/, /node_modules/, /@vite/, /@id/ etc.
-    // Para clientes remotos, rejeita rotas desconhecidas (igual production).
+    // O proxy encaminha tudo ao Vite — não há necessidade de filtrar paths,
+    // pois o Vite só serve recursos do app. Clients remotos precisam
+    // acessar /@vite/client, /src/main.js, etc. para o Vue montar.
     app.use((req, res, next) => {
       if (req.path.startsWith("/api/") || req.path === "/events") return next();
       if (req.path === "/" && !_allowHttpRoot(getUserData)) {
         return res.status(404).send("A rota raiz do servidor HTTP está desativada em desenvolvimento.");
-      }
-      const ip = req.ip || req.socket?.remoteAddress || "";
-      if (!_isLocalhost(ip) && req.method === "GET" && !_isAllowedSpaPath(req.path)) {
-        return res.status(404).send("Rota não encontrada.");
       }
       return proxy(req, res);
     });
