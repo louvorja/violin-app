@@ -276,7 +276,13 @@ function onVideoError(event: Event): void {
   videoFailed.value = true;
   const code = el?.error?.code;
   const reason = code === 3 ? "decode" : code === 4 ? "source_not_supported" : "unknown";
-  console.error("[FileProjection] vídeo local falhou:", {
+  const error = new Error(`File projection video ${reason}`);
+  Telemetry.captureException(error, {
+    playback_id: fileProjection.playback_id,
+    operation: "file_projection_video",
+    reason,
+  });
+  console.error("[FileProjection] vídeo local falhou:", error, {
     code,
     message: el?.error?.message,
     src: fileProjection.url?.substring(0, 100),
@@ -288,11 +294,6 @@ function onVideoError(event: Event): void {
     message: el?.error?.message,
     ready_state: el?.readyState,
     network_state: el?.networkState,
-  });
-  Telemetry.captureException(new Error(`File projection video ${reason}`), {
-    playback_id: fileProjection.playback_id,
-    operation: "file_projection_video",
-    reason,
   });
 }
 
@@ -535,18 +536,21 @@ function _initYoutube(): void {
             Media.close(true);
           }
         },
-        onError: (e: number) => {
-          console.error("[FileProjection] YouTube player error:", e);
+        onError: (e: { data: number }) => {
+          const code = e?.data;
+          const error = new Error(`YouTube player error ${code}`);
+          Telemetry.captureException(error, {
+            playback_id: fileProjection.playback_id,
+            operation: "youtube_player",
+          });
+          console.error("[FileProjection] YouTube player error:", error);
           Telemetry.track("music_playback_failed", {
             playback_id: fileProjection.playback_id,
             stage: "youtube_player",
-            reason: `youtube_${e}`,
-            provider_code: e,
+            reason: `youtube_${code}`,
+            provider_code: code,
+            page_origin: window.location.origin,
             window_role: "auxiliary",
-          });
-          Telemetry.captureException(new Error(`YouTube player error ${e}`), {
-            playback_id: fileProjection.playback_id,
-            operation: "youtube_player",
           });
         },
       },

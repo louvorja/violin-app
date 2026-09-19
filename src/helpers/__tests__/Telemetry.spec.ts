@@ -28,7 +28,14 @@ const posthog = {
   is_capturing: vi.fn(() => true),
 };
 
+const databaseReporters: Array<(timing: unknown) => void> = [];
+
 vi.mock("posthog-js", () => ({ default: posthog }));
+vi.mock("@/helpers/Database", () => ({
+  setDatabaseTimingReporter: (fn: (timing: unknown) => void) => {
+    databaseReporters.push(fn);
+  },
+}));
 vi.mock("@/helpers/UserData", () => ({
   default: {
     get: (key: string, fallback: unknown) => (key in state ? state[key] : fallback),
@@ -264,6 +271,110 @@ describe("Telemetry", () => {
       if (bridge && originalError) bridge.originalError = originalError;
       Telemetry.setEnabled(false);
     }
+  });
+
+  it("captura uma única vez o mesmo Error que passa por mais de um canal", async () => {
+    const Telemetry = await loadTelemetry();
+    await Telemetry.init();
+    posthog.captureException.mockClear();
+    const bridge = (
+      console as typeof console & {
+        __louvorjaTelemetryConsoleBridge?: { originalError: (...args: unknown[]) => void };
+      }
+    ).__louvorjaTelemetryConsoleBridge;
+    const originalError = bridge?.originalError;
+    if (bridge) bridge.originalError = vi.fn();
+
+    try {
+      const error = new Error("Failed to fetch dynamically imported module");
+      // Ordem do carregador de módulos: captura explícita, console e errorHandler do Vue.
+      Telemetry.captureException(error, { source: "module_async_load", module_id: "hymnal" });
+      console.error('[Modules] erro ao carregar "hymnal":', error);
+      Telemetry.captureException(error, { source: "vue" });
+
+      expect(posthog.captureException).toHaveBeenCalledOnce();
+      expect(posthog.captureException).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ source: "module_async_load", module_id: "hymnal" }),
+      );
+    } finally {
+      if (bridge && originalError) bridge.originalError = originalError;
+      Telemetry.setEnabled(false);
+    }
+  });
+
+  it("descarta o aviso benigno de ResizeObserver e mantém os demais erros", async () => {
+    const Telemetry = await loadTelemetry();
+    await Telemetry.init();
+    const config = posthog.init.mock.calls[0][1] as {
+      before_send: (capture: { event: string; properties: Record<string, unknown> }) => unknown;
+    };
+    const exception = (...values: string[]) => ({
+      event: "$exception",
+      properties: { $exception_list: values.map((value) => ({ type: "Error", value })) },
+    });
+
+    expect(
+      config.before_send(exception("ResizeObserver loop completed with undelivered notifications.")),
+    ).toBeNull();
+    expect(config.before_send(exception("ResizeObserver loop limit exceeded"))).toBeNull();
+    expect(config.before_send(exception("fetchWithTimeoutm is not defined"))).not.toBeNull();
+    expect(
+      config.before_send(
+        exception("ResizeObserver loop limit exceeded", "Cannot read properties of null"),
+      ),
+    ).not.toBeNull();
+    expect(Telemetry.isBenignException(undefined)).toBe(false);
+  });
+
+  it("não repete em performance_slow o que ui_thread_stall e ui_long_task já registram", async () => {
+    const Telemetry = await loadTelemetry();
+    await Telemetry.init();
+    posthog.capture.mockClear();
+
+    Telemetry.histogram("louvorja.ui.stall.duration", 1_400, { window_role: "main" });
+    Telemetry.histogram("louvorja.ui.long_task.duration", 600, { window_role: "main" });
+
+    expect(posthog.capture).not.toHaveBeenCalledWith("performance_slow", expect.anything());
+    expect(posthog.metrics.histogram).toHaveBeenCalledWith(
+      "louvorja.ui.stall.duration",
+      1_400,
+      expect.anything(),
+    );
+
+    Telemetry.histogram("louvorja.data_table.load.duration", 1_400);
+
+    expect(posthog.capture).toHaveBeenCalledWith(
+      "performance_slow",
+      expect.objectContaining({
+        metric_name: "louvorja.data_table.load.duration",
+        severity: "slow",
+      }),
+    );
+  });
+
+  it("registra leituras do banco fora da memória e deixa acertos de 0 ms só no histograma", async () => {
+    const Telemetry = await loadTelemetry();
+    await Telemetry.init();
+    posthog.capture.mockClear();
+    const report = databaseReporters.at(-1);
+    expect(report).toBeDefined();
+
+    report?.({ file: "music_123", source: "memory", duration_ms: 0, fresh: false });
+
+    expect(posthog.capture).not.toHaveBeenCalledWith("database_read", expect.anything());
+    expect(posthog.metrics.histogram).toHaveBeenCalledWith(
+      "louvorja.database.read.duration",
+      0,
+      expect.anything(),
+    );
+
+    report?.({ file: "music_123", source: "network", duration_ms: 320, fresh: false });
+
+    expect(posthog.capture).toHaveBeenCalledWith(
+      "database_read",
+      expect.objectContaining({ source: "network", dataset: "music_:id" }),
+    );
   });
 
   it("resetId() gera o distinct_id via bootstrap e reforça o consentimento atual", async () => {

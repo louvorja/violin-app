@@ -350,15 +350,17 @@ function _initYoutube(): void {
           });
           _broadcastYtState();
         },
-        onError: (e: number) => {
+        onError: (e: { data: number }) => {
+          const code = e?.data;
           Telemetry.track("music_playback_failed", {
             playback_id: fileState.playback_id,
             stage: "youtube_player",
-            reason: `youtube_${e}`,
-            provider_code: e,
+            reason: `youtube_${code}`,
+            provider_code: code,
+            page_origin: window.location.origin,
             window_role: "background_projection_return",
           });
-          Telemetry.captureException(new Error(`YouTube player error ${e}`), {
+          Telemetry.captureException(new Error(`YouTube player error ${code}`), {
             playback_id: fileState.playback_id,
             operation: "youtube_player",
           });

@@ -39,7 +39,8 @@ const _pendingEvents: Array<{ event: string; properties: Record<string, unknown>
 const _pendingMetrics: Array<{ name: string; value: number; attributes: MetricAttributes }> = [];
 const _pendingSpans = new Map<string, PerformanceSpan>();
 const _breadcrumbs: Array<{ at: string; event: string; properties?: Record<string, unknown> }> = [];
-const _explicitErrors = new WeakSet<object>();
+const _explicitErrors = new WeakMap<object, number>();
+const DUPLICATE_CAPTURE_WINDOW_MS = 5_000;
 const MAX_BREADCRUMBS = 150;
 const MAX_PROPERTY_DEPTH = 6;
 const MAX_ARRAY_ITEMS = 100;
@@ -47,7 +48,13 @@ const MAX_STRING_LENGTH = 20_000;
 const REPLAY_READY_TIMEOUT_MS = 5_000;
 const REPLAY_READY_POLL_MS = 100;
 const POSTHOG_PROBE_TIMEOUT_MS = 3_500;
-const PERFORMANCE_BUDGETS: Array<{ match: RegExp; warn: number; critical: number }> = [
+const UI_JANK_BUDGET = { warn: 250, critical: 1_000 } as const;
+const PERFORMANCE_BUDGETS: Array<{
+  match: RegExp;
+  warn: number;
+  critical: number;
+  ownEvent?: boolean;
+}> = [
   { match: /route\.transition|route_transition/, warn: 1_000, critical: 5_000 },
   { match: /module\.(open|mount|first_paint)/, warn: 500, critical: 2_000 },
   { match: /data_table\.(load|filter)/, warn: 500, critical: 3_000 },
@@ -55,8 +62,12 @@ const PERFORMANCE_BUDGETS: Array<{ match: RegExp; warn: number; critical: number
   { match: /projection\.(open|broadcast)/, warn: 500, critical: 3_000 },
   { match: /music\.(audio|metadata|page|playlists)/, warn: 1_000, critical: 8_000 },
   { match: /http\.client/, warn: 1_000, critical: 5_000 },
-  { match: /ui\.(long_task|stall)/, warn: 250, critical: 1_000 },
+  // ui_long_task e ui_thread_stall já são o evento detalhado dessas medições.
+  { match: /ui\.(long_task|stall)/, ...UI_JANK_BUDGET, ownEvent: true },
 ];
+// Aviso do navegador sem efeito visível, que o Error Tracking classifica como severidade alta.
+const BENIGN_EXCEPTION =
+  /^ResizeObserver loop (?:completed with undelivered notifications|limit exceeded)\.?$/i;
 const SENSITIVE_KEY = /(password|passwd|secret|token|authorization|cookie|api[-_]?key)/i;
 const SENSITIVE_QUERY =
   /([?&](?:access[-_]?token|refresh[-_]?token|token|auth(?:orization)?|api[-_]?key|client[-_]?secret|secret|password|jwt)=)[^&\s]+/gi;
@@ -109,6 +120,15 @@ function sanitizeString(value: string): string {
 
 function normalizeVersion(value: unknown): string {
   return typeof value === "string" ? value.trim().replace(/^v(?=\d)/, "") : "";
+}
+
+export function isBenignException(properties: Record<string, unknown> | undefined): boolean {
+  const list = properties?.$exception_list;
+  if (!Array.isArray(list) || list.length === 0) return false;
+  return list.every((item) => {
+    const value = (item as { value?: unknown } | null)?.value;
+    return typeof value === "string" && BENIGN_EXCEPTION.test(value.trim());
+  });
 }
 
 function serializableValue(value: unknown, depth = 0): unknown {
@@ -527,7 +547,13 @@ export function track(event: string, properties: Record<string, unknown> = {}): 
 
 export function captureException(error: unknown, properties: Record<string, unknown> = {}): void {
   if (!isEnabled()) return;
-  if (error && typeof error === "object") _explicitErrors.add(error);
+  if (error && typeof error === "object") {
+    // O mesmo Error costuma passar por catch local, errorHandler do Vue e console.error.
+    const now = Date.now();
+    const capturedAt = _explicitErrors.get(error);
+    if (capturedAt !== undefined && now - capturedAt < DUPLICATE_CAPTURE_WINDOW_MS) return;
+    _explicitErrors.set(error, now);
+  }
   const sanitized = safeError(error);
   const enriched = {
     ...baseContext(),
@@ -604,14 +630,16 @@ export function histogram(name: string, value: number, attributes: MetricAttribu
   const budget = PERFORMANCE_BUDGETS.find((candidate) => candidate.match.test(safeName));
   if (budget && value >= budget.warn) {
     const severity = value >= budget.critical ? "critical" : "slow";
-    track("performance_slow", {
-      metric_name: safeName,
-      duration_ms: Math.round(value),
-      severity,
-      warn_budget_ms: budget.warn,
-      critical_budget_ms: budget.critical,
-      ...safeAttributes,
-    });
+    if (!budget.ownEvent) {
+      track("performance_slow", {
+        metric_name: safeName,
+        duration_ms: Math.round(value),
+        severity,
+        warn_budget_ms: budget.warn,
+        critical_budget_ms: budget.critical,
+        ...safeAttributes,
+      });
+    }
     log(severity === "critical" ? "error" : "warn", "performance budget exceeded", {
       metric_name: safeName,
       duration_ms: Math.round(value),
@@ -666,10 +694,11 @@ function startResponsivenessMonitor(): void {
           });
 
           const now = Date.now();
-          if (durationMs < 250 || now - lastLongTaskEventAt < 5_000) continue;
+          if (durationMs < UI_JANK_BUDGET.warn || now - lastLongTaskEventAt < 5_000) continue;
           lastLongTaskEventAt = now;
           track("ui_long_task", {
             duration_ms: durationMs,
+            severity: durationMs >= UI_JANK_BUDGET.critical ? "critical" : "slow",
             entry_type: entry.entryType,
             entry_name: entry.name,
             start_time_ms: Math.round(entry.startTime),
@@ -689,16 +718,27 @@ function startResponsivenessMonitor(): void {
 
   const intervalMs = 1_000;
   let previousTick = typeof performance !== "undefined" ? performance.now() : Date.now();
+  let visibilityChanged = false;
+  const markVisibilityChange = () => {
+    visibilityChanged = true;
+  };
+  document.addEventListener("visibilitychange", markVisibilityChange);
+  cleanups.push(() => document.removeEventListener("visibilitychange", markVisibilityChange));
   const timer = window.setInterval(() => {
     const now = typeof performance !== "undefined" ? performance.now() : Date.now();
     const driftMs = Math.max(0, Math.round(now - previousTick - intervalMs));
     previousTick = now;
-    // Timers são deliberadamente estrangulados quando a aba está em segundo
-    // plano; isso não é um travamento do renderer.
-    if (document.visibilityState === "hidden" || driftMs < 250) return;
+    const crossedVisibilityChange = visibilityChanged;
+    visibilityChanged = false;
+    // Timers são estrangulados em segundo plano. O primeiro tick depois de a
+    // janela voltar carrega todo o atraso acumulado e a aba já está visível:
+    // isso não é travamento do renderer.
+    if (document.visibilityState === "hidden" || crossedVisibilityChange) return;
+    if (driftMs < UI_JANK_BUDGET.warn) return;
 
     track("ui_thread_stall", {
       duration_ms: driftMs,
+      severity: driftMs >= UI_JANK_BUDGET.critical ? "critical" : "slow",
       expected_interval_ms: intervalMs,
       route: routePath(),
     });
@@ -1182,6 +1222,7 @@ async function _init(): Promise<void> {
     rageclick: isMainWindow,
     before_send: (capture) => {
       if (!capture) return null;
+      if (capture.event === "$exception" && isBenignException(capture.properties)) return null;
       // `token` is injected by PostHog and is required by `/e/`. It matches
       // the generic secret-key sanitizer, but removing it makes the SDK drop
       // every event before opening the network request. Preserve only this
@@ -1423,7 +1464,8 @@ setNetworkTimingReporter((timing) => {
 });
 setDatabaseTimingReporter((timing) => {
   const dataset = timing.file.replace(/_\d+$/g, "_:id").slice(0, 100);
-  track("database_read", { ...timing, dataset });
+  // Acertos em memória (~0 ms) vão só ao histograma; um evento por leitura era ruído.
+  if (timing.source !== "memory") track("database_read", { ...timing, dataset });
   histogram("louvorja.database.read.duration", timing.duration_ms, {
     source: timing.source,
     dataset,

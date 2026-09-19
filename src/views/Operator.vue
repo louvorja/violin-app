@@ -190,8 +190,12 @@ function onVideoBuffering(event) {
 function onVideoError(event) {
   const el = event.currentTarget;
   videoFailed.value = true;
-  console.error("[Operator] vídeo local falhou:", {
-    code: el?.error?.code,
+  const code = el?.error?.code;
+  const reason = code === 3 ? "decode" : code === 4 ? "source_not_supported" : "unknown";
+  const error = new Error(`Operator video ${reason}`);
+  Telemetry.captureException(error, { operation: "operator_video", reason });
+  console.error("[Operator] vídeo local falhou:", error, {
+    code,
     message: el?.error?.message,
     src: videoUrl.value.substring(0, 100),
   });

@@ -85,7 +85,7 @@ export interface YTPlayerOptions {
   events: {
     onReady: () => void;
     onStateChange: (e: { data: number }) => void;
-    onError?: (e: number) => void;
+    onError?: (e: { data: number }) => void;
     onApiChange?: () => void;
   };
 }

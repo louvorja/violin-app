@@ -76,9 +76,9 @@ function buildAsyncComponent(moduleId: string): Component {
       return Promise.reject(new Error(`[Modules] módulo não encontrado: ${moduleId}`));
     },
     onError(err, _retry, fail) {
+      Telemetry.captureException(err, { source: "module_async_load", module_id: moduleId });
       console.error(`[Modules] erro ao carregar "${moduleId}":`, err);
       Telemetry.markEnd("module.open", moduleId, { module_id: moduleId, outcome: "failed" });
-      Telemetry.captureException(err, { source: "module_async_load", module_id: moduleId });
       Telemetry.track("module_load_failed", {
         module_id: moduleId,
         reason: err instanceof Error ? err.name : "unknown",
