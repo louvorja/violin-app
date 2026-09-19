@@ -48,8 +48,10 @@ test("abrir música sem áudio → slide aparece em /projection", async ({ brows
   // Aguardar a linha da música aparecer (DataTable carregou o mock)
   await expect(mainPage.locator('[data-testid="music-row-1"]')).toBeVisible({ timeout: 10000 });
 
-  // Abrir a música sem áudio
-  await mainPage.locator('[data-testid="music-row-1"] [data-testid="mmt-btn-no-audio"]').click();
+  // Abrir a música sem áudio (botão só renderiza no hover/foco da linha — ver deferQuickActions)
+  const musicRow = mainPage.locator('[data-testid="music-row-1"]');
+  await musicRow.locator(".mmt").hover();
+  await musicRow.locator('[data-testid="mmt-btn-no-audio"]').click();
 
   // Verificar que o slide (capa) aparece na projeção com o nome da música
   const slideContent = projPage.locator('[data-testid="slide-content"]');
