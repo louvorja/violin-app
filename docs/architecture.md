@@ -392,7 +392,7 @@ baixa `/db/bundle`, extrai os JSONs e injeta no IndexedDB via `$database.seed()`
 
 A Bíblia são ~15 mil capítulos (13 versões × 1.189). Buscá-los um a um custava até
 ~1.200 requisições por versão à API; por isso ela tem um ZIP próprio, `/db/bible-bundle`
-(~23 MB, gerado pelo `ingest` da API a partir do bundle da origem), baixado **uma vez**.
+(~25 MB medido em produção, gerado pelo `ingest` da API a partir do bundle da origem), baixado **uma vez**.
 
 - **Quando baixa**: só ao abrir a Bíblia ou a Busca Bíblica, ou ao mandar baixar
   versões (StartupCheckDialog, Sincronizar). Nunca no boot. O progresso aparece

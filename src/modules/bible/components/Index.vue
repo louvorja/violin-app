@@ -638,7 +638,7 @@ function onKeydown(e: KeyboardEvent): void {
 
 onMounted(async () => {
   window.addEventListener("keydown", onKeydown);
-  // Em segundo plano: ler um capítulo não pode esperar 23 MB. Enquanto o ZIP
+  // Em segundo plano: ler um capítulo não pode esperar 25 MB. Enquanto o ZIP
   // baixa, os capítulos abertos vêm pela rede e são guardados como sempre.
   void sync.ensureBibleBundle();
   await loadData();

@@ -114,7 +114,7 @@ let catalogReady = false;
 let catalogEnsurePromise: Promise<boolean> | null = null;
 let catalogFailedAt = 0;
 
-// Depois de uma falha, reabrir a tela bíblica não recomeça o download de 23 MB
+// Depois de uma falha, reabrir a tela bíblica não recomeça o download de 25 MB
 // na hora: numa rede que soluça, cada abertura seria uma nova tentativa do zero.
 const BUNDLE_RETRY_COOLDOWN_MS = 5 * 60_000;
 
