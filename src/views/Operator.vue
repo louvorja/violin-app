@@ -60,7 +60,7 @@
           'op-card--active': i === currentIndex,
           'op-card--cover': slide.cover,
         }"
-        :style="{ backgroundImage: slide.url_image ? `url(${slide.url_image})` : 'none' }"
+        :style="{ backgroundImage: slide.url_image ? `url(${imageUrl(slide.url_image)})` : 'none' }"
         @click="goTo(i)"
       >
         <div class="op-card-num">{{ i + 1 }}</div>
@@ -84,10 +84,20 @@ import { KEYS } from "@/constants/UserDataKeys";
 import $idb from "@/helpers/IndexedDB";
 import { DB_TABLE } from "@/constants/DbTables";
 import Telemetry from "@/helpers/Telemetry";
+import Path from "@/helpers/Path";
 
 const { t } = useI18n();
 const root = ref(null);
 const slides = ref([]);
+
+function imageUrl(value) {
+  if (!value) return "";
+  try {
+    return Path.file(value);
+  } catch {
+    return value;
+  }
+}
 const currentIndex = ref(0);
 const title = ref("");
 const progress = ref(0);

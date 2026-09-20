@@ -99,6 +99,7 @@ import { useI18n } from "vue-i18n";
 import { useProjectionState } from "@/composables/useProjectionState";
 import { useSlideStyle } from "@/composables/useSlideStyle";
 import OverlayRenderer from "@/components/OverlayRenderer.vue";
+import Path from "@/helpers/Path";
 
 const { t } = useI18n();
 const { slide, isCover, progress, slideProgress, title, slideIndex, totalSlides, nextSlide } =
@@ -138,8 +139,14 @@ const returnTopBgInline = computed(() => {
   // personalizado da projeção (que não deve vazar para o retorno).
   const slideUrl = slide.value?.url_image;
   if (!slideUrl) return null;
+  let resolvedUrl = slideUrl;
+  try {
+    resolvedUrl = Path.file(slideUrl);
+  } catch {
+    /* mantém URL já resolvida por uma fonte externa */
+  }
   return {
-    backgroundImage: `url(${slideUrl})`,
+    backgroundImage: `url(${resolvedUrl})`,
     backgroundSize: "cover",
     backgroundPosition: "center center",
     backgroundRepeat: "no-repeat",

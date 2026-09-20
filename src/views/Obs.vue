@@ -19,7 +19,7 @@
         <div
           v-if="slide.url_image"
           class="obs-bg"
-          :style="{ backgroundImage: `url(${slide.url_image})` }"
+          :style="{ backgroundImage: `url(${imageUrl(slide.url_image)})` }"
         />
         <div class="obs-content">
           <div class="obs-text" v-html="slide.lyric || slide.name || ''" />
@@ -35,6 +35,16 @@ import { useProjectionState } from "@/composables/useProjectionState";
 import OverlayRenderer from "@/components/OverlayRenderer.vue";
 import LibrasOverlay from "@/views/LibrasOverlay.vue";
 import { useLibrasState } from "@/modules/libras/composables/useLibrasState";
+import Path from "@/helpers/Path";
+
+function imageUrl(value) {
+  if (!value) return "";
+  try {
+    return Path.file(value);
+  } catch {
+    return value;
+  }
+}
 
 const { slide } = useProjectionState();
 const { showOnObs: showLibrasObs } = useLibrasState();

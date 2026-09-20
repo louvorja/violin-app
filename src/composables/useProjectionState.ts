@@ -3,21 +3,28 @@ import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import $broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import Telemetry, { isProjectionMilestone } from "@/helpers/Telemetry";
+import Path from "@/helpers/Path";
 
 export type Slide = Record<string, unknown> | null;
 
 export const IMAGE_POSITION_MAP: Record<string | number, string> = {
   center: "center center",
-  top:    "center top",
+  top: "center top",
   bottom: "center bottom",
-  left:   "left center",
-  right:  "right center",
-  1: "left top",    2: "center top",    3: "right top",
-  4: "left center", 5: "center center", 6: "right center",
-  7: "left bottom", 8: "center bottom", 9: "right bottom",
+  left: "left center",
+  right: "right center",
+  1: "left top",
+  2: "center top",
+  3: "right top",
+  4: "left center",
+  5: "center center",
+  6: "right center",
+  7: "left bottom",
+  8: "center bottom",
+  9: "right bottom",
 };
 
-export const COLOR_COVER_GOLD  = "#EFB400";
+export const COLOR_COVER_GOLD = "#EFB400";
 export const COLOR_LYRIC_WHITE = "#FFFFFF";
 
 interface BgImgStyle {
@@ -44,12 +51,12 @@ interface ProjectionStateReturn {
  * Encapsula a subscrição ao SLIDE_CHANGE e os computed derivados comuns.
  */
 export function useProjectionState(): ProjectionStateReturn {
-  const slide       = ref<Slide>(null);
-  const nextSlide   = ref<Slide>(null);
-  const title       = ref("");
-  const progress    = ref(0);
+  const slide = ref<Slide>(null);
+  const nextSlide = ref<Slide>(null);
+  const title = ref("");
+  const progress = ref(0);
   const slideProgress = ref(0);
-  const slideIndex  = ref(0);
+  const slideIndex = ref(0);
   const totalSlides = ref(0);
 
   // Janelas que abrem depois da música começar não recebem o broadcast
@@ -61,11 +68,11 @@ export function useProjectionState(): ProjectionStateReturn {
 
   useBroadcastListener(BROADCAST_TYPE.SLIDE_CHANGE, (payload) => {
     const p = payload as Record<string, unknown>;
-    slide.value       = (p.slide as Slide) ?? null;
-    nextSlide.value   = (p.next_slide as Slide) ?? null;
-    title.value       = (p.title as string) ?? "";
-    progress.value    = (p.progress as number) ?? 0;
-    slideIndex.value  = (p.slide_index as number) ?? 0;
+    slide.value = (p.slide as Slide) ?? null;
+    nextSlide.value = (p.next_slide as Slide) ?? null;
+    title.value = (p.title as string) ?? "";
+    progress.value = (p.progress as number) ?? 0;
+    slideIndex.value = (p.slide_index as number) ?? 0;
     totalSlides.value = (p.total_slides as number) ?? (p.last_slide as number) ?? 0;
 
     if (typeof p._ts === "number") {
@@ -116,12 +123,12 @@ export function useProjectionState(): ProjectionStateReturn {
   // Sem este reset, janelas de projeção e clients de transmissão (OBS)
   // ficam mostrando a letra da música anterior indefinidamente.
   useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, () => {
-    slide.value       = null;
-    nextSlide.value   = null;
-    title.value       = "";
-    progress.value    = 0;
+    slide.value = null;
+    nextSlide.value = null;
+    title.value = "";
+    progress.value = 0;
     slideProgress.value = 0;
-    slideIndex.value  = 0;
+    slideIndex.value = 0;
     totalSlides.value = 0;
   });
 
@@ -135,23 +142,32 @@ export function useProjectionState(): ProjectionStateReturn {
     if (typeof idx === "number") slideIndex.value = idx;
   });
 
-  const isCover = computed<boolean>(() =>
-    !!(
-      slide.value &&
-      (slide.value.cover    === true  ||
-       slide.value.tipo     === "CAPA" ||
-       slide.value.is_cover === true  ||
-       slideIndex.value     === 0)
-    )
+  const isCover = computed<boolean>(
+    () =>
+      !!(
+        slide.value &&
+        (slide.value.cover === true ||
+          slide.value.tipo === "CAPA" ||
+          slide.value.is_cover === true ||
+          slideIndex.value === 0)
+      )
   );
 
   const bgImgStyle = computed<BgImgStyle>(() => {
-    const pos = IMAGE_POSITION_MAP[slide.value?.image_position as string | number] || "center center";
+    const pos =
+      IMAGE_POSITION_MAP[slide.value?.image_position as string | number] || "center center";
+    const image = slide.value?.url_image as string | undefined;
+    let imageUrl: string | undefined;
+    if (image) {
+      try {
+        imageUrl = Path.file(image);
+      } catch {
+        imageUrl = image;
+      }
+    }
     return {
-      backgroundImage:    slide.value?.url_image
-        ? `url(${slide.value.url_image as string})`
-        : undefined,
-      backgroundSize:     "cover",
+      backgroundImage: imageUrl ? `url(${imageUrl})` : undefined,
+      backgroundSize: "cover",
       backgroundPosition: pos,
     };
   });
@@ -164,6 +180,7 @@ export function useProjectionState(): ProjectionStateReturn {
     slideProgress,
     slideIndex,
     totalSlides,
-    isCover, bgImgStyle,
+    isCover,
+    bgImgStyle,
   };
 }
