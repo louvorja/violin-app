@@ -134,6 +134,23 @@ describe("Telemetry", () => {
     );
   });
 
+  it("não sonda o endpoint de ingestão com GET: o PostHog só aceita POST e responderia 400 a cada boot", async () => {
+    const Telemetry = await loadTelemetry();
+    const { fetchWithTimeout } = await import("@/helpers/Http");
+    const rawFetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(null, { status: 200 }));
+
+    await Telemetry.init();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const requested = [
+      ...vi.mocked(fetchWithTimeout).mock.calls.map(([url]) => String(url)),
+      ...rawFetch.mock.calls.map(([url]) => String(url)),
+    ];
+    expect(requested.filter((url) => /\/e\/?$/.test(url))).toEqual([]);
+  });
+
   it("usa a versão embutida quando o singleton não expõe LIB_VERSION", async () => {
     const previous = posthog.LIB_VERSION;
     delete (posthog as { LIB_VERSION?: string }).LIB_VERSION;

@@ -16,7 +16,7 @@ import type {
 } from "posthog-js";
 import Platform from "@/helpers/Platform";
 import $userdata from "@/helpers/UserData";
-import { fetchWithTimeout, setNetworkTimingReporter } from "@/helpers/Http";
+import { setNetworkTimingReporter } from "@/helpers/Http";
 import { setDatabaseTimingReporter } from "@/helpers/Database";
 import { KEYS } from "@/constants/UserDataKeys";
 import packageJson from "@root/package.json";
@@ -47,7 +47,6 @@ const MAX_ARRAY_ITEMS = 100;
 const MAX_STRING_LENGTH = 20_000;
 const REPLAY_READY_TIMEOUT_MS = 5_000;
 const REPLAY_READY_POLL_MS = 100;
-const POSTHOG_PROBE_TIMEOUT_MS = 3_500;
 const UI_JANK_BUDGET = { warn: 250, critical: 1_000 } as const;
 const PERFORMANCE_BUDGETS: Array<{
   match: RegExp;
@@ -363,62 +362,6 @@ async function waitForSessionRecording(posthog: PostHog): Promise<boolean> {
     await new Promise((resolve) => setTimeout(resolve, REPLAY_READY_POLL_MS));
   }
   return isSessionRecordingStarted(replay);
-}
-
-/**
- * Verifica somente a alcançabilidade do endpoint de ingestão. Não envia dados
- * nem substitui o SDK; serve para separar no log "evento aceito localmente"
- * de "rede/CSP/firewall não deixa chegar ao PostHog".
- */
-async function probePostHog(): Promise<void> {
-  if (typeof fetch !== "function") return;
-  const startedAt = Date.now();
-  const controller = typeof AbortController === "function" ? new AbortController() : null;
-  const timeout = controller
-    ? setTimeout(() => controller.abort(), POSTHOG_PROBE_TIMEOUT_MS)
-    : null;
-  try {
-    const response = await fetchWithTimeout(`${HOST.replace(/\/$/, "")}/e/`, {
-      method: "GET",
-      cache: "no-store",
-      timeout: POSTHOG_PROBE_TIMEOUT_MS,
-      source: "posthog-probe",
-      thirdParty: true,
-      signal: controller?.signal,
-    });
-    const methodRejectedAsExpected = [400, 405, 415].includes(response.status);
-    // GET em /e/ pode responder 404/405 por método, mas isso já prova que o
-    // host e o CORS foram alcançados; só a exceção indica bloqueio de rede.
-    diagnostic(
-      "info",
-      methodRejectedAsExpected
-        ? "probe PostHog alcançou o endpoint (GET rejeitado como esperado)"
-        : "probe do endpoint PostHog respondeu",
-      {
-        status: response.status,
-        ok: response.ok,
-        reachable: true,
-        probe_method: "GET",
-        expected_ingestion_method: "POST",
-        method_probe_expected_rejection: methodRejectedAsExpected,
-        // /e/ aceita POST; um GET de diagnóstico costuma responder 400/405/415
-        // e ainda assim confirma que DNS, TLS, proxy e CSP chegaram ao host.
-        method_probe_accepted: response.ok,
-        duration_ms: Date.now() - startedAt,
-        online: typeof navigator !== "undefined" ? navigator.onLine : undefined,
-        access_control_allow_origin:
-          response.headers?.get("access-control-allow-origin") || undefined,
-      }
-    );
-  } catch (error) {
-    diagnostic("warn", "endpoint PostHog inacessível", {
-      error: error instanceof Error ? error.message : String(error),
-      duration_ms: Date.now() - startedAt,
-      online: typeof navigator !== "undefined" ? navigator.onLine : undefined,
-    });
-  } finally {
-    if (timeout) clearTimeout(timeout);
-  }
 }
 
 function requestUrl(input: Parameters<NonNullable<typeof globalThis.fetch>>[0]): string {
@@ -1363,7 +1306,6 @@ async function _init(): Promise<void> {
     send_instantly: true,
     ...sdkIdentity(posthog),
   });
-  void probePostHog();
 
   // O replay é carregado sob demanda. Ele não pode segurar o primeiro evento:
   // em um PC que fecha o app logo após abrir, os 5 s anteriores perdiam toda a
@@ -1472,7 +1414,7 @@ function scheduleDomDiagnostic(posthog: PostHog): void {
 
 installGlobalHandlers();
 setNetworkTimingReporter((timing) => {
-  if (timing.source === "posthog-probe" || !timing.remote) return;
+  if (!timing.remote) return;
   track("network_request", { ...timing });
   histogram("louvorja.http.client.duration", timing.duration_ms, {
     source: timing.source,
