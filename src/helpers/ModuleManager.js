@@ -73,7 +73,9 @@ export default {
     const locales = ["pt", "es"];
     const promise = Promise.all(
       locales.map(async (locale) => {
-        const path = `/src/modules/${moduleId}/lang/${locale}.json`;
+        // A chave é a do glob acima (relativa a este arquivo); qualquer outra forma
+        // não casa, e a tradução do módulo deixa de carregar sem nenhum erro.
+        const path = `../modules/${moduleId}/lang/${locale}.json`;
         const loader = _translationLoaders[path];
         if (typeof loader !== "function") return;
         const loaded = await loader();
