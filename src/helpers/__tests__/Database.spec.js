@@ -334,9 +334,37 @@ describe("Database — seed do bundle do banco (needsSeed/seed)", () => {
     expect(stored.has("bible_2_39_6")).toBe(true);
     expect(stored.has("bible_9_1_1")).toBe(false);
   });
+
+  it("getStoredIdsForPrefix também reconhece capítulos do cache legado", async () => {
+    tbl("cache").set("bible_2_1_1", {
+      id: "bible_2_1_1",
+      data: { 1: "No princípio" },
+      ts: 1,
+      v: V,
+    });
+    const db = await importDatabase();
+
+    const stored = await db.getStoredIdsForPrefix("bible_chapters", "bible_2_");
+    expect(stored.has("bible_2_1_1")).toBe(true);
+  });
 });
 
 describe("Database — deduplicação de buscas concorrentes", () => {
+  it("getLocal não consulta a rede quando o capítulo não está no cache", async () => {
+    const db = await importDatabase();
+
+    expect(await db.getLocal("bible_2_39_5")).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("getLocal retorna um capítulo sem consultar a rede", async () => {
+    const db = await importDatabase();
+    await db.seed("bible_2_39_5", { 1: "No princípio" });
+
+    expect(await db.getLocal("bible_2_39_5")).toEqual({ 1: "No princípio" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("dois chamadores simultâneos compartilham uma única requisição", async () => {
     const db = await importDatabase();
     let resolveFetch;

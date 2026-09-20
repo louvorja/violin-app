@@ -91,6 +91,12 @@ interface ScanCacheResult {
 let scanCacheEntry: { lang: string; at: number; result: ScanCacheResult } | null = null;
 const SCAN_CACHE_TTL_MS = 5 * 60_000;
 
+// A verificação inicial e a tela de Sincronizar podem instanciar este
+// composable ao mesmo tempo. Compartilhar a operação evita que as duas
+// instâncias baixem os mesmos capítulos.
+let activeBibleDownload: Promise<number> | null = null;
+let activeBibleCancel: (() => void) | null = null;
+
 export function useSyncManager() {
   const { t, locale } = useI18n();
   const bgTasks = useBackgroundTasks();
@@ -461,8 +467,27 @@ export function useSyncManager() {
   ): Promise<number> {
     if (versionIds.length === 0) return 0;
 
+    if (activeBibleDownload) return activeBibleDownload;
+    const pending = downloadBibleVersionsInternal(versionIds, bibleVersions, lang);
+    activeBibleDownload = pending;
+    try {
+      return await pending;
+    } finally {
+      if (activeBibleDownload === pending) activeBibleDownload = null;
+      activeBibleCancel = null;
+    }
+  }
+
+  async function downloadBibleVersionsInternal(
+    versionIds: number[],
+    bibleVersions: BibleVersion[],
+    lang: string
+  ): Promise<number> {
     bibleDownloading.value = true;
     bibleCancelled.value = false;
+    activeBibleCancel = () => {
+      bibleCancelled.value = true;
+    };
     bibleProgress.value = { done: 0, total: 0, currentFile: "" };
     bibleCompletedMsg.value = "";
 
@@ -520,6 +545,10 @@ export function useSyncManager() {
     if (toDownload.length === 0) {
       bibleDownloading.value = false;
       bibleCompletedMsg.value = "Nada a baixar (já está em cache).";
+      const previous = $userdata.get<number[]>(KEYS.STORAGE.BIBLE_DOWNLOADED_VERSIONS, []) || [];
+      $userdata.set(KEYS.STORAGE.BIBLE_DOWNLOADED_VERSIONS, [
+        ...new Set([...previous.filter((id) => !versionIds.includes(id)), ...versionIds]),
+      ]);
       return 0;
     }
 
@@ -530,6 +559,7 @@ export function useSyncManager() {
     // uma rajada de conexões/transações.
     const batchSize = RUNTIME_PERFORMANCE.lowResource ? 2 : RUNTIME_PERFORMANCE.constrained ? 3 : 4;
     let completed = 0;
+    const failedKeys = new Set<string>();
     for (let i = 0; i < toDownload.length && !bibleCancelled.value; i += batchSize) {
       const batch = toDownload.slice(i, i + batchSize);
       await Promise.all(
@@ -538,8 +568,13 @@ export function useSyncManager() {
           const detail = formatBackgroundTaskDetail(key, t, bibleVersions);
           bibleProgress.value = { ...bibleProgress.value, currentFile: detail || key };
           try {
-            await Database.get(key, { fresh: true, silent: true });
+            // A lista já foi filtrada pelo cache local. A leitura normal
+            // compartilha o mesmo in-flight com a Bíblia e não cria outra
+            // requisição por causa de `fresh`.
+            const data = await Database.get(key, { silent: true });
+            if (data === null) failedKeys.add(key);
           } catch (e) {
+            failedKeys.add(key);
             console.warn(`[useSyncManager] falha ao baixar ${key}:`, e);
           }
           completed += 1;
@@ -559,7 +594,18 @@ export function useSyncManager() {
       bibleCancelled.value = false;
       bgTasks.updateTask("sync-bible", { status: "cancelled" });
     } else {
-      $userdata.set(KEYS.STORAGE.BIBLE_DOWNLOADED_VERSIONS, versionIds);
+      const completedVersionIds = versionIds.filter(
+        (versionId) =>
+          !toDownload.some(
+            (chapter) =>
+              chapter.versionId === versionId &&
+              failedKeys.has(`bible_${chapter.versionId}_${chapter.bookId}_${chapter.n}`)
+          )
+      );
+      const previous = $userdata.get<number[]>(KEYS.STORAGE.BIBLE_DOWNLOADED_VERSIONS, []) || [];
+      $userdata.set(KEYS.STORAGE.BIBLE_DOWNLOADED_VERSIONS, [
+        ...new Set([...previous.filter((id) => !versionIds.includes(id)), ...completedVersionIds]),
+      ]);
       bgTasks.completeTask("sync-bible");
     }
     return bibleProgress.value.done;
@@ -809,7 +855,8 @@ export function useSyncManager() {
 
   function cancelDownloads(): void {
     Platform.download?.cancel();
-    bibleCancelled.value = true;
+    if (activeBibleCancel) activeBibleCancel();
+    else bibleCancelled.value = true;
   }
 
   // ─── Bundle Download ────────────────────────────────────────

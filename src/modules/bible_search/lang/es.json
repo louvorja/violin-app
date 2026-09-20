@@ -27,5 +27,6 @@
   },
   "search": "Buscar",
   "search_placeholder": "Escriba un término (ej: Jesús sanó)",
-  "empty_hint": "Ningún versículo encontrado, intente con otro texto"
+  "empty_hint": "Ningún versículo encontrado, intente con otro texto",
+  "download_hint": "La búsqueda por palabra usa los capítulos guardados en este dispositivo. Descargue la versión en Sincronizar para buscar toda la Biblia."
 }

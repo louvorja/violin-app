@@ -112,7 +112,7 @@
 
         <div v-else-if="noResults" class="bs-empty">
           <LjIcon :icon="ICONS.MODULES.BIBLE_SEARCH" size="48" color="primary" />
-          <p>{{ tm("empty_hint") }}</p>
+          <p>{{ tm(searchCorpusEmpty ? "download_hint" : "empty_hint") }}</p>
         </div>
       </template>
     </div>
@@ -135,6 +135,7 @@ import { KEYS } from "@/constants/UserDataKeys";
 import Fuse from "fuse.js";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { ICONS } from "@/config/Icons";
+import { DB_TABLE } from "@/constants/DbTables";
 
 const container = ref<{ tm: (key: string, named?: Record<string, unknown>) => string } | null>(
   null
@@ -158,6 +159,7 @@ const noResults = ref<boolean>(false);
 const books: Ref<BibleBook[]> = ref([]);
 const versions: Ref<BibleVersion[]> = ref([]);
 const selectedVersionId = ref<number | null>(null);
+const searchCorpusEmpty = ref(false);
 const isProjecting = computed(() => $userdata.get(KEYS.MODULES.BIBLE.IS_PLAYING, false));
 
 const versionItems = computed(() =>
@@ -248,6 +250,7 @@ function onVersionChange(val: number): void {
 }
 
 async function doSearch(): Promise<void> {
+  if (searching.value) return;
   confirmarRascunho();
   const terms = searchTerms.value.filter((t: string) => t?.trim());
   if (!terms.length) return;
@@ -256,6 +259,7 @@ async function doSearch(): Promise<void> {
   results.value = [];
   selectedIndex.value = 0;
   noResults.value = false;
+  searchCorpusEmpty.value = false;
 
   try {
     const merged: BibleSearchResult[] = [];
@@ -424,43 +428,87 @@ async function searchByReference(q: string): Promise<BibleSearchResult[]> {
   return [];
 }
 
-const versesCache: BibleSearchResult[] = [];
-let cachedVersionId: number | null = null;
-let cachedBookList: string | null = null;
+let cachedCorpusKey: string | null = null;
+let cachedCorpus: BibleSearchResult[] = [];
+let cachedCorpusChapterCount = 0;
+let corpusPromiseKey: string | null = null;
+let corpusPromise: Promise<{ verses: BibleSearchResult[]; chapters: number }> | null = null;
+let disposed = false;
 
 async function getVersesForSearch(): Promise<BibleSearchResult[]> {
   const versionId = await getVersionId();
-  const selectedBooks: number[] = $userdata.get("modules.bible_search.books", []) || [];
+  const rawSelectedBooks = $userdata.get<unknown>("modules.bible_search.books", []);
+  const selectedBooks = (Array.isArray(rawSelectedBooks) ? rawSelectedBooks : [])
+    .map(Number)
+    .filter(Number.isFinite)
+    .sort((a, b) => a - b);
   const bookListKey = selectedBooks.length ? selectedBooks.join(",") : "*";
-  if (cachedVersionId === versionId && cachedBookList === bookListKey && versesCache.length) {
-    return versesCache;
+  const corpusKey = `${versionId}:${bookListKey}`;
+
+  if (cachedCorpusKey === corpusKey) {
+    searchCorpusEmpty.value = cachedCorpusChapterCount === 0;
+    return cachedCorpus;
   }
-  versesCache.length = 0;
-  cachedVersionId = versionId;
-  cachedBookList = bookListKey;
-  for (const book of books.value) {
-    if (selectedBooks.length && !selectedBooks.includes(book.id_bible_book)) continue;
-    for (let ch = 1; ch <= (book.chapters || 1); ch++) {
-      const bibleFile = `bible_${versionId}_${book.id_bible_book}_${ch}`;
-      const chapterData: Record<string, string> | null = await $database.get(bibleFile, {
-        silent: true,
-      });
-      if (!chapterData) continue;
-      for (const [v, txt] of Object.entries(chapterData)) {
-        versesCache.push({
-          id_bible_book: book.id_bible_book,
-          id_bible_version: versionId,
-          book: book.name,
-          chapter: ch,
-          verse: parseInt(v, 10),
-          reference: `${book.name} ${ch}:${v}`,
-          text: txt,
-        });
+  if (corpusPromiseKey === corpusKey && corpusPromise) {
+    const result = await corpusPromise;
+    searchCorpusEmpty.value = result.chapters === 0;
+    return result.verses;
+  }
+
+  // Uma única leitura do índice local evita 1.189 consultas ao IndexedDB
+  // quando nada dessa versão foi baixado. O ponto principal é que a busca
+  // textual nunca chama Database.get(), pois isso buscaria a rede.
+  const stored = await $database.getStoredIdsForPrefix(
+    DB_TABLE.BIBLE_CHAPTERS,
+    `bible_${versionId}_`
+  );
+  const pending = (async () => {
+    const verses: BibleSearchResult[] = [];
+    let chapters = 0;
+    for (const book of books.value) {
+      if (disposed) break;
+      if (selectedBooks.length && !selectedBooks.includes(book.id_bible_book)) continue;
+      for (let ch = 1; ch <= (book.chapters || 1); ch++) {
+        if (disposed) break;
+        const bibleFile = `bible_${versionId}_${book.id_bible_book}_${ch}`;
+        if (!stored.has(bibleFile)) continue;
+        const chapterData = await $database.getLocal<Record<string, string>>(bibleFile);
+        if (!chapterData) continue;
+        chapters += 1;
+        for (const [v, txt] of Object.entries(chapterData)) {
+          verses.push({
+            id_bible_book: book.id_bible_book,
+            id_bible_version: versionId,
+            book: book.name,
+            chapter: ch,
+            verse: parseInt(v, 10),
+            reference: `${book.name} ${ch}:${v}`,
+            text: txt,
+          });
+        }
+        await new Promise<void>((r) => setTimeout(r, 0));
       }
-      await new Promise<void>((r) => setTimeout(r, 0));
+    }
+    return { verses, chapters };
+  })();
+
+  corpusPromiseKey = corpusKey;
+  corpusPromise = pending;
+  try {
+    const result = await pending;
+    if (!disposed) {
+      cachedCorpusKey = corpusKey;
+      cachedCorpus = result.verses;
+      cachedCorpusChapterCount = result.chapters;
+    }
+    searchCorpusEmpty.value = result.chapters === 0;
+    return result.verses;
+  } finally {
+    if (corpusPromise === pending) {
+      corpusPromise = null;
+      corpusPromiseKey = null;
     }
   }
-  return versesCache;
 }
 
 async function searchByKeyword(q: string): Promise<BibleSearchResult[]> {
@@ -572,6 +620,9 @@ onMounted(async () => {
 });
 
 onUnmounted(() => document.removeEventListener("mousedown", onDocPointerDown, true));
+onUnmounted(() => {
+  disposed = true;
+});
 </script>
 
 <style scoped>

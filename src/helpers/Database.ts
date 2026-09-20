@@ -571,6 +571,29 @@ export default {
   },
 
   /**
+   * Lê somente as camadas locais do banco (memória e IndexedDB).
+   *
+   * Esta variante é deliberadamente incapaz de buscar a rede. Ela serve para
+   * fluxos exploratórios, como busca textual, que podem consultar milhares de
+   * chaves e não devem transformar um cache incompleto em uma rajada de GETs.
+   */
+  async getLocal<T = unknown>(file: string): Promise<T | null> {
+    const mem = _memory.get(file);
+    if (mem && isValidV(mem.v)) return mem.data as T;
+
+    try {
+      const routed = await readRouted<T>(file, routeFor(file));
+      if (routed !== null) {
+        _memory.set(file, { id: file, data: routed, ts: Date.now(), v: getVersion() });
+        return routed;
+      }
+    } catch {
+      /* Uma leitura local falha como cache ausente; nunca deve abrir diálogo. */
+    }
+    return null;
+  },
+
+  /**
    * O dataset já está válido no IDB (meta/linhas com a versão vigente)?
    * Usado pelo instalador do bundle do banco — não toca na camada de memória.
    */
@@ -623,11 +646,22 @@ export default {
   async getStoredIdsForPrefix(table: string, filePrefix: string): Promise<Set<string>> {
     try {
       const all = await $idb.getAll<ItemRow>(table);
-      return new Set(
+      const ids = new Set(
         all
           .filter((r) => typeof r.file === "string" && r.file.startsWith(filePrefix))
           .map((r) => r.file)
       );
+
+      // Instalações anteriores guardavam capítulos inteiros na tabela `cache`.
+      // Considerá-los aqui permite que buscas locais aproveitem esse acervo e
+      // que o próximo download não rebaixe o que já está no disco lógico.
+      if (table === DB_TABLE.BIBLE_CHAPTERS) {
+        const legacy = await $idb.getAll<{ id?: string }>(DB_TABLE.CACHE);
+        for (const row of legacy) {
+          if (typeof row.id === "string" && row.id.startsWith(filePrefix)) ids.add(row.id);
+        }
+      }
+      return ids;
     } catch {
       return new Set();
     }
