@@ -10,7 +10,7 @@
           :placeholder="tm('version')"
           :aria-label="tm('version')"
           @click="refreshDownloadedVersions"
-          @update:model-value="bible.id_bible_version = Number($event)"
+          @update:model-value="selVersion(Number($event))"
         />
 
         <LjCheckbox
@@ -31,7 +31,7 @@
           :placeholder="tm('book')"
           :aria-label="tm('book')"
           :icon="ICONS.BIBLE.BOOK_OPEN_PAGE"
-          @update:model-value="bible.id_bible_book = Number($event)"
+          @update:model-value="selBook(Number($event))"
         />
         <LjSelect
           :model-value="bible.chapter"
@@ -41,7 +41,7 @@
           :placeholder="tm('chapter')"
           :aria-label="tm('chapter')"
           :icon="ICONS.BIBLE.BOOKMARK"
-          @update:model-value="bible.chapter = Number($event)"
+          @update:model-value="selChapter(Number($event))"
         />
         <LjPopover align="start">
           <template #trigger>
@@ -95,7 +95,7 @@
             :placeholder="tm('book')"
             :aria-label="tm('book')"
             :icon="ICONS.BIBLE.BOOK_OPEN_PAGE"
-            @update:model-value="bible.id_bible_book = Number($event)"
+            @update:model-value="selBook(Number($event))"
           />
         </div>
         <div class="bible-col__grid">
@@ -134,7 +134,7 @@
             :placeholder="tm('chapter')"
             :aria-label="tm('chapter')"
             :icon="ICONS.BIBLE.BOOKMARK"
-            @update:model-value="bible.chapter = Number($event)"
+            @update:model-value="selChapter(Number($event))"
           />
         </div>
         <div class="bible-col__grid">
