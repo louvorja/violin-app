@@ -233,6 +233,9 @@ export function useSyncManager() {
     lang: string,
     { fresh = false } = {}
   ): Promise<{ categories: any[]; hymnalIds: number[]; hymnal1996Ids: number[] }> {
+    // No primeiro uso as listas saem do bundle, não de cinco GETs à parte. Quem
+    // pede o catálogo "fresco" quer a rede de propósito: não espera o bundle.
+    if (!fresh) await ensureCatalogForBulkRead();
     const hymnal1996Enabled =
       $userdata.get<boolean>(moduleShowInMainMenu("hymnal_1996"), false) === true;
     const [catsRes, hymRes, hym1996Res] = await Promise.allSettled([
@@ -457,6 +460,7 @@ export function useSyncManager() {
   async function loadBibleVersions(
     lang: string
   ): Promise<{ versions: BibleVersion[]; downloaded: number[] }> {
+    await ensureCatalogForBulkRead();
     let versions: BibleVersion[] = [];
     try {
       const data = await Database.get<BibleVersion[]>(`${lang}_bible_version`);
@@ -475,6 +479,7 @@ export function useSyncManager() {
     { trackProgress = false }: { trackProgress?: boolean } = {}
   ): Promise<number[]> {
     if (!versions.length) return [];
+    await ensureCatalogForBulkRead();
 
     const books = await Database.get<Array<{ id_bible_book: number; chapters?: number }>>(
       `${lang}_bible_book`

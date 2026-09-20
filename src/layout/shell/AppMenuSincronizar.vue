@@ -346,9 +346,16 @@
             <p class="opt-hint">{{ $t("options.bible_download.download_hint") }}</p>
 
             <div v-if="bibleLoading" class="opt-row opt-row--col" style="padding: 16px 0">
-              <LjProgress indeterminate />
+              <LjProgress
+                :indeterminate="!bundleAtivo || sync.bundlePercent.value === 0"
+                :value="bundleAtivo ? sync.bundlePercent.value : 0"
+              />
               <span class="opt-folder-path" style="margin-top: 8px">
-                {{ $t("options.bible_download.loading") }}
+                {{
+                  bundleAtivo
+                    ? $t("options.collections_download.bundle_running")
+                    : $t("options.bible_download.loading")
+                }}
               </span>
             </div>
 

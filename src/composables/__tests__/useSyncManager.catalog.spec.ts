@@ -36,7 +36,8 @@ const CATALOG: Record<string, unknown> = {
   pt_categories: [{ id_category: 1, order: 1, albums: [{ id_album: 7 }] }],
   pt_hymnal: [],
   pt_doxology_albums: [],
-  pt_bible_version: [],
+  pt_bible_version: [{ id_bible_version: 1 }],
+  pt_bible_book: [{ id_bible_book: 1, chapters: 2 }],
   album_7: { url_image: null, musics: [{ id_music: 1 }, { id_music: 2 }] },
   music_1: { url_music: "/musics/pt/A/1.opus" },
   music_2: { url_music: "/musics/pt/A/2.opus" },
@@ -199,5 +200,66 @@ describe("bundle da Bíblia e bundle geral em andamento", () => {
 
     expect(await sync.ensureBibleBundle()).toBe(true);
     expect(h.bibleInstall).not.toHaveBeenCalled();
+  });
+});
+
+describe("abrir o Sincronizar (desktop, primeiro uso)", () => {
+  // A tela lê o catálogo, as versões e o disco da Bíblia ao mesmo tempo.
+  const openSyncScreen = (sync: Awaited<ReturnType<typeof mountSync>>) =>
+    Promise.all([
+      sync.loadCatalog("pt"),
+      sync.loadBibleVersions("pt"),
+      sync.scanBibleVersionsDisk([{ id_bible_version: 1 }] as never, "pt"),
+    ]);
+
+  it("custa só o bundle: nenhuma lista é lida da rede antes dele", async () => {
+    const sync = await mountSync();
+
+    await openSyncScreen(sync);
+
+    expect(h.fullInstall).toHaveBeenCalledTimes(1);
+    expect(h.events[0]).toBe("bundle");
+    const before = h.events.slice(0, h.events.indexOf("bundle"));
+    expect(before.filter((e) => e.startsWith("get:"))).toEqual([]);
+    expect(h.events).toContain("get:pt_categories");
+    expect(h.events).toContain("get:pt_bible_version");
+  });
+
+  it("depois de instalado, abrir de novo não baixa nada", async () => {
+    h.hasBundleMarker.mockResolvedValue(true);
+    const sync = await mountSync();
+
+    await openSyncScreen(sync);
+
+    expect(h.fullInstall).not.toHaveBeenCalled();
+  });
+
+  it("atualizar o catálogo é um pedido de rede de propósito e não espera o bundle", async () => {
+    const sync = await mountSync();
+
+    await sync.loadCatalog("pt", { fresh: true });
+
+    expect(h.fullInstall).not.toHaveBeenCalled();
+    expect(h.events).toContain("get:pt_categories");
+  });
+
+  it("se o bundle falha, as listas ainda saem da rede", async () => {
+    h.fullInstall.mockRejectedValue(new Error("rede caiu"));
+    const sync = await mountSync();
+
+    const { categories } = await sync.loadCatalog("pt");
+
+    expect(categories).toHaveLength(1);
+    expect(h.events).toContain("get:pt_categories");
+  });
+
+  it("na web não baixa o bundle geral para ler as listas", async () => {
+    h.platform.isDesktop = false;
+    h.platform.storage = undefined;
+    const sync = await mountSync();
+
+    await openSyncScreen(sync);
+
+    expect(h.fullInstall).not.toHaveBeenCalled();
   });
 });

@@ -370,6 +370,11 @@ IndexedDB. No desktop, quem lê o catálogo **em massa** garante o bundle antes
   custa **1 GET** de ~30 MB (a Bíblia vem junto), com barra de progresso no próprio
   diálogo. Se o download falha, o scan automático é pulado — nunca vira milhares de
   GETs — e só é retentado depois de 5 minutos.
+  Abrir **Sincronizar** no primeiro uso também espera o bundle antes de ler as
+  listas (catálogo, versões e capítulos da Bíblia): custa o bundle mais **uma**
+  requisição pequena, a lista de doxologia, que vem de uma rota REST fora do bundle
+  (medido no Electron, contando o processo principal: boot 0, 1ª abertura 2, 2ª
+  abertura 0). "Atualizar catálogo" é um pedido de rede de propósito e não espera.
 - **AppMenuAtualizacoes** (desktop): botão "Aplicar" baixa bundle quando há
   versão nova; botão "Reinstalar banco" faz `force: true`.
 - **AppMenuSincronizar** (desktop): botão "Restaurar banco de dados" faz
