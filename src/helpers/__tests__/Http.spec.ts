@@ -4,6 +4,7 @@ import {
   setNetworkReporter,
   setNetworkTimingReporter,
   classifyNetworkError,
+  isTransientFailure,
   ehRemota,
   NET_TIMEOUT,
 } from "@/helpers/Http";
@@ -125,6 +126,23 @@ describe("classifyNetworkError", () => {
     expect(classifyNetworkError(new DOMException("x", "TimeoutError"))).toBe("network");
     expect(classifyNetworkError(new Error("HTTP 404"))).toBe("http");
     expect(classifyNetworkError(new Error("JSON inválido"))).toBe("other");
+  });
+});
+
+describe("isTransientFailure", () => {
+  it("rede fora e servidor com problema passageiro não pedem diálogo", () => {
+    expect(isTransientFailure(new TypeError("Failed to fetch"))).toBe(true);
+    expect(isTransientFailure(new DOMException("x", "TimeoutError"))).toBe(true);
+    for (const status of [408, 429, 500, 502, 503, 504]) {
+      expect(isTransientFailure(new Error(`HTTP ${status}`))).toBe(true);
+    }
+  });
+
+  it("404, acesso negado e resposta inválida continuam sendo erro de verdade", () => {
+    expect(isTransientFailure(new Error("HTTP 404"))).toBe(false);
+    expect(isTransientFailure(new Error("HTTP 403"))).toBe(false);
+    expect(isTransientFailure(new SyntaxError("Unexpected token <"))).toBe(false);
+    expect(isTransientFailure(new Error("JSON inválido"))).toBe(false);
   });
 });
 

@@ -316,6 +316,14 @@ function handle() {
           });
         } catch (e) {
           console.error(`[protocol] Erro ao buscar JSON em ${pathname}:`, e);
+          // A API não foi alcançada: diz isso ao renderer em vez de um 500 que ele
+          // leria como defeito do servidor e mostraria num diálogo.
+          if (e && e.networkFailure) {
+            return new Response(e.message || "Network unavailable", {
+              status: 503,
+              headers: { "X-Network-Error": "1" },
+            });
+          }
           return new Response(e.message || "JSON Cache Error", { status: 500 });
         }
       }

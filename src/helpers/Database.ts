@@ -10,7 +10,9 @@
  * Sem APIs Vue.
  */
 import $alert from "@/helpers/Alert";
-import { fetchWithTimeout, classifyNetworkError } from "@/helpers/Http";
+import $snackbar from "@/helpers/Snackbar";
+import { i18nAtual } from "@/i18n";
+import { fetchWithTimeout, classifyNetworkError, isTransientFailure } from "@/helpers/Http";
 import $path from "@/helpers/Path";
 import $dev from "@/helpers/Dev";
 import $idb from "@/helpers/IndexedDB";
@@ -22,6 +24,19 @@ import {
   API_URL_FALLBACK_TOKEN,
   apiOrigin,
 } from "@/config/Api";
+
+// Uma frase por queda do servidor: reabre só depois de uma resposta saudável.
+let _serverTroubleNotified = false;
+
+function notifyServerTrouble(): void {
+  if (_serverTroubleNotified) return;
+  _serverTroubleNotified = true;
+  const t = i18nAtual()?.global?.t;
+  $snackbar.warning(
+    t ? t("messages.server_unavailable") : "O servidor não respondeu direito. Tente de novo em instantes.",
+    { key: "server-unavailable" }
+  );
+}
 
 interface CacheEntry<T> {
   id: string;
@@ -490,8 +505,13 @@ function fetchAndStore<T>(file: string, fresh: boolean): Promise<T | null> {
         source: "database-fallback",
       });
     }
+    if (response.status < 500) _serverTroubleNotified = false;
     if (response.status === 404) return null;
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    if (!response.ok) {
+      // O main não alcançou a API (louvorja://json_db): é um fetch que falhou, não um 5xx.
+      if (response.headers.get("X-Network-Error")) throw new TypeError("Failed to fetch");
+      throw new Error(`HTTP ${response.status}`);
+    }
     let data = (await response.json()) as T;
     // Envelope Laravel paginado ({current_page, data[], last_page}) →
     // array cru, para rotas "items" servidas por REST.
@@ -619,12 +639,17 @@ export default {
         /* cache indisponível também */
       }
 
-      // Sem rede o cache stale já foi tentado logo acima; insistir num diálogo
-      // modal por chamada enche a tela de avisos iguais no meio do culto, e o
-      // indicador de conexão no cabeçalho já conta a mesma história. Erro de
-      // verdade — 404, resposta inválida — continua aparecendo.
-      if (!opts.silent && classifyNetworkError(error) !== "network") {
-        $alert.error({ text: "messages.file_database_not_found", error });
+      // Sem rede (ou com o servidor passando mal) o cache stale já foi tentado logo
+      // acima; insistir num diálogo modal por chamada enche a tela de avisos iguais
+      // no meio do culto, e o indicador de conexão no cabeçalho já conta a história
+      // da rede. Erro de verdade — 404, resposta inválida — continua aparecendo;
+      // servidor com defeito vira uma frase discreta, uma vez por queda.
+      if (!opts.silent) {
+        if (!isTransientFailure(error)) {
+          $alert.error({ text: "messages.file_database_not_found", error });
+        } else if (classifyNetworkError(error) !== "network") {
+          notifyServerTrouble();
+        }
       }
       reportTiming({ file, source: "error", fresh }, startedAt);
       return null;

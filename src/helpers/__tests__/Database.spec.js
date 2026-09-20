@@ -47,9 +47,17 @@ vi.mock("@/helpers/Path", () => ({
   default: { db: (p) => `https://db.test${p}` },
 }));
 
-vi.mock("@/helpers/Alert", () => ({
-  default: { error: vi.fn(), info: vi.fn(), show: vi.fn() },
+const { alertError, snackbarWarning } = vi.hoisted(() => ({
+  alertError: vi.fn(),
+  snackbarWarning: vi.fn(),
 }));
+
+vi.mock("@/helpers/Alert", () => ({
+  default: { error: alertError, info: vi.fn(), show: vi.fn() },
+}));
+
+vi.mock("@/helpers/Snackbar", () => ({ default: { warning: snackbarWarning } }));
+vi.mock("@/i18n", () => ({ i18nAtual: () => ({ global: { t: (key) => key } }) }));
 
 vi.mock("@/config/Api", () => ({
   API_URL: "https://api.test",
@@ -79,11 +87,18 @@ beforeEach(() => {
   setActivePinia(createPinia());
   tables.clear();
   fetchMock.mockReset();
+  alertError.mockReset();
+  snackbarWarning.mockReset();
   vi.resetModules();
 });
 
 function jsonResponse(body, status = 200) {
-  return { ok: status === 200 || status === 404 ? true : false, status, json: async () => body };
+  return {
+    ok: status === 200 || status === 404 ? true : false,
+    status,
+    headers: new Headers(),
+    json: async () => body,
+  };
 }
 
 /** Extrai os dataIds não-meta de um dataset dentro da tabela. */
@@ -427,5 +442,78 @@ describe("Database — deduplicação de buscas concorrentes", () => {
     ]);
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("Database — falha sem nenhum cache: o que aparece na tela", () => {
+  // O processo principal responde 503 + este cabeçalho quando é ELE que não
+  // alcança a API; o renderer só vê um louvorja:// que devolveu erro.
+  const semRedeNoMain = () => ({
+    ok: false,
+    status: 503,
+    headers: new Headers({ "X-Network-Error": "1" }),
+    json: async () => ({}),
+  });
+
+  it("sem internet no desktop (503 do main) não abre diálogo nem avisa", async () => {
+    fetchMock.mockResolvedValue(semRedeNoMain());
+    const db = await importDatabase();
+
+    expect(await db.get("pt_musics")).toBeNull();
+
+    expect(alertError).not.toHaveBeenCalled();
+    expect(snackbarWarning).not.toHaveBeenCalled();
+  });
+
+  it("erro 5xx do servidor não abre diálogo: uma frase discreta, uma vez por queda", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({}, 500));
+    const db = await importDatabase();
+
+    await db.get("pt_musics");
+    await db.get("pt_hymnal");
+
+    expect(alertError).not.toHaveBeenCalled();
+    expect(snackbarWarning).toHaveBeenCalledTimes(1);
+    expect(snackbarWarning.mock.calls[0][0]).toBe("messages.server_unavailable");
+  });
+
+  it("depois que o servidor volta, a próxima queda avisa de novo", async () => {
+    const db = await importDatabase();
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({}, 500));
+    await db.get("pt_musics");
+    fetchMock.mockResolvedValueOnce(jsonResponse([{ id_music: 1, name: "A" }]));
+    await db.get("pt_hymnal");
+    fetchMock.mockResolvedValueOnce(jsonResponse({}, 500));
+    await db.get("pt_categories");
+
+    expect(snackbarWarning).toHaveBeenCalledTimes(2);
+  });
+
+  it("resposta inválida continua aparecendo em diálogo", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => {
+        throw new SyntaxError("Unexpected token <");
+      },
+    });
+    const db = await importDatabase();
+
+    expect(await db.get("pt_musics")).toBeNull();
+
+    expect(alertError).toHaveBeenCalledTimes(1);
+    expect(snackbarWarning).not.toHaveBeenCalled();
+  });
+
+  it("chamada silent não mostra nada, nem diálogo nem aviso", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({}, 500));
+    const db = await importDatabase();
+
+    await db.get("pt_musics", { silent: true });
+
+    expect(alertError).not.toHaveBeenCalled();
+    expect(snackbarWarning).not.toHaveBeenCalled();
   });
 });
