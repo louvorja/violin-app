@@ -260,7 +260,6 @@ function seedDefaultFonts() {
 function seedDefaultUpdatePreferences() {
   const seeds = [
     [KEYS.OPTIONS.CHECK_UPDATES_ON_START, true],
-    [KEYS.OPTIONS.CHECK_DB_UPDATES_ON_START, true],
     [KEYS.OPTIONS.SKIP_STARTUP_CHECK, false],
   ];
 

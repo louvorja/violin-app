@@ -425,7 +425,6 @@
       "db_available": "Nova versão {version} do banco disponível.",
       "db_up_to_date": "Banco atualizado",
       "db_error": "Não foi possível verificar.",
-      "check_db_updates_on_start": "Verificar atualizações do banco ao iniciar",
       "cache_cleared": "Cache limpo.",
       "reinstall_db": "Reinstalar banco de dados",
       "reinstall_db_confirm": "Isso vai baixar e reinstalar todo o banco de dados da internet. Deseja continuar?",
@@ -1293,19 +1292,13 @@
     "bundle_cancel": "Download do banco de dados interrompido",
     "bundle_extracting": "Extraindo arquivos...",
     "bundle_injecting": "Injetando dados no banco...",
-    "bundle_preparing": "Preparando...",
-    "bundle_retry": "Tentativa {attempt}/{max}",
     "bundle_error": "Não foi possível baixar o banco de dados. Verifique sua conexão com a internet e tente novamente.",
-    "bundle_error_title": "Falha ao baixar banco de dados",
-    "bundle_error_hint": "Você pode fazer manualmente em: Opções → Atualizar → Banco de dados",
     "bundle_importing_albums": "Importando álbuns...",
     "bundle_importing_musics": "Importando músicas...",
     "bundle_importing_bible": "Importando Bíblias...",
     "bundle_importing_catalog": "Importando catálogo...",
     "bundle_importing_extras": "Importando complementos...",
-    "bundle_version_suffix": "Versão",
-    "bundle_update_title": "Atualização do banco de dados",
-    "bundle_update_text": "Uma nova versão do banco de dados está disponível (v{version}). Deseja baixar agora?"
+    "bundle_version_suffix": "Versão"
   },
   "accessibility": {
     "title": "Acessibilidade — Libras",

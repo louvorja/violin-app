@@ -77,6 +77,7 @@ Quando a API principal falha (erro de rede ou HTTP), as chamadas são repetidas
 automaticamente na API de fallback. Implementado em:
 - `src/helpers/Database.ts` — fetch com retry
 - `src/helpers/BundleInstaller.ts` — fetchRemoteConfig com retry
+- `src/helpers/BibleBundleInstaller.ts` — bundle só da Bíblia (`/db/bible-bundle`), sob demanda
 - `electron/main/download/api.js` — getParams com retry
 
 ---
@@ -359,17 +360,61 @@ bible_chapters).
 4. `injectBundle(datasets, onProgress, signal)` — injeta cada dataset via
    `$database.seed()`.
 
-**Pontos de uso:**
-- **StartupCheckDialog** (desktop): verifica se o catálogo de músicas está vazio
-  ou se a versão do bundle diverge da local → baixa bundle antes do scan.
+**Pontos de uso** — o boot **não** baixa nem consulta bundle: nenhum diálogo ao
+abrir o app. A web lê o catálogo de `Database.get()` sob demanda, com cache no
+IndexedDB. No desktop, quem lê o catálogo **em massa** garante o bundle antes
+(`useSyncManager.ensureCatalogBundle()`, só olha o marcador local):
+- **StartupCheckDialog** (desktop, primeiro uso) e o scan de **Sincronizar**: o
+  scan abre o JSON de cada álbum e de cada música (~67 álbuns + ~1.900 músicas em
+  PT). Sem o catálogo no disco isso seria ~2 mil GETs por instalação; com o bundle
+  custa **1 GET** de ~30 MB (a Bíblia vem junto), com barra de progresso no próprio
+  diálogo. Se o download falha, o scan automático é pulado — nunca vira milhares de
+  GETs — e só é retentado depois de 5 minutos.
 - **AppMenuAtualizacoes** (desktop): botão "Aplicar" baixa bundle quando há
   versão nova; botão "Reinstalar banco" faz `force: true`.
 - **AppMenuSincronizar** (desktop): botão "Restaurar banco de dados" faz
   `force: true` + reload da página.
 
-O bundle substitui o antigo seed inicial de JSONs empacotados. O fluxo atual de
-instalação usa `BundleInstaller.ts` para baixar `/db/bundle`, extrair os JSONs e
-injetar no IndexedDB via `$database.seed()` antes do uso normal.
+`install()` sem `version` grava no marcador a versão do `config` que já vem dentro
+do ZIP; só consulta a API se o ZIP não a trouxer. Dois downloads nunca correm em
+paralelo: o bundle geral contém a Bíblia (quem pede a Bíblia o aproveita), mas o
+bundle da Bíblia não contém o catálogo (quem pede o catálogo espera e baixa o seu).
+
+O bundle substitui o antigo seed inicial de JSONs empacotados: `BundleInstaller.ts`
+baixa `/db/bundle`, extrai os JSONs e injeta no IndexedDB via `$database.seed()`.
+
+#### Bundle da Bíblia (`BibleBundleInstaller.ts`)
+
+A Bíblia são ~15 mil capítulos (13 versões × 1.189). Buscá-los um a um custava até
+~1.200 requisições por versão à API; por isso ela tem um ZIP próprio, `/db/bible-bundle`
+(~23 MB, gerado pelo `ingest` da API a partir do bundle da origem), baixado **uma vez**.
+
+- **Quando baixa**: só ao abrir a Bíblia ou a Busca Bíblica, ou ao mandar baixar
+  versões (StartupCheckDialog, Sincronizar). Nunca no boot. O progresso aparece
+  dentro da própria tela (`useSyncManager.bundleInstalling` / `bundlePercent`) e
+  **não bloqueia**: a Bíblia abre o catálogo e os capítulos pedidos pela rede
+  enquanto o ZIP baixa; a Busca Bíblica monta na hora e só a pesquisa espera.
+- **Como decide**: `useSyncManager.ensureBibleBundle()` olha só o marcador local
+  (`__bible_bundle_marker__`, com uma `BUNDLE_REVISION` do app) — nenhuma
+  requisição. O banco completo já instalado também vale, pois traz os capítulos.
+  Não acompanha a versão remota do catálogo: o texto bíblico não muda com as
+  atualizações de músicas. Para forçar um novo download, suba `BUNDLE_REVISION`.
+- **Compartilhado**: várias telas abrindo juntas dividem um único download; uma
+  falha só é retentada depois de 5 minutos.
+- **Instalação**: capítulo a capítulo (`$database.seed`), sem segurar tudo em
+  memória; o marcador é gravado por último, então uma queda no meio recomeça.
+- **Telas em sincronia**: `useSyncManager.bibleRevision` sobe sempre que o conteúdo
+  bíblico local muda (bundle instalado, versões baixadas ou removidas). A tela da
+  Bíblia (marcador "↓" das versões) e a aba Bíblia de Sincronizar releem quando ele
+  muda; sem isso ficavam com a foto de quando abriram.
+- **Progresso**: `bundlePercentOf()` dá um percentual único, com um trecho por fase
+  (baixar 0–70, extrair 70–80, gravar 80–100), usado em todas as telas e na lista de
+  tarefas. Cada fase calculada sozinha voltava a 0% e as telas a desenhavam como
+  "indeterminada". Só existe uma barra por espera: em Sincronizar, o bloco de
+  carregamento da lista mostra a barra do bundle em vez de somar uma segunda.
+- **Reserva**: se o bundle não está disponível (offline, ou a API ainda não o
+  publicou), os capítulos continuam vindo por `Database.get()`, como antes.
+- **Busca por palavra** nunca vai à rede: pesquisa só o que já está no IndexedDB.
 
 **Versões da Bíblia "baixadas"** (`helpers/BibleDownloads.ts`): detecção
 unificada por união — capítulos completos no IDB (`bible_chapters`) ∪ cache
@@ -466,6 +511,7 @@ Helpers principais:
 | `IndexedDB.ts`         | CRUD unificado no IndexedDB                                                  |
 | `Database.ts`          | JSONs do banco com cache em camadas (memória → IDB → rede) e stale-if-error  |
 | `BundleInstaller.ts`   | Download/extract/inject de bundle ZIP do banco (14 tabelas de catálogo)      |
+| `BibleBundleInstaller.ts` | Bundle ZIP só dos capítulos bíblicos; marcador local, sem requisição na checagem |
 | `ImageConvert.ts`      | HEIC/HEIF → JPEG (`heic2any`) na importação                                  |
 | `SljaConverter.js`     | Import/export `.slja` do editor legado Delphi (JSZip + INI)                  |
 | `SljaPlayer.ts`        | `openSlja()` — apresenta um `.slja` na projeção do app, sem gravar nada      |
@@ -1301,6 +1347,7 @@ src/
 │   ├── IndexedDB.ts
 │   ├── Database.ts
 │   ├── BundleInstaller.ts
+│   ├── BibleBundleInstaller.ts
 │   ├── FilePicker.ts
 │   ├── SettingsStorage.ts
 │   ├── Snackbar.ts           # Snackbar global (suporta action opcional)

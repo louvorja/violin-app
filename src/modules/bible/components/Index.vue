@@ -68,6 +68,17 @@
       </div>
     </template>
 
+    <div v-if="sync.bundleInstalling.value" class="bible-bundle-status" role="status">
+      <div class="bible-bundle-status__head">
+        <span>{{ tm("bundle_downloading") }}</span>
+        <span v-if="sync.bundlePercent.value > 0">{{ sync.bundlePercent.value }}%</span>
+      </div>
+      <LjProgress
+        :value="sync.bundlePercent.value"
+        :indeterminate="sync.bundlePercent.value === 0"
+      />
+    </div>
+
     <BibleSpotlight v-model="bibleSpotlightOpen" :initial-buffer="spotlightInitialBuffer" />
 
     <div v-if="!compact" class="bible-layout">
@@ -294,6 +305,7 @@ import {
   LjIcon,
   LjInput,
   LjPopover,
+  LjProgress,
   LjSelect,
   LjSkeleton,
 } from "@/components/ui";
@@ -326,12 +338,14 @@ import type {
 } from "@/types/Bible";
 import BibleSpotlight from "@/components/BibleSpotlight.vue";
 import { ModuleState } from "@/types/Module";
+import { useSyncManager } from "@/composables/useSyncManager";
 
 const HISTORY_MAX = 30;
 
 const { t: i18nT, locale } = useI18n();
 const { width } = useViewport();
 const moduleId = manifest.id;
+const sync = useSyncManager();
 
 const module_ = computed(() => Modules.get(moduleId) as ModuleState | undefined);
 const show = computed(() => module_.value?.show);
@@ -422,6 +436,15 @@ async function refreshDownloadedVersions(): Promise<void> {
 watch(locale, () => {
   void refreshDownloadedVersions();
 });
+
+// O que está baixado muda fora desta tela — o bundle termina de instalar em
+// segundo plano, ou o operador baixa/remove versões em Sincronizar. O módulo
+// fica montado o tempo todo, então sem isto o "↓" ficava com a foto de quando
+// a tela abriu.
+watch(
+  () => sync.bibleRevision.value,
+  () => void refreshDownloadedVersions()
+);
 
 const versions_list = computed(() =>
   versions.value.map((v) => ({
@@ -520,6 +543,7 @@ watch(show, async (val) => {
       scriptural_reference: null,
       text: null,
     });
+    void sync.ensureBibleBundle();
     await loadData();
   }
 });
@@ -614,6 +638,9 @@ function onKeydown(e: KeyboardEvent): void {
 
 onMounted(async () => {
   window.addEventListener("keydown", onKeydown);
+  // Em segundo plano: ler um capítulo não pode esperar 23 MB. Enquanto o ZIP
+  // baixa, os capítulos abertos vêm pela rede e são guardados como sempre.
+  void sync.ensureBibleBundle();
   await loadData();
   void refreshDownloadedVersions();
 });
@@ -1175,6 +1202,24 @@ useBroadcastListener(BROADCAST_TYPE.REQUEST_BIBLE_STATE, () => {
   gap: 12px;
   flex: 1;
   min-width: 0;
+}
+
+.bible-bundle-status {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 12px 0;
+  padding: 8px 10px;
+  border: 1px solid var(--lj-surface-border);
+  border-radius: var(--lj-radius-sm);
+  color: var(--lj-text-muted);
+  font-size: 12px;
+}
+
+.bible-bundle-status__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .bible-header__history {

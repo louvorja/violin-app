@@ -1,6 +1,7 @@
 {
   "title": "Bíblia",
   "description": "Bíblia",
+  "bundle_downloading": "Baixando a Bíblia para este dispositivo…",
   "ribbon": {
     "title_ctx": "Configurar Bíblia",
     "show_reference": "Exibir Referência",

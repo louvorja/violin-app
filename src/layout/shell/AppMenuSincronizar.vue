@@ -67,7 +67,10 @@
           <div class="opt-section-top">
             <p class="opt-hint">{{ $t("options.collections_download.hint") }}</p>
 
-            <div v-if="bundleEmDownload" class="opt-bundle-baixando">
+            <div
+              v-if="bundleEmDownload && !(loadingCategories || scanningCache)"
+              class="opt-bundle-baixando"
+            >
               <LjIcon :icon="ICONS.UI.PROGRESS_DOWNLOAD" size="16" />
               <div class="opt-bundle-baixando__texto">
                 <span>{{ $t("options.collections_download.bundle_running") }}</span>
@@ -150,23 +153,28 @@
               role="status"
               aria-live="polite"
             >
-              <LjProgress indeterminate :height="4" />
+              <LjProgress
+                :indeterminate="!bundleAtivo || sync.bundlePercent.value === 0"
+                :value="bundleAtivo ? sync.bundlePercent.value : 0"
+                :height="4"
+              />
               <div class="sinc-loading__copy">
                 <span>
                   {{
-                    loadingCategories && !categories.length
-                      ? $t("options.collections_download.loading")
-                      : scanningCache
-                        ? $t("options.collections_download.scanning_cache", {
-                            done: scanCacheDone,
-                            total: scanCacheTotal,
-                          })
-                        : $t("options.collections_download.loading")
+                    bundleAtivo
+                      ? $t("options.collections_download.bundle_running")
+                      : loadingCategories && !categories.length
+                        ? $t("options.collections_download.loading")
+                        : scanningCache && scanCacheTotal > 0
+                          ? $t("options.collections_download.scanning_cache", {
+                              done: scanCacheDone,
+                              total: scanCacheTotal,
+                            })
+                          : scanningCache
+                            ? $t("options.collections_download.waiting_for_catalog")
+                            : $t("options.collections_download.loading")
                   }}
                 </span>
-                <small v-if="scanningCache && scanCacheTotal === 0">
-                  {{ $t("options.collections_download.waiting_for_catalog") }}
-                </small>
               </div>
             </div>
 
@@ -416,7 +424,12 @@
             >
               <template #label>
                 {{
-                  $t("options.bible_download.downloading", { done: bibleDone, total: bibleTotal })
+                  sync.bundleInstalling.value
+                    ? $t("modules.bible.bundle_downloading")
+                    : $t("options.bible_download.downloading", {
+                        done: bibleDone,
+                        total: bibleTotal,
+                      })
                 }}
               </template>
             </ProgressBar>
@@ -638,10 +651,7 @@
           <div v-if="sync.bundleInstalling.value" class="sinc-block-gap">
             <LjProgress
               :value="bundleDownloadPercent"
-              :indeterminate="
-                sync.bundleProgress.value.phase === 'download' &&
-                !sync.bundleProgress.value.bytesTotal
-              "
+              :indeterminate="bundleDownloadPercent === 0"
             />
             <div v-if="bundleDownloadDetail" class="opt-hint sinc-detail-gap">
               {{ bundleDownloadDetail }}
@@ -829,15 +839,12 @@ const currentDownloadFile = computed(() => {
 });
 const completedMsg = computed(() => sync.downloadCompletedMsg.value);
 
-const bundleDownloadPercent = computed<number>(() => {
-  const progress = sync.bundleProgress.value;
-  if (progress.phase === "download") {
-    const received = progress.bytesReceived ?? progress.current;
-    const total = progress.bytesTotal ?? 0;
-    return total > 0 ? Math.round((received / total) * 100) : 0;
-  }
-  return progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
-});
+const bundleDownloadPercent = computed<number>(() => sync.bundlePercent.value);
+
+/** Há um bundle descendo: é ele que a lista de coletâneas está esperando. */
+const bundleAtivo = computed<boolean>(
+  () => !!bundleEmDownload.value || sync.bundleInstalling.value
+);
 
 const bundleDownloadDetail = computed<string>(() => {
   const progress = sync.bundleProgress.value;
@@ -1180,6 +1187,21 @@ async function refreshBibleVersions(): Promise<void> {
     bibleLoading.value = false;
   }
 }
+
+// O bundle termina de instalar em segundo plano (ou a Bíblia muda em outra tela)
+// depois que esta aba já leu o disco: sem reler, as versões ficavam todas
+// desmarcadas mesmo com a Bíblia inteira instalada.
+watch(
+  () => sync.bibleRevision.value,
+  () => {
+    if (bibleLoading.value || bibleSaving.value || bibleDownloading.value) return;
+    // Não atropela uma seleção que o operador está montando.
+    const untouched =
+      selectedBibles.value.size === bibleDownloadedBaseline.value.size &&
+      [...selectedBibles.value].every((id) => bibleDownloadedBaseline.value.has(id));
+    if (untouched) void loadBibleVersions();
+  }
+);
 
 async function downloadBibleVersions(): Promise<void> {
   if (selectedBibles.value.size === 0) return;

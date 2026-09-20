@@ -73,6 +73,17 @@
       </div>
     </template>
 
+    <div v-if="sync.bundleInstalling.value" class="bs-bundle-status" role="status">
+      <div class="bs-bundle-status__head">
+        <span>{{ tm("bundle_downloading") }}</span>
+        <span v-if="sync.bundlePercent.value > 0">{{ sync.bundlePercent.value }}%</span>
+      </div>
+      <LjProgress
+        :value="sync.bundlePercent.value"
+        :indeterminate="sync.bundlePercent.value === 0"
+      />
+    </div>
+
     <div class="bs-body">
       <template v-if="searching">
         <div class="bs-body__loading">
@@ -120,7 +131,7 @@
 </template>
 
 <script setup lang="ts">
-import { LjButton, LjChip, LjIcon, LjSpinner } from "@/components/ui";
+import { LjButton, LjChip, LjIcon, LjProgress, LjSpinner } from "@/components/ui";
 import { ref, computed, onMounted, onUnmounted, watch, type Ref } from "vue";
 import { module as manifest } from "../manifest";
 import type { BibleBook, BibleVersion, BibleSearchResult } from "@/types/Bible";
@@ -136,12 +147,14 @@ import Fuse from "fuse.js";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { ICONS } from "@/config/Icons";
 import { DB_TABLE } from "@/constants/DbTables";
+import { useSyncManager } from "@/composables/useSyncManager";
 
 const container = ref<{ tm: (key: string, named?: Record<string, unknown>) => string } | null>(
   null
 );
 const tm = (key: string, params?: Record<string, unknown>): string =>
   container.value?.tm(key, params) || key;
+const sync = useSyncManager();
 
 const searchTerms = ref<string[]>([]);
 /** Texto ainda não confirmado como termo — vira chip no Enter. */
@@ -455,14 +468,17 @@ async function getVersesForSearch(): Promise<BibleSearchResult[]> {
     return result.verses;
   }
 
-  // Uma única leitura do índice local evita 1.189 consultas ao IndexedDB
-  // quando nada dessa versão foi baixado. O ponto principal é que a busca
-  // textual nunca chama Database.get(), pois isso buscaria a rede.
-  const stored = await $database.getStoredIdsForPrefix(
-    DB_TABLE.BIBLE_CHAPTERS,
-    `bible_${versionId}_`
-  );
   const pending = (async () => {
+    // A busca só lê o disco. Se a Bíblia ainda está sendo instalada, espera:
+    // sem isso o corpus sairia vazio e ficaria guardado assim.
+    await sync.ensureBibleBundle();
+    // Uma única leitura do índice local evita 1.189 consultas ao IndexedDB
+    // quando nada dessa versão foi baixado. O ponto principal é que a busca
+    // textual nunca chama Database.get(), pois isso buscaria a rede.
+    const stored = await $database.getStoredIdsForPrefix(
+      DB_TABLE.BIBLE_CHAPTERS,
+      `bible_${versionId}_`
+    );
     const verses: BibleSearchResult[] = [];
     let chapters = 0;
     for (const book of books.value) {
@@ -611,6 +627,7 @@ useBroadcastListener(BROADCAST_TYPE.MODULE_RIBBON_ACTION, (payload: unknown) => 
 
 onMounted(async () => {
   document.addEventListener("mousedown", onDocPointerDown, true);
+  void sync.ensureBibleBundle();
   await loadBooks();
   await loadVersions();
   const savedVersion = $userdata.get("modules.bible_search.version", null);
@@ -734,6 +751,22 @@ onUnmounted(() => {
 .bs-version-select {
   width: 200px;
   min-width: 160px;
+}
+.bs-bundle-status {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 12px 0;
+  padding: 8px 10px;
+  border: 1px solid var(--lj-surface-border);
+  border-radius: var(--lj-radius-sm);
+  color: var(--lj-text-muted);
+  font-size: 12px;
+}
+.bs-bundle-status__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
 }
 .bs-body {
   display: flex;

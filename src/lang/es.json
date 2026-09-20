@@ -425,7 +425,6 @@
       "db_available": "Nueva versión {version} de la base disponible.",
       "db_up_to_date": "Base de datos actualizada",
       "db_error": "No se pudo verificar.",
-      "check_db_updates_on_start": "Verificar actualizaciones de la base al iniciar",
       "cache_cleared": "Caché limpiado.",
       "reinstall_db": "Reinstalar base de datos",
       "reinstall_db_confirm": "Esto descargará e reinstalará toda la base de datos de internet. ¿Desea continuar?",
@@ -1293,19 +1292,13 @@
     "bundle_cancel": "Descarga de la base de datos interrumpido",
     "bundle_extracting": "Extrayendo archivos...",
     "bundle_injecting": "Inyectando datos en la base...",
-    "bundle_preparing": "Preparando...",
-    "bundle_retry": "Intento {attempt}/{max}",
     "bundle_error": "No se pudo descargar la base de datos. Verifique su conexión a internet e intente de nuevo.",
-    "bundle_error_title": "Error al descargar base de datos",
-    "bundle_error_hint": "Puede hacerlo manualmente en: Opciones → Actualizar → Base de datos",
     "bundle_importing_albums": "Importando álbumes...",
     "bundle_importing_musics": "Importando músicas...",
     "bundle_importing_bible": "Importando Biblias...",
     "bundle_importing_catalog": "Importando catálogo...",
     "bundle_importing_extras": "Importando complementos...",
-    "bundle_version_suffix": "Versión",
-    "bundle_update_title": "Actualización de la base de datos",
-    "bundle_update_text": "Hay una nueva versión de la base de datos disponible (v{version}). ¿Desea descargarla ahora?"
+    "bundle_version_suffix": "Versión"
   },
   "accessibility": {
     "title": "Accesibilidad — Libras",

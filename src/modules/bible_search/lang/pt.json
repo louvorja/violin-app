@@ -1,6 +1,7 @@
 {
   "title": "Busca Bíblica",
   "description": "Busca de versículos por palavra-chave ou referência",
+  "bundle_downloading": "Baixando a Bíblia para este dispositivo…",
   "project_start": "Iniciar Projeção",
   "project_stop": "Parar Projeção",
   "results_count": "{n} resultado(s)",

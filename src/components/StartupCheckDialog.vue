@@ -9,10 +9,24 @@
     <!-- Verificando -->
     <div v-if="view === 'scanning'" class="sc-scanning">
       <LjSpinner :size="48" class="sc-scanning__spinner" />
-      <span class="sc-scanning__label">{{ $t("startup_check.scanning") }}</span>
-      <span v-if="sync.scanProgress.value.total > 0" class="sc-scanning__count">
-        {{ sync.scanProgress.value.done }} / {{ sync.scanProgress.value.total }}
-      </span>
+      <!-- Primeiro uso: o catálogo desce em um único bundle antes do scan -->
+      <template v-if="sync.bundleInstalling.value">
+        <span class="sc-scanning__label">{{ $t("startup_check.bundle_downloading") }}</span>
+        <LjProgress
+          class="sc-scanning__bar"
+          :value="sync.bundlePercent.value"
+          :indeterminate="sync.bundlePercent.value === 0"
+        />
+        <span v-if="sync.bundlePercent.value > 0" class="sc-scanning__count">
+          {{ sync.bundlePercent.value }}%
+        </span>
+      </template>
+      <template v-else>
+        <span class="sc-scanning__label">{{ $t("startup_check.scanning") }}</span>
+        <span v-if="sync.scanProgress.value.total > 0" class="sc-scanning__count">
+          {{ sync.scanProgress.value.done }} / {{ sync.scanProgress.value.total }}
+        </span>
+      </template>
     </div>
 
     <!-- Resumo -->
@@ -675,6 +689,11 @@ onMounted(() => {
 
 .sc-scanning__label {
   font-size: var(--lj-text-lg);
+}
+
+.sc-scanning__bar {
+  width: 100%;
+  max-width: 320px;
 }
 
 .sc-scanning__count {

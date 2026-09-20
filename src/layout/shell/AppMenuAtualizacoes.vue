@@ -102,17 +102,6 @@
         {{ $t("options.updates.database") }}
       </h3>
 
-      <div class="opt-row">
-        <label class="opt-checkbox">
-          <input
-            type="checkbox"
-            :checked="checkDbOnStart"
-            @change="onCheckDbOnStartChange($c($event))"
-          />
-          <span>{{ $t("options.updates.check_db_updates_on_start") }}</span>
-        </label>
-      </div>
-
       <div class="opt-row opt-row--spread">
         <label class="opt-label">{{ $t("options.updates.current_version") }}</label>
         <strong v-if="dbCurrentConfig">
@@ -297,7 +286,6 @@ const lastAppCheck = ref<string | null>(null);
 // Opções da tela
 const useBeta = ref(false);
 const checkOnStart = ref(true);
-const checkDbOnStart = ref(true);
 const autoDownload = ref(false);
 
 // Sync manager (bundle download)
@@ -313,15 +301,9 @@ const dbBundleRunning = computed(() => dbBundleTask.value?.status === "running")
 const dbBundleDisplayActive = computed<boolean>(
   () => reinstallingDb.value || sync.bundleInstalling.value || dbBundleRunning.value
 );
-const dbBundleProgressPercent = computed<number>(() => {
-  const progress = sync.bundleProgress.value;
-  if (progress.phase === "download") {
-    const received = progress.bytesReceived ?? progress.current;
-    const total = progress.bytesTotal ?? 0;
-    return total > 0 ? Math.round((received / total) * 100) : (dbBundleTask.value?.progress ?? 0);
-  }
-  return dbBundleTask.value?.progress ?? 0;
-});
+const dbBundleProgressPercent = computed<number>(() =>
+  sync.bundleInstalling.value ? sync.bundlePercent.value : (dbBundleTask.value?.progress ?? 0)
+);
 const dbBundleDetail = computed<string>(() => {
   const progress = sync.bundleProgress.value;
   if (progress.phase === "download") {
@@ -432,11 +414,6 @@ function onCheckOnStartChange(v: boolean): void {
   checkOnStart.value = v;
   $userdata.set(KEYS.OPTIONS.CHECK_UPDATES_ON_START, v);
   pushOptions();
-}
-
-function onCheckDbOnStartChange(v: boolean): void {
-  checkDbOnStart.value = v;
-  $userdata.set(KEYS.OPTIONS.CHECK_DB_UPDATES_ON_START, v);
 }
 
 function onAutoDownloadChange(v: boolean): void {
@@ -767,8 +744,6 @@ onMounted(async () => {
   const savedBeta = $userdata.get<boolean | null>(KEYS.OPTIONS.USE_BETA_UPDATES, null);
   useBeta.value = savedBeta == null ? true : savedBeta;
   checkOnStart.value = $userdata.get<boolean>(KEYS.OPTIONS.CHECK_UPDATES_ON_START, true) === true;
-  checkDbOnStart.value =
-    $userdata.get<boolean>(KEYS.OPTIONS.CHECK_DB_UPDATES_ON_START, true) === true;
   autoDownload.value = $userdata.get<boolean>(KEYS.OPTIONS.AUTO_DOWNLOAD_UPDATES, false) === true;
 
   if (Platform.isDesktop && Platform.updater) {

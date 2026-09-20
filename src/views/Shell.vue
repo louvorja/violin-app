@@ -59,75 +59,6 @@
       @start-download="onUpdateDialogDownload"
       @close="onUpdateDialogClose"
     />
-
-    <!-- Bundle download overlay (before startup check) -->
-    <LjDialog
-      v-model="bundleLoading"
-      :title="t('startup_check.bundle_downloading')"
-      :icon="ICONS.UI.PROGRESS_DOWNLOAD"
-      size="md"
-      persistent
-    >
-      <div class="shell-bundle">
-        <LjProgress
-          :value="bundleDownloadPercent"
-          :indeterminate="
-            sync.bundleProgress.value.phase === 'download' && !sync.bundleProgress.value.bytesTotal
-          "
-          :height="8"
-        />
-        <div class="shell-bundle__row">
-          <span v-if="bundleDownloadDetail">
-            {{ bundleDownloadDetail }}
-          </span>
-          <span v-else-if="bundleDownloadPercent > 0">{{ bundleDownloadPercent }}%</span>
-          <span v-else>{{ t("startup_check.bundle_preparing") }}</span>
-          <span v-if="sync.bundleProgress.value.detail" class="shell-bundle__file lj-u-truncate">
-            {{ formatBackgroundTaskDetail(sync.bundleProgress.value.detail, t) }}
-          </span>
-        </div>
-        <div v-if="bundleRetryAttempt > 1" class="shell-bundle__retry">
-          {{
-            t("startup_check.bundle_retry", { attempt: bundleRetryAttempt, max: bundleRetryMax })
-          }}
-        </div>
-      </div>
-
-      <template #footer>
-        <LjButton
-          size="sm"
-          variant="ghost"
-          :icon="ICONS.UI.WINDOW_MINIMIZE"
-          @click="bundleLoading = false"
-        >
-          {{ t("startup_check.minimize") }}
-        </LjButton>
-        <span class="lj-u-spacer" />
-        <LjButton size="sm" variant="danger" :icon="ICONS.PLAYER.STOP" @click="onBundleCancel">
-          {{ t("options.collections_download.cancel") }}
-        </LjButton>
-      </template>
-    </LjDialog>
-
-    <!-- Bundle error dialog -->
-    <LjDialog
-      v-model="bundleErrorOpen"
-      :title="t('startup_check.bundle_error_title')"
-      :icon="ICONS.UI.ALERT_CIRCLE"
-      icon-variant="danger"
-      size="sm"
-    >
-      <p class="shell-bundle-error__text">{{ bundleError }}</p>
-      <p class="shell-bundle-error__hint">
-        {{ t("startup_check.bundle_error_hint") }}
-      </p>
-
-      <template #footer>
-        <LjButton size="sm" :icon="ICONS.UI.CHECK" @click="bundleErrorOpen = false">
-          {{ t("actions.close") }}
-        </LjButton>
-      </template>
-    </LjDialog>
   </div>
 </template>
 
@@ -135,7 +66,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch, defineAsyncComponent } from "vue";
 import { useI18n } from "vue-i18n";
 
-import { LjButton, LjDialog, LjProgress } from "@/components/ui";
+import { LjButton } from "@/components/ui";
 import AppSystemBar from "@/layout/SystemBar.vue";
 import AppFooter from "@/layout/Footer.vue";
 import AppModules from "@/layout/Modules.vue";
@@ -172,7 +103,6 @@ import { KEYS } from "@/constants/UserDataKeys";
 import $popup from "@/helpers/Popup";
 import Broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
-import $alert from "@/helpers/Alert";
 import type { BibleSearchResult } from "@/types/Bible";
 
 import { registerShell } from "@/composables/useShell";
@@ -183,9 +113,7 @@ import { useProjectionShutdown } from "@/composables/useProjectionShutdown";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
 import { hasOpenWebWindows } from "@/helpers/projection/webWindow";
 import { open as openProjection } from "@/helpers/Projection";
-import { formatBackgroundTaskDetail } from "@/helpers/BackgroundTaskDetail";
 import { useSyncManager } from "@/composables/useSyncManager";
-import BundleInstaller from "@/helpers/BundleInstaller";
 import { detectDesktopDownloadPlatform } from "@/helpers/DesktopDownload";
 const ChatDrawer = defineAsyncComponent(() => import("@/components/ChatDrawer.vue"));
 import { useChat } from "@/composables/useChat";
@@ -203,12 +131,6 @@ const musicSearchOpen = ref(false);
 const bibleSearchOpen = ref(false);
 const hotkeysOpen = ref(false);
 const startupCheckOpen = ref(false);
-const bundleLoading = ref(false);
-const bundleCancelled = ref(false);
-const bundleRetryAttempt = ref(1);
-const bundleRetryMax = ref(5);
-const bundleError = ref<string | null>(null);
-const bundleErrorOpen = ref(false);
 const releaseNotesOpen = ref(false);
 const releaseNotes = ref<ReleaseNotes | null>(null);
 const updateDialogOpen = ref(false);
@@ -250,33 +172,6 @@ const footerHeight = computed(() => {
   if (playerMinimized.value) return "var(--lj-player-height)";
   if (hasProjection.value) return "36px";
   return "0px";
-});
-
-const bundleDownloadPercent = computed<number>(() => {
-  const progress = sync.bundleProgress.value;
-  if (progress.phase === "download") {
-    const received = progress.bytesReceived ?? progress.current;
-    const total = progress.bytesTotal ?? 0;
-    return total > 0 ? Math.round((received / total) * 100) : 0;
-  }
-  return progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
-});
-
-const bundleDownloadDetail = computed<string>(() => {
-  const progress = sync.bundleProgress.value;
-  if (progress.phase !== "download") return "";
-
-  const received = progress.bytesReceived ?? progress.current ?? 0;
-  if (received <= 0) return "";
-
-  const total = progress.bytesTotal ?? 0;
-  const rate = progress.bytesPerSecond ?? 0;
-
-  if (total > 0) {
-    return `${sync.humanSize(received)} / ${sync.humanSize(total)} · ${sync.humanSize(rate)}/s`;
-  }
-
-  return `${sync.humanSize(received)} baixados · ${sync.humanSize(rate)}/s`;
 });
 
 // Listeners externos (eventos globais que substituem acoplamento direto via shell._ref)
@@ -454,101 +349,6 @@ async function _showPendingStartupCheck() {
   // quiser revê-lo tem o botão em Sincronizar.
   $userdata.set(KEYS.OPTIONS.STARTUP_CHECK_DONE, true);
   startupCheckOpen.value = true;
-}
-
-async function _checkBundleNeeded(): Promise<{ needed: boolean; version?: number }> {
-  try {
-    const remote = await BundleInstaller.fetchRemoteConfig();
-    console.info("[Shell] bundle check → remote version:", remote?.version_number ?? "null");
-
-    if (!remote) {
-      // API inacessível — checa localmente se o marker existe
-      const hasAnyData = await _hasLocalBundleData();
-      console.info("[Shell] bundle check → remote inacessível, local data:", hasAnyData);
-      if (hasAnyData) {
-        return { needed: false };
-      }
-      return { needed: true };
-    }
-
-    const installed = await BundleInstaller.isBundleInstalled(remote.version_number);
-    const installedVersion = await BundleInstaller.getInstalledBundleVersion();
-    console.info(
-      "[Shell] bundle check → installed for v" + remote.version_number + ":",
-      installed,
-      "local version:",
-      installedVersion
-    );
-
-    // Nunca rebaixe um catálogo mais novo para obedecer a uma API atrasada ou
-    // que acabou de fazer rollback. O marker exato continua sendo o caminho
-    // normal; a comparação >= protege instalações legadas e rollbacks.
-    if (installed || (installedVersion != null && installedVersion >= remote.version_number)) {
-      return { needed: false };
-    }
-
-    // Bundle não instalado para esta versão — verificar se há dados locais de versão anterior
-    const hasAnyData = await _hasLocalBundleData();
-    console.info(
-      "[Shell] bundle check → local data exists:",
-      hasAnyData,
-      "remote:",
-      remote.version_number
-    );
-    return { needed: true, version: remote.version_number };
-  } catch (e) {
-    console.warn("[Shell] bundle check erro:", e);
-    const hasAnyData = await _hasLocalBundleData();
-    return { needed: !hasAnyData };
-  }
-}
-
-/** Verifica se existe qualquer dado de bundle no IndexedDB (marker ou dados de catálogo). */
-async function _hasLocalBundleData(): Promise<boolean> {
-  try {
-    const version = await BundleInstaller.getInstalledBundleVersion();
-    return version != null && version > 0;
-  } catch {
-    return false;
-  }
-}
-
-/** Bundle download com retry (5x) + overlay bloqueante. Retorna true se OK, false se falhou/cancelou. */
-async function _showPendingBundleDownload(version?: number): Promise<boolean> {
-  const MAX_RETRIES = 5;
-  const RETRY_DELAY_MS = 5000;
-
-  bundleCancelled.value = false;
-
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    bundleLoading.value = true;
-    bundleRetryAttempt.value = attempt;
-    bundleRetryMax.value = MAX_RETRIES;
-    bundleError.value = null;
-
-    const ok = await sync.downloadBundle({ version });
-    bundleLoading.value = false;
-
-    if (ok) return true;
-
-    if (bundleCancelled.value) {
-      console.info("[Shell] bundle download cancelado pelo usuário");
-      return false;
-    }
-
-    if (attempt < MAX_RETRIES) {
-      await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
-    }
-  }
-  if (bundleCancelled.value) return false;
-  bundleError.value = t("startup_check.bundle_error");
-  bundleErrorOpen.value = true;
-  return false;
-}
-
-function onBundleCancel(): void {
-  bundleCancelled.value = true;
-  sync.cancelBundle();
 }
 
 function _handleUpdaterState(
@@ -853,55 +653,7 @@ onMounted(() => {
   }
 
   if (Platform.isDesktop) {
-    (async () => {
-      const checkOnStart =
-        $userdata.get<boolean>(KEYS.OPTIONS.CHECK_DB_UPDATES_ON_START, true) === true;
-      if (!checkOnStart) {
-        // Preferência desligada: pula verificação de bundle, segue o boot
-        _runStartupUpdateCheck();
-        return;
-      }
-
-      const { needed, version } = await _checkBundleNeeded();
-      console.info("[Shell] bundle check → needed:", needed, "version:", version);
-
-      if (!needed) {
-        _runStartupUpdateCheck();
-        return;
-      }
-
-      // Quem já recusou esta versão não é perguntado de novo. A recusa vale só
-      // para o número que estava na tela: quando sair uma versão nova do banco,
-      // a pergunta volta. Sem isso o diálogo reaparecia a cada abertura do app,
-      // porque a checagem só compara o que está instalado com o que existe no
-      // servidor e não tinha como saber que a resposta já havia sido dada.
-      const recusada = $userdata.get<number | null>(KEYS.OPTIONS.BUNDLE_DECLINED_VERSION, null);
-      if (version != null && recusada === version) {
-        console.info("[Shell] bundle v" + version + " já recusado — não perguntar de novo");
-        _runStartupUpdateCheck();
-        return;
-      }
-
-      // Bundle necessário — pergunta ao usuário se quer atualizar
-      $alert.yesno(
-        {
-          title: t("startup_check.bundle_update_title"),
-          text: t("startup_check.bundle_update_text", { version: version || "?" }),
-        },
-        (btn?: string) => {
-          if (btn === "yes") {
-            void _showPendingBundleDownload(version).then((ok) => {
-              if (ok) _runStartupUpdateCheck();
-            });
-          } else {
-            if (version != null) {
-              $userdata.set(KEYS.OPTIONS.BUNDLE_DECLINED_VERSION, version);
-            }
-            _runStartupUpdateCheck();
-          }
-        }
-      );
-    })();
+    _runStartupUpdateCheck();
   } else {
     void _continueBootAfterUpdate();
   }
@@ -970,46 +722,6 @@ onBeforeUnmount(() => {
   window.removeEventListener("louvorja:toggle-chat", toggleChat);
 });
 </script>
-
-<!-- Sem `scoped`: o corpo dos diálogos sai por um portal para fora da árvore
-     do componente, onde regra com escopo não casaria. O isolamento vem do
-     prefixo `shell-`. -->
-<style>
-.shell-bundle {
-  display: flex;
-  flex-direction: column;
-  gap: var(--lj-space-5);
-}
-
-.shell-bundle__row {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--lj-space-4);
-  font-size: var(--lj-text-sm);
-  color: var(--lj-text-muted);
-}
-
-.shell-bundle__file {
-  max-width: 260px;
-}
-
-.shell-bundle__retry {
-  text-align: center;
-  font-size: var(--lj-text-sm);
-  color: var(--lj-text-muted);
-}
-
-.shell-bundle-error__text {
-  margin: 0;
-  line-height: 1.5;
-}
-
-.shell-bundle-error__hint {
-  margin: var(--lj-space-4) 0 0;
-  font-size: var(--lj-text-sm);
-  color: var(--lj-text-muted);
-}
-</style>
 
 <style scoped>
 /* Raiz da shell — coluna que ocupa a janela inteira, dentro do
