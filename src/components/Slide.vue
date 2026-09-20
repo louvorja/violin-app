@@ -75,7 +75,14 @@ import { useSlideStyle } from "@/composables/useSlideStyle";
 function _resolveImage(url) {
   if (!url) return null;
   if (typeof url !== "string") return null;
-  // Já é URL absoluta (http/https/louvorja/file/blob/data)?
+  // URL externa: no Electron o Path preserva a origem e habilita o cache local.
+  if (/^https?:\/\//i.test(url)) {
+    try {
+      return Path.file(url);
+    } catch {
+      return url;
+    }
+  }
   if (/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(url)) return url;
   try {
     return Path.file(url);

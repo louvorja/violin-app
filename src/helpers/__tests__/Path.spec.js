@@ -62,15 +62,17 @@ describe("Path.file — modo web", () => {
   });
 
   it("funciona sem barra inicial no path", () => {
-    expect(Path.file("img/thumb.jpg")).toBe(`${FILES_URL}img/thumb.jpg`);
+    expect(Path.file("img/thumb.jpg")).toBe(`${FILES_URL}/img/thumb.jpg`);
   });
 
   it("lança erro para path com traversal (..)", () => {
     expect(() => Path.file("../etc/passwd")).toThrow(/caminho inválido/);
   });
 
-  it("lança erro para URL absoluta no path", () => {
-    expect(() => Path.file("https://evil.com/x")).toThrow(/caminho inválido/);
+  it("preserva URL HTTPS completa da API", () => {
+    expect(Path.file("https://cdn.louvorja.com/images/x.jpg")).toBe(
+      "https://cdn.louvorja.com/images/x.jpg"
+    );
     expect(() => Path.file("ftp://server/file")).toThrow(/caminho inválido/);
   });
 });
@@ -86,6 +88,12 @@ describe("Path.file — modo desktop", () => {
 
   it("adiciona barra inicial se ausente", () => {
     expect(Path.file("img/thumb.jpg")).toBe("louvorja://files/img/thumb.jpg");
+  });
+
+  it("preserva a origem remota ao criar a URL do protocolo", () => {
+    expect(Path.file("https://cdn.louvorja.com/musics/pt/hino.opus")).toBe(
+      "louvorja://files/musics/pt/hino.opus?source=https%3A%2F%2Fcdn.louvorja.com%2Fmusics%2Fpt%2Fhino.opus"
+    );
   });
 });
 

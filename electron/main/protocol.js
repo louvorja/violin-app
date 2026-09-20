@@ -357,7 +357,15 @@ function handle() {
 
         // Fallback: stream remoto. Cacheia se for request "completo" (sem Range).
         if (_config.filesUrl) {
-          const remoteUrl = _config.filesUrl + (pathname.startsWith("/") ? pathname : "/" + pathname);
+          let sourceUrl = null;
+          try {
+            const candidate = url.searchParams.get("source");
+            if (candidate && /^https?:\/\//i.test(candidate)) sourceUrl = candidate;
+          } catch {
+            sourceUrl = null;
+          }
+          const remoteUrl = sourceUrl ||
+            _config.filesUrl + (pathname.startsWith("/") ? pathname : "/" + pathname);
           const rangeHeader = request.headers.get("range");
           const isRangeRequest = !!rangeHeader;
           const headers = _config.apiToken ? { "Api-Token": _config.apiToken } : {};

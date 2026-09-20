@@ -1,6 +1,7 @@
 /** @category helper-puro — Constrói URLs do banco e arquivos. Seguro no Electron main process; sem APIs Vue. */
 import Platform from "@/helpers/Platform";
-import { API_URL_DB, API_URL_FILES } from "@/config/Api";
+import { API_URL_DB } from "@/config/Api";
+import { encodeMediaPath, resolveMediaReference } from "@/helpers/MediaUrl";
 
 const DB_KEY_RE = /^[a-zA-Z0-9_-]+$/;
 
@@ -40,19 +41,17 @@ export default {
    * @param path  Ex: "/audio/12345.mp3"
    */
   file(path: string): string {
-    if (path.includes("..") || /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//i.test(path)) {
+    const reference = resolveMediaReference(path);
+    if (!reference) {
       throw new Error(`Path.file: caminho inválido "${path}"`);
     }
     if (Platform.isDesktop) {
-      const p = path.startsWith("/") ? path : "/" + path;
-      return "louvorja://files" + p;
+      const source = /^https?:\/\//i.test(path.trim())
+        ? `?source=${encodeURIComponent(reference.url)}`
+        : "";
+      return `louvorja://files${encodeMediaPath(reference.relativePath)}${source}`;
     }
-    if (!API_URL_FILES) {
-      throw new Error(
-        "Path.file: URL de arquivos não configurada. Configure VITE_URL_API no .env ou abra o app via Electron."
-      );
-    }
-    return API_URL_FILES + path;
+    return reference.url;
   },
 
   /**

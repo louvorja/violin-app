@@ -15,9 +15,11 @@ import { formatBackgroundTaskDetail } from "@/helpers/BackgroundTaskDetail";
 import { RUNTIME_PERFORMANCE } from "@/helpers/RuntimePerformance";
 import type { Music } from "@/types/Music";
 import type { BibleBook } from "@/types/Bible";
+import { resolveMediaReference } from "@/helpers/MediaUrl";
 
 interface FileEntry {
   remote: string;
+  remoteUrl?: string;
   local: string;
   expectedSize: number;
 }
@@ -672,9 +674,14 @@ export function useSyncManager() {
   }
 
   function toFile(url: string | null | undefined): FileEntry | null {
-    if (!url) return null;
-    const remote = url.startsWith("/") ? url : `/${url}`;
-    return { remote, local: remote.slice(1), expectedSize: 0 };
+    const reference = resolveMediaReference(url);
+    if (!reference) return null;
+    return {
+      remote: reference.relativePath,
+      remoteUrl: reference.url,
+      local: reference.relativePath.slice(1),
+      expectedSize: 0,
+    };
   }
 
   async function fetchJson<T = MusicData>(key: string): Promise<T | null> {
@@ -807,7 +814,9 @@ export function useSyncManager() {
 
   // ─── Bundle Download ────────────────────────────────────────
 
-  async function downloadBundle(opts: { force?: boolean; version?: number } = {}): Promise<boolean> {
+  async function downloadBundle(
+    opts: { force?: boolean; version?: number } = {}
+  ): Promise<boolean> {
     if (bundleInstalling.value) return false;
 
     bundleInstalling.value = true;

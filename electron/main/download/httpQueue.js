@@ -47,6 +47,7 @@ class HttpQueue extends EventEmitter {
         : path.join(paths.filesDir(), item.local);
       this.queue.push({
         remote: item.remote,
+        remoteUrl: item.remoteUrl,
         local: localAbs,
         expectedSize: item.expectedSize,
       });
@@ -147,7 +148,7 @@ class HttpQueue extends EventEmitter {
 
   async _processItem(item, total, getNextIndex) {
     const idx = getNextIndex();
-    const url = this._buildUrl(item.remote);
+    const url = item.remoteUrl || this._buildUrl(item.remote);
     const tmp = `${item.local}.tmp`;
 
     try {
