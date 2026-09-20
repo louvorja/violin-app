@@ -795,6 +795,7 @@
   },
   "messages": {
     "file_database_not_found": "Arquivo de dados não encontrado!",
+    "server_unavailable": "O servidor não respondeu direito. Tente de novo em instantes.",
     "developer_mode_enabled": "Modo DESENVOLVEDOR ativado!",
     "developer_mode_disabled": "Modo DESENVOLVEDOR desativado!",
     "error_import_module": "Erro ao importar módulo",

@@ -101,6 +101,18 @@ export function classifyNetworkError(e: unknown): NetworkErrorKind {
 }
 
 /**
+ * Falha que o operador não tem como consertar e que passa sozinha: rede fora, ou
+ * servidor com problema momentâneo (5xx, 408, 429). Não merece diálogo modal; o
+ * indicador de conexão e um aviso discreto contam a história. 404, acesso negado
+ * e resposta inválida continuam sendo erro de verdade.
+ */
+export function isTransientFailure(e: unknown): boolean {
+  if (classifyNetworkError(e) === "network") return true;
+  const msg = e instanceof Error ? e.message : String(e ?? "");
+  return /^HTTP (?:408|429|5\d\d)\b/.test(msg);
+}
+
+/**
  * `fetch` com prazo até a RESPOSTA — não até o fim da transferência.
  *
  * A diferença é o que separa "desistir de uma rede morta" de "cortar o download

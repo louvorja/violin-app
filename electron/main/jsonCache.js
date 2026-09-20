@@ -139,12 +139,14 @@ async function fetchJson(relPath, remoteBaseUrl, headers = {}) {
   }
 
   const promise = (async () => {
+    let reached = false;
     try {
       // Remover barra inicial duplicada entre base e relPath
       const sep = relPath.startsWith("/") ? "" : "/";
       const remoteUrl = remoteBaseUrl + sep + relPath;
       console.log(`[jsonCache] MISS ${relPath} — baixando: ${remoteUrl}`);
       const response = await httpRequest(remoteUrl, headers);
+      reached = true;
       console.log(`[jsonCache] Resposta de ${relPath}: status=${response.status}`);
 
       netHealth.report(true, "jsonCache");
@@ -216,7 +218,12 @@ async function fetchJson(relPath, remoteBaseUrl, headers = {}) {
 
       throw new Error(`HTTP ${response.status}`);
     } catch (e) {
-      netHealth.report(false, "jsonCache");
+      // Resposta ruim (5xx, JSON inválido, disco) não é falta de internet: o
+      // servidor foi alcançado, e contar isso adiantaria a queda por falso positivo.
+      if (!reached) {
+        netHealth.report(false, "jsonCache");
+        e.networkFailure = true;
+      }
       if (fs.existsSync(localPath)) {
         console.warn(
           `[jsonCache] Erro de rede, usando stale: ${relPath} (${e.message})`
