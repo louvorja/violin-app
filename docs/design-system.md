@@ -493,6 +493,13 @@ background: var(--lj-player-gauge-bg); /* gradiente (muda por tema) */
 color: var(--lj-player-slide-text-color); /* text (light) / gold (dark) */
 ```
 
+**O que nasce na base da janela se apoia no rodapé por token, não por altura fixa.** O
+`Footer` publica em `:root` a altura real do que está ancorado — `--lj-dock-offset` — e o
+valor volta a `0px` com o rodapé recolhido. O `LjToast` usa
+`bottom: calc(var(--lj-dock-offset) + var(--lj-space-7))`. Sem isso o aviso cobre a barra
+de progresso e os controles do player justamente quando ele aparece, com um hino tocando;
+nada dá erro, o toast só fica em cima do que o operador precisa clicar.
+
 ### Popups e Dialogs
 
 ```css

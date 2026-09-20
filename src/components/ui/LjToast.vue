@@ -115,7 +115,10 @@ const timerStyle = computed(() => ({
   pointer-events: auto;
   position: fixed;
   z-index: var(--lj-z-toast);
-  bottom: var(--lj-space-7);
+  /* Apoiado no que estiver ancorado embaixo (o player): com um hino tocando, o
+     aviso ficava por cima da barra de progresso e dos controles. */
+  bottom: calc(var(--lj-dock-offset, 0px) + var(--lj-space-7));
+  transition: bottom var(--lj-transition-normal);
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -126,7 +129,6 @@ const timerStyle = computed(() => ({
   overflow: hidden;
   background: var(--lj-surface-bg);
   border: var(--lj-ui-float-border);
-  border-left: 3px solid var(--lj-info);
   border-radius: var(--lj-radius-md);
   box-shadow: var(--lj-shadow-3);
   color: var(--lj-text);
@@ -135,28 +137,16 @@ const timerStyle = computed(() => ({
   line-height: 1.45;
 }
 
-/* A cor vive na borda e no ícone, não no fundo inteiro: sobre a projeção, um
-   bloco chapado de cor chama mais atenção que o conteúdo do culto. */
-.lj-toast--info {
-  border-left-color: var(--lj-info);
-}
+/* A cor vive só no ícone: nem faixa na borda, nem fundo chapado. Sobre a
+   projeção, um bloco de cor chama mais atenção que o conteúdo do culto. */
 .lj-toast--info .lj-toast__icon {
   color: var(--lj-info);
-}
-.lj-toast--success {
-  border-left-color: var(--lj-success);
 }
 .lj-toast--success .lj-toast__icon {
   color: var(--lj-success);
 }
-.lj-toast--warning {
-  border-left-color: var(--lj-warning);
-}
 .lj-toast--warning .lj-toast__icon {
   color: var(--lj-warning);
-}
-.lj-toast--error {
-  border-left-color: var(--lj-danger);
 }
 .lj-toast--error .lj-toast__icon {
   color: var(--lj-alert-error-color, var(--lj-danger));

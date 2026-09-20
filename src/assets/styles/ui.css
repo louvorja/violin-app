@@ -104,6 +104,11 @@
   --lj-z-tooltip: 2700;
   --lj-z-toast: 2800;
 
+  /* Altura do que está ancorado na base da janela — o rodapé do player. Quem
+     nasce embaixo (o toast) se apoia nela em vez de cobrir o player; o rodapé
+     publica o valor real em :root e, recolhido, ele volta a 0. */
+  --lj-dock-offset: 0px;
+
   --lj-ui-disabled-opacity: 0.45;
 
   /* Tooltip é a única superfície invertida do sistema — escura sobre a

@@ -1,9 +1,10 @@
 <template>
   <footer
     id="footer-bar"
+    ref="footerEl"
     class="footer"
     :class="{
-      'footer--active': hasPlayer || hasBgSound || hasProjection,
+      'footer--active': footerActive,
       'footer--bg-sound': hasBgSound,
       'footer--bg-only': hasBgSound && !hasPlayer && !hasProjection,
       'footer--fp-only': hasProjection && !hasPlayer && !hasBgSound,
@@ -218,7 +219,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
 import packageJson from "@root/package.json";
 import Modules from "@/helpers/Modules";
 import Media from "@/composables/useMedia";
@@ -251,6 +252,31 @@ const hasPlayer = computed(() => {
 
 const hasBgSound = computed(() => !!bg.currentFile.value);
 const hasProjection = computed(() => fp.isProjecting.value);
+const footerActive = computed(() => hasPlayer.value || hasBgSound.value || hasProjection.value);
+
+// O rodapé some e volta por `transform`, e a altura varia com o que ele mostra
+// (player, som de fundo, playlist, projeção). O toast nasce na base da janela e
+// precisa saber quanto dela está ocupado — publicado como `--lj-dock-offset`.
+const footerEl = ref(null);
+let dockObserver = null;
+
+function publishDockOffset() {
+  const height = footerActive.value && footerEl.value ? footerEl.value.offsetHeight : 0;
+  document.documentElement.style.setProperty("--lj-dock-offset", `${height}px`);
+}
+
+watch(footerActive, publishDockOffset);
+onMounted(() => {
+  publishDockOffset();
+  if (typeof ResizeObserver !== "undefined" && footerEl.value) {
+    dockObserver = new ResizeObserver(publishDockOffset);
+    dockObserver.observe(footerEl.value);
+  }
+});
+onBeforeUnmount(() => {
+  dockObserver?.disconnect();
+  document.documentElement.style.removeProperty("--lj-dock-offset");
+});
 
 const hasAudio = computed(() => {
   const url = media.value?.config?.audio;

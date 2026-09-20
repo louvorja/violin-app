@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 import { nextTick } from "vue";
 import LjToast from "../LjToast.vue";
 import { expectKeyExists, mountUi } from "./mountUi";
@@ -113,5 +114,17 @@ describe("LjToast", () => {
     w.unmount();
     vi.advanceTimersByTime(10_000);
     expect(w.emitted("update:modelValue")).toBeUndefined();
+  });
+
+  // O jsdom não aplica o <style>: o contrato visual se confere no fonte.
+  it("o tom vive só no ícone: sem tarja colorida na lateral", () => {
+    const fonte = readFileSync("src/components/ui/LjToast.vue", "utf8");
+    const estilo = fonte.slice(fonte.indexOf("<style"));
+    expect(estilo, "a tarja lateral foi retirada de propósito").not.toMatch(/border-(left|inline-start)/);
+    for (const tom of ["info", "success", "warning", "error"]) {
+      expect(estilo, `o ícone ${tom} carrega a cor do tom`).toMatch(
+        new RegExp(`\\.lj-toast--${tom} \\.lj-toast__icon\\s*\\{`)
+      );
+    }
   });
 });
