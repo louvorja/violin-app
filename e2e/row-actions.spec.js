@@ -13,6 +13,10 @@ import music1 from "./fixtures/music_1.json";
 async function abrirMusicas(browser, options) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, ...options });
   await context.route("http://e2e.mock/**", (route) => route.fulfill({ json: [] }));
+  // O Vite responde index.html para JSONs ausentes; sem este fallback o
+  // Database tenta interpretar HTML e abre um alerta modal no boot.
+  // As rotas específicas abaixo têm prioridade (LIFO).
+  await context.route("**/json_db/**", (route) => route.fulfill({ json: [] }));
   await context.route("**/pt_musics*", (route) => route.fulfill({ json: ptMusics }));
   await context.route("**/music_1*", (route) => route.fulfill({ json: music1 }));
 

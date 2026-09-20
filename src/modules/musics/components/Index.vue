@@ -214,8 +214,7 @@ const musicPageStartedAt = typeof performance !== "undefined" ? performance.now(
 let musicFirstPaintReported = false;
 let musicDataVisibleReported = false;
 
-onMounted(async () => {
-  Telemetry.track("music_module_opened", { compact: compact.value });
+async function hydratePlaylistsAfterPaint() {
   const playlistStartedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
   await hydrate();
   const playlistDurationMs = Math.max(
@@ -231,7 +230,14 @@ onMounted(async () => {
   Telemetry.histogram("louvorja.music.page.stage.duration", playlistDurationMs, {
     stage: "playlists_ready",
   });
+}
 
+onMounted(() => {
+  Telemetry.track("music_module_opened", { compact: compact.value });
+
+  // A lista de músicas já é utilizável sem ler playlists do IndexedDB. Esperar
+  // dois frames dá prioridade ao primeiro paint; a hidratação continua
+  // automática logo em seguida, antes de o operador normalmente abrir o menu.
   requestAnimationFrame(() =>
     requestAnimationFrame(async () => {
       await nextTick();
@@ -251,6 +257,7 @@ onMounted(async () => {
       Telemetry.histogram("louvorja.music.page.stage.duration", durationMs, {
         stage: "first_paint",
       });
+      void hydratePlaylistsAfterPaint();
     })
   );
 });

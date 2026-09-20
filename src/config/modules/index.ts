@@ -5,7 +5,7 @@ import { categories } from "@/config/modules/ribbon/categories";
 import $userdata from "@/helpers/UserData";
 import { moduleShowInMainMenu } from "@/constants/UserDataKeys";
 
-const modules = import.meta.glob<ModuleRibbon>("@/modules/*/manifest.ts", {
+const modules = import.meta.glob<ModuleRibbon>("../../modules/*/manifest.ts", {
   eager: true,
 });
 

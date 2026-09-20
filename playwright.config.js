@@ -1,4 +1,13 @@
+import fs from "node:fs";
 import { defineConfig, devices } from "@playwright/test";
+
+const bundledChromium = process.env.LJ_CHROME_PATH;
+const windowsSystemChrome = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
+const chromiumExecutable =
+  bundledChromium ||
+  (process.platform === "win32" && fs.existsSync(windowsSystemChrome)
+    ? windowsSystemChrome
+    : undefined);
 
 export default defineConfig({
   testDir: "./e2e",
@@ -18,7 +27,10 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      use: {
+        ...devices["Desktop Chrome"],
+        ...(chromiumExecutable ? { launchOptions: { executablePath: chromiumExecutable } } : {}),
+      },
     },
   ],
   webServer: {

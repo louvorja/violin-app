@@ -5,7 +5,13 @@
     </DropdownMenuTrigger>
 
     <DropdownMenuPortal>
-      <DropdownMenuContent class="lj-ui-float lj-menu" :side="side" :align="align" :side-offset="4">
+      <DropdownMenuContent
+        v-if="!lazyContent || open"
+        class="lj-ui-float lj-menu"
+        :side="side"
+        :align="align"
+        :side-offset="4"
+      >
         <template v-for="(item, index) in items" :key="index">
           <DropdownMenuSeparator v-if="item.separator" class="lj-menu__separator" />
           <DropdownMenuLabel
@@ -86,8 +92,10 @@ withDefaults(
     items?: LjMenuItem[];
     side?: "top" | "right" | "bottom" | "left";
     align?: "start" | "center" | "end";
+    /** Evita criar slots pesados até o operador abrir o menu. */
+    lazyContent?: boolean;
   }>(),
-  { items: () => [], side: "bottom", align: "start" }
+  { items: () => [], side: "bottom", align: "start", lazyContent: false }
 );
 
 const open = ref(false);

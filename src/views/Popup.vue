@@ -11,6 +11,8 @@ import Alert from "@/helpers/Alert";
 
 const message = ref(null);
 const module = computed(() => AppData.get("popup_module"));
+const popupComponentLoaders = import.meta.glob("../modules/*/components/Popup.vue");
+const moduleIdPattern = /^[a-z0-9_-]+$/i;
 
 // Inicializa popup_module a partir da query string (?module=X). Necessário porque
 // cada janela Electron tem seu próprio Pinia store e $appdata não é compartilhado
@@ -25,14 +27,20 @@ function readModuleFromUrl() {
 }
 
 function loadModuleComponent() {
+  const moduleId = typeof module.value === "string" ? module.value : "";
+  const loader = moduleIdPattern.test(moduleId)
+    ? popupComponentLoaders[`../modules/${moduleId}/components/Popup.vue`]
+    : null;
+
   return defineAsyncComponent(() => {
-    return import(`@/modules/${module.value}/components/Popup.vue`).catch((e) => {
-      Alert.error({
-        text: "messages.error_import_module",
-        error: e,
-      });
-      return null;
+    if (typeof loader === "function") return loader();
+
+    const error = new Error(`Popup indisponível para o módulo "${moduleId}"`);
+    Alert.error({
+      text: "messages.error_import_module",
+      error,
     });
+    return Promise.reject(error);
   });
 }
 

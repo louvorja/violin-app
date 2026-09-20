@@ -20,7 +20,7 @@
       <span v-else class="mmt-reserve" :style="{ '--mmt-quick-count': QUICK_ACTION_COUNT }" />
     </template>
 
-    <LjMenu side="left" align="start">
+    <LjMenu side="left" align="start" lazy-content>
       <template #trigger>
         <LjButton
           size="md"

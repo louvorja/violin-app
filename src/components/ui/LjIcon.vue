@@ -67,7 +67,7 @@ const resolvedColor = computed(() =>
  */
 const tablerIcon = computed(() => (props.icon ? TABLER_ICONS[props.icon] : undefined));
 
-const _svgModules = import.meta.glob("@/assets/icons/*.svg", {
+const _svgModules = import.meta.glob("../../assets/icons/*.svg", {
   query: "?raw",
   import: "default",
   eager: true,

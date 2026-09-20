@@ -66,6 +66,9 @@ test("navegação permanece utilizável no perfil PC fraco", async ({ browser })
 
   // Catch-all primeiro; as rotas específicas registradas depois têm prioridade (LIFO).
   await context.route("http://e2e.mock/**", (route) => route.fulfill({ json: [] }));
+  // Sem arquivo estático, o fallback SPA do Vite devolve index.html. Responder
+  // JSON aqui evita que catálogos auxiliares ausentes abram alerta modal no boot.
+  await context.route("**/json_db/**", (route) => route.fulfill({ json: [] }));
   await context.route("**/pt_musics*", (route) => route.fulfill({ json: largeMusicFixture() }));
 
   const page = await context.newPage();

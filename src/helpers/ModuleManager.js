@@ -13,7 +13,7 @@ import { moduleTitleFallback } from "@/config/modules/titles";
 // As traduções, porém, são o conteúdo pesado do boot e só entram quando um
 // módulo é realmente aberto. Os `index.ts` dos módulos eram apenas wrappers
 // idênticos que importavam pt.json + es.json para todos os 37 módulos.
-const _translationLoaders = import.meta.glob("@/modules/*/lang/*.json");
+const _translationLoaders = import.meta.glob("../modules/*/lang/*.json");
 const _translationPromises = new Map();
 const _translationsLoaded = new Set();
 

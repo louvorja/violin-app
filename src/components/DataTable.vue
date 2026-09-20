@@ -70,6 +70,78 @@ const limit = ref(0);
 const error = ref(null);
 const last_filter = ref({});
 const loading = ref(true);
+
+/**
+ * Índice efêmero do dataset atual. A lista base só precisa do nome sem acento
+ * para paginação por letra; os demais campos são normalizados sob demanda,
+ * quando o operador realmente pesquisa neles. Assim abrir uma coleção grande
+ * não processa letras e álbuns que ainda não são visíveis.
+ */
+let _indexedData = [];
+let _baseCacheSignature = "";
+let _baseCache = [];
+let _fuseCache = null;
+
+function clearIndexes() {
+  _indexedData = [];
+  _baseCacheSignature = "";
+  _baseCache = [];
+  _fuseCache = null;
+}
+
+function makeIndex(item) {
+  const name = String(item?.name ?? "");
+  return {
+    item,
+    letterName: name.normalize("NFD").replace(/[\u0300-\u036f]/g, ""),
+    clean: Object.create(null),
+    fold: Object.create(null),
+    albumIds: Array.isArray(item?.albums) ? item.albums.map((album) => album.id_album) : null,
+  };
+}
+
+function cleanField(entry, key) {
+  if (!(key in entry.clean)) entry.clean[key] = Strings.clean(String(entry.item?.[key] ?? ""));
+  return entry.clean[key];
+}
+
+function foldField(entry, key) {
+  if (!(key in entry.fold)) entry.fold[key] = Strings.fold(String(entry.item?.[key] ?? ""));
+  return entry.fold[key];
+}
+
+function getBaseEntries(filter, disabled) {
+  const signature = JSON.stringify({
+    filter,
+    disabled,
+    letter: props.letter,
+  });
+  if (signature === _baseCacheSignature) return _baseCache;
+
+  _baseCacheSignature = signature;
+  _fuseCache = null;
+  _baseCache = _indexedData.filter((entry) => {
+    const item = entry.item;
+    const filterCondition =
+      filter.length === 0 || filter.some((key) => item[key] === true || item[key] === 1);
+
+    const initialLetter =
+      props.letter === "" ||
+      (props.letter === "#"
+        ? /^[^a-zA-Z]/.test(entry.letterName)
+        : entry.letterName.startsWith(props.letter));
+
+    // Álbuns desativados: oculta a música se NÃO pertencer a nenhum álbum ativo.
+    const albumActive =
+      !entry.albumIds ||
+      entry.albumIds.length === 0 ||
+      entry.albumIds.some((albumId) => !disabled.includes(albumId));
+
+    return filterCondition && initialLetter && albumActive;
+  });
+  return _baseCache;
+}
+
 let _paginateRaf = null;
 let _rafCycles = 0;
 // O contêiner do módulo agora informa o scroll real ao DataTable. Não fazer
@@ -163,6 +235,7 @@ async function loadData() {
   all_data.value = [];
   filter_data.value = [];
   data.value = [];
+  clearIndexes();
   error.value = null;
   loading.value = true;
   let loadTimeout;
@@ -185,6 +258,13 @@ async function loadData() {
     if (props.sort_by) {
       all_data.value.sort((a, b) => Strings.sort(a[props.sort_by], b[props.sort_by]));
     }
+    _indexedData = all_data.value.map(makeIndex);
+    // Watchers de filtros podem rodar enquanto o dataset ainda está vazio.
+    // O índice acabou de ser preenchido, então o recorte anterior não é mais
+    // válido mesmo que os filtros tenham a mesma assinatura.
+    _baseCacheSignature = "";
+    _baseCache = [];
+    _fuseCache = null;
     filterData();
     await nextTick();
     reportLoad("ready", {
@@ -251,51 +331,38 @@ function filterData() {
       ? Object.keys(props.filter).filter((key) => props.filter[key] === true)
       : [];
 
-    // Recorte que não depende do texto digitado: é sobre ele que a busca —
-    // exata ou aproximada — corre.
-    const base = all_data.value.filter((item) => {
-      const filterCondition =
-        filter.length === 0 || filter.some((key) => item[key] === true || item[key] === 1);
-
-      const initialLetter =
-        props.letter === "" ||
-        (props.letter === "#"
-          ? /^[^a-zA-Z]/.test(item.name.normalize("NFD").replace(/[̀-ͯ]/g, ""))
-          : item.name.normalize("NFD").replace(/[̀-ͯ]/g, "").startsWith(props.letter));
-
-      // Álbuns desativados: oculta a música se NÃO pertencer a nenhum álbum ativo.
-      const disabled = props.disabled_albums || [];
-      const albumActive =
-        !Array.isArray(item.albums) ||
-        item.albums.length === 0 ||
-        item.albums.some((a) => !disabled.includes(a.id_album));
-
-      return filterCondition && initialLetter && albumActive;
-    });
+    // Recorte que não depende do texto digitado: é cacheado entre teclas e
+    // preserva a mesma ordem do catálogo. A busca exata e a fuzzy trabalham
+    // apenas sobre esse subconjunto.
+    const disabled = props.disabled_albums || [];
+    const baseEntries = getBaseEntries(filter, disabled);
 
     is_fuzzy.value = false;
 
     if (searchable.length === 0 || value === "") {
-      filter_data.value = base;
+      filter_data.value = baseEntries.map((entry) => entry.item);
       paginateData();
       return;
     }
 
-    const exact = base.filter((item) =>
-      searchable.some((key) => {
-        if (key === "track" && item.albums) {
-          return isHymnalTrack(item, value);
-        }
+    const exact = baseEntries
+      .filter((entry) =>
+        searchable.some((key) => {
+          const item = entry.item;
+          if (key === "track" && item.albums) {
+            return isHymnalTrack(item, value);
+          }
 
-        if (!isNaN(item[key]) && !isNaN(value)) {
-          return Number(item[key]) === Number(value);
-        } else if (isNaN(item[key])) {
-          return Strings.clean(item[key]).includes(value);
-        } else {
-          return false;
-        }
-      })
-    );
+          if (!isNaN(item[key]) && !isNaN(value)) {
+            return Number(item[key]) === Number(value);
+          } else if (isNaN(item[key])) {
+            return cleanField(entry, key).includes(value);
+          } else {
+            return false;
+          }
+        })
+      )
+      .map((entry) => entry.item);
 
     if (exact.length > 0) {
       filter_data.value = exact;
@@ -303,7 +370,7 @@ function filterData() {
       return;
     }
 
-    const approximate = fuzzySearch(base, searchable);
+    const approximate = fuzzySearch(baseEntries, searchable);
     is_fuzzy.value = approximate.length > 0;
     filter_data.value = approximate;
 
@@ -318,27 +385,33 @@ function filterData() {
  * trecho não achou nada, e só nos campos curtos — a letra é texto longo, onde
  * a aproximação custa caro e acerta qualquer coisa.
  */
-function fuzzySearch(base, searchable) {
+function fuzzySearch(baseEntries, searchable) {
   const fields = FUZZY_FIELDS.filter((key) => searchable.includes(key));
   const query = Strings.fold(props.search);
   if (!fields.length || query.length < FUZZY_MIN_LENGTH || /^\d+$/.test(query)) return [];
 
-  const entries = base.map((item) => {
-    const entry = { item };
-    fields.forEach((key) => {
-      entry[key] = Strings.fold(item[key]);
+  const fieldsSignature = fields.join(",");
+  if (!_fuseCache || _fuseCache.fieldsSignature !== fieldsSignature) {
+    const entries = baseEntries.map((indexed) => {
+      const entry = { item: indexed.item };
+      fields.forEach((key) => {
+        entry[key] = foldField(indexed, key);
+      });
+      return entry;
     });
-    return entry;
-  });
 
-  const fuse = new Fuse(entries, {
-    keys: fields,
-    threshold: 0.35,
-    ignoreLocation: true,
-    minMatchCharLength: FUZZY_MIN_LENGTH,
-  });
+    _fuseCache = {
+      fieldsSignature,
+      fuse: new Fuse(entries, {
+        keys: fields,
+        threshold: 0.35,
+        ignoreLocation: true,
+        minMatchCharLength: FUZZY_MIN_LENGTH,
+      }),
+    };
+  }
 
-  return fuse.search(query, { limit: FUZZY_LIMIT }).map((hit) => hit.item.item);
+  return _fuseCache.fuse.search(query, { limit: FUZZY_LIMIT }).map((hit) => hit.item.item);
 }
 
 function paginateData() {

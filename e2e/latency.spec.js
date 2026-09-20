@@ -24,6 +24,9 @@ test("latência slide_change cross-window p95 <50ms", async ({ browser }) => {
   const context = await browser.newContext();
 
   await context.route("http://e2e.mock/**", (route) => route.fulfill({ json: [] }));
+  // Impede o fallback SPA do Vite (index.html) de ser interpretado como JSON
+  // por catálogos auxiliares durante o boot das duas janelas.
+  await context.route("**/json_db/**", (route) => route.fulfill({ json: [] }));
   await context.route("**/pt_musics*", (route) => route.fulfill({ json: ptMusics }));
   await context.route("**/music_1*", (route) => route.fulfill({ json: music1 }));
 
