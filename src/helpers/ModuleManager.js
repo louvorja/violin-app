@@ -73,7 +73,7 @@ export default {
     const locales = ["pt", "es"];
     const promise = Promise.all(
       locales.map(async (locale) => {
-        const path = `/src/modules/${moduleId}/lang/${locale}.json`;
+        const path = `../modules/${moduleId}/lang/${locale}.json`;
         const loader = _translationLoaders[path];
         if (typeof loader !== "function") return;
         const loaded = await loader();

@@ -143,7 +143,11 @@
       </div>
     </section>
 
-    <section id="opt-sec-monitors" class="opt-section">
+    <section
+      v-if="renderDeferredSections || initialTab === 'monitors'"
+      id="opt-sec-monitors"
+      class="opt-section"
+    >
       <h3 class="opt-section-title">
         <LjIcon :icon="ICONS.UI.MONITORS" size="18" />
         <span>{{ $t("options.monitors.title") }}</span>
@@ -228,7 +232,11 @@
       </template>
     </section>
 
-    <section id="opt-sec-bible" class="opt-section">
+    <section
+      v-if="renderDeferredSections || initialTab === 'bible'"
+      id="opt-sec-bible"
+      class="opt-section"
+    >
       <h3 class="opt-section-title">
         <LjIcon :icon="ICONS.BIBLE.BIBLE" size="18" />
         <span>{{ $t("options.bible.title") }}</span>
@@ -284,7 +292,11 @@
       </div>
     </section>
 
-    <section id="opt-sec-slides" class="opt-section">
+    <section
+      v-if="renderDeferredSections || initialTab === 'slides'"
+      id="opt-sec-slides"
+      class="opt-section"
+    >
       <h3 class="opt-section-title">
         <LjIcon :icon="ICONS.MUSIC.MUSIC" size="18" />
         <span>{{ $t("options.slides.title") }}</span>
@@ -1051,7 +1063,11 @@
       </div>
     </section>
 
-    <section id="opt-sec-videos" class="opt-section">
+    <section
+      v-if="renderDeferredSections || initialTab === 'videos'"
+      id="opt-sec-videos"
+      class="opt-section"
+    >
       <h3 class="opt-section-title">
         <LjIcon :icon="ICONS.MEDIA.YOUTUBE" size="18" />
         <span>{{ $t("options.videos.title") }}</span>
@@ -1122,7 +1138,11 @@
       </div>
     </section>
 
-    <section id="opt-sec-player" class="opt-section">
+    <section
+      v-if="renderDeferredSections || initialTab === 'player'"
+      id="opt-sec-player"
+      class="opt-section"
+    >
       <h3 class="opt-section-title">
         <LjIcon :icon="ICONS.PLAYER.PLAY_PAUSE" size="18" />
         <span>{{ $t("options.player.title") }}</span>
@@ -1217,7 +1237,11 @@
       </div>
     </section>
 
-    <section id="opt-sec-file_projection" class="opt-section">
+    <section
+      v-if="renderDeferredSections || initialTab === 'file_projection'"
+      id="opt-sec-file_projection"
+      class="opt-section"
+    >
       <h3 class="opt-section-title">
         <LjIcon :icon="ICONS.UI.FILE" size="18" />
         <span>{{ $t("options.file_projection.title") }}</span>
@@ -1328,7 +1352,11 @@
       </template>
     </section>
 
-    <section id="opt-sec-utilities" class="opt-section">
+    <section
+      v-if="renderDeferredSections || initialTab === 'utilities'"
+      id="opt-sec-utilities"
+      class="opt-section"
+    >
       <h3 class="opt-section-title">
         <LjIcon :icon="ICONS.UI.TOOLS" size="18" />
         <span>{{ $t("options.utilities.title") }}</span>
@@ -1379,7 +1407,11 @@
       </div>
     </section>
 
-    <section id="opt-sec-privacy" class="opt-section">
+    <section
+      v-if="renderDeferredSections || initialTab === 'privacy'"
+      id="opt-sec-privacy"
+      class="opt-section"
+    >
       <h3 class="opt-section-title">
         <LjIcon :icon="ICONS.UI.PRIVACY" size="18" />
         <span>{{ $t("options.privacy.title") }}</span>
@@ -1437,6 +1469,31 @@ const isDesktop: ComputedRef<boolean> = computed(() => Platform.isDesktop as boo
 // (ex: botão "Configurações" da ribbon da Liturgia → "slides").
 const props = defineProps<{ initialTab?: string }>();
 const root = ref<HTMLElement | null>(null);
+const renderDeferredSections = ref(false);
+let deferredSectionsTimer: ReturnType<typeof setTimeout> | null = null;
+let deferredAssetsLoaded = false;
+
+async function showDeferredSections(): Promise<void> {
+  if (deferredSectionsTimer) {
+    clearTimeout(deferredSectionsTimer);
+    deferredSectionsTimer = null;
+  }
+  if (renderDeferredSections.value) return;
+
+  renderDeferredSections.value = true;
+}
+
+function scheduleDeferredSections(): void {
+  // A tela Geral é suficiente para o primeiro uso. Benchmark Electron/Windows
+  // com CPU 6×: montar tudo imediatamente piorou o primeiro paint de 275ms
+  // para 962ms após ocioso e de 437ms para 970ms na reabertura. Prioriza o
+  // primeiro paint; as seções fora da viewport entram após a interação inicial.
+  if (props.initialTab && props.initialTab !== "general") {
+    void showDeferredSections();
+    return;
+  }
+  deferredSectionsTimer = setTimeout(() => void showDeferredSections(), 700);
+}
 
 function scrollToSection(id?: string): void {
   if (!id) return;
@@ -1447,9 +1504,20 @@ function scrollToSection(id?: string): void {
   });
 }
 
-watch(() => props.initialTab, scrollToSection);
+watch(renderDeferredSections, (visible) => {
+  if (visible) void loadDeferredAssets();
+});
+
+watch(
+  () => props.initialTab,
+  (tab) => {
+    if (tab && tab !== "general") void showDeferredSections();
+    scrollToSection(tab);
+  }
+);
 
 onMounted(() => {
+  scheduleDeferredSections();
   if (props.initialTab && props.initialTab !== "general") scrollToSection(props.initialTab);
 });
 
@@ -1710,15 +1778,10 @@ onMounted(async () => {
       wallpaperBlobUrl.value = URL.createObjectURL(blob);
     }
   }
-  // O fundo da projeção de arquivos só era lido ao ligar o interruptor. Quem
-  // abria as Opções com ele já ligado via os defaults, e qualquer edição
-  // gravava por cima da configuração real.
-  await loadFileProjBg();
-  await loadSlideBg();
-  await loadReturnBgs();
 });
 
 onBeforeUnmount(() => {
+  if (deferredSectionsTimer) clearTimeout(deferredSectionsTimer);
   // Descarrega o que estiver pendente: fechar o painel logo depois de soltar o
   // mouse cancelaria a gravação sem ela nunca ter acontecido.
   if (saveTimer) {
@@ -1821,6 +1884,17 @@ function setFileProj(key: string, value: any): void {
 const SLIDE_BG_STORAGE_ID = "slide_custom_background";
 let slideBgBlobUrl: string | null = null;
 const slideBgImageUrl = ref("");
+
+async function loadDeferredAssets(): Promise<void> {
+  if (deferredAssetsLoaded) return;
+  deferredAssetsLoaded = true;
+
+  // Estes fundos aparecem apenas em seções fora da viewport inicial. Consultá-los
+  // junto com o wallpaper geral monopolizava IndexedDB e a criação de Blob URLs
+  // durante a abertura no Windows, mesmo quando o usuário só queria mudar tema
+  // ou idioma.
+  await Promise.all([loadFileProjBg(), loadSlideBg(), loadReturnBgs()]);
+}
 
 async function loadSlideBg(): Promise<void> {
   const s = await getSetting<any>(SLIDE_BG_STORAGE_ID).catch(() => null);

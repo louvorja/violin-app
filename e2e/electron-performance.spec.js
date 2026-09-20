@@ -88,11 +88,18 @@ test("Electron mantém a reabertura da aba estável", async () => {
       await page.evaluate(() =>
         document.querySelector('[data-testid="ribbon-btn-musics"]')?.click()
       );
+      const searchInput = page.getByPlaceholder("Buscar por...");
+      await searchInput.waitFor({
+        state: "visible",
+        timeout: 45_000,
+      });
+      const controlsReadyMs = Date.now() - startedAt;
       await page.locator('[data-testid^="music-row-"]').first().waitFor({
         state: "visible",
         timeout: 45_000,
       });
       return {
+        controls_ready_ms: controlsReadyMs,
         duration_ms: Date.now() - startedAt,
         rows: await page.locator('[data-testid^="music-row-"]').count(),
       };
@@ -103,17 +110,75 @@ test("Electron mantém a reabertura da aba estável", async () => {
       await page.waitForTimeout(100);
     };
 
+    const openSettings = async () => {
+      const startedAt = Date.now();
+      await page.locator(".app-menu-btn").click();
+      await page.locator("#opt-sec-general").waitFor({
+        state: "visible",
+        timeout: 45_000,
+      });
+      const firstPaintMs = Date.now() - startedAt;
+      await expect(page.locator(".opt-section")).toHaveCount(9, {
+        timeout: 15_000,
+      });
+      return {
+        first_paint_ms: firstPaintMs,
+        full_content_ms: Date.now() - startedAt,
+        sections: await page.locator(".opt-section").count(),
+      };
+    };
+
+    const closeSettings = async () => {
+      await page.locator(".app-menu-back").click();
+      await page.locator("#opt-sec-general").waitFor({
+        state: "detached",
+        timeout: 15_000,
+      });
+    };
+
     const before = await processMetrics(electronApp);
+    const settingsImmediate = await openSettings();
+    await closeSettings();
+
+    // Simula o uso normal: a shell já ficou interativa e o preload ocioso do
+    // chunk de Configurações teve oportunidade de terminar antes do clique.
+    await page.waitForTimeout(2_200);
+    const settingsFirst = await openSettings();
+    await closeSettings();
+    const settingsSecond = await openSettings();
+    await closeSettings();
     const first = await openMusic();
+
+    // Garante que o catálogo lazy do módulo foi mesclado: antes da regressão
+    // do path do import.meta.glob, este texto aparecia como chave crua.
+    const searchInput = page.getByPlaceholder("Buscar por...");
+    await expect(searchInput).toBeVisible({ timeout: 45_000 });
+
     await closeMusic();
     const second = await openMusic();
+
+    const searchStartedAt = Date.now();
+    await searchInput.fill("Música de teste 1889");
+    await page.locator('[data-testid="music-row-1889"]').waitFor({
+      state: "visible",
+      timeout: 45_000,
+    });
+    const search = {
+      duration_ms: Date.now() - searchStartedAt,
+      rows: await page.locator('[data-testid^="music-row-"]').count(),
+    };
+
     const after = await processMetrics(electronApp);
     const result = {
       platform: nodeProcess.platform,
       electron: await electronApp.evaluate(() => globalThis.process.versions.electron),
       boot_ms: Date.now() - launchStartedAt,
+      settings_immediate: settingsImmediate,
+      settings_first_after_idle: settingsFirst,
+      settings_second: settingsSecond,
       first,
       second,
+      search,
       before,
       after,
     };
@@ -124,8 +189,13 @@ test("Electron mantém a reabertura da aba estável", async () => {
       contentType: "application/json",
     });
 
+    expect(settingsImmediate.sections).toBeGreaterThanOrEqual(8);
+    expect(settingsFirst.sections).toBeGreaterThanOrEqual(8);
+    expect(settingsSecond.sections).toBeGreaterThanOrEqual(8);
     expect(second.rows).toBeLessThanOrEqual(first.rows);
     expect(second.duration_ms).toBeLessThan(3_000);
+    expect(search.rows).toBe(1);
+    expect(search.duration_ms).toBeLessThan(3_000);
   } finally {
     await electronApp?.close().catch(() => {});
     fs.rmSync(root, { recursive: true, force: true });

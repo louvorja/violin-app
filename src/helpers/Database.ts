@@ -526,8 +526,23 @@ function fetchAndStore<T>(file: string, fresh: boolean): Promise<T | null> {
       data = (data as unknown as { data: T }).data;
     }
 
-    await writeRouted(file, data, route);
+    // A resposta já foi validada pelo transporte e a cópia em memória atende
+    // imediatamente esta sessão. Persistir um dataset roteado como `items`
+    // pode significar milhares de transações IndexedDB (ex.: catálogo de
+    // músicas); aguardar essa normalização aqui deixava a primeira abertura
+    // da tela bloqueada, sobretudo em disco/CPU modestos no Windows.
+    //
+    // O cache normalizado continua sendo gravado para os próximos boots e
+    // para uso offline, mas não faz parte do caminho crítico de exibição.
+    // A escrita é idempotente e o cache de origem (HTTP/jsonCache do desktop)
+    // já está protegido por gravação atômica antes de esta resposta chegar.
     memorySet(file, data);
+    void writeRouted(file, data, route).catch((writeError) => {
+      $dev.write(
+        "Não foi possível persistir DB em segundo plano",
+        `${file}: ${writeError instanceof Error ? writeError.message : String(writeError)}`
+      );
+    });
 
     return data;
   })();

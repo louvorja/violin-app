@@ -43,6 +43,26 @@ export interface RoleState {
 }
 
 /**
+ * Estado compartilhado por renderer.
+ *
+ * MonitorSelect aparece muitas vezes na tela de Opções. Antes, cada instância
+ * criava seu próprio estado e chamava `list`, `getPrefs` e `getRoles` pelo IPC
+ * ao montar. Além de repetir até 30+ travessias IPC, cada uma registrava um
+ * listener para mudança de tela. Displays são um recurso do processo inteiro,
+ * portanto a fonte também precisa ser única.
+ */
+const displays = ref<ElectronDisplay[]>([]);
+const prefs = ref<DisplayPrefs>({});
+const isIdentifying = ref(false);
+const lastIdentifyError = ref<string | null>(null);
+const lastIdentifiedAt = ref<number | null>(null);
+const roles = ref<RoleState[]>([]);
+const screenAccess = ref<string>("native");
+let refreshInFlight: Promise<void> | null = null;
+let mountedConsumers = 0;
+const sharedCleanups: (() => void)[] = [];
+
+/**
  * useDisplays — composable que mantém lista reativa de monitores disponíveis.
  *
  * Disponível apenas no Electron (Platform.displays). No web/PWA retorna lista vazia.
@@ -74,21 +94,11 @@ export function useDisplays(): {
   getFeatureRole: (feature: string) => Promise<string | null>;
   setFeatureRole: (feature: string, role: string | null) => Promise<void>;
 } {
-  const displays = ref<ElectronDisplay[]>([]);
-  const prefs    = ref<DisplayPrefs>({});
-  const isIdentifying = ref(false);
-  const lastIdentifyError = ref<string | null>(null);
-  const lastIdentifiedAt = ref<number | null>(null);
-  const roles    = ref<RoleState[]>([]);
-
-  /**
-   * Estado do acesso às telas no navegador:
-   * granted | prompt | denied | unsupported | native (Electron).
-   */
-  const screenAccess = ref<string>("native");
-
   async function refresh(): Promise<void> {
-    if (!Platform.displays) {
+    if (refreshInFlight) return refreshInFlight;
+
+    refreshInFlight = (async () => {
+      if (!Platform.displays) {
       // Web/PWA: as telas vêm da Window Management API. Sem permissão
       // concedida, o navegador só conta a tela atual — e aí não há o que
       // atribuir a papéis.
@@ -129,6 +139,11 @@ export function useDisplays(): {
       console.error("[useDisplays] getRoles falhou:", err);
       roles.value = [];
     }
+    })().finally(() => {
+      refreshInFlight = null;
+    });
+
+    return refreshInFlight;
   }
 
   async function setPreferred(feature: string, displayId: number | string): Promise<void> {
@@ -236,34 +251,40 @@ export function useDisplays(): {
     }
   }
 
-  const cleanups: (() => void)[] = [];
-
   onMounted(() => {
-    refresh();
+    mountedConsumers += 1;
+    void refresh();
+
+    // Apenas o primeiro consumidor registra as notificações do sistema. Todos
+    // os demais observam os mesmos refs acima.
+    if (sharedCleanups.length) return;
 
     // Desktop: o main avisa quando um monitor é conectado, desconectado ou muda
     // de resolução.
     const api = Platform.displays as { onChanged?: (cb: () => void) => () => void } | null;
     if (api?.onChanged) {
-      cleanups.push(api.onChanged(() => refresh()));
+      sharedCleanups.push(api.onChanged(() => void refresh()));
       return;
     }
 
     // Navegador: `screenschange` avisa quando uma tela entra ou sai. Sem isso a
     // lista só atualizava ao recarregar a página.
-    cleanups.push(WebDisplays.onChange(() => refresh()));
+    sharedCleanups.push(WebDisplays.onChange(() => void refresh()));
 
     // Rede de segurança para quando não há evento nenhum: sem permissão
     // concedida, ou navegador sem a Window Management API (Firefox/Safari).
     if (typeof window !== "undefined") {
-      const handler = () => refresh();
+      const handler = () => void refresh();
       window.addEventListener("focus", handler);
-      cleanups.push(() => window.removeEventListener("focus", handler));
+      sharedCleanups.push(() => window.removeEventListener("focus", handler));
     }
   });
 
   onBeforeUnmount(() => {
-    for (const cleanup of cleanups.splice(0)) {
+    mountedConsumers = Math.max(0, mountedConsumers - 1);
+    if (mountedConsumers) return;
+
+    for (const cleanup of sharedCleanups.splice(0)) {
       try {
         cleanup();
       } catch (err) {
