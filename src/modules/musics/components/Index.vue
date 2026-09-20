@@ -5,6 +5,7 @@
     compact
     :index="data.count"
     @close="close()"
+    @show="onShow"
     @scroll="onScroll"
     @has-scroll="hasScroll"
   >
@@ -375,8 +376,17 @@ function openAlbum(id_album) {
   Media.openAlbum(id_album);
 }
 
+function onShow(isVisible) {
+  // A aba pode ser fechada diretamente pelo shell (Modules.close), sem passar
+  // pelo callback @close. Limpe a consulta somente nesse caso; alternar para
+  // outra aba mantém o módulo cacheado intacto.
+  if (!isVisible) {
+    search.value = "";
+    Telemetry.track("music_module_closed");
+  }
+}
+
 function close() {
-  Telemetry.track("music_module_closed");
   search.value = "";
 }
 </script>

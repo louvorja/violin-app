@@ -1,10 +1,9 @@
 /**
- * Perfil de navegação em máquina fraca.
+ * Navegação com renderer desacelerado.
  *
  * Playwright emula o renderer/Chromium, não o kernel do sistema operacional:
- * CPU lenta via CDP, memória lógica via navigator e dados grandes determinísticos.
- * O mesmo teste pode rodar em runners Windows/macOS/Linux para medir também o
- * custo real de cada Electron/Chromium distribuído pela plataforma.
+ * a CPU lenta via CDP reproduz o custo de PCs fracos sem bifurcar o
+ * comportamento da aplicação por memória ou número de núcleos.
  */
 import { test, expect } from "@playwright/test";
 
@@ -24,16 +23,8 @@ function largeMusicFixture() {
   }));
 }
 
-async function installSlowProfile(context, page) {
+async function installSlowRenderer(context, page) {
   await context.addInitScript(() => {
-    Object.defineProperty(Navigator.prototype, "hardwareConcurrency", {
-      configurable: true,
-      get: () => 2,
-    });
-    Object.defineProperty(Navigator.prototype, "deviceMemory", {
-      configurable: true,
-      get: () => 2,
-    });
     window.__ljPerformanceLongTasks = [];
     new PerformanceObserver((list) => {
       for (const entry of list.getEntries()) {
@@ -46,9 +37,12 @@ async function installSlowProfile(context, page) {
   await cdp.send("Emulation.setCPUThrottlingRate", { rate: CPU_SLOWDOWN });
 }
 
-async function waitForMusicRows(page) {
+async function waitForMusicRows(page, expectedRows = 1) {
   await page.locator('[data-testid^="music-row-"]').first().waitFor({
     state: "visible",
+    timeout: 45_000,
+  });
+  await expect(page.locator('[data-testid^="music-row-"]')).toHaveCount(expectedRows, {
     timeout: 45_000,
   });
 }
@@ -60,7 +54,7 @@ async function clickAndMeasure(page, locator, ready) {
   return Math.round((await page.evaluate(() => performance.now())) - startedAt);
 }
 
-test("navegação permanece utilizável no perfil PC fraco", async ({ browser }) => {
+test("navegação permanece utilizável com renderer desacelerado", async ({ browser }) => {
   test.setTimeout(120_000);
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
 
@@ -72,7 +66,7 @@ test("navegação permanece utilizável no perfil PC fraco", async ({ browser })
   await context.route("**/pt_musics*", (route) => route.fulfill({ json: largeMusicFixture() }));
 
   const page = await context.newPage();
-  await installSlowProfile(context, page);
+  await installSlowRenderer(context, page);
   await page.goto("/");
   await page.locator('[data-testid="modules-ready"]').waitFor({
     state: "attached",
@@ -80,7 +74,7 @@ test("navegação permanece utilizável no perfil PC fraco", async ({ browser })
   });
 
   const musicButton = page.locator('[data-testid="ribbon-btn-musics"]');
-  const firstOpenMs = await clickAndMeasure(page, musicButton, () => waitForMusicRows(page));
+  const firstOpenMs = await clickAndMeasure(page, musicButton, () => waitForMusicRows(page, 60));
   const renderedRows = await page.locator('[data-testid^="music-row-"]').count();
   const rowButtons = await page
     .locator('[data-testid^="music-row-"]')
@@ -88,20 +82,29 @@ test("navegação permanece utilizável no perfil PC fraco", async ({ browser })
     .locator("button")
     .count();
 
+  // A abertura sem filtro não constrói o índice completo. A primeira busca
+  // precisa materializá-lo sob demanda e alcançar uma música fora da página
+  // inicial, preservando o comportamento do catálogo inteiro.
+  const searchInput = page.getByRole("textbox");
+  await searchInput.fill("Música de teste 1889");
+  await expect(page.locator('[data-testid="music-row-1889"]')).toBeVisible({
+    timeout: 10_000,
+  });
+  await expect(page.locator('[data-testid^="music-row-"]')).toHaveCount(1);
+
   const closeButton = page.locator('[aria-label="Fechar: Músicas"]');
   await closeButton.click();
   await expect(closeButton).toHaveCount(0, { timeout: 15_000 });
 
-  const secondOpenMs = await clickAndMeasure(page, musicButton, () => waitForMusicRows(page));
+  const secondOpenMs = await clickAndMeasure(page, musicButton, () => waitForMusicRows(page, 60));
   const secondRenderedRows = await page.locator('[data-testid^="music-row-"]').count();
 
   console.log(
     JSON.stringify(
       {
-        profile: {
+        renderer: {
           cpu_slowdown: CPU_SLOWDOWN,
-          hardware_concurrency: 2,
-          device_memory_gb: 2,
+          table_page_size: 60,
         },
         first_open_ms: firstOpenMs,
         second_open_ms: secondOpenMs,
@@ -115,9 +118,10 @@ test("navegação permanece utilizável no perfil PC fraco", async ({ browser })
     )
   );
 
-  // O perfil de 2 GB/2 threads deve usar a página reduzida de RuntimePerformance.
-  expect(renderedRows).toBeLessThanOrEqual(40);
-  expect(secondRenderedRows).toBeLessThanOrEqual(renderedRows);
+  // O lote é único para todos os equipamentos; a CPU desacelerada só valida
+  // que o mesmo caminho permanece responsivo em cenário desfavorável.
+  expect(renderedRows).toBe(60);
+  expect(secondRenderedRows).toBe(60);
   expect(rowButtons).toBe(1);
   expect(secondOpenMs).toBeLessThan(3_000);
 

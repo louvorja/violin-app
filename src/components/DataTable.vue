@@ -39,7 +39,8 @@ const TABLE_PAGE_SIZE = 60;
 /**
  * A camada Database devolve a mesma referência enquanto o dataset está no cache
  * de memória. Ao fechar e reabrir uma aba, reutilizamos a visão ordenada e o
- * índice estrutural já preparados, sem reordenar e percorrer milhares de itens.
+ * índice estrutural já preparados. O índice é criado sob demanda: a primeira
+ * página sem busca/filtro só precisa das primeiras linhas ordenadas.
  * Filtros e resultados continuam pertencendo a cada instância de DataTable.
  */
 const _preparedDatasets = new WeakMap();
@@ -92,12 +93,14 @@ const loading = ref(true);
  * não processa letras e álbuns que ainda não são visíveis.
  */
 let _indexedData = [];
+let _preparedDataset = null;
 let _baseCacheSignature = "";
 let _baseCache = [];
 let _fuseCache = null;
 
 function clearIndexes() {
   _indexedData = [];
+  _preparedDataset = null;
   _baseCacheSignature = "";
   _baseCache = [];
   _fuseCache = null;
@@ -143,9 +146,18 @@ function prepareDataset(source) {
     items.sort((a, b) => Strings.sort(a[props.sort_by], b[props.sort_by]));
   }
 
-  const prepared = { items, indexed: items.map(makeIndex) };
+  const prepared = { items, indexed: null };
   viewsBySort.set(sortKey, prepared);
   return prepared;
+}
+
+function ensureIndexedData() {
+  if (!_preparedDataset) return [];
+  if (!_preparedDataset.indexed) {
+    _preparedDataset.indexed = _preparedDataset.items.map(makeIndex);
+  }
+  _indexedData = _preparedDataset.indexed;
+  return _indexedData;
 }
 
 function getBaseEntries(filter, disabled) {
@@ -202,7 +214,13 @@ watch(
 
 watch(
   () => props.search,
-  () => {
+  (search) => {
+    // Limpar a busca acontece ao fechar o módulo. Não deixe o resultado
+    // anterior visível numa reabertura antes do debounce de digitação.
+    if (Strings.clean(search).length === 0) {
+      filterData();
+      return;
+    }
     debouncedFilterData();
   }
 );
@@ -294,8 +312,9 @@ async function loadData() {
     }
 
     const prepared = prepareDataset(loadedData);
+    _preparedDataset = prepared;
     all_data.value = prepared.items;
-    _indexedData = prepared.indexed;
+    _indexedData = prepared.indexed || [];
     // Watchers de filtros podem rodar enquanto o dataset ainda está vazio.
     // O índice acabou de ser preenchido, então o recorte anterior não é mais
     // válido mesmo que os filtros tenham a mesma assinatura.
@@ -368,13 +387,25 @@ function filterData() {
       ? Object.keys(props.filter).filter((key) => props.filter[key] === true)
       : [];
 
-    // Recorte que não depende do texto digitado: é cacheado entre teclas e
-    // preserva a mesma ordem do catálogo. A busca exata e a fuzzy trabalham
-    // apenas sobre esse subconjunto.
+    // Sem busca, filtros, letra ou álbuns desativados, a tela inicial não
+    // precisa normalizar/indexar o catálogo inteiro: basta manter a visão
+    // ordenada e renderizar a primeira página. Isso remove trabalho síncrono
+    // do primeiro frame em qualquer dispositivo.
     const disabled = props.disabled_albums || [];
-    const baseEntries = getBaseEntries(filter, disabled);
-
+    const needsBaseFilter = filter.length > 0 || disabled.length > 0 || props.letter !== "";
     is_fuzzy.value = false;
+
+    if ((searchable.length === 0 || value === "") && !needsBaseFilter) {
+      filter_data.value = all_data.value;
+      paginateData();
+      return;
+    }
+
+    // Busca, letra, filtro instrumental e álbuns desativados precisam do
+    // índice completo, que é construído apenas neste ponto e compartilhado
+    // entre reaberturas que reutilizam o mesmo dataset do Database.
+    ensureIndexedData();
+    const baseEntries = getBaseEntries(filter, disabled);
 
     if (searchable.length === 0 || value === "") {
       filter_data.value = baseEntries.map((entry) => entry.item);
