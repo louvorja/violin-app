@@ -76,6 +76,7 @@ import { DB_TABLE, SETTINGS_TABLE } from "@/constants/DbTables";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 import Telemetry from "@/helpers/Telemetry";
 import { normalizeYouTubeError } from "@/helpers/YouTubeError";
+import { syncVideoElement } from "@/helpers/VideoSync";
 import $idb from "@/helpers/IndexedDB";
 
 GlobalWorkerOptions.workerSrc = pdfjsWorker;
@@ -409,13 +410,7 @@ useBroadcastListener(BROADCAST_TYPE.VIDEO_STATE, (payload: unknown) => {
     }
   }
 
-  if (typeof data.currentTime === "number") {
-    const drift = Math.abs(el.currentTime - data.currentTime);
-    if (drift > 1.5 && el.readyState >= 1) {
-      const duration = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : Infinity;
-      el.currentTime = Math.max(0, Math.min(data.currentTime, duration));
-    }
-  }
+  syncVideoElement(el, data);
 });
 
 useBroadcastListener(BROADCAST_TYPE.VIDEO_STATE, (payload: unknown) => {

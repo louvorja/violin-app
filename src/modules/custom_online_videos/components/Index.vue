@@ -5,6 +5,8 @@
     </template>
 
     <div class="cv-body">
+      <OnlineVideoDownloadsBar :items="libraryItems" />
+
       <!-- Chips de categorias (filtro) -->
       <div v-if="categories.length || uncategorizedCount > 0" class="cv-chips">
         <span class="cv-chips-title">{{ tm("categories") }}</span>
@@ -74,6 +76,7 @@
               {{ categoryName(v.categoryId) }}
             </span>
             <span class="lj-u-spacer" />
+            <OnlineVideoDownload :video-id="extractYoutubeId(v.url)" :name="v.name" />
             <LjButton
               size="sm"
               variant="primary"
@@ -122,12 +125,20 @@
               <div class="cv-grid-overlay">
                 <LjIcon :icon="ICONS.PLAYER.PLAY" :size="36" class="cv-grid-play" />
               </div>
+              <span class="cv-grid-badge">
+                <OnlineVideoDownloadBadge :video-id="extractYoutubeId(v.url)" compact />
+              </span>
             </div>
             <div class="cv-grid-name">{{ v.name }}</div>
             <div v-if="categoryName(v.categoryId)" class="cv-grid-category">
               {{ categoryName(v.categoryId) }}
             </div>
             <div class="cv-grid-actions">
+              <OnlineVideoDownload
+                :video-id="extractYoutubeId(v.url)"
+                :name="v.name"
+                :show-status="false"
+              />
               <LjButton
                 size="sm"
                 variant="ghost"
@@ -208,6 +219,11 @@ import { ref, reactive, computed, onMounted, onBeforeUnmount } from "vue";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import CategoryManagerDialog, { CategoryFileData } from "@/components/CategoryManagerDialog.vue";
+import OnlineVideoDownload from "@/components/OnlineVideoDownload.vue";
+import OnlineVideoDownloadBadge from "@/components/OnlineVideoDownloadBadge.vue";
+import OnlineVideoDownloadsBar from "@/components/OnlineVideoDownloadsBar.vue";
+import { useOnlineVideoDownloads } from "@/composables/useOnlineVideoDownloads";
+import { prepare as prepareOnlineVideo } from "@/helpers/OnlineVideo";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 import {
   LjButton,
@@ -251,6 +267,7 @@ const UNCATEGORIZED_ID = "";
 
 const moduleContainer = ref<{ tm(key: string): string } | null>(null);
 const tm = (key: string): string => moduleContainer.value?.tm(key) || key;
+const downloads = useOnlineVideoDownloads();
 
 const videos = ref<VideoItem[]>([]);
 const viewMode = ref<string>("grid");
@@ -364,6 +381,7 @@ async function handleDeleteCategory(id: string): Promise<void> {
     await deleteVideoInternal(v.id);
   }
   videos.value = videos.value.filter((v) => v.categoryId !== id);
+  for (const v of affected) await dropDownloadIfUnused(extractYoutubeId(v.url));
   await $idb.del(STORE_CATEGORY, id);
   categories.value = categories.value.filter((c) => c.id !== id);
   const next = new Set(selectedCategoryIds.value);
@@ -376,6 +394,22 @@ function extractYoutubeId(url: string): string | null {
     /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/)([a-zA-Z0-9_-]{11})/
   );
   return m ? m[1] : null;
+}
+
+/** Os vídeos da lista, na forma que a barra de downloads espera. */
+const libraryItems = computed(() =>
+  videos.value.map((v) => ({ id: extractYoutubeId(v.url), name: v.name }))
+);
+
+/**
+ * Um arquivo baixado sem nenhum vídeo da lista que o use não teria como ser
+ * removido pela tela — e o que foi mantido nunca sai sozinho. Ao apagar ou trocar
+ * o link de um vídeo, o download vai junto, salvo se outro item usa o mesmo vídeo.
+ */
+async function dropDownloadIfUnused(ytId: string | null): Promise<void> {
+  if (!ytId || !downloads.available) return;
+  if (videos.value.some((x) => extractYoutubeId(x.url) === ytId)) return;
+  await downloads.remove(ytId);
 }
 
 function buildEmbedUrl(url: string): string | null {
@@ -501,6 +535,7 @@ async function saveVideo(): Promise<void> {
       }
       const v = videos.value.find((x) => x.id === editingId.value);
       if (v) {
+        const previousYtId = extractYoutubeId(v.url);
         v.name = name;
         v.url = url;
         v.categoryId = formCategoryId.value || undefined;
@@ -511,6 +546,7 @@ async function saveVideo(): Promise<void> {
           delete objectUrlIndex[v.id];
         }
         fetchAndCacheThumbnail(v, ytId);
+        if (previousYtId !== ytId) await dropDownloadIfUnused(previousYtId);
       }
     } else {
       const title = (await fetchYoutubeTitle(ytId)) || ytId;
@@ -533,9 +569,13 @@ async function saveVideo(): Promise<void> {
 }
 
 async function confirmDelete(v: VideoItem): Promise<void> {
-  if (!confirm(tm("confirm_delete"))) return;
+  const ytId = extractYoutubeId(v.url);
+  const shared = videos.value.some((x) => x.id !== v.id && extractYoutubeId(x.url) === ytId);
+  const takesFile = !!ytId && !shared && downloads.stateOf(ytId) === "downloaded";
+  if (!confirm(tm(takesFile ? "confirm_delete_downloaded" : "confirm_delete"))) return;
   await deleteVideoInternal(v.id);
   videos.value = videos.value.filter((x) => x.id !== v.id);
+  await dropDownloadIfUnused(ytId);
 }
 
 async function projectVideo(v: VideoItem): Promise<void> {
@@ -545,7 +585,11 @@ async function projectVideo(v: VideoItem): Promise<void> {
     return;
   }
   projectingId.value = v.id;
-  await Media.openYouTube(embedUrl, v.name);
+  const opened = await Media.openYouTube(embedUrl, v.name);
+  // Cancelado ou impossível de tocar: sai do destaque, salvo se outro vídeo já o substituiu.
+  if (!opened && projectingId.value === v.id) projectingId.value = "";
+  const ytId = extractYoutubeId(v.url);
+  if (opened && ytId) void downloads.adopt([ytId]);
 }
 
 async function stopProjection(): Promise<void> {
@@ -560,7 +604,8 @@ async function projectUrl(rawUrl: string): Promise<void> {
     return;
   }
   projectingId.value = "__url__";
-  await Media.openYouTube(embedUrl, rawUrl);
+  const opened = await Media.openYouTube(embedUrl, rawUrl);
+  if (!opened && projectingId.value === "__url__") projectingId.value = "";
 }
 
 useBroadcastListener(BROADCAST_TYPE.MODULE_RIBBON_ACTION, (payload: unknown) => {
@@ -587,9 +632,14 @@ function close(): void {
 }
 
 onMounted(async () => {
+  prepareOnlineVideo();
   await loadVideos();
   await loadCategories();
   selectAllCategoriesAndUncategorized();
+  if (downloads.available) {
+    const ids = videos.value.map((v) => extractYoutubeId(v.url));
+    await downloads.adopt(ids.filter((id): id is string => !!id));
+  }
 });
 
 onBeforeUnmount(() => {
@@ -859,6 +909,21 @@ onBeforeUnmount(() => {
 
 .cv-grid-play {
   color: var(--lj-white);
+}
+
+.cv-grid-badge {
+  position: absolute;
+  top: var(--lj-space-3);
+  left: var(--lj-space-3);
+  display: inline-flex;
+  padding: var(--lj-space-1);
+  background: var(--lj-surface-bg);
+  border-radius: var(--lj-radius-md);
+  box-shadow: var(--lj-shadow-1);
+}
+
+.cv-grid-badge:empty {
+  display: none;
 }
 
 .cv-grid-name {

@@ -574,8 +574,17 @@
       "action_link": "Link no navegador",
       "action_video": "Vídeo",
       "always_on_top": "Manter sempre no topo",
+      "cache_clear": "Apagar vídeos baixados",
+      "cache_clear_confirm": "Apagar todos os vídeos baixados? Eles serão baixados de novo quando forem usados.",
+      "cache_empty": "Nenhum vídeo baixado",
+      "cache_size": "Vídeos baixados: {count} ({size})",
+      "download": "Baixar o vídeo antes de projetar (sem anúncios)",
+      "download_hint": "O vídeo é baixado uma vez, guardado no computador e projetado como um arquivo: sem anúncios e com a mesma imagem na projeção, no retorno e no operador. Desative para usar sempre o player do YouTube.",
       "fullscreen": "Exibir em tela cheia",
+      "max_height": "Qualidade máxima do download",
       "open_return_at": "Tela de retorno do vídeo em:",
+      "play_while_downloading": "Se ainda não foi baixado, tocar já no YouTube e baixar em segundo plano",
+      "play_while_downloading_hint": "Começa na hora, sem esperar. Nessa primeira vez o YouTube pode mostrar anúncios; nas próximas o vídeo toca do arquivo, sem anúncios. Para não ter espera nem anúncio, baixe os vídeos antes, em Meus Vídeos Online.",
       "show_return": "Exibir na tela de retorno",
       "title": "Vídeos On-line",
       "youtube_action": "Ao executar link do YouTube na liturgia, abrir:"
@@ -1430,6 +1439,34 @@
     "fullscreen_auto_hint": "Um clique é necessário porque o navegador não permite que sites entrem em tela cheia sozinhos. No aplicativo para computador a projeção já abre em tela cheia, sem clique.",
     "video_unavailable": "Vídeo indisponível",
     "video_unavailable_hint": "Não foi possível carregar o vídeo. Verifique a conexão com a internet."
+  },
+  "online_video": {
+    "preparing": "Baixando o vídeo…",
+    "phase": {
+      "tools": "Preparando as ferramentas de vídeo (só na primeira vez)",
+      "queued": "Na fila",
+      "downloading": "Baixando",
+      "finalizing": "Finalizando"
+    },
+    "errors": {
+      "age": "Este vídeo tem restrição de idade e não pode ser projetado.",
+      "private": "Este vídeo é privado e não pode ser projetado.",
+      "geo": "Este vídeo não está disponível na sua região.",
+      "unavailable": "Este vídeo foi removido ou não está disponível.",
+      "fallback": "Não foi possível baixar o vídeo. Usando o player do YouTube, que pode exibir anúncios.",
+      "download": "Não foi possível baixar o vídeo agora. Tente de novo mais tarde."
+    },
+    "download": {
+      "start": "Baixar para usar sem internet",
+      "done": "Baixado",
+      "remove": "Remover download",
+      "cancel": "Cancelar download",
+      "confirm_remove": "Remover este vídeo baixado do computador? Ele continua na sua lista.",
+      "summary": "Baixados: {count} de {total} ({size})",
+      "download_all": "Baixar todos",
+      "remove_all": "Remover downloads",
+      "confirm_remove_all": "Remover os {count} vídeos baixados desta lista? Eles continuam na lista."
+    }
   },
   "chat": {
     "title": "Chat",

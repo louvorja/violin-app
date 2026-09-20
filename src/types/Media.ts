@@ -27,6 +27,8 @@ export interface VideoMediaState {
   /** YouTube PlayerState, quando a origem é a projeção online. */
   state?: number;
   playback_id?: string;
+  /** `Date.now()` de quando o estado foi lido; quem recebe compensa a idade da mensagem. */
+  sentAt?: number;
 }
 
 export interface FileProjectionState {

@@ -123,6 +123,7 @@ import OnlineVideoCard, {
 } from "./OnlineVideoCard.vue";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import Media from "@/composables/useMedia";
+import { prepare as prepareOnlineVideo } from "@/helpers/OnlineVideo";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import $database from "@/helpers/Database";
 import $userdata from "@/helpers/UserData";
@@ -283,7 +284,10 @@ async function loadData(): Promise<void> {
   loading.value = false;
 }
 
-onMounted(loadData);
+onMounted(() => {
+  prepareOnlineVideo();
+  void loadData();
+});
 
 watch(locale, () => {
   loadData();
@@ -300,10 +304,18 @@ function buildEmbedUrl(videoId: string): string {
   return `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&controls=0`;
 }
 
+/** Cancelado ou impossível de tocar: o card deixa de aparecer "no ar", salvo se outro vídeo já o substituiu. */
+function releaseIfNotPlaying(id: string, opened: boolean): void {
+  if (opened || projectingId.value !== id) return;
+  projectingId.value = "";
+  $userdata.set(KEYS.MODULES.ONLINE_VIDEOS.IS_PROJECTING, false);
+}
+
 async function projectVideo(video: OnlineVideo): Promise<void> {
   projectingId.value = video.video_id;
   $userdata.set(KEYS.MODULES.ONLINE_VIDEOS.IS_PROJECTING, true);
-  await Media.openYouTube(buildEmbedUrl(video.video_id), video.title);
+  const opened = await Media.openYouTube(buildEmbedUrl(video.video_id), video.title);
+  releaseIfNotPlaying(video.video_id, opened);
 }
 
 useBroadcastListener(BROADCAST_TYPE.MODULE_RIBBON_ACTION, (payload: unknown) => {
@@ -316,7 +328,9 @@ useBroadcastListener(BROADCAST_TYPE.MODULE_RIBBON_ACTION, (payload: unknown) => 
     if (!id) return;
     projectingId.value = id;
     $userdata.set(KEYS.MODULES.ONLINE_VIDEOS.IS_PROJECTING, true);
-    Media.openYouTube(buildEmbedUrl(id), url);
+    void Media.openYouTube(buildEmbedUrl(id), url).then((opened) =>
+      releaseIfNotPlaying(id, opened)
+    );
   } else if (data.action === "toggle") {
     if (projectingId.value) {
       projectingId.value = "";

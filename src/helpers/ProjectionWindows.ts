@@ -220,7 +220,9 @@ export async function closeAnnouncementsWindow(): Promise<void> {
  * "file_projection", para não conflitar com a configuração do
  * Player de Áudio/Vídeo (que pode estar em monitor diferente).
  */
-export async function openVideoProjectionWindows(): Promise<void> {
+export async function openVideoProjectionWindows(
+  { withOperator = false }: { withOperator?: boolean } = {}
+): Promise<void> {
   if (await isBackgroundOpen()) return;
 
   const fullscreen = ($userdata.get(KEYS.OPTIONS.ONLINE_VIDEO_PROJECTION.FULLSCREEN, true) as boolean);
@@ -244,6 +246,13 @@ export async function openVideoProjectionWindows(): Promise<void> {
         alwaysOnTop
       );
     }
+  }
+
+  // O vídeo baixado é um arquivo como os da liturgia, e o operador mostra a
+  // prévia dele. O player embutido do YouTube não tem o que mostrar ali.
+  if (withOperator && ($userdata.get(KEYS.OPTIONS.OPEN_OPERATOR, false) as boolean)) {
+    const op = await _target(PROJECTION_TYPE.OPERATOR);
+    await _open(PROJECTION_URL.OPERATOR, PROJECTION_TYPE.OPERATOR, op.monitorId, false, false);
   }
 }
 

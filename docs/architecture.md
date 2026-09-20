@@ -876,7 +876,98 @@ Duas fontes de vídeos YouTube projetáveis, mescladas na liturgia:
 - Ícone da origem: imagem do canal (`default_image` do canal, resolvido via
   vídeo → playlist → canal) para a API; ícone do módulo
   (`ICONS.MODULES.CUSTOM_ONLINE_VIDEOS`) para Meus Vídeos.
-- Execução: embed YouTube via `$media.openYouTube`.
+- Execução: `$media.openYouTube` (ver "Reprodução" abaixo).
+
+### Reprodução: baixar antes de projetar (desktop)
+
+O player embutido do YouTube tem três defeitos para uso em culto: **anúncios** no telão,
+**um player independente em cada janela** (projeção e retorno tocavam duas cópias fora de
+sincronia, e o operador não mostrava nada) e **dependência de internet durante a
+projeção**. No desktop o vídeo agora é **baixado e projetado como um arquivo local**:
+
+```
+Media.openYouTube(embedUrl, título)          ← único ponto de entrada (5 chamadores)
+  ├─ arquivo já baixado? ── sim ──→ toca dele (mesmo com o download automático desligado)
+  └─ OnlineVideo.downloadEnabled()? ── não ──→ openEmbeddedYouTube (caminho antigo, com anúncios)
+       │ sim
+       ├─ "tocar já enquanto baixa" ligado e sem arquivo → openEmbeddedYouTube na hora
+       │    + download em segundo plano (sem "manter", sem aviso de falha)
+       ▼
+  onlineVideo:ensure(id, { maxHeight })      ← IPC; main: manager.js
+       │   cache em userData/online_videos/<id>.mp4  (hit = instantâneo)
+       │   miss → tools.ensure (yt-dlp + ffmpeg, 1ª vez) → yt-dlp → move para o cache
+       ▼
+  { ok, url: louvorja://onlinevideo/<id>.mp4 }
+       │
+       ▼   mesmo caminho de um vídeo local da liturgia
+  FILE_PROJECTION { type: "video" }  +  Media.openAudio({ mediaType: "video" })
+       ├─ /projection/file        <video> mudo, sincronizado por VIDEO_STATE
+       ├─ /projection/file/return <video> mudo, sincronizado por VIDEO_STATE
+       ├─ /operator               prévia do vídeo (abre se "Abrir operador" estiver ligado)
+       └─ janela principal        único que toca o áudio; controla play/pausa/busca/volume
+```
+
+- **Sem anúncio por construção**: o yt-dlp baixa o arquivo, não passa pelo player.
+- **Qualidade**: H.264 + AAC em MP4 até a altura escolhida (480/720/**1080**, em Opções →
+  Vídeos On-line). O ffmpeg só junta as trilhas (`-c copy`), nunca recodifica. H.264 é o que
+  o Chromium decodifica em hardware nos PCs modestos; VP9/AV1 só entram se o vídeo não tiver
+  H.264. O `moov` já vem no início do arquivo, então o streaming com `Range` começa na hora.
+- **Streaming do disco**: `_loadAudioSrc` não passa pelo XHR/blob para `louvorja://onlinevideo/`
+  (traria o arquivo inteiro para a memória, e é o caminho que o modo offline usaria).
+- **Duas raias, uma transferência por vez em cada**, deduplicado por vídeo: o que o operador
+  manda projetar agora (`foreground`) nunca espera atrás de um pré-download (`background`).
+  Projetar um vídeo que só esperava na fila de pré-download o passa para a raia urgente;
+  pedir outro vídeo cancela o que a projeção esperava; cancelar mata a árvore de processos
+  (yt-dlp → python → ffmpeg). A troca/renovação das ferramentas só acontece com um único
+  download em curso (no Windows o `.exe` em uso não é sobrescrito). A barra é única e
+  monótona: na primeira vez as ferramentas ocupam os primeiros 25%.
+- **Cancelar e pedir de novo** funciona na hora: um job já abortado, mas ainda saindo, não é
+  reaproveitado por quem pede em seguida (`manager.ensure` espera o antigo largar a pasta de
+  parciais e recomeça), e no renderer `_dropPendingDownload` também descarta o preparo
+  cancelado. O yt-dlp retoma o `.part`, então cancelar não joga fora o que já chegou.
+- **Ferramentas (yt-dlp + ffmpeg)** são instaladas uma vez, por todos: pedidos simultâneos
+  compartilham a instalação e todos recebem o andamento (quem chega no meio parte do estado
+  atual). Cancelar só faz quem cancelou parar de esperar — a instalação segue, porque o
+  operador que trocou de vídeo no primeiro uso a aproveita em vez de recomeçar do zero. Abrir
+  "Vídeos On-line" ou "Meus Vídeos Online" já dispara a instalação em silêncio
+  (`onlineVideo:prepare`, uma vez por sessão).
+- **Progresso** aparece em "Processos em segundo plano" (`useBackgroundTasks`, com botão de
+  cancelar). Vídeo já em cache não pisca tarefa nenhuma.
+- **Cache** em `userData/online_videos/` (é cache, não documento: se sumir, baixa de novo;
+  por isso fica fora da pasta de dados, que costuma morar num OneDrive/iCloud). Cota de 6 GB,
+  despeja o menos usado; "Apagar vídeos baixados" em Opções. Parciais com mais de 1 dia são
+  varridos na abertura do app.
+- **Vídeos mantidos** (`<id>.keep` ao lado do arquivo): o que o operador baixou de propósito,
+  em "Meus Vídeos Online", e o que projetou a partir da própria lista. O despejo por espaço
+  nunca os leva e eles não contam na cota (que é do cache automático). Sair só pelo botão de
+  remover, por "Remover downloads" ou ao excluir o vídeo da lista — sem outro item da lista
+  que use o mesmo vídeo, para não deixar arquivo órfão de centenas de MB que a tela não
+  alcança.
+- **Baixar de antemão** (`useOnlineVideoDownloads`): estado único por janela (arquivos no
+  disco + downloads em curso), compartilhado pelo módulo, pelo `useMedia` (o download que a
+  projeção inicia também aparece no cartão, com barra e "✕") e pela lista de processos. Só no
+  desktop; no navegador os controles não aparecem.
+- **Tocar já enquanto baixa** (Opções → Vídeos On-line, desligado por padrão): o vídeo sem
+  arquivo abre na hora pelo player do YouTube — que pode mostrar anúncio nessa primeira vez —
+  e baixa ao fundo, para as próximas tocarem do arquivo. Não há reprodução progressiva do
+  arquivo: o yt-dlp baixa vídeo e áudio separados e só os junta no fim, então não existe
+  arquivo tocável antes de terminar.
+- **Falhas** (`OnlineVideo.actionForFailure`): vídeo privado, removido, com restrição de idade
+  ou de país → só avisa o operador e **nada vai para o telão**; cancelamento → silencioso;
+  qualquer outra (sem GitHub, ferramenta quebrada, `bot`, disco cheio, transmissão ao vivo) →
+  aviso e cai no player do YouTube (`openEmbeddedYouTube`).
+- **yt-dlp desatualizado** (o YouTube muda o player a cada poucas semanas): falha que uma
+  versão nova resolve (`unknown`, `forbidden`, `format`, `bot`) renova o yt-dlp e repete uma
+  vez, no máximo uma renovação por hora.
+- **Web/PWA** não baixa: continua só com o player do YouTube.
+
+Arquivos: `electron/main/onlineVideo/{ids,store,runner,tools,manager,index}.js`,
+`src/helpers/OnlineVideo.ts`, `src/composables/useMedia.ts` (`openYouTube`),
+`src/composables/useOnlineVideoDownloads.ts` e os componentes
+`src/components/OnlineVideoDownload{,Badge,sBar}.vue`.
+Testes: `electron/main/__tests__/onlineVideo*.spec.js` (unidade; `LJ_NET_TESTS=1` liga o
+ponta a ponta com a internet real) e `e2e/online-video.electron.spec.js`
+(`LJ_RUN_ELECTRON_ONLINE_VIDEO=1`, Electron de verdade).
 
 ---
 

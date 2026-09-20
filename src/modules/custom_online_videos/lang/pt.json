@@ -17,6 +17,7 @@
   "grid": "Miniaturas",
   "empty": "Nenhum vídeo salvo. Clique em \"Adicionar Vídeo\" para começar.",
   "confirm_delete": "Excluir este vídeo?",
+  "confirm_delete_downloaded": "Excluir este vídeo? O arquivo baixado no computador também será apagado.",
   "invalid_url": "URL do YouTube inválida.",
   "save": "Salvar",
   "cancel": "Cancelar",

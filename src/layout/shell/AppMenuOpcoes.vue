@@ -1100,6 +1100,62 @@
           @update:model-value="saveUserData(KEYS.OPTIONS.YOUTUBE_ACTION, $event)"
         />
       </div>
+      <template v-if="isDesktop">
+        <div class="opt-row">
+          <label class="opt-checkbox">
+            <input
+              type="checkbox"
+              :checked="videoDownload"
+              @change="saveUserData(KEYS.OPTIONS.ONLINE_VIDEO_PROJECTION.DOWNLOAD, $c($event))"
+            />
+            <span>{{ $t("options.videos.download") }}</span>
+          </label>
+        </div>
+        <p class="opt-hint">{{ $t("options.videos.download_hint") }}</p>
+        <template v-if="videoDownload">
+          <div class="opt-row">
+            <label class="opt-checkbox">
+              <input
+                type="checkbox"
+                :checked="videoPlayWhileDownloading"
+                @change="
+                  saveUserData(
+                    KEYS.OPTIONS.ONLINE_VIDEO_PROJECTION.PLAY_WHILE_DOWNLOADING,
+                    $c($event)
+                  )
+                "
+              />
+              <span>{{ $t("options.videos.play_while_downloading") }}</span>
+            </label>
+          </div>
+          <p class="opt-hint">{{ $t("options.videos.play_while_downloading_hint") }}</p>
+        </template>
+        <div v-if="videoDownload" class="opt-row">
+          <label class="opt-label" for="opt-videos-max-height">
+            {{ $t("options.videos.max_height") }}
+          </label>
+          <LjSelect
+            id="opt-videos-max-height"
+            :items="opcoesAlturaVideo"
+            :model-value="String(videoMaxHeight)"
+            @update:model-value="
+              saveUserData(KEYS.OPTIONS.ONLINE_VIDEO_PROJECTION.MAX_HEIGHT, Number($event))
+            "
+          />
+        </div>
+        <div class="opt-row">
+          <span class="opt-label">{{ videoCacheLabel }}</span>
+          <LjButton
+            variant="default"
+            size="sm"
+            :icon="ICONS.ACTIONS.DELETE"
+            :disabled="!videoCache.count"
+            @click="clearVideoCache"
+          >
+            {{ $t("options.videos.cache_clear") }}
+          </LjButton>
+        </div>
+      </template>
       <div class="opt-row">
         <label class="opt-checkbox">
           <input
@@ -1416,6 +1472,8 @@ import MonitorShape from "@/components/MonitorShape.vue";
 import $userdata from "@/helpers/UserData";
 import Platform from "@/helpers/Platform";
 import Telemetry from "@/helpers/Telemetry";
+import $alert from "@/helpers/Alert";
+import { DEFAULT_MAX_HEIGHT, MAX_HEIGHTS, normalizeMaxHeight } from "@/helpers/OnlineVideo";
 import { ICONS } from "@/config/Icons";
 import { KEYS } from "@/constants/UserDataKeys";
 import { MAIN_BACKGROUND_ID, Settings } from "@/types/Settings";
@@ -1775,6 +1833,60 @@ const videoProjAlwaysOnTop: ComputedRef<boolean> = computed(
 const vidProjShowReturn: ComputedRef<boolean> = computed(
   () => $userdata.get<boolean>(KEYS.OPTIONS.ONLINE_VIDEO_PROJECTION.SHOW_RETURN, false)!!
 );
+
+const videoDownload: ComputedRef<boolean> = computed(
+  () => $userdata.get<boolean>(KEYS.OPTIONS.ONLINE_VIDEO_PROJECTION.DOWNLOAD, true) !== false
+);
+const videoPlayWhileDownloading: ComputedRef<boolean> = computed(
+  () =>
+    $userdata.get<boolean>(KEYS.OPTIONS.ONLINE_VIDEO_PROJECTION.PLAY_WHILE_DOWNLOADING, false) ===
+    true
+);
+const videoMaxHeight: ComputedRef<number> = computed(() =>
+  normalizeMaxHeight(
+    $userdata.get(KEYS.OPTIONS.ONLINE_VIDEO_PROJECTION.MAX_HEIGHT, DEFAULT_MAX_HEIGHT)
+  )
+);
+const opcoesAlturaVideo = computed(() =>
+  MAX_HEIGHTS.map((h) => ({ value: String(h), label: `${h}p` }))
+);
+
+const videoCache = ref({ count: 0, size: 0 });
+
+function formatVideoBytes(bytes: number): string {
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+  return `${Math.max(1, Math.round(bytes / 1024 ** 2))} MB`;
+}
+
+const videoCacheLabel = computed(() =>
+  videoCache.value.count
+    ? t("options.videos.cache_size", {
+        count: videoCache.value.count,
+        size: formatVideoBytes(videoCache.value.size),
+      })
+    : t("options.videos.cache_empty")
+);
+
+async function refreshVideoCache(): Promise<void> {
+  try {
+    const status = await Platform.onlineVideo?.status();
+    videoCache.value = { count: status?.count ?? 0, size: status?.size ?? 0 };
+  } catch {
+    /* sem o main não há o que mostrar */
+  }
+}
+
+function clearVideoCache(): void {
+  $alert.yesno({ title: "options.videos.cache_clear_confirm" }, async (btn?: string) => {
+    if (btn !== "yes") return;
+    await Platform.onlineVideo?.clear();
+    await refreshVideoCache();
+  });
+}
+
+onMounted(() => {
+  if (isDesktop.value) void refreshVideoCache();
+});
 
 const bibleReturnEnabled: ComputedRef<boolean> = computed(
   () => $userdata.get<boolean>(KEYS.MODULES.BIBLE.SHOW_RETURN, false)!!

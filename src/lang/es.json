@@ -574,8 +574,17 @@
       "action_link": "Enlace en el navegador",
       "action_video": "Vídeo",
       "always_on_top": "Mantener siempre al frente",
+      "cache_clear": "Borrar videos descargados",
+      "cache_clear_confirm": "¿Borrar todos los videos descargados? Se volverán a descargar cuando se usen.",
+      "cache_empty": "Ningún video descargado",
+      "cache_size": "Videos descargados: {count} ({size})",
+      "download": "Descargar el video antes de proyectar (sin anuncios)",
+      "download_hint": "El video se descarga una vez, se guarda en el equipo y se proyecta como un archivo: sin anuncios y con la misma imagen en la proyección, el retorno y el operador. Desactívalo para usar siempre el reproductor de YouTube.",
       "fullscreen": "Mostrar en pantalla completa",
+      "max_height": "Calidad máxima de la descarga",
       "open_return_at": "Pantalla de retorno del vídeo en:",
+      "play_while_downloading": "Si aún no se descargó, reproducir ya en YouTube y descargar en segundo plano",
+      "play_while_downloading_hint": "Empieza al instante, sin esperar. Esa primera vez YouTube puede mostrar anuncios; las siguientes el video se reproduce desde el archivo, sin anuncios. Para no tener espera ni anuncios, descarga los videos antes, en Mis Videos Online.",
       "show_return": "Mostrar en la pantalla de retorno",
       "title": "Vídeos On-line",
       "youtube_action": "Al ejecutar enlace de YouTube en la liturgia, abrir:"
@@ -1430,6 +1439,34 @@
     "fullscreen_auto_hint": "Se necesita un clic porque el navegador no permite que los sitios entren en pantalla completa por sí solos. En la aplicación de escritorio la proyección ya abre en pantalla completa, sin clic.",
     "video_unavailable": "Video no disponible",
     "video_unavailable_hint": "No se pudo cargar el video. Verifique la conexión a internet."
+  },
+  "online_video": {
+    "preparing": "Descargando el video…",
+    "phase": {
+      "tools": "Preparando las herramientas de video (solo la primera vez)",
+      "queued": "En cola",
+      "downloading": "Descargando",
+      "finalizing": "Finalizando"
+    },
+    "errors": {
+      "age": "Este video tiene restricción de edad y no se puede proyectar.",
+      "private": "Este video es privado y no se puede proyectar.",
+      "geo": "Este video no está disponible en tu región.",
+      "unavailable": "Este video fue eliminado o no está disponible.",
+      "fallback": "No se pudo descargar el video. Se usa el reproductor de YouTube, que puede mostrar anuncios.",
+      "download": "No se pudo descargar el video ahora. Inténtalo de nuevo más tarde."
+    },
+    "download": {
+      "start": "Descargar para usar sin internet",
+      "done": "Descargado",
+      "remove": "Quitar descarga",
+      "cancel": "Cancelar descarga",
+      "confirm_remove": "¿Quitar este video descargado del equipo? Sigue en tu lista.",
+      "summary": "Descargados: {count} de {total} ({size})",
+      "download_all": "Descargar todos",
+      "remove_all": "Quitar descargas",
+      "confirm_remove_all": "¿Quitar los {count} videos descargados de esta lista? Siguen en la lista."
+    }
   },
   "chat": {
     "title": "Chat",

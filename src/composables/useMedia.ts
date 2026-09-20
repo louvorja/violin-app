@@ -34,6 +34,9 @@ import { MediaOpenParams } from "@/types/Media";
 import { MusicActionEnum } from "@/enums/MusicActionEnum";
 import AudioLibrary from "@/helpers/AudioLibrary";
 import Telemetry from "@/helpers/Telemetry";
+import * as OnlineVideo from "@/helpers/OnlineVideo";
+import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
+import { useOnlineVideoDownloads } from "@/composables/useOnlineVideoDownloads";
 
 const _audio = useAudioPlayback();
 const _slides = useSlides();
@@ -101,6 +104,7 @@ function _broadcastVideoState(currentTime?: number, isPaused?: boolean): void {
   $broadcast.send(BROADCAST_TYPE.VIDEO_STATE, {
     currentTime: currentTime ?? _audio.currentTime.value,
     isPaused: isPaused ?? _audio.isPaused.value,
+    sentAt: Date.now(),
   });
 }
 
@@ -110,6 +114,135 @@ function _isYouTube(): boolean {
 
 function _keepVideoProjectionOnLoadError(): boolean {
   return Boolean($appdata.get(KEYS.MODULES.MEDIA.CONFIG.VIDEO_FILE, false));
+}
+
+// ─── Vídeo do YouTube baixado (ver helpers/OnlineVideo.ts) ───────────────────
+
+type DownloadedOutcome = "playing" | "stopped" | "embed";
+
+let _ytPrepareSeq = 0;
+let _ytPreparation: { id: string; promise: Promise<DownloadedOutcome> } | null = null;
+// Vídeo que ainda está sendo baixado (some assim que o download termina).
+let _ytDownloading: string | null = null;
+
+/**
+ * O operador desistiu do vídeo que ainda baixava — fechou a mídia ou abriu outra
+ * coisa. Sem isso o vídeo apareceria sozinho no telão quando terminasse.
+ */
+function _dropPendingDownload(): void {
+  if (!_ytDownloading) return;
+  OnlineVideo.cancel(_ytDownloading);
+  _ytDownloading = null;
+  _ytPrepareSeq++; // o resultado que chegar já não interessa
+  // Quem pedir o mesmo vídeo agora começa um preparo novo: reaproveitar o cancelado,
+  // que ainda está encerrando, o faria terminar em "parado" e o vídeo nunca abriria.
+  _ytPreparation = null;
+}
+
+/**
+ * Baixa o vídeo (ou o acha em cache) e o projeta. O download aparece na lista de
+ * processos em segundo plano, com barra e botão de cancelar. Pedir outro vídeo
+ * cancela o que ainda está baixando; pedir o mesmo de novo aproveita o pedido em
+ * curso em vez de abrir uma segunda projeção.
+ */
+function _prepareDownloadedYouTube(id: string, title: string): Promise<DownloadedOutcome> {
+  if (_ytPreparation?.id === id) return _ytPreparation.promise;
+  if (_ytPreparation) OnlineVideo.cancel(_ytPreparation.id);
+
+  const seq = ++_ytPrepareSeq;
+  const promise = _runDownloadedYouTube(id, title, seq).finally(() => {
+    if (_ytPreparation?.promise === promise) _ytPreparation = null;
+  });
+  _ytPreparation = { id, promise };
+  return promise;
+}
+
+async function _runDownloadedYouTube(
+  id: string,
+  title: string,
+  seq: number
+): Promise<DownloadedOutcome> {
+  const t = i18nAtual()?.global?.t;
+  const say = (key: string): string => (t ? String(t(key)) : key);
+  const tasks = useBackgroundTasks();
+  const downloads = useOnlineVideoDownloads();
+  const taskId = `online-video:${id}`;
+  let registered = false;
+
+  _ytDownloading = id;
+  const res = await OnlineVideo.ensure(id, (p) => {
+    if (seq !== _ytPrepareSeq) return;
+    downloads.mark(id, p); // o cartão do vídeo mostra o andamento, e o "✕" cancela
+    // Só entra na lista quando há trabalho de verdade: um vídeo em cache não tem
+    // progresso, e não vale piscar um "preparando" para algo instantâneo.
+    if (!registered) {
+      registered = true;
+      tasks.registerTask(taskId, title || id, () => OnlineVideo.cancel(id));
+      $snackbar.info(say("online_video.preparing"), { key: `ov-prep-${id}`, timeout: 5000 });
+    }
+    tasks.updateTask(taskId, { progress: p.percent, detail: OnlineVideo.phaseText(p) });
+  });
+  if (_ytDownloading === id) _ytDownloading = null;
+  // Baixou de verdade: o cartão passa a mostrar "baixado" sem piscar "não baixado" no meio.
+  if (res.ok && registered) await downloads.refresh();
+  downloads.unmark(id);
+
+  const dropTask = (): void => {
+    if (registered) tasks.dismissTask(taskId);
+  };
+
+  // O operador já pediu outro vídeo: este resultado não interessa mais.
+  if (seq !== _ytPrepareSeq) {
+    dropTask();
+    return "stopped";
+  }
+
+  if (res.ok) {
+    if (registered) tasks.completeTask(taskId);
+    await _openVideoFileProjection(res.url, title);
+    return "playing";
+  }
+
+  const kind = res.error.kind;
+  const action = OnlineVideo.actionForFailure(kind);
+  if (action === "silent") {
+    dropTask();
+    return "stopped";
+  }
+  if (registered) tasks.updateTask(taskId, { status: "error", error: res.error.message });
+  const text = say(OnlineVideo.messageKeyForFailure(kind));
+  if (action === "error") {
+    $snackbar.error(text, { key: `ov-error-${id}`, timeout: 8000 });
+    return "stopped";
+  }
+  $snackbar.warning(text, { key: `ov-fallback-${id}`, timeout: 8000 });
+  return "embed";
+}
+
+/**
+ * Entra pelo mesmo caminho de um vídeo local da liturgia: as janelas de projeção
+ * e retorno tocam o arquivo sem som, sincronizadas por VIDEO_STATE, e o operador
+ * mostra a prévia; o áudio sai da janela principal.
+ */
+async function _openVideoFileProjection(url: string, title: string): Promise<void> {
+  // Se o que estava no ar era o player embutido, as janelas dele saem primeiro.
+  if (_isYouTube()) _self.close(true);
+
+  const payload = { url, type: "video", title };
+  try {
+    localStorage.setItem(KEYS.PROJECTION.LJ_FILE_PROJECTION, JSON.stringify(payload));
+    localStorage.removeItem(KEYS.PROJECTION.LJ_YOUTUBE_PROJECTION);
+  } catch {
+    /* ignore */
+  }
+
+  try {
+    await openVideoProjectionWindows({ withOperator: true });
+  } catch (error) {
+    Telemetry.captureException(error, { operation: "online_video_projection_open" });
+  }
+  $broadcast.send(BROADCAST_TYPE.FILE_PROJECTION, payload);
+  await _self.openAudio({ url, title, mediaType: "video" });
 }
 
 function _loadAudioSrc(
@@ -150,7 +283,16 @@ function _loadAudioSrc(
       source_type: _sourceType(audioUrl),
     })
   );
-  if ($appdata.get(KEYS.SHELL.IS_ONLINE) && $userdata.get(KEYS.MODULES.MEDIA.LAZY_LOAD)) {
+  // Vídeo do YouTube já baixado: o arquivo está no disco e o protocolo atende
+  // `Range`, então o <video> lê direto dele. Passar pelo XHR/blob abaixo traria o
+  // arquivo inteiro (dezenas a centenas de MB) para a memória antes de tocar — e
+  // é justamente o caminho que se usaria sem internet, quando o vídeo baixado
+  // mais faz falta.
+  const streamsFromDisk = audioUrl.startsWith("louvorja://onlinevideo/");
+  if (
+    streamsFromDisk ||
+    ($appdata.get(KEYS.SHELL.IS_ONLINE) && $userdata.get(KEYS.MODULES.MEDIA.LAZY_LOAD))
+  ) {
     if (_activePlayback) {
       _activePlayback = { ..._activePlayback, lazy: true };
       if (!deferAudioContext) _audio.setTelemetryContext(_activePlayback);
@@ -417,10 +559,10 @@ _audio.onTimeUpdate((ct, d) => {
     if (_playlistOnEnd) {
       const handled = _playlistOnEnd();
       if (!handled) {
-        _self.close(true);
+        _self.close(true, true);
       }
     } else {
-      _self.close(true);
+      _self.close(true, true);
     }
   }
 
@@ -495,6 +637,7 @@ const _self = {
   },
 
   async open(params: MediaOpenParams | string | number): Promise<void> {
+    _dropPendingDownload();
     params = _openParams(params);
 
     $dev.write("open media", params);
@@ -1158,7 +1301,12 @@ const _self = {
     $appdata.set(KEYS.MODULES.MEDIA.MINIMIZED, false);
   },
 
-  close(force = false): void {
+  /**
+   * @param keepPendingDownload  o fim natural da mídia não cancela o vídeo do YouTube que
+   *   o operador pediu enquanto ela tocava; qualquer outro fechamento cancela.
+   */
+  close(force = false, keepPendingDownload = false): void {
+    if (force && !keepPendingDownload) _dropPendingDownload();
     if (_isYouTube()) {
       if (!force) {
         const key = "modules.media.alerts.close";
@@ -1275,6 +1423,7 @@ const _self = {
   },
 
   async openAudio(params: MediaOpenParams | string | number): Promise<void> {
+    _dropPendingDownload();
     params = _openParams(params);
     const playback_id = _newPlaybackId();
     const audioMode = params.mode || "audio";
@@ -1421,7 +1570,34 @@ const _self = {
     this.minimize();
   },
 
-  async openYouTube(url: string, title: string): Promise<void> {
+  /**
+   * Abre um vídeo do YouTube. No desktop ele é baixado antes (sem anúncios) e toca
+   * como um vídeo local — projeção, retorno e operador incluídos. O player
+   * embutido fica como reserva.
+   *
+   * @returns true quando há algo tocando; false quando o operador cancelou ou o
+   *          vídeo não pode ser reproduzido (privado, removido, restrito).
+   */
+  async openYouTube(url: string, title: string): Promise<boolean> {
+    const id = OnlineVideo.videoIdFromUrl(url);
+    // Um vídeo que o operador já baixou toca do arquivo mesmo com o download
+    // automático desligado: é de graça e sem anúncio.
+    if (id && (OnlineVideo.downloadEnabled() || (await OnlineVideo.isDownloaded(id)))) {
+      // Sem o arquivo e com o operador preferindo não esperar: começa já pelo player do
+      // YouTube e baixa ao fundo, para que da próxima vez toque do arquivo.
+      if (OnlineVideo.playWhileDownloading() && !(await OnlineVideo.isDownloaded(id))) {
+        void useOnlineVideoDownloads().download(id, title, { keep: false, quiet: true });
+        await this.openEmbeddedYouTube(url, title);
+        return true;
+      }
+      const outcome = await _prepareDownloadedYouTube(id, title);
+      if (outcome !== "embed") return outcome === "playing";
+    }
+    await this.openEmbeddedYouTube(url, title);
+    return true;
+  },
+
+  async openEmbeddedYouTube(url: string, title: string): Promise<void> {
     $dev.write("open youtube", { url, title });
     const playback_id = _newPlaybackId();
     const youtubeContext: AudioTelemetryContext = {

@@ -85,6 +85,7 @@ import $idb from "@/helpers/IndexedDB";
 import { DB_TABLE } from "@/constants/DbTables";
 import Telemetry from "@/helpers/Telemetry";
 import Path from "@/helpers/Path";
+import { syncVideoElement } from "@/helpers/VideoSync";
 
 const { t } = useI18n();
 const root = ref(null);
@@ -251,13 +252,7 @@ useBroadcastListener(BROADCAST_TYPE.VIDEO_STATE, (payload) => {
       });
     }
   }
-  if (typeof payload?.currentTime === "number" && el.readyState >= 1) {
-    const drift = Math.abs(el.currentTime - payload.currentTime);
-    if (drift > 1.5) {
-      const duration = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : Infinity;
-      el.currentTime = Math.max(0, Math.min(payload.currentTime, duration));
-    }
-  }
+  syncVideoElement(el, payload || {});
 });
 
 useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, () => {

@@ -76,6 +76,7 @@ import { SETTINGS_TABLE } from "@/constants/DbTables";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 import Telemetry from "@/helpers/Telemetry";
 import { normalizeYouTubeError } from "@/helpers/YouTubeError";
+import { syncVideoElement } from "@/helpers/VideoSync";
 
 GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
@@ -401,15 +402,10 @@ useBroadcastListener(BROADCAST_TYPE.VIDEO_STATE, (payload: unknown) => {
     }
   }
 
-  if (typeof data.currentTime === "number") {
-    const drift = Math.abs(el.currentTime - data.currentTime);
-    if (drift > 1.5 && el.readyState >= 1) {
-      try {
-        el.currentTime = Math.max(0, data.currentTime);
-      } catch {
-        /* metadata ainda não chegou */
-      }
-    }
+  try {
+    syncVideoElement(el, data);
+  } catch {
+    /* metadata ainda não chegou */
   }
 });
 
