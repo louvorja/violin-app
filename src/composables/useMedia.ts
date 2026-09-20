@@ -1569,6 +1569,10 @@ const _self = {
     $appdata.set(KEYS.MODULES.MEDIA.CONFIG.CURRENT_TIME, 0);
     $appdata.set(KEYS.MODULES.MEDIA.CONFIG.DURATION, 0);
     $appdata.set(KEYS.MODULES.MEDIA.CONFIG.PROGRESS, 0);
+    // O espelho de `_slides.slideIndex` só grava quando o índice muda: uma
+    // música que parte do slide 0 nunca o dispara, e o contador da janela de
+    // Mídia mostrava NaN/N com o slide ativo sem marcação.
+    $appdata.set(KEYS.MODULES.MEDIA.CONFIG.SLIDE_INDEX, 0);
     $appdata.set(KEYS.MODULES.MEDIA.CONFIG.VOLUME, 100);
     $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED, false);
     $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_FADING, false);
