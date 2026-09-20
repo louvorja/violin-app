@@ -61,6 +61,12 @@ export function useDisplays(): {
   setPreferred: (feature: string, displayId: number | string) => Promise<void>;
   getPreferred: (feature: string) => number | string | null;
   identify: (durationMs?: number) => Promise<void>;
+  /** Indica que a identificação de monitores está em andamento. */
+  isIdentifying: Ref<boolean>;
+  /** Último erro da identificação, ou null após sucesso. */
+  lastIdentifyError: Ref<string | null>;
+  /** Timestamp da última identificação concluída com sucesso. */
+  lastIdentifiedAt: Ref<number | null>;
   roles: Ref<RoleState[]>;
   screenAccess: Ref<string>;
   requestScreenAccess: () => Promise<void>;
@@ -70,6 +76,9 @@ export function useDisplays(): {
 } {
   const displays = ref<ElectronDisplay[]>([]);
   const prefs    = ref<DisplayPrefs>({});
+  const isIdentifying = ref(false);
+  const lastIdentifyError = ref<string | null>(null);
+  const lastIdentifiedAt = ref<number | null>(null);
   const roles    = ref<RoleState[]>([]);
 
   /**
@@ -206,15 +215,24 @@ export function useDisplays(): {
   }
 
   async function identify(durationMs = 5000): Promise<void> {
-    if (!Platform.displays) {
-      // No navegador, um popup por tela — é o mais próximo das janelas nativas.
-      WebDisplays.identify(durationMs);
-      return;
-    }
+    if (isIdentifying.value) return;
+
+    isIdentifying.value = true;
+    lastIdentifyError.value = null;
     try {
-      await Platform.displays.identify(durationMs);
+      if (!Platform.displays) {
+        // No navegador, um popup por tela — é o mais próximo das janelas nativas.
+        await Promise.resolve(WebDisplays.identify(durationMs));
+      } else {
+        await Platform.displays.identify(durationMs);
+      }
+      lastIdentifiedAt.value = Date.now();
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      lastIdentifyError.value = message || "Não foi possível identificar os monitores";
       console.error("[useDisplays] identify falhou:", err);
+    } finally {
+      isIdentifying.value = false;
     }
   }
 
@@ -261,6 +279,9 @@ export function useDisplays(): {
     setPreferred,
     getPreferred,
     identify,
+    isIdentifying,
+    lastIdentifyError,
+    lastIdentifiedAt,
     roles,
     screenAccess,
     requestScreenAccess,

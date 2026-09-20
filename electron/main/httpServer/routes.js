@@ -4,6 +4,7 @@ const path = require("path");
 const fs = require("fs");
 const jsonCache = require("../jsonCache.js");
 const devices = require("../devices.js");
+const { safeSend } = require("../safeWebContents.js");
 
 const KEY_LITURGY_DAYS = "modules.liturgy.days";
 const KEY_LITURGY_ACTIVE_DAY = "modules.liturgy.active_day";
@@ -127,7 +128,7 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
       clearTimeout(timeout);
       res.json(data);
     });
-    mainWindow.webContents.send("http:song-slides", {
+    safeSend(mainWindow, "http:song-slides", {
       action: "playing-check",
       replyChannel: channel,
     });
@@ -243,7 +244,7 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
       payload.index = parseInt(req.body.index, 10);
     }
 
-    mainWindow.webContents.send("http:song-slides", payload);
+    safeSend(mainWindow, "http:song-slides", payload);
     res.json({ status: "ok", action, payload });
   });
 
@@ -276,19 +277,19 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
 
     if (action === "close") {
       const payload = { action: "bible-close" };
-      mainWindow.webContents.send("http:song-slides", payload);
+      safeSend(mainWindow, "http:song-slides", payload);
       return res.json({ status: "ok", action: "bible-close", payload });
     }
 
     if (action === "next") {
       const payload = { action: "bible-next" };
-      mainWindow.webContents.send("http:song-slides", payload);
+      safeSend(mainWindow, "http:song-slides", payload);
       return res.json({ status: "ok", action: "bible-next", payload });
     }
 
     if (action === "prev") {
       const payload = { action: "bible-prev" };
-      mainWindow.webContents.send("http:song-slides", payload);
+      safeSend(mainWindow, "http:song-slides", payload);
       return res.json({ status: "ok", action: "bible-prev", payload });
     }
 
@@ -309,7 +310,7 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
       versionId,
     };
 
-    mainWindow.webContents.send("http:song-slides", payload);
+    safeSend(mainWindow, "http:song-slides", payload);
     res.json({ status: "ok", action: "bible-verse", payload });
   });
 
@@ -328,7 +329,7 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
     }
 
     const payload = { action: "liturgy-execute", id, tag: req.body.tag };
-    mainWindow.webContents.send("http:song-slides", payload);
+    safeSend(mainWindow, "http:song-slides", payload);
     res.json({ status: "ok", action: "liturgy-execute", payload });
   });
 
@@ -350,7 +351,7 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
 
     const mode = _resolveSongMode(req.body);
 
-    mainWindow.webContents.send("http:open-song", { id_music: id, mode, id: id_liturgy });
+    safeSend(mainWindow, "http:open-song", { id_music: id, mode, id: id_liturgy });
     res.json({ status: "ok", id, mode });
   });
 
@@ -424,7 +425,7 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
       _sorteios.number.history.push(num);
 
       if (mainWindow) {
-        mainWindow.webContents.send("http:drawing-number", { number: num });
+        safeSend(mainWindow, "http:drawing-number", { number: num });
       }
 
       return res.json({ status: "ok", number: num, history: _sorteios.number.history });
@@ -463,7 +464,7 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
       _sorteios.name.history.push(name);
 
       if (mainWindow) {
-        mainWindow.webContents.send("http:drawing-name", { name });
+        safeSend(mainWindow, "http:drawing-name", { name });
       }
 
       return res.json({ status: "ok", name, history: _sorteios.name.history });
@@ -553,7 +554,7 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
         clearTimeout(timeout);
         res.json(data);
       });
-      mainWindow.webContents.send("http:song-slides", { action: "announcements-list", replyChannel: channel });
+      safeSend(mainWindow, "http:song-slides", { action: "announcements-list", replyChannel: channel });
       return;
     }
 
@@ -570,22 +571,22 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
 
     if (action === "project") {
       const ids = req.body.ids || [];
-      mainWindow.webContents.send("http:song-slides", { action: "announcements-project", ids });
+      safeSend(mainWindow, "http:song-slides", { action: "announcements-project", ids });
       return res.json({ status: "ok", action: "announcements-project" });
     }
 
     if (action === "next") {
-      mainWindow.webContents.send("http:song-slides", { action: "announcements-next" });
+      safeSend(mainWindow, "http:song-slides", { action: "announcements-next" });
       return res.json({ status: "ok", action: "announcements-next" });
     }
 
     if (action === "prev") {
-      mainWindow.webContents.send("http:song-slides", { action: "announcements-prev" });
+      safeSend(mainWindow, "http:song-slides", { action: "announcements-prev" });
       return res.json({ status: "ok", action: "announcements-prev" });
     }
 
     if (action === "stop") {
-      mainWindow.webContents.send("http:song-slides", { action: "announcements-stop" });
+      safeSend(mainWindow, "http:song-slides", { action: "announcements-stop" });
       return res.json({ status: "ok", action: "announcements-stop" });
     }
 
@@ -600,7 +601,7 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
     if (!mainWindow) {
       return res.status(503).json({ error: "Janela principal não disponível" });
     }
-    mainWindow.webContents.send("http:projections-close");
+    safeSend(mainWindow, "http:projections-close");
     res.json({ status: "ok", action: "projections-close" });
   });
 
@@ -663,9 +664,7 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
     // Envia IPC para o renderer local
     const mainWindow = getValidMainWindow();
     if (mainWindow) {
-      try {
-        mainWindow.webContents.send("transmission:chat-message", msg);
-      } catch (_) { /* noop */ }
+      safeSend(mainWindow, "transmission:chat-message", msg);
     }
 
     res.json({ ok: true, id: msg.id });
@@ -707,7 +706,7 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
 
       const mainWindow = getValidMainWindow();
       if (mainWindow) {
-        mainWindow.webContents.send("http:libras-bundle", { token, replyChannel: channel });
+        safeSend(mainWindow, "http:libras-bundle", { token, replyChannel: channel });
       } else {
         clearTimeout(timeout);
         ipcMain.removeAllListeners(channel);

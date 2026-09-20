@@ -31,6 +31,7 @@ const path = require("path");
 const https = require("https");
 const http = require("http");
 const { installRequiresWindowsElevation } = require("./windowsInstallScope.js");
+const { safeSend } = require("./safeWebContents.js");
 
 const GITHUB_OWNER = "louvorja";
 const GITHUB_REPO = "violin-app";
@@ -86,9 +87,7 @@ _state.version = app.getVersion() || "0.0.0";
 // ---------------------------------------------------------------------------
 
 function _emit() {
-  if (_mainWindow && !_mainWindow.isDestroyed()) {
-    _mainWindow.webContents.send("updater:state", { ..._state });
-  }
+  safeSend(_mainWindow, "updater:state", { ..._state });
 }
 
 function _setState(patch) {
@@ -397,9 +396,12 @@ function _pipeToFile(res, dest, tmp, info, webContents, resolve, reject) {
         transferred: received,
         total,
       });
-      if (webContents && !webContents.isDestroyed()) {
-        webContents.send("updater:package-progress", { percent: pct, received, total, bytesPerSecond });
-      }
+      safeSend(webContents, "updater:package-progress", {
+        percent: pct,
+        received,
+        total,
+        bytesPerSecond,
+      });
     }
   });
   res.pipe(out);
@@ -416,13 +418,27 @@ function _pipeToFile(res, dest, tmp, info, webContents, resolve, reject) {
  */
 function openPackage() {
   if (!_state.packagePath) return Promise.resolve({ ok: false, error: "Nenhum pacote baixado" });
+
+  const installType = getInstallType();
+  if (process.platform === "linux" && installType === "appimage") {
+    openReleasePage();
+    return Promise.resolve({
+      ok: true,
+      action: "manual-appimage",
+      installType,
+      message: "Abra o novo AppImage baixado ou a página da release para concluir a atualização.",
+    });
+  }
+
   return require("electron").shell.openPath(_state.packagePath).then(
     (err) => {
-      if (err) return { ok: false, error: err };
-      setTimeout(() => require("electron").app.quit(), 500);
-      return { ok: true };
+      if (err) return { ok: false, error: err, installType };
+      // deb/rpm são instalados por um gerenciador externo. Fechar o app neste
+      // ponto interrompia fluxos que ainda pedem confirmação e causava replies
+      // perdidos no Linux. O encerramento fica sob controle explícito da UI.
+      return { ok: true, action: "opened-package", installType };
     },
-    (err) => ({ ok: false, error: String(err) })
+    (err) => ({ ok: false, error: String(err), installType })
   );
 }
 
@@ -725,15 +741,16 @@ function cancelDownload() {
  * - Dev ou check via GitHub API: abre o pacote baixado e fecha o app
  *   após o instalador ser lançado.
  */
-function quitAndInstall() {
+async function quitAndInstall() {
   if (!autoUpdater || !autoUpdater.isUpdaterActive() || _checkedViaGithub) {
-    if (_state.packagePath) {
-      require("electron").shell.openPath(_state.packagePath);
-      setTimeout(() => require("electron").app.quit(), 500);
-    }
-    return;
+    // O download manual não tem confirmação de instalação pelo sistema.
+    // Em particular, nunca encerra o AppImage após abrir o arquivo: o
+    // operador precisa executar/substituir a instalação explicitamente.
+    return openPackage();
   }
+
   autoUpdater.quitAndInstall();
+  return { ok: true, action: "quit-and-install", installType: getInstallType() };
 }
 
 /**

@@ -87,16 +87,39 @@ function _create(): AudioPlayback {
     }
   }
 
+  function _mediaErrorName(code: number | undefined): string | undefined {
+    return code === 1 ? "MEDIA_ERR_ABORTED"
+      : code === 2 ? "MEDIA_ERR_NETWORK"
+        : code === 3 ? "MEDIA_ERR_DECODE"
+          : code === 4 ? "MEDIA_ERR_SRC_NOT_SUPPORTED"
+            : undefined;
+  }
+
+  function _sourceKind(sourceType: string | undefined): string {
+    if (sourceType === "youtube") return "youtube";
+    if (sourceType === "cached" || sourceType === "cache") return "cached";
+    if (sourceType === "remote" || sourceType === "network") return "remote";
+    return "local";
+  }
+
   function _telemetryProps(el: HTMLMediaElement, extra: Record<string, unknown> = {}): Record<string, unknown> {
     const error = el.error;
+    const context: Partial<AudioTelemetryContext> =
+      _elementTelemetryContext.get(el) || _telemetryContext || {};
+    const sourceType = typeof context.source_type === "string" ? context.source_type : undefined;
+    const api = typeof window !== "undefined" ? window.louvorjaApi : undefined;
     return {
-      ...(_elementTelemetryContext.get(el) || _telemetryContext || {}),
+      ...context,
       current_time: Number.isFinite(el.currentTime) ? Number(el.currentTime.toFixed(3)) : 0,
       duration: Number.isFinite(el.duration) ? Number(el.duration.toFixed(3)) : 0,
       ready_state: el.readyState,
       network_state: el.networkState,
       media_error_code: error?.code,
+      media_error_name: _mediaErrorName(error?.code),
       media_error_message: error?.message,
+      source_kind: _sourceKind(sourceType),
+      is_desktop: !!api,
+      platform: api?.platform || "web",
       buffered_seconds: (() => {
         try {
           if (!el.buffered.length) return 0;
@@ -169,7 +192,12 @@ function _create(): AudioPlayback {
     if (eventName === "error") {
       const reason = el.error?.code === 1 ? "aborted" : el.error?.code === 2 ? "network" :
         el.error?.code === 3 ? "decode" : el.error?.code === 4 ? "source_not_supported" : "unknown";
-      const failure = { stage: "media_element", reason, file_ext: _srcExtension(el) };
+      const failure = {
+        stage: "media_element",
+        reason,
+        error_name: _mediaErrorName(el.error?.code),
+        file_ext: _srcExtension(el),
+      };
       Telemetry.track("music_playback_failed", _telemetryProps(el, failure));
       Telemetry.log("error", "music media error", _telemetryProps(el, failure));
       return;

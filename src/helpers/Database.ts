@@ -105,6 +105,65 @@ enum ENDPOINT_CATEGORIES {
 
 /** Cache em memória — primeira camada (instantânea, mesma sessão). */
 const _memory = new Map<string, CacheEntry<unknown>>();
+const MEMORY_CACHE_BUDGET_BYTES = 32 * 1024 * 1024;
+const MEMORY_CACHE_ENTRY_LIMIT_BYTES = 16 * 1024 * 1024;
+let _memoryBytes = 0;
+
+/**
+ * Datasets essenciais permanecem protegidos durante a limpeza por LRU. Eles
+ * ainda podem ser invalidados explicitamente; a proteção só vale para pressão
+ * automática do orçamento.
+ */
+function isEssentialMemoryDataset(file: string): boolean {
+  return /(^|_)(musics|hymnal|hymnal_1996|bible_version|bible_book|categories)$/.test(file);
+}
+
+function estimateMemoryBytes(data: unknown): number {
+  try {
+    // UTF-16 é uma estimativa conservadora para strings mantidas pelo renderer.
+    return JSON.stringify(data).length * 2;
+  } catch {
+    return MEMORY_CACHE_ENTRY_LIMIT_BYTES + 1;
+  }
+}
+
+function memoryDelete(file: string): void {
+  const previous = _memory.get(file);
+  if (!previous) return;
+  const previousBytes = (previous as CacheEntry<unknown> & { memoryBytes?: number }).memoryBytes ?? 0;
+  _memoryBytes = Math.max(0, _memoryBytes - previousBytes);
+  _memory.delete(file);
+}
+
+function memoryGet<T>(file: string): CacheEntry<T> | undefined {
+  const entry = _memory.get(file) as CacheEntry<T> | undefined;
+  if (entry) entry.ts = Date.now();
+  return entry;
+}
+
+function memorySet<T>(file: string, data: T): void {
+  const bytes = estimateMemoryBytes(data);
+  memoryDelete(file);
+  if (bytes > MEMORY_CACHE_ENTRY_LIMIT_BYTES) return;
+
+  while (_memoryBytes + bytes > MEMORY_CACHE_BUDGET_BYTES) {
+    const candidate = [..._memory.entries()]
+      .filter(([key]) => !isEssentialMemoryDataset(key))
+      .sort(([, a], [, b]) => a.ts - b.ts)[0];
+    if (!candidate) break;
+    memoryDelete(candidate[0]);
+  }
+
+  const entry = {
+    id: file,
+    data,
+    ts: Date.now(),
+    v: getVersion(),
+    memoryBytes: bytes,
+  } as CacheEntry<T> & { memoryBytes: number };
+  _memory.set(file, entry);
+  _memoryBytes += bytes;
+}
 
 /**
  * Buscas de rede em andamento, por chave. Vários módulos abrem no mesmo boot
@@ -448,7 +507,7 @@ function fetchAndStore<T>(file: string, fresh: boolean): Promise<T | null> {
     }
 
     await writeRouted(file, data, route);
-    _memory.set(file, { id: file, data, ts: Date.now(), v: getVersion() });
+    memorySet(file, data);
 
     return data;
   })();
@@ -475,11 +534,12 @@ export default {
   invalidate(file?: string): void {
     if (!file) {
       _memory.clear();
+      _memoryBytes = 0;
       for (const t of CATALOG_TABLES) void $idb.clear(t);
       $dev.write("Cache do DB limpo (tudo)");
       return;
     }
-    _memory.delete(file);
+    memoryDelete(file);
     const r = routeFor(file);
     if (!r) {
       void $idb.del(DB_TABLE.CACHE, file);
@@ -504,6 +564,7 @@ export default {
   /** Igual a invalidate() sem argumento, mas aguardando a limpeza terminar. */
   async invalidateAll(): Promise<void> {
     _memory.clear();
+    _memoryBytes = 0;
     await Promise.all(CATALOG_TABLES.map((t) => $idb.clear(t)));
     $dev.write("Cache do DB limpo (tudo, aguardado)");
   },
@@ -517,7 +578,7 @@ export default {
     try {
       if (!opts.fresh) {
         // 1) Memória — instantâneo (mesma sessão).
-        const mem = _memory.get(file);
+        const mem = memoryGet(file);
         if (mem && isValidV(mem.v)) {
           $dev.write(`Lendo DB da memória`, file);
           reportTiming({ file, source: "memory", fresh }, startedAt);
@@ -528,7 +589,7 @@ export default {
         const routed = await readRouted<T>(file, routeFor(file));
         if (routed !== null) {
           $dev.write(`Lendo DB do cache IDB`, file);
-          _memory.set(file, { id: file, data: routed, ts: Date.now(), v: getVersion() });
+          memorySet(file, routed);
           reportTiming({ file, source: "indexeddb", fresh }, startedAt);
           return routed;
         }
@@ -540,7 +601,7 @@ export default {
     } catch (error) {
       // Stale-if-error: sem rede/protocolo indisponível, qualquer cache existente
       // (mesmo antigo) é preferível a quebrar — essencial para uso offline.
-      const mem = _memory.get(file);
+      const mem = memoryGet(file);
       if (mem && isValidV(mem.v)) {
         $dev.write(`Rede falhou — usando memória`, file);
         reportTiming({ file, source: "stale-memory", fresh }, startedAt);
@@ -549,7 +610,7 @@ export default {
       try {
         const routed = await readRouted<T>(file, routeFor(file));
         if (routed !== null) {
-          _memory.set(file, { id: file, data: routed, ts: Date.now(), v: getVersion() });
+          memorySet(file, routed);
           $dev.write(`Rede falhou — usando cache IDB`, file);
           reportTiming({ file, source: "stale-indexeddb", fresh }, startedAt);
           return routed;

@@ -48,3 +48,6 @@ pnpm-debug.log*
 *.sln
 *.sw?
 .playwright-mcp/
+
+# graphify-axet
+.graphify/

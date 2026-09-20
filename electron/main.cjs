@@ -34,6 +34,7 @@ const os = require("os");
 const { randomUUID } = require("crypto");
 const fs = require("fs-extra");
 const { configureSystemCertificates } = require("./main/systemCertificates.js");
+const { safeSend } = require("./main/safeWebContents.js");
 
 // O processo principal usa `https` para updater, catálogo e mídia. No
 // Windows, acrescente as raízes que o SO confia antes de qualquer módulo poder
@@ -336,9 +337,7 @@ function reportMainProcessError(source, error) {
   // chegar. A fila permite enviar o stack no próximo boot e evita perda muda
   // justamente no caso mais importante: uncaughtException.
   telemetryErrorQueue.enqueue(MAIN_ERROR_QUEUE_PATH, payload);
-  try {
-    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("telemetry:main-error", payload);
-  } catch (_) { /* processo pode estar encerrando */ }
+  safeSend(mainWindow, "telemetry:main-error", payload);
   console.error(`[${source}]`, payload.message);
 }
 
@@ -555,10 +554,10 @@ function createWindow() {
 
   // Sinalizar mudanças de estado de maximização para o renderer (SystemBar)
   mainWindow.on("maximize", () => {
-    try { mainWindow.webContents.send("window:maximizeChange", true); } catch (_) { /* ignore */ }
+    safeSend(mainWindow, "window:maximizeChange", true);
   });
   mainWindow.on("unmaximize", () => {
-    try { mainWindow.webContents.send("window:maximizeChange", false); } catch (_) { /* ignore */ }
+    safeSend(mainWindow, "window:maximizeChange", false);
   });
 
   // Encaminha erros/warnings do renderer para o terminal. Em produção fica
@@ -625,8 +624,7 @@ function _persistUserDataFromMain(path) {
   }
   const payload = { path, value: _walkGet(_userDataMain, path) };
   for (const w of BrowserWindow.getAllWindows()) {
-    if (!w || w.isDestroyed()) continue;
-    try { w.webContents.send("userdata:patch", payload); } catch (_) { /* ignore */ }
+    safeSend(w, "userdata:patch", payload);
   }
 }
 
@@ -1131,7 +1129,7 @@ ipcMain.handle("userdata:patch", (event, payload) => {
   for (const w of BrowserWindow.getAllWindows()) {
     if (!w || w.isDestroyed()) continue;
     if (w.webContents === sender) continue;
-    try { w.webContents.send("userdata:patch", payload); } catch (_) { /* ignore */ }
+    safeSend(w, "userdata:patch", payload);
   }
   return { ok: true };
 });
@@ -1330,9 +1328,8 @@ ipcMain.on("transmission:broadcast", (event, msg) => {
   // janelas de projeção carregam via HTTP (origem diferente da principal)
   // e o BroadcastChannel cross-origin não funciona.
   for (const w of BrowserWindow.getAllWindows()) {
-    if (!w || w.isDestroyed()) continue;
     if (w === mainWindow) continue;
-    try { w.webContents.send("broadcast:relay", msg); } catch (_) { /* noop */ }
+    safeSend(w, "broadcast:relay", msg);
   }
 });
 
@@ -1413,8 +1410,7 @@ ipcMain.handle("devices:save", (_e, deviceList) => {
   }
   // Fan-out para todas as janelas
   for (const w of BrowserWindow.getAllWindows()) {
-    if (!w || w.isDestroyed()) continue;
-    try { w.webContents.send("devices:changed", deviceList); } catch (_) { /* noop */ }
+    safeSend(w, "devices:changed", deviceList);
   }
   return { ok: true };
 });
@@ -1917,12 +1913,7 @@ ipcMain.handle("net:getStatus", () => netHealth.status());
 
 netHealth.onChange((estado) => {
   for (const win of BrowserWindow.getAllWindows()) {
-    if (!win || win.isDestroyed()) continue;
-    try {
-      win.webContents.send("net:status", estado);
-    } catch (_) {
-      /* janela indo embora */
-    }
+    safeSend(win, "net:status", estado);
   }
 });
 

@@ -17,6 +17,7 @@
  */
 
 const { globalShortcut, BrowserWindow } = require("electron");
+const { safeSend } = require("./safeWebContents.js");
 
 /** @type {BrowserWindow | null} */
 let _mainWindow = null;
@@ -44,15 +45,12 @@ function setMainWindow(win) {
 function dispatch(action, payload = {}) {
   // Prioridade 1: janela do nosso app que está em foco
   const focused = BrowserWindow.getFocusedWindow();
-  if (focused && !focused.isDestroyed()) {
-    focused.webContents.send("shortcut", { action, payload });
+  if (focused && safeSend(focused, "shortcut", { action, payload })) {
     return;
   }
 
   // Prioridade 2: janela principal (app pode estar em background)
-  if (_mainWindow && !_mainWindow.isDestroyed()) {
-    _mainWindow.webContents.send("shortcut", { action, payload });
-  }
+  safeSend(_mainWindow, "shortcut", { action, payload });
 }
 
 /**

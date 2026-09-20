@@ -100,6 +100,7 @@ import { loadYtApi } from "@/composables/useYouTubeApi";
 import { getDocument, GlobalWorkerOptions } from "pdfjs-dist";
 import pdfjsWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import Telemetry from "@/helpers/Telemetry";
+import { normalizeYouTubeError } from "@/helpers/YouTubeError";
 
 GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
@@ -350,19 +351,26 @@ function _initYoutube(): void {
           });
           _broadcastYtState();
         },
-        onError: (e: { data: number }) => {
-          const code = e?.data;
+        onError: (e: unknown) => {
+          const normalized = normalizeYouTubeError(e);
+          const error = new Error(normalized.message);
+          error.name = normalized.name;
           Telemetry.track("music_playback_failed", {
             playback_id: fileState.playback_id,
             stage: "youtube_player",
-            reason: `youtube_${code}`,
-            provider_code: code,
-            page_origin: window.location.origin,
+            reason: normalized.kind,
+            error_name: normalized.name,
+            ...normalized.properties,
+            source_kind: "youtube",
+            is_desktop: false,
+            platform: "web",
             window_role: "background_projection_return",
           });
-          Telemetry.captureException(new Error(`YouTube player error ${code}`), {
+          Telemetry.captureException(error, {
             playback_id: fileState.playback_id,
             operation: "youtube_player",
+            stage: "youtube_player",
+            ...normalized.properties,
           });
         },
       },

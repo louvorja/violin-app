@@ -4,6 +4,7 @@ const http = require("http");
 const apiClient = require("./api.js");
 const integrity = require("./integrity.js");
 const { HttpQueue } = require("./httpQueue.js");
+const { safeSend } = require("../safeWebContents.js");
 
 let _activeQueue = null;
 let _filesUrl = "";
@@ -138,15 +139,15 @@ async function startDownload(files, webContents) {
   _activeQueue = new HttpQueue({ baseUrl: _filesUrl, apiToken: _apiToken });
   _activeQueue.add(toDownload);
 
-  _activeQueue.on("progress", (data) => webContents.send("download:progress", data));
-  _activeQueue.on("file-done", (data) => webContents.send("download:file-done", data));
-  _activeQueue.on("file-error", (data) => webContents.send("download:file-error", data));
+  _activeQueue.on("progress", (data) => safeSend(webContents, "download:progress", data));
+  _activeQueue.on("file-done", (data) => safeSend(webContents, "download:file-done", data));
+  _activeQueue.on("file-error", (data) => safeSend(webContents, "download:file-error", data));
   _activeQueue.on("queue-done", (data) => {
-    webContents.send("download:queue-done", data);
+    safeSend(webContents, "download:queue-done", data);
     _activeQueue = null;
   });
   _activeQueue.on("queue-cancelled", () => {
-    webContents.send("download:queue-cancelled");
+    safeSend(webContents, "download:queue-cancelled");
     _activeQueue = null;
   });
 

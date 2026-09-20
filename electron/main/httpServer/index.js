@@ -34,6 +34,7 @@ const { setupAuth } = require("./auth.js");
 const { setupRoutes } = require("./routes.js");
 const events = require("./events.js");
 const spa = require("./spa.js");
+const { safeSend } = require("../safeWebContents.js");
 
 let _server = null;
 let _port = 7070;
@@ -285,12 +286,8 @@ async function start({ port, mainWindow } = {}) {
       }
       const currentList = devices.list();
       for (const w of windows) {
-        try {
-          w.webContents.send("devices:pending", device);
-          w.webContents.send("devices:changed", currentList);
-        } catch (e) {
-          console.error("[httpServer] Falha ao enviar devices:pending:", e?.message || e);
-        }
+        safeSend(w, "devices:pending", device);
+        safeSend(w, "devices:changed", currentList);
       }
       console.log(`[httpServer] devices:pending enviado para ${windows.length} janela(s)`);
     } else {
@@ -360,11 +357,7 @@ async function start({ port, mainWindow } = {}) {
         // valores de módulos). Sem isso, ligar o servidor com música já tocando
         // deixaria o cliente SSE conectado mas sem nada para renderizar — os
         // emissores só publicam ao MUDAR de slide/versículo.
-        try {
-          if (_mainWindow && !_mainWindow.isDestroyed()) {
-            _mainWindow.webContents.send("transmission:request-state");
-          }
-        } catch (_) { /* noop */ }
+        safeSend(_mainWindow, "transmission:request-state");
         resolve({ port, token: _token });
       });
       server.on("error", (err) => {

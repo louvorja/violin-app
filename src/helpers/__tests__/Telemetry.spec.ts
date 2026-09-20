@@ -369,7 +369,7 @@ describe("Telemetry", () => {
     expect(isProjectionMilestone(0, 1, true)).toBe(true);
   });
 
-  it("registra leituras do banco fora da memória e deixa acertos de 0 ms só no histograma", async () => {
+  it("agrega leituras normais do banco e só cria evento individual para degradações", async () => {
     const Telemetry = await loadTelemetry();
     await Telemetry.init();
     posthog.capture.mockClear();
@@ -377,6 +377,8 @@ describe("Telemetry", () => {
     expect(report).toBeDefined();
 
     report?.({ file: "music_123", source: "memory", duration_ms: 0, fresh: false });
+    report?.({ file: "music_123", source: "network", duration_ms: 320, fresh: false });
+    report?.({ file: "music_123", source: "indexeddb", duration_ms: 24, fresh: false });
 
     expect(posthog.capture).not.toHaveBeenCalledWith("database_read", expect.anything());
     expect(posthog.metrics.histogram).toHaveBeenCalledWith(
@@ -384,12 +386,17 @@ describe("Telemetry", () => {
       0,
       expect.anything(),
     );
+    expect(posthog.metrics.histogram).toHaveBeenCalledWith(
+      "louvorja.database.read.duration",
+      320,
+      expect.objectContaining({ attributes: expect.objectContaining({ dataset: "music_:id" }) }),
+    );
 
-    report?.({ file: "music_123", source: "network", duration_ms: 320, fresh: false });
+    report?.({ file: "music_123", source: "stale-indexeddb", duration_ms: 320, fresh: false });
 
     expect(posthog.capture).toHaveBeenCalledWith(
       "database_read",
-      expect.objectContaining({ source: "network", dataset: "music_:id" }),
+      expect.objectContaining({ source: "stale-indexeddb", dataset: "music_:id" }),
     );
   });
 

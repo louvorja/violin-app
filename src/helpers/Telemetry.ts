@@ -1482,8 +1482,15 @@ setNetworkTimingReporter((timing) => {
 });
 setDatabaseTimingReporter((timing) => {
   const dataset = timing.file.replace(/_\d+$/g, "_:id").slice(0, 100);
-  // Acertos em memória (~0 ms) vão só ao histograma; um evento por leitura era ruído.
-  if (timing.source !== "memory") track("database_read", { ...timing, dataset });
+  const diagnosticSource =
+    timing.source === "error" ||
+    timing.source === "stale-memory" ||
+    timing.source === "stale-indexeddb";
+
+  // O histograma agrega todas as leituras e é a fonte para percentis e volume.
+  // Eventos individuais ficam restritos a degradações reais: registrar cada
+  // leitura de rede transformava telemetria de diagnóstico em 72% da cota.
+  if (diagnosticSource) track("database_read", { ...timing, dataset });
   histogram("louvorja.database.read.duration", timing.duration_ms, {
     source: timing.source,
     dataset,

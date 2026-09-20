@@ -17,6 +17,7 @@ const { BrowserWindow, screen } = require("electron");
 const displays = require("./displays.js");
 const monitorConfig = require("./monitorConfig.js");
 const windowFactory = require("./windowFactory.js");
+const { safeSend } = require("./safeWebContents.js");
 
 /**
  * Drivers de projetor emitem vários eventos ao reconectar (added seguido de
@@ -35,12 +36,7 @@ let _attached = false;
 /** Envia um evento para todas as janelas vivas. */
 function _broadcast(channel, payload) {
   for (const win of BrowserWindow.getAllWindows()) {
-    if (!win || win.isDestroyed()) continue;
-    try {
-      win.webContents.send(channel, payload);
-    } catch (_) {
-      /* janela indo embora */
-    }
+    safeSend(win, channel, payload);
   }
 }
 

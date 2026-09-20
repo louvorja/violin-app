@@ -75,6 +75,7 @@ import { Settings } from "@/types/Settings";
 import { DB_TABLE, SETTINGS_TABLE } from "@/constants/DbTables";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 import Telemetry from "@/helpers/Telemetry";
+import { normalizeYouTubeError } from "@/helpers/YouTubeError";
 import $idb from "@/helpers/IndexedDB";
 
 GlobalWorkerOptions.workerSrc = pdfjsWorker;
@@ -538,20 +539,30 @@ function _initYoutube(): void {
             Media.close(true);
           }
         },
-        onError: (e: { data: number }) => {
-          const code = e?.data;
-          const error = new Error(`YouTube player error ${code}`);
+        onError: (e: unknown) => {
+          const normalized = normalizeYouTubeError(e);
+          const error = new Error(normalized.message);
+          error.name = normalized.name;
           Telemetry.captureException(error, {
             playback_id: fileProjection.playback_id,
             operation: "youtube_player",
+            stage: "youtube_player",
+            ...normalized.properties,
           });
-          console.error("[FileProjectionReturn] YouTube player error:", error);
+          console.error(
+            "[FileProjectionReturn] YouTube player error:",
+            normalized.message,
+            normalized.code
+          );
           Telemetry.track("music_playback_failed", {
             playback_id: fileProjection.playback_id,
             stage: "youtube_player",
-            reason: `youtube_${code}`,
-            provider_code: code,
-            page_origin: window.location.origin,
+            reason: normalized.kind,
+            error_name: normalized.name,
+            ...normalized.properties,
+            source_kind: "youtube",
+            is_desktop: false,
+            platform: "web",
             window_role: "auxiliary_return",
           });
         },
