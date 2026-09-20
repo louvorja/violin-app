@@ -13,7 +13,6 @@ import Libras from "@/helpers/Libras";
 import BundleInstaller from "@/helpers/BundleInstaller";
 import BibleBundleInstaller from "@/helpers/BibleBundleInstaller";
 import { formatBackgroundTaskDetail } from "@/helpers/BackgroundTaskDetail";
-import { RUNTIME_PERFORMANCE } from "@/helpers/RuntimePerformance";
 import type { Music } from "@/types/Music";
 import type { BibleBook } from "@/types/Bible";
 import { resolveMediaReference } from "@/helpers/MediaUrl";
@@ -656,11 +655,10 @@ export function useSyncManager() {
     }
 
     // O download é uma tarefa de fundo, mas cada capítulo ainda passa pelo
-    // renderer → protocolo Electron → rede → IndexedDB. Um capítulo por vez
-    // deixa uma versão inteira lenta demais; 16+ em paralelo satura justamente
-    // os PCs fracos. O limite acompanha o perfil sem transformar a operação em
-    // uma rajada de conexões/transações.
-    const batchSize = RUNTIME_PERFORMANCE.lowResource ? 2 : RUNTIME_PERFORMANCE.constrained ? 3 : 4;
+    // renderer → protocolo Electron → rede → IndexedDB. Quatro operações
+    // simultâneas preservam avanço perceptível sem formar uma rajada de
+    // conexões/transações, em qualquer equipamento.
+    const batchSize = 4;
     let completed = 0;
     const failedKeys = new Set<string>();
     for (let i = 0; i < toDownload.length && !bibleCancelled.value; i += batchSize) {
@@ -805,10 +803,9 @@ export function useSyncManager() {
     files: Map<string, FileEntry>
   ): Promise<void> {
     // `scanCache` pode chamar esta função para até três álbuns ao mesmo tempo.
-    // 16 por álbum virava até 48 leituras de metadados concorrentes, cada uma
-    // com rede e persistência no IDB. Reduzimos a rajada sem perder o ganho de
-    // paralelismo em máquinas normais.
-    const BATCH = RUNTIME_PERFORMANCE.lowResource ? 2 : RUNTIME_PERFORMANCE.constrained ? 4 : 8;
+    // Um lote fixo de quatro limita a rajada de leitura e persistência no IDB
+    // para todos os equipamentos.
+    const BATCH = 4;
     for (let i = 0; i < musicIds.length; i += BATCH) {
       const slice = musicIds.slice(i, i + BATCH);
       await Promise.all(

@@ -11,7 +11,7 @@
 <script setup>
 /**
  * Container genérico de tabela: carrega JSON via Database, filtra por busca/letra/filter,
- * ordena e pagina em lotes adaptados ao equipamento via scroll. Emite o estado
+ * ordena e pagina em lotes fixos via scroll. Emite o estado
  * via v-model.
  * Ver MusicMenuTable.vue para o widget de ações por linha — são componentes distintos.
  */
@@ -23,12 +23,26 @@ import Strings from "@/helpers/Strings";
 import { isHymnalTrack } from "@/helpers/Hymnal";
 import Fuse from "fuse.js";
 import Telemetry from "@/helpers/Telemetry";
-import { RUNTIME_PERFORMANCE } from "@/helpers/RuntimePerformance";
 
 /** Campos onde o operador erra a digitação — nome da música e do álbum. */
 const FUZZY_FIELDS = ["name", "albums_names"];
 const FUZZY_MIN_LENGTH = 3;
 const FUZZY_LIMIT = 100;
+
+/**
+ * Lote único para qualquer equipamento. Sessenta linhas já ultrapassam a
+ * viewport típica em tabelas com chips e menus; o restante do catálogo entra
+ * pelo mesmo scroll progressivo em todos os ambientes.
+ */
+const TABLE_PAGE_SIZE = 60;
+
+/**
+ * A camada Database devolve a mesma referência enquanto o dataset está no cache
+ * de memória. Ao fechar e reabrir uma aba, reutilizamos a visão ordenada e o
+ * índice estrutural já preparados, sem reordenar e percorrer milhares de itens.
+ * Filtros e resultados continuam pertencendo a cada instância de DataTable.
+ */
+const _preparedDatasets = new WeakMap();
 
 // Debounce leve: aguarda `ms` ms de inatividade antes de executar `fn`.
 function debounce(fn, ms = 300) {
@@ -108,6 +122,30 @@ function cleanField(entry, key) {
 function foldField(entry, key) {
   if (!(key in entry.fold)) entry.fold[key] = Strings.fold(String(entry.item?.[key] ?? ""));
   return entry.fold[key];
+}
+
+function prepareDataset(source) {
+  let viewsBySort = _preparedDatasets.get(source);
+  if (!viewsBySort) {
+    viewsBySort = new Map();
+    _preparedDatasets.set(source, viewsBySort);
+  }
+
+  const sortKey = props.sort_by || "";
+  const cached = viewsBySort.get(sortKey);
+  if (cached) return cached;
+
+  // Nunca reordena o array do Database. Além de preservar a ordem do cache
+  // compartilhado, isso permite que outras tabelas escolham outro sort sem
+  // invalidar esta visão preparada.
+  const items = [...source];
+  if (props.sort_by) {
+    items.sort((a, b) => Strings.sort(a[props.sort_by], b[props.sort_by]));
+  }
+
+  const prepared = { items, indexed: items.map(makeIndex) };
+  viewsBySort.set(sortKey, prepared);
+  return prepared;
 }
 
 function getBaseEntries(filter, disabled) {
@@ -247,18 +285,17 @@ async function loadData() {
         LOAD_TIMEOUT_MS
       );
     });
-    all_data.value = await Promise.race([Database.get(props.file), timeout]);
+    const loadedData = await Promise.race([Database.get(props.file), timeout]);
 
-    if (all_data.value == null) {
+    if (!Array.isArray(loadedData)) {
       error.value = t("components.datatable.alerts.not_found");
       reportLoad("not_found");
       return;
     }
 
-    if (props.sort_by) {
-      all_data.value.sort((a, b) => Strings.sort(a[props.sort_by], b[props.sort_by]));
-    }
-    _indexedData = all_data.value.map(makeIndex);
+    const prepared = prepareDataset(loadedData);
+    all_data.value = prepared.items;
+    _indexedData = prepared.indexed;
     // Watchers de filtros podem rodar enquanto o dataset ainda está vazio.
     // O índice acabou de ser preenchido, então o recorte anterior não é mais
     // válido mesmo que os filtros tenham a mesma assinatura.
@@ -415,17 +452,16 @@ function fuzzySearch(baseEntries, searchable) {
 }
 
 function paginateData() {
-  const PAGE_SIZE = RUNTIME_PERFORMANCE.tablePageSize;
   const searching = Strings.clean(props.search).length > 0;
 
   // Durante a busca, os resultados ficam limitados a no máximo 100.
   if (searching) {
-    data.value = filter_data.value.slice(0, PAGE_SIZE);
+    data.value = filter_data.value.slice(0, TABLE_PAGE_SIZE);
     loading.value = false;
     return;
   }
 
-  limit.value += PAGE_SIZE;
+  limit.value += TABLE_PAGE_SIZE;
   data.value = filter_data.value.slice(0, limit.value);
   loading.value = false;
 

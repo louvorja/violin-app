@@ -1,46 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { getRuntimePerformanceProfile } from "@/helpers/RuntimePerformance";
+import {
+  isPersistentModule,
+  PERSISTENT_MODULE_IDS,
+  RUNTIME_PERFORMANCE,
+} from "@/helpers/RuntimePerformance";
 
-describe("getRuntimePerformanceProfile", () => {
-  it("usa o perfil normal quando o equipamento é forte", () => {
-    expect(getRuntimePerformanceProfile({ deviceMemory: 8, hardwareConcurrency: 8 })).toEqual({
-      lowResource: false,
-      constrained: false,
-      moduleCacheMax: 6,
-      tablePageSize: 80,
-    });
-  });
-
-  it("reduz cache e DOM inicial em equipamentos limitados", () => {
-    expect(getRuntimePerformanceProfile({ deviceMemory: 4, hardwareConcurrency: 4 })).toEqual({
-      lowResource: false,
-      constrained: true,
+describe("RuntimePerformance", () => {
+  it("usa o mesmo limite de cache de módulos em qualquer ambiente", () => {
+    expect(RUNTIME_PERFORMANCE).toEqual({
       moduleCacheMax: 4,
-      tablePageSize: 60,
     });
+    expect(Object.isFrozen(RUNTIME_PERFORMANCE)).toBe(true);
   });
 
-  it("prioriza liberar RAM quando há até 2 GB ou 2 threads", () => {
-    expect(getRuntimePerformanceProfile({ deviceMemory: 2, hardwareConcurrency: 8 })).toEqual({
-      lowResource: true,
-      constrained: true,
-      moduleCacheMax: 3,
-      tablePageSize: 40,
-    });
-    expect(getRuntimePerformanceProfile({ hardwareConcurrency: 2 })).toEqual({
-      lowResource: true,
-      constrained: true,
-      moduleCacheMax: 3,
-      tablePageSize: 40,
-    });
-  });
-
-  it("não exige deviceMemory para funcionar no Electron", () => {
-    expect(getRuntimePerformanceProfile({ hardwareConcurrency: 8 })).toEqual({
-      lowResource: false,
-      constrained: false,
-      moduleCacheMax: 6,
-      tablePageSize: 80,
-    });
+  it("mantém apenas módulos operacionais na faixa persistente", () => {
+    expect([...PERSISTENT_MODULE_IDS]).toEqual([
+      "clock",
+      "liturgy",
+      "stopwatch",
+      "timer",
+      "timer_worship",
+    ]);
+    expect(isPersistentModule("timer")).toBe(true);
+    expect(isPersistentModule("musics")).toBe(false);
   });
 });
