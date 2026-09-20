@@ -1,0 +1,76 @@
+"use strict";
+
+const path = require("path");
+const paths = require("../paths.js");
+const { createTools } = require("./tools.js");
+const { createManager } = require("./manager.js");
+const { isVideoId } = require("./ids.js");
+const { safeSend } = require("../safeWebContents.js");
+
+let _manager = null;
+
+/** Instância única: cache em `userData/online_videos`, ferramentas em `userData/bin`. */
+function getManager() {
+  if (!_manager) {
+    const userData = paths.userData();
+    const tools = createTools({ binDir: path.join(userData, "bin") });
+    _manager = createManager({
+      dir: path.join(userData, "online_videos"),
+      tools,
+      // O YouTube passou a exigir a resolução de um desafio em JavaScript para
+      // liberar os formatos. O próprio Electron, rodando como Node, faz isso sem
+      // baixar mais nada (o runner liga ELECTRON_RUN_AS_NODE só para esse filho).
+      jsRuntime: () => `node:${process.execPath}`,
+      // O E2E provoca a renovação de propósito; uma renovação de minutos antes,
+      // feita por uma falha passageira de rede, não pode deixá-lo sem o que testar.
+      refreshCooldownMs: process.env.LJ_E2E_USER_DATA ? 0 : undefined,
+    });
+  }
+  return _manager;
+}
+
+/** Caminho em disco do vídeo já baixado, ou null. Usado pelo protocolo louvorja://. */
+function fileFor(id) {
+  if (!isVideoId(id)) return null;
+  const m = getManager();
+  return m.store.has(id) ? m.store.pathFor(id) : null;
+}
+
+/**
+ * Registra os handlers IPC. Cada operação é específica e recebe só o ID do
+ * vídeo (validado), uma altura máxima entre valores permitidos e duas opções
+ * booleanas de escolha fechada (`priority`, `keep`): o renderer não escolhe URL,
+ * caminho nem argumento do yt-dlp.
+ */
+function registerIpc(ipcMain) {
+  ipcMain.handle("onlineVideo:status", () => getManager().status());
+
+  ipcMain.handle("onlineVideo:ensure", (event, id, opts) => {
+    const o = opts && typeof opts === "object" ? opts : {};
+    const options = {
+      maxHeight: o.maxHeight,
+      priority: o.priority === "background" ? "background" : "foreground",
+      keep: o.keep === true,
+    };
+    return getManager().ensure(id, options, (progress) => {
+      safeSend(event.sender, "onlineVideo:progress", progress);
+    });
+  });
+
+  ipcMain.handle("onlineVideo:cancel", (_event, id) => getManager().cancel(id));
+  ipcMain.handle("onlineVideo:keep", (_event, id) => getManager().keep(id));
+  ipcMain.handle("onlineVideo:prepare", () => getManager().prepare());
+  ipcMain.handle("onlineVideo:list", () => getManager().list());
+  ipcMain.handle("onlineVideo:remove", (_event, id) => getManager().remove(id));
+  ipcMain.handle("onlineVideo:clear", () => getManager().clear());
+}
+
+function init() {
+  return getManager().init();
+}
+
+function shutdown() {
+  if (_manager) _manager.cancelAll();
+}
+
+module.exports = { getManager, fileFor, registerIpc, init, shutdown };

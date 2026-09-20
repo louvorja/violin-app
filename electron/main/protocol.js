@@ -7,6 +7,7 @@
  *   louvorja://app/<caminho>       — assets do build Vue em dist/ (substitui file://)
  *   louvorja://json_db/<arquivo>   — proxy com cache para <api>/json_db
  *   louvorja://files/<caminho>     — arquivos locais em userData/files/ (populado em D3 via HTTPS)
+ *   louvorja://onlinevideo/<id>.mp4 — vídeos do YouTube baixados em userData/online_videos/
  *
  * O protocolo é marcado como standard + secure para que fetch() e XHR funcionem
  * normalmente dentro do renderer sem erros de CORS/CSP. O host "app" existe
@@ -31,6 +32,7 @@ const { temSegmentoPai } = require("./mediaRoots.js");
 const netHealth = require("./netHealth.js");
 const apiConfig = require("./apiConfig.js");
 const { buildCsp } = require("./csp.js");
+const onlineVideo = require("./onlineVideo/index.js");
 
 // ---------------------------------------------------------------------------
 // Configuração de URLs remotas
@@ -326,6 +328,18 @@ function handle() {
           }
           return new Response(e.message || "JSON Cache Error", { status: 500 });
         }
+      }
+
+      // ------------------------------------------------------------------
+      // louvorja://onlinevideo/<id>.mp4
+      // Vídeo do YouTube já baixado para o cache local. O ID tem formato
+      // fixo, então nada que chegue aqui vira caminho fora do cache.
+      // ------------------------------------------------------------------
+      if (host === "onlinevideo") {
+        const m = /^\/([A-Za-z0-9_-]{11})\.mp4$/.exec(pathname);
+        const file = m ? onlineVideo.fileFor(m[1]) : null;
+        if (!file) return new Response("Not found", { status: 404 });
+        return _responderArquivo(file, request);
       }
 
       // ------------------------------------------------------------------

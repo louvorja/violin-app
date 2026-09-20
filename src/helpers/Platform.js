@@ -161,6 +161,16 @@ export default {
   },
 
   /**
+   * Vídeos do YouTube baixados para projeção sem anúncios, ou deixados prontos de antemão.
+   * null quando rodando no browser/PWA — lá só existe o player embutido.
+   *
+   * @returns {{ status, ensure, cancel, list, keep, prepare, remove, clear, onProgress } | null}
+   */
+  get onlineVideo() {
+    return api?.onlineVideo ?? null;
+  },
+
+  /**
    * Gerenciamento de displays/monitores (D4).
    * Permite listar displays, identificá-los visualmente e salvar preferências por feature.
    * null quando rodando no browser/PWA.

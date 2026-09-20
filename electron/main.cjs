@@ -71,6 +71,7 @@ const identifyMonitors = require("./main/identifyMonitors.js");
 const httpServer = require("./main/httpServer/index.js");
 const devices = require("./main/devices.js");
 const youtubeReferer = require("./main/youtubeReferer.js");
+const onlineVideo = require("./main/onlineVideo/index.js");
 const shortcuts = require("./main/shortcuts.js");
 const updater = require("./main/updater.js");
 const powerBlocker = require("./main/powerBlocker.js");
@@ -739,6 +740,11 @@ app.whenReady().then(async () => {
   // D2 — Instalar handler do protocolo louvorja://
   protocolModule.handle();
 
+  // Restos de downloads de vídeo interrompidos há mais de um dia viram lixo.
+  onlineVideo.init().catch((e) => {
+    console.warn("[onlineVideo] limpeza de parciais falhou:", e?.message || e);
+  });
+
   // O embed do YouTube recusa (erro 153) quem não envia um Referer https.
   youtubeReferer.install(session.defaultSession, require("../package.json").homepage);
 
@@ -876,6 +882,9 @@ app.on("before-quit", async () => {
   }
 
   docStore.flush();
+
+  // Um yt-dlp em andamento seguiria baixando (e segurando o vídeo) depois do app fechar.
+  onlineVideo.shutdown();
 
   await httpServer.stop();
 });
@@ -1181,6 +1190,11 @@ ipcMain.handle("download:isDownloading", () => downloader.isDownloading());
 
 /** Verifica integridade local de uma lista de arquivos (missing/damaged/ok) */
 ipcMain.handle("download:checkFiles", (_event, files) => downloader.checkFiles(files));
+
+// ---------------------------------------------------------------------------
+// Vídeos online baixados para projeção sem anúncios (onlineVideo:*)
+// ---------------------------------------------------------------------------
+onlineVideo.registerIpc(ipcMain);
 
 // ---------------------------------------------------------------------------
 // IPC handlers de displays e janelas (D4)

@@ -137,6 +137,38 @@ Em produção, o protocolo `louvorja://` aplica CSP via header HTTP usando
 Para janelas secundárias abertas via `windowFactory.js` (Projection, Operator, etc.),
 a mesma session padrão aplica a política automaticamente.
 
+### Vídeos online: binários baixados em tempo de execução
+
+O download de vídeos do YouTube (`electron/main/onlineVideo/`) executa dois binários que
+**não** vão no instalador e são baixados para `userData/bin/` no primeiro uso:
+
+| Binário  | Origem                                             | Verificação                                                                                   |
+| -------- | -------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `yt-dlp` | `github.com/yt-dlp/yt-dlp/releases/latest`         | SHA-256 do `SHA2-256SUMS` da mesma release; roda `--version` antes de instalar                |
+| `ffmpeg` | `github.com/eugeneware/ffmpeg-static` (tag fixa)   | SHA-256 do `.gz` **fixado no código** (`tools.js`); roda `-version` antes de instalar         |
+
+- O renderer só pede `onlineVideo:ensure(id, { maxHeight, priority, keep })` (mais `keep(id)`,
+  `cancel(id)`, `remove(id)`, `list`, `status`, `clear` e `prepare`, este sem argumento). O `id`
+  precisa casar `^[A-Za-z0-9_-]{11}$`; a URL é montada no main e o yt-dlp roda por `spawn` com
+  array de argumentos, sem shell e com `--ignore-config`. `maxHeight` só aceita 480, 720 ou
+  1080; `priority` só `"background"` (qualquer outro valor vira `"foreground"`) e `keep` só
+  `true` (qualquer outro valor vira `false`). Nada disso leva texto do renderer a um comando.
+- `<id>.keep` é uma marca vazia ao lado do vídeo, criada só depois de o arquivo existir e só
+  com um ID válido: não há caminho, nome nem conteúdo que o renderer escolha.
+- Abrir "Vídeos On-line" ou "Meus Vídeos Online" instala os dois binários **antes** de o operador
+  tocar qualquer coisa (`onlineVideo:prepare`, uma vez por sessão, ~100 MB na primeira vez), para
+  o primeiro vídeo não esperar. É o mesmo download, com as mesmas verificações, só que disparado
+  pela intenção de usar o módulo, e não pelo primeiro clique em tocar.
+- O arquivo baixado é servido em `louvorja://onlinevideo/<id>.mp4`. O handler só aceita o
+  mesmo formato de ID (não há como sair da pasta do cache) e atende `Range`.
+- O yt-dlp é o único binário atualizado sem lançar uma versão do app, e só depois de uma falha
+  que uma versão nova resolve (no máximo uma vez por hora). Trocar o ffmpeg exige trocar o
+  hash fixado em `tools.js`, portanto um release.
+- Os hosts alcançados (`github.com`, `objects.githubusercontent.com` e o YouTube) são acessados
+  pelo processo principal e pelo yt-dlp, não pelo renderer: a CSP não ganha domínio novo.
+- Um binário que baixou certo mas não executa (antivírus, arquitetura errada) é apagado e
+  reinstalado uma vez; se continuar falhando, o app cai no player do YouTube.
+
 ---
 
 ## Autenticação do servidor HTTP embarcado

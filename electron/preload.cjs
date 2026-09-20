@@ -234,6 +234,36 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
   },
 
   // -------------------------------------------------------------------------
+  // Vídeos online baixados (projeção sem anúncios)
+  // -------------------------------------------------------------------------
+
+  onlineVideo: {
+    /** Estado das ferramentas e do cache: { supported, ready, count, size, ... } */
+    status: () => ipcRenderer.invoke("onlineVideo:status"),
+    /**
+     * Garante o vídeo em disco. Resolve `{ ok, url, ... }` ou `{ ok: false, error: { kind } }`.
+     * `opts`: `{ maxHeight, priority: "foreground" | "background", keep }`.
+     */
+    ensure: (id, opts) => ipcRenderer.invoke("onlineVideo:ensure", id, opts),
+    /** Cancela o download do vídeo, se houver. */
+    cancel: (id) => ipcRenderer.invoke("onlineVideo:cancel", id),
+    /** Vídeos em disco: [{ id, size, usedAt, kept }] */
+    list: () => ipcRenderer.invoke("onlineVideo:list"),
+    /** Manda manter um vídeo já baixado: o despejo por espaço não o leva. */
+    keep: (id) => ipcRenderer.invoke("onlineVideo:keep", id),
+    /** Instala yt-dlp e ffmpeg de antemão, em silêncio. Resolve `{ ok, ready }`. */
+    prepare: () => ipcRenderer.invoke("onlineVideo:prepare"),
+    remove: (id) => ipcRenderer.invoke("onlineVideo:remove", id),
+    clear: () => ipcRenderer.invoke("onlineVideo:clear"),
+    /** Progresso do download iniciado por esta janela — retorna cleanup. */
+    onProgress: (cb) => {
+      const handler = (_e, data) => cb(data);
+      ipcRenderer.on("onlineVideo:progress", handler);
+      return () => ipcRenderer.off("onlineVideo:progress", handler);
+    },
+  },
+
+  // -------------------------------------------------------------------------
   // D4 — Gerenciamento de monitores e janelas de projeção
   // -------------------------------------------------------------------------
 
