@@ -55,7 +55,7 @@
 
               <div class="app-menu-content">
                 <Transition name="app-menu-screen" mode="out-in">
-                  <div :key="renderedItem?.id || 'loading'">
+                  <div :key="activeItem?.id">
                     <div
                       v-if="!renderedItem"
                       class="app-menu-content-placeholder"
@@ -138,7 +138,10 @@ const activeItem = ref(null);
 const renderedItem = ref(null);
 let renderTimer = null;
 // No Windows, a montagem do painel pesado compete com a animação da cortina
-// no mesmo renderer. As outras plataformas não precisam pagar este atraso.
+// no mesmo renderer, então espera a cortina acabar. Nas outras plataformas ela
+// não poupa nenhum quadro e só atrasa o conteúdo, por isso não adia nada.
+// O wrapper do template segue a tela ativa (não o painel montado): o painel
+// entra nele sem passar pelo fade duplo do `out-in`.
 const CONTENT_DELAY_MS = Platform.platform === "win32" ? 220 : 0;
 
 // Aba inicial da tela de Opções quando aberta programaticamente
@@ -274,8 +277,14 @@ function clearRenderTimer() {
   }
 }
 
+function showItem(item) {
+  clearRenderTimer();
+  renderedItem.value = item;
+}
+
 /** Monta painéis pesados depois da cortina, sem bloquear seus primeiros frames. */
 function scheduleRenderedItem(item) {
+  if (!CONTENT_DELAY_MS) return showItem(item);
   clearRenderTimer();
   renderedItem.value = null;
   renderTimer = setTimeout(() => {
@@ -337,9 +346,10 @@ function onKeydown(e) {
 function selectItem(item) {
   activeItem.value = item;
   if (item.inline) {
-    scheduleRenderedItem(item);
+    // Renderiza dentro do menu, não fecha. Sem cortina para proteger, a troca é imediata.
+    showItem(item);
     return;
-  } // Renderiza dentro do menu, não fecha
+  }
   close();
   setTimeout(() => {
     try {
