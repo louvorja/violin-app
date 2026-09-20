@@ -10,12 +10,14 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     teardownTimeout: 5000,
-    // O pool padrão ("forks") e o pool "threads" quebram neste ambiente
-    // Windows + Node 24 com "Cannot read properties of undefined
-    // (reading 'config')" ao subir os workers do tinypool. "vmThreads"
-    // evita esse problema mantendo o isolamento de módulos por arquivo
-    // de teste.
-    pool: "vmThreads",
+    // O pool padrão ("forks") e o pool "threads" quebram no Windows + Node 24
+    // com "Cannot read properties of undefined (reading 'config')" ao subir
+    // os workers do tinypool. "vmThreads" evita isso, mas roda as specs num
+    // contexto vm: `window` deixa de ser redefinível, o TZ do processo não
+    // vale, `import()` dinâmico de .cjs falha e o mock de "electron" não
+    // alcança o require. Por isso só o Windows usa "vmThreads"; CI (Linux) e
+    // macOS ficam no padrão.
+    pool: process.platform === "win32" ? "vmThreads" : "forks",
     exclude: ["**/node_modules/**", "**/e2e/**"],
     coverage: {
       provider: "v8",
