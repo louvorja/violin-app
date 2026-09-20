@@ -1,4 +1,4 @@
-import { ref, onBeforeUnmount } from "vue";
+import { ref, computed, watch, onBeforeUnmount } from "vue";
 import { useI18n } from "vue-i18n";
 import Platform from "@/helpers/Platform";
 import Database from "@/helpers/Database";
@@ -11,6 +11,7 @@ import type { BundleProgress } from "@/types/Database";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
 import Libras from "@/helpers/Libras";
 import BundleInstaller from "@/helpers/BundleInstaller";
+import BibleBundleInstaller from "@/helpers/BibleBundleInstaller";
 import { formatBackgroundTaskDetail } from "@/helpers/BackgroundTaskDetail";
 import { RUNTIME_PERFORMANCE } from "@/helpers/RuntimePerformance";
 import type { Music } from "@/types/Music";
@@ -97,6 +98,58 @@ const SCAN_CACHE_TTL_MS = 5 * 60_000;
 let activeBibleDownload: Promise<number> | null = null;
 let activeBibleCancel: (() => void) | null = null;
 
+// O bundle é compartilhado entre a Bíblia, a busca bíblica e as telas de
+// Atualizações. Assim, abrir duas dessas telas não inicia dois downloads nem
+// perde o progresso de quem entrou depois.
+const bundleInstalling = ref(false);
+const bundleProgress = ref<BundleProgress>({ phase: "download", current: 0, total: 0 });
+let activeBundleDownload: Promise<boolean> | null = null;
+// O bundle geral já contém a Bíblia; o bundle bíblico não contém o catálogo.
+let activeBundleKind: "full" | "bible" | null = null;
+let activeBundleAbort: AbortController | null = null;
+let bundleReady = false;
+let bundleEnsurePromise: Promise<boolean> | null = null;
+let bundleFailedAt = 0;
+let catalogReady = false;
+let catalogEnsurePromise: Promise<boolean> | null = null;
+let catalogFailedAt = 0;
+
+// Depois de uma falha, reabrir a tela bíblica não recomeça o download de 23 MB
+// na hora: numa rede que soluça, cada abertura seria uma nova tentativa do zero.
+const BUNDLE_RETRY_COOLDOWN_MS = 5 * 60_000;
+
+// Cada fase reportava o próprio 0→100 (baixar, extrair, gravar). A barra chegava
+// a 100% e voltava a 0% — e, valendo 0, as telas a desenhavam como
+// "indeterminada". Um percentual só, com um trecho fixo por fase, nunca recua.
+const BUNDLE_PHASE_SPAN: Record<BundleProgress["phase"], readonly [number, number]> = {
+  download: [0, 70],
+  extract: [70, 80],
+  inject: [80, 100],
+};
+
+export function bundlePercentOf(p: BundleProgress): number {
+  const [from, to] = BUNDLE_PHASE_SPAN[p.phase];
+  let done = 0;
+  if (p.phase === "download") {
+    const total = p.bytesTotal ?? 0;
+    if (total > 0) done = (p.bytesReceived ?? p.current) / total;
+  } else if (p.total > 0) {
+    done = p.current / p.total;
+  }
+  return Math.round(from + Math.min(1, Math.max(0, done)) * (to - from));
+}
+
+const bundlePercent = computed<number>(() => bundlePercentOf(bundleProgress.value));
+
+// Sobe sempre que o conteúdo bíblico local muda (bundle instalado, versões
+// baixadas ou removidas). As telas que mostram "o que está baixado" — Bíblia e
+// Sincronizar — releem quando ele muda, em vez de ficar com a foto de quando
+// abriram.
+const bibleRevision = ref(0);
+function bumpBibleRevision(): void {
+  bibleRevision.value += 1;
+}
+
 export function useSyncManager() {
   const { t, locale } = useI18n();
   const bgTasks = useBackgroundTasks();
@@ -117,12 +170,7 @@ export function useSyncManager() {
   const bibleProgress = ref({ done: 0, total: 0, currentFile: "" });
   const bibleCompletedMsg = ref("");
 
-  // Bundle download
-  const bundleInstalling = ref(false);
-  const bundleProgress = ref<BundleProgress>({ phase: "download", current: 0, total: 0 });
-
   let _downloadCleanup: CleanupFn[] = [];
-  let _bundleAbort: AbortController | null = null;
 
   // ─── FTP ────────────────────────────────────────────────────────
 
@@ -272,6 +320,17 @@ export function useSyncManager() {
         hymnal1996Cached: false,
       };
 
+    // O scan é automático: sem o catálogo no disco ele viraria milhares de
+    // requisições que ninguém pediu. Sem catálogo, não há o que marcar como baixado.
+    if (!(await ensureCatalogForBulkRead())) {
+      return {
+        cachedAlbums: new Set(),
+        classicAlbums: new Set(),
+        hymnalCached: false,
+        hymnal1996Cached: false,
+      };
+    }
+
     scanning.value = true;
     scanProgress.value = { done: 0, total: totalSteps };
 
@@ -356,6 +415,9 @@ export function useSyncManager() {
     bibleVersions: BibleVersion[];
     downloadedBibles: number[];
   }> {
+    // Antes das listas: com o bundle instalado elas já saem do disco, e o
+    // primeiro uso inteiro custa um único download.
+    await ensureCatalogForBulkRead();
     const { categories, hymnalIds, hymnal1996Ids } = await loadCatalog(lang);
     const { versions: bibleVersions } = await loadBibleVersions(lang);
     const { cachedAlbums, classicAlbums, hymnalCached, hymnal1996Cached } = await scanCache(
@@ -372,7 +434,9 @@ export function useSyncManager() {
       };
     }
 
-    const downloadedBibles = await scanBibleVersionsDisk(bibleVersions, lang);
+    const downloadedBibles = await scanBibleVersionsDisk(bibleVersions, lang, {
+      trackProgress: true,
+    });
 
     scanning.value = false;
     return {
@@ -405,7 +469,11 @@ export function useSyncManager() {
     return { versions, downloaded: saved || [] };
   }
 
-  async function scanBibleVersionsDisk(versions: BibleVersion[], lang: string): Promise<number[]> {
+  async function scanBibleVersionsDisk(
+    versions: BibleVersion[],
+    lang: string,
+    { trackProgress = false }: { trackProgress?: boolean } = {}
+  ): Promise<number[]> {
     if (!versions.length) return [];
 
     const books = await Database.get<Array<{ id_bible_book: number; chapters?: number }>>(
@@ -454,7 +522,11 @@ export function useSyncManager() {
         console.warn(`[useSyncManager] scan bible version ${ver.id_bible_version}:`, e);
       }
 
-      scanProgress.value = { ...scanProgress.value, done: scanProgress.value.done + 1 };
+      // `scanProgress` é do scan de coletâneas: a aba Bíblia, que chama isto por
+      // conta própria, deixava a tela do scan em "(10/0)".
+      if (trackProgress) {
+        scanProgress.value = { ...scanProgress.value, done: scanProgress.value.done + 1 };
+      }
     }
 
     return downloaded;
@@ -495,12 +567,34 @@ export function useSyncManager() {
       bibleCancelled.value = true;
     });
 
+    // Um GET traz os capítulos de todas as versões. Sem isso, "baixar tudo"
+    // abria uma requisição por capítulo (~1.200 por versão). O laço abaixo só
+    // trabalha de verdade se o bundle não estiver disponível.
+    // A revisão só sobe quando um download acontece: "já estava instalado" não conta.
+    const revisionBefore = bibleRevision.value;
+    const stopMirroring = watch(
+      bundlePercent,
+      (pct) => {
+        if (!bundleInstalling.value) return;
+        bibleProgress.value = { done: pct, total: 100, currentFile: "" };
+        bgTasks.updateTask("sync-bible", { progress: pct });
+      },
+      { immediate: true }
+    );
+    try {
+      await ensureBibleBundle();
+    } finally {
+      stopMirroring();
+    }
+    const installedNow = bibleRevision.value !== revisionBefore;
+
     const books = await Database.get<Array<{ id_bible_book: number; chapters?: number }>>(
       `${lang}_bible_book`
     );
     if (!books || books.length === 0) {
       bibleCompletedMsg.value = "Nenhum livro encontrado.";
       bibleDownloading.value = false;
+      bgTasks.updateTask("sync-bible", { status: "error" });
       return 0;
     }
 
@@ -544,12 +638,16 @@ export function useSyncManager() {
 
     if (toDownload.length === 0) {
       bibleDownloading.value = false;
-      bibleCompletedMsg.value = "Nada a baixar (já está em cache).";
+      bibleCompletedMsg.value = installedNow ? "" : "Nada a baixar (já está em cache).";
       const previous = $userdata.get<number[]>(KEYS.STORAGE.BIBLE_DOWNLOADED_VERSIONS, []) || [];
       $userdata.set(KEYS.STORAGE.BIBLE_DOWNLOADED_VERSIONS, [
         ...new Set([...previous.filter((id) => !versionIds.includes(id)), ...versionIds]),
       ]);
-      return 0;
+      // Sem isto a tarefa ficava "em andamento" para sempre: a aba da Bíblia
+      // continuava desenhando o progresso e escondia o botão de baixar.
+      bgTasks.completeTask("sync-bible");
+      bumpBibleRevision();
+      return installedNow ? allChapters.length : 0;
     }
 
     // O download é uma tarefa de fundo, mas cada capítulo ainda passa pelo
@@ -608,10 +706,19 @@ export function useSyncManager() {
       ]);
       bgTasks.completeTask("sync-bible");
     }
+    bumpBibleRevision();
     return bibleProgress.value.done;
   }
 
   async function saveBibleSelectionToDisk(toRemove: number[]): Promise<void> {
+    try {
+      await removeBibleVersions(toRemove);
+    } finally {
+      bumpBibleRevision();
+    }
+  }
+
+  async function removeBibleVersions(toRemove: number[]): Promise<void> {
     for (const versionId of toRemove) {
       const prefix = `bible_${versionId}_`;
       // Remove do disco legado (userData/json_db/*.json).
@@ -635,6 +742,7 @@ export function useSyncManager() {
     selectedHymnal1996 = false,
     hymnal1996Ids: number[] = []
   ): Promise<FileEntry[]> {
+    await ensureCatalogForBulkRead();
     const files = new Map<string, FileEntry>();
     const albumIds = [...selectedAlbums];
     const allMusicIds = new Set<number>();
@@ -862,7 +970,30 @@ export function useSyncManager() {
   // ─── Bundle Download ────────────────────────────────────────
 
   async function downloadBundle(
-    opts: { force?: boolean; version?: number } = {}
+    opts: { force?: boolean; version?: number; bibleOnly?: boolean } = {}
+  ): Promise<boolean> {
+    const kind = opts.bibleOnly ? "bible" : "full";
+    while (activeBundleDownload) {
+      if (activeBundleKind === "full" || activeBundleKind === kind) return activeBundleDownload;
+      // Quem pediu o banco completo não pode se dar por satisfeito com o
+      // bundle só da Bíblia que já está descendo: espera e baixa o seu.
+      await activeBundleDownload.catch(() => false);
+    }
+    const pending = downloadBundleInternal(opts);
+    activeBundleDownload = pending;
+    activeBundleKind = kind;
+    try {
+      return await pending;
+    } finally {
+      if (activeBundleDownload === pending) {
+        activeBundleDownload = null;
+        activeBundleKind = null;
+      }
+    }
+  }
+
+  async function downloadBundleInternal(
+    opts: { force?: boolean; version?: number; bibleOnly?: boolean } = {}
   ): Promise<boolean> {
     if (bundleInstalling.value) return false;
 
@@ -874,27 +1005,23 @@ export function useSyncManager() {
       bytesReceived: 0,
       bytesTotal: 0,
     };
-    _bundleAbort = new AbortController();
-    const signal = _bundleAbort.signal;
+    activeBundleAbort = new AbortController();
+    const signal = activeBundleAbort.signal;
 
     const taskId = "db-bundle";
     bgTasks.registerTask(taskId, "shell.background_tasks.db_bundle", () => {
-      _bundleAbort?.abort();
+      activeBundleAbort?.abort();
     });
 
     try {
-      await BundleInstaller.install({
+      const installer = opts.bibleOnly ? BibleBundleInstaller : BundleInstaller;
+      await installer.install({
         force: opts.force,
         version: opts.version,
         signal,
         onProgress: (p: BundleProgress) => {
           bundleProgress.value = p;
-          const pct =
-            p.phase === "download" && p.bytesTotal && p.bytesTotal > 0
-              ? Math.round(((p.bytesReceived ?? p.current) / p.bytesTotal) * 100)
-              : p.total > 0
-                ? Math.round((p.current / p.total) * 100)
-                : 0;
+          const pct = bundlePercentOf(p);
           const received = p.bytesReceived ?? (p.phase === "download" ? p.current : 0);
           const totalBytes = p.bytesTotal ?? 0;
           const rate = p.bytesPerSecond ?? 0;
@@ -915,6 +1042,9 @@ export function useSyncManager() {
       });
 
       bgTasks.completeTask(taskId);
+      bundleReady = true;
+      if (!opts.bibleOnly) catalogReady = true;
+      bumpBibleRevision();
       return true;
     } catch (e) {
       if (signal.aborted) {
@@ -926,12 +1056,77 @@ export function useSyncManager() {
       return false;
     } finally {
       bundleInstalling.value = false;
-      _bundleAbort = null;
+      activeBundleAbort = null;
     }
   }
 
   function cancelBundle(): void {
-    _bundleAbort?.abort();
+    activeBundleAbort?.abort();
+  }
+
+  /**
+   * Garante a Bíblia local quando o usuário entra numa tela bíblica. A checagem
+   * é só o marcador no disco — sem requisição. O ZIP é baixado uma única vez,
+   * compartilhado entre todas as instâncias do composable.
+   */
+  async function ensureBibleBundle(): Promise<boolean> {
+    if (bundleReady) return true;
+    if (bundleEnsurePromise) return bundleEnsurePromise;
+    if (Date.now() - bundleFailedAt < BUNDLE_RETRY_COOLDOWN_MS) return false;
+
+    const pending = (async (): Promise<boolean> => {
+      if (await BibleBundleInstaller.isInstalled()) {
+        bundleReady = true;
+        return true;
+      }
+
+      const installed = await downloadBundle({ bibleOnly: true });
+      if (!installed) bundleFailedAt = Date.now();
+      return installed;
+    })();
+
+    bundleEnsurePromise = pending;
+    try {
+      return await pending;
+    } finally {
+      if (bundleEnsurePromise === pending) bundleEnsurePromise = null;
+    }
+  }
+
+  /**
+   * Garante o catálogo (álbuns, músicas, hinário…) local antes de uma leitura
+   * em massa. O scan da Verificação Inicial abre o JSON de cada álbum e de cada
+   * música — ~2 mil requisições por instalação se o catálogo não estiver no
+   * disco. O bundle geral traz tudo (e a Bíblia junto) em um único GET.
+   */
+  async function ensureCatalogBundle(): Promise<boolean> {
+    if (catalogReady) return true;
+    if (catalogEnsurePromise) return catalogEnsurePromise;
+    if (Date.now() - catalogFailedAt < BUNDLE_RETRY_COOLDOWN_MS) return false;
+
+    const pending = (async (): Promise<boolean> => {
+      if (await BundleInstaller.hasBundleMarker()) {
+        catalogReady = true;
+        bundleReady = true;
+        return true;
+      }
+      const installed = await downloadBundle();
+      if (!installed) catalogFailedAt = Date.now();
+      return installed;
+    })();
+
+    catalogEnsurePromise = pending;
+    try {
+      return await pending;
+    } finally {
+      if (catalogEnsurePromise === pending) catalogEnsurePromise = null;
+    }
+  }
+
+  /** Só o desktop escaneia o disco álbum por álbum; a web não tem essa leitura em massa. */
+  async function ensureCatalogForBulkRead(): Promise<boolean> {
+    if (!Platform.storage?.checkLocal) return true;
+    return ensureCatalogBundle();
   }
 
   // ─── Utilities ──────────────────────────────────────────────────
@@ -1237,8 +1432,12 @@ export function useSyncManager() {
     refreshDiskUsage,
     bundleInstalling,
     bundleProgress,
+    bundlePercent,
+    bibleRevision,
     downloadBundle,
     cancelBundle,
+    ensureBibleBundle,
+    ensureCatalogBundle,
     cleanup,
   };
 }

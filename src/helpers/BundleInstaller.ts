@@ -26,7 +26,14 @@ const BUNDLE_MARKER_KEY = "__bundle_marker__";
 interface BundleMarker {
   id: string;
   version_number: number;
+  /** Epoch da exportação da origem; muda mesmo quando o schema não muda. */
+  source_version?: number;
   installed_at: string;
+}
+
+interface RemoteBundleConfig {
+  version_number: number;
+  source_version?: number;
 }
 
 /** Tabelas limpas antes da injeção do bundle (somente dados de catálogo/banco). */
@@ -79,12 +86,24 @@ function abortCheck(signal?: AbortSignal): void {
   signal?.throwIfAborted();
 }
 
-function parseRemoteVersion(value: unknown): { version_number: number } | null {
+function parseRemoteVersion(value: unknown): RemoteBundleConfig | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
-  const version = (value as { version_number?: unknown }).version_number;
-  return typeof version === "number" && Number.isFinite(version) && version >= 0
-    ? { version_number: version }
-    : null;
+  const raw = value as { version?: unknown; version_number?: unknown };
+  const versionNumber =
+    typeof raw.version_number === "number" &&
+    Number.isFinite(raw.version_number) &&
+    raw.version_number >= 0
+      ? raw.version_number
+      : null;
+  const sourceVersion =
+    typeof raw.version === "number" && Number.isFinite(raw.version) && raw.version >= 0
+      ? raw.version
+      : null;
+  if (versionNumber === null && sourceVersion === null) return null;
+  return {
+    version_number: versionNumber ?? sourceVersion!,
+    ...(sourceVersion === null ? {} : { source_version: sourceVersion }),
+  };
 }
 
 export default {
@@ -239,10 +258,18 @@ export default {
       // Grava marker confirmando instalação do bundle
       // Usa a versão recebida como parâmetro (evita fetchRemoteConfig redundante)
       let markerVersion = version ?? 0;
-      if (!markerVersion) {
+      let sourceVersion: number | undefined = version;
+      // O ZIP já traz o `config`: perguntar de novo à API seria uma segunda
+      // requisição só para saber o que acabou de chegar.
+      const bundled = markerVersion ? null : parseRemoteVersion(datasets.get("config"));
+      if (bundled) {
+        markerVersion = bundled.source_version ?? bundled.version_number;
+        sourceVersion = bundled.source_version;
+      } else if (!markerVersion) {
         try {
           const remote = await this.fetchRemoteConfig();
-          markerVersion = remote?.version_number ?? 0;
+          markerVersion = remote?.source_version ?? remote?.version_number ?? 0;
+          sourceVersion = remote?.source_version;
         } catch {
           // Se fetchRemoteConfig falhar, tenta ler do config local
           try {
@@ -260,6 +287,7 @@ export default {
         data: {
           id: BUNDLE_MARKER_KEY,
           version_number: markerVersion,
+          ...(sourceVersion == null ? {} : { source_version: sourceVersion }),
           installed_at: new Date().toISOString(),
         } satisfies BundleMarker,
         ts: Date.now(),
@@ -301,7 +329,22 @@ export default {
         BUNDLE_MARKER_KEY
       );
       if (!row?.data) return false;
-      return row.data.version_number === expectedVersion;
+      return (row.data.source_version ?? row.data.version_number) === expectedVersion;
+    } catch {
+      return false;
+    }
+  },
+
+  /**
+   * True só se um bundle completo terminou de instalar neste aparelho — o
+   * marcador é o último a ser gravado. Diferente de getInstalledBundleVersion,
+   * não considera o dataset `config` em cache: a web o guarda rotineiramente,
+   * sem nunca ter instalado bundle nenhum.
+   */
+  async hasBundleMarker(): Promise<boolean> {
+    try {
+      const row = await $idb.get<{ data?: BundleMarker }>(DB_TABLE.CACHE, BUNDLE_MARKER_KEY);
+      return !!row?.data;
     } catch {
       return false;
     }
@@ -310,11 +353,10 @@ export default {
   /** Retorna a versão do último bundle instalado, sem buscar na rede. */
   async getInstalledBundleVersion(): Promise<number | null> {
     try {
-      const marker = await $idb.get<{ data?: { version_number?: unknown } }>(
-        DB_TABLE.CACHE,
-        BUNDLE_MARKER_KEY
-      );
-      const markerVersion = marker?.data?.version_number;
+      const marker = await $idb.get<{
+        data?: { version_number?: unknown; source_version?: unknown };
+      }>(DB_TABLE.CACHE, BUNDLE_MARKER_KEY);
+      const markerVersion = marker?.data?.source_version ?? marker?.data?.version_number;
       if (
         typeof markerVersion === "number" &&
         Number.isFinite(markerVersion) &&
@@ -345,7 +387,7 @@ export default {
    * Verifica se o bundle remoto tem versão diferente da local.
    * Retorna null se não conseguir acessar a API.
    */
-  async fetchRemoteConfig(): Promise<{ version_number: number } | null> {
+  async fetchRemoteConfig(): Promise<RemoteBundleConfig | null> {
     // Wi-Fi de igreja soluça por meio segundo o tempo todo (ver
     // useConnectivity.ts) — sem retry, essa checagem roda no boot e um
     // soluço passageiro fazia o app achar que precisa rebaixar tudo (ou
@@ -359,14 +401,15 @@ export default {
     return null;
   },
 
-  async _fetchRemoteConfigOnce(): Promise<{ version_number: number } | null> {
+  async _fetchRemoteConfigOnce(): Promise<RemoteBundleConfig | null> {
     const fetchConfig = async (
       url: string,
       token: string,
       source: string
-    ): Promise<{ version_number: number } | null> => {
+    ): Promise<RemoteBundleConfig | null> => {
       const res = await fetchWithTimeout(url, {
         headers: { "Api-Token": token },
+        cache: "no-store",
         source,
       });
       if (!res.ok) return null;

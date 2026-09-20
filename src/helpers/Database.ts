@@ -697,6 +697,10 @@ export default {
    */
   async seed(file: string, data: unknown): Promise<void> {
     await writeRouted(file, data, routeFor(file));
+    // Um bundle pode substituir um capítulo que já foi lido nesta sessão.
+    // Esquecer a cópia em memória faz a próxima leitura usar o valor novo do
+    // IndexedDB sem invalidar os demais datasets.
+    _memory.delete(file);
   },
 
   /**
