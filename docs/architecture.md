@@ -1017,7 +1017,7 @@ estático — funciona offline):
 
 Pontos de conversão **na entrada** (antes de gravar no IDB): Biblioteca de
 Mídia (drag-and-drop, file picker e import em lote), Editor de Slides,
-Projeção de Fundo, picker de imagens do Overlay e imagem da ação final do
+Projeção de Fundo, picker de imagens das Sobreposições e imagem da ação final do
 Timer/Timer Worship. A projeção da Biblioteca de Mídia tem ainda **fallback
 preguiçoso**: HEIC já registrado sem conversão é convertido on-demand e
 cacheado por item (`heicProjectionCache`).
@@ -1446,7 +1446,7 @@ Todos os endpoints POST exigem `Content-Type: application/json`.
 src/
 ├── components/              # Componentes reutilizáveis globais
 │   ├── CategoryManagerDialog.vue  # Diálogo de categorias (compartilhado)
-│   ├── OverlayRenderer.vue        # Overlays sobre projeção
+│   ├── OverlayRenderer.vue        # Sobreposições sobre a projeção
 │   ├── Slide.vue                  # Renderizador de slides
 │   ├── StartupCheckDialog.vue     # Verificação inicial + download de coletâneas/bíblia
 │   └── format-fields/             # Campos de formatação (FieldColor, FieldFont, etc.)
@@ -1495,7 +1495,7 @@ src/
 │   │       ├── Index.vue                 # Layout two-columns (playlist panel + songs)
 │   │       ├── PlaylistPanel.vue         # Painel esquerdo: criar/renomear/excluir playlists
 │   │       └── PlaylistSongs.vue         # Painel direito: músicas da playlist + play
-│   ├── overlay/                  # Overlays customizáveis
+│   ├── overlay/                  # Sobreposições customizáveis (id interno: overlay)
 │   ├── scheduled_items/          # Itens agendados por categoria/data
 │   └── ...
 ├── views/                    # Rotas de projeção / shell

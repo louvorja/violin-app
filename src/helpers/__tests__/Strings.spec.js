@@ -52,3 +52,25 @@ describe("Strings.sort", () => {
     expect(Strings.sort(undefined, undefined)).toBe(0);
   });
 });
+
+describe("Strings.escapeHtml", () => {
+  it("escapa os cinco caracteres que abrem marcação ou atributo", () => {
+    expect(Strings.escapeHtml(`<a href="x" title='y'>&</a>`)).toBe(
+      "&lt;a href=&quot;x&quot; title=&#39;y&#39;&gt;&amp;&lt;/a&gt;"
+    );
+  });
+
+  it("neutraliza um nome que tenta injetar HTML", () => {
+    expect(Strings.escapeHtml("<img src=x onerror=alert(1)>")).not.toContain("<");
+  });
+
+  it("preserva os acentos e escapa só o que é sintaxe de HTML", () => {
+    expect(Strings.escapeHtml("Ação & Louvor")).toBe("Ação &amp; Louvor");
+  });
+
+  it("aceita vazio, nulo e indefinido", () => {
+    expect(Strings.escapeHtml("")).toBe("");
+    expect(Strings.escapeHtml(null)).toBe("");
+    expect(Strings.escapeHtml(undefined)).toBe("");
+  });
+});

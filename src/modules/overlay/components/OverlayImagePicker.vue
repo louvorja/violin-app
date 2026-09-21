@@ -16,11 +16,14 @@
         size="sm"
         :icon="ICONS.ACTIONS.CLOSE"
         icon-only
+        :title="tm('slot.remove_image')"
+        :aria-label="tm('slot.remove_image')"
         @click="clearSelection"
       />
     </div>
 
     <!-- Library grid -->
+    <p v-if="images.length > 0" class="image-picker-caption">{{ tm("slot.image_library") }}</p>
     <div v-if="images.length > 0" class="image-picker-grid">
       <div
         v-for="img in images"
@@ -34,11 +37,13 @@
         <LjButton
           variant="ghost"
           size="sm"
+          icon-only
           class="image-picker-delete"
+          :icon="ICONS.ACTIONS.DELETE"
+          :title="tm('slot.delete_image')"
+          :aria-label="tm('slot.delete_image')"
           @click.stop="deleteImage(img)"
-        >
-          <LjIcon :icon="ICONS.ACTIONS.DELETE" size="16" />
-        </LjButton>
+        />
       </div>
     </div>
 
@@ -58,9 +63,14 @@
       @change="onFilesSelected"
     />
 
-    <LjButton variant="default" size="sm" class="image-picker-upload-btn" @click="openFilePicker">
-      <LjIcon start :icon="ICONS.ACTIONS.UPLOAD" />
-      {{ tm("slot.image_library") }}
+    <LjButton
+      variant="default"
+      size="sm"
+      class="image-picker-upload-btn"
+      :icon="ICONS.ACTIONS.UPLOAD"
+      @click="openFilePicker"
+    >
+      {{ tm("slot.add_image") }}
     </LjButton>
   </div>
 </template>
@@ -227,9 +237,16 @@ onMounted(() => {
   white-space: nowrap;
 }
 
+.image-picker-caption {
+  margin: 0;
+  color: var(--lj-text-muted);
+  font-size: var(--lj-text-sm);
+  font-weight: var(--lj-weight-medium);
+}
+
 .image-picker-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
   gap: 6px;
   max-height: 160px;
   overflow-y: auto;
@@ -264,7 +281,7 @@ onMounted(() => {
   bottom: 0;
   left: 0;
   right: 0;
-  font-size: 8px;
+  font-size: 10px;
   padding: 2px 4px;
   background: rgba(0, 0, 0, 0.6);
   color: #fff;
@@ -285,6 +302,10 @@ onMounted(() => {
 
 .image-picker-item:hover .image-picker-delete {
   opacity: 1;
+}
+
+.image-picker-empty p {
+  margin: 0;
 }
 
 .image-picker-empty {

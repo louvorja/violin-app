@@ -34,7 +34,7 @@ const MODULE_TITLES: Record<string, Record<string, string>> = {
     musics: "Músicas",
     name_draw: "Sorteio de Nomes",
     online_videos: "Vídeos On-line",
-    overlay: "Overlays",
+    overlay: "Sobreposições",
     remote_control: "Controle Remoto",
     scheduled_items: "Itens Agendados",
     slide_editor: "Editor de Músicas",

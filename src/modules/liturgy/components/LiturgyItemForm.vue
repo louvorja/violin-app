@@ -554,8 +554,8 @@ const typeOptions = computed(() => [
   { value: LiturgyItemTypeEnum.ITENS_AGENDADOS, label: t("types.itens-agendados") },
   { value: LiturgyItemTypeEnum.MUSICA, label: t("types.musica") },
   { value: LiturgyItemTypeEnum.SITE, label: t("types.site") },
-  { value: LiturgyItemTypeEnum.BG_SOUND, label: t("types.som-de-fundo") },
   { value: LiturgyItemTypeEnum.OVERLAY, label: t("types.overlay") },
+  { value: LiturgyItemTypeEnum.BG_SOUND, label: t("types.som-de-fundo") },
   { value: LiturgyItemTypeEnum.VIDEO_ONLINE, label: t("types.video-online") },
 ]);
 
@@ -583,7 +583,7 @@ const scheduledOptions = computed(() => [
 ]);
 
 const overlayOptions = computed(() => [
-  { value: "", label: t("overlay.select_slot") },
+  { value: "", label: t("overlay.pick") },
   ...props.overlaySlots.map((slot) => ({ value: slot.id, label: slot.name || slot.id })),
 ]);
 

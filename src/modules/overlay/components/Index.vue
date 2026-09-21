@@ -4,20 +4,29 @@
     :manifest="manifest"
     :style="{ minWidth: '700px', minHeight: '400px' }"
   >
+    <template #header>
+      <LjSwitch
+        :model-value="enabled"
+        :label="tm('global_enabled')"
+        @update:model-value="setEnabled"
+      />
+      <span class="lj-u-spacer" />
+      <LjButton variant="primary" size="sm" :icon="ICONS.ACTIONS.ADD" @click="addSlot">
+        {{ tm("add_slot") }}
+      </LjButton>
+    </template>
+
     <div class="overlay-root">
-      <!-- Header -->
-
-      <LjDivider />
-
       <div class="overlay-body">
-        <!-- Preview -->
-        <div class="overlay-preview-panel">
-          <div class="overlay-preview-header">
-            <LjIcon :icon="ICONS.UI.EYE_OUTLINE" size="14" />
+        <section class="overlay-preview-panel">
+          <h3 class="overlay-panel-title">
+            <LjIcon :icon="ICONS.UI.EYE_OUTLINE" :size="14" />
             <span>{{ tm("preview") }}</span>
-          </div>
-          <div class="overlay-preview-canvas-wrap">
-            <div ref="previewRef" class="overlay-preview-canvas">
+            <span class="overlay-panel-note">16:9 · 1920 × 1080</span>
+          </h3>
+
+          <div ref="stageWrapRef" class="overlay-stage-wrap">
+            <div class="overlay-stage" :style="stageStyle">
               <div
                 v-for="slot in localSlots"
                 :key="slot.id"
@@ -31,7 +40,7 @@
                   class="overlay-preview-text"
                   :style="previewTextStyle(slot)"
                 >
-                  {{ slot.content || "Texto" }}
+                  {{ slot.content || tm("slot.type_text") }}
                 </div>
                 <img
                   v-else-if="slot.type === 'image'"
@@ -45,81 +54,93 @@
                   class="overlay-preview-text"
                   :style="previewTextStyle(slot)"
                 >
-                  {{ moduleValues[slot.source_module || ""] || slot.source_module || "—" }}
+                  {{ mirrorText(slot) }}
                 </div>
               </div>
             </div>
           </div>
-        </div>
+        </section>
 
-        <!-- Slot list -->
-        <div class="overlay-slot-list">
+        <section class="overlay-list-panel">
           <div v-if="localSlots.length === 0" class="overlay-empty">
-            <LjIcon :icon="ICONS.MODULES.OVERLAY" size="48" color="grey" />
-            <p>{{ tm("empty") }}</p>
+            <LjIcon :icon="ICONS.MODULES.OVERLAY" :size="40" />
+            <p class="overlay-empty__title">{{ tm("empty") }}</p>
+            <p class="overlay-empty__hint">{{ tm("empty_hint") }}</p>
           </div>
 
-          <div v-else class="overlay-slots">
-            <div
-              v-for="(slot, i) in localSlots"
+          <ul v-else class="overlay-slots">
+            <li
+              v-for="slot in localSlots"
               :key="slot.id"
               class="overlay-slot-card"
               :class="{ 'overlay-slot-card--active': editingSlot?.id === slot.id }"
             >
               <div class="overlay-slot-card-header">
-                <LjIcon :icon="ICONS.ACTIONS.DRAG" size="16" class="overlay-slot-drag" />
-                <LjSwitch v-model="slot.enabled" @update:model-value="persist" />
-                <span class="overlay-slot-name">{{ slot.name }}</span>
+                <LjSwitch
+                  v-model="slot.enabled"
+                  :title="tm('slot.enabled')"
+                  @update:model-value="persist"
+                />
+                <span class="overlay-slot-name" :title="slot.name">{{ slot.name }}</span>
                 <LjChip size="sm" class="overlay-slot-type">
                   {{ tm("slot.type_" + slot.type) }}
                 </LjChip>
-                <div class="lj-u-spacer" />
                 <LjButton
                   variant="ghost"
                   size="sm"
-                  :icon="ICONS.ACTIONS.EDIT_OUTLINE"
                   icon-only
-                  @click="editSlot(i)"
+                  :icon="ICONS.ACTIONS.EDIT_OUTLINE"
+                  :title="tm('slot.edit')"
+                  :aria-label="tm('slot.edit')"
+                  :aria-expanded="editingSlot?.id === slot.id"
+                  @click="toggleEditing(slot)"
                 />
                 <LjButton
                   variant="ghost"
                   size="sm"
-                  :icon="ICONS.ACTIONS.DUPLICATE"
                   icon-only
-                  @click="duplicateSlot(i)"
+                  :icon="ICONS.ACTIONS.DUPLICATE"
+                  :title="tm('slot.duplicate')"
+                  :aria-label="tm('slot.duplicate')"
+                  @click="duplicateSlot(slot)"
                 />
                 <LjButton
                   variant="danger"
                   size="sm"
-                  :icon="ICONS.ACTIONS.DELETE"
                   icon-only
-                  @click="removeSlot(i)"
+                  :icon="ICONS.ACTIONS.DELETE"
+                  :title="tm('slot.delete')"
+                  :aria-label="tm('slot.delete')"
+                  @click="confirmRemove(slot)"
                 />
               </div>
 
-              <!-- Inline editor when selected -->
               <div v-if="editingSlot?.id === slot.id" class="overlay-slot-editor">
                 <OverlaySlotEditor :slot-data="slot" @change="onSlotChange" />
               </div>
-            </div>
-          </div>
-        </div>
+            </li>
+          </ul>
+        </section>
       </div>
     </div>
   </ModuleContainer>
 </template>
 
 <script setup lang="ts">
-import { LjButton, LjChip, LjDivider, LjIcon, LjSwitch } from "@/components/ui";
+import { LjButton, LjChip, LjIcon, LjSwitch } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
-import { ref, reactive, onMounted } from "vue";
+import { ref, reactive, computed, onMounted, onBeforeUnmount } from "vue";
+import { useI18n } from "vue-i18n";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import OverlaySlotEditor from "./OverlaySlotEditor.vue";
 import $broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import $userdata from "@/helpers/UserData";
-import { FONT, resolveFont } from "@/config/Fonts";
+import $alert from "@/helpers/Alert";
+import Strings from "@/helpers/Strings";
+import { KEYS } from "@/constants/UserDataKeys";
+import { getModuleTitle } from "@/config/modules";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import {
   getImage,
@@ -130,26 +151,36 @@ import {
   deleteSlot,
 } from "@/helpers/Overlay";
 import {
-  OVERLAY_STYLE_DEFAULTS,
-  createOverlaySlot,
-  buildAnchorStyle,
-  type OverlaySlot,
-} from "@/types/Overlay";
+  STAGE_UNITS,
+  overlayImageStyle,
+  overlaySlotStyle,
+  overlayTextStyle,
+} from "@/helpers/OverlayStyle";
+import { OVERLAY_STYLE_DEFAULTS, createOverlaySlot, type OverlaySlot } from "@/types/Overlay";
 
+const { t } = useI18n();
 const moduleContainer = ref<{ tm(key: string, named?: Record<string, unknown>): string } | null>(
   null
 );
 const tm = (key: string, named?: Record<string, unknown>): string =>
   moduleContainer.value?.tm(key, named) || key;
 
-const enabled = ref(false);
+// O interruptor global e o botão da ribbon leem a mesma preferência: ligar por
+// um deles precisa refletir no outro sem cada um guardar a sua cópia.
+const enabled = computed(
+  () => $userdata.get<boolean>(KEYS.MODULES.OVERLAY.ENABLED, false) === true
+);
 const localSlots = reactive<OverlaySlot[]>([]);
 const editingSlot = ref<OverlaySlot | null>(null);
-const previewRef = ref<HTMLElement | null>(null);
 const previewImageCache = reactive<Record<string, string>>({});
 const moduleValues = reactive<Record<string, string>>({});
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+function setEnabled(value: boolean): void {
+  $userdata.set(KEYS.MODULES.OVERLAY.ENABLED, value);
+  $broadcast.send(BROADCAST_TYPE.OVERLAY_CONFIG_CHANGED, { enabled: value });
+}
 
 async function load(): Promise<void> {
   const slots = await readAllSlots();
@@ -189,28 +220,28 @@ function onSlotChange(updatedSlot: OverlaySlot): void {
 
 function addSlot(): void {
   const slot = createOverlaySlot();
-  slot.name = `Overlay ${localSlots.length + 1}`;
+  slot.name = tm("slot.default_name", { n: localSlots.length + 1 });
   slot.order = localSlots.length;
   localSlots.push(slot);
   editingSlot.value = slot;
   persist();
 }
 
-function editSlot(index: number): void {
-  editingSlot.value = localSlots[index];
+function toggleEditing(slot: OverlaySlot): void {
+  editingSlot.value = editingSlot.value?.id === slot.id ? null : slot;
 }
 
 function selectPreviewSlot(slot: OverlaySlot): void {
-  const idx = localSlots.findIndex((s) => s.id === slot.id);
-  if (idx !== -1) editSlot(idx);
+  editingSlot.value = slot;
 }
 
-function duplicateSlot(index: number): void {
-  const original = localSlots[index];
+function duplicateSlot(original: OverlaySlot): void {
+  const index = localSlots.findIndex((s) => s.id === original.id);
+  if (index === -1) return;
   const copy = createOverlaySlot({
     ...JSON.parse(JSON.stringify(original)),
     id: undefined,
-    name: original.name + " (cópia)",
+    name: `${original.name} ${tm("slot.copy_suffix")}`,
   });
   copy.order = localSlots.length;
   localSlots.splice(index + 1, 0, copy);
@@ -218,9 +249,28 @@ function duplicateSlot(index: number): void {
   persist();
 }
 
-async function removeSlot(index: number): Promise<void> {
-  const slot = localSlots[index];
-  if (slot.file_id) {
+// As sobreposições nascem como "Sobreposição 1", "2"…: só o botão da linha não
+// basta para o operador ver qual está prestes a sumir, então o nome vai na
+// pergunta. O Alert renderiza com v-html, por isso o nome é escapado.
+function confirmRemove(slot: OverlaySlot): void {
+  $alert.yesno(
+    {
+      title: tm("slot.delete_confirm"),
+      text: `<strong>${Strings.escapeHtml(slot.name)}</strong>`,
+      translate: false,
+    },
+    (btn?: string) => {
+      if (btn === "yes") void removeSlot(slot);
+    }
+  );
+}
+
+async function removeSlot(slot: OverlaySlot): Promise<void> {
+  if (!localSlots.some((s) => s.id === slot.id)) return;
+  // A imagem é da biblioteca e pode servir a outra sobreposição: ela só sai
+  // junto com a última que a usa.
+  const usedElsewhere = localSlots.some((s) => s.id !== slot.id && s.file_id === slot.file_id);
+  if (slot.file_id && !usedElsewhere) {
     try {
       await deleteImage(slot.file_id);
     } catch {
@@ -228,40 +278,44 @@ async function removeSlot(index: number): Promise<void> {
     }
   }
   await deleteSlot(slot.id);
-  localSlots.splice(index, 1);
+  // O índice é procurado só agora: a lista pode ter sido recarregada durante os
+  // `await` acima, e o índice antigo apontaria para outro item.
+  const index = localSlots.findIndex((s) => s.id === slot.id);
+  if (index !== -1) localSlots.splice(index, 1);
   if (editingSlot.value?.id === slot.id) editingSlot.value = null;
   persist();
 }
 
-function anchorTextAlign(slot: OverlaySlot): string {
-  const anchor = slot.position?.anchor || "bottom-center";
-  if (anchor.endsWith("right")) return "right";
-  if (anchor === "center" || anchor.endsWith("center")) return "center";
-  return "left";
+// ── Pré-visualização ──
+// O palco é uma tela de 1920×1080 reduzida por `transform`, medida em unidades
+// de container: fonte, espaçamento e deslocamento em px escalam juntos, como
+// numa projeção Full HD, e o estilo vem do mesmo helper que a projeção usa.
+
+const STAGE_WIDTH = 1920;
+const stageWrapRef = ref<HTMLElement | null>(null);
+const stageScale = ref(0.4);
+const stageStyle = computed(() => ({
+  transform: `scale(${stageScale.value})`,
+  "--stage-scale": String(stageScale.value),
+}));
+let stageObserver: ResizeObserver | null = null;
+
+function measureStage(): void {
+  const width = stageWrapRef.value?.clientWidth ?? 0;
+  if (width > 0) stageScale.value = width / STAGE_WIDTH;
 }
 
-function previewSlotStyle(slot: OverlaySlot): Record<string, string | number | undefined> {
+function previewSlotStyle(slot: OverlaySlot): Record<string, string> {
   if (!slot.enabled) return { display: "none" };
-  const s = slot.style;
-  const out: Record<string, string | number | undefined> = {
-    position: "absolute",
-    ...buildAnchorStyle(slot.position),
-    zIndex: slot.order + 1,
-    opacity: String((s.opacity ?? 100) / 100),
-    padding: s.padding || "8px 16px",
-    borderRadius: s.border_radius || "4px",
-    border: s.border || "",
-    width: s.width || "auto",
-    height: s.height || "auto",
-    textAlign: anchorTextAlign(slot),
-  };
-  if (s.background && s.background !== "transparent") {
-    out.background = s.background;
-  }
-  if (s.box_shadow) {
-    out.boxShadow = "0 4px 16px rgba(0,0,0,0.45)";
-  }
-  return out;
+  return { ...overlaySlotStyle(slot), pointerEvents: "auto", cursor: "pointer" };
+}
+
+function previewTextStyle(slot: OverlaySlot): Record<string, string> {
+  return overlayTextStyle(slot, STAGE_UNITS);
+}
+
+function previewImageStyle(slot: OverlaySlot): Record<string, string> {
+  return overlayImageStyle(slot, STAGE_UNITS);
 }
 
 function previewImageUrl(slot: OverlaySlot): string {
@@ -275,30 +329,10 @@ function previewImageUrl(slot: OverlaySlot): string {
   return "";
 }
 
-function previewImageStyle(slot: OverlaySlot): Record<string, string | number> {
-  const scale = (slot.style?.image_scale ?? 100) / 100;
-  return {
-    width: "auto",
-    height: "auto",
-    maxWidth: `calc(40% * ${scale})`,
-    maxHeight: `calc(30% * ${scale})`,
-    objectFit: slot.style?.object_fit || "contain",
-    display: "inline-block",
-  };
-}
-
-function previewTextStyle(slot: OverlaySlot): Record<string, string> {
-  const s = slot.style;
-  return {
-    fontFamily: resolveFont(s.font, FONT.PROJECTION.FALLBACK),
-    fontSize: `clamp(5px, ${s.font_size || 5}vh, 80px)`,
-    color: s.color || "#FFFFFF",
-    textAlign: s.text_align || "center",
-    lineHeight: "1.3",
-    fontWeight: "600",
-    letterSpacing: "0.02em",
-    textShadow: s.text_shadow ? "0 2px 8px rgba(0,0,0,0.8)" : "none",
-  };
+function mirrorText(slot: OverlaySlot): string {
+  const source = slot.source_module || "";
+  if (moduleValues[source]) return moduleValues[source];
+  return source ? t(getModuleTitle(source)) : "—";
 }
 
 // Ações da Ribbon
@@ -307,9 +341,7 @@ useBroadcastListener(BROADCAST_TYPE.MODULE_RIBBON_ACTION, (payload: unknown) => 
   if (pl?.module !== "overlay") return;
   switch (pl.action) {
     case "toggle":
-      enabled.value = !enabled.value;
-      $userdata.set("modules.overlay.enabled", enabled.value);
-      $broadcast.send(BROADCAST_TYPE.OVERLAY_CONFIG_CHANGED, { enabled: enabled.value });
+      setEnabled(!enabled.value);
       break;
     case "add":
       addSlot();
@@ -329,15 +361,22 @@ useBroadcastListener(BROADCAST_TYPE.MODULE_PROJECTION_VALUE, (payload: unknown) 
 useBroadcastListener(BROADCAST_TYPE.OVERLAY_CONFIG_CHANGED, (payload: unknown) => {
   const p = payload as { enabled?: boolean } | null;
   if (p?.enabled !== undefined) {
-    enabled.value = p.enabled;
-    $userdata.set("modules.overlay.enabled", p.enabled);
+    $userdata.set(KEYS.MODULES.OVERLAY.ENABLED, p.enabled);
   }
   load();
 });
 
 onMounted(() => {
-  enabled.value = $userdata.get<boolean>("modules.overlay.enabled", false) === true;
   load();
+  measureStage();
+  if (typeof ResizeObserver !== "undefined" && stageWrapRef.value) {
+    stageObserver = new ResizeObserver(measureStage);
+    stageObserver.observe(stageWrapRef.value);
+  }
+});
+
+onBeforeUnmount(() => {
+  stageObserver?.disconnect();
 });
 </script>
 
@@ -347,14 +386,8 @@ onMounted(() => {
   flex-direction: column;
   height: 100%;
   overflow: hidden;
-}
-
-.overlay-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 16px;
-  flex-shrink: 0;
+  container-type: inline-size;
+  container-name: overlay-module;
 }
 
 .overlay-body {
@@ -364,86 +397,129 @@ onMounted(() => {
   overflow: hidden;
 }
 
+/* ====================== Pré-visualização ====================== */
 .overlay-preview-panel {
   display: flex;
   flex-direction: column;
+  gap: var(--lj-space-4);
   flex: 1;
   min-width: 0;
+  padding: var(--lj-space-6);
+  overflow-y: auto;
 }
 
-.overlay-preview-header {
+.overlay-panel-title {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  font-size: 12px;
-  font-weight: 500;
+  gap: var(--lj-space-3);
+  margin: 0;
   color: var(--lj-text-muted);
-  flex-shrink: 0;
+  font-size: var(--lj-text-sm);
+  font-weight: var(--lj-weight-medium);
 }
 
-.overlay-preview-canvas-wrap {
-  flex: 1;
-  min-height: 0;
-  min-width: 0;
-  position: relative;
+.overlay-panel-note {
+  margin-left: auto;
+  color: var(--lj-text-subtle);
+  font-weight: normal;
 }
-.overlay-preview-canvas {
-  position: absolute;
-  inset: 0;
-  background: #111;
+
+.overlay-stage-wrap {
+  position: relative;
+  flex-shrink: 0;
+  width: 100%;
+  aspect-ratio: 16 / 9;
   overflow: hidden;
+  background: #111;
   border-radius: var(--lj-radius-lg);
 }
 
-.overlay-preview-slot {
-  white-space: pre-wrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  cursor: pointer;
+.overlay-stage {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1920px;
+  height: 1080px;
+  transform-origin: top left;
+  container-type: size;
 }
+
+/* Mesmas regras de caixa do OverlayRenderer: sem elas o texto não quebra na
+   mesma largura que na projeção. */
+.overlay-preview-slot {
+  box-sizing: border-box;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+}
+
+/* O palco está reduzido; o contorno é dividido pela escala para continuar com
+   2px na tela. */
 .overlay-preview-slot--active {
-  outline: 2px solid var(--lj-ui-accent);
-  outline-offset: -2px;
+  outline: calc(2px / var(--stage-scale)) solid var(--lj-ui-accent);
+  outline-offset: calc(-2px / var(--stage-scale));
 }
 
 .overlay-preview-text {
+  white-space: pre-wrap;
+  user-select: none;
 }
 
 .overlay-preview-img {
   display: block;
 }
 
-.overlay-slot-list {
+/* ====================== Lista ====================== */
+.overlay-list-panel {
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
   width: 40%;
   min-width: 300px;
-  flex-shrink: 0;
+  max-width: 480px;
+  padding: var(--lj-space-5);
   overflow-y: auto;
+  border-left: 1px solid var(--lj-surface-divider);
 }
 
 .overlay-empty {
   display: flex;
+  flex: 1;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  flex: 1;
+  gap: var(--lj-space-3);
+  padding: var(--lj-space-8);
   color: var(--lj-text-subtle);
-  font-size: 13px;
-  padding: 24px;
   text-align: center;
 }
 
+.overlay-empty p {
+  margin: 0;
+}
+
+.overlay-empty__title {
+  color: var(--lj-text-muted);
+  font-size: var(--lj-text-base);
+  font-weight: var(--lj-weight-medium);
+}
+
+.overlay-empty__hint {
+  max-width: 260px;
+  font-size: var(--lj-text-sm);
+}
+
 .overlay-slots {
-  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .overlay-slot-card {
   border: 1px solid var(--lj-surface-border);
   border-radius: var(--lj-radius-lg);
-  margin-bottom: 8px;
   background: var(--lj-surface-bg-soft);
   transition: border-color var(--lj-transition-normal);
 }
@@ -455,24 +531,18 @@ onMounted(() => {
 .overlay-slot-card-header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
-  font-size: 13px;
-}
-
-.overlay-slot-drag {
-  cursor: grab;
-  color: var(--lj-text-subtle);
+  gap: var(--lj-space-3);
+  padding: var(--lj-space-3) var(--lj-space-4);
+  font-size: var(--lj-text-base);
 }
 
 .overlay-slot-name {
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   flex: 1;
   min-width: 0;
-  margin-left: 10px;
+  overflow: hidden;
+  font-weight: var(--lj-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .overlay-slot-type {
@@ -480,7 +550,38 @@ onMounted(() => {
 }
 
 .overlay-slot-editor {
+  padding: var(--lj-space-5);
   border-top: 1px solid var(--lj-surface-divider);
-  padding: 12px;
+}
+
+/* Lado a lado só quando a lista comporta a fileira de abas do editor (369px
+   úteis; a 40% da largura, com a barra de rolagem do Windows, isso pede ~1090px
+   de módulo). Abaixo disso — janela pequena, ou a tela de um projetor 1024×768
+   espelhada — a pré-visualização vai para cima e a lista ocupa a largura toda,
+   em vez de o editor estourar a moldura do cartão. */
+@container overlay-module (max-width: 1089px) {
+  .overlay-body {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .overlay-preview-panel {
+    flex: none;
+    overflow: visible;
+  }
+
+  .overlay-stage-wrap {
+    max-width: 420px;
+  }
+
+  .overlay-list-panel {
+    flex: none;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    overflow: visible;
+    border-top: 1px solid var(--lj-surface-divider);
+    border-left: 0;
+  }
 }
 </style>

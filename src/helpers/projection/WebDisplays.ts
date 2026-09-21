@@ -11,6 +11,7 @@
  */
 
 import { identityFromDisplay, type MonitorIdentity } from "@/helpers/MonitorIdentity";
+import Strings from "@/helpers/Strings";
 
 /** Uma tela como o navegador a descreve. */
 export interface WebScreen {
@@ -270,7 +271,7 @@ export function identify(durationMs = 5000): number {
     const win = window.open("", `louvorja_identify_${index}`, features);
     if (!win) return;
 
-    const nome = screen.label ? escapeHtml(screen.label) : "";
+    const nome = screen.label ? Strings.escapeHtml(screen.label) : "";
     win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Monitor ${index + 1}</title>
 <style>
   html,body{margin:0;height:100%;background:#6366f1;color:#fff;
@@ -300,16 +301,6 @@ export function identify(durationMs = 5000): number {
   }, durationMs);
 
   return abertas.length;
-}
-
-/** Escapa texto vindo do sistema antes de injetá-lo no HTML do cartão. */
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }
 
 /**

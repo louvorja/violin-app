@@ -1,17 +1,19 @@
 {
-  "title": "Overlays",
-  "description": "Gerencie overlays customizáveis sobre a projeção.",
+  "title": "Sobreposições",
+  "description": "Gerencie textos, imagens e valores de outros módulos exibidos por cima da projeção.",
   "ribbon": {
-    "title_ctx": "Overlays",
+    "title_ctx": "Sobreposições",
     "btn": {
-      "overlay_toggle": "Overlay",
-      "overlay_on": "Overlay ativo",
-      "overlay_add": "Adicionar overlay"
+      "overlay_activate": "Ativar sobreposições",
+      "overlay_deactivate": "Desativar sobreposições",
+      "overlay_add": "Adicionar sobreposição"
     }
   },
-  "global_enabled": "Overlay ativo",
-  "add_slot": "Adicionar overlay",
+  "global_enabled": "Sobreposições ativas",
+  "add_slot": "Adicionar sobreposição",
   "slot": {
+    "default_name": "Sobreposição {n}",
+    "copy_suffix": "(cópia)",
     "name": "Nome",
     "type": "Tipo",
     "type_text": "Texto",
@@ -20,9 +22,15 @@
     "module_source": "Módulo de origem",
     "content": "Conteúdo",
     "image_library": "Biblioteca de imagens",
-    "drag_drop_hint": "Arraste imagens aqui ou clique para selecionar",
-    "enabled": "Ativo",
-    "delete_confirm": "Excluir este overlay?"
+    "add_image": "Adicionar imagem",
+    "remove_image": "Remover imagem",
+    "delete_image": "Excluir da biblioteca",
+    "drag_drop_hint": "Arraste imagens aqui ou use o botão abaixo",
+    "enabled": "Ativa",
+    "edit": "Editar",
+    "duplicate": "Duplicar",
+    "delete": "Excluir",
+    "delete_confirm": "Excluir esta sobreposição?"
   },
   "position": {
     "title": "Posição",
@@ -36,9 +44,10 @@
     "font_size": "Tamanho do texto",
     "color": "Cor do texto",
     "background": "Fundo",
+    "no_background": "Sem fundo",
     "background_opacity": "Opacidade do fundo",
     "opacity": "Opacidade",
-    "padding": "Padding",
+    "padding": "Espaçamento interno",
     "border_radius": "Borda arredondada",
     "border": "Borda",
     "text_shadow": "Sombra no texto",
@@ -66,7 +75,8 @@
     "show_on_return": "Mostrar no retorno",
     "show_on_obs": "Mostrar no OBS"
   },
-  "empty": "Nenhum overlay configurado. Clique em \"Adicionar overlay\" para começar.",
+  "empty": "Nenhuma sobreposição criada.",
+  "empty_hint": "Use uma sobreposição para exibir um texto, um logotipo ou um cronômetro por cima da projeção.",
   "animations": {
     "fade": "Fade",
     "slide-up": "Deslizar para cima",
@@ -74,8 +84,8 @@
     "none": "Nenhuma",
     "slide-left": "Deslizar para esquerda",
     "slide-right": "Deslizar para direita",
-    "zoom-in": "Zoom in",
-    "zoom-out": "Zoom out",
+    "zoom-in": "Aproximar",
+    "zoom-out": "Afastar",
     "bounce": "Quicar",
     "flip": "Girar 3D"
   },
@@ -90,5 +100,5 @@
     "bottom-center": "Base centro",
     "bottom-right": "Base direita"
   },
-  "preview": "Preview"
+  "preview": "Prévia"
 }

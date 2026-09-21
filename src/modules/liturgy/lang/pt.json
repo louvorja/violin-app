@@ -63,7 +63,7 @@
     "biblioteca-midia": "Biblioteca de Mídia",
     "som-de-fundo": "Som de Fundo",
     "anuncios": "Anúncios",
-    "overlay": "Overlay"
+    "overlay": "Sobreposição"
   },
   "inputs": {
     "type": "Tipo",
@@ -268,12 +268,13 @@
     "all": "Todos"
   },
   "overlay": {
-    "select_slot": "Selecionar overlay",
+    "select_slot": "Sobreposição",
+    "pick": "-- selecione uma sobreposição --",
     "action": "Ação",
     "activate": "Ativar",
     "deactivate": "Desativar",
-    "link_overlay": "Vincular Overlay",
-    "linked_overlay": "Overlay vinculado",
-    "no_slots": "Nenhum overlay disponível. Crie slots no módulo Overlay."
+    "link_overlay": "Vincular sobreposição",
+    "linked_overlay": "Sobreposição vinculada",
+    "no_slots": "Nenhuma sobreposição disponível. Crie sobreposições no módulo Sobreposições."
   }
 }

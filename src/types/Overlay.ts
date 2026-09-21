@@ -108,9 +108,9 @@ export const OVERLAY_STYLE_DEFAULTS: OverlayStyle = {
 };
 
 export function createOverlaySlot(overrides: Partial<OverlaySlot> = {}): OverlaySlot {
-  return {
+  const slot: OverlaySlot = {
     id: crypto.randomUUID(),
-    name: "Novo overlay",
+    name: "Nova sobreposição",
     enabled: true,
     type: "text",
     content: "Texto",
@@ -123,6 +123,10 @@ export function createOverlaySlot(overrides: Partial<OverlaySlot> = {}): Overlay
     order: 0,
     ...overrides,
   };
+  // `id: undefined` nos overrides (é como o duplicar pede um id novo) apagaria o
+  // id gerado acima, e o slot chegaria ao IndexedDB sem chave.
+  if (!slot.id) slot.id = crypto.randomUUID();
+  return slot;
 }
 
 export const OVERLAY_ANCHOR_CSS: Record<OverlayAnchor, Record<string, string>> = {

@@ -1,17 +1,19 @@
 {
   "title": "Superposiciones",
-  "description": "Gestiona superposiciones personalizables sobre la proyección.",
+  "description": "Gestione textos, imágenes y valores de otros módulos mostrados sobre la proyección.",
   "ribbon": {
     "title_ctx": "Superposiciones",
     "btn": {
-      "overlay_toggle": "Superposición",
-      "overlay_on": "Superposición activa",
+      "overlay_activate": "Activar superposiciones",
+      "overlay_deactivate": "Desactivar superposiciones",
       "overlay_add": "Agregar superposición"
     }
   },
-  "global_enabled": "Superposición activa",
+  "global_enabled": "Superposiciones activas",
   "add_slot": "Agregar superposición",
   "slot": {
+    "default_name": "Superposición {n}",
+    "copy_suffix": "(copia)",
     "name": "Nombre",
     "type": "Tipo",
     "type_text": "Texto",
@@ -20,8 +22,14 @@
     "module_source": "Módulo de origen",
     "content": "Contenido",
     "image_library": "Biblioteca de imágenes",
-    "drag_drop_hint": "Arrastre imágenes aquí o haga clic para seleccionar",
-    "enabled": "Activo",
+    "add_image": "Agregar imagen",
+    "remove_image": "Quitar imagen",
+    "delete_image": "Eliminar de la biblioteca",
+    "drag_drop_hint": "Arrastre imágenes aquí o use el botón de abajo",
+    "enabled": "Activa",
+    "edit": "Editar",
+    "duplicate": "Duplicar",
+    "delete": "Eliminar",
     "delete_confirm": "¿Eliminar esta superposición?"
   },
   "position": {
@@ -36,6 +44,7 @@
     "font_size": "Tamaño del texto",
     "color": "Color del texto",
     "background": "Fondo",
+    "no_background": "Sin fondo",
     "background_opacity": "Opacidad del fondo",
     "opacity": "Opacidad",
     "padding": "Relleno",
@@ -66,7 +75,8 @@
     "show_on_return": "Mostrar en retorno",
     "show_on_obs": "Mostrar en OBS"
   },
-  "empty": "Ninguna superposición configurada. Haga clic en \"Agregar superposición\" para comenzar.",
+  "empty": "Ninguna superposición creada.",
+  "empty_hint": "Use una superposición para mostrar un texto, un logotipo o un cronómetro sobre la proyección.",
   "animations": {
     "fade": "Desvanecer",
     "slide-up": "Deslizar arriba",

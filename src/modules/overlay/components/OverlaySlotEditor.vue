@@ -42,64 +42,73 @@
 
     <!-- Position tab -->
     <div v-if="activeTab === 'position'" class="editor-pane">
-      <LjField :label="tm('position.anchor')" layout="column" group>
-        <div class="anchor-grid">
-          <button
-            v-for="anchor in anchors"
-            :key="anchor"
-            type="button"
-            class="anchor-cell"
-            :class="{ 'anchor-cell--active': m.position.anchor === anchor }"
-            :aria-label="tm('anchors.' + anchor)"
-            :aria-pressed="m.position.anchor === anchor"
-            @click="
-              m.position.anchor = anchor;
-              emitChange();
-            "
-          >
-            <span class="anchor-dot" />
-          </button>
-        </div>
-      </LjField>
+      <div class="editor-position">
+        <LjField
+          :label="tm('position.anchor')"
+          layout="column"
+          group
+          class="editor-position__anchor"
+        >
+          <div class="anchor-grid">
+            <button
+              v-for="anchor in anchors"
+              :key="anchor"
+              type="button"
+              class="anchor-cell"
+              :class="{ 'anchor-cell--active': m.position.anchor === anchor }"
+              :aria-label="tm('anchors.' + anchor)"
+              :aria-pressed="m.position.anchor === anchor"
+              @click="
+                m.position.anchor = anchor;
+                emitChange();
+              "
+            >
+              <span class="anchor-dot" />
+            </button>
+          </div>
+        </LjField>
 
-      <div class="editor-grid">
-        <LjField :label="tm('position.offset_x')" layout="column">
-          <LjInput
-            :model-value="m.position.offset_x"
-            type="number"
-            @update:model-value="
-              m.position.offset_x = Number($event);
-              emitChange();
-            "
-          >
-            <template #suffix><span class="editor-suffix">px</span></template>
-          </LjInput>
-        </LjField>
-        <LjField :label="tm('position.offset_y')" layout="column">
-          <LjInput
-            :model-value="m.position.offset_y"
-            type="number"
-            @update:model-value="
-              m.position.offset_y = Number($event);
-              emitChange();
-            "
-          >
-            <template #suffix><span class="editor-suffix">px</span></template>
-          </LjInput>
-        </LjField>
+        <div class="editor-position__offsets">
+          <LjField :label="tm('position.offset_x')" layout="column">
+            <LjInput
+              :model-value="m.position.offset_x"
+              type="number"
+              @update:model-value="
+                m.position.offset_x = Number($event);
+                emitChange();
+              "
+            >
+              <template #suffix><span class="editor-suffix">px</span></template>
+            </LjInput>
+          </LjField>
+          <LjField :label="tm('position.offset_y')" layout="column">
+            <LjInput
+              :model-value="m.position.offset_y"
+              type="number"
+              @update:model-value="
+                m.position.offset_y = Number($event);
+                emitChange();
+              "
+            >
+              <template #suffix><span class="editor-suffix">px</span></template>
+            </LjInput>
+          </LjField>
+        </div>
       </div>
     </div>
 
     <!-- Appearance tab -->
     <div v-if="activeTab === 'appearance'" class="editor-pane">
       <LjField :label="tm('style.font')" layout="column">
-        <SelectFont
-          :model-value="m.style.font"
-          @update:model-value="
-            m.style.font = $event;
-            emitChange();
-          "
-        />
+        <div class="editor-font">
+          <SelectFont
+            :model-value="m.style.font"
+            @update:model-value="
+              m.style.font = $event;
+              emitChange();
+            "
+          />
+        </div>
       </LjField>
 
       <LjField :label="tm('style.font_size')" layout="column">
@@ -108,6 +117,7 @@
           :min="1"
           :max="20"
           :step="0.5"
+          unit="%"
           show-value
           @update:model-value="
             m.style.font_size = $event;
@@ -129,39 +139,45 @@
             />
           </div>
         </LjField>
-        <LjField :label="tm('style.background')" layout="column">
-          <div class="editor-color">
-            <LjInput
-              :model-value="m.style.background"
-              type="color"
-              @update:model-value="
-                m.style.background = $event;
-                emitChange();
-              "
-            />
-          </div>
+        <LjField :label="tm('style.text_align')" layout="column">
+          <LjSelect
+            :model-value="m.style.text_align"
+            :items="alignOptions"
+            @update:model-value="
+              m.style.text_align = $event;
+              emitChange();
+            "
+          />
         </LjField>
       </div>
+
+      <LjField :label="tm('style.background')" layout="column">
+        <div class="editor-background">
+          <div class="editor-color editor-background__color">
+            <LjInput
+              :model-value="backgroundColor"
+              type="color"
+              :disabled="noBackground"
+              @update:model-value="setBackground($event)"
+            />
+          </div>
+          <LjCheckbox
+            :model-value="noBackground"
+            :label="tm('style.no_background')"
+            @update:model-value="setNoBackground($event)"
+          />
+        </div>
+      </LjField>
 
       <LjField :label="tm('style.opacity')" layout="column">
         <LjSlider
           :model-value="m.style.opacity"
           :min="0"
           :max="100"
+          unit="%"
           show-value
           @update:model-value="
             m.style.opacity = $event;
-            emitChange();
-          "
-        />
-      </LjField>
-
-      <LjField :label="tm('style.text_align')" layout="column">
-        <LjSelect
-          :model-value="m.style.text_align"
-          :items="alignOptions"
-          @update:model-value="
-            m.style.text_align = $event;
             emitChange();
           "
         />
@@ -186,25 +202,27 @@
         />
       </div>
 
-      <LjField :label="tm('style.padding')" layout="column">
-        <LjInput
-          :model-value="m.style.padding"
-          @update:model-value="
-            m.style.padding = $event;
-            emitChange();
-          "
-        />
-      </LjField>
+      <div class="editor-grid">
+        <LjField :label="tm('style.padding')" layout="column">
+          <LjInput
+            :model-value="m.style.padding"
+            @update:model-value="
+              m.style.padding = $event;
+              emitChange();
+            "
+          />
+        </LjField>
 
-      <LjField :label="tm('style.border_radius')" layout="column">
-        <LjInput
-          :model-value="m.style.border_radius"
-          @update:model-value="
-            m.style.border_radius = $event;
-            emitChange();
-          "
-        />
-      </LjField>
+        <LjField :label="tm('style.border_radius')" layout="column">
+          <LjInput
+            :model-value="m.style.border_radius"
+            @update:model-value="
+              m.style.border_radius = $event;
+              emitChange();
+            "
+          />
+        </LjField>
+      </div>
 
       <LjField :label="tm('style.border')" layout="column">
         <LjInput
@@ -226,6 +244,7 @@
             :min="10"
             :max="200"
             :step="5"
+            unit="%"
             show-value
             @update:model-value="
               m.style.image_scale = $event;
@@ -416,6 +435,24 @@ const fitOptions = [
   { label: tm("style.fit_scale_down"), value: "scale-down" },
 ];
 
+// <input type="color"> não representa "transparente": sem esta ponte ele
+// mostrava preto para um fundo que na verdade não pinta nada, e depois de
+// escolher uma cor não havia como voltar.
+const noBackground = computed(() => !m.style.background || m.style.background === "transparent");
+const backgroundColor = computed(() => (noBackground.value ? lastBackground : m.style.background));
+let lastBackground = noBackground.value ? "#000000" : m.style.background;
+
+function setBackground(color) {
+  lastBackground = color;
+  m.style.background = color;
+  emitChange();
+}
+
+function setNoBackground(none) {
+  m.style.background = none ? "transparent" : lastBackground;
+  emitChange();
+}
+
 function onTypeChange() {
   if (m.type !== "module_mirror") m.source_module = null;
   if (m.type !== "image") m.file_id = "";
@@ -433,6 +470,12 @@ function onTypeChange() {
   flex-shrink: 0;
 }
 
+/* Cinco abas com o respiro padrão pedem 409px; com este, 369px — o que cabe no
+   cartão da lista sem rolagem horizontal. */
+.editor-tabs :deep(.lj-tabs__trigger) {
+  padding-inline: var(--lj-space-4);
+}
+
 .editor-pane {
   display: flex;
   flex-direction: column;
@@ -446,10 +489,21 @@ function onTypeChange() {
   margin-bottom: 0;
 }
 
-.editor-grid {
+/* `minmax(0, 1fr)` e largura 100% nos campos: o <input> nasce com ~177px de
+   largura intrínseca, e uma coluna `1fr` comum não encolhe abaixo disso — no
+   painel estreito o segundo campo estourava a moldura do cartão. */
+.editor-grid,
+.editor-position__offsets {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--lj-space-5);
+}
+
+.editor-grid :deep(.lj-input),
+.editor-grid :deep(.lj-select),
+.editor-position__offsets :deep(.lj-input) {
+  width: 100%;
+  min-width: 0;
 }
 
 .editor-checkboxes {
@@ -479,11 +533,50 @@ function onTypeChange() {
   cursor: pointer;
 }
 
+/* O SelectFont vem com a largura fixa da tela de Opções; aqui ele acompanha os
+   demais campos do painel. */
+.editor-font :deep(.select-font) {
+  width: 100%;
+}
+
+.editor-background {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-5);
+}
+
+.editor-background__color {
+  flex: 1;
+  min-width: 0;
+}
+
+/* A grade é uma miniatura da tela (16:9): cada célula fica onde a âncora cai na
+   projeção, e o conjunto cabe ao lado dos deslocamentos em vez de ocupar a
+   largura toda. */
+.editor-position {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--lj-space-6);
+}
+
+.editor-position__anchor {
+  flex: 0 0 auto;
+}
+
+.editor-position__offsets {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
 .anchor-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
   gap: var(--lj-space-2);
-  padding: var(--lj-space-4);
+  width: 176px;
+  aspect-ratio: 16 / 9;
+  padding: var(--lj-space-3);
   background: var(--lj-surface-bg-soft);
   border: 1px solid var(--lj-surface-border);
   border-radius: var(--lj-radius-md);
@@ -493,7 +586,6 @@ function onTypeChange() {
   display: flex;
   align-items: center;
   justify-content: center;
-  aspect-ratio: 1;
   padding: 0;
   background: var(--lj-surface-bg-hover);
   border: 1px solid transparent;

@@ -701,7 +701,7 @@
       "close_projection": "Encerrar Projeção",
       "prev_music": "Música Anterior",
       "next_music": "Próxima Música",
-      "overlay": "Overlay",
+      "overlay": "Sobreposições",
       "background": "Projeção de Fundo"
     },
     "errors": {
@@ -992,8 +992,8 @@
       "transmission": "Transmissão",
       "uncheck_all": "Desmarcar Todos",
       "update": "Atualizar",
-      "overlay_toggle": "Overlay on/off",
-      "overlay_add": "Adicionar overlay",
+      "overlay_toggle": "Ativar/desativar sobreposições",
+      "overlay_add": "Adicionar sobreposição",
       "audio_only": "Tocar Áudio",
       "playback_only": "Tocar Playback"
     }
@@ -1247,7 +1247,7 @@
     "ctrl_b": "Abrir busca bíblica rápida",
     "ctrl_m": "Abrir busca de músicas",
     "ctrl_k": "Abrir paleta de comandos",
-    "ctrl_o": "Ativar/desativar overlay",
+    "ctrl_o": "Ativar/desativar sobreposições",
     "ctrl_p": "Iniciar/parar projeção de fundo",
     "ctrl_tab": "Próximo módulo aberto",
     "shift_ctrl_tab": "Módulo anterior",

@@ -13,7 +13,7 @@ const moduleCtxId = "ctx_" + moduleId;
 
 export const module: Module = {
   id: moduleId,
-  name: "Overlays",
+  name: "Sobreposições",
   description: `${modulePath}.description`,
   title: `${modulePath}.title`,
   icon: ICONS.MODULES.OVERLAY,
@@ -41,17 +41,17 @@ export const contextualPages: RibbonPage[] = [
           {
             id: `${moduleId}_toggle`,
             icon: ICONS.UI.LAYERS_OFF,
-            label: `${modulePath}.ribbon.btn.overlay_toggle`,
+            label: `${modulePath}.ribbon.btn.overlay_activate`,
             action: `${moduleId}_toggle`,
             color: "#7c3aed",
             stateBinding: {
-              watchPath: "modules.overlay.enabled",
+              watchPath: KEYS.MODULES.OVERLAY.ENABLED,
               iconOn: ICONS.UI.LAYERS,
               iconOff: ICONS.UI.LAYERS_OFF,
               colorOn: "#10b981",
               colorOff: "#7c3aed",
-              labelOn: `${modulePath}.ribbon.btn.overlay_on`,
-              labelOff: `${modulePath}.ribbon.btn.overlay_toggle`,
+              labelOn: `${modulePath}.ribbon.btn.overlay_deactivate`,
+              labelOff: `${modulePath}.ribbon.btn.overlay_activate`,
             },
           },
           {

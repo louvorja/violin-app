@@ -25,6 +25,19 @@ export default {
       .replace(/\s+/g, " ")
       .trim();
   },
+  /**
+   * Escapa texto digitado pelo usuário antes de injetá-lo em HTML. O Alert
+   * renderiza título e texto com v-html, então um nome como `<img onerror=…>`
+   * viraria marcação de verdade dentro da confirmação.
+   */
+  escapeHtml(text: string): string {
+    return String(text ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  },
   sort(a: string | number, b: string | number): number {
     if (typeof a === "number" && typeof b === "number") {
       return a - b;
