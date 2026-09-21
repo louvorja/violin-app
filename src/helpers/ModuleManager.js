@@ -107,7 +107,7 @@ export default {
    * Instala um único módulo: registra no store, carrega i18n e customization.
    * Idempotente por design — a chave no $appdata é sobrescrita a cada boot.
    */
-  async installModule(module) {
+  installModule(module) {
     try {
       const manifest = module.manifest;
 
@@ -213,7 +213,7 @@ export default {
     );
     for (const manifest of manifests) {
       try {
-        await this.installModule(new BaseModule(manifest));
+        this.installModule(new BaseModule(manifest));
       } catch (e) {
         console.warn(`[ModuleManager] Falha ao instalar módulo ${manifest.id}:`, e);
         Telemetry.captureException(e, { source: "module_manager_init", module_id: manifest.id });

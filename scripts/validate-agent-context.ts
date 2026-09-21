@@ -36,6 +36,7 @@ export function validateAgentContext(root = defaultRoot): string[] {
   const agents = readText(root, "AGENTS.md", errors);
   const claude = readText(root, "CLAUDE.md", errors);
   const main = readText(root, "src/main.js", errors);
+  const mainShell = readText(root, "src/bootstrap/main-shell.js", errors);
   const moduleRegistry = readText(root, "src/config/modules/index.ts", errors);
   const packageText = readText(root, "package.json", errors);
 
@@ -66,7 +67,11 @@ export function validateAgentContext(root = defaultRoot): string[] {
     }
   }
 
-  requireText(main, "src/main.js", "createPinia", errors);
+  if (!main.includes("createPinia") && !mainShell.includes("createPinia")) {
+    errors.push(
+      'src/main.js or src/bootstrap/main-shell.js must mention "createPinia".',
+    );
+  }
   requireText(moduleRegistry, "src/config/modules/index.ts", "manifest.ts", errors);
 
   if (packageText) {
