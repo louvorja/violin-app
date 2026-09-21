@@ -17,9 +17,14 @@ const posthog = {
   },
   captureLog: vi.fn(),
   metrics: { histogram: vi.fn() },
-  sessionRecordingStarted: vi.fn(() => true),
   startSessionRecording: vi.fn(),
   stopSessionRecording: vi.fn(),
+  get_session_id: vi.fn(() => "sessao-principal"),
+  get_session_replay_url: vi.fn(() => ""),
+  onSessionId: vi.fn((callback: (sessionId: string) => void) => {
+    callback("sessao-principal");
+    return () => {};
+  }),
   addExceptionStep: vi.fn(),
   startExceptionAutocapture: vi.fn(),
   opt_in_capturing: vi.fn(),
@@ -31,6 +36,23 @@ const posthog = {
 const databaseReporters: Array<(timing: unknown) => void> = [];
 
 vi.mock("posthog-js", () => ({ default: posthog }));
+// Barramento em memória: o BroadcastChannel real entrega mensagens a instâncias
+// de testes anteriores. O mock persiste entre `vi.resetModules()`, então os
+// listeners são limpos a cada teste.
+const bus = vi.hoisted(() => ({
+  listeners: new Set<(message: { type: string; payload: unknown }) => void>(),
+}));
+vi.mock("@/helpers/Broadcast", () => ({
+  default: {
+    send: (type: string, payload: unknown = {}) => {
+      for (const listener of [...bus.listeners]) listener({ type, payload });
+    },
+    listen: (listener: (message: { type: string; payload: unknown }) => void) => {
+      bus.listeners.add(listener);
+      return () => bus.listeners.delete(listener);
+    },
+  },
+}));
 vi.mock("@/helpers/Database", () => ({
   setDatabaseTimingReporter: (fn: (timing: unknown) => void) => {
     databaseReporters.push(fn);
@@ -67,6 +89,7 @@ async function loadTelemetry() {
 
 beforeEach(() => {
   for (const key of Object.keys(state)) delete state[key];
+  bus.listeners.clear();
   vi.clearAllMocks();
   vi.spyOn(console, "info").mockImplementation(() => {});
   vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -101,7 +124,7 @@ describe("Telemetry", () => {
         api_transport: "fetch",
         capture_pageview: "history_change",
         capture_exceptions: true,
-        disable_session_recording: false,
+        disable_session_recording: true,
         capture_heatmaps: true,
         capture_dead_clicks: true,
         rageclick: true,
@@ -129,7 +152,7 @@ describe("Telemetry", () => {
     );
     expect(posthog.capture).toHaveBeenCalledWith(
       "app_opened",
-      expect.objectContaining({ app_version: "2.0.0-beta.8", sdk_version: "1.433.7", replay_ready: true }),
+      expect.objectContaining({ app_version: "2.0.0-beta.8", sdk_version: "1.433.7" }),
       { send_instantly: true, transport: "fetch" },
     );
   });
@@ -171,24 +194,205 @@ describe("Telemetry", () => {
     }
   });
 
-  it("emite app_opened com replay_ready=false quando o recorder não inicia a tempo", async () => {
-    vi.useFakeTimers();
-    posthog.sessionRecordingStarted.mockReturnValue(false);
-    try {
-      const Telemetry = await loadTelemetry();
-      const initPromise = Telemetry.init();
-      await vi.advanceTimersByTimeAsync(6_000);
-      await initPromise;
+  describe("Replay só em erros", () => {
+    type BeforeSend = (capture: {
+      event: string;
+      properties: Record<string, unknown>;
+    }) => { properties: Record<string, unknown> } | null;
 
-      expect(posthog.capture).toHaveBeenCalledWith(
-        "app_opened",
-        expect.objectContaining({ replay_ready: false }),
-        { send_instantly: true, transport: "fetch" },
+    const exception = (...values: string[]) => ({
+      event: "$exception",
+      properties: { $exception_list: values.map((value) => ({ type: "Error", value })) },
+    });
+    const beforeSend = () =>
+      (posthog.init.mock.calls[0][1] as { before_send: BeforeSend }).before_send;
+
+    it("não grava no boot nem ao religar a telemetria", async () => {
+      const Telemetry = await loadTelemetry();
+      await Telemetry.init();
+      Telemetry.setEnabled(false);
+      Telemetry.setEnabled(true);
+
+      expect(posthog.startSessionRecording).not.toHaveBeenCalled();
+    });
+
+    it("começa no primeiro erro real, renova a cada erro e para 5 minutos depois do último", async () => {
+      const Telemetry = await loadTelemetry();
+      await Telemetry.init();
+      vi.useFakeTimers();
+      try {
+        beforeSend()(exception("Cannot read properties of null"));
+        await vi.advanceTimersByTimeAsync(0);
+        expect(posthog.startSessionRecording).toHaveBeenCalledExactlyOnceWith(true);
+
+        await vi.advanceTimersByTimeAsync(4 * 60_000);
+        beforeSend()(exception("outro erro"));
+        await vi.advanceTimersByTimeAsync(4 * 60_000 + 59_000);
+        expect(posthog.stopSessionRecording).not.toHaveBeenCalled();
+
+        await vi.advanceTimersByTimeAsync(1_000);
+        expect(posthog.stopSessionRecording).toHaveBeenCalledOnce();
+        expect(posthog.startSessionRecording).toHaveBeenCalledOnce();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("erros em sequência não estendem a gravação além de 15 minutos", async () => {
+      const Telemetry = await loadTelemetry();
+      await Telemetry.init();
+      vi.useFakeTimers();
+      try {
+        for (let minute = 0; minute <= 16; minute += 4) {
+          beforeSend()(exception(`erro aos ${minute} min`));
+          await vi.advanceTimersByTimeAsync(4 * 60_000);
+        }
+        expect(posthog.startSessionRecording).toHaveBeenCalledTimes(2);
+        expect(posthog.stopSessionRecording).toHaveBeenCalledOnce();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("um erro depois do teto reinicia a gravação mesmo que o timer de parada tenha atrasado", async () => {
+      const Telemetry = await loadTelemetry();
+      await Telemetry.init();
+      vi.useFakeTimers();
+      try {
+        beforeSend()(exception("primeiro"));
+        await vi.advanceTimersByTimeAsync(0);
+        // Janela em segundo plano: o relógio anda, o timer de parada ainda não disparou.
+        vi.setSystemTime(Date.now() + 16 * 60_000);
+
+        beforeSend()(exception("depois do teto"));
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(posthog.stopSessionRecording).toHaveBeenCalledOnce();
+        expect(posthog.startSessionRecording).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("não grava por causa do aviso benigno de ResizeObserver", async () => {
+      const Telemetry = await loadTelemetry();
+      await Telemetry.init();
+      vi.useFakeTimers();
+      try {
+        expect(
+          beforeSend()(exception("ResizeObserver loop completed with undelivered notifications.")),
+        ).toBeNull();
+        await vi.advanceTimersByTimeAsync(10);
+        expect(posthog.startSessionRecording).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("com a telemetria desligada, um erro não inicia a gravação e a que corre é encerrada", async () => {
+      const Telemetry = await loadTelemetry();
+      await Telemetry.init();
+      vi.useFakeTimers();
+      try {
+        beforeSend()(exception("erro"));
+        await vi.advanceTimersByTimeAsync(0);
+        Telemetry.setEnabled(false);
+        expect(posthog.stopSessionRecording).toHaveBeenCalledOnce();
+
+        beforeSend()(exception("erro depois de desligar"));
+        await vi.advanceTimersByTimeAsync(0);
+        expect(posthog.startSessionRecording).toHaveBeenCalledOnce();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("só a janela principal leva o link do replay nos erros", async () => {
+      posthog.get_session_replay_url.mockReturnValue("https://us.posthog.com/project/1/replay/abc");
+      const Telemetry = await loadTelemetry();
+      await Telemetry.init();
+
+      Telemetry.captureException(new Error("na principal"));
+
+      expect(posthog.get_session_replay_url).toHaveBeenCalledWith();
+      expect(posthog.captureException).toHaveBeenLastCalledWith(
+        expect.any(Error),
+        expect.objectContaining({ replay_url: "https://us.posthog.com/project/1/replay/abc" }),
       );
-    } finally {
-      posthog.sessionRecordingStarted.mockReturnValue(true);
-      vi.useRealTimers();
-    }
+
+      const auxiliary = await loadTelemetry();
+      window.location.hash = "#/projection";
+      await auxiliary.init();
+      posthog.captureException.mockClear();
+
+      auxiliary.captureException(new Error("na projeção"));
+
+      expect(posthog.captureException.mock.lastCall?.[1]).not.toHaveProperty("replay_url");
+      posthog.get_session_replay_url.mockReturnValue("");
+    });
+
+    it("a principal anuncia a própria sessão, responde a quem pergunta e grava a pedido da auxiliar", async () => {
+      const Telemetry = await loadTelemetry();
+      const { default: Broadcast } = await import("@/helpers/Broadcast");
+      const { BROADCAST_TYPE } = await import("@/helpers/BroadcastTypes");
+      const received: Array<{ type: string; payload: unknown }> = [];
+      Broadcast.listen((message) => received.push(message), { replay: false });
+
+      await Telemetry.init();
+      expect(received).toContainEqual({
+        type: BROADCAST_TYPE.TELEMETRY_SESSION,
+        payload: { session_id: "sessao-principal" },
+      });
+
+      received.length = 0;
+      Broadcast.send(BROADCAST_TYPE.TELEMETRY_SESSION_REQUEST, {});
+      expect(received).toContainEqual({
+        type: BROADCAST_TYPE.TELEMETRY_SESSION,
+        payload: { session_id: "sessao-principal" },
+      });
+
+      expect(posthog.startSessionRecording).not.toHaveBeenCalled();
+      Broadcast.send(BROADCAST_TYPE.TELEMETRY_ERROR_SEEN, {});
+      expect(posthog.startSessionRecording).toHaveBeenCalledExactlyOnceWith(true);
+      Telemetry.setEnabled(false);
+    });
+
+    it("o erro de uma janela auxiliar leva a sessão da principal e pede que ela grave", async () => {
+      const Telemetry = await loadTelemetry();
+      window.location.hash = "#/projection";
+      const { default: Broadcast } = await import("@/helpers/Broadcast");
+      const { BROADCAST_TYPE } = await import("@/helpers/BroadcastTypes");
+      const sent: string[] = [];
+      Broadcast.listen((message) => sent.push(message.type), { replay: false });
+
+      await Telemetry.init();
+      expect(sent).toContain(BROADCAST_TYPE.TELEMETRY_SESSION_REQUEST);
+      expect(posthog.startSessionRecording).not.toHaveBeenCalled();
+
+      const withoutAnswer = beforeSend()({
+        ...exception("antes de a principal responder"),
+        properties: { ...exception("x").properties, $session_id: "sessao-da-auxiliar" },
+      });
+      expect(withoutAnswer?.properties.$session_id).toBe("sessao-da-auxiliar");
+      expect(sent).not.toContain(BROADCAST_TYPE.TELEMETRY_ERROR_SEEN);
+
+      Broadcast.send(BROADCAST_TYPE.TELEMETRY_SESSION, { session_id: "sessao-da-principal" });
+
+      const routine = beforeSend()({
+        event: "route_changed",
+        properties: { $session_id: "sessao-da-auxiliar" },
+      });
+      expect(routine?.properties.$session_id).toBe("sessao-da-auxiliar");
+      expect(sent).not.toContain(BROADCAST_TYPE.TELEMETRY_ERROR_SEEN);
+
+      const linked = beforeSend()({
+        ...exception("Falha no vídeo da projeção"),
+        properties: { ...exception("x").properties, $session_id: "sessao-da-auxiliar" },
+      });
+      expect(linked?.properties.$session_id).toBe("sessao-da-principal");
+      expect(sent).toContain(BROADCAST_TYPE.TELEMETRY_ERROR_SEEN);
+      expect(posthog.startSessionRecording).not.toHaveBeenCalled();
+    });
   });
 
   it("inicializa também janelas auxiliares para não perder seus erros", async () => {

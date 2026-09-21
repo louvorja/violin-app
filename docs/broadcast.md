@@ -82,6 +82,9 @@ $broadcast.send(BROADCAST_TYPE.SLIDE_CHANGE, { slide_index: 0 });
 | `LIBRAS_TOGGLE` | `"libras_toggle"` | ShellTools | Projection |
 | `LIBRAS_TRANSLATE` | `"libras_translate"` | useLibras | Projection, Obs |
 | `REQUEST_LIBRAS_STATE` | `"request_libras_state"` | LibrasOverlay | main.js |
+| `TELEMETRY_SESSION_REQUEST` | `"telemetry_session_request"` | Telemetry (janelas auxiliares) | Telemetry (janela principal) |
+| `TELEMETRY_SESSION` | `"telemetry_session"` | Telemetry (janela principal) | Telemetry (janelas auxiliares) |
+| `TELEMETRY_ERROR_SEEN` | `"telemetry_error_seen"` | Telemetry (janelas auxiliares) | Telemetry (janela principal) |
 
 ### Module Projection
 

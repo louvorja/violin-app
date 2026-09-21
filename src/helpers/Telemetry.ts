@@ -14,6 +14,8 @@ import type {
   PostHog,
   RequestResponse,
 } from "posthog-js";
+import Broadcast from "@/helpers/Broadcast";
+import { BROADCAST_TYPE, type TelemetrySessionPayload } from "@/helpers/BroadcastTypes";
 import Platform from "@/helpers/Platform";
 import $userdata from "@/helpers/UserData";
 import { setNetworkTimingReporter } from "@/helpers/Http";
@@ -34,6 +36,10 @@ let _sdkVersion = BUILD_SDK_VERSION || "unknown";
 let _installed = false;
 let _nativeAutocaptureActive = false;
 let _responsivenessCleanup: (() => void) | null = null;
+let _mainSessionId = "";
+let _errorReplayStartedAt = 0;
+let _errorReplayTimer: ReturnType<typeof setTimeout> | null = null;
+let _sessionBusConnected = false;
 const _pendingExceptions: Array<{ error: unknown; properties?: Record<string, unknown> }> = [];
 const _pendingEvents: Array<{ event: string; properties: Record<string, unknown> }> = [];
 const _pendingMetrics: Array<{ name: string; value: number; attributes: MetricAttributes }> = [];
@@ -45,8 +51,10 @@ const MAX_BREADCRUMBS = 150;
 const MAX_PROPERTY_DEPTH = 6;
 const MAX_ARRAY_ITEMS = 100;
 const MAX_STRING_LENGTH = 20_000;
-const REPLAY_READY_TIMEOUT_MS = 5_000;
-const REPLAY_READY_POLL_MS = 100;
+// O Replay só grava depois de um erro real: a janela se renova a cada novo erro
+// e, com erros em sequência, uma gravação nunca passa do teto.
+const REPLAY_AFTER_ERROR_MS = 5 * 60_000;
+const REPLAY_MAX_MS = 15 * 60_000;
 const UI_JANK_BUDGET = { warn: 250, critical: 1_000 } as const;
 const PERFORMANCE_BUDGETS: Array<{
   match: RegExp;
@@ -92,10 +100,6 @@ type PostHogWithMetrics = PostHog & {
       options?: { unit?: string; attributes?: MetricAttributes }
     ) => void;
   };
-};
-
-type PostHogWithReplay = PostHog & {
-  sessionRecordingStarted?: () => boolean;
 };
 
 type DiagnosticLevel = "trace" | "debug" | "info" | "warn" | "error" | "fatal";
@@ -329,39 +333,106 @@ function errorProperties(error: unknown): Record<string, unknown> {
   return { message: sanitizeString(String(error)) };
 }
 
+// Sem timestamp: a gravação nasce junto com o erro, então um `?t=` medido desde o
+// início da sessão apontaria para além do fim do vídeo. Janelas auxiliares não
+// gravam, e o link delas seria uma página vazia.
 function replayLinkProperties(): Record<string, unknown> {
+  if (windowRole() !== "main") return {};
   try {
-    const url = _ph?.get_session_replay_url?.({ withTimestamp: true, timestampLookBack: 30 });
+    const url = _ph?.get_session_replay_url?.();
     return typeof url === "string" && url ? { replay_url: url } : {};
   } catch {
     return {};
   }
 }
 
-function isSessionRecordingStarted(posthog: PostHogWithReplay): boolean {
+function stopErrorReplay(): void {
+  if (_errorReplayTimer) clearTimeout(_errorReplayTimer);
+  _errorReplayTimer = null;
+  _errorReplayStartedAt = 0;
   try {
-    return (
-      typeof posthog.sessionRecordingStarted === "function" && posthog.sessionRecordingStarted()
-    );
+    _ph?.stopSessionRecording();
   } catch {
-    return false;
+    // Parar o replay nunca pode afetar o app.
   }
 }
 
-/**
- * O recorder do Replay é carregado de forma assíncrona pelo SDK. Esta espera
- * só é usada como diagnóstico posterior: o evento inicial não pode depender
- * dela, pois CSP, bloqueador ou rede lenta não devem atrasar o boot.
- */
-async function waitForSessionRecording(posthog: PostHog): Promise<boolean> {
-  const replay = posthog as PostHogWithReplay;
-  if (typeof replay.sessionRecordingStarted !== "function") return false;
-  const deadline = Date.now() + REPLAY_READY_TIMEOUT_MS;
-  while (Date.now() < deadline) {
-    if (isSessionRecordingStarted(replay)) return true;
-    await new Promise((resolve) => setTimeout(resolve, REPLAY_READY_POLL_MS));
+function startErrorReplay(): void {
+  if (!_ph || windowRole() !== "main" || !isEnabled()) return;
+  const now = Date.now();
+  if (_errorReplayStartedAt && now - _errorReplayStartedAt >= REPLAY_MAX_MS) stopErrorReplay();
+  if (!_errorReplayStartedAt) {
+    _errorReplayStartedAt = now;
+    try {
+      // `true` ignora amostragem e gatilhos do projeto: a decisão de gravar é deste código.
+      _ph.startSessionRecording(true);
+    } catch (error) {
+      _errorReplayStartedAt = 0;
+      diagnostic("warn", "falha ao iniciar o replay do erro", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return;
+    }
+    diagnostic("info", "replay iniciado por erro");
   }
-  return isSessionRecordingStarted(replay);
+  if (_errorReplayTimer) clearTimeout(_errorReplayTimer);
+  const untilCap = REPLAY_MAX_MS - (now - _errorReplayStartedAt);
+  _errorReplayTimer = setTimeout(stopErrorReplay, Math.min(REPLAY_AFTER_ERROR_MS, untilCap));
+}
+
+function announceMainSession(sessionId: string | undefined): void {
+  if (!sessionId) return;
+  const payload: TelemetrySessionPayload = { session_id: sessionId };
+  Broadcast.send(BROADCAST_TYPE.TELEMETRY_SESSION, payload);
+}
+
+// Cada janela tem a própria sessão (`persistence: "memory"`) e só a principal
+// grava. A auxiliar aprende a sessão da principal para que os erros dela
+// apontem para uma gravação que existe.
+function connectSessionBus(posthog: PostHog): void {
+  if (_sessionBusConnected) return;
+  _sessionBusConnected = true;
+  try {
+    if (windowRole() === "main") {
+      Broadcast.listen(
+        (message) => {
+          if (message.type === BROADCAST_TYPE.TELEMETRY_SESSION_REQUEST) {
+            announceMainSession(posthog.get_session_id?.());
+          } else if (message.type === BROADCAST_TYPE.TELEMETRY_ERROR_SEEN) {
+            startErrorReplay();
+          }
+        },
+        { replay: false }
+      );
+      posthog.onSessionId?.((sessionId) => announceMainSession(sessionId));
+      return;
+    }
+    Broadcast.listen(
+      (message) => {
+        if (message.type !== BROADCAST_TYPE.TELEMETRY_SESSION) return;
+        const sessionId = (message.payload as Partial<TelemetrySessionPayload> | undefined)
+          ?.session_id;
+        if (typeof sessionId === "string" && sessionId) _mainSessionId = sessionId;
+      },
+      { replay: false }
+    );
+    Broadcast.send(BROADCAST_TYPE.TELEMETRY_SESSION_REQUEST, {});
+  } catch (error) {
+    diagnostic("debug", "canal de sessão do replay indisponível", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+function onRealException(isMainWindow: boolean, capture: CaptureResult): void {
+  if (isMainWindow) {
+    setTimeout(startErrorReplay, 0);
+    return;
+  }
+  if (!_mainSessionId) return;
+  // O Error Tracking liga erro e replay pelo `$session_id`; o da principal é o que tem gravação.
+  capture.properties = { ...capture.properties, $session_id: _mainSessionId };
+  Broadcast.send(BROADCAST_TYPE.TELEMETRY_ERROR_SEEN, {});
 }
 
 function requestUrl(input: Parameters<NonNullable<typeof globalThis.fetch>>[0]): string {
@@ -971,14 +1042,13 @@ export function setEnabled(enabled: boolean): void {
     _pendingMetrics.length = 0;
     _pendingSpans.clear();
     _responsivenessCleanup?.();
-    _ph?.stopSessionRecording();
+    stopErrorReplay();
     _ph?.opt_out_capturing();
     return;
   }
   if (_ph) {
     _ph.opt_in_capturing({ captureEventName: false });
     _ph.register({ app_version: _appVersion, sdk_version: _sdkVersion });
-    if (windowRole() === "main") _ph.startSessionRecording();
     startResponsivenessMonitor();
   } else void init();
 }
@@ -1092,10 +1162,10 @@ async function _init(): Promise<void> {
       captureExtensionExceptions: false,
       exception_steps: { enabled: true, max_bytes: 32_768 },
     },
-    // Cada BrowserWindow tem seu próprio renderer. O Replay fica concentrado
-    // na janela do operador; janelas auxiliares continuam enviando eventos e
-    // erros, mas não viram sessões pretas do projetor no PostHog.
-    disable_session_recording: !isMainWindow,
+    // O Replay só existe para depurar erros: começa em `startErrorReplay`, na
+    // janela do operador. Janelas auxiliares enviam eventos e erros, mas não
+    // viram sessões pretas do projetor no PostHog.
+    disable_session_recording: true,
     disable_external_dependency_loading: false,
     disable_surveys: true,
     disable_surveys_automatic_display: true,
@@ -1183,7 +1253,10 @@ async function _init(): Promise<void> {
     rageclick: isMainWindow,
     before_send: (capture) => {
       if (!capture) return null;
-      if (capture.event === "$exception" && isBenignException(capture.properties)) return null;
+      if (capture.event === "$exception") {
+        if (isBenignException(capture.properties)) return null;
+        onRealException(isMainWindow, capture);
+      }
       // `token` is injected by PostHog and is required by `/e/`. It matches
       // the generic secret-key sanitizer, but removing it makes the SDK drop
       // every event before opening the network request. Preserve only this
@@ -1225,6 +1298,7 @@ async function _init(): Promise<void> {
     window_route: routePath(),
     telemetry_schema_version: 2,
   });
+  connectSessionBus(posthog);
   // `capture()` returning undefined only means that the SDK did not return a
   // payload to the caller. This hook is the stronger signal that the event
   // passed consent/bot filters and reached the SDK's request pipeline.
@@ -1279,7 +1353,6 @@ async function _init(): Promise<void> {
     }
     diagnostic("debug", "métricas pendentes enviadas após init", { count: pendingMetrics.length });
   }
-  const replayReady = isSessionRecordingStarted(posthog);
   const appOpened = posthog.capture(
     "app_opened",
     {
@@ -1290,7 +1363,6 @@ async function _init(): Promise<void> {
       // inicial é o mais consultado para saber qual SDK está em campo, e não
       // deve ficar refém de como o SDK aplica super properties.
       sdk_version: sdkVersion,
-      replay_ready: replayReady,
       locale: $userdata.get<string>(KEYS.OPTIONS.LANGUAGE, "pt"),
       pwa:
         typeof window !== "undefined" && window.matchMedia?.("(display-mode: standalone)").matches,
@@ -1301,36 +1373,11 @@ async function _init(): Promise<void> {
   diagnostic("info", "evento app_opened solicitado ao SDK", {
     ...captureResultDetails(appOpened),
     capture_called: true,
-    replay_ready: replayReady,
     window_role: windowRole(),
     send_instantly: true,
     ...sdkIdentity(posthog),
   });
 
-  // O replay é carregado sob demanda. Ele não pode segurar o primeiro evento:
-  // em um PC que fecha o app logo após abrir, os 5 s anteriores perdiam toda a
-  // sessão. Se o recorder ficar pronto depois, isso também vira evidência no
-  // terminal/PostHog sem atrasar o boot.
-  void waitForSessionRecording(posthog)
-    .then((ready) => {
-      if (!ready || replayReady) return;
-      posthog.capture(
-        "session_replay_ready",
-        {
-          ...baseContext(),
-          platform: Platform.isDesktop ? "desktop" : "web",
-          window_role: windowRole(),
-          replay_ready: true,
-        },
-        { send_instantly: true, transport: "fetch" }
-      );
-      diagnostic("info", "session replay pronto após o boot");
-    })
-    .catch((error) =>
-      diagnostic("warn", "falha ao aguardar session replay", {
-        error: error instanceof Error ? error.message : String(error),
-      })
-    );
   const pendingExceptions = _pendingExceptions.splice(0);
   for (const pending of pendingExceptions)
     posthog.captureException(pending.error, pending.properties);

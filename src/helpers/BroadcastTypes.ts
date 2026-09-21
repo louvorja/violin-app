@@ -181,6 +181,26 @@ export const BROADCAST_TYPE = Object.freeze({
    *  Recebido por: useChat (atualiza UI). */
   CHAT_MESSAGE: "chat_message",
 
+  // ─── Telemetria: replay de erros das janelas auxiliares ─────────────────
+
+  /** Uma janela auxiliar pergunta qual é a sessão de gravação da janela
+   *  principal. Payload: {}
+   *  Emitido por: Telemetry (janelas auxiliares) ao iniciar.
+   *  Recebido por: Telemetry (janela principal, responde com TELEMETRY_SESSION). */
+  TELEMETRY_SESSION_REQUEST: "telemetry_session_request",
+
+  /** Sessão de gravação atual da janela principal. Payload: TelemetrySessionPayload
+   *  Emitido por: Telemetry (janela principal) ao iniciar, ao trocar de sessão
+   *  e em resposta a TELEMETRY_SESSION_REQUEST.
+   *  Recebido por: Telemetry (janelas auxiliares, que a gravam nos próprios erros). */
+  TELEMETRY_SESSION: "telemetry_session",
+
+  /** Uma janela auxiliar teve um erro real e o replay da principal precisa
+   *  estar gravando quando o operador olhar. Payload: {}
+   *  Emitido por: Telemetry (janelas auxiliares).
+   *  Recebido por: Telemetry (janela principal, inicia a gravação). */
+  TELEMETRY_ERROR_SEEN: "telemetry_error_seen",
+
   // ─── In-app (hotkeys / HTTP events → módulos) ────────────────────────────
 
   /** Número sorteado via HTTP externo. Recebido por: módulo draw. */
@@ -266,6 +286,10 @@ export interface SlidesDataPayload {
 
 export interface GoToSlidePayload {
   index: number;
+}
+
+export interface TelemetrySessionPayload {
+  session_id: string;
 }
 
 export interface BibleVersePayload {
