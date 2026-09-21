@@ -46,7 +46,10 @@ const getAgent = () => (agent ||= createAgent());
  *
  * @returns {Promise<{ data: Buffer, total: number|null }>}
  */
-function httpsRange(url, start, end, { signal, timeoutMs = CHUNK_TIMEOUT_MS } = {}) {
+/** Quantos redirecionamentos (302 etc.) uma busca de pedaço segue antes de desistir. */
+const CHUNK_MAX_REDIRECTS = 5;
+
+function httpsRange(url, start, end, { signal, timeoutMs = CHUNK_TIMEOUT_MS, maxRedirects = CHUNK_MAX_REDIRECTS } = {}) {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
       reject(new OnlineVideoError("cancelled", "Cancelado"));
@@ -62,6 +65,26 @@ function httpsRange(url, start, end, { signal, timeoutMs = CHUNK_TIMEOUT_MS } = 
       },
       (res) => {
         const status = res.statusCode || 0;
+        // O CDN do googlevideo às vezes responde com um redirecionamento (edge que
+        // trocou, ou o link assinado apontando para outro host) em vez do pedaço
+        // pedido. Sem seguir isso aqui, a trilha inteira falhava com "HTTP 302" —
+        // e só nas redes/CDNs que chegam a fazer esse redirecionamento.
+        if ([301, 302, 303, 307, 308].includes(status) && res.headers.location) {
+          res.resume();
+          if (maxRedirects <= 0) {
+            reject(new OnlineVideoError("network", "Redirecionamentos demais"));
+            return;
+          }
+          let redirected;
+          try {
+            redirected = new URL(res.headers.location, url).toString();
+          } catch {
+            reject(new OnlineVideoError("network", "Location de redirecionamento inválida"));
+            return;
+          }
+          httpsRange(redirected, start, end, { signal, timeoutMs, maxRedirects: maxRedirects - 1 }).then(resolve, reject);
+          return;
+        }
         if (status !== 206 && !(status === 200 && start === 0)) {
           res.resume();
           const kind = status === 403 || status === 404 || status === 410 ? "forbidden" : "network";
