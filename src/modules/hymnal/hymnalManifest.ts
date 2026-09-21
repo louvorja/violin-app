@@ -3,7 +3,7 @@ import type { RibbonPage } from "@/types/Ribbon"
 import { ModuleCategoryEnum } from "@/enums/ModuleCategoryEnum"
 import { ModuleGroupEnum } from "@/enums/ModuleGroupEnum"
 import { ModuleEnum } from "@/enums/ModuleEnum"
-import $modules from "@/helpers/Modules"
+import { getModulePath } from "@/helpers/ModulePath"
 import { ICONS } from "@/config/Icons";
 
 interface HymnalManifestConfig {
@@ -21,7 +21,7 @@ export function createHymnalManifest({
   icon,
   defaultShowInMainMenu = true,
 }: HymnalManifestConfig): { module: Module; contextualPages: RibbonPage[] } {
-  const modulePath = $modules.getPath(id);
+  const modulePath = getModulePath(id);
   const moduleCtxId = "ctx_" + id;
 
   const module: Module = {

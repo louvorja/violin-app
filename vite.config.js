@@ -282,6 +282,14 @@ export default async ({ mode }) => {
             const emNodeModules = id.includes("node_modules");
 
             if (emNodeModules) {
+              // O registro de ícones é usado pelo LjIcon, mas era arrastado para
+              // `modules-manifests` por ele compartilhar o grafo do Shell. Em
+              // máquinas lentas isso adicionava centenas de KB de parse/execução
+              // ao carregamento de todos os metadados da Ribbon. Isolado, fica
+              // cacheável e não bloqueia a avaliação dos manifests.
+              if (/[\\/]node_modules[\\/]@tabler[\\/]icons-vue[\\/]/.test(id)) {
+                return "vendor-tabler-icons";
+              }
               // i18n antes de vue: "vue-i18n" também casaria a regra do core.
               // Muda só com novas traduções.
               if (/[\\/]node_modules[\\/]@?vue-i18n|[\\/]node_modules[\\/]vue-i18n[\\/]/.test(id)) {

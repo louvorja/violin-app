@@ -1,3 +1,4 @@
+import { defineAsyncComponent } from "vue";
 import { ModuleCategoryEnum } from "@/enums/ModuleCategoryEnum"
 import { ModuleGroupEnum } from "@/enums/ModuleGroupEnum"
 import type { RibbonPage } from "@/types/Ribbon"
@@ -5,11 +6,13 @@ import { Module } from "@/types/Module"
 import { ICONS } from "@/config/Icons"
 import { ModuleEnum } from "@/enums/ModuleEnum"
 import { KEYS } from "@/constants/UserDataKeys"
-import $modules from "@/helpers/Modules"
-import BookPicker from "@/modules/bible_search/components/BookPicker.vue";
+import { getModulePath } from "@/helpers/ModulePath"
+const BookPicker = defineAsyncComponent(
+  () => import("@/modules/bible_search/components/BookPicker.vue")
+);
 
 const moduleId = ModuleEnum.BIBLE_SEARCH;
-const modulePath = $modules.getPath(moduleId);
+const modulePath = getModulePath(moduleId);
 const moduleCtxId = "ctx_" + moduleId;
 
 export const module: Module = {

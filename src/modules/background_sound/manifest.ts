@@ -1,3 +1,4 @@
+import { defineAsyncComponent } from "vue";
 import type { Module } from "@/types/Module"
 import type { RibbonPage } from "@/types/Ribbon"
 import { ModuleCategoryEnum } from "@/enums/ModuleCategoryEnum"
@@ -5,11 +6,13 @@ import { ModuleGroupEnum } from "@/enums/ModuleGroupEnum"
 import { ICONS } from "@/config/Icons"
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { KEYS } from "@/constants/UserDataKeys";
-import $modules from "@/helpers/Modules";
-import RibbonSettings from "@/modules/background_sound/components/RibbonSettings.vue";
+import { getModulePath } from "@/helpers/ModulePath"
+const RibbonSettings = defineAsyncComponent(
+  () => import("@/modules/background_sound/components/RibbonSettings.vue")
+);
 
 const moduleId = ModuleEnum.BACKGROUND_SOUND;
-const modulePath = $modules.getPath(moduleId);
+const modulePath = getModulePath(moduleId);
 const moduleCtxId = "ctx_" + moduleId;
 
 export const module: Module = {

@@ -36,9 +36,14 @@ function musicFixture() {
 async function mainWindow(electronApp) {
   const deadline = Date.now() + 60_000;
   while (Date.now() < deadline) {
-    const page = electronApp
-      .windows()
-      .find((candidate) => candidate.url().includes("localhost:5002"));
+    const page = electronApp.windows().find((candidate) => {
+      const url = candidate.url();
+      return (
+        url !== "about:blank" &&
+        !url.includes("splash.html") &&
+        (url.includes("localhost:5002") || url.includes("index.html"))
+      );
+    });
     if (page) return page;
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
@@ -60,14 +65,21 @@ test("Electron mantém a reabertura da aba estável", async () => {
   fs.mkdirSync(path.join(root, "json_db"), { recursive: true });
   fs.writeFileSync(path.join(root, "json_db", "pt_musics.json"), JSON.stringify(musicFixture()));
 
-  const env = { ...nodeProcess.env, ELECTRON_DEV: "1", LJ_E2E_USER_DATA: root };
+  const packagedExecutable = nodeProcess.env.LJ_ELECTRON_EXECUTABLE;
+  const env = { ...nodeProcess.env, LJ_E2E_USER_DATA: root };
+  if (packagedExecutable) {
+    delete env.ELECTRON_DEV;
+  } else {
+    env.ELECTRON_DEV = "1";
+  }
   delete env.ELECTRON_RUN_AS_NODE;
 
   let electronApp;
   try {
     const launchStartedAt = Date.now();
     electronApp = await electron.launch({
-      args: [".", "--disable-gpu"],
+      executablePath: packagedExecutable || undefined,
+      args: packagedExecutable ? ["--disable-gpu"] : [".", "--disable-gpu"],
       cwd: nodeProcess.cwd(),
       env,
       timeout: 60_000,
@@ -77,6 +89,17 @@ test("Electron mantém a reabertura da aba estável", async () => {
       state: "attached",
       timeout: 60_000,
     });
+
+    const startupOverlay = page.locator(".lj-dialog__overlay[data-state='open']");
+    if (
+      await startupOverlay
+        .waitFor({ state: "visible", timeout: 2_000 })
+        .then(() => true)
+        .catch(() => false)
+    ) {
+      await page.keyboard.press("Escape");
+      await startupOverlay.waitFor({ state: "detached", timeout: 15_000 });
+    }
 
     const cdp = await page.context().newCDPSession(page);
     await cdp.send("Emulation.setCPUThrottlingRate", {

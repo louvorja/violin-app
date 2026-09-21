@@ -1,3 +1,4 @@
+import { defineAsyncComponent } from "vue";
 import type { Module } from "@/types/Module"
 import type { RibbonPage } from "@/types/Ribbon"
 import { ModuleCategoryEnum } from "@/enums/ModuleCategoryEnum"
@@ -5,12 +6,15 @@ import { ModuleGroupEnum } from "@/enums/ModuleGroupEnum"
 import { ICONS } from "@/config/Icons"
 import { FONT } from "@/config/Fonts"
 import { ModuleEnum } from "@/enums/ModuleEnum"
-import $modules from "@/helpers/Modules"
+import { getModulePath } from "@/helpers/ModulePath"
 import { KEYS } from "@/constants/UserDataKeys";
-import TimeDurationInput from "@/components/inputs/TimeDurationInput.vue";
+
+const TimeDurationInput = defineAsyncComponent(
+  () => import("@/components/inputs/TimeDurationInput.vue")
+);
 
 const moduleId = ModuleEnum.STOPWATCH;
-const modulePath = $modules.getPath(moduleId);
+const modulePath = getModulePath(moduleId);
 const moduleCtxId = "ctx_" + moduleId;
 
 export const module: Module = {

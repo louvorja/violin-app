@@ -6,12 +6,12 @@ import { ICONS } from "@/config/Icons"
 import { FONT } from "@/config/Fonts"
 import { SABBATH_SCHOOL_SOUNDS } from "@/config/SabbathSchool"
 import { ModuleEnum } from "@/enums/ModuleEnum"
-import $modules from "@/helpers/Modules"
+import { getModulePath } from "@/helpers/ModulePath"
 import { KEYS } from "@/constants/UserDataKeys";
 import { createTimerEndRibbonGroups } from "@/config/modules/ribbon/timerEndRibbon";
 
 const moduleId = ModuleEnum.TIMER_WORSHIP;
-const modulePath = $modules.getPath(moduleId);
+const modulePath = getModulePath(moduleId);
 const moduleCtxId = "ctx_" + moduleId;
 
 export const module: Module = {

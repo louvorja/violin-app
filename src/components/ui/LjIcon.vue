@@ -14,7 +14,7 @@
 
 <script setup lang="ts">
 import { computed, useAttrs } from "vue";
-import { TABLER_ICONS } from "@/config/Icons";
+import { TABLER_ICONS } from "@/config/TablerIcons";
 
 interface IconProps {
   icon?: string;

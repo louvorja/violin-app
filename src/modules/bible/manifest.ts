@@ -7,10 +7,10 @@ import { FONT } from "@/config/Fonts"
 import { ModuleEnum } from "@/enums/ModuleEnum"
 import { KEYS } from "@/constants/UserDataKeys"
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes"
-import $modules from "@/helpers/Modules"
+import { getModulePath } from "@/helpers/ModulePath"
 
 const moduleId = ModuleEnum.BIBLE;
-const modulePath = $modules.getPath(moduleId);
+const modulePath = getModulePath(moduleId);
 const moduleCtxId = "ctx_" + moduleId;
 
 export const module: Module = {
