@@ -235,6 +235,7 @@
     "no_liturgy_selected": "Ninguna liturgia seleccionada para gestionar.",
     "import_title": "Importar Liturgia",
     "import_success": "Liturgia importada con éxito!",
+    "importing": "Importando liturgia...",
     "export_title": "Exportar Liturgia",
     "duplicate_prefix": "Copia de",
     "duplicate_prefix_n": "Copia ({n}) de",

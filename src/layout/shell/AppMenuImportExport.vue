@@ -15,7 +15,7 @@
           <p class="opt-hint">{{ $t("import_export.export.hint") }}</p>
         </div>
         <div>
-          <button type="button" class="opt-btn" @click="pickFile">
+          <button type="button" class="opt-btn" :disabled="importing" @click="pickFile">
             <LjIcon :icon="ICONS.ACTIONS.UPLOAD" size="14" />
             {{ $t("import_export.import.action") }}
           </button>
@@ -36,7 +36,10 @@
       <p v-else-if="exportDone" class="opt-status opt-status--ok">
         {{ $t("import_export.export.done") }}
       </p>
-      <p v-else-if="importing" class="opt-status">{{ $t("alert.wait") }}</p>
+      <p v-else-if="importing" class="opt-status opt-status--busy" role="status">
+        <LjSpinner :size="14" />
+        {{ $t("alert.wait") }}
+      </p>
       <p
         v-else-if="importResult"
         class="opt-status"
@@ -57,9 +60,10 @@
 </template>
 
 <script setup lang="ts">
-import { LjIcon } from "@/components/ui";
+import { LjIcon, LjSpinner } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref } from "vue";
+import { useBusy } from "@/composables/useBusy";
 import $liturgy from "@/helpers/Liturgy";
 import SljaConverter from "@/helpers/SljaConverter";
 import { LiturgyItem, ScheduledCategory, type ScheduledItem } from "@/types/Liturgy";
@@ -139,7 +143,7 @@ const DELPHI_NAMED_COLORS: Record<string, string> = {
 const fileInput = ref<HTMLInputElement | null>(null);
 const exporting = ref<boolean>(false);
 const exportDone = ref<boolean>(false);
-const importing = ref<boolean>(false);
+const { busy: importing, run: runImport } = useBusy();
 const importResult = ref<ImportResult | null>(null);
 
 /* ---- Helpers ---- */
@@ -275,9 +279,12 @@ async function onFileSelected(e: Event): Promise<void> {
   const file = target.files?.[0];
   if (!file) return;
 
-  importing.value = true;
   importResult.value = null;
+  await runImport(() => readImportFile(file));
+  target.value = "";
+}
 
+async function readImportFile(file: File): Promise<void> {
   try {
     const buf = await file.arrayBuffer();
     let text: string;
@@ -341,14 +348,16 @@ async function onFileSelected(e: Event): Promise<void> {
   } catch (e) {
     console.error("[ImportExport] import error:", e);
     importResult.value = { ok: false, msg: "Erro ao importar arquivo." };
-  } finally {
-    importing.value = false;
-    target.value = "";
   }
 }
 </script>
 
 <style scoped>
+.opt-status--busy {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lj-space-3);
+}
 .opt-actions-row {
   display: grid;
   grid-template-columns: 1fr 1fr;

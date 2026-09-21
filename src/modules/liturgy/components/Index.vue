@@ -12,6 +12,19 @@
       <span>{{ t("data.drop_hint") }}</span>
     </div>
 
+    <Transition name="liturgy-busy">
+      <div
+        v-if="importing"
+        class="liturgy-busy-overlay"
+        role="status"
+        aria-live="polite"
+        data-testid="liturgy-import-loader"
+      >
+        <LjSpinner :size="36" :label="t('library.importing')" />
+        <span>{{ t("library.importing") }}</span>
+      </div>
+    </Transition>
+
     <LiturgyDayTabs
       :active-day="activeDay"
       :day-labels="dayLabels"
@@ -119,7 +132,7 @@
 
 <script setup lang="ts">
 import { useLiturgyI18n } from "../i18n";
-import { LjButton, LjDialog, LjField, LjIcon, LjSelect } from "@/components/ui";
+import { LjButton, LjDialog, LjField, LjIcon, LjSelect, LjSpinner } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
@@ -143,7 +156,8 @@ import { SearchMusicItem } from "@/types/Music";
 import LiturgySaveDialog from "./LiturgySaveDialog.vue";
 import LiturgyLoadDialog from "./LiturgyLoadDialog.vue";
 import LiturgyManageDialog from "./LiturgyManageDialog.vue";
-import { useLiturgyLibrary, parseJaImport } from "../composables/useLiturgyLibrary";
+import { useLiturgyLibrary } from "../composables/useLiturgyLibrary";
+import { useLiturgyImport } from "../composables/useLiturgyImport";
 import { useLiturgyAutoLoad } from "../composables/useLiturgyAutoLoad";
 import Telemetry from "@/helpers/Telemetry";
 
@@ -329,14 +343,6 @@ const manageDialog = ref(false);
 const liturgyLibrary = useLiturgyLibrary();
 const liturgyAutoLoad = useLiturgyAutoLoad();
 
-function importTelemetryProperties(file: File, format: "json" | "ja") {
-  return {
-    format,
-    size_bytes: Math.min(Math.max(0, file.size || 0), 50 * 1024 * 1024),
-    mime_type: file.type || "unknown",
-  };
-}
-
 function reportLiturgyError(
   error: unknown,
   operation: string,
@@ -345,6 +351,8 @@ function reportLiturgyError(
   Telemetry.captureException(error, { source: `liturgy.${operation}`, ...properties });
   Telemetry.track("liturgy_operation_failed", { operation, ...properties });
 }
+
+const { busy: importing, doImport } = useLiturgyImport(liturgyLibrary, reportLiturgyError);
 
 watch(
   [items, () => $liturgy.getCurrentLiturgyId()],
@@ -552,103 +560,6 @@ function doExport() {
     });
 }
 
-async function _importJsonFile(file: File): Promise<void> {
-  const properties = importTelemetryProperties(file, "json");
-  Telemetry.track("liturgy_import_started", properties);
-  try {
-    const text = await file.text();
-    const parsed = liturgyLibrary.parseImport(text);
-    if (!parsed) {
-      Telemetry.track("liturgy_import_failed", { ...properties, reason: "invalid_format" });
-      $snackbar.error(t("library.import_invalid"));
-      return;
-    }
-    const existing = await liturgyLibrary.getByName(parsed.name);
-    if (existing) {
-      $alert.yesno(
-        { title: t("library.import_title"), text: t("library.save_overwrite_confirm") },
-        async (btn?: string) => {
-          if (btn !== "yes") return;
-          try {
-            await liturgyLibrary.save({ id: existing.id, name: parsed.name, items: parsed.items });
-            Telemetry.track("liturgy_import_completed", {
-              ...properties,
-              overwritten: true,
-              item_count: parsed.items.length,
-            });
-            $snackbar.success(t("library.import_success"));
-          } catch (error) {
-            reportLiturgyError(error, "import_json_save", properties);
-            console.error("[Liturgia] import JSON falhou:", error);
-            $snackbar.error(t("library.import_invalid"));
-          }
-        }
-      );
-    } else {
-      await liturgyLibrary.save({ name: parsed.name, items: parsed.items });
-      Telemetry.track("liturgy_import_completed", {
-        ...properties,
-        overwritten: false,
-        item_count: parsed.items.length,
-      });
-      $snackbar.success(t("library.import_success"));
-    }
-  } catch (error) {
-    reportLiturgyError(error, "import_json", properties);
-    console.error("[Liturgia] leitura do JSON falhou:", error);
-    $snackbar.error(t("library.import_invalid"));
-  }
-}
-
-// O `.ja` do Delphi é INI em Windows-1252, não UTF-8 — decodificar como texto
-// simples trocaria todo acento por lixo (`Ã§Ã£o` em vez de `ção`).
-async function _importJaFile(file: File): Promise<void> {
-  const properties = importTelemetryProperties(file, "ja");
-  Telemetry.track("liturgy_import_started", properties);
-  try {
-    const buffer = await file.arrayBuffer();
-    const text = new TextDecoder("windows-1252").decode(buffer);
-    const parsed = parseJaImport(text);
-    if (!parsed || parsed.length === 0) {
-      Telemetry.track("liturgy_import_failed", { ...properties, reason: "invalid_format" });
-      $snackbar.error(t("library.import_invalid"));
-      return;
-    }
-    // Um `.ja` pode trazer várias liturgias salvas juntas (ex.: culto e escola
-    // sabatina); confirmar sobrescrita uma a uma travaria o import numa fila de
-    // diálogos. Cada uma entra como item novo na biblioteca.
-    for (const liturgy of parsed) {
-      await liturgyLibrary.save({ name: liturgy.name, items: liturgy.items });
-    }
-    Telemetry.track("liturgy_import_completed", {
-      ...properties,
-      liturgy_count: parsed.length,
-      item_count: parsed.reduce((total, liturgy) => total + liturgy.items.length, 0),
-    });
-    $snackbar.success(t("library.import_success"));
-  } catch (error) {
-    reportLiturgyError(error, "import_ja", properties);
-    console.error("[Liturgia] leitura do .ja falhou:", error);
-    $snackbar.error(t("library.import_invalid"));
-  }
-}
-
-function doImport() {
-  const input = document.createElement("input");
-  input.type = "file";
-  input.accept = ".json,.ja";
-  input.onchange = async (e: Event) => {
-    const file = (e.target as HTMLInputElement).files?.[0];
-    if (!file) return;
-    if (file.name.toLowerCase().endsWith(".ja")) {
-      await _importJaFile(file);
-    } else {
-      await _importJsonFile(file);
-    }
-  };
-  input.click();
-}
-
 onMounted(async () => {
   await loadMusicsList();
   await loadVideosList();
@@ -720,5 +631,31 @@ function onDragLeaveCustom(e: DragEvent) {
   font-size: var(--lj-text-xl);
   font-weight: var(--lj-weight-semibold);
   pointer-events: none;
+}
+
+/* Cobre o módulo inteiro enquanto a liturgia é importada: o clique não passa para a lista. */
+.liturgy-busy-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--lj-space-5);
+  background: color-mix(in srgb, var(--lj-surface-bg) 88%, transparent);
+  color: var(--lj-text);
+  font-size: var(--lj-text-lg);
+  font-weight: var(--lj-weight-medium);
+}
+
+.liturgy-busy-enter-active,
+.liturgy-busy-leave-active {
+  transition: opacity 0.15s ease;
+}
+
+.liturgy-busy-enter-from,
+.liturgy-busy-leave-to {
+  opacity: 0;
 }
 </style>
