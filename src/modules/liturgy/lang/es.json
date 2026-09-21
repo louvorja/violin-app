@@ -79,7 +79,7 @@
     "path_internal": "Ruta relativa al programa",
     "music_choose_later": "Elegir durante el culto",
     "music_select": "Música",
-    "music_pick": "-- seleccione una música --",
+    "music_placeholder": "Escriba el título para buscar...",
     "scheduled_category": "Categoría del ítem programado",
     "scheduled_pick": "-- seleccione una categoría --",
     "scheduled_empty": "Ninguna categoría creada. Use el botón de configuración para crear.",
@@ -154,9 +154,6 @@
   },
   "video": {
     "play": "Reproducir vídeo"
-  },
-  "music_search": {
-    "title": "Búsqueda de Músicas"
   },
   "video_search": {
     "title": "Búsqueda de Vídeos",

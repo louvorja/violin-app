@@ -177,26 +177,13 @@
       />
 
       <LjField v-if="!form.escolha" class="lif-field lif-spaced" :label="t('inputs.music_select')">
-        <div class="lif-inline">
-          <LjSelect
-            class="lif-inline__grow"
-            :model-value="form.musica"
-            :items="musicOptions"
-            :placeholder="t('inputs.music_pick')"
-            @update:model-value="
-              setFormField('musica', Number($event));
-              onMusicChange();
-            "
-          />
-          <LjButton
-            variant="ghost"
-            icon-only
-            :icon="ICONS.ACTIONS.SEARCH"
-            :title="t('music_search.title')"
-            :aria-label="t('music_search.title')"
-            @click="searchOpen = true"
-          />
-        </div>
+        <LjCombobox
+          :model-value="selectedMusic"
+          :items="musicOptions"
+          :filter="musicMatches"
+          :placeholder="t('inputs.music_placeholder')"
+          @update:model-value="onMusicSelected($event as MusicOption)"
+        />
       </LjField>
 
       <LjField
@@ -396,13 +383,6 @@
       <p class="lif-hint">{{ t("inputs.bloco_hint") }}</p>
     </section>
 
-    <MusicSpotlight
-      v-model="searchOpen"
-      mode="pick"
-      :musics-list="musicsForSpotlight"
-      @pick="onMusicPicked"
-    />
-
     <template #footer>
       <LjButton
         v-if="isEditing"
@@ -437,6 +417,7 @@ import {
   LjButton,
   LjCheckbox,
   LjChip,
+  LjCombobox,
   LjDialog,
   LjField,
   LjIcon,
@@ -448,15 +429,14 @@ import {
 import { ICONS } from "@/config/Icons";
 import Liturgy from "@/helpers/Liturgy";
 import DateTime from "@/helpers/DateTime";
-import MusicSpotlight from "@/components/MusicSpotlight.vue";
 import LiturgyVideoSearch, { type VideoSearchItem } from "./LiturgyVideoSearch.vue";
 import LiturgyLibrarySearch, { type LibrarySearchItem } from "./LiturgyLibrarySearch.vue";
 import $idb from "@/helpers/IndexedDB";
 import { DB_TABLE } from "@/constants/DbTables";
 import type { LiturgyItem, LiturgyMusicItem, ScheduledCategory } from "@/types/Liturgy";
-import type { SearchMusicItem } from "@/types/Music";
 import type { OverlaySlot } from "@/types/Overlay";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
+import { buildMusicOptions, musicMatches, type MusicOption } from "../musicOptions";
 
 const props = withDefaults(
   defineProps<{
@@ -567,15 +547,17 @@ const blocoOptions = computed(() => [
   })),
 ]);
 
-const musicOptions = computed(() => {
-  const placeholder = { value: -1, label: t("inputs.music_pick") };
-  const options = props.musicsList.map((m) => ({
-    value: Number(m.id_music),
-    label: m.custom_song_id ? `♪ ${m.name}` : m.name,
-  }));
-  options.sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
-  return [placeholder, ...options];
-});
+// Sem o item "-- selecione --" que o select carregava: no combobox isso é o
+// placeholder do campo, e "sem música" é o checkbox "Escolher na hora do culto".
+const musicOptions = computed(() => buildMusicOptions(props.musicsList));
+
+const musicOptionById = computed(() => new Map(musicOptions.value.map((o) => [o.value, o])));
+const selectedMusic = computed(() => musicOptionById.value.get(Number(props.form.musica)) ?? null);
+
+function onMusicSelected(option: MusicOption) {
+  props.setFormField("musica", option.value);
+  props.onMusicChange();
+}
 
 const scheduledOptions = computed(() => [
   { value: "", label: t("inputs.scheduled_pick") },
@@ -594,13 +576,12 @@ function hasInstrumental(musicId: number): boolean {
 }
 
 const presetsOpen = ref(false);
-const searchOpen = ref(false);
 
-function updateDurationForVersion(version: string, _music?: LiturgyMusicItem | SearchMusicItem) {
+function updateDurationForVersion(version: string) {
   if (version === "lyric") return;
   const musicId = props.form.musica;
   if (musicId <= 0) return;
-  const m = _music || props.musicsList?.find((x) => Number(x.id_music) === musicId);
+  const m = props.musicsList?.find((x) => Number(x.id_music) === musicId);
   if (!m) return;
   const raw = m as Record<string, unknown>;
   const useInstrumental = version === "pb" || version === "audio_pb";
@@ -754,20 +735,6 @@ function toggleAnnouncement(id: string, checked: boolean): void {
 function onVersionChange(version: string) {
   props.setFormField("subtipo", version);
   updateDurationForVersion(version);
-}
-
-const musicsForSpotlight = computed<SearchMusicItem[]>(
-  () => props.musicsList as unknown as SearchMusicItem[]
-);
-
-function onMusicPicked(music: SearchMusicItem) {
-  const id = Number(music.id_music);
-  if (!Number.isFinite(id)) return;
-  props.setFormField("musica", id);
-  props.onMusicChange();
-  if (!props.form.escolha) {
-    updateDurationForVersion(props.form.subtipo || "sung", music);
-  }
 }
 </script>
 
