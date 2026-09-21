@@ -251,7 +251,7 @@ export default {
    * Ajustes da janela nativa em volta dos botões do sistema — usado pela
    * SystemBar e pelo AppMenu. null no browser/PWA.
    *
-   * @returns {{ signalAppReady, toggleMaximize, close, alignTrafficLights, setTitleBarOverlay } | null}
+   * @returns {{ signalAppReady, toggleMaximize, close, alignTrafficLights, setTitleBarOverlay, alignTitleBarOverlay } | null}
    */
   get window() {
     return api?.window ?? null;

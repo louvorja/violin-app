@@ -57,7 +57,7 @@ if (process.platform === "win32") {
 }
 
 const paths = require("./main/paths.js");
-const { createMainWindow, TRAFFIC_LIGHT_POSITION } = require("./main/windows.js");
+const { createMainWindow, TRAFFIC_LIGHT_POSITION, TITLEBAR_OVERLAY } = require("./main/windows.js");
 const userStore = require("./main/userStore.js");
 const protocolModule = require("./main/protocol.js");
 const jsonCache = require("./main/jsonCache.js");
@@ -1483,21 +1483,29 @@ ipcMain.handle("window:setTitleBarOverlay", (event, opts) => {
 
   try {
     win.setTitleBarOverlay(overlay);
+    if (overlay.height) {
+      // Esta é a altura de repouso: a que `alignTitleBarOverlay` restaura.
+      const estado = overlayState(win);
+      clearInterval(estado.timer);
+      estado.timer = null;
+      estado.repouso = estado.atual = overlay.height;
+    }
     return { ok: true };
   } catch (err) {
     return { ok: false, error: String(err?.message || err) };
   }
 });
 
-// Duração do deslocamento dos semáforos. Espelha a transição de entrada e saída
-// do painel do AppMenu (`--lj-transition-normal`, 0.2s): os botões são a metade
-// nativa de uma barra cuja outra metade desliza por CSS, e pular direto para a
-// posição final deixava as duas em ritmos diferentes.
-const TRAFFIC_LIGHT_ANIM_MS = 200;
+// Duração do deslocamento dos botões da janela (semáforos no macOS, faixa do
+// overlay no Windows/Linux). Espelha a transição de entrada e saída do painel
+// do AppMenu (`--lj-transition-normal`, 0.2s): os botões são a metade nativa de
+// uma barra cuja outra metade desliza por CSS, e pular direto para a posição
+// final deixava as duas em ritmos diferentes.
+const WINDOW_BUTTONS_ANIM_MS = 200;
 const _trafficLightAnim = new Map();
 
 /**
- * Leva os semáforos até `alvoY` ao longo de TRAFFIC_LIGHT_ANIM_MS.
+ * Leva os semáforos até `alvoY` ao longo de WINDOW_BUTTONS_ANIM_MS.
  *
  * A curva é um ease-out cúbico, aproximação do `cubic-bezier(0, 0, 0.2, 1)` que
  * o painel usa no transform — num percurso de poucos pontos as duas não se
@@ -1519,7 +1527,7 @@ function moveTrafficLights(win, alvoY) {
       _trafficLightAnim.delete(win.id);
       return;
     }
-    const t = Math.min(1, (Date.now() - inicio) / TRAFFIC_LIGHT_ANIM_MS);
+    const t = Math.min(1, (Date.now() - inicio) / WINDOW_BUTTONS_ANIM_MS);
     const y = Math.round(origemY + (alvoY - origemY) * (1 - Math.pow(1 - t, 3)));
     if (y !== ultimoY) {
       win.setWindowButtonPosition({ x: TRAFFIC_LIGHT_POSITION.x, y });
@@ -1550,6 +1558,76 @@ ipcMain.handle("window:alignTrafficLights", (event, barHeight) => {
   }
   moveTrafficLights(win, alvoY);
   return { ok: true, y: alvoY };
+});
+
+// Windows/Linux: o Electron não expõe a altura atual do overlay, então o main a
+// guarda. `repouso` é a altura da systembar; `atual` acompanha cada passo.
+const _overlayState = new WeakMap();
+
+function overlayState(win) {
+  let estado = _overlayState.get(win);
+  if (!estado) {
+    estado = {
+      repouso: TITLEBAR_OVERLAY.height,
+      atual: TITLEBAR_OVERLAY.height,
+      timer: null,
+    };
+    _overlayState.set(win, estado);
+  }
+  return estado;
+}
+
+/**
+ * Leva a faixa dos botões nativos até `alvo` px ao longo de
+ * WINDOW_BUTTONS_ANIM_MS, com a mesma curva dos semáforos (ease-out cúbico,
+ * aproximação do `cubic-bezier(0, 0, 0.2, 1)` do painel). Parte da altura em
+ * que a faixa está agora, então fechar o menu no meio da abertura não dá salto.
+ * Só emite quando o valor inteiro muda.
+ */
+function moveOverlayHeight(win, alvo) {
+  const estado = overlayState(win);
+  clearInterval(estado.timer);
+  estado.timer = null;
+
+  const origem = estado.atual;
+  if (origem === alvo) return;
+
+  const inicio = Date.now();
+  const parar = () => {
+    clearInterval(estado.timer);
+    estado.timer = null;
+  };
+  estado.timer = setInterval(() => {
+    if (win.isDestroyed()) return parar();
+    const t = Math.min(1, (Date.now() - inicio) / WINDOW_BUTTONS_ANIM_MS);
+    const h = Math.round(origem + (alvo - origem) * (1 - Math.pow(1 - t, 3)));
+    if (h !== estado.atual) {
+      try {
+        win.setTitleBarOverlay({ height: h });
+        estado.atual = h;
+      } catch {
+        return parar();
+      }
+    }
+    if (t >= 1) parar();
+  }, 16);
+}
+
+// Windows/Linux: o equivalente de `alignTrafficLights`. O painel do AppMenu
+// cobre a systembar com um cabeçalho mais alto e a faixa dos botões nativos
+// cresce junto, para ficarem no eixo do título e do X em vez de presos ao topo.
+// `barHeight` nulo devolve a altura de repouso. No macOS não faz nada.
+ipcMain.handle("window:alignTitleBarOverlay", (event, barHeight) => {
+  if (process.platform === "darwin") return { ok: false };
+  const win = focusedOrMain(event);
+  if (!win || win.isDestroyed() || !win.setTitleBarOverlay) return { ok: false };
+
+  const alvo =
+    Number.isFinite(barHeight) && barHeight > 0
+      ? Math.round(barHeight)
+      : overlayState(win).repouso;
+  moveOverlayHeight(win, alvo);
+  return { ok: true, height: alvo };
 });
 
 // ---------------------------------------------------------------------------
