@@ -324,10 +324,10 @@ function scheduleRenderedItem(item) {
 // Os botões da janela — semáforos no macOS, overlay do sistema no Windows e no
 // Linux — ficam sobre o conteúdo, presos ao eixo da systembar, e este painel
 // cobre a systembar com um cabeçalho mais alto. Eles são a terceira peça do
-// mesmo gesto: a cortina desce, o cabeçalho cresce, os botões seguem a borda.
-// No macOS a curva e a duração são as mesmas do painel; o overlay do
-// Windows/Linux não desliza, então a altura muda de uma vez, junto com o
-// primeiro quadro da cortina.
+// mesmo gesto: a cortina desce, o cabeçalho cresce, os botões seguem a borda —
+// mesma curva, mesma duração. No Windows/Linux é a altura da faixa que cresce,
+// passo a passo, porque o overlay não desliza sozinho: pular direto para os
+// 56px dava um tranco em meio à animação do cabeçalho.
 //
 // O disparo vem dos hooks da Transition, não de um watch sobre `open`: montar o
 // painel leva ~120ms, e nesse intervalo o watch já teria mandado os botões
@@ -335,19 +335,17 @@ function scheduleRenderedItem(item) {
 //
 // A altura vem do token, não do elemento, porque no hook de entrada o cabeçalho
 // ainda está na altura inicial da animação.
-function alturaDoToken(nome) {
-  return parseFloat(getComputedStyle(document.documentElement).getPropertyValue(nome));
-}
-
 function descerBotoes(el) {
   if (!Platform.isDesktop) return;
-  const altura = alturaDoToken("--lj-appmenu-header-height");
+  const altura = parseFloat(
+    getComputedStyle(document.documentElement).getPropertyValue("--lj-appmenu-header-height")
+  );
   if (!(altura > 0)) return;
 
   const mover = () =>
     hasOverlayTrafficLights.value
       ? Platform.window?.alignTrafficLights?.(altura)
-      : Platform.window?.setTitleBarOverlay?.({ height: altura });
+      : Platform.window?.alignTitleBarOverlay?.(altura);
 
   // Montar o painel atrasa o primeiro quadro da cortina em algumas dezenas de
   // ms, e o hook de entrada corre antes disso. Sair junto com `transitionstart`
@@ -366,12 +364,8 @@ function descerBotoes(el) {
 
 function restaurarBotoes() {
   if (!Platform.isDesktop) return;
-  if (hasOverlayTrafficLights.value) {
-    Platform.window?.alignTrafficLights?.();
-    return;
-  }
-  const altura = alturaDoToken("--lj-systembar-height");
-  if (altura > 0) Platform.window?.setTitleBarOverlay?.({ height: altura });
+  if (hasOverlayTrafficLights.value) Platform.window?.alignTrafficLights?.();
+  else Platform.window?.alignTitleBarOverlay?.();
 }
 
 function onKeydown(e) {

@@ -146,4 +146,4 @@ function createMainWindow(devUrl, prodHtmlPath, preloadPath) {
   return win;
 }
 
-module.exports = { createMainWindow, TRAFFIC_LIGHT_POSITION };
+module.exports = { createMainWindow, TRAFFIC_LIGHT_POSITION, TITLEBAR_OVERLAY };

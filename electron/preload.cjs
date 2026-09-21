@@ -539,9 +539,17 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
       ipcRenderer.invoke("window:alignTrafficLights", barHeight),
     /**
      * Windows/Linux: pinta a faixa dos botões nativos com as cores da systembar.
-     * `color` e `symbolColor` em `#rrggbb`; `height` em px, inteiro.
+     * `color` e `symbolColor` em `#rrggbb`; `height` em px, inteiro, e vira a
+     * altura de repouso da faixa.
      */
     setTitleBarOverlay: (opts) => ipcRenderer.invoke("window:setTitleBarOverlay", opts),
+    /**
+     * Windows/Linux: leva a faixa dos botões nativos, animando, até uma barra
+     * de `barHeight` px. Equivalente de `alignTrafficLights`. Sem argumento,
+     * volta à altura de repouso.
+     */
+    alignTitleBarOverlay: (barHeight = null) =>
+      ipcRenderer.invoke("window:alignTitleBarOverlay", barHeight),
   },
 
   // -------------------------------------------------------------------------
