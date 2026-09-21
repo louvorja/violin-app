@@ -114,3 +114,15 @@ export function formatBackgroundTaskDetail(
 
   return _translateToken(value, t);
 }
+
+/**
+ * O rótulo é chave de tradução nas tarefas do app e texto puro nas de vídeo online (o título do
+ * YouTube). Passar um título por `t()` só produz aviso de chave ausente a cada renderização.
+ */
+export function backgroundTaskLabel(
+  label: string,
+  t: TranslateFn,
+  te: (_key: string) => boolean
+): string {
+  return te(label) ? t(label) : label;
+}

@@ -105,7 +105,7 @@
       <div class="bg-tasks">
         <div v-for="task in bgTasks.tasks.value" :key="task.id" class="bg-task">
           <div class="bg-task__main">
-            <span class="bg-task__label">{{ t(task.label) }}</span>
+            <span class="bg-task__label">{{ backgroundTaskLabel(task.label, t, te) }}</span>
             <template v-if="task.status === 'running'">
               <LjProgress :value="task.progress ?? 0" :indeterminate="!task.progress" :height="4" />
               <span class="bg-task__detail">
@@ -208,12 +208,12 @@ import { useChat } from "@/composables/useChat";
 import { localeTag } from "@/helpers/DateTime";
 import { useLibrasState } from "@/modules/libras/composables/useLibrasState";
 import { useAppTheme } from "@/composables/useAppTheme";
-import { formatBackgroundTaskDetail } from "@/helpers/BackgroundTaskDetail";
+import { backgroundTaskLabel, formatBackgroundTaskDetail } from "@/helpers/BackgroundTaskDetail";
 import { LjButton, LjIcon, LjPopover, LjProgress, LjTooltip } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { COLORS } from "@constants/Colors";
 
-const { t, locale } = useI18n();
+const { t, te, locale } = useI18n();
 const { isDark, toggleDark } = useAppTheme();
 const bgTasks = useBackgroundTasks();
 const { isOpen: chatOpen, unreadCount, toggleOpen: toggleChat } = useChat();
@@ -304,8 +304,8 @@ async function toggleBackgroundProjection() {
 function confirmCancel(task: BackgroundTask): void {
   $alert.yesno(
     {
-      title: t("shell.background_tasks.title"),
-      text: t("shell.background_tasks.confirm_cancel"),
+      title: "shell.background_tasks.title",
+      text: "shell.background_tasks.confirm_cancel",
     },
     (btn?: string) => {
       if (btn === "yes") {
