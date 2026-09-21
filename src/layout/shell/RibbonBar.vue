@@ -82,6 +82,8 @@
                   :disabled="btn.disabled"
                   :testid="`ribbon-btn-${btn.id}`"
                   @click="executeButton(btn)"
+                  @pointerenter="onButtonIntent(btn)"
+                  @focus="onButtonIntent(btn)"
                 />
               </div>
             </template>
@@ -277,6 +279,7 @@ import RibbonGroupComponent from "@/layout/shell/RibbonGroupComponent.vue";
 import RibbonTabs from "@/components/RibbonTabs.vue";
 import { LjSlider, LjSwitch } from "@/components/ui";
 import { THEMES } from "@/config/Theme";
+import { prefetchModule } from "@/helpers/ModulePrefetch";
 
 const { t } = useI18n();
 const shell = useShell();
@@ -673,6 +676,10 @@ function getRibbonItemClass(btn: RibbonButton): string {
     return "ribbon-group-item--compact ribbon-group-item--toggle";
   }
   return "ribbon-group-item--compact";
+}
+
+function onButtonIntent(btn: RibbonButton): void {
+  if (btn.module) prefetchModule(btn.module);
 }
 
 function executeButton(btn: RibbonButton): void {
