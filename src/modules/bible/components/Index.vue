@@ -557,6 +557,8 @@ watch(
     send("chapter", select_bible.chapter);
     send("verses", select_bible.verses);
     send("version", select_bible.version);
+    send("id_bible_version", select_bible.id_bible_version);
+    send("id_bible_book", select_bible.id_bible_book);
   }
 );
 

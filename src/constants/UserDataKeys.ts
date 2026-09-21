@@ -13,9 +13,13 @@ const OPTIONS_DISPLAYS = `${OPTIONS}.displays`
 const OPTIONS_SLIDE = `${OPTIONS}.slide`
 const OPTIONS_FILE_PROJECTION = `${OPTIONS}.file_projection`
 const OPTIONS_ONLINE_VIDEO_PROJECTION = `${OPTIONS}.online_video_projection`
+const MODULES_BIBLE = `${MODULES}.${ModuleEnum.BIBLE}`;
+const MODULES_BIBLE_DATA = `${MODULES}.${ModuleEnum.BIBLE}.data`;
+const MODULES_LIBRAS = `${MODULES}.${ModuleEnum.LIBRAS}`;
 const MODULES_LITURGY = `${MODULES}.${ModuleEnum.LITURGY}`;
 const MODULES_MEDIA = `${MODULES}.${ModuleEnum.MEDIA}`;
 const MODULES_MEDIA_CONFIG = `${MODULES}.${ModuleEnum.MEDIA}.config`;
+const MODULES_STOPWATCH = `${MODULES}.${ModuleEnum.STOPWATCH}`;
 const MODULES_TIMER = `${MODULES}.${ModuleEnum.TIMER}`;
 const MODULES_TIMER_WORSHIP = `${MODULES}.${ModuleEnum.TIMER_WORSHIP}`;
 
@@ -43,13 +47,23 @@ export const KEYS = {
       IS_PLAYING: `${MODULES}.${ModuleEnum.BACKGROUND_PROJECTION}.is_playing`,
     },
     BIBLE: {
-      SHOW_RETURN: `${MODULES}.${ModuleEnum.BIBLE}.show_return`,
-      IS_PLAYING: `${MODULES}.${ModuleEnum.BIBLE}.is_playing`,
-      FONT: `${MODULES}.${ModuleEnum.BIBLE}.font`,
-      ESC_CLOSES_PROJECTION: `${MODULES}.${ModuleEnum.BIBLE}.esc_closes_projection`,
-      SHOW_REFERENCE: `${MODULES}.${ModuleEnum.BIBLE}.show_reference`,
-      SHOW_VERSION: `${MODULES}.${ModuleEnum.BIBLE}.show_version`,
-      REFERENCE_ONLY: `${MODULES}.${ModuleEnum.BIBLE}.reference_only`,
+      SHOW_RETURN: `${MODULES_BIBLE}.show_return`,
+      IS_PLAYING: `${MODULES_BIBLE}.is_playing`,
+      FONT: `${MODULES_BIBLE}.font`,
+      ESC_CLOSES_PROJECTION: `${MODULES_BIBLE}.esc_closes_projection`,
+      SHOW_REFERENCE: `${MODULES_BIBLE}.show_reference`,
+      SHOW_VERSION: `${MODULES_BIBLE}.show_version`,
+      REFERENCE_ONLY: `${MODULES_BIBLE}.reference_only`,
+      DATA: {
+        ROOT: `${MODULES_BIBLE_DATA}`,
+        ID_BIBLE_VERSION: `${MODULES_BIBLE_DATA}.id_bible_version`,
+        ID_BIBLE_BOOK: `${MODULES_BIBLE_DATA}.id_bible_book`,
+        CHAPTER: `${MODULES_BIBLE_DATA}.chapter`,
+        VERSES: `${MODULES_BIBLE_DATA}.verses`,
+        BOOK: `${MODULES_BIBLE_DATA}.book`,
+        TEXT: `${MODULES_BIBLE_DATA}.text`,
+        SCRIPTURAL_REFERENCE: `${MODULES_BIBLE_DATA}.scriptural_reference`,
+      },
     },
     BACKGROUND_SOUND: {
       IS_PLAYING: `${MODULES}.${ModuleEnum.BACKGROUND_SOUND}.is_playing`,
@@ -131,28 +145,28 @@ export const KEYS = {
       ENABLED: `${MODULES}.${ModuleEnum.OVERLAY}.enabled`,
     },
     LIBRAS: {
-      ANCHOR: `${MODULES}.${ModuleEnum.LIBRAS}.anchor`,
-      OFFSET_X: `${MODULES}.${ModuleEnum.LIBRAS}.offset_x`,
-      OFFSET_Y: `${MODULES}.${ModuleEnum.LIBRAS}.offset_y`,
-      WIDTH: `${MODULES}.${ModuleEnum.LIBRAS}.width`,
-      HEIGHT: `${MODULES}.${ModuleEnum.LIBRAS}.height`,
-      SHOW_TEXT: `${MODULES}.${ModuleEnum.LIBRAS}.show_text`,
-      SHOW_BORDER: `${MODULES}.${ModuleEnum.LIBRAS}.show_border`,
-      SPEED: `${MODULES}.${ModuleEnum.LIBRAS}.speed`,
-      EMOTION: `${MODULES}.${ModuleEnum.LIBRAS}.emotion`,
-      REGION: `${MODULES}.${ModuleEnum.LIBRAS}.region`,
-      ANIMATION: `${MODULES}.${ModuleEnum.LIBRAS}.animation`,
-      EXIT_ANIMATION: `${MODULES}.${ModuleEnum.LIBRAS}.exit_animation`,
-      ANIMATION_DURATION: `${MODULES}.${ModuleEnum.LIBRAS}.animation_duration`,
-      EXIT_ANIMATION_DURATION: `${MODULES}.${ModuleEnum.LIBRAS}.exit_animation_duration`,
-      BACKGROUND_COLOR: `${MODULES}.${ModuleEnum.LIBRAS}.background_color`,
+      ANCHOR: `${MODULES_LIBRAS}.anchor`,
+      OFFSET_X: `${MODULES_LIBRAS}.offset_x`,
+      OFFSET_Y: `${MODULES_LIBRAS}.offset_y`,
+      WIDTH: `${MODULES_LIBRAS}.width`,
+      HEIGHT: `${MODULES_LIBRAS}.height`,
+      SHOW_TEXT: `${MODULES_LIBRAS}.show_text`,
+      SHOW_BORDER: `${MODULES_LIBRAS}.show_border`,
+      SPEED: `${MODULES_LIBRAS}.speed`,
+      EMOTION: `${MODULES_LIBRAS}.emotion`,
+      REGION: `${MODULES_LIBRAS}.region`,
+      ANIMATION: `${MODULES_LIBRAS}.animation`,
+      EXIT_ANIMATION: `${MODULES_LIBRAS}.exit_animation`,
+      ANIMATION_DURATION: `${MODULES_LIBRAS}.animation_duration`,
+      EXIT_ANIMATION_DURATION: `${MODULES_LIBRAS}.exit_animation_duration`,
+      BACKGROUND_COLOR: `${MODULES_LIBRAS}.background_color`,
     },
     OPEN_ORDER: `${MODULES}._openOrder`,
     STOPWATCH: {
-      RUNNING: `${MODULES}.${ModuleEnum.STOPWATCH}.running`,
-      MODE: `${MODULES}.${ModuleEnum.STOPWATCH}.mode`,
-      TARGET_SECONDS: `${MODULES}.${ModuleEnum.STOPWATCH}.target_seconds`,
-      SHOW_SECONDS: `${MODULES}.${ModuleEnum.STOPWATCH}.show_seconds`,
+      RUNNING: `${MODULES_STOPWATCH}.running`,
+      MODE: `${MODULES_STOPWATCH}.mode`,
+      TARGET_SECONDS: `${MODULES_STOPWATCH}.target_seconds`,
+      SHOW_SECONDS: `${MODULES_STOPWATCH}.show_seconds`,
     },
     SLIDE_EDITOR: {
       PROJECTING: `${MODULES}.${ModuleEnum.SLIDE_EDITOR}.projecting`,
