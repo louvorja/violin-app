@@ -772,9 +772,17 @@
             <input
               type="number"
               class="opt-input opt-input--num"
-              :value="getUserData(KEYS.OPTIONS.SLIDE.RETURN_FONT_SIZE_COVER, 14)"
+              :value="
+                getUserData(
+                  KEYS.OPTIONS.SLIDE.RETURN_FONT_SIZE_COVER,
+                  SLIDE_STYLE_DEFAULT.return_font_size_cover
+                )
+              "
               @input="
-                saveUserData(KEYS.OPTIONS.SLIDE.RETURN_FONT_SIZE_COVER, Number($v($event)) || 14)
+                saveUserData(
+                  KEYS.OPTIONS.SLIDE.RETURN_FONT_SIZE_COVER,
+                  Number($v($event)) || SLIDE_STYLE_DEFAULT.return_font_size_cover
+                )
               "
             />
           </label>
@@ -783,9 +791,17 @@
             <input
               type="number"
               class="opt-input opt-input--num"
-              :value="getUserData(KEYS.OPTIONS.SLIDE.RETURN_FONT_SIZE_LYRIC, 11)"
+              :value="
+                getUserData(
+                  KEYS.OPTIONS.SLIDE.RETURN_FONT_SIZE_LYRIC,
+                  SLIDE_STYLE_DEFAULT.return_font_size_lyric
+                )
+              "
               @input="
-                saveUserData(KEYS.OPTIONS.SLIDE.RETURN_FONT_SIZE_LYRIC, Number($v($event)) || 11)
+                saveUserData(
+                  KEYS.OPTIONS.SLIDE.RETURN_FONT_SIZE_LYRIC,
+                  Number($v($event)) || SLIDE_STYLE_DEFAULT.return_font_size_lyric
+                )
               "
             />
           </label>
@@ -812,8 +828,15 @@
             <input
               type="number"
               class="opt-input opt-input--num"
-              :value="getUserData(KEYS.OPTIONS.SLIDE.FONT_SIZE_NEXT, 5)"
-              @input="saveUserData(KEYS.OPTIONS.SLIDE.FONT_SIZE_NEXT, Number($v($event)) || 5)"
+              :value="
+                getUserData(KEYS.OPTIONS.SLIDE.FONT_SIZE_NEXT, SLIDE_STYLE_DEFAULT.font_size_next)
+              "
+              @input="
+                saveUserData(
+                  KEYS.OPTIONS.SLIDE.FONT_SIZE_NEXT,
+                  Number($v($event)) || SLIDE_STYLE_DEFAULT.font_size_next
+                )
+              "
             />
           </label>
           <div class="opt-format-field">
@@ -850,9 +873,17 @@
               type="number"
               class="opt-input opt-input--num"
               max="40"
-              :value="getUserData(KEYS.OPTIONS.SLIDE.RETURN_HEIGHT_BOTTOM, 18)"
+              :value="
+                getUserData(
+                  KEYS.OPTIONS.SLIDE.RETURN_HEIGHT_BOTTOM,
+                  SLIDE_STYLE_DEFAULT.return_height_bottom
+                )
+              "
               @input="
-                saveUserData(KEYS.OPTIONS.SLIDE.RETURN_HEIGHT_BOTTOM, Number($v($event)) || 18)
+                saveUserData(
+                  KEYS.OPTIONS.SLIDE.RETURN_HEIGHT_BOTTOM,
+                  Number($v($event)) || SLIDE_STYLE_DEFAULT.return_height_bottom
+                )
               "
             />
           </label>
@@ -991,7 +1022,12 @@
             <LjSelect
               id="opt-return-top-bg-position"
               :items="opcoesPosicaoFundo"
-              :model-value="getUserData(KEYS.OPTIONS.SLIDE.RETURN_BG_TOP_POSITION, 'center')"
+              :model-value="
+                getUserData(
+                  KEYS.OPTIONS.SLIDE.RETURN_BG_TOP_POSITION,
+                  SLIDE_STYLE_DEFAULT.return_bg_top_position
+                )
+              "
               @update:model-value="saveUserData(KEYS.OPTIONS.SLIDE.RETURN_BG_TOP_POSITION, $event)"
             />
           </div>
@@ -1042,7 +1078,12 @@
             <LjSelect
               id="opt-return-bottom-bg-position"
               :items="opcoesPosicaoFundo"
-              :model-value="getUserData(KEYS.OPTIONS.SLIDE.RETURN_BG_BOTTOM_POSITION, 'center')"
+              :model-value="
+                getUserData(
+                  KEYS.OPTIONS.SLIDE.RETURN_BG_BOTTOM_POSITION,
+                  SLIDE_STYLE_DEFAULT.return_bg_bottom_position
+                )
+              "
               @update:model-value="
                 saveUserData(KEYS.OPTIONS.SLIDE.RETURN_BG_BOTTOM_POSITION, $event)
               "

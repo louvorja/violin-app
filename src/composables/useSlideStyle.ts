@@ -19,10 +19,12 @@ import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { FONT, resolveFont } from "@/config/Fonts";
 import { getSetting } from "@/helpers/SettingsStorage";
+import { estiloDeFundo } from "@/helpers/BackgroundStyle";
 
 const SLIDE_BG_STORAGE_ID = "slide_custom_background";
 const RETURN_BG_TOP_STORAGE_ID = "return_custom_bg_top";
 const RETURN_BG_BOTTOM_STORAGE_ID = "return_custom_bg_bottom";
+const MODOS_DE_FUNDO = new Set(["cover", "contain", "center", "stretch", "tile"]);
 
 /**
  * Cache da imagem de fundo resolvida a partir do IndexedDB.
@@ -305,19 +307,13 @@ const _readSlideOpts = (): SlideCfg => {
     if (typeof bottomColor === "string") merged.return_bg_bottom_color = bottomColor;
     if (_returnTopBlobUrl) merged.return_bg_top_image = _returnTopBlobUrl;
     if (_returnBottomBlobUrl) merged.return_bg_bottom_image = _returnBottomBlobUrl;
-    if (typeof topPos === "string") {
-      const map: Record<string, string> = {
-        center: "center center", cover: "center center", contain: "center center",
-        stretch: "center center", tile: "0 0",
-      };
-      merged.return_bg_top_position = map[topPos] || topPos;
+    // O modo ("Ajuste") é guardado como escolhido: achatá-lo em uma posição CSS
+    // fazia contain, esticado, ladrilho e centralizado saírem todos como cover.
+    if (typeof topPos === "string" && MODOS_DE_FUNDO.has(topPos)) {
+      merged.return_bg_top_position = topPos;
     }
-    if (typeof bottomPos === "string") {
-      const map: Record<string, string> = {
-        center: "center center", cover: "center center", contain: "center center",
-        stretch: "center center", tile: "0 0",
-      };
-      merged.return_bg_bottom_position = map[bottomPos] || bottomPos;
+    if (typeof bottomPos === "string" && MODOS_DE_FUNDO.has(bottomPos)) {
+      merged.return_bg_bottom_position = bottomPos;
     }
   }
 
@@ -482,16 +478,14 @@ export function useSlideStyle(): SlideStyleAPI {
     };
   }
 
+  /**
+   * Estilo do próximo slide no retorno, sem `font-size`: `font_size_next` é o
+   * teto em vh e quem escolhe o tamanho é o ajuste ao painel (`useFitText`),
+   * para a letra caber inteira em vez de ser cortada por um limite fixo.
+   */
   function nextStyle(slide?: SlideOption): CSSProperties {
-    const sizePct = cfg.value.font_size_next;
     return {
       fontFamily: _baseFont(slide ?? null),
-      // O próximo slide vive no painel de retorno, que é um container de
-      // consulta menor que a viewport. Calcular em `vh` permite que duas
-      // linhas ultrapassem o painel e sejam cortadas pelo overflow.
-      // O fator 100/18 preserva a escala configurada historicamente, enquanto
-      // o teto reserva espaço para duas linhas de line-height 1.2.
-      fontSize: `clamp(14px, min(${sizePct * (100 / 18)}cqh, calc(41.6667cqh - 1px)), 120px)`,
       color: cfg.value.color_next,
       opacity: 0.85,
       fontWeight: 600,
@@ -538,25 +532,19 @@ export function useSlideStyle(): SlideStyleAPI {
   }
 
   function returnTopBgStyle(): CSSProperties {
-    const url = cfg.value.return_bg_top_image || "";
-    return {
-      backgroundImage: url ? `url(${url})` : undefined,
-      backgroundSize: "cover",
-      backgroundPosition: cfg.value.return_bg_top_position,
-      backgroundColor: cfg.value.return_bg_top_color,
-      backgroundRepeat: "no-repeat",
-    };
+    return estiloDeFundo({
+      color: cfg.value.return_bg_top_color,
+      imageUrl: cfg.value.return_bg_top_image,
+      position: cfg.value.return_bg_top_position,
+    });
   }
 
   function returnBottomBgStyle(): CSSProperties {
-    const url = cfg.value.return_bg_bottom_image || "";
-    return {
-      backgroundImage: url ? `url(${url})` : undefined,
-      backgroundSize: "cover",
-      backgroundPosition: cfg.value.return_bg_bottom_position,
-      backgroundColor: cfg.value.return_bg_bottom_color,
-      backgroundRepeat: "no-repeat",
-    };
+    return estiloDeFundo({
+      color: cfg.value.return_bg_bottom_color,
+      imageUrl: cfg.value.return_bg_bottom_image,
+      position: cfg.value.return_bg_bottom_position,
+    });
   }
 
   /** Cor para texto repetido (refrão). */

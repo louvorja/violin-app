@@ -9,7 +9,7 @@ export const SLIDE_STYLE_DEFAULT = Object.freeze({
   font_size_cover: 18, // % da viewport height (vh)
   font_size_lyric: 10,
   font_size_aux: 8,
-  font_size_next: 5, // ProjectionReturn — próximo slide
+  font_size_next: 7, // vh — teto do próximo slide no retorno (encolhe para caber)
   color_cover: "#EFB400", // gold (cor da capa Delphi)
   color_lyric: "#FFFFFF",
   color_repeat: "#EFB400", // refrão/repetição (gold por default)
@@ -42,15 +42,15 @@ export const SLIDE_STYLE_DEFAULT = Object.freeze({
   custom_return_background_active: false,
   return_bg_top_color: "#1a201a", // verde escuro atual (hardcoded)
   return_bg_top_image: "",
-  return_bg_top_position: "center center",
+  return_bg_top_position: "cover", // opção "Ajuste": cover|contain|center|stretch|tile
   return_bg_bottom_color: "#1d251d", // topo do gradiente atual
   return_bg_bottom_image: "",
-  return_bg_bottom_position: "center center",
+  return_bg_bottom_position: "cover",
 
   // Formatação de texto do retorno
-  return_height_bottom: 18, // vh — painel inferior
-  return_font_size_cover: 14, // vh — capa no retorno
-  return_font_size_lyric: 11, // vh — letra no retorno
+  return_height_bottom: 22, // vh — painel inferior: cabe 4 linhas do próximo slide sem apertar
+  return_font_size_cover: 14, // vh — TETO da capa no retorno (encolhe para caber)
+  return_font_size_lyric: 16, // vh — TETO da letra no retorno (encolhe para caber)
   return_top_text_case: "uppercase",
   return_top_text_align: "center",
   return_bottom_text_case: "uppercase",
