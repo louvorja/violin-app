@@ -131,6 +131,16 @@ async function download(id: string, name: string, options: DownloadOptions = {})
 }
 
 /**
+ * Um link acabou de entrar na lista: o download já começa e o vídeo fica guardado. Tocar a
+ * qualquer momento entra no mesmo download, sem esperar o fim. Respeita quem desligou o
+ * download automático.
+ */
+function startForNewLink(id: string, name: string): Promise<boolean> {
+  if (!OnlineVideo.downloadEnabled()) return Promise.resolve(false);
+  return download(id, name);
+}
+
+/**
  * O cartão volta a oferecer o download na hora, sem esperar o yt-dlp terminar de
  * sair: quem cancela e clica em baixar de novo não pode ficar preso ao antigo.
  */
@@ -157,7 +167,10 @@ async function adopt(ids: string[]): Promise<void> {
   await refresh();
   for (const id of ids) {
     const file = files[id];
-    if (file && !file.kept && (await OnlineVideo.keepFile(id))) files[id] = { ...file, kept: true };
+    if (file?.kept) continue;
+    // Tocando já, o arquivo ainda está baixando: o main o guarda assim que terminar.
+    if (!file && !pending[id]) continue;
+    if ((await OnlineVideo.keepFile(id)) && file) files[id] = { ...file, kept: true };
   }
 }
 
@@ -177,6 +190,7 @@ export function useOnlineVideoDownloads() {
     unmark,
     refresh,
     download,
+    startForNewLink,
     cancel,
     remove,
     adopt,

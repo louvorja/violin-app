@@ -20,6 +20,7 @@ import {
   downloadAvailable,
   downloadEnabled,
   ensure,
+  isProgressiveUrl,
   isDownloaded,
   keepFile,
   listFiles,
@@ -27,9 +28,10 @@ import {
   maxHeight,
   messageKeyForDownloadFailure,
   messageKeyForFailure,
+  messageKeyForStreamFailure,
   normalizeMaxHeight,
-  playWhileDownloading,
   removeFile,
+  stream,
   videoIdFromUrl,
 } from "@/helpers/OnlineVideo";
 import { KEYS } from "@/constants/UserDataKeys";
@@ -144,8 +146,7 @@ describe("mensagens ao operador existem nos dois idiomas", () => {
     "online_video.download.download_all",
     "online_video.download.remove_all",
     "online_video.download.confirm_remove_all",
-    "options.videos.play_while_downloading",
-    "options.videos.play_while_downloading_hint",
+    messageKeyForStreamFailure("network"),
   ];
 
   // Cognatos que se escrevem igual nos dois idiomas.
@@ -168,6 +169,24 @@ describe("mensagens ao operador existem nos dois idiomas", () => {
     expect(resolve(es, messageKeyForDownloadFailure("network"))).not.toMatch(/YouTube|anuncios/);
     expect(messageKeyForDownloadFailure("private")).toBe("online_video.errors.private");
     expect(messageKeyForDownloadFailure("tool")).toBe("online_video.errors.download");
+  });
+
+  it("o aviso do 'tocar já' não fala em baixar (nada foi baixado) e avisa do player com anúncios", () => {
+    expect(resolve(pt, messageKeyForStreamFailure("network"))).not.toMatch(/baixar/i);
+    expect(resolve(es, messageKeyForStreamFailure("network"))).not.toMatch(/descargar/i);
+    expect(resolve(pt, messageKeyForStreamFailure("network"))).toMatch(/anúncios/);
+    expect(resolve(es, messageKeyForStreamFailure("network"))).toMatch(/anuncios/);
+    expect(messageKeyForStreamFailure("private")).toBe("online_video.errors.private");
+    expect(messageKeyForStreamFailure("tool")).toBe("online_video.errors.stream");
+  });
+
+  it("a opção de baixar descreve o que ela faz: sem anúncios, sem esperar o fim do download e já ao adicionar o link", () => {
+    for (const lang of [pt, es]) {
+      const hint = resolve(lang, "options.videos.download_hint");
+      expect(hint).toMatch(/sin anuncios|sem anúncios/);
+      expect(hint).toMatch(/sin esperar|sem esperar/);
+      expect(hint).toMatch(/ya empieza|já começa/);
+    }
   });
 
   it("cada erro do próprio vídeo tem a sua mensagem, e o resto usa a de reserva", () => {
@@ -344,30 +363,6 @@ describe("downloadAvailable", () => {
   });
 });
 
-describe("playWhileDownloading (tocar já enquanto baixa)", () => {
-  it("vem desligado: o padrão é esperar o download, sem anúncio", () => {
-    expect(playWhileDownloading()).toBe(false);
-  });
-
-  it("o operador liga, e só vale com o download automático ligado", () => {
-    h.prefs[K.PLAY_WHILE_DOWNLOADING] = true;
-    expect(playWhileDownloading()).toBe(true);
-    h.prefs[K.DOWNLOAD] = false;
-    expect(playWhileDownloading()).toBe(false);
-  });
-
-  it("no navegador não existe: lá o player do YouTube já é o único caminho", () => {
-    h.prefs[K.PLAY_WHILE_DOWNLOADING] = true;
-    h.platform.isDesktop = false;
-    expect(playWhileDownloading()).toBe(false);
-  });
-
-  it("só o valor true liga (lixo salvo não liga)", () => {
-    h.prefs[K.PLAY_WHILE_DOWNLOADING] = "sim";
-    expect(playWhileDownloading()).toBe(false);
-  });
-});
-
 describe("vídeos no disco", () => {
   const files = [
     { id: ID, size: 10, usedAt: 1, kept: true },
@@ -428,5 +423,80 @@ describe("cancel", () => {
   it("sem bridge não faz nada", () => {
     h.platform.onlineVideo = null;
     expect(() => cancel(ID)).not.toThrow();
+  });
+});
+
+describe("isProgressiveUrl", () => {
+  it("reconhece só o endereço do vídeo que ainda baixa (lido por pedaços, sem XHR)", () => {
+    expect(isProgressiveUrl(`louvorja://onlinestream/${ID}/video`)).toBe(true);
+    expect(isProgressiveUrl(`louvorja://onlinestream/${ID}/audio`)).toBe(true);
+    for (const no of [
+      `louvorja://onlinevideo/${ID}.mp4`, // já baixado: outro caminho
+      "https://rr1.googlevideo.com/videoplayback",
+      "https://www.youtube.com/watch?v=T8YHfGrk3ok",
+      "blob:https://x/abc",
+      "louvorja://files/musics/a.opus",
+      "",
+      null,
+      undefined,
+    ]) {
+      expect(isProgressiveUrl(no as string)).toBe(false);
+    }
+  });
+});
+
+describe("stream", () => {
+  const streams = {
+    ok: true,
+    id: ID,
+    video: { url: `louvorja://onlinestream/${ID}/video`, height: 1080 },
+    audio: { url: `louvorja://onlinestream/${ID}/audio` },
+    muxed: false,
+    duration: 235,
+  };
+
+  it("pede ao main com a altura escolhida e devolve a resposta", async () => {
+    h.platform.onlineVideo = fakeApi({ stream: vi.fn(async () => streams) });
+    h.prefs[K.MAX_HEIGHT] = 720;
+    expect(await stream(ID)).toEqual(streams);
+    expect(h.platform.onlineVideo.stream).toHaveBeenCalledWith(ID, { maxHeight: 720 });
+    expect(h.track).toHaveBeenCalledWith(
+      "online_video_stream_resolved",
+      expect.objectContaining({ video_id: ID, height: 1080, muxed: false })
+    );
+  });
+
+  it("no navegador (sem bridge) responde 'unsupported', sem lançar", async () => {
+    h.platform.onlineVideo = null;
+    expect(await stream(ID)).toMatchObject({ ok: false, error: { kind: "unsupported" } });
+  });
+
+  it("main antigo, sem o handler: também 'unsupported'", async () => {
+    h.platform.onlineVideo = fakeApi(); // sem `stream`
+    expect(await stream(ID)).toMatchObject({ ok: false, error: { kind: "unsupported" } });
+  });
+
+  it("falha do main chega como resultado e é medida; cancelar não conta como falha", async () => {
+    h.platform.onlineVideo = fakeApi({
+      stream: vi.fn(async () => ({ ok: false, error: { kind: "network", message: "x" } })),
+    });
+    expect(await stream(ID)).toMatchObject({ ok: false, error: { kind: "network" } });
+    expect(h.track).toHaveBeenCalledWith("online_video_stream_failed", expect.objectContaining({ kind: "network" }));
+
+    h.track.mockClear();
+    h.platform.onlineVideo = fakeApi({
+      stream: vi.fn(async () => ({ ok: false, error: { kind: "cancelled", message: "x" } })),
+    });
+    await stream(ID);
+    expect(h.track).not.toHaveBeenCalled();
+  });
+
+  it("o IPC em si falhar (janela recarregando) vira erro tratável, não exceção", async () => {
+    h.platform.onlineVideo = fakeApi({
+      stream: vi.fn(async () => {
+        throw new Error("Error invoking remote method");
+      }),
+    });
+    expect(await stream(ID)).toMatchObject({ ok: false, error: { kind: "unknown" } });
   });
 });

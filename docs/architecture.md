@@ -878,34 +878,42 @@ Duas fontes de vídeos YouTube projetáveis, mescladas na liturgia:
   (`ICONS.MODULES.CUSTOM_ONLINE_VIDEOS`) para Meus Vídeos.
 - Execução: `$media.openYouTube` (ver "Reprodução" abaixo).
 
-### Reprodução: baixar antes de projetar (desktop)
+### Reprodução: uma cópia baixada pelo app, tocada já (desktop)
 
 O player embutido do YouTube tem três defeitos para uso em culto: **anúncios** no telão,
 **um player independente em cada janela** (projeção e retorno tocavam duas cópias fora de
 sincronia, e o operador não mostrava nada) e **dependência de internet durante a
-projeção**. No desktop o vídeo agora é **baixado e projetado como um arquivo local**:
+projeção**. No desktop o vídeo agora é **baixado uma vez pelo app e projetado como um arquivo
+local** — e começa a tocar em segundos, sem esperar o download acabar:
 
 ```
 Media.openYouTube(embedUrl, título)          ← único ponto de entrada (5 chamadores)
   ├─ arquivo já baixado? ── sim ──→ toca dele (mesmo com o download automático desligado)
   └─ OnlineVideo.downloadEnabled()? ── não ──→ openEmbeddedYouTube (caminho antigo, com anúncios)
        │ sim
-       ├─ "tocar já enquanto baixa" ligado e sem arquivo → openEmbeddedYouTube na hora
-       │    + download em segundo plano (sem "manter", sem aviso de falha)
        ▼
-  onlineVideo:ensure(id, { maxHeight })      ← IPC; main: manager.js
-       │   cache em userData/online_videos/<id>.mp4  (hit = instantâneo)
-       │   miss → tools.ensure (yt-dlp + ffmpeg, 1ª vez) → yt-dlp → move para o cache
+  onlineVideo:stream(id)                     ← IPC; main: manager.js
+       │   já baixando (pré-download da lista)? → entra nesse download, sem esperar e sem baixar
+       │   de novo; senão o yt-dlp só descobre os links das trilhas (~6 s) e o main baixa UMA vez
        ▼
-  { ok, url: louvorja://onlinevideo/<id>.mp4 }
-       │
+  { video: louvorja://onlinestream/<id>/video, audio: …/audio }   ← arquivos que vão crescendo
+       │      (se não der: player do YouTube, com aviso, e o download segue ao fundo)
        ▼   mesmo caminho de um vídeo local da liturgia
   FILE_PROJECTION { type: "video" }  +  Media.openAudio({ mediaType: "video" })
        ├─ /projection/file        <video> mudo, sincronizado por VIDEO_STATE
        ├─ /projection/file/return <video> mudo, sincronizado por VIDEO_STATE
        ├─ /operator               prévia do vídeo (abre se "Abrir operador" estiver ligado)
        └─ janela principal        único que toca o áudio; controla play/pausa/busca/volume
+
+  Quando as trilhas terminam: ffmpeg junta sem recodificar → userData/online_videos/<id>.mp4
+  (a próxima vez toca do arquivo: `louvorja://onlinevideo/<id>.mp4`, os dois endereços iguais)
 ```
+
+**Toda transferência é a mesma coisa**: tocar (`stream`), o botão de baixar e o **link novo na
+lista** (o download já começa ao salvar, e o vídeo fica guardado) usam o mesmo downloader
+(`progressive.js`). Quem manda tocar no meio de um pré-download entra nele: sai da fila, lê das
+mesmas trilhas e não abre uma segunda conexão. Só um vídeo sem trilhas servidas por HTTP
+(formatos em fragmentos) cai no yt-dlp, e então o play acompanha o download (`busy`).
 
 - **Sem anúncio por construção**: o yt-dlp baixa o arquivo, não passa pelo player.
 - **Qualidade**: H.264 + AAC em MP4 até a altura escolhida (480/720/**1080**, em Opções →
@@ -916,9 +924,10 @@ Media.openYouTube(embedUrl, título)          ← único ponto de entrada (5 cha
   (traria o arquivo inteiro para a memória, e é o caminho que o modo offline usaria).
 - **Duas raias, uma transferência por vez em cada**, deduplicado por vídeo: o que o operador
   manda projetar agora (`foreground`) nunca espera atrás de um pré-download (`background`).
-  Projetar um vídeo que só esperava na fila de pré-download o passa para a raia urgente;
-  pedir outro vídeo cancela o que a projeção esperava; cancelar mata a árvore de processos
-  (yt-dlp → python → ffmpeg). A troca/renovação das ferramentas só acontece com um único
+  Tocar um vídeo que só esperava na fila de pré-download o tira da fila (`runNow`, sem ocupar
+  raia: nada segura o play, nem o fim de outro download); pedir outro vídeo cancela o que a
+  projeção esperava — menos o download que o operador pediu de propósito (botão, link novo),
+  que só deixa de ser esperado; cancelar mata a árvore de processos (yt-dlp → python → ffmpeg). A troca/renovação das ferramentas só acontece com um único
   download em curso (no Windows o `.exe` em uso não é sobrescrito). A barra é única e
   monótona: na primeira vez as ferramentas ocupam os primeiros 25%.
 - **Cancelar e pedir de novo** funciona na hora: um job já abortado, mas ainda saindo, não é
@@ -946,12 +955,35 @@ Media.openYouTube(embedUrl, título)          ← único ponto de entrada (5 cha
 - **Baixar de antemão** (`useOnlineVideoDownloads`): estado único por janela (arquivos no
   disco + downloads em curso), compartilhado pelo módulo, pelo `useMedia` (o download que a
   projeção inicia também aparece no cartão, com barra e "✕") e pela lista de processos. Só no
-  desktop; no navegador os controles não aparecem.
-- **Tocar já enquanto baixa** (Opções → Vídeos On-line, desligado por padrão): o vídeo sem
-  arquivo abre na hora pelo player do YouTube — que pode mostrar anúncio nessa primeira vez —
-  e baixa ao fundo, para as próximas tocarem do arquivo. Não há reprodução progressiva do
-  arquivo: o yt-dlp baixa vídeo e áudio separados e só os junta no fim, então não existe
-  arquivo tocável antes de terminar.
+  desktop; no navegador os controles não aparecem. **Link novo na lista** (`startForNewLink`)
+  já começa o download e guarda o vídeo, salvo com o download desligado nas opções.
+- **A cópia única** (`onlineVideo:stream`, `progressive.js`): o yt-dlp pede só os **links** das
+  duas trilhas (`-J`, sem baixar) e o main as baixa **uma vez**, em pedaços de 2 MB, para
+  arquivos do tamanho final em `online_videos/.stream/<id>/` que vão sendo preenchidos.
+  Projeção, retorno, operador e o player do app leem desses arquivos por `Range`, em
+  `louvorja://onlinestream/<id>/video|audio` — o handler espera o trecho que ainda não chegou
+  e, num salto, o baixador pula para lá. Começa em ~7 s. Ao terminar, o ffmpeg junta as trilhas
+  sem recodificar (`muxCopy`) e o MP4 entra no cache. O renderer só precisa chamar `ensure`
+  em segundo plano, que se junta ao mesmo job (barra, cancelar e "manter" iguais).
+  - **Por que não dar o link do YouTube direto ao `<video>`** (foi o primeiro protótipo): cada
+    janela abriria a própria conexão (3 a 4 cópias) e o YouTube limita cada conexão aberta a
+    ~2× o tempo real (0,6 MB/s para um vídeo de 0,3 MB/s; medido também com 3 em paralelo,
+    cada uma com o seu limite). Pedaços de 4–10 MB chegam a ~10 MB/s (~40× o tempo real), e
+    as imagens travavam com `readyState 1`. Uma cópia só, lida do disco, resolve.
+  - **A cópia em trilhas** só fica depois de o MP4 estar pronto se alguém tocou dela (as janelas
+    seguem lendo); a de um pré-download que ninguém tocou some na hora (`session.everRead`).
+    As de um vídeo anterior saem quando outro começa, ou 30 min depois de o último leitor sair
+    (o `<video>` pausado pode voltar a pedir dados); ao abrir o app, `.stream` é apagada.
+  - **Contam como transferência** para a troca das ferramentas, que espera o fim.
+  - **Player do app**: o elemento de som toca a trilha de áudio, então a prévia de imagem do
+    módulo Mídia lê a trilha de vídeo (`MEDIA.CONFIG.VIDEO_SRC`), muda e sincronizada.
+  - **Cancelar o download do vídeo que está tocando** (✕ no cartão) o leva junto: as trilhas de
+    onde ele toca somem, então o módulo para a projeção.
+  - **Falhas**: yt-dlp que não responde, ferramentas ainda sem instalar (1º uso), som que não fica
+    pronto em 20 s ou erro no elemento → player do YouTube (com aviso, exceto no 1º uso) e o
+    download ao fundo; vídeo só com formatos em fragmentos (`busy`) → acompanha o download do
+    yt-dlp com barra; vídeo privado/removido → só avisa. Fechar a mídia com o download em curso
+    não o cancela.
 - **Falhas** (`OnlineVideo.actionForFailure`): vídeo privado, removido, com restrição de idade
   ou de país → só avisa o operador e **nada vai para o telão**; cancelamento → silencioso;
   qualquer outra (sem GitHub, ferramenta quebrada, `bot`, disco cheio, transmissão ao vivo) →
@@ -961,7 +993,7 @@ Media.openYouTube(embedUrl, título)          ← único ponto de entrada (5 cha
   vez, no máximo uma renovação por hora.
 - **Web/PWA** não baixa: continua só com o player do YouTube.
 
-Arquivos: `electron/main/onlineVideo/{ids,store,runner,tools,manager,index}.js`,
+Arquivos: `electron/main/onlineVideo/{ids,store,runner,rangeSet,progressive,tools,manager,index}.js`,
 `src/helpers/OnlineVideo.ts`, `src/composables/useMedia.ts` (`openYouTube`),
 `src/composables/useOnlineVideoDownloads.ts` e os componentes
 `src/components/OnlineVideoDownload{,Badge,sBar}.vue`.

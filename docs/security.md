@@ -147,8 +147,9 @@ O download de vídeos do YouTube (`electron/main/onlineVideo/`) executa dois bin
 | `yt-dlp` | `github.com/yt-dlp/yt-dlp/releases/latest`         | SHA-256 do `SHA2-256SUMS` da mesma release; roda `--version` antes de instalar                |
 | `ffmpeg` | `github.com/eugeneware/ffmpeg-static` (tag fixa)   | SHA-256 do `.gz` **fixado no código** (`tools.js`); roda `-version` antes de instalar         |
 
-- O renderer só pede `onlineVideo:ensure(id, { maxHeight, priority, keep })` (mais `keep(id)`,
-  `cancel(id)`, `remove(id)`, `list`, `status`, `clear` e `prepare`, este sem argumento). O `id`
+- O renderer só pede `onlineVideo:ensure(id, { maxHeight, priority, keep })` e
+  `onlineVideo:stream(id, { maxHeight, keep })` (mais `keep(id)`, `cancel(id)`, `remove(id)`,
+  `list`, `status`, `clear` e `prepare`, este sem argumento). O `id`
   precisa casar `^[A-Za-z0-9_-]{11}$`; a URL é montada no main e o yt-dlp roda por `spawn` com
   array de argumentos, sem shell e com `--ignore-config`. `maxHeight` só aceita 480, 720 ou
   1080; `priority` só `"background"` (qualquer outro valor vira `"foreground"`) e `keep` só
@@ -161,6 +162,13 @@ O download de vídeos do YouTube (`electron/main/onlineVideo/`) executa dois bin
   pela intenção de usar o módulo, e não pelo primeiro clique em tocar.
 - O arquivo baixado é servido em `louvorja://onlinevideo/<id>.mp4`. O handler só aceita o
   mesmo formato de ID (não há como sair da pasta do cache) e atende `Range`.
+- O vídeo que ainda baixa é servido em `louvorja://onlinestream/<id>/video|audio` (tocar, o botão
+  de baixar e o link novo na lista usam o mesmo caminho): o handler
+  só aceita o ID de formato fixo e essas duas trilhas. Os links do YouTube (`googlevideo.com`)
+  **nunca chegam ao renderer**: o `yt-dlp -J` os entrega ao main, que só aceita `https` e
+  hosts `*.googlevideo.com` (`runner.streamUrl`, conferido de novo ao abrir a sessão),
+  baixa com `Range` — sem seguir redirecionamentos — e grava em `online_videos/.stream/<id>/`,
+  com nomes fixos. Nenhuma janela abre conexão própria com o YouTube nesse caminho.
 - O yt-dlp é o único binário atualizado sem lançar uma versão do app, e só depois de uma falha
   que uma versão nova resolve (no máximo uma vez por hora). Trocar o ffmpeg exige trocar o
   hash fixado em `tools.js`, portanto um release.

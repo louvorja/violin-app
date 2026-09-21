@@ -89,6 +89,8 @@ export const KEYS = {
       CONFIG: {
         ROOT: MODULES_MEDIA_CONFIG,
         AUDIO: `${MODULES_MEDIA_CONFIG}.audio`,
+        /** Fonte da imagem, quando difere da do som (vídeo que ainda baixa). Vazio: usa `AUDIO`. */
+        VIDEO_SRC: `${MODULES_MEDIA_CONFIG}.video_src`,
         AUDIO_ONLY: `${MODULES_MEDIA_CONFIG}.audio_only`,
         BUFFERED: `${MODULES_MEDIA_CONFIG}.buffered`,
         CURRENT_TIME: `${MODULES_MEDIA_CONFIG}.current_time`,
@@ -312,15 +314,10 @@ export const KEYS = {
       ALWAYS_ON_TOP: `${OPTIONS_ONLINE_VIDEO_PROJECTION}.always_on_top`,
       SHOW_RETURN: `${OPTIONS_ONLINE_VIDEO_PROJECTION}.show_return`,
       FULLSCREEN: `${OPTIONS_ONLINE_VIDEO_PROJECTION}.fullscreen`,
-      /** Baixa o vídeo antes de projetar (sem anúncios). Só no desktop; default true. */
+      /** Toca pelo app, sem anúncios, baixando o vídeo no computador; false volta ao player do YouTube. Só no desktop; default true. */
       DOWNLOAD: `${OPTIONS_ONLINE_VIDEO_PROJECTION}.download`,
       /** Altura máxima do download: 480, 720 ou 1080 (default). */
       MAX_HEIGHT: `${OPTIONS_ONLINE_VIDEO_PROJECTION}.max_height`,
-      /**
-       * Vídeo ainda não baixado: toca já pelo player do YouTube (que pode mostrar
-       * anúncio) e baixa em segundo plano para as próximas vezes. Default false.
-       */
-      PLAY_WHILE_DOWNLOADING: `${OPTIONS_ONLINE_VIDEO_PROJECTION}.play_while_downloading`,
     },
   },
   STORAGE: {

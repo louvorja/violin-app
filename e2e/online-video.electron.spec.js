@@ -39,6 +39,8 @@ const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
 let app;
 let main;
 let root;
+/** Últimas mensagens de aviso/erro do console da janela principal: é o que explica uma tela que não apareceu. */
+const mainConsole = [];
 const requests = [];
 /**
  * Por onde o app importa cada módulo. O Vite acrescenta `?t=` aos módulos
@@ -135,6 +137,29 @@ async function snapshot() {
 const openOnline = (id) =>
   main.evaluate(([url]) => window.__media.openYouTube(url, "Teste E2E"), [embed(id)]);
 
+/** O download de antemão (botão de baixar, link novo na lista), pelo mesmo composable da tela. */
+const downloadFromList = (id, name) =>
+  main.evaluate(
+    async ([url, v, n]) => {
+      const { useOnlineVideoDownloads } = await import(/* @vite-ignore */ url);
+      return useOnlineVideoDownloads().download(v, n);
+    },
+    [modules.downloads, id, name]
+  );
+
+/** Apaga o vídeo do disco pelo composable: o cartão e a lista de arquivos ficam de acordo. */
+const removeFromList = (id) =>
+  main.evaluate(
+    async ([url, v]) => {
+      const { useOnlineVideoDownloads } = await import(/* @vite-ignore */ url);
+      return useOnlineVideoDownloads().remove(v);
+    },
+    [modules.downloads, id]
+  );
+
+/** As trilhas de um vídeo que ainda baixa (a cópia que as janelas leem) ficam aqui. */
+const streamDirOf = (id) => path.join(root, "online_videos", ".stream", id);
+
 const tasks = () =>
   main.evaluate(async (url) => {
     const { useBackgroundTasks } = await import(/* @vite-ignore */ url);
@@ -211,6 +236,19 @@ test.beforeAll(async () => {
   });
 
   main = await until(() => windows().main, { timeout: 90_000, label: "janela principal" });
+  main.on("console", (m) => {
+    if (["warning", "error"].includes(m.type()) || /\[vite\]/i.test(m.text())) {
+      mainConsole.push(
+        `${new Date().toISOString().slice(11, 19)} ${m.type()}: ${m.text().slice(0, 240)}`
+      );
+      if (mainConsole.length > 60) mainConsole.shift();
+    }
+  });
+  main.on("pageerror", (e) =>
+    mainConsole.push(
+      `${new Date().toISOString().slice(11, 19)} pageerror: ${String(e.message).slice(0, 240)}`
+    )
+  );
   await main.waitForLoadState("domcontentloaded");
   await sleep(3000);
   await main.keyboard.press("Escape"); // fecha o diálogo de verificação inicial
@@ -223,6 +261,7 @@ test.beforeAll(async () => {
   for (const [key, name] of [
     ["audio", "useAudioPlayback"],
     ["tasks", "useBackgroundTasks"],
+    ["downloads", "useOnlineVideoDownloads"],
   ]) {
     modules[key] = await main.evaluate(async (n) => {
       const source = await (await fetch("/src/composables/useMedia.ts")).text();
@@ -258,12 +297,13 @@ test.afterAll(async () => {
 test.describe("primeiro uso: instala as ferramentas e baixa um 1080p", () => {
   test.setTimeout(420_000);
 
-  test("mostra o progresso, projeta nas três janelas e não usa o player do YouTube", async () => {
+  test("baixar instala as ferramentas e mostra o progresso; o vídeo baixado projeta nas três janelas sem o player do YouTube", async () => {
     expect((await status()).ready).toBe(false);
     const startedAt = Date.now();
     requests.length = 0;
 
-    const opening = openOnline(LONG);
+    // O download de antemão (botão, ou link novo na lista): na primeira vez instala as ferramentas.
+    const downloading = downloadFromList(LONG, "Vídeo longo (E2E)");
 
     // 1) O download aparece nos processos em segundo plano, com progresso que sobe.
     const seen = [];
@@ -276,22 +316,30 @@ test.describe("primeiro uso: instala as ferramentas e baixa um 1080p", () => {
         if (/ferramentas/i.test(t.detail || "")) sawTools = true;
         if (t.status !== "running") break;
       }
-      const done = await Promise.race([opening.then(() => true), sleep(700).then(() => false)]);
+      const done = await Promise.race([downloading.then(() => true), sleep(700).then(() => false)]);
       if (done) break;
     }
-    const opened = await opening;
+    const downloaded = await downloading;
     const elapsed = Date.now() - startedAt;
     console.log(
-      `[e2e] primeira abertura (com instalação das ferramentas): ${(elapsed / 1000).toFixed(1)} s`
+      `[e2e] primeiro download (com instalação das ferramentas): ${(elapsed / 1000).toFixed(1)} s`
     );
 
-    expect(opened).toBe(true);
+    expect(downloaded).toBe(true);
     expect(sawTools, "deve ter avisado que prepara as ferramentas na primeira vez").toBe(true);
     expect(seen.length).toBeGreaterThan(3);
-    expect(Math.max(...seen)).toBeGreaterThan(50);
+    // Progresso parado nas ferramentas quase sempre é o download falhando (o YouTube pode pedir
+    // "confirme que não é um robô" a um IP com muitas execuções seguidas): o aviso mostra o porquê.
+    expect(
+      Math.max(...seen),
+      `progresso visto: ${seen.join(",")}; aviso na tela: ${(await snackbar()) ?? "nenhum"}`
+    ).toBeGreaterThan(50);
     for (let i = 1; i < seen.length; i++) expect(seen[i]).toBeGreaterThanOrEqual(seen[i - 1] - 1);
     expect((await status()).ready).toBe(true);
     expect((await status()).count).toBe(1);
+
+    // Agora que está no disco, o vídeo toca do arquivo.
+    expect(await openOnline(LONG)).toBe(true);
 
     // 2) As três janelas existem.
     const w = await until(
@@ -535,56 +583,28 @@ test.describe("quando algo dá errado", () => {
     }
   });
 
-  test("yt-dlp desatualizado: renova sozinho e o vídeo abre", async () => {
-    const ytdlp = path.join(root, "bin", "yt-dlp");
-    const ffmpeg = path.join(root, "bin", "ffmpeg");
-    const ffmpegBefore = fs.statSync(ffmpeg).mtimeMs;
-    // Um yt-dlp "antigo": responde --version normalmente e só falha ao baixar, como um
-    // extrator que o YouTube deixou para trás. Os dois binários seguem executando.
-    fs.writeFileSync(
-      ytdlp,
-      '#!/bin/sh\nif [ "$1" = "--version" ]; then echo 2020.01.01; exit 0; fi\n' +
-        "echo 'ERROR: algo que só uma versão nova entende' >&2\nexit 1\n",
-      { mode: 0o755 }
-    );
-    await main.evaluate(() => window.louvorjaApi.onlineVideo.remove("jNQXAC9IVRw"));
-
-    const opened = await openOnline(SHORT);
-    expect(opened).toBe(true);
-    expect(fs.statSync(ytdlp).size, "voltou o yt-dlp de verdade").toBeGreaterThan(1_000_000);
-    expect(fs.statSync(ffmpeg).mtimeMs, "só o yt-dlp foi trocado; o ffmpeg ficou como estava").toBe(
-      ffmpegBefore
-    );
-    await until(
-      async () => {
-        const s = await snapshot();
-        return s.projection && !s.projection.none && s.projection.src.includes(SHORT);
-      },
-      { timeout: 20_000, label: "o vídeo baixado na projeção" }
-    );
-    await closeMedia();
-  });
-
-  test("binário corrompido: reinstala as ferramentas e o vídeo abre", async () => {
+  test("binário corrompido: o download reinstala as ferramentas e o vídeo baixa", async () => {
     const ffmpeg = path.join(root, "bin", "ffmpeg");
     fs.writeFileSync(ffmpeg, Buffer.from([0, 1, 2, 3, 4, 5]), { mode: 0o755 });
-    await main.evaluate(() => window.louvorjaApi.onlineVideo.remove("jNQXAC9IVRw"));
+    await removeFromList(SHORT);
 
-    const opened = await openOnline(SHORT);
-    expect(opened).toBe(true);
+    expect(await downloadFromList(SHORT, "Vídeo curto (E2E)")).toBe(true);
     expect(fs.statSync(ffmpeg).size).toBeGreaterThan(1_000_000);
+    expect(
+      (await main.evaluate(() => window.louvorjaApi.onlineVideo.list())).some((f) => f.id === SHORT)
+    ).toBe(true);
+
+    // E toca do arquivo.
+    expect(await openOnline(SHORT)).toBe(true);
     await until(() => windows().projection, { timeout: 20_000, label: "projeção" });
     await closeMedia();
   });
 
-  test("cancelar durante o download não abre janela e não deixa processo", async () => {
-    await main.evaluate((id) => window.louvorjaApi.onlineVideo.remove(id), LONG);
-    const opening = openOnline(LONG);
+  test("cancelar o download não abre janela, não deixa processo e apaga as trilhas pela metade", async () => {
+    await removeFromList(LONG);
+    const downloading = downloadFromList(LONG, "Vídeo longo (E2E)");
     await until(() => downloadingTask(LONG), { timeout: 60_000, label: "o download começar" });
-    const running = processesMentioning(LONG);
-    expect(running.length).toBeGreaterThan(0);
-    // O yt-dlp usa o próprio Electron (como Node) para resolver o desafio de JS do YouTube.
-    expect(running.some((l) => l.includes("--js-runtimes node:"))).toBe(true);
+    expect((await status()).active).toContain(LONG);
 
     // O mesmo caminho do botão "cancelar" da lista de processos.
     await main.evaluate(
@@ -595,37 +615,35 @@ test.describe("quando algo dá errado", () => {
       [modules.tasks, LONG]
     );
 
-    expect(await opening).toBe(false);
+    expect(await downloading).toBe(false);
     await sleep(2500);
     expect(processesMentioning(LONG)).toEqual([]);
     expect(auxiliaries().length).toBe(0);
     expect((await status()).active).toEqual([]);
     expect((await tasks()).some((t) => t.id === `online-video:${LONG}`)).toBe(false);
+    expect(fs.existsSync(streamDirOf(LONG)), "as trilhas pela metade somem").toBe(false);
   });
 
-  test("pedir outro vídeo cancela o que ainda baixava e toca o novo", async () => {
-    await main.evaluate((id) => window.louvorjaApi.onlineVideo.remove(id), LONG);
-    await main.evaluate((id) => window.louvorjaApi.onlineVideo.remove(id), SHORT);
-    const first = openOnline(LONG);
-    await until(() => downloadingTask(LONG), {
-      timeout: 60_000,
-      label: "o primeiro download começar",
-    });
+  test("tocar outro vídeo NÃO cancela o download que o operador pediu de propósito", async () => {
+    await removeFromList(LONG);
+    await removeFromList(SHORT);
+    const downloading = downloadFromList(LONG, "Vídeo longo (E2E)");
+    await until(() => downloadingTask(LONG), { timeout: 60_000, label: "o download começar" });
 
-    const second = await openOnline(SHORT);
-    expect(second).toBe(true);
-    expect(await first).toBe(false);
-
+    expect(await openOnline(SHORT)).toBe(true);
     const s = await until(
       async () => {
         const x = await snapshot();
         return x.projection && !x.projection.none && x.projection.src.includes(SHORT) ? x : null;
       },
-      { timeout: 20_000, label: "o vídeo novo na projeção" }
+      { timeout: 25_000, label: "o vídeo novo na projeção" }
     );
-    expect(s.projection.src).toBe(`louvorja://onlinevideo/${SHORT}.mp4`);
-    await sleep(2000);
-    expect(processesMentioning(LONG)).toEqual([]);
+    expect(s.projection.frames).toEqual([]);
+
+    // O download do outro seguiu e terminou, guardado.
+    expect(await downloading).toBe(true);
+    const list = await main.evaluate(() => window.louvorjaApi.onlineVideo.list());
+    expect(list.find((f) => f.id === LONG)?.kept, "baixado de propósito").toBe(true);
     await closeMedia();
   });
 
@@ -635,11 +653,15 @@ test.describe("quando algo dá errado", () => {
       id
     );
 
-  /** Pede o vídeo e espera o download engrenar. Devolve num objeto para a promessa não ser achatada. */
-  const startDownloading = async (id) => {
-    await main.evaluate((v) => window.louvorjaApi.onlineVideo.remove(v), id);
+  /**
+   * Pede o vídeo e devolve enquanto o main ainda procura os links (uns 5 s, antes de as janelas
+   * abrirem): é o intervalo em que trocar de ideia tem que cancelar tudo. Devolve num objeto para
+   * a promessa não ser achatada.
+   */
+  const startOpening = async (id) => {
+    await removeFromList(id);
     const opening = openOnline(id);
-    await until(() => downloadingTask(id), { timeout: 60_000, label: "o download começar" });
+    await sleep(800);
     return { opening };
   };
 
@@ -654,23 +676,24 @@ test.describe("quando algo dá errado", () => {
       [id, title]
     );
 
-  test("parar a mídia durante o download cancela o vídeo: ele não aparece sozinho depois", async () => {
-    const { opening } = await startDownloading(LONG);
+  test("parar a mídia enquanto o vídeo abre cancela tudo: ele não aparece sozinho depois", async () => {
+    const { opening } = await startOpening(LONG);
     await media("close", true); // "Parar projeção"
     expect(await opening).toBe(false);
     await sleep(3000);
     expect(auxiliaries().length).toBe(0);
     expect(processesMentioning(LONG)).toEqual([]);
     expect(await cached(LONG)).toBe(false);
+    expect((await status()).active).toEqual([]);
   });
 
-  test("abrir outra mídia durante o download cancela o vídeo pendente", async () => {
+  test("abrir outra mídia enquanto o vídeo abre cancela o vídeo pendente", async () => {
     await main.evaluate(
       (v) => window.louvorjaApi.onlineVideo.ensure(v, { maxHeight: 1080 }),
       SHORT
     );
     expect(await cached(SHORT)).toBe(true);
-    const { opening } = await startDownloading(LONG);
+    const { opening } = await startOpening(LONG);
 
     // O operador começa outra coisa (aqui, um vídeo já baixado tocando só o áudio).
     await playLocal(SHORT, "Outro");
@@ -696,15 +719,13 @@ test.describe("quando algo dá errado", () => {
       { label: "o hino tocar" }
     );
 
-    const { opening } = await startDownloading(LONG);
-    await media("goToTime", 17); // o hino de 19 s acaba enquanto o vídeo ainda baixa
+    await removeFromList(LONG);
+    const opening = openOnline(LONG);
+    await media("goToTime", 17); // o hino de 19 s acaba enquanto o vídeo ainda abre
     await until(async () => (await readAudio()).paused, {
       timeout: 15_000,
       label: "o hino terminar",
     });
-    expect(
-      (await tasks()).some((t) => t.id === `online-video:${LONG}` && t.status === "running")
-    ).toBe(true);
 
     expect(await opening).toBe(true); // o vídeo chegou e foi projetado
     const s = await until(
@@ -719,7 +740,7 @@ test.describe("quando algo dá errado", () => {
       },
       { timeout: 25_000, label: "o vídeo na projeção depois do fim do hino" }
     );
-    expect(s.projection.src).toBe(`louvorja://onlinevideo/${LONG}.mp4`);
+    expect(s.projection.src).toMatch(new RegExp(`louvorja://online(stream|video)/${LONG}`));
     await closeMedia();
   });
 });
@@ -769,7 +790,32 @@ test.describe("Meus vídeos online: baixar de antemão e gerenciar", () => {
       [SHORT, LONG, NAME_SHORT, NAME_LONG]
     );
     await main.getByText("Meus Vídeos Online").first().click();
-    await main.waitForSelector(".cv-grid-card", { timeout: 20_000 });
+    try {
+      await main.waitForSelector(".cv-grid-card", { timeout: 20_000 });
+    } catch (error) {
+      // Diagnóstico: o que a tela mostrava e o que o console disse, para não ficar no "às vezes falha".
+      const dom = await main
+        .evaluate(() => ({
+          url: location.href,
+          dialogs: [...document.querySelectorAll("[role=dialog]")].map((d) =>
+            (d.getAttribute("aria-label") || d.textContent || "").slice(0, 60)
+          ),
+          cards: document.querySelectorAll(".cv-grid-card").length,
+          text: document.body.innerText.replace(/\s+/g, " ").slice(0, 600),
+          bodyPointerEvents: getComputedStyle(document.body).pointerEvents,
+          modules: JSON.stringify(window.__appdata?.get?.("modules") ?? {}).slice(0, 400),
+        }))
+        .catch((e) => ({ erro: e.message }));
+      console.log(
+        "[e2e] o módulo Meus Vídeos Online não mostrou os cartões:",
+        JSON.stringify(dom, null, 1)
+      );
+      console.log("[e2e] console da janela principal:\n" + mainConsole.slice(-25).join("\n"));
+      await main
+        .screenshot({ path: "test-results/meus-videos-online-sem-cartoes.png" })
+        .catch(() => {});
+      throw error;
+    }
   });
 
   test("nada baixado: cada vídeo oferece baixar, e a barra resume 0 de 2", async () => {
@@ -903,7 +949,7 @@ test.describe("Meus vídeos online: baixar de antemão e gerenciar", () => {
   test("cancelar pelo cartão: para o download, não deixa processo e devolve o botão de baixar", async () => {
     await action(NAME_LONG, BTN.download).click();
     await until(() => downloadingTask(LONG), { timeout: 60_000, label: "o download começar" });
-    expect(processesMentioning(LONG).length).toBeGreaterThan(0);
+    expect((await status()).active).toContain(LONG);
 
     await action(NAME_LONG, BTN.cancel).click();
     await expect(action(NAME_LONG, BTN.download)).toBeVisible({ timeout: 10_000 });
@@ -912,40 +958,55 @@ test.describe("Meus vídeos online: baixar de antemão e gerenciar", () => {
     expect((await status()).active).toEqual([]);
     expect((await tasks()).some((t) => t.id === `online-video:${LONG}`)).toBe(false);
     expect(await onDisk(LONG)).toBeFalsy();
+    expect(fs.existsSync(streamDirOf(LONG)), "as trilhas pela metade somem").toBe(false);
   });
 
-  test("projetar pelo cartão um vídeo ainda não baixado: o cartão mostra o andamento, e o ✕ cancela na hora", async () => {
-    await main.evaluate((id) => window.louvorjaApi.onlineVideo.remove(id), LONG);
+  test("pelo cartão, ainda baixando: toca já, o cartão mostra o andamento, e o ✕ cancela o download e para o vídeo", async () => {
+    const STREAM_LONG = `louvorja://onlinestream/${LONG}/video`;
+    const playingFromStream = () =>
+      until(
+        async () => {
+          const x = await snapshot();
+          return [x.projection, x.ret, x.operator].every(
+            (v) => v && !v.none && v.src === STREAM_LONG && v.ready >= 3 && v.t > 0.3
+          )
+            ? x
+            : null;
+        },
+        { timeout: 40_000, label: "o vídeo tocando pelo cartão, antes de acabar de baixar" }
+      );
+
+    await removeFromList(LONG);
     await card(NAME_LONG).locator(".cv-grid-thumb").click();
-    await until(() => downloadingTask(LONG), { timeout: 60_000, label: "o download começar" });
+    await playingFromStream();
 
     // O cartão não finge que nada acontece: mostra a barra e oferece cancelar, não baixar.
     await expect(card(NAME_LONG).locator('.ovd-badge [role="progressbar"]')).toBeVisible();
     await expect(action(NAME_LONG, BTN.download)).toHaveCount(0);
-    expect(auxiliaries().length, "ainda baixando: nada no telão").toBe(0);
 
+    // Cancelar o download leva o vídeo junto: as trilhas de onde ele toca somem.
     await action(NAME_LONG, BTN.cancel).click();
-    await expect(action(NAME_LONG, BTN.download)).toBeVisible({ timeout: 5_000 }); // sem esperar o yt-dlp sair
-    await expect(card(NAME_LONG).locator(".cv-grid-card--active, .ovd-badge")).toHaveCount(0);
+    await expect(action(NAME_LONG, BTN.download)).toBeVisible({ timeout: 5_000 });
+    await until(() => auxiliaries().length === 0, {
+      timeout: 10_000,
+      label: "o vídeo parar junto com o download",
+    });
+    await sleep(1500);
+    expect((await status()).active).toEqual([]);
+    expect(fs.existsSync(streamDirOf(LONG)), "as trilhas pela metade somem").toBe(false);
+    expect(await onDisk(LONG)).toBeFalsy();
 
     // Clicar de novo logo em seguida tem que funcionar (não pode pegar carona no cancelado).
     await card(NAME_LONG).locator(".cv-grid-thumb").click();
-    const shown = await until(
-      async () => {
-        const x = await snapshot();
-        return x.projection &&
-          !x.projection.none &&
-          x.projection.src.includes(LONG) &&
-          !x.projection.paused
-          ? x
-          : null;
-      },
-      { timeout: 120_000, label: "o vídeo na projeção depois de cancelar e tocar de novo" }
-    );
-    expect(shown.projection.src).toBe(`louvorja://onlinevideo/${LONG}.mp4`);
-    await expect(action(NAME_LONG, BTN.remove)).toBeVisible();
+    await playingFromStream();
     await closeMedia();
+    await until(async () => !!(await onDisk(LONG)), {
+      timeout: 180_000,
+      label: "o vídeo chegar ao disco",
+    });
+
     // Limpa pela própria tela, para o cartão e o disco seguirem de acordo.
+    await expect(action(NAME_LONG, BTN.remove)).toBeVisible({ timeout: 10_000 });
     await action(NAME_LONG, BTN.remove).click();
     await confirmYes();
     await until(async () => !(await onDisk(LONG)), {
@@ -955,45 +1016,94 @@ test.describe("Meus vídeos online: baixar de antemão e gerenciar", () => {
     await expect(action(NAME_LONG, BTN.download)).toBeVisible();
   });
 
-  test("tocar já enquanto baixa: o player do YouTube abre na hora, e o download segue ao fundo sem trocar nada", async () => {
-    await main.evaluate((id) => window.louvorjaApi.onlineVideo.remove(id), LONG);
-    await setPref("options.online_video_projection.play_while_downloading", true);
-    try {
+  /**
+   * "Tocar já": sem o arquivo no disco, o vídeo começa antes de acabar de baixar. O main
+   * baixa UMA vez, aos pedaços, para um arquivo que vai crescendo, e todas as telas leem
+   * dele pelo protocolo do app — sem uma conexão por janela (o YouTube limita cada uma a
+   * ~2× o tempo real, e as imagens travavam) e sem o player do YouTube (sem anúncio).
+   */
+  test.describe("tocar já: o vídeo começa antes de acabar de baixar", () => {
+    const STREAM = (id, kind) => `louvorja://onlinestream/${id}/${kind}`;
+    const removeFromDisk = (id) =>
+      main.evaluate((v) => window.louvorjaApi.onlineVideo.remove(v), id);
+
+    test.afterAll(async () => {
+      await removeFromDisk(LONG);
+    });
+
+    /** As telas que mostram imagem (a do player do app só aparece com o diálogo aberto). */
+    const screens = (s) => [s.projection, s.ret, s.operator];
+
+    test("abre em segundos e as três telas leem do mesmo arquivo em crescimento, sem o YouTube no meio", async () => {
+      await removeFromDisk(LONG);
+      const before = requests.length;
       const startedAt = Date.now();
       const opened = await openOnline(LONG);
+      const elapsed = Date.now() - startedAt;
       expect(opened).toBe(true);
-      expect(Date.now() - startedAt, "não esperou o download").toBeLessThan(6_000);
+      console.log(`[e2e] tocar já: pronto para tocar em ${(elapsed / 1000).toFixed(1)} s`);
+      expect(elapsed, "não esperou o download inteiro").toBeLessThan(25_000);
 
-      const proj = await until(() => windows().projection, {
-        timeout: 20_000,
-        label: "janela de projeção",
-      });
-      const frame = await until(
-        async () => (await readVideo(proj)).frames.find((f) => /youtube\.com\/embed/.test(f)),
-        { timeout: 30_000, label: "o player do YouTube" }
+      const playing = await until(
+        async () => {
+          const s = await snapshot();
+          return screens(s).every(
+            (v) => v && !v.none && v.src === STREAM(LONG, "video") && v.ready >= 3 && v.t > 0.3
+          )
+            ? s
+            : null;
+        },
+        { timeout: 20_000, label: "as três telas tocando do arquivo em crescimento" }
       );
-      expect(frame).toMatch(new RegExp(LONG));
+      for (const v of screens(playing)) {
+        expect(v.frames, "nenhum player do YouTube").toEqual([]);
+        expect(v.muted).toBe(true);
+      }
+      expect(playing.audio.src).toBe(STREAM(LONG, "audio"));
+      expect(playing.audio.paused).toBe(false);
 
-      // O download corre ao fundo: aparece na lista de processos e termina no disco, sem guardar.
-      await until(() => downloadingTask(LONG), {
-        timeout: 60_000,
-        label: "o download em segundo plano",
-      });
+      // Quem fala com o YouTube é o main (uma vez): nenhuma janela abre conexão própria.
+      const fromWindows = requests
+        .slice(before)
+        .filter(
+          (r) =>
+            /googlevideo\.com/i.test(r.url) || (r.page !== "/" && externalAdOrYoutube([r]).length)
+        );
+      expect(fromWindows.map((r) => `${r.page} ${r.url}`)).toEqual([]);
+
+      // Imagem e som alinhados enquanto ainda baixa.
+      const gaps = [];
+      for (let i = 0; i < 8; i++) {
+        await sleep(500);
+        const s = await snapshot();
+        for (const v of screens(s)) gaps.push(v.t - s.audio.t);
+      }
+      console.log(
+        `[e2e] tocar já: deriva imagem-som mediana ${(median(gaps.map(Math.abs)) * 1000).toFixed(0)} ms, pior ${(Math.max(...gaps.map(Math.abs)) * 1000).toFixed(0)} ms`
+      );
+      expect(median(gaps.map(Math.abs))).toBeLessThan(0.15);
+      expect(Math.max(...gaps.map(Math.abs))).toBeLessThan(0.5);
+
+      // O download foi este mesmo: aparece na lista de processos, termina no disco e não guarda.
       await until(async () => !!(await onDisk(LONG)), {
         timeout: 120_000,
         label: "o vídeo chegar ao disco",
       });
-      expect((await onDisk(LONG)).kept, "download automático: só cache").toBe(false);
-      expect((await snackbar()) ?? "").not.toMatch(/Não foi possível baixar/);
+      const file = await onDisk(LONG);
+      expect(file.kept, "download automático: só cache").toBe(false);
+      expect(file.size).toBeGreaterThan(50_000_000);
+      expect((await status()).active).toEqual([]);
+      expect((await snackbar()) ?? "").not.toMatch(/Não foi possível/);
+      expect(processesMentioning(LONG), "o yt-dlp não baixa de novo").toEqual([]);
 
-      // Acabar de baixar não troca o que está no ar: segue o player do YouTube.
-      await sleep(2_500);
-      const still = await readVideo(proj);
-      expect(still.frames.some((f) => /youtube\.com\/embed/.test(f))).toBe(true);
-      expect(windows().all.some((w) => route(w) === "/projection/file" && w !== proj)).toBe(false);
+      // Acabar de baixar não troca o que está no ar.
+      await sleep(1_500);
+      const still = await snapshot();
+      expect(screens(still).every((v) => v.src === STREAM(LONG, "video") && !v.paused)).toBe(true);
+      expect(still.audio.t).toBeGreaterThan(playing.audio.t);
       await closeMedia();
 
-      // Da próxima vez o arquivo já está lá: toca dele, sem player do YouTube.
+      // Da próxima vez toca do arquivo, sem trilhas separadas.
       expect(await openOnline(LONG)).toBe(true);
       const local = await until(
         async () => {
@@ -1008,12 +1118,212 @@ test.describe("Meus vídeos online: baixar de antemão e gerenciar", () => {
         { timeout: 30_000, label: "o vídeo do arquivo" }
       );
       expect(local.projection.src).toBe(`louvorja://onlinevideo/${LONG}.mp4`);
-      expect(local.projection.frames).toEqual([]);
-    } finally {
+      expect(local.audio.src).toBe(`louvorja://onlinevideo/${LONG}.mp4`);
       await closeMedia();
-      await setPref("options.online_video_projection.play_while_downloading", false);
-      await main.evaluate((id) => window.louvorjaApi.onlineVideo.remove(id), LONG);
-    }
+    });
+
+    test("pelo cartão de Meus vídeos online: toca já, o cartão mostra o andamento e o vídeo fica guardado", async () => {
+      await removeFromDisk(LONG);
+      const startedAt = Date.now();
+      await card(NAME_LONG).locator(".cv-grid-thumb").click();
+      await until(
+        async () => {
+          const s = await snapshot();
+          return screens(s).every(
+            (v) => v && !v.none && v.src === STREAM(LONG, "video") && v.ready >= 3 && v.t > 0.3
+          )
+            ? s
+            : null;
+        },
+        { timeout: 40_000, label: "as telas tocando pelo cartão, antes de acabar de baixar" }
+      );
+      expect(Date.now() - startedAt, "não esperou o download inteiro").toBeLessThan(30_000);
+
+      // Baixando ao fundo, o cartão mostra o andamento em vez de oferecer o download.
+      const stillDownloading = !(await onDisk(LONG));
+      if (stillDownloading) {
+        await expect(card(NAME_LONG).locator('.ovd-badge [role="progressbar"]')).toBeVisible();
+        await expect(action(NAME_LONG, BTN.download)).toHaveCount(0);
+      }
+
+      // Vídeo da própria lista fica guardado: o despejo do cache automático não o leva.
+      await until(async () => !!(await onDisk(LONG)), {
+        timeout: 180_000,
+        label: "o vídeo chegar ao disco",
+      });
+      await until(async () => (await onDisk(LONG))?.kept === true, {
+        timeout: 10_000,
+        label: "o vídeo da lista ser guardado",
+      });
+      await closeMedia();
+
+      await expect(action(NAME_LONG, BTN.remove)).toBeVisible({ timeout: 10_000 });
+      await action(NAME_LONG, BTN.remove).click();
+      await confirmYes();
+      await until(async () => !(await onDisk(LONG)), {
+        timeout: 10_000,
+        label: "o arquivo sair do disco",
+      });
+    });
+
+    test("mandar tocar no meio do download de antemão: entra nele, sem esperar e sem baixar de novo", async () => {
+      await removeFromList(LONG);
+      await action(NAME_LONG, BTN.download).click();
+      await until(() => downloadingTask(LONG), { timeout: 60_000, label: "o download começar" });
+
+      const before = requests.length;
+      const startedAt = Date.now();
+      await card(NAME_LONG).locator(".cv-grid-thumb").click();
+      await until(
+        async () => {
+          const s = await snapshot();
+          return screens(s).every(
+            (v) => v && !v.none && v.src === STREAM(LONG, "video") && v.ready >= 3 && v.t > 0.3
+          )
+            ? s
+            : null;
+        },
+        { timeout: 30_000, label: "as telas tocando do download em curso" }
+      );
+      expect(Date.now() - startedAt, "não esperou o download terminar").toBeLessThan(25_000);
+
+      // Um download só: nenhuma janela falou com o YouTube.
+      const fromWindows = requests
+        .slice(before)
+        .filter(
+          (r) =>
+            /googlevideo\.com/i.test(r.url) || (r.page !== "/" && externalAdOrYoutube([r]).length)
+        );
+      expect(fromWindows.map((r) => `${r.page} ${r.url}`)).toEqual([]);
+
+      await until(async () => (await onDisk(LONG))?.kept === true, {
+        timeout: 180_000,
+        label: "o download terminar, guardado",
+      });
+      await closeMedia();
+    });
+
+    test("pausar, saltar e retomar chegam às três telas, sem esperar o download", async () => {
+      await removeFromDisk(LONG);
+      expect(await openOnline(LONG)).toBe(true);
+      await until(
+        async () => screens(await snapshot()).every((v) => v && v.ready >= 3 && v.t > 0.3),
+        {
+          timeout: 20_000,
+          label: "tocando",
+        }
+      );
+
+      await media("pause", true);
+      await until(
+        async () => {
+          const s = await snapshot();
+          return screens(s).every((v) => v.paused) && s.audio.paused;
+        },
+        { timeout: 4_000, label: "todas pausarem" }
+      );
+
+      const askedAt = Date.now();
+      await media("goToTime", 150);
+      await until(
+        async () => {
+          const s = await snapshot();
+          return (
+            screens(s).every((v) => v.ready >= 3 && Math.abs(v.t - 150) < 2) &&
+            Math.abs(s.audio.t - 150) < 2
+          );
+        },
+        { timeout: 8_000, label: "todas irem para 2:30" }
+      );
+      console.log(`[e2e] tocar já: salto para 2:30 em ${Date.now() - askedAt} ms`);
+
+      await media("pause", false);
+      await until(
+        async () => {
+          const s = await snapshot();
+          return screens(s).every((v) => !v.paused && v.t > 150.5) && !s.audio.paused;
+        },
+        { timeout: 8_000, label: "todas retomarem" }
+      );
+      await closeMedia();
+    });
+
+    test("fechar a mídia com o download em curso não o cancela: o vídeo chega ao disco para a próxima vez", async () => {
+      await removeFromDisk(LONG);
+      expect(await openOnline(LONG)).toBe(true);
+      await closeMedia();
+      await until(async () => !!(await onDisk(LONG)), {
+        timeout: 120_000,
+        label: "o vídeo chegar ao disco",
+      });
+      expect((await onDisk(LONG)).kept).toBe(false);
+      expect((await snackbar()) ?? "").not.toMatch(/Não foi possível/);
+      expect(auxiliaries().length).toBe(0);
+    });
+
+    test("apertar play em um vídeo e depois em outro: só o segundo fica no telão, e os dois acabam baixados", async () => {
+      await removeFromDisk(LONG);
+      await removeFromDisk(SHORT);
+
+      expect(await openOnline(LONG)).toBe(true);
+      await until(async () => (await snapshot()).projection?.src === STREAM(LONG, "video"), {
+        timeout: 20_000,
+        label: "o primeiro no telão",
+      });
+
+      expect(await openOnline(SHORT)).toBe(true);
+      const second = await until(
+        async () => {
+          const s = await snapshot();
+          return screens(s).every((v) => v && v.src === STREAM(SHORT, "video") && v.ready >= 3) &&
+            s.audio.src === STREAM(SHORT, "audio")
+            ? s
+            : null;
+        },
+        { timeout: 20_000, label: "o segundo no telão" }
+      );
+      expect(second.projection.frames).toEqual([]);
+      expect(windows().all.filter((w) => route(w) === "/projection/file")).toHaveLength(1);
+
+      // O primeiro seguiu baixando ao fundo (é o que o operador pediu, e a próxima vez sai do arquivo).
+      await until(async () => !!(await onDisk(LONG)) && !!(await onDisk(SHORT)), {
+        timeout: 120_000,
+        label: "os dois chegarem ao disco",
+      });
+      await closeMedia();
+    });
+
+    test("com o yt-dlp quebrado: cai no player do YouTube (avisando), e o download ao fundo renova o yt-dlp", async () => {
+      const ytdlp = path.join(root, "bin", "yt-dlp");
+      await removeFromDisk(LONG);
+      fs.writeFileSync(
+        ytdlp,
+        '#!/bin/sh\nif [ "$1" = "--version" ]; then echo 2020.01.01; exit 0; fi\n' +
+          "echo 'ERROR: algo que só uma versão nova entende' >&2\nexit 1\n",
+        { mode: 0o755 }
+      );
+
+      const opened = await openOnline(LONG);
+      expect(opened).toBe(true);
+      const proj = await until(() => windows().projection, {
+        timeout: 20_000,
+        label: "janela de projeção",
+      });
+      const frame = await until(
+        async () => (await readVideo(proj)).frames.find((f) => /youtube\.com\/embed/.test(f)),
+        { timeout: 30_000, label: "o player do YouTube (reserva)" }
+      );
+      expect(frame).toMatch(new RegExp(LONG));
+      expect(await snackbar()).toMatch(/player do YouTube/);
+
+      // A reserva não fica sem o download: ele renova o yt-dlp e o vídeo chega ao disco.
+      await until(async () => !!(await onDisk(LONG)), {
+        timeout: 150_000,
+        label: "o vídeo chegar ao disco",
+      });
+      expect(fs.statSync(ytdlp).size, "voltou o yt-dlp de verdade").toBeGreaterThan(1_000_000);
+      await closeMedia();
+    });
   });
 
   test("excluir o vídeo da lista leva junto o arquivo baixado, e avisa disso", async () => {
@@ -1031,5 +1341,20 @@ test.describe("Meus vídeos online: baixar de antemão e gerenciar", () => {
     expect(await main.evaluate(() => window.__confirmMessages)).toEqual([
       "Excluir este vídeo? O arquivo baixado no computador também será apagado.",
     ]);
+  });
+
+  // Por último: cria um cartão a mais na lista.
+  test("link novo na lista: o download já começa sozinho e o vídeo fica guardado, sem projetar nada", async () => {
+    await removeFromList(SHORT);
+    await main.getByRole("button", { name: "Adicionar vídeo" }).first().click();
+    const dialog = main.getByRole("dialog").last();
+    await dialog.locator("input").first().fill(`https://www.youtube.com/watch?v=${SHORT}`);
+    await dialog.getByRole("button", { name: "Salvar", exact: true }).click();
+
+    await until(async () => (await onDisk(SHORT))?.kept === true, {
+      timeout: 120_000,
+      label: "o vídeo do link novo ser baixado e guardado, sem ninguém apertar baixar",
+    });
+    expect(auxiliaries().length, "baixar não projeta nada").toBe(0);
   });
 });

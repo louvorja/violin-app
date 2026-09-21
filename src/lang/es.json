@@ -578,13 +578,11 @@
       "cache_clear_confirm": "¿Borrar todos los videos descargados? Se volverán a descargar cuando se usen.",
       "cache_empty": "Ningún video descargado",
       "cache_size": "Videos descargados: {count} ({size})",
-      "download": "Descargar el video antes de proyectar (sin anuncios)",
-      "download_hint": "El video se descarga una vez, se guarda en el equipo y se proyecta como un archivo: sin anuncios y con la misma imagen en la proyección, el retorno y el operador. Desactívalo para usar siempre el reproductor de YouTube.",
+      "download": "Reproducir videos de YouTube sin anuncios (descargados en el equipo)",
+      "download_hint": "El video empieza a reproducirse en pocos segundos, sin esperar a que termine la descarga, y queda guardado en el equipo: sin anuncios y con la misma imagen en la proyección, el retorno y el operador. Al agregar un enlace en Mis Videos en Línea, la descarga ya empieza. Desactívalo para usar siempre el reproductor de YouTube.",
       "fullscreen": "Mostrar en pantalla completa",
       "max_height": "Calidad máxima de la descarga",
       "open_return_at": "Pantalla de retorno del vídeo en:",
-      "play_while_downloading": "Si aún no se descargó, reproducir ya en YouTube y descargar en segundo plano",
-      "play_while_downloading_hint": "Empieza al instante, sin esperar. Esa primera vez YouTube puede mostrar anuncios; las siguientes el video se reproduce desde el archivo, sin anuncios. Para no tener espera ni anuncios, descarga los videos antes, en Mis Videos Online.",
       "show_return": "Mostrar en la pantalla de retorno",
       "title": "Vídeos On-line",
       "youtube_action": "Al ejecutar enlace de YouTube en la liturgia, abrir:"
@@ -1454,7 +1452,8 @@
       "geo": "Este video no está disponible en tu región.",
       "unavailable": "Este video fue eliminado o no está disponible.",
       "fallback": "No se pudo descargar el video. Se usa el reproductor de YouTube, que puede mostrar anuncios.",
-      "download": "No se pudo descargar el video ahora. Inténtalo de nuevo más tarde."
+      "download": "No se pudo descargar el video ahora. Inténtalo de nuevo más tarde.",
+      "stream": "No se pudo abrir el video directamente. Se usa el reproductor de YouTube, que puede mostrar anuncios."
     },
     "download": {
       "start": "Descargar para usar sin internet",

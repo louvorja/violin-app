@@ -105,7 +105,8 @@ describe("OnlineVideoDownload — o controle de cada vídeo", () => {
   it("baixando: mostra o andamento e o botão vira cancelar", async () => {
     const { Control, api, downloads } = await load();
     api.ensure = vi.fn(() => new Promise(() => {})); // nunca termina
-    const w = mountIn(Control, { videoId: ID, name: "Louvor" });
+    const onCancelled = vi.fn();
+    const w = mountIn(Control, { videoId: ID, name: "Louvor", onCancelled });
     void downloads.download(ID, "Louvor");
     api.emit({ id: ID, phase: "downloading", percent: 37, phasePercent: 37 });
     await flushPromises();
@@ -114,6 +115,8 @@ describe("OnlineVideoDownload — o controle de cada vídeo", () => {
     expect(button(w, "Baixar para usar sem internet").exists()).toBe(false);
     await button(w, "Cancelar download").trigger("click");
     expect(api.cancel).toHaveBeenCalledWith(ID);
+    // Quem projeta este vídeo é avisado: cancelar o download derruba as trilhas de onde ele toca.
+    expect(onCancelled).toHaveBeenCalledTimes(1);
   });
 
   it("na fila: mostra 'Na fila' em vez de 0%", async () => {

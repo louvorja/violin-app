@@ -245,7 +245,14 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
      * `opts`: `{ maxHeight, priority: "foreground" | "background", keep }`.
      */
     ensure: (id, opts) => ipcRenderer.invoke("onlineVideo:ensure", id, opts),
-    /** Cancela o download do vídeo, se houver. */
+    /**
+     * Toca já, sem esperar o download: baixa uma vez, aos pedaços, e devolve endereços
+     * `louvorja://onlinestream/…` de onde as janelas leem. Resolve
+     * `{ ok, video: { url, height }, audio: { url }, muxed, duration, cached }` ou
+     * `{ ok: false, error: { kind } }`. `opts`: `{ maxHeight, keep }`.
+     */
+    stream: (id, opts) => ipcRenderer.invoke("onlineVideo:stream", id, opts),
+    /** Cancela o download (ou a busca de URL) do vídeo, se houver. */
     cancel: (id) => ipcRenderer.invoke("onlineVideo:cancel", id),
     /** Vídeos em disco: [{ id, size, usedAt, kept }] */
     list: () => ipcRenderer.invoke("onlineVideo:list"),

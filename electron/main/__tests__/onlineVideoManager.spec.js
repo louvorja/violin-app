@@ -52,6 +52,11 @@ function okRun(size = 10) {
   });
 }
 
+/** Sem trilhas servidas direto (só formatos em fragmentos): o download cai no yt-dlp. */
+const noDirectLinks = async () => {
+  throw new OnlineVideoError("format", "Nenhum vídeo servido direto");
+};
+
 function make(overrides = {}) {
   const tools = overrides.tools ?? fakeTools();
   const run = overrides.run ?? okRun();
@@ -59,6 +64,7 @@ function make(overrides = {}) {
     dir,
     tools,
     run,
+    resolve: noDirectLinks,
     freeBytes: async () => MIN_FREE_BYTES * 10,
     ...overrides,
   });
@@ -1095,5 +1101,516 @@ describe("progresso", () => {
     const events = [];
     await manager.ensure(A, {}, (e) => events.push(e));
     expect(events.at(-1)).toMatchObject({ phase: "error", kind: "geo" });
+  });
+});
+
+describe("stream (tocar já, enquanto baixa uma vez só)", () => {
+  const GV = "https://rr1---sn-x.googlevideo.com/videoplayback";
+  const VURL = `${GV}?kind=video`;
+  const AURL = `${GV}?kind=audio`;
+  const bytes = (n, seed) => Buffer.from(Array.from({ length: n }, (_, i) => (i * 7 + seed) % 251));
+
+  /** Um YouTube falso (só os pedaços em memória) e um ffmpeg falso, ligados a um gerenciador de verdade. */
+  function makeStream(overrides = {}) {
+    const video = bytes(6000, 1);
+    const audio = bytes(2000, 2);
+    const log = [];
+    const gate = overrides.gate; // {promise}: segura os pedaços até o teste soltar
+    const fetchRange = vi.fn(async (url, start, end, { signal } = {}) => {
+      log.push({ kind: url === VURL ? "video" : "audio", start, end });
+      if (gate) {
+        // como o HTTP de verdade: cancelar interrompe o pedido em voo
+        await Promise.race([
+          gate.promise,
+          new Promise((_, reject) => signal?.addEventListener("abort", () => reject(new OnlineVideoError("cancelled", "Cancelado")))),
+        ]);
+      }
+      if (overrides.fetchFails) throw overrides.fetchFails;
+      const src = url === VURL ? video : audio;
+      return { data: Buffer.from(src.subarray(start, end + 1)), total: src.length };
+    });
+    const resolve = overrides.resolve ?? vi.fn(async ({ id }) => {
+      if (overrides.failFor?.includes(id)) return noDirectLinks();
+      return {
+        video: { url: VURL, size: video.length, height: 1080, vcodec: "avc1.640028", ext: "mp4" },
+        audio: { url: AURL, size: audio.length, acodec: "mp4a.40.2", ext: "m4a" },
+        muxed: false,
+        duration: 60,
+        expiresAt: 1789960552000,
+      };
+    });
+    const mux = overrides.mux ?? vi.fn(async ({ video: v, audio: a, out }) => {
+      fs.mkdirSync(path.dirname(out), { recursive: true });
+      fs.writeFileSync(out, Buffer.concat([fs.readFileSync(v), fs.readFileSync(a)]));
+      return { file: out, size: fs.statSync(out).size };
+    });
+    const made = make({ resolve, fetchRange, mux, ...overrides.cfg });
+    return { ...made, resolve, fetchRange, mux, log, video, audio };
+  }
+
+  const read = async (served) => Buffer.from(await new Response(served.body).arrayBuffer());
+
+  it("devolve endereços do próprio app (nunca o link do YouTube) e a janela já lê o vídeo por eles", async () => {
+    const { manager, video, audio } = makeStream();
+    const res = await manager.stream(A);
+    expect(res).toMatchObject({
+      ok: true,
+      id: A,
+      cached: false,
+      muxed: false,
+      duration: 60,
+      video: { url: `louvorja://onlinestream/${A}/video`, height: 1080 },
+      audio: { url: `louvorja://onlinestream/${A}/audio` },
+    });
+    expect(JSON.stringify(res)).not.toContain("googlevideo");
+    expect((await read(manager.serveStream(A, "video", "bytes=0-99"))).equals(video.subarray(0, 100))).toBe(true);
+    expect((await read(manager.serveStream(A, "audio", "bytes=100-199"))).equals(audio.subarray(100, 200))).toBe(true);
+  });
+
+  it("baixa cada trilha uma vez só, por mais janelas que leiam", async () => {
+    const { manager, log, video } = makeStream();
+    await manager.stream(A);
+    const readers = await Promise.all(
+      [1, 2, 3, 4].map(() => read(manager.serveStream(A, "video", "bytes=0-5999")))
+    );
+    for (const r of readers) expect(r.equals(video)).toBe(true);
+    await manager.ensure(A); // espera o job
+    expect(log.filter((r) => r.kind === "video")).toHaveLength(1);
+    expect(log.filter((r) => r.kind === "audio")).toHaveLength(1);
+  });
+
+  it("quando as trilhas terminam, o ffmpeg só as junta e o MP4 entra no cache como um download normal", async () => {
+    const { manager, mux, run, tools } = makeStream();
+    await manager.stream(A);
+    const done = await manager.ensure(A, {}, () => {}); // quem já pede o download se junta ao job
+    expect(done).toMatchObject({ ok: true, id: A, url: `louvorja://onlinevideo/${A}.mp4`, cached: false });
+    expect(mux).toHaveBeenCalledTimes(1);
+    expect(mux.mock.calls[0][0]).toMatchObject({ ffmpeg: "/fake/ffmpeg" });
+    expect(manager.store.has(A)).toBe(true);
+    expect(fs.existsSync(path.join(dir, ".partial", A))).toBe(false);
+    expect(run).not.toHaveBeenCalled(); // o yt-dlp nem entrou no download
+    expect(tools.refreshYtdlp).not.toHaveBeenCalled();
+  });
+
+  it("o download em segundo plano de quem já toca se junta ao job, sem abrir outro nem baixar de novo", async () => {
+    const { manager, run, log } = makeStream();
+    await manager.stream(A);
+    const events = [];
+    const res = await manager.ensure(A, { priority: "background" }, (e) => events.push(e));
+    expect(res.ok).toBe(true);
+    expect(run).not.toHaveBeenCalled();
+    expect(log.filter((r) => r.kind === "video")).toHaveLength(1);
+    expect(events.map((e) => e.phase)).toContain("done");
+  });
+
+  it("o progresso segue as fases de sempre e só sobe", async () => {
+    const { manager } = makeStream();
+    const events = [];
+    await manager.stream(A);
+    await manager.ensure(A, {}, (e) => events.push(e));
+    const phases = events.map((e) => e.phase);
+    expect(phases.indexOf("finalizing")).toBeGreaterThan(-1);
+    expect(phases.at(-1)).toBe("done");
+    const percents = events.filter((e) => typeof e.percent === "number").map((e) => e.percent);
+    for (let i = 1; i < percents.length; i++) expect(percents[i]).toBeGreaterThanOrEqual(percents[i - 1]);
+  });
+
+  it("dois pedidos do mesmo vídeo viram uma sessão só", async () => {
+    const { manager, resolve, log } = makeStream();
+    const [one, two] = await Promise.all([manager.stream(A), manager.stream(A)]);
+    expect(one).toMatchObject({ ok: true });
+    expect(two).toMatchObject({ ok: true });
+    await manager.ensure(A);
+    expect(resolve).toHaveBeenCalledTimes(1);
+    expect(log.filter((r) => r.kind === "video")).toHaveLength(1);
+  });
+
+  it("pedir de novo com 'manter' marca o job para guardar o vídeo", async () => {
+    const { manager } = makeStream();
+    await manager.stream(A);
+    await manager.stream(A, { keep: true });
+    await manager.ensure(A);
+    expect(manager.store.isKept(A)).toBe(true);
+  });
+
+  it("manter um vídeo que ainda baixa (tocar já) o guarda quando terminar", async () => {
+    const { manager } = makeStream();
+    await manager.stream(A);
+    expect(manager.store.isKept(A)).toBe(false); // ainda não há arquivo
+    expect(manager.keep(A)).toBe(true);
+    await manager.ensure(A);
+    expect(manager.store.isKept(A)).toBe(true);
+  });
+
+  it("vídeo que já está no disco: devolve o arquivo (os dois endereços iguais), sem procurar links", async () => {
+    const { manager, resolve } = makeStream();
+    await manager.ensure(A); // baixa e deixa no cache
+    resolve.mockClear();
+    const res = await manager.stream(A);
+    expect(res).toMatchObject({
+      ok: true,
+      cached: true,
+      muxed: true,
+      video: { url: `louvorja://onlinevideo/${A}.mp4` },
+      audio: { url: `louvorja://onlinevideo/${A}.mp4` },
+    });
+    expect(resolve).not.toHaveBeenCalled();
+  });
+
+  it("vídeo formato único (com o som junto): uma trilha só, sem ffmpeg", async () => {
+    const single = bytes(5000, 3);
+    const resolve = vi.fn(async () => ({
+      video: { url: VURL, size: single.length, height: 720 },
+      audio: { url: VURL, size: single.length },
+      muxed: true,
+      duration: 30,
+    }));
+    const fetchRange = vi.fn(async (url, start, end) => ({ data: Buffer.from(single.subarray(start, end + 1)), total: single.length }));
+    const mux = vi.fn();
+    const { manager } = make({ resolve, fetchRange, mux });
+    const res = await manager.stream(B);
+    expect(res).toMatchObject({ ok: true, muxed: true });
+    expect((await read(manager.serveStream(B, "audio", "bytes=0-99"))).equals(single.subarray(0, 100))).toBe(true);
+    expect(await manager.ensure(B)).toMatchObject({ ok: true });
+    expect(mux).not.toHaveBeenCalled();
+    expect(fs.readFileSync(path.join(dir, `${B}.mp4`)).equals(single)).toBe(true);
+  });
+
+  describe("recusas", () => {
+    it("ID inválido não chega a lugar nenhum", async () => {
+      const { manager, resolve, fetchRange } = makeStream();
+      for (const bad of ["../x", "--exec=calc", "", null]) {
+        expect(await manager.stream(bad)).toMatchObject({ ok: false, error: { kind: "invalid" } });
+      }
+      expect(resolve).not.toHaveBeenCalled();
+      expect(fetchRange).not.toHaveBeenCalled();
+    });
+
+    it("plataforma sem suporte", async () => {
+      const { manager, resolve } = makeStream({ cfg: { tools: fakeTools({ supported: false }) } });
+      expect(await manager.stream(A)).toMatchObject({ ok: false, error: { kind: "unsupported" } });
+      expect(resolve).not.toHaveBeenCalled();
+    });
+
+    it("sem as ferramentas instaladas: não instala por conta própria, quem pede cai no caminho normal", async () => {
+      const tools = fakeTools({ ready: vi.fn(() => false) });
+      const { manager, resolve } = makeStream({ cfg: { tools } });
+      expect(await manager.stream(A)).toMatchObject({ ok: false, error: { kind: "tools" } });
+      expect(resolve).not.toHaveBeenCalled();
+      expect(tools.ensure).not.toHaveBeenCalled();
+    });
+
+    it("pouco espaço em disco: recusa antes de baixar qualquer byte", async () => {
+      const { manager, fetchRange } = makeStream({ cfg: { freeBytes: async () => MIN_FREE_BYTES - 1 } });
+      expect(await manager.stream(A)).toMatchObject({ ok: false, error: { kind: "disk" } });
+      expect(fetchRange).not.toHaveBeenCalled();
+    });
+
+    it("vídeo removido, privado…: o erro do yt-dlp chega como resultado, sem renovar o yt-dlp", async () => {
+      const resolve = vi.fn(async () => {
+        throw new OnlineVideoError("private", "Private video");
+      });
+      const { manager, tools } = makeStream({ resolve });
+      expect(await manager.stream(A)).toEqual({ ok: false, error: { kind: "private", message: "Private video" } });
+      expect(tools.refreshYtdlp).not.toHaveBeenCalled();
+    });
+
+    it("erro inesperado do yt-dlp também vira resultado, nunca exceção", async () => {
+      const resolve = vi.fn(async () => {
+        throw new TypeError("boom");
+      });
+      const { manager } = makeStream({ resolve });
+      expect(await manager.stream(A)).toMatchObject({ ok: false, error: { kind: "unknown", message: "boom" } });
+    });
+
+    it("serveStream só atende ID válido e as duas trilhas conhecidas", async () => {
+      const { manager } = makeStream();
+      await manager.stream(A);
+      for (const [id, kind] of [["../x", "video"], [A, "other"], [A, "../../etc/passwd"], [B, "video"], [null, "video"]]) {
+        expect(manager.serveStream(id, kind, "bytes=0-9")).toBeNull();
+      }
+    });
+  });
+
+  describe("o download (botão ou link novo) usa o mesmo caminho: uma cópia só, que o play já pode ler", () => {
+    it("baixa pelas trilhas e entrega o MP4, sem o yt-dlp baixar nada", async () => {
+      const { manager, run, resolve, video, audio } = makeStream();
+      const res = await manager.ensure(A, { keep: true });
+      expect(res).toMatchObject({ ok: true, id: A, url: `louvorja://onlinevideo/${A}.mp4`, cached: false });
+      expect(run).not.toHaveBeenCalled();
+      expect(resolve).toHaveBeenCalledTimes(1);
+      expect(fs.readFileSync(path.join(dir, `${A}.mp4`)).equals(Buffer.concat([video, audio]))).toBe(true);
+      expect(manager.store.isKept(A)).toBe(true);
+    });
+
+    it("vídeo só com formatos em fragmentos: o yt-dlp baixa, como antes", async () => {
+      const { manager, run } = makeStream({ failFor: [A] });
+      expect(await manager.ensure(A)).toMatchObject({ ok: true });
+      expect(run).toHaveBeenCalledTimes(1);
+    });
+
+    it("o que é do próprio vídeo (privado, restrito…) falha sem tentar o yt-dlp por baixo", async () => {
+      const resolve = vi.fn(async () => {
+        throw new OnlineVideoError("private", "Vídeo privado");
+      });
+      const { manager, run } = makeStream({ resolve });
+      expect(await manager.ensure(A)).toMatchObject({ ok: false, error: { kind: "private" } });
+      expect(run).not.toHaveBeenCalled();
+    });
+
+    it("mandar tocar no meio do download começa já, das trilhas que estão sendo baixadas", async () => {
+      const gate = deferred();
+      const { manager, resolve, video } = makeStream({ gate });
+      const download = manager.ensure(A, { priority: "background", keep: true });
+      const res = await manager.stream(A); // o download ainda nem recebeu o primeiro pedaço
+      expect(res).toMatchObject({ ok: true, video: { url: `louvorja://onlinestream/${A}/video` } });
+      expect(resolve).toHaveBeenCalledTimes(1); // os links foram descobertos uma vez só
+      gate.resolve();
+      const served = manager.serveStream(A, "video", "bytes=0-99");
+      expect(served.status).toBe(206);
+      expect(await read(served)).toEqual(video.subarray(0, 100));
+      expect(await download).toMatchObject({ ok: true });
+      expect(manager.store.isKept(A)).toBe(true);
+    });
+
+    it("mandar tocar um vídeo que ainda espera na fila de pré-downloads o tira da fila", async () => {
+      const gate = deferred();
+      const run = vi.fn(async (opts) => {
+        await gate.promise;
+        return okRun()(opts);
+      });
+      // B (só em fragmentos) segura a raia de pré-download; A espera na fila atrás dele.
+      const { manager } = makeStream({ cfg: { run }, failFor: [B] });
+      const first = manager.ensure(B, { priority: "background" });
+      const queued = manager.ensure(A, { priority: "background" });
+      const res = await Promise.race([manager.stream(A), new Promise((r) => setTimeout(() => r("preso"), 400))]);
+      expect(res).toMatchObject({ ok: true, video: { url: `louvorja://onlinestream/${A}/video` } });
+      gate.resolve();
+      await Promise.all([first, queued]);
+    });
+
+    it("a cópia em trilhas de um pré-download que ninguém tocou some quando o MP4 fica pronto", async () => {
+      const { manager } = makeStream();
+      await manager.ensure(A);
+      await new Promise((r) => setTimeout(r, 50));
+      expect(manager.serveStream(A, "video", "bytes=0-9")).toBeNull();
+      expect(fs.existsSync(path.join(dir, ".stream", A))).toBe(false);
+      expect(manager.store.has(A)).toBe(true);
+    });
+
+    it("mas se o operador mandou tocar, as janelas seguem lendo dela depois de o MP4 ficar pronto", async () => {
+      const gate = deferred();
+      const { manager, video } = makeStream({ gate });
+      const download = manager.ensure(A);
+      await manager.stream(A);
+      gate.resolve();
+      await download;
+      expect(manager.store.has(A)).toBe(true);
+      expect(await read(manager.serveStream(A, "video", "bytes=0-9"))).toEqual(video.subarray(0, 10));
+    });
+
+    it("o progresso só sobe e traz o andamento das trilhas", async () => {
+      let t = 0;
+      const { manager } = makeStream({ cfg: { now: () => (t += 300) } });
+      const events = [];
+      await manager.ensure(A, {}, (e) => events.push(e));
+      const phases = events.map((e) => e.phase);
+      expect(phases[0]).toBe("queued");
+      expect(phases).toContain("downloading");
+      expect(phases.at(-1)).toBe("done");
+      const percents = events.map((e) => e.percent);
+      for (let i = 1; i < percents.length; i++) expect(percents[i]).toBeGreaterThanOrEqual(percents[i - 1]);
+      expect(events.some((e) => e.downloaded > 0 && e.total > 0)).toBe(true);
+    });
+
+    it("na primeira vez, o vídeo usa a parte da barra que sobra depois das ferramentas", async () => {
+      let ready = false;
+      const paths = { ytdlp: "/fake/yt-dlp", ffmpeg: "/fake/ffmpeg" };
+      const tools = fakeTools({
+        ready: vi.fn(() => ready),
+        paths: vi.fn(() => paths),
+        ensure: vi.fn(async () => {
+          ready = true;
+          return paths;
+        }),
+      });
+      let t = 0;
+      const { manager } = makeStream({ cfg: { tools, now: () => (t += 300) } });
+      const events = [];
+      const res = await manager.ensure(A, {}, (e) => events.push(e));
+      expect(res).toMatchObject({ ok: true, installedTools: true });
+      const downloading = events.filter((e) => e.phase === "downloading");
+      expect(downloading.length).toBeGreaterThan(1);
+      expect(downloading.every((e) => e.percent >= 25)).toBe(true);
+      // Trilhas completas = 95% do vídeo, na parte que sobra da barra: 25 + 95 × 74 ÷ 99 ≈ 96.
+      expect(Math.max(...downloading.map((e) => e.percent))).toBe(96);
+    });
+
+    it("cancelar no meio: termina como cancelado e as trilhas pela metade somem", async () => {
+      const gate = deferred();
+      const { manager } = makeStream({ gate });
+      const download = manager.ensure(A);
+      await manager.stream(A); // abre a sessão
+      manager.cancel(A);
+      expect(await download).toMatchObject({ ok: false, error: { kind: "cancelled" } });
+      await new Promise((r) => setTimeout(r, 50));
+      expect(manager.serveStream(A, "video", "bytes=0-9")).toBeNull();
+      expect(fs.existsSync(path.join(dir, ".stream", A))).toBe(false);
+      expect(manager.store.has(A)).toBe(false);
+    });
+
+    it("quem manda tocar um download que falha antes de abrir as trilhas recebe o motivo", async () => {
+      const resolve = vi.fn(async () => {
+        throw new OnlineVideoError("private", "Vídeo privado");
+      });
+      const { manager } = makeStream({ resolve });
+      const download = manager.ensure(A);
+      expect(await manager.stream(A)).toMatchObject({ ok: false, error: { kind: "private" } });
+      await download;
+    });
+  });
+
+  describe("já havia um download pelo yt-dlp (vídeo só com formatos em fragmentos)", () => {
+    it("não há trilha para ler antes do fim: avisa 'busy' e o torna o urgente", async () => {
+      const gate = deferred();
+      const run = vi.fn(async (opts) => {
+        await gate.promise;
+        return okRun()(opts);
+      });
+      const resolve = vi.fn(noDirectLinks);
+      const { manager } = makeStream({ cfg: { run }, resolve });
+      const background = manager.ensure(A, { priority: "background" });
+      await Promise.resolve();
+      const res = await manager.stream(A);
+      expect(res).toMatchObject({ ok: false, error: { kind: "busy" } });
+      expect(resolve).toHaveBeenCalledTimes(1); // só a do próprio download: o play não procura de novo
+      gate.resolve();
+      expect(await background).toMatchObject({ ok: true });
+    });
+  });
+
+  describe("quando algo dá errado no meio", () => {
+    it("link vencido (403): quem espera o download recebe o erro, e a sessão some (nada pela metade)", async () => {
+      const { manager } = makeStream({ fetchFails: new OnlineVideoError("forbidden", "HTTP 403") });
+      await manager.stream(A);
+      const res = await manager.ensure(A);
+      expect(res).toMatchObject({ ok: false, error: { kind: "forbidden" } });
+      expect(manager.serveStream(A, "video", "bytes=0-9")).toBeNull();
+      expect(manager.store.has(A)).toBe(false);
+      expect(fs.existsSync(path.join(dir, ".stream", A))).toBe(false);
+    });
+
+    it("o ffmpeg falha ao juntar: nada entra no cache, e o erro chega", async () => {
+      const mux = vi.fn(async () => {
+        throw new OnlineVideoError("format", "ffmpeg: Invalid data");
+      });
+      const { manager } = makeStream({ mux });
+      await manager.stream(A);
+      expect(await manager.ensure(A)).toMatchObject({ ok: false, error: { kind: "format" } });
+      expect(manager.store.has(A)).toBe(false);
+      expect(fs.existsSync(path.join(dir, ".partial", A)) && fs.readdirSync(path.join(dir, ".partial", A)).length).toBeFalsy();
+    });
+
+    it("cancelar para o download, acorda quem lê e não deixa trilhas em disco", async () => {
+      const gate = deferred();
+      const { manager } = makeStream({ gate });
+      await manager.stream(A);
+      const reading = read(manager.serveStream(A, "video", "bytes=0-99")).then(() => null, (e) => e);
+      const job = manager.ensure(A);
+      expect(manager.cancel(A)).toBe(true);
+      expect(await job).toMatchObject({ ok: false, error: { kind: "cancelled" } });
+      expect(await reading).toBeTruthy();
+      gate.resolve();
+      expect(manager.serveStream(A, "video", "bytes=0-9")).toBeNull();
+      expect((await manager.status()).active).toEqual([]);
+    });
+
+    it("cancelar enquanto os links ainda chegam: 'cancelled', sem sessão nem arquivo", async () => {
+      const resolve = vi.fn(
+        ({ signal }) =>
+          new Promise((_, reject) =>
+            signal.addEventListener("abort", () => reject(new OnlineVideoError("cancelled", "Cancelado")))
+          )
+      );
+      const { manager, fetchRange } = makeStream({ resolve });
+      const pending = manager.stream(A);
+      await Promise.resolve();
+      expect(manager.cancel(A)).toBe(true);
+      expect(await pending).toMatchObject({ ok: false, error: { kind: "cancelled" } });
+      expect(fetchRange).not.toHaveBeenCalled();
+    });
+
+    it("cancelar no instante em que os links chegam vale: nada é aberto nem baixado", async () => {
+      const { manager, fetchRange } = makeStream(); // este yt-dlp falso nem olha o sinal de cancelamento
+      const opening = manager.stream(A);
+      await Promise.resolve();
+      manager.cancel(A);
+      expect(await opening).toMatchObject({ ok: false, error: { kind: "cancelled" } });
+      expect(fetchRange).not.toHaveBeenCalled();
+      expect((await manager.status()).active).toEqual([]);
+      expect(manager.serveStream(A, "video", "bytes=0-9")).toBeNull();
+      expect(fs.existsSync(path.join(dir, ".stream", A))).toBe(false);
+    });
+
+    it("remover o vídeo no meio do download cancela, apaga as trilhas e não deixa cache", async () => {
+      const gate = deferred();
+      const { manager } = makeStream({ gate });
+      await manager.stream(A);
+      const job = manager.ensure(A);
+      await manager.remove(A);
+      expect(await job).toMatchObject({ ok: false, error: { kind: "cancelled" } });
+      gate.resolve();
+      expect(manager.store.has(A)).toBe(false);
+      expect(manager.serveStream(A, "video", "bytes=0-9")).toBeNull();
+    });
+
+    it("cancelar depois de cancelado, ou de um vídeo que não baixa, não quebra nada", async () => {
+      const { manager } = makeStream();
+      expect(manager.cancel(A)).toBe(false);
+    });
+  });
+
+  describe("limpeza das trilhas em disco", () => {
+    it("ao começar outro vídeo, as trilhas do que já terminou saem", async () => {
+      const { manager } = makeStream();
+      await manager.stream(A);
+      await manager.ensure(A); // A terminou e virou MP4
+      expect(manager.serveStream(A, "video", "bytes=0-9")).not.toBeNull(); // ainda serve: a janela pode estar pausada
+      await manager.stream(B);
+      expect(manager.serveStream(A, "video", "bytes=0-9")).toBeNull();
+      expect(fs.existsSync(path.join(dir, ".stream", A))).toBe(false);
+    });
+
+    it("ao abrir o app, o que sobrou de uma sessão anterior é apagado", async () => {
+      fs.mkdirSync(path.join(dir, ".stream", A), { recursive: true });
+      fs.writeFileSync(path.join(dir, ".stream", A, "video.mp4"), "x");
+      const { manager } = makeStream();
+      await manager.init();
+      expect(fs.existsSync(path.join(dir, ".stream"))).toBe(false);
+    });
+
+    it("as trilhas não aparecem na lista de vídeos baixados nem contam na cota", async () => {
+      const gate = deferred();
+      const { manager } = makeStream({ gate });
+      await manager.stream(A);
+      expect(await manager.list()).toEqual([]);
+      gate.resolve();
+      await manager.ensure(A);
+      expect((await manager.list()).map((v) => v.id)).toEqual([A]);
+    });
+  });
+
+  it("conta como transferência (a manutenção das ferramentas espera) mas não ocupa a fila de download", async () => {
+    const gate = deferred();
+    const { manager } = makeStream({ gate });
+    await manager.stream(A);
+    // um download de OUTRO vídeo, na raia urgente, não fica esperando atrás do "tocar já"
+    const phases = [];
+    const other = manager.ensure(B, { priority: "foreground" }, (e) => phases.push(e.phase));
+    await new Promise((r) => setTimeout(r, 300));
+    expect(phases).toContain("downloading");
+    gate.resolve();
+    expect(await other).toMatchObject({ ok: true });
+    await manager.ensure(A);
   });
 });

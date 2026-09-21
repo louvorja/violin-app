@@ -578,13 +578,11 @@
       "cache_clear_confirm": "Apagar todos os vídeos baixados? Eles serão baixados de novo quando forem usados.",
       "cache_empty": "Nenhum vídeo baixado",
       "cache_size": "Vídeos baixados: {count} ({size})",
-      "download": "Baixar o vídeo antes de projetar (sem anúncios)",
-      "download_hint": "O vídeo é baixado uma vez, guardado no computador e projetado como um arquivo: sem anúncios e com a mesma imagem na projeção, no retorno e no operador. Desative para usar sempre o player do YouTube.",
+      "download": "Tocar vídeos do YouTube sem anúncios (baixados no computador)",
+      "download_hint": "O vídeo começa a tocar em poucos segundos, sem esperar o download terminar, e fica guardado no computador: sem anúncios e com a mesma imagem na projeção, no retorno e no operador. Ao adicionar um link em Meus Vídeos Online, o download já começa. Desative para usar sempre o player do YouTube.",
       "fullscreen": "Exibir em tela cheia",
       "max_height": "Qualidade máxima do download",
       "open_return_at": "Tela de retorno do vídeo em:",
-      "play_while_downloading": "Se ainda não foi baixado, tocar já no YouTube e baixar em segundo plano",
-      "play_while_downloading_hint": "Começa na hora, sem esperar. Nessa primeira vez o YouTube pode mostrar anúncios; nas próximas o vídeo toca do arquivo, sem anúncios. Para não ter espera nem anúncio, baixe os vídeos antes, em Meus Vídeos Online.",
       "show_return": "Exibir na tela de retorno",
       "title": "Vídeos On-line",
       "youtube_action": "Ao executar link do YouTube na liturgia, abrir:"
@@ -1454,7 +1452,8 @@
       "geo": "Este vídeo não está disponível na sua região.",
       "unavailable": "Este vídeo foi removido ou não está disponível.",
       "fallback": "Não foi possível baixar o vídeo. Usando o player do YouTube, que pode exibir anúncios.",
-      "download": "Não foi possível baixar o vídeo agora. Tente de novo mais tarde."
+      "download": "Não foi possível baixar o vídeo agora. Tente de novo mais tarde.",
+      "stream": "Não foi possível abrir o vídeo direto. Usando o player do YouTube, que pode exibir anúncios."
     },
     "download": {
       "start": "Baixar para usar sem internet",

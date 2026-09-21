@@ -9,7 +9,7 @@
       :icon="ICONS.ACTIONS.CLOSE"
       :title="t('online_video.download.cancel')"
       :aria-label="t('online_video.download.cancel')"
-      @click.stop="downloads.cancel(videoId!)"
+      @click.stop="cancelDownload"
     />
     <LjButton
       v-else-if="state === 'downloaded'"
@@ -54,11 +54,22 @@ const props = withDefaults(
   { showStatus: true }
 );
 
+const emit = defineEmits<{
+  /** O operador cancelou o download: quem projeta este vídeo precisa parar, as trilhas somem. */
+  cancelled: [];
+}>();
+
 const { t } = useI18n();
 const downloads = useOnlineVideoDownloads();
 
 const state = computed(() => (props.videoId ? downloads.stateOf(props.videoId) : "none"));
 const visible = computed(() => downloads.available && !!props.videoId);
+
+function cancelDownload(): void {
+  if (!props.videoId) return;
+  downloads.cancel(props.videoId);
+  emit("cancelled");
+}
 
 function askRemove(): void {
   const id = props.videoId;

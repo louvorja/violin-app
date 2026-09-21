@@ -57,7 +57,7 @@
               v-show="!videoPreviewFailed"
               ref="videoPreview"
               class="media-video-preview"
-              :src="config?.audio || ''"
+              :src="config?.video_src || config?.audio || ''"
               autoplay
               muted
               playsinline

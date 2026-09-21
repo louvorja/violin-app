@@ -1112,24 +1112,6 @@
           </label>
         </div>
         <p class="opt-hint">{{ $t("options.videos.download_hint") }}</p>
-        <template v-if="videoDownload">
-          <div class="opt-row">
-            <label class="opt-checkbox">
-              <input
-                type="checkbox"
-                :checked="videoPlayWhileDownloading"
-                @change="
-                  saveUserData(
-                    KEYS.OPTIONS.ONLINE_VIDEO_PROJECTION.PLAY_WHILE_DOWNLOADING,
-                    $c($event)
-                  )
-                "
-              />
-              <span>{{ $t("options.videos.play_while_downloading") }}</span>
-            </label>
-          </div>
-          <p class="opt-hint">{{ $t("options.videos.play_while_downloading_hint") }}</p>
-        </template>
         <div v-if="videoDownload" class="opt-row">
           <label class="opt-label" for="opt-videos-max-height">
             {{ $t("options.videos.max_height") }}
@@ -1836,11 +1818,6 @@ const vidProjShowReturn: ComputedRef<boolean> = computed(
 
 const videoDownload: ComputedRef<boolean> = computed(
   () => $userdata.get<boolean>(KEYS.OPTIONS.ONLINE_VIDEO_PROJECTION.DOWNLOAD, true) !== false
-);
-const videoPlayWhileDownloading: ComputedRef<boolean> = computed(
-  () =>
-    $userdata.get<boolean>(KEYS.OPTIONS.ONLINE_VIDEO_PROJECTION.PLAY_WHILE_DOWNLOADING, false) ===
-    true
 );
 const videoMaxHeight: ComputedRef<number> = computed(() =>
   normalizeMaxHeight(

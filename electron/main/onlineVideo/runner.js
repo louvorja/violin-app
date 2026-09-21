@@ -9,6 +9,12 @@ const ALLOWED_HEIGHTS = [480, 720, 1080];
 const DEFAULT_HEIGHT = 1080;
 /** Sem nenhuma linha do yt-dlp por este tempo, a conexão morreu de verdade. */
 const STALL_MS = 120_000;
+/** Descobrir as URLs diretas leva ~6 s; passar disso é conexão pendurada, não vídeo pesado. */
+const RESOLVE_TIMEOUT_MS = 45_000;
+/** A resposta do yt-dlp lista todos os formatos (~130 KB); acima disto algo está errado. */
+const RESOLVE_MAX_OUTPUT = 8 * 1024 * 1024;
+/** O YouTube serve os arquivos de vídeo só por estes hosts; qualquer outro não é reproduzido. */
+const STREAM_HOST_RE = /^(?:[a-z0-9-]+\.)+googlevideo\.com$/i;
 
 /** Erro com `kind` estável, para o renderer decidir entre avisar e cair no player do YouTube. */
 class OnlineVideoError extends Error {
@@ -30,13 +36,16 @@ function clampHeight(value) {
  * entram quando o vídeo não tem esse par (VP9/AV1 pesam na CPU, então ficam
  * por último). Nenhuma delas recomprime: o ffmpeg apenas junta as trilhas.
  */
-function formatSelector(maxHeight) {
+function formatSelector(maxHeight, { direct = false } = {}) {
   const h = clampHeight(maxHeight);
+  // Tocar direto exige um arquivo servido por HTTP com `Range` (o <video> busca por
+  // pedaços); trilhas em fragmentos ou HLS só o yt-dlp sabe juntar.
+  const https = direct ? "[protocol=https]" : "";
   return [
-    `bv*[height<=${h}][vcodec^=avc1]+ba[acodec^=mp4a]`,
-    `b[height<=${h}][vcodec^=avc1][ext=mp4]`,
-    `bv*[height<=${h}]+ba`,
-    `b[height<=${h}]`,
+    `bv*[height<=${h}][vcodec^=avc1]${https}+ba[acodec^=mp4a]${https}`,
+    `b[height<=${h}][vcodec^=avc1][ext=mp4]${https}`,
+    `bv*[height<=${h}]${https}+ba${https}`,
+    `b[height<=${h}]${https}`,
   ].join("/");
 }
 
@@ -73,6 +82,14 @@ function buildArgs({ id, outDir, ffmpegPath, maxHeight, cacheDir, jsRuntime }) {
   if (jsRuntime) args.push("--js-runtimes", jsRuntime);
   args.push(watchUrl(id));
   return args;
+}
+
+/** Só o runtime de JavaScript do yt-dlp pode rodar o Electron como Node; para o resto, herdar a variável de um ambiente de desenvolvimento seria um acidente. */
+function childEnv(jsRuntime) {
+  const env = { ...process.env, PYTHONIOENCODING: "utf-8" };
+  if (jsRuntime && /^node:/.test(jsRuntime)) env.ELECTRON_RUN_AS_NODE = "1";
+  else delete env.ELECTRON_RUN_AS_NODE;
+  return env;
 }
 
 function num(value) {
@@ -238,11 +255,7 @@ function run(opts) {
     fs.ensureDirSync(outDir);
 
     const args = buildArgs({ id, outDir, ffmpegPath: tools.ffmpeg, maxHeight, cacheDir, jsRuntime });
-    const env = { ...process.env, PYTHONIOENCODING: "utf-8" };
-    // Só o runtime de JavaScript do yt-dlp pode rodar o Electron como Node; para o
-    // resto, herdar a variável de um ambiente de desenvolvimento seria um acidente.
-    if (jsRuntime && /^node:/.test(jsRuntime)) env.ELECTRON_RUN_AS_NODE = "1";
-    else delete env.ELECTRON_RUN_AS_NODE;
+    const env = childEnv(jsRuntime);
 
     let child;
     try {
@@ -349,6 +362,307 @@ function run(opts) {
   });
 }
 
+function buildResolveArgs({ id, maxHeight, cacheDir, jsRuntime }) {
+  const args = [
+    "--ignore-config",
+    "--no-playlist",
+    "--no-colors",
+    "--no-warnings",
+    "--socket-timeout",
+    "20",
+    "--retries",
+    "3",
+    "-f",
+    formatSelector(maxHeight, { direct: true }),
+    "-J",
+  ];
+  if (cacheDir) args.push("--cache-dir", cacheDir);
+  if (jsRuntime) args.push("--js-runtimes", jsRuntime);
+  args.push(watchUrl(id));
+  return args;
+}
+
+/** A URL só serve se for https, do YouTube e com `Range`; devolve-a ou null. */
+function streamUrl(raw) {
+  if (typeof raw !== "string") return null;
+  try {
+    const u = new URL(raw);
+    return u.protocol === "https:" && STREAM_HOST_RE.test(u.hostname) ? u.href : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Tamanho exato da trilha: o `clen` da URL é o do arquivo. `filesize_approx` é estimativa
+ * e não serve para dimensionar um arquivo que vai ser preenchido por pedaços.
+ */
+function exactSize(url, format) {
+  const clen = Number(new URL(url).searchParams.get("clen"));
+  if (Number.isFinite(clen) && clen > 0) return clen;
+  return Number.isFinite(format.filesize) && format.filesize > 0 ? format.filesize : null;
+}
+
+/** Quando a URL deixa de valer (parâmetro `expire`, em segundos); null se não vier. */
+function expiryOf(url) {
+  const n = Number(new URL(url).searchParams.get("expire"));
+  return Number.isFinite(n) && n > 0 ? n * 1000 : null;
+}
+
+/**
+ * Do JSON do yt-dlp para o que o renderer precisa: uma URL de vídeo e uma de áudio
+ * (a mesma, quando o formato já vem com os dois). Nada aqui baixa: são links do
+ * YouTube para o <video> ler direto.
+ *
+ * @param {object} info  saída de `yt-dlp -J -f <seletor>`
+ * @param {number} [now]
+ */
+function parseStreams(info, now = Date.now()) {
+  if (!info || typeof info !== "object") throw new OnlineVideoError("format", "Resposta do yt-dlp inválida");
+  if (info.is_live === true) throw new OnlineVideoError("live", "Transmissão ao vivo");
+
+  const formats = Array.isArray(info.requested_formats) && info.requested_formats.length ? info.requested_formats : [info];
+  const usable = formats.filter((f) => f && streamUrl(f.url));
+  const hasVideo = (f) => !!f.vcodec && f.vcodec !== "none";
+  const hasAudio = (f) => !!f.acodec && f.acodec !== "none";
+
+  const video = usable.find(hasVideo);
+  if (!video) throw new OnlineVideoError("format", "Nenhum vídeo servido direto");
+  const muxed = hasAudio(video);
+  const audio = muxed ? video : usable.find((f) => hasAudio(f) && !hasVideo(f));
+  if (!audio) throw new OnlineVideoError("format", "Nenhuma trilha de áudio servida direto");
+
+  const expiries = [video, audio].map((f) => expiryOf(streamUrl(f.url))).filter((t) => t != null);
+  return {
+    video: {
+      url: streamUrl(video.url),
+      height: num(String(video.height)),
+      width: num(String(video.width)),
+      vcodec: video.vcodec || null,
+      ext: video.ext || null,
+      size: exactSize(streamUrl(video.url), video),
+    },
+    audio: {
+      url: streamUrl(audio.url),
+      acodec: audio.acodec || null,
+      ext: audio.ext || null,
+      size: exactSize(streamUrl(audio.url), audio),
+    },
+    muxed,
+    duration: num(String(info.duration)),
+    expiresAt: expiries.length ? Math.min(...expiries) : now + 30 * 60 * 1000,
+  };
+}
+
+/**
+ * Pergunta ao yt-dlp as URLs diretas do vídeo, sem baixar nada. Bem mais rápido que
+ * baixar (~6 s), e sem player do YouTube no meio não há anúncio.
+ *
+ * @param {object} opts
+ * @param {{ ytdlp: string }} opts.tools
+ * @param {string} opts.id
+ * @param {number} [opts.maxHeight]
+ * @param {string} [opts.cacheDir]
+ * @param {string} [opts.jsRuntime]
+ * @param {AbortSignal} [opts.signal]
+ * @param {typeof spawn} [opts.spawnImpl]
+ * @param {typeof killTree} [opts.killImpl]
+ * @param {number} [opts.timeoutMs]
+ */
+function resolveStreams(opts) {
+  const {
+    tools,
+    id,
+    maxHeight,
+    cacheDir,
+    jsRuntime,
+    signal,
+    spawnImpl = spawn,
+    killImpl = killTree,
+    timeoutMs = RESOLVE_TIMEOUT_MS,
+  } = opts;
+
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new OnlineVideoError("cancelled", "Cancelado"));
+      return;
+    }
+    let child;
+    try {
+      child = spawnImpl(tools.ytdlp, buildResolveArgs({ id, maxHeight, cacheDir, jsRuntime }), {
+        windowsHide: true,
+        stdio: ["ignore", "pipe", "pipe"],
+        env: childEnv(jsRuntime),
+        detached: process.platform !== "win32",
+      });
+    } catch (error) {
+      reject(new OnlineVideoError("tool", error.message));
+      return;
+    }
+
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    let timer = null;
+
+    const finish = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (signal) signal.removeEventListener("abort", onAbort);
+      fn(value);
+    };
+    const onAbort = () => {
+      killImpl(child);
+      finish(reject, new OnlineVideoError("cancelled", "Cancelado"));
+    };
+    if (signal) signal.addEventListener("abort", onAbort, { once: true });
+    timer = setTimeout(() => {
+      killImpl(child);
+      finish(reject, new OnlineVideoError("network", "Sem resposta do YouTube"));
+    }, timeoutMs);
+
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+      if (stdout.length > RESOLVE_MAX_OUTPUT) {
+        killImpl(child);
+        finish(reject, new OnlineVideoError("format", "Resposta do yt-dlp grande demais"));
+      }
+    });
+    child.stderr.setEncoding("utf8");
+    child.stderr.on("data", (chunk) => {
+      stderr = (stderr + chunk).slice(-8192);
+    });
+    child.on("error", (error) => finish(reject, new OnlineVideoError("tool", error.message)));
+    child.on("close", (code) => {
+      if (settled) return;
+      if (code !== 0) {
+        const detail = stderr.trim().split("\n").filter(Boolean).pop() || `código ${code}`;
+        finish(reject, new OnlineVideoError(classifyError(stderr), detail));
+        return;
+      }
+      try {
+        finish(resolve, parseStreams(JSON.parse(stdout)));
+      } catch (error) {
+        finish(
+          reject,
+          error instanceof OnlineVideoError ? error : new OnlineVideoError("format", "Resposta do yt-dlp ilegível")
+        );
+      }
+    });
+  });
+}
+
+/** Juntar duas trilhas sem recodificar leva poucos segundos; passar disso é ffmpeg pendurado. */
+const MUX_TIMEOUT_MS = 180_000;
+
+/**
+ * Junta a trilha de vídeo e a de áudio num MP4, sem recodificar (só copia os pacotes) e
+ * com o índice no começo, para o arquivo tocar e buscar como qualquer vídeo baixado.
+ *
+ * @param {object} opts
+ * @param {string} opts.ffmpeg
+ * @param {string} opts.video
+ * @param {string} opts.audio
+ * @param {string} opts.out
+ * @param {AbortSignal} [opts.signal]
+ * @returns {Promise<{ file: string, size: number }>}
+ */
+function muxCopy(opts) {
+  const {
+    ffmpeg,
+    video,
+    audio,
+    out,
+    signal,
+    spawnImpl = spawn,
+    killImpl = killTree,
+    timeoutMs = MUX_TIMEOUT_MS,
+  } = opts;
+
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new OnlineVideoError("cancelled", "Cancelado"));
+      return;
+    }
+    const args = [
+      "-y",
+      "-hide_banner",
+      "-loglevel",
+      "error",
+      "-i",
+      video,
+      "-i",
+      audio,
+      "-map",
+      "0:v:0",
+      "-map",
+      "1:a:0",
+      "-c",
+      "copy",
+      "-movflags",
+      "+faststart",
+      "-f",
+      "mp4",
+      out,
+    ];
+    let child;
+    try {
+      child = spawnImpl(ffmpeg, args, {
+        windowsHide: true,
+        stdio: ["ignore", "ignore", "pipe"],
+        env: childEnv(undefined),
+        detached: process.platform !== "win32",
+      });
+    } catch (error) {
+      reject(new OnlineVideoError("tool", error.message));
+      return;
+    }
+
+    let stderr = "";
+    let settled = false;
+    let timer = null;
+    const finish = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (signal) signal.removeEventListener("abort", onAbort);
+      fn(value);
+    };
+    const onAbort = () => {
+      killImpl(child);
+      finish(reject, new OnlineVideoError("cancelled", "Cancelado"));
+    };
+    if (signal) signal.addEventListener("abort", onAbort, { once: true });
+    timer = setTimeout(() => {
+      killImpl(child);
+      finish(reject, new OnlineVideoError("tool", "O ffmpeg não terminou de juntar as trilhas"));
+    }, timeoutMs);
+
+    child.stderr?.setEncoding("utf8");
+    child.stderr?.on("data", (chunk) => {
+      stderr = (stderr + chunk).slice(-4096);
+    });
+    child.on("error", (error) => finish(reject, new OnlineVideoError("tool", error.message)));
+    child.on("close", async (code) => {
+      if (settled) return;
+      if (code !== 0) {
+        const detail = stderr.trim().split("\n").filter(Boolean).pop() || `código ${code}`;
+        finish(reject, new OnlineVideoError("format", `ffmpeg: ${detail}`));
+        return;
+      }
+      try {
+        const st = await fs.stat(out);
+        if (!st.isFile() || st.size === 0) throw new Error("vazio");
+        finish(resolve, { file: out, size: st.size });
+      } catch {
+        finish(reject, new OnlineVideoError("format", "O ffmpeg não gerou o MP4"));
+      }
+    });
+  });
+}
+
 module.exports = {
   OnlineVideoError,
   ALLOWED_HEIGHTS,
@@ -356,6 +670,11 @@ module.exports = {
   clampHeight,
   formatSelector,
   buildArgs,
+  buildResolveArgs,
+  streamUrl,
+  parseStreams,
+  resolveStreams,
+  muxCopy,
   parseLine,
   createProgressMapper,
   classifyError,

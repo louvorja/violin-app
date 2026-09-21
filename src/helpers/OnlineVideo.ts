@@ -15,6 +15,8 @@ import { KEYS } from "@/constants/UserDataKeys";
 export type OnlineVideoErrorKind =
   | "invalid"
   | "unsupported"
+  | "tools"
+  | "busy"
   | "tool"
   | "network"
   | "cancelled"
@@ -66,6 +68,31 @@ export interface OnlineVideoFile {
   usedAt: number;
   kept: boolean;
 }
+
+/**
+ * Endereços do próprio app de onde as janelas leem o vídeo enquanto ele ainda baixa
+ * (`stream`). São a mesma cópia para todas: quem baixa é o main.
+ */
+export interface OnlineVideoStreams {
+  video: {
+    url: string;
+    height?: number | null;
+    width?: number | null;
+    vcodec?: string | null;
+    ext?: string | null;
+    size?: number | null;
+  };
+  /** Igual ao do vídeo quando o arquivo já traz o som junto (`muxed`). */
+  audio: { url: string; acodec?: string | null; ext?: string | null; size?: number | null };
+  muxed: boolean;
+  duration: number | null;
+  /** O vídeo já estava no disco: os dois endereços são o arquivo. */
+  cached?: boolean;
+}
+
+export type OnlineVideoStreamResult =
+  | ({ ok: true; id: string } & OnlineVideoStreams)
+  | { ok: false; error: { kind: OnlineVideoErrorKind; message: string } };
 
 export interface EnsureOptions {
   /** Pré-download: espera na sua própria fila e não atrasa o que o operador projeta agora. */
@@ -124,6 +151,16 @@ export function messageKeyForDownloadFailure(kind: string): string {
     : "online_video.errors.download";
 }
 
+/**
+ * Falha ao abrir por links diretos ("tocar já"): nada foi baixado, então o aviso não
+ * fala em download. O que é do próprio vídeo tem a mesma explicação de sempre.
+ */
+export function messageKeyForStreamFailure(kind: string): string {
+  return VIDEO_ITSELF_UNPLAYABLE.has(kind)
+    ? `online_video.errors.${kind}`
+    : "online_video.errors.stream";
+}
+
 /** Texto curto da fase do download, para a lista de processos. */
 export function phaseText(p: OnlineVideoProgress): string {
   const t = i18nAtual()?.global?.t;
@@ -144,19 +181,13 @@ export function downloadAvailable(): boolean {
   return Platform.isDesktop && !!Platform.onlineVideo;
 }
 
-/** Baixar sozinho antes de projetar: o operador pode preferir o player do YouTube. */
+/**
+ * Tocar pelo app (sem anúncios), baixando o vídeo no computador: o operador pode preferir o
+ * player do YouTube. Um vídeo que já está no disco toca dele mesmo com isto desligado.
+ */
 export function downloadEnabled(): boolean {
   if (!downloadAvailable()) return false;
   return $userdata.get<boolean>(KEYS.OPTIONS.ONLINE_VIDEO_PROJECTION.DOWNLOAD, true) !== false;
-}
-
-/**
- * Sem o vídeo no disco, começa pelo player do YouTube em vez de esperar o download.
- * Só vale onde há download (desktop): no navegador o player já é o único caminho.
- */
-export function playWhileDownloading(): boolean {
-  if (!downloadEnabled()) return false;
-  return $userdata.get<boolean>(KEYS.OPTIONS.ONLINE_VIDEO_PROJECTION.PLAY_WHILE_DOWNLOADING, false) === true;
 }
 
 export function maxHeight(): number {
@@ -221,6 +252,50 @@ export async function ensure(
     return { ok: false, error: { kind: "unknown", message } };
   } finally {
     off?.();
+  }
+}
+
+/**
+ * Endereço de um vídeo que ainda baixa, servido pelo próprio app. O <video> lê por
+ * pedaços direto do arquivo em crescimento: passá-lo pelo XHR/blob traria o arquivo
+ * inteiro para a memória antes de tocar, que é justamente a espera que se quer evitar.
+ */
+export function isProgressiveUrl(url: string | null | undefined): boolean {
+  return typeof url === "string" && url.startsWith("louvorja://onlinestream/");
+}
+
+/**
+ * Começa o vídeo já: o main baixa uma vez, aos pedaços, e devolve os endereços de onde
+ * as janelas leem — sem esperar o download acabar e sem o player do YouTube (logo, sem
+ * anúncio). Uns 6 s até poder tocar. Nunca rejeita: se não der, a resposta diz por quê e
+ * quem chama cai no player embutido.
+ */
+export async function stream(id: string): Promise<OnlineVideoStreamResult> {
+  const api = Platform.onlineVideo;
+  if (!api?.stream) return { ok: false, error: { kind: "unsupported", message: "sem desktop" } };
+  const startedAt = Date.now();
+  try {
+    const res = (await api.stream(id, { maxHeight: maxHeight() })) as OnlineVideoStreamResult;
+    if (res.ok) {
+      Telemetry.track("online_video_stream_resolved", {
+        video_id: id,
+        height: res.video.height ?? null,
+        muxed: res.muxed,
+        cached: res.cached ?? false,
+        elapsed_ms: Date.now() - startedAt,
+      });
+    } else if (res.error.kind !== "cancelled") {
+      Telemetry.track("online_video_stream_failed", {
+        video_id: id,
+        kind: res.error.kind,
+        elapsed_ms: Date.now() - startedAt,
+      });
+    }
+    return res;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    Telemetry.track("online_video_stream_failed", { video_id: id, kind: "unknown", ipc: true });
+    return { ok: false, error: { kind: "unknown", message } };
   }
 }
 

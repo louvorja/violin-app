@@ -2,11 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({
   platform: { isDesktop: true, onlineVideo: null as any },
+  prefs: {} as Record<string, unknown>,
   warning: vi.fn(),
 }));
 
 vi.mock("@/helpers/Platform", () => ({ default: h.platform }));
-vi.mock("@/helpers/UserData", () => ({ default: { get: (_k: string, fallback?: unknown) => fallback } }));
+vi.mock("@/helpers/UserData", () => ({
+  default: { get: (key: string, fallback?: unknown) => (key in h.prefs ? h.prefs[key] : fallback) },
+}));
 vi.mock("@/helpers/Telemetry", () => ({ default: { track: vi.fn() } }));
 vi.mock("@/helpers/Snackbar", () => ({ default: { warning: h.warning } }));
 vi.mock("@/i18n", () => ({ i18nAtual: () => ({ global: { t: (key: string) => key } }) }));
@@ -63,6 +66,7 @@ const taskOf = (tasks: { tasks: { value: any[] } }, id: string) =>
 beforeEach(() => {
   h.platform.isDesktop = true;
   h.platform.onlineVideo = fakeApi();
+  h.prefs = {};
   h.warning.mockClear();
 });
 
@@ -81,6 +85,43 @@ describe("disponibilidade", () => {
     const { downloads } = await load();
     expect(await downloads.download(ID, "Vídeo")).toBe(false);
     expect(h.platform.onlineVideo.ensure).not.toHaveBeenCalled();
+  });
+});
+
+describe("link novo na lista: o download já começa", () => {
+  it("baixa em segundo plano e guarda, sem esperar o operador pedir", async () => {
+    const { downloads } = await load();
+    const started = downloads.startForNewLink(ID, "Louvor 1");
+    expect(downloads.stateOf(ID)).toBe("downloading"); // o cartão já mostra o andamento
+    expect(await started).toBe(true);
+    expect(h.platform.onlineVideo.ensure).toHaveBeenCalledWith(ID, {
+      maxHeight: 1080,
+      priority: "background",
+      keep: true,
+    });
+    expect(downloads.stateOf(ID)).toBe("downloaded");
+  });
+
+  it("com o download desligado nas opções, não baixa nada", async () => {
+    h.prefs["options.online_video_projection.download"] = false;
+    const { downloads } = await load();
+    expect(await downloads.startForNewLink(ID, "Louvor 1")).toBe(false);
+    expect(h.platform.onlineVideo.ensure).not.toHaveBeenCalled();
+  });
+
+  it("no navegador não existe: nada para baixar", async () => {
+    h.platform.isDesktop = false;
+    const { downloads } = await load();
+    expect(await downloads.startForNewLink(ID, "Louvor 1")).toBe(false);
+    expect(h.platform.onlineVideo.ensure).not.toHaveBeenCalled();
+  });
+
+  it("o mesmo link duas vezes seguidas baixa uma vez só", async () => {
+    const { downloads } = await load();
+    const first = downloads.startForNewLink(ID, "Louvor 1");
+    expect(await downloads.startForNewLink(ID, "Louvor 1")).toBe(false);
+    await first;
+    expect(h.platform.onlineVideo.ensure).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -342,6 +383,17 @@ describe("adopt (o que está na lista do operador fica guardado)", () => {
     expect(api.keep).toHaveBeenCalledWith(ID);
     expect(downloads.files[ID].kept).toBe(true);
     expect(downloads.files[OTHER].kept).toBe(false);
+  });
+
+  it("vídeo ainda baixando (tocar já): pede ao main para guardar quando terminar", async () => {
+    const api = fakeApi([]);
+    h.platform.onlineVideo = api;
+    const { downloads } = await load();
+    downloads.mark(ID); // o cartão mostra o andamento
+    await downloads.adopt([ID, OTHER]);
+    expect(api.keep).toHaveBeenCalledTimes(1); // só o que está baixando; OTHER não existe
+    expect(api.keep).toHaveBeenCalledWith(ID);
+    downloads.unmark(ID);
   });
 
   it("também mostra no cartão o que já estava no disco", async () => {

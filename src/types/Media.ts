@@ -10,10 +10,16 @@ export interface MediaOpenParams {
   /** Fonte direta da liturgia/biblioteca. Vídeos usam HTMLVideoElement para
    * preservar a faixa de áudio e o relógio de reprodução. */
   mediaType?: "audio" | "video";
+  /**
+   * Fonte da imagem quando ela vem de um arquivo diferente do som (vídeo que ainda
+   * baixa: trilha de vídeo e trilha de áudio). O player do app a mostra, muda.
+   */
+  videoUrl?: string;
 }
 
 export interface MediaConfig {
   audio?: unknown;
+  video_src?: string;
   slide_index?: number;
   last_slide?: number;
   mode?: MusicActionEnum;

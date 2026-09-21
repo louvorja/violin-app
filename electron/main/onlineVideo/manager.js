@@ -5,11 +5,16 @@ const nodeFs = require("fs");
 const path = require("path");
 const { createStore } = require("./store.js");
 const runner = require("./runner.js");
+const progressive = require("./progressive.js");
 const { isVideoId } = require("./ids.js");
 
 const { OnlineVideoError, clampHeight, needsFreshTool } = runner;
 
 const URL_PREFIX = "louvorja://onlinevideo/";
+/** O vídeo que ainda está sendo baixado, servido do arquivo que vai crescendo. */
+const STREAM_PREFIX = "louvorja://onlinestream/";
+/** Uma sessão pronta guarda as trilhas por este tempo: o <video> pausado pode voltar a pedir dados. */
+const SESSION_IDLE_MS = 30 * 60 * 1000;
 const DEFAULT_MAX_BYTES = 6 * 1024 ** 3;
 /** Abaixo disso um vídeo de 1080p pode encher o disco no meio do culto. */
 const MIN_FREE_BYTES = 1024 ** 3;
@@ -38,6 +43,10 @@ function urlFor(id) {
   return `${URL_PREFIX}${id}.mp4`;
 }
 
+function streamUrlFor(id, kind) {
+  return `${STREAM_PREFIX}${id}/${kind}`;
+}
+
 function fail(error) {
   const kind = error instanceof OnlineVideoError ? error.kind : "unknown";
   return { ok: false, error: { kind, message: error?.message || String(error) } };
@@ -62,6 +71,10 @@ function createManager(cfg) {
     dir,
     tools,
     run = runner.run,
+    resolve = runner.resolveStreams,
+    mux = runner.muxCopy,
+    openSession = progressive.openSession,
+    fetchRange,
     maxBytes = DEFAULT_MAX_BYTES,
     freeBytes = defaultFreeBytes,
     jsRuntime = () => undefined,
@@ -73,13 +86,22 @@ function createManager(cfg) {
   const cacheDir = path.join(dir, ".ytdlp-cache");
   /** @type {Map<string, any>} */
   const jobs = new Map();
+  /** Pedidos de URL direta em andamento (tocar já, sem baixar). */
+  const resolutions = new Map();
+  /** Vídeos tocando enquanto baixam, por ID: as trilhas em disco de que as janelas leem. */
+  const sessions = new Map();
+  const streamDir = path.join(dir, ".stream");
+  let sessionSweep = null;
   const lanes = {
     foreground: { running: 0, waiters: [] },
     background: { running: 0, waiters: [] },
   };
   let lastRefreshAt = -Infinity;
 
-  const transfersRunning = () => lanes.foreground.running + lanes.background.running;
+  /** Vídeos tocando enquanto baixam: não usam as raias, mas contam como transferência em curso. */
+  let streaming = 0;
+
+  const transfersRunning = () => lanes.foreground.running + lanes.background.running + streaming;
 
   function grant(waiter) {
     const { job } = waiter;
@@ -115,10 +137,34 @@ function createManager(cfg) {
   }
 
   function release(job) {
+    if (job.bypass) {
+      job.bypass = false;
+      streaming--;
+      return;
+    }
     const lane = lanes[job.holding];
     lane.running--;
     const next = lane.waiters.shift();
     if (next) grant(next);
+  }
+
+  /**
+   * O operador quer TOCAR um vídeo que só estava na fila de pré-download: ele sai da fila e
+   * começa agora, sem ocupar raia (nada pode segurar o play, nem o fim de outro download).
+   * Já contamos como transferência em curso, para a manutenção das ferramentas esperar.
+   */
+  function runNow(job) {
+    const waiter = job.waiter;
+    if (!waiter) return;
+    for (const lane of Object.values(lanes)) {
+      const i = lane.waiters.indexOf(waiter);
+      if (i >= 0) lane.waiters.splice(i, 1);
+    }
+    job.waiter = null;
+    job.priority = "foreground";
+    job.bypass = true;
+    streaming++;
+    waiter.resolve();
   }
 
   /**
@@ -177,6 +223,7 @@ function createManager(cfg) {
       const base = installedTools ? TOOLS_SHARE : 0;
       /** Progresso do vídeo (0–99) na parte da barra que sobra depois das ferramentas. */
       const overall = (p) => Math.round(base + (p * (99 - base)) / 99);
+      job.mapPercent = overall;
 
       if (installedTools) {
         publish(job, { phase: "tools", percent: 0, phasePercent: 0 }, { force: true });
@@ -214,25 +261,7 @@ function createManager(cfg) {
       for (;;) {
         publish(job, { phase: "downloading", percent: overall(0), phasePercent: 0 }, { force: true });
         try {
-          result = await run({
-            tools: toolPaths,
-            id,
-            outDir: partial,
-            maxHeight: job.maxHeight,
-            cacheDir,
-            jsRuntime: jsRuntime(),
-            signal,
-            onProgress: (p) =>
-              publish(job, {
-                phase: "downloading",
-                percent: overall(p.percent),
-                phasePercent: p.percent,
-                downloaded: p.downloaded,
-                total: p.total,
-                speed: p.speed,
-                eta: p.eta,
-              }),
-          });
+          result = await fetchVideo(job, { toolPaths, partial, overall });
           break;
         } catch (error) {
           const kind = error instanceof OnlineVideoError ? error.kind : "unknown";
@@ -264,29 +293,138 @@ function createManager(cfg) {
       }
 
       publish(job, { phase: "finalizing", percent: 99 }, { force: true });
-      await fs.move(result.file, store.pathFor(id), { overwrite: true });
-      await fs.remove(partial);
-      if (job.keep) store.keep(id);
-      try {
-        await store.evict({ maxBytes, inUse: [id, ...jobs.keys()] });
-      } catch {
-        /* falha ao liberar espaço nunca invalida o download que deu certo */
-      }
-
-      publish(job, { phase: "done", percent: 100 }, { force: true });
-      return {
-        ok: true,
-        id,
-        url: urlFor(id),
-        size: result.size,
-        cached: false,
-        meta: result.meta,
-        durationMs: now() - startedAt,
-        installedTools,
-      };
+      return await deliver(job, partial, result, startedAt, installedTools);
     } finally {
       release(job);
     }
+  }
+
+  /**
+   * Traz o vídeo para `partial`. O caminho normal é o mesmo do "tocar já": o yt-dlp só descobre
+   * os links diretos e o main baixa as trilhas UMA vez, para arquivos que as janelas já podem ler
+   * enquanto o download segue — assim quem manda tocar no meio do pré-download não espera.
+   * Só quando o vídeo não tem trilhas servidas direto (formatos em fragmentos) o yt-dlp baixa.
+   */
+  async function fetchVideo(job, { toolPaths, partial, overall }) {
+    const { id, controller } = job;
+    const signal = controller.signal;
+    const links = await resolveLinks(id, { maxHeight: job.maxHeight });
+    if (signal.aborted) throw new OnlineVideoError("cancelled", "Download cancelado");
+    if (links.ok) {
+      await assertRoomFor(links);
+      await openJobSession(job, links);
+      job.settleReady(true);
+      return assemble(job, partial);
+    }
+    // Só formatos em fragmentos: o yt-dlp sabe juntá-los, as janelas não conseguem ler. Quem
+    // pedir para tocar enquanto ele baixa acompanha o download (não há o que ler antes do fim).
+    if (links.error.kind !== "format") throw new OnlineVideoError(links.error.kind, links.error.message);
+    job.settleReady(false);
+    return run({
+      tools: toolPaths,
+      id,
+      outDir: partial,
+      maxHeight: job.maxHeight,
+      cacheDir,
+      jsRuntime: jsRuntime(),
+      signal,
+      onProgress: (p) =>
+        publish(job, {
+          phase: "downloading",
+          percent: overall(p.percent),
+          phasePercent: p.percent,
+          downloaded: p.downloaded,
+          total: p.total,
+          speed: p.speed,
+          eta: p.eta,
+        }),
+    });
+  }
+
+  /** Espaço para as duas trilhas mais a cópia juntada; sem os tamanhos, o mínimo de sempre. */
+  async function assertRoomFor(links) {
+    const sizes = [links.video.size, links.muxed ? 0 : links.audio.size];
+    const needed = sizes.every((n) => n > 0) ? Math.max(MIN_FREE_BYTES, (sizes[0] + sizes[1]) * 2.2) : MIN_FREE_BYTES;
+    const free = await freeBytes(dir);
+    if (free != null && free < needed) throw new OnlineVideoError("disk", "Pouco espaço livre no disco");
+  }
+
+  /** Abre as trilhas em disco de onde as janelas leem; o mesmo par de conexões serve a todas. */
+  async function openJobSession(job, links) {
+    const { id } = job;
+    job.links = links;
+    const session = await openSession({
+      id,
+      streams: links,
+      dir: path.join(streamDir, id),
+      fetchRange,
+      onProgress: ({ have, total }) =>
+        publish(job, {
+          phase: "downloading",
+          percent: job.mapPercent(total ? Math.round((have / total) * 95) : 0),
+          phasePercent: total ? Math.round((have / total) * 100) : 0,
+          downloaded: have,
+          total,
+        }),
+    });
+    job.session = session;
+    sessions.set(id, session);
+    if (job.controller.signal.aborted) session.abort();
+    else job.controller.signal.addEventListener("abort", () => session.abort(), { once: true });
+    return session;
+  }
+
+  /** As trilhas terminaram de chegar: junta num MP4 (só copia os pacotes) em `partial`. */
+  async function assemble(job, partial) {
+    const { id, session, controller } = job;
+    await session.done;
+    publish(job, { phase: "finalizing", percent: 97 }, { force: true });
+    await fs.ensureDir(partial);
+    const out = path.join(partial, `${id}.mp4`);
+    // O yt-dlp que vai juntar o que baixamos já não entra: só o ffmpeg, que copia os pacotes.
+    if (session.muxed) await fs.copyFile(session.files.video, out);
+    else await mux({ ffmpeg: tools.paths().ffmpeg, video: session.files.video, audio: session.files.audio, out, signal: controller.signal });
+    const size = (await fs.stat(out)).size;
+    return { file: out, size, meta: { height: job.links.video.height ?? null, vcodec: job.links.video.vcodec ?? null } };
+  }
+
+  /** Entrega o MP4 pronto ao cache: guarda se o operador quis, libera espaço e avisa que acabou. */
+  async function deliver(job, partial, result, startedAt, installedTools) {
+    const { id } = job;
+    await fs.move(result.file, store.pathFor(id), { overwrite: true });
+    await fs.remove(partial);
+    if (job.keep) store.keep(id);
+    try {
+      await store.evict({ maxBytes, inUse: [id, ...jobs.keys()] });
+    } catch {
+      /* falha ao liberar espaço nunca invalida o download que deu certo */
+    }
+
+    publish(job, { phase: "done", percent: 100 }, { force: true });
+    return {
+      ok: true,
+      id,
+      url: urlFor(id),
+      size: result.size,
+      cached: false,
+      meta: result.meta,
+      durationMs: now() - startedAt,
+      installedTools,
+    };
+  }
+
+  /**
+   * O trabalho acabou (deu certo, falhou ou foi cancelado). A cópia em trilhas só fica se alguém
+   * toca dela — as janelas seguem lendo até fecharem —; a de um pré-download que ninguém tocou
+   * já não serve, o MP4 basta.
+   */
+  function settleJob(job) {
+    if (jobs.get(job.id) === job) jobs.delete(job.id);
+    job.settleReady?.(false);
+    const { session } = job;
+    if (!session) return;
+    session.finishedAt = now();
+    if (!job.played && !session.everRead && sessions.get(job.id) === session) void disposeSession(job.id);
   }
 
   /**
@@ -331,29 +469,231 @@ function createManager(cfg) {
       listeners: new Set(onProgress ? [onProgress] : []),
       lastEmit: 0,
       best: 0,
+      mapPercent: (p) => p,
+      links: null,
+      session: null,
+      played: false,
+      openError: null,
+      ready: null,
+      settleReady: null,
       promise: null,
     };
+    // Quem mandar tocar este vídeo no meio do download espera só até as trilhas abrirem (`ready`).
+    job.ready = new Promise((resolve) => (job.settleReady = resolve));
     job.promise = execute(job)
-      .catch((error) => {
+      .catch(async (error) => {
+        job.openError ??= error;
         publish(job, { phase: "error", percent: 0, kind: error?.kind }, { force: true });
+        // Falhou ou foi cancelado: as trilhas pela metade não servem a ninguém.
+        await disposeSession(id);
         return fail(error);
       })
-      .finally(() => {
-        jobs.delete(id);
-      });
+      .finally(() => settleJob(job));
     jobs.set(id, job);
     return job.promise;
   }
 
   function cancel(id) {
     const job = jobs.get(id);
-    if (!job) return false;
-    job.controller.abort();
-    return true;
+    const resolution = resolutions.get(id);
+    job?.controller.abort();
+    resolution?.controller.abort();
+    return !!(job || resolution);
   }
 
   function cancelAll() {
     for (const job of jobs.values()) job.controller.abort();
+    for (const resolution of resolutions.values()) resolution.controller.abort();
+  }
+
+  /** Os links diretos do YouTube (vídeo e áudio) que o yt-dlp descobre em ~6 s; um pedido só por vídeo. */
+  function resolveLinks(id, opts) {
+    const existing = resolutions.get(id);
+    if (existing && !existing.controller.signal.aborted) return existing.promise;
+
+    const entry = { controller: new AbortController(), promise: null };
+    entry.promise = Promise.resolve()
+      .then(() =>
+        resolve({
+          tools: tools.paths(),
+          id,
+          maxHeight: clampHeight(opts.maxHeight),
+          cacheDir,
+          jsRuntime: jsRuntime(),
+          signal: entry.controller.signal,
+        })
+      )
+      .then(
+        // Cancelado no mesmo instante em que os links chegaram: o cancelamento vale.
+        (links) =>
+          entry.controller.signal.aborted
+            ? fail(new OnlineVideoError("cancelled", "Cancelado"))
+            : { ok: true, id, ...links },
+        (error) => fail(error)
+      )
+      .finally(() => {
+        if (resolutions.get(id) === entry) resolutions.delete(id);
+      });
+    resolutions.set(id, entry);
+    return entry.promise;
+  }
+
+  function streamInfo(job) {
+    const { links } = job;
+    return {
+      ok: true,
+      id: job.id,
+      cached: false,
+      video: { ...links.video, url: streamUrlFor(job.id, "video") },
+      audio: { ...links.audio, url: streamUrlFor(job.id, "audio") },
+      muxed: links.muxed,
+      duration: links.duration,
+    };
+  }
+
+  /** Apaga as sessões que não servem mais (o vídeo já terminou e ninguém lê há um bom tempo, ou é de outro vídeo). */
+  async function sweepSessions({ except } = {}) {
+    const t = now();
+    for (const [id, session] of sessions) {
+      if (id === except || session.disposed || !session.finishedAt) continue;
+      const idle = t - Math.max(session.lastReadAt, session.finishedAt) > SESSION_IDLE_MS;
+      // Outro vídeo assumiu o telão: o <video> deste já não existe para pedir mais nada.
+      if (idle || except) {
+        sessions.delete(id);
+        await session.dispose();
+      }
+    }
+  }
+
+  /**
+   * Toca já, sem esperar o download: baixa o vídeo UMA vez, aos pedaços, para arquivos
+   * que vão crescendo, e devolve endereços `louvorja://onlinestream/…` de onde todas as
+   * janelas leem (projeção, retorno, operador, player) — sem rede e sem anúncio. Quando
+   * as trilhas terminam viram o MP4 do cache, como um download normal.
+   *
+   * Só com as ferramentas instaladas: quem pede antes disso cai no caminho normal, que
+   * as instala. Nunca rejeita.
+   */
+  async function stream(id, opts = {}) {
+    if (!isVideoId(id)) return fail(new OnlineVideoError("invalid", "ID de vídeo inválido"));
+    if (!tools.supported) return fail(new OnlineVideoError("unsupported", "Plataforma sem suporte"));
+
+    const cached = () => {
+      store.touch(id);
+      if (opts.keep) store.keep(id);
+      const url = urlFor(id);
+      return { ok: true, id, cached: true, video: { url }, audio: { url }, muxed: true, duration: null };
+    };
+    if (store.has(id)) return cached();
+    if (!tools.ready()) return fail(new OnlineVideoError("tools", "Ferramentas ainda não instaladas"));
+
+    const join = async (job) => {
+      if (job.controller.signal.aborted) {
+        // Cancelado, mas ainda saindo: quem pede agora não herda o cancelamento.
+        await job.promise;
+        return stream(id, opts);
+      }
+      // Um pré-download em curso (ou na fila): o operador quer TOCAR. Ele sai da fila e o vídeo
+      // toca das trilhas que já estão sendo baixadas, sem esperar o fim.
+      runNow(job);
+      job.played = true;
+      if (opts.keep) job.keep = true;
+      const opened = await job.ready;
+      if (opened) return streamInfo(job);
+      if (job.openError) return fail(job.openError);
+      // Só há formatos em fragmentos e o yt-dlp está baixando: não há trilha para ler antes do
+      // fim. Ele passa a ser o urgente, e quem pediu decide se espera.
+      promote(job);
+      return fail(new OnlineVideoError("busy", "Este vídeo já está sendo baixado"));
+    };
+
+    const running = jobs.get(id);
+    if (running) return join(running);
+
+    const links = await resolveLinks(id, opts);
+    if (!links.ok) return links;
+    // Enquanto os links chegavam, o mesmo vídeo pode ter sido baixado ou pedido de novo.
+    if (store.has(id)) return cached();
+    const raced = jobs.get(id);
+    if (raced) return join(raced);
+
+    try {
+      await assertRoomFor(links);
+    } catch (error) {
+      return fail(error);
+    }
+    await sweepSessions({ except: id });
+    // Última checagem antes do primeiro ponto sem `await`: a partir daqui o job já consta em `jobs`.
+    const late = jobs.get(id);
+    if (late) return join(late);
+    if (store.has(id)) return cached();
+
+    const job = {
+      id,
+      maxHeight: clampHeight(opts.maxHeight),
+      priority: "foreground",
+      keep: opts.keep === true,
+      // O operador está esperando: não entra em fila nenhuma (são duas conexões curtas, e
+      // nada pode segurar o "tocar já"), mas conta como transferência para a manutenção
+      // das ferramentas — que não pode trocar o ffmpeg no meio de uma junção.
+      holding: null,
+      waiter: null,
+      controller: new AbortController(),
+      listeners: new Set(),
+      lastEmit: 0,
+      best: 0,
+      mapPercent: (p) => p,
+      links: null,
+      session: null,
+      played: true,
+      openError: null,
+      ready: null,
+      settleReady: null,
+      promise: null,
+    };
+    streaming++;
+    const startedAt = now();
+    job.ready = openJobSession(job, links).then(
+      () => true,
+      (error) => {
+        job.openError = error;
+        return false;
+      }
+    );
+    job.promise = job.ready
+      .then(async (opened) => {
+        if (!opened) throw job.openError;
+        const partial = store.partialDirFor(id);
+        const result = await assemble(job, partial);
+        return deliver(job, partial, result, startedAt, false);
+      })
+      .catch(async (error) => {
+        publish(job, { phase: "error", percent: 0, kind: error?.kind }, { force: true });
+        // Falhou ou foi cancelado: as trilhas pela metade não servem a ninguém.
+        await disposeSession(id);
+        return fail(error);
+      })
+      .finally(() => {
+        streaming--;
+        settleJob(job);
+      });
+    jobs.set(id, job);
+
+    const opened = await job.ready;
+    if (!opened) return fail(job.openError);
+    publish(job, { phase: "downloading", percent: 0 }, { force: true });
+    return streamInfo(job);
+  }
+
+  /**
+   * Responde a um pedido `Range` das janelas com o que já está em disco do vídeo que
+   * ainda baixa, esperando o que não chegou. null se não há sessão deste vídeo.
+   */
+  function serveStream(id, kind, rangeHeader, signal) {
+    if (!isVideoId(id) || (kind !== "video" && kind !== "audio")) return null;
+    const session = sessions.get(id);
+    if (!session || session.disposed) return null;
+    return session.serve(kind, rangeHeader, signal);
   }
 
   /**
@@ -372,20 +712,38 @@ function createManager(cfg) {
     }
   }
 
-  /** Manda manter um vídeo que já está no disco: o despejo por espaço não o leva. */
+  /**
+   * Manda manter o vídeo: o despejo por espaço não o leva. Se ele ainda está baixando (o
+   * "tocar já" projeta antes de o arquivo existir), fica marcado e é guardado quando terminar.
+   */
   function keep(id) {
-    return isVideoId(id) && store.keep(id);
+    if (!isVideoId(id)) return false;
+    const running = jobs.get(id);
+    if (running) {
+      running.keep = true;
+      return true;
+    }
+    return store.keep(id);
+  }
+
+  async function disposeSession(id) {
+    const session = sessions.get(id);
+    if (!session) return;
+    sessions.delete(id);
+    await session.dispose();
   }
 
   async function remove(id) {
     if (!isVideoId(id)) return false;
     cancel(id);
+    await disposeSession(id);
     await store.remove(id);
     return true;
   }
 
   async function clear() {
     cancelAll();
+    await Promise.all([...sessions.keys()].map(disposeSession));
     return store.clear();
   }
 
@@ -405,7 +763,13 @@ function createManager(cfg) {
     return store.list();
   }
 
-  function init() {
+  async function init() {
+    // Recém-aberto o app, nada pode estar lendo as trilhas de um vídeo que baixava antes.
+    await fs.remove(streamDir).catch(() => {});
+    if (!sessionSweep) {
+      sessionSweep = setInterval(() => void sweepSessions().catch(() => {}), 60_000);
+      sessionSweep.unref?.();
+    }
     return store.sweepPartials();
   }
 
@@ -413,6 +777,8 @@ function createManager(cfg) {
     store,
     tools,
     ensure,
+    stream,
+    serveStream,
     cancel,
     cancelAll,
     prepare,
@@ -426,4 +792,12 @@ function createManager(cfg) {
   };
 }
 
-module.exports = { createManager, urlFor, URL_PREFIX, DEFAULT_MAX_BYTES, MIN_FREE_BYTES };
+module.exports = {
+  createManager,
+  urlFor,
+  streamUrlFor,
+  URL_PREFIX,
+  STREAM_PREFIX,
+  DEFAULT_MAX_BYTES,
+  MIN_FREE_BYTES,
+};

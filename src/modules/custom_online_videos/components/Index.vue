@@ -76,7 +76,11 @@
               {{ categoryName(v.categoryId) }}
             </span>
             <span class="lj-u-spacer" />
-            <OnlineVideoDownload :video-id="extractYoutubeId(v.url)" :name="v.name" />
+            <OnlineVideoDownload
+              :video-id="extractYoutubeId(v.url)"
+              :name="v.name"
+              @cancelled="stopIfProjecting(v)"
+            />
             <LjButton
               size="sm"
               variant="primary"
@@ -138,6 +142,7 @@
                 :video-id="extractYoutubeId(v.url)"
                 :name="v.name"
                 :show-status="false"
+                @cancelled="stopIfProjecting(v)"
               />
               <LjButton
                 size="sm"
@@ -546,7 +551,10 @@ async function saveVideo(): Promise<void> {
           delete objectUrlIndex[v.id];
         }
         fetchAndCacheThumbnail(v, ytId);
-        if (previousYtId !== ytId) await dropDownloadIfUnused(previousYtId);
+        if (previousYtId !== ytId) {
+          await dropDownloadIfUnused(previousYtId);
+          void downloads.startForNewLink(ytId, name);
+        }
       }
     } else {
       const title = (await fetchYoutubeTitle(ytId)) || ytId;
@@ -560,6 +568,7 @@ async function saveVideo(): Promise<void> {
       await saveVideoInternal(v);
       videos.value.unshift(v);
       fetchAndCacheThumbnail(v, ytId);
+      void downloads.startForNewLink(ytId, title);
     }
     selectAllCategoriesAndUncategorized();
     dialogOpen.value = false;
@@ -590,6 +599,11 @@ async function projectVideo(v: VideoItem): Promise<void> {
   if (!opened && projectingId.value === v.id) projectingId.value = "";
   const ytId = extractYoutubeId(v.url);
   if (opened && ytId) void downloads.adopt([ytId]);
+}
+
+/** Cancelar o download do vídeo que está no telão o leva junto: as trilhas de onde ele toca somem. */
+function stopIfProjecting(v: VideoItem): void {
+  if (projectingId.value === v.id) void stopProjection();
 }
 
 async function stopProjection(): Promise<void> {

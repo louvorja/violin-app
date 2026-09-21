@@ -8,6 +8,7 @@
  *   louvorja://json_db/<arquivo>   — proxy com cache para <api>/json_db
  *   louvorja://files/<caminho>     — arquivos locais em userData/files/ (populado em D3 via HTTPS)
  *   louvorja://onlinevideo/<id>.mp4 — vídeos do YouTube baixados em userData/online_videos/
+ *   louvorja://onlinestream/<id>/video|audio — o vídeo do YouTube que ainda está baixando
  *
  * O protocolo é marcado como standard + secure para que fetch() e XHR funcionem
  * normalmente dentro do renderer sem erros de CORS/CSP. O host "app" existe
@@ -340,6 +341,19 @@ function handle() {
         const file = m ? onlineVideo.fileFor(m[1]) : null;
         if (!file) return new Response("Not found", { status: 404 });
         return _responderArquivo(file, request);
+      }
+
+      // ------------------------------------------------------------------
+      // louvorja://onlinestream/<id>/video | audio
+      // O vídeo do YouTube que ainda está baixando: as janelas leem, por Range,
+      // do arquivo que o main vai preenchendo — uma cópia só para todas. Só
+      // atende ID de formato fixo e as duas trilhas conhecidas.
+      // ------------------------------------------------------------------
+      if (host === "onlinestream") {
+        const m = /^\/([A-Za-z0-9_-]{11})\/(video|audio)$/.exec(pathname);
+        const served = m ? onlineVideo.serveStream(m[1], m[2], request) : null;
+        if (!served) return new Response("Not found", { status: 404 });
+        return new Response(served.body, { status: served.status, headers: served.headers });
       }
 
       // ------------------------------------------------------------------

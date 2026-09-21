@@ -29,6 +29,17 @@ function getManager() {
   return _manager;
 }
 
+/**
+ * Resposta a um pedido `Range` do vídeo que ainda está baixando (protocolo
+ * louvorja://onlinestream/), ou null se não há sessão dele.
+ * @param {string} id
+ * @param {"video"|"audio"} kind
+ * @param {Request} request
+ */
+function serveStream(id, kind, request) {
+  return getManager().serveStream(id, kind, request.headers.get("range"), request.signal);
+}
+
 /** Caminho em disco do vídeo já baixado, ou null. Usado pelo protocolo louvorja://. */
 function fileFor(id) {
   if (!isVideoId(id)) return null;
@@ -40,7 +51,9 @@ function fileFor(id) {
  * Registra os handlers IPC. Cada operação é específica e recebe só o ID do
  * vídeo (validado), uma altura máxima entre valores permitidos e duas opções
  * booleanas de escolha fechada (`priority`, `keep`): o renderer não escolhe URL,
- * caminho nem argumento do yt-dlp.
+ * caminho nem argumento do yt-dlp. O que volta de `stream` são endereços
+ * `louvorja://onlinestream/…` do próprio app: os links do YouTube (só de hosts
+ * googlevideo, que o main confere) nunca chegam ao renderer.
  */
 function registerIpc(ipcMain) {
   ipcMain.handle("onlineVideo:status", () => getManager().status());
@@ -55,6 +68,11 @@ function registerIpc(ipcMain) {
     return getManager().ensure(id, options, (progress) => {
       safeSend(event.sender, "onlineVideo:progress", progress);
     });
+  });
+
+  ipcMain.handle("onlineVideo:stream", (_event, id, opts) => {
+    const o = opts && typeof opts === "object" ? opts : {};
+    return getManager().stream(id, { maxHeight: o.maxHeight, keep: o.keep === true });
   });
 
   ipcMain.handle("onlineVideo:cancel", (_event, id) => getManager().cancel(id));
@@ -73,4 +91,4 @@ function shutdown() {
   if (_manager) _manager.cancelAll();
 }
 
-module.exports = { getManager, fileFor, registerIpc, init, shutdown };
+module.exports = { getManager, fileFor, serveStream, registerIpc, init, shutdown };

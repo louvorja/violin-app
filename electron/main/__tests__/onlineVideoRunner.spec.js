@@ -54,6 +54,19 @@ describe("formatSelector", () => {
     expect(alternatives.at(-1)).toBe("b[height<=1080]");
   });
 
+  it("para tocar direto, cada alternativa exige um arquivo servido por HTTP (nada de fragmentos ou HLS)", () => {
+    const alternatives = runner.formatSelector(1080, { direct: true }).split("/");
+    expect(alternatives).toHaveLength(4);
+    expect(alternatives[0]).toBe(
+      "bv*[height<=1080][vcodec^=avc1][protocol=https]+ba[acodec^=mp4a][protocol=https]"
+    );
+    for (const alt of alternatives) {
+      for (const part of alt.split("+")) expect(part).toContain("[protocol=https]");
+    }
+    // o seletor de baixar não muda
+    expect(runner.formatSelector(1080)).not.toContain("protocol");
+  });
+
   it("só aceita alturas conhecidas e cai em 1080", () => {
     expect(runner.formatSelector(720)).toContain("height<=720");
     expect(runner.formatSelector(480)).toContain("height<=480");
@@ -397,6 +410,356 @@ describe("run", () => {
     expect(capture[0].PYTHONIOENCODING).toBe("utf-8");
     expect(capture[0].ELECTRON_RUN_AS_NODE).toBeUndefined();
     expect(capture[1].ELECTRON_RUN_AS_NODE).toBe("1");
+  });
+});
+
+const GV = "https://rr1---sn-2apnuxaxjvh-nw2e.googlevideo.com/videoplayback";
+const EXPIRE = 1789960552;
+/** Forma do `requested_formats` que o yt-dlp devolve (testado contra o yt-dlp de verdade). */
+const videoFormat = (extra = {}) => ({
+  format_id: "137",
+  ext: "mp4",
+  vcodec: "avc1.640028",
+  acodec: "none",
+  height: 1080,
+  width: 1920,
+  protocol: "https",
+  filesize: 73460124,
+  url: `${GV}?expire=${EXPIRE}&mime=video%2Fmp4&c=VISIONOS`,
+  ...extra,
+});
+const audioFormat = (extra = {}) => ({
+  format_id: "140",
+  ext: "m4a",
+  vcodec: "none",
+  acodec: "mp4a.40.2",
+  protocol: "https",
+  url: `${GV}?expire=${EXPIRE + 5}&mime=audio%2Fmp4&c=VISIONOS`,
+  ...extra,
+});
+
+describe("parseStreams (o que o yt-dlp devolve para tocar direto)", () => {
+  it("entrega o link do vídeo e o do áudio (trilhas separadas), a altura e quando vencem", () => {
+    const out = runner.parseStreams({
+      duration: 235,
+      requested_formats: [videoFormat(), audioFormat()],
+    });
+    expect(out.muxed).toBe(false);
+    expect(out.video).toMatchObject({ height: 1080, width: 1920, vcodec: "avc1.640028", ext: "mp4", size: 73460124 });
+    expect(out.video.url).toContain("mime=video%2Fmp4");
+    expect(out.audio.url).toContain("mime=audio%2Fmp4");
+    expect(out.audio).toMatchObject({ acodec: "mp4a.40.2", ext: "m4a" });
+    expect(out.duration).toBe(235);
+    expect(out.expiresAt).toBe(EXPIRE * 1000); // o que vence primeiro
+  });
+
+  it("o tamanho vem do `clen` da URL (o do arquivo); estimativa nunca serve para dimensionar", () => {
+    const withClen = (n) => `${GV}?expire=${EXPIRE}&clen=${n}`;
+    const out = runner.parseStreams({
+      requested_formats: [
+        videoFormat({ url: withClen(73460124), filesize: 1, filesize_approx: 999 }),
+        audioFormat({ url: withClen(3811304), filesize: null, filesize_approx: 5 }),
+      ],
+    });
+    expect(out.video.size).toBe(73460124);
+    expect(out.audio.size).toBe(3811304);
+
+    const noExact = runner.parseStreams({
+      requested_formats: [
+        videoFormat({ url: GV, filesize: null, filesize_approx: 999 }),
+        audioFormat({ url: GV, filesize: null, filesize_approx: 5 }),
+      ],
+    });
+    expect(noExact.video.size).toBeNull();
+    expect(noExact.audio.size).toBeNull();
+  });
+
+  it("sem `clen`, usa o filesize exato do formato", () => {
+    const out = runner.parseStreams({
+      requested_formats: [videoFormat({ url: GV, filesize: 500 }), audioFormat({ url: GV, filesize: 70 })],
+    });
+    expect(out.video.size).toBe(500);
+    expect(out.audio.size).toBe(70);
+  });
+
+  it("formato único com som: imagem e som saem do mesmo link", () => {
+    const out = runner.parseStreams({
+      duration: 60,
+      ...videoFormat({ acodec: "mp4a.40.2", format_id: "22", height: 720 }),
+    });
+    expect(out.muxed).toBe(true);
+    expect(out.audio.url).toBe(out.video.url);
+    expect(out.video.height).toBe(720);
+  });
+
+  it("a ordem das trilhas não importa", () => {
+    const out = runner.parseStreams({ requested_formats: [audioFormat(), videoFormat()] });
+    expect(out.video.url).toContain("video%2Fmp4");
+    expect(out.audio.url).toContain("audio%2Fmp4");
+  });
+
+  it("sem parâmetro de validade, assume meia hora a partir de agora", () => {
+    const out = runner.parseStreams(
+      { requested_formats: [videoFormat({ url: GV }), audioFormat({ url: GV })] },
+      1_000_000
+    );
+    expect(out.expiresAt).toBe(1_000_000 + 30 * 60 * 1000);
+  });
+
+  it("só aceita link https do googlevideo: outro host, http ou lixo viram erro", () => {
+    for (const url of [
+      "https://evil.example.com/videoplayback",
+      "https://googlevideo.com.evil.com/videoplayback",
+      "http://rr1---sn-x.googlevideo.com/videoplayback",
+      "file:///etc/passwd",
+      "javascript:alert(1)",
+      "louvorja://onlinevideo/T8YHfGrk3ok.mp4",
+      "não é url",
+      "",
+      null,
+      undefined,
+    ]) {
+      expect(() => runner.parseStreams({ requested_formats: [videoFormat({ url }), audioFormat()] })).toThrow(
+        expect.objectContaining({ kind: "format" })
+      );
+    }
+  });
+
+  it("um áudio de fora do googlevideo não é aproveitado: sem trilha de áudio, é erro", () => {
+    expect(() =>
+      runner.parseStreams({ requested_formats: [videoFormat(), audioFormat({ url: "https://evil.example.com/a" })] })
+    ).toThrow(expect.objectContaining({ kind: "format" }));
+  });
+
+  it("vídeo sem nenhuma trilha de áudio servida é erro (a projeção ficaria muda)", () => {
+    expect(() => runner.parseStreams({ requested_formats: [videoFormat()] })).toThrow(
+      expect.objectContaining({ kind: "format" })
+    );
+  });
+
+  it("transmissão ao vivo não toca por aqui", () => {
+    expect(() => runner.parseStreams({ is_live: true, requested_formats: [videoFormat(), audioFormat()] })).toThrow(
+      expect.objectContaining({ kind: "live" })
+    );
+  });
+
+  it("resposta que não é objeto é erro, não exceção solta", () => {
+    for (const bad of [null, undefined, "x", 5]) {
+      expect(() => runner.parseStreams(bad)).toThrow(expect.objectContaining({ kind: "format" }));
+    }
+  });
+});
+
+describe("buildResolveArgs", () => {
+  it("pede só o JSON (sem baixar) com o seletor direto, sem shell e sem configuração do usuário", () => {
+    const args = runner.buildResolveArgs({ id: ID, maxHeight: 720 });
+    expect(args).toContain("-J");
+    expect(args).toContain("--ignore-config");
+    expect(args).toContain("--no-playlist");
+    expect(args[args.indexOf("-f") + 1]).toBe(runner.formatSelector(720, { direct: true }));
+    expect(args.at(-1)).toBe(watchUrl(ID));
+    for (const download of ["-o", "--no-simulate", "--merge-output-format", "--ffmpeg-location"]) {
+      expect(args).not.toContain(download);
+    }
+  });
+
+  it("cache e runtime de JavaScript só entram quando informados", () => {
+    expect(runner.buildResolveArgs({ id: ID })).not.toContain("--js-runtimes");
+    const args = runner.buildResolveArgs({ id: ID, cacheDir: "/c", jsRuntime: "node:/x" });
+    expect(args[args.indexOf("--cache-dir") + 1]).toBe("/c");
+    expect(args[args.indexOf("--js-runtimes") + 1]).toBe("node:/x");
+  });
+});
+
+describe("resolveStreams", () => {
+  const json = (extra = {}) =>
+    JSON.stringify({ duration: 235, requested_formats: [videoFormat(), audioFormat()], ...extra });
+
+  it("lê o JSON do stdout e devolve os links, sem baixar nada", async () => {
+    const child = fakeChild();
+    const spawnImpl = vi.fn(() => child);
+    const promise = runner.resolveStreams({ tools, id: ID, spawnImpl });
+    child.stdout.write(json().slice(0, 40));
+    child.stdout.write(json().slice(40)); // chega em pedaços
+    child.emit("close", 0);
+    const out = await promise;
+    expect(out.video.url).toContain("video%2Fmp4");
+    expect(out.audio.url).toContain("audio%2Fmp4");
+    expect(spawnImpl.mock.calls[0][0]).toBe("/fake/yt-dlp");
+    expect(Array.isArray(spawnImpl.mock.calls[0][1])).toBe(true);
+    expect(spawnImpl.mock.calls[0][2].shell).toBeUndefined();
+  });
+
+  it("só liga o Electron-como-Node quando o runtime é node:", async () => {
+    const run = async (jsRuntime) => {
+      const child = fakeChild();
+      const spawnImpl = vi.fn(() => child);
+      const p = runner.resolveStreams({ tools, id: ID, jsRuntime, spawnImpl });
+      child.stdout.write(json());
+      child.emit("close", 0);
+      await p;
+      return spawnImpl.mock.calls[0][2].env;
+    };
+    expect((await run("node:/x/Electron")).ELECTRON_RUN_AS_NODE).toBe("1");
+    expect((await run(undefined)).ELECTRON_RUN_AS_NODE).toBeUndefined();
+  });
+
+  it("classifica o erro do yt-dlp (vídeo privado, removido, rede…)", async () => {
+    const child = fakeChild();
+    const promise = runner.resolveStreams({ tools, id: ID, spawnImpl: () => child });
+    child.stderr.write("ERROR: [youtube] T8YHfGrk3ok: Private video. Sign in if you've been granted access\n");
+    child.emit("close", 1);
+    await expect(promise).rejects.toMatchObject({ name: "OnlineVideoError", kind: "private" });
+  });
+
+  it("saída que não é JSON vira erro de formato, não exceção solta", async () => {
+    const child = fakeChild();
+    const promise = runner.resolveStreams({ tools, id: ID, spawnImpl: () => child });
+    child.stdout.write("isto não é json");
+    child.emit("close", 0);
+    await expect(promise).rejects.toMatchObject({ kind: "format" });
+  });
+
+  it("um link de fora do googlevideo na resposta é recusado", async () => {
+    const child = fakeChild();
+    const promise = runner.resolveStreams({ tools, id: ID, spawnImpl: () => child });
+    child.stdout.write(json({ requested_formats: [videoFormat({ url: "https://evil.example.com/v" }), audioFormat()] }));
+    child.emit("close", 0);
+    await expect(promise).rejects.toMatchObject({ kind: "format" });
+  });
+
+  it("cancelar mata o yt-dlp e rejeita como cancelado", async () => {
+    const child = fakeChild();
+    const killImpl = vi.fn();
+    const controller = new AbortController();
+    const promise = runner.resolveStreams({ tools, id: ID, spawnImpl: () => child, killImpl, signal: controller.signal });
+    controller.abort();
+    await expect(promise).rejects.toMatchObject({ kind: "cancelled" });
+    expect(killImpl).toHaveBeenCalledWith(child);
+  });
+
+  it("já cancelado antes de começar: nem executa o yt-dlp", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const spawnImpl = vi.fn();
+    await expect(runner.resolveStreams({ tools, id: ID, spawnImpl, signal: controller.signal })).rejects.toMatchObject({
+      kind: "cancelled",
+    });
+    expect(spawnImpl).not.toHaveBeenCalled();
+  });
+
+  it("sem resposta no prazo: mata o yt-dlp e acusa rede", async () => {
+    const child = fakeChild();
+    const killImpl = vi.fn();
+    const promise = runner.resolveStreams({ tools, id: ID, spawnImpl: () => child, killImpl, timeoutMs: 30 });
+    await expect(promise).rejects.toMatchObject({ kind: "network" });
+    expect(killImpl).toHaveBeenCalledWith(child);
+  });
+
+  it("resposta enorme demais é cortada em vez de encher a memória", async () => {
+    const child = fakeChild();
+    const killImpl = vi.fn();
+    const promise = runner.resolveStreams({ tools, id: ID, spawnImpl: () => child, killImpl });
+    child.stdout.write("x".repeat(9 * 1024 * 1024));
+    await expect(promise).rejects.toMatchObject({ kind: "format" });
+    expect(killImpl).toHaveBeenCalledWith(child);
+  });
+
+  it("o yt-dlp que nem sobe (antivírus, arquitetura errada) vira erro de ferramenta", async () => {
+    await expect(
+      runner.resolveStreams({
+        tools,
+        id: ID,
+        spawnImpl: () => {
+          throw new Error("EACCES");
+        },
+      })
+    ).rejects.toMatchObject({ kind: "tool" });
+  });
+});
+
+describe("muxCopy (junta as trilhas sem recodificar)", () => {
+  const opts = (extra = {}) => ({ ffmpeg: "/fake/ffmpeg", video: "/t/video.mp4", audio: "/t/audio.m4a", out: "", ...extra });
+
+  it("copia os pacotes (sem recodificar), põe o índice no começo e não usa shell", async () => {
+    const out = path.join(tmpDir(), "out.mp4");
+    const child = fakeChild();
+    const spawnImpl = vi.fn(() => child);
+    const promise = runner.muxCopy(opts({ out, spawnImpl }));
+    fs.writeFileSync(out, "mp4");
+    child.emit("close", 0);
+    await expect(promise).resolves.toEqual({ file: out, size: 3 });
+
+    const [bin, args, options] = spawnImpl.mock.calls[0];
+    expect(bin).toBe("/fake/ffmpeg");
+    expect(Array.isArray(args)).toBe(true);
+    expect(options.shell).toBeUndefined();
+    expect(args.slice(args.indexOf("-c"), args.indexOf("-c") + 2)).toEqual(["-c", "copy"]);
+    expect(args[args.indexOf("-movflags") + 1]).toBe("+faststart");
+    expect(args.filter((a, i) => args[i - 1] === "-i")).toEqual(["/t/video.mp4", "/t/audio.m4a"]);
+    expect(args).toEqual(expect.arrayContaining(["0:v:0", "1:a:0"]));
+    expect(args.at(-1)).toBe(out);
+    for (const recode of ["-c:v", "-c:a", "libx264", "aac"]) expect(args).not.toContain(recode);
+  });
+
+  it("ffmpeg que sai com erro vira erro de formato com a última linha do que ele escreveu", async () => {
+    const child = fakeChild();
+    const promise = runner.muxCopy(opts({ out: path.join(tmpDir(), "o.mp4"), spawnImpl: () => child }));
+    child.stderr.write("[mov,mp4] moov atom not found\nvideo.mp4: Invalid data found when processing input\n");
+    await new Promise((r) => setTimeout(r, 5));
+    child.emit("close", 1);
+    await expect(promise).rejects.toMatchObject({ kind: "format", message: expect.stringContaining("Invalid data") });
+  });
+
+  it("saiu com sucesso mas não deixou o arquivo (ou deixou vazio): erro", async () => {
+    for (const write of [false, true]) {
+      const out = path.join(tmpDir(), "o.mp4");
+      const child = fakeChild();
+      const promise = runner.muxCopy(opts({ out, spawnImpl: () => child }));
+      if (write) fs.writeFileSync(out, "");
+      child.emit("close", 0);
+      await expect(promise).rejects.toMatchObject({ kind: "format" });
+    }
+  });
+
+  it("cancelar mata o ffmpeg e rejeita como cancelado", async () => {
+    const child = fakeChild();
+    const killImpl = vi.fn();
+    const controller = new AbortController();
+    const promise = runner.muxCopy(opts({ spawnImpl: () => child, killImpl, signal: controller.signal }));
+    controller.abort();
+    await expect(promise).rejects.toMatchObject({ kind: "cancelled" });
+    expect(killImpl).toHaveBeenCalledWith(child);
+  });
+
+  it("já cancelado: nem executa o ffmpeg", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const spawnImpl = vi.fn();
+    await expect(runner.muxCopy(opts({ spawnImpl, signal: controller.signal }))).rejects.toMatchObject({
+      kind: "cancelled",
+    });
+    expect(spawnImpl).not.toHaveBeenCalled();
+  });
+
+  it("ffmpeg pendurado: mata e acusa ferramenta", async () => {
+    const child = fakeChild();
+    const killImpl = vi.fn();
+    const promise = runner.muxCopy(opts({ spawnImpl: () => child, killImpl, timeoutMs: 30 }));
+    await expect(promise).rejects.toMatchObject({ kind: "tool" });
+    expect(killImpl).toHaveBeenCalledWith(child);
+  });
+
+  it("o ffmpeg que nem sobe vira erro de ferramenta", async () => {
+    await expect(
+      runner.muxCopy(
+        opts({
+          spawnImpl: () => {
+            throw new Error("EACCES");
+          },
+        })
+      )
+    ).rejects.toMatchObject({ kind: "tool" });
   });
 });
 
