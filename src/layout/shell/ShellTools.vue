@@ -80,7 +80,12 @@
     </LjTooltip>
 
     <!--    Atividades em segundo plano-->
-    <LjPopover :title="t('shell.background_tasks.title')" side="bottom" align="end">
+    <LjPopover
+      v-if="showBackgroundTasks"
+      :title="t('shell.background_tasks.title')"
+      side="bottom"
+      align="end"
+    >
       <template #trigger>
         <button
           type="button"
@@ -88,11 +93,7 @@
           :class="{ 'shell-tool--active': bgTasks.hasActiveTasks.value }"
           :aria-label="t('shell.background_tasks.title')"
         >
-          <LjTooltip
-            v-if="Platform.isDesktop"
-            :text="t('shell.background_tasks.title')"
-            side="bottom"
-          >
+          <LjTooltip :text="t('shell.background_tasks.title')" side="bottom">
             <LjIcon
               :icon="ICONS.UI.PROGRESS_DOWNLOAD"
               :color="bgTasks.hasActiveTasks.value ? COLORS.WARNING : undefined"
@@ -229,6 +230,11 @@ function formatTaskDetail(detail: string | null | undefined): string {
 }
 
 const hasUpdate = computed(() => $appdata.get(KEYS.SHELL.APP_UPDATE_AVAILABLE, false));
+
+// No desktop há vários produtores de tarefa (coletâneas, Bíblia, banco, atualização,
+// vídeo online), então o botão fica sempre. Na web só o cache de Libras registra
+// tarefa: um botão fixo abriria quase sempre um popover vazio.
+const showBackgroundTasks = computed(() => Platform.isDesktop || bgTasks.tasks.value.length > 0);
 
 const isBgPlaying = computed(() =>
   $userdata.get<boolean>(KEYS.MODULES.BACKGROUND_PROJECTION.IS_PLAYING, false)
