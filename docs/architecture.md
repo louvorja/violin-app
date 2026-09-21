@@ -216,7 +216,7 @@ Estrutura do `user_data` no Pinia store:
 
 ```js
 {
-  theme: string,
+  theme: string, // id de tema ou "auto" (acompanha o sistema); padrão: "auto"
   language: "pt" | "es",
   layout: "apps" | "ribbon",
   remote: { is_connected, url, token },

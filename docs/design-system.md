@@ -156,6 +156,19 @@ Overlays pré-definidos para hover, press e sombras.
 | `--lj-black-alpha-75` | `rgba(0,0,0,0.75)`       |
 | `--lj-navy-alpha-30`  | `rgba(27,79,138,0.3)`    |
 
+### Escolha do tema e modo Automático
+
+Os tokens de cada tema vivem em `[data-theme="<id>"]` (`tokens.css`), sempre no `<html>`.
+A preferência guardada em `options.theme` é um id de tema **ou `"auto"`**, e é o padrão de
+quem nunca escolheu. No Automático o tema em uso acompanha o modo do sistema
+(`prefers-color-scheme`): escuro vira `dark`; claro volta ao último tema claro escolhido
+(ou `darkblue`). O `<html>` recebe sempre o tema já resolvido, nunca `"auto"` — por isso
+nenhum CSS precisa conhecer o modo. O botão sol/lua do cabeçalho é uma escolha explícita:
+quem o aciona sai do Automático.
+
+A regra vive num lugar só: `resolveTheme` em `src/config/Themes.ts`, aplicada por
+`useAppTheme` e, em cada janela, por `startThemeSync` no bootstrap.
+
 ---
 
 ## Tipografia

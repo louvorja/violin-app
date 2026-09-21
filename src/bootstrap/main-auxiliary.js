@@ -17,7 +17,7 @@ import Platform from "@/helpers/Platform";
 import Telemetry from "@/helpers/Telemetry";
 import { KEYS } from "@/constants/UserDataKeys";
 import { FONT, resolveDefaultFont } from "@/config/Fonts";
-import { getTheme } from "@/config/Themes";
+import { startThemeSync } from "@/composables/useAppTheme";
 import { BootOrchestrator } from "@/bootstrap/BootOrchestrator";
 
 const bootStartedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
@@ -52,8 +52,8 @@ watchEffect(() => {
 
   document.documentElement.style.setProperty(FONT.UI.CSS_VAR, uiFont);
   document.documentElement.style.setProperty(FONT.PROJECTION.CSS_VAR, projectionFont);
-  document.documentElement.dataset.theme = getTheme(UserData.get(KEYS.OPTIONS.THEME)).id;
 });
+startThemeSync();
 
 async function start() {
   await $storage.hydrate();

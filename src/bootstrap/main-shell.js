@@ -61,7 +61,7 @@ import { BROADCAST_TYPE } from "@helpers/BroadcastTypes";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { KEYS } from "@/constants/UserDataKeys";
 import { FONT, resolveDefaultFont } from "@/config/Fonts";
-import { getTheme } from "@/config/Themes";
+import { startThemeSync } from "@/composables/useAppTheme";
 import { BootOrchestrator } from "@/bootstrap/BootOrchestrator";
 
 const app = createApp(App);
@@ -221,13 +221,13 @@ watchEffect(() => {
   );
   document.documentElement.style.setProperty(FONT.UI.CSS_VAR, uiFont);
   document.documentElement.style.setProperty(FONT.PROJECTION.CSS_VAR, projectionFont);
-
-  // O tema pelo mesmo caminho: quem troca é a janela principal, mas os tokens
-  // vivem em [data-theme] no <html> de cada janela. Sem carimbar aqui, a
-  // projeção recebe o patch do UserData e continua pintando a paleta antiga —
-  // no telão, no meio do culto.
-  document.documentElement.dataset.theme = getTheme(UserData.get(KEYS.OPTIONS.THEME)).id;
 });
+
+// O tema pelo mesmo caminho: quem troca é a janela principal, mas os tokens
+// vivem em [data-theme] no <html> de cada janela. Sem carimbar aqui, a
+// projeção recebe o patch do UserData e continua pintando a paleta antiga —
+// no telão, no meio do culto. Também acompanha o sistema no modo Automático.
+startThemeSync();
 
 function seedDefaultFonts() {
   const seeds = [

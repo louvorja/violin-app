@@ -1,10 +1,34 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import { nextTick } from "vue";
 import { createPinia, setActivePinia } from "pinia";
-import { useAppTheme } from "@/composables/useAppTheme";
+import { startThemeSync, useAppTheme } from "@/composables/useAppTheme";
 import $appdata from "@/helpers/AppData";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
-import { DEFAULT_THEME_ID } from "@/config/Themes";
+import { AUTO_THEME_ID, DARK_THEME_ID, DEFAULT_THEME_ID } from "@/config/Themes";
+
+/**
+ * O jsdom não tem `matchMedia`. Este falso responde só à consulta de esquema
+ * escuro e deixa o teste virar o modo do sistema, como o SO faria. Precisa
+ * existir antes da primeira leitura do modo: o composable instala o ouvinte
+ * uma vez e o reaproveita pelo resto do arquivo.
+ */
+type ChangeListener = (_event: { matches: boolean }) => void;
+const system = { dark: false, listeners: new Set<ChangeListener>() };
+
+function setSystemDark(dark: boolean): void {
+  system.dark = dark;
+  system.listeners.forEach((listener) => listener({ matches: dark }));
+}
+
+vi.stubGlobal("matchMedia", (query: string) => ({
+  get matches() {
+    return query.includes("prefers-color-scheme: dark") ? system.dark : false;
+  },
+  addEventListener: (_type: string, listener: ChangeListener) => system.listeners.add(listener),
+  removeEventListener: (_type: string, listener: ChangeListener) =>
+    system.listeners.delete(listener),
+}));
 
 /**
  * Os três efeitos da troca de tema estavam copiados em cinco telas, e cada
@@ -18,7 +42,9 @@ describe("useAppTheme", () => {
     $userdata.set(KEYS.OPTIONS.THEME, undefined);
     $userdata.set(KEYS.OPTIONS.THEME_LAST_LIGHT, undefined);
     $userdata.set("theme", undefined);
+    $appdata.set(KEYS.SHELL.IS_DARK, false);
     delete document.documentElement.dataset.theme;
+    setSystemDark(false);
   });
 
   it("carimba o tema no <html>", () => {
@@ -73,9 +99,11 @@ describe("useAppTheme", () => {
     expect(current.value).toBe("pink");
   });
 
-  it("id fora do registro cai no tema padrão", () => {
+  it("id fora do registro cai na preferência padrão, o Automático", () => {
     $userdata.set(KEYS.OPTIONS.THEME, "roxo-neon");
-    expect(useAppTheme().current.value).toBe(DEFAULT_THEME_ID);
+    const { preference, current } = useAppTheme();
+    expect(preference.value).toBe(AUTO_THEME_ID);
+    expect(current.value).toBe(DEFAULT_THEME_ID);
   });
 
   it("alternar volta para o último tema claro em uso", () => {
@@ -114,6 +142,118 @@ describe("useAppTheme", () => {
     previewTheme("purple");
     expect(document.documentElement.dataset.theme).toBe("purple");
     expect($userdata.get(KEYS.OPTIONS.THEME)).toBe("blue");
+  });
+
+  describe("modo Automático", () => {
+    it("quem nunca escolheu um tema acompanha o sistema", () => {
+      expect(useAppTheme().preference.value).toBe(AUTO_THEME_ID);
+    });
+
+    it("sistema escuro vira o tema escuro; claro volta ao tema padrão", () => {
+      const { current, isDark } = useAppTheme();
+
+      setSystemDark(true);
+      expect(current.value).toBe(DARK_THEME_ID);
+      expect(isDark.value).toBe(true);
+
+      setSystemDark(false);
+      expect(current.value).toBe(DEFAULT_THEME_ID);
+      expect(isDark.value).toBe(false);
+    });
+
+    it("no claro usa o último tema claro escolhido e não o perde ao passar pelo escuro", () => {
+      const { setTheme, current, lightTheme } = useAppTheme();
+
+      setTheme("green");
+      setTheme(AUTO_THEME_ID);
+      expect(current.value).toBe("green");
+
+      setSystemDark(true);
+      expect(current.value).toBe(DARK_THEME_ID);
+      expect(lightTheme.value).toBe("green");
+
+      setSystemDark(false);
+      expect(current.value).toBe("green");
+    });
+
+    it("persiste 'auto' e carimba o tema resolvido, nunca o próprio 'auto'", () => {
+      setSystemDark(true);
+      useAppTheme().setTheme(AUTO_THEME_ID);
+
+      expect($userdata.get(KEYS.OPTIONS.THEME)).toBe(AUTO_THEME_ID);
+      expect(document.documentElement.dataset.theme).toBe(DARK_THEME_ID);
+      expect($appdata.get(KEYS.SHELL.IS_DARK)).toBe(true);
+    });
+
+    it("escolher o Automático não regrava o último tema claro", () => {
+      const { setTheme } = useAppTheme();
+      setTheme(DARK_THEME_ID);
+      setTheme(AUTO_THEME_ID);
+      expect($userdata.get(KEYS.OPTIONS.THEME_LAST_LIGHT)).toBeNull();
+    });
+
+    it("um tema explícito ignora o sistema", () => {
+      const { setTheme, current } = useAppTheme();
+      setTheme("pink");
+
+      setSystemDark(true);
+      expect(current.value).toBe("pink");
+      setSystemDark(false);
+      expect(current.value).toBe("pink");
+    });
+
+    it("alternar com o sistema escuro sai do Automático e vai para o claro", () => {
+      const { setTheme, toggleDark, preference, current } = useAppTheme();
+      setTheme(AUTO_THEME_ID);
+      setSystemDark(true);
+
+      toggleDark();
+      expect(preference.value).toBe(DEFAULT_THEME_ID);
+      expect(current.value).toBe(DEFAULT_THEME_ID);
+      expect(document.documentElement.dataset.theme).toBe(DEFAULT_THEME_ID);
+    });
+
+    it("alternar com o sistema claro sai do Automático e vai para o escuro", () => {
+      const { setTheme, toggleDark, preference, isDark } = useAppTheme();
+      setTheme(AUTO_THEME_ID);
+
+      toggleDark();
+      expect(preference.value).toBe(DARK_THEME_ID);
+      expect(isDark.value).toBe(true);
+
+      setSystemDark(false);
+      expect(isDark.value).toBe(true);
+    });
+
+    it("startThemeSync acompanha a virada do sistema no <html> e no is_dark", async () => {
+      const stop = startThemeSync();
+      try {
+        expect(document.documentElement.dataset.theme).toBe(DEFAULT_THEME_ID);
+
+        setSystemDark(true);
+        await nextTick();
+        expect(document.documentElement.dataset.theme).toBe(DARK_THEME_ID);
+        expect($appdata.get(KEYS.SHELL.IS_DARK)).toBe(true);
+
+        setSystemDark(false);
+        await nextTick();
+        expect(document.documentElement.dataset.theme).toBe(DEFAULT_THEME_ID);
+        expect($appdata.get(KEYS.SHELL.IS_DARK)).toBe(false);
+      } finally {
+        stop();
+      }
+    });
+
+    it("startThemeSync carimba o tema que outra janela gravou", async () => {
+      const stop = startThemeSync();
+      try {
+        $userdata.set(KEYS.OPTIONS.THEME, "terracota");
+        await nextTick();
+        expect(document.documentElement.dataset.theme).toBe("terracota");
+      } finally {
+        stop();
+      }
+    });
   });
 
   it("recusa em tempo de compilação um tema fora do registro", () => {

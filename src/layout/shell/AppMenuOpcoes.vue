@@ -12,7 +12,7 @@
           :items="themes"
           item-value="id"
           item-label="label"
-          :model-value="getUserData(KEYS.OPTIONS.THEME, COLOR_THEMES.DEFAULT)"
+          :model-value="themePreference"
           @update:model-value="changeTheme(String($event))"
         />
       </div>
@@ -1491,8 +1491,8 @@ import { DEFAULT_MAX_HEIGHT, MAX_HEIGHTS, normalizeMaxHeight } from "@/helpers/O
 import { ICONS } from "@/config/Icons";
 import { KEYS } from "@/constants/UserDataKeys";
 import { MAIN_BACKGROUND_ID, Settings } from "@/types/Settings";
-import { THEMES, COLOR_THEMES } from "@/config/Theme";
-import { isThemeId, THEME_IDS } from "@/config/Themes";
+import { THEMES } from "@/config/Theme";
+import { AUTO_THEME_ID, isThemePreference, THEME_IDS } from "@/config/Themes";
 import { SLIDE_STYLE_DEFAULT } from "@/config/SlideStyle";
 import { estiloDeFundo } from "@/helpers/BackgroundStyle";
 import { FONT } from "@/config/Fonts";
@@ -1562,7 +1562,7 @@ onMounted(() => {
 });
 
 const { t, locale } = useI18n();
-const { setTheme } = useAppTheme();
+const { preference: themePreference, setTheme } = useAppTheme();
 const {
   displays,
   roles,
@@ -1584,7 +1584,7 @@ const autoFullscreen = computed(() =>
 );
 
 const themes: ComputedRef<ThemeOption[]> = computed(() =>
-  THEME_IDS.map((id) => ({ id, label: t(`options.general.themes.${id}`) }))
+  [AUTO_THEME_ID, ...THEME_IDS].map((id) => ({ id, label: t(`options.general.themes.${id}`) }))
 );
 
 function getUserData<T = unknown>(key: string, defaultValue?: T): T {
@@ -2251,7 +2251,7 @@ function getPref(feature: string): string {
 }
 
 function changeTheme(selectedTheme: string): void {
-  if (!isThemeId(selectedTheme)) return;
+  if (!isThemePreference(selectedTheme)) return;
   setTheme(selectedTheme);
 }
 

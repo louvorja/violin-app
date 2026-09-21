@@ -160,6 +160,7 @@
       "clock_projection_on_boot": "Proyectar el reloj al iniciar",
       "clock_projection_on_boot_hint": "Abre el reloj en pantalla completa en el monitor de retorno al iniciar el programa.",
       "themes": {
+        "auto": "Automático (sistema)",
         "light": "Claro",
         "dark": "Oscuro",
         "black": "Negro",

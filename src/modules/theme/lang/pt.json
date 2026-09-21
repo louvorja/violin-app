@@ -1,6 +1,8 @@
 {
   "title": "Aparência",
   "description": "Fornece ferramentas para customização das cores do programa.",
+  "auto-theme": "Automático",
+  "auto-hint": "Acompanha o modo claro ou escuro do sistema. No claro, usa o último tema claro escolhido.",
   "light-themes": "Temas Claros",
   "dark-themes": "Temas Escuros"
 }

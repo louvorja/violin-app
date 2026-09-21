@@ -1,5 +1,26 @@
 <template>
   <ModuleContainer ref="moduleContainer" :manifest="manifest">
+    <div class="theme-group">
+      <div class="theme-group__title">{{ tm("auto-theme") }}</div>
+
+      <button
+        type="button"
+        class="theme-swatch"
+        :class="{ 'is-current': preference === AUTO_THEME_ID }"
+        :aria-pressed="preference === AUTO_THEME_ID"
+        :title="tm('auto-theme')"
+        @click="setTheme(AUTO_THEME_ID)"
+      >
+        <!-- Duas metades, cada uma com o `data-theme` do modo que representa: a
+             clara é o tema claro que o Automático usa de fato, não um genérico. -->
+        <span class="theme-swatch__color theme-swatch__color--auto">
+          <span class="theme-swatch__half" :data-theme="lightTheme" />
+          <span class="theme-swatch__half" :data-theme="DARK_THEME_ID" />
+        </span>
+      </button>
+      <p class="theme-group__hint">{{ tm("auto-hint") }}</p>
+    </div>
+
     <div v-for="group in groups" :key="group.mode" class="theme-group">
       <div class="theme-group__title">
         {{ group.mode === "dark" ? tm("dark-themes") : tm("light-themes") }}
@@ -10,8 +31,8 @@
         :key="theme.id"
         type="button"
         class="theme-swatch"
-        :class="{ 'is-current': current === theme.id }"
-        :aria-pressed="current === theme.id"
+        :class="{ 'is-current': preference === theme.id }"
+        :aria-pressed="preference === theme.id"
         :title="theme.id"
         @click="setTheme(theme.id)"
       >
@@ -31,7 +52,7 @@
 import { ref } from "vue";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
-import { DARK_THEMES, LIGHT_THEMES } from "@/config/Themes";
+import { AUTO_THEME_ID, DARK_THEME_ID, DARK_THEMES, LIGHT_THEMES } from "@/config/Themes";
 import { useAppTheme } from "@/composables/useAppTheme";
 const moduleContainer = ref(null);
 const tm = (key) => {
@@ -41,7 +62,7 @@ const tm = (key) => {
 /* ########################################################### */
 /* ########################################################### */
 
-const { current, setTheme } = useAppTheme();
+const { preference, lightTheme, setTheme } = useAppTheme();
 
 const groups = [
   { mode: "light", themes: LIGHT_THEMES },
@@ -56,6 +77,12 @@ const groups = [
 
 .theme-group__title {
   font-weight: var(--lj-weight-medium);
+}
+
+.theme-group__hint {
+  margin: var(--lj-space-2) var(--lj-space-2) 0;
+  font-size: var(--lj-text-base);
+  color: var(--lj-text-muted);
 }
 
 .theme-swatch {
@@ -90,6 +117,17 @@ const groups = [
   width: 22px;
   height: 22px;
   border-radius: 50%;
+  background: var(--lj-navy);
+}
+
+.theme-swatch__color--auto {
+  display: flex;
+  overflow: hidden;
+  background: none;
+}
+
+.theme-swatch__half {
+  flex: 1;
   background: var(--lj-navy);
 }
 </style>
