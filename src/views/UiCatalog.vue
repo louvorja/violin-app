@@ -261,8 +261,18 @@
           <LjField label="Fonte de projeção" hint="Aplica-se a todas as telas de projeção.">
             <LjSelect v-model="demoFont" :items="fontItems" style="width: 240px" />
           </LjField>
-          <LjField label="Música" hint="Combobox filtra a lista conforme você digita.">
-            <LjCombobox v-model="demoSong" :items="songItems" style="width: 240px" />
+          <LjField
+            label="Música"
+            hint="Combobox filtra conforme você digita, só desenha as linhas visíveis (aguenta milhares) e mostra um texto secundário para separar títulos iguais. Por padrão a busca olha só o rótulo; `filter` troca a regra — aqui, casa também o CD."
+          >
+            <LjCombobox
+              v-model="demoSong"
+              :items="songItems"
+              :filter="songMatches"
+              item-value="value"
+              item-label="label"
+              style="width: 320px"
+            />
           </LjField>
           <LjField label="Volume">
             <LjSlider v-model="volume" show-value unit="%" style="width: 240px" />
@@ -427,6 +437,7 @@
 import { onMounted, ref } from "vue";
 import { useAppTheme } from "@/composables/useAppTheme";
 import { ICONS } from "@/config/Icons";
+import Strings from "@/helpers/Strings";
 import { COLOR_THEMES } from "@/config/Theme";
 import { DEFAULT_THEME_ID, isThemeId, type ThemeId } from "@/config/Themes";
 import {
@@ -477,12 +488,15 @@ const THEME_IDS = [...new Set(Object.values(COLOR_THEMES))].filter(isThemeId);
 const themeItems = THEME_IDS.map((id) => ({ value: id, label: id }));
 const fontItems = ["Padrão", "Advent Sans", "Arial", "Calibri Bold", "DIN Condensed Bold"];
 const songItems = [
-  "Ó Deus de Amor",
-  "Vós, ó nações rendei louvor",
-  "És Tu, Senhor o poderoso Vencedor",
-  "És Criador e Rei",
-  "Castelo Forte",
+  { value: 1, label: "Ó Deus de Amor", detail: "Hinário Adventista" },
+  { value: 2, label: "Vós, ó nações rendei louvor", detail: "Hinário Adventista" },
+  { value: 3, label: "És Tu, Senhor o poderoso Vencedor", detail: "Hinário Adventista 1996" },
+  { value: 4, label: "És Criador e Rei", detail: "Louvores Jovens" },
+  { value: 5, label: "Castelo Forte", detail: "Hinário Adventista" },
 ];
+function songMatches(item: Record<string, unknown>, term: string): boolean {
+  return [item.label, item.detail].some((text) => Strings.clean(String(text)).includes(term));
+}
 const tabItems: LjTab[] = [
   { value: "geral", label: "Geral" },
   { value: "biblia", label: "Bíblia" },
@@ -508,7 +522,7 @@ const demoSwitch = ref(false);
 const progress = ref(38);
 const demoTheme = ref<string>(COLOR_THEMES.DEFAULT);
 const demoFont = ref("DIN Condensed Bold");
-const demoSong = ref<string>("Ó Deus de Amor");
+const demoSong = ref(songItems[0]);
 const volume = ref(70);
 const fontSize = ref(42);
 const tab = ref("geral");

@@ -9,6 +9,11 @@ import pt from "@/lang/pt.json";
  * isso tudo é montado com `attachTo: document.body` e a lista é consultada em
  * `document`, não em `wrapper.find`.
  *
+ * A lista é virtual, e o virtualizador só desenha as linhas que cabem na altura
+ * do contêiner, lida de `offsetHeight`. O jsdom não faz layout e devolve 0, o que
+ * esvaziaria a lista — por isso o `beforeAll` dá uma altura ao painel. Quem monta
+ * um combobox em outro teste precisa do mesmo.
+ *
  * Fora de teste (jsdom não é navegador):
  * - posicionamento do popper, medidas e transições;
  * - fechar ao clicar fora / ao perder o foco (depende de ponteiro real e de
@@ -22,9 +27,20 @@ import pt from "@/lang/pt.json";
 const montados: Array<{ unmount: () => void }> = [];
 const passar = () => new Promise((r) => setTimeout(r, 0));
 
+const ALTURA_PAINEL = 280;
+
 beforeAll(() => {
   // O Reka rola até o item destacado ao abrir; jsdom não implementa isso.
   Element.prototype.scrollIntoView = () => {};
+  // O virtualizador mede o contêiner por offsetHeight/offsetWidth.
+  Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
+    configurable: true,
+    get: () => ALTURA_PAINEL,
+  });
+  Object.defineProperty(HTMLElement.prototype, "offsetWidth", {
+    configurable: true,
+    get: () => 300,
+  });
 });
 
 afterEach(() => {
@@ -47,6 +63,17 @@ async function abrir(w: ReturnType<typeof montar>) {
   await passar();
 }
 
+async function digitar(w: ReturnType<typeof montar>, texto: string) {
+  const input = campo(w);
+  (input.element as HTMLInputElement).value = texto;
+  await input.trigger("input");
+  await passar();
+}
+
+function textos() {
+  return itensNaTela().map((n) => n.textContent?.trim());
+}
+
 function itensNaTela() {
   return [...document.querySelectorAll<HTMLElement>(".lj-combobox__item")];
 }
@@ -56,6 +83,10 @@ function textoVazio() {
 }
 
 const FRUTAS = ["Alfa", "Beta"];
+const MUITAS = Array.from({ length: 2000 }, (_, i) => ({
+  id: i + 1,
+  name: `Música ${String(i + 1).padStart(4, "0")}`,
+}));
 const MUSICAS = [
   { id: 1, name: "Alfa" },
   { id: 2, name: "Beta" },
@@ -250,6 +281,136 @@ describe("LjCombobox", () => {
     await passar();
     expect(itensNaTela()).toHaveLength(0);
     expect(textoVazio()).toBe("Nenhum resultado.");
+  });
+
+  it("desenha só as linhas que cabem, não as 2000 da lista", async () => {
+    const w = montar({ items: MUITAS, itemValue: "id", itemLabel: "name" });
+    await abrir(w);
+
+    const linhas = textos();
+    expect(linhas[0]).toBe("Música 0001");
+    expect(linhas.length).toBeGreaterThan(5);
+    expect(linhas.length).toBeLessThan(50);
+  });
+
+  it("acha na lista enorme um item que está fora da janela desenhada", async () => {
+    const w = montar({ items: MUITAS, itemValue: "id", itemLabel: "name" });
+    await digitar(w, "1999");
+
+    expect(textos()).toEqual(["Música 1999"]);
+  });
+
+  it("filtra ignorando acento, caixa, espaço e pontuação", async () => {
+    const w = montar({
+      items: [
+        { id: 1, name: "Santo, Santo, Santo!" },
+        { id: 2, name: "Você é Fiel" },
+        { id: 3, name: "Outra" },
+      ],
+      itemValue: "id",
+      itemLabel: "name",
+    });
+
+    await digitar(w, "VOCE e");
+    expect(textos()).toEqual(["Você é Fiel"]);
+
+    await digitar(w, "santo santo");
+    expect(textos()).toEqual(["Santo, Santo, Santo!"]);
+  });
+
+  it("zera o termo digitado ao fechar: a lista volta inteira na próxima abertura", async () => {
+    const w = montar({ items: MUSICAS, itemValue: "id", itemLabel: "name" });
+    await digitar(w, "alf");
+    expect(textos()).toEqual(["Alfa"]);
+
+    await w.find(".lj-combobox__trigger").trigger("click");
+    await passar();
+    expect(itensNaTela()).toHaveLength(0);
+
+    await abrir(w);
+    expect(textos()).toEqual(["Alfa", "Beta"]);
+  });
+
+  it("marca o item de mesmo valor, ainda que o objeto do v-model esteja defasado", async () => {
+    // A lista é recriada (troca de idioma, itens novos) e o v-model guarda a
+    // versão antiga do item: só o valor, não o objeto inteiro, continua igual.
+    const w = montar({
+      items: MUSICAS,
+      itemValue: "id",
+      itemLabel: "name",
+      modelValue: { id: 2, name: "Beta (versão antiga)" },
+    });
+    await abrir(w);
+
+    expect(
+      itensNaTela().map((n) => [n.textContent?.trim(), n.getAttribute("aria-selected")])
+    ).toEqual([
+      ["Alfa", "false"],
+      ["Beta", "true"],
+    ]);
+  });
+
+  it("mostra o texto secundário da linha, e só nos itens que o têm", async () => {
+    const w = montar({
+      items: [
+        { id: 1, name: "Abrigo na Rocha", detail: "Hinário Adventista" },
+        { id: 2, name: "Abrigo na Rocha", detail: "Hinário Adventista 1996" },
+        { id: 3, name: "Sem álbum" },
+      ],
+      itemValue: "id",
+      itemLabel: "name",
+    });
+    await abrir(w);
+
+    const detalhes = [...document.querySelectorAll(".lj-combobox__detail")].map((n) =>
+      n.textContent?.trim()
+    );
+    expect(detalhes).toEqual(["Hinário Adventista", "Hinário Adventista 1996"]);
+    expect(itensNaTela()[2].querySelector(".lj-combobox__detail")).toBeNull();
+  });
+
+  it("o texto secundário não entra na busca: só o rótulo é filtrado", async () => {
+    const w = montar({
+      items: [
+        { id: 1, name: "Abrigo na Rocha", detail: "Hinário Adventista" },
+        { id: 2, name: "Adventista de Coração", detail: "Jovem" },
+      ],
+      itemValue: "id",
+      itemLabel: "name",
+    });
+    await digitar(w, "adventista");
+
+    const rotulos = [...document.querySelectorAll(".lj-combobox__label")].map((n) =>
+      n.textContent?.trim()
+    );
+    expect(rotulos).toEqual(["Adventista de Coração"]);
+  });
+
+  it("uma regra de busca própria substitui a do rótulo e recebe o termo já normalizado", async () => {
+    const termos: string[] = [];
+    const w = montar({
+      items: [
+        { id: 1, name: "Abrigo na Rocha", detail: "Hinário Adventista" },
+        { id: 2, name: "Adventista de Coração", detail: "Jovem" },
+      ],
+      itemValue: "id",
+      itemLabel: "name",
+      filter: (item: { id: number }, termo: string) => {
+        termos.push(termo);
+        return item.id === 2;
+      },
+    });
+    await abrir(w);
+    expect(termos).toEqual([]);
+    expect(itensNaTela()).toHaveLength(2);
+
+    await digitar(w, "Hinário Advent");
+
+    const rotulos = [...document.querySelectorAll(".lj-combobox__label")].map((n) =>
+      n.textContent?.trim()
+    );
+    expect(rotulos).toEqual(["Adventista de Coração"]);
+    expect(new Set(termos)).toEqual(new Set(["hinarioadvent"]));
   });
 
   it("sinaliza o estado inválido só quando pedido", () => {
