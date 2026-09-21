@@ -25,7 +25,7 @@
           <LjIcon
             :icon="getModule(m.id).icon"
             :color="getModule(m.id).color"
-            size="20"
+            size="18"
             class="subtab-icon"
             aria-hidden="true"
           />
@@ -37,7 +37,7 @@
             :aria-label="`${$t('alert.close')}: ${t(getModule(m.id).title)}`"
             @click.stop="close(m.id)"
           >
-            <LjIcon :icon="ICONS.ACTIONS.CLOSE" size="11" aria-hidden="true" />
+            <LjIcon :icon="ICONS.ACTIONS.CLOSE" size="12" aria-hidden="true" />
           </span>
         </button>
       </template>
@@ -99,12 +99,22 @@ function close(id) {
 }
 
 .subtabs {
+  /* Raio das pontas da aba e dos "pés" côncavos da ativa. É também o recuo
+     lateral da faixa: sem ele o pé da primeira aba seria cortado pelo overflow. */
+  --subtab-r: var(--lj-radius-md);
+
   display: flex;
   align-items: flex-end;
+  gap: 3px;
   height: var(--lj-subtabs-height);
-  padding: 0 var(--lj-space-2);
-  background: var(--lj-subtabs-bg);
-  border-bottom: 1px solid var(--lj-subtabs-border);
+  padding: var(--lj-space-2) var(--subtab-r) 0;
+  /* A linha da base é fundo, e não borda: a aba ativa desce sobre ela para se
+     fundir ao painel, e uma borda ficaria fora da área que o overflow deixa
+     pintar. */
+  background:
+    linear-gradient(var(--lj-subtabs-border), var(--lj-subtabs-border)) left bottom / 100% 1px
+      no-repeat,
+    var(--lj-subtabs-bg);
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
@@ -115,28 +125,31 @@ function close(id) {
   display: none;
 }
 
+/* A aba inativa termina 2px acima da base e a ativa desce até ela, mas o topo é
+   o mesmo: o que muda entre os estados é o acabamento, não o tamanho. */
 .subtab {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: var(--lj-space-2);
+  gap: var(--lj-space-3);
+  height: calc(var(--lj-subtabs-height) - var(--lj-space-2) - 2px);
+  margin-bottom: 2px;
   padding: 0 var(--lj-space-2) 0 var(--lj-space-4);
   background: var(--lj-subtab-bg);
-  border: 3px solid var(--lj-subtabs-border);
-  border-bottom: none;
-  border-radius: var(--lj-radius-tab);
-  margin-right: 2px;
-  cursor: pointer;
-  font-size: var(--lj-text-base);
+  border: none;
+  border-radius: var(--subtab-r);
   color: var(--lj-subtab-color);
+  font-family: inherit;
+  font-size: var(--lj-text-base);
+  /* Mesmo peso nos dois estados: trocar 400 por 600 alargava a aba ativa e
+     empurrava as vizinhas a cada clique. */
+  font-weight: var(--lj-weight-medium);
+  white-space: nowrap;
+  cursor: pointer;
   outline: none;
   transition:
     background var(--lj-transition-fast),
-    color var(--lj-transition-fast),
-    border-color var(--lj-transition-fast);
-  white-space: nowrap;
-  font-family: inherit;
-  height: calc(var(--lj-subtabs-height) - 4px);
-  position: relative;
+    color var(--lj-transition-fast);
 }
 
 .subtab:hover:not(.subtab--active) {
@@ -144,32 +157,81 @@ function close(id) {
   color: var(--lj-text);
 }
 
-.subtab--active {
-  background: var(--lj-subtab-active-bg);
-  color: var(--lj-navy);
-  font-weight: var(--lj-weight-semibold);
-  border-color: var(--lj-navy);
-  z-index: 2;
-  height: var(--lj-subtabs-height);
-  margin-bottom: -1px;
-  padding-bottom: 1px;
+.subtab:focus-visible {
+  box-shadow: var(--lj-ui-focus);
 }
 
-.subtab--active::before {
+/* Aba ativa: mesma cor do painel e pontas côncavas que a ligam à linha da base.
+   Sem barra de cor — quem a destaca é o contraste com a faixa. */
+.subtab--active {
+  height: calc(var(--lj-subtabs-height) - var(--lj-space-2));
+  margin-bottom: 0;
+  /* Devolve os 2px a mais de altura ao lado de dentro, para o texto ficar no
+     mesmo lugar nos dois estados. */
+  padding-bottom: 2px;
+  background: var(--lj-subtab-active-bg);
+  border-radius: var(--subtab-r) var(--subtab-r) 0 0;
+  color: var(--lj-subtab-active-color);
+  z-index: 2;
+}
+
+.subtab--active::before,
+.subtab--active::after {
   content: "";
   position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  height: 2px;
-  background: var(--lj-navy);
-  border-radius: var(--lj-radius-tab) var(--lj-radius-tab) 0 0;
+  bottom: 0;
+  width: var(--subtab-r);
+  height: var(--subtab-r);
+  pointer-events: none;
+}
+
+/* O círculo tem centro no canto de cima, junto à aba: por dentro é transparente
+   (mostra a faixa), por fora é o fundo da aba — o que desenha o arco côncavo. Os
+   0,5px de transição suavizam a serrilha sem deixar uma franja semitransparente. */
+.subtab--active::before {
+  left: calc(-1 * var(--subtab-r));
+  background: radial-gradient(
+    circle at 0 0,
+    transparent var(--subtab-r),
+    var(--lj-subtab-active-bg) calc(var(--subtab-r) + 0.5px)
+  );
+}
+
+.subtab--active::after {
+  right: calc(-1 * var(--subtab-r));
+  background: radial-gradient(
+    circle at 100% 0,
+    transparent var(--subtab-r),
+    var(--lj-subtab-active-bg) calc(var(--subtab-r) + 0.5px)
+  );
+}
+
+/* Filete entre abas inativas, no meio do vão. Some junto da ativa, do hover e
+   depois da última, onde não separa nada. */
+.subtab:not(.subtab--active)::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: -2px;
+  width: 1px;
+  height: 14px;
+  transform: translateY(-50%);
+  background: var(--lj-subtabs-border);
+  pointer-events: none;
+  transition: opacity var(--lj-transition-fast);
+}
+
+.subtab:not(.subtab--active):is(
+    :last-child,
+    :hover,
+    :has(+ .subtab:hover),
+    :has(+ .subtab--active)
+  )::after {
+  opacity: 0;
 }
 
 .subtab-icon {
-  opacity: 0.85;
   flex-shrink: 0;
-  margin-right: var(--lj-space-2);
 }
 
 .subtab-label {
@@ -180,21 +242,19 @@ function close(id) {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   width: 16px;
   height: 16px;
-  border-radius: var(--lj-radius-xs);
-  margin-left: var(--lj-space-1);
+  border-radius: 50%;
   color: var(--lj-subtab-close-color);
-  opacity: 0.85;
   transition:
-    opacity var(--lj-transition-fast),
-    background var(--lj-transition-fast);
+    background var(--lj-transition-fast),
+    color var(--lj-transition-fast);
 }
 
 .subtab-close:hover {
-  opacity: 1;
   background: var(--lj-subtab-close-hover-bg);
-  color: var(--lj-orange-dark);
+  color: var(--lj-text);
 }
 
 .subtab--ghost {

@@ -26,7 +26,7 @@ Usado em: tabs, titlebar, sidebar do AppMenu, botões primários.
 
 ### Secundária — Orange
 
-Laranja de acento. Usado em: tabs contextuais, botão fechar sub-tab, sidebar ativo.
+Laranja de acento. Usado em: tabs contextuais, sidebar ativo.
 
 | Token                  | Valor                      | Uso                  |
 | ---------------------- | -------------------------- | -------------------- |
@@ -340,7 +340,7 @@ Não alterar sem validar o layout completo.
 | `--lj-tab-height`          | `28px` | Tabs do Ribbon                |
 | `--lj-ribbon-body-height`  | `80px` | Body do Ribbon                |
 | `--lj-group-label-height`  | `18px` | Label de grupo no Ribbon      |
-| `--lj-subtabs-height`      | `28px` | Sub-tabs internas dos módulos |
+| `--lj-subtabs-height`      | `30px` | Sub-tabs internas dos módulos |
 | `--lj-player-height`       | `88px` | Footer / Player               |
 | `--lj-player-title-height` | `22px` | Título no player              |
 | `--lj-player-row-height`   | `46px` | Linha de controles do player  |
@@ -422,7 +422,7 @@ background: var(--lj-player-gauge-buffer-bg); /* white 25% (light) / white 8% (d
   color: var(--lj-subtab-close-color);
 }
 .subtab-close:hover {
-  background: var(--lj-subtab-close-hover-bg);
+  background: var(--lj-subtab-close-hover-bg); /* círculo neutro, como no Chrome */
 }
 ```
 
@@ -474,23 +474,27 @@ border-color: var(--lj-rbtn-active-border);
 ### Sub-tabs (módulos)
 
 ```css
-/* barra */
+/* faixa — mais escura que a aba ativa, como a moldura do Chrome. A linha da base
+   é fundo (gradiente), não borda: a aba ativa desce sobre ela */
 background: var(--lj-subtabs-bg);
-border-bottom: 1px solid var(--lj-subtabs-border);
 
-/* tab inativa */
+/* tab inativa — sem fundo nem moldura; filete de 1px entre inativas vizinhas,
+   escondido junto da ativa, do hover e depois da última */
 background: var(--lj-subtab-bg);
 color: var(--lj-subtab-color);
 
-/* tab hover */
+/* tab hover — pílula translúcida */
 background: var(--lj-subtab-hover-bg);
 
-/* tab ativa */
+/* tab ativa — fundo igual ao do cabeçalho do módulo logo abaixo (surface-bg-soft),
+   para se fundir ao painel; pontas côncavas (::before/::after com radial-gradient)
+   ligam a aba à linha da base. Sem barra nem borda de cor: quem a destaca é o
+   contraste com a faixa */
 background: var(--lj-subtab-active-bg);
 color: var(--lj-subtab-active-color);
 
 /* botão fechar */
-color: var(--lj-subtab-close-color); /* orange */
+color: var(--lj-subtab-close-color);
 ```
 
 ### Player / Footer

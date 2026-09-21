@@ -134,15 +134,19 @@
   /* =================================================================
    * 5. COMPONENTES — sub tabs (PageControl interno)
    * ================================================================= */
-  --lj-subtabs-bg: var(--lj-gray-100);
+  /* A faixa é mais escura que a aba ativa, como a moldura do Chrome: é o
+     contraste entre as duas que desenha a aba, sem borda nem linha de cor. */
+  --lj-subtabs-bg: var(--lj-gray-200);
   --lj-subtabs-border: var(--lj-surface-border-strong);
-  --lj-subtab-bg: var(--lj-gray-200);
+  --lj-subtab-bg: transparent;
   --lj-subtab-color: var(--lj-text-muted);
-  --lj-subtab-hover-bg: var(--lj-surface-bg);
-  --lj-subtab-active-bg: var(--lj-surface-bg);
+  --lj-subtab-hover-bg: rgba(255, 255, 255, 0.6);
+  /* Igual ao fundo do cabeçalho do módulo, logo abaixo: é o que faz a aba
+     ativa se fundir ao painel em vez de parecer uma caixa solta. */
+  --lj-subtab-active-bg: var(--lj-surface-bg-soft);
   --lj-subtab-active-color: var(--lj-text);
-  --lj-subtab-close-color: var(--lj-orange);
-  --lj-subtab-close-hover-bg: rgba(243, 156, 18, 0.18);
+  --lj-subtab-close-color: var(--lj-text-muted);
+  --lj-subtab-close-hover-bg: rgba(0, 0, 0, 0.1);
 
   /* =================================================================
    * 6. COMPONENTES — status bar
@@ -239,7 +243,7 @@
   --lj-tab-height: 28px;
   --lj-ribbon-body-height: 110px;
   --lj-group-label-height: 18px;
-  --lj-subtabs-height: 28px;
+  --lj-subtabs-height: 30px;
   --lj-player-height: 88px;
   --lj-player-title-height: 22px;
   --lj-player-row-height: 46px;
@@ -372,12 +376,13 @@
   --lj-body-divider: #2a3441;
 
   /* Subtabs */
-  --lj-subtabs-bg: #161e2c;
+  --lj-subtabs-bg: #0e141e;
   --lj-subtabs-border: #2a3441;
-  --lj-subtab-bg: #1f2937;
-  --lj-subtab-hover-bg: #1c2330;
-  --lj-subtab-active-bg: #243248;
+  --lj-subtab-bg: transparent;
+  --lj-subtab-hover-bg: rgba(255, 255, 255, 0.06);
+  --lj-subtab-active-bg: var(--lj-surface-bg-soft);
   --lj-subtab-active-color: #ffffff;
+  --lj-subtab-close-hover-bg: rgba(255, 255, 255, 0.12);
 
   /* StatusBar */
   --lj-statusbar-bg: #161e2c;
