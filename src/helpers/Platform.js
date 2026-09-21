@@ -258,10 +258,10 @@ export default {
   },
 
   /**
-   * Controles da janela nativa (min/max/restore/close) — usado pela SystemBar.
-   * null no browser/PWA.
+   * Ajustes da janela nativa em volta dos botões do sistema — usado pela
+   * SystemBar e pelo AppMenu. null no browser/PWA.
    *
-   * @returns {{ signalAppReady, minimize, maximize, unmaximize, toggleMaximize, close, isMaximized, onMaximizeChange } | null}
+   * @returns {{ signalAppReady, toggleMaximize, close, alignTrafficLights, setTitleBarOverlay } | null}
    */
   get window() {
     return api?.window ?? null;

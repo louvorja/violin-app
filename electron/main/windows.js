@@ -20,6 +20,15 @@ const path = require("path");
 const TRAFFIC_LIGHT_POSITION = { x: 10, y: 11 };
 
 /**
+ * Faixa dos botões nativos (minimizar/maximizar/fechar) no Windows e no Linux.
+ *
+ * Só o ponto de partida: a cor pertence ao tema e a altura à systembar
+ * (`--lj-systembar-height`), então a SystemBar reenvia os dois pelo IPC
+ * "window:setTitleBarOverlay" ao montar e a cada troca de tema.
+ */
+const TITLEBAR_OVERLAY = { color: "#1b2a41", symbolColor: "#ffffff", height: 35 };
+
+/**
  * Cria a janela principal do LouvorJA.
  *
  * @param {string} devUrl    URL do dev server (ex: "http://localhost:5002")
@@ -53,14 +62,22 @@ function createMainWindow(devUrl, prodHtmlPath, preloadPath) {
     // só o fundo vazio do index.html.
     show: false,
     backgroundColor: "#1b2a41",
-    // Title bar custom (replicar Delphi):
-    //  - Win/Linux: frameless, SystemBar customizada com botões funcionais
-    //  - macOS: titleBarStyle "hiddenInset" mantém os stoplights mas esconde a barra,
-    //           permitindo que a SystemBar customizada do app sirva como drag region
-    //           sem duplicar o título.
-    frame: false,
-    titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
-    trafficLightPosition: process.platform === "darwin" ? TRAFFIC_LIGHT_POSITION : undefined,
+    // Title bar custom (replicar Delphi): a SystemBar do app ocupa o lugar da
+    // barra de título, e os botões da janela são sempre os do sistema.
+    //  - macOS: "hiddenInset" mantém os semáforos sobre o conteúdo, permitindo
+    //           que a SystemBar sirva como drag region sem duplicar o título.
+    //  - Win/Linux: "hidden" + titleBarOverlay pede ao sistema que desenhe
+    //           minimizar/maximizar/fechar por cima da SystemBar.
+    ...(process.platform === "darwin"
+      ? {
+          frame: false,
+          titleBarStyle: "hiddenInset",
+          trafficLightPosition: TRAFFIC_LIGHT_POSITION,
+        }
+      : {
+          titleBarStyle: "hidden",
+          titleBarOverlay: TITLEBAR_OVERLAY,
+        }),
     autoHideMenuBar: true,
     webPreferences: {
       preload: preloadPath,

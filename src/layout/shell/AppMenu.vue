@@ -15,7 +15,7 @@
     </button>
 
     <Teleport to="body">
-      <Transition name="app-menu" @enter="descerSemaforos" @leave="restaurarSemaforos">
+      <Transition name="app-menu" @enter="descerBotoes" @leave="restaurarBotoes">
         <div v-if="open" class="app-menu-overlay" @click.self="close">
           <div class="app-menu-panel" role="menu" :aria-label="$t('shell.appmenu')">
             <header
@@ -321,10 +321,13 @@ function scheduleRenderedItem(item) {
   }, CONTENT_DELAY_MS);
 }
 
-// Os semáforos do macOS ficam sobre o conteúdo, presos ao eixo da systembar, e
-// este painel cobre a systembar com um cabeçalho mais alto. Eles são a terceira
-// peça do mesmo gesto: a cortina desce, o cabeçalho cresce, os botões seguem a
-// borda — mesma curva, mesma duração.
+// Os botões da janela — semáforos no macOS, overlay do sistema no Windows e no
+// Linux — ficam sobre o conteúdo, presos ao eixo da systembar, e este painel
+// cobre a systembar com um cabeçalho mais alto. Eles são a terceira peça do
+// mesmo gesto: a cortina desce, o cabeçalho cresce, os botões seguem a borda.
+// No macOS a curva e a duração são as mesmas do painel; o overlay do
+// Windows/Linux não desliza, então a altura muda de uma vez, junto com o
+// primeiro quadro da cortina.
 //
 // O disparo vem dos hooks da Transition, não de um watch sobre `open`: montar o
 // painel leva ~120ms, e nesse intervalo o watch já teria mandado os botões
@@ -332,14 +335,19 @@ function scheduleRenderedItem(item) {
 //
 // A altura vem do token, não do elemento, porque no hook de entrada o cabeçalho
 // ainda está na altura inicial da animação.
-function descerSemaforos(el) {
-  if (!hasOverlayTrafficLights.value) return;
-  const altura = parseFloat(
-    getComputedStyle(document.documentElement).getPropertyValue("--lj-appmenu-header-height")
-  );
+function alturaDoToken(nome) {
+  return parseFloat(getComputedStyle(document.documentElement).getPropertyValue(nome));
+}
+
+function descerBotoes(el) {
+  if (!Platform.isDesktop) return;
+  const altura = alturaDoToken("--lj-appmenu-header-height");
   if (!(altura > 0)) return;
 
-  const mover = () => Platform.window?.alignTrafficLights?.(altura);
+  const mover = () =>
+    hasOverlayTrafficLights.value
+      ? Platform.window?.alignTrafficLights?.(altura)
+      : Platform.window?.setTitleBarOverlay?.({ height: altura });
 
   // Montar o painel atrasa o primeiro quadro da cortina em algumas dezenas de
   // ms, e o hook de entrada corre antes disso. Sair junto com `transitionstart`
@@ -356,9 +364,14 @@ function descerSemaforos(el) {
   }
 }
 
-function restaurarSemaforos() {
-  if (!hasOverlayTrafficLights.value) return;
-  Platform.window?.alignTrafficLights?.();
+function restaurarBotoes() {
+  if (!Platform.isDesktop) return;
+  if (hasOverlayTrafficLights.value) {
+    Platform.window?.alignTrafficLights?.();
+    return;
+  }
+  const altura = alturaDoToken("--lj-systembar-height");
+  if (altura > 0) Platform.window?.setTitleBarOverlay?.({ height: altura });
 }
 
 function onKeydown(e) {
@@ -425,7 +438,7 @@ onBeforeUnmount(() => {
   clearRenderTimer();
   clearOptionsPreloadTimer();
   renderedItem.value = null;
-  restaurarSemaforos();
+  restaurarBotoes();
   window.removeEventListener("louvorja:open-updates", onOpenUpdates);
   window.removeEventListener("louvorja:open-options", onOpenOptions);
   window.removeEventListener("louvorja:open-about", onOpenAbout);
@@ -523,15 +536,15 @@ function onOpenOptions(e) {
   background: var(--lj-tabs-bg);
   color: var(--lj-white);
   flex-shrink: 0;
-  /* A janela é `frame: false` em toda plataforma e este painel cobre a
-     systembar, que é a única região de arrasto do app. Sem esta linha a janela
-     fica presa no lugar enquanto o menu está aberto. */
+  /* A janela não tem barra de título nativa em nenhuma plataforma e este
+     painel cobre a systembar, que é a única região de arrasto do app. Sem esta
+     linha a janela fica presa no lugar enquanto o menu está aberto. */
   -webkit-app-region: drag;
 }
 
 /* Só no app desktop em macOS, onde os semáforos ficam sobre o conteúdo da
    janela: abre espaço à direita deles. O alinhamento vertical é resolvido do
-   outro lado — `descerSemaforos` leva os botões ao centro deste cabeçalho,
+   outro lado — `descerBotoes` leva os botões ao centro deste cabeçalho,
    porque encolher o cabeçalho até o eixo deles espremia o X a 2,5px do topo. */
 .app-menu-header--mac {
   padding-left: 88px;

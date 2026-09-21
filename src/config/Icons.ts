@@ -389,7 +389,6 @@ export const ICONS = {
     WEB: "world",
     WIFI: "wifi",
     WIFI_OFF: "wifi-off",
-    WINDOW_MAXIMIZE: "square",
     WINDOW_MINIMIZE: "minus",
     WINDOW_RESTORE: "squares",
   },

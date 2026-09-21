@@ -516,7 +516,9 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
   },
 
   // -------------------------------------------------------------------------
-  // Window controls — minimize/maximize/restore/close + isMaximized event
+  // Janela — os botões de minimizar/maximizar/fechar são do sistema
+  // (semáforos no macOS, titleBarOverlay no Windows/Linux); aqui ficam só os
+  // ajustes que o app faz em volta deles.
   // -------------------------------------------------------------------------
 
   window: {
@@ -526,12 +528,8 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
      * enquanto o app sobe. Dispare uma vez, depois do primeiro frame.
      */
     signalAppReady: () => ipcRenderer.send("app:ready"),
-    minimize: () => ipcRenderer.invoke("window:minimize"),
-    maximize: () => ipcRenderer.invoke("window:maximize"),
-    unmaximize: () => ipcRenderer.invoke("window:unmaximize"),
     toggleMaximize: () => ipcRenderer.invoke("window:toggleMaximize"),
     close: () => ipcRenderer.invoke("window:close"),
-    isMaximized: () => ipcRenderer.invoke("window:isMaximized"),
     /**
      * macOS: alinha os semáforos ao centro de uma barra de `barHeight` pontos.
      * Para camadas que cobrem a systembar com um cabeçalho de outra altura.
@@ -540,15 +538,10 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
     alignTrafficLights: (barHeight = null) =>
       ipcRenderer.invoke("window:alignTrafficLights", barHeight),
     /**
-     * Escuta o evento "maximize"/"unmaximize" enviado pelo main quando o estado da
-     * janela muda (ex: usuário arrasta para tela ou clica no controle nativo).
-     * Retorna função de cleanup.
+     * Windows/Linux: pinta a faixa dos botões nativos com as cores da systembar.
+     * `color` e `symbolColor` em `#rrggbb`; `height` em px, inteiro.
      */
-    onMaximizeChange(cb) {
-      const handler = (_e, isMax) => cb(!!isMax);
-      ipcRenderer.on("window:maximizeChange", handler);
-      return () => ipcRenderer.off("window:maximizeChange", handler);
-    },
+    setTitleBarOverlay: (opts) => ipcRenderer.invoke("window:setTitleBarOverlay", opts),
   },
 
   // -------------------------------------------------------------------------

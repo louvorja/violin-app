@@ -1145,10 +1145,7 @@
       "exit": "Sair"
     },
     "window": {
-      "minimize": "Minimizar",
-      "maximize": "Maximizar",
-      "restore": "Restaurar",
-      "close": "Fechar"
+      "minimize": "Minimizar"
     },
     "playing": "Reproduzindo",
     "playing_youtube": "Reproduzindo do YouTube",

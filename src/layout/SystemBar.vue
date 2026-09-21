@@ -1,8 +1,9 @@
 <template>
   <div
     v-if="isDesktop"
+    ref="bar"
     class="systembar"
-    :class="{ 'systembar--mac': isMac }"
+    :class="{ 'systembar--mac': isMac, 'systembar--overlay': !isMac }"
     @dblclick="toggleMaximize"
   >
     <!-- AppMenu + Abas (no-drag) -->
@@ -22,43 +23,13 @@
       <ShellTools />
     </div>
 
-    <!-- Window controls Win/Linux (no-drag) -->
-    <div v-if="!isMac" class="systembar-controls">
-      <button
-        type="button"
-        class="systembar-btn"
-        :title="$t('shell.window.minimize')"
-        @click="minimize"
-      >
-        <LjIcon :icon="ICONS.UI.WINDOW_MINIMIZE" size="14" />
-      </button>
-      <button
-        type="button"
-        class="systembar-btn"
-        :title="isMaximized ? $t('shell.window.restore') : $t('shell.window.maximize')"
-        @click="toggleMaximize"
-      >
-        <LjIcon
-          :icon="isMaximized ? ICONS.UI.WINDOW_RESTORE : ICONS.UI.WINDOW_MAXIMIZE"
-          size="14"
-        />
-      </button>
-      <button
-        type="button"
-        class="systembar-btn systembar-btn--close"
-        :title="$t('shell.window.close')"
-        @click="closeWindow"
-      >
-        <LjIcon :icon="ICONS.ACTIONS.CLOSE" size="14" />
-      </button>
-    </div>
+    <!-- Os botões de janela são do sistema (semáforos no macOS, titleBarOverlay
+         no Windows/Linux): não há markup deles aqui, só o espaço reservado. -->
   </div>
 </template>
 
 <script setup>
-import { LjIcon } from "@/components/ui";
-import { ICONS } from "@/config/Icons";
-import { ref, computed, onMounted, onBeforeUnmount } from "vue";
+import { ref, computed, watch, onBeforeUnmount } from "vue";
 import { useI18n } from "vue-i18n";
 import Platform from "@/helpers/Platform";
 import $appdata from "@/helpers/AppData";
@@ -71,8 +42,8 @@ import { useRibbonStore } from "@/stores/ribbonStore";
 const { t } = useI18n();
 const store = useRibbonStore();
 
-const isMaximized = ref(false);
-let unsubscribe = null;
+const bar = ref(null);
+let themeObserver = null;
 
 const isDesktop = computed(() => $appdata.get("is_desktop"));
 const isMac = computed(() => Platform.platform === "darwin");
@@ -100,39 +71,54 @@ const title = computed(() => {
   return `${moduleTitle} - Louvor JA Violin`;
 });
 
-function minimize() {
-  Platform.window?.minimize();
-}
-
 function toggleMaximize() {
-  const res = Platform.window?.toggleMaximize();
-  if (res && typeof res.maximized === "boolean") isMaximized.value = res.maximized;
+  Platform.window?.toggleMaximize();
 }
 
-function closeWindow() {
-  Platform.window?.close();
+function toHex(cssColor) {
+  const m = /^rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/.exec(cssColor);
+  if (!m) return null;
+  return "#" + [m[1], m[2], m[3]].map((n) => Number(n).toString(16).padStart(2, "0")).join("");
 }
 
-async function syncMaximized() {
-  try {
-    const v = await Platform.window?.isMaximized();
-    if (typeof v === "boolean") isMaximized.value = v;
-  } catch (_) {
-    /* ignore */
-  }
+// A faixa dos botões nativos é pintada pelo Electron, não pelo DOM: sem copiar
+// a cor da barra para lá, o tema escuro ficaria com botões sobre o navy do claro.
+// A altura só vai na primeira vez, para casar com o token: as trocas de tema
+// desfariam a altura que o AppMenu dá à faixa enquanto está aberto.
+function syncOverlay({ height = false } = {}) {
+  const el = bar.value;
+  if (!el) return;
+  const style = getComputedStyle(el);
+  const color = toHex(style.backgroundColor);
+  const symbolColor = toHex(style.color);
+  if (!color || !symbolColor) return;
+  Platform.window?.setTitleBarOverlay?.({
+    color,
+    symbolColor,
+    ...(height && { height: el.offsetHeight }),
+  });
 }
 
-onMounted(async () => {
-  if (Platform.window?.onMaximizeChange) {
-    unsubscribe = Platform.window.onMaximizeChange((v) => {
-      isMaximized.value = v;
+// A barra só existe depois que `is_desktop` vira true, então o observador
+// nasce quando o elemento aparece, e não no onMounted.
+watch(
+  bar,
+  (el) => {
+    themeObserver?.disconnect();
+    themeObserver = null;
+    if (!el || isMac.value || !Platform.window?.setTitleBarOverlay) return;
+    syncOverlay({ height: true });
+    themeObserver = new MutationObserver(() => syncOverlay());
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
     });
-  }
-  await syncMaximized();
-});
+  },
+  { flush: "post" }
+);
 
 onBeforeUnmount(() => {
-  if (unsubscribe) unsubscribe();
+  themeObserver?.disconnect();
 });
 </script>
 
@@ -160,6 +146,15 @@ onBeforeUnmount(() => {
 
 .systembar--mac {
   padding-left: 80px;
+}
+
+/* Win/Linux: os botões do sistema flutuam sobre o canto direito. A variável
+   `titlebar-area-width` é a largura que sobra à esquerda deles; o fallback
+   (3 × 46px, os botões do Windows) vale se o ambiente não a expuser. */
+.systembar--overlay {
+  padding-right: calc(
+    100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, calc(100vw - 138px))
+  );
 }
 
 .systembar-appmenu {
@@ -208,38 +203,5 @@ onBeforeUnmount(() => {
 }
 .systembar-tools .shell-tool:hover {
   background: var(--lj-white-alpha-18);
-}
-
-/* ── Window controls Win/Linux (no-drag) ── */
-.systembar-controls {
-  display: flex;
-  align-items: stretch;
-  -webkit-app-region: no-drag;
-}
-
-.systembar-btn {
-  width: 44px;
-  height: var(--lj-systembar-height);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  color: var(--lj-white);
-  cursor: pointer;
-  transition: background var(--lj-transition-fast);
-  outline: none;
-  opacity: 0.85;
-  font-family: inherit;
-}
-
-.systembar-btn:hover {
-  background: var(--lj-white-alpha-18);
-  opacity: 1;
-}
-
-.systembar-btn--close:hover {
-  background: var(--lj-danger);
-  opacity: 1;
 }
 </style>
