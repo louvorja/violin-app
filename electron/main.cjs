@@ -552,14 +552,6 @@ function createWindow() {
     });
   }
 
-  // Sinalizar mudanças de estado de maximização para o renderer (SystemBar)
-  mainWindow.on("maximize", () => {
-    safeSend(mainWindow, "window:maximizeChange", true);
-  });
-  mainWindow.on("unmaximize", () => {
-    safeSend(mainWindow, "window:maximizeChange", false);
-  });
-
   // Encaminha erros/warnings do renderer para o terminal. Em produção fica
   // disponível de forma explícita com LJ_LOGS=1; quando o exe foi chamado de
   // um CMD/PowerShell, liga automaticamente para facilitar diagnóstico da
@@ -1457,24 +1449,6 @@ ipcMain.handle("app:open-files-ready", (event) => {
   return fileOpenQueue.ready(event.sender);
 });
 
-ipcMain.handle("window:minimize", (event) => {
-  const win = focusedOrMain(event);
-  if (win && !win.isMinimized()) win.minimize();
-  return { ok: !!win };
-});
-
-ipcMain.handle("window:maximize", (event) => {
-  const win = focusedOrMain(event);
-  if (win && !win.isMaximized()) win.maximize();
-  return { ok: !!win, maximized: win ? win.isMaximized() : false };
-});
-
-ipcMain.handle("window:unmaximize", (event) => {
-  const win = focusedOrMain(event);
-  if (win && win.isMaximized()) win.unmaximize();
-  return { ok: !!win, maximized: win ? win.isMaximized() : false };
-});
-
 ipcMain.handle("window:toggleMaximize", (event) => {
   const win = focusedOrMain(event);
   if (!win) return { ok: false };
@@ -1489,9 +1463,30 @@ ipcMain.handle("window:close", (event) => {
   return { ok: !!win };
 });
 
-ipcMain.handle("window:isMaximized", (event) => {
+const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+
+// Pinta a faixa dos botões nativos do Windows e do Linux com as cores da
+// systembar. A cor mora no Electron, não no DOM: sem isto o tema escuro
+// ficaria com os botões sobre o navy do tema claro. No macOS os semáforos não
+// têm fundo, então não há o que pintar.
+ipcMain.handle("window:setTitleBarOverlay", (event, opts) => {
+  if (process.platform === "darwin") return { ok: false };
   const win = focusedOrMain(event);
-  return win ? win.isMaximized() : false;
+  if (!win || win.isDestroyed() || !win.setTitleBarOverlay) return { ok: false };
+
+  const { color, symbolColor, height } = opts || {};
+  const overlay = {};
+  if (HEX_COLOR.test(color)) overlay.color = color;
+  if (HEX_COLOR.test(symbolColor)) overlay.symbolColor = symbolColor;
+  if (Number.isInteger(height) && height > 0) overlay.height = height;
+  if (!Object.keys(overlay).length) return { ok: false };
+
+  try {
+    win.setTitleBarOverlay(overlay);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err) };
+  }
 });
 
 // Duração do deslocamento dos semáforos. Espelha a transição de entrada e saída

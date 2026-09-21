@@ -1138,10 +1138,7 @@
       "exit": "Salir"
     },
     "window": {
-      "minimize": "Minimizar",
-      "maximize": "Maximizar",
-      "restore": "Restaurar",
-      "close": "Cerrar"
+      "minimize": "Minimizar"
     },
     "playing": "Reproduciendo",
     "playing_youtube": "Reproduciendo de YouTube",
