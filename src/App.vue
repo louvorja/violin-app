@@ -36,11 +36,13 @@ const isProjectionRoute = computed(() => {
  * transparentes: uma superfície opaca aqui cobre a câmera com um retângulo
  * branco, e ele fica na transmissão enquanto não houver slide. Em `/projection`
  * o preto vem do `index.html`, justamente para não haver lampejo branco antes
- * de o slide entrar por fade — no telão, diante da congregação.
+ * de o slide entrar por fade — no telão, diante da congregação. `/operator` abre
+ * junto com o vídeo e desenha o próprio fundo por inteiro: até a rota carregar, o
+ * tema por baixo (branco ou cinza-azulado) apareceria como uma piscada.
  */
 const semFundoProprio = computed(() => {
   const path = route.path || "";
-  return path.startsWith("/obs") || path.startsWith("/projection");
+  return path.startsWith("/obs") || path.startsWith("/projection") || path === "/operator";
 });
 </script>
 

@@ -346,10 +346,11 @@ onBeforeUnmount(() => {
 </script>
 
 <style>
-/* Cores Delphi do fmMusicaOperador: panel #353535, grid lines #524752 */
+/* Cores Delphi do fmMusicaOperador: panel #353535, grid lines #524752.
+   O fundo cinza é do .op-root: no corpo, ele pintava a janela inteira entre o
+   carregamento do CSS e a montagem da tela, uma piscada cinza antes do vídeo. */
 body {
   margin: 0;
-  background: #232323;
   color: #fff;
   font-family: var(--lj-font-projection);
 }

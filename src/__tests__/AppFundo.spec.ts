@@ -11,7 +11,9 @@ import App from "@/App.vue";
  * cobre a câmera com um retângulo branco, que fica na transmissão enquanto não
  * houver slide. Em `/projection` o preto vem do index.html justamente para não
  * haver lampejo branco antes de o slide entrar por fade — no telão, diante da
- * congregação. Nenhum dos dois acusa nada no console.
+ * congregação. O operador abre junto com o vídeo e pinta a janela inteira por
+ * conta própria: sem isto, o tema (branco ou cinza-azulado) aparece por baixo
+ * enquanto a rota carrega. Nenhum deles acusa nada no console.
  */
 const Vazio = defineComponent({ setup: () => () => h("div") });
 
@@ -24,6 +26,7 @@ async function montarEm(path: string) {
       { path: "/obs/bible", component: Vazio },
       { path: "/projection", component: Vazio },
       { path: "/projection/return", component: Vazio },
+      { path: "/operator", component: Vazio },
       { path: "/clock", component: Vazio },
     ],
   });
@@ -40,7 +43,7 @@ async function montarEm(path: string) {
 
 describe("fundo da raiz do app", () => {
   it("não pinta nas rotas de captura e de projeção", async () => {
-    for (const rota of ["/obs", "/obs/bible", "/projection", "/projection/return"]) {
+    for (const rota of ["/obs", "/obs/bible", "/projection", "/projection/return", "/operator"]) {
       const w = await montarEm(rota);
       expect(w.get("#app-container").classes(), rota).toContain("is-transparente");
       w.unmount();
