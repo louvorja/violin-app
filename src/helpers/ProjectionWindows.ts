@@ -13,6 +13,8 @@
 
 import Platform from "@/helpers/Platform";
 import $userdata from "@/helpers/UserData";
+import $appdata from "@/helpers/AppData";
+import { isProgressiveUrl } from "@/helpers/OnlineVideo";
 import { PROJECTION_TYPE, PROJECTION_URL } from "@/constants/Projection";
 import { KEYS } from "@/constants/UserDataKeys";
 import { close as closeWindow, isOpen as isWindowOpen, open as openWindow } from "@/helpers/Projection";
@@ -27,7 +29,7 @@ interface DisplaysAPI {
 async function _open(
   route: string,
   feature: string,
-  monitorId: number | null,
+  monitorId: number | string | null,
   fullscreen: boolean,
   alwaysOnTop = false
 ): Promise<void> {
@@ -78,6 +80,139 @@ async function _target(feature: string): Promise<{ open: boolean; monitorId: num
   return { open: !!WebRoles.screenForRole(role), monitorId: null };
 }
 
+export type WindowKind = "projection" | "return" | "operator";
+/** O que está no ar: música/slides, arquivo (imagem ou vídeo da liturgia) ou vídeo on-line (YouTube). */
+export type MediaKind = "music" | "file" | "video";
+
+/**
+ * O que o player tem no ar agora. O player embutido do YouTube e o vídeo baixado ou em streaming
+ * são "video"; vídeo de arquivo é "file"; o resto é música. Quem abre janela pergunta aqui em vez
+ * de supor música: as rotas de música não mostram arquivo nem vídeo.
+ */
+export function currentMediaKind(): MediaKind {
+  const config = KEYS.MODULES.MEDIA.CONFIG;
+  const embedded = $appdata.get<boolean>(config.IS_YOUTUBE, false) === true;
+  if (!embedded && $appdata.get<boolean>(config.VIDEO_FILE, false) !== true) return "music";
+  const source = String($appdata.get<string>(config.AUDIO, "") ?? "");
+  const online =
+    embedded || source.startsWith("louvorja://onlinevideo/") || isProgressiveUrl(source);
+  return online ? "video" : "file";
+}
+
+export interface WindowPlan {
+  route: string;
+  /** Chave da janela no main: a mesma chave nunca abre duas janelas. */
+  feature: string;
+  /** Features cujo monitor vale para esta janela, em ordem: a primeira com monitor decide. */
+  monitors: string[];
+  fullscreen: boolean;
+  alwaysOnTop: boolean;
+}
+
+/**
+ * Que janela abrir, e onde, para cada mídia. É a única tabela: a abertura automática ao dar
+ * play, o menu do player e o botão "Abrir no monitor" passam por ela, então abrem exatamente
+ * a mesma janela. As rotas de música não tocam arquivo nem vídeo — o retorno ficava em
+ * "PRÓX 1/0" e a projeção em branco por cima do telão —, por isso cada mídia tem as suas.
+ */
+export function mediaWindowPlan(kind: WindowKind, media: MediaKind): WindowPlan {
+  if (kind === "operator") {
+    // O operador precisa interagir com a janela principal: nunca em tela cheia nem no topo.
+    return {
+      route: PROJECTION_URL.OPERATOR,
+      feature: PROJECTION_TYPE.OPERATOR,
+      monitors: [PROJECTION_TYPE.OPERATOR],
+      fullscreen: false,
+      alwaysOnTop: false,
+    };
+  }
+
+  const { MUSIC, RETURN, FILE, FILE_RETURN, ONLINE_VIDEO, ONLINE_VIDEO_RETURN } = PROJECTION_TYPE;
+  const prefs =
+    media === "music"
+      ? KEYS.OPTIONS
+      : media === "file"
+        ? KEYS.OPTIONS.FILE_PROJECTION
+        : KEYS.OPTIONS.ONLINE_VIDEO_PROJECTION;
+  const table: Record<MediaKind, Record<"projection" | "return", Omit<WindowPlan, "fullscreen" | "alwaysOnTop">>> = {
+    music: {
+      projection: { route: PROJECTION_URL.MUSIC, feature: MUSIC, monitors: [MUSIC] },
+      return: { route: PROJECTION_URL.RETURN, feature: RETURN, monitors: [RETURN] },
+    },
+    // O arquivo e o vídeo on-line usam a mesma rota; a chave do retorno difere porque cada um
+    // tem a sua opção de monitor, e o retorno sob demanda tem que repetir a da abertura automática.
+    file: {
+      projection: { route: PROJECTION_URL.FILE, feature: FILE, monitors: [FILE, MUSIC] },
+      return: { route: PROJECTION_URL.FILE_RETURN, feature: FILE_RETURN, monitors: [FILE_RETURN, RETURN] },
+    },
+    video: {
+      projection: { route: PROJECTION_URL.FILE, feature: FILE, monitors: [ONLINE_VIDEO, MUSIC] },
+      return: {
+        route: PROJECTION_URL.FILE_RETURN,
+        feature: ONLINE_VIDEO_RETURN,
+        monitors: [ONLINE_VIDEO_RETURN, RETURN],
+      },
+    },
+  };
+
+  return {
+    ...table[media][kind],
+    fullscreen: $userdata.get(prefs.FULLSCREEN, true) as boolean,
+    alwaysOnTop: $userdata.get(prefs.ALWAYS_ON_TOP, true) as boolean,
+  };
+}
+
+/**
+ * Abre uma janela da mídia que está no ar. Automático (ao dar play) ou `explicit` (o operador
+ * clicou no menu do player): é a mesma função.
+ *
+ * Sem monitor para o papel, o automático não abre nada — o operador é a exceção, que sempre abre.
+ * Pedido pelo operador, a janela é tentada assim mesmo e o main explica a recusa em vez de o
+ * clique parecer morto.
+ *
+ * O retorno de música (PRÓX/1/0) ocupa o mesmo monitor e não sabe mostrar arquivo nem vídeo:
+ * o retorno do arquivo/vídeo entra no lugar dele, e ele sai também quando não há onde pôr o outro.
+ *
+ * `monitorId` é o monitor que o operador escolheu à mão (o menu do botão "Abrir no monitor");
+ * sem ele vale o do papel da janela.
+ */
+export async function openMediaWindow(
+  kind: WindowKind,
+  media: MediaKind,
+  {
+    explicit = false,
+    monitorId,
+  }: { explicit?: boolean; monitorId?: number | string | null } = {}
+): Promise<void> {
+  const plan = mediaWindowPlan(kind, media);
+
+  let target: { open: boolean; monitorId: number | null } = { open: false, monitorId: null };
+  for (const feature of plan.monitors) {
+    target = await _target(feature);
+    if (target.open) break;
+  }
+  const placeable = target.open || explicit || kind === "operator";
+
+  if (kind === "return" && media !== "music") {
+    if (placeable || (await isWindowOpen(PROJECTION_TYPE.RETURN))) await _close(PROJECTION_TYPE.RETURN);
+  }
+  if (!placeable) return;
+  await _open(plan.route, plan.feature, monitorId ?? target.monitorId, plan.fullscreen, plan.alwaysOnTop);
+}
+
+/** O operador abre com qualquer mídia: ele troca a grade de slides pela prévia do vídeo. */
+async function _openOperatorIfEnabled(media: MediaKind): Promise<void> {
+  if ($userdata.get(KEYS.OPTIONS.OPEN_OPERATOR, false) as boolean) await openMediaWindow("operator", media);
+}
+
+/**
+ * O retorno de música que já está na tela não sabe mostrar arquivo nem vídeo: o do arquivo/vídeo
+ * é pedido mesmo com a opção de retorno desligada, senão ele ficaria em "PRÓX 1/0" sobre o telão.
+ */
+async function _wantsMediaReturn(optionOn: boolean): Promise<boolean> {
+  return optionOn || (await isWindowOpen(PROJECTION_TYPE.RETURN));
+}
+
 /**
  * Abre as janelas auxiliares respeitando as preferências do usuário.
  *
@@ -92,33 +227,9 @@ async function _target(feature: string): Promise<{ open: boolean; monitorId: num
 export async function openProjectionWindows(): Promise<void> {
   if (await isBackgroundOpen()) return;
 
-  const fullscreen = $userdata.get(KEYS.OPTIONS.FULLSCREEN, true) as boolean;
-  const alwaysOnTop = $userdata.get(KEYS.OPTIONS.ALWAYS_ON_TOP, true) as boolean;
-  const openOperator = $userdata.get(KEYS.OPTIONS.OPEN_OPERATOR, false) as boolean;
-  const openReturn = ($userdata.get(KEYS.OPTIONS.OPEN_RETURN, false) as boolean);
-
-  const projection = await _target(PROJECTION_TYPE.MUSIC);
-  if (projection.open) {
-    await _open(
-      PROJECTION_URL.BASE, PROJECTION_TYPE.MUSIC, projection.monitorId, fullscreen, alwaysOnTop
-    );
-  }
-
-  if (openReturn) {
-    const ret = await _target(PROJECTION_TYPE.RETURN);
-    if (ret.open) {
-      await _open(
-        PROJECTION_URL.RETURN, PROJECTION_TYPE.RETURN, ret.monitorId, fullscreen, alwaysOnTop
-      );
-    }
-  }
-
-  if (openOperator) {
-    // Operador NÃO usa always-on-top (o operador precisa interagir com a
-    // janela principal sem que o overlay roube foco).
-    const op = await _target(PROJECTION_TYPE.OPERATOR);
-    await _open(PROJECTION_URL.OPERATOR, PROJECTION_TYPE.OPERATOR, op.monitorId, false, false);
-  }
+  await openMediaWindow("projection", "music");
+  if ($userdata.get(KEYS.OPTIONS.OPEN_RETURN, false) as boolean) await openMediaWindow("return", "music");
+  await _openOperatorIfEnabled("music");
 }
 
 /**
@@ -131,61 +242,14 @@ export async function openProjectionWindows(): Promise<void> {
 export async function openFileProjectionWindows(): Promise<void> {
   if (await isBackgroundOpen()) return;
 
-  const fullscreen = ($userdata.get(KEYS.OPTIONS.FILE_PROJECTION.FULLSCREEN, true) as boolean);
-  const alwaysOnTop = ($userdata.get(KEYS.OPTIONS.FILE_PROJECTION.ALWAYS_ON_TOP, true) as boolean);
-
-  // Projeção de arquivo — cai na configuração de música quando não tem a sua.
-  let file = await _target(PROJECTION_TYPE.FILE);
-  if (!file.open) file = await _target(PROJECTION_TYPE.MUSIC);
-  if (file.open) {
-    await _open(PROJECTION_URL.FILE, PROJECTION_TYPE.FILE, file.monitorId, fullscreen, alwaysOnTop);
-  }
-
-  // Retorno de arquivo — respeita a opção específica de arquivo e herda a
-  // opção geral de retorno para instalações que já usavam esse fluxo.
-  // A opção geral de retorno é o fallback histórico para quem já usava
-  // "Abrir Tela de Retorno" antes da configuração específica do player.
-  const genericReturnOpen = await isWindowOpen(PROJECTION_TYPE.RETURN);
-  const openFileReturn =
+  await openMediaWindow("projection", "file");
+  // A opção geral de retorno é o fallback histórico de quem já usava "Abrir Tela de Retorno"
+  // antes da configuração específica do player.
+  const returnOn =
     ($userdata.get(KEYS.OPTIONS.FILE_PROJECTION.SHOW_RETURN, false) as boolean) ||
-    ($userdata.get(KEYS.OPTIONS.OPEN_RETURN, false) as boolean) ||
-    // Se o retorno musical já está na tela, troque-o pelo retorno de arquivo
-    // mesmo que a preferência tenha sido alterada depois de ele abrir. Isso
-    // evita deixar PRÓX/1/0 congelado ao iniciar um vídeo.
-    genericReturnOpen;
-  console.info("[ProjectionWindows] retorno de arquivo:", {
-    enabled: openFileReturn,
-    genericReturnOpen,
-  });
-  if (openFileReturn) {
-    let ret = await _target(PROJECTION_TYPE.FILE_RETURN);
-    if (!ret.open) ret = await _target(PROJECTION_TYPE.RETURN);
-    if (ret.open) {
-      // Não deixe a janela de retorno de músicas (PRÓX/1/0) ocupar o mesmo
-      // papel enquanto um arquivo está sendo projetado.
-      await _close(PROJECTION_TYPE.RETURN);
-      await _open(
-        PROJECTION_URL.FILE_RETURN, PROJECTION_TYPE.FILE_RETURN, ret.monitorId,
-        fullscreen, alwaysOnTop
-      );
-    } else if (genericReturnOpen) {
-      // A janela existente pode ter sido aberta antes de a preferência de
-      // monitor ser reconciliada. Fechá-la é melhor que exibir um retorno
-      // musical vazio sobre o vídeo; a próxima execução resolverá o monitor
-      // assim que ele voltar a ficar disponível.
-      await _close(PROJECTION_TYPE.RETURN);
-    }
-  }
-
-  // O operador também é útil para arquivos de vídeo: a janela troca a grade
-  // de slides pela prévia do vídeo enquanto ele está no ar. Respeitamos a
-  // mesma opção usada para músicas e deixamos `openWindow` fazer a operação
-  // idempotente quando a janela já estiver aberta.
-  const openOperator = $userdata.get(KEYS.OPTIONS.OPEN_OPERATOR, false) as boolean;
-  if (openOperator) {
-    const op = await _target(PROJECTION_TYPE.OPERATOR);
-    await _open(PROJECTION_URL.OPERATOR, PROJECTION_TYPE.OPERATOR, op.monitorId, false, false);
-  }
+    ($userdata.get(KEYS.OPTIONS.OPEN_RETURN, false) as boolean);
+  if (await _wantsMediaReturn(returnOn)) await openMediaWindow("return", "file");
+  await _openOperatorIfEnabled("file");
 }
 
 /**
@@ -225,35 +289,12 @@ export async function openVideoProjectionWindows(
 ): Promise<void> {
   if (await isBackgroundOpen()) return;
 
-  const fullscreen = ($userdata.get(KEYS.OPTIONS.ONLINE_VIDEO_PROJECTION.FULLSCREEN, true) as boolean);
-  const alwaysOnTop = ($userdata.get(KEYS.OPTIONS.ONLINE_VIDEO_PROJECTION.ALWAYS_ON_TOP, true) as boolean);
-
-  let video = await _target(PROJECTION_TYPE.ONLINE_VIDEO);
-  if (!video.open) video = await _target(PROJECTION_TYPE.MUSIC);
-  if (video.open) {
-    await _open(PROJECTION_URL.FILE, PROJECTION_TYPE.FILE, video.monitorId, fullscreen, alwaysOnTop);
-  }
-
-  const openVideoReturn = $userdata.get(KEYS.OPTIONS.ONLINE_VIDEO_PROJECTION.SHOW_RETURN, false) as boolean;
-  if (openVideoReturn) {
-    const ret = await _target(PROJECTION_TYPE.ONLINE_VIDEO_RETURN);
-    if (ret.open) {
-      await _open(
-        PROJECTION_URL.FILE_RETURN,
-        PROJECTION_TYPE.ONLINE_VIDEO_RETURN,
-        ret.monitorId,
-        fullscreen,
-        alwaysOnTop
-      );
-    }
-  }
-
-  // O vídeo baixado é um arquivo como os da liturgia, e o operador mostra a
-  // prévia dele. O player embutido do YouTube não tem o que mostrar ali.
-  if (withOperator && ($userdata.get(KEYS.OPTIONS.OPEN_OPERATOR, false) as boolean)) {
-    const op = await _target(PROJECTION_TYPE.OPERATOR);
-    await _open(PROJECTION_URL.OPERATOR, PROJECTION_TYPE.OPERATOR, op.monitorId, false, false);
-  }
+  await openMediaWindow("projection", "video");
+  const returnOn = $userdata.get(KEYS.OPTIONS.ONLINE_VIDEO_PROJECTION.SHOW_RETURN, false) as boolean;
+  if (await _wantsMediaReturn(returnOn)) await openMediaWindow("return", "video");
+  // O vídeo baixado é um arquivo como os da liturgia, e o operador mostra a prévia dele.
+  // O player embutido do YouTube não tem o que mostrar ali.
+  if (withOperator) await _openOperatorIfEnabled("video");
 }
 
 /**
@@ -349,4 +390,4 @@ export async function closeBibleWindows(): Promise<void> {
   ]);
 }
 
-export default { openProjectionWindows, closeProjectionWindows, closeBibleWindows, openBibleWindow, openFileProjectionWindows, openAnnouncementsWindow, closeAnnouncementsWindow, openVideoProjectionWindows, openBackgroundProjectionWindows, closeBackgroundProjectionWindows };
+export default { openProjectionWindows, closeProjectionWindows, closeBibleWindows, openBibleWindow, openFileProjectionWindows, openAnnouncementsWindow, closeAnnouncementsWindow, openVideoProjectionWindows, openMediaWindow, mediaWindowPlan, currentMediaKind, openBackgroundProjectionWindows, closeBackgroundProjectionWindows };

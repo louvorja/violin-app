@@ -59,7 +59,7 @@
       :aria-label="$t('shell.player.fullscreen')"
       @click="emit('fullscreen', true)"
     />
-    <LScreenBtn v-if="location !== 'fullscreen'" module="media" />
+    <LScreenBtn v-if="location !== 'fullscreen'" :media="mediaOnAir" />
 
     <!-- Atalhos para abrir as janelas auxiliares (replica fmMusica + fmMusicaRetorno + fmMusicaOperador do Delphi) -->
     <LjMenu v-if="location !== 'fullscreen'" :items="projectionItems" side="bottom" align="end">
@@ -111,10 +111,12 @@ import { useViewport } from "@/composables/useViewport";
 import LScreenBtn from "@/components/buttons/Screen.vue";
 import { LjButton, LjMenu, type LjMenuItem } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
-import { open as openProjection } from "@/helpers/Projection";
-import { PROJECTION_TYPE, PROJECTION_URL } from "@/constants/Projection";
-import $userdata from "@/helpers/UserData";
-import { KEYS } from "@/constants/UserDataKeys";
+import {
+  currentMediaKind,
+  openMediaWindow,
+  type MediaKind,
+  type WindowKind,
+} from "@/helpers/ProjectionWindows";
 import type { MenuMode, PlayerButton, Slide } from "@/composables/usePlayerState";
 
 const props = withDefaults(
@@ -205,21 +207,29 @@ const slideItems = computed<LjMenuItem[]>(() =>
   }))
 );
 
+/** O que o player tem no ar. As janelas de música não tocam arquivo nem vídeo, então cada mídia abre as suas. */
+const mediaOnAir = computed<MediaKind>(() => currentMediaKind());
+
+/** Mesma função da abertura automática ao dar play: a janela que abre é a mesma. */
+function openWindow(kind: WindowKind): void {
+  void openMediaWindow(kind, mediaOnAir.value, { explicit: true });
+}
+
 const projectionItems = computed<LjMenuItem[]>(() => [
   {
     label: t("shell.proj_open_projection"),
     icon: ICONS.PROJECTION.START,
-    action: () => openWindow(PROJECTION_TYPE.MUSIC),
+    action: () => openWindow("projection"),
   },
   {
     label: t("shell.proj_open_return"),
     icon: ICONS.PROJECTION.RETURN,
-    action: () => openWindow(PROJECTION_TYPE.RETURN),
+    action: () => openWindow("return"),
   },
   {
     label: t("shell.proj_open_operator"),
     icon: ICONS.UI.VIEW_GRID_OUTLINE,
-    action: () => openWindow(PROJECTION_TYPE.OPERATOR),
+    action: () => openWindow("operator"),
   },
 ]);
 
@@ -245,26 +255,6 @@ const compactItems = computed<LjMenuItem[]>(() => {
 
   return items;
 });
-
-const ROUTE_OF_FEATURE: Record<string, string> = {
-  [PROJECTION_TYPE.MUSIC]: PROJECTION_URL.MUSIC,
-  [PROJECTION_TYPE.RETURN]: PROJECTION_URL.RETURN,
-  [PROJECTION_TYPE.OPERATOR]: PROJECTION_URL.OPERATOR,
-};
-
-function openWindow(feature: string): void {
-  const isOperator = feature === PROJECTION_TYPE.OPERATOR;
-  openProjection({
-    feature,
-    route: ROUTE_OF_FEATURE[feature],
-    // O menu do player precisa respeitar as mesmas preferências usadas pelo
-    // fluxo automático de mídia. Antes ele sempre forçava fullscreen para
-    // música/retorno, então essas janelas nunca viravam uma janela normal com
-    // botão na barra de tarefas do Windows.
-    fullscreen: isOperator ? false : $userdata.get(KEYS.OPTIONS.FULLSCREEN, true) === true,
-    alwaysOnTop: isOperator ? false : $userdata.get(KEYS.OPTIONS.ALWAYS_ON_TOP, true) === true,
-  });
-}
 </script>
 
 <style scoped>

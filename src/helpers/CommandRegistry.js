@@ -18,8 +18,7 @@
 import Fuse from "fuse.js";
 import Modules from "@/helpers/Modules";
 import Media from "@/composables/useMedia";
-import { open as openProjection } from "@/helpers/Projection";
-import { PROJECTION_TYPE, PROJECTION_URL } from "@/constants/Projection";
+import { currentMediaKind, openMediaWindow } from "@/helpers/ProjectionWindows";
 import { ICONS } from "@/config/Icons";
 import { hymnalTracks } from "@/helpers/Hymnal";
 import { KEYS } from "@/constants/UserDataKeys";
@@ -186,11 +185,7 @@ function staticCommands(t) {
       icon: ICONS.PROJECTION.PRESENTATION,
       category: "action",
       run: () => {
-        openProjection({
-          route: PROJECTION_URL.MUSIC,
-          feature: PROJECTION_TYPE.MUSIC,
-          fullscreen: true,
-        });
+        void openMediaWindow("projection", currentMediaKind(), { explicit: true });
       },
     },
     {
@@ -200,11 +195,7 @@ function staticCommands(t) {
       icon: ICONS.UI.VIEW_GRID,
       category: "action",
       run: () => {
-        openProjection({
-          route: PROJECTION_URL.OPERATOR,
-          feature: PROJECTION_TYPE.OPERATOR,
-          fullscreen: false,
-        });
+        void openMediaWindow("operator", currentMediaKind(), { explicit: true });
       },
     },
   ];

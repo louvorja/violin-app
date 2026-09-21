@@ -49,6 +49,7 @@ import {
   needsScreenAccess,
   requestScreenAccess,
 } from "@/helpers/Projection";
+import { mediaWindowPlan, openMediaWindow } from "@/helpers/ProjectionWindows";
 import { PROJECTION_TYPE } from "@/constants/Projection";
 
 const props = defineProps({
@@ -58,6 +59,11 @@ const props = defineProps({
   route: { type: String, default: null },
   /** Modo retrocompat — abre Popup do módulo se feature/route não forem fornecidos. */
   module: { type: String, default: null },
+  /**
+   * Player: a mídia no ar ("music" | "file" | "video"). A janela, o monitor e a abertura vêm da
+   * tabela de ProjectionWindows — a mesma da abertura automática e do menu de janelas do player.
+   */
+  media: { type: String, default: null },
   size: { type: String, default: "small" },
   variant: { type: String, default: "text" },
   fullscreen: { type: Boolean, default: true },
@@ -68,7 +74,6 @@ const { t } = useI18n();
 
 const ROUTE_BY_MODULE = {
   bible: "/projection/bible",
-  media: "/projection",
   music: "/projection",
   // Genéricos — usam ModuleProjection.vue lendo ?module=<id>
   message_board: "/projection/module?module=message_board",
@@ -82,18 +87,28 @@ const ROUTE_BY_MODULE = {
 
 const is_mobile = computed(() => AppData.get("is_mobile"));
 
-// O player usa module="media", mas a janela que o Media abre em /projection é a
-// feature canônica "musicas". Sem o alias, o botão abriria uma segunda janela na
-// mesma rota e nunca refletiria a projeção já aberta.
 const FEATURE_BY_MODULE = {
-  media: PROJECTION_TYPE.MUSIC,
   music: PROJECTION_TYPE.MUSIC,
 };
 
+// No player, quem diz que janela é essa é a tabela da mídia no ar: um "/projection" fixo abria a
+// janela de música por cima do vídeo — em tela cheia e sem saber mostrar vídeo, ficava preta.
+const plan = computed(() => (props.media ? mediaWindowPlan("projection", props.media) : null));
+
+// A chave da janela (aberta ou não) e a do monitor coincidem, exceto no vídeo on-line: a janela é
+// a do arquivo, mas o monitor tem opção própria.
 const featureName = computed(
-  () => props.feature || FEATURE_BY_MODULE[props.module] || props.module || "default"
+  () =>
+    plan.value?.feature ||
+    props.feature ||
+    FEATURE_BY_MODULE[props.module] ||
+    props.module ||
+    "default"
 );
-const routePath = computed(() => props.route || ROUTE_BY_MODULE[props.module] || null);
+const monitorFeature = computed(() => plan.value?.monitors[0] || featureName.value);
+const routePath = computed(
+  () => plan.value?.route || props.route || ROUTE_BY_MODULE[props.module] || null
+);
 const isProjectionMode = computed(() => !!routePath.value);
 
 // Estado do Popup tradicional (legacy — para módulos sem route)
@@ -111,7 +126,7 @@ const effective_id = ref(null);
 // Explicit: undefined = "usar padrão herdado"; null = "mesma janela"; number = monitor escolhido
 const explicit_id = ref(undefined);
 
-const fallback_feature = computed(() => getFallbackFeature(featureName.value));
+const fallback_feature = computed(() => getFallbackFeature(monitorFeature.value));
 const fallback_label = computed(() => {
   const f = fallback_feature.value;
   if (!f) return "";
@@ -245,12 +260,27 @@ async function refreshDisplays() {
   displays.value = await listDisplays();
   needs_access.value = await needsScreenAccess();
   // explicit: só leitura crua da feature (sem fallback)
-  const explicit = await getPreferredMonitor(featureName.value, { explicit: true });
-  const usingFallback = await isUsingFallback(featureName.value);
+  const explicit = await getPreferredMonitor(monitorFeature.value, { explicit: true });
+  const usingFallback = await isUsingFallback(monitorFeature.value);
   explicit_id.value = usingFallback ? undefined : explicit;
   // effective: com fallback aplicado — esse é quem abre a janela
-  effective_id.value = await getPreferredMonitor(featureName.value);
+  effective_id.value = await getPreferredMonitor(monitorFeature.value);
   projection_open.value = await isProjectionOpen(featureName.value);
+}
+
+/** Abre a janela no monitor dado. No player é a mesma função da abertura automática e do menu. */
+async function openWindow(monitorId) {
+  if (props.media) {
+    await openMediaWindow("projection", props.media, { explicit: true, monitorId });
+    return;
+  }
+  await openProjection({
+    feature: featureName.value,
+    route: routePath.value,
+    monitorId,
+    fullscreen: props.fullscreen,
+    alwaysOnTop: props.alwaysOnTop,
+  });
 }
 
 function legacyPopup() {
@@ -267,13 +297,7 @@ async function primaryClick() {
   if (projection_open.value) {
     await closeProjection(featureName.value);
   } else {
-    await openProjection({
-      feature: featureName.value,
-      route: routePath.value,
-      monitorId: effective_id.value,
-      fullscreen: props.fullscreen,
-      alwaysOnTop: props.alwaysOnTop,
-    });
+    await openWindow(effective_id.value);
   }
   await refreshDisplays();
 }
@@ -289,7 +313,7 @@ async function choose(displayId) {
   // setPreferredMonitor com null limpa a preferência. Para "Padrão herdado"
   // (undefined), também passamos null para limpar o explícito.
   const toSave = displayId === undefined ? null : displayId;
-  await setPreferredMonitor(featureName.value, toSave);
+  await setPreferredMonitor(monitorFeature.value, toSave);
   await refreshDisplays();
 
   if (effective_id.value == null) {
@@ -298,13 +322,7 @@ async function choose(displayId) {
   } else {
     // Re-abre no monitor efetivo (escolhido ou herdado)
     if (projection_open.value) await closeProjection(featureName.value);
-    await openProjection({
-      feature: featureName.value,
-      route: routePath.value,
-      monitorId: effective_id.value,
-      fullscreen: props.fullscreen,
-      alwaysOnTop: props.alwaysOnTop,
-    });
+    await openWindow(effective_id.value);
   }
   await refreshDisplays();
 }
@@ -349,7 +367,7 @@ onUnmounted(() => {
   }
 });
 
-watch([() => props.module, () => props.feature, () => props.route], () => {
+watch([() => props.module, () => props.feature, () => props.route, () => props.media], () => {
   refreshDisplays();
 });
 </script>
