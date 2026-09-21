@@ -112,9 +112,12 @@
               type="button"
               class="player-btn player-btn--primary"
               :aria-label="isPaused ? $t('shell.player.play') : $t('shell.player.pause')"
+              :disabled="isLoading"
               @click="togglePlay"
             >
+              <LjSpinner v-if="isLoading" :size="24" />
               <LjIcon
+                v-else
                 :icon="isPaused ? ICONS.PLAYER.PLAYER : ICONS.PLAYER.PAUSE_PLAIN"
                 :size="24"
               />
@@ -228,7 +231,7 @@ import Database from "@/helpers/Database";
 import DateTime from "@/helpers/DateTime";
 import BackgroundSoundPlayer from "@/components/BackgroundSoundPlayer.vue";
 import FileProjectionBar from "@/components/FileProjectionBar.vue";
-import { LjChip, LjDivider, LjIcon, LjTooltip } from "@/components/ui";
+import { LjChip, LjDivider, LjIcon, LjSpinner, LjTooltip } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { useFileProjection } from "@/composables/useFileProjection";
 import { usePlaylistPlayback } from "@/modules/musics/composables/usePlaylistPlayback";
@@ -298,6 +301,8 @@ const hasSlides = computed(() => {
 const isYouTube = computed(() => !!media.value?.config?.is_youtube);
 
 const isPaused = computed(() => media.value?.config?.is_paused !== false);
+// Carregando, o player ainda consta como pausado: sem isto o ▶ dá a impressão de que nada aconteceu.
+const isLoading = computed(() => !!media.value?.loading);
 const isMute = computed(() => Number(media.value?.config?.volume) <= 0);
 const progress = computed(() => Number(media.value?.config?.progress) || 0);
 const bufferPct = computed(() => Number(media.value?.config?.buffered) || 0);

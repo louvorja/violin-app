@@ -520,6 +520,95 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
   });
 });
 
+describe("aviso de que o vídeo está sendo aberto (o clique não pode parecer morto)", () => {
+  let embedded: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    embedded = vi.spyOn(media, "openEmbeddedYouTube").mockResolvedValue(undefined);
+    controlledDownloads();
+  });
+  afterEach(() => embedded.mockRestore());
+
+  it("existe desde o clique, enquanto o yt-dlp ainda resolve os links, e some quando o vídeo toca", async () => {
+    expect(media.opening()).toBeNull();
+    const links = deferred<ReturnType<typeof streams>>();
+    h.stream.mockReturnValue(links.promise);
+
+    const opening = media.openYouTube(embed(ID), "Hino 202");
+    expect(media.opening()).toEqual({ id: ID, title: "Hino 202" });
+    await sleep(20);
+    expect(media.opening()).toEqual({ id: ID, title: "Hino 202" });
+
+    links.resolve(streams(ID));
+    expect(await opening).toBe(true);
+    expect(media.opening()).toBeNull();
+  });
+
+  it("um vídeo já baixado também mostra o aviso até tocar", async () => {
+    h.downloaded = true;
+    const calls = controlledDownloads();
+    const opening = media.openYouTube(embed(ID), "Hino 202");
+    expect(media.opening()).toEqual({ id: ID, title: "Hino 202" });
+    await sleep(20);
+    calls[0].done.resolve(ok(ID));
+    expect(await opening).toBe(true);
+    expect(media.opening()).toBeNull();
+  });
+
+  it("some quando o vídeo não pode ser aberto (indisponível, com o aviso de erro)", async () => {
+    h.stream.mockResolvedValue(streamFail("unavailable"));
+    expect(await media.openYouTube(embed(ID), "Hino 202")).toBe(false);
+    expect(media.opening()).toBeNull();
+  });
+
+  it("some quando cai no player do YouTube", async () => {
+    h.stream.mockResolvedValue(streamFail("network"));
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(await media.openYouTube(embed(ID), "Hino 202")).toBe(true);
+    expect(embedded).toHaveBeenCalledOnce();
+    expect(media.opening()).toBeNull();
+  });
+
+  it("some também quando algo dá errado no meio do caminho", async () => {
+    h.stream.mockRejectedValue(new Error("falha inesperada"));
+    await expect(media.openYouTube(embed(ID), "Hino 202")).rejects.toThrow("falha inesperada");
+    expect(media.opening()).toBeNull();
+  });
+
+  it("cancelar pelo aviso desiste do pedido: o aviso some e o vídeo não abre depois", async () => {
+    const links = deferred<ReturnType<typeof streams>>();
+    h.stream.mockReturnValue(links.promise);
+    const opening = media.openYouTube(embed(ID), "Hino 202");
+    await sleep(20);
+
+    media.cancelOpening();
+    expect(media.opening()).toBeNull();
+    expect(h.cancel).toHaveBeenCalledWith(ID);
+
+    links.resolve(streams(ID));
+    expect(await opening).toBe(false);
+    expect(openAudio).not.toHaveBeenCalled();
+  });
+
+  it("pedir outro vídeo troca o aviso, e o pedido antigo, ao terminar, não apaga o do novo", async () => {
+    const first = deferred<ReturnType<typeof streams>>();
+    const second = deferred<ReturnType<typeof streams>>();
+    h.stream.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+
+    const a = media.openYouTube(embed(ID), "Primeiro");
+    await sleep(20);
+    const b = media.openYouTube(embed(OTHER), "Segundo");
+    expect(media.opening()).toEqual({ id: OTHER, title: "Segundo" });
+
+    first.resolve(streams(ID));
+    expect(await a).toBe(false);
+    expect(media.opening()).toEqual({ id: OTHER, title: "Segundo" });
+
+    second.resolve(streams(OTHER));
+    expect(await b).toBe(true);
+    expect(media.opening()).toBeNull();
+  });
+});
+
 describe("com o download automático desligado", () => {
   it("um vídeo já baixado toca do arquivo mesmo assim", async () => {
     vi.resetModules();

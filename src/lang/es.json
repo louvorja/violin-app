@@ -1148,6 +1148,8 @@
       "minimize": "Minimizar"
     },
     "playing": "Reproduciendo",
+    "opening": "Abriendo",
+    "opening_cancel": "Cancelar apertura",
     "playing_youtube": "Reproduciendo de YouTube",
     "player": {
       "first": "Primera diapositiva",

@@ -1,4 +1,4 @@
-import { watch } from "vue";
+import { shallowRef, watch } from "vue";
 import $dev from "@/helpers/Dev";
 import $appdata from "@/helpers/AppData";
 import $userdata from "@/helpers/UserData";
@@ -129,6 +129,9 @@ let _ytDownloading: string | null = null;
 let _ytOwnsDownload = false;
 // Vídeo aberto por links diretos, esperando o som ficar pronto para tocar.
 let _ytStarting: string | null = null;
+// O vídeo do YouTube que o operador acabou de pedir, do clique até o som estar pronto (ou ele desistir). Enquanto o
+// yt-dlp resolve os links (~5 s) nada mais aparece na tela: sem isto o clique parece não ter feito nada.
+const _opening = shallowRef<{ id: string | null; title: string } | null>(null);
 
 /**
  * O operador desistiu do vídeo que ainda baixava — fechou a mídia ou abriu outra
@@ -1722,22 +1725,39 @@ const _self = {
    */
   async openYouTube(url: string, title: string): Promise<boolean> {
     const id = OnlineVideo.videoIdFromUrl(url);
-    // Um vídeo que o operador já baixou toca do arquivo mesmo com o download desligado: é de
-    // graça e sem anúncio.
-    const downloaded = !!id && (await OnlineVideo.isDownloaded(id));
-    if (id && downloaded) {
-      const outcome = await _prepareDownloadedYouTube(id, title);
-      if (outcome !== "embed") return outcome === "playing";
-    } else if (id && OnlineVideo.downloadEnabled()) {
-      // Sem esperar o download: toca das trilhas que o main baixa uma vez só, e o download termina
-      // ao fundo. Se não der para tocar assim, começa pelo player do YouTube (que pode ter
-      // anúncio) e o download segue mesmo assim, para as próximas vezes.
-      const outcome = await _prepareStreamedYouTube(id, title);
-      if (outcome !== "embed") return outcome === "playing";
-      void useOnlineVideoDownloads().download(id, title, { keep: false, quiet: true });
+    const opening = { id, title };
+    _opening.value = opening;
+    try {
+      // Um vídeo que o operador já baixou toca do arquivo mesmo com o download desligado: é de
+      // graça e sem anúncio.
+      const downloaded = !!id && (await OnlineVideo.isDownloaded(id));
+      if (id && downloaded) {
+        const outcome = await _prepareDownloadedYouTube(id, title);
+        if (outcome !== "embed") return outcome === "playing";
+      } else if (id && OnlineVideo.downloadEnabled()) {
+        // Sem esperar o download: toca das trilhas que o main baixa uma vez só, e o download termina
+        // ao fundo. Se não der para tocar assim, começa pelo player do YouTube (que pode ter
+        // anúncio) e o download segue mesmo assim, para as próximas vezes.
+        const outcome = await _prepareStreamedYouTube(id, title);
+        if (outcome !== "embed") return outcome === "playing";
+        void useOnlineVideoDownloads().download(id, title, { keep: false, quiet: true });
+      }
+      await this.openEmbeddedYouTube(url, title);
+      return true;
+    } finally {
+      if (_opening.value === opening) _opening.value = null;
     }
-    await this.openEmbeddedYouTube(url, title);
-    return true;
+  },
+
+  /** O vídeo do YouTube que está sendo aberto, ou null. Reativo: a tela mostra "Abrindo…" enquanto for não nulo. */
+  opening(): { id: string | null; title: string } | null {
+    return _opening.value;
+  },
+
+  /** O operador desistiu antes de o vídeo tocar: some o aviso e o pedido pendente é cancelado. */
+  cancelOpening(): void {
+    _opening.value = null;
+    this.close(true);
   },
 
   async openEmbeddedYouTube(url: string, title: string): Promise<void> {

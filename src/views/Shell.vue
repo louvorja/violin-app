@@ -40,6 +40,7 @@
     </main>
 
     <AppFooter />
+    <OpeningBar />
 
     <CommandPalette v-if="cmdPaletteOpen" v-model="cmdPaletteOpen" />
     <MusicSpotlight v-if="musicSearchOpen" v-model="musicSearchOpen" />
@@ -69,6 +70,7 @@ import { useI18n } from "vue-i18n";
 import { LjButton } from "@/components/ui";
 import AppSystemBar from "@/layout/SystemBar.vue";
 import AppFooter from "@/layout/Footer.vue";
+import OpeningBar from "@/components/OpeningBar.vue";
 import AppModules from "@/layout/Modules.vue";
 import AppAlert from "@/layout/Alert.vue";
 import AppSnackbar from "@/layout/SnackbarBar.vue";
