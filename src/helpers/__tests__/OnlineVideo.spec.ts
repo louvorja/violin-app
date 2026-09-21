@@ -159,9 +159,11 @@ describe("mensagens ao operador existem nos dois idiomas", () => {
     if (!SAME_IN_BOTH.has(key)) expect(resolve(es, key)).not.toBe(resolve(pt, key));
   });
 
-  it("o aviso de reserva diz que o player do YouTube pode ter anúncios", () => {
-    expect(resolve(pt, messageKeyForFailure("network"))).toMatch(/anúncios/);
-    expect(resolve(es, messageKeyForFailure("network"))).toMatch(/anuncios/);
+  it("o aviso de reserva diz que o app usa o player do YouTube, sem falar de anúncios", () => {
+    expect(resolve(pt, messageKeyForFailure("network"))).toMatch(/player do YouTube/);
+    expect(resolve(es, messageKeyForFailure("network"))).toMatch(/reproductor de YouTube/);
+    expect(resolve(pt, messageKeyForFailure("network"))).not.toMatch(/anúncios/);
+    expect(resolve(es, messageKeyForFailure("network"))).not.toMatch(/anuncios/);
   });
 
   it("baixar de antemão não promete o player do YouTube, que não existe nesse caminho", () => {
@@ -171,11 +173,13 @@ describe("mensagens ao operador existem nos dois idiomas", () => {
     expect(messageKeyForDownloadFailure("tool")).toBe("online_video.errors.download");
   });
 
-  it("o aviso do 'tocar já' não fala em baixar (nada foi baixado) e avisa do player com anúncios", () => {
+  it("o aviso do 'tocar já' não fala em baixar (nada foi baixado) nem em anúncios, e diz que usa o player do YouTube", () => {
     expect(resolve(pt, messageKeyForStreamFailure("network"))).not.toMatch(/baixar/i);
     expect(resolve(es, messageKeyForStreamFailure("network"))).not.toMatch(/descargar/i);
-    expect(resolve(pt, messageKeyForStreamFailure("network"))).toMatch(/anúncios/);
-    expect(resolve(es, messageKeyForStreamFailure("network"))).toMatch(/anuncios/);
+    expect(resolve(pt, messageKeyForStreamFailure("network"))).toMatch(/player do YouTube/);
+    expect(resolve(es, messageKeyForStreamFailure("network"))).toMatch(/reproductor de YouTube/);
+    expect(resolve(pt, messageKeyForStreamFailure("network"))).not.toMatch(/anúncios/);
+    expect(resolve(es, messageKeyForStreamFailure("network"))).not.toMatch(/anuncios/);
     expect(messageKeyForStreamFailure("private")).toBe("online_video.errors.private");
     expect(messageKeyForStreamFailure("tool")).toBe("online_video.errors.stream");
   });

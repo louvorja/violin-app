@@ -335,10 +335,17 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
   });
 
   describe("quando os links diretos não servem", () => {
-    it("rede ou YouTube fora do ar: cai no player do YouTube, avisa e baixa ao fundo", async () => {
+    it("rede ou YouTube fora do ar: cai no player do YouTube, avisa, baixa ao fundo e registra o motivo no console", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       h.stream.mockResolvedValue(streamFail("network"));
       const calls = controlledDownloads();
       expect(await media.openYouTube(embed(ID), "Louvor")).toBe(true);
+      expect(warn).toHaveBeenCalledWith("[OnlineVideo] abrir direto falhou:", {
+        id: ID,
+        kind: "network",
+        message: "network",
+      });
+      warn.mockRestore();
       expect(embedded).toHaveBeenCalledWith(embed(ID), "Louvor");
       expect(h.warning).toHaveBeenCalledTimes(1);
       expect(calls).toHaveLength(1);
@@ -388,12 +395,18 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
       closed.mockRestore();
     });
 
-    it("o elemento de som acusa erro: cai no player do YouTube sem esperar o prazo", async () => {
+    it("o elemento de som acusa erro: cai no player do YouTube sem esperar o prazo e registra o código do erro", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       h.ready = 0;
       h.mediaError = { code: 4 };
       const closed = vi.spyOn(media, "close").mockImplementation(() => {});
       controlledDownloads();
       expect(await media.openYouTube(embed(ID), "Louvor")).toBe(true);
+      expect(warn).toHaveBeenCalledWith(
+        "[OnlineVideo] o vídeo aberto direto não chegou a tocar:",
+        expect.objectContaining({ id: ID, ready_state: 0, error_code: 4 })
+      );
+      warn.mockRestore();
       expect(embedded).toHaveBeenCalledTimes(1);
       expect(h.ensure).toHaveBeenCalledTimes(1);
       closed.mockRestore();

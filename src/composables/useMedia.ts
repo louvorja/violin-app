@@ -331,6 +331,7 @@ async function _runStreamedYouTube(
 
   if (!res.ok) {
     const kind = res.error.kind;
+    console.warn("[OnlineVideo] abrir direto falhou:", { id, kind, message: res.error.message });
     // Já há um download comum em curso para este vídeo (um pré-download, por exemplo): não
     // dá para tocar dele antes de terminar, então o operador o acompanha, com barra.
     if (kind === "busy") return _runDownloadedYouTube(id, title, seq);
@@ -360,7 +361,15 @@ async function _runStreamedYouTube(
   if (_ytStarting === id) _ytStarting = null;
   if (started === "stopped") return "stopped";
   if (started === "failed") {
-    Telemetry.track("online_video_stream_start_failed", { video_id: id });
+    const el = _audio.getElement();
+    const detail = {
+      ready_state: el.readyState,
+      network_state: el.networkState,
+      error_code: el.error?.code ?? null,
+      error_message: el.error?.message ?? null,
+    };
+    console.warn("[OnlineVideo] o vídeo aberto direto não chegou a tocar:", { id, ...detail });
+    Telemetry.track("online_video_stream_start_failed", { video_id: id, ...detail });
     _self.close(true);
     $snackbar.warning(say(OnlineVideo.messageKeyForStreamFailure("unknown")), {
       key: `ov-fallback-${id}`,

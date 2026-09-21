@@ -1448,9 +1448,9 @@
       "private": "Este video es privado y no se puede proyectar.",
       "geo": "Este video no está disponible en tu región.",
       "unavailable": "Este video fue eliminado o no está disponible.",
-      "fallback": "No se pudo descargar el video. Se usa el reproductor de YouTube, que puede mostrar anuncios.",
+      "fallback": "No se pudo descargar el video. Se usa el reproductor de YouTube.",
       "download": "No se pudo descargar el video ahora. Inténtalo de nuevo más tarde.",
-      "stream": "No se pudo abrir el video directamente. Se usa el reproductor de YouTube, que puede mostrar anuncios."
+      "stream": "No se pudo abrir el video directamente. Se usa el reproductor de YouTube."
     },
     "download": {
       "start": "Descargar para usar sin internet",

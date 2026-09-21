@@ -352,7 +352,10 @@ function handle() {
       if (host === "onlinestream") {
         const m = /^\/([A-Za-z0-9_-]{11})\/(video|audio)$/.exec(pathname);
         const served = m ? onlineVideo.serveStream(m[1], m[2], request) : null;
-        if (!served) return new Response("Not found", { status: 404 });
+        if (!served) {
+          console.warn("[protocol] onlinestream sem sessão para:", pathname);
+          return new Response("Not found", { status: 404 });
+        }
         return new Response(served.body, { status: served.status, headers: served.headers });
       }
 

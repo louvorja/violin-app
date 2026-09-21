@@ -29,6 +29,14 @@ function getManager() {
   return _manager;
 }
 
+/** Sem isto a falha só vira um aviso na tela, e não se sabe por quê (no Windows, sobretudo). */
+function logFailure(operation, id, res) {
+  if (res && res.ok === false && res.error?.kind !== "cancelled") {
+    console.warn(`[onlineVideo] ${operation} falhou (${process.platform}-${process.arch}):`, id, res.error?.kind, res.error?.message);
+  }
+  return res;
+}
+
 /**
  * Resposta a um pedido `Range` do vídeo que ainda está baixando (protocolo
  * louvorja://onlinestream/), ou null se não há sessão dele.
@@ -58,21 +66,21 @@ function fileFor(id) {
 function registerIpc(ipcMain) {
   ipcMain.handle("onlineVideo:status", () => getManager().status());
 
-  ipcMain.handle("onlineVideo:ensure", (event, id, opts) => {
+  ipcMain.handle("onlineVideo:ensure", async (event, id, opts) => {
     const o = opts && typeof opts === "object" ? opts : {};
     const options = {
       maxHeight: o.maxHeight,
       priority: o.priority === "background" ? "background" : "foreground",
       keep: o.keep === true,
     };
-    return getManager().ensure(id, options, (progress) => {
+    return logFailure("ensure", id, await getManager().ensure(id, options, (progress) => {
       safeSend(event.sender, "onlineVideo:progress", progress);
-    });
+    }));
   });
 
-  ipcMain.handle("onlineVideo:stream", (_event, id, opts) => {
+  ipcMain.handle("onlineVideo:stream", async (_event, id, opts) => {
     const o = opts && typeof opts === "object" ? opts : {};
-    return getManager().stream(id, { maxHeight: o.maxHeight, keep: o.keep === true });
+    return logFailure("stream", id, await getManager().stream(id, { maxHeight: o.maxHeight, keep: o.keep === true }));
   });
 
   ipcMain.handle("onlineVideo:cancel", (_event, id) => getManager().cancel(id));

@@ -288,13 +288,19 @@ export async function stream(id: string): Promise<OnlineVideoStreamResult> {
       Telemetry.track("online_video_stream_failed", {
         video_id: id,
         kind: res.error.kind,
+        message: String(res.error.message ?? "").slice(0, 200),
         elapsed_ms: Date.now() - startedAt,
       });
     }
     return res;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    Telemetry.track("online_video_stream_failed", { video_id: id, kind: "unknown", ipc: true });
+    Telemetry.track("online_video_stream_failed", {
+      video_id: id,
+      kind: "unknown",
+      ipc: true,
+      message: message.slice(0, 200),
+    });
     return { ok: false, error: { kind: "unknown", message } };
   }
 }
