@@ -17,6 +17,7 @@ const path = require("path");
 const { Readable } = require("stream");
 const { OnlineVideoError, streamUrl } = require("./runner.js");
 const { RangeSet } = require("./rangeSet.js");
+const { trustedCertificates } = require("./certs.js");
 
 /** O que se busca de cada vez: ~0,2 s a 10 MB/s, e o começo do vídeo chega logo. */
 const CHUNK_BYTES = 2 * 1024 * 1024;
@@ -31,7 +32,13 @@ const USER_AGENT =
 const MIME = { video: "video/mp4", audio: "audio/mp4" };
 
 /** Reaproveita a conexão TLS entre um pedaço e o seguinte. */
-const agent = new https.Agent({ keepAlive: true, maxSockets: 6 });
+function createAgent(certificates = trustedCertificates) {
+  return new https.Agent({ keepAlive: true, maxSockets: 6, ca: certificates() });
+}
+
+// Criado no primeiro pedaço: ler o repositório de certificados do sistema não deve atrasar o boot.
+let agent = null;
+const getAgent = () => (agent ||= createAgent());
 
 /**
  * Busca [start, end] de uma URL do googlevideo. Devolve os bytes e o tamanho total do
@@ -48,7 +55,11 @@ function httpsRange(url, start, end, { signal, timeoutMs = CHUNK_TIMEOUT_MS } = 
     const expected = end - start + 1;
     const req = https.request(
       url,
-      { method: "GET", agent, headers: { Range: `bytes=${start}-${end}`, "User-Agent": USER_AGENT, Accept: "*/*" } },
+      {
+        method: "GET",
+        agent: getAgent(),
+        headers: { Range: `bytes=${start}-${end}`, "User-Agent": USER_AGENT, Accept: "*/*" },
+      },
       (res) => {
         const status = res.statusCode || 0;
         if (status !== 206 && !(status === 200 && start === 0)) {
@@ -228,7 +239,12 @@ class Track {
         this.notify();
       }
     } catch (error) {
-      if (!this.closed) this.error = error;
+      if (!this.closed) {
+        this.error = error;
+        if (error?.kind !== "cancelled") {
+          console.warn(`[onlineVideo] a trilha parou de baixar (${process.platform}-${process.arch}):`, error?.kind, error?.message);
+        }
+      }
       this.notify();
       throw error;
     }
@@ -437,6 +453,7 @@ async function openSession(opts) {
 module.exports = {
   CHUNK_BYTES,
   SLICE_BYTES,
+  createAgent,
   httpsRange,
   openSession,
 };

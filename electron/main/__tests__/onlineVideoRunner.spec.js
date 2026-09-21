@@ -798,3 +798,135 @@ describe.skipIf(process.platform === "win32")("killTree (processo de verdade)", 
     expect(() => runner.killTree({})).not.toThrow();
   });
 });
+
+describe("certificado que o yt-dlp não reconhece (proxy ou antivírus que inspeciona o HTTPS)", () => {
+  // Linha real de um Windows corporativo: o yt-dlp só confia no `certifi`, que não tem a raiz do proxy.
+  const CERT_LINE =
+    "ERROR: [youtube] kQWEGODrfKc: Unable to download API page: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1007) (caused by CertificateVerifyError('[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1007)')); please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U\n";
+  const usesSystemCerts = (args) => args.join(" ").includes("--compat-options no-certifi");
+  const streamsJson = () => JSON.stringify({ duration: 235, requested_formats: [videoFormat(), audioFormat()] });
+
+  /** Dois processos falsos entregues em sequência: a 1ª tentativa e a repetição. */
+  function twoAttempts() {
+    const first = fakeChild();
+    const second = fakeChild();
+    const spawnImpl = vi.fn().mockReturnValueOnce(first).mockReturnValueOnce(second);
+    const secondSpawned = () => vi.waitFor(() => expect(spawnImpl).toHaveBeenCalledTimes(2));
+    return { first, second, spawnImpl, secondSpawned };
+  }
+
+  it("só pede o repositório de certificados do sistema quando systemCerts é informado", () => {
+    const download = { id: ID, outDir: "/tmp/out", ffmpegPath: "/bin/ffmpeg" };
+    expect(usesSystemCerts(runner.buildResolveArgs({ id: ID }))).toBe(false);
+    expect(usesSystemCerts(runner.buildResolveArgs({ id: ID, systemCerts: true }))).toBe(true);
+    expect(usesSystemCerts(runner.buildArgs(download))).toBe(false);
+    expect(usesSystemCerts(runner.buildArgs({ ...download, systemCerts: true }))).toBe(true);
+    expect(runner.buildResolveArgs({ id: ID, systemCerts: true }).at(-1)).toBe(watchUrl(ID));
+    expect(runner.buildArgs({ ...download, systemCerts: true }).at(-1)).toBe(watchUrl(ID));
+  });
+
+  it("a linha do Windows é classificada como falha de rede", () => {
+    expect(runner.classifyError(CERT_LINE)).toBe("network");
+  });
+
+  it("resolveStreams repete com o repositório do sistema e devolve os links", async () => {
+    const { first, second, spawnImpl, secondSpawned } = twoAttempts();
+    const certTrust = { system: false };
+
+    const promise = runner.resolveStreams({ tools, id: ID, spawnImpl, certTrust });
+    first.stderr.write(CERT_LINE);
+    first.emit("close", 1);
+    await secondSpawned();
+    second.stdout.write(streamsJson());
+    second.emit("close", 0);
+
+    const out = await promise;
+    expect(out.video.url).toContain("video%2Fmp4");
+    expect(usesSystemCerts(spawnImpl.mock.calls[0][1])).toBe(false);
+    expect(usesSystemCerts(spawnImpl.mock.calls[1][1])).toBe(true);
+    expect(certTrust.system).toBe(true);
+  });
+
+  it("reconhece o erro de certificado mesmo quando não é a última linha do stderr", async () => {
+    const { first, second, spawnImpl, secondSpawned } = twoAttempts();
+    const promise = runner.resolveStreams({ tools, id: ID, spawnImpl, certTrust: { system: false } });
+    first.stderr.write(`${CERT_LINE}WARNING: alguma outra coisa depois\n`);
+    first.emit("close", 1);
+    await secondSpawned();
+    second.stdout.write(streamsJson());
+    second.emit("close", 0);
+    await expect(promise).resolves.toMatchObject({ muxed: false });
+  });
+
+  it("depois que o repositório do sistema resolveu, as chamadas seguintes já começam com ele", async () => {
+    const child = fakeChild();
+    const spawnImpl = vi.fn(() => child);
+    const promise = runner.resolveStreams({ tools, id: ID, spawnImpl, certTrust: { system: true } });
+    child.stdout.write(streamsJson());
+    child.emit("close", 0);
+    await promise;
+    expect(spawnImpl).toHaveBeenCalledTimes(1);
+    expect(usesSystemCerts(spawnImpl.mock.calls[0][1])).toBe(true);
+  });
+
+  it("se o repositório do sistema também falha, para na segunda tentativa e não passa a preferi-lo", async () => {
+    const { first, second, spawnImpl, secondSpawned } = twoAttempts();
+    const certTrust = { system: false };
+    const promise = runner.resolveStreams({ tools, id: ID, spawnImpl, certTrust });
+    first.stderr.write(CERT_LINE);
+    first.emit("close", 1);
+    await secondSpawned();
+    second.stderr.write(CERT_LINE);
+    second.emit("close", 1);
+
+    await expect(promise).rejects.toMatchObject({ name: "OnlineVideoError", kind: "network" });
+    expect(spawnImpl).toHaveBeenCalledTimes(2);
+    expect(certTrust.system).toBe(false);
+  });
+
+  it("outras falhas de rede não repetem a tentativa", async () => {
+    const child = fakeChild();
+    const spawnImpl = vi.fn(() => child);
+    const promise = runner.resolveStreams({ tools, id: ID, spawnImpl, certTrust: { system: false } });
+    child.stderr.write("ERROR: [youtube] X: Unable to download webpage: <urlopen error timed out>\n");
+    child.emit("close", 1);
+    await expect(promise).rejects.toMatchObject({ kind: "network" });
+    expect(spawnImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancelar durante a primeira tentativa não abre uma segunda", async () => {
+    const child = fakeChild();
+    const spawnImpl = vi.fn(() => child);
+    const controller = new AbortController();
+    const promise = runner.resolveStreams({
+      tools,
+      id: ID,
+      spawnImpl,
+      killImpl: () => {},
+      signal: controller.signal,
+      certTrust: { system: false },
+    });
+    controller.abort();
+    await expect(promise).rejects.toMatchObject({ kind: "cancelled" });
+    expect(spawnImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("run, o download completo, também repete com o repositório do sistema", async () => {
+    const outDir = tmpDir();
+    const { first, second, spawnImpl, secondSpawned } = twoAttempts();
+    const certTrust = { system: false };
+
+    const promise = runner.run({ tools, id: ID, outDir, spawnImpl, certTrust });
+    first.stderr.write(CERT_LINE);
+    first.emit("close", 1);
+    await secondSpawned();
+    fs.writeFileSync(path.join(outDir, `${ID}.mp4`), "video");
+    second.emit("close", 0);
+
+    const result = await promise;
+    expect(result.file).toBe(path.join(outDir, `${ID}.mp4`));
+    expect(usesSystemCerts(spawnImpl.mock.calls[0][1])).toBe(false);
+    expect(usesSystemCerts(spawnImpl.mock.calls[1][1])).toBe(true);
+    expect(certTrust.system).toBe(true);
+  });
+});

@@ -49,7 +49,17 @@ function formatSelector(maxHeight, { direct = false } = {}) {
   ].join("/");
 }
 
-function buildArgs({ id, outDir, ffmpegPath, maxHeight, cacheDir, jsRuntime }) {
+/**
+ * O yt-dlp só confia nos certificados do `certifi`. Proxy e antivírus que inspecionam o HTTPS
+ * instalam a raiz deles apenas no repositório do sistema (o que o navegador lê), e o yt-dlp
+ * passa a recusar toda conexão com "unable to get local issuer certificate".
+ */
+const CERT_ERROR_RE = /CERTIFICATE_VERIFY_FAILED|certificate verify failed|unable to get (?:local )?issuer certificate/i;
+const SYSTEM_CERTS_ARGS = ["--compat-options", "no-certifi"];
+/** Vale para o processo todo: depois que o repositório do sistema resolveu, as chamadas já começam com ele. */
+const defaultCertTrust = { system: false };
+
+function buildArgs({ id, outDir, ffmpegPath, maxHeight, cacheDir, jsRuntime, systemCerts }) {
   const args = [
     "--ignore-config",
     "--no-playlist",
@@ -80,6 +90,7 @@ function buildArgs({ id, outDir, ffmpegPath, maxHeight, cacheDir, jsRuntime }) {
   ];
   if (cacheDir) args.push("--cache-dir", cacheDir);
   if (jsRuntime) args.push("--js-runtimes", jsRuntime);
+  if (systemCerts) args.push(...SYSTEM_CERTS_ARGS);
   args.push(watchUrl(id));
   return args;
 }
@@ -179,6 +190,36 @@ function classifyError(stderr) {
   return "unknown";
 }
 
+/** Erro do que o yt-dlp escreveu em stderr; `certificate` marca a recusa do certificado da conexão. */
+function ytdlpFailure(stderr, code) {
+  const detail = stderr.trim().split("\n").filter(Boolean).pop() || `código ${code}`;
+  const error = new OnlineVideoError(classifyError(stderr), detail);
+  error.certificate = CERT_ERROR_RE.test(stderr);
+  return error;
+}
+
+/**
+ * Roda `attempt` e, se o yt-dlp recusou o certificado da conexão, repete uma vez confiando no
+ * repositório do sistema. Só passa a preferi-lo se essa repetição der certo.
+ *
+ * @param {(opts: object) => Promise<any>} attempt
+ * @param {{ certTrust?: { system: boolean } }} opts
+ */
+async function withSystemCerts(attempt, opts) {
+  const trust = opts.certTrust || defaultCertTrust;
+  try {
+    return await attempt({ ...opts, systemCerts: trust.system });
+  } catch (error) {
+    if (trust.system || !error?.certificate) throw error;
+    const result = await attempt({ ...opts, systemCerts: true });
+    trust.system = true;
+    console.info(
+      "[onlineVideo] o yt-dlp não reconheceu o certificado da conexão; passou a usar os certificados do sistema"
+    );
+    return result;
+  }
+}
+
 /** Só estes tipos de falha se resolvem com um yt-dlp mais novo — o resto é do vídeo ou da rede. */
 function needsFreshTool(kind) {
   return kind === "unknown" || kind === "forbidden" || kind === "format" || kind === "bot";
@@ -230,9 +271,10 @@ function killTree(child) {
  * @param {typeof spawn} [opts.spawnImpl]
  * @param {typeof killTree} [opts.killImpl]
  * @param {number} [opts.stallMs]
+ * @param {boolean} [opts.systemCerts] confiar no repositório de certificados do sistema em vez do `certifi`
  * @returns {Promise<{ file: string, size: number, meta: object|null }>}
  */
-function run(opts) {
+function runOnce(opts) {
   const {
     tools,
     id,
@@ -240,6 +282,7 @@ function run(opts) {
     maxHeight,
     cacheDir,
     jsRuntime,
+    systemCerts,
     onProgress,
     signal,
     spawnImpl = spawn,
@@ -254,7 +297,7 @@ function run(opts) {
     }
     fs.ensureDirSync(outDir);
 
-    const args = buildArgs({ id, outDir, ffmpegPath: tools.ffmpeg, maxHeight, cacheDir, jsRuntime });
+    const args = buildArgs({ id, outDir, ffmpegPath: tools.ffmpeg, maxHeight, cacheDir, jsRuntime, systemCerts });
     const env = childEnv(jsRuntime);
 
     let child;
@@ -345,9 +388,7 @@ function run(opts) {
       if (settled) return;
       if (stdoutBuf) handleLine(stdoutBuf);
       if (code !== 0) {
-        const kind = classifyError(stderr);
-        const detail = stderr.trim().split("\n").filter(Boolean).pop() || `código ${code}`;
-        finish(reject, new OnlineVideoError(kind, detail));
+        finish(reject, ytdlpFailure(stderr, code));
         return;
       }
       const file = path.join(outDir, `${id}.mp4`);
@@ -362,7 +403,15 @@ function run(opts) {
   });
 }
 
-function buildResolveArgs({ id, maxHeight, cacheDir, jsRuntime }) {
+/**
+ * Como `runOnce`, mas se o yt-dlp recusar o certificado da conexão repete uma vez com o
+ * repositório de certificados do sistema. `opts.certTrust` existe para os testes isolarem o estado.
+ */
+function run(opts) {
+  return withSystemCerts(runOnce, opts);
+}
+
+function buildResolveArgs({ id, maxHeight, cacheDir, jsRuntime, systemCerts }) {
   const args = [
     "--ignore-config",
     "--no-playlist",
@@ -378,6 +427,7 @@ function buildResolveArgs({ id, maxHeight, cacheDir, jsRuntime }) {
   ];
   if (cacheDir) args.push("--cache-dir", cacheDir);
   if (jsRuntime) args.push("--js-runtimes", jsRuntime);
+  if (systemCerts) args.push(...SYSTEM_CERTS_ARGS);
   args.push(watchUrl(id));
   return args;
 }
@@ -468,14 +518,16 @@ function parseStreams(info, now = Date.now()) {
  * @param {typeof spawn} [opts.spawnImpl]
  * @param {typeof killTree} [opts.killImpl]
  * @param {number} [opts.timeoutMs]
+ * @param {boolean} [opts.systemCerts] confiar no repositório de certificados do sistema em vez do `certifi`
  */
-function resolveStreams(opts) {
+function resolveStreamsOnce(opts) {
   const {
     tools,
     id,
     maxHeight,
     cacheDir,
     jsRuntime,
+    systemCerts,
     signal,
     spawnImpl = spawn,
     killImpl = killTree,
@@ -489,7 +541,7 @@ function resolveStreams(opts) {
     }
     let child;
     try {
-      child = spawnImpl(tools.ytdlp, buildResolveArgs({ id, maxHeight, cacheDir, jsRuntime }), {
+      child = spawnImpl(tools.ytdlp, buildResolveArgs({ id, maxHeight, cacheDir, jsRuntime, systemCerts }), {
         windowsHide: true,
         stdio: ["ignore", "pipe", "pipe"],
         env: childEnv(jsRuntime),
@@ -538,8 +590,7 @@ function resolveStreams(opts) {
     child.on("close", (code) => {
       if (settled) return;
       if (code !== 0) {
-        const detail = stderr.trim().split("\n").filter(Boolean).pop() || `código ${code}`;
-        finish(reject, new OnlineVideoError(classifyError(stderr), detail));
+        finish(reject, ytdlpFailure(stderr, code));
         return;
       }
       try {
@@ -552,6 +603,11 @@ function resolveStreams(opts) {
       }
     });
   });
+}
+
+/** Como `resolveStreamsOnce`, com a mesma repetição por certificado recusado de `run`. */
+function resolveStreams(opts) {
+  return withSystemCerts(resolveStreamsOnce, opts);
 }
 
 /** Juntar duas trilhas sem recodificar leva poucos segundos; passar disso é ffmpeg pendurado. */
