@@ -33,11 +33,13 @@ export class BootOrchestrator {
   constructor(options: BootOrchestratorOptions = {}) {
     this.onStage = options.onStage;
     this.onTaskError = options.onTaskError;
-    this.requestFrame =
-      options.requestAnimationFrame ??
-      ((callback) => globalThis.setTimeout(() => callback(Date.now()), 0) as unknown as number);
-    this.requestIdle = options.requestIdleCallback;
-    this.defer = options.setTimeout ?? globalThis.setTimeout;
+    // setTimeout e requestAnimationFrame do navegador lançam "Illegal invocation" quando
+    // chamados como método de outro objeto; por isso cada um é invocado solto, nunca por `this.x()`.
+    const { requestAnimationFrame: raf, requestIdleCallback: idle, setTimeout: defer } = options;
+    this.requestFrame = (callback) =>
+      raf ? raf(callback) : (globalThis.setTimeout(() => callback(Date.now()), 0) as unknown as number);
+    this.requestIdle = idle ? (callback, idleOptions) => idle(callback, idleOptions) : undefined;
+    this.defer = (callback, delay) => (defer ? defer(callback, delay) : globalThis.setTimeout(callback, delay));
   }
 
   afterFirstPaint(tasks: BootTask[] = []): Promise<void> {

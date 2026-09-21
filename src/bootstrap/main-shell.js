@@ -39,6 +39,7 @@ import Path from "@/helpers/Path";
 import Media from "@/composables/useMedia";
 import { MusicActionEnum } from "@/enums/MusicActionEnum";
 import Broadcast from "@/helpers/Broadcast";
+import Database from "@/helpers/Database";
 import Liturgy from "@/helpers/Liturgy";
 import { IMAGE_EXT, AUDIO_EXT, VIDEO_EXT } from "@/constants/FileTypes";
 import { openSlja, SLJA_EXT } from "@/helpers/SljaPlayer";
@@ -725,26 +726,97 @@ $storage.hydrate().then(async () => {
               break;
             }
 
-            case "bible-verse":
+            case "bible-verse": {
+              // Se versionId não veio do server, resolve do banco (primeira versão disponível)
+              let resolvedVersionId = data.versionId;
+              if (resolvedVersionId == null) {
+                try {
+                  const versions = await Database.get("pt_bible_version");
+                  if (Array.isArray(versions) && versions.length > 0) {
+                    resolvedVersionId = versions[0].id_bible_version;
+                  }
+                } catch {
+                  /* ignore */
+                }
+              }
+
               Broadcast.send(BROADCAST_TYPE.BIBLE_VERSE, {
                 text: data.text,
                 reference: data.reference,
                 book_id: data.bookId,
                 chapter: data.chapter,
                 verses: data.verses,
-                version_id: data.versionId,
+                version_id: resolvedVersionId,
                 active: true,
               });
               ProjectionWindows.openBibleWindow();
+
+              // Grava estado no AppData para que bible-next/bible.prev
+              // funcionem mesmo sem o módulo Bíblia aberto.
+              const BIBLE_DATA = KEYS.MODULES.BIBLE.DATA;
+              const bookName = data.reference
+                ? data.reference.replace(/\s+\d+:\d+.*$/, "").trim()
+                : "";
+              if (resolvedVersionId != null)
+                AppData.set(BIBLE_DATA.ID_BIBLE_VERSION, resolvedVersionId);
+              if (data.bookId != null) AppData.set(BIBLE_DATA.ID_BIBLE_BOOK, data.bookId);
+              if (data.chapter != null) AppData.set(BIBLE_DATA.CHAPTER, data.chapter);
+              if (data.verses != null) AppData.set(BIBLE_DATA.VERSES, data.verses);
+              if (bookName) AppData.set(BIBLE_DATA.BOOK, bookName);
+              if (data.text != null) AppData.set(BIBLE_DATA.TEXT, data.text);
+              if (data.reference != null)
+                AppData.set(BIBLE_DATA.SCRIPTURAL_REFERENCE, data.reference);
               break;
+            }
             case "bible-next":
-              Broadcast.send(BROADCAST_TYPE.BIBLE_RIBBON_ACTION, { action: "next_verse" });
+            case "bible-prev": {
+              const isNext = data.action === "bible-next";
+              const BIBLE_DATA = KEYS.MODULES.BIBLE.DATA;
+              const id_bible_version = AppData.get(BIBLE_DATA.ID_BIBLE_VERSION);
+              const id_bible_book = AppData.get(BIBLE_DATA.ID_BIBLE_BOOK);
+              const chapter = AppData.get(BIBLE_DATA.CHAPTER);
+              const book = AppData.get(BIBLE_DATA.BOOK);
+              const verses = AppData.get(BIBLE_DATA.VERSES);
+              if (id_bible_version == null || id_bible_book == null || chapter == null) break;
+
+              const dbKey = `bible_${id_bible_version}_${id_bible_book}_${chapter}`;
+              const versesData = await Database.get(dbKey);
+              if (!versesData || typeof versesData !== "object") break;
+
+              const verseNums = Object.keys(versesData)
+                .map(Number)
+                .filter((n) => n > 0)
+                .sort((a, b) => a - b);
+              if (verseNums.length === 0) break;
+
+              const currentVerses = Array.isArray(verses) ? verses : [];
+              const current = isNext
+                ? Math.max(0, ...currentVerses)
+                : Math.min(...currentVerses.filter((n) => n > 0), verseNums[verseNums.length - 1]);
+              const idx = verseNums.indexOf(current);
+              const nextIdx = isNext ? idx + 1 : idx - 1;
+
+              if (nextIdx >= 0 && nextIdx < verseNums.length) {
+                const nextVerse = verseNums[nextIdx];
+                Broadcast.send(BROADCAST_TYPE.BIBLE_VERSE, {
+                  text: versesData[String(nextVerse)] || "",
+                  reference: `${book || ""} ${chapter}:${nextVerse}`,
+                  book_id: id_bible_book,
+                  chapter: chapter,
+                  verses: [nextVerse],
+                  version_id: id_bible_version,
+                  active: true,
+                });
+                AppData.set(BIBLE_DATA.VERSES, [nextVerse]);
+              }
               break;
-            case "bible-prev":
-              Broadcast.send(BROADCAST_TYPE.BIBLE_RIBBON_ACTION, { action: "prev_verse" });
-              break;
+            }
             case "bible-close":
-              Broadcast.send(BROADCAST_TYPE.BIBLE_RIBBON_ACTION, { action: "clear" });
+              Broadcast.send(BROADCAST_TYPE.BIBLE_VERSE, {
+                text: "",
+                reference: "",
+                active: true,
+              });
               break;
             case "announcements-list": {
               const allAnn = await $idb.getAll(DB_TABLE.ANNOUNCEMENTS);
