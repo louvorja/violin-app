@@ -30,7 +30,7 @@
     "delete_confirm": "¿Eliminar la playlist \"{name}\"?",
     "empty": "Ninguna playlist creada",
     "song_count": "{n} canción",
-    "song_count_plural": "{n} canciónes",
+    "song_count_plural": "{n} canciones",
     "duration": "Duración total",
     "play": "Reproducir",
     "stop": "Detener Playlist",

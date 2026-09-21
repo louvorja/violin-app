@@ -6,13 +6,16 @@
  *   - `createTimerEndRibbonGroups(moduleId)` — grupos da ribbon (select de ação,
  *     botões de configuração e chip de info)
  */
+import { defineAsyncComponent } from "vue";
 import type { RibbonGroup } from "@/types/Ribbon";
 import { ICONS } from "@/config/Icons";
 import { KEYS } from "@constants/UserDataKeys";
 import { MediaEnum } from "@/enums/MediaEnum";
 import { ModuleEnum } from "@/enums/ModuleEnum";
-import $modules from "@helpers/Modules";
-import TimerEndRibbonInfo from "@components/TimerEndRibbonInfo.vue";
+import { getModulePath } from "@/helpers/ModulePath";
+const TimerEndRibbonInfo = defineAsyncComponent(
+  () => import("@components/TimerEndRibbonInfo.vue")
+);
 
 export function getTimerEndActionKeys(moduleId: string) {
   if (moduleId === ModuleEnum.TIMER_WORSHIP) return KEYS.MODULES.TIMER_WORSHIP;
@@ -20,7 +23,7 @@ export function getTimerEndActionKeys(moduleId: string) {
 }
 
 export function createTimerEndRibbonGroups(moduleId: string): RibbonGroup[] {
-  const modulePath = $modules.getPath(moduleId);
+  const modulePath = getModulePath(moduleId);
   const ctxId = "ctx_" + moduleId;
   const keys = getTimerEndActionKeys(moduleId);
   const optionPath = keys.END_ACTION;

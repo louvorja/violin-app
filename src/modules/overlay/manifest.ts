@@ -4,11 +4,11 @@ import { ModuleCategoryEnum } from "@/enums/ModuleCategoryEnum"
 import { ModuleGroupEnum } from "@/enums/ModuleGroupEnum"
 import { ICONS } from "@/config/Icons"
 import { ModuleEnum } from "@/enums/ModuleEnum"
-import $modules from "@/helpers/Modules"
+import { getModulePath } from "@/helpers/ModulePath"
 import { KEYS } from "@/constants/UserDataKeys";
 
 const moduleId = ModuleEnum.OVERLAY;
-const modulePath = $modules.getPath(moduleId);
+const modulePath = getModulePath(moduleId);
 const moduleCtxId = "ctx_" + moduleId;
 
 export const module: Module = {

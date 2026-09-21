@@ -4,10 +4,10 @@ import { ModuleCategoryEnum } from "@/enums/ModuleCategoryEnum"
 import { ModuleGroupEnum } from "@/enums/ModuleGroupEnum"
 import { ICONS } from "@/config/Icons"
 import { ModuleEnum } from "@/enums/ModuleEnum"
-import $modules from "@/helpers/Modules"
+import { getModulePath } from "@/helpers/ModulePath"
 
 const moduleId = ModuleEnum.SCHEDULED_ITEMS;
-const modulePath = $modules.getPath(moduleId);
+const modulePath = getModulePath(moduleId);
 const moduleCtxId = "ctx_" + moduleId;
 
 export const module: Module = {

@@ -75,7 +75,7 @@ function formatRow(moduleId: string, status: "ok" | "warn" | "error", detail: st
 }
 
 function validate() {
-  const manifests = resolve(root, "src/modules/*/manifest.ts")
+  const manifests = resolve(root, "src/modules/*/manifest.ts").replace(/\\/g, "/")
   const files = fg.sync(manifests)
 
   console.log(`\nValidando ${files.length} manifest.ts...\n`)
@@ -113,9 +113,13 @@ function validate() {
       errors++
     }
 
-    // ── modulePath = $modules.getPath(moduleId) ──
-    if (!usesFactory && !content.includes("$modules.getPath(moduleId)")) {
-      console.log(formatRow(moduleId, "error", "$modules.getPath(moduleId) ausente"))
+    // ── modulePath = getModulePath(moduleId) (helper leve) ou $modules.getPath(moduleId) (legado) ──
+    if (
+      !usesFactory &&
+      !content.includes("getModulePath(moduleId)") &&
+      !content.includes("$modules.getPath(moduleId)")
+    ) {
+      console.log(formatRow(moduleId, "error", "getModulePath(moduleId) ausente"))
       errors++
     }
 

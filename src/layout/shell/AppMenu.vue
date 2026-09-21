@@ -99,7 +99,9 @@
 <script setup>
 import { LjIcon } from "@/components/ui";
 import { ref, computed, onMounted, onBeforeUnmount, defineAsyncComponent } from "vue";
-const AppMenuOpcoes = defineAsyncComponent(() => import("./AppMenuOpcoes.vue"));
+
+const loadAppMenuOpcoes = () => import("./AppMenuOpcoes.vue");
+const AppMenuOpcoes = defineAsyncComponent(loadAppMenuOpcoes);
 const AppMenuSobre = defineAsyncComponent(() => import("./AppMenuSobre.vue"));
 const AppMenuTransmitir = defineAsyncComponent(() => import("./AppMenuTransmitir.vue"));
 const AppMenuSincronizar = defineAsyncComponent(() => import("./AppMenuSincronizar.vue"));
@@ -137,12 +139,13 @@ const trigger = ref(null);
 const activeItem = ref(null);
 const renderedItem = ref(null);
 let renderTimer = null;
-// No Windows, a montagem do painel pesado compete com a animação da cortina
-// no mesmo renderer, então espera a cortina acabar. Nas outras plataformas ela
-// não poupa nenhum quadro e só atrasa o conteúdo, por isso não adia nada.
+let optionsPreloadTimer = null;
+// Benchmark Electron/Windows com CPU 6× mostrou que atrasar a montagem 220 ms
+// deixava um placeholder branco e piorava o primeiro paint. O painel começa no
+// próprio clique; as seções secundárias continuam sendo diferidas dentro dele.
 // O wrapper do template segue a tela ativa (não o painel montado): o painel
 // entra nele sem passar pelo fade duplo do `out-in`.
-const CONTENT_DELAY_MS = Platform.platform === "win32" ? 220 : 0;
+const CONTENT_DELAY_MS = 0;
 
 // Aba inicial da tela de Opções quando aberta programaticamente
 // (ex: botão "Configurações" da ribbon da Liturgia → aba Slides).
@@ -236,6 +239,31 @@ const items = computed(() => [
     action: exitApp,
   },
 ]);
+
+function preloadOptionsWhenIdle() {
+  // Mantém Configurações em chunk separado para não aumentar o boot. Depois que
+  // a shell já ficou interativa, antecipa download e avaliação em ociosidade:
+  // no Windows fraco isso remove trabalho do clique que abre o painel.
+  const preload = () => {
+    optionsPreloadTimer = null;
+    void loadAppMenuOpcoes();
+  };
+  if (typeof window.requestIdleCallback === "function") {
+    optionsPreloadTimer = window.requestIdleCallback(preload, { timeout: 2_000 });
+  } else {
+    optionsPreloadTimer = setTimeout(preload, 1_000);
+  }
+}
+
+function clearOptionsPreloadTimer() {
+  if (optionsPreloadTimer === null) return;
+  if (typeof window.cancelIdleCallback === "function") {
+    window.cancelIdleCallback(optionsPreloadTimer);
+  } else {
+    clearTimeout(optionsPreloadTimer);
+  }
+  optionsPreloadTimer = null;
+}
 
 function toggle() {
   if (open.value) close();
@@ -384,6 +412,7 @@ function exitApp() {
 }
 
 onMounted(() => {
+  preloadOptionsWhenIdle();
   window.addEventListener("louvorja:open-updates", onOpenUpdates);
   window.addEventListener("louvorja:open-options", onOpenOptions);
   window.addEventListener("louvorja:open-about", onOpenAbout);
@@ -394,6 +423,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   clearRenderTimer();
+  clearOptionsPreloadTimer();
   renderedItem.value = null;
   restaurarSemaforos();
   window.removeEventListener("louvorja:open-updates", onOpenUpdates);

@@ -700,8 +700,6 @@ onBeforeUnmount(() => {
   background: transparent;
   opacity: 0;
   transition: opacity 120ms linear;
-  box-sizing: border-box;
-  padding: 24px;
 }
 .return-root--ready {
   opacity: 1;

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { ICONS, TABLER_ICONS } from "../Icons";
+import { ICONS } from "../Icons";
+import { TABLER_ICONS } from "../TablerIcons";
 
 /**
  * Todo nome do catálogo tem de resolver em algum desenho.
