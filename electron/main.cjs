@@ -1477,39 +1477,6 @@ ipcMain.handle("window:close", (event) => {
   return { ok: !!win };
 });
 
-const HEX_COLOR = /^#[0-9a-f]{6}$/i;
-
-// Pinta a faixa dos botões nativos do Windows e do Linux com as cores da
-// systembar. A cor mora no Electron, não no DOM: sem isto o tema escuro
-// ficaria com os botões sobre o navy do tema claro. No macOS os semáforos não
-// têm fundo, então não há o que pintar.
-ipcMain.handle("window:setTitleBarOverlay", (event, opts) => {
-  if (process.platform === "darwin") return { ok: false };
-  const win = focusedOrMain(event);
-  if (!win || win.isDestroyed() || !win.setTitleBarOverlay) return { ok: false };
-
-  const { color, symbolColor, height } = opts || {};
-  const overlay = {};
-  if (HEX_COLOR.test(color)) overlay.color = color;
-  if (HEX_COLOR.test(symbolColor)) overlay.symbolColor = symbolColor;
-  if (Number.isInteger(height) && height > 0) overlay.height = height;
-  if (!Object.keys(overlay).length) return { ok: false };
-
-  try {
-    win.setTitleBarOverlay(overlay);
-    if (overlay.height) {
-      // Esta é a altura de repouso: a que `alignTitleBarOverlay` restaura.
-      const estado = overlayState(win);
-      clearInterval(estado.timer);
-      estado.timer = null;
-      estado.repouso = estado.atual = overlay.height;
-    }
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, error: String(err?.message || err) };
-  }
-});
-
 // Duração do deslocamento dos botões da janela (semáforos no macOS, faixa do
 // overlay no Windows/Linux). Espelha a transição de entrada e saída do painel
 // do AppMenu (`--lj-transition-normal`, 0.2s): os botões são a metade nativa de
@@ -1575,17 +1542,13 @@ ipcMain.handle("window:alignTrafficLights", (event, barHeight) => {
 });
 
 // Windows/Linux: o Electron não expõe a altura atual do overlay, então o main a
-// guarda. `repouso` é a altura da systembar; `atual` acompanha cada passo.
+// guarda, passo a passo. A janela nasce com a altura de repouso.
 const _overlayState = new WeakMap();
 
 function overlayState(win) {
   let estado = _overlayState.get(win);
   if (!estado) {
-    estado = {
-      repouso: TITLEBAR_OVERLAY.height,
-      atual: TITLEBAR_OVERLAY.height,
-      timer: null,
-    };
+    estado = { atual: TITLEBAR_OVERLAY.height, timer: null };
     _overlayState.set(win, estado);
   }
   return estado;
@@ -1639,7 +1602,7 @@ ipcMain.handle("window:alignTitleBarOverlay", (event, barHeight) => {
   const alvo =
     Number.isFinite(barHeight) && barHeight > 0
       ? Math.round(barHeight)
-      : overlayState(win).repouso;
+      : TITLEBAR_OVERLAY.height;
   moveOverlayHeight(win, alvo);
   return { ok: true, height: alvo };
 });

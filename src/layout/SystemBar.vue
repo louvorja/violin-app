@@ -1,7 +1,6 @@
 <template>
   <div
     v-if="isDesktop"
-    ref="bar"
     class="systembar"
     :class="{ 'systembar--mac': isMac, 'systembar--overlay': !isMac }"
     @dblclick="toggleMaximize"
@@ -29,7 +28,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onBeforeUnmount } from "vue";
+import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import Platform from "@/helpers/Platform";
 import $appdata from "@/helpers/AppData";
@@ -41,9 +40,6 @@ import { useRibbonStore } from "@/stores/ribbonStore";
 
 const { t } = useI18n();
 const store = useRibbonStore();
-
-const bar = ref(null);
-let themeObserver = null;
 
 const isDesktop = computed(() => $appdata.get("is_desktop"));
 const isMac = computed(() => Platform.platform === "darwin");
@@ -74,52 +70,6 @@ const title = computed(() => {
 function toggleMaximize() {
   Platform.window?.toggleMaximize();
 }
-
-function toHex(cssColor) {
-  const m = /^rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/.exec(cssColor);
-  if (!m) return null;
-  return "#" + [m[1], m[2], m[3]].map((n) => Number(n).toString(16).padStart(2, "0")).join("");
-}
-
-// A faixa dos botões nativos é pintada pelo Electron, não pelo DOM: sem copiar
-// a cor da barra para lá, o tema escuro ficaria com botões sobre o navy do claro.
-// A altura só vai na primeira vez, para casar com o token: as trocas de tema
-// desfariam a altura que o AppMenu dá à faixa enquanto está aberto.
-function syncOverlay({ height = false } = {}) {
-  const el = bar.value;
-  if (!el) return;
-  const style = getComputedStyle(el);
-  const color = toHex(style.backgroundColor);
-  const symbolColor = toHex(style.color);
-  if (!color || !symbolColor) return;
-  Platform.window?.setTitleBarOverlay?.({
-    color,
-    symbolColor,
-    ...(height && { height: el.offsetHeight }),
-  });
-}
-
-// A barra só existe depois que `is_desktop` vira true, então o observador
-// nasce quando o elemento aparece, e não no onMounted.
-watch(
-  bar,
-  (el) => {
-    themeObserver?.disconnect();
-    themeObserver = null;
-    if (!el || isMac.value || !Platform.window?.setTitleBarOverlay) return;
-    syncOverlay({ height: true });
-    themeObserver = new MutationObserver(() => syncOverlay());
-    themeObserver.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["data-theme"],
-    });
-  },
-  { flush: "post" }
-);
-
-onBeforeUnmount(() => {
-  themeObserver?.disconnect();
-});
 </script>
 
 <style scoped>

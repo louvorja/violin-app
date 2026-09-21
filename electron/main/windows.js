@@ -22,11 +22,17 @@ const TRAFFIC_LIGHT_POSITION = { x: 10, y: 11 };
 /**
  * Faixa dos botões nativos (minimizar/maximizar/fechar) no Windows e no Linux.
  *
- * Só o ponto de partida: a cor pertence ao tema e a altura à systembar
- * (`--lj-systembar-height`), então a SystemBar reenvia os dois pelo IPC
- * "window:setTitleBarOverlay" ao montar e a cada troca de tema.
+ * O fundo é transparente de propósito: os botões flutuam sobre a systembar e
+ * mostram o que o DOM pinta ali — tema, escurecimento de modal, cortina do
+ * AppMenu. Uma cor sólida ficaria presa ao valor da criação e destoaria a cada
+ * mudança, porque a faixa é desenhada por cima da página e nenhum backdrop a
+ * alcança. E ela precisa nascer transparente: o Electron não aplica alfa em
+ * `setTitleBarOverlay` chamado depois de a janela existir.
+ *
+ * O símbolo é branco em todos os temas (`--lj-titlebar-color`). A altura espelha
+ * `--lj-systembar-height` (tokens.css); `SystemBar.spec.ts` confere que casam.
  */
-const TITLEBAR_OVERLAY = { color: "#1b2a41", symbolColor: "#ffffff", height: 35 };
+const TITLEBAR_OVERLAY = { color: "#00000000", symbolColor: "#ffffff", height: 35 };
 
 /**
  * Cria a janela principal do LouvorJA.
