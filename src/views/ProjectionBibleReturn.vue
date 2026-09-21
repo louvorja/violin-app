@@ -1,47 +1,51 @@
 <template>
   <OverlayRenderer />
-  <div class="return-root" :class="{ 'return-root--ready': ready }">
-    <!-- Versículo atual ocupa quase toda a tela -->
-    <div class="return-current">
-      <!-- Imagem de fundo se houver personalizada para a Bíblia -->
-      <div
-        v-if="image"
-        class="return-bg"
-        :style="{
-          backgroundImage: `url(${image})`,
-          backgroundSize: image_fit || 'cover',
-          backgroundPosition: 'center',
-          opacity: ((image_opacity ?? 100) / 100) * 0.7,
-        }"
-      />
-
-      <div
-        class="return-current-text"
-        :class="[`align-${vertical_align}`, `justify-${horizontal_align}`]"
-      >
-        <div class="return-text-container">
-          <div
-            v-if="active && displayText"
-            class="return-text"
-            :style="textStyle"
-            v-html="displayText"
-          />
+  <div
+    class="return-root"
+    :class="{ 'return-root--ready': ready }"
+    :style="{ backgroundColor: backgroundColor, '--return-accent': ACCENT }"
+  >
+    <!-- Versículo atual: referência em faixa própria, texto no resto -->
+    <div class="return-current" :style="{ background: backgroundColor }">
+      <div class="return-head">
+        <div v-if="active && displayReference" class="return-title" :style="referenceStyle">
+          {{ displayReference }}
         </div>
       </div>
 
-      <!-- Referência no topo -->
-      <div v-if="active && displayReference" class="return-title">{{ displayReference }}</div>
+      <div ref="topBox" class="return-stage" :class="`align-${vertical_align}`">
+        <div
+          v-if="active && displayText"
+          ref="topText"
+          class="return-text"
+          :style="textStyle"
+          v-html="displayText"
+        />
+      </div>
     </div>
 
-    <!-- Painel fixo no rodapé com próximo versículo -->
-    <div class="return-bottom">
+    <!-- Painel fixo no rodapé com o próximo versículo -->
+    <div
+      class="return-bottom"
+      :style="{
+        background: backgroundColor,
+        height: `${SLIDE_STYLE_DEFAULT.return_height_bottom}vh`,
+      }"
+    >
       <div class="return-bottom-grid">
-        <div>
-          <span class="return-next-label">{{ t("shell.proj_return_next") }}</span>
-        </div>
+        <span class="return-next-label">{{ t("shell.proj_return_next") }}</span>
         <div class="return-next-text">
-          <div v-if="nextReference" class="return-next-reference">{{ nextReference }}</div>
-          <span class="return-next-content" v-html="nextText || '—'" />
+          <div v-if="nextReference" class="return-next-reference" :style="nextReferenceStyle">
+            {{ nextReference }}
+          </div>
+          <div ref="nextBox" class="return-next-body">
+            <span
+              ref="nextEl"
+              class="return-next-content"
+              :style="nextTextStyle"
+              v-html="nextHtml"
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -53,13 +57,27 @@ import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { useI18n } from "vue-i18n";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
+import { useFitText } from "@/composables/useFitText";
 import Broadcast from "@/helpers/Broadcast";
 import UserData from "@/helpers/UserData";
 import { FONT, resolveFont } from "@/config/Fonts";
+import { SLIDE_STYLE_DEFAULT } from "@/config/SlideStyle";
+import { horizontalTextAlign, moduleCustomizationDefault } from "@/helpers/ModuleFormatting";
 import OverlayRenderer from "@/components/OverlayRenderer.vue";
 
 const { t } = useI18n();
 const MID = "modules.bible";
+
+/** Cor de destaque do retorno (rótulo, borda, referência sem cor escolhida). */
+const ACCENT = "#efb400";
+
+/**
+ * Pisos do ajuste automático, em vh. O tamanho da tela de formatação da Bíblia
+ * é o teto; o texto só desce até aqui, e abaixo disso só se nem assim couber —
+ * uma seleção enorme de versículos em letra pequena é melhor que cortada.
+ */
+const MIN_TEXT_VH = 2;
+const MIN_NEXT_VH = 1.9;
 
 const ready = ref(false);
 const text = ref("");
@@ -80,27 +98,78 @@ function ud(key, fallback = null) {
   return v == null ? fallback : v;
 }
 
-const font = computed(() => resolveFont(ud("font", null), FONT.PROJECTION.FALLBACK));
-const font_color = computed(() => ud("font_color", "#FFFFFF"));
-const vertical_align = computed(() => ud("vertical_align", "center"));
-const horizontal_align = computed(() => ud("horizontal_align", "center"));
-const image = computed(() => ud("image", ""));
-const image_opacity = computed(() => ud("image_opacity", 100));
-const image_fit = computed(() => ud("image_fit", "cover"));
+// Mesmos defaults da projeção (manifesto do módulo): uma preferência ausente
+// não pode valer uma coisa na projeção e outra no retorno.
+function udDefault(key, fallback) {
+  return ud(key, moduleCustomizationDefault("bible", key, fallback));
+}
 
-const textStyle = computed(() => {
+function _vh(value, fallback, min, max) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.min(max, Math.max(min, n)) : fallback;
+}
+
+const font = computed(() =>
+  resolveFont(udDefault("font", FONT.PROJECTION.INHERIT), FONT.PROJECTION.FALLBACK)
+);
+const font_color = computed(() => udDefault("font_color", "#FFFFFF"));
+const vertical_align = computed(() => udDefault("vertical_align", "center"));
+const horizontal_align = computed(() => udDefault("horizontal_align", "center"));
+const backgroundColor = computed(() => udDefault("background_color", "#000000") || "#000000");
+
+// O teto do texto é o "Tamanho da fonte" da formatação da Bíblia, lido como vh:
+// quem aumenta o tamanho na projeção vê o retorno acompanhar, e o padrão (15)
+// já dá uma letra grande. Quem escolhe o tamanho final é o ajuste automático.
+const maxTextVh = computed(() => _vh(udDefault("font_size", 15), 15, 4, 60));
+const referenceVh = computed(() => _vh(udDefault("reference_font_size", 10) * 0.34, 3.4, 1.6, 10));
+
+const textShadowStyle = computed(() => {
+  if (!udDefault("text_shadow", false)) return {};
+  const color = udDefault("text_shadow_color", "#000000") || "#000000";
+  const blur = udDefault("text_shadow_blur", 4) || 4;
+  return { textShadow: `0 0 ${blur}px ${color}, 0 0 ${blur}px ${color}` };
+});
+
+// Sem `fontSize`: o tamanho é do ajuste automático (useFitText). O antigo
+// clamp(24px, 11vh, 70px) ignorava a opção de tamanho e cortava versículo longo.
+const textStyle = computed(() => ({
+  color: font_color.value || "#FFFFFF",
+  fontFamily: font.value || FONT.PROJECTION.FALLBACK,
+  textAlign: horizontalTextAlign(horizontal_align.value),
+  ...textShadowStyle.value,
+}));
+
+// O manifesto grava o padrão (laranja, feito para a projeção) no store, e ele
+// não se distingue de uma escolha. Só o que difere dele vale como escolha do
+// operador; do contrário, o dourado do retorno — o mesmo do rótulo e da borda.
+const referenceColor = computed(() => {
+  const chosen = ud("reference_font_color", null);
+  const standard = moduleCustomizationDefault("bible", "reference_font_color", "");
+  const isChosen =
+    typeof chosen === "string" && chosen && chosen.toLowerCase() !== String(standard).toLowerCase();
+  return isChosen ? chosen : ACCENT;
+});
+
+const referenceStyle = computed(() => {
   return {
-    color: font_color.value || "#FFFFFF",
-    fontFamily: font.value || FONT.PROJECTION.FALLBACK,
-    fontSize: `clamp(24px, 11vh, 70px)`,
-    textAlign:
-      horizontal_align.value === "start"
-        ? "left"
-        : horizontal_align.value === "end"
-          ? "right"
-          : "center",
+    color: referenceColor.value,
+    fontFamily: resolveFont(
+      udDefault("reference_font", FONT.PROJECTION.INHERIT),
+      FONT.PROJECTION.FALLBACK
+    ),
+    fontSize: `max(14px, ${referenceVh.value}vh)`,
   };
 });
+
+const nextTextStyle = computed(() => ({
+  fontFamily: font.value || FONT.PROJECTION.FALLBACK,
+  textAlign: horizontalTextAlign(horizontal_align.value),
+}));
+
+const nextReferenceStyle = computed(() => ({
+  color: referenceColor.value,
+  textAlign: horizontalTextAlign(horizontal_align.value),
+}));
 
 const showReference = computed(() => ud("show_reference", true));
 const showVersion = computed(() => ud("show_version", true));
@@ -143,6 +212,29 @@ const displayReference = computed(() => {
   return reference.value;
 });
 
+const nextHtml = computed(() => nextText.value || "—");
+
+const topBox = ref(null);
+const topText = ref(null);
+const nextBox = ref(null);
+const nextEl = ref(null);
+
+useFitText({
+  box: topBox,
+  text: topText,
+  maxVh: () => maxTextVh.value,
+  minVh: () => MIN_TEXT_VH,
+  deps: () => [displayText.value, textStyle.value],
+});
+
+useFitText({
+  box: nextBox,
+  text: nextEl,
+  maxVh: () => SLIDE_STYLE_DEFAULT.font_size_next,
+  minVh: () => MIN_NEXT_VH,
+  deps: () => [nextHtml.value, nextTextStyle.value, nextReference.value],
+});
+
 useBroadcastListener(BROADCAST_TYPE.BIBLE_VERSE, (payload) => {
   if (payload === null || payload.active === false) {
     window.close();
@@ -170,10 +262,16 @@ function _onKey(e) {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   document.body.style.margin = "0";
   document.body.style.overflow = "hidden";
-  document.body.style.background = "#293329";
+  document.body.style.background = backgroundColor.value;
+
+  try {
+    await document.fonts.ready;
+  } catch {
+    /* font-loading API ausente — segue com fade-in imediato */
+  }
 
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
@@ -208,34 +306,62 @@ onBeforeUnmount(() => {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: #293329;
+  background: #000;
   font-family: var(--lj-font-projection, sans-serif);
   opacity: 0;
   transition: opacity 120ms linear;
   box-sizing: border-box;
-  padding: 24px 24px;
+  padding: 24px 24px; /* área segura nas bordas */
 }
 .return-root--ready {
   opacity: 1;
 }
 
 .return-current {
-  flex: 1;
+  flex: 1 1 0;
+  min-height: 0;
   position: relative;
-  overflow: hidden;
-  background: #1a201a;
-}
-
-.return-bg {
-  position: absolute;
-  inset: 0;
-}
-
-.return-current-text {
-  position: absolute;
-  inset: 0;
   display: flex;
-  padding: 40px;
+  flex-direction: column;
+  overflow: hidden;
+  background: #000;
+}
+
+/* A referência tem a própria faixa: antes era absoluta sobre o texto. */
+.return-head {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: baseline;
+  padding: 2.4vh 2.5vw 0.6vh;
+}
+
+.return-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+/* Caixa em que o versículo é ajustado: não depende do tamanho do texto
+ * (flex 1 1 0 + min-height 0), senão a medida corria atrás de si mesma. */
+.return-stage {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 2.5vw 1.8vh;
+  box-sizing: border-box;
 }
 
 .align-start {
@@ -248,102 +374,95 @@ onBeforeUnmount(() => {
   align-items: flex-end;
 }
 
-.justify-start {
-  justify-content: flex-start;
-}
-.justify-center {
-  justify-content: center;
-}
-.justify-end {
-  justify-content: flex-end;
-}
-
-.return-text-container {
-  width: 100%;
-}
-
 .return-text {
+  width: 100%;
+  min-width: 0;
   line-height: 1.3;
-  text-shadow:
-    0 2px 12px rgba(0, 0, 0, 0.9),
-    0 0 40px rgba(0, 0, 0, 0.6);
   letter-spacing: 0.01em;
-  max-width: 100%;
-}
-
-.return-title {
-  position: absolute;
-  top: 20px;
-  left: 20px;
-  right: 20px;
-  font-size: 1.7rem;
-  font-weight: 500;
-  color: #efb400;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  overflow-wrap: anywhere;
+  /* Versículo é prosa: quando o ajuste quebra a linha (white-space: normal
+   * inline), reparte a quebra em vez de deixar uma palavra sozinha no fim. */
+  text-wrap: balance;
 }
 
 .return-bottom {
+  position: relative;
   flex: 0 0 auto;
-  height: 18vh;
-  min-height: 90px;
+  min-height: 72px;
   width: 100%;
-  background: linear-gradient(180deg, #1d251d, #131b13);
-  border-top: 2px solid #efb400;
+  border-top: 2px solid var(--return-accent);
   display: flex;
   align-items: center;
   margin: 0;
-  padding: 8px 16px;
+  padding: 1vh 2.5vw;
+  box-sizing: border-box;
+  /* Guarda final: o ajuste já mantém o texto dentro do painel, mas uma fonte
+   * local com métricas incomuns nunca pode desenhar fora da moldura. */
+  overflow: clip;
 }
 
 .return-bottom-grid {
   display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 24px;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 1.6vw;
   width: 100%;
+  height: 100%;
+  min-height: 0;
   align-items: center;
+}
+
+.return-next-label {
+  font-size: max(12px, 2.6vh);
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: var(--return-accent);
+  background: color-mix(in srgb, var(--return-accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--return-accent) 40%, transparent);
+  padding: 0.3em 0.5em 0.1em;
+  border-radius: var(--lj-radius-xs);
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .return-next-text {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
   min-width: 0;
-}
-
-.return-next-label {
-  font-size: 2vh;
-  font-weight: 700;
-  letter-spacing: 0.15em;
-  color: #efb400;
-  background: rgba(239, 180, 0, 0.12);
-  border: 1px solid rgba(239, 180, 0, 0.4);
-  padding: 5px 8px;
-  border-radius: var(--lj-radius-xs);
-  flex-shrink: 0;
-  text-transform: uppercase;
+  min-height: 0;
+  height: 100%;
 }
 
 .return-next-reference {
-  font-size: 1.5rem;
+  flex: 0 0 auto;
+  font-size: max(12px, 2.6vh);
   font-weight: 700;
-  color: #efb400;
-  margin-bottom: 2px;
+  line-height: 1.2;
   text-transform: uppercase;
-}
-
-.return-next-content {
-  color: rgba(255, 255, 255, 0.85);
-  font-weight: 600;
-  line-height: 1.3;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 2rem;
+  margin-bottom: 0.4vh;
+}
+
+/* Caixa do ajuste do próximo versículo. */
+.return-next-body {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.return-next-content {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 600;
+  line-height: 1.25;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+  overflow-wrap: anywhere;
+  text-wrap: balance;
 }
 </style>
