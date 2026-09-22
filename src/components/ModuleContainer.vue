@@ -22,8 +22,8 @@
 
   <!-- Modo EMBEDDED (default — replica PageControl Delphi) -->
   <div v-else-if="show" v-show="isActiveEmbedded" class="module-embedded">
-    <header class="module-embedded-header">
-      <div v-if="$slots.header" class="module-embedded-slot-header">
+    <header v-if="$slots.header" class="module-embedded-header">
+      <div class="module-embedded-slot-header">
         <slot name="header" />
       </div>
     </header>
@@ -332,6 +332,7 @@ defineExpose({ userdata, tm, moduleId, module: module_ });
   align-items: center;
   gap: var(--lj-space-3);
   min-width: 0;
+  min-height: 0;
 }
 
 .module-embedded-action {
