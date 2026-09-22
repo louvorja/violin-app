@@ -219,9 +219,12 @@ async function start({ port, mainWindow } = {}) {
    * localhost (127.0.0.1, ::1) podem acessar SSE, API, aliases Delphi e
    * arquivos legacy. Requests de IPs remotos recebem 404.
    *
-   * A SPA (servir o app Vue para janelas Electron) permanece acessível
-   * de qualquer origem porque as janelas internas precisam da origem HTTP
-   * para YouTube IFrame API e BroadcastChannel.
+   * A SPA (rotas de projeção como /obs, /projection/return, /clock — ver
+   * SPA_ROUTES em spa.js) permanece acessível de qualquer origem mesmo com
+   * rotas externas desligadas: é o que permite um OBS/vMix noutra máquina
+   * da rede continuar capturando a projeção mesmo com o gate ativo. Não tem
+   * relação com as janelas do próprio Electron, que carregam por
+   * louvorja://app em produção e não passam por este servidor.
    */
   const EXTERNAL_PREFIXES = ['/events', '/api', '/legacy'];
   const EXTERNAL_PATHS = new Set(['/musica', '/biblia', '/controle', '/remote', '/relogio', '/projecao']);
@@ -445,8 +448,9 @@ function setToken(newToken) {
  * Define se as rotas externas (SSE, API, aliases Delphi) estão ativas.
  *
  * Quando desativadas, apenas requests de localhost podem acessá-las.
- * A SPA (app Vue para janelas Electron) sempre funciona de qualquer
- * origem — necessária para YouTube IFrame API e BroadcastChannel.
+ * As rotas de projeção (SPA_ROUTES em spa.js — /obs, /projection/return,
+ * /clock etc.) sempre funcionam de qualquer origem, para que um OBS/vMix
+ * remoto continue capturando mesmo com o gate ativo.
  *
  * @param {boolean} enabled
  */

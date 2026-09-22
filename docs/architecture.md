@@ -1376,8 +1376,12 @@ Listas longas (músicas, hinários, coletâneas) paginam incrementalmente:
 ## 🌐 Servidor HTTP embarcado (D5)
 
 Express servindo a SPA Vue + API `/api/*` + SSE `/events` (OBS/celular),
-com aliases Delphi (`/musica`, `/biblia`). Roda sempre — janelas auxiliares
-do Electron dependem da origem HTTP para YouTube IFrame API e BroadcastChannel.
+com aliases Delphi (`/musica`, `/biblia`). Roda sempre — sobe no boot para
+que Controle Remoto, transmissão OBS/vMix e dispositivos autorizados já
+estejam disponíveis sem ação do usuário. As janelas do Electron **não**
+dependem dele: em produção carregam por `louvorja://app`, origem fixa que
+já resolve BroadcastChannel e a IFrame API do YouTube por conta própria
+(a hipótese de que o YouTube exigia origem HTTP não se confirmou em teste).
 
 ### Fallback de porta
 
