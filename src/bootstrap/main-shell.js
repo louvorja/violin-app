@@ -63,6 +63,7 @@ import { KEYS } from "@/constants/UserDataKeys";
 import { FONT, resolveDefaultFont } from "@/config/Fonts";
 import { startThemeSync } from "@/composables/useAppTheme";
 import { BootOrchestrator } from "@/bootstrap/BootOrchestrator";
+import { useLibrasState } from "@/modules/libras/composables/useLibrasState";
 
 const app = createApp(App);
 Telemetry.installVueErrorHandler(app);
@@ -1044,6 +1045,23 @@ $storage.hydrate().then(async () => {
 
     app.mount("#app");
     _bootStage("mounted");
+
+    // Estado atual, não a ação de alternar: sem isto, saber "quantos usuários
+    // usam Libras" dependia de esperar alguém tocar no interruptor depois do
+    // deploy desta telemetria. `$set` grava a propriedade na pessoa, então uma
+    // consulta por `person.properties.libras_enabled` responde a qualquer
+    // momento, mesmo para quem já tinha ativado em sessões anteriores.
+    if (!isAuxiliaryRenderer) {
+      const libras = useLibrasState();
+      Telemetry.track("libras_state_at_boot", {
+        $set: {
+          libras_enabled: libras.enabled.value,
+          libras_musics_enabled: libras.musicsEnabled.value,
+          libras_bible_enabled: libras.bibleEnabled.value,
+          libras_show_on_obs: libras.showOnObs.value,
+        },
+      });
+    }
 
     // O primeiro frame não espera manutenção de dados. O orquestrador conserva
     // a ordem entre migrações que dependem entre si, isola uma falha por tarefa

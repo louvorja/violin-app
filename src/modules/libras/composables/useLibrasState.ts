@@ -14,6 +14,7 @@ import { ref, type Ref } from "vue";
 import $broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { KEYS_LS } from "@/constants/LocalStorageKeys";
+import Telemetry from "@/helpers/Telemetry";
 
 type LibrasScope = "music" | "bible";
 
@@ -43,9 +44,17 @@ $broadcast.listen((msg) => {
   if (typeof flags.obs === "boolean") showOnObs.value = flags.obs;
 });
 
-function setFlag(key: string, target: Ref<boolean>, value: boolean): void {
+function setFlag(field: keyof LibrasFlags, key: string, target: Ref<boolean>, value: boolean): void {
   target.value = value;
   localStorage.setItem(key, String(value));
+  Telemetry.track("libras_toggled", {
+    field,
+    value,
+    enabled: enabled.value,
+    musics: musicsEnabled.value,
+    bible: bibleEnabled.value,
+    obs: showOnObs.value,
+  });
   $broadcast.send(BROADCAST_TYPE.LIBRAS_TOGGLE, {
     enabled: enabled.value,
     musics: musicsEnabled.value,
@@ -67,10 +76,11 @@ export function useLibrasState() {
     bibleEnabled,
     showOnObs,
     scopeEnabled,
-    setEnabled: (value: boolean) => setFlag(KEYS_LS.LIBRAS.ENABLED, enabled, value),
+    setEnabled: (value: boolean) => setFlag("enabled", KEYS_LS.LIBRAS.ENABLED, enabled, value),
     setMusicsEnabled: (value: boolean) =>
-      setFlag(KEYS_LS.LIBRAS.MUSICS_ENABLED, musicsEnabled, value),
-    setBibleEnabled: (value: boolean) => setFlag(KEYS_LS.LIBRAS.BIBLE_ENABLED, bibleEnabled, value),
-    setShowOnObs: (value: boolean) => setFlag(KEYS_LS.LIBRAS.SHOW_ON_OBS, showOnObs, value),
+      setFlag("musics", KEYS_LS.LIBRAS.MUSICS_ENABLED, musicsEnabled, value),
+    setBibleEnabled: (value: boolean) =>
+      setFlag("bible", KEYS_LS.LIBRAS.BIBLE_ENABLED, bibleEnabled, value),
+    setShowOnObs: (value: boolean) => setFlag("obs", KEYS_LS.LIBRAS.SHOW_ON_OBS, showOnObs, value),
   };
 }
