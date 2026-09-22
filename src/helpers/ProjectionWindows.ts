@@ -293,8 +293,11 @@ export async function openVideoProjectionWindows(
   const returnOn = $userdata.get(KEYS.OPTIONS.ONLINE_VIDEO_PROJECTION.SHOW_RETURN, false) as boolean;
   if (await _wantsMediaReturn(returnOn)) await openMediaWindow("return", "video");
   // O vídeo baixado é um arquivo como os da liturgia, e o operador mostra a prévia dele.
-  // O player embutido do YouTube não tem o que mostrar ali.
+  // O player embutido do YouTube não tem o que mostrar ali: se a janela ficou aberta de uma
+  // mídia anterior, ela nunca ouve o vídeo embutido e travava mostrando o conteúdo velho — cada
+  // janela por si, com a projeção e o retorno já no vídeo novo e o operador ainda no antigo.
   if (withOperator) await _openOperatorIfEnabled("video");
+  else if (await isWindowOpen(PROJECTION_TYPE.OPERATOR)) await _close(PROJECTION_TYPE.OPERATOR);
 }
 
 /**

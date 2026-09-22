@@ -6,7 +6,7 @@ import path from "path";
 import fs from "fs";
 
 const require = createRequire(import.meta.url);
-const { createManager, MIN_FREE_BYTES } = require("../onlineVideo/manager.js");
+const { createManager, MIN_FREE_BYTES, SESSION_IDLE_MS } = require("../onlineVideo/manager.js");
 const { OnlineVideoError } = require("../onlineVideo/runner.js");
 
 const A = "aaaaaaaaaaa";
@@ -1571,12 +1571,29 @@ describe("stream (tocar já, enquanto baixa uma vez só)", () => {
   });
 
   describe("limpeza das trilhas em disco", () => {
-    it("ao começar outro vídeo, as trilhas do que já terminou saem", async () => {
+    it("começar outro vídeo NÃO apaga na hora as trilhas do que já terminou: a troca ainda não chegou às janelas", async () => {
+      // O aviso para as janelas trocarem de vídeo só sai DEPOIS que os links do novo resolvem
+      // (stream() ainda está resolvendo B aqui) — apagar o arquivo de A agora rasga o vídeo
+      // debaixo de quem ainda está vendo, e é isto que o operador sentiu como "aperto em outro
+      // vídeo e buga".
       const { manager } = makeStream();
       await manager.stream(A);
       await manager.ensure(A); // A terminou e virou MP4
       expect(manager.serveStream(A, "video", "bytes=0-9")).not.toBeNull(); // ainda serve: a janela pode estar pausada
       await manager.stream(B);
+      expect(manager.serveStream(A, "video", "bytes=0-9")).not.toBeNull();
+      expect(fs.existsSync(path.join(dir, ".stream", A))).toBe(true);
+    });
+
+    it("as trilhas do vídeo anterior só saem sozinhas depois de ficarem ociosas", async () => {
+      // Começa em 1 (não 0): `finishedAt` vira falsy com o relógio parado em zero e o sweep
+      // trataria a sessão como "ainda não terminou", mascarando o teste.
+      let clock = 1;
+      const { manager } = makeStream({ cfg: { now: () => clock } });
+      await manager.stream(A);
+      await manager.ensure(A); // A terminou e virou MP4
+      clock += SESSION_IDLE_MS + 1;
+      await manager.stream(B); // a varredura roda aqui; A já está ocioso há tempo suficiente
       expect(manager.serveStream(A, "video", "bytes=0-9")).toBeNull();
       expect(fs.existsSync(path.join(dir, ".stream", A))).toBe(false);
     });

@@ -7,6 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
+import { KEYS } from "@/constants/UserDataKeys";
 
 const h = vi.hoisted(() => ({
   ensure: vi.fn(),
@@ -20,6 +21,7 @@ const h = vi.hoisted(() => ({
   warning: vi.fn(),
   error: vi.fn(),
   openWindows: vi.fn(async () => {}),
+  closeWindows: vi.fn(async () => {}),
   send: vi.fn(),
 }));
 
@@ -39,6 +41,7 @@ vi.mock("@/helpers/Snackbar", () => ({
 vi.mock("@/helpers/ProjectionWindows", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/helpers/ProjectionWindows")>()),
   openVideoProjectionWindows: h.openWindows,
+  closeProjectionWindows: h.closeWindows,
 }));
 vi.mock("@/helpers/Broadcast", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/helpers/Broadcast")>();
@@ -100,6 +103,7 @@ beforeEach(async () => {
   h.warning.mockClear();
   h.error.mockClear();
   h.openWindows.mockClear();
+  h.closeWindows.mockClear();
   openAudio = vi.spyOn(media, "openAudio").mockResolvedValue(undefined);
   mediaSpies = [
     vi.spyOn(HTMLMediaElement.prototype, "readyState", "get").mockImplementation(() => h.ready),
@@ -649,5 +653,46 @@ describe("com o download automático desligado", () => {
     expect(h.stream).not.toHaveBeenCalled();
     expect(h.ensure).not.toHaveBeenCalled();
     vi.doUnmock("@/helpers/OnlineVideo");
+  });
+});
+
+describe("trocar do vídeo baixado para o player embutido", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("apaga o payload de projeção por arquivo ao cair no embed, senão uma janela recriada depois mostra o vídeo antigo", async () => {
+    // O localStorage do ambiente de teste é um objeto pelado, sem os métodos.
+    const guardado = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) => guardado.get(k) ?? null,
+      setItem: (k: string, v: string) => void guardado.set(k, v),
+      removeItem: (k: string) => void guardado.delete(k),
+    });
+
+    // Um vídeo baixado (yt-dlp) tocou antes: `_openVideoFileProjection` grava este payload
+    // para janelas que abrirem depois de perder o broadcast ao vivo (ver `_readPendingProjection`).
+    localStorage.setItem(
+      KEYS.PROJECTION.LJ_FILE_PROJECTION,
+      JSON.stringify({ url: "louvorja://onlinevideo/old.mp4", type: "video", title: "Vídeo antigo" })
+    );
+
+    await media.openEmbeddedYouTube(embed(OTHER), "Vídeo novo");
+
+    // `_readPendingProjection` sempre olha LJ_FILE_PROJECTION primeiro: sobrevivendo, uma
+    // janela de retorno ou operador recriada depois voltaria a mostrar o vídeo baixado antigo
+    // em vez do player embutido atual — exatamente o "cada janela por si" relatado.
+    expect(localStorage.getItem(KEYS.PROJECTION.LJ_FILE_PROJECTION)).toBeNull();
+    expect(localStorage.getItem(KEYS.PROJECTION.LJ_YOUTUBE_PROJECTION)).toContain(OTHER);
+  });
+});
+
+describe("trocar de um vídeo embutido para outro", () => {
+  it("não fecha a janela de projeção para reabri-la: o clique no segundo vídeo trava e apaga a tela, porque o Electron ainda está destruindo a janela quando o pedido de reabrir a mesma feature chega", async () => {
+    await media.openEmbeddedYouTube(embed(ID), "Vídeo 1");
+    await media.openEmbeddedYouTube(embed(OTHER), "Vídeo 2");
+
+    expect(h.closeWindows).not.toHaveBeenCalled();
+    expect(h.openWindows).toHaveBeenCalledTimes(2);
   });
 });

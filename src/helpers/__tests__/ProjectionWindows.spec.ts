@@ -300,6 +300,13 @@ describe("as aberturas automáticas", () => {
     expect(opened().map((o) => o.feature)).toContain(OPERATOR);
   });
 
+  it("vídeo on-line embutido: fecha o operador que ficou aberto de uma mídia anterior, senão ele trava mostrando o conteúdo velho", async () => {
+    isWindowOpen.mockImplementation(async (feature: string) => feature === OPERATOR);
+    calls.length = 0;
+    await windows.openVideoProjectionWindows();
+    expect(calls).toContain(`close:${OPERATOR}`);
+  });
+
   it.each([
     ["música", () => windows.openProjectionWindows()],
     ["arquivo", () => windows.openFileProjectionWindows()],

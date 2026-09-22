@@ -358,6 +358,7 @@ function createManager(cfg) {
       streams: links,
       dir: path.join(streamDir, id),
       fetchRange,
+      now,
       onProgress: ({ have, total }) =>
         publish(job, {
           phase: "downloading",
@@ -551,14 +552,17 @@ function createManager(cfg) {
     };
   }
 
-  /** Apaga as sessões que não servem mais (o vídeo já terminou e ninguém lê há um bom tempo, ou é de outro vídeo). */
+  /** Apaga as sessões que não servem mais: o vídeo já terminou e ninguém lê há um bom tempo. */
   async function sweepSessions({ except } = {}) {
     const t = now();
     for (const [id, session] of sessions) {
       if (id === except || session.disposed || !session.finishedAt) continue;
       const idle = t - Math.max(session.lastReadAt, session.finishedAt) > SESSION_IDLE_MS;
-      // Outro vídeo assumiu o telão: o <video> deste já não existe para pedir mais nada.
-      if (idle || except) {
+      // `except` só livra a sessão do vídeo que está para começar de se apagar sozinha — não
+      // força a saída das outras. Trocar de vídeo não fecha as janelas na hora: elas ainda podem
+      // estar lendo o vídeo anterior quando este sweep roda, e apagar o arquivo debaixo de quem
+      // lê é o que dá o "buga" (dispose() apaga o arquivo — "quem ainda lê recebe erro").
+      if (idle) {
         sessions.delete(id);
         await session.dispose();
       }
@@ -800,4 +804,5 @@ module.exports = {
   STREAM_PREFIX,
   DEFAULT_MAX_BYTES,
   MIN_FREE_BYTES,
+  SESSION_IDLE_MS,
 };

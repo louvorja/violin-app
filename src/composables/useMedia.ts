@@ -1771,7 +1771,17 @@ const _self = {
     };
     Telemetry.track("music_youtube_requested", { playback_id, title });
 
-    if (_isYouTube()) this.close(true);
+    // Trocar de um vídeo embutido para outro fica na MESMA janela (mesma feature "file"):
+    // `_initYoutube` já destrói o player antigo antes de criar o novo. Fechar e reabrir aqui
+    // corriam — o Electron ainda estava destruindo a janela antiga quando o pedido de abrir a
+    // mesma feature chegava, reaproveitava a quase-morta em vez de recriar, e travava preta.
+    if (_isYouTube()) {
+      _dropPendingDownload();
+      if (_ytUnlisten) {
+        _ytUnlisten();
+        _ytUnlisten = null;
+      }
+    }
 
     _audio.stop();
     this.clearVariables();
@@ -1799,6 +1809,10 @@ const _self = {
         KEYS.PROJECTION.LJ_YOUTUBE_PROJECTION,
         JSON.stringify({ url, type: "youtube", title, playback_id })
       );
+      // Sem isto, uma janela recriada depois (retorno, operador, ou a própria
+      // projeção reaberta) lia o vídeo por arquivo anterior em vez deste —
+      // `_readPendingProjection` sempre prioriza LJ_FILE_PROJECTION.
+      localStorage.removeItem(KEYS.PROJECTION.LJ_FILE_PROJECTION);
     } catch {
       /* ignore */
     }
