@@ -143,25 +143,25 @@
 
       <!-- Dispositivos autorizados -->
       <section v-if="httpServer.running && externalRoutesEnabled" class="opt-section">
-        <div class="tx-devices-header">
-          <h3 class="opt-section-title">
-            <LjIcon :icon="ICONS.UI.MONITORS" :size="18" />
-            {{ $t("options.transmission.devices_section") }}
-          </h3>
+        <h3 class="opt-section-title">
+          <LjIcon :icon="ICONS.UI.MONITORS" :size="18" />
+          {{ $t("options.transmission.devices_section") }}
+        </h3>
+        <div class="tx-devices-actions">
+          <p class="opt-hint">{{ $t("options.transmission.devices_hint") }}</p>
           <LjButton size="sm" :icon="ICONS.ACTIONS.ADD" @click="addNewDevice">
             {{ $t("options.transmission.add_device") }}
           </LjButton>
         </div>
-        <p class="opt-hint">{{ $t("options.transmission.devices_hint") }}</p>
 
         <div class="tx-app-download">
           <span class="tx-app-download__label">
             {{ $t("options.transmission.app_download_label") }}
           </span>
-          <LjButton size="md" :icon="ICONS.UI.ANDROID" @click="showAppDialog('android')">
+          <LjButton size="sm" :icon="ICONS.UI.ANDROID" @click="showAppDialog('android')">
             Android
           </LjButton>
-          <LjButton size="md" :icon="ICONS.UI.APPLE" @click="showAppDialog('ios')">iOS</LjButton>
+          <LjButton size="sm" :icon="ICONS.UI.APPLE" @click="showAppDialog('ios')">iOS</LjButton>
         </div>
 
         <div v-if="devices.length" class="tx-devices">
@@ -1073,14 +1073,24 @@ onMounted(async () => {
 
 /* Lista de URLs de transmissão. */
 /* Dispositivos autorizados */
-.tx-devices-header {
+/* O botão de ação fica numa linha própria, abaixo do título — dentro da linha
+   do título ele espreme o <h3>, que é quem carrega a borda inferior, e ela
+   para de vazar até a borda direita da seção. */
+.tx-devices-actions {
   display: flex;
-  align-items: center;
-  gap: var(--lj-space-3);
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--lj-space-4);
+  /* Mesmo ajuste de .opt-section-title + .opt-hint — como o botão mora numa
+     div ao lado da dica, o seletor de irmão adjacente do arquivo compartilhado
+     não alcança, e o espaço abaixo do título ficava maior que nas outras seções. */
+  margin-top: calc(var(--lj-space-2) * -1);
+  margin-bottom: var(--lj-space-5);
 }
-.tx-devices-header .opt-section-title {
+.tx-devices-actions .opt-hint {
   flex: 1;
-  margin-bottom: 0;
+  min-width: 0;
+  margin: 0;
 }
 .tx-devices {
   display: flex;
@@ -1212,12 +1222,6 @@ onMounted(async () => {
 .tx-confirm-device-meta {
   font-size: var(--lj-text-xs);
   color: var(--lj-text-subtle);
-}
-
-.tx-devices-header__actions {
-  display: flex;
-  align-items: center;
-  gap: var(--lj-space-1);
 }
 
 .tx-app-download {
