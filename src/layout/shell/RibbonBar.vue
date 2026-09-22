@@ -280,6 +280,7 @@ import RibbonTabs from "@/components/RibbonTabs.vue";
 import { LjSlider, LjSwitch } from "@/components/ui";
 import { THEMES } from "@/config/Theme";
 import { prefetchModule } from "@/helpers/ModulePrefetch";
+import { ensureContrastOnDark } from "@/helpers/ColorContrast";
 
 const { t } = useI18n();
 const shell = useShell();
@@ -626,11 +627,19 @@ function resolveBtnColor(btn: RibbonButton): string | undefined {
     const isDark = $appdata.get<boolean>(KEYS.SHELL.IS_DARK, false);
     return isDark ? "#FFFFFF" : COLORS.PRIMARY;
   }
+  let color: string | undefined;
   if (btn.stateBinding) {
     const val = $userdata.get(btn.stateBinding.watchPath);
-    return val ? btn.stateBinding.colorOn || btn.color : btn.stateBinding.colorOff || btn.color;
+    color = val ? btn.stateBinding.colorOn || btn.color : btn.stateBinding.colorOff || btn.color;
+  } else {
+    color = btn.color;
   }
-  return btn.color;
+  // A paleta "classic" vem do Delphi, pensada pra fundo claro: no tema escuro
+  // parte dela cai abaixo do contraste mínimo contra o corpo do ribbon e o
+  // ícone some. Clareia só quem precisa, sem reescrever cada manifest.
+  if (!color) return color;
+  const isDark = $appdata.get<boolean>(KEYS.SHELL.IS_DARK, false);
+  return isDark ? ensureContrastOnDark(color) : color;
 }
 
 function resolveBtnLabel(btn: RibbonButton): string {

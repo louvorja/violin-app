@@ -788,9 +788,12 @@ onBeforeUnmount(() => {
   flex: 1;
   overflow: auto;
   position: relative;
-  /* Fundo clean: navy gradient suave do topo pro fundo, sem vinheta. */
-  background: linear-gradient(180deg, #1f2f48 0%, #14233a 100%);
-  color: rgba(255, 255, 255, 0.7);
+  /* Fundo clean: navy gradient suave do topo pro fundo, sem vinheta.
+     --lj-navy* acompanha a cor escolhida em todos os temas (inclusive os
+     "claros", que só trocam a marca — ver tokens.css), então esta tela nunca
+     destoa do resto do shell nem do texto branco do DesktopDownloadPrompt. */
+  background: linear-gradient(180deg, var(--lj-navy-dark) 0%, var(--lj-navy-darker) 100%);
+  color: var(--lj-text-on-navy-muted);
 }
 
 .shell-content::before {
