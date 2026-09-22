@@ -167,7 +167,16 @@
         <div v-if="devices.length" class="tx-devices">
           <div v-for="device in devices" :key="device.id" class="tx-device-row">
             <div class="tx-device-info">
-              <LjIcon :icon="ICONS.UI.MONITORS" :size="18" />
+              <LjIcon
+                :icon="
+                  device.platform === 'android'
+                    ? ICONS.UI.ANDROID
+                    : device.platform === 'ios'
+                      ? ICONS.UI.APPLE
+                      : ICONS.UI.MONITORS
+                "
+                :size="18"
+              />
               <div>
                 <div class="tx-device-name">{{ device.name }}</div>
                 <div class="tx-device-meta">
