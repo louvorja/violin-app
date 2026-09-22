@@ -326,6 +326,8 @@
       "urls_hint": "Use estas URLs como Browser Source no software de transmissão (OBS, vMix, etc.) ou em qualquer celular/computador na mesma rede.",
       "token_label": "Token",
       "token_reset": "Gerar novo",
+      "token_saved": "Token salvo com sucesso",
+      "token_copied": "Token copiado para a área de transferência",
       "local_windows": "Janelas locais",
       "local_windows_hint": "Abrir uma das views como janela do app — útil em monitor secundário no mesmo computador.",
       "use_hostname": "Usar nome da máquina em vez do IP",

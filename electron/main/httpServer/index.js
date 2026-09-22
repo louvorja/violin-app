@@ -425,6 +425,23 @@ function resetToken() {
 }
 
 /**
+ * Define um token customizado pelo usuário.
+ *
+ * @param {string} newToken
+ * @returns {string} token gravado
+ */
+function setToken(newToken) {
+  if (!newToken || typeof newToken !== "string") return _token;
+  _token = newToken.trim();
+  try {
+    const cfg = userStore.read("config") || {};
+    cfg.httpServer = { ...(cfg.httpServer || {}), token: _token };
+    userStore.write("config", cfg);
+  } catch (_) { /* noop */ }
+  return _token;
+}
+
+/**
  * Define se as rotas externas (SSE, API, aliases Delphi) estão ativas.
  *
  * Quando desativadas, apenas requests de localhost podem acessá-las.
@@ -474,6 +491,7 @@ module.exports = {
   status,
   generateToken,
   resetToken,
+  setToken,
   setMainWindow,
   publish,
   getUserData,

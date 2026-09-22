@@ -75,17 +75,32 @@
           <div>
             <span class="tx-token-label">{{ $t("options.transmission.token_label") }}</span>
             <p class="opt-hint">{{ $t("options.transmission.port_hint") }}</p>
-            <LjCopyButton :value="httpServer.token || ''" class="tx-token">
-              {{ httpServer.token }}
-            </LjCopyButton>
-            <LjButton
-              size="sm"
-              style="margin-left: 10px"
-              :icon="ICONS.ACTIONS.RESTART"
-              @click="resetToken"
-            >
-              {{ $t("options.transmission.token_reset") }}
-            </LjButton>
+            <div class="tx-token-row">
+              <input
+                v-model="tokenInput"
+                class="tx-token-input"
+                type="text"
+                maxlength="20"
+                spellcheck="false"
+                autocomplete="off"
+              />
+              <LjButton
+                size="sm"
+                :icon="ICONS.ACTIONS.SAVE"
+                :disabled="
+                  !httpServer.running || tokenInput === httpServer.token || !tokenInput.trim()
+                "
+                @click="saveToken"
+              >
+                {{ $t("actions.save") }}
+              </LjButton>
+              <LjButton size="sm" :icon="ICONS.UI.COPY" @click="copyToken">
+                {{ $t("actions.copy") }}
+              </LjButton>
+              <LjButton size="sm" :icon="ICONS.ACTIONS.RESTART" @click="resetToken">
+                {{ $t("options.transmission.token_reset") }}
+              </LjButton>
+            </div>
           </div>
         </div>
 
@@ -391,19 +406,13 @@
 
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { useDisplays } from "@/composables/useDisplays";
 import { useDevices } from "@/composables/useDevices";
+import $snackbar from "@/helpers/Snackbar";
 import MonitorSelect from "@/components/inputs/MonitorSelect.vue";
 import DevicePermissionsDialog from "@/components/DevicePermissionsDialog.vue";
-import {
-  LjButton,
-  LjCheckbox,
-  LjCopyButton,
-  LjDialog,
-  LjIcon,
-  LjInput,
-  LjSelect,
-} from "@/components/ui";
+import { LjButton, LjCheckbox, LjDialog, LjIcon, LjInput, LjSelect } from "@/components/ui";
 import Platform from "@/helpers/Platform";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
@@ -417,6 +426,7 @@ const playStoreLogo = new URL("@/assets/img/play-store.svg", import.meta.url).hr
 const appStoreLogo = new URL("@/assets/img/app-store.svg", import.meta.url).href;
 
 const isDesktop = computed(() => Platform.isDesktop);
+const { t } = useI18n();
 const { displays, getFeatureRole, setFeatureRole } = useDisplays();
 const {
   devices,
@@ -828,6 +838,34 @@ async function resetToken() {
   }
 }
 
+const tokenInput = ref("");
+
+watch(
+  () => httpServer.value.token,
+  (t) => {
+    tokenInput.value = t || "";
+  },
+  { immediate: true }
+);
+
+async function saveToken() {
+  if (!Platform.httpServer?.setToken) return;
+  const val = tokenInput.value.trim();
+  if (!val) return;
+  try {
+    await Platform.httpServer.setToken(val);
+    await refreshStatus();
+    $snackbar.success(t("options.transmission.token_saved"));
+  } catch (e) {
+    console.error("[Transmitir] saveToken:", e);
+  }
+}
+
+function copyToken() {
+  navigator.clipboard?.writeText(tokenInput.value);
+  $snackbar.success(t("options.transmission.token_copied"));
+}
+
 /**
  * Alterna a permissão de rotas externas (SSE, API, aliases Delphi).
  * Quando desativadas, apenas localhost pode acessá-las; a SPA do app
@@ -1003,17 +1041,20 @@ onMounted(async () => {
   color: var(--lj-text-muted);
   font-size: var(--lj-text-base);
 }
-:deep(.tx-token) {
+.tx-token-input {
   font-family: var(--lj-font-mono);
   letter-spacing: 0.08em;
   padding: var(--lj-space-1) var(--lj-space-4);
   background: var(--lj-surface-bg-active);
+  border: 1px solid var(--lj-surface-border);
   border-radius: var(--lj-radius-md);
-  cursor: pointer;
-  transition: background 150ms;
+  color: var(--lj-text);
+  outline: none;
+  width: 100px;
+  transition: border-color 150ms;
 }
-:deep(.tx-token:hover) {
-  background: var(--lj-surface-bg-hover);
+.tx-token-input:focus {
+  border-color: var(--lj-accent);
 }
 .tx-port-label {
   margin-left: var(--lj-space-8);

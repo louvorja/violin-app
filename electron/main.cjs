@@ -1306,6 +1306,7 @@ ipcMain.handle("httpServer:setExternalRoutes", (_e, enabled) => {
 
 /** Regenera o token e persiste em userStore. Retorna o novo token. */
 ipcMain.handle("httpServer:resetToken", () => httpServer.resetToken());
+ipcMain.handle("httpServer:setToken", (_e, token) => httpServer.setToken(token));
 
 /** Retorna as configurações de dispositivos (only_authorized_devices etc.). */
 ipcMain.handle("httpServer:getDeviceSettings", () => devices.getSettings());

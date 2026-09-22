@@ -408,6 +408,7 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
     hostname: () => ipcRenderer.invoke("httpServer:hostname"),
     /** Regenera token (revoga acessos antigos). Retorna novo token. */
     resetToken: () => ipcRenderer.invoke("httpServer:resetToken"),
+    setToken: (token) => ipcRenderer.invoke("httpServer:setToken", token),
     /** Retorna configurações de dispositivos (only_authorized_devices etc.). */
     getDeviceSettings: () => ipcRenderer.invoke("httpServer:getDeviceSettings"),
     /** Atualiza configurações de dispositivos. */

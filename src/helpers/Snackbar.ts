@@ -71,12 +71,17 @@ export default {
       _lastKey = d.key;
       _lastKeyAt = agora;
     }
-    _currentAction = d.action;
-    $appdata.set("snackbar.show", true);
-    $appdata.set("snackbar.text", d.text);
-    $appdata.set("snackbar.color", d.color);
-    $appdata.set("snackbar.icon", d.icon);
-    $appdata.set("snackbar.timeout", d.timeout);
+    // Força re-animação: fecha antes de reabrir para que o Vue
+    // processe a transição mesmo quando o toast já está visível.
+    $appdata.set("snackbar.show", false);
+    requestAnimationFrame(() => {
+      _currentAction = d.action;
+      $appdata.set("snackbar.show", true);
+      $appdata.set("snackbar.text", d.text);
+      $appdata.set("snackbar.color", d.color);
+      $appdata.set("snackbar.icon", d.icon);
+      $appdata.set("snackbar.timeout", d.timeout);
+    });
   },
 
   /**
