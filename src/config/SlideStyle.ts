@@ -17,7 +17,7 @@ export const SLIDE_STYLE_DEFAULT = Object.freeze({
   color_aux: "#EFB400",
   background_color: "#000000",
   background_image: "",
-  background_position: "center center",
+  background_position: "cover", // modo cru: cover|contain|center|stretch|tile (estiloDeFundo converte)
   progress_color: "#EFB400",
   show_progress_bar: true,
   show_title_first_slide: true,

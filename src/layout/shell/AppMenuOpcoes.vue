@@ -1537,7 +1537,7 @@ import { AUTO_THEME_ID, isThemePreference, THEME_IDS } from "@/config/Themes";
 import { SLIDE_STYLE_DEFAULT } from "@/config/SlideStyle";
 import { estiloDeFundo } from "@/helpers/BackgroundStyle";
 import { FONT } from "@/config/Fonts";
-import { refreshReturnBg } from "@/composables/useSlideStyle";
+import { refreshReturnBg, refreshSlideBg } from "@/composables/useSlideStyle";
 
 interface ThemeOption {
   id: string;
@@ -2050,6 +2050,8 @@ async function pickSlideBgImage(): Promise<void> {
   slideBgBlobUrl = URL.createObjectURL(blob);
   slideBgImageUrl.value = slideBgBlobUrl;
   await saveSetting({ id: SLIDE_BG_STORAGE_ID, image: r.data, mime: r.mime });
+  refreshSlideBg();
+  Broadcast.send(BROADCAST_TYPE.SLIDE_BG_CHANGED, {});
 }
 
 async function removeSlideBgImage(): Promise<void> {
@@ -2059,6 +2061,8 @@ async function removeSlideBgImage(): Promise<void> {
   }
   slideBgImageUrl.value = "";
   await saveSetting({ id: SLIDE_BG_STORAGE_ID, image: null, mime: null });
+  refreshSlideBg();
+  Broadcast.send(BROADCAST_TYPE.SLIDE_BG_CHANGED, {});
 }
 
 /* ── Return Background Images (top + bottom) ── */

@@ -147,6 +147,7 @@ export const BROADCAST_TYPE = Object.freeze({
    *  Emitido por: AppMenuOpcoes (após pick/remove de imagem retorno).
    *  Recebido por: useSlideStyle (re-resolve blob URLs do IndexedDB). */
   RETURN_BG_CHANGED: "return_bg_changed",
+  SLIDE_BG_CHANGED: "slide_bg_changed",
 
   /** Sincronização de vídeo entre o player principal e a projeção.
    *  Payload: { currentTime: number, isPaused: boolean }

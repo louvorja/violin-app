@@ -88,22 +88,18 @@ const customBackground = computed(() => cfg.value.custom_return_background_activ
 const returnRootBackground = computed(() =>
   customBackground.value
     ? cfg.value.return_bg_top_color || cfg.value.background_color || "#000000"
-    : cfg.value.background_color || "#000000"
+    : "#000000"
 );
 
 // A imagem de fundo só existe quando o operador a escolheu em "Fundo da tela de
 // retorno personalizado". A capa do slide não entra: atrás da letra ela só
 // tirava contraste de quem lê de longe.
 const topPanelStyle = computed(() =>
-  customBackground.value
-    ? slideStyle.returnTopBgStyle()
-    : { background: cfg.value.background_color }
+  customBackground.value ? slideStyle.returnTopBgStyle() : { background: "#1a201a" }
 );
 
 const bottomPanelStyle = computed(() => ({
-  ...(customBackground.value
-    ? slideStyle.returnBottomBgStyle()
-    : { background: cfg.value.background_color }),
+  ...(customBackground.value ? slideStyle.returnBottomBgStyle() : { background: "#1d251d" }),
   height: `${cfg.value.return_height_bottom}vh`,
 }));
 

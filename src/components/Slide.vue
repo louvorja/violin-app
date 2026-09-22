@@ -7,7 +7,7 @@
     <!-- Fundo (cor + imagem). Só pinta se houver imagem ou cor diferente do
          padrão; senão fica transparente sobre o root. -->
     <div
-      v-if="bgStyle.backgroundImage || cfg.background_color"
+      v-if="bgStyle.backgroundImage || cfg.background_color || cfg.custom_background_active"
       :key="bgKey"
       class="lj-slide__bg"
       :style="bgStyle"
@@ -161,7 +161,10 @@ watch(
 );
 
 // Estilos derivados — todos via useSlideStyle (fonte única).
-const bgStyle = computed(() => slideStyle.bgStyle(slideObj.value));
+const bgStyle = computed(() => {
+  void cfg.value;
+  return slideStyle.bgStyle(slideObj.value);
+});
 const bgKey = computed(() => slideObj.value?.url_image || cfg.value.background_image || "default");
 
 const mainTextStyle = computed(() => {

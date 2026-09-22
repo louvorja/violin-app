@@ -100,6 +100,17 @@ export function refreshReturnBg(): void {
   void _resolveReturnBgFromIdb();
 }
 
+/**
+ * Força re-resolução da imagem de fundo do slide a partir do IndexedDB.
+ * Chamado pelo AppMenuOpcoes após salvar/remover imagens.
+ * Espelho de refreshReturnBg — mesmo padrão que funciona no retorno.
+ */
+export function refreshSlideBg(): void {
+  _slideBgResolving = false;
+  _slideBgReady.value = false;
+  void _resolveSlideBgFromIdb();
+}
+
 export type SlideOption = Record<string, unknown> | null;
 
 interface SlideStyleAPI {
@@ -281,14 +292,9 @@ const _readSlideOpts = (): SlideCfg => {
     // a blob URL é criada uma vez por sessão.
     if (_slideBgBlobUrl) merged.background_image = _slideBgBlobUrl;
     if (typeof bgPos === "string") {
-      const map: Record<string, string> = {
-        center: "center center",
-        cover: "center center",
-        contain: "center center",
-        stretch: "center center",
-        tile: "0 0",
-      };
-      merged.background_position = map[bgPos] || bgPos;
+      // Guarda o modo cru (cover/contain/center/stretch/tile) — o estiloDeFundo
+      // converte para background-size/repeat. Não achatar para CSS aqui.
+      merged.background_position = bgPos;
     }
   } else {
     // Sem fundo personalizado: usa Imagem de Fundo global (única chave global_bg_color)
@@ -357,6 +363,10 @@ const _readSlideOpts = (): SlideCfg => {
     if (typeof bottomAlign === "string") merged.return_bottom_text_align = bottomAlign;
   }
 
+  // Nunca deixa background_color vazio — senão o v-if da div de fundo
+  // no Slide.vue avalia false e a div não renderiza.
+  if (!merged.background_color) merged.background_color = "#000000";
+
   return merged;
 };
 
@@ -371,6 +381,9 @@ export function useSlideStyle(): SlideStyleAPI {
   // (pick/remove no AppMenuOpcoes da janela principal).
   useBroadcastListener(BROADCAST_TYPE.RETURN_BG_CHANGED, () => {
     refreshReturnBg();
+  });
+  useBroadcastListener(BROADCAST_TYPE.SLIDE_BG_CHANGED, () => {
+    refreshSlideBg();
   });
 
   // Resolve imagem de fundo do IndexedDB na primeira uso (uma vez por sessão).
@@ -389,6 +402,11 @@ export function useSlideStyle(): SlideStyleAPI {
     void $userdata.get<boolean>(KEYS.OPTIONS.SLIDE.CUSTOM_BACKGROUND, false);
     void $userdata.get<boolean>(KEYS.OPTIONS.SLIDE.CUSTOM_RETURN_BACKGROUND, false);
     void $userdata.get<boolean>(KEYS.OPTIONS.SLIDE.CUSTOM_RETURN_TEXT_FORMAT, false);
+    // Fundo personalizado — chaves que _readSlideOpts() lê
+    void $userdata.get<boolean>(KEYS.OPTIONS.SLIDE.BG_TRANSPARENT, false);
+    void $userdata.get<string>(KEYS.OPTIONS.SLIDE.BG_COLOR, null);
+    void $userdata.get<string>(KEYS.OPTIONS.SLIDE.BG_POSITION, null);
+    void $userdata.get<boolean>(KEYS.OPTIONS.SLIDE.AFFECT_EXTERNAL_SLIDES, null);
     return _readSlideOpts();
   });
 
@@ -496,39 +514,37 @@ export function useSlideStyle(): SlideStyleAPI {
 
   function bgStyle(slide?: SlideOption): CSSProperties {
     const slideUrl = (slide as { url_image?: string })?.url_image;
-    // Regras (replicando o Delphi):
-    //   1. "Fundo personalizado" + "afetar slides externos" → custom vence:
-    //      cor sólida ou imagem custom substitui a url_image do slide.
-    //      Se bg_image estiver vazio, mostra SÓ a cor (sem imagem do slide).
-    //   2. Sem custom OU sem affect_external → usa url_image do slide;
-    //      se o slide não tem imagem, cai no background_color global.
-    // O bug anterior era exigir background_image truthy na condição —
-    // resultado: usuário marcava "Fundo personalizado" + cor preta + imagem
-    // vazia e o slide continuava mostrando a capa original da música.
-    const customWins =
-      cfg.value.affect_external_slides && cfg.value.custom_background_active;
-    const url = customWins
-      ? cfg.value.background_image // pode ser "" → sem imagem, só a cor
-      : slideUrl || cfg.value.background_image || "";
-    // Quando custom NÃO vence e o slide tem image_position numérica (0-8 do
-    // banco), preserva o posicionamento original do slide.
-    let position: string = cfg.value.background_position;
-    const slideImagePos = (slide as { image_position?: number | string })?.image_position;
-    if (!customWins && typeof slideImagePos === "number") {
+    const customActive = cfg.value.custom_background_active;
+    const hasIdMusic = (slide as { id_music?: number })?.id_music != null;
+    const isImported = !hasIdMusic; // slide sem id_music = importado/personalizado
+
+    // affect_external_slides só bloqueia slides IMPORTADOS.
+    // Slides da biblioteca padrão (com id_music) sempre recebem o fundo personalizado.
+    const customWins = customActive && (!isImported || cfg.value.affect_external_slides);
+
+    const imageUrl = customWins
+      ? cfg.value.background_image || null
+      : slideUrl || cfg.value.background_image || null;
+
+    const style = estiloDeFundo({
+      color: cfg.value.background_color,
+      imageUrl,
+      position: cfg.value.background_position,
+    });
+
+    // Preserva image_position numérica do slide (0-8 do banco) quando custom não vence
+    if (!customWins && imageUrl && typeof (slide as { image_position?: number | string })?.image_position === "number") {
       const POSITIONS = [
         "top left", "top center", "top right",
         "center left", "center center", "center right",
         "bottom left", "bottom center", "bottom right",
       ];
-      position = POSITIONS[slideImagePos] || position;
+      const slideImagePos = Number((slide as { image_position?: number | string }).image_position);
+      if (Number.isFinite(slideImagePos) && POSITIONS[slideImagePos]) {
+        style.backgroundPosition = POSITIONS[slideImagePos];
+      }
     }
-    return {
-      backgroundImage: url ? `url(${url})` : undefined,
-      backgroundSize: "cover",
-      backgroundPosition: position,
-      backgroundColor: cfg.value.background_color,
-      backgroundRepeat: "no-repeat",
-    };
+    return style;
   }
 
   function returnTopBgStyle(): CSSProperties {
