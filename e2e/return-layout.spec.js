@@ -53,19 +53,18 @@ for (const viewport of viewports) {
       const nextContent = document.querySelector(".return-next-content");
       const nextText = document.querySelector(".return-next-text");
       if (!nextContent || !nextText) throw new Error("Preview do próximo slide ausente");
-      const nextStyle = getComputedStyle(nextContent);
       return {
         panel: rect(".return-bottom"),
+        // O contador vive ao lado do título, no painel de cima — só o
+        // próximo slide precisa caber dentro do painel do rodapé.
         children: [
           rect(".return-bottom-grid"),
           rect(".return-next-label"),
           rect(".return-next-text"),
           rect(".return-next-content"),
-          rect(".return-counter"),
         ],
         nextPreview: {
-          lineClamp: nextStyle.webkitLineClamp,
-          lineHeight: Number.parseFloat(nextStyle.lineHeight),
+          contentHeight: nextContent.scrollHeight,
           availableHeight: nextText.clientHeight,
         },
       };
@@ -76,10 +75,9 @@ for (const viewport of viewports) {
       expect(child.bottom).toBeLessThanOrEqual(layout.panel.bottom + 1);
     }
 
-    // Não basta esconder o overflow: duas linhas completas precisam caber
-    // antes do clamp aplicar as reticências ao texto excedente.
-    expect(layout.nextPreview.lineClamp).toBe("2");
-    expect(layout.nextPreview.lineHeight * 2).toBeLessThanOrEqual(
+    // O ajuste automático (useFitText) encolhe a fonte até a letra inteira
+    // caber na caixa — nunca corta o texto do próximo slide.
+    expect(layout.nextPreview.contentHeight).toBeLessThanOrEqual(
       layout.nextPreview.availableHeight + 1
     );
 
