@@ -66,7 +66,7 @@ export const contextualPages: RibbonPage[] = [
           },
           {
             id: `${moduleId}_stop_immediately`,
-            icon: ICONS.CATEGORY.CLOSING,
+            icon: ICONS.PLAYER.STOP_NOW,
             label: `${modulePath}.stop_immediately`,
             action: `${moduleId}_stop_immediately`,
             color: "#e74c3c",

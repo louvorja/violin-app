@@ -246,6 +246,7 @@ export const ICONS = {
     SKIP_FORWARD: "player-skip-forward",
     STOP: "player-stop",
     STOP_CIRCLE: "player-stop-filled",
+    STOP_NOW: "player-stop-filled",
     TRANSITION: "transition-right",
     VOLUME_HIGH: "volume",
     VOLUME_LOW: "volume-4",
