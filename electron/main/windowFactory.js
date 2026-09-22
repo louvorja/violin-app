@@ -22,6 +22,7 @@ const _windowMeta = new Map();
 
 /** Referência à janela principal — usada para devolver o foco após abrir projeções. */
 let _mainWindow = null;
+let _httpPort = null;
 
 /**
  * Registra a janela principal. As janelas auxiliares (projeção, operador,
@@ -666,6 +667,10 @@ function setTaskbarVisibility(show) {
   return { ok: true, updated };
 }
 
+function setHttpPort(port) {
+  _httpPort = port;
+}
+
 module.exports = {
   openOnMonitor,
   close,
@@ -673,6 +678,7 @@ module.exports = {
   listOpen,
   getWindow,
   setMainWindow,
+  setHttpPort,
   setTaskbarVisibility,
   reconcile,
 };
