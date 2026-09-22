@@ -168,7 +168,11 @@ mac:
     - target: zip
       arch:
         - universal
-  artifactName: "LouvorJA.Violin-${version}.${ext}"
+  # O .dmg não precisa de marca — só existe em macOS, a extensão já entrega
+  # isso. O .zip é genérico e, sem "-mac" no nome, ninguém que abra a lista de
+  # assets da release adivinha que ele não é pra baixar: existe só porque o
+  # Squirrel.Mac exige um .zip (não o .dmg) para o auto-update.
+  artifactName: "LouvorJA.Violin-${version}-mac.${ext}"
   # Ícone próprio do macOS: 1024x1024 com a placa já desenhada — o squircle
   # branco na grade da Apple (~82% do canvas), margem transparente em volta.
   #
