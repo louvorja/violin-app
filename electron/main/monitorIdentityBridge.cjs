@@ -1,5 +1,8 @@
 "use strict";
 
+const { pathToFileURL } = require("node:url");
+const path = require("node:path");
+
 /**
  * monitorIdentityBridge.cjs — Ponte do main process (CommonJS) para os módulos
  * de monitor, que são ESM: o algoritmo de identidade e o mapa feature→papel.
@@ -14,10 +17,15 @@
 let _identity = null;
 let _roles = null;
 
+/** file:// absoluto — um especificador relativo falha ao resolver dentro do vm context dos testes. */
+function _importLocal(filename) {
+  return import(pathToFileURL(path.join(__dirname, filename)).href);
+}
+
 /** Carrega os módulos. Chamar uma vez, antes de abrir qualquer janela. */
 async function init() {
-  if (!_identity) _identity = await import("./monitorIdentity.mjs");
-  if (!_roles) _roles = await import("./displayRoles.mjs");
+  if (!_identity) _identity = await _importLocal("monitorIdentity.mjs");
+  if (!_roles) _roles = await _importLocal("displayRoles.mjs");
   return { identity: _identity, roles: _roles };
 }
 

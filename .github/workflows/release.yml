@@ -18,6 +18,12 @@ jobs:
           - os: windows-latest
             platform: win
             artifact: installer-windows
+            # Node 24 crasha o pool de workers do Vitest no Windows (o config
+            # cai para vmThreads, que por sua vez não sustenta mock de
+            # electron/require.cache nem troca de TZ em runtime — ver
+            # vitest.config.js). Node 22 evita o crash original e permite usar
+            # o pool "forks" padrão, igual às outras duas plataformas.
+            node_version: "22"
             artifact_glob: |
               dist_electron/*.exe
               dist_electron/*.blockmap
@@ -47,7 +53,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "24"
+          node-version: ${{ matrix.node_version || '24' }}
           cache: "npm"
 
       - name: Instalar dependências

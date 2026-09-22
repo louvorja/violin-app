@@ -25,31 +25,31 @@ beforeEach(() => {
 
 describe("detecção de suporte", () => {
   it("reconhece navegador sem a API", () => {
-    vi.stubGlobal("window", { screen: { width: 1512, height: 982 } });
+    vi.stubGlobal("screen", { width: 1512, height: 982 });
     expect(WebDisplays.isSupported()).toBe(false);
   });
 
   it("reconhece navegador com a API", () => {
-    vi.stubGlobal("window", { getScreenDetails: () => Promise.resolve({}) });
+    vi.stubGlobal("getScreenDetails", () => Promise.resolve({}));
     expect(WebDisplays.isSupported()).toBe(true);
   });
 
   it("detecta mais de uma tela sem precisar de permissão", () => {
-    vi.stubGlobal("window", { screen: { isExtended: true } });
+    vi.stubGlobal("screen", { isExtended: true });
     expect(WebDisplays.isExtended()).toBe(true);
   });
 });
 
 describe("permissionState", () => {
   it("responde unsupported quando a API não existe", async () => {
-    vi.stubGlobal("window", {});
+    // Nenhum stub: o jsdom já não expõe getScreenDetails por padrão.
     expect(await WebDisplays.permissionState()).toBe("unsupported");
   });
 
   it("sobrevive ao nome de permissão desconhecido", async () => {
     // Consultar um nome que o navegador não conhece lança TypeError; sem o
     // try/catch a tela de Opções quebrava inteira.
-    vi.stubGlobal("window", { getScreenDetails: () => Promise.resolve({}) });
+    vi.stubGlobal("getScreenDetails", () => Promise.resolve({}));
     vi.stubGlobal("navigator", {
       permissions: {
         query: () => {
@@ -61,7 +61,7 @@ describe("permissionState", () => {
   });
 
   it("reporta o estado concedido", async () => {
-    vi.stubGlobal("window", { getScreenDetails: () => Promise.resolve({}) });
+    vi.stubGlobal("getScreenDetails", () => Promise.resolve({}));
     vi.stubGlobal("navigator", {
       permissions: { query: async () => ({ state: "granted" }) },
     });
@@ -71,10 +71,8 @@ describe("permissionState", () => {
 
 describe("listScreens", () => {
   it("sem permissão, conta apenas a tela atual", () => {
-    vi.stubGlobal("window", {
-      screen: { width: 1512, height: 982, availWidth: 1512, availHeight: 957 },
-      devicePixelRatio: 2,
-    });
+    vi.stubGlobal("screen", { width: 1512, height: 982, availWidth: 1512, availHeight: 957 });
+    vi.stubGlobal("devicePixelRatio", 2);
     const screens = WebDisplays.listScreens();
     expect(screens).toHaveLength(1);
     expect(screens[0].primary).toBe(true);
@@ -83,7 +81,7 @@ describe("listScreens", () => {
 
 describe("identityOf", () => {
   it("converte a tela no mesmo fingerprint usado no desktop", () => {
-    vi.stubGlobal("window", { screen: {} });
+    vi.stubGlobal("screen", {});
     const screen = {
       id: "screen-1",
       label: PROJECTOR.label,
@@ -103,7 +101,7 @@ describe("identityOf", () => {
   it("marca a origem como web e zera o que o navegador não informa", () => {
     // Sem isso, um fingerprint do navegador poderia ser comparado com um do
     // Electron — e as unidades de px e posição não são equivalentes.
-    vi.stubGlobal("window", { screen: {} });
+    vi.stubGlobal("screen", {});
     const identity = WebDisplays.identityOf({
       id: "screen-0", label: "", bounds: { x: 0, y: 0, width: 1512, height: 982 },
       avail: { x: 0, y: 0, width: 1512, height: 957 },
@@ -121,12 +119,10 @@ describe("aviso de mudança de telas", () => {
     // conectar um projetor não atualizava nada até recarregar a página.
     // `window.screen` emite `change` mesmo sem a permissão concedida.
     const handlers: Record<string, (() => void)[]> = {};
-    vi.stubGlobal("window", {
-      screen: {
-        isExtended: false,
-        addEventListener: (evt: string, cb: () => void) => {
-          (handlers[evt] ||= []).push(cb);
-        },
+    vi.stubGlobal("screen", {
+      isExtended: false,
+      addEventListener: (evt: string, cb: () => void) => {
+        (handlers[evt] ||= []).push(cb);
       },
     });
 
