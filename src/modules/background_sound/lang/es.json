@@ -43,5 +43,7 @@
   "ribbon": {
     "title_ctx": "Gestionar Sonido de Fondo"
   },
-  "categories": "Categorias"
+  "categories": "Categorias",
+  "show_all": "Mostrar todas",
+  "hide_all": "Ocultar todas"
 }

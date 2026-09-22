@@ -6,6 +6,16 @@
     @close="stop"
   >
     <!-- Header -->
+    <template #header>
+      <div class="bgs-header-actions">
+        <LjButton size="sm" variant="ghost" @click="selectAllCategoriesAndUncategorized">
+          {{ tm("show_all") }}
+        </LjButton>
+        <LjButton size="sm" variant="ghost" @click="selectedCategoryIds = new Set()">
+          {{ tm("hide_all") }}
+        </LjButton>
+      </div>
+    </template>
     <div
       class="bgm-root"
       :class="{ 'bgm-root--drag-over': isDragOver }"
@@ -33,15 +43,6 @@
           <span class="bgs-chip-count">
             {{ libraryFiles.filter((f) => f.categoryId === cat.id).length }}
           </span>
-          <button
-            type="button"
-            class="bgs-chip-add"
-            :title="tm('add_audio')"
-            :aria-label="tm('add_audio')"
-            @click.stop="addAudioFiles(cat.id)"
-          >
-            <LjIcon :icon="ICONS.ACTIONS.ADD" :size="12" />
-          </button>
         </div>
         <!-- Virtual: arquivos sem categoria -->
         <div
@@ -56,18 +57,8 @@
           </span>
           <span class="bgm-chip-name">{{ tm("uncategorized") }}</span>
           <span class="bgs-chip-count">{{ uncategorizedCount }}</span>
-          <button
-            type="button"
-            class="bgs-chip-add"
-            :title="tm('add_audio')"
-            :aria-label="tm('add_audio')"
-            @click.stop="addAudioFiles(UNCATEGORIZED_ID)"
-          >
-            <LjIcon :icon="ICONS.ACTIONS.ADD" :size="12" />
-          </button>
         </div>
       </div>
-
       <!-- Audio cards grid -->
       <div v-if="visibleFiles.length" class="bgs-audio-grid">
         <div
@@ -1026,6 +1017,10 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.bgs-header-actions {
+  display: flex;
+  gap: var(--lj-space-2);
+}
 .bgm-root {
   display: flex;
   flex-direction: column;
