@@ -24,6 +24,10 @@
  * Quando `only_authorized_devices` está ativo, apenas o token global é
  * aceito via query/body. Devices devem usar o par de headers.
  *
+ * Devices pendentes (sem permissões) só passam nos `allowUnapprovedPaths`
+ * (ex.: /api/ping) — inclusive no modo restrito —, para conseguirem
+ * acompanhar a aprovação do pareamento.
+ *
  * `req.authInfo` é anexado a cada request autenticado:
  *   { kind, authorized, permissions, deviceId? }
  * — consumido por `/api/ping` para informar se o device já foi autorizado.
@@ -124,15 +128,9 @@ function setupAuth(getToken, findDeviceByToken, findDeviceById, isOnlyAuthorized
         };
         return next();
       }
-      // Gate restrito roda ANTES da exceção do ping.
-      if (onlyAuthorized) {
-        return res.status(403).json({
-          status: "error",
-          message: "Dispositivo não autorizado",
-          code: "DEVICE_NOT_AUTHORIZED",
-        });
-      }
-      // Modo aberto: device cadastrado sem permissões só passa nos paths de exceção.
+      // Device cadastrado mas ainda sem permissões: libera os paths de exceção
+      // (ex.: /api/ping), para o app conseguir acompanhar a aprovação do
+      // pareamento — inclusive no modo restrito (`only_authorized_devices`).
       if (pairDevice && isUnapprovedAllowed) {
         req.authInfo = {
           kind: "device-pending",
@@ -141,6 +139,14 @@ function setupAuth(getToken, findDeviceByToken, findDeviceById, isOnlyAuthorized
           deviceId: pairDevice.id,
         };
         return next();
+      }
+      // Gate restrito bloqueia o pendente nos demais paths.
+      if (onlyAuthorized) {
+        return res.status(403).json({
+          status: "error",
+          message: "Dispositivo não autorizado",
+          code: "DEVICE_NOT_AUTHORIZED",
+        });
       }
     }
 

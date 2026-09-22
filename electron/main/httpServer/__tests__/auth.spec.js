@@ -155,11 +155,24 @@ describe("setupAuth — token via query/body (apenas token global)", () => {
 });
 
 describe("setupAuth — only_authorized_devices", () => {
-  it("device pendente via par id+token é bloqueado com 403", async () => {
+  it("device pendente via par id+token acessa /api/ping mesmo no modo restrito", async () => {
     const out = await run(
       buildMiddleware([pendingDevice], { onlyAuthorized: true }),
       makeRequest({
         path: PING,
+        headers: { "x-device-id": pendingDevice.id, "x-device-token": pendingDevice.token },
+      }),
+    );
+    expect(out.status).toBe(200);
+    expect(out.authInfo.kind).toBe("device-pending");
+    expect(out.authInfo.authorized).toBe(false);
+  });
+
+  it("device pendente via par id+token é bloqueado com 403 fora do /api/ping", async () => {
+    const out = await run(
+      buildMiddleware([pendingDevice], { onlyAuthorized: true }),
+      makeRequest({
+        path: OPEN_SONG,
         headers: { "x-device-id": pendingDevice.id, "x-device-token": pendingDevice.token },
       }),
     );
