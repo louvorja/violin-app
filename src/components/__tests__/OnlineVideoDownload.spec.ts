@@ -98,7 +98,7 @@ describe("OnlineVideoDownload — o controle de cada vídeo", () => {
     const w = mountUi(Parent);
     await button(w, "Baixar para usar sem internet").trigger("click");
     await flushPromises();
-    expect(api.ensure).toHaveBeenCalledWith(ID, expect.objectContaining({ priority: "background", keep: true }));
+    expect(api.ensure).toHaveBeenCalledWith(ID, expect.objectContaining({ priority: "foreground", keep: true }));
     expect(parentClick).not.toHaveBeenCalled();
   });
 
@@ -207,7 +207,7 @@ describe("OnlineVideoDownloadsBar — o resumo da lista", () => {
     await all!.trigger("click");
     await flushPromises();
     expect(api.ensure).toHaveBeenCalledTimes(1);
-    expect(api.ensure).toHaveBeenCalledWith(OTHER, expect.objectContaining({ priority: "background" }));
+    expect(api.ensure).toHaveBeenCalledWith(OTHER, expect.objectContaining({ priority: "foreground" }));
   });
 
   it("com tudo baixado some o 'Baixar todos'; sem nada baixado some o 'Remover'", async () => {

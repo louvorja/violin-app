@@ -16,7 +16,6 @@ import { formatBackgroundTaskDetail } from "@/helpers/BackgroundTaskDetail";
 import type { Music } from "@/types/Music";
 import type { BibleBook } from "@/types/Bible";
 import { resolveMediaReference } from "@/helpers/MediaUrl";
-import Telemetry from "@/helpers/Telemetry";
 
 interface FileEntry {
   remote: string;
@@ -994,7 +993,11 @@ export function useSyncManager() {
           bgTasks.updateTask("sync-collections", { status: "error", completedAt: Date.now() });
           const code = typeof result?.error === "string" && /^download_worker_[a-z_]{1,48}$/.test(result.error)
             ? result.error : "file_error";
-          Telemetry.track("download_queue_failed", { code, failed_count: failed });
+          // Telemetria é opcional no boot e nunca atrasa nem substitui o aviso
+          // funcional de erro, inclusive quando o renderer ainda está montando.
+          void import("@/helpers/Telemetry").then(({ default: Telemetry }) => {
+            Telemetry.track("download_queue_failed", { code, failed_count: failed });
+          }).catch(() => {});
         } else {
           bgTasks.completeTask("sync-collections");
         }
