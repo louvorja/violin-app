@@ -793,6 +793,7 @@ describe("Telemetry", () => {
       feature: "projection",
       duration_ms: 2_400,
       playback_id: "playback-1",
+      presentation_active: true,
       online_video_foreground_running: 1,
       online_video_jobs: [
         { priority: "foreground", lane: "streaming", phase: "downloading", age_bucket: "lt_10s" },
@@ -809,6 +810,7 @@ describe("Telemetry", () => {
         incident_type: "renderer_unresponsive",
         duration_ms: 2_400,
         playback_id: "playback-1",
+        presentation_active: true,
         online_video_foreground_running: 1,
         online_video_jobs: [
           { priority: "foreground", lane: "streaming", phase: "downloading", age_bucket: "lt_10s" },

@@ -30,7 +30,7 @@ const NUMBERS = [
   "online_video_foreground_running", "online_video_background_running",
   "online_video_foreground_queued", "online_video_background_queued",
 ];
-const BOOLEANS = ["download_active", "download_admission_blocked", "presentation_active", "http_server_running", "online_video_streaming", "online_video_background_admission_blocked"];
+const BOOLEANS = ["download_active", "presentation_active", "http_server_running", "online_video_streaming"];
 
 // Keep UUID correlation; opaque non-UUID identifiers are hashed rather than
 // retaining a possible title/path that arrived in an identifier field.

@@ -86,6 +86,13 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
     },
   },
 
+  /** Sinal booleano sem dados de mídia para diagnóstico de concorrência. */
+  presentation: {
+    setMediaActive: (active) => {
+      if (typeof active === "boolean") ipcRenderer.send("presentation:media-active", active);
+    },
+  },
+
   // -------------------------------------------------------------------------
   // D1 — Storage persistente em arquivos JSON (userData/storage/)
   // -------------------------------------------------------------------------

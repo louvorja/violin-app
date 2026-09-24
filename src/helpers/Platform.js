@@ -170,6 +170,11 @@ export default {
     return api?.download ?? null;
   },
 
+  /** Sinal de mídia ativa para diagnóstico desktop sem metadados pessoais. */
+  get presentation() {
+    return api?.presentation ?? null;
+  },
+
   /**
    * Vídeos do YouTube baixados para projeção sem anúncios, ou deixados prontos de antemão.
    * null quando rodando no browser/PWA — lá só existe o player embutido.

@@ -100,4 +100,18 @@ describe("preload IPC contract", () => {
       },
     ]);
   });
+
+  it("expõe apenas o sinal booleano de mídia ativa", () => {
+    const seen = loadPreload();
+    const api = seen.exposed;
+    api.presentation.setMediaActive(true);
+    api.presentation.setMediaActive("yes");
+    api.presentation.setMediaActive(false);
+
+    expect(seen.sent).toEqual([
+      { channel: "presentation:media-active", payload: true },
+      { channel: "presentation:media-active", payload: false },
+    ]);
+  });
+
 });

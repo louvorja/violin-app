@@ -34,6 +34,9 @@ declare global {
       reloadAll: () => Promise<{ ok: boolean; count: number }>;
       openDevTools: () => Promise<{ ok: boolean }>;
     };
+    presentation?: {
+      setMediaActive: (active: boolean) => void;
+    };
     telemetry?: {
       log: (payload: {
         level: "trace" | "debug" | "info" | "warn" | "error" | "fatal";
@@ -169,7 +172,7 @@ declare global {
       onFileDone: (cb: () => void) => void;
       onFileError: (cb: () => void) => void;
       onQueueDone: (
-        cb: (d: { queued?: number; message?: string; downloaded?: number; failed?: number }) => void
+        cb: (d: { queued?: number; message?: string; downloaded?: number; failed?: number; error?: string }) => void
       ) => void;
       onQueueCancelled: (cb: () => void) => void;
       start: (

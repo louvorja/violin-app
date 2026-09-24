@@ -34,6 +34,7 @@ import { MediaOpenParams } from "@/types/Media";
 import { MusicActionEnum } from "@/enums/MusicActionEnum";
 import AudioLibrary from "@/helpers/AudioLibrary";
 import Telemetry from "@/helpers/Telemetry";
+import Platform from "@/helpers/Platform";
 import * as OnlineVideo from "@/helpers/OnlineVideo";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
 import { useOnlineVideoDownloads } from "@/composables/useOnlineVideoDownloads";
@@ -54,6 +55,7 @@ let _audioXhr: XMLHttpRequest | null = null;
 // e chegar ao fim dela não é motivo para encerrar a música.
 let _switchingMode = false;
 let _activePlayback: AudioTelemetryContext | null = null;
+let _mediaActivitySent = false;
 const _videoStateRevisions = new VideoStateRevisionCounter();
 
 // typeof null === "object": sem tratar null aqui, open(null) estourava lendo params.mode.
@@ -69,6 +71,14 @@ function _newPlaybackId(): string {
     /* ambientes antigos sem randomUUID */
   }
   return `playback-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function _mediaClockMs(): number {
+  return typeof performance !== "undefined" ? performance.now() : Date.now();
+}
+
+function _mediaElapsedMs(startedAt: number): number {
+  return Math.max(0, Math.min(180_000, Math.round(_mediaClockMs() - startedAt)));
 }
 
 function _audioTelemetry(extra: Record<string, unknown> = {}): Record<string, unknown> {
@@ -92,6 +102,11 @@ function _sourceType(url: string): string {
 
 function _setPlaybackContext(context: AudioTelemetryContext | null): void {
   _activePlayback = context;
+  const active = context !== null;
+  if (active !== _mediaActivitySent) {
+    _mediaActivitySent = active;
+    try { Platform.presentation?.setMediaActive(active); } catch { /* diagnóstico não afeta projeção */ }
+  }
   if (!context) _videoStateRevisions.reset();
   Telemetry.setRuntimeContext({
     playback_id: context?.playback_id ?? null,
@@ -357,63 +372,107 @@ async function _runStreamedYouTube(
 ): Promise<DownloadedOutcome> {
   const t = i18nAtual()?.global?.t;
   const say = (key: string): string => (t ? String(t(key)) : key);
+  const startedAt = _mediaClockMs();
+  let phaseStartedAt = startedAt;
+  let resolutionMs: number | null = null;
+  let projectionOpenMs: number | null = null;
+  let mediaReadyMs: number | null = null;
+  let outcome = "error";
 
-  _ytDownloading = id; // até os links chegarem, cancelar ou abrir outra coisa desiste do pedido
-  const res = await OnlineVideo.stream(id);
-  if (_ytDownloading === id) _ytDownloading = null;
-  if (seq !== _ytPrepareSeq) return "stopped";
-
-  if (!res.ok) {
-    const kind = res.error.kind;
-    console.warn("[OnlineVideo] abrir direto falhou:", { id, kind, message: res.error.message });
-    // Já há um download comum em curso para este vídeo (um pré-download, por exemplo): não
-    // dá para tocar dele antes de terminar, então o operador o acompanha, com barra.
-    if (kind === "busy") return _runDownloadedYouTube(id, title, seq);
-    const action = OnlineVideo.actionForFailure(kind);
-    if (action === "silent") return "stopped";
-    if (action === "error") {
-      $snackbar.error(say(OnlineVideo.messageKeyForFailure(kind)), {
-        key: `ov-error-${id}`,
-        timeout: 8000,
-      });
+  try {
+    _ytDownloading = id; // até os links chegarem, cancelar ou abrir outra coisa desiste do pedido
+    const res = await OnlineVideo.stream(id);
+    resolutionMs = _mediaElapsedMs(phaseStartedAt);
+    if (_ytDownloading === id) _ytDownloading = null;
+    if (seq !== _ytPrepareSeq) {
+      outcome = "superseded";
       return "stopped";
     }
-    // Ferramentas ainda sendo instaladas (primeiro uso): o download ao fundo as instala,
-    // e não há falha a explicar.
-    if (kind !== "tools") {
-      $snackbar.warning(say(OnlineVideo.messageKeyForStreamFailure(kind)), {
+
+    if (!res.ok) {
+      const kind = res.error.kind;
+      console.warn("[OnlineVideo] abrir direto falhou:", { id, kind, message: res.error.message });
+      // Já há um download comum em curso para este vídeo (um pré-download, por exemplo): não
+      // dá para tocar dele antes de terminar, então o operador o acompanha, com barra.
+      if (kind === "busy") {
+        outcome = "download_fallback";
+        return _runDownloadedYouTube(id, title, seq);
+      }
+      const action = OnlineVideo.actionForFailure(kind);
+      if (action === "silent") {
+        outcome = "cancelled";
+        return "stopped";
+      }
+      if (action === "error") {
+        outcome = "unplayable";
+        $snackbar.error(say(OnlineVideo.messageKeyForFailure(kind)), {
+          key: `ov-error-${id}`,
+          timeout: 8000,
+        });
+        return "stopped";
+      }
+      // Ferramentas ainda sendo instaladas (primeiro uso): o download ao fundo as instala,
+      // e não há falha a explicar.
+      if (kind !== "tools") {
+        $snackbar.warning(say(OnlineVideo.messageKeyForStreamFailure(kind)), {
+          key: `ov-fallback-${id}`,
+          timeout: 8000,
+        });
+      }
+      outcome = "embed_fallback";
+      return "embed";
+    }
+
+    phaseStartedAt = _mediaClockMs();
+    if (!(await _openVideoFileProjection(res.video.url, title, res.audio.url, seq))) {
+      projectionOpenMs = _mediaElapsedMs(phaseStartedAt);
+      outcome = "superseded";
+      return "stopped";
+    }
+    projectionOpenMs = _mediaElapsedMs(phaseStartedAt);
+    _ytStarting = id;
+    phaseStartedAt = _mediaClockMs();
+    const started = await _waitForStreamStart(seq);
+    mediaReadyMs = _mediaElapsedMs(phaseStartedAt);
+    if (_ytStarting === id) _ytStarting = null;
+    if (started === "stopped") {
+      outcome = "superseded";
+      return "stopped";
+    }
+    if (started === "failed") {
+      outcome = "media_not_ready";
+      const el = _audio.getElement();
+      const detail = {
+        ready_state: el.readyState,
+        network_state: el.networkState,
+        error_code: el.error?.code ?? null,
+        error_message: el.error?.message ?? null,
+      };
+      console.warn("[OnlineVideo] o vídeo aberto direto não chegou a tocar:", { id, ...detail });
+      Telemetry.track("online_video_stream_start_failed", { video_id: id, ...detail });
+      _self.close(true);
+      $snackbar.warning(say(OnlineVideo.messageKeyForStreamFailure("unknown")), {
         key: `ov-fallback-${id}`,
         timeout: 8000,
       });
+      return "embed";
     }
-    return "embed";
-  }
 
-  if (!(await _openVideoFileProjection(res.video.url, title, res.audio.url, seq))) return "stopped";
-  _ytStarting = id;
-  const started = await _waitForStreamStart(seq);
-  if (_ytStarting === id) _ytStarting = null;
-  if (started === "stopped") return "stopped";
-  if (started === "failed") {
-    const el = _audio.getElement();
-    const detail = {
-      ready_state: el.readyState,
-      network_state: el.networkState,
-      error_code: el.error?.code ?? null,
-      error_message: el.error?.message ?? null,
-    };
-    console.warn("[OnlineVideo] o vídeo aberto direto não chegou a tocar:", { id, ...detail });
-    Telemetry.track("online_video_stream_start_failed", { video_id: id, ...detail });
-    _self.close(true);
-    $snackbar.warning(say(OnlineVideo.messageKeyForStreamFailure("unknown")), {
-      key: `ov-fallback-${id}`,
-      timeout: 8000,
-    });
-    return "embed";
+    void useOnlineVideoDownloads().download(id, title, { keep: false, quiet: true, background: true });
+    outcome = "playing";
+    return "playing";
+  } finally {
+    // Um resumo por tentativa, sem título/URL/ID e sem log por chunk ou frame.
+    try {
+      Telemetry.track("online_video_stream_start_latency", {
+        resolution_ms: resolutionMs,
+        projection_open_ms: projectionOpenMs,
+        media_ready_ms: mediaReadyMs,
+        total_ms: _mediaElapsedMs(startedAt),
+        outcome,
+      });
+    } catch { /* diagnóstico nunca substitui o resultado da reprodução */ }
   }
-
-  void useOnlineVideoDownloads().download(id, title, { keep: false, quiet: true });
-  return "playing";
 }
 
 function _loadAudioSrc(
@@ -1774,7 +1833,7 @@ const _self = {
         // anúncio) e o download segue mesmo assim, para as próximas vezes.
         const outcome = await _prepareStreamedYouTube(id, title);
         if (outcome !== "embed") return outcome === "playing";
-        void useOnlineVideoDownloads().download(id, title, { keep: false, quiet: true });
+        void useOnlineVideoDownloads().download(id, title, { keep: false, quiet: true, background: true });
       }
       await this.openEmbeddedYouTube(url, title);
       return true;

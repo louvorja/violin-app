@@ -799,6 +799,7 @@ const RUNTIME_INCIDENT_KEYS = new Set([
   "main_memory_rss_mb",
   "main_heap_used_mb",
   "download_active",
+  "presentation_active",
   "online_video_manager_initialized",
   "online_video_active_count",
   "online_video_resolving_count",

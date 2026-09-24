@@ -24,6 +24,7 @@ const _windowMeta = new Map();
 let _mainWindow = null;
 let _httpPort = null;
 let _windowObserver = null;
+let _presentationActivityObserver = null;
 
 /**
  * Permite ao main observar lifecycle/crash das janelas sem acoplar a factory
@@ -32,6 +33,12 @@ let _windowObserver = null;
  */
 function setWindowObserver(observer) {
   _windowObserver = typeof observer === "function" ? observer : null;
+}
+
+/** Informa o main quando existe uma janela de projeção, mesmo escondida por hotplug. */
+function setPresentationActivityObserver(observer) {
+  _presentationActivityObserver = typeof observer === "function" ? observer : null;
+  _syncMainBackgroundThrottling();
 }
 
 /**
@@ -80,11 +87,13 @@ function _shouldSkipTaskbar(meta) {
  * custo de CPU.
  */
 function _syncMainBackgroundThrottling() {
-  if (!_mainWindow || _mainWindow.isDestroyed()) return;
-  const projectionVisible = Array.from(_openWindows.entries()).some(([feature, win]) => {
+  const presentationWindows = Array.from(_openWindows.entries()).filter(([feature, win]) => {
     const meta = _windowMeta.get(feature) || {};
-    return _isProjectionPresentationWindow(meta.route, feature) && _isWindowActive(win);
+    return _isProjectionPresentationWindow(meta.route, feature) && win && !win.isDestroyed();
   });
+  try { _presentationActivityObserver?.(presentationWindows.length > 0); } catch (_) { /* noop */ }
+  if (!_mainWindow || _mainWindow.isDestroyed()) return;
+  const projectionVisible = presentationWindows.some(([, win]) => _isWindowActive(win));
   try {
     _mainWindow.webContents.setBackgroundThrottling(!projectionVisible);
   } catch (_) {
@@ -698,6 +707,7 @@ module.exports = {
   getWindow,
   setMainWindow,
   setWindowObserver,
+  setPresentationActivityObserver,
   setHttpPort,
   setTaskbarVisibility,
   reconcile,

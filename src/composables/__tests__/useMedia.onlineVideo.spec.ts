@@ -274,6 +274,25 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
     expect(h.info).not.toHaveBeenCalled();
   });
 
+  it("emite um resumo de latência por abertura, sem título ou URL", async () => {
+    const { default: Telemetry } = await import("@/helpers/Telemetry");
+    const track = vi.spyOn(Telemetry, "track").mockImplementation(() => {});
+    controlledDownloads();
+
+    expect(await media.openYouTube(embed(ID), "Título privado")).toBe(true);
+
+    const summary = track.mock.calls.find(([event]) => event === "online_video_stream_start_latency")?.[1];
+    expect(summary).toMatchObject({ outcome: "playing" });
+    expect(summary?.resolution_ms).toEqual(expect.any(Number));
+    expect(summary?.projection_open_ms).toEqual(expect.any(Number));
+    expect(summary?.media_ready_ms).toEqual(expect.any(Number));
+    expect(summary).not.toHaveProperty("title");
+    expect(summary).not.toHaveProperty("url");
+    expect(summary).not.toHaveProperty("video_id");
+    expect(track.mock.calls.filter(([event]) => event === "online_video_stream_start_latency")).toHaveLength(1);
+    track.mockRestore();
+  });
+
   it("o vídeo que já estava no disco quando o main foi perguntado toca do arquivo, sem trilhas separadas", async () => {
     const file = `louvorja://onlinevideo/${ID}.mp4`;
     h.stream.mockResolvedValue({ ok: true, id: ID, cached: true, video: { url: file }, audio: { url: file }, muxed: true, duration: null });

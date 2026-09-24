@@ -86,10 +86,16 @@ const classicLibrary = require("./main/classicLibrary.js");
 const netHealth = require("./main/netHealth.js");
 const telemetryErrorQueue = require("./main/telemetryErrorQueue.js");
 const { createRuntimeHealthMonitor } = require("./main/runtimeHealth.js");
+const { createRuntimeIncidentJournal } = require("./main/runtimeIncidentJournal.js");
+const { createPresentationActivity } = require("./main/presentationActivity.js");
 const { buildCsp } = require("./main/csp.js");
 
 const diagnosticLogsRequested =
   process.env.LJ_LOGS === "1" || process.argv.some((arg) => arg.toLowerCase() === "--lj-logs");
+const presentationActivity = createPresentationActivity();
+windowFactory.setPresentationActivityObserver((active) => {
+  presentationActivity.setSource("projection_window", active);
+});
 
 function configureAppPaths() {
   // Mantém o identificador técnico do pacote separado do nome exibido.
@@ -309,6 +315,12 @@ let quitFlushComplete = false;
 let appTray = null;
 const pendingRuntimeIncidents = [];
 const runtimeTelemetryReady = new Set();
+const runtimeIncidentJournal = createRuntimeIncidentJournal({
+  file: path.join(paths.userData(), "runtime-incidents.json"),
+});
+// Consentimento só é conhecido após carregar user_data. Até lá, o journal não
+// persiste incidentes; a fila em memória ainda pode entregá-los ao renderer.
+let runtimeJournalConsent = false;
 
 const MAIN_ERROR_QUEUE_PATH = path.join(paths.userData(), "telemetry-main-errors.json");
 
@@ -364,6 +376,7 @@ function _compactRuntimeSnapshot() {
     main_memory_rss_mb: Math.round(memory.rss / 1024 / 1024),
     main_heap_used_mb: Math.round(memory.heapUsed / 1024 / 1024),
     download_active: downloader.isDownloading(),
+    presentation_active: presentationActivity.isActive(),
     update_status: updateStatus,
     http_server_running: httpStatus?.running === true,
     projection_features: windowFactory.listOpen().slice(0, 16),
@@ -420,6 +433,13 @@ function _emitRuntimeIncident(incident) {
     duration_ms: incident?.duration_ms,
     reason: incident?.reason,
   });
+  // O backup local é raro e assíncrono: nunca espera disco/OneDrive no monitor
+  // do event loop. O schema fechado do journal descarta rota, URL e título.
+  if (runtimeJournalConsent) {
+    void runtimeIncidentJournal.append(incident).catch((error) => {
+      console.warn("[runtime-health] journal falhou:", error?.message || error);
+    });
+  }
   if (_deliverRuntimeIncident(incident)) return;
   pendingRuntimeIncidents.push(incident);
   if (pendingRuntimeIncidents.length > 20) pendingRuntimeIncidents.shift();
@@ -578,9 +598,13 @@ function createWindow() {
 
   // Recarregar a página derruba o listener do renderer; até ele voltar a
   // avisar que está pronto, o que chegar precisa ficar na fila.
-  mainWindow.webContents.on("did-start-loading", () => fileOpenQueue.reset());
+  mainWindow.webContents.on("did-start-loading", () => {
+    fileOpenQueue.reset();
+    presentationActivity.setSource("media_playback", false);
+  });
 
   mainWindow.webContents.on("render-process-gone", (_event, details) => {
+    presentationActivity.setSource("media_playback", false);
     reportMainProcessError(
       "electron.render_process_gone",
       new Error(`${details.reason || "unknown"}:${details.exitCode ?? ""}`),
@@ -608,6 +632,7 @@ function createWindow() {
   }
 
   mainWindow.on("closed", () => {
+    presentationActivity.setSource("media_playback", false);
     const projections = windowFactory.listOpen();
     mainWindow = null;
     try { httpServer.setMainWindow(null); } catch (_) { /* noop */ }
@@ -996,7 +1021,7 @@ app.on("before-quit", (event) => {
     // best-effort ate o Electron efetivamente sair.
     let flushTimeout = null;
     const persistence = await Promise.race([
-      Promise.allSettled([userStore.flush(), docStore.flush()]).finally(() => {
+      Promise.allSettled([userStore.flush(), docStore.flush(), runtimeIncidentJournal.flush()]).finally(() => {
         if (flushTimeout) clearTimeout(flushTimeout);
       }),
       new Promise((resolve) => {
@@ -1020,6 +1045,9 @@ app.on("before-quit", (event) => {
 
     // Um yt-dlp em andamento seguiria baixando (e segurando o vídeo) depois do app fechar.
     onlineVideo.shutdown();
+    // O acervo usa um processo utilitário separado. Cancela e espera no máximo
+    // dois segundos para limpar temporários; nunca prende o encerramento.
+    await downloader.shutdown();
 
     try {
       await httpServer.stop();
@@ -1238,6 +1266,12 @@ function _walkSet(obj, path, value) {
 }
 
 let _userDataMain = userStore.read("user_data") || {};
+runtimeJournalConsent = _userDataMain?.options?.telemetry !== false;
+if (!runtimeJournalConsent) {
+  void runtimeIncidentJournal.clear().catch((error) => {
+    console.warn("[runtime-health] limpeza do journal falhou:", error?.message || error);
+  });
+}
 console.log("[main] user_data carregado no boot:", {
   keys: Object.keys(_userDataMain || {}),
   favCount: Array.isArray(_userDataMain?.favorites) ? _userDataMain.favorites.length : 0,
@@ -1287,6 +1321,14 @@ ipcMain.handle("userdata:patch", (event, payload) => {
   const sender = event.sender;
   if (payload && typeof payload.path === "string") {
     _walkSet(_userDataMain, payload.path, payload.value);
+    if (payload.path === "options.telemetry" && typeof payload.value === "boolean") {
+      runtimeJournalConsent = payload.value;
+      if (!runtimeJournalConsent) {
+        void runtimeIncidentJournal.clear().catch((error) => {
+          console.warn("[runtime-health] limpeza do journal falhou:", error?.message || error);
+        });
+      }
+    }
     _scheduleUserDataFlush();
   } else {
     console.warn('[userdata:patch] payload inválido:', payload);
@@ -1348,6 +1390,13 @@ ipcMain.handle("download:isDownloading", () => downloader.isDownloading());
 
 /** Verifica integridade local de uma lista de arquivos (missing/damaged/ok) */
 ipcMain.handle("download:checkFiles", (_event, files) => downloader.checkFiles(files));
+
+// Só a janela principal declara a mídia ativa no diagnóstico de concorrência.
+// Uma auxiliar, site remoto ou payload malformado não pode falsificar o estado.
+ipcMain.on("presentation:media-active", (event, active) => {
+  if (event.sender !== mainWindow?.webContents || typeof active !== "boolean") return;
+  presentationActivity.setSource("media_playback", active);
+});
 
 // ---------------------------------------------------------------------------
 // Vídeos online baixados para projeção sem anúncios (onlineVideo:*)
