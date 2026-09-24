@@ -6,6 +6,7 @@ const jsonCache = require("../jsonCache.js");
 const devices = require("../devices.js");
 const { HARD_MAX_PAYLOAD_BYTES } = require("./rendererRequestRegistry.js");
 const { safeSend } = require("../safeWebContents.js");
+const { createMusicSearchCatalog, normalize } = require("./musicSearchCatalog.js");
 
 const KEY_LITURGY_DAYS = "modules.liturgy.days";
 const KEY_LITURGY_ACTIVE_DAY = "modules.liturgy.active_day";
@@ -154,6 +155,7 @@ function setupRoutes(
     rendererRequests,
   }
 ) {
+  const musicSearchCatalog = createMusicSearchCatalog();
 
   /** Retorna mainWindow apenas se existir e não estiver destruída. */
   function getValidMainWindow() {
@@ -445,38 +447,19 @@ function setupRoutes(
       return res.json({ status: "ok", results: [] });
     }
     const lang = req.query.lang || "pt";
-    const query = q
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "");
+    const query = normalize(q);
 
     try {
       const filePath = jsonCache.safeLocalPath(`${lang}_musics`);
-      let raw;
+      let results;
       try {
-        raw = await fs.promises.readFile(filePath, "utf8");
+        results = await musicSearchCatalog.search(filePath, query);
       } catch (error) {
         if (error.code !== "ENOENT") throw error;
         return res.status(404).json({
           error: "Base de músicas não encontrada localmente. Faça uma atualização do banco.",
         });
       }
-      const all = JSON.parse(raw);
-
-      const results = all
-        .filter((m) => {
-          const name = (m.name || "")
-            .toLowerCase()
-            .normalize("NFD")
-            .replace(/[\u0300-\u036f]/g, "");
-          const albums = (m.albums_names || "")
-            .toLowerCase()
-            .normalize("NFD")
-            .replace(/[\u0300-\u036f]/g, "");
-          return name.includes(query) || albums.includes(query);
-        })
-        .slice(0, 20);
-
       res.json({ status: "ok", results, total: results.length });
     } catch (e) {
       console.error("[httpServer] /api/music-search error:", e.message);

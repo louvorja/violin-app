@@ -67,6 +67,15 @@ describe("HTTP routes with asynchronous local reads", () => {
     const found = await call("/api/music-search", { q: "graca", lang: "pt" });
     expect(found.body).toMatchObject({ status: "ok", total: 1 });
     expect(found.body.results[0].name).toBe("Graça");
+
+    const replacement = path.join(root, "pt_musics.json.tmp");
+    await fs.writeFile(replacement, JSON.stringify([{ name: "Renovada", albums_names: "Álbum" }]));
+    await fs.rename(replacement, path.join(root, "pt_musics.json"));
+    expect((await call("/api/music-search", { q: "graca", lang: "pt" })).body.results).toEqual([]);
+    expect((await call("/api/music-search", { q: "renovada", lang: "pt" })).body.total).toBe(1);
+
+    await fs.unlink(path.join(root, "pt_musics.json"));
+    expect((await call("/api/music-search", { q: "renovada", lang: "pt" })).code).toBe(404);
   });
 
   it("keeps Bible downloaded detection, including missing chapters", async () => {
