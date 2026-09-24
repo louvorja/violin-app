@@ -64,9 +64,23 @@ export function useProjectionState(): ProjectionStateReturn {
   let musicPlaybackId: string | undefined;
   let musicRevision: number | undefined;
   const shadowReceiver = new MusicShadowReceiver();
+  // Bounded local evidence for the real Chromium cross-window harness. This
+  // contains no lyrics/titles and is never exported by production builds.
+  const shadowDiagnostics = import.meta.env.DEV
+    ? { comparisons: 0, divergences: 0, sessionId: null as string | null }
+    : null;
+  const diagnosticWindow = window as Window & {
+    __ljMusicShadowDiagnostics?: NonNullable<typeof shadowDiagnostics>;
+  };
+  if (shadowDiagnostics) diagnosticWindow.__ljMusicShadowDiagnostics = shadowDiagnostics;
   function compareShadow(): void {
     try {
       const fields = shadowReceiver.takeDifferences();
+      if (shadowDiagnostics) {
+        shadowDiagnostics.comparisons = shadowReceiver.comparisonCount();
+        shadowDiagnostics.sessionId = shadowReceiver.snapshot()?.sessionId ?? null;
+        if (fields.length) shadowDiagnostics.divergences = Math.min(Number.MAX_SAFE_INTEGER, shadowDiagnostics.divergences + 1);
+      }
       if (fields.length) Telemetry.track("presentation_shadow_renderer_divergence", { fields: fields.join(",") });
     } catch { /* diagnostic failure cannot affect projection */ }
   }
@@ -74,6 +88,9 @@ export function useProjectionState(): ProjectionStateReturn {
   onBeforeUnmount(() => {
     // Um rAF pendente não deve atribuir o frame da próxima rota ao slide antigo.
     frameProbeGeneration++;
+    if (shadowDiagnostics && diagnosticWindow.__ljMusicShadowDiagnostics === shadowDiagnostics) {
+      delete diagnosticWindow.__ljMusicShadowDiagnostics;
+    }
   });
 
   useBroadcastListener(BROADCAST_TYPE.MUSIC_SHADOW_SNAPSHOT, (payload) => {

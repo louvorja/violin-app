@@ -39,6 +39,19 @@ broadcast não produz divergência artificial; recovery visual ainda pertence ao
 legado. Este protocolo diagnóstico usa apenas Broadcast local/cross-window,
 não valida a entrega a clientes HTTP/SSE. Não há acknowledgements de paint.
 
+O harness `e2e/presentation-shadow.spec.js` executa Chromium com duas páginas
+reais, fixtures locais e bloqueio de origens externas. Exercita as duas ordens
+de abertura produtor/projetor, navegação e reabertura após perder mensagens.
+Em desenvolvimento, `window.__ljMusicShadowDiagnostics` expõe apenas três
+campos de tamanho constante: número de comparações efetivamente realizadas,
+incidentes e ID da sessão. O contador vem do ponto de comparação do receptor;
+receber um pacote ou não emitir divergência não conta como evidência de paridade.
+Esse objeto é removido ao desmontar e não é exposto no build de produção.
+O teste exige comparação positiva e zero divergências em cada etapa e anexa
+os contadores como JSON, sem letras/títulos. Não envia eventos de sucesso ao
+PostHog. Para preservar outros artefatos, execute com `--output` apontando para
+um diretório temporário exclusivo.
+
 Cada `setSlides` cria uma sessão local nova, independente de `playback_id`.
 Trocar cantada/playback pode mudar a identidade do áudio e seus timestamps
 preservando a sessão de apresentação e o slide atual. O produtor atribui IDs
