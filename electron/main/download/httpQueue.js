@@ -7,6 +7,7 @@ const { EventEmitter } = require("events");
 const paths = require("../paths.js");
 
 const DEFAULT_PROGRESS_INTERVAL_MS = 100;
+const MAX_REDIRECTS = 3;
 
 /**
  * HttpQueue — fila de downloads HTTPS com pool de workers concorrentes.
@@ -162,23 +163,68 @@ class HttpQueue extends EventEmitter {
     return `${this.baseUrl}/${encoded}`;
   }
 
-  _downloadOne(url, localPath, onProgress) {
+  _downloadOne(url, localPath, onProgress, redirectCount = 0, tokenAllowed = true) {
     return new Promise((resolve, reject) => {
-      const lib = url.startsWith("https") ? https : http;
-      const headers = {};
-      if (this.apiToken) headers["Api-Token"] = this.apiToken;
+      let target;
+      try {
+        target = new URL(url);
+        if (target.protocol !== "https:" && target.protocol !== "http:") {
+          throw new Error(`Protocolo de download não permitido: ${target.protocol}`);
+        }
+      } catch (err) {
+        reject(err);
+        return;
+      }
+      if (this.cancelled) {
+        reject(new Error("cancelled"));
+        return;
+      }
 
-      const req = lib.get(url, { headers }, (res) => {
-        if (res.statusCode === 301 || res.statusCode === 302) {
-          // Segue redirect uma vez
+      const lib = target.protocol === "https:" ? https : http;
+      const headers = {};
+      // O token pertence ao servidor configurado, não a URLs de CDN nem a
+      // origens alcançadas por redirects. Uma vez fora da origem, não o reenvie.
+      let baseOrigin;
+      try { baseOrigin = new URL(this.baseUrl).origin; } catch (_) { /* sem origem confiável */ }
+      if (this.apiToken && tokenAllowed && target.origin === baseOrigin) {
+        headers["Api-Token"] = this.apiToken;
+      }
+
+      let req;
+      try {
+        req = lib.get(target, { headers }, (res) => {
+        if ([301, 302, 303, 307, 308].includes(res.statusCode)) {
           const loc = res.headers.location;
           res.resume();
-          this._activeReqs.delete(req);
           if (!loc) {
             reject(new Error(`HTTP ${res.statusCode} sem Location`));
             return;
           }
-          this._downloadOne(loc, localPath, onProgress).then(resolve, reject);
+          if (redirectCount >= MAX_REDIRECTS) {
+            reject(new Error(`Limite de ${MAX_REDIRECTS} redirecionamentos excedido`));
+            return;
+          }
+          let next;
+          try {
+            next = new URL(loc, target);
+            if (next.protocol !== "https:" && next.protocol !== "http:") {
+              throw new Error(`Protocolo de redirect não permitido: ${next.protocol}`);
+            }
+            if (target.protocol === "https:" && next.protocol === "http:") {
+              throw new Error("Redirect HTTPS para HTTP não permitido");
+            }
+          } catch (err) {
+            reject(err);
+            return;
+          }
+          if (this.cancelled) {
+            reject(new Error("cancelled"));
+            return;
+          }
+          this._downloadOne(
+            next.href, localPath, onProgress, redirectCount + 1,
+            tokenAllowed && next.origin === target.origin
+          ).then(resolve, reject);
           return;
         }
         if (res.statusCode !== 200) {
@@ -207,7 +253,11 @@ class HttpQueue extends EventEmitter {
         );
         out.on("error", reject);
         res.on("error", reject);
-      });
+        });
+      } catch (err) {
+        reject(err);
+        return;
+      }
 
       req.on("error", reject);
       req.on("close", () => this._activeReqs.delete(req));
@@ -242,6 +292,7 @@ class HttpQueue extends EventEmitter {
           totalBytes: totalBytes || item.expectedSize || 0,
         });
       });
+      if (this.cancelled) throw new Error("cancelled");
 
       // `file-done` nunca ultrapassa a última posição conhecida do arquivo.
       this._flushPendingProgress(idx);
