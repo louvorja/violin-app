@@ -335,7 +335,11 @@ export async function listFiles(): Promise<OnlineVideoFile[]> {
 
 export async function isDownloaded(id: string): Promise<boolean> {
   if (!downloadAvailable()) return false;
-  return (await listFiles()).some((f) => f.id === id);
+  try {
+    return (await Platform.onlineVideo?.has(id)) === true;
+  } catch {
+    return false;
+  }
 }
 
 /** Manda manter um vídeo que já está no disco. */

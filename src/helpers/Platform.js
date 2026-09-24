@@ -174,7 +174,7 @@ export default {
    * Vídeos do YouTube baixados para projeção sem anúncios, ou deixados prontos de antemão.
    * null quando rodando no browser/PWA — lá só existe o player embutido.
    *
-   * @returns {{ status, ensure, stream, cancel, list, keep, prepare, remove, clear, onProgress } | null}
+   * @returns {{ status, ensure, stream, cancel, has, list, keep, prepare, remove, clear, onProgress } | null}
    */
   get onlineVideo() {
     return api?.onlineVideo ?? null;

@@ -183,6 +183,27 @@ declare global {
       cancel: () => void;
       checkFiles: (files: unknown) => Promise<unknown>;
     };
+    onlineVideo: {
+      status: () => Promise<{ count: number; size: number; supported: boolean; ready: boolean }>;
+      ensure: (
+        id: string,
+        opts?: { maxHeight?: number; priority?: "foreground" | "background"; keep?: boolean }
+      ) => Promise<import("./helpers/OnlineVideo").OnlineVideoResult>;
+      stream: (
+        id: string,
+        opts?: { maxHeight?: number; keep?: boolean }
+      ) => Promise<import("./helpers/OnlineVideo").OnlineVideoStreamResult>;
+      cancel: (id: string) => Promise<boolean>;
+      has: (id: string) => Promise<boolean>;
+      list: () => Promise<import("./helpers/OnlineVideo").OnlineVideoFile[]>;
+      keep: (id: string) => Promise<boolean>;
+      prepare: () => Promise<{ ok: boolean; ready?: boolean; error?: unknown }>;
+      remove: (id: string) => Promise<boolean>;
+      clear: () => Promise<number>;
+      onProgress: (
+        cb: (progress: import("./helpers/OnlineVideo").OnlineVideoProgress) => void
+      ) => () => void;
+    };
     displays: {
       list: () => Promise<unknown[]>;
       getPreferred: (feature: string) => Promise<{ id: number; bounds: unknown } | null>;

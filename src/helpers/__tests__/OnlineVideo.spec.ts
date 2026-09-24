@@ -388,10 +388,19 @@ describe("vídeos no disco", () => {
   });
 
   it("isDownloaded confere pelo ID e vale zero fora do desktop", async () => {
-    h.platform.onlineVideo = fakeApi({ list: vi.fn(async () => files) });
+    h.platform.onlineVideo = fakeApi({ has: vi.fn(async (id: string) => id === ID), list: vi.fn() });
     expect(await isDownloaded(ID)).toBe(true);
     expect(await isDownloaded("zzzzzzzzzzz")).toBe(false);
+    expect(h.platform.onlineVideo.has).toHaveBeenCalledWith(ID);
+    expect(h.platform.onlineVideo.list).not.toHaveBeenCalled();
     h.platform.isDesktop = false;
+    expect(await isDownloaded(ID)).toBe(false);
+  });
+
+  it("isDownloaded trata falha do IPC e resposta inválida como ausência de cache", async () => {
+    h.platform.onlineVideo = fakeApi({ has: vi.fn(async () => "yes") });
+    expect(await isDownloaded(ID)).toBe(false);
+    h.platform.onlineVideo = fakeApi({ has: vi.fn(async () => { throw new Error("main saiu"); }) });
     expect(await isDownloaded(ID)).toBe(false);
   });
 

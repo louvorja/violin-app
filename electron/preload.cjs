@@ -240,6 +240,8 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
     stream: (id, opts) => ipcRenderer.invoke("onlineVideo:stream", id, opts),
     /** Cancela o download (ou a busca de URL) do vídeo, se houver. */
     cancel: (id) => ipcRenderer.invoke("onlineVideo:cancel", id),
+    /** Consulta direta de um único vídeo no cache. */
+    has: (id) => ipcRenderer.invoke("onlineVideo:has", id),
     /** Vídeos em disco: [{ id, size, usedAt, kept }] */
     list: () => ipcRenderer.invoke("onlineVideo:list"),
     /** Manda manter um vídeo já baixado: o despejo por espaço não o leva. */

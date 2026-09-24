@@ -109,6 +109,9 @@ function registerIpc(ipcMain) {
   });
 
   ipcMain.handle("onlineVideo:cancel", (_event, id) => getManager().cancel(id));
+  // O play consulta um único ID. A listagem completa do cache pode fazer centenas de
+  // stats sequenciais e atrasar a primeira imagem em discos lentos/antivírus.
+  ipcMain.handle("onlineVideo:has", (_event, id) => isVideoId(id) && getManager().store.has(id));
   ipcMain.handle("onlineVideo:keep", (_event, id) => getManager().keep(id));
   ipcMain.handle("onlineVideo:prepare", () => getManager().prepare());
   ipcMain.handle("onlineVideo:list", () => getManager().list());
