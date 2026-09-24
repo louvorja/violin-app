@@ -1,16 +1,39 @@
 "use strict";
+const path = require("path");
 const https = require("https");
 const http = require("http");
+const paths = require("../paths.js");
 const apiClient = require("./api.js");
 const integrity = require("./integrity.js");
-const { HttpQueue } = require("./httpQueue.js");
+const { UtilityQueue } = require("./utilityQueue.js");
+const { validateDownloadEntries } = require("./requestValidation.js");
 const { safeSend } = require("../safeWebContents.js");
+
+// Apenas as origens do acervo oficial. A base configurada também é aceita
+// pelo validador; origens recebidas do renderer nunca entram nesta lista.
+const TRUSTED_MEDIA_ORIGINS = ["https://cdn.louvorja.com", "https://api.louvorja.com.br"];
 
 let _activeQueue = null;
 let _startingDownload = false;
 let _filesUrl = "";
 let _apiUrl = "";
 let _apiToken = "";
+
+function _validatedFiles(files, filesDir, filesUrl) {
+  const entries = validateDownloadEntries(files, {
+    filesDir,
+    filesBaseUrl: filesUrl,
+    allowedRemoteOrigins: TRUSTED_MEDIA_ORIGINS,
+  });
+  const destinations = new Set();
+  for (const entry of entries) {
+    const absolute = path.resolve(filesDir, entry.local);
+    const key = process.platform === "win32" ? absolute.toLowerCase() : absolute;
+    if (destinations.has(key)) throw new TypeError("download files: destino duplicado");
+    destinations.add(key);
+  }
+  return entries;
+}
 
 function setApiConfig(cfg) {
   apiClient.setConfig(cfg);
@@ -131,16 +154,35 @@ async function startDownload(files, webContents) {
 
   _startingDownload = true;
   try {
+    const filesDir = paths.filesDir();
+    const filesUrl = _filesUrl;
+    const apiToken = _apiToken;
+    // Valida antes de qualquer stat ou socket. A lista passa a ser um snapshot
+    // fechado: nada da entrada IPC não confiável chega à fila de trabalho.
+    const entries = _validatedFiles(files, filesDir, filesUrl);
     // Filtrar arquivos já OK sem bloquear o main durante a varredura.
-    const { missing, damaged } = await integrity.diff(files);
+    const { missing, damaged } = await integrity.diff(entries);
+    if (paths.filesDir() !== filesDir) {
+      throw new Error("Pasta de arquivos alterada durante o preparo do download; tente novamente");
+    }
     const toDownload = [...missing, ...damaged];
 
     if (toDownload.length === 0) {
       return { queued: 0, message: "Todos os arquivos já estão atualizados" };
     }
 
-    _activeQueue = new HttpQueue({ baseUrl: _filesUrl, apiToken: _apiToken });
-    _activeQueue.add(toDownload);
+    _activeQueue = new UtilityQueue({
+      baseUrl: filesUrl,
+      apiToken,
+      filesDir,
+      allowedRemoteOrigins: TRUSTED_MEDIA_ORIGINS,
+    });
+    _activeQueue.add(toDownload.map((entry) => ({
+      remote: entry.remote,
+      remoteUrl: entry.remoteUrl,
+      local: path.resolve(filesDir, entry.local),
+      expectedSize: entry.expectedSize,
+    })));
 
     _activeQueue.on("progress", (data) => safeSend(webContents, "download:progress", data));
     _activeQueue.on("file-done", (data) => safeSend(webContents, "download:file-done", data));
@@ -191,8 +233,13 @@ function isDownloading() {
   return !!(_activeQueue && _activeQueue.running);
 }
 
+function shutdown() {
+  return _activeQueue?.shutdown() || Promise.resolve();
+}
+
 function checkFiles(files) {
-  return integrity.diff(files);
+  const entries = _validatedFiles(files, paths.filesDir(), _filesUrl);
+  return integrity.diff(entries);
 }
 
 module.exports = {
@@ -204,5 +251,6 @@ module.exports = {
   pauseDownload,
   resumeDownload,
   isDownloading,
+  shutdown,
   checkFiles,
 };

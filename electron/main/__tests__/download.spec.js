@@ -2,6 +2,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createRequire } from "module";
 import http from "http";
+import os from "os";
+import path from "path";
 
 const require = createRequire(import.meta.url);
 
@@ -89,6 +91,7 @@ describe("download.startDownload", () => {
   it("reserves the start while asynchronous integrity scanning is pending", async () => {
     const download = require("../download/index.js");
     const integrity = require("../download/integrity.js");
+    vi.spyOn(require("../paths.js"), "filesDir").mockReturnValue(path.join(os.tmpdir(), "lj-download-test-files"));
     download.setApiConfig({ filesUrl: "https://example.invalid/files" });
     let finishScan;
     vi.spyOn(integrity, "diff").mockImplementation(() => new Promise((resolve) => {
@@ -99,6 +102,59 @@ describe("download.startDownload", () => {
     await expect(download.startDownload([], null)).rejects.toThrow("Download já em andamento");
     finishScan({ missing: [], damaged: [], ok: [] });
     await expect(first).resolves.toMatchObject({ queued: 0 });
+    vi.restoreAllMocks();
+  });
+
+  it("rejects unsafe or duplicate IPC entries before filesystem scanning", async () => {
+    const download = require("../download/index.js");
+    const integrity = require("../download/integrity.js");
+    vi.spyOn(require("../paths.js"), "filesDir").mockReturnValue(path.join(os.tmpdir(), "lj-download-test-files"));
+    const scan = vi.spyOn(integrity, "diff");
+    download.setApiConfig({ filesUrl: "https://api.louvorja.workers.dev/file" });
+    const valid = { remote: "/images/capa.jpg", local: "images/capa.jpg", remoteUrl: "https://cdn.louvorja.com/images/capa.jpg" };
+
+    await expect(download.startDownload([{ ...valid, local: "../outside.jpg" }], null)).rejects.toThrow("download files");
+    await expect(download.startDownload([valid, valid], null)).rejects.toThrow("destino duplicado");
+    expect(scan).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
+  });
+
+  it("validates checkFiles with the same boundary as startDownload", async () => {
+    const download = require("../download/index.js");
+    const integrity = require("../download/integrity.js");
+    vi.spyOn(require("../paths.js"), "filesDir").mockReturnValue(path.join(os.tmpdir(), "lj-download-test-files"));
+    download.setApiConfig({ filesUrl: "https://api.louvorja.workers.dev/file" });
+    const scan = vi.spyOn(integrity, "diff").mockResolvedValue({ missing: [], damaged: [], ok: [] });
+
+    await expect(download.checkFiles([{ remote: "/images/capa.jpg", local: "images/capa.jpg", remoteUrl: "https://cdn.louvorja.com/images/capa.jpg" }])).resolves.toMatchObject({ ok: [] });
+    expect(scan).toHaveBeenCalledOnce();
+    expect(() => download.checkFiles([{ remote: "/images/capa.jpg", local: "../outside.jpg" }])).toThrow("download files");
+    expect(scan).toHaveBeenCalledOnce();
+    vi.restoreAllMocks();
+  });
+
+  it("hands a validated absolute snapshot to the isolated utility queue", async () => {
+    const download = require("../download/index.js");
+    const integrity = require("../download/integrity.js");
+    const { UtilityQueue } = require("../download/utilityQueue.js");
+    const filesDir = path.join(os.tmpdir(), "lj-download-test-files");
+    vi.spyOn(require("../paths.js"), "filesDir").mockReturnValue(filesDir);
+    vi.spyOn(integrity, "diff").mockImplementation(async (files) => ({ missing: files, damaged: [], ok: [] }));
+    let queue;
+    vi.spyOn(UtilityQueue.prototype, "start").mockImplementation(function () {
+      queue = this;
+      this.running = true;
+      return Promise.resolve();
+    });
+    download.setApiConfig({ filesUrl: "https://api.louvorja.workers.dev/file" });
+    const entry = { remote: "/images/capa.jpg", local: "images/capa.jpg", remoteUrl: "https://cdn.louvorja.com/images/capa.jpg" };
+
+    await expect(download.startDownload([entry], null)).resolves.toEqual({ queued: 1 });
+
+    expect(queue.config).toMatchObject({ filesDir, baseUrl: "https://api.louvorja.workers.dev/file" });
+    expect(queue.queue).toEqual([{ ...entry, local: path.join(filesDir, entry.local) }]);
+    queue.emit("queue-done", { downloaded: 1, failed: 0 });
+    expect(download.isDownloading()).toBe(false);
     vi.restoreAllMocks();
   });
 });

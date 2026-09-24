@@ -62,11 +62,18 @@ function _ensureDownloadListeners(): void {
   );
 
   _downloadListeners.push(
-    Platform.download.onQueueDone(() => {
+    Platform.download.onQueueDone((result: { downloaded?: number; failed?: number }) => {
       const task = _tasks.get("sync-collections");
       if (task && task.status === "running") {
-        task.status = "completed";
-        task.progress = 100;
+        const failed = typeof result?.failed === "number" &&
+          Number.isSafeInteger(result.failed) && result.failed > 0 ? result.failed : 0;
+        const downloaded = typeof result?.downloaded === "number" &&
+          Number.isSafeInteger(result.downloaded) && result.downloaded > 0 ? result.downloaded : 0;
+        task._failed = Math.max(task._failed ?? 0, failed);
+        task._done = Math.max(task._done ?? 0, downloaded);
+        task._total = Math.max(task._total ?? 0, downloaded + failed);
+        task.status = task._failed > 0 ? "error" : "completed";
+        task.progress = task.status === "completed" ? 100 : task.progress;
         task.completedAt = Date.now();
       }
     }),
@@ -81,6 +88,7 @@ function _ensureDownloadListeners(): void {
       }
     }),
   );
+
 }
 
 export function useBackgroundTasks() {

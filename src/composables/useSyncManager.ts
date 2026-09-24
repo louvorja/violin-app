@@ -16,6 +16,7 @@ import { formatBackgroundTaskDetail } from "@/helpers/BackgroundTaskDetail";
 import type { Music } from "@/types/Music";
 import type { BibleBook } from "@/types/Bible";
 import { resolveMediaReference } from "@/helpers/MediaUrl";
+import Telemetry from "@/helpers/Telemetry";
 
 interface FileEntry {
   remote: string;
@@ -978,9 +979,25 @@ export function useSyncManager() {
 
     // Escuta conclusão da fila
     _downloadCleanup.push(
-      Platform.download.onQueueDone(() => {
+      Platform.download.onQueueDone((result: { downloaded?: number; failed?: number; error?: string }) => {
         downloading.value = false;
-        bgTasks.completeTask("sync-collections");
+        const reportedFailed = typeof result?.failed === "number" &&
+          Number.isSafeInteger(result.failed) && result.failed > 0 ? result.failed : 0;
+        const failed = Math.max(downloadProgress.value.failed, reportedFailed);
+        downloadFailedCount.value = Math.max(downloadFailedCount.value, failed);
+        downloadProgress.value = {
+          ...downloadProgress.value,
+          failed: Math.max(downloadProgress.value.failed, failed),
+        };
+        if (failed > 0) {
+          downloadCompletedMsg.value = t("options.collections_download.failed", { n: failed });
+          bgTasks.updateTask("sync-collections", { status: "error", completedAt: Date.now() });
+          const code = typeof result?.error === "string" && /^download_worker_[a-z_]{1,48}$/.test(result.error)
+            ? result.error : "file_error";
+          Telemetry.track("download_queue_failed", { code, failed_count: failed });
+        } else {
+          bgTasks.completeTask("sync-collections");
+        }
       })
     );
     _downloadCleanup.push(
