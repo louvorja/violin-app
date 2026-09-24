@@ -33,6 +33,7 @@ class HttpQueue extends EventEmitter {
     this.running = false;
     this.cancelled = false;
     this.paused = false;
+    this.admissionBlocked = false;
     this._activeReqs = new Set();
     this._activeTmps = new Set();
     this._resumeWaiters = [];
@@ -65,8 +66,7 @@ class HttpQueue extends EventEmitter {
     this.cancelled = true;
     this.paused = false;
     this._discardPendingProgress();
-    this._resumeWaiters.forEach((res) => res());
-    this._resumeWaiters = [];
+    this._releaseAdmissionWaiters();
     for (const req of this._activeReqs) {
       try { req.destroy(new Error("cancelled")); } catch (_) { /* ignore */ }
     }
@@ -131,13 +131,26 @@ class HttpQueue extends EventEmitter {
   resume() {
     if (!this.paused) return;
     this.paused = false;
-    this._resumeWaiters.forEach((res) => res());
-    this._resumeWaiters = [];
+    this._releaseAdmissionWaiters();
     this.emit("resumed");
   }
 
-  _waitIfPaused() {
-    if (!this.paused) return Promise.resolve();
+  /** Stops admission of new files without interrupting active downloads. */
+  setAdmissionBlocked(blocked) {
+    const next = blocked === true;
+    if (this.admissionBlocked === next) return;
+    this.admissionBlocked = next;
+    this._releaseAdmissionWaiters();
+  }
+
+  _releaseAdmissionWaiters() {
+    if (!this.cancelled && (this.paused || this.admissionBlocked)) return;
+    this._resumeWaiters.forEach((resolve) => resolve());
+    this._resumeWaiters = [];
+  }
+
+  _waitForAdmission() {
+    if (this.cancelled || (!this.paused && !this.admissionBlocked)) return Promise.resolve();
     return new Promise((res) => this._resumeWaiters.push(res));
   }
 
@@ -212,6 +225,14 @@ class HttpQueue extends EventEmitter {
       await fs.ensureDir(path.dirname(item.local));
       this._activeTmps.add(tmp);
 
+      // A preparação do diretório é assíncrona: a apresentação pode começar
+      // nesse intervalo. Ainda não há requisição ativa, então aguarde a
+      // admissão antes de abrir o socket deste arquivo.
+      while (!this.cancelled && (this.paused || this.admissionBlocked)) {
+        await this._waitForAdmission();
+      }
+      if (this.cancelled) throw new Error("cancelled");
+
       await this._downloadOne(url, tmp, (bytes, totalBytes) => {
         this._queueProgress(idx, {
           current: idx,
@@ -262,8 +283,10 @@ class HttpQueue extends EventEmitter {
     // Pool de workers concorrentes — cada um consome o queue até esvaziar.
     const worker = async () => {
       while (!this.cancelled) {
-        await this._waitIfPaused();
+        await this._waitForAdmission();
         if (this.cancelled) break;
+        // A pausa pode chegar entre o Promise resolvido e este microtask.
+        if (this.paused || this.admissionBlocked) continue;
         if (this.queue.length === 0) break;
         const item = this.queue.shift();
         if (!item) break;
