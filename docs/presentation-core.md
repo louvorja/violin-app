@@ -81,6 +81,18 @@ paridade de todos os módulos nem autoriza cutover automático.
 
 Validação: testes de replay determinístico, deduplicação, sessão antiga,
 fechamento/reabertura, limites, cópia de inputs, troca de marcações, divergência
-deliberada, seek assíncrono e requests de recovery. O trabalho não depende de
-hardware Windows. Transporte revisionado, recovery de snapshots nas janelas e
-validação física multiplataforma permanecem etapas posteriores.
+deliberada, seek assíncrono, requests de recovery e comparação em duas janelas
+Chromium reais. O trabalho não depende de hardware Windows. Cutover do legado,
+aplicação visual do snapshot canônico e validação física multiplataforma
+permanecem etapas posteriores; não confundir paridade desta fatia com paridade
+de todos os modos de apresentação.
+
+`projection_slide_frame_opportunity` é emitido somente em marcos/atrasos e
+separa `command_to_commit_ms`, `commit_to_emit_ms`,
+`broadcast_to_receive_ms`, `receive_to_state_apply_ms`,
+`state_apply_to_dom_ms` e `dom_to_frame_ms`, quando os respectivos marcos são
+válidos. `receive_to_apply_ms` mantém o significado histórico até `nextTick`.
+Os histogramas de duração usam apenas atributos de baixa cardinalidade; letras,
+títulos e IDs não entram nas dimensões das métricas. Dois `requestAnimationFrame`
+indicam oportunidade de frame após o patch DOM, não a apresentação física no
+monitor. O laboratório Windows deve correlacionar essa amostra com GPU/display.
