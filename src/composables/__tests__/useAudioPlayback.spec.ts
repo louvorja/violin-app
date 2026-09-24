@@ -36,9 +36,7 @@ describe("useAudioPlayback.play", () => {
   });
 
   it("silencia AbortError — interromper um play() pendente é esperado, não falha", async () => {
-    stubPlay(
-      namedError("AbortError", "The play() request was interrupted by a call to pause().")
-    );
+    stubPlay(namedError("AbortError", "The play() request was interrupted by a call to pause()."));
     const onError = vi.fn();
 
     audio.play(onError);
@@ -77,15 +75,15 @@ describe("useAudioPlayback.play", () => {
 
     expect(Telemetry.track).toHaveBeenCalledWith(
       "music_buffering_started",
-      expect.objectContaining({ playback_id: "p-buffer", id_music: 42, trigger: "waiting" }),
+      expect.objectContaining({ playback_id: "p-buffer", id_music: 42, trigger: "waiting" })
     );
     expect(Telemetry.track).toHaveBeenCalledWith(
       "music_buffering_recovered",
-      expect.objectContaining({ playback_id: "p-buffer" }),
+      expect.objectContaining({ playback_id: "p-buffer" })
     );
     expect(Telemetry.track).toHaveBeenCalledWith(
       "music_play_started",
-      expect.objectContaining({ playback_id: "p-buffer" }),
+      expect.objectContaining({ playback_id: "p-buffer" })
     );
   });
 
@@ -94,10 +92,14 @@ describe("useAudioPlayback.play", () => {
     current.setAttribute("src", "blob:atual");
     const next = document.createElement("audio");
     next.setAttribute("src", "blob:nova");
-    next.play = vi.fn(() => Promise.reject(namedError("NotSupportedError", "codec"))) as unknown as HTMLMediaElement["play"];
+    next.play = vi.fn(() =>
+      Promise.reject(namedError("NotSupportedError", "codec"))
+    ) as unknown as HTMLMediaElement["play"];
     next.pause = vi.fn();
 
-    await expect(audio.takeOver(next, () => 0, true)).rejects.toMatchObject({ name: "NotSupportedError" });
+    await expect(audio.takeOver(next, () => 0, true)).rejects.toMatchObject({
+      name: "NotSupportedError",
+    });
     expect(audio.getElement()).toBe(current);
     expect(next.play).toHaveBeenCalledOnce();
   });
@@ -114,7 +116,7 @@ describe("useAudioPlayback.play", () => {
 
     expect(Telemetry.track).toHaveBeenCalledWith(
       "music_playback_failed",
-      expect.objectContaining({ playback_id: "p-decode", stage: "media_element", reason: "decode" }),
+      expect.objectContaining({ playback_id: "p-decode", stage: "media_element", reason: "decode" })
     );
   });
 
@@ -132,9 +134,35 @@ describe("useAudioPlayback.play", () => {
 
       expect(Telemetry.track).toHaveBeenCalledWith(
         "music_playback_stalled",
-        expect.objectContaining({ playback_id: "p-stalled", reason: "time_not_advancing" }),
+        expect.objectContaining({ playback_id: "p-stalled", reason: "time_not_advancing" })
       );
     } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("amostra o relógio em 10 Hz em vez de recalcular o renderer a cada frame", async () => {
+    vi.useFakeTimers();
+    const onTime = vi.fn();
+    const off = audio.onTimeUpdate(onTime);
+    try {
+      const el = stubPlay(null);
+      Object.defineProperty(el, "paused", { configurable: true, value: false });
+      Object.defineProperty(el, "duration", { configurable: true, value: 60 });
+      Object.defineProperty(el, "currentTime", { configurable: true, writable: true, value: 1 });
+
+      audio.play();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      // Uma amostra imediata e, depois, dez amostras por segundo.
+      expect(onTime).toHaveBeenCalledTimes(1);
+      vi.advanceTimersByTime(1_000);
+      expect(onTime.mock.calls.length).toBeGreaterThanOrEqual(10);
+      expect(onTime.mock.calls.length).toBeLessThanOrEqual(12);
+    } finally {
+      off();
+      audio.reset();
       vi.useRealTimers();
     }
   });

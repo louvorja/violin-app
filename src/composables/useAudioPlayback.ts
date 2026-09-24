@@ -28,9 +28,18 @@ export interface AudioPlayback {
   setElementKind: (kind: MediaElementKind) => HTMLMediaElement;
   setTelemetryContext: (context: AudioTelemetryContext | null) => void;
   setSrc: (src: string, lazy?: boolean) => void;
-  prepare: (src: string, lazy?: boolean, seekHint?: number, telemetryContext?: AudioTelemetryContext) => Promise<HTMLAudioElement>;
+  prepare: (
+    src: string,
+    lazy?: boolean,
+    seekHint?: number,
+    telemetryContext?: AudioTelemetryContext
+  ) => Promise<HTMLAudioElement>;
   release: (el: HTMLMediaElement) => void;
-  takeOver: (next: HTMLMediaElement, startTime: (duration: number) => number, play: boolean) => Promise<void>;
+  takeOver: (
+    next: HTMLMediaElement,
+    startTime: (duration: number) => number,
+    play: boolean
+  ) => Promise<void>;
   setDurationHint: (seconds: number) => void;
   play: (onError?: (e: unknown) => void, onStarted?: () => void) => void;
   pause: (callback?: () => void) => void;
@@ -49,18 +58,18 @@ export interface AudioPlayback {
 let _shared: AudioPlayback | null = null;
 
 function _create(): AudioPlayback {
-  const volume      = ref(100);
+  const volume = ref(100);
   const currentTime = ref(0);
-  const duration    = ref(0);
-  const progress    = ref(0);
-  const buffered    = ref(0);
-  const isPaused    = ref(true);
-  const isFading    = ref(false);
-  const isLazy      = ref(false);
+  const duration = ref(0);
+  const progress = ref(0);
+  const buffered = ref(0);
+  const isPaused = ref(true);
+  const isFading = ref(false);
+  const isLazy = ref(false);
 
   let _el: HTMLMediaElement | null = null;
   let _elementKind: MediaElementKind = "audio";
-  let _rafId: number | null = null;
+  let _clockTimer: ReturnType<typeof setInterval> | null = null;
   let _playing = false;
   const _timeCallbacks: TimeCallback[] = [];
   let _telemetryContext: AudioTelemetryContext | null = null;
@@ -75,6 +84,11 @@ function _create(): AudioPlayback {
   let _lastListeningReportAt = 0;
   let _listeningStartedReported = false;
   const LISTENING_REPORT_INTERVAL_MS = 30_000;
+  // A UI e o transporte de projeção já publicam progresso a no máximo 10 Hz.
+  // Amostrar o relógio do elemento a 60 Hz fazia Vue recalcular refs/watchers
+  // seis vezes além do que qualquer consumidor consegue exibir, justamente no
+  // renderer do operador durante a apresentação.
+  const PLAYBACK_CLOCK_INTERVAL_MS = 100;
 
   // Só a extensão: o suficiente para separar formato sem suporte de arquivo bloqueado.
   function _srcExtension(el: HTMLMediaElement): string | undefined {
@@ -88,10 +102,14 @@ function _create(): AudioPlayback {
   }
 
   function _mediaErrorName(code: number | undefined): string | undefined {
-    return code === 1 ? "MEDIA_ERR_ABORTED"
-      : code === 2 ? "MEDIA_ERR_NETWORK"
-        : code === 3 ? "MEDIA_ERR_DECODE"
-          : code === 4 ? "MEDIA_ERR_SRC_NOT_SUPPORTED"
+    return code === 1
+      ? "MEDIA_ERR_ABORTED"
+      : code === 2
+        ? "MEDIA_ERR_NETWORK"
+        : code === 3
+          ? "MEDIA_ERR_DECODE"
+          : code === 4
+            ? "MEDIA_ERR_SRC_NOT_SUPPORTED"
             : undefined;
   }
 
@@ -102,7 +120,10 @@ function _create(): AudioPlayback {
     return "local";
   }
 
-  function _telemetryProps(el: HTMLMediaElement, extra: Record<string, unknown> = {}): Record<string, unknown> {
+  function _telemetryProps(
+    el: HTMLMediaElement,
+    extra: Record<string, unknown> = {}
+  ): Record<string, unknown> {
     const error = el.error;
     const context: Partial<AudioTelemetryContext> =
       _elementTelemetryContext.get(el) || _telemetryContext || {};
@@ -123,8 +144,12 @@ function _create(): AudioPlayback {
       buffered_seconds: (() => {
         try {
           if (!el.buffered.length) return 0;
-          return Number(Math.max(0, el.buffered.end(el.buffered.length - 1) - el.currentTime).toFixed(3));
-        } catch { return 0; }
+          return Number(
+            Math.max(0, el.buffered.end(el.buffered.length - 1) - el.currentTime).toFixed(3)
+          );
+        } catch {
+          return 0;
+        }
       })(),
       ...extra,
     };
@@ -141,19 +166,25 @@ function _create(): AudioPlayback {
     if (!force && now - _lastListeningReportAt < LISTENING_REPORT_INTERVAL_MS) return;
     const duration = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : 0;
     const completionRatio = duration > 0 ? Math.min(1, current / duration) : undefined;
-    Telemetry.track("music_listening_progress", _telemetryProps(el, {
-      listened_seconds: Number(_listenedSeconds.toFixed(2)),
-      completion_ratio: completionRatio,
-      listening_reason: reason,
-    }));
+    Telemetry.track(
+      "music_listening_progress",
+      _telemetryProps(el, {
+        listened_seconds: Number(_listenedSeconds.toFixed(2)),
+        completion_ratio: completionRatio,
+        listening_reason: reason,
+      })
+    );
     Telemetry.histogram("louvorja.music.listened.seconds", _listenedSeconds, {
       mode: _telemetryContext.mode || "unknown",
     });
     if (reason === "ended" || (completionRatio !== undefined && completionRatio >= 0.9)) {
-      Telemetry.track("music_listening_completed", _telemetryProps(el, {
-        listened_seconds: Number(_listenedSeconds.toFixed(2)),
-        completion_ratio: completionRatio,
-      }));
+      Telemetry.track(
+        "music_listening_completed",
+        _telemetryProps(el, {
+          listened_seconds: Number(_listenedSeconds.toFixed(2)),
+          completion_ratio: completionRatio,
+        })
+      );
     }
     _lastListeningReportAt = now;
   }
@@ -171,9 +202,12 @@ function _create(): AudioPlayback {
     }
     if (eventName === "playing") {
       if (_bufferingSince) {
-        Telemetry.track("music_buffering_recovered", _telemetryProps(el, {
-          buffering_ms: now - _bufferingSince,
-        }));
+        Telemetry.track(
+          "music_buffering_recovered",
+          _telemetryProps(el, {
+            buffering_ms: now - _bufferingSince,
+          })
+        );
         _bufferingSince = 0;
       }
       Telemetry.track("music_play_started", _telemetryProps(el));
@@ -181,17 +215,32 @@ function _create(): AudioPlayback {
         _listeningStartedReported = true;
         _lastListenedTime = Number.isFinite(el.currentTime) ? el.currentTime : 0;
         _lastListeningReportAt = now;
-        Telemetry.track("music_listening_started", _telemetryProps(el, { listening_mode: "audio" }));
+        Telemetry.track(
+          "music_listening_started",
+          _telemetryProps(el, { listening_mode: "audio" })
+        );
       }
       return;
     }
-    if (eventName === "loadedmetadata" || eventName === "canplay" || eventName === "canplaythrough") {
+    if (
+      eventName === "loadedmetadata" ||
+      eventName === "canplay" ||
+      eventName === "canplaythrough"
+    ) {
       Telemetry.track("music_media_ready", _telemetryProps(el, { readiness: eventName }));
       return;
     }
     if (eventName === "error") {
-      const reason = el.error?.code === 1 ? "aborted" : el.error?.code === 2 ? "network" :
-        el.error?.code === 3 ? "decode" : el.error?.code === 4 ? "source_not_supported" : "unknown";
+      const reason =
+        el.error?.code === 1
+          ? "aborted"
+          : el.error?.code === 2
+            ? "network"
+            : el.error?.code === 3
+              ? "decode"
+              : el.error?.code === 4
+                ? "source_not_supported"
+                : "unknown";
       const failure = {
         stage: "media_element",
         reason,
@@ -239,11 +288,14 @@ function _create(): AudioPlayback {
         return;
       }
       if (now - _lastProgressAt >= 5000 && _telemetryContext) {
-        Telemetry.track("music_playback_stalled", _telemetryProps(el, {
-          stage: "clock",
-          reason: "time_not_advancing",
-          stalled_ms: now - _lastProgressAt,
-        }));
+        Telemetry.track(
+          "music_playback_stalled",
+          _telemetryProps(el, {
+            stage: "clock",
+            reason: "time_not_advancing",
+            stalled_ms: now - _lastProgressAt,
+          })
+        );
         _lastProgressAt = now;
       }
     }, 2000);
@@ -259,11 +311,10 @@ function _create(): AudioPlayback {
     if (!_el) return;
     const ct = isNaN(_el.currentTime) || !isFinite(_el.currentTime) ? 0 : _el.currentTime;
     const rawD = _el.duration;
-    const d =
-      isNaN(rawD) || !isFinite(rawD) || rawD < 0 ? duration.value : rawD;
+    const d = isNaN(rawD) || !isFinite(rawD) || rawD < 0 ? duration.value : rawD;
     currentTime.value = ct;
-    duration.value    = d;
-    progress.value    = d <= 0 ? 0 : (ct / d) * 100;
+    duration.value = d;
+    progress.value = d <= 0 ? 0 : (ct / d) * 100;
     if (!isLazy.value) {
       buffered.value = 100;
     } else {
@@ -277,24 +328,21 @@ function _create(): AudioPlayback {
     }
   }
 
-  function _startRaf(): void {
-    if (_rafId) return;
+  function _startClock(): void {
+    if (_clockTimer) return;
     const tick = () => {
-      if (!_playing) {
-        _rafId = null;
-        return;
-      }
+      if (!_playing) return;
       _syncTime();
       if (_el && _playing) _reportListening(_el, "heartbeat");
-      _rafId = requestAnimationFrame(tick);
     };
-    _rafId = requestAnimationFrame(tick);
+    tick();
+    _clockTimer = setInterval(tick, PLAYBACK_CLOCK_INTERVAL_MS);
   }
 
-  function _stopRaf(): void {
-    if (_rafId) {
-      cancelAnimationFrame(_rafId);
-      _rafId = null;
+  function _stopClock(): void {
+    if (_clockTimer) {
+      clearInterval(_clockTimer);
+      _clockTimer = null;
     }
     _playing = false;
     _stopWatchdog();
@@ -318,7 +366,21 @@ function _create(): AudioPlayback {
     el.addEventListener("timeupdate", _syncTime);
     el.addEventListener("progress", _syncTime);
     el.addEventListener("loadedmetadata", _syncTime);
-    for (const eventName of ["loadstart", "loadedmetadata", "canplay", "canplaythrough", "playing", "waiting", "stalled", "suspend", "durationchange", "pause", "ended", "error", "abort"]) {
+    for (const eventName of [
+      "loadstart",
+      "loadedmetadata",
+      "canplay",
+      "canplaythrough",
+      "playing",
+      "waiting",
+      "stalled",
+      "suspend",
+      "durationchange",
+      "pause",
+      "ended",
+      "error",
+      "abort",
+    ]) {
       el.addEventListener(eventName, _onMediaEvent);
     }
     _listening.add(el);
@@ -329,7 +391,21 @@ function _create(): AudioPlayback {
     el.removeEventListener("timeupdate", _syncTime);
     el.removeEventListener("progress", _syncTime);
     el.removeEventListener("loadedmetadata", _syncTime);
-    for (const eventName of ["loadstart", "loadedmetadata", "canplay", "canplaythrough", "playing", "waiting", "stalled", "suspend", "durationchange", "pause", "ended", "error", "abort"]) {
+    for (const eventName of [
+      "loadstart",
+      "loadedmetadata",
+      "canplay",
+      "canplaythrough",
+      "playing",
+      "waiting",
+      "stalled",
+      "suspend",
+      "durationchange",
+      "pause",
+      "ended",
+      "error",
+      "abort",
+    ]) {
       el.removeEventListener(eventName, _onMediaEvent);
     }
     _listening.delete(el);
@@ -364,7 +440,7 @@ function _create(): AudioPlayback {
     if (kind !== "audio" && kind !== "video") kind = "audio";
     if (_elementKind === kind && _el) return getElement();
     if (_el) {
-      _stopRaf();
+      _stopClock();
       _unlisten(_el);
       _el.pause();
       _detachSource(_el);
@@ -380,7 +456,12 @@ function _create(): AudioPlayback {
    * Resolve quando ela já dá para tocar — é o que permite trocar de faixa sem
    * o buraco de silêncio da decodificação.
    */
-  function prepare(src: string, lazy = false, seekHint = 0, telemetryContext?: AudioTelemetryContext): Promise<HTMLAudioElement> {
+  function prepare(
+    src: string,
+    lazy = false,
+    seekHint = 0,
+    telemetryContext?: AudioTelemetryContext
+  ): Promise<HTMLAudioElement> {
     return new Promise((resolve, reject) => {
       const el = document.createElement("audio");
       const context = telemetryContext || _telemetryContext;
@@ -390,7 +471,21 @@ function _create(): AudioPlayback {
       el.volume = volume.value / 100;
       el.dataset.lazy = lazy ? "1" : "";
       el.src = src;
-      for (const eventName of ["loadstart", "loadedmetadata", "canplay", "canplaythrough", "playing", "waiting", "stalled", "suspend", "durationchange", "pause", "ended", "error", "abort"]) {
+      for (const eventName of [
+        "loadstart",
+        "loadedmetadata",
+        "canplay",
+        "canplaythrough",
+        "playing",
+        "waiting",
+        "stalled",
+        "suspend",
+        "durationchange",
+        "pause",
+        "ended",
+        "error",
+        "abort",
+      ]) {
         el.addEventListener(eventName, _onMediaEvent);
       }
 
@@ -411,7 +506,21 @@ function _create(): AudioPlayback {
         el.removeEventListener("loadedmetadata", posicionar);
         el.removeEventListener("canplay", pronto);
         el.removeEventListener("error", falhou);
-        for (const eventName of ["loadstart", "loadedmetadata", "canplay", "canplaythrough", "playing", "waiting", "stalled", "suspend", "durationchange", "pause", "ended", "error", "abort"]) {
+        for (const eventName of [
+          "loadstart",
+          "loadedmetadata",
+          "canplay",
+          "canplaythrough",
+          "playing",
+          "waiting",
+          "stalled",
+          "suspend",
+          "durationchange",
+          "pause",
+          "ended",
+          "error",
+          "abort",
+        ]) {
           el.removeEventListener(eventName, _onMediaEvent);
         }
       };
@@ -426,7 +535,12 @@ function _create(): AudioPlayback {
         _descartar(el);
         const error = el.error;
         const failure = new Error("prepare: falha ao carregar áudio");
-        failure.name = error?.code === 3 ? "DecodeError" : error?.code === 4 ? "NotSupportedError" : "MediaLoadError";
+        failure.name =
+          error?.code === 3
+            ? "DecodeError"
+            : error?.code === 4
+              ? "NotSupportedError"
+              : "MediaLoadError";
         reject(failure);
       };
       // Rede ruim não pode deixar a troca pendurada — quem chamou decide o que
@@ -450,7 +564,11 @@ function _create(): AudioPlayback {
   function _descartar(el: HTMLMediaElement): void {
     el.pause();
     if (el.src && el.src.startsWith("blob:")) {
-      try { URL.revokeObjectURL(el.src); } catch (_) { /* ignore */ }
+      try {
+        URL.revokeObjectURL(el.src);
+      } catch (_) {
+        /* ignore */
+      }
     }
     _detachSource(el);
     el.remove();
@@ -464,7 +582,7 @@ function _create(): AudioPlayback {
   function takeOver(
     next: HTMLMediaElement,
     startTime: (duration: number) => number,
-    play: boolean,
+    play: boolean
   ): Promise<void> {
     const d = isNaN(next.duration) || !isFinite(next.duration) ? 0 : next.duration;
     const alvo = startTime(d);
@@ -492,7 +610,7 @@ function _create(): AudioPlayback {
     };
 
     if (!play) {
-      _stopRaf();
+      _stopClock();
       promover();
       next.pause();
       isPaused.value = true;
@@ -504,7 +622,7 @@ function _create(): AudioPlayback {
       _playing = !next.paused;
       isPaused.value = next.paused;
       if (_playing) {
-        _startRaf();
+        _startClock();
         _startWatchdog();
       }
     };
@@ -525,7 +643,11 @@ function _create(): AudioPlayback {
     // memória do Blob (URL.createObjectURL não é GC'd até revoke). Em sessões
     // longas com muitas trocas de faixa, vira leak considerável.
     if (el.src && el.src.startsWith("blob:")) {
-      try { URL.revokeObjectURL(el.src); } catch (_) { /* ignore */ }
+      try {
+        URL.revokeObjectURL(el.src);
+      } catch (_) {
+        /* ignore */
+      }
     }
     isLazy.value = lazy;
     el.src = src;
@@ -543,7 +665,10 @@ function _create(): AudioPlayback {
     // chegou: o onload do XHR chama play() de novo assim que o blob existir.
     if (!el.getAttribute("src")) {
       if (_telemetryContext || _elementTelemetryContext.has(el)) {
-        Telemetry.track("music_play_deferred", _telemetryProps(el, { stage: "play_request", reason: "source_not_ready" }));
+        Telemetry.track(
+          "music_play_deferred",
+          _telemetryProps(el, { stage: "play_request", reason: "source_not_ready" })
+        );
       }
       return;
     }
@@ -554,7 +679,7 @@ function _create(): AudioPlayback {
           if (el.paused) return;
           _playing = true;
           isPaused.value = false;
-          _startRaf();
+          _startClock();
           _startWatchdog();
           onStarted?.();
         })
@@ -564,27 +689,34 @@ function _create(): AudioPlayback {
           // É o desfecho esperado dessas ações, não uma falha de carregamento:
           // reportar viraria um alerta de erro a cada troca rápida de música.
           if ((e as { name?: string } | null)?.name === "AbortError") return;
-          Telemetry.track("music_playback_failed", _telemetryProps(el, {
-            stage: "play_promise",
-            reason: (e as { name?: string } | null)?.name || "unknown",
-          }));
-          Telemetry.log("error", "music play promise rejected", _telemetryProps(el, {
-            stage: "play_promise",
-            reason: (e as { name?: string } | null)?.name || "unknown",
-          }));
+          Telemetry.track(
+            "music_playback_failed",
+            _telemetryProps(el, {
+              stage: "play_promise",
+              reason: (e as { name?: string } | null)?.name || "unknown",
+            })
+          );
+          Telemetry.log(
+            "error",
+            "music play promise rejected",
+            _telemetryProps(el, {
+              stage: "play_promise",
+              reason: (e as { name?: string } | null)?.name || "unknown",
+            })
+          );
           if (onError) onError(e);
         });
     } else if (!el.paused) {
       _playing = true;
       isPaused.value = false;
-      _startRaf();
+      _startClock();
       _startWatchdog();
       onStarted?.();
     }
   }
 
   function pause(callback?: () => void): void {
-    _stopRaf();
+    _stopClock();
     isPaused.value = true;
     const el = getElement();
     el.pause();
@@ -592,7 +724,7 @@ function _create(): AudioPlayback {
   }
 
   function stop(callback?: () => void): void {
-    _stopRaf();
+    _stopClock();
     if (_el) {
       _el.onerror = null;
       _el.pause();
@@ -614,9 +746,7 @@ function _create(): AudioPlayback {
   function seekTo(time: number): void {
     const el = getElement();
     if (!Number.isFinite(time) || time < 0) return;
-    const d = isNaN(el.duration) || !isFinite(el.duration)
-      ? duration.value
-      : el.duration;
+    const d = isNaN(el.duration) || !isFinite(el.duration) ? duration.value : el.duration;
     if (!Number.isFinite(d) || d <= 0) return;
     el.currentTime = _posicaoSegura(time, d);
   }
@@ -674,15 +804,15 @@ function _create(): AudioPlayback {
   }
 
   function reset(): void {
-    _stopRaf();
-    volume.value      = 100;
+    _stopClock();
+    volume.value = 100;
     currentTime.value = 0;
-    duration.value    = 0;
-    progress.value    = 0;
-    buffered.value    = 0;
-    isPaused.value    = true;
-    isFading.value    = false;
-    isLazy.value      = false;
+    duration.value = 0;
+    progress.value = 0;
+    buffered.value = 0;
+    isPaused.value = true;
+    isFading.value = false;
+    isLazy.value = false;
     _telemetryContext = null;
     _listenedSeconds = 0;
     _lastListenedTime = 0;
@@ -699,7 +829,7 @@ function _create(): AudioPlayback {
   }
 
   function cleanup(): void {
-    _stopRaf();
+    _stopClock();
     if (_el) {
       _unlisten(_el);
       if (_el.parentNode) _el.parentNode.removeChild(_el);
@@ -708,8 +838,16 @@ function _create(): AudioPlayback {
   }
 
   return {
-    volume, currentTime, duration, progress, buffered, isPaused, isFading,
-    getElement, setElementKind, setTelemetryContext: (context) => {
+    volume,
+    currentTime,
+    duration,
+    progress,
+    buffered,
+    isPaused,
+    isFading,
+    getElement,
+    setElementKind,
+    setTelemetryContext: (context) => {
       if (context?.playback_id !== _telemetryContext?.playback_id) {
         _listenedSeconds = 0;
         _lastListenedTime = 0;
@@ -721,11 +859,24 @@ function _create(): AudioPlayback {
         if (context) _elementTelemetryContext.set(_el, context);
         else _elementTelemetryContext.delete(_el);
       }
-    }, setSrc, prepare, release: _descartar, takeOver, setDurationHint,
-    play, pause, stop,
-    setVolume, toggleVolume, seekTo, advanceTime,
-    fadeIn, fadeOut, onTimeUpdate,
-    reset, cleanup,
+    },
+    setSrc,
+    prepare,
+    release: _descartar,
+    takeOver,
+    setDurationHint,
+    play,
+    pause,
+    stop,
+    setVolume,
+    toggleVolume,
+    seekTo,
+    advanceTime,
+    fadeIn,
+    fadeOut,
+    onTimeUpdate,
+    reset,
+    cleanup,
   };
 }
 
