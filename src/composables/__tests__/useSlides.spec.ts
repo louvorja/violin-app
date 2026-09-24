@@ -1,4 +1,8 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import { nextTick, ref } from "vue";
+import type { AudioPlayback } from "@/composables/useAudioPlayback";
+import Telemetry from "@/helpers/Telemetry";
+import { MusicPresentationCore } from "@/presentation/MusicPresentationCore";
 import { useSlides, type Slide } from "@/composables/useSlides";
 import $broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
@@ -8,6 +12,80 @@ const slides = useSlides();
 // Mesma música em cantada e playback: os slides são os mesmos, as marcações não.
 const SUNG = [0, 10, 20, 30];
 const PLAYBACK = [0, 8, 19, 28];
+
+describe("useSlides presentation shadow", () => {
+  beforeEach(() => slides.reset());
+
+  it("tracks real manual navigation, close and reopening without controlling legacy", () => {
+    abrir(SUNG);
+    const first = slides.presentationShadow().snapshot!.sessionId;
+    slides.goToSlide(2);
+    expect(slides.presentationShadow()).toMatchObject({ snapshot: { slideIndex: 2, active: true }, differences: [] });
+    slides.reset();
+    expect(slides.presentationShadow()).toMatchObject({ snapshot: { active: false, totalSlides: 0 }, differences: [] });
+    abrir(SUNG);
+    expect(slides.presentationShadow().snapshot!.sessionId).not.toBe(first);
+    expect(slides.presentationShadow().differences).toEqual([]);
+  });
+
+  it("waits for audio seek to commit, then independently derives the same slide", async () => {
+    abrir(SUNG);
+    const audio = {
+      currentTime: ref(0), duration: ref(40), progress: ref(0), seekTo: vi.fn(),
+    };
+    slides.bindAudio(audio as unknown as AudioPlayback);
+    slides.goToSlide(2);
+    expect(audio.seekTo).toHaveBeenCalledWith(20);
+    expect(slides.presentationShadow().snapshot!.slideIndex).toBe(0);
+    audio.currentTime.value = 20;
+    await nextTick();
+    expect(slides.presentationShadow()).toMatchObject({ snapshot: { slideIndex: 2 }, differences: [] });
+    slides.setTimes(PLAYBACK);
+    slides.setPlaybackId("replacement-audio");
+    audio.currentTime.value = 29;
+    await nextTick();
+    expect(slides.presentationShadow()).toMatchObject({ snapshot: { slideIndex: 3 }, differences: [] });
+    slides.reset();
+  });
+
+  it("recovery broadcasts do not create new domain commits", () => {
+    abrir(SUNG);
+    slides.goToSlide(1);
+    const snapshot = slides.presentationShadow().snapshot;
+    $broadcast.send(BROADCAST_TYPE.REQUEST_SLIDE_STATE);
+    expect(slides.presentationShadow().snapshot).toBe(snapshot);
+  });
+
+  it("reports one metadata-only divergence per session while preserving legacy", () => {
+    const track = vi.spyOn(Telemetry, "track");
+    try {
+      abrir(SUNG);
+      slides.title.value = "Unexpected legacy mutation";
+      slides.goToSlide(1);
+      slides.goToSlide(2);
+      const incidents = track.mock.calls.filter(([event]) => event === "presentation_shadow_divergence");
+      expect(incidents).toEqual([["presentation_shadow_divergence", { fields: "title" }]]);
+      expect(slides.title.value).toBe("Unexpected legacy mutation");
+      expect(slides.presentationShadow().differences).toEqual(["title"]);
+    } finally {
+      track.mockRestore();
+    }
+  });
+
+  it("keeps navigating when the diagnostic core fails", () => {
+    abrir(SUNG);
+    const dispatch = vi.spyOn(MusicPresentationCore.prototype, "dispatch").mockImplementation(() => {
+      throw new Error("shadow failure");
+    });
+    try {
+      expect(() => slides.goToSlide(2)).not.toThrow();
+      expect(slides.slideIndex.value).toBe(2);
+      expect(slides.presentationShadow().snapshot).toBeNull();
+    } finally {
+      dispatch.mockRestore();
+    }
+  });
+});
 
 function abrir(times: number[], playbackId?: string): void {
   const lista: Slide[] = times.map((_, i) => ({ lyric: `slide ${i}` }));

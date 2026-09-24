@@ -3,6 +3,7 @@ import $broadcast from "@/helpers/Broadcast";
 import type { AudioPlayback } from "@/composables/useAudioPlayback";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import Telemetry, { isProjectionMilestone } from "@/helpers/Telemetry";
+import { MusicPresentationCore, musicSnapshotDifferences, type MusicOperation, type MusicSnapshot } from "@/presentation/MusicPresentationCore";
 
 export interface Slide {
   lyric?: string;
@@ -36,6 +37,8 @@ interface SlidesInstance {
   goFirst: () => void;
   goLast: () => void;
   reset: () => void;
+  /** Diagnostic only: never used to render or control the legacy presentation. */
+  presentationShadow: () => { snapshot: MusicSnapshot | null; differences: readonly string[] };
 }
 
 let _shared: SlidesInstance | null = null;
@@ -55,6 +58,35 @@ function _create(): SlidesInstance {
   let _pendingCommand: { targetIndex: number; at: number } | null = null;
   let _stopAudioWatch: (() => void) | null = null;
   let _audio: AudioPlayback | null = null;
+  let _shadow: MusicPresentationCore | null = null;
+  let _shadowSession = 0;
+  let _shadowCommand = 0;
+  let _shadowDifferences: string[] = [];
+  let _shadowReported = false;
+
+  function compareShadow(): void {
+    if (!_shadow) return;
+    _shadowDifferences = musicSnapshotDifferences(_shadow.snapshot(), {
+      title: title.value, slideIndex: slideIndex.value, totalSlides: slides.value.length,
+      slide: slides.value[slideIndex.value] ?? null,
+      nextSlide: slides.value[slideIndex.value + 1] ?? null,
+    });
+    if (_shadowDifferences.length && !_shadowReported) {
+      _shadowReported = true;
+      // One metadata-only incident per session, never one event per command.
+      Telemetry.track("presentation_shadow_divergence", { fields: _shadowDifferences.join(",") });
+    }
+  }
+
+  function shadowCommand(operation: MusicOperation): void {
+    try {
+      _shadow?.dispatch({ ...operation, sessionId: _shadow.snapshot().sessionId, commandId: ++_shadowCommand });
+      compareShadow();
+    } catch {
+      // Shadow failure must never interrupt the authoritative legacy path.
+      _shadow = null;
+    }
+  }
 
   const slide      = computed<Slide | null>(() => slides.value[slideIndex.value] ?? null);
   const nextSlide  = computed<Slide | null>(() => slides.value[slideIndex.value + 1] ?? null);
@@ -98,6 +130,15 @@ function _create(): SlidesInstance {
     _lastProgressSendAt = 0;
     _lastSlideProgressSent = -1;
     _pendingCommand = null;
+    _shadowCommand = 0;
+    _shadowDifferences = [];
+    _shadowReported = false;
+    try {
+      _shadow = new MusicPresentationCore(`music-shadow-${++_shadowSession}`, newSlides ?? [], newTimes ?? [], newTitle ?? "");
+      compareShadow();
+    } catch {
+      _shadow = null;
+    }
   }
 
   function setPlaybackId(playbackId?: string): void {
@@ -109,6 +150,7 @@ function _create(): SlidesInstance {
   // se preserva é o slide, não o instante do relógio.
   function setTimes(newTimes: number[]): void {
     times.value = newTimes ?? [];
+    shadowCommand({ type: "times", times: times.value });
   }
 
   /** Instante, na faixa vigente, do ponto `fraction` (0-1) dentro do slide `index`. */
@@ -179,6 +221,7 @@ function _create(): SlidesInstance {
       _audio.seekTo(times.value[idx] ?? 0);
     } else {
       slideIndex.value = idx;
+      shadowCommand({ type: "select", index });
       broadcastSlide();
     }
   }
@@ -228,6 +271,9 @@ function _create(): SlidesInstance {
 
         if (si !== _lastBroadcastIndex) {
           _lastBroadcastIndex = si;
+          // Audio commands commit only when the actual player clock advances.
+          // The core independently derives the index from the same time input.
+          shadowCommand({ type: "clock", position: ct });
           broadcastSlide();
         }
       }
@@ -254,6 +300,7 @@ function _create(): SlidesInstance {
     _lastBroadcastIndex = -1;
     _lastProgressSendAt = 0;
     _lastSlideProgressSent = -1;
+    shadowCommand({ type: "close" });
   }
 
   return {
@@ -261,6 +308,7 @@ function _create(): SlidesInstance {
     slide, nextSlide, totalSlides,
     setSlides, setPlaybackId, setTimes, timeForPosition, bindAudio, unbindAudio, broadcastSlide,
     goToSlide, goPrev, goNext, goFirst, goLast, reset,
+    presentationShadow: () => ({ snapshot: _shadow?.snapshot() ?? null, differences: [..._shadowDifferences] }),
   };
 }
 
