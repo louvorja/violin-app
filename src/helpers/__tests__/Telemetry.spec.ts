@@ -120,24 +120,25 @@ describe("Telemetry", () => {
     expect(posthog.init).toHaveBeenCalledWith(
       "test-key",
       expect.objectContaining({
-        autocapture: true,
+        autocapture: false,
         api_transport: "fetch",
-        capture_pageview: "history_change",
+        capture_pageview: false,
+        capture_pageleave: false,
         capture_exceptions: true,
         disable_session_recording: true,
-        capture_heatmaps: true,
-        capture_dead_clicks: true,
-        rageclick: true,
-        enable_recording_console_log: true,
+        capture_heatmaps: false,
+        capture_dead_clicks: false,
+        rageclick: false,
+        capture_performance: false,
+        enable_recording_console_log: false,
         session_recording: expect.objectContaining({
           recordHeaders: false,
           recordBody: false,
-          collectFonts: true,
-          captureCanvas: { recordCanvas: true, canvasFps: 2, canvasQuality: "0.2" },
+          collectFonts: false,
+          captureCanvas: { recordCanvas: false },
         }),
         metrics: expect.objectContaining({
           serviceName: "louvorja-violin",
-          network: expect.objectContaining({ name: "louvorja.http.client.duration" }),
         }),
         tracing_headers: [],
       })
@@ -219,6 +220,12 @@ describe("Telemetry", () => {
     it("começa no primeiro erro real, renova a cada erro e para 5 minutos depois do último", async () => {
       const Telemetry = await loadTelemetry();
       await Telemetry.init();
+      const config = posthog.init.mock.calls[0][1] as {
+        session_recording: { collectFonts: boolean; captureCanvas: { recordCanvas: boolean } };
+      };
+      expect(config.session_recording).toEqual(
+        expect.objectContaining({ collectFonts: false, captureCanvas: { recordCanvas: false } })
+      );
       vi.useFakeTimers();
       try {
         beforeSend()(exception("Cannot read properties of null"));
@@ -409,6 +416,8 @@ describe("Telemetry", () => {
         capture_heatmaps: false,
         capture_dead_clicks: false,
         rageclick: false,
+        capture_performance: false,
+        enable_recording_console_log: false,
       })
     );
     expect(posthog.capture).toHaveBeenCalledWith(
@@ -584,6 +593,37 @@ describe("Telemetry", () => {
         severity: "slow",
       })
     );
+  });
+
+  it("agrega avisos de performance repetidos por métrica sem perder o histograma", async () => {
+    const Telemetry = await loadTelemetry();
+    await Telemetry.init();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-24T12:00:00.000Z"));
+    try {
+      posthog.capture.mockClear();
+      posthog.logger.error.mockClear();
+      posthog.metrics.histogram.mockClear();
+
+      Telemetry.histogram("louvorja.ui.long_task.duration", 1_200, { window_role: "main" });
+      Telemetry.histogram("louvorja.ui.long_task.duration", 1_400, { window_role: "main" });
+
+      expect(posthog.capture).not.toHaveBeenCalledWith("performance_slow", expect.anything());
+      expect(posthog.logger.error).toHaveBeenCalledOnce();
+      expect(posthog.metrics.histogram).toHaveBeenCalledTimes(2);
+
+      vi.advanceTimersByTime(60_000);
+      Telemetry.histogram("louvorja.ui.long_task.duration", 1_500, { window_role: "main" });
+
+      expect(posthog.logger.error).toHaveBeenCalledTimes(2);
+      expect(posthog.logger.error).toHaveBeenLastCalledWith(
+        "performance budget exceeded",
+        expect.objectContaining({ suppressed_count: 1, duration_ms: 1_500 })
+      );
+      expect(posthog.metrics.histogram).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("só registra em evento o primeiro, o último e o slide sem conteúdo de uma troca", async () => {

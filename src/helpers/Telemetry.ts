@@ -64,6 +64,11 @@ const UI_JANK_BUDGET = { warn: 250, critical: 1_000 } as const;
 const RUNTIME_HEARTBEAT_MS = 15_000;
 const RUNTIME_AGGREGATE_LOG_MS = 60_000;
 const RUNTIME_CRITICAL_COOLDOWN_MS = 60_000;
+const PERFORMANCE_DIAGNOSTIC_COOLDOWN_MS = 60_000;
+const _performanceDiagnosticWindows = new Map<
+  string,
+  { lastCapturedAt: number; suppressedCount: number }
+>();
 const PERFORMANCE_BUDGETS: Array<{
   match: RegExp;
   warn: number;
@@ -665,24 +670,44 @@ export function histogram(name: string, value: number, attributes: MetricAttribu
   const budget = PERFORMANCE_BUDGETS.find((candidate) => candidate.match.test(safeName));
   if (budget && value >= budget.warn) {
     const severity = value >= budget.critical ? "critical" : "slow";
-    if (!budget.ownEvent) {
-      track("performance_slow", {
+    const diagnosticKey = `${safeName}:${severity}`;
+    const now = Date.now();
+    let diagnosticWindow = _performanceDiagnosticWindows.get(diagnosticKey);
+    if (!diagnosticWindow && _performanceDiagnosticWindows.size >= 100) {
+      const oldestKey = _performanceDiagnosticWindows.keys().next().value;
+      if (oldestKey) _performanceDiagnosticWindows.delete(oldestKey);
+    }
+    if (
+      !diagnosticWindow ||
+      now - diagnosticWindow.lastCapturedAt >= PERFORMANCE_DIAGNOSTIC_COOLDOWN_MS
+    ) {
+      const suppressedCount = diagnosticWindow?.suppressedCount ?? 0;
+      diagnosticWindow = { lastCapturedAt: now, suppressedCount: 0 };
+      _performanceDiagnosticWindows.set(diagnosticKey, diagnosticWindow);
+      const suppressed = suppressedCount > 0 ? { suppressed_count: suppressedCount } : {};
+      if (!budget.ownEvent) {
+        track("performance_slow", {
+          metric_name: safeName,
+          duration_ms: Math.round(value),
+          severity,
+          warn_budget_ms: budget.warn,
+          critical_budget_ms: budget.critical,
+          ...suppressed,
+          ...safeAttributes,
+        });
+      }
+      log(severity === "critical" ? "error" : "warn", "performance budget exceeded", {
         metric_name: safeName,
         duration_ms: Math.round(value),
         severity,
         warn_budget_ms: budget.warn,
         critical_budget_ms: budget.critical,
+        ...suppressed,
         ...safeAttributes,
       });
+    } else {
+      diagnosticWindow.suppressedCount += 1;
     }
-    log(severity === "critical" ? "error" : "warn", "performance budget exceeded", {
-      metric_name: safeName,
-      duration_ms: Math.round(value),
-      severity,
-      warn_budget_ms: budget.warn,
-      critical_budget_ms: budget.critical,
-      ...safeAttributes,
-    });
   }
   const metrics = (_ph as PostHogWithMetrics | null)?.metrics;
   if (metrics?.histogram) {
@@ -1155,18 +1180,6 @@ function windowFeature(): string {
   return route.replace(/^\//, "").split("/")[0] || "main";
 }
 
-function networkMetricPath(url: string): string {
-  try {
-    const pathname = new URL(url).pathname || "/";
-    return pathname
-      .replace(/\b[0-9a-f]{8,}\b/gi, ":id")
-      .replace(/\/\d+(?=\/|$)/g, "/:id")
-      .slice(0, 120);
-  } catch {
-    return "unknown";
-  }
-}
-
 function osName(): string {
   if (Platform.isDesktop) return Platform.platform ?? "unknown";
   const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
@@ -1353,9 +1366,12 @@ async function _init(): Promise<void> {
     // nem de chave própria no localStorage.
     persistence: "memory",
     bootstrap: { distinctID: anonId() },
-    autocapture: isMainWindow,
-    capture_pageview: isMainWindow ? "history_change" : false,
-    capture_pageleave: true,
+    // A aplicação envia eventos de navegação/interação explicitamente. A
+    // captura automática duplica esses eventos e instala listeners contínuos
+    // em cada ação do renderer.
+    autocapture: false,
+    capture_pageview: false,
+    capture_pageleave: false,
     capture_exceptions: true,
     error_tracking: {
       captureExtensionExceptions: false,
@@ -1383,16 +1399,11 @@ async function _init(): Promise<void> {
       // hidden/file fogem ao maskAllInputs padrão e podem carregar token ou
       // caminho local; ocultá-los não reduz a reprodução das ações do usuário.
       blockSelector: 'input[type="hidden"], input[type="file"]',
-      // Mantém as fontes locais disponíveis no snapshot; sem isso o Replay
-      // pode mostrar o DOM, mas o texto da projeção fica visualmente ausente
-      // ou com dimensões erradas.
-      collectFonts: isMainWindow,
-      // PDFs e previews podem ser pintados em canvas. Dois frames por segundo
-      // é suficiente para diagnosticar o conteúdo sem transformar o Replay em
-      // uma gravação de vídeo contínua. A janela de projeção segue sem Replay.
-      captureCanvas: isMainWindow
-        ? { recordCanvas: true, canvasFps: 2, canvasQuality: "0.2" }
-        : { recordCanvas: false },
+      // Replay continua sendo iniciado após erro real, mas não lê fontes nem
+      // canvas: esses caminhos podem copiar/renderizar mídia pesada durante
+      // apresentações e previews.
+      collectFonts: false,
+      captureCanvas: { recordCanvas: false },
       // Não registrar headers nem bodies: podem conter tokens, cookies ou
       // conteúdo completo de requisições, mesmo quando a URL foi redigida.
       recordHeaders: false,
@@ -1427,29 +1438,22 @@ async function _init(): Promise<void> {
       serviceName: "louvorja-violin",
       environment: import.meta.env.MODE || "unknown",
       serviceVersion: version,
-      // A extensão Metrics agrega histogramas no cliente antes de enviar,
-      // evitando um evento por requisição e mantendo as séries consultáveis.
-      network: {
-        name: "louvorja.http.client.duration",
-        attributes: (request, response) => ({
-          route: networkMetricPath(request.url),
-          method: request.method,
-          status_class:
-            response.status == null ? "missing" : `${Math.floor(response.status / 100)}xx`,
-          window_role: windowRole(),
-        }),
-      },
+      // Duração de HTTP já é reportada pelo helper Http; instrumentar cada
+      // request também pelo SDK duplicaria o trabalho e as séries.
     },
     // Não enviar os headers opcionais de tracing para a API do produto. O
     // Worker público não os lista no Access-Control-Allow-Headers; no Electron
     // isso transformava cada GET do banco em preflight rejeitado por CORS.
     // A telemetria continua correlacionada pelos próprios eventos do SDK.
     tracing_headers: [],
-    enable_recording_console_log: true,
-    capture_performance: { web_vitals: isMainWindow, network_timing: true },
-    capture_heatmaps: isMainWindow,
-    capture_dead_clicks: isMainWindow,
-    rageclick: isMainWindow,
+    enable_recording_console_log: false,
+    // As medições explícitas de Http e os spans do produto são a fonte de
+    // performance. Evita observers de rede/Web Vitals e recursos de produto
+    // analytics que não são necessários para diagnóstico de falhas.
+    capture_performance: false,
+    capture_heatmaps: false,
+    capture_dead_clicks: false,
+    rageclick: false,
     before_send: (capture) => {
       if (!capture) return null;
       if (capture.event === "$exception") {
