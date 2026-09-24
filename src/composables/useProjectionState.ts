@@ -101,6 +101,7 @@ export function useProjectionState(): ProjectionStateReturn {
     progress.value = (p.progress as number) ?? 0;
     slideIndex.value = (p.slide_index as number) ?? 0;
     totalSlides.value = (p.total_slides as number) ?? (p.last_slide as number) ?? 0;
+    const stateAppliedAt = Date.now();
     shadowReceiver.observe(p.presentation_session, musicRevision, {
       active: true, slide: slide.value, nextSlide: nextSlide.value, title: title.value,
       slideIndex: slideIndex.value, totalSlides: totalSlides.value,
@@ -130,20 +131,27 @@ export function useProjectionState(): ProjectionStateReturn {
       if (typeof requestAnimationFrame === "function" && document.visibilityState !== "hidden") {
         void nextTick().then(() => {
           if (probeGeneration !== frameProbeGeneration) return;
-          const appliedAt = Date.now();
+          const domUpdatedAt = Date.now();
           requestAnimationFrame(() => {
             if (probeGeneration !== frameProbeGeneration) return;
             requestAnimationFrame(() => {
               if (probeGeneration !== frameProbeGeneration || document.visibilityState === "hidden") return;
               const frameAt = Date.now();
               const broadcastToFrameMs = Math.max(0, frameAt - sentAt);
-              const receiveToApplyMs = Math.max(0, appliedAt - receivedAt);
+              const receiveToStateApplyMs = Math.max(0, stateAppliedAt - receivedAt);
+              const stateApplyToDomMs = Math.max(0, domUpdatedAt - stateAppliedAt);
+              const domToFrameMs = Math.max(0, frameAt - domUpdatedAt);
               const commandAt = typeof p._command_ts === "number" &&
                 Number.isFinite(p._command_ts) && p._command_ts <= sentAt &&
                 p._command_ts >= sentAt - 30_000
                 ? p._command_ts
                 : null;
               const commandToFrameMs = commandAt === null ? null : Math.max(0, frameAt - commandAt);
+              const commitAt = typeof p._commit_ts === "number" &&
+                Number.isFinite(p._commit_ts) && p._commit_ts <= sentAt &&
+                p._commit_ts >= sentAt - 30_000
+                ? p._commit_ts
+                : null;
               Telemetry.histogram("louvorja.projection.slide.frame_opportunity", broadcastToFrameMs, {
                 window_role: "auxiliary",
               });
@@ -160,8 +168,18 @@ export function useProjectionState(): ProjectionStateReturn {
                     Number.isSafeInteger(p.presentation_revision) && p.presentation_revision >= 0
                     ? p.presentation_revision : undefined,
                   broadcast_to_receive_ms: latencyMs,
-                  receive_to_apply_ms: receiveToApplyMs,
+                  // Alias legado: este campo historicamente mediu ate nextTick.
+                  receive_to_apply_ms: Math.max(0, domUpdatedAt - receivedAt),
+                  receive_to_state_apply_ms: receiveToStateApplyMs,
+                  state_apply_to_dom_ms: stateApplyToDomMs,
+                  dom_to_frame_ms: domToFrameMs,
                   broadcast_to_frame_ms: broadcastToFrameMs,
+                  ...(commitAt === null ? {} : {
+                    commit_to_emit_ms: Math.max(0, sentAt - commitAt),
+                  }),
+                  ...(commandAt === null || commitAt === null || commandAt > commitAt ? {} : {
+                    command_to_commit_ms: Math.max(0, commitAt - commandAt),
+                  }),
                   ...(commandToFrameMs === null ? {} : { command_to_frame_ms: commandToFrameMs }),
                 });
               }

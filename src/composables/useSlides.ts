@@ -58,6 +58,7 @@ function _create(): SlidesInstance {
   let _lastSlideProgressSent = -1;
   let _playbackId: string | undefined;
   let _presentationRevision = 0;
+  let _pendingStateCommitAt = 0;
   let _pendingCommand: { targetIndex: number; at: number } | null = null;
   let _stopAudioWatch: (() => void) | null = null;
   let _audio: AudioPlayback | null = null;
@@ -140,6 +141,7 @@ function _create(): SlidesInstance {
     _playbackId         = playbackId;
     slideIndex.value    = 0;
     slideProgress.value = 0;
+    _pendingStateCommitAt = Date.now();
     _lastBroadcastIndex = -1;
     _lastProgressSendAt = 0;
     _lastSlideProgressSent = -1;
@@ -181,6 +183,9 @@ function _create(): SlidesInstance {
   function broadcastSlide(): void {
     const idx = slideIndex.value;
     const sentAt = Date.now();
+    const commitAt = _pendingStateCommitAt > 0 && _pendingStateCommitAt <= sentAt &&
+      sentAt - _pendingStateCommitAt <= 30_000 ? _pendingStateCommitAt : undefined;
+    _pendingStateCommitAt = 0;
     const commandAt = _pendingCommand?.targetIndex === idx &&
       sentAt - _pendingCommand.at <= 30_000
       ? _pendingCommand.at
@@ -200,6 +205,9 @@ function _create(): SlidesInstance {
       // Preserva o início do comando mesmo quando um seek de áudio só publica
       // a troca depois que o relógio do player avança.
       _command_ts: commandAt,
+      // Estado legado já foi aplicado aos refs antes de publicar. Replays sem
+      // commit novo não recebem este marco.
+      _commit_ts: commitAt,
       // Permite medir a latência real entre a janela do operador e as janelas
       // auxiliares sem enviar o conteúdo da letra.
       _ts: sentAt,
@@ -241,6 +249,7 @@ function _create(): SlidesInstance {
       _audio.seekTo(times.value[idx] ?? 0);
     } else {
       slideIndex.value = idx;
+      _pendingStateCommitAt = Date.now();
       shadowCommand({ type: "select", index });
       broadcastSlide();
     }
@@ -292,6 +301,7 @@ function _create(): SlidesInstance {
 
         if (si !== _lastBroadcastIndex) {
           _lastBroadcastIndex = si;
+          _pendingStateCommitAt = now;
           // Audio commands commit only when the actual player clock advances.
           // The core independently derives the index from the same time input.
           shadowCommand({ type: "clock", position: ct });
@@ -318,6 +328,7 @@ function _create(): SlidesInstance {
     title.value         = "";
     _playbackId         = undefined;
     _pendingCommand     = null;
+    _pendingStateCommitAt = 0;
     _lastBroadcastIndex = -1;
     _lastProgressSendAt = 0;
     _lastSlideProgressSent = -1;

@@ -79,6 +79,7 @@ describe("useProjectionState frame opportunity", () => {
       playback_id: "p1",
       _ts: sentAt,
       _command_ts: sentAt - 10,
+      _commit_ts: sentAt - 2,
     });
     await nextTick();
     expect(wrapper?.text()).toBe("slide visível");
@@ -102,6 +103,12 @@ describe("useProjectionState frame opportunity", () => {
       expect.objectContaining({
         presentation_revision: 7,
         command_to_frame_ms: expect.any(Number),
+        command_to_commit_ms: 8,
+        commit_to_emit_ms: 2,
+        broadcast_to_receive_ms: expect.any(Number),
+        receive_to_state_apply_ms: expect.any(Number),
+        state_apply_to_dom_ms: expect.any(Number),
+        dom_to_frame_ms: expect.any(Number),
         receive_to_apply_ms: expect.any(Number),
       })
     );
@@ -139,5 +146,24 @@ describe("useProjectionState frame opportunity", () => {
     nextFrame();
     nextFrame();
     expect(fake.histogram).not.toHaveBeenCalled();
+  });
+
+  it("descarta marcos de commit impossíveis sem descartar o frame", async () => {
+    await nextTick();
+    const sentAt = Date.now() - 20;
+    emit({
+      slide: { lyric: "visível" }, slide_index: 0, total_slides: 1,
+      _ts: sentAt, _command_ts: sentAt - 10, _commit_ts: sentAt + 1_000,
+    });
+    await nextTick();
+    nextFrame();
+    nextFrame();
+    expect(fake.track).toHaveBeenCalledWith(
+      "projection_slide_frame_opportunity",
+      expect.objectContaining({ command_to_frame_ms: expect.any(Number) })
+    );
+    const sample = fake.track.mock.calls.find(([name]) => name === "projection_slide_frame_opportunity")?.[1];
+    expect(sample).not.toHaveProperty("command_to_commit_ms");
+    expect(sample).not.toHaveProperty("commit_to_emit_ms");
   });
 });
