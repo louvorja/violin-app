@@ -1,5 +1,6 @@
 "use strict";
 const paths = require("../paths.js");
+const fs = require("fs/promises");
 const { isSizeAcceptable } = require("../mediaRoots.js");
 const resolver = require("../mediaResolver.js");
 
@@ -12,14 +13,23 @@ const resolver = require("../mediaResolver.js");
  * @param {string} localPath  Caminho relativo ao acervo (absoluto é aceito por
  *   compatibilidade e tratado como já resolvido)
  * @param {number} expectedSize  Tamanho em bytes (0 = catálogo não informa)
- * @returns {{ exists:boolean, sizeOk:boolean, actualSize:number, origin:string|null }}
+ * @returns {Promise<{ exists:boolean, sizeOk:boolean, actualSize:number, origin:string|null }>}
  */
-function checkFile(localPath, expectedSize = 0) {
+async function checkFile(localPath, expectedSize = 0) {
   const rel = _paraRelativo(localPath);
-  const achado = resolver.resolveReadSync(rel);
+  const achado = await resolver.resolveRead(rel);
   if (!achado) return { exists: false, sizeOk: false, actualSize: 0, origin: null };
 
-  const actualSize = require("fs-extra").statSync(achado.path).size;
+  let actualSize;
+  try {
+    actualSize = (await fs.stat(achado.path)).size;
+  } catch (error) {
+    // O arquivo pode sumir entre a resolução e o segundo stat.
+    if (error.code === "ENOENT") {
+      return { exists: false, sizeOk: false, actualSize: 0, origin: null };
+    }
+    throw error;
+  }
   return {
     exists: true,
     sizeOk: isSizeAcceptable(actualSize, expectedSize),
@@ -41,23 +51,30 @@ function _paraRelativo(localPath) {
 /**
  * Recebe lista de arquivos com tamanhos esperados, retorna os que precisam ser baixados.
  * @param {Array<{ remote:string, local:string, expectedSize:number }>} files
- * @returns {{ missing: Array, damaged: Array, ok: Array }}
+ * @returns {Promise<{ missing: Array, damaged: Array, ok: Array }>}
  */
-function diff(files) {
+async function diff(files) {
   const missing = [];
   const damaged = [];
   const ok = [];
 
-  files.forEach((file) => {
-    const check = checkFile(file.local, file.expectedSize || 0);
-    if (!check.exists) {
-      missing.push(file);
-    } else if (!check.sizeOk) {
-      damaged.push({ ...file, actualSize: check.actualSize });
-    } else {
-      ok.push(file);
-    }
-  });
+  // Limita a pressão no filesystem sem serializar um catálogo inteiro.
+  for (let start = 0; start < files.length; start += 32) {
+    const batch = files.slice(start, start + 32);
+    const checks = await Promise.all(
+      batch.map((file) => checkFile(file.local, file.expectedSize || 0))
+    );
+    batch.forEach((file, index) => {
+      const check = checks[index];
+      if (!check.exists) {
+        missing.push(file);
+      } else if (!check.sizeOk) {
+        damaged.push({ ...file, actualSize: check.actualSize });
+      } else {
+        ok.push(file);
+      }
+    });
+  }
 
   return { missing, damaged, ok };
 }

@@ -439,7 +439,7 @@ function setupRoutes(
   // ---------------------------------------------------------------
   // /api/music-search?q=...&lang=pt (GET — somente leitura)
   // ---------------------------------------------------------------
-  app.get("/api/music-search", (req, res) => {
+  app.get("/api/music-search", async (req, res) => {
     const q = req.query.q;
     if (!q || q.length < 2) {
       return res.json({ status: "ok", results: [] });
@@ -452,12 +452,15 @@ function setupRoutes(
 
     try {
       const filePath = jsonCache.safeLocalPath(`${lang}_musics`);
-      if (!fs.existsSync(filePath)) {
+      let raw;
+      try {
+        raw = await fs.promises.readFile(filePath, "utf8");
+      } catch (error) {
+        if (error.code !== "ENOENT") throw error;
         return res.status(404).json({
           error: "Base de músicas não encontrada localmente. Faça uma atualização do banco.",
         });
       }
-      const raw = fs.readFileSync(filePath, "utf8");
       const all = JSON.parse(raw);
 
       const results = all
@@ -557,16 +560,24 @@ function setupRoutes(
   // ---------------------------------------------------------------
   // /api/bible-downloaded — versões da Bíblia baixadas no host (GET)
   // ---------------------------------------------------------------
-  app.get("/api/bible-downloaded", (req, res) => {
+  app.get("/api/bible-downloaded", async (req, res) => {
     const lang = req.query.lang || "pt";
     try {
       const versionsPath = jsonCache.safeLocalPath(`${lang}_bible_version`);
       const booksPath = jsonCache.safeLocalPath(`${lang}_bible_book`);
-      if (!fs.existsSync(versionsPath) || !fs.existsSync(booksPath)) {
+      let versionsRaw;
+      let booksRaw;
+      try {
+        [versionsRaw, booksRaw] = await Promise.all([
+          fs.promises.readFile(versionsPath, "utf8"),
+          fs.promises.readFile(booksPath, "utf8"),
+        ]);
+      } catch (error) {
+        if (error.code !== "ENOENT") throw error;
         return res.json({ status: "ok", downloaded: [] });
       }
-      const versions = JSON.parse(fs.readFileSync(versionsPath, "utf8"));
-      const books = JSON.parse(fs.readFileSync(booksPath, "utf8"));
+      const versions = JSON.parse(versionsRaw);
+      const books = JSON.parse(booksRaw);
       if (!Array.isArray(versions) || !Array.isArray(books)) {
         return res.json({ status: "ok", downloaded: [] });
       }
@@ -587,11 +598,23 @@ function setupRoutes(
         let allPresent = true;
         for (const b of books) {
           const chCount = b.chapters || 1;
-          for (let c = 1; c <= chCount; c++) {
-            const chapterPath = jsonCache.safeLocalPath(
-              `bible_${v.id_bible_version}_${b.id_bible_book}_${c}`
+          for (let start = 1; start <= chCount; start += 32) {
+            const end = Math.min(start + 32, chCount + 1);
+            const present = await Promise.all(
+              Array.from({ length: end - start }, (_, offset) => {
+                const chapterPath = jsonCache.safeLocalPath(
+                  `bible_${v.id_bible_version}_${b.id_bible_book}_${start + offset}`
+                );
+                return fs.promises.access(chapterPath).then(
+                  () => true,
+                  (error) => {
+                    if (error.code === "ENOENT") return false;
+                    throw error;
+                  }
+                );
+              })
             );
-            if (!fs.existsSync(chapterPath)) {
+            if (present.includes(false)) {
               allPresent = false;
               break;
             }
@@ -867,9 +890,11 @@ function setupRoutes(
     const sanitized = rawPath.replace(/^\/+/g, "").replace(/\.\.\//g, "");
     try {
       const filePath = jsonCache.safeLocalPath(sanitized);
-      if (fs.existsSync(filePath)) {
-        const raw = fs.readFileSync(filePath, "utf8");
+      try {
+        const raw = await fs.promises.readFile(filePath, "utf8");
         return res.json(JSON.parse(raw));
+      } catch (error) {
+        if (error.code !== "ENOENT") throw error;
       }
 
       const databaseUrl = typeof getDatabaseUrl === "function" ? getDatabaseUrl() : "";

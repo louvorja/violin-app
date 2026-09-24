@@ -7,6 +7,7 @@ const { HttpQueue } = require("./httpQueue.js");
 const { safeSend } = require("../safeWebContents.js");
 
 let _activeQueue = null;
+let _startingDownload = false;
 let _filesUrl = "";
 let _apiUrl = "";
 let _apiToken = "";
@@ -125,36 +126,41 @@ async function checkConnection() {
  * @returns {Promise<{ queued: number }>}
  */
 async function startDownload(files, webContents) {
-  if (_activeQueue) throw new Error("Download já em andamento");
+  if (_activeQueue || _startingDownload) throw new Error("Download já em andamento");
   if (!_filesUrl) throw new Error("filesUrl não configurada — chame setApiConfig antes");
 
-  // Filtrar arquivos já OK
-  const { missing, damaged } = integrity.diff(files);
-  const toDownload = [...missing, ...damaged];
+  _startingDownload = true;
+  try {
+    // Filtrar arquivos já OK sem bloquear o main durante a varredura.
+    const { missing, damaged } = await integrity.diff(files);
+    const toDownload = [...missing, ...damaged];
 
-  if (toDownload.length === 0) {
-    return { queued: 0, message: "Todos os arquivos já estão atualizados" };
+    if (toDownload.length === 0) {
+      return { queued: 0, message: "Todos os arquivos já estão atualizados" };
+    }
+
+    _activeQueue = new HttpQueue({ baseUrl: _filesUrl, apiToken: _apiToken });
+    _activeQueue.add(toDownload);
+
+    _activeQueue.on("progress", (data) => safeSend(webContents, "download:progress", data));
+    _activeQueue.on("file-done", (data) => safeSend(webContents, "download:file-done", data));
+    _activeQueue.on("file-error", (data) => safeSend(webContents, "download:file-error", data));
+    _activeQueue.on("queue-done", (data) => {
+      safeSend(webContents, "download:queue-done", data);
+      _activeQueue = null;
+    });
+    _activeQueue.on("queue-cancelled", () => {
+      safeSend(webContents, "download:queue-cancelled");
+      _activeQueue = null;
+    });
+
+    // Não await — queue roda em background, eventos reportam progresso
+    _activeQueue.start();
+
+    return { queued: toDownload.length };
+  } finally {
+    _startingDownload = false;
   }
-
-  _activeQueue = new HttpQueue({ baseUrl: _filesUrl, apiToken: _apiToken });
-  _activeQueue.add(toDownload);
-
-  _activeQueue.on("progress", (data) => safeSend(webContents, "download:progress", data));
-  _activeQueue.on("file-done", (data) => safeSend(webContents, "download:file-done", data));
-  _activeQueue.on("file-error", (data) => safeSend(webContents, "download:file-error", data));
-  _activeQueue.on("queue-done", (data) => {
-    safeSend(webContents, "download:queue-done", data);
-    _activeQueue = null;
-  });
-  _activeQueue.on("queue-cancelled", () => {
-    safeSend(webContents, "download:queue-cancelled");
-    _activeQueue = null;
-  });
-
-  // Não await — queue roda em background, eventos reportam progresso
-  _activeQueue.start();
-
-  return { queued: toDownload.length };
 }
 
 function cancelDownload() {

@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createRequire } from "module";
 import http from "http";
 
@@ -19,6 +19,7 @@ describe("download.checkConnection", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await Promise.all(servers.splice(0).map((s) => new Promise((resolve) => s.close(resolve))));
   });
 
@@ -81,5 +82,23 @@ describe("download.checkConnection", () => {
 
     expect(result.ok).toBe(true);
     expect(Date.now() - startedAt).toBeLessThan(500);
+  });
+});
+
+describe("download.startDownload", () => {
+  it("reserves the start while asynchronous integrity scanning is pending", async () => {
+    const download = require("../download/index.js");
+    const integrity = require("../download/integrity.js");
+    download.setApiConfig({ filesUrl: "https://example.invalid/files" });
+    let finishScan;
+    vi.spyOn(integrity, "diff").mockImplementation(() => new Promise((resolve) => {
+      finishScan = resolve;
+    }));
+
+    const first = download.startDownload([], null);
+    await expect(download.startDownload([], null)).rejects.toThrow("Download já em andamento");
+    finishScan({ missing: [], damaged: [], ok: [] });
+    await expect(first).resolves.toMatchObject({ queued: 0 });
+    vi.restoreAllMocks();
   });
 });
