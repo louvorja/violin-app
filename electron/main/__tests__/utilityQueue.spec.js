@@ -5,6 +5,7 @@ import { EventEmitter } from "node:events";
 import path from "node:path";
 import os from "node:os";
 import { mkdtemp, mkdir, symlink, rm } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 
 const require = createRequire(import.meta.url);
 const { UtilityQueue } = require("../download/utilityQueue.js");
@@ -28,6 +29,12 @@ function fixture() {
 }
 
 describe("download utility process", () => {
+  it("configures the worker's Windows trust store before loading HTTPS downloads", () => {
+    const source = readFileSync(require.resolve("../download/utilityWorker.cjs"), "utf8");
+    expect(source.indexOf("configureSystemCertificates()")).toBeGreaterThan(0);
+    expect(source.indexOf("configureSystemCertificates()")).toBeLessThan(source.indexOf('require("./httpQueue.js")'));
+  });
+
   it("uses a private start message and only forwards validated current-job events", async () => {
     const { queue, child, emit, root } = fixture();
     const progress = vi.fn();

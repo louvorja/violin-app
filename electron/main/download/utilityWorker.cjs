@@ -1,4 +1,7 @@
 "use strict";
+// O utilityProcess tem seu próprio estado TLS. A configuração do main não é
+// herdada: carregue as raízes confiadas pelo Windows antes do cliente HTTPS.
+require("../systemCertificates.js").configureSystemCertificates();
 const { HttpQueue } = require("./httpQueue.js");
 const { validateDownloadEntries } = require("./requestValidation.js");
 
