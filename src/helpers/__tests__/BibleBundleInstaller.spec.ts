@@ -49,6 +49,32 @@ vi.mock("@/config/Api", () => ({
   API_URL_FALLBACK_TOKEN: "",
 }));
 
+// A semântica de instalação (um capítulo por vez e marker por último) não
+// depende do browser Worker; a ponte Worker é coberta separadamente.
+vi.mock("@/helpers/BundleExtraction", async () => {
+  const JSZip = (await import("jszip")).default;
+  return {
+    extractBundleEntries: async (
+      buffer: ArrayBuffer,
+      options: { onEntry: (entry: { key: string; data: unknown; current: number; total: number }) => unknown }
+    ) => {
+      const zip = await JSZip.loadAsync(buffer);
+      const paths = Object.keys(zip.files).filter(
+        (path) => !zip.files[path].dir && /^bible_\d+_\d+_\d+\.json$/.test(path.split("/").at(-1) || "")
+      );
+      for (let index = 0; index < paths.length; index++) {
+        const path = paths[index];
+        await options.onEntry({
+          key: path.split("/").at(-1)!.replace(/\.json$/, ""),
+          data: JSON.parse(await zip.files[path].async("text")),
+          current: index + 1,
+          total: paths.length,
+        });
+      }
+    },
+  };
+});
+
 import BibleBundleInstaller from "@/helpers/BibleBundleInstaller";
 
 async function zipOf(files: Record<string, unknown>): Promise<ArrayBuffer> {

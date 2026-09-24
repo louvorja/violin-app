@@ -4,7 +4,6 @@
  *
  * @category helper-puro — sem APIs Vue.
  */
-import JSZip from "jszip";
 import $database from "@/helpers/Database";
 import $idb from "@/helpers/IndexedDB";
 import $dev from "@/helpers/Dev";
@@ -12,6 +11,7 @@ import { DB_TABLE } from "@/constants/DbTables";
 import type { BundleProgress } from "@/types/Database";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 import Telemetry from "@/helpers/Telemetry";
+import { extractBundleEntries } from "@/helpers/BundleExtraction";
 import {
   API_URL,
   API_TOKEN,
@@ -42,20 +42,6 @@ function bundleUrl(): string {
 
 function authHeaders(): Record<string, string> {
   return { "Api-Token": API_TOKEN };
-}
-
-/** Converte caminho do ZIP para chave lógica do banco. */
-function keyFromPath(filePath: string): string {
-  const parts = filePath.split("/");
-  const fileName = parts[parts.length - 1];
-  if (!fileName.endsWith(".json")) return "";
-  const base = fileName.replace(/\.json$/, "");
-
-  if (parts.includes("lang")) {
-    const langIdx = parts.indexOf("lang");
-    return parts[langIdx + 1] ? `${parts[langIdx + 1]}_${base}` : base;
-  }
-  return base;
 }
 
 function abortCheck(signal?: AbortSignal): void {
@@ -166,28 +152,17 @@ export default {
     signal?: AbortSignal
   ): Promise<Map<string, unknown>> {
     abortCheck(signal);
-    const zip = await JSZip.loadAsync(buffer);
-    const entries = Object.keys(zip.files).filter(
-      (f) => !zip.files[f].dir && f.endsWith(".json") && !f.endsWith("_manifest.json")
-    );
-
     const datasets = new Map<string, unknown>();
     const report = progressReporter(onProgress);
-    let lastYield = Date.now();
-    for (let i = 0; i < entries.length; i++) {
-      abortCheck(signal);
-      const key = keyFromPath(entries[i]);
-      if (!key) continue;
-      const raw = await zip.files[entries[i]].async("text");
-      abortCheck(signal);
-      if (datasets.has(key)) throw new Error(`Bundle inválido: chave duplicada ${key}`);
-      datasets.set(key, JSON.parse(raw));
-      report({ phase: "extract", current: i + 1, total: entries.length }, i === entries.length - 1);
-      if (Date.now() - lastYield >= 16) {
-        await new Promise<void>((resolve) => setTimeout(resolve, 0));
-        lastYield = Date.now();
-      }
-    }
+    await extractBundleEntries(buffer, {
+      kind: "catalog",
+      signal,
+      onEntry: ({ key, data, current, total }) => {
+        if (datasets.has(key)) throw new Error(`Bundle inválido: chave duplicada ${key}`);
+        datasets.set(key, data);
+        report({ phase: "extract", current, total }, current === total);
+      },
+    });
     abortCheck(signal);
     return datasets;
   },

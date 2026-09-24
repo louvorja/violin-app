@@ -36,6 +36,36 @@ vi.mock("@/config/Api", () => ({
   API_URL_DB_FALLBACK: "",
 }));
 
+// O contrato do instalador é testado sem Worker real; a ponte Worker tem sua
+// própria suíte. Aqui o ZIP ainda é interpretado para preservar as variantes
+// de config usadas pelos cenários abaixo.
+vi.mock("@/helpers/BundleExtraction", async () => {
+  const JSZip = (await import("jszip")).default;
+  return {
+    extractBundleEntries: async (
+      buffer: ArrayBuffer,
+      options: { onEntry: (entry: { key: string; data: unknown; current: number; total: number }) => unknown }
+    ) => {
+      const zip = await JSZip.loadAsync(buffer);
+      const paths = Object.keys(zip.files).filter(
+        (path) => !zip.files[path].dir && path.endsWith(".json") && !path.endsWith("_manifest.json")
+      );
+      for (let index = 0; index < paths.length; index++) {
+        const path = paths[index];
+        const parts = path.split("/");
+        const base = parts.at(-1)!.replace(/\.json$/, "");
+        const lang = parts.indexOf("lang");
+        await options.onEntry({
+          key: lang >= 0 && parts[lang + 1] ? `${parts[lang + 1]}_${base}` : base,
+          data: JSON.parse(await zip.files[path].async("text")),
+          current: index + 1,
+          total: paths.length,
+        });
+      }
+    },
+  };
+});
+
 import BundleInstaller from "@/helpers/BundleInstaller";
 
 async function bundleWith(config: unknown): Promise<ArrayBuffer> {

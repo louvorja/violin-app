@@ -8,7 +8,6 @@
  * não acompanha a versão remota do banco: o marcador local basta, e a checagem
  * não faz nenhuma requisição.
  */
-import JSZip from "jszip";
 import $database from "@/helpers/Database";
 import $idb from "@/helpers/IndexedDB";
 import BundleInstaller from "@/helpers/BundleInstaller";
@@ -16,9 +15,9 @@ import type { BundleProgress } from "@/types/Database";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 import { API_TOKEN, API_URL, API_URL_FALLBACK, API_URL_FALLBACK_TOKEN } from "@/config/Api";
 import { DB_TABLE } from "@/constants/DbTables";
+import { extractBundleEntries } from "@/helpers/BundleExtraction";
 
 const MARKER_KEY = "__bible_bundle_marker__";
-const BIBLE_KEY_RE = /^bible_\d+_\d+_\d+$/;
 
 /** Sobe quando o app precisar rebaixar a Bíblia: texto corrigido na origem ou formato novo. */
 const BUNDLE_REVISION = 1;
@@ -118,22 +117,22 @@ export default {
     const buffer = await fetchBibleBundle(onProgress, signal);
     abortCheck(signal);
 
-    const zip = await JSZip.loadAsync(buffer);
-    const entries = Object.keys(zip.files).filter(
-      (name) => !zip.files[name].dir && BIBLE_KEY_RE.test(name.replace(/\.json$/, ""))
-    );
-    if (entries.length === 0) throw new Error("Bible bundle inválido: nenhum capítulo encontrado");
-
     // Um capítulo por vez: são ~15 mil, e segurar todos parseados em memória
     // seria um pico de centenas de MB num PC fraco. Se cair no meio, os já
     // gravados são válidos e, sem o marcador, a próxima abertura recomeça.
-    for (let i = 0; i < entries.length; i++) {
-      abortCheck(signal);
-      const key = entries[i].replace(/\.json$/, "");
-      const raw = await zip.files[entries[i]].async("text");
-      await $database.seed(key, JSON.parse(raw));
-      onProgress?.({ phase: "inject", current: i + 1, total: entries.length, detail: key });
-    }
+    let chapters = 0;
+    await extractBundleEntries(buffer, {
+      kind: "bible",
+      signal,
+      onEntry: async ({ key, data, current, total }) => {
+        abortCheck(signal);
+        await $database.seed(key, data);
+        chapters++;
+        onProgress?.({ phase: "inject", current, total, detail: key });
+      },
+    });
+    if (chapters === 0) throw new Error("Bible bundle inválido: nenhum capítulo encontrado");
+    abortCheck(signal);
 
     await $idb.put(DB_TABLE.CACHE, {
       id: MARKER_KEY,
