@@ -1,6 +1,7 @@
 /**
- * Real app/preload/main/utility-process download test; local HTTP fixtures only.
+ * Real app/preload/main/utility-process download test; the download fixture is loopback-only.
  * VITE_TARGET=desktop LJ_RUN_DOWNLOAD_UTILITY=1 npx playwright test e2e/download-utility.electron.spec.js
+ * Packaged mode may make normal bootstrap requests and requires explicit opt-in.
  * The profile and media are temporary. No external logs, traces or screenshots.
  */
 import { test, expect } from "@playwright/test";
@@ -19,6 +20,12 @@ test.use({ trace: "off", screenshot: "off", video: "off" });
 test("downloads and cancels through the real preload in a separate utility process", async () => {
   const testInfo = test.info();
   test.setTimeout(120000);
+  const packagedExecutable = nodeProcess.env.LJ_ELECTRON_EXECUTABLE?.trim();
+  if (packagedExecutable && nodeProcess.env.LJ_ALLOW_PACKAGED_BOOTSTRAP_NETWORK !== "1") {
+    throw new Error(
+      "Packaged mode may make normal bootstrap network requests; set LJ_ALLOW_PACKAGED_BOOTSTRAP_NETWORK=1 to opt in"
+    );
+  }
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "lj-download-utility-e2e-"));
   const fixture = Buffer.alloc(512 * 1024, 42);
   const requests = [];
@@ -67,37 +74,63 @@ test("downloads and cancels through the real preload in a separate utility proce
       })
     );
     const guard = path.resolve("e2e/helpers/loopback-network.cjs");
-    const env = { ...nodeProcess.env, ELECTRON_DEV: "1", LJ_E2E_USER_DATA: root };
+    const env = { ...nodeProcess.env, LJ_E2E_USER_DATA: root };
+    if (packagedExecutable) delete env.ELECTRON_DEV;
+    else env.ELECTRON_DEV = "1";
     delete env.ELECTRON_RUN_AS_NODE;
-    // Playwright deliberately strips NODE_OPTIONS. Load the network guard via
-    // Electron's -r argument, before the real application's main entry.
+    // Packaged Electron treats -r as an application argument, so it cannot
+    // load the test guard. Packaged mode has a separate explicit opt-in above;
+    // dev mode keeps the guard and Chromium network restriction.
+    const launchArgs = packagedExecutable
+      ? []
+      : [
+          "-r",
+          guard,
+          ".",
+          "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1",
+        ];
     app = await electron.launch({
-      args: [
-        "-r",
-        guard,
-        ".",
-        "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1",
-      ],
+      executablePath: packagedExecutable ? path.resolve(packagedExecutable) : undefined,
+      args: launchArgs,
       env,
       timeout: 60000,
     });
-    expect(
-      await app.evaluate(() => {
-        try {
-          globalThis.process
-            .getBuiltinModule("node:http")
-            .request("http://external-disabled.invalid");
-          return false;
-        } catch (error) {
-          return error.message === "External HTTP disabled by isolated download E2E";
-        }
-      })
-    ).toBe(true);
+    if (packagedExecutable) {
+      const runtime = await app.evaluate(({ app }) => ({
+        packaged: app.isPackaged,
+        executable: app.getPath("exe"),
+        userData: app.getPath("userData"),
+        documents: app.getPath("documents"),
+      }));
+      expect(runtime.packaged).toBe(true);
+      expect(await fs.realpath(runtime.executable)).toBe(await fs.realpath(packagedExecutable));
+      expect(path.resolve(runtime.userData)).toBe(root);
+      expect(path.resolve(runtime.documents)).toBe(path.join(root, "documents"));
+    } else {
+      expect(
+        await app.evaluate(() => {
+          try {
+            globalThis.process
+              .getBuiltinModule("node:http")
+              .request("http://external-disabled.invalid");
+            return false;
+          } catch (error) {
+            return error.message === "External HTTP disabled by isolated download E2E";
+          }
+        })
+      ).toBe(true);
+    }
     let page;
     await expect
       .poll(
         () => {
-          page = app.windows().find((candidate) => candidate.url().includes("localhost:5002"));
+          page = app
+            .windows()
+            .find((candidate) =>
+              packagedExecutable
+                ? candidate.url().startsWith("louvorja://app/")
+                : candidate.url().includes("localhost:5002")
+            );
           return !!page;
         },
         { timeout: 60000 }
