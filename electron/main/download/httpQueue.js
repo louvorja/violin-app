@@ -4,7 +4,6 @@ const path = require("path");
 const https = require("https");
 const http = require("http");
 const { EventEmitter } = require("events");
-const paths = require("../paths.js");
 
 const DEFAULT_PROGRESS_INTERVAL_MS = 100;
 const MAX_REDIRECTS = 3;
@@ -23,18 +22,18 @@ const MAX_REDIRECTS = 3;
  */
 class HttpQueue extends EventEmitter {
   /**
-   * @param {{ baseUrl: string, apiToken?: string, concurrency?: number, progressIntervalMs?: number }} options
+   * @param {{ baseUrl: string, apiToken?: string, concurrency?: number, progressIntervalMs?: number, filesDir?: string }} options
    */
-  constructor({ baseUrl, apiToken, concurrency, progressIntervalMs } = {}) {
+  constructor({ baseUrl, apiToken, concurrency, progressIntervalMs, filesDir } = {}) {
     super();
     this.baseUrl = (baseUrl || "").replace(/\/+$/, "");
     this.apiToken = apiToken || null;
+    this.filesDir = filesDir;
     this.concurrency = Math.max(1, Math.min(16, concurrency ?? 6));
     this.queue = [];
     this.running = false;
     this.cancelled = false;
     this.paused = false;
-    this.admissionBlocked = false;
     this._activeReqs = new Set();
     this._activeTmps = new Set();
     this._resumeWaiters = [];
@@ -53,7 +52,7 @@ class HttpQueue extends EventEmitter {
     items.forEach((item) => {
       const localAbs = path.isAbsolute(item.local)
         ? item.local
-        : path.join(paths.filesDir(), item.local);
+        : path.join(this.filesDir || require("../paths.js").filesDir(), item.local);
       this.queue.push({
         remote: item.remote,
         remoteUrl: item.remoteUrl,
@@ -67,7 +66,7 @@ class HttpQueue extends EventEmitter {
     this.cancelled = true;
     this.paused = false;
     this._discardPendingProgress();
-    this._releaseAdmissionWaiters();
+    this._releasePauseWaiters();
     for (const req of this._activeReqs) {
       try { req.destroy(new Error("cancelled")); } catch (_) { /* ignore */ }
     }
@@ -132,26 +131,18 @@ class HttpQueue extends EventEmitter {
   resume() {
     if (!this.paused) return;
     this.paused = false;
-    this._releaseAdmissionWaiters();
+    this._releasePauseWaiters();
     this.emit("resumed");
   }
 
-  /** Stops admission of new files without interrupting active downloads. */
-  setAdmissionBlocked(blocked) {
-    const next = blocked === true;
-    if (this.admissionBlocked === next) return;
-    this.admissionBlocked = next;
-    this._releaseAdmissionWaiters();
-  }
-
-  _releaseAdmissionWaiters() {
-    if (!this.cancelled && (this.paused || this.admissionBlocked)) return;
+  _releasePauseWaiters() {
+    if (!this.cancelled && this.paused) return;
     this._resumeWaiters.forEach((resolve) => resolve());
     this._resumeWaiters = [];
   }
 
-  _waitForAdmission() {
-    if (this.cancelled || (!this.paused && !this.admissionBlocked)) return Promise.resolve();
+  _waitWhilePaused() {
+    if (this.cancelled || !this.paused) return Promise.resolve();
     return new Promise((res) => this._resumeWaiters.push(res));
   }
 
@@ -272,14 +263,14 @@ class HttpQueue extends EventEmitter {
     const tmp = `${item.local}.tmp`;
 
     try {
-      await fs.ensureDir(path.dirname(item.local));
+      await this._prepareDestination(item.local);
+      await this._assertDestination(item.local, tmp);
       this._activeTmps.add(tmp);
 
-      // A preparação do diretório é assíncrona: a apresentação pode começar
-      // nesse intervalo. Ainda não há requisição ativa, então aguarde a
-      // admissão antes de abrir o socket deste arquivo.
-      while (!this.cancelled && (this.paused || this.admissionBlocked)) {
-        await this._waitForAdmission();
+      // A preparação do diretório é assíncrona; respeite uma pausa explícita
+      // que tenha chegado antes de abrir o socket deste arquivo.
+      while (!this.cancelled && this.paused) {
+        await this._waitWhilePaused();
       }
       if (this.cancelled) throw new Error("cancelled");
 
@@ -296,6 +287,7 @@ class HttpQueue extends EventEmitter {
 
       // `file-done` nunca ultrapassa a última posição conhecida do arquivo.
       this._flushPendingProgress(idx);
+      await this._assertDestination(item.local, tmp);
       await fs.move(tmp, item.local, { overwrite: true });
       this._activeTmps.delete(tmp);
       this.emit("file-done", { file: item.remote, localPath: item.local });
@@ -310,6 +302,39 @@ class HttpQueue extends EventEmitter {
       console.warn(`[httpQueue] falhou ${url}: ${err.message}`);
       this.emit("file-error", { file: item.remote, error: err.message });
       return { ok: false };
+    }
+  }
+
+  async _prepareDestination(local) {
+    if (!this.filesDir) return fs.ensureDir(path.dirname(local));
+    const relative = path.relative(this.filesDir, path.dirname(local));
+    if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+      throw new Error("Destino fora da pasta de arquivos");
+    }
+    await fs.ensureDir(this.filesDir);
+    let current = this.filesDir;
+    for (const segment of relative.split(path.sep).filter(Boolean)) {
+      current = path.join(current, segment);
+      try { await fs.mkdir(current); } catch (error) { if (error.code !== "EEXIST") throw error; }
+      const stat = await fs.lstat(current);
+      if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error("Diretório de destino inválido");
+    }
+  }
+
+  async _assertDestination(local, tmp) {
+    if (!this.filesDir) return;
+    const root = await fs.realpath(this.filesDir);
+    const parent = await fs.realpath(path.dirname(local));
+    const relative = path.relative(root, parent);
+    if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+      throw new Error("Destino fora da pasta de arquivos");
+    }
+    for (const target of [local, tmp]) {
+      try {
+        if ((await fs.lstat(target)).isSymbolicLink()) throw new Error("Link simbólico não permitido no destino");
+      } catch (error) {
+        if (error.code !== "ENOENT") throw error;
+      }
     }
   }
 
@@ -334,10 +359,10 @@ class HttpQueue extends EventEmitter {
     // Pool de workers concorrentes — cada um consome o queue até esvaziar.
     const worker = async () => {
       while (!this.cancelled) {
-        await this._waitForAdmission();
+        await this._waitWhilePaused();
         if (this.cancelled) break;
         // A pausa pode chegar entre o Promise resolvido e este microtask.
-        if (this.paused || this.admissionBlocked) continue;
+        if (this.paused) continue;
         if (this.queue.length === 0) break;
         const item = this.queue.shift();
         if (!item) break;
