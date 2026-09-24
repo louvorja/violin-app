@@ -1,8 +1,6 @@
 /**
- * useSyncManager.catalog.spec.ts — no primeiro uso do desktop a Verificação
- * Inicial escaneia o disco álbum por álbum, o que abre o JSON de cada álbum e de
- * cada música (~2 mil). O catálogo tem que estar local antes: um único bundle,
- * e nunca uma enxurrada de GETs que ninguém pediu.
+ * useSyncManager.catalog.spec.ts — o boot só verifica o marker local. Instalar o
+ * ZIP geral e abrir milhares de registros do catálogo exigem uma ação explícita.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createApp, ref } from "vue";
@@ -15,6 +13,7 @@ const h = vi.hoisted(() => ({
   bibleIsInstalled: vi.fn(),
   bibleInstall: vi.fn(),
   dbGet: vi.fn(),
+  dbGetLocal: vi.fn(),
   storedIds: vi.fn(),
 }));
 
@@ -29,7 +28,7 @@ vi.mock("@/helpers/BibleBundleInstaller", () => ({
   default: { isInstalled: h.bibleIsInstalled, install: h.bibleInstall },
 }));
 vi.mock("@/helpers/Database", () => ({
-  default: { get: h.dbGet, getStoredIdsForPrefix: h.storedIds },
+  default: { get: h.dbGet, getLocal: h.dbGetLocal, getStoredIdsForPrefix: h.storedIds },
 }));
 
 const CATALOG: Record<string, unknown> = {
@@ -60,6 +59,7 @@ async function mountSync() {
 }
 
 const catalogReads = () => h.dbGet.mock.calls.map(([key]) => key as string);
+const localCatalogReads = () => h.dbGetLocal.mock.calls.map(([key]) => key as string);
 const deferred = () => {
   let resolve!: () => void;
   const promise = new Promise<void>((r) => (resolve = r));
@@ -74,6 +74,7 @@ beforeEach(() => {
     fn.mockReset();
   }
   h.dbGet.mockReset();
+  h.dbGetLocal.mockReset();
   h.storedIds.mockReset();
 
   h.hasBundleMarker.mockResolvedValue(false);
@@ -86,6 +87,10 @@ beforeEach(() => {
     h.events.push(`get:${key}`);
     return CATALOG[key] ?? null;
   });
+  h.dbGetLocal.mockImplementation(async (key: string) => {
+    h.events.push(`local:${key}`);
+    return CATALOG[key] ?? null;
+  });
   h.storedIds.mockResolvedValue(new Set());
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -94,57 +99,83 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("Verificação Inicial (desktop, primeiro uso)", () => {
-  it("baixa o bundle geral uma vez, antes de ler qualquer lista do catálogo", async () => {
-    const sync = await mountSync();
-
-    await sync.runScan("pt");
-
-    expect(h.fullInstall).toHaveBeenCalledTimes(1);
-    expect(h.events[0]).toBe("bundle");
-    expect(h.events.indexOf("get:pt_categories")).toBeGreaterThan(h.events.indexOf("bundle"));
-    // O bundle é o banco completo: a Bíblia vem junto e não precisa do seu ZIP.
-    expect(h.bibleInstall).not.toHaveBeenCalled();
-  });
-
-  it("com o catálogo já instalado, não baixa nada", async () => {
-    h.hasBundleMarker.mockResolvedValue(true);
-    const sync = await mountSync();
-
-    await sync.runScan("pt");
-
-    expect(h.fullInstall).not.toHaveBeenCalled();
-    expect(catalogReads()).toContain("album_7");
-  });
-
-  it("se o bundle falha, o scan automático não abre álbum nem música", async () => {
-    h.fullInstall.mockRejectedValue(new Error("rede caiu"));
+describe("Verificação Inicial leve", () => {
+  it("no primeiro boot consulta apenas o marker, sem ZIP nem leitura do catálogo", async () => {
     const sync = await mountSync();
 
     const result = await sync.runScan("pt");
 
-    expect(result.cachedAlbums.size).toBe(0);
-    expect(catalogReads().filter((k) => /^(album|music)_/.test(k))).toEqual([]);
+    expect(result).toMatchObject({ catalogAvailable: false, detailed: false });
+    expect(h.hasBundleMarker).toHaveBeenCalledTimes(1);
+    expect(h.fullInstall).not.toHaveBeenCalled();
+    expect(h.bibleInstall).not.toHaveBeenCalled();
+    expect(h.dbGet).not.toHaveBeenCalled();
+    expect(h.dbGetLocal).not.toHaveBeenCalled();
   });
 
-  it("não tenta de novo dentro da pausa depois de uma falha", async () => {
-    h.fullInstall.mockRejectedValue(new Error("rede caiu"));
+  it("mesmo com marker não inicia a varredura detalhada automaticamente", async () => {
+    h.hasBundleMarker.mockResolvedValue(true);
     const sync = await mountSync();
 
-    await sync.runScan("pt");
-    await sync.runScan("pt");
+    const result = await sync.runScan("pt");
 
-    expect(h.fullInstall).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({ catalogAvailable: true, detailed: false });
+    expect(h.fullInstall).not.toHaveBeenCalled();
+    expect(h.dbGet).not.toHaveBeenCalled();
+    expect(h.dbGetLocal).not.toHaveBeenCalled();
   });
 
-  it("na web, que não escaneia o disco, nunca baixa o bundle geral", async () => {
+  it("pedir detalhes sem catálogo falha de modo recuperável e não instala sozinho", async () => {
+    const sync = await mountSync();
+
+    const result = await sync.runScan("pt", { detailed: true });
+
+    expect(result).toMatchObject({ catalogAvailable: false, detailed: false });
+    expect(result.categories).toEqual([]);
+    expect(h.fullInstall).not.toHaveBeenCalled();
+    expect(h.dbGet).not.toHaveBeenCalled();
+    expect(h.dbGetLocal).not.toHaveBeenCalled();
+  });
+
+  it("só após ação explícita instala o catálogo geral", async () => {
+    const sync = await mountSync();
+    await sync.runScan("pt");
+
+    expect(await sync.downloadBundle()).toBe(true);
+
+    expect(h.fullInstall).toHaveBeenCalledTimes(1);
+    expect(h.bibleInstall).not.toHaveBeenCalled();
+    expect(await sync.runScan("pt", { detailed: true })).toMatchObject({
+      catalogAvailable: true,
+      detailed: true,
+    });
+  });
+
+  it("a varredura autorizada lê somente o catálogo local", async () => {
+    h.hasBundleMarker.mockResolvedValue(true);
+    const sync = await mountSync();
+
+    const result = await sync.runScan("pt", { detailed: true });
+
+    expect(result).toMatchObject({ catalogAvailable: true, detailed: true });
+    expect(localCatalogReads()).toContain("pt_categories");
+    expect(localCatalogReads()).toContain("album_7");
+    expect(localCatalogReads()).toContain("music_1");
+    expect(h.dbGet).not.toHaveBeenCalled();
+    expect(h.fullInstall).not.toHaveBeenCalled();
+  });
+
+  it("na web também mantém o boot leve", async () => {
     h.platform.isDesktop = false;
     h.platform.storage = undefined;
     const sync = await mountSync();
 
-    await sync.runScan("pt");
+    const result = await sync.runScan("pt");
 
+    expect(result).toMatchObject({ catalogAvailable: true, detailed: false });
+    expect(h.hasBundleMarker).not.toHaveBeenCalled();
     expect(h.fullInstall).not.toHaveBeenCalled();
+    expect(h.dbGet).not.toHaveBeenCalled();
   });
 });
 
@@ -204,7 +235,8 @@ describe("bundle da Bíblia e bundle geral em andamento", () => {
 });
 
 describe("abrir o Sincronizar (desktop, primeiro uso)", () => {
-  // A tela lê o catálogo, as versões e o disco da Bíblia ao mesmo tempo.
+  // A tela pode buscar as pequenas listas necessárias, mas nunca instala o ZIP
+  // geral implicitamente. Detalhes escolhidos continuam sob demanda.
   const openSyncScreen = (sync: Awaited<ReturnType<typeof mountSync>>) =>
     Promise.all([
       sync.loadCatalog("pt"),
@@ -212,20 +244,18 @@ describe("abrir o Sincronizar (desktop, primeiro uso)", () => {
       sync.scanBibleVersionsDisk([{ id_bible_version: 1 }] as never, "pt"),
     ]);
 
-  it("custa só o bundle: nenhuma lista é lida da rede antes dele", async () => {
+  it("lê só as listas pedidas e não instala o bundle geral", async () => {
     const sync = await mountSync();
 
     await openSyncScreen(sync);
 
-    expect(h.fullInstall).toHaveBeenCalledTimes(1);
-    expect(h.events[0]).toBe("bundle");
-    const before = h.events.slice(0, h.events.indexOf("bundle"));
-    expect(before.filter((e) => e.startsWith("get:"))).toEqual([]);
+    expect(h.fullInstall).not.toHaveBeenCalled();
     expect(h.events).toContain("get:pt_categories");
     expect(h.events).toContain("get:pt_bible_version");
+    expect(catalogReads().filter((key) => /^(album|music)_/.test(key))).toEqual([]);
   });
 
-  it("depois de instalado, abrir de novo não baixa nada", async () => {
+  it("um marker existente também não provoca reinstalação", async () => {
     h.hasBundleMarker.mockResolvedValue(true);
     const sync = await mountSync();
 
@@ -243,14 +273,25 @@ describe("abrir o Sincronizar (desktop, primeiro uso)", () => {
     expect(h.events).toContain("get:pt_categories");
   });
 
-  it("se o bundle falha, as listas ainda saem da rede", async () => {
-    h.fullInstall.mockRejectedValue(new Error("rede caiu"));
+  it("sem catálogo offline, as listas continuam recuperáveis pela rede", async () => {
     const sync = await mountSync();
 
     const { categories } = await sync.loadCatalog("pt");
 
     expect(categories).toHaveLength(1);
     expect(h.events).toContain("get:pt_categories");
+    expect(h.fullInstall).not.toHaveBeenCalled();
+  });
+
+  it("uma seleção explícita busca somente seus metadados sob demanda", async () => {
+    const sync = await mountSync();
+
+    await sync.collectFiles(new Set([7]), false, []);
+
+    expect(h.fullInstall).not.toHaveBeenCalled();
+    expect(catalogReads()).toContain("album_7");
+    expect(catalogReads()).toContain("music_1");
+    expect(catalogReads()).toContain("music_2");
   });
 
   it("na web não baixa o bundle geral para ler as listas", async () => {

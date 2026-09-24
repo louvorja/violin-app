@@ -594,8 +594,9 @@ onMounted(() => {
     $appdata.set(KEYS.SHELL.IS_DESKTOP, false);
   }
 
-  // Startup check — só no desktop.
-  // O fluxo é: bundle download → update check → release notes → startup check.
+  // Startup check — só no desktop. O diálogo automático faz apenas a checagem
+  // leve do marker/conexão; bundle e varredura detalhada exigem ação explícita.
+  // O fluxo é: update check → release notes → startup check leve.
   if (platform.electron) {
     // As notas pertencem a uma atualização, não a uma versão. Sem registrar a
     // versão da execução anterior, uma instalação nova (chave vazia) contava

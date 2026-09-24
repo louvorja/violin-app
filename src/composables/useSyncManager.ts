@@ -86,6 +86,23 @@ interface ScanCacheResult {
   hymnal1996Cached: boolean;
 }
 
+export interface CatalogScanResult extends ScanCacheResult {
+  categories: any[];
+  hymnalIds: number[];
+  hymnal1996Ids: number[];
+  bibleVersions: BibleVersion[];
+  downloadedBibles: number[];
+  /** Há um bundle geral concluído no armazenamento local. */
+  catalogAvailable: boolean;
+  /** O usuário autorizou e concluiu a leitura detalhada do catálogo local. */
+  detailed: boolean;
+}
+
+interface CatalogReadOptions {
+  fresh?: boolean;
+  localOnly?: boolean;
+}
+
 // O que está no disco só muda por ação do próprio app, então o resultado do
 // scan é reaproveitado entre aberturas da tela e invalidado em cada escrita.
 let scanCacheEntry: { lang: string; at: number; result: ScanCacheResult } | null = null;
@@ -230,17 +247,16 @@ export function useSyncManager() {
 
   async function loadCatalog(
     lang: string,
-    { fresh = false } = {}
+    { fresh = false, localOnly = false }: CatalogReadOptions = {}
   ): Promise<{ categories: any[]; hymnalIds: number[]; hymnal1996Ids: number[] }> {
-    // No primeiro uso as listas saem do bundle, não de cinco GETs à parte. Quem
-    // pede o catálogo "fresco" quer a rede de propósito: não espera o bundle.
-    if (!fresh) await ensureCatalogForBulkRead();
+    const read = <T>(key: string, silent = false): Promise<T | null> =>
+      localOnly ? Database.getLocal<T>(key) : Database.get<T>(key, { fresh, silent });
     const hymnal1996Enabled =
       $userdata.get<boolean>(moduleShowInMainMenu("hymnal_1996"), false) === true;
     const [catsRes, hymRes, hym1996Res] = await Promise.allSettled([
-      Database.get(`${lang}_categories`, { fresh }),
-      Database.get(`${lang}_hymnal`, { fresh }),
-      hymnal1996Enabled ? Database.get(`${lang}_hymnal_1996`, { fresh }) : Promise.resolve(null),
+      read(`${lang}_categories`),
+      read(`${lang}_hymnal`),
+      hymnal1996Enabled ? read(`${lang}_hymnal_1996`) : Promise.resolve(null),
     ]);
     const categories: any[] = [];
     let hymnalIds: number[] = [];
@@ -264,9 +280,9 @@ export function useSyncManager() {
     // ({lang}_doxology_albums). Injetada aqui, flui automaticamente para
     // Sincronizar, check inicial, scan de cache, download e uso em disco.
     try {
-      const dox = await Database.get<Array<{ id_album: number | string; name: string }>>(
+      const dox = await read<Array<{ id_album: number | string; name: string }>>(
         `${lang}_doxology_albums`,
-        { silent: true }
+        true
       );
       if (Array.isArray(dox) && dox.length > 0) {
         categories.push({
@@ -322,9 +338,10 @@ export function useSyncManager() {
         hymnal1996Cached: false,
       };
 
-    // O scan é automático: sem o catálogo no disco ele viraria milhares de
-    // requisições que ninguém pediu. Sem catálogo, não há o que marcar como baixado.
-    if (!(await ensureCatalogForBulkRead())) {
+    // O scan nunca instala nada. Sem um catálogo concluído no disco, abrir cada
+    // álbum/música viraria milhares de GETs; a tela oferece a instalação como
+    // uma ação explícita e este caminho retorna um estado vazio recuperável.
+    if (!(await hasCatalogForBulkRead())) {
       return {
         cachedAlbums: new Set(),
         classicAlbums: new Set(),
@@ -345,7 +362,7 @@ export function useSyncManager() {
       await Promise.all(
         slice.map(async (id) => {
           try {
-            const files = await collectAlbumFileList(id);
+            const files = await collectAlbumFileList(id, { localOnly: true });
             if (files.length === 0) return;
             const origem = await originOfFileList(files);
             if (origem) cachedAlbums.add(id);
@@ -362,7 +379,7 @@ export function useSyncManager() {
     let hymnalCached = false;
     if (hymnalIds.length) {
       try {
-        const hymFiles = await collectHymnalFileList(hymnalIds);
+        const hymFiles = await collectHymnalFileList(hymnalIds, { localOnly: true });
         hymnalCached = hymFiles.length > 0 && (await isFileListComplete(hymFiles));
       } catch (e) {
         console.warn("[useSyncManager] scan hymnal:", e);
@@ -373,7 +390,7 @@ export function useSyncManager() {
     let hymnal1996Cached = false;
     if (hymnal1996Ids.length) {
       try {
-        const hymFiles = await collectHymnalFileList(hymnal1996Ids);
+        const hymFiles = await collectHymnalFileList(hymnal1996Ids, { localOnly: true });
         hymnal1996Cached = hymFiles.length > 0 && (await isFileListComplete(hymFiles));
       } catch (e) {
         console.warn("[useSyncManager] scan hymnal 1996:", e);
@@ -406,63 +423,90 @@ export function useSyncManager() {
     scanCacheEntry = null;
   }
 
-  async function runScan(lang: string): Promise<{
-    categories: any[];
-    hymnalIds: number[];
-    hymnal1996Ids: number[];
-    cachedAlbums: Set<number>;
-    classicAlbums: Set<number>;
-    hymnalCached: boolean;
-    hymnal1996Cached: boolean;
-    bibleVersions: BibleVersion[];
-    downloadedBibles: number[];
-  }> {
-    // Antes das listas: com o bundle instalado elas já saem do disco, e o
-    // primeiro uso inteiro custa um único download.
-    await ensureCatalogForBulkRead();
-    const { categories, hymnalIds, hymnal1996Ids } = await loadCatalog(lang);
-    const { versions: bibleVersions } = await loadBibleVersions(lang);
-    const { cachedAlbums, classicAlbums, hymnalCached, hymnal1996Cached } = await scanCache(
-      lang,
-      categories,
-      hymnalIds,
-      hymnal1996Ids
-    );
-
-    if (bibleVersions.length > 0) {
-      scanProgress.value = {
-        ...scanProgress.value,
-        total: scanProgress.value.total + bibleVersions.length,
-      };
-    }
-
-    const downloadedBibles = await scanBibleVersionsDisk(bibleVersions, lang, {
-      trackProgress: true,
-    });
-
-    scanning.value = false;
+  function emptyCatalogScan(catalogAvailable: boolean): CatalogScanResult {
     return {
-      categories,
-      hymnalIds,
-      hymnal1996Ids,
-      cachedAlbums,
-      classicAlbums,
-      hymnalCached,
-      hymnal1996Cached,
-      bibleVersions,
-      downloadedBibles,
+      categories: [],
+      hymnalIds: [],
+      hymnal1996Ids: [],
+      cachedAlbums: new Set(),
+      classicAlbums: new Set(),
+      hymnalCached: false,
+      hymnal1996Cached: false,
+      bibleVersions: [],
+      downloadedBibles: [],
+      catalogAvailable,
+      detailed: false,
     };
+  }
+
+  /**
+   * A abertura automática faz somente a checagem local do marker. O scan
+   * detalhado abre milhares de registros de álbum/música e, por isso, só roda
+   * depois de uma ação explícita da pessoa na tela.
+   */
+  async function runScan(
+    lang: string,
+    { detailed = false }: { detailed?: boolean } = {}
+  ): Promise<CatalogScanResult> {
+    const catalogAvailable = await hasCatalogForBulkRead();
+    if (!detailed || !catalogAvailable) return emptyCatalogScan(catalogAvailable);
+
+    scanning.value = true;
+    try {
+      // No desktop, uma varredura detalhada é estritamente local. Mesmo que um
+      // marker antigo tenha sobrevivido a uma corrupção parcial, o boot nunca
+      // transforma a falta de uma linha em rajada de rede.
+      const localOnly = !!Platform.storage?.checkLocal;
+      const { categories, hymnalIds, hymnal1996Ids } = await loadCatalog(lang, { localOnly });
+      const { versions: bibleVersions } = await loadBibleVersions(lang, { localOnly });
+      const { cachedAlbums, classicAlbums, hymnalCached, hymnal1996Cached } = await scanCache(
+        lang,
+        categories,
+        hymnalIds,
+        hymnal1996Ids
+      );
+
+      if (bibleVersions.length > 0) {
+        scanProgress.value = {
+          ...scanProgress.value,
+          total: scanProgress.value.total + bibleVersions.length,
+        };
+      }
+
+      const downloadedBibles = await scanBibleVersionsDisk(bibleVersions, lang, {
+        trackProgress: true,
+        localOnly,
+      });
+
+      return {
+        categories,
+        hymnalIds,
+        hymnal1996Ids,
+        cachedAlbums,
+        classicAlbums,
+        hymnalCached,
+        hymnal1996Cached,
+        bibleVersions,
+        downloadedBibles,
+        catalogAvailable: true,
+        detailed: true,
+      };
+    } finally {
+      scanning.value = false;
+    }
   }
 
   // ─── Bible Versions ─────────────────────────────────────────────
 
   async function loadBibleVersions(
-    lang: string
+    lang: string,
+    { localOnly = false }: { localOnly?: boolean } = {}
   ): Promise<{ versions: BibleVersion[]; downloaded: number[] }> {
-    await ensureCatalogForBulkRead();
     let versions: BibleVersion[] = [];
     try {
-      const data = await Database.get<BibleVersion[]>(`${lang}_bible_version`);
+      const data = localOnly
+        ? await Database.getLocal<BibleVersion[]>(`${lang}_bible_version`)
+        : await Database.get<BibleVersion[]>(`${lang}_bible_version`);
       if (data) versions = data;
     } catch (e) {
       console.error("[useSyncManager] loadBibleVersions:", e);
@@ -475,14 +519,19 @@ export function useSyncManager() {
   async function scanBibleVersionsDisk(
     versions: BibleVersion[],
     lang: string,
-    { trackProgress = false }: { trackProgress?: boolean } = {}
+    {
+      trackProgress = false,
+      localOnly = false,
+    }: { trackProgress?: boolean; localOnly?: boolean } = {}
   ): Promise<number[]> {
     if (!versions.length) return [];
-    await ensureCatalogForBulkRead();
-
-    const books = await Database.get<Array<{ id_bible_book: number; chapters?: number }>>(
-      `${lang}_bible_book`
-    );
+    const books = localOnly
+      ? await Database.getLocal<Array<{ id_bible_book: number; chapters?: number }>>(
+          `${lang}_bible_book`
+        )
+      : await Database.get<Array<{ id_bible_book: number; chapters?: number }>>(
+          `${lang}_bible_book`
+        );
     if (!books || books.length === 0) return [];
 
     const downloaded: number[] = [];
@@ -745,7 +794,6 @@ export function useSyncManager() {
     selectedHymnal1996 = false,
     hymnal1996Ids: number[] = []
   ): Promise<FileEntry[]> {
-    await ensureCatalogForBulkRead();
     const files = new Map<string, FileEntry>();
     const albumIds = [...selectedAlbums];
     const allMusicIds = new Set<number>();
@@ -779,28 +827,35 @@ export function useSyncManager() {
     return [...files.values()];
   }
 
-  async function collectAlbumFileList(albumId: number): Promise<FileEntry[]> {
+  async function collectAlbumFileList(
+    albumId: number,
+    { localOnly = false }: { localOnly?: boolean } = {}
+  ): Promise<FileEntry[]> {
     const files = new Map<string, FileEntry>();
-    const album = await fetchJson<MusicData>(`album_${albumId}`);
+    const album = await fetchJson<MusicData>(`album_${albumId}`, { localOnly });
     if (!album) return [];
     const f = toFile(album.url_image);
     if (f) files.set(f.remote, f);
     const musicIds = (album.musics || [])
       .map((m) => Number(m.id_music))
       .filter((n) => Number.isFinite(n));
-    await collectMusicFiles(musicIds, files);
+    await collectMusicFiles(musicIds, files, { localOnly });
     return [...files.values()];
   }
 
-  async function collectHymnalFileList(hymnalIds: number[]): Promise<FileEntry[]> {
+  async function collectHymnalFileList(
+    hymnalIds: number[],
+    { localOnly = false }: { localOnly?: boolean } = {}
+  ): Promise<FileEntry[]> {
     const files = new Map<string, FileEntry>();
-    await collectMusicFiles(hymnalIds, files);
+    await collectMusicFiles(hymnalIds, files, { localOnly });
     return [...files.values()];
   }
 
   async function collectMusicFiles(
     musicIds: number[],
-    files: Map<string, FileEntry>
+    files: Map<string, FileEntry>,
+    { localOnly = false }: { localOnly?: boolean } = {}
   ): Promise<void> {
     // `scanCache` pode chamar esta função para até três álbuns ao mesmo tempo.
     // Um lote fixo de quatro limita a rajada de leitura e persistência no IDB
@@ -810,7 +865,7 @@ export function useSyncManager() {
       const slice = musicIds.slice(i, i + BATCH);
       await Promise.all(
         slice.map(async (mid) => {
-          const m = await fetchJson<MusicData>(`music_${mid}`);
+          const m = await fetchJson<MusicData>(`music_${mid}`, { localOnly });
           addMusicToFileMap(m, files);
         })
       );
@@ -840,8 +895,11 @@ export function useSyncManager() {
     };
   }
 
-  async function fetchJson<T = MusicData>(key: string): Promise<T | null> {
-    return Database.get<T>(key);
+  async function fetchJson<T = MusicData>(
+    key: string,
+    { localOnly = false }: { localOnly?: boolean } = {}
+  ): Promise<T | null> {
+    return localOnly ? Database.getLocal<T>(key) : Database.get<T>(key);
   }
 
   /**
@@ -1125,10 +1183,18 @@ export function useSyncManager() {
     }
   }
 
-  /** Só o desktop escaneia o disco álbum por álbum; a web não tem essa leitura em massa. */
-  async function ensureCatalogForBulkRead(): Promise<boolean> {
+  /**
+   * Guarda local para leituras em massa. Deliberadamente não instala nada:
+   * baixar o ZIP completo exige `ensureCatalogBundle()`/`downloadBundle()` a
+   * partir de uma ação explícita da interface.
+   */
+  async function hasCatalogForBulkRead(): Promise<boolean> {
     if (!Platform.storage?.checkLocal) return true;
-    return ensureCatalogBundle();
+    if (catalogReady) return true;
+    if (!(await BundleInstaller.hasBundleMarker())) return false;
+    catalogReady = true;
+    bundleReady = true;
+    return true;
   }
 
   // ─── Utilities ──────────────────────────────────────────────────

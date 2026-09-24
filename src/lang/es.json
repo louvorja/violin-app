@@ -1292,6 +1292,10 @@
     "download_all": "Descargar Todo",
     "sync_hint": "Puede descargar álbumes o versiones bíblicas específicas después en el menú Opciones > Sincronizar.",
     "offline_hint": "Servidor de descarga no disponible. Verifique su conexión a internet.",
+    "catalog_not_installed": "El catálogo sin conexión no está instalado. LouvorJA sigue funcionando por internet; instálelo solamente si desea preparar este equipo para usarlo sin conexión.",
+    "catalog_scan_deferred": "La lectura detallada del catálogo se aplazó para mantener un inicio rápido. Puede iniciarla ahora si desea comprobar los archivos de este equipo.",
+    "install_catalog": "Instalar catálogo sin conexión",
+    "scan_catalog": "Comprobar archivos",
     "minimize": "Minimizar al segundo plano",
     "task": {
       "collections": "Descargando colecciones",

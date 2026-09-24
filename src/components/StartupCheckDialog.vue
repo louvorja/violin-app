@@ -9,7 +9,7 @@
     <!-- Verificando -->
     <div v-if="view === 'scanning'" class="sc-scanning">
       <LjSpinner :size="48" class="sc-scanning__spinner" />
-      <!-- Primeiro uso: o catálogo desce em um único bundle antes do scan -->
+      <!-- O bundle só aparece depois de uma ação explícita da pessoa. -->
       <template v-if="sync.bundleInstalling.value">
         <span class="sc-scanning__label">{{ $t("startup_check.bundle_downloading") }}</span>
         <LjProgress
@@ -63,8 +63,30 @@
         :text="$t('startup_check.offline_hint')"
       />
 
+      <LjAlert
+        v-if="catalogActionFailed"
+        variant="danger"
+        :icon="ICONS.UI.INFORMATION_OUTLINE"
+        :text="$t('startup_check.bundle_error')"
+      />
+
+      <LjAlert
+        v-else-if="!catalogAvailable"
+        variant="warning"
+        :icon="ICONS.UI.INFORMATION_OUTLINE"
+        :text="$t('startup_check.catalog_not_installed')"
+      />
+
+      <LjAlert
+        v-else-if="!detailedScan"
+        variant="info"
+        :icon="ICONS.UI.INFORMATION_OUTLINE"
+        :text="$t('startup_check.catalog_scan_deferred')"
+      />
+
       <!-- Coletâneas: categorias com álbuns -->
       <LjCard
+        v-if="detailedScan"
         soft
         :icon="ICONS.MEDIA.AUDIO"
         :title="$t('startup_check.collections_status')"
@@ -146,6 +168,7 @@
 
       <!-- Versões da Bíblia -->
       <LjCard
+        v-if="detailedScan"
         soft
         :icon="ICONS.BIBLE.BIBLE"
         :title="$t('startup_check.bible_status')"
@@ -184,7 +207,7 @@
         </div>
       </LjCard>
 
-      <LjAlert :text="$t('startup_check.sync_hint')" />
+      <LjAlert v-if="detailedScan" :text="$t('startup_check.sync_hint')" />
     </div>
 
     <!-- Seleção de arquivos -->
@@ -313,22 +336,38 @@
         <LjButton size="sm" variant="ghost" @click="onClose">
           {{ $t("actions.close") }}
         </LjButton>
+        <template v-if="detailedScan">
+          <LjButton
+            size="sm"
+            :icon="ICONS.ACTIONS.SELECT_MULTIPLE"
+            :disabled="!canDownload"
+            @click="view = 'details'"
+          >
+            {{ $t("startup_check.select_files") }}
+          </LjButton>
+          <LjButton
+            size="sm"
+            variant="primary"
+            :icon="ICONS.ACTIONS.DOWNLOAD"
+            :disabled="!canDownload"
+            @click="downloadAll"
+          >
+            {{ $t("startup_check.download_all") }}
+          </LjButton>
+        </template>
         <LjButton
-          size="sm"
-          :icon="ICONS.ACTIONS.SELECT_MULTIPLE"
-          :disabled="!canDownload"
-          @click="view = 'details'"
-        >
-          {{ $t("startup_check.select_files") }}
-        </LjButton>
-        <LjButton
+          v-else
           size="sm"
           variant="primary"
-          :icon="ICONS.ACTIONS.DOWNLOAD"
-          :disabled="!canDownload"
-          @click="downloadAll"
+          :icon="catalogAvailable ? ICONS.ACTIONS.SEARCH : ICONS.ACTIONS.DOWNLOAD"
+          :disabled="sync.bundleInstalling.value"
+          @click="prepareCatalog"
         >
-          {{ $t("startup_check.download_all") }}
+          {{
+            catalogAvailable
+              ? $t("startup_check.scan_catalog")
+              : $t("startup_check.install_catalog")
+          }}
         </LjButton>
       </template>
 
@@ -371,7 +410,7 @@
           size="sm"
           variant="danger"
           :icon="ICONS.ACTIONS.CANCEL"
-          @click="sync.cancelDownloads()"
+          @click="cancelActiveWork"
         >
           {{ $t("options.collections_download.cancel") }}
         </LjButton>
@@ -442,6 +481,9 @@ const selectedAlbums = ref<number[]>([]);
 const selectedHymnal = ref(false);
 const selectedBibles = ref<number[]>([]);
 const expandedCategory = ref<number | null>(null);
+const catalogAvailable = ref(false);
+const detailedScan = ref(false);
+const catalogActionFailed = ref(false);
 const scanData = ref<ScanData>({
   categories: [],
   hymnalIds: [],
@@ -457,8 +499,10 @@ const sync = useSyncManager();
 
 const canDownload = computed(() => sync.ftpOk.value && !sync.ftpChecking.value);
 
-/** Há transferência em andamento (coletâneas ou bíblia). */
-const isBusy = computed(() => sync.downloading.value || sync.bibleDownloading.value);
+/** Há transferência em andamento (catálogo, coletâneas ou Bíblia). */
+const isBusy = computed(
+  () => sync.bundleInstalling.value || sync.downloading.value || sync.bibleDownloading.value
+);
 
 const ftpLabel = computed(() =>
   sync.ftpChecking.value
@@ -534,35 +578,62 @@ function minimizeToBackground(): void {
   emit("update:modelValue", false);
 }
 
-async function startScan(): Promise<void> {
+async function startScan({ detailed = false }: { detailed?: boolean } = {}): Promise<void> {
   const lang = $userdata.get(KEYS.OPTIONS.LANGUAGE, "pt") || "pt";
 
   view.value = "scanning";
-  const result = await sync.runScan(lang);
+  catalogActionFailed.value = false;
+  try {
+    const result = await sync.runScan(lang, { detailed });
+    const total = result.categories.reduce(
+      (sum: number, cat: any) => sum + (cat.albums?.length || 0),
+      0
+    );
 
-  const total = result.categories.reduce(
-    (sum: number, cat: any) => sum + (cat.albums?.length || 0),
-    0
-  );
+    scanData.value = {
+      categories: result.categories,
+      hymnalIds: result.hymnalIds,
+      cachedAlbums: result.cachedAlbums,
+      classicAlbums: result.classicAlbums,
+      hymnalCached: result.hymnalCached,
+      bibleVersions: result.bibleVersions,
+      downloadedBibles: result.downloadedBibles,
+      albumsTotal: total,
+    };
+    catalogAvailable.value = result.catalogAvailable;
+    detailedScan.value = result.detailed;
+    selectedAlbums.value = [...result.cachedAlbums];
+    selectedHymnal.value = result.hymnalCached;
+    selectedBibles.value = result.downloadedBibles;
+  } catch (error) {
+    console.error("[StartupCheck] scan:", error);
+    catalogActionFailed.value = true;
+    detailedScan.value = false;
+  } finally {
+    view.value = "summary";
+    void sync.checkFtp();
+  }
+}
 
-  scanData.value = {
-    categories: result.categories,
-    hymnalIds: result.hymnalIds,
-    cachedAlbums: result.cachedAlbums,
-    classicAlbums: result.classicAlbums,
-    hymnalCached: result.hymnalCached,
-    bibleVersions: result.bibleVersions,
-    downloadedBibles: result.downloadedBibles,
-    albumsTotal: total,
-  };
+async function prepareCatalog(): Promise<void> {
+  catalogActionFailed.value = false;
+  if (!catalogAvailable.value) {
+    view.value = "scanning";
+    // Clique explícito: não aplica cooldown e permite tentar novamente logo
+    // após uma falha ou cancelamento.
+    const installed = await sync.downloadBundle();
+    if (!installed) {
+      catalogActionFailed.value = true;
+      view.value = "summary";
+      return;
+    }
+  }
+  await startScan({ detailed: true });
+}
 
-  selectedAlbums.value = [...result.cachedAlbums];
-  selectedHymnal.value = result.hymnalCached;
-  selectedBibles.value = result.downloadedBibles;
-
-  view.value = "summary";
-
-  sync.checkFtp();
+function cancelActiveWork(): void {
+  sync.cancelBundle();
+  sync.cancelDownloads();
 }
 
 function isCategoryFullySelected(cat: Category): boolean {
