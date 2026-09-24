@@ -22,6 +22,7 @@
           preload="auto"
           @loadedmetadata="onVideoReady"
           @canplay="onVideoReady"
+          @seeked="onVideoSeeked"
           @playing="onVideoPlaying"
           @waiting="onVideoBuffering"
           @stalled="onVideoBuffering"
@@ -74,7 +75,7 @@ import { DB_TABLE, SETTINGS_TABLE } from "@/constants/DbTables";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 import Telemetry from "@/helpers/Telemetry";
 import { normalizeYouTubeError } from "@/helpers/YouTubeError";
-import { syncVideoElement } from "@/helpers/VideoSync";
+import { applyVideoState } from "@/helpers/VideoSync";
 import $idb from "@/helpers/IndexedDB";
 import { VideoStateGate } from "@/helpers/VideoStateVersion";
 import { VideoFrameConfirmation } from "@/helpers/VideoFrameConfirmation";
@@ -99,6 +100,7 @@ const videoFrameConfirmation = new VideoFrameConfirmation(
   "file_projection_return_video",
   (event, properties) => Telemetry.track(event, properties)
 );
+let latestVideoState: VideoMediaState | null = null;
 const ytContainer = ref<HTMLDivElement | null>(null);
 const pdfCanvas = ref<HTMLCanvasElement | null>(null);
 const ready = ref<boolean>(false);
@@ -197,6 +199,9 @@ async function _activateProjection(p: FileProjectionState): Promise<void> {
       console.warn("[FileProjectionReturn] resolução do blob falhou:", error);
     }
   }
+  if (p.type !== "video" || !p.playback_id || p.playback_id !== fileProjection.playback_id) {
+    latestVideoState = null;
+  }
   fileProjection.active = true;
   fileProjection.type = p.type || "image";
   fileProjection.url = p.url || "";
@@ -258,7 +263,32 @@ function onVideoReady(event: Event): void {
     width: el.videoWidth,
     height: el.videoHeight,
   });
-  if (el.paused) el.play().catch(() => {});
+  if (latestVideoState) {
+    _applyVideoState(latestVideoState);
+  } else if (el.paused) {
+    el.play().catch(() => {});
+  }
+}
+
+function _applyVideoState(state: VideoMediaState): void {
+  const el = videoRef.value;
+  if (!el) return;
+  const syncAction = applyVideoState(el, state, (error) => {
+    console.warn(
+      "[FileProjectionReturn] vídeo não iniciou na sincronia:",
+      error instanceof Error ? error.name : error
+    );
+    Telemetry.log("warn", "file projection return video sync play rejected", {
+      playback_id: fileProjection.playback_id,
+      name: error instanceof Error ? error.name : undefined,
+      message: error instanceof Error ? error.message : String(error),
+    });
+  });
+  videoFrameConfirmation.observe(el, state, syncAction);
+}
+
+function onVideoSeeked(): void {
+  if (latestVideoState) _applyVideoState(latestVideoState);
 }
 
 function onVideoPlaying(): void {
@@ -393,6 +423,7 @@ useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, async () => {
   pdfDoc = null;
   fileProjection.active = false;
   videoStateGate.clear();
+  latestVideoState = null;
   Telemetry.setRuntimeContext({ playback_id: null, presentation_revision: null });
   try {
     localStorage.removeItem(KEYS.PROJECTION.LJ_FILE_PROJECTION);
@@ -406,29 +437,8 @@ useBroadcastListener(BROADCAST_TYPE.VIDEO_STATE, (payload: unknown) => {
   if (!fileProjection.active || fileProjection.type !== "video") return;
   const data = payload as VideoMediaState;
   if (!videoStateGate.accepts(data)) return;
-  const el = videoRef.value;
-  if (!el) return;
-
-  if (typeof data.isPaused === "boolean") {
-    if (data.isPaused && !el.paused) {
-      el.pause();
-    } else if (!data.isPaused && el.paused) {
-      el.play().catch((error) => {
-        console.warn(
-          "[FileProjectionReturn] vídeo não iniciou na sincronia:",
-          error?.name || error
-        );
-        Telemetry.log("warn", "file projection return video sync play rejected", {
-          playback_id: fileProjection.playback_id,
-          name: error?.name,
-          message: error?.message,
-        });
-      });
-    }
-  }
-
-  const syncAction = syncVideoElement(el, data);
-  videoFrameConfirmation.observe(el, data, syncAction);
+  latestVideoState = data;
+  _applyVideoState(data);
 });
 
 useBroadcastListener(BROADCAST_TYPE.VIDEO_STATE, (payload: unknown) => {

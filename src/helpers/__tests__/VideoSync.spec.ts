@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  applyVideoState,
   CATCH_UP,
   expectedVideoTime,
   HARD_SEEK_S,
@@ -164,6 +165,53 @@ describe("syncVideoElement — quando não mexer", () => {
     const el = video();
     expect(syncVideoElement(el, { currentTime: NaN, isPaused: false })).toBe("skip");
     expect(syncVideoElement(el, { currentTime: undefined as unknown as number, isPaused: false })).toBe("skip");
+  });
+});
+
+describe("applyVideoState", () => {
+  it("mantém pausado e alinha a posição quando uma busca termina", () => {
+    const fake = {
+      readyState: 4,
+      seeking: true,
+      currentTime: 8,
+      duration: 200,
+      playbackRate: 1,
+      paused: false,
+      pause: vi.fn(() => { fake.paused = true; }),
+      play: vi.fn(() => { fake.paused = false; return Promise.resolve(); }),
+    };
+    const el = fake as unknown as HTMLVideoElement;
+
+    expect(applyVideoState(el, { currentTime: 150, isPaused: true })).toBe("skip");
+    expect(el.paused).toBe(true);
+    expect(el.currentTime).toBe(8);
+    expect(el.play).not.toHaveBeenCalled();
+
+    // O browser conclui a busca assíncrona; reaplicar o último estado não dá play.
+    fake.seeking = false;
+    expect(applyVideoState(el, { currentTime: 150, isPaused: true })).toBe("seek");
+    expect(el.currentTime).toBe(150);
+    expect(applyVideoState(el, { currentTime: 150, isPaused: true })).toBe("ok");
+    expect(el.paused).toBe(true);
+    expect(el.play).not.toHaveBeenCalled();
+  });
+
+  it("retoma um vídeo pausado se o estado mais recente for tocando", () => {
+    const fake = {
+      readyState: 4,
+      seeking: false,
+      currentTime: 10,
+      duration: 200,
+      playbackRate: 1,
+      paused: true,
+      pause: vi.fn(() => { fake.paused = true; }),
+      play: vi.fn(() => { fake.paused = false; return Promise.resolve(); }),
+    };
+    const el = fake as unknown as HTMLVideoElement;
+
+    applyVideoState(el, { currentTime: 10, isPaused: false });
+    expect(el.play).toHaveBeenCalledOnce();
+    expect(el.paused).toBe(false);
   });
 });
 

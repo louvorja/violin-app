@@ -96,3 +96,18 @@ export function syncVideoElement(
   el.playbackRate = baseRate;
   return "ok";
 }
+
+/** Applies playback state before aligning the video position with its audio clock. */
+export function applyVideoState(
+  el: HTMLVideoElement,
+  state: VideoClockState,
+  onPlayRejected?: (error: unknown) => void
+): SyncAction {
+  if (state.isPaused === true) {
+    if (!el.paused) el.pause();
+  } else if (state.isPaused === false && el.paused) {
+    void el.play().catch((error) => onPlayRejected?.(error));
+  }
+
+  return syncVideoElement(el, state);
+}
