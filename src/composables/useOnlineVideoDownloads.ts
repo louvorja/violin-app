@@ -93,9 +93,20 @@ async function download(id: string, name: string, options: DownloadOptions = {})
     return promoted.ok;
   }
   if (files[id]) {
-    // Já estava em cache por ter sido projetado: só falta guardá-lo.
-    if (keep && (await OnlineVideo.keepFile(id))) files[id] = { ...files[id], kept: true };
-    return true;
+    // O arquivo pode ter sido removido fora deste composable (por exemplo, pelo
+    // sistema). Nesse caso a listagem local ainda é antiga e o download precisa
+    // começar normalmente.
+    if (await OnlineVideo.isDownloaded(id)) {
+      if (!keep) return true;
+      if (await OnlineVideo.keepFile(id)) {
+        files[id] = { ...files[id], kept: true };
+        return true;
+      }
+    }
+    delete files[id];
+    // A checagem do disco acima é assíncrona: outro pedido pode ter iniciado o
+    // download enquanto ela aguardava. Reutilize a mesma regra de deduplicação.
+    if (pending[id]) return download(id, name, options);
   }
 
   const tasks = useBackgroundTasks();

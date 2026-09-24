@@ -34,6 +34,7 @@ function fakeApi(disk: FileRow[] = [], ensure?: (id: string, opts: any) => Promi
     ),
     cancel: vi.fn(async () => true),
     list: vi.fn(async () => api.disk.map((f) => ({ ...f }))),
+    has: vi.fn(async (id: string) => api.disk.some((f) => f.id === id)),
     keep: vi.fn(async (id: string) => {
       const f = api.disk.find((x) => x.id === id);
       if (f) f.kept = true;
@@ -271,6 +272,39 @@ describe("download antecipado", () => {
     expect(api.ensure).not.toHaveBeenCalled();
     expect(api.keep).toHaveBeenCalledWith(ID);
     expect(downloads.files[ID].kept).toBe(true);
+  });
+
+  it("recomeça o download quando o arquivo foi removido fora do composable", async () => {
+    const api = fakeApi([{ id: ID, size: 10, usedAt: 1, kept: false }]);
+    h.platform.onlineVideo = api;
+    const { downloads } = await load();
+    await downloads.refresh();
+    api.disk = []; // arquivo apagado externamente; files ainda está antigo
+
+    expect(await downloads.download(ID, "V", { keep: false, quiet: true, background: true })).toBe(true);
+    expect(api.has).toHaveBeenCalledWith(ID);
+    expect(api.ensure).toHaveBeenCalledWith(ID, {
+      maxHeight: 1080, priority: "background", keep: false,
+    });
+    expect(downloads.stateOf(ID)).toBe("downloaded");
+  });
+
+  it("dois pedidos após remoção externa compartilham um download", async () => {
+    const api = fakeApi([{ id: ID, size: 10, usedAt: 1, kept: false }]);
+    h.platform.onlineVideo = api;
+    const { downloads } = await load();
+    await downloads.refresh();
+    api.disk = [];
+    const answers: Array<(exists: boolean) => void> = [];
+    api.has = vi.fn(() => new Promise<boolean>((resolve) => { answers.push(resolve); }));
+
+    const first = downloads.download(ID, "Cache", { keep: false, background: true });
+    const second = downloads.download(ID, "Cache", { keep: false, background: true });
+    expect(api.has).toHaveBeenCalledTimes(2);
+    for (const answer of answers) answer(false);
+
+    expect(await Promise.all([first, second])).toEqual([true, false]);
+    expect(api.ensure).toHaveBeenCalledTimes(1);
   });
 
   it("cancelar tira o cartão do 'baixando', limpa a lista de processos e não avisa nada", async () => {
