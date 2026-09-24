@@ -1,10 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, h } from "vue";
 import { mount, type VueWrapper } from "@vue/test-utils";
 import Broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useProjectionState } from "../useProjectionState";
 import { useSlides } from "../useSlides";
+import Telemetry from "@/helpers/Telemetry";
+import { MusicShadowReceiver } from "@/presentation/MusicShadowReceiver";
 
 const producer = useSlides();
 let state: ReturnType<typeof useProjectionState>;
@@ -107,5 +109,30 @@ describe("projection progress belongs to the committed music slide", () => {
     expect(state.slideProgress.value).toBe(0);
     progress("song", 1, 1, 200);
     expect(state.slideProgress.value).toBe(100);
+  });
+
+  it("an auxiliary mount recovers the real shadow and never renders diagnostic payloads", () => {
+    producer.setSlides([{ lyric: "Cover" }, { lyric: "Verse" }], [], "Authoritative", "new");
+    producer.goToSlide(1);
+    wrapper?.unmount();
+    const receive = vi.spyOn(MusicShadowReceiver.prototype, "receive");
+    const track = vi.spyOn(Telemetry, "track");
+    try {
+      wrapper = mount(component);
+      expect(receive).toHaveBeenCalled();
+      const packet = receive.mock.calls.at(-1)![0] as { version: 1; legacyRevision: number; snapshot: Record<string, unknown> };
+      expect(packet.snapshot).toMatchObject({ title: "Authoritative", slideIndex: 1, slide: { lyric: "Verse" } });
+      expect(track.mock.calls.filter(([name]) => name === "presentation_shadow_renderer_divergence")).toHaveLength(0);
+      const inconsistent = { ...packet, snapshot: { ...packet.snapshot, title: "Diagnostic-only title" } };
+      Broadcast.send(BROADCAST_TYPE.MUSIC_SHADOW_SNAPSHOT, inconsistent);
+      Broadcast.send(BROADCAST_TYPE.MUSIC_SHADOW_SNAPSHOT, inconsistent);
+      expect(state.title.value).toBe("Authoritative");
+      expect(state.slide.value?.lyric).toBe("Verse");
+      expect(track.mock.calls.filter(([name]) => name === "presentation_shadow_renderer_divergence"))
+        .toEqual([["presentation_shadow_renderer_divergence", { fields: "title" }]]);
+    } finally {
+      receive.mockRestore();
+      track.mockRestore();
+    }
   });
 });

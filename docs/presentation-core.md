@@ -10,11 +10,34 @@ comandos, observar commits e consultar um snapshot coeso. O contrato nasce
 desse consumidor real: `dispatch`, `subscribe`, `requestSnapshot`. A inscrição
 recebe apenas commits futuros; após desinscrição/perda de notificações, uma
 consulta recupera o estado atual sem replay da sequência de comandos. Falha de
-um observador não bloqueia outros. `connect` e `reportApplied` não são expostos
-enquanto não houver janela remota consumindo esse protocolo. Ainda não existe
-adapter Broadcast/IPC/SSE nem recovery visual novo: as projeções continuam
-usando o transporte legado. A recuperação em memória é validada por testes de
+um observador não bloqueia outros. `connect` e `reportApplied` não são expostos:
+o receptor remoto é diagnóstico e não aplica snapshots à tela. Ainda não existe
+cutover nem recovery visual novo: as projeções continuam usando o transporte
+legado. A recuperação em memória é validada por testes de
 desconexão, perda de atualização e fechamento não observado.
+
+Uma segunda fatia exercita Broadcast nas janelas auxiliares: o produtor publica
+`MUSIC_SHADOW_SNAPSHOT` e responde a `REQUEST_MUSIC_SHADOW_SNAPSHOT`. O payload
+versionado passa por validação de runtime e contém apenas estado coeso,
+slide atual/próximo e campos escalares usados na comparação; nunca o deck todo.
+O transporte não encaminha esses eventos para IPC/SSE. Os listeners são
+registrados antes do request, incluindo o caso de resposta síncrona in-window.
+
+`useProjectionState` tem um receptor diagnóstico independente das refs usadas
+para renderizar. Ele compara somente quando sessão e revisão do broadcast
+coincidem exatamente com o legado aplicado; descarta snapshots anteriores,
+ignora outra sessão e suspende comparação sob Bíblia. Close pode chegar antes
+ou depois de seu snapshot, por isso só se compara quando ambos estão fechados.
+Reabrir uma janela solicita o snapshot atual, sem depender dos anteriores.
+Cada instância produtora gera um prefixo UUID fora do core, evitando colisão de
+sessões após reload. Divergências do renderer geram no máximo um incidente por
+sessão, contendo somente os nomes dos campos. Não se registra sucesso por
+comando, não se transmite progresso contínuo e nada no shadow controla a tela.
+
+Limites: comparação exige um broadcast legado correlacionado. Perder esse
+broadcast não produz divergência artificial; recovery visual ainda pertence ao
+legado. Este protocolo diagnóstico usa apenas Broadcast local/cross-window,
+não valida a entrega a clientes HTTP/SSE. Não há acknowledgements de paint.
 
 Cada `setSlides` cria uma sessão local nova, independente de `playback_id`.
 Trocar cantada/playback pode mudar a identidade do áudio e seus timestamps

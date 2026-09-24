@@ -4,6 +4,7 @@ import $broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import Telemetry, { isProjectionMilestone } from "@/helpers/Telemetry";
 import Path from "@/helpers/Path";
+import { MusicShadowReceiver } from "@/presentation/MusicShadowReceiver";
 
 export type Slide = Record<string, unknown> | null;
 
@@ -62,17 +63,22 @@ export function useProjectionState(): ProjectionStateReturn {
   let musicSlideActive = false;
   let musicPlaybackId: string | undefined;
   let musicRevision: number | undefined;
+  const shadowReceiver = new MusicShadowReceiver();
+  function compareShadow(): void {
+    try {
+      const fields = shadowReceiver.takeDifferences();
+      if (fields.length) Telemetry.track("presentation_shadow_renderer_divergence", { fields: fields.join(",") });
+    } catch { /* diagnostic failure cannot affect projection */ }
+  }
 
   onBeforeUnmount(() => {
     // Um rAF pendente não deve atribuir o frame da próxima rota ao slide antigo.
     frameProbeGeneration++;
   });
 
-  // Janelas que abrem depois da música começar não recebem o broadcast
-  // anterior. Solicitamos reemissão ao montar — o emissor (useSlides na
-  // janela principal) reenviará SLIDE_CHANGE se houver slides ativos.
-  onMounted(() => {
-    $broadcast.send(BROADCAST_TYPE.REQUEST_SLIDE_STATE);
+  useBroadcastListener(BROADCAST_TYPE.MUSIC_SHADOW_SNAPSHOT, (payload) => {
+    shadowReceiver.receive(payload);
+    compareShadow();
   });
 
   useBroadcastListener(BROADCAST_TYPE.SLIDE_CHANGE, (payload) => {
@@ -95,6 +101,11 @@ export function useProjectionState(): ProjectionStateReturn {
     progress.value = (p.progress as number) ?? 0;
     slideIndex.value = (p.slide_index as number) ?? 0;
     totalSlides.value = (p.total_slides as number) ?? (p.last_slide as number) ?? 0;
+    shadowReceiver.observe(p.presentation_session, musicRevision, {
+      active: true, slide: slide.value, nextSlide: nextSlide.value, title: title.value,
+      slideIndex: slideIndex.value, totalSlides: totalSlides.value,
+    });
+    compareShadow();
 
     if (typeof p._ts === "number" && Number.isFinite(p._ts) &&
         p._ts >= receivedAt - 300_000 && p._ts <= receivedAt + 1_000) {
@@ -172,6 +183,7 @@ export function useProjectionState(): ProjectionStateReturn {
     const p = payload as Record<string, unknown>;
     if (p.active) {
       musicSlideActive = false;
+      shadowReceiver.suspend();
       slide.value = {
         lyric: (p.text as string) || "",
         aux_lyric: (p.reference as string) || "",
@@ -204,6 +216,8 @@ export function useProjectionState(): ProjectionStateReturn {
     slideProgress.value = 0;
     slideIndex.value = 0;
     totalSlides.value = 0;
+    shadowReceiver.close();
+    compareShadow();
   });
 
   // Progresso contínuo do slide atual (throttled) para a barra no stage display.
@@ -216,6 +230,13 @@ export function useProjectionState(): ProjectionStateReturn {
     const sp = p.slide_progress;
     if (typeof sp !== "number" || !Number.isFinite(sp)) return;
     slideProgress.value = Math.max(0, Math.min(100, sp));
+  });
+
+  // Register all consumers before requesting: the local Broadcast fan-out can
+  // answer synchronously, whereas another window answers asynchronously.
+  onMounted(() => {
+    $broadcast.send(BROADCAST_TYPE.REQUEST_SLIDE_STATE);
+    $broadcast.send(BROADCAST_TYPE.REQUEST_MUSIC_SHADOW_SNAPSHOT);
   });
 
   const isCover = computed<boolean>(

@@ -5,6 +5,8 @@ import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import Telemetry, { isProjectionMilestone } from "@/helpers/Telemetry";
 import { MusicPresentationCore, musicSnapshotDifferences, type MusicOperation, type MusicSnapshot } from "@/presentation/MusicPresentationCore";
 import { createMemoryPresentationTransport, type PresentationTransport } from "@/presentation/PresentationTransport";
+import { readMusicShadowPacket } from "@/presentation/MusicShadowReceiver";
+import { createMusicShadowSessionFactory } from "@/helpers/MusicShadowSession";
 
 export interface Slide {
   lyric?: string;
@@ -60,7 +62,7 @@ function _create(): SlidesInstance {
   let _stopAudioWatch: (() => void) | null = null;
   let _audio: AudioPlayback | null = null;
   let _shadow: PresentationTransport | null = null;
-  let _shadowSession = 0;
+  const nextShadowSession = createMusicShadowSessionFactory();
   let _shadowCommand = 0;
   let _shadowDifferences: string[] = [];
   let _shadowReported = false;
@@ -88,6 +90,16 @@ function _create(): SlidesInstance {
     }
   }
 
+  function publishShadow(): void {
+    try {
+      if (!_shadow) return;
+      const packet = readMusicShadowPacket({
+        version: 1, legacyRevision: _presentationRevision, snapshot: _shadow.requestSnapshot(),
+      });
+      if (packet) $broadcast.send(BROADCAST_TYPE.MUSIC_SHADOW_SNAPSHOT, packet);
+    } catch { /* diagnostics must not block legacy */ }
+  }
+
   const slide      = computed<Slide | null>(() => slides.value[slideIndex.value] ?? null);
   const nextSlide  = computed<Slide | null>(() => slides.value[slideIndex.value + 1] ?? null);
   const totalSlides = computed<number>(() => slides.value.length);
@@ -103,6 +115,8 @@ function _create(): SlidesInstance {
       if (!slides.value.length) return;
       const request = msg.payload as { index?: number; _command_ts?: number };
       goToSlide(request?.index ?? 0, request?._command_ts);
+    } else if (msg.type === BROADCAST_TYPE.REQUEST_MUSIC_SHADOW_SNAPSHOT) {
+      publishShadow();
     } else if (msg.type === BROADCAST_TYPE.REQUEST_SLIDE_STATE) {
       // Janela secundária pediu o estado atual — reemite SLIDES_DATA (lista completa)
       // e SLIDE_CHANGE (índice atual) para que ela possa renderizar sem esperar
@@ -135,7 +149,7 @@ function _create(): SlidesInstance {
     _shadowReported = false;
     try {
       _shadow = createMemoryPresentationTransport(new MusicPresentationCore(
-        `music-shadow-${++_shadowSession}`, newSlides ?? [], newTimes ?? [], newTitle ?? ""
+        nextShadowSession(), newSlides ?? [], newTimes ?? [], newTitle ?? ""
       ));
       _shadow.subscribe(compareShadow);
       compareShadow(_shadow.requestSnapshot());
@@ -182,6 +196,7 @@ function _create(): SlidesInstance {
       total_slides: totalSlides.value,
       playback_id: _playbackId,
       presentation_revision: presentationRevision,
+      presentation_session: _shadow?.requestSnapshot().sessionId,
       // Preserva o início do comando mesmo quando um seek de áudio só publica
       // a troca depois que o relógio do player avança.
       _command_ts: commandAt,
@@ -198,6 +213,7 @@ function _create(): SlidesInstance {
       playback_id: _playbackId,
       presentation_revision: presentationRevision,
     });
+    publishShadow();
     // Telemetria não participa do caminho de publicação do slide.
     if (isProjectionMilestone(idx, totalSlides.value, !!slide.value)) {
       Telemetry.track("projection_slide_broadcast", {
@@ -306,6 +322,7 @@ function _create(): SlidesInstance {
     _lastProgressSendAt = 0;
     _lastSlideProgressSent = -1;
     shadowCommand({ type: "close" });
+    publishShadow();
   }
 
   return {

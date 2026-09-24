@@ -22,6 +22,9 @@ export const BROADCAST_TYPE = Object.freeze({
    *  O emissor useSlides inclui presentation_revision, _ts e, quando houve
    *  comando explícito, _command_ts para medir a oportunidade de pintura. */
   SLIDE_CHANGE: "slide_change",
+  /** Diagnostic-only core snapshot; never controls the legacy renderer. */
+  MUSIC_SHADOW_SNAPSHOT: "music_shadow_snapshot",
+  REQUEST_MUSIC_SHADOW_SNAPSHOT: "request_music_shadow_snapshot",
 
   /** Atualização contínua (0-100) do progresso do SLIDE atual.
    *  Emitido durante playback (throttle) e recebido por: ProjectionReturn (barra de progresso).
@@ -273,6 +276,7 @@ export interface SlideChangePayload {
   total_slides: number;
   playback_id?: string;
   presentation_revision?: number;
+  presentation_session?: string;
   /** Timestamp de emissão (Date.now()) para medir latência cross-window. */
   _ts?: number;
 }
