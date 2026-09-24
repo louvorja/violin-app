@@ -43,6 +43,7 @@ let _token = null;
 let _mainWindow = null;
 let _externalRoutesEnabled = true;
 let _rendererRequests = null;
+let _userDataProvider = null;
 /** @type {Set<import('net').Socket>} */
 const _sockets = new Set();
 
@@ -508,7 +509,13 @@ function publish(msg) {
 }
 
 function getUserData() {
-  return userStore.read("user_data") || {};
+  return (_userDataProvider ? _userDataProvider() : userStore.read("user_data")) || {};
+}
+
+/** Usa o snapshot vivo do main, atualizado antes da escrita debounceada em disco. */
+function setUserDataProvider(provider) {
+  if (typeof provider !== "function") throw new TypeError("userData provider inválido");
+  _userDataProvider = provider;
 }
 
 module.exports = {
@@ -521,6 +528,7 @@ module.exports = {
   setMainWindow,
   publish,
   getUserData,
+  setUserDataProvider,
   setExternalRoutesEnabled,
   getExternalRoutesEnabled,
 };

@@ -1223,8 +1223,19 @@ ipcMain.handle("dev:openDevTools", (event) => {
 // ---------------------------------------------------------------------------
 
 ipcMain.handle("userStore:read", (_event, key) => userStore.read(key));
-ipcMain.handle("userStore:write", async (_event, key, value) => userStore.write(key, value));
-ipcMain.handle("userStore:remove", async (_event, key) => userStore.remove(key));
+ipcMain.handle("userStore:write", async (_event, key, value) => {
+  if (key === "user_data" && (!value || typeof value !== "object" || Array.isArray(value))) {
+    throw new TypeError("user_data deve ser um objeto");
+  }
+  const persistence = userStore.write(key, value);
+  if (key === "user_data") _userDataMain = value;
+  return persistence;
+});
+ipcMain.handle("userStore:remove", async (_event, key) => {
+  const persistence = userStore.remove(key);
+  if (key === "user_data") _userDataMain = {};
+  return persistence;
+});
 ipcMain.handle("userStore:keys", () => userStore.keys());
 ipcMain.handle("userStore:dir", () => userStore.dir());
 
@@ -1266,6 +1277,7 @@ function _walkSet(obj, path, value) {
 }
 
 let _userDataMain = userStore.read("user_data") || {};
+httpServer.setUserDataProvider(() => _userDataMain);
 runtimeJournalConsent = _userDataMain?.options?.telemetry !== false;
 if (!runtimeJournalConsent) {
   void runtimeIncidentJournal.clear().catch((error) => {
