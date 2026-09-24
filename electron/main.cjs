@@ -308,6 +308,8 @@ console.log("[LouvorJA] Runtime principal:", JSON.stringify({
 let mainWindow = null;
 let appBootstrapped = false;
 let isQuitting = false;
+let quitFlushStarted = false;
+let quitFlushComplete = false;
 /** @type {Electron.Tray | null} */
 let appTray = null;
 
@@ -609,16 +611,15 @@ if (process.platform === "linux") {
 
 /** Persiste `_userDataMain` e avisa as janelas abertas. */
 function _persistUserDataFromMain(path) {
-  try {
-    userStore.write("user_data", _userDataMain);
-  } catch (e) {
+  const persistence = userStore.write("user_data", _userDataMain);
+  persistence.catch((e) => {
     console.warn("[main] Falha ao persistir user_data:", e?.message || e);
-    return;
-  }
+  });
   const payload = { path, value: _walkGet(_userDataMain, path) };
   for (const w of BrowserWindow.getAllWindows()) {
     safeSend(w, "userdata:patch", payload);
   }
+  return persistence;
 }
 
 function _walkGet(obj, path) {
@@ -660,7 +661,7 @@ async function _bootstrapMonitorConfig() {
       // alterado nem apagado, então um build antigo continua funcionando.
       try {
         if (!userStore.read("monitor_prefs_bak_v1")) {
-          userStore.write("monitor_prefs_bak_v1", prefs);
+          await userStore.write("monitor_prefs_bak_v1", prefs);
         }
       } catch (e) {
         console.warn("[monitors] Backup do formato antigo falhou:", e?.message || e);
@@ -676,7 +677,7 @@ async function _bootstrapMonitorConfig() {
 
     const reconciliation = monitorConfig.reconcile({ userData: _userDataMain, connected });
     if (migration.changed || reconciliation.changed) {
-      _persistUserDataFromMain("options.displays");
+      await _persistUserDataFromMain("options.displays");
     }
 
     const config = monitorConfig.getConfig(_userDataMain);
@@ -850,17 +851,21 @@ app.on("window-all-closed", () => {
   }
 });
 
-// D5 — Parar servidor HTTP antes de quit
-app.on("before-quit", async () => {
+// D5 — Parar servidor HTTP e confirmar persistencia antes de quit. O Electron
+// nao aguarda uma callback async de before-quit por conta propria: o primeiro
+// evento e cancelado, e um segundo app.quit() e liberado depois dos flushes.
+app.on("before-quit", (event) => {
   // O listener de close da janela principal usa esta flag para diferenciar um
   // encerramento explícito de um clique acidental no X durante projeção.
   isQuitting = true;
 
-  // Sincronizar _userDataMain em disco ANTES de sair.
-  // Garante que mudanças feitas no últimosMilissegundos (ex: adicionar favorito e sair)
-  // sejam persistidas. Sem isso, mudanças via IPC async podem ser perdidas se o app
-  // fechar rapidamente.
-  try {
+  if (quitFlushComplete) return;
+  event.preventDefault();
+  if (quitFlushStarted) return;
+  quitFlushStarted = true;
+
+  void (async () => {
+    // Coloca o snapshot final na fila antes de flush(), sem fazer I/O sincrono.
     if (Object.keys(_userDataMain || {}).length > 0) {
       const favCount = Array.isArray(_userDataMain?.favorites)
         ? _userDataMain.favorites.length
@@ -870,18 +875,53 @@ app.on("before-quit", async () => {
         favCount,
       });
       _flushUserData();
+    }
+
+    // OneDrive/antivirus podem manter um handle preso por tempo indefinido.
+    // Esperamos o bastante para o retry normal, mas nunca transformamos o
+    // encerramento do app em outro travamento. As Promises continuam
+    // best-effort ate o Electron efetivamente sair.
+    let flushTimeout = null;
+    const persistence = await Promise.race([
+      Promise.allSettled([userStore.flush(), docStore.flush()]).finally(() => {
+        if (flushTimeout) clearTimeout(flushTimeout);
+      }),
+      new Promise((resolve) => {
+        flushTimeout = setTimeout(() => {
+          resolve([{
+            status: "rejected",
+            reason: new Error("timeout de 10s ao sincronizar storage"),
+          }]);
+        }, 10_000);
+        flushTimeout.unref?.();
+      }),
+    ]);
+    for (const result of persistence) {
+      if (result.status === "rejected") {
+        console.warn("[before-quit] Falha ao sincronizar storage:", result.reason?.message || result.reason);
+      }
+    }
+    if (persistence.every((result) => result.status === "fulfilled")) {
       console.log("[before-quit] user_data sincronizado com sucesso");
     }
-  } catch (e) {
-    console.warn("[before-quit] Falha ao sincronizar user_data:", e?.message || e);
-  }
 
-  docStore.flush();
+    // Um yt-dlp em andamento seguiria baixando (e segurando o vídeo) depois do app fechar.
+    onlineVideo.shutdown();
 
-  // Um yt-dlp em andamento seguiria baixando (e segurando o vídeo) depois do app fechar.
-  onlineVideo.shutdown();
-
-  await httpServer.stop();
+    try {
+      await httpServer.stop();
+    } catch (e) {
+      console.warn("[before-quit] Falha ao parar servidor HTTP:", e?.message || e);
+    }
+  })()
+    .catch((e) => {
+      // Nao prenda o processo para sempre se um teardown inesperado falhar.
+      console.warn("[before-quit] Falha durante encerramento:", e?.message || e);
+    })
+    .finally(() => {
+      quitFlushComplete = true;
+      app.quit();
+    });
 });
 
 // D6 — Desregistrar atalhos globais ao fechar (obrigatório no Electron)
@@ -1032,8 +1072,8 @@ ipcMain.handle("dev:openDevTools", (event) => {
 // ---------------------------------------------------------------------------
 
 ipcMain.handle("userStore:read", (_event, key) => userStore.read(key));
-ipcMain.handle("userStore:write", (_event, key, value) => userStore.write(key, value));
-ipcMain.handle("userStore:remove", (_event, key) => userStore.remove(key));
+ipcMain.handle("userStore:write", async (_event, key, value) => userStore.write(key, value));
+ipcMain.handle("userStore:remove", async (_event, key) => userStore.remove(key));
 ipcMain.handle("userStore:keys", () => userStore.keys());
 ipcMain.handle("userStore:dir", () => userStore.dir());
 
@@ -1059,7 +1099,7 @@ ipcMain.handle("userStore:dir", () => userStore.dir());
 //
 // Estratégia agora: o main process mantém uma cópia completa de user_data em
 // memória (_userDataMain). Toda chamada a `userdata:patch` atualiza essa cópia,
-// persiste IMEDIATAMENTE no disco e faz fan-out para outras janelas. Janelas
+// agenda a revisão mais nova na fila assíncrona e faz fan-out para outras janelas. Janelas
 // auxiliares chamam `userdata:fetch` no boot e recebem o snapshot mais fresco.
 // ---------------------------------------------------------------------------
 
@@ -1105,11 +1145,11 @@ function _flushUserData() {
     clearTimeout(_userDataFlushTimer);
     _userDataFlushTimer = null;
   }
-  try {
-    userStore.write("user_data", _userDataMain);
-  } catch (e) {
+  const persistence = userStore.write("user_data", _userDataMain);
+  persistence.catch((e) => {
     console.warn("[userdata] persist falhou:", e?.message || e);
-  }
+  });
+  return persistence;
 }
 
 function _scheduleUserDataFlush() {
@@ -1297,15 +1337,18 @@ ipcMain.handle("httpServer:status", () => httpServer.status());
  * Não afeta as janelas do próprio Electron, que não passam por este
  * servidor. A preferência é persistida em userStore para o próximo boot.
  */
-ipcMain.handle("httpServer:setExternalRoutes", (_e, enabled) => {
+ipcMain.handle("httpServer:setExternalRoutes", async (_e, enabled) => {
   httpServer.setExternalRoutesEnabled(enabled);
   try {
     const cfg = userStore.read("config") || {};
     if (!cfg.httpServer) cfg.httpServer = {};
     cfg.httpServer.externalRoutesEnabled = !!enabled;
-    userStore.write("config", cfg);
-  } catch (_) { /* noop */ }
-  return { ok: true };
+    await userStore.write("config", cfg);
+    return { ok: true };
+  } catch (e) {
+    console.warn("[httpServer] Falha ao persistir rotas externas:", e?.message || e);
+    return { ok: false, error: e?.message || String(e) };
+  }
 });
 
 /** Regenera o token e persiste em userStore. Retorna o novo token. */
@@ -1389,12 +1432,12 @@ ipcMain.handle("shortcuts:status", () => shortcuts.status());
  * Persiste a preferência globalEnabled no userStore para ser respeitada no próximo boot.
  * Separado do enable/disable para que o toggle na UI atualize config automaticamente.
  */
-ipcMain.handle("shortcuts:savePreference", (_e, enabled) => {
+ipcMain.handle("shortcuts:savePreference", async (_e, enabled) => {
   try {
     const cfg = userStore.read("config") || {};
     if (!cfg.shortcuts) cfg.shortcuts = {};
     cfg.shortcuts.globalEnabled = !!enabled;
-    userStore.write("config", cfg);
+    await userStore.write("config", cfg);
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e.message };
@@ -1763,14 +1806,18 @@ ipcMain.handle("shell:openPath", async (_event, filePath) => {
     return { ok: false, path: resolved, error: error?.message || String(error) };
   }
 });
-ipcMain.handle("storage:setDataDir", (_e, newDir, opts) => storage.setDataDir(newDir, opts));
+ipcMain.handle("storage:setDataDir", async (_e, newDir, opts) => {
+  // Nao mova/troque a raiz enquanto uma escrita ainda usa o caminho antigo.
+  await Promise.all([userStore.flush(), docStore.flush()]);
+  return storage.setDataDir(newDir, opts);
+});
 
 // ---------------------------------------------------------------------------
 // Documentos do usuário (biblioteca de liturgias, playlists, coletâneas)
 // ---------------------------------------------------------------------------
 
 ipcMain.handle("docs:read", (_e, colecao) => docStore.read(colecao));
-ipcMain.handle("docs:write", (_e, colecao, docs) => docStore.write(colecao, docs));
+ipcMain.handle("docs:write", async (_e, colecao, docs) => docStore.write(colecao, docs));
 ipcMain.handle("docs:list", () => docStore.list());
 ipcMain.handle("storage:enforceQuota", (_e, maxBytes) => storage.enforceQuota(maxBytes));
 
@@ -1905,7 +1952,7 @@ ipcMain.handle("classic:validate", (_e, dir) => classicLibrary.validate(dir));
 /**
  * Grava a escolha do usuário e aplica na hora. `dir` nulo desliga.
  */
-ipcMain.handle("classic:setSource", (_e, { dir, lang, enabled } = {}) => {
+ipcMain.handle("classic:setSource", async (_e, { dir, lang, enabled } = {}) => {
   const atual = userStore.read("storage") || {};
   const cfg = { ...atual };
 
@@ -1932,7 +1979,7 @@ ipcMain.handle("classic:setSource", (_e, { dir, lang, enabled } = {}) => {
     }));
   }
 
-  userStore.write("storage", cfg);
+  await userStore.write("storage", cfg);
   aplicarAcervoClassico(cfg);
   return {
     ok: true,

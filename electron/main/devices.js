@@ -40,9 +40,11 @@ function _loadSettings() {
 }
 
 function _persistSettings() {
-  try {
-    userStore.write(SETTINGS_KEY, _settings);
-  } catch (_) { /* noop */ }
+  const persistence = userStore.write(SETTINGS_KEY, _settings);
+  persistence.catch((error) => {
+    console.warn("[devices] Falha ao persistir configuracoes:", error?.message || error);
+  });
+  return persistence;
 }
 
 /** Retorna todos os dispositivos (cache em memória, sincronizado pelo renderer). */

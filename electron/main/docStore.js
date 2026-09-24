@@ -19,6 +19,7 @@
 const fs = require("fs-extra");
 const path = require("path");
 const paths = require("./paths.js");
+const { createAsyncJsonWriteQueue } = require("./asyncJsonWriteQueue.js");
 
 /** Nome de coleção seguro para virar nome de arquivo. */
 const NAME_RE = /^[a-zA-Z0-9_.-]+$/;
@@ -37,11 +38,43 @@ function filePath(colecao) {
   return path.join(libraryDir(), `${colecao}.json`);
 }
 
+const _writes = createAsyncJsonWriteQueue({
+  name: "docStore",
+  resolveFile: filePath,
+  // Preserva a janela de lote que este store ja oferecia. flush() ignora a
+  // espera, por isso o encerramento nunca paga estes 300 ms.
+  debounceMs: 300,
+});
+
+function _snapshot(docs, colecao) {
+  const json = JSON.stringify(Array.isArray(docs) ? docs : [], null, 2);
+  if (json === undefined) {
+    throw new TypeError(`docStore: colecao "${colecao}" nao e serializavel em JSON`);
+  }
+  return `${json}\n`;
+}
+
+function _recoverBackup(file) {
+  const backup = `${file}.bak`;
+  try {
+    if (!fs.existsSync(file) && fs.existsSync(backup)) fs.renameSync(backup, file);
+  } catch (e) {
+    console.warn(`[docStore] recuperacao de backup falhou (${file}):`, e.message);
+  }
+}
+
 /** Documentos de uma coleção. Lista vazia quando ela ainda não existe. */
 function read(colecao) {
   validateName(colecao);
+  const queued = _writes.peek(colecao);
+  if (queued) {
+    if (queued.type === "remove") return [];
+    const docs = JSON.parse(queued.contents);
+    return Array.isArray(docs) ? docs : [];
+  }
   const file = filePath(colecao);
   try {
+    _recoverBackup(file);
     if (!fs.existsSync(file)) return [];
     const docs = fs.readJsonSync(file);
     return Array.isArray(docs) ? docs : [];
@@ -53,54 +86,22 @@ function read(colecao) {
 
 /** Coleções já gravadas. */
 function list() {
+  const found = new Set();
   try {
-    return fs
+    for (const name of fs
       .readdirSync(libraryDir())
       .filter((n) => n.endsWith(".json"))
-      .map((n) => n.slice(0, -5));
+      .map((n) => n.slice(0, -5))) {
+      found.add(name);
+    }
   } catch (_) {
-    return [];
+    // Pasta ainda nao criada.
   }
-}
-
-const _pendentes = new Map();
-let _flushTimer = null;
-
-function _grava(colecao, docs) {
-  const file = filePath(colecao);
-  const tmp = `${file}.tmp`;
-  fs.ensureDirSync(libraryDir());
-  try {
-    fs.writeJsonSync(tmp, docs, { spaces: 2 });
-    try {
-      fs.renameSync(tmp, file);
-    } catch (_) {
-      fs.moveSync(tmp, file, { overwrite: true });
-    }
-  } catch (e) {
-    try {
-      fs.removeSync(tmp);
-    } catch (_) {
-      /* ignorar */
-    }
-    throw e;
+  for (const entry of _writes.latestEntries()) {
+    if (entry.type === "remove") found.delete(entry.id);
+    else found.add(entry.id);
   }
-}
-
-/** Grava o que estiver pendente. Chamado pela janela de lote e no encerramento. */
-function flush() {
-  if (_flushTimer) {
-    clearTimeout(_flushTimer);
-    _flushTimer = null;
-  }
-  for (const [colecao, docs] of _pendentes) {
-    try {
-      _grava(colecao, docs);
-    } catch (e) {
-      console.warn(`[docStore] write("${colecao}") falhou:`, e.message);
-    }
-  }
-  _pendentes.clear();
+  return [...found];
 }
 
 /**
@@ -110,14 +111,12 @@ function flush() {
  */
 function write(colecao, docs) {
   validateName(colecao);
-  _pendentes.set(colecao, Array.isArray(docs) ? docs : []);
-  if (!_flushTimer) {
-    _flushTimer = setTimeout(() => {
-      _flushTimer = null;
-      flush();
-    }, 300);
-  }
-  return { ok: true };
+  return _writes.enqueueWrite(colecao, _snapshot(docs, colecao));
+}
+
+/** Aguarda todas as colecoes, incluindo retry de falha transitoria. */
+function flush() {
+  return _writes.flush();
 }
 
 module.exports = { read, write, list, flush, dir: libraryDir };

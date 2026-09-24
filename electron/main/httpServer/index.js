@@ -62,6 +62,14 @@ function generateToken() {
 const PORT_RANGE = { min: 7000, max: 9000 };
 const MAX_PORT_ATTEMPTS = 100;
 
+function _persistConfig(cfg, context) {
+  const persistence = userStore.write("config", cfg);
+  persistence.catch((error) => {
+    console.warn(`[httpServer] Falha ao persistir ${context}:`, error?.message || error);
+  });
+  return persistence;
+}
+
 /**
  * Sorteia uma porta aleatória no range, ignorando as já tentadas.
  * @param {Set<number>} excluded Portas já tentadas
@@ -129,7 +137,7 @@ function _loadOrCreateToken() {
     try {
       const cfg = userStore.read("config") || {};
       cfg.httpServer = { ...(cfg.httpServer || {}), token };
-      userStore.write("config", cfg);
+      _persistConfig(cfg, "token inicial");
     } catch (_) { /* segue com token em memória */ }
   }
   return token;
@@ -140,7 +148,7 @@ function _persistPort(port) {
   try {
     const cfg = userStore.read("config") || {};
     cfg.httpServer = { ...(cfg.httpServer || {}), port };
-    userStore.write("config", cfg);
+    _persistConfig(cfg, "porta HTTP");
   } catch (_) { /* noop */ }
 }
 
@@ -422,7 +430,7 @@ function resetToken() {
   try {
     const cfg = userStore.read("config") || {};
     cfg.httpServer = { ...(cfg.httpServer || {}), token: _token };
-    userStore.write("config", cfg);
+    _persistConfig(cfg, "token regenerado");
   } catch (_) { /* noop */ }
   return _token;
 }
@@ -439,7 +447,7 @@ function setToken(newToken) {
   try {
     const cfg = userStore.read("config") || {};
     cfg.httpServer = { ...(cfg.httpServer || {}), token: _token };
-    userStore.write("config", cfg);
+    _persistConfig(cfg, "token customizado");
   } catch (_) { /* noop */ }
   return _token;
 }

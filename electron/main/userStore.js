@@ -16,6 +16,7 @@
 const fs = require("fs-extra");
 const path = require("path");
 const paths = require("./paths.js");
+const { createAsyncJsonWriteQueue } = require("./asyncJsonWriteQueue.js");
 
 // ---------------------------------------------------------------------------
 // Validação de chave
@@ -77,6 +78,29 @@ function filePath(key) {
   return path.join(storageDir(), `${key}.json`);
 }
 
+const _writes = createAsyncJsonWriteQueue({
+  name: "userStore",
+  resolveFile: filePath,
+});
+
+function _snapshot(value, key) {
+  const json = JSON.stringify(value, null, 2);
+  if (json === undefined) {
+    throw new TypeError(`userStore: valor de "${key}" nao e serializavel em JSON`);
+  }
+  return `${json}\n`;
+}
+
+/** Recupera o snapshot anterior se uma queda interrompeu o fallback Windows. */
+function _recoverBackup(file) {
+  const backup = `${file}.bak`;
+  try {
+    if (!fs.existsSync(file) && fs.existsSync(backup)) fs.renameSync(backup, file);
+  } catch (e) {
+    console.warn(`[userStore] recuperacao de backup falhou (${file}):`, e.message);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // API pública
 // ---------------------------------------------------------------------------
@@ -90,9 +114,15 @@ function filePath(key) {
  */
 function read(key) {
   validateKey(key);
+  const queued = _writes.peek(key);
+  if (queued) {
+    if (queued.type === "remove") return null;
+    return JSON.parse(queued.contents);
+  }
   const file = filePath(key);
 
   try {
+    _recoverBackup(file);
     if (!fs.existsSync(file)) return null;
     return fs.readJsonSync(file);
   } catch (e) {
@@ -102,40 +132,23 @@ function read(key) {
 }
 
 /**
- * Escreve um valor para uma chave de forma atômica.
- * Usa estratégia .tmp + rename para evitar corrupção em crash.
+ * Agenda um valor para escrita atomica sem bloquear o event loop. Escritas da
+ * mesma chave ainda nao iniciadas sao coalescidas; todas as Promises resolvem
+ * somente quando uma revisao igual ou mais nova chegou ao disco.
  *
  * @param {string} key
  * @param {any} value  Qualquer valor serializável em JSON
  */
 function write(key, value) {
   validateKey(key);
-  ensureDir();
-
-  const file = filePath(key);
-  const tmp = `${file}.tmp`;
-
-  try {
-    fs.writeJsonSync(tmp, value, { spaces: 2 });
-    // `rename` do POSIX troca o arquivo num passo só: ou o leitor vê o valor
-    // antigo inteiro, ou o novo inteiro. O `moveSync` do fs-extra apaga o
-    // destino antes de renomear — uma janela em que `user_data.json` não
-    // existe, e uma queda de energia dentro dela leva junto todas as
-    // preferências do usuário. Ele fica só como fallback do Windows, onde
-    // `rename` recusa destino existente.
-    try {
-      fs.renameSync(tmp, file);
-    } catch (_) {
-      fs.moveSync(tmp, file, { overwrite: true });
-    }
-    if (process.env.LOUVORJA_DEBUG_STORAGE) {
-      console.log(`[userStore] Gravou "${key}" em ${file}`);
-    }
-  } catch (e) {
-    // Limpar arquivo temporário em caso de erro
-    try { fs.removeSync(tmp); } catch (_) { /* ignorar */ }
-    throw new Error(`[userStore] write("${key}") falhou: ${e.message}`);
+  const promise = _writes.enqueueWrite(key, _snapshot(value, key));
+  if (process.env.LOUVORJA_DEBUG_STORAGE) {
+    promise.then(
+      () => console.log(`[userStore] Gravou "${key}" em ${filePath(key)}`),
+      () => {}
+    );
   }
+  return promise;
 }
 
 /**
@@ -145,13 +158,7 @@ function write(key, value) {
  */
 function remove(key) {
   validateKey(key);
-  const file = filePath(key);
-
-  try {
-    if (fs.existsSync(file)) fs.removeSync(file);
-  } catch (e) {
-    console.warn(`[userStore] remove("${key}") falhou:`, e.message);
-  }
+  return _writes.enqueueRemove(key);
 }
 
 /**
@@ -161,16 +168,23 @@ function remove(key) {
  * @returns {string[]}
  */
 function keys() {
+  const found = new Set();
   try {
     ensureDir();
-    return fs
+    for (const key of fs
       .readdirSync(storageDir())
       .filter((f) => f.endsWith(".json") && !f.endsWith(".tmp.json"))
-      .map((f) => f.slice(0, -5)); // remover extensão .json
+      .map((f) => f.slice(0, -5))) {
+      found.add(key);
+    }
   } catch (e) {
     console.warn("[userStore] keys() falhou:", e.message);
-    return [];
   }
+  for (const entry of _writes.latestEntries()) {
+    if (entry.type === "remove") found.delete(entry.id);
+    else found.add(entry.id);
+  }
+  return [...found];
 }
 
 /**
@@ -182,8 +196,13 @@ function dir() {
   return storageDir();
 }
 
+/** Aguarda todas as revisoes, incluindo um retry de falhas transitorias. */
+function flush() {
+  return _writes.flush();
+}
+
 // ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
 
-module.exports = { read, write, remove, keys, dir };
+module.exports = { read, write, remove, keys, dir, flush };

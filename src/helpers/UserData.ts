@@ -215,8 +215,8 @@ export default {
           | { invoke?: (channel: string, ...args: unknown[]) => Promise<unknown> }
           | null;
         if (api && typeof api.invoke === "function") {
-          // Fire-and-forget é OK aqui — o main persiste sincronamente após receber.
-          // Em caso de crash/quit rápido, o handler before-quit sincroniza.
+          // Fire-and-forget é OK aqui — o main captura a revisão em memória e
+          // serializa a escrita. Em quit rápido, before-quit aguarda o flush.
           api.invoke("userdata:patch", payload).catch((err) => {
             console.warn("[UserData] IPC userdata:patch falhou:", err);
           });

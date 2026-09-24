@@ -234,7 +234,9 @@ function setPreferred(featureId, displayId) {
   // atualizado para o novo resolvedor enxergar a escolha.
   const prefs = userStore.read(PREF_KEY) || {};
   prefs[featureId] = displayId;
-  userStore.write(PREF_KEY, prefs);
+  userStore.write(PREF_KEY, prefs).catch((error) => {
+    console.warn("[displays] Falha ao persistir monitor preferido:", error?.message || error);
+  });
 
   const userData = _readUserData();
   if (!monitorConfig.getConfig(userData)) return;
