@@ -3,7 +3,18 @@
 `src/presentation/MusicPresentationCore.ts` modela apenas slides de música.
 É TypeScript puro, sem Vue, DOM, relógio, BroadcastChannel ou Electron.
 `useSlides` continua sendo a autoridade e alimenta o core em paralelo.
-Nenhuma janela renderiza o snapshot novo; não há cutover nem novo transporte.
+Nenhuma janela renderiza o snapshot novo; não há cutover.
+
+O produtor usa `PresentationTransport` com adapter em memória para despachar
+comandos, observar commits e consultar um snapshot coeso. O contrato nasce
+desse consumidor real: `dispatch`, `subscribe`, `requestSnapshot`. A inscrição
+recebe apenas commits futuros; após desinscrição/perda de notificações, uma
+consulta recupera o estado atual sem replay da sequência de comandos. Falha de
+um observador não bloqueia outros. `connect` e `reportApplied` não são expostos
+enquanto não houver janela remota consumindo esse protocolo. Ainda não existe
+adapter Broadcast/IPC/SSE nem recovery visual novo: as projeções continuam
+usando o transporte legado. A recuperação em memória é validada por testes de
+desconexão, perda de atualização e fechamento não observado.
 
 Cada `setSlides` cria uma sessão local nova, independente de `playback_id`.
 Trocar cantada/playback pode mudar a identidade do áudio e seus timestamps

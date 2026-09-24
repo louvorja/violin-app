@@ -4,6 +4,7 @@ import type { AudioPlayback } from "@/composables/useAudioPlayback";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import Telemetry, { isProjectionMilestone } from "@/helpers/Telemetry";
 import { MusicPresentationCore, musicSnapshotDifferences, type MusicOperation, type MusicSnapshot } from "@/presentation/MusicPresentationCore";
+import { createMemoryPresentationTransport, type PresentationTransport } from "@/presentation/PresentationTransport";
 
 export interface Slide {
   lyric?: string;
@@ -58,15 +59,15 @@ function _create(): SlidesInstance {
   let _pendingCommand: { targetIndex: number; at: number } | null = null;
   let _stopAudioWatch: (() => void) | null = null;
   let _audio: AudioPlayback | null = null;
-  let _shadow: MusicPresentationCore | null = null;
+  let _shadow: PresentationTransport | null = null;
   let _shadowSession = 0;
   let _shadowCommand = 0;
   let _shadowDifferences: string[] = [];
   let _shadowReported = false;
 
-  function compareShadow(): void {
+  function compareShadow(snapshot: MusicSnapshot): void {
     if (!_shadow) return;
-    _shadowDifferences = musicSnapshotDifferences(_shadow.snapshot(), {
+    _shadowDifferences = musicSnapshotDifferences(snapshot, {
       title: title.value, slideIndex: slideIndex.value, totalSlides: slides.value.length,
       slide: slides.value[slideIndex.value] ?? null,
       nextSlide: slides.value[slideIndex.value + 1] ?? null,
@@ -80,8 +81,7 @@ function _create(): SlidesInstance {
 
   function shadowCommand(operation: MusicOperation): void {
     try {
-      _shadow?.dispatch({ ...operation, sessionId: _shadow.snapshot().sessionId, commandId: ++_shadowCommand });
-      compareShadow();
+      _shadow?.dispatch({ ...operation, sessionId: _shadow.requestSnapshot().sessionId, commandId: ++_shadowCommand });
     } catch {
       // Shadow failure must never interrupt the authoritative legacy path.
       _shadow = null;
@@ -134,8 +134,11 @@ function _create(): SlidesInstance {
     _shadowDifferences = [];
     _shadowReported = false;
     try {
-      _shadow = new MusicPresentationCore(`music-shadow-${++_shadowSession}`, newSlides ?? [], newTimes ?? [], newTitle ?? "");
-      compareShadow();
+      _shadow = createMemoryPresentationTransport(new MusicPresentationCore(
+        `music-shadow-${++_shadowSession}`, newSlides ?? [], newTimes ?? [], newTitle ?? ""
+      ));
+      _shadow.subscribe(compareShadow);
+      compareShadow(_shadow.requestSnapshot());
     } catch {
       _shadow = null;
     }
@@ -308,7 +311,7 @@ function _create(): SlidesInstance {
     slide, nextSlide, totalSlides,
     setSlides, setPlaybackId, setTimes, timeForPosition, bindAudio, unbindAudio, broadcastSlide,
     goToSlide, goPrev, goNext, goFirst, goLast, reset,
-    presentationShadow: () => ({ snapshot: _shadow?.snapshot() ?? null, differences: [..._shadowDifferences] }),
+    presentationShadow: () => ({ snapshot: _shadow?.requestSnapshot() ?? null, differences: [..._shadowDifferences] }),
   };
 }
 
