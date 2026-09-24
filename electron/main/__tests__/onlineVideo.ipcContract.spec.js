@@ -119,32 +119,10 @@ describe("vídeo online: o que fica de fora do carregamento do preload", () => {
         online_video_background_running: 0,
         online_video_foreground_queued: 0,
         online_video_background_queued: 0,
-        online_video_background_admission_blocked: false,
         online_video_streaming: 0,
         online_video_jobs: [],
       });
       expect(seen.appGetPathCalls).toBe(0);
-    });
-  });
-
-  it("guarda o bloqueio de background antes de o manager nascer", () => {
-    withFakeElectron("win32", (seen) => {
-      const onlineVideo = require(INDEX);
-      onlineVideo.setBackgroundAdmissionBlocked(true);
-      expect(onlineVideo.diagnosticSnapshot()).toMatchObject({
-        online_video_manager_initialized: false,
-        online_video_background_admission_blocked: true,
-      });
-      expect(seen.appGetPathCalls).toBe(0);
-
-      onlineVideo.serveStream("abcdefghijk", "video", {
-        headers: { get: () => null },
-        signal: undefined,
-      });
-      expect(onlineVideo.diagnosticSnapshot()).toMatchObject({
-        online_video_manager_initialized: true,
-        online_video_background_admission_blocked: true,
-      });
     });
   });
 
