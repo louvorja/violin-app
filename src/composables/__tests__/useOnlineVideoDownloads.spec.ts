@@ -89,14 +89,14 @@ describe("disponibilidade", () => {
 });
 
 describe("link novo na lista: o download já começa", () => {
-  it("baixa em segundo plano e guarda, sem esperar o operador pedir", async () => {
+  it("prepara link adicionado pelo operador com prioridade foreground e guarda", async () => {
     const { downloads } = await load();
     const started = downloads.startForNewLink(ID, "Louvor 1");
     expect(downloads.stateOf(ID)).toBe("downloading"); // o cartão já mostra o andamento
     expect(await started).toBe(true);
     expect(h.platform.onlineVideo.ensure).toHaveBeenCalledWith(ID, {
       maxHeight: 1080,
-      priority: "background",
+      priority: "foreground",
       keep: true,
     });
     expect(downloads.stateOf(ID)).toBe("downloaded");
@@ -141,16 +141,53 @@ describe("refresh e estado", () => {
 });
 
 describe("download antecipado", () => {
-  it("baixa em segundo plano, mantendo o vídeo, e o mostra como baixado", async () => {
+  it("pedido explícito usa foreground, mantém o vídeo e o mostra como baixado", async () => {
     const { downloads } = await load();
     expect(await downloads.download(ID, "Louvor 1")).toBe(true);
     expect(h.platform.onlineVideo.ensure).toHaveBeenCalledWith(ID, {
       maxHeight: 1080,
-      priority: "background",
+      priority: "foreground",
       keep: true,
     });
     expect(downloads.stateOf(ID)).toBe("downloaded");
     expect(downloads.pending[ID]).toBeUndefined();
+  });
+
+  it("cache oportunista continua background somente quando solicitado explicitamente", async () => {
+    const { downloads } = await load();
+    expect(await downloads.download(ID, "Cache", { keep: false, quiet: true, background: true })).toBe(true);
+    expect(h.platform.onlineVideo.ensure).toHaveBeenCalledWith(ID, {
+      maxHeight: 1080, priority: "background", keep: false,
+    });
+    // Avisos e retenção não determinam a prioridade do pedido.
+    expect(await downloads.download(OTHER, "Próximo", { keep: false, quiet: true })).toBe(true);
+    expect(h.platform.onlineVideo.ensure).toHaveBeenLastCalledWith(OTHER, {
+      maxHeight: 1080, priority: "foreground", keep: false,
+    });
+  });
+
+  it("pedido do operador promove cache pendente sem cancelar nem duplicar tarefa", async () => {
+    type Result = { ok: true; id: string; url: string; size: number; cached: boolean };
+    let finish!: (_value: Result) => void;
+    const shared = new Promise<Result>((resolve) => { finish = resolve; });
+    const api = fakeApi([], () => shared);
+    h.platform.onlineVideo = api;
+    const { downloads, tasks } = await load();
+    const automatic = downloads.download(ID, "Cache", { keep: false, quiet: true, background: true });
+    const manual = downloads.download(ID, "Próximo");
+    expect(api.ensure).toHaveBeenNthCalledWith(1, ID, {
+      maxHeight: 1080, priority: "background", keep: false,
+    });
+    expect(api.ensure).toHaveBeenNthCalledWith(2, ID, {
+      maxHeight: 1080, priority: "foreground", keep: true,
+    });
+    expect(api.cancel).not.toHaveBeenCalled();
+    expect(tasks.tasks.value.filter((task) => task.id === `online-video:${ID}`)).toHaveLength(1);
+    api.disk.push({ id: ID, size: 1, usedAt: 1, kept: true });
+    finish({ ok: true, id: ID, url: "u", size: 1, cached: false });
+    expect(await automatic).toBe(true);
+    expect(await manual).toBe(true);
+    expect(downloads.stateOf(ID)).toBe("downloaded");
   });
 
   it("entra na lista de processos na hora, já na fila, e termina como concluída", async () => {

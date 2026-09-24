@@ -5,8 +5,8 @@
  *
  * O estado é único por janela — o módulo, a lista de processos e qualquer outro
  * componente enxergam o mesmo download em andamento e o mesmo arquivo em disco.
- * O pré-download entra na raia de segundo plano do gerenciador: nunca atrasa um
- * vídeo que o operador manda projetar agora.
+ * Pedidos do operador usam a raia foreground, inclusive ao preparar o próximo
+ * item durante uma apresentação. Cache oportunista opta pela raia background.
  */
 import { reactive } from "vue";
 import * as OnlineVideo from "@/helpers/OnlineVideo";
@@ -26,6 +26,7 @@ const files = reactive<Record<string, OnlineVideo.OnlineVideoFile>>({});
 const pending = reactive<Record<string, PendingDownload>>({});
 /** Qual `download()` é o dono do "baixando" de cada vídeo: o que já foi cancelado não mexe no do novo. */
 const runs = new Map<string, symbol>();
+const backgroundRuns = new Set<string>();
 
 function say(key: string, params?: Record<string, unknown>): string {
   const t = i18nAtual()?.global?.t as ((k: string, p?: unknown) => unknown) | undefined;
@@ -65,6 +66,8 @@ export interface DownloadOptions {
   keep?: boolean;
   /** Sem aviso se falhar: usado no download que a projeção pede em segundo plano. */
   quiet?: boolean;
+  /** Cache oportunista; pedidos do operador permanecem foreground por padrão. */
+  background?: boolean;
 }
 
 /**
@@ -73,8 +76,22 @@ export interface DownloadOptions {
  * em disco.
  */
 async function download(id: string, name: string, options: DownloadOptions = {}): Promise<boolean> {
-  const { keep = true, quiet = false } = options;
-  if (!OnlineVideo.downloadAvailable() || pending[id]) return false;
+  const { keep = true, quiet = false, background = false } = options;
+  if (!OnlineVideo.downloadAvailable()) return false;
+  if (pending[id]) {
+    if (background || !backgroundRuns.has(id)) return false;
+    // Um clique explícito pode promover o cache já enfileirado. O main
+    // reutiliza o mesmo job; seu dono original continua atualizando a UI.
+    backgroundRuns.delete(id);
+    const promoted = await OnlineVideo.ensure(id, undefined, { background: false, keep });
+    if (!promoted.ok && promoted.error.kind !== "cancelled" && !quiet) {
+      $snackbar.warning(say(OnlineVideo.messageKeyForDownloadFailure(promoted.error.kind)), {
+        key: `ov-download-${id}`,
+        timeout: 8000,
+      });
+    }
+    return promoted.ok;
+  }
   if (files[id]) {
     // Já estava em cache por ter sido projetado: só falta guardá-lo.
     if (keep && (await OnlineVideo.keepFile(id))) files[id] = { ...files[id], kept: true };
@@ -85,6 +102,7 @@ async function download(id: string, name: string, options: DownloadOptions = {})
   const taskId = `online-video:${id}`;
   const token = Symbol(id);
   runs.set(id, token);
+  if (background) backgroundRuns.add(id);
   const mine = (): boolean => runs.get(id) === token;
   mark(id);
   tasks.registerTask(taskId, name || id, () => OnlineVideo.cancel(id));
@@ -96,7 +114,7 @@ async function download(id: string, name: string, options: DownloadOptions = {})
       mark(id, p);
       tasks.updateTask(taskId, { progress: p.percent, detail: OnlineVideo.phaseText(p) });
     },
-    { background: true, keep }
+    { background, keep }
   );
   // Dono do "baixando" até aqui? Se o operador cancelou e baixou de novo, o que
   // vale é o download novo, e este não mexe no cartão nem na lista de processos.
@@ -105,6 +123,7 @@ async function download(id: string, name: string, options: DownloadOptions = {})
     if (!mine()) return;
     unmark(id);
     runs.delete(id);
+    backgroundRuns.delete(id);
   };
   if (res.ok) {
     if (current) tasks.completeTask(taskId);
@@ -147,6 +166,7 @@ function startForNewLink(id: string, name: string): Promise<boolean> {
 function cancel(id: string): void {
   OnlineVideo.cancel(id);
   runs.delete(id);
+  backgroundRuns.delete(id);
   unmark(id);
   useBackgroundTasks().dismissTask(`online-video:${id}`);
 }
@@ -155,6 +175,7 @@ function cancel(id: string): void {
 async function remove(id: string): Promise<void> {
   await OnlineVideo.removeFile(id);
   runs.delete(id);
+  backgroundRuns.delete(id);
   unmark(id);
   delete files[id];
 }
