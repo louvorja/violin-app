@@ -1992,8 +1992,11 @@ ipcMain.handle("shell:openPath", async (_event, filePath) => {
 });
 ipcMain.handle("storage:setDataDir", async (_e, newDir, opts) => {
   // Nao mova/troque a raiz enquanto uma escrita ainda usa o caminho antigo.
+  if (_userDataFlushTimer) await _flushUserData();
   await Promise.all([userStore.flush(), docStore.flush()]);
-  return storage.setDataDir(newDir, opts);
+  const result = await storage.setDataDir(newDir, opts);
+  if (result.ok) _userDataMain = userStore.read("user_data") || {};
+  return result;
 });
 
 // ---------------------------------------------------------------------------
