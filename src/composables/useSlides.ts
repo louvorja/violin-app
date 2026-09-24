@@ -30,7 +30,7 @@ interface SlidesInstance {
   bindAudio: (audioPlayback: AudioPlayback) => void;
   unbindAudio: () => void;
   broadcastSlide: () => void;
-  goToSlide: (index: number) => void;
+  goToSlide: (index: number, commandAt?: number) => void;
   goPrev: () => void;
   goNext: () => void;
   goFirst: () => void;
@@ -51,6 +51,8 @@ function _create(): SlidesInstance {
   let _lastProgressSendAt = 0;
   let _lastSlideProgressSent = -1;
   let _playbackId: string | undefined;
+  let _presentationRevision = 0;
+  let _pendingCommand: { targetIndex: number; at: number } | null = null;
   let _stopAudioWatch: (() => void) | null = null;
   let _audio: AudioPlayback | null = null;
 
@@ -67,7 +69,8 @@ function _create(): SlidesInstance {
       // capa a cada avanço, o Libras reiniciava a animação do avatar e, quando
       // o evento vazio chegava por último, a projeção ficava em branco.
       if (!slides.value.length) return;
-      goToSlide((msg.payload as { index: number }).index);
+      const request = msg.payload as { index?: number; _command_ts?: number };
+      goToSlide(request?.index ?? 0, request?._command_ts);
     } else if (msg.type === BROADCAST_TYPE.REQUEST_SLIDE_STATE) {
       // Janela secundária pediu o estado atual — reemite SLIDES_DATA (lista completa)
       // e SLIDE_CHANGE (índice atual) para que ela possa renderizar sem esperar
@@ -94,6 +97,7 @@ function _create(): SlidesInstance {
     _lastBroadcastIndex = -1;
     _lastProgressSendAt = 0;
     _lastSlideProgressSent = -1;
+    _pendingCommand = null;
   }
 
   function setPlaybackId(playbackId?: string): void {
@@ -117,15 +121,13 @@ function _create(): SlidesInstance {
 
   function broadcastSlide(): void {
     const idx = slideIndex.value;
-    if (isProjectionMilestone(idx, totalSlides.value, !!slide.value)) {
-      Telemetry.track("projection_slide_broadcast", {
-        slide_index: idx,
-        total_slides: totalSlides.value,
-        has_slide: !!slide.value,
-        has_next_slide: !!nextSlide.value,
-        playback_id: _playbackId,
-      });
-    }
+    const sentAt = Date.now();
+    const commandAt = _pendingCommand?.targetIndex === idx &&
+      sentAt - _pendingCommand.at <= 30_000
+      ? _pendingCommand.at
+      : undefined;
+    if (commandAt !== undefined) _pendingCommand = null;
+    const presentationRevision = ++_presentationRevision;
     $broadcast.send(BROADCAST_TYPE.SLIDE_CHANGE, {
       slide_index:  idx,
       slide:        toRaw(slide.value),
@@ -134,9 +136,13 @@ function _create(): SlidesInstance {
       progress:     _audio?.progress.value ?? 0,
       total_slides: totalSlides.value,
       playback_id: _playbackId,
+      presentation_revision: presentationRevision,
+      // Preserva o início do comando mesmo quando um seek de áudio só publica
+      // a troca depois que o relógio do player avança.
+      _command_ts: commandAt,
       // Permite medir a latência real entre a janela do operador e as janelas
       // auxiliares sem enviar o conteúdo da letra.
-      _ts: Date.now(),
+      _ts: sentAt,
     });
 
     // Também reenviamos o progresso do SLIDE atual (0-100) para janelas
@@ -146,11 +152,27 @@ function _create(): SlidesInstance {
       slide_progress: slideProgress.value,
       playback_id: _playbackId,
     });
+    // Telemetria não participa do caminho de publicação do slide.
+    if (isProjectionMilestone(idx, totalSlides.value, !!slide.value)) {
+      Telemetry.track("projection_slide_broadcast", {
+        slide_index: idx,
+        total_slides: totalSlides.value,
+        has_slide: !!slide.value,
+        has_next_slide: !!nextSlide.value,
+        playback_id: _playbackId,
+        presentation_revision: presentationRevision,
+      });
+    }
   }
 
-  function goToSlide(index: number): void {
+  function goToSlide(index: number, commandAt?: number): void {
     const last = totalSlides.value - 1;
-    const idx  = Math.max(0, Math.min(Math.floor(index ?? 0), last < 0 ? 0 : last));
+    const requestedIndex = Number.isFinite(index) ? Math.floor(index) : 0;
+    const idx  = Math.max(0, Math.min(requestedIndex, last < 0 ? 0 : last));
+    const now = Date.now();
+    const issuedAt = typeof commandAt === "number" && Number.isFinite(commandAt) &&
+      commandAt <= now + 1_000 && commandAt >= now - 30_000 ? commandAt : now;
+    _pendingCommand = { targetIndex: idx, at: issuedAt };
 
     // Com áudio e timestamps: seek no áudio → slideIndex atualiza via watcher reativo
     if (_audio && _audio.duration.value > 0 && times.value.length > 0) {
@@ -228,6 +250,7 @@ function _create(): SlidesInstance {
     slideProgress.value = 0;
     title.value         = "";
     _playbackId         = undefined;
+    _pendingCommand     = null;
     _lastBroadcastIndex = -1;
     _lastProgressSendAt = 0;
     _lastSlideProgressSent = -1;

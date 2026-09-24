@@ -276,7 +276,7 @@ watch(currentIndex, () => scrollToActive(), { flush: "post" });
 
 function goTo(index) {
   currentIndex.value = index;
-  $broadcast.send(BROADCAST_TYPE.GO_TO_SLIDE, { index });
+  $broadcast.send(BROADCAST_TYPE.GO_TO_SLIDE, { index, _command_ts: Date.now() });
 }
 
 function onKey(e) {

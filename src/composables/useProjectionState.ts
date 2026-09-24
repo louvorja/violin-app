@@ -1,4 +1,4 @@
-import { ref, computed, onMounted, type Ref, type ComputedRef } from "vue";
+import { ref, computed, nextTick, onMounted, onBeforeUnmount, type Ref, type ComputedRef } from "vue";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import $broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
@@ -58,6 +58,12 @@ export function useProjectionState(): ProjectionStateReturn {
   const slideProgress = ref(0);
   const slideIndex = ref(0);
   const totalSlides = ref(0);
+  let frameProbeGeneration = 0;
+
+  onBeforeUnmount(() => {
+    // Um rAF pendente não deve atribuir o frame da próxima rota ao slide antigo.
+    frameProbeGeneration++;
+  });
 
   // Janelas que abrem depois da música começar não recebem o broadcast
   // anterior. Solicitamos reemissão ao montar — o emissor (useSlides na
@@ -68,6 +74,8 @@ export function useProjectionState(): ProjectionStateReturn {
 
   useBroadcastListener(BROADCAST_TYPE.SLIDE_CHANGE, (payload) => {
     const p = payload as Record<string, unknown>;
+    const receivedAt = Date.now();
+    const probeGeneration = ++frameProbeGeneration;
     slide.value = (p.slide as Slide) ?? null;
     nextSlide.value = (p.next_slide as Slide) ?? null;
     title.value = (p.title as string) ?? "";
@@ -75,8 +83,9 @@ export function useProjectionState(): ProjectionStateReturn {
     slideIndex.value = (p.slide_index as number) ?? 0;
     totalSlides.value = (p.total_slides as number) ?? (p.last_slide as number) ?? 0;
 
-    if (typeof p._ts === "number") {
-      const latencyMs = Math.max(0, Date.now() - p._ts);
+    if (typeof p._ts === "number" && Number.isFinite(p._ts)) {
+      const sentAt = p._ts;
+      const latencyMs = Math.max(0, receivedAt - sentAt);
       if (isProjectionMilestone(slideIndex.value, totalSlides.value, !!slide.value)) {
         Telemetry.track("projection_broadcast_received", {
           broadcast_type: BROADCAST_TYPE.SLIDE_CHANGE,
@@ -88,6 +97,51 @@ export function useProjectionState(): ProjectionStateReturn {
       Telemetry.histogram("louvorja.projection.broadcast.latency", latencyMs, {
         window_role: "auxiliary",
       });
+
+      // nextTick confirma que o Vue aplicou a mudança no DOM. Dois rAFs
+      // observam a primeira oportunidade de pintura após esse patch; não
+      // afirmam que o monitor físico exibiu o frame (isso exige o lab Windows).
+      // Uma troca posterior ou rota desmontada invalida a amostra anterior.
+      if (typeof requestAnimationFrame === "function" && document.visibilityState !== "hidden") {
+        void nextTick().then(() => {
+          if (probeGeneration !== frameProbeGeneration) return;
+          const appliedAt = Date.now();
+          requestAnimationFrame(() => {
+            if (probeGeneration !== frameProbeGeneration) return;
+            requestAnimationFrame(() => {
+              if (probeGeneration !== frameProbeGeneration || document.visibilityState === "hidden") return;
+              const frameAt = Date.now();
+              const broadcastToFrameMs = Math.max(0, frameAt - sentAt);
+              const receiveToApplyMs = Math.max(0, appliedAt - receivedAt);
+              const commandAt = typeof p._command_ts === "number" &&
+                Number.isFinite(p._command_ts) && p._command_ts <= sentAt &&
+                p._command_ts >= sentAt - 30_000
+                ? p._command_ts
+                : null;
+              const commandToFrameMs = commandAt === null ? null : Math.max(0, frameAt - commandAt);
+              Telemetry.histogram("louvorja.projection.slide.frame_opportunity", broadcastToFrameMs, {
+                window_role: "auxiliary",
+              });
+              if (commandToFrameMs !== null) {
+                Telemetry.histogram("louvorja.projection.slide.command_to_frame", commandToFrameMs, {
+                  window_role: "auxiliary",
+                });
+              }
+              if (isProjectionMilestone(slideIndex.value, totalSlides.value, !!slide.value) || broadcastToFrameMs >= 500) {
+                Telemetry.track("projection_slide_frame_opportunity", {
+                  slide_index: slideIndex.value,
+                  playback_id: p.playback_id,
+                  presentation_revision: p.presentation_revision,
+                  broadcast_to_receive_ms: latencyMs,
+                  receive_to_apply_ms: receiveToApplyMs,
+                  broadcast_to_frame_ms: broadcastToFrameMs,
+                  ...(commandToFrameMs === null ? {} : { command_to_frame_ms: commandToFrameMs }),
+                });
+              }
+            });
+          });
+        });
+      }
     }
     if (import.meta.env.DEV && typeof p._ts === "number") {
       const log = (window as { __ljLatencyLog?: number[] }).__ljLatencyLog;

@@ -18,7 +18,9 @@ export const BROADCAST_TYPE = Object.freeze({
   // ─── Cross-window ────────────────────────────────────────────────────────
 
   /** Estado atual do slide em reprodução. Emitido por Media.js, SlideEditor.
-   *  Recebido por: Projection, ProjectionReturn, Obs, Operator. */
+   *  Recebido por: Projection, ProjectionReturn, Obs, Operator.
+   *  O emissor useSlides inclui presentation_revision, _ts e, quando houve
+   *  comando explícito, _command_ts para medir a oportunidade de pintura. */
   SLIDE_CHANGE: "slide_change",
 
   /** Atualização contínua (0-100) do progresso do SLIDE atual.
@@ -31,7 +33,7 @@ export const BROADCAST_TYPE = Object.freeze({
   SLIDES_DATA: "slides_data",
 
   /** Solicitação de navegação para um slide específico. Emitido por Operator.
-   *  Recebido por: Media.js (listener via getElement). */
+   *  Payload: { index, _command_ts? }; recebido por useSlides. */
   GO_TO_SLIDE: "go_to_slide",
 
   /** Versículo bíblico selecionado. Emitido por bible/Index.vue.

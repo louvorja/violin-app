@@ -30,7 +30,7 @@ const { slide, progress, title, slideIndex, totalSlides } = useProjectionState()
 function _goTo(index) {
   if (totalSlides.value <= 0) return;
   const clamped = Math.max(0, Math.min(totalSlides.value - 1, index));
-  $broadcast.send(BROADCAST_TYPE.GO_TO_SLIDE, { index: clamped });
+  $broadcast.send(BROADCAST_TYPE.GO_TO_SLIDE, { index: clamped, _command_ts: Date.now() });
 }
 
 function _onKey(e) {

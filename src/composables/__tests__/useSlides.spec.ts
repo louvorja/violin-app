@@ -85,6 +85,47 @@ describe("useSlides e o pedido de troca de slide entre janelas", () => {
     expect(change).toEqual(expect.objectContaining({ playback_id: "p-slides" }));
   });
 
+  it("propaga revisão crescente e tempo do comando sem expor o conteúdo no marcador", () => {
+    slides.reset();
+    abrir(SUNG, "p-slides");
+    const changes: Record<string, unknown>[] = [];
+    const parar = $broadcast.listen((msg) => {
+      if (msg.type === BROADCAST_TYPE.SLIDE_CHANGE) {
+        changes.push(msg.payload as Record<string, unknown>);
+      }
+    });
+    changes.length = 0; // descarta replay do último estado cached
+    const commandAt = Date.now() - 25;
+    slides.goToSlide(1, commandAt);
+    slides.goToSlide(2);
+    parar();
+
+    expect(changes).toHaveLength(2);
+    expect(changes[0]).toEqual(expect.objectContaining({
+      presentation_revision: expect.any(Number),
+      _command_ts: commandAt,
+      _ts: expect.any(Number),
+    }));
+    expect(changes[1].presentation_revision).toBe((changes[0].presentation_revision as number) + 1);
+    expect(changes[1]._command_ts).toBeGreaterThanOrEqual(commandAt);
+  });
+
+  it("preserva o início do comando vindo de outra janela", () => {
+    slides.reset();
+    abrir(SUNG);
+    let change: Record<string, unknown> | undefined;
+    const parar = $broadcast.listen((msg) => {
+      if (msg.type === BROADCAST_TYPE.SLIDE_CHANGE) {
+        change = msg.payload as Record<string, unknown>;
+      }
+    });
+    const commandAt = Date.now() - 42;
+    $broadcast.send(BROADCAST_TYPE.GO_TO_SLIDE, { index: 2, _command_ts: commandAt });
+    parar();
+
+    expect(change).toEqual(expect.objectContaining({ slide_index: 2, _command_ts: commandAt }));
+  });
+
   it("a janela sem slides ignora o pedido em vez de transmitir um slide vazio", () => {
     slides.reset();
 

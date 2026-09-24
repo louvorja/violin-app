@@ -79,7 +79,7 @@ const PERFORMANCE_BUDGETS: Array<{
   { match: /module\.(open|mount|first_paint)/, warn: 500, critical: 2_000 },
   { match: /data_table\.(load|filter)/, warn: 500, critical: 3_000 },
   { match: /database\.(read|bundle)/, warn: 1_000, critical: 10_000 },
-  { match: /projection\.(open|broadcast)/, warn: 500, critical: 3_000 },
+  { match: /projection\.(open|broadcast|slide\.frame|slide\.command)/, warn: 500, critical: 3_000 },
   { match: /music\.(audio|metadata|page|playlists)/, warn: 1_000, critical: 8_000 },
   { match: /http\.client/, warn: 1_000, critical: 5_000 },
   // ui_long_task e ui_thread_stall já são o evento detalhado dessas medições.
