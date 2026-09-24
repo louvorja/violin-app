@@ -228,6 +228,7 @@ import OnlineVideoDownload from "@/components/OnlineVideoDownload.vue";
 import OnlineVideoDownloadBadge from "@/components/OnlineVideoDownloadBadge.vue";
 import OnlineVideoDownloadsBar from "@/components/OnlineVideoDownloadsBar.vue";
 import { useOnlineVideoDownloads } from "@/composables/useOnlineVideoDownloads";
+import { createVideoTitleEnrichment } from "../helpers/VideoTitleEnrichment";
 import { prepare as prepareOnlineVideo } from "@/helpers/OnlineVideo";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 import {
@@ -275,6 +276,11 @@ const tm = (key: string): string => moduleContainer.value?.tm(key) || key;
 const downloads = useOnlineVideoDownloads();
 
 const videos = ref<VideoItem[]>([]);
+const videoTitles = createVideoTitleEnrichment<VideoItem>({
+  find: (id) => videos.value.find((v) => v.id === id),
+  fetchTitle: fetchYoutubeTitle,
+  persist: (v) => $idb.put(VIDEOS_TABLE, v),
+});
 const viewMode = ref<string>("grid");
 const projectingId = ref<string>("");
 const thumbUrls = reactive<Record<string, string>>({});
@@ -445,11 +451,12 @@ async function loadVideos(): Promise<void> {
 }
 
 async function saveVideoInternal(v: VideoItem): Promise<void> {
-  await $idb.put(VIDEOS_TABLE, v);
+  await videoTitles.write(v.id, () => $idb.put(VIDEOS_TABLE, v));
 }
 
 async function deleteVideoInternal(id: string): Promise<void> {
-  await $idb.del(VIDEOS_TABLE, id);
+  videoTitles.invalidate(id);
+  await videoTitles.write(id, () => $idb.del(VIDEOS_TABLE, id));
   await $idb.del(THUMBS_TABLE, id);
   if (thumbUrls[id]) {
     URL.revokeObjectURL(thumbUrls[id]);
@@ -540,6 +547,7 @@ async function saveVideo(): Promise<void> {
       }
       const v = videos.value.find((x) => x.id === editingId.value);
       if (v) {
+        videoTitles.invalidate(v.id);
         const previousYtId = extractYoutubeId(v.url);
         v.name = name;
         v.url = url;
@@ -557,7 +565,8 @@ async function saveVideo(): Promise<void> {
         }
       }
     } else {
-      const title = (await fetchYoutubeTitle(ytId)) || ytId;
+      // O título remoto é cosmético: salvar e iniciar o download não esperam o YouTube.
+      const title = name || ytId;
       const v: VideoItem = {
         id: crypto.randomUUID(),
         name: title,
@@ -569,6 +578,7 @@ async function saveVideo(): Promise<void> {
       videos.value.unshift(v);
       fetchAndCacheThumbnail(v, ytId);
       void downloads.startForNewLink(ytId, title);
+      if (!name) videoTitles.enrich({ id: v.id, videoId: ytId, url, temporaryName: title });
     }
     selectAllCategoriesAndUncategorized();
     dialogOpen.value = false;
