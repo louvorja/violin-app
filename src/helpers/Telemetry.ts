@@ -36,6 +36,7 @@ let _sdkVersion = BUILD_SDK_VERSION || "unknown";
 let _installed = false;
 let _nativeAutocaptureActive = false;
 let _responsivenessCleanup: (() => void) | null = null;
+let _runtimeContext: { playback_id?: string; presentation_revision?: number } = {};
 let _mainSessionId = "";
 let _errorReplayStartedAt = 0;
 let _errorReplayTimer: ReturnType<typeof setTimeout> | null = null;
@@ -43,6 +44,10 @@ let _sessionBusConnected = false;
 const _pendingExceptions: Array<{ error: unknown; properties?: Record<string, unknown> }> = [];
 const _pendingEvents: Array<{ event: string; properties: Record<string, unknown> }> = [];
 const _pendingMetrics: Array<{ name: string; value: number; attributes: MetricAttributes }> = [];
+const _pendingRuntimeLogs: Array<{
+  level: "warn" | "error" | "fatal";
+  attributes: Record<string, unknown>;
+}> = [];
 const _pendingSpans = new Map<string, PerformanceSpan>();
 const _breadcrumbs: Array<{ at: string; event: string; properties?: Record<string, unknown> }> = [];
 const _explicitErrors = new WeakMap<object, number>();
@@ -56,6 +61,9 @@ const MAX_STRING_LENGTH = 20_000;
 const REPLAY_AFTER_ERROR_MS = 5 * 60_000;
 const REPLAY_MAX_MS = 15 * 60_000;
 const UI_JANK_BUDGET = { warn: 250, critical: 1_000 } as const;
+const RUNTIME_HEARTBEAT_MS = 15_000;
+const RUNTIME_AGGREGATE_LOG_MS = 60_000;
+const RUNTIME_CRITICAL_COOLDOWN_MS = 60_000;
 const PERFORMANCE_BUDGETS: Array<{
   match: RegExp;
   warn: number;
@@ -689,47 +697,232 @@ export function histogram(name: string, value: number, attributes: MetricAttribu
     _pendingMetrics.push({ name: safeName, value, attributes: safeAttributes });
 }
 
+type JankAggregate = {
+  count: number;
+  warn_count: number;
+  critical_count: number;
+  total_ms: number;
+  max_ms: number;
+};
+
+function emptyJankAggregate(): JankAggregate {
+  return { count: 0, warn_count: 0, critical_count: 0, total_ms: 0, max_ms: 0 };
+}
+
+function addJank(aggregate: JankAggregate, durationMs: number): void {
+  aggregate.count += 1;
+  aggregate.total_ms += durationMs;
+  aggregate.max_ms = Math.max(aggregate.max_ms, durationMs);
+  if (durationMs >= UI_JANK_BUDGET.warn) aggregate.warn_count += 1;
+  if (durationMs >= UI_JANK_BUDGET.critical) aggregate.critical_count += 1;
+}
+
+function runtimeIncidentId(): string {
+  try {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+  } catch {
+    // WebView antigo: o fallback ainda e unico o bastante para correlacao local.
+  }
+  return `renderer-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export function setRuntimeContext(context: {
+  playback_id?: string | null;
+  presentation_revision?: number | null;
+}): void {
+  const next: typeof _runtimeContext = { ..._runtimeContext };
+  if (context.playback_id === null) delete next.playback_id;
+  else if (typeof context.playback_id === "string" && context.playback_id.trim()) {
+    next.playback_id = sanitizeString(context.playback_id.trim()).slice(0, 120);
+  }
+  if (context.presentation_revision === null) delete next.presentation_revision;
+  else if (
+    Number.isInteger(context.presentation_revision) &&
+    Number(context.presentation_revision) >= 0
+  ) {
+    next.presentation_revision = Number(context.presentation_revision);
+  }
+  _runtimeContext = next;
+}
+
+const RUNTIME_INCIDENT_KEYS = new Set([
+  "diagnostic_schema_version",
+  "incident_id",
+  "incident_type",
+  "incident_status",
+  "severity",
+  "observed_at",
+  "app_instance_id",
+  "main_pid",
+  "main_uptime_ms",
+  "window_role",
+  "feature",
+  "web_contents_id",
+  "renderer_last_seen_ms_ago",
+  "renderer_route",
+  "renderer_visibility",
+  "renderer_active_operations",
+  "renderer_long_task_count",
+  "renderer_long_task_warn_count",
+  "renderer_long_task_critical_count",
+  "renderer_long_task_total_ms",
+  "renderer_long_task_max_ms",
+  "playback_id",
+  "presentation_revision",
+  "main_memory_rss_mb",
+  "main_heap_used_mb",
+  "download_active",
+  "update_status",
+  "http_server_running",
+  "projection_features",
+  "window_count",
+  "windows",
+  "process_metrics",
+  "gpu_feature_status",
+  "recent_runtime_events",
+  "duration_ms",
+  "reason",
+  "exit_code",
+  "child_process_type",
+  "service_name",
+  "process_name",
+  "main_loop_mean_ms",
+  "main_loop_p95_ms",
+  "main_loop_p99_ms",
+  "main_loop_max_ms",
+  "main_cpu_percent",
+  "sample_window_ms",
+  "critical_budget_ms",
+  "entry_type",
+  "entry_name",
+  "start_time_ms",
+]);
+
+export function reportRuntimeIncident(payload: unknown): void {
+  if (!isEnabled()) return;
+  if (!payload || typeof payload !== "object") return;
+  const raw = payload as Record<string, unknown>;
+  const attributes = Object.fromEntries(
+    Object.entries(raw).filter(([key]) => RUNTIME_INCIDENT_KEYS.has(key))
+  );
+  if (typeof attributes.incident_type !== "string" || !attributes.incident_type) return;
+  const rawSeverity = attributes.severity;
+  const level: "warn" | "error" | "fatal" =
+    rawSeverity === "fatal" ? "fatal" : rawSeverity === "error" ? "error" : "warn";
+  const enriched = {
+    source: "electron.runtime_health",
+    ...attributes,
+  };
+  if (!_ph) {
+    if (_pendingRuntimeLogs.length < 20) _pendingRuntimeLogs.push({ level, attributes: enriched });
+    return;
+  }
+  log(level, "runtime incident", enriched);
+}
+
 /**
- * Mede travamentos que não aparecem como exceção: tarefas longas e, onde essa
- * API não existe, atraso do event loop. Só a janela principal envia eventos
- * detalhados: projetor/controle remoto não devem produzir uma segunda sessão
- * de performance para o mesmo culto. As janelas auxiliares alimentam apenas o
- * histograma, agregado pelo SDK, para que um projetor que trava ao vivo apareça
- * nas métricas sem gerar evento algum.
+ * Mede travamentos sem transformar a propria telemetria em carga. Heartbeats
+ * de 15 s ficam somente no main process; PostHog recebe um agregado por minuto
+ * quando houve jank e um unico incidente imediato para tarefas >= 1 s.
  */
 function startResponsivenessMonitor(): void {
   if (_responsivenessCleanup || typeof window === "undefined" || import.meta.env.MODE === "test") {
     return;
   }
 
-  const isMain = windowRole() === "main";
   const cleanups: Array<() => void> = [];
-  let lastLongTaskEventAt = 0;
+  let heartbeatAggregate = emptyJankAggregate();
+  let remoteAggregate = emptyJankAggregate();
+  let lastCriticalIncidentAt = 0;
   let longTaskObserved = false;
+
+  const activeOperations = () =>
+    [..._pendingSpans.keys()]
+      .map((name) => name.replace(/[^a-zA-Z0-9_.:-]/g, "_").slice(0, 80))
+      .filter(Boolean)
+      .slice(0, 8);
+
+  const sendHeartbeat = () => {
+    try {
+      window.louvorjaApi?.telemetry?.heartbeat?.({
+        sampled_at_ms: Date.now(),
+        window_role: windowRole(),
+        feature: windowFeature(),
+        route: routePath(),
+        visibility: document.visibilityState,
+        active_operations: activeOperations(),
+        ..._runtimeContext,
+        long_tasks: heartbeatAggregate,
+      });
+    } catch {
+      // O canal local e best-effort e nao participa do fluxo da UI.
+    }
+    heartbeatAggregate = emptyJankAggregate();
+  };
+
+  const flushRemoteAggregate = () => {
+    const aggregate = remoteAggregate;
+    remoteAggregate = emptyJankAggregate();
+    if (aggregate.warn_count === 0) return;
+    log(aggregate.critical_count > 0 ? "error" : "warn", "renderer responsiveness aggregate", {
+      diagnostic_schema_version: 1,
+      incident_type: "renderer_long_task_aggregate",
+      severity: aggregate.critical_count > 0 ? "critical" : "slow",
+      window_role: windowRole(),
+      feature: windowFeature(),
+      route: routePath(),
+      long_task_count: aggregate.count,
+      long_task_warn_count: aggregate.warn_count,
+      long_task_critical_count: aggregate.critical_count,
+      long_task_total_ms: aggregate.total_ms,
+      long_task_max_ms: aggregate.max_ms,
+      active_operations: activeOperations(),
+      ..._runtimeContext,
+    });
+  };
+
+  const recordJank = (
+    durationMs: number,
+    source: "renderer_long_task" | "renderer_timer_stall",
+    entry?: PerformanceEntry
+  ) => {
+    if (!Number.isFinite(durationMs) || durationMs < 100) return;
+    addJank(heartbeatAggregate, durationMs);
+    addJank(remoteAggregate, durationMs);
+    const now = Date.now();
+    if (
+      durationMs < UI_JANK_BUDGET.critical ||
+      now - lastCriticalIncidentAt < RUNTIME_CRITICAL_COOLDOWN_MS
+    )
+      return;
+    lastCriticalIncidentAt = now;
+    reportRuntimeIncident({
+      diagnostic_schema_version: 1,
+      incident_id: runtimeIncidentId(),
+      incident_type: source,
+      incident_status: "detected",
+      severity: "error",
+      observed_at: new Date(now).toISOString(),
+      window_role: windowRole(),
+      feature: windowFeature(),
+      duration_ms: durationMs,
+      critical_budget_ms: UI_JANK_BUDGET.critical,
+      entry_type: entry?.entryType,
+      entry_name: entry?.name,
+      start_time_ms: entry ? Math.round(entry.startTime) : undefined,
+      renderer_active_operations: activeOperations(),
+      ..._runtimeContext,
+    });
+  };
 
   if (typeof PerformanceObserver === "function") {
     try {
       const observer = new PerformanceObserver((list) => {
         for (const entry of list.getEntries()) {
           const durationMs = Math.round(entry.duration);
-          if (!Number.isFinite(durationMs) || durationMs < 100) continue;
-
-          histogram("louvorja.ui.long_task.duration", durationMs, {
-            window_role: windowRole(),
-          });
-          if (!isMain) continue;
-
-          const now = Date.now();
-          if (durationMs < UI_JANK_BUDGET.warn || now - lastLongTaskEventAt < 5_000) continue;
-          lastLongTaskEventAt = now;
-          track("ui_long_task", {
-            duration_ms: durationMs,
-            severity: durationMs >= UI_JANK_BUDGET.critical ? "critical" : "slow",
-            entry_type: entry.entryType,
-            entry_name: entry.name,
-            start_time_ms: Math.round(entry.startTime),
-            route: routePath(),
-          });
+          recordJank(durationMs, "renderer_long_task", entry);
         }
       });
       observer.observe({ type: "longtask", buffered: true });
@@ -749,7 +942,7 @@ function startResponsivenessMonitor(): void {
   // relógio: chegou a reportar 40 s de "travamento" numa janela que emitia
   // eventos no meio do intervalo, sem nenhuma long task acima de 3,6 s. Aqui
   // ele só serve de reserva para quem não expõe a API.
-  if (isMain && !longTaskObserved) {
+  if (windowRole() === "main" && !longTaskObserved) {
     const intervalMs = 1_000;
     let previousTick = typeof performance !== "undefined" ? performance.now() : Date.now();
     let visibilityChanged = false;
@@ -767,22 +960,20 @@ function startResponsivenessMonitor(): void {
       // O primeiro tick depois de a janela voltar do segundo plano carrega todo
       // o atraso acumulado e a aba já está visível: não é travamento.
       if (document.visibilityState === "hidden" || crossedVisibilityChange) return;
-      if (driftMs < UI_JANK_BUDGET.warn) return;
-
-      track("ui_thread_stall", {
-        duration_ms: driftMs,
-        severity: driftMs >= UI_JANK_BUDGET.critical ? "critical" : "slow",
-        expected_interval_ms: intervalMs,
-        route: routePath(),
-      });
-      histogram("louvorja.ui.stall.duration", driftMs, {
-        window_role: windowRole(),
-      });
+      recordJank(driftMs, "renderer_timer_stall");
     }, intervalMs);
     cleanups.push(() => window.clearInterval(timer));
   }
 
+  sendHeartbeat();
+  const heartbeatTimer = window.setInterval(sendHeartbeat, RUNTIME_HEARTBEAT_MS);
+  const aggregateTimer = window.setInterval(flushRemoteAggregate, RUNTIME_AGGREGATE_LOG_MS);
+  cleanups.push(() => window.clearInterval(heartbeatTimer));
+  cleanups.push(() => window.clearInterval(aggregateTimer));
+
   _responsivenessCleanup = () => {
+    sendHeartbeat();
+    flushRemoteAggregate();
     for (const cleanup of cleanups.splice(0)) cleanup();
     _responsivenessCleanup = null;
   };
@@ -834,7 +1025,11 @@ export function installGlobalHandlers(): void {
   const reportConsoleMessage = (args: unknown[]): { message: string; errorObject?: Error } => {
     const parts = args.map((value) => {
       try {
-        return value instanceof Error ? value.message : typeof value === "string" ? value : String(value);
+        return value instanceof Error
+          ? value.message
+          : typeof value === "string"
+            ? value
+            : String(value);
       } catch {
         return "[unserializable]";
       }
@@ -898,7 +1093,7 @@ export function installGlobalHandlers(): void {
     if (_nativeAutocaptureActive) return;
     captureException(event.reason, { source: "unhandledrejection" });
   });
-  window.louvorjaApi?.on?.("telemetry:main-error", (payload) => {
+  window.louvorjaApi?.telemetry?.onMainError?.((payload) => {
     const data =
       payload && typeof payload === "object"
         ? (payload as Record<string, unknown>)
@@ -912,6 +1107,9 @@ export function installGlobalHandlers(): void {
       main_error_id: typeof data.id === "string" ? data.id : undefined,
     });
     if (typeof data.id === "string") void window.louvorjaApi?.telemetry?.ackMainError?.(data.id);
+  });
+  window.louvorjaApi?.telemetry?.onRuntimeIncident?.((payload) => {
+    reportRuntimeIncident(payload);
   });
   window.addEventListener("online", () => diagnostic("info", "renderer voltou a ficar online"));
   window.addEventListener("offline", () => diagnostic("warn", "renderer ficou offline"));
@@ -1040,6 +1238,7 @@ export function setEnabled(enabled: boolean): void {
     _pendingExceptions.length = 0;
     _pendingEvents.length = 0;
     _pendingMetrics.length = 0;
+    _pendingRuntimeLogs.length = 0;
     _pendingSpans.clear();
     _responsivenessCleanup?.();
     stopErrorReplay();
@@ -1353,6 +1552,15 @@ async function _init(): Promise<void> {
     }
     diagnostic("debug", "métricas pendentes enviadas após init", { count: pendingMetrics.length });
   }
+  const pendingRuntimeLogs = _pendingRuntimeLogs.splice(0);
+  for (const pending of pendingRuntimeLogs) {
+    log(pending.level, "runtime incident", pending.attributes);
+  }
+  if (pendingRuntimeLogs.length > 0) {
+    diagnostic("debug", "incidentes de runtime pendentes enviados após init", {
+      count: pendingRuntimeLogs.length,
+    });
+  }
   const appOpened = posthog.capture(
     "app_opened",
     {
@@ -1499,6 +1707,8 @@ export default {
   finishPerformance,
   markStart,
   markEnd,
+  setRuntimeContext,
+  reportRuntimeIncident,
   histogram,
   installVueErrorHandler,
 };

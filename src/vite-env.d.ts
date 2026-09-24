@@ -16,6 +16,23 @@ declare global {
         message: string;
         details?: Record<string, unknown>;
       }) => void;
+      heartbeat?: (payload: {
+        sampled_at_ms: number;
+        window_role: "main" | "auxiliary" | "unknown";
+        feature: string;
+        route: string;
+        visibility: DocumentVisibilityState;
+        active_operations: string[];
+        playback_id?: string;
+        presentation_revision?: number;
+        long_tasks: {
+          count: number;
+          warn_count: number;
+          critical_count: number;
+          total_ms: number;
+          max_ms: number;
+        };
+      }) => void;
       getPendingMainErrors?: () => Promise<
         Array<{
           id: string;
@@ -27,14 +44,26 @@ declare global {
         }>
       >;
       ackMainError?: (id: string) => Promise<{ ok: boolean }>;
+      onMainError?: (cb: (payload: unknown) => void) => () => void;
+      onRuntimeIncident?: (cb: (payload: unknown) => void) => () => void;
     };
     classic: {
       detect: () => Promise<
-        Array<{ dir: string; configDir: string; lang: string | null; folders: Record<string, boolean> }>
+        Array<{
+          dir: string;
+          configDir: string;
+          lang: string | null;
+          folders: Record<string, boolean>;
+        }>
       >;
       validate: (
         dir: string
-      ) => Promise<{ ok: boolean; configDir?: string; folders?: Record<string, boolean>; error?: string }>;
+      ) => Promise<{
+        ok: boolean;
+        configDir?: string;
+        folders?: Record<string, boolean>;
+        error?: string;
+      }>;
       getSource: () => Promise<{
         dir: string | null;
         lang: string | null;
@@ -45,7 +74,13 @@ declare global {
         dir: string | null;
         lang?: string | null;
         enabled?: boolean;
-      }) => Promise<{ ok: boolean; dir?: string | null; lang?: string | null; enabled?: boolean; error?: string }>;
+      }) => Promise<{
+        ok: boolean;
+        dir?: string | null;
+        lang?: string | null;
+        enabled?: boolean;
+        error?: string;
+      }>;
       import: (opts: {
         dir: string;
         lang?: string;
@@ -104,12 +139,20 @@ declare global {
     protocol: { setRemoteConfig: (config: unknown) => void };
     jsonCache: { clear: () => Promise<void>; dir: string };
     download: {
-      onProgress: (cb: (d: { file?: string; total: number; downloaded?: number; failed?: number }) => void) => void;
+      onProgress: (
+        cb: (d: { file?: string; total: number; downloaded?: number; failed?: number }) => void
+      ) => void;
       onFileDone: (cb: () => void) => void;
       onFileError: (cb: () => void) => void;
-      onQueueDone: (cb: (d: { queued?: number; message?: string; downloaded?: number; failed?: number }) => void) => void;
+      onQueueDone: (
+        cb: (d: { queued?: number; message?: string; downloaded?: number; failed?: number }) => void
+      ) => void;
       onQueueCancelled: (cb: () => void) => void;
-      start: (files: unknown) => Promise<{ queued?: number; message?: string; downloaded?: number; failed?: number } | undefined>;
+      start: (
+        files: unknown
+      ) => Promise<
+        { queued?: number; message?: string; downloaded?: number; failed?: number } | undefined
+      >;
       checkConnection: () => Promise<{ ok: boolean; host?: string; msg?: string; error?: string }>;
       setApiConfig: (config: unknown) => void;
       getParams: () => Promise<unknown>;
@@ -175,19 +218,28 @@ declare global {
         url: string;
       } | null>;
       getInstallType: () => Promise<"appimage" | "deb" | "rpm">;
-      onPackageProgress: (cb: (d: { percent: number; received: number; total: number; bytesPerSecond?: number }) => void) => () => void;
-      onStateChange: (cb: (state: {
-        status: string;
-        version: string | null;
-        newVersion: string | null;
-        progress: number;
-        error: string | null;
-        bytesPerSecond?: number;
-        transferred?: number;
-        total?: number;
-        packagePath?: string | null;
-        installRequiresElevation?: boolean;
-      }) => void) => () => void;
+      onPackageProgress: (
+        cb: (d: {
+          percent: number;
+          received: number;
+          total: number;
+          bytesPerSecond?: number;
+        }) => void
+      ) => () => void;
+      onStateChange: (
+        cb: (state: {
+          status: string;
+          version: string | null;
+          newVersion: string | null;
+          progress: number;
+          error: string | null;
+          bytesPerSecond?: number;
+          transferred?: number;
+          total?: number;
+          packagePath?: string | null;
+          installRequiresElevation?: boolean;
+        }) => void
+      ) => () => void;
     };
     powerBlocker: Record<string, unknown>;
     window: Record<string, unknown>;

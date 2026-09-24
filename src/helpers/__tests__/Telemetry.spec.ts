@@ -73,7 +73,7 @@ vi.mock("@/helpers/Http", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/helpers/Http")>();
   return {
     ...actual,
-    fetchWithTimeout: vi.fn(async () => ({ ok: true, status: 200 } as Response)),
+    fetchWithTimeout: vi.fn(async () => ({ ok: true, status: 200 }) as Response),
   };
 });
 
@@ -140,7 +140,7 @@ describe("Telemetry", () => {
           network: expect.objectContaining({ name: "louvorja.http.client.duration" }),
         }),
         tracing_headers: [],
-      }),
+      })
     );
     expect(posthog.startExceptionAutocapture).toHaveBeenCalledWith({
       capture_unhandled_errors: true,
@@ -148,12 +148,12 @@ describe("Telemetry", () => {
       capture_console_errors: false,
     });
     expect(posthog.register).toHaveBeenCalledWith(
-      expect.objectContaining({ app_version: "2.0.0-beta.8", sdk_version: "1.433.7" }),
+      expect.objectContaining({ app_version: "2.0.0-beta.8", sdk_version: "1.433.7" })
     );
     expect(posthog.capture).toHaveBeenCalledWith(
       "app_opened",
       expect.objectContaining({ app_version: "2.0.0-beta.8", sdk_version: "1.433.7" }),
-      { send_instantly: true, transport: "fetch" },
+      { send_instantly: true, transport: "fetch" }
     );
   });
 
@@ -182,12 +182,12 @@ describe("Telemetry", () => {
       await Telemetry.init();
 
       expect(posthog.register).toHaveBeenCalledWith(
-        expect.objectContaining({ app_version: "2.0.0-beta.8", sdk_version: "1.433.7" }),
+        expect.objectContaining({ app_version: "2.0.0-beta.8", sdk_version: "1.433.7" })
       );
       expect(posthog.capture).toHaveBeenCalledWith(
         "app_opened",
         expect.objectContaining({ sdk_version: "1.433.7" }),
-        { send_instantly: true, transport: "fetch" },
+        { send_instantly: true, transport: "fetch" }
       );
     } finally {
       posthog.LIB_VERSION = previous;
@@ -280,7 +280,7 @@ describe("Telemetry", () => {
       vi.useFakeTimers();
       try {
         expect(
-          beforeSend()(exception("ResizeObserver loop completed with undelivered notifications.")),
+          beforeSend()(exception("ResizeObserver loop completed with undelivered notifications."))
         ).toBeNull();
         await vi.advanceTimersByTimeAsync(10);
         expect(posthog.startSessionRecording).not.toHaveBeenCalled();
@@ -317,7 +317,7 @@ describe("Telemetry", () => {
       expect(posthog.get_session_replay_url).toHaveBeenCalledWith();
       expect(posthog.captureException).toHaveBeenLastCalledWith(
         expect.any(Error),
-        expect.objectContaining({ replay_url: "https://us.posthog.com/project/1/replay/abc" }),
+        expect.objectContaining({ replay_url: "https://us.posthog.com/project/1/replay/abc" })
       );
 
       const auxiliary = await loadTelemetry();
@@ -402,17 +402,19 @@ describe("Telemetry", () => {
     await Telemetry.init();
 
     expect(posthog.init).toHaveBeenCalledOnce();
-    expect(posthog.init.mock.calls[0][1]).toEqual(expect.objectContaining({
-      autocapture: false,
-      disable_session_recording: true,
-      capture_heatmaps: false,
-      capture_dead_clicks: false,
-      rageclick: false,
-    }));
+    expect(posthog.init.mock.calls[0][1]).toEqual(
+      expect.objectContaining({
+        autocapture: false,
+        disable_session_recording: true,
+        capture_heatmaps: false,
+        capture_dead_clicks: false,
+        rageclick: false,
+      })
+    );
     expect(posthog.capture).toHaveBeenCalledWith(
       "app_opened",
       expect.objectContaining({ window_role: "auxiliary" }),
-      { send_instantly: true, transport: "fetch" },
+      { send_instantly: true, transport: "fetch" }
     );
   });
 
@@ -426,7 +428,7 @@ describe("Telemetry", () => {
     await expect(Telemetry.init()).resolves.toBeUndefined();
     expect(consoleError).toHaveBeenCalledWith(
       "[Telemetry] falha ao inicializar:",
-      expect.objectContaining({ message: "quota database bloqueada" }),
+      expect.objectContaining({ message: "quota database bloqueada" })
     );
 
     // `_started` volta ao estado inicial: uma nova tentativa (ex.: religar a
@@ -447,7 +449,10 @@ describe("Telemetry", () => {
 
     await initPromise;
 
-    expect(posthog.capture).toHaveBeenCalledWith("route_changed", expect.objectContaining({ to: "home" }));
+    expect(posthog.capture).toHaveBeenCalledWith(
+      "route_changed",
+      expect.objectContaining({ to: "home" })
+    );
   });
 
   it("não duplica a captura de erros globais depois que o autocapture nativo do SDK assume", async () => {
@@ -455,18 +460,22 @@ describe("Telemetry", () => {
 
     // Antes do init(): nenhum autocapture nativo ainda existe — o listener
     // manual é a única rede de segurança para um crash no boot.
-    window.dispatchEvent(new ErrorEvent("error", { error: new Error("crash no boot"), message: "crash no boot" }));
+    window.dispatchEvent(
+      new ErrorEvent("error", { error: new Error("crash no boot"), message: "crash no boot" })
+    );
     await Telemetry.init();
     expect(posthog.captureException).toHaveBeenCalledWith(
       expect.objectContaining({ message: "crash no boot" }),
-      expect.anything(),
+      expect.anything()
     );
 
     posthog.captureException.mockClear();
 
     // Depois do init(): startExceptionAutocapture já assumiu os mesmos
     // eventos globais — reportar de novo pelo listener manual duplicaria.
-    window.dispatchEvent(new ErrorEvent("error", { error: new Error("crash depois"), message: "crash depois" }));
+    window.dispatchEvent(
+      new ErrorEvent("error", { error: new Error("crash depois"), message: "crash depois" })
+    );
     expect(posthog.captureException).not.toHaveBeenCalled();
   });
 
@@ -486,7 +495,10 @@ describe("Telemetry", () => {
       console.error("[Liturgia] import falhou", new Error("arquivo inválido"));
       expect(posthog.captureException).toHaveBeenCalledWith(
         expect.objectContaining({ message: "arquivo inválido" }),
-        expect.objectContaining({ source: "console.error", console_message: expect.stringContaining("import falhou") }),
+        expect.objectContaining({
+          source: "console.error",
+          console_message: expect.stringContaining("import falhou"),
+        })
       );
     } finally {
       if (bridge && originalError) bridge.originalError = originalError;
@@ -516,7 +528,7 @@ describe("Telemetry", () => {
       expect(posthog.captureException).toHaveBeenCalledOnce();
       expect(posthog.captureException).toHaveBeenCalledWith(
         expect.anything(),
-        expect.objectContaining({ source: "module_async_load", module_id: "hymnal" }),
+        expect.objectContaining({ source: "module_async_load", module_id: "hymnal" })
       );
     } finally {
       if (bridge && originalError) bridge.originalError = originalError;
@@ -536,14 +548,14 @@ describe("Telemetry", () => {
     });
 
     expect(
-      config.before_send(exception("ResizeObserver loop completed with undelivered notifications.")),
+      config.before_send(exception("ResizeObserver loop completed with undelivered notifications."))
     ).toBeNull();
     expect(config.before_send(exception("ResizeObserver loop limit exceeded"))).toBeNull();
     expect(config.before_send(exception("fetchWithTimeoutm is not defined"))).not.toBeNull();
     expect(
       config.before_send(
-        exception("ResizeObserver loop limit exceeded", "Cannot read properties of null"),
-      ),
+        exception("ResizeObserver loop limit exceeded", "Cannot read properties of null")
+      )
     ).not.toBeNull();
     expect(Telemetry.isBenignException(undefined)).toBe(false);
   });
@@ -560,7 +572,7 @@ describe("Telemetry", () => {
     expect(posthog.metrics.histogram).toHaveBeenCalledWith(
       "louvorja.ui.stall.duration",
       1_400,
-      expect.anything(),
+      expect.anything()
     );
 
     Telemetry.histogram("louvorja.data_table.load.duration", 1_400);
@@ -570,7 +582,7 @@ describe("Telemetry", () => {
       expect.objectContaining({
         metric_name: "louvorja.data_table.load.duration",
         severity: "slow",
-      }),
+      })
     );
   });
 
@@ -605,19 +617,19 @@ describe("Telemetry", () => {
     expect(posthog.metrics.histogram).toHaveBeenCalledWith(
       "louvorja.database.read.duration",
       0,
-      expect.anything(),
+      expect.anything()
     );
     expect(posthog.metrics.histogram).toHaveBeenCalledWith(
       "louvorja.database.read.duration",
       320,
-      expect.objectContaining({ attributes: expect.objectContaining({ dataset: "music_:id" }) }),
+      expect.objectContaining({ attributes: expect.objectContaining({ dataset: "music_:id" }) })
     );
 
     report?.({ file: "music_123", source: "stale-indexeddb", duration_ms: 320, fresh: false });
 
     expect(posthog.capture).toHaveBeenCalledWith(
       "database_read",
-      expect.objectContaining({ source: "stale-indexeddb", dataset: "music_:id" }),
+      expect.objectContaining({ source: "stale-indexeddb", dataset: "music_:id" })
     );
   });
 
@@ -629,7 +641,7 @@ describe("Telemetry", () => {
     Telemetry.resetId();
 
     expect(posthog.reset).toHaveBeenLastCalledWith(
-      expect.objectContaining({ bootstrap: expect.objectContaining({ isIdentifiedID: false }) }),
+      expect.objectContaining({ bootstrap: expect.objectContaining({ isIdentifiedID: false }) })
     );
     expect(posthog.opt_in_capturing).toHaveBeenCalled();
     expect(posthog.opt_out_capturing).not.toHaveBeenCalled();
@@ -664,11 +676,11 @@ describe("Telemetry", () => {
         name: "Santo, Santo, Santo",
         lyric: "Santo, Santo, Santo",
         nested: { album: "Hinário" },
-      }),
+      })
     );
     expect(posthog.addExceptionStep).toHaveBeenLastCalledWith(
       "music_opened",
-      expect.objectContaining({ nested: { album: "Hinário" } }),
+      expect.objectContaining({ nested: { album: "Hinário" } })
     );
   });
 
@@ -677,10 +689,9 @@ describe("Telemetry", () => {
     await Telemetry.init();
 
     const config = posthog.init.mock.calls[0][1] as {
-      before_send: (capture: {
-        event: string;
+      before_send: (capture: { event: string; properties: Record<string, unknown> }) => {
         properties: Record<string, unknown>;
-      }) => { properties: Record<string, unknown> };
+      };
     };
     const sanitized = config.before_send({
       event: "test_event",
@@ -724,8 +735,41 @@ describe("Telemetry", () => {
 
     expect(posthog.logger.warn).toHaveBeenCalledWith(
       "music media buffering",
-      expect.objectContaining({ playback_id: "p-1", nested: { stage: "waiting" } }),
+      expect.objectContaining({ playback_id: "p-1", nested: { stage: "waiting" } })
     );
+  });
+
+  it("registra incidente de runtime com schema limitado e sem campos arbitrários", async () => {
+    const Telemetry = await loadTelemetry();
+    await Telemetry.init();
+
+    Telemetry.reportRuntimeIncident({
+      diagnostic_schema_version: 1,
+      incident_id: "incident-1",
+      incident_type: "renderer_unresponsive",
+      incident_status: "recovered",
+      severity: "error",
+      window_role: "auxiliary",
+      feature: "projection",
+      duration_ms: 2_400,
+      playback_id: "playback-1",
+      token: "não enviar",
+      arbitrary_payload: "não enviar",
+    });
+
+    expect(posthog.logger.error).toHaveBeenCalledWith(
+      "runtime incident",
+      expect.objectContaining({
+        source: "electron.runtime_health",
+        incident_id: "incident-1",
+        incident_type: "renderer_unresponsive",
+        duration_ms: 2_400,
+        playback_id: "playback-1",
+      })
+    );
+    const attributes = posthog.logger.error.mock.lastCall?.[1] as Record<string, unknown>;
+    expect(attributes.token).toBeUndefined();
+    expect(attributes.arbitrary_payload).toBeUndefined();
   });
 
   it("envia histogramas de performance com dimensões de baixa cardinalidade", async () => {
@@ -734,11 +778,10 @@ describe("Telemetry", () => {
 
     Telemetry.histogram("louvorja.test.duration", 123, { window_role: "main" });
 
-    expect(posthog.metrics.histogram).toHaveBeenCalledWith(
-      "louvorja.test.duration",
-      123,
-      { unit: "ms", attributes: { window_role: "main" } },
-    );
+    expect(posthog.metrics.histogram).toHaveBeenCalledWith("louvorja.test.duration", 123, {
+      unit: "ms",
+      attributes: { window_role: "main" },
+    });
   });
 
   it("mascara tokens na mensagem de logs", async () => {
@@ -749,7 +792,7 @@ describe("Telemetry", () => {
 
     expect(posthog.logger.error).toHaveBeenCalledWith(
       "GET /audio?token=[REDACTED]",
-      expect.any(Object),
+      expect.any(Object)
     );
   });
 
@@ -757,7 +800,9 @@ describe("Telemetry", () => {
     const Telemetry = await loadTelemetry();
     await Telemetry.init();
     const config = posthog.init.mock.calls[0][1] as {
-      session_recording: { maskCapturedNetworkRequestFn: (_request: { name: string }) => { name: string } };
+      session_recording: {
+        maskCapturedNetworkRequestFn: (_request: { name: string }) => { name: string };
+      };
     };
 
     const masked = config.session_recording.maskCapturedNetworkRequestFn({
@@ -775,7 +820,7 @@ describe("Telemetry", () => {
 
     expect(posthog.captureException).toHaveBeenLastCalledWith(
       expect.any(Error),
-      expect.objectContaining({ message: expect.stringContaining("token=[REDACTED]") }),
+      expect.objectContaining({ message: expect.stringContaining("token=[REDACTED]") })
     );
     expect(posthog.captureException.mock.lastCall?.[1]?.message).not.toContain("segredo");
     const capturedError = posthog.captureException.mock.lastCall?.[0];

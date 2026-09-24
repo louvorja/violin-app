@@ -23,6 +23,16 @@ const _windowMeta = new Map();
 /** Referência à janela principal — usada para devolver o foco após abrir projeções. */
 let _mainWindow = null;
 let _httpPort = null;
+let _windowObserver = null;
+
+/**
+ * Permite ao main observar lifecycle/crash das janelas sem acoplar a factory
+ * a PostHog. O callback e best-effort e nunca participa da abertura.
+ * @param {((win: Electron.BrowserWindow, context: object) => void) | null} observer
+ */
+function setWindowObserver(observer) {
+  _windowObserver = typeof observer === "function" ? observer : null;
+}
 
 /**
  * Registra a janela principal. As janelas auxiliares (projeção, operador,
@@ -272,6 +282,15 @@ function openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = f
     overscan,
   };
   _windowMeta.set(feature, windowMeta);
+  try {
+    _windowObserver?.(win, {
+      window_role: "auxiliary",
+      feature,
+      route: _routePath(route),
+    });
+  } catch (error) {
+    console.warn(`[windowFactory] observador de ${feature} falhou:`, error?.message || error);
+  }
 
   const syncWindowActivity = () => {
     _syncAuxBackgroundThrottling(win);
@@ -678,6 +697,7 @@ module.exports = {
   listOpen,
   getWindow,
   setMainWindow,
+  setWindowObserver,
   setHttpPort,
   setTaskbarVisibility,
   reconcile,

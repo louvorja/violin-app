@@ -28,6 +28,7 @@ const {
   Menu,
   nativeImage,
   shell,
+  powerMonitor,
 } = require("electron");
 const path = require("path");
 const os = require("os");
@@ -84,6 +85,7 @@ const mediaResolver = require("./main/mediaResolver.js");
 const classicLibrary = require("./main/classicLibrary.js");
 const netHealth = require("./main/netHealth.js");
 const telemetryErrorQueue = require("./main/telemetryErrorQueue.js");
+const { createRuntimeHealthMonitor } = require("./main/runtimeHealth.js");
 const { buildCsp } = require("./main/csp.js");
 
 const diagnosticLogsRequested =
@@ -312,6 +314,8 @@ let quitFlushStarted = false;
 let quitFlushComplete = false;
 /** @type {Electron.Tray | null} */
 let appTray = null;
+const pendingRuntimeIncidents = [];
+const runtimeTelemetryReady = new Set();
 
 const MAIN_ERROR_QUEUE_PATH = path.join(paths.userData(), "telemetry-main-errors.json");
 
@@ -322,6 +326,117 @@ function _readPendingMainErrors() {
 function _ackMainError(id) {
   return telemetryErrorQueue.acknowledge(MAIN_ERROR_QUEUE_PATH, id);
 }
+
+function _compactRuntimeSnapshot() {
+  let appMetrics = [];
+  let gpuFeatureStatus = {};
+  let windows = [];
+  try {
+    appMetrics = app.getAppMetrics().slice(0, 24).map((metric) => ({
+      pid: metric.pid,
+      process_type: metric.type,
+      cpu_percent: Math.round((Number(metric.cpu?.percentCPUUsage) || 0) * 10) / 10,
+      working_set_mb: Math.round((Number(metric.memory?.workingSetSize) || 0) / 1024),
+      peak_working_set_mb: Math.round((Number(metric.memory?.peakWorkingSetSize) || 0) / 1024),
+    }));
+  } catch (_) {
+    // Snapshot e best-effort; o incidente principal continua valido.
+  }
+  try {
+    gpuFeatureStatus = app.getGPUFeatureStatus();
+  } catch (_) {
+    // Indisponivel antes do ready em alguns hosts.
+  }
+  try {
+    windows = BrowserWindow.getAllWindows().slice(0, 24).map((win) => ({
+      window_id: win.id,
+      web_contents_id: win.webContents?.id,
+      visible: win.isVisible(),
+      minimized: win.isMinimized(),
+      focused: win.isFocused(),
+      fullscreen: win.isFullScreen(),
+    }));
+  } catch (_) {
+    // Uma janela pode ser destruida enquanto o snapshot e montado.
+  }
+
+  const memory = process.memoryUsage();
+  let updateStatus = "unknown";
+  let httpStatus = null;
+  try { updateStatus = updater.status()?.status || "unknown"; } catch (_) { /* noop */ }
+  try { httpStatus = httpServer.status(); } catch (_) { /* noop */ }
+  return {
+    main_memory_rss_mb: Math.round(memory.rss / 1024 / 1024),
+    main_heap_used_mb: Math.round(memory.heapUsed / 1024 / 1024),
+    download_active: downloader.isDownloading(),
+    update_status: updateStatus,
+    http_server_running: httpStatus?.running === true,
+    projection_features: windowFactory.listOpen().slice(0, 16),
+    window_count: windows.length,
+    windows,
+    process_metrics: appMetrics,
+    gpu_feature_status: gpuFeatureStatus,
+  };
+}
+
+function _deliverRuntimeIncident(incident, preferredTarget = null) {
+  const affectedId = Number.isInteger(incident?.web_contents_id)
+    ? incident.web_contents_id
+    : null;
+  let allWindows = [];
+  try { allWindows = BrowserWindow.getAllWindows(); } catch (_) { /* noop */ }
+  const candidates = [
+    preferredTarget,
+    mainWindow?.webContents?.id !== affectedId ? mainWindow : null,
+    ...allWindows.filter((win) => win.webContents?.id !== affectedId),
+    mainWindow,
+  ].filter(Boolean);
+  const visited = new Set();
+  for (const target of candidates) {
+    const webContents = target.webContents || target;
+    const id = webContents?.id;
+    if (!Number.isInteger(id) || visited.has(id) || !runtimeTelemetryReady.has(id)) continue;
+    visited.add(id);
+    if (safeSend(target, "telemetry:runtime-incident", incident)) return true;
+  }
+  return false;
+}
+
+function _flushPendingRuntimeIncidents(preferredTarget = null) {
+  if (!pendingRuntimeIncidents.length) return;
+  const remaining = [];
+  for (const incident of pendingRuntimeIncidents.splice(0)) {
+    if (!_deliverRuntimeIncident(incident, preferredTarget)) remaining.push(incident);
+  }
+  pendingRuntimeIncidents.push(...remaining.slice(-20));
+}
+
+function _emitRuntimeIncident(incident) {
+  const level = incident?.severity === "fatal" || incident?.severity === "error"
+    ? "error"
+    : "warn";
+  console[level]("[runtime-health]", {
+    incident_type: incident?.incident_type,
+    incident_status: incident?.incident_status,
+    incident_id: incident?.incident_id,
+    window_role: incident?.window_role,
+    feature: incident?.feature,
+    duration_ms: incident?.duration_ms,
+    reason: incident?.reason,
+  });
+  if (_deliverRuntimeIncident(incident)) return;
+  pendingRuntimeIncidents.push(incident);
+  if (pendingRuntimeIncidents.length > 20) pendingRuntimeIncidents.shift();
+}
+
+const runtimeHealth = createRuntimeHealthMonitor({
+  emitIncident: _emitRuntimeIncident,
+  getRuntimeSnapshot: _compactRuntimeSnapshot,
+});
+const handleSystemResume = () => runtimeHealth.noteSystemResume();
+windowFactory.setWindowObserver((win, context) => runtimeHealth.watchWindow(win, context));
+runtimeHealth.watchApp(app);
+runtimeHealth.start();
 
 // Encaminha falhas do processo principal para o renderer enquanto ele ainda
 // está vivo. O monitor não altera o comportamento padrão do Node após uma
@@ -447,6 +562,7 @@ function createWindow() {
   }
 
   mainWindow = createMainWindow(DEV_URL, prodHtmlPath, preloadPath);
+  runtimeHealth.watchWindow(mainWindow, { window_role: "main", feature: "main", route: "/" });
 
   // Fechar a janela principal durante uma projeção não pode destruir a fonte
   // de estado que alimenta as janelas auxiliares. No Windows mantemos o item
@@ -694,6 +810,7 @@ async function _bootstrapMonitorConfig() {
 }
 
 app.whenReady().then(async () => {
+  powerMonitor.on("resume", handleSystemResume);
   // Antes de qualquer trabalho: entre o clique no ícone e a janela existir há
   // bootstrap de monitores, limpeza de cache e a subida do servidor HTTP, e
   // nada disso dá sinal de vida ao operador.
@@ -926,6 +1043,8 @@ app.on("before-quit", (event) => {
 
 // D6 — Desregistrar atalhos globais ao fechar (obrigatório no Electron)
 app.on("will-quit", () => {
+  powerMonitor.removeListener("resume", handleSystemResume);
+  runtimeHealth.stop();
   shortcuts.disable();
   powerBlocker.stop();
   if (appTray) {
@@ -986,6 +1105,14 @@ ipcMain.on("telemetry:renderer-log", (_event, payload) => {
   if (level === "error" || level === "fatal") console.error(line);
   else if (level === "warn") console.warn(line);
   else console.log(line);
+});
+
+// Heartbeats permanecem somente em memoria. Eles enriquecem um incidente raro
+// com a ultima rota/operacao conhecida, sem criar um log por tick no PostHog.
+ipcMain.on("telemetry:heartbeat", (event, payload) => {
+  if (!runtimeHealth.acceptHeartbeat(event.sender.id, payload)) return;
+  runtimeTelemetryReady.add(event.sender.id);
+  _flushPendingRuntimeIncidents(event.sender);
 });
 
 ipcMain.handle("telemetry:pending-main-errors", () => _readPendingMainErrors());

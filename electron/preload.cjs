@@ -56,8 +56,19 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
   /** Diagnóstico do renderer no terminal que iniciou o Electron. */
   telemetry: {
     log: (payload) => ipcRenderer.send("telemetry:renderer-log", payload),
+    heartbeat: (payload) => ipcRenderer.send("telemetry:heartbeat", payload),
     getPendingMainErrors: () => ipcRenderer.invoke("telemetry:pending-main-errors"),
     ackMainError: (id) => ipcRenderer.invoke("telemetry:ack-main-error", id),
+    onMainError: (cb) => {
+      const handler = (_event, payload) => cb(payload);
+      ipcRenderer.on("telemetry:main-error", handler);
+      return () => ipcRenderer.off("telemetry:main-error", handler);
+    },
+    onRuntimeIncident: (cb) => {
+      const handler = (_event, payload) => cb(payload);
+      ipcRenderer.on("telemetry:runtime-incident", handler);
+      return () => ipcRenderer.off("telemetry:runtime-incident", handler);
+    },
   },
 
   // -------------------------------------------------------------------------
