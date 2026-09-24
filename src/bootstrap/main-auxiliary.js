@@ -19,6 +19,7 @@ import { KEYS } from "@/constants/UserDataKeys";
 import { FONT, resolveDefaultFont } from "@/config/Fonts";
 import { startThemeSync } from "@/composables/useAppTheme";
 import { BootOrchestrator } from "@/bootstrap/BootOrchestrator";
+import { requiresAuxiliaryIndexedDbBeforeMount } from "@/bootstrap/auxiliaryIdbPolicy";
 
 const bootStartedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
 
@@ -69,14 +70,29 @@ async function start() {
   app.use(i18n);
   bindModuleI18n(i18n);
 
-  // Várias rotas auxiliares exibem blobs ou snapshots persistidos. Abrir o
-  // IndexedDB antes do mount preserva a recuperação de estado sem carregar a
-  // infraestrutura da Shell.
-  await $idb.init();
-  bootStage("dependencies_ready");
+  const requiresIdbBeforeMount = requiresAuxiliaryIndexedDbBeforeMount(window.location);
+  if (requiresIdbBeforeMount) {
+    // Arquivo/PDF, fundo e anúncios recuperam estado persistido já no mount.
+    // Mantemos a barreira para não trocar uma reabertura correta por tela preta.
+    await $idb.init();
+  }
+  bootStage("dependencies_ready", { indexeddb_blocking: requiresIdbBeforeMount });
 
   app.mount("#app");
   bootStage("mounted");
+
+  if (!requiresIdbBeforeMount) {
+    // Projeção de música/retorno/OBS ganha o primeiro mount sem esperar o
+    // IndexedDB. Chamadas posteriores ao banco compartilham a mesma conexão e
+    // continuam preservando o replay tardio de estado persistido.
+    void $idb
+      .init()
+      .then(() => bootStage("indexeddb_ready"))
+      .catch((error) => {
+        console.warn("[bootstrap/auxiliary] IndexedDB tardio falhou:", error);
+        Telemetry.captureException(error, { source: "auxiliary_indexeddb_late_init" });
+      });
+  }
 
   const orchestrator = new BootOrchestrator({
     onStage: (stage) => {
