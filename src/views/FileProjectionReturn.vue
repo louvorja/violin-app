@@ -233,10 +233,18 @@ function _prepareVideo(): void {
   });
 }
 
-function onVideoReady(): void {
+function _requestVideoState(): void {
+  if (document.hidden || !fileProjection.active || fileProjection.type !== "video") return;
+  if (!fileProjection.playback_id) return;
+  if (!videoRef.value || videoRef.value.readyState < 1) return;
+  Broadcast.send(BROADCAST_TYPE.REQUEST_VIDEO_STATE, { playback_id: fileProjection.playback_id });
+}
+
+function onVideoReady(event: Event): void {
   const el = videoRef.value;
   if (!el) return;
   videoFailed.value = false;
+  if (event.type === "loadedmetadata") _requestVideoState();
   console.info("[FileProjectionReturn] vídeo pronto:", {
     playback_id: fileProjection.playback_id,
     duration: Number.isFinite(el.duration) ? Number(el.duration.toFixed(3)) : 0,
@@ -671,6 +679,10 @@ onMounted(async () => {
   });
 
   window.addEventListener("keydown", _onKey);
+  window.addEventListener("focus", _requestVideoState);
+  window.addEventListener("pageshow", _requestVideoState);
+  document.addEventListener("visibilitychange", _requestVideoState);
+  document.addEventListener("resume", _requestVideoState);
 });
 
 onBeforeUnmount(() => {
@@ -686,6 +698,10 @@ onBeforeUnmount(() => {
   pdfDoc = null;
   _destroyYoutube();
   window.removeEventListener("keydown", _onKey);
+  window.removeEventListener("focus", _requestVideoState);
+  window.removeEventListener("pageshow", _requestVideoState);
+  document.removeEventListener("visibilitychange", _requestVideoState);
+  document.removeEventListener("resume", _requestVideoState);
 });
 </script>
 

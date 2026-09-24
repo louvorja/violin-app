@@ -152,10 +152,14 @@ export const BROADCAST_TYPE = Object.freeze({
   SLIDE_BG_CHANGED: "slide_bg_changed",
 
   /** Sincronização de vídeo entre o player principal e a projeção.
-   *  Payload: { currentTime, isPaused, duration, sentAt, playback_id, revision }
+   *  Payload: { currentTime, isPaused, duration, sentAt, playback_id, revision,
+   *             sampledAt, position, playing, rate, clockAnchor }
    *  Emitido por: useMedia.ts (onTimeUpdate + goToTime + pause/play).
    *  Recebido por: FileProjection.vue (sincroniza o <video> com o <audio>). */
   VIDEO_STATE: "video_state",
+
+  /** Solicita um VIDEO_STATE fresco para reabrir ou retomar projeção de arquivo. */
+  REQUEST_VIDEO_STATE: "request_video_state",
 
   /** Força a RibbonBar a selecionar uma página específica.
    *  Payload: { pageId: string } */

@@ -39,6 +39,7 @@ import * as OnlineVideo from "@/helpers/OnlineVideo";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
 import { useOnlineVideoDownloads } from "@/composables/useOnlineVideoDownloads";
 import { VideoStateRevisionCounter } from "@/helpers/VideoStateVersion";
+import { createVideoPlaybackSnapshot, shouldRespondToVideoStateRequest } from "@/helpers/VideoPlaybackSnapshot";
 
 const _audio = useAudioPlayback();
 const _slides = useSlides();
@@ -125,11 +126,23 @@ function _broadcastVideoState(currentTime?: number, isPaused?: boolean): void {
   if (!$appdata.get(KEYS.MODULES.MEDIA.CONFIG.VIDEO_FILE)) return;
   const version = _videoStateRevisions.next(_activePlayback?.playback_id);
   if (!version) return;
+  const el = _audio.getElement();
+  const position = currentTime ?? (Number.isFinite(el.currentTime) ? el.currentTime : _audio.currentTime.value);
+  const paused = isPaused ?? el.paused;
+  const sampledAt = Date.now();
+  const snapshot = createVideoPlaybackSnapshot({
+    ...version,
+    currentTime: position,
+    isPaused: paused,
+    rate: el.playbackRate,
+  }, sampledAt);
+  if (!snapshot) return;
   $broadcast.send(BROADCAST_TYPE.VIDEO_STATE, {
-    currentTime: currentTime ?? _audio.currentTime.value,
-    isPaused: isPaused ?? _audio.isPaused.value,
+    currentTime: position,
+    isPaused: paused,
     duration: _audio.duration.value,
-    sentAt: Date.now(),
+    sentAt: sampledAt,
+    ...snapshot,
     ...version,
   });
 }
@@ -867,6 +880,15 @@ const _self = {
   /** ID da tentativa atual para os módulos que orquestram a reprodução. */
   getActivePlaybackId(): string | null {
     return _activePlayback?.playback_id || null;
+  },
+
+  /** Responde com o relógio atual, inclusive quando a reprodução está pausada. */
+  broadcastVideoStateForRequest(playbackId?: string): void {
+    if (!shouldRespondToVideoStateRequest(
+      playbackId, _activePlayback?.playback_id,
+      Boolean($appdata.get(KEYS.MODULES.MEDIA.CONFIG.VIDEO_FILE))
+    )) return;
+    _broadcastVideoState();
   },
 
   async open(params: MediaOpenParams | string | number): Promise<void> {

@@ -970,6 +970,10 @@ $storage.hydrate().then(async () => {
     Broadcast.listen((msg) => {
       handleProjectionStateRequest(msg, Broadcast);
 
+      if (msg.type === BROADCAST_TYPE.REQUEST_VIDEO_STATE) {
+        Media.broadcastVideoStateForRequest(msg.payload?.playback_id);
+      }
+
       // Módulos genéricos (/projection/module) — responde pelo cache do
       // Broadcast.ts. Mesmo padrão do REQUEST_BIBLE_STATE acima: o cache é
       // preenchido por qualquer emissão de MODULE_PROJECTION_VALUE (em

@@ -1,4 +1,5 @@
 import type { VideoMediaState } from "@/types/Media";
+import { playbackPositionAt } from "@/helpers/VideoPlaybackSnapshot";
 
 /** Acima disso a imagem está tão fora que só uma busca resolve (troca de faixa, salto do operador). */
 export const HARD_SEEK_S = 0.5;
@@ -22,9 +23,16 @@ const MAX_MESSAGE_AGE_S = 2;
  * compartilham.
  */
 export function expectedVideoTime(
-  state: Pick<VideoMediaState, "currentTime" | "isPaused" | "sentAt">,
+  state: VideoClockState,
   now: number = Date.now()
 ): number | null {
+  if (
+    state.sampledAt !== undefined || state.position !== undefined ||
+    state.playing !== undefined || state.rate !== undefined
+  ) {
+    if (state.playing !== !state.isPaused) return null;
+    return playbackPositionAt(state as Required<Pick<VideoMediaState, "sampledAt" | "position" | "playing" | "rate">>, now);
+  }
   if (typeof state.currentTime !== "number" || !Number.isFinite(state.currentTime)) return null;
   if (state.isPaused === true || typeof state.sentAt !== "number") return state.currentTime;
   const age = (now - state.sentAt) / 1000;
@@ -38,6 +46,9 @@ type SyncableVideo = Pick<
   "readyState" | "seeking" | "currentTime" | "duration" | "playbackRate"
 >;
 
+type VideoClockState = Pick<VideoMediaState, "currentTime" | "isPaused" | "sentAt"> &
+  Partial<Pick<VideoMediaState, "sampledAt" | "position" | "playing" | "rate">>;
+
 /**
  * Alinha a imagem (que está sem som) ao áudio da janela principal.
  *
@@ -49,7 +60,7 @@ type SyncableVideo = Pick<
  */
 export function syncVideoElement(
   el: SyncableVideo,
-  state: Pick<VideoMediaState, "currentTime" | "isPaused" | "sentAt">,
+  state: VideoClockState,
   now: number = Date.now()
 ): SyncAction {
   const expected = expectedVideoTime(state, now);
@@ -61,9 +72,11 @@ export function syncVideoElement(
   const target = Math.max(0, Math.min(expected, duration));
   const delta = target - el.currentTime; // > 0: a imagem está atrás do som
   const gap = Math.abs(delta);
+  const baseRate = typeof state.rate === "number" && Number.isFinite(state.rate) && state.rate > 0
+    ? state.rate : 1;
 
   if (state.isPaused === true) {
-    el.playbackRate = 1;
+    el.playbackRate = baseRate;
     if (gap > PAUSED_SEEK_S) {
       el.currentTime = target;
       return "seek";
@@ -72,14 +85,14 @@ export function syncVideoElement(
   }
 
   if (gap > HARD_SEEK_S) {
-    el.playbackRate = 1;
+    el.playbackRate = baseRate;
     el.currentTime = target;
     return "seek";
   }
   if (gap > RATE_SYNC_S) {
-    el.playbackRate = delta > 0 ? 1 + CATCH_UP : 1 - CATCH_UP;
+    el.playbackRate = delta > 0 ? baseRate * (1 + CATCH_UP) : baseRate * (1 - CATCH_UP);
     return "rate";
   }
-  el.playbackRate = 1;
+  el.playbackRate = baseRate;
   return "ok";
 }

@@ -30,6 +30,12 @@ export interface VideoMediaState {
   currentTime: number;
   isPaused: boolean;
   duration: number;
+  /** Coherent playback clock; optional while older senders still exist. */
+  sampledAt?: number;
+  position?: number;
+  playing?: boolean;
+  rate?: number;
+  clockAnchor?: number | null;
   /** YouTube PlayerState, quando a origem é a projeção online. */
   state?: number;
   playback_id?: string;
