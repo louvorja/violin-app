@@ -1,7 +1,23 @@
 /// <reference types="vite/client" />
 declare global {
+  interface UserDataIpcPatch {
+    path: string;
+    value: unknown;
+    _src?: string;
+  }
+
+  interface LouvorjaAppInfo {
+    isPackaged: boolean;
+    isDev: boolean;
+    version: string;
+    electron: string;
+    chromium: string;
+    node: string;
+    userData: string;
+    appPath: string;
+  }
+
   interface LouvorjaApi {
-    on?: (_channel: string, _handler: (_payload: unknown) => void) => () => void;
     platform: string;
     version: string;
     isDev: boolean;
@@ -9,6 +25,14 @@ declare global {
       electron?: string;
       chrome?: string;
       node?: string;
+    };
+    app: {
+      info: () => Promise<LouvorjaAppInfo>;
+    };
+    dev: {
+      setLogForwarding: (enabled: boolean) => Promise<{ ok: boolean; enabled: boolean }>;
+      reloadAll: () => Promise<{ ok: boolean; count: number }>;
+      openDevTools: () => Promise<{ ok: boolean }>;
     };
     telemetry?: {
       log: (payload: {
@@ -187,7 +211,19 @@ declare global {
       ) => () => void;
     };
     windows: Record<string, unknown>;
-    httpServer: Record<string, unknown>;
+    httpServer: {
+      start: (opts?: { port?: number }) => Promise<{ port: number; token: string }>;
+      stop: () => Promise<void>;
+      status: () => Promise<Record<string, unknown>>;
+      setExternalRoutes: (enabled: boolean) => Promise<{ ok: boolean; error?: string }>;
+      localIps: () => Promise<string[]>;
+      hostname: () => Promise<string>;
+      resetToken: () => Promise<string>;
+      setToken: (token: string) => Promise<string>;
+      getDeviceSettings: () => Promise<Record<string, unknown>>;
+      setDeviceSettings: (settings: Record<string, unknown>) => Promise<Record<string, unknown>>;
+      respond: (requestId: string, payload: unknown) => boolean;
+    };
     shortcuts: Record<string, unknown>;
     updater: {
       check: () => Promise<{ ok: boolean; state?: unknown; error?: string }>;
@@ -243,7 +279,11 @@ declare global {
     };
     powerBlocker: Record<string, unknown>;
     window: Record<string, unknown>;
-    userdata: Record<string, unknown>;
+    userdata: {
+      fetch: () => Promise<Record<string, unknown>>;
+      patch: (payload: UserDataIpcPatch) => Promise<{ ok: boolean }>;
+      onPatch: (cb: (payload: UserDataIpcPatch) => void) => () => void;
+    };
     transmission: Record<string, unknown>;
     appLogin: Record<string, unknown>;
     onHttpEvent: (cb: (eventType: string, data: unknown) => void) => () => void;

@@ -23,7 +23,7 @@ const express = require("express");
 const path = require("path");
 const fs = require("fs-extra");
 const net = require("net");
-const { app: electronApp, BrowserWindow } = require("electron");
+const { app: electronApp, BrowserWindow, ipcMain } = require("electron");
 
 const paths = require("../paths.js");
 const userStore = require("../userStore.js");
@@ -34,6 +34,7 @@ const { setupAuth } = require("./auth.js");
 const { setupRoutes } = require("./routes.js");
 const events = require("./events.js");
 const spa = require("./spa.js");
+const { RendererRequestRegistry } = require("./rendererRequestRegistry.js");
 const { safeSend } = require("../safeWebContents.js");
 
 let _server = null;
@@ -41,8 +42,16 @@ let _port = 7070;
 let _token = null;
 let _mainWindow = null;
 let _externalRoutesEnabled = true;
+let _rendererRequests = null;
 /** @type {Set<import('net').Socket>} */
 const _sockets = new Set();
+
+function _getRendererRequests() {
+  if (_rendererRequests) return _rendererRequests;
+  _rendererRequests = new RendererRequestRegistry({ getMainWindow: () => _mainWindow });
+  _rendererRequests.attach(ipcMain);
+  return _rendererRequests;
+}
 
 /** Caracteres usados para gerar o token. Mesma faixa do `geraToken` do Delphi. */
 const TOKEN_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -168,7 +177,7 @@ function _isDev() {
  */
 async function start({ port, mainWindow } = {}) {
   // Sempre atualiza _mainWindow se fornecido (chamado no boot e re-start).
-  if (mainWindow) _mainWindow = mainWindow;
+  if (mainWindow) setMainWindow(mainWindow);
   if (_server) return Promise.resolve({ port: _port, token: _token });
 
   // Resolve a porta: param > userStore > 7070.
@@ -185,8 +194,8 @@ async function start({ port, mainWindow } = {}) {
   _token = _loadOrCreateToken();
   // Não descarta uma janela já registrada quando o caller não passa uma
   // (ex.: renderer reinicia o servidor sem conhecer a janela).
-  if (mainWindow) _mainWindow = mainWindow;
-  else if (_mainWindow && _mainWindow.isDestroyed()) _mainWindow = null;
+  if (mainWindow) setMainWindow(mainWindow);
+  else if (_mainWindow && _mainWindow.isDestroyed()) setMainWindow(null);
 
   // Configura events.js para reescrever louvorja://* nos payloads SSE
   // usando as URLs HTTPS reais (clients remotos não conhecem o protocolo).
@@ -328,6 +337,7 @@ async function start({ port, mainWindow } = {}) {
     jsonCache,
     getDatabaseUrl: () => protocolModule.getRemoteConfig().databaseUrl,
     getApiToken: () => protocolModule.getRemoteConfig().apiToken,
+    rendererRequests: _getRendererRequests(),
   });
 
   // Arquivos legacy do Delphi (`userData/server/*`) — opcional, mantém
@@ -400,6 +410,7 @@ async function start({ port, mainWindow } = {}) {
 function stop() {
   return new Promise((resolve) => {
     events.closeAll();
+    _rendererRequests?.cancelAll("SERVER_STOPPED", "Servidor HTTP encerrado");
 
     if (!_server) return resolve();
 
@@ -481,6 +492,9 @@ function status() {
 }
 
 function setMainWindow(win) {
+  if (_mainWindow && _mainWindow !== win) {
+    _rendererRequests?.cancelAll("WINDOW_CHANGED", "Janela principal substituída");
+  }
   _mainWindow = win;
 }
 

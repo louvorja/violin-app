@@ -453,8 +453,8 @@ $storage.hydrate().then(async () => {
                 currentSlideIndex: Number(last.slide_index) || 0,
                 title: last.title || "",
               };
-              if (data?.replyChannel && Platform.api?.send) {
-                Platform.api.send(data.replyChannel, reply);
+              if (data?.requestId && Platform.httpServer?.respond) {
+                Platform.httpServer.respond(data.requestId, reply);
               }
               break;
             }
@@ -830,9 +830,9 @@ $storage.hydrate().then(async () => {
                 hasImage: !!a.imageData,
                 hasVideo: !!a.videoData,
               }));
-              const replyChannel = data?.replyChannel;
-              if (replyChannel && Platform.api?.send) {
-                Platform.api.send(replyChannel, { status: "ok", announcements: simplified });
+              const requestId = data?.requestId;
+              if (requestId && Platform.httpServer?.respond) {
+                Platform.httpServer.respond(requestId, { status: "ok", announcements: simplified });
               }
               break;
             }
@@ -907,18 +907,26 @@ $storage.hydrate().then(async () => {
           break;
         case "http:libras-bundle": {
           // Handler para bundles de animação VLibras.
-          // O renderer busca o bundle no IndexedDB e envia de volta via replyChannel.
-          const { token, replyChannel } = data;
-          if (token && replyChannel && Platform.api?.send) {
+          // O renderer busca o bundle no IndexedDB e responde pela porta fixa.
+          const { token, requestId } = data;
+          if (token && requestId && Platform.httpServer?.respond) {
             // Buscar no IndexedDB (tabela libras_bundles)
             const bundleKey = `bundle_${token}`;
             $idb
               .get("libras_bundles", bundleKey)
               .then((entry) => {
-                Platform.api.send(replyChannel, entry || null);
+                const raw = entry?.data;
+                const bytes = Array.isArray(raw)
+                  ? Uint8Array.from(raw)
+                  : raw instanceof ArrayBuffer
+                    ? new Uint8Array(raw)
+                    : ArrayBuffer.isView(raw)
+                      ? new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength)
+                      : null;
+                Platform.httpServer.respond(requestId, bytes ? { data: bytes } : null);
               })
               .catch(() => {
-                Platform.api.send(replyChannel, null);
+                Platform.httpServer.respond(requestId, null);
               });
           }
           break;

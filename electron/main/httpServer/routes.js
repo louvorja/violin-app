@@ -4,10 +4,13 @@ const path = require("path");
 const fs = require("fs");
 const jsonCache = require("../jsonCache.js");
 const devices = require("../devices.js");
+const { HARD_MAX_PAYLOAD_BYTES } = require("./rendererRequestRegistry.js");
 const { safeSend } = require("../safeWebContents.js");
 
 const KEY_LITURGY_DAYS = "modules.liturgy.days";
 const KEY_LITURGY_ACTIVE_DAY = "modules.liturgy.active_day";
+const SLIDE_STATE_MAX_BYTES = 8 * 1024 * 1024;
+const ANNOUNCEMENTS_MAX_BYTES = 2 * 1024 * 1024;
 
 /**
  * Estado em memória para sorteios (replicado entre requests).
@@ -95,7 +98,62 @@ function normalizeKeyName(rawKey) {
   return trimmed;
 }
 
-function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDatabaseUrl, getApiToken }) {
+function isPlainObject(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function isSlideStateResponse(payload) {
+  return (
+    isPlainObject(payload) &&
+    payload.status === "ok" &&
+    typeof payload.supported === "boolean" &&
+    typeof payload.playing === "boolean" &&
+    Array.isArray(payload.slides) &&
+    payload.slides.length <= 10_000 &&
+    Number.isInteger(payload.currentSlideIndex) &&
+    payload.currentSlideIndex >= 0 &&
+    typeof payload.title === "string"
+  );
+}
+
+function isAnnouncementsResponse(payload) {
+  return (
+    isPlainObject(payload) &&
+    payload.status === "ok" &&
+    Array.isArray(payload.announcements) &&
+    payload.announcements.length <= 10_000 &&
+    payload.announcements.every(
+      (item) =>
+        isPlainObject(item) &&
+        typeof item.id === "string" &&
+        item.id.length <= 256 &&
+        (item.nome == null || typeof item.nome === "string") &&
+        (item.ordem == null || Number.isFinite(item.ordem)) &&
+        typeof item.hasImage === "boolean" &&
+        typeof item.hasVideo === "boolean"
+    )
+  );
+}
+
+function isLibrasBundleResponse(payload) {
+  if (payload === null) return true;
+  if (!isPlainObject(payload)) return false;
+  return payload.data instanceof ArrayBuffer || ArrayBuffer.isView(payload.data);
+}
+
+function setupRoutes(
+  app,
+  {
+    getMainWindow,
+    getUserData,
+    jsonCache: _cache,
+    getDatabaseUrl,
+    getApiToken,
+    rendererRequests,
+  }
+) {
 
   /** Retorna mainWindow apenas se existir e não estiver destruída. */
   function getValidMainWindow() {
@@ -104,34 +162,57 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
     return win;
   }
 
-  /**
-   * Consulta o estado atual da projeção de letras na janela principal.
-   *
-   * Mesmo padrão de `replyChannel` do `/api/announcements?action=list`: o
-   * renderer responde no canal IPC e esse valor vira a resposta HTTP. Sem isso
-   * o cliente remoto só sabia dos slides por push (`slides_data`) e ficava com a
-   * aba vazia quando o evento se perdia.
-   */
-  function askSlideState(mainWindow, res) {
-    const { ipcMain } = require("electron");
-    const channel = "_song_slides_state_reply_" + Date.now();
-    let sent = false;
-    const timeout = setTimeout(() => {
-      if (sent) return;
-      sent = true;
-      ipcMain.removeAllListeners(channel);
-      res.status(504).json({ error: "Timeout ao consultar o estado dos slides" });
-    }, 3000);
-    ipcMain.once(channel, (_event, data) => {
-      if (sent) return;
-      sent = true;
-      clearTimeout(timeout);
-      res.json(data);
-    });
-    safeSend(mainWindow, "http:song-slides", {
-      action: "playing-check",
-      replyChannel: channel,
-    });
+  async function requestRenderer(mainWindow, res, eventType, payload, options) {
+    const pending = rendererRequests.request(options.prefix, options);
+    const cancelOnClose = () => {
+      pending.cancel("CLIENT_CLOSED", "Cliente HTTP desconectou");
+    };
+    res.once("close", cancelOnClose);
+
+    if (!safeSend(mainWindow, eventType, { ...payload, requestId: pending.requestId })) {
+      pending.cancel("RENDERER_UNAVAILABLE", "Janela principal não está disponível");
+    }
+
+    try {
+      return await pending.promise;
+    } finally {
+      res.off("close", cancelOnClose);
+    }
+  }
+
+  function sendRendererError(res, error, timeoutMessage) {
+    if (res.headersSent || res.writableEnded || res.destroyed) return;
+    if (error?.code === "CLIENT_CLOSED") return;
+    if (error?.code === "TIMEOUT") {
+      res.status(504).json({ error: timeoutMessage });
+      return;
+    }
+    if (error?.code === "INVALID_PAYLOAD") {
+      res.status(502).json({ error: "Resposta inválida da janela principal" });
+      return;
+    }
+    res.status(503).json({ error: "Janela principal indisponível" });
+  }
+
+  /** Consulta o estado atual sem permitir que o renderer escolha um canal IPC. */
+  async function askSlideState(mainWindow, res) {
+    try {
+      const data = await requestRenderer(
+        mainWindow,
+        res,
+        "http:song-slides",
+        { action: "playing-check" },
+        {
+          prefix: "slides",
+          timeoutMs: 3_000,
+          maxPayloadBytes: SLIDE_STATE_MAX_BYTES,
+          validatePayload: isSlideStateResponse,
+        }
+      );
+      if (!res.headersSent && !res.writableEnded) res.json(data);
+    } catch (error) {
+      sendRendererError(res, error, "Timeout ao consultar o estado dos slides");
+    }
   }
 
   // ---------------------------------------------------------------
@@ -531,7 +612,7 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
   // GET  action=list       — lista anúncios (somente leitura)
   // POST action=project|next|prev|stop — controle de anúncios
   // ---------------------------------------------------------------
-  app.get("/api/announcements", (req, res) => {
+  app.get("/api/announcements", async (req, res) => {
     const mainWindow = getValidMainWindow();
     const action = req.query.action || "list";
 
@@ -539,22 +620,23 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
       if (!mainWindow) {
         return res.status(503).json({ error: "Janela principal não disponível" });
       }
-      const { ipcMain } = require("electron");
-      const channel = "_announcements_list_reply_" + Date.now();
-      let sent = false;
-      const timeout = setTimeout(() => {
-        if (sent) return;
-        sent = true;
-        ipcMain.removeAllListeners(channel);
-        res.status(504).json({ error: "Timeout ao buscar anúncios" });
-      }, 5000);
-      ipcMain.once(channel, (_event, data) => {
-        if (sent) return;
-        sent = true;
-        clearTimeout(timeout);
-        res.json(data);
-      });
-      safeSend(mainWindow, "http:song-slides", { action: "announcements-list", replyChannel: channel });
+      try {
+        const data = await requestRenderer(
+          mainWindow,
+          res,
+          "http:song-slides",
+          { action: "announcements-list" },
+          {
+            prefix: "announcements",
+            timeoutMs: 5_000,
+            maxPayloadBytes: ANNOUNCEMENTS_MAX_BYTES,
+            validatePayload: isAnnouncementsResponse,
+          }
+        );
+        if (!res.headersSent && !res.writableEnded) res.json(data);
+      } catch (error) {
+        sendRendererError(res, error, "Timeout ao buscar anúncios");
+      }
       return;
     }
 
@@ -680,41 +762,41 @@ function setupRoutes(app, { getMainWindow, getUserData, jsonCache: _cache, getDa
     }
 
     try {
-      const { ipcMain } = require("electron");
-      const channel = "_libras_bundle_reply_" + Date.now();
-      let sent = false;
-      const timeout = setTimeout(() => {
-        if (sent) return;
-        sent = true;
-        ipcMain.removeAllListeners(channel);
-        res.status(504).json({ error: "Timeout ao buscar bundle" });
-      }, 5000);
-
-      ipcMain.once(channel, (_event, data) => {
-        if (sent) return;
-        sent = true;
-        clearTimeout(timeout);
-        if (data && data.data) {
-          const buffer = Buffer.from(data.data);
-          res.setHeader("Content-Type", "application/octet-stream");
-          res.setHeader("Content-Length", buffer.length);
-          res.setHeader("Cache-Control", "public, max-age=86400");
-          return res.send(buffer);
-        }
-        res.status(404).json({ error: "Bundle não encontrado", token });
-      });
-
       const mainWindow = getValidMainWindow();
-      if (mainWindow) {
-        safeSend(mainWindow, "http:libras-bundle", { token, replyChannel: channel });
-      } else {
-        clearTimeout(timeout);
-        ipcMain.removeAllListeners(channel);
-        res.status(503).json({ error: "Janela principal não disponível" });
+      if (!mainWindow) {
+        return res.status(503).json({ error: "Janela principal não disponível" });
       }
+      const data = await requestRenderer(
+        mainWindow,
+        res,
+        "http:libras-bundle",
+        { token },
+        {
+          prefix: "libras",
+          timeoutMs: 5_000,
+          maxPayloadBytes: HARD_MAX_PAYLOAD_BYTES,
+          validatePayload: isLibrasBundleResponse,
+        }
+      );
+      if (res.headersSent || res.writableEnded) return;
+      if (data?.data) {
+        const bytes = data.data;
+        const buffer = bytes instanceof ArrayBuffer
+          ? Buffer.from(bytes)
+          : Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        res.setHeader("Content-Type", "application/octet-stream");
+        res.setHeader("Content-Length", buffer.length);
+        res.setHeader("Cache-Control", "public, max-age=86400");
+        return res.send(buffer);
+      }
+      res.status(404).json({ error: "Bundle não encontrado", token });
     } catch (e) {
+      if (e?.code) {
+        sendRendererError(res, e, "Timeout ao buscar bundle");
+        return;
+      }
       console.error("[httpServer] /libras error:", e.message);
-      res.status(500).json({ error: e.message });
+      if (!res.headersSent && !res.writableEnded) res.status(500).json({ error: e.message });
     }
   });
 

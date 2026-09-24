@@ -59,6 +59,16 @@ export default {
     return api ? api.version : null;
   },
 
+  /** Informações do executável expostas por um canal IPC específico. */
+  get app() {
+    return api?.app ?? null;
+  },
+
+  /** Ações restritas à tela de desenvolvimento. */
+  get dev() {
+    return api?.dev ?? null;
+  },
+
   /**
    * true quando a app roda em modo desenvolvimento.
    *
@@ -335,7 +345,7 @@ export default {
    * a todas as janelas auxiliares (Projeção, Operador, ObsBible).
    * null no browser/PWA — lá o BroadcastChannel cross-tab é confiável.
    *
-   * @returns {{ patch, onPatch } | null}
+   * @returns {{ fetch, patch, onPatch } | null}
    */
   get userdata() {
     return api?.userdata ?? null;

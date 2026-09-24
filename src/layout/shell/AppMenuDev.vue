@@ -161,9 +161,7 @@ function setLogsTerminal(v: boolean): void {
   logsTerminal.value = v;
   $userdata.set(KEYS.OPTIONS.DEV.LOGS_TERMINAL, v);
   try {
-    (Platform.api as { invoke?: (channel: string, ...args: unknown[]) => Promise<unknown> })
-      .invoke?.("dev:setLogForwarding", v)
-      .catch(() => {});
+    Platform.dev?.setLogForwarding?.(v).catch(() => {});
   } catch {
     /* noop */
   }
@@ -176,9 +174,7 @@ function toggleShowLibrasText(v: boolean): void {
 
 function reloadAllWindows(): void {
   try {
-    (Platform.api as { invoke?: (channel: string, ...args: unknown[]) => Promise<unknown> })
-      .invoke?.("dev:reloadAll")
-      .catch(() => {});
+    Platform.dev?.reloadAll?.().catch(() => {});
   } catch {
     /* noop */
   }
@@ -186,9 +182,7 @@ function reloadAllWindows(): void {
 
 function openDevToolsConsole(): void {
   try {
-    (Platform.api as { invoke?: (channel: string, ...args: unknown[]) => Promise<unknown> })
-      .invoke?.("dev:openDevTools")
-      .catch(() => {});
+    Platform.dev?.openDevTools?.().catch(() => {});
   } catch {
     /* noop */
   }
@@ -201,11 +195,8 @@ function clearDbCache(): void {
 
 async function loadEnv(): Promise<void> {
   try {
-    const api = Platform.api as {
-      invoke?: (channel: string, ...args: unknown[]) => Promise<DevEnv>;
-    };
-    if (!api?.invoke) return;
-    const info = await api.invoke("app:info");
+    if (!Platform.app?.info) return;
+    const info = (await Platform.app.info()) as DevEnv;
     env.value = info;
   } catch {
     /* noop */

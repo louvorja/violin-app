@@ -21,6 +21,9 @@
 const { contextBridge, ipcRenderer } = require("electron");
 const { webUtils } = require("electron");
 
+const HTTP_RENDERER_RESPONSE_CHANNEL = "http:renderer-response";
+const HTTP_RENDERER_REQUEST_ID_RE = /^(slides|announcements|libras):[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 contextBridge.exposeInMainWorld("louvorjaApi", {
   /** Resolve o caminho real de um File arrastado/selecionado (Electron 32+). */
   getPathForFile: (file) => {
@@ -53,6 +56,18 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
    */
   isDesktop: true,
 
+  /** Informações do executável usadas pela tela de diagnóstico. */
+  app: {
+    info: () => ipcRenderer.invoke("app:info"),
+  },
+
+  /** Operações deliberadamente limitadas à tela de desenvolvimento. */
+  dev: {
+    setLogForwarding: (enabled) => ipcRenderer.invoke("dev:setLogForwarding", enabled),
+    reloadAll: () => ipcRenderer.invoke("dev:reloadAll"),
+    openDevTools: () => ipcRenderer.invoke("dev:openDevTools"),
+  },
+
   /** Diagnóstico do renderer no terminal que iniciou o Electron. */
   telemetry: {
     log: (payload) => ipcRenderer.send("telemetry:renderer-log", payload),
@@ -69,49 +84,6 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
       ipcRenderer.on("telemetry:runtime-incident", handler);
       return () => ipcRenderer.off("telemetry:runtime-incident", handler);
     },
-  },
-
-  // -------------------------------------------------------------------------
-  // IPC helpers internos para fases futuras.
-  // Não use ipcRenderer diretamente no renderer — sempre passe por aqui.
-  // -------------------------------------------------------------------------
-
-  /**
-   * Invoca um handler IPC no main process e aguarda a resposta.
-   * Wrapper genérico para ipcRenderer.invoke().
-   * Usado pelas fases D1-D6 para chamar serviços do main.
-   *
-   * @param {string} channel  Nome do canal IPC (ex: "userStore:read")
-   * @param {...any} args     Argumentos a passar ao handler
-   * @returns {Promise<any>}
-   */
-  invoke(channel, ...args) {
-    return ipcRenderer.invoke(channel, ...args);
-  },
-
-  /**
-   * Escuta eventos emitidos pelo main process via webContents.send().
-   * Retorna função de cleanup (remove o listener).
-   *
-   * @param {string} channel
-   * @param {Function} handler
-   * @returns {Function} cleanup
-   */
-  on(channel, handler) {
-    const wrappedHandler = (_event, ...args) => handler(...args);
-    ipcRenderer.on(channel, wrappedHandler);
-    return () => ipcRenderer.off(channel, wrappedHandler);
-  },
-
-  /**
-   * Envia evento one-way para o main process via ipcRenderer.send().
-   * Usado para responder a solicitações do main (ex: lista de anúncios).
-   *
-   * @param {string} channel
-   * @param {*} data
-   */
-  send(channel, data) {
-    ipcRenderer.send(channel, data);
   },
 
   // -------------------------------------------------------------------------
@@ -151,6 +123,9 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
    * as outras BrowserWindows, e elas processam em `onPatch()`.
    */
   userdata: {
+    /** Snapshot mais recente mantido pelo main process. */
+    fetch: () => ipcRenderer.invoke("userdata:fetch"),
+
     /**
      * Notifica o main que o renderer aplicou um patch — main fan-out para
      * as outras janelas.
@@ -424,6 +399,17 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
     getDeviceSettings: () => ipcRenderer.invoke("httpServer:getDeviceSettings"),
     /** Atualiza configurações de dispositivos. */
     setDeviceSettings: (settings) => ipcRenderer.invoke("httpServer:setDeviceSettings", settings),
+    /**
+     * Responde a uma consulta HTTP iniciada pelo main. O renderer nunca escolhe
+     * o canal IPC: somente devolve o request id emitido pelo registro limitado.
+     */
+    respond: (requestId, payload) => {
+      if (typeof requestId !== "string" || !HTTP_RENDERER_REQUEST_ID_RE.test(requestId)) {
+        return false;
+      }
+      ipcRenderer.send(HTTP_RENDERER_RESPONSE_CHANNEL, { requestId, payload });
+      return true;
+    },
   },
 
   /**

@@ -41,6 +41,12 @@ export interface UserDataState {
   modules: Record<string, unknown>;
 }
 
+export interface UserDataPatch {
+  path: string;
+  value: unknown;
+  _src?: string;
+}
+
 let _saveTimer: ReturnType<typeof setTimeout> | null = null;
 // Cleanup das subscrições da última chamada de initCrossWindow — usado para
 // evitar acumular listeners em HMR (Vite recarrega o módulo, listeners
@@ -149,11 +155,9 @@ export default {
     // renderer monte já com as preferências definitivas.
     if (Platform.isDesktop) {
       try {
-        const api = Platform.api as
-          | { invoke?: (channel: string, ...args: unknown[]) => Promise<unknown> }
-          | null;
-        if (api && typeof api.invoke === "function") {
-          const fresh = await api.invoke("userdata:fetch").catch(() => null);
+        const userdata = Platform.userdata;
+        if (userdata?.fetch) {
+          const fresh = await userdata.fetch().catch(() => null);
           if (fresh && typeof fresh === "object") {
             _suppressBroadcast = true;
             try {
@@ -203,7 +207,7 @@ export default {
       console.warn(`[UserData] Falha ao sanitizar value para "${param}" — enviando original`);
     }
 
-    const payload = { path: param, value: sanitizedValue, _src: _SRC };
+    const payload: UserDataPatch = { path: param, value: sanitizedValue, _src: _SRC };
     try {
       $broadcast.send(BROADCAST_TYPE.USERDATA_PATCH, payload);
     } catch {
@@ -211,18 +215,12 @@ export default {
     }
     if (Platform.isDesktop) {
       try {
-        const api = Platform.api as
-          | { invoke?: (channel: string, ...args: unknown[]) => Promise<unknown> }
-          | null;
-        if (api && typeof api.invoke === "function") {
+        const userdata = Platform.userdata;
+        if (userdata?.patch) {
           // Fire-and-forget é OK aqui — o main captura a revisão em memória e
           // serializa a escrita. Em quit rápido, before-quit aguarda o flush.
-          api.invoke("userdata:patch", payload).catch((err) => {
+          userdata.patch(payload).catch((err: unknown) => {
             console.warn("[UserData] IPC userdata:patch falhou:", err);
-          });
-        } else if (Platform.userdata?.patch) {
-          Platform.userdata.patch(payload).catch((err: any) => {
-            console.warn("[UserData] patch alternativo falhou:", err);
           });
         }
       } catch (err) {
@@ -262,22 +260,12 @@ export default {
       if (!msg || msg.type !== BROADCAST_TYPE.USERDATA_PATCH) return;
       apply(msg.payload as { path?: string; value?: unknown; _src?: string } | null);
     });
-    // Canal 2 — IPC do Electron (fallback determinístico).
-    // louvorjaApi.on é genérico e existe no preload desde D0 — sync funciona
-    // mesmo em janelas com preload antigo, contanto que o main.cjs novo esteja
-    // ativo (que registra o webContents.send("userdata:patch", ...)).
+    // Canal 2 — IPC específico do Electron (fallback determinístico).
     let offIpc: (() => void) | null = null;
     if (Platform.isDesktop) {
       try {
-        const api = Platform.api as
-          | { on?: (channel: string, h: (data: unknown) => void) => () => void }
-          | null;
-        if (api && typeof api.on === "function") {
-          offIpc = api.on("userdata:patch", (data: unknown) =>
-            apply(data as { path?: string; value?: unknown; _src?: string } | null)
-          ) || null;
-        } else if (Platform.userdata?.onPatch) {
-          const off = Platform.userdata.onPatch((data: unknown) =>
+        if (Platform.userdata?.onPatch) {
+          const off = Platform.userdata.onPatch((data: UserDataPatch) =>
             apply(data as { path?: string; value?: unknown; _src?: string } | null)
           );
           if (typeof off === "function") offIpc = off;
