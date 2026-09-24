@@ -104,4 +104,43 @@ describe("download IPC file-entry validation", () => {
       remoteUrl: "https://api.louvorja.workers.dev/file/musics/pt/hino.opus?v=2",
     }], options)).toHaveLength(1);
   });
+
+  it.each([
+    "https://api.louvorja.workers.dev/file/images/100%25%20livre.jpg",
+    "https://cdn.louvorja.com/images/100%25%20livre.jpg?v=2",
+    "https://api.louvorja.com.br/file/images/100%25%20livre.jpg",
+  ])("accepts encoded literal percent in renderer full URL: %s", (remoteUrl) => {
+    expect(validateDownloadEntries([{
+      remote: "/images/100% livre.jpg",
+      local: "images/100% livre.jpg",
+      remoteUrl,
+      expectedSize: 0,
+    }], {
+      ...options,
+      allowedRemoteOrigins: ["https://cdn.louvorja.com", "https://api.louvorja.com.br"],
+    })).toHaveLength(1);
+  });
+
+  it.each([
+    "https://cdn.louvorja.com/images/capa.jpg",
+    "https://api.louvorja.com.br/file/images/capa.jpg",
+  ])("requires explicit trust for CDN and legacy origins: %s", (remoteUrl) => {
+    const entry = { remote: "/images/capa.jpg", local: "images/capa.jpg", remoteUrl };
+    expect(() => validateDownloadEntries([entry], options)).toThrow("origem não confiável");
+    expect(() => validateDownloadEntries([entry], {
+      ...options,
+      allowedRemoteOrigins: [new URL(remoteUrl).origin],
+    })).not.toThrow();
+  });
+
+  it.each([
+    "https://cdn.louvorja.com/images/%252e%252e/images/capa.jpg",
+    "https://cdn.louvorja.com/images%252fcapa.jpg",
+    "https://cdn.louvorja.com/images/%255ccapa.jpg",
+    "https://cdn.louvorja.com/images/%2500capa.jpg",
+  ])("still rejects nested escaped traversal/separators: %s", (remoteUrl) => {
+    expect(() => validateDownloadEntries([{
+      remote: "/images/capa.jpg", local: "images/capa.jpg", remoteUrl,
+    }], { ...options, allowedRemoteOrigins: ["https://cdn.louvorja.com"] })).toThrow();
+  });
 });

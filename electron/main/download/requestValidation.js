@@ -86,6 +86,10 @@ function safeUrlPath(value) {
   for (const segment of rawPath.split("/")) {
     let decoded = segment;
     for (let i = 0; i < 8; i++) {
+      // Depois da primeira decodificação, %25 pode ser um percentual literal
+      // no nome do arquivo. Só decodifique novamente quando restar %HH;
+      // decodeURIComponent("100% livre.jpg") não é uma segunda camada válida.
+      if (i > 0 && !/%[0-9a-f]{2}/i.test(decoded)) break;
       let next;
       try {
         next = decodeURIComponent(decoded);
