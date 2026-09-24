@@ -62,6 +62,7 @@ test("downloads and cancels through the real preload in a separate utility proce
           telemetry: false,
           check_updates_on_start: false,
           auto_download_updates: false,
+          dev: { devtools_projections: false, devtools_main_window: false },
         },
       })
     );
@@ -121,8 +122,45 @@ test("downloads and cancels through the real preload in a separate utility proce
         }),
       ];
       await api.setApiConfig({ filesUrl: url, apiUrl: url, paramsUrl: url, apiToken: "" });
-      window.louvorjaApi.presentation.setMediaActive(true);
     }, baseUrl);
+    // Exercise the actual BrowserWindow lifecycle which changes presentation
+    // activity, using a small framed window safe for a single-monitor desk.
+    const projection = await page.evaluate(async () => {
+      const [display] = await window.louvorjaApi.displays.list();
+      return window.louvorjaApi.windows.open({
+        route: "/projection",
+        feature: "musicas",
+        monitorId: display.id,
+        fullscreen: false,
+        alwaysOnTop: false,
+        frame: true,
+        width: 480,
+        height: 270,
+      });
+    });
+    expect(projection.id).toBeGreaterThan(0);
+    await expect
+      .poll(() => page.evaluate(() => window.louvorjaApi.windows.listOpen()))
+      .toContain("musicas");
+    let projectionPage;
+    await expect
+      .poll(() => {
+        projectionPage = app.windows().find((candidate) => candidate.url().endsWith("/projection"));
+        return !!projectionPage;
+      })
+      .toBe(true);
+    await projectionPage.locator(".projection-stage").waitFor({ state: "visible" });
+    expect(
+      await app.evaluate(({ BrowserWindow }, id) => {
+        const win = BrowserWindow.fromId(id);
+        return {
+          visible: win.isVisible(),
+          fullscreen: win.isFullScreen(),
+          kiosk: win.isKiosk(),
+          alwaysOnTop: win.isAlwaysOnTop(),
+        };
+      }, projection.id)
+    ).toEqual({ visible: true, fullscreen: false, kiosk: false, alwaysOnTop: false });
     const start = async (name) =>
       page.evaluate(
         async ({ name, size }) => {
@@ -180,10 +218,16 @@ test("downloads and cancels through the real preload in a separate utility proce
       )
       .toBe(0);
     expect(requests.filter((url) => url === "/retry.bin")).toHaveLength(2);
-    await page.evaluate(() => {
+    expect(projectionPage.isClosed()).toBe(false);
+    expect(await page.evaluate(() => window.louvorjaApi.windows.listOpen())).toContain("musicas");
+    await page.evaluate(async () => {
       window.__downloadTestCleanup.forEach((off) => off());
-      window.louvorjaApi.presentation.setMediaActive(false);
+      await window.louvorjaApi.windows.close("musicas");
     });
+    await expect.poll(() => projectionPage.isClosed()).toBe(true);
+    expect(await page.evaluate(() => window.louvorjaApi.windows.listOpen())).not.toContain(
+      "musicas"
+    );
     await testInfo.attach("download-summary", {
       contentType: "application/json",
       body: JSON.stringify({
@@ -191,7 +235,8 @@ test("downloads and cancels through the real preload in a separate utility proce
         bytes_verified: fixture.length * 2,
         cancel_cleanup: true,
         retry_completed: true,
-        presentation_activity_did_not_pause_download: true,
+        real_projection_window_did_not_pause_download: true,
+        projection_closed_cleanly: true,
       }),
     });
   } finally {
