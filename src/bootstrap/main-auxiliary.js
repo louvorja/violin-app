@@ -12,7 +12,7 @@ import "@/assets/styles/fonts.css";
 import $storage from "@/helpers/Storage";
 import UserData from "@/helpers/UserData";
 import $idb from "@/helpers/IndexedDB";
-import ModuleManager from "@/helpers/ModuleManager";
+import { bindModuleI18n } from "@/helpers/ModuleTranslations";
 import Platform from "@/helpers/Platform";
 import Telemetry from "@/helpers/Telemetry";
 import { KEYS } from "@/constants/UserDataKeys";
@@ -67,7 +67,7 @@ async function start() {
 
   const i18n = await createI18nInstance(UserData.get(KEYS.OPTIONS.LANGUAGE));
   app.use(i18n);
-  ModuleManager.bindI18n(i18n);
+  bindModuleI18n(i18n);
 
   // Várias rotas auxiliares exibem blobs ou snapshots persistidos. Abrir o
   // IndexedDB antes do mount preserva a recuperação de estado sem carregar a

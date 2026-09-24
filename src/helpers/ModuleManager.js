@@ -8,14 +8,7 @@ import Telemetry from "@/helpers/Telemetry";
 import BaseModule from "@/modules/BaseModule";
 import { getAllModules } from "@/config/modules";
 import { moduleTitleFallback } from "@/config/modules/titles";
-
-// Os manifests são metadados pequenos e precisam existir para montar a Ribbon.
-// As traduções, porém, são o conteúdo pesado do boot e só entram quando um
-// módulo é realmente aberto. Os `index.ts` dos módulos eram apenas wrappers
-// idênticos que importavam pt.json + es.json para todos os 37 módulos.
-const _translationLoaders = import.meta.glob("../modules/*/lang/*.json");
-const _translationPromises = new Map();
-const _translationsLoaded = new Set();
+import { bindModuleI18n, ensureModuleTranslations } from "@/helpers/ModuleTranslations";
 
 /**
  * ModuleManager — lifecycle de módulos (boot-time).
@@ -47,18 +40,7 @@ export default {
    */
   bindI18n(i18n) {
     this.i18n = i18n;
-    // Com handler de chave ausente o vue-i18n para de avisar; o aviso de dev
-    // volta aqui, só para o que continua ausente com o módulo já carregado.
-    i18n.global.setMissingHandler((locale, key) => {
-      const moduleId = /^modules\.([^.]+)\./.exec(key)?.[1];
-      if (moduleId && !_translationsLoaded.has(moduleId)) {
-        void this.ensureTranslations(moduleId);
-        return;
-      }
-      if (import.meta.env.DEV && locale === i18n.global.fallbackLocale.value) {
-        console.warn(`[i18n] chave ausente "${key}"`);
-      }
-    });
+    bindModuleI18n(i18n);
   },
 
   /**
@@ -67,40 +49,7 @@ export default {
    * sem pagar o custo das traduções de módulos que nunca foram usados.
    */
   ensureTranslations(moduleId) {
-    if (!this.i18n) return Promise.resolve();
-    if (_translationPromises.has(moduleId)) return _translationPromises.get(moduleId);
-
-    const locales = ["pt", "es"];
-    const promise = Promise.all(
-      locales.map(async (locale) => {
-        const path = `../modules/${moduleId}/lang/${locale}.json`;
-        const loader = _translationLoaders[path];
-        if (typeof loader !== "function") return;
-        const loaded = await loader();
-        const translations = loaded?.default ?? loaded;
-        if (!translations || typeof translations !== "object") return;
-        this.i18n.global.mergeLocaleMessage(locale, {
-          modules: { [moduleId]: translations },
-        });
-      })
-    )
-      .then(() => {
-        _translationsLoaded.add(moduleId);
-      })
-      .catch((error) => {
-        _translationPromises.delete(moduleId);
-        Telemetry.captureException(error, {
-          source: "module_translation_load",
-          module_id: moduleId,
-        });
-        // Tradução é melhoria de conteúdo, não pré-condição para montar a aba.
-        // Em offline/chunk desatualizado a tela funcional ainda deve abrir com
-        // os títulos de metadata e as chaves globais disponíveis.
-        return undefined;
-      });
-
-    _translationPromises.set(moduleId, promise);
-    return promise;
+    return ensureModuleTranslations(moduleId);
   },
 
   /**

@@ -97,12 +97,9 @@ import { KEYS } from "@/constants/UserDataKeys";
 import { SETTINGS_TABLE } from "@/constants/DbTables";
 import type { YTAPI, YTPlayer } from "@/types/Media";
 import { loadYtApi } from "@/composables/useYouTubeApi";
-import { getDocument, GlobalWorkerOptions } from "pdfjs-dist";
-import pdfjsWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import { loadPdfDocument, type PDFDocumentProxy } from "@/helpers/PdfRuntime";
 import Telemetry from "@/helpers/Telemetry";
 import { normalizeYouTubeError } from "@/helpers/YouTubeError";
-
-GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
 /* ── Background state ── */
 
@@ -168,7 +165,7 @@ let ytPlayer: YTPlayer | null = null;
 
 /* ── PDF state ── */
 const pdfCanvas = ref<HTMLCanvasElement | null>(null);
-let pdfDoc: import("pdfjs-dist").PDFDocumentProxy | null = null;
+let pdfDoc: PDFDocumentProxy | null = null;
 let currentPdfPage = ref(1);
 let _ytInitializing = false;
 const ytFailed = ref(false);
@@ -437,8 +434,7 @@ function onKey(e: KeyboardEvent): void {
 
 async function loadPdf(url: string, pageNum: number): Promise<void> {
   try {
-    const loadingTask = getDocument({ url });
-    pdfDoc = await loadingTask.promise;
+    pdfDoc = await loadPdfDocument({ url });
     currentPdfPage.value = pageNum;
     await renderPdfPage(pageNum);
   } catch (err) {

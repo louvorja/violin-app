@@ -66,8 +66,7 @@ import {
   YTPlayer,
 } from "@/types/Media";
 import { loadYtApi } from "@/composables/useYouTubeApi";
-import { getDocument, GlobalWorkerOptions } from "pdfjs-dist";
-import pdfjsWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import { loadPdfDocument, type PDFDocumentProxy } from "@/helpers/PdfRuntime";
 import $userdata from "@/helpers/UserData";
 import { getSetting } from "@/helpers/SettingsStorage";
 import { Settings } from "@/types/Settings";
@@ -77,8 +76,6 @@ import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 import Telemetry from "@/helpers/Telemetry";
 import { normalizeYouTubeError } from "@/helpers/YouTubeError";
 import { syncVideoElement } from "@/helpers/VideoSync";
-
-GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
 function getYT(): YTAPI | null {
   return (window as unknown as { YT?: YTAPI }).YT ?? null;
@@ -98,7 +95,7 @@ const videoFailed = ref(false);
 const ytContainer = ref<HTMLDivElement | null>(null);
 const pdfCanvas = ref<HTMLCanvasElement | null>(null);
 
-let pdfDoc: import("pdfjs-dist").PDFDocumentProxy | null = null;
+let pdfDoc: PDFDocumentProxy | null = null;
 
 let ytPlayer: YTPlayer | null = null;
 let ytSyncTimer: ReturnType<typeof setInterval> | null = null;
@@ -159,7 +156,7 @@ async function loadPdf(url: string, pageNum = 1): Promise<void> {
     const data = await fetchWithTimeout(url, { timeout: NET_TIMEOUT.MEDIA, source: "file" }).then(
       (r) => r.arrayBuffer()
     );
-    pdfDoc = await getDocument({ data }).promise;
+    pdfDoc = await loadPdfDocument({ data });
     fileProjection.totalPages = pdfDoc.numPages;
     await renderPdfPage(pageNum);
     Broadcast.send(BROADCAST_TYPE.FILE_PROJECTION_PAGE, {
