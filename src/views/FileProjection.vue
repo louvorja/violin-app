@@ -76,6 +76,7 @@ import Telemetry from "@/helpers/Telemetry";
 import { normalizeYouTubeError } from "@/helpers/YouTubeError";
 import { syncVideoElement } from "@/helpers/VideoSync";
 import { VideoStateGate } from "@/helpers/VideoStateVersion";
+import { VideoFrameConfirmation } from "@/helpers/VideoFrameConfirmation";
 
 function getYT(): YTAPI | null {
   return (window as unknown as { YT?: YTAPI }).YT ?? null;
@@ -93,6 +94,10 @@ const fileProjection = reactive<FileProjectionState>({
 const videoRef = ref<HTMLVideoElement | null>(null);
 const videoFailed = ref(false);
 const videoStateGate = new VideoStateGate();
+const videoFrameConfirmation = new VideoFrameConfirmation(
+  "file_projection_video",
+  (event, properties) => Telemetry.track(event, properties)
+);
 const ytContainer = ref<HTMLDivElement | null>(null);
 const pdfCanvas = ref<HTMLCanvasElement | null>(null);
 
@@ -276,6 +281,7 @@ function onVideoBuffering(event: Event): void {
 function onVideoError(event: Event): void {
   const el = event.currentTarget as HTMLVideoElement | null;
   videoFailed.value = true;
+  videoFrameConfirmation.cancel();
   const code = el?.error?.code;
   const reason = code === 3 ? "decode" : code === 4 ? "source_not_supported" : "unknown";
   const error = new Error(`File projection video ${reason}`);
@@ -406,7 +412,8 @@ useBroadcastListener(BROADCAST_TYPE.VIDEO_STATE, (payload: unknown) => {
   }
 
   try {
-    syncVideoElement(el, data);
+    const syncAction = syncVideoElement(el, data);
+    videoFrameConfirmation.observe(el, data, syncAction);
   } catch {
     /* metadata ainda não chegou */
   }
@@ -658,6 +665,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(async () => {
+  videoFrameConfirmation.dispose();
   if (wpBlobUrl) URL.revokeObjectURL(wpBlobUrl);
   if (pdfDoc) {
     try {
