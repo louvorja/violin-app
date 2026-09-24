@@ -23,7 +23,13 @@ function readSlide(value: unknown): MusicSlide | null | undefined {
   const slide: Record<string, unknown> = {};
   for (const key of fields) {
     const field = value[key];
+    // Product fixtures/data use null for optional imagery; preserve it so the
+    // normalized shadow compares equal to the legacy selection.
     if (field === undefined) continue;
+    if (field === null && key !== "cover" && key !== "lyric") {
+      slide[key] = null;
+      continue;
+    }
     if (key === "cover") {
       if (typeof field !== "boolean") return undefined;
     } else if (key === "image_position" && typeof field === "number") {
@@ -103,6 +109,7 @@ export class MusicShadowReceiver {
   private legacy: { sessionId: string; revision: number; selection: LegacySelection } | null = null;
   private suspended = false;
   private reportedSession: string | null = null;
+  private _comparisonCount = 0;
 
   receive(value: unknown): void {
     const packet = readMusicShadowPacket(value);
@@ -159,8 +166,13 @@ export class MusicShadowReceiver {
     )
       return [];
     const differences = musicSnapshotDifferences(packet.snapshot, legacy.selection);
+    if (this._comparisonCount < Number.MAX_SAFE_INTEGER) this._comparisonCount++;
     if (differences.length) this.reportedSession = legacy.sessionId;
     return differences;
+  }
+
+  comparisonCount(): number {
+    return this._comparisonCount;
   }
 
   snapshot(): MusicSnapshot | null {

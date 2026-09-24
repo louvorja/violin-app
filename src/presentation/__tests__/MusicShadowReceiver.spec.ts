@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { MusicPresentationCore } from "../MusicPresentationCore";
 import { MusicShadowReceiver, readMusicShadowPacket } from "../MusicShadowReceiver";
 import { createMusicShadowSessionFactory } from "@/helpers/MusicShadowSession";
+import music1 from "../../../e2e/fixtures/music_1.json";
 
 function fixture(sessionId = "session-a") {
   const core = new MusicPresentationCore(
@@ -66,14 +67,56 @@ describe("auxiliary music snapshot shadow", () => {
     expect(readMusicShadowPacket(lastSlide)?.snapshot.nextSlide).toBeNull();
   });
 
+  it("normalizes null optional image fields from the real music fixture", () => {
+    const packet = fixture();
+    const lyric = Object.values(music1.lyric)[0];
+    const fromMusicFixture = {
+      ...packet,
+      snapshot: {
+        ...packet.snapshot,
+        slide: {
+          lyric: music1.name,
+          cover: true,
+          url_image: music1.url_image,
+          image_position: music1.image_position,
+        },
+        nextSlide: {
+          lyric: lyric.lyric.replace(/[\r\n]+/g, "<br>"),
+          cover: false,
+          url_image: music1.url_image,
+          image_position: music1.image_position,
+        },
+      },
+    };
+    const normalized = readMusicShadowPacket(fromMusicFixture);
+    expect(normalized?.snapshot.slide).toEqual({
+      lyric: "Aleluia",
+      cover: true,
+      url_image: null,
+      image_position: null,
+    });
+    expect(normalized?.snapshot.nextSlide).toEqual({
+      lyric: "Aleluia<br>Glória ao Senhor",
+      cover: false,
+      url_image: null,
+      image_position: null,
+    });
+    const receiver = new MusicShadowReceiver();
+    receiver.observe("session-a", 7, normalized!.snapshot);
+    receiver.receive(normalized);
+    expect(receiver.takeDifferences()).toEqual([]);
+  });
+
   it("waits for matching legacy revision in either delivery order", () => {
     const receiver = new MusicShadowReceiver();
     const packet = fixture();
     receiver.receive(packet);
     receiver.observe("session-a", 6, { ...packet.snapshot, title: "Earlier title" });
     expect(receiver.takeDifferences()).toEqual([]);
+    expect(receiver.comparisonCount()).toBe(0);
     receiver.observe("session-a", 7, packet.snapshot);
     expect(receiver.takeDifferences()).toEqual([]);
+    expect(receiver.comparisonCount()).toBe(1);
     const next = {
       ...packet,
       legacyRevision: 8,
@@ -83,6 +126,7 @@ describe("auxiliary music snapshot shadow", () => {
     expect(receiver.takeDifferences()).toEqual([]);
     receiver.receive(next);
     expect(receiver.takeDifferences()).toEqual([]);
+    expect(receiver.comparisonCount()).toBe(2);
     receiver.receive(packet);
     expect(receiver.snapshot()?.title).toBe("New title");
   });
@@ -104,6 +148,7 @@ describe("auxiliary music snapshot shadow", () => {
     receiver.observe("session-a", 20, { ...latest.snapshot, title: "Wrong legacy title" });
     expect(receiver.takeDifferences()).toEqual(["title"]);
     expect(receiver.takeDifferences()).toEqual([]);
+    expect(receiver.comparisonCount()).toBe(2);
   });
 
   it("does not confuse Bible, close timing or old sessions with divergence", () => {
