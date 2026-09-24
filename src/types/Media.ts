@@ -33,6 +33,8 @@ export interface VideoMediaState {
   /** YouTube PlayerState, quando a origem é a projeção online. */
   state?: number;
   playback_id?: string;
+  /** Sequência monotônica dentro de um playback; começa em 1. */
+  revision?: number;
   /** `Date.now()` de quando o estado foi lido; quem recebe compensa a idade da mensagem. */
   sentAt?: number;
 }

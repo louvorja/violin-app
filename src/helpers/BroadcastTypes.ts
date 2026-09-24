@@ -150,7 +150,7 @@ export const BROADCAST_TYPE = Object.freeze({
   SLIDE_BG_CHANGED: "slide_bg_changed",
 
   /** Sincronização de vídeo entre o player principal e a projeção.
-   *  Payload: { currentTime: number, isPaused: boolean }
+   *  Payload: { currentTime, isPaused, duration, sentAt, playback_id, revision }
    *  Emitido por: useMedia.ts (onTimeUpdate + goToTime + pause/play).
    *  Recebido por: FileProjection.vue (sincroniza o <video> com o <audio>). */
   VIDEO_STATE: "video_state",

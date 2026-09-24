@@ -56,7 +56,6 @@ import { estiloDeFundo } from "@/helpers/BackgroundStyle";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import Broadcast from "@/helpers/Broadcast";
-import Media from "@/composables/useMedia";
 import OverlayRenderer from "@/components/OverlayRenderer.vue";
 import {
   FileProjectionState,
@@ -77,6 +76,7 @@ import Telemetry from "@/helpers/Telemetry";
 import { normalizeYouTubeError } from "@/helpers/YouTubeError";
 import { syncVideoElement } from "@/helpers/VideoSync";
 import $idb from "@/helpers/IndexedDB";
+import { VideoStateGate } from "@/helpers/VideoStateVersion";
 
 function getYT(): YTAPI | null {
   return (window as unknown as { YT?: YTAPI }).YT ?? null;
@@ -93,6 +93,7 @@ const fileProjection = reactive<FileProjectionState>({
 
 const videoRef = ref<HTMLVideoElement | null>(null);
 const videoFailed = ref(false);
+const videoStateGate = new VideoStateGate();
 const ytContainer = ref<HTMLDivElement | null>(null);
 const pdfCanvas = ref<HTMLCanvasElement | null>(null);
 const ready = ref<boolean>(false);
@@ -196,6 +197,8 @@ async function _activateProjection(p: FileProjectionState): Promise<void> {
   fileProjection.url = p.url || "";
   fileProjection.title = p.title || "";
   fileProjection.playback_id = p.playback_id;
+  videoStateGate.begin(p.playback_id);
+  Telemetry.setRuntimeContext({ playback_id: p.playback_id ?? null });
   console.log("[FileProjectionReturn] Ativado:", p.type, p.url?.substring(0, 60));
   if (p.type === "video") {
     videoFailed.value = false;
@@ -375,6 +378,8 @@ useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, async () => {
   }
   pdfDoc = null;
   fileProjection.active = false;
+  videoStateGate.clear();
+  Telemetry.setRuntimeContext({ playback_id: null, presentation_revision: null });
   try {
     localStorage.removeItem(KEYS.PROJECTION.LJ_FILE_PROJECTION);
     localStorage.removeItem(KEYS.PROJECTION.LJ_YOUTUBE_PROJECTION);
@@ -385,9 +390,10 @@ useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, async () => {
 
 useBroadcastListener(BROADCAST_TYPE.VIDEO_STATE, (payload: unknown) => {
   if (!fileProjection.active || fileProjection.type !== "video") return;
+  const data = payload as VideoMediaState;
+  if (!videoStateGate.accepts(data)) return;
   const el = videoRef.value;
   if (!el) return;
-  const data = payload as VideoMediaState;
 
   if (typeof data.isPaused === "boolean") {
     if (data.isPaused && !el.paused) {
@@ -412,8 +418,9 @@ useBroadcastListener(BROADCAST_TYPE.VIDEO_STATE, (payload: unknown) => {
 
 useBroadcastListener(BROADCAST_TYPE.VIDEO_STATE, (payload: unknown) => {
   if (!fileProjection.active || fileProjection.type !== "youtube") return;
-  if (!ytPlayer || !ytPlayer.getCurrentTime) return;
   const data = payload as VideoMediaState;
+  if (!videoStateGate.accepts(data)) return;
+  if (!ytPlayer || !ytPlayer.getCurrentTime) return;
   try {
     const diff = Math.abs(
       ytPlayer.getCurrentTime() - (typeof data.currentTime === "number" ? data.currentTime : 0)
@@ -525,11 +532,6 @@ function _initYoutube(): void {
             window_role: "auxiliary_return",
           });
           _broadcastYtState();
-          const yt = getYT();
-          if (e.data === yt?.PlayerState.ENDED) {
-            Broadcast.send(BROADCAST_TYPE.MEDIA_CLOSE, {});
-            Media.close(true);
-          }
         },
         onError: (e: unknown) => {
           const normalized = normalizeYouTubeError(e);

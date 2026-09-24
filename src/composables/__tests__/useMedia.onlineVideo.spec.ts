@@ -23,6 +23,7 @@ const h = vi.hoisted(() => ({
   openWindows: vi.fn(async () => {}),
   closeWindows: vi.fn(async () => {}),
   send: vi.fn(),
+  listeners: new Set<(_msg: { type: string; payload?: unknown }) => void>(),
 }));
 
 vi.mock("@/helpers/OnlineVideo", async (importOriginal) => ({
@@ -45,7 +46,17 @@ vi.mock("@/helpers/ProjectionWindows", async (importOriginal) => ({
 }));
 vi.mock("@/helpers/Broadcast", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/helpers/Broadcast")>();
-  return { ...original, default: { ...original.default, send: h.send } };
+  return {
+    ...original,
+    default: {
+      ...original.default,
+      send: h.send,
+      listen: vi.fn((callback: (_msg: { type: string; payload?: unknown }) => void) => {
+        h.listeners.add(callback);
+        return () => h.listeners.delete(callback);
+      }),
+    },
+  };
 });
 
 type Media = typeof import("@/composables/useMedia").default;
@@ -104,6 +115,8 @@ beforeEach(async () => {
   h.error.mockClear();
   h.openWindows.mockClear();
   h.closeWindows.mockClear();
+  h.send.mockClear();
+  h.listeners.clear();
   openAudio = vi.spyOn(media, "openAudio").mockResolvedValue(undefined);
   mediaSpies = [
     vi.spyOn(HTMLMediaElement.prototype, "readyState", "get").mockImplementation(() => h.ready),
@@ -694,5 +707,79 @@ describe("trocar de um vídeo embutido para outro", () => {
 
     expect(h.closeWindows).not.toHaveBeenCalled();
     expect(h.openWindows).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("fim natural do player embutido", () => {
+  it("a Shell encerra somente o playback YouTube ativo ao receber state 0", async () => {
+    await media.openEmbeddedYouTube(embed(ID), "Vídeo 1");
+    const projection = h.send.mock.calls.find(
+      ([type]) => type === BROADCAST_TYPE.ONLINE_VIDEO_PROJECTION
+    )?.[1] as { playback_id?: string } | undefined;
+    expect(projection?.playback_id).toBeTruthy();
+
+    const close = vi.spyOn(media, "close");
+    const emitState = (playback_id?: string) => {
+      for (const listener of [...h.listeners]) {
+        listener({
+          type: BROADCAST_TYPE.YOUTUBE_STATE,
+          payload: { state: 0, playback_id, currentTime: 10, duration: 10, isPaused: true },
+        });
+      }
+    };
+
+    emitState();
+    emitState("playback-obsoleto");
+    expect(close).not.toHaveBeenCalled();
+
+    emitState(projection?.playback_id as string);
+    emitState(projection?.playback_id as string);
+    expect(close).toHaveBeenCalledOnce();
+    expect(close).toHaveBeenCalledWith(true);
+    expect(h.send).toHaveBeenCalledWith(BROADCAST_TYPE.MEDIA_CLOSE);
+
+    close.mockRestore();
+  });
+});
+
+describe("sincronia versionada do vídeo local", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("republica a identidade da projeção e incrementa revision no mesmo playback", async () => {
+    const url = "louvorja://onlinevideo/video-state.mp4";
+    const guardado = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => guardado.get(key) ?? null,
+      setItem: (key: string, value: string) => void guardado.set(key, value),
+      removeItem: (key: string) => void guardado.delete(key),
+    });
+    localStorage.setItem(
+      KEYS.PROJECTION.LJ_FILE_PROJECTION,
+      JSON.stringify({ url, type: "video", title: "Vídeo local", fadeDuration: 250 })
+    );
+    openAudio.mockRestore();
+
+    await media.openAudio({ url, title: "Vídeo local", mediaType: "video" });
+
+    const identity = h.send.mock.calls.find(
+      ([type]) => type === BROADCAST_TYPE.FILE_PROJECTION
+    )?.[1] as { playback_id?: string; fadeDuration?: number } | undefined;
+    expect(identity).toMatchObject({ playback_id: expect.any(String), fadeDuration: 250 });
+
+    media.goToTime(5);
+    media.goToTime(8);
+    const states = h.send.mock.calls
+      .filter(([type]) => type === BROADCAST_TYPE.VIDEO_STATE)
+      .map(([, payload]) => payload as { playback_id?: string; revision?: number });
+
+    expect(states).toHaveLength(2);
+    expect(states).toEqual([
+      expect.objectContaining({ playback_id: identity?.playback_id, revision: 1 }),
+      expect.objectContaining({ playback_id: identity?.playback_id, revision: 2 }),
+    ]);
+
+    media.close(true);
   });
 });

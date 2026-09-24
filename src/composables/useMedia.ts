@@ -37,6 +37,7 @@ import Telemetry from "@/helpers/Telemetry";
 import * as OnlineVideo from "@/helpers/OnlineVideo";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
 import { useOnlineVideoDownloads } from "@/composables/useOnlineVideoDownloads";
+import { VideoStateRevisionCounter } from "@/helpers/VideoStateVersion";
 
 const _audio = useAudioPlayback();
 const _slides = useSlides();
@@ -53,6 +54,7 @@ let _audioXhr: XMLHttpRequest | null = null;
 // e chegar ao fim dela não é motivo para encerrar a música.
 let _switchingMode = false;
 let _activePlayback: AudioTelemetryContext | null = null;
+const _videoStateRevisions = new VideoStateRevisionCounter();
 
 // typeof null === "object": sem tratar null aqui, open(null) estourava lendo params.mode.
 function _openParams(params: MediaOpenParams | string | number | null | undefined): MediaOpenParams {
@@ -90,6 +92,11 @@ function _sourceType(url: string): string {
 
 function _setPlaybackContext(context: AudioTelemetryContext | null): void {
   _activePlayback = context;
+  if (!context) _videoStateRevisions.reset();
+  Telemetry.setRuntimeContext({
+    playback_id: context?.playback_id ?? null,
+    presentation_revision: null,
+  });
   _audio.setTelemetryContext(context);
 }
 
@@ -101,11 +108,35 @@ let _ytStateReceived = false;
 
 function _broadcastVideoState(currentTime?: number, isPaused?: boolean): void {
   if (!$appdata.get(KEYS.MODULES.MEDIA.CONFIG.VIDEO_FILE)) return;
+  const version = _videoStateRevisions.next(_activePlayback?.playback_id);
+  if (!version) return;
   $broadcast.send(BROADCAST_TYPE.VIDEO_STATE, {
     currentTime: currentTime ?? _audio.currentTime.value,
     isPaused: isPaused ?? _audio.isPaused.value,
+    duration: _audio.duration.value,
     sentAt: Date.now(),
+    ...version,
   });
+}
+
+/**
+ * Os fluxos de liturgia/acervo abrem a janela antes do player principal.
+ * Assim que `openAudio` reserva o playback, republicamos o mesmo payload com
+ * sua identidade para que estados atrasados do vídeo anterior sejam rejeitados.
+ */
+function _publishVideoProjectionIdentity(playbackId: string, projectionUrl: string): void {
+  try {
+    const stored = localStorage.getItem(KEYS.PROJECTION.LJ_FILE_PROJECTION);
+    if (!stored) return;
+    const payload = JSON.parse(stored) as Record<string, unknown>;
+    if (payload.type !== "video" || payload.url !== projectionUrl) return;
+    if (payload.playback_id === playbackId) return;
+    const versionedPayload = { ...payload, playback_id: playbackId };
+    localStorage.setItem(KEYS.PROJECTION.LJ_FILE_PROJECTION, JSON.stringify(versionedPayload));
+    $broadcast.send(BROADCAST_TYPE.FILE_PROJECTION, versionedPayload);
+  } catch {
+    /* cache opcional; o primeiro VIDEO_STATE ainda pode vincular um receiver legado */
+  }
 }
 
 function _isYouTube(): boolean {
@@ -1621,6 +1652,9 @@ const _self = {
       });
       $appdata.set(KEYS.MODULES.MEDIA.CONFIG.AUDIO, audioUrl);
       $appdata.set(KEYS.MODULES.MEDIA.CONFIG.VIDEO_SRC, params.videoUrl || "");
+      if (isVideo) {
+        _publishVideoProjectionIdentity(playback_id, params.videoUrl || audioUrl);
+      }
 
       const volume = $appdata.get(KEYS.MODULES.MEDIA.CONFIG.VOLUME);
       _audio.setVolume(volume as number);
@@ -1863,6 +1897,17 @@ const _self = {
               _telemetryFor(youtubeContext, { ended_reason: "youtube_ended" })
             );
           _ytLastState = p.state;
+        }
+        if (
+          p.state === 0 &&
+          p.playback_id === playback_id &&
+          _isYouTube() &&
+          _activePlayback?.playback_id === playback_id
+        ) {
+          // A janela apenas reporta o fim; a Shell é a dona do lifecycle e
+          // publica MEDIA_CLOSE uma única vez para todas as projeções.
+          _self.close(true);
+          return;
         }
       }
       _audio.currentTime.value =
