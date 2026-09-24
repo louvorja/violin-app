@@ -111,8 +111,8 @@ const _MIME_TYPES = {
  * pedaço que já tinha em mãos. Avançar um slide para além disso encostava no
  * "fim" e encerrava o hino no meio do culto.
  */
-function _responderArquivo(caminho, request) {
-  const fileSize = fs.statSync(caminho).size;
+async function _responderArquivo(caminho, request) {
+  const fileSize = (await fs.stat(caminho)).size;
   const rangeHeader = request.headers.get("range");
   const match = rangeHeader && rangeHeader.match(/^bytes=(\d+)-(\d*)$/);
 
@@ -268,7 +268,7 @@ function handle() {
         // CSP defense-in-depth: aplica política estrita para páginas que NÃO
         // são projeção de vídeo (YouTube IFrame API precisa de 'unsafe-inline').
         const isFileVideoProjection = url.hash?.startsWith("#/projection/file");
-        const response = fs.existsSync(localPath)
+        const response = (await fs.pathExists(localPath))
           ? await electron.net.fetch(pathToFileURL(localPath).toString())
           : await electron.net.fetch(pathToFileURL(path.join(distDir, "index.html")).toString());
 
@@ -340,7 +340,7 @@ function handle() {
         const m = /^\/([A-Za-z0-9_-]{11})\.mp4$/.exec(pathname);
         const file = m ? onlineVideo.fileFor(m[1]) : null;
         if (!file) return new Response("Not found", { status: 404 });
-        return _responderArquivo(file, request);
+        return await _responderArquivo(file, request);
       }
 
       // ------------------------------------------------------------------
@@ -389,9 +389,9 @@ function handle() {
         // Prioriza o que já está no disco, em qualquer origem de leitura: a
         // pasta de dados e, quando configurado, o acervo da versão clássica —
         // aceitando .mp3 onde o banco pede .opus, e .bmp onde pede .jpg.
-        const achado = mediaResolver.resolveReadSync(rawRelative);
+        const achado = await mediaResolver.resolveRead(rawRelative);
         if (achado) {
-          return _responderArquivo(achado.path, request);
+          return await _responderArquivo(achado.path, request);
         }
 
         // Fallback: stream remoto. Cacheia se for request "completo" (sem Range).
@@ -474,11 +474,11 @@ function handle() {
           return new Response("Forbidden", { status: 403 });
         }
 
-        if (!fs.existsSync(raw)) {
+        if (!(await fs.pathExists(raw))) {
           return new Response("Not found", { status: 404 });
         }
 
-        return _responderArquivo(raw, request);
+        return await _responderArquivo(raw, request);
       }
 
       // Host desconhecido

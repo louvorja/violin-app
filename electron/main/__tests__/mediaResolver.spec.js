@@ -47,7 +47,7 @@ describe("mediaResolver", () => {
     expect(achado.path).toBe(join(CLASSICA, "musicas", "Album", "Faixa.mp3"));
   });
 
-  it("a versão síncrona, usada pelo protocolo, chega ao mesmo lugar", () => {
+  it("a versão síncrona mantém a mesma resolução do acervo clássico", () => {
     const achado = resolver.resolveReadSync("covers/10.jpg");
     expect(achado.origin).toBe("classic");
     expect(achado.path).toBe(join(CLASSICA, "capas", "10.bmp"));
