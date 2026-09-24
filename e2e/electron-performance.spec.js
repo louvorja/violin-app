@@ -5,6 +5,12 @@
  * Rode com:
  *   VITE_TARGET=desktop LJ_RUN_ELECTRON_PERF=1 \
  *     npx playwright test e2e/electron-performance.spec.js
+ * PowerShell:
+ *   $env:VITE_TARGET="desktop"; $env:LJ_RUN_ELECTRON_PERF="1"
+ *   npx playwright test e2e/electron-performance.spec.js
+ *
+ * A GPU fica habilitada, como no aplicativo real. Para uma comparacao
+ * diagnostica isolada, use explicitamente LJ_ELECTRON_DISABLE_GPU=1.
  *
  * A suíte é opt-in porque precisa iniciar uma aplicação Electron real e deve
  * rodar em uma máquina/runner por vez.
@@ -15,6 +21,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import nodeProcess from "node:process";
+import { closeElectronApp } from "./helpers/electron-processes.mjs";
 
 test.skip(!nodeProcess.env.LJ_RUN_ELECTRON_PERF, "Electron performance test is opt-in");
 
@@ -66,6 +73,7 @@ test("Electron mantém a reabertura da aba estável", async () => {
   fs.writeFileSync(path.join(root, "json_db", "pt_musics.json"), JSON.stringify(musicFixture()));
 
   const packagedExecutable = nodeProcess.env.LJ_ELECTRON_EXECUTABLE;
+  const disableGpu = nodeProcess.env.LJ_ELECTRON_DISABLE_GPU === "1";
   const env = { ...nodeProcess.env, LJ_E2E_USER_DATA: root };
   if (packagedExecutable) {
     delete env.ELECTRON_DEV;
@@ -77,9 +85,11 @@ test("Electron mantém a reabertura da aba estável", async () => {
   let electronApp;
   try {
     const launchStartedAt = Date.now();
+    const launchArgs = packagedExecutable ? [] : ["."];
+    if (disableGpu) launchArgs.push("--disable-gpu");
     electronApp = await electron.launch({
       executablePath: packagedExecutable || undefined,
-      args: packagedExecutable ? ["--disable-gpu"] : [".", "--disable-gpu"],
+      args: launchArgs,
       cwd: nodeProcess.cwd(),
       env,
       timeout: 60_000,
@@ -192,9 +202,19 @@ test("Electron mantém a reabertura da aba estável", async () => {
     };
 
     const after = await processMetrics(electronApp);
+    const gpuFeatureStatus = await electronApp.evaluate(({ app }) => app.getGPUFeatureStatus());
+    const gpuInfo = await electronApp.evaluate(({ app }) => app.getGPUInfo("basic"));
     const result = {
       platform: nodeProcess.platform,
       electron: await electronApp.evaluate(() => globalThis.process.versions.electron),
+      packaged: !!packagedExecutable,
+      gpu_disabled: disableGpu,
+      gpu_feature_status: gpuFeatureStatus,
+      gpu_info: gpuInfo,
+      cpu_model: os.cpus()[0]?.model ?? null,
+      logical_cpu_count: os.cpus().length,
+      total_memory_mb: Math.round(os.totalmem() / 1024 / 1024),
+      cpu_throttle: Number(nodeProcess.env.LJ_PERF_CPU || 6),
       boot_ms: Date.now() - launchStartedAt,
       settings_immediate: settingsImmediate,
       settings_first_after_idle: settingsFirst,
@@ -220,7 +240,11 @@ test("Electron mantém a reabertura da aba estável", async () => {
     expect(search.rows).toBe(1);
     expect(search.duration_ms).toBeLessThan(3_000);
   } finally {
-    await electronApp?.close().catch(() => {});
-    fs.rmSync(root, { recursive: true, force: true });
+    const electronPid = electronApp?.process()?.pid;
+    const closed = await closeElectronApp(electronApp);
+    if (closed.forced) {
+      console.warn(`[perf] Electron PID ${electronPid} exigiu encerramento forçado`);
+    }
+    fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   }
 });

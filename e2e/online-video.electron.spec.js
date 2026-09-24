@@ -7,9 +7,15 @@
  *   VITE_TARGET=desktop npx vite --port 5002 --strictPort
  *   LJ_RUN_ELECTRON_ONLINE_VIDEO=1 npx playwright test e2e/online-video.electron.spec.js \
  *     --reporter=line
+ * PowerShell (em dois terminais):
+ *   $env:VITE_TARGET="desktop"; npx vite --port 5002 --strictPort
+ *   $env:LJ_RUN_ELECTRON_ONLINE_VIDEO="1"
+ *   npx playwright test e2e/online-video.electron.spec.js --reporter=line
  *
  * É opt-in: baixa ~130 MB na primeira vez e abre janelas de verdade na tela.
  * Usa um perfil isolado (LJ_E2E_USER_DATA), então convive com o app do usuário.
+ * Windows usa PowerShell apenas para observar subprocessos e taskkill somente
+ * como fallback se o encerramento coordenado do Electron não responder.
  */
 import { test, expect } from "@playwright/test";
 import { _electron as electron } from "playwright";
@@ -18,10 +24,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import nodeProcess from "node:process";
-import { execFileSync } from "node:child_process";
+import { closeElectronApp, processesMentioning } from "./helpers/electron-processes.mjs";
 
 test.skip(
-  !nodeProcess.env.LJ_RUN_ELECTRON_ONLINE_VIDEO || nodeProcess.platform === "win32",
+  !nodeProcess.env.LJ_RUN_ELECTRON_ONLINE_VIDEO,
   "opt-in: precisa de Electron real e internet"
 );
 test.describe.configure({ mode: "serial" });
@@ -35,6 +41,7 @@ const MISSING = "zzzzzzzzzzz";
 const embed = (id) => `https://www.youtube.com/embed/${id}?autoplay=1&rel=0&controls=0`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+const toolName = (name) => `${name}${nodeProcess.platform === "win32" ? ".exe" : ""}`;
 
 let app;
 let main;
@@ -202,17 +209,6 @@ function externalAdOrYoutube(list) {
     .map((r) => `${r.page} ${r.url}`);
 }
 
-function processesMentioning(needle) {
-  try {
-    const out = execFileSync("ps", ["-axo", "pid,command"], { encoding: "utf8" });
-    return out
-      .split("\n")
-      .filter((l) => l.includes(needle) && !l.includes("playwright") && !l.includes("ps -axo"));
-  } catch {
-    return [];
-  }
-}
-
 async function closeMedia() {
   await media("close", true);
   await until(() => auxiliaries().length === 0, {
@@ -284,14 +280,14 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  if (app) {
-    try {
-      nodeProcess.kill(app.process().pid, "SIGKILL");
-    } catch {
-      /* já saiu */
-    }
+  const electronPid = app?.process()?.pid;
+  const closed = await closeElectronApp(app);
+  if (closed.forced) {
+    console.warn(`[e2e] Electron PID ${electronPid} exigiu encerramento forçado`);
   }
-  if (root) fs.rmSync(root, { recursive: true, force: true });
+  if (root) {
+    fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  }
 });
 
 test.describe("primeiro uso: instala as ferramentas e baixa um 1080p", () => {
@@ -480,7 +476,7 @@ test.describe("primeiro uso: instala as ferramentas e baixa um 1080p", () => {
   test("fechar derruba as janelas, o áudio e não deixa processo de download", async () => {
     await closeMedia();
     expect((await readAudio()).paused).toBe(true);
-    expect(processesMentioning(LONG)).toEqual([]);
+    expect(await processesMentioning(LONG)).toEqual([]);
     expect((await status()).count).toBe(1); // o arquivo continua no cache
   });
 });
@@ -584,7 +580,7 @@ test.describe("quando algo dá errado", () => {
   });
 
   test("binário corrompido: o download reinstala as ferramentas e o vídeo baixa", async () => {
-    const ffmpeg = path.join(root, "bin", "ffmpeg");
+    const ffmpeg = path.join(root, "bin", toolName("ffmpeg"));
     fs.writeFileSync(ffmpeg, Buffer.from([0, 1, 2, 3, 4, 5]), { mode: 0o755 });
     await removeFromList(SHORT);
 
@@ -617,7 +613,7 @@ test.describe("quando algo dá errado", () => {
 
     expect(await downloading).toBe(false);
     await sleep(2500);
-    expect(processesMentioning(LONG)).toEqual([]);
+    expect(await processesMentioning(LONG)).toEqual([]);
     expect(auxiliaries().length).toBe(0);
     expect((await status()).active).toEqual([]);
     expect((await tasks()).some((t) => t.id === `online-video:${LONG}`)).toBe(false);
@@ -682,7 +678,7 @@ test.describe("quando algo dá errado", () => {
     expect(await opening).toBe(false);
     await sleep(3000);
     expect(auxiliaries().length).toBe(0);
-    expect(processesMentioning(LONG)).toEqual([]);
+    expect(await processesMentioning(LONG)).toEqual([]);
     expect(await cached(LONG)).toBe(false);
     expect((await status()).active).toEqual([]);
   });
@@ -699,7 +695,7 @@ test.describe("quando algo dá errado", () => {
     await playLocal(SHORT, "Outro");
     expect(await opening).toBe(false);
     await sleep(2500);
-    expect(processesMentioning(LONG)).toEqual([]);
+    expect(await processesMentioning(LONG)).toEqual([]);
     expect(await cached(LONG)).toBe(false);
     expect(auxiliaries().length).toBe(0); // o vídeo cancelado não abriu nada no telão
     await media("close", true);
@@ -954,7 +950,7 @@ test.describe("Meus vídeos online: baixar de antemão e gerenciar", () => {
     await action(NAME_LONG, BTN.cancel).click();
     await expect(action(NAME_LONG, BTN.download)).toBeVisible({ timeout: 10_000 });
     await sleep(2500);
-    expect(processesMentioning(LONG)).toEqual([]);
+    expect(await processesMentioning(LONG)).toEqual([]);
     expect((await status()).active).toEqual([]);
     expect((await tasks()).some((t) => t.id === `online-video:${LONG}`)).toBe(false);
     expect(await onDisk(LONG)).toBeFalsy();
@@ -1094,7 +1090,7 @@ test.describe("Meus vídeos online: baixar de antemão e gerenciar", () => {
       expect(file.size).toBeGreaterThan(50_000_000);
       expect((await status()).active).toEqual([]);
       expect((await snackbar()) ?? "").not.toMatch(/Não foi possível/);
-      expect(processesMentioning(LONG), "o yt-dlp não baixa de novo").toEqual([]);
+      expect(await processesMentioning(LONG), "o yt-dlp não baixa de novo").toEqual([]);
 
       // Acabar de baixar não troca o que está no ar.
       await sleep(1_500);
@@ -1294,14 +1290,20 @@ test.describe("Meus vídeos online: baixar de antemão e gerenciar", () => {
     });
 
     test("com o yt-dlp quebrado: cai no player do YouTube (avisando), e o download ao fundo renova o yt-dlp", async () => {
-      const ytdlp = path.join(root, "bin", "yt-dlp");
+      const ytdlp = path.join(root, "bin", toolName("yt-dlp"));
       await removeFromDisk(LONG);
-      fs.writeFileSync(
-        ytdlp,
-        '#!/bin/sh\nif [ "$1" = "--version" ]; then echo 2020.01.01; exit 0; fi\n' +
-          "echo 'ERROR: algo que só uma versão nova entende' >&2\nexit 1\n",
-        { mode: 0o755 }
-      );
+      if (nodeProcess.platform === "win32") {
+        // Um PE inválido produz a mesma categoria de erro de ferramenta e força
+        // o caminho real de reset/reinstalação, sem depender de bash no Windows.
+        fs.writeFileSync(ytdlp, Buffer.from([0, 1, 2, 3, 4, 5]));
+      } else {
+        fs.writeFileSync(
+          ytdlp,
+          '#!/bin/sh\nif [ "$1" = "--version" ]; then echo 2020.01.01; exit 0; fi\n' +
+            "echo 'ERROR: algo que só uma versão nova entende' >&2\nexit 1\n",
+          { mode: 0o755 }
+        );
+      }
 
       const opened = await openOnline(LONG);
       expect(opened).toBe(true);
