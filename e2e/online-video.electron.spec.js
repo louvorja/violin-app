@@ -110,6 +110,8 @@ function readVideo(page) {
           h: v.videoHeight,
           src: v.currentSrc,
           ready: v.readyState,
+          networkState: v.networkState,
+          errorCode: v.error?.code ?? null,
           dur: v.duration,
           frames,
         }
@@ -131,6 +133,8 @@ function readAudio() {
       volume: el.volume,
       src: el.currentSrc,
       dur: el.duration,
+      networkState: el.networkState,
+      errorCode: el.error?.code ?? null,
     };
   }, modules.audio);
 }
@@ -144,6 +148,30 @@ async function snapshot() {
     readAudio(),
   ]);
   return { projection, ret, operator, audio };
+}
+
+/** Only numeric media state and the local scheme class leave a failed test. */
+function diagnosticMedia(media) {
+  if (!media) return { exists: false };
+  if (media.none) return { exists: false, elementMissing: true };
+  const srcClass = media.src?.startsWith("louvorja://onlinestream/")
+    ? "progressive"
+    : media.src?.startsWith("louvorja://onlinevideo/")
+      ? "cached"
+      : media.src
+        ? "other"
+        : "empty";
+  return {
+    exists: true,
+    srcClass,
+    readyState: media.ready,
+    networkState: media.networkState,
+    errorCode: media.errorCode,
+    currentTime: media.t,
+    playbackRate: media.playbackRate,
+    paused: media.paused,
+    sampledAtMs: media.sampledAtMs,
+  };
 }
 
 const openOnline = (id) =>
@@ -1082,9 +1110,11 @@ test.describe("Meus vídeos online: baixar de antemão e gerenciar", () => {
       console.log(`[e2e] tocar já: pronto para tocar em ${(elapsed / 1000).toFixed(1)} s`);
       expect(elapsed, "não esperou o download inteiro").toBeLessThan(25_000);
 
+      let lastPlaybackSnapshot = null;
       const playing = await until(
         async () => {
           const s = await snapshot();
+          lastPlaybackSnapshot = s;
           return screens(s).every(
             (v) => v && !v.none && v.src === STREAM(LONG, "video") && v.ready >= 3 && v.t > 0.3
           )
@@ -1092,7 +1122,32 @@ test.describe("Meus vídeos online: baixar de antemão e gerenciar", () => {
             : null;
         },
         { timeout: 20_000, label: "as três telas tocando do arquivo em crescimento" }
-      );
+      ).catch(async (error) => {
+        const manager = await status().catch(() => null);
+        await test.info().attach("stream-readiness-numeric", {
+          body: Buffer.from(
+            JSON.stringify(
+              {
+                projection: diagnosticMedia(lastPlaybackSnapshot?.projection),
+                return: diagnosticMedia(lastPlaybackSnapshot?.ret),
+                operator: diagnosticMedia(lastPlaybackSnapshot?.operator),
+                audio: diagnosticMedia(lastPlaybackSnapshot?.audio),
+                manager: manager
+                  ? {
+                      ready: manager.ready,
+                      activeCount: Array.isArray(manager.active) ? manager.active.length : null,
+                      last_stream_failure: manager.last_stream_failure ?? null,
+                    }
+                  : null,
+              },
+              null,
+              2
+            )
+          ),
+          contentType: "application/json",
+        });
+        throw error;
+      });
       for (const v of screens(playing)) {
         expect(v.frames, "nenhum player do YouTube").toEqual([]);
         expect(v.muted).toBe(true);
