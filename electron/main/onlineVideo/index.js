@@ -9,6 +9,26 @@ const { safeSend } = require("../safeWebContents.js");
 
 let _manager = null;
 
+/**
+ * Forma estável do estado inativo. É deliberadamente síncrona e não chama
+ * `getManager()`: runtime-health a consulta só ao montar um incidente e não
+ * pode, por isso, criar cache, ferramentas ou trabalho de inicialização.
+ */
+function inactiveDiagnosticSnapshot() {
+  return {
+    online_video_manager_initialized: false,
+    online_video_active_count: 0,
+    online_video_resolving_count: 0,
+    online_video_session_count: 0,
+    online_video_foreground_running: 0,
+    online_video_background_running: 0,
+    online_video_foreground_queued: 0,
+    online_video_background_queued: 0,
+    online_video_streaming: 0,
+    online_video_jobs: [],
+  };
+}
+
 /** Instância única: cache em `userData/online_videos`, ferramentas em `userData/bin`. */
 function getManager() {
   if (!_manager) {
@@ -99,4 +119,8 @@ function shutdown() {
   if (_manager) _manager.cancelAll();
 }
 
-module.exports = { getManager, fileFor, serveStream, registerIpc, init, shutdown };
+function diagnosticSnapshot() {
+  return _manager ? _manager.diagnosticSnapshot() : inactiveDiagnosticSnapshot();
+}
+
+module.exports = { getManager, fileFor, serveStream, registerIpc, init, shutdown, diagnosticSnapshot };

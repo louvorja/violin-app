@@ -36,7 +36,7 @@ function makeMonitor(options = {}) {
     appInstanceId: "app-test",
     loopDelayMonitor: options.loopDelayMonitor || fakeLoopDelay(),
     emitIncident: (incident) => incidents.push(incident),
-    getRuntimeSnapshot: () => ({ download_active: true }),
+    getRuntimeSnapshot: () => options.runtimeSnapshot || ({ download_active: true }),
     sampleIntervalMs: 60_000,
     criticalDelayMs: 1_000,
     incidentCooldownMs: 60_000,
@@ -108,6 +108,41 @@ describe("runtimeHealth", () => {
       renderer_active_operations: ["video:playback"],
       download_active: true,
     }));
+  });
+
+  it("anexa o retrato agregado de vídeo somente ao incidente emitido", () => {
+    const state = makeMonitor({
+      runtimeSnapshot: {
+        download_active: false,
+        online_video_manager_initialized: true,
+        online_video_active_count: 3,
+        online_video_foreground_running: 1,
+        online_video_background_running: 1,
+        online_video_background_queued: 1,
+        online_video_streaming: 1,
+        online_video_jobs: [
+          { priority: "foreground", lane: "streaming", phase: "downloading", played: true, age_bucket: "lt_10s" },
+        ],
+      },
+    });
+    expect(state.incidents).toHaveLength(0);
+
+    const win = fakeWindow(21);
+    state.monitor.watchWindow(win, { window_role: "main", feature: "main" });
+    win.emit("unresponsive");
+
+    expect(state.incidents).toHaveLength(1);
+    expect(state.incidents[0]).toMatchObject({
+      online_video_manager_initialized: true,
+      online_video_active_count: 3,
+      online_video_foreground_running: 1,
+      online_video_background_running: 1,
+      online_video_background_queued: 1,
+      online_video_streaming: 1,
+      online_video_jobs: [
+        { priority: "foreground", lane: "streaming", phase: "downloading", played: true, age_bucket: "lt_10s" },
+      ],
+    });
   });
 
   it("correlaciona unresponsive e recovery com o mesmo id e duração", () => {

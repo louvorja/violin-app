@@ -793,6 +793,10 @@ describe("Telemetry", () => {
       feature: "projection",
       duration_ms: 2_400,
       playback_id: "playback-1",
+      online_video_foreground_running: 1,
+      online_video_jobs: [
+        { priority: "foreground", lane: "streaming", phase: "downloading", age_bucket: "lt_10s" },
+      ],
       token: "não enviar",
       arbitrary_payload: "não enviar",
     });
@@ -805,6 +809,10 @@ describe("Telemetry", () => {
         incident_type: "renderer_unresponsive",
         duration_ms: 2_400,
         playback_id: "playback-1",
+        online_video_foreground_running: 1,
+        online_video_jobs: [
+          { priority: "foreground", lane: "streaming", phase: "downloading", age_bucket: "lt_10s" },
+        ],
       })
     );
     const attributes = posthog.logger.error.mock.lastCall?.[1] as Record<string, unknown>;

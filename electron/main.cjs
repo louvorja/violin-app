@@ -363,8 +363,10 @@ function _compactRuntimeSnapshot() {
   const memory = process.memoryUsage();
   let updateStatus = "unknown";
   let httpStatus = null;
+  let onlineVideoDiagnostics = {};
   try { updateStatus = updater.status()?.status || "unknown"; } catch (_) { /* noop */ }
   try { httpStatus = httpServer.status(); } catch (_) { /* noop */ }
+  try { onlineVideoDiagnostics = onlineVideo.diagnosticSnapshot(); } catch (_) { /* noop */ }
   return {
     main_memory_rss_mb: Math.round(memory.rss / 1024 / 1024),
     main_heap_used_mb: Math.round(memory.heapUsed / 1024 / 1024),
@@ -376,6 +378,7 @@ function _compactRuntimeSnapshot() {
     windows,
     process_metrics: appMetrics,
     gpu_feature_status: gpuFeatureStatus,
+    ...onlineVideoDiagnostics,
   };
 }
 

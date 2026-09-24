@@ -535,6 +535,44 @@ describe("raias: o que é urgente não espera pré-download", () => {
     expect(await bg).toMatchObject({ ok: true, id: A });
   });
 
+  it("expõe somente o retrato agregado das raias para um incidente", async () => {
+    const { gates, run } = gated();
+    let clock = 10_000;
+    const { manager, tools } = make({ run, now: () => clock });
+    const bg = manager.ensure(A, { priority: "background" });
+    const fg = manager.ensure(B);
+    const queued = manager.ensure(C, { priority: "background" });
+    await tick();
+
+    clock += 2_500;
+    const snapshot = manager.diagnosticSnapshot();
+    expect(snapshot).toMatchObject({
+      online_video_manager_initialized: true,
+      online_video_active_count: 3,
+      online_video_foreground_running: 1,
+      online_video_background_running: 1,
+      online_video_foreground_queued: 0,
+      online_video_background_queued: 1,
+    });
+    expect(snapshot.online_video_jobs).toHaveLength(3);
+    expect(snapshot.online_video_jobs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ priority: "foreground", lane: "foreground", phase: "downloading", age_bucket: "lt_10s" }),
+        expect.objectContaining({ priority: "background", lane: "background", phase: "downloading", age_bucket: "lt_10s" }),
+        expect.objectContaining({ priority: "background", lane: "queued", phase: "queued", age_bucket: "lt_10s" }),
+      ])
+    );
+    expect(tools.info).not.toHaveBeenCalled();
+    expect(JSON.stringify(snapshot)).not.toContain(A);
+    expect(JSON.stringify(snapshot)).not.toContain(B);
+    expect(JSON.stringify(snapshot)).not.toContain(C);
+
+    gates[A].resolve();
+    gates[B].resolve();
+    gates[C].resolve();
+    await Promise.all([bg, fg, queued]);
+  });
+
   it("pré-downloads entre si seguem em fila: um por vez", async () => {
     const { gates, order, run } = gated();
     const { manager } = make({ run });
@@ -1149,6 +1187,27 @@ describe("stream (tocar já, enquanto baixa uma vez só)", () => {
   }
 
   const read = async (served) => Buffer.from(await new Response(served.body).arrayBuffer());
+
+  it("marca stream ativo apenas no retrato local de incidente", async () => {
+    const gate = deferred();
+    const { manager } = makeStream({ gate });
+    await manager.stream(A);
+
+    const snapshot = manager.diagnosticSnapshot();
+    expect(snapshot).toMatchObject({
+      online_video_active_count: 1,
+      online_video_session_count: 1,
+      online_video_streaming: 1,
+      online_video_foreground_running: 0,
+      online_video_background_running: 0,
+    });
+    expect(snapshot.online_video_jobs).toEqual([
+      expect.objectContaining({ priority: "foreground", lane: "streaming", phase: "downloading", played: true, age_bucket: "lt_10s" }),
+    ]);
+
+    gate.resolve();
+    await manager.ensure(A);
+  });
 
   it("devolve endereços do próprio app (nunca o link do YouTube) e a janela já lê o vídeo por eles", async () => {
     const { manager, video, audio } = makeStream();

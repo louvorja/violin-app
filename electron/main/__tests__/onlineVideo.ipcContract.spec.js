@@ -23,7 +23,7 @@ const PROTOCOL = file("../protocol.js");
 const FUNCTIONS = ["status", "ensure", "stream", "cancel", "list", "keep", "prepare", "remove", "clear"];
 
 function withFakeElectron(platform, fn) {
-  const seen = { exposed: null, invoked: [], listened: [], handlers: new Map() };
+  const seen = { exposed: null, invoked: [], listened: [], handlers: new Map(), appGetPathCalls: 0 };
   const stub = {
     contextBridge: {
       exposeInMainWorld: (_name, api) => {
@@ -40,7 +40,7 @@ function withFakeElectron(platform, fn) {
       off: () => {},
     },
     webUtils: { getPathForFile: () => "" },
-    app: { getPath: () => os.tmpdir() },
+    app: { getPath: () => { seen.appGetPathCalls += 1; return os.tmpdir(); } },
   };
   const electron = new Proxy(stub, { get: (target, key) => (key in target ? target[key] : () => {}) });
 
@@ -88,12 +88,37 @@ describe.each(["darwin", "win32", "linux"])("vídeo online: preload e main (%s)"
 });
 
 describe("vídeo online: o que fica de fora do carregamento do preload", () => {
+  it("diagnóstico inativo não inicializa o gerenciador nem consulta caminhos", () => {
+    withFakeElectron("win32", (seen) => {
+      const snapshot = require(INDEX).diagnosticSnapshot();
+      expect(snapshot).toEqual({
+        online_video_manager_initialized: false,
+        online_video_active_count: 0,
+        online_video_resolving_count: 0,
+        online_video_session_count: 0,
+        online_video_foreground_running: 0,
+        online_video_background_running: 0,
+        online_video_foreground_queued: 0,
+        online_video_background_queued: 0,
+        online_video_streaming: 0,
+        online_video_jobs: [],
+      });
+      expect(seen.appGetPathCalls).toBe(0);
+    });
+  });
+
   it("o main envia o progresso no mesmo canal que o preload escuta", () => {
     expect(fs.readFileSync(INDEX, "utf8")).toContain('"onlineVideo:progress"');
   });
 
   it("main.cjs registra os handlers no nível do módulo, fora de qualquer condição de plataforma", () => {
     expect(fs.readFileSync(MAIN, "utf8")).toMatch(/^onlineVideo\.registerIpc\(ipcMain\);$/m);
+  });
+
+  it("runtime-health recebe o retrato de vídeo somente ao montar seu snapshot", () => {
+    const source = fs.readFileSync(MAIN, "utf8");
+    expect(source).toContain("onlineVideo.diagnosticSnapshot()");
+    expect(source).toContain("...onlineVideoDiagnostics");
   });
 
   it("o protocolo louvorja://onlinestream entrega o pedido ao serveStream do vídeo online", () => {

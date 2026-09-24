@@ -163,6 +163,7 @@ function createManager(cfg) {
     job.waiter = null;
     job.priority = "foreground";
     job.bypass = true;
+    job.streamingMode = true;
     streaming++;
     waiter.resolve();
   }
@@ -185,6 +186,9 @@ function createManager(cfg) {
 
   function publish(job, payload, { force = false } = {}) {
     const t = now();
+    // O retrato de incidente precisa da fase mais recente mesmo quando a UI
+    // descarta uma amostra intermediária pelo throttle de progresso.
+    if (typeof payload.phase === "string") job.phase = payload.phase;
     if (!force && t - job.lastEmit < PROGRESS_INTERVAL_MS) return;
     job.lastEmit = t;
     // A barra só sobe: uma nova tentativa ou a renovação do yt-dlp no meio do
@@ -193,6 +197,8 @@ function createManager(cfg) {
       job.best = Math.max(job.best, payload.percent);
       payload = { ...payload, percent: job.best };
     }
+    // O retrato de diagnóstico é lido apenas quando o runtime-health já está
+    // emitindo um incidente. Guardar a fase não cria IPC nem I/O.
     const evt = { id: job.id, ...payload };
     for (const listener of job.listeners) {
       try {
@@ -469,11 +475,14 @@ function createManager(cfg) {
       controller: new AbortController(),
       listeners: new Set(onProgress ? [onProgress] : []),
       lastEmit: 0,
+      startedAt: now(),
+      phase: "queued",
       best: 0,
       mapPercent: (p) => p,
       links: null,
       session: null,
       played: false,
+      streamingMode: false,
       openError: null,
       ready: null,
       settleReady: null,
@@ -645,11 +654,14 @@ function createManager(cfg) {
       controller: new AbortController(),
       listeners: new Set(),
       lastEmit: 0,
+      startedAt: now(),
+      phase: "resolving",
       best: 0,
       mapPercent: (p) => p,
       links: null,
       session: null,
       played: true,
+      streamingMode: true,
       openError: null,
       ready: null,
       settleReady: null,
@@ -763,6 +775,42 @@ function createManager(cfg) {
     };
   }
 
+  /**
+   * Estado compacto e estritamente em memória para enriquecer um incidente
+   * raro. Não expõe IDs, URLs, títulos ou caminhos; tampouco chama o store ou
+   * ferramentas, porque o coletor de runtime-health não pode criar carga
+   * durante um travamento.
+   */
+  function diagnosticSnapshot() {
+    const ageBucket = (job) => {
+      const age = Math.max(0, now() - job.startedAt);
+      if (age < 10_000) return "lt_10s";
+      if (age < 60_000) return "10s_1m";
+      if (age < 5 * 60_000) return "1m_5m";
+      return "gte_5m";
+    };
+    const compactJob = (job) => ({
+      priority: job.priority === "background" ? "background" : "foreground",
+      lane: job.streamingMode ? "streaming" : job.holding || (job.waiter ? "queued" : "resolving"),
+      phase: typeof job.phase === "string" ? job.phase.slice(0, 40) : "unknown",
+      played: job.played === true,
+      age_bucket: ageBucket(job),
+    });
+
+    return {
+      online_video_manager_initialized: true,
+      online_video_active_count: jobs.size,
+      online_video_resolving_count: resolutions.size,
+      online_video_session_count: sessions.size,
+      online_video_foreground_running: lanes.foreground.running,
+      online_video_background_running: lanes.background.running,
+      online_video_foreground_queued: lanes.foreground.waiters.length,
+      online_video_background_queued: lanes.background.waiters.length,
+      online_video_streaming: streaming,
+      online_video_jobs: [...jobs.values()].slice(0, 8).map(compactJob),
+    };
+  }
+
   async function list() {
     return store.list();
   }
@@ -790,6 +838,7 @@ function createManager(cfg) {
     remove,
     clear,
     status,
+    diagnosticSnapshot,
     list,
     init,
     urlFor,
