@@ -96,6 +96,9 @@ function createManager(cfg) {
     foreground: { running: 0, waiters: [] },
     background: { running: 0, waiters: [] },
   };
+  // Admission control da apresentação ao vivo. Não cancela nem suspende o que
+  // já está transferindo: só impede que um novo pré-download comece.
+  let backgroundAdmissionBlocked = false;
   let lastRefreshAt = -Infinity;
 
   /** Vídeos tocando enquanto baixam: não usam as raias, mas contam como transferência em curso. */
@@ -111,10 +114,22 @@ function createManager(cfg) {
     waiter.resolve();
   }
 
+  function canGrant(job) {
+    return job.priority !== "background" || !backgroundAdmissionBlocked;
+  }
+
+  function drainLane(priority) {
+    const lane = lanes[priority];
+    if (!lane || lane.running >= 1) return;
+    if (priority === "background" && backgroundAdmissionBlocked) return;
+    const next = lane.waiters.shift();
+    if (next) grant(next);
+  }
+
   function acquire(job) {
     return new Promise((resolve, reject) => {
       const waiter = { job, resolve };
-      if (lanes[job.priority].running < 1) {
+      if (lanes[job.priority].running < 1 && canGrant(job)) {
         grant(waiter);
         return;
       }
@@ -144,8 +159,7 @@ function createManager(cfg) {
     }
     const lane = lanes[job.holding];
     lane.running--;
-    const next = lane.waiters.shift();
-    if (next) grant(next);
+    drainLane(job.holding);
   }
 
   /**
@@ -182,6 +196,14 @@ function createManager(cfg) {
     if (i >= 0) queue.splice(i, 1);
     if (lanes.foreground.running < 1) grant(waiter);
     else lanes.foreground.waiters.push(waiter);
+  }
+
+  /** Bloqueia apenas novas concessões BACKGROUND; foreground e streaming seguem livres. */
+  function setBackgroundAdmissionBlocked(blocked) {
+    const next = blocked === true;
+    if (backgroundAdmissionBlocked === next) return;
+    backgroundAdmissionBlocked = next;
+    if (!next) drainLane("background");
   }
 
   function publish(job, payload, { force = false } = {}) {
@@ -806,6 +828,7 @@ function createManager(cfg) {
       online_video_background_running: lanes.background.running,
       online_video_foreground_queued: lanes.foreground.waiters.length,
       online_video_background_queued: lanes.background.waiters.length,
+      online_video_background_admission_blocked: backgroundAdmissionBlocked,
       online_video_streaming: streaming,
       online_video_jobs: [...jobs.values()].slice(0, 8).map(compactJob),
     };
@@ -839,6 +862,7 @@ function createManager(cfg) {
     clear,
     status,
     diagnosticSnapshot,
+    setBackgroundAdmissionBlocked,
     list,
     init,
     urlFor,

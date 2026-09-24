@@ -8,6 +8,9 @@ const { isVideoId } = require("./ids.js");
 const { safeSend } = require("../safeWebContents.js");
 
 let _manager = null;
+// A atividade de apresentação pode ser conhecida antes do primeiro uso de
+// vídeo online. Guardamos o valor para aplicá-lo quando o manager nascer.
+let _backgroundAdmissionBlocked = false;
 
 /**
  * Forma estável do estado inativo. É deliberadamente síncrona e não chama
@@ -24,6 +27,7 @@ function inactiveDiagnosticSnapshot() {
     online_video_background_running: 0,
     online_video_foreground_queued: 0,
     online_video_background_queued: 0,
+    online_video_background_admission_blocked: _backgroundAdmissionBlocked,
     online_video_streaming: 0,
     online_video_jobs: [],
   };
@@ -45,6 +49,7 @@ function getManager() {
       // feita por uma falha passageira de rede, não pode deixá-lo sem o que testar.
       refreshCooldownMs: process.env.LJ_E2E_USER_DATA ? 0 : undefined,
     });
+    _manager.setBackgroundAdmissionBlocked(_backgroundAdmissionBlocked);
   }
   return _manager;
 }
@@ -119,8 +124,22 @@ function shutdown() {
   if (_manager) _manager.cancelAll();
 }
 
+function setBackgroundAdmissionBlocked(blocked) {
+  _backgroundAdmissionBlocked = blocked === true;
+  _manager?.setBackgroundAdmissionBlocked(_backgroundAdmissionBlocked);
+}
+
 function diagnosticSnapshot() {
   return _manager ? _manager.diagnosticSnapshot() : inactiveDiagnosticSnapshot();
 }
 
-module.exports = { getManager, fileFor, serveStream, registerIpc, init, shutdown, diagnosticSnapshot };
+module.exports = {
+  getManager,
+  fileFor,
+  serveStream,
+  registerIpc,
+  init,
+  shutdown,
+  diagnosticSnapshot,
+  setBackgroundAdmissionBlocked,
+};

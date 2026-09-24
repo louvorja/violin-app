@@ -535,6 +535,98 @@ describe("raias: o que é urgente não espera pré-download", () => {
     expect(await bg).toMatchObject({ ok: true, id: A });
   });
 
+  it("segura novos pré-downloads durante a apresentação, mas foreground continua livre", async () => {
+    const { gates, order, run } = gated();
+    const { manager } = make({ run });
+    manager.setBackgroundAdmissionBlocked(true);
+    const bg = manager.ensure(A, { priority: "background" });
+    await tick();
+    expect(order).toEqual([]);
+    expect(manager.diagnosticSnapshot()).toMatchObject({
+      online_video_background_admission_blocked: true,
+      online_video_background_running: 0,
+      online_video_background_queued: 1,
+    });
+
+    const fg = manager.ensure(B);
+    await tick();
+    expect(order).toEqual([`start ${B}`]);
+    gates[B].resolve();
+    await fg;
+
+    manager.setBackgroundAdmissionBlocked(false);
+    await tick();
+    expect(order).toContain(`start ${A}`);
+    gates[A].resolve();
+    await bg;
+  });
+
+  it("não interrompe pré-download em voo e não concede o próximo até desbloquear", async () => {
+    const { gates, order, run } = gated();
+    const { manager } = make({ run });
+    const first = manager.ensure(A, { priority: "background" });
+    await tick();
+    manager.setBackgroundAdmissionBlocked(true);
+    const queued = manager.ensure(B, { priority: "background" });
+
+    gates[A].resolve();
+    await first;
+    await tick();
+    expect(order).toEqual([`start ${A}`, `end ${A}`]);
+
+    manager.setBackgroundAdmissionBlocked(false);
+    await tick();
+    expect(order).toContain(`start ${B}`);
+    gates[B].resolve();
+    await queued;
+  });
+
+  it("cancelar enquanto bloqueado remove o pedido sem travar o próximo", async () => {
+    const { gates, order, run } = gated();
+    const { manager } = make({ run });
+    manager.setBackgroundAdmissionBlocked(true);
+    const cancelled = manager.ensure(A, { priority: "background" });
+    const next = manager.ensure(B, { priority: "background" });
+    manager.cancel(A);
+
+    expect(await cancelled).toMatchObject({ ok: false, error: { kind: "cancelled" } });
+    expect(order).toEqual([]);
+    manager.setBackgroundAdmissionBlocked(false);
+    await tick();
+    expect(order).toEqual([`start ${B}`]);
+    gates[B].resolve();
+    await next;
+  });
+
+  it("tocar um pré-download bloqueado o promove e começa sem esperar", async () => {
+    const { gates, order, run } = gated();
+    const { manager } = make({ run });
+    manager.setBackgroundAdmissionBlocked(true);
+    const background = manager.ensure(A, { priority: "background" });
+    await tick();
+    const urgent = manager.ensure(A);
+    await tick();
+
+    expect(urgent).toBe(background);
+    expect(order).toEqual([`start ${A}`]);
+    gates[A].resolve();
+    await urgent;
+  });
+
+  it("stream também libera um pré-download bloqueado sem esperar o admission gate", async () => {
+    const { gates, order, run } = gated();
+    const { manager } = make({ run });
+    manager.setBackgroundAdmissionBlocked(true);
+    const background = manager.ensure(A, { priority: "background" });
+    await tick();
+
+    expect(await manager.stream(A)).toMatchObject({ ok: false, error: { kind: "busy" } });
+    await tick();
+    expect(order).toEqual([`start ${A}`]);
+    gates[A].resolve();
+    await background;
+  });
+
   it("expõe somente o retrato agregado das raias para um incidente", async () => {
     const { gates, run } = gated();
     let clock = 10_000;
