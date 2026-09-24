@@ -479,6 +479,33 @@ describe("stream", () => {
     );
   });
 
+  it("inclui etapas numéricas no evento existente sem aceitar conteúdo extra do IPC", async () => {
+    h.platform.onlineVideo = fakeApi({ stream: vi.fn(async () => ({
+      ...streams,
+      timings: { resolve_ms: 125.4, session_open_ms: 75, join_wait_ms: 0, total_ms: 200, url: "https://secret", title: "private" },
+    })) });
+    const result = await stream(ID);
+    expect(result.ok && result.timings).toEqual({ resolve_ms: 125, session_open_ms: 75, join_wait_ms: 0, total_ms: 200 });
+    expect(h.track).toHaveBeenCalledWith("online_video_stream_resolved", expect.objectContaining({
+      main_resolve_ms: 125, main_session_open_ms: 75, main_join_wait_ms: 0, main_total_ms: 200,
+    }));
+    expect(JSON.stringify(h.track.mock.calls)).not.toMatch(/secret|private/);
+    expect(h.track.mock.calls.filter(([event]) => event === "online_video_stream_resolved")).toHaveLength(1);
+  });
+
+  it("descarta durações inválidas e limita valores recebidos do main", async () => {
+    h.platform.onlineVideo = fakeApi({ stream: vi.fn(async () => ({
+      ...streams,
+      timings: { resolve_ms: -1, session_open_ms: Infinity, join_wait_ms: "100", total_ms: 999_999_999 },
+    })) });
+    await stream(ID);
+    const properties = h.track.mock.calls.find(([event]) => event === "online_video_stream_resolved")?.[1];
+    expect(properties).toMatchObject({ main_total_ms: 600_000 });
+    expect(properties).not.toHaveProperty("main_resolve_ms");
+    expect(properties).not.toHaveProperty("main_session_open_ms");
+    expect(properties).not.toHaveProperty("main_join_wait_ms");
+  });
+
   it("no navegador (sem bridge) responde 'unsupported', sem lançar", async () => {
     h.platform.onlineVideo = null;
     expect(await stream(ID)).toMatchObject({ ok: false, error: { kind: "unsupported" } });

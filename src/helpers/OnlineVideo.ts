@@ -88,6 +88,8 @@ export interface OnlineVideoStreams {
   duration: number | null;
   /** O vídeo já estava no disco: os dois endereços são o arquivo. */
   cached?: boolean;
+  /** Tempos deste pedido no main; join mede espera, sem repetir trabalho do dono. */
+  timings?: Partial<Record<"resolve_ms" | "session_open_ms" | "join_wait_ms" | "total_ms", number>>;
 }
 
 export type OnlineVideoStreamResult =
@@ -277,13 +279,29 @@ export async function stream(id: string): Promise<OnlineVideoStreamResult> {
   try {
     const res = (await api.stream(id, { maxHeight: maxHeight() })) as OnlineVideoStreamResult;
     if (res.ok) {
+      const timings: Record<string, number> = {};
+      const safeTimings: NonNullable<OnlineVideoStreams["timings"]> = {};
+      // Resposta IPC é uma fronteira: somente durações finitas, nunca campos
+      // arbitrários ou conteúdo, entram no evento que já existe.
+      if (res.timings && typeof res.timings === "object" && !Array.isArray(res.timings)) {
+        for (const key of ["resolve_ms", "session_open_ms", "join_wait_ms", "total_ms"] as const) {
+          const value = res.timings[key];
+          if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+            const bounded = Math.round(Math.min(value, 600_000));
+            timings[`main_${key}`] = bounded;
+            safeTimings[key] = bounded;
+          }
+        }
+      }
       Telemetry.track("online_video_stream_resolved", {
         video_id: id,
         height: res.video.height ?? null,
         muxed: res.muxed,
         cached: res.cached ?? false,
         elapsed_ms: Date.now() - startedAt,
+        ...timings,
       });
+      return res.timings === undefined ? res : { ...res, timings: safeTimings };
     } else if (res.error.kind !== "cancelled") {
       Telemetry.track("online_video_stream_failed", {
         video_id: id,

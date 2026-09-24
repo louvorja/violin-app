@@ -3,6 +3,7 @@
 const fs = require("fs-extra");
 const nodeFs = require("fs");
 const path = require("path");
+const { performance } = require("node:perf_hooks");
 const { createStore } = require("./store.js");
 const runner = require("./runner.js");
 const progressive = require("./progressive.js");
@@ -79,6 +80,7 @@ function createManager(cfg) {
     freeBytes = defaultFreeBytes,
     jsRuntime = () => undefined,
     now = Date.now,
+    monotonicNow = () => performance.now(),
     refreshCooldownMs = REFRESH_COOLDOWN_MS,
   } = cfg;
 
@@ -594,6 +596,16 @@ function createManager(cfg) {
    * as instala. Nunca rejeita.
    */
   async function stream(id, opts = {}) {
+    const requestStartedAt = monotonicNow();
+    const timings = { resolve_ms: 0, session_open_ms: 0, join_wait_ms: 0, total_ms: 0 };
+    const elapsed = (start) => {
+      const value = monotonicNow() - start;
+      return Number.isFinite(value) ? Math.round(Math.min(600_000, Math.max(0, value))) : 0;
+    };
+    const withTimings = (result) => ({
+      ...result,
+      timings: { ...timings, total_ms: elapsed(requestStartedAt) },
+    });
     if (!isVideoId(id)) return fail(new OnlineVideoError("invalid", "ID de vídeo inválido"));
     if (!tools.supported) return fail(new OnlineVideoError("unsupported", "Plataforma sem suporte"));
 
@@ -601,7 +613,7 @@ function createManager(cfg) {
       store.touch(id);
       if (opts.keep) store.keep(id);
       const url = urlFor(id);
-      return { ok: true, id, cached: true, video: { url }, audio: { url }, muxed: true, duration: null };
+      return withTimings({ ok: true, id, cached: true, video: { url }, audio: { url }, muxed: true, duration: null });
     };
     if (store.has(id)) return cached();
     if (!tools.ready()) return fail(new OnlineVideoError("tools", "Ferramentas ainda não instaladas"));
@@ -617,8 +629,10 @@ function createManager(cfg) {
       runNow(job);
       job.played = true;
       if (opts.keep) job.keep = true;
+      const joinStartedAt = monotonicNow();
       const opened = await job.ready;
-      if (opened) return streamInfo(job);
+      timings.join_wait_ms = elapsed(joinStartedAt);
+      if (opened) return withTimings(streamInfo(job));
       if (job.openError) return fail(job.openError);
       // Só há formatos em fragmentos e o yt-dlp está baixando: não há trilha para ler antes do
       // fim. Ele passa a ser o urgente, e quem pediu decide se espera.
@@ -629,7 +643,9 @@ function createManager(cfg) {
     const running = jobs.get(id);
     if (running) return join(running);
 
+    const resolveStartedAt = monotonicNow();
     const links = await resolveLinks(id, opts);
+    timings.resolve_ms = elapsed(resolveStartedAt);
     if (!links.ok) return links;
     // Enquanto os links chegavam, o mesmo vídeo pode ter sido baixado ou pedido de novo.
     if (store.has(id)) return cached();
@@ -675,6 +691,7 @@ function createManager(cfg) {
     };
     streaming++;
     const startedAt = now();
+    const openStartedAt = monotonicNow();
     job.ready = openJobSession(job, links).then(
       () => true,
       (error) => {
@@ -702,9 +719,10 @@ function createManager(cfg) {
     jobs.set(id, job);
 
     const opened = await job.ready;
+    timings.session_open_ms = elapsed(openStartedAt);
     if (!opened) return fail(job.openError);
     publish(job, { phase: "downloading", percent: 0 }, { force: true });
-    return streamInfo(job);
+    return withTimings(streamInfo(job));
   }
 
   /**

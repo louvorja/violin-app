@@ -1188,6 +1188,60 @@ describe("stream (tocar já, enquanto baixa uma vez só)", () => {
 
   const read = async (served) => Buffer.from(await new Response(served.body).arrayBuffer());
 
+  it("mede resolução e abertura separadamente, sem confundir cache com rede", async () => {
+    let clock = 0;
+    const { openSession } = require("../onlineVideo/progressive.js");
+    const { manager, resolve } = makeStream({ cfg: {
+      monotonicNow: () => clock,
+      openSession: async (options) => { clock += 40; return openSession(options); },
+    } });
+    const resolveLinks = resolve.getMockImplementation();
+    resolve.mockImplementation(async (options) => { clock += 120; return resolveLinks(options); });
+    const first = await manager.stream(A);
+    expect(first.timings).toEqual({ resolve_ms: 120, session_open_ms: 40, join_wait_ms: 0, total_ms: 160 });
+    await manager.ensure(A);
+    const cached = await manager.stream(A);
+    expect(cached.cached).toBe(true);
+    expect(cached.timings).toEqual({ resolve_ms: 0, session_open_ms: 0, join_wait_ms: 0, total_ms: 0 });
+    expect(resolve).toHaveBeenCalledTimes(1);
+  });
+
+  it("join mede somente sua espera pelo job existente sem repetir resolução/probe", async () => {
+    let clock = 0;
+    const entering = deferred();
+    const gate = deferred();
+    const { openSession } = require("../onlineVideo/progressive.js");
+    const open = vi.fn(async (options) => {
+      entering.resolve();
+      await gate.promise;
+      return openSession(options);
+    });
+    const { manager, resolve } = makeStream({ cfg: { monotonicNow: () => clock, openSession: open } });
+    const first = manager.stream(A);
+    await entering.promise;
+    const second = manager.stream(A);
+    clock += 75;
+    gate.resolve();
+    const [owner, joined] = await Promise.all([first, second]);
+    expect(owner.timings.session_open_ms).toBe(75);
+    expect(joined.timings).toEqual({ resolve_ms: 0, session_open_ms: 0, join_wait_ms: 75, total_ms: 75 });
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(resolve).toHaveBeenCalledTimes(1);
+    await manager.ensure(A);
+  });
+
+  it("limita durações no resultado IPC mesmo com relógio injetado extremo", async () => {
+    let clock = 0;
+    const { manager, resolve } = makeStream({ cfg: { monotonicNow: () => clock } });
+    const resolveLinks = resolve.getMockImplementation();
+    resolve.mockImplementation(async (options) => { clock = 999_999_999; return resolveLinks(options); });
+    const result = await manager.stream(A);
+    expect(result.timings.resolve_ms).toBe(600_000);
+    expect(result.timings.total_ms).toBe(600_000);
+    expect(Object.values(result.timings).every((value) => Number.isFinite(value) && value >= 0 && value <= 600_000)).toBe(true);
+    await manager.ensure(A);
+  });
+
   it("marca stream ativo apenas no retrato local de incidente", async () => {
     const gate = deferred();
     const { manager } = makeStream({ gate });
