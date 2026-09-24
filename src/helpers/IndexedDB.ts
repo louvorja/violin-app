@@ -14,12 +14,21 @@ import { DB_NAME, DB_TABLE, DB_VERSION } from "@/constants/DbTables";
 
 const TABLE_SETTINGS = DB_TABLE.SETTINGS;
 
+export interface CatalogChange {
+  key: string;
+  writes: ReadonlyArray<{
+    table: string;
+    rows: ReadonlyArray<{ id: string }>;
+    /** Remove somente as linhas deste dataset, nunca a tabela inteira. */
+    replacePrefix?: string;
+  }>;
+}
+
 let dbPromise: Promise<IDBPDatabase> | null = null;
 
 function getDb(): Promise<IDBPDatabase> {
   if (!dbPromise) {
     dbPromise = openDB(DB_NAME, DB_VERSION, {
-
       upgrade(db) {
         for (const name of Object.values(DB_TABLE)) {
           if (!db.objectStoreNames.contains(name)) {
@@ -83,6 +92,85 @@ export default {
     await tx.done;
   },
 
+  /**
+   * Publica um bundle completo e seu marcador na mesma transação. Uma falha de
+   * escrita ou AbortSignal faz o IndexedDB restaurar todas as linhas anteriores.
+   * Não há timers/yields aqui: cada request IDB mantém a transação ativa.
+   */
+  async applyCatalogBatch(
+    changes: readonly CatalogChange[],
+    marker: { id: string },
+    options: {
+      signal?: AbortSignal;
+      onApplied?: (_current: number, _total: number, _key: string) => void;
+    } = {}
+  ): Promise<void> {
+    options.signal?.throwIfAborted();
+    const tables = [
+      ...new Set([
+        DB_TABLE.CACHE,
+        ...changes.flatMap((change) => change.writes.map((write) => write.table)),
+      ]),
+    ];
+    const tx = (await getDb()).transaction(tables, "readwrite");
+    const abort = () => {
+      try {
+        tx.abort();
+      } catch {
+        // A transação pode já ter terminado entre o signal e este callback.
+      }
+    };
+    options.signal?.addEventListener("abort", abort, { once: true });
+    try {
+      for (let i = 0; i < changes.length; i++) {
+        options.signal?.throwIfAborted();
+        const change = changes[i];
+        for (const write of change.writes) {
+          const store = tx.objectStore(write.table);
+          if (write.replacePrefix) {
+            const oldIds = await store.getAllKeys(
+              IDBKeyRange.bound(write.replacePrefix, `${write.replacePrefix}\uffff`)
+            );
+            for (const id of oldIds) await store.delete(id);
+          }
+          for (const row of write.rows) {
+            options.signal?.throwIfAborted();
+            await store.put(row);
+          }
+        }
+        if (i + 1 < changes.length) {
+          try {
+            options.onApplied?.(i + 1, changes.length, change.key);
+          } catch {
+            // Progresso é diagnóstico/UI, não pode abortar a persistência.
+          }
+        }
+      }
+      options.signal?.throwIfAborted();
+      await tx.objectStore(DB_TABLE.CACHE).put(marker);
+      await tx.done;
+      const last = changes.at(-1);
+      if (last) {
+        try {
+          options.onApplied?.(changes.length, changes.length, last.key);
+        } catch {
+          // O commit já terminou; um callback de progresso falho não o desfaz.
+        }
+      }
+    } catch (error) {
+      abort();
+      try {
+        await tx.done;
+      } catch {
+        // A rejeição original (ou o motivo do abort) é mais útil ao chamador.
+      }
+      if (options.signal?.aborted) throw options.signal.reason ?? error;
+      throw error;
+    } finally {
+      options.signal?.removeEventListener("abort", abort);
+    }
+  },
+
   /** Remove um registro pelo id. */
   async del(table: string, id: string): Promise<void> {
     await (await getDb()).delete(table, id);
@@ -103,7 +191,6 @@ export default {
     }
   },
 
-
   /**
    * === Métodos para Tabela Settings
    */
@@ -121,6 +208,5 @@ export default {
   /** Remove um registro de configuração inteiro. */
   async removeSetting(id: string): Promise<void> {
     await this.del(TABLE_SETTINGS, id);
-  }
-
+  },
 };

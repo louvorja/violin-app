@@ -355,10 +355,11 @@ bible_chapters).
 1. `fetchBundle(signal)` — baixa o ZIP com headers de autenticação.
 2. `extractBundle(buffer, onProgress, signal)` — extrai JSONs via JSZip, mapeia
    caminhos para chaves lógicas do banco.
-3. `clearBundleTables()` — limpa as 14 tabelas de catálogo (preserva dados de
-   módulos: settings, playlists, overlay, liturgy, etc.).
-4. `injectBundle(datasets, onProgress, signal)` — injeta cada dataset via
-   `$database.seed()`.
+3. Valida `config` e prepara as linhas roteadas com pontos cooperativos de
+   cancelamento. Nenhuma tabela é limpa durante a preparação.
+4. `$database.seedBundleAtomic()` aplica somente as chaves/prefixos presentes
+   no ZIP e grava o marcador na mesma transação IndexedDB. Falha ou cancelamento
+   reverte a transação; o catálogo anterior continua disponível.
 
 **Pontos de uso** — o boot **não** baixa nem consulta bundle: nenhum diálogo ao
 abrir o app. A web lê o catálogo de `Database.get()` sob demanda, com cache no
@@ -386,7 +387,7 @@ paralelo: o bundle geral contém a Bíblia (quem pede a Bíblia o aproveita), ma
 bundle da Bíblia não contém o catálogo (quem pede o catálogo espera e baixa o seu).
 
 O bundle substitui o antigo seed inicial de JSONs empacotados: `BundleInstaller.ts`
-baixa `/db/bundle`, extrai os JSONs e injeta no IndexedDB via `$database.seed()`.
+baixa `/db/bundle`, extrai os JSONs e publica o catálogo via transação IndexedDB.
 
 #### Bundle da Bíblia (`BibleBundleInstaller.ts`)
 

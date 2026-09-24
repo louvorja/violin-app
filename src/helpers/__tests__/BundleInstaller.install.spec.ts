@@ -6,9 +6,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import JSZip from "jszip";
 
-const { rows, fetchWithTimeout } = vi.hoisted(() => ({
+const { rows, fetchWithTimeout, seedBundleAtomic } = vi.hoisted(() => ({
   rows: new Map<string, { data?: Record<string, unknown> }>(),
   fetchWithTimeout: vi.fn(),
+  seedBundleAtomic: vi.fn(),
 }));
 
 vi.mock("@/helpers/IndexedDB", () => ({
@@ -20,7 +21,7 @@ vi.mock("@/helpers/IndexedDB", () => ({
     clear: vi.fn(async () => {}),
   },
 }));
-vi.mock("@/helpers/Database", () => ({ default: { seed: vi.fn(async () => {}), get: vi.fn() } }));
+vi.mock("@/helpers/Database", () => ({ default: { seedBundleAtomic, get: vi.fn() } }));
 vi.mock("@/helpers/Dev", () => ({ default: { write: vi.fn(), log: vi.fn() } }));
 vi.mock("@/helpers/Telemetry", () => ({
   default: { track: vi.fn(), histogram: vi.fn(), captureException: vi.fn() },
@@ -47,6 +48,12 @@ async function bundleWith(config: unknown): Promise<ArrayBuffer> {
 beforeEach(() => {
   rows.clear();
   fetchWithTimeout.mockReset();
+  seedBundleAtomic.mockReset();
+  seedBundleAtomic.mockImplementation(async (datasets, marker, options) => {
+    options?.signal?.throwIfAborted();
+    rows.set(marker.id, marker);
+    options?.onProgress?.(datasets.size, datasets.size, [...datasets.keys()].at(-1));
+  });
 });
 
 describe("BundleInstaller.install", () => {
@@ -94,5 +101,46 @@ describe("BundleInstaller.install", () => {
 
     await expect(BundleInstaller.install({})).rejects.toThrow(/configuração do banco ausente/);
     expect(await BundleInstaller.hasBundleMarker()).toBe(false);
+    expect(seedBundleAtomic).not.toHaveBeenCalled();
+  });
+
+  it("mantém o marcador anterior se a publicação falha", async () => {
+    rows.set("__bundle_marker__", { data: { version_number: 180 } });
+    fetchWithTimeout.mockResolvedValue(
+      new Response(await bundleWith({ version_number: 190 }), { status: 200 })
+    );
+    seedBundleAtomic.mockRejectedValueOnce(new Error("disk full"));
+
+    await expect(BundleInstaller.install({})).rejects.toThrow("disk full");
+    expect(rows.get("__bundle_marker__")?.data).toMatchObject({ version_number: 180 });
+  });
+
+  it("aborta antes de publicar e mantém o marcador anterior", async () => {
+    const controller = new AbortController();
+    rows.set("__bundle_marker__", { data: { version_number: 180 } });
+    fetchWithTimeout.mockResolvedValue(
+      new Response(await bundleWith({ version_number: 190 }), { status: 200 })
+    );
+    controller.abort(new Error("cancelado"));
+
+    await expect(BundleInstaller.install({ signal: controller.signal })).rejects.toThrow(
+      "cancelado"
+    );
+    expect(seedBundleAtomic).not.toHaveBeenCalled();
+    expect(rows.get("__bundle_marker__")?.data).toMatchObject({ version_number: 180 });
+  });
+
+  it("emite o último progresso após publicar", async () => {
+    fetchWithTimeout.mockResolvedValue(
+      new Response(await bundleWith({ version_number: 190 }), { status: 200 })
+    );
+    const progress = vi.fn();
+
+    await BundleInstaller.install({ onProgress: progress });
+
+    expect(progress).toHaveBeenCalledWith(
+      expect.objectContaining({ phase: "inject", current: 2, total: 2 })
+    );
+    expect(rows.get("__bundle_marker__")?.data).toMatchObject({ version_number: 190 });
   });
 });

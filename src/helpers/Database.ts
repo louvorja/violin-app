@@ -16,6 +16,7 @@ import { fetchWithTimeout, classifyNetworkError, isTransientFailure } from "@/he
 import $path from "@/helpers/Path";
 import $dev from "@/helpers/Dev";
 import $idb from "@/helpers/IndexedDB";
+import type { CatalogChange } from "@/helpers/IndexedDB";
 import { DB_TABLE } from "@/constants/DbTables";
 import {
   API_URL,
@@ -33,7 +34,9 @@ function notifyServerTrouble(): void {
   _serverTroubleNotified = true;
   const t = i18nAtual()?.global?.t;
   $snackbar.warning(
-    t ? t("messages.server_unavailable") : "O servidor não respondeu direito. Tente de novo em instantes.",
+    t
+      ? t("messages.server_unavailable")
+      : "O servidor não respondeu direito. Tente de novo em instantes.",
     { key: "server-unavailable" }
   );
 }
@@ -145,7 +148,8 @@ function estimateMemoryBytes(data: unknown): number {
 function memoryDelete(file: string): void {
   const previous = _memory.get(file);
   if (!previous) return;
-  const previousBytes = (previous as CacheEntry<unknown> & { memoryBytes?: number }).memoryBytes ?? 0;
+  const previousBytes =
+    (previous as CacheEntry<unknown> & { memoryBytes?: number }).memoryBytes ?? 0;
   _memoryBytes = Math.max(0, _memoryBytes - previousBytes);
   _memory.delete(file);
 }
@@ -335,6 +339,78 @@ async function readRouted<T>(file: string, r: Route | null): Promise<T | null> {
 
 function makeRow(file: string, dataId: string, seq: number, data: unknown): ItemRow {
   return { id: `${file}:${dataId}`, file, dataId, seq, data, ts: Date.now(), v: getVersion() };
+}
+
+/** Prepara uma substituição de catálogo sem escrever; o commit ocorre numa transação IDB. */
+async function prepareBundleChanges(
+  datasets: Map<string, unknown>,
+  signal?: AbortSignal
+): Promise<CatalogChange[]> {
+  const changes: CatalogChange[] = [];
+  let lastYield = Date.now();
+  const checkpoint = async () => {
+    signal?.throwIfAborted();
+    if (Date.now() - lastYield < 16) return;
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    lastYield = Date.now();
+    signal?.throwIfAborted();
+  };
+  const items = async (file: string, table: string, idKey: string, value: unknown) => {
+    if (!Array.isArray(value)) throw new Error(`Bundle inválido: ${file} não é uma lista`);
+    const rows: ItemRow[] = [];
+    for (let seq = 0; seq < value.length; seq++) {
+      const item: unknown = value[seq];
+      if (!item || typeof item !== "object" || Array.isArray(item)) {
+        throw new Error(`Bundle inválido: item de ${file} não é um objeto`);
+      }
+      const dataId = String((item as Record<string, unknown>)[idKey] ?? seq);
+      rows.push(makeRow(file, dataId, seq, item));
+      if (seq % 128 === 0) await checkpoint();
+    }
+    rows.push(makeRow(file, META_ID, -1, null));
+    return { table, rows, replacePrefix: `${file}:` };
+  };
+
+  for (const [file, data] of datasets) {
+    await checkpoint();
+    const route = routeFor(file);
+    if (!route) {
+      const row: CacheEntry<unknown> = { id: file, data, ts: Date.now(), v: getVersion() };
+      changes.push({
+        key: file,
+        writes: [{ table: DB_TABLE.CACHE, rows: [row] }],
+      });
+    } else if (route.kind === "items") {
+      changes.push({ key: file, writes: [await items(file, route.table!, route.idKey!, data)] });
+    } else if (route.kind === "composite-online") {
+      if (!data || typeof data !== "object" || Array.isArray(data)) {
+        throw new Error(`Bundle inválido: ${file} não é uma coletânea`);
+      }
+      const obj = data as Record<string, unknown>;
+      changes.push({
+        key: file,
+        writes: [
+          await items(file, DB_TABLE.ONLINE_VIDEOS_CHANNELS, "channel_id", obj.channels),
+          await items(file, DB_TABLE.ONLINE_VIDEOS_PLAYLISTS, "playlist_id", obj.playlists),
+          await items(file, DB_TABLE.ONLINE_VIDEOS, "video_id", obj.videos),
+        ],
+      });
+    } else if (route.kind === "detail-music") {
+      const dataId = file.slice("music_".length);
+      changes.push({
+        key: file,
+        writes: [
+          { table: route.table!, rows: [{ ...makeRow(file, dataId, 0, data), id: `m:${dataId}` }] },
+        ],
+      });
+    } else {
+      changes.push({
+        key: file,
+        writes: [{ table: route.table!, rows: [{ ...makeRow(file, file, 0, data), id: file }] }],
+      });
+    }
+  }
+  return changes;
 }
 
 /**
@@ -741,6 +817,23 @@ export default {
     // Esquecer a cópia em memória faz a próxima leitura usar o valor novo do
     // IndexedDB sem invalidar os demais datasets.
     _memory.delete(file);
+  },
+
+  /** Publica o bundle e seu marker juntos; falha/abort deixa o catálogo antigo intacto. */
+  async seedBundleAtomic(
+    datasets: Map<string, unknown>,
+    marker: { id: string },
+    options: {
+      signal?: AbortSignal;
+      onProgress?: (_current: number, _total: number, _key: string) => void;
+    } = {}
+  ): Promise<void> {
+    const changes = await prepareBundleChanges(datasets, options.signal);
+    await $idb.applyCatalogBatch(changes, marker, {
+      signal: options.signal,
+      onApplied: options.onProgress,
+    });
+    for (const file of datasets.keys()) memoryDelete(file);
   },
 
   /**

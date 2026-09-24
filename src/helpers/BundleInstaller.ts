@@ -1,6 +1,6 @@
 /**
  * BundleInstaller — Baixa o bundle do banco de dados (ZIP) da API,
- * extrai os JSONs e injeta no IndexedDB via roteamento do Database.
+ * extrai os JSONs e publica o catálogo com um commit atômico no IndexedDB.
  *
  * @category helper-puro — sem APIs Vue.
  */
@@ -36,24 +36,6 @@ interface RemoteBundleConfig {
   source_version?: number;
 }
 
-/** Tabelas limpas antes da injeção do bundle (somente dados de catálogo/banco). */
-const BUNDLE_TABLES = [
-  DB_TABLE.CACHE,
-  DB_TABLE.MUSICS,
-  DB_TABLE.HYMNAL,
-  DB_TABLE.HYMNAL_1996,
-  DB_TABLE.ALBUMS,
-  DB_TABLE.MUSIC_CATEGORIES,
-  DB_TABLE.DOXOLOGY_ALBUMS,
-  DB_TABLE.CHILDREN_ALBUMS,
-  DB_TABLE.ONLINE_VIDEOS,
-  DB_TABLE.ONLINE_VIDEOS_CHANNELS,
-  DB_TABLE.ONLINE_VIDEOS_PLAYLISTS,
-  DB_TABLE.BIBLE_VERSIONS,
-  DB_TABLE.BIBLE_BOOKS,
-  DB_TABLE.BIBLE_CHAPTERS,
-];
-
 function bundleUrl(): string {
   return `${API_URL}/db/bundle`;
 }
@@ -76,14 +58,18 @@ function keyFromPath(filePath: string): string {
   return base;
 }
 
-async function clearBundleTables(): Promise<void> {
-  for (const table of BUNDLE_TABLES) {
-    await $idb.clear(table);
-  }
-}
-
 function abortCheck(signal?: AbortSignal): void {
   signal?.throwIfAborted();
+}
+
+function progressReporter(onProgress?: (p: BundleProgress) => void) {
+  let lastAt = 0;
+  return (progress: BundleProgress, final = false) => {
+    const now = Date.now();
+    if (!final && now - lastAt < 100) return;
+    lastAt = now;
+    onProgress?.(progress);
+  };
 }
 
 function parseRemoteVersion(value: unknown): RemoteBundleConfig | null {
@@ -122,33 +108,53 @@ export default {
 
     const totalBytes = Number(res.headers.get("content-length") || 0);
     const reader = res.body?.getReader();
-    if (!reader) return res.arrayBuffer();
+    if (!reader) {
+      const buffer = await res.arrayBuffer();
+      abortCheck(signal);
+      return buffer;
+    }
 
     const chunks: BlobPart[] = [];
     let receivedBytes = 0;
     const startedAt = Date.now();
+    const report = progressReporter(onProgress);
 
-    while (true) {
-      abortCheck(signal);
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (!value) continue;
+    try {
+      while (true) {
+        abortCheck(signal);
+        const { done, value } = await reader.read();
+        abortCheck(signal);
+        if (done) break;
+        if (!value) continue;
 
-      chunks.push(value);
-      receivedBytes += value.byteLength;
-      const elapsedSeconds = Math.max((Date.now() - startedAt) / 1000, 0.001);
-      const bytesPerSecond = receivedBytes / elapsedSeconds;
+        chunks.push(value);
+        receivedBytes += value.byteLength;
+        const elapsedSeconds = Math.max((Date.now() - startedAt) / 1000, 0.001);
+        // Durante o download, current/total representam bytes recebidos/total.
+        report({
+          phase: "download",
+          current: receivedBytes,
+          total: totalBytes,
+          bytesReceived: receivedBytes,
+          bytesTotal: totalBytes,
+          bytesPerSecond: receivedBytes / elapsedSeconds,
+        });
+      }
+    } catch (error) {
+      await reader.cancel().catch(() => {});
+      throw error;
+    }
 
-      // Durante o download, current/total representam bytes recebidos/total.
-      onProgress?.({
+    report(
+      {
         phase: "download",
         current: receivedBytes,
         total: totalBytes,
         bytesReceived: receivedBytes,
         bytesTotal: totalBytes,
-        bytesPerSecond,
-      });
-    }
+      },
+      true
+    );
 
     const blob = new Blob(chunks);
     return await blob.arrayBuffer();
@@ -166,29 +172,24 @@ export default {
     );
 
     const datasets = new Map<string, unknown>();
+    const report = progressReporter(onProgress);
+    let lastYield = Date.now();
     for (let i = 0; i < entries.length; i++) {
       abortCheck(signal);
       const key = keyFromPath(entries[i]);
       if (!key) continue;
       const raw = await zip.files[entries[i]].async("text");
-      datasets.set(key, JSON.parse(raw));
-      onProgress?.({ phase: "extract", current: i + 1, total: entries.length });
-    }
-    return datasets;
-  },
-
-  async injectBundle(
-    datasets: Map<string, unknown>,
-    onProgress?: (p: BundleProgress) => void,
-    signal?: AbortSignal
-  ): Promise<void> {
-    const keys = [...datasets.keys()];
-    for (let i = 0; i < keys.length; i++) {
       abortCheck(signal);
-      const key = keys[i];
-      await $database.seed(key, datasets.get(key));
-      onProgress?.({ phase: "inject", current: i + 1, total: keys.length, detail: key });
+      if (datasets.has(key)) throw new Error(`Bundle inválido: chave duplicada ${key}`);
+      datasets.set(key, JSON.parse(raw));
+      report({ phase: "extract", current: i + 1, total: entries.length }, i === entries.length - 1);
+      if (Date.now() - lastYield >= 16) {
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        lastYield = Date.now();
+      }
     }
+    abortCheck(signal);
+    return datasets;
   },
 
   async install(opts: {
@@ -199,6 +200,7 @@ export default {
   }): Promise<void> {
     const { version, onProgress, signal } = opts;
     const installStartedAt = Date.now();
+    let stage: "download" | "extract" | "validate" | "resolve_version" | "inject" = "download";
     Telemetry.track("database_bundle_install_started", {
       version: version ?? null,
       force: opts.force === true,
@@ -220,6 +222,7 @@ export default {
       });
 
       abortCheck(signal);
+      stage = "extract";
       const extractStartedAt = Date.now();
       const datasets = await this.extractBundle(buffer, onProgress, signal);
       const extractMs = Date.now() - extractStartedAt;
@@ -235,28 +238,20 @@ export default {
       // Um ZIP vazio, HTML de portal cativo ou resposta de outro endpoint não
       // pode limpar o catálogo já instalado. Valide a estrutura mínima antes de
       // tocar no IndexedDB.
-      if (datasets.size === 0 || !datasets.has("config")) {
+      stage = "validate";
+      const config = datasets.get("config");
+      if (
+        datasets.size < 2 ||
+        !config ||
+        typeof config !== "object" ||
+        Array.isArray(config)
+      ) {
         throw new Error("Bundle inválido: configuração do banco ausente");
       }
 
-      abortCheck(signal);
-      await clearBundleTables();
-      $dev.write("[BundleInstaller] Tabelas limpas");
-
-      abortCheck(signal);
-      const injectStartedAt = Date.now();
-      await this.injectBundle(datasets, onProgress, signal);
-      const injectMs = Date.now() - injectStartedAt;
-      Telemetry.track("database_bundle_stage_completed", {
-        stage: "inject",
-        duration_ms: injectMs,
-        datasets: datasets.size,
-      });
-      Telemetry.histogram("louvorja.database.bundle.stage.duration", injectMs, { stage: "inject" });
-      $dev.write("[BundleInstaller] Bundle injetado", `${datasets.size} datasets`);
-
       // Grava marker confirmando instalação do bundle
       // Usa a versão recebida como parâmetro (evita fetchRemoteConfig redundante)
+      stage = "resolve_version";
       let markerVersion = version ?? 0;
       let sourceVersion: number | undefined = version;
       // O ZIP já traz o `config`: perguntar de novo à API seria uma segunda
@@ -282,7 +277,7 @@ export default {
           }
         }
       }
-      await $idb.put(DB_TABLE.CACHE, {
+      const marker = {
         id: BUNDLE_MARKER_KEY,
         data: {
           id: BUNDLE_MARKER_KEY,
@@ -292,7 +287,25 @@ export default {
         } satisfies BundleMarker,
         ts: Date.now(),
         v: import.meta.env.VITE_DB_VERSION || "",
+      };
+
+      abortCheck(signal);
+      stage = "inject";
+      const injectStartedAt = Date.now();
+      const report = progressReporter(onProgress);
+      await $database.seedBundleAtomic(datasets, marker, {
+        signal,
+        onProgress: (current, total, key) =>
+          report({ phase: "inject", current, total, detail: key }, current === total),
       });
+      const injectMs = Date.now() - injectStartedAt;
+      Telemetry.track("database_bundle_stage_completed", {
+        stage: "inject",
+        duration_ms: injectMs,
+        datasets: datasets.size,
+      });
+      Telemetry.histogram("louvorja.database.bundle.stage.duration", injectMs, { stage: "inject" });
+      $dev.write("[BundleInstaller] Bundle injetado", `${datasets.size} datasets`);
       const totalMs = Date.now() - installStartedAt;
       Telemetry.track("database_bundle_install_completed", {
         version: markerVersion,
@@ -305,17 +318,22 @@ export default {
       $dev.write("[BundleInstaller] Marker gravado", `v${markerVersion}`);
     } catch (error) {
       const durationMs = Date.now() - installStartedAt;
-      Telemetry.captureException(error, {
-        source: "database_bundle_install",
-        version: version ?? null,
-      });
+      if (!signal?.aborted) {
+        Telemetry.captureException(error, {
+          source: "database_bundle_install",
+          version: version ?? null,
+          stage,
+        });
+      }
       Telemetry.track("database_bundle_install_failed", {
         version: version ?? null,
         duration_ms: durationMs,
         reason: error instanceof Error ? error.name : "unknown",
+        stage,
+        aborted: signal?.aborted === true,
       });
       Telemetry.histogram("louvorja.database.bundle.install.duration", durationMs, {
-        outcome: "failed",
+        outcome: signal?.aborted ? "aborted" : "failed",
       });
       throw error;
     }

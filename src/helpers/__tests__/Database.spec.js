@@ -7,7 +7,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 
 // IDB em memória — tabelas separadas, simulando persistência entre "restarts".
-const { tables, tbl } = vi.hoisted(() => {
+const { tables, tbl, applyCatalogBatch } = vi.hoisted(() => {
   const tables = new Map();
   const tbl = (name) => {
     let m = tables.get(name);
@@ -17,7 +17,7 @@ const { tables, tbl } = vi.hoisted(() => {
     }
     return m;
   };
-  return { tables, tbl };
+  return { tables, tbl, applyCatalogBatch: vi.fn() };
 });
 
 vi.mock("@/helpers/IndexedDB", () => ({
@@ -40,6 +40,7 @@ vi.mock("@/helpers/IndexedDB", () => ({
     clear: vi.fn(async (t) => {
       tbl(t).clear();
     }),
+    applyCatalogBatch,
   },
 }));
 
@@ -90,6 +91,31 @@ beforeEach(() => {
   alertError.mockReset();
   snackbarWarning.mockReset();
   vi.resetModules();
+  applyCatalogBatch.mockReset();
+  applyCatalogBatch.mockImplementation(async (changes, marker, options) => {
+    const next = new Map([...tables].map(([name, rows]) => [name, new Map(rows)]));
+    const target = (name) => {
+      if (!next.has(name)) next.set(name, new Map());
+      return next.get(name);
+    };
+    for (const [index, change] of changes.entries()) {
+      options.signal?.throwIfAborted();
+      for (const write of change.writes) {
+        const rows = target(write.table);
+        if (write.replacePrefix) {
+          for (const key of rows.keys()) {
+            if (key.startsWith(write.replacePrefix)) rows.delete(key);
+          }
+        }
+        for (const row of write.rows) rows.set(row.id, row);
+      }
+      options.onApplied?.(index + 1, changes.length, change.key);
+    }
+    options.signal?.throwIfAborted();
+    target("cache").set(marker.id, marker);
+    tables.clear();
+    for (const [name, rows] of next) tables.set(name, rows);
+  });
 });
 
 function jsonResponse(body, status = 200) {
@@ -515,5 +541,39 @@ describe("Database — falha sem nenhum cache: o que aparece na tela", () => {
 
     expect(alertError).not.toHaveBeenCalled();
     expect(snackbarWarning).not.toHaveBeenCalled();
+  });
+});
+
+describe("Database — publicação de bundle", () => {
+  it("troca somente o dataset publicado e descarta a cópia antiga em memória", async () => {
+    const db = await importDatabase();
+    await db.seed("pt_musics", [{ id_music: 1, name: "antiga" }]);
+    await db.getLocal("pt_musics");
+    tbl("cache").set("unrelated", { id: "unrelated", data: "preservado", v: V });
+
+    await db.seedBundleAtomic(
+      new Map([
+        ["config", { version_number: 200 }],
+        ["pt_musics", [{ id_music: 2, name: "nova" }]],
+      ]),
+      { id: "__bundle_marker__", data: { version_number: 200 } }
+    );
+
+    expect((await db.getLocal("pt_musics")).map((item) => item.name)).toEqual(["nova"]);
+    expect(dataIds("musics", "pt_musics")).toEqual(["2"]);
+    expect(tbl("cache").get("unrelated").data).toBe("preservado");
+    expect(tbl("cache").get("__bundle_marker__").data.version_number).toBe(200);
+  });
+
+  it("recusa forma inválida antes de abrir a transação", async () => {
+    const db = await importDatabase();
+    await db.seed("pt_musics", [{ id_music: 1, name: "antiga" }]);
+
+    await expect(
+      db.seedBundleAtomic(new Map([["pt_musics", { invalid: true }]]), { id: "marker" })
+    ).rejects.toThrow(/não é uma lista/);
+
+    expect(applyCatalogBatch).not.toHaveBeenCalled();
+    expect(dataIds("musics", "pt_musics")).toEqual(["1"]);
   });
 });
