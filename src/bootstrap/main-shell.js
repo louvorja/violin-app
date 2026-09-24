@@ -65,6 +65,7 @@ import { startThemeSync } from "@/composables/useAppTheme";
 import { BootOrchestrator } from "@/bootstrap/BootOrchestrator";
 import { useLibrasState } from "@/modules/libras/composables/useLibrasState";
 import { handleProjectionStateRequest } from "@/helpers/ProjectionStateRequests";
+import { listenForVideoStateRequests } from "@/helpers/VideoStateRequest";
 
 const app = createApp(App);
 Telemetry.installVueErrorHandler(app);
@@ -964,15 +965,13 @@ $storage.hydrate().then(async () => {
       }
     });
 
+    listenForVideoStateRequests(Broadcast, Media);
+
     // Responde a pedidos de estado usando o cache do Broadcast.ts.
     // Isso garante que janelas de projeção recém-abertas recebam o estado
     // atual mesmo se o módulo específico (Bíblia ou Música) não estiver montado.
     Broadcast.listen((msg) => {
       handleProjectionStateRequest(msg, Broadcast);
-
-      if (msg.type === BROADCAST_TYPE.REQUEST_VIDEO_STATE) {
-        Media.broadcastVideoStateForRequest(msg.payload?.playback_id);
-      }
 
       // Módulos genéricos (/projection/module) — responde pelo cache do
       // Broadcast.ts. Mesmo padrão do REQUEST_BIBLE_STATE acima: o cache é

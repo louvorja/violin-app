@@ -7,6 +7,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
+import Broadcast from "@/helpers/Broadcast";
+import { listenForVideoStateRequests } from "@/helpers/VideoStateRequest";
 import { KEYS } from "@/constants/UserDataKeys";
 
 const h = vi.hoisted(() => ({
@@ -800,5 +802,71 @@ describe("sincronia versionada do vídeo local", () => {
     ]);
 
     media.close(true);
+  });
+
+  it("responde só ao pedido da reprodução ativa e inclui snapshot pausado versionado", async () => {
+    const url = "louvorja://onlinevideo/video-request.mp4";
+    const guardado = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => guardado.get(key) ?? null,
+      setItem: (key: string, value: string) => void guardado.set(key, value),
+      removeItem: (key: string) => void guardado.delete(key),
+    });
+    localStorage.setItem(
+      KEYS.PROJECTION.LJ_FILE_PROJECTION,
+      JSON.stringify({ url, type: "video", title: "Vídeo pausado" })
+    );
+    openAudio.mockRestore();
+    await media.openAudio({ url, title: "Vídeo pausado", mediaType: "video" });
+
+    const playbackId = media.getActivePlaybackId();
+    expect(playbackId).toEqual(expect.any(String));
+    h.send.mockClear();
+    const stopListening = listenForVideoStateRequests(Broadcast, media);
+
+    try {
+      for (const listener of [...h.listeners]) {
+        listener({
+          type: BROADCAST_TYPE.REQUEST_VIDEO_STATE,
+          payload: { playback_id: "stale-playback" },
+        });
+      }
+      expect(h.send).not.toHaveBeenCalledWith(BROADCAST_TYPE.VIDEO_STATE, expect.anything());
+
+      for (const listener of [...h.listeners]) {
+        listener({
+          type: BROADCAST_TYPE.REQUEST_VIDEO_STATE,
+          payload: { playback_id: playbackId },
+        });
+      }
+
+      const states = h.send.mock.calls
+        .filter(([type]) => type === BROADCAST_TYPE.VIDEO_STATE)
+        .map(
+          ([, payload]) =>
+            payload as {
+              playback_id: string;
+              revision: number;
+              currentTime: number;
+              isPaused: boolean;
+              playing: boolean;
+              position: number;
+              clockAnchor: number | null;
+            }
+        );
+      expect(states).toHaveLength(1);
+      expect(states[0]).toMatchObject({
+        playback_id: playbackId,
+        revision: 1,
+        currentTime: 0,
+        isPaused: true,
+        playing: false,
+        position: 0,
+        clockAnchor: null,
+      });
+    } finally {
+      stopListening();
+      media.close(true);
+    }
   });
 });
