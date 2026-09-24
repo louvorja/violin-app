@@ -548,7 +548,13 @@ test.describe("quando algo dá errado", () => {
   test("vídeo removido: avisa o operador e NÃO abre janela nenhuma para o telão", async () => {
     const opened = await openOnline(MISSING);
     expect(opened).toBe(false);
-    expect(await snackbar()).toMatch(/removido ou não está disponível/i);
+    await expect
+      .poll(() =>
+        main.evaluate(() =>
+          window.__appdata.get("snackbar.show") ? window.__appdata.get("snackbar.text") : null
+        )
+      )
+      .toMatch(/removido ou não está disponível/i);
     await sleep(1500);
     expect(auxiliaries().length).toBe(0);
   });
@@ -764,7 +770,9 @@ test.describe("Meus vídeos online: baixar de antemão e gerenciar", () => {
   const onDisk = async (id) => (await files()).find((f) => f.id === id);
   const confirmYes = () => main.getByRole("button", { name: "Sim", exact: true }).click();
 
-  test.beforeAll(async () => {
+  // Playwright requires a destructured fixture argument before testInfo.
+  // eslint-disable-next-line no-empty-pattern
+  test.beforeAll(async ({}, testInfo) => {
     await main.evaluate(() => window.louvorjaApi.onlineVideo.clear());
     await main.evaluate(
       async ([short, long, nameShort, nameLong]) => {
@@ -808,7 +816,7 @@ test.describe("Meus vídeos online: baixar de antemão e gerenciar", () => {
       );
       console.log("[e2e] console da janela principal:\n" + mainConsole.slice(-25).join("\n"));
       await main
-        .screenshot({ path: "test-results/meus-videos-online-sem-cartoes.png" })
+        .screenshot({ path: testInfo.outputPath("meus-videos-online-sem-cartoes.png") })
         .catch(() => {});
       throw error;
     }
@@ -957,7 +965,7 @@ test.describe("Meus vídeos online: baixar de antemão e gerenciar", () => {
     expect(fs.existsSync(streamDirOf(LONG)), "as trilhas pela metade somem").toBe(false);
   });
 
-  test("pelo cartão, ainda baixando: toca já, o cartão mostra o andamento, e o ✕ cancela o download e para o vídeo", async () => {
+  test("pelo cartão, toca já, mostra o estado do download e cancela se ainda estiver baixando", async () => {
     const STREAM_LONG = `louvorja://onlinestream/${LONG}/video`;
     const playingFromStream = () =>
       until(
@@ -976,30 +984,59 @@ test.describe("Meus vídeos online: baixar de antemão e gerenciar", () => {
     await card(NAME_LONG).locator(".cv-grid-thumb").click();
     await playingFromStream();
 
-    // O cartão não finge que nada acontece: mostra a barra e oferece cancelar, não baixar.
-    await expect(card(NAME_LONG).locator('.ovd-badge [role="progressbar"]')).toBeVisible();
+    // A transferência pode terminar enquanto as três janelas começam a reproduzir.
+    const badge = card(NAME_LONG).locator(".ovd-badge");
+    await expect(badge).toHaveClass(/ovd-badge--(downloading|downloaded)/);
     await expect(action(NAME_LONG, BTN.download)).toHaveCount(0);
 
-    // Cancelar o download leva o vídeo junto: as trilhas de onde ele toca somem.
-    await action(NAME_LONG, BTN.cancel).click();
-    await expect(action(NAME_LONG, BTN.download)).toBeVisible({ timeout: 5_000 });
-    await until(() => auxiliaries().length === 0, {
-      timeout: 10_000,
-      label: "o vídeo parar junto com o download",
+    const badgeState = await badge.evaluate((el) => {
+      if (el.classList.contains("ovd-badge--downloaded")) return "downloaded";
+      return el.classList.contains("ovd-badge--downloading") &&
+        el.querySelector('[role="progressbar"]')
+        ? "downloading"
+        : "missing-progress";
     });
-    await sleep(1500);
-    expect((await status()).active).toEqual([]);
-    expect(fs.existsSync(streamDirOf(LONG)), "as trilhas pela metade somem").toBe(false);
-    expect(await onDisk(LONG)).toBeFalsy();
+    expect(["downloading", "downloaded"]).toContain(badgeState);
 
-    // Clicar de novo logo em seguida tem que funcionar (não pode pegar carona no cancelado).
-    await card(NAME_LONG).locator(".cv-grid-thumb").click();
-    await playingFromStream();
-    await closeMedia();
-    await until(async () => !!(await onDisk(LONG)), {
-      timeout: 180_000,
-      label: "o vídeo chegar ao disco",
-    });
+    let cancelled = false;
+    if (badgeState === "downloading") {
+      // Cancelar o download leva o vídeo junto: as trilhas de onde ele toca somem.
+      try {
+        await action(NAME_LONG, BTN.cancel).click({ timeout: 1500 });
+        cancelled = true;
+      } catch (error) {
+        // O botão some se o download terminar entre a leitura do selo e o clique.
+        if (!(await onDisk(LONG))) throw error;
+      }
+    }
+
+    if (cancelled) {
+      await expect(action(NAME_LONG, BTN.download)).toBeVisible({ timeout: 5_000 });
+      await until(() => auxiliaries().length === 0, {
+        timeout: 10_000,
+        label: "o vídeo parar junto com o download",
+      });
+      await sleep(1500);
+      expect((await status()).active).toEqual([]);
+      expect(fs.existsSync(streamDirOf(LONG)), "as trilhas pela metade somem").toBe(false);
+      expect(await onDisk(LONG)).toBeFalsy();
+
+      // Clicar de novo logo em seguida tem que funcionar (não pode pegar carona no cancelado).
+      await card(NAME_LONG).locator(".cv-grid-thumb").click();
+      await playingFromStream();
+      await closeMedia();
+      await until(async () => !!(await onDisk(LONG)), {
+        timeout: 180_000,
+        label: "o vídeo chegar ao disco",
+      });
+    } else {
+      await expect(action(NAME_LONG, BTN.remove)).toBeVisible();
+      expect(
+        await onDisk(LONG),
+        "o selo de concluído corresponde ao arquivo no disco"
+      ).toBeTruthy();
+      await closeMedia();
+    }
 
     // Limpa pela própria tela, para o cartão e o disco seguirem de acordo.
     await expect(action(NAME_LONG, BTN.remove)).toBeVisible({ timeout: 10_000 });

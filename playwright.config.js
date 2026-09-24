@@ -11,6 +11,9 @@ const chromiumExecutable =
 
 export default defineConfig({
   testDir: "./e2e",
+  // Playwright clears outputDir before every run. Keep persistent lab records
+  // in test-results/windows-live-stability outside this disposable subfolder.
+  outputDir: "./test-results/playwright",
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
