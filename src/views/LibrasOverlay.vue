@@ -451,6 +451,10 @@ onMounted(() => {
       isMediaActive.value = false;
     }
   });
+  // A janela pode nascer depois de a opção ter sido alterada. O request
+  // completa o contrato de recuperação e faz a principal reemitir o snapshot
+  // mais recente, sem depender de uma nova interação do operador.
+  $broadcast.send(BROADCAST_TYPE.REQUEST_LIBRAS_STATE, {});
 });
 
 onBeforeUnmount(() => {

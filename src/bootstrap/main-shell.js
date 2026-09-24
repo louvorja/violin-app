@@ -64,6 +64,7 @@ import { FONT, resolveDefaultFont } from "@/config/Fonts";
 import { startThemeSync } from "@/composables/useAppTheme";
 import { BootOrchestrator } from "@/bootstrap/BootOrchestrator";
 import { useLibrasState } from "@/modules/libras/composables/useLibrasState";
+import { handleProjectionStateRequest } from "@/helpers/ProjectionStateRequests";
 
 const app = createApp(App);
 Telemetry.installVueErrorHandler(app);
@@ -959,26 +960,7 @@ $storage.hydrate().then(async () => {
     // Isso garante que janelas de projeção recém-abertas recebam o estado
     // atual mesmo se o módulo específico (Bíblia ou Música) não estiver montado.
     Broadcast.listen((msg) => {
-      if (msg.type === BROADCAST_TYPE.REQUEST_BIBLE_STATE) {
-        const last = Broadcast.getLastPayload(BROADCAST_TYPE.BIBLE_VERSE);
-        console.log("[main] REQUEST_BIBLE_STATE recebido. Cache:", last);
-        if (last) {
-          Broadcast.send(BROADCAST_TYPE.BIBLE_VERSE, last);
-        }
-      }
-
-      if (msg.type === BROADCAST_TYPE.REQUEST_SLIDE_STATE) {
-        const last = Broadcast.getLastPayload(BROADCAST_TYPE.SLIDE_CHANGE);
-        if (last) {
-          Broadcast.send(BROADCAST_TYPE.SLIDE_CHANGE, last);
-          if (msg.type === BROADCAST_TYPE.REQUEST_LIBRAS_STATE) {
-            const last = Broadcast.getLastPayload(BROADCAST_TYPE.LIBRAS_TOGGLE);
-            if (last) {
-              Broadcast.send(BROADCAST_TYPE.LIBRAS_TOGGLE, last);
-            }
-          }
-        }
-      }
+      handleProjectionStateRequest(msg, Broadcast);
 
       // Módulos genéricos (/projection/module) — responde pelo cache do
       // Broadcast.ts. Mesmo padrão do REQUEST_BIBLE_STATE acima: o cache é
