@@ -4,7 +4,12 @@ import { MusicShadowReceiver, readMusicShadowPacket } from "../MusicShadowReceiv
 import { createMusicShadowSessionFactory } from "@/helpers/MusicShadowSession";
 
 function fixture(sessionId = "session-a") {
-  const core = new MusicPresentationCore(sessionId, [{ lyric: "Cover" }, { lyric: "Verse" }], [], "Song");
+  const core = new MusicPresentationCore(
+    sessionId,
+    [{ lyric: "Cover" }, { lyric: "Verse" }],
+    [],
+    "Song"
+  );
   return { version: 1 as const, legacyRevision: 7, snapshot: core.snapshot() };
 }
 
@@ -13,10 +18,52 @@ describe("auxiliary music snapshot shadow", () => {
     const packet = fixture();
     expect(readMusicShadowPacket(null)).toBeNull();
     expect(readMusicShadowPacket({ ...packet, legacyRevision: NaN })).toBeNull();
-    expect(readMusicShadowPacket({ ...packet, snapshot: { ...packet.snapshot, sessionId: "" } })).toBeNull();
-    expect(readMusicShadowPacket({ ...packet, snapshot: { ...packet.snapshot, slide: { lyric: [] } } })).toBeNull();
-    expect(readMusicShadowPacket({ ...packet, snapshot: { ...packet.snapshot, slide: { lyric: "Text", extra: { private: true } } } })?.snapshot.slide)
-      .toEqual({ lyric: "Text" });
+    expect(
+      readMusicShadowPacket({ ...packet, snapshot: { ...packet.snapshot, sessionId: "" } })
+    ).toBeNull();
+    expect(
+      readMusicShadowPacket({ ...packet, snapshot: { ...packet.snapshot, slide: { lyric: [] } } })
+    ).toBeNull();
+    expect(
+      readMusicShadowPacket({
+        ...packet,
+        snapshot: { ...packet.snapshot, slide: { lyric: "Text", extra: { private: true } } },
+      })?.snapshot.slide
+    ).toEqual({ lyric: "Text" });
+  });
+
+  it("rejects inconsistent active selections but accepts empty covers and the last slide", () => {
+    const packet = fixture();
+    const snapshot = packet.snapshot;
+    expect(
+      readMusicShadowPacket({
+        ...packet,
+        snapshot: { ...snapshot, totalSlides: 0, slide: null, nextSlide: null },
+      })
+    ).toBeNull();
+    expect(
+      readMusicShadowPacket({ ...packet, snapshot: { ...snapshot, slideIndex: 2 } })
+    ).toBeNull();
+    expect(readMusicShadowPacket({ ...packet, snapshot: { ...snapshot, slide: null } })).toBeNull();
+    expect(
+      readMusicShadowPacket({ ...packet, snapshot: { ...snapshot, nextSlide: null } })
+    ).toBeNull();
+
+    const cover = {
+      ...packet,
+      snapshot: { ...snapshot, slide: { cover: true }, nextSlide: { lyric: "Verse" } },
+    };
+    expect(readMusicShadowPacket(cover)?.snapshot.slide).toEqual({ cover: true });
+    const lastSlide = {
+      ...packet,
+      snapshot: {
+        ...snapshot,
+        slideIndex: 1,
+        slide: { lyric: "Verse" },
+        nextSlide: null,
+      },
+    };
+    expect(readMusicShadowPacket(lastSlide)?.snapshot.nextSlide).toBeNull();
   });
 
   it("waits for matching legacy revision in either delivery order", () => {
@@ -27,7 +74,11 @@ describe("auxiliary music snapshot shadow", () => {
     expect(receiver.takeDifferences()).toEqual([]);
     receiver.observe("session-a", 7, packet.snapshot);
     expect(receiver.takeDifferences()).toEqual([]);
-    const next = { ...packet, legacyRevision: 8, snapshot: { ...packet.snapshot, revision: 1, title: "New title" } };
+    const next = {
+      ...packet,
+      legacyRevision: 8,
+      snapshot: { ...packet.snapshot, revision: 1, title: "New title" },
+    };
     receiver.observe("session-a", 8, next.snapshot);
     expect(receiver.takeDifferences()).toEqual([]);
     receiver.receive(next);
@@ -41,7 +92,11 @@ describe("auxiliary music snapshot shadow", () => {
     const packet = fixture();
     receiver.observe("session-a", 7, packet.snapshot);
     receiver.receive(packet);
-    const latest = { ...packet, legacyRevision: 20, snapshot: { ...packet.snapshot, revision: 10, title: "Recovered" } };
+    const latest = {
+      ...packet,
+      legacyRevision: 20,
+      snapshot: { ...packet.snapshot, revision: 10, title: "Recovered" },
+    };
     receiver.observe("session-a", 20, latest.snapshot);
     receiver.receive(latest);
     expect(receiver.snapshot()).toEqual(latest.snapshot);
@@ -58,7 +113,18 @@ describe("auxiliary music snapshot shadow", () => {
     receiver.suspend();
     receiver.receive({ ...packet, snapshot: { ...packet.snapshot, title: "Different" } });
     expect(receiver.takeDifferences()).toEqual([]);
-    const closed = { ...packet, snapshot: { ...packet.snapshot, revision: 1, active: false, title: "", totalSlides: 0, slide: null, nextSlide: null } };
+    const closed = {
+      ...packet,
+      snapshot: {
+        ...packet.snapshot,
+        revision: 1,
+        active: false,
+        title: "",
+        totalSlides: 0,
+        slide: null,
+        nextSlide: null,
+      },
+    };
     receiver.receive(closed);
     receiver.close();
     expect(receiver.takeDifferences()).toEqual([]);
@@ -83,6 +149,8 @@ describe("auxiliary music snapshot shadow", () => {
       receiver.receive(current);
       receiver.receive(previous);
       expect(receiver.snapshot()?.sessionId).toBe(current.snapshot.sessionId);
-    } finally { now.mockRestore(); }
+    } finally {
+      now.mockRestore();
+    }
   });
 });
