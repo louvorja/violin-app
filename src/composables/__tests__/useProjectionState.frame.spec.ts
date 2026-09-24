@@ -131,4 +131,13 @@ describe("useProjectionState frame opportunity", () => {
 
     expect(fake.histogram.mock.calls.filter(([name]) => name === "louvorja.projection.slide.frame_opportunity")).toHaveLength(0);
   });
+
+  it("ignora timestamp remoto impossível sem criar histograma de alta cardinalidade", async () => {
+    await nextTick();
+    emit({ slide: { lyric: "visível" }, slide_index: 0, total_slides: 1, _ts: -1e12 });
+    await nextTick();
+    nextFrame();
+    nextFrame();
+    expect(fake.histogram).not.toHaveBeenCalled();
+  });
 });

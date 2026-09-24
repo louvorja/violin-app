@@ -83,7 +83,8 @@ export function useProjectionState(): ProjectionStateReturn {
     slideIndex.value = (p.slide_index as number) ?? 0;
     totalSlides.value = (p.total_slides as number) ?? (p.last_slide as number) ?? 0;
 
-    if (typeof p._ts === "number" && Number.isFinite(p._ts)) {
+    if (typeof p._ts === "number" && Number.isFinite(p._ts) &&
+        p._ts >= receivedAt - 300_000 && p._ts <= receivedAt + 1_000) {
       const sentAt = p._ts;
       const latencyMs = Math.max(0, receivedAt - sentAt);
       if (isProjectionMilestone(slideIndex.value, totalSlides.value, !!slide.value)) {
@@ -131,7 +132,9 @@ export function useProjectionState(): ProjectionStateReturn {
                 Telemetry.track("projection_slide_frame_opportunity", {
                   slide_index: slideIndex.value,
                   playback_id: p.playback_id,
-                  presentation_revision: p.presentation_revision,
+                  presentation_revision: typeof p.presentation_revision === "number" &&
+                    Number.isSafeInteger(p.presentation_revision) && p.presentation_revision >= 0
+                    ? p.presentation_revision : undefined,
                   broadcast_to_receive_ms: latencyMs,
                   receive_to_apply_ms: receiveToApplyMs,
                   broadcast_to_frame_ms: broadcastToFrameMs,
