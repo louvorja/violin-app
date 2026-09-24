@@ -39,6 +39,9 @@ const GITHUB_REPO = "violin-app";
 const GITHUB_RELEASES_URL = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases?per_page=20`;
 
 let autoUpdater = null;
+let UpdaterCancellationToken = null;
+let _nativeDownloadToken = null;
+let _downloadUpdatePromise = null;
 const _installRequiresElevation = installRequiresWindowsElevation();
 
 /** @type {import("electron").BrowserWindow | null} */
@@ -112,17 +115,26 @@ function _maybeStartAutomaticDownload() {
   if (!canStartWork(WorkPriority.BACKGROUND, _presentationActive)) return;
 
   _automaticDownloadInFlight = true;
+  let started = false;
   Promise.resolve()
     .then(() => {
-      // A apresentação pode começar entre o agendamento e esta microtask.
-      if (!canStartWork(WorkPriority.BACKGROUND, _presentationActive)) return null;
+      // Opção, cancelamento e atividade podem mudar antes desta microtask.
+      if (!_autoDownload || _state.status !== "available" || !_state.newVersion ||
+          _state.newVersion === _autoDownloadCancelledVersion ||
+          !canStartWork(WorkPriority.BACKGROUND, _presentationActive)) return null;
+      started = true;
       return downloadUpdate(_mainWindow);
     })
     .then((result) => {
       if (result && !result.ok) console.warn("[updater] auto-download falhou:", result.error);
     })
     .catch((error) => console.warn("[updater] auto-download falhou:", error?.message || error))
-    .finally(() => { _automaticDownloadInFlight = false; });
+    .finally(() => {
+      _automaticDownloadInFlight = false;
+      // Uma transição active→idle pode ter ocorrido enquanto o flag estava
+      // ocupado. Só reagenda quando a tentativa nunca chegou a começar.
+      if (!started) _maybeStartAutomaticDownload();
+    });
 }
 
 function setPresentationActive(active) {
@@ -580,7 +592,13 @@ function init({ channel = "latest", autoCheck = true, autoDownload = false, useB
   // blindamos o require para não quebrar o boot caso o módulo falhe.
   if (!autoUpdater) {
     try {
-      autoUpdater = require("electron-updater").autoUpdater;
+      const updaterModule = require("electron-updater");
+      autoUpdater = updaterModule.autoUpdater;
+      UpdaterCancellationToken = updaterModule.CancellationToken;
+      if (typeof UpdaterCancellationToken !== "function") {
+        // Sem cancelamento real, é mais seguro usar o fallback HTTP manual.
+        autoUpdater = null;
+      }
     } catch (e) {
       console.warn("[updater] electron-updater indisponível:", e.message);
     }
@@ -656,6 +674,10 @@ function init({ channel = "latest", autoCheck = true, autoDownload = false, useB
         newVersion: info.version,
         progress: 100,
       });
+    });
+
+    autoUpdater.on("update-cancelled", () => {
+      _setState({ status: "available", error: null });
     });
 
     // ----- Auto-check após boot ----------------------------------------------
@@ -738,7 +760,18 @@ async function checkForUpdates() {
  * @param {import("electron").WebContents} [sender]
  * @returns {Promise<{ ok: boolean, path?: string, error?: string }>}
  */
-async function downloadUpdate(sender) {
+function downloadUpdate(sender) {
+  if (_downloadUpdatePromise) return _downloadUpdatePromise;
+  const pending = _runDownloadUpdate(sender);
+  _downloadUpdatePromise = pending;
+  pending.then(
+    () => { if (_downloadUpdatePromise === pending) _downloadUpdatePromise = null; },
+    () => { if (_downloadUpdatePromise === pending) _downloadUpdatePromise = null; }
+  );
+  return pending;
+}
+
+async function _runDownloadUpdate(sender) {
   if (!autoUpdater || !autoUpdater.isUpdaterActive() || _checkedViaGithub) {
     try {
       return await downloadPackage(sender);
@@ -746,15 +779,22 @@ async function downloadUpdate(sender) {
       return { ok: false, error: e.message };
     }
   }
+  const token = new UpdaterCancellationToken();
+  _nativeDownloadToken = token;
   try {
     autoUpdater.allowPrerelease = _useBeta;
     autoUpdater.autoDownload = true;
-    await autoUpdater.downloadUpdate();
+    await autoUpdater.downloadUpdate(token);
     return { ok: true };
   } catch (e) {
+    if (token.cancelled) {
+      _setState({ status: "available", error: null });
+      return { ok: false, error: "cancelled" };
+    }
     _setState({ status: "error", error: e.message });
     return { ok: false, error: e.message };
   } finally {
+    if (_nativeDownloadToken === token) _nativeDownloadToken = null;
     autoUpdater.autoDownload = false;
   }
 }
@@ -769,10 +809,9 @@ function cancelDownload() {
     _downloadAbortController.abort();
     _downloadAbortController = null;
   }
-  // Cancela download via electron-updater
-  if (autoUpdater && autoUpdater.isUpdaterActive() && typeof autoUpdater.cancelDownload === "function") {
-    try { autoUpdater.cancelDownload(); } catch (_) { /* ignore */ }
-  }
+  // A API instalada do electron-updater recebe CancellationToken em
+  // downloadUpdate(); ela não oferece cancelDownload() no updater.
+  _nativeDownloadToken?.cancel();
 }
 
 /**
