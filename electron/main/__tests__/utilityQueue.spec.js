@@ -22,7 +22,7 @@ function fixture() {
   child.kill = vi.fn();
   const root = path.join(os.tmpdir(), "utility-test");
   const queue = new UtilityQueue({ filesDir: root, baseUrl: "https://example.test", fork: () => child });
-  queue.add([{ remote: "/a", local: "a" }]);
+  queue.add([{ remote: "/a", local: "a", actualSize: 0 }]);
   const emit = (type, data, jobId = queue.jobId) => child.emit("message", { version: 1, jobId, type, data });
   return { queue, child, emit, root };
 }
@@ -38,6 +38,7 @@ describe("download utility process", () => {
     expect(child.postMessage).not.toHaveBeenCalled();
     emit("ready");
     expect(child.postMessage.mock.calls[0][0].type).toBe("start");
+    expect(child.postMessage.mock.calls[0][0].data.files[0]).not.toHaveProperty("actualSize");
     emit("started");
     emit("progress", { file: "/a", current: 1, total: 1, bytes: 5, totalBytes: 10 }, "old-job");
     emit("progress", { file: "/a", current: 1, total: 1, bytes: Infinity, totalBytes: 10 });

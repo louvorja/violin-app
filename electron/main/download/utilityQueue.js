@@ -25,7 +25,13 @@ class UtilityQueue extends EventEmitter {
 
   add(files) {
     if (this.running || this.done) throw new Error("Download já iniciado");
-    this.queue.push(...files);
+    // integrity.diff annotates damaged files with actualSize. Only transport
+    // download-contract fields; the worker validates this closed shape again.
+    this.queue.push(...files.map(({ remote, local, remoteUrl, expectedSize }) => ({
+      remote, local,
+      ...(remoteUrl === undefined ? {} : { remoteUrl }),
+      ...(expectedSize === undefined ? {} : { expectedSize }),
+    })));
   }
 
   start() {
