@@ -182,10 +182,30 @@ describe("useSlides e o pedido de troca de slide entre janelas", () => {
     expect(changes[0]).toEqual(expect.objectContaining({
       presentation_revision: expect.any(Number),
       _command_ts: commandAt,
+      _commit_ts: expect.any(Number),
       _ts: expect.any(Number),
     }));
+    expect(changes[0]._commit_ts).toBeGreaterThanOrEqual(commandAt);
+    expect(changes[0]._commit_ts).toBeLessThanOrEqual(changes[0]._ts as number);
     expect(changes[1].presentation_revision).toBe((changes[0].presentation_revision as number) + 1);
     expect(changes[1]._command_ts).toBeGreaterThanOrEqual(commandAt);
+  });
+
+  it("não atribui commit novo a replay de recuperação", () => {
+    slides.reset();
+    abrir(SUNG);
+    const changes: Record<string, unknown>[] = [];
+    const parar = $broadcast.listen((msg) => {
+      if (msg.type === BROADCAST_TYPE.SLIDE_CHANGE) changes.push(msg.payload as Record<string, unknown>);
+    });
+    changes.length = 0; // listener recebe o último estado cached imediatamente
+    slides.goToSlide(1);
+    $broadcast.send(BROADCAST_TYPE.REQUEST_SLIDE_STATE);
+    parar();
+
+    expect(changes).toHaveLength(2);
+    expect(changes[0]._commit_ts).toEqual(expect.any(Number));
+    expect(changes[1]._commit_ts).toBeUndefined();
   });
 
   it("preserva o início do comando vindo de outra janela", () => {
