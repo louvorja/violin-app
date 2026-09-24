@@ -6,6 +6,8 @@ const http = require("http");
 const { EventEmitter } = require("events");
 const paths = require("../paths.js");
 
+const DEFAULT_PROGRESS_INTERVAL_MS = 100;
+
 /**
  * HttpQueue — fila de downloads HTTPS com pool de workers concorrentes.
  * Usada para baixar mídia (capas, áudio, imagens das letras) via
@@ -20,9 +22,9 @@ const paths = require("../paths.js");
  */
 class HttpQueue extends EventEmitter {
   /**
-   * @param {{ baseUrl: string, apiToken?: string, concurrency?: number }} options
+   * @param {{ baseUrl: string, apiToken?: string, concurrency?: number, progressIntervalMs?: number }} options
    */
-  constructor({ baseUrl, apiToken, concurrency } = {}) {
+  constructor({ baseUrl, apiToken, concurrency, progressIntervalMs } = {}) {
     super();
     this.baseUrl = (baseUrl || "").replace(/\/+$/, "");
     this.apiToken = apiToken || null;
@@ -34,6 +36,11 @@ class HttpQueue extends EventEmitter {
     this._activeReqs = new Set();
     this._activeTmps = new Set();
     this._resumeWaiters = [];
+    this._progressIntervalMs = Number.isFinite(progressIntervalMs)
+      ? Math.max(0, progressIntervalMs)
+      : DEFAULT_PROGRESS_INTERVAL_MS;
+    this._pendingProgress = new Map();
+    this._progressTimer = null;
   }
 
   /**
@@ -57,12 +64,62 @@ class HttpQueue extends EventEmitter {
   cancel() {
     this.cancelled = true;
     this.paused = false;
+    this._discardPendingProgress();
     this._resumeWaiters.forEach((res) => res());
     this._resumeWaiters = [];
     for (const req of this._activeReqs) {
       try { req.destroy(new Error("cancelled")); } catch (_) { /* ignore */ }
     }
     this._activeReqs.clear();
+  }
+
+  /**
+   * Progresso de rede pode chegar uma vez por chunk. Mantemos só a amostra
+   * mais recente de cada arquivo e fazemos fan-out numa cadência limitada,
+   * evitando transformar uma resposta fragmentada em milhares de IPCs.
+   */
+  _queueProgress(key, payload) {
+    if (this.cancelled) return;
+    this._pendingProgress.set(key, payload);
+    if (this._progressTimer) return;
+
+    this._progressTimer = setTimeout(() => {
+      this._progressTimer = null;
+      this._flushPendingProgress();
+    }, this._progressIntervalMs);
+  }
+
+  /**
+   * Em conclusão/erro, a última amostra do arquivo é emitida imediatamente
+   * antes do evento terminal. Sem `key`, drena todas as amostras pendentes.
+   */
+  _flushPendingProgress(key) {
+    if (key !== undefined) {
+      const payload = this._pendingProgress.get(key);
+      this._pendingProgress.delete(key);
+      if (this._pendingProgress.size === 0 && this._progressTimer) {
+        clearTimeout(this._progressTimer);
+        this._progressTimer = null;
+      }
+      if (payload) this.emit("progress", payload);
+      return;
+    }
+
+    if (this._progressTimer) {
+      clearTimeout(this._progressTimer);
+      this._progressTimer = null;
+    }
+    const pending = [...this._pendingProgress.values()];
+    this._pendingProgress.clear();
+    for (const payload of pending) this.emit("progress", payload);
+  }
+
+  _discardPendingProgress() {
+    if (this._progressTimer) {
+      clearTimeout(this._progressTimer);
+      this._progressTimer = null;
+    }
+    this._pendingProgress.clear();
   }
 
   pause() {
@@ -156,7 +213,7 @@ class HttpQueue extends EventEmitter {
       this._activeTmps.add(tmp);
 
       await this._downloadOne(url, tmp, (bytes, totalBytes) => {
-        this.emit("progress", {
+        this._queueProgress(idx, {
           current: idx,
           total,
           file: item.remote,
@@ -165,11 +222,14 @@ class HttpQueue extends EventEmitter {
         });
       });
 
+      // `file-done` nunca ultrapassa a última posição conhecida do arquivo.
+      this._flushPendingProgress(idx);
       await fs.move(tmp, item.local, { overwrite: true });
       this._activeTmps.delete(tmp);
       this.emit("file-done", { file: item.remote, localPath: item.local });
       return { ok: true };
     } catch (err) {
+      if (!this.cancelled) this._flushPendingProgress(idx);
       if (this._activeTmps.has(tmp)) {
         try { await fs.remove(tmp); } catch (_) { /* ignore */ }
         this._activeTmps.delete(tmp);
@@ -185,6 +245,7 @@ class HttpQueue extends EventEmitter {
     if (this.running) throw new Error("HttpQueue já está em execução");
     if (!this.baseUrl) throw new Error("HttpQueue: baseUrl não configurada");
     if (this.queue.length === 0) {
+      this._discardPendingProgress();
       this.emit("queue-done", { downloaded: 0, failed: 0 });
       return;
     }
@@ -218,8 +279,14 @@ class HttpQueue extends EventEmitter {
 
     this.running = false;
 
-    if (this.cancelled) this.emit("queue-cancelled");
-    else this.emit("queue-done", { downloaded, failed });
+    if (this.cancelled) {
+      this._discardPendingProgress();
+      this.emit("queue-cancelled");
+    } else {
+      // Garante que nenhuma amostra final fique presa em timer ao encerrar.
+      this._flushPendingProgress();
+      this.emit("queue-done", { downloaded, failed });
+    }
   }
 }
 

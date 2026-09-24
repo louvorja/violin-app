@@ -41,7 +41,29 @@ const REMOTE_RELAY_TYPES = new Set([
   "chat_message",
 ]);
 
-/** @type {Set<{ res: import('http').ServerResponse, id: number }>} */
+const MAX_CLIENT_QUEUE = 32;
+
+// Estados contínuos podem usar "latest value wins" enquanto um socket está
+// sob backpressure. `media_close` é uma barreira terminal e `chat_message`
+// representa mensagens distintas, portanto não entram nessa coalescência.
+const COALESCIBLE_TYPES = new Set(
+  [...REMOTE_RELAY_TYPES].filter((type) => type !== "media_close" && type !== "chat_message")
+);
+const TERMINAL_TYPES = new Set(["media_close"]);
+
+/**
+ * @typedef {{ type: string, data: string, terminal: boolean, coalescible: boolean }} PendingEvent
+ * @typedef {{
+ *   res: import('http').ServerResponse,
+ *   id: number,
+ *   blocked: boolean,
+ *   closed: boolean,
+ *   queue: PendingEvent[],
+ *   cleanup?: () => void,
+ * }} SseClient
+ */
+
+/** @type {Set<SseClient>} */
 const _clients = new Set();
 
 /** Último payload conhecido por tipo — replay quando um cliente conecta. */
@@ -102,40 +124,150 @@ function handler(req, res) {
     Connection: "keep-alive",
     "X-Accel-Buffering": "no",
   });
-  // Comentário inicial força o navegador a entregar os headers + abrir o stream.
-  res.write(":ok\n\n");
-
   const id = _nextId++;
-  const client = { res, id };
+  /** @type {SseClient} */
+  const client = { res, id, blocked: false, closed: false, queue: [] };
   _clients.add(client);
+
+  let ka = null;
+  const onDrain = () => _flushClient(client);
+
+  const cleanup = () => {
+    if (client.closed) return;
+    client.closed = true;
+    if (ka) clearInterval(ka);
+    ka = null;
+    client.queue.length = 0;
+    _clients.delete(client);
+    try { res.off?.("drain", onDrain); } catch { /* noop */ }
+    try { res.off?.("close", cleanup); } catch { /* noop */ }
+    try { res.off?.("error", cleanup); } catch { /* noop */ }
+    try { req.off?.("close", cleanup); } catch { /* noop */ }
+    try { req.off?.("error", cleanup); } catch { /* noop */ }
+    try { res.end(); } catch { /* noop */ }
+  };
+  client.cleanup = cleanup;
+
+  res.on?.("drain", onDrain);
+  res.on?.("close", cleanup);
+  res.on?.("error", cleanup);
+  req.on("close", cleanup);
+  req.on("error", cleanup);
+
+  // Comentário inicial força o navegador a entregar os headers + abrir o stream.
+  if (!_writeRaw(client, ":ok\n\n")) return;
 
   // Replay do último estado conhecido para que clients que conectarem
   // depois do início da música/versículo já apareçam com o conteúdo certo.
   for (const [type, payload] of _lastByType.entries()) {
-    _writeEvent(res, { type, payload: _rewriteCustomProtocol(payload) });
+    _writeEvent(client, { type, payload: _rewriteCustomProtocol(payload) });
   }
+  if (client.closed) return;
 
   // Keepalive — alguns proxies derrubam conexões inativas em 30-60s.
-  const ka = setInterval(() => {
-    try { res.write(":keepalive\n\n"); } catch { /* noop */ }
+  ka = setInterval(() => {
+    // Não aumente a fila de um socket que já sinalizou backpressure; os dados
+    // pendentes e o próprio buffer TCP mantêm a conexão ocupada.
+    if (!client.blocked && client.queue.length === 0) {
+      _writeRaw(client, ":keepalive\n\n");
+    }
   }, 25000);
-
-  const cleanup = () => {
-    clearInterval(ka);
-    _clients.delete(client);
-    try { res.end(); } catch { /* noop */ }
-  };
-
-  req.on("close", cleanup);
-  req.on("error", cleanup);
+  ka.unref?.();
 }
 
-function _writeEvent(res, msg) {
+function _writeRaw(client, data) {
+  if (client.closed) return false;
   try {
-    res.write("data: " + JSON.stringify(msg) + "\n\n");
+    if (client.res.write(data) === false) client.blocked = true;
+    return true;
   } catch {
-    /* socket fechado — cleanup acontece via req.on("close") */
+    client.cleanup?.();
+    return false;
   }
+}
+
+function _flushClient(client) {
+  if (client.closed) return;
+  client.blocked = false;
+  while (!client.blocked && client.queue.length > 0) {
+    // `write() === false` ainda aceita este chunk; só os seguintes aguardam
+    // `drain`, portanto removemos antes de escrever para não duplicá-lo.
+    const event = client.queue.shift();
+    if (!_writeRaw(client, event.data)) return;
+  }
+}
+
+function _makeRoom(client, incoming) {
+  while (client.queue.length >= MAX_CLIENT_QUEUE) {
+    // Estados intermediários e chat antigo cedem lugar primeiro. Barreiras
+    // terminais permanecem na fila até serem aceitas pelo socket.
+    const disposable = client.queue.findIndex(
+      (event) => !event.terminal && !event.coalescible
+    );
+    const removable = disposable >= 0
+      ? disposable
+      : client.queue.findIndex((event) => !event.terminal);
+    if (removable >= 0) {
+      client.queue.splice(removable, 1);
+      continue;
+    }
+
+    // Hoje há uma única barreira (`media_close`). Repetições são idempotentes:
+    // preservar a mais nova mantém o estado final sem crescimento ilimitado.
+    if (incoming.terminal) {
+      const duplicate = client.queue.findIndex((event) => event.type === incoming.type);
+      if (duplicate >= 0) {
+        client.queue.splice(duplicate, 1);
+        continue;
+      }
+    }
+    return false;
+  }
+  return true;
+}
+
+function _enqueueEvent(client, event) {
+  if (client.closed) return;
+
+  if (event.type === "media_close") {
+    // Um close pendente torna snapshots antigos de música obsoletos. Se uma
+    // nova música chegar depois, ela será enfileirada depois da barreira.
+    client.queue = client.queue.filter(
+      (pending) => pending.type !== "slide_change" && pending.type !== "slides_data"
+    );
+  }
+
+  if (event.coalescible || event.terminal) {
+    const previous = client.queue.findIndex((pending) => pending.type === event.type);
+    if (previous >= 0) client.queue.splice(previous, 1);
+  }
+
+  if (!_makeRoom(client, event)) return;
+  client.queue.push(event);
+}
+
+function _writeEvent(client, msg) {
+  let data;
+  try {
+    data = "data: " + JSON.stringify(msg) + "\n\n";
+  } catch {
+    return;
+  }
+
+  const event = {
+    type: msg.type,
+    data,
+    terminal: TERMINAL_TYPES.has(msg.type),
+    coalescible: COALESCIBLE_TYPES.has(msg.type),
+  };
+
+  if (!client.blocked && client.queue.length === 0) {
+    _writeRaw(client, data);
+    return;
+  }
+
+  _enqueueEvent(client, event);
+  if (!client.blocked) _flushClient(client);
 }
 
 /**
@@ -162,20 +294,23 @@ function publish(msg) {
   if (_clients.size === 0) return;
 
   const out = { type: msg.type, payload: _rewriteCustomProtocol(msg.payload) };
-  for (const c of _clients) _writeEvent(c.res, out);
+  for (const c of _clients) _writeEvent(c, out);
 }
 
 /** Fecha todas as conexões SSE. Chamado quando o servidor para. */
 function closeAll() {
-  for (const c of _clients) {
-    try { c.res.end(); } catch { /* noop */ }
-  }
-  _clients.clear();
+  for (const c of [..._clients]) c.cleanup?.();
   _lastByType.clear();
 }
 
 function status() {
-  return { clients: _clients.size, lastTypes: [..._lastByType.keys()] };
+  let queued = 0;
+  let blocked = 0;
+  for (const client of _clients) {
+    queued += client.queue.length;
+    if (client.blocked) blocked++;
+  }
+  return { clients: _clients.size, lastTypes: [..._lastByType.keys()], queued, blocked };
 }
 
 module.exports = {
@@ -185,4 +320,5 @@ module.exports = {
   status,
   setRemoteConfigProvider,
   REMOTE_RELAY_TYPES,
+  MAX_CLIENT_QUEUE,
 };
