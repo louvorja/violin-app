@@ -59,6 +59,9 @@ export function useProjectionState(): ProjectionStateReturn {
   const slideIndex = ref(0);
   const totalSlides = ref(0);
   let frameProbeGeneration = 0;
+  let musicSlideActive = false;
+  let musicPlaybackId: string | undefined;
+  let musicRevision: number | undefined;
 
   onBeforeUnmount(() => {
     // Um rAF pendente não deve atribuir o frame da próxima rota ao slide antigo.
@@ -76,6 +79,16 @@ export function useProjectionState(): ProjectionStateReturn {
     const p = payload as Record<string, unknown>;
     const receivedAt = Date.now();
     const probeGeneration = ++frameProbeGeneration;
+    const playbackId = typeof p.playback_id === "string" ? p.playback_id : undefined;
+    const revision = typeof p.presentation_revision === "number" &&
+      Number.isSafeInteger(p.presentation_revision) && p.presentation_revision >= 0
+      ? p.presentation_revision : undefined;
+    if (playbackId !== musicPlaybackId || revision !== musicRevision || p.slide_index !== slideIndex.value) {
+      slideProgress.value = 0;
+    }
+    musicPlaybackId = playbackId;
+    musicRevision = revision;
+    musicSlideActive = p.slide != null;
     slide.value = (p.slide as Slide) ?? null;
     nextSlide.value = (p.next_slide as Slide) ?? null;
     title.value = (p.title as string) ?? "";
@@ -158,6 +171,7 @@ export function useProjectionState(): ProjectionStateReturn {
   useBroadcastListener(BROADCAST_TYPE.BIBLE_VERSE, (payload) => {
     const p = payload as Record<string, unknown>;
     if (p.active) {
+      musicSlideActive = false;
       slide.value = {
         lyric: (p.text as string) || "",
         aux_lyric: (p.reference as string) || "",
@@ -180,6 +194,9 @@ export function useProjectionState(): ProjectionStateReturn {
   // Sem este reset, janelas de projeção e clients de transmissão (OBS)
   // ficam mostrando a letra da música anterior indefinidamente.
   useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, () => {
+    musicSlideActive = false;
+    musicPlaybackId = undefined;
+    musicRevision = undefined;
     slide.value = null;
     nextSlide.value = null;
     title.value = "";
@@ -192,11 +209,13 @@ export function useProjectionState(): ProjectionStateReturn {
   // Progresso contínuo do slide atual (throttled) para a barra no stage display.
   useBroadcastListener(BROADCAST_TYPE.SLIDE_PROGRESS, (payload) => {
     const p = payload as Record<string, unknown>;
-    const sp = (p.slide_progress as number) ?? 0;
-    slideProgress.value = sp;
-    // Mantém consistência caso uma janela receba slide_progress antes do slide_change.
-    const idx = p.slide_index as number | undefined;
-    if (typeof idx === "number") slideIndex.value = idx;
+    // Progress is not a navigation command. A late/replayed packet must never
+    // select another slide or change the progress of a newer song/revision.
+    if (!musicSlideActive || p.slide_index !== slideIndex.value ||
+        p.playback_id !== musicPlaybackId || p.presentation_revision !== musicRevision) return;
+    const sp = p.slide_progress;
+    if (typeof sp !== "number" || !Number.isFinite(sp)) return;
+    slideProgress.value = Math.max(0, Math.min(100, sp));
   });
 
   const isCover = computed<boolean>(

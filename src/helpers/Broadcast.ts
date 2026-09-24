@@ -94,6 +94,7 @@ function _deliverLocal(msg: BroadcastMessage): void {
     // receber replay da música anterior. O evento em si é transitório.
     if (msg.type === "media_close") {
       _lastByType.delete("slide_change");
+      _lastByType.delete("slide_progress");
       _lastByType.delete("slides_data");
       _lastByType.delete("file_projection");
       _lastByType.delete("online_video_projection");

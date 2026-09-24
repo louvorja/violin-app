@@ -268,6 +268,7 @@ export interface SlideChangePayload {
   progress: number;
   total_slides: number;
   playback_id?: string;
+  presentation_revision?: number;
   /** Timestamp de emissão (Date.now()) para medir latência cross-window. */
   _ts?: number;
 }
@@ -277,6 +278,8 @@ export interface SlideProgressPayload {
   /** 0-100. */
   slide_progress: number;
   playback_id?: string;
+  /** Revision of the slide selection this progress belongs to. */
+  presentation_revision?: number;
 }
 
 export interface SlidesDataPayload {

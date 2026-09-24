@@ -196,6 +196,7 @@ function _create(): SlidesInstance {
       slide_index: idx,
       slide_progress: slideProgress.value,
       playback_id: _playbackId,
+      presentation_revision: presentationRevision,
     });
     // Telemetria não participa do caminho de publicação do slide.
     if (isProjectionMilestone(idx, totalSlides.value, !!slide.value)) {
@@ -269,6 +270,7 @@ function _create(): SlidesInstance {
             slide_index: si,
             slide_progress: sp,
             playback_id: _playbackId,
+            presentation_revision: _presentationRevision,
           });
         }
 
