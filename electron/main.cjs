@@ -160,19 +160,12 @@ function _temConteudo(dir) {
 
 /**
  * O que, dentro de `dir`, conta como acervo a mudar de lugar. `files/` e
- * `storage/` ficam de fora porque são a estrutura nova: sem essa exceção a
+ * `storage/` e `library/` ficam de fora porque são a estrutura nova: sem essa exceção a
  * própria pasta de dados, recém-criada com as preferências dentro, passaria
  * por origem de migração e encerraria a busca antes de olhar as outras.
  */
 function _entradasDeAcervo(dir) {
-  try {
-    if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return [];
-    return fs
-      .readdirSync(dir)
-      .filter((nome) => nome !== "files" && nome !== "storage" && !nome.startsWith("."));
-  } catch (_) {
-    return [];
-  }
+  return require("./main/mediaMigration.js").listLegacyMediaEntries(dir);
 }
 
 /**

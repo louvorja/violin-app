@@ -227,7 +227,7 @@ async function openFilesDir() {
 
 /**
  * Aponta a pasta de dados para outro lugar. Com moveExisting=true leva junto
- * o acervo (`files/`) e as preferências (`storage/`).
+ * o acervo (`files/`), as preferências (`storage/`) e os documentos (`library/`).
  *
  * @param {string} newDir
  * @param {object} options { moveExisting?: boolean }
@@ -241,13 +241,49 @@ async function setDataDir(newDir, options = {}) {
   if (abs === oldDir) return { ok: true, dir: abs };
 
   if (moveExisting) {
-    for (const sub of ["files", "storage"]) {
+    // Nunca misture duas instalações nem mova uma raiz para dentro da outra.
+    // Resolva links antes de comparar, pois o seletor também aceita aliases.
+    const [sourceRoot, targetRoot] = await Promise.all([fs.realpath(oldDir), fs.realpath(abs)]);
+    if (sourceRoot === targetRoot) return { ok: true, dir: oldDir };
+    if (sourceRoot.startsWith(targetRoot + path.sep) || targetRoot.startsWith(sourceRoot + path.sep)) {
+      throw new Error("A nova pasta de dados não pode conter a atual nem estar dentro dela.");
+    }
+
+    const moves = [];
+    for (const sub of ["files", "storage", "library"]) {
       const from = path.join(oldDir, sub);
       if (!(await fs.pathExists(from))) continue;
-      // `move` renomeia quando é o mesmo volume — o acervo tem gigabytes e
-      // uma cópia byte a byte deixaria o operador esperando à toa.
-      await fs.move(from, path.join(abs, sub), { overwrite: true });
+      const to = path.join(abs, sub);
+      if (await fs.pathExists(to)) {
+        throw new Error(`A pasta de destino já contém "${sub}". Escolha uma pasta sem dados existentes.`);
+      }
+      moves.push({ from, to });
     }
+
+    const completed = [];
+    try {
+      for (const move of moves) {
+        // Rename no mesmo volume; nunca sobrescreva conteúdo que apareceu
+        // depois da verificação acima (por exemplo, sincronização em nuvem).
+        await fs.move(move.from, move.to, { overwrite: false });
+        completed.push(move);
+      }
+      paths.setDataDir(abs);
+    } catch (error) {
+      const failures = [];
+      for (const move of completed.reverse()) {
+        try {
+          await fs.move(move.to, move.from, { overwrite: false });
+        } catch (rollbackError) {
+          failures.push(new Error(`Não foi possível restaurar ${move.to} para ${move.from}: ${rollbackError.message}`));
+        }
+      }
+      if (failures.length) {
+        throw new AggregateError([error, ...failures], "Falha ao mudar a pasta de dados; alguns arquivos permanecem no destino. " + failures.map((failure) => failure.message).join("; "));
+      }
+      throw error;
+    }
+    return { ok: true, dir: abs };
   }
 
   paths.setDataDir(abs);
