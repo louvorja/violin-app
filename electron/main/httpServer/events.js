@@ -42,6 +42,20 @@ const REMOTE_RELAY_TYPES = new Set([
 ]);
 
 const MAX_CLIENT_QUEUE = 32;
+const MAX_CACHED_STATES = 64;
+const MODULE_STATE_TYPES = new Set(["module_projection_value", "module_format_changed"]);
+
+function stateKey(msg) {
+  const moduleId = msg.payload?.module;
+  if (
+    MODULE_STATE_TYPES.has(msg.type) &&
+    typeof moduleId === "string" &&
+    /^[a-zA-Z0-9_-]{1,64}$/.test(moduleId)
+  ) {
+    return `${msg.type}:${moduleId}`;
+  }
+  return msg.type;
+}
 
 // Estados contínuos podem usar "latest value wins" enquanto um socket está
 // sob backpressure. `media_close` é uma barreira terminal e `chat_message`
@@ -52,7 +66,7 @@ const COALESCIBLE_TYPES = new Set(
 const TERMINAL_TYPES = new Set(["media_close"]);
 
 /**
- * @typedef {{ type: string, data: string, terminal: boolean, coalescible: boolean }} PendingEvent
+ * @typedef {{ type: string, key: string, data: string, terminal: boolean, coalescible: boolean }} PendingEvent
  * @typedef {{
  *   res: import('http').ServerResponse,
  *   id: number,
@@ -66,7 +80,7 @@ const TERMINAL_TYPES = new Set(["media_close"]);
 /** @type {Set<SseClient>} */
 const _clients = new Set();
 
-/** Último payload conhecido por tipo — replay quando um cliente conecta. */
+/** Último estado por tipo e, nos eventos multiplexados, por módulo. */
 const _lastByType = new Map();
 
 let _nextId = 1;
@@ -159,7 +173,7 @@ function handler(req, res) {
 
   // Replay do último estado conhecido para que clients que conectarem
   // depois do início da música/versículo já apareçam com o conteúdo certo.
-  for (const [type, payload] of _lastByType.entries()) {
+  for (const { type, payload } of _lastByType.values()) {
     _writeEvent(client, { type, payload: _rewriteCustomProtocol(payload) });
   }
   if (client.closed) return;
@@ -238,7 +252,7 @@ function _enqueueEvent(client, event) {
   }
 
   if (event.coalescible || event.terminal) {
-    const previous = client.queue.findIndex((pending) => pending.type === event.type);
+    const previous = client.queue.findIndex((pending) => pending.key === event.key);
     if (previous >= 0) client.queue.splice(previous, 1);
   }
 
@@ -256,6 +270,7 @@ function _writeEvent(client, msg) {
 
   const event = {
     type: msg.type,
+    key: stateKey(msg),
     data,
     terminal: TERMINAL_TYPES.has(msg.type),
     coalescible: COALESCIBLE_TYPES.has(msg.type),
@@ -288,7 +303,12 @@ function publish(msg) {
     _lastByType.delete("slide_change");
     _lastByType.delete("slides_data");
   } else {
-    _lastByType.set(msg.type, msg.payload);
+    const key = stateKey(msg);
+    _lastByType.delete(key);
+    _lastByType.set(key, { type: msg.type, payload: msg.payload });
+    while (_lastByType.size > MAX_CACHED_STATES) {
+      _lastByType.delete(_lastByType.keys().next().value);
+    }
   }
 
   if (_clients.size === 0) return;
@@ -310,7 +330,12 @@ function status() {
     queued += client.queue.length;
     if (client.blocked) blocked++;
   }
-  return { clients: _clients.size, lastTypes: [..._lastByType.keys()], queued, blocked };
+  return {
+    clients: _clients.size,
+    lastTypes: [...new Set([..._lastByType.values()].map((event) => event.type))],
+    queued,
+    blocked,
+  };
 }
 
 module.exports = {

@@ -35,6 +35,36 @@ afterEach(() => {
 });
 
 describe("HTTP SSE — backpressure", () => {
+  it.each(["module_projection_value", "module_format_changed"])("preserva estados independentes por modulo em %s e no replay", (type) => {
+    const client = openClient([true, false]);
+    events.publish({ type: "slide_change", payload: { index: 0 } });
+    events.publish({ type, payload: { module: "countdown", value: 42 } });
+    events.publish({ type, payload: { module: "clock", value: "12:00" } });
+    events.publish({ type, payload: { module: "countdown", value: 41 } });
+
+    expect(events.status().queued).toBe(2);
+    client.res.emit("drain");
+    const expected = [
+      { type, payload: { module: "clock", value: "12:00" } },
+      { type, payload: { module: "countdown", value: 41 } },
+    ];
+    expect(messages(client.writes).filter((msg) => msg.type === type)).toEqual(expected);
+
+    const reconnect = openClient();
+    expect(messages(reconnect.writes).filter((msg) => msg.type === type)).toEqual(expected);
+  });
+
+  it("limita snapshots mesmo com muitas identidades e usa fallback para modulo invalido", () => {
+    for (let index = 0; index < 200; index++) {
+      events.publish({ type: "module_projection_value", payload: { module: `module_${index}` } });
+    }
+    events.publish({ type: "module_projection_value", payload: { module: {}, value: 1 } });
+    events.publish({ type: "module_projection_value", payload: { value: 2 } });
+    const client = openClient();
+    expect(messages(client.writes)).toHaveLength(64);
+    expect(messages(client.writes).at(-1)).toEqual({ type: "module_projection_value", payload: { value: 2 } });
+  });
+
   it("aguarda drain e mantém somente o estado mais recente de cada tipo", () => {
     // :ok é aceito; o primeiro evento entra no buffer e sinaliza backpressure.
     const client = openClient([true, false]);

@@ -35,6 +35,51 @@ afterEach(async () => {
 });
 
 describe("createAsyncJsonWriteQueue", () => {
+  it("remove tambem backup e temp antes de confirmar a exclusao", async () => {
+    const dir = tempDir();
+    const file = path.join(dir, "prefs.json");
+    await Promise.all([file, `${file}.bak`, `${file}.tmp`].map((target) =>
+      fs.writeJson(target, { old: true })
+    ));
+    const queue = createAsyncJsonWriteQueue({
+      name: "testStore",
+      resolveFile: () => file,
+      debounceMs: 60_000,
+    });
+
+    const removed = queue.enqueueRemove("prefs");
+    await queue.flush();
+    await expect(removed).resolves.toMatchObject({ ok: true });
+    expect(await Promise.all([file, `${file}.bak`, `${file}.tmp`].map((target) =>
+      fs.pathExists(target)
+    ))).toEqual([false, false, false]);
+  });
+
+  it("nao confirma exclusao nem remove canonico quando backup esta bloqueado", async () => {
+    const dir = tempDir();
+    const file = path.join(dir, "prefs.json");
+    await fs.writeJson(file, { current: true });
+    await fs.writeJson(`${file}.bak`, { old: true });
+    const io = withOverrides({
+      remove: async (target) => {
+        if (target === `${file}.bak`) throw new Error("backup bloqueado");
+        return fs.remove(target);
+      },
+    });
+    const queue = createAsyncJsonWriteQueue({
+      name: "testStore",
+      resolveFile: () => file,
+      debounceMs: 60_000,
+      io,
+    });
+
+    const removed = queue.enqueueRemove("prefs");
+    const flushed = queue.flush();
+    await expect(removed).rejects.toThrow("backup bloqueado");
+    await expect(flushed).rejects.toThrow("gravacao(oes) pendente(s)");
+    expect(await fs.readJson(file)).toEqual({ current: true });
+  });
+
   it("coalesce uma rajada e confirma todas as Promises na ultima revisao", async () => {
     const dir = tempDir();
     let writes = 0;

@@ -177,9 +177,12 @@ function createAsyncJsonWriteQueue({ name, resolveFile, debounceMs = 0, io = fs 
   async function _run(operation) {
     const file = resolveFile(operation.id);
     if (operation.type === "remove") {
+      // Remova primeiro qualquer copia recuperavel. Se o backup estiver
+      // bloqueado, falhe preservando o canonico: read() nao pode ressuscitar
+      // um valor depois de uma exclusao confirmada.
+      await io.remove(`${file}.bak`);
+      await io.remove(`${file}.tmp`);
       await io.remove(file);
-      // Nao deixe um temp de queda antiga reaparecer como dado valido.
-      await _removeQuietly(io, `${file}.tmp`);
       return;
     }
     await atomicWriteJson({ io, file, contents: operation.contents });
