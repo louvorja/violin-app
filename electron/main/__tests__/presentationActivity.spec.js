@@ -32,4 +32,24 @@ describe("presentationActivity", () => {
     const activity = createPresentationActivity();
     expect(() => activity.setSource("../../projection", true)).toThrow(TypeError);
   });
+
+  it("notifica apenas transições de atividade e permite unsubscribe", () => {
+    const activity = createPresentationActivity();
+    const transitions = [];
+    const unsubscribe = activity.subscribe((active) => transitions.push(active));
+    activity.setSource("projection_window", true);
+    activity.setSource("media_playback", true);
+    activity.setSource("projection_window", false);
+    activity.setSource("media_playback", false);
+    unsubscribe();
+    activity.setSource("projection_window", true);
+    expect(transitions).toEqual([true, false]);
+  });
+
+  it("não deixa observer com falha interromper a apresentação", () => {
+    const activity = createPresentationActivity();
+    activity.subscribe(() => { throw new Error("observer falhou"); });
+    expect(activity.setSource("projection_window", true)).toBe(true);
+    expect(activity.isActive()).toBe(true);
+  });
 });

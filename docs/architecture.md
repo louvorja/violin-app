@@ -621,7 +621,10 @@ Persistidas em `user_data.options` e aplicadas em runtime via `Platform.updater.
    (persistido em `SKIP_UPDATE_NOTIFICATION_VERSION`) e botão "Atualizar" que
    inicia o download em segundo plano — exibindo taxa, tamanho e tempo restante.
 4. Se houver versão nova e **auto-download ligado**: baixa em background e acende o
-   badge de atualização na `ShellTools`.
+   badge de atualização na `ShellTools`. O download automático novo espera o fim
+   de uma apresentação ativa; um download já iniciado não é pausado e o pedido
+   manual do operador continua permitido. Cancelamento explícito impede que a
+   mesma versão seja retomada automaticamente.
 5. Estado propagado ao renderer via IPC `updater:state` (`Platform.updater.onStateChange`).
 
 No Windows, o instalador assistido fixa o modo por usuário (`perMachine: false`,

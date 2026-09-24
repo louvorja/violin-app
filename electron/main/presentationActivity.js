@@ -10,6 +10,7 @@
  */
 function createPresentationActivity() {
   const sources = new Set();
+  const listeners = new Set();
 
   function isActive() {
     return sources.size > 0;
@@ -19,16 +20,29 @@ function createPresentationActivity() {
     if (typeof source !== "string" || !/^[a-z_]{1,40}$/.test(source)) {
       throw new TypeError("Fonte de apresentação inválida");
     }
+    const previous = isActive();
     if (enabled === true) sources.add(source);
     else sources.delete(source);
-    return isActive();
+    const active = isActive();
+    if (active !== previous) {
+      for (const listener of listeners) {
+        try { listener(active); } catch (_) { /* observers cannot break presentation state */ }
+      }
+    }
+    return active;
+  }
+
+  function subscribe(listener) {
+    if (typeof listener !== "function") throw new TypeError("Observer inválido");
+    listeners.add(listener);
+    return () => listeners.delete(listener);
   }
 
   function snapshot() {
     return { active: isActive(), sources: [...sources].sort() };
   }
 
-  return { isActive, setSource, snapshot };
+  return { isActive, setSource, snapshot, subscribe };
 }
 
 module.exports = { createPresentationActivity };

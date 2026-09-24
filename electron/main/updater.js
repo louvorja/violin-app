@@ -32,6 +32,7 @@ const https = require("https");
 const http = require("http");
 const { installRequiresWindowsElevation } = require("./windowsInstallScope.js");
 const { safeSend } = require("./safeWebContents.js");
+const { WorkPriority, canStartWork } = require("./presentationAdmission.js");
 
 const GITHUB_OWNER = "louvorja";
 const GITHUB_REPO = "violin-app";
@@ -65,6 +66,9 @@ let _state = {
 let _useBeta = false;
 let _autoCheck = true;
 let _autoDownload = false;
+let _presentationActive = false;
+let _automaticDownloadInFlight = false;
+let _autoDownloadCancelledVersion = null;
 
 // Candidata mais recente encontrada via GitHub API — guardada para
 // o download manual sem refazer o check.
@@ -94,6 +98,38 @@ function _setState(patch) {
   _state = { ..._state, ...patch };
   console.info("[updater] _setState →", _state.status, "| newVersion:", _state.newVersion, "| hasWindow:", !!( _mainWindow && !_mainWindow.isDestroyed()));
   _emit();
+}
+
+/**
+ * O estado `available` é a fila durável em memória do auto-download: enquanto
+ * há apresentação, não começa trabalho novo. O pedido manual do operador usa
+ * downloadUpdate() diretamente e permanece permitido. Um download já iniciado
+ * nunca é pausado por uma mudança de atividade.
+ */
+function _maybeStartAutomaticDownload() {
+  if (!_autoDownload || _state.status !== "available" || _automaticDownloadInFlight) return;
+  if (!_state.newVersion || _state.newVersion === _autoDownloadCancelledVersion) return;
+  if (!canStartWork(WorkPriority.BACKGROUND, _presentationActive)) return;
+
+  _automaticDownloadInFlight = true;
+  Promise.resolve()
+    .then(() => {
+      // A apresentação pode começar entre o agendamento e esta microtask.
+      if (!canStartWork(WorkPriority.BACKGROUND, _presentationActive)) return null;
+      return downloadUpdate(_mainWindow);
+    })
+    .then((result) => {
+      if (result && !result.ok) console.warn("[updater] auto-download falhou:", result.error);
+    })
+    .catch((error) => console.warn("[updater] auto-download falhou:", error?.message || error))
+    .finally(() => { _automaticDownloadInFlight = false; });
+}
+
+function setPresentationActive(active) {
+  if (typeof active !== "boolean") throw new TypeError("Estado de apresentação inválido");
+  const wasActive = _presentationActive;
+  _presentationActive = active;
+  if (wasActive && !active) _maybeStartAutomaticDownload();
 }
 
 /** Fetch HTTP(S) simples, retorna Buffer ou texto. */
@@ -270,13 +306,7 @@ async function checkGithubAndSetState() {
     }
     console.info("[updater] checkGithubAndSetState → update disponível:", info.version);
     _setState({ status: "available", newVersion: info.version, error: null });
-    // Se "baixar automaticamente" estiver ativo, já inicia o download manual
-    // do asset (estado transitório available → downloading → downloaded).
-    if (_autoDownload) {
-      downloadPackage(_mainWindow).catch((e) =>
-        console.warn("[updater] auto-download deb/rpm falhou:", e.message)
-      );
-    }
+    _maybeStartAutomaticDownload();
     return { ok: true, updateAvailable: true, version: info.version };
   } catch (e) {
     _setState({ status: "error", error: e.message || String(e) });
@@ -579,7 +609,9 @@ function init({ channel = "latest", autoCheck = true, autoDownload = false, useB
     // pede para o operador abrir o arquivo. Sem esta linha, quem está numa beta
     // recebe beta, e quem está numa estável recebe estável.
     if (channel && channel !== "latest") autoUpdater.channel = channel;
-    autoUpdater.autoDownload = _autoDownload;
+    // O electron-updater não conhece a atividade da apresentação. Mantemos o
+    // check separado do download para admitir apenas o trabalho automático.
+    autoUpdater.autoDownload = false;
     // Instalações atuais por usuário continuam simples. Para o legado em
     // Program Files, nunca esconda uma falha de UAC ao encerrar o programa:
     // o operador verá o estado baixado e clicará em "Instalar".
@@ -597,6 +629,7 @@ function init({ channel = "latest", autoCheck = true, autoDownload = false, useB
         newVersion: info.version,
         releaseNotes: typeof info.releaseNotes === "string" ? info.releaseNotes : null,
       });
+      _maybeStartAutomaticDownload();
     });
 
     autoUpdater.on("update-not-available", () => {
@@ -661,7 +694,11 @@ function setOptions({ useBeta, autoCheck, autoDownload } = {}) {
 
   if (autoUpdater) {
     autoUpdater.allowPrerelease = _useBeta;
-    autoUpdater.autoDownload = _autoDownload;
+    autoUpdater.autoDownload = false;
+  }
+  if (autoDownload === true) {
+    _autoDownloadCancelledVersion = null;
+    _maybeStartAutomaticDownload();
   }
 }
 
@@ -680,7 +717,7 @@ async function checkForUpdates() {
   try {
     _checkedViaGithub = false;
     autoUpdater.allowPrerelease = _useBeta;
-    autoUpdater.autoDownload = _autoDownload;
+    autoUpdater.autoDownload = false;
     await autoUpdater.checkForUpdates();
     return { ok: true, state: { ..._state } };
   } catch (e) {
@@ -717,6 +754,8 @@ async function downloadUpdate(sender) {
   } catch (e) {
     _setState({ status: "error", error: e.message });
     return { ok: false, error: e.message };
+  } finally {
+    autoUpdater.autoDownload = false;
   }
 }
 
@@ -724,6 +763,7 @@ async function downloadUpdate(sender) {
  * Cancela o download em andamento (manual ou electron-updater).
  */
 function cancelDownload() {
+  if (_state.newVersion) _autoDownloadCancelledVersion = _state.newVersion;
   // Cancela download manual (GitHub API)
   if (_downloadAbortController) {
     _downloadAbortController.abort();
@@ -771,6 +811,7 @@ module.exports = {
   quitAndInstall,
   status,
   setOptions,
+  setPresentationActive,
   checkGithubRelease,
   checkGithubAndSetState,
   downloadPackage,
