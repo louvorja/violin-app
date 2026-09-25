@@ -638,7 +638,14 @@ usuário dentro de `Program Files` é reconhecida pelo script NSIS e atualizada
 no mesmo diretório somente depois da confirmação do UAC; o updater não tenta
 fazê-lo silenciosamente ao fechar o app (`installRequiresElevation`). Isso evita
 o estado anterior, em que a atualização falhava sem aviso e deixava uma segunda
-cópia concorrente.
+cópia concorrente. Se o Windows iniciar diretamente o instalador com um token
+elevado — por compatibilidade `RUNASADMIN`, shell elevado, UAC desativado ou a
+conta Administrator interna — o NSIS compara o SID desse token com o SID do
+processo do Explorer. A instalação por usuário pode continuar quando ambos
+pertencem à mesma conta; credenciais de outro administrador continuam
+bloqueadas para não direcionar HKCU e `LocalAppData` ao perfil errado. A
+instância interna do UAC permanece reservada à recuperação do legado em
+`Program Files`.
 
 A ordem do fluxo de boot é: **atualização → release notes → startup check**.
 Cada etapa encadeia na próxima apenas quando concluída (ou dispensada), e há um
