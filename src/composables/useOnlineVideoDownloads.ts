@@ -183,12 +183,13 @@ function cancel(id: string): void {
 }
 
 /** Apaga o vídeo do computador; ele segue na lista do operador. */
-async function remove(id: string): Promise<void> {
-  await OnlineVideo.removeFile(id);
+async function remove(id: string): Promise<boolean> {
+  if (!(await OnlineVideo.removeFile(id))) return false;
   runs.delete(id);
   backgroundRuns.delete(id);
   unmark(id);
   delete files[id];
+  return true;
 }
 
 /**

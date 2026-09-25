@@ -42,7 +42,13 @@ const K = KEYS.OPTIONS.ONLINE_VIDEO_PROJECTION;
 function fakeApi(overrides: Record<string, unknown> = {}) {
   const listeners = new Set<(p: any) => void>();
   return {
-    ensure: vi.fn(async () => ({ ok: true, id: ID, url: `louvorja://onlinevideo/${ID}.mp4`, size: 5, cached: false })),
+    ensure: vi.fn(async () => ({
+      ok: true,
+      id: ID,
+      url: `louvorja://onlinevideo/${ID}.mp4`,
+      size: 5,
+      cached: false,
+    })),
     cancel: vi.fn(async () => true),
     onProgress: vi.fn((cb: (p: any) => void) => {
       listeners.add(cb);
@@ -101,19 +107,40 @@ describe("política de falha", () => {
     }
   );
 
-  it.each(["tool", "network", "bot", "forbidden", "format", "unknown", "disk", "live", "unsupported"])(
-    "%s: o problema é nosso (ou é transmissão ao vivo) — cai no player do YouTube",
-    (kind) => {
-      expect(actionForFailure(kind)).toBe("embed");
-    }
-  );
+  it.each([
+    "tool",
+    "network",
+    "bot",
+    "forbidden",
+    "format",
+    "unknown",
+    "disk",
+    "live",
+    "unsupported",
+  ])("%s: o problema é nosso (ou é transmissão ao vivo) — cai no player do YouTube", (kind) => {
+    expect(actionForFailure(kind)).toBe("embed");
+  });
 
   it("todo erro que o main pode devolver tem uma ação definida", () => {
     const kinds = [
-      "invalid", "unsupported", "tool", "network", "cancelled", "age", "private", "geo",
-      "live", "bot", "unavailable", "disk", "format", "forbidden", "unknown",
+      "invalid",
+      "unsupported",
+      "tool",
+      "network",
+      "cancelled",
+      "age",
+      "private",
+      "geo",
+      "live",
+      "bot",
+      "unavailable",
+      "disk",
+      "format",
+      "forbidden",
+      "unknown",
     ];
-    for (const kind of kinds) expect(["silent", "error", "embed"]).toContain(actionForFailure(kind));
+    for (const kind of kinds)
+      expect(["silent", "error", "embed"]).toContain(actionForFailure(kind));
   });
 });
 
@@ -123,7 +150,9 @@ describe("mensagens ao operador existem nos dois idiomas", () => {
   const resolve = (obj: any, key: string) => key.split(".").reduce((o, k) => o?.[k], obj);
 
   const keys = [
-    ...["age", "private", "geo", "unavailable", "tool", "network", "unknown"].map(messageKeyForFailure),
+    ...["age", "private", "geo", "unavailable", "tool", "network", "unknown"].map(
+      messageKeyForFailure
+    ),
     "online_video.preparing",
     "online_video.phase.tools",
     "online_video.phase.queued",
@@ -252,8 +281,14 @@ describe("ensure", () => {
       priority: "foreground",
       keep: false,
     });
-    expect(h.track).toHaveBeenCalledWith("online_video_download_requested", expect.objectContaining({ video_id: ID }));
-    expect(h.track).toHaveBeenCalledWith("online_video_download_ready", expect.objectContaining({ video_id: ID, cached: false }));
+    expect(h.track).toHaveBeenCalledWith(
+      "online_video_download_requested",
+      expect.objectContaining({ video_id: ID })
+    );
+    expect(h.track).toHaveBeenCalledWith(
+      "online_video_download_ready",
+      expect.objectContaining({ video_id: ID, cached: false })
+    );
   });
 
   it("pré-download: pede a raia de segundo plano e a guarda no disco", async () => {
@@ -323,7 +358,10 @@ describe("ensure", () => {
       }),
     });
     const res = await ensure(ID);
-    expect(res).toEqual({ ok: false, error: { kind: "unknown", message: "Error invoking remote method" } });
+    expect(res).toEqual({
+      ok: false,
+      error: { kind: "unknown", message: "Error invoking remote method" },
+    });
     expect(actionForFailure((res as any).error.kind)).toBe("embed");
   });
 
@@ -383,12 +421,17 @@ describe("vídeos no disco", () => {
     expect(await listFiles()).toEqual([]);
     h.platform.onlineVideo = fakeApi({ list: vi.fn(async () => null) });
     expect(await listFiles()).toEqual([]);
-    h.platform.onlineVideo = fakeApi({ list: vi.fn(async () => Promise.reject(new Error("main saiu"))) });
+    h.platform.onlineVideo = fakeApi({
+      list: vi.fn(async () => Promise.reject(new Error("main saiu"))),
+    });
     expect(await listFiles()).toEqual([]);
   });
 
   it("isDownloaded confere pelo ID e vale zero fora do desktop", async () => {
-    h.platform.onlineVideo = fakeApi({ has: vi.fn(async (id: string) => id === ID), list: vi.fn() });
+    h.platform.onlineVideo = fakeApi({
+      has: vi.fn(async (id: string) => id === ID),
+      list: vi.fn(),
+    });
     expect(await isDownloaded(ID)).toBe(true);
     expect(await isDownloaded("zzzzzzzzzzz")).toBe(false);
     expect(h.platform.onlineVideo.has).toHaveBeenCalledWith(ID);
@@ -400,7 +443,11 @@ describe("vídeos no disco", () => {
   it("isDownloaded trata falha do IPC e resposta inválida como ausência de cache", async () => {
     h.platform.onlineVideo = fakeApi({ has: vi.fn(async () => "yes") });
     expect(await isDownloaded(ID)).toBe(false);
-    h.platform.onlineVideo = fakeApi({ has: vi.fn(async () => { throw new Error("main saiu"); }) });
+    h.platform.onlineVideo = fakeApi({
+      has: vi.fn(async () => {
+        throw new Error("main saiu");
+      }),
+    });
     expect(await isDownloaded(ID)).toBe(false);
   });
 
@@ -416,14 +463,14 @@ describe("vídeos no disco", () => {
     expect(await keepFile(ID)).toBe(false);
   });
 
-  it("removeFile pede ao main e ignora falha ou ausência do bridge", async () => {
+  it("removeFile pede ao main e informa se a remoção foi concluída", async () => {
     h.platform.onlineVideo = fakeApi({ remove: vi.fn(async () => true) });
-    await removeFile(ID);
+    expect(await removeFile(ID)).toBe(true);
     expect(h.platform.onlineVideo.remove).toHaveBeenCalledWith(ID);
     h.platform.onlineVideo = fakeApi({ remove: vi.fn(async () => Promise.reject(new Error("x"))) });
-    await expect(removeFile(ID)).resolves.toBeUndefined();
+    await expect(removeFile(ID)).resolves.toBe(false);
     h.platform.onlineVideo = null;
-    await expect(removeFile(ID)).resolves.toBeUndefined();
+    await expect(removeFile(ID)).resolves.toBe(false);
   });
 });
 
@@ -480,26 +527,57 @@ describe("stream", () => {
   });
 
   it("inclui etapas numéricas no evento existente sem aceitar conteúdo extra do IPC", async () => {
-    h.platform.onlineVideo = fakeApi({ stream: vi.fn(async () => ({
-      ...streams,
-      timings: { resolve_ms: 125.4, session_open_ms: 75, join_wait_ms: 0, total_ms: 200, url: "https://secret", title: "private" },
-    })) });
+    h.platform.onlineVideo = fakeApi({
+      stream: vi.fn(async () => ({
+        ...streams,
+        timings: {
+          resolve_ms: 125.4,
+          session_open_ms: 75,
+          join_wait_ms: 0,
+          total_ms: 200,
+          url: "https://secret",
+          title: "private",
+        },
+      })),
+    });
     const result = await stream(ID);
-    expect(result.ok && result.timings).toEqual({ resolve_ms: 125, session_open_ms: 75, join_wait_ms: 0, total_ms: 200 });
-    expect(h.track).toHaveBeenCalledWith("online_video_stream_resolved", expect.objectContaining({
-      main_resolve_ms: 125, main_session_open_ms: 75, main_join_wait_ms: 0, main_total_ms: 200,
-    }));
+    expect(result.ok && result.timings).toEqual({
+      resolve_ms: 125,
+      session_open_ms: 75,
+      join_wait_ms: 0,
+      total_ms: 200,
+    });
+    expect(h.track).toHaveBeenCalledWith(
+      "online_video_stream_resolved",
+      expect.objectContaining({
+        main_resolve_ms: 125,
+        main_session_open_ms: 75,
+        main_join_wait_ms: 0,
+        main_total_ms: 200,
+      })
+    );
     expect(JSON.stringify(h.track.mock.calls)).not.toMatch(/secret|private/);
-    expect(h.track.mock.calls.filter(([event]) => event === "online_video_stream_resolved")).toHaveLength(1);
+    expect(
+      h.track.mock.calls.filter(([event]) => event === "online_video_stream_resolved")
+    ).toHaveLength(1);
   });
 
   it("descarta durações inválidas e limita valores recebidos do main", async () => {
-    h.platform.onlineVideo = fakeApi({ stream: vi.fn(async () => ({
-      ...streams,
-      timings: { resolve_ms: -1, session_open_ms: Infinity, join_wait_ms: "100", total_ms: 999_999_999 },
-    })) });
+    h.platform.onlineVideo = fakeApi({
+      stream: vi.fn(async () => ({
+        ...streams,
+        timings: {
+          resolve_ms: -1,
+          session_open_ms: Infinity,
+          join_wait_ms: "100",
+          total_ms: 999_999_999,
+        },
+      })),
+    });
     await stream(ID);
-    const properties = h.track.mock.calls.find(([event]) => event === "online_video_stream_resolved")?.[1];
+    const properties = h.track.mock.calls.find(
+      ([event]) => event === "online_video_stream_resolved"
+    )?.[1];
     expect(properties).toMatchObject({ main_total_ms: 600_000 });
     expect(properties).not.toHaveProperty("main_resolve_ms");
     expect(properties).not.toHaveProperty("main_session_open_ms");
@@ -521,7 +599,10 @@ describe("stream", () => {
       stream: vi.fn(async () => ({ ok: false, error: { kind: "network", message: "x" } })),
     });
     expect(await stream(ID)).toMatchObject({ ok: false, error: { kind: "network" } });
-    expect(h.track).toHaveBeenCalledWith("online_video_stream_failed", expect.objectContaining({ kind: "network" }));
+    expect(h.track).toHaveBeenCalledWith(
+      "online_video_stream_failed",
+      expect.objectContaining({ kind: "network" })
+    );
 
     h.track.mockClear();
     h.platform.onlineVideo = fakeApi({

@@ -193,7 +193,9 @@ export function downloadEnabled(): boolean {
 }
 
 export function maxHeight(): number {
-  return normalizeMaxHeight($userdata.get(KEYS.OPTIONS.ONLINE_VIDEO_PROJECTION.MAX_HEIGHT, DEFAULT_MAX_HEIGHT));
+  return normalizeMaxHeight(
+    $userdata.get(KEYS.OPTIONS.ONLINE_VIDEO_PROJECTION.MAX_HEIGHT, DEFAULT_MAX_HEIGHT)
+  );
 }
 
 /**
@@ -370,10 +372,10 @@ export async function keepFile(id: string): Promise<boolean> {
 }
 
 /** Apaga o vídeo do disco (cancelando o download dele, se houver). */
-export async function removeFile(id: string): Promise<void> {
+export async function removeFile(id: string): Promise<boolean> {
   try {
-    await Platform.onlineVideo?.remove(id);
+    return (await Platform.onlineVideo?.remove(id)) === true;
   } catch {
-    /* já não existe */
+    return false;
   }
 }

@@ -21,6 +21,8 @@ const DEFAULT_MAX_BYTES = 6 * 1024 ** 3;
 const MIN_FREE_BYTES = 1024 ** 3;
 const REFRESH_COOLDOWN_MS = 60 * 60 * 1000;
 const PROGRESS_INTERVAL_MS = 250;
+/** Não prenda o diálogo de apagar cache se um processo externo ignorar o abort. */
+const CANCEL_SETTLE_MS = 10_000;
 const STREAM_FAILURE_TTL_MS = 5 * 60 * 1000;
 const STREAM_FAILURE_KINDS = new Set([
   "age", "bot", "disk", "forbidden", "format", "geo", "live", "network", "private", "tool", "unavailable", "unknown",
@@ -55,6 +57,24 @@ function streamUrlFor(id, kind) {
 function fail(error) {
   const kind = error instanceof OnlineVideoError ? error.kind : "unknown";
   return { ok: false, error: { kind, message: error?.message || String(error) } };
+}
+
+async function settleCancelled(promises) {
+  if (!promises.length) return;
+  let timer;
+  try {
+    await Promise.race([
+      Promise.allSettled(promises),
+      new Promise((_, reject) => {
+        timer = setTimeout(
+          () => reject(new OnlineVideoError("busy", "O download não encerrou a tempo de limpar o cache")),
+          CANCEL_SETTLE_MS
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**
@@ -97,6 +117,10 @@ function createManager(cfg) {
   const resolutions = new Map();
   /** Vídeos tocando enquanto baixam, por ID: as trilhas em disco de que as janelas leem. */
   const sessions = new Map();
+  /** Limpeza em curso: novos pedidos esperam para não terem o arquivo recém-criado apagado. */
+  let clearing = null;
+  /** Remoções em curso por vídeo: novo pedido do mesmo ID só começa após a fronteira destrutiva. */
+  const removals = new Map();
   const streamDir = path.join(dir, ".stream");
   let sessionSweep = null;
   const lanes = {
@@ -358,6 +382,9 @@ function createManager(cfg) {
       }
 
       publish(job, { phase: "finalizing", percent: 99 }, { force: true });
+      // Alguns processos externos só percebem o abort depois de devolver o arquivo.
+      // Nunca publique esse resultado depois de um cancelar/limpar o cache.
+      if (signal.aborted) throw new OnlineVideoError("cancelled", "Download cancelado");
       return await deliver(job, partial, result, startedAt, installedTools);
     } finally {
       release(job);
@@ -457,7 +484,14 @@ function createManager(cfg) {
   /** Entrega o MP4 pronto ao cache: guarda se o operador quis, libera espaço e avisa que acabou. */
   async function deliver(job, partial, result, startedAt, installedTools) {
     const { id } = job;
+    if (job.controller.signal.aborted) throw new OnlineVideoError("cancelled", "Download cancelado");
     await fs.move(result.file, store.pathFor(id), { overwrite: true });
+    // `fs.move()` pode ter começado no exato instante do abort. Apague a cópia
+    // que acabou de chegar antes de comunicar cancelamento ao chamador.
+    if (job.controller.signal.aborted) {
+      await store.remove(id);
+      throw new OnlineVideoError("cancelled", "Download cancelado");
+    }
     await fs.remove(partial);
     if (job.keep) store.keep(id);
     try {
@@ -498,6 +532,11 @@ function createManager(cfg) {
    * e decide se cai no player do YouTube.
    */
   function ensure(id, opts = {}, onProgress) {
+    // `clear()` é uma fronteira: não deixe um novo pedido terminar no intervalo
+    // entre o cancelamento dos antigos e a remoção do cache anterior.
+    if (clearing) return clearing.then(() => ensure(id, opts, onProgress), fail);
+    const removing = removals.get(id);
+    if (removing) return removing.then(() => ensure(id, opts, onProgress), fail);
     if (!isVideoId(id)) {
       return Promise.resolve(fail(new OnlineVideoError("invalid", "ID de vídeo inválido")));
     }
@@ -648,6 +687,17 @@ function createManager(cfg) {
    * as instala. Nunca rejeita.
    */
   async function stream(id, opts = {}) {
+    try {
+      if (clearing) await clearing;
+    } catch (error) {
+      return fail(error);
+    }
+    const removing = removals.get(id);
+    try {
+      if (removing) await removing;
+    } catch (error) {
+      return fail(error);
+    }
     const requestStartedAt = monotonicNow();
     const timings = { resolve_ms: 0, session_open_ms: 0, join_wait_ms: 0, total_ms: 0 };
     const elapsed = (start) => {
@@ -830,18 +880,66 @@ function createManager(cfg) {
     await session.dispose();
   }
 
-  async function remove(id) {
-    if (!isVideoId(id)) return false;
-    cancel(id);
-    await disposeSession(id);
-    await store.remove(id);
-    return true;
+  function remove(id) {
+    if (clearing) return clearing.then(() => remove(id));
+    if (!isVideoId(id)) return Promise.resolve(false);
+    const existing = removals.get(id);
+    if (existing) return existing;
+    const jobsToSettle = [...jobs.values()].filter((job) => job.id === id).map((job) => job.promise);
+    const resolution = resolutions.get(id);
+    const resolutionsToSettle = resolution ? [resolution.promise] : [];
+    let settleRemoving;
+    let failRemoving;
+    const removing = new Promise((resolve, reject) => {
+      settleRemoving = resolve;
+      failRemoving = reject;
+    });
+    removals.set(id, removing);
+    void (async () => {
+      try {
+        cancel(id);
+        // O abort é cooperativo. Só remova o destino definitivo quando nenhum
+        // `deliver()` antigo puder publicar esse ID de volta no cache.
+        await settleCancelled([...jobsToSettle, ...resolutionsToSettle]);
+        await disposeSession(id);
+        await store.remove(id);
+        settleRemoving(true);
+      } catch (error) {
+        failRemoving(error);
+      }
+    })();
+    void removing.then(
+      () => removals.delete(id),
+      () => removals.delete(id)
+    );
+    return removing;
   }
 
   async function clear() {
-    cancelAll();
-    await Promise.all([...sessions.keys()].map(disposeSession));
-    return store.clear();
+    if (clearing) return clearing;
+    const jobsToSettle = [...jobs.values()].map((job) => job.promise);
+    const resolutionsToSettle = [...resolutions.values()].map((resolution) => resolution.promise);
+    let settleClear;
+    let failClear;
+    clearing = new Promise((resolve, reject) => {
+      settleClear = resolve;
+      failClear = reject;
+    });
+    void (async () => {
+      try {
+        cancelAll();
+        // O abort é cooperativo. Só limpe o disco depois que nenhum `deliver()`
+        // antigo puder publicar um MP4 de volta no cache.
+        await settleCancelled([...jobsToSettle, ...resolutionsToSettle]);
+        await Promise.all([...sessions.keys()].map(disposeSession));
+        settleClear(await store.clear());
+      } catch (error) {
+        failClear(error);
+      } finally {
+        clearing = null;
+      }
+    })();
+    return clearing;
   }
 
   async function status() {

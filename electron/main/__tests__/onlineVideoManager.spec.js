@@ -8,6 +8,7 @@ import fs from "fs";
 const require = createRequire(import.meta.url);
 const { createManager, MIN_FREE_BYTES, SESSION_IDLE_MS } = require("../onlineVideo/manager.js");
 const { OnlineVideoError } = require("../onlineVideo/runner.js");
+const fsExtra = require("fs-extra");
 
 const A = "aaaaaaaaaaa";
 const B = "bbbbbbbbbbb";
@@ -1006,11 +1007,80 @@ describe("cache", () => {
     expect(await manager.remove("../x")).toBe(false);
   });
 
+  it("remove espera o job cancelado e não deixa ele republicar o MP4", async () => {
+    const gate = deferred();
+    const run = vi.fn(async ({ outDir, id }) => {
+      // Simula um processo externo que só devolve depois de receber o abort.
+      await gate.promise;
+      fs.mkdirSync(outDir, { recursive: true });
+      const file = path.join(outDir, `${id}.mp4`);
+      fs.writeFileSync(file, Buffer.alloc(10, 1));
+      return { file, size: 10, meta: { height: 1080 } };
+    });
+    const { manager } = make({ run });
+    const downloading = manager.ensure(A);
+    await vi.waitFor(() => expect(run).toHaveBeenCalledTimes(1));
+
+    const removing = manager.remove(A);
+    gate.resolve();
+
+    expect(await downloading).toMatchObject({ ok: false, error: { kind: "cancelled" } });
+    expect(await removing).toBe(true);
+    expect(await manager.list()).toEqual([]);
+  });
+
+  it("remove apaga o MP4 se o abort chegar durante o move final", async () => {
+    const moved = deferred();
+    const releaseMove = deferred();
+    const originalMove = fsExtra.move;
+    const move = vi.spyOn(fsExtra, "move").mockImplementation(async (...args) => {
+      await originalMove(...args);
+      moved.resolve();
+      await releaseMove.promise;
+    });
+    try {
+      const { manager } = make();
+      const downloading = manager.ensure(A);
+      await moved.promise;
+
+      const removing = manager.remove(A);
+      releaseMove.resolve();
+
+      expect(await downloading).toMatchObject({ ok: false, error: { kind: "cancelled" } });
+      expect(await removing).toBe(true);
+      expect(await manager.list()).toEqual([]);
+    } finally {
+      move.mockRestore();
+    }
+  });
+
   it("clear esvazia o cache e devolve quantos eram", async () => {
     const { manager } = make();
     await manager.ensure(A);
     await manager.ensure(B);
     expect(await manager.clear()).toBe(2);
+    expect(await manager.list()).toEqual([]);
+  });
+
+  it("clear espera o job cancelado e não deixa ele republicar o MP4", async () => {
+    const gate = deferred();
+    const run = vi.fn(async ({ outDir, id }) => {
+      // Simula um processo externo que só devolve depois de receber o abort.
+      await gate.promise;
+      fs.mkdirSync(outDir, { recursive: true });
+      const file = path.join(outDir, `${id}.mp4`);
+      fs.writeFileSync(file, Buffer.alloc(10, 1));
+      return { file, size: 10, meta: { height: 1080 } };
+    });
+    const { manager } = make({ run });
+    const downloading = manager.ensure(A);
+    await vi.waitFor(() => expect(run).toHaveBeenCalledTimes(1));
+
+    const clearing = manager.clear();
+    gate.resolve();
+
+    expect(await downloading).toMatchObject({ ok: false, error: { kind: "cancelled" } });
+    expect(await clearing).toBe(0);
     expect(await manager.list()).toEqual([]);
   });
 
