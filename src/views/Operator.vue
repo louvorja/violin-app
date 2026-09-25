@@ -87,6 +87,7 @@ import { DB_TABLE } from "@/constants/DbTables";
 import Telemetry from "@/helpers/Telemetry";
 import Path from "@/helpers/Path";
 import { applyVideoState } from "@/helpers/VideoSync";
+import { VideoStateGate } from "@/helpers/VideoStateVersion";
 
 const { t } = useI18n();
 const root = ref(null);
@@ -112,6 +113,7 @@ let videoActivation = 0;
 let videoObjectUrl = "";
 let latestVideoState = null;
 let currentPlaybackId = null;
+const videoStateGate = new VideoStateGate();
 
 function revokeVideoObjectUrl() {
   if (!videoObjectUrl) return;
@@ -125,6 +127,7 @@ async function activateVideo(payload) {
     latestVideoState = null;
   }
   currentPlaybackId = payload?.playback_id || null;
+  videoStateGate.begin(currentPlaybackId);
   videoActive.value = false;
   videoFailed.value = false;
   slides.value = [];
@@ -240,6 +243,7 @@ function onVideoError(event) {
 
 useBroadcastListener(BROADCAST_TYPE.SLIDES_DATA, (payload) => {
   videoActivation++;
+  videoStateGate.clear();
   latestVideoState = null;
   currentPlaybackId = null;
   revokeVideoObjectUrl();
@@ -255,6 +259,7 @@ useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION, (payload) => {
     void activateVideo(payload);
   } else {
     videoActivation++;
+    videoStateGate.clear();
     latestVideoState = null;
     currentPlaybackId = null;
     revokeVideoObjectUrl();
@@ -270,14 +275,16 @@ useBroadcastListener(BROADCAST_TYPE.VIDEO_STATE, (payload) => {
   if (!videoActive.value) return;
   const el = videoRef.value;
   if (!el) return;
-  latestVideoState = payload || null;
-  applyVideoState(el, payload || {}, (error) => {
+  if (!videoStateGate.accepts(payload)) return;
+  latestVideoState = payload;
+  applyVideoState(el, payload, (error) => {
     console.warn("[Operator] vídeo não iniciou na sincronia:", error?.name || error);
   });
 });
 
 useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, () => {
   videoActivation++;
+  videoStateGate.clear();
   latestVideoState = null;
   currentPlaybackId = null;
   revokeVideoObjectUrl();
