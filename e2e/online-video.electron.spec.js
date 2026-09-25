@@ -152,6 +152,60 @@ async function snapshot() {
   return { projection, ret, operator, audio };
 }
 
+/** A small, failure-only timeline for the main media element; no source or title. */
+async function startCachedReopenProbe() {
+  await main.evaluate(() => {
+    const events = [];
+    const eventNames = ["loadstart", "canplay", "playing", "pause", "abort", "error", "waiting"];
+    const record = (name, el, reason = null) => {
+      if (el?.id !== "__audio") return;
+      events.push({
+        name,
+        atMs: performance.timeOrigin + performance.now(),
+        currentTime: Number.isFinite(el.currentTime) ? el.currentTime : null,
+        readyState: el.readyState,
+        networkState: el.networkState,
+        errorCode: el.error?.code ?? null,
+        paused: el.paused,
+        reason,
+      });
+      if (events.length > 40) events.shift();
+    };
+    const onEvent = (event) => record(event.type, event.target);
+    for (const name of eventNames) document.addEventListener(name, onEvent, true);
+    const originalPlay = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = function (...args) {
+      if (this.id === "__audio") record("play_called", this);
+      const promise = originalPlay.apply(this, args);
+      if (this.id === "__audio" && promise?.then) {
+        void promise.then(
+          () => record("play_resolved", this),
+          (error) => {
+            const name = error?.name;
+            const reason = [
+              "AbortError",
+              "NotAllowedError",
+              "NotSupportedError",
+              "InvalidStateError",
+            ].includes(name)
+              ? name
+              : "other";
+            record("play_rejected", this, reason);
+          }
+        );
+      }
+      return promise;
+    };
+    window.__cachedReopenProbe = {
+      events,
+      stop() {
+        HTMLMediaElement.prototype.play = originalPlay;
+        for (const name of eventNames) document.removeEventListener(name, onEvent, true);
+      },
+    };
+  });
+}
+
 /** Only numeric media state and the local scheme class leave a failed test. */
 function diagnosticMedia(media) {
   if (!media) return { exists: false };
@@ -523,6 +577,7 @@ test.describe("depois de baixado", () => {
 
   test("reabrir vem do cache: rápido, sem tarefa de download e sem rede do YouTube", async () => {
     requests.length = 0;
+    await startCachedReopenProbe();
     const startedAt = Date.now();
     const opened = await openOnline(LONG);
     expect(opened).toBe(true);
@@ -542,24 +597,32 @@ test.describe("depois de baixado", () => {
           : null;
       },
       { timeout: 20_000, label: "as três janelas tocando" }
-    ).catch(async (error) => {
-      await test.info().attach("cached-reopen-numeric", {
-        body: Buffer.from(
-          JSON.stringify(
-            {
-              projection: diagnosticMedia(lastPlaybackSnapshot?.projection),
-              return: diagnosticMedia(lastPlaybackSnapshot?.ret),
-              operator: diagnosticMedia(lastPlaybackSnapshot?.operator),
-              audio: diagnosticMedia(lastPlaybackSnapshot?.audio),
-            },
-            null,
-            2
-          )
-        ),
-        contentType: "application/json",
+    )
+      .catch(async (error) => {
+        const events = await main
+          .evaluate(() => window.__cachedReopenProbe?.events ?? [])
+          .catch(() => []);
+        await test.info().attach("cached-reopen-numeric", {
+          body: Buffer.from(
+            JSON.stringify(
+              {
+                projection: diagnosticMedia(lastPlaybackSnapshot?.projection),
+                return: diagnosticMedia(lastPlaybackSnapshot?.ret),
+                operator: diagnosticMedia(lastPlaybackSnapshot?.operator),
+                audio: diagnosticMedia(lastPlaybackSnapshot?.audio),
+                events,
+              },
+              null,
+              2
+            )
+          ),
+          contentType: "application/json",
+        });
+        throw error;
+      })
+      .finally(async () => {
+        await main.evaluate(() => window.__cachedReopenProbe?.stop()).catch(() => {});
       });
-      throw error;
-    });
     const ms = Date.now() - startedAt;
     console.log(`[e2e] reabertura do cache até tudo tocando: ${ms} ms`);
     expect(ms).toBeLessThan(15_000);
