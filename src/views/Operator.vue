@@ -28,6 +28,7 @@
           preload="auto"
           @loadedmetadata="onVideoReady"
           @canplay="onVideoReady"
+          @seeked="onVideoSeeked"
           @playing="onVideoPlaying"
           @waiting="onVideoBuffering"
           @stalled="onVideoBuffering"
@@ -85,7 +86,7 @@ import $idb from "@/helpers/IndexedDB";
 import { DB_TABLE } from "@/constants/DbTables";
 import Telemetry from "@/helpers/Telemetry";
 import Path from "@/helpers/Path";
-import { syncVideoElement } from "@/helpers/VideoSync";
+import { applyVideoState } from "@/helpers/VideoSync";
 
 const { t } = useI18n();
 const root = ref(null);
@@ -109,6 +110,8 @@ const videoFailed = ref(false);
 const videoRef = ref(null);
 let videoActivation = 0;
 let videoObjectUrl = "";
+let latestVideoState = null;
+let currentPlaybackId = null;
 
 function revokeVideoObjectUrl() {
   if (!videoObjectUrl) return;
@@ -118,6 +121,10 @@ function revokeVideoObjectUrl() {
 
 async function activateVideo(payload) {
   const activation = ++videoActivation;
+  if (!payload?.playback_id || payload.playback_id !== currentPlaybackId) {
+    latestVideoState = null;
+  }
+  currentPlaybackId = payload?.playback_id || null;
   videoActive.value = false;
   videoFailed.value = false;
   slides.value = [];
@@ -176,7 +183,22 @@ function onVideoReady() {
     width: el.videoWidth,
     height: el.videoHeight,
   });
-  if (el.paused) el.play().catch(() => {});
+  if (latestVideoState) {
+    applyVideoState(el, latestVideoState, (error) => {
+      console.warn("[Operator] vídeo não iniciou na sincronia:", error?.name || error);
+    });
+  } else if (el.paused) {
+    el.play().catch(() => {});
+  }
+}
+
+function onVideoSeeked() {
+  const el = videoRef.value;
+  if (el && latestVideoState) {
+    applyVideoState(el, latestVideoState, (error) => {
+      console.warn("[Operator] vídeo não iniciou na sincronia:", error?.name || error);
+    });
+  }
 }
 
 function onVideoPlaying() {
@@ -218,6 +240,8 @@ function onVideoError(event) {
 
 useBroadcastListener(BROADCAST_TYPE.SLIDES_DATA, (payload) => {
   videoActivation++;
+  latestVideoState = null;
+  currentPlaybackId = null;
   revokeVideoObjectUrl();
   videoActive.value = false;
   videoFailed.value = false;
@@ -231,6 +255,8 @@ useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION, (payload) => {
     void activateVideo(payload);
   } else {
     videoActivation++;
+    latestVideoState = null;
+    currentPlaybackId = null;
     revokeVideoObjectUrl();
     videoActive.value = false;
     videoFailed.value = false;
@@ -244,19 +270,16 @@ useBroadcastListener(BROADCAST_TYPE.VIDEO_STATE, (payload) => {
   if (!videoActive.value) return;
   const el = videoRef.value;
   if (!el) return;
-  if (typeof payload?.isPaused === "boolean") {
-    if (payload.isPaused && !el.paused) el.pause();
-    else if (!payload.isPaused && el.paused) {
-      el.play().catch((error) => {
-        console.warn("[Operator] vídeo não iniciou na sincronia:", error?.name || error);
-      });
-    }
-  }
-  syncVideoElement(el, payload || {});
+  latestVideoState = payload || null;
+  applyVideoState(el, payload || {}, (error) => {
+    console.warn("[Operator] vídeo não iniciou na sincronia:", error?.name || error);
+  });
 });
 
 useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, () => {
   videoActivation++;
+  latestVideoState = null;
+  currentPlaybackId = null;
   revokeVideoObjectUrl();
   videoActive.value = false;
   videoFailed.value = false;

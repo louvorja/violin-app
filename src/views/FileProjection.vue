@@ -20,6 +20,7 @@
         playsinline
         @loadedmetadata="onVideoReady"
         @canplay="onVideoReady"
+        @seeked="onVideoSeeked"
         @playing="onVideoPlaying"
         @waiting="onVideoBuffering"
         @stalled="onVideoBuffering"
@@ -74,7 +75,7 @@ import { SETTINGS_TABLE } from "@/constants/DbTables";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 import Telemetry from "@/helpers/Telemetry";
 import { normalizeYouTubeError } from "@/helpers/YouTubeError";
-import { syncVideoElement } from "@/helpers/VideoSync";
+import { applyVideoState } from "@/helpers/VideoSync";
 import { VideoStateGate } from "@/helpers/VideoStateVersion";
 import { VideoFrameConfirmation } from "@/helpers/VideoFrameConfirmation";
 import { VideoFirstFrame } from "@/helpers/VideoFirstFrame";
@@ -99,7 +100,10 @@ const videoFrameConfirmation = new VideoFrameConfirmation(
   "file_projection_video",
   (event, properties) => Telemetry.track(event, properties)
 );
-const videoFirstFrame = new VideoFirstFrame("projection", (event, properties) => Telemetry.track(event, properties));
+const videoFirstFrame = new VideoFirstFrame("projection", (event, properties) =>
+  Telemetry.track(event, properties)
+);
+let latestVideoState: VideoMediaState | null = null;
 const ytContainer = ref<HTMLDivElement | null>(null);
 const pdfCanvas = ref<HTMLCanvasElement | null>(null);
 
@@ -192,6 +196,9 @@ async function _activateProjection(p: FileProjectionState): Promise<void> {
       console.warn("[FileProjection] libRef resolve falhou:", e);
     }
   }
+  if (p.type !== "video" || !p.playback_id || p.playback_id !== fileProjection.playback_id) {
+    latestVideoState = null;
+  }
   fileProjection.active = true;
   fileProjection.type = p.type || "image";
   fileProjection.url = p.url || "";
@@ -260,7 +267,32 @@ function onVideoReady(event: Event): void {
     width: el.videoWidth,
     height: el.videoHeight,
   });
-  if (el.paused) el.play().catch(() => {});
+  if (latestVideoState) {
+    _applyVideoState(latestVideoState);
+  } else if (el.paused) {
+    el.play().catch(() => {});
+  }
+}
+
+function _applyVideoState(state: VideoMediaState): void {
+  const el = videoRef.value;
+  if (!el) return;
+  try {
+    const syncAction = applyVideoState(el, state, (error) => {
+      Telemetry.log("warn", "file projection video sync play rejected", {
+        playback_id: fileProjection.playback_id,
+        name: error instanceof Error ? error.name : undefined,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    });
+    videoFrameConfirmation.observe(el, state, syncAction);
+  } catch {
+    /* metadata ainda não chegou */
+  }
+}
+
+function onVideoSeeked(): void {
+  if (latestVideoState) _applyVideoState(latestVideoState);
 }
 
 function onVideoPlaying(): void {
@@ -395,6 +427,7 @@ useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, async () => {
   pdfDoc = null;
   fileProjection.active = false;
   videoStateGate.clear();
+  latestVideoState = null;
   videoFirstFrame.cancel();
   Telemetry.setRuntimeContext({ playback_id: null, presentation_revision: null });
   try {
@@ -409,30 +442,9 @@ useBroadcastListener(BROADCAST_TYPE.VIDEO_STATE, (payload: unknown) => {
   if (!fileProjection.active || fileProjection.type !== "video") return;
   const data = payload as VideoMediaState;
   if (!videoStateGate.accepts(data)) return;
+  latestVideoState = data;
   videoFirstFrame.acceptRevision(data.revision, data.playback_id);
-  const el = videoRef.value;
-  if (!el) return;
-
-  if (typeof data.isPaused === "boolean") {
-    if (data.isPaused && !el.paused) {
-      el.pause();
-    } else if (!data.isPaused && el.paused) {
-      el.play().catch((error) => {
-        Telemetry.log("warn", "file projection video sync play rejected", {
-          playback_id: fileProjection.playback_id,
-          name: error?.name,
-          message: error?.message,
-        });
-      });
-    }
-  }
-
-  try {
-    const syncAction = syncVideoElement(el, data);
-    videoFrameConfirmation.observe(el, data, syncAction);
-  } catch {
-    /* metadata ainda não chegou */
-  }
+  _applyVideoState(data);
 });
 
 useBroadcastListener(BROADCAST_TYPE.VIDEO_STATE, (payload: unknown) => {
