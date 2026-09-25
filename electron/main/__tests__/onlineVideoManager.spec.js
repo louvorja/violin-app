@@ -1376,6 +1376,52 @@ describe("stream (tocar já, enquanto baixa uma vez só)", () => {
     await manager.ensure(A);
   });
 
+  it("cancelar durante a abertura da sessão não devolve stream pronto", async () => {
+    const entering = deferred();
+    const release = deferred();
+    const { openSession } = require("../onlineVideo/progressive.js");
+    const open = vi.fn(async (options) => {
+      entering.resolve();
+      await release.promise;
+      return openSession(options);
+    });
+    const { manager } = makeStream({ cfg: { openSession: open } });
+    const opening = manager.stream(A);
+    await entering.promise;
+
+    const removing = manager.remove(A);
+    release.resolve();
+
+    expect(await opening).toMatchObject({ ok: false, error: { kind: "cancelled" } });
+    expect(await removing).toBe(true);
+    expect((await manager.status()).active).toEqual([]);
+  });
+
+  it("stream que esperou remoção também espera clear iniciado nesse intervalo", async () => {
+    const downloadGate = deferred();
+    const clearEntered = deferred();
+    const releaseClear = deferred();
+    const { manager, resolve } = makeStream({ gate: downloadGate });
+    expect((await manager.stream(A)).ok).toBe(true);
+    const removing = manager.remove(A);
+    const restarting = manager.stream(A);
+    manager.store.clear = async () => {
+      clearEntered.resolve();
+      await releaseClear.promise;
+      return 0;
+    };
+    const clearing = manager.clear();
+
+    downloadGate.resolve();
+    await clearEntered.promise;
+    await Promise.resolve();
+    expect(resolve).toHaveBeenCalledTimes(1);
+
+    releaseClear.resolve();
+    await Promise.all([removing, clearing]);
+    expect(await restarting).toMatchObject({ ok: true });
+  });
+
   it("limita durações no resultado IPC mesmo com relógio injetado extremo", async () => {
     let clock = 0;
     const { manager, resolve } = makeStream({ cfg: { monotonicNow: () => clock } });

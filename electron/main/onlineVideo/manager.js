@@ -698,16 +698,24 @@ function createManager(cfg) {
    * as instala. Nunca rejeita.
    */
   async function stream(id, opts = {}) {
-    try {
-      if (clearing) await clearing;
-    } catch (error) {
-      return fail(error);
-    }
-    const removing = removals.get(id);
-    try {
-      if (removing) await removing;
-    } catch (error) {
-      return fail(error);
+    // Uma remoção pode terminar enquanto um `clear()` começa (e vice-versa).
+    // Só continue quando a observação das duas fronteiras for estável.
+    for (;;) {
+      const activeClear = clearing;
+      try {
+        if (activeClear) await activeClear;
+      } catch (error) {
+        return fail(error);
+      }
+      if (activeClear) continue;
+      const activeRemoval = removals.get(id);
+      try {
+        if (activeRemoval) await activeRemoval;
+      } catch (error) {
+        return fail(error);
+      }
+      if (activeRemoval) continue;
+      break;
     }
     const requestStartedAt = monotonicNow();
     const timings = { resolve_ms: 0, session_open_ms: 0, join_wait_ms: 0, total_ms: 0 };
@@ -746,6 +754,7 @@ function createManager(cfg) {
       const joinStartedAt = monotonicNow();
       const opened = await job.ready;
       timings.join_wait_ms = elapsed(joinStartedAt);
+      if (job.controller.signal.aborted || !streamFenceCurrent(id, fence)) return boundaryCancelled();
       if (opened) {
         job.streamDelivered = true;
         return withTimings(streamInfo(job));
@@ -841,6 +850,7 @@ function createManager(cfg) {
 
     const opened = await job.ready;
     timings.session_open_ms = elapsed(openStartedAt);
+    if (job.controller.signal.aborted || !streamFenceCurrent(id, fence)) return boundaryCancelled();
     if (!opened) return fail(job.openError);
     job.streamDelivered = true;
     publish(job, { phase: "downloading", percent: 0 }, { force: true });
