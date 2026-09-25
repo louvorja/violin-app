@@ -739,7 +739,41 @@ test.describe("quando algo dá errado", () => {
   test("cancelar o download não abre janela, não deixa processo e apaga as trilhas pela metade", async () => {
     await removeFromList(LONG);
     const downloading = downloadFromList(LONG, "Vídeo longo (E2E)");
-    await until(() => downloadingTask(LONG), { timeout: 60_000, label: "o download começar" });
+    let downloadOutcome = "pending";
+    void downloading.then(
+      (result) => {
+        downloadOutcome = result ? "completed" : "failed";
+      },
+      () => {
+        downloadOutcome = "rejected";
+      }
+    );
+    try {
+      await until(() => downloadingTask(LONG), { timeout: 60_000, label: "o download começar" });
+    } catch (error) {
+      const [manager, allTasks, downloaded] = await Promise.all([
+        status().catch(() => null),
+        tasks().catch(() => []),
+        main
+          .evaluate(
+            async (id) =>
+              (await window.louvorjaApi.onlineVideo.list()).some((file) => file.id === id),
+            LONG
+          )
+          .catch(() => null),
+      ]);
+      const task = allTasks.find((item) => item.id === `online-video:${LONG}`);
+      throw new Error(
+        `${error.message}; download=${JSON.stringify({
+          outcome: downloadOutcome,
+          active: manager?.active?.includes(LONG) ?? null,
+          activeCount: manager?.active?.length ?? null,
+          task: task ? { status: task.status, progress: task.progress } : null,
+          downloaded,
+        })}`,
+        { cause: error }
+      );
+    }
     expect((await status()).active).toContain(LONG);
 
     // O mesmo caminho do botão "cancelar" da lista de processos.
