@@ -1447,7 +1447,9 @@
   "online_video": {
     "preparing": "Descargando el video…",
     "phase": {
-      "tools": "Preparando las herramientas de video (solo la primera vez)",
+      "tools": "Preparando los componentes del video",
+      "tools_ytdlp": "Preparando herramienta 1 de 2 (yt-dlp): {percent}%",
+      "tools_ffmpeg": "Preparando herramienta 2 de 2 (ffmpeg): {percent}%",
       "queued": "En cola",
       "downloading": "Descargando",
       "finalizing": "Finalizando"

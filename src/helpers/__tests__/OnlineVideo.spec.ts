@@ -5,6 +5,9 @@ const h = vi.hoisted(() => ({
   platform: { isDesktop: true, onlineVideo: null as any },
   prefs: {} as Record<string, unknown>,
   track: vi.fn(),
+  translate: vi.fn((key: string, params?: { percent?: number }) =>
+    params?.percent === undefined ? key : `${key}:${params.percent}`
+  ),
 }));
 
 vi.mock("@/helpers/Platform", () => ({ default: h.platform }));
@@ -12,6 +15,7 @@ vi.mock("@/helpers/UserData", () => ({
   default: { get: (key: string, fallback?: unknown) => (key in h.prefs ? h.prefs[key] : fallback) },
 }));
 vi.mock("@/helpers/Telemetry", () => ({ default: { track: h.track } }));
+vi.mock("@/i18n", () => ({ i18nAtual: () => ({ global: { t: h.translate } }) }));
 
 import {
   actionForFailure,
@@ -30,6 +34,7 @@ import {
   messageKeyForFailure,
   messageKeyForStreamFailure,
   normalizeMaxHeight,
+  phaseText,
   removeFile,
   stream,
   videoIdFromUrl,
@@ -144,6 +149,22 @@ describe("política de falha", () => {
   });
 });
 
+describe("texto de fase do vídeo", () => {
+  it("mostra uma preparação genérica quando ainda não há ferramenta identificada", () => {
+    expect(phaseText({ id: ID, phase: "tools", percent: 2 })).toBe("online_video.phase.tools");
+    expect(h.translate).toHaveBeenCalledWith("online_video.phase.tools");
+  });
+
+  it.each([
+    ["yt-dlp", "online_video.phase.tools_ytdlp", 42],
+    ["ffmpeg", "online_video.phase.tools_ffmpeg", 58],
+  ])("identifica %s e arredonda o progresso da ferramenta", (tool, key, percent) => {
+    expect(
+      phaseText({ id: ID, phase: "tools", percent: 10, phasePercent: percent + 0.4, tool })
+    ).toBe(`${key}:${percent}`);
+  });
+});
+
 describe("mensagens ao operador existem nos dois idiomas", () => {
   const pt = JSON.parse(readFileSync("src/lang/pt.json", "utf8"));
   const es = JSON.parse(readFileSync("src/lang/es.json", "utf8"));
@@ -155,6 +176,8 @@ describe("mensagens ao operador existem nos dois idiomas", () => {
     ),
     "online_video.preparing",
     "online_video.phase.tools",
+    "online_video.phase.tools_ytdlp",
+    "online_video.phase.tools_ffmpeg",
     "online_video.phase.queued",
     "online_video.phase.downloading",
     "online_video.phase.finalizing",

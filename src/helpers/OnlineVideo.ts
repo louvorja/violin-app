@@ -167,7 +167,17 @@ export function messageKeyForStreamFailure(kind: string): string {
 export function phaseText(p: OnlineVideoProgress): string {
   const t = i18nAtual()?.global?.t;
   if (!t) return "";
-  if (p.phase === "tools") return String(t("online_video.phase.tools"));
+  if (p.phase === "tools") {
+    const toolPhase =
+      p.tool === "yt-dlp"
+        ? "online_video.phase.tools_ytdlp"
+        : p.tool === "ffmpeg"
+          ? "online_video.phase.tools_ffmpeg"
+          : null;
+    return toolPhase
+      ? String(t(toolPhase, { percent: Math.round(p.phasePercent ?? p.percent) }))
+      : String(t("online_video.phase.tools"));
+  }
   if (p.phase === "queued") return String(t("online_video.phase.queued"));
   if (p.phase === "finalizing") return String(t("online_video.phase.finalizing"));
   return `${t("online_video.phase.downloading")} ${Math.round(p.phasePercent ?? p.percent)}%`;
