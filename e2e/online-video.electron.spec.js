@@ -406,6 +406,26 @@ test.describe("primeiro uso: instala as ferramentas e baixa um 1080p", () => {
     await main.evaluate((id) => {
       const started = performance.now();
       const stages = {};
+      const transitions = [];
+      const errorKinds = new Set([
+        "invalid",
+        "unsupported",
+        "tools",
+        "busy",
+        "tool",
+        "network",
+        "cancelled",
+        "age",
+        "private",
+        "geo",
+        "live",
+        "bot",
+        "unavailable",
+        "disk",
+        "format",
+        "forbidden",
+        "unknown",
+      ]);
       const off = window.louvorjaApi.onlineVideo.onProgress((progress) => {
         if (progress.id !== id) return;
         const phase = ["queued", "tools", "downloading", "finalizing", "done", "error"].includes(
@@ -419,8 +439,17 @@ test.describe("primeiro uso: instala as ferramentas e baixa um 1080p", () => {
         const at = Math.round(performance.now() - started);
         const stage = stages[key] ?? (stages[key] = { first_ms: at, last_ms: at });
         stage.last_ms = at;
+        if (transitions.at(-1)?.phase !== key && transitions.length < 20) {
+          transitions.push({
+            phase: key,
+            at_ms: at,
+            ...(phase === "error"
+              ? { kind: errorKinds.has(progress.kind) ? progress.kind : "unknown" }
+              : {}),
+          });
+        }
       });
-      window.__onlineBootstrapProbe = { stages, off };
+      window.__onlineBootstrapProbe = { stages, transitions, off };
     }, LONG);
 
     // O download de antemão (botão, ou link novo na lista): na primeira vez instala as ferramentas.
@@ -446,7 +475,7 @@ test.describe("primeiro uso: instala as ferramentas e baixa um 1080p", () => {
       const probe = window.__onlineBootstrapProbe;
       probe?.off();
       delete window.__onlineBootstrapProbe;
-      return probe?.stages ?? {};
+      return probe ? { stages: probe.stages, transitions: probe.transitions } : {};
     });
     console.log(
       `[e2e] primeiro download (com instalação das ferramentas): ${(elapsed / 1000).toFixed(1)} s; fases ${JSON.stringify(phaseTimings)}`
