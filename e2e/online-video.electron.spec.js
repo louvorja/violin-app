@@ -72,6 +72,21 @@ async function until(fn, { timeout = 15_000, interval = 150, label = "condição
   throw new Error(`Tempo esgotado esperando ${label} (último: ${JSON.stringify(last)})`);
 }
 
+/** Mantém um orçamento real para a ação urgente sem deixar um timer pendurado após sucesso. */
+async function within(promise, timeout, label) {
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`Tempo esgotado esperando ${label}`)), timeout);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function route(page) {
   try {
     return new URL(page.url()).pathname;
@@ -988,27 +1003,77 @@ test.describe("Meus vídeos online: baixar de antemão e gerenciar", () => {
     await expect(summary()).toHaveText("Baixados: 0 de 2 (0 MB)");
   });
 
-  test("um pré-download longo não segura o vídeo que o operador projeta agora", async () => {
+  // Playwright exige o primeiro argumento com destructuring de fixture, mesmo quando não é usado.
+  // eslint-disable-next-line no-empty-pattern
+  test("um pré-download longo não segura o vídeo que o operador projeta agora", async ({}, testInfo) => {
+    const compactDownloadState = async () => {
+      const [manager, disk, backgroundTasks] = await Promise.all([status(), files(), tasks()]);
+      const taskState = (id) => {
+        const task = backgroundTasks.find((item) => item.id === `online-video:${id}`);
+        if (!task) return "absent";
+        if (task.status === "running") return "running";
+        if (task.status === "completed") return "completed";
+        if (task.status === "error") return "error";
+        return "other";
+      };
+      const fileState = (id) => {
+        const file = disk.find((item) => item.id === id);
+        return file ? (file.kept ? "kept" : "cached") : "absent";
+      };
+      return {
+        active_count: Array.isArray(manager.active) ? manager.active.length : null,
+        long: {
+          active: manager.active?.includes(LONG) === true,
+          task: taskState(LONG),
+          file: fileState(LONG),
+        },
+        short: {
+          active: manager.active?.includes(SHORT) === true,
+          task: taskState(SHORT),
+          file: fileState(SHORT),
+        },
+        last_stream_failure: manager.last_stream_failure ?? null,
+      };
+    };
+
+    const waitForShortProjection = async () => {
+      const deadline = Date.now() + 25_000;
+      while (Date.now() < deadline) {
+        try {
+          const sample = await snapshot();
+          if (sample.projection && !sample.projection.none && sample.projection.src.includes(SHORT))
+            return sample;
+        } catch {
+          /* janela ainda carregando */
+        }
+        await sleep(150);
+      }
+      throw new Error("Tempo esgotado esperando o vídeo curto na projeção");
+    };
+
     await action(NAME_LONG, BTN.download).click();
     await until(() => downloadingTask(LONG), { timeout: 60_000, label: "o pré-download começar" });
 
     const opening = openOnline(SHORT); // projetar agora, com o pré-download ainda em curso
-    await until(
-      async () => {
-        const { active } = await status();
-        return active.includes(LONG) && active.includes(SHORT);
-      },
-      { timeout: 30_000, interval: 100, label: "os dois vídeos baixando ao mesmo tempo" }
-    );
-
-    expect(await opening).toBe(true);
-    const shown = await until(
-      async () => {
-        const x = await snapshot();
-        return x.projection && !x.projection.none && x.projection.src.includes(SHORT) ? x : null;
-      },
-      { timeout: 25_000, label: "o vídeo curto na projeção" }
-    );
+    let shown;
+    try {
+      [shown] = await Promise.all([
+        waitForShortProjection(),
+        within(opening, 25_000, "o vídeo urgente começar").then((opened) => {
+          expect(opened).toBe(true);
+        }),
+      ]);
+    } catch (error) {
+      // A CDN pode terminar o LONG antes de o SHORT abrir; só anexe estados fechados,
+      // sem IDs, títulos, URLs, caminhos ou amostras por chunk/frame.
+      await testInfo
+        .attach("concurrent-download-state", {
+          body: JSON.stringify(await compactDownloadState().catch(() => ({ unavailable: true }))),
+          contentType: "application/json",
+        })
+        .catch(() => {});
+      throw error;
+    }
     expect(shown.projection.frames).toEqual([]);
 
     await until(async () => (await onDisk(LONG))?.kept === true, {
