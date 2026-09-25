@@ -403,6 +403,25 @@ test.describe("primeiro uso: instala as ferramentas e baixa um 1080p", () => {
     expect((await status()).ready).toBe(false);
     const startedAt = Date.now();
     requests.length = 0;
+    await main.evaluate((id) => {
+      const started = performance.now();
+      const stages = {};
+      const off = window.louvorjaApi.onlineVideo.onProgress((progress) => {
+        if (progress.id !== id) return;
+        const phase = ["queued", "tools", "downloading", "finalizing", "done", "error"].includes(
+          progress.phase
+        )
+          ? progress.phase
+          : "other";
+        const tool =
+          progress.tool === "yt-dlp" || progress.tool === "ffmpeg" ? progress.tool : "setup";
+        const key = phase === "tools" ? `${phase}:${tool}` : phase;
+        const at = Math.round(performance.now() - started);
+        const stage = stages[key] ?? (stages[key] = { first_ms: at, last_ms: at });
+        stage.last_ms = at;
+      });
+      window.__onlineBootstrapProbe = { stages, off };
+    }, LONG);
 
     // O download de antemão (botão, ou link novo na lista): na primeira vez instala as ferramentas.
     const downloading = downloadFromList(LONG, "Vídeo longo (E2E)");
@@ -423,8 +442,14 @@ test.describe("primeiro uso: instala as ferramentas e baixa um 1080p", () => {
     }
     const downloaded = await downloading;
     const elapsed = Date.now() - startedAt;
+    const phaseTimings = await main.evaluate(() => {
+      const probe = window.__onlineBootstrapProbe;
+      probe?.off();
+      delete window.__onlineBootstrapProbe;
+      return probe?.stages ?? {};
+    });
     console.log(
-      `[e2e] primeiro download (com instalação das ferramentas): ${(elapsed / 1000).toFixed(1)} s`
+      `[e2e] primeiro download (com instalação das ferramentas): ${(elapsed / 1000).toFixed(1)} s; fases ${JSON.stringify(phaseTimings)}`
     );
 
     expect(downloaded).toBe(true);
