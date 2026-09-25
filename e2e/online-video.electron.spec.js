@@ -135,6 +135,8 @@ function readAudio() {
       dur: el.duration,
       networkState: el.networkState,
       errorCode: el.error?.code ?? null,
+      userActivation: navigator.userActivation?.hasBeenActive ?? null,
+      visibility: document.visibilityState,
     };
   }, modules.audio);
 }
@@ -171,6 +173,8 @@ function diagnosticMedia(media) {
     playbackRate: media.playbackRate,
     paused: media.paused,
     sampledAtMs: media.sampledAtMs,
+    ...(media.userActivation !== undefined ? { userActivation: media.userActivation } : {}),
+    ...(media.visibility !== undefined ? { visibility: media.visibility } : {}),
   };
 }
 
@@ -526,9 +530,11 @@ test.describe("depois de baixado", () => {
       (await tasks()).some((t) => t.id === `online-video:${LONG}` && t.status === "running")
     ).toBe(false);
 
+    let lastPlaybackSnapshot = null;
     const playing = await until(
       async () => {
         const s = await snapshot();
+        lastPlaybackSnapshot = s;
         return [s.projection, s.ret, s.operator].every(
           (v) => v && !v.none && !v.paused && v.t > 0.3
         ) && !s.audio.paused
@@ -536,7 +542,24 @@ test.describe("depois de baixado", () => {
           : null;
       },
       { timeout: 20_000, label: "as três janelas tocando" }
-    );
+    ).catch(async (error) => {
+      await test.info().attach("cached-reopen-numeric", {
+        body: Buffer.from(
+          JSON.stringify(
+            {
+              projection: diagnosticMedia(lastPlaybackSnapshot?.projection),
+              return: diagnosticMedia(lastPlaybackSnapshot?.ret),
+              operator: diagnosticMedia(lastPlaybackSnapshot?.operator),
+              audio: diagnosticMedia(lastPlaybackSnapshot?.audio),
+            },
+            null,
+            2
+          )
+        ),
+        contentType: "application/json",
+      });
+      throw error;
+    });
     const ms = Date.now() - startedAt;
     console.log(`[e2e] reabertura do cache até tudo tocando: ${ms} ms`);
     expect(ms).toBeLessThan(15_000);
