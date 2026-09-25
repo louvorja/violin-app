@@ -1422,6 +1422,38 @@ describe("stream (tocar já, enquanto baixa uma vez só)", () => {
     expect(await restarting).toMatchObject({ ok: true });
   });
 
+  it("nova sessão espera o descarte assíncrono da sessão anterior do mesmo vídeo", async () => {
+    const disposeEntered = deferred();
+    const releaseDispose = deferred();
+    const { openSession } = require("../onlineVideo/progressive.js");
+    let opened = 0;
+    const open = vi.fn(async (options) => {
+      const session = await openSession(options);
+      if (opened++ === 0) {
+        const dispose = session.dispose.bind(session);
+        session.dispose = async () => {
+          disposeEntered.resolve();
+          await releaseDispose.promise;
+          return dispose();
+        };
+      }
+      return session;
+    });
+    const { manager } = makeStream({ cfg: { openSession: open } });
+    expect((await manager.ensure(A)).ok).toBe(true);
+    await disposeEntered.promise;
+
+    const removing = manager.remove(A);
+    const restarting = manager.stream(A);
+    await Promise.resolve();
+    expect(open).toHaveBeenCalledTimes(1);
+
+    releaseDispose.resolve();
+    expect(await removing).toBe(true);
+    expect(await restarting).toMatchObject({ ok: true });
+    expect(open).toHaveBeenCalledTimes(2);
+  });
+
   it("limita durações no resultado IPC mesmo com relógio injetado extremo", async () => {
     let clock = 0;
     const { manager, resolve } = makeStream({ cfg: { monotonicNow: () => clock } });

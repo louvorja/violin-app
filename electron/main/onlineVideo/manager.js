@@ -117,6 +117,8 @@ function createManager(cfg) {
   const resolutions = new Map();
   /** Vídeos tocando enquanto baixam, por ID: as trilhas em disco de que as janelas leem. */
   const sessions = new Map();
+  /** Descartes já retirados de `sessions`, mas que ainda podem apagar a pasta compartilhada. */
+  const disposingSessions = new Map();
   /** Limpeza em curso: novos pedidos esperam para não terem o arquivo recém-criado apagado. */
   let clearing = null;
   let clearGeneration = 0;
@@ -451,6 +453,9 @@ function createManager(cfg) {
   /** Abre as trilhas em disco de onde as janelas leem; o mesmo par de conexões serve a todas. */
   async function openJobSession(job, links) {
     const { id } = job;
+    const disposing = disposingSessions.get(id);
+    if (disposing) await disposing;
+    if (job.controller.signal.aborted) throw new OnlineVideoError("cancelled", "Download cancelado");
     job.links = links;
     const session = await openSession({
       id,
@@ -899,10 +904,18 @@ function createManager(cfg) {
   }
 
   async function disposeSession(id) {
+    const existing = disposingSessions.get(id);
+    if (existing) return existing;
     const session = sessions.get(id);
     if (!session) return;
     sessions.delete(id);
-    await session.dispose();
+    const disposing = Promise.resolve().then(() => session.dispose());
+    disposingSessions.set(id, disposing);
+    try {
+      await disposing;
+    } finally {
+      if (disposingSessions.get(id) === disposing) disposingSessions.delete(id);
+    }
   }
 
   function remove(id) {
@@ -959,6 +972,7 @@ function createManager(cfg) {
         // antigo puder publicar um MP4 de volta no cache.
         await settleCancelled([...jobsToSettle, ...resolutionsToSettle]);
         await Promise.all([...sessions.keys()].map(disposeSession));
+        await Promise.all([...disposingSessions.values()]);
         settleClear(await store.clear());
       } catch (error) {
         failClear(error);
