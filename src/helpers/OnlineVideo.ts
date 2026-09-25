@@ -220,12 +220,48 @@ export async function ensure(
   const api = Platform.onlineVideo;
   if (!api) return { ok: false, error: { kind: "unsupported", message: "sem desktop" } };
 
+  const startedAt = Date.now();
+  let lastWorkPhase: "queued" | "tools" | "downloading" | "finalizing" | null = null;
+  let lastTool: "yt-dlp" | "ffmpeg" | null = null;
+  let lastPhaseAt = startedAt;
+  let toolsStartedAt: number | null = null;
+  let firstDownloadingAt: number | null = null;
+  const boundedMs = (value: number | null): number | null =>
+    value === null || !Number.isFinite(value)
+      ? null
+      : Math.round(Math.max(0, Math.min(600_000, value)));
+  const progressContext = () => ({
+    last_phase: lastWorkPhase,
+    last_tool: lastWorkPhase === "tools" ? lastTool : null,
+    phase_elapsed_ms: lastWorkPhase ? boundedMs(Date.now() - lastPhaseAt) : null,
+    initial_tools_ms:
+      toolsStartedAt !== null && firstDownloadingAt !== null
+        ? boundedMs(firstDownloadingAt - toolsStartedAt)
+        : null,
+  });
   const off = onProgress
     ? api.onProgress((p: OnlineVideoProgress) => {
-        if (p?.id === id) onProgress(p);
+        if (p?.id !== id) return;
+        if (
+          p.phase === "queued" ||
+          p.phase === "tools" ||
+          p.phase === "downloading" ||
+          p.phase === "finalizing"
+        ) {
+          const tool =
+            p.phase === "tools" && (p.tool === "yt-dlp" || p.tool === "ffmpeg") ? p.tool : null;
+          if (p.phase !== lastWorkPhase || tool !== lastTool) {
+            const at = Date.now();
+            if (p.phase === "tools" && toolsStartedAt === null) toolsStartedAt = at;
+            if (p.phase === "downloading" && firstDownloadingAt === null) firstDownloadingAt = at;
+            lastWorkPhase = p.phase;
+            lastTool = tool;
+            lastPhaseAt = at;
+          }
+        }
+        onProgress(p);
       })
     : null;
-  const startedAt = Date.now();
   const background = options.background === true;
   const keep = options.keep === true;
   Telemetry.track("online_video_download_requested", {
@@ -249,6 +285,7 @@ export async function ensure(
         vcodec: res.meta?.vcodec ?? null,
         installed_tools: res.installedTools ?? false,
         elapsed_ms: res.durationMs ?? Date.now() - startedAt,
+        initial_tools_ms: progressContext().initial_tools_ms,
       });
     } else if (res.error.kind !== "cancelled") {
       Telemetry.track("online_video_download_failed", {
@@ -256,13 +293,19 @@ export async function ensure(
         kind: res.error.kind,
         action: actionForFailure(res.error.kind),
         elapsed_ms: Date.now() - startedAt,
+        ...progressContext(),
       });
     }
     return res;
   } catch (error) {
     // O IPC em si falhou (janela recarregando, main sem o handler): trate como falha nossa.
     const message = error instanceof Error ? error.message : String(error);
-    Telemetry.track("online_video_download_failed", { video_id: id, kind: "unknown", ipc: true });
+    Telemetry.track("online_video_download_failed", {
+      video_id: id,
+      kind: "unknown",
+      ipc: true,
+      ...progressContext(),
+    });
     return { ok: false, error: { kind: "unknown", message } };
   } finally {
     off?.();

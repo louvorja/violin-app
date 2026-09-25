@@ -351,6 +351,47 @@ describe("ensure", () => {
     expect(seen).toEqual([40]);
   });
 
+  it("resume tempos e fase no evento terminal sem emitir telemetria por progresso", async () => {
+    const api = fakeApi({
+      ensure: vi.fn(async () => {
+        api.emit({ id: ID, phase: "tools", tool: "yt-dlp", percent: 5 });
+        api.emit({ id: ID, phase: "tools", tool: "ffmpeg", percent: 20 });
+        api.emit({ id: ID, phase: "downloading", percent: 25 });
+        api.emit({ id: ID, phase: "error", kind: "bot", percent: 0 });
+        return { ok: false, error: { kind: "bot", message: "x" } };
+      }),
+    });
+    h.platform.onlineVideo = api;
+    await ensure(ID, () => {});
+    expect(h.track).toHaveBeenCalledTimes(2);
+    expect(h.track).toHaveBeenCalledWith(
+      "online_video_download_failed",
+      expect.objectContaining({
+        kind: "bot",
+        last_phase: "downloading",
+        last_tool: null,
+        phase_elapsed_ms: expect.any(Number),
+        initial_tools_ms: expect.any(Number),
+      })
+    );
+  });
+
+  it("falha na preparação conserva somente a ferramenta e fase de enum fechado", async () => {
+    const api = fakeApi({
+      ensure: vi.fn(async () => {
+        api.emit({ id: ID, phase: "tools", tool: "ffmpeg", percent: 10 });
+        api.emit({ id: ID, phase: "error", kind: "network", percent: 0 });
+        return { ok: false, error: { kind: "network", message: "x" } };
+      }),
+    });
+    h.platform.onlineVideo = api;
+    await ensure(ID, () => {});
+    expect(h.track).toHaveBeenCalledWith(
+      "online_video_download_failed",
+      expect.objectContaining({ last_phase: "tools", last_tool: "ffmpeg", initial_tools_ms: null })
+    );
+  });
+
   it("solta o ouvinte de progresso quando termina, dê certo ou não", async () => {
     const api = fakeApi();
     h.platform.onlineVideo = api;
