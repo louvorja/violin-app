@@ -1401,18 +1401,100 @@ test.describe("Meus vídeos online: baixar de antemão e gerenciar", () => {
     test("pelo cartão de Meus vídeos online: toca já, o cartão mostra o andamento e o vídeo fica guardado", async () => {
       await removeFromDisk(LONG);
       const startedAt = Date.now();
-      await card(NAME_LONG).locator(".cv-grid-thumb").click();
-      await until(
-        async () => {
-          const s = await snapshot();
-          return screens(s).every(
-            (v) => v && !v.none && v.src === STREAM(LONG, "video") && v.ready >= 3 && v.t > 0.3
-          )
-            ? s
+      let lastPlaybackSnapshot = null;
+      const startupWarnings = [];
+      const warningReads = [];
+      const allowedKinds = new Set([
+        "busy",
+        "cancelled",
+        "disk",
+        "forbidden",
+        "format",
+        "invalid",
+        "live",
+        "network",
+        "tool",
+        "tools",
+        "unknown",
+        "unsupported",
+        "bot",
+      ]);
+      const onStartupWarning = (message) => {
+        const line = message.text();
+        const stage = line.startsWith("[OnlineVideo] abrir direto falhou:")
+          ? "resolution"
+          : line.startsWith("[OnlineVideo] o vídeo aberto direto não chegou a tocar:")
+            ? "media_ready"
             : null;
-        },
-        { timeout: 40_000, label: "as telas tocando pelo cartão, antes de acabar de baixar" }
-      );
+        if (!stage) return;
+        warningReads.push(
+          Promise.all(message.args().map((arg) => arg.jsonValue().catch(() => null))).then(
+            (args) => {
+              const detail = args.find(
+                (arg) =>
+                  arg &&
+                  typeof arg === "object" &&
+                  !Array.isArray(arg) &&
+                  ("kind" in arg || "ready_state" in arg)
+              );
+              startupWarnings.push({
+                stage,
+                kind: allowedKinds.has(detail?.kind) ? detail.kind : "unknown",
+                ready_state: Number.isInteger(detail?.ready_state) ? detail.ready_state : null,
+                network_state: Number.isInteger(detail?.network_state)
+                  ? detail.network_state
+                  : null,
+                error_code: Number.isInteger(detail?.error_code) ? detail.error_code : null,
+              });
+            }
+          )
+        );
+      };
+      main.on("console", onStartupWarning);
+      try {
+        await card(NAME_LONG).locator(".cv-grid-thumb").click();
+        await until(
+          async () => {
+            const s = await snapshot();
+            lastPlaybackSnapshot = s;
+            return screens(s).every(
+              (v) => v && !v.none && v.src === STREAM(LONG, "video") && v.ready >= 3 && v.t > 0.3
+            )
+              ? s
+              : null;
+          },
+          { timeout: 40_000, label: "as telas tocando pelo cartão, antes de acabar de baixar" }
+        );
+      } catch (error) {
+        await Promise.allSettled(warningReads);
+        const manager = await status().catch(() => null);
+        await test.info().attach("card-stream-readiness-numeric", {
+          body: Buffer.from(
+            JSON.stringify(
+              {
+                projection: diagnosticMedia(lastPlaybackSnapshot?.projection),
+                return: diagnosticMedia(lastPlaybackSnapshot?.ret),
+                operator: diagnosticMedia(lastPlaybackSnapshot?.operator),
+                audio: diagnosticMedia(lastPlaybackSnapshot?.audio),
+                manager: manager
+                  ? {
+                      ready: manager.ready,
+                      activeCount: Array.isArray(manager.active) ? manager.active.length : null,
+                      last_stream_failure: manager.last_stream_failure ?? null,
+                    }
+                  : null,
+                startupWarnings,
+              },
+              null,
+              2
+            )
+          ),
+          contentType: "application/json",
+        });
+        throw error;
+      } finally {
+        main.off("console", onStartupWarning);
+      }
       expect(Date.now() - startedAt, "não esperou o download inteiro").toBeLessThan(30_000);
 
       // Baixando ao fundo, o cartão mostra o andamento em vez de oferecer o download.
