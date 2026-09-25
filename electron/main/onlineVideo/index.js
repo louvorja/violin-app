@@ -26,6 +26,7 @@ function inactiveDiagnosticSnapshot() {
     online_video_background_queued: 0,
     online_video_streaming: 0,
     online_video_jobs: [],
+    last_stream_failure: null,
   };
 }
 

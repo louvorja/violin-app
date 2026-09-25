@@ -78,6 +78,7 @@ import { normalizeYouTubeError } from "@/helpers/YouTubeError";
 import { applyVideoState } from "@/helpers/VideoSync";
 import { VideoStateGate } from "@/helpers/VideoStateVersion";
 import { VideoFrameConfirmation } from "@/helpers/VideoFrameConfirmation";
+import { VideoFirstFrame } from "@/helpers/VideoFirstFrame";
 
 function getYT(): YTAPI | null {
   return (window as unknown as { YT?: YTAPI }).YT ?? null;
@@ -98,6 +99,9 @@ const videoStateGate = new VideoStateGate();
 const videoFrameConfirmation = new VideoFrameConfirmation(
   "file_projection_video",
   (event, properties) => Telemetry.track(event, properties)
+);
+const videoFirstFrame = new VideoFirstFrame("projection", (event, properties) =>
+  Telemetry.track(event, properties)
 );
 let latestVideoState: VideoMediaState | null = null;
 const ytContainer = ref<HTMLDivElement | null>(null);
@@ -201,6 +205,7 @@ async function _activateProjection(p: FileProjectionState): Promise<void> {
   fileProjection.title = p.title || "";
   fileProjection.playback_id = p.playback_id;
   videoStateGate.begin(p.playback_id);
+  videoFirstFrame.begin(p.type === "video" ? p.playback_id : null);
   Telemetry.setRuntimeContext({ playback_id: p.playback_id ?? null });
   console.log("[FileProjection] Ativado:", p.type, p.url?.substring(0, 60));
   if (p.type === "video") {
@@ -218,6 +223,7 @@ function _prepareVideo(): void {
   videoFailed.value = false;
   el.muted = true;
   el.playsInline = true;
+  videoFirstFrame.attach(el);
   el.load();
   el.play().catch((error) => {
     // O erro de codec chega também pelo evento `error`; este log captura o
@@ -245,6 +251,7 @@ function onVideoReady(event: Event): void {
   const el = videoRef.value;
   if (!el) return;
   videoFailed.value = false;
+  videoFirstFrame.mediaReady(el);
   if (event.type === "loadedmetadata") _requestVideoState();
   console.info("[FileProjection] vídeo pronto:", {
     playback_id: fileProjection.playback_id,
@@ -320,6 +327,7 @@ function onVideoError(event: Event): void {
   const el = event.currentTarget as HTMLVideoElement | null;
   videoFailed.value = true;
   videoFrameConfirmation.cancel();
+  videoFirstFrame.cancel();
   const code = el?.error?.code;
   const reason = code === 3 ? "decode" : code === 4 ? "source_not_supported" : "unknown";
   const error = new Error(`File projection video ${reason}`);
@@ -420,6 +428,7 @@ useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, async () => {
   fileProjection.active = false;
   videoStateGate.clear();
   latestVideoState = null;
+  videoFirstFrame.cancel();
   Telemetry.setRuntimeContext({ playback_id: null, presentation_revision: null });
   try {
     localStorage.removeItem(KEYS.PROJECTION.LJ_FILE_PROJECTION);
@@ -434,6 +443,7 @@ useBroadcastListener(BROADCAST_TYPE.VIDEO_STATE, (payload: unknown) => {
   const data = payload as VideoMediaState;
   if (!videoStateGate.accepts(data)) return;
   latestVideoState = data;
+  videoFirstFrame.acceptRevision(data.revision, data.playback_id);
   _applyVideoState(data);
 });
 
@@ -688,6 +698,7 @@ onMounted(async () => {
 
 onBeforeUnmount(async () => {
   videoFrameConfirmation.dispose();
+  videoFirstFrame.dispose();
   if (wpBlobUrl) URL.revokeObjectURL(wpBlobUrl);
   if (pdfDoc) {
     try {

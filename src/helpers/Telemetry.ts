@@ -810,6 +810,7 @@ const RUNTIME_INCIDENT_KEYS = new Set([
   "online_video_background_queued",
   "online_video_streaming",
   "online_video_jobs",
+  "last_stream_failure",
   "update_status",
   "http_server_running",
   "projection_features",
@@ -836,6 +837,39 @@ const RUNTIME_INCIDENT_KEYS = new Set([
   "start_time_ms",
 ]);
 
+const STREAM_FAILURE_ENUMS = {
+  kind: new Set([
+    "age",
+    "bot",
+    "disk",
+    "forbidden",
+    "format",
+    "geo",
+    "live",
+    "network",
+    "private",
+    "tool",
+    "unavailable",
+    "unknown",
+  ]),
+  track: new Set(["video", "audio", "unknown"]),
+  phase: new Set(["opening", "downloading", "finalizing"]),
+  elapsed_bucket: new Set(["lt_10s", "10s_1m", "1m_5m", "gte_5m", "unknown"]),
+  age_bucket: new Set(["lt_10s", "10s_1m", "1m_5m", "gte_5m", "unknown"]),
+};
+
+function safeStreamFailureDiagnostic(value: unknown): Record<string, string> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const raw = value as Record<string, unknown>;
+  const safe: Record<string, string> = {};
+  for (const [key, allowed] of Object.entries(STREAM_FAILURE_ENUMS)) {
+    const entry = raw[key];
+    if (typeof entry !== "string" || !allowed.has(entry)) return null;
+    safe[key] = entry;
+  }
+  return safe;
+}
+
 export function reportRuntimeIncident(payload: unknown): void {
   if (!isEnabled()) return;
   if (!payload || typeof payload !== "object") return;
@@ -843,6 +877,9 @@ export function reportRuntimeIncident(payload: unknown): void {
   const attributes = Object.fromEntries(
     Object.entries(raw).filter(([key]) => RUNTIME_INCIDENT_KEYS.has(key))
   );
+  if ("last_stream_failure" in attributes) {
+    attributes.last_stream_failure = safeStreamFailureDiagnostic(attributes.last_stream_failure);
+  }
   if (typeof attributes.incident_type !== "string" || !attributes.incident_type) return;
   const rawSeverity = attributes.severity;
   const level: "warn" | "error" | "fatal" =

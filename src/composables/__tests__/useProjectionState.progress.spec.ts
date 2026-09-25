@@ -122,6 +122,12 @@ describe("projection progress belongs to the committed music slide", () => {
       expect(receive).toHaveBeenCalled();
       const packet = receive.mock.calls.at(-1)![0] as { version: 1; legacyRevision: number; snapshot: Record<string, unknown> };
       expect(packet.snapshot).toMatchObject({ title: "Authoritative", slideIndex: 1, slide: { lyric: "Verse" } });
+      const diagnostics = (window as Window & {
+        __ljMusicShadowDiagnostics?: { comparisons: number; divergences: number; sessionId: string | null };
+      }).__ljMusicShadowDiagnostics;
+      expect(diagnostics?.comparisons).toBeGreaterThan(0);
+      expect(diagnostics?.divergences).toBe(0);
+      expect(Object.keys(diagnostics ?? {}).sort()).toEqual(["comparisons", "divergences", "sessionId"]);
       expect(track.mock.calls.filter(([name]) => name === "presentation_shadow_renderer_divergence")).toHaveLength(0);
       const inconsistent = { ...packet, snapshot: { ...packet.snapshot, title: "Diagnostic-only title" } };
       Broadcast.send(BROADCAST_TYPE.MUSIC_SHADOW_SNAPSHOT, inconsistent);
@@ -130,6 +136,10 @@ describe("projection progress belongs to the committed music slide", () => {
       expect(state.slide.value?.lyric).toBe("Verse");
       expect(track.mock.calls.filter(([name]) => name === "presentation_shadow_renderer_divergence"))
         .toEqual([["presentation_shadow_renderer_divergence", { fields: "title" }]]);
+      expect(diagnostics?.divergences).toBe(1);
+      wrapper?.unmount();
+      wrapper = undefined;
+      expect((window as Window & { __ljMusicShadowDiagnostics?: unknown }).__ljMusicShadowDiagnostics).toBeUndefined();
     } finally {
       receive.mockRestore();
       track.mockRestore();

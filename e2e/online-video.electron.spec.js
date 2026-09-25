@@ -101,13 +101,17 @@ function readVideo(page) {
     const frames = [...document.querySelectorAll("iframe")].map((f) => f.src);
     return v
       ? {
+          sampledAtMs: performance.timeOrigin + performance.now(),
           t: v.currentTime,
+          playbackRate: v.playbackRate,
           paused: v.paused,
           muted: v.muted,
           w: v.videoWidth,
           h: v.videoHeight,
           src: v.currentSrc,
           ready: v.readyState,
+          networkState: v.networkState,
+          errorCode: v.error?.code ?? null,
           dur: v.duration,
           frames,
         }
@@ -120,12 +124,17 @@ function readAudio() {
     const { useAudioPlayback } = await import(/* @vite-ignore */ url);
     const el = useAudioPlayback().getElement();
     return {
+      sampledAtMs: performance.timeOrigin + performance.now(),
       t: el.currentTime,
+      playbackRate: el.playbackRate,
+      ready: el.readyState,
       paused: el.paused,
       muted: el.muted,
       volume: el.volume,
       src: el.currentSrc,
       dur: el.duration,
+      networkState: el.networkState,
+      errorCode: el.error?.code ?? null,
     };
   }, modules.audio);
 }
@@ -139,6 +148,30 @@ async function snapshot() {
     readAudio(),
   ]);
   return { projection, ret, operator, audio };
+}
+
+/** Only numeric media state and the local scheme class leave a failed test. */
+function diagnosticMedia(media) {
+  if (!media) return { exists: false };
+  if (media.none) return { exists: false, elementMissing: true };
+  const srcClass = media.src?.startsWith("louvorja://onlinestream/")
+    ? "progressive"
+    : media.src?.startsWith("louvorja://onlinevideo/")
+      ? "cached"
+      : media.src
+        ? "other"
+        : "empty";
+  return {
+    exists: true,
+    srcClass,
+    readyState: media.ready,
+    networkState: media.networkState,
+    errorCode: media.errorCode,
+    currentTime: media.t,
+    playbackRate: media.playbackRate,
+    paused: media.paused,
+    sampledAtMs: media.sampledAtMs,
+  };
 }
 
 const openOnline = (id) =>
@@ -1077,9 +1110,11 @@ test.describe("Meus vídeos online: baixar de antemão e gerenciar", () => {
       console.log(`[e2e] tocar já: pronto para tocar em ${(elapsed / 1000).toFixed(1)} s`);
       expect(elapsed, "não esperou o download inteiro").toBeLessThan(25_000);
 
+      let lastPlaybackSnapshot = null;
       const playing = await until(
         async () => {
           const s = await snapshot();
+          lastPlaybackSnapshot = s;
           return screens(s).every(
             (v) => v && !v.none && v.src === STREAM(LONG, "video") && v.ready >= 3 && v.t > 0.3
           )
@@ -1087,7 +1122,32 @@ test.describe("Meus vídeos online: baixar de antemão e gerenciar", () => {
             : null;
         },
         { timeout: 20_000, label: "as três telas tocando do arquivo em crescimento" }
-      );
+      ).catch(async (error) => {
+        const manager = await status().catch(() => null);
+        await test.info().attach("stream-readiness-numeric", {
+          body: Buffer.from(
+            JSON.stringify(
+              {
+                projection: diagnosticMedia(lastPlaybackSnapshot?.projection),
+                return: diagnosticMedia(lastPlaybackSnapshot?.ret),
+                operator: diagnosticMedia(lastPlaybackSnapshot?.operator),
+                audio: diagnosticMedia(lastPlaybackSnapshot?.audio),
+                manager: manager
+                  ? {
+                      ready: manager.ready,
+                      activeCount: Array.isArray(manager.active) ? manager.active.length : null,
+                      last_stream_failure: manager.last_stream_failure ?? null,
+                    }
+                  : null,
+              },
+              null,
+              2
+            )
+          ),
+          contentType: "application/json",
+        });
+        throw error;
+      });
       for (const v of screens(playing)) {
         expect(v.frames, "nenhum player do YouTube").toEqual([]);
         expect(v.muted).toBe(true);
@@ -1106,16 +1166,48 @@ test.describe("Meus vídeos online: baixar de antemão e gerenciar", () => {
 
       // Imagem e som alinhados enquanto ainda baixa.
       const gaps = [];
+      const driftSamples = [];
+      // Explicit whitelist: never attach the snapshot's URLs, iframe sources,
+      // titles or filesystem paths. Timestamps are captured inside each
+      // renderer's read, so delayed evaluation is distinguishable from drift.
+      const timing = (media) => ({
+        sampledAtMs: media.sampledAtMs,
+        currentTime: media.t,
+        playbackRate: media.playbackRate,
+        readyState: media.ready,
+        paused: media.paused,
+      });
       for (let i = 0; i < 8; i++) {
         await sleep(500);
         const s = await snapshot();
         for (const v of screens(s)) gaps.push(v.t - s.audio.t);
+        const roleSample = (video) => ({
+          ...timing(video),
+          signedDriftSeconds: video.t - s.audio.t,
+        });
+        driftSamples.push({
+          sample: i,
+          audio: timing(s.audio),
+          projection: roleSample(s.projection),
+          return: roleSample(s.ret),
+          operator: roleSample(s.operator),
+        });
       }
+      const medianDriftSeconds = median(gaps.map(Math.abs));
+      const maxDriftSeconds = Math.max(...gaps.map(Math.abs));
       console.log(
-        `[e2e] tocar já: deriva imagem-som mediana ${(median(gaps.map(Math.abs)) * 1000).toFixed(0)} ms, pior ${(Math.max(...gaps.map(Math.abs)) * 1000).toFixed(0)} ms`
+        `[e2e] tocar já: deriva imagem-som mediana ${(medianDriftSeconds * 1000).toFixed(0)} ms, pior ${(maxDriftSeconds * 1000).toFixed(0)} ms`
       );
-      expect(median(gaps.map(Math.abs))).toBeLessThan(0.15);
-      expect(Math.max(...gaps.map(Math.abs))).toBeLessThan(0.5);
+      if (medianDriftSeconds >= 0.15 || maxDriftSeconds >= 0.5) {
+        await test.info().attach("stream-drift-numeric", {
+          body: Buffer.from(
+            JSON.stringify({ medianDriftSeconds, maxDriftSeconds, samples: driftSamples }, null, 2)
+          ),
+          contentType: "application/json",
+        });
+      }
+      expect(medianDriftSeconds).toBeLessThan(0.15);
+      expect(maxDriftSeconds).toBeLessThan(0.5);
 
       // O download foi este mesmo: aparece na lista de processos, termina no disco e não guarda.
       await until(async () => !!(await onDisk(LONG)), {

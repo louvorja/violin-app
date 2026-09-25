@@ -19,6 +19,10 @@ A aplicação é composta por:
 - Sistema de Internacionalização (Vue I18n 11)
 - IndexedDB unificado (`louvorja`) para dados offline
 
+Para slides normais de música, a primeira fatia de um Presentation Core puro
+opera em shadow mode, sem controlar a tela. Sessão, revisão, recuperação e
+comparação entre janelas estão descritas em [`presentation-core.md`](presentation-core.md).
+
 ---
 
 ## 🧠 Stack

@@ -121,6 +121,7 @@ describe("vídeo online: o que fica de fora do carregamento do preload", () => {
         online_video_background_queued: 0,
         online_video_streaming: 0,
         online_video_jobs: [],
+        last_stream_failure: null,
       });
       expect(seen.appGetPathCalls).toBe(0);
     });

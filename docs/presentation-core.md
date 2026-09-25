@@ -39,6 +39,19 @@ broadcast não produz divergência artificial; recovery visual ainda pertence ao
 legado. Este protocolo diagnóstico usa apenas Broadcast local/cross-window,
 não valida a entrega a clientes HTTP/SSE. Não há acknowledgements de paint.
 
+O harness `e2e/presentation-shadow.spec.js` executa Chromium com duas páginas
+reais, fixtures locais e bloqueio de origens externas. Exercita as duas ordens
+de abertura produtor/projetor, navegação e reabertura após perder mensagens.
+Em desenvolvimento, `window.__ljMusicShadowDiagnostics` expõe apenas três
+campos de tamanho constante: número de comparações efetivamente realizadas,
+incidentes e ID da sessão. O contador vem do ponto de comparação do receptor;
+receber um pacote ou não emitir divergência não conta como evidência de paridade.
+Esse objeto é removido ao desmontar e não é exposto no build de produção.
+O teste exige comparação positiva e zero divergências em cada etapa e anexa
+os contadores como JSON, sem letras/títulos. Não envia eventos de sucesso ao
+PostHog. Para preservar outros artefatos, execute com `--output` apontando para
+um diretório temporário exclusivo.
+
 Cada `setSlides` cria uma sessão local nova, independente de `playback_id`.
 Trocar cantada/playback pode mudar a identidade do áudio e seus timestamps
 preservando a sessão de apresentação e o slide atual. O produtor atribui IDs
@@ -68,6 +81,18 @@ paridade de todos os módulos nem autoriza cutover automático.
 
 Validação: testes de replay determinístico, deduplicação, sessão antiga,
 fechamento/reabertura, limites, cópia de inputs, troca de marcações, divergência
-deliberada, seek assíncrono e requests de recovery. O trabalho não depende de
-hardware Windows. Transporte revisionado, recovery de snapshots nas janelas e
-validação física multiplataforma permanecem etapas posteriores.
+deliberada, seek assíncrono, requests de recovery e comparação em duas janelas
+Chromium reais. O trabalho não depende de hardware Windows. Cutover do legado,
+aplicação visual do snapshot canônico e validação física multiplataforma
+permanecem etapas posteriores; não confundir paridade desta fatia com paridade
+de todos os modos de apresentação.
+
+`projection_slide_frame_opportunity` é emitido somente em marcos/atrasos e
+separa `command_to_commit_ms`, `commit_to_emit_ms`,
+`broadcast_to_receive_ms`, `receive_to_state_apply_ms`,
+`state_apply_to_dom_ms` e `dom_to_frame_ms`, quando os respectivos marcos são
+válidos. `receive_to_apply_ms` mantém o significado histórico até `nextTick`.
+Os histogramas de duração usam apenas atributos de baixa cardinalidade; letras,
+títulos e IDs não entram nas dimensões das métricas. Dois `requestAnimationFrame`
+indicam oportunidade de frame após o patch DOM, não a apresentação física no
+monitor. O laboratório Windows deve correlacionar essa amostra com GPU/display.

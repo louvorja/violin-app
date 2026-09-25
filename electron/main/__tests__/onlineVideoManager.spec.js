@@ -1263,6 +1263,58 @@ describe("stream (tocar já, enquanto baixa uma vez só)", () => {
     await manager.ensure(A);
   });
 
+  it("guarda só o tipo, trilha e tempo aproximado da última falha progressiva", async () => {
+    const videoGate = deferred();
+    let clock = 1_000;
+    const fetchRange = vi.fn(async (url, start, end) => {
+      if (url === VURL) {
+        await videoGate.promise;
+        throw new OnlineVideoError("forbidden", "https://secret.example/path?token=private");
+      }
+      return { data: Buffer.alloc(end - start + 1), total: 2000 };
+    });
+    const { manager } = makeStream({ cfg: { fetchRange, now: () => clock } });
+    expect((await manager.status()).last_stream_failure).toBeNull();
+    expect((await manager.stream(A)).ok).toBe(true);
+    const finishing = manager.ensure(A);
+    videoGate.resolve();
+    expect(await finishing).toMatchObject({ ok: false, error: { kind: "forbidden" } });
+
+    const expected = {
+      kind: "forbidden",
+      track: "video",
+      phase: "downloading",
+      elapsed_bucket: "lt_10s",
+      age_bucket: "lt_10s",
+    };
+    expect(manager.diagnosticSnapshot().last_stream_failure).toEqual(expected);
+    expect((await manager.status()).last_stream_failure).toEqual(expected);
+    expect(JSON.stringify(expected)).not.toContain("secret.example");
+    expect(JSON.stringify(expected)).not.toContain(A);
+    clock += 5 * 60 * 1000;
+    expect(manager.diagnosticSnapshot().last_stream_failure).toBeNull();
+    expect((await manager.status()).last_stream_failure).toBeNull();
+  });
+
+  it("não registra cancelamento intencional como falha progressiva", async () => {
+    const gate = deferred();
+    const { manager } = makeStream({ gate });
+    await manager.stream(A);
+    expect(manager.cancel(A)).toBe(true);
+    gate.resolve();
+    await vi.waitFor(() => expect(manager.diagnosticSnapshot().online_video_active_count).toBe(0));
+    expect(manager.diagnosticSnapshot().last_stream_failure).toBeNull();
+  });
+
+  it("não confunde erro de pré-download não reproduzido com falha do stream em tela", async () => {
+    const fetchRange = vi.fn(async () => {
+      throw new OnlineVideoError("network", "Falha no pré-download");
+    });
+    const { manager } = makeStream({ cfg: { fetchRange } });
+    expect(await manager.ensure(A, { priority: "background" })).toMatchObject({ ok: false, error: { kind: "network" } });
+    expect(manager.diagnosticSnapshot().last_stream_failure).toBeNull();
+  });
+
   it("devolve endereços do próprio app (nunca o link do YouTube) e a janela já lê o vídeo por eles", async () => {
     const { manager, video, audio } = makeStream();
     const res = await manager.stream(A);
