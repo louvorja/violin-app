@@ -1454,6 +1454,43 @@ describe("stream (tocar já, enquanto baixa uma vez só)", () => {
     expect(open).toHaveBeenCalledTimes(2);
   });
 
+  it("sweep não deixa descarte antigo apagar a nova sessão do mesmo vídeo", async () => {
+    const disposeEntered = deferred();
+    const releaseDispose = deferred();
+    const { openSession } = require("../onlineVideo/progressive.js");
+    let now = 1;
+    let opened = 0;
+    const open = vi.fn(async (options) => {
+      const session = await openSession(options);
+      if (opened++ === 0) {
+        const dispose = session.dispose.bind(session);
+        session.dispose = async () => {
+          disposeEntered.resolve();
+          await releaseDispose.promise;
+          return dispose();
+        };
+      }
+      return session;
+    });
+    const { manager } = makeStream({ cfg: { now: () => now, openSession: open } });
+    expect((await manager.stream(A)).ok).toBe(true);
+    expect((await manager.ensure(A)).ok).toBe(true);
+    now = SESSION_IDLE_MS + 2;
+
+    const sweeping = manager.stream(B);
+    await disposeEntered.promise;
+    const removing = manager.remove(A);
+    const restarting = manager.stream(A);
+    await Promise.resolve();
+    expect(open).toHaveBeenCalledTimes(1);
+
+    releaseDispose.resolve();
+    expect(await removing).toBe(true);
+    expect(await restarting).toMatchObject({ ok: true });
+    expect(await sweeping).toMatchObject({ ok: true });
+    expect(open).toHaveBeenCalledTimes(3);
+  });
+
   it("limita durações no resultado IPC mesmo com relógio injetado extremo", async () => {
     let clock = 0;
     const { manager, resolve } = makeStream({ cfg: { monotonicNow: () => clock } });
