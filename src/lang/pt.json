@@ -210,7 +210,8 @@
       "auto_fullscreen_title": "Tela cheia automática",
       "auto_fullscreen_blocked": "A projeção precisa de um clique para entrar em tela cheia — limitação do navegador. No aplicativo para computador isso é automático.",
       "auto_fullscreen_granted": "A projeção entra em tela cheia sozinha.",
-      "projection_withheld": "O monitor de projeção não está conectado. A janela não foi aberta para não ocupar a sua tela."
+      "projection_withheld": "O monitor de projeção não está conectado. A janela não foi aberta para não ocupar a sua tela.",
+      "projection_close_pending": "A janela anterior ainda está fechando. Tente projetar novamente em instantes."
     },
     "slides": {
       "affect_external": "Formatação de texto e fundo personalizados afetam slides externos",

@@ -379,6 +379,9 @@ export async function open(opts: OpenOptions): Promise<void> {
         if (r.refused === "operator-screen") {
           const t = i18nAtual()?.global?.t;
           if (t) $snackbar.warning(t("options.monitors.projection_withheld"));
+        } else if (r.refused === "window-close-pending") {
+          const t = i18nAtual()?.global?.t;
+          if (t) $snackbar.warning(t("options.monitors.projection_close_pending"));
         } else {
           console.warn(`[Projection] Abertura recusada para ${opts.feature}: ${r.refused}`);
         }
