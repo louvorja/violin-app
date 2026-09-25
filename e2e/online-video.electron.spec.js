@@ -1151,18 +1151,44 @@ test.describe("Meus vídeos online: baixar de antemão e gerenciar", () => {
 
   test("pelo cartão, toca já, mostra o estado do download e cancela se ainda estiver baixando", async () => {
     const STREAM_LONG = `louvorja://onlinestream/${LONG}/video`;
-    const playingFromStream = () =>
-      until(
-        async () => {
-          const x = await snapshot();
-          return [x.projection, x.ret, x.operator].every(
-            (v) => v && !v.none && v.src === STREAM_LONG && v.ready >= 3 && v.t > 0.3
-          )
-            ? x
-            : null;
-        },
-        { timeout: 40_000, label: "o vídeo tocando pelo cartão, antes de acabar de baixar" }
-      );
+    const playingFromStream = async ({ allowCached = false } = {}) => {
+      let lastPlaybackSnapshot = null;
+      try {
+        return await until(
+          async () => {
+            const x = await snapshot();
+            lastPlaybackSnapshot = x;
+            return [x.projection, x.ret, x.operator].every(
+              (v) =>
+                v &&
+                !v.none &&
+                (v.src === STREAM_LONG ||
+                  (allowCached && v.src === `louvorja://onlinevideo/${LONG}.mp4`)) &&
+                v.ready >= 3 &&
+                v.t > 0.3
+            )
+              ? x
+              : null;
+          },
+          {
+            timeout: 40_000,
+            label: allowCached
+              ? "o vídeo tocando pelo cartão após cancelar (stream ou cache)"
+              : "o vídeo tocando pelo cartão em stream",
+          }
+        );
+      } catch (error) {
+        throw new Error(
+          `${error.message}; media=${JSON.stringify({
+            projection: diagnosticMedia(lastPlaybackSnapshot?.projection),
+            return: diagnosticMedia(lastPlaybackSnapshot?.ret),
+            operator: diagnosticMedia(lastPlaybackSnapshot?.operator),
+            audio: diagnosticMedia(lastPlaybackSnapshot?.audio),
+          })}`,
+          { cause: error }
+        );
+      }
+    };
 
     await removeFromList(LONG);
     await card(NAME_LONG).locator(".cv-grid-thumb").click();
@@ -1206,8 +1232,10 @@ test.describe("Meus vídeos online: baixar de antemão e gerenciar", () => {
       expect(await onDisk(LONG)).toBeFalsy();
 
       // Clicar de novo logo em seguida tem que funcionar (não pode pegar carona no cancelado).
+      // Uma CDN rápida pode concluir o novo download antes de as três janelas abrirem; nesse
+      // caso a fonte correta já é o MP4 final, não a sessão de arquivo em crescimento.
       await card(NAME_LONG).locator(".cv-grid-thumb").click();
-      await playingFromStream();
+      await playingFromStream({ allowCached: true });
       await closeMedia();
       await until(async () => !!(await onDisk(LONG)), {
         timeout: 180_000,
