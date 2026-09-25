@@ -119,8 +119,10 @@ function createManager(cfg) {
   const sessions = new Map();
   /** Limpeza em curso: novos pedidos esperam para não terem o arquivo recém-criado apagado. */
   let clearing = null;
+  let clearGeneration = 0;
   /** Remoções em curso por vídeo: novo pedido do mesmo ID só começa após a fronteira destrutiva. */
   const removals = new Map();
+  const removalGenerations = new Map();
   const streamDir = path.join(dir, ".stream");
   let sessionSweep = null;
   const lanes = {
@@ -177,6 +179,11 @@ function createManager(cfg) {
     }
     return { kind, track, phase, elapsed_bucket, age_bucket: timeBucket(now() - occurredAt) };
   }
+
+  const streamFence = (id) => ({ clear: clearGeneration, remove: removalGenerations.get(id) ?? 0 });
+  const streamFenceCurrent = (id, fence) =>
+    fence.clear === clearGeneration && fence.remove === (removalGenerations.get(id) ?? 0);
+  const boundaryCancelled = () => fail(new OnlineVideoError("cancelled", "Cancelado"));
 
   const transfersRunning = () => lanes.foreground.running + lanes.background.running + streaming;
 
@@ -499,6 +506,10 @@ function createManager(cfg) {
     } catch {
       /* falha ao liberar espaço nunca invalida o download que deu certo */
     }
+    if (job.controller.signal.aborted) {
+      await store.remove(id);
+      throw new OnlineVideoError("cancelled", "Download cancelado");
+    }
 
     publish(job, { phase: "done", percent: 100 }, { force: true });
     return {
@@ -710,6 +721,7 @@ function createManager(cfg) {
     });
     if (!isVideoId(id)) return fail(new OnlineVideoError("invalid", "ID de vídeo inválido"));
     if (!tools.supported) return fail(new OnlineVideoError("unsupported", "Plataforma sem suporte"));
+    const fence = streamFence(id);
 
     const cached = () => {
       store.touch(id);
@@ -752,6 +764,7 @@ function createManager(cfg) {
     const links = await resolveLinks(id, opts);
     timings.resolve_ms = elapsed(resolveStartedAt);
     if (!links.ok) return links;
+    if (!streamFenceCurrent(id, fence)) return boundaryCancelled();
     // Enquanto os links chegavam, o mesmo vídeo pode ter sido baixado ou pedido de novo.
     if (store.has(id)) return cached();
     const raced = jobs.get(id);
@@ -762,7 +775,9 @@ function createManager(cfg) {
     } catch (error) {
       return fail(error);
     }
+    if (!streamFenceCurrent(id, fence)) return boundaryCancelled();
     await sweepSessions({ except: id });
+    if (!streamFenceCurrent(id, fence)) return boundaryCancelled();
     // Última checagem antes do primeiro ponto sem `await`: a partir daqui o job já consta em `jobs`.
     const late = jobs.get(id);
     if (late) return join(late);
@@ -895,6 +910,7 @@ function createManager(cfg) {
       failRemoving = reject;
     });
     removals.set(id, removing);
+    removalGenerations.set(id, (removalGenerations.get(id) ?? 0) + 1);
     void (async () => {
       try {
         cancel(id);
@@ -917,6 +933,7 @@ function createManager(cfg) {
 
   async function clear() {
     if (clearing) return clearing;
+    clearGeneration++;
     const jobsToSettle = [...jobs.values()].map((job) => job.promise);
     const resolutionsToSettle = [...resolutions.values()].map((resolution) => resolution.promise);
     let settleClear;

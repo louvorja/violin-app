@@ -1084,6 +1084,82 @@ describe("cache", () => {
     expect(await manager.list()).toEqual([]);
   });
 
+  it("clear cancela stream já resolvido que ainda não registrou job", async () => {
+    const entered = deferred();
+    const release = deferred();
+    const fetchRange = vi.fn();
+    const { manager } = make({
+      resolve: async () => ({
+        video: { url: "https://example.test/video", size: 10 },
+        audio: { url: "https://example.test/audio", size: 10 },
+        muxed: false,
+        duration: 1,
+      }),
+      fetchRange,
+      freeBytes: async () => {
+        entered.resolve();
+        await release.promise;
+        return MIN_FREE_BYTES * 10;
+      },
+    });
+    const opening = manager.stream(A);
+    await entered.promise;
+
+    await manager.clear();
+    release.resolve();
+
+    expect(await opening).toMatchObject({ ok: false, error: { kind: "cancelled" } });
+    expect(fetchRange).not.toHaveBeenCalled();
+    expect((await manager.status()).active).toEqual([]);
+  });
+
+  it("remove cancela stream já resolvido que ainda não registrou job", async () => {
+    const entered = deferred();
+    const release = deferred();
+    const fetchRange = vi.fn();
+    const { manager } = make({
+      resolve: async () => ({
+        video: { url: "https://example.test/video", size: 10 },
+        audio: { url: "https://example.test/audio", size: 10 },
+        muxed: false,
+        duration: 1,
+      }),
+      fetchRange,
+      freeBytes: async () => {
+        entered.resolve();
+        await release.promise;
+        return MIN_FREE_BYTES * 10;
+      },
+    });
+    const opening = manager.stream(A);
+    await entered.promise;
+
+    expect(await manager.remove(A)).toBe(true);
+    release.resolve();
+
+    expect(await opening).toMatchObject({ ok: false, error: { kind: "cancelled" } });
+    expect(fetchRange).not.toHaveBeenCalled();
+  });
+
+  it("remove cancela se o abort chegar durante o despejo final", async () => {
+    const entered = deferred();
+    const release = deferred();
+    const { manager } = make();
+    manager.store.evict = async () => {
+      entered.resolve();
+      await release.promise;
+    };
+    const downloading = manager.ensure(A);
+    await entered.promise;
+
+    const removing = manager.remove(A);
+    release.resolve();
+
+    expect(await downloading).toMatchObject({ ok: false, error: { kind: "cancelled" } });
+    expect(await removing).toBe(true);
+    expect(await manager.list()).toEqual([]);
+  });
+
   it("init varre parciais velhos", async () => {
     const { manager } = make();
     const velho = manager.store.partialDirFor(A);
