@@ -1296,6 +1296,53 @@ describe("stream (tocar já, enquanto baixa uma vez só)", () => {
     expect((await manager.status()).last_stream_failure).toBeNull();
   });
 
+  it("emite uma vez a falha da trilha depois que stream entregou a sessão a dois pedidos", async () => {
+    const gate = deferred();
+    const onStreamFailure = vi.fn();
+    const { manager } = makeStream({
+      gate,
+      fetchFails: new OnlineVideoError("forbidden", "https://secret.example/video?token=private"),
+      cfg: { onStreamFailure },
+    });
+    const [first, joined] = await Promise.all([manager.stream(A), manager.stream(A)]);
+    expect(first.ok).toBe(true);
+    expect(joined.ok).toBe(true);
+    expect(onStreamFailure).not.toHaveBeenCalled();
+
+    gate.resolve();
+    expect(await manager.ensure(A)).toMatchObject({ ok: false, error: { kind: "forbidden" } });
+    expect(onStreamFailure).toHaveBeenCalledTimes(1);
+    expect(onStreamFailure).toHaveBeenCalledWith({
+      kind: "forbidden", track: "video", phase: "downloading", elapsed_bucket: "lt_10s", age_bucket: "lt_10s",
+    });
+    expect(JSON.stringify(onStreamFailure.mock.calls)).not.toMatch(/secret|private|https|aaaaaaaaaaa/);
+  });
+
+  it("não emite incidente ao cancelar nem para pré-download sem stream entregue", async () => {
+    const gate = deferred();
+    const onStreamFailure = vi.fn();
+    const { manager } = makeStream({ gate, cfg: { onStreamFailure } });
+    expect((await manager.stream(A)).ok).toBe(true);
+    manager.cancel(A);
+    gate.resolve();
+    await vi.waitFor(() => expect(manager.diagnosticSnapshot().online_video_active_count).toBe(0));
+    expect(onStreamFailure).not.toHaveBeenCalled();
+
+    const background = makeStream({
+      fetchFails: new OnlineVideoError("network", "Falha no pré-download"),
+      cfg: { onStreamFailure },
+    });
+    expect(await background.manager.ensure(B, { priority: "background" })).toMatchObject({ ok: false });
+    expect(onStreamFailure).not.toHaveBeenCalled();
+
+    const opening = makeStream({ cfg: {
+      onStreamFailure,
+      openSession: async () => { throw new OnlineVideoError("network", "Falha antes do retorno"); },
+    } });
+    expect(await opening.manager.stream(C)).toMatchObject({ ok: false, error: { kind: "network" } });
+    expect(onStreamFailure).not.toHaveBeenCalled();
+  });
+
   it("não registra cancelamento intencional como falha progressiva", async () => {
     const gate = deferred();
     const { manager } = makeStream({ gate });

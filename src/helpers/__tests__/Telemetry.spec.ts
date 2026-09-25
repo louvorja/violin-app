@@ -838,6 +838,32 @@ describe("Telemetry", () => {
     expect(JSON.stringify(attributes)).not.toContain("secret.example");
   });
 
+  it("encaminha incidente progressivo com apenas os enums da falha atual", async () => {
+    const Telemetry = await loadTelemetry();
+    await Telemetry.init();
+
+    Telemetry.reportRuntimeIncident({
+      incident_id: "incident-2",
+      incident_type: "online_video_progressive_failure",
+      incident_status: "detected",
+      severity: "error",
+      feature: "online_video",
+      last_stream_failure: {
+        kind: "network", track: "video", phase: "downloading", elapsed_bucket: "lt_10s", age_bucket: "lt_10s",
+        id: "aaaaaaaaaaa", url: "https://secret.example", message: "private",
+      },
+    });
+
+    const attributes = posthog.logger.error.mock.lastCall?.[1] as Record<string, unknown>;
+    expect(attributes).toMatchObject({
+      incident_type: "online_video_progressive_failure",
+      last_stream_failure: {
+        kind: "network", track: "video", phase: "downloading", elapsed_bucket: "lt_10s", age_bucket: "lt_10s",
+      },
+    });
+    expect(JSON.stringify(attributes)).not.toMatch(/secret|private|aaaaaaaaaaa/);
+  });
+
   it("envia histogramas de performance com dimensões de baixa cardinalidade", async () => {
     const Telemetry = await loadTelemetry();
     await Telemetry.init();

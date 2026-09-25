@@ -86,6 +86,7 @@ function createManager(cfg) {
     now = Date.now,
     monotonicNow = () => performance.now(),
     refreshCooldownMs = REFRESH_COOLDOWN_MS,
+    onStreamFailure = () => {},
   } = cfg;
 
   const store = createStore(dir);
@@ -119,7 +120,7 @@ function createManager(cfg) {
   };
 
   function recordStreamFailure(job, error) {
-    if (!job.links || !(job.played || job.streamingMode) || error?.kind === "cancelled") return;
+    if (!job.links || !(job.played || job.streamingMode) || job.controller.signal.aborted || error?.kind === "cancelled") return;
     const tracks = job.session?.tracks;
     const track = tracks?.video?.error === error ? "video" : tracks?.audio?.error === error ? "audio" : "unknown";
     const phase = job.session
@@ -133,6 +134,14 @@ function createManager(cfg) {
       elapsed_bucket: timeBucket(now() - job.startedAt),
       occurredAt: now(),
     };
+    if (job.streamDelivered && !job.failureReported) {
+      job.failureReported = true;
+      try {
+        onStreamFailure({ kind, track, phase, elapsed_bucket: lastStreamFailure.elapsed_bucket, age_bucket: "lt_10s" });
+      } catch {
+        // Observabilidade nunca altera o resultado do download.
+      }
+    }
   }
 
   function lastStreamFailureSnapshot() {
@@ -675,7 +684,10 @@ function createManager(cfg) {
       const joinStartedAt = monotonicNow();
       const opened = await job.ready;
       timings.join_wait_ms = elapsed(joinStartedAt);
-      if (opened) return withTimings(streamInfo(job));
+      if (opened) {
+        job.streamDelivered = true;
+        return withTimings(streamInfo(job));
+      }
       if (job.openError) return fail(job.openError);
       // Só há formatos em fragmentos e o yt-dlp está baixando: não há trilha para ler antes do
       // fim. Ele passa a ser o urgente, e quem pediu decide se espera.
@@ -765,6 +777,7 @@ function createManager(cfg) {
     const opened = await job.ready;
     timings.session_open_ms = elapsed(openStartedAt);
     if (!opened) return fail(job.openError);
+    job.streamDelivered = true;
     publish(job, { phase: "downloading", percent: 0 }, { force: true });
     return withTimings(streamInfo(job));
   }

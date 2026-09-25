@@ -75,6 +75,31 @@ describe("runtime incident journal", () => {
     expect(await journal().read()).toEqual(records);
   });
 
+  it("persiste só os enums da falha progressiva e rejeita diagnóstico inválido", async () => {
+    const failure = {
+      kind: "network", track: "audio", phase: "downloading", elapsed_bucket: "10s_1m", age_bucket: "lt_10s",
+      id: "aaaaaaaaaaa", url: "https://private.local/video", path: "C:\\private\\video", message: "secret",
+    };
+    const queue = journal();
+    await queue.append(incident(1, {
+      incident_type: "online_video_progressive_failure",
+      last_stream_failure: failure,
+      online_video_jobs: [{ id: "aaaaaaaaaaa" }],
+    }));
+    expect(await queue.read()).toEqual([expect.objectContaining({
+      incident_type: "online_video_progressive_failure",
+      last_stream_failure: {
+        kind: "network", track: "audio", phase: "downloading", elapsed_bucket: "10s_1m", age_bucket: "lt_10s",
+      },
+    })]);
+    expect(await queue.append(incident(2, {
+      incident_type: "online_video_progressive_failure",
+      last_stream_failure: { ...failure, track: "https://private.local" },
+    }))).toMatchObject({ ok: false });
+    const raw = await fs.readFile(file, "utf8");
+    expect(raw).not.toMatch(/private|secret|https|aaaaaaaaaaa|video\\\\video/);
+  });
+
   it("limita cada entrada mesmo com payload externo enorme", async () => {
     const queue = journal();
     await queue.append(incident(1, { stack: "x".repeat(MAX_ENTRY_BYTES * 10), windows: Array(1000).fill({ title: "secret" }) }));

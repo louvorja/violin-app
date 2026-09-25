@@ -11,7 +11,7 @@ const TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const HASH_ID = /^sha256:[a-f0-9]{64}$/;
 const ENUMS = {
-  incident_type: ["main_event_loop_stall", "renderer_unresponsive", "render_process_gone", "child_process_gone", "renderer_long_task", "renderer_timer_stall"],
+  incident_type: ["main_event_loop_stall", "renderer_unresponsive", "render_process_gone", "child_process_gone", "renderer_long_task", "renderer_timer_stall", "online_video_progressive_failure"],
   incident_status: ["detected", "recovered"],
   severity: ["info", "warn", "error", "fatal"],
   window_role: ["main", "auxiliary", "unknown"],
@@ -31,6 +31,23 @@ const NUMBERS = [
   "online_video_foreground_queued", "online_video_background_queued",
 ];
 const BOOLEANS = ["download_active", "presentation_active", "http_server_running", "online_video_streaming"];
+const STREAM_FAILURE_ENUMS = {
+  kind: ["age", "bot", "disk", "forbidden", "format", "geo", "live", "network", "private", "tool", "unavailable", "unknown"],
+  track: ["video", "audio", "unknown"],
+  phase: ["opening", "downloading", "finalizing"],
+  elapsed_bucket: ["lt_10s", "10s_1m", "1m_5m", "gte_5m", "unknown"],
+  age_bucket: ["lt_10s", "10s_1m", "1m_5m", "gte_5m", "unknown"],
+};
+
+function safeStreamFailure(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const safe = {};
+  for (const [key, allowed] of Object.entries(STREAM_FAILURE_ENUMS)) {
+    if (!allowed.includes(value[key])) return null;
+    safe[key] = value[key];
+  }
+  return safe;
+}
 
 // Keep UUID correlation; opaque non-UUID identifiers are hashed rather than
 // retaining a possible title/path that arrived in an identifier field.
@@ -68,6 +85,11 @@ function sanitizeIncident(payload, now) {
   }
   for (const key of BOOLEANS) {
     if (typeof payload[key] === "boolean") record[key] = payload[key];
+  }
+  if (record.incident_type === "online_video_progressive_failure") {
+    const failure = safeStreamFailure(payload.last_stream_failure);
+    if (!failure) return null;
+    record.last_stream_failure = failure;
   }
   return Buffer.byteLength(JSON.stringify(record), "utf8") <= MAX_ENTRY_BYTES ? record : null;
 }

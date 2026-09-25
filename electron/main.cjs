@@ -450,6 +450,20 @@ const runtimeHealth = createRuntimeHealthMonitor({
   emitIncident: _emitRuntimeIncident,
   getRuntimeSnapshot: _compactRuntimeSnapshot,
 });
+onlineVideo.setStreamFailureReporter((failure) => {
+  _emitRuntimeIncident({
+    diagnostic_schema_version: 1,
+    incident_id: randomUUID(),
+    app_instance_id: runtimeHealth.appInstanceId,
+    incident_type: "online_video_progressive_failure",
+    incident_status: "detected",
+    severity: "error",
+    observed_at: new Date().toISOString(),
+    window_role: "main",
+    feature: "online_video",
+    last_stream_failure: failure,
+  });
+});
 const handleSystemResume = () => runtimeHealth.noteSystemResume();
 windowFactory.setWindowObserver((win, context) => runtimeHealth.watchWindow(win, context));
 runtimeHealth.watchApp(app);

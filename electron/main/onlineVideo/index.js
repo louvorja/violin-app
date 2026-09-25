@@ -8,6 +8,11 @@ const { isVideoId } = require("./ids.js");
 const { safeSend } = require("../safeWebContents.js");
 
 let _manager = null;
+let streamFailureReporter = null;
+
+function setStreamFailureReporter(reporter) {
+  streamFailureReporter = typeof reporter === "function" ? reporter : null;
+}
 
 /**
  * Forma estável do estado inativo. É deliberadamente síncrona e não chama
@@ -45,6 +50,7 @@ function getManager() {
       // O E2E provoca a renovação de propósito; uma renovação de minutos antes,
       // feita por uma falha passageira de rede, não pode deixá-lo sem o que testar.
       refreshCooldownMs: process.env.LJ_E2E_USER_DATA ? 0 : undefined,
+      onStreamFailure: (failure) => streamFailureReporter?.(failure),
     });
   }
   return _manager;
@@ -135,4 +141,5 @@ module.exports = {
   init,
   shutdown,
   diagnosticSnapshot,
+  setStreamFailureReporter,
 };
