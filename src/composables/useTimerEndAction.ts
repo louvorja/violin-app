@@ -15,9 +15,6 @@ import { useI18n } from "vue-i18n";
 import $userdata from "@/helpers/UserData";
 import Platform from "@/helpers/Platform";
 import Alert from "@/helpers/Alert";
-import Broadcast from "@/helpers/Broadcast";
-import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
-import { openFileProjectionWindows } from "@/helpers/ProjectionWindows";
 import Media from "@/composables/useMedia";
 import Database from "@/helpers/Database";
 import $path from "@/helpers/Path";
@@ -25,7 +22,6 @@ import $modules from "@/helpers/Modules";
 import $idb from "@/helpers/IndexedDB";
 import { DB_TABLE } from "@/constants/DbTables";
 import { ensureRenderableImage, isHeic } from "@/helpers/ImageConvert";
-import { KEYS } from "@/constants/UserDataKeys";
 import { MediaEnum } from "@/enums/MediaEnum";
 import { MusicActionEnum } from "@/enums/MusicActionEnum";
 import type { Music } from "@/types/Music";
@@ -307,14 +303,14 @@ export function useTimerEndAction(moduleId: string, keys: TimerEndActionKeys) {
           Alert.show({ text: t("end_action.video_not_configured") });
           return;
         }
-        const payload = { url: data.url, type: data.type, title: "Timer", fadeDuration: 500 };
-        try {
-          localStorage.setItem(KEYS.PROJECTION.LJ_FILE_PROJECTION, JSON.stringify(payload));
-        } catch {
-          /* noop */
-        }
-        openFileProjectionWindows().catch(() => {});
-        Broadcast.send(BROADCAST_TYPE.FILE_PROJECTION, payload);
+        if (data.type !== "image" && data.type !== "pdf" && data.type !== "video") return;
+        const payload = {
+          url: data.url,
+          type: data.type as "image" | "pdf" | "video",
+          title: "Timer",
+          fadeDuration: 500,
+        };
+        void Media.projectFile(payload).catch(() => {});
         return;
       }
       case MediaEnum.ONLINE_VIDEO: {

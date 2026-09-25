@@ -33,11 +33,24 @@ async function _open(
   fullscreen: boolean,
   alwaysOnTop = false
 ): Promise<void> {
+  // The main process acknowledges `close` only after BrowserWindow `closed`.
+  // A same-feature reopen must wait for that acknowledgement instead of
+  // reusing a native window that is still in its close animation.
+  const pendingClose = _pendingFeatureCloses.get(feature);
+  if (pendingClose) await pendingClose;
   await openWindow({ route, feature, monitorId, fullscreen, alwaysOnTop });
 }
 
 async function _close(feature: string): Promise<void> {
-  await closeWindow(feature);
+  const pending = _pendingFeatureCloses.get(feature);
+  if (pending) return pending;
+  const closing = Promise.resolve().then(() => closeWindow(feature));
+  _pendingFeatureCloses.set(feature, closing);
+  try {
+    await closing;
+  } finally {
+    if (_pendingFeatureCloses.get(feature) === closing) _pendingFeatureCloses.delete(feature);
+  }
 }
 
 /**
@@ -83,6 +96,10 @@ async function _target(feature: string): Promise<{ open: boolean; monitorId: num
 export type WindowKind = "projection" | "return" | "operator";
 /** O que está no ar: música/slides, arquivo (imagem ou vídeo da liturgia) ou vídeo on-line (YouTube). */
 export type MediaKind = "music" | "file" | "video";
+const _musicWindowOpenings = new Set<Promise<void>>();
+let _musicWindowGeneration = 0;
+const MUSIC_WINDOW_CLOSE_WAIT_MS = 2500;
+const _pendingFeatureCloses = new Map<string, Promise<void>>();
 
 /**
  * O que o player tem no ar agora. O player embutido do YouTube e o vídeo baixado ou em streaming
@@ -224,12 +241,20 @@ async function _wantsMediaReturn(optionOn: boolean): Promise<boolean> {
  * - "operador" e "retorno" só abrem se `options.open_operator` /
  *   `options.open_return` estiverem habilitados nas configurações.
  */
-export async function openProjectionWindows(): Promise<void> {
+async function _openProjectionWindows(): Promise<void> {
   if (await isBackgroundOpen()) return;
 
   await openMediaWindow("projection", "music");
   if ($userdata.get(KEYS.OPTIONS.OPEN_RETURN, false) as boolean) await openMediaWindow("return", "music");
   await _openOperatorIfEnabled("music");
+}
+
+export function openProjectionWindows(): Promise<void> {
+  ++_musicWindowGeneration;
+  const opening = _openProjectionWindows();
+  _musicWindowOpenings.add(opening);
+  void opening.finally(() => _musicWindowOpenings.delete(opening)).catch(() => {});
+  return opening;
 }
 
 /**
@@ -374,15 +399,49 @@ export async function closeBackgroundProjectionWindows(): Promise<void> {
  */
 export async function closeProjectionWindows(): Promise<void> {
   await Promise.all([
-    _close(PROJECTION_TYPE.MUSIC),
+    closeMusicProjectionWindows(),
     _close(PROJECTION_TYPE.OPERATOR),
-    _close(PROJECTION_TYPE.RETURN),
     _close(PROJECTION_TYPE.BIBLE),
     _close(PROJECTION_TYPE.BIBLE_RETURN),
+    closeFileProjectionWindows(),
+  ]);
+}
+
+/** Libera somente as janelas que exibem arquivo/vídeo ao assumir slides de música ou do editor. */
+export async function closeFileProjectionWindows(): Promise<void> {
+  await Promise.all([
     _close(PROJECTION_TYPE.FILE),
     _close(PROJECTION_TYPE.FILE_RETURN),
     _close(PROJECTION_TYPE.ONLINE_VIDEO),
     _close(PROJECTION_TYPE.ONLINE_VIDEO_RETURN),
+  ]);
+}
+
+/** Ao entrar arquivo/vídeo, remove as duas telas que ainda exibiriam a música anterior. */
+export async function closeMusicProjectionWindows(): Promise<void> {
+  const generation = ++_musicWindowGeneration;
+  if (_musicWindowOpenings.size) {
+    const finished = Promise.allSettled([..._musicWindowOpenings]);
+    let settled = false;
+    const done = finished.then(() => { settled = true; });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      done,
+      new Promise<void>((resolve) => { timer = setTimeout(resolve, MUSIC_WINDOW_CLOSE_WAIT_MS); }),
+    ]);
+    if (timer) clearTimeout(timer);
+    if (!settled) {
+      void done.then(() => {
+        if (generation === _musicWindowGeneration) {
+          void Promise.all([_close(PROJECTION_TYPE.MUSIC), _close(PROJECTION_TYPE.RETURN)]).catch(() => {});
+        }
+      });
+    }
+  }
+  if (generation !== _musicWindowGeneration) return;
+  await Promise.all([
+    _close(PROJECTION_TYPE.MUSIC),
+    _close(PROJECTION_TYPE.RETURN),
   ]);
 }
 

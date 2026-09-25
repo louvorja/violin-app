@@ -37,6 +37,8 @@ import { useBackgroundSound } from "@/composables/useBackgroundSound";
 import { syncFromIdb as syncDevicesFromIdb } from "@/composables/useDevices";
 import Path from "@/helpers/Path";
 import Media from "@/composables/useMedia";
+import { useSlides } from "@/composables/useSlides";
+import { musicCommandSessionRejectionReason } from "@/presentation/MusicPresentationPacket";
 import { MusicActionEnum } from "@/enums/MusicActionEnum";
 import Broadcast from "@/helpers/Broadcast";
 import Database from "@/helpers/Database";
@@ -420,21 +422,53 @@ $storage.hydrate().then(async () => {
 
   // D5 — Conectar eventos do servidor HTTP às ações do app.
   if (Platform.isDesktop && !isAuxiliaryRenderer) {
+    const reportedRemoteCommandRejections = new Set();
+    function acceptsRemoteMusicCommand(action, data) {
+      const session = data?.presentation_session;
+      const current = useSlides().presentationSnapshot();
+      const reason = musicCommandSessionRejectionReason(current, session);
+      if (!reason) return true;
+      // One metadata-only incident per current session/action/reason. A delayed
+      // phone request must be diagnosable without logging every button press.
+      const key = `${current?.sessionId || "none"}:${action}:${reason}`;
+      if (!reportedRemoteCommandRejections.has(key)) {
+        reportedRemoteCommandRejections.add(key);
+        if (reportedRemoteCommandRejections.size > 32) {
+          reportedRemoteCommandRejections.delete(
+            reportedRemoteCommandRejections.values().next().value
+          );
+        }
+        Telemetry.track("presentation_remote_command_rejected", { action, reason });
+      }
+      return false;
+    }
     Platform.onHttpEvent(async (eventType, data) => {
       const action = data?.action;
       switch (eventType) {
         case "http:song-slides":
           switch (action) {
             case "next":
+              if (!acceptsRemoteMusicCommand(action, data)) break;
               Media.nextSlide();
               break;
             case "previous":
+              if (!acceptsRemoteMusicCommand(action, data)) break;
               Media.prevSlide();
               break;
             case "close":
+              if (!acceptsRemoteMusicCommand(action, data)) break;
               Media.close(true);
               break;
             case "go-to-slide":
+              // Música só aceita comandos originados da seleção que a interface
+              // remota observou. Isso impede um POST atrasado de selecionar slide
+              // em uma música que começou depois. Editor continua sem sessão.
+              if (
+                !acceptsRemoteMusicCommand(action, data) ||
+                !Number.isSafeInteger(data?.index) ||
+                data.index < 0
+              )
+                break;
               Media.goToSlide(data.index);
               break;
             case "playing-check": {
@@ -445,14 +479,15 @@ $storage.hydrate().then(async () => {
               // Proxy ("An object could not be cloned"). O round-trip por JSON
               // planifica tudo — é também o formato que o cliente recebe no `res.json`.
               const slides = JSON.parse(JSON.stringify(Media.slides() || []));
-              const last = Broadcast.getLastPayload(BROADCAST_TYPE.SLIDE_CHANGE) || {};
+              const current = useSlides().presentationSnapshot();
               const reply = {
                 status: "ok",
                 supported: true,
-                playing: slides.length > 0,
+                playing: Boolean(current?.active && slides.length > 0),
                 slides,
-                currentSlideIndex: Number(last.slide_index) || 0,
-                title: last.title || "",
+                currentSlideIndex: current?.active ? current.slideIndex : 0,
+                title: current?.active ? current.title : "",
+                presentation_session: current?.active ? current.sessionId : null,
               };
               if (data?.requestId && Platform.httpServer?.respond) {
                 Platform.httpServer.respond(data.requestId, reply);
@@ -522,35 +557,16 @@ $storage.hydrate().then(async () => {
                 }
                 if (IMAGE_EXT.includes(ext)) {
                   const p = { url, type: "image", title };
-                  try {
-                    localStorage.setItem("lj_file_projection", JSON.stringify(p));
-                  } catch {
-                    /* ignore */
-                  }
-                  await ProjectionWindows.openFileProjectionWindows().catch(() => {});
-                  Broadcast.send(BROADCAST_TYPE.FILE_PROJECTION, p);
+                  await Media.projectFile(p);
                 } else if (VIDEO_EXT.includes(ext)) {
                   const p = { url, type: "video", title };
-                  try {
-                    localStorage.setItem("lj_file_projection", JSON.stringify(p));
-                  } catch {
-                    /* ignore */
-                  }
-                  await ProjectionWindows.openFileProjectionWindows().catch(() => {});
-                  Broadcast.send(BROADCAST_TYPE.FILE_PROJECTION, p);
-                  await Media.openAudio({ url, title, mediaType: "video" });
+                  await Media.projectFile(p, url);
                 } else if (AUDIO_EXT.includes(ext)) {
                   await Media.openAudio({ url, title, mediaType: "audio" });
                 } else {
                   const p = { url, type: "pdf", title };
                   if (libRef) p.libRef = libRef;
-                  try {
-                    localStorage.setItem("lj_file_projection", JSON.stringify(p));
-                  } catch {
-                    /* ignore */
-                  }
-                  await ProjectionWindows.openFileProjectionWindows().catch(() => {});
-                  Broadcast.send(BROADCAST_TYPE.FILE_PROJECTION, p);
+                  await Media.projectFile(p);
                 }
               }
 

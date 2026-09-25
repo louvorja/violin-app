@@ -4,6 +4,14 @@
  * slide — visível só na aba de rede.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
+
+const listeners = vi.hoisted(() => new Map<string, (_payload: unknown) => void>());
+vi.mock("@/composables/useBroadcastListener", () => ({
+  useBroadcastListener: (type: string, handler: (_payload: unknown) => void) => {
+    listeners.set(type, handler);
+  },
+}));
 
 const translateText = vi.fn(async () => "GLOSS");
 const findCachedByText = vi.fn(async () => null);
@@ -40,6 +48,7 @@ async function load(flags: Record<string, string>) {
 
 describe("useLibras — guarda de ativação", () => {
   beforeEach(() => {
+    listeners.clear();
     translateText.mockClear();
     findCachedByText.mockClear();
   });
@@ -80,5 +89,56 @@ describe("useLibras — guarda de ativação", () => {
     useLibrasState().setEnabled(false);
     await translateSlide("Segundo verso");
     expect(translateText).toHaveBeenCalledTimes(1);
+  });
+
+  it("traduz o snapshot validado por sessão e ignora o companheiro versionado", async () => {
+    const { useLibras } = await load({ libras_enabled: "true" });
+    useLibras();
+    const send = (sessionId: string, revision: number, lyric: string,
+      selectionRevision = revision, slideIndex = 0) => {
+      listeners.get(BROADCAST_TYPE.MUSIC_PRESENTATION_SNAPSHOT)?.({
+        schema: 1, selectionRevision, playbackId: sessionId,
+        progress: 0, slideProgress: 0, emittedAt: Date.now(),
+        snapshot: { sessionId, revision, active: true, title: sessionId,
+          slideIndex, totalSlides: 2, slide: { lyric, id_music: 42 },
+          nextSlide: slideIndex === 0 ? { lyric: "Next" } : null },
+      });
+    };
+    send("song-a", 2, "Primeiro");
+    listeners.get(BROADCAST_TYPE.SLIDE_CHANGE)?.({
+      presentation_session: "song-a", presentation_revision: 2,
+      slide_index: 0, slide: { lyric: "Companheiro" },
+    });
+    send("song-a", 1, "Antigo");
+    await vi.waitFor(() => expect(translateText).toHaveBeenCalledTimes(1));
+    expect(translateText).toHaveBeenCalledWith("Primeiro");
+
+    send("song-b", 1, "Segundo");
+    send("song-a", 3, "Atrasado");
+    await vi.waitFor(() => expect(translateText).toHaveBeenCalledTimes(2));
+    expect(translateText).toHaveBeenLastCalledWith("Segundo");
+    listeners.get(BROADCAST_TYPE.SLIDE_CHANGE)?.({ slide_index: 0, slide: { lyric: "Editor" } });
+    await vi.waitFor(() => expect(translateText).toHaveBeenCalledTimes(3));
+    expect(translateText).toHaveBeenLastCalledWith("Editor");
+  });
+
+  it("keeps the refreshed envelope revision while avoiding retranslation of the same slide", async () => {
+    const { useLibras } = await load({ libras_enabled: "true" });
+    useLibras();
+    const send = (revision: number, selectionRevision: number, slideIndex: number, lyric: string) => {
+      listeners.get(BROADCAST_TYPE.MUSIC_PRESENTATION_SNAPSHOT)?.({
+        schema: 1, selectionRevision, progress: 0, slideProgress: 0, emittedAt: Date.now(),
+        snapshot: { sessionId: "song-a", revision, active: true, title: "Song",
+          slideIndex, totalSlides: 2, slide: { lyric, id_music: 42 },
+          nextSlide: slideIndex === 0 ? { lyric: "Next" } : null },
+      });
+    };
+    send(4, 8, 0, "Primeiro");
+    send(4, 9, 0, "Primeiro");
+    send(5, 8, 1, "Antigo");
+    await vi.waitFor(() => expect(translateText).toHaveBeenCalledTimes(1));
+    send(5, 10, 1, "Segundo");
+    await vi.waitFor(() => expect(translateText).toHaveBeenCalledTimes(2));
+    expect(translateText).toHaveBeenLastCalledWith("Segundo");
   });
 });

@@ -13,19 +13,18 @@ const slides = useSlides();
 const SUNG = [0, 10, 20, 30];
 const PLAYBACK = [0, 8, 19, 28];
 
-describe("useSlides presentation shadow", () => {
+describe("useSlides presentation snapshot", () => {
   beforeEach(() => slides.reset());
 
-  it("tracks real manual navigation, close and reopening without controlling legacy", () => {
+  it("tracks manual navigation, close and reopening in the canonical core", () => {
     abrir(SUNG);
-    const first = slides.presentationShadow().snapshot!.sessionId;
+    const first = slides.presentationSnapshot()!.sessionId;
     slides.goToSlide(2);
-    expect(slides.presentationShadow()).toMatchObject({ snapshot: { slideIndex: 2, active: true }, differences: [] });
+    expect(slides.presentationSnapshot()).toMatchObject({ slideIndex: 2, active: true });
     slides.reset();
-    expect(slides.presentationShadow()).toMatchObject({ snapshot: { active: false, totalSlides: 0 }, differences: [] });
+    expect(slides.presentationSnapshot()).toMatchObject({ active: false, totalSlides: 0 });
     abrir(SUNG);
-    expect(slides.presentationShadow().snapshot!.sessionId).not.toBe(first);
-    expect(slides.presentationShadow().differences).toEqual([]);
+    expect(slides.presentationSnapshot()!.sessionId).not.toBe(first);
   });
 
   it("waits for audio seek to commit, then independently derives the same slide", async () => {
@@ -36,51 +35,131 @@ describe("useSlides presentation shadow", () => {
     slides.bindAudio(audio as unknown as AudioPlayback);
     slides.goToSlide(2);
     expect(audio.seekTo).toHaveBeenCalledWith(20);
-    expect(slides.presentationShadow().snapshot!.slideIndex).toBe(0);
+    expect(slides.presentationSnapshot()!.slideIndex).toBe(0);
     audio.currentTime.value = 20;
     await nextTick();
-    expect(slides.presentationShadow()).toMatchObject({ snapshot: { slideIndex: 2 }, differences: [] });
+    expect(slides.presentationSnapshot()).toMatchObject({ slideIndex: 2 });
     slides.setTimes(PLAYBACK);
     slides.setPlaybackId("replacement-audio");
     audio.currentTime.value = 29;
     await nextTick();
-    expect(slides.presentationShadow()).toMatchObject({ snapshot: { slideIndex: 3 }, differences: [] });
+    expect(slides.presentationSnapshot()).toMatchObject({ slideIndex: 3 });
     slides.reset();
+  });
+
+  it("retries a transient snapshot publication failure without retrying on every clock tick", async () => {
+    abrir(SUNG);
+    const audio = {
+      currentTime: ref(0), duration: ref(40), progress: ref(0), seekTo: vi.fn(),
+    };
+    const originalSend = $broadcast.send.bind($broadcast);
+    let now = Date.now();
+    let failOnce = true;
+    const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+    const send = vi.spyOn($broadcast, "send").mockImplementation((type, payload) => {
+      if (type === BROADCAST_TYPE.MUSIC_PRESENTATION_SNAPSHOT && failOnce) {
+        failOnce = false;
+        throw new Error("transient transport failure");
+      }
+      return originalSend(type, payload);
+    });
+    try {
+      slides.bindAudio(audio as unknown as AudioPlayback);
+      audio.currentTime.value = 10;
+      await nextTick();
+      expect(slides.presentationSnapshot()?.slideIndex).toBe(1);
+      expect(send.mock.calls.filter(([type]) => type === BROADCAST_TYPE.MUSIC_PRESENTATION_SNAPSHOT)).toHaveLength(1);
+
+      now += 500;
+      audio.currentTime.value = 11;
+      await nextTick();
+      expect(send.mock.calls.filter(([type]) => type === BROADCAST_TYPE.MUSIC_PRESENTATION_SNAPSHOT)).toHaveLength(1);
+
+      now += 501;
+      audio.currentTime.value = 12;
+      await nextTick();
+      expect(send.mock.calls.filter(([type]) => type === BROADCAST_TYPE.MUSIC_PRESENTATION_SNAPSHOT)).toHaveLength(2);
+      expect(slides.presentationSnapshot()?.slideIndex).toBe(1);
+    } finally {
+      send.mockRestore();
+      clock.mockRestore();
+      slides.reset();
+    }
+  });
+
+  it("retries a failed close packet twice without a per-tick loop or duplicate incident", async () => {
+    abrir(SUNG);
+    const originalSend = $broadcast.send.bind($broadcast);
+    const track = vi.spyOn(Telemetry, "track").mockImplementation(() => {});
+    const send = vi.spyOn($broadcast, "send").mockImplementation((type, payload) => {
+      if (type === BROADCAST_TYPE.MUSIC_PRESENTATION_SNAPSHOT) {
+        return { crossWindow: false, remoteRelay: "not_required" };
+      }
+      return originalSend(type, payload);
+    });
+    vi.useFakeTimers();
+    try {
+      slides.reset();
+      expect(send.mock.calls.filter(([type]) => type === BROADCAST_TYPE.MUSIC_PRESENTATION_SNAPSHOT)).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(3_000);
+      expect(send.mock.calls.filter(([type]) => type === BROADCAST_TYPE.MUSIC_PRESENTATION_SNAPSHOT)).toHaveLength(3);
+      expect(track.mock.calls.filter(([event]) => event === "presentation_snapshot_publish_failed"))
+        .toEqual([["presentation_snapshot_publish_failed", { reason: "broadcast_channel_failed", phase: "close" }]]);
+    } finally {
+      send.mockRestore();
+      track.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("retries a failed cross-window enqueue without waiting for another audio tick", async () => {
+    abrir(SUNG);
+    vi.useFakeTimers();
+    const originalSend = $broadcast.send.bind($broadcast);
+    const track = vi.spyOn(Telemetry, "track");
+    let failOnce = true;
+    const send = vi.spyOn($broadcast, "send").mockImplementation((type, payload) => {
+      if (type === BROADCAST_TYPE.MUSIC_PRESENTATION_SNAPSHOT && failOnce) {
+        failOnce = false;
+        return { crossWindow: false, remoteRelay: "sent" };
+      }
+      return originalSend(type, payload);
+    });
+    try {
+      slides.goToSlide(1);
+      expect(send.mock.calls.filter(([type]) => type === BROADCAST_TYPE.MUSIC_PRESENTATION_SNAPSHOT)).toHaveLength(1);
+      expect(track.mock.calls.filter(([event]) => event === "presentation_snapshot_publish_failed"))
+        .toEqual([["presentation_snapshot_publish_failed", { reason: "broadcast_channel_failed" }]]);
+
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(send.mock.calls.filter(([type]) => type === BROADCAST_TYPE.MUSIC_PRESENTATION_SNAPSHOT)).toHaveLength(2);
+      expect(track.mock.calls.filter(([event]) => event === "presentation_snapshot_publish_failed"))
+        .toHaveLength(1);
+    } finally {
+      send.mockRestore();
+      track.mockRestore();
+      vi.useRealTimers();
+      slides.reset();
+    }
   });
 
   it("recovery broadcasts do not create new domain commits", () => {
     abrir(SUNG);
     slides.goToSlide(1);
-    const snapshot = slides.presentationShadow().snapshot;
+    const snapshot = slides.presentationSnapshot();
     $broadcast.send(BROADCAST_TYPE.REQUEST_SLIDE_STATE);
-    expect(slides.presentationShadow().snapshot).toBe(snapshot);
+    expect(slides.presentationSnapshot()).toBe(snapshot);
   });
 
-  it("reports one metadata-only divergence per session while preserving legacy", () => {
-    const track = vi.spyOn(Telemetry, "track");
-    try {
-      abrir(SUNG);
-      slides.title.value = "Unexpected legacy mutation";
-      slides.goToSlide(1);
-      slides.goToSlide(2);
-      const incidents = track.mock.calls.filter(([event]) => event === "presentation_shadow_divergence");
-      expect(incidents).toEqual([["presentation_shadow_divergence", { fields: "title" }]]);
-      expect(slides.title.value).toBe("Unexpected legacy mutation");
-      expect(slides.presentationShadow().differences).toEqual(["title"]);
-    } finally {
-      track.mockRestore();
-    }
-  });
-
-  it("keeps navigating when the diagnostic core fails", () => {
+  it("does not select a different slide when the canonical core fails", () => {
     abrir(SUNG);
     const dispatch = vi.spyOn(MusicPresentationCore.prototype, "dispatch").mockImplementation(() => {
-      throw new Error("shadow failure");
+      throw new Error("presentation core failure");
     });
     try {
       expect(() => slides.goToSlide(2)).not.toThrow();
-      expect(slides.slideIndex.value).toBe(2);
-      expect(slides.presentationShadow().snapshot).toBeNull();
+      expect(slides.slideIndex.value).toBe(0);
+      expect(slides.presentationSnapshot()).toBeNull();
     } finally {
       dispatch.mockRestore();
     }
@@ -142,25 +221,28 @@ describe("useSlides e o pedido de troca de slide entre janelas", () => {
     abrir(SUNG);
 
     const tipos = tiposEmitidos(() =>
-      $broadcast.send(BROADCAST_TYPE.GO_TO_SLIDE, { index: 2 })
+      $broadcast.send(BROADCAST_TYPE.GO_TO_SLIDE, {
+        index: 2, presentation_session: slides.presentationSnapshot()?.sessionId,
+      })
     );
 
     expect(slides.slideIndex.value).toBe(2);
-    expect(tipos).toContain(BROADCAST_TYPE.SLIDE_CHANGE);
+    expect(tipos).toContain(BROADCAST_TYPE.MUSIC_PRESENTATION_SNAPSHOT);
+    expect(tipos).not.toContain(BROADCAST_TYPE.SLIDE_CHANGE);
   });
 
   it("propaga o playback_id para correlacionar a projeção com o player", () => {
     slides.reset();
     abrir(SUNG, "p-slides");
-    let change: unknown;
+    let change: Record<string, unknown> | undefined;
     const parar = $broadcast.listen((msg) => {
-      if (msg.type === BROADCAST_TYPE.SLIDE_CHANGE) change = msg.payload;
+      if (msg.type === BROADCAST_TYPE.MUSIC_PRESENTATION_SNAPSHOT) change = msg.payload as Record<string, unknown>;
     });
 
     slides.goToSlide(1);
     parar();
 
-    expect(change).toEqual(expect.objectContaining({ playback_id: "p-slides" }));
+    expect(change).toEqual(expect.objectContaining({ playbackId: "p-slides" }));
   });
 
   it("propaga revisão crescente e tempo do comando sem expor o conteúdo no marcador", () => {
@@ -168,7 +250,7 @@ describe("useSlides e o pedido de troca de slide entre janelas", () => {
     abrir(SUNG, "p-slides");
     const changes: Record<string, unknown>[] = [];
     const parar = $broadcast.listen((msg) => {
-      if (msg.type === BROADCAST_TYPE.SLIDE_CHANGE) {
+      if (msg.type === BROADCAST_TYPE.MUSIC_PRESENTATION_SNAPSHOT) {
         changes.push(msg.payload as Record<string, unknown>);
       }
     });
@@ -180,15 +262,15 @@ describe("useSlides e o pedido de troca de slide entre janelas", () => {
 
     expect(changes).toHaveLength(2);
     expect(changes[0]).toEqual(expect.objectContaining({
-      presentation_revision: expect.any(Number),
-      _command_ts: commandAt,
-      _commit_ts: expect.any(Number),
-      _ts: expect.any(Number),
+      selectionRevision: expect.any(Number),
+      commandAt,
+      commitAt: expect.any(Number),
+      emittedAt: expect.any(Number),
     }));
-    expect(changes[0]._commit_ts).toBeGreaterThanOrEqual(commandAt);
-    expect(changes[0]._commit_ts).toBeLessThanOrEqual(changes[0]._ts as number);
-    expect(changes[1].presentation_revision).toBe((changes[0].presentation_revision as number) + 1);
-    expect(changes[1]._command_ts).toBeGreaterThanOrEqual(commandAt);
+    expect(changes[0].commitAt).toBeGreaterThanOrEqual(commandAt);
+    expect(changes[0].commitAt).toBeLessThanOrEqual(changes[0].emittedAt as number);
+    expect(changes[1].selectionRevision).toBe((changes[0].selectionRevision as number) + 1);
+    expect(changes[1].commandAt).toBeGreaterThanOrEqual(commandAt);
   });
 
   it("não atribui commit novo a replay de recuperação", () => {
@@ -196,7 +278,7 @@ describe("useSlides e o pedido de troca de slide entre janelas", () => {
     abrir(SUNG);
     const changes: Record<string, unknown>[] = [];
     const parar = $broadcast.listen((msg) => {
-      if (msg.type === BROADCAST_TYPE.SLIDE_CHANGE) changes.push(msg.payload as Record<string, unknown>);
+      if (msg.type === BROADCAST_TYPE.MUSIC_PRESENTATION_SNAPSHOT) changes.push(msg.payload as Record<string, unknown>);
     });
     changes.length = 0; // listener recebe o último estado cached imediatamente
     slides.goToSlide(1);
@@ -204,8 +286,8 @@ describe("useSlides e o pedido de troca de slide entre janelas", () => {
     parar();
 
     expect(changes).toHaveLength(2);
-    expect(changes[0]._commit_ts).toEqual(expect.any(Number));
-    expect(changes[1]._commit_ts).toBeUndefined();
+    expect(changes[0].commitAt).toEqual(expect.any(Number));
+    expect(changes[1].commitAt).toBeUndefined();
   });
 
   it("preserva o início do comando vindo de outra janela", () => {
@@ -213,15 +295,20 @@ describe("useSlides e o pedido de troca de slide entre janelas", () => {
     abrir(SUNG);
     let change: Record<string, unknown> | undefined;
     const parar = $broadcast.listen((msg) => {
-      if (msg.type === BROADCAST_TYPE.SLIDE_CHANGE) {
+      if (msg.type === BROADCAST_TYPE.MUSIC_PRESENTATION_SNAPSHOT) {
         change = msg.payload as Record<string, unknown>;
       }
     });
     const commandAt = Date.now() - 42;
-    $broadcast.send(BROADCAST_TYPE.GO_TO_SLIDE, { index: 2, _command_ts: commandAt });
+    $broadcast.send(BROADCAST_TYPE.GO_TO_SLIDE, {
+      index: 2, presentation_session: slides.presentationSnapshot()?.sessionId, _command_ts: commandAt,
+    });
     parar();
 
-    expect(change).toEqual(expect.objectContaining({ slide_index: 2, _command_ts: commandAt }));
+    expect(change).toEqual(expect.objectContaining({
+      commandAt,
+      snapshot: expect.objectContaining({ slideIndex: 2 }),
+    }));
   });
 
   it("a janela sem slides ignora o pedido em vez de transmitir um slide vazio", () => {
@@ -231,6 +318,20 @@ describe("useSlides e o pedido de troca de slide entre janelas", () => {
       $broadcast.send(BROADCAST_TYPE.GO_TO_SLIDE, { index: 3 })
     );
 
-    expect(tipos).not.toContain(BROADCAST_TYPE.SLIDE_CHANGE);
+    expect(tipos).not.toContain(BROADCAST_TYPE.MUSIC_PRESENTATION_SNAPSHOT);
+  });
+
+  it("ignores a late command from a previous music session", () => {
+    slides.reset();
+    abrir(SUNG);
+    const previousSession = slides.presentationSnapshot()?.sessionId;
+    abrir(SUNG);
+    $broadcast.send(BROADCAST_TYPE.GO_TO_SLIDE, { index: 2, presentation_session: previousSession });
+    $broadcast.send(BROADCAST_TYPE.GO_TO_SLIDE, { index: 2 });
+    expect(slides.slideIndex.value).toBe(0);
+    $broadcast.send(BROADCAST_TYPE.GO_TO_SLIDE, {
+      index: 2, presentation_session: slides.presentationSnapshot()?.sessionId,
+    });
+    expect(slides.slideIndex.value).toBe(2);
   });
 });

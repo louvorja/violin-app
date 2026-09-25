@@ -4,7 +4,8 @@ import $broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import Telemetry, { isProjectionMilestone } from "@/helpers/Telemetry";
 import Path from "@/helpers/Path";
-import { MusicShadowReceiver } from "@/presentation/MusicShadowReceiver";
+import { createBroadcastPresentationTransport } from "@/presentation/BroadcastPresentationTransport";
+import type { MusicPresentationPacket } from "@/presentation/MusicPresentationPacket";
 
 export type Slide = Record<string, unknown> | null;
 
@@ -43,13 +44,16 @@ interface ProjectionStateReturn {
   slideProgress: Ref<number>;
   slideIndex: Ref<number>;
   totalSlides: Ref<number>;
+  sessionId: Ref<string | null>;
   isCover: ComputedRef<boolean>;
   bgImgStyle: ComputedRef<BgImgStyle>;
 }
 
 /**
  * Estado reativo compartilhado entre as views de projeção.
- * Encapsula a subscrição ao SLIDE_CHANGE e os computed derivados comuns.
+ * Recebe o snapshot canônico de música. Eventos não versionados continuam
+ * servindo outras fontes de projeção (editor, Bíblia e mídia não musical),
+ * mas não existe fallback visual de música para SLIDE_CHANGE.
  */
 export function useProjectionState(): ProjectionStateReturn {
   const slide = ref<Slide>(null);
@@ -59,53 +63,82 @@ export function useProjectionState(): ProjectionStateReturn {
   const slideProgress = ref(0);
   const slideIndex = ref(0);
   const totalSlides = ref(0);
+  const sessionId = ref<string | null>(null);
   let frameProbeGeneration = 0;
   let musicSlideActive = false;
   let musicPlaybackId: string | undefined;
   let musicRevision: number | undefined;
-  const shadowReceiver = new MusicShadowReceiver();
-  // Bounded local evidence for the real Chromium cross-window harness. This
-  // contains no lyrics/titles and is never exported by production builds.
-  const shadowDiagnostics = import.meta.env.DEV
-    ? { comparisons: 0, divergences: 0, sessionId: null as string | null }
-    : null;
-  const diagnosticWindow = window as Window & {
-    __ljMusicShadowDiagnostics?: NonNullable<typeof shadowDiagnostics>;
-  };
-  if (shadowDiagnostics) diagnosticWindow.__ljMusicShadowDiagnostics = shadowDiagnostics;
-  function compareShadow(): void {
-    try {
-      const fields = shadowReceiver.takeDifferences();
-      if (shadowDiagnostics) {
-        shadowDiagnostics.comparisons = shadowReceiver.comparisonCount();
-        shadowDiagnostics.sessionId = shadowReceiver.snapshot()?.sessionId ?? null;
-        if (fields.length) shadowDiagnostics.divergences = Math.min(Number.MAX_SAFE_INTEGER, shadowDiagnostics.divergences + 1);
-      }
-      if (fields.length) Telemetry.track("presentation_shadow_renderer_divergence", { fields: fields.join(",") });
-    } catch { /* diagnostic failure cannot affect projection */ }
+  let currentVersionedSelection: { session: string; revision: number } | null = null;
+  let lastMissingSnapshotKey = "";
+  const reportedMissingSessions = new Set<string>();
+  let expectedMusicSession: string | null = null;
+  let snapshotWaitTimer: ReturnType<typeof setTimeout> | null = null;
+  function clearSnapshotWait(): void {
+    if (snapshotWaitTimer) clearTimeout(snapshotWaitTimer);
+    snapshotWaitTimer = null;
+    expectedMusicSession = null;
   }
+  const retiredSessions = new Set<string>();
+  const retireSession = (session: string): void => {
+    retiredSessions.delete(session);
+    retiredSessions.add(session);
+    if (retiredSessions.size > 32) retiredSessions.delete(retiredSessions.values().next().value!);
+  };
+  const visualTransport = createBroadcastPresentationTransport($broadcast);
 
   onBeforeUnmount(() => {
     // Um rAF pendente não deve atribuir o frame da próxima rota ao slide antigo.
     frameProbeGeneration++;
-    if (shadowDiagnostics && diagnosticWindow.__ljMusicShadowDiagnostics === shadowDiagnostics) {
-      delete diagnosticWindow.__ljMusicShadowDiagnostics;
-    }
+    stopVisualTransport?.();
+    visualTransport.dispose();
+    clearSnapshotWait();
   });
 
-  useBroadcastListener(BROADCAST_TYPE.MUSIC_SHADOW_SNAPSHOT, (payload) => {
-    shadowReceiver.receive(payload);
-    compareShadow();
-  });
-
-  useBroadcastListener(BROADCAST_TYPE.SLIDE_CHANGE, (payload) => {
-    const p = payload as Record<string, unknown>;
-    const receivedAt = Date.now();
-    const probeGeneration = ++frameProbeGeneration;
+  function applySelection(p: Record<string, unknown>, source: "canonical" | "editor"): void {
     const playbackId = typeof p.playback_id === "string" ? p.playback_id : undefined;
     const revision = typeof p.presentation_revision === "number" &&
       Number.isSafeInteger(p.presentation_revision) && p.presentation_revision >= 0
       ? p.presentation_revision : undefined;
+    const session = typeof p.presentation_session === "string" && p.presentation_session.length > 0
+      ? p.presentation_session : undefined;
+    if (source === "editor" && (session || revision !== undefined)) {
+      // Versioned music has one visual authority: the validated core packet.
+      // Only the validated core packet is allowed to select music visually.
+      if (session && !retiredSessions.has(session) &&
+          (currentVersionedSelection?.session !== session || currentVersionedSelection.revision < (revision ?? 0))) {
+        const key = `${session}:${revision ?? "unknown"}`;
+        if (lastMissingSnapshotKey !== key) {
+          lastMissingSnapshotKey = key;
+          visualTransport.requestSnapshot();
+          if (!reportedMissingSessions.has(session)) {
+            reportedMissingSessions.add(session);
+            if (reportedMissingSessions.size > 32) reportedMissingSessions.delete(reportedMissingSessions.values().next().value!);
+            Telemetry.track("presentation_snapshot_missing", { reason: "versioned_event_without_snapshot" });
+          }
+        }
+      }
+      return;
+    }
+    if (session && revision !== undefined) {
+      if (retiredSessions.has(session)) return;
+      if (currentVersionedSelection?.session === session) {
+        if (revision <= currentVersionedSelection.revision) return;
+      } else if (currentVersionedSelection) {
+        retireSession(currentVersionedSelection.session);
+      }
+      currentVersionedSelection = { session, revision };
+      sessionId.value = session;
+      if (expectedMusicSession === session) clearSnapshotWait();
+    } else if (currentVersionedSelection) {
+      // The editor has no comparable identity. Keep its active behavior while
+      // preventing a delayed packet from the previous versioned song.
+      retireSession(currentVersionedSelection.session);
+      currentVersionedSelection = null;
+      sessionId.value = null;
+      clearSnapshotWait();
+    }
+    const receivedAt = Date.now();
+    const probeGeneration = ++frameProbeGeneration;
     if (playbackId !== musicPlaybackId || revision !== musicRevision || p.slide_index !== slideIndex.value) {
       slideProgress.value = 0;
     }
@@ -119,11 +152,6 @@ export function useProjectionState(): ProjectionStateReturn {
     slideIndex.value = (p.slide_index as number) ?? 0;
     totalSlides.value = (p.total_slides as number) ?? (p.last_slide as number) ?? 0;
     const stateAppliedAt = Date.now();
-    shadowReceiver.observe(p.presentation_session, musicRevision, {
-      active: true, slide: slide.value, nextSlide: nextSlide.value, title: title.value,
-      slideIndex: slideIndex.value, totalSlides: totalSlides.value,
-    });
-    compareShadow();
 
     if (typeof p._ts === "number" && Number.isFinite(p._ts) &&
         p._ts >= receivedAt - 300_000 && p._ts <= receivedAt + 1_000) {
@@ -131,7 +159,8 @@ export function useProjectionState(): ProjectionStateReturn {
       const latencyMs = Math.max(0, receivedAt - sentAt);
       if (isProjectionMilestone(slideIndex.value, totalSlides.value, !!slide.value)) {
         Telemetry.track("projection_broadcast_received", {
-          broadcast_type: BROADCAST_TYPE.SLIDE_CHANGE,
+          broadcast_type: source === "canonical"
+            ? BROADCAST_TYPE.MUSIC_PRESENTATION_SNAPSHOT : BROADCAST_TYPE.SLIDE_CHANGE,
           slide_index: p.slide_index,
           playback_id: p.playback_id,
           latency_ms: latencyMs,
@@ -209,6 +238,81 @@ export function useProjectionState(): ProjectionStateReturn {
       const log = (window as { __ljLatencyLog?: number[] }).__ljLatencyLog;
       if (Array.isArray(log)) log.push(Date.now() - (p._ts as number));
     }
+  }
+
+  useBroadcastListener(BROADCAST_TYPE.SLIDE_CHANGE, (payload) => {
+    applySelection(payload as Record<string, unknown>, "editor");
+  });
+
+  // SLIDES_DATA carries the full operator deck. Its session identity also
+  // tells this visual receiver that a music snapshot ought to arrive. A
+  // single delayed retry/incident per session makes a blank projection
+  // diagnosable without a polling loop in the render path.
+  useBroadcastListener(BROADCAST_TYPE.SLIDES_DATA, (payload) => {
+    const session = (payload as Record<string, unknown>)?.presentation_session;
+    if (typeof session !== "string" || !session || session.length > 128 ||
+        retiredSessions.has(session) || currentVersionedSelection?.session === session ||
+        expectedMusicSession === session) return;
+    clearSnapshotWait();
+    expectedMusicSession = session;
+    visualTransport.requestSnapshot();
+    if (expectedMusicSession !== session) return;
+    snapshotWaitTimer = setTimeout(() => {
+      snapshotWaitTimer = null;
+      if (expectedMusicSession !== session || currentVersionedSelection?.session === session) return;
+      if (!reportedMissingSessions.has(session)) {
+        reportedMissingSessions.add(session);
+        if (reportedMissingSessions.size > 32) reportedMissingSessions.delete(reportedMissingSessions.values().next().value!);
+        Telemetry.track("presentation_snapshot_missing", { reason: "timeout_after_deck" });
+      }
+      visualTransport.requestSnapshot();
+    }, 2_000);
+  });
+
+  const stopVisualTransport = visualTransport?.subscribe((packet: MusicPresentationPacket) => {
+    const snapshot = packet.snapshot;
+    if (!snapshot.active) {
+      // MEDIA_CLOSE is shared with other projection sources. A music close may
+      // clear only the currently displayed music from the same core session.
+      if (currentVersionedSelection?.session === snapshot.sessionId) {
+        retireSession(snapshot.sessionId);
+        currentVersionedSelection = null;
+        sessionId.value = null;
+        clearSnapshotWait();
+        if (musicSlideActive) {
+          frameProbeGeneration++;
+          musicSlideActive = false;
+          musicPlaybackId = undefined;
+          musicRevision = undefined;
+          slide.value = null;
+          nextSlide.value = null;
+          title.value = "";
+          progress.value = 0;
+          slideProgress.value = 0;
+          slideIndex.value = 0;
+          totalSlides.value = 0;
+        }
+      }
+      return;
+    }
+    // The validated reducer snapshot owns visual selection. The emission
+    // revision correlates the independent progress stream.
+    applySelection({
+      presentation_session: snapshot.sessionId,
+      presentation_revision: packet.selectionRevision,
+      playback_id: packet.playbackId,
+      slide_index: snapshot.slideIndex,
+      slide: snapshot.slide,
+      next_slide: snapshot.nextSlide,
+      title: snapshot.title,
+      total_slides: snapshot.totalSlides,
+      progress: packet.progress,
+      slide_progress: packet.slideProgress,
+      _ts: packet.emittedAt,
+      _command_ts: packet.commandAt,
+      _commit_ts: packet.commitAt,
+    }, "canonical");
+    slideProgress.value = packet.slideProgress;
   });
 
   // Listener para versículos da bíblia. Permite que a janela de projeção principal
@@ -217,8 +321,9 @@ export function useProjectionState(): ProjectionStateReturn {
   useBroadcastListener(BROADCAST_TYPE.BIBLE_VERSE, (payload) => {
     const p = payload as Record<string, unknown>;
     if (p.active) {
+      clearSnapshotWait();
       musicSlideActive = false;
-      shadowReceiver.suspend();
+      sessionId.value = null;
       slide.value = {
         lyric: (p.text as string) || "",
         aux_lyric: (p.reference as string) || "",
@@ -241,9 +346,15 @@ export function useProjectionState(): ProjectionStateReturn {
   // Sem este reset, janelas de projeção e clients de transmissão (OBS)
   // ficam mostrando a letra da música anterior indefinidamente.
   useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, () => {
+    clearSnapshotWait();
+    if (currentVersionedSelection) {
+      retireSession(currentVersionedSelection.session);
+      currentVersionedSelection = null;
+    }
     musicSlideActive = false;
     musicPlaybackId = undefined;
     musicRevision = undefined;
+    sessionId.value = null;
     slide.value = null;
     nextSlide.value = null;
     title.value = "";
@@ -251,8 +362,6 @@ export function useProjectionState(): ProjectionStateReturn {
     slideProgress.value = 0;
     slideIndex.value = 0;
     totalSlides.value = 0;
-    shadowReceiver.close();
-    compareShadow();
   });
 
   // Progresso contínuo do slide atual (throttled) para a barra no stage display.
@@ -270,8 +379,8 @@ export function useProjectionState(): ProjectionStateReturn {
   // Register all consumers before requesting: the local Broadcast fan-out can
   // answer synchronously, whereas another window answers asynchronously.
   onMounted(() => {
+    visualTransport.requestSnapshot();
     $broadcast.send(BROADCAST_TYPE.REQUEST_SLIDE_STATE);
-    $broadcast.send(BROADCAST_TYPE.REQUEST_MUSIC_SHADOW_SNAPSHOT);
   });
 
   const isCover = computed<boolean>(
@@ -312,6 +421,7 @@ export function useProjectionState(): ProjectionStateReturn {
     slideProgress,
     slideIndex,
     totalSlides,
+    sessionId,
     isCover,
     bgImgStyle,
   };

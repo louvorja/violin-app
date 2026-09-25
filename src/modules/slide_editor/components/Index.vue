@@ -430,11 +430,12 @@ import AudioLibrary from "@/helpers/AudioLibrary";
 import { ensureRenderableImage } from "@/helpers/ImageConvert";
 import CustomSongs from "@/helpers/CustomSongs";
 import $alert from "@/helpers/Alert";
-import { openProjectionWindows, closeProjectionWindows } from "@/helpers/ProjectionWindows";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
 import { useSlideStyle } from "@/composables/useSlideStyle";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
+import Media from "@/composables/useMedia";
+import { readMusicPresentationPacket } from "@/presentation/MusicPresentationPacket";
 
 const SESSION_KEY = "slide_editor_song_v2";
 
@@ -832,7 +833,11 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener("lj:open-song", onOpenSong);
-  if (isProjecting.value) actStopProject();
+  if (isProjecting.value || _projectionClaimPending) actStopProject();
+  else {
+    _projectionGeneration += 1;
+    cancelProjectionBroadcasts();
+  }
   AudioLibrary.clearSession();
 });
 
@@ -846,7 +851,7 @@ function confirmDiscard() {
 }
 
 function onClose() {
-  if (isProjecting.value) actStopProject();
+  if (isProjecting.value || _projectionClaimPending) actStopProject();
   AudioLibrary.clearSession();
 }
 
@@ -1115,7 +1120,7 @@ async function onImportTxt(e) {
   markDirty();
 }
 
-async function toProjectionPayload(s) {
+async function toProjectionPayload(s, title = song.value.nome) {
   if (!s) return null;
   let urlImage = null;
   if (s.imagem) {
@@ -1133,20 +1138,51 @@ async function toProjectionPayload(s) {
     color_aux: s.cor_letra_aux,
     font_size_pct: s.tamanho_letra,
     font_size_aux_pct: s.tamanho_letra_aux,
-    name: song.value.nome,
+    name: title,
   };
 }
 
+let _projectionGeneration = 0;
+let _projectionBroadcastId = 0;
+let _projTimer = null;
+let _projectionClaimPending = false;
+
+function cancelProjectionBroadcasts() {
+  _projectionBroadcastId += 1;
+  if (_projTimer) clearTimeout(_projTimer);
+  _projTimer = null;
+}
+
 async function broadcastCurrentSlide() {
-  const slidePayload = await toProjectionPayload(activeSlide.value);
-  const nextPayload = await toProjectionPayload(slides.value[current.value + 1]);
+  if (!isProjecting.value) return;
+  const generation = _projectionGeneration;
+  const broadcastId = ++_projectionBroadcastId;
+  const slideIndex = current.value;
+  const totalSlides = slides.value.length;
+  const title = song.value.nome;
+  const active = activeSlide.value;
+  const next = slides.value[slideIndex + 1];
+  const slidePayload = await toProjectionPayload(active, title);
+  if (
+    !isProjecting.value ||
+    generation !== _projectionGeneration ||
+    broadcastId !== _projectionBroadcastId
+  )
+    return;
+  const nextPayload = await toProjectionPayload(next, title);
+  if (
+    !isProjecting.value ||
+    generation !== _projectionGeneration ||
+    broadcastId !== _projectionBroadcastId
+  )
+    return;
   $broadcast.send(BROADCAST_TYPE.SLIDE_CHANGE, {
-    slide_index: current.value,
+    slide_index: slideIndex,
     slide: slidePayload,
     next_slide: nextPayload,
-    title: song.value.nome,
+    title,
     progress: 0,
-    total_slides: slides.value.length,
+    total_slides: totalSlides,
   });
 }
 
@@ -1156,22 +1192,38 @@ async function broadcastCurrentSlide() {
 const isProjecting = ref(false);
 
 async function actProject() {
+  // stopForSlideEditor() clears the old player synchronously and only waits for
+  // an already-opening file/video window before closing it. Utility downloads continue.
+  const released = Media.stopForSlideEditor();
+  const generation = ++_projectionGeneration;
+  _projectionClaimPending = true;
+  $userdata.set(KEYS.MODULES.SLIDE_EDITOR.PROJECTING, true);
   try {
-    await openProjectionWindows();
+    await released;
+  } catch (err) {
+    console.warn("[slide_editor] liberação da projeção anterior falhou:", err);
+  }
+  if (generation !== _projectionGeneration) return;
+  try {
+    await Media.openProjectionStage();
   } catch (err) {
     console.warn("[slide_editor] openProjectionWindows falhou:", err);
   }
+  if (generation !== _projectionGeneration) return;
+  _projectionClaimPending = false;
   isProjecting.value = true;
-  $userdata.set(KEYS.MODULES.SLIDE_EDITOR.PROJECTING, true);
   await broadcastCurrentSlide();
 }
 
 function actStopProject() {
+  _projectionGeneration += 1;
+  _projectionClaimPending = false;
+  cancelProjectionBroadcasts();
   isProjecting.value = false;
   $userdata.set(KEYS.MODULES.SLIDE_EDITOR.PROJECTING, false);
   // Limpa a tela e encerra as janelas de projeção de música.
   $broadcast.send(BROADCAST_TYPE.MEDIA_CLOSE);
-  closeProjectionWindows().catch((e) => {
+  Media.closeProjectionStage().catch((e) => {
     console.warn("[slide_editor] closeProjectionWindows falhou:", e);
   });
 }
@@ -1191,18 +1243,36 @@ useBroadcastListener(BROADCAST_TYPE.REQUEST_SLIDE_STATE, () => {
 // Se algo externo encerrar a projeção (ESC global, Media.close), reseta o
 // estado local e o flag da ribbon para o ícone voltar ao inicial.
 useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, () => {
-  if (!isProjecting.value) return;
+  const hadClaim = _projectionClaimPending || isProjecting.value;
+  _projectionGeneration += 1;
+  _projectionClaimPending = false;
+  cancelProjectionBroadcasts();
+  if (!hadClaim) return;
+  isProjecting.value = false;
+  $userdata.set(KEYS.MODULES.SLIDE_EDITOR.PROJECTING, false);
+});
+
+// A new music session takes the stage. Cancel pending image conversion before
+// an old editor slide can arrive after its canonical snapshot.
+useBroadcastListener(BROADCAST_TYPE.MUSIC_PRESENTATION_SNAPSHOT, (payload) => {
+  const packet = readMusicPresentationPacket(payload);
+  if (!packet?.snapshot.active || (!_projectionClaimPending && !isProjecting.value)) return;
+  _projectionGeneration += 1;
+  _projectionClaimPending = false;
+  cancelProjectionBroadcasts();
   isProjecting.value = false;
   $userdata.set(KEYS.MODULES.SLIDE_EDITOR.PROJECTING, false);
 });
 
 // Reflete trocas e edições do slide ativo na janela de projeção ao vivo,
 // com debounce para evitar flood durante digitação.
-let _projTimer = null;
 function scheduleProjectionBroadcast() {
   if (!isProjecting.value) return;
-  if (_projTimer) clearTimeout(_projTimer);
-  _projTimer = setTimeout(() => broadcastCurrentSlide(), 120);
+  cancelProjectionBroadcasts();
+  _projTimer = setTimeout(() => {
+    _projTimer = null;
+    void broadcastCurrentSlide();
+  }, 120);
 }
 watch(current, scheduleProjectionBroadcast);
 watch(() => activeSlide.value, scheduleProjectionBroadcast, { deep: true });

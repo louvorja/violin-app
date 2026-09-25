@@ -1,10 +1,9 @@
 import { MusicPresentationCore, type MusicCommand, type MusicSnapshot } from "./MusicPresentationCore";
 
 /**
- * First transport slice: an ordered, in-process authority and its observers.
- * Subscription is live-only; requestSnapshot recovers after a missed update.
- * No connect/reportApplied yet: the shadow has no remote renderer to connect
- * or acknowledge, and must not claim that a diagnostic snapshot was painted.
+ * Ordered in-process adapter around the canonical reducer. Cross-window
+ * delivery and late-join recovery use BroadcastPresentationTransport.
+ * A snapshot delivery is not a physical frame acknowledgement.
  */
 export interface PresentationTransport {
   dispatch(_command: MusicCommand): void;
@@ -12,7 +11,7 @@ export interface PresentationTransport {
   requestSnapshot(): MusicSnapshot;
 }
 
-/** Memory adapter used by the actual music shadow producer, also usable in tests. */
+/** Memory adapter used by the music producer and isolated reducer tests. */
 export function createMemoryPresentationTransport(core: MusicPresentationCore): PresentationTransport {
   const listeners = new Set<(_snapshot: MusicSnapshot) => void>();
   return {

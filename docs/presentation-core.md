@@ -1,98 +1,96 @@
-# Presentation Core: primeira fatia em shadow mode
+# Presentation Core: primeira fatia canônica
 
-`src/presentation/MusicPresentationCore.ts` modela apenas slides de música.
-É TypeScript puro, sem Vue, DOM, relógio, BroadcastChannel ou Electron.
-`useSlides` continua sendo a autoridade e alimenta o core em paralelo.
-Nenhuma janela renderiza o snapshot novo; não há cutover.
+Slides normais de música são selecionados por `MusicPresentationCore`, um
+reducer TypeScript puro sem Vue, DOM, relógio, Broadcast ou Electron. Cada
+`setSlides` cria uma sessão nova; `select`, `clock`, `times` e `close` são
+comandos ordenados por ID dentro dela. O core devolve um snapshot coeso com
+sessão, revisão, estado ativo, título, índice, quantidade e slides atual/próximo.
+`useSlides` continua dono dos efeitos de áudio e das marcações; o índice que
+publica para projeção vem do core. Não há feature flag nem fallback visual
+musical para `SLIDE_CHANGE` neste beta.
 
-O produtor usa `PresentationTransport` com adapter em memória para despachar
-comandos, observar commits e consultar um snapshot coeso. O contrato nasce
-desse consumidor real: `dispatch`, `subscribe`, `requestSnapshot`. A inscrição
-recebe apenas commits futuros; após desinscrição/perda de notificações, uma
-consulta recupera o estado atual sem replay da sequência de comandos. Falha de
-um observador não bloqueia outros. `connect` e `reportApplied` não são expostos:
-o receptor remoto é diagnóstico e não aplica snapshots à tela. Ainda não existe
-cutover nem recovery visual novo: as projeções continuam usando o transporte
-legado. A recuperação em memória é validada por testes de
-desconexão, perda de atualização e fechamento não observado.
+## Transporte e recuperação
 
-Uma segunda fatia exercita Broadcast nas janelas auxiliares: o produtor publica
-`MUSIC_SHADOW_SNAPSHOT` e responde a `REQUEST_MUSIC_SHADOW_SNAPSHOT`. O payload
-versionado passa por validação de runtime e contém apenas estado coeso,
-slide atual/próximo e campos escalares usados na comparação; nunca o deck todo.
-O transporte não encaminha esses eventos para IPC/SSE. Os listeners são
-registrados antes do request, incluindo o caso de resposta síncrona in-window.
+`BroadcastPresentationTransport` publica `MUSIC_PRESENTATION_SNAPSHOT` no
+`BroadcastChannel("louvorja")`, valida o pacote em cada fronteira e responde a
+`REQUEST_MUSIC_PRESENTATION_SNAPSHOT`. O pacote tem campos visuais permitidos,
+`selectionRevision`, `playbackId`, progresso e marcos de tempo. Não leva o deck
+inteiro nem binários. A revisão do core ordena commits; `selectionRevision`
+ordena reemissões da mesma seleção, como uma resposta a uma janela tardia.
+Sessões anteriores e revisões repetidas/regressivas são descartadas. Um pacote
+de fechamento aposenta sua sessão.
 
-`useProjectionState` tem um receptor diagnóstico independente das refs usadas
-para renderizar. Ele compara somente quando sessão e revisão do broadcast
-coincidem exatamente com o legado aplicado; descarta snapshots anteriores,
-ignora outra sessão e suspende comparação sob Bíblia. Close pode chegar antes
-ou depois de seu snapshot, por isso só se compara quando ambos estão fechados.
-Reabrir uma janela solicita o snapshot atual, sem depender dos anteriores.
-Cada instância produtora gera um prefixo UUID fora do core, evitando colisão de
-sessões após reload. Divergências do renderer geram no máximo um incidente por
-sessão, contendo somente os nomes dos campos. Não se registra sucesso por
-comando, não se transmite progresso contínuo e nada no shadow controla a tela.
+O mesmo snapshot é relayado pelo servidor SSE para OBS e clientes HTTP. O
+cache local e o cache/fila SSE guardam só o estado atual; `MEDIA_CLOSE` remove
+snapshots antigos e preserva a barreira de fechamento sob backpressure. Um
+snapshot musical ativo invalida um `SLIDE_CHANGE` antigo de editor no replay;
+um novo evento sem versão invalida o snapshot e o deck da música anterior.
+Janelas tardias recuperam por
+request/reply local ou pelo estado SSE em cache, sem reexecutar comandos.
 
-Limites: comparação exige um broadcast legado correlacionado. Perder esse
-broadcast não produz divergência artificial; recovery visual ainda pertence ao
-legado. Este protocolo diagnóstico usa apenas Broadcast local/cross-window,
-não valida a entrega a clientes HTTP/SSE. Não há acknowledgements de paint.
+`useProjectionState` aplica apenas pacotes canônicos validados para música.
+`SLIDE_CHANGE` versionado não altera a tela, mesmo se o snapshot faltar ou for
+malformado. O evento sem versão continua existindo para o editor. Bíblia,
+arquivo, fundo, vídeo e demais fontes conservam seus próprios contratos até
+uma fatia específica migrá-los. `SLIDE_PROGRESS` segue como atualização
+throttled de 0–100, aceita somente quando sessão lógica, playback, índice e
+`selectionRevision` correspondem ao snapshot aplicado.
 
-O harness `e2e/presentation-shadow.spec.js` executa Chromium com duas páginas
-reais, fixtures locais e bloqueio de origens externas. Exercita as duas ordens
-de abertura produtor/projetor, navegação e reabertura após perder mensagens.
-Em desenvolvimento, `window.__ljMusicShadowDiagnostics` expõe apenas três
-campos de tamanho constante: número de comparações efetivamente realizadas,
-incidentes e ID da sessão. O contador vem do ponto de comparação do receptor;
-receber um pacote ou não emitir divergência não conta como evidência de paridade.
-Esse objeto é removido ao desmontar e não é exposto no build de produção.
-O teste exige comparação positiva e zero divergências em cada etapa e anexa
-os contadores como JSON, sem letras/títulos. Não envia eventos de sucesso ao
-PostHog. Para preservar outros artefatos, execute com `--output` apontando para
-um diretório temporário exclusivo.
+`SLIDES_DATA` ainda transporta o deck completo para Operator e controle remoto,
+agora correlacionado por `presentation_session`. Esses consumidores aguardam o
+snapshot da mesma sessão e rejeitam lista de uma sessão aposentada. Operator,
+controle remoto e Libras também selecionam música pelo pacote canônico. O
+endpoint de playing-check lê o core diretamente. Música não emite mais
+`SLIDE_CHANGE`; os emissores não musicais e seus consumidores continuam.
+Ao assumir o editor, cards da música antiga são limpos, mesmo se um deck já
+foi entregue antes de um socket SSE entrar em backpressure.
 
-Cada `setSlides` cria uma sessão local nova, independente de `playback_id`.
-Trocar cantada/playback pode mudar a identidade do áudio e seus timestamps
-preservando a sessão de apresentação e o slide atual. O produtor atribui IDs
-numéricos estritamente crescentes aos comandos da sessão. IDs repetidos ou
-anteriores e comandos de outra sessão são ignorados. Esse contrato supõe um
-único produtor ordenado; ainda não é um protocolo para múltiplos emissores.
+Comandos `GO_TO_SLIDE` vindos de outra janela carregam
+`presentation_session`; o produtor rejeita comandos sem a sessão vigente e
+índices malformados. Um comando atrasado de uma música anterior não pode
+mover a nova. Navegação local via `Media.goToSlide()` usa a sessão do core.
+Os comandos HTTP de música (`next`, `previous`, `close`, `go-to-slide`) exigem a
+sessão observada no controle remoto quando há música ativa; uma sessão antiga
+ou ausente é rejeitada no renderer principal e gera no máximo um incidente de
+metadados por ação/motivo/sessão.
 
-O snapshot reúne sessão, revisão, estado ativo, título, índice, quantidade,
-slide atual e próximo. Revisão aumenta por comando aceito, inclusive atualização
-das marcações. Reemissão de Broadcast para recovery não altera essa revisão.
-Fechar encerra a sessão; reabrir exige uma sessão nova. Cópias de slides protegem
-os campos escalares usados nesta fatia; metadados aninhados não são modelados.
+Quando chega um deck correlacionado sem snapshot, o receptor pede o estado e
+faz no máximo uma tentativa retardada após 2 s. Um timeout produz um evento
+`presentation_snapshot_missing` por sessão, só com motivo enumerado. Falhas de
+publicação registram no máximo um incidente por sessão, com motivo
+`broadcast_channel_failed`, `ipc_relay_failed` ou `ipc_relay_unavailable`, e fazem até duas novas
+tentativas com intervalo de 1 s, mesmo sem novo tick de áudio. O resultado do
+emissor confirma apenas o enfileiramento síncrono local/IPC; não confirma
+recebimento remoto nem pintura de frame. Falhas de comando do core também são
+limitadas por sessão. Não há log por tick, frame, chunk ou mensagem normal.
 
-Sem áudio, o shadow recebe o índice solicitado e calcula os limites. Com áudio,
-um pedido de navegação primeiro faz seek no player legado; o shadow recebe o
-tempo somente quando o watcher confirma uma mudança real de slide. O core
-calcula independentemente o índice a partir das marcações. Progresso contínuo,
-clock de vídeo, Bíblia, overlays e formatação ficam fora desta fatia.
+## Limites e testes
 
-A comparação automática verifica título, índice, quantidade e campos visuais
-escalares do slide atual/próximo após os commits. A primeira divergência de cada
-sessão gera `presentation_shadow_divergence` contendo somente nomes dos campos,
-sem letra, título ou outros conteúdos. Falha do shadow não bloqueia o legado.
-`presentationShadow()` permite inspeção local e testes; não deve ser usado para
-controle ou renderização. Ausência de divergências nesses campos não demonstra
-paridade de todos os módulos nem autoriza cutover automático.
+O áudio principal continua sendo o clock de reprodução. O watcher entrega
+amostras ao core e publica nova seleção só quando o índice muda; não envia
+snapshot a cada tick. A capa é publicada antes de iniciar a transferência de
+áudio. Falha transitória de publicação tenta novamente com intervalo limitado,
+sem log ou validação repetida em cada tick. A troca de fonte libera a projeção
+de arquivo/vídeo antes de o editor ou a música assumirem o telão, sem pausar
+downloads manuais na Utility. Vídeo local/progressivo conserva seu protocolo de
+playback/revision e recuperação próprios. Papel/display da janela, Bíblia,
+overlays e arquivos ainda não pertencem ao core musical.
 
-Validação: testes de replay determinístico, deduplicação, sessão antiga,
-fechamento/reabertura, limites, cópia de inputs, troca de marcações, divergência
-deliberada, seek assíncrono, requests de recovery e comparação em duas janelas
-Chromium reais. O trabalho não depende de hardware Windows. Cutover do legado,
-aplicação visual do snapshot canônico e validação física multiplataforma
-permanecem etapas posteriores; não confundir paridade desta fatia com paridade
-de todos os modos de apresentação.
+Fechar e reabrir a mesma janela nativa aguarda o evento Electron `closed`; essa
+confirmação tem limite de 2,5 s. Se não chegar, a tentativa de reabertura é
+recusada, a janela segue reservada até fechar e a tentativa registra o motivo
+sem sondagem periódica.
 
-`projection_slide_frame_opportunity` é emitido somente em marcos/atrasos e
-separa `command_to_commit_ms`, `commit_to_emit_ms`,
-`broadcast_to_receive_ms`, `receive_to_state_apply_ms`,
-`state_apply_to_dom_ms` e `dom_to_frame_ms`, quando os respectivos marcos são
-válidos. `receive_to_apply_ms` mantém o significado histórico até `nextTick`.
-Os histogramas de duração usam apenas atributos de baixa cardinalidade; letras,
-títulos e IDs não entram nas dimensões das métricas. Dois `requestAnimationFrame`
-indicam oportunidade de frame após o patch DOM, não a apresentação física no
-monitor. O laboratório Windows deve correlacionar essa amostra com GPU/display.
+Os testes unitários cobrem ordenação, sessão nova, fechamento, reemissão com a
+mesma revisão do core, pacote malformado, progresso atrasado, lista de sessão
+antiga, comando tardio e timeout de recovery. Os E2Es offline
+`presentation-core.spec.js` e `latency.spec.js`
+exercitam janelas Chromium reais, ordens opostas de abertura, reabertura,
+replay e navegação. Execute-os com `--output` em diretório exclusivo: o
+Playwright limpa sua saída. Incluem o primeiro slide enquanto o áudio ainda
+carrega e não acessam YouTube.
+
+`projection_slide_frame_opportunity` separa comando, commit, emissão,
+recebimento, aplicação de estado, patch Vue e oportunidade de frame com dois
+`requestAnimationFrame`. Não prova paint físico no monitor; GPU, hotplug,
+DPI/Hz mistos, Defender/OneDrive e soaks continuam no laboratório Windows.

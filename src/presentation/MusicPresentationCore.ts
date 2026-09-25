@@ -1,4 +1,4 @@
-/** Music-only shadow domain. No clocks, I/O, framework or platform dependencies. */
+/** Music-only canonical domain. No clocks, I/O, framework or platform dependencies. */
 export interface MusicSlide {
   lyric?: string;
   cover?: boolean;
@@ -57,11 +57,11 @@ export class MusicPresentationCore {
       index = Math.max(0, Math.min(requested, this.slides.length - 1));
     }
     if (command.type === "clock" && this.times.length) {
-      // Match the existing producer's timestamp semantics, including repeated
-      // markers. Keep out-of-range results visible to the shadow comparison.
+      // Match timestamp semantics, including repeated markers, but never
+      // select beyond the deck now that this reducer can own the projection.
       let reached = 0;
       for (const time of this.times) if (time <= command.position) reached++;
-      index = Math.max(0, reached - 1);
+      index = Math.max(0, Math.min(reached - 1, this.slides.length - 1));
     }
     const closed = command.type === "close";
     this.state = Object.freeze({
@@ -73,24 +73,4 @@ export class MusicPresentationCore {
     });
     return this.state;
   }
-}
-
-/** Compare semantic selection, never timestamps or transport emission counts. */
-export function musicSnapshotDifferences(
-  snapshot: MusicSnapshot,
-  legacy: Pick<MusicSnapshot, "title" | "slideIndex" | "totalSlides" | "slide" | "nextSlide">
-): string[] {
-  const differences: string[] = [];
-  for (const key of ["title", "slideIndex", "totalSlides"] as const) {
-    if (snapshot[key] !== legacy[key]) differences.push(key);
-  }
-  for (const key of ["slide", "nextSlide"] as const) {
-    // Scalar presentation fields suffice to detect a wrong selected slide;
-    // arbitrary nested metadata is outside this first domain slice.
-    const a = snapshot[key];
-    const b = legacy[key];
-    if ((a === null) !== (b === null) || ["lyric", "cover", "url_image", "image_position", "aux_lyric"]
-      .some((field) => a?.[field] !== b?.[field])) differences.push(key);
-  }
-  return differences;
 }

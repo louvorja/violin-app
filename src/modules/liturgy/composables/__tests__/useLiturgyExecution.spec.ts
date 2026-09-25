@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   openSlja: vi.fn(),
   openPath: vi.fn(),
   openAudio: vi.fn(),
+  projectFile: vi.fn(),
   systemPlayer: false,
 }));
 
@@ -26,7 +27,7 @@ vi.mock("@/helpers/UserData", () => ({
   default: { get: (_key: string, fallback: unknown) => (mocks.systemPlayer ? true : fallback) },
 }));
 vi.mock("@/composables/useMedia", () => ({
-  default: { close: vi.fn(), stop: vi.fn(), openAudio: mocks.openAudio },
+  default: { close: vi.fn(), stop: vi.fn(), openAudio: mocks.openAudio, projectFile: mocks.projectFile },
 }));
 vi.mock("@/composables/useBackgroundSound", () => ({
   useBackgroundSound: () => ({ currentFile: { value: null } }),
@@ -63,6 +64,7 @@ beforeEach(() => {
   mocks.openSlja.mockResolvedValue(true);
   mocks.openPath.mockResolvedValue({ ok: true });
   mocks.openAudio.mockResolvedValue(undefined);
+  mocks.projectFile.mockResolvedValue(true);
 });
 
 describe("liturgia — item de arquivo .slja", () => {
@@ -109,5 +111,19 @@ describe("liturgia — item de arquivo .slja", () => {
 
     await vi.waitFor(() => expect(mocks.openPath).toHaveBeenCalledWith("/Users/ana/aviso.mp4"));
     expect(mocks.openSlja).not.toHaveBeenCalled();
+  });
+
+  it("imagem e vídeo passam pela posse de palco compartilhada antes de publicar", async () => {
+    const { executeItem } = useLiturgyExecution();
+    executeItem(arquivo("/Users/ana/aviso.png", "Aviso"));
+    await vi.waitFor(() => expect(mocks.projectFile).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "image", title: "Aviso" })
+    ));
+
+    executeItem(arquivo("/Users/ana/aviso.mp4", "Vídeo"));
+    await vi.waitFor(() => expect(mocks.projectFile).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "video", title: "Vídeo" }),
+      expect.any(String)
+    ));
   });
 });

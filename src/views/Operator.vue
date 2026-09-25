@@ -88,6 +88,7 @@ import Telemetry from "@/helpers/Telemetry";
 import Path from "@/helpers/Path";
 import { applyVideoState } from "@/helpers/VideoSync";
 import { VideoStateGate } from "@/helpers/VideoStateVersion";
+import { readMusicPresentationPacket } from "@/presentation/MusicPresentationPacket";
 
 const { t } = useI18n();
 const root = ref(null);
@@ -104,6 +105,15 @@ function imageUrl(value) {
 const currentIndex = ref(0);
 const title = ref("");
 const progress = ref(0);
+let canonicalSelection = null;
+let pendingSessionSlides = null;
+const retiredCanonicalSessions = new Set();
+function retireCanonical(session) {
+  retiredCanonicalSessions.delete(session);
+  retiredCanonicalSessions.add(session);
+  if (retiredCanonicalSessions.size > 32)
+    retiredCanonicalSessions.delete(retiredCanonicalSessions.values().next().value);
+}
 const videoActive = ref(false);
 const videoUrl = ref("");
 const videoTitle = ref("");
@@ -241,7 +251,7 @@ function onVideoError(event) {
   });
 }
 
-useBroadcastListener(BROADCAST_TYPE.SLIDES_DATA, (payload) => {
+function applySlidesData(payload) {
   videoActivation++;
   videoStateGate.clear();
   latestVideoState = null;
@@ -250,8 +260,24 @@ useBroadcastListener(BROADCAST_TYPE.SLIDES_DATA, (payload) => {
   videoActive.value = false;
   videoFailed.value = false;
   slides.value = payload.slides || [];
-  title.value = payload.title || "";
-  currentIndex.value = payload.slide_index ?? 0;
+  if (!canonicalSelection) {
+    title.value = payload.title || "";
+    currentIndex.value = payload.slide_index ?? 0;
+  }
+}
+
+useBroadcastListener(BROADCAST_TYPE.SLIDES_DATA, (payload) => {
+  const session = payload?.presentation_session;
+  if (session !== undefined && (typeof session !== "string" || !session || session.length > 128))
+    return;
+  if (session && retiredCanonicalSessions.has(session)) return;
+  if (session && canonicalSelection?.session !== session) {
+    // A deck without its canonical selection cannot become visible, even
+    // when this window has just opened or the previous session has closed.
+    pendingSessionSlides = { session, payload };
+    return;
+  }
+  applySlidesData(payload);
 });
 
 useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION, (payload) => {
@@ -283,6 +309,15 @@ useBroadcastListener(BROADCAST_TYPE.VIDEO_STATE, (payload) => {
 });
 
 useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, () => {
+  if (canonicalSelection) {
+    retireCanonical(canonicalSelection.session);
+    canonicalSelection = null;
+  }
+  pendingSessionSlides = null;
+  slides.value = [];
+  currentIndex.value = 0;
+  title.value = "";
+  progress.value = 0;
   videoActivation++;
   videoStateGate.clear();
   latestVideoState = null;
@@ -294,10 +329,55 @@ useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, () => {
   videoTitle.value = "";
 });
 
+useBroadcastListener(BROADCAST_TYPE.MUSIC_PRESENTATION_SNAPSHOT, (payload) => {
+  const packet = readMusicPresentationPacket(payload);
+  if (!packet) return;
+  const { sessionId, revision, active, slideIndex, title: currentTitle } = packet.snapshot;
+  const { selectionRevision } = packet;
+  if (retiredCanonicalSessions.has(sessionId)) return;
+  if (canonicalSelection?.session === sessionId) {
+    if (
+      revision < canonicalSelection.revision ||
+      selectionRevision < canonicalSelection.selectionRevision ||
+      (revision === canonicalSelection.revision &&
+        selectionRevision === canonicalSelection.selectionRevision)
+    )
+      return;
+  } else if (canonicalSelection) {
+    retireCanonical(canonicalSelection.session);
+  }
+  canonicalSelection = { session: sessionId, revision, selectionRevision };
+  if (active) {
+    if (pendingSessionSlides?.session === sessionId) applySlidesData(pendingSessionSlides.payload);
+    pendingSessionSlides = null;
+    currentIndex.value = slideIndex;
+    title.value = currentTitle;
+    progress.value = packet.progress;
+  } else {
+    pendingSessionSlides = null;
+    slides.value = [];
+    currentIndex.value = 0;
+    title.value = "";
+    progress.value = 0;
+    retireCanonical(sessionId);
+    canonicalSelection = null;
+  }
+});
+
 useBroadcastListener(BROADCAST_TYPE.SLIDE_CHANGE, (payload) => {
+  // The versioned music companion is consumed from the canonical packet above.
+  // The slide editor still publishes this unversioned event.
+  if (payload?.presentation_session !== undefined || payload?.presentation_revision !== undefined)
+    return;
+  if (canonicalSelection) {
+    retireCanonical(canonicalSelection.session);
+    canonicalSelection = null;
+  }
+  pendingSessionSlides = null;
+  slides.value = [];
   currentIndex.value = payload.slide_index ?? 0;
   progress.value = payload.progress ?? 0;
-  if (payload.title) title.value = payload.title;
+  title.value = payload.title || "";
 });
 
 // Scroll para o card ativo após qualquer mudança de currentIndex originada
@@ -306,7 +386,11 @@ watch(currentIndex, () => scrollToActive(), { flush: "post" });
 
 function goTo(index) {
   currentIndex.value = index;
-  $broadcast.send(BROADCAST_TYPE.GO_TO_SLIDE, { index, _command_ts: Date.now() });
+  $broadcast.send(BROADCAST_TYPE.GO_TO_SLIDE, {
+    index,
+    _command_ts: Date.now(),
+    ...(canonicalSelection ? { presentation_session: canonicalSelection.session } : {}),
+  });
 }
 
 function onKey(e) {
@@ -367,6 +451,7 @@ onMounted(() => {
   }
   // Solicita estado atual (caso a música já tenha aberto antes desta janela)
   $broadcast.send(BROADCAST_TYPE.REQUEST_SLIDE_STATE);
+  $broadcast.send(BROADCAST_TYPE.REQUEST_MUSIC_PRESENTATION_SNAPSHOT);
 });
 
 onBeforeUnmount(() => {

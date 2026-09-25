@@ -8,7 +8,7 @@ function fixture() {
   ], [0, 10, 20], "Song"));
 }
 
-describe("presentation memory transport used by the music shadow", () => {
+describe("presentation memory transport used by the music core", () => {
   it("recovers one cohesive snapshot after observer disconnect and missed updates", () => {
     const transport = fixture();
     let observed: MusicSnapshot | null = null;

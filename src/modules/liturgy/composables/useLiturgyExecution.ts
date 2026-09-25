@@ -7,7 +7,7 @@ import $path from "@/helpers/Path";
 import $broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useFileProjection } from "@/composables/useFileProjection";
-import { openFileProjectionWindows, openAnnouncementsWindow } from "@/helpers/ProjectionWindows";
+import { openAnnouncementsWindow } from "@/helpers/ProjectionWindows";
 import $appdata from "@/helpers/AppData";
 import $userdata from "@/helpers/UserData";
 import $idb from "@/helpers/IndexedDB";
@@ -470,15 +470,6 @@ export function useLiturgyExecution() {
     }
   }
 
-  function _persistFileProjection(payload: Record<string, unknown>): void {
-    try {
-      localStorage.setItem("lj_file_projection", JSON.stringify(payload));
-    } catch (e) {
-      reportExecutionError(e, "persist_file_projection");
-      console.error(e);
-    }
-  }
-
   function _resolveFileUrl(dir: string): string {
     if (!dir) return "";
     // blob:/data: usam UM único barra após o esquema — passam direto.
@@ -563,19 +554,16 @@ export function useLiturgyExecution() {
           : 0;
       const payload = {
         url,
-        type: kind,
+        type: kind as "image" | "pdf",
         title: item.item || "",
         fadeDuration: fadeDur,
         ...extraPayload,
       };
-      _persistFileProjection(payload);
-
-      await openFileProjectionWindows().catch((e: unknown) => {
+      await $media.projectFile(payload).catch((e: unknown) => {
         reportExecutionError(e, "open_file_projection", { kind });
         $alert.error(e as string);
         console.error(e);
       });
-      $broadcast.send(BROADCAST_TYPE.FILE_PROJECTION, payload);
     } else if (kind === "video") {
       const fadeDur =
         ($userdata.get(KEYS.OPTIONS.FILE_PROJECTION.FADE, true) as boolean) !== false
@@ -583,20 +571,15 @@ export function useLiturgyExecution() {
           : 0;
       const payload = {
         url,
-        type: "video",
+        type: "video" as const,
         title: item.item || "",
         fadeDuration: fadeDur,
         ...extraPayload,
       };
-      _persistFileProjection(payload);
-      await openFileProjectionWindows().catch((e: unknown) => {
+      await $media.projectFile(payload, url).catch((e: unknown) => {
         reportExecutionError(e, "open_file_projection", { kind });
         $alert.error(e as string);
         console.error(e);
-      });
-      $broadcast.send(BROADCAST_TYPE.FILE_PROJECTION, payload);
-      void $media.openAudio({ url, title: item.item || "", mediaType: "video" }).catch((error: unknown) => {
-        reportExecutionError(error, "open_video_file", { kind });
       });
     } else if (kind === "audio") {
       void $media.openAudio({ url, title: item.item || "", mediaType: "audio" }).catch((error: unknown) => {

@@ -1468,7 +1468,7 @@ ipcMain.handle("displays:setFeatureRole", (_event, feature, role) =>
 );
 
 /** Abre janela de projeção em um monitor específico */
-ipcMain.handle("windows:open", (_event, options) => {
+ipcMain.handle("windows:open", async (_event, options) => {
   const preloadPath = path.join(__dirname, "preload.cjs");
   const prodHtmlPath = path.join(paths.webBuild(), "index.html");
   // Todas as janelas Electron compartilham a mesma origem:
@@ -1484,13 +1484,14 @@ ipcMain.handle("windows:open", (_event, options) => {
   // "Opções do Desenvolvedor" (options.dev.devtools_projections).
   // null → deixa o windowFactory decidir (_isDevMode). true/false → override.
   const devToolsOpt = _userDataMain?.options?.dev?.devtools_projections;
-  const win = windowFactory.openOnMonitor({
+  const win = await windowFactory.openOnMonitor({
     ...options,
     preloadPath,
     devUrl,
     prodHtmlPath,
     devTools: devToolsOpt == null ? null : !!devToolsOpt,
   });
+  if (win?.refused) return { id: null, refused: win.refused };
   // `null` quando o windowFactory recusou abrir na tela do operador. O
   // renderer avisa o operador em vez de deixar o clique sem resposta.
   return win ? { id: win.id } : { id: null, refused: "operator-screen" };

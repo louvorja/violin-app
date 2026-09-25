@@ -332,7 +332,7 @@ import { LjButton, LjDialog, LjDivider, LjEmpty, LjIcon, LjInput, LjTabs } from 
 import $broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
-import { openFileProjectionWindows, closeProjectionWindows } from "@/helpers/ProjectionWindows";
+import { closeProjectionWindows } from "@/helpers/ProjectionWindows";
 import $media from "@/composables/useMedia";
 import $appdata from "@/helpers/AppData";
 import $userdata from "@/helpers/UserData";
@@ -1055,18 +1055,14 @@ async function playIndex(index: number): Promise<void> {
     });
   }
 
-  localStorage.setItem(KEYS.PROJECTION.LJ_FILE_PROJECTION, JSON.stringify(payload));
-
-  await openFileProjectionWindows();
-
-  $broadcast.send(BROADCAST_TYPE.FILE_PROJECTION, payload);
-
-  if (isVideo) {
-    await $media.openAudio({ url, title: item.name, mediaType: "video" });
-  } else {
-    $media.stop();
-    $appdata.set("modules.media.config.video_file", false);
-  }
+  if (
+    !(await $media.projectFile(
+      payload as Parameters<typeof $media.projectFile>[0],
+      isVideo ? url : undefined,
+      { stopExistingAudio: true }
+    ))
+  )
+    isPlaying.value = false;
 }
 
 async function togglePlay(): Promise<void> {

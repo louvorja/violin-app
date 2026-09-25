@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PROJECTION_TYPE, PROJECTION_URL } from "@/constants/Projection";
 import { KEYS } from "@/constants/UserDataKeys";
 
@@ -71,6 +71,8 @@ beforeEach(() => {
   };
   prefs = {};
 });
+
+afterEach(() => vi.useRealTimers());
 
 describe("openMediaWindow — a tabela de janelas por mídia", () => {
   it.each([
@@ -316,4 +318,70 @@ describe("as aberturas automáticas", () => {
     await automatic();
     expect(openWindow).not.toHaveBeenCalled();
   });
+});
+
+it("libera apenas janelas de arquivo e vídeo antes de os slides assumirem o palco", async () => {
+  await windows.closeFileProjectionWindows();
+  expect(closeWindow.mock.calls.map(([feature]) => feature)).toEqual([
+    FILE, FILE_RETURN, ONLINE_VIDEO, ONLINE_VIDEO_RETURN,
+  ]);
+  expect(closeWindow).not.toHaveBeenCalledWith(MUSIC);
+  expect(closeWindow).not.toHaveBeenCalledWith(OPERATOR);
+});
+
+it("ao entrar vídeo, fecha somente as janelas de música e retorno", async () => {
+  await windows.closeMusicProjectionWindows();
+  expect(closeWindow.mock.calls.map(([feature]) => feature)).toEqual([MUSIC, RETURN]);
+  expect(closeWindow).not.toHaveBeenCalledWith(FILE);
+  expect(closeWindow).not.toHaveBeenCalledWith(OPERATOR);
+});
+
+it.each([
+  ["música", () => windows.closeMusicProjectionWindows(), "music", MUSIC],
+  ["arquivo", () => windows.closeFileProjectionWindows(), "file", FILE],
+] as const)("%s só reabre a feature depois que o close nativo foi confirmado", async (_name, closeStage, media, feature) => {
+  const closing = (() => {
+    let resolve!: () => void;
+    const promise = new Promise<void>((done) => { resolve = done; });
+    return { promise, resolve };
+  })();
+  closeWindow.mockImplementationOnce(() => closing.promise);
+
+  const close = closeStage();
+  await vi.waitFor(() => expect(closeWindow).toHaveBeenCalled());
+  const open = windows.openMediaWindow("projection", media);
+  await Promise.resolve();
+  expect(openWindow).not.toHaveBeenCalled();
+
+  closing.resolve();
+  await Promise.all([close, open]);
+  expect(openWindow).toHaveBeenCalledWith(expect.objectContaining({ feature }));
+});
+
+it("vídeo espera uma janela MUSIC já abrindo antes de fechá-la", async () => {
+  let finishOpen!: () => void;
+  openWindow.mockImplementationOnce(() => new Promise<void>((resolve) => { finishOpen = resolve; }));
+  const music = windows.openProjectionWindows();
+  await vi.waitFor(() => expect(openWindow).toHaveBeenCalledOnce());
+  const closeMusic = windows.closeMusicProjectionWindows();
+  expect(closeWindow).not.toHaveBeenCalled();
+  finishOpen();
+  await Promise.all([music, closeMusic]);
+  expect(closeWindow.mock.calls.map(([feature]) => feature)).toEqual([MUSIC, RETURN]);
+});
+
+it("MUSIC que termina de abrir após o limite é fechada sem bloquear o novo vídeo", async () => {
+  let finishOpen!: () => void;
+  openWindow.mockImplementationOnce(() => new Promise<void>((resolve) => { finishOpen = resolve; }));
+  const music = windows.openProjectionWindows();
+  await vi.waitFor(() => expect(openWindow).toHaveBeenCalledOnce());
+  vi.useFakeTimers();
+  const closeMusic = windows.closeMusicProjectionWindows();
+  await vi.advanceTimersByTimeAsync(2500);
+  await closeMusic;
+  expect(closeWindow).toHaveBeenCalledTimes(2);
+
+  finishOpen();
+  await music;
+  await vi.waitFor(() => expect(closeWindow).toHaveBeenCalledTimes(4));
 });

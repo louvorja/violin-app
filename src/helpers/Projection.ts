@@ -29,6 +29,8 @@ import $snackbar from "@/helpers/Snackbar";
 import { i18nAtual } from "@/i18n";
 import Telemetry from "@/helpers/Telemetry";
 
+const _reportedCloseTimeouts = new Set<string>();
+
 /**
  * Fallback hierárquico — quando uma feature não tem monitor explicitamente
  * escolhido, herda do grupo default:
@@ -374,10 +376,17 @@ export async function open(opts: OpenOptions): Promise<void> {
       // O main recusa abrir na tela do operador quando o monitor do papel não
       // está conectado. Sem aviso o clique ficaria sem resposta nenhuma.
       if (r && r.refused) {
-        const t = i18nAtual()?.global?.t;
-        if (t) $snackbar.warning(t("options.monitors.projection_withheld"));
+        if (r.refused === "operator-screen") {
+          const t = i18nAtual()?.global?.t;
+          if (t) $snackbar.warning(t("options.monitors.projection_withheld"));
+        } else {
+          console.warn(`[Projection] Abertura recusada para ${opts.feature}: ${r.refused}`);
+        }
       }
-      report(r?.refused ? "refused" : "opened", { window_id: r?.id ?? null });
+      report(r?.refused ? "refused" : "opened", {
+        window_id: r?.id ?? null,
+        refusal_reason: r?.refused ?? null,
+      });
       return;
     } catch (e) {
       console.warn("[Projection] windows.open falhou, fallback web:", e);
@@ -395,7 +404,11 @@ export async function close(feature: string): Promise<void> {
   const api = await _getWindowsApi();
   if (api?.close) {
     try {
-      await api.close(feature);
+      const closed = await api.close(feature);
+      if (closed === false && !_reportedCloseTimeouts.has(feature)) {
+        _reportedCloseTimeouts.add(feature);
+        Telemetry.track("projection_window_close_unconfirmed", { feature });
+      }
     } catch {
       /* noop */
     }

@@ -1,9 +1,9 @@
 /**
- * Latência cross-window slide_change: GO_TO_SLIDE → useSlides → Projection
+ * Latência cross-window do snapshot canônico: GO_TO_SLIDE → Core → Projection
  *
  * Fluxo medido:
- *   projPage → GO_TO_SLIDE → mainPage/useSlides → SLIDE_CHANGE (com _ts)
- *     → projPage/useProjectionState → Date.now() - _ts = latência
+ *   projPage → GO_TO_SLIDE(session) → mainPage/useSlides → MUSIC_PRESENTATION_SNAPSHOT
+ *     → projPage/useProjectionState → Date.now() - emittedAt = latência
  *
  * Por que não precisa de UI:
  *   useMedia.ts importa useSlides() a nível de módulo.
@@ -18,7 +18,7 @@ import music1 from "./fixtures/music_1.json";
 
 const N_ITERATIONS = 100;
 
-test("latência slide_change cross-window p95 <50ms", async ({ browser }) => {
+test("latência do snapshot canônico cross-window p95 <50ms", async ({ browser }) => {
   test.setTimeout(60_000);
 
   const context = await browser.newContext();
@@ -33,9 +33,19 @@ test("latência slide_change cross-window p95 <50ms", async ({ browser }) => {
   // Inicializa o array de latência antes de qualquer script da página
   await context.addInitScript(() => {
     window.__ljLatencyLog = [];
+    window.__ljCanonicalSession = null;
+    const channel = new BroadcastChannel("louvorja");
+    channel.addEventListener("message", (event) => {
+      if (
+        event.data?.type === "music_presentation_snapshot" &&
+        event.data.payload?.snapshot?.active
+      ) {
+        window.__ljCanonicalSession = event.data.payload.snapshot.sessionId;
+      }
+    });
   });
 
-  // Abre projeção primeiro: listener SLIDE_CHANGE ativo antes dos eventos
+  // Abre projeção primeiro: receptor canônico ativo antes dos eventos.
   const projPage = await context.newPage();
   await projPage.goto("/projection");
 
@@ -57,12 +67,14 @@ test("latência slide_change cross-window p95 <50ms", async ({ browser }) => {
   await musicRow.hover();
   await musicRow.locator('[data-testid="mmt-btn-no-audio"]').click();
 
-  // Aguarda projPage estar montada e com o listener SLIDE_CHANGE pronto
+  // Aguarda projPage estar montada e com o snapshot canônico pronto.
   await projPage.locator("body").waitFor({ state: "attached", timeout: 10_000 });
   await projPage.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
   await expect(projPage.locator('[data-testid="slide-content"]')).toContainText("Aleluia", {
     timeout: 10_000,
   });
+  const sessionId = await projPage.evaluate(() => window.__ljCanonicalSession);
+  expect(sessionId).toEqual(expect.any(String));
 
   // Garante que o log começa vazio
   await projPage.evaluate(() => {
@@ -70,18 +82,27 @@ test("latência slide_change cross-window p95 <50ms", async ({ browser }) => {
   });
 
   // Executa N_ITERATIONS navegações:
-  //   projPage envia GO_TO_SLIDE → mainPage/useSlides processa → emite SLIDE_CHANGE com _ts
+  //   projPage envia GO_TO_SLIDE → mainPage/useSlides publica o snapshot canônico
   //   projPage/useProjectionState recebe → registra latência em window.__ljLatencyLog
   for (let i = 0; i < N_ITERATIONS; i++) {
     // Alterna entre slide 0 e 1 para evitar otimização de "mesma posição"
     const idx = i % 2;
 
     // Enviado de projPage (janela diferente da mainPage) → mainPage recebe
-    await projPage.evaluate((index) => {
-      const bc = new BroadcastChannel("louvorja");
-      bc.postMessage({ type: "go_to_slide", payload: { index } });
-      bc.close();
-    }, idx);
+    await projPage.evaluate(
+      ({ index, presentationSession }) => {
+        const bc = new BroadcastChannel("louvorja");
+        bc.postMessage({
+          type: "go_to_slide",
+          payload: {
+            index,
+            presentation_session: presentationSession,
+          },
+        });
+        bc.close();
+      },
+      { index: idx, presentationSession: sessionId }
+    );
 
     // Aguarda a medição desta iteração
     await projPage.waitForFunction(
@@ -97,7 +118,7 @@ test("latência slide_change cross-window p95 <50ms", async ({ browser }) => {
   if (measurements.length === 0) {
     throw new Error(
       "Nenhuma medição capturada. Verifique:\n" +
-        "  1. broadcastSlide() em useSlides.ts emite _ts: Date.now()\n" +
+        "  1. broadcastSlide() em useSlides.ts emite emittedAt: Date.now()\n" +
         "  2. useProjectionState.ts registra em window.__ljLatencyLog\n" +
         "  3. import.meta.env.DEV é true no Vite dev server"
     );
@@ -110,7 +131,7 @@ test("latência slide_change cross-window p95 <50ms", async ({ browser }) => {
   const p99 = sorted[sorted.length - 1]; // pior caso no conjunto
 
   console.log(
-    `\nLatência slide_change cross-window (N=${measurements.length}):\n` +
+    `\nLatência snapshot canônico cross-window (N=${measurements.length}):\n` +
       `  p50 = ${p50}ms\n` +
       `  p95 = ${p95}ms\n` +
       `  p99/max = ${p99}ms`

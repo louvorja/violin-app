@@ -25,12 +25,16 @@ import Slide from "@/components/Slide.vue";
 import OverlayRenderer from "@/components/OverlayRenderer.vue";
 import LibrasOverlay from "@/views/LibrasOverlay.vue";
 
-const { slide, progress, title, slideIndex, totalSlides } = useProjectionState();
+const { slide, progress, title, slideIndex, totalSlides, sessionId } = useProjectionState();
 
 function _goTo(index) {
   if (totalSlides.value <= 0) return;
   const clamped = Math.max(0, Math.min(totalSlides.value - 1, index));
-  $broadcast.send(BROADCAST_TYPE.GO_TO_SLIDE, { index: clamped, _command_ts: Date.now() });
+  $broadcast.send(BROADCAST_TYPE.GO_TO_SLIDE, {
+    index: clamped,
+    _command_ts: Date.now(),
+    ...(sessionId.value ? { presentation_session: sessionId.value } : {}),
+  });
 }
 
 function _onKey(e) {

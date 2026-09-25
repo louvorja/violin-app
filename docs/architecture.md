@@ -19,9 +19,10 @@ A aplicação é composta por:
 - Sistema de Internacionalização (Vue I18n 11)
 - IndexedDB unificado (`louvorja`) para dados offline
 
-Para slides normais de música, a primeira fatia de um Presentation Core puro
-opera em shadow mode, sem controlar a tela. Sessão, revisão, recuperação e
-comparação entre janelas estão descritas em [`presentation-core.md`](presentation-core.md).
+Para slides normais de música, o Presentation Core puro é a fonte canônica da
+seleção projetada, com transporte validado por Broadcast e SSE, recuperação por
+snapshot e comandos entre janelas correlacionados por sessão. Contrato e limites em
+[`presentation-core.md`](presentation-core.md).
 
 ---
 
@@ -564,7 +565,9 @@ Canal único `BroadcastChannel("louvorja")`. Duas finalidades:
 
 | Tipo                      | Emissor                 | Receptor                                    |
 |---------------------------|-------------------------|---------------------------------------------|
-| `slide_change`            | useSlides               | Projection, ProjectionReturn, Obs, Operator |
+| `music_presentation_snapshot` | useSlides            | Projection, Return, OBS, Operator, Remote, Libras |
+| `slide_change`            | slide_editor            | Projection, ProjectionReturn, Obs, Operator |
+| `slides_data`             | useMedia/useSlides      | Operator, RemoteControl                     |
 | `bible_verse`             | bible/Index.vue         | ObsBible, ProjectionBible                   |
 | `media_close`             | useMedia.close()        | Projection, Obs, FileProjection             |
 | `file_projection`         | liturgy / media_library | FileProjection, FileProjectionReturn        |

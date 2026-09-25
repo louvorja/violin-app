@@ -3,10 +3,11 @@ import $broadcast from "@/helpers/Broadcast";
 import type { AudioPlayback } from "@/composables/useAudioPlayback";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import Telemetry, { isProjectionMilestone } from "@/helpers/Telemetry";
-import { MusicPresentationCore, musicSnapshotDifferences, type MusicOperation, type MusicSnapshot } from "@/presentation/MusicPresentationCore";
+import { MusicPresentationCore, type MusicOperation, type MusicSnapshot } from "@/presentation/MusicPresentationCore";
 import { createMemoryPresentationTransport, type PresentationTransport } from "@/presentation/PresentationTransport";
-import { readMusicShadowPacket } from "@/presentation/MusicShadowReceiver";
-import { createMusicShadowSessionFactory } from "@/helpers/MusicShadowSession";
+import { createBroadcastPresentationTransport } from "@/presentation/BroadcastPresentationTransport";
+import { readMusicPresentationPacket, type MusicPresentationPacket } from "@/presentation/MusicPresentationPacket";
+import { createMusicPresentationSessionFactory } from "@/helpers/MusicPresentationSession";
 
 export interface Slide {
   lyric?: string;
@@ -40,8 +41,7 @@ interface SlidesInstance {
   goFirst: () => void;
   goLast: () => void;
   reset: () => void;
-  /** Diagnostic only: never used to render or control the legacy presentation. */
-  presentationShadow: () => { snapshot: MusicSnapshot | null; differences: readonly string[] };
+  presentationSnapshot: () => MusicSnapshot | null;
 }
 
 let _shared: SlidesInstance | null = null;
@@ -56,49 +56,98 @@ function _create(): SlidesInstance {
   let _lastBroadcastIndex = -1;
   let _lastProgressSendAt = 0;
   let _lastSlideProgressSent = -1;
+  let _nextPublishRetryAt = 0;
+  let _publishRetryTimer: ReturnType<typeof setTimeout> | null = null;
+  let _publishRetryAttempts = 0;
   let _playbackId: string | undefined;
   let _presentationRevision = 0;
   let _pendingStateCommitAt = 0;
   let _pendingCommand: { targetIndex: number; at: number } | null = null;
   let _stopAudioWatch: (() => void) | null = null;
   let _audio: AudioPlayback | null = null;
-  let _shadow: PresentationTransport | null = null;
-  const nextShadowSession = createMusicShadowSessionFactory();
-  let _shadowCommand = 0;
-  let _shadowDifferences: string[] = [];
-  let _shadowReported = false;
+  let _core: PresentationTransport | null = null;
+  let _lastPresentationPacket: MusicPresentationPacket | null = null;
+  const _visualTransport = createBroadcastPresentationTransport($broadcast, {
+    currentSnapshot: () => _lastPresentationPacket,
+  });
+  const nextCoreSession = createMusicPresentationSessionFactory();
+  let _coreCommand = 0;
+  let _publishFailureReported = false;
+  let _coreFailureReported = false;
 
-  function compareShadow(snapshot: MusicSnapshot): void {
-    if (!_shadow) return;
-    _shadowDifferences = musicSnapshotDifferences(snapshot, {
-      title: title.value, slideIndex: slideIndex.value, totalSlides: slides.value.length,
-      slide: slides.value[slideIndex.value] ?? null,
-      nextSlide: slides.value[slideIndex.value + 1] ?? null,
-    });
-    if (_shadowDifferences.length && !_shadowReported) {
-      _shadowReported = true;
-      // One metadata-only incident per session, never one event per command.
-      Telemetry.track("presentation_shadow_divergence", { fields: _shadowDifferences.join(",") });
+  function reportCoreFailure(error: unknown, phase: "initialize" | "command"): void {
+    if (_coreFailureReported) return;
+    _coreFailureReported = true;
+    Telemetry.captureException(error, { source: "presentation_core", phase });
+    Telemetry.track("presentation_core_failed", { phase });
+  }
+
+  function cancelPublishRetry(): void {
+    if (_publishRetryTimer) clearTimeout(_publishRetryTimer);
+    _publishRetryTimer = null;
+    _publishRetryAttempts = 0;
+  }
+
+  function schedulePublishRetry(sessionId: string): void {
+    if (_publishRetryTimer || _publishRetryAttempts >= 2) return;
+    _publishRetryAttempts++;
+    _publishRetryTimer = setTimeout(() => {
+      _publishRetryTimer = null;
+      if (_core?.requestSnapshot().sessionId !== sessionId || !_core.requestSnapshot().active) return;
+      broadcastSlide();
+    }, 1_000);
+  }
+
+  function scheduleCloseRetry(sessionId: string): void {
+    if (_publishRetryTimer || _publishRetryAttempts >= 2) return;
+    _publishRetryAttempts++;
+    _publishRetryTimer = setTimeout(() => {
+      _publishRetryTimer = null;
+      const current = _core?.requestSnapshot();
+      if (!current || current.sessionId !== sessionId || current.active) return;
+      const failure = publishVisualSnapshot();
+      if (failure) scheduleCloseRetry(sessionId);
+      else cancelPublishRetry();
+    }, 1_000);
+  }
+
+  function coreCommand(operation: MusicOperation): MusicSnapshot | null {
+    try {
+      if (!_core) return null;
+      _core.dispatch({ ...operation, sessionId: _core.requestSnapshot().sessionId, commandId: ++_coreCommand });
+      return _core.requestSnapshot();
+    } catch (error) {
+      // A failed core command must not silently select via the old renderer path.
+      _core = null;
+      reportCoreFailure(error, "command");
+      return null;
     }
   }
 
-  function shadowCommand(operation: MusicOperation): void {
+  function publishVisualSnapshot(timing: { sentAt: number; commandAt?: number; commitAt?: number } = { sentAt: Date.now() }): string | null {
+    if (!_core) return "core_unavailable";
     try {
-      _shadow?.dispatch({ ...operation, sessionId: _shadow.requestSnapshot().sessionId, commandId: ++_shadowCommand });
-    } catch {
-      // Shadow failure must never interrupt the authoritative legacy path.
-      _shadow = null;
-    }
-  }
-
-  function publishShadow(): void {
-    try {
-      if (!_shadow) return;
-      const packet = readMusicShadowPacket({
-        version: 1, legacyRevision: _presentationRevision, snapshot: _shadow.requestSnapshot(),
+      const boundedPercent = (value: number): number => Number.isFinite(value)
+        ? Math.max(0, Math.min(100, value)) : 0;
+      const packet = readMusicPresentationPacket({
+        schema: 1,
+        selectionRevision: _presentationRevision,
+        playbackId: _playbackId,
+        progress: boundedPercent(_audio?.progress.value ?? 0),
+        slideProgress: boundedPercent(slideProgress.value),
+        emittedAt: timing.sentAt,
+        commandAt: timing.commandAt,
+        commitAt: timing.commitAt,
+        snapshot: _core.requestSnapshot(),
       });
-      if (packet) $broadcast.send(BROADCAST_TYPE.MUSIC_SHADOW_SNAPSHOT, packet);
-    } catch { /* diagnostics must not block legacy */ }
+      if (!packet) return "invalid_packet";
+      _lastPresentationPacket = packet;
+      const delivery = _visualTransport.publish(packet);
+      return delivery === "sent" ? null : delivery;
+    } catch {
+      // Invalid snapshots are never sent to a visual renderer.
+      return "publish_exception";
+    }
   }
 
   const slide      = computed<Slide | null>(() => slides.value[slideIndex.value] ?? null);
@@ -114,20 +163,21 @@ function _create(): SlidesInstance {
       // capa a cada avanço, o Libras reiniciava a animação do avatar e, quando
       // o evento vazio chegava por último, a projeção ficava em branco.
       if (!slides.value.length) return;
-      const request = msg.payload as { index?: number; _command_ts?: number };
-      goToSlide(request?.index ?? 0, request?._command_ts);
-    } else if (msg.type === BROADCAST_TYPE.REQUEST_MUSIC_SHADOW_SNAPSHOT) {
-      publishShadow();
+      const request = msg.payload as { index?: unknown; presentation_session?: unknown; _command_ts?: number } | null;
+      const currentSession = _core?.requestSnapshot().sessionId;
+      if (!currentSession || request?.presentation_session !== currentSession ||
+          typeof request.index !== "number" || !Number.isSafeInteger(request.index)) return;
+      goToSlide(request.index, request._command_ts);
     } else if (msg.type === BROADCAST_TYPE.REQUEST_SLIDE_STATE) {
-      // Janela secundária pediu o estado atual — reemite SLIDES_DATA (lista completa)
-      // e SLIDE_CHANGE (índice atual) para que ela possa renderizar sem esperar
-      // a próxima troca de slide.
+      // Janela secundária pediu o estado atual: lista completa para Operator e
+      // controle remoto, mais snapshot canônico para a projeção visual.
       if (slides.value.length > 0) {
         $broadcast.send(BROADCAST_TYPE.SLIDES_DATA, {
           slides:      slides.value.map((s) => toRaw(s)),
           title:       title.value,
           slide_index: slideIndex.value,
           playback_id: _playbackId,
+          presentation_session: _core?.requestSnapshot().sessionId,
         });
         broadcastSlide();
       }
@@ -135,6 +185,8 @@ function _create(): SlidesInstance {
   });
 
   function setSlides(newSlides: Slide[], newTimes: number[], newTitle: string, playbackId?: string): void {
+    _lastPresentationPacket = null;
+    cancelPublishRetry();
     slides.value        = newSlides ?? [];
     times.value         = newTimes ?? [];
     title.value         = newTitle ?? "";
@@ -145,18 +197,18 @@ function _create(): SlidesInstance {
     _lastBroadcastIndex = -1;
     _lastProgressSendAt = 0;
     _lastSlideProgressSent = -1;
+    _nextPublishRetryAt = 0;
     _pendingCommand = null;
-    _shadowCommand = 0;
-    _shadowDifferences = [];
-    _shadowReported = false;
+    _coreCommand = 0;
+    _publishFailureReported = false;
+    _coreFailureReported = false;
     try {
-      _shadow = createMemoryPresentationTransport(new MusicPresentationCore(
-        nextShadowSession(), newSlides ?? [], newTimes ?? [], newTitle ?? ""
+      _core = createMemoryPresentationTransport(new MusicPresentationCore(
+        nextCoreSession(), newSlides ?? [], newTimes ?? [], newTitle ?? ""
       ));
-      _shadow.subscribe(compareShadow);
-      compareShadow(_shadow.requestSnapshot());
-    } catch {
-      _shadow = null;
+    } catch (error) {
+      _core = null;
+      reportCoreFailure(error, "initialize");
     }
   }
 
@@ -169,7 +221,7 @@ function _create(): SlidesInstance {
   // se preserva é o slide, não o instante do relógio.
   function setTimes(newTimes: number[]): void {
     times.value = newTimes ?? [];
-    shadowCommand({ type: "times", times: times.value });
+    coreCommand({ type: "times", times: times.value });
   }
 
   /** Instante, na faixa vigente, do ponto `fraction` (0-1) dentro do slide `index`. */
@@ -181,6 +233,12 @@ function _create(): SlidesInstance {
   }
 
   function broadcastSlide(): void {
+    const canonical = _core?.requestSnapshot();
+    if (!canonical?.active) return;
+    if (canonical?.active && canonical.slideIndex !== slideIndex.value) {
+      // The reducer, not the compatibility ref, owns selection.
+      slideIndex.value = canonical.slideIndex;
+    }
     const idx = slideIndex.value;
     const sentAt = Date.now();
     const commitAt = _pendingStateCommitAt > 0 && _pendingStateCommitAt <= sentAt &&
@@ -192,26 +250,20 @@ function _create(): SlidesInstance {
       : undefined;
     if (commandAt !== undefined) _pendingCommand = null;
     const presentationRevision = ++_presentationRevision;
-    $broadcast.send(BROADCAST_TYPE.SLIDE_CHANGE, {
-      slide_index:  idx,
-      slide:        toRaw(slide.value),
-      next_slide:   toRaw(nextSlide.value),
-      title:        title.value,
-      progress:     _audio?.progress.value ?? 0,
-      total_slides: totalSlides.value,
-      playback_id: _playbackId,
-      presentation_revision: presentationRevision,
-      presentation_session: _shadow?.requestSnapshot().sessionId,
-      // Preserva o início do comando mesmo quando um seek de áudio só publica
-      // a troca depois que o relógio do player avança.
-      _command_ts: commandAt,
-      // Estado legado já foi aplicado aos refs antes de publicar. Replays sem
-      // commit novo não recebem este marco.
-      _commit_ts: commitAt,
-      // Permite medir a latência real entre a janela do operador e as janelas
-      // auxiliares sem enviar o conteúdo da letra.
-      _ts: sentAt,
-    });
+    const publishFailure = publishVisualSnapshot({ sentAt, commandAt, commitAt });
+    if (publishFailure) {
+      _nextPublishRetryAt = sentAt + 1_000;
+      if (!_publishFailureReported) {
+        _publishFailureReported = true;
+        Telemetry.track("presentation_snapshot_publish_failed", { reason: publishFailure });
+      }
+      const sessionId = canonical?.sessionId;
+      if (sessionId) schedulePublishRetry(sessionId);
+      return;
+    }
+    cancelPublishRetry();
+    _lastBroadcastIndex = idx;
+    _nextPublishRetryAt = 0;
 
     // Também reenviamos o progresso do SLIDE atual (0-100) para janelas
     // de retorno (que não têm acesso direto ao áudio).
@@ -221,7 +273,6 @@ function _create(): SlidesInstance {
       playback_id: _playbackId,
       presentation_revision: presentationRevision,
     });
-    publishShadow();
     // Telemetria não participa do caminho de publicação do slide.
     if (isProjectionMilestone(idx, totalSlides.value, !!slide.value)) {
       Telemetry.track("projection_slide_broadcast", {
@@ -248,9 +299,10 @@ function _create(): SlidesInstance {
     if (_audio && _audio.duration.value > 0 && times.value.length > 0) {
       _audio.seekTo(times.value[idx] ?? 0);
     } else {
-      slideIndex.value = idx;
+      const canonical = coreCommand({ type: "select", index });
+      if (!canonical?.active) return;
+      slideIndex.value = canonical.slideIndex;
       _pendingStateCommitAt = Date.now();
-      shadowCommand({ type: "select", index });
       broadcastSlide();
     }
   }
@@ -274,7 +326,9 @@ function _create(): SlidesInstance {
         const d  = audioPlayback.duration.value;
         if (!ts?.length) return;
 
-        const si    = Math.max(0, ts.filter((t) => t <= ct).length - 1);
+        const canonical = coreCommand({ type: "clock", position: ct });
+        if (!canonical?.active) return;
+        const si = canonical.slideIndex;
         const start = ts[si] ?? 0;
         const end   = ts[si + 1] ?? d;
         const spRaw = end > start ? ((ct - start) / (end - start)) * 100 : 0;
@@ -299,12 +353,10 @@ function _create(): SlidesInstance {
           });
         }
 
-        if (si !== _lastBroadcastIndex) {
-          _lastBroadcastIndex = si;
+        if (si !== _lastBroadcastIndex && now >= _nextPublishRetryAt) {
           _pendingStateCommitAt = now;
           // Audio commands commit only when the actual player clock advances.
           // The core independently derives the index from the same time input.
-          shadowCommand({ type: "clock", position: ct });
           broadcastSlide();
         }
       }
@@ -321,6 +373,7 @@ function _create(): SlidesInstance {
 
   function reset(): void {
     unbindAudio();
+    cancelPublishRetry();
     slides.value        = [];
     slideIndex.value    = 0;
     times.value         = [];
@@ -332,8 +385,18 @@ function _create(): SlidesInstance {
     _lastBroadcastIndex = -1;
     _lastProgressSendAt = 0;
     _lastSlideProgressSent = -1;
-    shadowCommand({ type: "close" });
-    publishShadow();
+    _nextPublishRetryAt = 0;
+    const closed = _core?.requestSnapshot().active ? coreCommand({ type: "close" }) : null;
+    if (closed && !closed.active) {
+      const failure = publishVisualSnapshot();
+      if (failure) {
+        if (!_publishFailureReported) {
+          _publishFailureReported = true;
+          Telemetry.track("presentation_snapshot_publish_failed", { reason: failure, phase: "close" });
+        }
+        scheduleCloseRetry(closed.sessionId);
+      }
+    }
   }
 
   return {
@@ -341,7 +404,7 @@ function _create(): SlidesInstance {
     slide, nextSlide, totalSlides,
     setSlides, setPlaybackId, setTimes, timeForPosition, bindAudio, unbindAudio, broadcastSlide,
     goToSlide, goPrev, goNext, goFirst, goLast, reset,
-    presentationShadow: () => ({ snapshot: _shadow?.requestSnapshot() ?? null, differences: [..._shadowDifferences] }),
+    presentationSnapshot: () => _core?.requestSnapshot() ?? null,
   };
 }
 

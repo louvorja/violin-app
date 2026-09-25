@@ -211,6 +211,7 @@ import { useI18n } from "vue-i18n";
 import { useRoute } from "vue-router";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
+import { readMusicPresentationPacket } from "@/presentation/MusicPresentationPacket";
 import { isTokenInvalid, apiFetch, postApi } from "@/helpers/ApiClient";
 import { LjButton, LjDialog, LjDivider, LjIcon, LjSpinner, LjTabs, LjToast } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
@@ -314,16 +315,78 @@ watch(tab, (newTab) => {
 const slides = ref([]);
 const currentSlideIndex = ref(0);
 const currentTitle = ref("");
+let canonicalSelection = null;
+let pendingSessionSlides = null;
+const retiredCanonicalSessions = new Set();
+function retireCanonical(session) {
+  retiredCanonicalSessions.delete(session);
+  retiredCanonicalSessions.add(session);
+  if (retiredCanonicalSessions.size > 32)
+    retiredCanonicalSessions.delete(retiredCanonicalSessions.values().next().value);
+}
 
 useBroadcastListener(BROADCAST_TYPE.SLIDES_DATA, (payload) => {
+  const session = payload?.presentation_session;
+  if (session !== undefined && (typeof session !== "string" || !session || session.length > 128))
+    return;
+  if (session && retiredCanonicalSessions.has(session)) return;
+  if (session && canonicalSelection?.session !== session) {
+    pendingSessionSlides = { session, payload };
+    return;
+  }
   slides.value = payload.slides || [];
-  currentTitle.value = payload.title || "";
-  currentSlideIndex.value = payload.slide_index ?? 0;
+  if (!canonicalSelection) {
+    currentTitle.value = payload.title || "";
+    currentSlideIndex.value = payload.slide_index ?? 0;
+  }
+});
+
+useBroadcastListener(BROADCAST_TYPE.MUSIC_PRESENTATION_SNAPSHOT, (payload) => {
+  const packet = readMusicPresentationPacket(payload);
+  if (!packet) return;
+  const { sessionId, revision, active, slideIndex, title } = packet.snapshot;
+  const { selectionRevision } = packet;
+  if (retiredCanonicalSessions.has(sessionId)) return;
+  if (canonicalSelection?.session === sessionId) {
+    if (
+      revision < canonicalSelection.revision ||
+      selectionRevision < canonicalSelection.selectionRevision ||
+      (revision === canonicalSelection.revision &&
+        selectionRevision === canonicalSelection.selectionRevision)
+    )
+      return;
+  } else if (canonicalSelection) {
+    retireCanonical(canonicalSelection.session);
+  }
+  canonicalSelection = { session: sessionId, revision, selectionRevision };
+  if (active) {
+    if (pendingSessionSlides?.session === sessionId)
+      slides.value = pendingSessionSlides.payload.slides || [];
+    pendingSessionSlides = null;
+    currentSlideIndex.value = slideIndex;
+    currentTitle.value = title;
+  } else {
+    pendingSessionSlides = null;
+    slides.value = [];
+    currentSlideIndex.value = 0;
+    currentTitle.value = "";
+    retireCanonical(sessionId);
+    canonicalSelection = null;
+  }
 });
 
 useBroadcastListener(BROADCAST_TYPE.SLIDE_CHANGE, (payload) => {
+  // The editor has no presentation session; music selection comes from the packet.
+  if (payload?.presentation_session !== undefined || payload?.presentation_revision !== undefined)
+    return;
+  if (canonicalSelection) {
+    retireCanonical(canonicalSelection.session);
+    canonicalSelection = null;
+  }
+  pendingSessionSlides = null;
+  slides.value = [];
   currentSlideIndex.value = payload.slide_index ?? 0;
-  if (payload.title) currentTitle.value = payload.title;
+  currentTitle.value = payload.title || "";
 });
 
 useBroadcastListener(BROADCAST_TYPE.BIBLE_VERSE, async (payload) => {
@@ -432,7 +495,16 @@ async function closeBible() {
 }
 async function closeProjection() {
   try {
-    await postApi("/api/song-slides", { action: "close" }, token.value);
+    await postApi(
+      "/api/song-slides",
+      {
+        action: "close",
+        ...(canonicalSelection?.session
+          ? { presentation_session: canonicalSelection.session }
+          : {}),
+      },
+      token.value
+    );
     activeBible.value.active = false;
     activeBible.value.chapterVerses = [];
     showSnackbar(t("remote_control.bible.projection_closed"));
@@ -455,14 +527,25 @@ function prevSlide() {
 
 function goToSlide(index) {
   currentSlideIndex.value = index;
-  postApi("/api/song-slides", { action: "go-to-slide", index }, token.value).catch(() =>
+  const command = { action: "go-to-slide", index };
+  if (canonicalSelection?.session) command.presentation_session = canonicalSelection.session;
+  postApi("/api/song-slides", command, token.value).catch(() =>
     showSnackbar(t("remote_control.slides.error_change"), "error")
   );
 }
 
 async function closeMedia() {
   try {
-    await postApi("/api/song-slides", { action: "close" }, token.value);
+    await postApi(
+      "/api/song-slides",
+      {
+        action: "close",
+        ...(canonicalSelection?.session
+          ? { presentation_session: canonicalSelection.session }
+          : {}),
+      },
+      token.value
+    );
     slides.value = [];
     currentTitle.value = "";
     showSnackbar(t("remote_control.slides.projection_closed"));

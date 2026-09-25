@@ -27,6 +27,7 @@
  */
 import { BROADCAST_TYPE, BroadcastMessage } from "@/helpers/BroadcastTypes";
 import Platform from "@/helpers/Platform";
+import { readMusicPresentationPacket } from "@/presentation/MusicPresentationPacket";
 
 const CHANNEL_NAME = "louvorja";
 
@@ -38,6 +39,7 @@ const CHANNEL_NAME = "louvorja";
  */
 const STATEFUL_TYPES = new Set<string>([
   BROADCAST_TYPE.SLIDE_CHANGE,
+  BROADCAST_TYPE.MUSIC_PRESENTATION_SNAPSHOT,
   BROADCAST_TYPE.SLIDE_PROGRESS,
   BROADCAST_TYPE.SLIDES_DATA,
   BROADCAST_TYPE.MEDIA_CLOSE,
@@ -63,6 +65,7 @@ const STATEFUL_TYPES = new Set<string>([
  */
 const TRANSMISSION_TYPES = new Set<string>([
   BROADCAST_TYPE.SLIDE_CHANGE,
+  BROADCAST_TYPE.MUSIC_PRESENTATION_SNAPSHOT,
   BROADCAST_TYPE.SLIDES_DATA,
   BROADCAST_TYPE.MEDIA_CLOSE,
   BROADCAST_TYPE.BIBLE_VERSE,
@@ -81,6 +84,12 @@ export interface BroadcastListenOptions {
   replay?: boolean;
 }
 
+/** Synchronous enqueue status, not an acknowledgement that a remote frame painted. */
+export interface BroadcastSendResult {
+  crossWindow: boolean;
+  remoteRelay: "sent" | "failed" | "unavailable" | "not_required";
+}
+
 function _cacheKey(msg: BroadcastMessage): string {
   return (msg.payload as Record<string, unknown> | undefined)?.module
     ? String((msg.payload as Record<string, unknown>).module)
@@ -94,11 +103,35 @@ function _deliverLocal(msg: BroadcastMessage): void {
     // receber replay da música anterior. O evento em si é transitório.
     if (msg.type === "media_close") {
       _lastByType.delete("slide_change");
+      _lastByType.delete(BROADCAST_TYPE.MUSIC_PRESENTATION_SNAPSHOT);
       _lastByType.delete("slide_progress");
       _lastByType.delete("slides_data");
       _lastByType.delete("file_projection");
       _lastByType.delete("online_video_projection");
       _lastByType.delete("background_projection");
+    } else if (msg.type === BROADCAST_TYPE.MUSIC_PRESENTATION_SNAPSHOT) {
+      const packet = readMusicPresentationPacket(msg.payload);
+      if (packet) {
+        // The canonical active song supersedes any cached editor slide.
+        // Keep SLIDES_DATA: it remains the current song's auxiliary metadata.
+        if (packet.snapshot.active) _lastByType.delete(BROADCAST_TYPE.SLIDE_CHANGE);
+        const key = _cacheKey(msg);
+        let inner = _lastByType.get(msg.type);
+        if (!inner) {
+          inner = new Map<string, BroadcastMessage>();
+          _lastByType.set(msg.type, inner);
+        }
+        inner.set(key, msg);
+      }
+    } else if (msg.type === BROADCAST_TYPE.SLIDE_CHANGE &&
+        (msg.payload as Record<string, unknown> | null)?.presentation_session === undefined &&
+        (msg.payload as Record<string, unknown> | null)?.presentation_revision === undefined) {
+      // An unversioned editor/other-source slide owns the stage now. A new
+      // receiver must not replay the previous music deck alongside it.
+      _lastByType.delete(BROADCAST_TYPE.MUSIC_PRESENTATION_SNAPSHOT);
+      _lastByType.delete(BROADCAST_TYPE.SLIDES_DATA);
+      _lastByType.delete(BROADCAST_TYPE.SLIDE_PROGRESS);
+      _lastByType.set(msg.type, new Map([["__default__", msg]]));
     } else if (STATEFUL_TYPES.has(msg.type)) {
       const key = _cacheKey(msg);
       let inner = _lastByType.get(msg.type);
@@ -146,11 +179,12 @@ function _initOnce(): void {
 
 function getChannel(): BroadcastChannel {
   if (!channel) {
-    channel = new BroadcastChannel(CHANNEL_NAME);
-    channel.addEventListener("message", (e: MessageEvent<BroadcastMessage>) => {
+    const opened = new BroadcastChannel(CHANNEL_NAME);
+    opened.addEventListener("message", (e: MessageEvent<BroadcastMessage>) => {
       // Mensagens vindas de OUTRAS janelas chegam aqui — repassa pros listeners locais.
       _deliverLocal(e.data);
     });
+    channel = opened;
   }
   return channel;
 }
@@ -158,12 +192,15 @@ function getChannel(): BroadcastChannel {
 _initOnce();
 
 export default {
-  send(type: string, payload: unknown = {}): void {
+  send(type: string, payload: unknown = {}): BroadcastSendResult {
     const msg: BroadcastMessage = { type, payload } as BroadcastMessage;
+    let crossWindow = false;
     try {
       getChannel().postMessage(msg);
+      crossWindow = true;
     } catch {
-      /* noop */
+      // Local delivery still works; a canonical producer must see the failed
+      // cross-window enqueue so it can retry and emit one bounded incident.
     }
     // Entrega local — outras janelas Electron recebem via BroadcastChannel acima.
     _deliverLocal(msg);
@@ -171,23 +208,27 @@ export default {
     // Encaminhamento para clients SSE remotos. O main process filtra para
     // só aceitar da janela principal — nas janelas auxiliares isso vira
     // no-op silencioso e nada é duplicado.
+    let remoteRelay: BroadcastSendResult["remoteRelay"] = "not_required";
     if (TRANSMISSION_TYPES.has(type)) {
+      if (Platform.isDesktop) remoteRelay = "unavailable";
       const t = Platform.transmission;
       if (t && typeof t.broadcast === "function") {
         try {
           t.broadcast(msg);
+          remoteRelay = "sent";
         } catch {
-          /* noop */
+          remoteRelay = "failed";
         }
       }
     }
+    return { crossWindow, remoteRelay };
   },
 
   listen(
     callback: (msg: BroadcastMessage) => void,
     options: BroadcastListenOptions = {}
   ): () => void {
-    getChannel(); // garante a inscrição cross-window
+    try { getChannel(); } catch { /* local-only until the next send retries */ }
     _localListeners.add(callback);
 
     // Replay do último estado conhecido — listeners que registram depois

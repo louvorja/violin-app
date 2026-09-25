@@ -26,8 +26,9 @@ O LouvorJA usa um único canal `BroadcastChannel("louvorja")` para duas finalida
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 
-useBroadcastListener(BROADCAST_TYPE.SLIDE_CHANGE, (payload) => {
-  console.log(payload.slide_index, payload.slide);
+useBroadcastListener(BROADCAST_TYPE.MUSIC_PRESENTATION_SNAPSHOT, (payload) => {
+  // Valide com readMusicPresentationPacket antes de aplicar.
+  console.log(payload.snapshot.slideIndex);
 });
 ```
 
@@ -36,14 +37,15 @@ useBroadcastListener(BROADCAST_TYPE.SLIDE_CHANGE, (payload) => {
 ```js
 import { useBroadcastSender } from "@/composables/useBroadcastSender";
 const { send, BROADCAST_TYPE } = useBroadcastSender();
-send(BROADCAST_TYPE.GO_TO_SLIDE, { index: 3 });
+send(BROADCAST_TYPE.GO_TO_SLIDE, { index: 3, presentation_session: currentSessionId });
 ```
 
 ### Em helpers / fora do contexto Vue:
 
 ```js
-import $broadcast, { BROADCAST_TYPE } from "@/helpers/Broadcast";
-$broadcast.send(BROADCAST_TYPE.SLIDE_CHANGE, { slide_index: 0 });
+import $broadcast from "@/helpers/Broadcast";
+import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
+$broadcast.send(BROADCAST_TYPE.REQUEST_MUSIC_PRESENTATION_SNAPSHOT);
 ```
 
 ---
@@ -54,10 +56,12 @@ $broadcast.send(BROADCAST_TYPE.SLIDE_CHANGE, { slide_index: 0 });
 
 | Constante | String | Emissor | Consumidor |
 |---|---|---|---|
-| `SLIDE_CHANGE` | `"slide_change"` | `useSlides` / `slide_editor` | `useProjectionState` → Projection, ProjectionReturn, Obs |
-| `SLIDE_PROGRESS` | `"slide_progress"` | `useMedia` (throttled) | ProjectionReturn |
-| `SLIDES_DATA` | `"slides_data"` | `useMedia.open()` | Operator |
-| `GO_TO_SLIDE` | `"go_to_slide"` | Operator | useSlides |
+| `MUSIC_PRESENTATION_SNAPSHOT` | `"music_presentation_snapshot"` | `useSlides` | Projection, Return, OBS, Operator, Remote, Libras; também SSE |
+| `REQUEST_MUSIC_PRESENTATION_SNAPSHOT` | `"request_music_presentation_snapshot"` | Janelas auxiliares | `useSlides` |
+| `SLIDE_CHANGE` | `"slide_change"` | `slide_editor` | `useProjectionState` e consumidores do editor |
+| `SLIDE_PROGRESS` | `"slide_progress"` | `useSlides` (throttled) | ProjectionReturn |
+| `SLIDES_DATA` | `"slides_data"` | `useMedia`/`useSlides` | Operator, RemoteControl |
+| `GO_TO_SLIDE` | `"go_to_slide"` | Operator, Projection | `useSlides` (sessão obrigatória para música) |
 | `BIBLE_VERSE` | `"bible_verse"` | bible/Index | ObsBible, ProjectionBible |
 | `BIBLE_FORMAT_CHANGED` | `"bible_format_changed"` | bible/Index, AppMenuOpcoes | ProjectionBible, ProjectionBibleReturn |
 | `SLIDE_FONT_CHANGED` | `"slide_font_changed"` | AppMenuOpcoes | useSlideStyle, ModuleProjection |
@@ -112,7 +116,15 @@ $broadcast.send(BROADCAST_TYPE.SLIDE_CHANGE, { slide_index: 0 });
 
 ## Payloads
 
-### `SLIDE_CHANGE`
+### `MUSIC_PRESENTATION_SNAPSHOT`
+
+O contrato exato e a validação em runtime estão em
+`src/presentation/MusicPresentationPacket.ts`. Contém `schema: 1`,
+`selectionRevision`, `playbackId?`, progresso, marcos de tempo e um snapshot
+com `sessionId`, revisão do core, estado ativo, título, índice, quantidade e
+slides atual/próximo. O deck completo não atravessa este canal.
+
+### `SLIDE_CHANGE` (editor, sem sessão musical)
 
 ```ts
 {
@@ -171,16 +183,17 @@ sequenceDiagram
     participant Proj as Projection / ProjectionReturn / Obs
 
     Note over Media,BC: Abertura de música
-    Media->>BC: SLIDES_DATA { slides, title }
-    BC->>Op: renderiza grade de slides
+    Media->>BC: MUSIC_PRESENTATION_SNAPSHOT { sessionId, revision, slide, nextSlide }
+    Media->>BC: SLIDES_DATA { slides, title, presentation_session }
+    BC->>Op: valida sessão e renderiza grade de slides
 
     Note over Media,BC: Navegação de slides
-    Media->>BC: SLIDE_CHANGE { slide_index, slide, next_slide }
+    Media->>BC: MUSIC_PRESENTATION_SNAPSHOT { sessionId, revision, slide, nextSlide }
     BC->>Proj: atualiza slide exibido
     BC->>Op: marca slide ativo
 
     Note over Op,BC: Clique no Operator
-    Op->>BC: GO_TO_SLIDE { index }
+    Op->>BC: GO_TO_SLIDE { index, presentation_session }
     BC->>Media: salta para slide #index
 
     Note over U,BC: Bíblia → OBS
@@ -199,4 +212,4 @@ sequenceDiagram
 | `src/composables/useBroadcastListener.ts` | Hook Vue com cleanup em `onUnmounted` |
 | `src/composables/useBroadcastSender.ts` | Helper de envio tipado |
 | `src/composables/useProjectionState.ts` | Estado reativo para views de projeção |
-| `src/composables/useSlides.ts` | Emite SLIDE_CHANGE · recebe GO_TO_SLIDE |
+| `src/composables/useSlides.ts` | Core musical, snapshot canônico e comandos correlacionados |

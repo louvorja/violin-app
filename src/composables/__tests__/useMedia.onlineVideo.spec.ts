@@ -19,10 +19,15 @@ const h = vi.hoisted(() => ({
   ready: 4,
   mediaError: null as unknown,
   downloaded: false,
+  isDownloaded: vi.fn(async () => false),
   info: vi.fn(),
   warning: vi.fn(),
   error: vi.fn(),
   openWindows: vi.fn(async () => {}),
+  openFileWindows: vi.fn(async () => {}),
+  openMusicWindows: vi.fn(async () => {}),
+  closeFileWindows: vi.fn(async () => {}),
+  closeMusicWindows: vi.fn(async () => {}),
   closeWindows: vi.fn(async () => {}),
   send: vi.fn(),
   listeners: new Set<(_msg: { type: string; payload?: unknown }) => void>(),
@@ -35,7 +40,7 @@ vi.mock("@/helpers/OnlineVideo", async (importOriginal) => ({
   cancel: h.cancel,
   downloadEnabled: () => true,
   downloadAvailable: () => true,
-  isDownloaded: async () => h.downloaded,
+  isDownloaded: h.isDownloaded,
   listFiles: async () => [],
 }));
 vi.mock("@/helpers/Snackbar", () => ({
@@ -44,6 +49,10 @@ vi.mock("@/helpers/Snackbar", () => ({
 vi.mock("@/helpers/ProjectionWindows", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/helpers/ProjectionWindows")>()),
   openVideoProjectionWindows: h.openWindows,
+  openFileProjectionWindows: h.openFileWindows,
+  openProjectionWindows: h.openMusicWindows,
+  closeFileProjectionWindows: h.closeFileWindows,
+  closeMusicProjectionWindows: h.closeMusicWindows,
   closeProjectionWindows: h.closeWindows,
 }));
 vi.mock("@/helpers/Broadcast", async (importOriginal) => {
@@ -112,10 +121,15 @@ beforeEach(async () => {
   h.ready = 4;
   h.mediaError = null;
   h.downloaded = false;
+  h.isDownloaded.mockReset().mockImplementation(async () => h.downloaded);
   h.info.mockClear();
   h.warning.mockClear();
   h.error.mockClear();
   h.openWindows.mockClear();
+  h.openFileWindows.mockClear();
+  h.openMusicWindows.mockClear();
+  h.closeFileWindows.mockClear();
+  h.closeMusicWindows.mockClear();
   h.closeWindows.mockClear();
   h.send.mockClear();
   h.listeners.clear();
@@ -153,7 +167,7 @@ describe("acompanhar o download do yt-dlp e projetar", () => {
       url: `louvorja://onlinevideo/${ID}.mp4`,
       title: "Louvor",
       mediaType: "video",
-    });
+    }, true);
   });
 
   it("cancelado pelo operador: não abre nada, e nenhum aviso de erro", async () => {
@@ -163,6 +177,39 @@ describe("acompanhar o download do yt-dlp e projetar", () => {
     expect(h.warning).not.toHaveBeenCalled();
     expect(h.error).not.toHaveBeenCalled();
   });
+
+  it("lookup de cache atrasado não inicia vídeo depois que o editor assumiu", async () => {
+    const lookup = deferred<boolean>();
+    h.isDownloaded.mockReturnValueOnce(lookup.promise);
+    const video = media.openYouTube(embed(ID), "Vídeo antigo");
+    await tick();
+    expect(h.isDownloaded).toHaveBeenCalledWith(ID);
+    expect(h.ensure).not.toHaveBeenCalled();
+    await media.stopForSlideEditor();
+    expect(media.opening()).toBeNull();
+
+    lookup.resolve(true);
+    expect(await video).toBe(false);
+    expect(h.ensure).not.toHaveBeenCalled();
+    expect(h.stream).not.toHaveBeenCalled();
+    expect(h.openWindows).not.toHaveBeenCalled();
+  });
+});
+
+it("um close de palco já enviado termina antes de uma nova projeção FILE", async () => {
+  const closing = deferred<void>();
+  h.closeWindows.mockImplementationOnce(() => closing.promise);
+
+  media.close(true);
+  await vi.waitFor(() => expect(h.closeWindows).toHaveBeenCalledOnce());
+
+  const nextStage = media.projectFile({ url: "blob:new-reading", type: "image", title: "Leitura" });
+  await tick();
+  expect(h.openFileWindows).not.toHaveBeenCalled();
+
+  closing.resolve();
+  await expect(nextStage).resolves.toBe(true);
+  expect(h.openFileWindows).toHaveBeenCalledOnce();
 });
 
 describe("cancelar e tocar de novo (download do yt-dlp)", () => {
@@ -270,7 +317,7 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
       title: "Louvor",
       mediaType: "video",
       videoUrl: video.url,
-    });
+    }, true);
     expect(embedded).not.toHaveBeenCalled();
     // abre direto: nenhum toast de "abrindo" entre o clique e o vídeo
     expect(h.info).not.toHaveBeenCalled();
@@ -300,7 +347,7 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
     h.stream.mockResolvedValue({ ok: true, id: ID, cached: true, video: { url: file }, audio: { url: file }, muxed: true, duration: null });
     controlledDownloads();
     expect(await media.openYouTube(embed(ID), "Louvor")).toBe(true);
-    expect(openAudio).toHaveBeenCalledWith({ url: file, title: "Louvor", mediaType: "video" });
+    expect(openAudio).toHaveBeenCalledWith({ url: file, title: "Louvor", mediaType: "video" }, true);
     expect(embedded).not.toHaveBeenCalled();
   });
 
@@ -317,7 +364,7 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
       url: `louvorja://onlinevideo/${ID}.mp4`,
       title: "Louvor",
       mediaType: "video",
-    });
+    }, true);
   });
 
   it("o download só começa depois de o vídeo estar tocando, e sem guardá-lo", async () => {
@@ -359,7 +406,7 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
     expect(await media.openYouTube(embed(ID), "Louvor")).toBe(true);
     expect(h.stream).not.toHaveBeenCalled();
     expect(embedded).not.toHaveBeenCalled();
-    expect(openAudio).toHaveBeenCalledWith(expect.objectContaining({ url: `louvorja://onlinevideo/${ID}.mp4` }));
+    expect(openAudio).toHaveBeenCalledWith(expect.objectContaining({ url: `louvorja://onlinevideo/${ID}.mp4` }), true);
   });
 
   it("pedir o mesmo vídeo de novo enquanto abre continua sendo uma projeção só", async () => {
@@ -384,7 +431,7 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
         message: "network",
       });
       warn.mockRestore();
-      expect(embedded).toHaveBeenCalledWith(embed(ID), "Louvor");
+      expect(embedded).toHaveBeenCalledWith(embed(ID), "Louvor", expect.any(Number));
       expect(h.warning).toHaveBeenCalledTimes(1);
       expect(calls).toHaveLength(1);
       expect(h.ensure).toHaveBeenCalledWith(ID, expect.any(Function), { background: true, keep: false });
@@ -426,8 +473,8 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
       const opening = media.openYouTube(embed(ID), "Louvor");
       await vi.advanceTimersByTimeAsync(21_000);
       expect(await opening).toBe(true);
-      expect(closed).toHaveBeenCalledWith(true);
-      expect(embedded).toHaveBeenCalledWith(embed(ID), "Louvor");
+      expect(closed).toHaveBeenCalledWith(true, true, true, true);
+      expect(embedded).toHaveBeenCalledWith(embed(ID), "Louvor", expect.any(Number));
       expect(h.warning).toHaveBeenCalledTimes(1);
       expect(h.ensure).toHaveBeenCalledTimes(1);
       closed.mockRestore();
@@ -480,6 +527,21 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
       links.resolve(streams(ID));
       expect(await pending).toBe(false);
       expect(openAudio).not.toHaveBeenCalled();
+    });
+
+    it("editor assume o palco sem cancelar o download iniciado pelo operador", async () => {
+      await startCardDownload();
+      const links = deferred<unknown>();
+      h.stream.mockReturnValue(links.promise);
+      const pending = media.openYouTube(embed(ID), "Louvor");
+      await tick();
+
+      await media.stopForSlideEditor();
+      expect(h.cancel).not.toHaveBeenCalled();
+
+      links.resolve(streams(ID));
+      expect(await pending).toBe(false);
+      expect(h.openWindows).not.toHaveBeenCalled();
     });
 
     it("pedir outro vídeo nesse meio-tempo também não cancela o download do primeiro", async () => {
@@ -664,7 +726,7 @@ describe("com o download automático desligado", () => {
 
     expect(await fresh.openYouTube(embed(ID), "Louvor")).toBe(true);
     expect(h.ensure).toHaveBeenCalledWith(ID, expect.anything());
-    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ url: `louvorja://onlinevideo/${ID}.mp4` }));
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ url: `louvorja://onlinevideo/${ID}.mp4` }), true);
     vi.doUnmock("@/helpers/OnlineVideo");
   });
 
@@ -683,7 +745,7 @@ describe("com o download automático desligado", () => {
     const embedded = vi.spyOn(fresh, "openEmbeddedYouTube").mockResolvedValue(undefined);
 
     expect(await fresh.openYouTube(embed(ID), "Louvor")).toBe(true);
-    expect(embedded).toHaveBeenCalledWith(embed(ID), "Louvor");
+    expect(embedded).toHaveBeenCalledWith(embed(ID), "Louvor", expect.any(Number));
     expect(h.stream).not.toHaveBeenCalled();
     expect(h.ensure).not.toHaveBeenCalled();
     vi.doUnmock("@/helpers/OnlineVideo");
@@ -728,6 +790,195 @@ describe("trocar de um vídeo embutido para outro", () => {
 
     expect(h.closeWindows).not.toHaveBeenCalled();
     expect(h.openWindows).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("posse do palco durante a abertura do vídeo", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const storage = () => {
+    const values = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => void values.set(key, value),
+      removeItem: (key: string) => void values.delete(key),
+    });
+  };
+
+  it.each(["editor", "música"] as const)(
+    "FILE antigo não publica nem inicia vídeo quando %s assume durante sua abertura",
+    async (next) => {
+      storage();
+      const fileOpened = deferred<void>();
+      h.openFileWindows.mockReturnValueOnce(fileOpened.promise);
+      const oldFile = media.projectFile(
+        { url: "blob:old-video", type: "video", title: "Vídeo antigo" },
+        "blob:old-video"
+      );
+      await tick();
+      const newOwner = next === "editor"
+        ? media.stopForSlideEditor()
+        : media.openCustomSong({ nome: "Música nova", slides: [{ tipo: "CAPA", letra: "Capa" }] });
+      fileOpened.resolve();
+      const [projected] = await Promise.all([oldFile, newOwner]);
+
+      expect(projected).toBe(false);
+      expect(h.send).not.toHaveBeenCalledWith(BROADCAST_TYPE.FILE_PROJECTION, expect.anything());
+      expect(openAudio).not.toHaveBeenCalled();
+      expect(h.closeFileWindows).toHaveBeenCalledOnce();
+      expect(localStorage.getItem(KEYS.PROJECTION.LJ_FILE_PROJECTION)).toBeNull();
+    }
+  );
+
+  it("PDF válido mantém cache de reabertura e projeta sem abrir player de áudio", async () => {
+    storage();
+    const payload = { url: "blob:pdf", type: "pdf" as const, title: "Leitura", page: 1 };
+    expect(await media.projectFile(payload)).toBe(true);
+    expect(h.openFileWindows).toHaveBeenCalledOnce();
+    expect(h.send).toHaveBeenCalledWith(BROADCAST_TYPE.FILE_PROJECTION, payload);
+    expect(localStorage.getItem(KEYS.PROJECTION.LJ_FILE_PROJECTION)).toContain("blob:pdf");
+    expect(openAudio).not.toHaveBeenCalled();
+  });
+
+  it("imagem/PDF da liturgia preserva áudio em curso; a biblioteca pode pedir parada", async () => {
+    storage();
+    const { useAudioPlayback } = await import("@/composables/useAudioPlayback");
+    const stop = vi.spyOn(useAudioPlayback(), "stop");
+    try {
+      await media.projectFile({ url: "blob:reading", type: "pdf", title: "Leitura" });
+      expect(stop).not.toHaveBeenCalled();
+      await media.projectFile(
+        { url: "blob:library", type: "image", title: "Acervo" },
+        undefined,
+        { stopExistingAudio: true }
+      );
+      expect(stop).toHaveBeenCalledOnce();
+    } finally {
+      stop.mockRestore();
+    }
+  });
+
+  it("fechar enquanto FILE abre remove a janela tardia e não publica o arquivo", async () => {
+    storage();
+    const fileOpened = deferred<void>();
+    h.openFileWindows.mockReturnValueOnce(fileOpened.promise);
+    const oldFile = media.projectFile({ url: "blob:old-image", type: "image", title: "Antiga" });
+    await tick();
+    media.close(true);
+    fileOpened.resolve();
+    expect(await oldFile).toBe(false);
+    await vi.waitFor(() => expect(h.closeFileWindows).toHaveBeenCalledOnce());
+    expect(h.send).not.toHaveBeenCalledWith(BROADCAST_TYPE.FILE_PROJECTION, expect.anything());
+  });
+
+  it("editor espera a abertura antiga terminar e fecha FILE antes de projetar slides", async () => {
+    const guardado = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => guardado.get(key) ?? null,
+      setItem: (key: string, value: string) => void guardado.set(key, value),
+      removeItem: (key: string) => void guardado.delete(key),
+    });
+    const windowOpened = deferred<void>();
+    h.openWindows.mockReturnValueOnce(windowOpened.promise);
+    const youtube = media.openEmbeddedYouTube(embed(ID), "Vídeo antigo");
+    await tick();
+
+    const editor = media.stopForSlideEditor();
+    expect(h.closeFileWindows).not.toHaveBeenCalled();
+    windowOpened.resolve();
+    await Promise.all([youtube, editor]);
+
+    expect(h.closeFileWindows).toHaveBeenCalledOnce();
+    expect(localStorage.getItem(KEYS.PROJECTION.LJ_YOUTUBE_PROJECTION)).toBeNull();
+    expect(h.send).not.toHaveBeenCalledWith(BROADCAST_TYPE.ONLINE_VIDEO_PROJECTION, expect.anything());
+    expect(h.listeners.size).toBe(0);
+  });
+
+  it("música só abre suas janelas depois que o vídeo pendente foi fechado", async () => {
+    const guardado = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => guardado.get(key) ?? null,
+      setItem: (key: string, value: string) => void guardado.set(key, value),
+      removeItem: (key: string) => void guardado.delete(key),
+    });
+    const windowOpened = deferred<void>();
+    h.openWindows.mockReturnValueOnce(windowOpened.promise);
+    const oldVideo = media.openEmbeddedYouTube(embed(ID), "Vídeo antigo");
+    await tick();
+
+    const music = media.openCustomSong({ nome: "Música nova", slides: [{ tipo: "CAPA", letra: "Capa" }] });
+    await tick();
+    expect(h.openMusicWindows).not.toHaveBeenCalled();
+    windowOpened.resolve();
+    await Promise.all([oldVideo, music]);
+
+    expect(h.closeFileWindows).toHaveBeenCalledOnce();
+    expect(h.openMusicWindows).toHaveBeenCalledOnce();
+    expect(h.send).not.toHaveBeenCalledWith(BROADCAST_TYPE.ONLINE_VIDEO_PROJECTION, expect.anything());
+    expect(localStorage.getItem(KEYS.PROJECTION.LJ_YOUTUBE_PROJECTION)).toBeNull();
+  });
+
+  it("vídeo embutido fecha MUSIC/RETURN antes de abrir FILE", async () => {
+    await media.openEmbeddedYouTube(embed(ID), "Vídeo");
+    expect(h.closeMusicWindows).toHaveBeenCalledOnce();
+    expect(h.closeMusicWindows.mock.invocationCallOrder[0]).toBeLessThan(
+      h.openWindows.mock.invocationCallOrder[0]
+    );
+  });
+
+  it("vídeo baixado fecha MUSIC/RETURN antes de abrir FILE", async () => {
+    h.downloaded = true;
+    h.ensure.mockResolvedValue({ ...ok(ID), cached: true });
+    await media.openYouTube(embed(ID), "Vídeo");
+    expect(h.closeMusicWindows).toHaveBeenCalledOnce();
+    expect(h.closeMusicWindows.mock.invocationCallOrder[0]).toBeLessThan(
+      h.openWindows.mock.invocationCallOrder[0]
+    );
+  });
+
+  it("close de MUSIC atrasado do vídeo antigo não fecha a janela da música nova", async () => {
+    const guardado = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => guardado.get(key) ?? null,
+      setItem: (key: string, value: string) => void guardado.set(key, value),
+      removeItem: (key: string) => void guardado.delete(key),
+    });
+    const musicClose = deferred<void>();
+    h.closeMusicWindows.mockReturnValueOnce(musicClose.promise);
+    const oldVideo = media.openEmbeddedYouTube(embed(ID), "Vídeo antigo");
+    await tick();
+    const newMusic = media.openCustomSong({ nome: "Nova", slides: [{ tipo: "CAPA", letra: "Capa" }] });
+    expect(h.openMusicWindows).not.toHaveBeenCalled();
+
+    musicClose.resolve();
+    await Promise.all([oldVideo, newMusic]);
+
+    expect(h.openWindows).not.toHaveBeenCalled();
+    expect(h.closeFileWindows).toHaveBeenCalledOnce();
+    expect(h.openMusicWindows).toHaveBeenCalledOnce();
+  });
+
+  it("abertura nativa de vídeo travada não impede o editor, e o fechamento tardio remove FILE", async () => {
+    const guardado = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => guardado.get(key) ?? null,
+      setItem: (key: string, value: string) => void guardado.set(key, value),
+      removeItem: (key: string) => void guardado.delete(key),
+    });
+    const windowOpened = deferred<void>();
+    h.openWindows.mockReturnValueOnce(windowOpened.promise);
+    const oldVideo = media.openEmbeddedYouTube(embed(ID), "Vídeo antigo");
+    await tick();
+
+    vi.useFakeTimers();
+    const editor = media.stopForSlideEditor();
+    await vi.advanceTimersByTimeAsync(2500);
+    await editor;
+    expect(h.closeFileWindows).toHaveBeenCalledOnce();
+
+    windowOpened.resolve();
+    await oldVideo;
+    await vi.waitFor(() => expect(h.closeFileWindows).toHaveBeenCalledTimes(2));
   });
 });
 

@@ -15,6 +15,7 @@ import { useLibrasState } from "./useLibrasState";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
 import $dev from "@/helpers/Dev";
+import { readMusicPresentationPacket } from "@/presentation/MusicPresentationPacket";
 
 export function useLibras() {
   const { scopeEnabled } = useLibrasState();
@@ -22,6 +23,13 @@ export function useLibras() {
   const originalText = ref<string>("");
   const isTranslating = ref(false);
   const lastSlideIndex = ref<number>(-1);
+  let canonicalSelection: { session: string; revision: number; selectionRevision: number; index: number } | null = null;
+  const retiredCanonicalSessions = new Set<string>();
+  const retireCanonical = (session: string): void => {
+    retiredCanonicalSessions.delete(session);
+    retiredCanonicalSessions.add(session);
+    if (retiredCanonicalSessions.size > 32) retiredCanonicalSessions.delete(retiredCanonicalSessions.values().next().value!);
+  };
 
   /**
    * Traduz o texto de um slide e armazena o gloss.
@@ -89,25 +97,72 @@ export function useLibras() {
     }
   }
 
-  // Escutar mudanças de slide via BroadcastChannel
-  useBroadcastListener(BROADCAST_TYPE.SLIDE_CHANGE, (payload: unknown) => {
-    const data = payload as { slide_index: number; slide?: { lyric?: string; id_music?: number } };
-    if (data.slide_index === lastSlideIndex.value) return;
-    lastSlideIndex.value = data.slide_index;
-
-    const lyric = data.slide?.lyric || "";
-    if (lyric) {
-      translateSlide(lyric, data.slide?.id_music ? Number(data.slide.id_music) : undefined);
-    } else {
+  function translateSelection(lyric: string | null | undefined, id: string | number | null | undefined): void {
+    if (!lyric) {
       gloss.value = "";
       originalText.value = "";
+      return;
     }
+    const musicId = Number(id);
+    void translateSlide(lyric, Number.isFinite(musicId) && musicId > 0 ? musicId : undefined);
+  }
+
+  useBroadcastListener(BROADCAST_TYPE.MUSIC_PRESENTATION_SNAPSHOT, (payload: unknown) => {
+    const packet = readMusicPresentationPacket(payload);
+    if (!packet) return;
+    const { sessionId, revision, active, slideIndex, slide } = packet.snapshot;
+    const { selectionRevision } = packet;
+    if (retiredCanonicalSessions.has(sessionId)) return;
+    if (canonicalSelection?.session === sessionId) {
+      if (revision < canonicalSelection.revision ||
+          selectionRevision < canonicalSelection.selectionRevision ||
+          (revision === canonicalSelection.revision && selectionRevision === canonicalSelection.selectionRevision)) return;
+    } else if (canonicalSelection) {
+      retireCanonical(canonicalSelection.session);
+    }
+    const changed = canonicalSelection?.session !== sessionId || canonicalSelection.index !== slideIndex;
+    canonicalSelection = { session: sessionId, revision, selectionRevision, index: slideIndex };
+    if (!active) {
+      retireCanonical(sessionId);
+      canonicalSelection = null;
+      lastSlideIndex.value = -1;
+      gloss.value = "";
+      originalText.value = "";
+    } else if (changed) {
+      lastSlideIndex.value = slideIndex;
+      translateSelection(slide?.lyric, slide?.id_music);
+    }
+  });
+
+  // The slide editor still emits an unversioned selection.
+  useBroadcastListener(BROADCAST_TYPE.SLIDE_CHANGE, (payload: unknown) => {
+    const data = payload as { presentation_session?: unknown; presentation_revision?: unknown;
+      slide_index: number; slide?: { lyric?: string; id_music?: number } };
+    if (data.presentation_session !== undefined || data.presentation_revision !== undefined) return;
+    if (canonicalSelection) {
+      retireCanonical(canonicalSelection.session);
+      canonicalSelection = null;
+      lastSlideIndex.value = -1;
+    }
+    if (data.slide_index === lastSlideIndex.value) return;
+    lastSlideIndex.value = data.slide_index;
+    translateSelection(data.slide?.lyric, data.slide?.id_music);
+  });
+
+  useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, () => {
+    if (canonicalSelection) retireCanonical(canonicalSelection.session);
+    canonicalSelection = null;
+    lastSlideIndex.value = -1;
+    gloss.value = "";
+    originalText.value = "";
   });
 
   function clear(): void {
     gloss.value = "";
     originalText.value = "";
     lastSlideIndex.value = -1;
+    canonicalSelection = null;
+    retiredCanonicalSessions.clear();
   }
 
   onUnmounted(() => {

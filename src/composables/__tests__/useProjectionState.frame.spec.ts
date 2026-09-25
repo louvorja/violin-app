@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, h, nextTick } from "vue";
 import { mount, type VueWrapper } from "@vue/test-utils";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
+import { readMusicPresentationPacket } from "@/presentation/MusicPresentationPacket";
 
 const fake = vi.hoisted(() => ({
   listeners: new Set<(message: { type: string; payload: unknown }) => void>(),
@@ -38,6 +39,26 @@ describe("useProjectionState frame opportunity", () => {
   });
 
   function emit(payload: Record<string, unknown>) {
+    const revision = payload.presentation_revision;
+    if (typeof revision === "number") {
+      const index = Number(payload.slide_index ?? 0);
+      const total = Number(payload.total_slides ?? 1);
+      const packet = readMusicPresentationPacket({
+        schema: 1, selectionRevision: revision, playbackId: payload.playback_id,
+        progress: 0, slideProgress: 0, emittedAt: payload._ts,
+        commandAt: payload._command_ts, commitAt: payload._commit_ts,
+        snapshot: {
+          sessionId: "frame", revision, active: true, title: "Song",
+          slideIndex: index, totalSlides: total, slide: payload.slide,
+          nextSlide: index + 1 < total ? { lyric: "Next" } : null,
+        },
+      });
+      if (!packet) throw new Error("invalid fixture");
+      for (const listener of [...fake.listeners]) {
+        listener({ type: BROADCAST_TYPE.MUSIC_PRESENTATION_SNAPSHOT, payload: packet });
+      }
+      return;
+    }
     for (const listener of [...fake.listeners]) {
       listener({ type: BROADCAST_TYPE.SLIDE_CHANGE, payload });
     }

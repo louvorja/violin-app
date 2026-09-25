@@ -10,9 +10,12 @@
 const { app, BrowserWindow } = require("electron");
 const displays = require("./displays.js");
 const powerBlocker = require("./powerBlocker.js");
+const { createWindowCloseGate, DEFAULT_CLOSE_ACK_TIMEOUT_MS } = require("./windowCloseGate.js");
 
 /** Mantém referência das janelas abertas por feature para evitar duplicatas */
 const _openWindows = new Map();
+/** A feature is not reusable until Electron confirms the old BrowserWindow closed. */
+const _windowCloseGate = createWindowCloseGate(DEFAULT_CLOSE_ACK_TIMEOUT_MS);
 
 /**
  * Metadata de cada janela aberta, para conseguir recolocá-la no monitor certo
@@ -195,7 +198,7 @@ function _isProjectionPresentationWindow(route, feature) {
  * @returns {BrowserWindow|null} null quando abrir significaria ocupar a tela do
  *   operador no lugar do monitor configurado — ver o bloco de decisão abaixo.
  */
-function openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = false, preloadPath, devUrl, prodHtmlPath, width, height, alwaysOnTop = false, showInTaskbar = true, devTools = null }) {
+function _openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = false, preloadPath, devUrl, prodHtmlPath, width, height, alwaysOnTop = false, showInTaskbar = true, devTools = null }) {
   // Se já existe janela para essa feature, mostra-a sem roubar o foco da main.
   //
   // Quando ela está escondida é porque o monitor dela sumiu e o `reconcile` a
@@ -417,6 +420,10 @@ function openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = f
   win.webContents.once("did-finish-load", showOnce);
   win.once("ready-to-show", showOnce);
 
+  // Native/user close (including Escape and macOS kiosk exit) must reserve
+  // this feature too. A new open cannot reuse a BrowserWindow mid-close.
+  win.on("close", () => { void _windowCloseGate.observeClose(feature, win); });
+
   // Esc fecha a janela fullscreen no macOS como saída de emergência.
   if (fullscreen && isMac) {
     win.webContents.on("before-input-event", (_e, input) => {
@@ -476,6 +483,15 @@ function openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = f
   _syncMainBackgroundThrottling();
   _syncPowerBlocker();
   return win;
+}
+
+/** A new owner must not reuse a feature while its previous window is closing. */
+function openOnMonitor(options) {
+  return _windowCloseGate.beforeOpen(options.feature).then((closed) => {
+    // A timeout is not permission to reuse a window that may still be closing.
+    // Fail this attempt; once `closed` arrives a later owner can open cleanly.
+    return closed ? _openOnMonitor(options) : { refused: "window-close-pending" };
+  });
 }
 
 /**
@@ -646,9 +662,7 @@ function reconcile(resolveDisplay) {
  */
 function close(feature) {
   const win = _openWindows.get(feature);
-  if (win && !win.isDestroyed()) {
-    win.close();
-  }
+  return _windowCloseGate.close(feature, win, () => win.close());
 }
 
 /** Fecha todas as janelas auxiliares antes de um encerramento explícito. */

@@ -300,7 +300,7 @@ function setupRoutes(
 
   // ---------------------------------------------------------------
   // POST /api/song-slides — ações de slides
-  // Body: { action: string, index?: number }
+  // Body: { action: string, index?: number, presentation_session?: string }
   // ---------------------------------------------------------------
   app.post("/api/song-slides", (req, res) => {
     const mainWindow = getValidMainWindow();
@@ -324,7 +324,21 @@ function setupRoutes(
 
     const payload = { action };
     if (action === "go-to-slide") {
-      payload.index = parseInt(req.body.index, 10);
+      const index = req.body?.index;
+      if (!Number.isSafeInteger(index) || index < 0) {
+        return res.status(400).json({ error: "index deve ser um inteiro não negativo" });
+      }
+      payload.index = index;
+    }
+
+    if (["next", "previous", "close", "go-to-slide"].includes(action)) {
+      const session = req.body?.presentation_session;
+      if (session !== undefined) {
+        if (typeof session !== "string" || !session || session.length > 128) {
+          return res.status(400).json({ error: "presentation_session inválida" });
+        }
+        payload.presentation_session = session;
+      }
     }
 
     safeSend(mainWindow, "http:song-slides", payload);

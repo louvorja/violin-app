@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MusicPresentationCore, musicSnapshotDifferences } from "../MusicPresentationCore";
+import { MusicPresentationCore } from "../MusicPresentationCore";
 
 const fixture = () => new MusicPresentationCore("session-a", [
   { lyric: "Cover", cover: true }, { lyric: "Verse" }, { lyric: "Chorus" },
@@ -37,6 +37,12 @@ describe("music presentation domain", () => {
     expect(core.dispatch({ ...base, commandId: 3, type: "clock", position: 15 }).slideIndex).toBe(2);
   });
 
+  it("does not select past the last visual slide when markers outnumber the deck", () => {
+    const core = new MusicPresentationCore("a", [{ lyric: "Only" }], [0, 1, 2], "Song");
+    expect(core.dispatch({ sessionId: "a", commandId: 1, type: "clock", position: 3 }).slideIndex).toBe(0);
+    expect(core.snapshot().slide?.lyric).toBe("Only");
+  });
+
   it("does not share selection fields or markers with mutable inputs", () => {
     const slides = [{ lyric: "Original" }];
     const times = [0];
@@ -47,10 +53,4 @@ describe("music presentation domain", () => {
     expect(core.dispatch({ sessionId: "a", commandId: 1, type: "clock", position: 2 }).slideIndex).toBe(0);
   });
 
-  it("detects genuine legacy divergence without comparing transport counters", () => {
-    const snapshot = fixture().snapshot();
-    expect(musicSnapshotDifferences(snapshot, snapshot)).toEqual([]);
-    expect(musicSnapshotDifferences(snapshot, { ...snapshot, slideIndex: 1, slide: { lyric: "Other" } }))
-      .toEqual(["slideIndex", "slide"]);
-  });
 });

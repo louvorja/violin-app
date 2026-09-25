@@ -11,7 +11,8 @@
  *  o estado por outro caminho.
  *
  * Modelo:
- *  1. Renderer principal emite `slide_change` no BroadcastChannel.
+ *  1. Renderer principal emite `music_presentation_snapshot` (música) ou
+ *     `slide_change` sem sessão (editor) no BroadcastChannel.
  *  2. `Broadcast.ts` (renderer) faz `transmission.broadcast(msg)` via IPC.
  *  3. `main.cjs` chama `events.publish(msg)` aqui.
  *  4. Este módulo:
@@ -30,6 +31,7 @@
  */
 
 const REMOTE_RELAY_TYPES = new Set([
+  "music_presentation_snapshot",
   "slide_change",
   "slides_data",
   "media_close",
@@ -45,6 +47,87 @@ const MAX_CLIENT_QUEUE = 32;
 const MAX_CACHED_STATES = 64;
 const MODULE_STATE_TYPES = new Set(["module_projection_value", "module_format_changed"]);
 
+const isPlainObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+const isCounter = (value) => Number.isSafeInteger(value) && value >= 0;
+const isPercent = (value) => Number.isFinite(value) && value >= 0 && value <= 100;
+
+function presentationSlideLength(slide) {
+  if (!isPlainObject(slide)) return null;
+  let characters = 0;
+  const textLimits = {
+    lyric: 100_000,
+    name: 4_096,
+    aux_lyric: 100_000,
+    lyric_aux: 100_000,
+    url_image: 8_192,
+    tipo: 64,
+    color: 128,
+    color_aux: 128,
+    font: 256,
+  };
+  for (const [key, limit] of Object.entries(textLimits)) {
+    const value = slide[key];
+    if (value === undefined) continue;
+    if (value !== null && (typeof value !== "string" || value.length > limit)) return null;
+    if (typeof value === "string") characters += value.length;
+  }
+  for (const key of ["cover", "is_cover"]) {
+    if (slide[key] !== undefined && slide[key] !== null && typeof slide[key] !== "boolean") return null;
+  }
+  for (const key of ["font_size_pct", "font_size_aux_pct"]) {
+    const value = slide[key];
+    if (value !== undefined && value !== null &&
+        (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1_000)) return null;
+  }
+  const position = slide.image_position;
+  if (position !== undefined && position !== null) {
+    if ((typeof position === "string" && position.length > 128) ||
+        (typeof position === "number" && (!Number.isFinite(position) || Math.abs(position) > 1_000)) ||
+        (typeof position !== "string" && typeof position !== "number")) return null;
+    if (typeof position === "string") characters += position.length;
+  }
+  const musicId = slide.id_music;
+  if (musicId !== undefined && musicId !== null) {
+    if ((typeof musicId === "string" && (!musicId.length || musicId.length > 128)) ||
+        (typeof musicId === "number" && (!Number.isSafeInteger(musicId) || musicId < 0)) ||
+        (typeof musicId !== "string" && typeof musicId !== "number")) return null;
+    if (typeof musicId === "string") characters += musicId.length;
+  }
+  return characters;
+}
+
+function isValidMusicSnapshot(packet) {
+  if (!packet || typeof packet !== "object" || Array.isArray(packet) || packet.schema !== 1 ||
+      !Number.isSafeInteger(packet.selectionRevision) || packet.selectionRevision < 0 ||
+      !Number.isFinite(packet.progress) || packet.progress < 0 || packet.progress > 100 ||
+      !Number.isFinite(packet.slideProgress) || packet.slideProgress < 0 || packet.slideProgress > 100 ||
+      !Number.isSafeInteger(packet.emittedAt) || packet.emittedAt < 0 ||
+      (packet.playbackId !== undefined &&
+        (typeof packet.playbackId !== "string" || packet.playbackId.length > 128)) ||
+      (packet.commandAt !== undefined && (!isCounter(packet.commandAt) || packet.commandAt > packet.emittedAt)) ||
+      (packet.commitAt !== undefined && (!isCounter(packet.commitAt) || packet.commitAt > packet.emittedAt))) return false;
+  const snapshot = packet.snapshot;
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot) ||
+      typeof snapshot.sessionId !== "string" || !snapshot.sessionId.length || snapshot.sessionId.length > 128 ||
+      !Number.isSafeInteger(snapshot.revision) || snapshot.revision < 0 || typeof snapshot.active !== "boolean" ||
+      typeof snapshot.title !== "string" || snapshot.title.length > 4_096 ||
+      !Number.isSafeInteger(snapshot.slideIndex) || snapshot.slideIndex < 0 ||
+      !Number.isSafeInteger(snapshot.totalSlides) || snapshot.totalSlides < 0) return false;
+  if (!snapshot.active) {
+    return snapshot.title === "" && snapshot.slideIndex === 0 &&
+      snapshot.totalSlides === 0 && snapshot.slide === null && snapshot.nextSlide === null;
+  }
+  if (snapshot.totalSlides <= snapshot.slideIndex ||
+      !snapshot.slide || typeof snapshot.slide !== "object" || Array.isArray(snapshot.slide)) return false;
+  const slideCharacters = presentationSlideLength(snapshot.slide);
+  const nextSlideCharacters = snapshot.nextSlide === null ? 0 : presentationSlideLength(snapshot.nextSlide);
+  if (slideCharacters === null || nextSlideCharacters === null ||
+      snapshot.title.length + slideCharacters + nextSlideCharacters > 512_000) return false;
+  return snapshot.slideIndex + 1 < snapshot.totalSlides
+    ? snapshot.nextSlide !== null
+    : snapshot.nextSlide === null;
+}
+
 function stateKey(msg) {
   const moduleId = msg.payload?.module;
   if (
@@ -57,6 +140,12 @@ function stateKey(msg) {
   return msg.type;
 }
 
+function isUnversionedSlideChange(msg) {
+  return msg.type === "slide_change" &&
+    msg.payload?.presentation_session === undefined &&
+    msg.payload?.presentation_revision === undefined;
+}
+
 // Estados contínuos podem usar "latest value wins" enquanto um socket está
 // sob backpressure. `media_close` é uma barreira terminal e `chat_message`
 // representa mensagens distintas, portanto não entram nessa coalescência.
@@ -66,7 +155,7 @@ const COALESCIBLE_TYPES = new Set(
 const TERMINAL_TYPES = new Set(["media_close"]);
 
 /**
- * @typedef {{ type: string, key: string, data: string, terminal: boolean, coalescible: boolean }} PendingEvent
+ * @typedef {{ type: string, key: string, data: string, terminal: boolean, coalescible: boolean, canonicalActive: boolean, unversionedSlide: boolean }} PendingEvent
  * @typedef {{
  *   res: import('http').ServerResponse,
  *   id: number,
@@ -243,11 +332,22 @@ function _makeRoom(client, incoming) {
 function _enqueueEvent(client, event) {
   if (client.closed) return;
 
-  if (event.type === "media_close") {
+  if (event.canonicalActive) {
+    // A canonical active song supersedes an older cached-editor slide. Preserve
+    // SLIDES_DATA because it is still useful metadata for this current song.
+    client.queue = client.queue.filter((pending) => pending.type !== "slide_change");
+  } else if (event.unversionedSlide) {
+    // The editor took the stage: no old music snapshot or deck may be replayed
+    // ahead of its current slide after a blocked socket resumes.
+    client.queue = client.queue.filter(
+      (pending) => pending.type !== "music_presentation_snapshot" && pending.type !== "slides_data"
+    );
+  } else if (event.type === "media_close") {
     // Um close pendente torna snapshots antigos de música obsoletos. Se uma
     // nova música chegar depois, ela será enfileirada depois da barreira.
     client.queue = client.queue.filter(
-      (pending) => pending.type !== "slide_change" && pending.type !== "slides_data"
+      (pending) => pending.type !== "music_presentation_snapshot" &&
+        pending.type !== "slide_change" && pending.type !== "slides_data"
     );
   }
 
@@ -274,6 +374,9 @@ function _writeEvent(client, msg) {
     data,
     terminal: TERMINAL_TYPES.has(msg.type),
     coalescible: COALESCIBLE_TYPES.has(msg.type),
+    canonicalActive: msg.type === "music_presentation_snapshot" &&
+      isValidMusicSnapshot(msg.payload) && msg.payload.snapshot.active,
+    unversionedSlide: isUnversionedSlideChange(msg),
   };
 
   if (!client.blocked && client.queue.length === 0) {
@@ -294,15 +397,23 @@ function _writeEvent(client, msg) {
 function publish(msg) {
   if (!msg || typeof msg.type !== "string") return;
   if (!REMOTE_RELAY_TYPES.has(msg.type)) return;
+  if (msg.type === "music_presentation_snapshot" && !isValidMusicSnapshot(msg.payload)) return;
 
   // `media_close` invalida o estado de slide/letra — qualquer client que
   // conectar DEPOIS do close não deve receber replay da música anterior.
   // Limpamos o cache antes de propagar; o evento em si é transitório e
   // por isso não fica em `_lastByType`.
   if (msg.type === "media_close") {
+    _lastByType.delete("music_presentation_snapshot");
     _lastByType.delete("slide_change");
     _lastByType.delete("slides_data");
   } else {
+    if (msg.type === "music_presentation_snapshot" && msg.payload.snapshot.active) {
+      _lastByType.delete("slide_change");
+    } else if (isUnversionedSlideChange(msg)) {
+      _lastByType.delete("music_presentation_snapshot");
+      _lastByType.delete("slides_data");
+    }
     const key = stateKey(msg);
     _lastByType.delete(key);
     _lastByType.set(key, { type: msg.type, payload: msg.payload });

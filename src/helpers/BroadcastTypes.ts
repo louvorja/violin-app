@@ -17,22 +17,20 @@
 export const BROADCAST_TYPE = Object.freeze({
   // ─── Cross-window ────────────────────────────────────────────────────────
 
-  /** Estado atual do slide em reprodução. Emitido por Media.js, SlideEditor.
-   *  Recebido por: Projection, ProjectionReturn, Obs, Operator.
-   *  O emissor useSlides inclui presentation_revision, _ts e, quando houve
-   *  comando explícito, _command_ts para medir a oportunidade de pintura. */
+  /** Slide de fontes não musicais (ex.: editor). Música usa o snapshot
+   *  validado do Presentation Core abaixo; não publique música por aqui. */
   SLIDE_CHANGE: "slide_change",
-  /** Diagnostic-only core snapshot; never controls the legacy renderer. */
-  MUSIC_SHADOW_SNAPSHOT: "music_shadow_snapshot",
-  REQUEST_MUSIC_SHADOW_SNAPSHOT: "request_music_shadow_snapshot",
+  /** Snapshot canônico de música, validado nas fronteiras e relayado por SSE. */
+  MUSIC_PRESENTATION_SNAPSHOT: "music_presentation_snapshot",
+  REQUEST_MUSIC_PRESENTATION_SNAPSHOT: "request_music_presentation_snapshot",
 
   /** Atualização contínua (0-100) do progresso do SLIDE atual.
    *  Emitido durante playback (throttle) e recebido por: ProjectionReturn (barra de progresso).
    *  Payload: { slide_index, slide_progress } */
   SLIDE_PROGRESS: "slide_progress",
 
-  /** Carga inicial de slides ao abrir uma música. Emitido por Media.js.
-   *  Recebido por: Operator. */
+  /** Deck completo para Operator/controle remoto, correlacionado por
+   *  presentation_session. O snapshot canônico só leva slide atual/próximo. */
   SLIDES_DATA: "slides_data",
 
   /** Solicitação de navegação para um slide específico. Emitido por Operator.
@@ -114,8 +112,8 @@ export const BROADCAST_TYPE = Object.freeze({
    *  Recebido por: (recepção futura). */
   MESSAGE_BOARD: "message_board",
 
-  /** [planejado] Notificação de fechamento da mídia. Emit: Media.close().
-   *  Recebido por: Projection, Obs. (ainda não emitido — ver Media.js). */
+  /** Barreira compartilhada de encerramento de mídia/projeção, emitida por
+   *  Media.close e outros donos; limpa também caches de replay. */
   MEDIA_CLOSE: "media_close",
 
   /** Projeção de arquivo (imagem/vídeo) vindo de liturgia ou outro módulo.

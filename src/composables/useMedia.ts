@@ -24,7 +24,10 @@ import { useAlbum } from "@/composables/useAlbum";
 import {
   openProjectionWindows,
   openVideoProjectionWindows,
+  openFileProjectionWindows,
   closeProjectionWindows,
+  closeFileProjectionWindows,
+  closeMusicProjectionWindows,
 } from "@/helpers/ProjectionWindows";
 import { Music } from "@/types/Music";
 import type { Lyric } from "@/types/Lyric";
@@ -188,6 +191,10 @@ let _ytDownloading: string | null = null;
 let _ytOwnsDownload = false;
 // Vídeo aberto por links diretos, esperando o som ficar pronto para tocar.
 let _ytStarting: string | null = null;
+const _videoWindowOpenings = new Set<Promise<void>>();
+let _stageEpoch = 0;
+let _stageWindowTransition: Promise<void> = Promise.resolve();
+const VIDEO_WINDOW_RELEASE_WAIT_MS = 2500;
 // O vídeo do YouTube que o operador acabou de pedir, do clique até o som estar pronto (ou ele desistir). Enquanto o
 // yt-dlp resolve os links (~5 s) nada mais aparece na tela: sem isto o clique parece não ter feito nada.
 const _opening = shallowRef<{ id: string | null; title: string } | null>(null);
@@ -197,21 +204,127 @@ const _opening = shallowRef<{ id: string | null; title: string } | null>(null);
  * coisa. Sem isso o vídeo apareceria sozinho no telão quando terminasse.
  */
 function _dropPendingDownload(): void {
+  const preparation = _ytPreparation;
+  if (preparation) {
+    _ytPrepareSeq++;
+    _ytPreparation = null;
+  }
   if (_ytStarting) {
     // Fechou a mídia ou abriu outra coisa antes de o vídeo começar: quem espera o som
     // ficar pronto não pode, ao estourar o prazo, abrir o player do YouTube por cima.
     _ytStarting = null;
-    _ytPrepareSeq++;
-    _ytPreparation = null;
+    if (!preparation) _ytPrepareSeq++;
   }
   if (!_ytDownloading) return;
   if (_ytOwnsDownload) OnlineVideo.cancel(_ytDownloading);
   _ytDownloading = null;
   _ytOwnsDownload = false;
-  _ytPrepareSeq++; // o resultado que chegar já não interessa
+  if (!preparation) _ytPrepareSeq++; // o resultado que chegar já não interessa
   // Quem pedir o mesmo vídeo agora começa um preparo novo: reaproveitar o cancelado,
   // que ainda está encerrando, o faria terminar em "parado" e o vídeo nunca abriria.
   _ytPreparation = null;
+}
+
+function _clearFileProjectionCache(): void {
+  try {
+    localStorage.removeItem(KEYS.PROJECTION.LJ_FILE_PROJECTION);
+    localStorage.removeItem(KEYS.PROJECTION.LJ_YOUTUBE_PROJECTION);
+  } catch { /* armazenamento indisponível */ }
+}
+
+function _hasFileProjectionCache(): boolean {
+  try {
+    return Boolean(localStorage.getItem(KEYS.PROJECTION.LJ_FILE_PROJECTION) ||
+      localStorage.getItem(KEYS.PROJECTION.LJ_YOUTUBE_PROJECTION));
+  } catch { return false; }
+}
+
+function _queueStageWindows(stageEpoch: number, action: () => Promise<void>): Promise<void> {
+  const transition = _stageWindowTransition.then(async () => {
+    if (stageEpoch === _stageEpoch) await action();
+  });
+  _stageWindowTransition = transition.catch(() => {});
+  return transition;
+}
+
+/** Wait for older close operations without making a native window open block later stage changes. */
+async function _afterStageWindowCloses(stageEpoch: number, action: () => Promise<void>): Promise<void> {
+  await _stageWindowTransition;
+  if (stageEpoch === _stageEpoch) await action();
+}
+
+function _closeFileWindowsAfterPendingOpen(stageEpoch: number): void {
+  if (!_videoWindowOpenings.size) return;
+  void Promise.allSettled([..._videoWindowOpenings]).then(() => {
+    if (stageEpoch === _stageEpoch) {
+      void _queueStageWindows(stageEpoch, closeFileProjectionWindows).catch(() => {});
+    }
+  });
+}
+
+async function _waitForPreviousVideoWindows(stageEpoch: number): Promise<void> {
+  if (!_videoWindowOpenings.size) return;
+  const finished = Promise.allSettled([..._videoWindowOpenings]);
+  let settled = false;
+  const done = finished.then(() => { settled = true; });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([
+    done,
+    new Promise<void>((resolve) => { timer = setTimeout(resolve, VIDEO_WINDOW_RELEASE_WAIT_MS); }),
+  ]);
+  if (timer) clearTimeout(timer);
+  if (!settled) {
+    // A chamada nativa demorou além do limite. Não atrasa a nova música;
+    // se a janela antiga aparecer depois, fecha-a apenas se este palco ainda for dono.
+    void done.then(() => {
+      if (stageEpoch === _stageEpoch) {
+        void _queueStageWindows(stageEpoch, closeFileProjectionWindows).catch(() => {});
+      }
+    });
+  }
+}
+
+/** Encerra o palco de arquivo/vídeo antes de um novo slide musical ou do editor. */
+async function _releaseFileVideoStage(stageEpoch: number, wasVisibleAlready = false): Promise<void> {
+  const wasVisible = _isYouTube() || _keepVideoProjectionOnLoadError() ||
+    _hasFileProjectionCache() || _videoWindowOpenings.size > 0 || wasVisibleAlready;
+  if (!wasVisible) return;
+  if (_ytUnlisten) {
+    _ytUnlisten();
+    _ytUnlisten = null;
+  }
+  if (_ytWatchdog) clearTimeout(_ytWatchdog);
+  _ytWatchdog = null;
+  _clearFileProjectionCache();
+  $broadcast.send(BROADCAST_TYPE.MEDIA_CLOSE);
+  await _queueStageWindows(stageEpoch, async () => {
+    // A abertura Electron já enviada pode terminar depois do pedido de troca.
+    await _waitForPreviousVideoWindows(stageEpoch);
+    if (stageEpoch === _stageEpoch) await closeFileProjectionWindows();
+  });
+}
+
+async function _openTrackedVideoWindows(withOperator = false): Promise<void> {
+  const opening = openVideoProjectionWindows({ withOperator });
+  _videoWindowOpenings.add(opening);
+  try { await opening; }
+  finally { _videoWindowOpenings.delete(opening); }
+}
+
+async function _openTrackedFileWindows(): Promise<void> {
+  const opening = openFileProjectionWindows();
+  _videoWindowOpenings.add(opening);
+  try { await opening; }
+  finally { _videoWindowOpenings.delete(opening); }
+}
+
+async function _claimVideoWindows(stageEpoch: number, withOperator = false): Promise<boolean> {
+  // O close de MUSIC/RETURN termina antes de um novo pedido de música poder
+  // abrir essas features. FILE permanece intacta ao trocar vídeo por vídeo.
+  await _queueStageWindows(stageEpoch, closeMusicProjectionWindows);
+  if (stageEpoch !== _stageEpoch) return false;
+  await _afterStageWindowCloses(stageEpoch, () => _openTrackedVideoWindows(withOperator));
+  return stageEpoch === _stageEpoch;
 }
 
 /**
@@ -289,8 +402,7 @@ async function _runDownloadedYouTube(
 
   if (res.ok) {
     if (registered) tasks.completeTask(taskId);
-    await _openVideoFileProjection(res.url, title);
-    return "playing";
+    return (await _openVideoFileProjection(res.url, title, res.url, seq)) ? "playing" : "stopped";
   }
 
   const kind = res.error.kind;
@@ -320,8 +432,10 @@ async function _openVideoFileProjection(
   audioUrl: string = url,
   seq?: number
 ): Promise<boolean> {
+  if (seq !== undefined && seq !== _ytPrepareSeq) return false;
   // Se o que estava no ar era o player embutido, as janelas dele saem primeiro.
-  if (_isYouTube()) _self.close(true);
+  if (_isYouTube()) _self.close(true, true, true, true);
+  const stageEpoch = _stageEpoch;
 
   const payload = { url, type: "video", title };
   try {
@@ -332,21 +446,21 @@ async function _openVideoFileProjection(
   }
 
   try {
-    await openVideoProjectionWindows({ withOperator: true });
+    if (!(await _claimVideoWindows(stageEpoch, true))) return false;
   } catch (error) {
     Telemetry.captureException(error, { operation: "online_video_projection_open" });
   }
+  if (stageEpoch !== _stageEpoch || (seq !== undefined && seq !== _ytPrepareSeq)) return false;
   $broadcast.send(BROADCAST_TYPE.FILE_PROJECTION, payload);
   // As janelas levam um instante para abrir; se o operador pediu outra coisa nesse
   // meio-tempo, este vídeo já não é o do telão.
-  if (seq !== undefined && seq !== _ytPrepareSeq) return false;
   await _self.openAudio({
     url: audioUrl,
     title,
     mediaType: "video",
     // Imagem e som em arquivos diferentes: o player do app mostra a imagem por conta própria.
     ...(audioUrl !== url ? { videoUrl: url } : {}),
-  });
+  }, true);
   return true;
 }
 
@@ -463,7 +577,7 @@ async function _runStreamedYouTube(
       };
       console.warn("[OnlineVideo] o vídeo aberto direto não chegou a tocar:", { id, ...detail });
       Telemetry.track("online_video_stream_start_failed", { video_id: id, ...detail });
-      _self.close(true);
+      _self.close(true, true, true, true);
       $snackbar.warning(say(OnlineVideo.messageKeyForStreamFailure("unknown")), {
         key: `ov-fallback-${id}`,
         timeout: 8000,
@@ -892,8 +1006,10 @@ const _self = {
   },
 
   async open(params: MediaOpenParams | string | number): Promise<void> {
-    _dropPendingDownload();
     params = _openParams(params);
+    const requestedId = params.id_music;
+    if (!((typeof requestedId === "string" && requestedId.trim().length > 0) ||
+      (typeof requestedId === "number" && Number.isFinite(requestedId)))) return;
 
     $dev.write("open media", params);
     const playback_id = _newPlaybackId();
@@ -981,6 +1097,12 @@ const _self = {
       }
       return;
     }
+
+    const stageEpoch = ++_stageEpoch;
+    _dropPendingDownload();
+    _opening.value = null;
+    await _releaseFileVideoStage(stageEpoch);
+    if (stageEpoch !== _stageEpoch) return;
 
     // Crossfade: se há audio tocando, faz fade out antes de carregar a nova música
     const _existingAudio = _audio.getElement();
@@ -1378,6 +1500,11 @@ const _self = {
       tempo_seconds?: number;
     }>;
   }): Promise<void> {
+    const stageEpoch = ++_stageEpoch;
+    _dropPendingDownload();
+    _opening.value = null;
+    await _releaseFileVideoStage(stageEpoch);
+    if (stageEpoch !== _stageEpoch) return;
     $dev.write("open custom song", song?.nome);
     const playback_id = _newPlaybackId();
     const playbackContext: AudioTelemetryContext = {
@@ -1499,12 +1626,18 @@ const _self = {
       _setPlaybackContext(projectionContext);
     }
     _slides.setSlides(opts.slides, opts.times, opts.title, opts.playbackId);
+    // A capa precisa existir antes de carregar áudio, inclusive quando o
+    // decoder falha, o player fica pausado ou uma janela abre nesse intervalo.
+    // O core é a fonte visual; o relógio só seleciona slides posteriores.
+    if (opts.slides.length > 0) _slides.broadcastSlide();
+    const presentationSession = _slides.presentationSnapshot()?.sessionId;
 
     $broadcast.send(BROADCAST_TYPE.SLIDES_DATA, {
       slides: opts.slides,
       title: opts.title,
       slide_index: 0,
       playback_id: opts.playbackId,
+      presentation_session: presentationSession,
     });
 
     if (opts.minimized) {
@@ -1527,8 +1660,7 @@ const _self = {
       $appdata.set(KEYS.MODULES.MEDIA.CONFIG.AUDIO, "");
       $appdata.set(KEYS.MODULES.MEDIA.CONFIG.AUDIO_ONLY, false);
       $appdata.set(KEYS.MODULES.MEDIA.LOADING, false);
-      // Sem áudio: broadcast imediato do slide de capa para a projeção.
-      _slides.broadcastSlide();
+      // A capa já foi publicada antes de iniciar os efeitos de mídia.
     }
 
     $appdata.set(KEYS.MODULES.MEDIA.CONFIG.MODE, opts.mode);
@@ -1536,7 +1668,7 @@ const _self = {
     // Replica fmMusica + fmMusicaRetorno + fmMusicaOperador do Delphi:
     // ao iniciar uma música, abre as janelas auxiliares conforme
     // configurado em "Configurações → Slides de Músicas".
-    openProjectionWindows().catch((e) => {
+    _afterStageWindowCloses(_stageEpoch, openProjectionWindows).catch((e) => {
       console.warn("[Media] openProjectionWindows falhou:", e);
       const properties = projectionContext
         ? _telemetryFor(projectionContext, { operation: "music_projection_open" })
@@ -1550,17 +1682,101 @@ const _self = {
   },
 
   stop(): void {
+    ++_stageEpoch;
+    _dropPendingDownload();
+    _opening.value = null;
+    if (_ytUnlisten) {
+      _ytUnlisten();
+      _ytUnlisten = null;
+    }
     _audio.stop();
     this.clearVariables();
     _slides.reset();
     $appdata.set(KEYS.MODULES.MEDIA.MINIMIZED, false);
   },
 
+  /** O editor assume as janelas de slides; um player de arquivo/vídeo anterior precisa sair. */
+  stopForSlideEditor(): Promise<void> {
+    const wasFileVideo = _isYouTube() || _keepVideoProjectionOnLoadError();
+    this.stop();
+    const released = _releaseFileVideoStage(_stageEpoch, wasFileVideo);
+    $appdata.set(KEYS.MODULES.MEDIA.IS_PLAYING, false);
+    return released;
+  },
+
+  /** Serialized stage-window ownership for the editor's start/stop controls. */
+  openProjectionStage(): Promise<void> {
+    return _afterStageWindowCloses(_stageEpoch, openProjectionWindows);
+  },
+
+  closeProjectionStage(): Promise<void> {
+    const stageEpoch = ++_stageEpoch;
+    return _queueStageWindows(stageEpoch, closeProjectionWindows);
+  },
+
+  /** Reserva a projeção FILE para imagem, PDF ou vídeo vindos da liturgia, acervo ou controle remoto. */
+  async projectFile(
+    payload: { url: string; type: "image" | "pdf" | "video"; title?: string; [key: string]: unknown },
+    videoAudioUrl?: string,
+    { stopExistingAudio = false }: { stopExistingAudio?: boolean } = {}
+  ): Promise<boolean> {
+    if (!payload || typeof payload.url !== "string" || !payload.url ||
+      !["image", "pdf", "video"].includes(payload.type)) return false;
+    const stageEpoch = ++_stageEpoch;
+    _dropPendingDownload();
+    _opening.value = null;
+    const wasYouTube = _isYouTube();
+    const editorOrYouTube = wasYouTube ||
+      $userdata.get<boolean>(KEYS.MODULES.SLIDE_EDITOR.PROJECTING, false) === true;
+    if (_ytUnlisten) {
+      _ytUnlisten();
+      _ytUnlisten = null;
+    }
+    if (wasYouTube || stopExistingAudio) {
+      _audio.stop();
+      this.clearVariables();
+      $appdata.set(KEYS.MODULES.MEDIA.IS_PLAYING, false);
+    } else {
+      // Liturgia, timer e HTTP historicamente mostram imagem/PDF sobre uma
+      // música ainda audível. Retira só o slide musical do telão.
+      _slides.reset();
+    }
+    if (editorOrYouTube) $broadcast.send(BROADCAST_TYPE.MEDIA_CLOSE);
+
+    await _queueStageWindows(stageEpoch, closeMusicProjectionWindows);
+    if (stageEpoch !== _stageEpoch) return false;
+    try {
+      localStorage.setItem(KEYS.PROJECTION.LJ_FILE_PROJECTION, JSON.stringify(payload));
+      localStorage.removeItem(KEYS.PROJECTION.LJ_YOUTUBE_PROJECTION);
+    } catch { /* cache de reabertura opcional */ }
+    try {
+      await _afterStageWindowCloses(stageEpoch, _openTrackedFileWindows);
+    } catch (error) {
+      Telemetry.captureException(error, { operation: "file_projection_open" });
+    }
+    if (stageEpoch !== _stageEpoch) return false;
+    $broadcast.send(BROADCAST_TYPE.FILE_PROJECTION, payload);
+    if (payload.type === "video" && videoAudioUrl) {
+      await this.openAudio({ url: videoAudioUrl, title: payload.title || "", mediaType: "video" }, true);
+    }
+    return stageEpoch === _stageEpoch;
+  },
+
   /**
    * @param keepPendingDownload  o fim natural da mídia não cancela o vídeo do YouTube que
    *   o operador pediu enquanto ela tocava; qualquer outro fechamento cancela.
    */
-  close(force = false, keepPendingDownload = false): void {
+  close(
+    force = false,
+    keepPendingDownload = false,
+    keepProjectionWindows = false,
+    preserveStageEpoch = false
+  ): void {
+    if (force && !preserveStageEpoch) {
+      ++_stageEpoch;
+      _opening.value = null;
+      _closeFileWindowsAfterPendingOpen(_stageEpoch);
+    }
     if (force && !keepPendingDownload) _dropPendingDownload();
     if (_isYouTube()) {
       if (!force) {
@@ -1589,7 +1805,7 @@ const _self = {
       $appdata.set(KEYS.MODULES.MEDIA.IS_PLAYING, false);
       $appdata.set(KEYS.MODULES.MEDIA.MINIMIZED, false);
       $broadcast.send(BROADCAST_TYPE.MEDIA_CLOSE);
-      closeProjectionWindows().catch((e) => {
+      if (!keepProjectionWindows) _queueStageWindows(_stageEpoch, closeProjectionWindows).catch((e) => {
         console.warn("[Media] closeProjectionWindows falhou:", e);
       });
       return;
@@ -1633,7 +1849,7 @@ const _self = {
     $broadcast.send(BROADCAST_TYPE.MEDIA_CLOSE);
 
     // Fecha janelas auxiliares (espelha o fmMusica.Close do Delphi).
-    closeProjectionWindows().catch((e) => {
+    if (!keepProjectionWindows) _queueStageWindows(_stageEpoch, closeProjectionWindows).catch((e) => {
       console.warn("[Media] closeProjectionWindows falhou:", e);
     });
   },
@@ -1677,9 +1893,22 @@ const _self = {
     _album.close();
   },
 
-  async openAudio(params: MediaOpenParams | string | number): Promise<void> {
-    _dropPendingDownload();
+  async openAudio(params: MediaOpenParams | string | number, preserveProjectionStage = false): Promise<void> {
     params = _openParams(params);
+    const stageEpoch = preserveProjectionStage ? _stageEpoch : ++_stageEpoch;
+    if (!preserveProjectionStage) {
+      _dropPendingDownload();
+      _opening.value = null;
+    }
+    if (params.mediaType !== "video") {
+      await _releaseFileVideoStage(stageEpoch);
+      if (stageEpoch !== _stageEpoch) return;
+    } else if (!preserveProjectionStage) {
+      if ($userdata.get<boolean>(KEYS.MODULES.SLIDE_EDITOR.PROJECTING, false) === true)
+        $broadcast.send(BROADCAST_TYPE.MEDIA_CLOSE);
+      await _queueStageWindows(stageEpoch, closeMusicProjectionWindows);
+      if (stageEpoch !== _stageEpoch) return;
+    }
     const playback_id = _newPlaybackId();
     const audioMode = params.mode || "audio";
     const playbackContext: AudioTelemetryContext = {
@@ -1840,12 +2069,16 @@ const _self = {
    */
   async openYouTube(url: string, title: string): Promise<boolean> {
     const id = OnlineVideo.videoIdFromUrl(url);
+    // Dois cliques no mesmo vídeo enquanto ele abre partilham a tentativa em
+    // curso; um segundo vídeo de fato revoga a primeira tentativa.
+    const stageEpoch = _opening.value?.id === id ? _stageEpoch : ++_stageEpoch;
     const opening = { id, title };
     _opening.value = opening;
     try {
       // Um vídeo que o operador já baixou toca do arquivo mesmo com o download desligado: é de
       // graça e sem anúncio.
       const downloaded = !!id && (await OnlineVideo.isDownloaded(id));
+      if (stageEpoch !== _stageEpoch) return false;
       if (id && downloaded) {
         const outcome = await _prepareDownloadedYouTube(id, title);
         if (outcome !== "embed") return outcome === "playing";
@@ -1857,8 +2090,9 @@ const _self = {
         if (outcome !== "embed") return outcome === "playing";
         void useOnlineVideoDownloads().download(id, title, { keep: false, quiet: true, background: true });
       }
-      await this.openEmbeddedYouTube(url, title);
-      return true;
+      if (stageEpoch !== _stageEpoch) return false;
+      await this.openEmbeddedYouTube(url, title, stageEpoch);
+      return stageEpoch === _stageEpoch;
     } finally {
       if (_opening.value === opening) _opening.value = null;
     }
@@ -1875,7 +2109,10 @@ const _self = {
     this.close(true);
   },
 
-  async openEmbeddedYouTube(url: string, title: string): Promise<void> {
+  async openEmbeddedYouTube(url: string, title: string, expectedStageEpoch?: number): Promise<void> {
+    const stageEpoch = expectedStageEpoch ?? ++_stageEpoch;
+    if (stageEpoch !== _stageEpoch) return;
+    if (expectedStageEpoch === undefined) _dropPendingDownload();
     $dev.write("open youtube", { url, title });
     const playback_id = _newPlaybackId();
     const youtubeContext: AudioTelemetryContext = {
@@ -1933,7 +2170,7 @@ const _self = {
     }
 
     try {
-      await openVideoProjectionWindows();
+      if (!(await _claimVideoWindows(stageEpoch))) return;
       Telemetry.track("music_youtube_projection_opened", _telemetryFor(youtubeContext));
     } catch (error) {
       Telemetry.captureException(
