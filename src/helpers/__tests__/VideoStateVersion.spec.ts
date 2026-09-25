@@ -20,17 +20,19 @@ describe("VideoStateRevisionCounter", () => {
 });
 
 describe("VideoStateGate", () => {
-  it("mantém compatibilidade legada somente até o primeiro payload versionado", () => {
+  it("exige identidade anunciada e rejeita payload legado", () => {
     const gate = new VideoStateGate();
     gate.begin();
 
     expect(gate.accepts(null)).toBe(false);
     expect(gate.accepts(undefined)).toBe(false);
-    expect(gate.accepts(state())).toBe(true);
-    expect(gate.accepts(state({ playback_id: "playback-a", revision: 1 }))).toBe(true);
+    expect(gate.accepts(state())).toBe(false);
+    expect(gate.accepts(state({ playback_id: "playback-a", revision: 1 }))).toBe(false);
+    gate.begin("playback-a");
     expect(gate.accepts(state())).toBe(false);
     expect(gate.accepts(state({ playback_id: "playback-a" }))).toBe(false);
     expect(gate.accepts(state({ revision: 2 }))).toBe(false);
+    expect(gate.accepts(state({ playback_id: "playback-a", revision: 1 }))).toBe(true);
   });
 
   it("rejeita payload legado assim que a projeção conhece o playback esperado", () => {
@@ -69,5 +71,13 @@ describe("VideoStateGate", () => {
     expect(gate.accepts(state({ playback_id: "playback-a", revision: 9 }))).toBe(false);
     expect(gate.accepts(state({ playback_id: "playback-b", revision: 1 }))).toBe(true);
     expect(gate.accepts(state({ playback_id: "playback-a", revision: 10 }))).toBe(false);
+  });
+
+  it("não consome revisão quando o relógio ou o estado de pausa é inválido", () => {
+    const gate = new VideoStateGate();
+    gate.begin("playback-a");
+    expect(gate.accepts(state({ playback_id: "playback-a", revision: 1, currentTime: NaN }))).toBe(false);
+    expect(gate.accepts(state({ playback_id: "playback-a", revision: 1, isPaused: undefined as never }))).toBe(false);
+    expect(gate.accepts(state({ playback_id: "playback-a", revision: 1, duration: Infinity }))).toBe(true);
   });
 });

@@ -115,16 +115,16 @@ describe("Operator video state", () => {
     expect(applyVideoState.mock.calls.at(-1)?.[1].currentTime).toBe(10);
   });
 
-  it("accepts initial legacy state without an identity and clears it on close", async () => {
+  it("rejects identity-free state before and after close", async () => {
     await activate();
     emit(BROADCAST_TYPE.VIDEO_STATE, state(undefined, undefined, 12));
-    expect(applyVideoState.mock.calls.at(-1)?.[1].currentTime).toBe(12);
+    expect(applyVideoState).not.toHaveBeenCalled();
     emit(BROADCAST_TYPE.MEDIA_CLOSE, {});
     await flushPromises();
     await activate("identified");
     emit(BROADCAST_TYPE.VIDEO_STATE, state(undefined, undefined, 90));
     await wrapper!.find("video").trigger("canplay");
-    expect(applyVideoState).toHaveBeenCalledTimes(1);
+    expect(applyVideoState).not.toHaveBeenCalled();
   });
 
   it("clears the previous playback on slides and non-video projection", async () => {

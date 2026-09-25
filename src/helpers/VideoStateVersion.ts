@@ -31,17 +31,9 @@ export class VideoStateRevisionCounter {
   }
 }
 
-/**
- * Protege um consumidor contra pacotes atrasados e fora de ordem.
- *
- * Payloads legados (sem playback_id e sem revision) continuam aceitos até o
- * primeiro payload versionado válido da projeção atual. Depois desse ponto o
- * consumidor não volta ao protocolo ambíguo. Payload parcialmente versionado é
- * inválido e nunca entra pela exceção de compatibilidade.
- */
+/** Protege um consumidor contra pacotes atrasados, ambíguos ou malformados. */
 export class VideoStateGate {
   private expectedPlaybackId: string | null = null;
-  private versioned = false;
   private lastRevision = 0;
 
   begin(playbackId?: string | null): void {
@@ -49,33 +41,27 @@ export class VideoStateGate {
     // Replays do mesmo FILE_PROJECTION não devem zerar a monotonicidade.
     if (expected && expected === this.expectedPlaybackId) return;
     this.expectedPlaybackId = expected;
-    this.versioned = false;
     this.lastRevision = 0;
   }
 
   clear(): void {
     this.expectedPlaybackId = null;
-    this.versioned = false;
     this.lastRevision = 0;
   }
 
   accepts(state: VideoMediaState | null | undefined): boolean {
     if (!state || typeof state !== "object") return false;
-    const hasPlaybackId = state.playback_id !== undefined;
-    const hasRevision = state.revision !== undefined;
-
-    // Se FILE_PROJECTION ja anunciou a identidade, um pacote legado e
-    // ambiguo: ele pode pertencer justamente ao playback anterior. O modo
-    // legado so existe enquanto a propria projecao tambem nao tem identidade.
-    if (!hasPlaybackId && !hasRevision) {
-      return !this.versioned && this.expectedPlaybackId === null;
-    }
     if (!validPlaybackId(state.playback_id) || !validRevision(state.revision)) return false;
-    if (this.expectedPlaybackId && state.playback_id !== this.expectedPlaybackId) return false;
-    if (this.versioned && state.revision <= this.lastRevision) return false;
+    if (!this.expectedPlaybackId || state.playback_id !== this.expectedPlaybackId) return false;
+    if (state.revision <= this.lastRevision) return false;
+    if (!Number.isFinite(state.currentTime) || state.currentTime < 0 ||
+        !(state.duration === Infinity || (Number.isFinite(state.duration) && state.duration >= 0)) ||
+        typeof state.isPaused !== "boolean") return false;
+    if (state.sampledAt !== undefined && (!Number.isFinite(state.sampledAt) || state.sampledAt < 0)) return false;
+    if (state.position !== undefined && (!Number.isFinite(state.position) || state.position < 0)) return false;
+    if (state.playing !== undefined && state.playing !== !state.isPaused) return false;
+    if (state.rate !== undefined && (!Number.isFinite(state.rate) || state.rate <= 0)) return false;
 
-    this.expectedPlaybackId = state.playback_id;
-    this.versioned = true;
     this.lastRevision = state.revision;
     return true;
   }
