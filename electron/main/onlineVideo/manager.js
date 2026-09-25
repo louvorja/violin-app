@@ -687,8 +687,9 @@ function createManager(cfg) {
       // estar lendo o vídeo anterior quando este sweep roda, e apagar o arquivo debaixo de quem
       // lê é o que dá o "buga" (dispose() apaga o arquivo — "quem ainda lê recebe erro").
       if (idle) {
-        sessions.delete(id);
-        await session.dispose();
+        // Passa pela mesma barreira de `remove`: o dispose apaga a pasta
+        // compartilhada e uma nova sessão deste ID só pode abri-la depois.
+        if (sessions.get(id) === session) await disposeSession(id);
       }
     }
   }
