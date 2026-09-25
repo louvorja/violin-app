@@ -457,13 +457,11 @@ test.describe("primeiro uso: instala as ferramentas e baixa um 1080p", () => {
 
     // 1) O download aparece nos processos em segundo plano, com progresso que sobe.
     const seen = [];
-    let sawTools = false;
     while (true) {
       const list = await tasks();
       const t = list.find((x) => x.id === `online-video:${LONG}`);
       if (t) {
         seen.push(t.progress);
-        if (/ferramentas/i.test(t.detail || "")) sawTools = true;
         if (t.status !== "running") break;
       }
       const done = await Promise.race([downloading.then(() => true), sleep(700).then(() => false)]);
@@ -482,7 +480,10 @@ test.describe("primeiro uso: instala as ferramentas e baixa um 1080p", () => {
     );
 
     expect(downloaded).toBe(true);
-    expect(sawTools, "deve ter avisado que prepara as ferramentas na primeira vez").toBe(true);
+    expect(
+      Object.keys(phaseTimings.stages ?? {}).some((phase) => phase.startsWith("tools:")),
+      "deve ter emitido a fase de preparação de ferramentas"
+    ).toBe(true);
     expect(seen.length).toBeGreaterThan(3);
     // Progresso parado nas ferramentas quase sempre é o download falhando (o YouTube pode pedir
     // "confirme que não é um robô" a um IP com muitas execuções seguidas): o aviso mostra o porquê.
