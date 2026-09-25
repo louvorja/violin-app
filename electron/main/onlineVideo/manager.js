@@ -21,6 +21,10 @@ const DEFAULT_MAX_BYTES = 6 * 1024 ** 3;
 const MIN_FREE_BYTES = 1024 ** 3;
 const REFRESH_COOLDOWN_MS = 60 * 60 * 1000;
 const PROGRESS_INTERVAL_MS = 250;
+const STREAM_FAILURE_TTL_MS = 5 * 60 * 1000;
+const STREAM_FAILURE_KINDS = new Set([
+  "age", "bot", "disk", "forbidden", "format", "geo", "live", "network", "private", "tool", "unavailable", "unknown",
+]);
 /**
  * A barra é uma só para o operador, mas o trabalho tem fases que recomeçam do
  * zero (cada ferramenta baixada, depois o vídeo). Na primeira vez as ferramentas
@@ -102,6 +106,44 @@ function createManager(cfg) {
 
   /** Vídeos tocando enquanto baixam: não usam as raias, mas contam como transferência em curso. */
   let streaming = 0;
+  /** Um único erro recente, sem ID, URL, mensagem ou caminho, para o diagnóstico de incidentes. */
+  let lastStreamFailure = null;
+
+  const timeBucket = (ms) => {
+    if (!Number.isFinite(ms)) return "unknown";
+    const age = Math.max(0, ms);
+    if (age < 10_000) return "lt_10s";
+    if (age < 60_000) return "10s_1m";
+    if (age < 5 * 60_000) return "1m_5m";
+    return "gte_5m";
+  };
+
+  function recordStreamFailure(job, error) {
+    if (!job.links || !(job.played || job.streamingMode) || error?.kind === "cancelled") return;
+    const tracks = job.session?.tracks;
+    const track = tracks?.video?.error === error ? "video" : tracks?.audio?.error === error ? "audio" : "unknown";
+    const phase = job.session
+      ? (job.phase === "finalizing" ? "finalizing" : "downloading")
+      : "opening";
+    const kind = error instanceof OnlineVideoError && STREAM_FAILURE_KINDS.has(error.kind) ? error.kind : "unknown";
+    lastStreamFailure = {
+      kind,
+      track,
+      phase,
+      elapsed_bucket: timeBucket(now() - job.startedAt),
+      occurredAt: now(),
+    };
+  }
+
+  function lastStreamFailureSnapshot() {
+    if (!lastStreamFailure) return null;
+    const { kind, track, phase, elapsed_bucket, occurredAt } = lastStreamFailure;
+    if (now() - occurredAt >= STREAM_FAILURE_TTL_MS) {
+      lastStreamFailure = null;
+      return null;
+    }
+    return { kind, track, phase, elapsed_bucket, age_bucket: timeBucket(now() - occurredAt) };
+  }
 
   const transfersRunning = () => lanes.foreground.running + lanes.background.running + streaming;
 
@@ -501,6 +543,7 @@ function createManager(cfg) {
     job.promise = execute(job)
       .catch(async (error) => {
         job.openError ??= error;
+        recordStreamFailure(job, error);
         publish(job, { phase: "error", percent: 0, kind: error?.kind }, { force: true });
         // Falhou ou foi cancelado: as trilhas pela metade não servem a ninguém.
         await disposeSession(id);
@@ -707,6 +750,7 @@ function createManager(cfg) {
         return deliver(job, partial, result, startedAt, false);
       })
       .catch(async (error) => {
+        recordStreamFailure(job, error);
         publish(job, { phase: "error", percent: 0, kind: error?.kind }, { force: true });
         // Falhou ou foi cancelado: as trilhas pela metade não servem a ninguém.
         await disposeSession(id);
@@ -796,6 +840,7 @@ function createManager(cfg) {
       count: items.length,
       size: items.reduce((s, v) => s + v.size, 0),
       active: [...jobs.keys()],
+      last_stream_failure: lastStreamFailureSnapshot(),
     };
   }
 
@@ -832,6 +877,7 @@ function createManager(cfg) {
       online_video_background_queued: lanes.background.waiters.length,
       online_video_streaming: streaming,
       online_video_jobs: [...jobs.values()].slice(0, 8).map(compactJob),
+      last_stream_failure: lastStreamFailureSnapshot(),
     };
   }
 

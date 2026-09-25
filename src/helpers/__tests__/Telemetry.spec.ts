@@ -798,6 +798,14 @@ describe("Telemetry", () => {
       online_video_jobs: [
         { priority: "foreground", lane: "streaming", phase: "downloading", age_bucket: "lt_10s" },
       ],
+      last_stream_failure: {
+        kind: "network",
+        track: "video",
+        phase: "downloading",
+        elapsed_bucket: "10s_1m",
+        age_bucket: "lt_10s",
+        url: "https://secret.example/path",
+      },
       token: "não enviar",
       arbitrary_payload: "não enviar",
     });
@@ -815,11 +823,19 @@ describe("Telemetry", () => {
         online_video_jobs: [
           { priority: "foreground", lane: "streaming", phase: "downloading", age_bucket: "lt_10s" },
         ],
+        last_stream_failure: {
+          kind: "network",
+          track: "video",
+          phase: "downloading",
+          elapsed_bucket: "10s_1m",
+          age_bucket: "lt_10s",
+        },
       })
     );
     const attributes = posthog.logger.error.mock.lastCall?.[1] as Record<string, unknown>;
     expect(attributes.token).toBeUndefined();
     expect(attributes.arbitrary_payload).toBeUndefined();
+    expect(JSON.stringify(attributes)).not.toContain("secret.example");
   });
 
   it("envia histogramas de performance com dimensões de baixa cardinalidade", async () => {

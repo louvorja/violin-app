@@ -83,9 +83,7 @@ declare global {
           folders: Record<string, boolean>;
         }>
       >;
-      validate: (
-        dir: string
-      ) => Promise<{
+      validate: (dir: string) => Promise<{
         ok: boolean;
         configDir?: string;
         folders?: Record<string, boolean>;
@@ -172,7 +170,13 @@ declare global {
       onFileDone: (cb: () => void) => void;
       onFileError: (cb: () => void) => void;
       onQueueDone: (
-        cb: (d: { queued?: number; message?: string; downloaded?: number; failed?: number; error?: string }) => void
+        cb: (d: {
+          queued?: number;
+          message?: string;
+          downloaded?: number;
+          failed?: number;
+          error?: string;
+        }) => void
       ) => void;
       onQueueCancelled: (cb: () => void) => void;
       start: (
@@ -187,7 +191,31 @@ declare global {
       checkFiles: (files: unknown) => Promise<unknown>;
     };
     onlineVideo: {
-      status: () => Promise<{ count: number; size: number; supported: boolean; ready: boolean }>;
+      status: () => Promise<{
+        count: number;
+        size: number;
+        supported: boolean;
+        ready: boolean;
+        last_stream_failure: null | {
+          kind:
+            | "age"
+            | "bot"
+            | "disk"
+            | "forbidden"
+            | "format"
+            | "geo"
+            | "live"
+            | "network"
+            | "private"
+            | "tool"
+            | "unavailable"
+            | "unknown";
+          track: "video" | "audio" | "unknown";
+          phase: "opening" | "downloading" | "finalizing";
+          elapsed_bucket: "lt_10s" | "10s_1m" | "1m_5m" | "gte_5m" | "unknown";
+          age_bucket: "lt_10s" | "10s_1m" | "1m_5m" | "gte_5m" | "unknown";
+        };
+      }>;
       ensure: (
         id: string,
         opts?: { maxHeight?: number; priority?: "foreground" | "background"; keep?: boolean }
