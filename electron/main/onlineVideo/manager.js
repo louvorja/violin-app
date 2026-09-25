@@ -379,7 +379,7 @@ function createManager(cfg) {
             toolPaths = await tools.ensure({ signal });
             continue;
           }
-          if (needsFreshTool(kind) && !refreshed && alone && now() - lastRefreshAt > refreshCooldownMs) {
+          if (needsFreshTool(kind) && !installedTools && !refreshed && alone && now() - lastRefreshAt > refreshCooldownMs) {
             refreshed = true;
             lastRefreshAt = now();
             publish(job, { phase: "tools", tool: "yt-dlp", percent: 0, phasePercent: 0 }, { force: true });

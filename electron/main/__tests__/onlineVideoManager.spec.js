@@ -360,6 +360,22 @@ describe("ensure — ffmpeg quebrado chega como erro genérico", () => {
 });
 
 describe("ensure — yt-dlp desatualizado", () => {
+  it.each(["bot", "format", "forbidden"])(
+    "yt-dlp recém-instalado com erro '%s': não baixa a mesma versão outra vez",
+    async (kind) => {
+      const tools = fakeTools({ ready: vi.fn(() => false) });
+      const run = vi.fn(async () => {
+        throw new OnlineVideoError(kind, "falha no vídeo");
+      });
+      const { manager } = make({ tools, run });
+
+      expect(await manager.ensure(A)).toMatchObject({ ok: false, error: { kind } });
+      expect(tools.ensure).toHaveBeenCalledTimes(1);
+      expect(tools.refreshYtdlp).not.toHaveBeenCalled();
+      expect(run).toHaveBeenCalledTimes(1);
+    }
+  );
+
   it("falha que uma versão nova resolve: renova o yt-dlp e repete uma vez", async () => {
     const good = okRun();
     let n = 0;
