@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   applyVideoState,
   CATCH_UP,
@@ -169,6 +169,8 @@ describe("syncVideoElement — quando não mexer", () => {
 });
 
 describe("applyVideoState", () => {
+  afterEach(() => vi.restoreAllMocks());
+
   function playbackVideo() {
     return {
       ...video(), src: "https://example.test/video.mp4", paused: false,
@@ -193,9 +195,48 @@ describe("applyVideoState", () => {
     expect(applyVideoState(el, { ...state, currentTime: 11 })).toBe("seek");
   });
 
-  it("does not seek when startup is already close and consumes that alignment", () => {
+  it("keeps one seek for startup lag that develops after an initially close frame", () => {
+    const clock = vi.spyOn(performance, "now").mockReturnValue(0);
     const el = playbackVideo();
     expect(applyVideoState(el, playing(10.02))).toBe("ok");
+    clock.mockReturnValue(250);
+    expect(applyVideoState(el, playing(10.1))).toBe("rate");
+    clock.mockReturnValue(500);
+    expect(applyVideoState(el, playing(10.407))).toBe("seek");
+    expect(el.currentTime).toBeCloseTo(10.407);
+    el.currentTime = 10;
+    clock.mockReturnValue(1000);
+    expect(applyVideoState(el, playing(10.407))).toBe("rate");
+    expect(applyVideoState(el, playing(10.407))).toBe("rate");
+    expect(el.currentTime).toBe(10);
+  });
+
+  it.each([2000, 2001])("expires the unused startup seek at %i ms", (elapsed) => {
+    const clock = vi.spyOn(performance, "now").mockReturnValue(0);
+    const el = playbackVideo();
+    expect(applyVideoState(el, playing(10.02))).toBe("ok");
+    clock.mockReturnValue(elapsed);
+    expect(applyVideoState(el, playing(10.407))).toBe("rate");
+    expect(el.currentTime).toBe(10);
+  });
+
+  it("does not extend or restart the startup window after pause, buffering or seeking", () => {
+    const clock = vi.spyOn(performance, "now").mockReturnValue(0);
+    const el = playbackVideo();
+    expect(applyVideoState(el, playing(10.02))).toBe("ok");
+    clock.mockReturnValue(1000);
+    expect(applyVideoState(el, { currentTime: 10, isPaused: true })).toBe("ok");
+    Object.defineProperty(el, "readyState", { value: 2, configurable: true });
+    expect(applyVideoState(el, playing(10.1))).toBe("rate");
+    clock.mockReturnValue(1900);
+    Object.defineProperty(el, "readyState", { value: 4, configurable: true });
+    Object.defineProperty(el, "seeking", { value: true, configurable: true });
+    expect(applyVideoState(el, playing(10.407))).toBe("skip");
+    clock.mockReturnValue(2001);
+    Object.defineProperty(el, "seeking", { value: false, configurable: true });
+    expect(applyVideoState(el, playing(10.407))).toBe("rate");
+    clock.mockReturnValue(5000);
+    expect(applyVideoState(el, { currentTime: 10, isPaused: true })).toBe("ok");
     expect(applyVideoState(el, playing(10.407))).toBe("rate");
     expect(el.currentTime).toBe(10);
   });
@@ -214,6 +255,7 @@ describe("applyVideoState", () => {
   });
 
   it("keeps initial alignment pending through metadata, buffering and seeking", () => {
+    const clock = vi.spyOn(performance, "now").mockReturnValue(0);
     const el = playbackVideo();
     const state = playing(10.407);
     for (const readyState of [0, 1, 2]) {
@@ -223,14 +265,17 @@ describe("applyVideoState", () => {
     Object.defineProperty(el, "readyState", { value: 4, configurable: true });
     Object.defineProperty(el, "seeking", { value: true, configurable: true });
     expect(applyVideoState(el, state)).toBe("skip");
+    clock.mockReturnValue(5000);
     Object.defineProperty(el, "seeking", { value: false, configurable: true });
     expect(applyVideoState(el, state)).toBe("seek");
   });
 
   it("does not consume startup alignment on paused or invalid states", () => {
+    const clock = vi.spyOn(performance, "now").mockReturnValue(0);
     const el = playbackVideo();
     expect(applyVideoState(el, { currentTime: 10, isPaused: true })).toBe("ok");
     expect(applyVideoState(el, playing(NaN))).toBe("skip");
+    clock.mockReturnValue(5000);
     expect(applyVideoState(el, playing(10.407))).toBe("seek");
   });
 

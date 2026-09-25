@@ -5,6 +5,8 @@ import { playbackPositionAt } from "@/helpers/VideoPlaybackSnapshot";
 export const HARD_SEEK_S = 0.5;
 /** Na primeira imagem pronta, não passe segundos corrigindo o atraso da abertura. */
 export const INITIAL_SEEK_S = 0.15;
+/** Permite um único alinhamento durante os primeiros ciclos de reprodução. */
+const INITIAL_ALIGNMENT_WINDOW_MS = 2000;
 /** Abaixo disso ninguém percebe; acima, a imagem é acelerada ou freada até alcançar o som. */
 export const RATE_SYNC_S = 0.05;
 /** ±8% de velocidade não se percebe, e fecha 0,25 s de diferença em ~3 s. */
@@ -55,6 +57,7 @@ const initialAlignments = new WeakMap<HTMLVideoElement, {
   playbackId: string | undefined;
   src: string;
   aligned: boolean;
+  deadline: number | null;
 }>();
 
 /**
@@ -114,7 +117,7 @@ export function applyVideoState(
 ): SyncAction {
   let alignment = initialAlignments.get(el);
   if (!alignment || alignment.playbackId !== state.playback_id || alignment.src !== el.src) {
-    alignment = { playbackId: state.playback_id, src: el.src, aligned: false };
+    alignment = { playbackId: state.playback_id, src: el.src, aligned: false, deadline: null };
     initialAlignments.set(el, alignment);
   }
 
@@ -124,10 +127,19 @@ export function applyVideoState(
     void el.play().catch((error) => onPlayRejected?.(error));
   }
 
-  // Metadata alone does not mean playback can advance. Keep the one-time
-  // alignment pending until canplay (or a later state), including after a seek.
-  const initialAlignment = !alignment.aligned && state.isPaused === false && el.readyState >= 3;
-  const action = syncVideoElement(el, state, Date.now(), initialAlignment);
-  if (initialAlignment && action !== "skip") alignment.aligned = true;
+  const now = Date.now();
+  const startupNow = performance.now();
+  const canAlign = state.isPaused === false && el.readyState >= 3 && !el.seeking &&
+    expectedVideoTime(state, now) !== null;
+  // A close first frame may stall immediately afterwards. Keep one seek
+  // available briefly, without extending its deadline on pause/buffering or
+  // repeated canplay/seeked events. Use a monotonic clock for this local window.
+  if (!alignment.aligned && alignment.deadline === null && canAlign) {
+    alignment.deadline = startupNow + INITIAL_ALIGNMENT_WINDOW_MS;
+  }
+  if (alignment.deadline !== null && startupNow >= alignment.deadline) alignment.aligned = true;
+  const initialAlignment = !alignment.aligned && canAlign;
+  const action = syncVideoElement(el, state, now, initialAlignment);
+  if (initialAlignment && action === "seek") alignment.aligned = true;
   return action;
 }
