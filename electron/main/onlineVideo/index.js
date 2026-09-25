@@ -9,6 +9,12 @@ const { safeSend } = require("../safeWebContents.js");
 
 let _manager = null;
 let streamFailureReporter = null;
+let presentationActive = false;
+
+function setPresentationActive(active) {
+  presentationActive = active === true;
+  _manager?.setPresentationActive(presentationActive);
+}
 
 function setStreamFailureReporter(reporter) {
   streamFailureReporter = typeof reporter === "function" ? reporter : null;
@@ -51,6 +57,7 @@ function getManager() {
       // feita por uma falha passageira de rede, não pode deixá-lo sem o que testar.
       refreshCooldownMs: process.env.LJ_E2E_USER_DATA ? 0 : undefined,
       onStreamFailure: (failure) => streamFailureReporter?.(failure),
+      presentationActive,
     });
   }
   return _manager;
@@ -142,4 +149,5 @@ module.exports = {
   shutdown,
   diagnosticSnapshot,
   setStreamFailureReporter,
+  setPresentationActive,
 };

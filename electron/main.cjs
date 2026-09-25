@@ -93,7 +93,10 @@ const { buildCsp } = require("./main/csp.js");
 const diagnosticLogsRequested =
   process.env.LJ_LOGS === "1" || process.argv.some((arg) => arg.toLowerCase() === "--lj-logs");
 const presentationActivity = createPresentationActivity();
-presentationActivity.subscribe((active) => updater.setPresentationActive(active));
+presentationActivity.subscribe((active) => {
+  updater.setPresentationActive(active);
+  onlineVideo.setPresentationActive(active);
+});
 windowFactory.setPresentationActivityObserver((active) => {
   presentationActivity.setSource("projection_window", active);
 });

@@ -8,6 +8,7 @@ const { createStore } = require("./store.js");
 const runner = require("./runner.js");
 const progressive = require("./progressive.js");
 const { isVideoId } = require("./ids.js");
+const { WorkPriority, canStartWork } = require("../presentationAdmission.js");
 
 const { OnlineVideoError, clampHeight, needsFreshTool } = runner;
 
@@ -107,7 +108,9 @@ function createManager(cfg) {
     monotonicNow = () => performance.now(),
     refreshCooldownMs = REFRESH_COOLDOWN_MS,
     onStreamFailure = () => {},
+    presentationActive: initialPresentationActive = false,
   } = cfg;
+  let presentationActive = initialPresentationActive === true;
 
   const store = createStore(dir);
   const cacheDir = path.join(dir, ".ytdlp-cache");
@@ -200,6 +203,8 @@ function createManager(cfg) {
   function drainLane(priority) {
     const lane = lanes[priority];
     if (!lane || lane.running >= 1) return;
+    if (!canStartWork(priority === "background" ? WorkPriority.BACKGROUND : WorkPriority.INTERACTIVE,
+      presentationActive)) return;
     const next = lane.waiters.shift();
     if (next) grant(next);
   }
@@ -207,7 +212,9 @@ function createManager(cfg) {
   function acquire(job) {
     return new Promise((resolve, reject) => {
       const waiter = { job, resolve };
-      if (lanes[job.priority].running < 1) {
+      if (lanes[job.priority].running < 1 &&
+          canStartWork(job.priority === "background" ? WorkPriority.BACKGROUND : WorkPriority.INTERACTIVE,
+            presentationActive)) {
         grant(waiter);
         return;
       }
@@ -274,6 +281,11 @@ function createManager(cfg) {
     if (i >= 0) queue.splice(i, 1);
     if (lanes.foreground.running < 1) grant(waiter);
     else lanes.foreground.waiters.push(waiter);
+  }
+
+  function setPresentationActive(active) {
+    presentationActive = active === true;
+    if (!presentationActive) drainLane("background");
   }
 
   function publish(job, payload, { force = false } = {}) {
@@ -1064,6 +1076,7 @@ function createManager(cfg) {
     diagnosticSnapshot,
     list,
     init,
+    setPresentationActive,
     urlFor,
   };
 }

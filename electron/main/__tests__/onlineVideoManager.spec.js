@@ -605,6 +605,27 @@ describe("raias: o que é urgente não espera pré-download", () => {
     await p2;
   });
 
+  it("adia cache automático durante apresentação e retoma depois, sem atrasar pedido do operador", async () => {
+    const { gates, order, run } = gated();
+    const { manager } = make({ run, presentationActive: true });
+    const background = manager.ensure(A, { priority: "background" });
+    await tick();
+    expect(order).toEqual([]);
+
+    const interactive = manager.ensure(B);
+    await tick();
+    expect(order).toEqual([`start ${B}`]);
+    gates[B].resolve();
+    expect(await interactive).toMatchObject({ ok: true, id: B });
+
+    manager.setPresentationActive(false);
+    await tick();
+    expect(order).toContain(`start ${A}`);
+    gates[A].resolve();
+    expect(await background).toMatchObject({ ok: true, id: A });
+    expect(order.filter((entry) => entry === `start ${A}`)).toHaveLength(1);
+  });
+
   it("dois pedidos urgentes seguem em fila entre si", async () => {
     const { gates, order, run } = gated();
     const { manager } = make({ run });
