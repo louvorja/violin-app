@@ -169,6 +169,71 @@ describe("syncVideoElement — quando não mexer", () => {
 });
 
 describe("applyVideoState", () => {
+  function playbackVideo() {
+    return {
+      ...video(), src: "https://example.test/video.mp4", paused: false,
+      pause: vi.fn(), play: vi.fn(() => Promise.resolve()),
+    } as HTMLVideoElement;
+  }
+
+  it("aligns the measured 407 ms startup lag once, then uses rate correction", () => {
+    const el = playbackVideo();
+    const state = { ...playing(10.407), playback_id: "first" };
+    expect(applyVideoState(el, state)).toBe("seek");
+    expect(el.currentTime).toBeCloseTo(10.407);
+    expect(el.playbackRate).toBe(1);
+
+    // The seek has decoded its frame. A subsequent moderate delay must not
+    // produce another seek on seeked/canplay or the next periodic broadcast.
+    el.currentTime = 10;
+    expect(applyVideoState(el, state)).toBe("rate");
+    expect(applyVideoState(el, state)).toBe("rate");
+    expect(el.currentTime).toBe(10);
+    expect(el.playbackRate).toBeCloseTo(1 + CATCH_UP);
+    expect(applyVideoState(el, { ...state, currentTime: 11 })).toBe("seek");
+  });
+
+  it("does not seek when startup is already close and consumes that alignment", () => {
+    const el = playbackVideo();
+    expect(applyVideoState(el, playing(10.02))).toBe("ok");
+    expect(applyVideoState(el, playing(10.407))).toBe("rate");
+    expect(el.currentTime).toBe(10);
+  });
+
+  it("resets alignment for a new playback identity, source, or video element", () => {
+    const el = playbackVideo();
+    const state = { ...playing(10.407), playback_id: "first" };
+    expect(applyVideoState(el, state)).toBe("seek");
+    el.currentTime = 10;
+    expect(applyVideoState(el, state)).toBe("rate");
+    expect(applyVideoState(el, { ...state, playback_id: "second" })).toBe("seek");
+    el.currentTime = 10;
+    el.src = "https://example.test/other.mp4";
+    expect(applyVideoState(el, { ...state, playback_id: "second" })).toBe("seek");
+    expect(applyVideoState(playbackVideo(), state)).toBe("seek");
+  });
+
+  it("keeps initial alignment pending through metadata, buffering and seeking", () => {
+    const el = playbackVideo();
+    const state = playing(10.407);
+    for (const readyState of [0, 1, 2]) {
+      Object.defineProperty(el, "readyState", { value: readyState, configurable: true });
+      expect(applyVideoState(el, state)).toBe(readyState === 0 ? "skip" : "rate");
+    }
+    Object.defineProperty(el, "readyState", { value: 4, configurable: true });
+    Object.defineProperty(el, "seeking", { value: true, configurable: true });
+    expect(applyVideoState(el, state)).toBe("skip");
+    Object.defineProperty(el, "seeking", { value: false, configurable: true });
+    expect(applyVideoState(el, state)).toBe("seek");
+  });
+
+  it("does not consume startup alignment on paused or invalid states", () => {
+    const el = playbackVideo();
+    expect(applyVideoState(el, { currentTime: 10, isPaused: true })).toBe("ok");
+    expect(applyVideoState(el, playing(NaN))).toBe("skip");
+    expect(applyVideoState(el, playing(10.407))).toBe("seek");
+  });
+
   it("mantém pausado e alinha a posição quando uma busca termina", () => {
     const fake = {
       readyState: 4,

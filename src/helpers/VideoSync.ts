@@ -3,6 +3,8 @@ import { playbackPositionAt } from "@/helpers/VideoPlaybackSnapshot";
 
 /** Acima disso a imagem está tão fora que só uma busca resolve (troca de faixa, salto do operador). */
 export const HARD_SEEK_S = 0.5;
+/** Na primeira imagem pronta, não passe segundos corrigindo o atraso da abertura. */
+export const INITIAL_SEEK_S = 0.15;
 /** Abaixo disso ninguém percebe; acima, a imagem é acelerada ou freada até alcançar o som. */
 export const RATE_SYNC_S = 0.05;
 /** ±8% de velocidade não se percebe, e fecha 0,25 s de diferença em ~3 s. */
@@ -47,7 +49,13 @@ type SyncableVideo = Pick<
 >;
 
 type VideoClockState = Pick<VideoMediaState, "currentTime" | "isPaused" | "sentAt"> &
-  Partial<Pick<VideoMediaState, "sampledAt" | "position" | "playing" | "rate">>;
+  Partial<Pick<VideoMediaState, "sampledAt" | "position" | "playing" | "rate" | "playback_id">>;
+
+const initialAlignments = new WeakMap<HTMLVideoElement, {
+  playbackId: string | undefined;
+  src: string;
+  aligned: boolean;
+}>();
 
 /**
  * Alinha a imagem (que está sem som) ao áudio da janela principal.
@@ -61,7 +69,8 @@ type VideoClockState = Pick<VideoMediaState, "currentTime" | "isPaused" | "sentA
 export function syncVideoElement(
   el: SyncableVideo,
   state: VideoClockState,
-  now: number = Date.now()
+  now: number = Date.now(),
+  initialAlignment = false
 ): SyncAction {
   const expected = expectedVideoTime(state, now);
   if (expected == null || el.readyState < 1) return "skip";
@@ -84,7 +93,7 @@ export function syncVideoElement(
     return "ok";
   }
 
-  if (gap > HARD_SEEK_S) {
+  if (gap > (initialAlignment ? INITIAL_SEEK_S : HARD_SEEK_S)) {
     el.playbackRate = baseRate;
     el.currentTime = target;
     return "seek";
@@ -103,11 +112,22 @@ export function applyVideoState(
   state: VideoClockState,
   onPlayRejected?: (error: unknown) => void
 ): SyncAction {
+  let alignment = initialAlignments.get(el);
+  if (!alignment || alignment.playbackId !== state.playback_id || alignment.src !== el.src) {
+    alignment = { playbackId: state.playback_id, src: el.src, aligned: false };
+    initialAlignments.set(el, alignment);
+  }
+
   if (state.isPaused === true) {
     if (!el.paused) el.pause();
   } else if (state.isPaused === false && el.paused) {
     void el.play().catch((error) => onPlayRejected?.(error));
   }
 
-  return syncVideoElement(el, state);
+  // Metadata alone does not mean playback can advance. Keep the one-time
+  // alignment pending until canplay (or a later state), including after a seek.
+  const initialAlignment = !alignment.aligned && state.isPaused === false && el.readyState >= 3;
+  const action = syncVideoElement(el, state, Date.now(), initialAlignment);
+  if (initialAlignment && action !== "skip") alignment.aligned = true;
+  return action;
 }
