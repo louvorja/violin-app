@@ -39,7 +39,7 @@
 <script setup lang="ts">
 /**
  * AnnouncementsProjection — exibe os slides de Anúncios em sequência.
- * Recebe { slides, index } via broadcast/localStorage; navegação por
+ * Recebe { slides, index } via broadcast/IndexedDB; navegação por
  * setas/espaço e pelo módulo (ANNOUNCEMENTS_CONTROL).
  */
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
@@ -139,20 +139,30 @@ const textStyle = computed(() => {
   return base;
 });
 
-async function hydrateMedia(): Promise<void> {
-  /* Mídia é armazenada inline nos slides — nada a hidratar. */
-}
-
-function applyState(payload: { slides?: AnnSlide[]; index?: number }): void {
-  const newIds = (payload.slides || []).map((s) => s.id).join(",");
+function applyState(payload: { slides?: AnnSlide[]; index?: number }): boolean {
+  if (
+    !Array.isArray(payload.slides) ||
+    payload.slides.length > 500 ||
+    !payload.slides.every(
+      (slide) =>
+        slide &&
+        typeof slide.id === "string" &&
+        typeof slide.nome === "string" &&
+        Number.isFinite(slide.ordem)
+    ) ||
+    (payload.index !== undefined && (!Number.isSafeInteger(payload.index) || payload.index < 0))
+  )
+    return false;
+  const newIds = payload.slides.map((s) => s.id).join(",");
   const oldIds = slides.value.map((s) => s.id).join(",");
   if (newIds !== oldIds) {
     clearMediaCache();
   }
-  slides.value = payload.slides || [];
+  slides.value = payload.slides;
   index.value = Math.max(0, Math.min(index.value, slides.value.length - 1));
-  if (typeof payload.index === "number") index.value = payload.index;
-  void hydrateMedia();
+  if (typeof payload.index === "number")
+    index.value = Math.max(0, Math.min(payload.index, slides.value.length - 1));
+  return true;
 }
 
 function onKeydown(e: KeyboardEvent): void {
@@ -170,8 +180,14 @@ function prev(): void {
 
 useProjectionCloseNotice(PROJECTION_TYPE.ANNOUNCEMENTS);
 
+let stateGeneration = 0;
+let receivedLiveState = false;
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
 useBroadcastListener(BROADCAST_TYPE.ANNOUNCEMENTS_STATE, (payload: unknown) => {
-  applyState((payload || {}) as { slides?: AnnSlide[]; index?: number });
+  if (applyState((payload || {}) as { slides?: AnnSlide[]; index?: number })) {
+    ++stateGeneration;
+    receivedLiveState = true;
+  }
 });
 
 useBroadcastListener(BROADCAST_TYPE.ANNOUNCEMENTS_CONTROL, (payload: unknown) => {
@@ -182,21 +198,29 @@ useBroadcastListener(BROADCAST_TYPE.ANNOUNCEMENTS_CONTROL, (payload: unknown) =>
 });
 
 async function readPendingState(): Promise<void> {
-  const row = await $idb.get<{ data?: { slides?: AnnSlide[]; index?: number } }>(
-    DB_TABLE.CACHE,
-    "announcements_projection_state"
-  );
-  if (row?.data) applyState(row.data);
+  if (receivedLiveState) return;
+  const generation = ++stateGeneration;
+  try {
+    const row = await $idb.get<{ data?: { slides?: AnnSlide[]; index?: number } }>(
+      DB_TABLE.CACHE,
+      "announcements_projection_state"
+    );
+    if (generation === stateGeneration && !receivedLiveState && row?.data) applyState(row.data);
+  } catch {
+    // A live broadcast may still arrive when local persistence is unavailable.
+  }
 }
 
 onMounted(() => {
   window.addEventListener("keydown", onKeydown);
   // Lê do IDB imediatamente + retry (padrão FileProjection).
   readPendingState();
-  setTimeout(readPendingState, 500);
+  retryTimer = setTimeout(readPendingState, 500);
 });
 
 onBeforeUnmount(() => {
+  ++stateGeneration;
+  if (retryTimer) clearTimeout(retryTimer);
   window.removeEventListener("keydown", onKeydown);
   for (const u of objectUrls) URL.revokeObjectURL(u);
 });
