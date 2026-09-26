@@ -286,3 +286,58 @@ test("direct cutover ignores versioned SLIDE_CHANGE without a valid canonical sn
     await context.close();
   }
 });
+
+test("200 ordered slide commands keep one session recoverable after projection reopen", async ({
+  browser,
+}) => {
+  test.setTimeout(120_000);
+  const context = await offlineContext(browser);
+  try {
+    const main = await context.newPage();
+    await openSong(main);
+    const projection = await openProjection(context);
+    const initial = await waitForCanonical(projection);
+    expect(initial.snapshot.totalSlides).toBeGreaterThan(1);
+    const session = initial.snapshot.sessionId;
+    const latencies = [];
+
+    for (let cycle = 0; cycle < 100; cycle++) {
+      for (const index of [1, 0]) {
+        const started = Date.now();
+        await send(projection, busTypes.goToSlide, { index, presentation_session: session });
+        await expect
+          .poll(() => latestCanonical(projection))
+          .toMatchObject({
+            snapshot: { sessionId: session, slideIndex: index },
+          });
+        const current = await latestCanonical(projection);
+        await expectSlideText(projection, current.snapshot.slide.lyric);
+        await projection.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+        latencies.push(Date.now() - started);
+      }
+    }
+
+    const ordered = [...latencies].sort((a, b) => a - b);
+    console.log(
+      JSON.stringify({
+        scenario: "slide-command-soak",
+        samples: ordered.length,
+        median_ms: ordered[Math.floor(ordered.length / 2)],
+        p95_ms: ordered[Math.floor(ordered.length * 0.95)],
+        p99_ms: ordered[Math.floor(ordered.length * 0.99)],
+        max_ms: ordered.at(-1),
+      })
+    );
+    await projection.close();
+    const reopened = await openProjection(context);
+    await expect
+      .poll(() => latestCanonical(reopened))
+      .toMatchObject({
+        snapshot: { sessionId: session, slideIndex: 0 },
+      });
+    await expectSlideText(reopened, (await latestCanonical(reopened)).snapshot.slide.lyric);
+    expect(context.pages()).toHaveLength(2);
+  } finally {
+    await context.close();
+  }
+});

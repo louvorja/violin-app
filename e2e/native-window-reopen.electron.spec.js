@@ -171,6 +171,40 @@ test("native close waits for the old music window before reopening the feature",
     await expect
       .poll(() => page.evaluate(() => window.louvorjaApi.windows.listOpen()))
       .toContain("musicas");
+    for (let cycle = 0; cycle < 20; cycle++) {
+      await page.evaluate(() => window.louvorjaApi.windows.close("musicas"));
+      await expect
+        .poll(() => page.evaluate(() => window.louvorjaApi.windows.listOpen()))
+        .not.toContain("musicas");
+      await page.evaluate(
+        ({ monitorId }) =>
+          window.louvorjaApi.windows.open({
+            route: "/projection",
+            feature: "musicas",
+            monitorId,
+            fullscreen: false,
+            alwaysOnTop: false,
+            frame: true,
+            width: 480,
+            height: 270,
+          }),
+        { monitorId: display.id }
+      );
+      await expect
+        .poll(
+          () => app.windows().filter((candidate) => candidate.url().endsWith("/projection")).length
+        )
+        .toBe(1);
+    }
+    console.log(
+      JSON.stringify({
+        scenario: "native-projection-reopen",
+        cycles: 20,
+        projection_windows: app
+          .windows()
+          .filter((candidate) => candidate.url().endsWith("/projection")).length,
+      })
+    );
   } finally {
     try {
       closed = await closeElectronApp(app);
