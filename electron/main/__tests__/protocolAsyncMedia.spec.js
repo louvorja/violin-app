@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import fs from "fs-extra";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import Path from "@/helpers/Path";
 
 const require = createRequire(import.meta.url);
 const root = fs.mkdtempSync(join(tmpdir(), "louvorja-protocol-async-"));
@@ -48,20 +49,20 @@ describe("louvorja:// local media requests", () => {
       expect(full.headers.get("Content-Length")).toBe("10");
       expect(await full.text()).toBe("abcdefghij");
 
-      const ranged = await handleRequest(new Request(`louvorja://local${localFile}`, {
+      const ranged = await handleRequest(new Request(Path.local(localFile), {
         headers: { Range: "bytes=3-5" },
       }));
       expect(ranged.status).toBe(206);
       expect(ranged.headers.get("Content-Range")).toBe("bytes 3-5/10");
       expect(await ranged.text()).toBe("345");
 
-      const beyondEnd = await handleRequest(new Request(`louvorja://local${localFile}`, {
+      const beyondEnd = await handleRequest(new Request(Path.local(localFile), {
         headers: { Range: "bytes=10-" },
       }));
       expect(beyondEnd.status).toBe(416);
       expect(beyondEnd.headers.get("Content-Range")).toBe("bytes */10");
 
-      const missing = await handleRequest(new Request(`louvorja://local${join(root, "missing.mp3")}`));
+      const missing = await handleRequest(new Request(Path.local(join(root, "missing.mp3"))));
       expect(missing.status).toBe(404);
       expect(syncStat).not.toHaveBeenCalled();
     } finally {

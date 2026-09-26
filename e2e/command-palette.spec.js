@@ -37,6 +37,10 @@ test("a primeira abertura da palette busca um hino", async ({ page }) => {
   await input.waitFor({ state: "visible", timeout: 10_000 });
   await input.fill("hino");
 
-  await expect(page.locator(".cmd-item")).toContainText(["Abrir Hinário", "Santo, Santo, Santo!"]);
+  // A primeira abertura busca e indexa o catálogo. Em runners carregados,
+  // esse trabalho pode passar do timeout padrão de 5 s do Playwright.
+  await expect(page.locator(".cmd-item")).toContainText(["Abrir Hinário", "Santo, Santo, Santo!"], {
+    timeout: 20_000,
+  });
   await expect(page.locator(".cmd-empty")).toHaveCount(0);
 });

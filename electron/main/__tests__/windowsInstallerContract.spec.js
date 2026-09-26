@@ -44,7 +44,7 @@ describe("contrato do instalador Windows", () => {
   });
 
   it("mantém o instalador assistido no escopo do usuário", () => {
-    const nsisConfig = builderConfig.match(/^nsis:\n([\s\S]*?)(?=^# -{10,}|^mac:)/m)?.[1];
+    const nsisConfig = builderConfig.replace(/\r\n/g, "\n").match(/^nsis:\n([\s\S]*?)(?=^# -{10,}|^mac:)/m)?.[1];
 
     expect(nsisConfig).toBeDefined();
     expect(nsisConfig).toMatch(/^  oneClick: false$/m);
