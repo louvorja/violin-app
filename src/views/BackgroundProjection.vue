@@ -161,6 +161,10 @@ import { SETTINGS_TABLE } from "@/constants/DbTables";
 import type { YTAPI, YTPlayer, VideoMediaState } from "@/types/Media";
 import { VideoStateGate } from "@/helpers/VideoStateVersion";
 import { FileProjectionActivationGate } from "@/presentation/FileProjectionActivation";
+import {
+  BackgroundPresentationGate,
+  readStoredBackgroundState,
+} from "@/presentation/BackgroundPresentationState";
 import { loadYtApi } from "@/composables/useYouTubeApi";
 import { loadPdfDocument, type PDFDocumentProxy } from "@/helpers/PdfRuntime";
 import { FONT, resolveFont } from "@/config/Fonts";
@@ -180,13 +184,16 @@ interface BgState {
 
 const curBg = reactive<BgState>({ active: false, type: "", url: "", title: "" });
 const bgVideoRef = ref<HTMLVideoElement | null>(null);
+const backgroundGate = new BackgroundPresentationGate();
 
 const MODULE_PATH = $modules.getPath(ModuleEnum.BACKGROUND_PROJECTION);
 const fadeDurationMs = computed(
   () => $userdata.get<number>(`${MODULE_PATH}.fade_duration`, 500) ?? 500
 );
 
-function activateBg(p: BgState): void {
+function activateBg(value: unknown): void {
+  const p = backgroundGate.accept(value);
+  if (!p) return;
   if (p.active === false) {
     curBg.active = false;
     curBg.type = "";
@@ -373,10 +380,10 @@ useBroadcastListener(BROADCAST_TYPE.BIBLE_FORMAT_CHANGED, () => {
 function readPendingBg(): void {
   if (curBg.active) return;
   try {
-    const stored = localStorage.getItem("lj_background_projection");
+    const stored = localStorage.getItem(KEYS.PROJECTION.LJ_BACKGROUND_PROJECTION);
     if (stored) {
       const p = JSON.parse(stored);
-      if (p?.url) activateBg(p);
+      activateBg(readStoredBackgroundState(p));
     }
   } catch {
     /* ignore */
@@ -387,7 +394,7 @@ readPendingBg();
 setTimeout(readPendingBg, 500);
 
 useBroadcastListener(BROADCAST_TYPE.BACKGROUND_PROJECTION, (payload: unknown) => {
-  activateBg((payload || {}) as BgState);
+  activateBg(payload);
 });
 
 useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION, (payload: unknown) => {

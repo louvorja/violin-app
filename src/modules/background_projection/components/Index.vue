@@ -247,6 +247,7 @@ import { KEYS } from "@/constants/UserDataKeys";
 import { IMAGE_EXT, VIDEO_EXT } from "@/constants/FileTypes";
 import { ensureRenderableImage, isHeic } from "@/helpers/ImageConvert";
 import { ModuleEnum } from "@/enums/ModuleEnum";
+import { nextBackgroundEpoch } from "@/presentation/BackgroundPresentationState";
 
 interface BgFile {
   id: string;
@@ -772,7 +773,13 @@ function getSelectedFile(): BgFile | null {
 async function playFile(file: BgFile): Promise<void> {
   selectedId.value = file.id;
   const url = resolvePath(file.path);
-  const payload = { url, type: file.type, title: file.name };
+  const payload = {
+    active: true,
+    epoch: nextBackgroundEpoch(),
+    url,
+    type: file.type,
+    title: file.name,
+  };
 
   localStorage.setItem(KEYS.PROJECTION.LJ_BACKGROUND_PROJECTION, JSON.stringify(payload));
 
@@ -791,19 +798,29 @@ async function togglePlay(): Promise<void> {
   }
   isPlaying.value = true;
   await openBackgroundProjectionWindows();
-  $broadcast.send(BROADCAST_TYPE.BACKGROUND_PROJECTION, { active: false });
+  $broadcast.send(BROADCAST_TYPE.BACKGROUND_PROJECTION, {
+    active: false,
+    epoch: nextBackgroundEpoch(),
+  });
 }
 
 async function clearProjection(): Promise<void> {
   if (!isPlaying.value) return;
   localStorage.removeItem(KEYS.PROJECTION.LJ_BACKGROUND_PROJECTION);
   selectedId.value = null;
-  $broadcast.send(BROADCAST_TYPE.BACKGROUND_PROJECTION, { active: false });
+  $broadcast.send(BROADCAST_TYPE.BACKGROUND_PROJECTION, {
+    active: false,
+    epoch: nextBackgroundEpoch(),
+  });
 }
 
 async function stop(): Promise<void> {
   isPlaying.value = false;
   localStorage.removeItem(KEYS.PROJECTION.LJ_BACKGROUND_PROJECTION);
+  $broadcast.send(BROADCAST_TYPE.BACKGROUND_PROJECTION, {
+    active: false,
+    epoch: nextBackgroundEpoch(),
+  });
   $broadcast.send(BROADCAST_TYPE.MEDIA_CLOSE, {});
   await closeBackgroundProjectionWindows();
 }

@@ -16,6 +16,7 @@ import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
 import { PROJECTION_TYPE } from "@/constants/Projection";
 import { close as closeProjection, isOpen as isProjectionOpen } from "@/helpers/Projection";
+import { nextBackgroundEpoch } from "@/presentation/BackgroundPresentationState";
 
 /**
  * Recarregar a janela de projeção também dispara o aviso de fechamento. Esperar
@@ -34,6 +35,9 @@ async function desligar(feature: string): Promise<void> {
     case PROJECTION_TYPE.BACKGROUND:
       $userdata.set(KEYS.MODULES.BACKGROUND_PROJECTION.IS_PLAYING, false);
       localStorage.removeItem(KEYS.PROJECTION.LJ_BACKGROUND_PROJECTION);
+      Broadcast.send(BROADCAST_TYPE.BACKGROUND_PROJECTION, {
+        active: false, epoch: nextBackgroundEpoch(),
+      });
       await closeProjection(PROJECTION_TYPE.BACKGROUND_RETURN);
       break;
 

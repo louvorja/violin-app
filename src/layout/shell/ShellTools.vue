@@ -202,6 +202,10 @@ import {
 } from "@/helpers/ProjectionWindows";
 import Broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
+import {
+  nextBackgroundEpoch,
+  readStoredBackgroundState,
+} from "@/presentation/BackgroundPresentationState";
 import { useBackgroundTasks, type BackgroundTask } from "@/composables/useBackgroundTasks";
 import { useConnectivity } from "@/composables/useConnectivity";
 import Platform from "@/helpers/Platform";
@@ -291,18 +295,29 @@ function openHotkeys() {
 async function toggleBackgroundProjection() {
   if (isBgPlaying.value) {
     $userdata.set(KEYS.MODULES.BACKGROUND_PROJECTION.IS_PLAYING, false);
+    localStorage.removeItem(KEYS.PROJECTION.LJ_BACKGROUND_PROJECTION);
+    Broadcast.send(BROADCAST_TYPE.BACKGROUND_PROJECTION, {
+      active: false,
+      epoch: nextBackgroundEpoch(),
+    });
     Broadcast.send(BROADCAST_TYPE.MEDIA_CLOSE, {});
     await closeBackgroundProjectionWindows();
   } else {
     $userdata.set(KEYS.MODULES.BACKGROUND_PROJECTION.IS_PLAYING, true);
     await openBackgroundProjectionWindows();
-    const stored = localStorage.getItem("lj_background_projection");
+    const stored = localStorage.getItem(KEYS.PROJECTION.LJ_BACKGROUND_PROJECTION);
     if (stored) {
       try {
-        Broadcast.send(BROADCAST_TYPE.BACKGROUND_PROJECTION, JSON.parse(stored));
+        const state = readStoredBackgroundState(JSON.parse(stored));
+        if (state?.active) Broadcast.send(BROADCAST_TYPE.BACKGROUND_PROJECTION, state);
       } catch {
         /* ignore */
       }
+    } else {
+      Broadcast.send(BROADCAST_TYPE.BACKGROUND_PROJECTION, {
+        active: false,
+        epoch: nextBackgroundEpoch(),
+      });
     }
   }
 }
