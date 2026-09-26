@@ -2,7 +2,7 @@
 
 **Data:** 2026-09-25  
 **Base inicial:** `origin/main` em `7113049a`  
-**Corte de código avaliado:** 23 commits desta execução, incluindo este relatório.  
+**Corte de código avaliado:** 24 commits desta execução, incluindo a correção de classificação deste relatório.  
 **Status arquitetural:** CONCLUÍDO para a arquitetura compartilhada Web/PWA e Electron, sujeito às ressalvas e à matriz física abaixo.  
 **Validação física multiplataforma:** PENDENTE. Este fechamento não publica nem faz push; `origin/main` avançou por um push externo durante a execução.
 
@@ -139,7 +139,7 @@ Não houve migração destrutiva de IndexedDB, UserData, diretório customizado,
 | `VITE_TARGET=desktop LJ_RUN_ELECTRON_PERF=1 npx playwright test e2e/electron-performance.spec.js --workers=1 --reporter=line` | 1 passou | Mac Apple M5/16 GB, CPU throttle 6; medição de shell, não Windows |
 | Testes focados de arquivo/fundo/overlay, seguidos da suíte Chromium completa | 4 passaram no primeiro foco; 2 no segundo; os 5 casos distintos passaram na suíte final | PDF 1→2→1, imagem late join/reopen, fundo/retorno e revogação de URL blob de overlay |
 
-O teste de vídeo online com rede pública é opt-in; usa YouTube/yt-dlp/ffmpeg reais e não substitui os testes determinísticos de protocolo, cache, utility e API simulada. A suíte completa passou após ajustar o cenário de ferramenta corrompida para respeitar a pausa de cache automático durante apresentação. Uma execução anterior encontrou `MediaError` no streaming progressivo durante o download; a repetição completa passou, então a disponibilidade da CDN externa continua como limite do ensaio. Não foi gerado instalador empacotado nem feita instalação do binário neste ciclo. O navegador e o Electron executados aqui usam builds de desenvolvimento.
+O teste de vídeo online com rede pública é opt-in; usa YouTube/yt-dlp/ffmpeg reais e não substitui os testes determinísticos de protocolo, cache, utility e API simulada. A suíte completa passou após ajustar o cenário de ferramenta corrompida para respeitar a pausa de cache automático durante apresentação. Uma execução anterior encontrou `MediaError` código 4 nas três telas após cancelar e reiniciar um stream, enquanto o áudio tocava. A origem não foi isolada naquela execução; a repetição completa passou. Isso permanece como risco de confiabilidade a observar em repetição prolongada, sem atribuição causal à CDN ou ao código. Não foi gerado instalador empacotado nem feita instalação do binário neste ciclo. O navegador e o Electron executados aqui usam builds de desenvolvimento.
 
 Os E2E Electron agora abrem por padrão janelas transparentes, sem foco e sem capturar mouse, somente quando usam `LJ_E2E_USER_DATA` isolado. `LJ_E2E_VISIBLE_WINDOWS=1` permite inspeção visual ou medição da composição real. No macOS, os E2E de download e 20 reaberturas passaram nesse modo e o monitor de foco registrou apenas o Google Chrome em primeiro plano; a suíte online de 33 cenários também passou nesse modo. O teste de performance acima foi executado com janelas visíveis antes dessa alteração. O comportamento sem foco em Windows/Linux requer validação física.
 
@@ -159,6 +159,7 @@ Não há gap arquitetural crítico conhecido nos caminhos live após os testes a
 
 - A suíte automática não substitui uma passagem manual exaustiva por editor, liturgia, canto/instrumental, atalhos, displays, OBS e todos os formatos de mídia em hardware alvo.
 - O YouTube embutido foi testado com API simulada; disponibilidade, anúncios, codec e restrições do serviço externo variam.
+- Uma execução online teve `MediaError` código 4 no vídeo progressivo após cancelamento e novo play, com áudio ainda tocando; a suíte completa subsequente passou. Investigar se reaparecer em repetição/telemetria com estado da sessão e resposta do protocolo.
 - O build ainda avisa sobre importação estática de `MusicSpotlight` e chunk lazy HEIC grande. Não houve falha de runtime ligada a esses warnings; avaliar com perfil de first paint antes de mexer em chunking.
 - Os 751 warnings do lint são dívida preexistente sem erros; a limpeza indiscriminada não tinha ROI nesta missão.
 
