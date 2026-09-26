@@ -31,6 +31,7 @@ import { readMusicPresentationPacket } from "@/presentation/MusicPresentationPac
 import { BiblePresentationGate } from "@/presentation/BiblePresentationState";
 import { ModulePresentationGate } from "@/presentation/ModulePresentationState";
 import { AnnouncementsPresentationGate } from "@/presentation/AnnouncementsPresentationState";
+import { LibrasVisibilityGate } from "@/presentation/LibrasVisibilityState";
 
 const CHANNEL_NAME = "louvorja";
 
@@ -84,6 +85,7 @@ const _lastByType = new Map<string, Map<string, BroadcastMessage>>();
 const bibleStateGate = new BiblePresentationGate();
 const moduleStateGate = new ModulePresentationGate();
 const announcementsStateGate = new AnnouncementsPresentationGate();
+const librasStateGate = new LibrasVisibilityGate();
 
 export interface BroadcastListenOptions {
   /** Repassa o último estado conhecido ao registrar o listener. */
@@ -113,6 +115,10 @@ function _deliverLocal(msg: BroadcastMessage): void {
     msg = { ...msg, payload: accepted };
   } else if (msg?.type === BROADCAST_TYPE.ANNOUNCEMENTS_STATE) {
     const accepted = announcementsStateGate.accept(msg.payload);
+    if (!accepted) return;
+    msg = { ...msg, payload: accepted };
+  } else if (msg?.type === BROADCAST_TYPE.LIBRAS_TOGGLE) {
+    const accepted = librasStateGate.accept(msg.payload);
     if (!accepted) return;
     msg = { ...msg, payload: accepted };
   }

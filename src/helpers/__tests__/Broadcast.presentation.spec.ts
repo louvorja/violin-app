@@ -172,4 +172,21 @@ describe("Broadcast music presentation relay", () => {
     expect(Broadcast.getLastPayload(BROADCAST_TYPE.SLIDE_CHANGE)).toEqual(editorSlide);
     expect(Broadcast.getLastPayload(BROADCAST_TYPE.MUSIC_PRESENTATION_SNAPSHOT)).toBeNull();
   });
+
+  it("does not cache or replay an old Libras toggle after a newer one", async () => {
+    const { default: Broadcast } = await import("../Broadcast");
+    const state = (epoch: number, enabled: boolean) => ({
+      libras_epoch: epoch, enabled, musics: true, bible: true, obs: false,
+    });
+    Broadcast.send(BROADCAST_TYPE.LIBRAS_TOGGLE, state(10, true));
+    Broadcast.send(BROADCAST_TYPE.LIBRAS_TOGGLE, state(11, false));
+    Broadcast.send(BROADCAST_TYPE.LIBRAS_TOGGLE, state(10, true));
+    expect(Broadcast.getLastPayload(BROADCAST_TYPE.LIBRAS_TOGGLE)).toEqual(state(11, false));
+    const received: unknown[] = [];
+    const stop = Broadcast.listen((message) => {
+      if (message.type === BROADCAST_TYPE.LIBRAS_TOGGLE) received.push(message.payload);
+    });
+    expect(received).toEqual([state(11, false)]);
+    stop();
+  });
 });

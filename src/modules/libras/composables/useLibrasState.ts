@@ -15,15 +15,11 @@ import $broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { KEYS_LS } from "@/constants/LocalStorageKeys";
 import Telemetry from "@/helpers/Telemetry";
+import { LibrasVisibilityGate, nextLibrasEpoch } from "@/presentation/LibrasVisibilityState";
 
 type LibrasScope = "music" | "bible";
 
-interface LibrasFlags {
-  enabled?: boolean;
-  musics?: boolean;
-  bible?: boolean;
-  obs?: boolean;
-}
+type LibrasFlag = "enabled" | "musics" | "bible" | "obs";
 
 function read(key: string, fallback: boolean): boolean {
   const raw = localStorage.getItem(key);
@@ -34,17 +30,19 @@ const enabled = ref(read(KEYS_LS.LIBRAS.ENABLED, false));
 const musicsEnabled = ref(read(KEYS_LS.LIBRAS.MUSICS_ENABLED, true));
 const bibleEnabled = ref(read(KEYS_LS.LIBRAS.BIBLE_ENABLED, true));
 const showOnObs = ref(read(KEYS_LS.LIBRAS.SHOW_ON_OBS, false));
+const visibilityGate = new LibrasVisibilityGate();
 
 $broadcast.listen((msg) => {
   if (msg.type !== BROADCAST_TYPE.LIBRAS_TOGGLE) return;
-  const flags = (msg.payload || {}) as LibrasFlags;
-  if (typeof flags.enabled === "boolean") enabled.value = flags.enabled;
-  if (typeof flags.musics === "boolean") musicsEnabled.value = flags.musics;
-  if (typeof flags.bible === "boolean") bibleEnabled.value = flags.bible;
-  if (typeof flags.obs === "boolean") showOnObs.value = flags.obs;
+  const flags = visibilityGate.accept(msg.payload);
+  if (!flags) return;
+  enabled.value = flags.enabled;
+  musicsEnabled.value = flags.musics;
+  bibleEnabled.value = flags.bible;
+  showOnObs.value = flags.obs;
 });
 
-function setFlag(field: keyof LibrasFlags, key: string, target: Ref<boolean>, value: boolean): void {
+function setFlag(field: LibrasFlag, key: string, target: Ref<boolean>, value: boolean): void {
   target.value = value;
   localStorage.setItem(key, String(value));
   Telemetry.track("libras_toggled", {
@@ -60,6 +58,7 @@ function setFlag(field: keyof LibrasFlags, key: string, target: Ref<boolean>, va
     musics: musicsEnabled.value,
     bible: bibleEnabled.value,
     obs: showOnObs.value,
+    libras_epoch: nextLibrasEpoch(),
   });
 }
 
