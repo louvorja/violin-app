@@ -556,11 +556,13 @@ function nextResult(): void {
   if (selectedIndex.value < results.value.length - 1) selectedIndex.value++;
 }
 
+let projectGeneration = 0;
 async function projectCurrent(): Promise<void> {
+  const generation = ++projectGeneration;
   const isActive = $userdata.get(KEYS.MODULES.BIBLE.IS_PLAYING, false);
   if (isActive) {
     $userdata.set(KEYS.MODULES.BIBLE.IS_PLAYING, false);
-    $broadcast.send(BROADCAST_TYPE.BIBLE_VERSE, {
+    $broadcast.send(BROADCAST_TYPE.BIBLE_VERSE_INTENT, {
       text: "",
       reference: "",
       active: true,
@@ -572,7 +574,12 @@ async function projectCurrent(): Promise<void> {
   if (!v) return;
   $userdata.set(KEYS.MODULES.BIBLE.IS_PLAYING, true);
   await ProjectionWindows.openBibleWindow();
-  $broadcast.send(BROADCAST_TYPE.BIBLE_VERSE, {
+  if (
+    generation !== projectGeneration ||
+    !$userdata.get<boolean>(KEYS.MODULES.BIBLE.IS_PLAYING, false)
+  )
+    return;
+  $broadcast.send(BROADCAST_TYPE.BIBLE_VERSE_INTENT, {
     text: v.text,
     reference: v.reference,
     book_id: v.id_bible_book,
@@ -583,9 +590,10 @@ async function projectCurrent(): Promise<void> {
 }
 
 function openInBible(): void {
+  ++projectGeneration;
   const v = currentVerse.value;
   if (!v) return;
-  $broadcast.send(BROADCAST_TYPE.BIBLE_VERSE, {
+  $broadcast.send(BROADCAST_TYPE.BIBLE_VERSE_INTENT, {
     text: v.text,
     reference: v.reference,
     book_id: v.id_bible_book,
@@ -598,6 +606,7 @@ function openInBible(): void {
 }
 
 function close(): void {
+  ++projectGeneration;
   searchTerms.value = [];
   draft.value = "";
   historyOpen.value = false;

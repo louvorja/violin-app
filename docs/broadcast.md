@@ -62,14 +62,15 @@ $broadcast.send(BROADCAST_TYPE.REQUEST_MUSIC_PRESENTATION_SNAPSHOT);
 | `SLIDE_PROGRESS` | `"slide_progress"` | `useSlides` (throttled) | ProjectionReturn |
 | `SLIDES_DATA` | `"slides_data"` | `useMedia`/`useSlides` | Operator, RemoteControl |
 | `GO_TO_SLIDE` | `"go_to_slide"` | Operator, Projection | `useSlides` (sessão obrigatória para música) |
-| `BIBLE_VERSE` | `"bible_verse"` | bible/Index | ObsBible, ProjectionBible |
+| `BIBLE_VERSE_INTENT` | `"bible_verse_intent"` | bible/Index, Shell | `main-shell.js` (valida e publica o estado canônico) |
+| `BIBLE_VERSE` | `"bible_verse"` | `main-shell.js` (autoridade da sessão principal) | ObsBible, ProjectionBible, ProjectionBibleReturn |
 | `BIBLE_FORMAT_CHANGED` | `"bible_format_changed"` | bible/Index, AppMenuOpcoes | ProjectionBible, ProjectionBibleReturn |
 | `SLIDE_FONT_CHANGED` | `"slide_font_changed"` | AppMenuOpcoes | useSlideStyle, ModuleProjection |
-| `REQUEST_BIBLE_STATE` | `"request_bible_state"` | ProjectionBible | bible/Index (re-emite) |
+| `REQUEST_BIBLE_STATE` | `"request_bible_state"` | ProjectionBible, ProjectionBibleReturn | `main-shell.js` (republica o último `BIBLE_VERSE` canônico) |
 | `MESSAGE_BOARD` | `"message_board"` | message_board/Index | (futuro) |
 | `MEDIA_CLOSE` | `"media_close"` | useMedia.close() | Projection, Obs, FileProjection |
 | `FILE_PROJECTION` | `"file_projection"` | liturgy / media_library / background_sound / timer end action | FileProjection, FileProjectionReturn |
-| `FILE_PROJECTION_PAGE` | `"file_projection_page"` | media_library (PDF nav) | FileProjection |
+| `FILE_PROJECTION_PAGE` | `"file_projection_page"` | media_library (pedido do operador); FileProjection/Return/BackgroundProjection (página e total) | FileProjection, FileProjectionReturn, BackgroundProjection, BackgroundProjectionReturn e media_library |
 | `ONLINE_VIDEO_PROJECTION` | `"online_video_projection"` | useMedia.openEmbeddedYouTube() (reserva com o player do YouTube; o vídeo baixado usa `FILE_PROJECTION` com `type: "video"`) | FileProjection |
 | `BACKGROUND_PROJECTION` | `"background_projection"` | background_projection module | BackgroundProjection, BackgroundProjectionReturn |
 | `WALLPAPER_UPDATE` | `"wallpaper_update"` | RibbonWallpaper, AppMenuOpcoes | BackgroundProjection, FileProjection |
@@ -137,15 +138,61 @@ slides atual/próximo. O deck completo não atravessa este canal.
 }
 ```
 
-### `BIBLE_VERSE`
+### Estado canônico da Bíblia
+
+O módulo da Bíblia não publica diretamente o estado exibido. Ele envia
+`BIBLE_VERSE_INTENT`; a janela principal valida o payload e `BiblePresentationAuthority`
+atribui identidade e ordem antes de publicar `BIBLE_VERSE`. O contrato está em
+`src/presentation/BiblePresentationState.ts`.
+
+O payload do intent contém `text`, `reference` e `active`; os metadados de livro,
+capítulo, versículos, versão e próximo versículo são opcionais. Valores são
+validados e limitados antes de publicação.
 
 ```ts
 {
-  text:      string;
+  bible_schema: 1;
+  bible_session: string; // identidade da sessão da autoridade principal
+  bible_epoch: number;   // época da sessão
+  bible_revision: number; // cresce a cada seleção ou fechamento
+  text: string;
   reference: string;
-  active:    boolean;
+  active: boolean;
+  book?: string;
+  book_id?: number;
+  chapter?: number;
+  verses?: number[];
+  version?: string;
+  version_id?: number;
+  next_text?: string;
+  next_reference?: string;
 }
 ```
+
+`Broadcast.ts` valida/rejeita pacotes malformados e versões antigas por meio de
+`BiblePresentationGate`, e guarda o último estado para replay a novos listeners.
+`REQUEST_BIBLE_STATE` pede à janela principal a republicação desse snapshot.
+Esse request é o mecanismo de recuperação entre janelas.
+
+### `FILE_PROJECTION_PAGE`
+
+```ts
+{
+  playback_id: string; // identidade do arquivo aberto no palco
+  page: number;        // inteiro >= 1
+  totalPages?: number; // inteiro >= 1, quando conhecido
+  source?: "operator" | "projection";
+}
+```
+
+Cada nova projeção PDF recebe um `playback_id` via `newFileProjectionId()`.
+O pedido do operador usa `source: "operator"`; a projeção aplica-o somente se
+o ID corresponder ao arquivo ativo, limita a página ao total conhecido e pode
+responder com `source: "projection"` e `totalPages`. A biblioteca e as
+projeções de retorno/background usam o mesmo validador
+`fileProjectionPageFor()`. O evento é transitório: a página de retomada é
+persistida junto do estado de arquivo e só é aplicada se o `playback_id` ainda
+corresponder.
 
 ### `FILE_PROJECTION`
 
@@ -154,6 +201,7 @@ slides atual/próximo. O deck completo não atravessa este canal.
   url:   string;
   type:  "image" | "video" | "pdf" | "youtube";
   title?: string;
+  playback_id?: string;
   page?: number;
   totalPages?: number;
 }

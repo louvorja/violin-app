@@ -389,10 +389,13 @@ useBroadcastListener(BROADCAST_TYPE.SLIDE_CHANGE, (payload) => {
   currentTitle.value = payload.title || "";
 });
 
+let bibleLoadGeneration = 0;
 useBroadcastListener(BROADCAST_TYPE.BIBLE_VERSE, async (payload) => {
+  const generation = ++bibleLoadGeneration;
+  if (!payload || typeof payload !== "object") return;
   activeBible.value.active = !!payload.active;
   activeBible.value.reference = payload.reference || "";
-  activeBible.value.versionId = payload.versionId || null;
+  activeBible.value.versionId = payload.version_id ?? payload.versionId ?? null;
 
   if (!payload.active) {
     activeBible.value.chapterVerses = [];
@@ -403,7 +406,8 @@ useBroadcastListener(BROADCAST_TYPE.BIBLE_VERSE, async (payload) => {
     activeBible.value.bookId = Number(payload.book_id);
     activeBible.value.chapter = payload.chapter;
     activeBible.value.verse = payload.verses?.[0] || 1;
-    await loadBibleChapter();
+    await loadBibleChapter(generation);
+    if (generation !== bibleLoadGeneration) return;
 
     // Sincroniza os selects do RemoteBible se ele estiver montado
     if (bibleRef.value?.loadBibleChapter) {
@@ -412,7 +416,7 @@ useBroadcastListener(BROADCAST_TYPE.BIBLE_VERSE, async (payload) => {
   }
 });
 
-async function loadBibleChapter() {
+async function loadBibleChapter(generation) {
   if (!activeBible.value.bookId || !activeBible.value.chapter) return;
 
   const bookId = Number(activeBible.value.bookId);
@@ -420,12 +424,15 @@ async function loadBibleChapter() {
   if (!versionId) {
     versionId = await getPreferredBibleVersion();
   }
-  if (!versionId) return;
+  if (!versionId || generation !== bibleLoadGeneration) return;
 
-  const dbKey = `bible_${versionId}_${bookId}_${activeBible.value.chapter}`;
+  const chapter = activeBible.value.chapter;
+  const dbKey = `bible_${versionId}_${bookId}_${chapter}`;
 
   const Database = (await import("@helpers/Database")).default;
+  if (generation !== bibleLoadGeneration) return;
   const chapterData = await Database.get(dbKey);
+  if (generation !== bibleLoadGeneration) return;
   if (chapterData) {
     const verseKeys = Object.keys(chapterData)
       .map(Number)

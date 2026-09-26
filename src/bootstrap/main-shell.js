@@ -68,6 +68,7 @@ import { BootOrchestrator } from "@/bootstrap/BootOrchestrator";
 import { useLibrasState } from "@/modules/libras/composables/useLibrasState";
 import { handleProjectionStateRequest } from "@/helpers/ProjectionStateRequests";
 import { listenForVideoStateRequests } from "@/helpers/VideoStateRequest";
+import { BiblePresentationAuthority } from "@/presentation/BiblePresentationState";
 
 const app = createApp(App);
 Telemetry.installVueErrorHandler(app);
@@ -97,6 +98,24 @@ const isAuxiliaryRenderer = AUXILIARY_ROUTE_PREFIXES.some((prefix) => {
   const route = initialRoutePath();
   return route === prefix || route.startsWith(`${prefix}/`);
 });
+
+// The primary shell owns Bible ordering for both Web/PWA and Electron. A
+// projection opened later asks this authority for the current snapshot.
+if (!isAuxiliaryRenderer) {
+  const bibleAuthority = new BiblePresentationAuthority();
+  Broadcast.listen(
+    (message) => {
+      if (message.type === BROADCAST_TYPE.BIBLE_VERSE_INTENT) {
+        const packet = bibleAuthority.publish(message.payload);
+        if (packet) Broadcast.send(BROADCAST_TYPE.BIBLE_VERSE, packet);
+      } else if (message.type === BROADCAST_TYPE.REQUEST_BIBLE_STATE) {
+        const current = Broadcast.getLastPayload(BROADCAST_TYPE.BIBLE_VERSE);
+        if (current) Broadcast.send(BROADCAST_TYPE.BIBLE_VERSE, current);
+      }
+    },
+    { replay: false }
+  );
+}
 
 /**
  * Executa uma música no modo escolhido (vindo do `POST /api/open-song`).
@@ -423,6 +442,14 @@ $storage.hydrate().then(async () => {
   // D5 — Conectar eventos do servidor HTTP às ações do app.
   if (Platform.isDesktop && !isAuxiliaryRenderer) {
     const reportedRemoteCommandRejections = new Set();
+    let bibleIntentRevision = 0;
+    // A local verse choice supersedes a remote request still resolving data.
+    Broadcast.listen(
+      (message) => {
+        if (message.type === BROADCAST_TYPE.BIBLE_VERSE_INTENT) bibleIntentRevision++;
+      },
+      { replay: false }
+    );
     function acceptsRemoteMusicCommand(action, data) {
       const session = data?.presentation_session;
       const current = useSlides().presentationSnapshot();
@@ -444,6 +471,10 @@ $storage.hydrate().then(async () => {
     }
     Platform.onHttpEvent(async (eventType, data) => {
       const action = data?.action;
+      const bibleRequest =
+        eventType === "http:song-slides" &&
+        ["bible-verse", "bible-next", "bible-prev", "bible-close"].includes(action);
+      const requestedBibleRevision = bibleRequest ? ++bibleIntentRevision : 0;
       switch (eventType) {
         case "http:song-slides":
           switch (action) {
@@ -758,8 +789,9 @@ $storage.hydrate().then(async () => {
                   /* ignore */
                 }
               }
+              if (requestedBibleRevision !== bibleIntentRevision) break;
 
-              Broadcast.send(BROADCAST_TYPE.BIBLE_VERSE, {
+              Broadcast.send(BROADCAST_TYPE.BIBLE_VERSE_INTENT, {
                 text: data.text,
                 reference: data.reference,
                 book_id: data.bookId,
@@ -800,6 +832,7 @@ $storage.hydrate().then(async () => {
 
               const dbKey = `bible_${id_bible_version}_${id_bible_book}_${chapter}`;
               const versesData = await Database.get(dbKey);
+              if (requestedBibleRevision !== bibleIntentRevision) break;
               if (!versesData || typeof versesData !== "object") break;
 
               const verseNums = Object.keys(versesData)
@@ -817,7 +850,7 @@ $storage.hydrate().then(async () => {
 
               if (nextIdx >= 0 && nextIdx < verseNums.length) {
                 const nextVerse = verseNums[nextIdx];
-                Broadcast.send(BROADCAST_TYPE.BIBLE_VERSE, {
+                Broadcast.send(BROADCAST_TYPE.BIBLE_VERSE_INTENT, {
                   text: versesData[String(nextVerse)] || "",
                   reference: `${book || ""} ${chapter}:${nextVerse}`,
                   book_id: id_bible_book,
@@ -831,7 +864,7 @@ $storage.hydrate().then(async () => {
               break;
             }
             case "bible-close":
-              Broadcast.send(BROADCAST_TYPE.BIBLE_VERSE, {
+              Broadcast.send(BROADCAST_TYPE.BIBLE_VERSE_INTENT, {
                 text: "",
                 reference: "",
                 active: true,

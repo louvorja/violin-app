@@ -8,6 +8,9 @@ import $userdata from "@/helpers/UserData";
 import Broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import ProjectionBibleReturn from "@/views/ProjectionBibleReturn.vue";
+import { BiblePresentationAuthority } from "@/presentation/BiblePresentationState";
+
+const bibleAuthority = new BiblePresentationAuthority();
 
 const P = "modules.bible";
 const CHAVES = [
@@ -32,7 +35,7 @@ const i18n = createI18n({
 });
 
 function verso(extra: Record<string, unknown> = {}) {
-  Broadcast.send(BROADCAST_TYPE.BIBLE_VERSE, {
+  const packet = bibleAuthority.publish({
     text: "Porque Deus amou o mundo de tal maneira que deu o seu Filho unigênito",
     reference: "João 3:16 (ARA)",
     book: "João",
@@ -44,6 +47,7 @@ function verso(extra: Record<string, unknown> = {}) {
     active: true,
     ...extra,
   });
+  Broadcast.send(BROADCAST_TYPE.BIBLE_VERSE, packet);
 }
 
 /**

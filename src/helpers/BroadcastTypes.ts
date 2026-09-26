@@ -37,9 +37,10 @@ export const BROADCAST_TYPE = Object.freeze({
    *  Payload: { index, _command_ts? }; recebido por useSlides. */
   GO_TO_SLIDE: "go_to_slide",
 
-  /** Versículo bíblico selecionado. Emitido por bible/Index.vue.
-   *  Recebido por: ObsBible, ProjectionBible. */
+  /** Estado canônico e versionado publicado pela janela principal. */
   BIBLE_VERSE: "bible_verse",
+  /** Pedido transitório de troca de versículo. A janela principal valida e publica BIBLE_VERSE. */
+  BIBLE_VERSE_INTENT: "bible_verse_intent",
 
   /** Formatação da Bíblia mudou (cor/fonte/tamanho/fundo). Emitido por
    *  bible/Index.vue ao alterar fmt.*. Recebido por: ProjectionBible. */
@@ -53,10 +54,7 @@ export const BROADCAST_TYPE = Object.freeze({
    *  Emitido por: RibbonBar. Recebido por: bible/Index.vue. */
   BIBLE_RIBBON_ACTION: "bible_ribbon_action",
 
-  /** Solicita reemissão do versículo atual da Bíblia. Emitido por
-   *  ProjectionBible ao montar — sem isso, janelas que abrem depois ficam
-   *  pretas até que o usuário troque de versículo.
-   *  Recebido por: bible/Index.vue (re-emite BIBLE_VERSE). */
+  /** Solicita o último BIBLE_VERSE canônico à janela principal. */
   REQUEST_BIBLE_STATE: "request_bible_state",
 
   // ─── Libras ────────────────────────────────────────────────────────────────
@@ -116,14 +114,14 @@ export const BROADCAST_TYPE = Object.freeze({
    *  Media.close e outros donos; limpa também caches de replay. */
   MEDIA_CLOSE: "media_close",
 
-  /** Projeção de arquivo (imagem/vídeo) vindo de liturgia ou outro módulo.
-   *  Payload: { url: string, type: "image" | "video" | "pdf", title?: string, page?: number, totalPages?: number }
+  /** Projeção de arquivo (imagem/vídeo/PDF) vindo de liturgia ou outro módulo.
+   *  Payload: { url, type, playback_id, title?, page?, totalPages? }
    *  Emitido por: liturgy (arquivo). Recebido por: Projection. */
   FILE_PROJECTION: "file_projection",
 
-  /** Navegação de página em PDF projetado.
-   *  Payload: { page: number }
-   *  Emitido por: media_library (next/prev em PDF). Recebido por: FileProjection. */
+  /** Navegação de PDF e resposta de metadados.
+   *  Payload: { playback_id, page, totalPages?, source: "operator" | "projection" }.
+   *  O ID impede que um arquivo anterior altere a projeção ativa. */
   FILE_PROJECTION_PAGE: "file_projection_page",
   ANNOUNCEMENTS_STATE: "announcements_state",
   ANNOUNCEMENTS_CONTROL: "announcements_control",

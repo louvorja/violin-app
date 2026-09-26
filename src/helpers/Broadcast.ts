@@ -28,6 +28,7 @@
 import { BROADCAST_TYPE, BroadcastMessage } from "@/helpers/BroadcastTypes";
 import Platform from "@/helpers/Platform";
 import { readMusicPresentationPacket } from "@/presentation/MusicPresentationPacket";
+import { BiblePresentationGate } from "@/presentation/BiblePresentationState";
 
 const CHANNEL_NAME = "louvorja";
 
@@ -78,6 +79,7 @@ const TRANSMISSION_TYPES = new Set<string>([
 let channel: BroadcastChannel | null = null;
 const _localListeners = new Set<(msg: BroadcastMessage) => void>();
 const _lastByType = new Map<string, Map<string, BroadcastMessage>>();
+const bibleStateGate = new BiblePresentationGate();
 
 export interface BroadcastListenOptions {
   /** Repassa o último estado conhecido ao registrar o listener. */
@@ -97,6 +99,11 @@ function _cacheKey(msg: BroadcastMessage): string {
 }
 
 function _deliverLocal(msg: BroadcastMessage): void {
+  if (msg?.type === BROADCAST_TYPE.BIBLE_VERSE) {
+    const accepted = bibleStateGate.accept(msg.payload);
+    if (!accepted) return;
+    msg = { ...msg, payload: accepted };
+  }
   if (msg && typeof msg.type === "string") {
     // `media_close` invalida o estado de slide acumulado — listeners que
     // registrarem depois (ex: OBS recarregado em outra máquina) não devem
@@ -193,6 +200,11 @@ _initOnce();
 
 export default {
   send(type: string, payload: unknown = {}): BroadcastSendResult {
+    if (type === BROADCAST_TYPE.BIBLE_VERSE) {
+      const accepted = bibleStateGate.accept(payload);
+      if (!accepted) return { crossWindow: false, remoteRelay: "not_required" };
+      payload = accepted;
+    }
     const msg: BroadcastMessage = { type, payload } as BroadcastMessage;
     let crossWindow = false;
     try {

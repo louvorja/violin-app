@@ -241,7 +241,9 @@ function commitVerse(val: number): void {
   selectResult(result);
 }
 
+let selectionGeneration = 0;
 async function selectResult(res: BibleSearchResult): Promise<void> {
+  const generation = ++selectionGeneration;
   if (res.text && res.reference) {
     const payload: BibleVersePayload = {
       text: res.text,
@@ -253,7 +255,8 @@ async function selectResult(res: BibleSearchResult): Promise<void> {
     };
     UserData.set(KEYS.MODULES.BIBLE.IS_PLAYING, true);
     await ProjectionWindows.openBibleWindow();
-    Broadcast.send(BROADCAST_TYPE.BIBLE_VERSE, payload);
+    if (generation !== selectionGeneration) return;
+    Broadcast.send(BROADCAST_TYPE.BIBLE_VERSE_INTENT, payload);
     Modules.open("bible");
     Broadcast.send(BROADCAST_TYPE.RIBBON_SELECT_PAGE, { pageId: "ctx_bible" });
   }

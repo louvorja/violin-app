@@ -534,7 +534,7 @@ function onUpdateDialogClose() {
 registerShell({ openCommandPalette, openHotkeysCheatsheet, openMusicSearch, openBibleSearch });
 
 function onBibleSelect(res: BibleSearchResult) {
-  Broadcast.send(BROADCAST_TYPE.BIBLE_VERSE, {
+  Broadcast.send(BROADCAST_TYPE.BIBLE_VERSE_INTENT, {
     text: res.text,
     reference: res.reference,
     active: true,

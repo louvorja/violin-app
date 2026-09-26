@@ -11,7 +11,6 @@ function harness(cached: Record<string, unknown> = {}) {
 
 describe("handleProjectionStateRequest", () => {
   it.each([
-    [BROADCAST_TYPE.REQUEST_BIBLE_STATE, BROADCAST_TYPE.BIBLE_VERSE],
     [BROADCAST_TYPE.REQUEST_SLIDE_STATE, BROADCAST_TYPE.SLIDE_CHANGE],
     [BROADCAST_TYPE.REQUEST_LIBRAS_STATE, BROADCAST_TYPE.LIBRAS_TOGGLE],
   ])("reemit cached state for %s", (requestType, responseType) => {

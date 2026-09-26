@@ -39,7 +39,7 @@ async function desligar(feature: string): Promise<void> {
 
     case PROJECTION_TYPE.BIBLE:
       $userdata.set(KEYS.MODULES.BIBLE.IS_PLAYING, false);
-      Broadcast.send(BROADCAST_TYPE.BIBLE_VERSE, { text: "", reference: "", active: false });
+      Broadcast.send(BROADCAST_TYPE.BIBLE_VERSE_INTENT, { text: "", reference: "", active: false });
       await closeProjection(PROJECTION_TYPE.BIBLE_RETURN);
       break;
 

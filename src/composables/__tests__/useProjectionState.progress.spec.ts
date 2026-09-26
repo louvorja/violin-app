@@ -7,6 +7,9 @@ import { useProjectionState } from "../useProjectionState";
 import { useSlides } from "../useSlides";
 import Telemetry from "@/helpers/Telemetry";
 import { readMusicPresentationPacket } from "@/presentation/MusicPresentationPacket";
+import { BiblePresentationAuthority } from "@/presentation/BiblePresentationState";
+
+const bibleAuthority = new BiblePresentationAuthority();
 
 const producer = useSlides();
 let state: ReturnType<typeof useProjectionState>;
@@ -47,7 +50,8 @@ describe("projection progress belongs to the committed music slide", () => {
   beforeEach(() => {
     producer.reset();
     Broadcast.send(BROADCAST_TYPE.MEDIA_CLOSE);
-    Broadcast.send(BROADCAST_TYPE.BIBLE_VERSE, { active: false });
+    Broadcast.send(BROADCAST_TYPE.BIBLE_VERSE,
+      bibleAuthority.publish({ active: false, text: "", reference: "" }));
     wrapper = mount(component);
   });
   afterEach(() => {
@@ -140,7 +144,8 @@ describe("projection progress belongs to the committed music slide", () => {
     expect(state.slideIndex.value).toBe(0);
     expect(state.slideProgress.value).toBe(0);
     slide("song", 2);
-    Broadcast.send(BROADCAST_TYPE.BIBLE_VERSE, { active: true, text: "Verse", reference: "Reference" });
+    Broadcast.send(BROADCAST_TYPE.BIBLE_VERSE,
+      bibleAuthority.publish({ active: true, text: "Verse", reference: "Reference" }));
     progress("song", 2, 0);
     expect(state.slideProgress.value).toBe(0);
     expect(state.slide.value?.lyric).toBe("Verse");

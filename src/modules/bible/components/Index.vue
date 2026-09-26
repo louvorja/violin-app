@@ -656,22 +656,58 @@ function send(param: string, value: unknown): void {
   AppData.set(`modules.${moduleId}.data.${param}`, value);
 }
 
+let loadDataGeneration = 0;
+
 async function loadData(): Promise<void> {
+  const generation = ++loadDataGeneration;
   loading.value = true;
 
   if (books.value.length <= 0) {
     loading_book.value = true;
-    books.value = (await Database.get(`${locale.value}_bible_book`)) as BibleBook[];
+    const loadedBooks = await Database.get(`${locale.value}_bible_book`);
+    if (generation !== loadDataGeneration) return;
+    books.value = Array.isArray(loadedBooks)
+      ? loadedBooks.filter(
+          (entry): entry is BibleBook =>
+            Number.isSafeInteger(entry?.id_bible_book) &&
+            entry.id_bible_book > 0 &&
+            typeof entry.name === "string" &&
+            Number.isSafeInteger(entry.chapters) &&
+            entry.chapters > 0
+        )
+      : [];
+    if (!books.value.length) {
+      loading_book.value = false;
+      loading.value = false;
+      return;
+    }
     if (!bible.id_bible_book) {
       await selBook(books.value[0].id_bible_book);
+      loading_book.value = false;
+      return;
     }
     loading_book.value = false;
   }
 
   if (versions.value.length <= 0) {
-    versions.value = (await Database.get(`${locale.value}_bible_version`)) as BibleVersion[];
+    const loadedVersions = await Database.get(`${locale.value}_bible_version`);
+    if (generation !== loadDataGeneration) return;
+    versions.value = Array.isArray(loadedVersions)
+      ? loadedVersions.filter(
+          (entry): entry is BibleVersion =>
+            Number.isSafeInteger(entry?.id_bible_version) &&
+            entry.id_bible_version > 0 &&
+            typeof entry.name === "string" &&
+            typeof entry.abbreviation === "string"
+        )
+      : [];
+    if (!versions.value.length) {
+      loading.value = false;
+      return;
+    }
     if (!bible.id_bible_version) {
       await selVersion(versions.value[0].id_bible_version);
+      return;
     }
   }
 
@@ -679,7 +715,20 @@ async function loadData(): Promise<void> {
   if (bible_file !== last_bible_file.value) {
     loading_verses.value = true;
     verses.value = {};
-    verses.value = (await Database.get(bible_file)) as Record<string, string>;
+    const loadedVerses = await Database.get(bible_file);
+    if (
+      generation !== loadDataGeneration ||
+      bible_file !== `bible_${bible.id_bible_version}_${bible.id_bible_book}_${bible.chapter}`
+    )
+      return;
+    verses.value =
+      loadedVerses && typeof loadedVerses === "object" && !Array.isArray(loadedVerses)
+        ? Object.fromEntries(
+            Object.entries(loadedVerses).filter(
+              ([key, value]) => /^\d+$/.test(key) && typeof value === "string"
+            )
+          )
+        : {};
     last_bible_file.value = bible_file;
     loading_verses.value = false;
   }
@@ -710,9 +759,9 @@ async function selBook(id_bible_book: number): Promise<void> {
   bible.verses = [];
   last_verse.value = 1;
   if (!bible.chapter) {
-    selChapter(1);
+    await selChapter(1);
   } else if (bible.chapter > (book.value?.chapters ?? 0)) {
-    selChapter(book.value?.chapters ?? 1);
+    await selChapter(book.value?.chapters ?? 1);
   } else {
     await loadData();
   }
@@ -782,7 +831,7 @@ async function selVerse(event: MouseEvent | null, num: number | string): Promise
     next_reference = `${bible.book} ${(bible.chapter ?? 0) + 1}:1`;
   }
 
-  Broadcast.send(BROADCAST_TYPE.BIBLE_VERSE, {
+  Broadcast.send(BROADCAST_TYPE.BIBLE_VERSE_INTENT, {
     text: select_bible.text,
     reference: select_bible.scriptural_reference,
     book: select_bible.book,
@@ -1052,7 +1101,7 @@ function clearText(): void {
     scriptural_reference: null,
     text: null,
   });
-  Broadcast.send(BROADCAST_TYPE.BIBLE_VERSE, {
+  Broadcast.send(BROADCAST_TYPE.BIBLE_VERSE_INTENT, {
     text: "",
     reference: "",
     active: true,
@@ -1084,7 +1133,7 @@ async function startProjection(): Promise<void> {
 
 async function stopProjection(): Promise<void> {
   UserData.set(KEYS.MODULES.BIBLE.IS_PLAYING, false);
-  Broadcast.send(BROADCAST_TYPE.BIBLE_VERSE, {
+  Broadcast.send(BROADCAST_TYPE.BIBLE_VERSE_INTENT, {
     text: "",
     reference: "",
     active: true,
@@ -1120,7 +1169,9 @@ useBroadcastListener(BROADCAST_TYPE.BIBLE_RIBBON_ACTION, (payload: any) => {
 });
 
 // Sincroniza o estado interno se um versículo for emitido por outro componente (ex: Spotlight, Bible Search).
+let bibleSelectionGeneration = 0;
 useBroadcastListener(BROADCAST_TYPE.BIBLE_VERSE, async (payload: any) => {
+  const generation = ++bibleSelectionGeneration;
   if (!payload || !payload.text) return;
 
   // Navegar até o livro/capítulo/versículo quando vindo de fora (bible_search, spotlight)
@@ -1129,7 +1180,9 @@ useBroadcastListener(BROADCAST_TYPE.BIBLE_VERSE, async (payload: any) => {
     const changedChap = payload.chapter !== bible.chapter;
 
     if (changedBook) await selBook(payload.book_id);
+    if (generation !== bibleSelectionGeneration) return;
     if (changedChap || changedBook) await selChapter(payload.chapter);
+    if (generation !== bibleSelectionGeneration) return;
 
     if (payload.verses?.length) {
       bible.verses = payload.verses;
@@ -1154,44 +1207,6 @@ useBroadcastListener(BROADCAST_TYPE.BIBLE_VERSE, async (payload: any) => {
       verses: payload.verses || [],
       chapter: payload.chapter || select_bible.chapter,
       id_bible_book: payload.book_id || select_bible.id_bible_book,
-    });
-  }
-});
-
-// Quando uma janela de projeção pede o estado, reemitir o versículo atual apenas se houver um.
-useBroadcastListener(BROADCAST_TYPE.REQUEST_BIBLE_STATE, () => {
-  console.log(
-    "[Bible/Index] REQUEST_BIBLE_STATE recebido. text=",
-    select_bible.text,
-    "verses=",
-    select_bible.verses?.length
-  );
-  if (select_bible.text && select_bible.verses?.length) {
-    const num = select_bible.verses[select_bible.verses.length - 1];
-    let next_text = "";
-    let next_reference = "";
-
-    const max_v = Math.max(0, ...Object.keys(verses.value).map(Number));
-    if (num < max_v) {
-      const next_v = num + 1;
-      next_text = verses.value[String(next_v)];
-      next_reference = `${bible.book} ${bible.chapter}:${next_v}`;
-    } else if ((bible.chapter ?? 0) < (book.value?.chapters || 0)) {
-      next_reference = `${bible.book} ${(bible.chapter ?? 0) + 1}:1`;
-    }
-
-    Broadcast.send(BROADCAST_TYPE.BIBLE_VERSE, {
-      text: select_bible.text || "",
-      reference: select_bible.scriptural_reference || "",
-      book: select_bible.book || "",
-      book_id: select_bible.id_bible_book,
-      chapter: select_bible.chapter || "",
-      verses: [...(select_bible.verses || [])],
-      version: select_bible.version || "",
-      version_id: select_bible.id_bible_version,
-      next_text,
-      next_reference,
-      active: !!(select_bible.text && select_bible.verses?.length),
     });
   }
 });

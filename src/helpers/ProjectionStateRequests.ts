@@ -19,7 +19,6 @@ export function handleProjectionStateRequest(
   broadcast: StatefulBroadcast
 ): boolean {
   const responseByRequest: Readonly<Record<string, string>> = {
-    [BROADCAST_TYPE.REQUEST_BIBLE_STATE]: BROADCAST_TYPE.BIBLE_VERSE,
     [BROADCAST_TYPE.REQUEST_SLIDE_STATE]: BROADCAST_TYPE.SLIDE_CHANGE,
     [BROADCAST_TYPE.REQUEST_LIBRAS_STATE]: BROADCAST_TYPE.LIBRAS_TOGGLE,
   };
