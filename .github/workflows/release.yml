@@ -91,7 +91,9 @@ jobs:
         run: npx playwright install chromium
 
       - name: Rodar testes E2E
-        run: npm run test:e2e
+        # As specs de projeção abrem várias páginas e processam PDF/vídeo.
+        # Um worker evita contenção de CPU no runner Windows durante o primeiro render.
+        run: npm run test:e2e -- --workers=1
 
       - name: Habilitar long paths (Windows)
         if: matrix.platform == 'win'

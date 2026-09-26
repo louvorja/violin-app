@@ -24,8 +24,14 @@ test("background and return recover current selection and reject old or cleared 
 
     await projection.goto("/projection/background_projection");
     await returned.goto("/projection/background_projection/return");
-    await expect(projection.locator("img.layer-bg")).toHaveAttribute("src", a);
-    await expect(returned.locator("img.return-bg")).toHaveAttribute("src", a);
+    await projection.locator(".layer-root-bg").waitFor({ state: "attached", timeout: 30_000 });
+    await returned.locator(".return-root-bg").waitFor({ state: "attached", timeout: 30_000 });
+    await expect(projection.locator("img.layer-bg")).toHaveAttribute("src", a, {
+      timeout: 20_000,
+    });
+    await expect(returned.locator("img.return-bg")).toHaveAttribute("src", a, {
+      timeout: 20_000,
+    });
 
     await operator.evaluate((url) => {
       const state = { active: true, epoch: 101, type: "image", url, title: "B" };

@@ -154,6 +154,7 @@ test("background projection and return keep the last rapid PDF page", async ({ b
   try {
     await operator.goto("/");
     await projection.goto("/projection/background_projection");
+    await projection.locator(".layer-root-bg").waitFor({ state: "attached", timeout: 30_000 });
     await operator.evaluate((pdfUrl) => {
       window.__pdfBus = new BroadcastChannel("louvorja");
       window.__pdfSend = (type, payload) => window.__pdfBus.postMessage({ type, payload });
@@ -168,9 +169,14 @@ test("background projection and return keep the last rapid PDF page", async ({ b
       localStorage.setItem("lj_file_projection", JSON.stringify(state));
       window.__pdfSend("file_projection", state);
     }, url);
-    await expect.poll(() => color(projection, "canvas.layer-file--pdf")).toEqual([255, 0, 0]);
+    await expect
+      .poll(() => color(projection, "canvas.layer-file--pdf"), { timeout: 20_000 })
+      .toEqual([255, 0, 0]);
     await returned.goto("/projection/background_projection/return");
-    await expect.poll(() => color(returned, "canvas.return-file--pdf")).toEqual([255, 0, 0]);
+    await returned.locator(".return-root-bg").waitFor({ state: "attached", timeout: 30_000 });
+    await expect
+      .poll(() => color(returned, "canvas.return-file--pdf"), { timeout: 20_000 })
+      .toEqual([255, 0, 0]);
 
     await operator.evaluate(() => {
       for (const page of [2, 1, 2]) {
