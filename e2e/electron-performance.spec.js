@@ -14,6 +14,8 @@
  *
  * A suíte é opt-in porque precisa iniciar uma aplicação Electron real e deve
  * rodar em uma máquina/runner por vez.
+ * Por padrão, as janelas ficam invisíveis e sem foco. Use LJ_E2E_VISIBLE_WINDOWS=1
+ * para medir também a composição visível ou inspecionar as janelas.
  */
 import { test, expect } from "@playwright/test";
 import { _electron as electron } from "playwright";
@@ -74,7 +76,11 @@ test("Electron mantém a reabertura da aba estável", async () => {
 
   const packagedExecutable = nodeProcess.env.LJ_ELECTRON_EXECUTABLE;
   const disableGpu = nodeProcess.env.LJ_ELECTRON_DISABLE_GPU === "1";
-  const env = { ...nodeProcess.env, LJ_E2E_USER_DATA: root };
+  const env = {
+    ...nodeProcess.env,
+    LJ_E2E_USER_DATA: root,
+    LJ_E2E_BACKGROUND_WINDOWS: nodeProcess.env.LJ_E2E_VISIBLE_WINDOWS === "1" ? "0" : "1",
+  };
   if (packagedExecutable) {
     delete env.ELECTRON_DEV;
   } else {

@@ -12,8 +12,9 @@
  *   $env:LJ_RUN_ELECTRON_ONLINE_VIDEO="1"
  *   npx playwright test e2e/online-video.electron.spec.js --reporter=line
  *
- * É opt-in: baixa ~130 MB na primeira vez e abre janelas de verdade na tela.
- * Usa um perfil isolado (LJ_E2E_USER_DATA), então convive com o app do usuário.
+ * É opt-in: baixa ~130 MB na primeira vez. Usa um perfil isolado
+ * (LJ_E2E_USER_DATA), com janelas invisíveis e sem foco por padrão.
+ * Defina LJ_E2E_VISIBLE_WINDOWS=1 para inspecionar as janelas na tela.
  * Windows usa PowerShell apenas para observar subprocessos e taskkill somente
  * como fallback se o encerramento coordenado do Electron não responder.
  */
@@ -329,7 +330,12 @@ async function setPref(key, value) {
 
 test.beforeAll(async () => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), "lj-online-video-e2e-"));
-  const env = { ...nodeProcess.env, ELECTRON_DEV: "1", LJ_E2E_USER_DATA: root };
+  const env = {
+    ...nodeProcess.env,
+    ELECTRON_DEV: "1",
+    LJ_E2E_USER_DATA: root,
+    LJ_E2E_BACKGROUND_WINDOWS: nodeProcess.env.LJ_E2E_VISIBLE_WINDOWS === "1" ? "0" : "1",
+  };
   delete env.ELECTRON_RUN_AS_NODE;
 
   app = await electron.launch({ args: ["."], env, timeout: 90_000 });

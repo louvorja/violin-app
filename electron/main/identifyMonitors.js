@@ -9,6 +9,7 @@
 
 const { BrowserWindow } = require("electron");
 const { connected } = require("./displays.js");
+const { backgroundWindows } = require("./e2eWindowMode.js");
 
 const _activeWindows = [];
 
@@ -57,9 +58,10 @@ function show(durationMs = 5000) {
       // cantos arredondados. Lá a janela é opaca e o card preenche tudo.
       transparent: !_isLinux,
       backgroundColor: _isLinux ? CARD_BG : undefined,
-      alwaysOnTop: true,
+      alwaysOnTop: !backgroundWindows,
       skipTaskbar: true,
       focusable: false,
+      show: !backgroundWindows,
       hasShadow: false,
       resizable: false,
       movable: false,

@@ -11,6 +11,7 @@ const { app, BrowserWindow } = require("electron");
 const displays = require("./displays.js");
 const powerBlocker = require("./powerBlocker.js");
 const { createWindowCloseGate, DEFAULT_CLOSE_ACK_TIMEOUT_MS } = require("./windowCloseGate.js");
+const { backgroundWindows, prepareWindow } = require("./e2eWindowMode.js");
 
 /** Mantém referência das janelas abertas por feature para evitar duplicatas */
 const _openWindows = new Map();
@@ -106,6 +107,7 @@ function _syncMainBackgroundThrottling() {
 
 /** Devolve o foco à janela principal (se viva) após abrir uma janela auxiliar. */
 function _refocusMainWindow() {
+  if (backgroundWindows) return;
   if (!_mainWindow || _mainWindow.isDestroyed()) return;
   // Pequeno delay para o fullscreen/always-on-top "settle" primeiro.
   setTimeout(() => {
@@ -229,8 +231,8 @@ function _openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = 
   const isMac = process.platform === "darwin";
   const isWin = process.platform === "win32";
   const isLin = process.platform === "linux";
-  const useMacPrimaryKiosk = fullscreen && isMac && !!target.primary;
-  const useMacPresentationLevel = fullscreen && isMac && _isProjectionPresentationWindow(route, feature);
+  const useMacPrimaryKiosk = fullscreen && isMac && !!target.primary && !backgroundWindows;
+  const useMacPresentationLevel = fullscreen && isMac && _isProjectionPresentationWindow(route, feature) && !backgroundWindows;
   // Em macOS Liquid Retina, o sistema pode aplicar máscara de cantos
   // arredondados na NSWindow, revelando o wallpaper nas bordas. Aumentamos a
   // janela alguns px para fora do display útil; os cantos arredondados ficam
@@ -246,7 +248,7 @@ function _openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = 
   // somente quando a projeção está no monitor principal, pois ali precisa
   // cobrir Dock/menu bar. Em monitores secundários, kiosk é agressivo demais
   // e pode deixar o app preso no modo apresentação.
-  const useDeferredFullscreen = fullscreen && (isWin || isLin);
+  const useDeferredFullscreen = fullscreen && (isWin || isLin) && !backgroundWindows;
   const winOpts = {
     x: bounds.x - overscan,
     y: bounds.y - overscan,
@@ -256,7 +258,7 @@ function _openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = 
     kiosk: useMacPrimaryKiosk,
     enableLargerThanScreen: fullscreen && isMac,
     frame,
-    alwaysOnTop: alwaysOnTop && !(fullscreen && isMac),
+    alwaysOnTop: !backgroundWindows && alwaysOnTop && !(fullscreen && isMac),
     title: feature,
     show: false,
     autoHideMenuBar: true,
@@ -282,6 +284,7 @@ function _openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = 
   };
 
   const win = new BrowserWindow(winOpts);
+  prepareWindow(win);
   const windowMeta = {
     route,
     feature,
@@ -398,18 +401,18 @@ function _openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = 
     _syncAuxBackgroundThrottling(win);
     _syncMainBackgroundThrottling();
     _applyDeferredFullscreen();
-    if (fullscreen && (isWin || isLin)) {
+    if (!backgroundWindows && fullscreen && (isWin || isLin)) {
       // No Windows o "always on top: screen-saver" é o único nível que
       // garante cobertura da taskbar quando o usuário marcou "Manter
       // barra de tarefas sempre visível". Em fullscreen real isso já é
       // o caso, mas alguns drivers de projetor perdem esse z-order ao
       // ressincronizar — força aqui.
       try { win.setAlwaysOnTop(true, "screen-saver"); } catch (_) { /* ignore */ }
-    } else if (useMacPresentationLevel) {
+    } else if (!backgroundWindows && useMacPresentationLevel) {
       // macOS desenha a menu bar acima de janelas normais, mesmo borderless.
       // Para janelas de projeção precisamos cobrir essa área no monitor projetado.
       try { win.setAlwaysOnTop(true, "screen-saver"); } catch (_) { /* ignore */ }
-    } else if (alwaysOnTop && !(fullscreen && isMac)) {
+    } else if (!backgroundWindows && alwaysOnTop && !(fullscreen && isMac)) {
       win.setAlwaysOnTop(true, "pop-up-menu");
     }
     // Não roubar foco do main window — `showInactive` já fez isso.

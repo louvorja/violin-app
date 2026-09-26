@@ -3,6 +3,7 @@
  * Isolated dev app, temporary user-data profile and loopback-only networking.
  * Run: VITE_TARGET=desktop LJ_RUN_NATIVE_WINDOW_REOPEN=1 \
  *   npx playwright test e2e/native-window-reopen.electron.spec.js --output /tmp/lj-native-window-reopen
+ * Windows stay invisible and do not take focus. Set LJ_E2E_VISIBLE_WINDOWS=1 to inspect them.
  */
 import { test, expect } from "@playwright/test";
 import { _electron as electron } from "playwright";
@@ -22,7 +23,12 @@ test("native close waits for the old music window before reopening the feature",
   test.setTimeout(90_000);
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "lj-native-window-reopen-"));
   const guard = path.resolve("e2e/helpers/loopback-network.cjs");
-  const env = { ...nodeProcess.env, LJ_E2E_USER_DATA: root, ELECTRON_DEV: "1" };
+  const env = {
+    ...nodeProcess.env,
+    LJ_E2E_USER_DATA: root,
+    LJ_E2E_BACKGROUND_WINDOWS: nodeProcess.env.LJ_E2E_VISIBLE_WINDOWS === "1" ? "0" : "1",
+    ELECTRON_DEV: "1",
+  };
   delete env.ELECTRON_RUN_AS_NODE;
   let app;
   let closed;
@@ -98,6 +104,13 @@ test("native close waits for the old music window before reopening the feature",
       { monitorId: display.id }
     );
     expect(first.id).toBeGreaterThan(0);
+    if (env.LJ_E2E_BACKGROUND_WINDOWS === "1") {
+      const opacities = await app.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows().map((win) => win.getOpacity())
+      );
+      expect(opacities.length).toBeGreaterThanOrEqual(2);
+      expect(opacities.every((opacity) => opacity === 0)).toBe(true);
+    }
     await expect
       .poll(() => page.evaluate(() => window.louvorjaApi.windows.listOpen()))
       .toContain("musicas");

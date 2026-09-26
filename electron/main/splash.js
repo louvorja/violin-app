@@ -13,10 +13,12 @@
 
 const { BrowserWindow, screen } = require("electron");
 const path = require("path");
+const { backgroundWindows } = require("./e2eWindowMode.js");
 
 let splashWindow = null;
 
 function show() {
+  if (backgroundWindows) return null;
   if (splashWindow && !splashWindow.isDestroyed()) return splashWindow;
 
   // Centralizar na tela primária

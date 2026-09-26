@@ -6,6 +6,7 @@
 
 const { BrowserWindow, shell } = require("electron");
 const path = require("path");
+const { prepareWindow } = require("./e2eWindowMode.js");
 
 /**
  * Posição de repouso dos semáforos do macOS, alinhada ao centro da systembar.
@@ -97,6 +98,7 @@ function createMainWindow(devUrl, prodHtmlPath, preloadPath) {
       backgroundThrottling: true,
     },
   });
+  prepareWindow(win);
 
   // Handler para window.open() — necessário para janelas popup e projeção.
   // Em D4, este handler vai ser expandido para abrir BrowserWindows em monitores específicos.

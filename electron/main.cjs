@@ -89,6 +89,7 @@ const { createRuntimeHealthMonitor } = require("./main/runtimeHealth.js");
 const { createRuntimeIncidentJournal } = require("./main/runtimeIncidentJournal.js");
 const { createPresentationActivity } = require("./main/presentationActivity.js");
 const { buildCsp } = require("./main/csp.js");
+const { backgroundWindows } = require("./main/e2eWindowMode.js");
 
 const diagnosticLogsRequested =
   process.env.LJ_LOGS === "1" || process.argv.some((arg) => arg.toLowerCase() === "--lj-logs");
@@ -251,6 +252,10 @@ function focusMainWindow() {
   }
   if (!mainWindow || mainWindow.isDestroyed()) return false;
   if (mainWindow.isMinimized()) mainWindow.restore();
+  if (backgroundWindows) {
+    mainWindow.showInactive();
+    return true;
+  }
   mainWindow.show();
   if (process.platform === "darwin") app.focus({ steal: true });
   mainWindow.focus();
@@ -524,7 +529,10 @@ function revealMainWindow() {
     _revealTimer = null;
   }
   if (!mainWindow || mainWindow.isDestroyed()) return;
-  if (!mainWindow.isVisible()) mainWindow.show();
+  if (!mainWindow.isVisible()) {
+    if (backgroundWindows) mainWindow.showInactive();
+    else mainWindow.show();
+  }
   splash.close();
 }
 
@@ -850,6 +858,7 @@ async function _bootstrapMonitorConfig() {
 
 app.whenReady().then(async () => {
   powerMonitor.on("resume", handleSystemResume);
+  if (backgroundWindows && process.platform === "darwin") app.dock?.hide();
   // Antes de qualquer trabalho: entre o clique no ícone e a janela existir há
   // bootstrap de monitores, limpeza de cache e a subida do servidor HTTP, e
   // nada disso dá sinal de vida ao operador.

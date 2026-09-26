@@ -3,6 +3,7 @@
  * VITE_TARGET=desktop LJ_RUN_DOWNLOAD_UTILITY=1 npx playwright test e2e/download-utility.electron.spec.js
  * Packaged mode may make normal bootstrap requests and requires explicit opt-in.
  * The profile and media are temporary. No external logs, traces or screenshots.
+ * Windows stay invisible and do not take focus. Set LJ_E2E_VISIBLE_WINDOWS=1 to inspect them.
  */
 import { test, expect } from "@playwright/test";
 import { _electron as electron } from "playwright";
@@ -74,7 +75,11 @@ test("downloads and cancels through the real preload in a separate utility proce
       })
     );
     const guard = path.resolve("e2e/helpers/loopback-network.cjs");
-    const env = { ...nodeProcess.env, LJ_E2E_USER_DATA: root };
+    const env = {
+      ...nodeProcess.env,
+      LJ_E2E_USER_DATA: root,
+      LJ_E2E_BACKGROUND_WINDOWS: nodeProcess.env.LJ_E2E_VISIBLE_WINDOWS === "1" ? "0" : "1",
+    };
     if (packagedExecutable) delete env.ELECTRON_DEV;
     else env.ELECTRON_DEV = "1";
     delete env.ELECTRON_RUN_AS_NODE;
