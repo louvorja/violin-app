@@ -326,7 +326,10 @@ function startExitAnimation() {
   }, exitAnimationDuration.value + 100);
 }
 
+let translationGeneration = 0;
+
 function resetPlayback() {
+  ++translationGeneration;
   stopUnity();
   rawGloss.value = "";
   isTranslating.value = false;
@@ -336,6 +339,7 @@ function resetPlayback() {
 // ─── Tradução ───────────────────────────────────────────────────────────────
 
 async function translateAndShow(text: string): Promise<void> {
+  const generation = ++translationGeneration;
   const plainText = Libras.stripHtml(text);
   if (!plainText) {
     rawGloss.value = "";
@@ -356,6 +360,7 @@ async function translateAndShow(text: string): Promise<void> {
   // 2. Buscar gloss por texto no IndexedDB (funciona offline se já foi traduzido)
   const entryType = props.type === "bible" ? "bible" : "music";
   const textCached = await Libras.findCachedByText(plainText, entryType);
+  if (generation !== translationGeneration) return;
   if (textCached?.gloss) {
     rawGloss.value = textCached.gloss;
     glossCache.set(cacheKey, textCached.gloss);
@@ -367,6 +372,7 @@ async function translateAndShow(text: string): Promise<void> {
   isTranslating.value = true;
   try {
     const result = await Libras.translateText(plainText);
+    if (generation !== translationGeneration) return;
     if (result) {
       rawGloss.value = result;
       glossCache.set(cacheKey, result);
@@ -392,7 +398,7 @@ async function translateAndShow(text: string): Promise<void> {
   } catch (e) {
     console.warn("[LibrasOverlay] tradução falhou:", e);
   } finally {
-    isTranslating.value = false;
+    if (generation === translationGeneration) isTranslating.value = false;
   }
 }
 
@@ -441,6 +447,7 @@ let unlistenMediaClose: (() => void) | null = null;
 onMounted(() => {
   unlistenMediaClose = $broadcast.listen((msg: { type: string }) => {
     if (msg.type === BROADCAST_TYPE.MEDIA_CLOSE) {
+      ++translationGeneration;
       sendToUnity("PlayerManager", "stopAll", "");
       if (avatarVisible.value) {
         startExitAnimation();
@@ -458,6 +465,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  ++translationGeneration;
   unlistenMediaClose?.();
   window.removeEventListener("message", onUnityMessage);
   stopUnity();
