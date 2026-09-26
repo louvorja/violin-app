@@ -46,14 +46,21 @@ test("PDF page state belongs to the active file and survives reopen", async ({ b
         window.__fileTestBus.postMessage({ type, payload });
     });
     const url = "http://localhost:5002/file-projection-fixture.pdf";
-    const activate = (playbackId) =>
+    const activate = (playbackId, stageEpoch) =>
       projection.evaluate(
-        ({ url, playbackId }) => {
-          const payload = { type: "pdf", url, title: "Fixture", page: 1, playback_id: playbackId };
+        ({ url, playbackId, stageEpoch }) => {
+          const payload = {
+            type: "pdf",
+            url,
+            title: "Fixture",
+            page: 1,
+            playback_id: playbackId,
+            stage_epoch: stageEpoch,
+          };
           localStorage.setItem("lj_file_projection", JSON.stringify(payload));
           window.__fileTestBus.send("file_projection", payload);
         },
-        { url, playbackId }
+        { url, playbackId, stageEpoch }
       );
     const pageColor = () =>
       projection.locator("canvas.file-projection__pdf").evaluate((canvas) => {
@@ -63,9 +70,9 @@ test("PDF page state belongs to the active file and survives reopen", async ({ b
         return [data[0], data[1], data[2]];
       });
 
-    await activate("pdf-a");
+    await activate("pdf-a", 100);
     await expect.poll(pageColor).toEqual([255, 0, 0]);
-    await activate("pdf-b");
+    await activate("pdf-b", 101);
     await expect
       .poll(() =>
         projection.evaluate(() =>
@@ -75,6 +82,19 @@ test("PDF page state belongs to the active file and survives reopen", async ({ b
         )
       )
       .toBe(true);
+    await expect.poll(pageColor).toEqual([255, 0, 0]);
+    await projection.evaluate(
+      (url) =>
+        window.__fileTestBus.send("file_projection", {
+          type: "pdf",
+          url,
+          title: "Old",
+          page: 2,
+          playback_id: "pdf-a",
+          stage_epoch: 100,
+        }),
+      url
+    );
     await expect.poll(pageColor).toEqual([255, 0, 0]);
     await projection.evaluate(() =>
       window.__fileTestBus.send("file_projection_page", {

@@ -43,6 +43,7 @@ import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
 import { useOnlineVideoDownloads } from "@/composables/useOnlineVideoDownloads";
 import { VideoStateRevisionCounter } from "@/helpers/VideoStateVersion";
 import { createVideoPlaybackSnapshot, shouldRespondToVideoStateRequest } from "@/helpers/VideoPlaybackSnapshot";
+import { nextFileProjectionEpoch } from "@/presentation/FileProjectionActivation";
 
 const _audio = useAudioPlayback();
 const _slides = useSlides();
@@ -459,11 +460,12 @@ async function _openVideoFileProjection(
   seq?: number
 ): Promise<boolean> {
   if (seq !== undefined && seq !== _ytPrepareSeq) return false;
+  const projectionEpoch = nextFileProjectionEpoch();
   // Se o que estava no ar era o player embutido, as janelas dele saem primeiro.
   if (_isYouTube()) _self.close(true, true, true, true);
   const stageEpoch = _stageEpoch;
 
-  const payload = { url, type: "video", title };
+  const payload = { url, type: "video", title, stage_epoch: projectionEpoch };
   try {
     localStorage.setItem(KEYS.PROJECTION.LJ_FILE_PROJECTION, JSON.stringify(payload));
     localStorage.removeItem(KEYS.PROJECTION.LJ_YOUTUBE_PROJECTION);
@@ -1756,6 +1758,7 @@ const _self = {
       !["image", "pdf", "video"].includes(payload.type)) return false;
     const projection = {
       ...payload,
+      stage_epoch: nextFileProjectionEpoch(),
       playback_id: typeof payload.playback_id === "string" && payload.playback_id
         ? payload.playback_id : _newPlaybackId(),
     };
@@ -2149,6 +2152,7 @@ const _self = {
   async openEmbeddedYouTube(url: string, title: string, expectedStageEpoch?: number): Promise<void> {
     const stageEpoch = expectedStageEpoch ?? ++_stageEpoch;
     if (stageEpoch !== _stageEpoch) return;
+    const projectionEpoch = nextFileProjectionEpoch();
     if (expectedStageEpoch === undefined) _dropPendingDownload();
     $dev.write("open youtube", { url, title });
     const playback_id = _newPlaybackId();
@@ -2197,7 +2201,7 @@ const _self = {
     try {
       localStorage.setItem(
         KEYS.PROJECTION.LJ_YOUTUBE_PROJECTION,
-        JSON.stringify({ url, type: "youtube", title, playback_id })
+        JSON.stringify({ url, type: "youtube", title, playback_id, stage_epoch: projectionEpoch })
       );
       // Sem isto, uma janela recriada depois (retorno, operador, ou a própria
       // projeção reaberta) lia o vídeo por arquivo anterior em vez deste —
@@ -2227,6 +2231,7 @@ const _self = {
       type: "youtube",
       title,
       playback_id,
+      stage_epoch: projectionEpoch,
     });
 
     _ytUnlisten = $broadcast.listen((msg) => {

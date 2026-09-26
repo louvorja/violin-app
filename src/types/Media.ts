@@ -51,6 +51,7 @@ export interface FileProjectionState {
   url: string;
   title: string;
   playback_id?: string;
+  stage_epoch?: number;
   page?: number;
   totalPages?: number;
   /** Referência para re-resolver URLs blob via IndexedDB na janela alvo. */

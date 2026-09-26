@@ -41,6 +41,7 @@ test("embedded YouTube ignores an old API load and recovers paused playback on r
           url: "https://www.youtube.com/embed/AAAAAAAAAAA?autoplay=1",
           type: "youtube",
           playback_id: "playback-a",
+          stage_epoch: 100,
           title: "Old",
         })
       );
@@ -58,6 +59,7 @@ test("embedded YouTube ignores an old API load and recovers paused playback on r
           url,
           type: "youtube",
           playback_id: "playback-b",
+          stage_epoch: 101,
           title: "New",
         })
       );
@@ -65,6 +67,7 @@ test("embedded YouTube ignores an old API load and recovers paused playback on r
         url,
         type: "youtube",
         playback_id: "playback-b",
+        stage_epoch: 101,
         title: "New",
       });
     }, youtubeUrl("BBBBBBBBBBB"));

@@ -310,6 +310,7 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
       url: video.url,
       type: "video",
       title: "Louvor",
+      stage_epoch: expect.any(Number),
     });
     // a imagem do player do app vem da trilha de vídeo; o som, da de áudio
     expect(openAudio).toHaveBeenCalledWith({
@@ -838,6 +839,7 @@ describe("posse do palco durante a abertura do vídeo", () => {
     expect(h.send).toHaveBeenCalledWith(BROADCAST_TYPE.FILE_PROJECTION, {
       ...payload,
       playback_id: expect.any(String),
+      stage_epoch: expect.any(Number),
     });
     expect(JSON.parse(localStorage.getItem(KEYS.PROJECTION.LJ_FILE_PROJECTION) || "null"))
       .toMatchObject({ ...payload, playback_id: expect.any(String) });

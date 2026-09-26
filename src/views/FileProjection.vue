@@ -77,6 +77,7 @@ import Telemetry from "@/helpers/Telemetry";
 import { normalizeYouTubeError } from "@/helpers/YouTubeError";
 import { applyVideoState } from "@/helpers/VideoSync";
 import { VideoStateGate } from "@/helpers/VideoStateVersion";
+import { FileProjectionActivationGate } from "@/presentation/FileProjectionActivation";
 import { VideoFrameConfirmation } from "@/helpers/VideoFrameConfirmation";
 import { VideoFirstFrame } from "@/helpers/VideoFirstFrame";
 import { fileProjectionPageFor } from "@/helpers/FileProjectionPage";
@@ -97,6 +98,7 @@ const fileProjection = reactive<FileProjectionState>({
 const videoRef = ref<HTMLVideoElement | null>(null);
 const videoFailed = ref(false);
 const videoStateGate = new VideoStateGate();
+const activationGate = new FileProjectionActivationGate();
 const videoFrameConfirmation = new VideoFrameConfirmation(
   "file_projection_video",
   (event, properties) => Telemetry.track(event, properties)
@@ -224,6 +226,9 @@ async function loadPdf(
 }
 
 async function _activateProjection(p: FileProjectionState): Promise<void> {
+  const accepted = activationGate.accept(p);
+  if (!accepted) return;
+  p = accepted;
   const generation = ++activationGeneration;
   ++pdfLoadGeneration;
   if (
@@ -452,6 +457,16 @@ setTimeout(_readPendingProjection, 500);
 useProjectionCloseNotice(PROJECTION_TYPE.FILE);
 
 useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION, (payload: unknown) => {
+  if ((payload as { action?: string } | null)?.action === "clear") {
+    activationGate.retire();
+    ++activationGeneration;
+    ++pdfLoadGeneration;
+    _destroyYoutube();
+    fileProjection.active = false;
+    videoStateGate.clear();
+    latestVideoState = null;
+    return;
+  }
   _activateProjection((payload || {}) as FileProjectionState);
 });
 
@@ -477,6 +492,7 @@ useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION_PAGE, (payload: unknown) => 
 });
 
 useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, async () => {
+  activationGate.retire();
   ++activationGeneration;
   ++pdfLoadGeneration;
   _destroyYoutube();

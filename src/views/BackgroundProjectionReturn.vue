@@ -97,6 +97,7 @@ import { KEYS } from "@/constants/UserDataKeys";
 import { SETTINGS_TABLE } from "@/constants/DbTables";
 import type { YTAPI, YTPlayer, VideoMediaState } from "@/types/Media";
 import { VideoStateGate } from "@/helpers/VideoStateVersion";
+import { FileProjectionActivationGate } from "@/presentation/FileProjectionActivation";
 import { loadYtApi } from "@/composables/useYouTubeApi";
 import { loadPdfDocument, type PDFDocumentProxy } from "@/helpers/PdfRuntime";
 import Telemetry from "@/helpers/Telemetry";
@@ -175,6 +176,7 @@ let ytGeneration = 0;
 let ytAwaitingSync = false;
 let ytSyncFallbackTimer: ReturnType<typeof setTimeout> | null = null;
 const youtubeStateGate = new VideoStateGate();
+const activationGate = new FileProjectionActivationGate();
 const ytFailed = ref(false);
 let _ytSyncTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -207,7 +209,15 @@ useBroadcastListener(BROADCAST_TYPE.BACKGROUND_PROJECTION, (payload: unknown) =>
 });
 
 useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION, (payload: unknown) => {
-  const p = payload as { type?: string; url?: string; page?: number; playback_id?: string };
+  if ((payload as { action?: string } | null)?.action === "clear") {
+    activationGate.retire();
+    ++pdfLoadGeneration;
+    _destroyYoutube();
+    fileState.active = false;
+    reloadWallpaper();
+    return;
+  }
+  const p = activationGate.accept(payload);
   if (p?.url) {
     _destroyYoutube();
     ++pdfLoadGeneration;
@@ -230,7 +240,7 @@ useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION, (payload: unknown) => {
 });
 
 useBroadcastListener(BROADCAST_TYPE.ONLINE_VIDEO_PROJECTION, (payload: unknown) => {
-  const p = payload as { type?: string; url?: string; playback_id?: string };
+  const p = activationGate.accept(payload);
   if (p?.url) {
     ++pdfLoadGeneration;
     _destroyYoutube();
@@ -254,6 +264,7 @@ useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION_PAGE, (payload: unknown) => 
 });
 
 useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, () => {
+  activationGate.retire();
   ++pdfLoadGeneration;
   _destroyYoutube();
   if (pdfDoc) {
