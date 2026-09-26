@@ -1,5 +1,8 @@
 import { test, expect } from "@playwright/test";
 
+// O service worker da PWA pode atender o catálogo antes do page.route.
+test.use({ serviceWorkers: "block" });
+
 test("a primeira abertura da palette busca um hino", async ({ page }) => {
   await page.route("http://e2e.mock/**", (route) => route.fulfill({ json: [] }));
   await page.route("**/pt_musics*", (route) =>
