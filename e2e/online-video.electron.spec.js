@@ -1267,12 +1267,31 @@ test.describe("Meus vídeos online: baixar de antemão e gerenciar", () => {
           }
         );
       } catch (error) {
+        const info = await status().catch(() => null);
+        const videoPath = path.join(streamDirOf(LONG), "video.mp4");
+        let videoHead = null;
+        try {
+          const fd = fs.openSync(videoPath, "r");
+          try {
+            const bytes = Buffer.alloc(24);
+            fs.readSync(fd, bytes, 0, bytes.length, 0);
+            videoHead = bytes.toString("hex");
+          } finally {
+            fs.closeSync(fd);
+          }
+        } catch {
+          /* a sessão pode já ter sido removida */
+        }
         throw new Error(
           `${error.message}; media=${JSON.stringify({
             projection: diagnosticMedia(lastPlaybackSnapshot?.projection),
             return: diagnosticMedia(lastPlaybackSnapshot?.ret),
             operator: diagnosticMedia(lastPlaybackSnapshot?.operator),
             audio: diagnosticMedia(lastPlaybackSnapshot?.audio),
+          })}; stream=${JSON.stringify({
+            active: info?.active,
+            failure: info?.last_stream_failure,
+            videoHead,
           })}`,
           { cause: error }
         );
@@ -1768,7 +1787,7 @@ test.describe("Meus vídeos online: baixar de antemão e gerenciar", () => {
       await closeMedia();
     });
 
-    test("com o yt-dlp quebrado: cai no player do YouTube (avisando), e o download ao fundo renova o yt-dlp", async () => {
+    test("com o yt-dlp quebrado: usa o YouTube e renova a ferramenta ao encerrar a apresentação", async () => {
       const ytdlp = path.join(root, "bin", toolName("yt-dlp"));
       await removeFromDisk(LONG);
       if (nodeProcess.platform === "win32") {
@@ -1795,15 +1814,15 @@ test.describe("Meus vídeos online: baixar de antemão e gerenciar", () => {
         { timeout: 30_000, label: "o player do YouTube (reserva)" }
       );
       expect(frame).toMatch(new RegExp(LONG));
-      expect(await snackbar()).toMatch(/player do YouTube/);
 
-      // A reserva não fica sem o download: ele renova o yt-dlp e o vídeo chega ao disco.
+      // Cache automático é trabalho de fundo: durante a apresentação ele fica na fila.
+      // Ao fechar a mídia, a fila volta a andar, renova a ferramenta e guarda o vídeo.
+      await closeMedia();
       await until(async () => !!(await onDisk(LONG)), {
         timeout: 150_000,
         label: "o vídeo chegar ao disco",
       });
       expect(fs.statSync(ytdlp).size, "voltou o yt-dlp de verdade").toBeGreaterThan(1_000_000);
-      await closeMedia();
     });
   });
 
