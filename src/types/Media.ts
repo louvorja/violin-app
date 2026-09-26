@@ -69,6 +69,7 @@ export interface MediaFile {
 export interface YouTubeControlPayload {
   action: string;
   value?: number;
+  playback_id: string;
 }
 
 

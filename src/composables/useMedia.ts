@@ -124,6 +124,32 @@ let _ytUnlisten: (() => void) | null = null;
 let _ytWatchdog: ReturnType<typeof setTimeout> | null = null;
 let _ytLastState: number | null = null;
 let _ytStateReceived = false;
+let _youtubePlaybackSample: { currentTime: number; duration: number; isPaused: boolean } | null = null;
+let _ytLastSampledAt = 0;
+
+function _broadcastYoutubeStateForRequest(): void {
+  // The embedded player lives in an auxiliary window. After that window closes
+  // its clock stops, so a reopened window resumes the last confirmed position.
+  const sample = _youtubePlaybackSample;
+  if (!sample) return;
+  const version = _videoStateRevisions.next(_activePlayback?.playback_id);
+  if (!version) return;
+  const sampledAt = Date.now();
+  const snapshot = createVideoPlaybackSnapshot({
+    ...version,
+    currentTime: sample.currentTime,
+    isPaused: sample.isPaused,
+    rate: 1,
+  }, sampledAt);
+  if (!snapshot) return;
+  $broadcast.send(BROADCAST_TYPE.VIDEO_STATE, {
+    ...version, ...snapshot,
+    currentTime: sample.currentTime,
+    duration: sample.duration,
+    isPaused: sample.isPaused,
+    sentAt: sampledAt,
+  });
+}
 
 function _broadcastVideoState(currentTime?: number, isPaused?: boolean): void {
   if (!$appdata.get(KEYS.MODULES.MEDIA.CONFIG.VIDEO_FILE)) return;
@@ -998,6 +1024,12 @@ const _self = {
 
   /** Responde com o relógio atual, inclusive quando a reprodução está pausada. */
   broadcastVideoStateForRequest(playbackId?: string): void {
+    if (_isYouTube() && shouldRespondToVideoStateRequest(
+      playbackId, _activePlayback?.playback_id, true
+    )) {
+      _broadcastYoutubeStateForRequest();
+      return;
+    }
     if (!shouldRespondToVideoStateRequest(
       playbackId, _activePlayback?.playback_id,
       Boolean($appdata.get(KEYS.MODULES.MEDIA.CONFIG.VIDEO_FILE))
@@ -2158,6 +2190,7 @@ const _self = {
     _audio.duration.value = 0;
     _audio.isPaused.value = false;
     _audio.progress.value = 0;
+    _youtubePlaybackSample = { currentTime: 0, duration: 0, isPaused: false };
 
     this.minimize();
 
@@ -2200,7 +2233,17 @@ const _self = {
       if (msg.type !== BROADCAST_TYPE.YOUTUBE_STATE) return;
       const p = msg.payload as Record<string, unknown>;
       if (!p) return;
-      if (typeof p.playback_id === "string" && p.playback_id !== playback_id) return;
+      if (p.playback_id !== playback_id) return;
+      if (typeof p.sampledAt !== "number" || !Number.isSafeInteger(p.sampledAt) ||
+          p.sampledAt < _ytLastSampledAt) return;
+      _ytLastSampledAt = p.sampledAt;
+      if (typeof p.currentTime === "number" && Number.isFinite(p.currentTime) && p.currentTime >= 0 &&
+          typeof p.duration === "number" && Number.isFinite(p.duration) && p.duration >= 0 &&
+          typeof p.isPaused === "boolean") {
+        _youtubePlaybackSample = {
+          currentTime: p.currentTime, duration: p.duration, isPaused: p.isPaused,
+        };
+      }
       _ytStateReceived = true;
       if (typeof p.state === "number") {
         if (p.state !== _ytLastState) {
@@ -2266,6 +2309,8 @@ const _self = {
     _ytWatchdog = null;
     _ytLastState = null;
     _ytStateReceived = false;
+    _youtubePlaybackSample = null;
+    _ytLastSampledAt = 0;
     _loadingId = null;
     if (_audioXhr) {
       const currentRequest = _audioXhr;
@@ -2343,7 +2388,7 @@ const _self = {
 
   goToTime(time: number): void {
     if (_isYouTube()) {
-      $broadcast.send(BROADCAST_TYPE.YOUTUBE_CONTROL, { action: "seekTo", value: time });
+      $broadcast.send(BROADCAST_TYPE.YOUTUBE_CONTROL, { action: "seekTo", value: time, playback_id: _activePlayback?.playback_id });
     } else {
       _audio.seekTo(time);
       _broadcastVideoState(time);
@@ -2353,7 +2398,7 @@ const _self = {
   advanceTime(time = 10): void {
     if (_isYouTube()) {
       const newTime = Math.max(0, _audio.currentTime.value + time);
-      $broadcast.send(BROADCAST_TYPE.YOUTUBE_CONTROL, { action: "seekTo", value: newTime });
+      $broadcast.send(BROADCAST_TYPE.YOUTUBE_CONTROL, { action: "seekTo", value: newTime, playback_id: _activePlayback?.playback_id });
     } else if (
       _audio.duration.value > 0 &&
       Number.isFinite(_audio.duration.value) &&
@@ -2371,11 +2416,11 @@ const _self = {
   pause(bool = true, callback?: () => void): void {
     if (_isYouTube()) {
       if (bool) {
-        $broadcast.send(BROADCAST_TYPE.YOUTUBE_CONTROL, { action: "pause" });
+        $broadcast.send(BROADCAST_TYPE.YOUTUBE_CONTROL, { action: "pause", playback_id: _activePlayback?.playback_id });
         $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED, true);
         _audio.isPaused.value = true;
       } else {
-        $broadcast.send(BROADCAST_TYPE.YOUTUBE_CONTROL, { action: "play" });
+        $broadcast.send(BROADCAST_TYPE.YOUTUBE_CONTROL, { action: "play", playback_id: _activePlayback?.playback_id });
         $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED, false);
         _audio.isPaused.value = false;
       }
@@ -2447,7 +2492,7 @@ const _self = {
     _audio.setVolume(val);
     $appdata.set(KEYS.MODULES.MEDIA.CONFIG.VOLUME, val);
     if (_isYouTube()) {
-      $broadcast.send(BROADCAST_TYPE.YOUTUBE_CONTROL, { action: "setVolume", value: val });
+      $broadcast.send(BROADCAST_TYPE.YOUTUBE_CONTROL, { action: "setVolume", value: val, playback_id: _activePlayback?.playback_id });
     }
   },
 

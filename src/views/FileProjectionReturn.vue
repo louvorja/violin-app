@@ -117,6 +117,9 @@ let pdfLoadGeneration = 0;
 let ytPlayer: YTPlayer | null = null;
 let ytSyncTimer: ReturnType<typeof setInterval> | null = null;
 let _ytInitializing = false;
+let ytGeneration = 0;
+let ytAwaitingSync = false;
+let ytSyncFallbackTimer: ReturnType<typeof setTimeout> | null = null;
 const ytFailed = ref(false);
 
 const _YT_SYNC_INTERVAL = 500;
@@ -227,6 +230,14 @@ async function loadPdf(
 async function _activateProjection(p: FileProjectionState): Promise<void> {
   const generation = ++activationGeneration;
   ++pdfLoadGeneration;
+  if (
+    fileProjection.type === "youtube" &&
+    (p.type !== "youtube" ||
+      p.playback_id !== fileProjection.playback_id ||
+      p.url !== fileProjection.url)
+  ) {
+    _destroyYoutube();
+  }
   let resolvedBlobUrl: string | null = null;
   // Object URLs pertencem ao renderer que os criou. Para vídeos do acervo,
   // reconstroi o blob a partir do IndexedDB antes de montar o elemento — sem
@@ -508,6 +519,8 @@ useBroadcastListener(BROADCAST_TYPE.VIDEO_STATE, (payload: unknown) => {
   const data = payload as VideoMediaState;
   if (!videoStateGate.accepts(data)) return;
   if (!ytPlayer || !ytPlayer.getCurrentTime) return;
+  if (ytSyncFallbackTimer) clearTimeout(ytSyncFallbackTimer);
+  ytSyncFallbackTimer = null;
   try {
     const diff = Math.abs(
       ytPlayer.getCurrentTime() - (typeof data.currentTime === "number" ? data.currentTime : 0)
@@ -519,6 +532,9 @@ useBroadcastListener(BROADCAST_TYPE.VIDEO_STATE, (payload: unknown) => {
     }
   } catch {
     /* ignore */
+  } finally {
+    ytAwaitingSync = false;
+    _startYtSync();
   }
 });
 
@@ -526,6 +542,7 @@ useBroadcastListener(BROADCAST_TYPE.YOUTUBE_CONTROL, (payload: unknown) => {
   if (!fileProjection.active || fileProjection.type !== "youtube") return;
   if (!ytPlayer) return;
   const data = payload as YouTubeControlPayload;
+  if (!fileProjection.playback_id || data?.playback_id !== fileProjection.playback_id) return;
   try {
     if (data.action === "play") ytPlayer.playVideo();
     else if (data.action === "pause") ytPlayer.pauseVideo();
@@ -543,11 +560,14 @@ function _embedUrlToId(url: string): string | null {
   return m ? m[1] : null;
 }
 
-function _loadYtApi(cb: (YT: YTAPI) => void): void {
+function _loadYtApi(cb: (YT: YTAPI) => void, isCurrent: () => boolean): void {
   ytFailed.value = false;
   loadYtApi()
-    .then(cb)
+    .then((YT) => {
+      if (isCurrent()) cb(YT);
+    })
     .catch((e: Error) => {
+      if (!isCurrent()) return;
       _ytInitializing = false;
       ytFailed.value = true;
       console.warn("[FileProjectionReturn] YouTube indisponível:", e?.message || e);
@@ -556,8 +576,15 @@ function _loadYtApi(cb: (YT: YTAPI) => void): void {
 
 function _initYoutube(): void {
   if (_ytInitializing) return;
-  _ytInitializing = true;
   _destroyYoutube();
+  _ytInitializing = true;
+  const generation = ytGeneration;
+  const playbackId = fileProjection.playback_id;
+  const isCurrent = () =>
+    generation === ytGeneration &&
+    fileProjection.active &&
+    fileProjection.type === "youtube" &&
+    fileProjection.playback_id === playbackId;
   const id = _embedUrlToId(fileProjection.url);
   console.log(
     "[FileProjectionReturn] _initYoutube - videoId:",
@@ -566,16 +593,18 @@ function _initYoutube(): void {
     fileProjection.url?.substring(0, 60)
   );
   if (!id) {
+    _ytInitializing = false;
     console.warn("[FileProjectionReturn] ID do YouTube não extraído da URL");
     return;
   }
   if (!ytContainer.value) {
+    _ytInitializing = false;
     console.warn("[FileProjectionReturn] Container YouTube não encontrado no DOM");
     return;
   }
 
   _loadYtApi((YT: YTAPI) => {
-    if (!ytContainer.value) return;
+    if (!isCurrent() || !ytContainer.value) return;
     ytPlayer = new YT.Player(ytContainer.value, {
       height: "100%",
       width: "100%",
@@ -591,6 +620,7 @@ function _initYoutube(): void {
       },
       events: {
         onReady: () => {
+          if (!isCurrent()) return;
           _ytInitializing = false;
           Telemetry.track("music_youtube_player_ready", {
             playback_id: fileProjection.playback_id,
@@ -599,12 +629,19 @@ function _initYoutube(): void {
           });
           if (ytPlayer) ytPlayer.playVideo();
           setTimeout(() => {
-            if (ytPlayer) ytPlayer.playVideo();
+            if (isCurrent() && ytPlayer) ytPlayer.playVideo();
           }, 700);
-          _broadcastYtState();
-          _startYtSync();
+          ytAwaitingSync = true;
+          Broadcast.send(BROADCAST_TYPE.REQUEST_VIDEO_STATE, { playback_id: playbackId });
+          ytSyncFallbackTimer = setTimeout(() => {
+            if (!isCurrent() || !ytAwaitingSync) return;
+            ytAwaitingSync = false;
+            _broadcastYtState();
+            _startYtSync();
+          }, 800);
         },
         onApiChange: () => {
+          if (!isCurrent()) return;
           try {
             if (typeof (ytPlayer as any)?.setOption === "function")
               (ytPlayer as any).setOption("captions", "track", {});
@@ -613,6 +650,7 @@ function _initYoutube(): void {
           }
         },
         onStateChange: (e: { data: number }) => {
+          if (!isCurrent()) return;
           Telemetry.track("music_youtube_state_changed", {
             playback_id: fileProjection.playback_id,
             state: e.data,
@@ -621,6 +659,7 @@ function _initYoutube(): void {
           _broadcastYtState();
         },
         onError: (e: unknown) => {
+          if (!isCurrent()) return;
           const normalized = normalizeYouTubeError(e);
           const error = new Error(normalized.message);
           error.name = normalized.name;
@@ -649,11 +688,11 @@ function _initYoutube(): void {
         },
       },
     });
-  });
+  }, isCurrent);
 }
 
 function _broadcastYtState(): void {
-  if (!ytPlayer || !ytPlayer.getCurrentTime || !fileProjection.active) return;
+  if (ytAwaitingSync || !ytPlayer || !ytPlayer.getCurrentTime || !fileProjection.active) return;
   const yt = getYT();
   if (!yt) return;
   try {
@@ -663,6 +702,7 @@ function _broadcastYtState(): void {
       duration: ytPlayer.getDuration() || 0,
       state: ytPlayer.getPlayerState(),
       playback_id: fileProjection.playback_id,
+      sampledAt: Date.now(),
     } as VideoMediaState);
   } catch {
     /* ignore */
@@ -677,6 +717,10 @@ function _startYtSync(): void {
 }
 
 function _destroyYoutube(): void {
+  ++ytGeneration;
+  ytAwaitingSync = false;
+  if (ytSyncFallbackTimer) clearTimeout(ytSyncFallbackTimer);
+  ytSyncFallbackTimer = null;
   _ytInitializing = false;
   ytFailed.value = false;
   if (ytSyncTimer) {

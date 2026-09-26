@@ -74,9 +74,9 @@ $broadcast.send(BROADCAST_TYPE.REQUEST_MUSIC_PRESENTATION_SNAPSHOT);
 | `ONLINE_VIDEO_PROJECTION` | `"online_video_projection"` | useMedia.openEmbeddedYouTube() (reserva com o player do YouTube; o vídeo baixado usa `FILE_PROJECTION` com `type: "video"`) | FileProjection |
 | `BACKGROUND_PROJECTION` | `"background_projection"` | background_projection module | BackgroundProjection, BackgroundProjectionReturn |
 | `WALLPAPER_UPDATE` | `"wallpaper_update"` | RibbonWallpaper, AppMenuOpcoes | BackgroundProjection, FileProjection |
-| `VIDEO_STATE` | `"video_state"` | useMedia (timeUpdate) | FileProjection |
-| `YOUTUBE_STATE` | `"youtube_state"` | FileProjection | (sincronia YouTube) |
-| `YOUTUBE_CONTROL` | `"youtube_control"` | useMedia | FileProjection (play/pause/seek) |
+| `VIDEO_STATE` | `"video_state"` | useMedia (relógio local ou resposta ao reopen YouTube) | FileProjection, retornos e background compatíveis |
+| `YOUTUBE_STATE` | `"youtube_state"` | FileProjection/Return/Background | useMedia (amostra com playback ID e timestamp) |
+| `YOUTUBE_CONTROL` | `"youtube_control"` | useMedia | Projeções YouTube (play/pause/seek do playback correspondente) |
 | `USERDATA_PATCH` | `"userdata:patch"` | UserData.set() | Todas as janelas (sync) |
 | `REQUEST_SLIDE_STATE` | `"request_slide_state"` | Popup/janelas secundárias | useSlides |
 | `ANNOUNCEMENTS_INTENT` | `"announcements_intent"` | announcements, liturgy or remote action | Primary shell (orders selections) |

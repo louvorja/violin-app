@@ -987,6 +987,31 @@ describe("posse do palco durante a abertura do vídeo", () => {
 });
 
 describe("fim natural do player embutido", () => {
+  it("responde ao reopen do YouTube com posição pausada do playback correto", async () => {
+    await media.openEmbeddedYouTube(embed(ID), "Vídeo 1");
+    const projection = h.send.mock.calls.find(
+      ([type]) => type === BROADCAST_TYPE.ONLINE_VIDEO_PROJECTION
+    )?.[1] as { playback_id?: string } | undefined;
+    const playbackId = projection?.playback_id;
+    expect(playbackId).toBeTruthy();
+    for (const listener of [...h.listeners]) {
+      listener({
+        type: BROADCAST_TYPE.YOUTUBE_STATE,
+        payload: { playback_id: playbackId, state: 2, currentTime: 42, duration: 120, isPaused: true, sampledAt: 100 },
+      });
+      listener({
+        type: BROADCAST_TYPE.YOUTUBE_STATE,
+        payload: { playback_id: playbackId, state: 1, currentTime: 5, duration: 120, isPaused: false, sampledAt: 90 },
+      });
+    }
+    media.broadcastVideoStateForRequest("retired-playback");
+    expect(h.send.mock.calls.filter(([type]) => type === BROADCAST_TYPE.VIDEO_STATE)).toHaveLength(0);
+    media.broadcastVideoStateForRequest(playbackId);
+    expect(h.send).toHaveBeenCalledWith(BROADCAST_TYPE.VIDEO_STATE,
+      expect.objectContaining({ playback_id: playbackId, revision: 1,
+        currentTime: 42, duration: 120, isPaused: true }));
+  });
+
   it("a Shell encerra somente o playback YouTube ativo ao receber state 0", async () => {
     await media.openEmbeddedYouTube(embed(ID), "Vídeo 1");
     const projection = h.send.mock.calls.find(
@@ -999,7 +1024,7 @@ describe("fim natural do player embutido", () => {
       for (const listener of [...h.listeners]) {
         listener({
           type: BROADCAST_TYPE.YOUTUBE_STATE,
-          payload: { state: 0, playback_id, currentTime: 10, duration: 10, isPaused: true },
+          payload: { state: 0, playback_id, currentTime: 10, duration: 10, isPaused: true, sampledAt: Date.now() },
         });
       }
     };
@@ -1007,6 +1032,13 @@ describe("fim natural do player embutido", () => {
     emitState();
     emitState("playback-obsoleto");
     expect(close).not.toHaveBeenCalled();
+
+    media.pause();
+    media.goToTime(12);
+    expect(h.send).toHaveBeenCalledWith(BROADCAST_TYPE.YOUTUBE_CONTROL,
+      expect.objectContaining({ action: "pause", playback_id: projection?.playback_id }));
+    expect(h.send).toHaveBeenCalledWith(BROADCAST_TYPE.YOUTUBE_CONTROL,
+      expect.objectContaining({ action: "seekTo", value: 12, playback_id: projection?.playback_id }));
 
     emitState(projection?.playback_id as string);
     emitState(projection?.playback_id as string);

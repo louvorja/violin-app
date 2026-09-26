@@ -95,7 +95,8 @@ import Slide from "@/components/Slide.vue";
 import { MAIN_BACKGROUND_ID, Settings } from "@/types/Settings";
 import { KEYS } from "@/constants/UserDataKeys";
 import { SETTINGS_TABLE } from "@/constants/DbTables";
-import type { YTAPI, YTPlayer } from "@/types/Media";
+import type { YTAPI, YTPlayer, VideoMediaState } from "@/types/Media";
+import { VideoStateGate } from "@/helpers/VideoStateVersion";
 import { loadYtApi } from "@/composables/useYouTubeApi";
 import { loadPdfDocument, type PDFDocumentProxy } from "@/helpers/PdfRuntime";
 import Telemetry from "@/helpers/Telemetry";
@@ -170,6 +171,10 @@ let pdfDoc: PDFDocumentProxy | null = null;
 let pdfLoadGeneration = 0;
 let currentPdfPage = ref(1);
 let _ytInitializing = false;
+let ytGeneration = 0;
+let ytAwaitingSync = false;
+let ytSyncFallbackTimer: ReturnType<typeof setTimeout> | null = null;
+const youtubeStateGate = new VideoStateGate();
 const ytFailed = ref(false);
 let _ytSyncTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -204,6 +209,7 @@ useBroadcastListener(BROADCAST_TYPE.BACKGROUND_PROJECTION, (payload: unknown) =>
 useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION, (payload: unknown) => {
   const p = payload as { type?: string; url?: string; page?: number; playback_id?: string };
   if (p?.url) {
+    _destroyYoutube();
     ++pdfLoadGeneration;
     if (pdfDoc) {
       try {
@@ -217,6 +223,7 @@ useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION, (payload: unknown) => {
     fileState.type = p.type || "image";
     fileState.url = p.url;
     fileState.playback_id = p.playback_id;
+    youtubeStateGate.begin(p.playback_id);
     reloadWallpaper();
     if (p.type === "pdf") nextTick(() => loadPdf(p.url!, p.page || 1, p.playback_id));
   }
@@ -231,6 +238,7 @@ useBroadcastListener(BROADCAST_TYPE.ONLINE_VIDEO_PROJECTION, (payload: unknown) 
     fileState.type = p.type || "youtube";
     fileState.url = p.url;
     fileState.playback_id = p.playback_id;
+    youtubeStateGate.begin(p.playback_id);
     reloadWallpaper();
     if (p.type === "youtube") nextTick(() => _initYoutube());
   }
@@ -257,6 +265,7 @@ useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, () => {
     pdfDoc = null;
   }
   fileState.active = false;
+  youtubeStateGate.clear();
   fileState.type = "";
   fileState.url = "";
   try {
@@ -269,7 +278,8 @@ useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, () => {
 
 useBroadcastListener(BROADCAST_TYPE.YOUTUBE_CONTROL, (payload: unknown) => {
   if (!ytPlayer || !fileState.active || fileState.type !== "youtube") return;
-  const data = payload as { action?: string; value?: number };
+  const data = payload as { action?: string; value?: number; playback_id?: string };
+  if (!fileState.playback_id || data?.playback_id !== fileState.playback_id) return;
   switch (data.action) {
     case "pause":
       ytPlayer.pauseVideo();
@@ -283,6 +293,25 @@ useBroadcastListener(BROADCAST_TYPE.YOUTUBE_CONTROL, (payload: unknown) => {
   }
 });
 
+useBroadcastListener(BROADCAST_TYPE.VIDEO_STATE, (payload: unknown) => {
+  if (!fileState.active || fileState.type !== "youtube" || !ytPlayer) return;
+  const data = payload as VideoMediaState;
+  if (!youtubeStateGate.accepts(data)) return;
+  if (ytSyncFallbackTimer) clearTimeout(ytSyncFallbackTimer);
+  ytSyncFallbackTimer = null;
+  try {
+    if (Math.abs(ytPlayer.getCurrentTime() - data.currentTime) > 1)
+      ytPlayer.seekTo(data.currentTime, true);
+    if (data.isPaused) ytPlayer.pauseVideo();
+    else ytPlayer.playVideo();
+  } catch {
+    /* player was disposed */
+  } finally {
+    ytAwaitingSync = false;
+    _startYtSync();
+  }
+});
+
 function getYT(): YTAPI | null {
   return (window as unknown as { YT?: YTAPI }).YT ?? null;
 }
@@ -292,11 +321,14 @@ function _embedUrlToId(url: string): string | null {
   return m ? m[1] : null;
 }
 
-function _loadYtApi(cb: (YT: YTAPI) => void): void {
+function _loadYtApi(cb: (YT: YTAPI) => void, isCurrent: () => boolean): void {
   ytFailed.value = false;
   loadYtApi()
-    .then(cb)
+    .then((YT) => {
+      if (isCurrent()) cb(YT);
+    })
     .catch((e: Error) => {
+      if (!isCurrent()) return;
       _ytInitializing = false;
       ytFailed.value = true;
       console.warn("[BackgroundProjectionReturn] YouTube indisponível:", e?.message || e);
@@ -305,14 +337,23 @@ function _loadYtApi(cb: (YT: YTAPI) => void): void {
 
 function _initYoutube(): void {
   if (_ytInitializing) return;
-  _ytInitializing = true;
   _destroyYoutube();
+  _ytInitializing = true;
+  const generation = ytGeneration;
+  const playbackId = fileState.playback_id;
+  const isCurrent = () =>
+    generation === ytGeneration &&
+    fileState.active &&
+    fileState.type === "youtube" &&
+    fileState.playback_id === playbackId;
   const id = _embedUrlToId(fileState.url);
-  if (!id) return;
-  if (!ytContainer.value) return;
+  if (!id || !ytContainer.value) {
+    _ytInitializing = false;
+    return;
+  }
 
   _loadYtApi((YT: YTAPI) => {
-    if (!ytContainer.value) return;
+    if (!isCurrent() || !ytContainer.value) return;
     ytPlayer = new YT.Player(ytContainer.value, {
       height: "100%",
       width: "100%",
@@ -328,6 +369,7 @@ function _initYoutube(): void {
       },
       events: {
         onReady: () => {
+          if (!isCurrent()) return;
           _ytInitializing = false;
           Telemetry.track("music_youtube_player_ready", {
             playback_id: fileState.playback_id,
@@ -335,10 +377,17 @@ function _initYoutube(): void {
             window_role: "background_projection_return",
           });
           if (ytPlayer) ytPlayer.playVideo();
-          _broadcastYtState();
-          _startYtSync();
+          ytAwaitingSync = true;
+          $broadcast.send(BROADCAST_TYPE.REQUEST_VIDEO_STATE, { playback_id: playbackId });
+          ytSyncFallbackTimer = setTimeout(() => {
+            if (!isCurrent() || !ytAwaitingSync) return;
+            ytAwaitingSync = false;
+            _broadcastYtState();
+            _startYtSync();
+          }, 800);
         },
         onApiChange: () => {
+          if (!isCurrent()) return;
           try {
             if (typeof (ytPlayer as any)?.setOption === "function")
               (ytPlayer as any).setOption("captions", "track", {});
@@ -347,6 +396,7 @@ function _initYoutube(): void {
           }
         },
         onStateChange: (e: { data: number }) => {
+          if (!isCurrent()) return;
           Telemetry.track("music_youtube_state_changed", {
             playback_id: fileState.playback_id,
             state: e.data,
@@ -355,6 +405,7 @@ function _initYoutube(): void {
           _broadcastYtState();
         },
         onError: (e: unknown) => {
+          if (!isCurrent()) return;
           const normalized = normalizeYouTubeError(e);
           const error = new Error(normalized.message);
           error.name = normalized.name;
@@ -378,10 +429,14 @@ function _initYoutube(): void {
         },
       },
     });
-  });
+  }, isCurrent);
 }
 
 function _destroyYoutube(): void {
+  ++ytGeneration;
+  ytAwaitingSync = false;
+  if (ytSyncFallbackTimer) clearTimeout(ytSyncFallbackTimer);
+  ytSyncFallbackTimer = null;
   if (_ytSyncTimer) {
     clearInterval(_ytSyncTimer);
     _ytSyncTimer = null;
@@ -399,7 +454,7 @@ function _destroyYoutube(): void {
 }
 
 function _broadcastYtState(): void {
-  if (!ytPlayer || !ytPlayer.getCurrentTime || !fileState.active) return;
+  if (ytAwaitingSync || !ytPlayer || !ytPlayer.getCurrentTime || !fileState.active) return;
   const yt = getYT();
   if (!yt) return;
   try {
@@ -409,6 +464,7 @@ function _broadcastYtState(): void {
       duration: ytPlayer.getDuration() || 0,
       state: ytPlayer.getPlayerState(),
       playback_id: fileState.playback_id,
+      sampledAt: Date.now(),
     });
   } catch {
     /* ignore */

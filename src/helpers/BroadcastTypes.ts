@@ -158,11 +158,12 @@ export const BROADCAST_TYPE = Object.freeze({
   /** Sincronização de vídeo entre o player principal e a projeção.
    *  Payload: { currentTime, isPaused, duration, sentAt, playback_id, revision,
    *             sampledAt, position, playing, rate, clockAnchor }
-   *  Emitido por: useMedia.ts (onTimeUpdate + goToTime + pause/play).
-   *  Recebido por: FileProjection.vue (sincroniza o <video> com o <audio>). */
+   *  Emitido por: useMedia.ts (onTimeUpdate + goToTime + pause/play ou
+   *  resposta ao reopen do player YouTube).
+   *  Recebido por: projeções de arquivo e retorno, inclusive YouTube. */
   VIDEO_STATE: "video_state",
 
-  /** Solicita um VIDEO_STATE fresco para reabrir ou retomar projeção de arquivo. */
+  /** Solicita um VIDEO_STATE fresco para reabrir arquivo ou YouTube. */
   REQUEST_VIDEO_STATE: "request_video_state",
 
   /** Força a RibbonBar a selecionar uma página específica.
