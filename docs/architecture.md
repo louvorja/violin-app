@@ -24,6 +24,15 @@ seleção projetada, com transporte validado por Broadcast e SSE, recuperação 
 snapshot e comandos entre janelas correlacionados por sessão. Contrato e limites em
 [`presentation-core.md`](presentation-core.md).
 
+Outras superfícies live mantêm autoridades menores: Bíblia, projeções de módulo,
+anúncios e visibilidade de overlay respondem a pedidos de estado na Shell.
+Vídeo, arquivo/PDF, fundo e Libras conservam seus contratos específicos, com
+identidade e versão para rejeitar mensagens antigas. Janelas de arquivo e fundo
+reabertas leem a seleção transitória validada; o retorno do fundo também recupera
+o arquivo ativo. `PdfPageRenderQueue` serializa páginas no mesmo canvas. A matriz
+completa e os limites testados estão em
+[`architecture-refactor-final-report.md`](architecture-refactor-final-report.md).
+
 ---
 
 ## 🧠 Stack
@@ -568,22 +577,24 @@ Canal único `BroadcastChannel("louvorja")`. Duas finalidades:
 | `music_presentation_snapshot` | useSlides            | Projection, Return, OBS, Operator, Remote, Libras |
 | `slide_change`            | slide_editor            | Projection, ProjectionReturn, Obs, Operator |
 | `slides_data`             | useMedia/useSlides      | Operator, RemoteControl                     |
-| `bible_verse`             | bible/Index.vue         | ObsBible, ProjectionBible                   |
+| `bible_verse`             | BiblePresentationAuthority na Shell | ProjectionBible, Return, OBS Bible, fundo |
 | `media_close`             | useMedia.close()        | Projection, Obs, FileProjection             |
-| `file_projection`         | liturgy / media_library | FileProjection, FileProjectionReturn        |
-| `background_projection`   | background_projection   | BackgroundProjection                        |
+| `file_projection`         | useMedia                | FileProjection, Return, fundo e retorno     |
+| `background_projection`   | background_projection   | BackgroundProjection e Return               |
 | `wallpaper_update`        | RibbonWallpaper, Opções | BackgroundProjection, FileProjection        |
 | `module_ribbon_action`    | RibbonBar               | Módulo alvo                                 |
 | `userdata:patch`          | UserData.set()          | Todas as janelas                            |
-| `announcements_state`     | announcements module    | AnnouncementsProjection                     |
-| `announcements_control`   | announcements module    | AnnouncementsProjection                     |
+| `announcements_state`     | AnnouncementsPresentationAuthority | AnnouncementsProjection             |
+| `announcements_control`   | AnnouncementsProjection/operador | Authority na Shell                    |
 | `bible_ribbon_action`     | RibbonBar               | Módulo bíblia                               |
 | `liturgy_ribbon_action`   | RibbonBar               | Módulo liturgia                             |
 | `module_projection_close` | módulos de projeção     | Janela de projeção                          |
 | `ribbon:select_page`      | Módulos                 | RibbonBar                                   |
-| `libras_toggle`           | ShellTools              | Projection                                  |
+| `libras_toggle`           | ShellTools/Opções       | Projeções e OBS (epoch monotônico)          |
 | `libras_translate`        | useLibras               | Projection, Obs                             |
 | `request_libras_state`    | LibrasOverlay           | main.js                                     |
+| `overlay_config_changed`  | Shell (estado canônico); módulo (invalidação de slots) | OverlayRenderer |
+| `request_overlay_state`   | OverlayRenderer         | Shell (visibilidade) e leitura local dos slots |
 
 ---
 
