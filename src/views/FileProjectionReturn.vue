@@ -145,11 +145,10 @@ const fallbackStyle = computed(() =>
   })
 );
 
-async function renderPdfPage(pageNum: number): Promise<boolean> {
+async function renderPdfPage(pageNum: number): Promise<void> {
   const canvas = pdfCanvas.value;
   const doc = pdfDoc;
-  if (!doc || !canvas) return false;
-  let committed = false;
+  if (!doc || !canvas) return;
   try {
     await pdfRenderQueue.run(async (isCurrent) => {
       if (pdfDoc !== doc) return;
@@ -169,13 +168,17 @@ async function renderPdfPage(pageNum: number): Promise<boolean> {
       await page.render({ canvas, viewport: scaled }).promise;
       if (isCurrent() && pdfDoc === doc) {
         fileProjection.page = pageNum;
-        committed = true;
+        Broadcast.send(BROADCAST_TYPE.FILE_PROJECTION_PAGE, {
+          playback_id: fileProjection.playback_id,
+          page: pageNum,
+          totalPages: doc.numPages,
+          source: "projection",
+        });
       }
     });
   } catch (e) {
     console.error("[FileProjectionReturn] Erro render página:", e);
   }
-  return committed;
 }
 
 async function loadPdf(
@@ -227,15 +230,7 @@ async function loadPdf(
     } catch {
       /* resume from the original page */
     }
-    if (!(await renderPdfPage(Math.max(1, Math.min(pageNum, doc.numPages))))) return;
-    if (generation !== pdfLoadGeneration || expectedPlaybackId !== fileProjection.playback_id)
-      return;
-    Broadcast.send(BROADCAST_TYPE.FILE_PROJECTION_PAGE, {
-      playback_id: fileProjection.playback_id,
-      page: fileProjection.page,
-      totalPages: pdfDoc.numPages,
-      source: "projection",
-    });
+    await renderPdfPage(Math.max(1, Math.min(pageNum, doc.numPages)));
   } catch (e) {
     console.error("[FileProjectionReturn] Erro carregar PDF:", e);
   }

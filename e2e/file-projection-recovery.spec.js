@@ -126,6 +126,7 @@ test("PDF page state belongs to the active file and survives reopen", async ({ b
     });
     await projection.waitForTimeout(300);
     await expect.poll(pageColor).toEqual([255, 0, 0]);
+    await expect.poll(() => projection.evaluate(() => window.__fileTestPages.at(-1)?.page)).toBe(1);
 
     await projection.reload();
     await expect.poll(pageColor).toEqual([0, 255, 0]);
@@ -183,6 +184,62 @@ test("background projection and return keep the last rapid PDF page", async ({ b
     await operator.waitForTimeout(300);
     await expect.poll(() => color(projection, "canvas.layer-file--pdf")).toEqual([0, 255, 0]);
     await expect.poll(() => color(returned, "canvas.return-file--pdf")).toEqual([0, 255, 0]);
+  } finally {
+    await context.close();
+  }
+});
+
+test("image projection and return recover the latest file after late join and reopen", async ({
+  browser,
+}) => {
+  const context = await browser.newContext({ serviceWorkers: "block" });
+  const operator = await context.newPage();
+  const projection = await context.newPage();
+  const returned = await context.newPage();
+  const image = (color) =>
+    `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="${color}"/></svg>`)}`;
+  const a = image("red");
+  const b = image("blue");
+  try {
+    await operator.goto("/");
+    await operator.evaluate(
+      (url) =>
+        localStorage.setItem(
+          "lj_file_projection",
+          JSON.stringify({
+            type: "image",
+            url,
+            title: "Current",
+            playback_id: "image-b",
+            stage_epoch: 101,
+          })
+        ),
+      b
+    );
+    await projection.goto("/projection/file");
+    await returned.goto("/projection/file/return");
+    await expect(projection.locator("img.file-projection__media")).toHaveAttribute("src", b);
+    await expect(returned.locator("img.return-file-projection__media")).toHaveAttribute("src", b);
+
+    await operator.evaluate((url) => {
+      const bus = new BroadcastChannel("louvorja");
+      bus.postMessage({
+        type: "file_projection",
+        payload: {
+          type: "image",
+          url,
+          title: "Old",
+          playback_id: "image-a",
+          stage_epoch: 100,
+        },
+      });
+      bus.close();
+    }, a);
+    await projection.waitForTimeout(100);
+    await expect(projection.locator("img.file-projection__media")).toHaveAttribute("src", b);
+    await expect(returned.locator("img.return-file-projection__media")).toHaveAttribute("src", b);
+    await projection.reload();
+    await expect(projection.locator("img.file-projection__media")).toHaveAttribute("src", b);
   } finally {
     await context.close();
   }
