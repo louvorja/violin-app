@@ -1,0 +1,3 @@
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{};e._posthogReleaseId=e._posthogReleaseId||"01a0db90-b420-0000-625f-2827b3c467f9";var n=(new e.Error).stack;n&&(e._posthogChunkIds=e._posthogChunkIds||{},e._posthogChunkIds[n]="30ddb0cc-620a-531a-860c-29e240ad1258")}catch(e){}}();var r=(a=>(a.AUDIO="audio",a.INSTRUMENTAL="instrumental",a.NO_AUDIO="no_audio",a.AUDIO_ONLY="audio-only",a.PLAYBACK_ONLY="playback-only",a.SUNG="sung",a.PLAYBACK="pb",a.LYRIC="lyric",a))(r||{});export{r as M};
+
+//# chunkId=30ddb0cc-620a-531a-860c-29e240ad1258

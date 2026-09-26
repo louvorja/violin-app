@@ -1,0 +1,3 @@
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{};e._posthogReleaseId=e._posthogReleaseId||"01a0db90-b420-0000-625f-2827b3c467f9";var n=(new e.Error).stack;n&&(e._posthogChunkIds=e._posthogChunkIds||{},e._posthogChunkIds[n]="2af18c6a-eea1-5152-8c93-1b68abff1d9a")}catch(e){}}();const n="Álbum",t="Muestra las canciones de un álbum (función $media.openAlbum)",e={track:"Pista",music_name:"Nombre",duration:"Duración"},a={title:n,description:t,table:e};export{a as default,t as description,e as table,n as title};
+
+//# chunkId=2af18c6a-eea1-5152-8c93-1b68abff1d9a

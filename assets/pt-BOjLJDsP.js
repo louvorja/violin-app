@@ -1,0 +1,3 @@
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{};e._posthogReleaseId=e._posthogReleaseId||"01a0db90-b420-0000-625f-2827b3c467f9";var n=(new e.Error).stack;n&&(e._posthogChunkIds=e._posthogChunkIds||{},e._posthogChunkIds[n]="f68b9eea-da22-57ab-a226-f6083d014c98")}catch(e){}}();const t="Relógio",o="Relógio digital com data e hora.",e={title_ctx:"Configurar Relógio"},r={toggle_format:"Alternar 12h/24h",toggle_seconds:"Mostrar/ocultar segundos",fullscreen:"Abrir em tela cheia"},a={title:t,description:o,ribbon:e,actions:r};export{r as actions,a as default,o as description,e as ribbon,t as title};
+
+//# chunkId=f68b9eea-da22-57ab-a226-f6083d014c98

@@ -1,0 +1,3 @@
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{};e._posthogReleaseId=e._posthogReleaseId||"01a0db90-b420-0000-625f-2827b3c467f9";var n=(new e.Error).stack;n&&(e._posthogChunkIds=e._posthogChunkIds||{},e._posthogChunkIds[n]="4ce6670f-28b6-57e1-a0bd-3820e66811e6")}catch(e){}}();const t="Contador",o="Contador simples com incremento e decremento.",e={title_ctx:"Configurar Contador"},n={reset:"Zerar"},r={title:t,description:o,ribbon:e,actions:n};export{n as actions,r as default,o as description,e as ribbon,t as title};
+
+//# chunkId=4ce6670f-28b6-57e1-a0bd-3820e66811e6

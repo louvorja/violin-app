@@ -1,0 +1,3 @@
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{};e._posthogReleaseId=e._posthogReleaseId||"01a0db90-b420-0000-625f-2827b3c467f9";var n=(new e.Error).stack;n&&(e._posthogChunkIds=e._posthogChunkIds||{},e._posthogChunkIds[n]="7c64065f-95d2-58b6-b91b-595c09f3acc4")}catch(e){}}();const t="Animação",e="Simple animation to get dependencies",i="PORTUGUES",o={create:{title:"Criar animação",name:"Nome",description:"Descrição"},edit:{title:"Editar animação",name:"Nome",description:"Descrição"}},n={title:t,description:e,text:i,modals:o};export{n as default,e as description,o as modals,i as text,t as title};
+
+//# chunkId=7c64065f-95d2-58b6-b91b-595c09f3acc4
