@@ -1387,9 +1387,7 @@ ipcMain.handle("protocol:setRemoteConfig", (_event, cfg) => {
 });
 
 /** Limpa todo o cache JSON em userData/json_db/ */
-ipcMain.handle("jsonCache:clear", () => {
-  jsonCache.clearCache();
-});
+ipcMain.handle("jsonCache:clear", () => jsonCache.clearCache());
 
 /** Retorna o caminho do diretório de cache (debug / módulo update) */
 ipcMain.handle("jsonCache:dir", () => {

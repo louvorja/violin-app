@@ -36,10 +36,13 @@ function CACHE_DIR() {
  * @param {string} filePath
  * @returns {boolean}
  */
-function isCacheValid(filePath) {
-  if (!fs.existsSync(filePath)) return false;
-  const stat = fs.statSync(filePath);
-  return Date.now() - stat.mtimeMs < TTL_MS;
+async function isCacheValid(filePath) {
+  try {
+    const stat = await fs.stat(filePath);
+    return Date.now() - stat.mtimeMs < TTL_MS;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -123,7 +126,7 @@ async function fetchJson(relPath, remoteBaseUrl, headers = {}) {
   const localPath = safeLocalPath(relPath);
 
   // Cache válido — retornar do disco (sem deduplicação necessária)
-  if (isCacheValid(localPath)) {
+  if (await isCacheValid(localPath)) {
     console.log(`[jsonCache] HIT ${relPath}`);
     return {
       body: await fs.readFile(localPath),
@@ -249,11 +252,11 @@ async function fetchJson(relPath, remoteBaseUrl, headers = {}) {
  * Invalida (remove) todo o cache JSON.
  * Útil para o módulo de update forçar re-download.
  */
-function clearCache() {
+async function clearCache() {
   const dir = CACHE_DIR();
-  if (fs.existsSync(dir)) {
-    fs.removeSync(dir);
-    fs.ensureDirSync(dir);
+  if (await fs.pathExists(dir)) {
+    await fs.remove(dir);
+    await fs.ensureDir(dir);
     console.log("[jsonCache] Cache limpo:", dir);
   }
 }
