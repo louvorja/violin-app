@@ -7,6 +7,7 @@ import $userdata from "@/helpers/UserData";
 import { OVERLAY_STYLE_DEFAULTS, type OverlaySlot } from "@/types/Overlay";
 import { KEYS } from "@/constants/UserDataKeys";
 import { overlaySlotStyle, overlayImageStyle, overlayTextStyle } from "@/helpers/OverlayStyle";
+import { OverlayVisibilityGate } from "@/presentation/OverlayVisibilityState";
 
 interface OverlayStateReturn {
   enabled: Ref<boolean>;
@@ -25,10 +26,13 @@ export function useOverlayState(): OverlayStateReturn {
   const enabled = ref($userdata.get<boolean>(KEYS.MODULES.OVERLAY.ENABLED, false) === true);
   const slots = ref<OverlaySlot[]>([]);
   const moduleValues = reactive<Record<string, string>>({});
+  const visibilityGate = new OverlayVisibilityGate();
+  let refreshGeneration = 0;
 
   async function refresh() {
-    enabled.value = $userdata.get(KEYS.MODULES.OVERLAY.ENABLED, false) as boolean;
+    const generation = ++refreshGeneration;
     const list = await readAllSlots();
+    if (generation !== refreshGeneration) return;
     slots.value = list.map((s) => ({
       ...s,
       style: { ...OVERLAY_STYLE_DEFAULTS, ...(s.style || {}) },
@@ -36,23 +40,9 @@ export function useOverlayState(): OverlayStateReturn {
   }
 
   useBroadcastListener(BROADCAST_TYPE.OVERLAY_CONFIG_CHANGED, (payload: unknown) => {
-    const p = payload as { enabled?: boolean } | null;
-    if (p?.enabled !== undefined) {
-      enabled.value = p.enabled;
-      $userdata.set(KEYS.MODULES.OVERLAY.ENABLED, p.enabled);
-    }
-    refresh();
-  });
-
-  // Escuta toggle de overlay via atalho (Ctrl+O) sem depender do módulo estar aberto
-  useBroadcastListener(BROADCAST_TYPE.MODULE_RIBBON_ACTION, (payload: unknown) => {
-    const p = payload as { module?: string; action?: string } | null;
-    if (p?.module === "overlay" && p?.action === "toggle") {
-      enabled.value = !enabled.value;
-      $userdata.set(KEYS.MODULES.OVERLAY.ENABLED, enabled.value);
-      $broadcast.send(BROADCAST_TYPE.OVERLAY_CONFIG_CHANGED, { enabled: enabled.value });
-      refresh();
-    }
+    const state = visibilityGate.accept(payload);
+    if (state) enabled.value = state.enabled;
+    void refresh();
   });
 
   useBroadcastListener(BROADCAST_TYPE.MODULE_PROJECTION_VALUE, (payload) => {
@@ -77,7 +67,7 @@ export function useOverlayState(): OverlayStateReturn {
   }
 
   onMounted(() => {
-    refresh();
+    void refresh();
     $broadcast.send(BROADCAST_TYPE.REQUEST_OVERLAY_STATE);
     requestModuleStates();
   });
@@ -105,11 +95,12 @@ export function useOverlayState(): OverlayStateReturn {
 
   async function slotImage(slot: OverlaySlot): Promise<string> {
     if (!slot.file_id) return slot.content || "";
-    const cached = _imageCache.get(slot.id);
+    const cacheKey = `${slot.id}:${slot.file_id}`;
+    const cached = _imageCache.get(cacheKey);
     if (cached) return cached;
     const record = await getImage(slot.file_id);
     const url = resolveImageUrl(record);
-    _imageCache.set(slot.id, url);
+    _imageCache.set(cacheKey, url);
     return url;
   }
 

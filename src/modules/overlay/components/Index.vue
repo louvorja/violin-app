@@ -176,6 +176,7 @@ const previewImageCache = reactive<Record<string, string>>({});
 const moduleValues = reactive<Record<string, string>>({});
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
+let loadGeneration = 0;
 
 function setEnabled(value: boolean): void {
   $userdata.set(KEYS.MODULES.OVERLAY.ENABLED, value);
@@ -183,7 +184,9 @@ function setEnabled(value: boolean): void {
 }
 
 async function load(): Promise<void> {
+  const generation = ++loadGeneration;
   const slots = await readAllSlots();
+  if (generation !== loadGeneration) return;
   localSlots.length = 0;
   for (const s of slots) {
     localSlots.push({ ...s, style: { ...OVERLAY_STYLE_DEFAULTS, ...(s.style || {}) } });
@@ -340,9 +343,6 @@ useBroadcastListener(BROADCAST_TYPE.MODULE_RIBBON_ACTION, (payload: unknown) => 
   const pl = payload as { module?: string; action?: string } | null;
   if (pl?.module !== "overlay") return;
   switch (pl.action) {
-    case "toggle":
-      setEnabled(!enabled.value);
-      break;
     case "add":
       addSlot();
       break;
@@ -358,12 +358,8 @@ useBroadcastListener(BROADCAST_TYPE.MODULE_PROJECTION_VALUE, (payload: unknown) 
 });
 
 // Atualiza localSlots quando overlay é alterado externamente (ex.: liturgia)
-useBroadcastListener(BROADCAST_TYPE.OVERLAY_CONFIG_CHANGED, (payload: unknown) => {
-  const p = payload as { enabled?: boolean } | null;
-  if (p?.enabled !== undefined) {
-    $userdata.set(KEYS.MODULES.OVERLAY.ENABLED, p.enabled);
-  }
-  load();
+useBroadcastListener(BROADCAST_TYPE.OVERLAY_CONFIG_CHANGED, () => {
+  void load();
 });
 
 onMounted(() => {

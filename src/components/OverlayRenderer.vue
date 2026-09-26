@@ -52,15 +52,17 @@ const {
 const imageUrls = ref<Record<string, string>>({});
 const showCanvas: Ref<boolean> = ref(false);
 const slotDataById: Record<string, OverlaySlot> = {};
+let imageLoadGeneration = 0;
 
 async function loadImages(list: OverlaySlot[]): Promise<void> {
+  const generation = ++imageLoadGeneration;
   const map: Record<string, string> = {};
   for (const slot of list) {
     if (slot.type === "image") {
       map[slot.id] = await slotImage(slot);
     }
   }
-  imageUrls.value = map;
+  if (generation === imageLoadGeneration) imageUrls.value = map;
 }
 
 watch(
@@ -68,6 +70,8 @@ watch(
   ([current, ge]: [OverlaySlot[], boolean]) => {
     if (ge) {
       showCanvas.value = true;
+    } else if (current.length === 0) {
+      showCanvas.value = false;
     }
     for (const s of current) {
       slotDataById[s.id] = s;

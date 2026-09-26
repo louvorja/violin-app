@@ -368,7 +368,6 @@ export function useLiturgyExecution() {
       if (slot.enabled) $userdata.set(KEYS.MODULES.OVERLAY.ENABLED, true);
 
       $broadcast.send(BROADCAST_TYPE.OVERLAY_CONFIG_CHANGED, {
-        enabled: slot.enabled,
         slot,
       });
     } catch (error) {
@@ -392,7 +391,6 @@ export function useLiturgyExecution() {
       $userdata.set(KEYS.MODULES.OVERLAY.ENABLED, true);
 
       $broadcast.send(BROADCAST_TYPE.OVERLAY_CONFIG_CHANGED, {
-        enabled: true,
         slot,
       });
     } catch (error) {

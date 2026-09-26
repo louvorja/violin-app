@@ -70,6 +70,7 @@ import { handleProjectionStateRequest } from "@/helpers/ProjectionStateRequests"
 import { listenForVideoStateRequests } from "@/helpers/VideoStateRequest";
 import { BiblePresentationAuthority } from "@/presentation/BiblePresentationState";
 import { ModulePresentationAuthority } from "@/presentation/ModulePresentationState";
+import { nextOverlayEpoch } from "@/presentation/OverlayVisibilityState";
 import {
   AnnouncementsPresentationAuthority,
   announcementPosition,
@@ -148,6 +149,28 @@ if (!isAuxiliaryRenderer) {
       } else if (message.type === BROADCAST_TYPE.REQUEST_ANNOUNCEMENTS_STATE) {
         const packet = announcementsAuthority.current();
         if (packet) Broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_STATE, packet);
+      } else if (
+        message.type === BROADCAST_TYPE.MODULE_RIBBON_ACTION &&
+        message.payload?.module === "overlay" &&
+        message.payload?.action === "toggle"
+      ) {
+        UserData.set(
+          KEYS.MODULES.OVERLAY.ENABLED,
+          UserData.get(KEYS.MODULES.OVERLAY.ENABLED, false) !== true
+        );
+        Broadcast.send(BROADCAST_TYPE.OVERLAY_CONFIG_CHANGED, {
+          enabled: UserData.get(KEYS.MODULES.OVERLAY.ENABLED, false) === true,
+          overlay_epoch: nextOverlayEpoch(),
+        });
+      } else if (
+        message.type === BROADCAST_TYPE.REQUEST_OVERLAY_STATE ||
+        (message.type === BROADCAST_TYPE.OVERLAY_CONFIG_CHANGED &&
+          !Number.isSafeInteger(message.payload?.overlay_epoch))
+      ) {
+        Broadcast.send(BROADCAST_TYPE.OVERLAY_CONFIG_CHANGED, {
+          enabled: UserData.get(KEYS.MODULES.OVERLAY.ENABLED, false) === true,
+          overlay_epoch: nextOverlayEpoch(),
+        });
       } else if (message.type === BROADCAST_TYPE.MEDIA_CLOSE) {
         const current = announcementsAuthority.current();
         if (current?.active) {
@@ -789,8 +812,8 @@ $storage.hydrate().then(async () => {
                     if (ovSlot) {
                       ovSlot.enabled = litItem.overlay_action === "activate";
                       await writeOverlaySlot(ovSlot);
+                      if (ovSlot.enabled) UserData.set(KEYS.MODULES.OVERLAY.ENABLED, true);
                       Broadcast.send(BROADCAST_TYPE.OVERLAY_CONFIG_CHANGED, {
-                        enabled: ovSlot.enabled,
                         slot: ovSlot,
                       });
                     }
@@ -808,8 +831,8 @@ $storage.hydrate().then(async () => {
                     if (linkedSlot) {
                       linkedSlot.enabled = true;
                       await writeOverlaySlot(linkedSlot);
+                      UserData.set(KEYS.MODULES.OVERLAY.ENABLED, true);
                       Broadcast.send(BROADCAST_TYPE.OVERLAY_CONFIG_CHANGED, {
-                        enabled: true,
                         slot: linkedSlot,
                       });
                     }
