@@ -65,8 +65,7 @@ interface MonitorIdentityModule {
 
 import * as impl from "@root/electron/main/monitorIdentity.mjs";
 
-const mod = (impl as { default?: MonitorIdentityModule }).default ??
-  (impl as unknown as MonitorIdentityModule);
+const mod = impl as unknown as MonitorIdentityModule;
 
 export const {
   WEIGHTS,

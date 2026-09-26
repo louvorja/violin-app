@@ -26,8 +26,7 @@ interface DisplayRolesModule {
 
 import * as impl from "@root/electron/main/displayRoles.mjs";
 
-const mod = (impl as { default?: DisplayRolesModule }).default ??
-  (impl as unknown as DisplayRolesModule);
+const mod = impl as unknown as DisplayRolesModule;
 
 export const { ROLES, FEATURE_ROLE, CANONICAL_FEATURE, roleOfFeature, deriveRoles } = mod;
 
