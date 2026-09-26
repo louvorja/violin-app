@@ -29,6 +29,7 @@ import { BROADCAST_TYPE, BroadcastMessage } from "@/helpers/BroadcastTypes";
 import Platform from "@/helpers/Platform";
 import { readMusicPresentationPacket } from "@/presentation/MusicPresentationPacket";
 import { BiblePresentationGate } from "@/presentation/BiblePresentationState";
+import { ModulePresentationGate } from "@/presentation/ModulePresentationState";
 
 const CHANNEL_NAME = "louvorja";
 
@@ -80,6 +81,7 @@ let channel: BroadcastChannel | null = null;
 const _localListeners = new Set<(msg: BroadcastMessage) => void>();
 const _lastByType = new Map<string, Map<string, BroadcastMessage>>();
 const bibleStateGate = new BiblePresentationGate();
+const moduleStateGate = new ModulePresentationGate();
 
 export interface BroadcastListenOptions {
   /** Repassa o último estado conhecido ao registrar o listener. */
@@ -101,6 +103,10 @@ function _cacheKey(msg: BroadcastMessage): string {
 function _deliverLocal(msg: BroadcastMessage): void {
   if (msg?.type === BROADCAST_TYPE.BIBLE_VERSE) {
     const accepted = bibleStateGate.accept(msg.payload);
+    if (!accepted) return;
+    msg = { ...msg, payload: accepted };
+  } else if (msg?.type === BROADCAST_TYPE.MODULE_PROJECTION_VALUE) {
+    const accepted = moduleStateGate.accept(msg.payload);
     if (!accepted) return;
     msg = { ...msg, payload: accepted };
   }
@@ -202,6 +208,10 @@ export default {
   send(type: string, payload: unknown = {}): BroadcastSendResult {
     if (type === BROADCAST_TYPE.BIBLE_VERSE) {
       const accepted = bibleStateGate.accept(payload);
+      if (!accepted) return { crossWindow: false, remoteRelay: "not_required" };
+      payload = accepted;
+    } else if (type === BROADCAST_TYPE.MODULE_PROJECTION_VALUE) {
+      const accepted = moduleStateGate.accept(payload);
       if (!accepted) return { crossWindow: false, remoteRelay: "not_required" };
       payload = accepted;
     }

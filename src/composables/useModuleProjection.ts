@@ -6,7 +6,7 @@
  *   - opcionalmente registra `onAction` para responder à ribbon contextual
  *
  * O composable cuida de:
- *   - escutar REQUEST_MODULE_STATE e reemitir o último valor
+ *   - publicar pedidos de estado para a autoridade da janela principal
  *   - escutar MODULE_RIBBON_ACTION e despachar para o handler local
  *
  * Exemplo de uso (counter):
@@ -19,7 +19,6 @@
  *   watch(count, (n) => projection.emit({ text: String(n), active: true }));
  */
 
-import { ref } from "vue";
 import Broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
@@ -45,32 +44,12 @@ interface UseModuleProjectionOptions {
 }
 
 export function useModuleProjection(moduleId: string, opts: UseModuleProjectionOptions = {}) {
-  const _last = ref<ProjectionPayload>({ text: "", reference: "", active: false });
-  // Só reemite no REQUEST_MODULE_STATE se emit() já foi chamado. Sem isso,
-  // uma instância do módulo montada mas sem valor (ex: draw na janela
-  // principal enquanto os dados estão noutra janela/popup) responderia com
-  // estado vazio, sobrescrevendo em corrida a resposta autoritativa do
-  // cache global (main.js REQUEST_MODULE_STATE fallback).
-  let _emitted = false;
-
   function emit(payload: ProjectionPayload) {
-    _emitted = true;
-    _last.value = { ...payload };
-    Broadcast.send(BROADCAST_TYPE.MODULE_PROJECTION_VALUE, {
+    Broadcast.send(BROADCAST_TYPE.MODULE_PROJECTION_INTENT, {
       module: moduleId,
       ...payload,
     });
   }
-
-  // Re-emite o último valor quando uma janela de projeção pede.
-  useBroadcastListener(BROADCAST_TYPE.REQUEST_MODULE_STATE, (payload) => {
-    if ((payload as { module?: string })?.module !== moduleId) return;
-    if (!_emitted) return;
-    Broadcast.send(BROADCAST_TYPE.MODULE_PROJECTION_VALUE, {
-      module: moduleId,
-      ..._last.value,
-    });
-  });
 
   // Recebe ações da ribbon contextual.
   useBroadcastListener(BROADCAST_TYPE.MODULE_RIBBON_ACTION, (payload) => {
@@ -80,5 +59,5 @@ export function useModuleProjection(moduleId: string, opts: UseModuleProjectionO
     if (data.action && opts.onAction) opts.onAction(data.action, data.payload);
   });
 
-  return { emit, _last };
+  return { emit };
 }

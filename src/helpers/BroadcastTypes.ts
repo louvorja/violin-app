@@ -75,18 +75,16 @@ export const BROADCAST_TYPE = Object.freeze({
 
   // ─── Pattern genérico de projeção de módulo ──────────────────────────────
 
-  /** Valor a ser projetado por um módulo qualquer (texto, número, etc.).
-   *  Payload: { module: string, text?: string, reference?: string, active?: boolean }
-   *  Emitido por: módulos com LScreenBtn (counter, draw, name_draw, message_board,
-   *  clock, stopwatch). Recebido por: ModuleProjection. */
+  /** Estado canônico versionado do módulo, publicado pela janela principal. */
   MODULE_PROJECTION_VALUE: "module_projection_value",
+  /** Pedido transitório de atualização do módulo; a janela principal atribui revisão. */
+  MODULE_PROJECTION_INTENT: "module_projection_intent",
 
   /** Formatação de algum módulo mudou. Payload: { module, key, value }.
    *  Emitido por: useModuleFormat. Recebido por: ModuleProjection. */
   MODULE_FORMAT_CHANGED: "module_format_changed",
 
-  /** Solicita reemissão do estado de um módulo. Payload: { module: string }.
-   *  Emitido por: ModuleProjection ao montar. Recebido por: módulo correspondente. */
+  /** Solicita snapshot do módulo à janela principal. Payload: { module: string }. */
   REQUEST_MODULE_STATE: "request_module_state",
 
   /** Ação ribbon contextual de qualquer módulo. Payload: { module, action }.

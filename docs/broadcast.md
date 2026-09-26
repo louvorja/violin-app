@@ -95,10 +95,17 @@ $broadcast.send(BROADCAST_TYPE.REQUEST_MUSIC_PRESENTATION_SNAPSHOT);
 
 | Tipo | Payload |
 |---|---|
-| `MODULE_PROJECTION_VALUE` | `{ module, text?, reference?, active? }` |
+| `MODULE_PROJECTION_INTENT` | `{ module, text?, reference?, active?, color? }` |
+| `MODULE_PROJECTION_VALUE` | `{ module_schema: 1, module_session, module_epoch, module_revision, module, text?, reference?, active?, color? }` |
 | `MODULE_FORMAT_CHANGED` | `{ module, key, value }` |
 | `REQUEST_MODULE_STATE` | `{ module }` |
 | `MODULE_RIBBON_ACTION` | `{ module, action }` |
+
+`useModuleProjection` emite intent; a janela principal atribui revisão independente
+para cada módulo e publica o valor canônico. `Broadcast.ts` valida o pacote e
+rejeita respostas antigas por módulo. Ao abrir ou reabrir, `/projection/module`
+pede ao shell o último snapshot. O emissor local não responde mais ao pedido,
+evitando que uma cópia antiga substitua o estado atual.
 
 ### In-app (hotkeys / HTTP)
 

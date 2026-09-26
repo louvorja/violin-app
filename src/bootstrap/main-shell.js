@@ -69,6 +69,7 @@ import { useLibrasState } from "@/modules/libras/composables/useLibrasState";
 import { handleProjectionStateRequest } from "@/helpers/ProjectionStateRequests";
 import { listenForVideoStateRequests } from "@/helpers/VideoStateRequest";
 import { BiblePresentationAuthority } from "@/presentation/BiblePresentationState";
+import { ModulePresentationAuthority } from "@/presentation/ModulePresentationState";
 
 const app = createApp(App);
 Telemetry.installVueErrorHandler(app);
@@ -103,6 +104,7 @@ const isAuxiliaryRenderer = AUXILIARY_ROUTE_PREFIXES.some((prefix) => {
 // projection opened later asks this authority for the current snapshot.
 if (!isAuxiliaryRenderer) {
   const bibleAuthority = new BiblePresentationAuthority();
+  const moduleAuthority = new ModulePresentationAuthority();
   Broadcast.listen(
     (message) => {
       if (message.type === BROADCAST_TYPE.BIBLE_VERSE_INTENT) {
@@ -111,6 +113,14 @@ if (!isAuxiliaryRenderer) {
       } else if (message.type === BROADCAST_TYPE.REQUEST_BIBLE_STATE) {
         const current = Broadcast.getLastPayload(BROADCAST_TYPE.BIBLE_VERSE);
         if (current) Broadcast.send(BROADCAST_TYPE.BIBLE_VERSE, current);
+      } else if (message.type === BROADCAST_TYPE.MODULE_PROJECTION_INTENT) {
+        const packet = moduleAuthority.publish(message.payload);
+        if (packet) Broadcast.send(BROADCAST_TYPE.MODULE_PROJECTION_VALUE, packet);
+      } else if (message.type === BROADCAST_TYPE.REQUEST_MODULE_STATE) {
+        const moduleId = message.payload?.module;
+        if (typeof moduleId !== "string") return;
+        const current = Broadcast.getLastPayload(BROADCAST_TYPE.MODULE_PROJECTION_VALUE, moduleId);
+        if (current) Broadcast.send(BROADCAST_TYPE.MODULE_PROJECTION_VALUE, current);
       }
     },
     { replay: false }
@@ -1002,7 +1012,7 @@ $storage.hydrate().then(async () => {
             ModuleEnum.CLOCK,
           ];
           for (const id of moduleIds) {
-            Broadcast.send(BROADCAST_TYPE.MODULE_PROJECTION_VALUE, { module: id, active: false });
+            Broadcast.send(BROADCAST_TYPE.MODULE_PROJECTION_INTENT, { module: id, active: false });
             Projection.close(id);
             Broadcast.send(BROADCAST_TYPE.MODULE_PROJECTION_CLOSE, { module: id });
           }
@@ -1016,33 +1026,14 @@ $storage.hydrate().then(async () => {
 
     listenForVideoStateRequests(Broadcast, Media);
 
-    // Responde a pedidos de estado usando o cache do Broadcast.ts.
-    // Isso garante que janelas de projeção recém-abertas recebam o estado
-    // atual mesmo se o módulo específico (Bíblia ou Música) não estiver montado.
+    // Pedidos genéricos de slide/Libras continuam usando o último estado.
+    // Bíblia e módulos respondem por suas autoridades acima, inclusive no Web/PWA.
     Broadcast.listen((msg) => {
       handleProjectionStateRequest(msg, Broadcast);
-
-      // Módulos genéricos (/projection/module) — responde pelo cache do
-      // Broadcast.ts. Mesmo padrão do REQUEST_BIBLE_STATE acima: o cache é
-      // preenchido por qualquer emissão de MODULE_PROJECTION_VALUE (em
-      // qualquer janela), então a projeção recém-aberta recebe o estado
-      // atual mesmo se o módulo que emitiu não estiver montado aqui.
-      if (msg.type === BROADCAST_TYPE.REQUEST_MODULE_STATE) {
-        const moduleId = msg.payload?.module;
-        if (moduleId) {
-          const last = Broadcast.getLastPayload(BROADCAST_TYPE.MODULE_PROJECTION_VALUE, moduleId);
-          if (last) {
-            Broadcast.send(BROADCAST_TYPE.MODULE_PROJECTION_VALUE, last);
-          }
-        }
-      }
     });
 
-    // Quando o servidor HTTP sobe (auto-start ou clique manual), pede ao
-    // próprio app para reemitir o estado atual. Os emissores (useSlides,
-    // bible/Index, useModuleProjection) escutam REQUEST_*_STATE e
-    // re-broadcastam — assim os clients SSE recém-conectados aparecem
-    // com a música/versículo que já estava em execução.
+    // Quando o servidor HTTP sobe, pede snapshots atuais à aplicação para
+    // que clients SSE recém-conectados não esperem a próxima alteração.
     Platform.transmission?.onRequestState?.(() => {
       Broadcast.send(BROADCAST_TYPE.REQUEST_SLIDE_STATE);
       Broadcast.send(BROADCAST_TYPE.REQUEST_BIBLE_STATE);
@@ -1352,7 +1343,7 @@ $storage.hydrate().then(async () => {
             ModuleEnum.CLOCK,
           ];
           for (const id of moduleIds) {
-            Broadcast.send(BROADCAST_TYPE.MODULE_PROJECTION_VALUE, { module: id, active: false });
+            Broadcast.send(BROADCAST_TYPE.MODULE_PROJECTION_INTENT, { module: id, active: false });
             // Fecha a janela de projeção do módulo (counter, timer, clock, etc.).
             //  - Desktop: Projection.close → IPC windows:close → windowFactory.
             //  - Web/PWA: broadcast que a própria janela escuta e se fecha
