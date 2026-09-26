@@ -347,6 +347,7 @@ import { KEYS } from "@/constants/UserDataKeys";
 import { IMAGE_EXT, VIDEO_EXT } from "@/constants/FileTypes";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 import Telemetry from "@/helpers/Telemetry";
+import { fileProjectionPageFor, newFileProjectionId } from "@/helpers/FileProjectionPage";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -529,6 +530,8 @@ const isPlaying = computed<boolean, boolean>({
 });
 const currentPdfPage = ref(1);
 const currentPdfTotalPages = ref(0);
+let currentPdfPlaybackId: string | undefined;
+let playIndexGeneration = 0;
 const fileInput = ref<HTMLInputElement | null>(null);
 
 /* ------------------------------------------------------------------ */
@@ -1012,18 +1015,22 @@ async function playIndex(index: number): Promise<void> {
   const item = playlist.value[index];
   if (!item) return;
   if (currentIndex.value === index && isPlaying.value) return;
+  const generation = ++playIndexGeneration;
 
   currentIndex.value = index;
   isPlaying.value = true;
   currentPdfPage.value = 1;
   currentPdfTotalPages.value = 0;
+  currentPdfPlaybackId = item.type === "pdf" ? newFileProjectionId() : undefined;
 
   const url = isHeic(item.name) ? await resolveRenderableUrl(item) : resolvePath(item.path);
+  if (generation !== playIndexGeneration) return;
   const isVideo = item.type === "video";
 
   const payload: Record<string, unknown> = { url, type: item.type, title: item.name };
   if (item.type === "pdf") {
     payload.page = 1;
+    payload.playback_id = currentPdfPlaybackId;
   }
   // A blob URL only exists in the renderer that owns the library. The return
   // projection runs in another window, so give it the IndexedDB reference to
@@ -1040,6 +1047,7 @@ async function playIndex(index: number): Promise<void> {
     Platform.api?.shell?.openPath
   ) {
     const external = await Platform.api.shell.openPath(item.path);
+    if (generation !== playIndexGeneration) return;
     if (external?.ok) {
       Telemetry.track("media_library_external_opened", {
         kind: "video",
@@ -1055,14 +1063,44 @@ async function playIndex(index: number): Promise<void> {
     });
   }
 
-  if (
-    !(await $media.projectFile(
-      payload as Parameters<typeof $media.projectFile>[0],
-      isVideo ? url : undefined,
-      { stopExistingAudio: true }
-    ))
-  )
-    isPlaying.value = false;
+  const projected = await $media.projectFile(
+    payload as Parameters<typeof $media.projectFile>[0],
+    isVideo ? url : undefined,
+    { stopExistingAudio: true }
+  );
+  if (!projected) {
+    if (generation === playIndexGeneration) isPlaying.value = false;
+  } else if (
+    generation === playIndexGeneration &&
+    item.type === "pdf" &&
+    currentPdfPage.value !== 1
+  ) {
+    broadcastPdfPage();
+  }
+}
+
+function broadcastPdfPage(): void {
+  if (!currentPdfPlaybackId) return;
+  const payload = {
+    playback_id: currentPdfPlaybackId,
+    page: currentPdfPage.value,
+    source: "operator",
+  };
+  try {
+    const stored = localStorage.getItem(KEYS.PROJECTION.LJ_FILE_PROJECTION);
+    if (stored) {
+      const projection = JSON.parse(stored) as Record<string, unknown>;
+      if (projection.playback_id === currentPdfPlaybackId && projection.type === "pdf") {
+        localStorage.setItem(
+          KEYS.PROJECTION.LJ_FILE_PROJECTION,
+          JSON.stringify({ ...projection, page: currentPdfPage.value })
+        );
+      }
+    }
+  } catch {
+    /* reopen cache is optional */
+  }
+  $broadcast.send(BROADCAST_TYPE.FILE_PROJECTION_PAGE, payload);
 }
 
 async function togglePlay(): Promise<void> {
@@ -1088,7 +1126,7 @@ async function next(): Promise<void> {
       return;
     }
     currentPdfPage.value++;
-    $broadcast.send(BROADCAST_TYPE.FILE_PROJECTION_PAGE, { page: currentPdfPage.value });
+    broadcastPdfPage();
     return;
   }
   if (currentIndex.value < playlist.value.length - 1) {
@@ -1108,7 +1146,7 @@ async function prev(): Promise<void> {
       return;
     }
     currentPdfPage.value--;
-    $broadcast.send(BROADCAST_TYPE.FILE_PROJECTION_PAGE, { page: currentPdfPage.value });
+    broadcastPdfPage();
     return;
   }
   if (currentIndex.value > 0) {
@@ -1117,9 +1155,11 @@ async function prev(): Promise<void> {
 }
 
 function stop(): void {
+  ++playIndexGeneration;
+  currentPdfPlaybackId = undefined;
   isPlaying.value = false;
   currentIndex.value = -1;
-  localStorage.removeItem("lj_file_projection");
+  localStorage.removeItem(KEYS.PROJECTION.LJ_FILE_PROJECTION);
   $broadcast.send(BROADCAST_TYPE.MEDIA_CLOSE, {});
   closeProjectionWindows();
   $appdata.set("modules.media.config.video_file", false);
@@ -1160,12 +1200,12 @@ useBroadcastListener(BROADCAST_TYPE.MODULE_RIBBON_ACTION, (payload) => {
 
 // Recebe page/totalPages da janela de projeção
 useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION_PAGE, (payload) => {
-  const data = payload as { page?: number; totalPages?: number };
-  if (typeof data.page === "number") {
-    currentPdfPage.value = data.page;
-  }
-  if (typeof data.totalPages === "number") {
-    currentPdfTotalPages.value = data.totalPages;
+  const data = fileProjectionPageFor(payload, currentPdfPlaybackId);
+  if (!data || data.source !== "projection" || data.totalPages === undefined) return;
+  currentPdfTotalPages.value = data.totalPages;
+  if (currentPdfPage.value > data.totalPages) {
+    currentPdfPage.value = data.totalPages;
+    broadcastPdfPage();
   }
 });
 

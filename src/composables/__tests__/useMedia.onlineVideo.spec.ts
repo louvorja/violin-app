@@ -835,8 +835,12 @@ describe("posse do palco durante a abertura do vídeo", () => {
     const payload = { url: "blob:pdf", type: "pdf" as const, title: "Leitura", page: 1 };
     expect(await media.projectFile(payload)).toBe(true);
     expect(h.openFileWindows).toHaveBeenCalledOnce();
-    expect(h.send).toHaveBeenCalledWith(BROADCAST_TYPE.FILE_PROJECTION, payload);
-    expect(localStorage.getItem(KEYS.PROJECTION.LJ_FILE_PROJECTION)).toContain("blob:pdf");
+    expect(h.send).toHaveBeenCalledWith(BROADCAST_TYPE.FILE_PROJECTION, {
+      ...payload,
+      playback_id: expect.any(String),
+    });
+    expect(JSON.parse(localStorage.getItem(KEYS.PROJECTION.LJ_FILE_PROJECTION) || "null"))
+      .toMatchObject({ ...payload, playback_id: expect.any(String) });
     expect(openAudio).not.toHaveBeenCalled();
   });
 

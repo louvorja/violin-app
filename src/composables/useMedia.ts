@@ -1722,6 +1722,11 @@ const _self = {
   ): Promise<boolean> {
     if (!payload || typeof payload.url !== "string" || !payload.url ||
       !["image", "pdf", "video"].includes(payload.type)) return false;
+    const projection = {
+      ...payload,
+      playback_id: typeof payload.playback_id === "string" && payload.playback_id
+        ? payload.playback_id : _newPlaybackId(),
+    };
     const stageEpoch = ++_stageEpoch;
     _dropPendingDownload();
     _opening.value = null;
@@ -1746,7 +1751,7 @@ const _self = {
     await _queueStageWindows(stageEpoch, closeMusicProjectionWindows);
     if (stageEpoch !== _stageEpoch) return false;
     try {
-      localStorage.setItem(KEYS.PROJECTION.LJ_FILE_PROJECTION, JSON.stringify(payload));
+      localStorage.setItem(KEYS.PROJECTION.LJ_FILE_PROJECTION, JSON.stringify(projection));
       localStorage.removeItem(KEYS.PROJECTION.LJ_YOUTUBE_PROJECTION);
     } catch { /* cache de reabertura opcional */ }
     try {
@@ -1755,9 +1760,9 @@ const _self = {
       Telemetry.captureException(error, { operation: "file_projection_open" });
     }
     if (stageEpoch !== _stageEpoch) return false;
-    $broadcast.send(BROADCAST_TYPE.FILE_PROJECTION, payload);
-    if (payload.type === "video" && videoAudioUrl) {
-      await this.openAudio({ url: videoAudioUrl, title: payload.title || "", mediaType: "video" }, true);
+    $broadcast.send(BROADCAST_TYPE.FILE_PROJECTION, projection);
+    if (projection.type === "video" && videoAudioUrl) {
+      await this.openAudio({ url: videoAudioUrl, title: projection.title || "", mediaType: "video" }, true);
     }
     return stageEpoch === _stageEpoch;
   },

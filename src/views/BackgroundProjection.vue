@@ -165,6 +165,7 @@ import { FONT, resolveFont } from "@/config/Fonts";
 import { horizontalTextAlign, moduleCustomizationDefault } from "@/helpers/ModuleFormatting";
 import Telemetry from "@/helpers/Telemetry";
 import { normalizeYouTubeError } from "@/helpers/YouTubeError";
+import { fileProjectionPageFor } from "@/helpers/FileProjectionPage";
 
 /* ── Background state ── */
 
@@ -229,6 +230,7 @@ let ytPlayer: YTPlayer | null = null;
 /* ── PDF state ── */
 const pdfCanvas = ref<HTMLCanvasElement | null>(null);
 let pdfDoc: PDFDocumentProxy | null = null;
+let pdfLoadGeneration = 0;
 let currentPdfPage = ref(1);
 let _ytInitializing = false;
 const ytFailed = ref(false);
@@ -384,6 +386,7 @@ useBroadcastListener(BROADCAST_TYPE.BACKGROUND_PROJECTION, (payload: unknown) =>
 useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION, (payload: unknown) => {
   const p = payload as { type?: string; url?: string; page?: number; playback_id?: string };
   if (p?.url) {
+    ++pdfLoadGeneration;
     if (pdfDoc) {
       try {
         (pdfDoc as any).destroy();
@@ -397,13 +400,14 @@ useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION, (payload: unknown) => {
     fileState.url = p.url;
     fileState.playback_id = p.playback_id;
     reloadWallpaper();
-    if (p.type === "pdf") nextTick(() => loadPdf(p.url!, p.page || 1));
+    if (p.type === "pdf") nextTick(() => loadPdf(p.url!, p.page || 1, p.playback_id));
   }
 });
 
 useBroadcastListener(BROADCAST_TYPE.ONLINE_VIDEO_PROJECTION, (payload: unknown) => {
   const p = payload as { type?: string; url?: string; playback_id?: string };
   if (p?.url) {
+    ++pdfLoadGeneration;
     _destroyYoutube();
     fileState.active = true;
     fileState.type = p.type || "youtube";
@@ -415,7 +419,8 @@ useBroadcastListener(BROADCAST_TYPE.ONLINE_VIDEO_PROJECTION, (payload: unknown) 
 });
 
 useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION_PAGE, (payload: unknown) => {
-  const p = payload as { page: number };
+  const p = fileProjectionPageFor(payload, fileState.playback_id);
+  if (!p || p.source !== "operator") return;
   if (fileState.active && fileState.type === "pdf" && pdfDoc) {
     currentPdfPage.value = p.page;
     renderPdfPage(p.page);
@@ -423,6 +428,7 @@ useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION_PAGE, (payload: unknown) => 
 });
 
 useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, () => {
+  ++pdfLoadGeneration;
   _destroyYoutube();
   if (pdfDoc) {
     try {
@@ -619,9 +625,21 @@ function onKey(e: KeyboardEvent): void {
 
 /* ── PDF helpers ── */
 
-async function loadPdf(url: string, pageNum: number): Promise<void> {
+async function loadPdf(url: string, pageNum: number, expectedPlaybackId?: string): Promise<void> {
+  if (fileState.playback_id !== expectedPlaybackId || fileState.url !== url || !fileState.active)
+    return;
+  const generation = ++pdfLoadGeneration;
   try {
-    pdfDoc = await loadPdfDocument({ url });
+    const doc = await loadPdfDocument({ url });
+    if (
+      generation !== pdfLoadGeneration ||
+      fileState.playback_id !== expectedPlaybackId ||
+      !fileState.active
+    ) {
+      await (doc as unknown as { destroy: () => Promise<void> }).destroy();
+      return;
+    }
+    pdfDoc = doc;
     currentPdfPage.value = pageNum;
     await renderPdfPage(pageNum);
   } catch (err) {

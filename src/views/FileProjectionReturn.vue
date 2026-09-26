@@ -80,6 +80,7 @@ import $idb from "@/helpers/IndexedDB";
 import { VideoStateGate } from "@/helpers/VideoStateVersion";
 import { VideoFrameConfirmation } from "@/helpers/VideoFrameConfirmation";
 import { VideoFirstFrame } from "@/helpers/VideoFirstFrame";
+import { fileProjectionPageFor } from "@/helpers/FileProjectionPage";
 
 function getYT(): YTAPI | null {
   return (window as unknown as { YT?: YTAPI }).YT ?? null;
@@ -105,11 +106,13 @@ const videoFirstFrame = new VideoFirstFrame("return", (event, properties) =>
   Telemetry.track(event, properties)
 );
 let latestVideoState: VideoMediaState | null = null;
+let activationGeneration = 0;
 const ytContainer = ref<HTMLDivElement | null>(null);
 const pdfCanvas = ref<HTMLCanvasElement | null>(null);
 const ready = ref<boolean>(false);
 
 let pdfDoc: PDFDocumentProxy | null = null;
+let pdfLoadGeneration = 0;
 
 let ytPlayer: YTPlayer | null = null;
 let ytSyncTimer: ReturnType<typeof setInterval> | null = null;
@@ -159,25 +162,62 @@ async function renderPdfPage(pageNum: number): Promise<void> {
   }
 }
 
-async function loadPdf(url: string, pageNum = 1): Promise<void> {
+async function loadPdf(
+  url: string,
+  pageNum = 1,
+  expectedPlaybackId = fileProjection.playback_id
+): Promise<void> {
+  if (
+    expectedPlaybackId !== fileProjection.playback_id ||
+    url !== fileProjection.url ||
+    !fileProjection.active ||
+    fileProjection.type !== "pdf"
+  )
+    return;
+  const generation = ++pdfLoadGeneration;
   try {
-    if (pdfDoc) {
+    const previousDoc = pdfDoc;
+    pdfDoc = null;
+    if (previousDoc) {
       try {
-        await (pdfDoc as any).destroy();
+        await (previousDoc as unknown as { destroy: () => Promise<void> }).destroy();
       } catch {
         /* ignore */
       }
     }
-    pdfDoc = null;
+    if (generation !== pdfLoadGeneration || expectedPlaybackId !== fileProjection.playback_id)
+      return;
     const data = await fetchWithTimeout(url, { timeout: NET_TIMEOUT.MEDIA, source: "file" }).then(
       (r) => r.arrayBuffer()
     );
-    pdfDoc = await loadPdfDocument({ data });
+    if (generation !== pdfLoadGeneration || expectedPlaybackId !== fileProjection.playback_id)
+      return;
+    const doc = await loadPdfDocument({ data });
+    if (
+      generation !== pdfLoadGeneration ||
+      expectedPlaybackId !== fileProjection.playback_id ||
+      !fileProjection.active
+    ) {
+      await (doc as unknown as { destroy: () => Promise<void> }).destroy();
+      return;
+    }
+    pdfDoc = doc;
     fileProjection.totalPages = pdfDoc.numPages;
-    await renderPdfPage(pageNum);
+    try {
+      const stored = JSON.parse(localStorage.getItem(KEYS.PROJECTION.LJ_FILE_PROJECTION) || "null");
+      const pending = fileProjectionPageFor(stored, expectedPlaybackId);
+      if (pending) pageNum = pending.page;
+    } catch {
+      /* resume from the original page */
+    }
+    await renderPdfPage(Math.max(1, Math.min(pageNum, doc.numPages)));
+    if (generation !== pdfLoadGeneration || expectedPlaybackId !== fileProjection.playback_id)
+      return;
     Broadcast.send(BROADCAST_TYPE.FILE_PROJECTION_PAGE, {
+      playback_id: fileProjection.playback_id,
       page: fileProjection.page,
       totalPages: pdfDoc.numPages,
+      source: "projection",
     });
   } catch (e) {
     console.error("[FileProjectionReturn] Erro carregar PDF:", e);
@@ -185,6 +225,9 @@ async function loadPdf(url: string, pageNum = 1): Promise<void> {
 }
 
 async function _activateProjection(p: FileProjectionState): Promise<void> {
+  const generation = ++activationGeneration;
+  ++pdfLoadGeneration;
+  let resolvedBlobUrl: string | null = null;
   // Object URLs pertencem ao renderer que os criou. Para vídeos do acervo,
   // reconstroi o blob a partir do IndexedDB antes de montar o elemento — sem
   // isso a janela de retorno recebe uma URL blob morta e fica preta.
@@ -195,13 +238,18 @@ async function _activateProjection(p: FileProjectionState): Promise<void> {
         p.libRef.id
       );
       if (rec?.data && rec.mime) {
-        p = { ...p, url: URL.createObjectURL(new Blob([rec.data], { type: rec.mime })) };
+        resolvedBlobUrl = URL.createObjectURL(new Blob([rec.data], { type: rec.mime }));
+        p = { ...p, url: resolvedBlobUrl };
       } else {
         console.warn("[FileProjectionReturn] dados do acervo ausentes para blob:", p.libRef.id);
       }
     } catch (error) {
       console.warn("[FileProjectionReturn] resolução do blob falhou:", error);
     }
+  }
+  if (generation !== activationGeneration) {
+    if (resolvedBlobUrl) URL.revokeObjectURL(resolvedBlobUrl);
+    return;
   }
   if (p.type !== "video" || !p.playback_id || p.playback_id !== fileProjection.playback_id) {
     latestVideoState = null;
@@ -221,7 +269,7 @@ async function _activateProjection(p: FileProjectionState): Promise<void> {
     _prepareVideo();
   }
   if (p.type === "youtube") nextTick(() => _initYoutube());
-  if (p.type === "pdf") nextTick(() => loadPdf(p.url, p.page || 1));
+  if (p.type === "pdf") nextTick(() => loadPdf(p.url, p.page || 1, p.playback_id));
 }
 
 function _prepareVideo(): void {
@@ -406,13 +454,15 @@ useBroadcastListener(BROADCAST_TYPE.ONLINE_VIDEO_PROJECTION, (payload: unknown) 
 
 useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION_PAGE, (payload: unknown) => {
   if (!fileProjection.active || fileProjection.type !== "pdf") return;
-  const data = payload as { page?: number };
-  if (typeof data.page === "number" && pdfDoc) {
+  const data = fileProjectionPageFor(payload, fileProjection.playback_id);
+  if (data?.source === "operator" && pdfDoc) {
     const clamped = Math.max(1, Math.min(data.page, pdfDoc.numPages));
     if (clamped !== data.page) {
       Broadcast.send(BROADCAST_TYPE.FILE_PROJECTION_PAGE, {
+        playback_id: fileProjection.playback_id,
         page: clamped,
         totalPages: pdfDoc.numPages,
+        source: "projection",
       });
     }
     renderPdfPage(clamped);
@@ -420,6 +470,8 @@ useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION_PAGE, (payload: unknown) => 
 });
 
 useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, async () => {
+  ++activationGeneration;
+  ++pdfLoadGeneration;
   _destroyYoutube();
   if (pdfDoc) {
     try {
