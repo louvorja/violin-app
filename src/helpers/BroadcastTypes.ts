@@ -121,7 +121,14 @@ export const BROADCAST_TYPE = Object.freeze({
    *  Payload: { playback_id, page, totalPages?, source: "operator" | "projection" }.
    *  O ID impede que um arquivo anterior altere a projeção ativa. */
   FILE_PROJECTION_PAGE: "file_projection_page",
+  /** Snapshot versionado dos anúncios, emitido pela janela principal. */
   ANNOUNCEMENTS_STATE: "announcements_state",
+  /** Atualização pequena de navegação dentro do deck ativo. */
+  ANNOUNCEMENTS_POSITION: "announcements_position",
+  /** Nova seleção do operador. A janela principal atribui a revisão. */
+  ANNOUNCEMENTS_INTENT: "announcements_intent",
+  /** Pede o snapshot corrente para uma janela aberta ou reaberta. */
+  REQUEST_ANNOUNCEMENTS_STATE: "request_announcements_state",
   ANNOUNCEMENTS_CONTROL: "announcements_control",
 
   /** Projeção de fundo (imagem/vídeo) do módulo Projeção de Fundo.

@@ -91,7 +91,11 @@ function stop(): void {
 
 function next(): void {
   if (currentType.value === "announcements") {
-    $broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_CONTROL, { action: "next" });
+    $broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_CONTROL, {
+      action: "next",
+      announcement_session: $broadcast.getLastPayload(BROADCAST_TYPE.ANNOUNCEMENTS_STATE)?.announcement_session,
+    });
+    return;
   }
   if (currentIndex.value < playlistLength.value - 1) {
     currentIndex.value++;
@@ -100,7 +104,11 @@ function next(): void {
 
 function prev(): void {
   if (currentType.value === "announcements") {
-    $broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_CONTROL, { action: "prev" });
+    $broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_CONTROL, {
+      action: "prev",
+      announcement_session: $broadcast.getLastPayload(BROADCAST_TYPE.ANNOUNCEMENTS_STATE)?.announcement_session,
+    });
+    return;
   }
   if (currentIndex.value > 0) {
     currentIndex.value--;
@@ -109,7 +117,10 @@ function prev(): void {
 
 function stopProjection(): void {
   if (currentType.value === "announcements") {
-    $broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_CONTROL, { action: "stop" });
+    $broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_CONTROL, {
+      action: "stop",
+      announcement_session: $broadcast.getLastPayload(BROADCAST_TYPE.ANNOUNCEMENTS_STATE)?.announcement_session,
+    });
   }
   stop();
 }

@@ -30,6 +30,7 @@ import Platform from "@/helpers/Platform";
 import { readMusicPresentationPacket } from "@/presentation/MusicPresentationPacket";
 import { BiblePresentationGate } from "@/presentation/BiblePresentationState";
 import { ModulePresentationGate } from "@/presentation/ModulePresentationState";
+import { AnnouncementsPresentationGate } from "@/presentation/AnnouncementsPresentationState";
 
 const CHANNEL_NAME = "louvorja";
 
@@ -82,6 +83,7 @@ const _localListeners = new Set<(msg: BroadcastMessage) => void>();
 const _lastByType = new Map<string, Map<string, BroadcastMessage>>();
 const bibleStateGate = new BiblePresentationGate();
 const moduleStateGate = new ModulePresentationGate();
+const announcementsStateGate = new AnnouncementsPresentationGate();
 
 export interface BroadcastListenOptions {
   /** Repassa o último estado conhecido ao registrar o listener. */
@@ -107,6 +109,10 @@ function _deliverLocal(msg: BroadcastMessage): void {
     msg = { ...msg, payload: accepted };
   } else if (msg?.type === BROADCAST_TYPE.MODULE_PROJECTION_VALUE) {
     const accepted = moduleStateGate.accept(msg.payload);
+    if (!accepted) return;
+    msg = { ...msg, payload: accepted };
+  } else if (msg?.type === BROADCAST_TYPE.ANNOUNCEMENTS_STATE) {
+    const accepted = announcementsStateGate.accept(msg.payload);
     if (!accepted) return;
     msg = { ...msg, payload: accepted };
   }
@@ -212,6 +218,10 @@ export default {
       payload = accepted;
     } else if (type === BROADCAST_TYPE.MODULE_PROJECTION_VALUE) {
       const accepted = moduleStateGate.accept(payload);
+      if (!accepted) return { crossWindow: false, remoteRelay: "not_required" };
+      payload = accepted;
+    } else if (type === BROADCAST_TYPE.ANNOUNCEMENTS_STATE) {
+      const accepted = announcementsStateGate.accept(payload);
       if (!accepted) return { crossWindow: false, remoteRelay: "not_required" };
       payload = accepted;
     }

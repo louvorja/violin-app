@@ -39,7 +39,7 @@
 <script setup lang="ts">
 /**
  * AnnouncementsProjection — exibe os slides de Anúncios em sequência.
- * Recebe { slides, index } via broadcast/IndexedDB; navegação por
+ * Recebe snapshot canônico da janela principal; navegação por
  * setas/espaço e pelo módulo (ANNOUNCEMENTS_CONTROL).
  */
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
@@ -47,32 +47,17 @@ import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { useProjectionCloseNotice } from "@/composables/useProjectionCloseNotice";
 import { PROJECTION_TYPE } from "@/constants/Projection";
-import $idb from "@/helpers/IndexedDB";
-import { DB_TABLE } from "@/constants/DbTables";
+import Broadcast from "@/helpers/Broadcast";
+import {
+  AnnouncementsPresentationGate,
+  type AnnouncementPacket,
+  type AnnouncementSlide,
+} from "@/presentation/AnnouncementsPresentationState";
 
-interface AnnSlide {
-  id: string;
-  nome: string;
-  ordem: number;
-  texto?: string;
-  imageData?: ArrayBuffer;
-  imageMime?: string;
-  videoData?: ArrayBuffer;
-  videoMime?: string;
-  style?: {
-    bgColor?: string;
-    textColor?: string;
-    fontSize?: number;
-    align?: "left" | "center" | "right";
-    alignY?: "flex-start" | "center" | "flex-end";
-    textShadow?: boolean;
-    textShadowColor?: string;
-    textShadowBlur?: number;
-  };
-}
-
-const slides = ref<AnnSlide[]>([]);
+const slides = ref<AnnouncementSlide[]>([]);
 const index = ref(0);
+let currentPacket: AnnouncementPacket | null = null;
+const stateGate = new AnnouncementsPresentationGate();
 
 const objectUrls: string[] = [];
 
@@ -139,30 +124,23 @@ const textStyle = computed(() => {
   return base;
 });
 
-function applyState(payload: { slides?: AnnSlide[]; index?: number }): boolean {
-  if (
-    !Array.isArray(payload.slides) ||
-    payload.slides.length > 500 ||
-    !payload.slides.every(
-      (slide) =>
-        slide &&
-        typeof slide.id === "string" &&
-        typeof slide.nome === "string" &&
-        Number.isFinite(slide.ordem)
-    ) ||
-    (payload.index !== undefined && (!Number.isSafeInteger(payload.index) || payload.index < 0))
-  )
-    return false;
-  const newIds = payload.slides.map((s) => s.id).join(",");
+function applyState(payload: unknown): void {
+  const packet = stateGate.accept(payload);
+  if (!packet) return;
+  const previousSession = currentPacket?.announcement_session;
+  currentPacket = packet;
+  if (!packet.active) {
+    slides.value = [];
+    clearMediaCache();
+    return;
+  }
+  const newIds = packet.slides.map((s) => s.id).join(",");
   const oldIds = slides.value.map((s) => s.id).join(",");
-  if (newIds !== oldIds) {
+  if (newIds !== oldIds || previousSession !== packet.announcement_session) {
     clearMediaCache();
   }
-  slides.value = payload.slides;
-  index.value = Math.max(0, Math.min(index.value, slides.value.length - 1));
-  if (typeof payload.index === "number")
-    index.value = Math.max(0, Math.min(payload.index, slides.value.length - 1));
-  return true;
+  slides.value = packet.slides;
+  index.value = packet.index;
 }
 
 function onKeydown(e: KeyboardEvent): void {
@@ -171,56 +149,47 @@ function onKeydown(e: KeyboardEvent): void {
 }
 
 function next(): void {
-  if (index.value < slides.value.length - 1) index.value++;
+  if (currentPacket?.active)
+    Broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_CONTROL, {
+      action: "next",
+      announcement_session: currentPacket.announcement_session,
+    });
 }
 
 function prev(): void {
-  if (index.value > 0) index.value--;
+  if (currentPacket?.active)
+    Broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_CONTROL, {
+      action: "prev",
+      announcement_session: currentPacket.announcement_session,
+    });
 }
 
 useProjectionCloseNotice(PROJECTION_TYPE.ANNOUNCEMENTS);
 
-let stateGeneration = 0;
-let receivedLiveState = false;
-let retryTimer: ReturnType<typeof setTimeout> | null = null;
 useBroadcastListener(BROADCAST_TYPE.ANNOUNCEMENTS_STATE, (payload: unknown) => {
-  if (applyState((payload || {}) as { slides?: AnnSlide[]; index?: number })) {
-    ++stateGeneration;
-    receivedLiveState = true;
+  applyState(payload);
+});
+
+useBroadcastListener(BROADCAST_TYPE.ANNOUNCEMENTS_POSITION, (payload: unknown) => {
+  const packet = stateGate.acceptPosition(payload);
+  if (packet) {
+    currentPacket = packet;
+    index.value = packet.index;
   }
 });
 
 useBroadcastListener(BROADCAST_TYPE.ANNOUNCEMENTS_CONTROL, (payload: unknown) => {
-  const action = (payload as { action?: string })?.action;
-  if (action === "next") next();
-  else if (action === "prev") prev();
-  else if (action === "stop") window.close();
+  const data = payload as { action?: string; announcement_session?: string } | null;
+  if (data?.action === "stop" && data.announcement_session === currentPacket?.announcement_session)
+    window.close();
 });
-
-async function readPendingState(): Promise<void> {
-  if (receivedLiveState) return;
-  const generation = ++stateGeneration;
-  try {
-    const row = await $idb.get<{ data?: { slides?: AnnSlide[]; index?: number } }>(
-      DB_TABLE.CACHE,
-      "announcements_projection_state"
-    );
-    if (generation === stateGeneration && !receivedLiveState && row?.data) applyState(row.data);
-  } catch {
-    // A live broadcast may still arrive when local persistence is unavailable.
-  }
-}
 
 onMounted(() => {
   window.addEventListener("keydown", onKeydown);
-  // Lê do IDB imediatamente + retry (padrão FileProjection).
-  readPendingState();
-  retryTimer = setTimeout(readPendingState, 500);
+  Broadcast.send(BROADCAST_TYPE.REQUEST_ANNOUNCEMENTS_STATE);
 });
 
 onBeforeUnmount(() => {
-  ++stateGeneration;
-  if (retryTimer) clearTimeout(retryTimer);
   window.removeEventListener("keydown", onKeydown);
   for (const u of objectUrls) URL.revokeObjectURL(u);
 });

@@ -339,6 +339,7 @@ import { openAnnouncementsWindow, closeAnnouncementsWindow } from "@/helpers/Pro
 import $broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useFileProjection } from "@/composables/useFileProjection";
+import { beginAnnouncementIntent } from "@/presentation/AnnouncementsPresentationState";
 
 interface AnnStyle {
   bgColor: string;
@@ -600,20 +601,21 @@ function buildSlidesPayload(): Array<Record<string, unknown>> {
 }
 
 async function project(): Promise<void> {
+  if (!sorted.value.length) return;
+  const announcementToken = beginAnnouncementIntent();
   const fp = useFileProjection();
   const idx = selectedId.value ? sorted.value.findIndex((a) => a.id === selectedId.value) : 0;
-  const payload = { slides: buildSlidesPayload(), index: Math.max(0, idx) };
-  await $idb.put(DB_TABLE.CACHE, {
-    id: "announcements_projection_state",
-    data: payload,
-    ts: Date.now(),
-  });
+  const payload = { ...announcementToken, slides: buildSlidesPayload(), index: Math.max(0, idx) };
+  $broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_INTENT, payload);
+  if (
+    $broadcast.getLastPayload(BROADCAST_TYPE.ANNOUNCEMENTS_STATE)?.announcement_session !==
+    announcementToken.announcement_session
+  )
+    return;
   projecting.value = true;
   const first = sorted.value[Math.max(0, idx)];
   fp.start("announcements", first?.nome || "", sorted.value.length, Math.max(0, idx));
   await openAnnouncementsWindow();
-  await new Promise((r) => setTimeout(r, 300));
-  $broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_STATE, payload);
 }
 
 // ─── Setas do teclado ────────────────────────────────────────────────
@@ -681,13 +683,16 @@ function ctxDelete(): void {
 }
 
 function sendControl(action: "next" | "prev"): void {
-  $broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_CONTROL, { action });
+  $broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_CONTROL, {
+    action,
+    announcement_session: $broadcast.getLastPayload(BROADCAST_TYPE.ANNOUNCEMENTS_STATE)
+      ?.announcement_session,
+  });
 }
 
 async function stopProject(): Promise<void> {
   const fp = useFileProjection();
   projecting.value = false;
-  await $idb.del(DB_TABLE.CACHE, "announcements_projection_state");
   fp.stopProjection();
   await closeAnnouncementsWindow();
 }

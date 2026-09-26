@@ -70,6 +70,11 @@ import { handleProjectionStateRequest } from "@/helpers/ProjectionStateRequests"
 import { listenForVideoStateRequests } from "@/helpers/VideoStateRequest";
 import { BiblePresentationAuthority } from "@/presentation/BiblePresentationState";
 import { ModulePresentationAuthority } from "@/presentation/ModulePresentationState";
+import {
+  AnnouncementsPresentationAuthority,
+  announcementPosition,
+  beginAnnouncementIntent,
+} from "@/presentation/AnnouncementsPresentationState";
 
 const app = createApp(App);
 Telemetry.installVueErrorHandler(app);
@@ -102,6 +107,7 @@ const isAuxiliaryRenderer = AUXILIARY_ROUTE_PREFIXES.some((prefix) => {
 
 // The primary shell owns Bible ordering for both Web/PWA and Electron. A
 // projection opened later asks this authority for the current snapshot.
+const announcementsAuthority = new AnnouncementsPresentationAuthority();
 if (!isAuxiliaryRenderer) {
   const bibleAuthority = new BiblePresentationAuthority();
   const moduleAuthority = new ModulePresentationAuthority();
@@ -121,6 +127,36 @@ if (!isAuxiliaryRenderer) {
         if (typeof moduleId !== "string") return;
         const current = Broadcast.getLastPayload(BROADCAST_TYPE.MODULE_PROJECTION_VALUE, moduleId);
         if (current) Broadcast.send(BROADCAST_TYPE.MODULE_PROJECTION_VALUE, current);
+      } else if (message.type === BROADCAST_TYPE.ANNOUNCEMENTS_INTENT) {
+        const packet = announcementsAuthority.publish(message.payload);
+        if (packet) Broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_STATE, packet);
+      } else if (message.type === BROADCAST_TYPE.ANNOUNCEMENTS_CONTROL) {
+        const packet = announcementsAuthority.control(message.payload);
+        if (packet) {
+          const fp = useFileProjection();
+          if (fp.currentType.value === "announcements") {
+            if (packet.active) fp.currentIndex.value = packet.index;
+            else fp.stop();
+          }
+          Broadcast.send(
+            packet.active
+              ? BROADCAST_TYPE.ANNOUNCEMENTS_POSITION
+              : BROADCAST_TYPE.ANNOUNCEMENTS_STATE,
+            packet.active ? announcementPosition(packet) : packet
+          );
+        }
+      } else if (message.type === BROADCAST_TYPE.REQUEST_ANNOUNCEMENTS_STATE) {
+        const packet = announcementsAuthority.current();
+        if (packet) Broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_STATE, packet);
+      } else if (message.type === BROADCAST_TYPE.MEDIA_CLOSE) {
+        const current = announcementsAuthority.current();
+        if (current?.active) {
+          const closed = announcementsAuthority.control({
+            action: "stop",
+            announcement_session: current.announcement_session,
+          });
+          if (closed) Broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_STATE, closed);
+        }
       }
     },
     { replay: false }
@@ -711,6 +747,7 @@ $storage.hydrate().then(async () => {
                     break;
                   }
                   case "anuncios": {
+                    const announcementToken = beginAnnouncementIntent();
                     const ids = litItem.anuncios_ids || [];
                     const allAnn = await $idb.getAll(DB_TABLE.ANNOUNCEMENTS);
                     const sorted = allAnn.sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
@@ -719,6 +756,7 @@ $storage.hydrate().then(async () => {
                       : sorted;
                     if (selected.length) {
                       const payload = {
+                        ...announcementToken,
                         slides: selected.map((a) => ({
                           id: String(a.id),
                           nome: a.nome,
@@ -732,17 +770,16 @@ $storage.hydrate().then(async () => {
                         })),
                         index: 0,
                       };
-                      await $idb.put(DB_TABLE.CACHE, {
-                        id: "announcements_projection_state",
-                        data: payload,
-                        ts: Date.now(),
-                      });
+                      Broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_INTENT, payload);
+                      if (
+                        announcementsAuthority.current()?.announcement_session !==
+                        announcementToken.announcement_session
+                      )
+                        break;
                       AppData.set("modules.media.is_playing", true);
                       const fp = useFileProjection();
                       fp.start("announcements", selected[0]?.nome || "", selected.length, 0);
                       ProjectionWindows.openAnnouncementsWindow().catch(() => {});
-                      await new Promise((r) => setTimeout(r, 300));
-                      Broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_STATE, payload);
                     }
                     break;
                   }
@@ -897,6 +934,7 @@ $storage.hydrate().then(async () => {
               break;
             }
             case "announcements-project": {
+              const announcementToken = beginAnnouncementIntent();
               const ids = data.ids || [];
               const allAnn = await $idb.getAll(DB_TABLE.ANNOUNCEMENTS);
               const sorted = allAnn.sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
@@ -909,6 +947,7 @@ $storage.hydrate().then(async () => {
                 : 0;
               if (sorted.length) {
                 const payload = {
+                  ...announcementToken,
                   slides: sorted.map((a) => ({
                     id: String(a.id),
                     nome: a.nome,
@@ -922,28 +961,36 @@ $storage.hydrate().then(async () => {
                   })),
                   index: startIdx,
                 };
-                await $idb.put(DB_TABLE.CACHE, {
-                  id: "announcements_projection_state",
-                  data: payload,
-                  ts: Date.now(),
-                });
+                Broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_INTENT, payload);
+                if (
+                  announcementsAuthority.current()?.announcement_session !==
+                  announcementToken.announcement_session
+                )
+                  break;
                 AppData.set("modules.media.is_playing", true);
                 const fp = useFileProjection();
                 fp.start("announcements", sorted[startIdx]?.nome || "", sorted.length, startIdx);
                 ProjectionWindows.openAnnouncementsWindow().catch(() => {});
-                await new Promise((r) => setTimeout(r, 300));
-                Broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_STATE, payload);
               }
               break;
             }
             case "announcements-next":
-              Broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_CONTROL, { action: "next" });
+              Broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_CONTROL, {
+                action: "next",
+                announcement_session: announcementsAuthority.current()?.announcement_session,
+              });
               break;
             case "announcements-prev":
-              Broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_CONTROL, { action: "prev" });
+              Broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_CONTROL, {
+                action: "prev",
+                announcement_session: announcementsAuthority.current()?.announcement_session,
+              });
               break;
             case "announcements-stop":
-              Broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_CONTROL, { action: "stop" });
+              Broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_CONTROL, {
+                action: "stop",
+                announcement_session: announcementsAuthority.current()?.announcement_session,
+              });
               ProjectionWindows.closeAnnouncementsWindow().catch(() => {});
               AppData.set("modules.media.is_playing", false);
               break;

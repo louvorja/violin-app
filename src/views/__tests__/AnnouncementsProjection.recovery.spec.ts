@@ -1,13 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
+import { mount, type VueWrapper } from "@vue/test-utils";
 import { nextTick } from "vue";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
+import {
+  AnnouncementsPresentationAuthority,
+  announcementPosition,
+  beginAnnouncementIntent,
+} from "@/presentation/AnnouncementsPresentationState";
 
 const mocks = vi.hoisted(() => ({
-  get: vi.fn(),
   listeners: new Set<(message: { type: string; payload: unknown }) => void>(),
 }));
-vi.mock("@/helpers/IndexedDB", () => ({ default: { get: mocks.get } }));
 vi.mock("@/composables/useProjectionCloseNotice", () => ({ useProjectionCloseNotice: vi.fn() }));
 vi.mock("@/helpers/Broadcast", () => ({
   default: {
@@ -30,46 +33,73 @@ describe("AnnouncementsProjection recovery", () => {
   afterEach(() => {
     wrapper?.unmount();
     wrapper = null;
-    mocks.get.mockReset();
     mocks.listeners.clear();
   });
 
-  it("keeps a live selection when an older IndexedDB recovery finishes later", async () => {
-    let resolveStored!: (value: unknown) => void;
-    mocks.get.mockReturnValue(new Promise((resolve) => { resolveStored = resolve; }));
-    wrapper = mount(AnnouncementsProjection, { attachTo: document.body });
-    await nextTick();
-    expect(mocks.get).toHaveBeenCalledOnce();
+  it("requests the current slide after reopen and ignores an old deck", async () => {
+    const authority = new AnnouncementsPresentationAuthority();
+    const producer = (message: { type: string; payload: unknown }) => {
+      if (message.type === BROADCAST_TYPE.ANNOUNCEMENTS_INTENT) {
+        const packet = authority.publish(message.payload);
+        if (packet) Broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_STATE, packet);
+      } else if (message.type === BROADCAST_TYPE.ANNOUNCEMENTS_CONTROL) {
+        const packet = authority.control(message.payload);
+        if (packet) Broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_POSITION, announcementPosition(packet));
+      } else if (message.type === BROADCAST_TYPE.REQUEST_ANNOUNCEMENTS_STATE) {
+        const packet = authority.current();
+        if (packet) Broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_STATE, packet);
+      }
+    };
+    mocks.listeners.add(producer);
+    const oldToken = beginAnnouncementIntent();
+    Broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_INTENT, {
+      ...oldToken, slides: [{ id: "old", nome: "Old", ordem: 1, texto: "Old deck" }], index: 0,
+    });
+    const oldPacket = authority.current();
 
-    Broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_STATE, {
-      slides: [{ id: "current", nome: "Current", ordem: 1, texto: "Current announcement" }],
+    const currentToken = beginAnnouncementIntent();
+    Broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_INTENT, {
+      ...currentToken,
+      slides: [
+        { id: "first", nome: "First", ordem: 1, texto: "First slide" },
+        { id: "second", nome: "Second", ordem: 2, texto: "Second slide" },
+      ],
       index: 0,
     });
+    wrapper = mount(AnnouncementsProjection, { attachTo: document.body });
     await nextTick();
-    expect(wrapper.text()).toContain("Current announcement");
+    expect(wrapper.text()).toContain("First slide");
 
-    resolveStored({ data: {
-      slides: [{ id: "old", nome: "Old", ordem: 1, texto: "Old announcement" }], index: 0,
-    } });
-    await flushPromises();
-    expect(wrapper.text()).toContain("Current announcement");
-    expect(wrapper.text()).not.toContain("Old announcement");
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
+    await nextTick();
+    expect(wrapper.text()).toContain("Second slide");
+
+    Broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_STATE, oldPacket);
+    await nextTick();
+    expect(wrapper.text()).toContain("Second slide");
+
+    wrapper.unmount();
+    wrapper = mount(AnnouncementsProjection, { attachTo: document.body });
+    await nextTick();
+    expect(wrapper.text()).toContain("Second slide");
   });
 
-  it("ignores malformed live state without blocking persisted recovery", async () => {
-    let resolveStored!: (value: unknown) => void;
-    mocks.get.mockReturnValue(new Promise((resolve) => { resolveStored = resolve; }));
-    wrapper = mount(AnnouncementsProjection, { attachTo: document.body });
-    await nextTick();
-
-    Broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_STATE, {
-      slides: [{ id: "invalid", nome: "Invalid", ordem: "first" }], index: 0,
+  it("rejects malformed state and controls from an older session", async () => {
+    const authority = new AnnouncementsPresentationAuthority();
+    const first = authority.publish({
+      ...beginAnnouncementIntent(),
+      slides: [{ id: "a", nome: "A", ordem: 1, texto: "Current" }], index: 0,
     });
-    resolveStored({ data: {
-      slides: [{ id: "stored", nome: "Stored", ordem: 1, texto: "Stored announcement" }],
-      index: 0,
-    } });
-    await flushPromises();
-    expect(wrapper.text()).toContain("Stored announcement");
+    expect(first).not.toBeNull();
+    wrapper = mount(AnnouncementsProjection, { attachTo: document.body });
+    Broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_STATE, first);
+    Broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_STATE, {
+      ...first, announcement_revision: 2, slides: [{ id: "invalid", ordem: "bad" }],
+    });
+    Broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_CONTROL, {
+      action: "stop", announcement_session: "retired",
+    });
+    await nextTick();
+    expect(wrapper.text()).toContain("Current");
   });
 });

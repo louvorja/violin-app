@@ -8,6 +8,7 @@ import $broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useFileProjection } from "@/composables/useFileProjection";
 import { openAnnouncementsWindow } from "@/helpers/ProjectionWindows";
+import { beginAnnouncementIntent } from "@/presentation/AnnouncementsPresentationState";
 import $appdata from "@/helpers/AppData";
 import $userdata from "@/helpers/UserData";
 import $idb from "@/helpers/IndexedDB";
@@ -299,6 +300,7 @@ export function useLiturgyExecution() {
 
   /** Anúncios: envia os slides selecionados (na ordem) para a projeção. */
   async function executeAnnouncements(item: LiturgyItem): Promise<void> {
+    const announcementToken = beginAnnouncementIntent();
     try {
       const all = (
         await $idb.getAll<{
@@ -323,6 +325,7 @@ export function useLiturgyExecution() {
       }
 
       const payload = {
+        ...announcementToken,
         slides: selected.map((a) => ({
           id: String(a.id),
           nome: a.nome,
@@ -336,21 +339,13 @@ export function useLiturgyExecution() {
         })),
         index: 0,
       };
-      // Salva no IDB (cache) — padrão do módulo announcements para fallback da projection.
-      // ArrayBuffer é preservado nativamente pelo IDB (diferente de localStorage/JSON).
-      await $idb.put(DB_TABLE.CACHE, {
-        id: "announcements_projection_state",
-        data: payload,
-        ts: Date.now(),
-      });
+      $broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_INTENT, payload);
+      if ($broadcast.getLastPayload(BROADCAST_TYPE.ANNOUNCEMENTS_STATE)?.announcement_session !== announcementToken.announcement_session) return;
       $appdata.set(KEYS.MODULES.MEDIA.IS_PLAYING, true);
       // Ativa a barra de controles global.
       const fp = useFileProjection();
       fp.start("announcements", selected[0]?.nome || "", selected.length, 0);
       await openAnnouncementsWindow();
-      // Espera a janela de projeção montar antes de enviar o broadcast.
-      await new Promise((r) => setTimeout(r, 300));
-      $broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_STATE, payload);
     } catch (error) {
       reportExecutionError(error, "execute_announcements");
     }
