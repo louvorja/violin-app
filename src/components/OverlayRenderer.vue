@@ -34,7 +34,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, type Ref } from "vue";
+import { onBeforeUnmount, ref, watch, type Ref } from "vue";
 import { useOverlayState } from "@/composables/useOverlayState";
 import type { OverlaySlot } from "@/types/Overlay";
 
@@ -53,6 +53,10 @@ const imageUrls = ref<Record<string, string>>({});
 const showCanvas: Ref<boolean> = ref(false);
 const slotDataById: Record<string, OverlaySlot> = {};
 let imageLoadGeneration = 0;
+
+onBeforeUnmount(() => {
+  ++imageLoadGeneration;
+});
 
 async function loadImages(list: OverlaySlot[]): Promise<void> {
   const generation = ++imageLoadGeneration;

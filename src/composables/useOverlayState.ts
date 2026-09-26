@@ -1,4 +1,4 @@
-import { ref, computed, onMounted, reactive, watch, type Ref, type ComputedRef } from "vue";
+import { ref, computed, onMounted, onUnmounted, reactive, watch, type Ref, type ComputedRef } from "vue";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import $broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
@@ -28,11 +28,27 @@ export function useOverlayState(): OverlayStateReturn {
   const moduleValues = reactive<Record<string, string>>({});
   const visibilityGate = new OverlayVisibilityGate();
   let refreshGeneration = 0;
+  let disposed = false;
+  const imageCache = new Map<string, string>();
+
+  function revokeImage(url: string): void {
+    if (url.startsWith("blob:")) URL.revokeObjectURL(url);
+  }
+
+  function pruneImages(list: OverlaySlot[]): void {
+    const current = new Set(list.filter((slot) => slot.file_id).map((slot) => `${slot.id}:${slot.file_id}`));
+    for (const [key, url] of imageCache) {
+      if (current.has(key)) continue;
+      revokeImage(url);
+      imageCache.delete(key);
+    }
+  }
 
   async function refresh() {
     const generation = ++refreshGeneration;
     const list = await readAllSlots();
-    if (generation !== refreshGeneration) return;
+    if (disposed || generation !== refreshGeneration) return;
+    pruneImages(list);
     slots.value = list.map((s) => ({
       ...s,
       style: { ...OVERLAY_STYLE_DEFAULTS, ...(s.style || {}) },
@@ -72,6 +88,12 @@ export function useOverlayState(): OverlayStateReturn {
     requestModuleStates();
   });
 
+  onUnmounted(() => {
+    disposed = true;
+    ++refreshGeneration;
+    pruneImages([]);
+  });
+
   // Monitora novos source_module adicionados em tempo real
   watch(
     () => slots.value.map((s) => s.source_module),
@@ -91,16 +113,19 @@ export function useOverlayState(): OverlayStateReturn {
     return slots.value.filter((s) => s.enabled).sort((a, b) => a.order - b.order);
   });
 
-  const _imageCache = new Map<string, string>();
-
   async function slotImage(slot: OverlaySlot): Promise<string> {
     if (!slot.file_id) return slot.content || "";
     const cacheKey = `${slot.id}:${slot.file_id}`;
-    const cached = _imageCache.get(cacheKey);
+    const cached = imageCache.get(cacheKey);
     if (cached) return cached;
     const record = await getImage(slot.file_id);
+    if (disposed || !slots.value.some((current) => current.id === slot.id && current.file_id === slot.file_id)) {
+      return "";
+    }
+    const existing = imageCache.get(cacheKey);
+    if (existing) return existing;
     const url = resolveImageUrl(record);
-    _imageCache.set(cacheKey, url);
+    imageCache.set(cacheKey, url);
     return url;
   }
 

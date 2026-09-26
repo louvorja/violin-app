@@ -50,3 +50,66 @@ test("overlay shortcut has one authority and a late projection rejects old visib
     await context.close();
   }
 });
+
+test("overlay replaces an image without retaining the old blob URL", async ({ browser }) => {
+  const context = await browser.newContext({ serviceWorkers: "block" });
+  const operator = await context.newPage();
+  const projection = await context.newPage();
+  try {
+    await projection.addInitScript(() => {
+      window.__revokedBlobUrls = [];
+      const revoke = URL.revokeObjectURL.bind(URL);
+      URL.revokeObjectURL = (url) => {
+        window.__revokedBlobUrls.push(url);
+        revoke(url);
+      };
+    });
+    await operator.goto("/");
+    await operator.locator('[data-testid="modules-ready"]').waitFor({ state: "attached" });
+    await operator.evaluate(async () => {
+      const { saveImage, writeSlot } = await import("/src/helpers/Overlay.ts");
+      const { createOverlaySlot } = await import("/src/types/Overlay.ts");
+      for (const [id, color] of [
+        ["image-a", "red"],
+        ["image-b", "blue"],
+      ]) {
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="${color}"/></svg>`;
+        await saveImage({
+          id,
+          name: id,
+          path: "",
+          data: new TextEncoder().encode(svg).buffer,
+          mime: "image/svg+xml",
+          size: svg.length,
+          addedAt: Date.now(),
+        });
+      }
+      await writeSlot(createOverlaySlot({ id: "image-slot", type: "image", file_id: "image-a" }));
+      const bus = new BroadcastChannel("louvorja");
+      bus.postMessage({
+        type: "module_ribbon_action",
+        payload: { module: "overlay", action: "toggle" },
+      });
+      bus.close();
+    });
+    await projection.goto("/projection");
+    const img = projection.locator('[data-slot-id="image-slot"] img');
+    await expect(img).toHaveAttribute("src", /^blob:/);
+    const oldUrl = await img.getAttribute("src");
+
+    await operator.evaluate(async () => {
+      const { readAllSlots, writeSlot } = await import("/src/helpers/Overlay.ts");
+      const slot = (await readAllSlots()).find((item) => item.id === "image-slot");
+      await writeSlot({ ...slot, file_id: "image-b" });
+      const bus = new BroadcastChannel("louvorja");
+      bus.postMessage({ type: "request_overlay_state" });
+      bus.close();
+    });
+    await expect.poll(() => img.getAttribute("src")).not.toBe(oldUrl);
+    await expect
+      .poll(() => projection.evaluate((url) => window.__revokedBlobUrls.includes(url), oldUrl))
+      .toBe(true);
+  } finally {
+    await context.close();
+  }
+});
