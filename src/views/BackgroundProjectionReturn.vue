@@ -97,7 +97,10 @@ import { KEYS } from "@/constants/UserDataKeys";
 import { SETTINGS_TABLE } from "@/constants/DbTables";
 import type { YTAPI, YTPlayer, VideoMediaState } from "@/types/Media";
 import { VideoStateGate } from "@/helpers/VideoStateVersion";
-import { FileProjectionActivationGate } from "@/presentation/FileProjectionActivation";
+import {
+  FileProjectionActivationGate,
+  readFileActivation,
+} from "@/presentation/FileProjectionActivation";
 import {
   BackgroundPresentationGate,
   readStoredBackgroundState,
@@ -107,6 +110,7 @@ import { loadPdfDocument, type PDFDocumentProxy } from "@/helpers/PdfRuntime";
 import Telemetry from "@/helpers/Telemetry";
 import { normalizeYouTubeError } from "@/helpers/YouTubeError";
 import { fileProjectionPageFor } from "@/helpers/FileProjectionPage";
+import { PdfPageRenderQueue } from "@/helpers/PdfPageRenderQueue";
 
 /* ── Background state ── */
 
@@ -177,6 +181,7 @@ let ytPlayer: YTPlayer | null = null;
 const pdfCanvas = ref<HTMLCanvasElement | null>(null);
 let pdfDoc: PDFDocumentProxy | null = null;
 let pdfLoadGeneration = 0;
+const pdfRenderQueue = new PdfPageRenderQueue();
 let currentPdfPage = ref(1);
 let _ytInitializing = false;
 let ytGeneration = 0;
@@ -215,51 +220,59 @@ useBroadcastListener(BROADCAST_TYPE.BACKGROUND_PROJECTION, (payload: unknown) =>
   activateBg(payload);
 });
 
+function applyFileActivation(payload: unknown): void {
+  const p = activationGate.accept(payload);
+  if (!p) return;
+  ++pdfLoadGeneration;
+  pdfRenderQueue.invalidate();
+  _destroyYoutube();
+  if (pdfDoc) {
+    void (pdfDoc as unknown as { destroy: () => Promise<void> }).destroy().catch(() => {});
+    pdfDoc = null;
+  }
+  fileState.active = true;
+  fileState.type = p.type;
+  fileState.url = p.url;
+  fileState.playback_id = p.playback_id;
+  youtubeStateGate.begin(p.playback_id);
+  reloadWallpaper();
+  if (p.type === "pdf") nextTick(() => loadPdf(p.url, p.page || 1, p.playback_id));
+  if (p.type === "youtube") nextTick(() => _initYoutube());
+}
+
+function readPendingFile(): void {
+  try {
+    const states = [
+      localStorage.getItem(KEYS.PROJECTION.LJ_FILE_PROJECTION),
+      localStorage.getItem(KEYS.PROJECTION.LJ_YOUTUBE_PROJECTION),
+    ].flatMap((raw) => (raw ? [readFileActivation(JSON.parse(raw))] : []));
+    const current = states
+      .filter((state) => state !== null)
+      .sort((a, b) => b.stage_epoch - a.stage_epoch)[0];
+    if (current) applyFileActivation(current);
+  } catch {
+    /* transient recovery cache may be unavailable */
+  }
+}
+
 useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION, (payload: unknown) => {
   if ((payload as { action?: string } | null)?.action === "clear") {
     activationGate.retire();
     ++pdfLoadGeneration;
+    pdfRenderQueue.invalidate();
     _destroyYoutube();
+    if (pdfDoc) {
+      void (pdfDoc as unknown as { destroy: () => Promise<void> }).destroy().catch(() => {});
+      pdfDoc = null;
+    }
     fileState.active = false;
     reloadWallpaper();
     return;
   }
-  const p = activationGate.accept(payload);
-  if (p?.url) {
-    _destroyYoutube();
-    ++pdfLoadGeneration;
-    if (pdfDoc) {
-      try {
-        (pdfDoc as any).destroy();
-      } catch {
-        /* ignore */
-      }
-      pdfDoc = null;
-    }
-    fileState.active = true;
-    fileState.type = p.type || "image";
-    fileState.url = p.url;
-    fileState.playback_id = p.playback_id;
-    youtubeStateGate.begin(p.playback_id);
-    reloadWallpaper();
-    if (p.type === "pdf") nextTick(() => loadPdf(p.url!, p.page || 1, p.playback_id));
-  }
+  applyFileActivation(payload);
 });
 
-useBroadcastListener(BROADCAST_TYPE.ONLINE_VIDEO_PROJECTION, (payload: unknown) => {
-  const p = activationGate.accept(payload);
-  if (p?.url) {
-    ++pdfLoadGeneration;
-    _destroyYoutube();
-    fileState.active = true;
-    fileState.type = p.type || "youtube";
-    fileState.url = p.url;
-    fileState.playback_id = p.playback_id;
-    youtubeStateGate.begin(p.playback_id);
-    reloadWallpaper();
-    if (p.type === "youtube") nextTick(() => _initYoutube());
-  }
-});
+useBroadcastListener(BROADCAST_TYPE.ONLINE_VIDEO_PROJECTION, applyFileActivation);
 
 useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION_PAGE, (payload: unknown) => {
   const p = fileProjectionPageFor(payload, fileState.playback_id);
@@ -273,6 +286,7 @@ useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION_PAGE, (payload: unknown) => 
 useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, () => {
   activationGate.retire();
   ++pdfLoadGeneration;
+  pdfRenderQueue.invalidate();
   _destroyYoutube();
   if (pdfDoc) {
     try {
@@ -516,6 +530,7 @@ async function loadPdf(url: string, pageNum: number, expectedPlaybackId?: string
   if (fileState.playback_id !== expectedPlaybackId || fileState.url !== url || !fileState.active)
     return;
   const generation = ++pdfLoadGeneration;
+  pdfRenderQueue.invalidate();
   try {
     const doc = await loadPdfDocument({ url });
     if (
@@ -536,13 +551,18 @@ async function loadPdf(url: string, pageNum: number, expectedPlaybackId?: string
 
 async function renderPdfPage(pageNum: number): Promise<void> {
   const canvas = pdfCanvas.value;
-  if (!canvas || !pdfDoc) return;
+  const doc = pdfDoc;
+  if (!canvas || !doc) return;
   try {
-    const page = await pdfDoc.getPage(pageNum);
-    const vp = page.getViewport({ scale: 1.5 });
-    canvas.width = vp.width;
-    canvas.height = vp.height;
-    await page.render({ canvas, viewport: vp }).promise;
+    await pdfRenderQueue.run(async (isCurrent) => {
+      if (pdfDoc !== doc) return;
+      const page = await doc.getPage(pageNum);
+      if (!isCurrent() || pdfDoc !== doc) return;
+      const vp = page.getViewport({ scale: 1.5 });
+      canvas.width = vp.width;
+      canvas.height = vp.height;
+      await page.render({ canvas, viewport: vp }).promise;
+    });
   } catch (err) {
     console.error("BackgroundProjectionReturn: PDF render error", err);
   }
@@ -581,6 +601,8 @@ useBroadcastListener(BROADCAST_TYPE.WALLPAPER_UPDATE, () => {
 });
 
 onMounted(async () => {
+  readPendingFile();
+  setTimeout(readPendingFile, 500);
   document.body.style.margin = "0";
   document.body.style.overflow = "hidden";
   document.body.style.background = "#000";
@@ -589,6 +611,11 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  pdfRenderQueue.invalidate();
+  if (pdfDoc) {
+    void (pdfDoc as unknown as { destroy: () => Promise<void> }).destroy().catch(() => {});
+    pdfDoc = null;
+  }
   _destroyYoutube();
   if (wpBlobUrl) URL.revokeObjectURL(wpBlobUrl);
 });

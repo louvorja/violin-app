@@ -82,6 +82,7 @@ import { FileProjectionActivationGate } from "@/presentation/FileProjectionActiv
 import { VideoFrameConfirmation } from "@/helpers/VideoFrameConfirmation";
 import { VideoFirstFrame } from "@/helpers/VideoFirstFrame";
 import { fileProjectionPageFor } from "@/helpers/FileProjectionPage";
+import { PdfPageRenderQueue } from "@/helpers/PdfPageRenderQueue";
 
 function getYT(): YTAPI | null {
   return (window as unknown as { YT?: YTAPI }).YT ?? null;
@@ -115,6 +116,7 @@ const ready = ref<boolean>(false);
 
 let pdfDoc: PDFDocumentProxy | null = null;
 let pdfLoadGeneration = 0;
+const pdfRenderQueue = new PdfPageRenderQueue();
 
 let ytPlayer: YTPlayer | null = null;
 let ytSyncTimer: ReturnType<typeof setInterval> | null = null;
@@ -143,28 +145,37 @@ const fallbackStyle = computed(() =>
   })
 );
 
-async function renderPdfPage(pageNum: number): Promise<void> {
+async function renderPdfPage(pageNum: number): Promise<boolean> {
   const canvas = pdfCanvas.value;
-  if (!pdfDoc || !canvas) return;
+  const doc = pdfDoc;
+  if (!doc || !canvas) return false;
+  let committed = false;
   try {
-    const page = await pdfDoc.getPage(pageNum);
-    const parent = canvas.parentElement as HTMLElement;
-    if (!parent) return;
-    const viewport = page.getViewport({ scale: 1 });
-    const scale = Math.min(
-      parent.clientWidth / viewport.width,
-      parent.clientHeight / viewport.height
-    );
-    const scaled = page.getViewport({ scale });
-    canvas.width = scaled.width;
-    canvas.height = scaled.height;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    await page.render({ canvas, viewport: scaled }).promise;
-    fileProjection.page = pageNum;
+    await pdfRenderQueue.run(async (isCurrent) => {
+      if (pdfDoc !== doc) return;
+      const page = await doc.getPage(pageNum);
+      if (!isCurrent() || pdfDoc !== doc) return;
+      const parent = canvas.parentElement as HTMLElement;
+      if (!parent) return;
+      const viewport = page.getViewport({ scale: 1 });
+      const scale = Math.min(
+        parent.clientWidth / viewport.width,
+        parent.clientHeight / viewport.height
+      );
+      const scaled = page.getViewport({ scale });
+      canvas.width = scaled.width;
+      canvas.height = scaled.height;
+      if (!canvas.getContext("2d")) return;
+      await page.render({ canvas, viewport: scaled }).promise;
+      if (isCurrent() && pdfDoc === doc) {
+        fileProjection.page = pageNum;
+        committed = true;
+      }
+    });
   } catch (e) {
     console.error("[FileProjectionReturn] Erro render página:", e);
   }
+  return committed;
 }
 
 async function loadPdf(
@@ -180,6 +191,7 @@ async function loadPdf(
   )
     return;
   const generation = ++pdfLoadGeneration;
+  pdfRenderQueue.invalidate();
   try {
     const previousDoc = pdfDoc;
     pdfDoc = null;
@@ -215,7 +227,7 @@ async function loadPdf(
     } catch {
       /* resume from the original page */
     }
-    await renderPdfPage(Math.max(1, Math.min(pageNum, doc.numPages)));
+    if (!(await renderPdfPage(Math.max(1, Math.min(pageNum, doc.numPages))))) return;
     if (generation !== pdfLoadGeneration || expectedPlaybackId !== fileProjection.playback_id)
       return;
     Broadcast.send(BROADCAST_TYPE.FILE_PROJECTION_PAGE, {
@@ -235,6 +247,7 @@ async function _activateProjection(p: FileProjectionState): Promise<void> {
   p = accepted;
   const generation = ++activationGeneration;
   ++pdfLoadGeneration;
+  pdfRenderQueue.invalidate();
   if (
     fileProjection.type === "youtube" &&
     (p.type !== "youtube" ||
@@ -465,6 +478,7 @@ useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION, (payload: unknown) => {
     activationGate.retire();
     ++activationGeneration;
     ++pdfLoadGeneration;
+    pdfRenderQueue.invalidate();
     _destroyYoutube();
     fileProjection.active = false;
     videoStateGate.clear();
@@ -499,6 +513,7 @@ useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, async () => {
   activationGate.retire();
   ++activationGeneration;
   ++pdfLoadGeneration;
+  pdfRenderQueue.invalidate();
   _destroyYoutube();
   if (pdfDoc) {
     try {
@@ -818,6 +833,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  pdfRenderQueue.invalidate();
   videoFrameConfirmation.dispose();
   videoFirstFrame.dispose();
   if (wpBlobUrl) URL.revokeObjectURL(wpBlobUrl);

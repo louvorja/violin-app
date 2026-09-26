@@ -115,8 +115,74 @@ test("PDF page state belongs to the active file and survives reopen", async ({ b
     });
     await expect.poll(pageColor).toEqual([0, 255, 0]);
 
+    await projection.evaluate(() => {
+      for (const page of [1, 2, 1]) {
+        window.__fileTestBus.send("file_projection_page", {
+          playback_id: "pdf-b",
+          page,
+          source: "operator",
+        });
+      }
+    });
+    await projection.waitForTimeout(300);
+    await expect.poll(pageColor).toEqual([255, 0, 0]);
+
     await projection.reload();
     await expect.poll(pageColor).toEqual([0, 255, 0]);
+  } finally {
+    await context.close();
+  }
+});
+
+test("background projection and return keep the last rapid PDF page", async ({ browser }) => {
+  const context = await browser.newContext({ serviceWorkers: "block" });
+  await context.route("**/file-projection-fixture.pdf", (route) =>
+    route.fulfill({ status: 200, contentType: "application/pdf", body: twoPagePdf() })
+  );
+  const operator = await context.newPage();
+  const projection = await context.newPage();
+  const returned = await context.newPage();
+  const url = "http://localhost:5002/file-projection-fixture.pdf";
+  const color = (page, selector) =>
+    page.locator(selector).evaluate((canvas) => {
+      const data = canvas
+        .getContext("2d")
+        .getImageData(canvas.width / 2, canvas.height / 2, 1, 1).data;
+      return [data[0], data[1], data[2]];
+    });
+  try {
+    await operator.goto("/");
+    await projection.goto("/projection/background_projection");
+    await operator.evaluate((pdfUrl) => {
+      window.__pdfBus = new BroadcastChannel("louvorja");
+      window.__pdfSend = (type, payload) => window.__pdfBus.postMessage({ type, payload });
+      const state = {
+        type: "pdf",
+        url: pdfUrl,
+        title: "Fixture",
+        page: 1,
+        playback_id: "background-pdf",
+        stage_epoch: 100,
+      };
+      localStorage.setItem("lj_file_projection", JSON.stringify(state));
+      window.__pdfSend("file_projection", state);
+    }, url);
+    await expect.poll(() => color(projection, "canvas.layer-file--pdf")).toEqual([255, 0, 0]);
+    await returned.goto("/projection/background_projection/return");
+    await expect.poll(() => color(returned, "canvas.return-file--pdf")).toEqual([255, 0, 0]);
+
+    await operator.evaluate(() => {
+      for (const page of [2, 1, 2]) {
+        window.__pdfSend("file_projection_page", {
+          playback_id: "background-pdf",
+          page,
+          source: "operator",
+        });
+      }
+    });
+    await operator.waitForTimeout(300);
+    await expect.poll(() => color(projection, "canvas.layer-file--pdf")).toEqual([0, 255, 0]);
+    await expect.poll(() => color(returned, "canvas.return-file--pdf")).toEqual([0, 255, 0]);
   } finally {
     await context.close();
   }
