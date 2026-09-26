@@ -705,6 +705,11 @@ onMounted(async () => {
   document.body.style.overflow = "hidden";
   document.body.style.background = "#000";
   window.addEventListener("keydown", onKey);
+  const requestBibleState = () => {
+    if (!bibleActive.value) $broadcast.send(BROADCAST_TYPE.REQUEST_BIBLE_STATE);
+  };
+  requestBibleState();
+  setTimeout(requestBibleState, 500);
   await reloadWallpaper();
 });
 

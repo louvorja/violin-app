@@ -54,6 +54,7 @@
 <script setup>
 import { ref, computed, onMounted, watch } from "vue";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
+import Broadcast from "@/helpers/Broadcast";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { useContainerSize } from "@/composables/useContainerSize";
 import UserData from "@/helpers/UserData";
@@ -177,6 +178,11 @@ onMounted(() => {
   document.body.style.margin = "0";
   document.body.style.overflow = "hidden";
   document.body.style.background = "transparent";
+  const requestState = () => {
+    if (!active.value) Broadcast.send(BROADCAST_TYPE.REQUEST_BIBLE_STATE);
+  };
+  requestState();
+  setTimeout(requestState, 500);
 });
 
 watch(

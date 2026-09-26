@@ -41,14 +41,19 @@ test("primary shell stamps Bible intents and serves the current verse to a late 
     const projection = await context.newPage();
     await projection.goto("/projection/bible");
     await expect(projection.locator(".projection-bible-text")).toHaveText("Primeiro versículo");
+    const obs = await context.newPage();
+    await obs.goto("/obs/bible");
+    await expect(obs.locator(".obs-bible-text")).toHaveText("Primeiro versículo");
     await producer.evaluate(() => window.__biblePublish("Versículo atual"));
     await expect(projection.locator(".projection-bible-text")).toHaveText("Versículo atual");
+    await expect(obs.locator(".obs-bible-text")).toHaveText("Versículo atual");
     await expect
       .poll(() => producer.evaluate(() => window.__biblePackets.length))
       .toBeGreaterThanOrEqual(2);
     await producer.evaluate((old) => window.__bibleRaw(old), first);
     await producer.waitForTimeout(150);
     await expect(projection.locator(".projection-bible-text")).toHaveText("Versículo atual");
+    await expect(obs.locator(".obs-bible-text")).toHaveText("Versículo atual");
   } finally {
     await context.close();
   }
