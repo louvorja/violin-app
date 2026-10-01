@@ -179,7 +179,7 @@ export default {
    * Vídeos do YouTube baixados para projeção sem anúncios, ou deixados prontos de antemão.
    * null quando rodando no browser/PWA — lá só existe o player embutido.
    *
-   * @returns {{ status, ensure, stream, cancel, has, list, keep, prepare, remove, clear, onProgress } | null}
+   * @returns {{ status, ensure, stream, cancel, has, list, prefetch, collection, accountStatus, accountLogin, accountLogout, keep, prepare, remove, clear, onProgress } | null}
    */
   get onlineVideo() {
     return api?.onlineVideo ?? null;
@@ -327,6 +327,34 @@ export default {
   /** Lista arquivos de um diretório local (auto-populate). */
   readDir(dirPath) {
     return api?.storage?.readDir?.(dirPath) ?? Promise.resolve([]);
+  },
+
+  /** Um nível de uma pasta, com tamanho e data. No navegador: `{ ok: false }`. */
+  listDir(dirPath) {
+    return api?.storage?.listDir?.(dirPath) ?? Promise.resolve({ ok: false, error: "unsupported" });
+  },
+
+  /** Histórico da série de vídeos da pasta. No navegador: `{ ok: false }`. */
+  seriesRead(dirPath) {
+    return (
+      api?.storage?.seriesRead?.(dirPath) ?? Promise.resolve({ ok: false, error: "unsupported" })
+    );
+  },
+
+  /** Resolve as cópias em conflito do histórico: `"merge"` ou o nome da versão a manter. */
+  seriesResolve(dirPath, choice) {
+    return (
+      api?.storage?.seriesResolve?.(dirPath, choice) ??
+      Promise.resolve({ ok: false, error: "unsupported" })
+    );
+  },
+
+  /** Aplica uma operação ao histórico da série, sobre o que está no disco agora. */
+  seriesApply(dirPath, op) {
+    return (
+      api?.storage?.seriesApply?.(dirPath, op) ??
+      Promise.resolve({ ok: false, error: "unsupported" })
+    );
   },
 
   /**

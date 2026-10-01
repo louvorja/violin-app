@@ -80,6 +80,8 @@ const fileOpen = require("./main/fileOpen.js");
 const splash = require("./main/splash.js");
 const storage = require("./main/storage.js");
 const docStore = require("./main/docStore.js");
+const fileBrowser = require("./main/fileBrowser.js");
+const seriesFile = require("./main/seriesFile.js");
 const mediaVariants = require("./main/mediaVariants.js");
 const mediaResolver = require("./main/mediaResolver.js");
 const classicLibrary = require("./main/classicLibrary.js");
@@ -2117,6 +2119,14 @@ ipcMain.handle("storage:readDir", async (_e, dirPath) => {
   }
   return walk(dirPath);
 });
+
+/** Um nível de uma pasta, com tamanho e data — navegador de arquivos do Modo apresentação. */
+ipcMain.handle("files:listDir", (_e, dirPath) => fileBrowser.listDir(dirPath));
+// Histórico de uma série de vídeos, gravado na própria pasta (nome de arquivo fixo).
+ipcMain.handle("files:seriesRead", (_e, dirPath) => seriesFile.read(dirPath));
+ipcMain.handle("files:seriesApply", (_e, dirPath, op) => seriesFile.apply(dirPath, op));
+// Cópias em conflito do sincronizador: "merge" ou o nome da versão escolhida.
+ipcMain.handle("files:seriesResolve", (_e, dirPath, choice) => seriesFile.resolve(dirPath, choice));
 
 ipcMain.handle("storage:chooseDir", async (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);

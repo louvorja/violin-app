@@ -589,7 +589,13 @@
       "open_return_at": "Tela de retorno do vídeo em:",
       "show_return": "Exibir na tela de retorno",
       "title": "Vídeos On-line",
-      "youtube_action": "Ao executar link do YouTube na liturgia, abrir:"
+      "youtube_action": "Ao executar link do YouTube na liturgia, abrir:",
+      "account_title": "Conta do YouTube",
+      "account_none": "Nenhuma conta conectada.",
+      "account_connected": "Conta conectada: os vídeos são consultados com ela.",
+      "account_login": "Entrar no YouTube",
+      "account_logout": "Sair da conta",
+      "account_hint": "Só é necessário se o YouTube começar a pedir \"confirme que você não é um robô\". Use uma conta secundária, criada para a igreja — o YouTube pode restringir contas usadas por programas como este. A sessão fica só neste computador e pode ser encerrada aqui a qualquer momento. Ter conta não faz aparecer anúncios: o app toca os vídeos sem o player do YouTube."
     },
     "player": {
       "title": "Player de Áudio/Vídeo",
@@ -847,6 +853,10 @@
       "info": "Informações",
       "items": "Itens",
       "library": "Biblioteca",
+      "navigation": "Navegação",
+      "outputs": "Saídas",
+      "presentation": "Apresentação",
+      "program": "Programa",
       "manage": "Gerenciar",
       "main_text": "Texto Principal",
       "media": "Mídia",
@@ -1011,6 +1021,9 @@
     "home_music": "Músicas",
     "home_bible": "Bíblia",
     "home_liturgy": "Liturgia",
+    "home_try": "ou experimente o novo",
+    "home_presentation": "Modo apresentação",
+    "home_beta": "Beta",
     "search_placeholder": "Buscar hino, música, versículo...",
     "toggle_sidebar": "Mostrar/ocultar menu",
     "toggle_liturgy": "Mostrar/ocultar liturgia",
@@ -1519,7 +1532,8 @@
       "unavailable": "Este vídeo foi removido ou não está disponível.",
       "fallback": "Não foi possível baixar o vídeo. Usando o player do YouTube.",
       "download": "Não foi possível baixar o vídeo agora. Tente de novo mais tarde.",
-      "stream": "Não foi possível abrir o vídeo direto. Usando o player do YouTube."
+      "stream": "Não foi possível abrir o vídeo direto. Usando o player do YouTube.",
+      "bot": "O YouTube pediu para confirmar que não é um robô. Entre com uma conta em Opções → Vídeos para voltar a tocar sem anúncios; por enquanto, usando o player do YouTube."
     },
     "download": {
       "start": "Baixar para usar sem internet",

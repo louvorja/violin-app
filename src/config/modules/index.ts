@@ -1,8 +1,9 @@
 import type { RibbonPage, RibbonGroup } from "@/types/Ribbon";
-import { Module, ModuleRibbon } from "@/types/Module";
+import { Module, ModuleRibbon, type ModuleShellBehavior } from "@/types/Module";
 import { groups } from "@/config/modules/ribbon/groups";
 import { categories } from "@/config/modules/ribbon/categories";
 import $userdata from "@/helpers/UserData";
+import $appdata from "@/helpers/AppData";
 import { moduleShowInMainMenu } from "@/constants/UserDataKeys";
 
 const modules = import.meta.glob<ModuleRibbon>("../../modules/*/manifest.ts", {
@@ -146,3 +147,15 @@ export function isModuleVisible(id: string): boolean {
 }
 
 export const getRibbonModules: RibbonPage[] = buildRibbonPages();
+
+type ShellFlag = "hidesLiturgySidebar" | "hidesFooterPlayer" | "immediateEscape";
+
+/** O que o manifesto do módulo pede ao shell; vazio para quem não pede nada. */
+export function moduleShell(id: string | null | undefined): ModuleShellBehavior {
+  return (id && getAllModules[id]?.shell) || {};
+}
+
+/** Algum módulo aberto pede esse comportamento ao shell? */
+export function anyOpenModuleWants(flag: ShellFlag): boolean {
+  return allManifests.some((m) => m.shell?.[flag] === true && $appdata.get<boolean>(`modules.${m.id}.show`, false) === true);
+}

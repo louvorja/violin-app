@@ -1208,6 +1208,38 @@
             {{ $t("options.videos.cache_clear") }}
           </LjButton>
         </div>
+        <div class="opt-row">
+          <span class="opt-label">
+            {{ $t("options.videos.account_title") }} —
+            {{
+              youtubeLoggedIn
+                ? $t("options.videos.account_connected")
+                : $t("options.videos.account_none")
+            }}
+          </span>
+          <LjButton
+            v-if="youtubeLoggedIn"
+            variant="default"
+            size="sm"
+            :disabled="youtubeBusy"
+            data-testid="opt-youtube-logout"
+            @click="youtubeLogout"
+          >
+            {{ $t("options.videos.account_logout") }}
+          </LjButton>
+          <LjButton
+            v-else
+            variant="default"
+            size="sm"
+            :icon="ICONS.MEDIA.YOUTUBE"
+            :loading="youtubeBusy"
+            data-testid="opt-youtube-login"
+            @click="youtubeLogin"
+          >
+            {{ $t("options.videos.account_login") }}
+          </LjButton>
+        </div>
+        <p class="opt-hint">{{ $t("options.videos.account_hint") }}</p>
       </template>
       <div class="opt-row">
         <label class="opt-checkbox">
@@ -1543,6 +1575,7 @@ import Platform from "@/helpers/Platform";
 import Telemetry from "@/helpers/Telemetry";
 import $alert from "@/helpers/Alert";
 import { DEFAULT_MAX_HEIGHT, MAX_HEIGHTS, normalizeMaxHeight } from "@/helpers/OnlineVideo";
+import { useYoutubeAccount } from "@/composables/useYoutubeAccount";
 import { ICONS } from "@/config/Icons";
 import { KEYS } from "@/constants/UserDataKeys";
 import { DEFAULT_BACKGROUND_COLOR, MAIN_BACKGROUND_ID, Settings } from "@/types/Settings";
@@ -1967,6 +2000,13 @@ function clearVideoCache(): void {
     await refreshVideoCache();
   });
 }
+
+const {
+  loggedIn: youtubeLoggedIn,
+  busy: youtubeBusy,
+  login: youtubeLogin,
+  logout: youtubeLogout,
+} = useYoutubeAccount(() => isDesktop.value);
 
 onMounted(() => {
   if (isDesktop.value) void refreshVideoCache();

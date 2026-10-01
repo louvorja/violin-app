@@ -1,5 +1,7 @@
 <template>
   <OverlayRenderer />
+  <ReturnOverride />
+  <ProjectionClearScreen />
   <div class="fp-wallpaper" :style="fallbackStyle"></div>
   <div class="return-root" :class="{ 'return-root--ready': ready }">
     <div v-if="fileProjection.active" class="return-file-projection">
@@ -76,6 +78,8 @@ import { createTransitionContext } from "@/config/Transitions";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import Broadcast from "@/helpers/Broadcast";
 import OverlayRenderer from "@/components/OverlayRenderer.vue";
+import ProjectionClearScreen from "@/components/ProjectionClearScreen.vue";
+import ReturnOverride from "@/components/ReturnOverride.vue";
 import {
   FileProjectionState,
   VideoMediaState,
@@ -1098,14 +1102,11 @@ onBeforeUnmount(() => {
   background: transparent;
 }
 
+/* Como na tela principal: preenche mantendo a proporção. */
 .return-file-projection__media {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-}
-.return-file-projection video.return-file-projection__media {
   width: 100%;
   height: 100%;
+  object-fit: contain;
 }
 .return-file-projection__youtube {
   width: 100%;

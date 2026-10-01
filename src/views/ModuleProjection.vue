@@ -1,5 +1,6 @@
 <template>
   <OverlayRenderer />
+  <ProjectionClearScreen />
   <DrawProjection v-if="isDraw" :text="text" :reference="reference" :active="active" />
   <NameDrawProjection v-else-if="isNameDraw" :text="text" :reference="reference" :active="active" />
   <div
@@ -85,6 +86,7 @@ import UserData from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
 import { FONT, resolveFont } from "@/config/Fonts";
 import OverlayRenderer from "@/components/OverlayRenderer.vue";
+import ProjectionClearScreen from "@/components/ProjectionClearScreen.vue";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import DrawProjection from "@/modules/draw/components/DrawProjection.vue";
 import NameDrawProjection from "@/modules/name_draw/components/NameDrawProjection.vue";

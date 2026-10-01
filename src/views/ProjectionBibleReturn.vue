@@ -1,5 +1,7 @@
 <template>
   <OverlayRenderer />
+  <ReturnOverride />
+  <ProjectionClearScreen />
   <div
     class="return-root"
     :class="{ 'return-root--ready': ready }"
@@ -64,6 +66,8 @@ import { FONT, resolveFont } from "@/config/Fonts";
 import { SLIDE_STYLE_DEFAULT } from "@/config/SlideStyle";
 import { horizontalTextAlign, moduleCustomizationDefault } from "@/helpers/ModuleFormatting";
 import OverlayRenderer from "@/components/OverlayRenderer.vue";
+import ProjectionClearScreen from "@/components/ProjectionClearScreen.vue";
+import ReturnOverride from "@/components/ReturnOverride.vue";
 
 const { t } = useI18n();
 const MID = "modules.bible";

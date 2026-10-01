@@ -1065,6 +1065,14 @@ function _lyricEntries(data: Music): Lyric[] {
   return [];
 }
 
+/**
+ * Slides de uma música como a projeção os mostra (capa + letra), sem tocá-la.
+ * Exportado para prévias — o Modo apresentação mostra a grade antes de ir ao ar.
+ */
+export function buildSlidesFrom(data: Music): Slide[] {
+  return _buildSlidesFrom(data);
+}
+
 function _buildSlidesFrom(data: Music): Slide[] {
   let prev_image: string | undefined = data?.url_image as string | undefined;
   let prev_image_position: string | number | undefined = data?.image_position;
@@ -1629,7 +1637,9 @@ const _self = {
    */
   async openCustomSong(
     song: CustomSongSource,
-    mode: MusicActionEnum | string = MusicActionEnum.AUDIO
+    mode: MusicActionEnum | string = MusicActionEnum.AUDIO,
+    /** Como `open`: quem tem o próprio palco (modo apresentação) abre o player minimizado. */
+    { minimized }: { minimized?: boolean } = {}
   ): Promise<boolean> {
     if (mode === MusicActionEnum.INSTRUMENTAL && !song?.playback_token) {
       Telemetry.track("custom_music_open_failed", { name: song?.nome, mode, reason: "no_playback" });
@@ -1691,6 +1701,8 @@ const _self = {
         font_size_pct: s.tamanho_letra,
         font_size_aux_pct: s.tamanho_letra_aux,
         name: song.nome || "",
+        // Quem acompanha o que está no ar (modo apresentação) reconhece a música pelo UUID.
+        custom_song_id: song.id,
       });
     }
     if (!slidesArray.length) {
@@ -1752,7 +1764,7 @@ const _self = {
       audioUrl,
       idCheck: null,
       retryFn: () => {},
-      minimized: !!minimizeOnStart,
+      minimized: minimized ?? !!minimizeOnStart,
       mode: audioUrl ? mode : MusicActionEnum.NO_AUDIO,
       playbackId: playback_id,
     });
@@ -2647,7 +2659,11 @@ const _self = {
               const id = $appdata.get(KEYS.MODULES.MEDIA.ID_MUSIC) as string | number | null;
               // Arquivos diretos da liturgia não têm id_music. Não tente
               // reabrir o banco com null após um erro de codec do vídeo.
-              if (a && id != null) self.open(id);
+              // A nova tentativa fica onde a música estava: minimizada, ela
+              // não pode reabrir o player por cima de quem a controla.
+              if (a && id != null) {
+                self.open({ id_music: id, minimized: self.isMinimized() });
+              }
             }
           );
         },

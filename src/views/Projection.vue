@@ -9,6 +9,7 @@
     />
   </div>
   <OverlayRenderer />
+  <ProjectionClearScreen />
   <LibrasOverlay
     :slide-lyric="slide?.lyric"
     :music-id="Number(slide?.id_music) || undefined"
@@ -24,6 +25,7 @@ import $broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import Slide from "@/components/Slide.vue";
 import OverlayRenderer from "@/components/OverlayRenderer.vue";
+import ProjectionClearScreen from "@/components/ProjectionClearScreen.vue";
 import LibrasOverlay from "@/views/LibrasOverlay.vue";
 
 const { slide, progress, title, slideIndex, totalSlides, sessionId } = useProjectionState();

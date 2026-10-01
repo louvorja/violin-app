@@ -589,7 +589,13 @@
       "open_return_at": "Pantalla de retorno del vídeo en:",
       "show_return": "Mostrar en la pantalla de retorno",
       "title": "Vídeos On-line",
-      "youtube_action": "Al ejecutar enlace de YouTube en la liturgia, abrir:"
+      "youtube_action": "Al ejecutar enlace de YouTube en la liturgia, abrir:",
+      "account_title": "Cuenta de YouTube",
+      "account_none": "Ninguna cuenta conectada.",
+      "account_connected": "Cuenta conectada: los videos se consultan con ella.",
+      "account_login": "Iniciar sesión en YouTube",
+      "account_logout": "Cerrar sesión",
+      "account_hint": "Solo es necesario si YouTube empieza a pedir \"confirma que no eres un robot\". Usa una cuenta secundaria, creada para la iglesia — YouTube puede restringir cuentas usadas por programas como este. La sesión queda solo en esta computadora y se puede cerrar aquí en cualquier momento. Tener cuenta no hace aparecer anuncios: la app reproduce los videos sin el reproductor de YouTube."
     },
     "player": {
       "title": "Reproductor de Audio/Vídeo",
@@ -847,6 +853,10 @@
       "info": "Información",
       "items": "Ítems",
       "library": "Biblioteca",
+      "navigation": "Navegación",
+      "outputs": "Salidas",
+      "presentation": "Presentación",
+      "program": "Programa",
       "manage": "Gestionar",
       "main_text": "Texto Principal",
       "media": "Media",
@@ -1011,6 +1021,9 @@
     "home_music": "Músicas",
     "home_bible": "Biblia",
     "home_liturgy": "Liturgia",
+    "home_try": "o prueba el nuevo",
+    "home_presentation": "Modo presentación",
+    "home_beta": "Beta",
     "search_placeholder": "Buscar himno, canción, versículo...",
     "toggle_sidebar": "Mostrar/ocultar menú",
     "toggle_liturgy": "Mostrar/ocultar liturgia",
@@ -1519,7 +1532,8 @@
       "unavailable": "Este video fue eliminado o no está disponible.",
       "fallback": "No se pudo descargar el video. Se usa el reproductor de YouTube.",
       "download": "No se pudo descargar el video ahora. Inténtalo de nuevo más tarde.",
-      "stream": "No se pudo abrir el video directamente. Se usa el reproductor de YouTube."
+      "stream": "No se pudo abrir el video directamente. Se usa el reproductor de YouTube.",
+      "bot": "YouTube pidió confirmar que no eres un robot. Inicia sesión con una cuenta en Opciones → Videos para volver a reproducir sin anuncios; por ahora, usando el reproductor de YouTube."
     },
     "download": {
       "start": "Descargar para usar sin internet",

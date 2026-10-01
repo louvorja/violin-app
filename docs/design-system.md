@@ -695,8 +695,11 @@ Veja todos lado a lado, nos 10 temas, na rota **`/ui`**.
 
 Foco preso, navegação por teclado, ARIA e portal:
 
-`LjSelect` · `LjCombobox` · `LjDialog` · `LjMenu` · `LjTooltip` · `LjTabs` ·
-`LjSlider` · `LjPopover` · `LjAccordion` · `LjDrawer`
+`LjSelect` · `LjCombobox` · `LjDialog` · `LjMenu` · `LjContextMenu` · `LjTooltip` ·
+`LjTabs` · `LjSlider` · `LjPopover` · `LjAccordion` · `LjDrawer`
+
+`LjContextMenu` é o `LjMenu` aberto pelo clique direito (ou pela tecla de menu)
+sobre o elemento do slot: mesma lista de itens, mesmo desenho.
 
 ```ts
 import { LjButton, LjSelect, LjDialog } from "@/components/ui";

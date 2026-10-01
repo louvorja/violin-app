@@ -1,5 +1,6 @@
 <template>
   <OverlayRenderer />
+  <ProjectionClearScreen />
   <div class="fp-wallpaper" :style="fallbackStyle"></div>
   <div v-if="fileProjection.active" class="file-projection">
     <!-- Cena da transição: mídia anterior e nova se sobrepõem durante a animação -->
@@ -70,6 +71,7 @@ import { PROJECTION_TYPE } from "@/constants/Projection";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import Broadcast from "@/helpers/Broadcast";
 import OverlayRenderer from "@/components/OverlayRenderer.vue";
+import ProjectionClearScreen from "@/components/ProjectionClearScreen.vue";
 import $idb from "@/helpers/IndexedDB";
 import { DB_TABLE } from "@/constants/DbTables";
 import {
@@ -1078,14 +1080,13 @@ onBeforeUnmount(async () => {
   justify-content: center;
   height: 100%;
 }
+/* Imagem e vídeo preenchem a tela mantendo a proporção. Com só max-width e
+   max-height, uma imagem pequena (um cartaz de 628×857) ficava no tamanho
+   original no meio do telão, cercada de preto. */
 .file-projection__media {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-}
-.file-projection video.file-projection__media {
   width: 100%;
   height: 100%;
+  object-fit: contain;
 }
 .file-projection__youtube {
   width: 100vw;

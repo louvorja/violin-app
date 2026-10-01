@@ -22,7 +22,7 @@ const MAIN = file("../../main.cjs");
 const PROTOCOL = file("../protocol.js");
 const PATHS = file("../paths.js");
 
-const FUNCTIONS = ["status", "ensure", "stream", "cancel", "has", "list", "keep", "prepare", "remove", "clear"];
+const FUNCTIONS = ["status", "ensure", "stream", "cancel", "has", "list", "prefetch", "accountStatus", "accountLogin", "accountLogout", "collection", "keep", "prepare", "remove", "clear"];
 
 async function withFakeElectron(platform, fn) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "lj-video-ipc-"));
@@ -81,6 +81,8 @@ describe.each(["darwin", "win32", "linux"])("vídeo online: preload e main (%s)"
       expect(called.find((c) => c.channel === "onlineVideo:stream").args).toEqual(["abcdefghijk", opts]);
       expect(called.find((c) => c.channel === "onlineVideo:ensure").args).toEqual(["abcdefghijk", opts]);
       expect(called.find((c) => c.channel === "onlineVideo:has").args).toEqual(["abcdefghijk"]);
+      // Canal ou playlist: a fonte e a página seguem como vieram; o main as valida.
+      expect(called.find((c) => c.channel === "onlineVideo:collection").args).toEqual(["abcdefghijk", opts]);
 
       require(INDEX).registerIpc({ handle: (channel, handler) => seen.handlers.set(channel, handler) });
       expect([...seen.handlers.keys()].sort()).toEqual(channels);
@@ -118,7 +120,10 @@ describe("vídeo online: o que fica de fora do carregamento do preload", () => {
       expect(await lookup).toBe(true);
       expect(onlineVideo.getManager()).not.toBe(previous);
       expect(onlineVideo.getManager().store.dir).toBe(path.join(path.resolve(chosen), "Videos"));
-      expect(onlineVideo.getManager().tools.paths().ytdlp).toBe(path.join(path.resolve(chosen), "bin", "yt-dlp"));
+      // No macOS o yt-dlp fica desempacotado numa pasta própria (ver tools.js).
+      expect(onlineVideo.getManager().tools.paths().ytdlp).toBe(
+        path.join(path.resolve(chosen), "bin", "yt-dlp-dist", "yt-dlp_macos")
+      );
     });
   });
 

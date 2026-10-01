@@ -75,6 +75,18 @@ const iconSize = computed(() => {
   border-color: var(--lj-rbtn-active-border);
 }
 
+/* Desabilitado some da vista sem sumir do lugar: o operador ainda vê o
+   comando, mas não confunde "não dá agora" com "não respondeu". */
+.ribbon-btn:disabled {
+  opacity: var(--lj-ui-disabled-opacity);
+  filter: grayscale(1);
+  cursor: default;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
 /* Botão grande: ícone topo + label embaixo */
 .ribbon-btn--large {
   flex-direction: column;

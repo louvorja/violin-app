@@ -252,6 +252,23 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
     has: (id) => ipcRenderer.invoke("onlineVideo:has", id),
     /** Vídeos em disco: [{ id, size, usedAt, kept }] */
     list: () => ipcRenderer.invoke("onlineVideo:list"),
+    /**
+     * Resolve os links do vídeo antes do play, sem baixar: o próximo `stream` dele
+     * começa sem consultar o YouTube. `opts`: `{ maxHeight }`. Resolve `{ ok }`.
+     */
+    prefetch: (id, opts) => ipcRenderer.invoke("onlineVideo:prefetch", id, opts),
+    /** Conta do YouTube para o yt-dlp: `{ loggedIn }`. Os cookies nunca chegam ao renderer. */
+    accountStatus: () => ipcRenderer.invoke("onlineVideo:accountStatus"),
+    /** Abre a janela de login do Google; resolve quando ela fecha, com o novo estado. */
+    accountLogin: () => ipcRenderer.invoke("onlineVideo:accountLogin"),
+    accountLogout: () => ipcRenderer.invoke("onlineVideo:accountLogout"),
+    /**
+     * Vídeos de um canal (do mais recente ao mais antigo) ou de uma playlist, sem baixar.
+     * `source`: `{ kind: "channel" | "playlist", id }` — id do canal (UC…), @ dele ou id
+     * da playlist. `range`: `{ start, count }` (1-based, até 50). Resolve
+     * `{ ok, title, channel, thumbnail, entries: [{ id, title, duration }], hasMore }`.
+     */
+    collection: (source, range) => ipcRenderer.invoke("onlineVideo:collection", source, range),
     /** Manda manter um vídeo já baixado: o despejo por espaço não o leva. */
     keep: (id) => ipcRenderer.invoke("onlineVideo:keep", id),
     /** Instala yt-dlp e ffmpeg de antemão, em silêncio. Resolve `{ ok, ready }`. */
@@ -370,6 +387,14 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
     enforceQuota: (maxBytes) => ipcRenderer.invoke("storage:enforceQuota", maxBytes),
     /** Lista arquivos de um diretório local (para auto-populate). */
     readDir: (dirPath) => ipcRenderer.invoke("storage:readDir", dirPath),
+    /** Um nível de uma pasta, com tamanho e data (navegador de arquivos). */
+    listDir: (dirPath) => ipcRenderer.invoke("files:listDir", dirPath),
+    /** Histórico da série de vídeos da pasta (`.louvorja-serie.json`); `series: null` se não é série. */
+    seriesRead: (dirPath) => ipcRenderer.invoke("files:seriesRead", dirPath),
+    /** Aplica uma operação (`play`, `undo`, `restart`, `create`, `settings`) ao histórico do disco. */
+    seriesApply: (dirPath, op) => ipcRenderer.invoke("files:seriesApply", dirPath, op),
+    /** Resolve cópias em conflito do histórico: `"merge"` ou o nome da versão a manter. */
+    seriesResolve: (dirPath, choice) => ipcRenderer.invoke("files:seriesResolve", dirPath, choice),
     /** Verifica quais arquivos remotos já estão no disco. */
     checkLocal: (remotePaths) => ipcRenderer.invoke("storage:checkLocal", remotePaths),
     /** Remove arquivos de mídia do cache local (paths remotos relativos). */
