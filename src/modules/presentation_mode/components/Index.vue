@@ -185,6 +185,7 @@ import { kindFromPath } from "../program/liturgy";
 import { itemVideoId, openOnline, useOnlineQueue } from "../composables/useOnlinePlayback";
 import { useOnlinePrefetch } from "../composables/useOnlinePrefetch";
 import { useSeriesRecorder } from "../composables/useSeries";
+import { useClicker } from "../composables/useClicker";
 import {
   bibleSource,
   fileQueueSource,
@@ -591,6 +592,9 @@ const navigation = useLiveNavigation(
   flashUpNext
 );
 const { canNavigate, navigate } = navigation;
+
+// Passador e teclado: o mesmo Anterior/Próximo das saídas; "B" e "." alternam a tela preta.
+useClicker({ navigate, toggleBlack: () => setCleared(!cleared.value) });
 const queueCounter = navigation.counter;
 
 useSeriesRecorder(() => {

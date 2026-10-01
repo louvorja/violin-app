@@ -409,6 +409,8 @@ export const KEYS = {
     POPUP: "popup",
     APP_UPDATE_AVAILABLE: "app_update_available",
     APP_UPDATE_VERSION: "app_update_version",
+    /** AppData: id do módulo da aba ativa (o que está à vista). */
+    ACTIVE_MODULE: "active_module",
   },
   REMOTE: {
     IS_CONNECTED: "remote.is_connected",

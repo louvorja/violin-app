@@ -1261,7 +1261,8 @@
       "media": "Reproductor",
       "liturgy": "Liturgia",
       "bible": "Biblia",
-      "system": "Sistema"
+      "system": "Sistema",
+      "presentation": "Modo presentación"
     },
     "esc": "Finalizar proyecciones activas",
     "f1": "Mostrar atajos de teclado",
@@ -1296,7 +1297,10 @@
     "next_slide": "Siguiente diapositiva",
     "bible_prev_verse": "Versículo anterior",
     "bible_next_verse": "Siguiente versículo",
-    "bible_clear": "Limpiar versículo seleccionado"
+    "bible_clear": "Limpiar versículo seleccionado",
+    "presentation_next": "Modo presentación: siguiente (control)",
+    "presentation_prev": "Modo presentación: anterior (control)",
+    "presentation_black": "Modo presentación: pantalla negra / volver"
   },
   "startup_check": {
     "title": "Verificación Inicial",
