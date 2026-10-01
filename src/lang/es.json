@@ -345,6 +345,8 @@
       "devices_hint": "Dispositivos que pueden acceder al servidor HTTP con permisos específicos. Instala la app Violin Remote para acceder",
       "only_authorized_devices": "Permitir solo dispositivos registrados",
       "only_authorized_hint": "Cuando está activo, solo los dispositivos registrados pueden acceder a la API. Localhost siempre tiene acceso.",
+      "chat_history_limit": "Mensajes en el historial del chat",
+      "chat_history_limit_hint": "Límite de mensajes no leídos que la app puede descargar al reconectarse (de 1 a 500).",
       "no_devices": "Ningún dispositivo autorizado.",
       "add_device": "Agregar Dispositivo",
       "scan_qr": "Escanear Código QR",

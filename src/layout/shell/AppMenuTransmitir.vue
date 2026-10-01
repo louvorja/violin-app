@@ -131,13 +131,33 @@
             }}
           </p>
         </div>
-        <div>
-          <LjCheckbox
-            :model-value="onlyAuthorizedDevices"
-            :label="$t('options.transmission.only_authorized_devices')"
-            @update:model-value="toggleOnlyAuthorized"
-          />
-          <p class="opt-hint">{{ $t("options.transmission.only_authorized_hint") }}</p>
+        <div class="tx-token-row">
+          <div>
+            <LjCheckbox
+              :model-value="onlyAuthorizedDevices"
+              :label="$t('options.transmission.only_authorized_devices')"
+              @update:model-value="toggleOnlyAuthorized"
+            />
+            <p class="opt-hint">{{ $t("options.transmission.only_authorized_hint") }}</p>
+          </div>
+          <div style="margin: 0 20px">
+            <label class="opt-label" for="tx-chat-history">
+              {{ $t("options.transmission.chat_history_limit") }}
+            </label>
+            <p class="opt-hint">{{ $t("options.transmission.chat_history_limit_hint") }}</p>
+            <span class="tx-port">
+              <LjInput
+                id="tx-chat-history"
+                size="sm"
+                type="number"
+                placeholder="100"
+                :model-value="chatHistoryLimit"
+                min="1"
+                max="500"
+                @change="setChatHistoryLimit(Number($event.target.value))"
+              />
+            </span>
+          </div>
         </div>
       </section>
 
@@ -537,6 +557,7 @@ const editingDevice = ref(null);
 const confirmDeleteDevice = ref(null);
 const showConfirmDeleteDialog = ref(false);
 const onlyAuthorizedDevices = ref(false);
+const chatHistoryLimit = ref(100);
 
 const STORES_URLS = {
   android: "https://play.google.com/store/apps/details?id=br.com.louvorja.violin_remote",
@@ -954,6 +975,17 @@ async function toggleOnlyAuthorized(enabled) {
   }
 }
 
+async function setChatHistoryLimit(value) {
+  const n = Math.min(500, Math.max(1, Math.trunc(Number(value) || 100)));
+  chatHistoryLimit.value = n;
+  if (!Platform.httpServer?.setDeviceSettings) return;
+  try {
+    await Platform.httpServer.setDeviceSettings({ chat_history_limit: n });
+  } catch (e) {
+    console.error("[Transmitir] setDeviceSettings:", e);
+  }
+}
+
 async function toggleUseHostname(enabled) {
   useHostname.value = enabled;
   if (!Platform.userStore) return;
@@ -979,6 +1011,7 @@ onMounted(async () => {
       if (Platform.httpServer.getDeviceSettings) {
         const ds = await Platform.httpServer.getDeviceSettings();
         onlyAuthorizedDevices.value = ds.only_authorized_devices === true;
+        chatHistoryLimit.value = ds.chat_history_limit ?? 100;
       }
     } catch (e) {
       console.warn("[Transmitir] init:", e);

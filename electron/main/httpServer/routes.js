@@ -4,6 +4,7 @@ const path = require("path");
 const fs = require("fs");
 const jsonCache = require("../jsonCache.js");
 const devices = require("../devices.js");
+const docStore = require("../docStore.js");
 const { HARD_MAX_PAYLOAD_BYTES } = require("./rendererRequestRegistry.js");
 const { safeSend } = require("../safeWebContents.js");
 const { createMusicSearchCatalog, normalize } = require("./musicSearchCatalog.js");
@@ -12,6 +13,9 @@ const KEY_LITURGY_DAYS = "modules.liturgy.days";
 const KEY_LITURGY_ACTIVE_DAY = "modules.liturgy.active_day";
 const SLIDE_STATE_MAX_BYTES = 8 * 1024 * 1024;
 const ANNOUNCEMENTS_MAX_BYTES = 2 * 1024 * 1024;
+
+/** Coleção (docStore) onde o histórico do chat é persistido — igual ao renderer. */
+const CHAT_MESSAGES_COLLECTION = "chat.messages";
 
 /**
  * Estado em memória para sorteios (replicado entre requests).
@@ -783,6 +787,29 @@ function setupRoutes(
     }
 
     res.json({ ok: true, id: msg.id });
+  });
+
+  // ---------------------------------------------------------------
+  // GET /api/chat/history — últimas mensagens do chat (somente leitura)
+  //
+  // Devolve até `chat_history_limit` mensagens (definido nas opções do
+  // desktop), da mais antiga para a mais recente. O app usa isso para
+  // preencher lacunas após reconectar.
+  // ---------------------------------------------------------------
+  app.get("/api/chat/history", (_req, res) => {
+    const limit = devices.getChatHistoryLimit();
+    let messages = [];
+    try {
+      messages = docStore.read(CHAT_MESSAGES_COLLECTION);
+    } catch (e) {
+      console.warn("[httpServer] /api/chat/history: falha ao ler o histórico:", e.message);
+    }
+    const ordenadas = [...messages].sort((a, b) =>
+      String(a && a.timestamp ? a.timestamp : "").localeCompare(
+        String(b && b.timestamp ? b.timestamp : ""),
+      ),
+    );
+    res.json({ status: "ok", messages: ordenadas.slice(-limit) });
   });
 
   // ---------------------------------------------------------------
