@@ -69,21 +69,19 @@ const semFundoProprio = computed(() => {
   background: transparent;
 }
 
-@media (max-width: 700px) {
-  /* A faixa da barra de status é padding do container: pintá-la com a cor do
-     cabeçalho evita o degradê entre o preto do sistema e o cabeçalho. */
-  #app-container.app-container--shell::before {
-    content: "";
-    position: fixed;
-    inset: 0 0 auto 0;
-    height: env(safe-area-inset-top);
-    background: var(--lj-shell-chrome-bg);
-    pointer-events: none;
-  }
+/* O iOS 26 pinta a barra de status com o fundo de um elemento `position: fixed`
+   encostado no topo ou, sem ele, com o background-color do <body>; ignora o
+   theme-color e pseudo-elementos. Só a janela principal (main.js põe a classe):
+   projeção e OBS cuidam do próprio fundo, que precisa ser preto ou transparente. */
+body.lj-shell-body {
+  background-color: var(--lj-shell-chrome-bg);
+}
 
-  #app-container.app-container--shell {
-    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
-      env(safe-area-inset-left);
-  }
+/* As faixas das áreas seguras (barra de status, indicador de início) mostram o
+   <body>, não a superfície do tema — senão a de baixo fica branca no tema claro. */
+#app-container.app-container--shell {
+  background-clip: content-box;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
 }
 </style>
