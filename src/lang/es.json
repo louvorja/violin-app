@@ -809,25 +809,14 @@
       "revelation": "Apocalipsis"
     }
   },
-  "import_export": {
-    "export": {
-      "action": "Exportar Liturgia",
-      "hint": "Descarga un archivo .json con todos los días de la liturgia, notas, ítems programados y categorías.",
-      "done": "¡Archivo descargado!"
-    },
-    "import": {
-      "action": "Importar Liturgia",
-      "hint": "Carga un archivo .json (exportado de la versión web/desktop) o .ja (versión legada). Los ítems se agregarán al día activo."
-    },
-    "open_slja": {
-      "title": "Abrir música personalizada",
-      "hint_mac": "Para proyectar una música .slja sin añadirla a una colección, arrastra el archivo dentro de la ventana de la app o sobre su icono en el Dock, o haz doble clic en el archivo.",
-      "hint_desktop": "Para proyectar una música .slja sin añadirla a una colección, arrastra el archivo dentro de la ventana de la app o haz doble clic en él (o \"Abrir con\" LouvorJA).",
-      "hint_pwa": "Para proyectar una música .slja sin añadirla a una colección, arrastra el archivo dentro de la ventana de la app o usa \"Abrir con\" en el archivo.",
-      "hint_web": "Para proyectar una música .slja sin añadirla a una colección, arrastra el archivo dentro de la ventana del navegador.",
-      "hint_touch": "En este dispositivo no se pueden arrastrar archivos a la app. Para reproducir una música .slja, impórtala en Colecciones Personales.",
-      "keep": "Para guardarla, impórtala en Colecciones Personales."
-    }
+  "open_file": {
+    "title": "Abrir música personalizada (.slja)",
+    "hint_mac": "Para proyectar una música .slja sin añadirla a una colección, arrastra el archivo dentro de la ventana de la app o sobre su icono en el Dock, o haz doble clic en el archivo.",
+    "hint_desktop": "Para proyectar una música .slja sin añadirla a una colección, arrastra el archivo dentro de la ventana de la app o haz doble clic en él (o \"Abrir con\" LouvorJA).",
+    "hint_pwa": "Para proyectar una música .slja sin añadirla a una colección, arrastra el archivo dentro de la ventana de la app o usa \"Abrir con\" en el archivo.",
+    "hint_web": "Para proyectar una música .slja sin añadirla a una colección, arrastra el archivo dentro de la ventana del navegador.",
+    "hint_touch": "En este dispositivo no se pueden arrastrar archivos a la app. Para reproducir una música .slja, impórtala en Colecciones Personales.",
+    "keep": "Para guardarla, impórtala en Colecciones Personales."
   },
   "popup": {
     "close": "Cerrar Ventana"
@@ -1175,7 +1164,7 @@
       "settings": "Opciones",
       "transmission": "Transmitir",
       "remote_control": "Control Remoto",
-      "import_export": "Importar/Exportar",
+      "open_file": "Abrir archivo",
       "sync": "Sincronizar Archivos",
       "accessibility": "Accesibilidad",
       "feedback": "Enviar Comentarios",

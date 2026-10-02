@@ -78,7 +78,7 @@
                     <AppMenuSincronizar v-else-if="renderedItem?.id === 'sync'" />
                     <AppMenuAcessibilidade v-else-if="renderedItem?.id === 'accessibility'" />
                     <AppMenuAtualizacoes v-else-if="renderedItem?.id === 'updates'" />
-                    <AppMenuImportExport v-else-if="renderedItem?.id === 'import_export'" />
+                    <AppMenuAbrirArquivo v-else-if="renderedItem?.id === 'open_file'" />
                     <AppMenuAlbums v-else-if="renderedItem?.id === 'albums'" />
                     <AppMenuLicencas v-else-if="renderedItem?.id === 'licenses'" />
                     <AppMenuDev v-else-if="renderedItem?.id === 'dev'" />
@@ -108,7 +108,7 @@ const AppMenuTransmitir = defineAsyncComponent(() => import("./AppMenuTransmitir
 const AppMenuSincronizar = defineAsyncComponent(() => import("./AppMenuSincronizar.vue"));
 const AppMenuAcessibilidade = defineAsyncComponent(() => import("./AppMenuAcessibilidade.vue"));
 const AppMenuAtualizacoes = defineAsyncComponent(() => import("./AppMenuAtualizacoes.vue"));
-const AppMenuImportExport = defineAsyncComponent(() => import("./AppMenuImportExport.vue"));
+const AppMenuAbrirArquivo = defineAsyncComponent(() => import("./AppMenuAbrirArquivo.vue"));
 const AppMenuAlbums = defineAsyncComponent(() => import("./AppMenuAlbums.vue"));
 const AppMenuDev = defineAsyncComponent(() => import("./AppMenuDev.vue"));
 const AppMenuLicencas = defineAsyncComponent(() => import("./AppMenuLicencas.vue"));
@@ -177,9 +177,9 @@ const items = computed(() => [
     inline: true,
   },
   {
-    id: "import_export",
-    label: "shell.appmenu_items.import_export",
-    icon: ICONS.UI.IMPORT_EXPORT,
+    id: "open_file",
+    label: "shell.appmenu_items.open_file",
+    icon: ICONS.UI.FOLDER_OPEN,
     inline: true,
   },
   {
