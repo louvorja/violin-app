@@ -195,51 +195,6 @@
               :placeholder="tm('labels.aux_text')"
               @input="markDirty"
             />
-            <div class="se-field">
-              <span class="se-field-label">{{ tm("labels.convert_text") }}</span>
-              <div class="se-case-row">
-                <span>{{ tm("labels.current_slide") }}</span>
-                <div class="se-actions-row">
-                  <button
-                    type="button"
-                    class="se-act-btn se-act-btn--small"
-                    :aria-label="tm('actions.uppercase_current')"
-                    @click="changeTextCase('current', 'upper')"
-                  >
-                    {{ tm("actions.uppercase") }}
-                  </button>
-                  <button
-                    type="button"
-                    class="se-act-btn se-act-btn--small"
-                    :aria-label="tm('actions.lowercase_current')"
-                    @click="changeTextCase('current', 'lower')"
-                  >
-                    {{ tm("actions.lowercase") }}
-                  </button>
-                </div>
-              </div>
-              <div class="se-case-row">
-                <span>{{ tm("labels.all_slides") }}</span>
-                <div class="se-actions-row">
-                  <button
-                    type="button"
-                    class="se-act-btn se-act-btn--small"
-                    :aria-label="tm('actions.uppercase_all')"
-                    @click="changeTextCase('all', 'upper')"
-                  >
-                    {{ tm("actions.uppercase") }}
-                  </button>
-                  <button
-                    type="button"
-                    class="se-act-btn se-act-btn--small"
-                    :aria-label="tm('actions.lowercase_all')"
-                    @click="changeTextCase('all', 'lower')"
-                  >
-                    {{ tm("actions.lowercase") }}
-                  </button>
-                </div>
-              </div>
-            </div>
             <div class="se-row-inline">
               <label class="se-field-label">Alinhamento</label>
               <div class="se-seg">
@@ -724,23 +679,6 @@ const auxTextStyle = computed(() => {
 
 function markDirty() {
   dirty.value = true;
-}
-
-function changeTextCase(scope, letterCase) {
-  const targets = scope === "all" ? slides.value : [slides.value[current.value]];
-  let changed = false;
-  for (const slide of targets) {
-    if (!slide) continue;
-    for (const field of ["letra", "letra_aux"]) {
-      if (typeof slide[field] !== "string") continue;
-      const converted =
-        letterCase === "upper" ? slide[field].toUpperCase() : slide[field].toLowerCase();
-      if (converted === slide[field]) continue;
-      slide[field] = converted;
-      changed = true;
-    }
-  }
-  if (changed) markDirty();
 }
 
 function truncate(text) {
@@ -1805,6 +1743,7 @@ function replicateText(scope) {
   padding: 4cqh;
 }
 .se-preview-text {
+  text-transform: uppercase;
   /* font-family/font-weight/textShadow/letterSpacing/color/textAlign vêm
      inline via useSlideStyle (paridade com a projeção real). */
   width: 100%;
@@ -1889,6 +1828,7 @@ function replicateText(scope) {
 
 /* Textarea */
 .se-textarea {
+  text-transform: uppercase;
   width: 100%;
   resize: vertical;
   padding: 6px 8px;
@@ -1925,19 +1865,6 @@ function replicateText(scope) {
   color: var(--lj-text-subtle);
   font-weight: 500;
   flex-shrink: 0;
-}
-
-.se-case-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-}
-.se-case-row > span {
-  flex: 0 0 80px;
-}
-.se-case-row .se-actions-row {
-  flex: 1;
 }
 
 /* Linha horizontal: label à esquerda + controles à direita */
