@@ -19,6 +19,7 @@ import $storage from "@/helpers/Storage";
 import $alert from "@helpers/Alert";
 import Platform from "@/helpers/Platform";
 import WakeLock from "@/helpers/WakeLock";
+import { installFileDrop } from "@/helpers/FileDrop";
 import { requestPersistence } from "@/helpers/WebFileStore";
 import { initAppInstall } from "@/composables/useAppInstall";
 import {
@@ -1373,6 +1374,9 @@ $storage.hydrate().then(async () => {
       const file = files[files.length - 1];
       if (file) void openSlja(Path.local(file), { origin: "system" });
     });
+
+    // Arrastar um .slja para a janela principal o projeta (navegador e Electron).
+    installFileDrop();
 
     // PWA instalado no Chrome/ChromeOS: "Abrir com" um .slja entrega o arquivo
     // pela launchQueue (manifest.file_handlers). No Android o Chrome não oferece

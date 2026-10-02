@@ -818,6 +818,15 @@
     "import": {
       "action": "Importar Liturgia",
       "hint": "Carga un archivo .json (exportado de la versión web/desktop) o .ja (versión legada). Los ítems se agregarán al día activo."
+    },
+    "open_slja": {
+      "title": "Abrir música personalizada",
+      "hint_mac": "Para proyectar una música .slja sin añadirla a una colección, arrastra el archivo dentro de la ventana de la app o sobre su icono en el Dock, o haz doble clic en el archivo.",
+      "hint_desktop": "Para proyectar una música .slja sin añadirla a una colección, arrastra el archivo dentro de la ventana de la app o haz doble clic en él (o \"Abrir con\" LouvorJA).",
+      "hint_pwa": "Para proyectar una música .slja sin añadirla a una colección, arrastra el archivo dentro de la ventana de la app o usa \"Abrir con\" en el archivo.",
+      "hint_web": "Para proyectar una música .slja sin añadirla a una colección, arrastra el archivo dentro de la ventana del navegador.",
+      "hint_touch": "En este dispositivo no se pueden arrastrar archivos a la app. Para reproducir una música .slja, impórtala en Colecciones Personales.",
+      "keep": "Para guardarla, impórtala en Colecciones Personales."
     }
   },
   "popup": {
@@ -830,7 +839,9 @@
     "developer_mode_disabled": "Modo DESARROLLADOR desactivado!",
     "error_import_module": "Error al importar el módulo",
     "misconfigured_module": "Este módulo está mal configurado. ¡La identificación ingresada en manifest.json debe tener el mismo nombre que la carpeta donde se encuentra!",
-    "heic_nao_suportado": "No se pudo leer esta foto HEIC. Conviértela a JPEG e impórtala de nuevo."
+    "heic_nao_suportado": "No se pudo leer esta foto HEIC. Conviértela a JPEG e impórtala de nuevo.",
+    "drop_slja_hint": "Suelta el archivo .slja para proyectar",
+    "drop_slja_invalid": "Aquí solo se pueden abrir archivos .slja."
   },
   "ribbon": {
     "pages": {

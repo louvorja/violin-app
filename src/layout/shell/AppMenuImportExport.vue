@@ -54,20 +54,7 @@
         <LjIcon :icon="ICONS.ACTIONS.UPLOAD" size="18" />
         {{ $t("import_export.open_slja.title") }}
       </h3>
-      <div>
-        <button type="button" class="opt-btn" @click="slja.click()">
-          <LjIcon :icon="ICONS.ACTIONS.UPLOAD" size="14" />
-          {{ $t("import_export.open_slja.action") }}
-        </button>
-        <input
-          ref="sljaInput"
-          type="file"
-          accept=".slja"
-          style="display: none"
-          @change="onSljaSelected"
-        />
-        <p class="opt-hint">{{ $t("import_export.open_slja.hint") }}</p>
-      </div>
+      <p class="opt-hint">{{ openSljaHint }}</p>
     </section>
 
     <section v-if="importResult?.details" class="opt-section">
@@ -83,11 +70,12 @@
 <script setup lang="ts">
 import { LjIcon, LjSpinner } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
-import { ref } from "vue";
+import { computed, ref } from "vue";
+import { useI18n } from "vue-i18n";
+import Platform from "@/helpers/Platform";
 import { useBusy } from "@/composables/useBusy";
 import $liturgy from "@/helpers/Liturgy";
 import SljaConverter from "@/helpers/SljaConverter";
-import { openSlja } from "@/helpers/SljaPlayer";
 import { LiturgyItem, ScheduledCategory, type ScheduledItem } from "@/types/Liturgy";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 
@@ -163,17 +151,32 @@ const DELPHI_NAMED_COLORS: Record<string, string> = {
 /* ---- Estado ---- */
 
 const fileInput = ref<HTMLInputElement | null>(null);
-const sljaInput = ref<HTMLInputElement | null>(null);
-const slja = {
-  click: () => sljaInput.value?.click(),
-};
 
-async function onSljaSelected(event: Event): Promise<void> {
-  const input = event.target as HTMLInputElement;
-  const file = input.files?.[0];
-  input.value = "";
-  if (file) await openSlja(file, { origin: "picker" });
-}
+const { t } = useI18n();
+
+/**
+ * Como abrir um .slja sem adicioná-lo a uma coletânea depende de onde o app
+ * roda. A escolha é por capacidade, não por sistema: o PWA no Chrome desktop
+ * tem "Abrir com" (launchQueue) e o Android, não.
+ */
+const openSljaHint = computed<string>(() => {
+  const keep = t("import_export.open_slja.keep");
+  let how: string;
+  if (Platform.isDesktop) {
+    how = t(
+      Platform.platform === "darwin"
+        ? "import_export.open_slja.hint_mac"
+        : "import_export.open_slja.hint_desktop"
+    );
+  } else if (window.matchMedia?.("(hover: none) and (pointer: coarse)").matches) {
+    return t("import_export.open_slja.hint_touch");
+  } else if ("launchQueue" in window) {
+    how = t("import_export.open_slja.hint_pwa");
+  } else {
+    how = t("import_export.open_slja.hint_web");
+  }
+  return `${how} ${keep}`;
+});
 const exporting = ref<boolean>(false);
 const exportDone = ref<boolean>(false);
 const { busy: importing, run: runImport } = useBusy();
