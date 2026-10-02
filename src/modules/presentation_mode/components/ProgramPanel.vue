@@ -51,7 +51,7 @@
             <span :class="{ 'pm-clock__end--late': fc.status === 'late' }">
               {{ formatHHMM(fc.forecastEnd) }}
             </span>
-            <span class="pm-clock__planned"> / {{ formatHHMM(fc.plannedEnd) }}</span>
+            <span class="pm-clock__planned">/ {{ formatHHMM(fc.plannedEnd) }}</span>
           </span>
         </div>
       </div>
@@ -124,7 +124,11 @@
               :selected="element.id === selectedItemId"
               :open="!!openItems[element.id]"
               :menu="itemMenu(element)"
+              :live-child-id="element.id === liveItemId ? liveChildId : null"
               @select="onSelect(element.id)"
+              @child-preview="(childId: string) => emit('child-preview', element.id, childId)"
+              @child-play="(childId: string) => emit('child-play', element.id, childId)"
+              @children="(list: ProgramSubItem[]) => updateItem(element.id, { children: list })"
               @activate="emit('activate', element.id)"
               @toggle="toggleOpen(element.id)"
               @edit="emit('edit-item', element.id)"
@@ -176,7 +180,7 @@ import {
 import { ICONS } from "@/config/Icons";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { useModuleI18n } from "@/composables/useModuleI18n";
-import type { ProgramItem } from "@/types/Presentation";
+import type { ProgramItem, ProgramSubItem } from "@/types/Presentation";
 import ProgramItemRow from "./ProgramItemRow.vue";
 import { todayIso, useProgram } from "../composables/useProgram";
 import {
@@ -202,7 +206,12 @@ const emit = defineEmits<{
   "remove-item": [itemId: string];
   import: [];
   settings: [];
+  "child-preview": [itemId: string, childId: string];
+  "child-play": [itemId: string, childId: string];
 }>();
+
+/** O filho de momento que está no ar, para destacar na lista. */
+defineProps<{ liveChildId: string | null }>();
 
 const { t, tm, locale } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
 const {
@@ -220,6 +229,7 @@ const {
   setSessions,
   select,
   toggleOpen,
+  updateItem,
 } = useProgram();
 
 const now = ref(new Date());
@@ -298,9 +308,17 @@ const countsLabel = computed(() => {
 /** "+" flutuante e botão direito na parte vazia da lista. */
 const addMenu = computed<LjMenuItem[]>(() => [
   { label: tm("ribbon.btn.new_item"), icon: ICONS.ACTIONS.ADD, action: () => emit("new-item") },
-  { label: tm("ribbon.btn.new_session"), icon: ICONS.ACTIONS.ADD_BOX, action: () => emit("new-session") },
+  {
+    label: tm("ribbon.btn.new_session"),
+    icon: ICONS.ACTIONS.ADD_BOX,
+    action: () => emit("new-session"),
+  },
   { separator: true },
-  { label: tm("ribbon.btn.import_liturgy"), icon: ICONS.ACTIONS.IMPORT, action: () => emit("import") },
+  {
+    label: tm("ribbon.btn.import_liturgy"),
+    icon: ICONS.ACTIONS.IMPORT,
+    action: () => emit("import"),
+  },
 ]);
 
 function itemMenu(item: ProgramItem): LjMenuItem[] {
@@ -308,9 +326,21 @@ function itemMenu(item: ProgramItem): LjMenuItem[] {
     { label: tm("library.preview"), icon: ICONS.UI.EYE, action: () => onSelect(item.id) },
     { label: tm("library.play"), icon: ICONS.PLAYER.PLAY, action: () => emit("activate", item.id) },
     { separator: true },
-    { label: tm("program.edit_item"), icon: ICONS.ACTIONS.EDIT_OUTLINE, action: () => emit("edit-item", item.id) },
-    { label: tm("ribbon.btn.duplicate"), icon: ICONS.ACTIONS.DUPLICATE, action: () => emit("duplicate-item", item.id) },
-    { label: tm("ribbon.btn.delete_item"), icon: ICONS.ACTIONS.DELETE, action: () => emit("remove-item", item.id) },
+    {
+      label: tm("program.edit_item"),
+      icon: ICONS.ACTIONS.EDIT_OUTLINE,
+      action: () => emit("edit-item", item.id),
+    },
+    {
+      label: tm("ribbon.btn.duplicate"),
+      icon: ICONS.ACTIONS.DUPLICATE,
+      action: () => emit("duplicate-item", item.id),
+    },
+    {
+      label: tm("ribbon.btn.delete_item"),
+      icon: ICONS.ACTIONS.DELETE,
+      action: () => emit("remove-item", item.id),
+    },
   ];
 }
 

@@ -1,7 +1,8 @@
 import { computed, type Ref } from "vue";
 import Telemetry from "@/helpers/Telemetry";
 import Media from "@/composables/useMedia";
-import type { ProgramBibleRef } from "@/types/Presentation";
+import type { ProgramBibleRef, ProgramItem } from "@/types/Presentation";
+import { childIndex, stepChild } from "../program/moment";
 import { bibleRefOf, stepVerse, type BibleChapter } from "../program/bible";
 import type { Playable } from "../program/playable";
 import type { LibraryEntry } from "./useFileLibrary";
@@ -119,3 +120,31 @@ export function bibleSource(deps: {
   };
 }
 
+
+/** O momento do programa de onde saiu o arquivo (ou anúncio) no ar: anda entre os filhos dele. */
+export function momentSource(deps: {
+  sent: () => { itemId: string; childId: string } | null;
+  item: (itemId: string) => ProgramItem | null;
+  send: (itemId: string, childId: string) => void;
+}): NavigableSource {
+  const current = () => {
+    const sent = deps.sent();
+    const item = sent ? deps.item(sent.itemId) : null;
+    return sent && item ? { item, childId: sent.childId } : null;
+  };
+  return {
+    active: () => !!current(),
+    canStep: () => (current()?.item.children?.length ?? 0) > 1,
+    counter: () => {
+      const c = current();
+      const i = c ? childIndex(c.item, c.childId) : -1;
+      return c && i >= 0 ? `${i + 1}/${c.item.children?.length ?? 0}` : undefined;
+    },
+    step(to) {
+      const c = current();
+      const next = c ? stepChild(c.item, c.childId, to) : null;
+      if (c && next) deps.send(c.item.id, next.id);
+      return !!next;
+    },
+  };
+}

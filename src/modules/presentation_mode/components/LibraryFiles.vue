@@ -273,6 +273,7 @@ import { computed, onMounted, ref, watch } from "vue";
 import SeriesBar from "./SeriesBar.vue";
 import SeriesDialog from "./SeriesDialog.vue";
 import { useFolderSeries } from "../composables/useSeries";
+import { useMoments } from "../composables/useMoments";
 import draggable from "vuedraggable";
 import {
   LjButton,
@@ -382,6 +383,7 @@ function menuFor(entry: LibraryEntry): LjMenuItem[] {
       icon: ICONS.ACTIONS.ADD,
       action: () => emit("add", fileItem(entry, meta.get(entry.path) ?? null)),
     },
+    ...momentMenu(entry),
     { separator: true },
     {
       label: lib.isFavorite(entry) ? tm("library.unfavorite") : tm("library.favorite"),
@@ -468,6 +470,29 @@ function confirmRemove(path: string): void {
       if (resp === "yes") void lib.removeFolder(path);
     }
   );
+}
+
+/* ─── Momentos do programa: destino de fotos, vídeos e PDFs ─── */
+
+const momentTargets = useMoments(tm);
+
+function momentMenu(entry: LibraryEntry): LjMenuItem[] {
+  if (entry.isDir || !momentTargets.accepts(entry.path)) return [];
+  const title = entry.name.replace(/\.[^.]+$/, "");
+  return [
+    { separator: true },
+    { label: tm("moment.add_to") },
+    ...momentTargets.moments.value.map((m) => ({
+      label: m.title,
+      icon: ICONS.MEDIA.PLAYLIST,
+      action: () => momentTargets.addTo(m, [entry.path]),
+    })),
+    {
+      label: tm("moment.new_moment"),
+      icon: ICONS.ACTIONS.ADD,
+      action: () => emit("add", momentTargets.newMoment([entry.path], title)),
+    },
+  ];
 }
 
 /* ─── Série: a pasta aberta pode guardar o histórico do que já passou ─── */

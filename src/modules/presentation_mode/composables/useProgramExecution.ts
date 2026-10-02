@@ -63,7 +63,7 @@ function playMusicOnStage(source: LiturgyItem): boolean {
  * a autoridade da Bíblia no shell transforma a intenção no versículo projetado.
  */
 export function useProgramExecution() {
-  const { executeItem } = useLiturgyExecution();
+  const { executeItem, executeAnnouncements } = useLiturgyExecution();
   const bible = useBibleLibrary();
 
   /**
@@ -119,5 +119,24 @@ export function useProgramExecution() {
     executeItem(liturgyItem({ id: crypto.randomUUID(), tipo: LiturgyItemTypeEnum.ARQUIVO, dir: path, item: name }));
   }
 
-  return { execute, projectPath, sendBible };
+  /**
+   * Um filho de momento: o arquivo vai como qualquer arquivo da biblioteca; o
+   * anúncio abre a projeção de anúncios naquele ponto.
+   */
+  function executeChild(item: ProgramItem, childId: string): boolean {
+    const index = item.children?.findIndex((c) => c.id === childId) ?? -1;
+    const child = item.children?.[index];
+    if (!child) return false;
+    if (child.path) {
+      projectPath(child.path, child.title);
+      return true;
+    }
+    if (child.ref && item.source) {
+      void executeAnnouncements(item.source, index);
+      return true;
+    }
+    return false;
+  }
+
+  return { execute, executeChild, projectPath, sendBible };
 }

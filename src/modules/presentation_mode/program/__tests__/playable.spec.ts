@@ -147,3 +147,27 @@ describe("música personalizada", () => {
     expect(isOnAir(expected, signal({ kind: "music", customSongId: "uuid" }))).toBe(true);
   });
 });
+
+describe("filho de momento", () => {
+  const momentItem: ProgramItem = {
+    id: "m",
+    kind: "moment",
+    title: "Anúncios",
+    plannedMinutes: 5,
+    children: [
+      { id: "a", title: "Batismo", kind: "image", path: "/Igreja/Anúncios/Batismo.jpg" },
+      { id: "b", title: "Retiro", kind: "video", path: "/Igreja/Anúncios/Retiro.mp4" },
+    ],
+  };
+
+  it("é o mesmo pelo item e pelo filho", () => {
+    expect(samePlayable({ type: "child", itemId: "m", childId: "a" }, { type: "child", itemId: "m", childId: "a" })).toBe(true);
+    expect(samePlayable({ type: "child", itemId: "m", childId: "a" }, { type: "child", itemId: "m", childId: "b" })).toBe(false);
+  });
+
+  it("arquivo do momento está no ar como arquivo", () => {
+    const expected = expectationOf({ type: "child", itemId: "m", childId: "b" }, momentItem);
+    expect(expected).toEqual({ kind: "file" });
+    expect(isOnAir(expected, signal({ kind: "file" }))).toBe(true);
+  });
+});

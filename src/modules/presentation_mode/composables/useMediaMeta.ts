@@ -116,9 +116,21 @@ function _pump(): void {
   }
 }
 
+/** Uma entrada mínima para um arquivo que só se conhece pelo caminho (filho de um momento). */
+function entryOf(path: string): LibraryEntry {
+  const name = path.split(/[\\/]/).pop() ?? path;
+  return { name, path, isDir: false, ext: name.includes(".") ? (name.split(".").pop() ?? "").toLowerCase() : "", size: 0, mtimeMs: 0 };
+}
+
 export function useMediaMeta() {
   return {
     meta: _meta,
+    /** Miniatura de um arquivo pelo caminho; pede a leitura na primeira vez. */
+    thumbOf(path: string): string | undefined {
+      const entry = entryOf(path);
+      if (!_meta.has(path)) this.request(entry);
+      return _meta.get(path)?.thumb;
+    },
     request(entry: LibraryEntry, { priority = false } = {}): void {
       if (entry.isDir || _meta.has(entry.path) || _queued.has(entry.path)) return;
       if (!fileKind(entry.ext) || fileKind(entry.ext) === "pdf" || fileKind(entry.ext) === "slja") return;

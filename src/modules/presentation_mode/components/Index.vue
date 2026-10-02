@@ -6,7 +6,14 @@
       :style="{ '--pm-library-h': `${libraryLayout.height.value}px` }"
     >
       <ProgramPanel
+        :live-child-id="liveOrigin?.type === 'child' ? liveOrigin.childId : null"
         @activate="activate"
+        @child-preview="
+          (itemId: string, childId: string) => stage.show({ type: 'child', itemId, childId })
+        "
+        @child-play="
+          (itemId: string, childId: string) => dispatch({ type: 'child', itemId, childId })
+        "
         @preview="(id: string) => stage.show({ type: 'program', itemId: id })"
         @edit-item="openEditItem"
         @edit-session="openEditSession"
@@ -50,12 +57,35 @@
             />
           </div>
         </header>
+        <!-- Momento em prévia: os arquivos dele em grade; clicar manda ao ar. -->
+        <MomentStage
+          v-if="momentPreview"
+          :item="momentPreview"
+          :live-child-id="null"
+          :locked="outputLocked"
+          @pick="
+            (childId: string) => dispatch({ type: 'child', itemId: momentPreview!.id, childId })
+          "
+        />
         <StagePreview
-          v-if="stagePreview && previewView"
+          v-else-if="stagePreview && previewView"
           :view="previewView"
           @play="playPreview"
           @play-return="playPreviewOnReturn"
         />
+        <!-- Arquivo de um momento no ar: vídeo com controles e a faixa dos outros; foto, a grade. -->
+        <template v-else-if="liveMoment">
+          <StageVideo v-if="showVideoStage" :locked="outputLocked" />
+          <MomentStage
+            :item="liveMoment"
+            :live-child-id="liveOrigin?.type === 'child' ? liveOrigin.childId : null"
+            :locked="outputLocked"
+            :strip="showVideoStage"
+            @pick="
+              (childId: string) => dispatch({ type: 'child', itemId: liveMoment!.id, childId })
+            "
+          />
+        </template>
         <StageSlides
           v-else-if="showSlideGrid"
           :subtitle="liveProgramItem?.kind === 'music' ? liveProgramItem.subtitle : undefined"
@@ -144,7 +174,7 @@ import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { useModuleI18n } from "@/composables/useModuleI18n";
 import { isModuleExpanded, toggleModuleExpanded } from "@/composables/useModuleExpanded";
-import type { ProgramBibleRef, ProgramItem, ProgramSession } from "@/types/Presentation";
+import type { ProgramBibleRef, ProgramItem } from "@/types/Presentation";
 import ProgramPanel from "./ProgramPanel.vue";
 import ProgramItemDialog from "./ProgramItemDialog.vue";
 import ProgramSessionDialog from "./ProgramSessionDialog.vue";
@@ -153,6 +183,7 @@ import OutputsPanel from "./OutputsPanel.vue";
 import StageSlides from "./StageSlides.vue";
 import StageVideo from "./StageVideo.vue";
 import StagePreview from "./StagePreview.vue";
+import MomentStage from "./MomentStage.vue";
 import { useStage } from "../composables/useStage";
 import { expectationOf, isOnAir, samePlayable, type Playable } from "../program/playable";
 import LibraryPanel, { type LibraryTab } from "./LibraryPanel.vue";
@@ -189,6 +220,7 @@ import { useClicker } from "../composables/useClicker";
 import {
   bibleSource,
   fileQueueSource,
+  momentSource,
   slidesSource,
   useLiveNavigation,
 } from "../composables/useLiveNavigation";
@@ -196,6 +228,7 @@ import { useBibleLibrary } from "../composables/useBibleLibrary";
 import { previewViewOf } from "../program/previewView";
 import { useLibraryLayout } from "../composables/useLibraryLayout";
 import { useProgramLiturgy } from "../composables/useProgramLiturgy";
+import { useProgramEditing } from "../composables/useProgramEditing";
 import { module as manifest } from "../manifest";
 
 const moduleId = ModuleEnum.PRESENTATION_MODE;
@@ -208,14 +241,8 @@ const {
   selectedItemId,
   ensureLoaded,
   setPlannedStart,
-  addSession,
-  updateSession,
-  removeSession,
   addItem,
-  updateItem,
   duplicateItem,
-  removeItem,
-  sessionOf,
   goLive,
   toggleOpen,
   preparedItemId,
@@ -224,7 +251,7 @@ const {
   setOutputLocked,
   prepare,
 } = useProgram();
-const { execute, projectPath, sendBible } = useProgramExecution();
+const { execute, executeChild, projectPath, sendBible } = useProgramExecution();
 const bibleLibrary = useBibleLibrary();
 const { importFromLiturgy, saveAsLiturgy } = useProgramLiturgy();
 const stage = useStage();
@@ -272,13 +299,14 @@ function dispatch(
   playable: Playable,
   { slideIndex = 0, mode = "sung", force = false }: DispatchOptions = {}
 ): void {
-  const item = playable.type === "program" ? findItem(playable.itemId) : null;
-  if (playable.type === "program") {
-    if (!item) return;
-    if (item.children?.length) {
-      toggleOpen(item.id, true);
-      return;
-    }
+  const item =
+    playable.type === "program" || playable.type === "child" ? findItem(playable.itemId) : null;
+  if ((playable.type === "program" || playable.type === "child") && !item) return;
+  // Momento: abrir o item manda o primeiro arquivo; o passador anda pelos outros.
+  if (playable.type === "program" && item?.children?.length) {
+    toggleOpen(item.id, true);
+    dispatch({ type: "child", itemId: item.id, childId: item.children[0].id }, { force });
+    return;
   }
   if (outputLocked.value && !force) {
     if (item) prepare(item.id);
@@ -287,7 +315,11 @@ function dispatch(
 
   stage.show(playable);
   const expected = expectationOf(playable, item, mode);
-  if (item) {
+  if (playable.type === "child" && item) {
+    goLive(item.id);
+    executeChild(item, playable.childId);
+    Telemetry.track("presentation_moment_child_live", { kind: item.kind });
+  } else if (item) {
     goLive(item.id);
     execute(item);
     Telemetry.track("presentation_item_live", { kind: item.kind });
@@ -368,7 +400,9 @@ const previewIsLive = computed(() => {
 const stagePreview = computed(() => !!stage.preview.value && !previewIsLive.value);
 const previewView = computed(() => {
   const t = stage.preview.value;
-  return t ? previewViewOf(t, t.type === "program" ? findItem(t.itemId) : null) : null;
+  return t
+    ? previewViewOf(t, t.type === "program" || t.type === "child" ? findItem(t.itemId) : null)
+    : null;
 });
 
 /**
@@ -451,9 +485,24 @@ const showVideoStage = computed(
     (liveKind.value === "file" && live.file.value?.type === "video")
 );
 
-const liveProgramItem = computed(() =>
-  liveOrigin.value?.type === "program" ? findItem(liveOrigin.value.itemId) : null
+/** O item do programa no ar — o próprio, ou o momento do filho que está no ar. */
+/** Momento (ou anúncios) em prévia: o palco mostra a grade dos arquivos dele. */
+const momentPreview = computed(() => {
+  const t = stage.preview.value;
+  if (!stagePreview.value || t?.type !== "program") return null;
+  const item = findItem(t.itemId);
+  return item && (item.kind === "moment" || item.children?.length) ? item : null;
+});
+
+/** O momento cujo arquivo está no ar. */
+const liveMoment = computed(() =>
+  liveOrigin.value?.type === "child" ? liveProgramItem.value : null
 );
+
+const liveProgramItem = computed(() => {
+  const origin = liveOrigin.value;
+  return origin?.type === "program" || origin?.type === "child" ? findItem(origin.itemId) : null;
+});
 
 const stageIcon = computed(() => {
   if (stagePreview.value) return previewView.value?.icon ?? null;
@@ -567,6 +616,14 @@ const onlineQueue = useOnlineQueue({
 
 const navigation = useLiveNavigation(
   [
+    momentSource({
+      sent: () => {
+        const sent = sentWhile(["file", "announcements"]);
+        return sent?.type === "child" ? sent : null;
+      },
+      item: (itemId) => findItem(itemId),
+      send: (itemId, childId) => dispatch({ type: "child", itemId, childId }),
+    }),
     bibleSource({
       sent: sentBible,
       chapterOf: (ref) => bibleLibrary.chapterOf(ref),
@@ -600,6 +657,8 @@ const queueCounter = navigation.counter;
 useSeriesRecorder(() => {
   const origin = liveOrigin.value;
   if (origin?.type === "file") return origin.entry.path;
+  if (origin?.type === "child")
+    return findItem(origin.itemId)?.children?.find((c) => c.id === origin.childId)?.path ?? null;
   return origin?.type === "program" ? (findItem(origin.itemId)?.source?.dir ?? null) : null;
 });
 
@@ -640,89 +699,25 @@ function toggleLock(): void {
   if (queued) activate(queued, { force: true });
 }
 
-/* ─── Itens ─── */
+/* ─── Itens e sessões: os diálogos de edição do programa ─── */
 
-const itemDialogOpen = ref(false);
-const editingItem = ref<ProgramItem | null>(null);
-const editingSessionId = ref<string | null>(null);
-
-/** Garante uma sessão para receber o item: programa vazio ganha a sessão padrão. */
-function ensureSession(): string {
-  const selected = selectedItemId.value ? sessionOf(selectedItemId.value) : null;
-  if (selected) return selected.id;
-  const last = program.value.sessions.at(-1);
-  return last ? last.id : addSession(tm("program.default_session")).id;
-}
-
-function openNewItem(): void {
-  editingItem.value = null;
-  editingSessionId.value = ensureSession();
-  itemDialogOpen.value = true;
-}
-
-function openEditItem(itemId: string): void {
-  const item = findItem(itemId);
-  if (!item) return;
-  editingItem.value = item;
-  editingSessionId.value = sessionOf(itemId)?.id ?? null;
-  itemDialogOpen.value = true;
-}
-
-function onSaveItem({ item, sessionId }: { item: ProgramItem; sessionId: string }): void {
-  if (editingItem.value) updateItem(item.id, item, sessionId);
-  else addItem(item, sessionId);
-}
-
-function confirmRemoveItem(itemId: string | null): void {
-  const item = itemId ? findItem(itemId) : null;
-  if (!item) return;
-  $alert.yesno(
-    { title: alertKey("alerts.remove_item_title"), text: alertKey("alerts.remove_item") },
-    (resp?: string) => {
-      if (resp !== "yes") return;
-      removeItem(item.id);
-      itemDialogOpen.value = false;
-    }
-  );
-}
-
-function duplicateSelected(): void {
-  if (selectedItemId.value) duplicateItem(selectedItemId.value);
-}
-
-/* ─── Sessões ─── */
-
-const sessionDialogOpen = ref(false);
-const editingSession = ref<ProgramSession | null>(null);
-
-function openNewSession(): void {
-  editingSession.value = null;
-  sessionDialogOpen.value = true;
-}
-
-function openEditSession(sessionId: string): void {
-  editingSession.value = program.value.sessions.find((s) => s.id === sessionId) ?? null;
-  sessionDialogOpen.value = !!editingSession.value;
-}
-
-function onSaveSession(label: string): void {
-  if (editingSession.value) updateSession(editingSession.value.id, { label });
-  else addSession(label);
-}
-
-function confirmRemoveSession(): void {
-  const session = editingSession.value;
-  if (!session) return;
-  const text = session.items.length ? "alerts.remove_session_items" : "alerts.remove_session";
-  $alert.yesno(
-    { title: alertKey("alerts.remove_session_title"), text: alertKey(text) },
-    (resp?: string) => {
-      if (resp !== "yes") return;
-      removeSession(session.id);
-      sessionDialogOpen.value = false;
-    }
-  );
-}
+const {
+  itemDialogOpen,
+  editingItem,
+  editingSessionId,
+  ensureSession,
+  openNewItem,
+  openEditItem,
+  onSaveItem,
+  confirmRemoveItem,
+  duplicateSelected,
+  sessionDialogOpen,
+  editingSession,
+  openNewSession,
+  openEditSession,
+  onSaveSession,
+  confirmRemoveSession,
+} = useProgramEditing({ findItem, tm, alertKey });
 
 /* ─── Programa ─── */
 

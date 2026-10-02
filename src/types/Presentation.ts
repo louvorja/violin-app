@@ -11,6 +11,8 @@ export type ProgramItemKind =
   | "presentation"
   | "bible"
   | "announcements"
+  /** Momento do culto com uma lista de fotos, vídeos e PDFs (anúncios, missionário…). */
+  | "moment"
   | "note"
   | "site"
   | "overlay"
@@ -33,6 +35,8 @@ export interface ProgramSubItem {
   seconds?: number;
   /** Id do anúncio (announcements.library) que este sub-item projeta. */
   ref?: string;
+  /** Arquivo da biblioteca (foto, vídeo, PDF) que este sub-item projeta. */
+  path?: string;
 }
 
 export interface ProgramItem {

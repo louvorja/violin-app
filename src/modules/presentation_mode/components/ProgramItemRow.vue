@@ -17,7 +17,7 @@
       >
         <span class="pm-row__time">{{ start }}</span>
         <button
-          v-if="hasChildren"
+          v-if="expandable"
           type="button"
           class="pm-row__chevron"
           :aria-expanded="open"
@@ -33,7 +33,8 @@
           <span v-if="item.subtitle" class="pm-row__subtitle">{{ item.subtitle }}</span>
         </div>
         <span v-if="live" class="pm-live-badge">
-          <span class="pm-live-badge__dot" />{{ tm("program.live") }}
+          <span class="pm-live-badge__dot" />
+          {{ tm("program.live") }}
         </span>
         <span v-else-if="prepared" class="pm-queued-badge">{{ tm("program.queued") }}</span>
         <LjIcon
@@ -57,16 +58,60 @@
       </div>
     </LjContextMenu>
 
-    <ol v-if="hasChildren && open" class="pm-subitems">
-      <li v-for="(child, i) in item.children" :key="child.id" class="pm-subitem">
-        <span class="pm-subitem__n">{{ i + 1 }}</span>
-        <span class="pm-subitem__thumb" />
-        <span class="pm-subitem__title">{{ child.title }}</span>
-        <span v-if="child.seconds" class="pm-subitem__duration">
-          {{ formatDuration(child.seconds / 60) }}
-        </span>
-      </li>
-    </ol>
+    <draggable
+      v-if="hasChildren && open"
+      :model-value="item.children ?? []"
+      item-key="id"
+      tag="ol"
+      class="pm-subitems"
+      :disabled="item.kind !== 'moment'"
+      :animation="150"
+      ghost-class="pm-subitem--ghost"
+      @update:model-value="(list: ProgramSubItem[]) => emit('children', list)"
+    >
+      <template #item="{ element: child, index: i }">
+        <li
+          class="pm-subitem"
+          :class="{ 'pm-subitem--live': child.id === liveChildId }"
+          role="button"
+          tabindex="0"
+          :title="child.title"
+          :data-testid="`pm-child-${child.title}`"
+          @click="emit('child-preview', child.id)"
+          @dblclick="emit('child-play', child.id)"
+          @keydown.enter.self="emit('child-play', child.id)"
+        >
+          <span class="pm-subitem__n">{{ i + 1 }}</span>
+          <span class="pm-subitem__thumb">
+            <img v-if="child.path && thumbOf(child.path)" :src="thumbOf(child.path)" alt="" />
+            <LjIcon v-else :icon="KIND_ICONS[(child as ProgramSubItem).kind]" :size="11" />
+          </span>
+          <span class="pm-subitem__title">{{ child.title }}</span>
+          <span v-if="child.seconds" class="pm-subitem__duration">
+            {{ formatDuration(child.seconds / 60) }}
+          </span>
+          <button
+            v-if="item.kind === 'moment'"
+            type="button"
+            class="pm-subitem__remove"
+            :title="tm('moment.remove')"
+            :aria-label="tm('moment.remove')"
+            @click.stop="
+              emit(
+                'children',
+                (item.children ?? []).filter((c) => c.id !== child.id)
+              )
+            "
+            @dblclick.stop
+          >
+            <LjIcon :icon="ICONS.ACTIONS.CLOSE" :size="10" />
+          </button>
+        </li>
+      </template>
+    </draggable>
+    <p v-else-if="open && item.kind === 'moment'" class="pm-subitems pm-subitems--empty">
+      {{ tm("moment.empty") }}
+    </p>
   </div>
 </template>
 
@@ -76,7 +121,9 @@ import { LjContextMenu, LjIcon, type LjMenuItem } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { useModuleI18n } from "@/composables/useModuleI18n";
-import type { ProgramItem } from "@/types/Presentation";
+import draggable from "vuedraggable";
+import type { ProgramItem, ProgramSubItem } from "@/types/Presentation";
+import { useMediaMeta } from "../composables/useMediaMeta";
 import { KIND_ICONS } from "../program/kinds";
 import { formatDuration } from "../program/time";
 
@@ -91,6 +138,8 @@ const props = defineProps<{
   selected: boolean;
   open: boolean;
   menu: LjMenuItem[];
+  /** O filho deste item que está no ar (momento). */
+  liveChildId?: string | null;
 }>();
 
 const emit = defineEmits<{
@@ -98,11 +147,19 @@ const emit = defineEmits<{
   activate: [];
   toggle: [];
   edit: [];
+  "child-preview": [childId: string];
+  "child-play": [childId: string];
+  /** Momento: nova lista de filhos (reordenada ou com um removido). */
+  children: [list: ProgramSubItem[]];
 }>();
+
+const { thumbOf } = useMediaMeta();
 
 const { tm } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
 
 const hasChildren = computed(() => (props.item.children?.length ?? 0) > 0);
+// Momento recém-criado (vazio) também abre: a linha explica como adicionar arquivos.
+const expandable = computed(() => hasChildren.value || props.item.kind === "moment");
 </script>
 
 <style scoped>
@@ -308,11 +365,69 @@ const hasChildren = computed(() => (props.item.children?.length ?? 0) > 0);
 }
 
 .pm-subitem__thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 34px;
   height: 20px;
   flex-shrink: 0;
+  overflow: hidden;
   border-radius: 2px;
   background: var(--lj-live-stage-bg);
+  color: var(--lj-white-alpha-50);
+}
+
+.pm-subitem__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.pm-subitem {
+  cursor: pointer;
+}
+
+.pm-subitem:hover {
+  background: var(--lj-live-active-bg);
+}
+
+.pm-subitem:focus-visible {
+  outline: none;
+  box-shadow: var(--lj-ui-focus);
+}
+
+.pm-subitem--live {
+  box-shadow: inset 3px 0 0 var(--lj-orange);
+  font-weight: var(--lj-weight-semibold);
+}
+
+.pm-subitem--ghost {
+  opacity: 0.5;
+}
+
+.pm-subitem__remove {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--lj-text-muted);
+  cursor: pointer;
+}
+
+.pm-subitem:hover .pm-subitem__remove,
+.pm-subitem__remove:focus-visible {
+  display: flex;
+}
+
+.pm-subitems--empty {
+  font-size: 11px;
+  color: var(--lj-text-subtle);
 }
 
 .pm-subitem__title {

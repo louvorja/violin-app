@@ -32,10 +32,15 @@ export function programView(item: ProgramItem): PreviewView {
   return { kind: "other", title: item.title, icon: KIND_ICONS[item.kind], playable: true };
 }
 
-/** Como o palco mostra um Playable em prévia. `item` é o do programa, quando o alvo é um. */
+/** Como o palco mostra um Playable em prévia. `item` é o do programa (ou o momento do filho). */
 export function previewViewOf(target: Playable, item: ProgramItem | null): PreviewView | null {
   if (target.type === "program") return item ? programView(item) : null;
   if (target.type === "file") return fileView(target.entry.path, target.entry.name);
+  if (target.type === "child") {
+    const child = item?.children?.find((c) => c.id === target.childId);
+    if (!child) return null;
+    return child.path ? fileView(child.path, child.title) : { kind: "other", title: child.title, icon: KIND_ICONS[child.kind], playable: true };
+  }
   if (target.type === "online") {
     return { kind: "image", title: target.title, icon: KIND_ICONS.online_video, playable: true, url: youtubeThumb(target.videoId) };
   }

@@ -83,6 +83,7 @@
     "presentation": "Presentación",
     "bible": "Biblia",
     "announcements": "Anuncios",
+    "moment": "Momento (fotos y videos)",
     "note": "Anotación",
     "site": "Sitio",
     "overlay": "Superposición",
@@ -111,7 +112,8 @@
     "missing_file": "Elija el archivo.",
     "missing_url": "Informe una dirección que empiece con http:// o https://.",
     "missing_title": "Informe el título.",
-    "version": "Versión"
+    "version": "Versión",
+    "moment_hint": "Después de crearlo, agrega fotos, videos y PDFs desde la biblioteca: en el menú ⋮ del archivo, \"Agregar al momento\", o arrastrando el archivo al ítem."
   },
   "session_dialog": {
     "new_title": "Nueva sesión",
@@ -317,5 +319,13 @@
     "conflict_last": "Último: {file} ({date})",
     "conflict_use": "Usar esta",
     "conflict_merge": "Unir todas (recomendado)"
+  },
+  "moment": {
+    "remove": "Quitar del momento",
+    "empty": "Aún no hay archivos. En la pestaña Archivos, usa el menú ⋮ → \"Agregar al momento\", o arrastra el archivo hasta aquí.",
+    "add_to": "Agregar al momento",
+    "new_moment": "Nuevo momento con este archivo",
+    "added": "Agregado a \"{name}\".",
+    "grid_hint": "Clic para enviar al aire · Siguiente/Anterior y el control recorren la lista"
   }
 }

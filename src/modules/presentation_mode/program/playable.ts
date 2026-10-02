@@ -22,7 +22,9 @@ export type Playable =
   /** `customId`: música personalizada — o `id_music` dela é só um número provisório da lista. */
   | { type: "song"; id_music: number; title: string; subtitle?: string; customId?: string }
   | { type: "bible"; ref: ProgramBibleRef }
-  | { type: "online"; videoId: string; title: string; channel?: string };
+  | { type: "online"; videoId: string; title: string; channel?: string }
+  /** Um arquivo ou anúncio de dentro de um momento do programa. */
+  | { type: "child"; itemId: string; childId: string };
 
 export function samePlayable(a: Playable, b: Playable): boolean {
   if (a.type === "program" && b.type === "program") return a.itemId === b.itemId;
@@ -32,6 +34,7 @@ export function samePlayable(a: Playable, b: Playable): boolean {
   }
   if (a.type === "bible" && b.type === "bible") return samePassage(a.ref, b.ref);
   if (a.type === "online" && b.type === "online") return a.videoId === b.videoId;
+  if (a.type === "child" && b.type === "child") return a.itemId === b.itemId && a.childId === b.childId;
   return false;
 }
 
@@ -92,6 +95,11 @@ export function expectationOf(
   }
   if (playable.type === "bible") return { kind: "bible", passage: playable.ref };
   if (playable.type === "online") return { kind: "online_video", videoId: playable.videoId };
+  if (playable.type === "child") {
+    const child = item?.children?.find((c) => c.id === playable.childId);
+    if (child?.path) return fromPath(child.path);
+    return child?.ref ? { kind: "announcements" } : { kind: null };
+  }
   if (!item) return { kind: null };
   if (item.bible) return { kind: "bible", passage: item.bible };
   const src = item.source;

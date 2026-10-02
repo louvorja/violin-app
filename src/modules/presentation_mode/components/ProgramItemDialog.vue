@@ -67,8 +67,10 @@
         <LjInput v-model="url" type="url" placeholder="https://www.youtube.com/watch?v=…" />
       </LjField>
 
+      <p v-if="kind === 'moment'" class="pm-item-form__hint">{{ tm("item_dialog.moment_hint") }}</p>
+
       <LjField :label="tm('item_dialog.title')">
-        <LjInput v-model="title" :autofocus="!isNew || kind === 'note'" />
+        <LjInput v-model="title" :autofocus="!isNew || kind === 'note' || kind === 'moment'" />
       </LjField>
 
       <LjField v-if="kind === 'note'" :label="tm('item_dialog.note_text')">
@@ -84,7 +86,12 @@
         </div>
       </LjField>
       <LjField :label="tm('item_dialog.session')">
-        <LjSelect v-model="targetSessionId" :items="sessionOptions" item-value="value" item-label="label" />
+        <LjSelect
+          v-model="targetSessionId"
+          :items="sessionOptions"
+          item-value="value"
+          item-label="label"
+        />
       </LjField>
 
       <p v-if="error" class="pm-item-form__error">{{ error }}</p>
@@ -113,14 +120,7 @@
 
 <script setup lang="ts">
 import { computed, defineAsyncComponent, ref, watch } from "vue";
-import {
-  LjButton,
-  LjDialog,
-  LjField,
-  LjInput,
-  LjSelect,
-  LjTextarea,
-} from "@/components/ui";
+import { LjButton, LjDialog, LjField, LjInput, LjSelect, LjTextarea } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
@@ -177,7 +177,10 @@ const music = ref<MusicPick | null>(null);
 const musicMode = ref<MusicMode>("sung");
 
 const modeOptions = computed(() =>
-  modesFor(!!music.value?.has_instrumental_music).map((m) => ({ value: m.value, label: tm(m.label) }))
+  modesFor(!!music.value?.has_instrumental_music).map((m) => ({
+    value: m.value,
+    label: tm(m.label),
+  }))
 );
 
 // Trocar para uma música sem instrumental não pode deixar "Playback" escolhido.
@@ -197,9 +200,7 @@ const kindOptions = computed(() => {
   return kinds.map((k) => ({ value: k, label: tm(`kinds.${k}`) }));
 });
 
-const sessionOptions = computed(() =>
-  props.sessions.map((s) => ({ value: s.id, label: s.label }))
-);
+const sessionOptions = computed(() => props.sessions.map((s) => ({ value: s.id, label: s.label })));
 
 function basename(path: string): string {
   return path.split(/[\\/]/).pop() || path;
@@ -216,13 +217,18 @@ function reset(): void {
   targetSessionId.value = props.sessionId ?? props.sessions[0]?.id ?? null;
   music.value =
     source?.tipo === LiturgyItemTypeEnum.MUSICA && source.id_music
-      ? { id_music: source.id_music, name: source.item, has_instrumental_music: source.has_instrumental_music }
+      ? {
+          id_music: source.id_music,
+          name: source.item,
+          has_instrumental_music: source.has_instrumental_music,
+        }
       : null;
   musicMode.value = isMusicMode(source?.subtipo) ? source.subtipo : "sung";
   bible.value = item?.bible ?? null;
   filePath.value = source?.tipo === LiturgyItemTypeEnum.ARQUIVO ? source.dir : "";
   url.value = source?.url ?? "";
-  noteText.value = item?.notes ?? (source?.tipo === LiturgyItemTypeEnum.ANOTACAO ? source.subitem : "");
+  noteText.value =
+    item?.notes ?? (source?.tipo === LiturgyItemTypeEnum.ANOTACAO ? source.subitem : "");
 }
 
 watch(
@@ -307,7 +313,12 @@ function build(): ProgramItem | string {
       };
     case "bible":
       if (!bible.value) return "item_dialog.missing_verse";
-      return { ...common, kind: "bible", title: common.title || bible.value.reference, bible: bible.value };
+      return {
+        ...common,
+        kind: "bible",
+        title: common.title || bible.value.reference,
+        bible: bible.value,
+      };
     case "file":
       if (!filePath.value) return "item_dialog.missing_file";
       return {
@@ -321,6 +332,9 @@ function build(): ProgramItem | string {
           item: common.title || basename(filePath.value),
         }),
       };
+    case "moment":
+      if (!common.title) return "item_dialog.missing_title";
+      return { ...common, kind: "moment", children: base?.children ?? [] };
     case "online_video":
       if (!/^https?:\/\//i.test(url.value.trim())) return "item_dialog.missing_url";
       return {
@@ -366,6 +380,12 @@ function save(): void {
 </script>
 
 <style scoped>
+.pm-item-form__hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--lj-text-muted);
+}
+
 .pm-item-form {
   display: flex;
   flex-direction: column;
