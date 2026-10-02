@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import { useConnectivity, reportNetworkResult, _resetConnectivity } from "@/composables/useConnectivity";
 import $appdata from "@/helpers/AppData";
@@ -80,6 +80,21 @@ describe("useConnectivity", () => {
     reportNetworkResult(false);
     reportNetworkResult(false);
     expect(guardNetwork()).toBe(false);
+  });
+
+  it("a sonda sem resposta derruba sozinha, mesmo na carência do despertar", async () => {
+    // Aberto sem internet, nada chega a falhar: é a sonda do boot que descobre.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("Load failed");
+      })
+    );
+    const { isOnline, recheck } = useConnectivity();
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(await recheck()).toBe(false);
+    expect(isOnline.value).toBe(false);
+    vi.unstubAllGlobals();
   });
 
   it("registra desde quando está fora", () => {
