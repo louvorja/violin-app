@@ -9,6 +9,7 @@ import { DB_TABLE } from "@/constants/DbTables";
 import type { BibleVersion } from "@/types/Bible";
 import type { BundleProgress } from "@/types/Database";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
+import { useAppInstall } from "@/composables/useAppInstall";
 import Libras from "@/helpers/Libras";
 import BundleInstaller from "@/helpers/BundleInstaller";
 import BibleBundleInstaller from "@/helpers/BibleBundleInstaller";
@@ -168,6 +169,7 @@ function bumpBibleRevision(): void {
 
 export function useSyncManager() {
   const { t, locale } = useI18n();
+  const { suggest: suggestInstall } = useAppInstall();
   const bgTasks = useBackgroundTasks();
 
   // Scan
@@ -1019,6 +1021,9 @@ export function useSyncManager() {
         downloadCompletedMsg.value = result.message || "Já está atualizado.";
       } else if (result?.queued != null) {
         downloadProgress.value = { ...downloadProgress.value, total: result.queued };
+        if (result.queued > 0) {
+          suggestInstall("offline_downloads", t("shell.pwa_install.snack_offline"));
+        }
       }
     } catch (e) {
       downloading.value = false;

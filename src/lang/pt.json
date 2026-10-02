@@ -484,7 +484,7 @@
       "save_nothing": "Nada a remover do disco.",
       "cancel": "Cancelar Download",
       "progress": "{done} de {total} ({percent}%)",
-      "hint": "Selecione álbuns para baixar capas, áudios e imagens das músicas para uso offline.",
+      "hint": "Marque o que quer baixar. Desmarque o que já está baixado para removê-lo.",
       "loading": "Carregando coletâneas…",
       "preparing": "Preparando lista de arquivos… ({done}/{total})",
       "collect_failed": "Falha ao coletar lista de arquivos.",
@@ -506,7 +506,11 @@
       "disk_usage_loading": "Calculando uso em disco…",
       "disk_usage_detail": "{size} · {files} arquivo(s) · {albums} álbum(ns) completo(s){hymnal}",
       "disk_usage_hymnal": " · hinário",
-      "from_classic": "acervo da versão clássica"
+      "from_classic": "acervo da versão clássica",
+      "downloaded": "baixado",
+      "will_remove": "será removido",
+      "remove": "Remover {n} do aparelho",
+      "remove_confirm": "Remover {n} item(ns) baixado(s) do aparelho? Você pode baixar de novo depois."
     },
     "bible_download": {
       "title": "Bíblia",
@@ -531,14 +535,17 @@
     "storage": {
       "title": "Armazenamento",
       "web": {
-        "hint": "No navegador, as músicas baixadas ficam guardadas só neste aparelho e neste app. Limpar os dados do site ou desinstalar o app apaga tudo.",
+        "hint": "As músicas baixadas ficam só neste aparelho. Limpar os dados do site ou desinstalar o app apaga tudo.",
         "used": "Espaço usado pelo app",
         "quota": "Limite do navegador",
         "protected": "Armazenamento protegido",
         "protected_yes": "Sim",
         "protected_no": "Não",
-        "protected_hint": "Sem a proteção, o navegador pode apagar as músicas baixadas se o aparelho ficar sem espaço. Instalar o app na tela inicial costuma liberá-la.",
-        "protect": "Proteger armazenamento"
+        "protected_hint": "Sem proteção, o aparelho pode apagar as músicas baixadas quando faltar espaço.",
+        "protect": "Proteger armazenamento",
+        "protect_done": "Armazenamento protegido.",
+        "protect_denied_install": "O navegador negou a proteção. Instale o app para liberá-la. Toque para ver como.",
+        "protect_denied": "O navegador negou a proteção. Use o site com frequência e tente de novo."
       },
       "folder": "Pasta de dados",
       "restart_required": "Reinicie o aplicativo para concluir a mudança de todos os dados para esta pasta.",
@@ -811,11 +818,6 @@
     "import": {
       "action": "Importar Liturgia",
       "hint": "Carrega um arquivo .json (exportado da versão web/desktop) ou .ja (versão legada). Os itens serão restaurados conforme os dias do arquivo."
-    },
-    "open_slja": {
-      "title": "Abrir música personalizada",
-      "action": "Abrir arquivo .slja",
-      "hint": "Projeta uma música exportada (.slja) direto, sem adicioná-la a uma coletânea."
     }
   },
   "popup": {
@@ -1210,7 +1212,33 @@
     "proj_open_projection": "Abrir projeção (tela cheia)",
     "proj_open_return": "Abrir retorno (operador)",
     "proj_open_operator": "Abrir grade do operador",
-    "icon": "Ícone"
+    "icon": "Ícone",
+    "pwa_install": {
+      "title": "Instalar o LouvorJA",
+      "intro": "Instalado, o app abre como qualquer outro e guarda suas músicas com mais segurança.",
+      "why_offline_downloads": "Sem instalar, o celular pode apagar as músicas baixadas quando faltar espaço.",
+      "why_storage": "Sem instalar, o celular pode apagar as músicas baixadas quando faltar espaço.",
+      "why_files": "Instalado, o app abre arquivos .slja direto.",
+      "benefits_title": "Vantagens",
+      "benefit_offline": "Músicas baixadas protegidas",
+      "benefit_fullscreen": "Tela cheia, sem barra do navegador",
+      "benefit_shortcut": "Ícone na tela inicial",
+      "install_now": "Instalar",
+      "steps_title": "Como instalar",
+      "ios_1": "Abra esta página no Safari.",
+      "ios_2": "Toque em Compartilhar (quadrado com seta para cima).",
+      "ios_3": "Toque em \"Adicionar à Tela de Início\".",
+      "ios_4": "Toque em \"Adicionar\".",
+      "android_1": "Toque no menu do navegador (três pontos).",
+      "android_2": "Toque em \"Instalar app\" ou \"Adicionar à tela inicial\".",
+      "android_3": "Confirme em \"Instalar\".",
+      "chromium_1": "Toque no ícone de instalar na barra de endereço.",
+      "chromium_2": "Ou abra o menu (três pontos) e escolha \"Instalar LouvorJA\".",
+      "chromium_3": "Confirme em \"Instalar\".",
+      "unsupported": "Este navegador não instala apps. Use o Chrome ou o Edge (Android) ou o Safari (iPhone e iPad).",
+      "snack_offline": "Instale o app para não perder as músicas baixadas. Toque para ver como.",
+      "protected_install": "Como instalar"
+    }
   },
   "formatacao": {
     "title": "Formatação",

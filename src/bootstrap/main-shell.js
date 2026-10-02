@@ -20,6 +20,7 @@ import $alert from "@helpers/Alert";
 import Platform from "@/helpers/Platform";
 import WakeLock from "@/helpers/WakeLock";
 import { requestPersistence } from "@/helpers/WebFileStore";
+import { initAppInstall } from "@/composables/useAppInstall";
 import {
   API_URL,
   API_URL_DB,
@@ -1353,6 +1354,7 @@ $storage.hydrate().then(async () => {
       // Só o app instalado pede: o Chrome costuma conceder a ele, e o Firefox
       // abriria um aviso de permissão no meio do boot.
       if (window.matchMedia?.("(display-mode: standalone)").matches) void requestPersistence();
+      initAppInstall();
     }
 
     // Observabilidade de uso e diagnóstico. Não bloqueia o boot e é no-op em

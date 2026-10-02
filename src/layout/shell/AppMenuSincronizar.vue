@@ -193,6 +193,18 @@
                     <small class="opt-download-count">
                       · {{ hymnalIds.length }} {{ $t("options.collections_download.songs") }}
                     </small>
+                    <small
+                      v-if="cachedHymnalBaseline"
+                      class="opt-download-count"
+                      :class="selectedHymnal ? 'opt-tag--ok' : 'opt-tag--remove'"
+                    >
+                      ·
+                      {{
+                        selectedHymnal
+                          ? $t("options.collections_download.downloaded")
+                          : $t("options.collections_download.will_remove")
+                      }}
+                    </small>
                   </label>
                 </div>
 
@@ -211,6 +223,18 @@
                     <strong>{{ $t("options.collections_download.hymnal_1996") }}</strong>
                     <small class="opt-download-count">
                       · {{ hymnal1996Ids.length }} {{ $t("options.collections_download.songs") }}
+                    </small>
+                    <small
+                      v-if="cachedHymnal1996Baseline"
+                      class="opt-download-count"
+                      :class="selectedHymnal1996 ? 'opt-tag--ok' : 'opt-tag--remove'"
+                    >
+                      ·
+                      {{
+                        selectedHymnal1996
+                          ? $t("options.collections_download.downloaded")
+                          : $t("options.collections_download.will_remove")
+                      }}
                     </small>
                   </label>
                 </div>
@@ -258,6 +282,20 @@
                       </small>
                       <small v-if="classicAlbums.has(album.id_album)" class="opt-download-count">
                         · {{ $t("options.collections_download.from_classic") }}
+                      </small>
+                      <small
+                        v-else-if="cachedAlbumsBaseline.has(album.id_album)"
+                        class="opt-download-count"
+                        :class="
+                          selectedAlbums.has(album.id_album) ? 'opt-tag--ok' : 'opt-tag--remove'
+                        "
+                      >
+                        ·
+                        {{
+                          selectedAlbums.has(album.id_album)
+                            ? $t("options.collections_download.downloaded")
+                            : $t("options.collections_download.will_remove")
+                        }}
                       </small>
                     </label>
                   </div>
@@ -325,15 +363,17 @@
                   {{ $t("options.collections_download.start") }}
                 </button>
                 <button
+                  v-if="hasPendingRemovals || saving"
                   type="button"
-                  class="opt-btn"
-                  :disabled="!hasPendingRemovals || saving || scanningCache"
-                  @click="saveSelection"
+                  class="opt-btn opt-btn--danger"
+                  :disabled="saving || scanningCache"
+                  @click="confirmRemoval"
                 >
+                  <LjIcon :icon="ICONS.ACTIONS.DELETE_FILLED" size="14" />
                   {{
                     saving
                       ? $t("options.collections_download.saving")
-                      : $t("options.collections_download.save")
+                      : $t("options.collections_download.remove", { n: pendingRemovalCount })
                   }}
                 </button>
               </template>
@@ -508,6 +548,15 @@
             >
               <LjIcon :icon="ICONS.UI.HARDDISK" size="14" />
               {{ $t("options.storage.web.protect") }}
+            </button>
+            <button
+              v-if="canOfferInstall"
+              type="button"
+              class="opt-btn"
+              @click="openInstallGuide('storage')"
+            >
+              <LjIcon :icon="ICONS.UI.INSTALL" size="14" />
+              {{ $t("shell.pwa_install.protected_install") }}
             </button>
             <button type="button" class="opt-btn opt-btn--danger" @click="clearFiles">
               <LjIcon :icon="ICONS.ACTIONS.DELETE_FILLED" size="14" />
@@ -737,6 +786,7 @@ import { ICONS } from "@/config/Icons";
 import { LjIcon, LjProgress, LjTabs } from "@/components/ui";
 import type { LjTab } from "@/components/ui";
 import { useSyncManager } from "@/composables/useSyncManager";
+import { useAppInstall } from "@/composables/useAppInstall";
 import { requestPersistence, webStorageUsage, type WebStorageUsage } from "@/helpers/WebFileStore";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
 import {
@@ -976,6 +1026,14 @@ const hasPendingRemovals = computed<boolean>(() => {
   return false;
 });
 
+const pendingRemovalCount = computed<number>(() => {
+  let n = 0;
+  for (const id of cachedAlbumsBaseline.value) if (!selectedAlbums.value.has(id)) n += 1;
+  if (cachedHymnalBaseline.value && !selectedHymnal.value) n += 1;
+  if (cachedHymnal1996Baseline.value && !selectedHymnal1996.value) n += 1;
+  return n;
+});
+
 const bibleHasPendingRemovals = computed<boolean>(() => {
   if (bibleDownloadedBaseline.value.size === 0) return false;
   for (const id of bibleDownloadedBaseline.value) {
@@ -1166,6 +1224,13 @@ async function startDownloads(): Promise<void> {
 }
 
 /* ---- Salvar seleção (remover do disco) ---- */
+
+async function confirmRemoval(): Promise<void> {
+  const ok = await $alert.confirm(
+    t("options.collections_download.remove_confirm", { n: pendingRemovalCount.value })
+  );
+  if (ok) await saveSelection();
+}
 
 async function saveSelection(): Promise<void> {
   if (!hasPendingRemovals.value || !Platform.storage?.removeFiles) return;
@@ -1544,6 +1609,7 @@ async function clearJson(): Promise<void> {
   }) as (...args: unknown[]) => unknown);
 }
 
+const { canOffer: canOfferInstall, openGuide: openInstallGuide } = useAppInstall();
 const webUsage = ref<WebStorageUsage | null>(null);
 
 async function loadWebUsage(): Promise<void> {
@@ -1552,8 +1618,22 @@ async function loadWebUsage(): Promise<void> {
 }
 
 async function protectStorage(): Promise<void> {
-  await requestPersistence();
+  const granted = await requestPersistence();
   await loadWebUsage();
+  if (granted) {
+    $snackbar.success(t("options.storage.web.protect_done"));
+    return;
+  }
+  // O navegador decide sozinho e costuma negar fora do app instalado.
+  if (canOfferInstall.value) {
+    $snackbar.info(t("options.storage.web.protect_denied_install"), {
+      key: "protect-denied",
+      timeout: 8000,
+      action: () => openInstallGuide("storage"),
+    });
+  } else {
+    $snackbar.warning(t("options.storage.web.protect_denied"), { key: "protect-denied" });
+  }
 }
 
 watch(activeTab, (aba) => {
@@ -1687,6 +1767,13 @@ onBeforeUnmount(() => {
 }
 .opt-album {
   font-size: var(--lj-text-sm);
+}
+.opt-tag--ok {
+  color: var(--lj-success);
+}
+.opt-tag--remove {
+  color: var(--lj-danger);
+  font-weight: 600;
 }
 .opt-stats--compact {
   margin-bottom: 10px;

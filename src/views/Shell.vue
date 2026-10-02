@@ -54,6 +54,7 @@
       @close="onReleaseNotesClose"
     />
     <StartupCheckDialog v-if="startupCheckOpen" v-model="startupCheckOpen" />
+    <InstallAppDialog v-if="installDialogOpen" v-model="installDialogOpen" />
     <UpdateAvailableDialog
       v-if="updateDialogOpen"
       v-model="updateDialogOpen"
@@ -85,6 +86,7 @@ import ShellLiturgyPanel from "@/layout/shell/ShellLiturgyPanel.vue";
 const HotkeysCheatsheet = defineAsyncComponent(
   () => import("@/layout/shell/HotkeysCheatsheet.vue")
 );
+const InstallAppDialog = defineAsyncComponent(() => import("@/components/InstallAppDialog.vue"));
 const StartupCheckDialog = defineAsyncComponent(
   () => import("@/components/StartupCheckDialog.vue")
 );
@@ -117,7 +119,7 @@ import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
 import { hasOpenWebWindows } from "@/helpers/projection/webWindow";
 import { open as openProjection } from "@/helpers/Projection";
 import { useSyncManager } from "@/composables/useSyncManager";
-import { detectDesktopDownloadPlatform } from "@/helpers/DesktopDownload";
+import { useAppInstall } from "@/composables/useAppInstall";
 const ChatDrawer = defineAsyncComponent(() => import("@/components/ChatDrawer.vue"));
 import { useChat } from "@/composables/useChat";
 import ScheduledStore from "@/helpers/ScheduledStore";
@@ -139,13 +141,11 @@ const releaseNotes = ref<ReleaseNotes | null>(null);
 const updateDialogOpen = ref(false);
 const updateDialogVersion = ref("");
 const ready = ref(false);
-const browserDesktopPlatform =
-  typeof navigator === "undefined" ? "other" : detectDesktopDownloadPlatform(navigator);
+const { channel: installChannel, dialogOpen: installDialogOpen } = useAppInstall();
 
 const showDesktopDownload = computed(() => {
   return (
-    !Platform.isDesktop &&
-    browserDesktopPlatform !== "other" &&
+    installChannel.value === "desktop" &&
     width.value >= 720 &&
     !$appdata.get<string | null>("active_module", null)
   );
