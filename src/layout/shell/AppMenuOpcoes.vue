@@ -57,7 +57,9 @@
         <label class="opt-checkbox">
           <input
             type="checkbox"
-            :checked="getUserData<boolean>(KEYS.SHELL.LITURGY_VISIBLE, true) !== false"
+            :checked="
+              getUserData<boolean>(KEYS.SHELL.LITURGY_VISIBLE, liturgySidebarDefault()) !== false
+            "
             @change="saveUserData(KEYS.SHELL.LITURGY_VISIBLE, $c($event))"
           />
           <span>{{ $t("options.general.show_liturgy_sidebar") }}</span>
@@ -1528,6 +1530,7 @@
 import { LjButton, LjIcon, LjSelect } from "@/components/ui";
 import { computed, type ComputedRef, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { pickImageData } from "@/helpers/FilePicker";
+import { liturgySidebarDefault } from "@/helpers/LiturgySidebar";
 import { getSetting, saveSetting } from "@/helpers/SettingsStorage";
 import Broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";

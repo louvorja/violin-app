@@ -83,6 +83,7 @@ const BibleSpotlight = defineAsyncComponent(() => import("@components/BibleSpotl
 import RibbonBar from "@/layout/shell/RibbonBar.vue";
 import OpenModulesTabs from "@/layout/shell/OpenModulesTabs.vue";
 import ShellLiturgyPanel from "@/layout/shell/ShellLiturgyPanel.vue";
+import { liturgySidebarDefault } from "@/helpers/LiturgySidebar";
 const HotkeysCheatsheet = defineAsyncComponent(
   () => import("@/layout/shell/HotkeysCheatsheet.vue")
 );
@@ -164,7 +165,8 @@ const liturgyModuleOpen = computed(() => {
 
 const showLiturgySidebar = computed(
   () =>
-    !liturgyModuleOpen.value && $userdata.get<boolean>(KEYS.SHELL.LITURGY_VISIBLE, true) !== false
+    !liturgyModuleOpen.value &&
+    $userdata.get<boolean>(KEYS.SHELL.LITURGY_VISIBLE, liturgySidebarDefault()) !== false
 );
 
 useProjectionShutdown();
