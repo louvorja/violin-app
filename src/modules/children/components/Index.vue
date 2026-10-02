@@ -34,6 +34,11 @@
       </h2>
       <h2 v-else class="ch-heading">{{ tm("albums") }}</h2>
 
+      <LjAlert
+        v-if="offlineLibrary.active.value"
+        variant="info"
+        :text="i18nT('shell.offline_albums_only')"
+      />
       <LjProgress
         v-if="albumsLoading || musicsLoading"
         indeterminate
@@ -129,6 +134,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { useOfflineLibrary } from "@/composables/useOfflineLibrary";
 import { LjAlert, LjButton, LjEmpty, LjIcon, LjInput, LjProgress, LjTable } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { module as manifest } from "../manifest";
@@ -155,6 +161,7 @@ interface AlbumMusic {
 }
 
 const { t: i18nT, locale } = useI18n();
+const offlineLibrary = useOfflineLibrary(() => locale.value);
 const tm = (key: string): string => i18nT(`modules.children.${key}`);
 
 const albumsLoading = ref(false);
@@ -177,7 +184,11 @@ const disabledAlbums = useDisabledAlbums();
 const q = computed(() => search.value.trim().toLocaleLowerCase(locale.value));
 const searchLabel = computed(() => tm(selectedAlbum.value ? "search_musics" : "search_albums"));
 const enabledAlbums = computed(() =>
-  albums.value.filter((album) => isAlbumEnabled(album.id_album, disabledAlbums.value))
+  albums.value.filter(
+    (album) =>
+      isAlbumEnabled(album.id_album, disabledAlbums.value) &&
+      offlineLibrary.hasAlbum(album.id_album)
+  )
 );
 const filteredAlbums = computed(() =>
   enabledAlbums.value.filter(
@@ -186,7 +197,9 @@ const filteredAlbums = computed(() =>
 );
 const filteredMusics = computed(() =>
   musics.value.filter(
-    (music) => !q.value || music.name.toLocaleLowerCase(locale.value).includes(q.value)
+    (music) =>
+      offlineLibrary.hasMusic(music.id_music) &&
+      (!q.value || music.name.toLocaleLowerCase(locale.value).includes(q.value))
   )
 );
 // MusicMenuTable mede a viewport, mas esta tabela pode ocupar só um painel estreito.

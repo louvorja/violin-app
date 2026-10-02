@@ -36,6 +36,7 @@
       :has_scroll="has_scroll"
       sort_by="track"
       :file="`${locale}_${dataFile}`"
+      offline_filter
     >
       <thead>
         <tr>

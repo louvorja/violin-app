@@ -49,7 +49,9 @@
     },
     "datatable": {
       "alerts": {
-        "not_found": "Não foi possível localizar o arquivo para exibir essas informações!"
+        "not_found": "Não foi possível localizar o arquivo para exibir essas informações!",
+        "offline_downloaded_only": "Sem internet: mostrando só as músicas baixadas neste aparelho.",
+        "offline_no_catalog": "Sem internet, e o catálogo ainda não foi baixado neste aparelho. Conecte-se uma vez para baixá-lo."
       }
     },
     "ui": {
@@ -1040,6 +1042,7 @@
     "history": "Histórico",
     "remote_connected": "Conectado remotamente",
     "offline_title": "Sem conexão com a internet",
+    "offline_albums_only": "Sem internet: mostrando só os álbuns com músicas baixadas neste aparelho.",
     "offline_since": "Sem conexão desde {time}.",
     "offline_detail": "O LouvorJA continua funcionando com o que já está no computador. Músicas e imagens que ainda não foram baixadas não abrem até a conexão voltar.",
     "offline_action": "Esta ação precisa de internet.",

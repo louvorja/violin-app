@@ -49,7 +49,9 @@
     },
     "datatable": {
       "alerts": {
-        "not_found": "¡No se pudo encontrar el archivo para mostrar esta información!"
+        "not_found": "¡No se pudo encontrar el archivo para mostrar esta información!",
+        "offline_downloaded_only": "Sin internet: se muestran solo las canciones descargadas en este dispositivo.",
+        "offline_no_catalog": "Sin internet, y el catálogo aún no se ha descargado en este dispositivo. Conéctate una vez para descargarlo."
       }
     },
     "ui": {
@@ -1040,6 +1042,7 @@
     "history": "Historial",
     "remote_connected": "Conectado remotamente",
     "offline_title": "Sin conexión a internet",
+    "offline_albums_only": "Sin internet: se muestran solo los álbumes con canciones descargadas en este dispositivo.",
     "offline_since": "Sin conexión desde {time}.",
     "offline_detail": "LouvorJA sigue funcionando con lo que ya está en la computadora. Las músicas e imágenes que aún no se descargaron no abren hasta que vuelva la conexión.",
     "offline_action": "Esta acción necesita internet.",

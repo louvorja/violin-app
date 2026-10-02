@@ -754,14 +754,19 @@ export default {
    * fluxos exploratórios, como busca textual, que podem consultar milhares de
    * chaves e não devem transformar um cache incompleto em uma rajada de GETs.
    */
-  async getLocal<T = unknown>(file: string): Promise<T | null> {
+  async getLocal<T = unknown>(
+    file: string,
+    { remember = true }: { remember?: boolean } = {}
+  ): Promise<T | null> {
     const mem = _memory.get(file);
     if (mem && isValidV(mem.v)) return mem.data as T;
 
     try {
       const routed = await readRouted<T>(file, routeFor(file));
       if (routed !== null) {
-        _memory.set(file, { id: file, data: routed, ts: Date.now(), v: getVersion() });
+        // Varreduras de milhares de chaves passam `remember: false` para não
+        // encher a memória com registros que ninguém vai abrir.
+        if (remember) _memory.set(file, { id: file, data: routed, ts: Date.now(), v: getVersion() });
         return routed;
       }
     } catch {
