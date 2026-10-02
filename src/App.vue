@@ -70,6 +70,17 @@ const semFundoProprio = computed(() => {
 }
 
 @media (max-width: 700px) {
+  /* A faixa da barra de status é padding do container: pintá-la com a cor do
+     cabeçalho evita o degradê entre o preto do sistema e o cabeçalho. */
+  #app-container.app-container--shell::before {
+    content: "";
+    position: fixed;
+    inset: 0 0 auto 0;
+    height: env(safe-area-inset-top);
+    background: var(--lj-shell-chrome-bg);
+    pointer-events: none;
+  }
+
   #app-container.app-container--shell {
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
       env(safe-area-inset-left);
