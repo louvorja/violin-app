@@ -77,11 +77,12 @@ body.lj-shell-body {
   background-color: var(--lj-shell-chrome-bg);
 }
 
-/* As faixas das áreas seguras (barra de status, indicador de início) mostram o
-   <body>, não a superfície do tema — senão a de baixo fica branca no tema claro. */
+/* O topo não tem padding: a faixa da barra de status é da linha de abas da
+   RibbonBar, que precisa encostar no topo (ver o comentário lá). As outras
+   faixas seguras mostram o <body>, não a superfície do tema — senão a de baixo
+   fica branca no tema claro. */
 #app-container.app-container--shell {
   background-clip: content-box;
-  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
-    env(safe-area-inset-left);
+  padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 </style>
