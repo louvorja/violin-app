@@ -7,8 +7,9 @@
  * Integra com displays.js para persistir preferências de monitor por feature.
  */
 
-const { app, BrowserWindow } = require("electron");
+const { app, BrowserWindow, Menu } = require("electron");
 const displays = require("./displays.js");
+const { attachEditContextMenu } = require("./editContextMenu.js");
 const powerBlocker = require("./powerBlocker.js");
 const { createWindowCloseGate, DEFAULT_CLOSE_ACK_TIMEOUT_MS } = require("./windowCloseGate.js");
 const { backgroundWindows, prepareWindow } = require("./e2eWindowMode.js");
@@ -302,6 +303,7 @@ function _openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = 
     win.on("page-title-updated", (event) => event.preventDefault());
   }
   prepareWindow(win);
+  attachEditContextMenu(win, Menu);
   const windowMeta = {
     route,
     feature,
