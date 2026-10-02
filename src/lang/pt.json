@@ -119,6 +119,8 @@
   },
   "alert": {
     "close": "Fechar",
+    "retry": "Tentar de novo",
+    "technical_details": "Detalhes técnicos",
     "yes": "Sim",
     "no": "Não",
     "ok": "OK",

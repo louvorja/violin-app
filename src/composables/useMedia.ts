@@ -38,6 +38,7 @@ import { MusicActionEnum } from "@/enums/MusicActionEnum";
 import AudioLibrary from "@/helpers/AudioLibrary";
 import { slideTimes } from "@/helpers/CustomSongs";
 import Telemetry from "@/helpers/Telemetry";
+import { decodeOpusToWav, isOpusUrl, opusNeedsFallback } from "@/helpers/OpusFallback";
 import Platform from "@/helpers/Platform";
 import * as OnlineVideo from "@/helpers/OnlineVideo";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
@@ -714,6 +715,38 @@ async function _runStreamedYouTube(
   }
 }
 
+type AudioFailure = { text: string; retryable: boolean };
+
+function _audioFailure(error: unknown): AudioFailure {
+  const name = (error as { name?: string } | null)?.name;
+  if (name === "NotSupportedError")
+    return { text: "modules.media.alerts.unsupported", retryable: false };
+  if (name === "DecodeError") return { text: "modules.media.alerts.decode", retryable: true };
+  if (name === "NotAllowedError") return { text: "modules.media.alerts.blocked", retryable: false };
+  return { text: "modules.media.alerts.not_loaded", retryable: true };
+}
+
+function _alertAudioFailure(error: unknown, retry?: () => void): void {
+  const { text, retryable } = _audioFailure(error);
+  const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error || "");
+  const canRetry = retryable && !!retry;
+  $alert.error(
+    {
+      title: "modules.media.alerts.not_loaded_title",
+      text,
+      error: detail ? mediaDiagnosticMessage(detail) || detail : "",
+      color: "error",
+      buttons: [
+        ...(canRetry ? [{ text: "alert.retry", color: "primary", value: "retry" }] : []),
+        { text: "alert.close", color: "error", value: "close" },
+      ],
+    },
+    (a?: unknown) => {
+      if (a === "retry") retry?.();
+    }
+  );
+}
+
 function _loadAudioSrc(
   audioUrl: string,
   idCheck: string | number | null,
@@ -761,9 +794,11 @@ function _loadAudioSrc(
   // traria a trilha inteira antes de tocar, que é justamente a espera que se quer evitar.
   const streamsFromDisk =
     audioUrl.startsWith("louvorja://onlinevideo/") || OnlineVideo.isProgressiveUrl(audioUrl);
+  const needsOpusDecode = isOpusUrl(audioUrl) && opusNeedsFallback();
   if (
-    streamsFromDisk ||
-    ($appdata.get(KEYS.SHELL.IS_ONLINE) && $userdata.get(KEYS.MODULES.MEDIA.LAZY_LOAD))
+    !needsOpusDecode &&
+    (streamsFromDisk ||
+      ($appdata.get(KEYS.SHELL.IS_ONLINE) && $userdata.get(KEYS.MODULES.MEDIA.LAZY_LOAD)))
   ) {
     if (_activePlayback) {
       _activePlayback = { ..._activePlayback, lazy: true };
@@ -808,9 +843,7 @@ function _loadAudioSrc(
       requestTelemetry({ operation: "music_audio_request_open", id_music: idCheck })
     );
     if (!_keepVideoProjectionOnLoadError()) _self.close(true);
-    $alert.error({ text: "modules.media.alerts.not_loaded", error }, function (a?: unknown) {
-      if (a) requestRetry();
-    });
+    _alertAudioFailure(error, requestRetry);
     return;
   }
 
@@ -861,8 +894,32 @@ function _loadAudioSrc(
         })
       );
       if (ehRemota(audioUrl)) reportNetworkResult(true, "media");
-      const sourceUrl = URL.createObjectURL(this.response as Blob);
-      onSource(sourceUrl, false, requestContext?.original_source);
+      const finish = (blob: Blob): void => {
+        if (_loadingId !== idCheck) return;
+        onSource(URL.createObjectURL(blob), false, requestContext?.original_source);
+      };
+      if (needsOpusDecode) {
+        $appdata.set(KEYS.MODULES.MEDIA.LOADING, true);
+        decodeOpusToWav(this.response as Blob).then(
+          (wav) => {
+            $appdata.set(KEYS.MODULES.MEDIA.LOADING, false);
+            finish(wav);
+          },
+          (error) => {
+            $appdata.set(KEYS.MODULES.MEDIA.LOADING, false);
+            Telemetry.captureException(
+              error,
+              requestTelemetry({ operation: "music_opus_decode", id_music: idCheck })
+            );
+            if (_loadingId !== idCheck) return;
+            _switchingMode = false;
+            if (!_keepVideoProjectionOnLoadError()) _self.close(true);
+            _alertAudioFailure(error, requestRetry);
+          }
+        );
+      } else {
+        finish(this.response as Blob);
+      }
       console.info("[Media] arquivo direto transferido:", {
         source_type: _sourceType(audioUrl),
         bytes: this.response.size,
@@ -897,12 +954,7 @@ function _loadAudioSrc(
           elapsed_ms: elapsed,
         })
       );
-      $alert.error(
-        { text: "modules.media.alerts.not_loaded", error: request.statusText || "" },
-        function (a?: unknown) {
-          if (a) requestRetry();
-        }
-      );
+      _alertAudioFailure(request.statusText || "", requestRetry);
     }
   };
   const falhaDeRede = function (event?: Event) {
@@ -2641,15 +2693,9 @@ const _self = {
       const self = this;
       _audio.play(
         (e) => {
-          $alert.error(
-            { text: "modules.media.alerts.not_loaded", error: e || "" },
-            function (a?: unknown) {
-              const id = $appdata.get(KEYS.MODULES.MEDIA.ID_MUSIC) as string | number | null;
-              // Arquivos diretos da liturgia não têm id_music. Não tente
-              // reabrir o banco com null após um erro de codec do vídeo.
-              if (a && id != null) self.open(id);
-            }
-          );
+          const id = $appdata.get(KEYS.MODULES.MEDIA.ID_MUSIC) as string | number | null;
+          // Arquivos diretos da liturgia não têm id_music: sem reabrir o banco com null.
+          _alertAudioFailure(e, id != null ? () => self.open(id) : undefined);
         },
         () => {
           $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED, false);
