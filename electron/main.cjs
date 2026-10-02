@@ -84,6 +84,13 @@ const mediaVariants = require("./main/mediaVariants.js");
 const mediaResolver = require("./main/mediaResolver.js");
 const classicLibrary = require("./main/classicLibrary.js");
 const netHealth = require("./main/netHealth.js");
+
+// Aberto por um terminal que depois foi fechado, o stdout vira um pipe morto:
+// cada console.* lançava "write EPIPE" como exceção não tratada, e registrar
+// essa exceção escrevia de novo — 20 erros em 85 ms. Log não pode derrubar o app.
+for (const stream of [process.stdout, process.stderr]) {
+  stream?.on?.("error", () => {});
+}
 const telemetryErrorQueue = require("./main/telemetryErrorQueue.js");
 const { createRuntimeHealthMonitor } = require("./main/runtimeHealth.js");
 const { createRuntimeWorkDiagnostics } = require("./main/runtimeWorkDiagnostics.js");
