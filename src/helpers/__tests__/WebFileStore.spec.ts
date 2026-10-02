@@ -9,6 +9,8 @@ vi.mock("@/helpers/Http", () => ({
   fetchWithTimeout: (url: string, init: unknown) => fetchMock(url, init),
 }));
 
+vi.mock("@/helpers/Telemetry", () => ({ default: { track: vi.fn() } }));
+
 class FakeCache {
   items = new Map<string, Response>();
   async match(url: string) {
@@ -115,6 +117,30 @@ describe("WebFileStore", () => {
       return new Response("x", { status: 200 });
     });
     expect(await run([files[0]])).toEqual({ downloaded: 1, failed: 0 });
+  });
+
+  it("queda de rede pausa a fila e retoma sem contar falha quando a conexão volta", async () => {
+    const listeners: Array<() => void> = [];
+    vi.stubGlobal("window", {
+      addEventListener: (_: string, cb: () => void) => listeners.push(cb),
+      removeEventListener: () => {},
+    });
+    let offline = true;
+    fetchMock.mockImplementation(async () => {
+      if (offline) throw new TypeError("Load failed");
+      return new Response("x", { status: 200 });
+    });
+    const errors: string[] = [];
+    const off = webDownload.onFileError((e) => errors.push(e.file));
+    const many = Array.from({ length: 12 }, (_, i) => ({ remote: `/musics/pt/A/${i}.mp3` }));
+    const finished = run(many);
+    await vi.waitFor(() => expect(listeners.length).toBeGreaterThan(0));
+    expect(errors).toEqual([]);
+    offline = false;
+    listeners.forEach((cb) => cb());
+    expect(await finished).toEqual({ downloaded: 12, failed: 0 });
+    off();
+    expect(errors).toEqual([]);
   });
 
   it("cancelar emite queue-cancelled e não emite queue-done", async () => {

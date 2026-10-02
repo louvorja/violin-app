@@ -121,43 +121,141 @@ async function downloadOne(
   throw lastError instanceof Error ? lastError : new Error(`Falha ao baixar ${remote}`);
 }
 
+type QueueItem = { remote: string; url: string; netFailures: number };
+
+/** Falha de transporte (rede caiu, página suspensa), não resposta ruim do servidor. */
+function isNetworkFailure(e: unknown): boolean {
+  return e instanceof TypeError || (e instanceof DOMException && e.name === "TimeoutError");
+}
+
+// Três falhas de rede seguidas já indicam conexão fora, não arquivo ruim.
+const PAUSE_AFTER_NETWORK_FAILURES = 3;
+const MAX_PAUSES = 12;
+const MAX_ATTEMPTS_PER_FILE = 6;
+
+function waitForNetwork(signal: AbortSignal, timeoutMs: number): Promise<void> {
+  return new Promise((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      if (typeof window.removeEventListener === "function") {
+        window.removeEventListener("online", done);
+      }
+      signal.removeEventListener("abort", done);
+      resolve();
+    };
+    const timer = setTimeout(done, timeoutMs);
+    if (typeof window.addEventListener === "function") window.addEventListener("online", done);
+    signal.addEventListener("abort", done);
+  });
+}
+
 async function runQueue(
   pending: Array<{ remote: string; url: string }>,
   store: Record<string, Cache>,
   signal: AbortSignal
 ): Promise<void> {
-  let next = 0;
+  const startedAt = Date.now();
+  const unstarted: QueueItem[] = pending.map((p) => ({ ...p, netFailures: 0 }));
+  const retry: QueueItem[] = [];
   let downloaded = 0;
   let failed = 0;
+  let inflight = 0;
+  let consecutiveNetwork = 0;
+  let pauses = 0;
+  let paused: Promise<void> | null = null;
+  let gaveUp = false;
   const { start, max } = webConcurrencyBounds();
   const adaptive = createAdaptiveConcurrency({ min: 2, start, max });
+  let peakLimit = adaptive.limit();
+
+  const fail = (item: QueueItem, message: string) => {
+    failed++;
+    onFileError.emit({ file: item.remote, error: message });
+  };
+
+  // Uma queda curta de rede não pode queimar a fila inteira em meio segundo: o
+  // arquivo volta para a fila e todos esperam a conexão voltar.
+  const pauseForNetwork = () => {
+    if (paused) return;
+    pauses++;
+    if (pauses > MAX_PAUSES) {
+      gaveUp = true;
+      return;
+    }
+    const wait = Math.min(30000, 2000 * 2 ** (pauses - 1));
+    paused = waitForNetwork(signal, wait).finally(() => {
+      paused = null;
+      consecutiveNetwork = 0;
+    });
+  };
+
   // Todos os workers existem; só os de índice abaixo do limite atual pegam
   // trabalho, os demais esperam o limite subir.
   const worker = async (index: number): Promise<void> => {
-    while (next < pending.length && !signal.aborted) {
+    while (!signal.aborted) {
+      if (gaveUp) return;
+      if (paused) {
+        await paused;
+        continue;
+      }
       if (index >= adaptive.limit()) {
+        if (unstarted.length === 0 && retry.length === 0 && inflight === 0) return;
         await new Promise((resolve) => setTimeout(resolve, 250));
         continue;
       }
-      const { remote, url } = pending[next++];
-      onProgress.emit({ file: remote, total: pending.length });
+      const item = retry.shift() ?? unstarted.shift();
+      if (!item) {
+        if (inflight === 0) return;
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        continue;
+      }
+      inflight++;
+      onProgress.emit({ file: item.remote, total: pending.length });
       try {
-        const bytes = await downloadOne(remote, url, store, signal);
+        const bytes = await downloadOne(item.remote, item.url, store, signal);
         adaptive.report({ bytes, ok: true });
+        peakLimit = Math.max(peakLimit, adaptive.limit());
+        consecutiveNetwork = 0;
+        pauses = 0;
         downloaded++;
-        onFileDone.emit({ file: remote });
+        onFileDone.emit({ file: item.remote });
       } catch (e) {
         if (signal.aborted) return;
         adaptive.report({ ok: false });
-        failed++;
-        console.warn("[WebFileStore] falhou:", remote, e);
-        onFileError.emit({ file: remote, error: (e as Error).message });
+        if (isNetworkFailure(e) && ++item.netFailures < MAX_ATTEMPTS_PER_FILE) {
+          retry.push(item);
+          if (++consecutiveNetwork >= PAUSE_AFTER_NETWORK_FAILURES) pauseForNetwork();
+        } else {
+          console.warn("[WebFileStore] falhou:", item.remote, e);
+          fail(item, (e as Error).message);
+        }
+      } finally {
+        inflight--;
       }
     }
   };
   await Promise.all(Array.from({ length: Math.min(max, pending.length) }, (_, i) => worker(i)));
-  if (signal.aborted) onQueueCancelled.emit({});
-  else onQueueDone.emit({ downloaded, failed });
+  if (signal.aborted) {
+    onQueueCancelled.emit({});
+    return;
+  }
+  for (const item of [...retry, ...unstarted]) fail(item, "Sem conexão");
+  void import("@/helpers/Telemetry")
+    .then(({ default: Telemetry }) => {
+      Telemetry.track("web_download_queue_finished", {
+        total: pending.length,
+        downloaded,
+        failed,
+        pauses,
+        gave_up: gaveUp,
+        start_limit: start,
+        peak_limit: peakLimit,
+        final_limit: adaptive.limit(),
+        duration_ms: Date.now() - startedAt,
+      });
+    })
+    .catch(() => {});
+  onQueueDone.emit({ downloaded, failed });
 }
 
 export const webDownload = {
