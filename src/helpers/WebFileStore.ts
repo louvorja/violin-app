@@ -11,6 +11,7 @@
  *
  * @category helper-puro — Sem APIs Vue; usa Cache Storage e fetch.
  */
+import { createAdaptiveConcurrency } from "@root/electron/main/download/adaptiveConcurrency.mjs";
 import { API_URL } from "@/config/Api";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 import { resolveMediaReference } from "@/helpers/MediaUrl";
@@ -20,7 +21,22 @@ export const IMAGE_CACHE = "louvorja-images";
 
 // Mantenha igual ao padrão de áudio do runtimeCaching em vite.config.js.
 const AUDIO_RE = /\.(mp3|ogg|opus|m4a|aac|wav|flac)(\?.*)?$/i;
-const CONCURRENCY = 3;
+
+/** Ponto de partida e teto de downloads simultâneos, conforme o que o aparelho declara. */
+export function webConcurrencyBounds(nav: Navigator | undefined = globalThis.navigator): {
+  start: number;
+  max: number;
+} {
+  const conn = (
+    nav as (Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }) | undefined
+  )?.connection;
+  const memory = (nav as (Navigator & { deviceMemory?: number }) | undefined)?.deviceMemory;
+  const cores = nav?.hardwareConcurrency ?? 4;
+  if (conn?.saveData || /^(slow-)?2g$/.test(conn?.effectiveType ?? "")) return { start: 2, max: 2 };
+  if (conn?.effectiveType === "3g") return { start: 2, max: 3 };
+  const weak = (memory !== undefined && memory <= 2) || cores <= 2;
+  return weak ? { start: 3, max: 4 } : { start: 4, max: 8 };
+}
 
 export interface WebFileEntry {
   remote: string;
@@ -83,7 +99,7 @@ async function downloadOne(
   url: string,
   store: Record<string, Cache>,
   signal: AbortSignal
-): Promise<void> {
+): Promise<number> {
   let lastError: unknown;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
@@ -94,8 +110,9 @@ async function downloadOne(
       });
       // Só 200 inteiro: um 206 gravado como arquivo completo tocaria cortado.
       if (response.status !== 200) throw new Error(`HTTP ${response.status}`);
+      const bytes = Number(response.headers.get("content-length")) || 0;
       await store[cacheNameFor(url)].put(url, response);
-      return;
+      return bytes;
     } catch (e) {
       lastError = e;
       if (signal.aborted) throw e;
@@ -112,23 +129,33 @@ async function runQueue(
   let next = 0;
   let downloaded = 0;
   let failed = 0;
-  const worker = async (): Promise<void> => {
+  const { start, max } = webConcurrencyBounds();
+  const adaptive = createAdaptiveConcurrency({ min: 2, start, max });
+  // Todos os workers existem; só os de índice abaixo do limite atual pegam
+  // trabalho, os demais esperam o limite subir.
+  const worker = async (index: number): Promise<void> => {
     while (next < pending.length && !signal.aborted) {
+      if (index >= adaptive.limit()) {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        continue;
+      }
       const { remote, url } = pending[next++];
       onProgress.emit({ file: remote });
       try {
-        await downloadOne(remote, url, store, signal);
+        const bytes = await downloadOne(remote, url, store, signal);
+        adaptive.report({ bytes, ok: true });
         downloaded++;
         onFileDone.emit({ file: remote });
       } catch (e) {
         if (signal.aborted) return;
+        adaptive.report({ ok: false });
         failed++;
         console.warn("[WebFileStore] falhou:", remote, e);
         onFileError.emit({ file: remote, error: (e as Error).message });
       }
     }
   };
-  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, pending.length) }, worker));
+  await Promise.all(Array.from({ length: Math.min(max, pending.length) }, (_, i) => worker(i)));
   if (signal.aborted) onQueueCancelled.emit({});
   else onQueueDone.emit({ downloaded, failed });
 }
@@ -157,9 +184,7 @@ export const webDownload = {
   },
 
   /** Enfileira o que ainda não está guardado; resolve assim que a fila começa, como no desktop. */
-  async start(
-    files: WebFileEntry[]
-  ): Promise<{ queued: number; message?: string }> {
+  async start(files: WebFileEntry[]): Promise<{ queued: number; message?: string }> {
     if (controller) controller.abort();
     const store = await openCaches();
     const pending: Array<{ remote: string; url: string }> = [];
@@ -258,7 +283,8 @@ export const webStorage = {
       if (!hit) continue;
       count++;
       const declared = Number(hit.headers.get("content-length"));
-      bytes += Number.isFinite(declared) && declared > 0 ? declared : (await hit.clone().blob()).size;
+      bytes +=
+        Number.isFinite(declared) && declared > 0 ? declared : (await hit.clone().blob()).size;
     }
     return { bytes, count };
   },
