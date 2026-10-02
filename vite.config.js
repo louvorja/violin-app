@@ -200,6 +200,17 @@ export default async ({ mode }) => {
           cacheableResponse: { statuses: [0, 200] },
         },
       },
+      // Decodificador de Opus — mesmo raciocínio do HEIC: são 4MB que só o
+      // Safari usa, e só ao tocar um .opus.
+      {
+        urlPattern: /\/assets\/opus-decoder-[^/]*\.js$/,
+        handler: "CacheFirst",
+        options: {
+          cacheName: "louvorja-opus-decoder",
+          expiration: { maxEntries: 2, maxAgeSeconds: 90 * 24 * 3600 },
+          cacheableResponse: { statuses: [0, 200] },
+        },
+      },
     ];
 
     plugins.push(
@@ -216,7 +227,7 @@ export default async ({ mode }) => {
           // de todo mundo, quando o arquivo só interessa a quem importa foto de
           // iPhone. Fora do precache, ele desce sob demanda e o
           // `runtimeCaching` acima o guarda a partir daí.
-          globIgnores: ["**/heic-to-*.js"],
+          globIgnores: ["**/heic-to-*.js", "**/opus-decoder-*.js"],
           runtimeCaching,
         },
         manifest: {
@@ -328,6 +339,15 @@ export default async ({ mode }) => {
               if (/[\\/]node_modules[\\/](vue|vue-router|pinia)[\\/]/.test(id)) return "vendor-vue";
               // Busca full-text
               if (/[\\/]node_modules[\\/]fuse\.js[\\/]/.test(id)) return "vendor-fuse";
+              // Decodificador de Opus em WASM (só o iOS precisa). O nome fixo é o
+              // que deixa `globIgnores` e o `runtimeCaching` o reconhecerem.
+              if (
+                /[\\/]node_modules[\\/](ogg-opus-decoder|opus-decoder|codec-parser|@wasm-audio-decoders|@eshaz[\\/]web-worker|simple-yenc)[\\/]/.test(
+                  id
+                )
+              ) {
+                return "opus-decoder";
+              }
               // Reka UI — o headless por trás dos primitivos
               if (/[\\/]node_modules[\\/]reka-ui[\\/]/.test(id)) return "vendor-reka";
               return;
