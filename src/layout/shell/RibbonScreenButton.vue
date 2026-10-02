@@ -1,5 +1,5 @@
 <template>
-  <div class="ribbon-screen-btn" :class="`ribbon-btn--${size}`">
+  <div v-if="canProject" class="ribbon-screen-btn" :class="`ribbon-btn--${size}`">
     <button
       type="button"
       class="ribbon-btn ribbon-btn--main"
@@ -33,6 +33,7 @@
 </template>
 
 <script setup lang="ts">
+import { canOpenWebWindows } from "@/helpers/projection/webWindow";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { LjIcon, LjMenu, type LjMenuItem } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
@@ -52,6 +53,8 @@ import {
 } from "@/helpers/Projection";
 import { useI18n } from "vue-i18n";
 import { CategorizedDisplays, DisplayInfo } from "@/types/Projection";
+
+const canProject = canOpenWebWindows();
 
 const props = defineProps({
   feature: { type: String, default: "" },

@@ -21,6 +21,7 @@ import {
   isWebWindowOpen,
   nudgeIntoRect,
   openWebWindow,
+  canOpenWebWindows,
 } from "@/helpers/projection/webWindow";
 import WebRoles from "@/helpers/projection/WebRoles";
 import WebDisplays from "@/helpers/projection/WebDisplays";
@@ -338,6 +339,8 @@ function _webRectForMonitor(
   };
 }
 
+let _warnedUnsupported = false;
+
 /** Abre a janela de projeção no monitor escolhido (ou no preferido). */
 export async function open(opts: OpenOptions): Promise<void> {
   const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
@@ -361,6 +364,17 @@ export async function open(opts: OpenOptions): Promise<void> {
   // Web/PWA primeiro e sem nenhum `await` antes: qualquer espera aqui consome a
   // ativação transitória do clique e o popup é bloqueado.
   if (!Platform.isDesktop) {
+    if (!canOpenWebWindows()) {
+      // Uma vez por sessão: a abertura automática (vídeo, arquivo) passa por
+      // aqui a cada mídia e não pode virar um aviso repetido.
+      if (!_warnedUnsupported) {
+        _warnedUnsupported = true;
+        const t = i18nAtual()?.global?.t;
+        if (t) $snackbar.info(t("projection.windows_unsupported"), { timeout: 8000 });
+      }
+      report("unsupported");
+      return;
+    }
     // Monitor escolhido no menu tem prioridade sobre o papel configurado em
     // Opções — é a escolha mais recente e mais específica do operador.
     const rect = _webRectForMonitor(opts.monitorId) ?? _webRectFor(opts.feature);

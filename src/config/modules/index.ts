@@ -4,6 +4,7 @@ import { groups } from "@/config/modules/ribbon/groups";
 import { categories } from "@/config/modules/ribbon/categories";
 import $userdata from "@/helpers/UserData";
 import { moduleShowInMainMenu } from "@/constants/UserDataKeys";
+import { canOpenWebWindows } from "@/helpers/projection/webWindow";
 
 const modules = import.meta.glob<ModuleRibbon>("../../modules/*/manifest.ts", {
   eager: true,
@@ -141,6 +142,7 @@ for (const m of allManifests) {
 export function isModuleVisible(id: string): boolean {
   const mod = getModules[id];
   if (!mod) return false;
+  if (mod.requiresProjectionWindow && !canOpenWebWindows()) return false;
   const fallback = mod.defaultShowInMainMenu ?? mod.showInMainMenu !== false;
   return $userdata.get(moduleShowInMainMenu(id), fallback) === true;
 }

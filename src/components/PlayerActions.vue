@@ -62,7 +62,12 @@
     <LScreenBtn v-if="location !== 'fullscreen'" :media="mediaOnAir" />
 
     <!-- Atalhos para abrir as janelas auxiliares (replica fmMusica + fmMusicaRetorno + fmMusicaOperador do Delphi) -->
-    <LjMenu v-if="location !== 'fullscreen'" :items="projectionItems" side="bottom" align="end">
+    <LjMenu
+      v-if="location !== 'fullscreen' && canProject"
+      :items="projectionItems"
+      side="bottom"
+      align="end"
+    >
       <template #trigger>
         <LjButton
           size="md"
@@ -105,6 +110,7 @@
 </template>
 
 <script setup lang="ts">
+import { canOpenWebWindows } from "@/helpers/projection/webWindow";
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { useViewport } from "@/composables/useViewport";
@@ -214,6 +220,8 @@ const mediaOnAir = computed<MediaKind>(() => currentMediaKind());
 function openWindow(kind: WindowKind): void {
   void openMediaWindow(kind, mediaOnAir.value, { explicit: true });
 }
+
+const canProject = canOpenWebWindows();
 
 const projectionItems = computed<LjMenuItem[]>(() => [
   {

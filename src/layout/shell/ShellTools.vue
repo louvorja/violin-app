@@ -25,7 +25,7 @@
 
     <!--    Projeção de Fundo — sem segunda tela no celular, não há o que abrir-->
     <LjTooltip
-      v-if="!compact"
+      v-if="!compact && canProject"
       :text="isBgPlaying ? 'Desativar projeção de fundo' : 'Ativar projeção de fundo'"
       side="bottom"
     >
@@ -252,6 +252,7 @@ import {
 import { useBackgroundTasks, type BackgroundTask } from "@/composables/useBackgroundTasks";
 import { useConnectivity } from "@/composables/useConnectivity";
 import Platform from "@/helpers/Platform";
+import { canOpenWebWindows } from "@/helpers/projection/webWindow";
 import { useChat } from "@/composables/useChat";
 import { localeTag } from "@/helpers/DateTime";
 import { useLibrasState } from "@/modules/libras/composables/useLibrasState";
@@ -263,6 +264,8 @@ import { COLORS } from "@constants/Colors";
 
 const { t, te, locale } = useI18n();
 const { isDark, toggleDark } = useAppTheme();
+
+const canProject = canOpenWebWindows();
 
 defineProps<{
   /**

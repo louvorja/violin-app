@@ -288,13 +288,18 @@
             <div class="tx-local-title">{{ $t(win.titleKey) }}</div>
           </div>
           <MonitorSelect
-            v-if="displays.length"
+            v-if="displays.length && canProject"
             inline
             class="tx-local-select"
             :model-value="getPref(featureKey(win.route))"
             @update:model-value="setPref(featureKey(win.route), $event)"
           />
-          <LjButton size="sm" :icon="ICONS.UI.MONITORS" @click="openLocalWindow(win)">
+          <LjButton
+            v-if="canProject"
+            size="sm"
+            :icon="ICONS.UI.MONITORS"
+            @click="openLocalWindow(win)"
+          >
             {{ $t("options.transmission.open_window") }}
           </LjButton>
         </div>
@@ -446,6 +451,7 @@ import Platform from "@/helpers/Platform";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
 import { open as openProjection } from "@/helpers/Projection";
+import { canOpenWebWindows } from "@/helpers/projection/webWindow";
 import { ICONS } from "@/config/Icons";
 import { DEVICE_PERMISSION_LABELS } from "@/types/Device";
 import QRCodeStyling from "qr-code-styling";
@@ -940,6 +946,8 @@ async function setHttpServerPort(port) {
     console.warn("[Transmitir] setPort:", e);
   }
 }
+
+const canProject = canOpenWebWindows();
 
 async function openLocalWindow(win) {
   const { route } = win;

@@ -1546,6 +1546,7 @@
   },
   "projection": {
     "enter_fullscreen": "Entrar em tela cheia",
+    "windows_unsupported": "Este aparelho não abre janelas de projeção. Use a tela cheia do player e espelhe a tela do aparelho.",
     "fullscreen_hint": "Você também pode apertar F11",
     "fullscreen_auto_hint": "Um clique é necessário porque o navegador não permite que sites entrem em tela cheia sozinhos. No aplicativo para computador a projeção já abre em tela cheia, sem clique.",
     "video_unavailable": "Vídeo indisponível",

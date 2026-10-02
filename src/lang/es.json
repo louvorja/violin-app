@@ -1546,6 +1546,7 @@
   },
   "projection": {
     "enter_fullscreen": "Entrar en pantalla completa",
+    "windows_unsupported": "Este dispositivo no abre ventanas de proyección. Use la pantalla completa del reproductor y duplique la pantalla del dispositivo.",
     "fullscreen_hint": "También puede pulsar F11",
     "fullscreen_auto_hint": "Se necesita un clic porque el navegador no permite que los sitios entren en pantalla completa por sí solos. En la aplicación de escritorio la proyección ya abre en pantalla completa, sin clic.",
     "video_unavailable": "Video no disponible",
