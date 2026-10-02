@@ -49,6 +49,27 @@
       </p>
     </section>
 
+    <section class="opt-section">
+      <h3 class="opt-section-title">
+        <LjIcon :icon="ICONS.ACTIONS.UPLOAD" size="18" />
+        {{ $t("import_export.open_slja.title") }}
+      </h3>
+      <div>
+        <button type="button" class="opt-btn" @click="slja.click()">
+          <LjIcon :icon="ICONS.ACTIONS.UPLOAD" size="14" />
+          {{ $t("import_export.open_slja.action") }}
+        </button>
+        <input
+          ref="sljaInput"
+          type="file"
+          accept=".slja"
+          style="display: none"
+          @change="onSljaSelected"
+        />
+        <p class="opt-hint">{{ $t("import_export.open_slja.hint") }}</p>
+      </div>
+    </section>
+
     <section v-if="importResult?.details" class="opt-section">
       <div class="opt-import-details">
         <div v-for="(line, i) in importResult.details" :key="i" class="opt-detail-row">
@@ -66,6 +87,7 @@ import { ref } from "vue";
 import { useBusy } from "@/composables/useBusy";
 import $liturgy from "@/helpers/Liturgy";
 import SljaConverter from "@/helpers/SljaConverter";
+import { openSlja } from "@/helpers/SljaPlayer";
 import { LiturgyItem, ScheduledCategory, type ScheduledItem } from "@/types/Liturgy";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 
@@ -141,6 +163,17 @@ const DELPHI_NAMED_COLORS: Record<string, string> = {
 /* ---- Estado ---- */
 
 const fileInput = ref<HTMLInputElement | null>(null);
+const sljaInput = ref<HTMLInputElement | null>(null);
+const slja = {
+  click: () => sljaInput.value?.click(),
+};
+
+async function onSljaSelected(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (file) await openSlja(file, { origin: "picker" });
+}
 const exporting = ref<boolean>(false);
 const exportDone = ref<boolean>(false);
 const { busy: importing, run: runImport } = useBusy();

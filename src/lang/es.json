@@ -801,6 +801,11 @@
     "import": {
       "action": "Importar Liturgia",
       "hint": "Carga un archivo .json (exportado de la versión web/desktop) o .ja (versión legada). Los ítems se agregarán al día activo."
+    },
+    "open_slja": {
+      "title": "Abrir música personalizada",
+      "action": "Abrir archivo .slja",
+      "hint": "Proyecta una música exportada (.slja) directamente, sin añadirla a una colección."
     }
   },
   "popup": {
@@ -949,7 +954,6 @@
       "editor_view_4_3": "4:3",
       "editor_view_16_9": "16:9",
       "editor_view_full": "Pant. Completa",
-      "export_music": "Exportar Música",
       "favorites": "Favoritos",
       "format": "Formato",
       "history": "Historial",

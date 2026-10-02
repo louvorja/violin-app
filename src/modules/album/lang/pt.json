@@ -11,5 +11,7 @@
     "music_name": "Nome",
     "duration": "Duração",
     "actions": "Ações"
-  }
+  },
+  "download": "Baixar álbum",
+  "download_hint": "Baixe este álbum em Sincronizar para ouvir sem internet."
 }

@@ -435,6 +435,7 @@ function exitApp() {
 onMounted(() => {
   preloadOptionsWhenIdle();
   window.addEventListener("louvorja:open-updates", onOpenUpdates);
+  window.addEventListener("louvorja:open-sync", onOpenSync);
   window.addEventListener("louvorja:open-options", onOpenOptions);
   window.addEventListener("louvorja:open-about", onOpenAbout);
   window.addEventListener("louvorja:open-licenses", onOpenLicenses);
@@ -448,6 +449,7 @@ onBeforeUnmount(() => {
   renderedItem.value = null;
   restaurarBotoes();
   window.removeEventListener("louvorja:open-updates", onOpenUpdates);
+  window.removeEventListener("louvorja:open-sync", onOpenSync);
   window.removeEventListener("louvorja:open-options", onOpenOptions);
   window.removeEventListener("louvorja:open-about", onOpenAbout);
   window.removeEventListener("louvorja:open-licenses", onOpenLicenses);
@@ -457,6 +459,10 @@ onBeforeUnmount(() => {
 
 function onOpenUpdates() {
   openAt("updates");
+}
+
+function onOpenSync() {
+  openAt("sync");
 }
 
 function onOpenAbout() {

@@ -1,10 +1,10 @@
 <template>
   <div class="opt">
-    <section v-if="!isDesktop" class="opt-section">
+    <section v-if="!canDownload" class="opt-section">
       <p class="opt-empty">{{ $t("options.collections_download.desktop_only") }}</p>
     </section>
 
-    <section v-if="isDesktop" class="opt-section">
+    <section v-if="canDownload" class="opt-section">
       <h3 class="opt-section-title">
         <LjIcon :icon="ICONS.UI.SYNC_CLOUD" size="18" />
         {{ $t("options.collections_download.connection") }}
@@ -37,11 +37,11 @@
           >
             {{ $t("options.collections_download.check_connection") }}
           </button>
-          <button type="button" class="opt-btn" @click="openStartupCheck">
+          <button v-if="isDesktop" type="button" class="opt-btn" @click="openStartupCheck">
             {{ $t("options.collections_download.open_startup_check") }}
           </button>
         </div>
-        <label class="opt-checkbox">
+        <label v-if="isDesktop" class="opt-checkbox">
           <input
             type="checkbox"
             :checked="startupCheckOnBoot"
@@ -54,7 +54,7 @@
 
     <!-- Abas: Coletâneas | Bíblia | Armazenamento -->
     <!-- O traço sob as abas vem do próprio LjTabs; não há divisória extra. -->
-    <template v-if="isDesktop">
+    <template v-if="canDownload">
       <LjTabs v-model="activeTab" :tabs="abas" class="sinc-tabs" />
 
       <div class="sinc-panes">
@@ -234,6 +234,7 @@
                   <div class="opt-cat-albums">
                     <label
                       v-for="album in cat.albums || []"
+                      :id="`sync-album-${album.id_album}`"
                       :key="album.id_album"
                       class="opt-checkbox opt-album"
                     >
@@ -674,9 +675,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import Platform from "@/helpers/Platform";
+import { pendingSyncAlbum } from "@/helpers/SyncIntent";
 import $userdata from "@/helpers/UserData";
 import $alert from "@/helpers/Alert";
 import { KEYS, moduleShowInMainMenu } from "@/constants/UserDataKeys";
@@ -745,6 +747,9 @@ const bundleEmDownload = computed(() => findTask("db-bundle"));
 /* ---- Estado ---- */
 
 const isDesktop = computed<boolean>(() => Platform.isDesktop);
+// Web/PWA baixa para o Cache Storage pelo mesmo contrato do desktop; só Bíblia,
+// armazenamento em pasta e versão clássica são exclusivos do Electron.
+const canDownload = computed<boolean>(() => !!Platform.download && !!Platform.storage?.checkLocal);
 const { t, locale } = useI18n();
 
 const ftpChecking = computed(() => sync.ftpChecking.value);
@@ -785,8 +790,12 @@ const abas = computed<LjTab[]>(() => [
     label: t("options.collections_download.title"),
     icon: ICONS.CUSTOM.LJA_COLOR,
   },
-  { value: "bible", label: t("options.bible_download.title"), icon: ICONS.BIBLE.BIBLE },
-  { value: "storage", label: t("options.storage.title"), icon: ICONS.UI.HARDDISK },
+  ...(isDesktop.value
+    ? [
+        { value: "bible", label: t("options.bible_download.title"), icon: ICONS.BIBLE.BIBLE },
+        { value: "storage", label: t("options.storage.title"), icon: ICONS.UI.HARDDISK },
+      ]
+    : []),
 ]);
 
 // Mesma economia do v-window-item: a aba só é montada na primeira vez que
@@ -1538,10 +1547,38 @@ async function refreshDiskUsage(): Promise<void> {
   }
 }
 
+/* ---- Álbum pedido por outra tela (atalho "Baixar" do diálogo do álbum) ---- */
+
+function applyPendingAlbum(): void {
+  const id = pendingSyncAlbum.value;
+  if (id == null || loadingCategories.value || scanningCache.value) return;
+  pendingSyncAlbum.value = null;
+  activeTab.value = "collections";
+  if (!selectedAlbums.value.has(id)) {
+    selectedAlbums.value = new Set(selectedAlbums.value).add(id);
+  }
+  // A lista só ganha altura final depois do render das caixas marcadas.
+  void nextTick(() => {
+    setTimeout(() => {
+      document.getElementById(`sync-album-${id}`)?.scrollIntoView({ block: "center" });
+    }, 150);
+  });
+}
+
+watch([pendingSyncAlbum, loadingCategories, scanningCache], applyPendingAlbum);
+
 /* ---- Lifecycle ---- */
 
 onMounted(async () => {
-  if (!isDesktop.value) return;
+  if (!canDownload.value) return;
+  if (!isDesktop.value) {
+    // No desktop o catálogo local vem da Verificação Inicial; o PWA não tem
+    // essa etapa, e o scan de álbuns baixados lê só o que está no IndexedDB.
+    // Abrir esta tela é a ação explícita que autoriza o download do bundle.
+    await Promise.all([sync.ensureCatalogBundle(), sync.checkFtp()]);
+    await loadCatalog();
+    return;
+  }
   // Independentes entre si — em série a tela levava a soma dos quatro tempos.
   await Promise.all([
     loadCatalog(),

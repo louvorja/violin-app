@@ -18,6 +18,7 @@ import ModuleManager from "@/helpers/ModuleManager";
 import $storage from "@/helpers/Storage";
 import $alert from "@helpers/Alert";
 import Platform from "@/helpers/Platform";
+import WakeLock from "@/helpers/WakeLock";
 import {
   API_URL,
   API_URL_DB,
@@ -1331,6 +1332,23 @@ $storage.hydrate().then(async () => {
     // ---------------------------------------------------------------------------
     if (!isAuxiliaryRenderer) Hotkeys.init();
 
+    // No navegador/PWA a tela do tablet apagaria no meio de um slide parado; o
+    // Electron resolve isso no main (`powerBlocker`). Aqui, a janela principal:
+    // mídia em cena ou tela cheia. As janelas de projeção estão em
+    // main-auxiliary.js.
+    if (!Platform.isDesktop) {
+      watchEffect(() => {
+        const live =
+          !!AppData.get(KEYS.MODULES.MEDIA.SHOW) || !!AppData.get(KEYS.MODULES.MEDIA.IS_PLAYING);
+        if (live) WakeLock.hold("presentation");
+        else WakeLock.release("presentation");
+      });
+      document.addEventListener("fullscreenchange", () => {
+        if (document.fullscreenElement) WakeLock.hold("fullscreen");
+        else WakeLock.release("fullscreen");
+      });
+    }
+
     // Observabilidade de uso e diagnóstico. Não bloqueia o boot e é no-op em
     // dev ou quando o usuário desliga a opção nas Opções.
     void Telemetry.init().then(() => _bootStage("telemetry_ready"));
@@ -1347,6 +1365,21 @@ $storage.hydrate().then(async () => {
       const file = files[files.length - 1];
       if (file) void openSlja(Path.local(file), { origin: "system" });
     });
+
+    // PWA instalado no Chrome/ChromeOS: "Abrir com" um .slja entrega o arquivo
+    // pela launchQueue (manifest.file_handlers). No Android o Chrome não oferece
+    // isso; lá o caminho é o botão de Importar/Exportar.
+    if (!Platform.isDesktop && "launchQueue" in window) {
+      window.launchQueue.setConsumer(async (params) => {
+        const handle = params.files?.[params.files.length - 1];
+        if (!handle) return;
+        try {
+          void openSlja(await handle.getFile(), { origin: "system" });
+        } catch (e) {
+          console.warn("[launchQueue] não foi possível ler o arquivo:", e);
+        }
+      });
+    }
 
     // --- Geral ---
 

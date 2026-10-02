@@ -152,19 +152,30 @@ export default async ({ mode }) => {
             },
           ]
         : []),
-      // Áudio (mp3, ogg, wav) — cache-first, TTL 30 dias
+      // Áudio (mp3, ogg, opus, m4a, aac, wav, flac; o catálogo atual é .opus) — cache-first. Sem prazo por data: "Baixar álbum"
+      // grava aqui direto (helpers/OfflineAlbums.ts) e o workbox recusaria, pelo
+      // cabeçalho Date, o que passou de 30 dias, justamente quando se está
+      // offline. O limite de entradas só alcança o que o próprio service worker
+      // guardou ao tocar. `rangeRequests` é obrigatório: o <audio> pede
+      // `Range: bytes=0-`, e sem fatiar a resposta do cache o Chrome Android não
+      // consegue tocar nem pular dentro do áudio offline.
       {
         urlPattern: filesUrl
-          ? new RegExp(`^${escapeRegex(filesUrl)}.*\\.(mp3|ogg|wav)(\\?.*)?$`, "i")
-          : /\.(mp3|ogg|wav)(\?.*)?$/i,
+          ? new RegExp(
+              `^${escapeRegex(filesUrl)}.*\\.(mp3|ogg|opus|m4a|aac|wav|flac)(\\?.*)?$`,
+              "i"
+            )
+          : /\.(mp3|ogg|opus|m4a|aac|wav|flac)(\?.*)?$/i,
         handler: "CacheFirst",
         options: {
           cacheName: "louvorja-audio",
-          expiration: { maxEntries: 500, maxAgeSeconds: 30 * 24 * 3600 },
+          expiration: { maxEntries: 500 },
           cacheableResponse: { statuses: [0, 200] },
+          rangeRequests: true,
+          matchOptions: { ignoreVary: true },
         },
       },
-      // Imagens externas — cache-first, TTL 30 dias
+      // Imagens externas — cache-first (sem prazo por data, pelo mesmo motivo do áudio)
       {
         urlPattern: filesUrl
           ? new RegExp(`^${escapeRegex(filesUrl)}.*\\.(jpg|jpeg|png|webp|gif)(\\?.*)?$`, "i")
@@ -172,8 +183,9 @@ export default async ({ mode }) => {
         handler: "CacheFirst",
         options: {
           cacheName: "louvorja-images",
-          expiration: { maxEntries: 200, maxAgeSeconds: 30 * 24 * 3600 },
+          expiration: { maxEntries: 200 },
           cacheableResponse: { statuses: [0, 200] },
+          matchOptions: { ignoreVary: true },
         },
       },
       // Conversor de HEIC — guardado no primeiro uso, e não antes. Fica fora do
@@ -215,6 +227,13 @@ export default async ({ mode }) => {
           display: "standalone",
           background_color: "#000000",
           theme_color: "#000000",
+          // Chrome/ChromeOS desktop: "Abrir com" LouvorJA para músicas .slja.
+          file_handlers: [
+            {
+              action: process.env.VITE_BASE_URL ?? "/",
+              accept: { "application/zip": [".slja"] },
+            },
+          ],
           icons: [
             {
               src: (process.env.VITE_BASE_URL ?? "/") + "ico/favicon-16x16.png",

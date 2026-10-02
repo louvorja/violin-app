@@ -456,6 +456,48 @@ Remoto, Sincronizar e StartupCheck.
 
 ---
 
+## Download de coletâneas no web/PWA
+
+`Platform.download` e `Platform.storage` têm o mesmo contrato nas duas plataformas:
+no Electron são o downloader do main process e a pasta de dados; no web/PWA são o
+adaptador `helpers/WebFileStore.ts`, que grava no Cache Storage (`louvorja-audio` e
+`louvorja-images`). `useSyncManager` e a tela **Sincronizar** não distinguem a
+plataforma: o PWA mostra só a aba Coletâneas (Bíblia, pasta de dados e versão
+clássica seguem exclusivos do desktop).
+
+- **URL é a chave.** O arquivo é guardado sob a mesma URL que o player pede
+  (`Path.file`), então o service worker o serve sem nenhuma mudança nos consumidores.
+- **Service worker** (`vite.config.js`): as rotas de áudio e imagem não expiram por
+  data (o workbox recusaria offline, pelo `Date`, o que passou de 30 dias) e a de
+  áudio usa `rangeRequests`, sem o qual o Chrome Android não toca nem pula dentro do
+  áudio em cache. O padrão de áudio inclui `.opus`, formato do catálogo atual; manter
+  igual a `AUDIO_RE` em `WebFileStore.ts`.
+- **Catálogo local.** O scan de álbuns baixados lê só o IndexedDB; ao abrir
+  Sincronizar o PWA chama `ensureCatalogBundle()`, o equivalente da Verificação
+  Inicial do desktop.
+- Só respostas 200 completas são gravadas; um 206 contaria como arquivo inteiro.
+
+---
+
+## Recursos do desktop no web/PWA
+
+Recurso novo entra pela **capacidade do navegador**, não pelo sistema operacional:
+o PWA no Mac/Windows/Linux segue o mesmo caminho do Android, e só fica de fora o
+que o navegador de fato não oferece.
+
+- **Tela acesa** (`helpers/WakeLock.ts`): equivalente web do `powerBlocker` do
+  Electron. Vários motivos podem pedir a trava (projeção, tela cheia, mídia em
+  cena) e ela só cai quando o último sai. A janela principal liga em
+  `main-shell.js`; as janelas de projeção e o relógio em `main-auxiliary.js`.
+  Esses dois bootstraps são independentes: o que vale para "todas as janelas"
+  precisa entrar nos dois.
+- **Abrir `.slja`**: botão em Importar/Exportar (funciona em qualquer navegador,
+  inclusive Android) e `file_handlers` + `launchQueue` no Chrome/ChromeOS. O
+  Android não oferece `file_handlers`.
+- **Só no desktop, sem equivalente web**: baixar vídeo online (yt-dlp), servidor
+  HTTP local (chat, controle remoto, dispositivos, OBS), atalhos globais do SO,
+  iniciar com o sistema e pasta de dados escolhida pelo usuário.
+
 ## 🖥️ Versão clássica (Delphi)
 
 A detecção da versão clássica é feita em `electron/main/classicLibrary.js`,

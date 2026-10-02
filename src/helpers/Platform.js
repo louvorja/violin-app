@@ -23,6 +23,8 @@
  * @category helper-puro — Seguro no Electron main process; sem APIs Vue.
  */
 
+import { isWebFileStoreSupported, webDownload, webStorage } from "@/helpers/WebFileStore";
+
 const api = typeof window !== "undefined" ? (window.louvorjaApi ?? null) : null;
 
 export default {
@@ -159,15 +161,16 @@ export default {
   },
 
   /**
-   * Cliente de download FTP (D3).
-   * Permite verificar conexão, baixar arquivos e monitorar progresso.
-   * null quando rodando no browser/PWA.
+   * Cliente de download (D3). No desktop é o downloader do main process; no
+   * browser/PWA é o adaptador de Cache Storage de `WebFileStore.ts`, com o
+   * mesmo contrato — por isso `useSyncManager` não distingue as plataformas.
+   * null só em navegador sem Cache Storage.
    *
    * @returns {{ setApiConfig, getParams, checkConnection, start, cancel, checkFiles,
    *             onProgress, onFileDone, onFileError, onQueueDone, onQueueCancelled } | null}
    */
   get download() {
-    return api?.download ?? null;
+    return /** @type {any} */ (api?.download ?? (isWebFileStoreSupported() ? webDownload : null));
   },
 
   /** Sinal de mídia ativa para diagnóstico desktop sem metadados pessoais. */
@@ -318,10 +321,11 @@ export default {
   /**
    * Gerenciamento de armazenamento local (S2): stats, clear, verify,
    * setFilesDir, openDir, checkLocal, checkJson, removeFiles, sizeOfPaths, setAutoCache.
-   * null no browser/PWA — controle só no desktop.
+   * No browser/PWA só existem `checkLocal`, `removeFiles` e `sizeOfPaths`
+   * (Cache Storage); pasta de dados, stats e afins são exclusivos do desktop.
    */
   get storage() {
-    return api?.storage ?? null;
+    return /** @type {any} */ (api?.storage ?? (isWebFileStoreSupported() ? webStorage : null));
   },
 
   /** Lista arquivos de um diretório local (auto-populate). */

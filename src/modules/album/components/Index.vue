@@ -19,6 +19,13 @@
         </div>
       </div>
 
+      <div v-if="!loading && tracks.length && canDownload" class="album-download">
+        <p class="album-download__hint">{{ t("download_hint") }}</p>
+        <LjButton size="sm" :icon="ICONS.ACTIONS.DOWNLOAD" @click="goDownload">
+          {{ t("download") }}
+        </LjButton>
+      </div>
+
       <LjProgress v-if="loading" indeterminate :label="t('loading')" />
       <LjEmpty v-else-if="!tracks.length" :icon="ICONS.MUSIC.NOTE" :title="t('empty')" />
       <LjTable
@@ -75,7 +82,9 @@ import { computed, ref, watch } from "vue";
 import { module as manifest } from "../manifest";
 import { useModule } from "@/composables/useModule";
 import { useAlbum } from "@/composables/useAlbum";
-import { LjDialog, LjEmpty, LjIcon, LjProgress, LjTable } from "@/components/ui";
+import { LjButton, LjDialog, LjEmpty, LjIcon, LjProgress, LjTable } from "@/components/ui";
+import Platform from "@/helpers/Platform";
+import { requestAlbumDownload } from "@/helpers/SyncIntent";
 import { ICONS } from "@/config/Icons";
 import MusicMenuTable from "@/components/MusicMenuTable.vue";
 import { useDisabledAlbums } from "@/composables/useMusicCatalog";
@@ -114,6 +123,15 @@ const coverFailed = ref(false);
 watch(coverUrl, () => {
   coverFailed.value = false;
 });
+
+// Download é centralizado em Opções → Sincronizar; aqui só leva o álbum até lá.
+const canDownload = computed(() => Boolean(Platform.download && Platform.storage?.checkLocal));
+
+function goDownload() {
+  const id = album.value.id_album;
+  closeAlbum();
+  requestAlbumDownload(id);
+}
 
 function onDialogChange(open) {
   if (!open) closeAlbum();
@@ -175,6 +193,25 @@ watch(disabledAlbums, (disabled) => {
   margin: var(--lj-space-3) 0 0;
   color: var(--lj-text-muted);
   font-size: var(--lj-text-base);
+}
+
+.album-download {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--lj-space-4);
+  margin-bottom: var(--lj-space-6);
+  padding: var(--lj-space-4) var(--lj-space-5);
+  border: 1px solid var(--lj-surface-border);
+  border-radius: var(--lj-radius-md);
+  background: var(--lj-surface-bg-soft);
+}
+
+.album-download__hint {
+  flex: 1 1 200px;
+  margin: 0;
+  color: var(--lj-text-muted);
+  font-size: var(--lj-text-sm);
 }
 
 .album-tracks {
