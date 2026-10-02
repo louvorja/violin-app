@@ -285,6 +285,7 @@ function runtimeContext(): Record<string, unknown> {
   const api = typeof window !== "undefined" ? window.louvorjaApi : undefined;
   return {
     target: Platform.isDesktop ? "electron" : "web",
+    app_platform: appPlatform(),
     os: osName(),
     electron_version: api?.runtime?.electron || Platform.electronVersion || undefined,
     chromium_version: api?.runtime?.chrome || undefined,
@@ -1442,6 +1443,20 @@ function osName(): string {
   return "unknown";
 }
 
+export type AppPlatform = "desktop" | "pwa" | "web";
+
+/** desktop = Electron; pwa = instalado/standalone; web = aba comum do navegador. */
+function appPlatform(): AppPlatform {
+  if (Platform.isDesktop) return "desktop";
+  if (typeof window === "undefined") return "web";
+  const standalone =
+    window.matchMedia?.("(display-mode: standalone)").matches ||
+    window.matchMedia?.("(display-mode: fullscreen)").matches ||
+    window.matchMedia?.("(display-mode: minimal-ui)").matches ||
+    (navigator as Navigator & { standalone?: boolean }).standalone === true;
+  return standalone ? "pwa" : "web";
+}
+
 async function appVersion(): Promise<string> {
   // O executável instalado é a fonte de verdade no desktop. Um override do
   // build (por exemplo, uma execução manual em main) não deve substituí-lo.
@@ -1521,6 +1536,7 @@ export function setEnabled(enabled: boolean): void {
       app_version: _appVersion,
       app_version_source: _appVersionSource,
       sdk_version: _sdkVersion,
+      app_platform: appPlatform(),
     });
     startResponsivenessMonitor();
   } else void init();
@@ -1543,6 +1559,7 @@ export function resetId(): void {
     app_version: _appVersion,
     app_version_source: _appVersionSource,
     sdk_version: _sdkVersion,
+    app_platform: appPlatform(),
   });
 }
 
@@ -1763,6 +1780,7 @@ async function _init(): Promise<void> {
     app_version: version,
     app_version_source: _appVersionSource,
     sdk_version: sdkVersion,
+    app_platform: appPlatform(),
     window_role: windowRole(),
     window_feature: windowFeature(),
     window_route: routePath(),
@@ -1839,6 +1857,7 @@ async function _init(): Promise<void> {
     "app_opened",
     {
       platform: Platform.isDesktop ? "desktop" : "web",
+      app_platform: appPlatform(),
       os: osName(),
       app_version: version,
       app_version_source: _appVersionSource,
