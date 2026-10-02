@@ -23,7 +23,14 @@ class FakeCache {
 }
 const stores = new Map<string, FakeCache>();
 
-import { AUDIO_CACHE, IMAGE_CACHE, webDownload, webStorage } from "../WebFileStore";
+import {
+  AUDIO_CACHE,
+  IMAGE_CACHE,
+  requestPersistence,
+  webDownload,
+  webStorage,
+  webStorageUsage,
+} from "../WebFileStore";
 
 const files = [
   { remote: "/musics/pt/A/one.opus" },
@@ -52,6 +59,7 @@ beforeEach(() => {
       if (!stores.has(name)) stores.set(name, new FakeCache());
       return stores.get(name);
     },
+    delete: async (name: string) => stores.delete(name),
   });
   vi.stubGlobal("navigator", { storage: { persist: async () => true } });
 });
@@ -138,5 +146,35 @@ describe("WebFileStore", () => {
     });
     await webStorage.removeFiles(["/covers/1.jpg"]);
     expect(await webStorage.sizeOfPaths(files.map((f) => f.remote))).toMatchObject({ count: 2 });
+  });
+
+  it("clearFiles apaga áudio e imagens baixados", async () => {
+    await run();
+    await webStorage.clearFiles();
+    expect(await webStorage.sizeOfPaths(files.map((f) => f.remote))).toEqual({ bytes: 0, count: 0 });
+  });
+
+  it("webStorageUsage lê uso, limite e proteção do navegador", async () => {
+    vi.stubGlobal("navigator", {
+      storage: {
+        estimate: async () => ({ usage: 10, quota: 100 }),
+        persisted: async () => false,
+      },
+    });
+    expect(await webStorageUsage()).toEqual({ usage: 10, quota: 100, persisted: false });
+  });
+
+  it("requestPersistence devolve false sem a API e não lança", async () => {
+    vi.stubGlobal("navigator", {});
+    expect(await requestPersistence()).toBe(false);
+    vi.stubGlobal("navigator", {
+      storage: {
+        persisted: async () => false,
+        persist: async () => {
+          throw new Error("negado");
+        },
+      },
+    });
+    expect(await requestPersistence()).toBe(false);
   });
 });

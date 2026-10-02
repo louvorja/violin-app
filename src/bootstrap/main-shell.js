@@ -19,6 +19,7 @@ import $storage from "@/helpers/Storage";
 import $alert from "@helpers/Alert";
 import Platform from "@/helpers/Platform";
 import WakeLock from "@/helpers/WakeLock";
+import { requestPersistence } from "@/helpers/WebFileStore";
 import {
   API_URL,
   API_URL_DB,
@@ -1347,6 +1348,11 @@ $storage.hydrate().then(async () => {
         if (document.fullscreenElement) WakeLock.hold("fullscreen");
         else WakeLock.release("fullscreen");
       });
+
+      // Liturgias, playlists e preferências também ficam só neste navegador.
+      // Só o app instalado pede: o Chrome costuma conceder a ele, e o Firefox
+      // abriria um aviso de permissão no meio do boot.
+      if (window.matchMedia?.("(display-mode: standalone)").matches) void requestPersistence();
     }
 
     // Observabilidade de uso e diagnóstico. Não bloqueia o boot e é no-op em

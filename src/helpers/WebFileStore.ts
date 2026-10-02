@@ -171,11 +171,7 @@ export const webDownload = {
     if (pending.length === 0) return { queued: 0 };
 
     // Evita que o navegador apague o acervo sozinho quando faltar espaço.
-    try {
-      await navigator.storage?.persist?.();
-    } catch {
-      /* sem persistência o download funciona do mesmo jeito */
-    }
+    await requestPersistence();
 
     const mine = new AbortController();
     controller = mine;
@@ -194,6 +190,35 @@ export const webDownload = {
   onQueueDone: (cb: Listener<{ downloaded: number; failed: number }>) => onQueueDone.on(cb),
   onQueueCancelled: (cb: Listener<Record<string, never>>) => onQueueCancelled.on(cb),
 };
+
+/**
+ * Pede ao navegador que não apague os dados do app sozinho quando faltar
+ * espaço. O Chrome decide por conta própria (costuma conceder a PWA instalado),
+ * então o resultado é informativo: sem persistência tudo funciona do mesmo jeito.
+ */
+export async function requestPersistence(): Promise<boolean> {
+  try {
+    if (!navigator.storage?.persist) return false;
+    return (await navigator.storage.persisted?.()) || (await navigator.storage.persist());
+  } catch {
+    return false;
+  }
+}
+
+export interface WebStorageUsage {
+  /** Bytes usados por tudo que o app guarda neste navegador. */
+  usage: number;
+  /** Teto que o navegador reserva para o app (depende do disco livre). */
+  quota: number;
+  /** O navegador prometeu não apagar os dados sozinho. */
+  persisted: boolean;
+}
+
+export async function webStorageUsage(): Promise<WebStorageUsage> {
+  const estimate = (await navigator.storage?.estimate?.().catch(() => null)) ?? {};
+  const persisted = (await navigator.storage?.persisted?.().catch(() => false)) ?? false;
+  return { usage: estimate.usage ?? 0, quota: estimate.quota ?? 0, persisted };
+}
 
 export const webStorage = {
   /** "own" quando o arquivo está guardado neste aparelho; no web não existe acervo clássico. */
@@ -216,6 +241,11 @@ export const webStorage = {
         if (url) await store[cacheNameFor(url)].delete(url, { ignoreVary: true });
       })
     );
+  },
+
+  /** Apaga todo o áudio e as imagens baixados; o catálogo (IndexedDB) fica. */
+  async clearFiles(): Promise<void> {
+    await Promise.all([AUDIO_CACHE, IMAGE_CACHE].map((name) => caches.delete(name)));
   },
 
   async sizeOfPaths(remotes: string[]): Promise<{ bytes: number; count: number }> {

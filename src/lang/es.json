@@ -530,6 +530,16 @@
     },
     "storage": {
       "title": "Almacenamiento",
+      "web": {
+        "hint": "En el navegador, las músicas descargadas se guardan solo en este dispositivo y en esta app. Borrar los datos del sitio o desinstalar la app lo elimina todo.",
+        "used": "Espacio usado por la app",
+        "quota": "Límite del navegador",
+        "protected": "Almacenamiento protegido",
+        "protected_yes": "Sí",
+        "protected_no": "No",
+        "protected_hint": "Sin la protección, el navegador puede borrar las músicas descargadas si el dispositivo se queda sin espacio. Instalar la app en la pantalla de inicio suele habilitarla.",
+        "protect": "Proteger almacenamiento"
+      },
       "folder": "Carpeta de datos",
       "restart_required": "Reinicie la aplicación para completar el traslado de todos los datos a esta carpeta.",
       "folder_fallback": "No pude escribir en {dir}; los datos están en la carpeta del programa. Elija otra carpeta o libere el acceso.",

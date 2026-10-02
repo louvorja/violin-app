@@ -469,6 +469,57 @@
           </div>
         </section>
 
+        <!-- Armazenamento no navegador/PWA: o acervo fica no Cache Storage -->
+        <section
+          v-if="abaIniciada('web_storage')"
+          v-show="activeTab === 'web_storage'"
+          class="opt-section"
+        >
+          <p class="opt-hint">{{ $t("options.storage.web.hint") }}</p>
+          <div class="opt-stats">
+            <div class="opt-stat">
+              <span class="opt-stat-label">{{ $t("options.storage.web.used") }}</span>
+              <span class="opt-stat-value">{{ sync.humanSize(webUsage?.usage) }}</span>
+            </div>
+            <div class="opt-stat">
+              <span class="opt-stat-label">{{ $t("options.storage.web.quota") }}</span>
+              <span class="opt-stat-value">{{ sync.humanSize(webUsage?.quota) }}</span>
+            </div>
+            <div class="opt-stat">
+              <span class="opt-stat-label">{{ $t("options.storage.web.protected") }}</span>
+              <span class="opt-stat-value">
+                {{
+                  webUsage?.persisted
+                    ? $t("options.storage.web.protected_yes")
+                    : $t("options.storage.web.protected_no")
+                }}
+              </span>
+            </div>
+          </div>
+          <p v-if="webUsage && !webUsage.persisted" class="opt-hint opt-hint--warn">
+            {{ $t("options.storage.web.protected_hint") }}
+          </p>
+          <div class="opt-actions">
+            <button
+              v-if="webUsage && !webUsage.persisted"
+              type="button"
+              class="opt-btn"
+              @click="protectStorage"
+            >
+              <LjIcon :icon="ICONS.UI.HARDDISK" size="14" />
+              {{ $t("options.storage.web.protect") }}
+            </button>
+            <button type="button" class="opt-btn opt-btn--danger" @click="clearFiles">
+              <LjIcon :icon="ICONS.ACTIONS.DELETE_FILLED" size="14" />
+              {{ $t("options.storage.clear_files") }}
+            </button>
+            <button type="button" class="opt-btn" @click="loadWebUsage">
+              <LjIcon :icon="ICONS.ACTIONS.REFRESH" size="14" />
+              {{ $t("options.storage.refresh") }}
+            </button>
+          </div>
+        </section>
+
         <!-- Armazenamento -->
         <section v-if="abaIniciada('storage')" v-show="activeTab === 'storage'" class="opt-section">
           <div class="opt-row opt-row--col sinc-row-gap">
@@ -686,6 +737,7 @@ import { ICONS } from "@/config/Icons";
 import { LjIcon, LjProgress, LjTabs } from "@/components/ui";
 import type { LjTab } from "@/components/ui";
 import { useSyncManager } from "@/composables/useSyncManager";
+import { requestPersistence, webStorageUsage, type WebStorageUsage } from "@/helpers/WebFileStore";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
 import {
   formatBackgroundTaskDetail,
@@ -795,7 +847,7 @@ const abas = computed<LjTab[]>(() => [
         { value: "bible", label: t("options.bible_download.title"), icon: ICONS.BIBLE.BIBLE },
         { value: "storage", label: t("options.storage.title"), icon: ICONS.UI.HARDDISK },
       ]
-    : []),
+    : [{ value: "web_storage", label: t("options.storage.title"), icon: ICONS.UI.HARDDISK }]),
 ]);
 
 // Mesma economia do v-window-item: a aba só é montada na primeira vez que
@@ -1492,11 +1544,27 @@ async function clearJson(): Promise<void> {
   }) as (...args: unknown[]) => unknown);
 }
 
+const webUsage = ref<WebStorageUsage | null>(null);
+
+async function loadWebUsage(): Promise<void> {
+  if (isDesktop.value) return;
+  webUsage.value = await webStorageUsage();
+}
+
+async function protectStorage(): Promise<void> {
+  await requestPersistence();
+  await loadWebUsage();
+}
+
+watch(activeTab, (aba) => {
+  if (aba === "web_storage") void loadWebUsage();
+});
+
 async function clearFiles(): Promise<void> {
   $alert.yesno("options.storage.clear_files_confirm", (async (btn) => {
     if (btn !== "yes") return;
     await Platform?.storage?.clearFiles?.();
-    await Promise.all([reloadStats(), scanLocalCache({ force: true })]);
+    await Promise.all([reloadStats(), scanLocalCache({ force: true }), loadWebUsage()]);
   }) as (...args: unknown[]) => unknown);
 }
 

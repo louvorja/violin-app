@@ -530,6 +530,16 @@
     },
     "storage": {
       "title": "Armazenamento",
+      "web": {
+        "hint": "No navegador, as músicas baixadas ficam guardadas só neste aparelho e neste app. Limpar os dados do site ou desinstalar o app apaga tudo.",
+        "used": "Espaço usado pelo app",
+        "quota": "Limite do navegador",
+        "protected": "Armazenamento protegido",
+        "protected_yes": "Sim",
+        "protected_no": "Não",
+        "protected_hint": "Sem a proteção, o navegador pode apagar as músicas baixadas se o aparelho ficar sem espaço. Instalar o app na tela inicial costuma liberá-la.",
+        "protect": "Proteger armazenamento"
+      },
       "folder": "Pasta de dados",
       "restart_required": "Reinicie o aplicativo para concluir a mudança de todos os dados para esta pasta.",
       "folder_fallback": "Não consegui escrever em {dir}; os dados estão na pasta do programa. Escolha outra pasta ou libere o acesso.",

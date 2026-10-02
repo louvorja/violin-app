@@ -494,6 +494,10 @@ que o navegador de fato não oferece.
 - **Abrir `.slja`**: botão em Importar/Exportar (funciona em qualquer navegador,
   inclusive Android) e `file_handlers` + `launchQueue` no Chrome/ChromeOS. O
   Android não oferece `file_handlers`.
+- **Armazenamento**: aba própria em Sincronizar mostra uso, limite e se o
+  navegador prometeu não apagar os dados (`navigator.storage.persist()`); o PWA
+  instalado pede essa proteção no boot e o download também. O botão "Limpar
+  mídia" apaga só os caches de áudio e imagem; o catálogo (IndexedDB) fica.
 - **Só no desktop, sem equivalente web**: baixar vídeo online (yt-dlp), servidor
   HTTP local (chat, controle remoto, dispositivos, OBS), atalhos globais do SO,
   iniciar com o sistema e pasta de dados escolhida pelo usuário.
