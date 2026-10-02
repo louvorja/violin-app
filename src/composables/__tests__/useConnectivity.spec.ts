@@ -45,6 +45,16 @@ describe("useConnectivity", () => {
     expect(isOnline.value).toBe(true);
   });
 
+  it("ao voltar a tela, falhas dos primeiros segundos não derrubam", () => {
+    const { isOnline } = useConnectivity();
+    Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+    reportNetworkResult(false);
+    reportNetworkResult(false);
+    reportNetworkResult(false);
+    expect(isOnline.value).toBe(true);
+  });
+
   it("um único sucesso traz de volta", () => {
     const { isOnline } = useConnectivity();
     reportNetworkResult(false);

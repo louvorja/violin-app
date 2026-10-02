@@ -493,10 +493,40 @@ onlineVideo.setStreamFailureReporter((failure) => {
     last_stream_failure: failure,
   });
 });
+// Esperas entre sondagens depois de acordar: o Wi-Fi costuma voltar em segundos.
+const RESUME_PROBE_DELAYS_MS = [1000, 3000, 7000, 15000];
+let _resumeProbeRun = 0;
+
+/**
+ * Ao acordar ou desbloquear a tela, as requisições dos primeiros segundos
+ * falham com o Wi-Fi ainda reconectando, e o indicador ficava preso em "sem
+ * internet". Ignora essas falhas, sonda até a rede responder e reenvia o
+ * estado a todas as janelas, mesmo sem mudança, para quem contou falhas
+ * por conta própria acertar o passo.
+ */
+async function recheckNetworkAfterWake() {
+  const run = ++_resumeProbeRun;
+  netHealth.holdFailures(RESUME_PROBE_DELAYS_MS.reduce((a, b) => a + b, 0) + 5000);
+  for (const delay of RESUME_PROBE_DELAYS_MS) {
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    if (run !== _resumeProbeRun) return;
+    const result = await downloader.checkConnection().catch(() => ({ ok: false }));
+    if (run !== _resumeProbeRun) return;
+    if (result?.ok) {
+      netHealth.report(true, "resume-probe");
+      break;
+    }
+  }
+  const estado = netHealth.status();
+  for (const win of BrowserWindow.getAllWindows()) safeSend(win, "net:status", estado);
+}
+
 const handleSystemResume = () => {
   cpuProfileCapture.cancel();
   runtimeHealth.noteSystemResume();
+  void recheckNetworkAfterWake();
 };
+const handleScreenUnlock = () => void recheckNetworkAfterWake();
 windowFactory.setWindowObserver((win, context) => runtimeHealth.watchWindow(win, context));
 runtimeHealth.watchApp(app);
 runtimeHealth.start();
@@ -883,6 +913,7 @@ async function _bootstrapMonitorConfig() {
 
 app.whenReady().then(async () => {
   powerMonitor.on("resume", handleSystemResume);
+  powerMonitor.on("unlock-screen", handleScreenUnlock);
   if (backgroundWindows && process.platform === "darwin") app.dock?.hide();
   // Antes de qualquer trabalho: entre o clique no ícone e a janela existir há
   // bootstrap de monitores, limpeza de cache e a subida do servidor HTTP, e
@@ -1123,6 +1154,7 @@ app.on("before-quit", (event) => {
 // D6 — Desregistrar atalhos globais ao fechar (obrigatório no Electron)
 app.on("will-quit", () => {
   powerMonitor.removeListener("resume", handleSystemResume);
+  powerMonitor.removeListener("unlock-screen", handleScreenUnlock);
   runtimeHealth.stop();
   cpuProfileCapture.cancel();
   shortcuts.disable();
@@ -1476,7 +1508,13 @@ ipcMain.handle("download:setApiConfig", (_event, cfg) => downloader.setApiConfig
 ipcMain.handle("download:getParams", (_event, force) => downloader.getParams(force));
 
 /** Verifica se o servidor de arquivos está acessível */
-ipcMain.handle("download:checkConnection", () => downloader.checkConnection());
+// A sonda também corrige o estado do main: sem isso o renderer voltava a
+// "online" e o main seguia "offline", e cada janela nova nascia sem internet.
+ipcMain.handle("download:checkConnection", async () => {
+  const result = await downloader.checkConnection();
+  netHealth.report(!!result?.ok, "probe");
+  return result;
+});
 
 /** Inicia download de uma lista de arquivos em background */
 ipcMain.handle("download:start", (event, files) => downloader.startDownload(files, event.sender));

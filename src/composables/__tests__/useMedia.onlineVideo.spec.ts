@@ -158,6 +158,9 @@ function onlyFragmentedFormats() {
 
 it("retains real XHR Blob MIME, bytes and original basename when play rejects the opaque source", async () => {
   openAudio.mockRestore();
+  // Este é o caminho do blob baixado por inteiro, não o do streaming.
+  const { default: $userdata } = await import("@/helpers/UserData");
+  $userdata.set(KEYS.MODULES.MEDIA.LAZY_LOAD, false);
   const { default: Telemetry } = await import("@/helpers/Telemetry");
   const log = vi.spyOn(Telemetry, "log").mockImplementation(() => {});
   let request!: XMLHttpRequest;

@@ -22,13 +22,20 @@ interface NetStatus {
 const FALHAS_PARA_OFFLINE = 2;
 
 /** Espera entre sondagens enquanto offline; a última se repete. */
-const BACKOFF_MS = [5000, 10000, 30000, 60000];
+const BACKOFF_MS = [2000, 5000, 10000, 30000, 60000];
+
+/**
+ * Ao voltar a tela, o Wi-Fi ainda está reconectando e as primeiras requisições
+ * falham; sem carência o indicador acendia "sem internet" a cada despertar.
+ */
+const CARENCIA_AO_DESPERTAR_MS = 15000;
 
 let _falhas = 0;
 let _tentativa = 0;
 let _timer: ReturnType<typeof setTimeout> | null = null;
 let _sondando = false;
 let _instalado = false;
+let _carenciaAte = 0;
 // `ref`, não variável solta: o `computed` que a interface consome precisa de
 // uma dependência reativa para reavaliar.
 const _desdeQuando = ref<number | null>(null);
@@ -101,8 +108,18 @@ export function reportNetworkResult(ok: boolean, _source = "fetch"): void {
     _definirEstado(true);
     return;
   }
+  if (Date.now() < _carenciaAte) return;
   _falhas += 1;
   if (_falhas >= FALHAS_PARA_OFFLINE) _definirEstado(false);
+}
+
+/** A tela voltou ou o sistema diz que a rede voltou: conferir já, do início do backoff. */
+function _aoDespertar(): void {
+  _carenciaAte = Date.now() + CARENCIA_AO_DESPERTAR_MS;
+  _falhas = 0;
+  if (_lerEstado()) return;
+  _pararSondagem();
+  void sondar();
 }
 
 /** Só para os testes: devolve o módulo ao estado inicial. */
@@ -112,6 +129,7 @@ export function _resetConnectivity(): void {
   if (_timer) clearTimeout(_timer);
   _timer = null;
   _sondando = false;
+  _carenciaAte = 0;
   _desdeQuando.value = null;
 }
 
@@ -126,9 +144,12 @@ function _instalar(): void {
     _falhas = FALHAS_PARA_OFFLINE;
     _definirEstado(false);
   });
-  window.addEventListener("online", () => void sondar());
+  window.addEventListener("online", _aoDespertar);
   window.addEventListener("focus", () => {
     if (!_lerEstado()) void sondar();
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") _aoDespertar();
   });
 
   if (navigator.onLine === false) _definirEstado(false);
