@@ -167,6 +167,7 @@ import Window from "@/components/Window.vue";
 import LSlide from "@/components/Slide.vue";
 import LPlayer from "@/components/Player.vue";
 import LFullscreenPlayer from "@/components/FullscreenPlayer.vue";
+import { fullscreenApiAvailable } from "@/helpers/Fullscreen";
 import {
   LjButton,
   LjChip,
@@ -436,6 +437,9 @@ function _onKeyNav(e) {
 // de um gesto do usuário) o flag ficava true e o <l-fullscreen-player> aparecia
 // como overlay duplicado sobre o player do rodapé.
 function _syncFullscreenFlag() {
+  // Sem a API a tela cheia é o modo "só página" do vue-fullscreen, que nunca
+  // tem `fullscreenElement`: o flag é a única verdade.
+  if (!fullscreenApiAvailable()) return;
   const real = !!document.fullscreenElement;
   if (module_.value?.config?.fullscreen && !real) {
     Media.fullscreen(false);
@@ -704,6 +708,13 @@ onBeforeUnmount(() => {
 <!-- Sem `scoped`: o conteúdo do popover vai para um portal no <body> e não
      recebe o atributo de escopo. O isolamento vem do prefixo `media-`. -->
 <style>
+/* Fundo sólido na tela cheia: no iOS 26 um `position: fixed` sem cor própria
+   no topo faz o sistema borrar a faixa abaixo da barra de status. Fora do
+   `scoped`: a raiz do vue-fullscreen não recebe o atributo de escopo. */
+.media-preview.fullscreen {
+  background-color: #000;
+}
+
 .media-options {
   display: flex;
   flex-direction: column;
