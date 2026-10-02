@@ -451,7 +451,7 @@ function toggleLibras() {
 .shell-tools--compact-web .shell-tool {
   flex: 0 0 44px;
   width: 44px;
-  height: 44px;
+  height: auto;
 }
 </style>
 

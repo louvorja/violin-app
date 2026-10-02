@@ -877,7 +877,11 @@ useBroadcastListener(BROADCAST_TYPE.RIBBON_SELECT_PAGE, (payload: unknown) => {
   flex: 1;
   min-width: 0;
   overflow-x: auto;
-  overscroll-behavior-inline: contain;
+  /* Só rola na horizontal: com `overflow-x: auto` o outro eixo vira `auto`
+     também, e 1px de sobra já deixava o dedo arrastar a barra para cima/baixo. */
+  overflow-y: hidden;
+  touch-action: pan-x;
+  overscroll-behavior: contain;
   scrollbar-width: none;
 }
 
