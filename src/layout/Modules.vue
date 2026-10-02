@@ -89,9 +89,10 @@ function buildAsyncComponent(moduleId: string): Component {
       // Na web, depois de uma publicação os arquivos da versão anterior somem do
       // servidor: a aba aberta não consegue mais baixar módulo nenhum. Recarregar
       // sozinho derrubaria o que estiver tocando, então a decisão fica com o operador.
+      // Vale também offline: o service worker já guardou a versão nova, e é o
+      // recarregar que a devolve — sem o aviso o módulo ficava em branco, mudo.
       const stale =
         !Platform.isDesktop &&
-        navigator.onLine &&
         /dynamically imported module|preload CSS|module script failed/i.test(String(err));
       if (stale) {
         $snackbar.show({

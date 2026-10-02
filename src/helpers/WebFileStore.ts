@@ -86,7 +86,7 @@ async function isCached(url: string, store: Record<string, Cache>): Promise<bool
   return Boolean(await store[cacheNameFor(url)].match(url, { ignoreVary: true }));
 }
 
-const onProgress = emitter<{ file: string }>();
+const onProgress = emitter<{ file: string; total?: number }>();
 const onFileDone = emitter<{ file: string }>();
 const onFileError = emitter<{ file: string; error: string }>();
 const onQueueDone = emitter<{ downloaded: number; failed: number }>();
@@ -140,7 +140,7 @@ async function runQueue(
         continue;
       }
       const { remote, url } = pending[next++];
-      onProgress.emit({ file: remote });
+      onProgress.emit({ file: remote, total: pending.length });
       try {
         const bytes = await downloadOne(remote, url, store, signal);
         adaptive.report({ bytes, ok: true });
@@ -209,7 +209,7 @@ export const webDownload = {
     controller?.abort();
   },
 
-  onProgress: (cb: Listener<{ file: string }>) => onProgress.on(cb),
+  onProgress: (cb: Listener<{ file: string; total?: number }>) => onProgress.on(cb),
   onFileDone: (cb: Listener<{ file: string }>) => onFileDone.on(cb),
   onFileError: (cb: Listener<{ file: string; error: string }>) => onFileError.on(cb),
   onQueueDone: (cb: Listener<{ downloaded: number; failed: number }>) => onQueueDone.on(cb),
