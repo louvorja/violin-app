@@ -37,7 +37,10 @@
             <span aria-hidden="true">{{ mobileActionsOpen ? "⌃" : "⌄" }}</span>
           </button>
           <div class="ribbon-tools-web">
-            <ShellTools :class="{ 'shell-tools--compact-web': isMobileWeb }" />
+            <ShellTools
+              :compact="isMobileWeb"
+              :class="{ 'shell-tools--compact-web': isMobileWeb }"
+            />
           </div>
         </div>
       </div>
