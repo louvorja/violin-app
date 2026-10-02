@@ -1,6 +1,7 @@
 import { createApp, watchEffect } from "vue";
 import { createPinia } from "pinia";
 import { useConnectivity } from "@/composables/useConnectivity";
+import { watchStaleVersion } from "@/helpers/StaleVersion";
 import requiresNetwork from "@/directives/requiresNetwork";
 import App from "@/App.vue";
 import router from "@/router";
@@ -1247,6 +1248,7 @@ $storage.hydrate().then(async () => {
     // Liga o diagnóstico de conexão antes de montar: as telas de projeção são
     // rotas deste mesmo app e precisam do estado desde o primeiro quadro.
     if (!isAuxiliaryRenderer) useConnectivity();
+    watchStaleVersion();
 
     app.mount("#app");
     _bootStage("mounted");
