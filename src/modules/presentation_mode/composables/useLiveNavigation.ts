@@ -26,22 +26,26 @@ export interface NavigableSource {
 
 /**
  * Os passos vão em fila: o segundo toque parte de onde o primeiro deixou,
- * mesmo que o conteúdo novo ainda não tenha voltado do ar. Na última parte —
- * ou sem partes — o Próximo não pula de item: chama `onEnd` (destaca "A seguir").
+ * mesmo que o conteúdo novo ainda não tenha voltado do ar.
+ *
+ * As fontes ativas são tentadas em ordem: o PDF de um momento vira a página e,
+ * na última, o momento passa ao arquivo seguinte. Quando nenhuma anda, o
+ * Próximo não pula de item: chama `onEnd` (destaca "A seguir").
  */
 export function useLiveNavigation(sources: NavigableSource[], locked: Ref<boolean>, onEnd: () => void) {
-  const current = computed(() => sources.find((s) => s.active()) ?? null);
-  const canNavigate = computed(() => !locked.value && !!current.value?.canStep());
-  const counter = computed(() => current.value?.counter?.());
+  const activeSources = () => sources.filter((s) => s.active());
+  const canNavigate = computed(() => !locked.value && activeSources().some((s) => s.canStep()));
+  const counter = computed(() => activeSources()[0]?.counter?.());
 
   let queue: Promise<void> = Promise.resolve();
   function navigate(to: Step): void {
     if (locked.value) return;
     queue = queue
       .then(async () => {
-        const source = sources.find((s) => s.active());
-        const moved = source?.canStep() ? await source.step(to) : false;
-        if (!moved && to === "next") onEnd();
+        for (const source of activeSources()) {
+          if (source.canStep() && (await source.step(to))) return;
+        }
+        if (to === "next") onEnd();
       })
       .catch((error: unknown) => {
         Telemetry.captureException(error, { source: "presentation_mode.navigate" });
@@ -125,7 +129,7 @@ export function bibleSource(deps: {
 export function momentSource(deps: {
   sent: () => { itemId: string; childId: string } | null;
   item: (itemId: string) => ProgramItem | null;
-  send: (itemId: string, childId: string) => void;
+  send: (itemId: string, childId: string, to: Step) => void;
 }): NavigableSource {
   const current = () => {
     const sent = deps.sent();
@@ -143,7 +147,7 @@ export function momentSource(deps: {
     step(to) {
       const c = current();
       const next = c ? stepChild(c.item, c.childId, to) : null;
-      if (c && next) deps.send(c.item.id, next.id);
+      if (c && next) deps.send(c.item.id, next.id, to);
       return !!next;
     },
   };

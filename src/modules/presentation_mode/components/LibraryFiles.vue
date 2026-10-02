@@ -418,6 +418,7 @@ const KIND_ICON: Record<string, string> = {
   video: ICONS.MEDIA.VIDEO_FILE,
   audio: ICONS.MUSIC.AUDIO,
   pdf: ICONS.UI.FILE_PDF,
+  powerpoint: ICONS.PROJECTION.PRESENTATION,
   slja: ICONS.PROJECTION.PRESENT,
 };
 

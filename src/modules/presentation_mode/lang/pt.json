@@ -327,5 +327,13 @@
     "new_moment": "Novo momento com este arquivo",
     "added": "Adicionado a \"{name}\".",
     "grid_hint": "Clique para mandar ao ar · Próximo/Anterior e o passador andam pela lista"
+  },
+  "pdf": {
+    "hint": "Clique para ir ao slide · Próximo/Anterior e o passador viram a página"
+  },
+  "pptx": {
+    "converting": "Convertendo \"{name}\" pelo PowerPoint…",
+    "failed": "Não deu para converter \"{name}\" pelo PowerPoint. Abra o arquivo no PowerPoint e exporte como PDF (Arquivo → Exportar → PDF).",
+    "unsupported": "Este computador não converte PowerPoint. Exporte \"{name}\" como PDF no PowerPoint e use o PDF."
   }
 }

@@ -163,6 +163,9 @@ declare global {
         dirPath: string,
         op: import("./types/Series").SeriesOp
       ) => Promise<{ ok: true; series: import("./types/Series").SeriesDoc } | { ok: false; error: string }>;
+      convertPresentation?: (
+        filePath: string
+      ) => Promise<{ ok: true; pdf: string; cached: boolean } | { ok: false; error: string }>;
       setDataDir: (dir: string, opts?: { moveExisting?: boolean }) => Promise<void>;
       enforceQuota: (maxBytes: number) => Promise<void>;
       checkLocal: (paths: string[]) => Promise<Record<string, "own" | "classic" | false>>;

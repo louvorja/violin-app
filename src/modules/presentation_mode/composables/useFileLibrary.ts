@@ -5,6 +5,7 @@ import Telemetry from "@/helpers/Telemetry";
 import { KEYS } from "@/constants/UserDataKeys";
 import { AUDIO_EXT, IMAGE_EXT, VIDEO_EXT } from "@/constants/FileTypes";
 import { SLJA_EXT } from "@/helpers/SljaPlayer";
+import { isPowerPoint } from "./usePowerPoint";
 
 /**
  * Navegador de arquivos do Modo apresentação.
@@ -32,7 +33,7 @@ export interface LibraryEntry {
   mtimeMs: number;
 }
 
-export type LibraryFileKind = "image" | "video" | "audio" | "pdf" | "slja";
+export type LibraryFileKind = "image" | "video" | "audio" | "pdf" | "powerpoint" | "slja";
 
 export const ALL = "__all__";
 export const FAVORITES = "__favorites__";
@@ -42,6 +43,7 @@ export function fileKind(ext: string): LibraryFileKind | null {
   if (VIDEO_EXT.includes(ext)) return "video";
   if (AUDIO_EXT.includes(ext)) return "audio";
   if (ext === "pdf") return "pdf";
+  if (isPowerPoint(`.${ext}`)) return "powerpoint";
   if (ext === SLJA_EXT) return "slja";
   return null;
 }

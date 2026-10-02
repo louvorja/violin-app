@@ -1,10 +1,22 @@
 <template>
-  <div class="pm-mirror" data-testid="pm-live-mirror" :data-kind="cleared ? 'cleared' : current ?? 'empty'">
+  <div
+    class="pm-mirror"
+    data-testid="pm-live-mirror"
+    :data-kind="cleared ? 'cleared' : (current ?? 'empty')"
+  >
     <div v-if="cleared || !current" class="pm-mirror__fill" :style="background" />
 
-    <Slide v-else-if="current === 'music'" :slide="music.slide.value ?? undefined" :title="music.title.value" />
+    <Slide
+      v-else-if="current === 'music'"
+      :slide="music.slide.value ?? undefined"
+      :title="music.title.value"
+    />
 
-    <Slide v-else-if="current === 'bible' && bible" :slide="bibleSlide ?? undefined" :title="bible.reference" />
+    <Slide
+      v-else-if="current === 'bible' && bible"
+      :slide="bibleSlide ?? undefined"
+      :title="bible.reference"
+    />
 
     <template v-else-if="current === 'file' && file">
       <img v-if="file.type === 'image'" class="pm-mirror__media" :src="file.url" alt="" />
@@ -17,6 +29,7 @@
         playsinline
         preload="auto"
       />
+      <img v-else-if="pdfPage" class="pm-mirror__media" :src="pdfPage" alt="" />
       <div v-else class="pm-mirror__label">
         <LjIcon :icon="ICONS.UI.FILE_PDF" :size="22" />
         <span>{{ file.title }}</span>
@@ -53,11 +66,23 @@ import { VideoStateGate } from "@/helpers/VideoStateVersion";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { useMainBackground } from "@/composables/useMainBackground";
 import { useLiveContent } from "../composables/useLiveContent";
+import { usePdfDeck } from "../composables/usePdfDeck";
 
 defineProps<{ cleared: boolean }>();
 
 const { current, music, bible, file, onlineTitle, announcement } = useLiveContent();
 const { style: background } = useMainBackground();
+
+/** O slide do PDF que está na tela, pela miniatura que o palco já desenhou. */
+const deck = usePdfDeck();
+const pdfPage = computed(() =>
+  file.value?.type === "pdf" && deck.active.value ? deck.thumbs.get(deck.page.value) || null : null
+);
+watch(
+  () => (deck.active.value ? deck.page.value : 0),
+  (page) => page && void deck.thumbOf(page),
+  { immediate: true }
+);
 
 const bibleSlide = computed(() =>
   bible.value ? { lyric: bible.value.text, aux_lyric: bible.value.reference, is_bible: true } : null

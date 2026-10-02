@@ -84,6 +84,17 @@ function fromCustomMusic(customSongId: string, mode: MusicMode | string | undefi
   return { kind: "music", customSongId };
 }
 
+/**
+ * O arquivo do disco por trás do que está no palco, se houver. `item` é o
+ * item do programa de `program`/`child`.
+ */
+export function filePathOf(playable: Playable | null, item: ProgramItem | null): string | null {
+  if (playable?.type === "file") return playable.entry.path;
+  if (playable?.type === "child") return item?.children?.find((c) => c.id === playable.childId)?.path ?? null;
+  if (playable?.type === "program") return item?.source?.dir ?? null;
+  return null;
+}
+
 export function expectationOf(
   playable: Playable,
   item: ProgramItem | null,

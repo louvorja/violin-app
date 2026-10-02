@@ -122,22 +122,21 @@ function entryOf(path: string): LibraryEntry {
   return { name, path, isDir: false, ext: name.includes(".") ? (name.split(".").pop() ?? "").toLowerCase() : "", size: 0, mtimeMs: 0 };
 }
 
+function request(entry: LibraryEntry, { priority = false } = {}): void {
+  if (entry.isDir || _meta.has(entry.path) || _queued.has(entry.path)) return;
+  if (!["image", "video", "audio"].includes(fileKind(entry.ext) ?? "")) return;
+  _queued.add(entry.path);
+  if (priority) _queue.unshift(entry);
+  else _queue.push(entry);
+  _pump();
+}
+
+/** Miniatura de um arquivo pelo caminho; pede a leitura na primeira vez. */
+function thumbOf(path: string): string | undefined {
+  if (!_meta.has(path)) request(entryOf(path));
+  return _meta.get(path)?.thumb;
+}
+
 export function useMediaMeta() {
-  return {
-    meta: _meta,
-    /** Miniatura de um arquivo pelo caminho; pede a leitura na primeira vez. */
-    thumbOf(path: string): string | undefined {
-      const entry = entryOf(path);
-      if (!_meta.has(path)) this.request(entry);
-      return _meta.get(path)?.thumb;
-    },
-    request(entry: LibraryEntry, { priority = false } = {}): void {
-      if (entry.isDir || _meta.has(entry.path) || _queued.has(entry.path)) return;
-      if (!fileKind(entry.ext) || fileKind(entry.ext) === "pdf" || fileKind(entry.ext) === "slja") return;
-      _queued.add(entry.path);
-      if (priority) _queue.unshift(entry);
-      else _queue.push(entry);
-      _pump();
-    },
-  };
+  return { meta: _meta, thumbOf, request };
 }

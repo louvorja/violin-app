@@ -82,6 +82,7 @@ const storage = require("./main/storage.js");
 const docStore = require("./main/docStore.js");
 const fileBrowser = require("./main/fileBrowser.js");
 const seriesFile = require("./main/seriesFile.js");
+const { createPresentationConverter } = require("./main/presentationConvert.js");
 const mediaVariants = require("./main/mediaVariants.js");
 const mediaResolver = require("./main/mediaResolver.js");
 const classicLibrary = require("./main/classicLibrary.js");
@@ -2127,6 +2128,11 @@ ipcMain.handle("files:seriesRead", (_e, dirPath) => seriesFile.read(dirPath));
 ipcMain.handle("files:seriesApply", (_e, dirPath, op) => seriesFile.apply(dirPath, op));
 // Cópias em conflito do sincronizador: "merge" ou o nome da versão escolhida.
 ipcMain.handle("files:seriesResolve", (_e, dirPath, choice) => seriesFile.resolve(dirPath, choice));
+// PowerPoint → PDF pelo PowerPoint instalado; o PDF é cache, refeito se o arquivo mudar.
+const presentationConverter = createPresentationConverter({
+  cacheDir: path.join(paths.dataDir(), "cache", "presentations"),
+});
+ipcMain.handle("files:convertPresentation", (_e, filePath) => presentationConverter.toPdf(filePath));
 
 ipcMain.handle("storage:chooseDir", async (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);

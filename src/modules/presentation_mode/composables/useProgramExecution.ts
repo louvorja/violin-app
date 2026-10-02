@@ -16,6 +16,7 @@ import { liturgyItem } from "../program/liturgy";
 import type { MusicMode } from "../program/musicModes";
 import { nextVerseOf } from "../program/bible";
 import { useBibleLibrary } from "./useBibleLibrary";
+import { isPowerPoint, powerPointAsPdf } from "./usePowerPoint";
 
 /**
  * Toca uma música no formato pedido. Com letra, ela vai minimizada — os
@@ -108,15 +109,27 @@ export function useProgramExecution() {
     }
     if (item.source) {
       if (item.source.tipo === LiturgyItemTypeEnum.MUSICA && playMusicOnStage(item.source)) return true;
+      if (item.source.tipo === LiturgyItemTypeEnum.ARQUIVO && isPowerPoint(item.source.dir ?? "")) {
+        projectPath(item.source.dir ?? "", item.title);
+        return true;
+      }
       executeItem(item.source);
       return true;
     }
     return false;
   }
 
-  /** Um arquivo solto (biblioteca) vai para a tela principal como um item de arquivo da liturgia. */
+  /**
+   * Um arquivo solto (biblioteca) vai para a tela principal como um item de
+   * arquivo da liturgia. PowerPoint vai como o PDF convertido.
+   */
   function projectPath(path: string, name: string): void {
-    executeItem(liturgyItem({ id: crypto.randomUUID(), tipo: LiturgyItemTypeEnum.ARQUIVO, dir: path, item: name }));
+    const send = (dir: string) =>
+      executeItem(liturgyItem({ id: crypto.randomUUID(), tipo: LiturgyItemTypeEnum.ARQUIVO, dir, item: name }));
+    if (!isPowerPoint(path)) return void send(path);
+    void powerPointAsPdf(path, name).then((pdf) => {
+      if (pdf) void send(pdf);
+    });
   }
 
   /**

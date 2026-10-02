@@ -76,11 +76,12 @@
         <!-- Arquivo de um momento no ar: vídeo com controles e a faixa dos outros; foto, a grade. -->
         <template v-else-if="liveMoment">
           <StageVideo v-if="showVideoStage" :locked="outputLocked" />
+          <PdfStage v-else-if="pdfDeck.active.value" :locked="outputLocked" />
           <MomentStage
             :item="liveMoment"
             :live-child-id="liveOrigin?.type === 'child' ? liveOrigin.childId : null"
             :locked="outputLocked"
-            :strip="showVideoStage"
+            :strip="showVideoStage || pdfDeck.active.value"
             @pick="
               (childId: string) => dispatch({ type: 'child', itemId: liveMoment!.id, childId })
             "
@@ -92,6 +93,7 @@
           :locked="outputLocked"
         />
         <StageVideo v-else-if="showVideoStage" :locked="outputLocked" />
+        <PdfStage v-else-if="pdfDeck.active.value" :locked="outputLocked" />
         <StageVideo v-else-if="audioLive" :locked="outputLocked" :audio-title="audioTitle" />
         <!-- Imagem, versículo, anúncio: o palco mostra o que está na tela. -->
         <div v-else-if="liveKind" class="pm-stage__preview" data-testid="pm-stage-preview">
@@ -184,8 +186,17 @@ import StageSlides from "./StageSlides.vue";
 import StageVideo from "./StageVideo.vue";
 import StagePreview from "./StagePreview.vue";
 import MomentStage from "./MomentStage.vue";
+import PdfStage from "./PdfStage.vue";
+import { isDeck, usePdfDeck } from "../composables/usePdfDeck";
+import { preparePowerPoint } from "../composables/usePowerPoint";
 import { useStage } from "../composables/useStage";
-import { expectationOf, isOnAir, samePlayable, type Playable } from "../program/playable";
+import {
+  expectationOf,
+  filePathOf,
+  isOnAir,
+  samePlayable,
+  type Playable,
+} from "../program/playable";
 import LibraryPanel, { type LibraryTab } from "./LibraryPanel.vue";
 import LiveMirror from "./LiveMirror.vue";
 import $appdata from "@/helpers/AppData";
@@ -614,15 +625,24 @@ const onlineQueue = useOnlineQueue({
   onSent: markSent,
 });
 
+const pdfDeck = usePdfDeck();
+
 const navigation = useLiveNavigation(
   [
+    // O PDF no ar vira página — mesmo dentro de um momento, antes de passar ao arquivo seguinte.
+    pdfDeck.source,
     momentSource({
       sent: () => {
         const sent = sentWhile(["file", "announcements"]);
         return sent?.type === "child" ? sent : null;
       },
       item: (itemId) => findItem(itemId),
-      send: (itemId, childId) => dispatch({ type: "child", itemId, childId }),
+      send: (itemId, childId, to) => {
+        // Voltando para um PDF, ele abre no último slide, de onde o operador saiu.
+        if (to === "prev" && isDeck(pathOf({ type: "child", itemId, childId })))
+          pdfDeck.openNextAtEnd();
+        dispatch({ type: "child", itemId, childId });
+      },
     }),
     bibleSource({
       sent: sentBible,
@@ -654,12 +674,16 @@ const { canNavigate, navigate } = navigation;
 useClicker({ navigate, toggleBlack: () => setCleared(!cleared.value) });
 const queueCounter = navigation.counter;
 
-useSeriesRecorder(() => {
-  const origin = liveOrigin.value;
-  if (origin?.type === "file") return origin.entry.path;
-  if (origin?.type === "child")
-    return findItem(origin.itemId)?.children?.find((c) => c.id === origin.childId)?.path ?? null;
-  return origin?.type === "program" ? (findItem(origin.itemId)?.source?.dir ?? null) : null;
+const pathOf = (p: Playable | null) =>
+  filePathOf(p, p?.type === "program" || p?.type === "child" ? findItem(p.itemId) : null);
+
+useSeriesRecorder(() => pathOf(liveOrigin.value));
+
+// PowerPoint no palco já começa a converter: na hora de mandar, o PDF está pronto.
+watch(stage.preview, (p) => {
+  const item = p?.type === "program" ? findItem(p.itemId) : null;
+  for (const path of [pathOf(p), ...(item?.children ?? []).map((c) => c.path)])
+    if (path) preparePowerPoint(path);
 });
 
 useOnlinePrefetch(() => {

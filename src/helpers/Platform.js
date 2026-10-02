@@ -349,6 +349,14 @@ export default {
     );
   },
 
+  /** PowerPoint → PDF pelo PowerPoint do computador. No navegador: `{ ok: false }`. */
+  convertPresentation(filePath) {
+    return (
+      api?.storage?.convertPresentation?.(filePath) ??
+      Promise.resolve({ ok: false, error: "unsupported" })
+    );
+  },
+
   /** Aplica uma operação ao histórico da série, sobre o que está no disco agora. */
   seriesApply(dirPath, op) {
     return (

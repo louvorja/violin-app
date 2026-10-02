@@ -395,6 +395,8 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
     seriesApply: (dirPath, op) => ipcRenderer.invoke("files:seriesApply", dirPath, op),
     /** Resolve cópias em conflito do histórico: `"merge"` ou o nome da versão a manter. */
     seriesResolve: (dirPath, choice) => ipcRenderer.invoke("files:seriesResolve", dirPath, choice),
+    /** PowerPoint → PDF pelo PowerPoint instalado (com cache). */
+    convertPresentation: (filePath) => ipcRenderer.invoke("files:convertPresentation", filePath),
     /** Verifica quais arquivos remotos já estão no disco. */
     checkLocal: (remotePaths) => ipcRenderer.invoke("storage:checkLocal", remotePaths),
     /** Remove arquivos de mídia do cache local (paths remotos relativos). */
