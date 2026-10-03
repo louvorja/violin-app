@@ -153,7 +153,7 @@
         <LjContextMenu
           v-for="video in online.entries.value"
           :key="video.id"
-          :items="menuFor(video)"
+          v-bind="menuFor(video)"
         >
           <div
             class="pm-online__card"
@@ -290,44 +290,55 @@ function select(video: OnlineEntry): void {
 
 const favoriteVideo = (id: string) => online.videos.value.find((f) => f.ytId === id) ?? null;
 
-function menuFor(video: OnlineEntry): LjMenuItem[] {
+/** Menu do vídeo: reproduzir e pré-visualizar em cima; o resto embaixo. */
+function menuFor(video: OnlineEntry): { quick: LjMenuItem[]; items: LjMenuItem[] } {
   const fav = favoriteVideo(video.id);
-  return [
-    {
-      label: tm("library.play"),
-      icon: ICONS.PLAYER.PLAY,
-      action: () => emit("play", onlinePlayable(video)),
-    },
-    {
-      label: tm("library.play_muted"),
-      icon: ICONS.PLAYER.VOLUME_MUTE,
-      action: () => emit("play", onlinePlayable(video), { muted: true }),
-    },
-    props.returnPath === onlineReturnPath(video.id)
-      ? {
-          label: tm("library.remove_from_return"),
-          icon: ICONS.PROJECTION.RETURN,
-          action: () => emit("show-on-return", null),
-        }
-      : {
-          label: tm("library.play_on_return"),
-          icon: ICONS.PROJECTION.RETURN,
-          action: () => emit("show-on-return", onlinePlayable(video)),
-        },
-    {
-      label: tm("library.add_to_program"),
-      icon: ICONS.ACTIONS.ADD,
-      action: () => emit("add", onlineItem(video)),
-    },
-    { separator: true },
-    fav
-      ? { label: tm("online.remove"), icon: ICONS.ACTIONS.DELETE, action: () => confirmRemove(fav) }
-      : {
-          label: tm("online.favorite_video"),
-          icon: ICONS.UI.STAR,
-          action: () => void save(`https://www.youtube.com/watch?v=${video.id}`),
-        },
-  ];
+  return {
+    quick: [
+      {
+        label: tm("library.play"),
+        icon: ICONS.PLAYER.PLAY,
+        action: () => emit("play", onlinePlayable(video)),
+      },
+      { label: tm("library.preview"), icon: ICONS.UI.EYE, action: () => select(video) },
+    ],
+    items: [
+      {
+        label: tm("library.play_muted"),
+        icon: ICONS.PLAYER.VOLUME_MUTE,
+        action: () => emit("play", onlinePlayable(video), { muted: true }),
+      },
+      props.returnPath === onlineReturnPath(video.id)
+        ? {
+            label: tm("library.remove_from_return"),
+            icon: ICONS.PROJECTION.RETURN,
+            action: () => emit("show-on-return", null),
+          }
+        : {
+            label: tm("library.play_on_return"),
+            icon: ICONS.PROJECTION.RETURN,
+            action: () => emit("show-on-return", onlinePlayable(video)),
+          },
+      { separator: true },
+      {
+        label: tm("library.add_to_program"),
+        icon: ICONS.ACTIONS.ADD,
+        action: () => emit("add", onlineItem(video)),
+      },
+      { separator: true },
+      fav
+        ? {
+            label: tm("online.remove"),
+            icon: ICONS.ACTIONS.DELETE,
+            action: () => confirmRemove(fav),
+          }
+        : {
+            label: tm("online.favorite_video"),
+            icon: ICONS.UI.STAR,
+            action: () => void save(`https://www.youtube.com/watch?v=${video.id}`),
+          },
+    ],
+  };
 }
 
 /* ─── Adicionar ─── */

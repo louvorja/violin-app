@@ -20,10 +20,10 @@ const flush = async () => {
   await nextTick();
 };
 
-function mountMenu(items: LjMenuItem[]) {
+function mountMenu(items: LjMenuItem[], quick: LjMenuItem[] = []) {
   const wrapper = mountUi(LjContextMenu, {
     attachTo: document.body,
-    props: { items },
+    props: { items, quick },
     slots: { default: () => h("div", { class: "alvo" }, "Arquivo") },
     global: { stubs: { Icon: true } },
   });
@@ -55,5 +55,33 @@ describe("LjContextMenu", () => {
     item.click();
     await flush();
     expect(action).toHaveBeenCalledOnce();
+  });
+
+  it("as ações rápidas ficam no topo e também chamam a ação", async () => {
+    const play = vi.fn();
+    const alvo = mountMenu([{ label: "Detalhes", action: () => {} }], [{ label: "Reproduzir", action: play }]);
+    openAt(alvo);
+    await flush();
+    const quick = document.querySelector(".lj-menu__quick-item") as HTMLElement;
+    expect(quick.textContent).toContain("Reproduzir");
+    expect(document.querySelector(".lj-menu__quick")?.compareDocumentPosition(
+      Array.from(document.querySelectorAll(".lj-menu__item")).find((el) => el.textContent?.includes("Detalhes"))!
+    )).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    quick.click();
+    await flush();
+    expect(play).toHaveBeenCalledOnce();
+  });
+
+  it("item com `children` vira um submenu, e a lista fica no segundo nível", async () => {
+    const alvo = mountMenu([
+      { label: "Adicionar ao momento", children: [{ label: "Anúncios", action: () => {} }] },
+    ]);
+    openAt(alvo);
+    await flush();
+    const trigger = Array.from(document.querySelectorAll('[role="menuitem"]')).find((el) =>
+      el.textContent?.includes("Adicionar ao momento")
+    ) as HTMLElement;
+    expect(trigger.getAttribute("aria-haspopup")).toBe("menu");
+    expect(document.body.textContent).not.toContain("Anúncios");
   });
 });

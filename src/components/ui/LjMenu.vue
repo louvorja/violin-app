@@ -85,6 +85,8 @@ export interface LjMenuItem {
   disabled?: boolean;
   separator?: boolean;
   action?: () => void;
+  /** Submenu (só no `LjContextMenu`, por enquanto): a lista que cresce fica no segundo nível. */
+  children?: LjMenuItem[];
 }
 
 withDefaults(
@@ -173,6 +175,56 @@ const open = ref(false);
   color: var(--lj-text-subtle);
   font-family: var(--lj-font-mono);
   font-size: var(--lj-text-xs);
+}
+
+/* Ações rápidas do menu de contexto: ícone grande e rótulo, lado a lado. */
+.lj-menu__quick {
+  display: flex;
+  gap: var(--lj-space-1);
+}
+
+.lj-menu__quick-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--lj-space-1);
+  min-width: 72px;
+  padding: var(--lj-space-3) var(--lj-space-2);
+  border-radius: var(--lj-radius-xs);
+  color: var(--lj-text);
+  font-size: var(--lj-text-sm);
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+}
+
+.lj-menu__quick-item svg {
+  color: var(--lj-ui-accent);
+}
+
+.lj-menu__quick-item + .lj-menu__quick-item {
+  border-left: 1px solid var(--lj-surface-border);
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.lj-menu__quick-item[data-highlighted] {
+  background: var(--lj-surface-bg-hover);
+}
+
+.lj-menu__quick-item[data-disabled] {
+  opacity: var(--lj-ui-disabled-opacity);
+  pointer-events: none;
+}
+
+.lj-menu__sub-arrow {
+  flex-shrink: 0;
+  color: var(--lj-text-muted);
+}
+
+.lj-menu__item[data-state="open"] {
+  background: var(--lj-surface-bg-hover);
 }
 
 .lj-menu__label {

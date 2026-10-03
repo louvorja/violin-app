@@ -292,7 +292,7 @@
             </template>
           </LjMenu>
 
-          <LjContextMenu :items="contextItems">
+          <LjContextMenu :items="contextItems" :quick="contextQuick">
             <div class="cat__context">Clique com o botão direito</div>
           </LjContextMenu>
 
@@ -516,9 +516,23 @@ const menuItems: LjMenuItem[] = [
   { label: "Identificar monitores", icon: ICONS.ACTIONS.SEARCH, shortcut: "F9", action: () => {} },
 ];
 
-const contextItems: LjMenuItem[] = [
+/** Ações rápidas no topo (as mais usadas) e um submenu para a lista que cresce. */
+const contextQuick: LjMenuItem[] = [
   { label: "Reproduzir", icon: ICONS.PLAYER.PLAY, action: () => {} },
+  { label: "Pré-visualizar", icon: ICONS.UI.EYE, action: () => {} },
+];
+const contextItems: LjMenuItem[] = [
   { label: "Adicionar ao programa", icon: ICONS.ACTIONS.ADD, action: () => {} },
+  {
+    label: "Adicionar ao momento",
+    icon: ICONS.MEDIA.PLAYLIST,
+    children: [
+      { label: "Anúncios", icon: ICONS.MEDIA.PLAYLIST, action: () => {} },
+      { label: "Minuto saúde", icon: ICONS.MEDIA.PLAYLIST, action: () => {} },
+      { separator: true },
+      { label: "Novo momento", icon: ICONS.ACTIONS.ADD, action: () => {} },
+    ],
+  },
   { separator: true },
   { label: "Detalhes", icon: ICONS.UI.INFORMATION_OUTLINE, action: () => {} },
 ];

@@ -328,27 +328,36 @@ const addMenu = computed<LjMenuItem[]>(() => [
   },
 ]);
 
-function itemMenu(item: ProgramItem): LjMenuItem[] {
-  return [
-    { label: tm("library.preview"), icon: ICONS.UI.EYE, action: () => onSelect(item.id) },
-    { label: tm("library.play"), icon: ICONS.PLAYER.PLAY, action: () => emit("activate", item.id) },
-    { separator: true },
-    {
-      label: tm("program.edit_item"),
-      icon: ICONS.ACTIONS.EDIT_OUTLINE,
-      action: () => emit("edit-item", item.id),
-    },
-    {
-      label: tm("ribbon.btn.duplicate"),
-      icon: ICONS.ACTIONS.DUPLICATE,
-      action: () => emit("duplicate-item", item.id),
-    },
-    {
-      label: tm("ribbon.btn.delete_item"),
-      icon: ICONS.ACTIONS.DELETE,
-      action: () => emit("remove-item", item.id),
-    },
-  ];
+/** Menu do item: reproduzir e editar em cima (como no FreeShow); o resto embaixo. */
+function itemMenu(item: ProgramItem): { quick: LjMenuItem[]; items: LjMenuItem[] } {
+  return {
+    quick: [
+      {
+        label: tm("library.play"),
+        icon: ICONS.PLAYER.PLAY,
+        action: () => emit("activate", item.id),
+      },
+      {
+        label: tm("menu.edit"),
+        icon: ICONS.ACTIONS.EDIT_OUTLINE,
+        action: () => emit("edit-item", item.id),
+      },
+    ],
+    items: [
+      { label: tm("library.preview"), icon: ICONS.UI.EYE, action: () => onSelect(item.id) },
+      { separator: true },
+      {
+        label: tm("ribbon.btn.duplicate"),
+        icon: ICONS.ACTIONS.DUPLICATE,
+        action: () => emit("duplicate-item", item.id),
+      },
+      {
+        label: tm("ribbon.btn.delete_item"),
+        icon: ICONS.ACTIONS.DELETE,
+        action: () => emit("remove-item", item.id),
+      },
+    ],
+  };
 }
 
 function onSelect(itemId: string): void {

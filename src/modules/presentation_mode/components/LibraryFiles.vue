@@ -36,7 +36,7 @@
         @update:model-value="lib.reorderFolders"
       >
         <template #item="{ element: folder }">
-          <LjContextMenu :items="folderMenu(folder)">
+          <LjContextMenu v-bind="folderMenu(folder)">
             <div
               class="pm-folder pm-folder--user"
               :class="{ 'pm-folder--active': lib.source.value === folder.path }"
@@ -334,30 +334,38 @@ function onOpen(entry: LibraryEntry): void {
 }
 
 /** Menu da pasta na barra lateral: abrir, levar ao programa, baixar da nuvem, tirar da lista. */
-function folderMenu(folder: { path: string; label: string }): LjMenuItem[] {
-  return [
-    {
-      label: tm("library.open_folder"),
-      icon: ICONS.UI.FOLDER_OPEN,
-      action: () => void lib.openSource(folder.path),
-    },
-    {
-      label: tm("folder.add_to_program"),
-      icon: ICONS.ACTIONS.ADD,
-      action: () => emit("add", folderItem(folder.path, folder.label)),
-    },
-    {
-      label: tm("cloud.download_folder"),
-      icon: ICONS.ACTIONS.CLOUD_DOWNLOAD,
-      action: () => void downloadFolder(folder.path, folder.label),
-    },
-    { separator: true },
-    {
-      label: tm("library.remove_folder"),
-      icon: ICONS.ACTIONS.CLOSE,
-      action: () => confirmRemove(folder.path),
-    },
-  ];
+/** Menu da pasta na barra lateral: abrir e levar ao programa em cima; baixar e tirar da lista embaixo. */
+function folderMenu(folder: { path: string; label: string }): {
+  quick: LjMenuItem[];
+  items: LjMenuItem[];
+} {
+  return {
+    quick: [
+      {
+        label: tm("menu.open"),
+        icon: ICONS.UI.FOLDER_OPEN,
+        action: () => void lib.openSource(folder.path),
+      },
+      {
+        label: tm("menu.to_program"),
+        icon: ICONS.ACTIONS.ADD,
+        action: () => emit("add", folderItem(folder.path, folder.label)),
+      },
+    ],
+    items: [
+      {
+        label: tm("cloud.download_folder"),
+        icon: ICONS.ACTIONS.CLOUD_DOWNLOAD,
+        action: () => void downloadFolder(folder.path, folder.label),
+      },
+      { separator: true },
+      {
+        label: tm("library.remove_folder"),
+        icon: ICONS.ACTIONS.CLOSE,
+        action: () => confirmRemove(folder.path),
+      },
+    ],
+  };
 }
 
 async function downloadFolder(path: string, label: string): Promise<void> {

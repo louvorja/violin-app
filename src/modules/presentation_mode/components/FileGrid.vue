@@ -1,6 +1,6 @@
 <template>
   <div class="pm-files__grid">
-    <LjContextMenu v-for="entry in entries" :key="entry.path" :items="menuFor(entry)">
+    <LjContextMenu v-for="entry in entries" :key="entry.path" v-bind="menuFor(entry)">
       <div
         class="pm-file"
         :class="{
@@ -183,112 +183,134 @@ async function downloadFolder(entry: LibraryEntry): Promise<void> {
   void cloud.downloadAll(files, tm("cloud.task", { where: entry.name }));
 }
 
-function menuFor(entry: LibraryEntry): LjMenuItem[] {
-  if (entry.isDir)
-    return [
-      {
-        label: tm("library.open_folder"),
-        icon: ICONS.UI.FOLDER_OPEN,
-        action: () => emit("open", entry),
-      },
-      {
-        label: tm("folder.add_to_program"),
-        icon: ICONS.ACTIONS.ADD,
-        action: () => emit("add", folderItem(entry.path, entry.name)),
-      },
-      {
-        label: tm("cloud.download_folder"),
-        icon: ICONS.ACTIONS.CLOUD_DOWNLOAD,
-        action: () => void downloadFolder(entry),
-      },
-    ];
-  const live = entry.path === props.livePath;
-  return [
-    ...(cloudOf(entry) === "cloud"
-      ? [
-          {
-            label: tm("cloud.download"),
-            icon: ICONS.ACTIONS.CLOUD_DOWNLOAD,
-            action: () => void cloud.download(entry.path),
-          },
-        ]
-      : []),
-    live
-      ? { label: tm("library.stop"), icon: ICONS.ACTIONS.CLOSE, action: () => emit("stop") }
-      : {
-          label: tm("library.play"),
-          icon: ICONS.PLAYER.PLAY,
-          action: () => emit("play", entry),
+/** O menu de um cartão: as ações mais usadas em cima (ícones grandes), o resto embaixo. */
+interface EntryMenu {
+  quick: LjMenuItem[];
+  items: LjMenuItem[];
+}
+
+function menuFor(entry: LibraryEntry): EntryMenu {
+  if (entry.isDir) {
+    return {
+      quick: [
+        { label: tm("menu.open"), icon: ICONS.UI.FOLDER_OPEN, action: () => emit("open", entry) },
+        {
+          label: tm("menu.to_program"),
+          icon: ICONS.ACTIONS.ADD,
+          action: () => emit("add", folderItem(entry.path, entry.name)),
         },
-    ...(fileKind(entry.ext) === "video" && !live
-      ? [
-          {
-            label: tm("library.play_muted"),
-            icon: ICONS.PLAYER.VOLUME_MUTE,
-            action: () => emit("play", entry, { muted: true }),
-          },
-        ]
-      : []),
-    { label: tm("library.preview"), icon: ICONS.UI.EYE, action: () => emit("select", entry) },
-    ...(fileKind(entry.ext) === "image" || fileKind(entry.ext) === "video"
-      ? [
-          entry.path === props.returnPath
-            ? {
-                label: tm("library.remove_from_return"),
-                icon: ICONS.PROJECTION.RETURN,
-                action: () => emit("show-on-return", null),
-              }
-            : {
-                label: tm("library.play_on_return"),
-                icon: ICONS.PROJECTION.RETURN,
-                action: () => emit("show-on-return", entry),
-              },
-        ]
-      : []),
-    {
-      label: tm("library.add_to_program"),
-      icon: ICONS.ACTIONS.ADD,
-      action: () => emit("add", fileItem(entry, meta.get(entry.path) ?? null)),
-    },
-    ...momentMenu(entry),
-    { separator: true },
-    {
-      label: lib.isFavorite(entry) ? tm("library.unfavorite") : tm("library.favorite"),
-      icon: lib.isFavorite(entry) ? ICONS.UI.STAR : ICONS.UI.STAR_OUTLINE,
-      action: () => lib.toggleFavorite(entry),
-    },
-    ...(props.noDetails
-      ? []
-      : [
-          {
-            label: tm("library.details"),
-            icon: ICONS.UI.INFORMATION_OUTLINE,
-            action: () => emit("details", entry),
-          },
-        ]),
-    ...(props.extraMenu?.(entry) ?? []),
-  ];
+      ],
+      items: [
+        {
+          label: tm("cloud.download_folder"),
+          icon: ICONS.ACTIONS.CLOUD_DOWNLOAD,
+          action: () => void downloadFolder(entry),
+        },
+      ],
+    };
+  }
+  const live = entry.path === props.livePath;
+  const kind = fileKind(entry.ext);
+  const play: LjMenuItem = live
+    ? { label: tm("library.stop"), icon: ICONS.ACTIONS.CLOSE, action: () => emit("stop") }
+    : { label: tm("library.play"), icon: ICONS.PLAYER.PLAY, action: () => emit("play", entry) };
+  const preview: LjMenuItem = {
+    label: tm("library.preview"),
+    icon: ICONS.UI.EYE,
+    action: () => emit("select", entry),
+  };
+  // Só na nuvem: baixar é o mais urgente, e vai para cima no lugar da prévia.
+  const cloudOnly = cloudOf(entry) === "cloud";
+  const quick = cloudOnly
+    ? [
+        {
+          label: tm("menu.download"),
+          icon: ICONS.ACTIONS.CLOUD_DOWNLOAD,
+          action: () => void cloud.download(entry.path),
+        },
+        play,
+      ]
+    : [play, preview];
+  return {
+    quick,
+    items: [
+      ...(cloudOnly ? [preview] : []),
+      ...(kind === "video" && !live
+        ? [
+            {
+              label: tm("library.play_muted"),
+              icon: ICONS.PLAYER.VOLUME_MUTE,
+              action: () => emit("play", entry, { muted: true }),
+            },
+          ]
+        : []),
+      ...(kind === "image" || kind === "video"
+        ? [
+            entry.path === props.returnPath
+              ? {
+                  label: tm("library.remove_from_return"),
+                  icon: ICONS.PROJECTION.RETURN,
+                  action: () => emit("show-on-return", null),
+                }
+              : {
+                  label: tm("library.play_on_return"),
+                  icon: ICONS.PROJECTION.RETURN,
+                  action: () => emit("show-on-return", entry),
+                },
+          ]
+        : []),
+      { separator: true },
+      {
+        label: tm("library.add_to_program"),
+        icon: ICONS.ACTIONS.ADD,
+        action: () => emit("add", fileItem(entry, meta.get(entry.path) ?? null)),
+      },
+      ...momentMenu(entry),
+      { separator: true },
+      {
+        label: lib.isFavorite(entry) ? tm("library.unfavorite") : tm("library.favorite"),
+        icon: lib.isFavorite(entry) ? ICONS.UI.STAR : ICONS.UI.STAR_OUTLINE,
+        action: () => lib.toggleFavorite(entry),
+      },
+      ...(props.noDetails
+        ? []
+        : [
+            {
+              label: tm("library.details"),
+              icon: ICONS.UI.INFORMATION_OUTLINE,
+              action: () => emit("details", entry),
+            },
+          ]),
+      ...(props.extraMenu?.(entry) ?? []),
+    ],
+  };
 }
 
 /* ─── Momentos do programa: destino de fotos, vídeos e PDFs ─── */
 
 const momentTargets = useMoments(tm);
 
+/** "Adicionar ao momento ▸": os momentos ficam no segundo nível — a lista cresce. */
 function momentMenu(entry: LibraryEntry): LjMenuItem[] {
   if (entry.isDir || !momentTargets.accepts(entry.path)) return [];
   const title = entry.name.replace(/\.[^.]+$/, "");
   return [
-    { separator: true },
-    { label: tm("moment.add_to") },
-    ...momentTargets.moments.value.map((m) => ({
-      label: m.title,
-      icon: ICONS.MEDIA.PLAYLIST,
-      action: () => momentTargets.addTo(m, [entry.path]),
-    })),
     {
-      label: tm("moment.new_moment"),
-      icon: ICONS.ACTIONS.ADD,
-      action: () => emit("add", momentTargets.newMoment([entry.path], title)),
+      label: tm("moment.add_to"),
+      icon: ICONS.MEDIA.PLAYLIST,
+      children: [
+        ...momentTargets.moments.value.map((m) => ({
+          label: m.title,
+          icon: ICONS.MEDIA.PLAYLIST,
+          action: () => momentTargets.addTo(m, [entry.path]),
+        })),
+        ...(momentTargets.moments.value.length ? [{ separator: true }] : []),
+        {
+          label: tm("moment.new_moment"),
+          icon: ICONS.ACTIONS.ADD,
+          action: () => emit("add", momentTargets.newMoment([entry.path], title)),
+        },
+      ],
     },
   ];
 }

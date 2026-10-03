@@ -433,5 +433,11 @@
     "stop_all": "Limpiar todo",
     "announcements": "Anuncios",
     "orphans_cleared": "Las pantallas mostraban algo que la app ya no controlaba (se recargó): volvieron al fondo."
+  },
+  "menu": {
+    "open": "Abrir",
+    "to_program": "Al programa",
+    "download": "Descargar",
+    "edit": "Editar"
   }
 }

@@ -1,6 +1,6 @@
 <template>
   <div class="pm-row-wrap">
-    <LjContextMenu :items="menu">
+    <LjContextMenu v-bind="menu">
       <div
         class="pm-row"
         :class="{
@@ -149,7 +149,8 @@ const props = defineProps<{
   prepared: boolean;
   selected: boolean;
   open: boolean;
-  menu: LjMenuItem[];
+  /** Ações rápidas em cima e o resto embaixo (ver LjContextMenu). */
+  menu: { quick: LjMenuItem[]; items: LjMenuItem[] };
   /** O filho deste item que está no ar (momento). */
   liveChildId?: string | null;
 }>();
