@@ -109,7 +109,14 @@
     </template>
   </LjDialog>
 
-  <MusicSpotlight v-if="musicPickerOpen" v-model="musicPickerOpen" mode="pick" @pick="onMusic" />
+  <!-- Os ícones de cada linha escolhem o formato do item; o clique na linha, o cantado. -->
+  <MusicSpotlight
+    v-if="musicPickerOpen"
+    v-model="musicPickerOpen"
+    mode="pick"
+    :on-music-action="onMusicAction"
+    @pick="onMusic"
+  />
   <BibleSpotlight
     v-if="biblePickerOpen"
     v-model="biblePickerOpen"
@@ -137,7 +144,8 @@ import type {
 } from "@/types/Presentation";
 import { CREATABLE_KINDS, KIND_ICONS } from "../program/kinds";
 import { kindFromPath, liturgyItem } from "../program/liturgy";
-import { isMusicMode, modesFor, type MusicMode } from "../program/musicModes";
+import { isMusicMode, modeOfAction, modesFor, type MusicMode } from "../program/musicModes";
+import { MusicActionEnum } from "@/enums/MusicActionEnum";
 import { newId } from "../composables/useProgram";
 
 const MusicSpotlight = defineAsyncComponent(() => import("@/components/MusicSpotlight.vue"));
@@ -249,6 +257,11 @@ function onMusic(picked: SearchMusicItem): void {
   const seconds = DateTime.toNumber(picked.duration);
   if (seconds > 0) minutes.value = Math.ceil(seconds / 60);
   musicPickerOpen.value = false;
+}
+
+function onMusicAction(picked: SearchMusicItem, action: MusicActionEnum): void {
+  onMusic(picked);
+  musicMode.value = modeOfAction(action) ?? "sung";
 }
 
 function onVerse(result: BibleSearchResult): void {
