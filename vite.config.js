@@ -152,13 +152,17 @@ export default async ({ mode }) => {
             },
           ]
         : []),
-      // Áudio (mp3, ogg, opus, m4a, aac, wav, flac; o catálogo atual é .opus) — cache-first. Sem prazo por data: "Baixar álbum"
-      // grava aqui direto (helpers/OfflineAlbums.ts) e o workbox recusaria, pelo
-      // cabeçalho Date, o que passou de 30 dias, justamente quando se está
-      // offline. O limite de entradas só alcança o que o próprio service worker
-      // guardou ao tocar. `rangeRequests` é obrigatório: o <audio> pede
-      // `Range: bytes=0-`, e sem fatiar a resposta do cache o Chrome Android não
-      // consegue tocar nem pular dentro do áudio offline.
+      // Áudio (mp3, ogg, opus, m4a, aac, wav, flac; o catálogo atual é .opus) — cache-first.
+      // Este cache e o de imagens são o acervo baixado: "Baixar álbum" grava aqui
+      // (helpers/WebFileStore.ts). Por isso NÃO têm `expiration`, nem por data nem
+      // por quantidade. O fetch do download passa por esta rota, o plugin de
+      // expiração registra cada URL e apaga as mais antigas acima do limite: com
+      // `maxEntries` o acervo de milhares de arquivos nunca ficava completo e os
+      // álbuns voltavam a "não baixado" sozinhos. Sem limite, resposta opaca
+      // (status 0) também não entra: o Chrome cobra ~7MB de cota por cada uma, e
+      // toda capa vista em <img> viraria uma. `rangeRequests` é obrigatório: o
+      // <audio> pede `Range: bytes=0-`, e sem fatiar a resposta do cache o Chrome
+      // Android não consegue tocar nem pular dentro do áudio offline.
       {
         urlPattern: filesUrl
           ? new RegExp(
@@ -169,13 +173,12 @@ export default async ({ mode }) => {
         handler: "CacheFirst",
         options: {
           cacheName: "louvorja-audio",
-          expiration: { maxEntries: 500 },
-          cacheableResponse: { statuses: [0, 200] },
+          cacheableResponse: { statuses: [200] },
           rangeRequests: true,
           matchOptions: { ignoreVary: true },
         },
       },
-      // Imagens externas — cache-first (sem prazo por data, pelo mesmo motivo do áudio)
+      // Imagens externas — cache-first (sem expiração, pelo mesmo motivo do áudio)
       {
         urlPattern: filesUrl
           ? new RegExp(`^${escapeRegex(filesUrl)}.*\\.(jpg|jpeg|png|webp|gif)(\\?.*)?$`, "i")
@@ -183,8 +186,7 @@ export default async ({ mode }) => {
         handler: "CacheFirst",
         options: {
           cacheName: "louvorja-images",
-          expiration: { maxEntries: 200 },
-          cacheableResponse: { statuses: [0, 200] },
+          cacheableResponse: { statuses: [200] },
           matchOptions: { ignoreVary: true },
         },
       },

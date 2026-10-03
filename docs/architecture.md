@@ -467,10 +467,13 @@ clássica seguem exclusivos do desktop).
 
 - **URL é a chave.** O arquivo é guardado sob a mesma URL que o player pede
   (`Path.file`), então o service worker o serve sem nenhuma mudança nos consumidores.
-- **Service worker** (`vite.config.js`): as rotas de áudio e imagem não expiram por
-  data (o workbox recusaria offline, pelo `Date`, o que passou de 30 dias) e a de
-  áudio usa `rangeRequests`, sem o qual o Chrome Android não toca nem pula dentro do
-  áudio em cache. O padrão de áudio inclui `.opus`, formato do catálogo atual; manter
+- **Service worker** (`vite.config.js`): as rotas de áudio e imagem não têm
+  `expiration`, nem por data nem por quantidade. O fetch do download passa pelo
+  service worker, que registra cada URL no plugin de expiração: com `maxEntries` ele
+  apagava o que acabara de ser baixado acima do limite, e o acervo voltava a "não
+  baixado". Pelo mesmo motivo só resposta 200 legível entra no cache (a opaca de um
+  `<img>` custa ~7MB de cota cada). A de áudio usa `rangeRequests`, sem o qual o
+  Chrome Android não toca nem pula dentro do áudio em cache. O padrão de áudio inclui `.opus`, formato do catálogo atual; manter
   igual a `AUDIO_RE` em `WebFileStore.ts`.
 - **Catálogo local.** O scan de álbuns baixados lê só o IndexedDB; ao abrir
   Sincronizar o PWA chama `ensureCatalogBundle()`, o equivalente da Verificação
