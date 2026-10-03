@@ -1,9 +1,29 @@
 /**
  * Smoke E2E: abrir liturgia → adicionar item → item aparece na lista
  */
+import { Buffer } from "node:buffer";
 import { test, expect } from "@playwright/test";
 
 test.use({ serviceWorkers: "block" });
+
+/** Dois segundos de silêncio: áudio válido para o player abrir sem alerta de erro. */
+function silentWav(seconds = 2, rate = 8000) {
+  const samples = seconds * rate;
+  const wav = Buffer.alloc(44 + samples, 128);
+  wav.write("RIFF", 0);
+  wav.writeUInt32LE(36 + samples, 4);
+  wav.write("WAVEfmt ", 8);
+  wav.writeUInt32LE(16, 16);
+  wav.writeUInt16LE(1, 20);
+  wav.writeUInt16LE(1, 22);
+  wav.writeUInt32LE(rate, 24);
+  wav.writeUInt32LE(rate, 28);
+  wav.writeUInt16LE(1, 32);
+  wav.writeUInt16LE(8, 34);
+  wav.write("data", 36);
+  wav.writeUInt32LE(samples, 40);
+  return wav;
+}
 
 async function openLiturgy(page) {
   await page.route("http://e2e.mock/**", (route) => route.fulfill({ json: [] }));
@@ -105,6 +125,23 @@ test("ao tocar uma música, marca somente com a opção ligada e não desmarca n
   page,
 }) => {
   await openLiturgy(page);
+  // Sem a música (e o caminho do áudio) no banco fictício o Mídia fecha em
+  // silêncio: o teste só passava contra a API real, e por isso falhava no CI.
+  await page.route(/\/music_42(\?.*)?$/, (route) =>
+    route.fulfill({
+      json: {
+        id_music: 42,
+        name: "Música para marcar",
+        albums: [],
+        url_music: "/musics/pt/teste/musica.mp3",
+        lyric: [{ id_lyric: 1, order: 1, lyric: "Letra de teste", show_slide: 1 }],
+      },
+    })
+  );
+
+  await page.route(/\/musics\/pt\/teste\/musica\.mp3(\?.*)?$/, (route) =>
+    route.fulfill({ contentType: "audio/wav", body: silentWav() })
+  );
 
   await page.evaluate(async () => {
     const { default: Liturgy } = await import("/src/helpers/Liturgy.ts");
