@@ -475,9 +475,11 @@ clássica seguem exclusivos do desktop).
   `<img>` custa ~7MB de cota cada). A de áudio usa `rangeRequests`, sem o qual o
   Chrome Android não toca nem pula dentro do áudio em cache. O padrão de áudio inclui `.opus`, formato do catálogo atual; manter
   igual a `AUDIO_RE` em `WebFileStore.ts`.
-- **Catálogo local.** O scan de álbuns baixados lê só o IndexedDB; ao abrir
-  Sincronizar o PWA chama `ensureCatalogBundle()`, o equivalente da Verificação
-  Inicial do desktop.
+- **Catálogo local.** O scan de álbuns baixados lê só o IndexedDB. O app instalado
+  chama `ensureCatalogBundle()` sozinho alguns segundos depois do boot, com internet
+  (`helpers/CatalogAutoInstall.ts`: é um ZIP de ~30MB, então a aba comum do navegador,
+  a economia de dados e o 2G ficam de fora); nos demais casos ele desce ao abrir
+  Sincronizar. É o equivalente da Verificação Inicial do desktop.
 - Só respostas 200 completas são gravadas; um 206 contaria como arquivo inteiro.
 
 ---

@@ -1211,8 +1211,8 @@ export function useSyncManager() {
 
   /**
    * Guarda local para leituras em massa. Deliberadamente não instala nada:
-   * baixar o ZIP completo exige `ensureCatalogBundle()`/`downloadBundle()` a
-   * partir de uma ação explícita da interface.
+   * baixar o ZIP completo fica com `ensureCatalogBundle()`/`downloadBundle()`,
+   * chamados por uma ação da interface ou pelo boot do app instalado.
    */
   async function hasCatalogForBulkRead(): Promise<boolean> {
     if (!Platform.storage?.checkLocal) return true;

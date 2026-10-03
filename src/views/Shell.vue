@@ -121,6 +121,7 @@ import { hasOpenWebWindows } from "@/helpers/projection/webWindow";
 import { open as openProjection } from "@/helpers/Projection";
 import { useSyncManager } from "@/composables/useSyncManager";
 import { useAppInstall } from "@/composables/useAppInstall";
+import { shouldAutoInstallCatalog } from "@/helpers/CatalogAutoInstall";
 const ChatDrawer = defineAsyncComponent(() => import("@/components/ChatDrawer.vue"));
 import { useChat } from "@/composables/useChat";
 import ScheduledStore from "@/helpers/ScheduledStore";
@@ -142,7 +143,32 @@ const releaseNotes = ref<ReleaseNotes | null>(null);
 const updateDialogOpen = ref(false);
 const updateDialogVersion = ref("");
 const ready = ref(false);
-const { channel: installChannel, dialogOpen: installDialogOpen } = useAppInstall();
+const {
+  channel: installChannel,
+  dialogOpen: installDialogOpen,
+  installed: appInstalled,
+} = useAppInstall();
+
+// App instalado: o catálogo desce sozinho no primeiro uso com internet, para as
+// listas e o modo offline não dependerem de abrir Sincronizar antes. Espera o
+// boot assentar, porque instalar o ZIP grava milhares de registros no IndexedDB.
+// `ensureCatalogBundle` não baixa nada quando o catálogo já está instalado.
+const CATALOG_AUTO_INSTALL_DELAY_MS = 8000;
+let catalogAutoInstallTimer: ReturnType<typeof setTimeout> | null = null;
+let catalogAutoInstallArmed = false;
+const shellOnline = () => $appdata.get<boolean>(KEYS.SHELL.IS_ONLINE, true) !== false;
+
+function autoInstallCatalog(): void {
+  if (!catalogAutoInstallArmed) return;
+  const context = {
+    desktop: Platform.isDesktop,
+    installed: appInstalled.value,
+    online: shellOnline(),
+  };
+  if (shouldAutoInstallCatalog(context)) void sync.ensureCatalogBundle();
+}
+
+watch([shellOnline, appInstalled], autoInstallCatalog);
 
 const showDesktopDownload = computed(() => {
   return (
@@ -552,6 +578,12 @@ onMounted(() => {
 
   applyStoredTheme();
 
+  catalogAutoInstallTimer = setTimeout(() => {
+    catalogAutoInstallTimer = null;
+    catalogAutoInstallArmed = true;
+    autoInstallCatalog();
+  }, CATALOG_AUTO_INSTALL_DELAY_MS);
+
   // Idioma
   const lang = $userdata.get<string>(KEYS.OPTIONS.LANGUAGE);
   if (lang && lang !== "") {
@@ -687,6 +719,8 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  if (catalogAutoInstallTimer) clearTimeout(catalogAutoInstallTimer);
+  catalogAutoInstallArmed = false;
   if (clockBootTimer) {
     clearTimeout(clockBootTimer);
     clockBootTimer = null;

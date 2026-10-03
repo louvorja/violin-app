@@ -1722,7 +1722,8 @@ onMounted(async () => {
   if (!isDesktop.value) {
     // No desktop o catálogo local vem da Verificação Inicial; o PWA não tem
     // essa etapa, e o scan de álbuns baixados lê só o que está no IndexedDB.
-    // Abrir esta tela é a ação explícita que autoriza o download do bundle.
+    // O app instalado já o baixa sozinho no boot (Shell.vue); numa aba comum
+    // do navegador, abrir esta tela é a ação que autoriza o download do bundle.
     await Promise.all([sync.ensureCatalogBundle(), sync.checkFtp()]);
     await loadCatalog();
     return;
