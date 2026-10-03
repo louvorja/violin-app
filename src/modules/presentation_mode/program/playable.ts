@@ -2,7 +2,7 @@ import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import type { ProgramBibleRef, ProgramItem } from "@/types/Presentation";
 import type { LibraryEntry } from "../composables/useFileLibrary";
 import type { LiveKind } from "../composables/useLiveContent";
-import type { MusicMode } from "./musicModes";
+import { isMusicMode, type MusicMode } from "./musicModes";
 import { videoIdFromUrl } from "@/helpers/OnlineVideo";
 import { samePassage, type BiblePassage } from "./bible";
 import { kindFromPath } from "./liturgy";
@@ -127,8 +127,10 @@ export function expectationOf(
   switch (src?.tipo) {
     case LiturgyItemTypeEnum.MUSICA:
       if (src.escolha || !src.id_music) return { kind: null };
-      if (src.id_music < 0) return src.ref_id ? fromCustomMusic(src.ref_id, src.subtipo) : { kind: null };
-      return fromMusic(src.id_music, src.subtipo);
+      if (src.id_music < 0) {
+        return src.ref_id ? fromCustomMusic(src.ref_id, isMusicMode(src.subtipo) ? src.subtipo : mode) : { kind: null };
+      }
+      return fromMusic(src.id_music, isMusicMode(src.subtipo) ? src.subtipo : mode);
     case LiturgyItemTypeEnum.ARQUIVO:
       return src.dir ? fromPath(src.dir) : { kind: null };
     case LiturgyItemTypeEnum.ANUNCIOS:

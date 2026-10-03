@@ -269,7 +269,7 @@ import {
   playMusicInMode,
   useProgramExecution,
 } from "../composables/useProgramExecution";
-import type { MusicMode } from "../program/musicModes";
+import { needsModeChoice, type MusicMode } from "../program/musicModes";
 import { itemVideoId, openOnline } from "../composables/useOnlinePlayback";
 import { useOnlinePrefetch } from "../composables/useOnlinePrefetch";
 import { useSeriesRecorder } from "../composables/useSeries";
@@ -352,7 +352,7 @@ interface DispatchOptions {
  */
 function dispatch(
   playable: Playable,
-  { slideIndex = 0, mode = "sung", force = false }: DispatchOptions = {}
+  { slideIndex = 0, mode, force = false }: DispatchOptions = {}
 ): void {
   const item = itemOf(playable);
   if (itemIdOf(playable) && !item) return;
@@ -369,6 +369,11 @@ function dispatch(
       if (next) dispatch({ type: "folderFile", itemId: folderItem.id, entry: next }, { force });
       else stage.show(playable);
     });
+    return;
+  }
+  // Música com a versão em aberto: vai para a prévia, e só entra no ar com a versão escolhida.
+  if (playable.type === "program" && item && !mode && needsModeChoice(item)) {
+    stage.show(playable);
     return;
   }
   if (outputLocked.value && !force) {
@@ -389,15 +394,15 @@ function dispatch(
     Telemetry.track("presentation_folder_file_live", {});
   } else if (item) {
     goLive(item.id);
-    execute(item);
+    execute(item, mode);
     Telemetry.track("presentation_item_live", { kind: item.kind });
   } else if (playable.type === "file") {
     library.startQueue(playable.entry);
     projectPath(playable.entry.path, playable.entry.name);
     Telemetry.track("presentation_library_projected", { ext: playable.entry.ext });
   } else if (playable.type === "song") {
-    if (playable.customId) playCustomMusicInMode(playable.customId, mode);
-    else playMusicInMode(playable.id_music, mode);
+    if (playable.customId) playCustomMusicInMode(playable.customId, mode ?? "sung");
+    else playMusicInMode(playable.id_music, mode ?? "sung");
   } else if (playable.type === "bible") {
     sendBible(playable.ref);
   } else if (playable.type === "online") {
@@ -500,7 +505,7 @@ function goToSlideWhenLoaded(idMusic: number, index: number): void {
 }
 onBeforeUnmount(() => cancelSlideWait?.());
 
-function playPreview(slideIndex = 0, mode: MusicMode = "sung"): void {
+function playPreview(slideIndex = 0, mode?: MusicMode): void {
   const t = stage.preview.value;
   if (t) dispatch(t, { slideIndex, mode });
 }

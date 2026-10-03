@@ -265,7 +265,11 @@
     "lyric": "Solo letra (sin audio)",
     "audio": "Solo audio",
     "audio_pb": "Solo audio (playback)",
-    "play_as": "Reproducir como…"
+    "play_as": "Reproducir como…",
+    "ask": "Elegir en el momento",
+    "ask_badge": "AL MOMENTO",
+    "ask_hint": "La versión (cantado, playback, solo letra…) se elige al enviar al aire",
+    "choose_now": "Elige la versión para enviar al aire:"
   },
   "bible": {
     "title": "Biblia",

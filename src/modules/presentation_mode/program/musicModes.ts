@@ -1,5 +1,7 @@
 import { ICONS } from "@/config/Icons";
 import { MusicActionEnum } from "@/enums/MusicActionEnum";
+import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
+import type { ProgramItem } from "@/types/Presentation";
 
 /**
  * Formatos de uma música — os mesmos da liturgia (`subtipo` do item), para o
@@ -32,6 +34,15 @@ export function modesFor(hasInstrumental: boolean): MusicModeOption[] {
 
 export function isMusicMode(value: string | undefined): value is MusicMode {
   return MUSIC_MODES.some((m) => m.value === value);
+}
+
+/**
+ * Música do programa com a versão em aberto ("escolher na hora"): só vai ao ar
+ * depois que o operador escolhe. Na liturgia, a versão vazia é o cantado.
+ */
+export function needsModeChoice(item: Pick<ProgramItem, "source">): boolean {
+  const src = item.source;
+  return src?.tipo === LiturgyItemTypeEnum.MUSICA && !!src.id_music && !src.escolha && !isMusicMode(src.subtipo);
 }
 
 /** Ação dos botões de música do app → formato do módulo. A letra avulsa não é formato. */

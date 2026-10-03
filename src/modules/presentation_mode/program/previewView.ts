@@ -6,6 +6,7 @@ import type { PreviewView } from "../components/StagePreview.vue";
 import { KIND_ICONS } from "./kinds";
 import { kindFromPath } from "./liturgy";
 import type { Playable } from "./playable";
+import { needsModeChoice } from "./musicModes";
 
 export function fileView(path: string, title: string): PreviewView {
   const kind = kindFromPath(path);
@@ -17,7 +18,11 @@ export function fileView(path: string, title: string): PreviewView {
 export function programView(item: ProgramItem): PreviewView {
   const src = item.source;
   if (src?.tipo === LiturgyItemTypeEnum.MUSICA && src.id_music && src.id_music > 0 && !src.escolha) {
-    return { kind: "song", title: item.title, icon: KIND_ICONS.music, playable: true, songId: src.id_music };
+    return { kind: "song", title: item.title, icon: KIND_ICONS.music, playable: true, songId: src.id_music, needsMode: needsModeChoice(item) };
+  }
+  // Música personalizada: sem grade de slides na prévia, mas a versão em aberto também se escolhe aqui.
+  if (needsModeChoice(item)) {
+    return { kind: "other", title: item.title, icon: KIND_ICONS.music, playable: true, needsMode: true, hasInstrumental: !!src?.has_instrumental_music };
   }
   if (item.children?.length) {
     return { kind: "list", title: item.title, icon: KIND_ICONS[item.kind], playable: false, items: item.children.map((c) => c.title) };

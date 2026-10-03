@@ -45,6 +45,15 @@ describe("useProgramExecution", () => {
     expect(executeItem).not.toHaveBeenCalled();
   });
 
+  it("versão em aberto: toca a escolhida agora; a do item, quando definida, vence", () => {
+    useProgramExecution().execute(music({ subtipo: "" }), "pb");
+    useProgramExecution().execute(music({ subtipo: "lyric" }), "pb");
+    expect(open.mock.calls.map((c) => (c as unknown[])[0])).toEqual([
+      { id_music: 70, mode: MusicActionEnum.INSTRUMENTAL, minimized: true },
+      { id_music: 70, mode: MusicActionEnum.NO_AUDIO, minimized: true },
+    ]);
+  });
+
   it("playback e só letra também vão para a grade", () => {
     useProgramExecution().execute(music({ subtipo: "pb" }));
     useProgramExecution().execute(music({ subtipo: "lyric" }));

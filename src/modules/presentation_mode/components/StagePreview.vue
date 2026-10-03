@@ -2,10 +2,23 @@
   <div class="pm-preview" data-testid="pm-stage-preview-item" :data-kind="view.kind">
     <template v-if="view.kind === 'song'">
       <p v-if="songState === 'loading'" class="pm-preview__note">{{ tm("library.loading") }}</p>
-      <p v-else-if="songState === 'error'" class="pm-preview__note">{{ tm("preview.song_failed") }}</p>
-      <SlideGrid v-else :slides="songSlides" :title="view.title" @pick="(i: number) => emit('play', i)" />
-      <footer class="pm-preview__bar">
-        <LjButton variant="primary" :icon="ICONS.PLAYER.PLAY" data-testid="pm-preview-play" @click="emit('play')">
+      <p v-else-if="songState === 'error'" class="pm-preview__note">
+        {{ tm("preview.song_failed") }}
+      </p>
+      <!-- Versão em aberto: o slide só entra no ar depois da escolha. -->
+      <SlideGrid
+        v-else
+        :slides="songSlides"
+        :title="view.title"
+        @pick="(i: number) => !view.needsMode && emit('play', i)"
+      />
+      <footer v-if="!view.needsMode" class="pm-preview__bar">
+        <LjButton
+          variant="primary"
+          :icon="ICONS.PLAYER.PLAY"
+          data-testid="pm-preview-play"
+          @click="emit('play')"
+        >
           {{ tm("preview.play") }}
         </LjButton>
         <LjMenu v-if="view.chooseMode" :items="modeItems" side="top">
@@ -52,7 +65,7 @@
         >
           {{ tm("library.play_on_return") }}
         </LjButton>
-        <LjTooltip v-if="view.playable" :text="tm('preview.play')">
+        <LjTooltip v-if="view.playable && !view.needsMode" :text="tm('preview.play')">
           <button
             type="button"
             class="pm-preview__play"
@@ -65,6 +78,26 @@
         </LjTooltip>
       </div>
     </div>
+
+    <!-- Versão em aberto (música do programa): escolher aqui é o que manda ao ar. -->
+    <footer
+      v-if="view.needsMode"
+      class="pm-preview__bar pm-preview__bar--choose"
+      data-testid="pm-preview-choose"
+    >
+      <span class="pm-preview__choose">{{ tm("music_modes.choose_now") }}</span>
+      <LjButton
+        v-for="(m, i) in songModes"
+        :key="m.value"
+        size="sm"
+        :variant="i === 0 ? 'primary' : 'default'"
+        :icon="m.icon"
+        :data-testid="`pm-preview-mode-${m.value}`"
+        @click="emit('play', 0, m.value)"
+      >
+        {{ tm(m.label) }}
+      </LjButton>
+    </footer>
   </div>
 </template>
 
@@ -95,6 +128,10 @@ export interface PreviewView {
   songId?: number;
   /** Música da biblioteca: oferece "Reproduzir como…" (no programa, o formato é do item). */
   chooseMode?: boolean;
+  /** Música do programa com a versão em aberto: só vai ao ar depois de escolher. */
+  needsMode?: boolean;
+  /** A música tem playback (para oferecer as versões com ele antes de ler o banco). */
+  hasInstrumental?: boolean;
   url?: string;
   text?: string;
   reference?: string;
@@ -112,8 +149,11 @@ const { tm } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
 const songSlides = ref<Record<string, unknown>[]>([]);
 const songHasInstrumental = ref(false);
 
+const songModes = computed(() =>
+  modesFor(songHasInstrumental.value || !!props.view.hasInstrumental)
+);
 const modeItems = computed<LjMenuItem[]>(() =>
-  modesFor(songHasInstrumental.value).map((m) => ({
+  songModes.value.map((m) => ({
     label: tm(m.label),
     icon: m.icon,
     action: () => emit("play", 0, m.value),
@@ -156,6 +196,18 @@ watch(
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+.pm-preview__bar.pm-preview__bar--choose {
+  flex-wrap: wrap;
+  height: auto;
+  min-height: 44px;
+  padding-block: 6px;
+  border-top: 2px solid var(--lj-ui-accent);
+}
+
+.pm-preview__choose {
+  font-weight: var(--lj-weight-semibold);
 }
 
 .pm-preview__bar {

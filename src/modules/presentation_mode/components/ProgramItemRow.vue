@@ -34,6 +34,14 @@
             {{ item.subtitle || folderSummary }}
           </span>
         </div>
+        <span
+          v-if="askMode"
+          class="pm-ask-badge"
+          :title="tm('music_modes.ask_hint')"
+          data-testid="pm-row-ask"
+        >
+          {{ tm("music_modes.ask_badge") }}
+        </span>
         <span v-if="live" class="pm-live-badge">
           <span class="pm-live-badge__dot" />
           {{ tm("program.live") }}
@@ -127,6 +135,7 @@ import draggable from "vuedraggable";
 import type { ProgramItem, ProgramSubItem } from "@/types/Presentation";
 import { useMediaMeta } from "../composables/useMediaMeta";
 import { useFolderItems } from "../composables/useFolderItems";
+import { needsModeChoice } from "../program/musicModes";
 import { KIND_ICONS } from "../program/kinds";
 import { formatDuration } from "../program/time";
 
@@ -157,6 +166,9 @@ const emit = defineEmits<{
 }>();
 
 const { thumbOf } = useMediaMeta();
+
+/** Música com a versão em aberto: o operador escolhe ao mandar ao ar. */
+const askMode = computed(() => needsModeChoice(props.item));
 
 /** Pasta: quantos arquivos, ou o próximo da série — lido da pasta na hora. */
 const folders = useFolderItems();
@@ -287,6 +299,17 @@ const expandable = computed(() => hasChildren.value || props.item.kind === "mome
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.pm-ask-badge {
+  flex-shrink: 0;
+  padding: 0 5px;
+  border: 1px solid var(--lj-ui-accent);
+  border-radius: 2px;
+  color: var(--lj-ui-accent);
+  font-size: 9.5px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .pm-row__subtitle {

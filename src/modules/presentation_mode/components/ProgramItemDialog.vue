@@ -199,18 +199,21 @@ const subtitle = ref("");
 const minutes = ref<string | number>(0);
 const targetSessionId = ref<string | null>(null);
 const music = ref<MusicPick | null>(null);
-const musicMode = ref<MusicMode>("sung");
+/** "ask": a versão fica para a hora — o duplo clique pede a escolha antes de abrir. */
+const ASK = "ask" as const;
+const musicMode = ref<MusicMode | typeof ASK>(ASK);
 
-const modeOptions = computed(() =>
-  modesFor(!!music.value?.has_instrumental_music).map((m) => ({
+const modeOptions = computed(() => [
+  { value: ASK, label: tm("music_modes.ask") },
+  ...modesFor(!!music.value?.has_instrumental_music).map((m) => ({
     value: m.value,
     label: tm(m.label),
-  }))
-);
+  })),
+]);
 
 // Trocar para uma música sem instrumental não pode deixar "Playback" escolhido.
 watch(modeOptions, (options) => {
-  if (!options.some((o) => o.value === musicMode.value)) musicMode.value = "sung";
+  if (!options.some((o) => o.value === musicMode.value)) musicMode.value = ASK;
 });
 const bible = ref<ProgramBibleRef | null>(null);
 const filePath = ref("");
@@ -258,7 +261,8 @@ function reset(): void {
           has_instrumental_music: source.has_instrumental_music,
         }
       : null;
-  musicMode.value = isMusicMode(source?.subtipo) ? source.subtipo : "sung";
+  // Item novo nasce com a versão em aberto; o existente mostra a que tem (ou "na hora").
+  musicMode.value = isMusicMode(source?.subtipo) ? source.subtipo : ASK;
   bible.value = item?.bible ?? null;
   filePath.value = source?.tipo === LiturgyItemTypeEnum.ARQUIVO ? source.dir : "";
   url.value = source?.url ?? "";
@@ -344,7 +348,7 @@ function build(): ProgramItem | string {
           ...(base?.source ?? {}),
           id: sourceId,
           tipo: LiturgyItemTypeEnum.MUSICA,
-          subtipo: musicMode.value,
+          subtipo: musicMode.value === ASK ? "" : musicMode.value,
           id_music: music.value.id_music,
           musica: music.value.id_music,
           item: music.value.name,

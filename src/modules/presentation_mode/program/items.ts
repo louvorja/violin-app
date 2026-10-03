@@ -13,8 +13,11 @@ export function fileTitle(entry: LibraryEntry): string {
   return entry.name.replace(/\.[^.]+$/, "");
 }
 
-/** Música do acervo como item do programa. `modeLabel` vai no subtítulo quando não é o formato de sempre. */
-export function songItem(song: LibrarySong, mode: MusicMode, modeLabel: string): ProgramItem {
+/**
+ * Música do acervo como item do programa. `modeLabel` vai no subtítulo quando
+ * não é o formato de sempre. `mode: null` deixa a versão para a hora.
+ */
+export function songItem(song: LibrarySong, mode: MusicMode | null, modeLabel: string): ProgramItem {
   const seconds = DateTime.toNumber(song.duration);
   return {
     id: newId(),
@@ -25,7 +28,7 @@ export function songItem(song: LibrarySong, mode: MusicMode, modeLabel: string):
     source: liturgyItem({
       id: newId(),
       tipo: LiturgyItemTypeEnum.MUSICA,
-      subtipo: mode,
+      subtipo: mode ?? "",
       id_music: song.id_music,
       musica: song.id_music,
       // Como a liturgia: id negativo + `ref_id` com o UUID da música personalizada.

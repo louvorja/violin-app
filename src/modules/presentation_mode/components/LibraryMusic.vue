@@ -334,13 +334,21 @@ function programMenu(item: CatalogRow) {
     {
       title: tm("library.add_to_program"),
       icon: ICONS.ACTIONS.ADD,
-      menu: modesFor(!!item.has_instrumental_music).map((m) => ({
-        title: tm(m.label),
-        icon: m.icon,
-        // O formato aparece no subtítulo quando não é o de sempre ("Cantado").
-        click: () =>
-          emit("add", songItem(toSong(item), m.value, m.value === "sung" ? "" : tm(m.label))),
-      })),
+      menu: [
+        // Versão em aberto: o duplo clique no programa pede a escolha antes de abrir.
+        {
+          title: tm("music_modes.ask"),
+          icon: ICONS.UI.HELP,
+          click: () => emit("add", songItem(toSong(item), null, "")),
+        },
+        ...modesFor(!!item.has_instrumental_music).map((m) => ({
+          title: tm(m.label),
+          icon: m.icon,
+          // O formato aparece no subtítulo quando não é o de sempre ("Cantado").
+          click: () =>
+            emit("add", songItem(toSong(item), m.value, m.value === "sung" ? "" : tm(m.label))),
+        })),
+      ],
     },
   ];
 }

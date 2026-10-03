@@ -13,7 +13,7 @@ import type { LiturgyItem } from "@/types/Liturgy";
 import { useLiturgyExecution } from "@/modules/liturgy/composables/useLiturgyExecution";
 import type { ProgramBibleRef, ProgramItem } from "@/types/Presentation";
 import { liturgyItem } from "../program/liturgy";
-import type { MusicMode } from "../program/musicModes";
+import { isMusicMode, type MusicMode } from "../program/musicModes";
 import { nextVerseOf } from "../program/bible";
 import { useBibleLibrary } from "./useBibleLibrary";
 import { isPowerPoint, powerPointAsPdf } from "./usePowerPoint";
@@ -46,10 +46,13 @@ export function playCustomMusicInMode(customId: string, mode: MusicMode | string
   void openCustomMusic(customId, LITURGY_VERSION_ACTION[mode] ?? MusicActionEnum.AUDIO, { minimized: true });
 }
 
-/** Música a escolher na hora segue o caminho da liturgia, que pede a escolha. */
-function playMusicOnStage(source: LiturgyItem): boolean {
+/**
+ * Música a escolher na hora segue o caminho da liturgia, que pede a escolha.
+ * `chosen`: a versão escolhida agora, para o item que deixou a versão em aberto.
+ */
+function playMusicOnStage(source: LiturgyItem, chosen?: MusicMode): boolean {
   if (source.escolha || !source.id_music) return false;
-  const mode = source.subtipo || "sung";
+  const mode = isMusicMode(source.subtipo) ? source.subtipo : (chosen ?? "sung");
   if (source.id_music > 0) playMusicInMode(source.id_music, mode);
   else if (source.ref_id) playCustomMusicInMode(source.ref_id, mode);
   else return false;
@@ -104,14 +107,14 @@ export function useProgramExecution() {
    * Item com sub-itens (anúncios) não projeta: o operador escolhe o sub-item.
    * Devolve se algo foi enviado para execução.
    */
-  function execute(item: ProgramItem): boolean {
+  function execute(item: ProgramItem, mode?: MusicMode): boolean {
     if (item.children?.length) return false;
     if (item.bible) {
       sendBible(item.bible);
       return true;
     }
     if (item.source) {
-      if (item.source.tipo === LiturgyItemTypeEnum.MUSICA && playMusicOnStage(item.source)) return true;
+      if (item.source.tipo === LiturgyItemTypeEnum.MUSICA && playMusicOnStage(item.source, mode)) return true;
       // Arquivo do disco segue o caminho da biblioteca: nuvem e PowerPoint são tratados lá.
       const dir = item.source.dir ?? "";
       if (item.source.tipo === LiturgyItemTypeEnum.ARQUIVO && dir && !isUrl(dir)) {
