@@ -340,5 +340,28 @@
     "converting": "Convertendo \"{name}\" pelo PowerPoint…",
     "failed": "Não deu para converter \"{name}\" pelo PowerPoint. Abra o arquivo no PowerPoint e exporte como PDF (Arquivo → Exportar → PDF).",
     "unsupported": "Este computador não converte PowerPoint. Exporte \"{name}\" como PDF no PowerPoint e use o PDF."
+  },
+  "cloud": {
+    "badge": "NUVEM",
+    "only_cloud": "Só na nuvem: ainda não está neste computador",
+    "downloading_badge": "Baixando da nuvem",
+    "download": "Baixar para este computador",
+    "download_folder": "Baixar a pasta para este computador",
+    "download_all": "Baixar da nuvem ({n})",
+    "download_all_title": "Baixa para este computador os arquivos desta pasta que estão só na nuvem",
+    "task": "Baixando da nuvem: {where}",
+    "progress": "{done} de {total}",
+    "not_here_title": "Arquivo só na nuvem",
+    "not_here_text": "\"{name}\" ainda não está neste computador. Passar agora faz o vídeo travar enquanto baixa.",
+    "play_anyway": "Passar assim mesmo",
+    "download_first": "Baixar e passar",
+    "downloading": "Baixando \"{name}\" da nuvem…",
+    "failed": "Não deu para baixar \"{name}\" da nuvem.",
+    "program_task": "Baixando da nuvem o que está no programa",
+    "keep_hint": {
+      "mac": "Baixado. A nuvem pode voltar a deixar o arquivo só online para liberar espaço. Para garantir no culto, no Finder clique com o botão direito na pasta e escolha “Manter Sempre Neste Dispositivo” (OneDrive), “Disponível Offline” (Google Drive) ou “Manter Transferido” (iCloud).",
+      "windows": "Baixado. A nuvem pode voltar a deixar o arquivo só online para liberar espaço. Para garantir no culto, no Explorador de Arquivos clique com o botão direito na pasta e escolha “Sempre manter neste dispositivo” (OneDrive, iCloud) ou “Disponível off-line” (Google Drive).",
+      "other": "Baixado. A nuvem pode voltar a deixar o arquivo só online para liberar espaço. Para garantir no culto, marque a pasta para ficar sempre neste computador no gerenciador de arquivos."
+    }
   }
 }

@@ -340,5 +340,28 @@
     "converting": "Convirtiendo \"{name}\" con PowerPoint…",
     "failed": "No se pudo convertir \"{name}\" con PowerPoint. Abre el archivo en PowerPoint y expórtalo como PDF (Archivo → Exportar → PDF).",
     "unsupported": "Esta computadora no convierte PowerPoint. Exporta \"{name}\" como PDF en PowerPoint y usa el PDF."
+  },
+  "cloud": {
+    "badge": "NUBE",
+    "only_cloud": "Solo en la nube: todavía no está en esta computadora",
+    "downloading_badge": "Descargando de la nube",
+    "download": "Descargar a esta computadora",
+    "download_folder": "Descargar la carpeta a esta computadora",
+    "download_all": "Descargar de la nube ({n})",
+    "download_all_title": "Descarga a esta computadora los archivos de esta carpeta que están solo en la nube",
+    "task": "Descargando de la nube: {where}",
+    "progress": "{done} de {total}",
+    "not_here_title": "Archivo solo en la nube",
+    "not_here_text": "\"{name}\" todavía no está en esta computadora. Pasarlo ahora hace que el video se trabe mientras descarga.",
+    "play_anyway": "Pasar de todos modos",
+    "download_first": "Descargar y pasar",
+    "downloading": "Descargando \"{name}\" de la nube…",
+    "failed": "No se pudo descargar \"{name}\" de la nube.",
+    "program_task": "Descargando de la nube lo que está en el programa",
+    "keep_hint": {
+      "mac": "Descargado. La nube puede volver a dejar el archivo solo en línea para liberar espacio. Para asegurarlo en el culto, en el Finder haz clic derecho en la carpeta y elige “Mantener siempre en este dispositivo” (OneDrive), “Disponible sin conexión” (Google Drive) o “Mantener descargado” (iCloud).",
+      "windows": "Descargado. La nube puede volver a dejar el archivo solo en línea para liberar espacio. Para asegurarlo en el culto, en el Explorador de archivos haz clic derecho en la carpeta y elige “Mantener siempre en este dispositivo” (OneDrive, iCloud) o “Disponible sin conexión” (Google Drive).",
+      "other": "Descargado. La nube puede volver a dejar el archivo solo en línea para liberar espacio. Para asegurarlo en el culto, marca la carpeta para que quede siempre en esta computadora en el administrador de archivos."
+    }
   }
 }

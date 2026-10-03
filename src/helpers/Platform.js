@@ -334,6 +334,24 @@ export default {
     return api?.storage?.listDir?.(dirPath) ?? Promise.resolve({ ok: false, error: "unsupported" });
   },
 
+  /** Quais arquivos estão só na nuvem. No navegador: nenhum (`{}`). */
+  cloudStates(paths) {
+    return api?.storage?.cloudStates?.(paths) ?? Promise.resolve({});
+  },
+
+  /** Baixa o arquivo da nuvem para o computador. No navegador: `{ ok: false }`. */
+  cloudDownload(filePath) {
+    return (
+      api?.storage?.cloudDownload?.(filePath) ??
+      Promise.resolve({ ok: false, error: "unsupported" })
+    );
+  },
+
+  /** Andamento dos downloads da nuvem; devolve a função que para de ouvir. */
+  onCloudProgress(cb) {
+    return api?.storage?.onCloudProgress?.(cb) ?? (() => {});
+  },
+
   /** Histórico da série de vídeos da pasta. No navegador: `{ ok: false }`. */
   seriesRead(dirPath) {
     return (

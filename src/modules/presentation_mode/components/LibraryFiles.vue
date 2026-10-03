@@ -131,6 +131,23 @@
               <span v-if="entry.path === returnPath" class="pm-file__return">
                 {{ tm("library.on_return") }}
               </span>
+              <span
+                v-else-if="cloudOf(entry)"
+                class="pm-file__cloud"
+                :title="
+                  cloudOf(entry) === 'cloud'
+                    ? tm('cloud.only_cloud')
+                    : tm('cloud.downloading_badge')
+                "
+                :data-testid="`pm-file-cloud-${entry.name}`"
+              >
+                <LjIcon :icon="ICONS.ACTIONS.CLOUD_DOWNLOAD" :size="11" />
+                {{
+                  cloudOf(entry) === "cloud"
+                    ? tm("cloud.badge")
+                    : `${cloud.progress.get(entry.path) ?? 0}%`
+                }}
+              </span>
               <template v-if="!entry.isDir">
                 <LjTooltip
                   :text="entry.path === livePath ? tm('library.stop') : tm('library.play')"
@@ -185,6 +202,17 @@
           <bdi dir="ltr">{{ locationLabel }}</bdi>
         </span>
         <span class="pm-files__count">{{ countLabel }}</span>
+        <LjButton
+          v-if="cloudFiles.length"
+          size="sm"
+          variant="ghost"
+          :icon="ICONS.ACTIONS.CLOUD_DOWNLOAD"
+          data-testid="pm-cloud-download-all"
+          :title="tm('cloud.download_all_title')"
+          @click="downloadPaths(cloudFiles, locationLabel)"
+        >
+          {{ tm("cloud.download_all", { n: cloudFiles.length }) }}
+        </LjButton>
         <LjButton
           v-if="seriesDir && !seriesDoc"
           size="sm"
@@ -296,6 +324,8 @@ import {
   type LibraryEntry,
 } from "../composables/useFileLibrary";
 import { useMediaMeta } from "../composables/useMediaMeta";
+import { useCloudFiles } from "../composables/useCloudFiles";
+import Platform from "@/helpers/Platform";
 import type { ProgramItem } from "@/types/Presentation";
 import { fileItem } from "../program/items";
 import type { Playable } from "../program/playable";
@@ -327,6 +357,7 @@ const { t, tm, locale } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
 
 const lib = useFileLibrary();
 const { meta, request } = useMediaMeta();
+const cloud = useCloudFiles();
 
 const selected = computed(() => lib.selected.value);
 
@@ -352,9 +383,23 @@ function menuFor(entry: LibraryEntry): LjMenuItem[] {
         icon: ICONS.UI.FOLDER_OPEN,
         action: () => void lib.enter(entry),
       },
+      {
+        label: tm("cloud.download_folder"),
+        icon: ICONS.ACTIONS.CLOUD_DOWNLOAD,
+        action: () => void downloadFolder(entry),
+      },
     ];
   const live = entry.path === props.livePath;
   return [
+    ...(cloudOf(entry) === "cloud"
+      ? [
+          {
+            label: tm("cloud.download"),
+            icon: ICONS.ACTIONS.CLOUD_DOWNLOAD,
+            action: () => void cloud.download(entry.path),
+          },
+        ]
+      : []),
     live
       ? { label: tm("library.stop"), icon: ICONS.ACTIONS.CLOSE, action: () => emit("stop") }
       : {
@@ -404,11 +449,45 @@ onMounted(() => {
 });
 
 // Miniaturas e durações da pasta aberta; o selecionado passa na frente da fila.
+// Antes, o estado da nuvem da pasta inteira numa consulta só: a miniatura não
+// abre o arquivo que está só na nuvem (abrir seria baixá-lo).
 watch(
   () => lib.entries.value,
-  (entries) => entries.forEach((e) => request(e)),
+  async (entries) => {
+    await cloud.refresh(entries.filter((e) => !e.isDir).map((e) => e.path));
+    entries.forEach((e) => request(e));
+  },
   { immediate: true }
 );
+// Arquivo que acabou de baixar ganha a miniatura que faltava.
+watch(
+  () => lib.entries.value.filter((e) => cloud.stateOf(e.path) === "local").length,
+  () => lib.entries.value.forEach((e) => request(e))
+);
+
+/* ─── Nuvem ─── */
+
+/** "cloud" ou "downloading"; nada para o que já está no computador. */
+function cloudOf(entry: LibraryEntry): "cloud" | "downloading" | undefined {
+  const state = entry.isDir ? undefined : cloud.stateOf(entry.path);
+  return state === "local" ? undefined : state;
+}
+
+const cloudFiles = computed(() =>
+  lib.entries.value.filter((e) => cloudOf(e) === "cloud").map((e) => e.path)
+);
+
+function downloadPaths(paths: string[], where: string): void {
+  void cloud.downloadAll(paths, tm("cloud.task", { where }));
+}
+
+async function downloadFolder(entry: LibraryEntry): Promise<void> {
+  const res = await Platform.listDir(entry.path).catch(() => null);
+  const files = res?.ok
+    ? (res.entries as LibraryEntry[]).filter((e) => !e.isDir).map((e) => e.path)
+    : [];
+  downloadPaths(files, entry.name);
+}
 watch(details, (entry) => {
   if (entry) request(entry, { priority: true });
 });
@@ -801,6 +880,21 @@ const emptyMessage = computed(() => {
 .pm-files__make-series {
   flex-shrink: 0;
   color: var(--lj-orange);
+}
+
+.pm-file__cloud {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  padding: 0 4px;
+  border-radius: 2px;
+  background: var(--lj-black-alpha-75);
+  color: var(--lj-white);
+  font-size: 9px;
+  font-weight: 700;
 }
 
 .pm-file__return {

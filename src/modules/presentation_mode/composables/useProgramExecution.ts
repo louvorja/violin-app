@@ -17,6 +17,8 @@ import type { MusicMode } from "../program/musicModes";
 import { nextVerseOf } from "../program/bible";
 import { useBibleLibrary } from "./useBibleLibrary";
 import { isPowerPoint, powerPointAsPdf } from "./usePowerPoint";
+import { useCloudFiles } from "./useCloudFiles";
+import { isUrl } from "../program/paths";
 
 /**
  * Toca uma música no formato pedido. Com letra, ela vai minimizada — os
@@ -66,6 +68,7 @@ function playMusicOnStage(source: LiturgyItem): boolean {
 export function useProgramExecution() {
   const { executeItem, executeAnnouncements } = useLiturgyExecution();
   const bible = useBibleLibrary();
+  const cloud = useCloudFiles();
 
   /**
    * O versículo vai ao ar na hora. O retorno de palco mostra o seguinte quando o
@@ -109,8 +112,10 @@ export function useProgramExecution() {
     }
     if (item.source) {
       if (item.source.tipo === LiturgyItemTypeEnum.MUSICA && playMusicOnStage(item.source)) return true;
-      if (item.source.tipo === LiturgyItemTypeEnum.ARQUIVO && isPowerPoint(item.source.dir ?? "")) {
-        projectPath(item.source.dir ?? "", item.title);
+      // Arquivo do disco segue o caminho da biblioteca: nuvem e PowerPoint são tratados lá.
+      const dir = item.source.dir ?? "";
+      if (item.source.tipo === LiturgyItemTypeEnum.ARQUIVO && dir && !isUrl(dir)) {
+        projectPath(dir, item.title);
         return true;
       }
       executeItem(item.source);
@@ -126,10 +131,13 @@ export function useProgramExecution() {
   function projectPath(path: string, name: string): void {
     const send = (dir: string) =>
       executeItem(liturgyItem({ id: crypto.randomUUID(), tipo: LiturgyItemTypeEnum.ARQUIVO, dir, item: name }));
-    if (!isPowerPoint(path)) return void send(path);
-    void powerPointAsPdf(path, name).then((pdf) => {
+    void (async () => {
+      // Só na nuvem, o vídeo tocaria aos trancos enquanto baixa: o operador decide.
+      if (!(await cloud.ensureLocal(path, name))) return;
+      if (!isPowerPoint(path)) return void send(path);
+      const pdf = await powerPointAsPdf(path, name);
       if (pdf) void send(pdf);
-    });
+    })();
   }
 
   /**

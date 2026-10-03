@@ -389,6 +389,15 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
     readDir: (dirPath) => ipcRenderer.invoke("storage:readDir", dirPath),
     /** Um nível de uma pasta, com tamanho e data (navegador de arquivos). */
     listDir: (dirPath) => ipcRenderer.invoke("files:listDir", dirPath),
+    /** Quais destes arquivos estão só na nuvem: `{ caminho: "local" | "cloud" }`. */
+    cloudStates: (paths) => ipcRenderer.invoke("files:cloudStates", paths),
+    /** Traz o arquivo da nuvem para o computador; o andamento chega por `onCloudProgress`. */
+    cloudDownload: (filePath) => ipcRenderer.invoke("files:cloudDownload", filePath),
+    onCloudProgress: (cb) => {
+      const listener = (_e, data) => cb(data);
+      ipcRenderer.on("files:cloudProgress", listener);
+      return () => ipcRenderer.removeListener("files:cloudProgress", listener);
+    },
     /** Histórico da série de vídeos da pasta (`.louvorja-serie.json`); `series: null` se não é série. */
     seriesRead: (dirPath) => ipcRenderer.invoke("files:seriesRead", dirPath),
     /** Aplica uma operação (`play`, `undo`, `restart`, `create`, `settings`) ao histórico do disco. */

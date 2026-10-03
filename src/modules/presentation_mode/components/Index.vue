@@ -203,6 +203,8 @@ import { isDeck, usePdfDeck } from "../composables/usePdfDeck";
 import { preparePowerPoint } from "../composables/usePowerPoint";
 import { takeOffAir } from "../composables/takeOffAir";
 import { returnOverrideFor } from "../composables/returnTarget";
+import { useProgramDownloads } from "../composables/useCloudFiles";
+import { programFilePaths } from "../program/paths";
 import { useStage } from "../composables/useStage";
 import {
   expectationOf,
@@ -680,6 +682,9 @@ const pathOf = (p: Playable | null) =>
   filePathOf(p, p?.type === "program" || p?.type === "child" ? findItem(p.itemId) : null);
 
 useSeriesRecorder(() => pathOf(liveOrigin.value));
+
+// Arquivos do programa que estão só na nuvem descem antes do culto.
+useProgramDownloads(() => programFilePaths(program.value));
 
 // PowerPoint no palco já começa a converter: na hora de mandar, o PDF está pronto.
 watch(stage.preview, (p) => {

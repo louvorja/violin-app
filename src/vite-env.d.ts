@@ -166,6 +166,9 @@ declare global {
       convertPresentation?: (
         filePath: string
       ) => Promise<{ ok: true; pdf: string; cached: boolean } | { ok: false; error: string }>;
+      cloudStates?: (paths: string[]) => Promise<Record<string, "local" | "cloud">>;
+      cloudDownload?: (filePath: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+      onCloudProgress?: (cb: (data: { path: string; percent: number }) => void) => () => void;
       setDataDir: (dir: string, opts?: { moveExisting?: boolean }) => Promise<void>;
       enforceQuota: (maxBytes: number) => Promise<void>;
       checkLocal: (paths: string[]) => Promise<Record<string, "own" | "classic" | false>>;

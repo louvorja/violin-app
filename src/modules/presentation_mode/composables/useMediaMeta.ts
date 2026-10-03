@@ -1,6 +1,7 @@
 import { reactive } from "vue";
 import $path from "@/helpers/Path";
 import { fileKind, type LibraryEntry } from "./useFileLibrary";
+import { useCloudFiles } from "./useCloudFiles";
 
 /**
  * Miniatura, duração e resolução dos arquivos do navegador, lidas no próprio
@@ -101,12 +102,28 @@ async function _load(entry: LibraryEntry): Promise<MediaMeta> {
   return {};
 }
 
+/**
+ * Abrir um arquivo que está só na nuvem faz o provedor baixá-lo inteiro: a
+ * miniatura de uma pasta do OneDrive baixaria a pasta toda. Esses ficam sem
+ * miniatura até o operador baixar — e voltam a ser pedidos depois.
+ */
+async function _isCloudOnly(path: string): Promise<boolean> {
+  const cloud = useCloudFiles();
+  if (!cloud.states.has(path)) await cloud.refresh([path]);
+  return cloud.stateOf(path) !== "local" && cloud.states.has(path);
+}
+
+async function _read(entry: LibraryEntry): Promise<MediaMeta | null> {
+  if (await _isCloudOnly(entry.path)) return null;
+  return _withTimeout(_load(entry));
+}
+
 function _pump(): void {
   while (_running < CONCURRENCY && _queue.length) {
     const entry = _queue.shift()!;
     _running++;
-    _withTimeout(_load(entry))
-      .then((meta) => _meta.set(entry.path, meta))
+    _read(entry)
+      .then((meta) => meta && _meta.set(entry.path, meta))
       .catch(() => _meta.set(entry.path, { failed: true }))
       .finally(() => {
         _running--;

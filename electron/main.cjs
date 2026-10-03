@@ -81,6 +81,7 @@ const splash = require("./main/splash.js");
 const storage = require("./main/storage.js");
 const docStore = require("./main/docStore.js");
 const fileBrowser = require("./main/fileBrowser.js");
+const cloudFiles = require("./main/cloudFiles.js").createCloudFiles();
 const seriesFile = require("./main/seriesFile.js");
 const { createPresentationConverter } = require("./main/presentationConvert.js");
 const mediaVariants = require("./main/mediaVariants.js");
@@ -2123,6 +2124,13 @@ ipcMain.handle("storage:readDir", async (_e, dirPath) => {
 
 /** Um nível de uma pasta, com tamanho e data — navegador de arquivos do Modo apresentação. */
 ipcMain.handle("files:listDir", (_e, dirPath) => fileBrowser.listDir(dirPath));
+// Pastas na nuvem (OneDrive, Google Drive, iCloud...): o que ainda não baixou, e baixar.
+ipcMain.handle("files:cloudStates", (_e, paths) => cloudFiles.states(paths));
+ipcMain.handle("files:cloudDownload", (event, filePath) =>
+  cloudFiles.download(filePath, (percent) => {
+    if (!event.sender.isDestroyed()) event.sender.send("files:cloudProgress", { path: filePath, percent });
+  })
+);
 // Histórico de uma série de vídeos, gravado na própria pasta (nome de arquivo fixo).
 ipcMain.handle("files:seriesRead", (_e, dirPath) => seriesFile.read(dirPath));
 ipcMain.handle("files:seriesApply", (_e, dirPath, op) => seriesFile.apply(dirPath, op));
