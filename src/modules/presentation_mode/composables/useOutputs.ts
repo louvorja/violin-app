@@ -138,6 +138,12 @@ function _publish(): void {
   $appdata.set(KEYS.MODULES.PRESENTATION_MODE.CAN_CLEAR, _presenting.value && !_cleared.value);
 }
 
+/** Alguma tela de projeção (principal ou retorno) está aberta agora. */
+export async function anyScreenOpen(): Promise<boolean> {
+  const open = await _openFeatures();
+  return [...MAIN_SCREEN_FEATURES, ...RETURN_FEATURES].some((f) => open.includes(f));
+}
+
 const MISSING_AFTER_READS = 2;
 
 export async function refreshShowing(): Promise<void> {

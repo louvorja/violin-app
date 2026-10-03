@@ -421,5 +421,16 @@
     "width": "Largura",
     "height": "Altura",
     "ratio": "Proporção da tela"
+  },
+  "layers": {
+    "title": "No ar agora",
+    "screen": "Tela",
+    "return": "Retorno",
+    "audio": "Áudio",
+    "empty": "—",
+    "stop": "Tirar desta camada",
+    "stop_all": "Limpar tudo",
+    "announcements": "Anúncios",
+    "orphans_cleared": "As telas mostravam algo que o app não controlava mais (ele recarregou): voltaram ao fundo."
   }
 }

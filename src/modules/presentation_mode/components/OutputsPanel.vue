@@ -20,14 +20,8 @@
         data-testid="pm-outputs-clear"
         @click="toggleCleared"
       />
-      <LjButton
-        size="lg"
-        icon-only
-        :icon="ICONS.UI.MONITORS"
-        :title="tm('outputs.identify')"
-        :loading="isIdentifying"
-        @click="identify(3000)"
-      />
+      <!-- "Identificar monitores" está no menu do monitor de cada tela. -->
+      <LayersPanel />
     </div>
 
     <section class="pm-outputs__section">
@@ -246,7 +240,6 @@ import { LjButton, LjIcon, LjMenu } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { useModuleI18n } from "@/composables/useModuleI18n";
-import { useDisplays } from "@/composables/useDisplays";
 import type { ProgramItem } from "@/types/Presentation";
 import LiveMirror from "./LiveMirror.vue";
 import ReturnMirror from "./ReturnMirror.vue";
@@ -255,6 +248,7 @@ import { KIND_ICONS } from "../program/kinds";
 import { useMonitorRole } from "../composables/useMonitorRole";
 import ScreenToggle from "./ScreenToggle.vue";
 import ScreenZoom from "./ScreenZoom.vue";
+import LayersPanel from "./LayersPanel.vue";
 
 defineProps<{
   upNext: ProgramItem | null;
@@ -295,7 +289,6 @@ const {
   reopen,
   toggleCleared,
 } = useOutputs();
-const { identify, isIdentifying } = useDisplays();
 const zoomed = ref<"main" | "stage" | null>(null);
 const mainRole = useMonitorRole("projection");
 const stageRole = useMonitorRole("stage");

@@ -105,6 +105,14 @@ export function filePathOf(playable: Playable | null, item: ProgramItem | null):
   return null;
 }
 
+/** O que vai ao ar é um vídeo (do disco ou on-line) — e ocupa a vez do único vídeo. */
+export function playsVideo(playable: Playable, item: ProgramItem | null): boolean {
+  if (playable.type === "online") return true;
+  if (playable.type === "program" && item?.source?.tipo === LiturgyItemTypeEnum.VIDEO_ONLINE) return true;
+  const path = filePathOf(playable, item);
+  return !!path && (kindFromPath(path) === "video" || !!videoIdFromUrl(path));
+}
+
 export function expectationOf(
   playable: Playable,
   item: ProgramItem | null,

@@ -15,6 +15,8 @@ import {
 import { useOnlineQueue } from "./useOnlinePlayback";
 import { isDeck, usePdfDeck } from "./usePdfDeck";
 import { useStage } from "./useStage";
+import { claimVideo } from "./useLayers";
+import { kindFromPath } from "../program/liturgy";
 
 /**
  * Anterior/Próximo do palco (botões, teclado e passador): junta as fontes que
@@ -91,7 +93,8 @@ export function useStageNavigation(deps: {
         sent: () => sentWhile(["file"]),
         step: (to) => library.stepQueue(to),
         send: (entry) => {
-          deps.projectPath(entry.path, entry.name);
+          if (kindFromPath(entry.path) === "video") claimVideo("screen");
+        deps.projectPath(entry.path, entry.name);
           // Na pasta do programa, o item continua sendo o que está no ar.
           const sent = stage.sent.value?.playable;
           markSent(sent?.type === "folderFile" ? { ...sent, entry } : { type: "file", entry });

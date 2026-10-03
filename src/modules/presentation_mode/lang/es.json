@@ -421,5 +421,16 @@
     "width": "Ancho",
     "height": "Alto",
     "ratio": "Proporción de la pantalla"
+  },
+  "layers": {
+    "title": "En el aire ahora",
+    "screen": "Pantalla",
+    "return": "Retorno",
+    "audio": "Audio",
+    "empty": "—",
+    "stop": "Quitar de esta capa",
+    "stop_all": "Limpiar todo",
+    "announcements": "Anuncios",
+    "orphans_cleared": "Las pantallas mostraban algo que la app ya no controlaba (se recargó): volvieron al fondo."
   }
 }

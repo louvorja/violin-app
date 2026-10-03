@@ -247,12 +247,14 @@ import { programFilePaths } from "../program/paths";
 import { useStage } from "../composables/useStage";
 import { useStageNavigation } from "../composables/useStageNavigation";
 import { useReturnBlankSync } from "../composables/useReturnVisibility";
+import { claimVideo, resetOrphanScreens } from "../composables/useLayers";
 import { useFolderItems } from "../composables/useFolderItems";
 import {
   expectationOf,
   filePathOf,
   isOnAir,
   itemIdOf,
+  playsVideo,
   samePlayable,
   type Playable,
 } from "../program/playable";
@@ -323,6 +325,8 @@ onMounted(() => {
   void ensureLoaded();
   // A trava vale para o culto em andamento, não para a próxima abertura.
   if (outputLocked.value) setOutputLocked(false);
+  // Telas abertas mostrando algo que ninguém controla (o app recarregou): voltam ao fundo.
+  void resetOrphanScreens();
 });
 
 const expanded = computed(() => isModuleExpanded(moduleId));
@@ -397,6 +401,8 @@ function dispatch(
   }
 
   stage.show(playable);
+  // Um vídeo por vez: o que estiver só no retorno sai antes deste entrar.
+  if (playsVideo(playable, item)) claimVideo("screen");
   const expected = expectationOf(playable, item, mode);
   if (playable.type === "child" && item) {
     goLive(item.id);
@@ -530,7 +536,10 @@ async function onShowOnReturn(target: Playable | null): Promise<void> {
   if (!target) return showOnReturn(null);
   const item = itemOf(target);
   const override = await returnOverrideFor(target, item);
-  if (override) await showOnReturn(override);
+  if (!override) return;
+  // Um vídeo por vez: o da tela principal sai antes deste tocar no retorno.
+  if (override.type === "video") claimVideo("return");
+  await showOnReturn(override);
 }
 
 function playPreviewOnReturn(): void {
