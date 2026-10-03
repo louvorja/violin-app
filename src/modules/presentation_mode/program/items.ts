@@ -49,6 +49,11 @@ export function fileItem(entry: LibraryEntry, meta: MediaMeta | null): ProgramIt
   };
 }
 
+/** Pasta da biblioteca como item: comum (o operador escolhe na hora) ou série (passa o próximo). */
+export function folderItem(path: string, title: string): ProgramItem {
+  return { id: newId(), kind: "folder", title, folder: path, plannedMinutes: 5 };
+}
+
 /** Vídeo do YouTube como item do programa: o motor da liturgia o abre pelo link. */
 export function onlineItem(video: { id: string; title: string; duration: number | null; channel?: string }): ProgramItem {
   const seconds = video.duration ?? 0;

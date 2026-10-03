@@ -35,7 +35,7 @@ export function programView(item: ProgramItem): PreviewView {
 /** Como o palco mostra um Playable em prévia. `item` é o do programa (ou o momento do filho). */
 export function previewViewOf(target: Playable, item: ProgramItem | null): PreviewView | null {
   if (target.type === "program") return item ? programView(item) : null;
-  if (target.type === "file") return fileView(target.entry.path, target.entry.name);
+  if (target.type === "file" || target.type === "folderFile") return fileView(target.entry.path, target.entry.name);
   if (target.type === "child") {
     const child = item?.children?.find((c) => c.id === target.childId);
     if (!child) return null;

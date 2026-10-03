@@ -42,7 +42,7 @@ export async function returnOverrideFor(target: Playable, item: ProgramItem | nu
   if (!path) return null;
   const videoId = OnlineVideo.videoIdFromUrl(path);
   const title =
-    target.type === "file"
+    target.type === "file" || target.type === "folderFile"
       ? target.entry.name
       : target.type === "child"
         ? (item?.children?.find((c) => c.id === target.childId)?.title ?? path)

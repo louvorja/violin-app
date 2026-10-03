@@ -13,6 +13,8 @@ export type ProgramItemKind =
   | "announcements"
   /** Momento do culto com uma lista de fotos, vídeos e PDFs (anúncios, missionário…). */
   | "moment"
+  /** Pasta da biblioteca (comum ou série): o conteúdo é o que estiver nela na hora. */
+  | "folder"
   | "note"
   | "site"
   | "overlay"
@@ -54,6 +56,8 @@ export interface ProgramItem {
   source?: LiturgyItem;
   bible?: ProgramBibleRef;
   children?: ProgramSubItem[];
+  /** Caminho da pasta de um item `folder`. */
+  folder?: string;
   notes?: string;
 }
 

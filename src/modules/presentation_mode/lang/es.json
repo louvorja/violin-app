@@ -88,7 +88,8 @@
     "note": "Anotación",
     "site": "Sitio",
     "overlay": "Superposición",
-    "scheduled": "Ítem programado"
+    "scheduled": "Ítem programado",
+    "folder": "Carpeta de la biblioteca (común o serie)"
   },
   "item_dialog": {
     "new_title": "Nuevo ítem",
@@ -114,7 +115,11 @@
     "missing_url": "Informe una dirección que empiece con http:// o https://.",
     "missing_title": "Informe el título.",
     "version": "Versión",
-    "moment_hint": "Después de crearlo, agrega fotos, videos y PDFs desde la biblioteca: en el menú ⋮ del archivo, \"Agregar al momento\", o arrastrando el archivo al ítem."
+    "moment_hint": "Después de crearlo, agrega fotos, videos y PDFs desde la biblioteca: en el menú ⋮ del archivo, \"Agregar al momento\", o arrastrando el archivo al ítem.",
+    "folder": "Carpeta",
+    "folder_hint": "Serie: el doble clic pasa el siguiente video. Carpeta común: se abre en el escenario para elegir.",
+    "folder_none": "Primero agrega carpetas en la pestaña Archivos de la biblioteca.",
+    "missing_folder": "Elige una carpeta."
   },
   "session_dialog": {
     "new_title": "Nueva sesión",
@@ -363,5 +368,14 @@
       "windows": "Descargado. La nube puede volver a dejar el archivo solo en línea para liberar espacio. Para asegurarlo en el culto, en el Explorador de archivos haz clic derecho en la carpeta y elige “Mantener siempre en este dispositivo” (OneDrive, iCloud) o “Disponible sin conexión” (Google Drive).",
       "other": "Descargado. La nube puede volver a dejar el archivo solo en línea para liberar espacio. Para asegurarlo en el culto, marca la carpeta para que quede siempre en esta computadora en el administrador de archivos."
     }
+  },
+  "folder": {
+    "add_to_program": "Agregar al programa",
+    "open_library": "Abrir en la biblioteca",
+    "hint": "Clic elige · doble clic o ▶ envía al aire · clic derecho para más",
+    "empty": "No hay archivos en esta carpeta.",
+    "count": "{n} archivos",
+    "next": "Siguiente: {name}",
+    "series_done": "Serie completa"
   }
 }

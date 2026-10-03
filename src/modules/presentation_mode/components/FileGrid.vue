@@ -67,7 +67,7 @@
                 />
               </button>
             </LjTooltip>
-            <LjTooltip :text="tm('library.details')">
+            <LjTooltip v-if="!noDetails" :text="tm('library.details')">
               <button
                 type="button"
                 class="pm-file__info"
@@ -100,7 +100,7 @@ import { fileKind, useFileLibrary, type LibraryEntry } from "../composables/useF
 import { useMediaMeta } from "../composables/useMediaMeta";
 import { useCloudFiles } from "../composables/useCloudFiles";
 import { useMoments } from "../composables/useMoments";
-import { fileItem } from "../program/items";
+import { fileItem, folderItem } from "../program/items";
 
 /**
  * A grade de arquivos de uma pasta: miniatura, duração, selos (no ar, no
@@ -121,6 +121,8 @@ const props = defineProps<{
   nextName?: string | null;
   /** Ações a mais no fim do menu (marcar na série...). */
   extraMenu?: (entry: LibraryEntry) => LjMenuItem[];
+  /** Sem o painel de detalhes por perto (palco): some o (i) e o "Detalhes" do menu. */
+  noDetails?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -189,6 +191,11 @@ function menuFor(entry: LibraryEntry): LjMenuItem[] {
         action: () => emit("open", entry),
       },
       {
+        label: tm("folder.add_to_program"),
+        icon: ICONS.ACTIONS.ADD,
+        action: () => emit("add", folderItem(entry.path, entry.name)),
+      },
+      {
         label: tm("cloud.download_folder"),
         icon: ICONS.ACTIONS.CLOUD_DOWNLOAD,
         action: () => void downloadFolder(entry),
@@ -240,11 +247,15 @@ function menuFor(entry: LibraryEntry): LjMenuItem[] {
       icon: lib.isFavorite(entry) ? ICONS.UI.STAR : ICONS.UI.STAR_OUTLINE,
       action: () => lib.toggleFavorite(entry),
     },
-    {
-      label: tm("library.details"),
-      icon: ICONS.UI.INFORMATION_OUTLINE,
-      action: () => emit("details", entry),
-    },
+    ...(props.noDetails
+      ? []
+      : [
+          {
+            label: tm("library.details"),
+            icon: ICONS.UI.INFORMATION_OUTLINE,
+            action: () => emit("details", entry),
+          },
+        ]),
     ...(props.extraMenu?.(entry) ?? []),
   ];
 }

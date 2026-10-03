@@ -78,6 +78,24 @@
             (childId: string) => dispatch({ type: 'child', itemId: momentPreview!.id, childId })
           "
         />
+        <!-- Pasta do programa: em prévia, ou no ar com foto/PDF (vídeo vai ao player). -->
+        <FolderStage
+          v-else-if="folderOnStage"
+          :item="folderOnStage"
+          :live-path="liveOrigin?.type === 'folderFile' ? liveOrigin.entry.path : null"
+          :return-path="returnOverride?.path ?? null"
+          @play="
+            (entry: LibraryEntry) =>
+              dispatch({ type: 'folderFile', itemId: folderOnStage!.id, entry })
+          "
+          @stop="takeOff"
+          @add="(added: ProgramItem) => addItem(added, ensureSession())"
+          @show-on-return="
+            (e: LibraryEntry | null) =>
+              onShowOnReturn(e && { type: 'folderFile', itemId: folderOnStage!.id, entry: e })
+          "
+          @open-library="openFolderInLibrary(folderOnStage!)"
+        />
         <StagePreview
           v-else-if="stagePreview && previewView"
           :view="previewView"
@@ -154,6 +172,9 @@
       />
     </div>
 
+    <!-- Um só diálogo de série: a barra da biblioteca e a do palco abrem o mesmo. -->
+    <SeriesDialog />
+
     <ProgramItemDialog
       v-model="itemDialogOpen"
       :item="editingItem"
@@ -198,18 +219,22 @@ import StageSlides from "./StageSlides.vue";
 import StageVideo from "./StageVideo.vue";
 import StagePreview from "./StagePreview.vue";
 import MomentStage from "./MomentStage.vue";
+import FolderStage from "./FolderStage.vue";
+import SeriesDialog from "./SeriesDialog.vue";
 import PdfStage from "./PdfStage.vue";
-import { isDeck, usePdfDeck } from "../composables/usePdfDeck";
 import { preparePowerPoint } from "../composables/usePowerPoint";
 import { takeOffAir } from "../composables/takeOffAir";
 import { returnOverrideFor } from "../composables/returnTarget";
 import { useProgramDownloads } from "../composables/useCloudFiles";
 import { programFilePaths } from "../program/paths";
 import { useStage } from "../composables/useStage";
+import { useStageNavigation } from "../composables/useStageNavigation";
+import { useFolderItems } from "../composables/useFolderItems";
 import {
   expectationOf,
   filePathOf,
   isOnAir,
+  itemIdOf,
   samePlayable,
   type Playable,
 } from "../program/playable";
@@ -217,11 +242,11 @@ import LibraryPanel, { type LibraryTab } from "./LibraryPanel.vue";
 import LiveMirror from "./LiveMirror.vue";
 import $appdata from "@/helpers/AppData";
 import { KEYS } from "@/constants/UserDataKeys";
-import { useFileLibrary } from "../composables/useFileLibrary";
+import { useFileLibrary, type LibraryEntry } from "../composables/useFileLibrary";
 import { KIND_ICONS } from "../program/kinds";
 import Media from "@/composables/useMedia";
 import { useSlides } from "@/composables/useSlides";
-import { useLiveContent, type LiveKind } from "../composables/useLiveContent";
+import { useLiveContent } from "../composables/useLiveContent";
 import {
   cleared,
   returnOverride,
@@ -238,18 +263,10 @@ import {
   useProgramExecution,
 } from "../composables/useProgramExecution";
 import type { MusicMode } from "../program/musicModes";
-import { itemVideoId, openOnline, useOnlineQueue } from "../composables/useOnlinePlayback";
+import { itemVideoId, openOnline } from "../composables/useOnlinePlayback";
 import { useOnlinePrefetch } from "../composables/useOnlinePrefetch";
 import { useSeriesRecorder } from "../composables/useSeries";
 import { useClicker } from "../composables/useClicker";
-import {
-  bibleSource,
-  fileQueueSource,
-  momentSource,
-  slidesSource,
-  useLiveNavigation,
-} from "../composables/useLiveNavigation";
-import { useBibleLibrary } from "../composables/useBibleLibrary";
 import { previewViewOf } from "../program/previewView";
 import { useLibraryLayout } from "../composables/useLibraryLayout";
 import { useProgramLiturgy } from "../composables/useProgramLiturgy";
@@ -277,9 +294,9 @@ const {
   prepare,
 } = useProgram();
 const { execute, executeChild, projectPath, sendBible } = useProgramExecution();
-const bibleLibrary = useBibleLibrary();
 const { importFromLiturgy, saveAsLiturgy } = useProgramLiturgy();
 const stage = useStage();
+const folders = useFolderItems();
 onBeforeUnmount(stage.reset);
 
 onMounted(() => {
@@ -307,6 +324,12 @@ function findItem(itemId: string): ProgramItem | null {
   return null;
 }
 
+/** O item do programa por trás do que está no palco (o próprio, o momento, a pasta). */
+function itemOf(playable: Playable | null | undefined): ProgramItem | null {
+  const id = itemIdOf(playable);
+  return id ? findItem(id) : null;
+}
+
 interface DispatchOptions {
   /** Música: slide em que ela entra. */
   slideIndex?: number;
@@ -324,13 +347,21 @@ function dispatch(
   playable: Playable,
   { slideIndex = 0, mode = "sung", force = false }: DispatchOptions = {}
 ): void {
-  const item =
-    playable.type === "program" || playable.type === "child" ? findItem(playable.itemId) : null;
-  if ((playable.type === "program" || playable.type === "child") && !item) return;
+  const item = itemOf(playable);
+  if (itemIdOf(playable) && !item) return;
   // Momento: abrir o item manda o primeiro arquivo; o passador anda pelos outros.
   if (playable.type === "program" && item?.children?.length) {
     toggleOpen(item.id, true);
     dispatch({ type: "child", itemId: item.id, childId: item.children[0].id }, { force });
+    return;
+  }
+  // Pasta: a série passa o próximo vídeo; a pasta comum abre no palco para o operador escolher.
+  if (playable.type === "program" && item?.kind === "folder" && item.folder) {
+    const folderItem = item;
+    void folders.nextOf(item.folder).then((next) => {
+      if (next) dispatch({ type: "folderFile", itemId: folderItem.id, entry: next }, { force });
+      else stage.show(playable);
+    });
     return;
   }
   if (outputLocked.value && !force) {
@@ -344,6 +375,11 @@ function dispatch(
     goLive(item.id);
     executeChild(item, playable.childId);
     Telemetry.track("presentation_moment_child_live", { kind: item.kind });
+  } else if (playable.type === "folderFile" && item) {
+    goLive(item.id);
+    library.startQueue(playable.entry, folders.filesOf(item.folder ?? ""));
+    projectPath(playable.entry.path, playable.entry.name);
+    Telemetry.track("presentation_folder_file_live", {});
   } else if (item) {
     goLive(item.id);
     execute(item);
@@ -425,9 +461,7 @@ const previewIsLive = computed(() => {
 const stagePreview = computed(() => !!stage.preview.value && !previewIsLive.value);
 const previewView = computed(() => {
   const t = stage.preview.value;
-  return t
-    ? previewViewOf(t, t.type === "program" || t.type === "child" ? findItem(t.itemId) : null)
-    : null;
+  return t ? previewViewOf(t, itemOf(t)) : null;
 });
 
 /**
@@ -467,8 +501,7 @@ function playPreview(slideIndex = 0, mode: MusicMode = "sung"): void {
 /** Foto ou vídeo só no retorno de palco (biblioteca, programa, YouTube); `null` tira. */
 async function onShowOnReturn(target: Playable | null): Promise<void> {
   if (!target) return showOnReturn(null);
-  const item =
-    target.type === "program" || target.type === "child" ? findItem(target.itemId) : null;
+  const item = itemOf(target);
   const override = await returnOverrideFor(target, item);
   if (override) await showOnReturn(override);
 }
@@ -505,6 +538,28 @@ const momentPreview = computed(() => {
   return item && (item.kind === "moment" || item.children?.length) ? item : null;
 });
 
+/**
+ * A pasta do programa no palco: a que está em prévia, ou a de onde saiu o
+ * arquivo no ar (menos vídeo, que fica com o player).
+ */
+const folderOnStage = computed<ProgramItem | null>(() => {
+  const t = stage.preview.value;
+  if (stagePreview.value) {
+    const item = t?.type === "program" ? findItem(t.itemId) : null;
+    return item?.kind === "folder" ? item : null;
+  }
+  return liveOrigin.value?.type === "folderFile" && !showVideoStage.value
+    ? liveProgramItem.value
+    : null;
+});
+
+/** Abre a pasta do item na aba Arquivos da biblioteca. */
+function openFolderInLibrary(item: ProgramItem): void {
+  if (!item.folder) return;
+  libraryTab.value = "files";
+  void library.openPath(item.folder);
+}
+
 /** O momento cujo arquivo está no ar. */
 const liveMoment = computed(() =>
   liveOrigin.value?.type === "child" ? liveProgramItem.value : null
@@ -512,7 +567,7 @@ const liveMoment = computed(() =>
 
 const liveProgramItem = computed(() => {
   const origin = liveOrigin.value;
-  return origin?.type === "program" || origin?.type === "child" ? findItem(origin.itemId) : null;
+  return itemOf(origin);
 });
 
 const stageIcon = computed(() => {
@@ -524,7 +579,18 @@ const stageIcon = computed(() => {
 /** O item do programa no ar; sem ele (biblioteca, outro módulo), o nome do que está na tela. */
 const stageTitle = computed(() => {
   if (stagePreview.value) return previewView.value?.title ?? "";
-  if (liveProgramItem.value) return liveProgramItem.value.title;
+  const item = liveProgramItem.value;
+  if (item) {
+    // Pasta e momento: o item e, ao lado, o arquivo que está na tela.
+    const origin = liveOrigin.value;
+    const part =
+      origin?.type === "folderFile"
+        ? origin.entry.name
+        : origin?.type === "child"
+          ? item.children?.find((c) => c.id === origin.childId)?.title
+          : null;
+    return part ? `${item.title} · ${part}` : item.title;
+  }
   if (audioLive.value && !liveKind.value) return audioTitle.value;
   switch (liveKind.value) {
     case "music":
@@ -572,7 +638,8 @@ const library = useFileLibrary();
 const libraryQueueLive = computed(() => {
   const q = library.queue.value;
   const origin = liveOrigin.value;
-  return !!q && origin?.type === "file" && q.entries[q.index]?.path === origin.entry.path;
+  const fromQueue = origin?.type === "file" || origin?.type === "folderFile";
+  return !!q && fromQueue && q.entries[q.index]?.path === origin.entry.path;
 });
 
 /** Trecho da Bíblia que o módulo pôs no ar — da biblioteca ou de um item do programa. */
@@ -608,83 +675,29 @@ function flashUpNext(): void {
 
 /* ─── Anterior/Próximo ─── */
 
-/** O que o módulo enviou, enquanto ainda há algo no ar — a navegação parte daqui, não do eco da tela. */
-function sentWhile(kinds: LiveKind[]): Playable | null {
-  const kind = liveKind.value;
-  return kind && kinds.includes(kind) ? (stage.sent.value?.playable ?? null) : null;
-}
-
-function sentBible(): ProgramBibleRef | null {
-  const sent = sentWhile(["bible"]);
-  if (sent?.type === "bible") return sent.ref;
-  return sent?.type === "program" ? (findItem(sent.itemId)?.bible ?? null) : null;
-}
-
-/** Manda ao ar sem passar pelo `dispatch`, que recomeçaria a fila pela lista aberta agora. */
-function markSent(playable: Playable): void {
-  stage.markSent(playable, expectationOf(playable, null));
-}
-
-const onlineQueue = useOnlineQueue({
-  sent: () => sentWhile(["file", "online_video"]),
-  onSent: markSent,
-});
-
-const pdfDeck = usePdfDeck();
-
-const navigation = useLiveNavigation(
-  [
-    // O PDF no ar vira página — mesmo dentro de um momento, antes de passar ao arquivo seguinte.
-    pdfDeck.source,
-    momentSource({
-      sent: () => {
-        const sent = sentWhile(["file", "announcements"]);
-        return sent?.type === "child" ? sent : null;
-      },
-      item: (itemId) => findItem(itemId),
-      send: (itemId, childId, to) => {
-        // Voltando para um PDF, ele abre no último slide, de onde o operador saiu.
-        if (to === "prev" && isDeck(pathOf({ type: "child", itemId, childId })))
-          pdfDeck.openNextAtEnd();
-        dispatch({ type: "child", itemId, childId });
-      },
-    }),
-    bibleSource({
-      sent: sentBible,
-      chapterOf: (ref) => bibleLibrary.chapterOf(ref),
-      send: (ref) => dispatch({ type: "bible", ref }),
-    }),
-    onlineQueue.source,
-    fileQueueSource({
-      queue: () => library.queue.value,
-      sent: () => sentWhile(["file"]),
-      step: (to) => library.stepQueue(to),
-      send: (entry) => {
-        projectPath(entry.path, entry.name);
-        markSent({ type: "file", entry });
-      },
-    }),
-    slidesSource({
-      isMusic: () => liveKind.value === "music",
-      total: () => slides.totalSlides.value,
-      index: () => slides.slideIndex.value,
-    }),
-  ],
+const { canNavigate, navigate, onlineQueue, pdfDeck } = useStageNavigation({
+  liveKind,
+  findItem,
+  dispatch,
+  projectPath,
   outputLocked,
-  flashUpNext
-);
-const { canNavigate, navigate } = navigation;
+  onEnd: flashUpNext,
+});
 
 // Passador e teclado: o mesmo Anterior/Próximo das saídas; "B" e "." alternam a tela preta.
 useClicker({ navigate, toggleBlack: () => setCleared(!cleared.value) });
 
-const pathOf = (p: Playable | null) =>
-  filePathOf(p, p?.type === "program" || p?.type === "child" ? findItem(p.itemId) : null);
+const pathOf = (p: Playable | null) => filePathOf(p, itemOf(p));
 
 useSeriesRecorder(() => pathOf(liveOrigin.value));
 
 // Arquivos do programa que estão só na nuvem descem antes do culto.
-useProgramDownloads(() => programFilePaths(program.value));
+useProgramDownloads(() => [
+  ...programFilePaths(program.value),
+  ...program.value.sessions
+    .flatMap((s) => s.items)
+    .flatMap((i) => (i.kind === "folder" && i.folder ? folders.neededPathsOf(i.folder) : [])),
+]);
 
 // PowerPoint no palco já começa a converter: na hora de mandar, o PDF está pronto.
 watch(stage.preview, (p) => {

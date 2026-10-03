@@ -36,28 +36,30 @@
         @update:model-value="lib.reorderFolders"
       >
         <template #item="{ element: folder }">
-          <div
-            class="pm-folder pm-folder--user"
-            :class="{ 'pm-folder--active': lib.source.value === folder.path }"
-            role="button"
-            tabindex="0"
-            :title="folder.path"
-            @click="lib.openSource(folder.path)"
-            @keydown.enter.self="lib.openSource(folder.path)"
-          >
-            <LjIcon :icon="ICONS.UI.FOLDER" :size="15" />
-            <span class="pm-folder__label">{{ folder.label }}</span>
-            <span class="pm-folder__count">{{ lib.counts.value[folder.path] ?? "" }}</span>
-            <button
-              type="button"
-              class="pm-folder__remove"
-              :title="tm('library.remove_folder')"
-              :aria-label="tm('library.remove_folder')"
-              @click.stop="confirmRemove(folder.path)"
+          <LjContextMenu :items="folderMenu(folder)">
+            <div
+              class="pm-folder pm-folder--user"
+              :class="{ 'pm-folder--active': lib.source.value === folder.path }"
+              role="button"
+              tabindex="0"
+              :title="folder.path"
+              @click="lib.openSource(folder.path)"
+              @keydown.enter.self="lib.openSource(folder.path)"
             >
-              <LjIcon :icon="ICONS.ACTIONS.CLOSE" :size="11" />
-            </button>
-          </div>
+              <LjIcon :icon="ICONS.UI.FOLDER" :size="15" />
+              <span class="pm-folder__label">{{ folder.label }}</span>
+              <span class="pm-folder__count">{{ lib.counts.value[folder.path] ?? "" }}</span>
+              <button
+                type="button"
+                class="pm-folder__remove"
+                :title="tm('library.remove_folder')"
+                :aria-label="tm('library.remove_folder')"
+                @click.stop="confirmRemove(folder.path)"
+              >
+                <LjIcon :icon="ICONS.ACTIONS.CLOSE" :size="11" />
+              </button>
+            </div>
+          </LjContextMenu>
         </template>
       </draggable>
       <button
@@ -149,7 +151,6 @@
         </LjButton>
         <span class="pm-files__hint">{{ tm("library.hint") }}</span>
       </footer>
-      <SeriesDialog />
     </div>
 
     <!-- Detalhes só a pedido — (i) ou menu de contexto. Abrir no clique
@@ -223,20 +224,25 @@
 import { computed, onMounted, ref, watch } from "vue";
 import FileGrid from "./FileGrid.vue";
 import SeriesBar from "./SeriesBar.vue";
-import SeriesDialog from "./SeriesDialog.vue";
 import { useFolderSeries } from "../composables/useSeries";
 import draggable from "vuedraggable";
-import { LjButton, LjEmpty, LjIcon } from "@/components/ui";
+import { LjButton, LjContextMenu, LjEmpty, LjIcon, type LjMenuItem } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import $alert from "@/helpers/Alert";
 import DateTime from "@/helpers/DateTime";
 import { useModuleI18n } from "@/composables/useModuleI18n";
-import { ALL, FAVORITES, useFileLibrary, type LibraryEntry } from "../composables/useFileLibrary";
+import {
+  ALL,
+  FAVORITES,
+  readFolder,
+  useFileLibrary,
+  type LibraryEntry,
+} from "../composables/useFileLibrary";
 import { useMediaMeta } from "../composables/useMediaMeta";
 import { useCloudFiles } from "../composables/useCloudFiles";
 import type { ProgramItem } from "@/types/Presentation";
-import { fileItem } from "../program/items";
+import { fileItem, folderItem } from "../program/items";
 import type { Playable } from "../program/playable";
 
 /**
@@ -325,6 +331,41 @@ function formatDate(ms: number): string {
 function onOpen(entry: LibraryEntry): void {
   if (entry.isDir) void lib.enter(entry);
   else emit("play", filePlayable(entry));
+}
+
+/** Menu da pasta na barra lateral: abrir, levar ao programa, baixar da nuvem, tirar da lista. */
+function folderMenu(folder: { path: string; label: string }): LjMenuItem[] {
+  return [
+    {
+      label: tm("library.open_folder"),
+      icon: ICONS.UI.FOLDER_OPEN,
+      action: () => void lib.openSource(folder.path),
+    },
+    {
+      label: tm("folder.add_to_program"),
+      icon: ICONS.ACTIONS.ADD,
+      action: () => emit("add", folderItem(folder.path, folder.label)),
+    },
+    {
+      label: tm("cloud.download_folder"),
+      icon: ICONS.ACTIONS.CLOUD_DOWNLOAD,
+      action: () => void downloadFolder(folder.path, folder.label),
+    },
+    { separator: true },
+    {
+      label: tm("library.remove_folder"),
+      icon: ICONS.ACTIONS.CLOSE,
+      action: () => confirmRemove(folder.path),
+    },
+  ];
+}
+
+async function downloadFolder(path: string, label: string): Promise<void> {
+  const files = await readFolder(path);
+  void cloud.downloadAll(
+    (files ?? []).filter((e) => !e.isDir).map((e) => e.path),
+    tm("cloud.task", { where: label })
+  );
 }
 
 function confirmRemove(path: string): void {

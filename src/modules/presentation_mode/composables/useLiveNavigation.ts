@@ -90,7 +90,8 @@ export function fileQueueSource(deps: {
   const live = () => {
     const q = deps.queue();
     const sent = deps.sent();
-    return !!q && sent?.type === "file" && q.entries[q.index]?.path === sent.entry.path;
+    const fromQueue = sent?.type === "file" || sent?.type === "folderFile";
+    return !!q && fromQueue && q.entries[q.index]?.path === sent.entry.path;
   };
   return {
     active: live,

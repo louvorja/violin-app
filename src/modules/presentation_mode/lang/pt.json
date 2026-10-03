@@ -88,7 +88,8 @@
     "note": "Anotação",
     "site": "Site",
     "overlay": "Sobreposição",
-    "scheduled": "Item agendado"
+    "scheduled": "Item agendado",
+    "folder": "Pasta da biblioteca (comum ou série)"
   },
   "item_dialog": {
     "new_title": "Novo item",
@@ -114,7 +115,11 @@
     "missing_url": "Informe um endereço que comece com http:// ou https://.",
     "missing_title": "Informe o título.",
     "version": "Versão",
-    "moment_hint": "Depois de criar, adicione fotos, vídeos e PDFs pela biblioteca: no menu ⋮ do arquivo, \"Adicionar ao momento\", ou arrastando o arquivo para o item."
+    "moment_hint": "Depois de criar, adicione fotos, vídeos e PDFs pela biblioteca: no menu ⋮ do arquivo, \"Adicionar ao momento\", ou arrastando o arquivo para o item.",
+    "folder": "Pasta",
+    "folder_hint": "Série: o duplo clique passa o próximo vídeo. Pasta comum: abre no palco para escolher.",
+    "folder_none": "Adicione pastas na aba Arquivos da biblioteca primeiro.",
+    "missing_folder": "Escolha uma pasta."
   },
   "session_dialog": {
     "new_title": "Nova sessão",
@@ -363,5 +368,14 @@
       "windows": "Baixado. A nuvem pode voltar a deixar o arquivo só online para liberar espaço. Para garantir no culto, no Explorador de Arquivos clique com o botão direito na pasta e escolha “Sempre manter neste dispositivo” (OneDrive, iCloud) ou “Disponível off-line” (Google Drive).",
       "other": "Baixado. A nuvem pode voltar a deixar o arquivo só online para liberar espaço. Para garantir no culto, marque a pasta para ficar sempre neste computador no gerenciador de arquivos."
     }
+  },
+  "folder": {
+    "add_to_program": "Adicionar ao programa",
+    "open_library": "Abrir na biblioteca",
+    "hint": "Clique escolhe · duplo clique ou ▶ manda ao ar · botão direito para mais",
+    "empty": "Nenhum arquivo nesta pasta.",
+    "count": "{n} arquivos",
+    "next": "Próximo: {name}",
+    "series_done": "Série completa"
   }
 }

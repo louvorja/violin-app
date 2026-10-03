@@ -30,7 +30,9 @@
         <LjIcon :icon="KIND_ICONS[item.kind]" :size="15" class="pm-row__icon" />
         <div class="pm-row__text">
           <span class="pm-row__title">{{ item.title || tm("program.untitled") }}</span>
-          <span v-if="item.subtitle" class="pm-row__subtitle">{{ item.subtitle }}</span>
+          <span v-if="item.subtitle || folderSummary" class="pm-row__subtitle">
+            {{ item.subtitle || folderSummary }}
+          </span>
         </div>
         <span v-if="live" class="pm-live-badge">
           <span class="pm-live-badge__dot" />
@@ -124,6 +126,7 @@ import { useModuleI18n } from "@/composables/useModuleI18n";
 import draggable from "vuedraggable";
 import type { ProgramItem, ProgramSubItem } from "@/types/Presentation";
 import { useMediaMeta } from "../composables/useMediaMeta";
+import { useFolderItems } from "../composables/useFolderItems";
 import { KIND_ICONS } from "../program/kinds";
 import { formatDuration } from "../program/time";
 
@@ -154,6 +157,20 @@ const emit = defineEmits<{
 }>();
 
 const { thumbOf } = useMediaMeta();
+
+/** Pasta: quantos arquivos, ou o próximo da série — lido da pasta na hora. */
+const folders = useFolderItems();
+const folderSummary = computed(() => {
+  if (props.item.kind !== "folder" || !props.item.folder) return "";
+  const summary = folders.summaryOf(props.item.folder);
+  if (!summary) return "";
+  if (summary.isSeries) {
+    return summary.next
+      ? tm("folder.next", { name: summary.next.replace(/\.[^.]+$/, "") })
+      : tm("folder.series_done");
+  }
+  return tm("folder.count", { n: summary.count });
+});
 
 const { tm } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
 

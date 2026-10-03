@@ -24,7 +24,16 @@ export type Playable =
   | { type: "bible"; ref: ProgramBibleRef }
   | { type: "online"; videoId: string; title: string; channel?: string }
   /** Um arquivo ou anúncio de dentro de um momento do programa. */
-  | { type: "child"; itemId: string; childId: string };
+  | { type: "child"; itemId: string; childId: string }
+  /** Um arquivo de uma pasta da biblioteca que está no programa (item `folder`). */
+  | { type: "folderFile"; itemId: string; entry: LibraryEntry };
+
+/** O item do programa por trás do Playable (o próprio, o momento ou a pasta), se houver. */
+export function itemIdOf(playable: Playable | null | undefined): string | null {
+  return playable?.type === "program" || playable?.type === "child" || playable?.type === "folderFile"
+    ? playable.itemId
+    : null;
+}
 
 export function samePlayable(a: Playable, b: Playable): boolean {
   if (a.type === "program" && b.type === "program") return a.itemId === b.itemId;
@@ -35,6 +44,7 @@ export function samePlayable(a: Playable, b: Playable): boolean {
   if (a.type === "bible" && b.type === "bible") return samePassage(a.ref, b.ref);
   if (a.type === "online" && b.type === "online") return a.videoId === b.videoId;
   if (a.type === "child" && b.type === "child") return a.itemId === b.itemId && a.childId === b.childId;
+  if (a.type === "folderFile" && b.type === "folderFile") return a.itemId === b.itemId && a.entry.path === b.entry.path;
   return false;
 }
 
@@ -89,7 +99,7 @@ function fromCustomMusic(customSongId: string, mode: MusicMode | string | undefi
  * item do programa de `program`/`child`.
  */
 export function filePathOf(playable: Playable | null, item: ProgramItem | null): string | null {
-  if (playable?.type === "file") return playable.entry.path;
+  if (playable?.type === "file" || playable?.type === "folderFile") return playable.entry.path;
   if (playable?.type === "child") return item?.children?.find((c) => c.id === playable.childId)?.path ?? null;
   if (playable?.type === "program") return item?.source?.dir ?? null;
   return null;
@@ -100,7 +110,7 @@ export function expectationOf(
   item: ProgramItem | null,
   mode?: MusicMode
 ): LiveExpectation {
-  if (playable.type === "file") return fromPath(playable.entry.path);
+  if (playable.type === "file" || playable.type === "folderFile") return fromPath(playable.entry.path);
   if (playable.type === "song") {
     return playable.customId ? fromCustomMusic(playable.customId, mode) : fromMusic(playable.id_music, mode);
   }

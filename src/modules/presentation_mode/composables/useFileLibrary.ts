@@ -62,7 +62,7 @@ function byName(a: LibraryEntry, b: LibraryEntry): number {
   return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
 }
 
-async function readFolder(dir: string): Promise<LibraryEntry[] | null> {
+export async function readFolder(dir: string): Promise<LibraryEntry[] | null> {
   const result = await Platform.listDir(dir);
   if (!result?.ok) return null;
   return (result.entries as LibraryEntry[]).filter((e) => e.isDir || fileKind(e.ext) !== null).sort(byName);
@@ -170,6 +170,19 @@ export function useFileLibrary() {
       await _reload();
     },
 
+    /** Abre uma pasta pelo caminho: a pasta da biblioteca que a contém, já dentro dela. */
+    async openPath(dir: string): Promise<void> {
+      const inside = (root: string) => dir === root || dir.startsWith(root.replace(/[\\/]$/, "") + (root.includes("\\") ? "\\" : "/"));
+      const root = folders.value
+        .map((f) => f.path)
+        .filter(inside)
+        .sort((a, b) => b.length - a.length)[0];
+      _source.value = root ?? dir;
+      _dir.value = root && root !== dir ? dir : null;
+      _selectedPath.value = null;
+      await _reload();
+    },
+
     async enter(entry: LibraryEntry): Promise<void> {
       if (!entry.isDir) return;
       _dir.value = entry.path;
@@ -221,9 +234,12 @@ export function useFileLibrary() {
       $userdata.set(KEYS.MODULES.PRESENTATION_MODE.LIBRARY_FOLDERS, list);
     },
 
-    /** O arquivo foi para a tela: a pasta aberta vira a fila de Anterior/Próximo. */
-    startQueue(entry: LibraryEntry): void {
-      const files = _entries.value.filter((e) => !e.isDir);
+    /**
+     * O arquivo foi para a tela: a pasta de onde ele saiu vira a fila de
+     * Anterior/Próximo — a aberta na grade ou, para a pasta do programa, `from`.
+     */
+    startQueue(entry: LibraryEntry, from?: LibraryEntry[]): void {
+      const files = (from ?? _entries.value).filter((e) => !e.isDir);
       const index = files.findIndex((e) => e.path === entry.path);
       _queue.value = index >= 0 ? { entries: files, index } : { entries: [entry], index: 0 };
     },

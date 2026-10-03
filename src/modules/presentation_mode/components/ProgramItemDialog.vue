@@ -63,6 +63,22 @@
         </div>
       </LjField>
 
+      <LjField
+        v-else-if="kind === 'folder'"
+        :label="tm('item_dialog.folder')"
+        :hint="
+          libraryFolders.length ? tm('item_dialog.folder_hint') : tm('item_dialog.folder_none')
+        "
+      >
+        <LjSelect
+          v-model="folderPath"
+          :items="libraryFolders"
+          item-value="path"
+          item-label="label"
+          data-testid="pm-item-folder"
+        />
+      </LjField>
+
       <LjField v-else-if="kind === 'online_video'" :label="tm('item_dialog.url')">
         <LjInput v-model="url" type="url" placeholder="https://www.youtube.com/watch?v=…" />
       </LjField>
@@ -147,6 +163,7 @@ import { kindFromPath, liturgyItem } from "../program/liturgy";
 import { isMusicMode, modeOfAction, modesFor, type MusicMode } from "../program/musicModes";
 import { MusicActionEnum } from "@/enums/MusicActionEnum";
 import { newId } from "../composables/useProgram";
+import { useFileLibrary } from "../composables/useFileLibrary";
 
 const MusicSpotlight = defineAsyncComponent(() => import("@/components/MusicSpotlight.vue"));
 const BibleSpotlight = defineAsyncComponent(() => import("@/components/BibleSpotlight.vue"));
@@ -198,6 +215,16 @@ watch(modeOptions, (options) => {
 const bible = ref<ProgramBibleRef | null>(null);
 const filePath = ref("");
 const url = ref("");
+/** Pasta de um item `folder`: uma das pastas da biblioteca (a que está aberta na edição, se não estiver mais lá). */
+const folderPath = ref<string | null>(null);
+const library = useFileLibrary();
+const libraryFolders = computed(() => {
+  const list = library.folders.value;
+  const current = props.item?.folder;
+  return current && !list.some((f) => f.path === current)
+    ? [...list, { path: current, label: basename(current) }]
+    : list;
+});
 const noteText = ref("");
 const error = ref("");
 const musicPickerOpen = ref(false);
@@ -235,6 +262,7 @@ function reset(): void {
   bible.value = item?.bible ?? null;
   filePath.value = source?.tipo === LiturgyItemTypeEnum.ARQUIVO ? source.dir : "";
   url.value = source?.url ?? "";
+  folderPath.value = item?.folder ?? null;
   noteText.value =
     item?.notes ?? (source?.tipo === LiturgyItemTypeEnum.ANOTACAO ? source.subitem : "");
 }
@@ -348,6 +376,16 @@ function build(): ProgramItem | string {
     case "moment":
       if (!common.title) return "item_dialog.missing_title";
       return { ...common, kind: "moment", children: base?.children ?? [] };
+    case "folder": {
+      const folder = libraryFolders.value.find((f) => f.path === folderPath.value);
+      if (!folderPath.value) return "item_dialog.missing_folder";
+      return {
+        ...common,
+        kind: "folder",
+        title: common.title || (folder?.label ?? basename(folderPath.value)),
+        folder: folderPath.value,
+      };
+    }
     case "online_video":
       if (!/^https?:\/\//i.test(url.value.trim())) return "item_dialog.missing_url";
       return {

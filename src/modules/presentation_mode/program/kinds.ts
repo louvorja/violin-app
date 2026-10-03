@@ -16,8 +16,9 @@ export const KIND_ICONS: Readonly<Record<ProgramItemKind, string>> = Object.free
   overlay: ICONS.UI.LAYERS,
   scheduled: ICONS.CALENDAR.MULTISELECT,
   moment: ICONS.MEDIA.PLAYLIST,
+  folder: ICONS.UI.FOLDER,
 });
 
 /** Tipos que o diálogo de "Novo item" sabe criar; os demais chegam pela liturgia. */
-export const CREATABLE_KINDS = ["music", "bible", "file", "moment", "online_video", "note"] as const;
+export const CREATABLE_KINDS = ["music", "bible", "file", "moment", "folder", "online_video", "note"] as const;
 export type CreatableKind = (typeof CREATABLE_KINDS)[number];

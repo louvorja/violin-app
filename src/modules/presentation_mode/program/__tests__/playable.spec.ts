@@ -3,7 +3,7 @@ import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import type { ProgramItem } from "@/types/Presentation";
 import type { LibraryEntry } from "../../composables/useFileLibrary";
 import { liturgyItem } from "../liturgy";
-import { expectationOf, isOnAir, samePlayable, type LiveSignal } from "../playable";
+import { expectationOf, filePathOf, isOnAir, itemIdOf, samePlayable, type LiveSignal } from "../playable";
 
 const entry = (path: string): LibraryEntry => ({
   name: path.split("/").pop() ?? path,
@@ -169,5 +169,25 @@ describe("filho de momento", () => {
     const expected = expectationOf({ type: "child", itemId: "m", childId: "b" }, momentItem);
     expect(expected).toEqual({ kind: "file" });
     expect(isOnAir(expected, signal({ kind: "file" }))).toBe(true);
+  });
+});
+
+describe("pasta do programa", () => {
+  const file = (path: string) => ({ type: "folderFile", itemId: "pasta", entry: entry(path) }) as const;
+
+  it("arquivo da pasta: o item e o caminho decidem; no ar como qualquer arquivo", () => {
+    expect(samePlayable(file("/Saude/01.mp4"), file("/Saude/01.mp4"))).toBe(true);
+    expect(samePlayable(file("/Saude/01.mp4"), file("/Saude/02.mp4"))).toBe(false);
+    expect(samePlayable(file("/Saude/01.mp4"), { type: "file", entry: entry("/Saude/01.mp4") })).toBe(false);
+    expect(isOnAir(expectationOf(file("/Saude/01.mp4"), null), signal({ kind: "file" }))).toBe(true);
+    expect(filePathOf(file("/Saude/01.mp4"), null)).toBe("/Saude/01.mp4");
+  });
+
+  it("itemIdOf: o item por trás do programa, do momento e da pasta", () => {
+    expect(itemIdOf({ type: "program", itemId: "a" })).toBe("a");
+    expect(itemIdOf({ type: "child", itemId: "b", childId: "c" })).toBe("b");
+    expect(itemIdOf(file("/x.mp4"))).toBe("pasta");
+    expect(itemIdOf({ type: "file", entry: entry("/x.mp4") })).toBeNull();
+    expect(itemIdOf(null)).toBeNull();
   });
 });
