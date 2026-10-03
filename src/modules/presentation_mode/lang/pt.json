@@ -5,7 +5,7 @@
     "title_ctx": "Apresentação",
     "btn": {
       "start": "Iniciar",
-      "stop": "Parar",
+      "stop": "Parar apresentação",
       "clear": "Limpar tela",
       "new_session": "Nova sessão",
       "new_item": "Novo item",
@@ -30,7 +30,8 @@
       "collapse": "Recolher módulo",
       "slide_grid": "Grade de slides",
       "operator_notes": "Notas do operador",
-      "unlock_output": "Destravar saída"
+      "unlock_output": "Destravar saída",
+      "take_off": "Tirar do ar"
     }
   },
   "panels": {
@@ -157,7 +158,9 @@
     "prepared": "Na fila — vai ao ar ao destravar",
     "send": "Enviar",
     "nothing_next": "Fim do programa.",
-    "return_only": "SÓ NO RETORNO"
+    "return_only": "SÓ NO RETORNO",
+    "take_off": "Tirar do ar",
+    "take_off_title": "Tira da tela só o que está passando (música, versículo, foto, vídeo). A apresentação continua aberta."
   },
   "stage": {
     "on_air": "NO AR",

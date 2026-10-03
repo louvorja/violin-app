@@ -34,6 +34,10 @@ export function useStage() {
       if (!_preview.value || (previous && samePlayable(_preview.value, previous))) _preview.value = playable;
       _sent.value = { playable, expected };
     },
+    /** Saiu do ar; o que estava no palco fica nele, pronto para voltar. */
+    clearSent(): void {
+      _sent.value = null;
+    },
     reset(): void {
       _preview.value = null;
       _sent.value = null;

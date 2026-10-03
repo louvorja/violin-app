@@ -48,6 +48,7 @@ export const contextualPages: RibbonPage[] = [
         buttons: [
           { id: `${moduleId}_start`, icon: ICONS.PROJECTION.START, label: `${btn}.start`, action: `${moduleId}_start`, color: "#27ae60", enabledWhen: KEYS.MODULES.PRESENTATION_MODE.CAN_START },
           { id: `${moduleId}_stop`, icon: ICONS.PROJECTION.STOP, label: `${btn}.stop`, action: `${moduleId}_stop`, color: "#e74c3c", enabledWhen: KEYS.MODULES.PRESENTATION_MODE.CAN_STOP },
+          { id: `${moduleId}_take_off`, icon: ICONS.PLAYER.STOP_CIRCLE, label: `${btn}.take_off`, action: `${moduleId}_take_off`, color: "#e67e22", enabledWhen: KEYS.MODULES.PRESENTATION_MODE.CAN_TAKE_OFF },
           { id: `${moduleId}_clear`, icon: ICONS.PROJECTION.CLEAN, label: `${btn}.clear`, action: `${moduleId}_clear`, color: "#f39c12", enabledWhen: KEYS.MODULES.PRESENTATION_MODE.CAN_CLEAR },
         ],
       },

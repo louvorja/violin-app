@@ -116,6 +116,8 @@ export const KEYS = {
       CAN_STOP: `${MODULES_PRESENTATION_MODE}.can_stop`,
       /** AppData: há saída aberta e a tela ainda não está limpa. */
       CAN_CLEAR: `${MODULES_PRESENTATION_MODE}.can_clear`,
+      /** AppData: há conteúdo no ar para tirar (música, versículo, arquivo...). */
+      CAN_TAKE_OFF: `${MODULES_PRESENTATION_MODE}.can_take_off`,
       /** UserData: pastas do navegador de arquivos — `{ path, label }[]`. */
       LIBRARY_FOLDERS: `${MODULES_PRESENTATION_MODE}.library_folders`,
       /** UserData: arquivos marcados com estrela no navegador de arquivos. */

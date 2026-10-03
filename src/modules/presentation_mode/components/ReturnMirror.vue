@@ -10,6 +10,10 @@
       <video v-else :src="override.url" muted autoplay playsinline />
       <span class="pm-return__only">{{ tm("outputs.return_only") }}</span>
     </div>
+    <!-- Foto, vídeo e PDF: o retorno mostra o mesmo que a tela principal. -->
+    <div v-else-if="sameAsMain" class="pm-return__fill" data-testid="pm-return-media">
+      <LiveMirror :cleared="false" />
+    </div>
     <div v-else class="pm-return__frame">
       <div class="pm-return__current">
         <div class="pm-return__head">
@@ -33,6 +37,7 @@ import { useMainBackground } from "@/composables/useMainBackground";
 import { useModuleI18n } from "@/composables/useModuleI18n";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { useLiveContent } from "../composables/useLiveContent";
+import LiveMirror from "./LiveMirror.vue";
 
 /**
  * Miniatura do retorno de palco. A composição é a do `ProjectionReturn.vue`
@@ -45,15 +50,13 @@ const props = defineProps<{
   cleared: boolean;
   /** Próximo item do programa, quando o conteúdo no ar não tem próxima parte. */
   upNext: string;
-  /** Posição na pasta ou na lista de vídeos ("3/12"), quando o que está no ar veio dela. */
-  queueCounter?: string;
   /** Imagem ou vídeo só no retorno — cobre a composição normal. */
   override?: { type: "image" | "video"; url: string } | null;
 }>();
 
 const { t } = useI18n();
 const { tm } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
-const { current, music, bible, file, onlineTitle, announcement } = useLiveContent();
+const { current, music, bible, announcement } = useLiveContent();
 const { style: background } = useMainBackground();
 
 function plain(html: string | undefined | null): string {
@@ -62,6 +65,9 @@ function plain(html: string | undefined | null): string {
     .replace(/<[^>]+>/g, "")
     .trim();
 }
+
+/** A janela de retorno de arquivos (`FileProjectionReturn`) repete a mídia da tela principal. */
+const sameAsMain = computed(() => current.value === "file" || current.value === "online_video");
 
 const view = computed(() => {
   switch (current.value) {
@@ -81,20 +87,6 @@ const view = computed(() => {
         text: bible.value?.text ?? "",
         next: bible.value?.nextReference || props.upNext,
         counter: "",
-      };
-    case "file":
-      return {
-        title: file.value?.title ?? "",
-        text: file.value?.title ?? "",
-        next: props.upNext,
-        counter: props.queueCounter || "1/1",
-      };
-    case "online_video":
-      return {
-        title: onlineTitle.value,
-        text: onlineTitle.value,
-        next: props.upNext,
-        counter: props.queueCounter || "1/1",
       };
     case "announcements":
       return {

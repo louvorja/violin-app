@@ -83,6 +83,16 @@
           @click="emit('last')"
         />
       </div>
+      <LjButton
+        class="pm-outputs__take-off"
+        :icon="ICONS.PLAYER.STOP_CIRCLE"
+        :disabled="!onAir"
+        :title="tm('outputs.take_off_title')"
+        data-testid="pm-outputs-take-off"
+        @click="emit('take-off')"
+      >
+        {{ tm("outputs.take_off") }}
+      </LjButton>
     </section>
 
     <section class="pm-outputs__section">
@@ -103,12 +113,7 @@
           @click="showOnReturn(null)"
         />
       </header>
-      <ReturnMirror
-        :cleared="cleared"
-        :up-next="upNext?.title ?? ''"
-        :queue-counter="queueCounter"
-        :override="returnOverride"
-      />
+      <ReturnMirror :cleared="cleared" :up-next="upNext?.title ?? ''" :override="returnOverride" />
     </section>
 
     <footer class="pm-upnext" :class="{ 'pm-upnext--flash': flash }" data-testid="pm-upnext">
@@ -151,7 +156,8 @@ defineProps<{
   canNavigate: boolean;
   /** Pisca "A seguir" quando o Próximo não tem mais parte para avançar. */
   flash: boolean;
-  queueCounter?: string;
+  /** Há conteúdo no ar para tirar. */
+  onAir: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -161,6 +167,7 @@ const emit = defineEmits<{
   last: [];
   "toggle-lock": [];
   send: [];
+  "take-off": [];
 }>();
 
 const { tm } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
@@ -246,6 +253,11 @@ function screenLabel(key: string, n: number | null): string {
   margin-left: auto;
   font-weight: 400;
   white-space: nowrap;
+}
+
+/* Vermelho no texto, não no fundo: o botão cheio de vermelho é o de parar tudo. */
+.pm-outputs__take-off:not(:disabled) {
+  color: var(--lj-danger);
 }
 
 .pm-outputs__nav {

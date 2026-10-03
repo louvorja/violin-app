@@ -48,6 +48,17 @@
               {{ tm("stage.show_live") }}
             </LjButton>
             <LjButton
+              v-if="!stagePreview && liveKind"
+              class="pm-bar__take-off"
+              size="sm"
+              :icon="ICONS.PLAYER.STOP_CIRCLE"
+              :title="tm('outputs.take_off_title')"
+              data-testid="pm-stage-take-off"
+              @click="takeOff"
+            >
+              {{ tm("outputs.take_off") }}
+            </LjButton>
+            <LjButton
               size="sm"
               icon-only
               :icon="expanded ? ICONS.PLAYER.FULLSCREEN_EXIT : ICONS.PLAYER.FULLSCREEN"
@@ -118,7 +129,7 @@
         @preview="stage.show"
         @play="(p: Playable, options?: { mode: MusicMode }) => dispatch(p, options)"
         @add="(item: ProgramItem) => addItem(item, ensureSession())"
-        @stop="stopMedia"
+        @stop="takeOff"
         @toggle-width="libraryLayout.toggleWidth"
         @toggle-height="libraryLayout.toggleHeight"
         @resize="libraryLayout.drag"
@@ -132,7 +143,8 @@
         :locked="outputLocked"
         :can-navigate="canNavigate"
         :flash="upNextFlash"
-        :queue-counter="queueCounter"
+        :on-air="!!liveKind"
+        @take-off="takeOff"
         @first="navigate('first')"
         @prev="navigate('prev')"
         @next="navigate('next')"
@@ -189,6 +201,7 @@ import MomentStage from "./MomentStage.vue";
 import PdfStage from "./PdfStage.vue";
 import { isDeck, usePdfDeck } from "../composables/usePdfDeck";
 import { preparePowerPoint } from "../composables/usePowerPoint";
+import { takeOffAir } from "../composables/takeOffAir";
 import { useStage } from "../composables/useStage";
 import {
   expectationOf,
@@ -588,10 +601,15 @@ const libraryLivePath = computed(() => {
   return libraryQueueLive.value && q ? q.entries[q.index].path : null;
 });
 
-/** Tira a mídia do ar mantendo as janelas de projeção abertas. */
-function stopMedia(): void {
-  Media.close(true, false, true);
+/** Tira do ar o que está na tela, mantendo a apresentação aberta. */
+function takeOff(): void {
+  Telemetry.track("presentation_take_off", { kind: liveKind.value });
+  takeOffAir(liveKind.value);
+  stage.clearSent();
 }
+watch(liveKind, (kind) => $appdata.set(KEYS.MODULES.PRESENTATION_MODE.CAN_TAKE_OFF, !!kind), {
+  immediate: true,
+});
 
 const upNextFlash = ref(false);
 let flashTimer: ReturnType<typeof setTimeout> | null = null;
@@ -672,7 +690,6 @@ const { canNavigate, navigate } = navigation;
 
 // Passador e teclado: o mesmo Anterior/Próximo das saídas; "B" e "." alternam a tela preta.
 useClicker({ navigate, toggleBlack: () => setCleared(!cleared.value) });
-const queueCounter = navigation.counter;
 
 const pathOf = (p: Playable | null) =>
   filePathOf(p, p?.type === "program" || p?.type === "child" ? findItem(p.itemId) : null);
@@ -762,6 +779,7 @@ const RIBBON_HANDLERS: Record<string, () => void> = {
   start: () => void startOutputs(),
   stop: () => void stopOutputs(),
   clear: () => setCleared(true),
+  take_off: takeOff,
   previous: () => navigate("prev"),
   next: () => navigate("next"),
   lock_output: toggleLock,
@@ -915,6 +933,11 @@ useBroadcastListener(BROADCAST_TYPE.MODULE_RIBBON_ACTION, (payload) => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Vermelho no texto: o botão cheio de vermelho é o de parar a apresentação. */
+.pm-bar__take-off {
+  color: var(--lj-danger);
 }
 
 .pm-bar__tools {

@@ -36,6 +36,12 @@
       </div>
     </template>
 
+    <img
+      v-else-if="current === 'online_video' && onlineVideoId"
+      class="pm-mirror__media"
+      :src="youtubeThumb(onlineVideoId)"
+      alt=""
+    />
     <div v-else-if="current === 'online_video'" class="pm-mirror__label">
       <LjIcon :icon="ICONS.MEDIA.YOUTUBE" :size="22" />
       <span>{{ onlineTitle }}</span>
@@ -62,6 +68,7 @@ import { LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { applyVideoState } from "@/helpers/VideoSync";
+import { youtubeThumb } from "@/helpers/OnlineVideo";
 import { VideoStateGate } from "@/helpers/VideoStateVersion";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { useMainBackground } from "@/composables/useMainBackground";
@@ -70,7 +77,7 @@ import { usePdfDeck } from "../composables/usePdfDeck";
 
 defineProps<{ cleared: boolean }>();
 
-const { current, music, bible, file, onlineTitle, announcement } = useLiveContent();
+const { current, music, bible, file, onlineTitle, onlineVideoId, announcement } = useLiveContent();
 const { style: background } = useMainBackground();
 
 /** O slide do PDF que está na tela, pela miniatura que o palco já desenhou. */
