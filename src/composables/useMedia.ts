@@ -47,6 +47,7 @@ import { useOnlineVideoDownloads } from "@/composables/useOnlineVideoDownloads";
 import { VideoStateRevisionCounter } from "@/helpers/VideoStateVersion";
 import { createVideoPlaybackSnapshot, shouldRespondToVideoStateRequest } from "@/helpers/VideoPlaybackSnapshot";
 import { nextFileProjectionEpoch } from "@/presentation/FileProjectionActivation";
+import { audioFailure } from "@/helpers/AudioFailure";
 import { mediaSourceDetails, mediaElementDetails, mediaFormatDetails, mediaDiagnosticMessage, mediaBlobDetails, mediaDiagnosticLog } from "@/helpers/MediaDiagnostics";
 
 const _audio = useAudioPlayback();
@@ -716,22 +717,16 @@ async function _runStreamedYouTube(
   }
 }
 
-type AudioFailure = { text: string; retryable: boolean };
-
-function _audioFailure(error: unknown): AudioFailure {
-  const name = (error as { name?: string } | null)?.name;
-  if (name === "NotSupportedError")
-    return { text: "modules.media.alerts.unsupported", retryable: false };
-  if (name === "DecodeError") return { text: "modules.media.alerts.decode", retryable: true };
-  if (name === "NotAllowedError") return { text: "modules.media.alerts.blocked", retryable: false };
-  return { text: "modules.media.alerts.not_loaded", retryable: true };
-}
-
 function _alertAudioFailure(error: unknown, retry?: () => void): void {
-  const { text, retryable } = _audioFailure(error);
+  const { text, retryable } = audioFailure(error, {
+    streaming: !!$appdata.get(KEYS.MODULES.MEDIA.CONFIG.LAZY),
+    // IS_ONLINE só cai na segunda falha; o navegador sabe antes que a rede saiu.
+    online: $appdata.get(KEYS.SHELL.IS_ONLINE) !== false && navigator.onLine !== false,
+  });
   const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error || "");
   const canRetry = retryable && !!retry;
-  $alert.error(
+  // `show`, e não `error`: este fixa os botões em "Fechar" e some com o "Tentar de novo".
+  $alert.show(
     {
       title: "modules.media.alerts.not_loaded_title",
       text,

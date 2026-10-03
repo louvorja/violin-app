@@ -8,6 +8,7 @@
     "decode": "O arquivo de áudio parece estar corrompido ou incompleto. Tente de novo.",
     "blocked": "O navegador bloqueou a reprodução. Toque em tocar novamente.",
     "not_loaded_offline": "Não foi possível baixar este áudio. Verifique a conexão e toque para tentar de novo.",
+    "offline_not_downloaded": "Sem internet, e esta música não está baixada neste aparelho. Conecte-se, ou baixe o álbum antes de ficar sem conexão.",
     "close": "Deseja fechar este slide?",
     "close_audio": "Deseja parar a música?",
     "close_projection": "Deseja encerrar a projeção?",
