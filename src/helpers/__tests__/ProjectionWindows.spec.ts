@@ -234,7 +234,7 @@ describe("a abertura automática e o menu do player abrem exatamente a mesma jan
       [KEYS.OPTIONS.ONLINE_VIDEO_PROJECTION.SHOW_RETURN]: true,
       [KEYS.OPTIONS.OPEN_OPERATOR]: true,
     };
-    const automatic = { music: windows.openProjectionWindows, file: windows.openFileProjectionWindows, video: () => windows.openVideoProjectionWindows({ withOperator: true }) }[media];
+    const automatic = { music: windows.openProjectionWindows, file: windows.openFileProjectionWindows, video: windows.openVideoProjectionWindows }[media];
     await automatic();
     const auto = openWindow.mock.calls.map(([o]) => o);
 
@@ -294,19 +294,19 @@ describe("as aberturas automáticas", () => {
     expect(calls).toEqual([`open:${FILE}`, `close:${RETURN}`, `open:${ONLINE_VIDEO_RETURN}`]);
   });
 
-  it("vídeo on-line: o operador só entra quando pedido e habilitado", async () => {
-    prefs = { [KEYS.OPTIONS.OPEN_OPERATOR]: true };
+  it("vídeo on-line: o operador entra com a opção ligada, embutido ou baixado — ele mostra a prévia dos dois", async () => {
     await windows.openVideoProjectionWindows();
     expect(opened().map((o) => o.feature)).not.toContain(OPERATOR);
-    await windows.openVideoProjectionWindows({ withOperator: true });
+    prefs = { [KEYS.OPTIONS.OPEN_OPERATOR]: true };
+    await windows.openVideoProjectionWindows();
     expect(opened().map((o) => o.feature)).toContain(OPERATOR);
   });
 
-  it("vídeo on-line embutido: fecha o operador que ficou aberto de uma mídia anterior, senão ele trava mostrando o conteúdo velho", async () => {
+  it("vídeo on-line: não fecha o operador que já estava aberto", async () => {
     isWindowOpen.mockImplementation(async (feature: string) => feature === OPERATOR);
     calls.length = 0;
     await windows.openVideoProjectionWindows();
-    expect(calls).toContain(`close:${OPERATOR}`);
+    expect(calls).not.toContain(`close:${OPERATOR}`);
   });
 
   it.each([

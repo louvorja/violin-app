@@ -20,7 +20,12 @@
     </LjMenu>
 
     <!-- Índice do slide atual: atalho para saltar direto a outro slide -->
-    <LjMenu v-if="minimized && !compact" :items="slideItems" side="bottom" align="end">
+    <LjMenu
+      v-if="minimized && !compact && slides.length"
+      :items="slideItems"
+      side="bottom"
+      align="end"
+    >
       <template #trigger>
         <button
           type="button"

@@ -25,10 +25,8 @@
     "lyric": "Letra de la Canción",
     "track": "Pista",
     "video_quality": "Calidad",
-    "channel": "Canal",
     "post_date": "Fecha de publicación",
     "views": "Visualizaciones",
-    "video_link": "Enlace del video",
     "slides": "Diapositivas"
   },
   "inputs": {

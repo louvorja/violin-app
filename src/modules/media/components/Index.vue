@@ -42,7 +42,7 @@
 
     <div
       class="media-body"
-      :class="{ 'media-body--video': isLocalVideo }"
+      :class="{ 'media-body--video': isLocalVideo || isYouTube }"
       :style="{ height: preview_height + 'px' }"
     >
       <div class="media-preview-col">
@@ -74,14 +74,13 @@
         </Fullscreen>
         <div
           v-else
+          ref="youtubeAnchor"
           class="media-preview media-preview--youtube"
           :style="{ height: preview_height + 'px' }"
-        >
-          <img v-if="youtubeThumbnail" :src="youtubeThumbnail" alt="" class="media-thumbnail" />
-        </div>
+        />
       </div>
-      <div v-if="width > 600 && !isLocalVideo" class="media-side">
-        <div v-if="!isYouTube" class="media-side__header">
+      <div v-if="width > 600 && !isLocalVideo && !isYouTube" class="media-side">
+        <div class="media-side__header">
           <span class="media-side__title">{{ tm("general.slides") }}</span>
           <span class="media-side__count">
             {{
@@ -89,8 +88,7 @@
             }}
           </span>
         </div>
-        <!-- Slide list for music -->
-        <div v-if="!isYouTube" ref="slides_list" class="media-slides">
+        <div ref="slides_list" class="media-slides">
           <button
             v-for="(item, index) in slides"
             :key="index"
@@ -126,28 +124,6 @@
             />
           </button>
         </div>
-        <!-- YouTube info panel -->
-        <div v-else class="media-youtube">
-          <div class="media-youtube__label">{{ tm("general.channel") }}</div>
-          <div class="media-youtube__value">
-            <a v-if="ytChannelUrl" :href="ytChannelUrl" target="_blank" class="media-youtube__link">
-              {{ ytChannel || "—" }}
-            </a>
-            <span v-else>{{ ytChannel || "—" }}</span>
-          </div>
-          <LjDivider class="media-youtube__divider" />
-          <div class="media-youtube__label">
-            {{ tm("general.video_link") }}
-          </div>
-          <a
-            v-if="youtubeWatchUrl"
-            :href="youtubeWatchUrl"
-            target="_blank"
-            class="media-youtube__link media-youtube__link--url"
-          >
-            {{ youtubeWatchUrl }}
-          </a>
-        </div>
       </div>
     </div>
 
@@ -155,6 +131,7 @@
       <l-player location="window" />
     </template>
   </Window>
+  <YouTubeStage v-if="isYouTube" :anchor="youtubeAnchor" />
 </template>
 
 <script setup>
@@ -167,16 +144,9 @@ import Window from "@/components/Window.vue";
 import LSlide from "@/components/Slide.vue";
 import LPlayer from "@/components/Player.vue";
 import LFullscreenPlayer from "@/components/FullscreenPlayer.vue";
+import YouTubeStage from "./YouTubeStage.vue";
 import { fullscreenApiAvailable } from "@/helpers/Fullscreen";
-import {
-  LjButton,
-  LjChip,
-  LjDivider,
-  LjPopover,
-  LjProgress,
-  LjSwitch,
-  LjTooltip,
-} from "@/components/ui";
+import { LjButton, LjChip, LjPopover, LjProgress, LjSwitch, LjTooltip } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import Modules from "@/helpers/Modules";
 import UserData from "@/helpers/UserData";
@@ -184,7 +154,6 @@ import AppData from "@/helpers/AppData";
 import Media from "@/composables/useMedia";
 import { useFileProjection } from "@/composables/useFileProjection";
 import Path from "@/helpers/Path";
-import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 import { useAudioPlayback } from "@/composables/useAudioPlayback";
 import Telemetry from "@/helpers/Telemetry";
 
@@ -207,6 +176,7 @@ const slides = computed(() => Media.slides());
 const slide = computed(() => Media.slide());
 const playback = useAudioPlayback();
 const videoPreview = ref(null);
+const youtubeAnchor = ref(null);
 const videoPreviewFailed = ref(false);
 let videoSyncTimer = null;
 let mediaMounted = false;
@@ -219,45 +189,6 @@ const isLocalVideo = computed(
 );
 
 const isYouTube = computed(() => !!config.value?.is_youtube);
-const youtubeId = computed(() => {
-  if (!isYouTube.value) return null;
-  const url = config.value?.youtube_url;
-  if (!url) return null;
-  const m = String(url).match(/\/embed\/([a-zA-Z0-9_-]+)/);
-  return m ? m[1] : null;
-});
-const youtubeThumbnail = computed(() => {
-  return youtubeId.value ? `https://img.youtube.com/vi/${youtubeId.value}/maxresdefault.jpg` : "";
-});
-const youtubeWatchUrl = computed(() => {
-  return youtubeId.value ? `https://www.youtube.com/watch?v=${youtubeId.value}` : "";
-});
-
-const ytChannel = ref("");
-const ytChannelUrl = ref("");
-let ytChannelReq = 0;
-
-function fetchYouTubeChannel(id) {
-  ytChannelReq++;
-  const req = ytChannelReq;
-  if (!id) {
-    ytChannel.value = "";
-    ytChannelUrl.value = "";
-    return;
-  }
-  fetchWithTimeout(
-    `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${id}&format=json`,
-    { timeout: NET_TIMEOUT.QUICK, source: "youtube-oembed", thirdParty: true }
-  )
-    .then((r) => r.json())
-    .then((data) => {
-      if (req !== ytChannelReq) return;
-      ytChannel.value = data.author_name || "";
-      ytChannelUrl.value = data.author_url || "";
-    })
-    .catch(() => {});
-}
-
 function onVideoPreviewError(event) {
   videoPreviewFailed.value = true;
   const video = event?.currentTarget;
@@ -317,13 +248,6 @@ watch(
       syncVideoPreview();
     }
     updateVideoSyncTimer();
-  },
-  { immediate: true }
-);
-watch(
-  youtubeId,
-  (id) => {
-    fetchYouTubeChannel(id);
   },
   { immediate: true }
 );
@@ -565,17 +489,9 @@ onBeforeUnmount(() => {
   font-variant-numeric: tabular-nums;
 }
 
+/* Só reserva o lugar: o vídeo é o YouTubeStage, que se posiciona por cima. */
 .media-preview--youtube {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--lj-color-projection-bg);
-}
-
-.media-thumbnail {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
+  background: #000;
 }
 
 /* A faixa de slides é sempre preta, independente do tema do shell. Os
@@ -667,41 +583,6 @@ onBeforeUnmount(() => {
 /* Pré-carrega a imagem do slide sem exibi-la. */
 .media-preload {
   display: none;
-}
-
-.media-youtube {
-  flex-shrink: 0;
-  width: 100%;
-  padding: var(--lj-space-6);
-  overflow-y: auto;
-  color: var(--lj-white);
-
-  --lj-surface-divider: var(--lj-white-alpha-18);
-}
-
-.media-youtube__label {
-  margin-bottom: var(--lj-space-2);
-  color: var(--lj-white-alpha-50);
-  font-size: var(--lj-text-base);
-}
-
-.media-youtube__value {
-  margin-bottom: var(--lj-space-4);
-  font-size: var(--lj-text-lg);
-}
-
-.media-youtube__divider {
-  margin-bottom: var(--lj-space-5);
-}
-
-.media-youtube__link {
-  color: var(--lj-info-light);
-  text-decoration: none;
-}
-
-.media-youtube__link--url {
-  font-size: var(--lj-text-lg);
-  word-break: break-all;
 }
 </style>
 

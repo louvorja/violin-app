@@ -143,6 +143,8 @@ export const KEYS = {
         VIDEO_FILE: `${MODULES_MEDIA_CONFIG}.video_file`,
         VOLUME: `${MODULES_MEDIA_CONFIG}.volume`,
         YOUTUBE_URL: `${MODULES_MEDIA_CONFIG}.youtube_url`,
+        YOUTUBE_PROJECTED: `${MODULES_MEDIA_CONFIG}.youtube_projected`,
+        YOUTUBE_PLAYBACK_ID: `${MODULES_MEDIA_CONFIG}.youtube_playback_id`,
       },
     },
     LYRIC: {

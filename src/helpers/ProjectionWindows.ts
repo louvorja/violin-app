@@ -309,20 +309,18 @@ export async function closeAnnouncementsWindow(): Promise<void> {
  * "file_projection", para não conflitar com a configuração do
  * Player de Áudio/Vídeo (que pode estar em monitor diferente).
  */
-export async function openVideoProjectionWindows(
-  { withOperator = false }: { withOperator?: boolean } = {}
-): Promise<void> {
+export async function openVideoProjectionWindows(): Promise<void> {
   if (await isBackgroundOpen()) return;
 
   await openMediaWindow("projection", "video");
   const returnOn = $userdata.get(KEYS.OPTIONS.ONLINE_VIDEO_PROJECTION.SHOW_RETURN, false) as boolean;
   if (await _wantsMediaReturn(returnOn)) await openMediaWindow("return", "video");
-  // O vídeo baixado é um arquivo como os da liturgia, e o operador mostra a prévia dele.
-  // O player embutido do YouTube não tem o que mostrar ali: se a janela ficou aberta de uma
-  // mídia anterior, ela nunca ouve o vídeo embutido e travava mostrando o conteúdo velho — cada
-  // janela por si, com a projeção e o retorno já no vídeo novo e o operador ainda no antigo.
-  if (withOperator) await _openOperatorIfEnabled("video");
-  else if (await isWindowOpen(PROJECTION_TYPE.OPERATOR)) await _close(PROJECTION_TYPE.OPERATOR);
+  await _openOperatorIfEnabled("video");
+}
+
+/** A janela que mostra o vídeo on-line está aberta? Sem ela, o player embutido toca na principal. */
+export function isVideoProjectionOpen(): Promise<boolean> {
+  return isWindowOpen(PROJECTION_TYPE.FILE);
 }
 
 /**

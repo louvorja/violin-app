@@ -1091,6 +1091,11 @@ onBeforeUnmount(async () => {
   width: 100vw;
   height: 100vh;
 }
+/* O vídeo do YouTube não recebe clique nem foco: um toque na projeção o pausaria na frente
+   da igreja. Avançar, voltar e pausar é na barra do player. */
+.file-projection :deep(iframe[src*="youtube"]) {
+  pointer-events: none;
+}
 .file-projection__pdf {
   max-width: 100%;
   max-height: 100%;

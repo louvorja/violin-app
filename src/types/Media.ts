@@ -43,6 +43,8 @@ export interface VideoMediaState {
   revision?: number;
   /** `Date.now()` de quando o estado foi lido; quem recebe compensa a idade da mensagem. */
   sentAt?: number;
+  /** Quem publicou o estado do YouTube. Ausente: a janela de projeção, que manda no relógio. */
+  role?: "main" | "return" | "operator";
 }
 
 export interface FileProjectionState {
@@ -87,6 +89,8 @@ export interface YTPlayer {
   getDuration(): number;
   getPlayerState(): number;
   setVolume(volume: number): void;
+  mute?(): void;
+  setOption?(module: string, option: string, value: object): void;
   unMute?(): void;
   destroy(): void;
 }
@@ -103,6 +107,9 @@ export interface YTPlayerOptions {
     controls: number;
     modestbranding: number;
     cc_load_policy?: number;
+    disablekb?: number;
+    playsinline?: number;
+    fs?: number;
   };
   events: {
     onReady: () => void;

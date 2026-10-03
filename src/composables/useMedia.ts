@@ -24,6 +24,7 @@ import { useAlbum } from "@/composables/useAlbum";
 import {
   openProjectionWindows,
   openVideoProjectionWindows,
+  isVideoProjectionOpen,
   openFileProjectionWindows,
   closeProjectionWindows,
   closeFileProjectionWindows,
@@ -383,8 +384,8 @@ async function _releaseFileVideoStage(stageEpoch: number, wasVisibleAlready = fa
   });
 }
 
-async function _openTrackedVideoWindows(withOperator = false): Promise<void> {
-  const opening = openVideoProjectionWindows({ withOperator });
+async function _openTrackedVideoWindows(): Promise<void> {
+  const opening = openVideoProjectionWindows();
   _videoWindowOpenings.add(opening);
   try { await opening; }
   finally { _videoWindowOpenings.delete(opening); }
@@ -397,12 +398,12 @@ async function _openTrackedFileWindows(): Promise<void> {
   finally { _videoWindowOpenings.delete(opening); }
 }
 
-async function _claimVideoWindows(stageEpoch: number, withOperator = false): Promise<boolean> {
+async function _claimVideoWindows(stageEpoch: number): Promise<boolean> {
   // O close de MUSIC/RETURN termina antes de um novo pedido de música poder
   // abrir essas features. FILE permanece intacta ao trocar vídeo por vídeo.
   await _queueStageWindows(stageEpoch, closeMusicProjectionWindows);
   if (stageEpoch !== _stageEpoch) return false;
-  await _afterStageWindowCloses(stageEpoch, () => _openTrackedVideoWindows(withOperator));
+  await _afterStageWindowCloses(stageEpoch, () => _openTrackedVideoWindows());
   return stageEpoch === _stageEpoch;
 }
 
@@ -536,7 +537,7 @@ async function _openVideoFileProjection(
   }
 
   try {
-    if (!(await _claimVideoWindows(stageEpoch, true))) return false;
+    if (!(await _claimVideoWindows(stageEpoch))) return false;
   } catch (error) {
     Telemetry.captureException(error, { operation: "online_video_projection_open" });
   }
@@ -2412,6 +2413,8 @@ const _self = {
     $appdata.set(KEYS.MODULES.MEDIA.CONFIG.TITLE, title);
     $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_YOUTUBE, true);
     $appdata.set(KEYS.MODULES.MEDIA.CONFIG.YOUTUBE_URL, url);
+    $appdata.set(KEYS.MODULES.MEDIA.CONFIG.YOUTUBE_PLAYBACK_ID, playback_id);
+    $appdata.set(KEYS.MODULES.MEDIA.CONFIG.YOUTUBE_PROJECTED, false);
     $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED, false);
     $appdata.set(KEYS.MODULES.MEDIA.CONFIG.AUDIO, "");
     $appdata.set(KEYS.MODULES.MEDIA.CONFIG.AUDIO_ONLY, false);
@@ -2441,6 +2444,12 @@ const _self = {
 
     try {
       if (!(await _claimVideoWindows(stageEpoch))) return;
+      // Com janela de projeção, o som e o relógio são dela; sem ela, o vídeo toca na principal.
+      const projected = await isVideoProjectionOpen();
+      if (stageEpoch !== _stageEpoch) return;
+      $appdata.set(KEYS.MODULES.MEDIA.CONFIG.YOUTUBE_PROJECTED, projected);
+      // Sem janela de projeção o vídeo só existe na janela do Mídia: ela abre para ele ser visto.
+      if (!projected) this.maximize();
       Telemetry.track("music_youtube_projection_opened", _telemetryFor(youtubeContext));
     } catch (error) {
       Telemetry.captureException(
@@ -2468,6 +2477,8 @@ const _self = {
       stateDiagnostics.received_messages = Math.min(stateDiagnostics.received_messages + 1, 10000);
       const p = msg.payload as Record<string, unknown>;
       if (!p) return;
+      // Retorno e operador só acompanham: o relógio é da projeção ou, sem ela, da principal.
+      if (p.role === "return" || p.role === "operator") return;
       if (p.playback_id !== playback_id) {
         stateDiagnostics.mismatched_playback_messages = Math.min(stateDiagnostics.mismatched_playback_messages + 1, 10000);
         return;

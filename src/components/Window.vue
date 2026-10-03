@@ -229,7 +229,9 @@ function onPointerDownOutside(event) {
   // é um clique "fora" da janela. Minimizar por causa disso tiraria da tela
   // exatamente aquilo que a pergunta está confirmando.
   const alvo = event.detail?.originalEvent?.target;
-  if (alvo instanceof Element && alvo.closest(".alert-overlay")) return;
+  // Vale o mesmo para a camada que um módulo põe por cima da própria janela (o vídeo do
+  // YouTube em tela cheia): clicar nela não é deixar a janela de lado.
+  if (alvo instanceof Element && alvo.closest(".alert-overlay, [data-window-layer]")) return;
 
   // Prioridade invertida em relação ao ESC, de propósito. O ESC é saída
   // decisiva; o clique fora é "deixa de lado". Na janela do Mídia, que é a

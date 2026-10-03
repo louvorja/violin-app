@@ -25,10 +25,8 @@
     "lyric": "Letra da Música",
     "track": "Faixa",
     "video_quality": "Qualidade",
-    "channel": "Canal",
     "post_date": "Data de publicação",
     "views": "Visualizações",
-    "video_link": "Link do vídeo",
     "slides": "Slides"
   },
   "inputs": {

@@ -1197,8 +1197,6 @@ $storage.hydrate().then(async () => {
       }
     });
 
-    listenForVideoStateRequests(Broadcast, Media);
-
     // Pedidos genéricos de slide/Libras continuam usando o último estado.
     // Bíblia e módulos respondem por suas autoridades acima, inclusive no Web/PWA.
     Broadcast.listen((msg) => {
@@ -1219,6 +1217,10 @@ $storage.hydrate().then(async () => {
       }
     });
   }
+
+  // Fora do bloco do desktop: no navegador a janela de projeção também abre no meio do vídeo
+  // e pede a posição atual; sem resposta ela recomeçava do zero.
+  if (!isAuxiliaryRenderer) listenForVideoStateRequests(Broadcast, Media);
 
   createI18nInstance(UserData.get(KEYS.OPTIONS.LANGUAGE)).then(async (i18n) => {
     app.use(i18n);
