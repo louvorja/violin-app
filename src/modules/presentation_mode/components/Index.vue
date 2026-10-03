@@ -47,6 +47,7 @@
             >
               {{ tm("stage.show_live") }}
             </LjButton>
+            <ReturnControl :live-kind="liveKind" />
             <LjButton
               v-if="!stagePreview && liveKind"
               class="pm-bar__take-off"
@@ -131,6 +132,8 @@
         <div v-else class="pm-stage__body">
           <p class="pm-stage__empty">{{ tm("empty.stage") }}</p>
         </div>
+        <!-- Vídeo só no retorno: o player dele fica no palco enquanto toca. -->
+        <ReturnPlayerBar @close="onShowOnReturn(null)" />
       </section>
 
       <LibraryPanel
@@ -221,6 +224,8 @@ import StagePreview from "./StagePreview.vue";
 import MomentStage from "./MomentStage.vue";
 import FolderStage from "./FolderStage.vue";
 import SeriesDialog from "./SeriesDialog.vue";
+import ReturnControl from "./ReturnControl.vue";
+import ReturnPlayerBar from "./ReturnPlayerBar.vue";
 import PdfStage from "./PdfStage.vue";
 import { preparePowerPoint } from "../composables/usePowerPoint";
 import { takeOffAir } from "../composables/takeOffAir";
@@ -229,6 +234,7 @@ import { useProgramDownloads } from "../composables/useCloudFiles";
 import { programFilePaths } from "../program/paths";
 import { useStage } from "../composables/useStage";
 import { useStageNavigation } from "../composables/useStageNavigation";
+import { useReturnBlankSync } from "../composables/useReturnVisibility";
 import { useFolderItems } from "../composables/useFolderItems";
 import {
   expectationOf,
@@ -632,6 +638,8 @@ function goToSlidePrompt(): void {
 const slides = useSlides();
 const live = useLiveContent();
 const liveKind = live.current;
+// Tipo escondido no retorno: o retorno mostra só o fundo enquanto ele está no ar.
+useReturnBlankSync(liveKind);
 
 /** O arquivo no ar saiu da biblioteca? Então a grade o destaca. */
 const library = useFileLibrary();

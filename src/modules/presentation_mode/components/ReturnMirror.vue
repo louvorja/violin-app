@@ -7,8 +7,17 @@
       data-testid="pm-return-override"
     >
       <img v-if="override.type === 'image'" :src="override.url" alt="" />
-      <video v-else :src="override.url" muted autoplay playsinline />
+      <video v-else ref="overrideVideo" :src="override.url" muted autoplay playsinline />
       <span class="pm-return__only">{{ tm("outputs.return_only") }}</span>
+    </div>
+    <!-- O tipo no ar está escondido no retorno: lá aparece só o fundo. -->
+    <div
+      v-else-if="returnBlank"
+      class="pm-return__fill pm-return__override"
+      :style="background"
+      data-testid="pm-return-blank"
+    >
+      <span class="pm-return__only">{{ tm("return_control.hidden_badge") }}</span>
     </div>
     <!-- Foto, vídeo e PDF: o retorno mostra o mesmo que a tela principal. -->
     <div v-else-if="sameAsMain" class="pm-return__fill" data-testid="pm-return-media">
@@ -31,7 +40,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
+import { applyVideoState } from "@/helpers/VideoSync";
+import { returnBlank } from "../composables/useOutputs";
+import { useReturnPlayer } from "../composables/useReturnPlayer";
 import { useI18n } from "vue-i18n";
 import { useMainBackground } from "@/composables/useMainBackground";
 import { useModuleI18n } from "@/composables/useModuleI18n";
@@ -58,6 +70,18 @@ const { t } = useI18n();
 const { tm } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
 const { current, music, bible, announcement } = useLiveContent();
 const { style: background } = useMainBackground();
+
+/** O vídeo só no retorno acompanha o player do palco, como o retorno de verdade. */
+const overrideVideo = ref<HTMLVideoElement | null>(null);
+const player = useReturnPlayer();
+watch(
+  () => [player.state.currentTime, player.state.paused] as const,
+  ([currentTime, paused]) => {
+    if (overrideVideo.value && player.state.id) {
+      applyVideoState(overrideVideo.value, { currentTime, isPaused: paused, sentAt: Date.now() });
+    }
+  }
+);
 
 function plain(html: string | undefined | null): string {
   return (html ?? "")

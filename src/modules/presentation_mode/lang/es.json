@@ -377,5 +377,19 @@
     "count": "{n} archivos",
     "next": "Siguiente: {name}",
     "series_done": "Serie completa"
+  },
+  "return_control": {
+    "title": "Lo que muestra el retorno de escenario para cada tipo de contenido",
+    "short": "Retorno",
+    "showing": "Retorno: mostrando",
+    "hidden": "Retorno: oculto",
+    "menu_title": "Mostrar en el retorno de escenario",
+    "hidden_badge": "OCULTO EN EL RETORNO",
+    "groups": {
+      "music": "Canciones",
+      "file": "Fotos, videos y PDF",
+      "online_video": "Videos en línea",
+      "bible": "Biblia"
+    }
   }
 }

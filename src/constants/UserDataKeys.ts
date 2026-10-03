@@ -122,6 +122,8 @@ export const KEYS = {
       LIBRARY_FOLDERS: `${MODULES_PRESENTATION_MODE}.library_folders`,
       /** UserData: arquivos marcados com estrela no navegador de arquivos. */
       LIBRARY_FAVORITES: `${MODULES_PRESENTATION_MODE}.library_favorites`,
+      /** UserData: tipos de conteúdo escondidos no retorno de palco — `{ music?: true, file?: true, ... }`. */
+      RETURN_HIDDEN: `${MODULES_PRESENTATION_MODE}.return_hidden`,
       /** UserData: biblioteca ocupando as duas colunas da esquerda. */
       LIBRARY_FULL_WIDTH: `${MODULES_PRESENTATION_MODE}.library_full_width`,
       /** UserData: altura da biblioteca em px, ajustada arrastando a borda. */

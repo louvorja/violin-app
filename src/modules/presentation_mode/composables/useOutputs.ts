@@ -13,6 +13,7 @@ import { PROJECTION_TYPE } from "@/constants/Projection";
 import { KEYS } from "@/constants/UserDataKeys";
 import $appdata from "@/helpers/AppData";
 import { useDisplays } from "@/composables/useDisplays";
+import { useReturnPlayer } from "./useReturnPlayer";
 
 /**
  * As duas saídas do Modo apresentação: a tela principal e o retorno de palco.
@@ -55,7 +56,11 @@ export interface ReturnOverride {
   title: string;
   /** Caminho no disco, para a biblioteca marcar o arquivo. */
   path: string;
+  /** Identidade desta exibição: o relógio do vídeo só vale para ela. */
+  id: string;
 }
+/** O que se pede para levar ao retorno; a identidade é dada ao mostrar. */
+export type ReturnTarget = Omit<ReturnOverride, "id">;
 const _returnOverride = ref<ReturnOverride | null>(null);
 export { _returnOverride as returnOverride };
 const _mainOpen = ref(false);
@@ -78,7 +83,10 @@ function _installResponder(): void {
         (msg.payload as { active?: boolean } | null)?.active === false
       ) {
         // O Esc limpa o retorno pelo Broadcast: o estado daqui acompanha.
-        _returnOverride.value = null;
+        if (_returnOverride.value) {
+          _returnOverride.value = null;
+          useReturnPlayer().stop();
+        }
       }
     },
     { replay: false }
@@ -114,18 +122,36 @@ export async function refreshShowing(): Promise<void> {
   _publish();
 }
 
+/** O retorno esconde o que está no ar (o tipo foi ocultado no retorno): fica o fundo. */
+const _returnBlank = ref(false);
+export { _returnBlank as returnBlank };
+
+/** O que o operador mandou só ao retorno vence; senão, o fundo, se o tipo no ar está oculto. */
 function _overridePayload(): Record<string, unknown> {
   const o = _returnOverride.value;
-  return o ? { active: true, type: o.type, url: o.url, title: o.title } : { active: false };
+  if (o) return { active: true, type: o.type, url: o.url, title: o.title, id: o.id };
+  return _returnBlank.value ? { active: true, type: "blank" } : { active: false };
+}
+
+export function setReturnBlank(blank: boolean): void {
+  if (_returnBlank.value === blank) return;
+  _installResponder();
+  _returnBlank.value = blank;
+  Broadcast.send(BROADCAST_TYPE.RETURN_OVERRIDE, _overridePayload());
 }
 
 /**
  * Leva a imagem ou o vídeo só para o retorno. Abre a janela de retorno se
  * ela estiver fechada — o operador escolheu mostrar algo no palco.
  */
-export async function showOnReturn(override: ReturnOverride | null): Promise<void> {
+export async function showOnReturn(override: ReturnTarget | null): Promise<void> {
   _installResponder();
-  _returnOverride.value = override;
+  const id = crypto.randomUUID();
+  _returnOverride.value = override && { ...override, id };
+  // Vídeo só no retorno toca pelo player daqui (com som); o retorno acompanha mudo.
+  const player = useReturnPlayer();
+  if (override?.type === "video") player.start({ id, url: override.url, title: override.title });
+  else player.stop();
   Broadcast.send(BROADCAST_TYPE.RETURN_OVERRIDE, _overridePayload());
   if (!override) return;
   const open = await _openFeatures();

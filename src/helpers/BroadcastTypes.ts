@@ -117,9 +117,15 @@ export const BROADCAST_TYPE = Object.freeze({
 
   /** Imagem ou vídeo só no retorno de palco (letra para o louvor especial,
    *  recado para quem está no palco). Cobre o retorno; a tela principal não muda.
-   *  Payload: { active: boolean, type?: "image" | "video", url?: string, title?: string }
+   *  `type: "blank"` esconde o conteúdo do retorno e mostra só o fundo.
+   *  Payload: { active: boolean, type?: "image" | "video" | "blank", url?: string, title?: string, id?: string }
    *  Emitido por: presentation_mode e o Esc. Recebido por: views de retorno. */
   RETURN_OVERRIDE: "return_override",
+
+  /** Relógio do vídeo só no retorno: o som sai do player da janela principal,
+   *  e o retorno (mudo) acompanha. Payload: VideoMediaState + `id` do override.
+   *  Emitido por: presentation_mode. Recebido por: ReturnOverride. */
+  RETURN_OVERRIDE_STATE: "return_override_state",
 
   /** Retorno recém-aberto pedindo o conteúdo exclusivo dele. */
   REQUEST_RETURN_OVERRIDE: "request_return_override",

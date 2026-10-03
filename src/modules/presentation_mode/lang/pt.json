@@ -377,5 +377,19 @@
     "count": "{n} arquivos",
     "next": "Próximo: {name}",
     "series_done": "Série completa"
+  },
+  "return_control": {
+    "title": "O que o retorno de palco mostra para cada tipo de conteúdo",
+    "short": "Retorno",
+    "showing": "Retorno: mostrando",
+    "hidden": "Retorno: oculto",
+    "menu_title": "Mostrar no retorno de palco",
+    "hidden_badge": "OCULTO NO RETORNO",
+    "groups": {
+      "music": "Músicas",
+      "file": "Fotos, vídeos e PDFs",
+      "online_video": "Vídeos on-line",
+      "bible": "Bíblia"
+    }
   }
 }

@@ -5,7 +5,7 @@ import { i18nAtual } from "@/i18n";
 import type { ProgramItem } from "@/types/Presentation";
 import { kindFromPath } from "../program/liturgy";
 import { filePathOf, type Playable } from "../program/playable";
-import type { ReturnOverride } from "./useOutputs";
+import type { ReturnTarget } from "./useOutputs";
 
 /**
  * O que vai só para o retorno de palco: foto ou vídeo — da biblioteca, do
@@ -21,12 +21,12 @@ function say(key: string): string {
   return t ? String(t(key)) : key;
 }
 
-function fromFile(path: string, title: string): ReturnOverride | null {
+function fromFile(path: string, title: string): ReturnTarget | null {
   const type = kindFromPath(path);
   return type === "image" || type === "video" ? { type, url: $path.local(path), title, path } : null;
 }
 
-async function fromOnline(videoId: string, title: string): Promise<ReturnOverride | null> {
+async function fromOnline(videoId: string, title: string): Promise<ReturnTarget | null> {
   const res = await OnlineVideo.stream(videoId).catch(() => null);
   if (!res?.ok) {
     $snackbar.warning(say(OnlineVideo.messageKeyForStreamFailure(res?.ok === false ? res.error.kind : "unknown")));
@@ -36,7 +36,7 @@ async function fromOnline(videoId: string, title: string): Promise<ReturnOverrid
 }
 
 /** `item`: o item do programa de `program`/`child`. Null quando não há o que levar ao retorno. */
-export async function returnOverrideFor(target: Playable, item: ProgramItem | null): Promise<ReturnOverride | null> {
+export async function returnOverrideFor(target: Playable, item: ProgramItem | null): Promise<ReturnTarget | null> {
   if (target.type === "online") return fromOnline(target.videoId, target.title);
   const path = filePathOf(target, item);
   if (!path) return null;
