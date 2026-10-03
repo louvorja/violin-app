@@ -98,8 +98,8 @@
           :live-path="liveOrigin?.type === 'folderFile' ? liveOrigin.entry.path : null"
           :return-path="returnOverride?.path ?? null"
           @play="
-            (entry: LibraryEntry) =>
-              dispatch({ type: 'folderFile', itemId: folderOnStage!.id, entry })
+            (entry: LibraryEntry, o?: PlayOptions) =>
+              dispatch({ type: 'folderFile', itemId: folderOnStage!.id, entry }, o)
           "
           @stop="takeOff"
           @add="(added: ProgramItem) => addItem(added, ensureSession())"
@@ -160,7 +160,7 @@
         :live-video-id="liveOrigin?.type === 'online' ? liveOrigin.videoId : null"
         @show-on-return="onShowOnReturn"
         @preview="stage.show"
-        @play="(p: Playable, options?: { mode: MusicMode }) => dispatch(p, options)"
+        @play="(p: Playable, options?: PlayOptions) => dispatch(p, options)"
         @add="(item: ProgramItem) => addItem(item, ensureSession())"
         @stop="takeOff"
         @toggle-width="libraryLayout.toggleWidth"
@@ -249,6 +249,7 @@ import { useStageNavigation } from "../composables/useStageNavigation";
 import { useReturnBlankSync } from "../composables/useReturnVisibility";
 import { claimVideo, resetOrphanScreens } from "../composables/useLayers";
 import { useFolderItems } from "../composables/useFolderItems";
+import { usePlayerMute } from "../composables/usePlayerMute";
 import {
   expectationOf,
   filePathOf,
@@ -257,6 +258,7 @@ import {
   playsVideo,
   samePlayable,
   type Playable,
+  type PlayOptions,
 } from "../program/playable";
 import LibraryPanel, { type LibraryTab } from "./LibraryPanel.vue";
 import LiveMirror from "./LiveMirror.vue";
@@ -319,6 +321,7 @@ const { execute, executeChild, projectPath, sendBible } = useProgramExecution();
 const { importFromLiturgy, saveAsLiturgy } = useProgramLiturgy();
 const stage = useStage();
 const folders = useFolderItems();
+const playerMute = usePlayerMute();
 onBeforeUnmount(stage.reset);
 
 onMounted(() => {
@@ -356,10 +359,9 @@ function itemOf(playable: Playable | null | undefined): ProgramItem | null {
   return id ? findItem(id) : null;
 }
 
-interface DispatchOptions {
+interface DispatchOptions extends PlayOptions {
   /** Música: slide em que ela entra. */
   slideIndex?: number;
-  mode?: MusicMode;
   /** Ignora a trava — é o destravar mandando ao ar o que estava na fila. */
   force?: boolean;
 }
@@ -371,7 +373,7 @@ interface DispatchOptions {
  */
 function dispatch(
   playable: Playable,
-  { slideIndex = 0, mode, force = false }: DispatchOptions = {}
+  { slideIndex = 0, mode, muted = false, force = false }: DispatchOptions = {}
 ): void {
   const item = itemOf(playable);
   if (itemIdOf(playable) && !item) return;
@@ -402,7 +404,11 @@ function dispatch(
 
   stage.show(playable);
   // Um vídeo por vez: o que estiver só no retorno sai antes deste entrar.
-  if (playsVideo(playable, item)) claimVideo("screen");
+  const video = playsVideo(playable, item);
+  if (video) claimVideo("screen");
+  // Sem áudio: o mudo do palco. Outra mídia com som devolve o volume de antes.
+  if (muted) playerMute.mute();
+  else if (video || playable.type === "song" || item?.kind === "music") playerMute.unmute();
   const expected = expectationOf(playable, item, mode);
   if (playable.type === "child" && item) {
     goLive(item.id);

@@ -23,7 +23,7 @@
       no-details
       @select="(e: LibraryEntry) => (selectedPath = e.path)"
       @open="play"
-      @play="play"
+      @play="(e: LibraryEntry, o?: PlayOptions) => play(e, o)"
       @stop="emit('stop')"
       @add="(added: ProgramItem) => emit('add', added)"
       @show-on-return="(e: LibraryEntry | null) => emit('show-on-return', e)"
@@ -55,6 +55,7 @@ import { ModuleEnum } from "@/enums/ModuleEnum";
 import { useModuleI18n } from "@/composables/useModuleI18n";
 import type { ProgramItem } from "@/types/Presentation";
 import type { LibraryEntry } from "../composables/useFileLibrary";
+import type { PlayOptions } from "../program/playable";
 import { useFolderItems } from "../composables/useFolderItems";
 import { useFolderSeries } from "../composables/useSeries";
 import FileGrid from "./FileGrid.vue";
@@ -74,7 +75,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  play: [entry: LibraryEntry];
+  play: [entry: LibraryEntry, options?: PlayOptions];
   stop: [];
   add: [item: ProgramItem];
   "show-on-return": [entry: LibraryEntry | null];
@@ -106,8 +107,8 @@ function playByName(name: string): void {
   if (entry) play(entry);
 }
 
-function play(entry: LibraryEntry): void {
-  if (!entry.isDir) emit("play", entry);
+function play(entry: LibraryEntry, options?: PlayOptions): void {
+  if (!entry.isDir) emit("play", entry, options);
 }
 </script>
 

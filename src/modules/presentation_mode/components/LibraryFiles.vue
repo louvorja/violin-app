@@ -105,7 +105,7 @@
         :extra-menu="seriesMenuFor"
         @select="onClick"
         @open="onOpen"
-        @play="(e: LibraryEntry) => emit('play', filePlayable(e))"
+        @play="(e: LibraryEntry, o?: PlayOptions) => emit('play', filePlayable(e), o)"
         @stop="emit('stop')"
         @details="openDetails"
         @add="(item: ProgramItem) => emit('add', item)"
@@ -243,7 +243,7 @@ import { useMediaMeta } from "../composables/useMediaMeta";
 import { useCloudFiles } from "../composables/useCloudFiles";
 import type { ProgramItem } from "@/types/Presentation";
 import { fileItem, folderItem } from "../program/items";
-import type { Playable } from "../program/playable";
+import type { Playable, PlayOptions } from "../program/playable";
 
 /**
  * Aba Arquivos da biblioteca: as pastas do computador que o operador
@@ -259,7 +259,7 @@ defineProps<{
 
 const emit = defineEmits<{
   preview: [playable: Playable];
-  play: [playable: Playable];
+  play: [playable: Playable, options?: PlayOptions];
   add: [item: ProgramItem];
   stop: [];
   /** Imagem ou vídeo só no retorno de palco; `null` tira. */

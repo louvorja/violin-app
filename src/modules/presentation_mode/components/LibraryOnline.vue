@@ -246,7 +246,7 @@ import { prepare as prepareOnlineVideo, youtubeThumb } from "@/helpers/OnlineVid
 import { useModuleI18n } from "@/composables/useModuleI18n";
 import type { ProgramItem } from "@/types/Presentation";
 import { onlineItem } from "../program/items";
-import type { Playable } from "../program/playable";
+import type { Playable, PlayOptions } from "../program/playable";
 import { onlinePlayable } from "../composables/useOnlinePlayback";
 import { onlineReturnPath } from "../composables/returnTarget";
 import {
@@ -271,7 +271,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{
   preview: [playable: Playable];
-  play: [playable: Playable];
+  play: [playable: Playable, options?: PlayOptions];
   add: [item: ProgramItem];
   stop: [];
   "show-on-return": [target: Playable | null];
@@ -297,6 +297,11 @@ function menuFor(video: OnlineEntry): LjMenuItem[] {
       label: tm("library.play"),
       icon: ICONS.PLAYER.PLAY,
       action: () => emit("play", onlinePlayable(video)),
+    },
+    {
+      label: tm("library.play_muted"),
+      icon: ICONS.PLAYER.VOLUME_MUTE,
+      action: () => emit("play", onlinePlayable(video), { muted: true }),
     },
     props.returnPath === onlineReturnPath(video.id)
       ? {

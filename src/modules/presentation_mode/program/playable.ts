@@ -28,6 +28,13 @@ export type Playable =
   /** Um arquivo de uma pasta da biblioteca que está no programa (item `folder`). */
   | { type: "folderFile"; itemId: string; entry: LibraryEntry };
 
+/** Como mandar ao ar: a versão da música, ou o vídeo sem áudio. */
+export interface PlayOptions {
+  mode?: MusicMode;
+  /** Vídeo sem áudio: entra mudo (o mesmo mudo do botão do palco). */
+  muted?: boolean;
+}
+
 /** O item do programa por trás do Playable (o próprio, o momento ou a pasta), se houver. */
 export function itemIdOf(playable: Playable | null | undefined): string | null {
   return playable?.type === "program" || playable?.type === "child" || playable?.type === "folderFile"

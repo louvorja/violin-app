@@ -101,6 +101,7 @@ import { useMediaMeta } from "../composables/useMediaMeta";
 import { useCloudFiles } from "../composables/useCloudFiles";
 import { useMoments } from "../composables/useMoments";
 import { fileItem, folderItem } from "../program/items";
+import type { PlayOptions } from "../program/playable";
 
 /**
  * A grade de arquivos de uma pasta: miniatura, duração, selos (no ar, no
@@ -130,7 +131,7 @@ const emit = defineEmits<{
   select: [entry: LibraryEntry];
   /** Duplo clique: entra na pasta ou projeta o arquivo. */
   open: [entry: LibraryEntry];
-  play: [entry: LibraryEntry];
+  play: [entry: LibraryEntry, options?: PlayOptions];
   stop: [];
   details: [entry: LibraryEntry];
   add: [item: ProgramItem];
@@ -219,6 +220,15 @@ function menuFor(entry: LibraryEntry): LjMenuItem[] {
           icon: ICONS.PLAYER.PLAY,
           action: () => emit("play", entry),
         },
+    ...(fileKind(entry.ext) === "video" && !live
+      ? [
+          {
+            label: tm("library.play_muted"),
+            icon: ICONS.PLAYER.VOLUME_MUTE,
+            action: () => emit("play", entry, { muted: true }),
+          },
+        ]
+      : []),
     { label: tm("library.preview"), icon: ICONS.UI.EYE, action: () => emit("select", entry) },
     ...(fileKind(entry.ext) === "image" || fileKind(entry.ext) === "video"
       ? [

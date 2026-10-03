@@ -119,6 +119,7 @@ import Media from "@/composables/useMedia";
 import { useAudioPlayback } from "@/composables/useAudioPlayback";
 import { useModuleI18n } from "@/composables/useModuleI18n";
 import LiveMirror from "./LiveMirror.vue";
+import { usePlayerMute } from "../composables/usePlayerMute";
 
 /**
  * Palco do vídeo no ar: a imagem é o espelho mudo da tela principal, e a
@@ -186,19 +187,10 @@ function togglePlay(): void {
   else Media.pause(true);
 }
 
-/* Cortar o áudio guarda o volume de antes para devolvê-lo igual. */
-const volumeBeforeMute = ref<number | null>(null);
-const muted = computed(() => volumeBeforeMute.value !== null);
-
-function toggleMute(): void {
-  if (volumeBeforeMute.value === null) {
-    volumeBeforeMute.value = audio.volume.value || 100;
-    Media.setVolume(0);
-  } else {
-    Media.setVolume(volumeBeforeMute.value);
-    volumeBeforeMute.value = null;
-  }
-}
+/* O mudo é do módulo: o "Reproduzir sem áudio" liga o mesmo. */
+const playerMute = usePlayerMute();
+const muted = playerMute.muted;
+const toggleMute = playerMute.toggle;
 
 const volumeIcon = computed(() => {
   const v = muted.value ? 0 : audio.volume.value;
@@ -208,10 +200,7 @@ const volumeIcon = computed(() => {
 
 /** Parar encerra o vídeo, mas as janelas de projeção seguem abertas para o próximo item. */
 function stop(): void {
-  if (volumeBeforeMute.value !== null) {
-    Media.setVolume(volumeBeforeMute.value);
-    volumeBeforeMute.value = null;
-  }
+  playerMute.unmute();
   Media.close(true, false, true);
 }
 </script>

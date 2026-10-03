@@ -227,7 +227,8 @@
     "open_folder": "Abrir pasta",
     "on_return": "RETORNO",
     "play_on_return": "Reproduzir só no retorno",
-    "remove_from_return": "Tirar do retorno"
+    "remove_from_return": "Tirar do retorno",
+    "play_muted": "Reproduzir sem áudio"
   },
   "video": {
     "back_10": "Voltar 10 segundos",

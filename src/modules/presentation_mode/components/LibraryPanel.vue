@@ -82,8 +82,7 @@ import LibraryMusic from "./LibraryMusic.vue";
 import LibraryBible from "./LibraryBible.vue";
 import LibraryOnline from "./LibraryOnline.vue";
 import type { ProgramBibleRef, ProgramItem } from "@/types/Presentation";
-import type { MusicMode } from "../program/musicModes";
-import type { Playable } from "../program/playable";
+import type { Playable, PlayOptions } from "../program/playable";
 import { LjButton, LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ModuleEnum } from "@/enums/ModuleEnum";
@@ -111,7 +110,7 @@ const emit = defineEmits<{
   "resize-end": [height: number];
   /** Todas as abas falam a mesma língua: prévia e ar recebem um Playable; o programa, um item pronto. */
   preview: [playable: Playable];
-  play: [playable: Playable, options?: { mode: MusicMode }];
+  play: [playable: Playable, options?: PlayOptions];
   add: [item: ProgramItem];
   stop: [];
   /** Imagem ou vídeo só no retorno de palco; `null` tira. */
@@ -121,7 +120,7 @@ const emit = defineEmits<{
 /** O que toda aba repassa sem tocar: as três ações comuns. */
 const relay = {
   onPreview: (p: Playable) => emit("preview", p),
-  onPlay: (p: Playable, options?: { mode: MusicMode }) => emit("play", p, options),
+  onPlay: (p: Playable, options?: PlayOptions) => emit("play", p, options),
   onAdd: (item: ProgramItem) => emit("add", item),
 };
 

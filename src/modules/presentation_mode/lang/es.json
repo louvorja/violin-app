@@ -227,7 +227,8 @@
     "open_folder": "Abrir carpeta",
     "on_return": "RETORNO",
     "play_on_return": "Reproducir solo en el retorno",
-    "remove_from_return": "Quitar del retorno"
+    "remove_from_return": "Quitar del retorno",
+    "play_muted": "Reproducir sin audio"
   },
   "video": {
     "back_10": "Retroceder 10 segundos",
