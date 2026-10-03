@@ -33,12 +33,27 @@
     </div>
 
     <section class="pm-outputs__section">
+      <!-- Cada tela: liga/desliga, nome e monitor (opção) — acima da miniatura dela. -->
       <header class="pm-outputs__label">
-        <span class="pm-outputs__live">
+        <LjSwitch
+          :model-value="screenOn.main"
+          :disabled="busy"
+          :aria-label="tm('outputs.screen_toggle_main')"
+          data-testid="pm-screen-main"
+          @update:model-value="(on: boolean) => setScreen('main', on)"
+        />
+        <span class="pm-outputs__live" :class="{ 'pm-outputs__live--off': !screenOn.main }">
           <span class="pm-outputs__dot" />
-          {{ tm("program.live") }}
+          {{ tm("outputs.main_screen") }}
         </span>
-        <span class="pm-outputs__where">{{ screenLabel("outputs.main_screen", mainMonitor) }}</span>
+        <LjMenu :items="mainRole.items.value" align="end">
+          <template #trigger>
+            <button type="button" class="pm-outputs__monitor" data-testid="pm-monitor-main">
+              {{ mainRole.monitorLabel.value }}
+              <LjIcon :icon="ICONS.UI.CHEVRON_DOWN" :size="11" />
+            </button>
+          </template>
+        </LjMenu>
       </header>
       <button
         v-if="mainMissing && mainMonitor !== null"
@@ -51,7 +66,14 @@
       </button>
       <div class="pm-outputs__screen">
         <LiveMirror :cleared="cleared" />
-        <span v-if="mainMissing" class="pm-outputs__closed" data-testid="pm-outputs-main-closed">
+        <span v-if="!screenOn.main" class="pm-outputs__closed" data-testid="pm-outputs-main-off">
+          {{ tm("outputs.screen_off") }}
+        </span>
+        <span
+          v-else-if="mainMissing"
+          class="pm-outputs__closed"
+          data-testid="pm-outputs-main-closed"
+        >
           {{ tm("outputs.screen_closed") }}
         </span>
       </div>
@@ -111,11 +133,25 @@
 
     <section class="pm-outputs__section">
       <header class="pm-outputs__label">
-        <span class="pm-outputs__title">
-          <LjIcon :icon="ICONS.PROJECTION.RETURN" :size="12" />
+        <LjSwitch
+          :model-value="screenOn.stage"
+          :disabled="busy"
+          :aria-label="tm('outputs.screen_toggle_stage')"
+          data-testid="pm-screen-stage"
+          @update:model-value="(on: boolean) => setScreen('stage', on)"
+        />
+        <span class="pm-outputs__live" :class="{ 'pm-outputs__live--off': !screenOn.stage }">
+          <span class="pm-outputs__dot" />
           {{ tm("outputs.stage_return") }}
         </span>
-        <span class="pm-outputs__where">{{ monitorLabel(stageMonitor) }}</span>
+        <LjMenu :items="stageRole.items.value" align="end">
+          <template #trigger>
+            <button type="button" class="pm-outputs__monitor" data-testid="pm-monitor-stage">
+              {{ stageRole.monitorLabel.value }}
+              <LjIcon :icon="ICONS.UI.CHEVRON_DOWN" :size="11" />
+            </button>
+          </template>
+        </LjMenu>
         <button
           v-if="stageMissing && stageMonitor !== null"
           type="button"
@@ -142,7 +178,14 @@
           :up-next="upNext?.title ?? ''"
           :override="returnOverride"
         />
-        <span v-if="stageMissing" class="pm-outputs__closed" data-testid="pm-outputs-stage-closed">
+        <span v-if="!screenOn.stage" class="pm-outputs__closed" data-testid="pm-outputs-stage-off">
+          {{ tm("outputs.screen_off") }}
+        </span>
+        <span
+          v-else-if="stageMissing"
+          class="pm-outputs__closed"
+          data-testid="pm-outputs-stage-closed"
+        >
           {{ tm("outputs.screen_closed") }}
         </span>
       </div>
@@ -168,7 +211,7 @@
 </template>
 
 <script setup lang="ts">
-import { LjButton, LjIcon } from "@/components/ui";
+import { LjButton, LjIcon, LjMenu, LjSwitch } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { useModuleI18n } from "@/composables/useModuleI18n";
@@ -178,6 +221,7 @@ import LiveMirror from "./LiveMirror.vue";
 import ReturnMirror from "./ReturnMirror.vue";
 import { returnOverride, showOnReturn, useOutputs } from "../composables/useOutputs";
 import { KIND_ICONS } from "../program/kinds";
+import { useMonitorRole } from "../composables/useMonitorRole";
 
 defineProps<{
   upNext: ProgramItem | null;
@@ -211,20 +255,16 @@ const {
   stageMonitor,
   mainMissing,
   stageMissing,
+  screenOn,
+  setScreen,
   start,
   stop,
   reopen,
   toggleCleared,
 } = useOutputs();
 const { identify, isIdentifying } = useDisplays();
-
-function monitorLabel(n: number | null): string {
-  return n === null ? tm("outputs.no_monitor") : tm("outputs.monitor", { n });
-}
-
-function screenLabel(key: string, n: number | null): string {
-  return `${tm(key)} · ${monitorLabel(n)}`;
-}
+const mainRole = useMonitorRole("projection");
+const stageRole = useMonitorRole("stage");
 </script>
 
 <style scoped>
@@ -326,6 +366,38 @@ function screenLabel(key: string, n: number | null): string {
 .pm-outputs__missing--inline {
   padding: 1px 6px;
   font-size: 10px;
+}
+
+/* Tela desligada: o nome recua, como o ponto vermelho que some. */
+.pm-outputs__live--off {
+  color: var(--lj-text-subtle);
+}
+
+.pm-outputs__live--off .pm-outputs__dot {
+  background: var(--lj-text-subtle);
+}
+
+/* Monitor da tela: opção, no canto do cabeçalho, clicável. */
+.pm-outputs__monitor {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  padding: 1px 4px;
+  border: none;
+  border-radius: var(--lj-radius-sm);
+  background: transparent;
+  color: var(--lj-text-subtle);
+  font: inherit;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  cursor: pointer;
+}
+
+.pm-outputs__monitor:hover {
+  background: var(--lj-white-alpha-08);
+  color: var(--lj-text);
 }
 
 .pm-outputs__where {

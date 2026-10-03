@@ -205,6 +205,7 @@ const emit = defineEmits<{
   "duplicate-item": [itemId: string];
   "remove-item": [itemId: string];
   import: [];
+  save: [];
   settings: [];
   "child-preview": [itemId: string, childId: string];
   "child-play": [itemId: string, childId: string];
@@ -318,6 +319,12 @@ const addMenu = computed<LjMenuItem[]>(() => [
     label: tm("ribbon.btn.import_liturgy"),
     icon: ICONS.ACTIONS.IMPORT,
     action: () => emit("import"),
+  },
+  // Em tela cheia o ribbon some: o que ele faz com o programa tem que estar aqui.
+  {
+    label: tm("ribbon.btn.save_program"),
+    icon: ICONS.ACTIONS.SAVE,
+    action: () => emit("save"),
   },
 ]);
 

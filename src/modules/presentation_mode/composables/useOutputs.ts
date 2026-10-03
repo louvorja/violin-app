@@ -5,9 +5,12 @@ import Telemetry from "@/helpers/Telemetry";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import {
   closeProjectionWindows,
-  keepStageReturn,
+  controlPresentationScreens,
   openMediaWindow,
 } from "@/helpers/ProjectionWindows";
+import { close as closeProjection } from "@/helpers/Projection";
+import { closingOnPurpose } from "@/composables/useProjectionShutdown";
+import { ModuleEnum } from "@/enums/ModuleEnum";
 import { isWebWindowOpen } from "@/helpers/projection/webWindow";
 import { PROJECTION_TYPE } from "@/constants/Projection";
 import { KEYS } from "@/constants/UserDataKeys";
@@ -67,12 +70,20 @@ export { _returnOverride as returnOverride };
 const _mainOpen = ref(false);
 const _returnOpen = ref(false);
 /**
- * A apresentação está iniciada: estado do operador, mudado só por Iniciar e
- * Parar. As janelas são o efeito — trocar a música por um vídeo fecha uma e
- * abre outra, e isso não pode parecer ao operador que a apresentação parou.
+ * Quais telas o operador ligou: estado dele, mudado por Iniciar/Parar e pelo
+ * liga/desliga de cada tela. As janelas são o efeito — trocar a música por um
+ * vídeo fecha uma e abre outra, e isso não pode parecer que a tela desligou.
  */
-const _presenting = ref(false);
-const _showing = computed(() => _presenting.value);
+export type Screen = "main" | "stage";
+const _on = ref<Record<Screen, boolean>>({ main: false, stage: false });
+const _presenting = computed(() => _on.value.main || _on.value.stage);
+const _showing = _presenting;
+
+// Com a aba do módulo à vista, as janelas automáticas seguem as telas ligadas:
+// desligada, nada abre sozinho nela. Nas outras abas, valem as opções de sempre.
+controlPresentationScreens(() =>
+  $appdata.get<string>(KEYS.SHELL.ACTIVE_MODULE, "") === ModuleEnum.PRESENTATION_MODE ? { ..._on.value } : null
+);
 /** Janela que sumiu com a apresentação iniciada (Esc no telão, monitor desligado). */
 const _mainMissing = ref(false);
 const _stageMissing = ref(false);
@@ -122,7 +133,7 @@ async function _openFeatures(): Promise<string[]> {
  */
 function _publish(): void {
   const idle = !_busy.value;
-  $appdata.set(KEYS.MODULES.PRESENTATION_MODE.CAN_START, idle && !_presenting.value);
+  $appdata.set(KEYS.MODULES.PRESENTATION_MODE.CAN_START, idle && !(_on.value.main && _on.value.stage));
   $appdata.set(KEYS.MODULES.PRESENTATION_MODE.CAN_STOP, idle && _presenting.value);
   $appdata.set(KEYS.MODULES.PRESENTATION_MODE.CAN_CLEAR, _presenting.value && !_cleared.value);
 }
@@ -133,28 +144,35 @@ export async function refreshShowing(): Promise<void> {
   const open = await _openFeatures();
   _mainOpen.value = MAIN_SCREEN_FEATURES.some((f) => open.includes(f));
   _returnOpen.value = RETURN_FEATURES.some((f) => open.includes(f));
-  // Tela aberta sem o Iniciar (o módulo recarregou, ou algo foi ao ar e abriu
-  // as telas sozinho): a apresentação está, de fato, iniciada.
-  if (!_presenting.value && !_busy.value && (_mainOpen.value || _returnOpen.value)) _setPresenting(true);
-  if (_presenting.value && !_busy.value) {
+  if (!_busy.value) {
+    // Tela aberta sem ter sido ligada aqui (o módulo recarregou, ou o operador
+    // abriu pela liturgia): ela está, de fato, ligada.
+    if (_mainOpen.value && !_on.value.main) _setOn("main", true);
+    if (_returnOpen.value && !_on.value.stage) _setOn("stage", true);
     _missingStreak = {
-      main: _mainOpen.value ? 0 : _missingStreak.main + 1,
-      stage: _returnOpen.value ? 0 : _missingStreak.stage + 1,
+      main: _on.value.main && !_mainOpen.value ? _missingStreak.main + 1 : 0,
+      stage: _on.value.stage && !_returnOpen.value ? _missingStreak.stage + 1 : 0,
     };
     _mainMissing.value = _missingStreak.main >= MISSING_AFTER_READS;
     _stageMissing.value = _missingStreak.stage >= MISSING_AFTER_READS;
-    // As duas telas sumiram (Esc no telão): o operador encerrou por lá.
-    if (_mainMissing.value && _stageMissing.value) _setPresenting(false);
+    // Todas as telas ligadas sumiram (Esc no telão): o operador encerrou por lá.
+    const allGone =
+      _presenting.value &&
+      (!_on.value.main || _mainMissing.value) &&
+      (!_on.value.stage || _stageMissing.value);
+    if (allGone) {
+      _setOn("main", false);
+      _setOn("stage", false);
+    }
   }
   _publish();
 }
 
-function _setPresenting(on: boolean): void {
-  _presenting.value = on;
-  keepStageReturn(on);
-  _missingStreak = { main: 0, stage: 0 };
-  _mainMissing.value = false;
-  _stageMissing.value = false;
+function _setOn(screen: Screen, on: boolean): void {
+  _on.value = { ..._on.value, [screen]: on };
+  _missingStreak = { ..._missingStreak, [screen]: 0 };
+  if (screen === "main") _mainMissing.value = false;
+  else _stageMissing.value = false;
 }
 
 /** As janelas do que está no ar: o vídeo reabre as do arquivo, não as da música. */
@@ -163,12 +181,27 @@ function _liveMedia(): "music" | "file" | "video" {
   return kind === "file" || kind === "announcements" ? "file" : kind === "online_video" ? "video" : "music";
 }
 
-/** Reabre a tela que sumiu, sem cobrir a que está no ar. */
+/** Abre as telas ligadas que não estão abertas, sem cobrir a que está no ar. */
 async function _openMissing(): Promise<void> {
   await refreshShowing();
   const media = _liveMedia();
-  if (!_mainOpen.value) await openMediaWindow("projection", media, { explicit: true });
-  if (!_returnOpen.value) await openMediaWindow("return", media, { explicit: true });
+  if (_on.value.main && !_mainOpen.value) await openMediaWindow("projection", media, { explicit: true });
+  if (_on.value.stage && !_returnOpen.value) await openMediaWindow("return", media, { explicit: true });
+}
+
+/** Fecha todas as janelas de uma tela (música, Bíblia, arquivo, vídeo). */
+async function _closeScreen(screen: Screen): Promise<void> {
+  const features = screen === "main" ? MAIN_SCREEN_FEATURES : RETURN_FEATURES;
+  const open = await _openFeatures();
+  // A outra tela segue com o mesmo conteúdo: o fechamento não pode desfazê-lo.
+  await Promise.all(
+    features
+      .filter((f) => open.includes(f))
+      .map((f) => {
+        closingOnPurpose(f);
+        return closeProjection(f);
+      })
+  );
 }
 
 /** O retorno esconde o que está no ar (o tipo foi ocultado no retorno): fica o fundo. */
@@ -226,7 +259,8 @@ export async function startOutputs(): Promise<void> {
   _busy.value = true;
   _publish();
   try {
-    _setPresenting(true);
+    _setOn("main", true);
+    _setOn("stage", true);
     // Só abre a saída que falta: a janela da música por cima de um vídeo no ar
     // cobriria o vídeo com o fundo.
     await _openMissing();
@@ -244,12 +278,32 @@ export async function stopOutputs(): Promise<void> {
   _busy.value = true;
   _publish();
   try {
-    _setPresenting(false);
+    _setOn("main", false);
+    _setOn("stage", false);
     await closeProjectionWindows();
     if (_cleared.value) setCleared(false);
     Telemetry.track("presentation_outputs_stopped", {});
   } catch (e) {
     Telemetry.captureException(e, { source: "presentation_mode.outputs.stop" });
+  } finally {
+    _busy.value = false;
+    await refreshShowing();
+  }
+}
+
+/** Liga ou desliga uma tela só; a outra continua como está. */
+export async function setScreen(screen: Screen, on: boolean): Promise<void> {
+  if (_busy.value) return;
+  _busy.value = true;
+  _publish();
+  try {
+    _setOn(screen, on);
+    if (on) await _openMissing();
+    else await _closeScreen(screen);
+    if (!_presenting.value && _cleared.value) setCleared(false);
+    Telemetry.track("presentation_screen_toggled", { screen, on });
+  } catch (e) {
+    Telemetry.captureException(e, { source: "presentation_mode.outputs.screen" });
   } finally {
     _busy.value = false;
     await refreshShowing();
@@ -306,6 +360,8 @@ export function useOutputs() {
     busy: _busy,
     mainMonitor,
     stageMonitor,
+    screenOn: _on,
+    setScreen,
     mainMissing: _mainMissing,
     stageMissing: _stageMissing,
     start: startOutputs,

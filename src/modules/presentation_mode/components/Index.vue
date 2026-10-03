@@ -22,6 +22,7 @@
         @duplicate-item="duplicateItem"
         @remove-item="(id: string) => confirmRemoveItem(id)"
         @import="importFromLiturgy"
+        @save="saveAsLiturgy"
         @settings="settingsDialogOpen = true"
       />
 

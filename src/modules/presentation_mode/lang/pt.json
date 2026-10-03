@@ -168,7 +168,10 @@
     "take_off_title": "Tira da tela só o que está passando (música, versículo, foto, vídeo). A apresentação continua aberta.",
     "missing_main": "A tela principal fechou — reabrir",
     "missing_stage": "fechou — reabrir",
-    "screen_closed": "TELA FECHADA"
+    "screen_closed": "TELA FECHADA",
+    "screen_off": "TELA DESLIGADA",
+    "screen_toggle_main": "Ligar ou desligar a tela principal",
+    "screen_toggle_stage": "Ligar ou desligar o retorno de palco"
   },
   "stage": {
     "on_air": "NO AR",

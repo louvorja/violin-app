@@ -168,7 +168,10 @@
     "take_off_title": "Quita de la pantalla solo lo que se está mostrando (canción, versículo, foto, video). La presentación sigue abierta.",
     "missing_main": "La pantalla principal se cerró — reabrir",
     "missing_stage": "se cerró — reabrir",
-    "screen_closed": "PANTALLA CERRADA"
+    "screen_closed": "PANTALLA CERRADA",
+    "screen_off": "PANTALLA APAGADA",
+    "screen_toggle_main": "Encender o apagar la pantalla principal",
+    "screen_toggle_stage": "Encender o apagar el retorno de escenario"
   },
   "stage": {
     "on_air": "AL AIRE",

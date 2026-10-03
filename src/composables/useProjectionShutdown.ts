@@ -25,8 +25,22 @@ import { nextBackgroundEpoch } from "@/presentation/BackgroundPresentationState"
  */
 const CONFIRMACAO_MS = 400;
 
+/**
+ * Janelas fechadas de propósito por quem segue no controle do conteúdo — o
+ * Modo apresentação desligando só a tela principal: o retorno continua com o
+ * mesmo vídeo, então nada do estado pode ser desfeito por esse fechamento.
+ */
+const _closingOnPurpose = new Map<string, number>();
+/** A janela avisa mais de uma vez ao fechar (ESC, beforeunload, pagehide): a marca vale por um tempo. */
+const ON_PURPOSE_MS = 5000;
+
+export function closingOnPurpose(feature: string): void {
+  _closingOnPurpose.set(feature, Date.now() + ON_PURPOSE_MS);
+}
+
 async function desligar(feature: string): Promise<void> {
   if (!feature) return;
+  if ((_closingOnPurpose.get(feature) ?? 0) > Date.now()) return;
 
   await new Promise((resolve) => setTimeout(resolve, CONFIRMACAO_MS));
   if (await isProjectionOpen(feature)) return;

@@ -209,6 +209,11 @@ export async function openMediaWindow(
     if (target.open) break;
   }
   const placeable = target.open || explicit || kind === "operator";
+  // Tela desligada pelo operador (Modo apresentação): só o pedido explícito abre.
+  const screens = _screens?.();
+  if (screens && !explicit && ((kind === "projection" && !screens.main) || (kind === "return" && !screens.stage))) {
+    return;
+  }
 
   if (kind === "return" && media !== "music") {
     if (placeable || (await isWindowOpen(PROJECTION_TYPE.RETURN))) await _close(PROJECTION_TYPE.RETURN);
@@ -227,18 +232,27 @@ async function _openOperatorIfEnabled(media: MediaKind): Promise<void> {
  * é pedido mesmo com a opção de retorno desligada, senão ele ficaria em "PRÓX 1/0" sobre o telão.
  */
 async function _wantsMediaReturn(optionOn: boolean): Promise<boolean> {
-  return optionOn || _stageReturnKept || (await isWindowOpen(PROJECTION_TYPE.RETURN));
+  const screens = _screens?.();
+  if (screens) return screens.stage;
+  return optionOn || (await isWindowOpen(PROJECTION_TYPE.RETURN));
 }
 
 /**
- * Apresentação iniciada (Modo apresentação): o retorno de palco acompanha todo
- * conteúdo, como a tela principal. Sem isto, trocar a música por um vídeo
- * fechava o retorno da música e o do vídeo só abria com a opção do player
- * ligada — o palco ficava sem nada enquanto o telão passava o vídeo.
+ * Telas ligadas pelo operador, quando um módulo as controla (Modo apresentação
+ * com a aba à vista): a tela principal e o retorno de palco acompanham todo
+ * conteúdo se ligadas, e nada abre sozinho nelas se desligadas. `null`: ninguém
+ * controla — valem as opções de cada player, como sempre.
+ *
+ * Sem isto, trocar a música por um vídeo fechava o retorno da música e o do
+ * vídeo só abria com a opção do player ligada: o palco ficava sem nada.
  */
-let _stageReturnKept = false;
-export function keepStageReturn(on: boolean): void {
-  _stageReturnKept = on;
+export interface PresentationScreens {
+  main: boolean;
+  stage: boolean;
+}
+let _screens: (() => PresentationScreens | null) | null = null;
+export function controlPresentationScreens(provider: (() => PresentationScreens | null) | null): void {
+  _screens = provider;
 }
 
 /**
@@ -256,7 +270,8 @@ async function _openProjectionWindows(): Promise<void> {
   if (await isBackgroundOpen()) return;
 
   await openMediaWindow("projection", "music");
-  if (($userdata.get(KEYS.OPTIONS.OPEN_RETURN, false) as boolean) || _stageReturnKept) {
+  const screens = _screens?.();
+  if (screens ? screens.stage : ($userdata.get(KEYS.OPTIONS.OPEN_RETURN, false) as boolean)) {
     await openMediaWindow("return", "music");
   }
   await _openOperatorIfEnabled("music");
@@ -346,11 +361,12 @@ export async function openBibleWindow(): Promise<void> {
 
   let bible = await _target(PROJECTION_TYPE.BIBLE);
   if (!bible.open) bible = await _target(PROJECTION_TYPE.MUSIC);
-  const openReturn = ($userdata.get(KEYS.MODULES.BIBLE.SHOW_RETURN, false) as boolean) || _stageReturnKept;
+  const screens = _screens?.();
+  const openReturn = screens ? screens.stage : ($userdata.get(KEYS.MODULES.BIBLE.SHOW_RETURN, false) as boolean);
   const fullscreen = $userdata.get(KEYS.OPTIONS.FULLSCREEN, true) as boolean;
   const alwaysOnTop = $userdata.get(KEYS.OPTIONS.ALWAYS_ON_TOP, true) as boolean;
 
-  if (bible.open) {
+  if (bible.open && (!screens || screens.main)) {
     await _open(PROJECTION_URL.BIBLE, PROJECTION_TYPE.BIBLE, bible.monitorId, fullscreen, alwaysOnTop);
   }
 
