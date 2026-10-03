@@ -5,6 +5,7 @@ import Telemetry from "@/helpers/Telemetry";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import {
   closeProjectionWindows,
+  keepStageReturn,
   openMediaWindow,
 } from "@/helpers/ProjectionWindows";
 import { isWebWindowOpen } from "@/helpers/projection/webWindow";
@@ -150,8 +151,12 @@ export async function startOutputs(): Promise<void> {
   _busy.value = true;
   _publish();
   try {
-    await openMediaWindow("projection", "music", { explicit: true });
-    await openMediaWindow("return", "music", { explicit: true });
+    keepStageReturn(true);
+    // Só abre a saída que falta: a janela da música por cima de um vídeo no ar
+    // cobriria o vídeo com o fundo.
+    await refreshShowing();
+    if (!_mainOpen.value) await openMediaWindow("projection", "music", { explicit: true });
+    if (!_returnOpen.value) await openMediaWindow("return", "music", { explicit: true });
     Telemetry.track("presentation_outputs_started", {});
   } catch (e) {
     Telemetry.captureException(e, { source: "presentation_mode.outputs.start" });
@@ -166,6 +171,7 @@ export async function stopOutputs(): Promise<void> {
   _busy.value = true;
   _publish();
   try {
+    keepStageReturn(false);
     await closeProjectionWindows();
     if (_cleared.value) setCleared(false);
     Telemetry.track("presentation_outputs_stopped", {});

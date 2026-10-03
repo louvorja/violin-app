@@ -2,7 +2,11 @@
   <div class="pm-video" data-testid="pm-stage-video">
     <div class="pm-video__stage">
       <!-- Áudio não vai para as saídas: o palco mostra só o que está tocando. -->
-      <div v-if="audioTitle !== undefined" class="pm-video__frame pm-video__audio" data-testid="pm-stage-audio">
+      <div
+        v-if="audioTitle !== undefined"
+        class="pm-video__frame pm-video__audio"
+        data-testid="pm-stage-audio"
+      >
         <LjIcon :icon="ICONS.MUSIC.AUDIO" :size="48" />
         <span class="pm-video__audio-title">{{ audioTitle }}</span>
         <span class="pm-video__audio-hint">{{ tm("video.audio_only") }}</span>
@@ -37,7 +41,9 @@
         data-testid="pm-video-forward"
         @click="Media.advanceTime(10)"
       />
-      <span class="pm-video__time" data-testid="pm-video-current">{{ DateTime.shortTime(shownTime) }}</span>
+      <span class="pm-video__time" data-testid="pm-video-current">
+        {{ DateTime.shortTime(shownTime) }}
+      </span>
 
       <div
         class="pm-video__timeline"
@@ -60,6 +66,15 @@
       </div>
 
       <span class="pm-video__time">{{ DateTime.shortTime(duration) }}</span>
+      <span
+        v-if="duration"
+        class="pm-video__remaining"
+        :title="tm('video.remaining_title')"
+        data-testid="pm-video-remaining"
+      >
+        −{{ DateTime.shortTime(remaining) }}
+        <span class="pm-video__ends">{{ tm("video.ends_at", { time: endsAt }) }}</span>
+      </span>
 
       <div class="pm-video__volume">
         <LjIcon :icon="volumeIcon" :size="16" class="pm-video__volume-icon" />
@@ -96,7 +111,7 @@
 
 <script setup lang="ts">
 import DateTime from "@/helpers/DateTime";
-import { computed, ref } from "vue";
+import { computed, onBeforeUnmount, ref } from "vue";
 import { LjButton, LjIcon, LjSlider } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ModuleEnum } from "@/enums/ModuleEnum";
@@ -117,7 +132,7 @@ const props = defineProps<{
   audioTitle?: string;
 }>();
 
-const { tm } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
+const { tm, locale } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
 const audio = useAudioPlayback();
 
 const duration = computed(() =>
@@ -127,7 +142,20 @@ const duration = computed(() =>
 /* Arrastar na linha do tempo mostra o ponto sob o dedo; o player só busca ao soltar. */
 const scrubTime = ref<number | null>(null);
 const shownTime = computed(() => scrubTime.value ?? audio.currentTime.value);
-const shownPercent = computed(() => (duration.value ? Math.min(100, (shownTime.value / duration.value) * 100) : 0));
+/* Quanto falta e a que horas acaba — o relógio anda mesmo com o vídeo pausado. */
+const remaining = computed(() => Math.max(0, duration.value - shownTime.value));
+const now = ref(Date.now());
+const clock = setInterval(() => (now.value = Date.now()), 1000);
+onBeforeUnmount(() => clearInterval(clock));
+const endsAt = computed(() =>
+  new Date(now.value + remaining.value * 1000).toLocaleTimeString(locale.value, {
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+);
+const shownPercent = computed(() =>
+  duration.value ? Math.min(100, (shownTime.value / duration.value) * 100) : 0
+);
 
 function timeAt(el: HTMLElement, clientX: number): number {
   const rect = el.getBoundingClientRect();
@@ -186,7 +214,6 @@ function stop(): void {
   }
   Media.close(true, false, true);
 }
-
 </script>
 
 <style scoped>
@@ -263,6 +290,25 @@ function stop(): void {
   font-variant-numeric: tabular-nums;
   color: var(--lj-text-muted);
   text-align: center;
+}
+
+.pm-video__remaining {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.15;
+  font-family: var(--lj-font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--lj-text);
+  white-space: nowrap;
+}
+
+.pm-video__ends {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--lj-text-muted);
 }
 
 /* A linha do tempo é o que encolhe primeiro quando o palco estreita. */

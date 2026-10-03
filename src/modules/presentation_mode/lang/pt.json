@@ -222,7 +222,9 @@
     "mute": "Cortar o áudio",
     "unmute": "Devolver o áudio",
     "stop": "Parar o vídeo",
-    "audio_only": "Áudio — não vai para as telas"
+    "audio_only": "Áudio — não vai para as telas",
+    "remaining_title": "Quanto falta para acabar e o horário em que acaba",
+    "ends_at": "acaba {time}"
   },
   "music": {
     "search": "Buscar por…",
