@@ -17,10 +17,12 @@ export function useMonitorRole(role: MonitorRole) {
   const { displays, roles, setRole, identify } = useDisplays();
 
   const currentId = computed(() => roles.value.find((r) => r.role === role)?.displayId ?? null);
-  const monitor = computed(() => {
-    const display = displays.value.find((d) => String(d.id) === String(currentId.value));
-    return display ? (display.number ?? null) : null;
-  });
+  const display = computed(() => displays.value.find((d) => String(d.id) === String(currentId.value)) ?? null);
+  const monitor = computed(() => (display.value ? (display.value.number ?? null) : null));
+  /** Tamanho da tela do monitor (para a visão em tela cheia da miniatura). */
+  const size = computed(() =>
+    display.value ? { width: display.value.bounds.width, height: display.value.bounds.height } : null
+  );
   const monitorLabel = computed(() =>
     monitor.value === null ? tm("outputs.no_monitor") : tm("outputs.monitor", { n: monitor.value })
   );
@@ -38,5 +40,5 @@ export function useMonitorRole(role: MonitorRole) {
     { label: tm("outputs.identify"), icon: ICONS.UI.MONITORS, action: () => void identify(3000) },
   ]);
 
-  return { monitor, monitorLabel, items };
+  return { monitor, monitorLabel, items, size };
 }

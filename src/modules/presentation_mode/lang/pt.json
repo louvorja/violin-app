@@ -171,7 +171,11 @@
     "screen_closed": "TELA FECHADA",
     "screen_off": "TELA DESLIGADA",
     "screen_toggle_main": "Ligar ou desligar a tela principal",
-    "screen_toggle_stage": "Ligar ou desligar o retorno de palco"
+    "screen_toggle_stage": "Ligar ou desligar o retorno de palco",
+    "presentation": "a apresentação",
+    "confirm_stop": "Clique novamente para parar",
+    "start_target": "Apresentar: {target}",
+    "stop_target": "Parar: {target}"
   },
   "stage": {
     "on_air": "NO AR",
@@ -410,5 +414,12 @@
   },
   "layout": {
     "resize_column": "Arraste para mudar a largura da coluna (duplo clique volta ao padrão)"
+  },
+  "zoom": {
+    "open": "Ver em tela cheia",
+    "close": "Fechar a tela cheia",
+    "width": "Largura",
+    "height": "Altura",
+    "ratio": "Proporção da tela"
   }
 }

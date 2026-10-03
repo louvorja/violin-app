@@ -1,17 +1,15 @@
 <template>
   <aside class="pm-outputs" data-testid="pm-outputs">
     <div class="pm-outputs__top">
-      <LjButton
-        class="pm-outputs__show"
-        size="lg"
-        :variant="showing ? 'danger' : 'primary'"
-        :icon="showing ? ICONS.PROJECTION.STOP : ICONS.PROJECTION.START"
-        :loading="busy"
-        data-testid="pm-outputs-toggle"
-        @click="showing ? stop() : start()"
-      >
-        {{ showing ? tm("outputs.stop") : tm("outputs.start") }}
-      </LjButton>
+      <!-- Geral: liga as duas telas; parar pede um segundo clique. -->
+      <ScreenToggle
+        :on="showing"
+        :busy="busy"
+        :label="tm('outputs.presentation')"
+        :text="{ on: tm('outputs.stop'), off: tm('outputs.start') }"
+        testid="pm-outputs-toggle"
+        @change="(on: boolean) => (on ? start() : stop())"
+      />
       <LjButton
         size="lg"
         icon-only
@@ -35,12 +33,12 @@
     <section class="pm-outputs__section">
       <!-- Cada tela: liga/desliga, nome e monitor (opção) — acima da miniatura dela. -->
       <header class="pm-outputs__label">
-        <LjSwitch
-          :model-value="screenOn.main"
-          :disabled="busy"
-          :aria-label="tm('outputs.screen_toggle_main')"
-          data-testid="pm-screen-main"
-          @update:model-value="(on: boolean) => setScreen('main', on)"
+        <ScreenToggle
+          :on="screenOn.main"
+          :busy="busy"
+          :label="tm('outputs.main_screen')"
+          testid="pm-screen-main"
+          @change="(on: boolean) => setScreen('main', on)"
         />
         <span class="pm-outputs__live" :class="{ 'pm-outputs__live--off': !screenOn.main }">
           <span class="pm-outputs__dot" />
@@ -64,7 +62,15 @@
       >
         {{ tm("outputs.missing_main") }}
       </button>
-      <div class="pm-outputs__screen">
+      <div
+        class="pm-outputs__screen"
+        role="button"
+        tabindex="0"
+        :title="tm('zoom.open')"
+        data-testid="pm-zoom-main"
+        @click="zoomed = 'main'"
+        @keydown.enter="zoomed = 'main'"
+      >
         <LiveMirror :cleared="cleared" />
         <span v-if="!screenOn.main" class="pm-outputs__closed" data-testid="pm-outputs-main-off">
           {{ tm("outputs.screen_off") }}
@@ -133,12 +139,12 @@
 
     <section class="pm-outputs__section">
       <header class="pm-outputs__label">
-        <LjSwitch
-          :model-value="screenOn.stage"
-          :disabled="busy"
-          :aria-label="tm('outputs.screen_toggle_stage')"
-          data-testid="pm-screen-stage"
-          @update:model-value="(on: boolean) => setScreen('stage', on)"
+        <ScreenToggle
+          :on="screenOn.stage"
+          :busy="busy"
+          :label="tm('outputs.stage_return')"
+          testid="pm-screen-stage"
+          @change="(on: boolean) => setScreen('stage', on)"
         />
         <span class="pm-outputs__live" :class="{ 'pm-outputs__live--off': !screenOn.stage }">
           <span class="pm-outputs__dot" />
@@ -172,7 +178,15 @@
           @click="showOnReturn(null)"
         />
       </header>
-      <div class="pm-outputs__screen">
+      <div
+        class="pm-outputs__screen"
+        role="button"
+        tabindex="0"
+        :title="tm('zoom.open')"
+        data-testid="pm-zoom-stage"
+        @click="zoomed = 'stage'"
+        @keydown.enter="zoomed = 'stage'"
+      >
         <ReturnMirror
           :cleared="cleared"
           :up-next="upNext?.title ?? ''"
@@ -190,6 +204,22 @@
         </span>
       </div>
     </section>
+
+    <!-- Clique numa miniatura: a tela em tamanho cheio, para ver de perto. -->
+    <ScreenZoom
+      v-if="zoomed"
+      :title="tm(zoomed === 'main' ? 'outputs.main_screen' : 'outputs.stage_return')"
+      :size="zoomed === 'main' ? mainRole.size.value : stageRole.size.value"
+      @close="zoomed = null"
+    >
+      <LiveMirror v-if="zoomed === 'main'" :cleared="cleared" />
+      <ReturnMirror
+        v-else
+        :cleared="cleared"
+        :up-next="upNext?.title ?? ''"
+        :override="returnOverride"
+      />
+    </ScreenZoom>
 
     <footer class="pm-upnext" :class="{ 'pm-upnext--flash': flash }" data-testid="pm-upnext">
       <span class="pm-upnext__label">
@@ -211,7 +241,8 @@
 </template>
 
 <script setup lang="ts">
-import { LjButton, LjIcon, LjMenu, LjSwitch } from "@/components/ui";
+import { ref } from "vue";
+import { LjButton, LjIcon, LjMenu } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { useModuleI18n } from "@/composables/useModuleI18n";
@@ -222,6 +253,8 @@ import ReturnMirror from "./ReturnMirror.vue";
 import { returnOverride, showOnReturn, useOutputs } from "../composables/useOutputs";
 import { KIND_ICONS } from "../program/kinds";
 import { useMonitorRole } from "../composables/useMonitorRole";
+import ScreenToggle from "./ScreenToggle.vue";
+import ScreenZoom from "./ScreenZoom.vue";
 
 defineProps<{
   upNext: ProgramItem | null;
@@ -263,6 +296,7 @@ const {
   toggleCleared,
 } = useOutputs();
 const { identify, isIdentifying } = useDisplays();
+const zoomed = ref<"main" | "stage" | null>(null);
 const mainRole = useMonitorRole("projection");
 const stageRole = useMonitorRole("stage");
 </script>
@@ -335,6 +369,7 @@ const stageRole = useMonitorRole("stage");
 /* A miniatura mostra o que está no monitor: com a tela fechada, nada. */
 .pm-outputs__screen {
   position: relative;
+  cursor: zoom-in;
 }
 
 .pm-outputs__closed {

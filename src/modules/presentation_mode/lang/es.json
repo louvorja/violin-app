@@ -171,7 +171,11 @@
     "screen_closed": "PANTALLA CERRADA",
     "screen_off": "PANTALLA APAGADA",
     "screen_toggle_main": "Encender o apagar la pantalla principal",
-    "screen_toggle_stage": "Encender o apagar el retorno de escenario"
+    "screen_toggle_stage": "Encender o apagar el retorno de escenario",
+    "presentation": "la presentación",
+    "confirm_stop": "Haz clic de nuevo para detener",
+    "start_target": "Presentar: {target}",
+    "stop_target": "Detener: {target}"
   },
   "stage": {
     "on_air": "AL AIRE",
@@ -410,5 +414,12 @@
   },
   "layout": {
     "resize_column": "Arrastra para cambiar el ancho de la columna (doble clic vuelve al predeterminado)"
+  },
+  "zoom": {
+    "open": "Ver en pantalla completa",
+    "close": "Cerrar la pantalla completa",
+    "width": "Ancho",
+    "height": "Alto",
+    "ratio": "Proporción de la pantalla"
   }
 }
