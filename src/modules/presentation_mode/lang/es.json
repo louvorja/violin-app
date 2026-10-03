@@ -407,5 +407,8 @@
     "stage_title": "Retorno de escenario: en qué monitor",
     "none": "Ninguno",
     "operator_screen": "pantalla del operador"
+  },
+  "layout": {
+    "resize_column": "Arrastra para cambiar el ancho de la columna (doble clic vuelve al predeterminado)"
   }
 }

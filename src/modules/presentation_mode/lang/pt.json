@@ -407,5 +407,8 @@
     "stage_title": "Retorno de palco: em qual monitor",
     "none": "Nenhum",
     "operator_screen": "tela do operador"
+  },
+  "layout": {
+    "resize_column": "Arraste para mudar a largura da coluna (duplo clique volta ao padrão)"
   }
 }

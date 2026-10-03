@@ -128,6 +128,10 @@ export const KEYS = {
       LIBRARY_FULL_WIDTH: `${MODULES_PRESENTATION_MODE}.library_full_width`,
       /** UserData: altura da biblioteca em px, ajustada arrastando a borda. */
       LIBRARY_HEIGHT: `${MODULES_PRESENTATION_MODE}.library_height`,
+      /** UserData: largura (px) da coluna do programa, à esquerda. */
+      PROGRAM_WIDTH: `${MODULES_PRESENTATION_MODE}.program_width`,
+      /** UserData: largura (px) da coluna das saídas, à direita. */
+      OUTPUTS_WIDTH: `${MODULES_PRESENTATION_MODE}.outputs_width`,
       /** UserData: onde a busca da aba Músicas procura — `{ name, lyric, album, track }`. */
       MUSIC_SEARCH: `${MODULES_PRESENTATION_MODE}.music_search`,
       /** UserData: aba Músicas mostra só as que têm playback. */

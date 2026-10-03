@@ -25,6 +25,8 @@ export function useClicker(actions: { navigate: (to: Step) => void; toggleBlack:
   // depois dos atalhos) passaria o slide de novo.
   type Handler = (e?: KeyboardEvent) => void;
   const own = (run: () => void): Handler => (e) => {
+    // Alça de redimensionar em foco: as setas são dela (largura e altura dos painéis).
+    if (document.activeElement?.getAttribute("role") === "separator") return;
     e?.stopImmediatePropagation();
     run();
   };

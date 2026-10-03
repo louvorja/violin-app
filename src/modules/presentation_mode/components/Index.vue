@@ -1,10 +1,21 @@
 <template>
   <ModuleContainer :manifest="manifest">
     <div
+      ref="area"
       class="pm-area"
       :class="{ 'pm-area--library-wide': libraryLayout.fullWidth.value }"
-      :style="{ '--pm-library-h': `${libraryLayout.height.value}px` }"
+      :style="{
+        '--pm-library-h': `${libraryLayout.height.value}px`,
+        '--pm-program-w': `${columns.program.value}px`,
+        '--pm-outputs-w': `${columns.outputs.value}px`,
+      }"
     >
+      <ColumnResizeHandle
+        v-for="col in ['program', 'outputs'] as const"
+        :key="col"
+        :column="col"
+        :layout="columns"
+      />
       <ProgramPanel
         :live-child-id="liveOrigin?.type === 'child' ? liveOrigin.childId : null"
         @activate="activate"
@@ -250,7 +261,6 @@ import LiveMirror from "./LiveMirror.vue";
 import $appdata from "@/helpers/AppData";
 import { KEYS } from "@/constants/UserDataKeys";
 import { useFileLibrary, type LibraryEntry } from "../composables/useFileLibrary";
-import { KIND_ICONS } from "../program/kinds";
 import Media from "@/composables/useMedia";
 import { useSlides } from "@/composables/useSlides";
 import { useLiveContent } from "../composables/useLiveContent";
@@ -276,6 +286,9 @@ import { useSeriesRecorder } from "../composables/useSeries";
 import { useClicker } from "../composables/useClicker";
 import { previewViewOf } from "../program/previewView";
 import { useLibraryLayout } from "../composables/useLibraryLayout";
+import { useColumnLayout } from "../composables/useColumnLayout";
+import { useStageHeader } from "../composables/useStageHeader";
+import ColumnResizeHandle from "./ColumnResizeHandle.vue";
 import { useProgramLiturgy } from "../composables/useProgramLiturgy";
 import { useProgramEditing } from "../composables/useProgramEditing";
 import { module as manifest } from "../manifest";
@@ -316,6 +329,8 @@ const expanded = computed(() => isModuleExpanded(moduleId));
 /* ─── Biblioteca ─── */
 
 const libraryLayout = useLibraryLayout();
+const area = ref<HTMLElement | null>(null);
+const columns = useColumnLayout(area);
 
 function toggleExpand(): void {
   toggleModuleExpanded(moduleId);
@@ -582,55 +597,6 @@ const liveProgramItem = computed(() => {
   return itemOf(origin);
 });
 
-const stageIcon = computed(() => {
-  if (stagePreview.value) return previewView.value?.icon ?? null;
-  if (!liveKind.value) return null;
-  return liveProgramItem.value ? KIND_ICONS[liveProgramItem.value.kind] : null;
-});
-
-/** O item do programa no ar; sem ele (biblioteca, outro módulo), o nome do que está na tela. */
-const stageTitle = computed(() => {
-  if (stagePreview.value) return previewView.value?.title ?? "";
-  const item = liveProgramItem.value;
-  if (item) {
-    // Pasta e momento: o item e, ao lado, o arquivo que está na tela.
-    const origin = liveOrigin.value;
-    const part =
-      origin?.type === "folderFile"
-        ? origin.entry.name
-        : origin?.type === "child"
-          ? item.children?.find((c) => c.id === origin.childId)?.title
-          : null;
-    return part ? `${item.title} · ${part}` : item.title;
-  }
-  if (audioLive.value && !liveKind.value) return audioTitle.value;
-  switch (liveKind.value) {
-    case "music":
-      return slides.title.value;
-    case "bible":
-      return live.bible.value?.reference ?? "";
-    case "file":
-      return live.file.value?.title ?? "";
-    case "online_video":
-      return live.onlineTitle.value;
-    case "announcements":
-      return live.announcement.value?.nome ?? "";
-    default:
-      return tm("panels.stage");
-  }
-});
-
-const stageMeta = computed(() => {
-  const t = stage.preview.value;
-  if (stagePreview.value && t) {
-    if (t.type === "program") return findItem(t.itemId)?.subtitle ?? "";
-    if (t.type === "song") return t.subtitle ?? "";
-    if (t.type === "online") return t.channel ?? "";
-    return "";
-  }
-  return liveKind.value ? (liveProgramItem.value?.subtitle ?? "") : "";
-});
-
 function goToSlidePrompt(): void {
   if (!showSlideGrid.value || outputLocked.value) return;
   $alert.prompt({ title: alertKey("stage.go_to_slide_title") }, (value: string | null) => {
@@ -646,6 +612,17 @@ const live = useLiveContent();
 const liveKind = live.current;
 // Tipo escondido no retorno: o retorno mostra só o fundo enquanto ele está no ar.
 useReturnBlankSync(liveKind);
+
+const { stageIcon, stageTitle, stageMeta } = useStageHeader({
+  stagePreview,
+  previewView,
+  liveKind,
+  liveOrigin,
+  liveProgramItem,
+  audioLive,
+  audioTitle,
+  findItem,
+});
 
 /** O arquivo no ar saiu da biblioteca? Então a grade o destaca. */
 const library = useFileLibrary();
@@ -821,7 +798,7 @@ useBroadcastListener(BROADCAST_TYPE.MODULE_RIBBON_ACTION, (payload) => {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 282px minmax(0, 1fr) 306px;
+  grid-template-columns: var(--pm-program-w, 282px) minmax(0, 1fr) var(--pm-outputs-w, 306px);
   grid-template-rows: minmax(150px, 1fr) auto;
   background: var(--lj-live-area-bg);
   font-size: var(--lj-text-md);
@@ -864,6 +841,11 @@ useBroadcastListener(BROADCAST_TYPE.MODULE_RIBBON_ACTION, (payload) => {
 }
 
 .pm-area--library-wide .pm-program {
+  grid-row: 1;
+}
+
+/* Biblioteca de largura total: a alça do programa só cobre a linha de cima. */
+.pm-area--library-wide > .pm-col-resize--program {
   grid-row: 1;
 }
 
