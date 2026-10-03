@@ -175,7 +175,8 @@
     "presentation": "la presentación",
     "confirm_stop": "Haz clic de nuevo para detener",
     "start_target": "Presentar: {target}",
-    "stop_target": "Detener: {target}"
+    "stop_target": "Detener: {target}",
+    "not_presenting": "NO ESTÁ PRESENTANDO"
   },
   "stage": {
     "on_air": "AL AIRE",
@@ -184,7 +185,10 @@
     "pause": "Pausar",
     "go_to_slide_title": "Ir a la diapositiva nº",
     "preview": "VISTA PREVIA",
-    "show_live": "Ver lo que está al aire"
+    "show_live": "Ver lo que está al aire",
+    "playing_not_presenting": "REPRODUCIENDO — NO ESTÁ EN LAS PANTALLAS",
+    "only_main": "solo en la pantalla principal",
+    "only_stage": "solo en el retorno"
   },
   "library": {
     "files": "Archivos",

@@ -66,8 +66,9 @@
         @keydown.enter="zoomed = 'main'"
       >
         <LiveMirror :cleared="cleared" />
-        <span v-if="!screenOn.main" class="pm-outputs__closed" data-testid="pm-outputs-main-off">
-          {{ tm("outputs.screen_off") }}
+        <!-- A tela não está desligada: só não está apresentando. A prévia continua à vista. -->
+        <span v-if="!screenOn.main" class="pm-outputs__idle" data-testid="pm-outputs-main-off">
+          {{ tm("outputs.not_presenting") }}
         </span>
         <span
           v-else-if="mainMissing"
@@ -186,8 +187,9 @@
           :up-next="upNext?.title ?? ''"
           :override="returnOverride"
         />
-        <span v-if="!screenOn.stage" class="pm-outputs__closed" data-testid="pm-outputs-stage-off">
-          {{ tm("outputs.screen_off") }}
+        <!-- A tela não está desligada: só não está apresentando. A prévia continua à vista. -->
+        <span v-if="!screenOn.stage" class="pm-outputs__idle" data-testid="pm-outputs-stage-off">
+          {{ tm("outputs.not_presenting") }}
         </span>
         <span
           v-else-if="stageMissing"
@@ -363,6 +365,25 @@ const stageRole = useMonitorRole("stage");
 .pm-outputs__screen {
   position: relative;
   cursor: zoom-in;
+}
+
+.pm-outputs__idle {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  padding: 1px 6px;
+  border: 1px solid var(--lj-orange);
+  border-radius: 3px;
+  background: var(--lj-black-alpha-75);
+  color: var(--lj-orange);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  pointer-events: none;
+}
+
+.pm-outputs__screen:has(.pm-outputs__idle) > :first-child {
+  opacity: 0.55;
 }
 
 .pm-outputs__closed {

@@ -76,6 +76,7 @@ const _returnOpen = ref(false);
  */
 export type Screen = "main" | "stage";
 const _on = ref<Record<Screen, boolean>>({ main: false, stage: false });
+export { _on as screenOn };
 const _presenting = computed(() => _on.value.main || _on.value.stage);
 const _showing = _presenting;
 

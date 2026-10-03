@@ -175,7 +175,8 @@
     "presentation": "a apresentação",
     "confirm_stop": "Clique novamente para parar",
     "start_target": "Apresentar: {target}",
-    "stop_target": "Parar: {target}"
+    "stop_target": "Parar: {target}",
+    "not_presenting": "NÃO ESTÁ APRESENTANDO"
   },
   "stage": {
     "on_air": "NO AR",
@@ -184,7 +185,10 @@
     "pause": "Pausar",
     "go_to_slide_title": "Ir para o slide nº",
     "preview": "PRÉVIA",
-    "show_live": "Ver o que está no ar"
+    "show_live": "Ver o que está no ar",
+    "playing_not_presenting": "TOCANDO — NÃO ESTÁ NAS TELAS",
+    "only_main": "só na tela principal",
+    "only_stage": "só no retorno"
   },
   "library": {
     "files": "Arquivos",

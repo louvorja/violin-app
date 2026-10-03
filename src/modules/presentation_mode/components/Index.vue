@@ -42,9 +42,17 @@
           <span v-if="stagePreview" class="pm-preview-badge" data-testid="pm-stage-badge">
             {{ tm("stage.preview") }}
           </span>
-          <span v-else-if="onAir" class="pm-on-air" data-testid="pm-stage-badge">
+          <!-- Reproduzir não é apresentar: o selo diz se está nas telas, e em quais. -->
+          <span
+            v-else-if="onAir && (screenOn.main || screenOn.stage)"
+            class="pm-on-air"
+            data-testid="pm-stage-badge"
+          >
             <span class="pm-on-air__dot" />
-            {{ tm("stage.on_air") }}
+            {{ tm("stage.on_air") }}{{ onAirWhere }}
+          </span>
+          <span v-else-if="onAir" class="pm-playing-only" data-testid="pm-stage-badge">
+            {{ tm("stage.playing_not_presenting") }}
           </span>
           <LjIcon v-if="stageIcon" :icon="stageIcon" :size="14" />
           <span class="pm-bar__title" data-testid="pm-stage-title">{{ stageTitle }}</span>
@@ -271,6 +279,7 @@ import { useLiveContent } from "../composables/useLiveContent";
 import {
   cleared,
   returnOverride,
+  screenOn,
   setCleared,
   showOnReturn,
   startOutputs,
@@ -457,6 +466,12 @@ const audioLive = computed(
 );
 const audioTitle = computed(() => $appdata.get<string>(KEYS.MODULES.MEDIA.CONFIG.TITLE, "") ?? "");
 const onAir = computed(() => !!liveKind.value || audioLive.value);
+/** Apresentando em uma tela só: o selo "no ar" diz qual. */
+const onAirWhere = computed(() =>
+  screenOn.value.main && screenOn.value.stage
+    ? ""
+    : ` · ${tm(screenOn.value.main ? "stage.only_main" : "stage.only_stage")}`
+);
 
 const liveSongId = computed(() => {
   const id = Number(slides.slides.value[0]?.id_music);
@@ -894,6 +909,18 @@ useBroadcastListener(BROADCAST_TYPE.MODULE_RIBBON_ACTION, (payload) => {
   border: 1px solid var(--lj-navy-active);
   border-radius: 3px;
   color: var(--lj-text);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+/* Tocando sem apresentar: âmbar, para não ser confundido com o "no ar". */
+.pm-playing-only {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border: 1px solid var(--lj-orange);
+  border-radius: 3px;
+  color: var(--lj-orange);
   font-size: 9.5px;
   font-weight: 700;
   letter-spacing: 0.5px;
