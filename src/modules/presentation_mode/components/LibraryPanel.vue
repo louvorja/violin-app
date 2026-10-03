@@ -56,8 +56,10 @@
     <LibraryOnline
       v-else-if="tab === 'online'"
       :live-video-id="liveVideoId"
+      :return-path="returnPath"
       v-bind="relay"
       @stop="emit('stop')"
+      @show-on-return="(t: Playable | null) => emit('show-on-return', t)"
     />
     <LibraryBible v-else-if="tab === 'bible'" :live="liveBible" v-bind="relay" />
     <LibraryFiles
@@ -66,7 +68,9 @@
       :return-path="returnPath"
       v-bind="relay"
       @stop="emit('stop')"
-      @show-on-return="(e: LibraryEntry | null) => emit('show-on-return', e)"
+      @show-on-return="
+        (e: LibraryEntry | null) => emit('show-on-return', e && { type: 'file', entry: e })
+      "
     />
   </section>
 </template>
@@ -111,7 +115,7 @@ const emit = defineEmits<{
   add: [item: ProgramItem];
   stop: [];
   /** Imagem ou vídeo só no retorno de palco; `null` tira. */
-  "show-on-return": [entry: LibraryEntry | null];
+  "show-on-return": [target: Playable | null];
 }>();
 
 /** O que toda aba repassa sem tocar: as três ações comuns. */

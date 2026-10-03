@@ -2,10 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, h, nextTick } from "vue";
 import { mount } from "@vue/test-utils";
 
-const registered = vi.hoisted(() => new Map<string, () => void>());
+const registered = vi.hoisted(() => new Map<string, (e?: KeyboardEvent) => void>());
 vi.mock("@/helpers/Hotkeys", () => ({
   default: {
-    register: (combo: string, handler: () => void) => registered.set(combo, handler),
+    register: (combo: string, handler: (e?: KeyboardEvent) => void) => registered.set(combo, handler),
     unregister: (combo: string) => registered.delete(combo),
   },
 }));
@@ -35,6 +35,15 @@ describe("useClicker", () => {
     registered.get("b")!();
     registered.get(".")!();
     expect(toggleBlack).toHaveBeenCalledTimes(2);
+  });
+
+  it("a tecla é só do passador: nenhum outro ouvinte passa o slide de novo", () => {
+    const navigate = vi.fn();
+    mount(defineComponent({ setup: () => (useClicker({ navigate, toggleBlack: vi.fn() }), () => h("div")) }));
+    const event = { stopImmediatePropagation: vi.fn() } as unknown as KeyboardEvent;
+    registered.get("ArrowRight")!(event);
+    expect(event.stopImmediatePropagation).toHaveBeenCalled();
+    expect(navigate).toHaveBeenCalledTimes(1);
   });
 
   it("solta as teclas quando outra aba fica à vista, e ao fechar o módulo", async () => {

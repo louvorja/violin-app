@@ -202,6 +202,7 @@ import PdfStage from "./PdfStage.vue";
 import { isDeck, usePdfDeck } from "../composables/usePdfDeck";
 import { preparePowerPoint } from "../composables/usePowerPoint";
 import { takeOffAir } from "../composables/takeOffAir";
+import { returnOverrideFor } from "../composables/returnTarget";
 import { useStage } from "../composables/useStage";
 import {
   expectationOf,
@@ -214,7 +215,7 @@ import LibraryPanel, { type LibraryTab } from "./LibraryPanel.vue";
 import LiveMirror from "./LiveMirror.vue";
 import $appdata from "@/helpers/AppData";
 import { KEYS } from "@/constants/UserDataKeys";
-import { useFileLibrary, type LibraryEntry } from "../composables/useFileLibrary";
+import { useFileLibrary } from "../composables/useFileLibrary";
 import { KIND_ICONS } from "../program/kinds";
 import Media from "@/composables/useMedia";
 import { useSlides } from "@/composables/useSlides";
@@ -235,8 +236,6 @@ import {
   useProgramExecution,
 } from "../composables/useProgramExecution";
 import type { MusicMode } from "../program/musicModes";
-import $path from "@/helpers/Path";
-import { kindFromPath } from "../program/liturgy";
 import { itemVideoId, openOnline, useOnlineQueue } from "../composables/useOnlinePlayback";
 import { useOnlinePrefetch } from "../composables/useOnlinePrefetch";
 import { useSeriesRecorder } from "../composables/useSeries";
@@ -463,31 +462,17 @@ function playPreview(slideIndex = 0, mode: MusicMode = "sung"): void {
   if (t) dispatch(t, { slideIndex, mode });
 }
 
-function onShowOnReturn(entry: LibraryEntry | null): void {
-  if (!entry) {
-    void showOnReturn(null);
-    return;
-  }
-  const type = kindFromPath(entry.path);
-  if (type !== "image" && type !== "video") return;
-  void showOnReturn({ type, url: $path.local(entry.path), title: entry.name, path: entry.path });
+/** Foto ou vídeo só no retorno de palco (biblioteca, programa, YouTube); `null` tira. */
+async function onShowOnReturn(target: Playable | null): Promise<void> {
+  if (!target) return showOnReturn(null);
+  const item =
+    target.type === "program" || target.type === "child" ? findItem(target.itemId) : null;
+  const override = await returnOverrideFor(target, item);
+  if (override) await showOnReturn(override);
 }
 
 function playPreviewOnReturn(): void {
-  const t = stage.preview.value;
-  if (t?.type === "file") onShowOnReturn(t.entry);
-  else if (t?.type === "program") {
-    const dir = findItem(t.itemId)?.source?.dir;
-    if (dir)
-      onShowOnReturn({
-        name: dir.split(/[\\/]/).pop() ?? dir,
-        path: dir,
-        isDir: false,
-        ext: "",
-        size: 0,
-        mtimeMs: 0,
-      });
-  }
+  if (stage.preview.value) void onShowOnReturn(stage.preview.value);
 }
 
 function focusLive(): void {

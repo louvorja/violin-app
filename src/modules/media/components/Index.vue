@@ -180,6 +180,8 @@ import { ICONS } from "@/config/Icons";
 import Modules from "@/helpers/Modules";
 import UserData from "@/helpers/UserData";
 import AppData from "@/helpers/AppData";
+import { KEYS } from "@/constants/UserDataKeys";
+import { ModuleEnum } from "@/enums/ModuleEnum";
 import Media from "@/composables/useMedia";
 import { useFileProjection } from "@/composables/useFileProjection";
 import Path from "@/helpers/Path";
@@ -399,6 +401,12 @@ function _onKeyNav(e) {
   if (!module_.value?.show && !module_.value?.minimized) return;
   // Não intercepta quando anúncios/projeção de arquivos está ativa.
   if (useFileProjection().isProjecting.value) return;
+  // No Modo apresentação o passador do módulo é quem passa: tratar aqui também
+  // avançava dois slides a cada tecla.
+  if (AppData.get(KEYS.SHELL.ACTIVE_MODULE, "") === ModuleEnum.PRESENTATION_MODE) return;
+  // No Modo apresentação o passador do módulo é quem passa: tratar aqui também
+  // avançava dois slides a cada tecla.
+  if (AppData.get(KEYS.SHELL.ACTIVE_MODULE, "") === ModuleEnum.PRESENTATION_MODE) return;
   if (e.ctrlKey || e.metaKey || e.altKey) return; // deixa Ctrl+arrow etc passar
   if (_isInTextField()) return;
 

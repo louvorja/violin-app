@@ -248,6 +248,7 @@ import type { ProgramItem } from "@/types/Presentation";
 import { onlineItem } from "../program/items";
 import type { Playable } from "../program/playable";
 import { onlinePlayable } from "../composables/useOnlinePlayback";
+import { onlineReturnPath } from "../composables/returnTarget";
 import {
   useOnlineLibrary,
   VIDEOS,
@@ -263,12 +264,17 @@ import {
  * mais antigo, e a lista continua ao rolar até o fim.
  */
 
-defineProps<{ liveVideoId: string | null }>();
+const props = defineProps<{
+  liveVideoId: string | null;
+  /** O que está só no retorno de palco (`youtube:<id>` para vídeo on-line). */
+  returnPath: string | null;
+}>();
 const emit = defineEmits<{
   preview: [playable: Playable];
   play: [playable: Playable];
   add: [item: ProgramItem];
   stop: [];
+  "show-on-return": [target: Playable | null];
 }>();
 
 const { tm, locale } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
@@ -292,6 +298,17 @@ function menuFor(video: OnlineEntry): LjMenuItem[] {
       icon: ICONS.PLAYER.PLAY,
       action: () => emit("play", onlinePlayable(video)),
     },
+    props.returnPath === onlineReturnPath(video.id)
+      ? {
+          label: tm("library.remove_from_return"),
+          icon: ICONS.PROJECTION.RETURN,
+          action: () => emit("show-on-return", null),
+        }
+      : {
+          label: tm("library.play_on_return"),
+          icon: ICONS.PROJECTION.RETURN,
+          action: () => emit("show-on-return", onlinePlayable(video)),
+        },
     {
       label: tm("library.add_to_program"),
       icon: ICONS.ACTIONS.ADD,

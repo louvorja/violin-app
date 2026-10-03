@@ -21,13 +21,20 @@ const PREV = ["PageUp", "ArrowLeft", "ArrowUp"];
 const BLACK = ["b", "."];
 
 export function useClicker(actions: { navigate: (to: Step) => void; toggleBlack: () => void }): void {
-  const next = () => actions.navigate("next");
-  const prev = () => actions.navigate("prev");
-  const black = () => actions.toggleBlack();
-  const bindings: [string, () => void, string][] = [
-    ...NEXT.map((k): [string, () => void, string] => [k, next, "hotkeys.presentation_next"]),
-    ...PREV.map((k): [string, () => void, string] => [k, prev, "hotkeys.presentation_prev"]),
-    ...BLACK.map((k): [string, () => void, string] => [k, black, "hotkeys.presentation_black"]),
+  // A tecla é só daqui: outro ouvinte na janela (o player de músicas montado
+  // depois dos atalhos) passaria o slide de novo.
+  type Handler = (e?: KeyboardEvent) => void;
+  const own = (run: () => void): Handler => (e) => {
+    e?.stopImmediatePropagation();
+    run();
+  };
+  const next = own(() => actions.navigate("next"));
+  const prev = own(() => actions.navigate("prev"));
+  const black = own(() => actions.toggleBlack());
+  const bindings: [string, Handler, string][] = [
+    ...NEXT.map((k): [string, Handler, string] => [k, next, "hotkeys.presentation_next"]),
+    ...PREV.map((k): [string, Handler, string] => [k, prev, "hotkeys.presentation_prev"]),
+    ...BLACK.map((k): [string, Handler, string] => [k, black, "hotkeys.presentation_black"]),
   ];
 
   let registered = false;
