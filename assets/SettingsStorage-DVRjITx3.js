@@ -1,0 +1,3 @@
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{};e._posthogReleaseId=e._posthogReleaseId||"01a101a7-8906-0000-a081-1cefe2810e27";var n=(new e.Error).stack;n&&(e._posthogChunkIds=e._posthogChunkIds||{},e._posthogChunkIds[n]="c5bfcc88-452a-5b86-b63c-83d645fe0ae0")}catch(e){}}();import{e as n,D as s}from"./BootOrchestrator-CblSriUT.js";const a=s.SETTINGS;async function i(t){return n.get(a,t)}async function o(t){await n.put(a,t)}export{i as g,o as s};
+
+//# chunkId=c5bfcc88-452a-5b86-b63c-83d645fe0ae0

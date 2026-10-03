@@ -1,0 +1,3 @@
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{};e._posthogReleaseId=e._posthogReleaseId||"01a101a7-8906-0000-a081-1cefe2810e27";var n=(new e.Error).stack;n&&(e._posthogChunkIds=e._posthogChunkIds||{},e._posthogChunkIds[n]="84341332-4f7d-5a8f-9954-9296370be644")}catch(e){}}();const t="Letra",a="Muestra la letra de la canción (función $media.openLyric)",e="Pista",c={title:t,description:a,track:e};export{c as default,a as description,t as title,e as track};
+
+//# chunkId=84341332-4f7d-5a8f-9954-9296370be644
