@@ -165,7 +165,10 @@
     "nothing_next": "Fim do programa.",
     "return_only": "SÓ NO RETORNO",
     "take_off": "Tirar do ar",
-    "take_off_title": "Tira da tela só o que está passando (música, versículo, foto, vídeo). A apresentação continua aberta."
+    "take_off_title": "Tira da tela só o que está passando (música, versículo, foto, vídeo). A apresentação continua aberta.",
+    "missing_main": "A tela principal fechou — reabrir",
+    "missing_stage": "fechou — reabrir",
+    "screen_closed": "TELA FECHADA"
   },
   "stage": {
     "on_air": "NO AR",
@@ -391,5 +394,11 @@
       "online_video": "Vídeos on-line",
       "bible": "Bíblia"
     }
+  },
+  "monitors": {
+    "main_title": "Tela principal: em qual monitor",
+    "stage_title": "Retorno de palco: em qual monitor",
+    "none": "Nenhum",
+    "operator_screen": "tela do operador"
   }
 }

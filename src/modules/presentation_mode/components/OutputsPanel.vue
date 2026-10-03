@@ -40,7 +40,21 @@
         </span>
         <span class="pm-outputs__where">{{ screenLabel("outputs.main_screen", mainMonitor) }}</span>
       </header>
-      <LiveMirror :cleared="cleared" />
+      <button
+        v-if="mainMissing && mainMonitor !== null"
+        type="button"
+        class="pm-outputs__missing"
+        data-testid="pm-outputs-main-missing"
+        @click="reopen()"
+      >
+        {{ tm("outputs.missing_main") }}
+      </button>
+      <div class="pm-outputs__screen">
+        <LiveMirror :cleared="cleared" />
+        <span v-if="mainMissing" class="pm-outputs__closed" data-testid="pm-outputs-main-closed">
+          {{ tm("outputs.screen_closed") }}
+        </span>
+      </div>
       <div class="pm-outputs__nav">
         <LjButton
           icon-only
@@ -102,6 +116,15 @@
           {{ tm("outputs.stage_return") }}
         </span>
         <span class="pm-outputs__where">{{ monitorLabel(stageMonitor) }}</span>
+        <button
+          v-if="stageMissing && stageMonitor !== null"
+          type="button"
+          class="pm-outputs__missing pm-outputs__missing--inline"
+          data-testid="pm-outputs-stage-missing"
+          @click="reopen()"
+        >
+          {{ tm("outputs.missing_stage") }}
+        </button>
         <LjButton
           v-if="returnOverride"
           size="sm"
@@ -113,7 +136,16 @@
           @click="showOnReturn(null)"
         />
       </header>
-      <ReturnMirror :cleared="cleared" :up-next="upNext?.title ?? ''" :override="returnOverride" />
+      <div class="pm-outputs__screen">
+        <ReturnMirror
+          :cleared="cleared"
+          :up-next="upNext?.title ?? ''"
+          :override="returnOverride"
+        />
+        <span v-if="stageMissing" class="pm-outputs__closed" data-testid="pm-outputs-stage-closed">
+          {{ tm("outputs.screen_closed") }}
+        </span>
+      </div>
     </section>
 
     <footer class="pm-upnext" :class="{ 'pm-upnext--flash': flash }" data-testid="pm-upnext">
@@ -171,8 +203,19 @@ const emit = defineEmits<{
 }>();
 
 const { tm } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
-const { cleared, showing, busy, mainMonitor, stageMonitor, start, stop, toggleCleared } =
-  useOutputs();
+const {
+  cleared,
+  showing,
+  busy,
+  mainMonitor,
+  stageMonitor,
+  mainMissing,
+  stageMissing,
+  start,
+  stop,
+  reopen,
+  toggleCleared,
+} = useOutputs();
 const { identify, isIdentifying } = useDisplays();
 
 function monitorLabel(n: number | null): string {
@@ -247,6 +290,42 @@ function screenLabel(key: string, n: number | null): string {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+}
+
+/* A miniatura mostra o que está no monitor: com a tela fechada, nada. */
+.pm-outputs__screen {
+  position: relative;
+}
+
+.pm-outputs__closed {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--lj-radius-sm);
+  background: var(--lj-black-alpha-75);
+  color: var(--lj-white);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+}
+
+/* Tela que sumiu com a apresentação iniciada: o aviso já é o botão de reabrir. */
+.pm-outputs__missing {
+  padding: 4px 8px;
+  border: 1px solid var(--lj-danger);
+  border-radius: var(--lj-radius-sm);
+  background: transparent;
+  color: var(--lj-danger);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pm-outputs__missing--inline {
+  padding: 1px 6px;
+  font-size: 10px;
 }
 
 .pm-outputs__where {

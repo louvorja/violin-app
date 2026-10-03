@@ -14,6 +14,7 @@ import { KEYS } from "@/constants/UserDataKeys";
 import $appdata from "@/helpers/AppData";
 import { useDisplays } from "@/composables/useDisplays";
 import { useReturnPlayer } from "./useReturnPlayer";
+import { useLiveContent } from "./useLiveContent";
 
 /**
  * As duas saídas do Modo apresentação: a tela principal e o retorno de palco.
@@ -65,7 +66,18 @@ const _returnOverride = ref<ReturnOverride | null>(null);
 export { _returnOverride as returnOverride };
 const _mainOpen = ref(false);
 const _returnOpen = ref(false);
-const _showing = computed(() => _mainOpen.value || _returnOpen.value);
+/**
+ * A apresentação está iniciada: estado do operador, mudado só por Iniciar e
+ * Parar. As janelas são o efeito — trocar a música por um vídeo fecha uma e
+ * abre outra, e isso não pode parecer ao operador que a apresentação parou.
+ */
+const _presenting = ref(false);
+const _showing = computed(() => _presenting.value);
+/** Janela que sumiu com a apresentação iniciada (Esc no telão, monitor desligado). */
+const _mainMissing = ref(false);
+const _stageMissing = ref(false);
+/** Leituras seguidas sem a janela: uma só é a troca de conteúdo no meio. */
+let _missingStreak = { main: 0, stage: 0 };
 const _busy = ref(false);
 let _responderInstalled = false;
 
@@ -110,16 +122,53 @@ async function _openFeatures(): Promise<string[]> {
  */
 function _publish(): void {
   const idle = !_busy.value;
-  $appdata.set(KEYS.MODULES.PRESENTATION_MODE.CAN_START, idle && !(_mainOpen.value && _returnOpen.value));
-  $appdata.set(KEYS.MODULES.PRESENTATION_MODE.CAN_STOP, idle && _showing.value);
-  $appdata.set(KEYS.MODULES.PRESENTATION_MODE.CAN_CLEAR, _showing.value && !_cleared.value);
+  $appdata.set(KEYS.MODULES.PRESENTATION_MODE.CAN_START, idle && !_presenting.value);
+  $appdata.set(KEYS.MODULES.PRESENTATION_MODE.CAN_STOP, idle && _presenting.value);
+  $appdata.set(KEYS.MODULES.PRESENTATION_MODE.CAN_CLEAR, _presenting.value && !_cleared.value);
 }
+
+const MISSING_AFTER_READS = 2;
 
 export async function refreshShowing(): Promise<void> {
   const open = await _openFeatures();
   _mainOpen.value = MAIN_SCREEN_FEATURES.some((f) => open.includes(f));
   _returnOpen.value = RETURN_FEATURES.some((f) => open.includes(f));
+  // Tela aberta sem o Iniciar (o módulo recarregou, ou algo foi ao ar e abriu
+  // as telas sozinho): a apresentação está, de fato, iniciada.
+  if (!_presenting.value && !_busy.value && (_mainOpen.value || _returnOpen.value)) _setPresenting(true);
+  if (_presenting.value && !_busy.value) {
+    _missingStreak = {
+      main: _mainOpen.value ? 0 : _missingStreak.main + 1,
+      stage: _returnOpen.value ? 0 : _missingStreak.stage + 1,
+    };
+    _mainMissing.value = _missingStreak.main >= MISSING_AFTER_READS;
+    _stageMissing.value = _missingStreak.stage >= MISSING_AFTER_READS;
+    // As duas telas sumiram (Esc no telão): o operador encerrou por lá.
+    if (_mainMissing.value && _stageMissing.value) _setPresenting(false);
+  }
   _publish();
+}
+
+function _setPresenting(on: boolean): void {
+  _presenting.value = on;
+  keepStageReturn(on);
+  _missingStreak = { main: 0, stage: 0 };
+  _mainMissing.value = false;
+  _stageMissing.value = false;
+}
+
+/** As janelas do que está no ar: o vídeo reabre as do arquivo, não as da música. */
+function _liveMedia(): "music" | "file" | "video" {
+  const kind = useLiveContent().current.value;
+  return kind === "file" || kind === "announcements" ? "file" : kind === "online_video" ? "video" : "music";
+}
+
+/** Reabre a tela que sumiu, sem cobrir a que está no ar. */
+async function _openMissing(): Promise<void> {
+  await refreshShowing();
+  const media = _liveMedia();
+  if (!_mainOpen.value) await openMediaWindow("projection", media, { explicit: true });
+  if (!_returnOpen.value) await openMediaWindow("return", media, { explicit: true });
 }
 
 /** O retorno esconde o que está no ar (o tipo foi ocultado no retorno): fica o fundo. */
@@ -177,12 +226,10 @@ export async function startOutputs(): Promise<void> {
   _busy.value = true;
   _publish();
   try {
-    keepStageReturn(true);
+    _setPresenting(true);
     // Só abre a saída que falta: a janela da música por cima de um vídeo no ar
     // cobriria o vídeo com o fundo.
-    await refreshShowing();
-    if (!_mainOpen.value) await openMediaWindow("projection", "music", { explicit: true });
-    if (!_returnOpen.value) await openMediaWindow("return", "music", { explicit: true });
+    await _openMissing();
     Telemetry.track("presentation_outputs_started", {});
   } catch (e) {
     Telemetry.captureException(e, { source: "presentation_mode.outputs.start" });
@@ -197,7 +244,7 @@ export async function stopOutputs(): Promise<void> {
   _busy.value = true;
   _publish();
   try {
-    keepStageReturn(false);
+    _setPresenting(false);
     await closeProjectionWindows();
     if (_cleared.value) setCleared(false);
     Telemetry.track("presentation_outputs_stopped", {});
@@ -205,6 +252,22 @@ export async function stopOutputs(): Promise<void> {
     Telemetry.captureException(e, { source: "presentation_mode.outputs.stop" });
   } finally {
     _busy.value = false;
+    await refreshShowing();
+  }
+}
+
+/** Reabre a tela que sumiu durante a apresentação. */
+export async function reopenOutputs(): Promise<void> {
+  if (_busy.value) return;
+  _busy.value = true;
+  try {
+    await _openMissing();
+    Telemetry.track("presentation_outputs_reopened", { main: _mainMissing.value, stage: _stageMissing.value });
+  } catch (e) {
+    Telemetry.captureException(e, { source: "presentation_mode.outputs.reopen" });
+  } finally {
+    _busy.value = false;
+    _missingStreak = { main: 0, stage: 0 };
     await refreshShowing();
   }
 }
@@ -243,8 +306,11 @@ export function useOutputs() {
     busy: _busy,
     mainMonitor,
     stageMonitor,
+    mainMissing: _mainMissing,
+    stageMissing: _stageMissing,
     start: startOutputs,
     stop: stopOutputs,
+    reopen: reopenOutputs,
     toggleCleared: () => setCleared(!_cleared.value),
   };
 }

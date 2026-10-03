@@ -1,3 +1,4 @@
+import { defineAsyncComponent } from "vue"
 import type { Module } from "@/types/Module"
 import type { RibbonPage } from "@/types/Ribbon"
 import { ModuleCategoryEnum } from "@/enums/ModuleCategoryEnum"
@@ -6,7 +7,8 @@ import { ICONS } from "@/config/Icons"
 import { ModuleEnum } from "@/enums/ModuleEnum"
 import { getModulePath } from "@/helpers/ModulePath"
 import { KEYS } from "@/constants/UserDataKeys"
-import { PROJECTION_TYPE, PROJECTION_URL } from "@/constants/Projection"
+
+const MonitorRolesGroup = defineAsyncComponent(() => import("./components/MonitorRolesGroup.vue"));
 
 const moduleId = ModuleEnum.PRESENTATION_MODE;
 const modulePath = getModulePath(moduleId);
@@ -84,10 +86,9 @@ export const contextualPages: RibbonPage[] = [
       {
         id: `${moduleCtxId}_outputs`,
         title: "ribbon.groups.outputs",
-        buttons: [
-          { id: `${moduleId}_main_screen`, type: "screen", feature: PROJECTION_TYPE.MUSIC, route: PROJECTION_URL.MUSIC, icon: ICONS.PROJECTION.SCREEN_OUTLINE, label: `${btn}.main_screen`, labelActive: `${btn}.stop_main_screen`, color: "#1b4f8a" },
-          { id: `${moduleId}_stage_return`, type: "screen", feature: PROJECTION_TYPE.RETURN, route: PROJECTION_URL.RETURN, icon: ICONS.PROJECTION.RETURN, label: `${btn}.stage_return`, labelActive: `${btn}.stop_stage_return`, color: "#1b4f8a" },
-        ],
+        // Opção (qual monitor é cada tela), não estado: ligar e desligar é o Iniciar/Parar.
+        customCategory: MonitorRolesGroup,
+        buttons: [],
       },
       {
         id: `${moduleCtxId}_library`,

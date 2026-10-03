@@ -165,7 +165,10 @@
     "nothing_next": "Fin del programa.",
     "return_only": "SOLO EN EL RETORNO",
     "take_off": "Quitar del aire",
-    "take_off_title": "Quita de la pantalla solo lo que se está mostrando (canción, versículo, foto, video). La presentación sigue abierta."
+    "take_off_title": "Quita de la pantalla solo lo que se está mostrando (canción, versículo, foto, video). La presentación sigue abierta.",
+    "missing_main": "La pantalla principal se cerró — reabrir",
+    "missing_stage": "se cerró — reabrir",
+    "screen_closed": "PANTALLA CERRADA"
   },
   "stage": {
     "on_air": "AL AIRE",
@@ -391,5 +394,11 @@
       "online_video": "Videos en línea",
       "bible": "Biblia"
     }
+  },
+  "monitors": {
+    "main_title": "Pantalla principal: en qué monitor",
+    "stage_title": "Retorno de escenario: en qué monitor",
+    "none": "Ninguno",
+    "operator_screen": "pantalla del operador"
   }
 }
