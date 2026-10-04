@@ -545,6 +545,17 @@ $storage.hydrate().then(async () => {
           );
         }
         Telemetry.track("presentation_remote_command_rejected", { action, reason });
+        // No terminal da máquina do operador. Sem isto, "o comando chega no
+        // servidor e não acontece" é indistinguível de "chega e é aplicado":
+        // o POST já respondeu 200 antes do renderer decidir, e a telemetria
+        // só existe para quem tem acesso a ela.
+        console.warn("[projection] comando remoto descartado", {
+          action,
+          reason,
+          sessionEnviada: session ?? "(nenhuma)",
+          sessaoAtual: current?.sessionId ?? "(nenhuma)",
+          musicaAtiva: !!current?.active,
+        });
       }
       return false;
     }

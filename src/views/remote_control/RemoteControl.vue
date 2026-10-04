@@ -64,11 +64,10 @@
       <!-- Tab Slides (Controle) -->
       <div v-if="isBooted('slides')" v-show="tab === 'slides'" class="rc-pane">
         <remote-slides
-          v-model:current-slide-index="currentSlideIndex"
-          :token="token"
           :slides="slides"
+          :current-slide-index="currentSlideIndex"
           :current-title="currentTitle"
-          @show-snackbar="showSnackbar"
+          @go-to-slide="goToSlide"
         />
       </div>
 
@@ -312,12 +311,30 @@ watch(tab, (newTab) => {
 });
 
 // --- Slides ---
+/** Mesmo teto que o servidor aceita devolver; acima disso é resposta fora do contrato. */
+const SLIDE_STATE_MAX_SLIDES = 10_000;
 const slides = ref([]);
 const currentSlideIndex = ref(0);
 const currentTitle = ref("");
 let canonicalSelection = null;
 let pendingSessionSlides = null;
 const retiredCanonicalSessions = new Set();
+
+/**
+ * Sessão observada por consulta direta (`playing-check`).
+ *
+ * Deliberadamente separada de `canonicalSelection`: aquele guarda revisão e
+ * revisão de seleção para ordenar snapshots, e o endpoint de consulta não
+ * devolve nenhum dos dois. Preenchê-lo com `0/0` faria o cliente descartar o
+ * próximo snapshot verdadeiro. Esta aqui só existe para anexar a sessão aos
+ * comandos — que é o que o guard do desktop exige para não descartar.
+ */
+const observedSession = ref(null);
+
+function commandSession() {
+  return canonicalSelection?.session || observedSession.value || null;
+}
+
 function retireCanonical(session) {
   retiredCanonicalSessions.delete(session);
   retiredCanonicalSessions.add(session);
@@ -534,22 +551,22 @@ function prevSlide() {
 
 function goToSlide(index) {
   currentSlideIndex.value = index;
+  const session = commandSession();
   const command = { action: "go-to-slide", index };
-  if (canonicalSelection?.session) command.presentation_session = canonicalSelection.session;
+  if (session) command.presentation_session = session;
   postApi("/api/song-slides", command, token.value).catch(() =>
     showSnackbar(t("remote_control.slides.error_change"), "error")
   );
 }
 
 async function closeMedia() {
+  const session = commandSession();
   try {
     await postApi(
       "/api/song-slides",
       {
         action: "close",
-        ...(canonicalSelection?.session
-          ? { presentation_session: canonicalSelection.session }
-          : {}),
+        ...(session ? { presentation_session: session } : {}),
       },
       token.value
     );
@@ -587,10 +604,69 @@ async function annStop() {
   }
 }
 
+/**
+ * Estado dos slides por consulta, não por push.
+ *
+ * A aba Slides era só escuta: depend inteiramente do `music_presentation_snapshot`
+ * que chega por SSE. Quando esse fluxo morre — e o `EventSource` falha de forma
+ * permanente em qualquer erro de HTTP, sem reconectar — a aba fica vazia e, sem
+ * sessão, o desktop descarta todo comando. O servidor já respondia a
+ * `playing-check` justamente para este caso, e nenhum cliente o usava.
+ *
+ * A resposta é validate em runtime antes de entrar na tela: é rede.
+ */
+async function refreshSlidesState() {
+  try {
+    const url = `/api/song-slides?action=playing-check${token.value ? `&token=${token.value}` : ""}`;
+    const res = await apiFetch(url);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!isSlideStateReply(data)) return;
+
+    if (!data.playing) {
+      // O desktop é a autoridade: se ele não tem apresentação, a aba limpa.
+      slides.value = [];
+      currentSlideIndex.value = 0;
+      currentTitle.value = "";
+      observedSession.value = null;
+      return;
+    }
+    slides.value = data.slides;
+    currentSlideIndex.value = data.currentSlideIndex;
+    currentTitle.value = data.title;
+    observedSession.value = data.presentation_session || null;
+  } catch (error) {
+    console.warn("[remote_control] não foi possível consultar os slides:", error?.message || error);
+  }
+}
+
+/** Espelha o que o servidor aceita devolver; o que não bate, não entra na tela. */
+function isSlideStateReply(data) {
+  return (
+    !!data &&
+    typeof data === "object" &&
+    data.status === "ok" &&
+    typeof data.supported === "boolean" &&
+    typeof data.playing === "boolean" &&
+    Array.isArray(data.slides) &&
+    data.slides.length <= SLIDE_STATE_MAX_SLIDES &&
+    Number.isSafeInteger(data.currentSlideIndex) &&
+    data.currentSlideIndex >= 0 &&
+    typeof data.title === "string" &&
+    (data.presentation_session === undefined ||
+      data.presentation_session === null ||
+      (typeof data.presentation_session === "string" &&
+        data.presentation_session.length > 0 &&
+        data.presentation_session.length <= 128))
+  );
+}
+
 async function refreshState() {
   showSnackbar(t("remote_control.sync.syncing"));
   try {
-    if (tab.value === "liturgy" && liturgyRef.value) {
+    if (tab.value === "slides") {
+      await refreshSlidesState();
+    } else if (tab.value === "liturgy" && liturgyRef.value) {
       await liturgyRef.value.refresh();
     } else if (tab.value === "bible" && bibleRef.value) {
       await bibleRef.value.refresh();
@@ -602,8 +678,17 @@ async function refreshState() {
   }
 }
 
+// Abrir a aba com a tela vazia é o sintoma do qual o operador complains, então
+// a consulta acontece ao abrir a aba, não só quando ele aperta sincronizar.
+watch(tab, (newTab) => {
+  if (newTab === "slides") void refreshSlidesState();
+});
+
 onMounted(async () => {
   await refreshState();
+  // A aba padrão é Atalhos; o estado dos slides vem mesmo assim, porque o
+  // operador pode trocar para a aba e encontrar a grade já pronta.
+  await refreshSlidesState();
 });
 </script>
 

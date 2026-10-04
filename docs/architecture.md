@@ -1541,6 +1541,7 @@ Persistido em `device_settings.json` via `devices.js`.
 | GET    | `/api/clock`                      | —                                             | Hora do servidor                           |
 | POST   | `/api/keyboard`                   | `{ key, modifiers? }`                         | Simula tecla (Electron `sendInputEvent`)   |
 | POST   | `/api/song-slides`                | `{ action, index? }`                          | Controle de slides (next/prev/close/go-to) |
+| GET    | `/api/song-slides`                | `?action=playing-check`                       | Estado da apresentação de música           |
 | POST   | `/api/bible`                      | `{ action?, text?, reference?, bookId?... }`  | Projeta versículo ou navega bíblia         |
 | POST   | `/api/liturgy-execute`            | `{ id, tag? }`                                | Executa item da liturgia                   |
 | POST   | `/api/open-song`                  | `{ id, tag?, id_liturgy? }`                   | Abre música para projeção                  |
@@ -1557,6 +1558,44 @@ Persistido em `device_settings.json` via `devices.js`.
 | POST   | `/api/register-device`            | `{ token, name, model, platform }`            | Cadastro de device (antes do auth)         |
 
 Todos os endpoints POST exigem `Content-Type: application/json`.
+
+### A aba de slides não é só escuta
+
+A aba Slides do controle remoto é a única tela que dependia **exclusivamente**
+do push por SSE. Como o desktop só publica o snapshot canônico quando o
+**índice** do slide muda (`useSlides.ts`), uma música parada num slide longo
+não republicava nada, e uma página com o stream morto não se recuperava sozinha.
+
+São duas proteções:
+
+1. **Consulta no lugar de espera.** Ao abrir a aba, ao trocar para ela e no
+   botão de sincronizar, a tela pergunta `GET /api/song-slides?action=playing-check`
+   e hidrata o deck, o slide atual e a sessão. A resposta é validada em runtime
+   antes de entrar na tela (é rede) e o deck é limpo quando o desktop diz
+   `playing: false`.
+2. **A sessão observada é estado separado de `canonicalSelection`.** Aquele
+   guarda revisões para ordenar snapshots; o endpoint de consulta não devolve
+   `revision` nem `selectionRevision`, e inventar `0/0` faria o cliente
+   descartar o próximo snapshot verdadeiro. A sessão da consulta serve só para
+   anexar `presentation_session` aos comandos — que é o que o guard do desktop
+   exige para não descartá-los.
+
+Com isso, a aba volta a funcionar mesmo com o SSE fora, e voltar a funcionar é
+também o caminho de recuperação.
+
+### O bridge SSE do celular se reconecta
+
+O script injetado em `spa.js` abre o `EventSource` que alimenta o
+BroadcastChannel da página. O `EventSource` só se refaz sozinho em erro de
+**rede**: em erro de **HTTP** (401 de token trocado, 403 de device sem
+permissão, 404 do gate de rotas externas) a especificação manda falhar a
+conexão em **permanente** — `readyState` CLOSED, sem nova tentativa. Como o
+resto do controle remoto é `fetch` avulso, a página continuava "funcionando"
+com a aba de slides muda e sem um único aviso.
+
+Por isso o bridge tem `onerror`: em `CLOSED` ele recria a conexão com folga
+(1s → 2s → 4s → 8s, teto 15s) e publica o estado em `window.__ljSSEState`
+(`connecting` | `open` | `closed`) para uma interface poder avisar o operador.
 
 
 ---
