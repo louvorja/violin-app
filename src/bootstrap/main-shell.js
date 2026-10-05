@@ -943,7 +943,8 @@ $storage.hydrate().then(async () => {
               break;
             }
             case "liturgy-execute": {
-              const litItem = Liturgy.get(data.id);
+              // Dia que o cliente exibiu → hoje → dia ativo (ver getFromCommand).
+              const litItem = Liturgy.getFromCommand(data.id, data.day);
               if (!litItem) {
                 console.warn("[http] liturgy-execute: item não encontrado", data.id);
                 break;
@@ -1462,7 +1463,7 @@ $storage.hydrate().then(async () => {
           await openSongByMode(data.id_music, data.mode);
 
           // Música escolhida na hora: só marca o item depois da escolha.
-          const litItem = data.id ? Liturgy.get(data.id) : null;
+          const litItem = data.id ? Liturgy.getFromCommand(data.id, data.day) : null;
           if (
             litItem &&
             litItem.tipo !== "bloco" &&

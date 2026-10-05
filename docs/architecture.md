@@ -1543,7 +1543,7 @@ Persistido em `device_settings.json` via `devices.js`.
 | POST   | `/api/song-slides`                | `{ action, index? }`                          | Controle de slides (next/prev/close/go-to) |
 | GET    | `/api/song-slides`                | `?action=playing-check`                       | Estado da apresentação de música           |
 | POST   | `/api/bible`                      | `{ action?, text?, reference?, bookId?... }`  | Projeta versículo ou navega bíblia         |
-| POST   | `/api/liturgy-execute`            | `{ id, tag? }`                                | Executa item da liturgia                   |
+| POST   | `/api/liturgy-execute`            | `{ id, tag?, day? }`                          | Executa item da liturgia (day = dia exibido) |
 | POST   | `/api/open-song`                  | `{ id, tag?, id_liturgy? }`                   | Abre música para projeção                  |
 | POST   | `/api/projections/close`          | `{}`                                          | Encerra todas as projeções ativas          |
 | POST   | `/api/announcements`              | `{ action, ids? }`                            | Projeta/anuncia (next/prev/stop/project)   |
@@ -1561,6 +1561,21 @@ Persistido em `device_settings.json` via `devices.js`.
 | POST   | `/api/register-device`            | `{ token, name, model, platform }`            | Cadastro de device (antes do auth)         |
 
 Todos os endpoints POST exigem `Content-Type: application/json`.
+
+### Executar item da liturgia sem abrir o módulo
+
+O `GET /api/liturgy` (sem `day`) devolve a lista de **hoje** e só cai no dia
+ativo se hoje estiver vazio. Já o `ACTIVE_DAY` — que o renderer usava para achar
+o item — só é sincronizado para hoje quando o módulo de liturgia **abre** na
+sessão (`useLiturgyPersistence`), então antes disso ele apontava para o dia da
+última sessão e o `liturgy-execute` respondia 200 sem executar nada
+(`item não encontrado`).
+
+Por isso o cliente (app e controle web) guarda o `day` da resposta do GET e
+devolve no execute, e o renderer resolve com `Liturgy.getFromCommand(id, day)`:
+**dia do cliente → hoje → dia ativo** (o par da rota). Sem `day`, o fallback já
+cobre; com `day`, o caso em que hoje e o dia ativo estavam errados também — e um
+`day` fora de 0..6 é descartado na rota.
 
 ### Vídeos Online no controle remoto
 

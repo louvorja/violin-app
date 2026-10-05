@@ -548,7 +548,19 @@ function setupRoutes(
       return res.status(400).json({ error: "id é obrigatório" });
     }
 
-    const payload = { action: "liturgy-execute", id, tag: req.body.tag };
+    // O dia que o cliente exibiu (a rota GET devolve o `day` da lista): o
+    // renderer busca o item nele e só cai no fallback (hoje → dia ativo) se
+    // faltar ou vier fora de 0..6.
+    const rawDay = req.body && req.body.day;
+    const parsedDay = typeof rawDay === "string" && rawDay.trim() !== "" ? Number(rawDay) : rawDay;
+    const day = Number.isInteger(parsedDay) && parsedDay >= 0 && parsedDay <= 6 ? parsedDay : undefined;
+
+    const payload = {
+      action: "liturgy-execute",
+      id,
+      tag: req.body.tag,
+      ...(day !== undefined ? { day } : {}),
+    };
     safeSend(mainWindow, "http:song-slides", payload);
     res.json({ status: "ok", action: "liturgy-execute", payload });
   });
