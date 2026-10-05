@@ -148,6 +148,112 @@ function isLibrasBundleResponse(payload) {
   return payload.data instanceof ArrayBuffer || ArrayBuffer.isView(payload.data);
 }
 
+/** Teto dos dois acervos de vídeo (catálogo remoto + Meus Vídeos). */
+const ONLINE_VIDEOS_MAX_ITEMS = 10_000;
+const ONLINE_VIDEOS_MAX_BYTES = 8 * 1024 * 1024;
+/** Miniatura servida em binário (blob do IDB do renderer). */
+const ONLINE_VIDEOS_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
+const ONLINE_VIDEOS_READ_ACTIONS = new Set(["albums", "videos", "search"]);
+const ONLINE_VIDEOS_IMAGE_KINDS = new Set(["video", "category"]);
+
+/**
+ * Miniatura de um item: URL (catálogo público ou caminho servido por
+ * `/api/online-videos/image`) ou `null`. Teto de 4 KB — é caminho, não bytes.
+ */
+function isOnlineVideoImageField(value) {
+  if (value === null || value === undefined) return true;
+  return typeof value === "string" && value.length <= 4_096;
+}
+
+/**
+ * Um vídeo dos dois acervos, no formato que o cliente consome.
+ * `source` distingue o catálogo remoto (`online`) dos Meus Vídeos (`custom`).
+ */
+function isOnlineVideoItem(item) {
+  return (
+    isPlainObject(item) &&
+    typeof item.id === "string" &&
+    item.id.length <= 256 &&
+    typeof item.title === "string" &&
+    item.title.length <= 1_000 &&
+    typeof item.url === "string" &&
+    item.url.length <= 2_048 &&
+    (item.source === "online" || item.source === "custom") &&
+    isOnlineVideoImageField(item.image)
+  );
+}
+
+function isOnlineVideosAlbumsResponse(payload) {
+  return (
+    isPlainObject(payload) &&
+    payload.status === "ok" &&
+    Array.isArray(payload.albums) &&
+    payload.albums.length <= ONLINE_VIDEOS_MAX_ITEMS &&
+    payload.albums.every(
+      (album) =>
+        isPlainObject(album) &&
+        typeof album.id === "string" &&
+        album.id.length <= 256 &&
+        (album.title == null || (typeof album.title === "string" && album.title.length <= 1_000)) &&
+        (album.subtitle == null ||
+          (typeof album.subtitle === "string" && album.subtitle.length <= 1_000)) &&
+        Number.isInteger(album.count) &&
+        album.count >= 0 &&
+        (album.source === "online" || album.source === "custom") &&
+        isOnlineVideoImageField(album.image)
+    )
+  );
+}
+
+function isOnlineVideosVideosResponse(payload) {
+  return (
+    isPlainObject(payload) &&
+    payload.status === "ok" &&
+    Array.isArray(payload.videos) &&
+    payload.videos.length <= ONLINE_VIDEOS_MAX_ITEMS &&
+    payload.videos.every(isOnlineVideoItem)
+  );
+}
+
+/**
+ * Binário da miniatura vindo do renderer (`?action=image`): `data` é o blob do
+ * IndexedDB ou `null` quando não existe (a rota responde 404).
+ */
+function isOnlineVideoImageResponse(payload) {
+  if (!isPlainObject(payload) || payload.status !== "ok") return false;
+  if (payload.data === null) return true;
+  if (!(payload.data instanceof ArrayBuffer) && !ArrayBuffer.isView(payload.data)) return false;
+  return typeof payload.mime === "string" && /^image\/[a-z0-9.+-]+$/i.test(payload.mime);
+}
+
+/**
+ * Devices pareados precisam da permission `online_videos` (ou `root`) para os
+ * endpoints de vídeo — mesmos termos do chat. Sem `authInfo` o acesso já veio
+ * garantido pelo middleware (token global/localhost).
+ */
+function hasOnlineVideosPermission(req) {
+  const permissions = (req.authInfo && req.authInfo.permissions) || null;
+  if (!permissions) return true;
+  return permissions.includes("root") || permissions.includes("online_videos");
+}
+
+/**
+ * Extrai o id de um link do YouTube (`watch?v=`, `youtu.be`, `embed`, `shorts`,
+ * `live`) ou de um id cru de 11 caracteres.
+ *
+ * Só o **id** segue para o renderer: a URL nunca vira argumento de comando, e
+ * id inválido vira 400 na hora (em vez de um 200 que não projeta nada).
+ */
+function extractYoutubeVideoId(value) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (/^[A-Za-z0-9_-]{11}$/.test(trimmed)) return trimmed;
+  const match = trimmed.match(
+    /(?:youtu\.be\/|[?&]v=|\/embed\/|\/shorts\/|\/live\/)([A-Za-z0-9_-]{11})/
+  );
+  return match ? match[1] : null;
+}
+
 function setupRoutes(
   app,
   {
@@ -713,6 +819,160 @@ function setupRoutes(
   });
 
   // ---------------------------------------------------------------
+  // /api/online-videos — Vídeos Online (controle remoto)
+  //
+  // GET  action=albums|videos|search — consulta os DOIS acervos no renderer
+  //      (catálogo remoto `{lang}_collections_online` + Meus Vídeos no IDB)
+  // POST action=play|close           — projeta uma URL do YouTube / encerra
+  //
+  // Devices pareados exigem a permission `online_videos` (ou `root`).
+  // ---------------------------------------------------------------
+  app.get("/api/online-videos", async (req, res) => {
+    if (!hasOnlineVideosPermission(req)) {
+      console.log("[httpServer] online-videos → 403 (device sem a permission online_videos)");
+      return res.status(403).json({ error: "Device sem permissão de vídeos online" });
+    }
+    const mainWindow = getValidMainWindow();
+    if (!mainWindow) {
+      return res.status(503).json({ error: "Janela principal não disponível" });
+    }
+
+    const action = req.query.action || "albums";
+    if (!ONLINE_VIDEOS_READ_ACTIONS.has(action)) {
+      return res
+        .status(400)
+        .json({ error: "action inválida para GET", valid: [...ONLINE_VIDEOS_READ_ACTIONS] });
+    }
+
+    const lang = req.query.lang === "es" ? "es" : "pt";
+    const q = typeof req.query.q === "string" ? req.query.q.trim().slice(0, 200) : "";
+    const album = typeof req.query.album === "string" ? req.query.album.trim().slice(0, 512) : "";
+    if (action === "videos" && !album) {
+      return res.status(400).json({ error: "album obrigatório" });
+    }
+
+    try {
+      const data = await requestRenderer(
+        mainWindow,
+        res,
+        "http:online-videos",
+        { action, lang, q, album },
+        {
+          prefix: "online-videos",
+          timeoutMs: 8_000,
+          maxPayloadBytes: ONLINE_VIDEOS_MAX_BYTES,
+          validatePayload:
+            action === "albums" ? isOnlineVideosAlbumsResponse : isOnlineVideosVideosResponse,
+        }
+      );
+      if (!res.headersSent && !res.writableEnded) {
+        // O log de recebimento (middleware) não mostra o desfecho — aqui sim:
+        // é o que aparece no terminal quando a aba Vídeos Online consulta.
+        const count = Array.isArray(data?.albums)
+          ? data.albums.length
+          : Array.isArray(data?.videos)
+            ? data.videos.length
+            : 0;
+        console.log(`[httpServer] online-videos → ${action} ok (${count} itens)`);
+        res.json(data);
+      }
+    } catch (error) {
+      console.warn(
+        `[httpServer] online-videos → ${action} falhou: ${error?.code || error?.message || error}`
+      );
+      sendRendererError(res, error, "Timeout ao buscar vídeos online");
+    }
+  });
+
+  // ---------------------------------------------------------------
+  // GET /api/online-videos/image?kind=video|category&id=...
+  // Miniatura dos **Meus Vídeos** (blob no IndexedDB do renderer) e dos
+  // ícones de imagem das categorias. As do catálogo remoto não passam por
+  // aqui: são URLs públicas (ytimg) que o cliente carrega direto.
+  // ---------------------------------------------------------------
+  app.get("/api/online-videos/image", async (req, res) => {
+    if (!hasOnlineVideosPermission(req)) {
+      console.log("[httpServer] online-videos image → 403 (device sem a permission online_videos)");
+      return res.status(403).json({ error: "Device sem permissão de vídeos online" });
+    }
+    const mainWindow = getValidMainWindow();
+    if (!mainWindow) {
+      return res.status(503).json({ error: "Janela principal não disponível" });
+    }
+
+    const kind = typeof req.query.kind === "string" ? req.query.kind : "";
+    const id = typeof req.query.id === "string" ? req.query.id.trim().slice(0, 256) : "";
+    if (!ONLINE_VIDEOS_IMAGE_KINDS.has(kind)) {
+      return res.status(400).json({ error: "kind inválido", valid: [...ONLINE_VIDEOS_IMAGE_KINDS] });
+    }
+    if (!id) {
+      return res.status(400).json({ error: "id obrigatório" });
+    }
+
+    try {
+      const image = await requestRenderer(
+        mainWindow,
+        res,
+        "http:online-videos",
+        { action: "image", kind, id },
+        {
+          prefix: "online-videos",
+          timeoutMs: 5_000,
+          maxPayloadBytes: ONLINE_VIDEOS_IMAGE_MAX_BYTES,
+          validatePayload: isOnlineVideoImageResponse,
+        }
+      );
+      if (res.headersSent || res.writableEnded) return;
+
+      if (!image.data) {
+        console.log(`[httpServer] online-videos image → 404 (${kind}:${id})`);
+        return res.status(404).json({ error: "Miniatura não encontrada" });
+      }
+      const bytes = ArrayBuffer.isView(image.data)
+        ? Buffer.from(image.data.buffer, image.data.byteOffset, image.data.byteLength)
+        : Buffer.from(image.data);
+      res.set("Content-Type", image.mime);
+      res.set("Cache-Control", "private, max-age=86400");
+      res.send(bytes);
+    } catch (error) {
+      console.warn(
+        `[httpServer] online-videos image → falhou: ${error?.code || error?.message || error}`
+      );
+      sendRendererError(res, error, "Timeout ao buscar a miniatura");
+    }
+  });
+
+  app.post("/api/online-videos", (req, res) => {
+    if (!hasOnlineVideosPermission(req)) {
+      console.log("[httpServer] online-videos → 403 no comando (device sem a permission)");
+      return res.status(403).json({ error: "Device sem permissão de vídeos online" });
+    }
+    const mainWindow = getValidMainWindow();
+    if (!mainWindow) {
+      return res.status(503).json({ error: "Janela principal não disponível" });
+    }
+
+    const action = req.body && req.body.action;
+    if (action === "play") {
+      const url = typeof req.body.url === "string" ? req.body.url.trim() : "";
+      const title = typeof req.body.title === "string" ? req.body.title.trim().slice(0, 500) : "";
+      const videoId = extractYoutubeVideoId(url);
+      if (!videoId) {
+        return res.status(400).json({ error: "url do YouTube inválida" });
+      }
+      safeSend(mainWindow, "http:online-videos", { action: "play", videoId, title });
+      return res.json({ status: "ok", action: "play" });
+    }
+
+    if (action === "close") {
+      safeSend(mainWindow, "http:online-videos", { action: "close" });
+      return res.json({ status: "ok", action: "close" });
+    }
+
+    res.status(400).json({ error: "action inválida", valid: ["play", "close"] });
+  });
+
+  // ---------------------------------------------------------------
   // POST /api/projections/close — encerra todas as projeções ativas
   // ---------------------------------------------------------------
   app.post("/api/projections/close", (req, res) => {
@@ -976,4 +1236,9 @@ module.exports = {
   setupRoutes,
   resolveSongMode: _resolveSongMode,
   normalizeKeyName,
+  extractYoutubeVideoId,
+  hasOnlineVideosPermission,
+  isOnlineVideosAlbumsResponse,
+  isOnlineVideosVideosResponse,
+  isOnlineVideoImageResponse,
 };

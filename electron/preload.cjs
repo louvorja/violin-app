@@ -22,7 +22,15 @@ const { contextBridge, ipcRenderer } = require("electron");
 const { webUtils } = require("electron");
 
 const HTTP_RENDERER_RESPONSE_CHANNEL = "http:renderer-response";
-const HTTP_RENDERER_REQUEST_ID_RE = /^(slides|announcements|libras):[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+/**
+ * Prefixos de `requestId` que o renderer pode devolver.
+ *
+ * São **dois** pontos para cada prefixo novo (ex.: `online-videos`): a lista de
+ * eventos em `onHttpEvent` e este regex. Um sem o outro faz a resposta ser
+ * descartada em silêncio e o main responder com timeout (504) — foi exatamente
+ * o bug da aba Vídeos Online.
+ */
+const HTTP_RENDERER_REQUEST_ID_RE = /^(slides|announcements|libras|online-videos):[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 contextBridge.exposeInMainWorld("louvorjaApi", {
   /** Resolve o caminho real de um File arrastado/selecionado (Electron 32+). */
@@ -641,6 +649,7 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
       "http:drawing-name",
       "http:libras-bundle",
       "http:projections-close",
+      "http:online-videos",
     ];
     const handlers = events.map((evt) => {
       const handler = (_e, data) => cb(evt, data);

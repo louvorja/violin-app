@@ -1552,12 +1552,56 @@ Persistido em `device_settings.json` via `devices.js`.
 | GET    | `/api/bible-downloaded`           | `?lang=pt`                                    | Versões da bíblia baixadas                |
 | GET    | `/api/liturgy`                    | —                                             | Itens da liturgia atual                    |
 | GET    | `/api/announcements?action=list`  | —                                             | Lista de anúncios                          |
+| GET    | `/api/online-videos`              | `?action=albums\|videos\|search`, `lang`, `q`, `album` | Álbuns/busca dos **dois** acervos de vídeo online (permission `online_videos`) |
+| GET    | `/api/online-videos/image`        | `?kind=video\|category`, `id`               | Miniatura em binário dos Meus Vídeos (permission `online_videos`) |
+| POST   | `/api/online-videos`              | `{ action: play\|close, url?, title? }`       | Projeta/encerra vídeo do YouTube (permission `online_videos`) |
 | GET    | `/api/user-data`                  | `?path=...`                                   | Lê valor do user_data                      |
 | GET    | `/api/db/:path`                   | —                                             | JSON do banco (cache local ou remoto)      |
 | GET    | `/libras/:token`                  | —                                             | Bundle de animação VLibras                 |
 | POST   | `/api/register-device`            | `{ token, name, model, platform }`            | Cadastro de device (antes do auth)         |
 
 Todos os endpoints POST exigem `Content-Type: application/json`.
+
+### Vídeos Online no controle remoto
+
+A aba **Vídeos Online** (`src/views/remote_control/RemoteVideos.vue`) espelha a de
+músicas: busca com debounce de 300 ms, campo de URL do YouTube para projetar direto
+e a navegação pelos álbuns dos **dois** acervos — as playlists do catálogo remoto
+(`{lang}_collections_online`, cacheado em camadas pelo desktop) e as categorias dos
+**Meus Vídeos** (IndexedDB). A busca varre os dois e deduplica por URL (o vídeo do
+usuário vence), ordenando por título.
+
+- **Consulta** (`albums` / `videos` / `search`) vai ao renderer por `requestRenderer`
+  no evento `http:online-videos` (só o renderer tem o IndexedDB e o catálogo);
+  `main-shell.js` compõe a resposta com `Platform.httpServer.respond` e o **main**
+  valida o payload antes de devolver (`isOnlineVideosAlbumsResponse` /
+  `isOnlineVideosVideosResponse`), com teto de 10.000 itens e 8 MB.
+- **Projeção** (`play`) só aceita **id** de vídeo: a rota extrai o id com
+  `extractYoutubeVideoId` (id de 11 caracteres — nunca uma URL crua), o renderer
+  monta o embed e chama `Media.openYouTube` (mesmo caminho da liturgia);
+  `close` chama `Media.close(true)` e zera o `IS_PROJECTING` da ribbon.
+- **Permission**: as duas rotas respondem **403** quando o device pareado não tem
+  `online_videos` (nem `root`). A permissão aparece no diálogo de permissões dos
+  dispositivos (`DEVICE_PERMISSIONS` em `src/types/Device.ts`, chave
+  `options.transmission.permission_online_videos`) e não mexe nas demais rotas.
+- **Miniaturas**: cada álbum/vídeo leva um campo `image`. No catálogo remoto é
+  **URL pública** (o `default_image` da API ou a thumb derivada do `video_id` no
+  ytimg) — o cliente carrega direto. Nos **Meus Vídeos** é um caminho relativo
+  (`/api/online-videos/image?kind=video|category&id=…`) que a rota resolve lendo o
+  **IndexedDB** no renderer e devolvendo os bytes com o `mime`
+  (`requestRenderer` + `ArrayBuffer`, mesmo caminho do bundle do Libras);
+  `data: null` vira 404 e o card fica sem thumb. Nada de base64 dentro das listas.
+  - **Vídeo**: o blob do thumbnail cacheado (`custom_online_videos.thumbnails`).
+  - **Categoria**: o renderer **rasteriza o tile** (`helpers/CategoryTile.ts`) —
+    fundo com a cor da categoria + ícone branco centralizado, igual ao chip do
+    desktop. O ícone é resolvido **pelo nome** em `TABLER_ICONS` (os componentes
+    já estão no bundle) e serializado com `renderToString` de
+    `vue/server-renderer` — um caminho só para qualquer nome de
+    `ICONS.CATEGORY`, sem importar um SVG por ícone e sem problema para nomes
+    que nem têm arquivo SVG (`alert-triangle-filled`). O **branco vem da prop
+    `color`**: dentro de um `<img>`, `currentColor` resolveria para preto. As
+    marcas do projeto (`ja`) vêm do glob de `src/assets/icons/*.svg` (mesmo
+    padrão do `LjIcon`). Imagem enviada pelo usuário tem prioridade sobre o ícone.
 
 ### A aba de slides não é só escuta
 

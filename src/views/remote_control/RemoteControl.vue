@@ -81,6 +81,11 @@
         />
       </div>
 
+      <!-- Tab Vídeos Online -->
+      <div v-if="isBooted('videos')" v-show="tab === 'videos'" class="rc-pane">
+        <remote-videos ref="videosRef" :token="token" @show-snackbar="showSnackbar" />
+      </div>
+
       <!-- Tab Atalhos -->
       <div v-if="isBooted('shortcuts')" v-show="tab === 'shortcuts'" class="rc-pane">
         <remote-shortcuts :token="token" @show-snackbar="showSnackbar" />
@@ -220,6 +225,7 @@ import RemoteLiturgy from "./RemoteLiturgy.vue";
 import RemoteSlides from "./RemoteSlides.vue";
 import RemoteAnnouncements from "./RemoteAnnouncements.vue";
 import RemoteShortcuts from "./RemoteShortcuts.vue";
+import RemoteVideos from "./RemoteVideos.vue";
 
 /** @typedef {import('@/types/Bible').ActiveBibleState} ActiveBibleState */
 
@@ -236,6 +242,7 @@ isTokenInvalid.value = false;
 const bibleRef = ref(null);
 const liturgyRef = ref(null);
 const announcementsRef = ref(null);
+const videosRef = ref(null);
 
 const tabItems = computed(() => [
   {
@@ -251,6 +258,11 @@ const tabItems = computed(() => [
     value: "announcements",
     label: t("remote_control.tabs.announcements"),
     icon: ICONS.MODULES.ANNOUNCEMENTS,
+  },
+  {
+    value: "videos",
+    label: t("remote_control.tabs.online_videos"),
+    icon: ICONS.MODULES.ONLINE_VIDEOS,
   },
 ]);
 
@@ -672,6 +684,8 @@ async function refreshState() {
       await bibleRef.value.refresh();
     } else if (tab.value === "announcements" && announcementsRef.value) {
       await announcementsRef.value.refresh();
+    } else if (tab.value === "videos" && videosRef.value) {
+      await videosRef.value.refresh();
     }
   } finally {
     loading.value = false;

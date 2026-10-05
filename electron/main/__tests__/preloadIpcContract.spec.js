@@ -101,6 +101,34 @@ describe("preload IPC contract", () => {
     ]);
   });
 
+  // Cada prefixo novo precisa entrar em DOIS lugares: a lista de eventos de
+  // `onHttpEvent` e o regex da `respond`. Esquecer o regex descarta a resposta
+  // em silêncio e o main acaba com 504 (foi o bug da aba Vídeos Online).
+  it("aceita o prefixo online-videos na resposta", () => {
+    const seen = loadPreload();
+    const api = seen.exposed;
+    const requestId = "online-videos:00000000-0000-4000-8000-000000000002";
+    const payload = { status: "ok", albums: [] };
+
+    expect(api.httpServer.respond(requestId, payload)).toBe(true);
+    expect(seen.sent).toEqual([
+      { channel: RENDERER_RESPONSE_CHANNEL, payload: { requestId, payload } },
+    ]);
+  });
+
+  it("onHttpEvent escuta http:online-videos junto dos demais eventos", () => {
+    const seen = loadPreload();
+    const api = seen.exposed;
+
+    const cleanup = api.onHttpEvent(() => {});
+
+    expect(seen.listeners.has("http:online-videos")).toBe(true);
+    expect(seen.listeners.has("http:song-slides")).toBe(true);
+    expect(seen.listeners.has("http:open-song")).toBe(true);
+    cleanup();
+    expect(seen.listeners.has("http:online-videos")).toBe(false);
+  });
+
   it("expõe apenas o sinal booleano de mídia ativa", () => {
     const seen = loadPreload();
     const api = seen.exposed;

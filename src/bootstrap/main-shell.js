@@ -16,6 +16,7 @@ import "@/assets/styles/fonts.css";
 import "@/assets/styles/appmenu-options.css";
 //Modules
 import ModuleManager from "@/helpers/ModuleManager";
+import { renderCategoryTile } from "@/helpers/CategoryTile";
 import $storage from "@/helpers/Storage";
 import $alert from "@helpers/Alert";
 import Platform from "@/helpers/Platform";
@@ -194,6 +195,195 @@ if (!isAuxiliaryRenderer) {
     },
     { replay: false }
   );
+}
+
+/** Teto dos arrays de vídeo devolvidos ao controle remoto (validação no main). */
+const ONLINE_VIDEOS_MAX_RESULTS = 10_000;
+
+/** Prefixos dos ids de álbum — `online:<playlist_id>` / `custom:<category_id>`. */
+const ONLINE_ALBUM_PREFIX = "online:";
+const CUSTOM_ALBUM_PREFIX = "custom:";
+
+/**
+ * URL pública da miniatura de um item do catálogo remoto.
+ *
+ * Prefere o `default_image` da API quando já é http(s); senão deriva a thumb do
+ * YouTube a partir do `video_id` (ou do `/vi/<id>/` embutido no `default_image`
+ * das playlists). Data URI não é enviado: o cliente não decodifica — o
+ * `default_image_base64` fica como reserva só no desktop.
+ */
+function catalogImageUrl(item, videoId) {
+  const direct = typeof item?.default_image === "string" ? item.default_image : "";
+  if (/^https?:\/\//.test(direct)) return direct;
+  const embedded = direct.match(/\/vi\/([\w-]{11})\//);
+  const id = videoId || (embedded && embedded[1]) || null;
+  return id ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : null;
+}
+
+/**
+ * Caminho relativo da miniatura que **o próprio desktop serve** (blob no
+ * IndexedDB). O cliente torna absoluto com host/token — o renderer não conhece
+ * o endereço público do servidor.
+ */
+function remoteImagePath(kind, id) {
+  const value = typeof id === "string" ? id.trim() : "";
+  if (!value) return null;
+  return `/api/online-videos/image?kind=${kind}&id=${encodeURIComponent(value)}`;
+}
+
+/** Catálogo remoto de vídeos online (já cacheado pelo desktop em camadas). */
+async function loadOnlineVideoCatalog(lang) {
+  const data = await Database.get(`${lang}_collections_online`, { silent: true });
+  return {
+    channels: Array.isArray(data?.channels) ? data.channels : [],
+    playlists: Array.isArray(data?.playlists) ? data.playlists : [],
+    videos: Array.isArray(data?.videos) ? data.videos : [],
+  };
+}
+
+/** Meus Vídeos Online (IndexedDB local) + as categorias que fazem os álbuns. */
+async function loadMyOnlineVideos() {
+  const [videos, categories] = await Promise.all([
+    $idb.getAll(DB_TABLE.CUSTOM_ONLINE_VIDEOS),
+    $idb.getAll(DB_TABLE.CUSTOM_ONLINE_VIDEOS_CATEGORIES),
+  ]);
+  return {
+    videos: Array.isArray(videos) ? videos : [],
+    categories: Array.isArray(categories) ? categories : [],
+  };
+}
+
+/**
+ * Álbuns dos dois acervos: uma playlist do catálogo e uma categoria (ou "sem
+ * categoria") dos Meus Vídeos. Catálogo primeiro, sem título por último.
+ */
+function buildOnlineVideoAlbums(catalog, mine) {
+  const clip = (value, max) => String(value ?? "").slice(0, max);
+  const channelTitles = new Map(
+    catalog.channels.map((channel) => [channel.channel_id, channel.title])
+  );
+
+  const perPlaylist = new Map();
+  for (const video of catalog.videos) {
+    const key = video.playlist_id;
+    perPlaylist.set(key, (perPlaylist.get(key) || 0) + 1);
+  }
+
+  const albums = [];
+  for (const playlist of catalog.playlists) {
+    albums.push({
+      id: ONLINE_ALBUM_PREFIX + clip(playlist.playlist_id, 256),
+      title: clip(playlist.title || playlist.playlist_id, 1_000),
+      subtitle: channelTitles.has(playlist.channel_id)
+        ? clip(channelTitles.get(playlist.channel_id), 1_000)
+        : null,
+      count: perPlaylist.get(playlist.playlist_id) || 0,
+      source: "online",
+      image: catalogImageUrl(playlist),
+    });
+  }
+
+  const perCategory = new Map();
+  for (const video of mine.videos) {
+    const key = video.categoryId || "";
+    perCategory.set(key, (perCategory.get(key) || 0) + 1);
+  }
+  const categoriesById = new Map(mine.categories.map((category) => [category.id, category]));
+  for (const [categoryId, count] of perCategory) {
+    const category = categoriesById.get(categoryId);
+    albums.push({
+      id: CUSTOM_ALBUM_PREFIX + clip(categoryId, 256),
+      // Sem categoria → null: cada cliente rotula com o seu idioma.
+      title: categoryId ? clip(category?.name, 1_000) : null,
+      subtitle: null,
+      count,
+      source: "custom",
+      // Toda categoria registrada tem tile (ícone tabler rasterizado ou a
+      // imagem enviada pelo usuário) — o renderer monta em `?action=image`.
+      image: categoryId && category ? remoteImagePath("category", category.id) : null,
+    });
+  }
+
+  const sourceOrder = { online: 0, custom: 1 };
+  albums.sort(
+    (a, b) =>
+      sourceOrder[a.source] - sourceOrder[b.source] ||
+      (a.title ? 0 : 1) - (b.title ? 0 : 1) ||
+      String(a.title || "").localeCompare(String(b.title || ""))
+  );
+  return albums;
+}
+
+/** Vídeos de um álbum (`online:<playlist>` ou `custom:<categoria>`). */
+function videosOfAlbum(catalog, mine, albumId, clip) {
+  if (albumId.startsWith(ONLINE_ALBUM_PREFIX)) {
+    const playlistId = albumId.slice(ONLINE_ALBUM_PREFIX.length);
+    return catalog.videos
+      .filter((video) => video.playlist_id === playlistId)
+      .sort((a, b) => (a.sequence || 0) - (b.sequence || 0))
+      .map((video) => ({
+        id: clip(video.video_id, 256),
+        title: clip(video.title || video.video_id, 1_000),
+        url: `https://www.youtube.com/watch?v=${video.video_id}`,
+        source: "online",
+        image: catalogImageUrl(video, video.video_id),
+      }));
+  }
+
+  if (albumId.startsWith(CUSTOM_ALBUM_PREFIX)) {
+    const categoryId = albumId.slice(CUSTOM_ALBUM_PREFIX.length);
+    return mine.videos
+      .filter((video) => (video.categoryId || "") === categoryId)
+      .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")))
+      .map((video) => ({
+        id: clip(video.id, 256),
+        title: clip(video.name || video.url, 1_000),
+        url: clip(video.url, 2_048),
+        source: "custom",
+        image: remoteImagePath("video", video.id),
+      }));
+  }
+
+  return [];
+}
+
+/** Busca nos DOIS acervos, deduplicando por URL (o do usuário vence). */
+function searchOnlineVideos(catalog, mine, q, clip) {
+  const needle = q.toLocaleLowerCase();
+  const matches = (value) =>
+    String(value ?? "")
+      .toLocaleLowerCase()
+      .includes(needle);
+
+  const merged = [];
+  const seen = new Set();
+  for (const video of mine.videos) {
+    const url = clip(video.url, 2_048);
+    if (!url || seen.has(url) || !matches(video.name || video.url)) continue;
+    seen.add(url);
+    merged.push({
+      id: clip(video.id, 256),
+      title: clip(video.name || url, 1_000),
+      url,
+      source: "custom",
+      image: remoteImagePath("video", video.id),
+    });
+  }
+  for (const video of catalog.videos) {
+    const url = `https://www.youtube.com/watch?v=${video.video_id}`;
+    if (seen.has(url) || !matches(video.title)) continue;
+    seen.add(url);
+    merged.push({
+      id: clip(video.video_id, 256),
+      title: clip(video.title || video.video_id, 1_000),
+      url,
+      source: "online",
+      image: catalogImageUrl(video, video.video_id),
+    });
+  }
+
+  merged.sort((a, b) => a.title.localeCompare(b.title));
+  return merged;
 }
 
 /**
@@ -559,6 +749,118 @@ $storage.hydrate().then(async () => {
       }
       return false;
     }
+    /**
+     * Vídeos Online do controle remoto: lê os DOIS acervos e projeta URLs.
+     *
+     * Consulta (`albums`/`videos`/`search`) compõe o catálogo remoto cacheado
+     * (`{lang}_collections_online` → canais/playlists/vídeos) com os Meus
+     * Vídeos do IndexedDB — mesma composição que a liturgia usa em
+     * `useLiturgyItems.loadVideosList`. Comando (`play`/close) projeta/encerra.
+     *
+     * Só responde quando veio `requestId` (GET); `play`/`close` chegam por
+     * `safeSend` e o POST já respondeu `200`.
+     */
+    async function handleOnlineVideosRequest(data, action) {
+      const respond = (payload) => {
+        if (data?.requestId && Platform.httpServer?.respond) {
+          Platform.httpServer.respond(data.requestId, payload);
+        }
+      };
+      const clip = (value, max) => String(value ?? "").slice(0, max);
+
+      try {
+        if (action === "play") {
+          const videoId = typeof data.videoId === "string" ? data.videoId : "";
+          if (!/^[A-Za-z0-9_-]{11}$/.test(videoId)) return;
+          const embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&controls=0`;
+          const ok = await Media.openYouTube(embedUrl, clip(data.title, 500) || embedUrl);
+          UserData.set(KEYS.MODULES.ONLINE_VIDEOS.IS_PROJECTING, ok !== false);
+          return;
+        }
+
+        if (action === "close") {
+          await Media.close(true);
+          UserData.set(KEYS.MODULES.ONLINE_VIDEOS.IS_PROJECTING, false);
+          return;
+        }
+
+        // Miniatura em binário: blob do IDB (Meus Vídeos) ou ícone de imagem
+        // da categoria. `data: null` faz a rota responder 404 e o card fica
+        // sem thumb — nada de base64 dentro das listas.
+        if (action === "image") {
+          const kind = data.kind === "category" ? "category" : "video";
+          const id = String(data.id || "").slice(0, 256);
+          if (!id) {
+            respond({ status: "ok", mime: "", data: null });
+            return;
+          }
+
+          if (kind === "video") {
+            const thumb = await $idb.get(DB_TABLE.CUSTOM_ONLINE_VIDEOS_THUMBNAILS, id);
+            const blob = thumb && thumb.blob;
+            const isBytes = blob instanceof ArrayBuffer || ArrayBuffer.isView(blob);
+            respond({
+              status: "ok",
+              mime: (thumb && thumb.mime) || "image/jpeg",
+              data: isBytes ? blob : null,
+            });
+            return;
+          }
+
+          const category = await $idb.get(DB_TABLE.CUSTOM_ONLINE_VIDEOS_CATEGORIES, id);
+          if (!category) {
+            respond({ status: "ok", mime: "", data: null });
+            return;
+          }
+          // Tile pronto (cor da categoria + ícone/imagem centralizado): os
+          // clientes não têm o módulo de ícones tabler do desktop.
+          const tile = await renderCategoryTile({
+            icon: category.icon,
+            color: category.color,
+            iconType: category.iconType,
+            iconMime: category.iconMime,
+            iconData: category.iconData,
+          });
+          respond(
+            tile
+              ? { status: "ok", mime: "image/png", data: tile }
+              : { status: "ok", mime: "", data: null }
+          );
+          return;
+        }
+
+        if (action !== "albums" && action !== "videos" && action !== "search") return;
+
+        const lang = data.lang === "es" ? "es" : "pt";
+        const catalog = await loadOnlineVideoCatalog(lang);
+        const mine = await loadMyOnlineVideos();
+
+        if (action === "albums") {
+          respond({
+            status: "ok",
+            albums: buildOnlineVideoAlbums(catalog, mine).slice(0, ONLINE_VIDEOS_MAX_RESULTS),
+          });
+          return;
+        }
+
+        const q = typeof data.q === "string" ? data.q.trim() : "";
+        if (action === "search") {
+          const videos = q.length >= 2 ? searchOnlineVideos(catalog, mine, q, clip) : [];
+          respond({ status: "ok", videos: videos.slice(0, ONLINE_VIDEOS_MAX_RESULTS) });
+          return;
+        }
+
+        const album = typeof data.album === "string" ? data.album : "";
+        respond({
+          status: "ok",
+          videos: videosOfAlbum(catalog, mine, album, clip).slice(0, ONLINE_VIDEOS_MAX_RESULTS),
+        });
+      } catch (error) {
+        console.warn("[http:online-videos] falha:", error?.message || error);
+        if (data?.requestId) respond(null);
+      }
+    }
+
     Platform.onHttpEvent(async (eventType, data) => {
       const action = data?.action;
       const bibleRequest =
@@ -1146,6 +1448,9 @@ $storage.hydrate().then(async () => {
           }
           break;
         }
+        case "http:online-videos":
+          await handleOnlineVideosRequest(data, action);
+          break;
         case "http:drawing-number":
           Broadcast.send(BROADCAST_TYPE.DRAWING_NUMBER, { number: data.number });
           break;

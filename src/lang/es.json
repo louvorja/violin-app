@@ -377,6 +377,7 @@
       "permission_liturgy": "Liturgia",
       "permission_announce": "Anuncios",
       "permission_chat": "Chat",
+      "permission_online_videos": "Videos en línea",
       "select_all": "Seleccionar todas",
       "deselect_all": "Desmarcar todas",
       "app_dialog_title": "Violin Remote",
@@ -692,7 +693,8 @@
     "tabs": {
       "slides": "Diapositivas",
       "announcements": "Anuncios",
-      "shortcuts": "Atajos"
+      "shortcuts": "Atajos",
+      "online_videos": "Videos en línea"
     },
     "music": {
       "mode_title": "Ejecutar como",
@@ -730,6 +732,18 @@
       "next_music": "Siguiente Música",
       "overlay": "Superposiciones",
       "background": "Proyección de Fondo"
+    },
+    "videos": {
+      "search_placeholder": "Buscar o ingresar la URL de YouTube",
+      "project_url": "Proyectar",
+      "catalog": "Videos en línea",
+      "mine": "Mis videos en línea",
+      "uncategorized": "Sin categoría",
+      "back": "Volver",
+      "empty_albums": "No hay videos disponibles. Actualice la base de datos en el escritorio.",
+      "empty_search": "No se encontraron videos",
+      "projected": "Video enviado a la proyección",
+      "project_error": "Error al proyectar el video"
     },
     "errors": {
       "generic": "Error"
