@@ -125,9 +125,8 @@
     <section v-if="form.tipo === LiturgyItemTypeEnum.SITE" class="lif-panel">
       <h3 class="lif-panel__title">{{ t("types.site") }}</h3>
       <LjField layout="column" :label="t('inputs.url')">
-        <div class="lif-inline">
+        <div class="lif-inline lif-inline--half">
           <LjInput
-            class="lif-inline__grow"
             :model-value="form.url"
             placeholder="https://"
             @update:model-value="setFormField('url', $event)"
@@ -149,9 +148,8 @@
     <section v-if="form.tipo === LiturgyItemTypeEnum.ARQUIVO" class="lif-panel">
       <h3 class="lif-panel__title">{{ t("types.arquivo") }}</h3>
       <LjField layout="column" :label="t('inputs.file_path')">
-        <div class="lif-inline">
+        <div class="lif-inline lif-inline--half">
           <LjInput
-            class="lif-inline__grow"
             :model-value="form.dir"
             :placeholder="t('inputs.file_path_placeholder')"
             @update:model-value="setFormField('dir', $event)"
@@ -204,9 +202,8 @@
     <section v-if="form.tipo === 'itens-agendados'" class="lif-panel">
       <h3 class="lif-panel__title">{{ t("types.itens-agendados") }}</h3>
       <LjField layout="column" :label="t('inputs.scheduled_category')" :error="formErrors?.id">
-        <div class="lif-inline">
+        <div class="lif-inline lif-inline--half">
           <LjSelect
-            class="lif-inline__grow"
             :model-value="String(form.id ?? '')"
             :items="scheduledOptions"
             :placeholder="t('inputs.scheduled_pick')"
@@ -889,11 +886,53 @@ function onVersionChange(version: string) {
   display: flex;
   align-items: center;
   gap: var(--lj-space-2);
+  /* A largura que decide o tamanho do campo é a da LINHA, não a da janela: o
+     diálogo tem max-width fixo (860px no tamanho lg), então uma media query
+     trataria uma tela de 2560px como "larga" para um campo que continua
+     medindo ~790px. Mesma convenção de `overlay-module` e `lj-slide`. */
+  container-type: inline-size;
+  container-name: lif-inline;
 }
 
-.lif-inline .lif-inline__grow {
-  flex: 1;
+/* O campo ocupa uma parte da linha e o botão fica ao lado. A escada sobe de
+   50% para 100% conforme a linha encolhe, para o campo não virar um traço
+   estreito em tela pequena nem uma barra de 600px em tela grande.
+
+   A largura vai no WRAPPER, via :deep(), e não na classe do controle:
+   `LjInput` e `LjSelect` usam `inheritAttrs: false` e repassam `$attrs` para
+   o elemento interno (o <input> e o gatilho do select). No `LjInput` a
+   classe ia parar no <input>, que não é flex item da linha — por isso o
+   `flex: 1` desta regra nunca teve efeito nenhum. */
+.lif-inline--half :deep(.lj-input),
+.lif-inline--half :deep(.lj-select) {
+  flex: 1 1 100%;
   min-width: 0;
+}
+
+@container lif-inline (min-width: 480px) {
+  .lif-inline--half :deep(.lj-input),
+  .lif-inline--half :deep(.lj-select) {
+    flex: 0 1 75%;
+  }
+}
+
+@container lif-inline (min-width: 640px) {
+  .lif-inline--half :deep(.lj-input),
+  .lif-inline--half :deep(.lj-select) {
+    flex: 0 1 50%;
+  }
+}
+
+/* No degrau de 100% o botão não caberia ao lado — `.lif-inline` não faz wrap,
+   e ele seria espremado a um alvo de 2px. Ele quebra para a linha de baixo,
+   encostado na direita. */
+@container lif-inline (max-width: 479px) {
+  .lif-inline--half {
+    flex-wrap: wrap;
+  }
+  .lif-inline--half > :last-child {
+    margin-left: auto;
+  }
 }
 
 .lif-fill {
