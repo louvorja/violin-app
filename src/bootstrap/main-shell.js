@@ -231,6 +231,23 @@ function remoteImagePath(kind, id) {
   return `/api/online-videos/image?kind=${kind}&id=${encodeURIComponent(value)}`;
 }
 
+/**
+ * Resolve o canal dono de um vídeo do catálogo: vídeo → playlist → canal.
+ *
+ * Devolve uma função com Mapas montados uma vez — o catálogo tem milhares de
+ * itens e um `find` por vídeo ficaria quadrático na busca.
+ */
+function channelTitleResolver(catalog) {
+  const playlists = new Map(catalog.playlists.map((playlist) => [playlist.playlist_id, playlist]));
+  const channels = new Map(catalog.channels.map((channel) => [channel.channel_id, channel]));
+  return (video) => {
+    const playlist = playlists.get(video.playlist_id);
+    const channel = playlist && channels.get(playlist.channel_id);
+    const title = channel && channel.title;
+    return typeof title === "string" && title ? title : null;
+  };
+}
+
 /** Catálogo remoto de vídeos online (já cacheado pelo desktop em camadas). */
 async function loadOnlineVideoCatalog(lang) {
   const data = await Database.get(`${lang}_collections_online`, { silent: true });
@@ -318,6 +335,7 @@ function buildOnlineVideoAlbums(catalog, mine) {
 function videosOfAlbum(catalog, mine, albumId, clip) {
   if (albumId.startsWith(ONLINE_ALBUM_PREFIX)) {
     const playlistId = albumId.slice(ONLINE_ALBUM_PREFIX.length);
+    const channelOf = channelTitleResolver(catalog);
     return catalog.videos
       .filter((video) => video.playlist_id === playlistId)
       .sort((a, b) => (a.sequence || 0) - (b.sequence || 0))
@@ -327,6 +345,7 @@ function videosOfAlbum(catalog, mine, albumId, clip) {
         url: `https://www.youtube.com/watch?v=${video.video_id}`,
         source: "online",
         image: catalogImageUrl(video, video.video_id),
+        channel: channelOf(video),
       }));
   }
 
@@ -341,6 +360,8 @@ function videosOfAlbum(catalog, mine, albumId, clip) {
         url: clip(video.url, 2_048),
         source: "custom",
         image: remoteImagePath("video", video.id),
+        // Meus Vídeos não têm canal — a linha Some no card.
+        channel: null,
       }));
   }
 
@@ -367,8 +388,11 @@ function searchOnlineVideos(catalog, mine, q, clip) {
       url,
       source: "custom",
       image: remoteImagePath("video", video.id),
+      // Meus Vídeos não têm canal — a linha Some no card.
+      channel: null,
     });
   }
+  const channelOf = channelTitleResolver(catalog);
   for (const video of catalog.videos) {
     const url = `https://www.youtube.com/watch?v=${video.video_id}`;
     if (seen.has(url) || !matches(video.title)) continue;
@@ -379,6 +403,7 @@ function searchOnlineVideos(catalog, mine, q, clip) {
       url,
       source: "online",
       image: catalogImageUrl(video, video.video_id),
+      channel: channelOf(video),
     });
   }
 

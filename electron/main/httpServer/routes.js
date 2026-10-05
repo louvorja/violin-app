@@ -167,7 +167,9 @@ function isOnlineVideoImageField(value) {
 
 /**
  * Um vídeo dos dois acervos, no formato que o cliente consome.
- * `source` distingue o catálogo remoto (`online`) dos Meus Vídeos (`custom`).
+ * `source` distingue o catálogo remoto (`online`) dos Meus Vídeos (`custom`) e
+ * `channel` é o canal dono do vídeo (terceira linha do card; `null` em Meus
+ * Vídeos, que não têm canal).
  */
 function isOnlineVideoItem(item) {
   return (
@@ -179,7 +181,10 @@ function isOnlineVideoItem(item) {
     typeof item.url === "string" &&
     item.url.length <= 2_048 &&
     (item.source === "online" || item.source === "custom") &&
-    isOnlineVideoImageField(item.image)
+    isOnlineVideoImageField(item.image) &&
+    (item.channel === null ||
+      item.channel === undefined ||
+      (typeof item.channel === "string" && item.channel.length <= 1_000))
   );
 }
 

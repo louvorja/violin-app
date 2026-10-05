@@ -37,8 +37,10 @@
             alt=""
           />
           <div class="rv-item__text">
-            <span class="rv-item__title lj-u-truncate">{{ video.title }}</span>
-            <span class="rv-item__subtitle lj-u-truncate">{{ sourceLabel(video.source) }}</span>
+            <span class="rv-item__title">{{ video.title }}</span>
+            <span v-if="video.channel" class="rv-item__subtitle lj-u-truncate">
+              {{ video.channel }}
+            </span>
           </div>
           <LjButton
             variant="ghost"
@@ -74,7 +76,7 @@
           <li v-else class="rv-item" @click="row.action()">
             <img v-if="row.thumb" class="rv-item__thumb" :src="row.thumb" loading="lazy" alt="" />
             <div class="rv-item__text">
-              <span class="rv-item__title lj-u-truncate">{{ row.title }}</span>
+              <span class="rv-item__title">{{ row.title }}</span>
               <span v-if="row.subtitle" class="rv-item__subtitle lj-u-truncate">
                 {{ row.subtitle }}
               </span>
@@ -124,6 +126,8 @@ interface OnlineVideo {
   url: string;
   source: "online" | "custom";
   image?: string | null;
+  /** Canal dono do vídeo (terceira linha do card); nulo em Meus Vídeos. */
+  channel?: string | null;
 }
 
 const props = defineProps<{ token?: string }>();
@@ -204,7 +208,8 @@ const videoRow = (video: OnlineVideo): Row => ({
   kind: "item",
   key: video.url,
   title: video.title,
-  subtitle: sourceLabel(video.source),
+  // Terceira linha: o canal (Meus Vídeos não têm → Some).
+  subtitle: video.channel ?? "",
   badge: null,
   thumb: imageUrl(video.image),
   playable: true,
@@ -523,9 +528,15 @@ defineExpose({ refresh });
   min-width: 0;
 }
 
+/* Título em 2 linhas: o vídeo do catálogo tem detalhe para a segunda —
+   o canal fica na linha de baixo. */
 .rv-item__title {
+  display: -webkit-box;
+  overflow: hidden;
   color: var(--lj-text);
   font-size: var(--lj-text-xl);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .rv-item__subtitle {

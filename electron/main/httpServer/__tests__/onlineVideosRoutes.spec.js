@@ -86,6 +86,17 @@ describe("validação das respostas de vídeo do renderer", () => {
     expect(isOnlineVideosAlbumsResponse(null)).toBe(false);
   });
 
+  it("aceita channel nulo (Meus Vídeos), o nome do canal, e rejeita lixo", () => {
+    expect(
+      isOnlineVideosVideosResponse({ status: "ok", videos: [{ ...video, channel: "Canal LouvorJA" }] })
+    ).toBe(true);
+    expect(isOnlineVideosVideosResponse({ status: "ok", videos: [{ ...video, channel: null }] })).toBe(true);
+    expect(
+      isOnlineVideosVideosResponse({ status: "ok", videos: [{ ...video, channel: "x".repeat(1_001) }] })
+    ).toBe(false);
+    expect(isOnlineVideosVideosResponse({ status: "ok", videos: [{ ...video, channel: 42 }] })).toBe(false);
+  });
+
   it("aceita o envelope de vídeos e rejeita o que estoura limite", () => {
     expect(isOnlineVideosVideosResponse({ status: "ok", videos: [video] })).toBe(true);
     expect(isOnlineVideosVideosResponse({ status: "ok", videos: [{ ...video, url: "x".repeat(2_049) }] })).toBe(
