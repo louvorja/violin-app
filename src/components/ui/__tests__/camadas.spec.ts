@@ -34,6 +34,26 @@ describe("escala de camadas", () => {
     expect(token("toast")).toBeGreaterThan(token("tooltip"));
   });
 
+  it("diálogo empilha a partir do token, e não de um número", () => {
+    // Overlay e conteúdo saem os dois de `--lj-dialog`, somando o nível do
+    // diálogo na pilha. Se um dos dois cravasse número, a ordem entre um
+    // diálogo e o outro passaria a depender do CSS e não mais da pilha.
+    const src = readFileSync("src/components/ui/LjDialog.vue", "utf8");
+    const derivados = src.match(/z-index: calc\(var\(--lj-z-dialog\)/g) || [];
+    expect(derivados).toHaveLength(2);
+    expect(src).toContain("--lj-dialog-stack");
+  });
+
+  it("empilhar diálogos nunca alcança o painel flutuante", () => {
+    // O empilhamento é automático e cada nível soma 2 (overlay + conteúdo).
+    // Esta conta é a garantia de que um diálogo aberto sobre outro continua
+    // abaixo de `--lj-z-popup` — onde mora o select dentro de um diálogo, o
+    // caso que esta escala existe para não quebrar.
+    const porNivel = 2;
+    const maximo = Math.floor((token("popup") - token("dialog") - 1) / porNivel);
+    expect(maximo).toBeGreaterThanOrEqual(20);
+  });
+
   it("nenhum primitivo crava z-index numérico — todos usam a escala", () => {
     const arquivos = [
       "LjSelect",
