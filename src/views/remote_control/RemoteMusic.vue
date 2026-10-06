@@ -11,7 +11,12 @@
     />
 
     <ul v-if="musicResults.length > 0" class="rm-list">
-      <li v-for="m in musicResults" :key="m.id_music" class="rm-item" @click="openVersionPicker(m)">
+      <li
+        v-for="m in musicResults"
+        :key="m.custom_song_id || m.id_music"
+        class="rm-item"
+        @click="openVersionPicker(m)"
+      >
         <div class="rm-item__text">
           <span class="rm-item__title lj-u-truncate">{{ m.name }}</span>
           <span v-if="musicAlbumLabel(m)" class="rm-item__subtitle lj-u-truncate">
@@ -66,7 +71,7 @@ import { LjButton, LjDialog, LjIcon, LjInput, LjSpinner } from "@/components/ui"
 import { ICONS } from "@/config/Icons";
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { MusicAlbum, MusicItem } from "@/types/Music";
+import { MusicItem, SearchMusicItem } from "@/types/Music";
 import type { ChooseLaterItem } from "@/types/Liturgy";
 import { apiFetch, postApi } from "@/helpers/ApiClient";
 import { MusicActionEnum } from "@/enums/MusicActionEnum";
@@ -87,12 +92,12 @@ const emit = defineEmits<{
 
 const { t, locale } = useI18n();
 const musicSearch = ref<string>("");
-const musicResults = ref<MusicItem[]>([]);
+const musicResults = ref<SearchMusicItem[]>([]);
 const loadingMusics = ref<boolean>(false);
 let searchTimeout: ReturnType<typeof setTimeout> | null = null;
 
 /** Música selecionada para escolha do modo de execução. */
-const selectedMusic = ref<MusicItem | null>(null);
+const selectedMusic = ref<SearchMusicItem | null>(null);
 const versionPickerOpen = ref<boolean>(false);
 
 /** Playback/Somente playback só valem quando a música tem faixa instrumental. */
@@ -164,7 +169,7 @@ async function onMusicSearch(): Promise<void> {
       const q = encodeURIComponent(musicSearch.value.trim());
       const res = await apiFetch(`/api/music-search?q=${q}&lang=${lang}&token=${props.token}`);
       if (res.ok) {
-        const data = (await res.json()) as { results?: MusicItem[] };
+        const data = (await res.json()) as { results?: SearchMusicItem[] };
         musicResults.value = data.results || [];
       } else {
         musicResults.value = [];
@@ -188,7 +193,7 @@ function playVersion(mode: MusicActionEnum): void {
   if (selectedMusic.value) void openMusic(selectedMusic.value, mode);
 }
 
-async function openMusic(music: MusicAlbum, mode: MusicActionEnum): Promise<void> {
+async function openMusic(music: SearchMusicItem, mode: MusicActionEnum): Promise<void> {
   try {
     const idLiturgy = props.chooseLaterItem?.id || "";
 
@@ -199,7 +204,14 @@ async function openMusic(music: MusicAlbum, mode: MusicActionEnum): Promise<void
 
     const res = await postApi(
       "/api/open-song",
-      { id: music.id_music, mode, id_liturgy: idLiturgy },
+      {
+        id: music.id_music,
+        mode,
+        id_liturgy: idLiturgy,
+        // Personalizada: o id acima é negativo (só para listas); a execução é
+        // pelo UUID — o desktop abre com `openCustomMusic`.
+        custom_song_id: music.custom_song_id,
+      },
       props.token
     );
     if (res.ok) {

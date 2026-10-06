@@ -148,6 +148,36 @@ function isLibrasBundleResponse(payload) {
   return payload.data instanceof ArrayBuffer || ArrayBuffer.isView(payload.data);
 }
 
+/** Teto do acervo pessoal de músicas no renderer. */
+const CUSTOM_SONGS_MAX_BYTES = 8 * 1024 * 1024;
+
+/**
+ * Acervo pessoal vindo do renderer (`http:custom-music`).
+ *
+ * Só os campos que o controle remoto consome; `custom_song_id` é o UUID que a
+ * execução usa (o `id_music` é um negativo sintético, só para listas).
+ */
+function isCustomSongsSearchResponse(payload) {
+  if (!isPlainObject(payload) || payload.status !== "ok" || !Array.isArray(payload.songs)) {
+    return false;
+  }
+  if (payload.songs.length > 5_000) return false;
+  return payload.songs.every(
+    (song) =>
+      isPlainObject(song) &&
+      Number.isInteger(song.id_music) &&
+      typeof song.name === "string" &&
+      song.name.length <= 500 &&
+      typeof song.albums_names === "string" &&
+      song.albums_names.length <= 1_000 &&
+      (song.custom_song_id === null ||
+        song.custom_song_id === undefined ||
+        typeof song.custom_song_id === "string") &&
+      Number.isInteger(song.has_instrumental_music) &&
+      Number.isInteger(song.has_audio)
+  );
+}
+
 /** Teto dos dois acervos de vídeo (catálogo remoto + Meus Vídeos). */
 const ONLINE_VIDEOS_MAX_ITEMS = 10_000;
 const ONLINE_VIDEOS_MAX_BYTES = 8 * 1024 * 1024;
@@ -583,9 +613,59 @@ function setupRoutes(
 
     const mode = _resolveSongMode(req.body);
 
-    safeSend(mainWindow, "http:open-song", { id_music: id, mode, id: id_liturgy });
+    // Música personalizada: o `id` do corpo é um negativo sintético (só serve
+    // para listas) — a execução é sempre pelo UUID em `custom_song_id`.
+    const customSongId =
+      typeof req.body.custom_song_id === "string" && req.body.custom_song_id
+        ? req.body.custom_song_id
+        : undefined;
+
+    safeSend(mainWindow, "http:open-song", {
+      id_music: id,
+      mode,
+      id: id_liturgy,
+      ...(customSongId ? { custom_song_id: customSongId } : {}),
+    });
     res.json({ status: "ok", id, mode });
   });
+
+  /**
+   * Músicas do acervo pessoal (IDB do renderer), filtradas com o **mesmo**
+   * `normalize` da busca oficial. Aditivo por natureza: renderer indisponível
+   * ou fora do ar → devolve `[]` e a busca oficial segue intacta.
+   *
+   * A consulta numérica é exclusiva do hinário oficial (personalizadas não têm
+   * número de hino), então nesses casos nem se consulta.
+   */
+  async function searchCustomSongs(query, res) {
+    const mainWindow = getValidMainWindow();
+    if (!mainWindow) return [];
+    try {
+      const data = await requestRenderer(
+        mainWindow,
+        res,
+        "http:custom-music",
+        {},
+        {
+          prefix: "custom-music",
+          timeoutMs: 4_000,
+          maxPayloadBytes: CUSTOM_SONGS_MAX_BYTES,
+          validatePayload: isCustomSongsSearchResponse,
+        }
+      );
+      return (data.songs || [])
+        .filter(
+          (song) =>
+            normalize(song.name).includes(query) || normalize(song.albums_names).includes(query)
+        )
+        .slice(0, 20);
+    } catch (error) {
+      console.warn(
+        `[httpServer] music-search pessoal falhou: ${error?.code || error?.message || error}`
+      );
+      return [];
+    }
+  }
 
   // ---------------------------------------------------------------
   // /api/music-search?q=...&lang=pt (GET — somente leitura)
@@ -614,7 +694,14 @@ function setupRoutes(
           error: "Base de músicas não encontrada localmente. Faça uma atualização do banco.",
         });
       }
-      res.json({ status: "ok", results, total: results.length });
+      // Acervo pessoal vem depois do oficial — mesma ordem do spotlight do
+      // desktop (`MusicSpotlight`: [...oficial, ...customMusics]).
+      const custom = /^\d+$/.test(query) ? [] : await searchCustomSongs(query, res);
+      const merged = [...results, ...custom];
+      if (custom.length > 0) {
+        console.log(`[httpServer] music-search pessoal ok (${custom.length} de ${merged.length})`);
+      }
+      res.json({ status: "ok", results: merged, total: merged.length });
     } catch (e) {
       console.error("[httpServer] /api/music-search error:", e.message);
       res.status(500).json({ error: e.message });
@@ -1258,4 +1345,5 @@ module.exports = {
   isOnlineVideosAlbumsResponse,
   isOnlineVideosVideosResponse,
   isOnlineVideoImageResponse,
+  isCustomSongsSearchResponse,
 };

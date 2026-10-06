@@ -25,12 +25,14 @@ const HTTP_RENDERER_RESPONSE_CHANNEL = "http:renderer-response";
 /**
  * Prefixos de `requestId` que o renderer pode devolver.
  *
- * São **dois** pontos para cada prefixo novo (ex.: `online-videos`): a lista de
- * eventos em `onHttpEvent` e este regex. Um sem o outro faz a resposta ser
- * descartada em silêncio e o main responder com timeout (504) — foi exatamente
- * o bug da aba Vídeos Online.
+ * São **dois** pontos para cada prefixo novo (ex.: `online-videos`,
+ * `custom-music`): a lista de eventos em `onHttpEvent` e este regex. Um sem o
+ * outro faz a resposta ser descartada em silêncio e o main responder com
+ * timeout — foi o bug da aba Vídeos Online e depois o da busca de músicas
+ * pessoais. O `preloadIpcContract.spec` cobre a lista de prefixos justamente
+ * para o próximo esquecimento falhar no teste e não em produção.
  */
-const HTTP_RENDERER_REQUEST_ID_RE = /^(slides|announcements|libras|online-videos):[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const HTTP_RENDERER_REQUEST_ID_RE = /^(slides|announcements|libras|online-videos|custom-music):[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 contextBridge.exposeInMainWorld("louvorjaApi", {
   /** Resolve o caminho real de um File arrastado/selecionado (Electron 32+). */
@@ -641,7 +643,9 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
 
   /**
    * Registra um callback para eventos emitidos pelo servidor HTTP ao renderer.
-   * Eventos: "http:song-slides", "http:open-song", "http:drawing-number", "http:drawing-name"
+   * Eventos: "http:song-slides", "http:open-song", "http:drawing-number",
+   * "http:drawing-name", "http:libras-bundle", "http:projections-close",
+   * "http:online-videos", "http:custom-music"
    * Retorna função de cleanup que remove todos os listeners.
    *
    * @param {(eventType: string, data: object) => void} cb
@@ -656,6 +660,7 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
       "http:libras-bundle",
       "http:projections-close",
       "http:online-videos",
+      "http:custom-music",
     ];
     const handlers = events.map((evt) => {
       const handler = (_e, data) => cb(evt, data);

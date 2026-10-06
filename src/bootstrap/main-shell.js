@@ -53,7 +53,7 @@ import { AUDIO_EXT } from "@/constants/FileTypes";
 import { openSlja, SLJA_EXT } from "@/helpers/SljaPlayer";
 import { heicToJpeg, isHeic } from "@/helpers/ImageConvert";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
-import { openCustomMusic } from "@/helpers/CustomMusicCatalog";
+import { loadCustomMusicCatalog, openCustomMusic } from "@/helpers/CustomMusicCatalog";
 import { LITURGY_VERSION_ACTION } from "@/config/MusicAction";
 import { DB_TABLE } from "@/constants/DbTables";
 import $idb from "@/helpers/IndexedDB";
@@ -1485,9 +1485,48 @@ $storage.hydrate().then(async () => {
               break;
           }
           break;
+        case "http:custom-music": {
+          // Acervo pessoal mora no IndexedDB — só o renderer lê. A parte
+          // pessoal é **adição**: qualquer falha aqui responde lista vazia e a
+          // busca oficial do main continua de pé (nada de TIMEOUT mudo).
+          try {
+            const songs = await loadCustomMusicCatalog();
+            const requestId = data?.requestId;
+            if (requestId && Platform.httpServer?.respond) {
+              const sent = Platform.httpServer.respond(requestId, {
+                status: "ok",
+                songs: songs.map((song) => ({
+                  id_music: song.id_music,
+                  name: song.name,
+                  albums_names: (song.custom_collection_names || []).join(", "),
+                  custom_song_id: song.custom_song_id || null,
+                  has_instrumental_music: song.has_instrumental_music ? 1 : 0,
+                  has_audio: song.has_audio ? 1 : 0,
+                })),
+              });
+              if (!sent) {
+                // O preload recusou o requestId (prefixo fora do regex) — sem
+                // isto o sintoma é só um TIMEOUT na rota, sem pista de onde.
+                console.warn("[http:custom-music] resposta descartada pelo preload", requestId);
+              }
+            }
+          } catch (error) {
+            console.warn("[http:custom-music] falha ao montar a lista:", error?.message || error);
+            if (data?.requestId && Platform.httpServer?.respond) {
+              Platform.httpServer.respond(data.requestId, { status: "ok", songs: [] });
+            }
+          }
+          break;
+        }
         case "http:open-song": {
           console.log("[http:open-song] Abrindo música:", data);
-          await openSongByMode(data.id_music, data.mode);
+          if (data.custom_song_id) {
+            // Música personalizada: o `id` do corpo é negativo (só para listas)
+            // — a execução é sempre pelo UUID (caminho único do desktop).
+            await openCustomMusic(data.custom_song_id, data.mode);
+          } else {
+            await openSongByMode(data.id_music, data.mode);
+          }
 
           // Música escolhida na hora: só marca o item depois da escolha.
           const litItem = data.id ? Liturgy.getFromCommand(data.id, data.day) : null;

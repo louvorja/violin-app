@@ -1681,7 +1681,7 @@ Persistido em `device_settings.json` via `devices.js`.
 | POST   | `/api/projections/close`          | `{}`                                          | Encerra todas as projeções ativas          |
 | POST   | `/api/announcements`              | `{ action, ids? }`                            | Projeta/anuncia (next/prev/stop/project)   |
 | POST   | `/api/settings/devices`           | `{ only_authorized_devices }`                 | Lê/grava flag de modo restrito             |
-| GET    | `/api/music-search`               | `?q=...&lang=pt`                              | Busca músicas (somente leitura)            |
+| GET    | `/api/music-search`               | `?q=...&lang=pt`                              | Busca músicas (oficial + acervo pessoal)   |
 | GET    | `/api/bible-downloaded`           | `?lang=pt`                                    | Versões da bíblia baixadas                |
 | GET    | `/api/liturgy`                    | —                                             | Itens da liturgia atual                    |
 | GET    | `/api/announcements?action=list`  | —                                             | Lista de anúncios                          |
@@ -1694,6 +1694,24 @@ Persistido em `device_settings.json` via `devices.js`.
 | POST   | `/api/register-device`            | `{ token, name, model, platform }`            | Cadastro de device (antes do auth)         |
 
 Todos os endpoints POST exigem `Content-Type: application/json`.
+
+### Busca de músicas com o acervo pessoal
+
+`GET /api/music-search` continua com o acervo **oficial** no main (jsonCache +
+`musicSearchCatalog`) e **acrescenta** as músicas das **coletâneas
+personalizadas**, que moram no IndexedDB e só o renderer lê — o main as busca
+pelo evento `http:custom-music` (`loadCustomMusicCatalog()`), filtra com o
+**mesmo `normalize`** da busca oficial e devolve `[...oficial, ...pessoal]`
+(mesma ordem do `MusicSpotlight`). A consulta numérica (hinário) não consulta o
+pessoal, e se o renderer falhar a busca oficial volta inteira: a parte pessoal é
+**adição**, nunca pré-requisito.
+
+Os resultados pessoais trazem `custom_song_id` (o UUID) — o `id_music` deles é
+um **negativo sintético**, só para listar. A execução manda os dois no
+`POST /api/open-song` e o renderer abre com `openCustomMusic(...)`, o caminho
+único do desktop; e os modos seguem a mesma régua do `MusicMenuTable`: sem
+faixa cantada não se oferece **Cantado**/**Somente áudio** (`has_audio`), sem
+instrumental não se oferece **Playback** (`has_instrumental_music`).
 
 ### Executar item da liturgia sem abrir o módulo
 
