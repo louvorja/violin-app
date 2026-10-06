@@ -405,6 +405,57 @@ function _openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = 
     try { win.webContents.setZoomFactor(1); } catch (_) { /* ignore */ }
   });
 
+  /*
+   * Empurrão de ponteiro para a janela de URL externa.
+   *
+   * Sites como o Canva escondem os controles da apresentação por inatividade
+   * de ponteiro, e o timer dessa inatividade só COMEÇA quando o site vê um
+   * evento de ponteiro. Nenhuma janela nossa entrega um: o app não injeta
+   * mouse em lugar nenhum (o único input injetado é teclado, e só quando o
+   * operador aperta — `windows:sendKey`), e no macOS o cursor do kiosk está
+   * escondido (`kiosk: useMacPrimaryKiosk`). O sintoma era reproduzível: os
+   * controles ficavam visíveis para sempre até alguém mover o mouse dentro da
+   * janela e retirar — só aí o ciclo rodava e eles sumiam sozinhos.
+   *
+   * `sendInputEvent` e não `executeJavaScript` com `new MouseEvent`: o
+   * sintético nasce com `isTrusted: false` e o Chromium não executa
+   * comportamento padrão com ele. É a mesma razão pela qual as teclas desta
+   * janela passaram a usar `sendInputEvent` — medido nesta mesma janela. Aqui
+   * ele entra na fila de entrada real, como se alguém tivesse movido o mouse.
+   *
+   * Centro, e não canto ou borda: os controles do Canva ficam nas bordas, e
+   * passar o ponteiro por eles abriria menu ou tooltip. O centro é o ponto
+   * neutro de uma apresentação.
+   *
+   * `did-finish-load` + folga: antes disso a página pode ainda estar montando
+   * a própria sequência inicial, e o empurrão passaria por cima dela.
+   *
+   * `getContentBounds`: as coordenadas do `sendInputEvent` são do conteúdo
+   * (webContents), não da janela.
+   *
+   * Um empurrão, não um controle: se o site tiver autoplay ou timer, ele
+   * continua dono do próprio ciclo. É `once` — se o site reexibir controles
+   * depois de navegar internamente, não há novo empurrão.
+   */
+  if (isExternal) {
+    const SITE_POINTER_NUDGE_MS = 1200;
+    win.webContents.once("did-finish-load", () => {
+      setTimeout(() => {
+        if (win.isDestroyed()) return;
+        try {
+          const { width, height } = win.getContentBounds();
+          win.webContents.sendInputEvent({
+            type: "mouseMove",
+            x: Math.round(width / 2),
+            y: Math.round(height / 2),
+          });
+        } catch (_) {
+          /* a página navegou e não existe mais neste webContents */
+        }
+      }, SITE_POINTER_NUDGE_MS);
+    });
+  }
+
   // setVisibleOnAllWorkspaces transforma o tipo do processo (UIElement),
   // o que ESCONDE o ícone do dock. Não usar.
 

@@ -1226,6 +1226,19 @@ janela da página:
   em vez de assumir: macOS fecha a janela em fullscreen com ESC sem avisar
   ninguém, e uma bandeira presa passaria a engolir tecla de janela morta.
 
+- **Ponteiro empurrado uma vez, ao carregar.** O site esconde os controles da
+  apresentação por inatividade de ponteiro, e esse timer só começa quando o site
+  vê um evento de ponteiro — nenhum chega do nosso lado: o app não injeta mouse
+  em lugar nenhum (o único input injetado é teclado, e só quando o operador
+  aperta) e no macOS o cursor do kiosk está escondido. Sem o empurrão os
+  controles ficavam visíveis para sempre até alguém mexer o mouse dentro da
+  janela e retirar — só aí o ciclo rodava e eles sumiam sozinhos.
+  `windowFactory.js` manda um `mouseMove` **real** (`sendInputEvent`) no centro,
+  1,2s após `did-finish-load`, só em janela externa. O sintético não serviria
+  pelo mesmo motivo do `keyDown` acima; o centro porque os controles ficam nas
+  bordas; e `once` porque é um empurrão, não um ciclo — o timer continua sendo
+  do site.
+
 **ESC** na janela principal pergunta `Deseja encerrar a projeção?` e fecha
 (quando Sim), pelo mesmo `$alert.yesno` da projeção de slides — é o primeiro
 ramo do handler de `Escape` em `main-shell.js`. Com o foco na janela da URL o
