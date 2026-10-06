@@ -632,6 +632,9 @@
       "fade_duration": "Duración del fundido",
       "custom_background": "Personalizar fondo de proyección"
     },
+    "site_projection": {
+      "title": "Proyección de Sitios"
+    },
     "utilities": {
       "title": "Utilidades",
       "open_at": "Proyectar utilidades en:",

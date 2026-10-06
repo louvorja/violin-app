@@ -20,6 +20,8 @@ import { KEYS } from "@/constants/UserDataKeys";
 import { close as closeWindow, isOpen as isWindowOpen, open as openWindow } from "@/helpers/Projection";
 import { roleOfFeature } from "@/helpers/DisplayRoles";
 import WebRoles from "@/helpers/projection/WebRoles";
+// A mesma lista que o main valida no IPC: duas cópias divergiriam em silêncio.
+import { FORWARDABLE_KEYS } from "@root/electron/main/windowKeys.mjs";
 
 interface DisplaysAPI {
   getPrefs: () => Promise<Record<string, number | string | null>>;
@@ -39,6 +41,39 @@ async function _open(
   const pendingClose = _pendingFeatureCloses.get(feature);
   if (pendingClose) await pendingClose;
   await openWindow({ route, feature, monitorId, fullscreen, alwaysOnTop });
+}
+
+/**
+ * Bandeira: a projeção de URL está no ar?
+ *
+ * Síncrona de propósito. As setas precisam decidir no mesmo turno de eventos:
+ * o `Hotkeys` escuta em `capture` e consome a tecla antes de qualquer IPC
+ * responder, então uma consulta assíncrona chegaria tarde demais e a tecla já
+ * teria caído na mídia. O preço é a auto-correção, que fica nos dois lados —
+ * `forwardSiteKey` repergunta ao main quando a entrega falha, e todo
+ * fechamento limpa por aqui.
+ */
+let _siteActive = false;
+
+/*
+ * Fecha a janela de URL e limpa a bandeira.
+ *
+ * Todo fechamento passa por aqui de propósito: são três caminhos diferentes
+ * (fechamento geral, mídia assumindo a tela e pedido do operador) e os três
+ * precisam limpar a mesma bandeira — senão as teclas continuariam sendo
+ * encaminhadas para uma janela que já não existe.
+ */
+async function _closeSite(): Promise<void> {
+  try {
+    // Juntas de propósito: a de retorno só existe se a de projeção existir,
+    // e deixar uma órfã manteria a URL na tela depois de "Encerrar projeção".
+    await Promise.all([
+      _close(PROJECTION_TYPE.SITE),
+      _close(PROJECTION_TYPE.SITE_RETURN),
+    ]);
+  } finally {
+    _siteActive = false;
+  }
 }
 
 async function _close(feature: string): Promise<void> {
@@ -214,6 +249,14 @@ export async function openMediaWindow(
     if (placeable || (await isWindowOpen(PROJECTION_TYPE.RETURN))) await _close(PROJECTION_TYPE.RETURN);
   }
   if (!placeable) return;
+  /*
+   * Mídia e arquivo não são projetados junto com um Site: quem abre a janela
+   * de mídia leva a tela. Só aqui, porque todas as janelas de música, arquivo
+   * e vídeo online passam por este portão — anúncios e bíblia não passam.
+   * A bandeira decide sem IPC: fecha-janela é uma chamada por janela aberta, e
+   * este portão atende três delas por projeção.
+   */
+  if (_siteActive) await _closeSite();
   await _open(plan.route, plan.feature, monitorId ?? target.monitorId, plan.fullscreen, plan.alwaysOnTop);
 }
 
@@ -301,6 +344,127 @@ export async function openAnnouncementsWindow(): Promise<boolean> {
 
 export async function closeAnnouncementsWindow(): Promise<void> {
   await _close(PROJECTION_TYPE.ANNOUNCEMENTS);
+}
+
+/** A projeção de URL está no ar? Síncrona — ver a bandeira em `_siteActive`. */
+export function isSiteProjectionActive(): boolean {
+  return _siteActive;
+}
+
+/**
+ * Esta tecla deve ir para a janela de URL? Devolve a tecla ou null.
+ *
+ * `null` significa "não é minha" — quem chama não pode nem `preventDefault`:
+ * as setas seguem para a mídia, a bíblia ou o navegador como sempre. Por isso
+ * as três condições de saída aqui são o que protege o comportamento atual.
+ */
+export function takeSiteKey(
+  e: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey">
+): string | null {
+  if (!_siteActive) return null;
+  /*
+   * Sem projeção aberta não há nada a encaminhar — e este é o estado normal
+   * na maior parte do tempo, então não loga.
+   */
+  if (!Platform.isDesktop) return null;
+  /*
+   * No web/PWA não há porta de envio (janela é popup de outra origem) e as
+   * setas seguem o comportamento de sempre. Também sem log, é esperado.
+   */
+  if (!Platform.windows?.sendKey) return null;
+  // Combinação é atalho do app (música anterior/próxima, por exemplo).
+  if (e.ctrlKey || e.metaKey || e.altKey) return null;
+  return FORWARDABLE_KEYS.includes(e.key) ? e.key : null;
+}
+
+/**
+ * Envia a tecla para a janela de URL.
+ *
+ * Se a entrega falhar, repergunta ao main se a janela ainda existe em vez de
+ * assumir: a bandeira não pode ficar presa engolindo tecla de uma janela que
+ * morreu sozinha (macOS fecha com ESC dentro do fullscreen), nem ser apagada
+ * por um erro transitório enquanto a janela segue lá.
+ */
+export async function forwardSiteKey(key: string): Promise<boolean> {
+  const send = Platform.windows?.sendKey;
+  if (!send) return false;
+
+  // Espelho: a de retorno carrega a MESMA URL em janela independente, então
+  // sem receber a tecla ela ficaria parada no slide inicial enquanto a de
+  // projeção passa. Fire-and-forget de propósito — não soma latência à tecla,
+  // e quando a opção está desligada a janela não existe e o main responde
+  // `window`, que aqui NÃO é falha.
+  const principal = await send(PROJECTION_TYPE.SITE, key).catch(() => null);
+  if (principal?.ok) {
+    void send(PROJECTION_TYPE.SITE_RETURN, key).catch(() => {});
+    return true;
+  }
+
+  // Só o principal manda a bandeira de baixo: é ele que a opção controla.
+  _siteActive = await isWindowOpen(PROJECTION_TYPE.SITE);
+  return false;
+}
+
+/** Fecha a janela de URL e limpa a bandeira. */
+export async function closeSiteWindow(): Promise<void> {
+  await _closeSite();
+}
+
+/**
+ * Projeta a URL de um item de liturgia do tipo Site.
+ *
+ * A `route` é a própria URL: o windowFactory carrega direto, fora da SPA e sem
+ * o preload do app — um site arbitrário não pode herdar `louvorjaApi`. Reutiliza
+ * as preferências de projeção de arquivo (mesma tela, mesma moldura), porque é
+ * a projeção mais próxima que existe de "mostrar um documento no telão".
+ */
+export async function openSiteWindow(url: string): Promise<boolean> {
+  if (!url) return false;
+  const fullscreen = $userdata.get(KEYS.OPTIONS.FILE_PROJECTION.FULLSCREEN, true) as boolean;
+  const alwaysOnTop = $userdata.get(
+    KEYS.OPTIONS.FILE_PROJECTION.ALWAYS_ON_TOP,
+    true
+  ) as boolean;
+  /*
+   * Monitor preferido do site, se houver; senão o da projeção de arquivo, que
+   * é o papel que o operador já associou ao telão. Sem nenhum dos três, null
+   * deixa o Projection resolver pelo dele próprio — a janela precisa abrir.
+   */
+  let target = await _target(PROJECTION_TYPE.SITE);
+  if (!target.open) target = await _target(PROJECTION_TYPE.FILE);
+  if (!target.open) target = await _target(PROJECTION_TYPE.MUSIC);
+  await _open(
+    url,
+    PROJECTION_TYPE.SITE,
+    target.monitorId,
+    fullscreen,
+    alwaysOnTop
+  );
+  const aberta = await isWindowOpen(PROJECTION_TYPE.SITE);
+  _siteActive = aberta;
+  if (aberta) await _openSiteReturn(url, fullscreen, alwaysOnTop);
+  return aberta;
+}
+
+/**
+ * Tela de retorno da projeção de URL.
+ *
+ * É a mesma URL aberta no monitor de retorno, como o arquivo faz com o arquivo
+ * — o operador enxerga o que está no telão sem desviar a vista do palco. O
+ * monitor segue a mesma cadeia das outras telas de retorno: o do papel do site,
+ * senão o da tela de retorno de música. Sem nenhum dos dois, a projeção segue
+ * sem retorno em vez de não abrir.
+ */
+async function _openSiteReturn(
+  url: string,
+  fullscreen: boolean,
+  alwaysOnTop: boolean
+): Promise<void> {
+  if (!$userdata.get(KEYS.OPTIONS.SITE_PROJECTION.SHOW_RETURN, false)) return;
+  let target = await _target(PROJECTION_TYPE.SITE_RETURN);
+  if (!target.open) target = await _target(PROJECTION_TYPE.RETURN);
+  if (!target.open) return;
+  await _open(url, PROJECTION_TYPE.SITE_RETURN, target.monitorId, fullscreen, alwaysOnTop);
 }
 
 /**
@@ -402,6 +566,11 @@ export async function closeProjectionWindows(): Promise<void> {
     _close(PROJECTION_TYPE.BIBLE),
     _close(PROJECTION_TYPE.BIBLE_RETURN),
     closeFileProjectionWindows(),
+    /*
+     * O Site é uma projeção como as outras: sem isto "Encerrar projeção"
+     * deixava a URL na tela.
+     */
+    _closeSite(),
   ]);
 }
 
@@ -450,4 +619,5 @@ export async function closeBibleWindows(): Promise<void> {
   ]);
 }
 
-export default { openProjectionWindows, closeProjectionWindows, closeBibleWindows, openBibleWindow, openFileProjectionWindows, openAnnouncementsWindow, closeAnnouncementsWindow, openVideoProjectionWindows, openMediaWindow, mediaWindowPlan, currentMediaKind, openBackgroundProjectionWindows, closeBackgroundProjectionWindows };
+export default { openProjectionWindows, closeProjectionWindows, closeBibleWindows, openBibleWindow, openFileProjectionWindows, openAnnouncementsWindow, closeAnnouncementsWindow, openSiteWindow,
+  closeSiteWindow, isSiteProjectionActive, takeSiteKey, forwardSiteKey, openVideoProjectionWindows, openMediaWindow, mediaWindowPlan, currentMediaKind, openBackgroundProjectionWindows, closeBackgroundProjectionWindows };

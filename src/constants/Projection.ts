@@ -11,6 +11,19 @@ export const PROJECTION_TYPE = {
   BACKGROUND: "background_projection",
   BACKGROUND_RETURN: "background_projection_return",
   ANNOUNCEMENTS: "announcements",
+  /**
+   * Item de liturgia do tipo Site: não tem rota própria. A `route` desta
+   * janela é a URL que o operador colou, e o windowFactory a carrega direto
+   * — fora da SPA, sem o preload do app, porque um site arbitrário não pode
+   * herdar `louvorjaApi`.
+   */
+  SITE: "site",
+  /**
+   * A mesma URL no monitor de retorno, aberta quando a opção de Projeção de
+   * Sites está ligada. A `route` também é a URL: é uma janela externa como a
+   * de cima, e passa pelo mesmo tratamento (sem preload, com partição).
+   */
+  SITE_RETURN: "site_return",
 };
 
 const RETURN_URL = "/return"

@@ -13,6 +13,7 @@ const { attachEditContextMenu } = require("./editContextMenu.js");
 const powerBlocker = require("./powerBlocker.js");
 const { createWindowCloseGate, DEFAULT_CLOSE_ACK_TIMEOUT_MS } = require("./windowCloseGate.js");
 const { backgroundWindows, prepareWindow } = require("./e2eWindowMode.js");
+const { isExternalRoute, loadTargetFor, webPreferencesFor } = require("./windowRoute.js");
 
 /** Mantém referência das janelas abertas por feature para evitar duplicatas */
 const _openWindows = new Map();
@@ -177,6 +178,15 @@ function _routePath(route) {
 }
 
 function _windowTitle(route) {
+  if (isExternalRoute(route)) {
+    let host = "Site";
+    try {
+      host = new URL(route).hostname;
+    } catch {
+      /* rota malformada: o nome segue genérico */
+    }
+    return `${host} — LouvorJA Violin`;
+  }
   const path = _routePath(route);
   const role = path === "/operator"
     ? "Operador"
@@ -187,6 +197,13 @@ function _windowTitle(route) {
 }
 
 function _isProjectionPresentationWindow(route, feature) {
+  /*
+   * O site não tem rota `/projection/*`: ele é reconhecido pela feature, do
+   * mesmo jeito que `musicas` e `retorno`. O valor é o literal porque este
+   * arquivo é CJS do main e não importa os tipos do renderer. A janela de
+   * retorno conta a mesma: é a mesma URL no monitor do palco.
+   */
+  if (feature === "site" || feature === "site_return") return true;
   const path = _routePath(route);
   return (
     path === "/projection" ||
@@ -247,6 +264,11 @@ function _openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = 
   const isMac = process.platform === "darwin";
   const isWin = process.platform === "win32";
   const isLin = process.platform === "linux";
+  /*
+   * URL externa (item Site da liturgia): a janela vira uma janela de navegação,
+   * e não uma janela do app.
+   */
+  const isExternal = isExternalRoute(route);
   const useMacPrimaryKiosk = fullscreen && isMac && !!target.primary && !backgroundWindows;
   const useMacPresentationLevel = fullscreen && isMac && _isProjectionPresentationWindow(route, feature) && !backgroundWindows;
   // O conteúdo precisa coincidir com o display: ampliar a janela para fora
@@ -284,10 +306,17 @@ function _openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = 
     // de tarefas para o operador localizar/fechar a janela pelo Windows.
     skipTaskbar: _shouldSkipTaskbar({ fullscreen, showInTaskbar }),
     webPreferences: {
-      preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      /*
+       * A rota decide o que é seguro: a janela externa NÃO recebe o preload do
+       * app — ele expõe `louvorjaApi` sem gate de origem (userStore, windows,
+       * httpServer), e qualquer site abriria com acesso a tudo — e sai da
+       * sessão do app, porque o CSP que `main.cjs` injeta via webRequest na
+       * defaultSession também caía nas respostas do site e bloqueava o script
+       * e o stylesheet dele.
+       */
+      ...webPreferencesFor(route, { preloadPath }),
       // A janela é criada oculta; os listeners de show/hide/minimize/restore
       // alternam isso para true enquanto ela não estiver sendo apresentada.
       backgroundThrottling: false,
@@ -304,6 +333,11 @@ function _openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = 
   }
   prepareWindow(win);
   attachEditContextMenu(win, Menu);
+  // O espelho nasce mudo: as duas janelas carregam a MESMA URL e o som tem que
+  // sair do telão, onde a congregação está — duas saídas do mesmo site dariam
+  // eco. `setAudioMuted` é chamada do webContents: não depende de preload nem
+  // de o renderer carregar.
+  if (feature === "site_return") win.webContents.setAudioMuted(true);
   const windowMeta = {
     route,
     feature,
@@ -477,15 +511,24 @@ function _openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = 
     }
   });
 
-  // Carregar URL com route
-  if (devUrl) {
-    win.loadURL(`${devUrl}${route}`);
-  } else if (prodHtmlPath) {
-    // Em produção carrega via custom protocol louvorja://app — origem
-    // real (não null), habilita BroadcastChannel inter-window, fetch
-    // relativo e secure context. router em hash mode preserva a rota.
-    const cleanRoute = route.startsWith("/") ? route : `/${route}`;
-    win.loadURL(`louvorja://app/index.html#${cleanRoute}`);
+  /*
+   * Carregar URL com route — a rota interna ou a URL externa do item Site.
+   * `target` já nomeia o display; o alvo do load é outro nome.
+   */
+  const loadTarget = loadTargetFor(route, { devUrl, prodHtmlPath });
+  if (isExternal) {
+    /*
+     * Uma janela de projeção que sai do site do operador para onde o site
+     * quiser não é uma projeção: só http segue navegando, popup novo não nasce
+     * (muitos sites abrem banner) e `file:`/`javascript:` não passam.
+     */
+    win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+    win.webContents.on("will-navigate", (event, url) => {
+      if (!/^https?:\/\//i.test(url)) event.preventDefault();
+    });
+  }
+  if (loadTarget.kind !== "none") {
+    win.loadURL(loadTarget.url);
   }
 
   _openWindows.set(feature, win);

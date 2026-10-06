@@ -13,6 +13,7 @@ const OPTIONS_DISPLAYS = `${OPTIONS}.displays`
 const OPTIONS_SLIDE = `${OPTIONS}.slide`
 const OPTIONS_FILE_PROJECTION = `${OPTIONS}.file_projection`
 const OPTIONS_ONLINE_VIDEO_PROJECTION = `${OPTIONS}.online_video_projection`
+const OPTIONS_SITE_PROJECTION = `${OPTIONS}.site_projection`
 const MODULES_BIBLE = `${MODULES}.${ModuleEnum.BIBLE}`;
 const MODULES_BIBLE_DATA = `${MODULES}.${ModuleEnum.BIBLE}.data`;
 const MODULES_LIBRAS = `${MODULES}.${ModuleEnum.LIBRAS}`;
@@ -316,6 +317,12 @@ export const KEYS = {
       FADE_DURATION: `${OPTIONS_FILE_PROJECTION}.fade_duration`,
       FULLSCREEN: `${OPTIONS_FILE_PROJECTION}.fullscreen`,
       SHOW_RETURN: `${OPTIONS_FILE_PROJECTION}.show_return`,
+    },
+    // A projeção de URL não tem preferência própria além da tela de retorno:
+    // tela cheia e "sempre no topo" seguem as de projeção de arquivo, como já
+    // era antes desta seção existir.
+    SITE_PROJECTION: {
+      SHOW_RETURN: `${OPTIONS_SITE_PROJECTION}.show_return`,
     },
     FULLSCREEN: `${OPTIONS}.fullscreen`,
     LAST_DB_CHECK: `${OPTIONS}.last_db_check`,

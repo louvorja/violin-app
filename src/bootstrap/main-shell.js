@@ -1086,7 +1086,34 @@ $storage.hydrate().then(async () => {
                   }
                   case "site": {
                     const url = Liturgy.validateUrl(litItem.url);
-                    window.open(url, "_blank", "noopener,noreferrer");
+                    /*
+                     * Mesmo caminho do módulo: janela de projeção do app, não
+                     * o navegador do sistema — o site aparece no telão com o
+                     * monitor preferido e sem herdar o preload do app.
+                     * "Link no navegador" (opção de vídeo) continua prometendo
+                     * o navegador, para os dois caminhos valerem a mesma coisa.
+                     */
+                    if (
+                      youtubeVideoId(url) &&
+                      UserData.get(KEYS.OPTIONS.YOUTUBE_ACTION, "video") === "link"
+                    ) {
+                      window.open(url, "_blank", "noopener,noreferrer");
+                      break;
+                    }
+                    /*
+                     * Exclusão mútua: só um item no telão.
+                     *
+                     * `close(true)` faz o trabalho síncrono — para o áudio e zera
+                     * o estado — mas só ENFILEIRA o fechamento das janelas, na
+                     * fila interna de `_stageWindowTransition`. A espera tem que
+                     * ser da MESMA fila: chamar `closeProjectionWindows`
+                     * diretamente cria uma espera paralela, e a ação enfileirada
+                     * sobrevive para rodar depois da URL já ter aberto — aí fecha
+                     * a janela que acabou de entrar e as teclas voltam a não sair.
+                     */
+                    await Media.close(true);
+                    await Media.closeProjectionStage();
+                    await ProjectionWindows.openSiteWindow(url);
                     break;
                   }
                   case "itens-agendados": {
@@ -1679,7 +1706,35 @@ $storage.hydrate().then(async () => {
     // ---------------------------------------------------------------------------
     // M2 — Registrar atalhos de teclado in-window após o app montar.
     // ---------------------------------------------------------------------------
-    if (!isAuxiliaryRenderer) Hotkeys.init();
+    if (!isAuxiliaryRenderer) {
+      /*
+       * Encaminha as teclas de rolagem para a janela de URL enquanto ela estiver
+       * no ar.
+       *
+       * É um listener próprio e não um atalho do `Hotkeys` por dois motivos:
+       * o dispatcher só despacha UM handler por combo ("último registrado vence"
+       * e faz `break`), então não daria para registrar as setas para o site sem
+       * roubar as da mídia; e o `capture` precisa decidir ANTES, porque um IPC
+       * assíncrono responderia depois de o Hotkeys já ter consumido a tecla.
+       * Por isso a ordem aqui importa: este listener vai antes do `init`.
+       */
+      window.addEventListener(
+        "keydown",
+        (e) => {
+          const key = ProjectionWindows.takeSiteKey(e);
+          /*
+           * `null` é "não é minha": o evento segue intacto para mídia, bíblia
+           * ou navegador, que é o comportamento de sempre.
+           */
+          if (!key) return;
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          void ProjectionWindows.forwardSiteKey(key);
+        },
+        { capture: true }
+      );
+      Hotkeys.init();
+    }
 
     // No navegador/PWA a tela do tablet apagaria no meio de um slide parado; o
     // Electron resolve isso no main (`powerBlocker`). Aqui, a janela principal:
@@ -1911,6 +1966,17 @@ $storage.hydrate().then(async () => {
             Broadcast.send(BROADCAST_TYPE.MODULE_PROJECTION_CLOSE, { module: id });
           }
         };
+
+        /*
+         * URL projetada: só um item no telão, então é ela que o ESC encerra,
+         * e com a mesma confirmação que a projeção de slides tem.
+         */
+        if (ProjectionWindows.isSiteProjectionActive()) {
+          $alert.yesno("modules.media.alerts.close_projection", (btn) => {
+            if (btn === "yes") void ProjectionWindows.closeSiteWindow();
+          });
+          return;
+        }
 
         // Projeção de anúncios
         const fp = useFileProjection();

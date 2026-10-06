@@ -319,6 +319,12 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
     /** Liga/desliga always-on-top de uma janela aberta */
     setAlwaysOnTop: (feature, on) =>
       ipcRenderer.invoke("windows:setAlwaysOnTop", feature, on),
+    /**
+     * Encaminha uma tecla para uma janela de projeção (ex.: a do Site).
+     * Devolve `{ ok, reason? }` — quem chama usa o `ok` para corrigir a
+     * própria noção de "projeção aberta" quando a janela já morreu.
+     */
+    sendKey: (feature, key) => ipcRenderer.invoke("windows:sendKey", { feature, key }),
     /** Mostra/oculta janelas de projeção fullscreen na barra de tarefas */
     setTaskbarVisibility: (show) =>
       ipcRenderer.invoke("windows:setTaskbarVisibility", show),

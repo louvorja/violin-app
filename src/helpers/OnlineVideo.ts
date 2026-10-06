@@ -10,6 +10,7 @@ import Platform from "@/helpers/Platform";
 import { i18nAtual } from "@/i18n";
 import $userdata from "@/helpers/UserData";
 import Telemetry from "@/helpers/Telemetry";
+import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 import { KEYS } from "@/constants/UserDataKeys";
 
 export type OnlineVideoErrorKind =
@@ -127,6 +128,33 @@ const VIDEO_ITSELF_UNPLAYABLE: ReadonlySet<string> = new Set([
   "geo",
   "unavailable",
 ]);
+
+/**
+ * Título do vídeo pelo oEmbed público do YouTube.
+ *
+ * É a única fonte de título sem API key e sem acionar o yt-dlp, e basta o ID.
+ * Devolve null em rede quebrada, vídeo privado ou removido — quem chama é que
+ * decide o nome de reserva.
+ *
+ * Existe aqui porque duas telas precisam do mesmo título (form de liturgia e
+ * "Meus Vídeos Online") e copiar o fetch duplicava o tratamento de falha.
+ */
+export async function fetchYoutubeTitle(ytId: string): Promise<string | null> {
+  if (!ytId) return null;
+  try {
+    const res = await fetchWithTimeout(
+      `https://www.youtube.com/oembed?url=${encodeURIComponent(
+        `https://www.youtube.com/watch?v=${ytId}`
+      )}&format=json`,
+      { timeout: NET_TIMEOUT.QUICK, source: "youtube-oembed", thirdParty: true }
+    );
+    if (!res.ok) return null;
+    const json = await res.json();
+    return typeof json.title === "string" && json.title ? json.title : null;
+  } catch {
+    return null;
+  }
+}
 
 export type FailureAction = "silent" | "error" | "embed";
 

@@ -205,7 +205,7 @@ export default {
    * Abre BrowserWindows no monitor certo com persistência de preferência.
    * null quando rodando no browser/PWA.
    *
-   * @returns {{ open, close, listOpen, setTaskbarVisibility?: (show: boolean) => Promise<any> } | null}
+   * @returns {{ open, close, listOpen, setTaskbarVisibility?, sendKey? } | null}
    */
   get windows() {
     return api?.windows ?? null;

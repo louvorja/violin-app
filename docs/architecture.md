@@ -1098,6 +1098,139 @@ ponta a ponta com a internet real) e `e2e/online-video.electron.spec.js`
 
 ---
 
+## 🌐 Projeção de URL (item Site da liturgia)
+
+O item de liturgia do tipo Site deixa de abrir o navegador do sistema e ocupa
+uma janela de projeção como as outras — monitor preferido, tela cheia e as
+preferências de "projeção de arquivo".
+
+### Como é carregada
+
+- A `route` da janela **é a URL** (`PROJECTION_TYPE.SITE`), não uma rota da
+  SPA: `electron/main/windowRoute.js` a reconhece (`isExternalRoute`) e o
+  `windowFactory` carrega direto. Encaminhar a URL para o router daria a tela
+  de 404, e no dev viraria `localhost:5002https://…`.
+- A janela **não recebe o preload** e sai da sessão do app
+  (`webPreferencesFor` → `sandbox: true`, `partition: "persist:lj-site"`).
+  Dois motivos, os dois reais: `louvorjaApi` não tem gate de origem
+  (`preload.cjs`), então um site arbitrário abriria com `userStore`, `windows`
+  e `httpServer`; e o CSP que `main.cjs` injeta via `webRequest` na
+  `defaultSession` caía nas respostas do site e bloqueava o script e o
+  stylesheet dele (a partição tira a janela de alcance daquele interceptor).
+- A navegação é limitada: popup novo é negado e só http(s) avança
+  (`will-navigate`).
+- Os dois caminhos de execução (módulo da liturgia e controle remoto) passam
+  por `ProjectionWindows.openSiteWindow`, e a opção "Link no navegador"
+  (`YOUTUBE_ACTION`) continua abrindo no navegador nos dois.
+
+### Tela de retorno
+
+Opção em **Opções → Projeção de Sites** (`KEYS.OPTIONS.SITE_PROJECTION.SHOW_RETURN`,
+padrão desligado). Com ela ligada, `openSiteWindow` abre a **mesma URL** uma
+segunda vez no monitor de retorno (`PROJECTION_TYPE.SITE_RETURN`) — o espelho que
+o arquivo já faz com o arquivo, para o operador enxergar o que está no telão sem
+desviar a vista do palco.
+
+- Monitor: o do papel do próprio site, senão o da tela de retorno de música,
+  mesma cadeia das outras telas de retorno. Sem nenhum dos dois, a projeção
+  segue sem retorno em vez de não abrir.
+- Tela cheia e "sempre no topo" continuam saindo das preferências de projeção
+  de arquivo, como antes desta seção existir.
+- Fecha junto: `_closeSite` encerra as duas, e quem assume o palco (mídia)
+  fecha as duas — deixar uma órfã manteria a URL na tela depois de
+  "Encerrar projeção".
+
+**As teclas vão para as duas.** São duas instâncias independentes da mesma URL
+(`KEYS_BY_FEATURE` em `windowKeys.mjs` traz `site` e `site_return` com as
+mesmas teclas), então sem receber o evento o espelho ficaria parado no slide
+inicial enquanto a de projeção passa. `forwardSiteKey` manda para as duas sem
+esperar o espelho — o resultado dele nunca manda a bandeira de baixo, porque só
+a de projeção existe quando a opção está desligada.
+
+**Nasce mudo**: `webContents.setAudioMuted(true)` na criação da janela. As duas
+mostram a MESMA URL, e o som tem que sair do telão, onde a congregação está.
+
+**Por que não espelhar os pixels.** Não existe `webContents.mirror()` no
+Electron: o espelho exigiria capturar quadros, codificar e transmitir
+(`capturePage`/`beginFrameSubscription` → JPEG → IPC → canvas), com rota e view
+novos, laço com throttle, degradação quando a janela não pinta, ~8-20% de CPU a
+15 fps e ~100-250 ms de latência no monitor que o operador olha justamente
+para conferir o slide. As teclas custam um IPC por tecla e não atrasam nada.
+
+**Limites que ficam do espelho por teclas** — as duas são instâncias
+independentes (compartilham a partição, então cookies e consentimento são os
+mesmos):
+
+- um site com autoplay/timer pode divergir com o tempo — a partir daí a única
+  solução é o espelho por captura, cujo custo fixo é o pipeline, não o gatilho;
+- sites responsivos renderizam diferente nos dois tamanhos (uma captura seria
+  pixel a pixel);
+- **interagir na janela de retorno quebra a simetria**: ela não tem preload e
+  não escuta nada, então o que o operador digita/clica lá não chega à de
+  projeção. O fluxo é operar pela janela principal.
+
+### Uma coisa por vez
+
+Site, música e arquivo não dividem a tela:
+
+- **Quem abre o site** chama `Media.close(true)` e depois espera
+  `Media.closeProjectionStage()` (`useLiturgyExecution.ts`, `main-shell.js`).
+  O `close(true)` faz o trabalho síncrono — para o áudio, zera `IS_PLAYING`,
+  emite `MEDIA_CLOSE` — mas só **enfileira** o fechamento de janelas na fila
+  interna de `_stageWindowTransition`. A espera tem que ser da MESMA fila:
+  chamar `closeProjectionWindows` diretamente criaria uma espera paralela, e a
+  ação enfileirada sobreviveria para rodar **depois** da URL já ter aberto — aí
+  ela fecharia a janela que acabou de entrar e as teclas voltariam a não sair.
+  Efeito colateral do mesmo caminho: a bíblia também sai, porque só um item fica
+  no telão.
+- **Quem abre janela de mídia** passa por `openMediaWindow`
+  (`ProjectionWindows.ts`), que fecha o site antes — é o portão de todas as
+  janelas de música, arquivo e vídeo online. Anúncios e bíblia não passam por
+  ali e continuam fora da regra.
+
+### Controlando a projeção
+
+**Setas, PageUp/PageDown, Home e End** enquanto a URL estiver no ar vão para a
+janela da página:
+
+- A decisão é **síncrona**: `takeSiteKey` lê a bandeira de "site aberto" de
+  `ProjectionWindows.ts`. O `Hotkeys` escuta em `capture` e consome a tecla no
+  mesmo turno de eventos, então um IPC assíncrono responderia tarde demais e a
+  tecla já teria caído na mídia.
+- O listener é `capture`, registrado **antes de `Hotkeys.init()`**, e faz
+  `stopImmediatePropagation` — senão mídia e bíblia navegariam junto. Combinações
+  com Ctrl/Alt/Meta continuam sendo atalho do app, e sem a API de envio
+  (web/PWA) a tecla segue intacta.
+- A entrega é `windows:sendKey` → **`sendInputEvent`** no `webContents`. É o
+  único caminho que atravessa partição, ausência de preload e origem
+  diferente: `BroadcastChannel` é por origem e `broadcast:relay` exige listener
+  no preload.
+- `sendInputEvent` e não `executeJavaScript` com `dispatchEvent(new
+  KeyboardEvent)`: o sintético nasce **com alvo em `window`**, então
+  escutadores em `document` ou no elemento focado não recebem (eventos só
+  sobem, não descem), e nasce com `isTrusted: false` — o Chromium não executa
+  ação padrão de evento não confiável, ou seja, a página não rola nem move o
+  cursor. Medido ao vivo: o main registrava `tecla despachada` sem erro e a
+  página não reagia. O `sendInputEvent` entra na fila de entrada real.
+- O `keyCode` é nome de Accelerator, não DOM: `ArrowRight` vira `Right`
+  (`toInputKeyCode` em `windowKeys.mjs`).
+  (`/api/keyboard` continua sintético de propósito: lá o alvo é o `Hotkeys` do
+  próprio app, que escuta em `window`.)
+- A janela do site **não** é focada antes de enviar: focar uma janela
+  fullscreen de outro monitor pode trocar de Espaço no macOS. Se algum site
+  exigir foco, a linha é uma só a adicionar.
+- A fronteira é allow-list fechada em `electron/main/windowKeys.mjs`, lido pelo
+  renderer e pelo main — duas cópias divergiriam em silêncio e a tecla sumiria
+  sem ninguém ver.
+- Entrega falhou? `forwardSiteKey` repergunta ao main se a janela ainda existe
+  em vez de assumir: macOS fecha a janela em fullscreen com ESC sem avisar
+  ninguém, e uma bandeira presa passaria a engolir tecla de janela morta.
+
+**ESC** na janela principal pergunta `Deseja encerrar a projeção?` e fecha
+(quando Sim), pelo mesmo `$alert.yesno` da projeção de slides — é o primeiro
+ramo do handler de `Escape` em `main-shell.js`. Com o foco na janela da URL o
+ESC fecha direto, que é exatamente como os slides se comportam.
+
 ## 🖼 Suporte a imagens HEIC/HEIF
 
 Fotos de iPhone (`.heic/.heif`) não são decodificadas pelo Chromium. O helper
@@ -1539,7 +1672,7 @@ Persistido em `device_settings.json` via `devices.js`.
 | ------ | --------------------------------- | --------------------------------------------- | ------------------------------------------ |
 | GET    | `/api/ping`                       | —                                             | Health check                               |
 | GET    | `/api/clock`                      | —                                             | Hora do servidor                           |
-| POST   | `/api/keyboard`                   | `{ key, modifiers? }`                         | Simula tecla (Electron `sendInputEvent`)   |
+| POST   | `/api/keyboard`                   | `{ key, modifiers? }`                         | Simula tecla (`KeyboardEvent` sintético)   |
 | POST   | `/api/song-slides`                | `{ action, index? }`                          | Controle de slides (next/prev/close/go-to) |
 | GET    | `/api/song-slides`                | `?action=playing-check`                       | Estado da apresentação de música           |
 | POST   | `/api/bible`                      | `{ action?, text?, reference?, bookId?... }`  | Projeta versículo ou navega bíblia         |

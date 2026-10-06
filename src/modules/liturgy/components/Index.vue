@@ -112,6 +112,7 @@
       :choose-file="chooseFile"
       :open-schedules-dialog="openSchedulesDialog"
       :videos-list="videosCache"
+      :reload-videos="loadVideosList"
     />
 
     <LiturgySchedules

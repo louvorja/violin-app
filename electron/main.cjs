@@ -31,6 +31,7 @@ const {
   powerMonitor,
 } = require("electron");
 const path = require("path");
+const { pathToFileURL } = require("node:url");
 const os = require("os");
 const { randomUUID } = require("crypto");
 const fs = require("fs-extra");
@@ -2054,6 +2055,64 @@ ipcMain.handle("windows:setAlwaysOnTop", (_event, feature, alwaysOnTop) => {
     return { ok: false, error: "window not found" };
   } catch (err) {
     return { ok: false, error: String(err) };
+  }
+});
+
+/*
+ * IPC: encaminha uma tecla para uma janela de projeção (a do Site)
+ *
+ * A janela da URL externa carrega outra origem em outra partição e SEM preload,
+ * então nenhum caminho de IPC a alcança: o BroadcastChannel é por origem e o
+ * `broadcast:relay` exige listener no preload. O que atravessa tudo é uma
+ * chamada do main para o `webContents` da janela.
+ *
+ * O método é `sendInputEvent`, e não `executeJavaScript` com
+ * `dispatchEvent(new KeyboardEvent)`. O sintético nasce COM ALVO EM `window` —
+ * escutadores em `document` ou no elemento focado não recebem, porque eventos
+ * só sobem, não descem — e nasce com `isTrusted: false`, e o Chromium não
+ * executa ação padrão de evento não confiável: não rola a página nem move o
+ * cursor. `sendInputEvent` entra na fila de entrada real do renderer, como se
+ * alguém tivesse apertado a tecla: chega no elemento focado e é confiável.
+ * (Por isso /api/keyboard usa o sintético: lá o alvo é o Hotkeys do próprio
+ * app, que escuta em `window` — e o motivo de trocá-lo dali não é este.)
+ *
+ * `keyCode` é nome de Accelerator, não DOM: `ArrowRight` vira `Right`
+ * (`toInputKeyCode` em `windowKeys.mjs`).
+ *
+ * A janela não é focada antes de enviar: focar uma janela fullscreen de outro
+ * monitor pode trocar de Espaço no macOS. Se algum site exigir foco, é uma
+ * linha a adicionar.
+ *
+ * O contrato de fronteira (`feature` e `key` em allow-list fechada) mora em
+ * `windowKeys.mjs`, que o renderer importa do mesmo arquivo. Carregado por
+ * import dinâmico porque este arquivo é CommonJS e o módulo é ESM — o mesmo
+ * motivo do `monitorIdentityBridge.cjs`.
+ */
+let _windowKeysPromise = null;
+function _windowKeys() {
+  if (!_windowKeysPromise) {
+    _windowKeysPromise = import(pathToFileURL(path.join(__dirname, "main/windowKeys.mjs")).href);
+  }
+  return _windowKeysPromise;
+}
+
+ipcMain.handle("windows:sendKey", async (_event, payload) => {
+  try {
+    const { resolveKeyTarget, toInputKeyCode } = await _windowKeys();
+    const alvo = resolveKeyTarget(payload && payload.feature, payload && payload.key);
+    if (!alvo.ok) return { ok: false, reason: alvo.reason };
+
+    const win = windowFactory.getWindow ? windowFactory.getWindow(alvo.feature) : null;
+    if (!win || win.isDestroyed()) return { ok: false, reason: "window" };
+
+    const keyCode = toInputKeyCode(alvo.key);
+    if (!keyCode) return { ok: false, reason: "key" };
+
+    win.webContents.sendInputEvent({ type: "keyDown", keyCode, modifiers: [] });
+    win.webContents.sendInputEvent({ type: "keyUp", keyCode, modifiers: [] });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, reason: err instanceof Error ? err.message : String(err) };
   }
 });
 

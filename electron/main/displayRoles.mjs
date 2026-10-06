@@ -38,6 +38,8 @@ export const FEATURE_ROLE = {
   online_video: ROLES.PROJECTION,
   background_projection: ROLES.PROJECTION,
   announcements: ROLES.PROJECTION,
+  // Item de liturgia do tipo Site: URL externa projetada na mesma tela.
+  site: ROLES.PROJECTION,
   counter: ROLES.PROJECTION,
   draw: ROLES.PROJECTION,
   name_draw: ROLES.PROJECTION,

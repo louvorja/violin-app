@@ -27,9 +27,24 @@ vi.mock("@/helpers/Projection", () => ({
 
 /** Monitor de cada feature; ausente = a feature não tem onde abrir. */
 let monitors: Record<string, number> = {};
+/** `isDesktop` e `sendKey` são mutáveis: um caso simula web, outro a entrega. */
+const platformState = vi.hoisted(() => ({
+  isDesktop: true,
+  sendKey: vi.fn(
+    async (_feature: string, _key?: string): Promise<{ ok: boolean; reason?: string }> => ({
+      ok: true,
+    })
+  ),
+}));
+
 vi.mock("@/helpers/Platform", () => ({
   default: {
-    isDesktop: true,
+    get isDesktop() {
+      return platformState.isDesktop;
+    },
+    get windows() {
+      return { sendKey: platformState.sendKey };
+    },
     displays: {
       getPreferred: async (feature: string) => (feature in monitors ? { id: monitors[feature] } : null),
     },
@@ -54,8 +69,16 @@ const lastOpen = () => openWindow.mock.calls.at(-1)?.[0] as OpenArgs;
 const musicReturnOnScreen = () =>
   isWindowOpen.mockImplementation(async (feature: string) => feature === RETURN);
 
-beforeEach(() => {
+beforeEach(async () => {
+  /*
+   * A bandeira é estado do módulo e a spec importa o módulo uma vez só: sem
+   * este reset um caso herda a projeção aberta do anterior.
+   */
+  await windows.closeSiteWindow();
   calls.length = 0;
+  platformState.isDesktop = true;
+  platformState.sendKey.mockReset();
+  platformState.sendKey.mockResolvedValue({ ok: true });
   openWindow.mockClear();
   closeWindow.mockClear();
   isWindowOpen.mockReset();
@@ -384,4 +407,203 @@ it("MUSIC que termina de abrir após o limite é fechada sem bloquear o novo ví
   finishOpen();
   await music;
   await vi.waitFor(() => expect(closeWindow).toHaveBeenCalledTimes(4));
+});
+
+/** Evento de tecla mínimo — o que `takeSiteKey` lê. */
+const tecla = (key: string, mods: Partial<KeyboardEvent> = {}) =>
+  ({ key, ctrlKey: false, metaKey: false, altKey: false, ...mods }) as KeyboardEvent;
+
+describe("projeção de URL (Site) — teclas e exclusão mútua", () => {
+  const URL_DO_SITE = "https://exemplo.com/enquete";
+  /** Abre a URL e reestabelece o cenário em que a bandeira está ligada. */
+  async function abrirSite(): Promise<void> {
+    isWindowOpen.mockImplementation(async (feature: string) => feature === PROJECTION_TYPE.SITE);
+    expect(await windows.openSiteWindow(URL_DO_SITE)).toBe(true);
+    expect(windows.isSiteProjectionActive()).toBe(true);
+    isWindowOpen.mockReset();
+    isWindowOpen.mockResolvedValue(false);
+  }
+
+  it("abrir marca a bandeira; fechar limpa — é ela que decide sem IPC", async () => {
+    await abrirSite();
+    expect(calls).toContain(`open:${PROJECTION_TYPE.SITE}`);
+
+    await windows.closeSiteWindow();
+
+    expect(windows.isSiteProjectionActive()).toBe(false);
+    expect(calls).toContain(`close:${PROJECTION_TYPE.SITE}`);
+    // `null` aqui é o que preserva o comportamento de mídia/bíblia.
+    expect(windows.takeSiteKey(tecla("ArrowRight"))).toBeNull();
+  });
+
+  it("só com a projeção no ar a tecla é considerada", async () => {
+    expect(windows.takeSiteKey(tecla("ArrowRight"))).toBeNull();
+    await abrirSite();
+    expect(windows.takeSiteKey(tecla("ArrowRight"))).toBe("ArrowRight");
+    expect(windows.takeSiteKey(tecla("PageDown"))).toBe("PageDown");
+    expect(windows.takeSiteKey(tecla("Home"))).toBe("Home");
+  });
+
+  it("combinação é atalho do app e tecla desconhecida não é nossa", async () => {
+    await abrirSite();
+    // Continuam sendo "música anterior/próxima" do app.
+    expect(windows.takeSiteKey(tecla("ArrowLeft", { ctrlKey: true }))).toBeNull();
+    expect(windows.takeSiteKey(tecla("ArrowUp", { metaKey: true }))).toBeNull();
+    expect(windows.takeSiteKey(tecla("ArrowDown", { altKey: true }))).toBeNull();
+    // Uma tecla qualquer não pode virar evento numa página alheia.
+    expect(windows.takeSiteKey(tecla("Escape"))).toBeNull();
+    expect(windows.takeSiteKey(tecla("a"))).toBeNull();
+  });
+
+  it("sem porta de envio (web/PWA) não se consome a tecla", async () => {
+    await abrirSite();
+    platformState.isDesktop = false;
+    expect(windows.takeSiteKey(tecla("ArrowRight"))).toBeNull();
+    platformState.isDesktop = true;
+  });
+
+  it("entrega a tecla para a janela de URL", async () => {
+    await abrirSite();
+    expect(await windows.forwardSiteKey("ArrowRight")).toBe(true);
+    expect(platformState.sendKey).toHaveBeenCalledWith(PROJECTION_TYPE.SITE, "ArrowRight");
+  });
+
+  it("entrega que falhou com a janela morta repergunta e corrige a bandeira", async () => {
+    /*
+     * Sem isto a bandeira ficaria presa: macOS fecha a janela em fullscreen com
+     * ESC sem avisar ninguém, e as setas passariam a ser engolidas por uma
+     * janela que já não existe.
+     */
+    await abrirSite();
+    platformState.sendKey.mockResolvedValueOnce({ ok: false, reason: "window" });
+    isWindowOpen.mockResolvedValue(false);
+
+    expect(await windows.forwardSiteKey("ArrowRight")).toBe(false);
+    expect(windows.isSiteProjectionActive()).toBe(false);
+    expect(windows.takeSiteKey(tecla("ArrowRight"))).toBeNull();
+  });
+
+  it("erro transitório não apaga a bandeira enquanto a janela existe", async () => {
+    await abrirSite();
+    platformState.sendKey.mockResolvedValueOnce({ ok: false, reason: "transitorio" });
+    isWindowOpen.mockResolvedValue(true);
+
+    expect(await windows.forwardSiteKey("ArrowRight")).toBe(false);
+    expect(windows.isSiteProjectionActive()).toBe(true);
+    expect(windows.takeSiteKey(tecla("ArrowRight"))).toBe("ArrowRight");
+  });
+
+  it("abrir mídia tira a URL da tela antes de entrar", async () => {
+    await abrirSite();
+    isWindowOpen.mockResolvedValue(false);
+
+    await windows.openFileProjectionWindows();
+
+    expect(calls).toContain(`close:${PROJECTION_TYPE.SITE}`);
+    expect(calls).toContain(`open:${PROJECTION_TYPE.FILE}`);
+    expect(windows.isSiteProjectionActive()).toBe(false);
+  });
+});
+
+describe("tela de retorno da projeção de URL", () => {
+  const URL_DO_SITE = "https://exemplo.com/enquete";
+  const ligarOpcao = () => {
+    prefs[KEYS.OPTIONS.SITE_PROJECTION.SHOW_RETURN] = true;
+  };
+  /** Abre já com a opção ligada e a janela de projeção no ar. */
+  async function abrirComRetorno(): Promise<void> {
+    ligarOpcao();
+    isWindowOpen.mockImplementation(async (feature: string) => feature === PROJECTION_TYPE.SITE);
+    await windows.openSiteWindow(URL_DO_SITE);
+    isWindowOpen.mockReset();
+    isWindowOpen.mockResolvedValue(false);
+  }
+
+  it("com a opção ligada, abre a URL no telão E na tela de retorno", async () => {
+    await abrirComRetorno();
+
+    expect(calls).toContain(`open:${PROJECTION_TYPE.SITE}`);
+    expect(calls).toContain(`open:${PROJECTION_TYPE.SITE_RETURN}`);
+    // As duas carregam a mesma URL: o retorno é um espelho, como o do arquivo.
+    const aberturas = opened();
+    expect(aberturas.filter((o) => o.route === URL_DO_SITE)).toHaveLength(2);
+  });
+
+  it("com a opção desligada, só a projeção", async () => {
+    isWindowOpen.mockImplementation(async (feature: string) => feature === PROJECTION_TYPE.SITE);
+    await windows.openSiteWindow(URL_DO_SITE);
+    isWindowOpen.mockReset();
+    isWindowOpen.mockResolvedValue(false);
+
+    expect(calls).toContain(`open:${PROJECTION_TYPE.SITE}`);
+    expect(calls).not.toContain(`open:${PROJECTION_TYPE.SITE_RETURN}`);
+  });
+
+  it("a tela de retorno usa o monitor da própria, senão o da retorno de música", async () => {
+    ligarOpcao();
+    isWindowOpen.mockImplementation(async (feature: string) => feature === PROJECTION_TYPE.SITE);
+    await windows.openSiteWindow(URL_DO_SITE);
+
+    // `opened()` só devolve rota e feature; o monitor vem da chamada bruta.
+    const retorno = openWindow.mock.calls
+      .map(([opts]) => opts)
+      .find((o) => o.feature === PROJECTION_TYPE.SITE_RETURN);
+    // O papel do próprio site não está configurado nesta fixture; cai no da
+    // tela de retorno de música (monitor 2) — mesma cadeia das outras telas.
+    expect(retorno?.monitorId).toBe(2);
+  });
+
+  it("sem monitor nenhum de retorno, a projeção segue e o retorno fica de fora", async () => {
+    ligarOpcao();
+    delete monitors[PROJECTION_TYPE.RETURN];
+    isWindowOpen.mockImplementation(async (feature: string) => feature === PROJECTION_TYPE.SITE);
+    await windows.openSiteWindow(URL_DO_SITE);
+
+    expect(calls).toContain(`open:${PROJECTION_TYPE.SITE}`);
+    expect(calls).not.toContain(`open:${PROJECTION_TYPE.SITE_RETURN}`);
+  });
+
+  it("encerrar fecha as duas, senão a URL fica presa no palco", async () => {
+    await abrirComRetorno();
+
+    await windows.closeSiteWindow();
+
+    expect(calls).toContain(`close:${PROJECTION_TYPE.SITE}`);
+    expect(calls).toContain(`close:${PROJECTION_TYPE.SITE_RETURN}`);
+    expect(windows.isSiteProjectionActive()).toBe(false);
+  });
+
+  it("a mesma tecla vai também para o espelho da tela de retorno", async () => {
+    // As duas janelas carregam a MESMA URL em instâncias independentes: sem
+    // receber a tecla o espelho ficaria parado no slide inicial.
+    await abrirComRetorno();
+
+    expect(await windows.forwardSiteKey("ArrowRight")).toBe(true);
+
+    expect(platformState.sendKey).toHaveBeenCalledWith(PROJECTION_TYPE.SITE, "ArrowRight");
+    expect(platformState.sendKey).toHaveBeenCalledWith(PROJECTION_TYPE.SITE_RETURN, "ArrowRight");
+  });
+
+  it("espelho inexistente não derruba a entrega nem a bandeira", async () => {
+    // Com a opção de retorno desligada a janela não existe e o main responde
+    // `window` para ela. Isso não pode apagar a bandeira nem parar as teclas.
+    await abrirComRetorno();
+    platformState.sendKey.mockImplementation(async (feature: string) =>
+      feature === PROJECTION_TYPE.SITE ? { ok: true } : { ok: false, reason: "window" }
+    );
+
+    expect(await windows.forwardSiteKey("ArrowRight")).toBe(true);
+    expect(windows.isSiteProjectionActive()).toBe(true);
+    expect(windows.takeSiteKey(tecla("ArrowRight"))).toBe("ArrowRight");
+  });
+
+  it("mídia assumindo a tela fecha as duas também", async () => {
+    await abrirComRetorno();
+    isWindowOpen.mockResolvedValue(false);
+
+    await windows.openFileProjectionWindows();
+
+    expect(calls).toContain(`close:${PROJECTION_TYPE.SITE_RETURN}`);
+    expect(windows.isSiteProjectionActive()).toBe(false);
+  });
 });
