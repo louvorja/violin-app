@@ -154,6 +154,28 @@ async function hydrate(): Promise<void> {
 // API pública
 // ---------------------------------------------------------------------------
 
+/**
+ * Backend do caminho web, ou `null` quando ele não existe.
+ *
+ * Nem todo contexto em que este módulo roda tem `localStorage`: o ambiente
+ * jsdom dos testes só expõe `sessionStorage`, e um iframe sandboxado não tem
+ * nenhum dos dois. Uma gravação de preferência não pode quebrar por isso — o
+ * erro estouraria dentro do `setTimeout` do debounce do `UserData`, sem stack
+ * e sem dono para ouvir. Com `null` o chamador degrada: leitura devolve o
+ * padrão, escrita e remoção viram no-op.
+ */
+function getStorageType(type: StorageType): Storage | null {
+  try {
+    if (type === "session") {
+      return typeof sessionStorage === "undefined" ? null : sessionStorage;
+    }
+    return typeof localStorage === "undefined" ? null : localStorage;
+  } catch {
+    /* O getter de `localStorage` lança SecurityError em origem opaca. */
+    return null;
+  }
+}
+
 export default {
   /**
    * Armazena um valor.
@@ -165,7 +187,7 @@ export default {
   set(item: string, data: unknown, type: StorageType = "local"): void {
     if (type === "session") {
       const serialized = typeof data === "object" ? JSON.stringify(data) : String(data);
-      sessionStorage.setItem(item, serialized);
+      getStorageType("session")?.setItem(item, serialized);
       return;
     }
 
@@ -182,7 +204,7 @@ export default {
     }
 
     const serialized = typeof data === "object" ? JSON.stringify(data) : String(data);
-    localStorage.setItem(item, serialized);
+    getStorageType("local")?.setItem(item, serialized);
   },
 
   /**
@@ -216,7 +238,7 @@ export default {
    */
   get<T = unknown>(item: string, ifnull: T | null = null, type: StorageType = "local"): T | null {
     if (type === "session") {
-      const data = sessionStorage.getItem(item);
+      const data = getStorageType("session")?.getItem(item);
       if (!data) return ifnull;
 
       if (ifnull === null) {
@@ -239,7 +261,9 @@ export default {
       return value as T;
     }
 
-    const data = localStorage.getItem(item);
+    const backend = getStorageType("local");
+    if (!backend) return ifnull;
+    const data = backend.getItem(item);
     if (!data) return ifnull;
 
     if (ifnull === null) {
@@ -265,7 +289,7 @@ export default {
    */
   remove(item: string, type: StorageType = "local"): void {
     if (type === "session") {
-      sessionStorage.removeItem(item);
+      getStorageType("session")?.removeItem(item);
       return;
     }
 
@@ -276,7 +300,7 @@ export default {
       return;
     }
 
-    localStorage.removeItem(item);
+    getStorageType("local")?.removeItem(item);
   },
 
   /**
@@ -288,10 +312,12 @@ export default {
    */
   removeAll(item: string, type: StorageType = "local"): void {
     if (type === "session") {
-      for (let i = sessionStorage.length - 1; i >= 0; i--) {
-        const key = sessionStorage.key(i);
+      const session = getStorageType("session");
+      if (!session) return;
+      for (let i = session.length - 1; i >= 0; i--) {
+        const key = session.key(i);
         if (key && key.split(":")[0] === item) {
-          sessionStorage.removeItem(key);
+          session.removeItem(key);
         }
       }
       return;
@@ -309,10 +335,12 @@ export default {
       return;
     }
 
-    for (let i = localStorage.length - 1; i >= 0; i--) {
-      const key = localStorage.key(i);
+    const backend = getStorageType("local");
+    if (!backend) return;
+    for (let i = backend.length - 1; i >= 0; i--) {
+      const key = backend.key(i);
       if (key && key.split(":")[0] === item) {
-        localStorage.removeItem(key);
+        backend.removeItem(key);
       }
     }
   },

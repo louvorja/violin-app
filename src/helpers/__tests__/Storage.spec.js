@@ -176,6 +176,45 @@ describe("Storage.removeAll — sessionStorage", () => {
 // storage() accessor
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Sem backend: o contexto simplesmente não tem os dois storages
+// ---------------------------------------------------------------------------
+
+describe("Storage — quando o backend web não existe", () => {
+  beforeEach(() => {
+    /*
+     * É o estado real que gerava os erros não tratados: o ambiente jsdom só
+     * tem `sessionStorage`, e o `localStorage` ausente derrubava o `setItem`
+     * dentro do `setTimeout` do debounce do UserData.
+     */
+    vi.unstubAllGlobals();
+    vi.stubGlobal("sessionStorage", sessionMock);
+  });
+
+  it("set de preferência vira no-op, não exceção", () => {
+    expect(() => Storage.set("preferencia", "valor")).not.toThrow();
+  });
+
+  it("get devolve o padrão", () => {
+    expect(Storage.get("preferencia", "padrao")).toBe("padrao");
+  });
+
+  it("remove e removeAll também não quebram", () => {
+    expect(() => Storage.remove("preferencia")).not.toThrow();
+    expect(() => Storage.removeAll("prefixo")).not.toThrow();
+  });
+
+  it("o caminho de sessão cai da mesma forma", () => {
+    /* O jsdom TEM sessionStorage, então aqui ele é removido de propósito. */
+    vi.stubGlobal("sessionStorage", undefined);
+
+    expect(() => Storage.set("sessao", "valor", "session")).not.toThrow();
+    expect(Storage.get("sessao", "padrao", "session")).toBe("padrao");
+    expect(() => Storage.remove("sessao", "session")).not.toThrow();
+    expect(() => Storage.removeAll("db", "session")).not.toThrow();
+  });
+});
+
 describe("Storage.storage()", () => {
   it("retorna localStorage para type=local", () => {
     expect(Storage.storage("local")).toBe(localStorage);
