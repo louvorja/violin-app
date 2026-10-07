@@ -378,6 +378,8 @@
       "permission_announce": "Anuncios",
       "permission_chat": "Chat",
       "permission_online_videos": "Videos en línea",
+      "permission_background_sound": "Sonido de fondo",
+      "permission_volume": "Volumen",
       "select_all": "Seleccionar todas",
       "deselect_all": "Desmarcar todas",
       "app_dialog_title": "Violin Remote",

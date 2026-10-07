@@ -32,6 +32,7 @@
       <!-- Tab Músicas -->
       <div v-if="isBooted('music')" v-show="tab === 'music'" class="rc-pane">
         <remote-music
+          ref="musicRef"
           v-model:tab="tab"
           v-model:choose-later-mode="chooseLaterMode"
           v-model:choose-later-item="chooseLaterItem"
@@ -84,6 +85,15 @@
       <!-- Tab Vídeos Online -->
       <div v-if="isBooted('videos')" v-show="tab === 'videos'" class="rc-pane">
         <remote-videos ref="videosRef" :token="token" @show-snackbar="showSnackbar" />
+      </div>
+
+      <!-- Tab Som de fundo -->
+      <div v-if="isBooted('background_sound')" v-show="tab === 'background_sound'" class="rc-pane">
+        <remote-background-sound
+          ref="backgroundSoundRef"
+          :token="token"
+          @show-snackbar="showSnackbar"
+        />
       </div>
 
       <!-- Tab Atalhos -->
@@ -226,6 +236,7 @@ import RemoteSlides from "./RemoteSlides.vue";
 import RemoteAnnouncements from "./RemoteAnnouncements.vue";
 import RemoteShortcuts from "./RemoteShortcuts.vue";
 import RemoteVideos from "./RemoteVideos.vue";
+import RemoteBackgroundSound from "./RemoteBackgroundSound.vue";
 
 /** @typedef {import('@/types/Bible').ActiveBibleState} ActiveBibleState */
 
@@ -243,6 +254,8 @@ const bibleRef = ref(null);
 const liturgyRef = ref(null);
 const announcementsRef = ref(null);
 const videosRef = ref(null);
+const backgroundSoundRef = ref(null);
+const musicRef = ref(null);
 
 const tabItems = computed(() => [
   {
@@ -263,6 +276,11 @@ const tabItems = computed(() => [
     value: "videos",
     label: t("remote_control.tabs.online_videos"),
     icon: ICONS.MODULES.ONLINE_VIDEOS,
+  },
+  {
+    value: "background_sound",
+    label: t("remote_control.tabs.background_sound"),
+    icon: ICONS.MODULES.BACKGROUND_SOUND,
   },
 ]);
 
@@ -686,6 +704,10 @@ async function refreshState() {
       await announcementsRef.value.refresh();
     } else if (tab.value === "videos" && videosRef.value) {
       await videosRef.value.refresh();
+    } else if (tab.value === "music" && musicRef.value) {
+      await musicRef.value.refresh();
+    } else if (tab.value === "background_sound" && backgroundSoundRef.value) {
+      await backgroundSoundRef.value.refresh();
     }
   } finally {
     loading.value = false;

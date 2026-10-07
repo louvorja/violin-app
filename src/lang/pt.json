@@ -378,6 +378,8 @@
       "permission_announce": "Anúncios",
       "permission_chat": "Chat",
       "permission_online_videos": "Vídeos Online",
+      "permission_background_sound": "Som de fundo",
+      "permission_volume": "Volume",
       "select_all": "Selecionar todas",
       "deselect_all": "Desmarcar todas",
       "app_dialog_title": "Violin Remote",
@@ -697,9 +699,14 @@
       "slides": "Slides",
       "announcements": "Anúncios",
       "shortcuts": "Atalhos",
-      "online_videos": "Vídeos Online"
+      "online_videos": "Vídeos Online",
+      "background_sound": "Som de fundo"
     },
     "music": {
+      "albums": "Álbuns",
+      "collections": "Coletâneas",
+      "albums_empty": "Nenhum álbum disponível. Atualize o banco no desktop.",
+      "album_empty": "Nenhuma música neste álbum.",
       "mode_title": "Executar como",
       "mode_sung": "Cantado",
       "mode_playback": "Playback",
@@ -758,6 +765,17 @@
     "token_invalid": {
       "title": "Token inválido",
       "message": "O token de acesso utilizado é inválido ou expirou. Gere um novo token nas Configurações → Transmissão."
+    },
+    "bgsound": {
+      "now": "Tocando agora",
+      "nothing": "Nenhum som tocando",
+      "volume": "Volume",
+      "pause": "Pausar",
+      "resume": "Retomar",
+      "stop": "Parar",
+      "library": "Biblioteca",
+      "empty": "Nenhum som de fundo cadastrado no desktop.",
+      "uncategorized": "Sem categoria"
     }
   },
   "bible": {

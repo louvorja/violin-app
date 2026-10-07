@@ -190,7 +190,9 @@ const ONLINE_VIDEOS_IMAGE_KINDS = new Set(["video", "category"]);
  * Miniatura de um item: URL (catálogo público ou caminho servido por
  * `/api/online-videos/image`) ou `null`. Teto de 4 KB — é caminho, não bytes.
  */
-function isOnlineVideoImageField(value) {
+const ONLINE_VIDEOS_MAX_ITEMS = 10_000;
+
+function isImageField(value) {
   if (value === null || value === undefined) return true;
   return typeof value === "string" && value.length <= 4_096;
 }
@@ -211,7 +213,7 @@ function isOnlineVideoItem(item) {
     typeof item.url === "string" &&
     item.url.length <= 2_048 &&
     (item.source === "online" || item.source === "custom") &&
-    isOnlineVideoImageField(item.image) &&
+    isImageField(item.image) &&
     (item.channel === null ||
       item.channel === undefined ||
       (typeof item.channel === "string" && item.channel.length <= 1_000))
@@ -235,7 +237,7 @@ function isOnlineVideosAlbumsResponse(payload) {
         Number.isInteger(album.count) &&
         album.count >= 0 &&
         (album.source === "online" || album.source === "custom") &&
-        isOnlineVideoImageField(album.image)
+        isImageField(album.image)
     )
   );
 }
@@ -262,11 +264,12 @@ function isOnlineVideoImageResponse(payload) {
 }
 
 /**
- * Devices pareados precisam da permission `online_videos` (ou `root`) para os
- * endpoints de vídeo — mesmos termos do chat. Sem `authInfo` o acesso já veio
- * garantido pelo middleware (token global/localhost).
+ * Permission de um device para um endpoint — mesmo molde do chat.
+ *
+ * Sem `authInfo` o acesso já veio garantido pelo middleware (token global ou
+ * localhost), então segue liberado.
  */
-function hasOnlineVideosPermission(req) {
+function hasDevicePermission(req, permission) {
   const permissions = (req.authInfo && req.authInfo.permissions) || null;
   if (!permissions) return true;
   return permissions.includes("root") || permissions.includes("online_videos");
@@ -1346,4 +1349,9 @@ module.exports = {
   isOnlineVideosVideosResponse,
   isOnlineVideoImageResponse,
   isCustomSongsSearchResponse,
+  isMusicLibraryAlbumsResponse,
+  isMusicLibrarySongsResponse,
+  hasDevicePermission,
+  isBackgroundSoundStateResponse,
+  isVolumeResponse,
 };

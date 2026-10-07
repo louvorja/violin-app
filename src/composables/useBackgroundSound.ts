@@ -187,15 +187,18 @@ export function useBackgroundSound() {
 
   function resume(): void {
     if (_audio.paused && _audio.src) {
+      // Intenção síncrona (mesmo padrão de playFile/togglePlay): o remote lê o
+      // estado logo depois do POST — se `isPlaying` só virasse true na
+      // promise, o GET seguinte ainda leria "pausado" com o áudio tocando.
+      isPlaying.value = true;
       const playPromise = _audio.play();
       if (playPromise) {
         playPromise
           .then(() => {
             _startRaf();
-            isPlaying.value = true;
           })
           .catch(() => {
-            /* ignora */
+            isPlaying.value = false;
           });
       }
     }

@@ -1695,12 +1695,17 @@ Persistido em `device_settings.json` via `devices.js`.
 | POST   | `/api/announcements`              | `{ action, ids? }`                            | Projeta/anuncia (next/prev/stop/project)   |
 | POST   | `/api/settings/devices`           | `{ only_authorized_devices }`                 | Lê/grava flag de modo restrito             |
 | GET    | `/api/music-search`               | `?q=...&lang=pt`                              | Busca músicas (oficial + acervo pessoal)   |
+| GET    | `/api/music-library`              | `action=albums\|songs`, `lang`, `album`       | Álbuns/faixas p/ navegar (hinários pinados + oficiais + coletâneas + "Sem álbum") |
+| GET    | `/api/music-library/image`        | `path=<url_image>`                            | Capa de álbum em `<dados>/files/`          |
 | GET    | `/api/bible-downloaded`           | `?lang=pt`                                    | Versões da bíblia baixadas                |
 | GET    | `/api/liturgy`                    | —                                             | Itens da liturgia atual                    |
 | GET    | `/api/announcements?action=list`  | —                                             | Lista de anúncios                          |
 | GET    | `/api/online-videos`              | `?action=albums\|videos\|search`, `lang`, `q`, `album` | Álbuns/busca dos **dois** acervos de vídeo online (permission `online_videos`) |
 | GET    | `/api/online-videos/image`        | `?kind=video\|category`, `id`               | Miniatura em binário dos Meus Vídeos (permission `online_videos`) |
 | POST   | `/api/online-videos`              | `{ action: play\|close, url?, title? }`       | Projeta/encerra vídeo do YouTube (permission `online_videos`) |
+| GET    | `/api/background-sound`           | —                                             | Estado + biblioteca de som de fundo (permission `background_sound`) |
+| POST   | `/api/background-sound`           | `{ action: play\|pause\|resume\|stop, id? }`      | Controla o player de som de fundo (permission `background_sound`) |
+| POST   | `/api/volume`                     | `{ action: up\|down, step? } \| { action: set, value }` | Volume dos players 0..100 (permission `volume`, só app) |
 | GET    | `/api/user-data`                  | `?path=...`                                   | Lê valor do user_data                      |
 | GET    | `/api/db/:path`                   | —                                             | JSON do banco (cache local ou remoto)      |
 | GET    | `/libras/:token`                  | —                                             | Bundle de animação VLibras                 |
@@ -1718,6 +1723,28 @@ pelo evento `http:custom-music` (`loadCustomMusicCatalog()`), filtra com o
 (mesma ordem do `MusicSpotlight`). A consulta numérica (hinário) não consulta o
 pessoal, e se o renderer falhar a busca oficial volta inteira: a parte pessoal é
 **adição**, nunca pré-requisito.
+
+A navegação por álbuns (lista → faixas → projetar) passa por
+`GET /api/music-library`: `action=albums` **pinada os hinários no topo**
+(`album:712` "Hinário Adventista" + `album:629` "Hinário 1996" quando o toggle
+`modules.hymnal_1996.show_in_main_menu` está ligado — fora de
+`{lang}_categories`; o pin some com o arquivo em disco ou em
+`disabled_albums`, e os ids são removidos do meio dos oficiais para não
+duplicar em catálogos antigos), achata `{lang}_categories}` em álbuns
+(aplicando `disabled_albums`), anexa as coletâneas do `docStore` e, se
+houver, o álbum virtual **"Sem álbum"** (`orphans:none`, `source: "custom"`, no
+fim) com as músicas pessoais que não estão em **nenhuma** coletânea — o título
+segue o `lang` (PT "Sem álbum" / ES "Sin álbum") e o `count` vem da mesma
+função que serve `action=songs`, para o badge nunca divergir das faixas;
+`action=songs` lê `album_<id>` (oficial), as faixas dos hinários direto de
+`{lang}_hymnal[_1996].json` (rótulo "Hino nº N - Nome", mesma fonte do sync e
+do `HymnalBrowser`), as `song_ids` da coletânea ou o `orphans:none`; os pins do
+hinário trazem `module_id` (`hymnal`/`hymnal_1996`) — os clientes usam esse
+campo para trocar a capa padrão pela **marca do módulo** (o mesmo ícone do
+desktop; web usa o SVG local, app/iOS a arte em PNG com tinta); e a capa
+sai por `/api/music-library/image` (arquivo de `<dados>/files/` com o mesmo
+guard de path traversal do protocolo `louvorja://files`). Tudo lido no main — sem
+ida ao renderer, diferente de Vídeos Online.
 
 Os resultados pessoais trazem `custom_song_id` (o UUID) — o `id_music` deles é
 um **negativo sintético**, só para listar. A execução manda os dois no
@@ -1781,6 +1808,55 @@ usuário vence), ordenando por título.
     `color`**: dentro de um `<img>`, `currentColor` resolveria para preto. As
     marcas do projeto (`ja`) vêm do glob de `src/assets/icons/*.svg` (mesmo
     padrão do `LjIcon`). Imagem enviada pelo usuário tem prioridade sobre o ícone.
+
+### Som de fundo e volume no controle remoto
+
+A aba **Som de fundo** (`src/views/remote_control/RemoteBackgroundSound.vue`)
+mostra a biblioteca de sons agrupada por categoria e os botões
+pausar/retomar/parar, com o "tocando agora" e o volume atual. O player é o
+**single** do desktop (`useBackgroundSound()`), então funciona **sem o módulo
+aberto** e sem mexer na projeção.
+
+- **Consulta** (`GET /api/background-sound`) vai ao renderer por
+  `requestRenderer` no evento `http:background-sound`: só ele lê o IndexedDB
+  (`background_sound.library` / `background_sound.category`) e só os
+  **metadados** voltam — id, nome, arquivo, categoria — nunca os bytes do som.
+  O `main` valida o payload (`isBackgroundSoundStateResponse`, tetos de
+  5.000 arquivos / 2.000 categorias) antes de devolver.
+- **Comando** (`POST /api/background-sound`, `play`/`pause`/`resume`/`stop`) é
+  `safeSend` direto: o renderer resolve o arquivo (refazendo a blob URL de
+  `data`+`mime`, com cache por sessão — o `path` gravado pode vencer) e toca
+  com o mesmo `playFile` do módulo. `play` exige `id`; os demais não.
+- **Volume** (`POST /api/volume`): `{ action: up|down, step? }` com passo
+  **1% por padrão** (clamp 0..100) ou `{ action: set, value }` para nível
+  absoluto — é o que o **iOS** manda ao espelhar o botão físico do iPhone
+  (`KVO` em `AVAudioSession.outputVolume`). O renderer aplica nos **dois**
+  players (`Media.setVolume` + `useBackgroundSound().setVolume`), que é o
+  "volume geral" da tela, e devolve `{ status: "ok", value }` (validado por
+  `isVolumeResponse`). Sem `step`/`value` válidos a rota responde 400. O
+  valor alimenta o StateFlow `ViolinApiClient.volumeLevel` (ponte
+  `ViolinState.watchVolume` para o Swift): a tela **Som de fundo** exibe o
+  nível com ícone de volume + número (sem `%`) e reage **ao vivo** às teclas
+  do celular — antes só a carga de um novo áudio atualizava o número. O
+  feedback do Android virou `Volume: N` (o `%%` da string duplicava o símbolo
+  depois do `.replace`).
+- **Permissions**: as três rotas respondem **403** sem `background_sound`
+  (respectivamente `volume`), nem `root`. São as permissions novas em
+  `DEVICE_PERMISSIONS` (`src/types/Device.ts`), com rótulo em
+  `options.transmission.permission_background_sound` / `permission_volume`.
+  No app elas vêm no `ping` e são guardadas por device: a aba fica visível no
+  modo Violin (como a de Vídeos Online — sem a permission o módulo mostra o
+  aviso amigável de permissão), e a tecla de volume só é **interceptada** com
+  `volume`; fora disso ela segue mexendo no volume do próprio aparelho.
+- **Blob URLs**: o toque remoto cria a URL do áudio **a cada vez**
+  (`helpers/BackgroundSoundPath.ts`, mesma régua do resolver da liturgia) —
+  o player revoga a URL ativa em `playFile`/`stop`/`cleanup` (fechar o módulo
+  no desktop), então reaproveitar uma cache dava replay de URL **revogada**:
+  `play()` rejeitava em silêncio e o som "não funcionava mais" na segunda vez.
+- **Limitações**: o web não tem sinal de "modo clássico" (a aba fica visível;
+  no Delphi o player de som de fundo não é o da projeção) e no Android cada
+  pressão vale **1 ponto** (tecla é consumida no `dispatchKeyEvent`, uma vez
+  por `down`, sem repetição acelerada).
 
 ### A aba de slides não é só escuta
 

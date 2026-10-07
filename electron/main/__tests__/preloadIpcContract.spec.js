@@ -123,6 +123,8 @@ describe("preload IPC contract", () => {
     const cleanup = api.onHttpEvent(() => {});
 
     expect(seen.listeners.has("http:online-videos")).toBe(true);
+    expect(seen.listeners.has("http:background-sound")).toBe(true);
+    expect(seen.listeners.has("http:volume")).toBe(true);
     expect(seen.listeners.has("http:song-slides")).toBe(true);
     expect(seen.listeners.has("http:open-song")).toBe(true);
     cleanup();
@@ -150,7 +152,15 @@ describe("preload IPC contract", () => {
     const api = seen.exposed;
     const uuid = "00000000-0000-4000-8000-000000000004";
 
-    for (const prefixo of ["slides", "announcements", "libras", "online-videos", "custom-music"]) {
+    for (const prefixo of [
+      "slides",
+      "announcements",
+      "libras",
+      "online-videos",
+      "custom-music",
+      "background-sound",
+      "volume",
+    ]) {
       expect(
         api.httpServer.respond(`${prefixo}:${uuid}`, { status: "ok" }),
         `prefixo "${prefixo}" fora do contrato do preload`

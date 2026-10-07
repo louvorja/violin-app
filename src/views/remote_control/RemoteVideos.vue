@@ -109,6 +109,8 @@ import { ICONS } from "@/config/Icons";
 import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { apiFetch, postApi } from "@/helpers/ApiClient";
+import { serverImageUrl } from "@/helpers/serverImageUrl";
+import { httpErrorMessage } from "@/helpers/httpErrorMessage";
 
 /** Álbum: uma playlist do catálogo ou uma categoria dos Meus Vídeos. */
 interface OnlineVideoAlbum {
@@ -154,17 +156,7 @@ const searching = computed(() => {
 const sourceLabel = (source: OnlineVideo["source"]) =>
   t(source === "custom" ? "remote_control.videos.mine" : "remote_control.videos.catalog");
 
-/**
- * URL da miniatura: `http(s)` do catálogo remoto vai direto; caminho relativo
- * (`/api/online-videos/image?...`) é o desktop servindo o blob do IndexedDB e
- * precisa do token do controle web. `""` = sem thumb (o card fica sem imagem).
- */
-const imageUrl = (raw?: string | null): string => {
-  if (!raw) return "";
-  if (/^https?:\/\//.test(raw)) return raw;
-  const sep = raw.includes("?") ? "&" : "?";
-  return `${raw}${sep}token=${props.token ?? ""}`;
-};
+const imageUrl = (raw?: string | null): string => serverImageUrl(raw, props.token);
 
 /**
  * O campo híbrido está no modo **URL** (projeta) e não de busca? Mesmas regras
@@ -251,21 +243,9 @@ const rows = computed<Row[]>(() => {
   return linhas;
 });
 
-/**
- * Texto do erro de uma resposta HTTP.
- *
- * O desktop manda `error` pronto (ex.: "Timeout ao buscar vídeos online",
- * "Device sem permissão de vídeos online") — sem isto a aba virava lista vazia
- * e o operador não sabia se era conteúdo ou falha.
- */
+/** Texto do erro de uma resposta HTTP (helper compartilhado com RemoteMusic). */
 async function mensagemDeErro(res: Response): Promise<string> {
-  try {
-    const body = (await res.json()) as { error?: string };
-    if (body.error) return body.error;
-  } catch {
-    /* corpo não é JSON */
-  }
-  return `${t("remote_control.errors.generic")}: ${res.status}`;
+  return httpErrorMessage(res, t("remote_control.errors.generic"));
 }
 
 /** Busca os álbuns dos dois acervos. */
