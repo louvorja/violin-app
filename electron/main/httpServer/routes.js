@@ -1,113 +1,37 @@
 "use strict";
 
-const path = require("path");
-const fs = require("fs");
-const jsonCache = require("../jsonCache.js");
+/**
+ * Rotas HTTP do desktop — ARQUIVO PRINCIPAL (infra + contratos + motor).
+ *
+ * A organização ficou em três arquivos:
+ *   - routes.js (este): infra do servidor (`ping`, `settings/devices`),
+ *     os validadores/payloads (contratos exportados para os specs) e o motor
+ *     de renderer compartilhado (`requestRenderer`/`sendRendererError`/
+ *     `getValidMainWindow`), além do orquestrador `setupRoutes`;
+ *   - transmissionRoutes.js: as URLs/janelas da tela Opções → Transmissão
+ *     (relógio, música, bíblia, projeções, anúncios, sorteio, libras) e os
+ *     dados que esses displays carregam (`user-data`, `db`);
+ *   - remoteRoutes.js: as features do controle remoto (teclado, liturgia,
+ *     músicas, vídeos online, som de fundo, volume, chat).
+ *
+ * Os dois registros recebem tudo por `ctx` — por isso **nunca** requerem este
+ * arquivo (sem require circular) — e o `module.exports` mantém o mesmo
+ * contrato de antes, com chaves literais para o `import { … }` ESM dos specs
+ * continuar resolvendo (cjs-module-lexer não enxerga spread).
+ */
+
 const devices = require("../devices.js");
-const docStore = require("../docStore.js");
-const { HARD_MAX_PAYLOAD_BYTES } = require("./rendererRequestRegistry.js");
 const { safeSend } = require("../safeWebContents.js");
-const { createMusicSearchCatalog, normalize } = require("./musicSearchCatalog.js");
+const transmissionRoutes = require("./transmissionRoutes.js");
+const remoteRoutes = require("./remoteRoutes.js");
 
-const KEY_LITURGY_DAYS = "modules.liturgy.days";
-const KEY_LITURGY_ACTIVE_DAY = "modules.liturgy.active_day";
-const SLIDE_STATE_MAX_BYTES = 8 * 1024 * 1024;
-const ANNOUNCEMENTS_MAX_BYTES = 2 * 1024 * 1024;
-
-/** Coleção (docStore) onde o histórico do chat é persistido — igual ao renderer. */
-const CHAT_MESSAGES_COLLECTION = "chat.messages";
-
-/**
- * Estado em memória para sorteios (replicado entre requests).
- * Mantém sintonia com o estado interno dos módulos de sorteio.
- */
-const _sorteios = {
-  number: { last: null, history: [] },
-  name: { last: null, history: [] },
-};
-
-/** Rate limit simples: 1 msg/500ms por device. */
-const _chatRateLimit = new Map();
-
-/** Modos de execução de música aceitos pelo /api/open-song. */
-const SONG_MODES = new Set([
-  "audio",
-  "instrumental",
-  "no_audio",
-  "audio-only",
-  "playback-only",
-]);
-
-/** Mapa legado tag → mode (clients antigos que só enviam `tag`). */
-const SONG_TAG_MODES = { 1: "audio", 2: "instrumental", 3: "no_audio" };
-
-/**
- * Resolve o modo de execução da música.
- *
- * Prioridade: `mode` válido > `tag` legado > `"audio"` (Cantado). Assim os
- * clients novos escolhem o modo explicitamente, os antigos continuam
- * funcionando pelo `tag`, e uma requisição sem nenhum dos dois abre cantado.
- */
-function _resolveSongMode(body) {
-  const rawMode = body && body.mode;
-  if (typeof rawMode === "string" && SONG_MODES.has(rawMode)) return rawMode;
-  const tag = parseInt((body && body.tag) || "", 10);
-  if (SONG_TAG_MODES[tag]) return SONG_TAG_MODES[tag];
-  return "audio";
-}
-
-/**
- * Códigos VK legados (modo clássico do app) → nomes de tecla do DOM.
- * O modo clássico remapeia as setas para números (37/38/39/40…).
- */
-const LEGACY_VK_KEYS = {
-  13: "Enter",
-  27: "Escape",
-  32: "Space",
-  35: "End",
-  36: "Home",
-  37: "ArrowLeft",
-  38: "ArrowUp",
-  39: "ArrowRight",
-  40: "ArrowDown",
-};
-
-/** Aliases aceitos → nome DOM usado pelo `Hotkeys` do renderer. */
-const KEY_ALIASES = {
-  arrowleft: "ArrowLeft",
-  arrowright: "ArrowRight",
-  arrowup: "ArrowUp",
-  arrowdown: "ArrowDown",
-  esc: "Escape",
-  " ": "Space",
-  space: "Space",
-  return: "Enter",
-};
-
-/**
- * Normaliza o nome da tecla recebido do client para o nome DOM.
- *
- * O app manda `ArrowRight`/`Space`/`Home`… (e o modo clássico, códigos VK).
- * O `Hotkeys` do renderer compara por `KeyboardEvent.key`, então a chave
- * precisa chegar no formato DOM.
- */
-function normalizeKeyName(rawKey) {
-  const str = String(rawKey ?? "");
-  // Espaço literal (" ") é uma tecla, não whitespace a aparar.
-  if (str === " ") return "Space";
-  const trimmed = str.trim();
-  if (!trimmed) return null;
-  if (LEGACY_VK_KEYS[trimmed]) return LEGACY_VK_KEYS[trimmed];
-  const alias = KEY_ALIASES[trimmed.toLowerCase()];
-  if (alias) return alias;
-  return trimmed;
-}
 
 function isPlainObject(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const prototype = Object.getPrototypeOf(value);
   return prototype === Object.prototype || prototype === null;
 }
+
 
 function isSlideStateResponse(payload) {
   return (
@@ -122,6 +46,7 @@ function isSlideStateResponse(payload) {
     typeof payload.title === "string"
   );
 }
+
 
 function isAnnouncementsResponse(payload) {
   return (
@@ -142,14 +67,13 @@ function isAnnouncementsResponse(payload) {
   );
 }
 
+
 function isLibrasBundleResponse(payload) {
   if (payload === null) return true;
   if (!isPlainObject(payload)) return false;
   return payload.data instanceof ArrayBuffer || ArrayBuffer.isView(payload.data);
 }
 
-/** Teto do acervo pessoal de músicas no renderer. */
-const CUSTOM_SONGS_MAX_BYTES = 8 * 1024 * 1024;
 
 /**
  * Acervo pessoal vindo do renderer (`http:custom-music`).
@@ -178,13 +102,6 @@ function isCustomSongsSearchResponse(payload) {
   );
 }
 
-/** Teto dos dois acervos de vídeo (catálogo remoto + Meus Vídeos). */
-const ONLINE_VIDEOS_MAX_ITEMS = 10_000;
-const ONLINE_VIDEOS_MAX_BYTES = 8 * 1024 * 1024;
-/** Miniatura servida em binário (blob do IDB do renderer). */
-const ONLINE_VIDEOS_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
-const ONLINE_VIDEOS_READ_ACTIONS = new Set(["albums", "videos", "search"]);
-const ONLINE_VIDEOS_IMAGE_KINDS = new Set(["video", "category"]);
 
 /**
  * Miniatura de um item: URL (catálogo público ou caminho servido por
@@ -196,6 +113,7 @@ function isImageField(value) {
   if (value === null || value === undefined) return true;
   return typeof value === "string" && value.length <= 4_096;
 }
+
 
 /**
  * Um vídeo dos dois acervos, no formato que o cliente consome.
@@ -220,6 +138,7 @@ function isOnlineVideoItem(item) {
   );
 }
 
+
 function isOnlineVideosAlbumsResponse(payload) {
   return (
     isPlainObject(payload) &&
@@ -242,6 +161,7 @@ function isOnlineVideosAlbumsResponse(payload) {
   );
 }
 
+
 function isOnlineVideosVideosResponse(payload) {
   return (
     isPlainObject(payload) &&
@@ -251,6 +171,7 @@ function isOnlineVideosVideosResponse(payload) {
     payload.videos.every(isOnlineVideoItem)
   );
 }
+
 
 /**
  * Binário da miniatura vindo do renderer (`?action=image`): `data` é o blob do
@@ -263,6 +184,7 @@ function isOnlineVideoImageResponse(payload) {
   return typeof payload.mime === "string" && /^image\/[a-z0-9.+-]+$/i.test(payload.mime);
 }
 
+
 /**
  * Permission de um device para um endpoint — mesmo molde do chat.
  *
@@ -272,38 +194,110 @@ function isOnlineVideoImageResponse(payload) {
 function hasDevicePermission(req, permission) {
   const permissions = (req.authInfo && req.authInfo.permissions) || null;
   if (!permissions) return true;
-  return permissions.includes("root") || permissions.includes("online_videos");
+  return permissions.includes("root") || permissions.includes(permission);
 }
 
+
+/** Vídeos Online exigem a permission `online_videos` (ou `root`). */
+function hasOnlineVideosPermission(req) {
+  return hasDevicePermission(req, "online_videos");
+}
+
+
 /**
- * Extrai o id de um link do YouTube (`watch?v=`, `youtu.be`, `embed`, `shorts`,
- * `live`) ou de um id cru de 11 caracteres.
- *
- * Só o **id** segue para o renderer: a URL nunca vira argumento de comando, e
- * id inválido vira 400 na hora (em vez de um 200 que não projeta nada).
+ * Estado da biblioteca de som de fundo (só metadados — os bytes ficam no
+ * renderer e nunca saem por aqui).
  */
-function extractYoutubeVideoId(value) {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  if (/^[A-Za-z0-9_-]{11}$/.test(trimmed)) return trimmed;
-  const match = trimmed.match(
-    /(?:youtu\.be\/|[?&]v=|\/embed\/|\/shorts\/|\/live\/)([A-Za-z0-9_-]{11})/
+function isBackgroundSoundStateResponse(payload) {
+  if (!isPlainObject(payload) || payload.status !== "ok") return false;
+  if (typeof payload.playing !== "boolean") return false;
+  if (!Number.isInteger(payload.volume) || payload.volume < 0 || payload.volume > 100) return false;
+  if (payload.currentId !== null && payload.currentId !== undefined && typeof payload.currentId !== "string") {
+    return false;
+  }
+  if (!Array.isArray(payload.files) || payload.files.length > 5_000) return false;
+  if (!Array.isArray(payload.categories) || payload.categories.length > 2_000) return false;
+  const filesOk = payload.files.every(
+    (file) =>
+      isPlainObject(file) &&
+      typeof file.id === "string" &&
+      file.id.length <= 256 &&
+      typeof file.name === "string" &&
+      file.name.length <= 500 &&
+      (file.fileName === null || file.fileName === undefined || typeof file.fileName === "string") &&
+      (file.categoryId === null || file.categoryId === undefined || typeof file.categoryId === "string")
   );
-  return match ? match[1] : null;
+  const categoriesOk = payload.categories.every(
+    (category) =>
+      isPlainObject(category) &&
+      typeof category.id === "string" &&
+      category.id.length <= 256 &&
+      typeof category.name === "string" &&
+      category.name.length <= 200 &&
+      (category.color === null || category.color === undefined || typeof category.color === "string")
+  );
+  return filesOk && categoriesOk;
+}
+
+
+/** Volume aplicado: valor resultante inteiro em 0..100. */
+function isVolumeResponse(payload) {
+  return (
+    isPlainObject(payload) &&
+    payload.status === "ok" &&
+    Number.isInteger(payload.value) &&
+    payload.value >= 0 &&
+    payload.value <= 100
+  );
+}
+
+
+function isMusicLibraryAlbumsResponse(payload) {
+  if (!isPlainObject(payload) || payload.status !== "ok" || !Array.isArray(payload.albums)) {
+    return false;
+  }
+  if (payload.albums.length > 2_000) return false;
+  return payload.albums.every(
+    (album) =>
+      isPlainObject(album) &&
+      typeof album.id === "string" &&
+      album.id.length <= 256 &&
+      typeof album.title === "string" &&
+      album.title.length <= 1_000 &&
+      (album.subtitle === null || (typeof album.subtitle === "string" && album.subtitle.length <= 300)) &&
+      Number.isInteger(album.count) &&
+      album.count >= 0 &&
+      (album.source === "official" || album.source === "custom") &&
+      (album.color === null || (typeof album.color === "string" && album.color.length <= 32)) &&
+      isImageField(album.image)
+  );
+}
+
+
+function isMusicLibrarySongsResponse(payload) {
+  if (!isPlainObject(payload) || payload.status !== "ok" || !Array.isArray(payload.songs)) {
+    return false;
+  }
+  if (payload.songs.length > 5_000) return false;
+  return payload.songs.every(
+    (song) =>
+      isPlainObject(song) &&
+      Number.isInteger(song.id_music) &&
+      typeof song.name === "string" &&
+      song.name.length <= 500 &&
+      typeof song.duration === "string" &&
+      song.duration.length <= 16 &&
+      Number.isInteger(song.has_instrumental_music) &&
+      typeof song.albums_names === "string" &&
+      Number.isInteger(song.has_audio) &&
+      (song.custom_song_id === null || typeof song.custom_song_id === "string")
+  );
 }
 
 function setupRoutes(
   app,
-  {
-    getMainWindow,
-    getUserData,
-    jsonCache: _cache,
-    getDatabaseUrl,
-    getApiToken,
-    rendererRequests,
-  }
+  { getMainWindow, getUserData, getDatabaseUrl, getApiToken, rendererRequests }
 ) {
-  const musicSearchCatalog = createMusicSearchCatalog();
 
   /** Retorna mainWindow apenas se existir e não estiver destruída. */
   function getValidMainWindow() {
@@ -311,6 +305,7 @@ function setupRoutes(
     if (!win || win.isDestroyed()) return null;
     return win;
   }
+
 
   async function requestRenderer(mainWindow, res, eventType, payload, options) {
     const pending = rendererRequests.request(options.prefix, options);
@@ -330,6 +325,7 @@ function setupRoutes(
     }
   }
 
+
   function sendRendererError(res, error, timeoutMessage) {
     if (res.headersSent || res.writableEnded || res.destroyed) return;
     if (error?.code === "CLIENT_CLOSED") return;
@@ -344,26 +340,33 @@ function setupRoutes(
     res.status(503).json({ error: "Janela principal indisponível" });
   }
 
-  /** Consulta o estado atual sem permitir que o renderer escolha um canal IPC. */
-  async function askSlideState(mainWindow, res) {
-    try {
-      const data = await requestRenderer(
-        mainWindow,
-        res,
-        "http:song-slides",
-        { action: "playing-check" },
-        {
-          prefix: "slides",
-          timeoutMs: 3_000,
-          maxPayloadBytes: SLIDE_STATE_MAX_BYTES,
-          validatePayload: isSlideStateResponse,
-        }
-      );
-      if (!res.headersSent && !res.writableEnded) res.json(data);
-    } catch (error) {
-      sendRendererError(res, error, "Timeout ao consultar o estado dos slides");
-    }
-  }
+  // ── Famílias de rota (arquivos separados; contrato via ctx) ──────────────
+  transmissionRoutes.register(app, {
+    getValidMainWindow,
+    requestRenderer,
+    sendRendererError,
+    getUserData,
+    getDatabaseUrl,
+    getApiToken,
+    isSlideStateResponse,
+    isAnnouncementsResponse,
+    isLibrasBundleResponse,
+  });
+  remoteRoutes.register(app, {
+    getValidMainWindow,
+    requestRenderer,
+    sendRendererError,
+    getUserData,
+    isCustomSongsSearchResponse,
+    isOnlineVideosAlbumsResponse,
+    isOnlineVideosVideosResponse,
+    isOnlineVideoImageResponse,
+    isBackgroundSoundStateResponse,
+    isVolumeResponse,
+    hasOnlineVideosPermission,
+    hasDevicePermission,
+  });
+
 
   // ---------------------------------------------------------------
   // /api/ping — health check
@@ -382,943 +385,7 @@ function setupRoutes(
     });
   });
 
-  // ---------------------------------------------------------------
-  // /api/clock — hora do servidor
-  // ---------------------------------------------------------------
-  app.get("/api/clock", (req, res) => {
-    const now = new Date();
-    res.json({
-      time: now.toTimeString().slice(0, 8),
-      date: now.toISOString().slice(0, 10),
-      timestamp: now.getTime(),
-    });
-  });
 
-  // ---------------------------------------------------------------
-  // POST /api/keyboard — simular tecla
-  // Body: { key: string, modifiers?: string[] }
-  //
-  // Injeta um KeyboardEvent sintético no renderer em vez de usar
-  // `webContents.sendInputEvent`. Dois motivos:
-  //  1. `sendInputEvent` exige a BrowserWindow EM FOCO (ver docs do Electron),
-  //     e o controle remoto é usado justamente com o desktop em segundo plano;
-  //  2. `sendInputEvent.keyCode` só aceita códigos de Accelerator ("Right"),
-  //     não nomes DOM ("ArrowRight") — era o que o app enviava.
-  // O evento sintético cai no `Hotkeys` do renderer, reaproveitando todo o
-  // roteamento já existente (Media × Bíblia).
-  // ---------------------------------------------------------------
-  app.post("/api/keyboard", (req, res) => {
-    const mainWindow = getValidMainWindow();
-    const rawKey = req.body && req.body.key;
-    const modifiers = (req.body && req.body.modifiers) || [];
-    if (!rawKey || !mainWindow) {
-      return res.status(400).json({ error: "key faltando ou janela indisponível" });
-    }
-
-    const key = normalizeKeyName(rawKey);
-    if (!key) {
-      return res.status(400).json({ error: `key inválida: ${rawKey}` });
-    }
-
-    const mods = new Set(
-      (Array.isArray(modifiers) ? modifiers : []).map((m) => String(m).toLowerCase())
-    );
-    const event = {
-      key,
-      bubbles: true,
-      cancelable: true,
-      ctrlKey: mods.has("control") || mods.has("ctrl"),
-      metaKey: mods.has("meta") || mods.has("cmd") || mods.has("command"),
-      altKey: mods.has("alt"),
-      shiftKey: mods.has("shift"),
-    };
-
-    try {
-      // `executeJavaScript` roda independente de foco/minimização.
-      mainWindow.webContents
-        .executeJavaScript(
-          `window.dispatchEvent(new KeyboardEvent("keydown", ${JSON.stringify(event)}))`
-        )
-        .catch(() => { /* janela ainda carregando ou destruída */ });
-      res.json({ status: "ok", key, modifiers });
-    } catch (e) {
-      res.status(500).json({ error: e.message });
-    }
-  });
-
-  // ---------------------------------------------------------------
-  // POST /api/song-slides — ações de slides
-  // Body: { action: string, index?: number, presentation_session?: string }
-  // ---------------------------------------------------------------
-  app.post("/api/song-slides", (req, res) => {
-    const mainWindow = getValidMainWindow();
-    const action = req.body && req.body.action;
-    if (!mainWindow) {
-      return res.status(503).json({ error: "Janela principal não disponível" });
-    }
-
-    const validActions = [
-      "next", "previous", "playing-check", "close",
-      "go-to-slide", "bible-next", "bible-prev", "bible-close",
-    ];
-    if (!validActions.includes(action)) {
-      return res.status(400).json({ error: "action inválida", valid: validActions });
-    }
-
-    // `playing-check` é consulta (não comando): devolve o estado atual.
-    if (action === "playing-check") {
-      return askSlideState(mainWindow, res);
-    }
-
-    const payload = { action };
-    if (action === "go-to-slide") {
-      const index = req.body?.index;
-      if (!Number.isSafeInteger(index) || index < 0) {
-        return res.status(400).json({ error: "index deve ser um inteiro não negativo" });
-      }
-      payload.index = index;
-    }
-
-    if (["next", "previous", "close", "go-to-slide"].includes(action)) {
-      const session = req.body?.presentation_session;
-      if (session !== undefined) {
-        if (typeof session !== "string" || !session || session.length > 128) {
-          return res.status(400).json({ error: "presentation_session inválida" });
-        }
-        payload.presentation_session = session;
-      }
-    }
-
-    safeSend(mainWindow, "http:song-slides", payload);
-    res.json({ status: "ok", action, payload });
-  });
-
-  // ---------------------------------------------------------------
-  // GET /api/song-slides?action=playing-check — mesma consulta por GET
-  // (clientes que só fazem GET usam esta forma).
-  // ---------------------------------------------------------------
-  app.get("/api/song-slides", (req, res) => {
-    if (req.query.action !== "playing-check") {
-      return res.status(400).json({ error: "action inválida para GET", valid: ["playing-check"] });
-    }
-    const mainWindow = getValidMainWindow();
-    if (!mainWindow) {
-      return res.status(503).json({ error: "Janela principal não disponível" });
-    }
-    return askSlideState(mainWindow, res);
-  });
-
-  // ---------------------------------------------------------------
-  // POST /api/bible — projeta versículo ou encerra projeção
-  // Body: { action?: "close"|"next"|"prev", text?, reference?, bookId?, versionId?, chapter?, verse? }
-  // ---------------------------------------------------------------
-  app.post("/api/bible", (req, res) => {
-    const mainWindow = getValidMainWindow();
-    if (!mainWindow) {
-      return res.status(503).json({ error: "Janela principal não disponível" });
-    }
-
-    const {
-      action, text, reference, bookId, chapter, verse, versionId: requestedVersionId,
-    } = req.body || {};
-
-    if (action === "close") {
-      const payload = { action: "bible-close" };
-      safeSend(mainWindow, "http:song-slides", payload);
-      return res.json({ status: "ok", action: "bible-close", payload });
-    }
-
-    if (action === "next") {
-      const payload = { action: "bible-next" };
-      safeSend(mainWindow, "http:song-slides", payload);
-      return res.json({ status: "ok", action: "bible-next", payload });
-    }
-
-    if (action === "prev") {
-      const payload = { action: "bible-prev" };
-      safeSend(mainWindow, "http:song-slides", payload);
-      return res.json({ status: "ok", action: "bible-prev", payload });
-    }
-
-    if (!text || !reference) {
-      return res.status(400).json({ error: "text e reference são obrigatórios (ou action=close)" });
-    }
-
-    if (
-      requestedVersionId != null &&
-      (!Number.isSafeInteger(requestedVersionId) || requestedVersionId < 1)
-    ) {
-      return res.status(400).json({ error: "versionId deve ser um inteiro positivo" });
-    }
-    const userData = typeof getUserData === "function" ? getUserData() : {};
-    const versionId = requestedVersionId ?? userData?.id_bible_version;
-
-    const payload = {
-      action: "bible-verse",
-      text,
-      reference,
-      bookId,
-      chapter: chapter ? parseInt(chapter, 10) : undefined,
-      verses: verse ? [parseInt(verse, 10)] : undefined,
-      versionId,
-    };
-
-    safeSend(mainWindow, "http:song-slides", payload);
-    res.json({ status: "ok", action: "bible-verse", payload });
-  });
-
-  // ---------------------------------------------------------------
-  // POST /api/liturgy-execute — executa item da liturgia
-  // Body: { id: string, tag?: string }
-  // ---------------------------------------------------------------
-  app.post("/api/liturgy-execute", (req, res) => {
-    const mainWindow = getValidMainWindow();
-    if (!mainWindow) {
-      return res.status(503).json({ error: "Janela principal não disponível" });
-    }
-    const id = req.body && req.body.id;
-    if (!id) {
-      return res.status(400).json({ error: "id é obrigatório" });
-    }
-
-    // O dia que o cliente exibiu (a rota GET devolve o `day` da lista): o
-    // renderer busca o item nele e só cai no fallback (hoje → dia ativo) se
-    // faltar ou vier fora de 0..6.
-    const rawDay = req.body && req.body.day;
-    const parsedDay = typeof rawDay === "string" && rawDay.trim() !== "" ? Number(rawDay) : rawDay;
-    const day = Number.isInteger(parsedDay) && parsedDay >= 0 && parsedDay <= 6 ? parsedDay : undefined;
-
-    const payload = {
-      action: "liturgy-execute",
-      id,
-      tag: req.body.tag,
-      ...(day !== undefined ? { day } : {}),
-    };
-    safeSend(mainWindow, "http:song-slides", payload);
-    res.json({ status: "ok", action: "liturgy-execute", payload });
-  });
-
-  // ---------------------------------------------------------------
-  // POST /api/open-song — abre música para projeção
-  // Body: { id: number, mode?: string, tag?: number, id_liturgy?: string }
-  //
-  // mode: audio | instrumental | no_audio | audio-only | playback-only
-  // tag (legado): 1=audio, 2=instrumental, 3=no_audio
-  // ---------------------------------------------------------------
-  app.post("/api/open-song", (req, res) => {
-    const mainWindow = getValidMainWindow();
-    const id = parseInt(req.body && req.body.id, 10);
-    const id_liturgy = req.body && req.body.id_liturgy;
-
-    if (isNaN(id) || !mainWindow) {
-      return res.status(400).json({ error: "id inválido ou janela indisponível" });
-    }
-
-    const mode = _resolveSongMode(req.body);
-
-    // Música personalizada: o `id` do corpo é um negativo sintético (só serve
-    // para listas) — a execução é sempre pelo UUID em `custom_song_id`.
-    const customSongId =
-      typeof req.body.custom_song_id === "string" && req.body.custom_song_id
-        ? req.body.custom_song_id
-        : undefined;
-
-    safeSend(mainWindow, "http:open-song", {
-      id_music: id,
-      mode,
-      id: id_liturgy,
-      ...(customSongId ? { custom_song_id: customSongId } : {}),
-    });
-    res.json({ status: "ok", id, mode });
-  });
-
-  /**
-   * Músicas do acervo pessoal (IDB do renderer), filtradas com o **mesmo**
-   * `normalize` da busca oficial. Aditivo por natureza: renderer indisponível
-   * ou fora do ar → devolve `[]` e a busca oficial segue intacta.
-   *
-   * A consulta numérica é exclusiva do hinário oficial (personalizadas não têm
-   * número de hino), então nesses casos nem se consulta.
-   */
-  async function searchCustomSongs(query, res) {
-    const mainWindow = getValidMainWindow();
-    if (!mainWindow) return [];
-    try {
-      const data = await requestRenderer(
-        mainWindow,
-        res,
-        "http:custom-music",
-        {},
-        {
-          prefix: "custom-music",
-          timeoutMs: 4_000,
-          maxPayloadBytes: CUSTOM_SONGS_MAX_BYTES,
-          validatePayload: isCustomSongsSearchResponse,
-        }
-      );
-      return (data.songs || [])
-        .filter(
-          (song) =>
-            normalize(song.name).includes(query) || normalize(song.albums_names).includes(query)
-        )
-        .slice(0, 20);
-    } catch (error) {
-      console.warn(
-        `[httpServer] music-search pessoal falhou: ${error?.code || error?.message || error}`
-      );
-      return [];
-    }
-  }
-
-  // ---------------------------------------------------------------
-  // /api/music-search?q=...&lang=pt (GET — somente leitura)
-  // ---------------------------------------------------------------
-  app.get("/api/music-search", async (req, res) => {
-    const q = req.query.q;
-    if (typeof q !== "string" || !q.trim() || (q.trim().length < 2 && !/^\d+$/.test(q.trim()))) {
-      return res.json({ status: "ok", results: [] });
-    }
-    const lang = req.query.lang === "es" ? "es" : "pt";
-    const query = normalize(q.trim());
-
-    try {
-      const filePath = jsonCache.safeLocalPath(`${lang}_musics`);
-      let results;
-      try {
-        const userData = typeof getUserData === "function" ? getUserData() : {};
-        const disabled = Array.isArray(userData?.options?.disabled_albums)
-          ? [...userData.options.disabled_albums] : [];
-        if (userData?.modules?.hymnal_1996?.show_in_main_menu !== true) disabled.push(629);
-        results = await musicSearchCatalog.search(filePath, query, disabled,
-          jsonCache.safeLocalPath(`${lang}_categories`));
-      } catch (error) {
-        if (error.code !== "ENOENT") throw error;
-        return res.status(404).json({
-          error: "Base de músicas não encontrada localmente. Faça uma atualização do banco.",
-        });
-      }
-      // Acervo pessoal vem depois do oficial — mesma ordem do spotlight do
-      // desktop (`MusicSpotlight`: [...oficial, ...customMusics]).
-      const custom = /^\d+$/.test(query) ? [] : await searchCustomSongs(query, res);
-      const merged = [...results, ...custom];
-      if (custom.length > 0) {
-        console.log(`[httpServer] music-search pessoal ok (${custom.length} de ${merged.length})`);
-      }
-      res.json({ status: "ok", results: merged, total: merged.length });
-    } catch (e) {
-      console.error("[httpServer] /api/music-search error:", e.message);
-      res.status(500).json({ error: e.message });
-    }
-  });
-
-  // ---------------------------------------------------------------
-  // /api/drawing-number
-  // GET  action=get-last — consulta último sorteado
-  // POST action=draw     — sortear número
-  // ---------------------------------------------------------------
-  app.get("/api/drawing-number", (req, res) => {
-    const action = req.query.action;
-    if (action === "get-last") {
-      return res.json({ status: "ok", last: _sorteios.number.last });
-    }
-    res.status(400).json({ error: "action inválida", valid: ["get-last"] });
-  });
-
-  app.post("/api/drawing-number", (req, res) => {
-    const mainWindow = getValidMainWindow();
-    const { action, min, max } = req.body || {};
-
-    if (action === "draw") {
-      const minVal = parseInt(min || "1", 10);
-      const maxVal = parseInt(max || "100", 10);
-      const num = Math.floor(Math.random() * (maxVal - minVal + 1)) + minVal;
-      _sorteios.number.last = num;
-      _sorteios.number.history.push(num);
-
-      if (mainWindow) {
-        safeSend(mainWindow, "http:drawing-number", { number: num });
-      }
-
-      return res.json({ status: "ok", number: num, history: _sorteios.number.history });
-    }
-
-    res.status(400).json({ error: "action inválida", valid: ["draw"] });
-  });
-
-  // ---------------------------------------------------------------
-  // /api/drawing-name
-  // GET  action=get-last — consulta último sorteado
-  // POST action=draw     — sortear nome
-  // ---------------------------------------------------------------
-  app.get("/api/drawing-name", (req, res) => {
-    const action = req.query.action;
-    if (action === "get-last") {
-      return res.json({ status: "ok", last: _sorteios.name.last });
-    }
-    res.status(400).json({ error: "action inválida", valid: ["get-last"] });
-  });
-
-  app.post("/api/drawing-name", (req, res) => {
-    const mainWindow = getValidMainWindow();
-    const { action, names: namesRaw } = req.body || {};
-
-    if (action === "draw") {
-      const namesStr = namesRaw || "";
-      const names = namesStr.split(",").map((n) => n.trim()).filter(Boolean);
-
-      if (names.length === 0) {
-        return res.status(400).json({ error: "names ausente ou vazio" });
-      }
-
-      const name = names[Math.floor(Math.random() * names.length)];
-      _sorteios.name.last = name;
-      _sorteios.name.history.push(name);
-
-      if (mainWindow) {
-        safeSend(mainWindow, "http:drawing-name", { name });
-      }
-
-      return res.json({ status: "ok", name, history: _sorteios.name.history });
-    }
-
-    res.status(400).json({ error: "action inválida", valid: ["draw"] });
-  });
-
-  // ---------------------------------------------------------------
-  // /api/bible-downloaded — versões da Bíblia baixadas no host (GET)
-  // ---------------------------------------------------------------
-  app.get("/api/bible-downloaded", async (req, res) => {
-    const lang = req.query.lang || "pt";
-    try {
-      const versionsPath = jsonCache.safeLocalPath(`${lang}_bible_version`);
-      const booksPath = jsonCache.safeLocalPath(`${lang}_bible_book`);
-      let versionsRaw;
-      let booksRaw;
-      try {
-        [versionsRaw, booksRaw] = await Promise.all([
-          fs.promises.readFile(versionsPath, "utf8"),
-          fs.promises.readFile(booksPath, "utf8"),
-        ]);
-      } catch (error) {
-        if (error.code !== "ENOENT") throw error;
-        return res.json({ status: "ok", downloaded: [] });
-      }
-      const versions = JSON.parse(versionsRaw);
-      const books = JSON.parse(booksRaw);
-      if (!Array.isArray(versions) || !Array.isArray(books)) {
-        return res.json({ status: "ok", downloaded: [] });
-      }
-
-      const userData = typeof getUserData === "function" ? getUserData() : {};
-      const flaggedVersions = new Set(
-        Array.isArray(userData?.storage?.bible_downloaded_versions)
-          ? userData.storage.bible_downloaded_versions
-          : []
-      );
-
-      const downloaded = [];
-      for (const v of versions) {
-        if (flaggedVersions.has(v.id_bible_version)) {
-          downloaded.push(v.id_bible_version);
-          continue;
-        }
-        let allPresent = true;
-        for (const b of books) {
-          const chCount = b.chapters || 1;
-          for (let start = 1; start <= chCount; start += 32) {
-            const end = Math.min(start + 32, chCount + 1);
-            const present = await Promise.all(
-              Array.from({ length: end - start }, (_, offset) => {
-                const chapterPath = jsonCache.safeLocalPath(
-                  `bible_${v.id_bible_version}_${b.id_bible_book}_${start + offset}`
-                );
-                return fs.promises.access(chapterPath).then(
-                  () => true,
-                  (error) => {
-                    if (error.code === "ENOENT") return false;
-                    throw error;
-                  }
-                );
-              })
-            );
-            if (present.includes(false)) {
-              allPresent = false;
-              break;
-            }
-          }
-          if (!allPresent) break;
-        }
-        if (allPresent) downloaded.push(v.id_bible_version);
-      }
-      res.json({ status: "ok", downloaded });
-    } catch (e) {
-      console.error("[httpServer] /api/bible-downloaded error:", e.message);
-      res.json({ status: "ok", downloaded: [] });
-    }
-  });
-
-  // ---------------------------------------------------------------
-  // /api/announcements
-  // GET  action=list       — lista anúncios (somente leitura)
-  // POST action=project|next|prev|stop — controle de anúncios
-  // ---------------------------------------------------------------
-  app.get("/api/announcements", async (req, res) => {
-    const mainWindow = getValidMainWindow();
-    const action = req.query.action || "list";
-
-    if (action === "list") {
-      if (!mainWindow) {
-        return res.status(503).json({ error: "Janela principal não disponível" });
-      }
-      try {
-        const data = await requestRenderer(
-          mainWindow,
-          res,
-          "http:song-slides",
-          { action: "announcements-list" },
-          {
-            prefix: "announcements",
-            timeoutMs: 5_000,
-            maxPayloadBytes: ANNOUNCEMENTS_MAX_BYTES,
-            validatePayload: isAnnouncementsResponse,
-          }
-        );
-        if (!res.headersSent && !res.writableEnded) res.json(data);
-      } catch (error) {
-        sendRendererError(res, error, "Timeout ao buscar anúncios");
-      }
-      return;
-    }
-
-    res.status(400).json({ error: "action inválida para GET, use POST para comandos" });
-  });
-
-  app.post("/api/announcements", (req, res) => {
-    const mainWindow = getValidMainWindow();
-    if (!mainWindow) {
-      return res.status(503).json({ error: "Janela principal não disponível" });
-    }
-
-    const action = req.body && req.body.action;
-
-    if (action === "project") {
-      const ids = req.body.ids || [];
-      safeSend(mainWindow, "http:song-slides", { action: "announcements-project", ids });
-      return res.json({ status: "ok", action: "announcements-project" });
-    }
-
-    if (action === "next") {
-      safeSend(mainWindow, "http:song-slides", { action: "announcements-next" });
-      return res.json({ status: "ok", action: "announcements-next" });
-    }
-
-    if (action === "prev") {
-      safeSend(mainWindow, "http:song-slides", { action: "announcements-prev" });
-      return res.json({ status: "ok", action: "announcements-prev" });
-    }
-
-    if (action === "stop") {
-      safeSend(mainWindow, "http:song-slides", { action: "announcements-stop" });
-      return res.json({ status: "ok", action: "announcements-stop" });
-    }
-
-    res.status(400).json({ error: "action inválida", valid: ["project", "next", "prev", "stop"] });
-  });
-
-  // ---------------------------------------------------------------
-  // /api/online-videos — Vídeos Online (controle remoto)
-  //
-  // GET  action=albums|videos|search — consulta os DOIS acervos no renderer
-  //      (catálogo remoto `{lang}_collections_online` + Meus Vídeos no IDB)
-  // POST action=play|close           — projeta uma URL do YouTube / encerra
-  //
-  // Devices pareados exigem a permission `online_videos` (ou `root`).
-  // ---------------------------------------------------------------
-  app.get("/api/online-videos", async (req, res) => {
-    if (!hasOnlineVideosPermission(req)) {
-      console.log("[httpServer] online-videos → 403 (device sem a permission online_videos)");
-      return res.status(403).json({ error: "Device sem permissão de vídeos online" });
-    }
-    const mainWindow = getValidMainWindow();
-    if (!mainWindow) {
-      return res.status(503).json({ error: "Janela principal não disponível" });
-    }
-
-    const action = req.query.action || "albums";
-    if (!ONLINE_VIDEOS_READ_ACTIONS.has(action)) {
-      return res
-        .status(400)
-        .json({ error: "action inválida para GET", valid: [...ONLINE_VIDEOS_READ_ACTIONS] });
-    }
-
-    const lang = req.query.lang === "es" ? "es" : "pt";
-    const q = typeof req.query.q === "string" ? req.query.q.trim().slice(0, 200) : "";
-    const album = typeof req.query.album === "string" ? req.query.album.trim().slice(0, 512) : "";
-    if (action === "videos" && !album) {
-      return res.status(400).json({ error: "album obrigatório" });
-    }
-
-    try {
-      const data = await requestRenderer(
-        mainWindow,
-        res,
-        "http:online-videos",
-        { action, lang, q, album },
-        {
-          prefix: "online-videos",
-          timeoutMs: 8_000,
-          maxPayloadBytes: ONLINE_VIDEOS_MAX_BYTES,
-          validatePayload:
-            action === "albums" ? isOnlineVideosAlbumsResponse : isOnlineVideosVideosResponse,
-        }
-      );
-      if (!res.headersSent && !res.writableEnded) {
-        // O log de recebimento (middleware) não mostra o desfecho — aqui sim:
-        // é o que aparece no terminal quando a aba Vídeos Online consulta.
-        const count = Array.isArray(data?.albums)
-          ? data.albums.length
-          : Array.isArray(data?.videos)
-            ? data.videos.length
-            : 0;
-        console.log(`[httpServer] online-videos → ${action} ok (${count} itens)`);
-        res.json(data);
-      }
-    } catch (error) {
-      console.warn(
-        `[httpServer] online-videos → ${action} falhou: ${error?.code || error?.message || error}`
-      );
-      sendRendererError(res, error, "Timeout ao buscar vídeos online");
-    }
-  });
-
-  // ---------------------------------------------------------------
-  // GET /api/online-videos/image?kind=video|category&id=...
-  // Miniatura dos **Meus Vídeos** (blob no IndexedDB do renderer) e dos
-  // ícones de imagem das categorias. As do catálogo remoto não passam por
-  // aqui: são URLs públicas (ytimg) que o cliente carrega direto.
-  // ---------------------------------------------------------------
-  app.get("/api/online-videos/image", async (req, res) => {
-    if (!hasOnlineVideosPermission(req)) {
-      console.log("[httpServer] online-videos image → 403 (device sem a permission online_videos)");
-      return res.status(403).json({ error: "Device sem permissão de vídeos online" });
-    }
-    const mainWindow = getValidMainWindow();
-    if (!mainWindow) {
-      return res.status(503).json({ error: "Janela principal não disponível" });
-    }
-
-    const kind = typeof req.query.kind === "string" ? req.query.kind : "";
-    const id = typeof req.query.id === "string" ? req.query.id.trim().slice(0, 256) : "";
-    if (!ONLINE_VIDEOS_IMAGE_KINDS.has(kind)) {
-      return res.status(400).json({ error: "kind inválido", valid: [...ONLINE_VIDEOS_IMAGE_KINDS] });
-    }
-    if (!id) {
-      return res.status(400).json({ error: "id obrigatório" });
-    }
-
-    try {
-      const image = await requestRenderer(
-        mainWindow,
-        res,
-        "http:online-videos",
-        { action: "image", kind, id },
-        {
-          prefix: "online-videos",
-          timeoutMs: 5_000,
-          maxPayloadBytes: ONLINE_VIDEOS_IMAGE_MAX_BYTES,
-          validatePayload: isOnlineVideoImageResponse,
-        }
-      );
-      if (res.headersSent || res.writableEnded) return;
-
-      if (!image.data) {
-        console.log(`[httpServer] online-videos image → 404 (${kind}:${id})`);
-        return res.status(404).json({ error: "Miniatura não encontrada" });
-      }
-      const bytes = ArrayBuffer.isView(image.data)
-        ? Buffer.from(image.data.buffer, image.data.byteOffset, image.data.byteLength)
-        : Buffer.from(image.data);
-      res.set("Content-Type", image.mime);
-      res.set("Cache-Control", "private, max-age=86400");
-      res.send(bytes);
-    } catch (error) {
-      console.warn(
-        `[httpServer] online-videos image → falhou: ${error?.code || error?.message || error}`
-      );
-      sendRendererError(res, error, "Timeout ao buscar a miniatura");
-    }
-  });
-
-  app.post("/api/online-videos", (req, res) => {
-    if (!hasOnlineVideosPermission(req)) {
-      console.log("[httpServer] online-videos → 403 no comando (device sem a permission)");
-      return res.status(403).json({ error: "Device sem permissão de vídeos online" });
-    }
-    const mainWindow = getValidMainWindow();
-    if (!mainWindow) {
-      return res.status(503).json({ error: "Janela principal não disponível" });
-    }
-
-    const action = req.body && req.body.action;
-    if (action === "play") {
-      const url = typeof req.body.url === "string" ? req.body.url.trim() : "";
-      const title = typeof req.body.title === "string" ? req.body.title.trim().slice(0, 500) : "";
-      const videoId = extractYoutubeVideoId(url);
-      if (!videoId) {
-        return res.status(400).json({ error: "url do YouTube inválida" });
-      }
-      safeSend(mainWindow, "http:online-videos", { action: "play", videoId, title });
-      return res.json({ status: "ok", action: "play" });
-    }
-
-    if (action === "close") {
-      safeSend(mainWindow, "http:online-videos", { action: "close" });
-      return res.json({ status: "ok", action: "close" });
-    }
-
-    res.status(400).json({ error: "action inválida", valid: ["play", "close"] });
-  });
-
-  // ---------------------------------------------------------------
-  // POST /api/projections/close — encerra todas as projeções ativas
-  // ---------------------------------------------------------------
-  app.post("/api/projections/close", (req, res) => {
-    const mainWindow = getValidMainWindow();
-    if (!mainWindow) {
-      return res.status(503).json({ error: "Janela principal não disponível" });
-    }
-    safeSend(mainWindow, "http:projections-close");
-    res.json({ status: "ok", action: "projections-close" });
-  });
-
-  // ---------------------------------------------------------------
-  // POST /api/chat — enviar mensagem de chat
-  // Body: { text: string, sender: string }
-  // Headers: X-Device-Id (opcional)
-  // ---------------------------------------------------------------
-  app.post("/api/chat", (req, res) => {
-    const { text, sender } = req.body || {};
-    if (!text || typeof text !== "string" || text.trim().length === 0) {
-      return res.status(400).json({ error: "text obrigatório" });
-    }
-    if (text.length > 2000) {
-      return res.status(400).json({ error: "text excede 2000 caracteres" });
-    }
-
-    // Rate limit: 1 msg/seg por device
-    const deviceId = req.headers && req.headers["x-device-id"];
-    const rateKey = deviceId || req.ip;
-    const now = Date.now();
-    const last = _chatRateLimit.get(rateKey) || 0;
-    if (now - last < 1000) {
-      return res.status(429).json({ error: "Rate limit: 1 msg/seg" });
-    }
-    _chatRateLimit.set(rateKey, now);
-
-    // Verifica permissão "chat" do device (se identificado)
-    if (deviceId) {
-      const device = devices.findById(String(deviceId));
-      if (device && device.permissions && !device.permissions.includes("chat") && !device.permissions.includes("root")) {
-        return res.status(403).json({ error: "Device sem permissão de chat" });
-      }
-    }
-
-    const foundDevice = deviceId ? devices.findById(String(deviceId)) : null;
-    const deviceName = foundDevice?.name;
-
-    // Id gerado pelo client (app) para casar a mensagem otimista com o eco SSE
-    // e evitar duplicata na tela. Aceita só strings curtas; senão gera um UUID.
-    const rawId = req.body && req.body.id;
-    const id =
-      typeof rawId === "string" && rawId.trim().length > 0 && rawId.trim().length <= 64
-        ? rawId.trim()
-        : crypto.randomUUID();
-
-    const msg = {
-      id,
-      sender: deviceName || sender || "Dispositivo",
-      deviceId: deviceId || undefined,
-      platform: foundDevice?.platform || undefined,
-      text: text.trim(),
-      timestamp: new Date().toISOString(),
-    };
-
-    // Publica via SSE para todos os clients conectados
-    const events = require("./events.js");
-    events.publish({ type: "chat_message", payload: msg });
-
-    // Envia IPC para o renderer local
-    const mainWindow = getValidMainWindow();
-    if (mainWindow) {
-      safeSend(mainWindow, "transmission:chat-message", msg);
-    }
-
-    res.json({ ok: true, id: msg.id });
-  });
-
-  // ---------------------------------------------------------------
-  // GET /api/chat/history — últimas mensagens do chat (somente leitura)
-  //
-  // Devolve até `chat_history_limit` mensagens (definido nas opções do
-  // desktop), da mais antiga para a mais recente. O app usa isso para
-  // preencher lacunas após reconectar.
-  // ---------------------------------------------------------------
-  app.get("/api/chat/history", (_req, res) => {
-    const limit = devices.getChatHistoryLimit();
-    let messages = [];
-    try {
-      messages = docStore.read(CHAT_MESSAGES_COLLECTION);
-    } catch (e) {
-      console.warn("[httpServer] /api/chat/history: falha ao ler o histórico:", e.message);
-    }
-    const ordenadas = [...messages].sort((a, b) =>
-      String(a && a.timestamp ? a.timestamp : "").localeCompare(
-        String(b && b.timestamp ? b.timestamp : ""),
-      ),
-    );
-    res.json({ status: "ok", messages: ordenadas.slice(-limit) });
-  });
-
-  // ---------------------------------------------------------------
-  // /libras/:token — bundles de animação VLibras (GET)
-  // ---------------------------------------------------------------
-  app.get("/libras/:token", async (req, res) => {
-    const token = req.params.token;
-    if (!token) {
-      return res.status(400).json({ error: "token obrigatório" });
-    }
-
-    try {
-      const mainWindow = getValidMainWindow();
-      if (!mainWindow) {
-        return res.status(503).json({ error: "Janela principal não disponível" });
-      }
-      const data = await requestRenderer(
-        mainWindow,
-        res,
-        "http:libras-bundle",
-        { token },
-        {
-          prefix: "libras",
-          timeoutMs: 5_000,
-          maxPayloadBytes: HARD_MAX_PAYLOAD_BYTES,
-          validatePayload: isLibrasBundleResponse,
-        }
-      );
-      if (res.headersSent || res.writableEnded) return;
-      if (data?.data) {
-        const bytes = data.data;
-        const buffer = bytes instanceof ArrayBuffer
-          ? Buffer.from(bytes)
-          : Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-        res.setHeader("Content-Type", "application/octet-stream");
-        res.setHeader("Content-Length", buffer.length);
-        res.setHeader("Cache-Control", "public, max-age=86400");
-        return res.send(buffer);
-      }
-      res.status(404).json({ error: "Bundle não encontrado", token });
-    } catch (e) {
-      if (e?.code) {
-        sendRendererError(res, e, "Timeout ao buscar bundle");
-        return;
-      }
-      console.error("[httpServer] /libras error:", e.message);
-      if (!res.headersSent && !res.writableEnded) res.status(500).json({ error: e.message });
-    }
-  });
-
-  // ---------------------------------------------------------------
-  // /api/liturgy — itens da liturgia do dia (GET)
-  // ---------------------------------------------------------------
-  app.get("/api/liturgy", (req, res) => {
-    const userData = typeof getUserData === "function" ? getUserData() : {};
-    const day = req.query.day != null ? parseInt(req.query.day, 10) : new Date().getDay();
-
-    function getByPath(obj, path, fallback) {
-      if (!path || !obj) return fallback;
-      const keys = path.split(".");
-      let cur = obj;
-      for (const key of keys) {
-        if (cur[key] === undefined || cur[key] === null) return fallback;
-        cur = cur[key];
-      }
-      return cur;
-    }
-
-    const allDays = getByPath(userData, KEY_LITURGY_DAYS, {});
-    let items = allDays[day] || [];
-
-    if (items.length === 0) {
-      const activeDay = getByPath(userData, KEY_LITURGY_ACTIVE_DAY, day);
-      if (activeDay !== day) {
-        items = allDays[activeDay] || [];
-        return res.json({ status: "ok", day: activeDay, items, is_active_day: true });
-      }
-    }
-
-    res.json({ status: "ok", day, items });
-  });
-
-  // ---------------------------------------------------------------
-  // /api/user-data?path=... (GET — somente leitura)
-  // ---------------------------------------------------------------
-  app.get("/api/user-data", (req, res) => {
-    const path = req.query.path;
-    if (!path) return res.status(400).json({ error: "path obrigatório" });
-
-    const userData = typeof getUserData === "function" ? getUserData() : {};
-
-    function getByPath(obj, path, fallback) {
-      if (!path || !obj) return fallback;
-      const keys = path.split(".");
-      let cur = obj;
-      for (const key of keys) {
-        if (!cur || cur[key] === undefined || cur[key] === null) return fallback;
-        cur = cur[key];
-      }
-      return cur;
-    }
-
-    const value = getByPath(userData, path, null);
-    res.json({ status: "ok", path, value });
-  });
-
-  // ---------------------------------------------------------------
-  // GET /api/db/:path(*) — cache JSON (somente leitura)
-  // ---------------------------------------------------------------
-  app.get("/api/db/:path(*)", async (req, res) => {
-    const rawPath = req.params.path;
-    if (!rawPath) {
-      return res.status(400).json({ error: "path é obrigatório" });
-    }
-    const sanitized = rawPath.replace(/^\/+/g, "").replace(/\.\.\//g, "");
-    try {
-      const filePath = jsonCache.safeLocalPath(sanitized);
-      try {
-        const raw = await fs.promises.readFile(filePath, "utf8");
-        return res.json(JSON.parse(raw));
-      } catch (error) {
-        if (error.code !== "ENOENT") throw error;
-      }
-
-      const databaseUrl = typeof getDatabaseUrl === "function" ? getDatabaseUrl() : "";
-      const apiToken = typeof getApiToken === "function" ? getApiToken() : "";
-      const headers = apiToken ? { "Api-Token": apiToken } : {};
-
-      const result = await jsonCache.fetchJson(sanitized, databaseUrl, headers);
-      if (result.status === 200 && result.body) {
-        return res.json(JSON.parse(result.body.toString("utf-8")));
-      }
-
-      return res.status(404).json({
-        error: "Arquivo não encontrado no cache local nem no servidor remoto",
-        path: sanitized,
-      });
-    } catch (e) {
-      console.error("[httpServer] /api/db error:", e.message);
-      res.status(500).json({ error: e.message });
-    }
-  });
 
   // ---------------------------------------------------------------
   // GET/POST /api/settings/devices — configurações de dispositivos
@@ -1328,6 +395,8 @@ function setupRoutes(
   app.get("/api/settings/devices", (_req, res) => {
     res.json(devices.getSettings());
   });
+
+
 
   app.post("/api/settings/devices", (req, res) => {
     const body = req.body || {};
@@ -1341,9 +410,9 @@ function setupRoutes(
 
 module.exports = {
   setupRoutes,
-  resolveSongMode: _resolveSongMode,
-  normalizeKeyName,
-  extractYoutubeVideoId,
+  resolveSongMode: transmissionRoutes.resolveSongMode,
+  normalizeKeyName: remoteRoutes.normalizeKeyName,
+  extractYoutubeVideoId: remoteRoutes.extractYoutubeVideoId,
   hasOnlineVideosPermission,
   isOnlineVideosAlbumsResponse,
   isOnlineVideosVideosResponse,

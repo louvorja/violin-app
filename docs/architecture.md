@@ -1679,6 +1679,24 @@ Quando ativado (via Transmissão → Dispositivos → checkbox), apenas devices
 cadastrados com permissões são aceitos. Token global legado é bloqueado.
 Persistido em `device_settings.json` via `devices.js`.
 
+### Organização dos arquivos do httpServer
+
+`electron/main/httpServer/` ficou em três arquivos (era um `routes.js` de
+~2.000 linhas):
+
+| Arquivo | Papel |
+|---|---|
+| `routes.js` | **Principal**: infra do servidor (`ping`, `settings/devices`), os validadores/payloads (contratos exportados para os specs) e o motor de renderer (`requestRenderer`/`sendRendererError`/`getValidMainWindow`); o `setupRoutes` orquestra os outros dois. |
+| `transmissionRoutes.js` | **Transmissão**: as URLs/janelas da tela Opções → Transmissão — relógio (`/clock`), música (`/obs`), bíblia (`/obs/bible`), pipeline de projeção (`open-song` → `song-slides` → `projections/close`), anúncios, sorteio, libras e os dados que os displays carregam (`user-data`, `db`, versões baixadas). |
+| `remoteRoutes.js` | **Controle remoto**: as features do app/web do operador — teclado, liturgia, busca/navegação de músicas, vídeos online, som de fundo, volume e chat. |
+
+As duas famílias recebem motor, validadores e deps por **`ctx`** no
+`register(app, ctx)` — nenhum delas requer `routes.js` (sem require circular)
+— e o `module.exports` de `routes.js` mantém o contrato de antes, com **chaves
+literais** (`resolveSongMode: transmissionRoutes.resolveSongMode`, …) para os
+`import { … }` ESM dos specs continuarem resolvendo (o cjs-module-lexer não
+enxerga spread).
+
 ### Endpoints da API
 
 | Método | Endpoint                          | Body / Query                                  | Descrição                                  |
