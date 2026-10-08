@@ -183,12 +183,22 @@ describe("Storage.removeAll — sessionStorage", () => {
 describe("Storage — quando o backend web não existe", () => {
   beforeEach(() => {
     /*
-     * É o estado real que gerava os erros não tratados: o ambiente jsdom só
-     * tem `sessionStorage`, e o `localStorage` ausente derrubava o `setItem`
-     * dentro do `setTimeout` do debounce do UserData.
+     * É o estado real que gerava os erros não tratados: o `localStorage`
+     * ausente derrubava o `setItem` dentro do `setTimeout` do debounce do
+     * UserData.
+     *
+     * O `undefined` é posto AQUI de propósito: só o `unstubAllGlobals` devolve
+     * o `localStorage` real, e ele existe no jsdom do CI e não existe nesta
+     * máquina — o teste passava de um lado e falhava do outro. Determinístico
+     * dos dois lados, como o teste do `sessionStorage` logo abaixo.
      */
     vi.unstubAllGlobals();
     vi.stubGlobal("sessionStorage", sessionMock);
+    vi.stubGlobal("localStorage", undefined);
+  });
+
+  it("o caso sob teste é real: o contexto não tem localStorage", () => {
+    expect(typeof localStorage).toBe("undefined");
   });
 
   it("set de preferência vira no-op, não exceção", () => {

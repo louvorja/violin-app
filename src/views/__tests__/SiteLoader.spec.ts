@@ -49,6 +49,16 @@ function montar() {
  * global (como este teste fazia) derrubava `new URL(...)` — que a tela usa
  * para resolver o logo. Define só os dois métodos, e apaga no `afterEach`.
  */
+/*
+ * `URL.createObjectURL` EXISTE no jsdom. Só apagar o método deixaria o ambiente
+ * do arquivo alterado para os testes seguintes — guarda o descritor original e
+ * devolve ele no afterEach.
+ */
+const descritores = {
+  create: Object.getOwnPropertyDescriptor(URL, "createObjectURL"),
+  revoke: Object.getOwnPropertyDescriptor(URL, "revokeObjectURL"),
+};
+
 function instalarObjectUrl(create: ReturnType<typeof vi.fn>, revoke: ReturnType<typeof vi.fn>) {
   Object.defineProperty(URL, "createObjectURL", { configurable: true, value: create });
   Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: revoke });
@@ -56,8 +66,10 @@ function instalarObjectUrl(create: ReturnType<typeof vi.fn>, revoke: ReturnType<
 
 function removerObjectUrl() {
   const alvo = URL as unknown as Record<string, unknown>;
-  delete alvo.createObjectURL;
-  delete alvo.revokeObjectURL;
+  if (descritores.create) Object.defineProperty(URL, "createObjectURL", descritores.create);
+  else delete alvo.createObjectURL;
+  if (descritores.revoke) Object.defineProperty(URL, "revokeObjectURL", descritores.revoke);
+  else delete alvo.revokeObjectURL;
 }
 
 function estilo(wrapper: ReturnType<typeof mount>): CSSStyleDeclaration {
