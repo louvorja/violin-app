@@ -758,7 +758,7 @@ export default {
     file: string,
     { remember = true }: { remember?: boolean } = {}
   ): Promise<T | null> {
-    const mem = _memory.get(file);
+    const mem = memoryGet<T>(file);
     if (mem && isValidV(mem.v)) return mem.data as T;
 
     try {
@@ -766,7 +766,7 @@ export default {
       if (routed !== null) {
         // Varreduras de milhares de chaves passam `remember: false` para não
         // encher a memória com registros que ninguém vai abrir.
-        if (remember) _memory.set(file, { id: file, data: routed, ts: Date.now(), v: getVersion() });
+        if (remember) memorySet(file, routed);
         return routed;
       }
     } catch {
@@ -821,7 +821,7 @@ export default {
     // Um bundle pode substituir um capítulo que já foi lido nesta sessão.
     // Esquecer a cópia em memória faz a próxima leitura usar o valor novo do
     // IndexedDB sem invalidar os demais datasets.
-    _memory.delete(file);
+    memoryDelete(file);
   },
 
   /** Publica o bundle e seu marker juntos; falha/abort deixa o catálogo antigo intacto. */

@@ -3,7 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const fetchMock = vi.fn();
 
-vi.mock("@/config/Api", () => ({ API_URL: "https://api.test", API_URL_FILES: "https://api.test/file" }));
+vi.mock("@/config/Api", () => ({
+  API_URL: "https://api.test",
+  API_URL_FILES: "https://api.test/file",
+}));
 vi.mock("@/helpers/Http", () => ({
   NET_TIMEOUT: { MEDIA: 1, QUICK: 1 },
   fetchWithTimeout: (url: string, init: unknown) => fetchMock(url, init),
@@ -87,6 +90,47 @@ describe("WebFileStore", () => {
     });
   });
 
+  it("verifica um acervo grande com poucas leituras simultâneas e mantém o áudio no cache", async () => {
+    const audio = new FakeCache();
+    stores.set(AUDIO_CACHE, audio);
+    const remotes = Array.from({ length: 1000 }, (_, i) => `/musics/pt/A/${i}.opus`);
+    audio.items.set(url(remotes[0]), new Response("áudio preservado"));
+    let active = 0;
+    let peak = 0;
+    const originalMatch = audio.match.bind(audio);
+    vi.spyOn(audio, "match").mockImplementation(async (remote) => {
+      active++;
+      peak = Math.max(peak, active);
+      await Promise.resolve();
+      try {
+        return await originalMatch(remote);
+      } finally {
+        active--;
+      }
+    });
+
+    const local = await webStorage.checkLocal(remotes);
+
+    expect(local[remotes[0]]).toBe("own");
+    expect(local[remotes[999]]).toBe(false);
+    expect(Object.keys(local)).toHaveLength(1000);
+    expect(peak).toBeLessThanOrEqual(4);
+    expect(await (await originalMatch(url(remotes[0])))!.text()).toBe("áudio preservado");
+  });
+
+  it("descarta o corpo da resposta usada somente para verificar existência", async () => {
+    const audio = new FakeCache();
+    stores.set(AUDIO_CACHE, audio);
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    vi.spyOn(audio, "match").mockResolvedValue({
+      body: { locked: false, cancel },
+      bodyUsed: false,
+    } as unknown as Response);
+
+    expect(await webStorage.checkLocal([files[0].remote])).toEqual({ [files[0].remote]: "own" });
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
   it("start devolve queued 0 e não baixa nada quando já está tudo guardado", async () => {
     await run();
     fetchMock.mockClear();
@@ -96,7 +140,9 @@ describe("WebFileStore", () => {
 
   it("recusa 206, conta falha e emite file-error sem gravar o arquivo", async () => {
     fetchMock.mockImplementation(async (u: string) =>
-      u.endsWith("one.opus") ? new Response("p", { status: 206 }) : new Response("x", { status: 200 })
+      u.endsWith("one.opus")
+        ? new Response("p", { status: 206 })
+        : new Response("x", { status: 200 })
     );
     const errors: string[] = [];
     const off = webDownload.onFileError((e) => errors.push(e.file));
@@ -104,7 +150,9 @@ describe("WebFileStore", () => {
     off();
     expect(result).toEqual({ downloaded: 2, failed: 1 });
     expect(errors).toEqual(["/musics/pt/A/one.opus"]);
-    expect((await webStorage.checkLocal(["/musics/pt/A/one.opus"]))["/musics/pt/A/one.opus"]).toBe(false);
+    expect((await webStorage.checkLocal(["/musics/pt/A/one.opus"]))["/musics/pt/A/one.opus"]).toBe(
+      false
+    );
   });
 
   it("repete uma vez antes de contar a falha", async () => {
@@ -174,10 +222,77 @@ describe("WebFileStore", () => {
     expect(await webStorage.sizeOfPaths(files.map((f) => f.remote))).toMatchObject({ count: 2 });
   });
 
+  it("remove uma seleção grande sem enfileirar todas as exclusões ao mesmo tempo", async () => {
+    const audio = new FakeCache();
+    stores.set(AUDIO_CACHE, audio);
+    const remotes = Array.from({ length: 1000 }, (_, i) => `/musics/pt/A/${i}.opus`);
+    let active = 0;
+    let peak = 0;
+    vi.spyOn(audio, "delete").mockImplementation(async () => {
+      active++;
+      peak = Math.max(peak, active);
+      await Promise.resolve();
+      active--;
+      return true;
+    });
+
+    await webStorage.removeFiles(remotes);
+
+    expect(audio.delete).toHaveBeenCalledTimes(1000);
+    expect(peak).toBeLessThanOrEqual(4);
+  });
+
+  it("mede mídia legada sem Content-Length lendo chunks sem clone nem corpo inteiro", async () => {
+    const audio = new FakeCache();
+    stores.set(AUDIO_CACHE, audio);
+    let remaining = 64;
+    const response = new Response(
+      new ReadableStream({
+        pull(controller) {
+          if (remaining-- > 0) controller.enqueue(new Uint8Array(32 * 1024));
+          else controller.close();
+        },
+      })
+    );
+    vi.spyOn(audio, "match").mockResolvedValue(response);
+    const clone = vi.spyOn(response, "clone");
+    const blob = vi.spyOn(response, "blob");
+    const arrayBuffer = vi.spyOn(response, "arrayBuffer");
+
+    expect(await webStorage.sizeOfPaths([files[0].remote])).toEqual({
+      bytes: 2 * 1024 * 1024,
+      count: 1,
+    });
+    expect(clone).not.toHaveBeenCalled();
+    expect(blob).not.toHaveBeenCalled();
+    expect(arrayBuffer).not.toHaveBeenCalled();
+    expect(response.bodyUsed).toBe(true);
+    expect(response.body?.locked).toBe(false);
+  });
+
+  it.each([0, 2048])("usa Content-Length %i sem ler o corpo", async (bytes) => {
+    const audio = new FakeCache();
+    stores.set(AUDIO_CACHE, audio);
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    const getReader = vi.fn();
+    vi.spyOn(audio, "match").mockResolvedValue({
+      headers: new Headers({ "content-length": String(bytes) }),
+      body: { locked: false, cancel, getReader },
+      bodyUsed: false,
+    } as unknown as Response);
+
+    expect(await webStorage.sizeOfPaths([files[0].remote])).toEqual({ bytes, count: 1 });
+    expect(getReader).not.toHaveBeenCalled();
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
   it("clearFiles apaga áudio e imagens baixados", async () => {
     await run();
     await webStorage.clearFiles();
-    expect(await webStorage.sizeOfPaths(files.map((f) => f.remote))).toEqual({ bytes: 0, count: 0 });
+    expect(await webStorage.sizeOfPaths(files.map((f) => f.remote))).toEqual({
+      bytes: 0,
+      count: 0,
+    });
   });
 
   it("webStorageUsage lê uso, limite e proteção do navegador", async () => {
