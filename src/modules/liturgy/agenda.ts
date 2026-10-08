@@ -49,30 +49,46 @@ function somarMinutos(time: string, minutes: number): string {
   return `${String(newH).padStart(2, "0")}:${String(newM).padStart(2, "0")}`;
 }
 
+/** A hora vem também de arquivos importados; valores inválidos não viram âncoras. */
+export function lerHorario(value: unknown): string {
+  return typeof value === "string" && /^(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/.test(value)
+    ? value.slice(0, 5)
+    : "";
+}
+
 /**
  * Relógio da liturgia: um bloco carimba a hora de início do trecho e cada item
  * seguinte começa quando o anterior termina — incluindo itens fora do bloco.
  *
- * Antes, itens sem blocoId usavam `item.time || prevEnd`, o que pegava o valor
- * salvo de uma computação anterior em vez de recalcular a partir do fim do item
- * anterior. O resultado era que alterações de duração ou reordenação não
- * afetavam os horários de itens soltos.
+ * A hora manual é uma âncora. Horas automáticas são calculadas novamente a
+ * cada alteração, sem transformar a hora exibida numa escolha do operador.
+ * Dados antigos não distinguiam as duas: preservamos a primeira hora e as que
+ * diferem da continuação; as coincidentes continuam automáticas. A inferência
+ * só é necessária até o próximo save, que grava o modo explicitamente.
  */
 function atribuirHorarios(list: LiturgyItem[]): LiturgyItem[] {
   const result: LiturgyItem[] = [];
   let prevEnd = "";
 
   for (const item of list) {
+    const hora = lerHorario(item.time);
+    const gerenciado = item.tipo !== LiturgyItemTypeEnum.BLOCO && !!item.blocoId;
+    const modo =
+      gerenciado || item.time_mode === "auto" || !hora
+        ? "auto"
+        : item.time_mode === "manual" || item.tipo === LiturgyItemTypeEnum.BLOCO || hora !== prevEnd
+          ? "manual"
+          : "auto";
+    const inicio = modo === "manual" ? hora : prevEnd;
     if (item.tipo === LiturgyItemTypeEnum.BLOCO) {
-      prevEnd = item.time || prevEnd;
-      result.push({ ...item, time: prevEnd });
+      prevEnd = inicio;
+      result.push({ ...item, time: inicio, time_mode: modo });
       continue;
     }
 
     const dur = Number(item.duration) || 0;
-    const inicio = prevEnd;
     prevEnd = inicio ? somarMinutos(inicio, dur) : "";
-    result.push({ ...item, time: inicio });
+    result.push({ ...item, time: inicio, time_mode: modo });
   }
 
   return result;
@@ -81,4 +97,12 @@ function atribuirHorarios(list: LiturgyItem[]): LiturgyItem[] {
 /** A lista como o operador a vê — no módulo e no painel da shell. */
 export function prepararAgenda(lista: LiturgyItem[]): LiturgyItem[] {
   return atribuirHorarios(agruparPorBloco(lista));
+}
+
+/** Persistência guarda somente as âncoras; a hora automática pertence à exibição. */
+export function agendaParaPersistir(lista: LiturgyItem[]): LiturgyItem[] {
+  return prepararAgenda(lista).map((item) => ({
+    ...item,
+    time: item.time_mode === "manual" ? item.time : "",
+  }));
 }

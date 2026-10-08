@@ -33,6 +33,218 @@ async function openLiturgy(page) {
   await expect(page.locator(".liturgy-page")).toBeVisible();
 }
 
+test("preenche Hora ao editar o título de um item existente sem horário", async ({ page }) => {
+  await openLiturgy(page);
+  await page.getByTestId("liturgy-add-item").last().click();
+  let dialog = page.getByRole("dialog");
+  await dialog.getByTestId("item-name").fill("Item existente para horário");
+  await dialog.getByTestId("item-save").click();
+  const card = page
+    .locator(".liturgy-page [data-item-id]")
+    .filter({ hasText: "Item existente para horário" });
+  await expect(card.locator(".tl-time")).toHaveCount(0);
+  await card.locator(".lit-card-action").first().click();
+  dialog = page.getByRole("dialog");
+  await dialog.getByTestId("item-name").fill("08:30 Item existente para horário");
+  await expect(dialog.locator('input[type="time"]')).toHaveValue("08:30");
+  await dialog.getByTestId("item-save").click();
+  await expect(card.locator(".tl-time")).toHaveText("08:30");
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const days =
+          JSON.parse(localStorage.getItem("user_data") || "{}")?.modules?.liturgy?.days || {};
+        return Object.values(days)
+          .flat()
+          .find((item) => item.item === "08:30 Item existente para horário")?.time;
+      })
+    )
+    .toBe("08:30");
+  await page.reload();
+  await page.getByTestId("modules-ready").waitFor({ state: "attached" });
+  await page.getByRole("button", { name: "Editar liturgia" }).click();
+  await expect(card.locator(".tl-time")).toHaveText("08:30");
+});
+
+test("preenche Hora pelo título e preserva ajuste ou limpeza depois de salvar e recarregar", async ({
+  page,
+}) => {
+  await openLiturgy(page);
+  await page.getByTestId("liturgy-add-item").last().click();
+  let dialog = page.getByRole("dialog");
+  await dialog.getByTestId("item-name").fill("08:30 Louvor do título");
+  await expect(dialog.locator('input[type="time"]')).toHaveValue("08:30");
+  await dialog.getByTestId("item-name").fill("Louvor do título às 9h");
+  await expect(dialog.locator('input[type="time"]')).toHaveValue("09:00");
+  await dialog.getByTestId("item-name").fill("08:30 Louvor do título / 09:00 Sermão");
+  await expect(dialog.locator('input[type="time"]')).toHaveValue("");
+  await dialog.getByTestId("item-name").fill("8h30 Louvor do título");
+  await expect(dialog.locator('input[type="time"]')).toHaveValue("08:30");
+  await dialog.getByTestId("item-save").click();
+  const card = page.locator(".liturgy-page [data-item-id]").filter({ hasText: "Louvor do título" });
+  await expect(card.locator(".tl-time")).toHaveText("08:30");
+  const savedTime = () =>
+    page.evaluate(() => {
+      const days =
+        JSON.parse(localStorage.getItem("user_data") || "{}")?.modules?.liturgy?.days || {};
+      const entry = Object.values(days)
+        .flat()
+        .find((item) => item.item.includes("Louvor do título"));
+      return entry && { time: entry.time, mode: entry.time_mode };
+    });
+  await expect.poll(savedTime).toEqual({ time: "08:30", mode: "manual" });
+  await page.reload();
+  await page.getByTestId("modules-ready").waitFor({ state: "attached" });
+  await page.getByRole("button", { name: "Editar liturgia" }).click();
+  await card.locator(".lit-card-action").first().click();
+  dialog = page.getByRole("dialog");
+  await expect(dialog.locator('input[type="time"]')).toHaveValue("08:30");
+  await dialog.getByTestId("item-name").fill("9h30 Louvor do título");
+  await expect(dialog.locator('input[type="time"]')).toHaveValue("08:30");
+  await dialog.locator('input[type="time"]').fill("10:15");
+  await dialog.getByTestId("item-name").fill("11h30 Louvor do título");
+  await expect(dialog.locator('input[type="time"]')).toHaveValue("10:15");
+  await dialog.locator('input[type="time"]').fill("");
+  await dialog.getByTestId("item-name").fill("12h30 Louvor do título");
+  await expect(dialog.locator('input[type="time"]')).toHaveValue("");
+  await dialog.getByTestId("item-save").click();
+  await expect.poll(savedTime).toEqual({ time: "", mode: "auto" });
+  await page.reload();
+  await page.getByTestId("modules-ready").waitFor({ state: "attached" });
+  await page.getByRole("button", { name: "Editar liturgia" }).click();
+  await card.locator(".lit-card-action").first().click();
+  await expect(page.getByRole("dialog").locator('input[type="time"]')).toHaveValue("");
+});
+
+test("salva a hora manual ao criar e editar um item, inclusive depois de recarregar", async ({
+  page,
+}) => {
+  await openLiturgy(page);
+  await page.getByTestId("liturgy-add-item").last().click();
+  let dialog = page.getByRole("dialog");
+  await dialog.getByTestId("item-name").fill("Item com hora manual");
+  await dialog.locator('input[type="time"]').fill("19:30");
+  await dialog.locator('input[type="number"]').fill("5");
+  await dialog.getByTestId("item-save").click();
+
+  const card = page
+    .locator(".liturgy-page [data-item-id]")
+    .filter({ hasText: "Item com hora manual" });
+  await expect(card.locator(".tl-time")).toHaveText("19:30");
+  await page.evaluate(async () => {
+    const { default: Modules } = await import("/src/helpers/Modules.js");
+    Modules.close("liturgy");
+  });
+  await expect(page.locator(".liturgy-panel")).toBeVisible();
+  await expect(
+    page.locator(".liturgy-item").filter({ hasText: "Item com hora manual" })
+  ).toContainText("19:30");
+  await page.getByRole("button", { name: "Editar liturgia" }).click();
+  await card.locator(".lit-card-action").first().click();
+  dialog = page.getByRole("dialog");
+  await expect(dialog.locator('input[type="time"]')).toHaveValue("19:30");
+  await dialog.locator('input[type="time"]').fill("20:15");
+  await dialog.getByTestId("item-save").click();
+  await expect(card.locator(".tl-time")).toHaveText("20:15");
+
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const days =
+          JSON.parse(localStorage.getItem("user_data") || "{}")?.modules?.liturgy?.days || {};
+        return Object.values(days)
+          .flat()
+          .find((item) => item.item === "Item com hora manual")?.time;
+      })
+    )
+    .toBe("20:15");
+  await page.reload();
+  await page.getByTestId("modules-ready").waitFor({ state: "attached" });
+  await expect(
+    page.locator(".liturgy-item").filter({ hasText: "Item com hora manual" })
+  ).toContainText("20:15");
+  await page.getByRole("button", { name: "Editar liturgia" }).click();
+  await expect(card.locator(".tl-time")).toHaveText("20:15");
+  await card.locator(".lit-card-action").first().click();
+  dialog = page.getByRole("dialog");
+  await expect(dialog.locator('input[type="time"]')).toHaveValue("20:15");
+  await dialog.locator('input[type="time"]').fill("");
+  await dialog.getByTestId("item-save").click();
+  await expect(card.locator(".tl-time")).toHaveCount(0);
+  await card.locator(".lit-card-action").first().click();
+  await expect(page.getByRole("dialog").locator('input[type="time"]')).toHaveValue("");
+});
+
+test("recalcula horários automáticos depois de editar duração e mantém a hora vinculada ao bloco", async ({
+  page,
+}) => {
+  await openLiturgy(page);
+  await page.getByTestId("ribbon-btn-add_item").click();
+  let dialog = page.getByRole("dialog");
+  await dialog.locator(".lif-field--type").getByRole("combobox").click();
+  await page.getByRole("option", { name: "Bloco", exact: true }).click();
+  await dialog.getByTestId("item-name").fill("8h Bloco com horário");
+  await expect(dialog.locator('input[type="time"]')).toHaveValue("08:00");
+  await dialog.getByTestId("item-save").click();
+
+  await page.getByTestId("ribbon-btn-add_item").click();
+  dialog = page.getByRole("dialog");
+  await dialog.getByTestId("item-name").fill("09:30 Item do bloco");
+  await expect(dialog.locator('input[type="time"]')).toHaveValue("09:30");
+  await dialog.locator('input[type="number"]').fill("5");
+  await dialog.getByRole("combobox").last().click();
+  await page.getByRole("option", { name: "8h Bloco com horário — 08:00", exact: true }).click();
+  await expect(dialog.locator('input[type="time"]')).toBeDisabled();
+  await dialog.getByTestId("item-save").click();
+
+  await page.getByTestId("ribbon-btn-add_item").click();
+  dialog = page.getByRole("dialog");
+  await dialog.getByTestId("item-name").fill("Continuação automática");
+  await dialog.getByTestId("item-save").click();
+  const child = page.locator(".liturgy-page [data-item-id]").filter({ hasText: "Item do bloco" });
+  const continuation = page
+    .locator(".liturgy-page [data-item-id]")
+    .filter({ hasText: "Continuação automática" });
+  await expect(child.locator(".tl-time")).toHaveText("08:00");
+  await expect(continuation.locator(".tl-time")).toHaveText("08:05");
+  await child.locator(".lit-card-action").first().click();
+  dialog = page.getByRole("dialog");
+  await expect(dialog.locator('input[type="time"]')).toBeDisabled();
+  await expect(dialog.locator('input[type="time"]')).toHaveValue("08:00");
+  await dialog.getByTestId("item-name").fill("10h30 Item do bloco");
+  await expect(dialog.locator('input[type="time"]')).toHaveValue("08:00");
+  await dialog.locator('input[type="number"]').fill("15");
+  await dialog.getByTestId("item-save").click();
+  await expect(continuation.locator(".tl-time")).toHaveText("08:15");
+  await continuation.locator(".lit-card-action").first().click();
+  dialog = page.getByRole("dialog");
+  await expect(dialog.locator('input[type="time"]')).toHaveValue("");
+  await dialog.getByTestId("item-save").click();
+
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const days =
+          JSON.parse(localStorage.getItem("user_data") || "{}")?.modules?.liturgy?.days || {};
+        return Object.values(days)
+          .flat()
+          .filter((item) => ["10h30 Item do bloco", "Continuação automática"].includes(item.item))
+          .map((item) => ({ time: item.time, mode: item.time_mode }));
+      })
+    )
+    .toEqual([
+      { time: "", mode: "auto" },
+      { time: "", mode: "auto" },
+    ]);
+  await page.reload();
+  await page.getByTestId("modules-ready").waitFor({ state: "attached" });
+  await expect(
+    page.locator(".liturgy-item").filter({ hasText: "Continuação automática" })
+  ).toContainText("08:15");
+  await page.getByRole("button", { name: "Editar liturgia" }).click();
+  await expect(continuation.locator(".tl-time")).toHaveText("08:15");
+});
+
 test("adicionar item à liturgia", async ({ page }) => {
   // Intercepta todas as requisições ao banco de dados mock para evitar alertas de erro
   await page.route("http://e2e.mock/**", (route) => route.fulfill({ json: [] }));
