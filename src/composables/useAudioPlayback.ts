@@ -538,16 +538,28 @@ function _create(): AudioPlayback {
       };
       const falhou = (): void => {
         if (encerrado) return;
-        encerrar();
-        _descartar(el);
-        const error = el.error;
-        const failure = new Error("prepare: falha ao carregar áudio");
+        // load(), chamado ao soltar a fonte, limpa el.error. Guarde apenas os
+        // valores do erro nativo antes do descarte, sem reter o elemento/MediaError.
+        const nativeError = el.error;
+        const error = nativeError
+          ? Object.freeze({
+              code: nativeError.code,
+              name: _mediaErrorName(nativeError.code),
+              message: mediaDiagnosticMessage(nativeError.message),
+            })
+          : undefined;
+        const failure = new Error(
+          "prepare: falha ao carregar áudio",
+          error ? { cause: error } : undefined
+        );
         failure.name =
           error?.code === 3
             ? "DecodeError"
             : error?.code === 4
               ? "NotSupportedError"
               : "MediaLoadError";
+        encerrar();
+        _descartar(el);
         reject(failure);
       };
       // Rede ruim não pode deixar a troca pendurada — quem chamou decide o que
@@ -698,25 +710,21 @@ function _create(): AudioPlayback {
           // É o desfecho esperado dessas ações, não uma falha de carregamento:
           // reportar viraria um alerta de erro a cada troca rápida de música.
           if ((e as { name?: string } | null)?.name === "AbortError") return;
-          const stale = requestSource !== el.getAttribute("src") || requestContext.playback_id !==
-            (_elementTelemetryContext.get(el) || _telemetryContext)?.playback_id;
+          const stale =
+            requestSource !== el.getAttribute("src") ||
+            requestContext.playback_id !==
+              (_elementTelemetryContext.get(el) || _telemetryContext)?.playback_id;
           const diagnostics = {
-            ...(stale ? { ...requestContext, snapshot_omitted: "source_replaced" }
+            ...(stale
+              ? { ...requestContext, snapshot_omitted: "source_replaced" }
               : _telemetryProps(el, mediaElementDetails(el))),
             stale_context: stale,
             stage: "play_promise",
             reason: (e as { name?: string } | null)?.name || "unknown",
             message: mediaDiagnosticMessage((e as { message?: string } | null)?.message),
           };
-          Telemetry.track(
-            "music_playback_failed",
-            diagnostics
-          );
-          Telemetry.log(
-            "error",
-            "music play promise rejected",
-            diagnostics
-          );
+          Telemetry.track("music_playback_failed", diagnostics);
+          Telemetry.log("error", "music play promise rejected", diagnostics);
           if (onError) onError(e);
         });
     } else if (!el.paused) {

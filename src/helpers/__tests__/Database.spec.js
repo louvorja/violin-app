@@ -406,6 +406,57 @@ describe("Database — deduplicação de buscas concorrentes", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("getLocal respeita o orçamento de memória ao lembrar metadados locais", async () => {
+    const db = await importDatabase();
+    const { default: idb } = await import("@/helpers/IndexedDB");
+    idb.get.mockClear();
+    for (let id = 1; id <= 24; id++) {
+      await db.seed(`music_${id}`, { id_music: id, lyric: "x".repeat(1024 * 1024) });
+      expect((await db.getLocal(`music_${id}`)).id_music).toBe(id);
+    }
+    const reads = idb.get.mock.calls.length;
+
+    expect((await db.getLocal("music_24")).id_music).toBe(24);
+    expect(idb.get).toHaveBeenCalledTimes(reads);
+    expect((await db.getLocal("music_1")).id_music).toBe(1);
+    expect(idb.get).toHaveBeenCalledTimes(reads + 1);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("getLocal com remember:false não acumula metadados de uma varredura", async () => {
+    const db = await importDatabase();
+    const { default: idb } = await import("@/helpers/IndexedDB");
+    await db.seed("music_1", { id_music: 1 });
+    idb.get.mockClear();
+
+    await db.getLocal("music_1", { remember: false });
+    await db.getLocal("music_1", { remember: false });
+
+    expect(idb.get).toHaveBeenCalledTimes(2);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("reseed desconta a memória anterior e preserva entradas novas dentro do orçamento", async () => {
+    const db = await importDatabase();
+    const { default: idb } = await import("@/helpers/IndexedDB");
+    const lyric = "x".repeat(1024 * 1024);
+    for (let update = 0; update < 20; update++) {
+      await db.seed("music_1", { id_music: 1, lyric, update });
+      await db.getLocal("music_1");
+      await db.seed("music_1", { id_music: 1, lyric, update: update + 1 });
+    }
+    await db.seed("music_2", { id_music: 2, lyric });
+    await db.seed("music_3", { id_music: 3, lyric });
+    idb.get.mockClear();
+
+    await db.getLocal("music_2");
+    await db.getLocal("music_3");
+    expect((await db.getLocal("music_2")).id_music).toBe(2);
+
+    expect(idb.get).toHaveBeenCalledTimes(2);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("dois chamadores simultâneos compartilham uma única requisição", async () => {
     const db = await importDatabase();
     let resolveFetch;

@@ -60,6 +60,13 @@ function _closeAlbumForPresentation(): void {
 }
 let _loadingId: string | number | null = null;
 let _playlistOnEnd: (() => boolean) | null = null;
+// Database pode tentar dois hosts, cada um com NET_TIMEOUT.DEFAULT até os
+// headers. A margem cobre leitura do cache e JSON sem deixar um corpo travado
+// manter a abertura pendurada. Esse orçamento só vale para metadata musical.
+const MUSIC_METADATA_TIMEOUT_MS = 2 * NET_TIMEOUT.DEFAULT + 5000;
+// Cancela só a espera deste player. A busca deduplicada do Database continua
+// atendendo outros consumidores e preenchendo o cache.
+let _cancelMusicMetadataWait: (() => void) | null = null;
 // XHR atual de download de áudio — abortado ao trocar de música rapidamente
 // para liberar conexão e evitar callbacks de respostas obsoletas (mesmo que
 // o early-return pelo _loadingId já as ignore, a request continuava
@@ -1355,16 +1362,26 @@ const _self = {
     const metadataStartedAt = Date.now();
     Telemetry.track("music_metadata_load_started", _telemetryFor(playbackContext, { id_music }));
     let metadataTimeout: ReturnType<typeof setTimeout> | null = null;
+    let cancelMetadataWait: (() => void) | null = null;
     try {
       const metadataRequest = $database.get<Music>(`music_${id_music}`);
       const metadataDeadline = new Promise<never>((_, reject) => {
+        cancelMetadataWait = () => reject(new Error("Music metadata wait superseded"));
+        _cancelMusicMetadataWait = cancelMetadataWait;
         metadataTimeout = setTimeout(
           () => reject(new Error(`Music metadata timeout: ${id_music}`)),
-          NET_TIMEOUT.DEFAULT + 5000
+          MUSIC_METADATA_TIMEOUT_MS
         );
       });
       data = await Promise.race([metadataRequest, metadataDeadline]);
     } catch (error) {
+      if (_loadingId !== id_music || _activePlayback?.playback_id !== playback_id) {
+        Telemetry.track(
+          "music_open_failed",
+          _telemetryFor(playbackContext, { id_music, reason: "superseded" })
+        );
+        return false;
+      }
       const message = error instanceof Error ? error.message : String(error);
       const reason = message.includes("metadata timeout")
         ? "metadata_timeout"
@@ -1389,6 +1406,7 @@ const _self = {
       return false;
     } finally {
       if (metadataTimeout) clearTimeout(metadataTimeout);
+      if (_cancelMusicMetadataWait === cancelMetadataWait) _cancelMusicMetadataWait = null;
     }
     Telemetry.track(
       "music_metadata_load_completed",
@@ -2592,6 +2610,9 @@ const _self = {
   },
 
   clearVariables(): void {
+    const cancelMetadataWait = _cancelMusicMetadataWait;
+    _cancelMusicMetadataWait = null;
+    cancelMetadataWait?.();
     _switchingMode = false;
     _customPlayback = null;
     if (_ytWatchdog) clearTimeout(_ytWatchdog);

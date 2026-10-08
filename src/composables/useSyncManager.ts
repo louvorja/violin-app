@@ -901,7 +901,7 @@ export function useSyncManager() {
     key: string,
     { localOnly = false }: { localOnly?: boolean } = {}
   ): Promise<T | null> {
-    return localOnly ? Database.getLocal<T>(key) : Database.get<T>(key);
+    return localOnly ? Database.getLocal<T>(key, { remember: false }) : Database.get<T>(key);
   }
 
   /**

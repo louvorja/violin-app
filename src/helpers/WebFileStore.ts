@@ -82,8 +82,43 @@ async function openCaches(): Promise<Record<string, Cache>> {
   return { [AUDIO_CACHE]: audio, [IMAGE_CACHE]: images };
 }
 
+/** Uma verificação só precisa dos metadados; não mantenha o corpo da mídia aberto. */
+function discardResponseBody(response: Response | null | undefined): void {
+  if (!response?.body || response.bodyUsed || response.body.locked) return;
+  // Não aguarde: uma resposta de stream clonado pode esperar a outra ponta do
+  // tee. Cancelar esta leitura não remove nem altera a entrada do Cache Storage.
+  void response.body.cancel().catch(() => {});
+}
+
 async function isCached(url: string, store: Record<string, Cache>): Promise<boolean> {
-  return Boolean(await store[cacheNameFor(url)].match(url, { ignoreVary: true }));
+  const response = await store[cacheNameFor(url)].match(url, { ignoreVary: true });
+  discardResponseBody(response);
+  return Boolean(response);
+}
+
+const STORAGE_BATCH = 4;
+
+/** Conta os bytes de uma resposta legada sem materializar o arquivo inteiro. */
+async function responseSize(response: Response): Promise<number> {
+  const header = response.headers.get("content-length");
+  const declared = Number(header);
+  if (header !== null && Number.isFinite(declared) && declared >= 0) {
+    discardResponseBody(response);
+    return declared;
+  }
+  if (!response.body) return 0;
+  const reader = response.body.getReader();
+  let bytes = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+    }
+    return bytes;
+  } finally {
+    reader.releaseLock();
+  }
 }
 
 const onProgress = emitter<{ file: string; total?: number }>();
@@ -347,23 +382,33 @@ export const webStorage = {
   /** "own" quando o arquivo está guardado neste aparelho; no web não existe acervo clássico. */
   async checkLocal(remotes: string[]): Promise<Record<string, "own" | false>> {
     const store = await openCaches();
-    const entries = await Promise.all(
-      remotes.map(async (remote) => {
-        const url = urlFor(remote);
-        return [remote, url && (await isCached(url, store)) ? ("own" as const) : false] as const;
-      })
-    );
+    const entries: Array<readonly [string, "own" | false]> = [];
+    for (let i = 0; i < remotes.length; i += STORAGE_BATCH) {
+      entries.push(
+        ...(await Promise.all(
+          remotes.slice(i, i + STORAGE_BATCH).map(async (remote) => {
+            const url = urlFor(remote);
+            return [
+              remote,
+              url && (await isCached(url, store)) ? ("own" as const) : false,
+            ] as const;
+          })
+        ))
+      );
+    }
     return Object.fromEntries(entries);
   },
 
   async removeFiles(remotes: string[]): Promise<void> {
     const store = await openCaches();
-    await Promise.all(
-      remotes.map(async (remote) => {
-        const url = urlFor(remote);
-        if (url) await store[cacheNameFor(url)].delete(url, { ignoreVary: true });
-      })
-    );
+    for (let i = 0; i < remotes.length; i += STORAGE_BATCH) {
+      await Promise.all(
+        remotes.slice(i, i + STORAGE_BATCH).map(async (remote) => {
+          const url = urlFor(remote);
+          if (url) await store[cacheNameFor(url)].delete(url, { ignoreVary: true });
+        })
+      );
+    }
   },
 
   /** Apaga todo o áudio e as imagens baixados; o catálogo (IndexedDB) fica. */
@@ -380,9 +425,7 @@ export const webStorage = {
       const hit = url ? await store[cacheNameFor(url)].match(url, { ignoreVary: true }) : null;
       if (!hit) continue;
       count++;
-      const declared = Number(hit.headers.get("content-length"));
-      bytes +=
-        Number.isFinite(declared) && declared > 0 ? declared : (await hit.clone().blob()).size;
+      bytes += await responseSize(hit);
     }
     return { bytes, count };
   },
