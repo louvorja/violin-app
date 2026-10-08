@@ -123,6 +123,7 @@ async function save(key: string, value: unknown): Promise<void> {
   (s as any)[key] = value;
   await saveSetting(s);
   if (key === "repeat") bg.repeat.value = value as boolean;
+  if (key === "autoPause") bg.autoPause.value = value as boolean;
   if (key === "fadeIn") bg.fadeInMs.value = value as number;
   if (key === "fadeOut") bg.fadeOutMs.value = value as number;
 }
@@ -136,6 +137,12 @@ onMounted(async () => {
   fadeOut.value = cfg.fadeOut;
   autoPause.value = cfg.autoPause;
   repeat_.value = cfg.repeat;
+  /*
+   * Empurra para o player: quem decide se outra mídia pausa o som é o
+   * composable (os gatilhos vivem lá, não no Index do módulo). Sem este
+   * empurrão, ligar o switch só mudava o IndexedDB e nada pausava.
+   */
+  bg.autoPause.value = cfg.autoPause;
   await resolveDefaultName();
 });
 </script>

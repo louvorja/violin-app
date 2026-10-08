@@ -244,6 +244,12 @@ const version = computed(() => `${packageJson.version}.${dbVersion.value}`);
 const media = computed(() => Modules.get("media"));
 
 const bg = useBackgroundSound();
+/*
+ * As opções do player (pausar automaticamente, fades, repetição) moram no
+ * composable — quem reinicia o app e não abre a aba do módulo continua com o
+ * que escolheu, em vez de cair nos defaults.
+ */
+void bg.carregarConfig();
 const fp = useFileProjection();
 const playlist = usePlaylistPlayback();
 

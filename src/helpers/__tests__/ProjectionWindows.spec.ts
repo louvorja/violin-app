@@ -60,6 +60,12 @@ let onAir: Record<string, unknown> = {};
 vi.mock("@/helpers/Telemetry", () => ({
   default: { track: vi.fn(), histogram: vi.fn() },
 }));
+/* Hoisted para o factory poder usá-lo: o Broadcast é quem leva o sinal de
+   "projeção de Site abriu" para o Som de Fundo pausar. */
+const broadcast = vi.hoisted(() => vi.fn());
+vi.mock("@/helpers/Broadcast", () => ({
+  default: { send: (...args: unknown[]) => broadcast(...args) },
+}));
 vi.mock("@/helpers/AppData", () => ({
   default: { get: (key: string, fallback?: unknown) => (key in onAir ? onAir[key] : fallback) },
 }));
@@ -865,5 +871,35 @@ describe("telemetria da projeção de Site", () => {
     ]);
     expect(JSON.stringify(props())).not.toContain("JWT-SEGREDO");
     expect(JSON.stringify(props())).not.toContain("canva.com");
+  });
+});
+
+describe("sinal de projeção de Site para o Som de Fundo", () => {
+  const sites = () =>
+    broadcast.mock.calls.filter(([tipo]) => tipo === "site_projection");
+
+  beforeEach(() => broadcast.mockClear());
+
+  it("abriu → avisa com a ORIGEM (e nunca com a URL)", async () => {
+    prefs[KEYS.OPTIONS.SITE_PROJECTION.SHOW_RETURN] = false;
+    monitors[PROJECTION_TYPE.SITE] = 1;
+    isWindowOpen.mockImplementation(
+      async (feature: string) =>
+        feature === PROJECTION_TYPE.SITE || feature === PROJECTION_TYPE.SITE_LOADER
+    );
+
+    await windows.openSiteWindow("https://exemplo.com/culto", "canva");
+
+    expect(sites()).toHaveLength(1);
+    expect(sites()[0][1]).toEqual({ source: "canva" });
+    expect(JSON.stringify(sites()[0][1])).not.toContain("exemplo.com");
+  });
+
+  it("não abriu → não há o que pausar, e ninguém é avisado", async () => {
+    isWindowOpen.mockResolvedValue(false);
+
+    await windows.openSiteWindow("https://exemplo.com/culto", "liturgy");
+
+    expect(sites()).toHaveLength(0);
   });
 });

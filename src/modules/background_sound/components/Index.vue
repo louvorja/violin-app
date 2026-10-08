@@ -241,7 +241,6 @@ import ModuleContainer from "@/components/ModuleContainer.vue";
 import { useBackgroundSound } from "@/composables/useBackgroundSound";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
-import $appdata from "@/helpers/AppData";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
 import Alert from "@/helpers/Alert";
@@ -425,7 +424,12 @@ async function loadSettings(): Promise<void> {
 }
 
 async function saveSettings(): Promise<void> {
-  await saveSetting({ id: SETTINGS_ID, ...cachedSettings });
+  /*
+   * `saveSetting` é `$idb.put` (substituição, não merge): o `autoPause` vem do
+   * player e não do cache local, senão um ajuste de fade daqui regravaria por
+   * cima da opção que o operador acabou de ligar na ribbon.
+   */
+  await saveSetting({ id: SETTINGS_ID, ...cachedSettings, autoPause: bg.autoPause.value });
   bg.fadeInMs.value = cachedSettings.fadeIn;
   bg.fadeOutMs.value = cachedSettings.fadeOut;
 }
@@ -441,13 +445,6 @@ const fadeOutDuration = computed({
   get: () => cachedSettings.fadeOut,
   set: (v: number) => {
     cachedSettings.fadeOut = v;
-    saveSettings();
-  },
-});
-const autoPause = computed({
-  get: () => cachedSettings.autoPause,
-  set: (v: boolean) => {
-    cachedSettings.autoPause = v;
     saveSettings();
   },
 });
@@ -943,42 +940,6 @@ useBroadcastListener(BROADCAST_TYPE.MODULE_RIBBON_ACTION, (payload) => {
 });
 
 /* ------------------------------------------------------------------ */
-/*  Auto-pause when media player opens                                 */
-/* ------------------------------------------------------------------ */
-
-watch(
-  () => $appdata.get("modules.media.show"),
-  (show) => {
-    if (autoPause.value && show && bg.isPlaying.value) {
-      bg.fadeOut(fadeOutDuration.value, () => bg.pause());
-    }
-  }
-);
-
-// Música tocando (áudio puro ou letra) — cobre openAudio/openLyric,
-// que não abrem o módulo de Mídia.
-watch(
-  () => $appdata.get("modules.media.is_playing"),
-  (playing) => {
-    if (autoPause.value && playing && bg.isPlaying.value) {
-      bg.fadeOut(fadeOutDuration.value, () => bg.pause());
-    }
-  }
-);
-
-useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION, () => {
-  if (autoPause.value && bg.isPlaying.value) {
-    bg.fadeOut(fadeOutDuration.value, () => bg.pause());
-  }
-});
-
-useBroadcastListener(BROADCAST_TYPE.ONLINE_VIDEO_PROJECTION, () => {
-  if (autoPause.value && bg.isPlaying.value) {
-    bg.fadeOut(fadeOutDuration.value, () => bg.pause());
-  }
-});
-
-/* ------------------------------------------------------------------ */
 /*  Lifecycle                                                          */
 /* ------------------------------------------------------------------ */
 
@@ -1056,6 +1017,12 @@ onMounted(async () => {
   bg.repeat.value = cachedSettings.repeat;
   bg.fadeInMs.value = cachedSettings.fadeIn;
   bg.fadeOutMs.value = cachedSettings.fadeOut;
+  /*
+   * Os gatilhos do "pausar automaticamente" vivem no composable (e não aqui):
+   * esta aba vai para a faixa KeepAlive de consultas e some do DOM depois de
+   * outras quatro. Aqui só sincroniza o valor lido.
+   */
+  bg.autoPause.value = cachedSettings.autoPause;
   categories.value = await loadCategories();
   libraryFiles.value = await loadLibrary();
   rebuildIconUrls(categories.value);

@@ -12,6 +12,8 @@
  */
 
 import Platform from "@/helpers/Platform";
+import $broadcast from "@/helpers/Broadcast";
+import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import $userdata from "@/helpers/UserData";
 import $appdata from "@/helpers/AppData";
 import { isProgressiveUrl } from "@/helpers/OnlineVideo";
@@ -473,6 +475,13 @@ export async function openSiteWindow(
     await _open(url, PROJECTION_TYPE.SITE, target.monitorId, fullscreen, alwaysOnTop);
     const aberta = await isWindowOpen(PROJECTION_TYPE.SITE);
     _siteActive = aberta;
+    /*
+     * "Outra mídia entrou no telão" para o Som de Fundo: sem este broadcast a
+     * projeção de Site (liturgia ou Canva) não pausava o som de fundo, porque
+     * nada nesse caminho escreve `modules.media.*`. Envia só o ORIGEM — a URL
+     * fica fora: é conteúdo do terceiro.
+     */
+    if (aberta) $broadcast.send(BROADCAST_TYPE.SITE_PROJECTION, { source });
 
     if (aberta) {
       retorno = await _openSiteReturn(url, fullscreen, alwaysOnTop);

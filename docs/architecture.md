@@ -202,6 +202,50 @@ desativação de uma aba KeepAlive e registrados novamente na ativação. Assim,
 trocar de aba preserva o estado visual sem manter callbacks de módulos inativos
 processando cada evento cross-window.
 
+**Regra: lógica que depende de um evento enquanto OUTRA aba está ativa não pode
+morar na aba.** Quem prova isso é a **pausa automática do som de fundo**: os
+gatilhos — dois `watch` de `modules.media.*` e quatro tipos de broadcast —
+ficavam no `Index.vue` do módulo, e o operador só abre outra mídia estando
+**noutra** aba. Os broadcast paravam no `onDeactivated`, os `watch` morriam na
+desmontagem (a faixa de consultas guarda só `moduleCacheMax: 4`), e o
+`autoPause` em si era lido de um cache local nunca atualizado pela ribbon, que é
+onde a opção é ligada.
+
+Os cinco gatilhos, e por quê cada um existe:
+
+| Gatilho | Cobre |
+|---|---|
+| `watch(modules.media.show)` | vídeo/YouTube (minimizar, abrir) |
+| `watch(modules.media.is_playing)` | arquivo de áudio e vídeo direto (`openAudio` escreve o sinal) |
+| `FILE_PROJECTION` | vídeo da Biblioteca e da Liturgia |
+| `ONLINE_VIDEO_PROJECTION` | vídeo on-line |
+| **`SLIDES_DATA`** | **música** |
+| **`SITE_PROJECTION`** | **projeção de Site (liturgia e Canva)** |
+
+`SITE_PROJECTION` é o da projeção de URL: `ProjectionWindows.openSiteWindow`
+abre janela externa, não escreve `modules.media.*` nem manda `FILE_PROJECTION` —
+o broadcast é o único sinal. Sai com `{ source }` (`"liturgy"`/`"canva"`) e
+**sem a URL**, que é conteúdo do terceiro.
+
+`SLIDES_DATA` é o ponto não óbvio: o caminho de música
+(`useMedia._launchProjection`) **nunca** escreve `modules.media.is_playing` — o
+áudio passa por `_loadAudioSrc`, não por `openAudio` —, e `modules.media.show`
+só dispara o `watch` quando o valor MUDA, o que não acontece na segunda música
+da sessão. Então, sem o broadcast, tocar música não pausava nada. Ele é enviado
+incondicionalmente, inclusive em modo áudio (sem slides).
+
+Hoje gatilhos e `autoPause` vivem em `src/composables/useBackgroundSound.ts` —
+o dono do player, chamado pelo `Footer`, que é sempre montado:
+
+- `armarAutoPause()` roda **uma vez**, dentro de `effectScope(true)`: um scope
+  destacado não é parado quando o componente da chamada desmonta;
+- `$broadcast.listen` direto, **não** `useBroadcastListener`, porque este
+  pausa o listener na troca de aba — que é exatamente onde o vídeo está;
+- `carregarConfig()` (chamado pelo `Footer`) aplica o registro persistido, para
+  a opção valer depois de reiniciar o app sem abrir a aba do módulo;
+- a ribbon empurra `bg.autoPause` ao salvar, como já fazia com `repeat` e fades;
+- o fader usado é `fadeOutMs` (o compartilho), não o cache local da tela.
+
 Tabelas grandes usam paginação incremental. O tamanho inicial também segue o
 perfil de recursos, para evitar montar centenas de linhas e componentes antes do
 primeiro paint; o scroll continua carregando as páginas seguintes.

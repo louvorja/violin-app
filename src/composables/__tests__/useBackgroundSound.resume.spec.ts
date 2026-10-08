@@ -1,4 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+/*
+ * O composable arma os gatilhos do auto-pause na primeira chamada, e esses
+ * gatilhos leem AppData (Pinia) — que não existe aqui. O mock isola o escopo
+ * deste spec: estado do player, não o armador.
+ */
+vi.mock("@/helpers/AppData", () => ({
+  default: { get: () => false, set: () => {} },
+}));
+
 import { useBackgroundSound } from "@/composables/useBackgroundSound";
 
 /**
