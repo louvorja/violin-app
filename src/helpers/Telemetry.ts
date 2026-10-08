@@ -147,6 +147,32 @@ function sanitizeString(value: string): string {
   return value.slice(0, MAX_STRING_LENGTH).replace(SENSITIVE_QUERY, "$1[REDACTED]");
 }
 
+/**
+ * Valor de uma `route` que pode sair do app.
+ *
+ * A rota interna da SPA (`/projection/file`) é caminho nosso: vai inteira, já
+ * sanitizada — se um dia trouxer `?token=`, o `SENSITIVE_QUERY` cobre.
+ *
+ * URL externa vira **só o host**. O `path` de um `view_url` do Canva carrega o
+ * JWT (a própria API do app o chama de "JWT com `expwy`"), e o `SENSITIVE_QUERY`
+ * só redige **query** — `?token=`, `?jwt=`… o que estiver no caminho passaria
+ * inteiro. Host responde "foi site? de onde?" sem levar nem o token nem o
+ * endereço completo do terceiro.
+ *
+ * @param route rota/URL que ia para a telemetria
+ * @returns rota interna sanitizada, ou o host de uma URL externa
+ */
+export function routeForTelemetry(route: unknown): string {
+  const texto = typeof route === "string" ? route.trim() : "";
+  if (!texto) return "";
+  if (!/^https?:\/\/[^/\s]+/i.test(texto)) return sanitizeString(texto);
+  try {
+    return new URL(texto).host;
+  } catch {
+    return "[external]";
+  }
+}
+
 function normalizeVersion(value: unknown): string {
   return typeof value === "string" ? value.trim().replace(/^v(?=\d)/, "") : "";
 }
@@ -2007,5 +2033,6 @@ export default {
   setRuntimeContext,
   reportRuntimeIncident,
   histogram,
+  routeForTelemetry,
   installVueErrorHandler,
 };

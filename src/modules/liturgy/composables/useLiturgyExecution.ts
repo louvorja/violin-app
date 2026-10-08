@@ -222,7 +222,7 @@ export function useLiturgyExecution() {
        */
       await $media.close(true);
       await $media.closeProjectionStage();
-      await openSiteWindow(valid);
+      await openSiteWindow(valid, "liturgy");
     } catch (error) {
       reportExecutionError(error, "open_site", { has_url: true });
       console.warn("[useLiturgyItems] openSiteWindow falhou:", error);

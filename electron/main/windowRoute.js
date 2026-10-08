@@ -75,4 +75,54 @@ function webPreferencesFor(route, { preloadPath } = {}) {
   return { preload: preloadPath, sandbox: false };
 }
 
-module.exports = { SITE_PARTITION, isExternalRoute, loadTargetFor, webPreferencesFor };
+/**
+ * O host é do Canva? Só `canva.com` (com subdomínio) — `evilcanva.com` não.
+ * @param {string} url
+ */
+function hostCanva(url) {
+  try {
+    return /(^|\.)canva\.com$/i.test(new URL(String(url)).hostname);
+  } catch (_) {
+    return false;
+  }
+}
+
+/**
+ * A URL é uma tela de login (ou de desafio) do Canva?
+ *
+ * Duas decisões dependem dela: a janela de login saber quando o operador
+ * terminou, e a projeção avisar que caiu na tela de login. Por isso é pura e
+ * mora aqui, junto do contrato de URL da janela.
+ *
+ * `includes` e não `startsWith`: o Canva serve `/<locale>/login` em alguns
+ * mercados, e um `startsWith("/login")` classificava aquilo como "já logado" —
+ * foi exatamente isso que fechou a janela de login antes de o operador
+ * digitar qualquer coisa.
+ *
+ * Só canva.com: um link de liturgia que termina em `/login` de outro site não
+ * pode disparar o aviso do Canva.
+ */
+function ehPaginaDeLogin(url) {
+  if (!hostCanva(url)) return false;
+  let caminho;
+  try {
+    caminho = new URL(String(url)).pathname.toLowerCase();
+  } catch (_) {
+    return false;
+  }
+  if (caminho.includes("/login")) return true;
+  if (caminho.includes("/signup")) return true;
+  if (caminho.includes("/logout")) return true;
+  /* Desafio do Cloudflare: também não é o design. */
+  if (caminho.startsWith("/cdn-cgi/")) return true;
+  return false;
+}
+
+module.exports = {
+  SITE_PARTITION,
+  isExternalRoute,
+  loadTargetFor,
+  webPreferencesFor,
+  ehPaginaDeLogin,
+  hostCanva,
+};

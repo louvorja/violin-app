@@ -332,6 +332,66 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
       ipcRenderer.invoke("windows:setTaskbarVisibility", show),
   },
 
+  /*
+   * Integração Canva. Segredos (Client Secret, access/refresh token) não
+   * passam por aqui: só resultado já validado no main. Ver
+   * `electron/main/canva/` — o cofre é `storage/canva_secrets.json`.
+   */
+  canva: {
+    status: () => ipcRenderer.invoke("canva:status"),
+    /** Grava Client ID/Secret no cofre; nunca os devolve. */
+    setCredentials: (clientId, clientSecret) =>
+      ipcRenderer.invoke("canva:setCredentials", { clientId, clientSecret }),
+    /** Pendente até o usuário autorizar no navegador (ou o tempo acabar). */
+    connect: () => ipcRenderer.invoke("canva:connect"),
+    disconnect: () => ipcRenderer.invoke("canva:disconnect"),
+    /**
+     * Login no site do Canva numa janela normal, na mesma sessão da projeção.
+     * Pendente até o operador concluir ou fechar a janela.
+     */
+    webLogin: () => ipcRenderer.invoke("canva:webLogin"),
+    /** Apaga os cookies do Canva na partição da projeção. Não mexe na API. */
+    webLogout: () => ipcRenderer.invoke("canva:webLogout"),
+    /** `view: "designs"` lista designs; sem ele, itens da pasta (raiz = `root`). */
+    items: (payload) => ipcRenderer.invoke("canva:items", payload),
+    /** `view_url` novo a cada clique — o do Canva expira. */
+    designUrl: (designId) => ipcRenderer.invoke("canva:designUrl", { designId }),
+    /**
+     * Exporta o design como PDF para o disco e devolve o caminho local.
+     * "Projetar como: PDF" — pendente durante o job do Canva (até ~1 min).
+     */
+    exportPdf: (designId) => ipcRenderer.invoke("canva:exportPdf", { designId }),
+    /**
+     * A janela de projeção parou numa tela de login do Canva — a sessão do
+     * site não vale mais. Limpa o selo e devolve função de cleanup.
+     * @param {(data: {url: string}) => void} cb
+     * @returns {() => void}
+     */
+    onLoginWall: (cb) => {
+      const handler = (_e, data) => cb?.(data);
+      ipcRenderer.on("site:login-wall", handler);
+      return () => ipcRenderer.off("site:login-wall", handler);
+    },
+  },
+
+  /**
+   * Ciclo da tela de loading da projeção de Site.
+   *
+   * O renderer abre os loaders, abre as janelas de Site e só ENTÃO chama
+   * `aguardar()` — é isso que diz ao main quais janelas ele deve esperar, sem
+   * adivinhar (a de retorno pode nem existir: opção desligada ou sem monitor).
+   * Quando todas estiverem prontas, o main manda `pronto: true` para as duas
+   * telas de loading ao mesmo tempo; elas dão fade e o main as fecha.
+   */
+  siteLoader: {
+    onPronto: (cb) => {
+      const handler = (_e, data) => cb?.(data);
+      ipcRenderer.on("site-loader:pronto", handler);
+      return () => ipcRenderer.off("site-loader:pronto", handler);
+    },
+    aguardar: () => ipcRenderer.invoke("site-loader:aguardar"),
+  },
+
   // F5.1 — Iniciar com o sistema operacional
   appLogin: {
     set: (enabled) => ipcRenderer.invoke("app:setLoginItem", enabled),

@@ -66,6 +66,11 @@ const DOMAINS = {
     "https://t2.gstatic.com",
     "https://t3.gstatic.com",
   ],
+  // Miniaturas de designs do Canva (`thumbnail.url` documentado como
+  // document-export.canva.com; o wildcard cobre hosts de assets que o Canva
+  // pode trocar). Só IMG: as chamadas REST acontecem no main, então CONNECT
+  // não ganha nada aqui.
+  CANVA: ["https://document-export.canva.com", "https://*.canva.com"],
   VLIBRAS: [
     DOMAINS_SCR.VLIBRAS.URL,
     DOMAINS_SCR.VLIBRAS.DICT,
@@ -82,6 +87,7 @@ const vlibras = DOMAINS.VLIBRAS.join(" ");
 const fonts = DOMAINS.FONTS.join(" ");
 const posthog = DOMAINS.POSTHOG.join(" ");
 const contributorImages = DOMAINS.CONTRIBUTOR_IMAGES.join(" ");
+const canva = DOMAINS.CANVA.join(" ");
 const thirdParty = `${youtube} ${google} ${vlibras} ${cdn} ${posthog}`;
 
 const DOMAINS_CSP = {
@@ -93,7 +99,7 @@ const DOMAINS_CSP = {
   // navegador barrava a capa e o áudio enquanto o `fetch` da mesma origem
   // passava — o operador via "Ocorreu um erro ao carregar este áudio". Só o
   // desktop escapava, porque lá o CSP libera `https:` inteiro.
-  IMG: `${api} ${youtube} ${contributorImages}`,
+  IMG: `${api} ${youtube} ${contributorImages} ${canva}`,
   MEDIA: `${api} ${youtube}`,
   CONNECT: `${api} ${thirdParty}`,
   WORKER: `data:`,

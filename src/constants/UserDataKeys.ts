@@ -14,6 +14,7 @@ const OPTIONS_SLIDE = `${OPTIONS}.slide`
 const OPTIONS_FILE_PROJECTION = `${OPTIONS}.file_projection`
 const OPTIONS_ONLINE_VIDEO_PROJECTION = `${OPTIONS}.online_video_projection`
 const OPTIONS_SITE_PROJECTION = `${OPTIONS}.site_projection`
+const OPTIONS_INTEGRATIONS = `${OPTIONS}.integrations`
 const MODULES_BIBLE = `${MODULES}.${ModuleEnum.BIBLE}`;
 const MODULES_BIBLE_DATA = `${MODULES}.${ModuleEnum.BIBLE}.data`;
 const MODULES_LIBRAS = `${MODULES}.${ModuleEnum.LIBRAS}`;
@@ -85,6 +86,8 @@ export const KEYS = {
     },
     BACKGROUND_SOUND: {
       IS_PLAYING: `${MODULES}.${ModuleEnum.BACKGROUND_SOUND}.is_playing`,
+      /** Som marcado como padrão (id do arquivo da biblioteca) — ponteiro único. */
+      DEFAULT_ID: `${MODULES}.${ModuleEnum.BACKGROUND_SOUND}.default_id`,
     },
     LITURGY: {
       ACTIVE_DAY: `${MODULES_LITURGY}.active_day`,
@@ -375,6 +378,45 @@ export const KEYS = {
       DOWNLOAD: `${OPTIONS_ONLINE_VIDEO_PROJECTION}.download`,
       /** Altura máxima do download: 480, 720 ou 1080 (default). */
       MAX_HEIGHT: `${OPTIONS_ONLINE_VIDEO_PROJECTION}.max_height`,
+    },
+    /*
+     * Integrações de terceiros. Aqui só cabe o que é EXIBÍVEL ao usuário
+     * (nome do perfil conectado). Client Secret e token vivem fora do
+     * `user_data`, em `storage/canva_secrets.json` cifrado pelo main —
+     * `user_data` é sincronizado entre janelas e não pode carregar segredo.
+     * Espelho de `PROFILE_PATH` em electron/main/canva/index.js.
+     */
+    INTEGRATIONS: {
+      CANVA: {
+        ROOT: `${OPTIONS_INTEGRATIONS}.canva`,
+        PROFILE: `${OPTIONS_INTEGRATIONS}.canva.profile`,
+        /**
+         * A sessão do SITE (cookies) foi conferida e deu certo.
+         *
+         * Não é deduzido de cookie: o Canva grava `CDI`/`CL`/`_cfuvid` para
+         * qualquer visitante, e contar isso premiava "sessão ativa" sem login.
+         * O valor só é gravado pelo desafio de `webSession.verificar()` e é
+         * limpo quando a projeção cai na tela de login.
+         */
+        WEB_SESSION: `${OPTIONS_INTEGRATIONS}.canva.web_session`,
+        /**
+         * Como um design do Canva é projetado: `"pdf"` (exporta e projeta pelo
+         * leitor do app) ou `"site"` (a página do Canva ao vivo, que exige a
+         * sessão web). Default `pdf` — é o que não depende de gesto nenhum
+         * de terceiro.
+         */
+        PROJECT_AS: `${OPTIONS_INTEGRATIONS}.canva.project_as`,
+        /**
+         * Qualidade pedida ao export em PDF: `"regular"` ou `"pro"`.
+         *
+         * Default `regular`: é o que funciona em qualquer conta, inclusive sem
+         * Canva Pro. `pro` pede a saída premium e pode falhar com
+         * `license_required` quando o design tem elemento premium não pago —
+         * nesse caso o export refaz em `regular` e a tela avisa. Ver
+         * `electron/main/canva/export.js`.
+         */
+        EXPORT_QUALITY: `${OPTIONS_INTEGRATIONS}.canva.export_quality`,
+      },
     },
   },
   STORAGE: {

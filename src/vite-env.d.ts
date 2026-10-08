@@ -17,6 +17,61 @@ declare global {
     appPath: string;
   }
 
+  /**
+   * Resultado de toda operação Canva. NUNCA traz credencial nem token — só o
+   * motivo da falha, porque o Electron repassa ao renderer apenas
+   * `message`/`stack` de um Error e o `code` sumiria da tela.
+   */
+  interface CanvaResult {
+    ok: boolean;
+    code?: string;
+    message?: string;
+  }
+
+  interface CanvaStatus extends CanvaResult {
+    available?: boolean;
+    /** Credenciais salvas no cofre (não diz se estão corretas). */
+    hasCredentials?: boolean;
+    /** Token emitido e ainda com refresh. */
+    connected?: boolean;
+    /** O cofre está cifrado com AES-256-GCM. */
+    encrypted?: boolean;
+    /** Arquivo de chave presente e o ciphertext decifra. */
+    keyOk?: boolean;
+    /**
+     * O SITE do Canva tem sessão na partição da projeção (cookies)?
+     * Separado de `connected`: esse é o token da API, aquele é o cookie que o
+     * `view_url` exige. Ver `electron/main/canva/webSession.js`.
+     */
+    webSession?: boolean;
+    /**
+     * O token não tem o escopo `design:content:read`, que o export em PDF
+     * exige — a tela avisa antes do clique. `false` só quando dá para saber
+     * (token com campo `scope`); sem ele, quem decide é o Canva.
+     */
+    requiresReconnect?: boolean;
+    profile?: string;
+    redirectUri?: string;
+    port?: number;
+    keyFile?: string;
+    error?: string;
+  }
+
+  interface CanvaItem {
+    type: "folder" | "design" | "image";
+    id: string;
+    name: string;
+    thumb: string | null;
+    /** Só imagem: aberta direto pelo thumbnail, que é a única URL que ela tem. */
+    url?: string;
+    pageCount?: number;
+  }
+
+  interface CanvaListResult extends CanvaResult {
+    items?: CanvaItem[];
+    continuation?: string | null;
+  }
+
   interface LouvorjaApi {
     platform: string;
     version: string;
@@ -270,6 +325,86 @@ declare global {
           shown: string[];
         }) => void
       ) => () => void;
+    };
+    /**
+     * Integração Canva. OAuth2+PKCE, listagem e `view_url` acontecem no main;
+     * aqui só chega resultado já validado.
+     */
+    canva: {
+      status: () => Promise<CanvaStatus>;
+      /** Grava no cofre. O Client Secret nunca volta daqui. */
+      setCredentials: (clientId: string, clientSecret: string) => Promise<CanvaStatus>;
+      /** Fica pendente até o usuário autorizar no navegador (ou dar timeout). */
+      connect: () => Promise<CanvaResult>;
+      /** Revoga a linhagem no Canva e limpa o cofre local. */
+      disconnect: () => Promise<CanvaResult>;
+      /**
+       * Login no site do Canva numa janela normal (fora da projeção), na mesma
+       * sessão que a janela de URL e a tela de retorno usam. Pendente até o
+       * operador concluir ou fechar a janela.
+       */
+      webLogin: () => Promise<CanvaResult>;
+      /**
+       * Sai do SITE do Canva (cookies da partição da projeção). Não revoga o
+       * token da API — para isso existe `disconnect`.
+       */
+      webLogout: () => Promise<CanvaResult & { removidos?: number }>;
+      /** `view: "designs"` lista designs; sem ele, itens da pasta (raiz = `root`). */
+      items: (payload?: {
+        folderId?: string;
+        view?: string;
+        ownership?: string;
+        continuation?: string | null;
+        limit?: number;
+      }) => Promise<CanvaListResult>;
+      /** `view_url` novo a cada clique — o do Canva expira. */
+      designUrl: (designId: string) => Promise<CanvaResult & { url?: string }>;
+      /**
+       * Exporta o design como PDF no disco e devolve o caminho local.
+       * "Projetar como: PDF": não usa sessão web do Canva, só o token da API.
+       * Fica pendente enquanto o job roda (até ~1 minuto).
+       */
+      exportPdf: (
+        designId: string
+      ) => Promise<
+        CanvaResult & {
+          path?: string;
+          cached?: boolean;
+          title?: string;
+          pageCount?: number;
+          /** Qualidade com que o PDF saiu (`pro` pode cair para `regular`). */
+          quality?: string;
+          /** Pedi `pro`, o Canva recusou e refez em `regular`. */
+          qualityFallback?: boolean;
+        }
+      >;
+      /**
+       * A projeção parou numa tela de login do Canva (a sessão do site caiu).
+       * Devolve a função de cleanup — é um evento, não um invoke.
+       */
+      onLoginWall: (cb: (data: { url?: string }) => void) => () => void;
+    };
+    /**
+     * Ciclo da tela de loading da projeção de Site.
+     *
+     * `pronto: false` abre o ciclo (a janela pode ter sido reutilizada ainda
+     * com o fade aplicado); `pronto: true` começa o fade — as duas telas
+     * (telão e retorno) recebem o mesmo aviso para sumirem juntas.
+     */
+    siteLoader: {
+      /**
+       * `pronto: false` abre o ciclo; `pronto: true` começa o fade.
+       * `apresentou` é o resultado da apresentação do Canva (`null` quando não
+       * há gesto a fazer — Site de liturgia, por exemplo).
+       */
+      onPronto: (
+        cb: (data: { pronto: boolean; apresentou?: boolean | null }) => void
+      ) => () => void;
+      /**
+       * O renderer já abriu TODAS as janelas deste ciclo; o main passa a
+       * esperar cada uma delas estar pronta antes de avisar os loaders.
+       */
+      aguardar: () => Promise<{ ok: boolean }>;
     };
     windows: Record<string, unknown>;
     httpServer: {

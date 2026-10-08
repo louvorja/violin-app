@@ -20,6 +20,7 @@
   "playing": "Projetando",
   "next": "Próximo",
   "prev": "Anterior",
+  "page_indicator": "Página {page} / {total}",
   "empty_library": "Nenhum arquivo na biblioteca",
   "empty_playlist": "Playlist vazia",
   "no_item_selected": "Nenhum item selecionado",
@@ -40,5 +41,29 @@
   "categories": "Categorias",
   "uncategorized": "Sem categoria",
   "select_category": "Selecionar categoria",
-  "manage_categories": "Gerenciar Categorias"
+  "manage_categories": "Gerenciar Categorias",
+  "canva": {
+    "title": "Canva",
+    "desktop": "A aba Canva está disponível no aplicativo desktop.",
+    "connect_title": "Conecte sua conta Canva",
+    "connect_hint": "As credenciais ficam em Opções → Integrações e são guardadas cifradas.",
+    "connect": "Abrir Integrações",
+    "loading": "Carregando do Canva…",
+    "checking": "Verificando a conexão com o Canva…",
+    "error": "Não foi possível carregar do Canva.",
+    "empty": "Nada por aqui.",
+    "load_more": "Carregar mais",
+    "back": "Voltar",
+    "projects": "Projetos",
+    "all": "Todos os designs",
+    "shared": "Compartilhados comigo",
+    "type_folder": "Pasta",
+    "type_image": "Imagem",
+    "type_design": "Design",
+    "type_design_pages": "Design · {n} páginas",
+    "exporting": "Exportando o design do Canva…",
+    "export_error": "Não consegui exportar o design.",
+    "page_mismatch": "O Canva declara {declared} páginas, mas o PDF abriu com {total}. O arquivo pode ter vindo incompleto.",
+    "web_session_hint": "Sem a sessão do Canva, a projeção pode abrir a tela de login. Ative em Opções → Integrações."
+  }
 }

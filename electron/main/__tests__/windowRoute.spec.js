@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { SITE_PARTITION, isExternalRoute, loadTargetFor, webPreferencesFor } = require("../windowRoute.js");
+const { SITE_PARTITION, isExternalRoute, loadTargetFor, webPreferencesFor, ehPaginaDeLogin } = require("../windowRoute.js");
 
 const DEV = { devUrl: "http://localhost:5002", prodHtmlPath: "" };
 const PROD = { devUrl: "", prodHtmlPath: "/app/dist/index.html" };
@@ -117,4 +117,40 @@ describe("webPreferencesFor", () => {
     expect(webPreferencesFor("  https://exemplo.com  ", { preloadPath: PRELOAD }).preload)
       .toBeUndefined();
   });
+});
+
+describe("ehPaginaDeLogin — é tela de login do Canva?", () => {
+  it.each([
+    /* Regressão: `/<locale>/login` NÃO começa com "/login", e um startsWith
+       classificou isso como "já logado" — a janela fechou antes do operador
+       digitar. */
+    "https://www.canva.com/login",
+    "https://www.canva.com/login/",
+    "https://www.canva.com/login?returnUrl=%2F",
+    "https://www.canva.com/pt-BR/login",
+    "https://www.canva.com/en/login/",
+    "https://www.canva.com/pt-BR/signup",
+    "https://www.canva.com/logout",
+    /* Desafio do Cloudflare também não é o design. */
+    "https://www.canva.com/cdn-cgi/challenge-platform/h/b/jsd",
+    "https://fwd2.canva.com/login",
+  ])("sim: %s", (url) => expect(ehPaginaDeLogin(url)).toBe(true));
+
+  it.each([
+    "https://www.canva.com/",
+    "https://www.canva.com/projects",
+    "https://www.canva.com/folders/FAF2lZtloor",
+    "https://www.canva.com/design/DAFVztcvd9z/view",
+    /* Host tem que ser canva.com: um link de liturgia terminado em /login
+       de outro site não pode disparar o aviso do Canva. */
+    "https://exemplo.com/login",
+    "https://evilcanva.com/login",
+    "https://notcanva.com/enrolar",
+    "javascript:alert(1)",
+    "não é url",
+    "",
+    null,
+    undefined,
+    42,
+  ])("não: %s", (url) => expect(ehPaginaDeLogin(url)).toBe(false));
 });

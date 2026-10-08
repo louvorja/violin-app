@@ -85,6 +85,8 @@ const mediaVariants = require("./main/mediaVariants.js");
 const mediaResolver = require("./main/mediaResolver.js");
 const classicLibrary = require("./main/classicLibrary.js");
 const netHealth = require("./main/netHealth.js");
+const canva = require("./main/canva/index.js");
+const { ehPaginaDeLogin, hostCanva } = require("./main/windowRoute.js");
 
 // Aberto por um terminal que depois foi fechado, o stdout vira um pipe morto:
 // cada console.* lançava "write EPIPE" como exceção não tratada, e registrar
@@ -536,6 +538,176 @@ const handleSystemResume = () => {
 };
 const handleScreenUnlock = () => void recheckNetworkAfterWake();
 windowFactory.setWindowObserver((win, context) => runtimeHealth.watchWindow(win, context));
+
+/*
+ * A projeção caiu na tela de login do Canva.
+ *
+ * É a verdade absoluta sobre a sessão do site: o `view_url` é de um design
+ * privado e o site não deixou passar. Duas reações — zerar o selo da tela de
+ * Integrações (que, sem isso, continuaria verde) e avisar a janela do app,
+ * porque a de projeção não tem preload para ouvir nada.
+ *
+ * Só na transição e só do principal: o espelho carrega a MESMA URL, e dois
+ * avisos virariam dois alertas para o mesmo fato.
+ */
+const _siteNaParede = new Map();
+windowFactory.setSiteNavigationListener((_win, { feature, url }) => {
+  const parede = ehPaginaDeLogin(url);
+  if (_siteNaParede.get(feature) === parede) return;
+  _siteNaParede.set(feature, parede);
+  if (!parede) return;
+  canva.setWebSession(false);
+  if (feature !== "site") return;
+  const payload = { url };
+  for (const w of BrowserWindow.getAllWindows()) safeSend(w, "site:login-wall", payload);
+});
+
+/* -------------------------------------------------------------------------
+ * Loader de projeção de Site
+ *
+ * A janela de Site é externa: ela só aparece no `did-finish-load`, e no Canva
+ * ainda falta o gesto de apresentação + a espera de os controles sumirem. Sem
+ * cobertura, o operador via a página "chegando" no telão — tela branca, barra
+ * de ferramentas, botão de apresentação — no meio da congregação.
+ *
+ * Ciclo:
+ *   renderer abre site_loader → site → [site_loader_return → site_return]
+ *   renderer chama `site-loader:aguardar`  ← diz QUais janelas existem
+ *   main espera cada uma ficar pronta      ← carregada; no Canva, também
+ *                                             apresentada e com controles sumidos
+ *   main manda {pronto:true} para OS DOIS loaders ao mesmo tempo
+ *   loaders dão fade (CSS, 400 ms) → main fecha os dois (550 ms)
+ *
+ * Duas proteções, porque um loader que não sai deixa a tela presa na frente da
+ * congregação: timeout de segurança e o fechamento da projeção (que também
+ * fecha os loaders).
+ * ---------------------------------------------------------------------- */
+const SITE_FEATURES = ["site", "site_return"];
+const SITE_LOADER_FEATURES = ["site_loader", "site_loader_return"];
+const LOADER_FECHAR_MS = 550;
+const LOADER_TIMEOUT_MS = 20000;
+
+/**
+ * Janela de Site pronta desde que ELA NASCEU.
+ *
+ * Separado do `esperando` de propósito: o `did-finish-load` pode chegar antes
+ * do renderer chamar `aguardar` (site em cache), e janela REUTILIZADA não
+ * recarrega — sem guardar aqui, o segundo ciclo acharia uma janela que nunca
+ * mais vai sinalizar.
+ */
+const _siteProntas = new Set();
+
+/**
+ * Resultado da apresentação do Canva, por janela: `true` entrou em tela cheia,
+ * `false` não confirmou. Só janelas do Canva entram aqui.
+ *
+ * É o ÚNICO indicador de que o modo Site FUNCIONOU — abrir a janela não
+ * garante nada, o design pode ficar no `VIEWER` sem nunca virar apresentação.
+ * Nulo (mapa vazio) significa que não havia gesto a fazer: um Site de liturgia,
+ * por exemplo.
+ */
+const _apresentacao = new Map();
+
+const _loader = { esperando: new Set(), timer: null, fechamento: null };
+
+/** `true` se alguma janela entrou, `false` se nenhuma confirmou, `null` se não havia Canva. */
+function _resumoApresentacao() {
+  const valores = [..._apresentacao.values()];
+  if (!valores.length) return null;
+  return valores.some((v) => v === true);
+}
+
+/** Uma janela de Site ficou pronta: marca e, se era a última pendente, avisa. */
+function _sitePronto(feature) {
+  if (!SITE_FEATURES.includes(feature)) return;
+  _siteProntas.add(feature);
+  if (!_loader.esperando.has(feature)) return;
+  _loader.esperando.delete(feature);
+  if (_loader.esperando.size === 0) _loaderAvisar(true);
+}
+
+/**
+ * Envia o estado para as duas telas de loading.
+ *
+ * `false` é o início do ciclo: a janela de loader pode ter sido REUTILIZADA de
+ * uma projeção anterior ainda com o fade aplicado, e ficaria invisível.
+ * `true` começa o fade — as duas recebem no mesmo turno, então somem juntas.
+ */
+function _loaderAvisar(pronto) {
+  if (_loader.timer) {
+    clearTimeout(_loader.timer);
+    _loader.timer = null;
+  }
+  for (const feature of SITE_LOADER_FEATURES) {
+    const win = windowFactory.getWindow(feature);
+    if (win && !win.isDestroyed()) {
+      safeSend(win, "site-loader:pronto", {
+        pronto,
+        /* No início do ciclo não há resultado ainda; só o `true` interessa. */
+        apresentou: pronto ? _resumoApresentacao() : null,
+      });
+    }
+  }
+  if (!pronto) return;
+  if (_loader.fechamento) clearTimeout(_loader.fechamento);
+  _loader.fechamento = setTimeout(() => {
+    _loader.fechamento = null;
+    for (const feature of SITE_LOADER_FEATURES) void windowFactory.close(feature);
+  }, LOADER_FECHAR_MS);
+}
+
+/*
+ * Página do Canva pronta na projeção: clica em "Apresentar em tela cheia".
+ *
+ * O `view_url` abre a visualização, e sem este clique o operador precisa
+ * achar o botão do canto inferior direito em toda projeção. Melhor esforço —
+ * se o Canva mudar o botão, a projeção segue como está; e só para canva.com,
+ * para não ficar clicando em link de liturgia aleatório.
+ *
+ * O `finally` é o que alimenta o loader: para o Canva a janela só conta como
+ * pronta DEPOIS de `tentarApresentar`, que devolve true com a apresentação
+ * confirmada e a espera de os controles sumirem já decorrida.
+ */
+windowFactory.setSiteReadyListener((win, { feature, url }) => {
+  if (!SITE_FEATURES.includes(feature)) return;
+  const ehCanva = hostCanva(url);
+  const tentativa = ehCanva
+    ? canva.tentarApresentar(win).catch((err) => {
+        console.warn("[site-loader] apresentação falhou:", err?.message || err);
+        return false;
+      })
+    : Promise.resolve(null);
+  void tentativa.then((apresentou) => {
+    if (ehCanva) _apresentacao.set(feature, apresentou);
+    _sitePronto(feature);
+  });
+});
+
+/**
+ * O renderer já abriu TODAS as janelas deste ciclo.
+ *
+ * É o renderer quem declara, porque só ele sabe o que abriu: a de retorno pode
+ * nem existir (opção desligada, ou ligada sem monitor de retorno). Aqui o main
+ * só encontra as que existem, vê quais ainda não ficaram prontas e espera.
+ */
+ipcMain.handle("site-loader:aguardar", () => {
+  const alvos = SITE_FEATURES.filter((feature) => !!windowFactory.getWindow(feature));
+  _loader.esperando = new Set(alvos.filter((feature) => !_siteProntas.has(feature)));
+  _loaderAvisar(false);
+
+  if (_loader.esperando.size === 0) {
+    _loaderAvisar(true);
+    return { ok: true };
+  }
+  _loader.timer = setTimeout(() => {
+    console.warn(
+      `[site-loader] timeout de ${LOADER_TIMEOUT_MS}ms sem todas as janelas prontas ` +
+        `(${[..._loader.esperando].join(", ")}) — revelando mesmo assim`
+    );
+    _loaderAvisar(true);
+  }, LOADER_TIMEOUT_MS);
+  return { ok: true };
+});
 runtimeHealth.watchApp(app);
 runtimeHealth.start();
 
@@ -1602,6 +1774,20 @@ ipcMain.handle("windows:open", async (_event, options) => {
   // "Opções do Desenvolvedor" (options.dev.devtools_projections).
   // null → deixa o windowFactory decidir (_isDevMode). true/false → override.
   const devToolsOpt = _userDataMain?.options?.dev?.devtools_projections;
+  /*
+   * A abertura vai (re)carregar → zera a marcação de pronta, para o loader do
+   * ciclo esperar o novo `did-finish-load`. Janela reutilizada COM A MESMA rota
+   * mantém a marca: nada vai recarregar, e tratar isso como "pendente" fecharia
+   * o loader só depois do timeout de20s.
+   */
+  if (
+    SITE_FEATURES.includes(options.feature) &&
+    windowFactory.willLoad(options.feature, options.route)
+  ) {
+    _siteProntas.delete(options.feature);
+    /* Ciclo novo: o resultado da apresentação anterior não vale mais. */
+    _apresentacao.delete(options.feature);
+  }
   const win = await windowFactory.openOnMonitor({
     ...options,
     preloadPath,
@@ -2123,6 +2309,72 @@ ipcMain.handle("windows:setTaskbarVisibility", (_event, show) => {
     return { ok: false, error: String(err) };
   }
 });
+
+// ---------------------------------------------------------------------------
+// IPC: Integrações — Canva
+//
+// Fluxo OAuth2 + PKCE e todas as chamadas REST acontecem AQUI. O renderer
+// recebe apenas `{ ok, code, message, ... }`: Client Secret, access token e
+// refresh token não passam pelo contextBridge nem entram em `user_data`
+// (o cofre é `storage/canva_secrets.json`, fora da sincronização entre
+// janelas). Cada handler devolve resultado em vez de lançar, porque o
+// Electron repassa ao renderer só `message`/`stack` e o código de erro
+// sumiria da tela de Integrações.
+// ---------------------------------------------------------------------------
+
+canva.configure({
+  setUserData: (pathKey, value) => {
+    _walkSet(_userDataMain, pathKey, value);
+    return _persistUserDataFromMain(pathKey);
+  },
+  getUserData: () => _userDataMain,
+});
+
+ipcMain.handle("canva:status", () => canva.status());
+
+ipcMain.handle("canva:setCredentials", (_event, payload) => canva.setCredentials(payload));
+
+/** Nada do renderer entra aqui: porta e redirectUri são fixas no portal. */
+ipcMain.handle("canva:connect", () =>
+  canva.connect({ openExternal: (url) => shell.openExternal(url) })
+);
+
+ipcMain.handle("canva:disconnect", () => canva.disconnect());
+
+/**
+ * Login no SITE do Canva (cookies), fora da projeção.
+ *
+ * O token da API não autentica `www.canva.com` — o design privado abre pelo
+ * `view_url` e o site pede sessão. A janela usa a MESMA partição da projeção,
+ * então os cookies valem para a janela de URL e para a tela de retorno.
+ */
+ipcMain.handle("canva:webLogin", () => canva.webLogin());
+
+/**
+ * Sai do SITE do Canva (cookies da partição) — mantém o token da API.
+ * Só limpa canva.com: a partição é compartilhada com os Sites da liturgia.
+ */
+ipcMain.handle("canva:webLogout", () => canva.webLogout());
+
+ipcMain.handle("canva:items", (_event, payload) => canva.items(payload));
+
+ipcMain.handle("canva:designUrl", (_event, payload) => canva.designUrl(payload));
+
+/**
+ * Exporta o design como PDF e devolve o caminho local.
+ * "Projetar como: PDF" — usa só o token da API, sem sessão web do Canva.
+ * O invoke fica pendente durante o job (até ~1 min): a aba mostra o progresso.
+ */
+/*
+ * Qualidade do export vem da tela de Integrações (default `regular`), lida AQUI
+ * para o renderer não precisar repassar — o main é quem tem o user_data
+ * atualizado, e a preferência não muda durante o job.
+ */
+ipcMain.handle("canva:exportPdf", (_event, payload) =>
+  canva.exportDesign(payload, {
+    exportQuality: _userDataMain?.options?.integrations?.canva?.export_quality,
+  })
+);
 
 // ---------------------------------------------------------------------------
 // IPC: Storage (S2) — visibilidade e gerenciamento da pasta de mídia + cache

@@ -56,6 +56,13 @@ export interface FileProjectionState {
   stage_epoch?: number;
   page?: number;
   totalPages?: number;
+  /**
+   * Tamanho declarado pelo DONO do arquivo (o `page_count` do Canva, por
+   * exemplo). A janela de projeção compara com o que o pdf.js abriu de fato —
+   * é como se descobre que um export saiu incompleto, em vez de achar na
+   * hora de virar a página.
+   */
+  pageCount?: number;
   /** Navegação veio do "anterior" — inverte o modo automático de direção. */
   backward?: boolean;
   /** Referência para re-resolver URLs blob via IndexedDB na janela alvo. */

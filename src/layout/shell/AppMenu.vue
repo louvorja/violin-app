@@ -76,6 +76,7 @@
                     <AppMenuSobre v-else-if="renderedItem?.id === 'about'" />
                     <AppMenuTransmitir v-else-if="renderedItem?.id === 'transmission'" />
                     <AppMenuSincronizar v-else-if="renderedItem?.id === 'sync'" />
+                    <AppMenuIntegracoes v-else-if="renderedItem?.id === 'integrations'" />
                     <AppMenuAcessibilidade v-else-if="renderedItem?.id === 'accessibility'" />
                     <AppMenuAtualizacoes v-else-if="renderedItem?.id === 'updates'" />
                     <AppMenuAbrirArquivo v-else-if="renderedItem?.id === 'open_file'" />
@@ -106,6 +107,7 @@ const AppMenuOpcoes = defineAsyncComponent(loadAppMenuOpcoes);
 const AppMenuSobre = defineAsyncComponent(() => import("./AppMenuSobre.vue"));
 const AppMenuTransmitir = defineAsyncComponent(() => import("./AppMenuTransmitir.vue"));
 const AppMenuSincronizar = defineAsyncComponent(() => import("./AppMenuSincronizar.vue"));
+const AppMenuIntegracoes = defineAsyncComponent(() => import("./AppMenuIntegracoes.vue"));
 const AppMenuAcessibilidade = defineAsyncComponent(() => import("./AppMenuAcessibilidade.vue"));
 const AppMenuAtualizacoes = defineAsyncComponent(() => import("./AppMenuAtualizacoes.vue"));
 const AppMenuAbrirArquivo = defineAsyncComponent(() => import("./AppMenuAbrirArquivo.vue"));
@@ -142,6 +144,8 @@ const activeItem = ref(null);
 const renderedItem = ref(null);
 let renderTimer = null;
 let optionsPreloadTimer = null;
+/* Cleanup do aviso de "projeção caiu na tela de login" — vindo do main. */
+let cleanupLoginWall = null;
 // Benchmark Electron/Windows com CPU 6× mostrou que atrasar a montagem 220 ms
 // deixava um placeholder branco e piorava o primeiro paint. O painel começa no
 // próprio clique; as seções secundárias continuam sendo diferidas dentro dele.
@@ -186,6 +190,12 @@ const items = computed(() => [
     id: "sync",
     label: "shell.appmenu_items.sync",
     icon: ICONS.UI.SYNC_CLOUD,
+    inline: true,
+  },
+  {
+    id: "integrations",
+    label: "shell.appmenu_items.integrations",
+    icon: ICONS.UI.LINK,
     inline: true,
   },
   {
@@ -439,6 +449,8 @@ onMounted(() => {
   window.addEventListener("louvorja:open-options", onOpenOptions);
   window.addEventListener("louvorja:open-about", onOpenAbout);
   window.addEventListener("louvorja:open-licenses", onOpenLicenses);
+  window.addEventListener("louvorja:open-integrations", onOpenIntegrations);
+  registrarLoginWall();
   // O diálogo da verificação inicial vive no Shell; o menu precisa sair da frente.
   window.addEventListener("louvorja:open-startup-check", close);
 });
@@ -453,6 +465,8 @@ onBeforeUnmount(() => {
   window.removeEventListener("louvorja:open-options", onOpenOptions);
   window.removeEventListener("louvorja:open-about", onOpenAbout);
   window.removeEventListener("louvorja:open-licenses", onOpenLicenses);
+  window.removeEventListener("louvorja:open-integrations", onOpenIntegrations);
+  soltarLoginWall();
   window.removeEventListener("louvorja:open-startup-check", close);
   document.removeEventListener("keydown", onKeydown);
 });
@@ -471,6 +485,39 @@ function onOpenAbout() {
 
 function onOpenLicenses() {
   openAt("licenses");
+}
+
+/** CTA da aba Canva da Biblioteca de Mídia — "conecte em Opções → Integrações". */
+function onOpenIntegrations() {
+  openAt("integrations");
+}
+
+/**
+ * A janela de projeção parou numa tela de login do Canva.
+ *
+ * O main já zerou o selo; aqui só informa e oferece o caminho curto. É um
+ * alerta do culto inteiro: o operador descobre AGORA, e não vendo a senha de
+ * um hino no telão.
+ */
+function onLoginWall() {
+  $alert.yesno(
+    {
+      title: t("shell.canva_login_wall.title"),
+      text: t("shell.canva_login_wall.text"),
+    },
+    (btn) => {
+      if (btn === "yes") openAt("integrations");
+    }
+  );
+}
+
+function registrarLoginWall() {
+  cleanupLoginWall = window.louvorjaApi?.canva?.onLoginWall?.(onLoginWall) || null;
+}
+
+function soltarLoginWall() {
+  cleanupLoginWall?.();
+  cleanupLoginWall = null;
 }
 
 /**

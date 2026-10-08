@@ -42,6 +42,7 @@ import { useFileProjection } from "@/composables/useFileProjection";
 import { useBackgroundSound } from "@/composables/useBackgroundSound";
 import { syncFromIdb as syncDevicesFromIdb } from "@/composables/useDevices";
 import Path from "@/helpers/Path";
+import { resolveBackgroundSoundPath } from "@/helpers/BackgroundSoundPath";
 import Media from "@/composables/useMedia";
 import { useSlides } from "@/composables/useSlides";
 import { musicCommandSessionRejectionReason } from "@/presentation/MusicPresentationPacket";
@@ -246,6 +247,36 @@ function channelTitleResolver(catalog) {
     const title = channel && channel.title;
     return typeof title === "string" && title ? title : null;
   };
+}
+
+/** Lê uma tabela do IndexedDB sem derrubar o comando se a tabela não existir. */
+async function safeIdbAll(table) {
+  try {
+    const rows = await $idb.getAll(table);
+    return Array.isArray(rows) ? rows : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Toca um som no player single do desktop (funciona sem o módulo aberto).
+ *
+ * O caminho vem de `resolveBackgroundSoundPath`: **URL nova a cada toque** —
+ * o player revoga a URL ativa em `playFile`/`stop`/`cleanup`, então cache de
+ * blob URL causava replay de URL revogada ("não funciona mais" na segunda
+ * vez). Ver KDoc do helper.
+ */
+function playBackgroundSound(bg, file) {
+  const path = resolveBackgroundSoundPath(file);
+  // Registro sem bytes e sem path (corrompido): tocar com src vazio setaria
+  // `currentFile` mesmo com o play falhando e os próximos toques virariam
+  // resume() contra src morto — a mesma armadilha do bug da URL revogada.
+  if (!path) {
+    console.warn("[http:background-sound] som sem caminho reproduzível:", file?.id);
+    return;
+  }
+  bg.playFile({ ...file, path }, bg.fadeInMs.value);
 }
 
 /** Catálogo remoto de vídeos online (já cacheado pelo desktop em camadas). */
@@ -650,6 +681,23 @@ function _cycleModule(direction) {
 }
 function _mediaIsActive() {
   return AppData.get("modules.media.show", false) || AppData.get("modules.media.minimized", false);
+}
+
+/**
+ * Há um ARQUIVO no telão (imagem, PDF, vídeo local)?
+ *
+ * `projectFile` grava o payload em `LJ_FILE_PROJECTION` e o remove no
+ * fechamento — é a mesma fonte que a janela de projeção usa para retomar a
+ * página. Sem isto, projetar um PDF pela aba Canva deixava as setas mudas:
+ * `modules.media.show` só liga quando a música abre, e um PDF projetado sozinho
+ * não entra nesse estado.
+ */
+function _fileProjectionIsActive() {
+  try {
+    return Boolean(localStorage.getItem(KEYS.PROJECTION.LJ_FILE_PROJECTION));
+  } catch {
+    return false;
+  }
 }
 
 /** Retorna o composable singleton do shell (com openCommandPalette / openHotkeysCheatsheet). */
@@ -1543,6 +1591,128 @@ $storage.hydrate().then(async () => {
         case "http:online-videos":
           await handleOnlineVideosRequest(data, action);
           break;
+        case "http:background-sound": {
+          // Som de fundo: o player é single (useBackgroundSound), então o
+          // controle remoto funciona sem o módulo aberto.
+          const bg = useBackgroundSound();
+          if (data.action === "state") {
+            const requestId = data?.requestId;
+            if (requestId && Platform.httpServer?.respond) {
+              const [files, categories] = await Promise.all([
+                safeIdbAll(DB_TABLE.BACKGROUND_SOUND_LIBRARY),
+                safeIdbAll(DB_TABLE.BACKGROUND_SOUND_CATEGORY),
+              ]);
+              const current = bg.currentFile.value;
+              const sent = Platform.httpServer.respond(requestId, {
+                status: "ok",
+                playing: bg.isPlaying.value,
+                volume: Math.round(bg.volume.value),
+                currentId: current && current.id != null ? String(current.id) : null,
+                // Clip no mesmo teto do validador (isBackgroundSoundStateResponse):
+                // sem isto, um nome/id longo demais virava 502 Invalid Payload.
+                files: files.map((file) => ({
+                  id: String(file.id).slice(0, 256),
+                  name: String(file.name || file.fileName || "").slice(0, 500),
+                  fileName: typeof file.fileName === "string" ? file.fileName : null,
+                  categoryId: typeof file.categoryId === "string" ? file.categoryId : null,
+                })),
+                categories: categories.map((category) => ({
+                  id: String(category.id).slice(0, 256),
+                  name: String(category.name || "").slice(0, 200),
+                  color: typeof category.color === "string" ? category.color : null,
+                })),
+              });
+              if (!sent) {
+                console.warn("[http:background-sound] resposta descartada pelo preload", requestId);
+              }
+            }
+            break;
+          }
+          // play-default é o único com resposta (idempotente / sem padrão);
+          // nos demais `requestId` é indefinido e o respond vira no-op.
+          const requestId = data?.requestId;
+          const respond = (payload) => {
+            if (requestId && Platform.httpServer?.respond) {
+              const sent = Platform.httpServer.respond(requestId, payload);
+              if (!sent) {
+                console.warn("[http:background-sound] resposta descartada pelo preload", requestId);
+              }
+            }
+          };
+          try {
+            if (data.action === "play") {
+              const files = await safeIdbAll(DB_TABLE.BACKGROUND_SOUND_LIBRARY);
+              const file = files.find((candidate) => String(candidate.id) === String(data.id));
+              if (file) playBackgroundSound(bg, file);
+              else console.warn("[http:background-sound] som não encontrado:", data.id);
+            } else if (data.action === "pause") {
+              bg.pause();
+            } else if (data.action === "resume") {
+              bg.resume();
+            } else if (data.action === "stop") {
+              bg.stop(0);
+            } else if (data.action === "play-default") {
+              const defaultId = String(
+                UserData.get(KEYS.MODULES.BACKGROUND_SOUND.DEFAULT_ID, "") || ""
+              );
+              const record = defaultId
+                ? await $idb.get(DB_TABLE.BACKGROUND_SOUND_LIBRARY, defaultId)
+                : null;
+              if (!record) {
+                respond({ status: "error", error: "Nenhum som padrão configurado" });
+              } else if (
+                bg.isPlaying.value &&
+                String(bg.currentFile.value?.id) === String(record.id)
+              ) {
+                // Idempotente: o padrão já está tocando — não reinicia.
+                respond({ status: "ok" });
+              } else if (
+                bg.currentFile.value &&
+                String(bg.currentFile.value.id) === String(record.id)
+              ) {
+                // Pausado no próprio padrão: continua de onde parou.
+                bg.resume();
+                respond({ status: "ok" });
+              } else {
+                playBackgroundSound(bg, record);
+                respond({ status: "ok" });
+              }
+            }
+          } catch (error) {
+            console.warn("[http:background-sound] comando falhou:", error?.message || error);
+            respond({ status: "error", error: "Falha ao iniciar o som de fundo" });
+          }
+          break;
+        }
+        case "http:volume": {
+          // Volume "geral": os dois players (projeção + som de fundo).
+          try {
+            const atual = Number(AppData.get(KEYS.MODULES.MEDIA.CONFIG.VOLUME, 50));
+            const base = Number.isFinite(atual) ? atual : 50;
+            const step = Number.isFinite(Number(data.step)) ? Number(data.step) : 1;
+            let next;
+            if (data.action === "up") next = Math.min(100, base + step);
+            else if (data.action === "down") next = Math.max(0, base - step);
+            else next = Math.max(0, Math.min(100, Number(data.value)));
+            // Sem o round, um base fracionário (slider sem step, valor vindo do
+            // YouTube) devolveria 51.5 — o validador exige inteiro e a rota
+            // responderia 502 mesmo com o volume já aplicado.
+            next = Math.round(next);
+            Media.setVolume(next);
+            useBackgroundSound().setVolume(next);
+            const requestId = data?.requestId;
+            if (requestId && Platform.httpServer?.respond) {
+              const sent = Platform.httpServer.respond(requestId, { status: "ok", value: next });
+              if (!sent) console.warn("[http:volume] resposta descartada pelo preload", requestId);
+            }
+          } catch (error) {
+            console.warn("[http:volume] falha:", error?.message || error);
+            if (data?.requestId && Platform.httpServer?.respond) {
+              Platform.httpServer.respond(data.requestId, null);
+            }
+          }
+          break;
+        }
         case "http:drawing-number":
           Broadcast.send(BROADCAST_TYPE.DRAWING_NUMBER, { number: data.number });
           break;
@@ -2160,22 +2330,30 @@ $storage.hydrate().then(async () => {
 
     // --- Navegação de slides (contexto: media ativa) ---
 
-    const _ifMedia = (fn) => (e) => {
-      if (_mediaIsActive()) {
-        // preventDefault bloqueia ação default do browser (back/forward, scroll).
-        // stopImmediatePropagation impede que a trava de foco do diálogo veja
-        // o evento e mova o foco em vez de navegar slides: com a janela do
-        // media aberta, as setas mexiam o foco da lista em vez de trocar de
-        // slide.
-        if (e && typeof e.preventDefault === "function") e.preventDefault();
-        if (e && typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
-        fn();
-      }
-    };
+    const _ifMedia =
+      (fn, opts = {}) =>
+      (e) => {
+        /*
+         * `arquivo: true` estende o gate às teclas de PÁGINA: o telão pode estar
+         * mostrando um PDF projetado fora da playlist (aba Canva), e esse caso
+         * não liga `modules.media.show` — sem a extensão as setas morriam em
+         * silêncio enquanto a música não estivesse aberta.
+         */
+        if (_mediaIsActive() || (opts.arquivo === true && _fileProjectionIsActive())) {
+          // preventDefault bloqueia ação default do browser (back/forward, scroll).
+          // stopImmediatePropagation impede que a trava de foco do diálogo veja
+          // o evento e mova o foco em vez de navegar slides: com a janela do
+          // media aberta, as setas mexiam o foco da lista em vez de trocar de
+          // slide.
+          if (e && typeof e.preventDefault === "function") e.preventDefault();
+          if (e && typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
+          fn();
+        }
+      };
 
     Hotkeys.register(
       "Ctrl+ArrowUp",
-      _ifMedia(() => Media.prevSlide()),
+      _ifMedia(() => Media.prevSlide(), { arquivo: true }),
       {
         context: "media",
         description: "hotkeys.ctrl_up",
@@ -2185,7 +2363,7 @@ $storage.hydrate().then(async () => {
     );
     Hotkeys.register(
       "Ctrl+ArrowDown",
-      _ifMedia(() => Media.nextSlide()),
+      _ifMedia(() => Media.nextSlide(), { arquivo: true }),
       {
         context: "media",
         description: "hotkeys.ctrl_down",
@@ -2195,7 +2373,7 @@ $storage.hydrate().then(async () => {
     );
     Hotkeys.register(
       "Ctrl+PageUp",
-      _ifMedia(() => Media.prevSlide()),
+      _ifMedia(() => Media.prevSlide(), { arquivo: true }),
       {
         context: "media",
         description: "hotkeys.ctrl_pageup",
@@ -2205,7 +2383,7 @@ $storage.hydrate().then(async () => {
     );
     Hotkeys.register(
       "Ctrl+PageDown",
-      _ifMedia(() => Media.nextSlide()),
+      _ifMedia(() => Media.nextSlide(), { arquivo: true }),
       {
         context: "media",
         description: "hotkeys.ctrl_pagedown",
@@ -2237,8 +2415,9 @@ $storage.hydrate().then(async () => {
     // Setas puras ← / → / ↑ / ↓ navegam slides quando media está ativa
     // (replica FormKeyUp Delphi: setas funcionam em qualquer janela com fMusica visível).
     // PageUp/PageDown também navegam slides puros.
-    const _prevSlide = _ifMedia(() => Media.prevSlide());
-    const _nextSlide = _ifMedia(() => Media.nextSlide());
+    /* Arrows + PageUp/PageDown: valem também com um arquivo no telão. */
+    const _prevSlide = _ifMedia(() => Media.prevSlide(), { arquivo: true });
+    const _nextSlide = _ifMedia(() => Media.nextSlide(), { arquivo: true });
     // preventDefault: false aqui é importante — Hotkeys.js só executa o handler
     // (não chama preventDefault automático). _ifMedia decide: se media está
     // ativa, chama preventDefault + stopImmediatePropagation; senão, libera

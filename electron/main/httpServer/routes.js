@@ -357,6 +357,7 @@ function setupRoutes(
     requestRenderer,
     sendRendererError,
     getUserData,
+    isPlainObject,
     isCustomSongsSearchResponse,
     isOnlineVideosAlbumsResponse,
     isOnlineVideosVideosResponse,

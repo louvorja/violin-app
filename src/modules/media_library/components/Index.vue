@@ -60,113 +60,118 @@
       <div class="media-split">
         <!-- Library -->
         <div v-show="!mobileLayout || mobileView === 'library'" class="media-library">
-          <div class="media-search">
-            <LjInput
-              v-model="searchQuery"
-              clearable
-              :icon="ICONS.ACTIONS.SEARCH"
-              :placeholder="tm('search')"
-              :aria-label="tm('search')"
-            />
-          </div>
+          <!-- Aba Canva: conteúdo remoto, navegação por pastas, sem busca local. -->
+          <CanvaTab v-if="libraryFilter === 'canva'" />
 
-          <!-- Chips de categorias (filtro) -->
-          <div v-if="categories.length || uncategorizedCount > 0" class="media-chips">
-            <span class="media-chips-title">{{ tm("categories") }}</span>
-            <div
-              v-for="cat in categories"
-              :key="cat.id"
-              class="media-chip"
-              :class="{ 'media-chip--active': selectedCategoryIds.has(cat.id) }"
-              :style="{ '--chip-color': cat.color }"
-              @click="toggleCategoryChip(cat.id)"
-            >
-              <span class="media-chip-icon-wrap">
-                <LjIcon v-if="cat.iconType === 'icon'" :icon="cat.icon" :size="14" />
-                <img v-else :src="cat.icon" class="media-chip-img" alt="" />
-              </span>
-              <span class="media-chip-name">{{ cat.name }}</span>
-              <span class="media-chip-count">
-                {{ files.filter((f) => f.categoryId === cat.id).length }}
-              </span>
-              <button
-                type="button"
-                class="media-chip-add"
-                :title="tm('add_files')"
-                :aria-label="tm('add_files')"
-                @click.stop="beginAddWithCategory(cat.id)"
-              >
-                <LjIcon :icon="ICONS.ACTIONS.ADD" :size="12" />
-              </button>
-            </div>
-            <div
-              v-if="uncategorizedCount > 0"
-              class="media-chip media-chip--uncategorized"
-              :class="{ 'media-chip--active': selectedCategoryIds.has(UNCATEGORIZED_ID) }"
-              @click="toggleCategoryChip(UNCATEGORIZED_ID)"
-            >
-              <span class="media-chip-icon-wrap">
-                <LjIcon :icon="ICONS.UI.FILE_MULTIPLE" :size="14" />
-              </span>
-              <span class="media-chip-name">{{ tm("uncategorized") }}</span>
-              <span class="media-chip-count">{{ uncategorizedCount }}</span>
-              <button
-                type="button"
-                class="media-chip-add"
-                :title="tm('add_files')"
-                :aria-label="tm('add_files')"
-                @click.stop="beginAddWithCategory(UNCATEGORIZED_ID)"
-              >
-                <LjIcon :icon="ICONS.ACTIONS.ADD" :size="12" />
-              </button>
-            </div>
-          </div>
-          <div v-if="filteredFiles.length" class="media-grid">
-            <div
-              v-for="file in filteredFiles"
-              :key="file.id"
-              class="media-grid-item"
-              @click="addToPlaylist(file)"
-            >
-              <img
-                v-if="file.thumb"
-                :src="file.thumb"
-                class="media-grid-item-thumb"
-                alt=""
-                loading="lazy"
+          <template v-else>
+            <div class="media-search">
+              <LjInput
+                v-model="searchQuery"
+                clearable
+                :icon="ICONS.ACTIONS.SEARCH"
+                :placeholder="tm('search')"
+                :aria-label="tm('search')"
               />
-              <div v-else class="media-grid-item-thumb media-grid-item-thumb--icon">
-                <LjIcon :icon="fileTypeIcon(file.type)" :size="28" />
+            </div>
+
+            <!-- Chips de categorias (filtro) -->
+            <div v-if="categories.length || uncategorizedCount > 0" class="media-chips">
+              <span class="media-chips-title">{{ tm("categories") }}</span>
+              <div
+                v-for="cat in categories"
+                :key="cat.id"
+                class="media-chip"
+                :class="{ 'media-chip--active': selectedCategoryIds.has(cat.id) }"
+                :style="{ '--chip-color': cat.color }"
+                @click="toggleCategoryChip(cat.id)"
+              >
+                <span class="media-chip-icon-wrap">
+                  <LjIcon v-if="cat.iconType === 'icon'" :icon="cat.icon" :size="14" />
+                  <img v-else :src="cat.icon" class="media-chip-img" alt="" />
+                </span>
+                <span class="media-chip-name">{{ cat.name }}</span>
+                <span class="media-chip-count">
+                  {{ files.filter((f) => f.categoryId === cat.id).length }}
+                </span>
+                <button
+                  type="button"
+                  class="media-chip-add"
+                  :title="tm('add_files')"
+                  :aria-label="tm('add_files')"
+                  @click.stop="beginAddWithCategory(cat.id)"
+                >
+                  <LjIcon :icon="ICONS.ACTIONS.ADD" :size="12" />
+                </button>
               </div>
-              <div class="media-grid-item-name">{{ file.name }}</div>
-              <div v-if="categoryName(file.categoryId)" class="media-grid-item-category">
-                {{ categoryName(file.categoryId) }}
-              </div>
-              <div class="media-grid-item-actions">
-                <LjButton
-                  size="sm"
-                  variant="ghost"
-                  icon-only
-                  :icon="ICONS.ACTIONS.EDIT"
-                  :title="tm('rename')"
-                  :aria-label="tm('rename')"
-                  @click.stop="startRename(file)"
-                />
-                <LjButton
-                  size="sm"
-                  variant="ghost"
-                  icon-only
-                  :icon="ICONS.ACTIONS.DELETE"
-                  :title="tm('delete')"
-                  :aria-label="tm('delete')"
-                  @click.stop="removeFile(file)"
-                />
+              <div
+                v-if="uncategorizedCount > 0"
+                class="media-chip media-chip--uncategorized"
+                :class="{ 'media-chip--active': selectedCategoryIds.has(UNCATEGORIZED_ID) }"
+                @click="toggleCategoryChip(UNCATEGORIZED_ID)"
+              >
+                <span class="media-chip-icon-wrap">
+                  <LjIcon :icon="ICONS.UI.FILE_MULTIPLE" :size="14" />
+                </span>
+                <span class="media-chip-name">{{ tm("uncategorized") }}</span>
+                <span class="media-chip-count">{{ uncategorizedCount }}</span>
+                <button
+                  type="button"
+                  class="media-chip-add"
+                  :title="tm('add_files')"
+                  :aria-label="tm('add_files')"
+                  @click.stop="beginAddWithCategory(UNCATEGORIZED_ID)"
+                >
+                  <LjIcon :icon="ICONS.ACTIONS.ADD" :size="12" />
+                </button>
               </div>
             </div>
-          </div>
-          <div v-else class="media-empty">
-            <LjEmpty :icon="ICONS.UI.FOLDER_OPEN" :title="tm('empty_library')" />
-          </div>
+            <div v-if="filteredFiles.length" class="media-grid">
+              <div
+                v-for="file in filteredFiles"
+                :key="file.id"
+                class="media-grid-item"
+                @click="addToPlaylist(file)"
+              >
+                <img
+                  v-if="file.thumb"
+                  :src="file.thumb"
+                  class="media-grid-item-thumb"
+                  alt=""
+                  loading="lazy"
+                />
+                <div v-else class="media-grid-item-thumb media-grid-item-thumb--icon">
+                  <LjIcon :icon="fileTypeIcon(file.type)" :size="28" />
+                </div>
+                <div class="media-grid-item-name">{{ file.name }}</div>
+                <div v-if="categoryName(file.categoryId)" class="media-grid-item-category">
+                  {{ categoryName(file.categoryId) }}
+                </div>
+                <div class="media-grid-item-actions">
+                  <LjButton
+                    size="sm"
+                    variant="ghost"
+                    icon-only
+                    :icon="ICONS.ACTIONS.EDIT"
+                    :title="tm('rename')"
+                    :aria-label="tm('rename')"
+                    @click.stop="startRename(file)"
+                  />
+                  <LjButton
+                    size="sm"
+                    variant="ghost"
+                    icon-only
+                    :icon="ICONS.ACTIONS.DELETE"
+                    :title="tm('delete')"
+                    :aria-label="tm('delete')"
+                    @click.stop="removeFile(file)"
+                  />
+                </div>
+              </div>
+            </div>
+            <div v-else class="media-empty">
+              <LjEmpty :icon="ICONS.UI.FOLDER_OPEN" :title="tm('empty_library')" />
+            </div>
+          </template>
         </div>
 
         <LjDivider v-if="!mobileLayout" vertical />
@@ -232,12 +237,17 @@
         </div>
       </div>
 
-      <!-- Player bar -->
-      <div v-if="isPlaying && currentItem" class="media-playerbar">
+      <!--
+        Player bar. Serve ao PDF da lista E ao projetado pela aba Canva — o
+        telão é o mesmo, só muda de onde veio o item. No caso de um PDF, o
+        índice vira "Página X / Y", porque "1 / 1" não diz nada quando o
+        documento tem cinco.
+      -->
+      <div v-if="mostrarBarra" class="media-playerbar">
         <div class="media-playerbar-info">
-          <LjIcon :icon="currentItem.typeIcon" :size="16" />
-          <span class="media-playerbar-name">{{ currentItem.name }}</span>
-          <span class="media-playerbar-index">{{ currentIndex + 1 }} / {{ playlist.length }}</span>
+          <LjIcon :icon="barraIcone" :size="16" />
+          <span class="media-playerbar-name">{{ barraTitulo }}</span>
+          <span class="media-playerbar-index">{{ barraIndice }}</span>
         </div>
         <div class="media-playerbar-controls">
           <LjButton
@@ -246,10 +256,7 @@
             :icon="ICONS.PLAYER.PREV"
             :title="tm('prev')"
             :aria-label="tm('prev')"
-            :disabled="
-              currentIndex <= 0 &&
-              (!currentItem || currentItem.type !== 'pdf' || currentPdfPage <= 1)
-            "
+            :disabled="!podeVoltar"
             @click="prev"
           />
           <LjButton
@@ -258,12 +265,7 @@
             :icon="ICONS.PLAYER.NEXT"
             :title="tm('next')"
             :aria-label="tm('next')"
-            :disabled="
-              currentIndex >= playlist.length - 1 &&
-              (!currentItem ||
-                currentItem.type !== 'pdf' ||
-                (currentPdfTotalPages > 0 && currentPdfPage >= currentPdfTotalPages))
-            "
+            :disabled="!podeAvancar"
             @click="next"
           />
           <LjButton
@@ -357,6 +359,7 @@ import CategoryManagerDialog, {
   type CategoryFileData,
 } from "@/components/CategoryManagerDialog.vue";
 import { LjButton, LjDialog, LjDivider, LjEmpty, LjIcon, LjInput, LjTabs } from "@/components/ui";
+import CanvaTab from "./CanvaTab.vue";
 import $broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
@@ -367,6 +370,7 @@ import $userdata from "@/helpers/UserData";
 import Platform from "@/helpers/Platform";
 import $path from "@/helpers/Path";
 import $alert from "@/helpers/Alert";
+import $snackbar from "@/helpers/Snackbar";
 import { ICONS } from "@/config/Icons";
 import $idb from "@/helpers/IndexedDB";
 import { ensureRenderableImage, isHeic, heicToJpeg } from "@/helpers/ImageConvert";
@@ -375,7 +379,11 @@ import { KEYS } from "@/constants/UserDataKeys";
 import { IMAGE_EXT, VIDEO_EXT } from "@/constants/FileTypes";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 import Telemetry from "@/helpers/Telemetry";
-import { fileProjectionPageFor, newFileProjectionId } from "@/helpers/FileProjectionPage";
+import {
+  adotarProjecaoExterna,
+  fileProjectionPageFor,
+  newFileProjectionId,
+} from "@/helpers/FileProjectionPage";
 
 const { width: viewportWidth } = useViewport();
 const mobileLayout = computed(() => !Platform.isDesktop && viewportWidth.value <= 1000);
@@ -405,8 +413,8 @@ interface PlaylistItem {
   typeIcon: string;
 }
 
-/** Filtro de tipo da barra de abas. */
-type LibraryFilter = "all" | MediaFile["type"];
+/** Filtro de tipo da barra de abas. `canva` troca a grade local pela remota. */
+type LibraryFilter = "all" | MediaFile["type"] | "canva";
 
 /** Ícone que representa o tipo do arquivo — na grade e na playlist. */
 function fileTypeIcon(type: MediaFile["type"]): string {
@@ -446,8 +454,16 @@ async function deleteFile(id: string): Promise<void> {
 /*  State                                                              */
 /* ------------------------------------------------------------------ */
 
-const moduleContainer = ref<{ tm(key: string): string } | null>(null);
-const tm = (key: string): string => moduleContainer.value?.tm(key) || key;
+/*
+ * Assinatura do `tm` exposto pelo ModuleContainer. Os nomes aqui são contrato,
+ * não variáveis — por isso o `_`, que é o que a regra de lint aceita para
+ * argumento não usado.
+ */
+const moduleContainer = ref<{
+  tm: (_key: string, _named?: Record<string, unknown>) => string;
+} | null>(null);
+const tm = (key: string, named?: Record<string, unknown>): string =>
+  (named ? moduleContainer.value?.tm(key, named) : moduleContainer.value?.tm(key)) || key;
 
 const libraryFilter = ref<LibraryFilter>("all");
 
@@ -456,6 +472,7 @@ const filterTabs = computed(() => [
   { value: "image", label: tm("images") },
   { value: "video", label: tm("videos") },
   { value: "pdf", label: tm("documents") },
+  { value: "canva", label: tm("canva.title") },
 ]);
 
 const searchQuery = ref("");
@@ -563,6 +580,21 @@ const isPlaying = computed<boolean, boolean>({
 const currentPdfPage = ref(1);
 const currentPdfTotalPages = ref(0);
 let currentPdfPlaybackId: string | undefined;
+/*
+ * PDF no telão que NÃO veio desta lista — o caso é a aba Canva, que projeta
+ * direto por `$media.projectFile`.
+ *
+ * Sem isto a barra do player não aparecia, `next()` caía no ramo de playlist e
+ * acabava em `stop()` (fechando a projeção na frente da congregação), e o
+ * indicador de página não tinha onde morar. Adotar o `playback_id` que está no
+ * telão é o que faz o PDF de fora usar exatamente os mesmos controles do PDF
+ * da lista.
+ */
+const pdfExterno = ref<{ playback_id: string; title: string; declaredPageCount?: number } | null>(
+  null
+);
+/** Aviso de contagem já dado para este PDF — não repete a cada página. */
+let avisoContagemDado = false;
 let playIndexGeneration = 0;
 const fileInput = ref<HTMLInputElement | null>(null);
 
@@ -804,6 +836,8 @@ async function removeFile(file: MediaFile): Promise<void> {
 /* ------------------------------------------------------------------ */
 
 const filteredFiles = computed(() => {
+  /* A aba Canva não tem arquivo local — quem monta a grade é o CanvaTab. */
+  if (libraryFilter.value === "canva") return [];
   let list = files.value;
   if (selectedCategoryIds.value.size > 0) {
     list = list.filter((f) => selectedCategoryIds.value.has(f.categoryId || UNCATEGORIZED_ID));
@@ -823,6 +857,49 @@ const currentItem = computed(() =>
     ? playlist.value[currentIndex.value]
     : null
 );
+
+/* ------------------------------------------------------------------ */
+/*  Player bar — a lista OU o PDF projetado de fora                    */
+/* ------------------------------------------------------------------ */
+
+/** O item da lista está no palco (é ele que a barra tradicional mostra). */
+const barraLista = computed(() => isPlaying.value && !!currentItem.value);
+/** Há um PDF no palco, venha ele da lista ou da aba Canva. */
+const pdfNoPalco = computed(() => !!pdfExterno.value || currentItem.value?.type === "pdf");
+const mostrarBarra = computed(() => barraLista.value || !!pdfExterno.value);
+const barraTitulo = computed(() =>
+  barraLista.value ? (currentItem.value?.name ?? "") : (pdfExterno.value?.title ?? "")
+);
+const barraIcone = computed(() =>
+  barraLista.value ? (currentItem.value?.typeIcon ?? "") : fileTypeIcon("pdf")
+);
+const barraIndice = computed(() => {
+  if (pdfNoPalco.value && currentPdfTotalPages.value > 0) {
+    return tm("page_indicator", { page: currentPdfPage.value, total: currentPdfTotalPages.value });
+  }
+  return `${currentIndex.value + 1} / ${playlist.value.length}`;
+});
+/** Última página de um PDF de fora não tem "próxima": o botão apaga. */
+const podeAvancar = computed(() => {
+  if (pdfExterno.value) {
+    return currentPdfTotalPages.value > 0
+      ? currentPdfPage.value < currentPdfTotalPages.value
+      : true;
+  }
+  return !(
+    currentIndex.value >= playlist.value.length - 1 &&
+    (!currentItem.value ||
+      currentItem.value.type !== "pdf" ||
+      (currentPdfTotalPages.value > 0 && currentPdfPage.value >= currentPdfTotalPages.value))
+  );
+});
+const podeVoltar = computed(() => {
+  if (pdfExterno.value) return currentPdfPage.value > 1;
+  return !(
+    currentIndex.value <= 0 &&
+    (!currentItem.value || currentItem.value.type !== "pdf" || currentPdfPage.value <= 1)
+  );
+});
 
 /* ------------------------------------------------------------------ */
 /*  Library management                                                 */
@@ -1072,6 +1149,9 @@ async function playIndex(index: number): Promise<void> {
   currentPdfPage.value = 1;
   currentPdfTotalPages.value = 0;
   currentPdfPlaybackId = item.type === "pdf" ? newFileProjectionId() : undefined;
+  /* Este item é que vai para o telão: um PDF adotado da aba Canva sai de cena. */
+  pdfExterno.value = null;
+  avisoContagemDado = false;
 
   const url = isHeic(item.name) ? await resolveRenderableUrl(item) : resolvePath(item.path);
   if (generation !== playIndexGeneration) return;
@@ -1165,10 +1245,15 @@ async function togglePlay(): Promise<void> {
 }
 
 async function next(): Promise<void> {
-  const item = playlist.value[currentIndex.value];
-  if (item?.type === "pdf") {
+  if (pdfNoPalco.value) {
     const total = currentPdfTotalPages.value;
     if (total > 0 && currentPdfPage.value >= total) {
+      /*
+       * O PDF da lista passa para a próxima mídia; o de fora não tem
+       * "próxima" — e cair em stop() fecharia a projeção na frente da
+       * congregação só porque o operador chegou à última página.
+       */
+      if (pdfExterno.value) return;
       if (currentIndex.value < playlist.value.length - 1) {
         await playIndex(currentIndex.value + 1);
       } else {
@@ -1188,9 +1273,9 @@ async function next(): Promise<void> {
 }
 
 async function prev(): Promise<void> {
-  const item = playlist.value[currentIndex.value];
-  if (item?.type === "pdf") {
+  if (pdfNoPalco.value) {
     if (currentPdfPage.value <= 1) {
+      if (pdfExterno.value) return;
       if (currentIndex.value > 0) {
         await playIndex(currentIndex.value - 1);
       }
@@ -1208,6 +1293,8 @@ async function prev(): Promise<void> {
 function stop(): void {
   ++playIndexGeneration;
   currentPdfPlaybackId = undefined;
+  pdfExterno.value = null;
+  avisoContagemDado = false;
   isPlaying.value = false;
   currentIndex.value = -1;
   localStorage.removeItem(KEYS.PROJECTION.LJ_FILE_PROJECTION);
@@ -1249,11 +1336,69 @@ useBroadcastListener(BROADCAST_TYPE.MODULE_RIBBON_ACTION, (payload) => {
   }
 });
 
+/*
+ * O palco mudou de conteúdo.
+ *
+ * `projectFile` publica o payload de ARQUIVO para todo mundo, e é aqui que a
+ * aba Canva é adotada: o `playback_id` que está no telão vira o
+ * `currentPdfPlaybackId` de sempre, e a barra do player, o Próximo/Anterior e
+ * a contagem passam a valer para ele sem nenhuma regra paralela.
+ *
+ * `action: "clear"` vem do `useProjectionShutdown` (janela de projeção fechou)
+ * e `MEDIA_CLOSE` do fechamento explícito — são os dois sinais de que o PDF
+ * saiu de cena e a barra tem que apagar.
+ */
+useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION, (payload) => {
+  const decisao = adotarProjecaoExterna(payload, currentPdfPlaybackId);
+
+  if (decisao.acao === "limpar") {
+    pdfExterno.value = null;
+    avisoContagemDado = false;
+    if (decisao.encerrada) currentPdfPlaybackId = undefined;
+    return;
+  }
+  if (decisao.acao === "ignorar") return;
+
+  currentPdfPlaybackId = decisao.playback_id;
+  currentPdfPage.value = decisao.page;
+  currentPdfTotalPages.value = 0;
+  pdfExterno.value = {
+    playback_id: decisao.playback_id,
+    title: decisao.title,
+    declaredPageCount: decisao.declaredPageCount,
+  };
+  avisoContagemDado = false;
+});
+
+useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, () => {
+  pdfExterno.value = null;
+  avisoContagemDado = false;
+  currentPdfPlaybackId = undefined;
+});
+
+/**
+ * O dono do arquivo disse quantas páginas tem; o pdf.js disse as que abriu.
+ *
+ * Divergir significa export incompleto — e é muito melhor descobrir aqui, com
+ * o arquivo na tela, do que na hora de virar a página no culto. Aviso único
+ * por PDF: a correção é reexportar, não apertar o botão de novo.
+ */
+function conferirContagem(total: number): void {
+  const declarado = pdfExterno.value?.declaredPageCount;
+  if (avisoContagemDado || !declarado || declarado === total) return;
+  avisoContagemDado = true;
+  $snackbar.warning(tm("canva.page_mismatch", { declared: declarado, total }), {
+    key: "canva-page-mismatch",
+    timeout: 9000,
+  });
+}
+
 // Recebe page/totalPages da janela de projeção
 useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION_PAGE, (payload) => {
   const data = fileProjectionPageFor(payload, currentPdfPlaybackId);
   if (!data || data.source !== "projection" || data.totalPages === undefined) return;
   currentPdfTotalPages.value = data.totalPages;
+  conferirContagem(data.totalPages);
   if (currentPdfPage.value > data.totalPages) {
     currentPdfPage.value = data.totalPages;
     broadcastPdfPage();

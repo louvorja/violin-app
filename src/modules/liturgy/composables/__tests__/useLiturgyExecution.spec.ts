@@ -228,7 +228,7 @@ describe("liturgia — item de site", () => {
 
     await executeItem(site("https://exemplo.com/enquete"));
 
-    expect(mocks.openSiteWindow).toHaveBeenCalledWith("https://exemplo.com/enquete");
+    expect(mocks.openSiteWindow).toHaveBeenCalledWith("https://exemplo.com/enquete", "liturgy");
     expect(navegador).not.toHaveBeenCalled();
     navegador.mockRestore();
   });
@@ -259,7 +259,7 @@ describe("liturgia — item de site", () => {
 
     await executeItem(site("exemplo.com/enquete"));
 
-    expect(mocks.openSiteWindow).toHaveBeenCalledWith("http://exemplo.com/enquete");
+    expect(mocks.openSiteWindow).toHaveBeenCalledWith("http://exemplo.com/enquete", "liturgy");
   });
 
   it("sem URL não abre janela nenhuma", async () => {

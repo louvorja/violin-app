@@ -349,7 +349,12 @@ export async function open(opts: OpenOptions): Promise<void> {
     const durationMs = elapsed();
     Telemetry.track("projection_window_opened", {
       feature: opts.feature,
-      route: opts.route,
+      /*
+       * URL externa (item Site, design do Canva) vira só o HOST: o `path` do
+       * `view_url` carrega o JWT e o sanitizer só cobre query. Ver
+       * `Telemetry.routeForTelemetry`.
+       */
+      route: Telemetry.routeForTelemetry(opts.route),
       target: Platform.isDesktop ? "electron" : "web",
       outcome,
       duration_ms: durationMs,

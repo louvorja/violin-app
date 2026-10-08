@@ -15,6 +15,36 @@ const { createWindowCloseGate, DEFAULT_CLOSE_ACK_TIMEOUT_MS } = require("./windo
 const { backgroundWindows, prepareWindow } = require("./e2eWindowMode.js");
 const { isExternalRoute, loadTargetFor, webPreferencesFor } = require("./windowRoute.js");
 
+/**
+ * Features da tela de loading da projeção de Site.
+ *
+ * São janelas da SPA que cobrem a janela externa enquanto ela carrega e entra
+ * em apresentação. Precisam ficar ACIMA dela — daí o nível de alwaysOnTop e o
+ * empurrão de topo quando a de Site aparece.
+ */
+const SITE_LOADER_FEATURES = ["site_loader", "site_loader_return"];
+
+/**
+ * Traz as telas de loading de Site para o topo.
+ *
+ * A janela externa é mostrada DEPOIS do loader, e no Windows/Linux as duas
+ * ficam em nível `screen-saver` — empate em que a recém-mostrada vence. Sem
+ * este empurrão apareciam quadros do Canva entre a página e a tela de
+ * loading. Síncrono de propósito: roda no mesmo turno do `showInactive`, antes
+ * de o compositor apresentar o quadro.
+ */
+function _trazerLoadersAoTopo() {
+  for (const feature of SITE_LOADER_FEATURES) {
+    const win = _openWindows.get(feature);
+    if (!win || win.isDestroyed()) continue;
+    try {
+      win.moveTop();
+    } catch (_) {
+      /* a janela pode ter sido destruída entre o get e o moveTop */
+    }
+  }
+}
+
 /** Mantém referência das janelas abertas por feature para evitar duplicatas */
 const _openWindows = new Map();
 /** A feature is not reusable until Electron confirms the old BrowserWindow closed. */
@@ -31,6 +61,8 @@ let _mainWindow = null;
 let _httpPort = null;
 let _windowObserver = null;
 let _presentationActivityObserver = null;
+let _siteNavigationListener = null;
+let _siteReadyListener = null;
 let _operationMeasurer = (_operation, _details, run) => run();
 
 function setOperationMeasurer(measurer) {
@@ -50,6 +82,30 @@ function setWindowObserver(observer) {
 function setPresentationActivityObserver(observer) {
   _presentationActivityObserver = typeof observer === "function" ? observer : null;
   _syncMainBackgroundThrottling();
+}
+
+/**
+ * Notifica cada navegação do frame principal de uma janela EXTERNA.
+ *
+ * É o gancho de quem precisa saber "onde a projeção parou" sem a factory
+ * conhecer o Canva: o main compara a URL com `ehPaginaDeLogin` e decide se é
+ * uma parede de login. Só http é navegável ali, então a URL sempre chega limpa.
+ * @param {((win: Electron.BrowserWindow, ctx: {feature: string, url: string}) => void) | null} fn
+ */
+function setSiteNavigationListener(fn) {
+  _siteNavigationListener = typeof fn === "function" ? fn : null;
+}
+
+/**
+ * Notifica quando uma janela EXTERNA termina de carregar a página.
+ *
+ * É o gancho de quem precisa agir DEPOIS do site estar pronto — o Canva usa
+ * para clicar em "Apresentar em tela cheia" antes de o operador ver a
+ * visualização. A factory não sabe o que é Canva: quem decide é o main.
+ * @param {((win: Electron.BrowserWindow, ctx: {feature: string, url: string}) => void) | null} fn
+ */
+function setSiteReadyListener(fn) {
+  _siteReadyListener = typeof fn === "function" ? fn : null;
 }
 
 /**
@@ -214,6 +270,52 @@ function _isProjectionPresentationWindow(route, feature) {
 }
 
 /**
+ * Reuso com OUTRA rota → recarrega a janela.
+ *
+ * Sem isto a janela mostrava a URL ANTIGA: `openSiteWindow` abria o design B e
+ * o telão seguia no A, sem erro nenhum. A comparação é pela `route` guardada em
+ * `_windowMeta` (e não pelo `getURL()`), porque em hash routing a URL do
+ * documento não muda quando a rota muda.
+ *
+ * @returns {boolean} true quando recarregou
+ */
+function _garantirRota(feature, route, { devUrl, prodHtmlPath } = {}) {
+  const meta = _windowMeta.get(feature);
+  if (meta && meta.route === route) return false;
+  const win = _openWindows.get(feature);
+  if (!win || win.isDestroyed()) return false;
+  const target = loadTargetFor(route, { devUrl, prodHtmlPath });
+  if (target.kind === "none") return false;
+  try {
+    win.loadURL(target.url);
+  } catch (e) {
+    console.warn(`[windowFactory] recarga de ${feature} falhou:`, e?.message || e);
+    return false;
+  }
+  if (meta) meta.route = route;
+  else _windowMeta.set(feature, { route, feature });
+  return true;
+}
+
+/**
+ * Abrir esta feature vai CARREGAR — criar a janela ou trocar a rota.
+ *
+ * Enquanto devolver `true` a janela ainda NÃO está pronta: é o main quem usa
+ * isso para não tratar uma recarga como "já carregada" e fechar o loader de
+ * projeção de Site na hora em que ele mal apareceu.
+ *
+ * @param {string} feature
+ * @param {string} route  rota/URL que vai ser aberta
+ * @returns {boolean}
+ */
+function willLoad(feature, route) {
+  const win = _openWindows.get(feature);
+  if (!win || win.isDestroyed()) return true;
+  const meta = _windowMeta.get(feature);
+  return !meta || meta.route !== route;
+}
+
+/**
  * Cria uma BrowserWindow em um monitor específico, opcionalmente fullscreen.
  *
  * @param {object} options
@@ -243,6 +345,12 @@ function _openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = 
   // próximo e a letra abre em cima do trabalho dele.
   const existing = _openWindows.get(feature);
   if (existing && !existing.isDestroyed()) {
+    /*
+     * Navega ANTES de mostrar: se a URL mudou, mostrar a antiga e trocar
+     * depois daria um quadro de conteúdo velho (aí coberto pelo loader, mas
+     * ainda assim). Ver `_garantirRota`.
+     */
+    _garantirRota(feature, route, { devUrl, prodHtmlPath });
     if (existing.isVisible()) {
       existing.showInactive();
     } else {
@@ -338,6 +446,23 @@ function _openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = 
   // eco. `setAudioMuted` é chamada do webContents: não depende de preload nem
   // de o renderer carregar.
   if (feature === "site_return") win.webContents.setAudioMuted(true);
+  /*
+   * A tela de loading nasce ACIMA da janela externa que ela cobre. As duas
+   * ocupam o mesmo monitor em tela cheia, e a de Site é mostrada depois (no
+   * `did-finish-load`), o que já a colocaria por cima do loader — que ficaria
+   * invisível justamente enquanto precisa esconder a página chegando.
+   *
+   * Nível "screen-saver" porque é o mais alto que o Electron tem: no Windows
+   * ele é o mesmo que o `showOnce` aplica a qualquer janela fullscreen, então
+   * só um nível acima vence o empate.
+   */
+  if (SITE_LOADER_FEATURES.includes(feature)) {
+    try {
+      win.setAlwaysOnTop(true, "screen-saver");
+    } catch (_) {
+      /* ignore */
+    }
+  }
   const windowMeta = {
     route,
     feature,
@@ -439,7 +564,13 @@ function _openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = 
    */
   if (isExternal) {
     const SITE_POINTER_NUDGE_MS = 1200;
-    win.webContents.once("did-finish-load", () => {
+    /*
+     * `on`, não `once`: a janela externa agora PODE recarregar (reuso com
+     * outra URL), e cada carga completa é uma página nova que nunca viu um
+     * ponteiro. `did-finish-load` não dispara em navegação in-page, então o
+     * empurrão continua acontecendo uma vez por carga e não por troca de rota.
+     */
+    win.webContents.on("did-finish-load", () => {
       setTimeout(() => {
         if (win.isDestroyed()) return;
         try {
@@ -490,10 +621,18 @@ function _openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = 
     if (_shown || win.isDestroyed()) return;
     _shown = true;
     _operationMeasurer("window.show", { feature }, () => win.showInactive());
+    /*
+     * No MESMO turno do `showInactive`: esperar o evento `show` dava quadros
+     * do Canva por cima antes do empurrão chegar.
+     */
+    if (isExternal) _trazerLoadersAoTopo();
     _syncAuxBackgroundThrottling(win);
     _syncMainBackgroundThrottling();
     _applyDeferredFullscreen();
-    if (!backgroundWindows && fullscreen && (isWin || isLin)) {
+    if (SITE_LOADER_FEATURES.includes(feature)) {
+      /* Nunca rebaixa: ver o comentário do mesmo nível junto à criação. */
+      try { win.setAlwaysOnTop(true, "screen-saver"); } catch (_) { /* ignore */ }
+    } else if (!backgroundWindows && fullscreen && (isWin || isLin)) {
       // No Windows o "always on top: screen-saver" é o único nível que
       // garante cobertura da taskbar quando o usuário marcou "Manter
       // barra de tarefas sempre visível". Em fullscreen real isso já é
@@ -577,7 +716,52 @@ function _openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = 
     win.webContents.on("will-navigate", (event, url) => {
       if (!/^https?:\/\//i.test(url)) event.preventDefault();
     });
+    /*
+     * Cadeia de redirecionamento do frame principal, para quem quiser saber
+     * onde a projeção parou (a tela de login do Canva, por exemplo). In-Page
+     * também: SPA troca a rota sem recarregar.
+     */
+    if (_siteNavigationListener) {
+      const avisar = (url) => {
+        try {
+          _siteNavigationListener(win, { feature, url: String(url || "") });
+        } catch (err) {
+          console.warn("[windowFactory] siteNavigationListener:", err?.message || err);
+        }
+      };
+      win.webContents.on("did-navigate", (_event, url) => avisar(url));
+      win.webContents.on("did-navigate-in-page", (_event, url) => avisar(url));
+    }
+    if (_siteReadyListener) {
+      win.webContents.on("did-finish-load", () => {
+        try {
+          _siteReadyListener(win, { feature, url: String(win.webContents.getURL() || route || "") });
+        } catch (err) {
+          console.warn("[windowFactory] siteReadyListener:", err?.message || err);
+        }
+      });
+    }
+    /*
+     * Restauração posterior (reconcile de monitores, reabertura): de novo o
+     * loader é quem tem que ficar por cima.
+     */
+    win.on("show", () => _trazerLoadersAoTopo());
   }
+  /*
+   * A tela de loading nasce VISÍVEL, antes de qualquer carga.
+   *
+   * A ordem de CRIAÇÃO já estava certa (o loader é aberto antes da janela de
+   * Site), mas a de APARECER dependia de cada janela pintar — e a SPA do app
+   * pode pintar DEPOIS da página externa, que aí aparecia sozinha por alguns
+   * milissegundos. Mostrar aqui dentro da criação vira garantia por
+   * construção: quando `windows:open` devolve ao renderer, o loader já está
+   * na tela e só então a janela externa é criada.
+   *
+   * Sem flash branco: a janela nasce com `backgroundColor #000` e o
+   * `index.html` linka primeiro o `boot.css`, que faz `body { background:#000 }`.
+   */
+  if (SITE_LOADER_FEATURES.includes(feature)) showOnce();
+
   if (loadTarget.kind !== "none") {
     win.loadURL(loadTarget.url);
   }
@@ -825,6 +1009,9 @@ module.exports = {
   setMainWindow,
   setWindowObserver,
   setOperationMeasurer,
+  setSiteNavigationListener,
+  setSiteReadyListener,
+  willLoad,
   setPresentationActivityObserver,
   setHttpPort,
   setTaskbarVisibility,

@@ -34,6 +34,7 @@ import { Music } from "@/types/Music";
 import type { Lyric } from "@/types/Lyric";
 import { LyricOpenParams } from "@/types/Lyric";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
+import { moverPaginaPdf } from "@/helpers/FileProjectionPage";
 import { MediaOpenParams } from "@/types/Media";
 import { MusicActionEnum } from "@/enums/MusicActionEnum";
 import AudioLibrary from "@/helpers/AudioLibrary";
@@ -1156,6 +1157,42 @@ function _timesFor(slides: Slide[], mode: string): number[] {
       (mode === MusicActionEnum.AUDIO ? item.time : item.instrumental_time) as string
     )
   );
+}
+
+/**
+ * Avança/volta a PÁGINA do PDF que está no telão.
+ *
+ * As setas do operador andam nos slides de música (`_slides`), e um PDF
+ * projetado — da lista ou da aba Canva — não tem slide nenhum: a tecla morria
+ * em silêncio. Aqui a página é o documento compartilhado: o mesmo `page` que a
+ * janela de projeção usa para retomar depois de fechar é lido do
+ * `LJ_FILE_PROJECTION`, alterado e devolvido, e a janela recebe o comando pelo
+ * `FILE_PROJECTION_PAGE` com `source: "operator"` — o mesmo caminho que o
+ * player da lista já usava. O clamp final é da janela (`doc.numPages`), que é
+ * quem sabe o tamanho real do documento.
+ *
+ * @returns true quando mexeu em página — quem chamou não deve seguir nos slides
+ */
+function _pdfPageStep(delta: number): boolean {
+  let bruto: string | null = null;
+  try {
+    bruto = localStorage.getItem(KEYS.PROJECTION.LJ_FILE_PROJECTION);
+  } catch {
+    return false;
+  }
+
+  const movimento = moverPaginaPdf(bruto, delta);
+  if (!movimento) return false;
+
+  if (movimento.storage !== bruto) {
+    try {
+      localStorage.setItem(KEYS.PROJECTION.LJ_FILE_PROJECTION, movimento.storage);
+    } catch {
+      /* O comando abaixo já chega sem o cache de reabertura. */
+    }
+  }
+  if (movimento.comando) $broadcast.send(BROADCAST_TYPE.FILE_PROJECTION_PAGE, movimento.comando);
+  return true;
 }
 
 const _self = {
@@ -2725,9 +2762,12 @@ const _self = {
     _slides.goFirst();
   },
   prevSlide(): void {
+    /* PDF no telão manda: a página é o documento, não o slide da música. */
+    if (_pdfPageStep(-1)) return;
     _slides.goPrev();
   },
   nextSlide(): void {
+    if (_pdfPageStep(1)) return;
     _slides.goNext();
   },
   lastSlide(): void {
