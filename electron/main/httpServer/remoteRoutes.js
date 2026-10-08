@@ -146,6 +146,18 @@ async function readJsonCacheOrNull(filePath) {
 
 
 /**
+ * Faixas válidas do `album_<id>.json` — a contagem exibida no card.
+ *
+ * Os detalhes são arquivos de 1–2 KB (≤70 por catálogo), lidos em paralelo;
+ * arquivo ausente devolve 0 e o badge simplesmente não aparece.
+ */
+async function albumTrackCount(albumId) {
+  const detail = await readJsonCacheOrNull(jsonCache.safeLocalPath(`album_${albumId}`));
+  if (!Array.isArray(detail?.musics)) return 0;
+  return detail.musics.filter((music) => music && Number(Number(music.id_music)) > 0).length;
+}
+
+/**
  * Capa de um álbum: `http(s)` vira URL direta; caminho relativo vira a rota
  * própria `/api/music-library/image` (os clientes absolutizam com host+token).
  */
@@ -158,13 +170,16 @@ function musicLibraryImageUrl(urlImage) {
 
 
 /** Payload de um álbum oficial (vem do `{lang}_categories`). `count: 0` = sem contagem conhecida. */
-function officialAlbumPayload(album) {
+function officialAlbumPayload(album, count = 0) {
   const subtitle = typeof album.subtitle === "string" && album.subtitle.trim() ? album.subtitle : null;
   return {
     id: `album:${Number(album.id_album)}`,
     title: String(album.name || "").slice(0, 1_000),
     subtitle: subtitle ? subtitle.slice(0, 300) : null,
-    count: 0,
+    // Faixas do `album_<id>.json` — 0 quando o detalhe local não existe
+    // (mesma régua de `action=songs`: o badge nunca promete o que a lista
+    // de faixas não entrega).
+    count,
     source: "official",
     color: typeof album.color === "string" && album.color ? album.color : null,
     image: musicLibraryImageUrl(album.url_image),
@@ -203,6 +218,15 @@ function noAlbumTitle(lang) {
 
 
 /** Títulos dos hinários — parity com `config/modules/titles.ts`. */
+/**
+ * Cores do ícone por módulo — espelham `src/modules/hymnal{,_1996}/manifest.ts`
+ * (`color`), o mesmo tom que o desktop aplica no glifo do módulo.
+ */
+const HYMNAL_MODULE_COLORS = {
+  current: "#c0392b",
+  legacy: "#7d3c98",
+};
+
 function hymnalTitle(lang, which) {
   if (which === "legacy") return lang === "es" ? "Himnario 1996" : "Hinário 1996";
   return lang === "es" ? "Himnario Adventista" : "Hinário Adventista";
@@ -317,6 +341,9 @@ function register(app, ctx) {
     requestRenderer,
     sendRendererError,
     getUserData,
+    // Predicado do contrato usado no validador inline do play-default — vem
+    // do principal como os demais validators (sem require circular).
+    isPlainObject,
     isCustomSongsSearchResponse,
     isOnlineVideosAlbumsResponse,
     isOnlineVideosVideosResponse,
@@ -531,22 +558,27 @@ function register(app, ctx) {
 
         // Achata categorias → álbuns (dedup por id_album), filtra e ordena como
         // o módulo Álbuns do desktop (ano desc, depois nome).
-        const oficiais = [
-          ...new Map(
-            categories
-              .flatMap((category) => (Array.isArray(category?.albums) ? category.albums : []))
-              .filter(
-                (album) =>
-                  album && Number.isFinite(Number(album.id_album)) && isAlbumEnabled(album.id_album, disabled)
-              )
-              .map((album) => [Number(album.id_album), album])
-          ).values(),
-        ]
-          .sort(
-            (a, b) =>
-              albumYear(b) - albumYear(a) || String(a.name || "").localeCompare(String(b.name || ""))
-          )
-          .map(officialAlbumPayload);
+        const oficiais = await Promise.all(
+          [
+            ...new Map(
+              categories
+                .flatMap((category) => (Array.isArray(category?.albums) ? category.albums : []))
+                .filter(
+                  (album) =>
+                    album && Number.isFinite(Number(album.id_album)) && isAlbumEnabled(album.id_album, disabled)
+                )
+                .map((album) => [Number(album.id_album), album])
+            ).values(),
+          ]
+            .sort(
+              (a, b) =>
+                albumYear(b) - albumYear(a) || String(a.name || "").localeCompare(String(b.name || ""))
+            )
+            .map(
+              async (album) =>
+                officialAlbumPayload(album, await albumTrackCount(Number(album.id_album)))
+            )
+        );
 
         const colecoes = (docStore.read("custom_collections.collections") || [])
           .filter(
@@ -590,17 +622,20 @@ function register(app, ctx) {
             jsonCache.safeLocalPath(which === "legacy" ? `${lang}_hymnal_1996` : `${lang}_hymnal`)
           );
           if (!Array.isArray(file)) continue;
+          const moduleId = which === "legacy" ? "hymnal_1996" : "hymnal";
           hinarios.push({
             id: `album:${albumId}`,
             title: hymnalTitle(lang, which),
             subtitle: null,
             count: file.length,
             source: "official",
-            // Módulo dono do álbum — os clientes usam o ícone do módulo
-            // (a mesma marca do desktop) no lugar da nota musical.
-            module_id: which === "legacy" ? "hymnal_1996" : "hymnal",
-            color: null,
-            image: null,
+            // Módulo dono do álbum — os clientes usam o ícone do módulo (a
+            // mesma marca do desktop). A imagem vem do endpoint de ícones:
+            // PNG quadrado pré-tintado, servido pelo backend — os apps não
+            // precisam embarcar o SVG/PNG da marca.
+            module_id: moduleId,
+            color: which === "legacy" ? HYMNAL_MODULE_COLORS.legacy : HYMNAL_MODULE_COLORS.current,
+            image: `/api/music-library/image?path=icons/${moduleId}.png`,
           });
         }
         // Se o hinário já estava nas categorias (catálogos antigos), sai de lá
@@ -728,6 +763,23 @@ function register(app, ctx) {
     } catch {
       relative = raw.replace(/^\/+/, "");
     }
+
+    // Ícones do próprio app (hinários): moram em electron/main/httpServer/
+    // icons/, fora do acervo de mídia do usuário — mesmo mime/cache das capas.
+    // A regex não aceita `/` nem `..` depois de `icons/` (sem traversal); o
+    // arquivo precisa existir no diretório, senão 404.
+    const appIcon = relative.match(/^icons\/([a-z0-9_-]+)\.png$/);
+    if (appIcon) {
+      try {
+        const data = await fs.promises.readFile(path.join(__dirname, "icons", `${appIcon[1]}.png`));
+        res.set("Content-Type", "image/png");
+        res.set("Cache-Control", "private, max-age=86400");
+        return res.send(data);
+      } catch {
+        return res.status(404).json({ error: "Ícone não encontrado" });
+      }
+    }
+
     if (!mediaResolver.resolveWrite(relative)) {
       return res.status(403).json({ error: "Caminho inválido" });
     }
@@ -952,8 +1004,8 @@ function register(app, ctx) {
 
 
 
-  const BACKGROUND_SOUND_ACTIONS = new Set(["play", "pause", "resume", "stop"]);
-  app.post("/api/background-sound", (req, res) => {
+  const BACKGROUND_SOUND_ACTIONS = new Set(["play", "pause", "resume", "stop", "play-default"]);
+  app.post("/api/background-sound", async (req, res) => {
     if (!hasDevicePermission(req, "background_sound")) {
       console.log("[httpServer] background-sound → 403 no comando (device sem a permission)");
       return res.status(403).json({ error: "Device sem permissão de som de fundo" });
@@ -972,6 +1024,35 @@ function register(app, ctx) {
     if (action === "play" && !id) {
       return res.status(400).json({ error: "id é obrigatório para play" });
     }
+
+    // play-default precisa da resposta do renderer (é o único com feedback):
+    // idempotente no renderer (padrão já tocando → ok sem reiniciar) e 404
+    // quando não há som marcado — o módulo Apresentador mostra o motivo.
+    if (action === "play-default") {
+      try {
+        const data = await requestRenderer(mainWindow, res, "http:background-sound", { action }, {
+          prefix: "background-sound",
+          timeoutMs: 4_000,
+          maxPayloadBytes: 8_192,
+          validatePayload: (payload) =>
+            isPlainObject(payload) &&
+            (payload.status === "ok" || (payload.status === "error" && typeof payload.error === "string")),
+        });
+        if (!res.headersSent && !res.writableEnded) {
+          if (data.status === "error") {
+            return res.status(404).json({ error: data.error });
+          }
+          res.json({ status: "ok", action });
+        }
+      } catch (error) {
+        console.warn(
+          `[httpServer] background-sound play-default falhou: ${error?.code || error?.message || error}`
+        );
+        sendRendererError(res, error, "Timeout ao iniciar o som de fundo");
+      }
+      return;
+    }
+
     safeSend(mainWindow, "http:background-sound", { action, ...(id ? { id } : {}) });
     res.json({ status: "ok", action });
   });

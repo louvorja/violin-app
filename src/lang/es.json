@@ -704,6 +704,10 @@
       "presenter": "Presentador"
     },
     "music": {
+      "albums": "Álbumes",
+      "collections": "Colecciones",
+      "albums_empty": "No hay álbumes disponibles. Actualice la base de datos en el escritorio.",
+      "album_empty": "Ninguna música en este álbum.",
       "mode_title": "Ejecutar como",
       "mode_sung": "Cantado",
       "mode_playback": "Playback",

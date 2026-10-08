@@ -1722,7 +1722,7 @@ enxerga spread).
 | GET    | `/api/online-videos/image`        | `?kind=video\|category`, `id`               | Miniatura em binário dos Meus Vídeos (permission `online_videos`) |
 | POST   | `/api/online-videos`              | `{ action: play\|close, url?, title? }`       | Projeta/encerra vídeo do YouTube (permission `online_videos`) |
 | GET    | `/api/background-sound`           | —                                             | Estado + biblioteca de som de fundo (permission `background_sound`) |
-| POST   | `/api/background-sound`           | `{ action: play\|pause\|resume\|stop, id? }`      | Controla o player de som de fundo (permission `background_sound`) |
+| POST   | `/api/background-sound`           | `{ action: play\|pause\|resume\|stop\|play-default, id? }` | Controla o player; `play-default` inicia o som padrão (permission `background_sound`) |
 | POST   | `/api/volume`                     | `{ action: up\|down, step? } \| { action: set, value }` | Volume dos players 0..100 (permission `volume`, só app) |
 | GET    | `/api/user-data`                  | `?path=...`                                   | Lê valor do user_data                      |
 | GET    | `/api/db/:path`                   | —                                             | JSON do banco (cache local ou remoto)      |
@@ -1757,9 +1757,26 @@ função que serve `action=songs`, para o badge nunca divergir das faixas;
 `action=songs` lê `album_<id>` (oficial), as faixas dos hinários direto de
 `{lang}_hymnal[_1996].json` (rótulo "Hino nº N - Nome", mesma fonte do sync e
 do `HymnalBrowser`), as `song_ids` da coletânea ou o `orphans:none`; os pins do
-hinário trazem `module_id` (`hymnal`/`hymnal_1996`) — os clientes usam esse
-campo para trocar a capa padrão pela **marca do módulo** (o mesmo ícone do
-desktop; web usa o SVG local, app/iOS a arte em PNG com tinta); e a capa
+hinário trazem `module_id` (`hymnal`/`hymnal_1996`) — e o `image` do pin aponta para a
+**própria rota de capas** — `GET /api/music-library/image?path=icons/<módulo>.png`
+(a rota ganhou uma branch `icons/`: arquivos em
+`electron/main/httpServer/icons/`, fora do acervo de mídia do usuário; a
+regex `icons/[a-z0-9_-]+.png` não aceita `/` nem `..` — sem traversal e, fora
+do diretório, 404). Os PNGs são quadrados (384×384) com o glifo pré-tintado na
+cor do manifesto (`#c0392b`/`#7d3c98`, espelhada em `HYMNAL_MODULE_COLORS`) —
+SVG não serviria: Coil (sem `coil-svg`) e `UIImage`/Assets.car não decodificam,
+então raster é o único formato que os **três clientes** consomem pelo mesmo
+caminho de capa (web `<img>`, KMP/iOS `AsyncImage`) — **nenhum asset da marca
+embarcado no app** (evita o case-sensitivity do asset catalog do iOS e o
+arquivo extra no Android), e o quadrado evita o crop do `object-fit: cover`.
+`module_id` continua no payload para o fundo neutro dos
+pins (glifo colorido em fundo neutro, como as subtabs do desktop — o `color`
+não vira fundo cheio; isso continua sendo só das coletâneas) e como fallback
+quando o endpoint não existe (desktop antigo → capa ausente → ícone
+genérico). O `count` dos álbuns
+oficiais agora vem das faixas reais do `album_<id>.json` (arquivos de 1–2 KB
+lidos em paralelo; detalhe ausente → `count: 0` e o badge some, como antes) —
+badge e lista de faixas passam a se bater; e a capa
 sai por `/api/music-library/image` (arquivo de `<dados>/files/` com o mesmo
 guard de path traversal do protocolo `louvorja://files`). Tudo lido no main — sem
 ida ao renderer, diferente de Vídeos Online.

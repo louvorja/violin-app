@@ -66,7 +66,7 @@
               v-else-if="row.icon"
               :icon="row.icon"
               :size="32"
-              color="primary"
+              :color="row.iconColor || 'primary'"
               class="rm-item__icon"
             />
             <div class="rm-item__text">
@@ -176,6 +176,8 @@ type Row =
       thumb: string;
       /** Ícone quando não há capa (pins do hinário usam a marca do módulo). */
       icon?: string;
+      /** Cor do glifo (manifest color do módulo, ex.: #7d3c98). */
+      iconColor?: string;
       playable: boolean;
       action: () => void;
     };
@@ -210,6 +212,7 @@ const rows = computed<Row[]>(() => {
     badge: album.count > 0 ? String(album.count) : null,
     thumb: serverImageUrl(album.image, props.token),
     icon: albumModuleIcon(album.module_id),
+    iconColor: album.module_id ? album.color || undefined : undefined,
     playable: false,
     action: () => openAlbum(album),
   });
