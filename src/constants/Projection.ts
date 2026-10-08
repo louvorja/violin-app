@@ -24,6 +24,14 @@ export const PROJECTION_TYPE = {
    * de cima, e passa pelo mesmo tratamento (sem preload, com partição).
    */
   SITE_RETURN: "site_return",
+  /**
+   * Tela de loading que cobre o monitor ENQUANTO a janela de Site carrega e
+   * entra no modo de apresentação. É janela da SPA (tem preload, rota própria)
+   * — só a de Site é externa.
+   */
+  SITE_LOADER: "site_loader",
+  /** A mesma tela de loading no monitor de retorno, para os dois fades juntos. */
+  SITE_LOADER_RETURN: "site_loader_return",
 };
 
 const RETURN_URL = "/return"
@@ -43,4 +51,6 @@ export const PROJECTION_URL = {
   BACKGROUND: URL_BASE + "/"+ PROJECTION_TYPE.BACKGROUND,
   BACKGROUND_RETURN: URL_BASE + "/" + PROJECTION_TYPE.BACKGROUND + RETURN_URL,
   ANNOUNCEMENTS: `${URL_BASE}/${PROJECTION_TYPE.ANNOUNCEMENTS}`,
+  SITE_LOADER: URL_BASE + "/" + PROJECTION_TYPE.SITE_LOADER,
+  SITE_LOADER_RETURN: URL_BASE + "/" + PROJECTION_TYPE.SITE_LOADER_RETURN,
 };

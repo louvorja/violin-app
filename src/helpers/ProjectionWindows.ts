@@ -19,6 +19,7 @@ import { PROJECTION_TYPE, PROJECTION_URL } from "@/constants/Projection";
 import { KEYS } from "@/constants/UserDataKeys";
 import { close as closeWindow, isOpen as isWindowOpen, open as openWindow } from "@/helpers/Projection";
 import { roleOfFeature } from "@/helpers/DisplayRoles";
+import Telemetry from "@/helpers/Telemetry";
 import WebRoles from "@/helpers/projection/WebRoles";
 // A mesma lista que o main valida no IPC: duas cópias divergiriam em silêncio.
 import { FORWARDABLE_KEYS } from "@root/electron/main/windowKeys.mjs";
@@ -67,9 +68,13 @@ async function _closeSite(): Promise<void> {
   try {
     // Juntas de propósito: a de retorno só existe se a de projeção existir,
     // e deixar uma órfã manteria a URL na tela depois de "Encerrar projeção".
+    // Os loaders vão junto: fechar a projeção tem que revelar uma tela
+    // encerrada, não uma tela de loading presa na frente.
     await Promise.all([
       _close(PROJECTION_TYPE.SITE),
       _close(PROJECTION_TYPE.SITE_RETURN),
+      _close(PROJECTION_TYPE.SITE_LOADER),
+      _close(PROJECTION_TYPE.SITE_LOADER_RETURN),
     ]);
   } finally {
     _siteActive = false;
@@ -265,12 +270,19 @@ async function _openOperatorIfEnabled(media: MediaKind): Promise<void> {
   if ($userdata.get(KEYS.OPTIONS.OPEN_OPERATOR, false) as boolean) await openMediaWindow("operator", media);
 }
 
-/**
- * O retorno de música que já está na tela não sabe mostrar arquivo nem vídeo: o do arquivo/vídeo
- * é pedido mesmo com a opção de retorno desligada, senão ele ficaria em "PRÓX 1/0" sobre o telão.
+/*
+ * Cada projeção decide o PRÓPRIO retorno. `options.open_return` (a opção geral
+ * de Slides de Músicas) só manda na de música; arquivo e vídeo usam a dele.
+ *
+ * Um retorno que ficou aberto por outra projeção seria um órfão no telão: com a
+ * opção daqui desligada ele é FECHADO em vez de reutilizado — senão o operador
+ * veria "PRÓX 1/0" de uma projeção que não está no ar. Ele volta na próxima
+ * abertura da projeção dona dele, que é quem liga a própria opção.
  */
 async function _wantsMediaReturn(optionOn: boolean): Promise<boolean> {
-  return optionOn || (await isWindowOpen(PROJECTION_TYPE.RETURN));
+  if (optionOn) return true;
+  if (await isWindowOpen(PROJECTION_TYPE.RETURN)) await _close(PROJECTION_TYPE.RETURN);
+  return false;
 }
 
 /**
@@ -289,6 +301,8 @@ async function _openProjectionWindows(): Promise<void> {
 
   await openMediaWindow("projection", "music");
   if ($userdata.get(KEYS.OPTIONS.OPEN_RETURN, false) as boolean) await openMediaWindow("return", "music");
+  /* Mesma regra do arquivo e do vídeo: retorno de outra projeção vira órfão aqui. */
+  else if (await isWindowOpen(PROJECTION_TYPE.RETURN)) await _close(PROJECTION_TYPE.RETURN);
   await _openOperatorIfEnabled("music");
 }
 
@@ -311,11 +325,12 @@ export async function openFileProjectionWindows(): Promise<void> {
   if (await isBackgroundOpen()) return;
 
   await openMediaWindow("projection", "file");
-  // A opção geral de retorno é o fallback histórico de quem já usava "Abrir Tela de Retorno"
-  // antes da configuração específica do player.
-  const returnOn =
-    ($userdata.get(KEYS.OPTIONS.FILE_PROJECTION.SHOW_RETURN, false) as boolean) ||
-    ($userdata.get(KEYS.OPTIONS.OPEN_RETURN, false) as boolean);
+  /*
+   * Só a opção de arquivo. A opção geral `options.open_return` é da música
+   * (Slides de Músicas): ligá-la não pode puxar uma tela de retorno para cima
+   * de uma projeção de arquivo cuja opção própria está desligada.
+   */
+  const returnOn = $userdata.get(KEYS.OPTIONS.FILE_PROJECTION.SHOW_RETURN, false) as boolean;
   if (await _wantsMediaReturn(returnOn)) await openMediaWindow("return", "file");
   await _openOperatorIfEnabled("file");
 }
@@ -410,6 +425,9 @@ export async function closeSiteWindow(): Promise<void> {
   await _closeSite();
 }
 
+/** De onde veio o Site que está sendo projetado — só existe estes dois. */
+export type SiteProjectionSource = "liturgy" | "canva";
+
 /**
  * Projeta a URL de um item de liturgia do tipo Site.
  *
@@ -418,32 +436,136 @@ export async function closeSiteWindow(): Promise<void> {
  * as preferências de projeção de arquivo (mesma tela, mesma moldura), porque é
  * a projeção mais próxima que existe de "mostrar um documento no telão".
  */
-export async function openSiteWindow(url: string): Promise<boolean> {
+export async function openSiteWindow(
+  url: string,
+  source: SiteProjectionSource
+): Promise<boolean> {
   if (!url) return false;
-  const fullscreen = $userdata.get(KEYS.OPTIONS.FILE_PROJECTION.FULLSCREEN, true) as boolean;
-  const alwaysOnTop = $userdata.get(
-    KEYS.OPTIONS.FILE_PROJECTION.ALWAYS_ON_TOP,
-    true
-  ) as boolean;
-  /*
-   * Monitor preferido do site, se houver; senão o da projeção de arquivo, que
-   * é o papel que o operador já associou ao telão. Sem nenhum dos três, null
-   * deixa o Projection resolver pelo dele próprio — a janela precisa abrir.
-   */
-  let target = await _target(PROJECTION_TYPE.SITE);
-  if (!target.open) target = await _target(PROJECTION_TYPE.FILE);
-  if (!target.open) target = await _target(PROJECTION_TYPE.MUSIC);
-  await _open(
-    url,
-    PROJECTION_TYPE.SITE,
-    target.monitorId,
-    fullscreen,
-    alwaysOnTop
-  );
-  const aberta = await isWindowOpen(PROJECTION_TYPE.SITE);
-  _siteActive = aberta;
-  if (aberta) await _openSiteReturn(url, fullscreen, alwaysOnTop);
-  return aberta;
+  const iniciadoEm = Date.now();
+  let loader = false;
+  let retorno = false;
+
+  try {
+    const fullscreen = $userdata.get(KEYS.OPTIONS.FILE_PROJECTION.FULLSCREEN, true) as boolean;
+    const alwaysOnTop = $userdata.get(
+      KEYS.OPTIONS.FILE_PROJECTION.ALWAYS_ON_TOP,
+      true
+    ) as boolean;
+    /*
+     * Monitor preferido do site, se houver; senão o da projeção de arquivo, que
+     * é o papel que o operador já associou ao telão. Sem nenhum dos três, null
+     * deixa o Projection resolver pelo dele próprio — a janela precisa abrir.
+     */
+    let target = await _target(PROJECTION_TYPE.SITE);
+    if (!target.open) target = await _target(PROJECTION_TYPE.FILE);
+    if (!target.open) target = await _target(PROJECTION_TYPE.MUSIC);
+
+    /*
+     * O loader nasce ANTES da de Site, no MESMO monitor e com a MESMA moldura:
+     * é ele quem tem que estar na tela quando a página externa aparecer.
+     */
+    loader = await _abrirLoaderSite(
+      PROJECTION_TYPE.SITE_LOADER,
+      target.monitorId,
+      fullscreen,
+      alwaysOnTop
+    );
+    await _open(url, PROJECTION_TYPE.SITE, target.monitorId, fullscreen, alwaysOnTop);
+    const aberta = await isWindowOpen(PROJECTION_TYPE.SITE);
+    _siteActive = aberta;
+
+    if (aberta) {
+      retorno = await _openSiteReturn(url, fullscreen, alwaysOnTop);
+      if (loader || retorno) await _aguardarLoadersSite();
+    } else {
+      /* Sem janela de Site não há o que cobrir: loader órfão só taparia o telão. */
+      await _fecharLoadersSite();
+    }
+
+    /*
+     * O evento único de "site projetado": liturgia e Canva passam por aqui,
+     * então é um filtro só para responder quanto isso é usado. Nada de URL,
+     * design ou título — só origem, resultado e quanto demorou.
+     */
+    Telemetry.track("site_projected", {
+      source,
+      ok: aberta,
+      has_loader: loader,
+      has_return: retorno,
+      duration_ms: Date.now() - iniciadoEm,
+    });
+    return aberta;
+  } catch (error) {
+    /* Falha que NUNGA chega ao `report` do Projection — ainda assim é uso. */
+    Telemetry.track("site_projected", {
+      source,
+      ok: false,
+      has_loader: loader,
+      has_return: retorno,
+      duration_ms: Date.now() - iniciadoEm,
+      /* Só código: a mensagem pode carregar a URL. */
+      reason: (error as { code?: string } | null)?.code || "exception",
+    });
+    throw error;
+  }
+}
+
+/**
+ * Tela de loading da projeção de Site, no mesmo monitor da janela externa.
+ *
+ * Só existe no desktop: é o main quem controla o ciclo (abrir, esperar, avisar
+ * e fechar) e no web/PWA não há essa porta — lá a página abre num popup e um
+ * loader a mais seria só um segundo popup na tela do operador.
+ *
+ * @returns true se a tela de loading abriu
+ */
+async function _abrirLoaderSite(
+  feature: string,
+  monitorId: number | null,
+  fullscreen: boolean,
+  alwaysOnTop: boolean
+): Promise<boolean> {
+  if (!window.louvorjaApi?.siteLoader) return false;
+  const rota =
+    feature === PROJECTION_TYPE.SITE_LOADER_RETURN
+      ? PROJECTION_URL.SITE_LOADER_RETURN
+      : PROJECTION_URL.SITE_LOADER;
+  try {
+    await _open(rota, feature, monitorId, fullscreen, alwaysOnTop);
+    return await isWindowOpen(feature);
+  } catch {
+    /* Loading é cortesia: sem ele a projeção de Site segue normal. */
+    return false;
+  }
+}
+
+/**
+ * Diz ao main que TODAS as janelas deste ciclo já existem.
+ *
+ * Só então ele passa a esperar cada uma — antes disso ele estaria adivinhando,
+ * e adivinhar erra: a de retorno pode não existir (opção desligada, ou ligada
+ * sem monitor). Enquanto ele espera, os loaders seguem cobrindo a tela; se a
+ * chamada falhar, os loaders são fechados aqui, porque o main só aciona o
+ * timeout DEPOIS de receber este aviso.
+ */
+async function _aguardarLoadersSite(): Promise<void> {
+  try {
+    const r = (await window.louvorjaApi?.siteLoader?.aguardar?.()) as
+      | { ok?: boolean }
+      | undefined;
+    if (r?.ok !== false) return;
+  } catch {
+    /* invoke rejeitou — fecha abaixo em vez de deixar a tela presa. */
+  }
+  await _fecharLoadersSite();
+}
+
+/** Fecha as telas de loading, se alguma existir. */
+async function _fecharLoadersSite(): Promise<void> {
+  await Promise.all([
+    _close(PROJECTION_TYPE.SITE_LOADER),
+    _close(PROJECTION_TYPE.SITE_LOADER_RETURN),
+  ]);
 }
 
 /**
@@ -459,12 +581,28 @@ async function _openSiteReturn(
   url: string,
   fullscreen: boolean,
   alwaysOnTop: boolean
-): Promise<void> {
-  if (!$userdata.get(KEYS.OPTIONS.SITE_PROJECTION.SHOW_RETURN, false)) return;
+): Promise<boolean> {
+  if (!$userdata.get(KEYS.OPTIONS.SITE_PROJECTION.SHOW_RETURN, false)) {
+    /*
+     * Sem a opção, um espelho de uma abertura anterior seria um órfão no monitor
+     * de retorno — a URL antiga continuaria no ar. Mesma regra do arquivo/vídeo:
+     * fecha em vez de deixar sobrar.
+     */
+    if (await isWindowOpen(PROJECTION_TYPE.SITE_RETURN)) await _close(PROJECTION_TYPE.SITE_RETURN);
+    return false;
+  }
   let target = await _target(PROJECTION_TYPE.SITE_RETURN);
   if (!target.open) target = await _target(PROJECTION_TYPE.RETURN);
-  if (!target.open) return;
+  if (!target.open) return false;
+  /* Mesma ordem do principal: loader primeiro, no mesmo monitor. */
+  await _abrirLoaderSite(
+    PROJECTION_TYPE.SITE_LOADER_RETURN,
+    target.monitorId,
+    fullscreen,
+    alwaysOnTop
+  );
   await _open(url, PROJECTION_TYPE.SITE_RETURN, target.monitorId, fullscreen, alwaysOnTop);
+  return isWindowOpen(PROJECTION_TYPE.SITE_RETURN);
 }
 
 /**
