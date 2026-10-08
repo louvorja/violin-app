@@ -63,15 +63,12 @@ import { LjSlider, LjSwitch } from "@/components/ui";
 import $userdata from "@/helpers/UserData";
 import $idb from "@/helpers/IndexedDB";
 import { KEYS } from "@/constants/UserDataKeys";
-import { DB_TABLE } from "@/constants/DbTables";
+import { DB_TABLE, SETTINGS_TABLE } from "@/constants/DbTables";
 import { useBackgroundSound } from "@/composables/useBackgroundSound";
 import $modules from "@/helpers/Modules";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { getSetting, saveSetting } from "@/helpers/SettingsStorage";
 import { BackgroundSoundSettings } from "@/types/Settings";
-import { SETTINGS_TABLE } from "@/constants/DbTables";
-import { LjIcon } from "@components/ui";
-import { ICONS } from "@/config/Icons";
 
 const { t: i18nT } = useI18n();
 

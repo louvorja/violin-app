@@ -1,29 +1,46 @@
 <template>
   <div class="rfps-root">
+    <!--
+      UM container só, com as opções em COLUNAS ao lado do interruptor.
+
+      A ribbon dá ~84 px úteis ao grupo (`.ribbon-group-content` tem
+      `max-height` e `overflow: hidden`). Com o checkbox numa linha própria de
+      `height: 100%`, ele consumia essa altura inteira e a linha de baixo —
+      cor, ajuste e imagem — nascia fora da caixa e era cortada: o checkbox
+      respondia, e nada aparecia. Colunas cabem em84 px; linhas empilhadas não.
+    -->
     <div class="rfps-container">
       <div class="rfps-col">
         <div class="rfps-group">
-          <input type="checkbox" :checked="enabled" @change="onToggle" />
-          <label class="rfps-label">{{ $t("options.file_projection.custom_background") }}</label>
+          <input
+            id="rfps-custom-background"
+            type="checkbox"
+            :checked="enabled"
+            @change="onToggle"
+          />
+          <label class="rfps-label" for="rfps-custom-background">
+            {{ $t("options.file_projection.custom_background") }}
+          </label>
         </div>
+        <template v-if="enabled">
+          <div class="rfps-group">
+            <input type="color" class="rfps-color" :value="wpColor" @input="onColor" />
+            <label class="rfps-label">{{ tm("bg_color") }}</label>
+          </div>
+          <div class="rfps-group">
+            <select class="rfps-select" :value="wpPosition" @change="onPos">
+              <option value="cover">Cover</option>
+              <option value="contain">Contain</option>
+              <option value="center">Center</option>
+              <option value="stretch">Stretch</option>
+              <option value="tile">Tile</option>
+            </select>
+            <label class="rfps-label">{{ tm("bg_position") }}</label>
+          </div>
+        </template>
       </div>
-    </div>
-    <div v-if="enabled" class="rfps-container">
-      <div class="rfps-col">
-        <div class="rfps-group">
-          <input type="color" class="rfps-color" :value="wpColor" @input="onColor" />
-          <label class="rfps-label">{{ tm("bg_color") }}</label>
-        </div>
-        <div class="rfps-group">
-          <select class="rfps-select" :value="wpPosition" @change="onPos">
-            <option value="cover">Cover</option>
-            <option value="contain">Contain</option>
-            <option value="center">Center</option>
-            <option value="stretch">Stretch</option>
-            <option value="tile">Tile</option>
-          </select>
-          <label class="rfps-label">{{ tm("bg_position") }}</label>
-        </div>
+
+      <div v-if="enabled" class="rfps-col">
         <div class="rfps-group">
           <div class="opt-format-field opt-field-bgimage">
             <div class="opt-bg-pick">
@@ -38,7 +55,8 @@
           </div>
         </div>
       </div>
-      <div class="rfps-col">
+
+      <div v-if="enabled" class="rfps-col">
         <div class="rfps-group">
           <div v-if="wpImageUrl" class="rfps-preview">
             <img :src="wpImageUrl" class="rfps-preview-img" />
@@ -65,13 +83,17 @@ import { getSetting, saveSetting } from "@/helpers/SettingsStorage";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import Broadcast from "@/helpers/Broadcast";
 import { DEFAULT_BACKGROUND_COLOR } from "@/types/Settings";
+import { KEYS } from "@/constants/UserDataKeys";
+import { SETTINGS_TABLE } from "@/constants/DbTables";
 
 const { t: i18nT } = useI18n();
 const modulePrefix = $modules.getPath(ModuleEnum.MEDIA_LIBRARY);
 const tm = (key: string) => i18nT(`modules.media_library.${key}`);
 const currentBgImage = computed(() => wpImageUrl.value);
 
-const STORAGE_ID = "file_projection_background";
+/* A mesma tabela que a janela de projeção lê — literal aqui já divergiu uma vez. */
+const STORAGE_ID = SETTINGS_TABLE.FILE_PROJECTION_BACKGROUND;
+const KEY_HABILITADO = KEYS.OPTIONS.FILE_PROJECTION.BACKGROUND_ENABLED;
 
 const enabled = ref(false);
 const wpColor = ref(DEFAULT_BACKGROUND_COLOR);
@@ -86,7 +108,7 @@ function notifyViews(): void {
 
 function onToggle(e: Event): void {
   enabled.value = (e.target as HTMLInputElement).checked;
-  $userdata.set("options.file_projection.background_enabled", enabled.value);
+  $userdata.set(KEY_HABILITADO, enabled.value);
   if (enabled.value) {
     saveSetting({
       id: STORAGE_ID,
@@ -150,8 +172,7 @@ async function remove(): Promise<void> {
 }
 
 onMounted(async () => {
-  enabled.value =
-    $userdata.get<boolean>("options.file_projection.background_enabled", false) === true;
+  enabled.value = $userdata.get<boolean>(KEY_HABILITADO, false) === true;
   const s = await getSetting<any>(STORAGE_ID).catch(() => null);
   if (s) {
     wpColor.value = s.color || DEFAULT_BACKGROUND_COLOR;
