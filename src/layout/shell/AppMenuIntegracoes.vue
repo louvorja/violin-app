@@ -308,25 +308,6 @@
           {{ $t("options.integrations.canva.web_login_hint") }}
         </p>
 
-        <!-- Redirect URL: é ela que o portal exige registrar ---------------- -->
-        <div class="opt-row canva-block">
-          <span class="opt-label">{{ $t("options.integrations.canva.redirect_uri") }}</span>
-          <!--
-            O campo INTEIRO é o botão: clicar na URL já copia. Os dois lugares
-            que mostram o endereço (aqui e nas instruções) usam o mesmo valor —
-            é ele que o portal exige registrar.
-          -->
-          <LjCopyButton
-            v-if="status?.redirectUri"
-            :value="status.redirectUri"
-            class="canva-uri"
-            :title="$t('options.integrations.copy')"
-          >
-            <code class="canva-uri-code">{{ status.redirectUri }}</code>
-          </LjCopyButton>
-          <code v-else class="canva-uri-code">—</code>
-        </div>
-
         <!--
           Instruções num diálogo de verdade, não numa string: o passo do portal
           tem que ser um link clicável e a Redirect URL tem que estar num

@@ -103,6 +103,24 @@ async function mountPanel() {
   return wrapper;
 }
 
+/**
+ * Abre "Como configurar" e devolve o diálogo.
+ *
+ * O `LjDialog` teleporta para o `document.body`, então o wrapper não o vê —
+ * quem lê o conteúdo lê pelo corpo. A Redirect URL mora SÓ dentro dele.
+ */
+async function abrirInstrucoes(wrapper: Awaited<ReturnType<typeof mountPanel>>) {
+  await wrapper
+    .findAll("button")
+    .find((b) => b.text().trim() === "Como configurar")!
+    .trigger("click");
+  await flushPromises();
+
+  const dialogo = document.querySelector(".lj-dialog");
+  expect(dialogo).toBeTruthy();
+  return dialogo as HTMLElement;
+}
+
 beforeEach(() => {
   /* Diálogos do caso anterior teleportados no corpo — fora antes de montar. */
   document.querySelectorAll(".lj-dialog, .lj-dialog__overlay").forEach((n) => n.remove());
@@ -151,10 +169,8 @@ describe("Integrações — estado inicial", () => {
   beforeEach(() => {
     state.projectAs = "site";
   });
-  it("mostra a Redirect URL registrável e o botão Conectar bloqueado sem credenciais", async () => {
+  it("Conectar fica bloqueado sem credenciais salvas", async () => {
     const wrapper = await mountPanel();
-
-    expect(wrapper.text()).toContain("http://127.0.0.1:5530/auth/canva");
 
     const conectar = wrapper.findAll("button").find((b) => b.text().trim() === "Conectar");
     expect(conectar).toBeTruthy();
@@ -425,17 +441,22 @@ describe("Integrações — identidade e instruções", () => {
 
   it("a Redirect URL está DENTRO de um CopyButton — o campo inteiro copia", async () => {
     const wrapper = await mountPanel();
+    const dialogo = await abrirInstrucoes(wrapper);
 
-    const copiar = wrapper.find("button.lj-copy-btn");
-    expect(copiar.exists()).toBe(true);
-    expect(copiar.find("code").text()).toContain("http://127.0.0.1:5530/auth/canva");
+    const copiar = dialogo.querySelector("button.lj-copy-btn");
+    expect(copiar).toBeTruthy();
+    expect(copiar!.querySelector("code")!.textContent).toContain(
+      "http://127.0.0.1:5530/auth/canva"
+    );
     /*
      * O `<code>` é filho do botão, não um irmão ao lado: é isso que faz o
      * clique no endereço copiar, em vez de precisar de um botão separado.
      */
-    expect(copiar.find("code").element.parentElement).toBe(copiar.element);
+    expect(copiar!.querySelector("code")!.parentElement).toBe(copiar);
     /* Fora do botão não pode sobrar nenhuma segunda cópia do endereço. */
-    const solta = wrapper.findAll("code").filter((c) => !c.element.closest("button"));
+    const solta = [...dialogo.querySelectorAll("code")].filter(
+      (c) => !c.closest("button")
+    );
     expect(solta).toEqual([]);
   });
 
@@ -443,16 +464,9 @@ describe("Integrações — identidade e instruções", () => {
     const wrapper = await mountPanel();
     expect(document.querySelector(".lj-dialog")).toBeNull();
 
-    await wrapper
-      .findAll("button")
-      .find((b) => b.text().trim() === "Como configurar no portal")!
-      .trigger("click");
-    await flushPromises();
+    const dialogo = await abrirInstrucoes(wrapper);
 
-    /* Teleportado: o wrapper não o vê, o corpo sim. */
-    const dialogo = document.querySelector(".lj-dialog");
-    expect(dialogo).toBeTruthy();
-    expect(dialogo!.textContent).toContain("Canva — configuração no portal");
+    expect(dialogo.textContent).toContain("Canva — configuração no portal");
 
     const link = dialogo!.querySelector<HTMLAnchorElement>(
       'a.canva-link[href="https://www.canva.com/developers/apps"]'
@@ -464,20 +478,13 @@ describe("Integrações — identidade e instruções", () => {
 
   it("as instruções trazem o passo do login e a Redirect URL num CopyButton", async () => {
     const wrapper = await mountPanel();
-    await wrapper
-      .findAll("button")
-      .find((b) => b.text().trim() === "Como configurar no portal")!
-      .trigger("click");
-    await flushPromises();
-
-    const dialogo = document.querySelector(".lj-dialog");
-    expect(dialogo).toBeTruthy();
+    const dialogo = await abrirInstrucoes(wrapper);
 
     /* O login na sessão do site é o passo que faltava nas instruções. */
-    expect(dialogo!.textContent).toContain("Fazer login no Canva");
-    expect(dialogo!.textContent).toContain("a janela fecha sozinha");
+    expect(dialogo.textContent).toContain("Fazer login no Canva");
+    expect(dialogo.textContent).toContain("a janela fecha sozinha");
 
-    const dentro = dialogo!.querySelector<HTMLButtonElement>("button.lj-copy-btn");
+    const dentro = dialogo.querySelector<HTMLButtonElement>("button.lj-copy-btn");
     expect(dentro).toBeTruthy();
     expect(dentro!.querySelector("code")?.textContent).toContain("127.0.0.1:5530/auth/canva");
     expect(dentro!.querySelector("code")?.parentElement).toBe(dentro);
