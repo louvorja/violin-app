@@ -19,6 +19,9 @@ const state = vi.hoisted(() => ({
   openSiteWindow: vi.fn((_url?: string, _source?: string) => Promise.resolve(true)),
   projectFile: vi.fn((_payload: unknown) => Promise.resolve(true)),
   snackbar: vi.fn(),
+  yesno: vi.fn(),
+  cachedPdfs: vi.fn(),
+  clearCachedPdf: vi.fn(),
 }));
 
 vi.mock("@/helpers/Platform", () => ({
@@ -48,6 +51,9 @@ vi.mock("@/helpers/ProjectionWindows", () => ({
   /* A origem (`"canva"`) precisa chegar ao mock: sem ela não há como afirmar
      de qual módulo veio a projeção. */
   openSiteWindow: (url?: string, source?: string) => state.openSiteWindow(url, source),
+}));
+vi.mock("@/helpers/Alert", () => ({
+  default: { yesno: (...args: unknown[]) => state.yesno(...args) },
 }));
 vi.mock("@/helpers/Telemetry", () => ({
   default: { track: vi.fn(), histogram: vi.fn(), captureException: vi.fn() },
@@ -84,6 +90,8 @@ function instalarApi(overrides: Record<string, unknown> = {}) {
       items: state.items,
       designUrl: state.designUrl,
       exportPdf: state.exportPdf,
+      cachedPdfs: state.cachedPdfs,
+      clearCachedPdf: state.clearCachedPdf,
       ...overrides,
     },
   };
@@ -114,6 +122,9 @@ beforeEach(() => {
     .mockResolvedValue({ ok: true, path: "/dados/canva/D1.pdf", pageCount: 4 });
   state.snackbar.mockClear();
   state.projectFile.mockClear();
+  state.yesno.mockReset();
+  state.cachedPdfs.mockReset().mockResolvedValue({});
+  state.clearCachedPdf.mockReset().mockResolvedValue({ ok: true });
   state.close.mockClear();
   state.closeProjectionStage.mockClear();
   state.openSiteWindow.mockClear();
@@ -487,5 +498,138 @@ describe("Aba Canva — telemetria", () => {
     expect(props("canva_project_requested")).toMatchObject({ mode: "site" });
     expect(props("canva_site_link_failed")).toMatchObject({ reason: "no_view_url" });
     expect(eventos("canva_site_link_failed")[0][1]).not.toHaveProperty("message");
+  });
+});
+
+describe("Aba Canva — selo de cache", () => {
+  const DESIGN_CACHE = {
+    type: "design",
+    id: "D9",
+    name: "Deck Páscoa",
+    thumb: null,
+    pageCount: 3,
+    updatedAt: 1_700_000_000,
+  };
+  /* API antiga (ou payload estranho) sem `updated_at`: aí confia no arquivo. */
+  const SEM_DATA = {
+    type: "design",
+    id: "D9",
+    name: "Deck Páscoa",
+    thumb: null,
+    pageCount: 3,
+  };
+
+  const comItens = async (itens: unknown[], mapa: Record<string, number>) => {
+    state.items.mockResolvedValue({ ok: true, items: itens, continuation: null });
+    state.cachedPdfs.mockResolvedValue(mapa);
+    return mountTab();
+  };
+
+  it("acende o selo quando o PDF está guardado E ainda vale", async () => {
+    const wrapper = await comItens([DESIGN_CACHE], { D9: 1_700_000_000 });
+
+    const selo = wrapper.find(".canva-cache");
+    expect(selo.exists()).toBe(true);
+    expect(selo.attributes("aria-label")).toBe("Em cache");
+    expect(wrapper.findAll(".canva-cell")).toHaveLength(1);
+  });
+
+  it("some quando o design foi editado no Canva (updated_at diferente)", async () => {
+    const wrapper = await comItens([DESIGN_CACHE], { D9: 1_600_000_000 });
+
+    expect(wrapper.find(".canva-cache").exists()).toBe(false);
+  });
+
+  it("sem PDF guardado não há selo", async () => {
+    const wrapper = await comItens([DESIGN_CACHE], {});
+
+    expect(wrapper.find(".canva-cache").exists()).toBe(false);
+  });
+
+  it("pasta e imagem nunca têm selo — não é PDF", async () => {
+    const wrapper = await comItens([PASTA, COM_THUMB], {
+      F1: 1_700_000_000,
+      I1: 1_700_000_000,
+    });
+
+    expect(wrapper.find(".canva-cache").exists()).toBe(false);
+  });
+
+  it("sem `updated_at` no item, confia no arquivo", async () => {
+    const wrapper = await comItens([SEM_DATA], { D9: 1_600_000_000 });
+
+    expect(wrapper.find(".canva-cache").exists()).toBe(true);
+  });
+
+  it("no modo site o selo some: o cache não é consumido ali", async () => {
+    state.modo = "site";
+    const wrapper = await comItens([DESIGN_CACHE], { D9: 1_700_000_000 });
+
+    expect(wrapper.find(".canva-cache").exists()).toBe(false);
+  });
+
+  it("clicar pergunta; em sim apaga, some, e NÃO projeta", async () => {
+    state.yesno.mockImplementation((_opts: unknown, cb: (_v: string) => void) => cb("yes"));
+    const wrapper = await comItens([DESIGN_CACHE], { D9: 1_700_000_000 });
+
+    await wrapper.find(".canva-cache").trigger("click");
+    await flushPromises();
+
+    expect(state.yesno).toHaveBeenCalledTimes(1);
+    expect(state.clearCachedPdf).toHaveBeenCalledWith("D9");
+    expect(wrapper.find(".canva-cache").exists()).toBe(false);
+    /* Irmão do card: apagar o cache não pode disparar `abrir`. */
+    expect(state.exportPdf).not.toHaveBeenCalled();
+    expect(state.projectFile).not.toHaveBeenCalled();
+    expect(state.openSiteWindow).not.toHaveBeenCalled();
+  });
+
+  it("em não, mantém o PDF guardado", async () => {
+    state.yesno.mockImplementation((_opts: unknown, cb: (_v: string) => void) => cb("no"));
+    const wrapper = await comItens([DESIGN_CACHE], { D9: 1_700_000_000 });
+
+    await wrapper.find(".canva-cache").trigger("click");
+    await flushPromises();
+
+    expect(state.clearCachedPdf).not.toHaveBeenCalled();
+    expect(wrapper.find(".canva-cache").exists()).toBe(true);
+  });
+
+  it("falha ao apagar vira aviso, e o selo continua", async () => {
+    state.clearCachedPdf.mockResolvedValue({
+      ok: false,
+      code: "cache_remove_failed",
+      message: "EPERM",
+    });
+    state.yesno.mockImplementation((_opts: unknown, cb: (_v: string) => void) => cb("yes"));
+    const wrapper = await comItens([DESIGN_CACHE], { D9: 1_700_000_000 });
+
+    await wrapper.find(".canva-cache").trigger("click");
+    await flushPromises();
+
+    expect(state.snackbar).toHaveBeenCalledWith(
+      "warning",
+      expect.stringContaining("EPERM")
+    );
+    expect(wrapper.find(".canva-cache").exists()).toBe(true);
+  });
+
+  it("a lista busca o mapa de cache uma vez, junto dos itens", async () => {
+    await comItens([DESIGN_CACHE], { D9: 1_700_000_000 });
+
+    expect(state.cachedPdfs).toHaveBeenCalledTimes(1);
+    expect(state.items).toHaveBeenCalledTimes(1);
+  });
+
+  it("o selo é IRMÃO do card — nenhum `button` dentro de `button`", async () => {
+    const wrapper = await comItens([DESIGN_CACHE], { D9: 1_700_000_000 });
+
+    const card = wrapper.find(".canva-item");
+    const selo = wrapper.find(".canva-cache");
+
+    expect(card.element.parentElement).toBe(selo.element.parentElement);
+    /* `closest` inclui o próprio elemento — o que importa é NÃO estar dentro. */
+    expect(card.element.contains(selo.element)).toBe(false);
+    expect(card.attributes("title")).toBe("Deck Páscoa");
   });
 });

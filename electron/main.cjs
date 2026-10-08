@@ -2376,6 +2376,24 @@ ipcMain.handle("canva:exportPdf", (_event, payload) =>
   })
 );
 
+/**
+ * Selos de cache da aba Canva.
+ *
+ * `cachedPdfs` devolve designId → `updated_at` de TUDO que tem `.pdf` E `.json`,
+ * para o renderer comparar com o item da lista e só acender o selo quando o
+ * PDF ainda vale. `clearCachedPdf` apaga um, a pedido do operador — a validação
+ * do id acontece AQUI (fronteira) e de novo no export.js (defesa).
+ */
+ipcMain.handle("canva:cachedPdfs", () => canva.cachedPdfs());
+
+ipcMain.handle("canva:clearCachedPdf", (_event, payload) => {
+  const designId = payload && typeof payload === "object" ? payload.designId : undefined;
+  if (typeof designId !== "string" || !designId || designId.length > 100) {
+    return { ok: false, code: "invalid_id", message: "Design sem identificador." };
+  }
+  return canva.clearCachedPdf({ designId });
+});
+
 // ---------------------------------------------------------------------------
 // IPC: Storage (S2) — visibilidade e gerenciamento da pasta de mídia + cache
 // ---------------------------------------------------------------------------

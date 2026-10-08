@@ -93,28 +93,40 @@
       </div>
 
       <div v-else-if="itens.length" class="canva-grid">
-        <button
-          v-for="item in itens"
-          :key="`${item.type}:${item.id}`"
-          type="button"
-          class="canva-item"
-          :title="item.name"
-          @click="abrir(item)"
-        >
-          <img
-            v-if="item.thumb && !thumbsQuebradas.has(item.id)"
-            :src="item.thumb"
-            class="canva-thumb"
-            alt=""
-            loading="lazy"
-            @error="quebrarThumb(item)"
-          />
-          <span v-else class="canva-thumb canva-thumb--icon">
-            <LjIcon :icon="iconeDe(item)" :size="26" />
-          </span>
-          <span class="canva-name">{{ item.name }}</span>
-          <span class="canva-type">{{ tipoDe(item) }}</span>
-        </button>
+        <div v-for="item in itens" :key="`${item.type}:${item.id}`" class="canva-cell">
+          <button type="button" class="canva-item" :title="item.name" @click="abrir(item)">
+            <img
+              v-if="item.thumb && !thumbsQuebradas.has(item.id)"
+              :src="item.thumb"
+              class="canva-thumb"
+              alt=""
+              loading="lazy"
+              @error="quebrarThumb(item)"
+            />
+            <span v-else class="canva-thumb canva-thumb--icon">
+              <LjIcon :icon="iconeDe(item)" :size="26" />
+            </span>
+            <span class="canva-name">{{ item.name }}</span>
+            <span class="canva-type">{{ tipoDe(item) }}</span>
+          </button>
+
+          <!--
+            Selo de cache: IRMÃO do card, não filho — `<button>` dentro de
+            `<button>` é HTML inválido, e como irmãos clicar aqui não dispara
+            `abrir`. Só no modo PDF, que é o único que consome o cache.
+          -->
+          <button
+            v-if="!modoSite && emCache(item)"
+            type="button"
+            class="canva-cache"
+            :disabled="exportando"
+            :title="tm('canva.cached')"
+            :aria-label="tm('canva.cached')"
+            @click="excluirCache(item)"
+          >
+            <LjIcon :icon="ICONS.UI.DATABASE" :size="14" />
+          </button>
+        </div>
       </div>
 
       <!-- Vazio só quando não há erro: senão seriam as duas mensagens juntas. -->
@@ -137,6 +149,7 @@ import { ICONS } from "@/config/Icons";
 import Platform from "@/helpers/Platform";
 import $path from "@/helpers/Path";
 import $snackbar from "@/helpers/Snackbar";
+import $alert from "@/helpers/Alert";
 import Telemetry from "@/helpers/Telemetry";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
@@ -171,6 +184,8 @@ const exportando = ref(false);
 const erro = ref("");
 /** Miniatura que não carregou: fica o ícone no lugar, com a mesma altura. */
 const thumbsQuebradas = ref<Set<string>>(new Set());
+/** PDFs guardados no disco: designId → `updated_at` do meta do cache. */
+const cache = ref(new Map<string, number>());
 /*
  * Geração da listagem atual. Navegar rápido (pasta → voltar → outra vista)
  * pode deixar a resposta antiga chegar por último e sobrescrever a nova.
@@ -219,6 +234,68 @@ function quebrarThumb(item: CanvaItem): void {
   thumbsQuebradas.value = proximo;
 }
 
+/**
+ * PDFs já guardados no disco, uma chamada por atualização da grade.
+ *
+ * Nunca rejeita: um IPC de leitura que falha não pode esconder a lista — o selo
+ * é cortesia, não conteúdo.
+ */
+async function carregarCache(): Promise<void> {
+  if (!api) return;
+  try {
+    const mapa = await api.cachedPdfs();
+    cache.value = new Map(Object.entries(mapa || {}));
+  } catch {
+    cache.value = new Map();
+  }
+}
+
+/**
+ * O PDF deste design está guardado E ainda vale?
+ *
+ * "Vale" é o que o `exportarPdf` checa antes de servir do disco: o `updated_at`
+ * do meta tem que bater com o do design. Editou no Canva → o selo some sozinho
+ * no próximo carregamento da lista. Sem `updated_at` no item não dá para
+ * validar — aí confia no arquivo, porque esconder o selo por um payload antigo
+ * seria pior.
+ */
+function emCache(item: CanvaItem): boolean {
+  if (item.type !== "design") return false;
+  const guardado = cache.value.get(item.id);
+  if (guardado === undefined) return false;
+  if (item.updatedAt != null && guardado !== item.updatedAt) return false;
+  return true;
+}
+
+/**
+ * Pergunta antes de apagar: o próximo clique no design reexporta — e isso
+ * gasta um export da cota do Canva.
+ */
+function excluirCache(item: CanvaItem): void {
+  if (!api) return;
+  $alert.yesno(
+    {
+      title: tm("canva.cache_clear_title"),
+      text: tm("canva.cache_clear_text", { name: item.name }),
+    },
+    (async (btn: string) => {
+      if (btn !== "yes") return;
+      try {
+        const r = await api.clearCachedPdf(item.id);
+        if (!r.ok) {
+          $snackbar.warning(r.message || tm("canva.cache_clear_failed"));
+          return;
+        }
+        cache.value.delete(item.id);
+        $snackbar.success(tm("canva.cache_cleared"));
+      } catch (e) {
+        $snackbar.warning((e as Error).message || tm("canva.cache_clear_failed"));
+      }
+      /* `Alert.yesno` infere `() => void` do default — o cast é do padrão do app. */
+    }) as unknown as (..._args: unknown[]) => unknown
+  );
+}
+
 async function recarregar(): Promise<void> {
   if (!api) return;
   const minhaGeracao = ++geracao;
@@ -236,7 +313,7 @@ async function recarregar(): Promise<void> {
             continuation: null,
           };
 
-    const resultado = await api.items(payload);
+    const [resultado] = await Promise.all([api.items(payload), carregarCache()]);
     if (minhaGeracao !== geracao) return;
     if (!resultado.ok) {
       erro.value = resultado.message || tm("canva.error");
@@ -422,6 +499,8 @@ async function projetarComoPdf(item: CanvaItem): Promise<void> {
       ...(typeof r.pageCount === "number" ? { page_count: r.pageCount } : {}),
       duration_ms: decorrido(),
     });
+    /* O meta acabou de nascer/atualizar: o selo acende sem trocar de aba. */
+    void carregarCache();
     /*
      * O Canva recusou o `pro` e refez em `regular`: o PDF é bom, mas não é o
      * que o operador pediu — dizer aqui vale mais do que ele só perceber a
@@ -595,6 +674,49 @@ onMounted(() => {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: var(--lj-space-5);
+}
+
+/*
+ * A célula é o item do grid; o card e o selo de cache são IRMÃOS dentro dela.
+ * `<button>` dentro de `<button>` é HTML inválido, e como irmãos clicar no
+ * selo não dispara `abrir` — que é o que o operador espera ao apagar o cache.
+ */
+.canva-cell {
+  position: relative;
+  display: grid;
+}
+
+/* Canto de cima da thumb, legível sobre qualquer miniatura. */
+.canva-cache {
+  position: absolute;
+  top: calc(var(--lj-space-3) + 6px);
+  right: calc(var(--lj-space-3) + 6px);
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: var(--lj-radius-sm);
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  cursor: pointer;
+}
+
+.canva-cache:hover {
+  background: rgba(0, 0, 0, 0.82);
+}
+
+.canva-cache:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.canva-cache:focus-visible {
+  outline: 2px solid var(--lj-ui-accent);
+  outline-offset: 2px;
 }
 
 .canva-item {

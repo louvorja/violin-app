@@ -65,6 +65,12 @@ declare global {
     /** Só imagem: aberta direto pelo thumbnail, que é a única URL que ela tem. */
     url?: string;
     pageCount?: number;
+    /**
+     * `updated_at` do design (segundos). Ausente quando a API não devolve —
+     * quem lê trata como "não dá para validar" e confia no arquivo.
+     * Serve só para o selo de cache: o PDF guardado só é reusado se bater.
+     */
+    updatedAt?: number;
   }
 
   interface CanvaListResult extends CanvaResult {
@@ -378,6 +384,10 @@ declare global {
           qualityFallback?: boolean;
         }
       >;
+      /** PDFs já guardados: designId → `updated_at` (segundos). */
+      cachedPdfs: () => Promise<Record<string, number>>;
+      /** Apaga o PDF e o meta de um design, a pedido do operador. */
+      clearCachedPdf: (designId: string) => Promise<CanvaResult>;
       /**
        * A projeção parou numa tela de login do Canva (a sessão do site caiu).
        * Devolve a função de cleanup — é um evento, não um invoke.

@@ -2150,6 +2150,27 @@ o **CSS** continua em px de layout (`/ dpr`), senão a página sairia dobrada.
 Palco ainda não medido devolve `null` — sem tocar no canvas, porque viewport de
 zero só faz o pdf.js reclamar.
 
+#### Selo de cache na lista
+
+O PDF já fica guardado em `<dados>/canva/<designId>.pdf` + `.json` — o que
+faltava era o operador VER isso e conseguir apagar.
+
+- **`canva:cachedPdfs`** devolve `designId → updated_at` de tudo que tem
+  **`.pdf` E `.json`** (um download que morreu no meio deixa o meta órfão, e
+  meta sem arquivo não é cache de nada). Um IPC por atualização da grade, não
+  um por item.
+- **O selo só acende se o PDF ainda vale**: `meta.updatedAt === item.updatedAt`
+  — exatamente o que o `exportarPdf` checa antes de servir do disco. Editou no
+  Canva, o selo some sozinho no próximo carregamento (o `updated_at` vem da
+  própria lista desde ago/2024). Sem `updated_at` no item, confia no arquivo.
+- **Selo é IRMÃO do card**, não filho: `<button>` dentro de `<button>` é HTML
+  inválido, e como irmãos clicar nele não dispara `abrir`. Só no modo **PDF** —
+  é o único que consome o cache.
+- **Exclusão**: `canva:clearCachedPdf` → `yesno` → apaga `.pdf` + `.json`. O id
+  é validado **na fronteira** (IPC) e **de novo** no `limparCachePdf`, porque
+  ele vira caminho de arquivo; `nomeSeguro` neutraliza `..` e `/`, então o alvo
+  sempre cai em `<dados>/canva`.
+
 ### Conteúdo e projeção (modo "site")
 
 - Listagem: `/v1/folders/{root|id}/items` (raiz, pastas) e `/v1/designs`

@@ -361,6 +361,10 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
      * "Projetar como: PDF" — pendente durante o job do Canva (até ~1 min).
      */
     exportPdf: (designId) => ipcRenderer.invoke("canva:exportPdf", { designId }),
+    /** PDFs já guardados (designId → updated_at) — acende o selo no card. */
+    cachedPdfs: () => ipcRenderer.invoke("canva:cachedPdfs"),
+    /** Apaga o PDF e o meta de um design, a pedido do operador. */
+    clearCachedPdf: (designId) => ipcRenderer.invoke("canva:clearCachedPdf", { designId }),
     /**
      * A janela de projeção parou numa tela de login do Canva — a sessão do
      * site não vale mais. Limpa o selo e devolve função de cleanup.

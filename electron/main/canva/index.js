@@ -322,6 +322,39 @@ async function exportDesign(payload, opts = {}) {
   }
 }
 
+/**
+ * PDFs já guardados no disco: designId → `updated_at` do meta.
+ *
+ * É o que a aba Canva precisa para acender o selo de cache e, mais importante,
+ * para saber se aquele PDF ainda VALE (o `updated_at` do meta contra o do
+ * design). Nunca rejeita: um IPC de leitura que falha não pode esconder a grade.
+ *
+ * @returns {Promise<Record<string, number>>}
+ */
+async function cachedPdfs() {
+  try {
+    return await exporter.listarCachePdf();
+  } catch (err) {
+    console.warn(`[canva] cachedPdfs: ${err?.message || err}`);
+    return {};
+  }
+}
+
+/**
+ * Apaga o PDF guardado de UM design, a pedido do operador.
+ *
+ * @param {{designId?: unknown}} payload
+ * @returns {Promise<{ok: true} | {ok: false, code: string, message: string}>}
+ */
+async function clearCachedPdf(payload) {
+  try {
+    const designId = payload && typeof payload === "object" ? payload.designId : undefined;
+    return await exporter.limparCachePdf(designId);
+  } catch (err) {
+    return wrap(err);
+  }
+}
+
 module.exports = {
   PROFILE_PATH,
   WEB_SESSION_PATH,
@@ -336,5 +369,7 @@ module.exports = {
   items,
   designUrl,
   exportDesign,
+  cachedPdfs,
+  clearCachedPdf,
   tentarApresentar,
 };

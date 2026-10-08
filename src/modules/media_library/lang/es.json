@@ -63,6 +63,11 @@
     "type_design_pages": "Diseño · {n} páginas",
     "exporting": "Exportando el diseño de Canva…",
     "export_error": "No pude exportar el diseño.",
+    "cached": "En caché",
+    "cache_clear_title": "¿Eliminar el PDF en caché?",
+    "cache_clear_text": "El PDF de «{name}» deja de estar guardado. En la próxima proyección se exportará de nuevo — eso consume una exportación de tu cuota de Canva.",
+    "cache_cleared": "PDF eliminado de la caché.",
+    "cache_clear_failed": "No pude eliminar el PDF de la caché.",
     "page_mismatch": "Canva declara {declared} páginas, pero el PDF se abrió con {total}. El archivo puede haber llegado incompleto.",
     "web_session_hint": "Sin la sesión de Canva, la proyección puede abrir la pantalla de inicio de sesión. Actívela en Opciones → Integraciones."
   }

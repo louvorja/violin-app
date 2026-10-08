@@ -79,6 +79,9 @@ function instalarApi(overrides: Partial<Api> = {}): Api {
     onLoginWall: state.onLoginWall,
     items: async () => ({ ok: true, items: [] }),
     designUrl: async () => ({ ok: true }),
+    /* Selos de cache: só a aba Canva usa — aqui só cumprem a forma. */
+    cachedPdfs: async () => ({}),
+    clearCachedPdf: async () => ({ ok: true }),
     ...overrides,
   };
   (window as unknown as { louvorjaApi?: unknown }).louvorjaApi = { canva: api };

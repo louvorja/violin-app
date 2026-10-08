@@ -54,7 +54,8 @@ function thumbOf(raw) {
  * Item de pasta no formato que o renderer entende.
  * @param {unknown} raw
  * @returns {{type: "folder"|"design"|"image", id: string, name: string,
- *            thumb: string|null, url?: string, pageCount?: number} | null}
+ *            thumb: string|null, url?: string, pageCount?: number,
+ *            updatedAt?: number} | null}
  */
 function normalizeFolderItem(raw) {
   if (!raw || typeof raw !== "object") return null;
@@ -75,6 +76,8 @@ function normalizeFolderItem(raw) {
       name: str(raw.design.title, "Design sem título"),
       thumb: thumbOf(raw.design),
       pageCount: int(raw.design.page_count, 0),
+      /* Só para o selo de cache: compara com o `updated_at` do PDF guardado. */
+      ...updatedAtOf(raw.design),
     };
   }
 
@@ -99,7 +102,7 @@ function normalizeFolderItem(raw) {
  * Design vindo de `/designs` (lista) — sem `urls`, que expiram.
  * @param {unknown} raw
  * @returns {{type: "design", id: string, name: string, thumb: string|null,
- *            pageCount: number} | null}
+ *            pageCount: number, updatedAt?: number} | null}
  */
 function normalizeDesign(raw) {
   if (!raw || typeof raw !== "object" || typeof raw.id !== "string") return null;
@@ -109,7 +112,23 @@ function normalizeDesign(raw) {
     name: str(raw.title, "Design sem título"),
     thumb: thumbOf(raw),
     pageCount: int(raw.page_count, 0),
+    ...updatedAtOf(raw),
   };
+}
+
+/**
+ * `updated_at` do design, presente só quando a API devolve.
+ *
+ * A chave NÃO é emitida quando falta: `undefined` sobrevive ao clone do IPC
+ * mas não ao JSON, e um `0` faria o selo de cache nunca casar. Prefiro a chave
+ * ausente — quem lê trata como "não dá para validar".
+ *
+ * @param {object} raw
+ * @returns {{updatedAt?: number}}
+ */
+function updatedAtOf(raw) {
+  const n = Number(raw && raw.updated_at);
+  return Number.isFinite(n) && n > 0 ? { updatedAt: Math.floor(n) } : {};
 }
 
 /** Itens malformados saem da lista; `items` nunca vem `undefined`. */

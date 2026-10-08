@@ -19,6 +19,8 @@ const MAIN = fs.readFileSync(file("../../main.cjs"), "utf8");
 
 /** Sufícios expostos em `louvorjaApi.canva`. */
 const FUNCOES = [
+  "cachedPdfs",
+  "clearCachedPdf",
   "connect",
   "designUrl",
   "disconnect",
@@ -99,3 +101,19 @@ describe("Canva: contrato de IPC", () => {
     expect(MAIN).toContain("hostCanva");
   });
 });
+
+  it("o selo de cache: o id é validado na fronteira antes de virar caminho de arquivo", () => {
+    /*
+     * `clearCachedPdf` monta caminho a partir do id que o renderer manda.
+     * Sem validação aqui, um payload malformado chegaria ao `limparCachePdf`.
+     * A defesa dupla (fronteira + export.js) é proposital.
+     */
+    const trecho = MAIN.match(/ipcMain\.handle\("canva:clearCachedPdf",[\s\S]*?\n\}\);/);
+    expect(trecho).toBeTruthy();
+    expect(trecho[0]).toContain('typeof designId !== "string"');
+    expect(trecho[0]).toContain("canva.clearCachedPdf({ designId })");
+
+    /* E as duas pontas do canal existem. */
+    expect(PRELOAD).toContain('ipcRenderer.invoke("canva:cachedPdfs")');
+    expect(PRELOAD).toContain('ipcRenderer.invoke("canva:clearCachedPdf"');
+  });

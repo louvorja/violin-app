@@ -286,8 +286,67 @@ async function exportarPdf(designId, opts = {}) {
   };
 }
 
+/**
+ * PDFs já guardados: designId → `updated_at` do meta.
+ *
+ * Só entra o que existe DUAS vezes (`.pdf` + `.json`): um download que morreu
+ * no meio deixa o meta órfão, e meta sem arquivo não é cache de nada — o
+ * `exportarPdf` já exige os dois para servir do disco.
+ *
+ * A chave é o basename do arquivo, que para um id do Canva (`[A-Za-z0-9_-]`) é
+ * o próprio id. Se um dia divergir, o selo some (fail-safe), nunca aparece onde
+ * não deve.
+ *
+ * @returns {Promise<Record<string, number>>}
+ */
+async function listarCachePdf() {
+  const mapa = {};
+  let nomes = [];
+  try {
+    nomes = await fs.readdir(pastaCanva());
+  } catch (_) {
+    return mapa;
+  }
+  for (const nome of nomes) {
+    if (!nome.endsWith(".json")) continue;
+    const base = nome.slice(0, -".json".length);
+    const meta = lerMeta(path.join(pastaCanva(), nome));
+    if (!meta || typeof meta.updatedAt !== "number") continue;
+    if (!(await fs.pathExists(path.join(pastaCanva(), `${base}.pdf`)))) continue;
+    mapa[base] = meta.updatedAt;
+  }
+  return mapa;
+}
+
+/**
+ * Apaga o PDF guardado de UM design (e o meta junto).
+ *
+ * O id vem do renderer, e `alvosDoDesign` monta caminho de arquivo a partir
+ * dele — então é validado AQUI também: um id malformado não pode virar remoção
+ * fora da pasta do Canva. A validação na fronteira (IPC) é a primeira porta;
+ * esta é a de defesa.
+ *
+ * @param {unknown} designId
+ * @returns {Promise<{ok: true} | {ok: false, code: string, message: string}>}
+ */
+async function limparCachePdf(designId) {
+  if (typeof designId !== "string" || !designId || designId.length > 100) {
+    return { ok: false, code: "invalid_id", message: "Design sem identificador." };
+  }
+  const alvos = alvosDoDesign(designId);
+  try {
+    await fs.remove(alvos.pdf);
+    await fs.remove(alvos.meta);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, code: "cache_remove_failed", message: String(err?.message || err) };
+  }
+}
+
 module.exports = {
   exportarPdf,
+  listarCachePdf,
+  limparCachePdf,
   baixar,
   alvosDoDesign,
   pastaCanva,

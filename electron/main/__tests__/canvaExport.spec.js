@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRequire } from "module";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join, sep } from "node:path";
 import { tmpdir } from "node:os";
 
 const require = createRequire(import.meta.url);
@@ -387,5 +387,79 @@ describe("qualidade do export", () => {
     expect(r.cached).toBe(true);
     expect(r.quality).toBe("pro");
     expect(r.qualityFallback).toBeFalsy();
+  });
+});
+
+describe("cache de PDF (selo da lista)", () => {
+  it("sem pasta ainda devolve mapa vazio", async () => {
+    await expect(exporter.listarCachePdf()).resolves.toEqual({});
+  });
+
+  it("depois de exportar, devolve o id e o updatedAt do meta", async () => {
+    stubApi();
+    await exporter.exportarPdf("D1", RAPIDO);
+
+    expect(await exporter.listarCachePdf()).toEqual({ D1: 111 });
+  });
+
+  it("meta órfão não é cache: sem o .pdf não há o que selar", async () => {
+    stubApi();
+    await exporter.exportarPdf("D1", RAPIDO);
+    /* Download que morreu no meio deixa o meta sozinho. */
+    rmSync(PDF_ESPERADO, { force: true });
+
+    expect(await exporter.listarCachePdf()).toEqual({});
+  });
+
+  it("id desconhecido devolve mapa vazio, não erro", async () => {
+    stubApi();
+    await exporter.exportarPdf("D1", RAPIDO);
+
+    expect(await exporter.listarCachePdf()).toEqual({ D1: 111 });
+    expect(await exporter.listarCachePdf()).not.toHaveProperty("OUTRO");
+  });
+
+  it("limpar apaga o .pdf e o .json, e some do mapa", async () => {
+    stubApi();
+    await exporter.exportarPdf("D1", RAPIDO);
+    expect(existsSync(PDF_ESPERADO)).toBe(true);
+
+    await expect(exporter.limparCachePdf("D1")).resolves.toEqual({ ok: true });
+
+    expect(existsSync(PDF_ESPERADO)).toBe(false);
+    expect(existsSync(META_ESPERADO)).toBe(false);
+    expect(await exporter.listarCachePdf()).toEqual({});
+  });
+
+  it("limpar sem cache nenhum segue ok — apagar duas vezes não é erro", async () => {
+    await expect(exporter.limparCachePdf("D1")).resolves.toEqual({ ok: true });
+  });
+
+  it("id não-string ou longo demais é recusado antes de tocar em arquivo", async () => {
+    await expect(exporter.limparCachePdf(undefined)).resolves.toMatchObject({
+      ok: false,
+      code: "invalid_id",
+    });
+    await expect(exporter.limparCachePdf(null)).resolves.toMatchObject({
+      ok: false,
+      code: "invalid_id",
+    });
+    await expect(exporter.limparCachePdf("x".repeat(101))).resolves.toMatchObject({
+      ok: false,
+      code: "invalid_id",
+    });
+  });
+
+  it("id com pontos e barras não escapa da pasta do Canva", async () => {
+    /*
+     * `nomeSeguro` neutraliza (`/` e `.` viram `_`) — é a mesma proteção que
+     * o `exportarPdf` usa ao gravar. O alvo segue DENTRO de <dados>/canva.
+     */
+    const alvos = exporter.alvosDoDesign("../outra-pasta");
+
+    expect(alvos.pdf.startsWith(exporter.pastaCanva() + sep)).toBe(true);
+    expect(basename(alvos.pdf)).not.toContain("..");
+
+    await expect(exporter.limparCachePdf("../outra-pasta")).resolves.toEqual({ ok: true });
   });
 });
