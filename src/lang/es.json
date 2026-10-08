@@ -699,7 +699,9 @@
       "slides": "Diapositivas",
       "announcements": "Anuncios",
       "shortcuts": "Atajos",
-      "online_videos": "Videos en línea"
+      "online_videos": "Videos en línea",
+      "background_sound": "Sonido de fondo",
+      "presenter": "Presentador"
     },
     "music": {
       "mode_title": "Ejecutar como",
@@ -760,6 +762,21 @@
     "token_invalid": {
       "title": "Token inválido",
       "message": "El token de acceso utilizado es inválido o expiró. Genere un nuevo token en Configuración → Transmisión."
+    },
+    "bgsound": {
+      "now": "Sonando ahora",
+      "nothing": "Ningún sonido sonando",
+      "volume": "Volumen",
+      "pause": "Pausar",
+      "resume": "Reanudar",
+      "stop": "Detener",
+      "library": "Biblioteca",
+      "empty": "No hay sonidos de fondo en el escritorio.",
+      "uncategorized": "Sin categoría"
+    },
+    "presenter": {
+      "start_bg": "Iniciar sonido de fondo",
+      "started": "Sonido de fondo iniciado"
     }
   },
   "bible": {

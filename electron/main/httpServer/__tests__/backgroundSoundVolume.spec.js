@@ -158,6 +158,32 @@ describe("POST /api/background-sound", () => {
     ]);
   });
 
+  it("play-default usa o requestRenderer e responde ok (sem id)", async () => {
+    rendererReply = { status: "ok" };
+
+    const res = await callPost("/api/background-sound", { action: "play-default" });
+
+    expect(res.code).toBe(200);
+    expect(res.body).toEqual({ status: "ok", action: "play-default" });
+    expect(requestedPrefixes).toEqual(["background-sound"]);
+    // O requestRenderer despacha pelo webContents falso — com requestId no
+    // prefixo `background-sound` (contrato do preload).
+    expect(enviados).toHaveLength(1);
+    expect(enviados[0][0]).toBe("http:background-sound");
+    expect(enviados[0][1]).toMatchObject({ action: "play-default" });
+    expect(String(enviados[0][1].requestId)).toContain("background-sound:");
+  });
+
+  it("sem som padrão configurado → 404 com a mensagem do renderer", async () => {
+    rendererReply = { status: "error", error: "Nenhum som padrão configurado" };
+
+    const res = await callPost("/api/background-sound", { action: "play-default" });
+
+    expect(res.code).toBe(404);
+    expect(res.body.error).toBe("Nenhum som padrão configurado");
+    expect(requestedPrefixes).toEqual(["background-sound"]);
+  });
+
   it("403 sem a permission background_sound", async () => {
     const res = await callPost("/api/background-sound", { action: "stop" }, { permissions: ["music"] });
 

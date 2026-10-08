@@ -45,5 +45,9 @@
   },
   "categories": "Categorias",
   "show_all": "Exibir todas",
-  "hide_all": "Exibir nenhuma"
+  "hide_all": "Exibir nenhuma",
+  "default_checkbox": "Som de fundo padrão",
+  "default_sound": "Som padrão",
+  "set_default": "Definir como som padrão",
+  "unset_default": "Remover som padrão"
 }

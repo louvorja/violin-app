@@ -700,7 +700,8 @@
       "announcements": "Anúncios",
       "shortcuts": "Atalhos",
       "online_videos": "Vídeos Online",
-      "background_sound": "Som de fundo"
+      "background_sound": "Som de fundo",
+      "presenter": "Apresentador"
     },
     "music": {
       "albums": "Álbuns",
@@ -776,6 +777,10 @@
       "library": "Biblioteca",
       "empty": "Nenhum som de fundo cadastrado no desktop.",
       "uncategorized": "Sem categoria"
+    },
+    "presenter": {
+      "start_bg": "Iniciar som de fundo",
+      "started": "Som de fundo iniciado"
     }
   },
   "bible": {

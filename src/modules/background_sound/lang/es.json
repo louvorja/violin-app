@@ -45,5 +45,9 @@
   },
   "categories": "Categorias",
   "show_all": "Mostrar todas",
-  "hide_all": "Ocultar todas"
+  "hide_all": "Ocultar todas",
+  "default_checkbox": "Sonido de fondo predeterminado",
+  "default_sound": "Sonido predeterminado",
+  "set_default": "Establecer como sonido predeterminado",
+  "unset_default": "Quitar sonido predeterminado"
 }

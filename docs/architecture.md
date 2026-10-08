@@ -1871,10 +1871,30 @@ aberto** e sem mexer na projeção.
   o player revoga a URL ativa em `playFile`/`stop`/`cleanup` (fechar o módulo
   no desktop), então reaproveitar uma cache dava replay de URL **revogada**:
   `play()` rejeitava em silêncio e o som "não funcionava mais" na segunda vez.
+- **Som padrão**: o ponteiro é `modules.background_sound.default_id` em
+  `user_data` (um por vez) — marcado pelo **checkbox "Som de fundo padrão"**
+  no edit do áudio no desktop e exibido como linha "Som padrão: <nome>" no
+  painel **Configurações** da ribbon do módulo (reativa ao checkbox). O
+  remoto inicia tudo com `POST { action: "play-default" }` — este action é o
+  único com resposta (via `requestRenderer`): **idempotente** (padrão já
+  tocando → `200` sem reiniciar; pausado no próprio padrão → retoma) e `404`
+  com `"Nenhum som padrão configurado"` quando não há ponteiro.
 - **Limitações**: o web não tem sinal de "modo clássico" (a aba fica visível;
   no Delphi o player de som de fundo não é o da projeção) e no Android cada
   pressão vale **1 ponto** (tecla é consumida no `dispatchKeyEvent`, uma vez
   por `down`, sem repetição acelerada).
+
+### Apresentador — setas grandes e som padrão
+
+Módulo do controle remoto (web: aba **Apresentador**; app: card em Módulos,
+`RemoteTab.Presenter`) pensado para quem está apresentando:
+
+- **Duas teclas grandes em linhas separadas** (setas ‹ ›, ~112 px de altura)
+  mandando o **mesmo `POST /api/keyboard` da tela de Atalhos** — o web mantém
+  o cooldown de 200 ms da tela de Atalhos; o app espelha o comportamento do
+  `AtalhosScreen` (sem cooldown).
+- **Rodapé ancorado: "Iniciar som de fundo"** → `POST play-default`
+  (idempotente; erro404 com o motivo vira snackbar/toast pelo cliente).
 
 ### A aba de slides não é só escuta
 

@@ -96,6 +96,11 @@
         />
       </div>
 
+      <!-- Tab Apresentador -->
+      <div v-if="isBooted('presenter')" v-show="tab === 'presenter'" class="rc-pane">
+        <remote-presenter :token="token" @show-snackbar="showSnackbar" />
+      </div>
+
       <!-- Tab Atalhos -->
       <div v-if="isBooted('shortcuts')" v-show="tab === 'shortcuts'" class="rc-pane">
         <remote-shortcuts :token="token" @show-snackbar="showSnackbar" />
@@ -237,6 +242,7 @@ import RemoteAnnouncements from "./RemoteAnnouncements.vue";
 import RemoteShortcuts from "./RemoteShortcuts.vue";
 import RemoteVideos from "./RemoteVideos.vue";
 import RemoteBackgroundSound from "./RemoteBackgroundSound.vue";
+import RemotePresenter from "./RemotePresenter.vue";
 
 /** @typedef {import('@/types/Bible').ActiveBibleState} ActiveBibleState */
 
@@ -281,6 +287,11 @@ const tabItems = computed(() => [
     value: "background_sound",
     label: t("remote_control.tabs.background_sound"),
     icon: ICONS.MODULES.BACKGROUND_SOUND,
+  },
+  {
+    value: "presenter",
+    label: t("remote_control.tabs.presenter"),
+    icon: ICONS.PROJECTION.PRESENTATION,
   },
 ]);
 
