@@ -69,6 +69,11 @@
     "cache_cleared": "PDF removido do cache.",
     "cache_clear_failed": "Não consegui remover o PDF do cache.",
     "page_mismatch": "O Canva declara {declared} páginas, mas o PDF abriu com {total}. O arquivo pode ter vindo incompleto.",
-    "web_session_hint": "Sem a sessão do Canva, a projeção pode abrir a tela de login. Ative em Opções → Integrações."
+    "web_session_hint": "Sem a sessão do Canva, a projeção pode abrir a tela de login. Ative em Opções → Integrações.",
+    "url_label": "Link do design do Canva",
+    "url_hint": "Cole o link público do design ou da projeção e projete diretamente.",
+    "url_placeholder": "https://www.canva.com/design/...",
+    "project_url": "Projetar",
+    "url_invalid": "Esse não é o link de um design do Canva. Cole algo como https://www.canva.com/design/..."
   }
 }

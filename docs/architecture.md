@@ -2516,15 +2516,19 @@ no-op, então a prova é o teste unitário, não o console.
 |---|---|---|
 | **Site (universal)** | `site_projected {source, ok, has_loader, has_return, duration_ms, reason?}` | `ProjectionWindows.openSiteWindow` |
 | **Integrações** | `canva_credentials_saved/_failed`, `canva_connected/_failed`, `canva_disconnected`, `canva_web_login_succeeded/_failed`, `canva_web_logged_out`, `canva_project_as_changed`, `canva_export_quality_changed`, `canva_scope_missing` | `AppMenuIntegracoes.vue` |
-| **Aba Canva** | `canva_tab_opened`, `canva_designs_loaded/_load_failed`, `canva_project_requested{mode}`, `canva_export_completed`, `canva_site_link_failed` | `CanvaTab.vue` |
+| **Aba Canva** | `canva_tab_opened`, `canva_designs_loaded/_load_failed`, `canva_project_requested{mode, via?}`, `canva_export_completed`, `canva_site_link_failed` | `CanvaTab.vue` |
 | **Apresentação** | `canva_site_presented {presented, loader_ms}` | `SiteLoader.vue` |
 
-Duas decisões que o desenho inteiro carrega:
+Três decisões que o desenho inteiro carrega:
 
 - **`source` é obrigatório.** `openSiteWindow(url, "liturgy" | "canva")` — um
   evento só para "quantos sites foram projetados", sem somar dois. A falha do
   `designUrl` (que nunca chega ao `openSiteWindow`) tem evento próprio:
   `canva_site_link_failed`.
+- **`via: "url"` marca o único caminho sem API.** O link colado no topo da aba
+  Canva pula `designUrl` e o export e vai direto ao `openSiteWindow`; só ele
+  envia `via`, para separar do clique na lista. Nada de URL no payload — só o
+  marcador.
 - **`apresentou` vem do main pelo `site-loader:pronto`.** Abrir a janela não
   garante nada — o design pode ficar no `VIEWER` sem nunca virar apresentação.
   `null` (sem gesto a fazer, como um Site de liturgia) não vira evento de Canva.

@@ -69,6 +69,11 @@
     "cache_cleared": "PDF eliminado de la caché.",
     "cache_clear_failed": "No pude eliminar el PDF de la caché.",
     "page_mismatch": "Canva declara {declared} páginas, pero el PDF se abrió con {total}. El archivo puede haber llegado incompleto.",
-    "web_session_hint": "Sin la sesión de Canva, la proyección puede abrir la pantalla de inicio de sesión. Actívela en Opciones → Integraciones."
+    "web_session_hint": "Sin la sesión de Canva, la proyección puede abrir la pantalla de inicio de sesión. Actívela en Opciones → Integraciones.",
+    "url_label": "Enlace del diseño de Canva",
+    "url_hint": "Pega el enlace público del diseño o de la proyección y proyéctalo directamente.",
+    "url_placeholder": "https://www.canva.com/design/...",
+    "project_url": "Proyectar",
+    "url_invalid": "Ese no es el enlace de un diseño de Canva. Pega algo como https://www.canva.com/design/..."
   }
 }
