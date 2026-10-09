@@ -228,6 +228,14 @@ const libraryFolders = computed(() => {
     ? [...list, { path: current, label: basename(current) }]
     : list;
 });
+const folderLabel = (path: string | null): string =>
+  path ? (libraryFolders.value.find((f) => f.path === path)?.label ?? basename(path)) : "";
+// O título começa com o nome da pasta — e acompanha a troca de pasta enquanto
+// o operador não escreveu outro.
+watch(folderPath, (path, previous) => {
+  if (kind.value !== "folder" || !path) return;
+  if (!title.value.trim() || title.value === folderLabel(previous)) title.value = folderLabel(path);
+});
 const noteText = ref("");
 const error = ref("");
 const musicPickerOpen = ref(false);

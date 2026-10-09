@@ -363,7 +363,8 @@
   "pptx": {
     "converting": "Convertendo \"{name}\" pelo PowerPoint…",
     "failed": "Não deu para converter \"{name}\" pelo PowerPoint. Abra o arquivo no PowerPoint e exporte como PDF (Arquivo → Exportar → PDF).",
-    "unsupported": "Este computador não converte PowerPoint. Exporte \"{name}\" como PDF no PowerPoint e use o PDF."
+    "unsupported": "Este computador não converte PowerPoint. Exporte \"{name}\" como PDF no PowerPoint e use o PDF.",
+    "disabled": "PowerPoint ainda não é aceito aqui. Abra \"{name}\" no PowerPoint, exporte como PDF (Arquivo → Exportar → PDF) e use o PDF."
   },
   "cloud": {
     "badge": "NUVEM",

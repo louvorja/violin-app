@@ -5,7 +5,7 @@ import Telemetry from "@/helpers/Telemetry";
 import { KEYS } from "@/constants/UserDataKeys";
 import { AUDIO_EXT, IMAGE_EXT, VIDEO_EXT } from "@/constants/FileTypes";
 import { SLJA_EXT } from "@/helpers/SljaPlayer";
-import { isPowerPoint } from "./usePowerPoint";
+import { isPowerPoint, POWERPOINT_ENABLED } from "./usePowerPoint";
 
 /**
  * Navegador de arquivos do Modo apresentação.
@@ -43,7 +43,7 @@ export function fileKind(ext: string): LibraryFileKind | null {
   if (VIDEO_EXT.includes(ext)) return "video";
   if (AUDIO_EXT.includes(ext)) return "audio";
   if (ext === "pdf") return "pdf";
-  if (isPowerPoint(`.${ext}`)) return "powerpoint";
+  if (POWERPOINT_ENABLED && isPowerPoint(`.${ext}`)) return "powerpoint";
   if (ext === SLJA_EXT) return "slja";
   return null;
 }

@@ -11,6 +11,14 @@ import { i18nAtual } from "@/i18n";
  */
 
 const PPT_EXT = ["ppt", "pptx", "pps", "ppsx", "pptm", "ppsm"];
+
+/**
+ * Desligado por enquanto: a conversão desconfigurava os textos dos slides.
+ * Só PDF — o PowerPoint some da biblioteca e, vindo do programa, o operador
+ * é orientado a exportar como PDF. A conversão (no main) fica pronta para
+ * voltar.
+ */
+export const POWERPOINT_ENABLED = false;
 /** Só avisa "convertendo" se demorar: a conversão em cache volta na hora. */
 const NOTICE_AFTER_MS = 400;
 
@@ -26,11 +34,16 @@ function tm(key: string, params?: Record<string, unknown>): string {
 
 /** Converte em segundo plano, sem avisos: o resultado fica no cache do main. */
 export function preparePowerPoint(path: string): void {
-  if (isPowerPoint(path)) void Platform.convertPresentation(path).catch(() => null);
+  if (POWERPOINT_ENABLED && isPowerPoint(path)) void Platform.convertPresentation(path).catch(() => null);
 }
 
 /** O PDF do PowerPoint, ou null (o operador já foi avisado do porquê). */
 export async function powerPointAsPdf(path: string, name: string): Promise<string | null> {
+  if (!POWERPOINT_ENABLED) {
+    Telemetry.track("presentation_pptx_failed", { error: "disabled" });
+    $snackbar.warning(tm("disabled", { name }), { timeout: 8000 });
+    return null;
+  }
   const notice = setTimeout(() => $snackbar.info(tm("converting", { name })), NOTICE_AFTER_MS);
   const res = await Platform.convertPresentation(path).catch(() => null);
   clearTimeout(notice);

@@ -5,6 +5,7 @@ import { fileProjectionPageFor } from "@/helpers/FileProjectionPage";
 import { loadPdfDocument, type PDFDocumentProxy } from "@/helpers/PdfRuntime";
 import Telemetry from "@/helpers/Telemetry";
 import { useLiveContent } from "./useLiveContent";
+import { isPowerPoint, POWERPOINT_ENABLED } from "./usePowerPoint";
 import type { NavigableSource } from "./useLiveNavigation";
 
 /**
@@ -18,7 +19,8 @@ const THUMB_WIDTH = 320;
 
 /** Arquivo que vira páginas no palco: PDF ou PowerPoint (convertido em PDF). */
 export function isDeck(path: string | null): boolean {
-  return !!path && /\.(pdf|pptx?|ppsx?|pptm|ppsm)$/i.test(path);
+  if (!path) return false;
+  return /\.pdf$/i.test(path) || (POWERPOINT_ENABLED && isPowerPoint(path));
 }
 
 const doc = shallowRef<PDFDocumentProxy | null>(null);
