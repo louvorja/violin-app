@@ -3,148 +3,188 @@
     <!-- Sem processo main não existe servidor de retorno do OAuth. -->
     <LjEmpty v-if="!isDesktop" :icon="ICONS.UI.LINK" :title="tm('canva.desktop')" />
 
-    <!-- Status ainda não chegou: sem isso o CTA de "conecte" pisca 1 frame. -->
-    <div v-else-if="!pronto" class="canva-state">
-      <LjSpinner :size="20" />
-      <span>{{ tm("canva.checking") }}</span>
-    </div>
-
-    <!-- Desconectado: o CTA leva direto para a tela que resolve. -->
-    <LjEmpty
-      v-else-if="desconectado"
-      :icon="ICONS.UI.LINK"
-      :title="tm('canva.connect_title')"
-      :description="tm('canva.connect_hint')"
-    >
-      <LjButton size="sm" variant="primary" @click="abrirIntegracoes">
-        {{ tm("canva.connect") }}
-      </LjButton>
-    </LjEmpty>
-
-    <div v-else class="canva-body">
-      <div class="canva-bar">
-        <LjButton
-          v-if="pastaAberta"
-          size="sm"
-          variant="subtle"
-          :icon="ICONS.UI.BACK"
-          @click="voltar"
+    <!--
+      Primeiro bloco da aba, em TODO estado desktop: colar o link de um design
+      não passa pela API nem por conta conectada — é o caminho de quem ainda não
+      configurou o Canva. Abaixo dele ficam os designs ou o aviso de Integrações.
+      `novalidate` porque a validação é nossa (mensagem no idioma do app) e não
+      a bolha nativa do navegador.
+    -->
+    <template v-else>
+      <form class="canva-url" novalidate @submit.prevent="projetarPorUrl">
+        <LjField
+          layout="column"
+          :label="tm('canva.url_label')"
+          :hint="erroUrl ? undefined : tm('canva.url_hint')"
+          :error="erroUrl || undefined"
         >
-          {{ tm("canva.back") }}
-        </LjButton>
+          <!-- Input e botão numa linha só: a estrutura garante, não o wrap. -->
+          <div class="canva-url-row">
+            <LjInput
+              v-model="urlDoDesign"
+              type="url"
+              clearable
+              :placeholder="tm('canva.url_placeholder')"
+              :invalid="!!erroUrl"
+              @update:model-value="erroUrl = ''"
+            />
+            <LjButton
+              class="canva-url-go"
+              type="submit"
+              size="sm"
+              variant="primary"
+              :icon="ICONS.PROJECTION.START"
+              :disabled="!urlDoDesign.trim()"
+            >
+              {{ tm("canva.project_url") }}
+            </LjButton>
+          </div>
+        </LjField>
+      </form>
 
-        <nav class="canva-crumbs" :aria-label="tm('canva.projects')">
-          <button type="button" class="canva-crumb" @click="irParaRaiz">
-            {{ tm("canva.projects") }}
-          </button>
-          <template v-for="(pasta, i) in trilha" :key="pasta.id">
-            <LjIcon :icon="ICONS.UI.CHEVRON_RIGHT" :size="12" />
-            <button type="button" class="canva-crumb" @click="irPara(i)">
-              {{ pasta.name }}
-            </button>
-          </template>
-        </nav>
-
-        <span class="lj-u-spacer" />
-
-        <div class="canva-views" role="group" :aria-label="tm('canva.title')">
-          <button
-            v-for="opcao in vistas"
-            :key="opcao.value"
-            type="button"
-            class="canva-view"
-            :class="{ 'canva-view--active': vista === opcao.value }"
-            :aria-pressed="vista === opcao.value"
-            @click="trocarVista(opcao.value)"
-          >
-            {{ opcao.label }}
-          </button>
-        </div>
+      <!-- Status ainda não chegou: sem isso o CTA de "conecte" pisca 1 frame. -->
+      <div v-if="!pronto" class="canva-state">
+        <LjSpinner :size="20" />
+        <span>{{ tm("canva.checking") }}</span>
       </div>
 
-      <!--
+      <!-- Desconectado: o CTA leva direto para a tela que resolve. -->
+      <LjEmpty
+        v-else-if="desconectado"
+        :icon="ICONS.UI.LINK"
+        :title="tm('canva.connect_title')"
+        :description="tm('canva.connect_hint')"
+      >
+        <LjButton size="sm" variant="primary" @click="abrirIntegracoes">
+          {{ tm("canva.connect") }}
+        </LjButton>
+      </LjEmpty>
+
+      <div v-else class="canva-body">
+        <div class="canva-bar">
+          <LjButton
+            v-if="pastaAberta"
+            size="sm"
+            variant="subtle"
+            :icon="ICONS.UI.BACK"
+            @click="voltar"
+          >
+            {{ tm("canva.back") }}
+          </LjButton>
+
+          <nav class="canva-crumbs" :aria-label="tm('canva.projects')">
+            <button type="button" class="canva-crumb" @click="irParaRaiz">
+              {{ tm("canva.projects") }}
+            </button>
+            <template v-for="(pasta, i) in trilha" :key="pasta.id">
+              <LjIcon :icon="ICONS.UI.CHEVRON_RIGHT" :size="12" />
+              <button type="button" class="canva-crumb" @click="irPara(i)">
+                {{ pasta.name }}
+              </button>
+            </template>
+          </nav>
+
+          <span class="lj-u-spacer" />
+
+          <div class="canva-views" role="group" :aria-label="tm('canva.title')">
+            <button
+              v-for="opcao in vistas"
+              :key="opcao.value"
+              type="button"
+              class="canva-view"
+              :class="{ 'canva-view--active': vista === opcao.value }"
+              :aria-pressed="vista === opcao.value"
+              @click="trocarVista(opcao.value)"
+            >
+              {{ opcao.label }}
+            </button>
+          </div>
+        </div>
+
+        <!--
         Só no modo "Projeção do Canva": o token da API não autentica o SITE, e
         sem cookies na partição o `view_url` cai na tela de login do Canva.
         No modo PDF nenhum cookie entra em cena — avisar ali seria mentira.
       -->
-      <p
-        v-if="modoSite && status?.connected && status.webSession === false"
-        class="canva-state canva-aviso"
-      >
-        {{ tm("canva.web_session_hint") }}
-      </p>
+        <p
+          v-if="modoSite && status?.connected && status.webSession === false"
+          class="canva-state canva-aviso"
+        >
+          {{ tm("canva.web_session_hint") }}
+        </p>
 
-      <!-- Export em curso: o invoke do main fica pendente até o job terminar. -->
-      <div v-if="exportando" class="canva-state">
-        <LjSpinner :size="20" />
-        <span>{{ tm("canva.exporting") }}</span>
-      </div>
+        <!-- Export em curso: o invoke do main fica pendente até o job terminar. -->
+        <div v-if="exportando" class="canva-state">
+          <LjSpinner :size="20" />
+          <span>{{ tm("canva.exporting") }}</span>
+        </div>
 
-      <!--
+        <!--
         O erro fica FORTE do bloco de conteúdo: ele aparece sozinho ou acima da
         grade. Um "Carregar mais" que falha não pode esconder o que já foi
         carregado — antes, `erro` vinha antes de `itens.length` e a grade sumia.
       -->
-      <p v-if="erro" class="canva-state canva-state--erro" role="alert">{{ erro }}</p>
+        <p v-if="erro" class="canva-state canva-state--erro" role="alert">{{ erro }}</p>
 
-      <div v-if="carregando" class="canva-state">
-        <LjSpinner :size="20" />
-        <span>{{ tm("canva.loading") }}</span>
-      </div>
+        <div v-if="carregando" class="canva-state">
+          <LjSpinner :size="20" />
+          <span>{{ tm("canva.loading") }}</span>
+        </div>
 
-      <div v-else-if="itens.length" class="canva-grid">
-        <div v-for="item in itens" :key="`${item.type}:${item.id}`" class="canva-cell">
-          <button type="button" class="canva-item" :title="item.name" @click="abrir(item)">
-            <img
-              v-if="item.thumb && !thumbsQuebradas.has(item.id)"
-              :src="item.thumb"
-              class="canva-thumb"
-              alt=""
-              loading="lazy"
-              @error="quebrarThumb(item)"
-            />
-            <span v-else class="canva-thumb canva-thumb--icon">
-              <LjIcon :icon="iconeDe(item)" :size="26" />
-            </span>
-            <span class="canva-name">{{ item.name }}</span>
-            <span class="canva-type">{{ tipoDe(item) }}</span>
-          </button>
+        <div v-else-if="itens.length" class="canva-grid">
+          <div v-for="item in itens" :key="`${item.type}:${item.id}`" class="canva-cell">
+            <button type="button" class="canva-item" :title="item.name" @click="abrir(item)">
+              <img
+                v-if="item.thumb && !thumbsQuebradas.has(item.id)"
+                :src="item.thumb"
+                class="canva-thumb"
+                alt=""
+                loading="lazy"
+                @error="quebrarThumb(item)"
+              />
+              <span v-else class="canva-thumb canva-thumb--icon">
+                <LjIcon :icon="iconeDe(item)" :size="26" />
+              </span>
+              <span class="canva-name">{{ item.name }}</span>
+              <span class="canva-type">{{ tipoDe(item) }}</span>
+            </button>
 
-          <!--
+            <!--
             Selo de cache: IRMÃO do card, não filho — `<button>` dentro de
             `<button>` é HTML inválido, e como irmãos clicar aqui não dispara
             `abrir`. Só no modo PDF, que é o único que consome o cache.
           -->
-          <button
-            v-if="!modoSite && emCache(item)"
-            type="button"
-            class="canva-cache"
-            :disabled="exportando"
-            :title="tm('canva.cached')"
-            :aria-label="tm('canva.cached')"
-            @click="excluirCache(item)"
-          >
-            <LjIcon :icon="ICONS.UI.DATABASE" :size="14" />
-          </button>
+            <button
+              v-if="!modoSite && emCache(item)"
+              type="button"
+              class="canva-cache"
+              :disabled="exportando"
+              :title="tm('canva.cached')"
+              :aria-label="tm('canva.cached')"
+              @click="excluirCache(item)"
+            >
+              <LjIcon :icon="ICONS.UI.DATABASE" :size="14" />
+            </button>
+          </div>
+        </div>
+
+        <!-- Vazio só quando não há erro: senão seriam as duas mensagens juntas. -->
+        <LjEmpty v-else-if="!erro" :icon="ICONS.UI.FOLDER" :title="tm('canva.empty')" />
+
+        <div v-if="continuacao && !carregando" class="canva-more">
+          <LjButton size="sm" variant="subtle" :disabled="carregandoMais" @click="carregarMais">
+            {{ tm("canva.load_more") }}
+          </LjButton>
         </div>
       </div>
-
-      <!-- Vazio só quando não há erro: senão seriam as duas mensagens juntas. -->
-      <LjEmpty v-else-if="!erro" :icon="ICONS.UI.FOLDER" :title="tm('canva.empty')" />
-
-      <div v-if="continuacao && !carregando" class="canva-more">
-        <LjButton size="sm" variant="subtle" :disabled="carregandoMais" @click="carregarMais">
-          {{ tm("canva.load_more") }}
-        </LjButton>
-      </div>
-    </div>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { LjButton, LjEmpty, LjIcon, LjSpinner } from "@/components/ui";
+import { LjButton, LjEmpty, LjField, LjIcon, LjInput, LjSpinner } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import Platform from "@/helpers/Platform";
 import $path from "@/helpers/Path";
@@ -186,6 +226,10 @@ const erro = ref("");
 const thumbsQuebradas = ref<Set<string>>(new Set());
 /** PDFs guardados no disco: designId → `updated_at` do meta do cache. */
 const cache = ref(new Map<string, number>());
+/** Link do design colado pelo operador — o caminho que não passa pela API. */
+const urlDoDesign = ref("");
+/** Aviso do campo de link; some no primeiro teclado novo. */
+const erroUrl = ref("");
 /*
  * Geração da listagem atual. Navegar rápido (pasta → voltar → outra vista)
  * pode deixar a resposta antiga chegar por último e sobrescrever a nova.
@@ -417,6 +461,47 @@ async function projeta(url: string): Promise<void> {
   await openSiteWindow(url, "canva");
 }
 
+/**
+ * Link do design → URL absoluta, ou "" quando não é link de design do Canva.
+ *
+ * O que sai daqui vira uma janela de projeção que carrega qualquer página, então
+ * a fronteira é fechada: só http(s), só `canva.com` (com subdomínios) e
+ * `/design/` no caminho. Colar outro endereço devolve o aviso na hora, sem
+ * abrir janela nenhuma.
+ */
+function urlDoCanva(bruta: string): string {
+  const texto = bruta.trim();
+  if (!texto) return "";
+  let alvo: URL;
+  try {
+    alvo = new URL(/^https?:\/\//i.test(texto) ? texto : `https://${texto}`);
+  } catch {
+    return "";
+  }
+  if (alvo.protocol !== "https:" && alvo.protocol !== "http:") return "";
+  const host = alvo.hostname.toLowerCase();
+  if (host !== "canva.com" && !host.endsWith(".canva.com")) return "";
+  if (!alvo.pathname.includes("/design/")) return "";
+  return alvo.toString();
+}
+
+/** Link colado: mesmo caminho de Site da lista, sem export e sem `designUrl`. */
+async function projetarPorUrl(): Promise<void> {
+  const url = urlDoCanva(urlDoDesign.value);
+  if (!url) {
+    erroUrl.value = tm("canva.url_invalid");
+    return;
+  }
+  erroUrl.value = "";
+  /* `via` distingue o link colado da lista: só este caminho roda sem API. */
+  Telemetry.track("canva_project_requested", { mode: "site", via: "url" });
+  try {
+    await projeta(url);
+  } catch (e) {
+    erroUrl.value = (e as Error).message || tm("canva.error");
+  }
+}
+
 async function abrir(item: CanvaItem): Promise<void> {
   if (item.type === "folder") {
     trilha.value = [...trilha.value, { id: item.id, name: item.name }];
@@ -588,6 +673,28 @@ onMounted(() => {
   flex-direction: column;
   gap: var(--lj-space-4);
   min-width: 0;
+}
+
+/*
+ * Rótulo em cima; embaixo, input e botão na MESMA linha — a estrutura garante
+ * isso, não o wrap, então não quebra nem no painel mais estreito. O flex no
+ * campo é o que ocupa o que sobra: sem ele o `inline-flex` do LjInput ficaria
+ * no tamanho do texto e sobraria um buraco antes do botão.
+ */
+.canva-url-row {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-3);
+  min-width: 0;
+}
+
+.canva-url-row :deep(.lj-input) {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.canva-url-go {
+  flex: 0 0 auto;
 }
 
 .canva-body {

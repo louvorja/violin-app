@@ -67,6 +67,7 @@ vi.mock("@/helpers/Snackbar", () => ({
   },
 }));
 
+import { ICONS } from "@/config/Icons";
 import Telemetry from "@/helpers/Telemetry";
 import CanvaTab from "../CanvaTab.vue";
 
@@ -631,5 +632,102 @@ describe("Aba Canva — selo de cache", () => {
     /* `closest` inclui o próprio elemento — o que importa é NÃO estar dentro. */
     expect(card.element.contains(selo.element)).toBe(false);
     expect(card.attributes("title")).toBe("Deck Páscoa");
+  });
+});
+
+describe("Aba Canva — link do design (caminho sem API)", () => {
+  const LINK = "https://www.canva.com/design/DAG1/view?utm_source=x";
+
+  const eventos = (nome: string) =>
+    vi.mocked(Telemetry.track).mock.calls.filter(([evento]) => evento === nome);
+
+  const colar = async (wrapper: Awaited<ReturnType<typeof mountTab>>, valor: string) => {
+    await wrapper.find('input[type="url"]').setValue(valor);
+    await wrapper.find("form.canva-url").trigger("submit");
+    await flushPromises();
+  };
+
+  beforeEach(() => vi.mocked(Telemetry.track).mockClear());
+
+  it("é o primeiro bloco da aba, mesmo sem conta conectada", async () => {
+    state.connected = false;
+    const wrapper = await mountTab();
+
+    expect(wrapper.find("form.canva-url").exists()).toBe(true);
+    expect(wrapper.find('input[type="url"]').exists()).toBe(true);
+    expect(wrapper.findAll("button").find((b) => b.text().trim() === "Projetar")).toBeTruthy();
+
+    /* Acima do aviso de configurar — quem não tem API usa primeiro este. */
+    const html = wrapper.html();
+    expect(html.indexOf("canva-url")).toBeLessThan(html.indexOf("Abrir Integrações"));
+    expect(state.items).not.toHaveBeenCalled();
+  });
+
+  it("com a conta conectada continua acima da grade", async () => {
+    const wrapper = await mountTab();
+
+    const html = wrapper.html();
+    expect(html.indexOf("canva-url")).toBeLessThan(html.indexOf("canva-grid"));
+  });
+
+  it("botão fica desabilitado com o campo vazio", async () => {
+    const wrapper = await mountTab();
+
+    const botao = wrapper.findAll("button").find((b) => b.text().trim() === "Projetar")!;
+    expect(botao.attributes("disabled")).toBeDefined();
+  });
+
+  it("link que não é do Canva mostra o aviso e não abre janela", async () => {
+    const wrapper = await mountTab();
+    await colar(wrapper, "https://exemplo.com/design/qualquer");
+
+    expect(wrapper.find(".canva-url").text()).toContain("não é o link de um design do Canva");
+    expect(state.close).not.toHaveBeenCalled();
+    expect(state.openSiteWindow).not.toHaveBeenCalled();
+  });
+
+  it("endereço do Canva fora de um design também é recusado", async () => {
+    const wrapper = await mountTab();
+    await colar(wrapper, "https://www.canva.com/folders/abc");
+
+    expect(wrapper.find(".canva-url").text()).toContain("não é o link de um design do Canva");
+    expect(state.openSiteWindow).not.toHaveBeenCalled();
+  });
+
+  it("link válido projeta pelo caminho de site, com a origem declarada", async () => {
+    const wrapper = await mountTab();
+    await colar(wrapper, LINK);
+
+    expect(wrapper.find(".lj-field__error").exists()).toBe(false);
+    expect(state.close).toHaveBeenCalledWith(true);
+    expect(state.closeProjectionStage).toHaveBeenCalled();
+    expect(state.openSiteWindow).toHaveBeenCalledWith(LINK, "canva");
+    expect(eventos("canva_project_requested")[0]?.[1]).toMatchObject({
+      mode: "site",
+      via: "url",
+    });
+    /* Sem API no caminho: nenhum export nem pedido de link da lista. */
+    expect(state.exportPdf).not.toHaveBeenCalled();
+    expect(state.designUrl).not.toHaveBeenCalled();
+  });
+
+  it("cola sem https e o campo avisa no próximo teclado", async () => {
+    const wrapper = await mountTab();
+    await colar(wrapper, "www.canva.com/design/DAG2/view");
+
+    expect(state.openSiteWindow).toHaveBeenCalledWith("https://www.canva.com/design/DAG2/view", "canva");
+
+    await wrapper.find('input[type="url"]').setValue("x");
+    expect(wrapper.find(".lj-field__error").exists()).toBe(false);
+  });
+
+  it("o botão fica na mesma linha do input e leva o ícone de projeção", async () => {
+    const wrapper = await mountTab();
+    const linha = wrapper.find(".canva-url-row");
+
+    expect(linha.find('input[type="url"]').exists()).toBe(true);
+    const botao = linha.findAll("button").find((b) => b.text().trim() === "Projetar");
+    expect(botao).toBeTruthy();
+    expect(botao!.find(".lj-icon").attributes("aria-label")).toBe(ICONS.PROJECTION.START);
   });
 });
