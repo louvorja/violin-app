@@ -37,7 +37,10 @@
             <span aria-hidden="true">{{ mobileActionsOpen ? "⌃" : "⌄" }}</span>
           </button>
           <div class="ribbon-tools-web">
-            <ShellTools :class="{ 'shell-tools--compact-web': isMobileWeb }" />
+            <ShellTools
+              :compact="isMobileWeb"
+              :class="{ 'shell-tools--compact-web': isMobileWeb }"
+            />
           </div>
         </div>
       </div>
@@ -849,12 +852,21 @@ useBroadcastListener(BROADCAST_TYPE.RIBBON_SELECT_PAGE, (payload: unknown) => {
   height: 100%;
 }
 
+/* No PWA do iOS 26 a linha de abas é a borda do topo. O WebKit
+   (LocalFrameView::fixedContainerEdges) testa um ponto logo abaixo do topo e
+   procura um ancestral fixed/sticky com fundo sólido e ≥90% da largura; sem
+   ele, borra ~40pt abaixo da barra de status com o efeito Liquid Glass. Por
+   isso `sticky` (nada rola aqui, o layout não muda) e a faixa da barra de
+   status como padding dela, não do container. Fora do iOS o inset é 0. */
 .ribbon-tabs-row {
   display: flex;
   align-items: stretch;
-  height: var(--lj-tab-height);
-  background: var(--lj-shell-chrome-bg);
-  position: relative;
+  box-sizing: border-box;
+  height: calc(var(--lj-tab-height) + env(safe-area-inset-top));
+  padding-top: env(safe-area-inset-top);
+  background-color: var(--lj-shell-chrome-bg);
+  position: sticky;
+  top: 0;
   z-index: 2;
 }
 
@@ -880,7 +892,7 @@ useBroadcastListener(BROADCAST_TYPE.RIBBON_SELECT_PAGE, (payload: unknown) => {
   display: grid;
   grid-template-columns: var(--lj-appmenu-width) minmax(0, 1fr);
   grid-template-rows: 44px 44px;
-  height: 88px;
+  height: calc(88px + env(safe-area-inset-top));
 }
 
 .ribbon--compact-web .ribbon-app-menu,
@@ -901,7 +913,11 @@ useBroadcastListener(BROADCAST_TYPE.RIBBON_SELECT_PAGE, (payload: unknown) => {
   flex: 1;
   min-width: 0;
   overflow-x: auto;
-  overscroll-behavior-inline: contain;
+  /* Só rola na horizontal: com `overflow-x: auto` o outro eixo vira `auto`
+     também, e 1px de sobra já deixava o dedo arrastar a barra para cima/baixo. */
+  overflow-y: hidden;
+  touch-action: pan-x;
+  overscroll-behavior: contain;
   scrollbar-width: none;
 }
 

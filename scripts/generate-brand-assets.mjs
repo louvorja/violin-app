@@ -117,7 +117,7 @@ if (!desktopOnly) {
     writeFileSync(`public/ico/favicon-${size}x${size}.png`, pngs.get(size));
   }
   writeFileSync("public/ico/favicon.png", pngs.get(1200));
-  writeFileSync("public/logo_violin.png", pngs.get(1200));
+  writeFileSync("public/logo.png", pngs.get(1200));
 }
 writeFileSync("build/icon-512.png", pngs.get(512));
 

@@ -63,6 +63,7 @@
 import { reactive, ref, computed, nextTick, watch, onMounted, onBeforeUnmount } from "vue";
 import "@/assets/styles/transitions.css";
 import { estiloDeFundo } from "@/helpers/BackgroundStyle";
+import { pdfPageFit } from "@/helpers/PdfPageFit";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { useProjectionCloseNotice } from "@/composables/useProjectionCloseNotice";
 import { useTransitionStage } from "@/composables/useTransitionStage";
@@ -195,13 +196,19 @@ async function renderPdfPage(pageNum: number): Promise<void> {
       const parent = canvas.parentElement as HTMLElement;
       if (!parent) return;
       const viewport = page.getViewport({ scale: 1 });
-      const scale = Math.min(
-        parent.clientWidth / viewport.width,
-        parent.clientHeight / viewport.height
-      );
-      const scaled = page.getViewport({ scale });
-      canvas.width = scaled.width;
-      canvas.height = scaled.height;
+      const fit = pdfPageFit({
+        pageWidth: viewport.width,
+        pageHeight: viewport.height,
+        parentWidth: parent.clientWidth,
+        parentHeight: parent.clientHeight,
+        devicePixelRatio: window.devicePixelRatio,
+      });
+      if (!fit) return;
+      const scaled = page.getViewport({ scale: fit.scale });
+      canvas.width = fit.pixelWidth;
+      canvas.height = fit.pixelHeight;
+      canvas.style.width = `${fit.cssWidth}px`;
+      canvas.style.height = `${fit.cssHeight}px`;
       if (!canvas.getContext("2d")) return;
       await page.render({ canvas, viewport: scaled }).promise;
       if (isCurrent() && pdfDoc === doc) {
@@ -631,6 +638,10 @@ useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION_PAGE, (payload: unknown) => 
         source: "projection",
       });
     }
+    /* Já nesta página (fim/início do documento): re-renderizar só pisca o
+       telão — é o que acontece quando o operador segura a seta no último
+       slide. */
+    if (clamped === fileProjection.page) return;
     renderPdfPage(clamped);
   }
 });
@@ -1091,6 +1102,11 @@ onBeforeUnmount(async () => {
 .file-projection__youtube {
   width: 100vw;
   height: 100vh;
+}
+/* O vídeo do YouTube não recebe clique nem foco: um toque na projeção o pausaria na frente
+   da igreja. Avançar, voltar e pausar é na barra do player. */
+.file-projection :deep(iframe[src*="youtube"]) {
+  pointer-events: none;
 }
 .file-projection__pdf {
   max-width: 100%;

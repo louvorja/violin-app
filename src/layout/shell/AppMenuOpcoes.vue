@@ -57,7 +57,9 @@
         <label class="opt-checkbox">
           <input
             type="checkbox"
-            :checked="getUserData<boolean>(KEYS.SHELL.LITURGY_VISIBLE, true) !== false"
+            :checked="
+              getUserData<boolean>(KEYS.SHELL.LITURGY_VISIBLE, liturgySidebarDefault()) !== false
+            "
             @change="saveUserData(KEYS.SHELL.LITURGY_VISIBLE, $c($event))"
           />
           <span>{{ $t("options.general.show_liturgy_sidebar") }}</span>
@@ -1477,6 +1479,32 @@
       </template>
     </section>
 
+    <!--
+      Logo abaixo da de arquivo porque as duas cuidam do mesmo telão: o item
+      Site é só uma forma diferente de chegar a ele (URL externa, sem preload
+      e com partição própria).
+    -->
+    <section
+      v-if="renderDeferredSections || initialTab === 'site_projection'"
+      id="opt-sec-site_projection"
+      class="opt-section"
+    >
+      <h3 class="opt-section-title">
+        <LjIcon :icon="ICONS.UI.WEB" size="18" />
+        <span>{{ $t("options.site_projection.title") }}</span>
+      </h3>
+      <div class="opt-row">
+        <label class="opt-checkbox">
+          <input
+            type="checkbox"
+            :checked="siteProjShowReturn"
+            @change="saveUserData(KEYS.OPTIONS.SITE_PROJECTION.SHOW_RETURN, $c($event))"
+          />
+          <span>{{ $t("options.player.show_return") }}</span>
+        </label>
+      </div>
+    </section>
+
     <section
       v-if="renderDeferredSections || initialTab === 'utilities'"
       id="opt-sec-utilities"
@@ -1560,6 +1588,7 @@
 import { LjButton, LjIcon, LjSelect } from "@/components/ui";
 import { computed, type ComputedRef, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { pickImageData } from "@/helpers/FilePicker";
+import { liturgySidebarDefault } from "@/helpers/LiturgySidebar";
 import { getSetting, saveSetting } from "@/helpers/SettingsStorage";
 import Broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
@@ -2024,6 +2053,9 @@ const fileProjAlwaysOnTop: ComputedRef<boolean> = computed(
 );
 const fileProjShowReturn: ComputedRef<boolean> = computed(
   () => $userdata.get<boolean>(KEYS.OPTIONS.FILE_PROJECTION.SHOW_RETURN, false)!!
+);
+const siteProjShowReturn: ComputedRef<boolean> = computed(
+  () => $userdata.get<boolean>(KEYS.OPTIONS.SITE_PROJECTION.SHOW_RETURN, false)!!
 );
 
 function setMedia(key: string, value: any): void {

@@ -69,10 +69,20 @@ const semFundoProprio = computed(() => {
   background: transparent;
 }
 
-@media (max-width: 700px) {
-  #app-container.app-container--shell {
-    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
-      env(safe-area-inset-left);
-  }
+/* O iOS 26 pinta a barra de status com o fundo de um elemento `position: fixed`
+   encostado no topo ou, sem ele, com o background-color do <body>; ignora o
+   theme-color e pseudo-elementos. Só a janela principal (main.js põe a classe):
+   projeção e OBS cuidam do próprio fundo, que precisa ser preto ou transparente. */
+body.lj-shell-body {
+  background-color: var(--lj-shell-chrome-bg);
+}
+
+/* O topo não tem padding: a faixa da barra de status é da linha de abas da
+   RibbonBar, que precisa encostar no topo (ver o comentário lá). As outras
+   faixas seguras mostram o <body>, não a superfície do tema — senão a de baixo
+   fica branca no tema claro. */
+#app-container.app-container--shell {
+  background-clip: content-box;
+  padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 </style>

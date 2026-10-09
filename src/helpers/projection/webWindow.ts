@@ -15,6 +15,21 @@
  * router, então reverse tabnabbing não se aplica; o handle serve apenas para
  * foco, geometria e fechamento — dados seguem pelo BroadcastChannel.
  */
+import Platform from "@/helpers/Platform";
+import { fullscreenApiAvailable } from "@/helpers/Fullscreen";
+
+/**
+ * Se este navegador consegue hospedar uma janela de projeção.
+ *
+ * A janela de projeção só serve em tela cheia. Sem a API de tela cheia (caso do
+ * iPhone) ela nunca chega lá — e no PWA instalado abre por cima do app, sem
+ * barra de navegador nem Esc para voltar. Critério de capacidade, não de
+ * sistema: o que decide é a API existir.
+ */
+export function canOpenWebWindows(): boolean {
+  return Platform.isDesktop || fullscreenApiAvailable();
+}
+
 export const WEB_WINDOW_FEATURES =
   "popup=yes,width=1280,height=720,toolbar=no,location=no,menubar=no,status=no,scrollbars=no,resizable=yes";
 
@@ -100,6 +115,7 @@ export function openWebWindow(
   route: string,
   features: string = WEB_WINDOW_FEATURES
 ): Window | null {
+  if (!canOpenWebWindows()) return null;
   const existing = _windows[feature];
   if (existing && !existing.closed) {
     existing.focus();

@@ -6,8 +6,21 @@
  * - bible: projetar versículos, navegar bíblia
  * - liturgy: executar itens da liturgia
  * - announce: controlar anúncios
+ * - chat: enviar/ler mensagens do chat
+ * - online_videos: consultar e projetar vídeos online (catálogo + Meus Vídeos)
+ * - background_sound: listar/tocar os sons de fundo pelo controle remoto
+ * - volume: ajustar o volume dos players (projeção + som de fundo) — só app
  */
-export type DevicePermission = "root" | "music" | "bible" | "liturgy" | "announce" | "chat";
+export type DevicePermission =
+  | "root"
+  | "music"
+  | "bible"
+  | "liturgy"
+  | "announce"
+  | "chat"
+  | "online_videos"
+  | "background_sound"
+  | "volume";
 
 /** Lista completa de permissões disponíveis. */
 export const DEVICE_PERMISSIONS: DevicePermission[] = [
@@ -17,6 +30,9 @@ export const DEVICE_PERMISSIONS: DevicePermission[] = [
   "liturgy",
   "announce",
   "chat",
+  "online_videos",
+  "background_sound",
+  "volume",
 ];
 
 /** Mapa permissão → chave de tradução (para UI). */
@@ -27,6 +43,9 @@ export const DEVICE_PERMISSION_LABELS: Record<DevicePermission, string> = {
   liturgy: "options.transmission.permission_liturgy",
   announce: "options.transmission.permission_announce",
   chat: "options.transmission.permission_chat",
+  online_videos: "options.transmission.permission_online_videos",
+  background_sound: "options.transmission.permission_background_sound",
+  volume: "options.transmission.permission_volume",
 };
 
 /**

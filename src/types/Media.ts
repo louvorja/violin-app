@@ -43,6 +43,8 @@ export interface VideoMediaState {
   revision?: number;
   /** `Date.now()` de quando o estado foi lido; quem recebe compensa a idade da mensagem. */
   sentAt?: number;
+  /** Quem publicou o estado do YouTube. Ausente: a janela de projeção, que manda no relógio. */
+  role?: "main" | "return" | "operator";
 }
 
 export interface FileProjectionState {
@@ -54,6 +56,13 @@ export interface FileProjectionState {
   stage_epoch?: number;
   page?: number;
   totalPages?: number;
+  /**
+   * Tamanho declarado pelo DONO do arquivo (o `page_count` do Canva, por
+   * exemplo). A janela de projeção compara com o que o pdf.js abriu de fato —
+   * é como se descobre que um export saiu incompleto, em vez de achar na
+   * hora de virar a página.
+   */
+  pageCount?: number;
   /** Navegação veio do "anterior" — inverte o modo automático de direção. */
   backward?: boolean;
   /** Referência para re-resolver URLs blob via IndexedDB na janela alvo. */
@@ -87,6 +96,8 @@ export interface YTPlayer {
   getDuration(): number;
   getPlayerState(): number;
   setVolume(volume: number): void;
+  mute?(): void;
+  setOption?(module: string, option: string, value: object): void;
   unMute?(): void;
   destroy(): void;
 }
@@ -103,6 +114,9 @@ export interface YTPlayerOptions {
     controls: number;
     modestbranding: number;
     cc_load_policy?: number;
+    disablekb?: number;
+    playsinline?: number;
+    fs?: number;
   };
   events: {
     onReady: () => void;

@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { nextTick } from "vue";
 import type { VueWrapper } from "@vue/test-utils";
 import LjDialog from "../LjDialog.vue";
+import { resetDialogStack } from "../dialogStack";
 import { expectKeyExists, mountUi } from "./mountUi";
 
 /** Deixa a fila de macrotasks rodar — o Reka só registra o listener de
@@ -19,6 +20,8 @@ afterEach(() => {
   aberto?.unmount();
   aberto = null;
   document.body.innerHTML = "";
+  // A pilha é estado de módulo: sem isto o nível de um caso vaza para o outro.
+  resetDialogStack();
 });
 
 type Props = Record<string, unknown>;
@@ -221,6 +224,82 @@ describe("LjDialog", () => {
     const ativo = document.activeElement as HTMLElement;
     expect(ativo.getAttribute("role")).toBe("dialog");
     expect(ativo.classList.contains("campo")).toBe(false);
+  });
+});
+
+describe("empilhamento automático", () => {
+  /** Abre um diálogo sem registro no `aberto` global, para coexistir com outro. */
+  async function abrirEmpilhado(title: string) {
+    const w = mountUi(
+      LjDialog,
+      { attachTo: document.body, props: { modelValue: true, title } },
+      "pt"
+    ) as VueWrapper;
+    await nextTick();
+    await macrotask();
+    return w;
+  }
+
+  const nivelDe = (el: Element | null) =>
+    (el as HTMLElement | null)?.style.getPropertyValue("--lj-dialog-stack");
+
+  it("o diálogo que abre por cima recebe um nível maior", async () => {
+    // O defeito: com dois diálogos abertos, os quatro camadas (overlay e
+    // conteúdo de cada um) empatavam, e o desempate era a ordem no <body>.
+    // Aí a pintura (CSS) podia responder a uma ordem e o clique (a camada
+    // DismissableLayer do Reka) a outra — um diálogo na frente sem receber
+    // clique, outro atrás recebendo.
+    const primeiro = await abrirEmpilhado("Formulário");
+    const segundo = await abrirEmpilhado("Gerenciador");
+
+    const conteudos = document.body.querySelectorAll(".lj-dialog");
+    expect(conteudos).toHaveLength(2);
+    expect(nivelDe(conteudos[0])).toBe("0");
+    expect(nivelDe(conteudos[1])).toBe("1");
+
+    // O overlay recebe o mesmo nível: cada um dos dois pertence ao mesmo
+    // diálogo, senão o overlay do de cima ficaria atrás do conteúdo de baixo.
+    const overlays = document.body.querySelectorAll(".lj-dialog__overlay");
+    expect(nivelDe(overlays[0])).toBe("0");
+    expect(nivelDe(overlays[1])).toBe("1");
+
+    primeiro.unmount();
+    segundo.unmount();
+  });
+
+  it("fechar o de cima devolve o nível para quem ficou", async () => {
+    const primeiro = await abrirEmpilhado("Formulário");
+    const segundo = await abrirEmpilhado("Gerenciador");
+    segundo.unmount();
+    await nextTick();
+
+    const terceiro = await abrirEmpilhado("Ajuda");
+    const conteudos = document.body.querySelectorAll(".lj-dialog");
+    expect(nivelDe(conteudos[0])).toBe("0");
+    // Reaproveitado, e não 2: quem fecha não deixa buraco na escala.
+    expect(nivelDe(conteudos[conteudos.length - 1])).toBe("1");
+
+    primeiro.unmount();
+    terceiro.unmount();
+  });
+
+  it("diálogo único não recebe empilhamento nenhum", async () => {
+    // Nível 0 é o mesmo z-index de sempre (2500/2501): a escala não muda para
+    // quem abre um diálogo por vez, que é o caso comum no app.
+    await abrir();
+    expect(nivelDe(document.body.querySelector(".lj-dialog"))).toBe("0");
+  });
+
+  it("desmontar com v-if enquanto aberto não vaza nível", async () => {
+    // O watcher de `modelValue` não roda nesse caminho; sem a devolução no
+    // descarte do escopo, o nível ficaria reservado para sempre.
+    const primeiro = await abrirEmpilhado("Formulário");
+    primeiro.unmount();
+    await nextTick();
+
+    const segundo = await abrirEmpilhado("Gerenciador");
+    expect(nivelDe(document.body.querySelector(".lj-dialog"))).toBe("0");
+    segundo.unmount();
   });
 });
 

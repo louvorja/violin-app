@@ -229,7 +229,7 @@ import OnlineVideoDownloadBadge from "@/components/OnlineVideoDownloadBadge.vue"
 import OnlineVideoDownloadsBar from "@/components/OnlineVideoDownloadsBar.vue";
 import { useOnlineVideoDownloads } from "@/composables/useOnlineVideoDownloads";
 import { createVideoTitleEnrichment } from "../helpers/VideoTitleEnrichment";
-import { prepare as prepareOnlineVideo } from "@/helpers/OnlineVideo";
+import { fetchYoutubeTitle, prepare as prepareOnlineVideo } from "@/helpers/OnlineVideo";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 import {
   LjButton,
@@ -427,20 +427,6 @@ function buildEmbedUrl(url: string): string | null {
   const id = extractYoutubeId(url);
   if (!id) return null;
   return `https://www.youtube.com/embed/${id}?autoplay=1&rel=0&controls=0`;
-}
-
-async function fetchYoutubeTitle(ytId: string): Promise<string | null> {
-  try {
-    const res = await fetchWithTimeout(
-      `https://www.youtube.com/oembed?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${ytId}`)}&format=json`,
-      { timeout: NET_TIMEOUT.QUICK, source: "youtube-oembed", thirdParty: true }
-    );
-    if (!res.ok) return null;
-    const json = await res.json();
-    return typeof json.title === "string" && json.title ? json.title : null;
-  } catch {
-    return null;
-  }
 }
 
 async function loadVideos(): Promise<void> {

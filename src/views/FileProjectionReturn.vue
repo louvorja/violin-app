@@ -72,6 +72,7 @@
 import { reactive, ref, computed, nextTick, onMounted, onBeforeUnmount, watch } from "vue";
 import "@/assets/styles/transitions.css";
 import { estiloDeFundo } from "@/helpers/BackgroundStyle";
+import { pdfPageFit } from "@/helpers/PdfPageFit";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { useTransitionStage } from "@/composables/useTransitionStage";
 import { createTransitionContext } from "@/config/Transitions";
@@ -88,6 +89,7 @@ import {
   YTPlayer,
 } from "@/types/Media";
 import { loadYtApi } from "@/composables/useYouTubeApi";
+import { outranks } from "@/composables/useYouTubeEmbed";
 import { KEYS } from "@/constants/UserDataKeys";
 import $userdata from "@/helpers/UserData";
 import { getSetting } from "@/helpers/SettingsStorage";
@@ -205,13 +207,19 @@ async function renderPdfPage(pageNum: number): Promise<void> {
       const parent = canvas.parentElement as HTMLElement;
       if (!parent) return;
       const viewport = page.getViewport({ scale: 1 });
-      const scale = Math.min(
-        parent.clientWidth / viewport.width,
-        parent.clientHeight / viewport.height
-      );
-      const scaled = page.getViewport({ scale });
-      canvas.width = scaled.width;
-      canvas.height = scaled.height;
+      const fit = pdfPageFit({
+        pageWidth: viewport.width,
+        pageHeight: viewport.height,
+        parentWidth: parent.clientWidth,
+        parentHeight: parent.clientHeight,
+        devicePixelRatio: window.devicePixelRatio,
+      });
+      if (!fit) return;
+      const scaled = page.getViewport({ scale: fit.scale });
+      canvas.width = fit.pixelWidth;
+      canvas.height = fit.pixelHeight;
+      canvas.style.width = `${fit.cssWidth}px`;
+      canvas.style.height = `${fit.cssHeight}px`;
       if (!canvas.getContext("2d")) return;
       await page.render({ canvas, viewport: scaled }).promise;
       if (isCurrent() && pdfDoc === doc) {
@@ -639,6 +647,10 @@ useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION_PAGE, (payload: unknown) => 
         source: "projection",
       });
     }
+    /* Já nesta página (fim/início do documento): re-renderizar só pisca o
+       telão — é o que acontece quando o operador segura a seta no último
+       slide. */
+    if (clamped === fileProjection.page) return;
     renderPdfPage(clamped);
   }
 });
@@ -700,6 +712,30 @@ useBroadcastListener(BROADCAST_TYPE.VIDEO_STATE, (payload: unknown) => {
   } finally {
     ytAwaitingSync = false;
     _startYtSync();
+  }
+});
+
+// O retorno acompanha quem manda no relógio (a projeção ou, sem ela, a janela principal):
+// só os comandos não bastam, porque cada player carrega e trava por conta própria.
+useBroadcastListener(BROADCAST_TYPE.YOUTUBE_STATE, (payload: unknown) => {
+  if (!fileProjection.active || fileProjection.type !== "youtube") return;
+  const data = payload as VideoMediaState;
+  if (!ytPlayer || !ytPlayer.getCurrentTime || ytAwaitingSync) return;
+  if (!fileProjection.playback_id || data?.playback_id !== fileProjection.playback_id) return;
+  if (!outranks(data.role, "return")) return;
+  try {
+    const playing = data.state === 1;
+    const age =
+      playing && typeof data.sampledAt === "number"
+        ? Math.max(0, (Date.now() - data.sampledAt) / 1000)
+        : 0;
+    const target = data.currentTime + age;
+    if (Math.abs(ytPlayer.getCurrentTime() - target) > 1) ytPlayer.seekTo(target, true);
+    const mine = ytPlayer.getPlayerState();
+    if (playing && mine === 2) ytPlayer.playVideo();
+    else if (data.state === 2 && mine === 1) ytPlayer.pauseVideo();
+  } catch {
+    /* ignore */
   }
 });
 
@@ -924,6 +960,7 @@ function _broadcastYtState(): void {
       state: ytPlayer.getPlayerState(),
       playback_id: fileProjection.playback_id,
       sampledAt: Date.now(),
+      role: "return",
     } as VideoMediaState);
     if (delivery?.crossWindow === false && !ytStateFailureLogged) {
       ytStateFailureLogged = true;
@@ -1111,6 +1148,11 @@ onBeforeUnmount(() => {
 .return-file-projection__youtube {
   width: 100%;
   height: 100%;
+}
+/* O vídeo do YouTube não recebe clique nem foco: um toque na projeção o pausaria na frente
+   da igreja. Avançar, voltar e pausar é na barra do player. */
+.return-file-projection :deep(iframe[src*="youtube"]) {
+  pointer-events: none;
 }
 .return-file-projection__pdf {
   max-width: 100%;

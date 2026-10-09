@@ -136,8 +136,8 @@ const anchor = computed<OverlayAnchor>(
     ($userdata.get<string>(KEYS.MODULES.LIBRAS.ANCHOR, "bottom-right") ||
       "bottom-right") as OverlayAnchor
 );
-const offsetX = computed(() => $userdata.get<number>(KEYS.MODULES.LIBRAS.OFFSET_X, -20) as number);
-const offsetY = computed(() => $userdata.get<number>(KEYS.MODULES.LIBRAS.OFFSET_Y, -20) as number);
+const offsetX = computed(() => $userdata.get<number>(KEYS.MODULES.LIBRAS.OFFSET_X, 0) as number);
+const offsetY = computed(() => $userdata.get<number>(KEYS.MODULES.LIBRAS.OFFSET_Y, 0) as number);
 const avatarWidth = computed(() => $userdata.get<number>(KEYS.MODULES.LIBRAS.WIDTH, 450) as number);
 const avatarHeight = computed(
   () => $userdata.get<number>(KEYS.MODULES.LIBRAS.HEIGHT, 400) as number

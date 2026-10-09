@@ -2,7 +2,7 @@
   <div
     ref="root"
     class="op-root"
-    :class="{ 'op-root--video': videoActive }"
+    :class="{ 'op-root--video': stageActive }"
     role="application"
     :aria-label="t('shell.operator_label')"
     tabindex="0"
@@ -10,7 +10,7 @@
     <div class="op-header">
       <span class="op-title">{{ title || "—" }}</span>
       <span class="op-hint">
-        {{ videoActive ? t("shell.operator_video_hint") : t("shell.operator_hint") }}
+        {{ stageActive ? t("shell.operator_video_hint") : t("shell.operator_hint") }}
       </span>
     </div>
 
@@ -45,6 +45,21 @@
       </div>
     </div>
 
+    <!-- Player embutido do YouTube: a mesma prévia, acompanhando a projeção. -->
+    <div v-else-if="youtube" class="op-video">
+      <div class="op-video-frame">
+        <div v-show="!youtubeFailed" ref="youtubeContainer" class="op-video-media op-video-embed" />
+        <div v-if="youtubeFailed" class="op-video-error">
+          <span>{{ t("shell.operator_video_error") }}</span>
+          <small>{{ youtube.title || "—" }}</small>
+        </div>
+      </div>
+      <div class="op-video-caption">
+        <span class="op-video-badge">{{ t("shell.operator_video") }}</span>
+        <span class="op-video-title">{{ youtube.title || "—" }}</span>
+      </div>
+    </div>
+
     <div v-else-if="slides.length === 0" class="op-empty">
       {{ t("shell.operator_waiting") }}
     </div>
@@ -69,14 +84,14 @@
       </div>
     </div>
 
-    <div v-if="!videoActive" class="op-progress-bar">
+    <div v-if="!stageActive" class="op-progress-bar">
       <div class="op-progress-fill" :style="{ width: progress + '%' }" />
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
+import { computed, ref, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
 import { useI18n } from "vue-i18n";
 import $broadcast from "@/helpers/Broadcast";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
@@ -87,6 +102,7 @@ import { DB_TABLE } from "@/constants/DbTables";
 import Telemetry from "@/helpers/Telemetry";
 import Path from "@/helpers/Path";
 import { applyVideoState } from "@/helpers/VideoSync";
+import { useYouTubeEmbed } from "@/composables/useYouTubeEmbed";
 import { VideoStateGate } from "@/helpers/VideoStateVersion";
 import { readMusicPresentationPacket } from "@/presentation/MusicPresentationPacket";
 
@@ -125,6 +141,51 @@ let latestVideoState = null;
 let currentPlaybackId = null;
 const videoStateGate = new VideoStateGate();
 
+const youtube = ref(null);
+const youtubeContainer = ref(null);
+const stageActive = computed(() => videoActive.value || !!youtube.value);
+// Arquivo e vídeo on-line contam a mesma época: o payload mais antigo que chega atrasado
+// (replay do canal ao abrir a janela) não toma o lugar do que está no ar.
+let stageEpoch = 0;
+const { failed: youtubeFailed } = useYouTubeEmbed({
+  container: youtubeContainer,
+  source: () => youtube.value,
+  role: "operator",
+});
+
+function supersedes(payload) {
+  const epoch = payload?.stage_epoch;
+  if (typeof epoch !== "number") return true;
+  if (epoch < stageEpoch) return false;
+  stageEpoch = epoch;
+  return true;
+}
+
+function activateYoutube(payload) {
+  if (payload?.type !== "youtube" || !payload.url || !payload.playback_id) return;
+  // O canal repete o último vídeo a quem acaba de abrir; o que já fechou não está mais guardado.
+  try {
+    const stored = JSON.parse(
+      localStorage.getItem(KEYS.PROJECTION.LJ_YOUTUBE_PROJECTION) || "null"
+    );
+    if (stored?.playback_id !== payload.playback_id) return;
+  } catch {
+    return;
+  }
+  if (!supersedes(payload)) return;
+  videoActivation++;
+  videoStateGate.clear();
+  latestVideoState = null;
+  currentPlaybackId = null;
+  revokeVideoObjectUrl();
+  videoActive.value = false;
+  videoFailed.value = false;
+  slides.value = [];
+  progress.value = 0;
+  title.value = payload.title || "";
+  youtube.value = { url: payload.url, playbackId: payload.playback_id, title: title.value };
+}
+
 function revokeVideoObjectUrl() {
   if (!videoObjectUrl) return;
   URL.revokeObjectURL(videoObjectUrl);
@@ -132,6 +193,8 @@ function revokeVideoObjectUrl() {
 }
 
 async function activateVideo(payload) {
+  if (!supersedes(payload)) return;
+  youtube.value = null;
   const activation = ++videoActivation;
   if (!payload?.playback_id || payload.playback_id !== currentPlaybackId) {
     latestVideoState = null;
@@ -252,6 +315,7 @@ function onVideoError(event) {
 }
 
 function applySlidesData(payload) {
+  youtube.value = null;
   videoActivation++;
   videoStateGate.clear();
   latestVideoState = null;
@@ -284,6 +348,8 @@ useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION, (payload) => {
   if (payload?.type === "video" && payload?.url) {
     void activateVideo(payload);
   } else {
+    if (!supersedes(payload)) return;
+    youtube.value = null;
     videoActivation++;
     videoStateGate.clear();
     latestVideoState = null;
@@ -295,6 +361,10 @@ useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION, (payload) => {
     progress.value = 0;
     title.value = payload?.title || "";
   }
+});
+
+useBroadcastListener(BROADCAST_TYPE.ONLINE_VIDEO_PROJECTION, (payload) => {
+  activateYoutube(payload);
 });
 
 useBroadcastListener(BROADCAST_TYPE.VIDEO_STATE, (payload) => {
@@ -314,6 +384,7 @@ useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, () => {
     canonicalSelection = null;
   }
   pendingSessionSlides = null;
+  youtube.value = null;
   slides.value = [];
   currentIndex.value = 0;
   title.value = "";
@@ -394,7 +465,7 @@ function goTo(index) {
 }
 
 function onKey(e) {
-  if (videoActive.value) {
+  if (stageActive.value) {
     if (e.key === "Escape") {
       e.preventDefault();
       window.close();
@@ -446,6 +517,8 @@ onMounted(() => {
         void activateVideo(pending);
       }
     }
+    const online = localStorage.getItem(KEYS.PROJECTION.LJ_YOUTUBE_PROJECTION);
+    if (online) activateYoutube(JSON.parse(online));
   } catch (error) {
     console.warn("[Operator] não foi possível reidratar vídeo pendente:", error);
   }
@@ -545,6 +618,17 @@ body {
   object-fit: contain;
   background: #000;
 }
+.op-video-embed {
+  /* Prévia: avançar e pausar é na barra do player da janela principal. */
+  pointer-events: none;
+}
+
+.op-video-embed :deep(iframe) {
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
 .op-video-error {
   display: flex;
   flex-direction: column;

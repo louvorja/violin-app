@@ -137,6 +137,7 @@
 import { LjIcon, LjInput } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import $alert from "@/helpers/Alert";
+import $snackbar from "@/helpers/Snackbar";
 import { nextTick, onActivated, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import DateTime from "@/helpers/DateTime";
@@ -259,6 +260,11 @@ function onExport(playlist: Playlist): void {
   }
 }
 
+function reportImportFailure(reason: "invalid_json" | "invalid_format" | "exception"): void {
+  Telemetry.track("music_playlist_import_failed", { format: "json", reason });
+  $snackbar.error(i18nT("formatacao.import_error"));
+}
+
 function onImport(): void {
   const input = document.createElement("input");
   input.type = "file";
@@ -272,12 +278,23 @@ function onImport(): void {
     });
     try {
       const text = await file.text();
-      const data = JSON.parse(text);
-      await importPlaylist(data);
+      let data: unknown;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        // SyntaxError pode conter trechos do arquivo; registre somente o motivo.
+        reportImportFailure("invalid_json");
+        return;
+      }
+      const playlist = await importPlaylist(data);
+      if (!playlist) {
+        reportImportFailure("invalid_format");
+        return;
+      }
       Telemetry.track("music_playlist_imported", { format: "json" });
     } catch (error) {
       Telemetry.captureException(error, { source: "music_playlist_import" });
-      Telemetry.track("music_playlist_import_failed", { format: "json", reason: "exception" });
+      reportImportFailure("exception");
     }
   };
   input.click();

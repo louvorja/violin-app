@@ -178,6 +178,25 @@ describe("Verificação Inicial leve", () => {
     expect(h.fullInstall).not.toHaveBeenCalled();
     expect(h.dbGet).not.toHaveBeenCalled();
   });
+
+  it("verificar o acervo não retém os detalhes locais de todos os álbuns e músicas", async () => {
+    h.hasBundleMarker.mockResolvedValue(true);
+    h.platform.isDesktop = false;
+    h.platform.storage = {
+      checkLocal: vi.fn(async (paths: string[]) =>
+        Object.fromEntries(paths.map((path) => [path, "own"]))
+      ),
+    };
+    const sync = await mountSync();
+
+    const result = await sync.scanCache("pt", CATALOG.pt_categories as never, []);
+
+    expect(result.cachedAlbums).toEqual(new Set([7]));
+    expect(h.dbGetLocal).toHaveBeenCalledWith("album_7", { remember: false });
+    expect(h.dbGetLocal).toHaveBeenCalledWith("music_1", { remember: false });
+    expect(h.dbGetLocal).toHaveBeenCalledWith("music_2", { remember: false });
+    expect(h.dbGet).not.toHaveBeenCalled();
+  });
 });
 
 describe("bundle da Bíblia e bundle geral em andamento", () => {

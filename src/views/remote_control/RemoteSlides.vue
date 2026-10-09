@@ -30,27 +30,29 @@ import { LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { useI18n } from "vue-i18n";
 import { Slide } from "@/types/Slide";
-import { postApi } from "@/helpers/ApiClient";
 
-const props = defineProps<{
-  token?: string;
+defineProps<{
   slides: Slide[];
   currentSlideIndex: number;
   currentTitle: string;
 }>();
 
-const emit = defineEmits<{
-  (e: "show-snackbar", message: string, type?: string): void;
-  (e: "update:current-slide-index", index: number): void;
-}>();
+const emit = defineEmits<{ (e: "go-to-slide", index: number): void }>();
 
 const { t } = useI18n();
 
+/**
+ * Só avisa o pai: o POST, o índice e a sessão são dele.
+ *
+ * Esta tela já teve o próprio `postApi`, e ele mandava o comando sem a
+ * `presentation_session` que o desktop exige para não descartar a seleção —
+ * ou seja, clicar num slide era sempre ignorado. O clique atualizava o desenho
+ * na hora (optimista) e a projeção não mexia. O pai faz certo porque é o mesmo
+ * caminho do rodapé e conhece a sessão observada; por isso o `v-model` do
+ * índice também foi embora — havia dois donos do mesmo estado.
+ */
 function goToSlide(index: number): void {
-  emit("update:current-slide-index", index);
-  postApi("/api/song-slides", { action: "go-to-slide", index }, props.token).catch(() =>
-    emit("show-snackbar", "Erro ao trocar slide", "error")
-  );
+  emit("go-to-slide", index);
 }
 </script>
 

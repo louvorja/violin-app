@@ -202,6 +202,50 @@ desativação de uma aba KeepAlive e registrados novamente na ativação. Assim,
 trocar de aba preserva o estado visual sem manter callbacks de módulos inativos
 processando cada evento cross-window.
 
+**Regra: lógica que depende de um evento enquanto OUTRA aba está ativa não pode
+morar na aba.** Quem prova isso é a **pausa automática do som de fundo**: os
+gatilhos — dois `watch` de `modules.media.*` e quatro tipos de broadcast —
+ficavam no `Index.vue` do módulo, e o operador só abre outra mídia estando
+**noutra** aba. Os broadcast paravam no `onDeactivated`, os `watch` morriam na
+desmontagem (a faixa de consultas guarda só `moduleCacheMax: 4`), e o
+`autoPause` em si era lido de um cache local nunca atualizado pela ribbon, que é
+onde a opção é ligada.
+
+Os cinco gatilhos, e por quê cada um existe:
+
+| Gatilho | Cobre |
+|---|---|
+| `watch(modules.media.show)` | vídeo/YouTube (minimizar, abrir) |
+| `watch(modules.media.is_playing)` | arquivo de áudio e vídeo direto (`openAudio` escreve o sinal) |
+| `FILE_PROJECTION` | vídeo da Biblioteca e da Liturgia |
+| `ONLINE_VIDEO_PROJECTION` | vídeo on-line |
+| **`SLIDES_DATA`** | **música** |
+| **`SITE_PROJECTION`** | **projeção de Site (liturgia e Canva)** |
+
+`SITE_PROJECTION` é o da projeção de URL: `ProjectionWindows.openSiteWindow`
+abre janela externa, não escreve `modules.media.*` nem manda `FILE_PROJECTION` —
+o broadcast é o único sinal. Sai com `{ source }` (`"liturgy"`/`"canva"`) e
+**sem a URL**, que é conteúdo do terceiro.
+
+`SLIDES_DATA` é o ponto não óbvio: o caminho de música
+(`useMedia._launchProjection`) **nunca** escreve `modules.media.is_playing` — o
+áudio passa por `_loadAudioSrc`, não por `openAudio` —, e `modules.media.show`
+só dispara o `watch` quando o valor MUDA, o que não acontece na segunda música
+da sessão. Então, sem o broadcast, tocar música não pausava nada. Ele é enviado
+incondicionalmente, inclusive em modo áudio (sem slides).
+
+Hoje gatilhos e `autoPause` vivem em `src/composables/useBackgroundSound.ts` —
+o dono do player, chamado pelo `Footer`, que é sempre montado:
+
+- `armarAutoPause()` roda **uma vez**, dentro de `effectScope(true)`: um scope
+  destacado não é parado quando o componente da chamada desmonta;
+- `$broadcast.listen` direto, **não** `useBroadcastListener`, porque este
+  pausa o listener na troca de aba — que é exatamente onde o vídeo está;
+- `carregarConfig()` (chamado pelo `Footer`) aplica o registro persistido, para
+  a opção valer depois de reiniciar o app sem abrir a aba do módulo;
+- a ribbon empurra `bg.autoPause` ao salvar, como já fazia com `repeat` e fades;
+- o fader usado é `fadeOutMs` (o compartilho), não o cache local da tela.
+
 Tabelas grandes usam paginação incremental. O tamanho inicial também segue o
 perfil de recursos, para evitar montar centenas de linhas e componentes antes do
 primeiro paint; o scroll continua carregando as páginas seguintes.
@@ -455,6 +499,57 @@ em disco (`<dados>/json_db`) ∪ flag manual
 Remoto, Sincronizar e StartupCheck.
 
 ---
+
+## Download de coletâneas no web/PWA
+
+`Platform.download` e `Platform.storage` têm o mesmo contrato nas duas plataformas:
+no Electron são o downloader do main process e a pasta de dados; no web/PWA são o
+adaptador `helpers/WebFileStore.ts`, que grava no Cache Storage (`louvorja-audio` e
+`louvorja-images`). `useSyncManager` e a tela **Sincronizar** não distinguem a
+plataforma: o PWA mostra só a aba Coletâneas (Bíblia, pasta de dados e versão
+clássica seguem exclusivos do desktop).
+
+- **URL é a chave.** O arquivo é guardado sob a mesma URL que o player pede
+  (`Path.file`), então o service worker o serve sem nenhuma mudança nos consumidores.
+- **Service worker** (`vite.config.js`): as rotas de áudio e imagem não têm
+  `expiration`, nem por data nem por quantidade. O fetch do download passa pelo
+  service worker, que registra cada URL no plugin de expiração: com `maxEntries` ele
+  apagava o que acabara de ser baixado acima do limite, e o acervo voltava a "não
+  baixado". Pelo mesmo motivo só resposta 200 legível entra no cache (a opaca de um
+  `<img>` custa ~7MB de cota cada). A de áudio usa `rangeRequests`, sem o qual o
+  Chrome Android não toca nem pula dentro do áudio em cache. O padrão de áudio inclui `.opus`, formato do catálogo atual; manter
+  igual a `AUDIO_RE` em `WebFileStore.ts`.
+- **Catálogo local.** O scan de álbuns baixados lê só o IndexedDB. O app instalado
+  chama `ensureCatalogBundle()` sozinho alguns segundos depois do boot, com internet
+  (`helpers/CatalogAutoInstall.ts`: é um ZIP de ~30MB, então a aba comum do navegador,
+  a economia de dados e o 2G ficam de fora); nos demais casos ele desce ao abrir
+  Sincronizar. É o equivalente da Verificação Inicial do desktop.
+- Só respostas 200 completas são gravadas; um 206 contaria como arquivo inteiro.
+
+---
+
+## Recursos do desktop no web/PWA
+
+Recurso novo entra pela **capacidade do navegador**, não pelo sistema operacional:
+o PWA no Mac/Windows/Linux segue o mesmo caminho do Android, e só fica de fora o
+que o navegador de fato não oferece.
+
+- **Tela acesa** (`helpers/WakeLock.ts`): equivalente web do `powerBlocker` do
+  Electron. Vários motivos podem pedir a trava (projeção, tela cheia, mídia em
+  cena) e ela só cai quando o último sai. A janela principal liga em
+  `main-shell.js`; as janelas de projeção e o relógio em `main-auxiliary.js`.
+  Esses dois bootstraps são independentes: o que vale para "todas as janelas"
+  precisa entrar nos dois.
+- **Abrir `.slja`**: botão em Importar/Exportar (funciona em qualquer navegador,
+  inclusive Android) e `file_handlers` + `launchQueue` no Chrome/ChromeOS. O
+  Android não oferece `file_handlers`.
+- **Armazenamento**: aba própria em Sincronizar mostra uso, limite e se o
+  navegador prometeu não apagar os dados (`navigator.storage.persist()`); o PWA
+  instalado pede essa proteção no boot e o download também. O botão "Limpar
+  mídia" apaga só os caches de áudio e imagem; o catálogo (IndexedDB) fica.
+- **Só no desktop, sem equivalente web**: baixar vídeo online (yt-dlp), servidor
+  HTTP local (chat, controle remoto, dispositivos, OBS), atalhos globais do SO,
+  iniciar com o sistema e pasta de dados escolhida pelo usuário.
 
 ## 🖥️ Versão clássica (Delphi)
 
@@ -1047,6 +1142,160 @@ ponta a ponta com a internet real) e `e2e/online-video.electron.spec.js`
 
 ---
 
+## 🌐 Projeção de URL (item Site da liturgia)
+
+O item de liturgia do tipo Site deixa de abrir o navegador do sistema e ocupa
+uma janela de projeção como as outras — monitor preferido, tela cheia e as
+preferências de "projeção de arquivo".
+
+### Como é carregada
+
+- A `route` da janela **é a URL** (`PROJECTION_TYPE.SITE`), não uma rota da
+  SPA: `electron/main/windowRoute.js` a reconhece (`isExternalRoute`) e o
+  `windowFactory` carrega direto. Encaminhar a URL para o router daria a tela
+  de 404, e no dev viraria `localhost:5002https://…`.
+- A janela **não recebe o preload** e sai da sessão do app
+  (`webPreferencesFor` → `sandbox: true`, `partition: "persist:lj-site"`).
+  Dois motivos, os dois reais: `louvorjaApi` não tem gate de origem
+  (`preload.cjs`), então um site arbitrário abriria com `userStore`, `windows`
+  e `httpServer`; e o CSP que `main.cjs` injeta via `webRequest` na
+  `defaultSession` caía nas respostas do site e bloqueava o script e o
+  stylesheet dele (a partição tira a janela de alcance daquele interceptor).
+- A navegação é limitada: popup novo é negado e só http(s) avança
+  (`will-navigate`).
+- Os dois caminhos de execução (módulo da liturgia e controle remoto) passam
+  por `ProjectionWindows.openSiteWindow`, e a opção "Link no navegador"
+  (`YOUTUBE_ACTION`) continua abrindo no navegador nos dois.
+
+### Tela de retorno
+
+Opção em **Opções → Projeção de Sites** (`KEYS.OPTIONS.SITE_PROJECTION.SHOW_RETURN`,
+padrão desligado). Com ela ligada, `openSiteWindow` abre a **mesma URL** uma
+segunda vez no monitor de retorno (`PROJECTION_TYPE.SITE_RETURN`) — o espelho que
+o arquivo já faz com o arquivo, para o operador enxergar o que está no telão sem
+desviar a vista do palco.
+
+- Monitor: o do papel do próprio site, senão o da tela de retorno de música,
+  mesma cadeia das outras telas de retorno. Sem nenhum dos dois, a projeção
+  segue sem retorno em vez de não abrir.
+- Tela cheia e "sempre no topo" continuam saindo das preferências de projeção
+  de arquivo, como antes desta seção existir.
+- Fecha junto: `_closeSite` encerra as duas, e quem assume o palco (mídia)
+  fecha as duas — deixar uma órfã manteria a URL na tela depois de
+  "Encerrar projeção".
+- **Cada projeção decide o PRÓPRIO retorno.** `options.open_return` (Opções →
+  Slides de Músicas) só manda na de música; arquivo usa
+  `file_projection.show_return`, vídeo usa `online_video_projection.show_return`
+  e este site usa `site_projection.show_return`. Quem está abrindo com a
+  própria opção **desligada** e encontra um retorno já na tela o **fecha** —
+  reutilizá-lo deixaria "PRÓX 1/0" (ou a URL antiga) no telão de uma projeção
+  que não está no ar. Ele volta na próxima abertura da projeção dona dele,
+  que é quem liga a própria opção.
+
+**As teclas vão para as duas.** São duas instâncias independentes da mesma URL
+(`KEYS_BY_FEATURE` em `windowKeys.mjs` traz `site` e `site_return` com as
+mesmas teclas), então sem receber o evento o espelho ficaria parado no slide
+inicial enquanto a de projeção passa. `forwardSiteKey` manda para as duas sem
+esperar o espelho — o resultado dele nunca manda a bandeira de baixo, porque só
+a de projeção existe quando a opção está desligada.
+
+**Nasce mudo**: `webContents.setAudioMuted(true)` na criação da janela. As duas
+mostram a MESMA URL, e o som tem que sair do telão, onde a congregação está.
+
+**Por que não espelhar os pixels.** Não existe `webContents.mirror()` no
+Electron: o espelho exigiria capturar quadros, codificar e transmitir
+(`capturePage`/`beginFrameSubscription` → JPEG → IPC → canvas), com rota e view
+novos, laço com throttle, degradação quando a janela não pinta, ~8-20% de CPU a
+15 fps e ~100-250 ms de latência no monitor que o operador olha justamente
+para conferir o slide. As teclas custam um IPC por tecla e não atrasam nada.
+
+**Limites que ficam do espelho por teclas** — as duas são instâncias
+independentes (compartilham a partição, então cookies e consentimento são os
+mesmos):
+
+- um site com autoplay/timer pode divergir com o tempo — a partir daí a única
+  solução é o espelho por captura, cujo custo fixo é o pipeline, não o gatilho;
+- sites responsivos renderizam diferente nos dois tamanhos (uma captura seria
+  pixel a pixel);
+- **interagir na janela de retorno quebra a simetria**: ela não tem preload e
+  não escuta nada, então o que o operador digita/clica lá não chega à de
+  projeção. O fluxo é operar pela janela principal.
+
+### Uma coisa por vez
+
+Site, música e arquivo não dividem a tela:
+
+- **Quem abre o site** chama `Media.close(true)` e depois espera
+  `Media.closeProjectionStage()` (`useLiturgyExecution.ts`, `main-shell.js`).
+  O `close(true)` faz o trabalho síncrono — para o áudio, zera `IS_PLAYING`,
+  emite `MEDIA_CLOSE` — mas só **enfileira** o fechamento de janelas na fila
+  interna de `_stageWindowTransition`. A espera tem que ser da MESMA fila:
+  chamar `closeProjectionWindows` diretamente criaria uma espera paralela, e a
+  ação enfileirada sobreviveria para rodar **depois** da URL já ter aberto — aí
+  ela fecharia a janela que acabou de entrar e as teclas voltariam a não sair.
+  Efeito colateral do mesmo caminho: a bíblia também sai, porque só um item fica
+  no telão.
+- **Quem abre janela de mídia** passa por `openMediaWindow`
+  (`ProjectionWindows.ts`), que fecha o site antes — é o portão de todas as
+  janelas de música, arquivo e vídeo online. Anúncios e bíblia não passam por
+  ali e continuam fora da regra.
+
+### Controlando a projeção
+
+**Setas, PageUp/PageDown, Home e End** enquanto a URL estiver no ar vão para a
+janela da página:
+
+- A decisão é **síncrona**: `takeSiteKey` lê a bandeira de "site aberto" de
+  `ProjectionWindows.ts`. O `Hotkeys` escuta em `capture` e consome a tecla no
+  mesmo turno de eventos, então um IPC assíncrono responderia tarde demais e a
+  tecla já teria caído na mídia.
+- O listener é `capture`, registrado **antes de `Hotkeys.init()`**, e faz
+  `stopImmediatePropagation` — senão mídia e bíblia navegariam junto. Combinações
+  com Ctrl/Alt/Meta continuam sendo atalho do app, e sem a API de envio
+  (web/PWA) a tecla segue intacta.
+- A entrega é `windows:sendKey` → **`sendInputEvent`** no `webContents`. É o
+  único caminho que atravessa partição, ausência de preload e origem
+  diferente: `BroadcastChannel` é por origem e `broadcast:relay` exige listener
+  no preload.
+- `sendInputEvent` e não `executeJavaScript` com `dispatchEvent(new
+  KeyboardEvent)`: o sintético nasce **com alvo em `window`**, então
+  escutadores em `document` ou no elemento focado não recebem (eventos só
+  sobem, não descem), e nasce com `isTrusted: false` — o Chromium não executa
+  ação padrão de evento não confiável, ou seja, a página não rola nem move o
+  cursor. Medido ao vivo: o main registrava `tecla despachada` sem erro e a
+  página não reagia. O `sendInputEvent` entra na fila de entrada real.
+- O `keyCode` é nome de Accelerator, não DOM: `ArrowRight` vira `Right`
+  (`toInputKeyCode` em `windowKeys.mjs`).
+  (`/api/keyboard` continua sintético de propósito: lá o alvo é o `Hotkeys` do
+  próprio app, que escuta em `window`.)
+- A janela do site **não** é focada antes de enviar: focar uma janela
+  fullscreen de outro monitor pode trocar de Espaço no macOS. Se algum site
+  exigir foco, a linha é uma só a adicionar.
+- A fronteira é allow-list fechada em `electron/main/windowKeys.mjs`, lido pelo
+  renderer e pelo main — duas cópias divergiriam em silêncio e a tecla sumiria
+  sem ninguém ver.
+- Entrega falhou? `forwardSiteKey` repergunta ao main se a janela ainda existe
+  em vez de assumir: macOS fecha a janela em fullscreen com ESC sem avisar
+  ninguém, e uma bandeira presa passaria a engolir tecla de janela morta.
+
+- **Ponteiro empurrado uma vez, ao carregar.** O site esconde os controles da
+  apresentação por inatividade de ponteiro, e esse timer só começa quando o site
+  vê um evento de ponteiro — nenhum chega do nosso lado: o app não injeta mouse
+  em lugar nenhum (o único input injetado é teclado, e só quando o operador
+  aperta) e no macOS o cursor do kiosk está escondido. Sem o empurrão os
+  controles ficavam visíveis para sempre até alguém mexer o mouse dentro da
+  janela e retirar — só aí o ciclo rodava e eles sumiam sozinhos.
+  `windowFactory.js` manda um `mouseMove` **real** (`sendInputEvent`) no centro,
+  1,2s após `did-finish-load`, só em janela externa. O sintético não serviria
+  pelo mesmo motivo do `keyDown` acima; o centro porque os controles ficam nas
+  bordas; e `once` porque é um empurrão, não um ciclo — o timer continua sendo
+  do site.
+
+**ESC** na janela principal pergunta `Deseja encerrar a projeção?` e fecha
+(quando Sim), pelo mesmo `$alert.yesno` da projeção de slides — é o primeiro
+ramo do handler de `Escape` em `main-shell.js`. Com o foco na janela da URL o
+ESC fecha direto, que é exatamente como os slides se comportam.
+
 ## 🖼 Suporte a imagens HEIC/HEIF
 
 Fotos de iPhone (`.heic/.heif`) não são decodificadas pelo Chromium. O helper
@@ -1482,24 +1731,57 @@ Quando ativado (via Transmissão → Dispositivos → checkbox), apenas devices
 cadastrados com permissões são aceitos. Token global legado é bloqueado.
 Persistido em `device_settings.json` via `devices.js`.
 
+### Organização dos arquivos do httpServer
+
+`electron/main/httpServer/` ficou em três arquivos (era um `routes.js` de
+~2.000 linhas):
+
+| Arquivo | Papel |
+|---|---|
+| `routes.js` | **Principal**: infra do servidor (`ping`, `settings/devices`), os validadores/payloads (contratos exportados para os specs) e o motor de renderer (`requestRenderer`/`sendRendererError`/`getValidMainWindow`); o `setupRoutes` orquestra os outros dois. |
+| `transmissionRoutes.js` | **Transmissão**: as URLs/janelas da tela Opções → Transmissão — relógio (`/clock`), música (`/obs`), bíblia (`/obs/bible`), pipeline de projeção (`open-song` → `song-slides` → `projections/close`), anúncios, sorteio, libras e os dados que os displays carregam (`user-data`, `db`, versões baixadas). |
+| `remoteRoutes.js` | **Controle remoto**: as features do app/web do operador — teclado, liturgia, busca/navegação de músicas, vídeos online, som de fundo, volume e chat. |
+
+As duas famílias recebem motor, validadores e deps por **`ctx`** no
+`register(app, ctx)` — nenhum delas requer `routes.js` (sem require circular)
+— e o `module.exports` de `routes.js` mantém o contrato de antes, com **chaves
+literais** (`resolveSongMode: transmissionRoutes.resolveSongMode`, …) para os
+`import { … }` ESM dos specs continuarem resolvendo (o cjs-module-lexer não
+enxerga spread). O `validatePayload` roda **no `RendererRequestRegistry`
+real** (o `requestRenderer` o repassa) — os specs de rota usam um registry
+falso e nunca o invocam; por isso um predicate órfo (`isPlainObject` no
+validador do `play-default`) passou por toda a suíte e só estourou em
+produção (popup de `ReferenceError` + POST pendurado). O contrato ponta a
+ponta fica coberto por `validatePayloadContract.spec.js`, que monta o registry
+real e responde pela `RENDERER_RESPONSE_CHANNEL`.
+
 ### Endpoints da API
 
 | Método | Endpoint                          | Body / Query                                  | Descrição                                  |
 | ------ | --------------------------------- | --------------------------------------------- | ------------------------------------------ |
 | GET    | `/api/ping`                       | —                                             | Health check                               |
 | GET    | `/api/clock`                      | —                                             | Hora do servidor                           |
-| POST   | `/api/keyboard`                   | `{ key, modifiers? }`                         | Simula tecla (Electron `sendInputEvent`)   |
+| POST   | `/api/keyboard`                   | `{ key, modifiers? }`                         | Simula tecla (`KeyboardEvent` sintético)   |
 | POST   | `/api/song-slides`                | `{ action, index? }`                          | Controle de slides (next/prev/close/go-to) |
+| GET    | `/api/song-slides`                | `?action=playing-check`                       | Estado da apresentação de música           |
 | POST   | `/api/bible`                      | `{ action?, text?, reference?, bookId?... }`  | Projeta versículo ou navega bíblia         |
-| POST   | `/api/liturgy-execute`            | `{ id, tag? }`                                | Executa item da liturgia                   |
+| POST   | `/api/liturgy-execute`            | `{ id, tag?, day? }`                          | Executa item da liturgia (day = dia exibido) |
 | POST   | `/api/open-song`                  | `{ id, tag?, id_liturgy? }`                   | Abre música para projeção                  |
 | POST   | `/api/projections/close`          | `{}`                                          | Encerra todas as projeções ativas          |
 | POST   | `/api/announcements`              | `{ action, ids? }`                            | Projeta/anuncia (next/prev/stop/project)   |
 | POST   | `/api/settings/devices`           | `{ only_authorized_devices }`                 | Lê/grava flag de modo restrito             |
-| GET    | `/api/music-search`               | `?q=...&lang=pt`                              | Busca músicas (somente leitura)            |
+| GET    | `/api/music-search`               | `?q=...&lang=pt`                              | Busca músicas (oficial + acervo pessoal)   |
+| GET    | `/api/music-library`              | `action=albums\|songs`, `lang`, `album`       | Álbuns/faixas p/ navegar (hinários pinados + oficiais + coletâneas + "Sem álbum") |
+| GET    | `/api/music-library/image`        | `path=<url_image>`                            | Capa de álbum em `<dados>/files/`          |
 | GET    | `/api/bible-downloaded`           | `?lang=pt`                                    | Versões da bíblia baixadas                |
 | GET    | `/api/liturgy`                    | —                                             | Itens da liturgia atual                    |
 | GET    | `/api/announcements?action=list`  | —                                             | Lista de anúncios                          |
+| GET    | `/api/online-videos`              | `?action=albums\|videos\|search`, `lang`, `q`, `album` | Álbuns/busca dos **dois** acervos de vídeo online (permission `online_videos`) |
+| GET    | `/api/online-videos/image`        | `?kind=video\|category`, `id`               | Miniatura em binário dos Meus Vídeos (permission `online_videos`) |
+| POST   | `/api/online-videos`              | `{ action: play\|close, url?, title? }`       | Projeta/encerra vídeo do YouTube (permission `online_videos`) |
+| GET    | `/api/background-sound`           | —                                             | Estado + biblioteca de som de fundo (permission `background_sound`) |
+| POST   | `/api/background-sound`           | `{ action: play\|pause\|resume\|stop\|play-default, id? }` | Controla o player; `play-default` inicia o som padrão (permission `background_sound`) |
+| POST   | `/api/volume`                     | `{ action: up\|down, step? } \| { action: set, value }` | Volume dos players 0..100 (permission `volume`, só app) |
 | GET    | `/api/user-data`                  | `?path=...`                                   | Lê valor do user_data                      |
 | GET    | `/api/db/:path`                   | —                                             | JSON do banco (cache local ou remoto)      |
 | GET    | `/libras/:token`                  | —                                             | Bundle de animação VLibras                 |
@@ -1507,6 +1789,766 @@ Persistido em `device_settings.json` via `devices.js`.
 
 Todos os endpoints POST exigem `Content-Type: application/json`.
 
+### Busca de músicas com o acervo pessoal
+
+`GET /api/music-search` continua com o acervo **oficial** no main (jsonCache +
+`musicSearchCatalog`) e **acrescenta** as músicas das **coletâneas
+personalizadas**, que moram no IndexedDB e só o renderer lê — o main as busca
+pelo evento `http:custom-music` (`loadCustomMusicCatalog()`), filtra com o
+**mesmo `normalize`** da busca oficial e devolve `[...oficial, ...pessoal]`
+(mesma ordem do `MusicSpotlight`). A consulta numérica (hinário) não consulta o
+pessoal, e se o renderer falhar a busca oficial volta inteira: a parte pessoal é
+**adição**, nunca pré-requisito.
+
+A navegação por álbuns (lista → faixas → projetar) passa por
+`GET /api/music-library`: `action=albums` **pinada os hinários no topo**
+(`album:712` "Hinário Adventista" + `album:629` "Hinário 1996" quando o toggle
+`modules.hymnal_1996.show_in_main_menu` está ligado — fora de
+`{lang}_categories`; o pin some com o arquivo em disco ou em
+`disabled_albums`, e os ids são removidos do meio dos oficiais para não
+duplicar em catálogos antigos), achata `{lang}_categories}` em álbuns
+(aplicando `disabled_albums`), anexa as coletâneas do `docStore` e, se
+houver, o álbum virtual **"Sem álbum"** (`orphans:none`, `source: "custom"`, no
+fim) com as músicas pessoais que não estão em **nenhuma** coletânea — o título
+segue o `lang` (PT "Sem álbum" / ES "Sin álbum") e o `count` vem da mesma
+função que serve `action=songs`, para o badge nunca divergir das faixas;
+`action=songs` lê `album_<id>` (oficial), as faixas dos hinários direto de
+`{lang}_hymnal[_1996].json` (rótulo "Hino nº N - Nome", mesma fonte do sync e
+do `HymnalBrowser`), as `song_ids` da coletânea ou o `orphans:none`; os pins do
+hinário trazem `module_id` (`hymnal`/`hymnal_1996`) — e o `image` do pin aponta para a
+**própria rota de capas** — `GET /api/music-library/image?path=icons/<módulo>.png`
+(a rota ganhou uma branch `icons/`: arquivos em
+`electron/main/httpServer/icons/`, fora do acervo de mídia do usuário; a
+regex `icons/[a-z0-9_-]+.png` não aceita `/` nem `..` — sem traversal e, fora
+do diretório, 404). Os PNGs são quadrados (384×384) com o glifo pré-tintado na
+cor do manifesto (`#c0392b`/`#7d3c98`, espelhada em `HYMNAL_MODULE_COLORS`) —
+SVG não serviria: Coil (sem `coil-svg`) e `UIImage`/Assets.car não decodificam,
+então raster é o único formato que os **três clientes** consomem pelo mesmo
+caminho de capa (web `<img>`, KMP/iOS `AsyncImage`) — **nenhum asset da marca
+embarcado no app** (evita o case-sensitivity do asset catalog do iOS e o
+arquivo extra no Android), e o quadrado evita o crop do `object-fit: cover`.
+`module_id` continua no payload para o fundo neutro dos
+pins (glifo colorido em fundo neutro, como as subtabs do desktop — o `color`
+não vira fundo cheio; isso continua sendo só das coletâneas) e como fallback
+quando o endpoint não existe (desktop antigo → capa ausente → ícone
+genérico). O `count` dos álbuns
+oficiais agora vem das faixas reais do `album_<id>.json` (arquivos de 1–2 KB
+lidos em paralelo; detalhe ausente → `count: 0` e o badge some, como antes) —
+badge e lista de faixas passam a se bater; e a capa
+sai por `/api/music-library/image` (arquivo de `<dados>/files/` com o mesmo
+guard de path traversal do protocolo `louvorja://files`). Tudo lido no main — sem
+ida ao renderer, diferente de Vídeos Online.
+
+Os resultados pessoais trazem `custom_song_id` (o UUID) — o `id_music` deles é
+um **negativo sintético**, só para listar. A execução manda os dois no
+`POST /api/open-song` e o renderer abre com `openCustomMusic(...)`, o caminho
+único do desktop; e os modos seguem a mesma régua do `MusicMenuTable`: sem
+faixa cantada não se oferece **Cantado**/**Somente áudio** (`has_audio`), sem
+instrumental não se oferece **Playback** (`has_instrumental_music`).
+
+### Executar item da liturgia sem abrir o módulo
+
+O `GET /api/liturgy` (sem `day`) devolve a lista de **hoje** e só cai no dia
+ativo se hoje estiver vazio. Já o `ACTIVE_DAY` — que o renderer usava para achar
+o item — só é sincronizado para hoje quando o módulo de liturgia **abre** na
+sessão (`useLiturgyPersistence`), então antes disso ele apontava para o dia da
+última sessão e o `liturgy-execute` respondia 200 sem executar nada
+(`item não encontrado`).
+
+Por isso o cliente (app e controle web) guarda o `day` da resposta do GET e
+devolve no execute, e o renderer resolve com `Liturgy.getFromCommand(id, day)`:
+**dia do cliente → hoje → dia ativo** (o par da rota). Sem `day`, o fallback já
+cobre; com `day`, o caso em que hoje e o dia ativo estavam errados também — e um
+`day` fora de 0..6 é descartado na rota.
+
+### Vídeos Online no controle remoto
+
+A aba **Vídeos Online** (`src/views/remote_control/RemoteVideos.vue`) espelha a de
+músicas: busca com debounce de 300 ms, campo de URL do YouTube para projetar direto
+e a navegação pelos álbuns dos **dois** acervos — as playlists do catálogo remoto
+(`{lang}_collections_online`, cacheado em camadas pelo desktop) e as categorias dos
+**Meus Vídeos** (IndexedDB). A busca varre os dois e deduplica por URL (o vídeo do
+usuário vence), ordenando por título.
+
+- **Consulta** (`albums` / `videos` / `search`) vai ao renderer por `requestRenderer`
+  no evento `http:online-videos` (só o renderer tem o IndexedDB e o catálogo);
+  `main-shell.js` compõe a resposta com `Platform.httpServer.respond` e o **main**
+  valida o payload antes de devolver (`isOnlineVideosAlbumsResponse` /
+  `isOnlineVideosVideosResponse`), com teto de 10.000 itens e 8 MB.
+- **Projeção** (`play`) só aceita **id** de vídeo: a rota extrai o id com
+  `extractYoutubeVideoId` (id de 11 caracteres — nunca uma URL crua), o renderer
+  monta o embed e chama `Media.openYouTube` (mesmo caminho da liturgia);
+  `close` chama `Media.close(true)` e zera o `IS_PROJECTING` da ribbon.
+- **Permission**: as duas rotas respondem **403** quando o device pareado não tem
+  `online_videos` (nem `root`). A permissão aparece no diálogo de permissões dos
+  dispositivos (`DEVICE_PERMISSIONS` em `src/types/Device.ts`, chave
+  `options.transmission.permission_online_videos`) e não mexe nas demais rotas.
+- **Miniaturas**: cada álbum/vídeo leva um campo `image`. No catálogo remoto é
+  **URL pública** (o `default_image` da API ou a thumb derivada do `video_id` no
+  ytimg) — o cliente carrega direto. Nos **Meus Vídeos** é um caminho relativo
+  (`/api/online-videos/image?kind=video|category&id=…`) que a rota resolve lendo o
+  **IndexedDB** no renderer e devolvendo os bytes com o `mime`
+  (`requestRenderer` + `ArrayBuffer`, mesmo caminho do bundle do Libras);
+  `data: null` vira 404 e o card fica sem thumb. Nada de base64 dentro das listas.
+  - **Vídeo**: o blob do thumbnail cacheado (`custom_online_videos.thumbnails`).
+  - **Categoria**: o renderer **rasteriza o tile** (`helpers/CategoryTile.ts`) —
+    fundo com a cor da categoria + ícone branco centralizado, igual ao chip do
+    desktop. O ícone é resolvido **pelo nome** em `TABLER_ICONS` (os componentes
+    já estão no bundle) e serializado com `renderToString` de
+    `vue/server-renderer` — um caminho só para qualquer nome de
+    `ICONS.CATEGORY`, sem importar um SVG por ícone e sem problema para nomes
+    que nem têm arquivo SVG (`alert-triangle-filled`). O **branco vem da prop
+    `color`**: dentro de um `<img>`, `currentColor` resolveria para preto. As
+    marcas do projeto (`ja`) vêm do glob de `src/assets/icons/*.svg` (mesmo
+    padrão do `LjIcon`). Imagem enviada pelo usuário tem prioridade sobre o ícone.
+
+### Som de fundo e volume no controle remoto
+
+A aba **Som de fundo** (`src/views/remote_control/RemoteBackgroundSound.vue`)
+mostra a biblioteca de sons agrupada por categoria e os botões
+pausar/retomar/parar, com o "tocando agora" e o volume atual. O player é o
+**single** do desktop (`useBackgroundSound()`), então funciona **sem o módulo
+aberto** e sem mexer na projeção.
+
+- **Consulta** (`GET /api/background-sound`) vai ao renderer por
+  `requestRenderer` no evento `http:background-sound`: só ele lê o IndexedDB
+  (`background_sound.library` / `background_sound.category`) e só os
+  **metadados** voltam — id, nome, arquivo, categoria — nunca os bytes do som.
+  O `main` valida o payload (`isBackgroundSoundStateResponse`, tetos de
+  5.000 arquivos / 2.000 categorias) antes de devolver.
+- **Comando** (`POST /api/background-sound`, `play`/`pause`/`resume`/`stop`) é
+  `safeSend` direto: o renderer resolve o arquivo (refazendo a blob URL de
+  `data`+`mime`, com cache por sessão — o `path` gravado pode vencer) e toca
+  com o mesmo `playFile` do módulo. `play` exige `id`; os demais não.
+- **Volume** (`POST /api/volume`): `{ action: up|down, step? }` com passo
+  **1% por padrão** (clamp 0..100) ou `{ action: set, value }` para nível
+  absoluto — é o que o **iOS** manda ao espelhar o botão físico do iPhone
+  (`KVO` em `AVAudioSession.outputVolume`). O renderer aplica nos **dois**
+  players (`Media.setVolume` + `useBackgroundSound().setVolume`), que é o
+  "volume geral" da tela, e devolve `{ status: "ok", value }` (validado por
+  `isVolumeResponse`). Sem `step`/`value` válidos a rota responde 400. O
+  valor alimenta o StateFlow `ViolinApiClient.volumeLevel` (ponte
+  `ViolinState.watchVolume` para o Swift): a tela **Som de fundo** exibe o
+  nível com ícone de volume + número (sem `%`) e reage **ao vivo** às teclas
+  do celular — antes só a carga de um novo áudio atualizava o número. O
+  feedback do Android virou `Volume: N` (o `%%` da string duplicava o símbolo
+  depois do `.replace`).
+- **Permissions**: as três rotas respondem **403** sem `background_sound`
+  (respectivamente `volume`), nem `root`. São as permissions novas em
+  `DEVICE_PERMISSIONS` (`src/types/Device.ts`), com rótulo em
+  `options.transmission.permission_background_sound` / `permission_volume`.
+  No app elas vêm no `ping` e são guardadas por device: a aba fica visível no
+  modo Violin (como a de Vídeos Online — sem a permission o módulo mostra o
+  aviso amigável de permissão), e a tecla de volume só é **interceptada** com
+  `volume`; fora disso ela segue mexendo no volume do próprio aparelho.
+- **Blob URLs**: o toque remoto cria a URL do áudio **a cada vez**
+  (`helpers/BackgroundSoundPath.ts`, mesma régua do resolver da liturgia) —
+  o player revoga a URL ativa em `playFile`/`stop`/`cleanup` (fechar o módulo
+  no desktop), então reaproveitar uma cache dava replay de URL **revogada**:
+  `play()` rejeitava em silêncio e o som "não funcionava mais" na segunda vez.
+- **Som padrão**: o ponteiro é `modules.background_sound.default_id` em
+  `user_data` (um por vez) — marcado pelo **checkbox "Som de fundo padrão"**
+  no edit do áudio no desktop e exibido como linha "Som padrão: <nome>" no
+  painel **Configurações** da ribbon do módulo (reativa ao checkbox). O
+  remoto inicia tudo com `POST { action: "play-default" }` — este action é o
+  único com resposta (via `requestRenderer`): **idempotente** (padrão já
+  tocando → `200` sem reiniciar; pausado no próprio padrão → retoma) e `404`
+  com `"Nenhum som padrão configurado"` quando não há ponteiro.
+- **Limitações**: o web não tem sinal de "modo clássico" (a aba fica visível;
+  no Delphi o player de som de fundo não é o da projeção) e no Android cada
+  pressão vale **1 ponto** (tecla é consumida no `dispatchKeyEvent`, uma vez
+  por `down`, sem repetição acelerada).
+
+### Apresentador — setas grandes e som padrão
+
+Módulo do controle remoto (web: aba **Apresentador**; app: card em Módulos,
+`RemoteTab.Presenter`) pensado para quem está apresentando:
+
+- **Duas teclas grandes em linhas separadas** (setas ‹ ›, ~112 px de altura)
+  mandando o **mesmo `POST /api/keyboard` da tela de Atalhos** — o web mantém
+  o cooldown de 200 ms da tela de Atalhos; o app espelha o comportamento do
+  `AtalhosScreen` (sem cooldown).
+- **Rodapé ancorado: "Iniciar som de fundo"** → `POST play-default`
+  (idempotente; erro404 com o motivo vira snackbar/toast pelo cliente).
+
+### A aba de slides não é só escuta
+
+A aba Slides do controle remoto é a única tela que dependia **exclusivamente**
+do push por SSE. Como o desktop só publica o snapshot canônico quando o
+**índice** do slide muda (`useSlides.ts`), uma música parada num slide longo
+não republicava nada, e uma página com o stream morto não se recuperava sozinha.
+
+São duas proteções:
+
+1. **Consulta no lugar de espera.** Ao abrir a aba, ao trocar para ela e no
+   botão de sincronizar, a tela pergunta `GET /api/song-slides?action=playing-check`
+   e hidrata o deck, o slide atual e a sessão. A resposta é validada em runtime
+   antes de entrar na tela (é rede) e o deck é limpo quando o desktop diz
+   `playing: false`.
+2. **A sessão observada é estado separado de `canonicalSelection`.** Aquele
+   guarda revisões para ordenar snapshots; o endpoint de consulta não devolve
+   `revision` nem `selectionRevision`, e inventar `0/0` faria o cliente
+   descartar o próximo snapshot verdadeiro. A sessão da consulta serve só para
+   anexar `presentation_session` aos comandos — que é o que o guard do desktop
+   exige para não descartá-los.
+
+Com isso, a aba volta a funcionar mesmo com o SSE fora, e voltar a funcionar é
+também o caminho de recuperação.
+
+### O bridge SSE do celular se reconecta
+
+O script injetado em `spa.js` abre o `EventSource` que alimenta o
+BroadcastChannel da página. O `EventSource` só se refaz sozinho em erro de
+**rede**: em erro de **HTTP** (401 de token trocado, 403 de device sem
+permissão, 404 do gate de rotas externas) a especificação manda falhar a
+conexão em **permanente** — `readyState` CLOSED, sem nova tentativa. Como o
+resto do controle remoto é `fetch` avulso, a página continuava "funcionando"
+com a aba de slides muda e sem um único aviso.
+
+Por isso o bridge tem `onerror`: em `CLOSED` ele recria a conexão com folga
+(1s → 2s → 4s → 8s, teto 15s) e publica o estado em `window.__ljSSEState`
+(`connecting` | `open` | `closed`) para uma interface poder avisar o operador.
+
+
+---
+
+## 🔌 Integração Canva
+
+Dois pontos de entrada, os mesmos dados: **Opções → Integrações** (`AppMenuIntegracoes.vue`,
+item novo do menu, acima de Acessibilidade) guarda credenciais e conecta a conta; a
+**aba Canva da Biblioteca de Mídia** (`CanvaTab.vue`) navega o conteúdo e projeta.
+
+### OAuth2 + PKCE, tudo no main
+
+Fluxo Authorization Code com PKCE — sem `client_secret` no renderer, sem `fetch`
+de terceiros no renderer, sem `connect-src` para a API.
+
+- `electron/main/canva/` — `crypto` (cofre), `store` (arquivo do cofre),
+  `auth` (PKCE + troca + refresh + revoke), `callbackServer` (retorno local),
+  `api` (REST + validação), `index` (fachada `{ ok, code, message }`).
+- **Porta fixa 5530**, rota `/auth/canva` → `http://127.0.0.1:5530/auth/canva`,
+  que é a string registrada em *Outside Canva → Redirect URLs*. O servidor só
+  existe durante o consentimento e é derrubado em todos os caminhos (sucesso,
+  `error`, `timeout`, porta ocupada) — uma porta presa mataria a próxima
+  tentativa. O `openExternal` roda **depois do bind**: o redirect tem que cair
+  num servidor que já responde.
+- `state` (96 bytes, base64url) liga o retorno à tentativa; `code_verifier`
+  igual, com `code_challenge = base64url(sha256(verifier))`. Divergiu o
+  `state`, o código **não** é trocado.
+- Escopos mínimos e leitura: `folder:read design:meta:read profile:read`. O
+  portal exige marcar cada um à mão.
+- `getAccessToken()` renova 10 min antes de expirar; `disconnect()` revoga a
+  **linhagem** do refresh no Canva (é isso que cancela o consentimento) e limpa
+  o cofre — falha de rede na revogação não deixa o app preso.
+
+### Cofre (AES-256-GCM)
+
+Client Secret e token nunca passam pelo `contextBridge` e nunca ficam em texto
+claro no disco.
+
+- Chave de 32 bytes, gerada na primeira gravação, em `<dados>/storage/canva.key`
+  com permissão `0600`. Ciphertext em `<dados>/storage/canva_secrets.json` —
+  arquivo **fora** do `user_data`, que é sincronizado entre janelas.
+- Formato `v1:<iv>:<tag>:<dados>` (base64). O GCM autentica: payload alterado ou
+  chave trocada vira `null`, nunca texto corrompido.
+- O main descriptografa **só em memória** para montar o `Authorization: Basic` e
+  o `refresh_token`. O renderer só vê `hasCredentials`/`connected`/`profile`.
+- `KEYS.OPTIONS.INTEGRATIONS.CANVA.PROFILE` (`options.integrations.canva.profile`)
+  é o único pedaço exibível no `user_data`; espelho em `PROFILE_PATH`.
+
+### IPC
+
+`canva:status`, `canva:setCredentials`, `canva:connect`, `canva:disconnect`,
+`canva:webLogin`, `canva:webLogout`, `canva:items`, `canva:designUrl`,
+`canva:exportPdf` — canal específico, payload validado na fronteira e
+**retorno em vez de throw**: o Electron repassa ao renderer só `message`/`stack`,
+e aí o código (`EADDRINUSE`, `no_credentials`, `state_mismatch`,
+`export_timeout`) sumiria da tela. `canva:exportPdf` fica pendente durante o
+job do Canva (até ~1 min) — é a barra de "Exportando…" da aba.
+
+O único evento é `site:login-wall` (`canva.onLoginWall` no preload) — main →
+renderer, quando a projeção pára numa tela de login. Ele é o inverso do invoke
+de sempre: não tem payload vindo do operador, só uma URL que o main já
+classificou.
+
+### Projetar como: PDF (o default)
+
+`Opções → Integrações → Projetar como` escolhe entre duas rotas. **PDF é o
+default** — é a única que não depende de gesto nenhum do Canva.
+
+O caminho é o do FreeShow, adaptado: ele exporta PNG por página e monta um show
+próprio; nós exportamos **um PDF** e projetamos pelo `FileProjection` que já
+existe — tela cheia, setas, operador e tela de retorno vêm de graça, sem sessão
+web do Canva e sem janela nova.
+
+`electron/main/canva/export.js`:
+
+1. `GET /v1/designs/{id}` → `updated_at` (chave do cache);
+2. se `<dados>/canva/<id>.pdf` e o `<id>.json` ao lado batem → **cache, nenhum job**;
+3. `POST /v1/exports {design_id, format:{type:"pdf", export_quality}}` → job;
+4. `GET /v1/exports/{jobId}` a cada 1 s, teto de 60 tentativas;
+5. baixa para `<dados>/canva/<id>.pdf` e grava o `.json` com `updated_at` e a
+   qualidade pedida.
+
+Dois guards de fronteira, porque errar aqui é um canvas em branco na frente da
+congregação:
+
+- **`%PDF-`** no começo do arquivo — se o Canva responder uma página de erro,
+  nada é gravado (`download_not_pdf`);
+- **uma URL só** — PDF é um arquivo; se a API devolver mais (`export_shape`),
+  falhamos em vez de projetar só a primeira página em silêncio;
+
+e mais dois, para o download em si:
+
+- **teto de 200 MB** (`download_too_big`), checado no `Content-Length` antes de
+  buffer — a URL vem da API, mas ninguém garante o tamanho;
+- **timeout de 120 s** no download (o das chamadas de API continua em 30 s):
+  30 s derrubavam um deck grande em conexão lenta no meio do culto.
+
+**Escopo:** o export exige `design:content:read` — e ele precisa estar na
+lista que a URL de consentimento pede, não só marcada no portal (o portal
+define o que o app PODE pedir; o token recebe o que a URL pede). `SCOPES`
+carrega os quatro: `folder:read`, `design:content:read`, `design:meta:read`,
+`profile:read`. O refresh não amplia escopo, então token emitido **antes** do
+fix continua sem ele — e aí:
+
+- `status().requiresReconnect` (`temEscopo(...) === false`) faz a tela
+  mostrar `canva.scope_missing` antes do clique, no modo PDF;
+- `export.js` devolve `missing_scope` **antes** de criar o job (depois do
+  passo do cache — PDF já baixado não gasta escopo);
+- token sem campo `scope` → `temEscopo` é `null` e o aviso **não** aparece:
+  não sabemos o que o Canva concedeu, o 403 na hora manda.
+
+**Rate limit** do Canva: 75 exports / 5 min e 500 / 24 h por usuário. Com cache
+por `updated_at`, um design projetado toda semana gasta um job por edição real.
+
+**Preço:** animação, vídeo e transição do design viram página parada — por isso
+é uma opção, não o único caminho. Quem precisa do Canva ao vivo escolhe
+"Projeção do canva" na mesma tela; a linha de sessão (login/logout) só aparece
+nesse modo, porque o modo PDF não usa cookie nenhum.
+
+#### Qualidade do export
+
+`Opções → Integrações → Qualidade do export (PDF)` escolhe entre `regular`
+(**default**) e `pro`. Sem o campo a API assume `regular` em silêncio, então ele
+é sempre mandado de propósito (`api.criarExportPdf`).
+
+`pro` pode ser recusado quando o design tem elemento premium que a conta não
+pagou — `error.code: license_required`, exatamente o caso que a documentação do
+Canva aponta. Aí o `export.js` **refaz o job em `regular`** e devolve
+`qualityFallback: true`; a aba Canva avisa por snackbar. Preferimos entregar um
+PDF em algo em nada, mas avisamos, porque o operador pediu `pro` e recebeu
+outra coisa. Falha que não é de licença (`internal_failure`, …) **não** gera
+segunda tentativa: seria só queimar rate limit.
+
+A qualidade pedida entra na **validade do cache** (`meta.exportQuality`):
+trocar de `regular` para `pro` não pode continuar servindo o PDF velho. Na meta
+fica `qualityUsed` à parte — a pedida decide o cache, a usada explica o que o
+operador está vendo.
+
+#### Todas as páginas, e a prova disso
+
+A API exporta **o documento inteiro** quando `pages` não vem no pedido (*"If
+`pages` isn't specified, all the pages are exported"*), e o PDF volta como
+**um** arquivo — por isso o guardião `export_shape` exige exatamente 1 URL. O
+tamanho declarado (`page_count` do `GET /v1/designs`) viaja no payload de
+projeção (`pageCount`), e a janela compara com o `doc.numPages` que o pdf.js
+abriu de fato: divergindo, o módulo mostra um snackbar (`canva.page_mismatch`).
+É a prova em runtime de que o export veio inteiro — em vez de descobrir na hora
+de virar a página no culto.
+
+#### Navegação das páginas
+
+O PDF projetado pela **aba Canva** não passa pela playlist da Biblioteca, e
+sem isso não havia comando nenhum: a barra do player só aparecia com
+`isPlaying && currentItem`, `next()` caía no ramo de playlist (e podia chegar a
+`stop()`), e as setas iam parar em `Media.nextSlide()` — slides de música, que
+um PDF não tem.
+
+Três correções, todas apoiadas no mesmo `FILE_PROJECTION` que o
+`projectFile` já publica:
+
+1. **Adoção** — `adotarProjecaoExterna` (pura, em `FileProjectionPage.ts`)
+   decide `limpar` / `ignorar` / `adotar`. Adotar faz o `playback_id` do telão
+   virar o `currentPdfPlaybackId` de sempre, e aí barra, contagem e
+   Próximo/Anterior valem para ele sem regra paralela. `limpar` distingue
+   `action:"clear"` (projeção encerrada, desfaz o id) de "outra mídia assumiu"
+   (só some a barra).
+2. **Barra do player** — aparece também para o PDF adotado, com o índice em
+   **"Página X / Y"** (o `"1 / 1"` da playlist não diz nada com 5 páginas), e o
+   botão Próximo apaga na última página em vez de mandar o operador para um
+   `stop()`.
+3. **Setas** — `_pdfPageStep` (`useMedia.nextSlide/prevSlide`) lê
+   `LJ_FILE_PROJECTION`, chama `moverPaginaPdf` (pura) e manda
+   `FILE_PROJECTION_PAGE {source:"operator"}`; o clamp de verdade continua
+   sendo da janela (`doc.numPages`). O gate em `main-shell.js` ganha
+   `{ arquivo: true }`: `_fileProjectionIsActive()` cobre o caso em que
+   `modules.media.show` está desligado (PDF projetado sem música).
+
+#### Nitidez
+
+`pdfPageFit` (pura, em `helpers/PdfPageFit.ts`) calcula escala e tamanho do
+canvas: o **backing store** sai em `devicePixelRatio` (num telão 4K ou no
+Windows com escala de 150 % o browser ampliaria a imagem e borraria a página) e
+o **CSS** continua em px de layout (`/ dpr`), senão a página sairia dobrada.
+Palco ainda não medido devolve `null` — sem tocar no canvas, porque viewport de
+zero só faz o pdf.js reclamar.
+
+#### Selo de cache na lista
+
+O PDF já fica guardado em `<dados>/canva/<designId>.pdf` + `.json` — o que
+faltava era o operador VER isso e conseguir apagar.
+
+- **`canva:cachedPdfs`** devolve `designId → updated_at` de tudo que tem
+  **`.pdf` E `.json`** (um download que morreu no meio deixa o meta órfão, e
+  meta sem arquivo não é cache de nada). Um IPC por atualização da grade, não
+  um por item.
+- **O selo só acende se o PDF ainda vale**: `meta.updatedAt === item.updatedAt`
+  — exatamente o que o `exportarPdf` checa antes de servir do disco. Editou no
+  Canva, o selo some sozinho no próximo carregamento (o `updated_at` vem da
+  própria lista desde ago/2024). Sem `updated_at` no item, confia no arquivo.
+- **Selo é IRMÃO do card**, não filho: `<button>` dentro de `<button>` é HTML
+  inválido, e como irmãos clicar nele não dispara `abrir`. Só no modo **PDF** —
+  é o único que consome o cache.
+- **Exclusão**: `canva:clearCachedPdf` → `yesno` → apaga `.pdf` + `.json`. O id
+  é validado **na fronteira** (IPC) e **de novo** no `limparCachePdf`, porque
+  ele vira caminho de arquivo; `nomeSeguro` neutraliza `..` e `/`, então o alvo
+  sempre cai em `<dados>/canva`.
+
+### Conteúdo e projeção (modo "site")
+
+- Listagem: `/v1/folders/{root|id}/items` (raiz, pastas) e `/v1/designs`
+  (`ownership=any|owned|shared`) com `continuation` para "Carregar mais".
+- **`view_url` é temporário** (JWT com `exp`): o clique em design chama
+  `canva:designUrl` para buscar um novo, nunca usa o da lista.
+- Design/imagem fecha a mídia antes (`$media.close(true)` +
+  `closeProjectionStage()`, a MESMA fila) e abre em
+  `ProjectionWindows.openSiteWindow` — mesmo caminho da liturgia. O design
+  privado exige a sessão do site na partição; ver **Duas autenticações**.
+- Imagem não tem `view_url` própria: abre pelo thumbnail.
+
+#### Toda janela precisa de papel em `FEATURE_ROLE`
+
+O `windowFactory.reconcile` resolve, **feature a feature**, cada janela aberta —
+e sem papel o `monitorConfig.resolveFeature` devolve
+`status=none, reason=unknown-feature` → `display: null` → a janela é **oculta**
+e o Shell avisa "Monitor desconectado" com os três monitores ligados.
+
+Foi o que apagou a tela de **retorno** da projeção de Site: `site_return` era o
+único `PROJECTION_TYPE` fora da tabela. A abertura nunca falhava porque
+`ProjectionWindows._target` caía no fallback de `retorno` — que é o mesmo papel
+(STAGE), então o monitor era o certo; quem quebrava era só a resolução do main,
+que é quem decide se a janela fica visível.
+
+- `displayRoles.spec.js` tem um **teste de cobertura**: todo `PROJECTION_TYPE`
+  precisa de `roleOfFeature(v) !== null`. Um `PROJECTION_TYPE` novo esquecido
+  falha no CI, não no telão. (Quem quiser reproduzir o diagnóstico de campo,
+  `monitorConfig.resolveFeature` é quem devolve `status`/`reason` — é ele que
+  `displays.resolveFeature(feature)` chama.)
+
+### Loader de projeção de Site
+
+A janela de Site é **externa**: ela só aparece no `did-finish-load`, e no Canva
+ainda falta o gesto de apresentação + a espera de os controles sumirem. Sem
+cobertura, o operador via a página "chegando" no telão — tela branca, barra de
+ferramentas, botão de apresentação — no meio da congregação.
+
+`src/views/SiteLoader.vue` é uma tela da **SPA** (rota `/projection/site_loader`)
+com o mesmo fundo da aba *Opções → Geral → Imagem de Fundo*
+(`getSetting(MAIN_BACKGROUND_ID)` + `estiloDeFundo`). Vale para **toda**
+projeção de Site, não só do Canva, e abre em **cada monitor** (telão e retorno).
+
+**Sem texto.** No centro fica só a marca (`public/logo.png`) com um **anel
+girando nas três cores da própria logo** — amarelo `#FBCF02`, azul `#00B8FD` e
+preto `#060605`, os mesmos `fill` de `src/assets/img/logo.svg`. A tela vive
+alguns segundos no telão e legenda ali seria ruído. O logo é resolvido contra o
+**documento** (`new URL("logo.png", document.baseURI)`): um `/logo.png`
+absoluto apontaria para a raiz do protocolo, e o handler de `louvorja://` só
+serve o host `app`.
+
+```
+renderer abre site_loader → site → [site_loader_return → site_return]
+renderer chama site-loader:aguardar   ← declara quais janelas existem
+main espera cada uma ficar pronta     ← carregada; no Canva, apresentada e sem controles
+main manda {pronto:true} para OS DOIS loaders ao mesmo tempo
+loaders dão fade (CSS, 400 ms) → main fecha os dois (550 ms)
+```
+
+- **Quem declara é o renderer**, porque só ele sabe o que abriu: a de retorno
+  pode não existir (opção desligada, ou ligada sem monitor). Antes disso o main
+  estaria adivinhando, e adivinha errado.
+- **"Pronto" não é "carregado"** no Canva: o `setSiteReadyListener` só conta a
+  janela depois que `tentarApresentar` resolve — apresentação confirmada **e**
+  a espera dos controles decorrida (ver **Apresentação automática**).
+- **`_siteProntas`** guarda a prontidão *desde que a janela nasceu*, separado do
+  `esperando` do ciclo: o `did-finish-load` pode chegar antes do `aguardar`
+  (site em cache) e janela **reutilizada** não recarrega.
+- **Ordem de abertura**: a ordem de **criação** nunca foi o problema (o loader é
+  aberto antes, com `await`); o de **aparecer** dependia de cada janela pintar, e
+  a SPA do app pode pintar DEPOIS da página do Canva — que aí aparecia sozinha
+  por alguns milissegundos, na projeção ou no retorno. Três travas:
+  1. o loader chama `showOnce()` **dentro da criação**, antes do `loadURL` —
+     quando a `windows:open` devolve ao renderer ele já está na tela, e só então
+     a janela externa nasce;
+  2. ele nasce em `setAlwaysOnTop(true, "screen-saver")` (nível mais alto, acima
+     do empate das fullscreen) e a janela externa devolve os loaders ao topo no
+     **mesmo turno** do `showInactive` (`_trazerLoadersAoTopo`) — nunca via
+     evento, porque dava quadros do Canva por cima antes do empurrão chegar;
+  3. **sem flash branco**: a janela nasce com `backgroundColor #000` e o
+     `index.html` linka primeiro o `boot.css`, que faz `body { background:#000 }`.
+- **Reuso com outra URL recarrega**: `_garantirRota` compara a `route` guardada
+  em `_windowMeta` (não o `getURL()` — em hash routing a URL do documento não
+  muda) e chama `loadURL`. Sem isso o telão seguia no design anterior. O main usa
+  `willLoad(feature, route)` para **não** marcar a janela como pronta enquanto
+  ela vai recarregar: marcar cedo fecharia o loader no instante em que ele mal
+  apareceu.
+- **Fade por CSS** (`transition: opacity`), não `win.setOpacity()`: essa API não
+  existe no Linux. Quem fecha é o main, 550 ms depois.
+- **Sempre sai**: `LOADER_TIMEOUT_MS = 20000` revela mesmo sem resposta, e
+  encerrar a projeção fecha os loaders junto (`_closeSite`). Se o `aguardar`
+  falhar, o renderer fecha na hora — sem IPC não há timeout a acionar.
+- Sem papel em `FEATURE_ROLE` o `roleOfFeature` devolve `null` e a janela é
+  recusada fora da tela do operador: é por isso que `site_loader` /
+  `site_loader_return` entraram na tabela (regra geral e teste de cobertura em
+  **Toda janela precisa de papel**, acima).
+- Só existe no desktop: no web/PWA não há essa porta, e um loader a mais seria
+  um segundo popup na tela do operador.
+
+### CSP
+
+Só `IMG: https://document-export.canva.com https://*.canva.com`
+(`config/cspDomains.cjs`). Sem `CONNECT` — a API inteira roda no main.
+
+### Duas autenticações (a confusão de sempre)
+
+O Canva tem **dois** mundos de autenticação e o app usa os dois, separados:
+
+| | O que é | Onde vive | Serve para |
+|---|---|---|---|
+| **Token da API** | OAuth2 + PKCE, `Authorization: Bearer` | cofre `canva_secrets.json`, só no main | `api.canva.com/rest` — listar pastas, designs, `view_url` |
+| **Sessão do site** | cookie em `www.canva.com` | partição `persist:lj-site` | abrir o design no navegador da projeção |
+
+O `view_url` é *“only accessible to the user that made the API request”*: num
+design privado, o site cobra a sessão web daquele usuário. **Não existe
+endpoint do Canva que troque um access token por um cookie de sessão**, e o
+OAuth aconteceu no navegador do sistema — os cookies de lá não são nossos. Por
+isso clicar no design caía na tela de login.
+
+**Como resolve:** `Opções → Integrações → Fazer login no Canva`
+(`canva:webLogin` → `electron/main/canva/webSession.js`). Abre uma janela
+**normal, fora da projeção**, apontando para `www.canva.com/login/`, com
+`preload: undefined` e **a mesma `SITE_PARTITION` da janela de URL**. Os cookies
+ficam no disco do perfil e valem para a projeção **e** para a tela de retorno
+(as duas compartilham a partição).
+
+**A janela não fecha sozinha** — o título manda: *"faça login e feche esta
+janela"*. É só quando ela fecha que o app confere.
+
+#### A conferência é por redirecionamento, não por cookie
+
+Primeira versão — e o erro que ela causou:
+
+> contava "cookies de sessão" na partição, descartando só os de analytics
+> (`_ga`, `__cf_bm`…). A home **anônima** do Canva já grava **`CDI`, `CL` e
+> `_cfuvid`**: o probe devolvia `true` logo na primeira visita, a janela fechou
+> sozinha antes de o operador digitar qualquer coisa e o app anunciou
+> "sessão ativada". A projeção foi pedir login como sempre.
+
+Agora manda o Canva (`webSession.verificar()`): carregamos
+`https://www.canva.com/login/` **oculto na mesma partição** e lemos onde ele
+nos deixou depois da cadeia de redirecionamento assentar. Logado, ele **bota
+para fora** do `/login/`; não logado, deixa a página de login em pé. Nada de
+adivinhar por contagem.
+
+`ehPaginaDeLogin(url)` (em `windowRoute.js`, puro) faz essa classificação — e
+usá-la exige `includes`, não `startsWith`: o Canva serve `/<locale>/login`,
+e um `startsWith("/login")` classificava aquilo como "já logado" (foi o que
+fechou a janela cedo demais).
+
+#### A parede de login na projeção é a verdade absoluta
+
+O selo persistido pode envelhecer (a sessão expira depois). Para isso,
+`windowFactory` reporta **cada navegação do frame principal das janelas
+externas** ao main (`setSiteNavigationListener` — a factory não conhece o
+Canva), e o main aplica `ehPaginaDeLogin`:
+
+- zera `options.integrations.canva.web_session` **na hora**;
+- emite `site:login-wall` para as janelas do app (a de projeção não tem
+  preload para ouvir);
+- `AppMenu.vue` abre `yesno("A projeção caiu na tela de login…")` com atalho
+  para a tela de Integrações.
+
+Só na **transição** (não-logado → logado) e só do principal (`site`): o
+espelho carrega a MESMA URL, e dois avisos virariam dois alertas para o mesmo
+fato.
+
+#### Apresentação automática
+
+O `view_url` abre a página **`VIEWER`** do Canva: o conteúdo aparece, mas o
+operador ainda precisa clicar em **"Apresentar em tela cheia"**, no canto
+inferior direito, para chegar no ponto da projeção.
+
+O Canva não expõe isso por URL — testado contra a API:
+
+```
+/api/design/<jwt>/view     → 303  (existe)
+/api/design/<jwt>/present  → 404  (NÃO existe)
+/design/<id>/present       → 404
+```
+
+e a própria doc diz que os modos (Present full screen, Presenter view,
+Autoplay) são escolhidos pelo botão "Present" da interface.
+
+Então o gesto sai por `electron/main/canva/present.js`. Quando a janela externa
+dispara `did-finish-load`, o main pergunta se o host é `canva.com` e chama
+`canva.tentarApresentar(win)`.
+
+##### Por que `sendInputEvent` e não `.click()`
+
+A primeira versão fazia `executeJavaScript` + `botao.click()`. O log saiu:
+
+```
+[canva] modo de apresentação acionado na projeção   (×2 — projeção e retorno)
+```
+
+…e **nada mudou na tela**: o evento sintético nasce com `isTrusted: false` e o
+Chromium não roda comportamento padrão com ele — a mesma conclusão que o
+*pointer nudge* do `windowFactory.js` documenta para esta janela. O
+`requestFullscreen()` do Canva ainda exigiria ativação de usuário.
+
+O desenho ficou: **`executeJavaScript` só LÊ** (estado e coordenadas
+normalizadas 0..1) e quem age é o main, pela fila de entrada real.
+
+##### Fluxo
+
+1. **Já é?** `fullscreenElement` não nulo ou a barra já sumiu → sai na hora.
+2. **Atalho do SO** — `sendInputEvent keyDown/keyUp 'P'` com os
+   modificadores de `ATIVOS_POR_SO`:
+
+   | SO | modificadores | atalho |
+   |---|---|---|
+   | `darwin` | `alt` + `meta` | `⌥⌘P` |
+   | `win32` | `alt` + `control` | `Ctrl+Alt+P` |
+   | **`linux`** | **`alt` + `control`** | **`Ctrl+Alt+P`** |
+
+   Linux não tem ramo próprio: o bundle do Canva só distingue `"apple"` de
+   `"other"` (`__c.Rb()`), então cai junto com o Windows. Fonte: atalho
+   oficial (*"Presentation mode: Alt + Ctrl + P"*).
+3. **Clique real** só se o estado não mudou — `mouseMove → mouseDown →
+   mouseUp` na posição lida, `x = round(nx * getContentBounds().width)` (a
+   mesma conta do pointer nudge, imune à escala do monitor).
+4. Repete de 1,2 s a 12 s enquanto a barra monta.
+
+**Sucesso é estado, não intenção**: só confirma se `fullscreenElement` ficou
+não-nulo **ou** o botão *sumiu depois de ter sido visto* — `entrou()` exige a
+transição, porque um primeiro `botao:false` também significa "a barra ainda não
+montou". É isso que impede entrar **e sair** do modo duas vezes, e que trocou o
+log falso de "acionado" por um log verdadeiro.
+
+##### Depois de entrar: os controles somem ANTES de a tela ser revelada
+
+A barra de apresentação do Canva some por **inatividade de ponteiro**, e o
+relógio dessa inatividade só anda depois que o site vê um evento de ponteiro.
+O gesto que acabou de entrar na apresentação **foi um ponteiro** (o clique no
+botão), então o ciclo recomeça ali mesmo — e sem mexer de novo a tela seria
+revelada com a barra ainda visível.
+
+Por isso `tentarApresentar` só devolve `true` depois de:
+
+1. um `mouseMove` para o **centro** (`getContentBounds()/2`; centro, porque a
+   barra fica nas bordas e passar por ela abriria menu ou tooltip);
+2. `ESPERA_CONTROLES_MS = 3000` de espera.
+
+É o **segundo** empurrão desta janela. O de `windowFactory.js` roda no
+`did-finish-load`, antes de qualquer apresentação, e serve só para o site
+enxergar um ponteiro pela primeira vez; este roda **depois** do gesto. A espera
+é fixa, sem detecção por DOM, e vira `opts.esperaControles` para os testes
+ajustarem — `false` não espera nem empurra nada.
+
+Foi essa espera que ligou o loader ao gesto: sem ela, o fade revelaria a barra
+recém-aberta e o operador veria a tela "se arrumando" na frente da congregação.
+
+**Filtros do candidato** (errar o clique é pior que não clicar):
+
+1. **Rótulo** — `aria-label`, `title`, `data-testid`, `aria-labelledby`
+   resolvido, texto ou o `[aria-label]` do filho, em PT ou EN;
+2. **Posição** — metade de baixo **e** metade direita; entre os que sobram,
+   vence o mais próximo do canto (o "?" da ponta não fala de apresentação);
+3. **Recusa** — em `fullscreenElement` não se toca nada.
+
+É melhor esforço e é honesto quando falha: o script devolve
+`{fullscreen, botao, candidatos, x, y}` e o log sai como
+`[canva] apresentação não confirmada — fullscreen=…, botao=…, candidatos=…`,
+com o que a página realmente mostrou — nada aqui derruba a abertura.
+
+As funções são puras e serializadas num IIFE (`SCRIPT` — `String(fn)` não
+carrega as auxiliares), então os filtros são exercitados num DOM de teste com o
+**HTML real do botão da Canva** como fixture, enquanto o main roda o mesmo
+código no renderer. O gancho é o `setSiteReadyListener` da factory, então o
+**espelho** (`site_return`) também recebe o gesto.
+
+Detalhes:
+
+- O selo mostra **"Sessão ativa como {nome}"**, com o nome do perfil do OAuth
+  (gravado ao conectar — a mesma conta que a projeção usa). Sem nome, cai em
+  "Sessão ativa" em vez de renderizar `"como "` vazio.
+- Ao lado do login existe **"Sair do Canva"** (`canva:webLogout` →
+  `webSession.sairDoSite`): apaga os cookies de `canva.com` na partição e zera
+  o selo. É distinto do **"Desconectar"**, que revoga o token da API no Canva.
+  O apagar é escopado em `canva.com` de propósito (em duas camadas,
+  `clearStorageData({origin})` + remoção cookie a cookie): a partição é
+  compartilhada com os Sites da liturgia, e uma limpeza genérica derrubaria um
+  enquete que não tem nada a ver com o Canva.
+- O login pode ser refeito quantas vezes precisar; a janela nunca é a de
+  projeção, então ninguém digita senha no telão.
+- A aba Canva mostra o aviso "Ative em Opções → Integrações" enquanto
+  `webSession === false`, para o operador não descobrir o problema só no culto.
+- Se a conferência responder `web_login_failed`, o login **não** pegou — a
+  mensagem manda o operador logar de novo e fechar a janela.
+
+### Telemetria do Site/Canva
+
+Tudo sai por `Telemetry.track` (PostHog), que é **opt-out** (`Opções →
+options.telemetry`) e **não roda em dev** — sem `VITE_POSTHOG_KEY` o `track` é
+no-op, então a prova é o teste unitário, não o console.
+
+| Grupo | Eventos | Onde |
+|---|---|---|
+| **Site (universal)** | `site_projected {source, ok, has_loader, has_return, duration_ms, reason?}` | `ProjectionWindows.openSiteWindow` |
+| **Integrações** | `canva_credentials_saved/_failed`, `canva_connected/_failed`, `canva_disconnected`, `canva_web_login_succeeded/_failed`, `canva_web_logged_out`, `canva_project_as_changed`, `canva_export_quality_changed`, `canva_scope_missing` | `AppMenuIntegracoes.vue` |
+| **Aba Canva** | `canva_tab_opened`, `canva_designs_loaded/_load_failed`, `canva_project_requested{mode}`, `canva_export_completed`, `canva_site_link_failed` | `CanvaTab.vue` |
+| **Apresentação** | `canva_site_presented {presented, loader_ms}` | `SiteLoader.vue` |
+
+Duas decisões que o desenho inteiro carrega:
+
+- **`source` é obrigatório.** `openSiteWindow(url, "liturgy" | "canva")` — um
+  evento só para "quantos sites foram projetados", sem somar dois. A falha do
+  `designUrl` (que nunca chega ao `openSiteWindow`) tem evento próprio:
+  `canva_site_link_failed`.
+- **`apresentou` vem do main pelo `site-loader:pronto`.** Abrir a janela não
+  garante nada — o design pode ficar no `VIEWER` sem nunca virar apresentação.
+  `null` (sem gesto a fazer, como um Site de liturgia) não vira evento de Canva.
+
+**Privacidade — nada que identifique o arquivo:** sem `design_id`, sem título,
+sem URL, sem JWT, sem cookie, sem credencial. `reason` é sempre **código**
+(`missing_scope`, `export_failed`, `canva_401`), nunca `message`, porque a
+mensagem do Canva pode carregar URL ou HTML — há teste afirmando isso.
+
+E já havia um vazamento: `projection_window_opened` mandava `route` como a URL
+inteira. O `view_url` do Canva é JWT, e o `SENSITIVE_QUERY` só redige
+**query** (`?token=`), não o **path** (`/api/design/<jwt>/view`). Por isso
+existe `Telemetry.routeForTelemetry()`: rota interna da SPA vai inteira, URL
+externa vira **só o host**.
+
+### Limites conhecidos
+
+- Miniatura é ~595×335; imagem ampliada na tela cheia fica mole. Se o Canva
+  passar a exigir autenticação na URL do thumbnail, entra um proxy
+  (`canva:thumbnail`, main faz o fetch com o Bearer) — hoje não foi preciso.
+- A porta 5530 precisa estar livre e registrada no portal; ocupada, o conectar
+  falha com `EADDRINUSE` legível em vez de travar.
+- Sem `client_secret` não existe fluxo: no portal é *Generate secret*.
+- Web/PWA não conecta (não há processo main para o retorno) — a aba avisa.
 
 ---
 

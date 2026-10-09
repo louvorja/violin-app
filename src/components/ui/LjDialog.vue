@@ -1,9 +1,10 @@
 <template>
   <DialogRoot v-model:open="open">
     <DialogPortal>
-      <DialogOverlay class="lj-dialog__overlay" />
+      <DialogOverlay class="lj-dialog__overlay" :style="layerStyle" />
       <DialogContent
         class="lj-dialog"
+        :style="layerStyle"
         :class="[`lj-dialog--${size}`, { 'lj-dialog--module': allowGlobalHotkeys }]"
         v-bind="description ? {} : { 'aria-describedby': undefined }"
         @open-auto-focus="onOpenAutoFocus"
@@ -44,7 +45,7 @@
 
 <script setup lang="ts">
 import { LjIcon } from "@/components/ui";
-import { computed } from "vue";
+import { computed, onScopeDispose, ref, watch } from "vue";
 import {
   DialogClose,
   DialogContent,
@@ -55,6 +56,7 @@ import {
   DialogTitle,
 } from "reka-ui";
 import { useI18n } from "vue-i18n";
+import { acquireDialogLevel, releaseDialogLevel } from "./dialogStack";
 import { ICONS } from "@/config/Icons";
 
 const { t } = useI18n();
@@ -88,6 +90,36 @@ const open = computed({
   set: (value) => emit("update:modelValue", value),
 });
 
+/**
+ * Nível na pilha de diálogos abertos. É automático de propósito: um diálogo
+ * que abre outro é o caso comum (gerenciador sobre formulário, form de
+ * categoria sobre o gerenciador) e o gerenciamento de quem fica sobre quem
+ * fica agnóstico para o usuario do componente. Veja `dialogStack.ts` para
+ * entender melhor.
+ */
+const nivelToken = Symbol("lj-dialog");
+const nivel = ref(0);
+
+// `immediate` cobre o diálogo que já começa aberto.
+watch(
+  open,
+  (isOpen) => {
+    if (isOpen) {
+      nivel.value = acquireDialogLevel(nivelToken);
+      return;
+    }
+    releaseDialogLevel(nivelToken);
+    nivel.value = 0;
+  },
+  { immediate: true }
+);
+
+// Um diálogo desmontado por `v-if` enquanto aberto não passa pelo watcher, e
+// sem isto o nível ficaria reservado para sempre.
+onScopeDispose(() => releaseDialogLevel(nivelToken));
+
+const layerStyle = computed(() => ({ "--lj-dialog-stack": String(nivel.value) }));
+
 // O foco automático no primeiro elemento faz o campo já abrir selecionado,
 // o que atrapalha em diálogos de confirmação. O contêiner recebe o foco e a
 // navegação por Tab segue funcionando.
@@ -114,10 +146,16 @@ function onDismiss(event: Event): void {
      o atributo de escopo para lá, então regras scoped simplesmente não casariam.
      O isolamento vem do prefixo `lj-` nas classes. -->
 <style>
+/* Passo 2 por nível porque cada diálogo ocupa DOIS níveis — o overlay e o
+   conteúdo. O overlay do diálogo do topo precisa cobrir o conteúdo do de baixo;
+   com passo 1 ele ficaria atrás dele e o diálogo de baixo pareceria "na
+   frente" sem estar. A folga até `--lj-z-popup` é de 49 níveis, então um
+   diálogo empilhado nunca cobre um painel flutuante (select dentro de
+   diálogo é caso corriqueiro). */
 .lj-dialog__overlay {
   position: fixed;
   inset: 0;
-  z-index: var(--lj-z-dialog);
+  z-index: calc(var(--lj-z-dialog) + var(--lj-dialog-stack, 0) * 2);
   background: var(--lj-black-alpha-40);
   animation: lj-dialog-fade var(--lj-ui-float-enter);
 }
@@ -134,7 +172,7 @@ function onDismiss(event: Event): void {
   position: fixed;
   top: 50%;
   left: 50%;
-  z-index: calc(var(--lj-z-dialog) + 1);
+  z-index: calc(var(--lj-z-dialog) + 1 + var(--lj-dialog-stack, 0) * 2);
   display: flex;
   flex-direction: column;
   transform: translate(-50%, -50%);
@@ -146,7 +184,8 @@ function onDismiss(event: Event): void {
   /* Recorta os cantos: o rodapé e o cabeçalho têm fundo próprio e vão de ponta
      a ponta, então sem isto o retângulo deles aparece por fora da curva. Nada
      dentro do diálogo depende de transbordar — o corpo já rola sozinho, e
-     select, menu e popover saem por portal, fora deste elemento. */
+     select, menu e popover saem por portal, fora deste elemento.
+  */
   overflow: hidden;
   box-shadow: var(--lj-shadow-3);
   color: var(--lj-text);

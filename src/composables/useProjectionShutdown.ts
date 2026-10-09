@@ -69,7 +69,9 @@ async function desligar(feature: string): Promise<void> {
       // caminho explícito de MEDIA_CLOSE.
       const mediaPlaying =
         $appdata.get<boolean>(KEYS.MODULES.MEDIA.IS_PLAYING, false) === true ||
-        $appdata.get<boolean>(KEYS.MODULES.MEDIA.CONFIG.VIDEO_FILE, false) === true;
+        $appdata.get<boolean>(KEYS.MODULES.MEDIA.CONFIG.VIDEO_FILE, false) === true ||
+        // O player embutido do YouTube segue na janela principal, que assume som e relógio.
+        $appdata.get<boolean>(KEYS.MODULES.MEDIA.CONFIG.IS_YOUTUBE, false) === true;
       // O botão do acervo deve voltar a permitir "projetar" o mesmo item,
       // mesmo que o player interno continue tocando sem a janela.
       $userdata.set(KEYS.MODULES.MEDIA_LIBRARY.IS_PLAYING, false);

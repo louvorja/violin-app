@@ -1,0 +1,4 @@
+# Os ícones são conferidos pelo hash do SVG (scripts/validate-brand-assets.mjs).
+# No Windows o autocrlf trocaria LF por CRLF no checkout, o hash mudaria e o
+# build da release falharia com "os ícones não acompanham o SVG atual".
+*.svg text eol=lf

@@ -7,7 +7,7 @@ import $path from "@/helpers/Path";
 import $broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useFileProjection } from "@/composables/useFileProjection";
-import { openAnnouncementsWindow } from "@/helpers/ProjectionWindows";
+import { openAnnouncementsWindow, openSiteWindow } from "@/helpers/ProjectionWindows";
 import { beginAnnouncementIntent } from "@/presentation/AnnouncementsPresentationState";
 import $appdata from "@/helpers/AppData";
 import $userdata from "@/helpers/UserData";
@@ -77,7 +77,7 @@ export function useLiturgyExecution() {
           await playMusic(item, item.subtipo || "sung");
           return;
         case LiturgyItemTypeEnum.SITE:
-          executeSite(item);
+          await executeSite(item);
           break;
         case LiturgyItemTypeEnum.ARQUIVO:
           projected = await openFile(item);
@@ -191,10 +191,42 @@ export function useLiturgyExecution() {
     });
   }
 
-  function openUrl(url: string): void {
+  /**
+   * Projeta a URL em janela de projeção do app.
+   *
+   * Não é `window.open`: o site saía da tela do operador para o navegador do
+   * sistema e o telão ficava sem nada. Aqui a URL ocupa a janela de projeção,
+   * com o monitor preferido e as mesmas preferências de arquivo.
+   */
+  async function openUrl(url: string): Promise<void> {
     if (!url) return;
     const valid = $liturgy.validateUrl(url);
-    window.open(valid, "_blank", "noopener,noreferrer");
+    /*
+     * A opção "Link no navegador" (YOUTUBE_ACTION) promete o navegador: sem
+     * este desvio o operador escolheria "link" e levaria janela de projeção.
+     */
+    if (isYoutube(valid) && $userdata.get<string>(KEYS.OPTIONS.YOUTUBE_ACTION, "video") === "link") {
+      window.open(valid, "_blank", "noopener,noreferrer");
+      return;
+    }
+    try {
+      /*
+       * Exclusão mútua: só um item no telão.
+       *
+       * `close(true)` faz o trabalho síncrono — para o áudio e zera o estado —
+       * mas só ENFILEIRA o fechamento das janelas, na fila interna de
+       * `_stageWindowTransition`. A espera tem que ser da MESMA fila: chamar
+       * `closeProjectionWindows` diretamente cria uma espera paralela, e a ação
+       * enfileirada sobrevive para rodar depois da URL já ter aberto — aí ela
+       * fecha a janela que acabou de entrar e as teclas voltam a não sair.
+       */
+      await $media.close(true);
+      await $media.closeProjectionStage();
+      await openSiteWindow(valid, "liturgy");
+    } catch (error) {
+      reportExecutionError(error, "open_site", { has_url: true });
+      console.warn("[useLiturgyItems] openSiteWindow falhou:", error);
+    }
   }
 
   /**
@@ -241,7 +273,7 @@ export function useLiturgyExecution() {
     return `https://www.youtube.com/embed/${id}?autoplay=1&rel=0&controls=0`;
   }
 
-  function executeSite(item: LiturgyItem): void {
+  async function executeSite(item: LiturgyItem): Promise<void> {
     const url = item.url || "";
     if (!url) return;
 
@@ -253,7 +285,7 @@ export function useLiturgyExecution() {
       }
     }
 
-    openUrl(url);
+    await openUrl(url);
   }
 
   async function executeOnlineVideo(item: LiturgyItem): Promise<boolean> {

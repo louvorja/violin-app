@@ -4,7 +4,20 @@
       <slot />
     </LjTable>
     <LjProgress v-if="loading" indeterminate :height="2" />
-    <LjAlert v-if="error" variant="danger" :text="error" class="__table-data-alert" />
+    <LjAlert
+      v-if="error"
+      :variant="offlineLibrary.offline.value ? 'warning' : 'danger'"
+      :text="
+        offlineLibrary.offline.value ? t('components.datatable.alerts.offline_no_catalog') : error
+      "
+      class="__table-data-alert"
+    />
+    <LjAlert
+      v-else-if="offline_filter && offlineLibrary.active.value"
+      variant="info"
+      :text="t('components.datatable.alerts.offline_downloaded_only')"
+      class="__table-data-alert"
+    />
   </div>
 </template>
 
@@ -24,6 +37,7 @@ import { isHymnalTrack } from "@/helpers/Hymnal";
 import Fuse from "fuse.js";
 import Telemetry from "@/helpers/Telemetry";
 import { useMusicCatalog } from "@/composables/useMusicCatalog";
+import { useOfflineLibrary } from "@/composables/useOfflineLibrary";
 import { isAlbumEnabled, prepareMusicCatalog, compareMusics } from "@root/config/musicCatalog.mjs";
 
 /** Campos onde o operador erra a digitação — nome da música e do álbum. */
@@ -78,11 +92,14 @@ const props = defineProps({
   search_min_length: { type: Number, default: 0 },
   /** Linhas locais somadas ao arquivo (acervo pessoal na tela de Músicas). */
   extra_rows: { type: Array, default: () => [] },
+  /** Offline, mostra só as músicas com áudio no aparelho (linhas com `id_music`). */
+  offline_filter: Boolean,
 });
 
 const emit = defineEmits(["update:modelValue"]);
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
+const offlineLibrary = useOfflineLibrary(() => locale.value);
 const { disabledAlbums, years } = useMusicCatalog(
   () => [],
   () => /_musics$/.test(props.file || "")
@@ -91,8 +108,17 @@ let sourceData = null;
 let fileData = null;
 
 function withExtraRows(rows) {
-  return props.extra_rows.length ? [...rows, ...props.extra_rows] : rows;
+  // O acervo pessoal (extra_rows) já é local: não passa pelo filtro offline.
+  const available =
+    props.offline_filter && offlineLibrary.active.value
+      ? rows.filter((row) => offlineLibrary.hasMusic(row.id_music))
+      : rows;
+  return props.extra_rows.length ? [...available, ...props.extra_rows] : available;
 }
+
+watch(offlineLibrary.active, () => {
+  if (props.offline_filter && fileData) applySource();
+});
 
 function applySource() {
   sourceData = withExtraRows(fileData);

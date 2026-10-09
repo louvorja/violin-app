@@ -1,6 +1,6 @@
 {
   "name": "louvorja-violin",
-  "version": "2.0.0-beta.14",
+  "version": "2.0.0-beta.15",
   "description": "Sistema de apresentação de letras de músicas e conteúdo bíblico para cultos e eventos religiosos.",
   "homepage": "https://louvorja.com.br",
   "desktopName": "louvorja-violin.desktop",
@@ -59,6 +59,7 @@
     "express": "^4.22.1",
     "fs-extra": "^11.2.0",
     "heic-to": "^1.5.2",
+    "ogg-opus-decoder": "^1.7.5",
     "qr-code-styling": "^1.9.2"
   },
   "devDependencies": {

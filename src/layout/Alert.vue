@@ -23,7 +23,10 @@
               <span v-if="alert.translate" v-html="$t(alert.text)" />
               <span v-else v-html="alert.text" />
             </p>
-            <small v-if="alert.error" class="alert-error" v-html="alert.error" />
+            <details v-if="alert.error" class="alert-details">
+              <summary>{{ $t("alert.technical_details") }}</summary>
+              <small class="alert-error" v-html="alert.error" />
+            </details>
           </div>
 
           <div v-if="alert.prompt" class="alert-body alert-body--input">
@@ -196,6 +199,18 @@ function clickBtn(value) {
   font-family: var(--lj-font-mono);
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.alert-details {
+  margin-top: var(--lj-space-3);
+}
+.alert-details summary {
+  cursor: pointer;
+  font-size: var(--lj-text-sm);
+  color: var(--lj-text-muted);
+}
+.alert-details .alert-error {
+  margin-top: var(--lj-space-2);
 }
 
 .alert-body--input {

@@ -38,6 +38,14 @@ export const FEATURE_ROLE = {
   online_video: ROLES.PROJECTION,
   background_projection: ROLES.PROJECTION,
   announcements: ROLES.PROJECTION,
+  // Item de liturgia do tipo Site: URL externa projetada na mesma tela.
+  site: ROLES.PROJECTION,
+  /*
+   * A tela de loading da projeção de Site. Precisa do papel para o
+   * `roleOfFeature` devolver um monitor — sem ele a janela é recusada fora da
+   * tela do operador e o loader simplesmente não aparecia no telão.
+   */
+  site_loader: ROLES.PROJECTION,
   counter: ROLES.PROJECTION,
   draw: ROLES.PROJECTION,
   name_draw: ROLES.PROJECTION,
@@ -55,6 +63,18 @@ export const FEATURE_ROLE = {
   file_return: ROLES.STAGE,
   online_video_return: ROLES.STAGE,
   background_projection_return: ROLES.STAGE,
+  /*
+   * A MESMA URL que `site`, no monitor de retorno.
+   *
+   * Sem papel aqui o `resolveFeature` devolve `unknown-feature`, o `reconcile`
+   * oculta a janela e o operador vê "Monitor desconectado — a projeção foi
+   * ocultada" sem ter desligado monitor nenhum. A abertura não falhava porque
+   * `ProjectionWindows._target` caía no fallback de `retorno` (mesmo papel) —
+   * só a resolução do main, que é quem decide se a janela fica visível.
+   */
+  site_return: ROLES.STAGE,
+  /* Loading da projeção de Site no monitor de retorno. */
+  site_loader_return: ROLES.STAGE,
   clock: ROLES.STAGE,
   clock_fullscreen: ROLES.STAGE,
 

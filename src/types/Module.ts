@@ -102,6 +102,9 @@ export interface Module {
   /** Visibilidade inicial no menu (persistida em modules.<id>.show_in_main_menu).
    *  Default = showInMainMenu. Permite começar oculto mesmo instalado. */
   defaultShowInMainMenu?: boolean;
+  /** O módulo só existe para alimentar uma janela de projeção. Some do menu
+   *  onde o navegador não consegue abri-la (ver `canOpenWebWindows`). */
+  requiresProjectionWindow?: boolean;
   /** Código de idioma para módulos com idioma fixo (ex: pt, es) */
   language?: string;
   /**

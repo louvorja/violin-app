@@ -80,6 +80,17 @@
               />
             </div>
             <div class="bgs-audio-card-actions">
+              <!-- Estrela = som padrão (o ponteiro único que o Apresentador inicia). -->
+              <LjButton
+                size="sm"
+                variant="ghost"
+                icon-only
+                :icon="isDefault(item.file.id) ? ICONS.UI.STAR : ICONS.UI.STAR_OUTLINE"
+                :aria-label="isDefault(item.file.id) ? tm('unset_default') : tm('set_default')"
+                class="bgs-audio-card-star"
+                :class="{ 'is-default': isDefault(item.file.id) }"
+                @click.stop="toggleDefault(item.file.id)"
+              />
               <LjButton
                 size="sm"
                 variant="ghost"
@@ -201,6 +212,8 @@
           </LjButton>
         </div>
 
+        <LjCheckbox v-model="editFileForm.isDefault" :label="tm('default_checkbox')" />
+
         <template #footer>
           <LjButton size="sm" @click="cancelEditFile">{{ tm("cancel") }}</LjButton>
           <LjButton size="sm" variant="primary" @click="saveFileEdit">{{ tm("save") }}</LjButton>
@@ -228,12 +241,20 @@ import ModuleContainer from "@/components/ModuleContainer.vue";
 import { useBackgroundSound } from "@/composables/useBackgroundSound";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
-import $appdata from "@/helpers/AppData";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
 import Alert from "@/helpers/Alert";
 import { ICONS } from "@/config/Icons";
-import { LjButton, LjDialog, LjEmpty, LjField, LjIcon, LjInput, LjSelect } from "@/components/ui";
+import {
+  LjButton,
+  LjCheckbox,
+  LjDialog,
+  LjEmpty,
+  LjField,
+  LjIcon,
+  LjInput,
+  LjSelect,
+} from "@/components/ui";
 import { AUDIO_EXT } from "@/constants/FileTypes";
 import CategoryManagerDialog, { CategoryFileData } from "@/components/CategoryManagerDialog.vue";
 import $idb from "@/helpers/IndexedDB";
@@ -365,11 +386,13 @@ const editFileForm = ref<{
   fileName: string;
   newFile: File | null;
   categoryId: string;
+  isDefault: boolean;
 }>({
   name: "",
   fileName: "",
   newFile: null,
   categoryId: "",
+  isDefault: false,
 });
 const editFileInput = ref<HTMLInputElement | null>(null);
 
@@ -401,7 +424,12 @@ async function loadSettings(): Promise<void> {
 }
 
 async function saveSettings(): Promise<void> {
-  await saveSetting({ id: SETTINGS_ID, ...cachedSettings });
+  /*
+   * `saveSetting` é `$idb.put` (substituição, não merge): o `autoPause` vem do
+   * player e não do cache local, senão um ajuste de fade daqui regravaria por
+   * cima da opção que o operador acabou de ligar na ribbon.
+   */
+  await saveSetting({ id: SETTINGS_ID, ...cachedSettings, autoPause: bg.autoPause.value });
   bg.fadeInMs.value = cachedSettings.fadeIn;
   bg.fadeOutMs.value = cachedSettings.fadeOut;
 }
@@ -417,13 +445,6 @@ const fadeOutDuration = computed({
   get: () => cachedSettings.fadeOut,
   set: (v: number) => {
     cachedSettings.fadeOut = v;
-    saveSettings();
-  },
-});
-const autoPause = computed({
-  get: () => cachedSettings.autoPause,
-  set: (v: boolean) => {
-    cachedSettings.autoPause = v;
     saveSettings();
   },
 });
@@ -702,8 +723,24 @@ async function removeFile(categoryId: string, file: MediaFile): Promise<void> {
 async function doRemove(fileId: string): Promise<void> {
   if (bg.currentFile.value?.id === fileId) bg.stop();
   await deleteLibraryFile(fileId);
+  const defaultKey = KEYS.MODULES.BACKGROUND_SOUND.DEFAULT_ID;
+  if (String($userdata.get(defaultKey, "")) === fileId) $userdata.set(defaultKey, "");
   libraryFiles.value = await loadLibrary();
   rebuildAllBlobUrls(libraryFiles.value);
+}
+
+/** Som marcado como padrão (user_data) — mesma chave do edit e da ribbon. */
+const defaultSoundId = computed(() =>
+  String($userdata.get(KEYS.MODULES.BACKGROUND_SOUND.DEFAULT_ID, "") ?? "")
+);
+
+function isDefault(fileId: string): boolean {
+  return !!fileId && defaultSoundId.value === fileId;
+}
+
+/** Estrela alterna: marcar este (substitui o anterior) ou desmarcar (se é o atual). */
+function toggleDefault(fileId: string): void {
+  $userdata.set(KEYS.MODULES.BACKGROUND_SOUND.DEFAULT_ID, isDefault(fileId) ? "" : fileId);
 }
 
 function openEditFile(item: { file: MediaFile; categoryId: string }): void {
@@ -713,6 +750,7 @@ function openEditFile(item: { file: MediaFile; categoryId: string }): void {
     fileName: item.file.fileName,
     newFile: null,
     categoryId: item.categoryId,
+    isDefault: String($userdata.get(KEYS.MODULES.BACKGROUND_SOUND.DEFAULT_ID, "")) === item.file.id,
   };
   showEditFileDialog.value = true;
 }
@@ -758,6 +796,17 @@ async function saveFileEdit(): Promise<void> {
   createdObjectUrls.delete(urlKey);
 
   await saveLibraryFile(storedFile);
+
+  // Som padrão = ponteiro único em user_data (marcar este substitui o anterior;
+  // desmarcar só limpa se o ponteiro apontava para este arquivo).
+  const defaultKey = KEYS.MODULES.BACKGROUND_SOUND.DEFAULT_ID;
+  const atual = String($userdata.get(defaultKey, ""));
+  if (editFileForm.value.isDefault) {
+    $userdata.set(defaultKey, storedFile.id);
+  } else if (atual === storedFile.id) {
+    $userdata.set(defaultKey, "");
+  }
+
   libraryFiles.value = await loadLibrary();
   rebuildAllBlobUrls(libraryFiles.value);
   showEditFileDialog.value = false;
@@ -891,42 +940,6 @@ useBroadcastListener(BROADCAST_TYPE.MODULE_RIBBON_ACTION, (payload) => {
 });
 
 /* ------------------------------------------------------------------ */
-/*  Auto-pause when media player opens                                 */
-/* ------------------------------------------------------------------ */
-
-watch(
-  () => $appdata.get("modules.media.show"),
-  (show) => {
-    if (autoPause.value && show && bg.isPlaying.value) {
-      bg.fadeOut(fadeOutDuration.value, () => bg.pause());
-    }
-  }
-);
-
-// Música tocando (áudio puro ou letra) — cobre openAudio/openLyric,
-// que não abrem o módulo de Mídia.
-watch(
-  () => $appdata.get("modules.media.is_playing"),
-  (playing) => {
-    if (autoPause.value && playing && bg.isPlaying.value) {
-      bg.fadeOut(fadeOutDuration.value, () => bg.pause());
-    }
-  }
-);
-
-useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION, () => {
-  if (autoPause.value && bg.isPlaying.value) {
-    bg.fadeOut(fadeOutDuration.value, () => bg.pause());
-  }
-});
-
-useBroadcastListener(BROADCAST_TYPE.ONLINE_VIDEO_PROJECTION, () => {
-  if (autoPause.value && bg.isPlaying.value) {
-    bg.fadeOut(fadeOutDuration.value, () => bg.pause());
-  }
-});
-
-/* ------------------------------------------------------------------ */
 /*  Lifecycle                                                          */
 /* ------------------------------------------------------------------ */
 
@@ -1004,6 +1017,12 @@ onMounted(async () => {
   bg.repeat.value = cachedSettings.repeat;
   bg.fadeInMs.value = cachedSettings.fadeIn;
   bg.fadeOutMs.value = cachedSettings.fadeOut;
+  /*
+   * Os gatilhos do "pausar automaticamente" vivem no composable (e não aqui):
+   * esta aba vai para a faixa KeepAlive de consultas e some do DOM depois de
+   * outras quatro. Aqui só sincroniza o valor lido.
+   */
+  bg.autoPause.value = cachedSettings.autoPause;
   categories.value = await loadCategories();
   libraryFiles.value = await loadLibrary();
   rebuildIconUrls(categories.value);
@@ -1202,6 +1221,10 @@ onBeforeUnmount(() => {
   box-shadow: 0 0 0 2px var(--lj-white-alpha-50);
   border-color: transparent;
 }
+.bgs-audio-card-star.is-default {
+  color: var(--lj-warning);
+}
+
 .bgs-audio-card-body {
   flex: 1;
   display: flex;

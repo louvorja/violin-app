@@ -125,9 +125,8 @@
     <section v-if="form.tipo === LiturgyItemTypeEnum.SITE" class="lif-panel">
       <h3 class="lif-panel__title">{{ t("types.site") }}</h3>
       <LjField layout="column" :label="t('inputs.url')">
-        <div class="lif-inline">
+        <div class="lif-inline lif-inline--half">
           <LjInput
-            class="lif-inline__grow"
             :model-value="form.url"
             placeholder="https://"
             @update:model-value="setFormField('url', $event)"
@@ -149,9 +148,8 @@
     <section v-if="form.tipo === LiturgyItemTypeEnum.ARQUIVO" class="lif-panel">
       <h3 class="lif-panel__title">{{ t("types.arquivo") }}</h3>
       <LjField layout="column" :label="t('inputs.file_path')">
-        <div class="lif-inline">
+        <div class="lif-inline lif-inline--half">
           <LjInput
-            class="lif-inline__grow"
             :model-value="form.dir"
             :placeholder="t('inputs.file_path_placeholder')"
             @update:model-value="setFormField('dir', $event)"
@@ -204,9 +202,8 @@
     <section v-if="form.tipo === 'itens-agendados'" class="lif-panel">
       <h3 class="lif-panel__title">{{ t("types.itens-agendados") }}</h3>
       <LjField layout="column" :label="t('inputs.scheduled_category')" :error="formErrors?.id">
-        <div class="lif-inline">
+        <div class="lif-inline lif-inline--half">
           <LjSelect
-            class="lif-inline__grow"
             :model-value="String(form.id ?? '')"
             :items="scheduledOptions"
             :placeholder="t('inputs.scheduled_pick')"
@@ -233,16 +230,29 @@
     <!-- ─── Painel VÍDEO ON-LINE ─── -->
     <section v-if="form.tipo === 'video-online'" class="lif-panel">
       <h3 class="lif-panel__title">{{ t("types.video-online") }}</h3>
-      <LjField layout="column" :label="t('inputs.video_select')">
+
+      <LjField layout="column" class="lif-spaced">
         <div>
-          <LjButton variant="ghost" :icon="ICONS.ACTIONS.SEARCH" @click="videoSearchOpen = true">
+          <LjButton variant="primary" :icon="ICONS.ACTIONS.SEARCH" @click="videoSearchOpen = true">
             {{ t("inputs.video_search_btn") }}
           </LjButton>
+          <!--
+            O X vem de `removable` (é o primitivo do design system, com
+            aria-label de fábrica). Clicar limpa a escolha e devolve o campo
+            de URL direta ao operador.
+          -->
+          <LjChip
+            v-if="form.url"
+            class="lif-selected"
+            style="margin-left: 10px"
+            :icon="ICONS.MEDIA.YOUTUBE"
+            removable
+            @remove="clearVideoSelection"
+          >
+            <span class="lif-selected__name">{{ selectedVideoName }}</span>
+          </LjChip>
         </div>
       </LjField>
-      <LjChip v-if="form.url" class="lif-selected" :icon="ICONS.MEDIA.YOUTUBE">
-        <span class="lif-selected__name">{{ selectedVideoName }}</span>
-      </LjChip>
       <p v-if="!videosList?.length" class="lif-hint lif-spaced">
         {{ t("inputs.video_empty") }}
       </p>
@@ -250,6 +260,39 @@
         v-model="videoSearchOpen"
         :videos-list="videosList"
         @pick="onVideoSearchPicked"
+      />
+      <div style="margin: 20px 0 20px 0">OU</div>
+
+      <!-- Em vez de procurar no catálogo: cola o link e confirma. -->
+      <LjField layout="column" :label="t('inputs.video_url_or_select')">
+        <div class="lif-inline lif-inline--half">
+          <!--
+            Com vídeo escolhido o campo fica desabilitado: são dois caminhos
+            que se excluem (catálogo e link direto) e o que vale é o que está
+            selecionado. O X do chip é quem devolve o campo.
+          -->
+          <LjInput
+            v-model="videoUrl"
+            :placeholder="t('inputs.video_url_placeholder')"
+            :disabled="videoUrlBusy || !!form.url"
+            @keydown.enter.prevent="confirmVideoUrl"
+          />
+          <LjButton
+            variant="primary"
+            :icon="ICONS.PROJECTION.START"
+            :loading="videoUrlBusy"
+            :disabled="videoUrlBusy || !!form.url"
+            @click="confirmVideoUrl"
+          >
+            {{ t("inputs.video_url_ok") }}
+          </LjButton>
+        </div>
+      </LjField>
+      <LjCheckbox
+        class="lif-spaced"
+        :model-value="saveToMyVideos"
+        :label="t('inputs.video_save_mine')"
+        @update:model-value="setSaveToMyVideos($event)"
       />
     </section>
 
@@ -436,6 +479,10 @@ import Platform from "@/helpers/Platform";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
 import { buildMusicOptions, musicMatches, type MusicOption } from "../musicOptions";
+import $snackbar from "@/helpers/Snackbar";
+import { downloadAvailable, fetchYoutubeTitle, videoIdFromUrl } from "@/helpers/OnlineVideo";
+import { useOnlineVideoDownloads } from "@/composables/useOnlineVideoDownloads";
+import { i18nAtual } from "@/i18n";
 import { useMusicCatalog } from "@/composables/useMusicCatalog";
 import { useI18n } from "vue-i18n";
 
@@ -461,6 +508,8 @@ const props = withDefaults(
     openSite: () => void;
     chooseFile: () => Promise<void>;
     openSchedulesDialog: () => void;
+    /** Recarrega a lista depois de salvar em Meus Vídeos Online. */
+    reloadVideos?: () => Promise<void>;
   }>(),
   {
     modelValue: false,
@@ -471,6 +520,7 @@ const props = withDefaults(
     blocoItems: () => [],
     videosList: () => [],
     overlaySlots: () => [],
+    reloadVideos: async () => {},
   }
 );
 
@@ -604,13 +654,100 @@ function updateDurationForVersion(version: string) {
   props.setFormField("duration", minutes);
 }
 
-function onVideoSearchPicked(v: { name: string; url: string }) {
+function onVideoSearchPicked(v: { name: string; url: string }): void {
   props.setFormField("url", v.url);
   props.setFormField("item", v.name);
   props.setFormField("subitem", v.name);
+  /*
+   * O link colado deixa de valer: sem isto o campo desabilitado ainda
+   * carregaria o URL antigo, e o botão "Usar" o reaplicaria por cima da
+   * escolha nova sem ninguém ver.
+   */
+  videoUrl.value = "";
+}
+
+/** O X do chip: devolve o campo de URL direta ao operador. */
+function clearVideoSelection(): void {
+  props.setFormField("url", "");
+  props.setFormField("item", "");
+  props.setFormField("subitem", "");
+  videoUrl.value = "";
 }
 
 const videoSearchOpen = ref(false);
+
+// --- URL colada: em vez de procurar no catálogo, o operador cola o link ---
+const videoUrl = ref("");
+const videoUrlBusy = ref(false);
+const saveToMyVideos = ref(false);
+const videoDownloads = useOnlineVideoDownloads();
+
+/*
+ * Reabre limpo: o checkbox é opt-in e o campo não guarda texto da sessão
+ * anterior — senão o operador confirmaria um link sem querer.
+ */
+watch(
+  () => props.modelValue,
+  (aberto) => {
+    if (aberto) {
+      videoUrl.value = "";
+      saveToMyVideos.value = false;
+    }
+  }
+);
+
+function setSaveToMyVideos(ativo: boolean): void {
+  saveToMyVideos.value = ativo;
+}
+
+/**
+ * Confirma o link colado: preenche o item e dá partida no download.
+ *
+ * O download acontece sempre, ligado ou não o checkbox — a opção controla só
+ * se o vídeo é salvo na lista. O progresso já vai por tarefa em segundo plano;
+ * o aviso é só para não parecer que o botão não fez nada.
+ */
+async function confirmVideoUrl(): Promise<void> {
+  const digitado = videoUrl.value.trim();
+  if (!digitado || videoUrlBusy.value) return;
+  videoUrlBusy.value = true;
+  try {
+    const url = Liturgy.validateUrl(digitado);
+    const ytId = videoIdFromUrl(url);
+    if (!ytId) {
+      $snackbar.error(t("inputs.video_url_invalid"));
+      return;
+    }
+    const nome = (await fetchYoutubeTitle(ytId)) || url;
+    props.setFormField("url", url);
+    props.setFormField("item", nome);
+    props.setFormField("subitem", "YouTube");
+    videoUrl.value = url;
+
+    if (saveToMyVideos.value) {
+      await $idb.put(DB_TABLE.CUSTOM_ONLINE_VIDEOS, {
+        id: crypto.randomUUID(),
+        name: nome,
+        url,
+        createdAt: new Date().toISOString(),
+      });
+      await props.reloadVideos?.();
+    }
+
+    /*
+     * Aviso só onde há download de verdade: no web/PWA o `download` devolve
+     * false e o operador veria "Baixando" sem que nada baixasse.
+     */
+    if (downloadAvailable()) {
+      const globalT = i18nAtual()?.global?.t;
+      const aviso = globalT ? String(globalT("online_video.preparing")) : "";
+      if (aviso) $snackbar.info(aviso, { key: "liturgy-video-download", timeout: 5000 });
+    }
+    void videoDownloads.download(ytId, nome, { keep: saveToMyVideos.value });
+  } finally {
+    videoUrlBusy.value = false;
+  }
+}
 
 const selectedVideoName = computed(() => {
   const url = props.form.url || "";
@@ -889,11 +1026,53 @@ function onVersionChange(version: string) {
   display: flex;
   align-items: center;
   gap: var(--lj-space-2);
+  /* A largura que decide o tamanho do campo é a da LINHA, não a da janela: o
+     diálogo tem max-width fixo (860px no tamanho lg), então uma media query
+     trataria uma tela de 2560px como "larga" para um campo que continua
+     medindo ~790px. Mesma convenção de `overlay-module` e `lj-slide`. */
+  container-type: inline-size;
+  container-name: lif-inline;
 }
 
-.lif-inline .lif-inline__grow {
-  flex: 1;
+/* O campo ocupa uma parte da linha e o botão fica ao lado. A escada sobe de
+   50% para 100% conforme a linha encolhe, para o campo não virar um traço
+   estreito em tela pequena nem uma barra de 600px em tela grande.
+
+   A largura vai no WRAPPER, via :deep(), e não na classe do controle:
+   `LjInput` e `LjSelect` usam `inheritAttrs: false` e repassam `$attrs` para
+   o elemento interno (o <input> e o gatilho do select). No `LjInput` a
+   classe ia parar no <input>, que não é flex item da linha — por isso o
+   `flex: 1` desta regra nunca teve efeito nenhum. */
+.lif-inline--half :deep(.lj-input),
+.lif-inline--half :deep(.lj-select) {
+  flex: 1 1 100%;
   min-width: 0;
+}
+
+@container lif-inline (min-width: 480px) {
+  .lif-inline--half :deep(.lj-input),
+  .lif-inline--half :deep(.lj-select) {
+    flex: 0 1 75%;
+  }
+}
+
+@container lif-inline (min-width: 640px) {
+  .lif-inline--half :deep(.lj-input),
+  .lif-inline--half :deep(.lj-select) {
+    flex: 0 1 50%;
+  }
+}
+
+/* No degrau de 100% o botão não caberia ao lado — `.lif-inline` não faz wrap,
+   e ele seria espremado a um alvo de 2px. Ele quebra para a linha de baixo,
+   encostado na direita. */
+@container lif-inline (max-width: 479px) {
+  .lif-inline--half {
+    flex-wrap: wrap;
+  }
+  .lif-inline--half > :last-child {
+    margin-left: auto;
+  }
 }
 
 .lif-fill {

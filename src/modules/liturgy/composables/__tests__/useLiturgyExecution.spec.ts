@@ -17,9 +17,14 @@ const mocks = vi.hoisted(() => ({
   getCustomSong: vi.fn(),
   resolveAudio: vi.fn(),
   openAnnouncementsWindow: vi.fn(),
+  openSiteWindow: vi.fn(),
+  closeMedia: vi.fn(),
+  closeProjectionStage: vi.fn(async () => {}),
   broadcastSend: vi.fn(),
   broadcastGetLastPayload: vi.fn(),
   systemPlayer: false,
+  /** Preferências que um caso queira forçar, lidas antes do `fallback`. */
+  userdataValues: new Map<string, unknown>(),
 }));
 
 vi.mock("../../i18n", () => ({
@@ -32,18 +37,22 @@ vi.mock("@/helpers/Platform", () => ({
 }));
 vi.mock("@/helpers/UserData", () => ({
   default: {
-    get: (_key: string, fallback: unknown) => (mocks.systemPlayer ? true : fallback),
+    get: (key: string, fallback: unknown) => {
+      if (mocks.userdataValues.has(key)) return mocks.userdataValues.get(key);
+      return mocks.systemPlayer ? true : fallback;
+    },
     set: mocks.userdataSet,
   },
 }));
 vi.mock("@/composables/useMedia", () => ({
   default: {
-    close: vi.fn(),
+    close: mocks.closeMedia,
     stop: vi.fn(),
     open: mocks.openMusic,
     openCustomSong: mocks.openCustomSong,
     openCustomAudio: mocks.openCustomAudio,
     openYouTube: mocks.openYouTube,
+    closeProjectionStage: mocks.closeProjectionStage,
     openAudio: mocks.openAudio,
     projectFile: mocks.projectFile,
   },
@@ -52,7 +61,22 @@ vi.mock("@/composables/useBackgroundSound", () => ({
   useBackgroundSound: () => ({ currentFile: { value: null } }),
 }));
 vi.mock("@/composables/useFileProjection", () => ({ useFileProjection: () => ({ start: vi.fn() }) }));
-vi.mock("@/helpers/Liturgy", () => ({ default: {} }));
+/*
+ * Só o que o composable chama. `validateUrl` copia a regra de
+ * `src/helpers/Liturgy.ts`: sem o mock o item Site lançava TypeError e o
+ * executeItem engolia o erro, sem abrir janela nenhuma.
+ */
+vi.mock("@/helpers/Liturgy", () => ({
+  default: {
+    validateUrl: (url: string) =>
+      !url ||
+      url.startsWith("http://") ||
+      url.startsWith("https://") ||
+      url.startsWith("ftp://")
+        ? url
+        : `http://${url}`,
+  },
+}));
 vi.mock("@/helpers/ImageConvert", () => ({ heicToJpeg: vi.fn() }));
 vi.mock("@/helpers/Alert", () => ({ default: { error: vi.fn(), info: vi.fn(), show: vi.fn() } }));
 vi.mock("@/helpers/Broadcast", () => ({
@@ -61,6 +85,7 @@ vi.mock("@/helpers/Broadcast", () => ({
 vi.mock("@/helpers/ProjectionWindows", () => ({
   openFileProjectionWindows: vi.fn(async () => {}),
   openAnnouncementsWindow: mocks.openAnnouncementsWindow,
+  openSiteWindow: mocks.openSiteWindow,
 }));
 vi.mock("@/helpers/AppData", () => ({ default: { get: vi.fn(), set: vi.fn() } }));
 vi.mock("@/helpers/IndexedDB", () => ({ default: { getAll: mocks.idbGetAll } }));
@@ -88,6 +113,10 @@ function arquivo(dir: string, item = "Arquivo"): LiturgyItem {
   return { id: "1", tipo: LiturgyItemTypeEnum.ARQUIVO, item, dir } as LiturgyItem;
 }
 
+function site(url: string, item = "Site"): LiturgyItem {
+  return { id: "s1", tipo: LiturgyItemTypeEnum.SITE, item, url } as LiturgyItem;
+}
+
 function linked(item: LiturgyItem): LiturgyItem {
   return { ...item, linked_overlay_id: "slot-1" };
 }
@@ -106,6 +135,7 @@ function music(mode = "sung"): LiturgyItem {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.systemPlayer = false;
+  mocks.userdataValues.clear();
   mocks.openSlja.mockResolvedValue(true);
   mocks.openPath.mockResolvedValue({ ok: true });
   mocks.openAudio.mockResolvedValue(undefined);
@@ -120,6 +150,9 @@ beforeEach(() => {
   mocks.getCustomSong.mockResolvedValue(null);
   mocks.resolveAudio.mockResolvedValue(null);
   mocks.openAnnouncementsWindow.mockResolvedValue(true);
+  mocks.openSiteWindow.mockResolvedValue(true);
+  mocks.closeMedia.mockClear();
+  mocks.closeProjectionStage.mockClear();
   mocks.broadcastGetLastPayload.mockReturnValue(null);
 });
 
@@ -181,6 +214,90 @@ describe("liturgia — item de arquivo .slja", () => {
       expect.objectContaining({ type: "video", title: "Vídeo" }),
       expect.any(String)
     );
+  });
+});
+
+describe("liturgia — item de site", () => {
+  it("abre a URL na janela de projeção do app, não no navegador do sistema", async () => {
+    /*
+     * Antes o site saía da tela do operador para o navegador do sistema e o
+     * telão ficava sem nada — não era projeção.
+     */
+    const navegador = vi.spyOn(window, "open").mockImplementation(() => null);
+    const { executeItem } = useLiturgyExecution();
+
+    await executeItem(site("https://exemplo.com/enquete"));
+
+    expect(mocks.openSiteWindow).toHaveBeenCalledWith("https://exemplo.com/enquete", "liturgy");
+    expect(navegador).not.toHaveBeenCalled();
+    navegador.mockRestore();
+  });
+
+  it("abrir o site encerra o que estava projetado, e espera as janelas saírem", async () => {
+    /*
+     * Exclusão mútua: só um item no telão.
+     *
+     * `close(true)` faz o trabalho síncrono (para o áudio e zera o estado) mas
+     * só ENFILEIRA o fechamento; a espera é da MESMA fila — sem ela a URL
+     * abriria por cima do que ainda está saindo. A ordem tem que ser exatamente
+     * esta: fechar, esperar a fila, abrir.
+     */
+    const { executeItem } = useLiturgyExecution();
+
+    await executeItem(site("https://exemplo.com/enquete"));
+
+    expect(mocks.closeMedia).toHaveBeenCalledWith(true);
+    expect(mocks.closeProjectionStage).toHaveBeenCalledTimes(1);
+    expect(mocks.openSiteWindow).toHaveBeenCalledTimes(1);
+    const aoFechar = mocks.closeProjectionStage.mock.invocationCallOrder[0];
+    const aoAbrir = mocks.openSiteWindow.mock.invocationCallOrder[0];
+    expect(aoFechar).toBeLessThan(aoAbrir);
+  });
+
+  it("URL sem protocolo ganha o http:// antes de ir para a janela", async () => {
+    const { executeItem } = useLiturgyExecution();
+
+    await executeItem(site("exemplo.com/enquete"));
+
+    expect(mocks.openSiteWindow).toHaveBeenCalledWith("http://exemplo.com/enquete", "liturgy");
+  });
+
+  it("sem URL não abre janela nenhuma", async () => {
+    const { executeItem } = useLiturgyExecution();
+
+    await executeItem(site(""));
+
+    expect(mocks.openSiteWindow).not.toHaveBeenCalled();
+  });
+
+  it("com a opção 'Link no navegador', o YouTube segue para o navegador", async () => {
+    /*
+     * A opção existe desde antes da janela de projeção: quem escolheu "link"
+     * tem direito ao navegador, e não a uma janela de projeção.
+     */
+    mocks.userdataValues.set(KEYS.OPTIONS.YOUTUBE_ACTION, "link");
+    const navegador = vi.spyOn(window, "open").mockImplementation(() => null);
+    const { executeItem } = useLiturgyExecution();
+
+    await executeItem(site("https://www.youtube.com/watch?v=dQw4w9WgXcQ"));
+
+    expect(navegador).toHaveBeenCalledTimes(1);
+    expect(mocks.openSiteWindow).not.toHaveBeenCalled();
+    expect(mocks.openYouTube).not.toHaveBeenCalled();
+    navegador.mockRestore();
+  });
+
+  it("YouTube com a preferência padrão segue para o player, não para a janela de site", async () => {
+    /*
+     * O item Site serve de porta para link de vídeo: quando o operador prefere
+     * vídeo, ele toca dentro do app e a janela de site não entra.
+     */
+    const { executeItem } = useLiturgyExecution();
+
+    await executeItem(site("https://www.youtube.com/watch?v=dQw4w9WgXcQ"));
+
+    expect(mocks.openYouTube).toHaveBeenCalledTimes(1);
+    expect(mocks.openSiteWindow).not.toHaveBeenCalled();
   });
 });
 

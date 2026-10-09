@@ -358,6 +358,7 @@ import {
   ContextMenuTrigger,
 } from "reka-ui";
 import { module as manifest } from "../manifest";
+import { aplicarOrdemDoDrag } from "../dragOrder";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import {
   LjButton,
@@ -566,10 +567,13 @@ async function removeAnnouncement(a: Announcement): Promise<void> {
 }
 
 async function onDragEnd(): Promise<void> {
-  for (let i = 0; i < sorted.value.length; i++) {
-    sorted.value[i].ordem = i + 1;
-  }
-  await Promise.all(sorted.value.map((a) => saveItem(a)));
+  /*
+   * Uma leitura só (ver dragOrder.ts): ler `sorted.value` dentro do laço
+   * reordenava a lista debaixo dos pés a cada escrita de `ordem`, e o valor
+   * acabava no item errado — a ordem "não mudava" ao soltar.
+   */
+  const ordenados = aplicarOrdemDoDrag(() => sorted.value);
+  await Promise.all(ordenados.map((a) => saveItem(a)));
 }
 
 // ─── Mídia ───────────────────────────────────────────────────────────

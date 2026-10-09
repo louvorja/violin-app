@@ -24,6 +24,7 @@ import { useAlbum } from "@/composables/useAlbum";
 import {
   openProjectionWindows,
   openVideoProjectionWindows,
+  isVideoProjectionOpen,
   openFileProjectionWindows,
   closeProjectionWindows,
   closeFileProjectionWindows,
@@ -33,11 +34,13 @@ import { Music } from "@/types/Music";
 import type { Lyric } from "@/types/Lyric";
 import { LyricOpenParams } from "@/types/Lyric";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
+import { moverPaginaPdf } from "@/helpers/FileProjectionPage";
 import { MediaOpenParams } from "@/types/Media";
 import { MusicActionEnum } from "@/enums/MusicActionEnum";
 import AudioLibrary from "@/helpers/AudioLibrary";
 import { slideTimes } from "@/helpers/CustomSongs";
 import Telemetry from "@/helpers/Telemetry";
+import { decodeOpusToWav, isOpusUrl, opusNeedsFallback } from "@/helpers/OpusFallback";
 import Platform from "@/helpers/Platform";
 import * as OnlineVideo from "@/helpers/OnlineVideo";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
@@ -45,6 +48,7 @@ import { useOnlineVideoDownloads } from "@/composables/useOnlineVideoDownloads";
 import { VideoStateRevisionCounter } from "@/helpers/VideoStateVersion";
 import { createVideoPlaybackSnapshot, shouldRespondToVideoStateRequest } from "@/helpers/VideoPlaybackSnapshot";
 import { nextFileProjectionEpoch } from "@/presentation/FileProjectionActivation";
+import { audioFailure } from "@/helpers/AudioFailure";
 import { mediaSourceDetails, mediaElementDetails, mediaFormatDetails, mediaDiagnosticMessage, mediaBlobDetails, mediaDiagnosticLog } from "@/helpers/MediaDiagnostics";
 
 const _audio = useAudioPlayback();
@@ -56,6 +60,13 @@ function _closeAlbumForPresentation(): void {
 }
 let _loadingId: string | number | null = null;
 let _playlistOnEnd: (() => boolean) | null = null;
+// Database pode tentar dois hosts, cada um com NET_TIMEOUT.DEFAULT até os
+// headers. A margem cobre leitura do cache e JSON sem deixar um corpo travado
+// manter a abertura pendurada. Esse orçamento só vale para metadata musical.
+const MUSIC_METADATA_TIMEOUT_MS = 2 * NET_TIMEOUT.DEFAULT + 5000;
+// Cancela só a espera deste player. A busca deduplicada do Database continua
+// atendendo outros consumidores e preenchendo o cache.
+let _cancelMusicMetadataWait: (() => void) | null = null;
 // XHR atual de download de áudio — abortado ao trocar de música rapidamente
 // para liberar conexão e evitar callbacks de respostas obsoletas (mesmo que
 // o early-return pelo _loadingId já as ignore, a request continuava
@@ -382,8 +393,8 @@ async function _releaseFileVideoStage(stageEpoch: number, wasVisibleAlready = fa
   });
 }
 
-async function _openTrackedVideoWindows(withOperator = false): Promise<void> {
-  const opening = openVideoProjectionWindows({ withOperator });
+async function _openTrackedVideoWindows(): Promise<void> {
+  const opening = openVideoProjectionWindows();
   _videoWindowOpenings.add(opening);
   try { await opening; }
   finally { _videoWindowOpenings.delete(opening); }
@@ -396,12 +407,12 @@ async function _openTrackedFileWindows(): Promise<void> {
   finally { _videoWindowOpenings.delete(opening); }
 }
 
-async function _claimVideoWindows(stageEpoch: number, withOperator = false): Promise<boolean> {
+async function _claimVideoWindows(stageEpoch: number): Promise<boolean> {
   // O close de MUSIC/RETURN termina antes de um novo pedido de música poder
   // abrir essas features. FILE permanece intacta ao trocar vídeo por vídeo.
   await _queueStageWindows(stageEpoch, closeMusicProjectionWindows);
   if (stageEpoch !== _stageEpoch) return false;
-  await _afterStageWindowCloses(stageEpoch, () => _openTrackedVideoWindows(withOperator));
+  await _afterStageWindowCloses(stageEpoch, () => _openTrackedVideoWindows());
   return stageEpoch === _stageEpoch;
 }
 
@@ -535,7 +546,7 @@ async function _openVideoFileProjection(
   }
 
   try {
-    if (!(await _claimVideoWindows(stageEpoch, true))) return false;
+    if (!(await _claimVideoWindows(stageEpoch))) return false;
   } catch (error) {
     Telemetry.captureException(error, { operation: "online_video_projection_open" });
   }
@@ -714,6 +725,32 @@ async function _runStreamedYouTube(
   }
 }
 
+function _alertAudioFailure(error: unknown, retry?: () => void): void {
+  const { text, retryable } = audioFailure(error, {
+    streaming: !!$appdata.get(KEYS.MODULES.MEDIA.CONFIG.LAZY),
+    // IS_ONLINE só cai na segunda falha; o navegador sabe antes que a rede saiu.
+    online: $appdata.get(KEYS.SHELL.IS_ONLINE) !== false && navigator.onLine !== false,
+  });
+  const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error || "");
+  const canRetry = retryable && !!retry;
+  // `show`, e não `error`: este fixa os botões em "Fechar" e some com o "Tentar de novo".
+  $alert.show(
+    {
+      title: "modules.media.alerts.not_loaded_title",
+      text,
+      error: detail ? mediaDiagnosticMessage(detail) || detail : "",
+      color: "error",
+      buttons: [
+        ...(canRetry ? [{ text: "alert.retry", color: "primary", value: "retry" }] : []),
+        { text: "alert.close", color: "error", value: "close" },
+      ],
+    },
+    (a?: unknown) => {
+      if (a === "retry") retry?.();
+    }
+  );
+}
+
 function _loadAudioSrc(
   audioUrl: string,
   idCheck: string | number | null,
@@ -761,9 +798,11 @@ function _loadAudioSrc(
   // traria a trilha inteira antes de tocar, que é justamente a espera que se quer evitar.
   const streamsFromDisk =
     audioUrl.startsWith("louvorja://onlinevideo/") || OnlineVideo.isProgressiveUrl(audioUrl);
+  const needsOpusDecode = isOpusUrl(audioUrl) && opusNeedsFallback();
   if (
-    streamsFromDisk ||
-    ($appdata.get(KEYS.SHELL.IS_ONLINE) && $userdata.get(KEYS.MODULES.MEDIA.LAZY_LOAD))
+    !needsOpusDecode &&
+    (streamsFromDisk ||
+      ($appdata.get(KEYS.SHELL.IS_ONLINE) && $userdata.get(KEYS.MODULES.MEDIA.LAZY_LOAD)))
   ) {
     if (_activePlayback) {
       _activePlayback = { ..._activePlayback, lazy: true };
@@ -808,9 +847,7 @@ function _loadAudioSrc(
       requestTelemetry({ operation: "music_audio_request_open", id_music: idCheck })
     );
     if (!_keepVideoProjectionOnLoadError()) _self.close(true);
-    $alert.error({ text: "modules.media.alerts.not_loaded", error }, function (a?: unknown) {
-      if (a) requestRetry();
-    });
+    _alertAudioFailure(error, requestRetry);
     return;
   }
 
@@ -861,8 +898,32 @@ function _loadAudioSrc(
         })
       );
       if (ehRemota(audioUrl)) reportNetworkResult(true, "media");
-      const sourceUrl = URL.createObjectURL(this.response as Blob);
-      onSource(sourceUrl, false, requestContext?.original_source);
+      const finish = (blob: Blob): void => {
+        if (_loadingId !== idCheck) return;
+        onSource(URL.createObjectURL(blob), false, requestContext?.original_source);
+      };
+      if (needsOpusDecode) {
+        $appdata.set(KEYS.MODULES.MEDIA.LOADING, true);
+        decodeOpusToWav(this.response as Blob).then(
+          (wav) => {
+            $appdata.set(KEYS.MODULES.MEDIA.LOADING, false);
+            finish(wav);
+          },
+          (error) => {
+            $appdata.set(KEYS.MODULES.MEDIA.LOADING, false);
+            Telemetry.captureException(
+              error,
+              requestTelemetry({ operation: "music_opus_decode", id_music: idCheck })
+            );
+            if (_loadingId !== idCheck) return;
+            _switchingMode = false;
+            if (!_keepVideoProjectionOnLoadError()) _self.close(true);
+            _alertAudioFailure(error, requestRetry);
+          }
+        );
+      } else {
+        finish(this.response as Blob);
+      }
       console.info("[Media] arquivo direto transferido:", {
         source_type: _sourceType(audioUrl),
         bytes: this.response.size,
@@ -897,12 +958,7 @@ function _loadAudioSrc(
           elapsed_ms: elapsed,
         })
       );
-      $alert.error(
-        { text: "modules.media.alerts.not_loaded", error: request.statusText || "" },
-        function (a?: unknown) {
-          if (a) requestRetry();
-        }
-      );
+      _alertAudioFailure(request.statusText || "", requestRetry);
     }
   };
   const falhaDeRede = function (event?: Event) {
@@ -1118,6 +1174,42 @@ function _timesFor(slides: Slide[], mode: string): number[] {
   );
 }
 
+/**
+ * Avança/volta a PÁGINA do PDF que está no telão.
+ *
+ * As setas do operador andam nos slides de música (`_slides`), e um PDF
+ * projetado — da lista ou da aba Canva — não tem slide nenhum: a tecla morria
+ * em silêncio. Aqui a página é o documento compartilhado: o mesmo `page` que a
+ * janela de projeção usa para retomar depois de fechar é lido do
+ * `LJ_FILE_PROJECTION`, alterado e devolvido, e a janela recebe o comando pelo
+ * `FILE_PROJECTION_PAGE` com `source: "operator"` — o mesmo caminho que o
+ * player da lista já usava. O clamp final é da janela (`doc.numPages`), que é
+ * quem sabe o tamanho real do documento.
+ *
+ * @returns true quando mexeu em página — quem chamou não deve seguir nos slides
+ */
+function _pdfPageStep(delta: number): boolean {
+  let bruto: string | null = null;
+  try {
+    bruto = localStorage.getItem(KEYS.PROJECTION.LJ_FILE_PROJECTION);
+  } catch {
+    return false;
+  }
+
+  const movimento = moverPaginaPdf(bruto, delta);
+  if (!movimento) return false;
+
+  if (movimento.storage !== bruto) {
+    try {
+      localStorage.setItem(KEYS.PROJECTION.LJ_FILE_PROJECTION, movimento.storage);
+    } catch {
+      /* O comando abaixo já chega sem o cache de reabertura. */
+    }
+  }
+  if (movimento.comando) $broadcast.send(BROADCAST_TYPE.FILE_PROJECTION_PAGE, movimento.comando);
+  return true;
+}
+
 const _self = {
   /** ID da tentativa atual para os módulos que orquestram a reprodução. */
   getActivePlaybackId(): string | null {
@@ -1278,16 +1370,26 @@ const _self = {
     const metadataStartedAt = Date.now();
     Telemetry.track("music_metadata_load_started", _telemetryFor(playbackContext, { id_music }));
     let metadataTimeout: ReturnType<typeof setTimeout> | null = null;
+    let cancelMetadataWait: (() => void) | null = null;
     try {
       const metadataRequest = $database.get<Music>(`music_${id_music}`);
       const metadataDeadline = new Promise<never>((_, reject) => {
+        cancelMetadataWait = () => reject(new Error("Music metadata wait superseded"));
+        _cancelMusicMetadataWait = cancelMetadataWait;
         metadataTimeout = setTimeout(
           () => reject(new Error(`Music metadata timeout: ${id_music}`)),
-          NET_TIMEOUT.DEFAULT + 5000
+          MUSIC_METADATA_TIMEOUT_MS
         );
       });
       data = await Promise.race([metadataRequest, metadataDeadline]);
     } catch (error) {
+      if (_loadingId !== id_music || _activePlayback?.playback_id !== playback_id) {
+        Telemetry.track(
+          "music_open_failed",
+          _telemetryFor(playbackContext, { id_music, reason: "superseded" })
+        );
+        return false;
+      }
       const message = error instanceof Error ? error.message : String(error);
       const reason = message.includes("metadata timeout")
         ? "metadata_timeout"
@@ -1312,6 +1414,7 @@ const _self = {
       return false;
     } finally {
       if (metadataTimeout) clearTimeout(metadataTimeout);
+      if (_cancelMusicMetadataWait === cancelMetadataWait) _cancelMusicMetadataWait = null;
     }
     Telemetry.track(
       "music_metadata_load_completed",
@@ -2372,6 +2475,8 @@ const _self = {
     $appdata.set(KEYS.MODULES.MEDIA.CONFIG.TITLE, title);
     $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_YOUTUBE, true);
     $appdata.set(KEYS.MODULES.MEDIA.CONFIG.YOUTUBE_URL, url);
+    $appdata.set(KEYS.MODULES.MEDIA.CONFIG.YOUTUBE_PLAYBACK_ID, playback_id);
+    $appdata.set(KEYS.MODULES.MEDIA.CONFIG.YOUTUBE_PROJECTED, false);
     $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED, false);
     $appdata.set(KEYS.MODULES.MEDIA.CONFIG.AUDIO, "");
     $appdata.set(KEYS.MODULES.MEDIA.CONFIG.AUDIO_ONLY, false);
@@ -2401,6 +2506,12 @@ const _self = {
 
     try {
       if (!(await _claimVideoWindows(stageEpoch))) return;
+      // Com janela de projeção, o som e o relógio são dela; sem ela, o vídeo toca na principal.
+      const projected = await isVideoProjectionOpen();
+      if (stageEpoch !== _stageEpoch) return;
+      $appdata.set(KEYS.MODULES.MEDIA.CONFIG.YOUTUBE_PROJECTED, projected);
+      // Sem janela de projeção o vídeo só existe na janela do Mídia: ela abre para ele ser visto.
+      if (!projected) this.maximize();
       Telemetry.track("music_youtube_projection_opened", _telemetryFor(youtubeContext));
     } catch (error) {
       Telemetry.captureException(
@@ -2428,6 +2539,8 @@ const _self = {
       stateDiagnostics.received_messages = Math.min(stateDiagnostics.received_messages + 1, 10000);
       const p = msg.payload as Record<string, unknown>;
       if (!p) return;
+      // Retorno e operador só acompanham: o relógio é da projeção ou, sem ela, da principal.
+      if (p.role === "return" || p.role === "operator") return;
       if (p.playback_id !== playback_id) {
         stateDiagnostics.mismatched_playback_messages = Math.min(stateDiagnostics.mismatched_playback_messages + 1, 10000);
         return;
@@ -2509,6 +2622,9 @@ const _self = {
   },
 
   clearVariables(): void {
+    const cancelMetadataWait = _cancelMusicMetadataWait;
+    _cancelMusicMetadataWait = null;
+    cancelMetadataWait?.();
     _switchingMode = false;
     _customPlayback = null;
     if (_ytWatchdog) clearTimeout(_ytWatchdog);
@@ -2653,18 +2769,13 @@ const _self = {
       const self = this;
       _audio.play(
         (e) => {
-          $alert.error(
-            { text: "modules.media.alerts.not_loaded", error: e || "" },
-            function (a?: unknown) {
-              const id = $appdata.get(KEYS.MODULES.MEDIA.ID_MUSIC) as string | number | null;
-              // Arquivos diretos da liturgia não têm id_music. Não tente
-              // reabrir o banco com null após um erro de codec do vídeo.
-              // A nova tentativa fica onde a música estava: minimizada, ela
-              // não pode reabrir o player por cima de quem a controla.
-              if (a && id != null) {
-                self.open({ id_music: id, minimized: self.isMinimized() });
-              }
-            }
+          const id = $appdata.get(KEYS.MODULES.MEDIA.ID_MUSIC) as string | number | null;
+          // Arquivos diretos da liturgia não têm id_music: sem reabrir o banco com null.
+          // A nova tentativa fica onde a música estava: minimizada, ela não pode
+          // reabrir o player por cima de quem a controla.
+          _alertAudioFailure(
+            e,
+            id != null ? () => self.open({ id_music: id, minimized: self.isMinimized() }) : undefined
           );
         },
         () => {
@@ -2689,9 +2800,12 @@ const _self = {
     _slides.goFirst();
   },
   prevSlide(): void {
+    /* PDF no telão manda: a página é o documento, não o slide da música. */
+    if (_pdfPageStep(-1)) return;
     _slides.goPrev();
   },
   nextSlide(): void {
+    if (_pdfPageStep(1)) return;
     _slides.goNext();
   },
   lastSlide(): void {

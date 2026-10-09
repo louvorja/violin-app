@@ -167,6 +167,11 @@ export const BROADCAST_TYPE = Object.freeze({
    *  Emitido por: useMedia.ts (openYouTube). Recebido por: FileProjection.vue. */
   ONLINE_VIDEO_PROJECTION: "online_video_projection",
 
+  /** Projeção de URL (item Site da liturgia ou design do Canva).
+   *  Payload: { source: "liturgy" | "canva" }
+   *  Emitido por: ProjectionWindows.openSiteWindow. Recebido por: Som de Fundo. */
+  SITE_PROJECTION: "site_projection",
+
   /** Notifica que o wallpaper/background settings foi alterado.
    *  Payload: {} (vazio — as views recarregam do IndexedDB)
    *  Emitido por: RibbonWallpaperSettings.vue, AppMenuOpcoes.vue

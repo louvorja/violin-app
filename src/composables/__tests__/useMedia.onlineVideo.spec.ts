@@ -158,6 +158,9 @@ function onlyFragmentedFormats() {
 
 it("retains real XHR Blob MIME, bytes and original basename when play rejects the opaque source", async () => {
   openAudio.mockRestore();
+  // Este é o caminho do blob baixado por inteiro, não o do streaming.
+  const { default: $userdata } = await import("@/helpers/UserData");
+  $userdata.set(KEYS.MODULES.MEDIA.LAZY_LOAD, false);
   const { default: Telemetry } = await import("@/helpers/Telemetry");
   const log = vi.spyOn(Telemetry, "log").mockImplementation(() => {});
   let request!: XMLHttpRequest;
@@ -198,7 +201,7 @@ describe("acompanhar o download do yt-dlp e projetar", () => {
   it("com o vídeo pronto, abre as janelas e toca o arquivo (não o player do YouTube)", async () => {
     h.ensure.mockResolvedValue(ok(ID));
     expect(await media.openYouTube(embed(ID), "Louvor")).toBe(true);
-    expect(h.openWindows).toHaveBeenCalledWith({ withOperator: true });
+    expect(h.openWindows).toHaveBeenCalled();
     expect(openAudio).toHaveBeenCalledWith({
       url: `louvorja://onlinevideo/${ID}.mp4`,
       title: "Louvor",
@@ -341,7 +344,7 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
     const { video, audio } = streams(ID);
     expect(await media.openYouTube(embed(ID), "Louvor")).toBe(true);
     expect(h.stream).toHaveBeenCalledWith(ID);
-    expect(h.openWindows).toHaveBeenCalledWith({ withOperator: true });
+    expect(h.openWindows).toHaveBeenCalled();
     expect(h.send).toHaveBeenCalledWith(BROADCAST_TYPE.FILE_PROJECTION, {
       url: video.url,
       type: "video",

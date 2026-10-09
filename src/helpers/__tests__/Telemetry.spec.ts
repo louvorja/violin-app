@@ -1319,3 +1319,34 @@ describe("Telemetry", () => {
     expect((capturedError as Error).stack).not.toContain("segredo");
   });
 });
+
+describe("routeForTelemetry", () => {
+  it("rota interna da SPA vai inteira, já sanitizada", async () => {
+    const Telemetry = await loadTelemetry();
+
+    expect(Telemetry.routeForTelemetry("/projection/file")).toBe("/projection/file");
+    expect(Telemetry.routeForTelemetry("/projection#musicas")).toBe("/projection#musicas");
+    expect(Telemetry.routeForTelemetry("/x?token=segredo")).toBe("/x?token=[REDACTED]");
+  });
+
+  it("URL externa vira só o HOST — o path pode carregar o JWT do Canva", async () => {
+    const Telemetry = await loadTelemetry();
+
+    expect(Telemetry.routeForTelemetry("https://www.canva.com/api/design/JWT-SEGREDO/view")).toBe(
+      "www.canva.com"
+    );
+    expect(Telemetry.routeForTelemetry("https://igreja.test/culto/pascoa")).toBe("igreja.test");
+    expect(Telemetry.routeForTelemetry("http://a.test/c?token=segredo")).toBe("a.test");
+  });
+
+  it("entrada vazia, não-string ou host ilegível não vaza caminho nenhum", async () => {
+    const Telemetry = await loadTelemetry();
+
+    expect(Telemetry.routeForTelemetry("")).toBe("");
+    expect(Telemetry.routeForTelemetry("   ")).toBe("");
+    expect(Telemetry.routeForTelemetry(null)).toBe("");
+    expect(Telemetry.routeForTelemetry(42)).toBe("");
+    /* Casa o padrão de URL mas o `new URL` recusa: cai no marcador. */
+    expect(Telemetry.routeForTelemetry("http://[")).toBe("[external]");
+  });
+});

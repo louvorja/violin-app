@@ -73,6 +73,16 @@ const routes = [
     component: () => import("@/views/AnnouncementsProjection.vue"),
   },
   {
+    path: PROJECTION_URL.SITE_LOADER,
+    name: "SiteLoader",
+    component: () => import("@/views/SiteLoader.vue"),
+  },
+  {
+    path: PROJECTION_URL.SITE_LOADER_RETURN,
+    name: "SiteLoaderReturn",
+    component: () => import("@/views/SiteLoader.vue"),
+  },
+  {
     path: PROJECTION_URL.FILE_RETURN,
     name: "FileProjectionReturn",
     component: () => import("@/views/FileProjectionReturn.vue"),
