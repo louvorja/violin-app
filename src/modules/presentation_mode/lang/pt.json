@@ -444,5 +444,10 @@
     "to_program": "Ao programa",
     "download": "Baixar",
     "edit": "Editar"
+  },
+  "audio_meter": {
+    "label": "Áudio",
+    "live": "Som saindo pelo computador",
+    "silent": "Nenhum som tocando"
   }
 }

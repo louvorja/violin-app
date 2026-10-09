@@ -56,27 +56,31 @@
       >
         {{ tm("outputs.missing_main") }}
       </button>
-      <div
-        class="pm-outputs__screen"
-        role="button"
-        tabindex="0"
-        :title="tm('zoom.open')"
-        data-testid="pm-zoom-main"
-        @click="zoomed = 'main'"
-        @keydown.enter="zoomed = 'main'"
-      >
-        <LiveMirror :cleared="cleared" />
-        <!-- A tela não está desligada: só não está apresentando. A prévia continua à vista. -->
-        <span v-if="!screenOn.main" class="pm-outputs__idle" data-testid="pm-outputs-main-off">
-          {{ tm("outputs.not_presenting") }}
-        </span>
-        <span
-          v-else-if="mainMissing"
-          class="pm-outputs__closed"
-          data-testid="pm-outputs-main-closed"
+      <!-- O som que sai do computador fica encostado na tela principal, como no FreeShow. -->
+      <div class="pm-outputs__screen-row">
+        <div
+          class="pm-outputs__screen"
+          role="button"
+          tabindex="0"
+          :title="tm('zoom.open')"
+          data-testid="pm-zoom-main"
+          @click="zoomed = 'main'"
+          @keydown.enter="zoomed = 'main'"
         >
-          {{ tm("outputs.screen_closed") }}
-        </span>
+          <LiveMirror :cleared="cleared" />
+          <!-- A tela não está desligada: só não está apresentando. A prévia continua à vista. -->
+          <span v-if="!screenOn.main" class="pm-outputs__idle" data-testid="pm-outputs-main-off">
+            {{ tm("outputs.not_presenting") }}
+          </span>
+          <span
+            v-else-if="mainMissing"
+            class="pm-outputs__closed"
+            data-testid="pm-outputs-main-closed"
+          >
+            {{ tm("outputs.screen_closed") }}
+          </span>
+        </div>
+        <AudioMeter />
       </div>
       <div class="pm-outputs__nav">
         <LjButton
@@ -250,6 +254,7 @@ import { KIND_ICONS } from "../program/kinds";
 import { useMonitorRole } from "../composables/useMonitorRole";
 import ScreenToggle from "./ScreenToggle.vue";
 import ScreenZoom from "./ScreenZoom.vue";
+import AudioMeter from "./AudioMeter.vue";
 import LayersPanel from "./LayersPanel.vue";
 
 defineProps<{
@@ -365,6 +370,17 @@ const stageRole = useMonitorRole("stage");
 .pm-outputs__screen {
   position: relative;
   cursor: zoom-in;
+}
+
+.pm-outputs__screen-row {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.pm-outputs__screen-row > .pm-outputs__screen {
+  flex: 1;
+  min-width: 0;
 }
 
 .pm-outputs__idle {

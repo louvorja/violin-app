@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { useAudioPlayback } from "@/composables/useAudioPlayback";
+import { applyMediaCors, useAudioPlayback } from "@/composables/useAudioPlayback";
 
 vi.mock("@/helpers/Telemetry", () => ({
   default: {
@@ -333,4 +333,33 @@ describe("useAudioPlayback.prepare", () => {
       expect(vi.getTimerCount()).toBe(baselineTimers);
     }
   );
+});
+
+describe("applyMediaCors", () => {
+  it("arquivos do app carregam em modo CORS, para o nível poder ser medido", () => {
+    const el = document.createElement("audio");
+    applyMediaCors(el, "louvorja://files/musics/pt/a.mp3");
+    expect(el.crossOrigin).toBe("anonymous");
+    applyMediaCors(el, "louvorja://local/Users/x/video.mp4");
+    expect(el.crossOrigin).toBe("anonymous");
+  });
+
+  it("links de fora e blobs seguem sem CORS", () => {
+    const el = document.createElement("audio");
+    el.crossOrigin = "anonymous";
+    applyMediaCors(el, "https://rr1---sn.googlevideo.com/videoplayback");
+    expect(el.hasAttribute("crossorigin")).toBe(false);
+    applyMediaCors(el, "blob:http://localhost:5002/abc");
+    expect(el.hasAttribute("crossorigin")).toBe(false);
+    applyMediaCors(el, "louvorja://onlinevideo/abc");
+    expect(el.hasAttribute("crossorigin")).toBe(false);
+  });
+
+  it("setSrc aplica a regra antes de carregar", () => {
+    audio.setSrc("louvorja://files/musics/pt/a.mp3");
+    expect(audio.getElement().crossOrigin).toBe("anonymous");
+    audio.setSrc("https://exemplo.com/a.mp3");
+    expect(audio.getElement().hasAttribute("crossorigin")).toBe(false);
+    audio.getElement().removeAttribute("src");
+  });
 });

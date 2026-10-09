@@ -2,6 +2,7 @@ import { reactive } from "vue";
 import Broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import Telemetry from "@/helpers/Telemetry";
+import { applyMediaCors } from "@/composables/useAudioPlayback";
 
 /**
  * O vídeo que está só no retorno de palco, tocado com som aqui, na janela
@@ -67,6 +68,7 @@ function start(video: { id: string; url: string; title: string }): void {
   for (const event of ["loadedmetadata", "play", "pause", "seeked", "ended", "timeupdate"]) {
     media.addEventListener(event, sync);
   }
+  applyMediaCors(media, video.url);
   media.src = video.url;
   el = media;
   Object.assign(state, { id: video.id, title: video.title, currentTime: 0, duration: 0, paused: false });
@@ -104,5 +106,16 @@ function toggleMute(): void {
 }
 
 export function useReturnPlayer() {
-  return { state, start, stop, toggle, seek, advance, setVolume, toggleMute };
+  return {
+    state,
+    start,
+    stop,
+    toggle,
+    seek,
+    advance,
+    setVolume,
+    toggleMute,
+    /** O elemento que está tocando, para o medidor de nível do fader. */
+    element: (): HTMLVideoElement | null => el,
+  };
 }

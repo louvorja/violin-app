@@ -63,6 +63,20 @@ export interface AudioPlayback {
 
 let _shared: AudioPlayback | null = null;
 
+/**
+ * Arquivos do app (`louvorja://local` e `louvorja://files`) carregam em modo
+ * CORS. A página é de outra origem, e sem isso o áudio fica "contaminado": o
+ * som toca, mas ninguém consegue medi-lo (o medidor de nível do modo
+ * apresentação usa `captureStream`). O protocolo responde ao CORS; links de
+ * fora (streaming, blob) seguem como sempre.
+ */
+const _CORS_SOURCE = /^louvorja:\/\/(local|files)\//i;
+
+export function applyMediaCors(el: HTMLMediaElement, src: string): void {
+  if (_CORS_SOURCE.test(src)) el.crossOrigin = "anonymous";
+  else el.removeAttribute("crossorigin");
+}
+
 function _create(): AudioPlayback {
   const volume = ref(100);
   const currentTime = ref(0);
@@ -477,6 +491,7 @@ function _create(): AudioPlayback {
       el.autoplay = false;
       el.volume = volume.value / 100;
       el.dataset.lazy = lazy ? "1" : "";
+      applyMediaCors(el, src);
       el.src = src;
       for (const eventName of [
         "loadstart",
@@ -669,6 +684,7 @@ function _create(): AudioPlayback {
       }
     }
     isLazy.value = lazy;
+    applyMediaCors(el, src);
     el.src = src;
     el.load();
   }
