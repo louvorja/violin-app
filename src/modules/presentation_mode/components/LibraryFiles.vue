@@ -3,13 +3,18 @@
     <LjEmpty :icon="ICONS.UI.FOLDER_OPEN" :title="tm('library.desktop_only')" />
   </div>
 
-  <div v-else class="pm-library__body" :class="{ 'pm-library__body--details': !!details }">
+  <div
+    v-else
+    class="pm-library__body"
+    :class="{ 'pm-library__body--details': !!details && !paneActive }"
+  >
     <nav class="pm-folders" :aria-label="tm('library.folders')">
       <button
         type="button"
         class="pm-folder"
-        :class="{ 'pm-folder--active': lib.source.value === ALL }"
-        @click="lib.openSource(ALL)"
+        :class="{ 'pm-folder--active': !paneActive && lib.source.value === ALL }"
+        data-testid="pm-library-all"
+        @click="openSource(ALL)"
       >
         <LjIcon :icon="ICONS.UI.FOLDER_MULTIPLE" :size="15" />
         <span class="pm-folder__label">{{ tm("library.all") }}</span>
@@ -18,13 +23,17 @@
       <button
         type="button"
         class="pm-folder"
-        :class="{ 'pm-folder--active': lib.source.value === FAVORITES }"
-        @click="lib.openSource(FAVORITES)"
+        :class="{ 'pm-folder--active': !paneActive && lib.source.value === FAVORITES }"
+        data-testid="pm-library-favorites"
+        @click="openSource(FAVORITES)"
       >
         <LjIcon :icon="ICONS.UI.FOLDER_HEART" :size="15" />
         <span class="pm-folder__label">{{ tm("library.favorites") }}</span>
         <span class="pm-folder__count">{{ lib.counts.value[FAVORITES] ?? "" }}</span>
       </button>
+      <!-- Mídia encaixa aqui o grupo Online (vídeos, playlists e canais). -->
+      <slot name="nav-extra" />
+      <span v-if="$slots['nav-extra']" class="pm-folders__group">{{ tm("library.folders") }}</span>
       <!-- Todos e Favoritos ficam fixos no topo; as pastas do operador se arrastam. -->
       <draggable
         :model-value="lib.folders.value"
@@ -39,12 +48,12 @@
           <LjContextMenu v-bind="folderMenu(folder)">
             <div
               class="pm-folder pm-folder--user"
-              :class="{ 'pm-folder--active': lib.source.value === folder.path }"
+              :class="{ 'pm-folder--active': !paneActive && lib.source.value === folder.path }"
               role="button"
               tabindex="0"
               :title="folder.path"
-              @click="lib.openSource(folder.path)"
-              @keydown.enter.self="lib.openSource(folder.path)"
+              @click="openSource(folder.path)"
+              @keydown.enter.self="openSource(folder.path)"
             >
               <LjIcon :icon="ICONS.UI.FOLDER" :size="15" />
               <span class="pm-folder__label">{{ folder.label }}</span>
@@ -66,14 +75,15 @@
         type="button"
         class="pm-folder pm-folder--add"
         data-testid="pm-library-add-folder"
-        @click="lib.addFolder()"
+        @click="addFolder"
       >
         <LjIcon :icon="ICONS.UI.FOLDER_PLUS" :size="15" />
         <span class="pm-folder__label">{{ tm("library.add_folder") }}</span>
       </button>
     </nav>
 
-    <div class="pm-files">
+    <slot v-if="paneActive" name="pane" />
+    <div v-else class="pm-files">
       <SeriesBar
         v-if="seriesDir"
         :dir="seriesDir"
@@ -88,7 +98,7 @@
           v-if="!lib.folders.value.length"
           size="sm"
           :icon="ICONS.UI.FOLDER_PLUS"
-          @click="lib.addFolder()"
+          @click="addFolder"
         >
           {{ tm("library.add_folder") }}
         </LjButton>
@@ -155,7 +165,7 @@
 
     <!-- Detalhes só a pedido — (i) ou menu de contexto. Abrir no clique
          deslocava a grade no meio do duplo clique. -->
-    <aside v-if="details" class="pm-details" data-testid="pm-library-details">
+    <aside v-if="details && !paneActive" class="pm-details" data-testid="pm-library-details">
       <div class="pm-details__head">
         <span class="pm-details__title">{{ details.name }}</span>
         <button
@@ -238,6 +248,7 @@ import {
   readFolder,
   useFileLibrary,
   type LibraryEntry,
+  type LibraryScope,
 } from "../composables/useFileLibrary";
 import { useMediaMeta } from "../composables/useMediaMeta";
 import { useCloudFiles } from "../composables/useCloudFiles";
@@ -246,16 +257,23 @@ import { fileItem, folderItem } from "../program/items";
 import type { Playable, PlayOptions } from "../program/playable";
 
 /**
- * Aba Arquivos da biblioteca: as pastas do computador que o operador
- * adicionou, com miniaturas e detalhes. Um clique leva o arquivo para a
- * prévia do palco; ▶ ou duplo clique projeta.
+ * As pastas do computador que o operador adicionou, com miniaturas e
+ * detalhes. Um clique leva o arquivo para a prévia do palco; ▶ ou duplo
+ * clique projeta. É a aba Arquivos inteira, e a base das abas Mídia e Áudio,
+ * que veem as mesmas pastas com o seu recorte (`scope`).
  */
 
-defineProps<{
-  /** Caminho do arquivo que está no ar, para a borda de destaque e o ✕. */
-  livePath: string | null;
-  returnPath: string | null;
-}>();
+const props = withDefaults(
+  defineProps<{
+    /** Caminho do arquivo que está no ar, para a borda de destaque e o ✕. */
+    livePath: string | null;
+    returnPath: string | null;
+    scope?: LibraryScope;
+    /** Uma fonte de fora (o Online da Mídia) ocupa a área da grade. */
+    paneActive?: boolean;
+  }>(),
+  { scope: "files", paneActive: false }
+);
 
 const emit = defineEmits<{
   preview: [playable: Playable];
@@ -264,13 +282,25 @@ const emit = defineEmits<{
   stop: [];
   /** Imagem ou vídeo só no retorno de palco; `null` tira. */
   "show-on-return": [entry: LibraryEntry | null];
+  /** O operador abriu uma fonte daqui (Tudo, Favoritos, uma pasta): a de fora sai. */
+  "source-opened": [];
 }>();
 
 const filePlayable = (entry: LibraryEntry): Playable => ({ type: "file", entry });
 
 const { t, tm, locale } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
 
-const lib = useFileLibrary();
+const lib = useFileLibrary(props.scope);
+
+function openSource(source: string): void {
+  emit("source-opened");
+  void lib.openSource(source);
+}
+
+function addFolder(): void {
+  emit("source-opened");
+  void lib.addFolder();
+}
 const { meta, request } = useMediaMeta();
 const cloud = useCloudFiles();
 
@@ -344,7 +374,7 @@ function folderMenu(folder: { path: string; label: string }): {
       {
         label: tm("menu.open"),
         icon: ICONS.UI.FOLDER_OPEN,
-        action: () => void lib.openSource(folder.path),
+        action: () => openSource(folder.path),
       },
       {
         label: tm("menu.to_program"),
@@ -531,6 +561,15 @@ const emptyMessage = computed(() => {
 
 .pm-folder--ghost {
   opacity: 0.5;
+}
+
+.pm-folders__group {
+  padding: 8px 9px 3px 12px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--lj-text-subtle);
 }
 
 .pm-folder--add {

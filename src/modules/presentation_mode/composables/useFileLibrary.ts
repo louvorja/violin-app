@@ -17,6 +17,11 @@ import { isPowerPoint, POWERPOINT_ENABLED } from "./usePowerPoint";
  *
  * Só aparece o que o app sabe projetar — o resto seria um clique que não faz
  * nada no meio do culto.
+ *
+ * As abas Arquivos, Mídia e Áudio olham as mesmas pastas, cada uma com o seu
+ * recorte (`LibraryScope`) e a sua navegação: abrir uma subpasta em Mídia não
+ * mexe em Arquivos. Pastas, favoritos e a fila de Anterior/Próximo são uma
+ * coisa só.
  */
 
 export interface LibraryFolder {
@@ -34,6 +39,23 @@ export interface LibraryEntry {
 }
 
 export type LibraryFileKind = "image" | "video" | "audio" | "pdf" | "powerpoint" | "slja";
+
+/** O recorte de cada aba: Arquivos mostra tudo; Mídia, fotos e vídeos; Áudio, áudios. */
+export type LibraryScope = "files" | "media" | "audio";
+
+const SCOPE_KINDS: Record<LibraryScope, LibraryFileKind[] | null> = {
+  files: null,
+  media: ["image", "video"],
+  audio: ["audio"],
+};
+
+/** O arquivo entra no recorte (pastas sempre entram: é por elas que se navega). */
+export function inScope(entry: Pick<LibraryEntry, "isDir" | "ext">, scope: LibraryScope): boolean {
+  if (entry.isDir) return true;
+  const kinds = SCOPE_KINDS[scope];
+  const kind = fileKind(entry.ext);
+  return kind !== null && (!kinds || kinds.includes(kind));
+}
 
 export const ALL = "__all__";
 export const FAVORITES = "__favorites__";
@@ -65,7 +87,9 @@ function byName(a: LibraryEntry, b: LibraryEntry): number {
 export async function readFolder(dir: string): Promise<LibraryEntry[] | null> {
   const result = await Platform.listDir(dir);
   if (!result?.ok) return null;
-  return (result.entries as LibraryEntry[]).filter((e) => e.isDir || fileKind(e.ext) !== null).sort(byName);
+  return (result.entries as LibraryEntry[])
+    .filter((e) => e.isDir || fileKind(e.ext) !== null)
+    .sort(byName);
 }
 
 const folders = computed<LibraryFolder[]>(
@@ -74,17 +98,6 @@ const folders = computed<LibraryFolder[]>(
 const favorites = computed<LibraryEntry[]>(
   () => $userdata.get<LibraryEntry[]>(KEYS.MODULES.PRESENTATION_MODE.LIBRARY_FAVORITES, []) ?? []
 );
-
-/** `ALL`, `FAVORITES` ou o caminho de uma das pastas. */
-const _source = ref<string>(ALL);
-/** Pasta aberta dentro da fonte (subpasta), quando a fonte é uma pasta. */
-const _dir = ref<string | null>(null);
-const _entries = ref<LibraryEntry[]>([]);
-const _loading = ref(false);
-const _missing = ref(false);
-const _selectedPath = ref<string | null>(null);
-const _counts = ref<Record<string, number>>({});
-let _loadSeq = 0;
 
 /**
  * Fila da pasta de onde o arquivo no ar saiu: Anterior e Próximo andam por
@@ -95,111 +108,174 @@ const _queue = ref<{ entries: LibraryEntry[]; index: number } | null>(null);
 
 export type QueueStep = "first" | "prev" | "next" | "last";
 
-async function _reload(): Promise<void> {
-  const seq = ++_loadSeq;
-  _loading.value = true;
-  _missing.value = false;
-  let entries: LibraryEntry[] = [];
-  try {
-    if (_source.value === FAVORITES) {
-      entries = [...favorites.value].sort(byName);
-    } else if (_source.value === ALL) {
-      const lists = await Promise.all(folders.value.map((f) => readFolder(f.path)));
-      entries = lists.flatMap((list) => (list ?? []).filter((e) => !e.isDir)).sort(byName);
-    } else {
-      const list = await readFolder(_dir.value ?? _source.value);
-      _missing.value = list === null;
-      entries = list ?? [];
+/** A navegação de uma aba: a fonte aberta, a subpasta, o que a grade mostra. */
+function _createNav(scope: LibraryScope) {
+  /** `ALL`, `FAVORITES` ou o caminho de uma das pastas. */
+  const source = ref<string>(ALL);
+  /** Pasta aberta dentro da fonte (subpasta), quando a fonte é uma pasta. */
+  const dir = ref<string | null>(null);
+  const entries = ref<LibraryEntry[]>([]);
+  const loading = ref(false);
+  const missing = ref(false);
+  const selectedPath = ref<string | null>(null);
+  const counts = ref<Record<string, number>>({});
+  let loadSeq = 0;
+
+  const fits = (e: LibraryEntry) => inScope(e, scope);
+  const files = (list: LibraryEntry[] | null) => (list ?? []).filter((e) => !e.isDir && fits(e));
+
+  async function reload(): Promise<void> {
+    const seq = ++loadSeq;
+    loading.value = true;
+    missing.value = false;
+    let next: LibraryEntry[] = [];
+    try {
+      if (source.value === FAVORITES) {
+        next = favorites.value.filter(fits).sort(byName);
+      } else if (source.value === ALL) {
+        const lists = await Promise.all(folders.value.map((f) => readFolder(f.path)));
+        next = lists.flatMap(files).sort(byName);
+      } else {
+        const list = await readFolder(dir.value ?? source.value);
+        missing.value = list === null;
+        next = (list ?? []).filter(fits);
+      }
+    } catch (e) {
+      Telemetry.captureException(e, { source: "presentation_mode.library.read" });
     }
-  } catch (e) {
-    Telemetry.captureException(e, { source: "presentation_mode.library.read" });
+    if (seq !== loadSeq) return;
+    entries.value = next;
+    loading.value = false;
+    if (selectedPath.value && !next.some((e) => e.path === selectedPath.value))
+      selectedPath.value = null;
   }
-  if (seq !== _loadSeq) return;
-  _entries.value = entries;
-  _loading.value = false;
-  if (_selectedPath.value && !entries.some((e) => e.path === _selectedPath.value)) _selectedPath.value = null;
+
+  async function refreshCounts(): Promise<void> {
+    const next: Record<string, number> = {};
+    await Promise.all(
+      folders.value.map(async (f) => {
+        next[f.path] = files(await readFolder(f.path)).length;
+      })
+    );
+    next[ALL] = Object.values(next).reduce((a, b) => a + b, 0);
+    next[FAVORITES] = favorites.value.filter(fits).length;
+    counts.value = next;
+  }
+
+  async function open(nextSource: string, nextDir: string | null = null): Promise<void> {
+    source.value = nextSource;
+    dir.value = nextDir;
+    selectedPath.value = null;
+    await reload();
+  }
+
+  return {
+    scope,
+    source,
+    dir,
+    entries,
+    loading,
+    missing,
+    selectedPath,
+    counts,
+    reload,
+    refreshCounts,
+    open,
+  };
 }
 
-async function _refreshCounts(): Promise<void> {
-  const counts: Record<string, number> = {};
+type Nav = ReturnType<typeof _createNav>;
+const _navs = new Map<LibraryScope, Nav>();
+
+function _nav(scope: LibraryScope): Nav {
+  let nav = _navs.get(scope);
+  if (!nav) {
+    nav = _createNav(scope);
+    _navs.set(scope, nav);
+  }
+  return nav;
+}
+
+/** Pastas e favoritos mudaram: toda aba já aberta relê. */
+async function _refreshAll(reload: (nav: Nav) => boolean): Promise<void> {
   await Promise.all(
-    folders.value.map(async (f) => {
-      const list = await readFolder(f.path);
-      counts[f.path] = list ? list.filter((e) => !e.isDir).length : 0;
-    })
+    [..._navs.values()].flatMap((nav) => [nav.refreshCounts(), reload(nav) ? nav.reload() : null])
   );
-  counts[ALL] = Object.values(counts).reduce((a, b) => a + b, 0);
-  counts[FAVORITES] = favorites.value.length;
-  _counts.value = counts;
 }
 
-export function useFileLibrary() {
-  const selected = computed(() => _entries.value.find((e) => e.path === _selectedPath.value) ?? null);
+export function useFileLibrary(scope: LibraryScope = "files") {
+  const nav = _nav(scope);
+  const { source, dir, entries, selectedPath } = nav;
+
+  const selected = computed(() => entries.value.find((e) => e.path === selectedPath.value) ?? null);
 
   /** Caminho mostrado no rodapé: a pasta aberta, ou o nome da fonte especial. */
-  const location = computed(() => (_source.value === ALL || _source.value === FAVORITES ? null : (_dir.value ?? _source.value)));
-
-  const canGoUp = computed(
-    () => !!_dir.value && _source.value !== ALL && _source.value !== FAVORITES && _dir.value !== _source.value
+  const location = computed(() =>
+    source.value === ALL || source.value === FAVORITES ? null : (dir.value ?? source.value)
   );
 
-  const fileCount = computed(() => _entries.value.filter((e) => !e.isDir).length);
+  const canGoUp = computed(
+    () =>
+      !!dir.value &&
+      source.value !== ALL &&
+      source.value !== FAVORITES &&
+      dir.value !== source.value
+  );
+
+  const fileCount = computed(() => entries.value.filter((e) => !e.isDir).length);
 
   return {
     supported: Platform.isDesktop,
+    scope,
     folders,
     favorites,
-    source: _source,
-    entries: _entries,
-    loading: _loading,
-    missing: _missing,
+    source,
+    entries,
+    loading: nav.loading,
+    missing: nav.missing,
     selected,
-    counts: _counts,
+    counts: nav.counts,
     location,
     canGoUp,
     fileCount,
 
     async load(): Promise<void> {
-      await Promise.all([_reload(), _refreshCounts()]);
+      await Promise.all([nav.reload(), nav.refreshCounts()]);
     },
 
-    async openSource(source: string): Promise<void> {
-      _source.value = source;
-      _dir.value = null;
-      _selectedPath.value = null;
-      await _reload();
+    openSource(next: string): Promise<void> {
+      return nav.open(next);
     },
 
     /** Abre uma pasta pelo caminho: a pasta da biblioteca que a contém, já dentro dela. */
-    async openPath(dir: string): Promise<void> {
-      const inside = (root: string) => dir === root || dir.startsWith(root.replace(/[\\/]$/, "") + (root.includes("\\") ? "\\" : "/"));
+    openPath(path: string): Promise<void> {
+      const inside = (root: string) =>
+        path === root ||
+        path.startsWith(root.replace(/[\\/]$/, "") + (root.includes("\\") ? "\\" : "/"));
       const root = folders.value
         .map((f) => f.path)
         .filter(inside)
         .sort((a, b) => b.length - a.length)[0];
-      _source.value = root ?? dir;
-      _dir.value = root && root !== dir ? dir : null;
-      _selectedPath.value = null;
-      await _reload();
+      return nav.open(root ?? path, root && root !== path ? path : null);
     },
 
     async enter(entry: LibraryEntry): Promise<void> {
       if (!entry.isDir) return;
-      _dir.value = entry.path;
-      _selectedPath.value = null;
-      await _reload();
+      dir.value = entry.path;
+      selectedPath.value = null;
+      await nav.reload();
     },
 
     async goUp(): Promise<void> {
-      if (!_dir.value) return;
-      const up = parentOf(_dir.value);
-      _dir.value = up === _source.value ? null : up;
-      _selectedPath.value = null;
-      await _reload();
+      if (!dir.value) return;
+      const up = parentOf(dir.value);
+      dir.value = up === source.value ? null : up;
+      selectedPath.value = null;
+      await nav.reload();
     },
 
     select(entry: LibraryEntry | null): void {
-      _selectedPath.value = entry && !entry.isDir ? entry.path : null;
+      selectedPath.value = entry && !entry.isDir ? entry.path : null;
     },
 
     async addFolder(): Promise<void> {
@@ -211,11 +287,7 @@ export function useFileLibrary() {
           { path: chosen, label: basename(chosen) },
         ]);
       }
-      await _refreshCounts();
-      _source.value = chosen;
-      _dir.value = null;
-      _selectedPath.value = null;
-      await _reload();
+      await Promise.all([_refreshAll((n) => n.source.value === ALL), nav.open(chosen)]);
     },
 
     async removeFolder(path: string): Promise<void> {
@@ -223,11 +295,13 @@ export function useFileLibrary() {
         KEYS.MODULES.PRESENTATION_MODE.LIBRARY_FOLDERS,
         folders.value.filter((f) => f.path !== path)
       );
-      if (_source.value === path) {
-        _source.value = ALL;
-        _dir.value = null;
+      for (const n of _navs.values()) {
+        if (n.source.value === path) {
+          n.source.value = ALL;
+          n.dir.value = null;
+        }
       }
-      await Promise.all([_reload(), _refreshCounts()]);
+      await _refreshAll((n) => n.source.value === ALL);
     },
 
     reorderFolders(list: LibraryFolder[]): void {
@@ -239,7 +313,7 @@ export function useFileLibrary() {
      * Anterior/Próximo — a aberta na grade ou, para a pasta do programa, `from`.
      */
     startQueue(entry: LibraryEntry, from?: LibraryEntry[]): void {
-      const files = (from ?? _entries.value).filter((e) => !e.isDir);
+      const files = (from ?? entries.value).filter((e) => !e.isDir);
       const index = files.findIndex((e) => e.path === entry.path);
       _queue.value = index >= 0 ? { entries: files, index } : { entries: [entry], index: 0 };
     },
@@ -268,8 +342,7 @@ export function useFileLibrary() {
         ? favorites.value.filter((f) => f.path !== entry.path)
         : [...favorites.value, { ...entry }];
       $userdata.set(KEYS.MODULES.PRESENTATION_MODE.LIBRARY_FAVORITES, next);
-      _counts.value = { ..._counts.value, [FAVORITES]: next.length };
-      if (_source.value === FAVORITES) void _reload();
+      void _refreshAll((n) => n.source.value === FAVORITES);
     },
   };
 }

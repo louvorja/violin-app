@@ -22,10 +22,10 @@
       "stop_main_screen": "Detener pantalla principal",
       "stop_stage_return": "Detener retorno",
       "library_files": "Archivos",
+      "library_media": "Medios",
+      "library_audio": "Audio",
       "library_musics": "Músicas",
       "library_bible": "Biblia",
-      "library_videos": "Videos en línea",
-      "library_media": "Medios",
       "expand": "Expandir módulo",
       "collapse": "Contraer módulo",
       "slide_grid": "Cuadrícula de diapositivas",
@@ -223,7 +223,7 @@
     "resize": "Arrastre para cambiar la altura (doble clic alterna)",
     "musics": "Músicas",
     "bible": "Biblia",
-    "online": "Videos en línea",
+    "online": "En línea",
     "play": "Reproducir",
     "stop": "Dejar de reproducir",
     "details": "Detalles",
@@ -232,7 +232,9 @@
     "on_return": "RETORNO",
     "play_on_return": "Reproducir solo en el retorno",
     "remove_from_return": "Quitar del retorno",
-    "play_muted": "Reproducir sin audio"
+    "play_muted": "Reproducir sin audio",
+    "media": "Medios",
+    "audio": "Audio"
   },
   "video": {
     "back_10": "Retroceder 10 segundos",

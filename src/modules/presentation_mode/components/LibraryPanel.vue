@@ -53,8 +53,9 @@
     </header>
 
     <LibraryMusic v-if="tab === 'musics'" :live-song-id="liveSongId" v-bind="relay" />
-    <LibraryOnline
-      v-else-if="tab === 'online'"
+    <LibraryMedia
+      v-else-if="tab === 'media'"
+      :live-path="livePath"
       :live-video-id="liveVideoId"
       :return-path="returnPath"
       v-bind="relay"
@@ -64,6 +65,8 @@
     <LibraryBible v-else-if="tab === 'bible'" :live="liveBible" v-bind="relay" />
     <LibraryFiles
       v-else
+      :key="tab"
+      :scope="tab === 'audio' ? 'audio' : 'files'"
       :live-path="livePath"
       :return-path="returnPath"
       v-bind="relay"
@@ -75,16 +78,30 @@
   </section>
 </template>
 
+<script lang="ts">
+import { ICONS } from "@/config/Icons";
+
+const TABS = [
+  { id: "files", label: "library.files", icon: ICONS.UI.FOLDER_OPEN },
+  { id: "media", label: "library.media", icon: ICONS.MEDIA.IMAGE_MULTIPLE },
+  { id: "audio", label: "library.audio", icon: ICONS.MEDIA.AUDIO_VIDEO },
+  { id: "musics", label: "library.musics", icon: ICONS.MUSIC.MUSIC },
+  { id: "bible", label: "library.bible", icon: ICONS.MODULES.BIBLE },
+] as const;
+export type LibraryTab = (typeof TABS)[number]["id"];
+/** Cada aba tem um botão `library_<aba>` no ribbon. */
+export const LIBRARY_TABS: LibraryTab[] = TABS.map((t) => t.id);
+</script>
+
 <script setup lang="ts">
 import { ref } from "vue";
 import LibraryFiles from "./LibraryFiles.vue";
 import LibraryMusic from "./LibraryMusic.vue";
 import LibraryBible from "./LibraryBible.vue";
-import LibraryOnline from "./LibraryOnline.vue";
+import LibraryMedia from "./LibraryMedia.vue";
 import type { ProgramBibleRef, ProgramItem } from "@/types/Presentation";
 import type { Playable, PlayOptions } from "../program/playable";
 import { LjButton, LjIcon } from "@/components/ui";
-import { ICONS } from "@/config/Icons";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { useModuleI18n } from "@/composables/useModuleI18n";
 import type { LibraryEntry } from "../composables/useFileLibrary";
@@ -126,13 +143,6 @@ const relay = {
 
 const { tm } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
 
-const TABS = [
-  { id: "files", label: "library.files", icon: ICONS.UI.FOLDER_OPEN },
-  { id: "musics", label: "library.musics", icon: ICONS.MUSIC.MUSIC },
-  { id: "bible", label: "library.bible", icon: ICONS.MODULES.BIBLE },
-  { id: "online", label: "library.online", icon: ICONS.MEDIA.YOUTUBE },
-] as const;
-export type LibraryTab = (typeof TABS)[number]["id"];
 /** Controlada de fora: o ribbon também troca a aba. */
 const tab = defineModel<LibraryTab>("tab", { default: "files" });
 

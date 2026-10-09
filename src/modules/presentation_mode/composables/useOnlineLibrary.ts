@@ -1,4 +1,5 @@
 import { computed, ref, shallowRef } from "vue";
+import $alert from "@/helpers/Alert";
 import $docs from "@/helpers/DocStore";
 import $idb from "@/helpers/IndexedDB";
 import Telemetry from "@/helpers/Telemetry";
@@ -299,4 +300,12 @@ export function useOnlineLibrary() {
     startQueue,
     stepQueue,
   };
+}
+
+/** Pergunta antes de tirar um favorito on-line da biblioteca. */
+export function confirmRemoveFavorite(fav: OnlineFavorite): void {
+  const key = (k: string) => `modules.presentation_mode.online.${k}`;
+  $alert.yesno({ title: key("remove_title"), text: key(`remove_${fav.kind}`) }, (resp?: string) => {
+    if (resp === "yes") void useOnlineLibrary().remove(fav.id);
+  });
 }

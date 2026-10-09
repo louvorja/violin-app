@@ -1,77 +1,5 @@
 <template>
   <div class="pm-online" data-testid="pm-library-online">
-    <nav class="pm-online__nav" :aria-label="tm('online.favorites')">
-      <button
-        type="button"
-        class="pm-online__src"
-        :class="{ 'pm-online__src--active': online.openId.value === VIDEOS }"
-        data-testid="pm-online-videos"
-        @click="online.open(VIDEOS)"
-      >
-        <LjIcon :icon="ICONS.MEDIA.YOUTUBE" :size="15" />
-        <span class="pm-online__src-label">{{ tm("online.videos") }}</span>
-        <span class="pm-online__src-count">{{ online.videos.value.length || "" }}</span>
-      </button>
-      <span v-if="online.collections.value.length" class="pm-online__group">
-        {{ tm("online.collections") }}
-      </span>
-      <draggable
-        :model-value="online.collections.value"
-        item-key="id"
-        tag="div"
-        class="pm-online__list"
-        :animation="150"
-        ghost-class="pm-online__src--ghost"
-        @update:model-value="(list: OnlineCollectionFavorite[]) => online.reorder(list)"
-      >
-        <template #item="{ element: fav }">
-          <div
-            class="pm-online__src pm-online__src--user"
-            :class="{ 'pm-online__src--active': online.openId.value === fav.id }"
-            role="button"
-            tabindex="0"
-            :title="
-              fav.channel && fav.kind === 'playlist' ? `${fav.title} · ${fav.channel}` : fav.title
-            "
-            :data-testid="`pm-online-src-${fav.ytId}`"
-            @click="online.open(fav.id, locale)"
-            @keydown.enter.self="online.open(fav.id, locale)"
-          >
-            <img
-              v-if="fav.kind === 'channel' && fav.thumbnail"
-              :src="fav.thumbnail"
-              alt=""
-              class="pm-online__avatar"
-            />
-            <LjIcon
-              v-else
-              :icon="fav.kind === 'channel' ? ICONS.UI.ACCOUNT : ICONS.MEDIA.PLAYLIST"
-              :size="15"
-            />
-            <span class="pm-online__src-label">{{ fav.title }}</span>
-            <button
-              type="button"
-              class="pm-online__remove"
-              :title="tm('online.remove')"
-              :aria-label="tm('online.remove')"
-              @click.stop="confirmRemove(fav)"
-            >
-              <LjIcon :icon="ICONS.ACTIONS.CLOSE" :size="11" />
-            </button>
-          </div>
-        </template>
-      </draggable>
-      <button
-        type="button"
-        class="pm-online__src pm-online__src--add"
-        data-testid="pm-online-add"
-        @click="startAdding"
-      >
-        <LjIcon :icon="ICONS.UI.LINK" :size="15" />
-        <span class="pm-online__src-label">{{ tm("online.add") }}</span>
-      </button>
-    </nav>
-
     <div class="pm-online__main">
       <header class="pm-online__head">
         <form v-if="adding" class="pm-online__form" @submit.prevent="submit">
@@ -228,7 +156,6 @@
 
 <script setup lang="ts">
 import { nextTick, onMounted, ref } from "vue";
-import draggable from "vuedraggable";
 import {
   LjButton,
   LjContextMenu,
@@ -239,7 +166,6 @@ import {
 } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ModuleEnum } from "@/enums/ModuleEnum";
-import $alert from "@/helpers/Alert";
 import DateTime from "@/helpers/DateTime";
 import $snackbar from "@/helpers/Snackbar";
 import { prepare as prepareOnlineVideo, youtubeThumb } from "@/helpers/OnlineVideo";
@@ -250,16 +176,14 @@ import type { Playable, PlayOptions } from "../program/playable";
 import { onlinePlayable } from "../composables/useOnlinePlayback";
 import { onlineReturnPath } from "../composables/returnTarget";
 import {
+  confirmRemoveFavorite,
   useOnlineLibrary,
-  VIDEOS,
-  type OnlineCollectionFavorite,
   type OnlineEntry,
-  type OnlineFavorite,
 } from "../composables/useOnlineLibrary";
 
 /**
- * Aba Vídeos on-line da biblioteca: vídeos, playlists e canais do YouTube que
- * o operador favoritou. Um clique leva o vídeo para a prévia do palco; ▶ ou
+ * A grade on-line da aba Mídia (a barra lateral é o OnlineSources): vídeos,
+ * playlists e canais do YouTube que o operador favoritou. Um clique leva o vídeo para a prévia do palco; ▶ ou
  * duplo clique projeta; + põe no programa. O canal lista do mais recente ao
  * mais antigo, e a lista continua ao rolar até o fim.
  */
@@ -278,7 +202,6 @@ const emit = defineEmits<{
 }>();
 
 const { tm, locale } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
-const alertKey = (key: string) => `modules.${ModuleEnum.PRESENTATION_MODE}.${key}`;
 const online = useOnlineLibrary();
 const current = online.openFavorite;
 
@@ -330,7 +253,7 @@ function menuFor(video: OnlineEntry): { quick: LjMenuItem[]; items: LjMenuItem[]
         ? {
             label: tm("online.remove"),
             icon: ICONS.ACTIONS.DELETE,
-            action: () => confirmRemove(fav),
+            action: () => confirmRemoveFavorite(fav),
           }
         : {
             label: tm("online.favorite_video"),
@@ -348,6 +271,7 @@ const saving = ref(false);
 const url = ref("");
 const urlInput = ref<{ focus?: () => void } | null>(null);
 
+/** O "Adicionar link" da barra lateral abre o campo aqui em cima. */
 async function startAdding(): Promise<void> {
   adding.value = true;
   url.value = "";
@@ -376,15 +300,6 @@ async function submit(): Promise<void> {
   if (await save(url.value)) adding.value = false;
 }
 
-function confirmRemove(fav: OnlineFavorite): void {
-  $alert.yesno(
-    { title: alertKey("online.remove_title"), text: alertKey(`online.remove_${fav.kind}`) },
-    (resp?: string) => {
-      if (resp === "yes") void online.remove(fav.id);
-    }
-  );
-}
-
 /* ─── Rolagem ─── */
 
 const grid = ref<HTMLElement | null>(null);
@@ -393,6 +308,8 @@ function onScroll(): void {
   if (el && el.scrollTop + el.clientHeight >= el.scrollHeight - 160)
     void online.loadMore(locale.value);
 }
+
+defineExpose({ startAdding });
 
 onMounted(() => {
   void online.ensureLoaded();
@@ -403,91 +320,13 @@ onMounted(() => {
 
 <style scoped>
 .pm-online {
-  flex: 1;
-  min-height: 0;
-  display: grid;
-  grid-template-columns: 168px minmax(0, 1fr);
-}
-
-.pm-online__nav {
   display: flex;
-  flex-direction: column;
-  min-height: 0;
-  overflow-y: auto;
-  border-right: 1px solid var(--lj-surface-border);
-}
-
-.pm-online__group {
-  padding: 8px 9px 3px 12px;
-  font-size: 9.5px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  color: var(--lj-text-subtle);
-}
-
-.pm-online__list {
-  display: flex;
-  flex-direction: column;
-}
-
-.pm-online__src {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 27px;
-  flex-shrink: 0;
-  padding: 0 8px 0 9px;
-  border: none;
-  border-left: 3px solid transparent;
-  background: transparent;
-  color: var(--lj-text);
-  font: inherit;
-  font-size: 12px;
-  text-align: left;
-  cursor: pointer;
-  transition: background 120ms var(--lj-ease);
-}
-
-.pm-online__src:hover {
-  background: var(--lj-hover-bg);
-}
-
-.pm-online__src :deep(svg) {
-  flex-shrink: 0;
-  color: var(--lj-orange);
-}
-
-.pm-online__src--active {
-  background: var(--lj-live-active-bg);
-  border-left-color: var(--lj-orange);
-}
-
-.pm-online__src--user {
-  cursor: grab;
-}
-
-.pm-online__src--ghost {
-  opacity: 0.5;
-}
-
-.pm-online__src--add {
-  color: var(--lj-orange);
-}
-
-.pm-online__src-label {
-  flex: 1;
   min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  min-height: 0;
 }
 
-.pm-online__src-count {
-  flex-shrink: 0;
-  font-family: var(--lj-font-mono);
-  font-size: 10px;
-  color: var(--lj-text-subtle);
+.pm-online__main {
+  flex: 1;
 }
 
 .pm-online__avatar {
@@ -501,26 +340,6 @@ onMounted(() => {
 .pm-online__avatar--lg {
   width: 22px;
   height: 22px;
-}
-
-.pm-online__remove {
-  display: none;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  padding: 0;
-  border: none;
-  border-radius: 3px;
-  background: transparent;
-  color: var(--lj-text-muted);
-  cursor: pointer;
-}
-
-.pm-online__src--user:hover .pm-online__remove,
-.pm-online__remove:focus-visible {
-  display: flex;
 }
 
 .pm-online__main {

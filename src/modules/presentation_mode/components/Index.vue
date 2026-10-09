@@ -232,7 +232,7 @@ import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { useModuleI18n } from "@/composables/useModuleI18n";
 import { isModuleExpanded, toggleModuleExpanded } from "@/composables/useModuleExpanded";
-import type { ProgramBibleRef, ProgramItem } from "@/types/Presentation";
+import type { ProgramItem } from "@/types/Presentation";
 import ProgramPanel from "./ProgramPanel.vue";
 import ProgramItemDialog from "./ProgramItemDialog.vue";
 import ProgramSessionDialog from "./ProgramSessionDialog.vue";
@@ -268,11 +268,13 @@ import {
   type Playable,
   type PlayOptions,
 } from "../program/playable";
-import LibraryPanel, { type LibraryTab } from "./LibraryPanel.vue";
+import LibraryPanel, { LIBRARY_TABS, type LibraryTab } from "./LibraryPanel.vue";
 import LiveMirror from "./LiveMirror.vue";
 import $appdata from "@/helpers/AppData";
 import { KEYS } from "@/constants/UserDataKeys";
 import { useFileLibrary, type LibraryEntry } from "../composables/useFileLibrary";
+import { useLibraryLiveMarks } from "../composables/useLibraryLiveMarks";
+import { useFlash } from "../composables/useFlash";
 import Media from "@/composables/useMedia";
 import { useSlides } from "@/composables/useSlides";
 import { useLiveContent } from "../composables/useLiveContent";
@@ -655,27 +657,8 @@ const { stageIcon, stageTitle, stageMeta } = useStageHeader({
   findItem,
 });
 
-/** O arquivo no ar saiu da biblioteca? Então a grade o destaca. */
 const library = useFileLibrary();
-const libraryQueueLive = computed(() => {
-  const q = library.queue.value;
-  const origin = liveOrigin.value;
-  const fromQueue = origin?.type === "file" || origin?.type === "folderFile";
-  return !!q && fromQueue && q.entries[q.index]?.path === origin.entry.path;
-});
-
-/** Trecho da Bíblia que o módulo pôs no ar — da biblioteca ou de um item do programa. */
-const liveBibleRef = computed<ProgramBibleRef | null>(() => {
-  const origin = liveOrigin.value;
-  if (origin?.type === "bible") return origin.ref;
-  return liveProgramItem.value?.bible ?? null;
-});
-
-/** Arquivo da biblioteca que está no ar — borda de destaque e ✕ na grade. */
-const libraryLivePath = computed(() => {
-  const q = library.queue.value;
-  return libraryQueueLive.value && q ? q.entries[q.index].path : null;
-});
+const { libraryLivePath, liveBibleRef } = useLibraryLiveMarks({ liveOrigin, liveProgramItem });
 
 /** Tira do ar o que está na tela, mantendo a apresentação aberta. */
 function takeOff(): void {
@@ -687,13 +670,8 @@ watch(liveKind, (kind) => $appdata.set(KEYS.MODULES.PRESENTATION_MODE.CAN_TAKE_O
   immediate: true,
 });
 
-const upNextFlash = ref(false);
-let flashTimer: ReturnType<typeof setTimeout> | null = null;
-function flashUpNext(): void {
-  upNextFlash.value = true;
-  if (flashTimer) clearTimeout(flashTimer);
-  flashTimer = setTimeout(() => (upNextFlash.value = false), 700);
-}
+// O "A seguir" pisca quando a fila chega ao fim.
+const { on: upNextFlash, trigger: flashUpNext } = useFlash(700);
 
 /* ─── Anterior/Próximo ─── */
 
@@ -722,11 +700,9 @@ useProgramDownloads(() => [
 ]);
 
 // PowerPoint no palco já começa a converter: na hora de mandar, o PDF está pronto.
-watch(stage.preview, (p) => {
-  const item = p?.type === "program" ? findItem(p.itemId) : null;
-  for (const path of [pathOf(p), ...(item?.children ?? []).map((c) => c.path)])
-    if (path) preparePowerPoint(path);
-});
+watch(stage.preview, (p) =>
+  preparePowerPoint(pathOf(p), findItem(p?.type === "program" ? p.itemId : ""))
+);
 
 useOnlinePrefetch(() => {
   const preview = stage.preview.value;
@@ -789,8 +765,7 @@ const {
 
 const settingsDialogOpen = ref(false);
 
-// Todas as ações do ribbon contextual chegam aqui. As que ainda não têm
-// handler são ignoradas até a fase que as implementa.
+// Todas as ações do ribbon contextual chegam aqui; as sem handler são ignoradas.
 const libraryTab = ref<LibraryTab>("files");
 
 const RIBBON_HANDLERS: Record<string, () => void> = {
@@ -809,10 +784,7 @@ const RIBBON_HANDLERS: Record<string, () => void> = {
   next: () => navigate("next"),
   lock_output: toggleLock,
   go_to_slide: goToSlidePrompt,
-  library_files: () => (libraryTab.value = "files"),
-  library_musics: () => (libraryTab.value = "musics"),
-  library_bible: () => (libraryTab.value = "bible"),
-  library_videos: () => (libraryTab.value = "online"),
+  ...Object.fromEntries(LIBRARY_TABS.map((t) => [`library_${t}`, () => (libraryTab.value = t)])),
   slide_grid: focusLive,
 };
 

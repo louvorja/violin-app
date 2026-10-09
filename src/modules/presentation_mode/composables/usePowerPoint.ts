@@ -32,9 +32,17 @@ function tm(key: string, params?: Record<string, unknown>): string {
   return t ? String(t(full, params)) : full;
 }
 
-/** Converte em segundo plano, sem avisos: o resultado fica no cache do main. */
-export function preparePowerPoint(path: string): void {
-  if (POWERPOINT_ENABLED && isPowerPoint(path)) void Platform.convertPresentation(path).catch(() => null);
+/**
+ * Converte em segundo plano, sem avisos: o resultado fica no cache do main.
+ * Com um item do programa, os arquivos filhos (de um momento) também.
+ */
+export function preparePowerPoint(
+  path: string | null,
+  item?: { children?: { path?: string }[] } | null
+): void {
+  if (!POWERPOINT_ENABLED) return;
+  for (const p of [path, ...(item?.children ?? []).map((c) => c.path)])
+    if (p && isPowerPoint(p)) void Platform.convertPresentation(p).catch(() => null);
 }
 
 /** O PDF do PowerPoint, ou null (o operador já foi avisado do porquê). */
@@ -50,6 +58,8 @@ export async function powerPointAsPdf(path: string, name: string): Promise<strin
   if (res?.ok) return res.pdf;
   const error = res?.error ?? "exception";
   Telemetry.track("presentation_pptx_failed", { error });
-  $snackbar.error(tm(error === "unsupported" ? "unsupported" : "failed", { name }), { timeout: 8000 });
+  $snackbar.error(tm(error === "unsupported" ? "unsupported" : "failed", { name }), {
+    timeout: 8000,
+  });
   return null;
 }
