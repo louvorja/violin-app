@@ -15,7 +15,7 @@ import {
 import { useOnlineQueue } from "./useOnlinePlayback";
 import { isDeck, usePdfDeck } from "./usePdfDeck";
 import { useStage } from "./useStage";
-import { claimVideo } from "./useLayers";
+import { claimScreen } from "./useLayers";
 import { kindFromPath } from "../program/liturgy";
 
 /**
@@ -93,7 +93,7 @@ export function useStageNavigation(deps: {
         sent: () => sentWhile(["file"]),
         step: (to) => library.stepQueue(to),
         send: (entry) => {
-          if (kindFromPath(entry.path) === "video") claimVideo("screen");
+          claimScreen(kindFromPath(entry.path) === "video" ? "video" : "other");
         deps.projectPath(entry.path, entry.name);
           // Na pasta do programa, o item continua sendo o que está no ar.
           const sent = stage.sent.value?.playable;

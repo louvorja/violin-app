@@ -255,7 +255,7 @@ import { programFilePaths } from "../program/paths";
 import { useStage } from "../composables/useStage";
 import { useStageNavigation } from "../composables/useStageNavigation";
 import { useReturnBlankSync } from "../composables/useReturnVisibility";
-import { claimVideo, resetOrphanScreens } from "../composables/useLayers";
+import { claimScreen, claimVideo, resetOrphanScreens } from "../composables/useLayers";
 import { useFolderItems } from "../composables/useFolderItems";
 import { usePlayerMute } from "../composables/usePlayerMute";
 import {
@@ -412,9 +412,10 @@ function dispatch(
   }
 
   stage.show(playable);
-  // Um vídeo por vez: o que estiver só no retorno sai antes deste entrar.
+  // A tela é uma só: o que entra tira o vídeo que estava (na tela ou só no retorno).
   const video = playsVideo(playable, item);
-  if (video) claimVideo("screen");
+  const music = playable.type === "song" || item?.kind === "music";
+  claimScreen(video ? "video" : music ? "music" : "other");
   // Sem áudio: o mudo do palco. Outra mídia com som devolve o volume de antes.
   if (muted) playerMute.mute();
   else if (video || playable.type === "song" || item?.kind === "music") playerMute.unmute();

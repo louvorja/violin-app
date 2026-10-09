@@ -65,6 +65,21 @@ export function claimVideo(target: "screen" | "return"): void {
   }
 }
 
+/**
+ * O que vai entrar na tela principal tira o que estava nela. O vídeo é dono
+ * da tela e do som dele: uma foto, um PDF ou um versículo no lugar de um
+ * vídeo encerram o vídeo — senão ele seguia tocando, sem aparecer em lugar
+ * nenhum e sem controle. A música troca o player sozinha; o "só áudio" de
+ * uma música (camada de áudio) continua podendo tocar por baixo de uma foto.
+ */
+export function claimScreen(next: "video" | "music" | "other"): void {
+  if (next === "video") return claimVideo("screen");
+  if (next === "other" && screenVideoPlaying()) {
+    Media.close(true, false, true);
+    Telemetry.track("presentation_layer_video_replaced", { from: "screen", by: "other" });
+  }
+}
+
 /** Tira tudo de todas as camadas: as telas ficam no fundo. */
 export function stopAllLayers(): void {
   const live = useLiveContent();
@@ -124,6 +139,11 @@ export function useLayers() {
     // O som do vídeo no ar sai pelo mesmo player: ocupa a camada de áudio.
     if (screenVideoPlaying()) return screenTitle.value;
     if (player.state.id) return player.state.title;
+    // Vídeo tocando no player sem estar na tela (aberto por outro caminho):
+    // o operador vê na camada de áudio e pode parar.
+    if ($appdata.get<boolean>(KEYS.MODULES.MEDIA.CONFIG.VIDEO_FILE, false) && $appdata.get<boolean>(KEYS.MODULES.MEDIA.IS_PLAYING, false)) {
+      return $appdata.get<string>(KEYS.MODULES.MEDIA.CONFIG.TITLE, "") || tm("hidden_video");
+    }
     return "";
   });
 

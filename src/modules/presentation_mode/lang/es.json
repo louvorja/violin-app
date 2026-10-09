@@ -436,7 +436,8 @@
     "stop": "Quitar de esta capa",
     "stop_all": "Limpiar todo",
     "announcements": "Anuncios",
-    "orphans_cleared": "Las pantallas mostraban algo que la app ya no controlaba (se recargó): volvieron al fondo."
+    "orphans_cleared": "Las pantallas mostraban algo que la app ya no controlaba (se recargó): volvieron al fondo.",
+    "hidden_video": "Video reproduciéndose fuera de la pantalla"
   },
   "menu": {
     "open": "Abrir",
