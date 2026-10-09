@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { agendaParaPersistir, lerHorario, prepararAgenda } from "../agenda";
+import {
+  agendaParaPersistir,
+  blocoDaSecao,
+  indiceFimDoBloco,
+  lerHorario,
+  prepararAgenda,
+  reposicionarParaBloco,
+} from "../agenda";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import type { LiturgyItem } from "@/types/Liturgy";
 
@@ -135,5 +142,84 @@ describe("horários da agenda", () => {
     for (const value of [null, {}, "25:00", "08:99", "x", "08:30<script>"]) {
       expect(lerHorario(value)).toBe("");
     }
+  });
+});
+
+describe("posicionamento por bloco", () => {
+  const bloco = (id: string) => item(id, { tipo: LiturgyItemTypeEnum.BLOCO, blocoId: undefined });
+  const duasSecoes = () => [
+    bloco("a"),
+    item("a1", { blocoId: "a" }),
+    item("a2", { blocoId: "a" }),
+    bloco("b"),
+    item("b1", { blocoId: "b" }),
+  ];
+  const nomes = (lista: LiturgyItem[]) => lista.map((entry) => entry.id);
+
+  it("o fim do bloco é o índice logo antes do próximo cabeçalho", () => {
+    const lista = duasSecoes();
+    expect(indiceFimDoBloco(lista, "a")).toBe(3);
+    expect(indiceFimDoBloco(lista, "b")).toBe(5);
+    expect(indiceFimDoBloco(lista, "sem-bloco")).toBe(5);
+    expect(indiceFimDoBloco(lista, "")).toBe(5);
+    expect(indiceFimDoBloco([item("solto")], "a")).toBe(1);
+  });
+
+  it("um bloco vazio recebe o item logo após o próprio cabeçalho", () => {
+    const lista = [bloco("a"), bloco("b"), item("b1", { blocoId: "b" })];
+    expect(indiceFimDoBloco(lista, "a")).toBe(1);
+    expect(nomes([...lista].slice(0, indiceFimDoBloco(lista, "a")))).toEqual(["a"]);
+  });
+
+  it("o fim do bloco é depois do último item vinculado, não da borda da seção", () => {
+    const soltos = [
+      bloco("a"),
+      item("solto-2"),
+      item("solto-3"),
+      item("solto-6"),
+      bloco("b"),
+    ];
+    expect(indiceFimDoBloco(soltos, "a")).toBe(1);
+
+    const comFilho = [
+      bloco("a"),
+      item("solto-2"),
+      item("filho", { blocoId: "a" }),
+      item("solto-6"),
+      bloco("b"),
+    ];
+    expect(indiceFimDoBloco(comFilho, "a")).toBe(3);
+  });
+
+  it("a seção é o cabeçalho mais próximo acima do índice", () => {
+    const lista = duasSecoes();
+    expect(blocoDaSecao(lista, 1)).toBe("a");
+    expect(blocoDaSecao(lista, 2)).toBe("a");
+    expect(blocoDaSecao(lista, 4)).toBe("b");
+    expect(blocoDaSecao(lista, 0)).toBeNull();
+    expect(blocoDaSecao(lista, 3)).toBeNull();
+    expect(blocoDaSecao(lista, 99)).toBeNull();
+    expect(blocoDaSecao([item("solto")], 0)).toBeNull();
+  });
+
+  it("reposicionar leva o item para o fim da seção alvo sem mutar a original", () => {
+    const lista = duasSecoes();
+    const nova = reposicionarParaBloco(lista, "a1", "b");
+    expect(nomes(nova)).toEqual(["a", "a2", "b", "b1", "a1"]);
+    expect(nomes(lista)).toEqual(["a", "a1", "a2", "b", "b1"]);
+  });
+
+  it("reposicionar no fim do próprio bloco devolve a mesma lista", () => {
+    const lista = duasSecoes();
+    expect(reposicionarParaBloco(lista, "a2", "a")).toBe(lista);
+    expect(reposicionarParaBloco(lista, "b1", "b")).toBe(lista);
+    expect(reposicionarParaBloco(lista, "nao-existe", "a")).toBe(lista);
+  });
+
+  it("sair do bloco deixa o item no fim da seção em que ele estava", () => {
+    const lista = [bloco("a"), item("a1", { blocoId: "a" }), item("a2", { blocoId: "a" }), bloco("b")];
+    expect(nomes(reposicionarParaBloco(lista, "a1", "a"))).toEqual(["a", "a2", "a1", "b"]);
+    const ultimo = [bloco("a"), item("a1", { blocoId: "a" }), bloco("b")];
+    expect(reposicionarParaBloco(ultimo, "a1", "a")).toBe(ultimo);
   });
 });

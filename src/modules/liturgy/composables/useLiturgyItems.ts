@@ -1,5 +1,13 @@
 import { useLiturgyI18n, chaveLiturgia } from "../i18n";
-import { agendaParaPersistir, agruparPorBloco, lerHorario, prepararAgenda } from "../agenda";
+import {
+  agendaParaPersistir,
+  agruparPorBloco,
+  blocoDaSecao,
+  indiceFimDoBloco,
+  lerHorario,
+  prepararAgenda,
+  reposicionarParaBloco,
+} from "../agenda";
 import { useLiturgyExecution } from "./useLiturgyExecution";
 import { ref, computed, type Ref, type WritableComputedRef } from "vue";
 import $liturgy from "@/helpers/Liturgy";
@@ -407,6 +415,31 @@ export function useLiturgyItems(
     }
   }
 
+  /**
+   * Gravar o item não muda a posição dele, então quem trocou o bloco vai para
+   * depois do último item vinculado ao bloco novo — é assim que a linha do
+   * item volta a entrar no bloco que o operador escolheu. Saiu do bloco: para
+   * depois do último filho do bloco de onde ele saiu, fora do `blocoId`, sem
+   * viajar até o fim da liturgia. Campo intocado não move nada: editar nome
+   * ou duração não embaralha a ordem da liturgia.
+   */
+  function reposicionarAposSalvar(
+    original: LiturgyItem,
+    built: Partial<LiturgyItem>
+  ): LiturgyItem[] | null {
+    const antes = original.blocoId || "";
+    const depois = built.blocoId || "";
+    if (antes === depois) return null;
+
+    const vista = [...items.value];
+    const indice = vista.findIndex((i) => i.id === original.id);
+    if (indice < 0) return null;
+
+    const destino = depois || blocoDaSecao(vista, indice);
+    if (!destino) return null;
+    return reposicionarParaBloco(vista, original.id, destino);
+  }
+
   function saveItem(): void {
     const f = form.value;
 
@@ -555,13 +588,20 @@ export function useLiturgyItems(
     // antiga pareça uma nova hora manual depois de recalcular a agenda.
     const persisted = agendaParaPersistir(items.value);
     $liturgy.set(persisted, activeDay.value);
+    let reposicionada: LiturgyItem[] | null = null;
     if (editIndex.value >= 0) {
-      const id = items.value[editIndex.value].id;
-      $liturgy.update(id, built, activeDay.value);
+      const original = items.value[editIndex.value];
+      $liturgy.update(original.id, built, activeDay.value);
+      reposicionada = reposicionarAposSalvar(original, built);
     } else {
-      $liturgy.add(built, activeDay.value);
+      const destino = indiceFimDoBloco(persisted, built.blocoId);
+      if (destino < persisted.length) {
+        $liturgy.insert(built, activeDay.value, destino);
+      } else {
+        $liturgy.add(built, activeDay.value);
+      }
     }
-    items.value = [...items.value];
+    items.value = reposicionada ?? [...items.value];
     dialog.value = false;
   }
 

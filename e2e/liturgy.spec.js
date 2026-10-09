@@ -544,3 +544,89 @@ test("oculta vínculo antigo de anúncios sem apagar os dados do item", async ({
   });
   expect(saved?.linked_overlay_id).toBe("liturgy-legacy-test");
 });
+
+test("trocar o bloco de um item na edição leva ele para o fim do bloco escolhido", async ({
+  page,
+}) => {
+  await page.route("http://e2e.mock/**", (route) => route.fulfill({ json: [] }));
+  await page.goto("/");
+  await page.locator('[data-testid="modules-ready"]').waitFor({ state: "attached" });
+  await page.evaluate(async () => {
+    const { default: Liturgy } = await import("/src/helpers/Liturgy.ts");
+    Liturgy.set([
+      { id: "bloco-alfa", tipo: "bloco", item: "Bloco Alfa" },
+      { id: "item-alfa", tipo: "anotacao", item: "Item do Alfa", blocoId: "bloco-alfa" },
+      { id: "bloco-beta", tipo: "bloco", item: "Bloco Beta" },
+      { id: "item-beta", tipo: "anotacao", item: "Item do Beta", blocoId: "bloco-beta" },
+    ]);
+  });
+
+  await page.getByRole("button", { name: "Editar liturgia" }).click();
+  await expect(page.locator(".liturgy-page")).toBeVisible();
+
+  const card = page.locator(".liturgy-page [data-item-id]").filter({ hasText: "Item do Alfa" });
+  await card.locator(".lit-card-action").first().click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("combobox", { name: "Bloco" }).click();
+  await page.getByRole("option", { name: /Bloco Beta/ }).click();
+  await dialog.getByTestId("item-save").click();
+
+  const ordem = async () =>
+    (await page.locator(".liturgy-page [data-item-id]").allInnerTexts()).map((text) => {
+      const t = text.replace(/\s+/g, " ").toUpperCase();
+      if (t.includes("BLOCO ALFA")) return "blocoAlfa";
+      if (t.includes("BLOCO BETA")) return "blocoBeta";
+      if (t.includes("ITEM DO ALFA")) return "itemAlfa";
+      if (t.includes("ITEM DO BETA")) return "itemBeta";
+      return t;
+    });
+
+  await expect.poll(ordem).toEqual(["blocoAlfa", "blocoBeta", "itemBeta", "itemAlfa"]);
+});
+
+test("item sem bloco que entra num bloco vai logo abaixo do cabeçalho, acima dos soltos", async ({
+  page,
+}) => {
+  await page.route("http://e2e.mock/**", (route) => route.fulfill({ json: [] }));
+  await page.goto("/");
+  await page.locator('[data-testid="modules-ready"]').waitFor({ state: "attached" });
+  await page.evaluate(async () => {
+    const { default: Liturgy } = await import("/src/helpers/Liturgy.ts");
+    Liturgy.set([
+      { id: "bloco-1", tipo: "bloco", item: "Bloco 1" },
+      { id: "solto-2", tipo: "anotacao", item: "Item sem bloco 2" },
+      { id: "solto-3", tipo: "anotacao", item: "Item sem bloco 3" },
+      { id: "solto-4", tipo: "anotacao", item: "Item sem bloco 4" },
+      { id: "solto-5", tipo: "anotacao", item: "Item sem bloco 5" },
+      { id: "solto-6", tipo: "anotacao", item: "Item sem bloco 6" },
+      { id: "bloco-2", tipo: "bloco", item: "Bloco 2" },
+    ]);
+  });
+
+  await page.getByRole("button", { name: "Editar liturgia" }).click();
+  await expect(page.locator(".liturgy-page")).toBeVisible();
+
+  const card = page.locator(".liturgy-page [data-item-id]").filter({ hasText: "Item sem bloco 4" });
+  await card.locator(".lit-card-action").first().click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("combobox", { name: "Bloco" }).click();
+  await page.getByRole("option", { name: /Bloco 1/ }).click();
+  await dialog.getByTestId("item-save").click();
+
+  const ordem = async () =>
+    (await page.locator(".liturgy-page [data-item-id]").allInnerTexts()).map((text) => {
+      const t = text.replace(/\s+/g, " ").toUpperCase();
+      if (t.includes("ITEM SEM BLOCO 2")) return "solto2";
+      if (t.includes("ITEM SEM BLOCO 3")) return "solto3";
+      if (t.includes("ITEM SEM BLOCO 4")) return "solto4";
+      if (t.includes("ITEM SEM BLOCO 5")) return "solto5";
+      if (t.includes("ITEM SEM BLOCO 6")) return "solto6";
+      if (t.includes("BLOCO 1")) return "bloco1";
+      if (t.includes("BLOCO 2")) return "bloco2";
+      return t;
+    });
+
+  await expect
+    .poll(ordem)
+    .toEqual(["bloco1", "solto4", "solto2", "solto3", "solto5", "solto6", "bloco2"]);
+});

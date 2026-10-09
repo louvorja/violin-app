@@ -39,6 +39,73 @@ export function agruparPorBloco(list: LiturgyItem[]): LiturgyItem[] {
   return result;
 }
 
+/*
+ * A posição no array é o que decide em que bloco o item aparece: a timeline é
+ * um `v-for` plano e um cabeçalho BLOCO abre uma seção que vai até o próximo
+ * cabeçalho (ou até o fim). Dentro dessa seção convivem itens do bloco — os
+ * que têm `blocoId` igual ao do cabeçalho — e itens soltos, que a tela mostra
+ * embaixo do cabeçalho mas sem a faixa do bloco.
+ *
+ * Por isso "fim do bloco" tem duas leituras e só uma serve para posicionar:
+ * o fim da SEÇÃO é a borda com o próximo cabeçalho, e os soltos não fazem
+ * parte do bloco. O fim do BLOCO é depois do último item vinculado a ele (ou
+ * logo abaixo do cabeçalho, quando o bloco ainda não tem filhos) — é isso
+ * que o `saveItem` usa para entrar num bloco e para mover o item quando o
+ * operador troca o bloco, o que antes só acontecia via drag-and-drop.
+ */
+
+/** Cabeçalho BLOCO da seção que contém `indice`. */
+export function blocoDaSecao(lista: LiturgyItem[], indice: number): string | null {
+  if (indice <= 0 || indice >= lista.length) return null;
+  if (lista[indice].tipo === LiturgyItemTypeEnum.BLOCO) return null;
+  for (let i = indice - 1; i >= 0; i--) {
+    if (lista[i].tipo === LiturgyItemTypeEnum.BLOCO) return lista[i].id || null;
+  }
+  return null;
+}
+
+/**
+ * Primeiro índice depois do último item vinculado ao bloco dentro da seção.
+ * Bloco sem filhos ganha o item logo abaixo do cabeçalho: os soltos que vêm
+ * em seguida não são do bloco, então entrar nele não empurra o item para o
+ * fim da seção. `lista.length` quando o bloco não existe (ou não há bloco).
+ */
+export function indiceFimDoBloco(lista: LiturgyItem[], blocoId?: string | null): number {
+  if (!blocoId) return lista.length;
+  const inicio = lista.findIndex(
+    (i) => i.tipo === LiturgyItemTypeEnum.BLOCO && i.id === blocoId
+  );
+  if (inicio < 0) return lista.length;
+  let destino = inicio + 1;
+  let i = inicio + 1;
+  while (i < lista.length && lista[i].tipo !== LiturgyItemTypeEnum.BLOCO) {
+    if (lista[i].blocoId === blocoId) destino = i + 1;
+    i++;
+  }
+  return destino;
+}
+
+/**
+ * Move o item para depois do último item do bloco. O destino é calculado
+ * sobre a lista já sem o item, então não há aritmética de índice: sai do
+ * lugar antigo e entra logo atrás do último filho (ou do cabeçalho).
+ * Devolve a mesma referência quando a posição não muda.
+ */
+export function reposicionarParaBloco(
+  lista: LiturgyItem[],
+  id: string,
+  blocoId: string
+): LiturgyItem[] {
+  const idx = lista.findIndex((i) => i.id === id);
+  if (idx < 0) return lista;
+  const semOItem = lista.filter((i) => i.id !== id);
+  const destino = indiceFimDoBloco(semOItem, blocoId);
+  if (destino === idx) return lista;
+  const nova = [...semOItem];
+  nova.splice(destino, 0, lista[idx]);
+  return nova;
+}
+
 function somarMinutos(time: string, minutes: number): string {
   if (!time) return "";
   const [h, m] = time.split(":").map(Number);
