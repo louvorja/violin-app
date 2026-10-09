@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import $liturgy from "@/helpers/Liturgy";
 import $userdata from "@/helpers/UserData";
@@ -27,8 +27,18 @@ function seedActiveDay(day: number): void {
 
 describe("Liturgy.getFromCommand", () => {
   beforeEach(() => {
+    // Relógio parado: três testes daqui comparam o resultado com um dia da
+    // semana fixo (item em sexta, 5; item em sábado, 6) contra "hoje" vazio.
+    // Com o relógio real a suite quebrava toda vez que a data caía nesses
+    // dias — sexta o item de sexta deixava de dar null, sábado o de sábado.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 0, 5)); // segunda-feira
     // Store novo por teste — o helper lê só do store, sem tocar no disco.
     setActivePinia(createPinia());
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("regressão: acha o item de HOJE mesmo com o ACTIVE_DAY de outra sessão", () => {
