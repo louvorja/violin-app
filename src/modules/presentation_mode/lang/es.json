@@ -445,10 +445,5 @@
     "to_program": "Al programa",
     "download": "Descargar",
     "edit": "Editar"
-  },
-  "audio_meter": {
-    "label": "Audio",
-    "live": "Sonido saliendo por la computadora",
-    "silent": "Ningún sonido sonando"
   }
 }

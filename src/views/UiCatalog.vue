@@ -150,24 +150,6 @@
             <LjProgress indeterminate label="Verificando integridade" />
           </LjCard>
 
-          <LjCard title="Nível de áudio" :icon="ICONS.MEDIA.AUDIO">
-            <LjLevelMeter :levels="[0.62, 0.55]" :peaks="[0.8, 0.74]" aria-label="Saída de áudio" />
-            <div style="height: 12px" />
-            <LjLevelMeter :levels="[0.95]" :peaks="[0.98]" :thickness="8" aria-label="No limite" />
-            <div style="height: 12px" />
-            <LjLevelMeter :levels="[0, 0]" disabled aria-label="Sem som" />
-            <div style="height: 12px" />
-            <div class="cat__row" style="height: 72px">
-              <LjLevelMeter
-                orientation="vertical"
-                :levels="[0.7, 0.64]"
-                :peaks="[0.86, 0.8]"
-                aria-label="Ao lado da tela"
-              />
-              <span>Na vertical, encostado numa prévia de tela.</span>
-            </div>
-          </LjCard>
-
           <LjCard title="Carregando">
             <div class="cat__row">
               <LjSpinner :size="13" />
@@ -472,7 +454,6 @@ import {
   LjEmpty,
   LjField,
   LjInput,
-  LjLevelMeter,
   LjProgress,
   LjSkeleton,
   LjSpinner,

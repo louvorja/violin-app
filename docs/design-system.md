@@ -688,7 +688,7 @@ Veja todos lado a lado, nos 10 temas, na rota **`/ui`**.
 ### Sem biblioteca — markup + CSS sobre os tokens
 
 `LjButton` · `LjInput` · `LjTextarea` · `LjCheckbox` · `LjSwitch` · `LjField` ·
-`LjCard` · `LjChip` · `LjSpinner` · `LjProgress` · `LjLevelMeter` · `LjSkeleton` · `LjEmpty` ·
+`LjCard` · `LjChip` · `LjSpinner` · `LjProgress` · `LjSkeleton` · `LjEmpty` ·
 `LjAlert` · `LjDivider` · `LjToast` · `LjTable` · `LjCalendar`
 
 ### Sobre Reka UI — onde há comportamento acessível

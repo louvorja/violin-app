@@ -23,7 +23,6 @@ export { default as LjEmpty } from "./LjEmpty.vue";
 export { default as LjField } from "./LjField.vue";
 export { default as LjIcon } from "./LjIcon.vue";
 export { default as LjInput } from "./LjInput.vue";
-export { default as LjLevelMeter } from "./LjLevelMeter.vue";
 export { default as LjProgress } from "./LjProgress.vue";
 export { default as LjSkeleton } from "./LjSkeleton.vue";
 export { default as LjSpinner } from "./LjSpinner.vue";
