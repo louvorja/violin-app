@@ -630,3 +630,84 @@ test("item sem bloco que entra num bloco vai logo abaixo do cabeçalho, acima do
     .poll(ordem)
     .toEqual(["bloco1", "solto4", "solto2", "solto3", "solto5", "solto6", "bloco2"]);
 });
+
+test("marca como concluído pelo checkbox e ao executar com a opção ligada", async ({ page }) => {
+  await page.route("http://e2e.mock/**", (route) => route.fulfill({ json: [] }));
+  await page.goto("/");
+  await page.locator('[data-testid="modules-ready"]').waitFor({ state: "attached" });
+  await page.evaluate(async () => {
+    const { default: Liturgy } = await import("/src/helpers/Liturgy.ts");
+    Liturgy.set([
+      { id: "bloco-1", tipo: "bloco", item: "Bloco 1" },
+      { id: "item-a", tipo: "anotacao", item: "Item dentro do bloco", blocoId: "bloco-1" },
+      { id: "item-b", tipo: "anotacao", item: "Item fora do bloco" },
+    ]);
+  });
+
+  await page.getByRole("button", { name: "Editar liturgia" }).click();
+  await expect(page.locator(".liturgy-page")).toBeVisible();
+
+  const dentro = page
+    .locator(".liturgy-page [data-item-id]")
+    .filter({ hasText: "Item dentro do bloco" });
+  const fora = page
+    .locator(".liturgy-page [data-item-id]")
+    .filter({ hasText: "Item fora do bloco" });
+
+  await dentro.locator(".lit-card-check label").click();
+  await expect(dentro.locator(".lit-card-check").getByRole("checkbox")).toBeChecked();
+
+  await page.getByTestId("ribbon-btn-mark_done").locator("label").click();
+  await expect(page.getByTestId("ribbon-btn-mark_done").getByRole("switch")).toBeChecked();
+
+  await fora.getByRole("button", { name: "Item fora do bloco" }).click();
+  await expect(page.getByRole("alertdialog")).toBeVisible();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Fechar" }).click();
+  await expect(fora.locator(".lit-card-check").getByRole("checkbox")).toBeChecked();
+
+  const marcados = () =>
+    page.evaluate(async () => {
+      const { default: Liturgy } = await import("/src/helpers/Liturgy.ts");
+      return Liturgy.list()
+        .filter((i) => i.checked)
+        .map((i) => i.item);
+    });
+  await expect.poll(marcados).toEqual(["Item dentro do bloco", "Item fora do bloco"]);
+});
+
+test("marca o item concluído ao clicar no painel lateral com a opção ligada", async ({ page }) => {
+  await page.route("http://e2e.mock/**", (route) => route.fulfill({ json: [] }));
+  await page.goto("/");
+  await page.locator('[data-testid="modules-ready"]').waitFor({ state: "attached" });
+  await page.evaluate(async () => {
+    const { default: Liturgy } = await import("/src/helpers/Liturgy.ts");
+    Liturgy.set([
+      { id: "bloco-1", tipo: "bloco", item: "Bloco 1" },
+      { id: "item-painel", tipo: "anotacao", item: "Item do painel", blocoId: "bloco-1" },
+    ]);
+  });
+
+  await page.getByRole("button", { name: "Editar liturgia" }).click();
+  await expect(page.locator(".liturgy-page")).toBeVisible();
+  await page.getByTestId("ribbon-btn-mark_done").locator("label").click();
+  await expect(page.getByTestId("ribbon-btn-mark_done").getByRole("switch")).toBeChecked();
+  await page.getByRole("button", { name: "Fechar: Liturgia", exact: true }).click();
+
+  const sidebar = page.locator(".shell-sidebar.liturgy-panel");
+  await expect(sidebar).toBeVisible();
+  const item = sidebar.locator(".liturgy-item").filter({ hasText: "Item do painel" });
+  await item.click();
+
+  const alerta = page.getByRole("alertdialog");
+  if (await alerta.isVisible()) {
+    await alerta.getByRole("button", { name: "Fechar" }).click();
+  }
+  await expect(item).toHaveClass(/liturgy-item--checked/);
+
+  const salvo = () =>
+    page.evaluate(async () => {
+      const { default: Liturgy } = await import("/src/helpers/Liturgy.ts");
+      return Liturgy.list().find((i) => i.id === "item-painel")?.checked;
+    });
+  await expect.poll(salvo).toBeTruthy();
+});
