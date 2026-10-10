@@ -183,7 +183,7 @@ describe("exportarPdf — o caminho do FreeShow adaptado", () => {
 describe("alvos do design", () => {
   it("sanitiza o id antes de virar nome de arquivo", () => {
     const alvos = exporter.alvosDoDesign("../../etc/passwd");
-    const nome = alvos.pdf.split("/").pop();
+    const nome = basename(alvos.pdf);
     expect(nome).toBe("______etc_passwd.pdf");
     expect(nome).not.toContain("/");
     expect(alvos.pdf.startsWith(join(base, "canva"))).toBe(true);

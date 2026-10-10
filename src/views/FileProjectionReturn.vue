@@ -159,6 +159,7 @@ const ready = ref<boolean>(false);
 
 let pdfDoc: PDFDocumentProxy | null = null;
 let pdfLoadGeneration = 0;
+let pdfPaginaAlvo = 1;
 const pdfRenderQueue = new PdfPageRenderQueue();
 
 let ytPlayer: YTPlayer | null = null;
@@ -195,6 +196,11 @@ async function renderPdfPage(pageNum: number): Promise<void> {
   const canvas = pdfCanvas.value;
   const doc = pdfDoc;
   if (!doc || !canvas) return;
+  /* A página pedida, não a pintada: enquanto um render está a caminho o
+     comando seguinte tem de furar a fila. Comparar com `fileProjection.page`
+     (só atualizado no fim do render) fazia a sequência rápida 1 → 2 → 1 morrer
+     no meio e deixar o telão na 2. */
+  pdfPaginaAlvo = pageNum;
   try {
     await pdfRenderQueue.run(async (isCurrent) => {
       if (pdfDoc !== doc) return;
@@ -646,7 +652,7 @@ useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION_PAGE, (payload: unknown) => 
     /* Já nesta página (fim/início do documento): re-renderizar só pisca o
        telão — é o que acontece quando o operador segura a seta no último
        slide. */
-    if (clamped === fileProjection.page) return;
+    if (clamped === pdfPaginaAlvo) return;
     renderPdfPage(clamped);
   }
 });
