@@ -77,6 +77,17 @@
         >
           {{ tm("outputs.screen_closed") }}
         </span>
+        <!-- A tela real diverge do player: a miniatura não pode fingir que está tudo certo. -->
+        <button
+          v-if="truth.status.main"
+          type="button"
+          class="pm-outputs__desync"
+          data-testid="pm-desync-main"
+          :title="tm('desync.repair')"
+          @click.stop="truth.repair('main')"
+        >
+          {{ tm(`desync.${truth.status.main}`) }}
+        </button>
       </div>
       <div class="pm-outputs__nav">
         <LjButton
@@ -198,6 +209,16 @@
         >
           {{ tm("outputs.screen_closed") }}
         </span>
+        <button
+          v-if="truth.status.return"
+          type="button"
+          class="pm-outputs__desync"
+          data-testid="pm-desync-stage"
+          :title="tm('desync.repair')"
+          @click.stop="truth.repair('return')"
+        >
+          {{ tm(`desync.${truth.status.return}`) }}
+        </button>
       </div>
     </section>
 
@@ -251,6 +272,7 @@ import { useMonitorRole } from "../composables/useMonitorRole";
 import ScreenToggle from "./ScreenToggle.vue";
 import ScreenZoom from "./ScreenZoom.vue";
 import LayersPanel from "./LayersPanel.vue";
+import { useScreenTruth } from "../composables/useScreenTruth";
 
 defineProps<{
   upNext: ProgramItem | null;
@@ -292,6 +314,8 @@ const {
   toggleCleared,
 } = useOutputs();
 const zoomed = ref<"main" | "stage" | null>(null);
+// O que as telas reais estão fazendo de fato, comparado com o player.
+const truth = useScreenTruth();
 const mainRole = useMonitorRole("projection");
 const stageRole = useMonitorRole("stage");
 </script>
@@ -365,6 +389,29 @@ const stageRole = useMonitorRole("stage");
 .pm-outputs__screen {
   position: relative;
   cursor: zoom-in;
+}
+
+.pm-outputs__desync {
+  position: absolute;
+  inset: auto 6px 6px;
+  z-index: 2;
+  padding: 4px 6px;
+  border: none;
+  border-radius: 3px;
+  background: var(--lj-danger);
+  color: var(--lj-white);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: left;
+  cursor: pointer;
+  animation: pm-desync-blink 1s steps(2, start) infinite;
+}
+
+@keyframes pm-desync-blink {
+  to {
+    opacity: 0.55;
+  }
 }
 
 .pm-outputs__idle {

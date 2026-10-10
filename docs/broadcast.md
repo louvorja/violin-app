@@ -95,6 +95,7 @@ $broadcast.send(BROADCAST_TYPE.REQUEST_MUSIC_PRESENTATION_SNAPSHOT);
 | `RETURN_OVERRIDE` | `"return_override"` | presentation_mode, Esc | Views de retorno (`ReturnOverride`): imagem, vídeo ou `blank` só no retorno |
 | `RETURN_OVERRIDE_STATE` | `"return_override_state"` | presentation_mode (player do vídeo só no retorno) | `ReturnOverride` (relógio do vídeo mudo) |
 | `REQUEST_RETURN_OVERRIDE` | `"request_return_override"` | Retorno recém-aberto | presentation_mode |
+| `SCREEN_VIDEO_REPORT` | `"screen_video_report"` | FileProjection, FileProjectionReturn (1×/s com vídeo) | presentation_mode (avisa na miniatura quando a tela diverge do player) |
 | `TELEMETRY_SESSION_REQUEST` | `"telemetry_session_request"` | Telemetry (janelas auxiliares) | Telemetry (janela principal) |
 | `TELEMETRY_SESSION` | `"telemetry_session"` | Telemetry (janela principal) | Telemetry (janelas auxiliares) |
 | `TELEMETRY_ERROR_SEEN` | `"telemetry_error_seen"` | Telemetry (janelas auxiliares) | Telemetry (janela principal) |

@@ -1114,6 +1114,18 @@ _audio.onTimeUpdate((ct, d) => {
   }
 });
 
+// Pausado, o relógio do player para e com ele a sincronia contínua: uma tela
+// que perdeu o aviso da pausa seguiria rodando sozinha, sem som, enquanto o
+// operador vê "pausado". Parado, o estado é reafirmado a cada segundo.
+const _PAUSED_RESYNC_MS = 1000;
+if (typeof window !== "undefined") {
+  setInterval(() => {
+    if (!_activePlayback || !$appdata.get(KEYS.MODULES.MEDIA.CONFIG.VIDEO_FILE)) return;
+    const el = document.getElementById("__audio") as HTMLMediaElement | null;
+    if (el?.paused) _broadcastVideoState();
+  }, _PAUSED_RESYNC_MS);
+}
+
 function _lyricEntries(data: Music): Lyric[] {
   const lyric = data?.lyric;
   if (Array.isArray(lyric)) return lyric;

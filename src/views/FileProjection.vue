@@ -92,6 +92,7 @@ import { SETTINGS_TABLE } from "@/constants/DbTables";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 import { heicToJpeg, isHeic } from "@/helpers/ImageConvert";
 import Telemetry from "@/helpers/Telemetry";
+import { useScreenVideoReport } from "@/composables/useScreenVideoReport";
 import {
   mediaElementDetails,
   mediaSourceDetails,
@@ -137,6 +138,13 @@ const { transitionName, stageStyle } = useTransitionStage(
 );
 
 const videoRef = ref<HTMLVideoElement | null>(null);
+// O módulo confere se esta tela faz o que o player manda (pausado é pausado).
+useScreenVideoReport(
+  "main",
+  videoRef,
+  () => fileProjection.playback_id ?? null,
+  () => fileProjection.active && fileProjection.type === "video"
+);
 const videoFailed = ref(false);
 const videoStateGate = new VideoStateGate();
 const activationGate = new FileProjectionActivationGate();

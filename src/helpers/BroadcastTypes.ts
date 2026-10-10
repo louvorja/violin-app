@@ -130,6 +130,13 @@ export const BROADCAST_TYPE = Object.freeze({
   /** Retorno recém-aberto pedindo o conteúdo exclusivo dele. */
   REQUEST_RETURN_OVERRIDE: "request_return_override",
 
+  /** O que o vídeo de uma tela real está fazendo de fato (não o que o player
+   *  acha que mandou). Uma vez por segundo enquanto há vídeo na tela.
+   *  Payload: { screen: "main" | "return", playback_id, isPaused, currentTime, sentAt }
+   *  Emitido por: FileProjection e FileProjectionReturn. Recebido por:
+   *  presentation_mode, que avisa nas miniaturas quando a tela diverge do player. */
+  SCREEN_VIDEO_REPORT: "screen_video_report",
+
   /** Texto do painel de recados. Emitido por message_board/Index.vue.
    *  Recebido por: (recepção futura). */
   MESSAGE_BOARD: "message_board",

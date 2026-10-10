@@ -519,5 +519,12 @@
     "remove": "Deixar de usar a pasta da igreja",
     "hint_on": "Programas e modelos ficam nesta pasta e chegam aos outros computadores pelo OneDrive.",
     "hint_off": "Escolha a pasta compartilhada (OneDrive) onde ficam as mídias do culto para o programa aparecer pronto nos outros computadores."
+  },
+  "desync": {
+    "playing": "A TELA CONTINUA RODANDO — o player está pausado. Clique para corrigir.",
+    "paused": "A TELA ESTÁ PARADA — o player está tocando. Clique para corrigir.",
+    "drift": "TELA FORA DE SINCRONIA com o player. Clique para corrigir.",
+    "orphan": "A TELA RODA UM VÍDEO QUE O PLAYER NÃO CONTROLA. Clique para tirar.",
+    "repair": "Põe a tela de volta no estado do player"
   }
 }

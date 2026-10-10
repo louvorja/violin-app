@@ -519,5 +519,12 @@
     "remove": "Dejar de usar la carpeta de la iglesia",
     "hint_on": "Programas y modelos quedan en esta carpeta y llegan a las otras computadoras por OneDrive.",
     "hint_off": "Elige la carpeta compartida (OneDrive) donde están los medios del culto para que el programa aparezca listo en las otras computadoras."
+  },
+  "desync": {
+    "playing": "LA PANTALLA SIGUE REPRODUCIENDO — el reproductor está en pausa. Haz clic para corregir.",
+    "paused": "LA PANTALLA ESTÁ DETENIDA — el reproductor está sonando. Haz clic para corregir.",
+    "drift": "PANTALLA FUERA DE SINCRONÍA con el reproductor. Haz clic para corregir.",
+    "orphan": "LA PANTALLA REPRODUCE UN VIDEO QUE EL REPRODUCTOR NO CONTROLA. Haz clic para quitarlo.",
+    "repair": "Devuelve la pantalla al estado del reproductor"
   }
 }
