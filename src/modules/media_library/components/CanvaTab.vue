@@ -113,8 +113,15 @@
           {{ tm("canva.web_session_hint") }}
         </p>
 
-        <!-- Export em curso: o invoke do main fica pendente até o job terminar. -->
-        <div v-if="exportando" class="canva-state">
+        <!--
+          Export em curso — e só quando ele é de verdade. Design já no disco
+          resolve em milissegundos: acender "Exportando…" aqui piscaria o aviso
+          por um frame e sumiria, que assusta mais do que informa. Quando o
+          selo diz que há cache, o loader espera uma folga antes de aparecer;
+          se o main ainda assim reexportar (design editado no Canva entre a
+          lista e o clique), o aviso chega — só que tarde.
+        -->
+        <div v-if="loaderVisivel" class="canva-state">
           <LjSpinner :size="20" />
           <span>{{ tm("canva.exporting") }}</span>
         </div>
@@ -182,7 +189,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { LjButton, LjEmpty, LjField, LjIcon, LjInput, LjSpinner } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
@@ -221,6 +228,18 @@ const carregando = ref(false);
 const carregandoMais = ref(false);
 /** Export em PDF em andamento no main — trava os cliques até terminar. */
 const exportando = ref(false);
+/*
+ * Loader do export, com atraso de propósito.
+ *
+ * Com cache no disco o invoke resolve em milissegundos e o loader piscaria na
+ * tela por um bloqueio de renderização. Por isso ele só aparece quando há
+ * export de verdade — e, no caso de cache, só depois de uma folga: se o main
+ * reexportar mesmo assim (design editado no Canva entre a lista e o clique), o
+ * operador não fica sem nenhum aviso.
+ */
+const FOLGA_CACHE_MS = 400;
+const loaderVisivel = ref(false);
+let timerLoader: ReturnType<typeof setTimeout> | null = null;
 const erro = ref("");
 /** Miniatura que não carregou: fica o ícone no lugar, com a mesma altura. */
 const thumbsQuebradas = ref<Set<string>>(new Set());
@@ -271,11 +290,41 @@ function tipoDe(item: CanvaItem): string {
     : tm("canva.type_design");
 }
 
-/** Thumbnail quebrada vira o ícone do tipo — esconder a img encolheria o card. */
+/**
+ * Thumbnail quebrada vira o ícone do tipo — esconder a img encolheria o card.
+ */
 function quebrarThumb(item: CanvaItem): void {
   const proximo = new Set(thumbsQuebradas.value);
   proximo.add(item.id);
   thumbsQuebradas.value = proximo;
+}
+
+/** Cancela o loader e devolve o silêncio — usado no fim de todo export. */
+function _pararLoader(): void {
+  if (timerLoader) {
+    clearTimeout(timerLoader);
+    timerLoader = null;
+  }
+  loaderVisivel.value = false;
+}
+
+/**
+ * Programa o loader do export.
+ *
+ * Sem cache no disco o export é certo (job no Canva, download) e o aviso nasce
+ * com o clique. Com cache, ele só aparece se a demora passar da folga — o
+ * caminho normal nem chega a pintar.
+ */
+function _agendarLoader(emDisco: boolean): void {
+  _pararLoader();
+  if (!emDisco) {
+    loaderVisivel.value = true;
+    return;
+  }
+  timerLoader = setTimeout(() => {
+    timerLoader = null;
+    loaderVisivel.value = true;
+  }, FOLGA_CACHE_MS);
 }
 
 /**
@@ -549,6 +598,7 @@ async function abrir(item: CanvaItem): Promise<void> {
 async function projetarComoPdf(item: CanvaItem): Promise<void> {
   if (!api) return;
   exportando.value = true;
+  _agendarLoader(emCache(item));
   erro.value = "";
   const iniciadoEm = Date.now();
   try {
@@ -617,6 +667,7 @@ async function projetarComoPdf(item: CanvaItem): Promise<void> {
     });
     throw e;
   } finally {
+    _pararLoader();
     exportando.value = false;
   }
 }
@@ -665,6 +716,9 @@ onMounted(() => {
   Telemetry.track("canva_tab_opened");
   void carregarStatus();
 });
+
+/* Trocar de aba com export na fila não pode deixar o loader para depois. */
+onBeforeUnmount(_pararLoader);
 </script>
 
 <style scoped>

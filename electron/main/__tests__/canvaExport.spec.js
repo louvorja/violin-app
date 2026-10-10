@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRequire } from "module";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join, sep } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -21,6 +21,8 @@ const store = require("../canva/store.js");
 const exporter = require("../canva/export.js");
 
 const RAPIDO = { pollMs: 1, maxTentativas: 5 };
+/** Escreve arquivo solto dentro de <base>/canva (a pasta já existe). */
+const fsWrite = (arquivo, conteudo) => writeFileSync(arquivo, conteudo);
 const PDF = "%PDF-1.7\n%%EOF";
 const HTML = "<html><body>erro</body></html>";
 const URL_DOWNLOAD = "https://export-download.canva.com/x.pdf";
@@ -56,11 +58,13 @@ function stubApi({ design, job, download } = {}) {
       );
     }
     chamadas.push({ kind: "design", url });
-    return Promise.resolve(
-      Response.json(
-        design ?? { design: { id: "D1", title: "Deck", updated_at: 111, page_count: 6 } }
-      )
-    );
+    /* `design` como função deixa o caso responder com o id que foi pedido —
+       é o que dois designs distintos no mesmo teste precisam. */
+    const payload =
+      typeof design === "function"
+        ? design(url)
+        : (design ?? { design: { id: "D1", title: "Deck", updated_at: 111, page_count: 6 } });
+    return Promise.resolve(Response.json(payload));
   });
   return chamadas;
 }
@@ -461,5 +465,53 @@ describe("cache de PDF (selo da lista)", () => {
     expect(basename(alvos.pdf)).not.toContain("..");
 
     await expect(exporter.limparCachePdf("../outra-pasta")).resolves.toEqual({ ok: true });
+  });
+});
+
+describe("limpar todo o cache", () => {
+  /* O id do design ecoa a URL: `/v1/designs/D2` devolve o design D2. */
+  const design = (url) => ({
+    design: { id: url.split("/").pop(), title: "Deck", updated_at: 111, page_count: 6 },
+  });
+
+  it("some com os PDFs e os metas, e conta quantos eram cache", async () => {
+    stubApi({ design });
+    await exporter.exportarPdf("D1", RAPIDO);
+    await exporter.exportarPdf("D2", RAPIDO);
+    expect(Object.keys(await exporter.listarCachePdf())).toEqual(["D1", "D2"]);
+
+    const r = await exporter.limparTodoCachePdf();
+
+    /* Conta o PDF, não o arquivo: meta é metade de um cache só. */
+    expect(r).toEqual({ ok: true, removidos: 2 });
+    expect(await exporter.listarCachePdf()).toEqual({});
+    expect(existsSync(PDF_ESPERADO)).toBe(false);
+    expect(existsSync(META_ESPERADO)).toBe(false);
+  });
+
+  it("meta órfão também sai — não é cache, mas não fica para ninguém", async () => {
+    stubApi();
+    await exporter.exportarPdf("D1", RAPIDO);
+    rmSync(PDF_ESPERADO, { force: true });
+
+    await expect(exporter.limparTodoCachePdf()).resolves.toEqual({ ok: true, removidos: 0 });
+
+    expect(existsSync(META_ESPERADO)).toBe(false);
+  });
+
+  it("pasta que não existe é cache vazio, não erro", async () => {
+    rmSync(join(base, "canva"), { recursive: true, force: true });
+
+    await expect(exporter.limparTodoCachePdf()).resolves.toEqual({ ok: true, removidos: 0 });
+  });
+
+  it("arquivo de fora do cache fica onde está — só .pdf e .json saem", async () => {
+    mkdirSync(join(base, "canva"), { recursive: true });
+    const alheio = join(base, "canva", "notas.txt");
+    fsWrite(alheio, "não me apaga");
+
+    await expect(exporter.limparTodoCachePdf()).resolves.toEqual({ ok: true, removidos: 0 });
+
+    expect(existsSync(alheio)).toBe(true);
   });
 });

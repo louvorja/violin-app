@@ -366,6 +366,12 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
     /** Apaga o PDF e o meta de um design, a pedido do operador. */
     clearCachedPdf: (designId) => ipcRenderer.invoke("canva:clearCachedPdf", { designId }),
     /**
+     * Apaga o cache inteiro. É o efeito aceito ao trocar a qualidade do
+     * export: PDF de `pro` e de `regular` são arquivos diferentes.
+     * @returns {Promise<{ok: boolean, removidos?: number}>}
+     */
+    clearCachedPdfs: () => ipcRenderer.invoke("canva:clearCachedPdfs"),
+    /**
      * A janela de projeção parou numa tela de login do Canva — a sessão do
      * site não vale mais. Limpa o selo e devolve função de cleanup.
      * @param {(data: {url: string}) => void} cb

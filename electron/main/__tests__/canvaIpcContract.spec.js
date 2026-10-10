@@ -21,6 +21,7 @@ const MAIN = fs.readFileSync(file("../../main.cjs"), "utf8");
 const FUNCOES = [
   "cachedPdfs",
   "clearCachedPdf",
+  "clearCachedPdfs",
   "connect",
   "designUrl",
   "disconnect",
@@ -100,7 +101,6 @@ describe("Canva: contrato de IPC", () => {
     expect(MAIN).toContain("canva.tentarApresentar(win)");
     expect(MAIN).toContain("hostCanva");
   });
-});
 
   it("o selo de cache: o id é validado na fronteira antes de virar caminho de arquivo", () => {
     /*
@@ -117,3 +117,18 @@ describe("Canva: contrato de IPC", () => {
     expect(PRELOAD).toContain('ipcRenderer.invoke("canva:cachedPdfs")');
     expect(PRELOAD).toContain('ipcRenderer.invoke("canva:clearCachedPdf"');
   });
+
+  it("limpar tudo não recebe payload nenhum do renderer", () => {
+    /*
+     * Apagar o cache inteiro não tem id para validar — então não tem o que
+     * receber. Um `payload` aqui seria só uma porta para o renderer mandar
+     * coisa que o main não ia usar.
+     */
+    /* Uma linha só, no nível do módulo: sem `_event`, sem payload. */
+    const trecho = MAIN.match(/^ipcMain\.handle\("canva:clearCachedPdfs".*$/m);
+    expect(trecho).toBeTruthy();
+    expect(trecho[0]).toContain("canva.clearCachedPdfs()");
+    expect(trecho[0]).not.toMatch(/_event|payload/);
+    expect(PRELOAD).toContain('ipcRenderer.invoke("canva:clearCachedPdfs")');
+  });
+});

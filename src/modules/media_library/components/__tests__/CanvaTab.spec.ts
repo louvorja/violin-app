@@ -302,6 +302,82 @@ describe("Aba Canva — estados de carregamento", () => {
     expect(wrapper.text()).toContain("Conecte sua conta Canva");
   });
 
+  /*
+   * O loader do export existe para quem vai exportar. Design já no disco
+   * resolve em milissegundos e o aviso piscaria na tela por um frame.
+   */
+  it("design em cache: o loader do export não aparece", async () => {
+    state.items.mockResolvedValue({
+      ok: true,
+      items: [{ ...DESIGN, id: "D9", name: "Deck", updatedAt: 1_700_000_000 }],
+      continuation: null,
+    });
+    state.cachedPdfs.mockResolvedValue({ D9: 1_700_000_000 });
+    const wrapper = await mountTab();
+
+    await wrapper.findAll("button").find((b) => b.attributes("title") === "Deck")!.trigger("click");
+    await flushPromises();
+
+    expect(wrapper.text()).not.toContain("Exportando o design do Canva");
+    expect(state.projectFile).toHaveBeenCalledTimes(1);
+  });
+
+  it("design sem cache: o loader aparece já no clique", async () => {
+    let soltar!: (_r: unknown) => void;
+    state.exportPdf.mockReturnValueOnce(
+      new Promise((resolve) => {
+        soltar = resolve;
+      })
+    );
+    const wrapper = await mountTab();
+
+    await wrapper.findAll("button").find((b) => b.attributes("title") === "Slide Páscoa")!.trigger("click");
+    await nextTick();
+
+    expect(wrapper.text()).toContain("Exportando o design do Canva");
+
+    soltar({ ok: true, path: "/dados/canva/D1.pdf", pageCount: 4 });
+    await flushPromises();
+    expect(wrapper.text()).not.toContain("Exportando o design do Canva");
+  });
+
+  it("em cache, mas o main reexporta: o loader chega depois da folga", async () => {
+    /*
+     * O selo diz que há cache (é o que a aba sabe) e o main reexporta mesmo
+     * assim — qualidade diferente da que gerou aquele PDF, por exemplo. Sem a
+     * folga, o operador ficaria sem aviso nenhum por minutos.
+     */
+    state.items.mockResolvedValue({
+      ok: true,
+      items: [{ ...DESIGN, id: "D9", name: "Deck", updatedAt: 1_700_000_000 }],
+      continuation: null,
+    });
+    state.cachedPdfs.mockResolvedValue({ D9: 1_700_000_000 });
+    let soltar!: (_r: unknown) => void;
+    state.exportPdf.mockReturnValueOnce(
+      new Promise((resolve) => {
+        soltar = resolve;
+      })
+    );
+    vi.useFakeTimers();
+    try {
+      const wrapper = await mountTab();
+      await wrapper.findAll("button").find((b) => b.attributes("title") === "Deck")!.trigger("click");
+      await nextTick();
+
+      /* A folga é o que segura o pisca-pisca do caso feliz. */
+      expect(wrapper.text()).not.toContain("Exportando o design do Canva");
+      await vi.advanceTimersByTimeAsync(400);
+      expect(wrapper.text()).toContain("Exportando o design do Canva");
+
+      soltar({ ok: true, path: "/dados/canva/D9.pdf", pageCount: 3 });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(wrapper.text()).not.toContain("Exportando o design do Canva");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("miniatura quebrada vira ícone, sem encolher o card", async () => {
     state.items.mockResolvedValueOnce({ ok: true, items: [COM_THUMB], continuation: null });
     const wrapper = await mountTab();

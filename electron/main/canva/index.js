@@ -355,6 +355,23 @@ async function clearCachedPdf(payload) {
   }
 }
 
+/**
+ * Apaga TODO o cache de PDF.
+ *
+ * É o efeito colateral que o operador aceita ao trocar a qualidade do export
+ * em Integrações: sem isso o card continuaria selado e o clique serviria um PDF
+ * da qualidade anterior. Nada de id entra aqui — não há o que validar.
+ *
+ * @returns {Promise<{ok: true, removidos: number} | {ok: false, code: string, message: string}>}
+ */
+async function clearCachedPdfs() {
+  try {
+    return await exporter.limparTodoCachePdf();
+  } catch (err) {
+    return wrap(err);
+  }
+}
+
 module.exports = {
   PROFILE_PATH,
   WEB_SESSION_PATH,
@@ -371,5 +388,6 @@ module.exports = {
   exportDesign,
   cachedPdfs,
   clearCachedPdf,
+  clearCachedPdfs,
   tentarApresentar,
 };

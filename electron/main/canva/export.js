@@ -343,10 +343,45 @@ async function limparCachePdf(designId) {
   }
 }
 
+/**
+ * Apaga TODO o cache de PDF (os arquivos e os metas).
+ *
+ * É o que a troca de qualidade exige: `pro` e `regular` são arquivos
+ * diferentes do mesmo design, e o cache leva a qualidade pedida na validade
+ * (`exportarPdf`). Sem limpar, o selo continuaria aceso no card e o clique
+ * serviria o PDF da qualidade antiga — o operador pediu Pro e veria Regular.
+ *
+ * Some com os metas órfãos também (json sem pdf): não são cache de nada, mas
+ * também não têm para quem ficar.
+ *
+ * @returns {Promise<{ok: true, removidos: number} | {ok: false, code: string, message: string}>}
+ */
+async function limparTodoCachePdf() {
+  let nomes = [];
+  try {
+    nomes = await fs.readdir(pastaCanva());
+  } catch (_) {
+    /* Pasta que não existe é cache vazio — não é erro. */
+    return { ok: true, removidos: 0 };
+  }
+  const pdfs = nomes.filter((nome) => nome.endsWith(".pdf"));
+  const metas = nomes.filter((nome) => nome.endsWith(".json"));
+  try {
+    for (const nome of [...pdfs, ...metas]) {
+      await fs.remove(path.join(pastaCanva(), nome));
+    }
+  } catch (err) {
+    return { ok: false, code: "cache_remove_failed", message: String(err?.message || err) };
+  }
+  /* Conta o que era cache de verdade: o PDF. Meta órfão não conta. */
+  return { ok: true, removidos: pdfs.length };
+}
+
 module.exports = {
   exportarPdf,
   listarCachePdf,
   limparCachePdf,
+  limparTodoCachePdf,
   baixar,
   alvosDoDesign,
   pastaCanva,

@@ -2383,6 +2383,8 @@ ipcMain.handle("canva:exportPdf", (_event, payload) =>
  * para o renderer comparar com o item da lista e só acender o selo quando o
  * PDF ainda vale. `clearCachedPdf` apaga um, a pedido do operador — a validação
  * do id acontece AQUI (fronteira) e de novo no export.js (defesa).
+ * `clearCachedPdfs` apaga todos, porque trocar a qualidade do export invalida
+ * o cache inteiro (ver `exportarPdf`).
  */
 ipcMain.handle("canva:cachedPdfs", () => canva.cachedPdfs());
 
@@ -2393,6 +2395,9 @@ ipcMain.handle("canva:clearCachedPdf", (_event, payload) => {
   }
   return canva.clearCachedPdf({ designId });
 });
+
+/* Sem payload: não há id a validar — apagar tudo não recebe nada do renderer. */
+ipcMain.handle("canva:clearCachedPdfs", () => canva.clearCachedPdfs());
 
 // ---------------------------------------------------------------------------
 // IPC: Storage (S2) — visibilidade e gerenciamento da pasta de mídia + cache

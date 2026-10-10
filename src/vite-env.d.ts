@@ -389,6 +389,11 @@ declare global {
       /** Apaga o PDF e o meta de um design, a pedido do operador. */
       clearCachedPdf: (designId: string) => Promise<CanvaResult>;
       /**
+       * Apaga o cache inteiro — o que trocar a qualidade do export provoca.
+       * `removidos` conta os PDFs que eram cache de verdade (meta órfão não).
+       */
+      clearCachedPdfs: () => Promise<CanvaResult & { removidos?: number }>;
+      /**
        * A projeção parou numa tela de login do Canva (a sessão do site caiu).
        * Devolve a função de cleanup — é um evento, não um invoke.
        */

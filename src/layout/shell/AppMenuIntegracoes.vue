@@ -361,7 +361,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { LjButton, LjCopyButton, LjDialog, LjIcon, LjInput } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
@@ -404,13 +404,90 @@ function setProjectAs(valor: string): void {
   if (de !== valor) Telemetry.track("canva_project_as_changed", { from: de, to: valor });
 }
 
+/**
+ * Troca a qualidade do export — com confirmação, porque o cache inteiro cai.
+ *
+ * `pro` e `regular` são arquivos DIFERENTES do mesmo design, e o cache leva a
+ * qualidade pedida na validade (`exportarPdf` no main). Sem apagar o cache, o
+ * selo continuaria aceso no card e o clique serviria o PDF da qualidade
+ * anterior: o operador pediria Pro e veria Regular sem explicação. Por isso a
+ * pergunta vem ANTES — e o cache só é limpo quando ele diz sim.
+ */
 function setExportQuality(valor: string): void {
   if (ocupado.value) return;
   const limpo = valor === QUALIDADE_PRO ? QUALIDADE_PRO : QUALIDADE_REGULAR;
   const de = exportQuality.value;
+  /* Clicar na opção já marcada não é troca: nem pergunta, nem limpeza. */
+  if (de === limpo) return;
+  /*
+   * O radio nativo já se moveu no clique. Espelhar no estado mantém a tela
+   * honesta enquanto o diálogo está aberto — e, no "não", devolver o valor
+   * anterior desmarca sozinho. A volta é no `nextTick` de propósito: no
+   * "não" dado no mesmo instante do clique, o Vue ainda não tinha renderizado
+   * a opção nova, e reverter antes disso deixaria o radio marcado onde o
+   * operador desistiu.
+   */
+  exportQuality.value = limpo;
+  $alert.yesno(
+    {
+      title: t("options.integrations.canva.quality_confirm_title"),
+      text: t("options.integrations.canva.quality_confirm_text", {
+        from: nomeDaQualidade(de),
+        to: nomeDaQualidade(limpo),
+      }),
+    },
+    ((btn: string) => {
+      if (btn !== "yes") {
+        void nextTick(() => {
+          exportQuality.value = de;
+        });
+        return;
+      }
+      void aplicarQualidade(limpo, de);
+      /* `Alert.yesno` infere `() => void` do default — o cast é do padrão do app. */
+    }) as unknown as (..._args: unknown[]) => unknown
+  );
+}
+
+function nomeDaQualidade(qualidade: string): string {
+  return qualidade === QUALIDADE_PRO
+    ? t("options.integrations.canva.quality_pro")
+    : t("options.integrations.canva.quality_regular");
+}
+
+async function aplicarQualidade(limpo: string, de: string): Promise<void> {
   exportQuality.value = limpo;
   $userdata.set(KEYS.OPTIONS.INTEGRATIONS.CANVA.EXPORT_QUALITY, limpo);
-  if (de !== limpo) Telemetry.track("canva_export_quality_changed", { from: de, to: limpo });
+  Telemetry.track("canva_export_quality_changed", { from: de, to: limpo });
+
+  const removidos = await limparCacheDoCanva();
+  if (removidos === null) {
+    /* A preferência já está gravada — o cache sai na próxima vez. */
+    $snackbar.warning(t("options.integrations.canva.quality_cache_failed"));
+    return;
+  }
+  if (removidos === 0) {
+    $snackbar.success(t("options.integrations.canva.quality_changed"));
+    return;
+  }
+  $snackbar.success(t("options.integrations.canva.quality_changed_cache", { n: removidos }));
+}
+
+/**
+ * Apaga o cache de PDF do Canva e devolve quantos PDFs saíram.
+ *
+ * `null` quando falhou — aí quem chamou decidiu manter a preferência (ela já
+ * estava gravada) e apenas avisar que o cache continua lá.
+ */
+async function limparCacheDoCanva(): Promise<number | null> {
+  if (!api) return null;
+  try {
+    const r = await api.clearCachedPdfs();
+    if (!r.ok) return null;
+    return typeof r.removidos === "number" ? r.removidos : 0;
+  } catch {
+    return null;
+  }
 }
 
 const isDesktop = Platform.isDesktop;

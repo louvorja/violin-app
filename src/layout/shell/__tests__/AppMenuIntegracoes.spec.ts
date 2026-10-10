@@ -32,6 +32,9 @@ const state = vi.hoisted(() => ({
   message: vi.fn(),
   yesno: vi.fn(),
   success: vi.fn(),
+  warning: vi.fn(),
+  /** Apagar o cache inteiro: devolve quantos PDFs saíram. */
+  clearCachedPdfs: vi.fn(),
 }));
 
 vi.mock("@/helpers/Platform", () => ({
@@ -48,7 +51,10 @@ vi.mock("@/helpers/Telemetry", () => ({
   default: { track: vi.fn(), histogram: vi.fn(), captureException: vi.fn() },
 }));
 vi.mock("@/helpers/Snackbar", () => ({
-  default: { success: (...args: unknown[]) => state.success(...args) },
+  default: {
+    success: (...args: unknown[]) => state.success(...args),
+    warning: (...args: unknown[]) => state.warning(...args),
+  },
 }));
 vi.mock("@/helpers/UserData", () => ({
   default: {
@@ -82,6 +88,7 @@ function instalarApi(overrides: Partial<Api> = {}): Api {
     /* Selos de cache: só a aba Canva usa — aqui só cumprem a forma. */
     cachedPdfs: async () => ({}),
     clearCachedPdf: async () => ({ ok: true }),
+    clearCachedPdfs: state.clearCachedPdfs,
     ...overrides,
   };
   (window as unknown as { louvorjaApi?: unknown }).louvorjaApi = { canva: api };
@@ -157,10 +164,12 @@ beforeEach(() => {
   });
   state.webLogin.mockReset().mockResolvedValue({ ok: true });
   state.webLogout.mockReset().mockResolvedValue({ ok: true, removidos: 3 });
+  state.clearCachedPdfs.mockReset().mockResolvedValue({ ok: true, removidos: 0 });
   state.exportPdf.mockReset().mockResolvedValue({ ok: true, path: "/tmp/design.pdf", cached: true });
   state.message.mockReset();
   state.yesno.mockReset();
   state.success.mockReset();
+  state.warning.mockReset();
   instalarApi();
 });
 
@@ -682,9 +691,12 @@ describe("Integrações — qualidade do export", () => {
 
   it("trocar para Pro grava a preferência na chave certa", async () => {
     state.setUserData.mockClear();
+    /* A troca passa pela confirmação: sem o sim, nada é gravado. */
+    state.yesno.mockImplementation((_opts: unknown, cb: (_v: string) => void) => cb("yes"));
     const wrapper = await mountPanel();
 
     await wrapper.find('input[name="canva-export-quality"][value="pro"]').setValue("pro");
+    await flushPromises();
 
     expect(state.setUserData).toHaveBeenCalledWith(
       KEYS.OPTIONS.INTEGRATIONS.CANVA.EXPORT_QUALITY,
@@ -712,6 +724,109 @@ describe("Integrações — qualidade do export", () => {
       .element.closest(".canva-block");
     expect(bloco?.textContent || "").toContain("Regular e avisa");
   });
+
+  /*
+   * A troca de qualidade APAGA o cache: `pro` e `regular` são arquivos
+   * diferentes do mesmo design, e sem a limpeza o selo continuaria aceso e o
+   * clique serviria o PDF da qualidade anterior. Quem decide é o operador.
+   */
+  it("trocar pergunta antes — e sem o sim nada é gravado", async () => {
+    state.setUserData.mockClear();
+    state.yesno.mockImplementation((_opts: unknown, cb: (_v: string) => void) => cb("no"));
+    const wrapper = await mountPanel();
+
+    await wrapper.find('input[name="canva-export-quality"][value="pro"]').setValue("pro");
+    await flushPromises();
+
+    expect(state.yesno).toHaveBeenCalledTimes(1);
+    const [opcoes] = state.yesno.mock.calls[0] as [Record<string, string>];
+    expect(opcoes.title).toBe("Trocar a qualidade do export?");
+    /* O aviso tem que nomear os dois lados da troca. */
+    expect(opcoes.text).toContain("Regular");
+    expect(opcoes.text).toContain("Pro");
+    expect(state.setUserData).not.toHaveBeenCalled();
+    expect(state.clearCachedPdfs).not.toHaveBeenCalled();
+    /* Cancelou: o radio volta para Regular, não fica marcado em Pro. */
+    expect(
+      (wrapper.find('input[name="canva-export-quality"][value="regular"]').element as HTMLInputElement)
+        .checked
+    ).toBe(true);
+  });
+
+  it("com o sim grava a preferência na chave certa", async () => {
+    state.setUserData.mockClear();
+    state.yesno.mockImplementation((_opts: unknown, cb: (_v: string) => void) => cb("yes"));
+    const wrapper = await mountPanel();
+
+    await wrapper.find('input[name="canva-export-quality"][value="pro"]').setValue("pro");
+    await flushPromises();
+
+    expect(state.setUserData).toHaveBeenCalledWith(
+      KEYS.OPTIONS.INTEGRATIONS.CANVA.EXPORT_QUALITY,
+      "pro"
+    );
+    expect(
+      (wrapper.find('input[name="canva-export-quality"][value="pro"]').element as HTMLInputElement)
+        .checked
+    ).toBe(true);
+  });
+
+  it("com o sim limpa o cache das apresentações já exportadas", async () => {
+    state.clearCachedPdfs.mockResolvedValueOnce({ ok: true, removidos: 4 });
+    state.yesno.mockImplementation((_opts: unknown, cb: (_v: string) => void) => cb("yes"));
+    const wrapper = await mountPanel();
+
+    await wrapper.find('input[name="canva-export-quality"][value="pro"]').setValue("pro");
+    await flushPromises();
+
+    expect(state.clearCachedPdfs).toHaveBeenCalledTimes(1);
+    expect(state.success).toHaveBeenCalledWith(expect.stringContaining("4"));
+  });
+
+  it("clicar na qualidade já marcada não pergunta nem limpa nada", async () => {
+    state.setUserData.mockClear();
+    state.clearCachedPdfs.mockClear();
+    const wrapper = await mountPanel();
+
+    await wrapper.find('input[name="canva-export-quality"][value="regular"]').setValue("regular");
+    await flushPromises();
+
+    expect(state.yesno).not.toHaveBeenCalled();
+    expect(state.clearCachedPdfs).not.toHaveBeenCalled();
+    expect(state.setUserData).not.toHaveBeenCalled();
+  });
+
+  it("cache vazio: a qualidade troca e o aviso não menciona PDF nenhum", async () => {
+    state.yesno.mockImplementation((_opts: unknown, cb: (_v: string) => void) => cb("yes"));
+    const wrapper = await mountPanel();
+
+    await wrapper.find('input[name="canva-export-quality"][value="pro"]').setValue("pro");
+    await flushPromises();
+
+    expect(state.success).toHaveBeenCalledWith(expect.stringContaining("Nenhum PDF"));
+    expect(state.success).not.toHaveBeenCalledWith(expect.stringContaining("0"));
+  });
+
+  it("não conseguiu limpar: avisa, mas a preferência fica gravada", async () => {
+    state.clearCachedPdfs.mockResolvedValueOnce({
+      ok: false,
+      code: "cache_remove_failed",
+      message: "EPERM",
+    });
+    state.setUserData.mockClear();
+    state.yesno.mockImplementation((_opts: unknown, cb: (_v: string) => void) => cb("yes"));
+    const wrapper = await mountPanel();
+
+    await wrapper.find('input[name="canva-export-quality"][value="pro"]').setValue("pro");
+    await flushPromises();
+
+    /* A escolha é do operador e já está feita; o cache sai pelo selo do card. */
+    expect(state.setUserData).toHaveBeenCalledWith(
+      KEYS.OPTIONS.INTEGRATIONS.CANVA.EXPORT_QUALITY,
+      "pro"
+    );
+    expect(state.warning).toHaveBeenCalled();
+  });
 });
 
 describe("Integrações — telemetria", () => {
@@ -733,11 +848,24 @@ describe("Integrações — telemetria", () => {
   });
 
   it("trocar a qualidade do export registra de/para", async () => {
+    /* O evento só sai quando o operador confirma — é ele que apaga o cache. */
+    state.yesno.mockImplementation((_opts: unknown, cb: (_v: string) => void) => cb("yes"));
     const wrapper = await mountPanel();
 
     await wrapper.find('input[name="canva-export-quality"][value="pro"]').setValue("pro");
+    await flushPromises();
 
     expect(props("canva_export_quality_changed")).toEqual({ from: "regular", to: "pro" });
+  });
+
+  it("desistir da troca não registra evento nenhum", async () => {
+    state.yesno.mockImplementation((_opts: unknown, cb: (_v: string) => void) => cb("no"));
+    const wrapper = await mountPanel();
+
+    await wrapper.find('input[name="canva-export-quality"][value="pro"]').setValue("pro");
+    await flushPromises();
+
+    expect(eventos("canva_export_quality_changed")).toHaveLength(0);
   });
 
   it("salvar credenciais registra sucesso", async () => {
