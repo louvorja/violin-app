@@ -157,16 +157,52 @@ function _bridgeScript(token, initialHash) {
       window.__ljSseBuffer.push(msg);
     }
   }
+  // Reconexão: o EventSource só se refaz sozinho em erro de REDE. Em erro de
+  // HTTP (401 depois de um token trocado, 403 de device sem permissão, 404 do
+  // gate de rotas externas) a especificação manda falhar a conexão em
+  // PERMANENTE — readyState CLOSED, sem nova tentativa. A página continuava
+  // funcionando porque todo o resto do controle remoto é fetch avulso, mas a
+  // aba Slides é push puro: sem music_presentation_snapshot não há sessão, e
+  // sem sessão todo comando é descartado. Pior, nada disso aparecia em lugar
+  // nenhum. Recriar a conexão é o que devolve a página.
+  var attempt = 0;
+  var retry = null;
+  function markState(state) {
+    try { window.__ljSSEState = state; } catch (_) { /* noop */ }
+  }
+  function scheduleReconnect() {
+    const wait = Math.min(1000 * Math.pow(2, attempt), 15000);
+    attempt++;
+    if (retry) clearTimeout(retry);
+    retry = setTimeout(function() { attach(); }, wait);
+  }
   function attach() {
+    let es;
     try {
-      var es = new EventSource(url);
-      es.onmessage = function(e) {
-        if (!e || !e.data) return;
-        try { deliver(JSON.parse(e.data)); } catch (_) { /* noop */ }
-      };
-      // EventSource reconecta sozinho; nada a fazer no onerror.
-      window.__ljSSE = es;
-    } catch (_) { /* noop */ }
+      es = new EventSource(url);
+    } catch (_) {
+      scheduleReconnect();
+      return;
+    }
+    markState('connecting');
+    es.onopen = function() {
+      attempt = 0;
+      markState('open');
+    };
+    es.onmessage = function(e) {
+      if (!e || !e.data) return;
+      try { deliver(JSON.parse(e.data)); } catch (_) { /* noop */ }
+    };
+    es.onerror = function() {
+      // O estado vem antes do close: depois de fechar, readyState já é CLOSED
+      // e não distinguiríamos erro de rede de falha permanente.
+      var state = es.readyState;
+      markState(state === 2 ? 'closed' : 'connecting');
+      try { es.close(); } catch (_) { /* noop */ }
+      // CONNECTING (0) ou OPEN (1): a reconexão é do próprio EventSource.
+      if (state === 2) scheduleReconnect();
+    };
+    window.__ljSSE = es;
   }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', attach);

@@ -9,6 +9,7 @@ import { DB_TABLE } from "@/constants/DbTables";
 import type { BibleVersion } from "@/types/Bible";
 import type { BundleProgress } from "@/types/Database";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
+import { useAppInstall } from "@/composables/useAppInstall";
 import Libras from "@/helpers/Libras";
 import BundleInstaller from "@/helpers/BundleInstaller";
 import BibleBundleInstaller from "@/helpers/BibleBundleInstaller";
@@ -168,6 +169,7 @@ function bumpBibleRevision(): void {
 
 export function useSyncManager() {
   const { t, locale } = useI18n();
+  const { suggest: suggestInstall } = useAppInstall();
   const bgTasks = useBackgroundTasks();
 
   // Scan
@@ -899,7 +901,7 @@ export function useSyncManager() {
     key: string,
     { localOnly = false }: { localOnly?: boolean } = {}
   ): Promise<T | null> {
-    return localOnly ? Database.getLocal<T>(key) : Database.get<T>(key);
+    return localOnly ? Database.getLocal<T>(key, { remember: false }) : Database.get<T>(key);
   }
 
   /**
@@ -1019,6 +1021,10 @@ export function useSyncManager() {
         downloadCompletedMsg.value = result.message || "Já está atualizado.";
       } else if (result?.queued != null) {
         downloadProgress.value = { ...downloadProgress.value, total: result.queued };
+        bgTasks.updateTask("sync-collections", { _total: result.queued });
+        if (result.queued > 0) {
+          suggestInstall("offline_downloads", t("shell.pwa_install.snack_offline"));
+        }
       }
     } catch (e) {
       downloading.value = false;
@@ -1205,8 +1211,8 @@ export function useSyncManager() {
 
   /**
    * Guarda local para leituras em massa. Deliberadamente não instala nada:
-   * baixar o ZIP completo exige `ensureCatalogBundle()`/`downloadBundle()` a
-   * partir de uma ação explícita da interface.
+   * baixar o ZIP completo fica com `ensureCatalogBundle()`/`downloadBundle()`,
+   * chamados por uma ação da interface ou pelo boot do app instalado.
    */
   async function hasCatalogForBulkRead(): Promise<boolean> {
     if (!Platform.storage?.checkLocal) return true;

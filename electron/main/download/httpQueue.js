@@ -3,10 +3,22 @@ const fs = require("fs-extra");
 const path = require("path");
 const https = require("https");
 const http = require("http");
+const os = require("os");
 const { EventEmitter } = require("events");
+const { pathToFileURL } = require("url");
 
 const DEFAULT_PROGRESS_INTERVAL_MS = 100;
 const MAX_REDIRECTS = 3;
+
+// ESM compartilhado com o renderer (WebFileStore); o import dinâmico é o que
+// permite ao CommonJS carregá-lo sem manter uma cópia.
+let _adaptiveModule = null;
+function loadAdaptiveConcurrency() {
+  _adaptiveModule ||= import(pathToFileURL(path.join(__dirname, "adaptiveConcurrency.mjs")).href);
+  return _adaptiveModule;
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * HttpQueue — fila de downloads HTTPS com pool de workers concorrentes.
@@ -29,7 +41,12 @@ class HttpQueue extends EventEmitter {
     this.baseUrl = (baseUrl || "").replace(/\/+$/, "");
     this.apiToken = apiToken || null;
     this.filesDir = filesDir;
-    this.concurrency = Math.max(1, Math.min(16, concurrency ?? 6));
+    // `concurrency` explícito fixa o número de downloads; sem ele a fila se
+    // adapta à vazão (ver adaptiveConcurrency.mjs).
+    this.fixedConcurrency = Number.isFinite(concurrency)
+      ? Math.max(1, Math.min(16, concurrency))
+      : null;
+    this.maxConcurrency = Math.max(4, Math.min(12, os.cpus().length || 4));
     this.queue = [];
     this.running = false;
     this.cancelled = false;
@@ -261,6 +278,7 @@ class HttpQueue extends EventEmitter {
     const idx = getNextIndex();
     const url = item.remoteUrl || this._buildUrl(item.remote);
     const tmp = `${item.local}.tmp`;
+    let receivedBytes = 0;
 
     try {
       await this._prepareDestination(item.local);
@@ -275,6 +293,7 @@ class HttpQueue extends EventEmitter {
       if (this.cancelled) throw new Error("cancelled");
 
       await this._downloadOne(url, tmp, (bytes, totalBytes) => {
+        receivedBytes = bytes;
         this._queueProgress(idx, {
           current: idx,
           total,
@@ -291,7 +310,7 @@ class HttpQueue extends EventEmitter {
       await fs.move(tmp, item.local, { overwrite: true });
       this._activeTmps.delete(tmp);
       this.emit("file-done", { file: item.remote, localPath: item.local });
-      return { ok: true };
+      return { ok: true, bytes: receivedBytes };
     } catch (err) {
       if (!this.cancelled) this._flushPendingProgress(idx);
       if (this._activeTmps.has(tmp)) {
@@ -356,24 +375,42 @@ class HttpQueue extends EventEmitter {
     let failed = 0;
     const getNextIndex = () => ++started;
 
+    let adaptive = null;
+    if (this.fixedConcurrency === null) {
+      const { createAdaptiveConcurrency } = await loadAdaptiveConcurrency();
+      adaptive = createAdaptiveConcurrency({ min: 2, start: 4, max: this.maxConcurrency });
+    }
+    const slots = this.fixedConcurrency ?? this.maxConcurrency;
+
     // Pool de workers concorrentes — cada um consome o queue até esvaziar.
-    const worker = async () => {
+    // Todos os workers existem; só os de índice abaixo do limite atual pegam
+    // trabalho, os demais esperam o limite subir.
+    const worker = async (index) => {
       while (!this.cancelled) {
         await this._waitWhilePaused();
         if (this.cancelled) break;
         // A pausa pode chegar entre o Promise resolvido e este microtask.
         if (this.paused) continue;
         if (this.queue.length === 0) break;
+        if (adaptive && index >= adaptive.limit()) {
+          await sleep(250);
+          continue;
+        }
         const item = this.queue.shift();
         if (!item) break;
         const r = await this._processItem(item, total, getNextIndex);
-        if (r.ok) downloaded++;
-        else if (!r.cancelled) failed++;
+        if (r.ok) {
+          downloaded++;
+          adaptive?.report({ bytes: r.bytes, ok: true });
+        } else if (!r.cancelled) {
+          failed++;
+          adaptive?.report({ ok: false });
+        }
       }
     };
 
     const workers = [];
-    for (let i = 0; i < this.concurrency; i++) workers.push(worker());
+    for (let i = 0; i < slots; i++) workers.push(worker(i));
     await Promise.all(workers);
 
     this.running = false;

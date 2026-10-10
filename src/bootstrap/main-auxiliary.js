@@ -14,6 +14,7 @@ import UserData from "@/helpers/UserData";
 import $idb from "@/helpers/IndexedDB";
 import { bindModuleI18n } from "@/helpers/ModuleTranslations";
 import Platform from "@/helpers/Platform";
+import WakeLock from "@/helpers/WakeLock";
 import Telemetry from "@/helpers/Telemetry";
 import { KEYS } from "@/constants/UserDataKeys";
 import { FONT, resolveDefaultFont } from "@/config/Fonts";
@@ -80,6 +81,16 @@ async function start() {
 
   app.mount("#app");
   bootStage("mounted");
+
+  // Projeção e relógio existem para ficar no ar sem toque algum; no navegador a
+  // tela apagaria no meio do slide (o Electron faz isso pelo `powerBlocker`).
+  // `/obs` é só captura e `/operator`/`/remote` são telas de controle.
+  if (
+    !Platform.isDesktop &&
+    /^\/(projection|projecao|clock|relogio)(\/|$)/.test(location.pathname)
+  ) {
+    WakeLock.hold("presentation");
+  }
 
   if (!requiresIdbBeforeMount) {
     // Projeção de música/retorno/OBS ganha o primeiro mount sem esperar o

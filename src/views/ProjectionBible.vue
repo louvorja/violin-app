@@ -1,5 +1,6 @@
 <template>
   <OverlayRenderer />
+  <ProjectionClearScreen />
   <LibrasOverlay
     :verse-text="text"
     :bible-version="version"
@@ -88,6 +89,7 @@ import UserData from "@/helpers/UserData";
 import { FONT, resolveFont } from "@/config/Fonts";
 import { horizontalTextAlign, moduleCustomizationDefault } from "@/helpers/ModuleFormatting";
 import OverlayRenderer from "@/components/OverlayRenderer.vue";
+import ProjectionClearScreen from "@/components/ProjectionClearScreen.vue";
 import LibrasOverlay from "@/views/LibrasOverlay.vue";
 
 const MID = "modules.bible";

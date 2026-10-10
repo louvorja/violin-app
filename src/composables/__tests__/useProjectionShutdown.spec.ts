@@ -20,7 +20,7 @@ vi.mock("@/helpers/Projection", () => ({
   },
 }));
 
-const { useProjectionShutdown } = await import("@/composables/useProjectionShutdown");
+const { useProjectionShutdown, closingOnPurpose } = await import("@/composables/useProjectionShutdown");
 const { useProjectionCloseNotice } = await import("@/composables/useProjectionCloseNotice");
 
 /**
@@ -81,6 +81,23 @@ describe("useProjectionShutdown", () => {
     await vi.advanceTimersByTimeAsync(1000);
 
     expect($userdata.get(KEYS.MODULES.BACKGROUND_PROJECTION.IS_PLAYING)).toBe(true);
+  });
+
+  it("fechada de propósito (tela principal desligada), o retorno segue com o mesmo conteúdo", async () => {
+    // Relógio no passado: a marca de "de propósito" (alguns segundos) não vaza para os outros testes.
+    vi.setSystemTime(new Date("2000-01-01T00:00:00Z"));
+    $userdata.set(KEYS.MODULES.BIBLE.IS_PLAYING, true);
+    janelasAbertas.add(PROJECTION_TYPE.BIBLE_RETURN);
+    montarJanelaPrincipal();
+
+    closingOnPurpose(PROJECTION_TYPE.BIBLE);
+    // A janela avisa duas vezes ao fechar (beforeunload e pagehide).
+    Broadcast.send(BROADCAST_TYPE.PROJECTION_CLOSED, { feature: PROJECTION_TYPE.BIBLE });
+    Broadcast.send(BROADCAST_TYPE.PROJECTION_CLOSED, { feature: PROJECTION_TYPE.BIBLE });
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect($userdata.get(KEYS.MODULES.BIBLE.IS_PLAYING)).toBe(true);
+    expect(janelasAbertas.has(PROJECTION_TYPE.BIBLE_RETURN)).toBe(true);
   });
 
   it("fechar o retorno não derruba a projeção principal", async () => {

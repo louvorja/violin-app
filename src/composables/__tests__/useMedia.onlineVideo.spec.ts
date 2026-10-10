@@ -158,6 +158,9 @@ function onlyFragmentedFormats() {
 
 it("retains real XHR Blob MIME, bytes and original basename when play rejects the opaque source", async () => {
   openAudio.mockRestore();
+  // Este é o caminho do blob baixado por inteiro, não o do streaming.
+  const { default: $userdata } = await import("@/helpers/UserData");
+  $userdata.set(KEYS.MODULES.MEDIA.LAZY_LOAD, false);
   const { default: Telemetry } = await import("@/helpers/Telemetry");
   const log = vi.spyOn(Telemetry, "log").mockImplementation(() => {});
   let request!: XMLHttpRequest;
@@ -198,11 +201,12 @@ describe("acompanhar o download do yt-dlp e projetar", () => {
   it("com o vídeo pronto, abre as janelas e toca o arquivo (não o player do YouTube)", async () => {
     h.ensure.mockResolvedValue(ok(ID));
     expect(await media.openYouTube(embed(ID), "Louvor")).toBe(true);
-    expect(h.openWindows).toHaveBeenCalledWith({ withOperator: true });
+    expect(h.openWindows).toHaveBeenCalled();
     expect(openAudio).toHaveBeenCalledWith({
       url: `louvorja://onlinevideo/${ID}.mp4`,
       title: "Louvor",
       mediaType: "video",
+      playback_id: expect.any(String),
     }, true);
   });
 
@@ -341,18 +345,23 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
     const { video, audio } = streams(ID);
     expect(await media.openYouTube(embed(ID), "Louvor")).toBe(true);
     expect(h.stream).toHaveBeenCalledWith(ID);
-    expect(h.openWindows).toHaveBeenCalledWith({ withOperator: true });
+    expect(h.openWindows).toHaveBeenCalled();
     expect(h.send).toHaveBeenCalledWith(BROADCAST_TYPE.FILE_PROJECTION, {
       url: video.url,
       type: "video",
       title: "Louvor",
       stage_epoch: expect.any(Number),
+      playback_id: expect.any(String),
+      clock: "player",
     });
+    // Uma identidade só: a tela e o player falam do mesmo playback.
+    const sent = h.send.mock.calls.find((c: unknown[]) => c[0] === BROADCAST_TYPE.FILE_PROJECTION)?.[1] as { playback_id: string };
+    expect(openAudio.mock.calls.at(-1)?.[0]).toMatchObject({ playback_id: sent.playback_id });
     // a imagem do player do app vem da trilha de vídeo; o som, da de áudio
     expect(openAudio).toHaveBeenCalledWith({
       url: audio.url,
       title: "Louvor",
-      mediaType: "video",
+      mediaType: "video", playback_id: expect.any(String),
       videoUrl: video.url,
     }, true);
     expect(embedded).not.toHaveBeenCalled();
@@ -384,7 +393,7 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
     h.stream.mockResolvedValue({ ok: true, id: ID, cached: true, video: { url: file }, audio: { url: file }, muxed: true, duration: null });
     controlledDownloads();
     expect(await media.openYouTube(embed(ID), "Louvor")).toBe(true);
-    expect(openAudio).toHaveBeenCalledWith({ url: file, title: "Louvor", mediaType: "video" }, true);
+    expect(openAudio).toHaveBeenCalledWith({ url: file, title: "Louvor", mediaType: "video", playback_id: expect.any(String) }, true);
     expect(embedded).not.toHaveBeenCalled();
   });
 
@@ -401,6 +410,7 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
       url: `louvorja://onlinevideo/${ID}.mp4`,
       title: "Louvor",
       mediaType: "video",
+      playback_id: expect.any(String),
     }, true);
   });
 
@@ -866,6 +876,30 @@ describe("posse do palco durante a abertura do vídeo", () => {
       expect(localStorage.getItem(KEYS.PROJECTION.LJ_FILE_PROJECTION)).toBeNull();
     }
   );
+
+  it("vídeo com som: a tela recebe a mesma identidade do player e passa a seguir o relógio dele", async () => {
+    storage();
+    const payload = { url: "louvorja://local/culto/video.mp4", type: "video" as const, title: "Vídeo" };
+    expect(await media.projectFile(payload, payload.url)).toBe(true);
+    const sent = h.send.mock.calls.find((c: unknown[]) => c[0] === BROADCAST_TYPE.FILE_PROJECTION)?.[1] as {
+      playback_id: string;
+      clock?: string;
+    };
+    expect(sent.clock).toBe("player");
+    expect(openAudio).toHaveBeenCalledWith(
+      expect.objectContaining({ url: payload.url, mediaType: "video", playback_id: sent.playback_id }),
+      true
+    );
+  });
+
+  it("vídeo sem player (timer): a tela toca sozinha, sem marca de relógio", async () => {
+    storage();
+    const payload = { url: "louvorja://local/timer.mp4", type: "video" as const, title: "Timer" };
+    expect(await media.projectFile(payload)).toBe(true);
+    const sent = h.send.mock.calls.find((c: unknown[]) => c[0] === BROADCAST_TYPE.FILE_PROJECTION)?.[1] as { clock?: string };
+    expect(sent.clock).toBeUndefined();
+    expect(openAudio).not.toHaveBeenCalled();
+  });
 
   it("PDF válido mantém cache de reabertura e projeta sem abrir player de áudio", async () => {
     storage();

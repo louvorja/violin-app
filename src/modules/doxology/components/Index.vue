@@ -28,6 +28,11 @@
       </h2>
       <h2 v-else class="dx-heading">{{ tm("albums") }}</h2>
 
+      <LjAlert
+        v-if="offlineLibrary.active.value"
+        variant="info"
+        :text="i18nT('shell.offline_albums_only')"
+      />
       <LjProgress
         v-if="loading"
         indeterminate
@@ -128,6 +133,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { useOfflineLibrary } from "@/composables/useOfflineLibrary";
 import { LjAlert, LjButton, LjEmpty, LjIcon, LjInput, LjProgress, LjTable } from "@/components/ui";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import MusicMenuTable from "@/components/MusicMenuTable.vue";
@@ -154,6 +160,7 @@ interface AlbumMusic {
 }
 
 const { t: i18nT, locale } = useI18n();
+const offlineLibrary = useOfflineLibrary(() => locale.value);
 const tm = (key: string): string => i18nT(`modules.doxology.${key}`);
 
 const pageEl = ref<HTMLElement | null>(null);
@@ -179,15 +186,16 @@ const filteredAlbums = computed(() =>
   albums.value.filter(
     (album) =>
       isAlbumEnabled(album.id_album, disabledAlbums.value) &&
+      offlineLibrary.hasAlbum(album.id_album) &&
       (!query.value || album.name.toLocaleLowerCase(locale.value).includes(query.value))
   )
 );
 const filteredMusics = computed(() =>
-  query.value
-    ? musics.value.filter((music) =>
-        music.name.toLocaleLowerCase(locale.value).includes(query.value)
-      )
-    : musics.value
+  musics.value.filter(
+    (music) =>
+      offlineLibrary.hasMusic(music.id_music) &&
+      (!query.value || music.name.toLocaleLowerCase(locale.value).includes(query.value))
+  )
 );
 
 function positiveId(value: unknown): number | null {

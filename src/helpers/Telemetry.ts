@@ -147,6 +147,32 @@ function sanitizeString(value: string): string {
   return value.slice(0, MAX_STRING_LENGTH).replace(SENSITIVE_QUERY, "$1[REDACTED]");
 }
 
+/**
+ * Valor de uma `route` que pode sair do app.
+ *
+ * A rota interna da SPA (`/projection/file`) é caminho nosso: vai inteira, já
+ * sanitizada — se um dia trouxer `?token=`, o `SENSITIVE_QUERY` cobre.
+ *
+ * URL externa vira **só o host**. O `path` de um `view_url` do Canva carrega o
+ * JWT (a própria API do app o chama de "JWT com `expwy`"), e o `SENSITIVE_QUERY`
+ * só redige **query** — `?token=`, `?jwt=`… o que estiver no caminho passaria
+ * inteiro. Host responde "foi site? de onde?" sem levar nem o token nem o
+ * endereço completo do terceiro.
+ *
+ * @param route rota/URL que ia para a telemetria
+ * @returns rota interna sanitizada, ou o host de uma URL externa
+ */
+export function routeForTelemetry(route: unknown): string {
+  const texto = typeof route === "string" ? route.trim() : "";
+  if (!texto) return "";
+  if (!/^https?:\/\/[^/\s]+/i.test(texto)) return sanitizeString(texto);
+  try {
+    return new URL(texto).host;
+  } catch {
+    return "[external]";
+  }
+}
+
 function normalizeVersion(value: unknown): string {
   return typeof value === "string" ? value.trim().replace(/^v(?=\d)/, "") : "";
 }
@@ -285,6 +311,7 @@ function runtimeContext(): Record<string, unknown> {
   const api = typeof window !== "undefined" ? window.louvorjaApi : undefined;
   return {
     target: Platform.isDesktop ? "electron" : "web",
+    app_platform: appPlatform(),
     os: osName(),
     electron_version: api?.runtime?.electron || Platform.electronVersion || undefined,
     chromium_version: api?.runtime?.chrome || undefined,
@@ -1442,6 +1469,20 @@ function osName(): string {
   return "unknown";
 }
 
+export type AppPlatform = "desktop" | "pwa" | "web";
+
+/** desktop = Electron; pwa = instalado/standalone; web = aba comum do navegador. */
+function appPlatform(): AppPlatform {
+  if (Platform.isDesktop) return "desktop";
+  if (typeof window === "undefined") return "web";
+  const standalone =
+    window.matchMedia?.("(display-mode: standalone)").matches ||
+    window.matchMedia?.("(display-mode: fullscreen)").matches ||
+    window.matchMedia?.("(display-mode: minimal-ui)").matches ||
+    (navigator as Navigator & { standalone?: boolean }).standalone === true;
+  return standalone ? "pwa" : "web";
+}
+
 async function appVersion(): Promise<string> {
   // O executável instalado é a fonte de verdade no desktop. Um override do
   // build (por exemplo, uma execução manual em main) não deve substituí-lo.
@@ -1521,6 +1562,7 @@ export function setEnabled(enabled: boolean): void {
       app_version: _appVersion,
       app_version_source: _appVersionSource,
       sdk_version: _sdkVersion,
+      app_platform: appPlatform(),
     });
     startResponsivenessMonitor();
   } else void init();
@@ -1543,6 +1585,7 @@ export function resetId(): void {
     app_version: _appVersion,
     app_version_source: _appVersionSource,
     sdk_version: _sdkVersion,
+    app_platform: appPlatform(),
   });
 }
 
@@ -1763,6 +1806,7 @@ async function _init(): Promise<void> {
     app_version: version,
     app_version_source: _appVersionSource,
     sdk_version: sdkVersion,
+    app_platform: appPlatform(),
     window_role: windowRole(),
     window_feature: windowFeature(),
     window_route: routePath(),
@@ -1839,6 +1883,7 @@ async function _init(): Promise<void> {
     "app_opened",
     {
       platform: Platform.isDesktop ? "desktop" : "web",
+      app_platform: appPlatform(),
       os: osName(),
       app_version: version,
       app_version_source: _appVersionSource,
@@ -1988,5 +2033,6 @@ export default {
   setRuntimeContext,
   reportRuntimeIncident,
   histogram,
+  routeForTelemetry,
   installVueErrorHandler,
 };

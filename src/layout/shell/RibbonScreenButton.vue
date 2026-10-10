@@ -1,5 +1,5 @@
 <template>
-  <div class="ribbon-screen-btn" :class="`ribbon-btn--${size}`">
+  <div v-if="canProject" class="ribbon-screen-btn" :class="`ribbon-btn--${size}`">
     <button
       type="button"
       class="ribbon-btn ribbon-btn--main"
@@ -33,6 +33,7 @@
 </template>
 
 <script setup lang="ts">
+import { canOpenWebWindows } from "@/helpers/projection/webWindow";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { LjIcon, LjMenu, type LjMenuItem } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
@@ -53,9 +54,15 @@ import {
 import { useI18n } from "vue-i18n";
 import { CategorizedDisplays, DisplayInfo } from "@/types/Projection";
 
+const canProject = canOpenWebWindows();
+
 const props = defineProps({
   feature: { type: String, default: "" },
   route: { type: String, default: "" },
+  /** Rótulo com a janela fechada. Distingue botões vizinhos (tela principal, retorno). */
+  label: { type: String, default: null },
+  /** Rótulo com a janela aberta; sem ele, o genérico "Parar Projeção". */
+  activeLabel: { type: String, default: null },
   iconColor: { type: String, default: null },
   size: { type: String, default: "large" },
   testid: { type: String, default: null },
@@ -109,7 +116,9 @@ const dynamicIconColor = computed<string | undefined>(() =>
   is_active.value ? "var(--lj-danger)" : (props.iconColor ?? undefined)
 );
 const dynamicLabel = computed(() =>
-  is_active.value ? t("ribbon.btn.stop_projection") : t("ribbon.btn.project")
+  is_active.value
+    ? props.activeLabel || t("ribbon.btn.stop_projection")
+    : props.label || t("ribbon.btn.project")
 );
 
 /** Resolução do monitor — vira a linha secundária do item de menu. */

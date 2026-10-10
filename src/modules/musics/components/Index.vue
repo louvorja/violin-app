@@ -117,6 +117,7 @@
       :has_scroll="has_scroll"
       sort_by="name"
       :file="`${$i18n.locale}_musics`"
+      offline_filter
       :extra_rows="customMusics"
     >
       <thead>

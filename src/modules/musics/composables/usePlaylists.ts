@@ -11,7 +11,9 @@ import Telemetry from "@/helpers/Telemetry";
 const TABLE_PLAYLISTS = DB_TABLE.MUSICS_PLAYLISTS;
 
 const _playlists = ref<Playlist[]>([]);
-const _selectedPlaylistId = ref<string | null>($userdata.get(KEYS.MODULES.MUSICS.SELECTED_PLAYLIST) || null);
+const _selectedPlaylistId = ref<string | null>(
+  $userdata.get(KEYS.MODULES.MUSICS.SELECTED_PLAYLIST) || null
+);
 const _hydrated = ref(false);
 
 let _saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -52,6 +54,68 @@ const selectedPlaylist = computed<Playlist | null>(() => {
   return _playlists.value.find((p) => p.id === _selectedPlaylistId.value) || null;
 });
 
+async function createPlaylist(name: string): Promise<Playlist> {
+  const playlist: Playlist = {
+    id: _generateId(),
+    name,
+    songs: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  _playlists.value = [..._playlists.value, playlist];
+  await _persistOne(playlist);
+  $dev.write("playlists:create", { id: playlist.id, name });
+  Telemetry.track("music_playlist_created", { playlist_id: playlist.id, name });
+  return playlist;
+}
+
+async function addSong(playlistId: string, song: PlaylistSong): Promise<void> {
+  _playlists.value = _playlists.value.map((p) => {
+    if (p.id !== playlistId) return p;
+    if (p.songs.some((s) => s.id_music === song.id_music)) return p;
+    return {
+      ...p,
+      songs: [...p.songs, song],
+      updatedAt: new Date().toISOString(),
+    };
+  });
+  const updated = _playlists.value.find((p) => p.id === playlistId);
+  if (updated) await _persistOne(updated);
+  Telemetry.track("music_playlist_song_added", {
+    playlist_id: playlistId,
+    id_music: song.id_music,
+    name: song.name,
+    duration: song.duration,
+  });
+}
+
+function _parseImportedSong(data: unknown): PlaylistSong | null {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  const song = data as Record<string, unknown>;
+  if (typeof song.id_music !== "number" && typeof song.id_music !== "string") return null;
+  const id_music = Number(song.id_music);
+  if (!Number.isSafeInteger(id_music) || id_music <= 0) return null;
+  if (song.name != null && typeof song.name !== "string") return null;
+  if (
+    song.duration != null &&
+    typeof song.duration !== "number" &&
+    typeof song.duration !== "string"
+  ) {
+    return null;
+  }
+  const duration = Number(song.duration ?? 0);
+  if (!Number.isFinite(duration) || duration < 0) return null;
+  if (song.has_instrumental_music != null && typeof song.has_instrumental_music !== "boolean") {
+    return null;
+  }
+  return {
+    id_music,
+    name: typeof song.name === "string" ? song.name : "",
+    duration,
+    has_instrumental_music: song.has_instrumental_music === true,
+  };
+}
+
 export function usePlaylists() {
   return {
     playlists: _playlists,
@@ -67,41 +131,36 @@ export function usePlaylists() {
         _hydrated.value = true;
         const durationMs = Math.max(
           0,
-          Math.round((typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt)
+          Math.round(
+            (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt
+          )
         );
         Telemetry.track("music_playlists_hydrated", {
           playlist_count: _playlists.value.length,
           songs_count: _playlists.value.reduce((n, p) => n + p.songs.length, 0),
           duration_ms: durationMs,
         });
-        Telemetry.histogram("louvorja.music.playlists.hydrate.duration", durationMs, { outcome: "completed" });
+        Telemetry.histogram("louvorja.music.playlists.hydrate.duration", durationMs, {
+          outcome: "completed",
+        });
         $dev.write("playlists:hydrated", { count: _playlists.value.length });
       } catch (e) {
         $dev.write("playlists:hydrate_error", { error: String(e) });
         const durationMs = Math.max(
           0,
-          Math.round((typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt)
+          Math.round(
+            (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt
+          )
         );
         Telemetry.captureException(e, { source: "music_playlists_hydrate" });
         Telemetry.track("music_playlists_hydrate_failed", { duration_ms: durationMs });
-        Telemetry.histogram("louvorja.music.playlists.hydrate.duration", durationMs, { outcome: "failed" });
+        Telemetry.histogram("louvorja.music.playlists.hydrate.duration", durationMs, {
+          outcome: "failed",
+        });
       }
     },
 
-    async createPlaylist(name: string): Promise<Playlist> {
-      const playlist: Playlist = {
-        id: _generateId(),
-        name,
-        songs: [],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      _playlists.value = [..._playlists.value, playlist];
-      await _persistOne(playlist);
-      $dev.write("playlists:create", { id: playlist.id, name });
-      Telemetry.track("music_playlist_created", { playlist_id: playlist.id, name });
-      return playlist;
-    },
+    createPlaylist,
 
     async renamePlaylist(id: string, name: string): Promise<void> {
       _playlists.value = _playlists.value.map((p) =>
@@ -128,20 +187,7 @@ export function usePlaylists() {
       Telemetry.track("music_playlist_selected", { playlist_id: id });
     },
 
-    async addSong(playlistId: string, song: PlaylistSong): Promise<void> {
-      _playlists.value = _playlists.value.map((p) => {
-        if (p.id !== playlistId) return p;
-        if (p.songs.some((s) => s.id_music === song.id_music)) return p;
-        return {
-          ...p,
-          songs: [...p.songs, song],
-          updatedAt: new Date().toISOString(),
-        };
-      });
-      const updated = _playlists.value.find((p) => p.id === playlistId);
-      if (updated) await _persistOne(updated);
-      Telemetry.track("music_playlist_song_added", { playlist_id: playlistId, id_music: song.id_music, name: song.name, duration: song.duration });
-    },
+    addSong,
 
     async removeSong(playlistId: string, index: number): Promise<void> {
       _playlists.value = _playlists.value.map((p) => {
@@ -179,7 +225,7 @@ export function usePlaylists() {
 
     async addSongToSelected(song: PlaylistSong): Promise<void> {
       if (!_selectedPlaylistId.value) return;
-      await this.addSong(_selectedPlaylistId.value, song);
+      await addSong(_selectedPlaylistId.value, song);
     },
 
     exportPlaylist(id: string): Playlist | null {
@@ -187,21 +233,21 @@ export function usePlaylists() {
     },
 
     async importPlaylist(data: unknown): Promise<Playlist | null> {
-      if (!data || typeof data !== "object") return null;
+      if (!data || typeof data !== "object" || Array.isArray(data)) return null;
       const obj = data as Record<string, unknown>;
       if (!Array.isArray(obj.songs)) return null;
 
       const name = typeof obj.name === "string" ? obj.name : "Playlist importada";
-      const songs: PlaylistSong[] = (obj.songs as Record<string, unknown>[]).map((s) => ({
-        id_music: Number(s.id_music) || 0,
-        name: String(s.name || ""),
-        duration: Number(s.duration) || 0,
-        has_instrumental_music: !!s.has_instrumental_music,
-      }));
+      const songs: PlaylistSong[] = [];
+      for (const data of obj.songs) {
+        const song = _parseImportedSong(data);
+        if (!song) return null;
+        songs.push(song);
+      }
 
-      const playlist = await this.createPlaylist(name);
+      const playlist = await createPlaylist(name);
       for (const song of songs) {
-        await this.addSong(playlist.id, song);
+        await addSong(playlist.id, song);
       }
       return _playlists.value.find((p) => p.id === playlist.id) || null;
     },

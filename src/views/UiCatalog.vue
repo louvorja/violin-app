@@ -292,6 +292,10 @@
             </template>
           </LjMenu>
 
+          <LjContextMenu :items="contextItems" :quick="contextQuick">
+            <div class="cat__context">Clique com o botão direito</div>
+          </LjContextMenu>
+
           <LjPopover title="Formatação">
             <template #trigger>
               <LjButton :icon="ICONS.ACTIONS.FORMAT">Popover</LjButton>
@@ -459,6 +463,7 @@ import {
   LjCombobox,
   LjDialog,
   LjMenu,
+  LjContextMenu,
   LjPopover,
   LjIcon,
   LjSlider,
@@ -507,8 +512,37 @@ const menuItems: LjMenuItem[] = [
   { label: "Mesma janela", checked: true, action: () => {} },
   { label: "Tela principal", icon: ICONS.UI.MONITORS, hint: "1470×918", action: () => {} },
   { label: "Tela de retorno", icon: ICONS.UI.MONITORS, hint: "1470×918", action: () => {} },
+  {
+    label: "Outros monitores",
+    icon: ICONS.UI.MONITORS,
+    children: [
+      { label: "Monitor 3", hint: "1920×1080", action: () => {} },
+      { label: "Monitor 4", hint: "1280×720", action: () => {} },
+    ],
+  },
   { separator: true },
   { label: "Identificar monitores", icon: ICONS.ACTIONS.SEARCH, shortcut: "F9", action: () => {} },
+];
+
+/** Ações rápidas no topo (as mais usadas) e um submenu para a lista que cresce. */
+const contextQuick: LjMenuItem[] = [
+  { label: "Reproduzir", icon: ICONS.PLAYER.PLAY, action: () => {} },
+  { label: "Pré-visualizar", icon: ICONS.UI.EYE, action: () => {} },
+];
+const contextItems: LjMenuItem[] = [
+  { label: "Adicionar ao programa", icon: ICONS.ACTIONS.ADD, action: () => {} },
+  {
+    label: "Adicionar ao momento",
+    icon: ICONS.MEDIA.PLAYLIST,
+    children: [
+      { label: "Anúncios", icon: ICONS.MEDIA.PLAYLIST, action: () => {} },
+      { label: "Minuto saúde", icon: ICONS.MEDIA.PLAYLIST, action: () => {} },
+      { separator: true },
+      { label: "Novo momento", icon: ICONS.ACTIONS.ADD, action: () => {} },
+    ],
+  },
+  { separator: true },
+  { label: "Detalhes", icon: ICONS.UI.INFORMATION_OUTLINE, action: () => {} },
 ];
 
 const { previewTheme } = useAppTheme();
@@ -654,6 +688,14 @@ onMounted(() => {
   max-width: 76ch;
   color: var(--lj-text-muted);
   line-height: 1.6;
+}
+
+.cat__context {
+  padding: var(--lj-space-4) var(--lj-space-6);
+  border: 1px dashed var(--lj-surface-border-strong);
+  border-radius: var(--lj-ui-radius);
+  color: var(--lj-text-muted);
+  font-size: var(--lj-text-sm);
 }
 
 .cat__row {

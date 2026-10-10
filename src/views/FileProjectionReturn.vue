@@ -1,5 +1,7 @@
 <template>
   <OverlayRenderer />
+  <ReturnOverride />
+  <ProjectionClearScreen />
   <div class="fp-wallpaper" :style="fallbackStyle"></div>
   <div class="return-root" :class="{ 'return-root--ready': ready }">
     <div v-if="fileProjection.active" class="return-file-projection">
@@ -20,7 +22,7 @@
                 :src="fileProjection.url"
                 class="return-file-projection__media"
                 :style="{ backgroundColor: wpColor }"
-                autoplay
+                :autoplay="!playerClock"
                 muted
                 playsinline
                 preload="auto"
@@ -70,12 +72,15 @@
 import { reactive, ref, computed, nextTick, onMounted, onBeforeUnmount, watch } from "vue";
 import "@/assets/styles/transitions.css";
 import { estiloDeFundo } from "@/helpers/BackgroundStyle";
+import { pdfPageFit } from "@/helpers/PdfPageFit";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { useTransitionStage } from "@/composables/useTransitionStage";
 import { createTransitionContext } from "@/config/Transitions";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import Broadcast from "@/helpers/Broadcast";
 import OverlayRenderer from "@/components/OverlayRenderer.vue";
+import ProjectionClearScreen from "@/components/ProjectionClearScreen.vue";
+import ReturnOverride from "@/components/ReturnOverride.vue";
 import {
   FileProjectionState,
   VideoMediaState,
@@ -84,6 +89,7 @@ import {
   YTPlayer,
 } from "@/types/Media";
 import { loadYtApi } from "@/composables/useYouTubeApi";
+import { outranks } from "@/composables/useYouTubeEmbed";
 import { KEYS } from "@/constants/UserDataKeys";
 import $userdata from "@/helpers/UserData";
 import { getSetting } from "@/helpers/SettingsStorage";
@@ -93,6 +99,8 @@ import { DB_TABLE, SETTINGS_TABLE } from "@/constants/DbTables";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 import { heicToJpeg, isHeic } from "@/helpers/ImageConvert";
 import Telemetry from "@/helpers/Telemetry";
+import { useScreenVideoReport } from "@/composables/useScreenVideoReport";
+import { useSlaveVideoClock } from "@/composables/useSlaveVideoClock";
 import {
   mediaElementDetails,
   mediaSourceDetails,
@@ -139,6 +147,19 @@ const { transitionName, stageStyle } = useTransitionStage(
 );
 
 const videoRef = ref<HTMLVideoElement | null>(null);
+/** O vídeo segue o player da janela principal: sem ele, não anda (ver useSlaveVideoClock). */
+const playerClock = ref(false);
+const slaveClock = useSlaveVideoClock(videoRef, {
+  enabled: () => playerClock.value && fileProjection.active && fileProjection.type === "video",
+  request: () => _requestVideoState(),
+});
+// O módulo confere se esta tela faz o que o player manda (pausado é pausado).
+useScreenVideoReport(
+  "return",
+  videoRef,
+  () => fileProjection.playback_id ?? null,
+  () => fileProjection.active && fileProjection.type === "video"
+);
 const videoFailed = ref(false);
 const videoStateGate = new VideoStateGate();
 const activationGate = new FileProjectionActivationGate();
@@ -201,13 +222,19 @@ async function renderPdfPage(pageNum: number): Promise<void> {
       const parent = canvas.parentElement as HTMLElement;
       if (!parent) return;
       const viewport = page.getViewport({ scale: 1 });
-      const scale = Math.min(
-        parent.clientWidth / viewport.width,
-        parent.clientHeight / viewport.height
-      );
-      const scaled = page.getViewport({ scale });
-      canvas.width = scaled.width;
-      canvas.height = scaled.height;
+      const fit = pdfPageFit({
+        pageWidth: viewport.width,
+        pageHeight: viewport.height,
+        parentWidth: parent.clientWidth,
+        parentHeight: parent.clientHeight,
+        devicePixelRatio: window.devicePixelRatio,
+      });
+      if (!fit) return;
+      const scaled = page.getViewport({ scale: fit.scale });
+      canvas.width = fit.pixelWidth;
+      canvas.height = fit.pixelHeight;
+      canvas.style.width = `${fit.cssWidth}px`;
+      canvas.style.height = `${fit.cssHeight}px`;
       if (!canvas.getContext("2d")) return;
       await page.render({ canvas, viewport: scaled }).promise;
       if (isCurrent() && pdfDoc === doc) {
@@ -369,6 +396,8 @@ async function _activateProjection(p: FileProjectionState): Promise<void> {
   fileProjection.url = p.url || "";
   fileProjection.title = p.title || "";
   fileProjection.playback_id = p.playback_id;
+  playerClock.value = p.type === "video" && p.clock === "player";
+  slaveClock.reset();
   fileProjection.backward = p.backward === true;
   videoStateGate.begin(p.playback_id);
   videoFirstFrame.begin(p.type === "video" ? p.playback_id : null);
@@ -418,6 +447,11 @@ function _prepareVideo(): void {
   videoFirstFrame.attach(el);
   el.load();
   const diagnosticContext = _captureVideoDiagnostics(el);
+  // Com player, a tela espera o estado dele para andar; pede já.
+  if (playerClock.value) {
+    _requestVideoState();
+    return;
+  }
   el.play().catch((error) => {
     console.warn("[FileProjectionReturn] vídeo não iniciou sozinho:", error?.name || error);
     mediaDiagnosticLog("warn", "file projection return video play rejected", {
@@ -635,6 +669,10 @@ useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION_PAGE, (payload: unknown) => 
         source: "projection",
       });
     }
+    /* Já nesta página (fim/início do documento): re-renderizar só pisca o
+       telão — é o que acontece quando o operador segura a seta no último
+       slide. */
+    if (clamped === fileProjection.page) return;
     renderPdfPage(clamped);
   }
 });
@@ -670,6 +708,7 @@ useBroadcastListener(BROADCAST_TYPE.VIDEO_STATE, (payload: unknown) => {
   if (!fileProjection.active || fileProjection.type !== "video") return;
   const data = payload as VideoMediaState;
   if (!videoStateGate.accepts(data)) return;
+  slaveClock.heard();
   latestVideoState = data;
   videoFirstFrame.acceptRevision(data.revision, data.playback_id);
   _applyVideoState(data);
@@ -696,6 +735,30 @@ useBroadcastListener(BROADCAST_TYPE.VIDEO_STATE, (payload: unknown) => {
   } finally {
     ytAwaitingSync = false;
     _startYtSync();
+  }
+});
+
+// O retorno acompanha quem manda no relógio (a projeção ou, sem ela, a janela principal):
+// só os comandos não bastam, porque cada player carrega e trava por conta própria.
+useBroadcastListener(BROADCAST_TYPE.YOUTUBE_STATE, (payload: unknown) => {
+  if (!fileProjection.active || fileProjection.type !== "youtube") return;
+  const data = payload as VideoMediaState;
+  if (!ytPlayer || !ytPlayer.getCurrentTime || ytAwaitingSync) return;
+  if (!fileProjection.playback_id || data?.playback_id !== fileProjection.playback_id) return;
+  if (!outranks(data.role, "return")) return;
+  try {
+    const playing = data.state === 1;
+    const age =
+      playing && typeof data.sampledAt === "number"
+        ? Math.max(0, (Date.now() - data.sampledAt) / 1000)
+        : 0;
+    const target = data.currentTime + age;
+    if (Math.abs(ytPlayer.getCurrentTime() - target) > 1) ytPlayer.seekTo(target, true);
+    const mine = ytPlayer.getPlayerState();
+    if (playing && mine === 2) ytPlayer.playVideo();
+    else if (data.state === 2 && mine === 1) ytPlayer.pauseVideo();
+  } catch {
+    /* ignore */
   }
 });
 
@@ -920,6 +983,7 @@ function _broadcastYtState(): void {
       state: ytPlayer.getPlayerState(),
       playback_id: fileProjection.playback_id,
       sampledAt: Date.now(),
+      role: "return",
     } as VideoMediaState);
     if (delivery?.crossWindow === false && !ytStateFailureLogged) {
       ytStateFailureLogged = true;
@@ -1098,18 +1162,20 @@ onBeforeUnmount(() => {
   background: transparent;
 }
 
+/* Como na tela principal: preenche mantendo a proporção. */
 .return-file-projection__media {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-}
-.return-file-projection video.return-file-projection__media {
   width: 100%;
   height: 100%;
+  object-fit: contain;
 }
 .return-file-projection__youtube {
   width: 100%;
   height: 100%;
+}
+/* O vídeo do YouTube não recebe clique nem foco: um toque na projeção o pausaria na frente
+   da igreja. Avançar, voltar e pausar é na barra do player. */
+.return-file-projection :deep(iframe[src*="youtube"]) {
+  pointer-events: none;
 }
 .return-file-projection__pdf {
   max-width: 100%;

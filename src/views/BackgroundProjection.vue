@@ -127,6 +127,7 @@
 
   <!-- Layer 2: Overlays -->
   <OverlayRenderer />
+  <ProjectionClearScreen />
   <LibrasOverlay
     :slide-lyric="projType === 'music' ? (slide?.lyric as string) : undefined"
     :music-id="projType === 'music' ? (slide?.id_music as number | undefined) : undefined"
@@ -155,6 +156,7 @@ import $modules from "@/helpers/Modules";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { getSetting } from "@/helpers/SettingsStorage";
 import OverlayRenderer from "@/components/OverlayRenderer.vue";
+import ProjectionClearScreen from "@/components/ProjectionClearScreen.vue";
 import LibrasOverlay from "@/views/LibrasOverlay.vue";
 import Slide from "@/components/Slide.vue";
 import { DEFAULT_BACKGROUND_COLOR, MAIN_BACKGROUND_ID, Settings } from "@/types/Settings";

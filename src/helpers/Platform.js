@@ -23,7 +23,15 @@
  * @category helper-puro — Seguro no Electron main process; sem APIs Vue.
  */
 
+import { isWebFileStoreSupported, webDownload, webStorage } from "@/helpers/WebFileStore";
+
 const api = typeof window !== "undefined" ? (window.louvorjaApi ?? null) : null;
+
+/** Resposta das operações de arquivo que só o desktop faz, no navegador. */
+const _unsupported = () =>
+  Promise.resolve(
+    /** @type {{ ok: false, error: string }} */ ({ ok: false, error: "unsupported" })
+  );
 
 export default {
   /**
@@ -159,15 +167,16 @@ export default {
   },
 
   /**
-   * Cliente de download FTP (D3).
-   * Permite verificar conexão, baixar arquivos e monitorar progresso.
-   * null quando rodando no browser/PWA.
+   * Cliente de download (D3). No desktop é o downloader do main process; no
+   * browser/PWA é o adaptador de Cache Storage de `WebFileStore.ts`, com o
+   * mesmo contrato — por isso `useSyncManager` não distingue as plataformas.
+   * null só em navegador sem Cache Storage.
    *
    * @returns {{ setApiConfig, getParams, checkConnection, start, cancel, checkFiles,
    *             onProgress, onFileDone, onFileError, onQueueDone, onQueueCancelled } | null}
    */
   get download() {
-    return api?.download ?? null;
+    return /** @type {any} */ (api?.download ?? (isWebFileStoreSupported() ? webDownload : null));
   },
 
   /** Sinal de mídia ativa para diagnóstico desktop sem metadados pessoais. */
@@ -179,7 +188,7 @@ export default {
    * Vídeos do YouTube baixados para projeção sem anúncios, ou deixados prontos de antemão.
    * null quando rodando no browser/PWA — lá só existe o player embutido.
    *
-   * @returns {{ status, ensure, stream, cancel, has, list, keep, prepare, remove, clear, onProgress } | null}
+   * @returns {{ status, ensure, stream, cancel, has, list, prefetch, collection, accountStatus, accountLogin, accountLogout, keep, prepare, remove, clear, onProgress } | null}
    */
   get onlineVideo() {
     return api?.onlineVideo ?? null;
@@ -202,7 +211,7 @@ export default {
    * Abre BrowserWindows no monitor certo com persistência de preferência.
    * null quando rodando no browser/PWA.
    *
-   * @returns {{ open, close, listOpen, setTaskbarVisibility?: (show: boolean) => Promise<any> } | null}
+   * @returns {{ open, close, listOpen, setTaskbarVisibility?, sendKey? } | null}
    */
   get windows() {
     return api?.windows ?? null;
@@ -318,15 +327,66 @@ export default {
   /**
    * Gerenciamento de armazenamento local (S2): stats, clear, verify,
    * setFilesDir, openDir, checkLocal, checkJson, removeFiles, sizeOfPaths, setAutoCache.
-   * null no browser/PWA — controle só no desktop.
+   * No browser/PWA só existem `checkLocal`, `removeFiles` e `sizeOfPaths`
+   * (Cache Storage); pasta de dados, stats e afins são exclusivos do desktop.
    */
   get storage() {
-    return api?.storage ?? null;
+    return /** @type {any} */ (api?.storage ?? (isWebFileStoreSupported() ? webStorage : null));
   },
 
   /** Lista arquivos de um diretório local (auto-populate). */
   readDir(dirPath) {
     return api?.storage?.readDir?.(dirPath) ?? Promise.resolve([]);
+  },
+
+  /** Um nível de uma pasta, com tamanho e data. No navegador: `{ ok: false }`. */
+  listDir(dirPath) {
+    return api?.storage?.listDir?.(dirPath) ?? _unsupported();
+  },
+
+  /** Quais arquivos estão só na nuvem. No navegador: nenhum (`{}`). */
+  cloudStates(paths) {
+    return api?.storage?.cloudStates?.(paths) ?? Promise.resolve({});
+  },
+
+  /** Baixa o arquivo da nuvem para o computador. No navegador: `{ ok: false }`. */
+  cloudDownload(filePath) {
+    return api?.storage?.cloudDownload?.(filePath) ?? _unsupported();
+  },
+
+  /** Andamento dos downloads da nuvem; devolve a função que para de ouvir. */
+  onCloudProgress(cb) {
+    return api?.storage?.onCloudProgress?.(cb) ?? (() => {});
+  },
+
+  /** Histórico da série de vídeos da pasta. No navegador: `{ ok: false }`. */
+  seriesRead(dirPath) {
+    return api?.storage?.seriesRead?.(dirPath) ?? _unsupported();
+  },
+
+  /** Resolve as cópias em conflito do histórico: `"merge"` ou o nome da versão a manter. */
+  seriesResolve(dirPath, choice) {
+    return api?.storage?.seriesResolve?.(dirPath, choice) ?? _unsupported();
+  },
+
+  /** PowerPoint → PDF pelo PowerPoint do computador. No navegador: `{ ok: false }`. */
+  convertPresentation(filePath) {
+    return api?.storage?.convertPresentation?.(filePath) ?? _unsupported();
+  },
+
+  /** Aplica uma operação ao histórico da série, sobre o que está no disco agora. */
+  seriesApply(dirPath, op) {
+    return api?.storage?.seriesApply?.(dirPath, op) ?? _unsupported();
+  },
+
+  /** Pasta da igreja do Modo apresentação (`stat`, `read`, `write`…). No navegador: `{ ok: false }`. */
+  church(op, ...args) {
+    return api?.storage?.church?.(op, ...args) ?? _unsupported();
+  },
+
+  /** Nome deste computador. No navegador: "". */
+  computerName() {
+    return api?.storage?.computerName?.() ?? Promise.resolve("");
   },
 
   /**

@@ -101,6 +101,73 @@ describe("preload IPC contract", () => {
     ]);
   });
 
+  // Cada prefixo novo precisa entrar em DOIS lugares: a lista de eventos de
+  // `onHttpEvent` e o regex da `respond`. Esquecer o regex descarta a resposta
+  // em silêncio e o main acaba com 504 (foi o bug da aba Vídeos Online).
+  it("aceita o prefixo online-videos na resposta", () => {
+    const seen = loadPreload();
+    const api = seen.exposed;
+    const requestId = "online-videos:00000000-0000-4000-8000-000000000002";
+    const payload = { status: "ok", albums: [] };
+
+    expect(api.httpServer.respond(requestId, payload)).toBe(true);
+    expect(seen.sent).toEqual([
+      { channel: RENDERER_RESPONSE_CHANNEL, payload: { requestId, payload } },
+    ]);
+  });
+
+  it("onHttpEvent escuta http:online-videos junto dos demais eventos", () => {
+    const seen = loadPreload();
+    const api = seen.exposed;
+
+    const cleanup = api.onHttpEvent(() => {});
+
+    expect(seen.listeners.has("http:online-videos")).toBe(true);
+    expect(seen.listeners.has("http:background-sound")).toBe(true);
+    expect(seen.listeners.has("http:volume")).toBe(true);
+    expect(seen.listeners.has("http:song-slides")).toBe(true);
+    expect(seen.listeners.has("http:open-song")).toBe(true);
+    cleanup();
+    expect(seen.listeners.has("http:online-videos")).toBe(false);
+  });
+
+  it("aceita o prefixo custom-music na resposta", () => {
+    const seen = loadPreload();
+    const api = seen.exposed;
+    const requestId = "custom-music:00000000-0000-4000-8000-000000000003";
+    const payload = { status: "ok", songs: [] };
+
+    expect(api.httpServer.respond(requestId, payload)).toBe(true);
+    expect(seen.sent).toEqual([
+      { channel: RENDERER_RESPONSE_CHANNEL, payload: { requestId, payload } },
+    ]);
+  });
+
+  // O regex precisa acompanhar a lista de eventos — já erramos isso duas vezes
+  // (online-videos e custom-music): a resposta era descartada em silêncio e a
+  // rota respondia TIMEOUT sem nenhuma pista no renderer. Este teste varre os
+  // prefixos conhecidos para o próximo esquecimento falhar aqui.
+  it("todos os prefixos conhecidos passam pelo regex da respond", () => {
+    const seen = loadPreload();
+    const api = seen.exposed;
+    const uuid = "00000000-0000-4000-8000-000000000004";
+
+    for (const prefixo of [
+      "slides",
+      "announcements",
+      "libras",
+      "online-videos",
+      "custom-music",
+      "background-sound",
+      "volume",
+    ]) {
+      expect(
+        api.httpServer.respond(`${prefixo}:${uuid}`, { status: "ok" }),
+        `prefixo "${prefixo}" fora do contrato do preload`
+      ).toBe(true);
+    }
+  });
+
   it("expõe apenas o sinal booleano de mídia ativa", () => {
     const seen = loadPreload();
     const api = seen.exposed;

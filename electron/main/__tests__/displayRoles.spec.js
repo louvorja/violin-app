@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { createRequire } from "module";
 import { ROLES, deriveRoles, roleOfFeature } from "../displayRoles.mjs";
+import { PROJECTION_TYPE } from "@/constants/Projection";
 
 const require = createRequire(import.meta.url);
 const { resolveWantedId } = require("../monitorPrefs.js");
@@ -19,8 +20,43 @@ describe("roleOfFeature", () => {
     ["bible_return", ROLES.STAGE],
     ["operador", ROLES.OPERATOR],
     ["shell:operator", ROLES.OPERATOR],
+    /*
+     * A tela de loading da projeção de Site. Sem papel o `roleOfFeature`
+     * devolve null e a janela é recusada fora da tela do operador — o loader
+     * simplesmente não apareceria no telão, que é onde ele precisa estar.
+     */
+    ["site_loader", ROLES.PROJECTION],
+    ["site_loader_return", ROLES.STAGE],
+    /*
+     * O retorno da projeção de Site. Sem papel o `resolveFeature` devolve
+     * `unknown-feature` e o `reconcile` OCULTA a janela — o aviso de "Monitor
+     * desconectado" aparecia com os três monitores ligados.
+     */
+    ["site_return", ROLES.STAGE],
   ])('mapeia "%s" para o papel "%s"', (feature, role) => {
     expect(roleOfFeature(feature)).toBe(role);
+  });
+
+  /*
+   * Trava de cobertura: toda janela que o app sabe abrir precisa de papel.
+   *
+   * Sem papel, `monitorConfig.resolveFeature` devolve `display: null` e
+   * `windowFactory.reconcile` esconde a janela — sem erro nenhum, só o
+   * aviso genérico de monitor desconectado. Foi exatamente isso que apagou a
+   * tela de retorno da projeção de Site (`site_return` fora da tabela).
+   *
+   * Falhar aqui vale mais do que descobrir no meio do culto: um
+   * `PROJECTION_TYPE` novo esquecido nunca chega ao reconciliador.
+   */
+  it("todo PROJECTION_TYPE tem papel — uma janela sem papel é ocultada", () => {
+    const semPapel = Object.values(PROJECTION_TYPE).filter(
+      (feature) => roleOfFeature(feature) == null
+    );
+
+    expect(
+      semPapel,
+      `PROJECTION_TYPE sem entrada em FEATURE_ROLE: ${semPapel.join(", ")}`
+    ).toEqual([]);
   });
 
   it("devolve null para feature desconhecida", () => {

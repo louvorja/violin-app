@@ -23,6 +23,7 @@ interface SnackbarState {
   color: string;
   icon: string | null;
   timeout: number;
+  has_action?: boolean;
 }
 
 type ToastVariant = "info" | "success" | "warning" | "error";
@@ -59,7 +60,7 @@ const DEFAULT_ICONS: Record<ToastVariant, string> = {
 
 const defaultIcon = computed(() => DEFAULT_ICONS[variant.value]);
 
-const actionable = computed(() => $snackbar.hasAction());
+const actionable = computed(() => snackbar.value.has_action === true);
 
 function onClick(): void {
   const action = $snackbar.takeAction();

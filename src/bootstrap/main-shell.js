@@ -1,6 +1,7 @@
 import { createApp, watchEffect } from "vue";
 import { createPinia } from "pinia";
 import { useConnectivity } from "@/composables/useConnectivity";
+import { watchStaleVersion } from "@/helpers/StaleVersion";
 import requiresNetwork from "@/directives/requiresNetwork";
 import App from "@/App.vue";
 import router from "@/router";
@@ -15,9 +16,14 @@ import "@/assets/styles/fonts.css";
 import "@/assets/styles/appmenu-options.css";
 //Modules
 import ModuleManager from "@/helpers/ModuleManager";
+import { renderCategoryTile } from "@/helpers/CategoryTile";
 import $storage from "@/helpers/Storage";
-import $alert from "@helpers/Alert";
 import Platform from "@/helpers/Platform";
+import $alert from "@/helpers/Alert";
+import WakeLock from "@/helpers/WakeLock";
+import { installFileDrop } from "@/helpers/FileDrop";
+import { requestPersistence } from "@/helpers/WebFileStore";
+import { initAppInstall } from "@/composables/useAppInstall";
 import {
   API_URL,
   API_URL_DB,
@@ -32,10 +38,12 @@ import Modules from "@/helpers/Modules";
 import Dev from "@/helpers/Dev";
 import UserData from "@/helpers/UserData";
 import AppData from "@/helpers/AppData";
+import { anyOpenModuleWants } from "@/config/modules";
 import { useFileProjection } from "@/composables/useFileProjection";
 import { useBackgroundSound } from "@/composables/useBackgroundSound";
 import { syncFromIdb as syncDevicesFromIdb } from "@/composables/useDevices";
 import Path from "@/helpers/Path";
+import { resolveBackgroundSoundPath } from "@/helpers/BackgroundSoundPath";
 import Media from "@/composables/useMedia";
 import { useSlides } from "@/composables/useSlides";
 import { musicCommandSessionRejectionReason } from "@/presentation/MusicPresentationPacket";
@@ -47,7 +55,7 @@ import { AUDIO_EXT } from "@/constants/FileTypes";
 import { openSlja, SLJA_EXT } from "@/helpers/SljaPlayer";
 import { heicToJpeg, isHeic } from "@/helpers/ImageConvert";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
-import { openCustomMusic } from "@/helpers/CustomMusicCatalog";
+import { loadCustomMusicCatalog, openCustomMusic } from "@/helpers/CustomMusicCatalog";
 import { LITURGY_VERSION_ACTION } from "@/config/MusicAction";
 import { DB_TABLE } from "@/constants/DbTables";
 import $idb from "@/helpers/IndexedDB";
@@ -189,6 +197,250 @@ if (!isAuxiliaryRenderer) {
     },
     { replay: false }
   );
+}
+
+/** Teto dos arrays de vídeo devolvidos ao controle remoto (validação no main). */
+const ONLINE_VIDEOS_MAX_RESULTS = 10_000;
+
+/** Prefixos dos ids de álbum — `online:<playlist_id>` / `custom:<category_id>`. */
+const ONLINE_ALBUM_PREFIX = "online:";
+const CUSTOM_ALBUM_PREFIX = "custom:";
+
+/**
+ * URL pública da miniatura de um item do catálogo remoto.
+ *
+ * Prefere o `default_image` da API quando já é http(s); senão deriva a thumb do
+ * YouTube a partir do `video_id` (ou do `/vi/<id>/` embutido no `default_image`
+ * das playlists). Data URI não é enviado: o cliente não decodifica — o
+ * `default_image_base64` fica como reserva só no desktop.
+ */
+function catalogImageUrl(item, videoId) {
+  const direct = typeof item?.default_image === "string" ? item.default_image : "";
+  if (/^https?:\/\//.test(direct)) return direct;
+  const embedded = direct.match(/\/vi\/([\w-]{11})\//);
+  const id = videoId || (embedded && embedded[1]) || null;
+  return id ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : null;
+}
+
+/**
+ * Caminho relativo da miniatura que **o próprio desktop serve** (blob no
+ * IndexedDB). O cliente torna absoluto com host/token — o renderer não conhece
+ * o endereço público do servidor.
+ */
+function remoteImagePath(kind, id) {
+  const value = typeof id === "string" ? id.trim() : "";
+  if (!value) return null;
+  return `/api/online-videos/image?kind=${kind}&id=${encodeURIComponent(value)}`;
+}
+
+/**
+ * Resolve o canal dono de um vídeo do catálogo: vídeo → playlist → canal.
+ *
+ * Devolve uma função com Mapas montados uma vez — o catálogo tem milhares de
+ * itens e um `find` por vídeo ficaria quadrático na busca.
+ */
+function channelTitleResolver(catalog) {
+  const playlists = new Map(catalog.playlists.map((playlist) => [playlist.playlist_id, playlist]));
+  const channels = new Map(catalog.channels.map((channel) => [channel.channel_id, channel]));
+  return (video) => {
+    const playlist = playlists.get(video.playlist_id);
+    const channel = playlist && channels.get(playlist.channel_id);
+    const title = channel && channel.title;
+    return typeof title === "string" && title ? title : null;
+  };
+}
+
+/** Lê uma tabela do IndexedDB sem derrubar o comando se a tabela não existir. */
+async function safeIdbAll(table) {
+  try {
+    const rows = await $idb.getAll(table);
+    return Array.isArray(rows) ? rows : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Toca um som no player single do desktop (funciona sem o módulo aberto).
+ *
+ * O caminho vem de `resolveBackgroundSoundPath`: **URL nova a cada toque** —
+ * o player revoga a URL ativa em `playFile`/`stop`/`cleanup`, então cache de
+ * blob URL causava replay de URL revogada ("não funciona mais" na segunda
+ * vez). Ver KDoc do helper.
+ */
+function playBackgroundSound(bg, file) {
+  const path = resolveBackgroundSoundPath(file);
+  // Registro sem bytes e sem path (corrompido): tocar com src vazio setaria
+  // `currentFile` mesmo com o play falhando e os próximos toques virariam
+  // resume() contra src morto — a mesma armadilha do bug da URL revogada.
+  if (!path) {
+    console.warn("[http:background-sound] som sem caminho reproduzível:", file?.id);
+    return;
+  }
+  bg.playFile({ ...file, path }, bg.fadeInMs.value);
+}
+
+/** Catálogo remoto de vídeos online (já cacheado pelo desktop em camadas). */
+async function loadOnlineVideoCatalog(lang) {
+  const data = await Database.get(`${lang}_collections_online`, { silent: true });
+  return {
+    channels: Array.isArray(data?.channels) ? data.channels : [],
+    playlists: Array.isArray(data?.playlists) ? data.playlists : [],
+    videos: Array.isArray(data?.videos) ? data.videos : [],
+  };
+}
+
+/** Meus Vídeos Online (IndexedDB local) + as categorias que fazem os álbuns. */
+async function loadMyOnlineVideos() {
+  const [videos, categories] = await Promise.all([
+    $idb.getAll(DB_TABLE.CUSTOM_ONLINE_VIDEOS),
+    $idb.getAll(DB_TABLE.CUSTOM_ONLINE_VIDEOS_CATEGORIES),
+  ]);
+  return {
+    videos: Array.isArray(videos) ? videos : [],
+    categories: Array.isArray(categories) ? categories : [],
+  };
+}
+
+/**
+ * Álbuns dos dois acervos: uma playlist do catálogo e uma categoria (ou "sem
+ * categoria") dos Meus Vídeos. Catálogo primeiro, sem título por último.
+ */
+function buildOnlineVideoAlbums(catalog, mine) {
+  const clip = (value, max) => String(value ?? "").slice(0, max);
+  const channelTitles = new Map(
+    catalog.channels.map((channel) => [channel.channel_id, channel.title])
+  );
+
+  const perPlaylist = new Map();
+  for (const video of catalog.videos) {
+    const key = video.playlist_id;
+    perPlaylist.set(key, (perPlaylist.get(key) || 0) + 1);
+  }
+
+  const albums = [];
+  for (const playlist of catalog.playlists) {
+    albums.push({
+      id: ONLINE_ALBUM_PREFIX + clip(playlist.playlist_id, 256),
+      title: clip(playlist.title || playlist.playlist_id, 1_000),
+      subtitle: channelTitles.has(playlist.channel_id)
+        ? clip(channelTitles.get(playlist.channel_id), 1_000)
+        : null,
+      count: perPlaylist.get(playlist.playlist_id) || 0,
+      source: "online",
+      image: catalogImageUrl(playlist),
+    });
+  }
+
+  const perCategory = new Map();
+  for (const video of mine.videos) {
+    const key = video.categoryId || "";
+    perCategory.set(key, (perCategory.get(key) || 0) + 1);
+  }
+  const categoriesById = new Map(mine.categories.map((category) => [category.id, category]));
+  for (const [categoryId, count] of perCategory) {
+    const category = categoriesById.get(categoryId);
+    albums.push({
+      id: CUSTOM_ALBUM_PREFIX + clip(categoryId, 256),
+      // Sem categoria → null: cada cliente rotula com o seu idioma.
+      title: categoryId ? clip(category?.name, 1_000) : null,
+      subtitle: null,
+      count,
+      source: "custom",
+      // Toda categoria registrada tem tile (ícone tabler rasterizado ou a
+      // imagem enviada pelo usuário) — o renderer monta em `?action=image`.
+      image: categoryId && category ? remoteImagePath("category", category.id) : null,
+    });
+  }
+
+  const sourceOrder = { online: 0, custom: 1 };
+  albums.sort(
+    (a, b) =>
+      sourceOrder[a.source] - sourceOrder[b.source] ||
+      (a.title ? 0 : 1) - (b.title ? 0 : 1) ||
+      String(a.title || "").localeCompare(String(b.title || ""))
+  );
+  return albums;
+}
+
+/** Vídeos de um álbum (`online:<playlist>` ou `custom:<categoria>`). */
+function videosOfAlbum(catalog, mine, albumId, clip) {
+  if (albumId.startsWith(ONLINE_ALBUM_PREFIX)) {
+    const playlistId = albumId.slice(ONLINE_ALBUM_PREFIX.length);
+    const channelOf = channelTitleResolver(catalog);
+    return catalog.videos
+      .filter((video) => video.playlist_id === playlistId)
+      .sort((a, b) => (a.sequence || 0) - (b.sequence || 0))
+      .map((video) => ({
+        id: clip(video.video_id, 256),
+        title: clip(video.title || video.video_id, 1_000),
+        url: `https://www.youtube.com/watch?v=${video.video_id}`,
+        source: "online",
+        image: catalogImageUrl(video, video.video_id),
+        channel: channelOf(video),
+      }));
+  }
+
+  if (albumId.startsWith(CUSTOM_ALBUM_PREFIX)) {
+    const categoryId = albumId.slice(CUSTOM_ALBUM_PREFIX.length);
+    return mine.videos
+      .filter((video) => (video.categoryId || "") === categoryId)
+      .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")))
+      .map((video) => ({
+        id: clip(video.id, 256),
+        title: clip(video.name || video.url, 1_000),
+        url: clip(video.url, 2_048),
+        source: "custom",
+        image: remoteImagePath("video", video.id),
+        // Meus Vídeos não têm canal — a linha Some no card.
+        channel: null,
+      }));
+  }
+
+  return [];
+}
+
+/** Busca nos DOIS acervos, deduplicando por URL (o do usuário vence). */
+function searchOnlineVideos(catalog, mine, q, clip) {
+  const needle = q.toLocaleLowerCase();
+  const matches = (value) =>
+    String(value ?? "")
+      .toLocaleLowerCase()
+      .includes(needle);
+
+  const merged = [];
+  const seen = new Set();
+  for (const video of mine.videos) {
+    const url = clip(video.url, 2_048);
+    if (!url || seen.has(url) || !matches(video.name || video.url)) continue;
+    seen.add(url);
+    merged.push({
+      id: clip(video.id, 256),
+      title: clip(video.name || url, 1_000),
+      url,
+      source: "custom",
+      image: remoteImagePath("video", video.id),
+      // Meus Vídeos não têm canal — a linha Some no card.
+      channel: null,
+    });
+  }
+  const channelOf = channelTitleResolver(catalog);
+  for (const video of catalog.videos) {
+    const url = `https://www.youtube.com/watch?v=${video.video_id}`;
+    if (seen.has(url) || !matches(video.title)) continue;
+    seen.add(url);
+    merged.push({
+      id: clip(video.video_id, 256),
+      title: clip(video.title || video.video_id, 1_000),
+      url,
+      source: "online",
+      image: catalogImageUrl(video, video.video_id),
+      channel: channelOf(video),
+    });
+  }
+
+  merged.sort((a, b) => a.title.localeCompare(b.title));
+  return merged;
 }
 
 /**
@@ -432,6 +684,23 @@ function _mediaIsActive() {
   return AppData.get("modules.media.show", false) || AppData.get("modules.media.minimized", false);
 }
 
+/**
+ * Há um ARQUIVO no telão (imagem, PDF, vídeo local)?
+ *
+ * `projectFile` grava o payload em `LJ_FILE_PROJECTION` e o remove no
+ * fechamento — é a mesma fonte que a janela de projeção usa para retomar a
+ * página. Sem isto, projetar um PDF pela aba Canva deixava as setas mudas:
+ * `modules.media.show` só liga quando a música abre, e um PDF projetado sozinho
+ * não entra nesse estado.
+ */
+function _fileProjectionIsActive() {
+  try {
+    return Boolean(localStorage.getItem(KEYS.PROJECTION.LJ_FILE_PROJECTION));
+  } catch {
+    return false;
+  }
+}
+
 /** Retorna o composable singleton do shell (com openCommandPalette / openHotkeysCheatsheet). */
 function _shell() {
   return useShell();
@@ -540,9 +809,132 @@ $storage.hydrate().then(async () => {
           );
         }
         Telemetry.track("presentation_remote_command_rejected", { action, reason });
+        // No terminal da máquina do operador. Sem isto, "o comando chega no
+        // servidor e não acontece" é indistinguível de "chega e é aplicado":
+        // o POST já respondeu 200 antes do renderer decidir, e a telemetria
+        // só existe para quem tem acesso a ela.
+        console.warn("[projection] comando remoto descartado", {
+          action,
+          reason,
+          sessionEnviada: session ?? "(nenhuma)",
+          sessaoAtual: current?.sessionId ?? "(nenhuma)",
+          musicaAtiva: !!current?.active,
+        });
       }
       return false;
     }
+    /**
+     * Vídeos Online do controle remoto: lê os DOIS acervos e projeta URLs.
+     *
+     * Consulta (`albums`/`videos`/`search`) compõe o catálogo remoto cacheado
+     * (`{lang}_collections_online` → canais/playlists/vídeos) com os Meus
+     * Vídeos do IndexedDB — mesma composição que a liturgia usa em
+     * `useLiturgyItems.loadVideosList`. Comando (`play`/close) projeta/encerra.
+     *
+     * Só responde quando veio `requestId` (GET); `play`/`close` chegam por
+     * `safeSend` e o POST já respondeu `200`.
+     */
+    async function handleOnlineVideosRequest(data, action) {
+      const respond = (payload) => {
+        if (data?.requestId && Platform.httpServer?.respond) {
+          Platform.httpServer.respond(data.requestId, payload);
+        }
+      };
+      const clip = (value, max) => String(value ?? "").slice(0, max);
+
+      try {
+        if (action === "play") {
+          const videoId = typeof data.videoId === "string" ? data.videoId : "";
+          if (!/^[A-Za-z0-9_-]{11}$/.test(videoId)) return;
+          const embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&controls=0`;
+          const ok = await Media.openYouTube(embedUrl, clip(data.title, 500) || embedUrl);
+          UserData.set(KEYS.MODULES.ONLINE_VIDEOS.IS_PROJECTING, ok !== false);
+          return;
+        }
+
+        if (action === "close") {
+          await Media.close(true);
+          UserData.set(KEYS.MODULES.ONLINE_VIDEOS.IS_PROJECTING, false);
+          return;
+        }
+
+        // Miniatura em binário: blob do IDB (Meus Vídeos) ou ícone de imagem
+        // da categoria. `data: null` faz a rota responder 404 e o card fica
+        // sem thumb — nada de base64 dentro das listas.
+        if (action === "image") {
+          const kind = data.kind === "category" ? "category" : "video";
+          const id = String(data.id || "").slice(0, 256);
+          if (!id) {
+            respond({ status: "ok", mime: "", data: null });
+            return;
+          }
+
+          if (kind === "video") {
+            const thumb = await $idb.get(DB_TABLE.CUSTOM_ONLINE_VIDEOS_THUMBNAILS, id);
+            const blob = thumb && thumb.blob;
+            const isBytes = blob instanceof ArrayBuffer || ArrayBuffer.isView(blob);
+            respond({
+              status: "ok",
+              mime: (thumb && thumb.mime) || "image/jpeg",
+              data: isBytes ? blob : null,
+            });
+            return;
+          }
+
+          const category = await $idb.get(DB_TABLE.CUSTOM_ONLINE_VIDEOS_CATEGORIES, id);
+          if (!category) {
+            respond({ status: "ok", mime: "", data: null });
+            return;
+          }
+          // Tile pronto (cor da categoria + ícone/imagem centralizado): os
+          // clientes não têm o módulo de ícones tabler do desktop.
+          const tile = await renderCategoryTile({
+            icon: category.icon,
+            color: category.color,
+            iconType: category.iconType,
+            iconMime: category.iconMime,
+            iconData: category.iconData,
+          });
+          respond(
+            tile
+              ? { status: "ok", mime: "image/png", data: tile }
+              : { status: "ok", mime: "", data: null }
+          );
+          return;
+        }
+
+        if (action !== "albums" && action !== "videos" && action !== "search") return;
+
+        const lang = data.lang === "es" ? "es" : "pt";
+        const catalog = await loadOnlineVideoCatalog(lang);
+        const mine = await loadMyOnlineVideos();
+
+        if (action === "albums") {
+          respond({
+            status: "ok",
+            albums: buildOnlineVideoAlbums(catalog, mine).slice(0, ONLINE_VIDEOS_MAX_RESULTS),
+          });
+          return;
+        }
+
+        const q = typeof data.q === "string" ? data.q.trim() : "";
+        if (action === "search") {
+          const videos = q.length >= 2 ? searchOnlineVideos(catalog, mine, q, clip) : [];
+          respond({ status: "ok", videos: videos.slice(0, ONLINE_VIDEOS_MAX_RESULTS) });
+          return;
+        }
+
+        const album = typeof data.album === "string" ? data.album : "";
+        respond({
+          status: "ok",
+          videos: videosOfAlbum(catalog, mine, album, clip).slice(0, ONLINE_VIDEOS_MAX_RESULTS),
+        });
+      } catch (error) {
+        console.warn("[http:online-videos] falha:", error?.message || error);
+        if (data?.requestId) respond(null);
+      }
+    }
+
     Platform.onHttpEvent(async (eventType, data) => {
       const action = data?.action;
       const bibleRequest =
@@ -600,7 +992,8 @@ $storage.hydrate().then(async () => {
               break;
             }
             case "liturgy-execute": {
-              const litItem = Liturgy.get(data.id);
+              // Dia que o cliente exibiu → hoje → dia ativo (ver getFromCommand).
+              const litItem = Liturgy.getFromCommand(data.id, data.day);
               if (!litItem) {
                 console.warn("[http] liturgy-execute: item não encontrado", data.id);
                 break;
@@ -742,7 +1135,34 @@ $storage.hydrate().then(async () => {
                   }
                   case "site": {
                     const url = Liturgy.validateUrl(litItem.url);
-                    window.open(url, "_blank", "noopener,noreferrer");
+                    /*
+                     * Mesmo caminho do módulo: janela de projeção do app, não
+                     * o navegador do sistema — o site aparece no telão com o
+                     * monitor preferido e sem herdar o preload do app.
+                     * "Link no navegador" (opção de vídeo) continua prometendo
+                     * o navegador, para os dois caminhos valerem a mesma coisa.
+                     */
+                    if (
+                      youtubeVideoId(url) &&
+                      UserData.get(KEYS.OPTIONS.YOUTUBE_ACTION, "video") === "link"
+                    ) {
+                      window.open(url, "_blank", "noopener,noreferrer");
+                      break;
+                    }
+                    /*
+                     * Exclusão mútua: só um item no telão.
+                     *
+                     * `close(true)` faz o trabalho síncrono — para o áudio e zera
+                     * o estado — mas só ENFILEIRA o fechamento das janelas, na
+                     * fila interna de `_stageWindowTransition`. A espera tem que
+                     * ser da MESMA fila: chamar `closeProjectionWindows`
+                     * diretamente cria uma espera paralela, e a ação enfileirada
+                     * sobrevive para rodar depois da URL já ter aberto — aí fecha
+                     * a janela que acabou de entrar e as teclas voltam a não sair.
+                     */
+                    await Media.close(true);
+                    await Media.closeProjectionStage();
+                    await ProjectionWindows.openSiteWindow(url);
                     break;
                   }
                   case "itens-agendados": {
@@ -1114,12 +1534,51 @@ $storage.hydrate().then(async () => {
               break;
           }
           break;
+        case "http:custom-music": {
+          // Acervo pessoal mora no IndexedDB — só o renderer lê. A parte
+          // pessoal é **adição**: qualquer falha aqui responde lista vazia e a
+          // busca oficial do main continua de pé (nada de TIMEOUT mudo).
+          try {
+            const songs = await loadCustomMusicCatalog();
+            const requestId = data?.requestId;
+            if (requestId && Platform.httpServer?.respond) {
+              const sent = Platform.httpServer.respond(requestId, {
+                status: "ok",
+                songs: songs.map((song) => ({
+                  id_music: song.id_music,
+                  name: song.name,
+                  albums_names: (song.custom_collection_names || []).join(", "),
+                  custom_song_id: song.custom_song_id || null,
+                  has_instrumental_music: song.has_instrumental_music ? 1 : 0,
+                  has_audio: song.has_audio ? 1 : 0,
+                })),
+              });
+              if (!sent) {
+                // O preload recusou o requestId (prefixo fora do regex) — sem
+                // isto o sintoma é só um TIMEOUT na rota, sem pista de onde.
+                console.warn("[http:custom-music] resposta descartada pelo preload", requestId);
+              }
+            }
+          } catch (error) {
+            console.warn("[http:custom-music] falha ao montar a lista:", error?.message || error);
+            if (data?.requestId && Platform.httpServer?.respond) {
+              Platform.httpServer.respond(data.requestId, { status: "ok", songs: [] });
+            }
+          }
+          break;
+        }
         case "http:open-song": {
           console.log("[http:open-song] Abrindo música:", data);
-          await openSongByMode(data.id_music, data.mode);
+          if (data.custom_song_id) {
+            // Música personalizada: o `id` do corpo é negativo (só para listas)
+            // — a execução é sempre pelo UUID (caminho único do desktop).
+            await openCustomMusic(data.custom_song_id, data.mode);
+          } else {
+            await openSongByMode(data.id_music, data.mode);
+          }
 
           // Música escolhida na hora: só marca o item depois da escolha.
-          const litItem = data.id ? Liturgy.get(data.id) : null;
+          const litItem = data.id ? Liturgy.getFromCommand(data.id, data.day) : null;
           if (
             litItem &&
             litItem.tipo !== "bloco" &&
@@ -1127,6 +1586,131 @@ $storage.hydrate().then(async () => {
             !Liturgy.isCheckedToday(litItem)
           ) {
             Liturgy.toggleChecked(litItem.id);
+          }
+          break;
+        }
+        case "http:online-videos":
+          await handleOnlineVideosRequest(data, action);
+          break;
+        case "http:background-sound": {
+          // Som de fundo: o player é single (useBackgroundSound), então o
+          // controle remoto funciona sem o módulo aberto.
+          const bg = useBackgroundSound();
+          if (data.action === "state") {
+            const requestId = data?.requestId;
+            if (requestId && Platform.httpServer?.respond) {
+              const [files, categories] = await Promise.all([
+                safeIdbAll(DB_TABLE.BACKGROUND_SOUND_LIBRARY),
+                safeIdbAll(DB_TABLE.BACKGROUND_SOUND_CATEGORY),
+              ]);
+              const current = bg.currentFile.value;
+              const sent = Platform.httpServer.respond(requestId, {
+                status: "ok",
+                playing: bg.isPlaying.value,
+                volume: Math.round(bg.volume.value),
+                currentId: current && current.id != null ? String(current.id) : null,
+                // Clip no mesmo teto do validador (isBackgroundSoundStateResponse):
+                // sem isto, um nome/id longo demais virava 502 Invalid Payload.
+                files: files.map((file) => ({
+                  id: String(file.id).slice(0, 256),
+                  name: String(file.name || file.fileName || "").slice(0, 500),
+                  fileName: typeof file.fileName === "string" ? file.fileName : null,
+                  categoryId: typeof file.categoryId === "string" ? file.categoryId : null,
+                })),
+                categories: categories.map((category) => ({
+                  id: String(category.id).slice(0, 256),
+                  name: String(category.name || "").slice(0, 200),
+                  color: typeof category.color === "string" ? category.color : null,
+                })),
+              });
+              if (!sent) {
+                console.warn("[http:background-sound] resposta descartada pelo preload", requestId);
+              }
+            }
+            break;
+          }
+          // play-default é o único com resposta (idempotente / sem padrão);
+          // nos demais `requestId` é indefinido e o respond vira no-op.
+          const requestId = data?.requestId;
+          const respond = (payload) => {
+            if (requestId && Platform.httpServer?.respond) {
+              const sent = Platform.httpServer.respond(requestId, payload);
+              if (!sent) {
+                console.warn("[http:background-sound] resposta descartada pelo preload", requestId);
+              }
+            }
+          };
+          try {
+            if (data.action === "play") {
+              const files = await safeIdbAll(DB_TABLE.BACKGROUND_SOUND_LIBRARY);
+              const file = files.find((candidate) => String(candidate.id) === String(data.id));
+              if (file) playBackgroundSound(bg, file);
+              else console.warn("[http:background-sound] som não encontrado:", data.id);
+            } else if (data.action === "pause") {
+              bg.pause();
+            } else if (data.action === "resume") {
+              bg.resume();
+            } else if (data.action === "stop") {
+              bg.stop(0);
+            } else if (data.action === "play-default") {
+              const defaultId = String(
+                UserData.get(KEYS.MODULES.BACKGROUND_SOUND.DEFAULT_ID, "") || ""
+              );
+              const record = defaultId
+                ? await $idb.get(DB_TABLE.BACKGROUND_SOUND_LIBRARY, defaultId)
+                : null;
+              if (!record) {
+                respond({ status: "error", error: "Nenhum som padrão configurado" });
+              } else if (
+                bg.isPlaying.value &&
+                String(bg.currentFile.value?.id) === String(record.id)
+              ) {
+                // Idempotente: o padrão já está tocando — não reinicia.
+                respond({ status: "ok" });
+              } else if (
+                bg.currentFile.value &&
+                String(bg.currentFile.value.id) === String(record.id)
+              ) {
+                // Pausado no próprio padrão: continua de onde parou.
+                bg.resume();
+                respond({ status: "ok" });
+              } else {
+                playBackgroundSound(bg, record);
+                respond({ status: "ok" });
+              }
+            }
+          } catch (error) {
+            console.warn("[http:background-sound] comando falhou:", error?.message || error);
+            respond({ status: "error", error: "Falha ao iniciar o som de fundo" });
+          }
+          break;
+        }
+        case "http:volume": {
+          // Volume "geral": os dois players (projeção + som de fundo).
+          try {
+            const atual = Number(AppData.get(KEYS.MODULES.MEDIA.CONFIG.VOLUME, 50));
+            const base = Number.isFinite(atual) ? atual : 50;
+            const step = Number.isFinite(Number(data.step)) ? Number(data.step) : 1;
+            let next;
+            if (data.action === "up") next = Math.min(100, base + step);
+            else if (data.action === "down") next = Math.max(0, base - step);
+            else next = Math.max(0, Math.min(100, Number(data.value)));
+            // Sem o round, um base fracionário (slider sem step, valor vindo do
+            // YouTube) devolveria 51.5 — o validador exige inteiro e a rota
+            // responderia 502 mesmo com o volume já aplicado.
+            next = Math.round(next);
+            Media.setVolume(next);
+            useBackgroundSound().setVolume(next);
+            const requestId = data?.requestId;
+            if (requestId && Platform.httpServer?.respond) {
+              const sent = Platform.httpServer.respond(requestId, { status: "ok", value: next });
+              if (!sent) console.warn("[http:volume] resposta descartada pelo preload", requestId);
+            }
+          } catch (error) {
+            console.warn("[http:volume] falha:", error?.message || error);
+            if (data?.requestId && Platform.httpServer?.respond) {
+              Platform.httpServer.respond(data.requestId, null);
+            }
           }
           break;
         }
@@ -1192,8 +1776,6 @@ $storage.hydrate().then(async () => {
       }
     });
 
-    listenForVideoStateRequests(Broadcast, Media);
-
     // Pedidos genéricos de slide/Libras continuam usando o último estado.
     // Bíblia e módulos respondem por suas autoridades acima, inclusive no Web/PWA.
     Broadcast.listen((msg) => {
@@ -1214,6 +1796,10 @@ $storage.hydrate().then(async () => {
       }
     });
   }
+
+  // Fora do bloco do desktop: no navegador a janela de projeção também abre no meio do vídeo
+  // e pede a posição atual; sem resposta ela recomeçava do zero.
+  if (!isAuxiliaryRenderer) listenForVideoStateRequests(Broadcast, Media);
 
   createI18nInstance(UserData.get(KEYS.OPTIONS.LANGUAGE)).then(async (i18n) => {
     app.use(i18n);
@@ -1243,6 +1829,7 @@ $storage.hydrate().then(async () => {
     // Liga o diagnóstico de conexão antes de montar: as telas de projeção são
     // rotas deste mesmo app e precisam do estado desde o primeiro quadro.
     if (!isAuxiliaryRenderer) useConnectivity();
+    watchStaleVersion();
 
     app.mount("#app");
     _bootStage("mounted");
@@ -1329,7 +1916,58 @@ $storage.hydrate().then(async () => {
     // ---------------------------------------------------------------------------
     // M2 — Registrar atalhos de teclado in-window após o app montar.
     // ---------------------------------------------------------------------------
-    if (!isAuxiliaryRenderer) Hotkeys.init();
+    if (!isAuxiliaryRenderer) {
+      /*
+       * Encaminha as teclas de rolagem para a janela de URL enquanto ela estiver
+       * no ar.
+       *
+       * É um listener próprio e não um atalho do `Hotkeys` por dois motivos:
+       * o dispatcher só despacha UM handler por combo ("último registrado vence"
+       * e faz `break`), então não daria para registrar as setas para o site sem
+       * roubar as da mídia; e o `capture` precisa decidir ANTES, porque um IPC
+       * assíncrono responderia depois de o Hotkeys já ter consumido a tecla.
+       * Por isso a ordem aqui importa: este listener vai antes do `init`.
+       */
+      window.addEventListener(
+        "keydown",
+        (e) => {
+          const key = ProjectionWindows.takeSiteKey(e);
+          /*
+           * `null` é "não é minha": o evento segue intacto para mídia, bíblia
+           * ou navegador, que é o comportamento de sempre.
+           */
+          if (!key) return;
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          void ProjectionWindows.forwardSiteKey(key);
+        },
+        { capture: true }
+      );
+      Hotkeys.init();
+    }
+
+    // No navegador/PWA a tela do tablet apagaria no meio de um slide parado; o
+    // Electron resolve isso no main (`powerBlocker`). Aqui, a janela principal:
+    // mídia em cena ou tela cheia. As janelas de projeção estão em
+    // main-auxiliary.js.
+    if (!Platform.isDesktop) {
+      watchEffect(() => {
+        const live =
+          !!AppData.get(KEYS.MODULES.MEDIA.SHOW) || !!AppData.get(KEYS.MODULES.MEDIA.IS_PLAYING);
+        if (live) WakeLock.hold("presentation");
+        else WakeLock.release("presentation");
+      });
+      document.addEventListener("fullscreenchange", () => {
+        if (document.fullscreenElement) WakeLock.hold("fullscreen");
+        else WakeLock.release("fullscreen");
+      });
+
+      // Liturgias, playlists e preferências também ficam só neste navegador.
+      // Só o app instalado pede: o Chrome costuma conceder a ele, e o Firefox
+      // abriria um aviso de permissão no meio do boot.
+      if (window.matchMedia?.("(display-mode: standalone)").matches) void requestPersistence();
+      initAppInstall();
+    }
 
     // Observabilidade de uso e diagnóstico. Não bloqueia o boot e é no-op em
     // dev ou quando o usuário desliga a opção nas Opções.
@@ -1347,6 +1985,24 @@ $storage.hydrate().then(async () => {
       const file = files[files.length - 1];
       if (file) void openSlja(Path.local(file), { origin: "system" });
     });
+
+    // Arrastar um .slja para a janela principal o projeta (navegador e Electron).
+    installFileDrop();
+
+    // PWA instalado no Chrome/ChromeOS: "Abrir com" um .slja entrega o arquivo
+    // pela launchQueue (manifest.file_handlers). No Android o Chrome não oferece
+    // isso; lá o caminho é o botão de Importar/Exportar.
+    if (!Platform.isDesktop && "launchQueue" in window) {
+      window.launchQueue.setConsumer(async (params) => {
+        const handle = params.files?.[params.files.length - 1];
+        if (!handle) return;
+        try {
+          void openSlja(await handle.getFile(), { origin: "system" });
+        } catch (e) {
+          console.warn("[launchQueue] não foi possível ler o arquivo:", e);
+        }
+      });
+    }
 
     // --- Geral ---
 
@@ -1521,28 +2177,49 @@ $storage.hydrate().then(async () => {
           }
         };
 
+        // Com um módulo de operação ao vivo aberto (manifesto: `shell.immediateEscape`)
+        // o Esc é a saída de emergência: tira da
+        // tela na hora, sem diálogo — um erro no telão não pode esperar o
+        // operador achar o "Sim". E as janelas ficam: fechá-las é o "Parar
+        // apresentação". Fora dele, vale a confirmação de sempre.
+        const immediate = anyOpenModuleWants("immediateEscape");
+        const stop = (confirmKey, action) => {
+          if (immediate) action();
+          else $alert.yesno(confirmKey, (btn) => btn === "yes" && action());
+        };
+        Broadcast.send(BROADCAST_TYPE.RETURN_OVERRIDE, { active: false });
+
+        /*
+         * URL projetada: só um item no telão, então é ela que o ESC encerra,
+         * e com a mesma confirmação que a projeção de slides tem.
+         */
+        if (ProjectionWindows.isSiteProjectionActive()) {
+          stop(
+            "modules.media.alerts.close_projection",
+            () => void ProjectionWindows.closeSiteWindow()
+          );
+          return;
+        }
+
         // Projeção de anúncios
         const fp = useFileProjection();
+        const lastFile = Broadcast.getLastPayload(BROADCAST_TYPE.FILE_PROJECTION);
         if (fp.isProjecting.value && fp.currentType.value === "announcements") {
           fp.stopProjection();
           Projection.close("announcements");
         }
-        // Projeção de arquivos de imagem e vídeo
-        else if (Broadcast.getLastPayload(BROADCAST_TYPE.FILE_PROJECTION)) {
-          $alert.yesno("modules.media.alerts.close_projection", (btn) => {
-            if (btn === "yes") {
-              Broadcast.send(BROADCAST_TYPE.FILE_PROJECTION, { action: "clear" });
-              Media.close(true);
-              closeEverythingElse();
-            }
+        // Projeção de arquivos de imagem e vídeo. O "clear" também fica no
+        // cache — não é arquivo no ar.
+        else if (lastFile && lastFile.action !== "clear") {
+          stop("modules.media.alerts.close_projection", () => {
+            Broadcast.send(BROADCAST_TYPE.FILE_PROJECTION, { action: "clear" });
+            Media.close(true, false, immediate);
+            closeEverythingElse();
           });
         } else if (_mediaIsActive()) {
-          // Música/Slides (com confirmação se ativa)
-          $alert.yesno("modules.media.alerts.close", (btn) => {
-            if (btn === "yes") {
-              Media.close(true);
-              closeEverythingElse();
-            }
+          stop("modules.media.alerts.close", () => {
+            Media.close(true, false, immediate);
+            closeEverythingElse();
           });
         } else {
           closeEverythingElse();
@@ -1664,22 +2341,30 @@ $storage.hydrate().then(async () => {
 
     // --- Navegação de slides (contexto: media ativa) ---
 
-    const _ifMedia = (fn) => (e) => {
-      if (_mediaIsActive()) {
-        // preventDefault bloqueia ação default do browser (back/forward, scroll).
-        // stopImmediatePropagation impede que a trava de foco do diálogo veja
-        // o evento e mova o foco em vez de navegar slides: com a janela do
-        // media aberta, as setas mexiam o foco da lista em vez de trocar de
-        // slide.
-        if (e && typeof e.preventDefault === "function") e.preventDefault();
-        if (e && typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
-        fn();
-      }
-    };
+    const _ifMedia =
+      (fn, opts = {}) =>
+      (e) => {
+        /*
+         * `arquivo: true` estende o gate às teclas de PÁGINA: o telão pode estar
+         * mostrando um PDF projetado fora da playlist (aba Canva), e esse caso
+         * não liga `modules.media.show` — sem a extensão as setas morriam em
+         * silêncio enquanto a música não estivesse aberta.
+         */
+        if (_mediaIsActive() || (opts.arquivo === true && _fileProjectionIsActive())) {
+          // preventDefault bloqueia ação default do browser (back/forward, scroll).
+          // stopImmediatePropagation impede que a trava de foco do diálogo veja
+          // o evento e mova o foco em vez de navegar slides: com a janela do
+          // media aberta, as setas mexiam o foco da lista em vez de trocar de
+          // slide.
+          if (e && typeof e.preventDefault === "function") e.preventDefault();
+          if (e && typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
+          fn();
+        }
+      };
 
     Hotkeys.register(
       "Ctrl+ArrowUp",
-      _ifMedia(() => Media.prevSlide()),
+      _ifMedia(() => Media.prevSlide(), { arquivo: true }),
       {
         context: "media",
         description: "hotkeys.ctrl_up",
@@ -1689,7 +2374,7 @@ $storage.hydrate().then(async () => {
     );
     Hotkeys.register(
       "Ctrl+ArrowDown",
-      _ifMedia(() => Media.nextSlide()),
+      _ifMedia(() => Media.nextSlide(), { arquivo: true }),
       {
         context: "media",
         description: "hotkeys.ctrl_down",
@@ -1699,7 +2384,7 @@ $storage.hydrate().then(async () => {
     );
     Hotkeys.register(
       "Ctrl+PageUp",
-      _ifMedia(() => Media.prevSlide()),
+      _ifMedia(() => Media.prevSlide(), { arquivo: true }),
       {
         context: "media",
         description: "hotkeys.ctrl_pageup",
@@ -1709,7 +2394,7 @@ $storage.hydrate().then(async () => {
     );
     Hotkeys.register(
       "Ctrl+PageDown",
-      _ifMedia(() => Media.nextSlide()),
+      _ifMedia(() => Media.nextSlide(), { arquivo: true }),
       {
         context: "media",
         description: "hotkeys.ctrl_pagedown",
@@ -1741,8 +2426,9 @@ $storage.hydrate().then(async () => {
     // Setas puras ← / → / ↑ / ↓ navegam slides quando media está ativa
     // (replica FormKeyUp Delphi: setas funcionam em qualquer janela com fMusica visível).
     // PageUp/PageDown também navegam slides puros.
-    const _prevSlide = _ifMedia(() => Media.prevSlide());
-    const _nextSlide = _ifMedia(() => Media.nextSlide());
+    /* Arrows + PageUp/PageDown: valem também com um arquivo no telão. */
+    const _prevSlide = _ifMedia(() => Media.prevSlide(), { arquivo: true });
+    const _nextSlide = _ifMedia(() => Media.nextSlide(), { arquivo: true });
     // preventDefault: false aqui é importante — Hotkeys.js só executa o handler
     // (não chama preventDefault automático). _ifMedia decide: se media está
     // ativa, chama preventDefault + stopImmediatePropagation; senão, libera

@@ -34,9 +34,32 @@ const props = withDefaults(
 const copied = ref(false);
 let timer: ReturnType<typeof setTimeout> | null = null;
 
-function handleCopy() {
+/**
+ * Copia e diz se deu certo.
+ *
+ * `navigator.clipboard` só existe em contexto seguro (https ou localhost). No
+ * desktop isso é sempre verdade — `louvorja://` é privilegiado com `secure` e
+ * o dev roda em localhost. Sem a API (PWA servida em http puro), não copia e
+ * **não** mostra "Copiado": fingir seria pior do que não copiar.
+ *
+ * Por que não o comando de cópia deprecada do DOM, que habitou aqui: a
+ * alternativa moderna é justamente `navigator.clipboard`, que já é o caminho
+ * principal. Trocar um TypeError por um aviso de deprecação não resolve nada.
+ */
+async function copiar(): Promise<boolean> {
+  if (!navigator.clipboard?.writeText) return false;
+  try {
+    await navigator.clipboard.writeText(props.value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function handleCopy() {
   if (!props.value) return;
-  navigator.clipboard.writeText(props.value).catch(() => {});
+  /* Sem copiar não se mostra "Copiado" — mentira o feedback. */
+  if (!(await copiar())) return;
   if (timer) clearTimeout(timer);
   copied.value = true;
   timer = setTimeout(() => {

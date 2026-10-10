@@ -1,5 +1,13 @@
 import { useLiturgyI18n, chaveLiturgia } from "../i18n";
-import { agruparPorBloco, prepararAgenda } from "../agenda";
+import {
+  agendaParaPersistir,
+  agruparPorBloco,
+  blocoDaSecao,
+  indiceFimDoBloco,
+  lerHorario,
+  prepararAgenda,
+  reposicionarParaBloco,
+} from "../agenda";
 import { useLiturgyExecution } from "./useLiturgyExecution";
 import { ref, computed, type Ref, type WritableComputedRef } from "vue";
 import $liturgy from "@/helpers/Liturgy";
@@ -21,6 +29,7 @@ import { AUDIO_EXT, VIDEO_EXT } from "@constants/FileTypes";
 import { useMusicCatalog } from "@/composables/useMusicCatalog";
 import { musicTitle } from "@root/config/musicCatalog.mjs";
 import { canLinkOverlay } from "../overlayLink";
+import { horarioDoTitulo } from "../titleTime";
 
 interface VideoItem {
   id: string;
@@ -75,6 +84,7 @@ export const DEFAULT_FORM = (): LiturgyItem => ({
   cor: DEFAULT_COLOR,
   duration: 0,
   time: "",
+  time_mode: "auto",
   dir: "",
   dir_info: "E",
   url: "",
@@ -105,9 +115,9 @@ export function useLiturgyItems(
   const menuOpen = ref(false);
   const overlaySlots = ref<OverlaySlot[]>([]);
   const overlaySlotsLoaded = ref(false);
+  let titleTimeEnabled = false;
 
-  const { executeItem, playMusic, openLyric, openUrl, openFile, isYoutube } =
-    useLiturgyExecution();
+  const { executeItem, playMusic, openLyric, openUrl, openFile, isYoutube } = useLiturgyExecution();
 
   async function loadOverlaySlots(): Promise<void> {
     if (overlaySlotsLoaded.value) return;
@@ -125,7 +135,7 @@ export function useLiturgyItems(
       return prepararAgenda($liturgy.list(activeDay.value));
     },
     set(val: LiturgyItem[]) {
-      $liturgy.set(prepararAgenda(val), activeDay.value);
+      $liturgy.set(agendaParaPersistir(val), activeDay.value);
     },
   });
 
@@ -162,7 +172,11 @@ export function useLiturgyItems(
     const childrenByBloco = new Map<string, LiturgyItem[]>();
     const childIds = new Set<string>();
     for (const item of value) {
-      if (item.tipo !== LiturgyItemTypeEnum.BLOCO && item.blocoId && movedBlocoIds.has(item.blocoId)) {
+      if (
+        item.tipo !== LiturgyItemTypeEnum.BLOCO &&
+        item.blocoId &&
+        movedBlocoIds.has(item.blocoId)
+      ) {
         childIds.add(item.id);
         if (!childrenByBloco.has(item.blocoId)) childrenByBloco.set(item.blocoId, []);
         childrenByBloco.get(item.blocoId)!.push(item);
@@ -219,14 +233,28 @@ export function useLiturgyItems(
   }
 
   const ICON_MAP: Record<string, string> = {
-    mp4: ICONS.MEDIA.VIDEO, webm: ICONS.MEDIA.VIDEO, mkv: ICONS.MEDIA.VIDEO,
-    mov: ICONS.MEDIA.VIDEO, avi: ICONS.MEDIA.VIDEO, m4v: ICONS.MEDIA.VIDEO,
-    mp3: ICONS.MEDIA.AUDIO, wav: ICONS.MEDIA.AUDIO, ogg: ICONS.MEDIA.AUDIO,
-    flac: ICONS.MEDIA.AUDIO, aac: ICONS.MEDIA.AUDIO, m4a: ICONS.MEDIA.AUDIO,
-    opus: ICONS.MEDIA.AUDIO, wma: ICONS.MEDIA.AUDIO,
-    jpg: ICONS.MEDIA.IMAGE, jpeg: ICONS.MEDIA.IMAGE, png: ICONS.MEDIA.IMAGE,
-    webp: ICONS.MEDIA.IMAGE, gif: ICONS.MEDIA.IMAGE, bmp: ICONS.MEDIA.IMAGE,
-    heic: ICONS.MEDIA.IMAGE, heif: ICONS.MEDIA.IMAGE,
+    mp4: ICONS.MEDIA.VIDEO,
+    webm: ICONS.MEDIA.VIDEO,
+    mkv: ICONS.MEDIA.VIDEO,
+    mov: ICONS.MEDIA.VIDEO,
+    avi: ICONS.MEDIA.VIDEO,
+    m4v: ICONS.MEDIA.VIDEO,
+    mp3: ICONS.MEDIA.AUDIO,
+    wav: ICONS.MEDIA.AUDIO,
+    ogg: ICONS.MEDIA.AUDIO,
+    flac: ICONS.MEDIA.AUDIO,
+    aac: ICONS.MEDIA.AUDIO,
+    m4a: ICONS.MEDIA.AUDIO,
+    opus: ICONS.MEDIA.AUDIO,
+    wma: ICONS.MEDIA.AUDIO,
+    jpg: ICONS.MEDIA.IMAGE,
+    jpeg: ICONS.MEDIA.IMAGE,
+    png: ICONS.MEDIA.IMAGE,
+    webp: ICONS.MEDIA.IMAGE,
+    gif: ICONS.MEDIA.IMAGE,
+    bmp: ICONS.MEDIA.IMAGE,
+    heic: ICONS.MEDIA.IMAGE,
+    heif: ICONS.MEDIA.IMAGE,
     pdf: ICONS.UI.FILE,
   };
 
@@ -234,7 +262,9 @@ export function useLiturgyItems(
     if (item.tipo === LiturgyItemTypeEnum.MUSICA && item.escolha)
       return t("placeholders.music_choose");
     if (item.tipo === LiturgyItemTypeEnum.MUSICA) {
-      const music = musicsList.value.find((m) => Number(m.id_music) === Number(item.id_music || item.musica));
+      const music = musicsList.value.find(
+        (m) => Number(m.id_music) === Number(item.id_music || item.musica)
+      );
       if (music) return musicTitle(music, t("data.music_prefix"));
     }
     // ITENS_AGENDADOS: re-resolve dinamicamente contra a data ativa (não snapshot).
@@ -291,15 +321,29 @@ export function useLiturgyItems(
       const toRemove = items.value
         .filter((i) => i.tipo !== LiturgyItemTypeEnum.BLOCO && $liturgy.isCheckedToday(i))
         .map((i) => i.id);
+      $liturgy.set(agendaParaPersistir(items.value), activeDay.value);
       toRemove.forEach((id) => $liturgy.remove(id, activeDay.value));
       items.value = [...items.value];
     });
   }
 
   /* ============== Dialog ============== */
+  function fillTimeFromTitle(): void {
+    if (!titleTimeEnabled || form.value.blocoId) return;
+    form.value.time = horarioDoTitulo(form.value.item);
+    form.value.time_mode = form.value.time ? "manual" : "auto";
+  }
+
   function openItemDialog(index = -1): void {
     editIndex.value = index;
     form.value = index >= 0 ? { ...DEFAULT_FORM(), ...items.value[index] } : DEFAULT_FORM();
+    if (!form.value.blocoId && form.value.time_mode === "auto") form.value.time = "";
+    const original = $liturgy.list(activeDay.value).find((entry) => entry.id === form.value.id);
+    // Abrir preserva também a escolha de deixar Hora vazia. Editar o título
+    // pode sugerir uma nova hora, até o operador tocar no campo Hora.
+    // A inferência é efêmera: abrir um legado nunca modifica os dados.
+    titleTimeEnabled = index < 0 || form.value.time_mode !== "manual";
+    if (original?.time_mode !== "auto") fillTimeFromTitle();
     formErrors.value = DEFAULT_FORM_ERRORS();
     if (form.value.subtipo === "ja" || form.value.subtipo === "div") {
       form.value.subtipo = "sung";
@@ -356,7 +400,7 @@ export function useLiturgyItems(
 
   function onScheduledCategoryChange(): void {
     const c = scheduledCategories.value.find((x) => x.id === form.value.id);
-    if (c) form.value.item = c.nome;
+    if (c) setFormField("item", c.nome);
     // Atualiza a duração com base no item agendado do dia ativo.
     const activeDate = $liturgy.getActiveDate();
     const sched = $liturgy.findScheduledForToday(form.value.id, activeDate);
@@ -369,6 +413,31 @@ export function useLiturgyItems(
     } else {
       form.value.duration = 0;
     }
+  }
+
+  /**
+   * Gravar o item não muda a posição dele, então quem trocou o bloco vai para
+   * depois do último item vinculado ao bloco novo — é assim que a linha do
+   * item volta a entrar no bloco que o operador escolheu. Saiu do bloco: para
+   * depois do último filho do bloco de onde ele saiu, fora do `blocoId`, sem
+   * viajar até o fim da liturgia. Campo intocado não move nada: editar nome
+   * ou duração não embaralha a ordem da liturgia.
+   */
+  function reposicionarAposSalvar(
+    original: LiturgyItem,
+    built: Partial<LiturgyItem>
+  ): LiturgyItem[] | null {
+    const antes = original.blocoId || "";
+    const depois = built.blocoId || "";
+    if (antes === depois) return null;
+
+    const vista = [...items.value];
+    const indice = vista.findIndex((i) => i.id === original.id);
+    if (indice < 0) return null;
+
+    const destino = depois || blocoDaSecao(vista, indice);
+    if (!destino) return null;
+    return reposicionarParaBloco(vista, original.id, destino);
   }
 
   function saveItem(): void {
@@ -387,7 +456,12 @@ export function useLiturgyItems(
       return;
     }
 
-    const built: Partial<LiturgyItem> = { ...f };
+    const hora = lerHorario(f.time);
+    const built: Partial<LiturgyItem> = {
+      ...f,
+      time: f.blocoId ? "" : hora,
+      time_mode: !f.blocoId && hora ? "manual" : "auto",
+    };
     switch (f.tipo) {
       case LiturgyItemTypeEnum.ANOTACAO:
         built.subitem = f.subitem || "";
@@ -433,14 +507,28 @@ export function useLiturgyItems(
         if (arquivo) {
           const ext = arquivo.split(".").pop()?.toLowerCase() || "";
           const ICON_MAP: Record<string, string> = {
-            mp4: ICONS.MEDIA.VIDEO, webm: ICONS.MEDIA.VIDEO, mkv: ICONS.MEDIA.VIDEO,
-            mov: ICONS.MEDIA.VIDEO, avi: ICONS.MEDIA.VIDEO, m4v: ICONS.MEDIA.VIDEO,
-            mp3: ICONS.MEDIA.AUDIO, wav: ICONS.MEDIA.AUDIO, ogg: ICONS.MEDIA.AUDIO,
-            flac: ICONS.MEDIA.AUDIO, aac: ICONS.MEDIA.AUDIO, m4a: ICONS.MEDIA.AUDIO,
-            opus: ICONS.MEDIA.AUDIO, wma: ICONS.MEDIA.AUDIO,
-            jpg: ICONS.MEDIA.IMAGE, jpeg: ICONS.MEDIA.IMAGE, png: ICONS.MEDIA.IMAGE,
-            webp: ICONS.MEDIA.IMAGE, gif: ICONS.MEDIA.IMAGE, bmp: ICONS.MEDIA.IMAGE,
-            heic: ICONS.MEDIA.IMAGE, heif: ICONS.MEDIA.IMAGE,
+            mp4: ICONS.MEDIA.VIDEO,
+            webm: ICONS.MEDIA.VIDEO,
+            mkv: ICONS.MEDIA.VIDEO,
+            mov: ICONS.MEDIA.VIDEO,
+            avi: ICONS.MEDIA.VIDEO,
+            m4v: ICONS.MEDIA.VIDEO,
+            mp3: ICONS.MEDIA.AUDIO,
+            wav: ICONS.MEDIA.AUDIO,
+            ogg: ICONS.MEDIA.AUDIO,
+            flac: ICONS.MEDIA.AUDIO,
+            aac: ICONS.MEDIA.AUDIO,
+            m4a: ICONS.MEDIA.AUDIO,
+            opus: ICONS.MEDIA.AUDIO,
+            wma: ICONS.MEDIA.AUDIO,
+            jpg: ICONS.MEDIA.IMAGE,
+            jpeg: ICONS.MEDIA.IMAGE,
+            png: ICONS.MEDIA.IMAGE,
+            webp: ICONS.MEDIA.IMAGE,
+            gif: ICONS.MEDIA.IMAGE,
+            bmp: ICONS.MEDIA.IMAGE,
+            heic: ICONS.MEDIA.IMAGE,
+            heif: ICONS.MEDIA.IMAGE,
             pdf: ICONS.UI.FILE,
           };
           const icon = ICON_MAP[ext] || ICONS.UI.FILE;
@@ -483,9 +571,10 @@ export function useLiturgyItems(
         const slot = overlaySlots.value.find((s) => s.id === f.overlay_id);
         built.overlay_id = f.overlay_id || "";
         built.overlay_action = f.overlay_action || "activate";
-        built.item = (f.overlay_action === "activate"
-          ? t("overlay.activate")
-          : t("overlay.deactivate")) + ": " + (slot?.name || built.overlay_id);
+        built.item =
+          (f.overlay_action === "activate" ? t("overlay.activate") : t("overlay.deactivate")) +
+          ": " +
+          (slot?.name || built.overlay_id);
         built.subitem = slot?.name || built.overlay_id;
         break;
       }
@@ -495,13 +584,24 @@ export function useLiturgyItems(
         break;
     }
 
+    // Fixar o modo legado antes de alterar duração evita que uma continuação
+    // antiga pareça uma nova hora manual depois de recalcular a agenda.
+    const persisted = agendaParaPersistir(items.value);
+    $liturgy.set(persisted, activeDay.value);
+    let reposicionada: LiturgyItem[] | null = null;
     if (editIndex.value >= 0) {
-      const id = items.value[editIndex.value].id;
-      $liturgy.update(id, built, activeDay.value);
+      const original = items.value[editIndex.value];
+      $liturgy.update(original.id, built, activeDay.value);
+      reposicionada = reposicionarAposSalvar(original, built);
     } else {
-      $liturgy.add(built, activeDay.value);
+      const destino = indiceFimDoBloco(persisted, built.blocoId);
+      if (destino < persisted.length) {
+        $liturgy.insert(built, activeDay.value, destino);
+      } else {
+        $liturgy.add(built, activeDay.value);
+      }
     }
-    items.value = [...items.value];
+    items.value = reposicionada ?? [...items.value];
     dialog.value = false;
   }
 
@@ -513,6 +613,7 @@ export function useLiturgyItems(
     $alert.yesno({ text: chaveLiturgia("dialog.remove_confirm") }, (btn?: string) => {
       if (btn !== "yes") return;
 
+      $liturgy.set(agendaParaPersistir(items.value), activeDay.value);
       if (item.tipo === LiturgyItemTypeEnum.BLOCO) {
         const list = $liturgy.list(activeDay.value);
         for (const child of list) {
@@ -531,9 +632,15 @@ export function useLiturgyItems(
   function cloneItem(index: number): void {
     if (index < 0 || index >= items.value.length) return;
 
-    const itemToClone = items.value[index];
+    const persisted = agendaParaPersistir(items.value);
+    const itemToClone = persisted[index];
+    $liturgy.set(persisted, activeDay.value);
 
-    const { id, checked_days: _, ...cloned } = itemToClone as LiturgyItem & { checked_days?: string };
+    const {
+      id,
+      checked_days: _,
+      ...cloned
+    } = itemToClone as LiturgyItem & { checked_days?: string };
 
     $liturgy.insert(cloned, activeDay.value, index + 1);
 
@@ -561,7 +668,9 @@ export function useLiturgyItems(
       const file = await api.storage.chooseFile();
       if (file) form.value.dir = file;
     } else if (Platform.isDesktop && (api as unknown as Record<string, unknown>)?.chooseFile) {
-      const file = await (api as unknown as { chooseFile: () => Promise<string | null> }).chooseFile();
+      const file = await (
+        api as unknown as { chooseFile: () => Promise<string | null> }
+      ).chooseFile();
       if (file) form.value.dir = file;
     } else {
       const inp = document.createElement("input");
@@ -610,8 +719,13 @@ export function useLiturgyItems(
     if (e.dataTransfer?.items) {
       const entries = Array.from(e.dataTransfer.items);
       for (const dtItem of entries) {
-        if ((dtItem as unknown as { webkitGetAsEntry?: () => FileSystemEntry | null }).webkitGetAsEntry) {
-          const entry = (dtItem as unknown as { webkitGetAsEntry: () => FileSystemEntry | null }).webkitGetAsEntry();
+        if (
+          (dtItem as unknown as { webkitGetAsEntry?: () => FileSystemEntry | null })
+            .webkitGetAsEntry
+        ) {
+          const entry = (
+            dtItem as unknown as { webkitGetAsEntry: () => FileSystemEntry | null }
+          ).webkitGetAsEntry();
           if (entry && entry.isDirectory) {
             const dirPath = (file as unknown as { path?: string }).path
               ? (file as unknown as { path: string }).path + "/"
@@ -726,9 +840,7 @@ export function useLiturgyItems(
   ];
 
   function apiChannelImages(data: Partial<OnlineApiData>): Map<string, string> {
-    const chImg = new Map(
-      (data.channels ?? []).map((c) => [c.channel_id, c.default_image || ""])
-    );
+    const chImg = new Map((data.channels ?? []).map((c) => [c.channel_id, c.default_image || ""]));
     return new Map(
       (data.playlists ?? []).map((p) => [p.playlist_id, chImg.get(p.channel_id) || ""])
     );
@@ -753,9 +865,7 @@ export function useLiturgyItems(
 
     const seen = new Set(all.map((v) => v.url));
     const api = await loadOnlineApiVideos();
-    const titles = new Map(
-      (api?.playlists ?? []).map((p) => [p.playlist_id, p.title])
-    );
+    const titles = new Map((api?.playlists ?? []).map((p) => [p.playlist_id, p.title]));
     const images = apiChannelImages(api ?? {});
     for (const av of api?.videos ?? []) {
       const url = `https://www.youtube.com/watch?v=${av.video_id}`;
@@ -783,6 +893,12 @@ export function useLiturgyItems(
 
   function setFormField(field: string, value: unknown): void {
     (form.value as Record<string, unknown>)[field] = value;
+    if (field === "time") titleTimeEnabled = false;
+    if (field === "blocoId") {
+      form.value.time = "";
+      form.value.time_mode = "auto";
+    }
+    if (field === "item" || field === "blocoId") fillTimeFromTitle();
     if (formErrors.value[field]) {
       delete formErrors.value[field];
     }

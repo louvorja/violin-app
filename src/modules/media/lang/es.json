@@ -3,7 +3,12 @@
   "description": "Monta la diapositiva de la canción (función $media.open)",
   "alerts": {
     "not_loaded": "¡Ocurrió un error al cargar este audio!",
+    "not_loaded_title": "No se pudo reproducir este audio",
+    "unsupported": "Este dispositivo no puede reproducir el formato de esta pista. Pruebe otra canción o use la aplicación en el computador.",
+    "decode": "El archivo de audio parece estar dañado o incompleto. Inténtelo de nuevo.",
+    "blocked": "El navegador bloqueó la reproducción. Toque reproducir de nuevo.",
     "not_loaded_offline": "No se pudo descargar este audio. Verifique la conexión y toque para intentar de nuevo.",
+    "offline_not_downloaded": "Sin internet, y esta canción no está descargada en este dispositivo. Conéctese, o descargue el álbum antes de quedarse sin conexión.",
     "close": "¿Quieres cerrar esta presentacion?",
     "close_audio": "¿Quieres detener la musica?",
     "close_projection": "¿Quieres detener la proyección?",
@@ -21,10 +26,8 @@
     "lyric": "Letra de la Canción",
     "track": "Pista",
     "video_quality": "Calidad",
-    "channel": "Canal",
     "post_date": "Fecha de publicación",
     "views": "Visualizaciones",
-    "video_link": "Enlace del video",
     "slides": "Diapositivas"
   },
   "inputs": {

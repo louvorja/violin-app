@@ -22,13 +22,25 @@ interface NetStatus {
 const FALHAS_PARA_OFFLINE = 2;
 
 /** Espera entre sondagens enquanto offline; a última se repete. */
-const BACKOFF_MS = [5000, 10000, 30000, 60000];
+const BACKOFF_MS = [2000, 5000, 10000, 30000, 60000];
+
+/**
+ * Ao voltar a tela, o Wi-Fi ainda está reconectando e as primeiras requisições
+ * falham; sem carência o indicador acendia "sem internet" a cada despertar.
+ */
+const CARENCIA_AO_DESPERTAR_MS = 15000;
+
+/** Tempo para o tráfego do boot dizer se há rede, antes de gastar uma sonda. */
+const CONFERENCIA_AO_ABRIR_MS = 3000;
 
 let _falhas = 0;
 let _tentativa = 0;
 let _timer: ReturnType<typeof setTimeout> | null = null;
 let _sondando = false;
 let _instalado = false;
+let _carenciaAte = 0;
+let _timerCarencia: ReturnType<typeof setTimeout> | null = null;
+let _houveResultado = false;
 // `ref`, não variável solta: o `computed` que a interface consome precisa de
 // uma dependência reativa para reavaliar.
 const _desdeQuando = ref<number | null>(null);
@@ -71,20 +83,32 @@ function _agendarSondagem(): void {
 async function sondar(): Promise<boolean> {
   if (_sondando) return _lerEstado();
   _sondando = true;
+  let ok = false;
   try {
     if (Platform.download?.checkConnection) {
-      const r = await Platform.download.checkConnection();
-      reportNetworkResult(!!r?.ok, "probe");
-      return !!r?.ok;
+      ok = !!(await Platform.download.checkConnection())?.ok;
+    } else {
+      await fetchWithTimeout(API_URL, {
+        method: "HEAD",
+        timeout: NET_TIMEOUT.QUICK,
+        source: "probe",
+      });
+      ok = true;
     }
-    await fetchWithTimeout(API_URL, {
-      method: "HEAD",
-      timeout: NET_TIMEOUT.QUICK,
-      source: "probe",
-    });
-    return true;
   } catch {
-    return false;
+    ok = false;
+  }
+  try {
+    if (ok) {
+      reportNetworkResult(true, "probe");
+    } else {
+      // A sonda é uma pergunta direta à rede, não um arquivo grande que
+      // demorou: a resposta dela vale sozinha, sem esperar a segunda falha
+      // nem a carência do despertar.
+      _falhas = FALHAS_PARA_OFFLINE;
+      _definirEstado(false);
+    }
+    return ok;
   } finally {
     _sondando = false;
     if (!_lerEstado()) _agendarSondagem();
@@ -96,13 +120,53 @@ async function sondar(): Promise<boolean> {
  * inclusive 500, conta como online: o servidor foi alcançado.
  */
 export function reportNetworkResult(ok: boolean, _source = "fetch"): void {
+  _houveResultado = true;
   if (ok) {
     _falhas = 0;
     _definirEstado(true);
     return;
   }
+  if (Date.now() < _carenciaAte) {
+    _conferirDepoisDaCarencia();
+    return;
+  }
   _falhas += 1;
   if (_falhas >= FALHAS_PARA_OFFLINE) _definirEstado(false);
+}
+
+/**
+ * Falhou durante a carência: pode ser só o Wi-Fi reconectando, pode ser que a
+ * rede não volte. Uma sonda no fim da carência tira a dúvida.
+ */
+function _conferirDepoisDaCarencia(): void {
+  if (_timerCarencia) return;
+  _timerCarencia = setTimeout(
+    () => {
+      _timerCarencia = null;
+      void sondar();
+    },
+    Math.max(0, _carenciaAte - Date.now())
+  );
+}
+
+/**
+ * Aberto sem internet, o app lê tudo do aparelho e nenhuma requisição chega a
+ * falhar — ficaria "online" para sempre. Se o tráfego normal do boot não
+ * respondeu a pergunta, uma única sonda responde.
+ */
+function _conferirAoAbrir(): void {
+  setTimeout(() => {
+    if (!_houveResultado || _falhas > 0) void sondar();
+  }, CONFERENCIA_AO_ABRIR_MS);
+}
+
+/** A tela voltou ou o sistema diz que a rede voltou: conferir já, do início do backoff. */
+function _aoDespertar(): void {
+  _carenciaAte = Date.now() + CARENCIA_AO_DESPERTAR_MS;
+  _falhas = 0;
+  if (_lerEstado()) return;
+  _pararSondagem();
+  void sondar();
 }
 
 /** Só para os testes: devolve o módulo ao estado inicial. */
@@ -112,6 +176,10 @@ export function _resetConnectivity(): void {
   if (_timer) clearTimeout(_timer);
   _timer = null;
   _sondando = false;
+  _carenciaAte = 0;
+  if (_timerCarencia) clearTimeout(_timerCarencia);
+  _timerCarencia = null;
+  _houveResultado = false;
   _desdeQuando.value = null;
 }
 
@@ -126,12 +194,16 @@ function _instalar(): void {
     _falhas = FALHAS_PARA_OFFLINE;
     _definirEstado(false);
   });
-  window.addEventListener("online", () => void sondar());
+  window.addEventListener("online", _aoDespertar);
   window.addEventListener("focus", () => {
     if (!_lerEstado()) void sondar();
   });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") _aoDespertar();
+  });
 
   if (navigator.onLine === false) _definirEstado(false);
+  else _conferirAoAbrir();
 
   // O main enxerga melhor: é ele quem busca catálogo e mídia o tempo todo. Quando
   // existe, a palavra dele vale sobre a nossa contagem local.

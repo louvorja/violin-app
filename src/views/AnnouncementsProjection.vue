@@ -52,6 +52,7 @@
       <div v-else class="ann-empty" />
     </template>
     <div v-else class="ann-empty" />
+    <ProjectionClearScreen />
   </div>
 </template>
 
@@ -66,6 +67,7 @@ import "@/assets/styles/transitions.css";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { useProjectionCloseNotice } from "@/composables/useProjectionCloseNotice";
+import ProjectionClearScreen from "@/components/ProjectionClearScreen.vue";
 import { useTransitionStage } from "@/composables/useTransitionStage";
 import { PROJECTION_TYPE } from "@/constants/Projection";
 import Broadcast from "@/helpers/Broadcast";

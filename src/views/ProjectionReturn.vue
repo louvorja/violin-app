@@ -1,5 +1,7 @@
 <template>
   <OverlayRenderer />
+  <ReturnOverride />
+  <ProjectionClearScreen />
   <div
     class="return-root"
     :class="{ 'return-root--ready': ready }"
@@ -66,6 +68,8 @@ import { useProjectionState } from "@/composables/useProjectionState";
 import { useSlideStyle } from "@/composables/useSlideStyle";
 import { useFitText } from "@/composables/useFitText";
 import OverlayRenderer from "@/components/OverlayRenderer.vue";
+import ProjectionClearScreen from "@/components/ProjectionClearScreen.vue";
+import ReturnOverride from "@/components/ReturnOverride.vue";
 
 const { t } = useI18n();
 const { slide, isCover, progress, slideProgress, title, slideIndex, totalSlides, nextSlide } =

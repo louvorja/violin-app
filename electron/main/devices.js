@@ -20,22 +20,38 @@ const userStore = require("./userStore.js");
 
 const SETTINGS_KEY = "device_settings";
 
+/** Limite padrão/mín./máx. de mensagens devolvidas pelo histórico de chat. */
+const DEFAULT_CHAT_HISTORY_LIMIT = 100;
+const MIN_CHAT_HISTORY_LIMIT = 1;
+const MAX_CHAT_HISTORY_LIMIT = 500;
+
 /** @type {Array<{id:string,token:string,name:string,platform:string,registeredAt:string,permissions:string[]}>} */
 let _devices = [];
 
-/** @type {{only_authorized_devices:boolean}|null} */
+/** @type {{only_authorized_devices:boolean,chat_history_limit:number}|null} */
 let _settings = null;
+
+/** Normaliza o limite de histórico (inteiro, 1..500; ausente/inválido → padrão). */
+function _clampChatHistoryLimit(value) {
+  if (value === null || value === undefined || value === "") return DEFAULT_CHAT_HISTORY_LIMIT;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return DEFAULT_CHAT_HISTORY_LIMIT;
+  return Math.min(MAX_CHAT_HISTORY_LIMIT, Math.max(MIN_CHAT_HISTORY_LIMIT, Math.trunc(n)));
+}
+
+/** Forma canônica das configurações (sempre com todos os campos). */
+function _normalizeSettings(data) {
+  return {
+    only_authorized_devices: !!(data && data.only_authorized_devices),
+    chat_history_limit: _clampChatHistoryLimit(data && data.chat_history_limit),
+  };
+}
 
 function _loadSettings() {
   try {
-    const data = userStore.read(SETTINGS_KEY);
-    if (data && typeof data === "object") {
-      _settings = { only_authorized_devices: !!data.only_authorized_devices };
-    } else {
-      _settings = { only_authorized_devices: false };
-    }
+    _settings = _normalizeSettings(userStore.read(SETTINGS_KEY));
   } catch (_) {
-    _settings = { only_authorized_devices: false };
+    _settings = _normalizeSettings(null);
   }
 }
 
@@ -58,12 +74,25 @@ function getSettings() {
   return { ..._settings };
 }
 
-/** Atualiza as configurações de dispositivos. */
+/** Atualiza as configurações de dispositivos (patch parcial, campos validados). */
 function updateSettings(partial) {
   if (!_settings) _loadSettings();
-  _settings = { ..._settings, ...partial };
+  const patch = { ...(partial || {}) };
+  if ("only_authorized_devices" in patch) {
+    patch.only_authorized_devices = !!patch.only_authorized_devices;
+  }
+  if ("chat_history_limit" in patch) {
+    patch.chat_history_limit = _clampChatHistoryLimit(patch.chat_history_limit);
+  }
+  _settings = { ..._settings, ...patch };
   _persistSettings();
   return { ..._settings };
+}
+
+/** Limite de mensagens do histórico de chat (definido nas opções do desktop). */
+function getChatHistoryLimit() {
+  if (!_settings) _loadSettings();
+  return _settings.chat_history_limit;
 }
 
 /** Busca device pelo token de acesso (campo `token`). */
@@ -159,4 +188,5 @@ module.exports = {
   getSettings,
   updateSettings,
   isOnlyAuthorized,
+  getChatHistoryLimit,
 };

@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRequire } from "node:module";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -44,6 +44,8 @@ function runBridge(html, href) {
     window,
     document: { readyState: "complete" },
     URL,
+    setTimeout,
+    clearTimeout,
     EventSource: class {
       constructor(url) {
         this.url = url;
@@ -98,6 +100,49 @@ describe("SPA HTTP — transmissão na mesma máquina", () => {
     const update = { type: "slide_change", payload: { slide: { lyric: "Próximo" } } };
     sources[0].onmessage({ data: JSON.stringify(update) });
     expect(delivered).toEqual([{ type: "louvorja-sse", detail: update }]);
+  });
+
+  it("refaz a conexão quando o EventSource morre de vez", async () => {
+    const response = await fetch(`${origin}/obs`);
+    const html = await response.text();
+    vi.useFakeTimers();
+    try {
+      const { window, sources } = runBridge(html, response.url);
+      expect(sources).toHaveLength(1);
+      // readyState 2 (CLOSED) é falha permanente — 401, 403 ou 404. O
+      // EventSource não se refaz sozinho nesse caso, e era o que deixava a
+      // página surda: todo o resto do remoto é fetch avulso, mas a aba de
+      // slides é push puro, então o sintoma era "chega e não acontece".
+      sources[0].readyState = 2;
+      sources[0].close = () => {};
+      sources[0].onerror();
+      expect(sources).toHaveLength(1);
+      expect(window.__ljSSEState).toBe("closed");
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(sources).toHaveLength(2);
+      expect(sources[1].url).toBe("/events?token=HOST1");
+      // A nova tentativa já entra como "connecting" — é o estado que a UI
+      // pode ler para avisar o operador em vez de deixar a aba muda.
+      expect(window.__ljSSEState).toBe("connecting");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("não refaz a conexão quando o erro é de rede, que o EventSource já resolve", async () => {
+    const response = await fetch(`${origin}/obs`);
+    const html = await response.text();
+    vi.useFakeTimers();
+    try {
+      const { sources } = runBridge(html, response.url);
+      sources[0].readyState = 0;
+      sources[0].close = () => {};
+      sources[0].onerror();
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(sources).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("preserva o hash de uma projeção de arquivo ao instalar o bridge", async () => {

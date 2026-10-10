@@ -1,10 +1,10 @@
 <template>
   <div class="opt">
-    <section v-if="!isDesktop" class="opt-section">
+    <section v-if="!canDownload" class="opt-section">
       <p class="opt-empty">{{ $t("options.collections_download.desktop_only") }}</p>
     </section>
 
-    <section v-if="isDesktop" class="opt-section">
+    <section v-if="canDownload" class="opt-section">
       <h3 class="opt-section-title">
         <LjIcon :icon="ICONS.UI.SYNC_CLOUD" size="18" />
         {{ $t("options.collections_download.connection") }}
@@ -37,11 +37,11 @@
           >
             {{ $t("options.collections_download.check_connection") }}
           </button>
-          <button type="button" class="opt-btn" @click="openStartupCheck">
+          <button v-if="isDesktop" type="button" class="opt-btn" @click="openStartupCheck">
             {{ $t("options.collections_download.open_startup_check") }}
           </button>
         </div>
-        <label class="opt-checkbox">
+        <label v-if="isDesktop" class="opt-checkbox">
           <input
             type="checkbox"
             :checked="startupCheckOnBoot"
@@ -54,7 +54,7 @@
 
     <!-- Abas: Coletâneas | Bíblia | Armazenamento -->
     <!-- O traço sob as abas vem do próprio LjTabs; não há divisória extra. -->
-    <template v-if="isDesktop">
+    <template v-if="canDownload">
       <LjTabs v-model="activeTab" :tabs="abas" class="sinc-tabs" />
 
       <div class="sinc-panes">
@@ -193,6 +193,18 @@
                     <small class="opt-download-count">
                       · {{ hymnalIds.length }} {{ $t("options.collections_download.songs") }}
                     </small>
+                    <small
+                      v-if="cachedHymnalBaseline"
+                      class="opt-download-count"
+                      :class="selectedHymnal ? 'opt-tag--ok' : 'opt-tag--remove'"
+                    >
+                      ·
+                      {{
+                        selectedHymnal
+                          ? $t("options.collections_download.downloaded")
+                          : $t("options.collections_download.will_remove")
+                      }}
+                    </small>
                   </label>
                 </div>
 
@@ -211,6 +223,18 @@
                     <strong>{{ $t("options.collections_download.hymnal_1996") }}</strong>
                     <small class="opt-download-count">
                       · {{ hymnal1996Ids.length }} {{ $t("options.collections_download.songs") }}
+                    </small>
+                    <small
+                      v-if="cachedHymnal1996Baseline"
+                      class="opt-download-count"
+                      :class="selectedHymnal1996 ? 'opt-tag--ok' : 'opt-tag--remove'"
+                    >
+                      ·
+                      {{
+                        selectedHymnal1996
+                          ? $t("options.collections_download.downloaded")
+                          : $t("options.collections_download.will_remove")
+                      }}
                     </small>
                   </label>
                 </div>
@@ -234,6 +258,7 @@
                   <div class="opt-cat-albums">
                     <label
                       v-for="album in cat.albums || []"
+                      :id="`sync-album-${album.id_album}`"
                       :key="album.id_album"
                       class="opt-checkbox opt-album"
                     >
@@ -257,6 +282,20 @@
                       </small>
                       <small v-if="classicAlbums.has(album.id_album)" class="opt-download-count">
                         · {{ $t("options.collections_download.from_classic") }}
+                      </small>
+                      <small
+                        v-else-if="cachedAlbumsBaseline.has(album.id_album)"
+                        class="opt-download-count"
+                        :class="
+                          selectedAlbums.has(album.id_album) ? 'opt-tag--ok' : 'opt-tag--remove'
+                        "
+                      >
+                        ·
+                        {{
+                          selectedAlbums.has(album.id_album)
+                            ? $t("options.collections_download.downloaded")
+                            : $t("options.collections_download.will_remove")
+                        }}
                       </small>
                     </label>
                   </div>
@@ -324,15 +363,17 @@
                   {{ $t("options.collections_download.start") }}
                 </button>
                 <button
+                  v-if="hasPendingRemovals || saving"
                   type="button"
-                  class="opt-btn"
-                  :disabled="!hasPendingRemovals || saving || scanningCache"
-                  @click="saveSelection"
+                  class="opt-btn opt-btn--danger"
+                  :disabled="saving || scanningCache"
+                  @click="confirmRemoval"
                 >
+                  <LjIcon :icon="ICONS.ACTIONS.DELETE_FILLED" size="14" />
                   {{
                     saving
                       ? $t("options.collections_download.saving")
-                      : $t("options.collections_download.save")
+                      : $t("options.collections_download.remove", { n: pendingRemovalCount })
                   }}
                 </button>
               </template>
@@ -465,6 +506,66 @@
                 }}
               </button>
             </div>
+          </div>
+        </section>
+
+        <!-- Armazenamento no navegador/PWA: o acervo fica no Cache Storage -->
+        <section
+          v-if="abaIniciada('web_storage')"
+          v-show="activeTab === 'web_storage'"
+          class="opt-section"
+        >
+          <p class="opt-hint">{{ $t("options.storage.web.hint") }}</p>
+          <div class="opt-stats">
+            <div class="opt-stat">
+              <span class="opt-stat-label">{{ $t("options.storage.web.used") }}</span>
+              <span class="opt-stat-value">{{ sync.humanSize(webUsage?.usage) }}</span>
+            </div>
+            <div class="opt-stat">
+              <span class="opt-stat-label">{{ $t("options.storage.web.quota") }}</span>
+              <span class="opt-stat-value">{{ sync.humanSize(webUsage?.quota) }}</span>
+            </div>
+            <div class="opt-stat">
+              <span class="opt-stat-label">{{ $t("options.storage.web.protected") }}</span>
+              <span class="opt-stat-value">
+                {{
+                  webUsage?.persisted
+                    ? $t("options.storage.web.protected_yes")
+                    : $t("options.storage.web.protected_no")
+                }}
+              </span>
+            </div>
+          </div>
+          <p v-if="webUsage && !webUsage.persisted" class="opt-hint opt-hint--warn">
+            {{ $t("options.storage.web.protected_hint") }}
+          </p>
+          <div class="opt-actions">
+            <button
+              v-if="webUsage && !webUsage.persisted"
+              type="button"
+              class="opt-btn"
+              @click="protectStorage"
+            >
+              <LjIcon :icon="ICONS.UI.HARDDISK" size="14" />
+              {{ $t("options.storage.web.protect") }}
+            </button>
+            <button
+              v-if="canOfferInstall"
+              type="button"
+              class="opt-btn"
+              @click="openInstallGuide('storage')"
+            >
+              <LjIcon :icon="ICONS.UI.INSTALL" size="14" />
+              {{ $t("shell.pwa_install.protected_install") }}
+            </button>
+            <button type="button" class="opt-btn opt-btn--danger" @click="clearFiles">
+              <LjIcon :icon="ICONS.ACTIONS.DELETE_FILLED" size="14" />
+              {{ $t("options.storage.clear_files") }}
+            </button>
+            <button type="button" class="opt-btn" @click="loadWebUsage">
+              <LjIcon :icon="ICONS.ACTIONS.REFRESH" size="14" />
+              {{ $t("options.storage.refresh") }}
+            </button>
           </div>
         </section>
 
@@ -674,9 +775,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import Platform from "@/helpers/Platform";
+import { pendingSyncAlbum } from "@/helpers/SyncIntent";
 import $userdata from "@/helpers/UserData";
 import $alert from "@/helpers/Alert";
 import { KEYS, moduleShowInMainMenu } from "@/constants/UserDataKeys";
@@ -684,6 +786,8 @@ import { ICONS } from "@/config/Icons";
 import { LjIcon, LjProgress, LjTabs } from "@/components/ui";
 import type { LjTab } from "@/components/ui";
 import { useSyncManager } from "@/composables/useSyncManager";
+import { useAppInstall } from "@/composables/useAppInstall";
+import { requestPersistence, webStorageUsage, type WebStorageUsage } from "@/helpers/WebFileStore";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
 import {
   formatBackgroundTaskDetail,
@@ -745,6 +849,9 @@ const bundleEmDownload = computed(() => findTask("db-bundle"));
 /* ---- Estado ---- */
 
 const isDesktop = computed<boolean>(() => Platform.isDesktop);
+// Web/PWA baixa para o Cache Storage pelo mesmo contrato do desktop; só Bíblia,
+// armazenamento em pasta e versão clássica são exclusivos do Electron.
+const canDownload = computed<boolean>(() => !!Platform.download && !!Platform.storage?.checkLocal);
 const { t, locale } = useI18n();
 
 const ftpChecking = computed(() => sync.ftpChecking.value);
@@ -785,8 +892,12 @@ const abas = computed<LjTab[]>(() => [
     label: t("options.collections_download.title"),
     icon: ICONS.CUSTOM.LJA_COLOR,
   },
-  { value: "bible", label: t("options.bible_download.title"), icon: ICONS.BIBLE.BIBLE },
-  { value: "storage", label: t("options.storage.title"), icon: ICONS.UI.HARDDISK },
+  ...(isDesktop.value
+    ? [
+        { value: "bible", label: t("options.bible_download.title"), icon: ICONS.BIBLE.BIBLE },
+        { value: "storage", label: t("options.storage.title"), icon: ICONS.UI.HARDDISK },
+      ]
+    : [{ value: "web_storage", label: t("options.storage.title"), icon: ICONS.UI.HARDDISK }]),
 ]);
 
 // Mesma economia do v-window-item: a aba só é montada na primeira vez que
@@ -913,6 +1024,14 @@ const hasPendingRemovals = computed<boolean>(() => {
   if (cachedHymnalBaseline.value && !selectedHymnal.value) return true;
   if (cachedHymnal1996Baseline.value && !selectedHymnal1996.value) return true;
   return false;
+});
+
+const pendingRemovalCount = computed<number>(() => {
+  let n = 0;
+  for (const id of cachedAlbumsBaseline.value) if (!selectedAlbums.value.has(id)) n += 1;
+  if (cachedHymnalBaseline.value && !selectedHymnal.value) n += 1;
+  if (cachedHymnal1996Baseline.value && !selectedHymnal1996.value) n += 1;
+  return n;
 });
 
 const bibleHasPendingRemovals = computed<boolean>(() => {
@@ -1105,6 +1224,13 @@ async function startDownloads(): Promise<void> {
 }
 
 /* ---- Salvar seleção (remover do disco) ---- */
+
+async function confirmRemoval(): Promise<void> {
+  const ok = await $alert.confirm(
+    t("options.collections_download.remove_confirm", { n: pendingRemovalCount.value })
+  );
+  if (ok) await saveSelection();
+}
 
 async function saveSelection(): Promise<void> {
   if (!hasPendingRemovals.value || !Platform.storage?.removeFiles) return;
@@ -1483,11 +1609,42 @@ async function clearJson(): Promise<void> {
   }) as (...args: unknown[]) => unknown);
 }
 
+const { canOffer: canOfferInstall, openGuide: openInstallGuide } = useAppInstall();
+const webUsage = ref<WebStorageUsage | null>(null);
+
+async function loadWebUsage(): Promise<void> {
+  if (isDesktop.value) return;
+  webUsage.value = await webStorageUsage();
+}
+
+async function protectStorage(): Promise<void> {
+  const granted = await requestPersistence();
+  await loadWebUsage();
+  if (granted) {
+    $snackbar.success(t("options.storage.web.protect_done"));
+    return;
+  }
+  // O navegador decide sozinho e costuma negar fora do app instalado.
+  if (canOfferInstall.value) {
+    $snackbar.info(t("options.storage.web.protect_denied_install"), {
+      key: "protect-denied",
+      timeout: 8000,
+      action: () => openInstallGuide("storage"),
+    });
+  } else {
+    $snackbar.warning(t("options.storage.web.protect_denied"), { key: "protect-denied" });
+  }
+}
+
+watch(activeTab, (aba) => {
+  if (aba === "web_storage") void loadWebUsage();
+});
+
 async function clearFiles(): Promise<void> {
   $alert.yesno("options.storage.clear_files_confirm", (async (btn) => {
     if (btn !== "yes") return;
     await Platform?.storage?.clearFiles?.();
-    await Promise.all([reloadStats(), scanLocalCache({ force: true })]);
+    await Promise.all([reloadStats(), scanLocalCache({ force: true }), loadWebUsage()]);
   }) as (...args: unknown[]) => unknown);
 }
 
@@ -1538,10 +1695,39 @@ async function refreshDiskUsage(): Promise<void> {
   }
 }
 
+/* ---- Álbum pedido por outra tela (atalho "Baixar" do diálogo do álbum) ---- */
+
+function applyPendingAlbum(): void {
+  const id = pendingSyncAlbum.value;
+  if (id == null || loadingCategories.value || scanningCache.value) return;
+  pendingSyncAlbum.value = null;
+  activeTab.value = "collections";
+  if (!selectedAlbums.value.has(id)) {
+    selectedAlbums.value = new Set(selectedAlbums.value).add(id);
+  }
+  // A lista só ganha altura final depois do render das caixas marcadas.
+  void nextTick(() => {
+    setTimeout(() => {
+      document.getElementById(`sync-album-${id}`)?.scrollIntoView({ block: "center" });
+    }, 150);
+  });
+}
+
+watch([pendingSyncAlbum, loadingCategories, scanningCache], applyPendingAlbum);
+
 /* ---- Lifecycle ---- */
 
 onMounted(async () => {
-  if (!isDesktop.value) return;
+  if (!canDownload.value) return;
+  if (!isDesktop.value) {
+    // No desktop o catálogo local vem da Verificação Inicial; o PWA não tem
+    // essa etapa, e o scan de álbuns baixados lê só o que está no IndexedDB.
+    // O app instalado já o baixa sozinho no boot (Shell.vue); numa aba comum
+    // do navegador, abrir esta tela é a ação que autoriza o download do bundle.
+    await Promise.all([sync.ensureCatalogBundle(), sync.checkFtp()]);
+    await loadCatalog();
+    return;
+  }
   // Independentes entre si — em série a tela levava a soma dos quatro tempos.
   await Promise.all([
     loadCatalog(),
@@ -1582,6 +1768,13 @@ onBeforeUnmount(() => {
 }
 .opt-album {
   font-size: var(--lj-text-sm);
+}
+.opt-tag--ok {
+  color: var(--lj-success);
+}
+.opt-tag--remove {
+  color: var(--lj-danger);
+  font-weight: 600;
 }
 .opt-stats--compact {
   margin-bottom: 10px;

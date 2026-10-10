@@ -13,12 +13,15 @@ const OPTIONS_DISPLAYS = `${OPTIONS}.displays`
 const OPTIONS_SLIDE = `${OPTIONS}.slide`
 const OPTIONS_FILE_PROJECTION = `${OPTIONS}.file_projection`
 const OPTIONS_ONLINE_VIDEO_PROJECTION = `${OPTIONS}.online_video_projection`
+const OPTIONS_SITE_PROJECTION = `${OPTIONS}.site_projection`
+const OPTIONS_INTEGRATIONS = `${OPTIONS}.integrations`
 const MODULES_BIBLE = `${MODULES}.${ModuleEnum.BIBLE}`;
 const MODULES_BIBLE_DATA = `${MODULES}.${ModuleEnum.BIBLE}.data`;
 const MODULES_LIBRAS = `${MODULES}.${ModuleEnum.LIBRAS}`;
 const MODULES_LITURGY = `${MODULES}.${ModuleEnum.LITURGY}`;
 const MODULES_MEDIA = `${MODULES}.${ModuleEnum.MEDIA}`;
 const MODULES_MEDIA_CONFIG = `${MODULES}.${ModuleEnum.MEDIA}.config`;
+const MODULES_PRESENTATION_MODE = `${MODULES}.${ModuleEnum.PRESENTATION_MODE}`;
 const MODULES_STOPWATCH = `${MODULES}.${ModuleEnum.STOPWATCH}`;
 const MODULES_TIMER = `${MODULES}.${ModuleEnum.TIMER}`;
 const MODULES_TIMER_WORSHIP = `${MODULES}.${ModuleEnum.TIMER_WORSHIP}`;
@@ -84,6 +87,8 @@ export const KEYS = {
     },
     BACKGROUND_SOUND: {
       IS_PLAYING: `${MODULES}.${ModuleEnum.BACKGROUND_SOUND}.is_playing`,
+      /** Som marcado como padrão (id do arquivo da biblioteca) — ponteiro único. */
+      DEFAULT_ID: `${MODULES}.${ModuleEnum.BACKGROUND_SOUND}.default_id`,
     },
     LITURGY: {
       ACTIVE_DAY: `${MODULES_LITURGY}.active_day`,
@@ -101,6 +106,45 @@ export const KEYS = {
       SHOW_NOTES: `${MODULES_LITURGY}.show_notes`,
       MARK_ON_ACCESS: `${MODULES_LITURGY}.mark_on_access`,
       SHOW: `${MODULES_LITURGY}.show`,
+    },
+    PRESENTATION_MODE: {
+      /** AppData: módulo aberto em alguma aba. */
+      SHOW: `${MODULES_PRESENTATION_MODE}.show`,
+      /** UserData: esconde o corpo do ribbon e as abas de módulo enquanto a aba está ativa. */
+      EXPANDED: `${MODULES_PRESENTATION_MODE}.expanded`,
+      /** UserData: saída travada. Mora aqui porque o stateBinding do ribbon lê o UserData; o módulo zera ao abrir. */
+      OUTPUT_LOCKED: `${MODULES_PRESENTATION_MODE}.output_locked`,
+      /** AppData: há saída para abrir — alguma das duas (tela principal, retorno) está fechada. */
+      CAN_START: `${MODULES_PRESENTATION_MODE}.can_start`,
+      /** AppData: há saída aberta para fechar. */
+      CAN_STOP: `${MODULES_PRESENTATION_MODE}.can_stop`,
+      /** AppData: há saída aberta e a tela ainda não está limpa. */
+      CAN_CLEAR: `${MODULES_PRESENTATION_MODE}.can_clear`,
+      /** AppData: há conteúdo no ar para tirar (música, versículo, arquivo...). */
+      CAN_TAKE_OFF: `${MODULES_PRESENTATION_MODE}.can_take_off`,
+      /** UserData: pastas do navegador de arquivos — `{ path, label }[]`. */
+      LIBRARY_FOLDERS: `${MODULES_PRESENTATION_MODE}.library_folders`,
+      /** UserData: arquivos marcados com estrela no navegador de arquivos. */
+      LIBRARY_FAVORITES: `${MODULES_PRESENTATION_MODE}.library_favorites`,
+      /** UserData: tipos de conteúdo escondidos no retorno de palco — `{ music?: true, file?: true, ... }`. */
+      RETURN_HIDDEN: `${MODULES_PRESENTATION_MODE}.return_hidden`,
+      /** UserData: biblioteca ocupando as duas colunas da esquerda. */
+      LIBRARY_FULL_WIDTH: `${MODULES_PRESENTATION_MODE}.library_full_width`,
+      /** UserData: altura da biblioteca em px, ajustada arrastando a borda. */
+      LIBRARY_HEIGHT: `${MODULES_PRESENTATION_MODE}.library_height`,
+      /** UserData: largura (px) da coluna do programa, à esquerda. */
+      PROGRAM_WIDTH: `${MODULES_PRESENTATION_MODE}.program_width`,
+      /** UserData: largura (px) da coluna das saídas, à direita. */
+      OUTPUTS_WIDTH: `${MODULES_PRESENTATION_MODE}.outputs_width`,
+      /**
+       * UserData: a pasta da igreja deste computador (OneDrive…), onde ficam os
+       * programas e modelos compartilhados. Vazio: só neste computador.
+       */
+      CHURCH_FOLDER: `${MODULES_PRESENTATION_MODE}.church_folder`,
+      /** UserData: onde a busca da aba Músicas procura — `{ name, lyric, album, track }`. */
+      MUSIC_SEARCH: `${MODULES_PRESENTATION_MODE}.music_search`,
+      /** UserData: aba Músicas mostra só as que têm playback. */
+      MUSIC_INSTRUMENTAL: `${MODULES_PRESENTATION_MODE}.music_instrumental`,
     },
     MUSICS: {
       SELECTED_PLAYLIST: `${MODULES}.${ModuleEnum.MUSICS}.selected_playlist`,
@@ -143,6 +187,8 @@ export const KEYS = {
         VIDEO_FILE: `${MODULES_MEDIA_CONFIG}.video_file`,
         VOLUME: `${MODULES_MEDIA_CONFIG}.volume`,
         YOUTUBE_URL: `${MODULES_MEDIA_CONFIG}.youtube_url`,
+        YOUTUBE_PROJECTED: `${MODULES_MEDIA_CONFIG}.youtube_projected`,
+        YOUTUBE_PLAYBACK_ID: `${MODULES_MEDIA_CONFIG}.youtube_playback_id`,
       },
     },
     LYRIC: {
@@ -315,6 +361,12 @@ export const KEYS = {
       FULLSCREEN: `${OPTIONS_FILE_PROJECTION}.fullscreen`,
       SHOW_RETURN: `${OPTIONS_FILE_PROJECTION}.show_return`,
     },
+    // A projeção de URL não tem preferência própria além da tela de retorno:
+    // tela cheia e "sempre no topo" seguem as de projeção de arquivo, como já
+    // era antes desta seção existir.
+    SITE_PROJECTION: {
+      SHOW_RETURN: `${OPTIONS_SITE_PROJECTION}.show_return`,
+    },
     FULLSCREEN: `${OPTIONS}.fullscreen`,
     LAST_DB_CHECK: `${OPTIONS}.last_db_check`,
     LAST_APP_CHECK: `${OPTIONS}.last_app_check`,
@@ -367,6 +419,45 @@ export const KEYS = {
       /** Altura máxima do download: 480, 720 ou 1080 (default). */
       MAX_HEIGHT: `${OPTIONS_ONLINE_VIDEO_PROJECTION}.max_height`,
     },
+    /*
+     * Integrações de terceiros. Aqui só cabe o que é EXIBÍVEL ao usuário
+     * (nome do perfil conectado). Client Secret e token vivem fora do
+     * `user_data`, em `storage/canva_secrets.json` cifrado pelo main —
+     * `user_data` é sincronizado entre janelas e não pode carregar segredo.
+     * Espelho de `PROFILE_PATH` em electron/main/canva/index.js.
+     */
+    INTEGRATIONS: {
+      CANVA: {
+        ROOT: `${OPTIONS_INTEGRATIONS}.canva`,
+        PROFILE: `${OPTIONS_INTEGRATIONS}.canva.profile`,
+        /**
+         * A sessão do SITE (cookies) foi conferida e deu certo.
+         *
+         * Não é deduzido de cookie: o Canva grava `CDI`/`CL`/`_cfuvid` para
+         * qualquer visitante, e contar isso premiava "sessão ativa" sem login.
+         * O valor só é gravado pelo desafio de `webSession.verificar()` e é
+         * limpo quando a projeção cai na tela de login.
+         */
+        WEB_SESSION: `${OPTIONS_INTEGRATIONS}.canva.web_session`,
+        /**
+         * Como um design do Canva é projetado: `"pdf"` (exporta e projeta pelo
+         * leitor do app) ou `"site"` (a página do Canva ao vivo, que exige a
+         * sessão web). Default `pdf` — é o que não depende de gesto nenhum
+         * de terceiro.
+         */
+        PROJECT_AS: `${OPTIONS_INTEGRATIONS}.canva.project_as`,
+        /**
+         * Qualidade pedida ao export em PDF: `"regular"` ou `"pro"`.
+         *
+         * Default `regular`: é o que funciona em qualquer conta, inclusive sem
+         * Canva Pro. `pro` pede a saída premium e pode falhar com
+         * `license_required` quando o design tem elemento premium não pago —
+         * nesse caso o export refaz em `regular` e a tela avisa. Ver
+         * `electron/main/canva/export.js`.
+         */
+        EXPORT_QUALITY: `${OPTIONS_INTEGRATIONS}.canva.export_quality`,
+      },
+    },
   },
   STORAGE: {
     BIBLE_DOWNLOADED_VERSIONS: `${STORAGE}.bible_downloaded_versions`,
@@ -382,6 +473,8 @@ export const KEYS = {
     POPUP: "popup",
     APP_UPDATE_AVAILABLE: "app_update_available",
     APP_UPDATE_VERSION: "app_update_version",
+    /** AppData: id do módulo da aba ativa (o que está à vista). */
+    ACTIVE_MODULE: "active_module",
   },
   REMOTE: {
     IS_CONNECTED: "remote.is_connected",

@@ -9,7 +9,11 @@
     @click="$emit('click', $event)"
   >
     <LjIcon :icon="icon" :size="iconSize" :color="iconColor" class="ribbon-btn-icon" />
-    <span class="ribbon-btn-label">{{ label }}</span>
+    <span class="ribbon-btn-label">
+      {{ label }}
+      <!-- Abre um menu: a seta diz isso antes do clique. -->
+      <LjIcon v-if="dropdown" :icon="ICONS.UI.CHEVRON_DOWN" :size="10" class="ribbon-btn-chevron" />
+    </span>
   </button>
 </template>
 
@@ -17,6 +21,7 @@
 import { LjIcon } from "@/components/ui";
 import { computed } from "vue";
 import { COLORS } from "@constants/Colors";
+import { ICONS } from "@/config/Icons";
 
 const props = defineProps({
   icon: { type: String, required: true },
@@ -26,6 +31,8 @@ const props = defineProps({
   disabled: { type: Boolean, default: false },
   iconColor: { type: String, default: COLORS.PRIMARY },
   testid: { type: String, default: null },
+  /** O botão abre um menu (seletor): mostra a seta ao lado do texto. */
+  dropdown: { type: Boolean, default: false },
 });
 
 defineEmits(["click"]);
@@ -73,6 +80,18 @@ const iconSize = computed(() => {
 .ribbon-btn--active {
   background: var(--lj-rbtn-active-bg);
   border-color: var(--lj-rbtn-active-border);
+}
+
+/* Desabilitado some da vista sem sumir do lugar: o operador ainda vê o
+   comando, mas não confunde "não dá agora" com "não respondeu". */
+.ribbon-btn:disabled {
+  opacity: var(--lj-ui-disabled-opacity);
+  filter: grayscale(1);
+  cursor: default;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  transform: none;
 }
 
 /* Botão grande: ícone topo + label embaixo */
@@ -147,5 +166,12 @@ const iconSize = computed(() => {
   text-align: left;
   flex: 1;
   min-width: 0;
+}
+
+.ribbon-btn-chevron {
+  display: inline-block;
+  margin-left: 2px;
+  vertical-align: middle;
+  opacity: 0.7;
 }
 </style>

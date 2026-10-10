@@ -4,7 +4,20 @@
       <slot />
     </LjTable>
     <LjProgress v-if="loading" indeterminate :height="2" />
-    <LjAlert v-if="error" variant="danger" :text="error" class="__table-data-alert" />
+    <LjAlert
+      v-if="error"
+      :variant="offlineLibrary.offline.value ? 'warning' : 'danger'"
+      :text="
+        offlineLibrary.offline.value ? t('components.datatable.alerts.offline_no_catalog') : error
+      "
+      class="__table-data-alert"
+    />
+    <LjAlert
+      v-else-if="offline_filter && offlineLibrary.active.value"
+      variant="info"
+      :text="t('components.datatable.alerts.offline_downloaded_only')"
+      class="__table-data-alert"
+    />
   </div>
 </template>
 
@@ -24,6 +37,7 @@ import { isHymnalTrack } from "@/helpers/Hymnal";
 import Fuse from "fuse.js";
 import Telemetry from "@/helpers/Telemetry";
 import { useMusicCatalog } from "@/composables/useMusicCatalog";
+import { useOfflineLibrary } from "@/composables/useOfflineLibrary";
 import { isAlbumEnabled, prepareMusicCatalog, compareMusics } from "@root/config/musicCatalog.mjs";
 
 /** Campos onde o operador erra a digitação — nome da música e do álbum. */
@@ -68,6 +82,8 @@ const props = defineProps({
   sort_by: String,
   disabled_albums: { type: Array, default: () => [] },
   albumId: { type: [Number, String], default: null },
+  /** Mostra só as músicas desta coletânea (id do álbum); null mostra todas. */
+  only_album: { type: Number, default: null },
   /**
    * Mínimo de caracteres para o filtro textual ser aplicado (scroll infinito
    * em listas grandes). Buscas numéricas exatas (nº do hino/track) escapam
@@ -76,11 +92,14 @@ const props = defineProps({
   search_min_length: { type: Number, default: 0 },
   /** Linhas locais somadas ao arquivo (acervo pessoal na tela de Músicas). */
   extra_rows: { type: Array, default: () => [] },
+  /** Offline, mostra só as músicas com áudio no aparelho (linhas com `id_music`). */
+  offline_filter: Boolean,
 });
 
 const emit = defineEmits(["update:modelValue"]);
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
+const offlineLibrary = useOfflineLibrary(() => locale.value);
 const { disabledAlbums, years } = useMusicCatalog(
   () => [],
   () => /_musics$/.test(props.file || "")
@@ -89,8 +108,17 @@ let sourceData = null;
 let fileData = null;
 
 function withExtraRows(rows) {
-  return props.extra_rows.length ? [...rows, ...props.extra_rows] : rows;
+  // O acervo pessoal (extra_rows) já é local: não passa pelo filtro offline.
+  const available =
+    props.offline_filter && offlineLibrary.active.value
+      ? rows.filter((row) => offlineLibrary.hasMusic(row.id_music))
+      : rows;
+  return props.extra_rows.length ? [...available, ...props.extra_rows] : available;
 }
+
+watch(offlineLibrary.active, () => {
+  if (props.offline_filter && fileData) applySource();
+});
 
 function applySource() {
   sourceData = withExtraRows(fileData);
@@ -208,6 +236,7 @@ function getBaseEntries(filter, disabled) {
     filter,
     disabled,
     letter: props.letter,
+    only_album: props.only_album,
   });
   if (signature === _baseCacheSignature) return _baseCache;
 
@@ -230,10 +259,13 @@ function getBaseEntries(filter, disabled) {
       entry.albumIds.length === 0 ||
       entry.albumIds.some((albumId) => isAlbumEnabled(albumId, disabled));
 
+    const inAlbum = props.only_album == null || !!entry.albumIds?.includes(props.only_album);
+
     return (
       filterCondition &&
       initialLetter &&
       albumActive &&
+      inAlbum &&
       (props.albumId == null || isAlbumEnabled(props.albumId, disabled))
     );
   });
@@ -290,6 +322,10 @@ watch(
 );
 watch(
   () => props.letter,
+  () => compareFilterData()
+);
+watch(
+  () => props.only_album,
   () => compareFilterData()
 );
 watch(
@@ -453,7 +489,8 @@ function filterData() {
     // ordenada e renderizar a primeira página. Isso remove trabalho síncrono
     // do primeiro frame em qualquer dispositivo.
     const disabled = disabledAlbumIds();
-    const needsBaseFilter = filter.length > 0 || disabled.length > 0 || props.letter !== "";
+    const needsBaseFilter =
+      filter.length > 0 || disabled.length > 0 || props.letter !== "" || props.only_album != null;
     is_fuzzy.value = false;
 
     if ((searchable.length === 0 || value === "") && !needsBaseFilter) {
@@ -583,6 +620,7 @@ function compareFilterData() {
     searchable_fields: props.searchable_fields,
     filter: props.filter,
     letter: props.letter,
+    only_album: props.only_album,
   };
 
   if (JSON.stringify(filter) === JSON.stringify(last_filter.value)) {

@@ -147,36 +147,32 @@ for (const target of [
       } else {
         expect((await close.boundingBox()).width).toBeCloseTo(16, 0);
       }
-      const sidebarToggle = page.locator(".liturgy-panel-header .liturgy-icon-btn").first();
-      if (target.touch) await expectTouchTarget(sidebarToggle);
-      else expect((await sidebarToggle.boundingBox()).width).toBeCloseTo(22, 0);
       const sidebar = page.locator(".liturgy-panel");
-      const initiallyCollapsed = await sidebar.evaluate((element) =>
-        element.classList.contains("liturgy-panel--collapsed")
-      );
       if (target.touch) {
-        expect(initiallyCollapsed).toBe(true);
-        const compactRect = await sidebar.boundingBox();
-        expect(compactRect.width).toBeLessThanOrEqual(46);
+        // Em tela de toque o painel da Liturgia começa desligado: o centro fica
+        // com a largura toda, e só o operador o liga.
+        await expect(sidebar).toHaveCount(0);
         const centerRect = await page.locator(".shell-center").boundingBox();
-        expect(centerRect.x + centerRect.width).toBeCloseTo(target.viewport.width - 45, 0);
+        expect(centerRect.x + centerRect.width).toBeCloseTo(target.viewport.width, 0);
+      } else {
+        const sidebarToggle = page.locator(".liturgy-panel-header .liturgy-icon-btn").first();
+        expect((await sidebarToggle.boundingBox()).width).toBeCloseTo(22, 0);
+        const initiallyCollapsed = await sidebar.evaluate((element) =>
+          element.classList.contains("liturgy-panel--collapsed")
+        );
+        await activate(sidebarToggle);
+        await expect
+          .poll(() =>
+            sidebar.evaluate((element) => element.classList.contains("liturgy-panel--collapsed"))
+          )
+          .toBe(!initiallyCollapsed);
+        await activate(sidebarToggle);
+        await expect
+          .poll(() =>
+            sidebar.evaluate((element) => element.classList.contains("liturgy-panel--collapsed"))
+          )
+          .toBe(initiallyCollapsed);
       }
-      await activate(sidebarToggle);
-      await expect
-        .poll(() =>
-          sidebar.evaluate((element) => element.classList.contains("liturgy-panel--collapsed"))
-        )
-        .toBe(!initiallyCollapsed);
-      if (target.touch) {
-        await expect.poll(async () => Math.round((await sidebar.boundingBox()).width)).toBe(250);
-        await expectInsideViewport(sidebar, page);
-      }
-      await activate(sidebarToggle);
-      await expect
-        .poll(() =>
-          sidebar.evaluate((element) => element.classList.contains("liturgy-panel--collapsed"))
-        )
-        .toBe(initiallyCollapsed);
       await activate(close);
       await expect(page.locator(".subtabs-wrapper")).toBeHidden();
       await expectNoPageOverflow(page);

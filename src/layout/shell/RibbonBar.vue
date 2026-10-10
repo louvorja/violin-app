@@ -37,13 +37,17 @@
             <span aria-hidden="true">{{ mobileActionsOpen ? "⌃" : "⌄" }}</span>
           </button>
           <div class="ribbon-tools-web">
-            <ShellTools :class="{ 'shell-tools--compact-web': isMobileWeb }" />
+            <ShellTools
+              :compact="isMobileWeb"
+              :class="{ 'shell-tools--compact-web': isMobileWeb }"
+            />
           </div>
         </div>
       </div>
     </template>
 
     <div
+      v-show="!isShellExpanded"
       id="ribbon-tabpanel"
       ref="corpoRibbon"
       class="ribbon-body"
@@ -89,6 +93,7 @@
                   :route="btn.route"
                   :icon-color="resolveBtnColor(btn)"
                   :label="$t(btn.label)"
+                  :active-label="btn.labelActive ? $t(btn.labelActive) : undefined"
                   :size="btn.size || 'large'"
                   :testid="`ribbon-btn-${btn.id}`"
                 />
@@ -100,7 +105,7 @@
                   :label="$t(resolveBtnLabel(btn))"
                   :size="btn.size || 'large'"
                   :active="isButtonActive(btn)"
-                  :disabled="btn.disabled"
+                  :disabled="isBtnDisabled(btn)"
                   :testid="`ribbon-btn-${btn.id}`"
                   @click="executeButton(btn)"
                   @pointerenter="onButtonIntent(btn)"
@@ -252,7 +257,7 @@
                   :label="$t(resolveBtnLabel(btn))"
                   :size="btn.size || 'small'"
                   :active="isButtonActive(btn)"
-                  :disabled="btn.disabled"
+                  :disabled="isBtnDisabled(btn)"
                   :testid="`ribbon-btn-${btn.id}`"
                   @click="executeButton(btn)"
                 />
@@ -304,6 +309,7 @@ import RibbonTabs from "@/components/RibbonTabs.vue";
 import { useViewport } from "@/composables/useViewport";
 import { LjSlider, LjSwitch } from "@/components/ui";
 import { prefetchModule } from "@/helpers/ModulePrefetch";
+import { setModuleExpanded, useShellExpanded } from "@/composables/useModuleExpanded";
 import { ensureContrastOnDark } from "@/helpers/ColorContrast";
 
 const { t } = useI18n();
@@ -552,6 +558,21 @@ watch(
     })
 );
 const isContextualActive: ComputedRef<boolean> = computed(() => !!activePageObj.value?.contextual);
+
+// Com o módulo expandido o corpo some, mas as abas do ribbon continuam
+// clicáveis. Escolher outra página é pedir o ribbon de volta: sem isso o
+// clique trocaria um corpo que ninguém vê.
+const { activeModule, isExpanded: isShellExpanded } = useShellExpanded();
+watch(
+  () => ribbonStore.activePage,
+  (pageId: string) => {
+    const moduleId = activeModule.value;
+    if (!isShellExpanded.value || !moduleId) return;
+    const page = modules.find((p: RibbonPage) => p.id === pageId);
+    if (page?.contextual && (page.activeOnModules || []).includes(moduleId)) return;
+    setModuleExpanded(moduleId, false);
+  }
+);
 const visiblePages: ComputedRef<RibbonPage[]> = computed(() => ribbonStore.visiblePages);
 
 function selectContextualPageForModule(moduleId: string | null): void {
@@ -653,6 +674,11 @@ const EDITOR_ACTIONS = new Set<string>([
   "editor_view_4_3",
   "editor_view_16_9",
 ]);
+
+function isBtnDisabled(btn: RibbonButton): boolean {
+  if (btn.disabled) return true;
+  return !!btn.enabledWhen && $appdata.get<boolean>(btn.enabledWhen, false) !== true;
+}
 
 function resolveBtnIcon(btn: RibbonButton): string {
   if (btn.stateBinding) {
@@ -790,6 +816,7 @@ function executeButton(btn: RibbonButton): void {
       "background_sound",
       "background_projection",
       "scheduled_items",
+      "presentation_mode",
     ];
     const pattern = new RegExp(`^(${actions.join("|")})_(.+)$`);
     const m = btn.action.match(pattern);
@@ -825,12 +852,21 @@ useBroadcastListener(BROADCAST_TYPE.RIBBON_SELECT_PAGE, (payload: unknown) => {
   height: 100%;
 }
 
+/* No PWA do iOS 26 a linha de abas é a borda do topo. O WebKit
+   (LocalFrameView::fixedContainerEdges) testa um ponto logo abaixo do topo e
+   procura um ancestral fixed/sticky com fundo sólido e ≥90% da largura; sem
+   ele, borra ~40pt abaixo da barra de status com o efeito Liquid Glass. Por
+   isso `sticky` (nada rola aqui, o layout não muda) e a faixa da barra de
+   status como padding dela, não do container. Fora do iOS o inset é 0. */
 .ribbon-tabs-row {
   display: flex;
   align-items: stretch;
-  height: var(--lj-tab-height);
-  background: var(--lj-shell-chrome-bg);
-  position: relative;
+  box-sizing: border-box;
+  height: calc(var(--lj-tab-height) + env(safe-area-inset-top));
+  padding-top: env(safe-area-inset-top);
+  background-color: var(--lj-shell-chrome-bg);
+  position: sticky;
+  top: 0;
   z-index: 2;
 }
 
@@ -856,7 +892,7 @@ useBroadcastListener(BROADCAST_TYPE.RIBBON_SELECT_PAGE, (payload: unknown) => {
   display: grid;
   grid-template-columns: var(--lj-appmenu-width) minmax(0, 1fr);
   grid-template-rows: 44px 44px;
-  height: 88px;
+  height: calc(88px + env(safe-area-inset-top));
 }
 
 .ribbon--compact-web .ribbon-app-menu,
@@ -877,7 +913,11 @@ useBroadcastListener(BROADCAST_TYPE.RIBBON_SELECT_PAGE, (payload: unknown) => {
   flex: 1;
   min-width: 0;
   overflow-x: auto;
-  overscroll-behavior-inline: contain;
+  /* Só rola na horizontal: com `overflow-x: auto` o outro eixo vira `auto`
+     também, e 1px de sobra já deixava o dedo arrastar a barra para cima/baixo. */
+  overflow-y: hidden;
+  touch-action: pan-x;
+  overscroll-behavior: contain;
   scrollbar-width: none;
 }
 

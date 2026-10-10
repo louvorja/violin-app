@@ -49,7 +49,9 @@
     },
     "datatable": {
       "alerts": {
-        "not_found": "Não foi possível localizar o arquivo para exibir essas informações!"
+        "not_found": "Não foi possível localizar o arquivo para exibir essas informações!",
+        "offline_downloaded_only": "Sem internet: mostrando só as músicas baixadas neste aparelho.",
+        "offline_no_catalog": "Sem internet, e o catálogo ainda não foi baixado neste aparelho. Conecte-se uma vez para baixá-lo."
       }
     },
     "ui": {
@@ -59,7 +61,8 @@
       "select_placeholder": "Selecione...",
       "search_placeholder": "Buscar...",
       "no_results": "Nenhum resultado.",
-      "copied": "Copiado"
+      "copied": "Copiado",
+      "details": "Detalhes"
     },
     "inputs": {
       "search": "Buscar"
@@ -119,6 +122,8 @@
   },
   "alert": {
     "close": "Fechar",
+    "retry": "Tentar de novo",
+    "technical_details": "Detalhes técnicos",
     "yes": "Sim",
     "no": "Não",
     "ok": "OK",
@@ -345,6 +350,8 @@
       "devices_hint": "Dispositivos que podem acessar o servidor HTTP com permissões específicas. Instale o app Violin Remote para ter acesso.",
       "only_authorized_devices": "Permitir somente dispositivos cadastrados",
       "only_authorized_hint": "Quando ativado, apenas dispositivos cadastrados podem acessar a API. Localhost sempre tem acesso.",
+      "chat_history_limit": "Mensagens no histórico do chat",
+      "chat_history_limit_hint": "Limite de mensagens não lidas que o app pode baixar ao reconectar (1 a 500).",
       "no_devices": "Nenhum dispositivo autorizado.",
       "add_device": "Adicionar Dispositivo",
       "scan_qr": "Escanear QR Code",
@@ -371,6 +378,9 @@
       "permission_liturgy": "Liturgia",
       "permission_announce": "Anúncios",
       "permission_chat": "Chat",
+      "permission_online_videos": "Vídeos Online",
+      "permission_background_sound": "Som de fundo",
+      "permission_volume": "Volume",
       "select_all": "Selecionar todas",
       "deselect_all": "Desmarcar todas",
       "app_dialog_title": "Violin Remote",
@@ -459,6 +469,80 @@
       "no_results": "Nenhum álbum encontrado para a pesquisa.",
       "loading": "Carregando álbuns…"
     },
+    "integrations": {
+      "title": "Integrações",
+      "hint": "Conecte serviços de terceiros para usá-los dentro do LouvorJA.",
+      "connection": "Conexão",
+      "not_connected": "Não conectado",
+      "connected": "Conectado",
+      "connected_as": "Conectado como {name}",
+      "connecting": "Aguardando autorização no navegador…",
+      "connect": "Conectar",
+      "disconnect": "Desconectar",
+      "copy": "Copiar",
+      "help": "Ajuda",
+      "instructions": "Como configurar",
+      "cancel": "Cancelar",
+      "canva": {
+        "desktop_only": "A conexão com o Canva existe só no aplicativo desktop: no navegador não há processo principal para receber o retorno do Canva.",
+        "credentials": "Credenciais do Canva",
+        "credentials_hint": "Vêm do portal de desenvolvedor do Canva. Ficam guardadas cifradas (AES-256-GCM) e não são exibidas depois de salvas.",
+        "client_id": "Client ID",
+        "client_id_placeholder": "OC-00000-AbCdEf",
+        "client_secret": "Client Secret",
+        "save_credentials": "Salvar credenciais",
+        "change_credentials": "Alterar credenciais",
+        "credentials_saved": "Credenciais salvas (criptografadas)",
+        "disconnect_confirm": "Revogar o acesso do LouvorJA ao seu Canva? O token local será apagado e será preciso conectar de novo.",
+        "redirect_uri": "Redirect URL",
+        "instructions_title": "Canva — configuração no portal de desenvolvedores",
+        "step_portal": "Abra o portal de desenvolvedores do Canva:",
+        "step_create": "Clique em \"Create app\".",
+        "step_rest": "Em Outside Canva → Configuration, ative Canva REST APIs.",
+        "step_scopes": "Em Scopes, marque Read em folder, design:meta, design:content e profile.",
+        "step_redirect": "Em Outside Canva → Redirect URLs, registre esta URL:",
+        "step_credentials": "Em Credentials, copie o Client ID e clique em Generate secret.",
+        "step_save": "Cole os dois em Credenciais do Canva e clique em \"Salvar credenciais\".",
+        "step_connect": "Clique em \"Conectar\" e autorize o app na sua conta Canva.",
+        "step_login": "Por fim, para exibir no modo projeção, no LouvorJA Violin, na tela de opcões > integrações, clique em \"Fazer login no Canva\" e entre na sua conta: quando o Canva aceitar, a janela fecha sozinha e o app confere a sessão — é esse login que permite a projeção abrir o design.",
+        "saved_ok": "Credenciais salvas.",
+        "connected_ok": "Canva conectado.",
+        "disconnected_ok": "Canva desconectado.",
+        "error_generic": "Falha na integração com o Canva.",
+        "key_warning": "O cofre do Canva não pôde ser lido — informe as credenciais de novo.",
+        "project_as": "Projetar como",
+        "project_as_hint": "Escolha como um design do Canva vai para o telão. Dá para trocar quando quiser.",
+        "project_as_pdf": "PDF",
+        "project_as_pdf_hint": "Exporta o design como arquivo e projeta com o leitor do app: tela cheia, setas, operador e tela de retorno nativos, sem login do Canva e sem esperar a página carregar.",
+        "project_as_pdf_details": "Animações, vídeos e transições do design viram página parada, e a primeira projeção leva alguns segundos para exportar. Além disso, existe uma limitação de 75 exportações por 5 minutos e 500 exportações por 25 horas",
+        "project_as_site": "Projeção do Canva",
+        "project_as_site_hint": "Abre o design ao vivo na janela da projeção, com animações, transições e elementos audiovisuais intactos.",
+        "project_as_site_details": "Exige fazer login do Canva uma vez, depende do atalho do Canva para entrar em modo de apresentação e a página pode demorar a carregar.",
+        "scope_missing": "Este token não tem o escopo design:content:read, que o export em PDF exige. Confirme design:content (Read) no portal e clique em Conectar para reconectar: escopo só entra numa nova autorização, o refresh não amplia.",
+        "export_quality": "Qualidade do export (PDF)",
+        "export_quality_hint": "Regular é suficiente para telão e funciona em qualquer conta. Pro usa a saída premium do Canva — se o design tiver elemento premium que a sua conta não pagou, o app refaz em Regular e avisa.",
+        "quality_regular": "Regular",
+        "quality_regular_hint": "Padrão do Canva: arquivo menor e export mais rápido.",
+        "quality_pro": "Pro (premium)",
+        "quality_pro_hint": "Saída de maior qualidade. Exige plano que cubra os elementos premium do design.",
+        "quality_fallback": "Export em Pro indisponível para este design — o PDF saiu em Regular.",
+        "web_session": "Sessão do Canva (projeção)",
+        "web_session_on": "Sessão ativa como {name}",
+        "web_session_active": "Sessão ativa",
+        "web_session_off": "Sem sessão — a projeção vai pedir login do Canva",
+        "web_login": "Fazer login no Canva",
+        "web_login_waiting": "Janela aberta — faça login no Canva",
+        "web_login_hint": "Abre o Canva numa janela normal, FORA da projeção. Faça login: quando o Canva aceitar, a janela fecha sozinha e o app confere a sessão. Os cookies ficam na mesma sessão usada pela janela de URL e pela tela de retorno, e o design abre direto. O token da API não serve aqui — o site do Canva autentica por sessão, não por token.",
+        "web_login_ok": "Login realizado com sucesso. A sessão do Canva foi verificada e a janela foi fechada.",
+        "web_login_failed": "Não detectei a sessão do Canva — conclua o login na janela e tente de novo.",
+        "web_login_network": "Não consegui conferir a sessão: verifique a conexão.",
+        "web_login_unavailable": "Conferência de sessão indisponível neste ambiente.",
+        "web_logout": "Sair do Canva",
+        "web_logout_confirm": "Encerrar a sessão do Canva na janela de projeção? O token da API continua valendo — só a sessão do site sai.",
+        "web_logout_ok": "Sessão do Canva encerrada.",
+        "web_logout_failed": "Não consegui encerrar a sessão do Canva."
+      }
+    },
     "collections_download": {
       "title": "Download de Coletâneas",
       "desktop_only": "Disponível apenas na versão desktop.",
@@ -482,7 +566,7 @@
       "save_nothing": "Nada a remover do disco.",
       "cancel": "Cancelar Download",
       "progress": "{done} de {total} ({percent}%)",
-      "hint": "Selecione álbuns para baixar capas, áudios e imagens das músicas para uso offline.",
+      "hint": "Marque o que quer baixar. Desmarque o que já está baixado para removê-lo.",
       "loading": "Carregando coletâneas…",
       "preparing": "Preparando lista de arquivos… ({done}/{total})",
       "collect_failed": "Falha ao coletar lista de arquivos.",
@@ -504,7 +588,11 @@
       "disk_usage_loading": "Calculando uso em disco…",
       "disk_usage_detail": "{size} · {files} arquivo(s) · {albums} álbum(ns) completo(s){hymnal}",
       "disk_usage_hymnal": " · hinário",
-      "from_classic": "acervo da versão clássica"
+      "from_classic": "acervo da versão clássica",
+      "downloaded": "baixado",
+      "will_remove": "será removido",
+      "remove": "Remover {n} do aparelho",
+      "remove_confirm": "Remover {n} item(ns) baixado(s) do aparelho? Você pode baixar de novo depois."
     },
     "bible_download": {
       "title": "Bíblia",
@@ -528,6 +616,19 @@
     },
     "storage": {
       "title": "Armazenamento",
+      "web": {
+        "hint": "As músicas baixadas ficam só neste aparelho. Limpar os dados do site ou desinstalar o app apaga tudo.",
+        "used": "Espaço usado pelo app",
+        "quota": "Limite do navegador",
+        "protected": "Armazenamento protegido",
+        "protected_yes": "Sim",
+        "protected_no": "Não",
+        "protected_hint": "Sem proteção, o aparelho pode apagar as músicas baixadas quando faltar espaço.",
+        "protect": "Proteger armazenamento",
+        "protect_done": "Armazenamento protegido.",
+        "protect_denied_install": "O navegador negou a proteção. Instale o app para liberá-la. Toque para ver como.",
+        "protect_denied": "O navegador negou a proteção. Use o site com frequência e tente de novo."
+      },
       "folder": "Pasta de dados",
       "restart_required": "Reinicie o aplicativo para concluir a mudança de todos os dados para esta pasta.",
       "folder_fallback": "Não consegui escrever em {dir}; os dados estão na pasta do programa. Escolha outra pasta ou libere o acesso.",
@@ -589,7 +690,13 @@
       "open_return_at": "Tela de retorno do vídeo em:",
       "show_return": "Exibir na tela de retorno",
       "title": "Vídeos On-line",
-      "youtube_action": "Ao executar link do YouTube na liturgia, abrir:"
+      "youtube_action": "Ao executar link do YouTube na liturgia, abrir:",
+      "account_title": "Conta do YouTube",
+      "account_none": "Nenhuma conta conectada.",
+      "account_connected": "Conta conectada: os vídeos são consultados com ela.",
+      "account_login": "Entrar no YouTube",
+      "account_logout": "Sair da conta",
+      "account_hint": "Só é necessário se o YouTube começar a pedir \"confirme que você não é um robô\". Use uma conta secundária, criada para a igreja — o YouTube pode restringir contas usadas por programas como este. A sessão fica só neste computador e pode ser encerrada aqui a qualquer momento. Ter conta não faz aparecer anúncios: o app toca os vídeos sem o player do YouTube."
     },
     "player": {
       "title": "Player de Áudio/Vídeo",
@@ -607,6 +714,9 @@
       "fade": "Usar fade ao abrir/fechar projeção",
       "fade_duration": "Duração do fade",
       "custom_background": "Personalizar fundo da projeção"
+    },
+    "site_projection": {
+      "title": "Projeção de Sites"
     },
     "utilities": {
       "title": "Utilitários",
@@ -669,9 +779,16 @@
     "tabs": {
       "slides": "Slides",
       "announcements": "Anúncios",
-      "shortcuts": "Atalhos"
+      "shortcuts": "Atalhos",
+      "online_videos": "Vídeos Online",
+      "background_sound": "Som de fundo",
+      "presenter": "Apresentador"
     },
     "music": {
+      "albums": "Álbuns",
+      "collections": "Coletâneas",
+      "albums_empty": "Nenhum álbum disponível. Atualize o banco no desktop.",
+      "album_empty": "Nenhuma música neste álbum.",
       "mode_title": "Executar como",
       "mode_sung": "Cantado",
       "mode_playback": "Playback",
@@ -708,6 +825,18 @@
       "overlay": "Sobreposições",
       "background": "Projeção de Fundo"
     },
+    "videos": {
+      "search_placeholder": "Pesquisar ou colar URL do YouTube",
+      "project_url": "Projecar",
+      "catalog": "Vídeos Online",
+      "mine": "Meus Vídeos Online",
+      "uncategorized": "Sem categoria",
+      "back": "Voltar",
+      "empty_albums": "Nenhum vídeo disponível. Atualize o banco de dados no desktop.",
+      "empty_search": "Nenhum vídeo encontrado",
+      "projected": "Vídeo enviado para a projeção",
+      "project_error": "Erro ao projetar o vídeo"
+    },
     "errors": {
       "generic": "Erro"
     },
@@ -718,6 +847,21 @@
     "token_invalid": {
       "title": "Token inválido",
       "message": "O token de acesso utilizado é inválido ou expirou. Gere um novo token nas Configurações → Transmissão."
+    },
+    "bgsound": {
+      "now": "Tocando agora",
+      "nothing": "Nenhum som tocando",
+      "volume": "Volume",
+      "pause": "Pausar",
+      "resume": "Retomar",
+      "stop": "Parar",
+      "library": "Biblioteca",
+      "empty": "Nenhum som de fundo cadastrado no desktop.",
+      "uncategorized": "Sem categoria"
+    },
+    "presenter": {
+      "start_bg": "Iniciar som de fundo",
+      "started": "Som de fundo iniciado"
     }
   },
   "bible": {
@@ -790,16 +934,14 @@
       "revelation": "Apocalipse"
     }
   },
-  "import_export": {
-    "export": {
-      "action": "Exportar Liturgia",
-      "hint": "Baixa um arquivo .json com todos os dias da liturgia, anotações, itens agendados e categorias.",
-      "done": "Arquivo baixado!"
-    },
-    "import": {
-      "action": "Importar Liturgia",
-      "hint": "Carrega um arquivo .json (exportado da versão web/desktop) ou .ja (versão legada). Os itens serão restaurados conforme os dias do arquivo."
-    }
+  "open_file": {
+    "title": "Abrir música personalizada (.slja)",
+    "hint_mac": "Para projetar uma música .slja sem adicioná-la a uma coletânea, arraste o arquivo para dentro da janela do app ou sobre o ícone dele no Dock, ou dê duplo clique no arquivo.",
+    "hint_desktop": "Para projetar uma música .slja sem adicioná-la a uma coletânea, arraste o arquivo para dentro da janela do app ou dê duplo clique nele (ou \"Abrir com\" LouvorJA).",
+    "hint_pwa": "Para projetar uma música .slja sem adicioná-la a uma coletânea, arraste o arquivo para dentro da janela do app ou use \"Abrir com\" no arquivo.",
+    "hint_web": "Para projetar uma música .slja sem adicioná-la a uma coletânea, arraste o arquivo para dentro da janela do navegador.",
+    "hint_touch": "Neste aparelho não é possível arrastar arquivos para o app. Para tocar uma música .slja, importe-a em Coletâneas Personalizadas.",
+    "keep": "Para guardá-la, importe em Coletâneas Personalizadas."
   },
   "popup": {
     "close": "Fechar Janela"
@@ -811,7 +953,9 @@
     "developer_mode_disabled": "Modo DESENVOLVEDOR desativado!",
     "error_import_module": "Erro ao importar módulo",
     "misconfigured_module": "Este módulo está mal configurado. O id informado no manifest.json deve ter o mesmo nome da pasta onde está localizado!",
-    "heic_nao_suportado": "Não foi possível ler esta foto HEIC. Converta para JPEG e importe de novo."
+    "heic_nao_suportado": "Não foi possível ler esta foto HEIC. Converta para JPEG e importe de novo.",
+    "drop_slja_hint": "Solte o arquivo .slja para projetar",
+    "drop_slja_invalid": "Só arquivos .slja podem ser abertos aqui."
   },
   "ribbon": {
     "pages": {
@@ -847,6 +991,10 @@
       "info": "Informações",
       "items": "Itens",
       "library": "Biblioteca",
+      "navigation": "Navegação",
+      "outputs": "Saídas",
+      "presentation": "Apresentação",
+      "program": "Programa",
       "manage": "Gerenciar",
       "main_text": "Texto Principal",
       "media": "Mídia",
@@ -947,7 +1095,6 @@
       "editor_view_4_3": "4:3",
       "editor_view_16_9": "16:9",
       "editor_view_full": "Tela Cheia",
-      "export_music": "Exportar Música",
       "favorites": "Favoritos",
       "format": "Formatar",
       "history": "Histórico",
@@ -1011,6 +1158,9 @@
     "home_music": "Músicas",
     "home_bible": "Bíblia",
     "home_liturgy": "Liturgia",
+    "home_try": "ou experimente o novo",
+    "home_presentation": "Modo apresentação",
+    "home_beta": "Beta",
     "search_placeholder": "Buscar hino, música, versículo...",
     "toggle_sidebar": "Mostrar/ocultar menu",
     "toggle_liturgy": "Mostrar/ocultar liturgia",
@@ -1020,6 +1170,7 @@
     "history": "Histórico",
     "remote_connected": "Conectado remotamente",
     "offline_title": "Sem conexão com a internet",
+    "offline_albums_only": "Sem internet: mostrando só os álbuns com músicas baixadas neste aparelho.",
     "offline_since": "Sem conexão desde {time}.",
     "offline_detail": "O LouvorJA continua funcionando com o que já está no computador. Músicas e imagens que ainda não foram baixadas não abrem até a conexão voltar.",
     "offline_action": "Esta ação precisa de internet.",
@@ -1146,8 +1297,9 @@
       "settings": "Opções",
       "transmission": "Transmitir",
       "remote_control": "Controle Remoto",
-      "import_export": "Importar/Exportar",
+      "open_file": "Abrir arquivo",
       "sync": "Sincronizar Arquivos",
+      "integrations": "Integrações",
       "accessibility": "Acessibilidade",
       "feedback": "Enviar Feedback",
       "check_update": "Procurar Atualizações",
@@ -1156,6 +1308,10 @@
       "donate": "Faça sua Doação",
       "licenses": "Licenças",
       "exit": "Sair"
+    },
+    "canva_login_wall": {
+      "title": "Projeção pedindo login do Canva",
+      "text": "A janela de projeção caiu na tela de login do Canva: a sessão não está mais ativa. Deseja abrir a tela de Integrações para logar de novo?"
     },
     "window": {
       "minimize": "Minimizar"
@@ -1194,7 +1350,33 @@
     "proj_open_projection": "Abrir projeção (tela cheia)",
     "proj_open_return": "Abrir retorno (operador)",
     "proj_open_operator": "Abrir grade do operador",
-    "icon": "Ícone"
+    "icon": "Ícone",
+    "pwa_install": {
+      "title": "Instalar o LouvorJA",
+      "intro": "Instalado, o app abre como qualquer outro e guarda suas músicas com mais segurança.",
+      "why_offline_downloads": "Sem instalar, o celular pode apagar as músicas baixadas quando faltar espaço.",
+      "why_storage": "Sem instalar, o celular pode apagar as músicas baixadas quando faltar espaço.",
+      "why_files": "Instalado, o app abre arquivos .slja direto.",
+      "benefits_title": "Vantagens",
+      "benefit_offline": "Músicas baixadas protegidas",
+      "benefit_fullscreen": "Tela cheia, sem barra do navegador",
+      "benefit_shortcut": "Ícone na tela inicial",
+      "install_now": "Instalar",
+      "steps_title": "Como instalar",
+      "ios_1": "Abra esta página no Safari.",
+      "ios_2": "Toque em Compartilhar (quadrado com seta para cima).",
+      "ios_3": "Toque em \"Adicionar à Tela de Início\".",
+      "ios_4": "Toque em \"Adicionar\".",
+      "android_1": "Toque no menu do navegador (três pontos).",
+      "android_2": "Toque em \"Instalar app\" ou \"Adicionar à tela inicial\".",
+      "android_3": "Confirme em \"Instalar\".",
+      "chromium_1": "Toque no ícone de instalar na barra de endereço.",
+      "chromium_2": "Ou abra o menu (três pontos) e escolha \"Instalar LouvorJA\".",
+      "chromium_3": "Confirme em \"Instalar\".",
+      "unsupported": "Este navegador não instala apps. Use o Chrome ou o Edge (Android) ou o Safari (iPhone e iPad).",
+      "snack_offline": "Instale o app para não perder as músicas baixadas. Toque para ver como.",
+      "protected_install": "Como instalar"
+    }
   },
   "formatacao": {
     "title": "Formatação",
@@ -1248,7 +1430,8 @@
       "media": "Player",
       "liturgy": "Liturgia",
       "bible": "Bíblia",
-      "system": "Sistema"
+      "system": "Sistema",
+      "presentation": "Modo apresentação"
     },
     "esc": "Encerrar projeções ativas",
     "f1": "Mostrar atalhos de teclado",
@@ -1283,7 +1466,10 @@
     "next_slide": "Próximo slide",
     "bible_prev_verse": "Versículo anterior",
     "bible_next_verse": "Próximo versículo",
-    "bible_clear": "Limpar versículo selecionado"
+    "bible_clear": "Limpar versículo selecionado",
+    "presentation_next": "Modo apresentação: próximo (passador)",
+    "presentation_prev": "Modo apresentação: anterior (passador)",
+    "presentation_black": "Modo apresentação: tela preta / voltar"
   },
   "startup_check": {
     "title": "Verificação Inicial",
@@ -1497,6 +1683,7 @@
   },
   "projection": {
     "enter_fullscreen": "Entrar em tela cheia",
+    "windows_unsupported": "Este aparelho não abre janelas de projeção. Use a tela cheia do player e espelhe a tela do aparelho.",
     "fullscreen_hint": "Você também pode apertar F11",
     "fullscreen_auto_hint": "Um clique é necessário porque o navegador não permite que sites entrem em tela cheia sozinhos. No aplicativo para computador a projeção já abre em tela cheia, sem clique.",
     "video_unavailable": "Vídeo indisponível",
@@ -1519,7 +1706,8 @@
       "unavailable": "Este vídeo foi removido ou não está disponível.",
       "fallback": "Não foi possível baixar o vídeo. Usando o player do YouTube.",
       "download": "Não foi possível baixar o vídeo agora. Tente de novo mais tarde.",
-      "stream": "Não foi possível abrir o vídeo direto. Usando o player do YouTube."
+      "stream": "Não foi possível abrir o vídeo direto. Usando o player do YouTube.",
+      "bot": "O YouTube pediu para confirmar que não é um robô. Entre com uma conta em Opções → Vídeos para voltar a tocar sem anúncios; por enquanto, usando o player do YouTube."
     },
     "download": {
       "start": "Baixar para usar sem internet",

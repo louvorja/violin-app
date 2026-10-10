@@ -37,6 +37,7 @@ export { default as LjCombobox } from "./LjCombobox.vue";
 export { default as LjDialog } from "./LjDialog.vue";
 export { default as LjDrawer } from "./LjDrawer.vue";
 export { default as LjMenu } from "./LjMenu.vue";
+export { default as LjContextMenu } from "./LjContextMenu.vue";
 export { default as LjPopover } from "./LjPopover.vue";
 export { default as LjSelect } from "./LjSelect.vue";
 export { default as LjSlider } from "./LjSlider.vue";

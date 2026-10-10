@@ -23,6 +23,17 @@ describe("netHealth", () => {
     expect(netHealth.status().online).toBe(true);
   });
 
+  it("na carência ao acordar, falhas não derrubam e sucesso continua valendo", () => {
+    netHealth.report(false);
+    netHealth.report(false);
+    expect(netHealth.status().online).toBe(false);
+    netHealth.holdFailures(10_000);
+    netHealth.report(true);
+    netHealth.report(false);
+    netHealth.report(false);
+    expect(netHealth.status().online).toBe(true);
+  });
+
   it("duas falhas seguidas derrubam", () => {
     netHealth.report(false);
     netHealth.report(false);

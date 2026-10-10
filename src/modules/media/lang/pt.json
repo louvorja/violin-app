@@ -3,7 +3,12 @@
   "description": "Monta o slide da música (função $media.open)",
   "alerts": {
     "not_loaded": "Ocorreu um erro ao carregar este áudio!",
+    "not_loaded_title": "Não foi possível tocar este áudio",
+    "unsupported": "Este aparelho não consegue tocar o formato desta faixa. Tente outra música ou use o aplicativo no computador.",
+    "decode": "O arquivo de áudio parece estar corrompido ou incompleto. Tente de novo.",
+    "blocked": "O navegador bloqueou a reprodução. Toque em tocar novamente.",
     "not_loaded_offline": "Não foi possível baixar este áudio. Verifique a conexão e toque para tentar de novo.",
+    "offline_not_downloaded": "Sem internet, e esta música não está baixada neste aparelho. Conecte-se, ou baixe o álbum antes de ficar sem conexão.",
     "close": "Deseja fechar este slide?",
     "close_audio": "Deseja parar a música?",
     "close_projection": "Deseja encerrar a projeção?",
@@ -21,10 +26,8 @@
     "lyric": "Letra da Música",
     "track": "Faixa",
     "video_quality": "Qualidade",
-    "channel": "Canal",
     "post_date": "Data de publicação",
     "views": "Visualizações",
-    "video_link": "Link do vídeo",
     "slides": "Slides"
   },
   "inputs": {

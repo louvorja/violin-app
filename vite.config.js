@@ -152,19 +152,33 @@ export default async ({ mode }) => {
             },
           ]
         : []),
-      // Áudio (mp3, ogg, wav) — cache-first, TTL 30 dias
+      // Áudio (mp3, ogg, opus, m4a, aac, wav, flac; o catálogo atual é .opus) — cache-first.
+      // Este cache e o de imagens são o acervo baixado: "Baixar álbum" grava aqui
+      // (helpers/WebFileStore.ts). Por isso NÃO têm `expiration`, nem por data nem
+      // por quantidade. O fetch do download passa por esta rota, o plugin de
+      // expiração registra cada URL e apaga as mais antigas acima do limite: com
+      // `maxEntries` o acervo de milhares de arquivos nunca ficava completo e os
+      // álbuns voltavam a "não baixado" sozinhos. Sem limite, resposta opaca
+      // (status 0) também não entra: o Chrome cobra ~7MB de cota por cada uma, e
+      // toda capa vista em <img> viraria uma. `rangeRequests` é obrigatório: o
+      // <audio> pede `Range: bytes=0-`, e sem fatiar a resposta do cache o Chrome
+      // Android não consegue tocar nem pular dentro do áudio offline.
       {
         urlPattern: filesUrl
-          ? new RegExp(`^${escapeRegex(filesUrl)}.*\\.(mp3|ogg|wav)(\\?.*)?$`, "i")
-          : /\.(mp3|ogg|wav)(\?.*)?$/i,
+          ? new RegExp(
+              `^${escapeRegex(filesUrl)}.*\\.(mp3|ogg|opus|m4a|aac|wav|flac)(\\?.*)?$`,
+              "i"
+            )
+          : /\.(mp3|ogg|opus|m4a|aac|wav|flac)(\?.*)?$/i,
         handler: "CacheFirst",
         options: {
           cacheName: "louvorja-audio",
-          expiration: { maxEntries: 500, maxAgeSeconds: 30 * 24 * 3600 },
-          cacheableResponse: { statuses: [0, 200] },
+          cacheableResponse: { statuses: [200] },
+          rangeRequests: true,
+          matchOptions: { ignoreVary: true },
         },
       },
-      // Imagens externas — cache-first, TTL 30 dias
+      // Imagens externas — cache-first (sem expiração, pelo mesmo motivo do áudio)
       {
         urlPattern: filesUrl
           ? new RegExp(`^${escapeRegex(filesUrl)}.*\\.(jpg|jpeg|png|webp|gif)(\\?.*)?$`, "i")
@@ -172,8 +186,8 @@ export default async ({ mode }) => {
         handler: "CacheFirst",
         options: {
           cacheName: "louvorja-images",
-          expiration: { maxEntries: 200, maxAgeSeconds: 30 * 24 * 3600 },
-          cacheableResponse: { statuses: [0, 200] },
+          cacheableResponse: { statuses: [200] },
+          matchOptions: { ignoreVary: true },
         },
       },
       // Conversor de HEIC — guardado no primeiro uso, e não antes. Fica fora do
@@ -184,6 +198,17 @@ export default async ({ mode }) => {
         handler: "CacheFirst",
         options: {
           cacheName: "louvorja-heic",
+          expiration: { maxEntries: 2, maxAgeSeconds: 90 * 24 * 3600 },
+          cacheableResponse: { statuses: [0, 200] },
+        },
+      },
+      // Decodificador de Opus — mesmo raciocínio do HEIC: são 4MB que só o
+      // Safari usa, e só ao tocar um .opus.
+      {
+        urlPattern: /\/assets\/opus-decoder-[^/]*\.js$/,
+        handler: "CacheFirst",
+        options: {
+          cacheName: "louvorja-opus-decoder",
           expiration: { maxEntries: 2, maxAgeSeconds: 90 * 24 * 3600 },
           cacheableResponse: { statuses: [0, 200] },
         },
@@ -204,7 +229,7 @@ export default async ({ mode }) => {
           // de todo mundo, quando o arquivo só interessa a quem importa foto de
           // iPhone. Fora do precache, ele desce sob demanda e o
           // `runtimeCaching` acima o guarda a partir daí.
-          globIgnores: ["**/heic-to-*.js"],
+          globIgnores: ["**/heic-to-*.js", "**/opus-decoder-*.js"],
           runtimeCaching,
         },
         manifest: {
@@ -215,6 +240,13 @@ export default async ({ mode }) => {
           display: "standalone",
           background_color: "#000000",
           theme_color: "#000000",
+          // Chrome/ChromeOS desktop: "Abrir com" LouvorJA para músicas .slja.
+          file_handlers: [
+            {
+              action: process.env.VITE_BASE_URL ?? "/",
+              accept: { "application/zip": [".slja"] },
+            },
+          ],
           icons: [
             {
               src: (process.env.VITE_BASE_URL ?? "/") + "ico/favicon-16x16.png",
@@ -309,6 +341,15 @@ export default async ({ mode }) => {
               if (/[\\/]node_modules[\\/](vue|vue-router|pinia)[\\/]/.test(id)) return "vendor-vue";
               // Busca full-text
               if (/[\\/]node_modules[\\/]fuse\.js[\\/]/.test(id)) return "vendor-fuse";
+              // Decodificador de Opus em WASM (só o iOS precisa). O nome fixo é o
+              // que deixa `globIgnores` e o `runtimeCaching` o reconhecerem.
+              if (
+                /[\\/]node_modules[\\/](ogg-opus-decoder|opus-decoder|codec-parser|@wasm-audio-decoders|@eshaz[\\/]web-worker|simple-yenc)[\\/]/.test(
+                  id
+                )
+              ) {
+                return "opus-decoder";
+              }
               // Reka UI — o headless por trás dos primitivos
               if (/[\\/]node_modules[\\/]reka-ui[\\/]/.test(id)) return "vendor-reka";
               return;

@@ -1,5 +1,5 @@
 <template>
-  <div v-if="!is_mobile" class="screen-btn">
+  <div v-if="!is_mobile && canProject" class="screen-btn">
     <LjTooltip :text="$t('options.slides.open_at')">
       <LjButton
         class="screen-btn__main"
@@ -51,6 +51,7 @@ import {
 } from "@/helpers/Projection";
 import { mediaWindowPlan, openMediaWindow } from "@/helpers/ProjectionWindows";
 import { PROJECTION_TYPE } from "@/constants/Projection";
+import { canOpenWebWindows } from "@/helpers/projection/webWindow";
 
 const props = defineProps({
   /** Identificador único da projeção (ex: "bible", "music"). Default: derivado de `module`. */
@@ -86,6 +87,7 @@ const ROUTE_BY_MODULE = {
 };
 
 const is_mobile = computed(() => AppData.get("is_mobile"));
+const canProject = canOpenWebWindows();
 
 const FEATURE_BY_MODULE = {
   music: PROJECTION_TYPE.MUSIC,
