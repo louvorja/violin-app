@@ -466,7 +466,8 @@
     "replace_text": "O programa desse dia já tem itens. Criar a partir do modelo substitui todos eles.",
     "pending": "Falta escolher: {n}",
     "pending_hint": "Itens que mudam toda semana e ainda não têm conteúdo. Clique para escolher.",
-    "choose": "ESCOLHER"
+    "choose": "ESCOLHER",
+    "use": "Usar um modelo"
   },
   "sync": {
     "saving": "Salvando…",

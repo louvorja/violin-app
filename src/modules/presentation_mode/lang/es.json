@@ -466,7 +466,8 @@
     "replace_text": "El programa de ese día ya tiene ítems. Crear desde el modelo los reemplaza todos.",
     "pending": "Falta elegir: {n}",
     "pending_hint": "Ítems que cambian cada semana y aún no tienen contenido. Haz clic para elegir.",
-    "choose": "ELEGIR"
+    "choose": "ELEGIR",
+    "use": "Usar un modelo"
   },
   "sync": {
     "saving": "Guardando…",

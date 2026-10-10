@@ -111,7 +111,7 @@
             data-testid="pm-program-from-model"
             @click="openModels('new')"
           >
-            {{ tm("models.new_title") }}
+            {{ tm("models.use") }}
           </LjButton>
           <LjButton size="sm" :icon="ICONS.ACTIONS.IMPORT" @click="emit('import')">
             {{ tm("ribbon.btn.import_liturgy") }}
@@ -765,6 +765,13 @@ function onSessionItems(sessionId: string, list: ProgramItem[]): void {
 
 .pm-program__empty {
   padding: var(--lj-space-4);
+}
+
+/* A coluna é estreita: as ações do vazio ficam uma embaixo da outra. */
+.pm-program__empty :deep(.lj-empty__actions) {
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
 }
 
 .pm-session__head {
