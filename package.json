@@ -11,6 +11,9 @@
   },
   "private": true,
   "main": "electron/main.cjs",
+  "engines": {
+    "node": ">=22.12.0 <25"
+  },
   "scripts": {
     "assets:brand": "node scripts/generate-brand-assets.mjs",
     "validate:brand-assets": "node scripts/validate-brand-assets.mjs",
@@ -68,7 +71,7 @@
     "@playwright/test": "^1.59.1",
     "@posthog/rollup-plugin": "^1.6.0",
     "@tabler/icons-vue": "^3.46.0",
-    "@types/node": "^25.6.0",
+    "@types/node": "^24.19.2",
     "@vitejs/plugin-vue": "^6.0.4",
     "@vitest/coverage-v8": "^4.1.5",
     "@vitest/ui": "^4.1.5",
