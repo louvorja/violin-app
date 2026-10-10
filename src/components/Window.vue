@@ -252,6 +252,7 @@ function onOpenAutoFocus(event) {
 
 function scroll() {
   const el = main_container.value;
+  if (!el) return;
   emit("scroll", {
     scroll_top: el.scrollTop,
     client_height: el.clientHeight,
