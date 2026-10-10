@@ -4,6 +4,7 @@ import Platform from "@/helpers/Platform";
 import Path from "@/helpers/Path";
 import type { OverlayImageRecord, OverlaySlot } from "@/types/Overlay";
 import { IMAGE_EXT } from "@/constants/FileTypes";
+import { localPathOf } from "@/helpers/FilePath";
 
 // ── Tables ──
 
@@ -66,7 +67,7 @@ export async function importFile(file: File): Promise<OverlayImageRecord> {
   const record: OverlayImageRecord = {
     id: crypto.randomUUID(),
     name: file.name,
-    path: (file as unknown as { path?: string }).path || "",
+    path: localPathOf(file),
     mime: file.type || "image/png",
     size: file.size,
     addedAt: Date.now(),

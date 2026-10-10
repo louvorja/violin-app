@@ -26,6 +26,7 @@ import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import type { LiturgyItem, ScheduledCategory, LiturgyMusicItem } from "@/types/Liturgy";
 import { hasPlayback, listSongs as listCustomSongs } from "@/helpers/CustomSongs";
 import { AUDIO_EXT, VIDEO_EXT } from "@constants/FileTypes";
+import { localPathOf } from "@/helpers/FilePath";
 import { useMusicCatalog } from "@/composables/useMusicCatalog";
 import { musicTitle } from "@root/config/musicCatalog.mjs";
 import { canLinkOverlay } from "../overlayLink";
@@ -777,7 +778,8 @@ export function useLiturgyItems(
 
   async function _addDroppedFile(file: File, e: DragEvent): Promise<void> {
     const name = file.name;
-    const filePath = (file as unknown as { path?: string }).path || name;
+    const realPath = localPathOf(file);
+    const filePath = realPath || name;
     const ext = name.split(".").pop()?.toLowerCase() || "";
     const textExts = ["txt", "rtf"];
 
@@ -792,14 +794,12 @@ export function useLiturgyItems(
             dtItem as unknown as { webkitGetAsEntry: () => FileSystemEntry | null }
           ).webkitGetAsEntry();
           if (entry && entry.isDirectory) {
-            const dirPath = (file as unknown as { path?: string }).path
-              ? (file as unknown as { path: string }).path + "/"
-              : entry.name + "/";
+            const dirPath = realPath ? realPath + "/" : entry.name + "/";
             $liturgy.add(
               {
                 tipo: LiturgyItemTypeEnum.ARQUIVO,
                 item: entry.name,
-                subitem: "Pasta " + ((file as unknown as { path?: string }).path || entry.name),
+                subitem: "Pasta " + (realPath || entry.name),
                 subtipo: "dir",
                 dir: dirPath,
                 dir_info: "E",
