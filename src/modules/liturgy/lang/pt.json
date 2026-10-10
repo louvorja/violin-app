@@ -253,7 +253,9 @@
     "import_invalid": "Arquivo inválido."
   },
   "alerts": {
-    "media_not_found": "Item não encontrado na biblioteca. Ele pode ter sido removido."
+    "media_not_found": "Item não encontrado na biblioteca. Ele pode ter sido removido.",
+    "file_unsupported": "Escolha uma imagem, vídeo, áudio, PDF ou apresentação .slja.",
+    "file_import_failed": "Não foi possível guardar o arquivo neste aparelho. Verifique o espaço disponível e tente novamente."
   },
   "library_search": {
     "title_media": "Biblioteca de Mídia",

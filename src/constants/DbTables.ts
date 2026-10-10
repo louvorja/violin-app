@@ -8,8 +8,9 @@ export const DB_NAME = "louvorja-violin";
  * Para testes, use `indexedDB.deleteDatabase("louvorja")` no console do navegador para resetar o banco
  *
  * v1 → v2: adicionada tabela "devices" (dispositivos autorizados)
+ * v2 → v3: arquivos locais escolhidos na liturgia web/PWA
  */
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 
 /**
  * Nomes de todas as tabelas do banco IndexedDB unificado `louvorja`.
@@ -22,7 +23,7 @@ export const DB_VERSION = 2;
  *
  * Ao adicionar uma nova tabela:
  *   1. Adicione a chave aqui
- *   2. Incremente `DB_VERSION` em `src/helpers/IndexedDB.ts`
+ *   2. Incremente `DB_VERSION` neste arquivo
  *   3. O `upgrade()` criará a store automaticamente
  */
 export const DB_TABLE = {
@@ -31,7 +32,7 @@ export const DB_TABLE = {
   // ─── Catálogos normalizados (1 registro por entidade) ───
   MUSICS: ModuleEnum.MUSICS,
   // ─── Playlists do usuário ───
-  MUSICS_PLAYLISTS: ModuleEnum.MUSICS+".playlists",
+  MUSICS_PLAYLISTS: ModuleEnum.MUSICS + ".playlists",
   HYMNAL: ModuleEnum.HYMNAL,
   HYMNAL_1996: ModuleEnum.HYMNAL_1996,
   ALBUMS: "albums",
@@ -62,6 +63,7 @@ export const DB_TABLE = {
   AUDIO_LIBRARY: "audio_library",
   IMAGE_LIBRARY: "image_library",
   LITURGY_LIBRARY: ModuleEnum.LITURGY + ".library",
+  LITURGY_FILES: ModuleEnum.LITURGY + ".files",
   SCHEDULED_CATEGORIES: ModuleEnum.LITURGY + ".scheduled_categories",
   SCHEDULED_ITEMS: ModuleEnum.LITURGY + ".scheduled_items",
   // ─── Cache de tradução Libras ───

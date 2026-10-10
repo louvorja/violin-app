@@ -30,7 +30,16 @@ import { AUDIO_EXT, IMAGE_EXT, VIDEO_EXT } from "@constants/FileTypes";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 import Telemetry from "@/helpers/Telemetry";
 import { useLiturgyI18n, chaveLiturgia } from "../i18n";
+import {
+  resolveLiturgyFile,
+  releaseLiturgyFileUrl,
+  retainLiturgyFileUrl,
+} from "@/helpers/LiturgyFiles";
 import { canLinkOverlay, youtubeVideoId } from "../overlayLink";
+
+// A shell e o módulo podem pedir arquivos ao mesmo tempo. Uma leitura/abertura
+// antiga que termina depois não assume a URL da solicitação mais recente.
+let fileOpenIntent = 0;
 
 /**
  * Executar um item da liturgia — tocar a música, projetar o arquivo, abrir o
@@ -87,7 +96,11 @@ export function useLiturgyExecution() {
           const sched = $liturgy.findScheduledForToday(item.id, activeDate);
           const arquivo = sched ? String((sched as Record<string, unknown>).arquivo || "") : "";
           if (arquivo) {
-            projected = await openFile({ ...item, tipo: LiturgyItemTypeEnum.ARQUIVO, dir: arquivo });
+            projected = await openFile({
+              ...item,
+              tipo: LiturgyItemTypeEnum.ARQUIVO,
+              dir: arquivo,
+            });
           } else {
             reportMissingResource("execute_scheduled_item", "scheduled_file");
             $alert.error({ text: chaveLiturgia("dialog.scheduled_not_found") });
@@ -205,7 +218,10 @@ export function useLiturgyExecution() {
      * A opção "Link no navegador" (YOUTUBE_ACTION) promete o navegador: sem
      * este desvio o operador escolheria "link" e levaria janela de projeção.
      */
-    if (isYoutube(valid) && $userdata.get<string>(KEYS.OPTIONS.YOUTUBE_ACTION, "video") === "link") {
+    if (
+      isYoutube(valid) &&
+      $userdata.get<string>(KEYS.OPTIONS.YOUTUBE_ACTION, "video") === "link"
+    ) {
       window.open(valid, "_blank", "noopener,noreferrer");
       return;
     }
@@ -354,9 +370,7 @@ export function useLiturgyExecution() {
       ).sort((a, b) => a.ordem - b.ordem);
 
       const ids = item.anuncios_ids;
-      const selected = Array.isArray(ids)
-        ? all.filter((a) => ids.includes(String(a.id)))
-        : all;
+      const selected = Array.isArray(ids) ? all.filter((a) => ids.includes(String(a.id))) : all;
       if (!selected.length) {
         reportMissingResource("execute_announcements", "announcement");
         $alert.error({ text: t("alerts.media_not_found") });
@@ -379,15 +393,21 @@ export function useLiturgyExecution() {
         index: 0,
       };
       $broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_INTENT, payload);
-      if ($broadcast.getLastPayload(BROADCAST_TYPE.ANNOUNCEMENTS_STATE)?.announcement_session !== announcementToken.announcement_session) return false;
+      if (
+        $broadcast.getLastPayload(BROADCAST_TYPE.ANNOUNCEMENTS_STATE)?.announcement_session !==
+        announcementToken.announcement_session
+      )
+        return false;
       $appdata.set(KEYS.MODULES.MEDIA.IS_PLAYING, true);
       // Ativa a barra de controles global.
       const fp = useFileProjection();
       fp.start("announcements", selected[0]?.nome || "", selected.length, 0);
       const opened = await openAnnouncementsWindow();
-      return opened &&
+      return (
+        opened &&
         $broadcast.getLastPayload(BROADCAST_TYPE.ANNOUNCEMENTS_STATE)?.announcement_session ===
-          announcementToken.announcement_session;
+          announcementToken.announcement_session
+      );
     } catch (error) {
       reportExecutionError(error, "execute_announcements");
       return false;
@@ -441,7 +461,6 @@ export function useLiturgyExecution() {
     }
   }
 
-
   let lastLiturgicalSoundUrl: string | null = null;
 
   /** Converte o registro em uma URL tocável na janela atual. */
@@ -454,9 +473,7 @@ export function useLiturgyExecution() {
     // Blob morto de sessão anterior + bytes no IDB → recria localmente.
     if (rec.data && rec.mime && (!p || p.startsWith("blob:") || !/^(https?|louvorja):/i.test(p))) {
       if (lastLiturgicalSoundUrl) URL.revokeObjectURL(lastLiturgicalSoundUrl);
-      lastLiturgicalSoundUrl = URL.createObjectURL(
-        new Blob([rec.data], { type: rec.mime })
-      );
+      lastLiturgicalSoundUrl = URL.createObjectURL(new Blob([rec.data], { type: rec.mime }));
       return lastLiturgicalSoundUrl;
     }
     // URLs completas passam direto.
@@ -545,7 +562,29 @@ export function useLiturgyExecution() {
     typeHint?: string,
     extraPayload?: Record<string, unknown>
   ): Promise<boolean> {
-    const dir = item.dir || "";
+    const intent = ++fileOpenIntent;
+    let dir = item.dir || "";
+    const storedFile =
+      item.tipo === LiturgyItemTypeEnum.ARQUIVO && item.ref_id
+        ? await resolveLiturgyFile(item.ref_id)
+        : null;
+    if (item.tipo === LiturgyItemTypeEnum.ARQUIVO && item.ref_id && intent !== fileOpenIntent) {
+      if (storedFile) releaseLiturgyFileUrl(storedFile.url);
+      return false;
+    }
+    if (item.tipo === LiturgyItemTypeEnum.ARQUIVO && item.ref_id && !storedFile) {
+      reportMissingResource("open_file", "file");
+      $alert.error({ text: dir, title: "modules.media.alerts.file_not_found" });
+      return false;
+    }
+    if (storedFile) {
+      dir = storedFile.name;
+      typeHint = storedFile.kind;
+      extraPayload = {
+        ...extraPayload,
+        libRef: { table: DB_TABLE.LITURGY_FILES, id: item.ref_id },
+      };
+    }
     const ext = dir.split(/[?#]/)[0].split(".").pop()?.toLowerCase() || "";
     // Tipo efetivo: extensão do caminho; sem extensão (ex.: blob URLs),
     // usa o hint informado pelo chamador (subtipo do item).
@@ -558,6 +597,7 @@ export function useLiturgyExecution() {
     else if (typeHint) kind = typeHint;
 
     if (
+      !storedFile &&
       (kind === "audio" || kind === "video") &&
       Boolean($userdata.get(KEYS.OPTIONS.USE_SYSTEM_MEDIA_PLAYER, false)) &&
       (await openWithSystemPlayer(dir, kind))
@@ -569,11 +609,12 @@ export function useLiturgyExecution() {
     }
 
     // HEIC/HEIF: converte para JPEG antes de enviar à projeção.
-    const url = await _resolveRenderableUrl(dir);
+    const url = storedFile?.url || (await _resolveRenderableUrl(dir));
 
     if (
       !url ||
-      (!dir.includes("/") &&
+      (!storedFile &&
+        !dir.includes("/") &&
         !dir.includes("\\") &&
         !/^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(dir) &&
         !dir.startsWith("/"))
@@ -595,12 +636,17 @@ export function useLiturgyExecution() {
         fadeDuration: fadeDur,
         ...extraPayload,
       };
-      return await $media.projectFile(payload).catch((e: unknown) => {
+      const projected = await $media.projectFile(payload).catch((e: unknown) => {
         reportExecutionError(e, "open_file_projection", { kind });
         $alert.error(e as string);
         console.error(e);
         return false;
       });
+      if (storedFile) {
+        if (projected && intent === fileOpenIntent) retainLiturgyFileUrl(url, "projection");
+        else releaseLiturgyFileUrl(url);
+      }
+      return projected;
     } else if (kind === "video") {
       const fadeDur =
         ($userdata.get(KEYS.OPTIONS.FILE_PROJECTION.FADE, true) as boolean) !== false
@@ -613,21 +659,39 @@ export function useLiturgyExecution() {
         fadeDuration: fadeDur,
         ...extraPayload,
       };
-      return await $media.projectFile(payload, url).catch((e: unknown) => {
+      const projected = await $media.projectFile(payload, url).catch((e: unknown) => {
         reportExecutionError(e, "open_file_projection", { kind });
         $alert.error(e as string);
         console.error(e);
         return false;
       });
+      if (storedFile) {
+        if (projected && intent === fileOpenIntent) {
+          retainLiturgyFileUrl(url, "projection");
+          retainLiturgyFileUrl(url, "audio");
+        } else releaseLiturgyFileUrl(url);
+      }
+      return projected;
     } else if (kind === "audio") {
-      void $media.openAudio({ url, title: item.item || "", mediaType: "audio" }).catch((error: unknown) => {
+      try {
+        await $media.openAudio({ url, title: item.item || "", mediaType: "audio" });
+        if (storedFile) {
+          if (intent === fileOpenIntent) retainLiturgyFileUrl(url, "audio");
+          else releaseLiturgyFileUrl(url);
+        }
+      } catch (error) {
+        if (storedFile) releaseLiturgyFileUrl(url);
         reportExecutionError(error, "open_audio_file", { kind });
-      });
+      }
       return false;
     } else if (kind === SLJA_EXT) {
       // Apresentação .slja toca aqui dentro: entregar ao SO abriria o programa
       // associado (no Windows, o LouvorJA antigo) e tiraria o operador do app.
-      return await openSlja(url, { title: item.item, origin: "liturgy" });
+      try {
+        return await openSlja(url, { title: item.item, origin: "liturgy" });
+      } finally {
+        if (storedFile) releaseLiturgyFileUrl(url);
+      }
     } else if (!kind && !typeHint) {
       // Tipo desconhecido sem hint: comportamento legado (abrir com SO).
       if (!(await openWithSystemPlayer(dir, "unknown"))) openUrl(dir);

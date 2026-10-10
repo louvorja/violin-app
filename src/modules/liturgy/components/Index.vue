@@ -96,6 +96,7 @@
       :edit-index="editIndex"
       :form="form"
       :form-errors="formErrors"
+      :file-importing="fileImporting"
       :colors="colors"
       :musics-list="musicsList"
       :scheduled-categories="scheduledCategories"
@@ -245,6 +246,7 @@ const {
   editIndex,
   form,
   formErrors,
+  fileImporting,
   isDraggingOver,
   items,
   totalDuration,

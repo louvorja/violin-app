@@ -9,7 +9,7 @@ import {
   reposicionarParaBloco,
 } from "../agenda";
 import { useLiturgyExecution } from "./useLiturgyExecution";
-import { ref, computed, type Ref, type WritableComputedRef } from "vue";
+import { ref, computed, watch, type Ref, type WritableComputedRef } from "vue";
 import $liturgy from "@/helpers/Liturgy";
 import $database from "@/helpers/Database";
 import { ICONS } from "@/config/Icons";
@@ -30,6 +30,12 @@ import { useMusicCatalog } from "@/composables/useMusicCatalog";
 import { musicTitle } from "@root/config/musicCatalog.mjs";
 import { canLinkOverlay } from "../overlayLink";
 import { horarioDoTitulo } from "../titleTime";
+import {
+  importLiturgyFile,
+  LITURGY_FILE_ACCEPT,
+  removeLiturgyFile,
+  validateLiturgyFile,
+} from "@/helpers/LiturgyFiles";
 
 interface VideoItem {
   id: string;
@@ -110,6 +116,20 @@ export function useLiturgyItems(
   const editIndex = ref(-1);
   const form = ref<LiturgyItem>(DEFAULT_FORM());
   const formErrors = ref<Record<string, string>>(DEFAULT_FORM_ERRORS());
+  const fileImporting = ref(false);
+  let selectedFile: File | null = null;
+  let fileSaveToken = 0;
+  watch(
+    dialog,
+    (open) => {
+      if (!open) {
+        selectedFile = null;
+        fileSaveToken++;
+        fileImporting.value = false;
+      }
+    },
+    { flush: "sync" }
+  );
   const musicsCache = ref<LiturgyMusicItem[] | null>(null);
   const isDraggingOver = ref(false);
   const menuOpen = ref(false);
@@ -335,6 +355,9 @@ export function useLiturgyItems(
   }
 
   function openItemDialog(index = -1): void {
+    selectedFile = null;
+    fileSaveToken++;
+    fileImporting.value = false;
     editIndex.value = index;
     form.value = index >= 0 ? { ...DEFAULT_FORM(), ...items.value[index] } : DEFAULT_FORM();
     if (!form.value.blocoId && form.value.time_mode === "auto") form.value.time = "";
@@ -358,6 +381,7 @@ export function useLiturgyItems(
   }
 
   function onTypeChange(): void {
+    selectedFile = null;
     if (form.value.tipo !== LiturgyItemTypeEnum.MUSICA) {
       form.value.musica = -1;
       form.value.escolha = false;
@@ -440,7 +464,8 @@ export function useLiturgyItems(
     return reposicionarParaBloco(vista, original.id, destino);
   }
 
-  function saveItem(): void {
+  async function saveItem(): Promise<void> {
+    if (fileImporting.value) return;
     const f = form.value;
 
     if (!f.tipo) {
@@ -454,6 +479,30 @@ export function useLiturgyItems(
     if (f.tipo === LiturgyItemTypeEnum.ITENS_AGENDADOS && !f.id) {
       formErrors.value = { id: t("dialog.choose_scheduled") };
       return;
+    }
+
+    if (f.tipo === LiturgyItemTypeEnum.ARQUIVO && selectedFile) {
+      const file = selectedFile;
+      const token = ++fileSaveToken;
+      fileImporting.value = true;
+      try {
+        const stored = await importLiturgyFile(file);
+        if (!dialog.value || form.value !== f || token !== fileSaveToken || selectedFile !== file) {
+          // Só este save criou a referência; nunca apague arquivos já salvos,
+          // que podem ser compartilhados por cópias ou pela biblioteca.
+          await removeLiturgyFile(stored.ref_id);
+          return;
+        }
+        Object.assign(f, stored);
+        selectedFile = null;
+      } catch {
+        if (form.value === f && token === fileSaveToken) {
+          formErrors.value.dir = t("alerts.file_import_failed");
+        }
+        return;
+      } finally {
+        if (token === fileSaveToken) fileImporting.value = false;
+      }
     }
 
     const hora = lerHorario(f.time);
@@ -663,22 +712,38 @@ export function useLiturgyItems(
 
   /* ============== Browse file ============== */
   async function chooseFile(): Promise<void> {
+    if (fileImporting.value) return;
     const api = Platform.api;
     if (Platform.isDesktop && api?.storage?.chooseFile) {
       const file = await api.storage.chooseFile();
-      if (file) form.value.dir = file;
+      if (file) setFormField("dir", file);
     } else if (Platform.isDesktop && (api as unknown as Record<string, unknown>)?.chooseFile) {
       const file = await (
         api as unknown as { chooseFile: () => Promise<string | null> }
       ).chooseFile();
-      if (file) form.value.dir = file;
+      if (file) setFormField("dir", file);
     } else {
       const inp = document.createElement("input");
       inp.type = "file";
+      inp.accept = LITURGY_FILE_ACCEPT;
+      const targetForm = form.value;
       inp.onchange = (e: Event) => {
         const target = e.target as HTMLInputElement;
         const f = target.files?.[0];
-        if (f) form.value.dir = (f as unknown as { path?: string }).path || f.name;
+        if (!f || form.value !== targetForm || !dialog.value) return;
+        try {
+          validateLiturgyFile(f);
+          setFormField("dir", f.name);
+          selectedFile = f;
+        } catch (error) {
+          if (form.value === targetForm) {
+            formErrors.value.dir = t(
+              error instanceof Error && error.message === "unsupported_file"
+                ? "alerts.file_unsupported"
+                : "alerts.file_import_failed"
+            );
+          }
+        }
       };
       inp.click();
     }
@@ -765,6 +830,21 @@ export function useLiturgyItems(
         activeDay.value
       );
     } else {
+      let stored: { dir: string; ref_id: string } | undefined;
+      if (!Platform.isDesktop) {
+        try {
+          stored = await importLiturgyFile(file);
+        } catch (error) {
+          $alert.error({
+            text: chaveLiturgia(
+              error instanceof Error && error.message === "unsupported_file"
+                ? "alerts.file_unsupported"
+                : "alerts.file_import_failed"
+            ),
+          });
+          return;
+        }
+      }
       $liturgy.add(
         {
           tipo: LiturgyItemTypeEnum.ARQUIVO,
@@ -772,6 +852,7 @@ export function useLiturgyItems(
           subitem: "Arquivo " + (filePath !== name ? filePath : name),
           subtipo: "arq",
           dir: filePath,
+          ...stored,
           dir_info: "E",
           cor: DEFAULT_COLOR,
         },
@@ -894,6 +975,10 @@ export function useLiturgyItems(
   function setFormField(field: string, value: unknown): void {
     (form.value as Record<string, unknown>)[field] = value;
     if (field === "time") titleTimeEnabled = false;
+    if (field === "dir" && form.value.tipo === LiturgyItemTypeEnum.ARQUIVO) {
+      form.value.ref_id = undefined;
+      selectedFile = null;
+    }
     if (field === "blocoId") {
       form.value.time = "";
       form.value.time_mode = "auto";
@@ -917,6 +1002,7 @@ export function useLiturgyItems(
     editIndex,
     form,
     formErrors,
+    fileImporting,
     musicsCache,
     videosCache,
     isDraggingOver,

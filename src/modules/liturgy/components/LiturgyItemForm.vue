@@ -147,10 +147,11 @@
     <!-- ─── Painel ARQUIVO ─── -->
     <section v-if="form.tipo === LiturgyItemTypeEnum.ARQUIVO" class="lif-panel">
       <h3 class="lif-panel__title">{{ t("types.arquivo") }}</h3>
-      <LjField layout="column" :label="t('inputs.file_path')">
+      <LjField layout="column" :label="t('inputs.file_path')" :error="formErrors?.dir">
         <div class="lif-inline lif-inline--half">
           <LjInput
             :model-value="form.dir"
+            :disabled="fileImporting"
             :placeholder="t('inputs.file_path_placeholder')"
             @update:model-value="setFormField('dir', $event)"
           />
@@ -160,6 +161,7 @@
             :icon="ICONS.UI.FILE"
             :title="t('actions.choose_file')"
             :aria-label="t('actions.choose_file')"
+            :loading="fileImporting"
             @click="chooseFile"
           />
         </div>
@@ -439,6 +441,7 @@
         size="sm"
         variant="primary"
         data-testid="item-save"
+        :disabled="fileImporting"
         :icon="isEditing ? ICONS.ACTIONS.SAVE : ICONS.ACTIONS.ADD"
         @click="saveItem"
       >
@@ -492,6 +495,7 @@ const props = withDefaults(
     editIndex?: number;
     form: LiturgyItem;
     formErrors?: Record<string, string>;
+    fileImporting?: boolean;
     colors?: string[];
     musicsList?: LiturgyMusicItem[];
     scheduledCategories?: ScheduledCategory[];

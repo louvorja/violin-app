@@ -21,7 +21,7 @@ export interface LiturgyItem {
   has_instrumental_music: boolean;
   checked?: string;
   blocoId?: string;
-  /** Id do item de origem em módulos externos (media_library / background_sound). */
+  /** Id de origem em módulos externos ou do arquivo web em liturgy.files (tipo arquivo). */
   ref_id?: string;
   /** Ids dos anúncios selecionados (tipo anuncios), na ordem de projeção. */
   anuncios_ids?: string[];

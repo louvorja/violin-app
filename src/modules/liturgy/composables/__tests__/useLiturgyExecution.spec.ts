@@ -14,6 +14,9 @@ const mocks = vi.hoisted(() => ({
   writeOverlaySlot: vi.fn(),
   userdataSet: vi.fn(),
   idbGetAll: vi.fn(),
+  resolveLiturgyFile: vi.fn(),
+  releaseLiturgyFileUrl: vi.fn(),
+  retainLiturgyFileUrl: vi.fn(),
   getCustomSong: vi.fn(),
   resolveAudio: vi.fn(),
   openAnnouncementsWindow: vi.fn(),
@@ -60,7 +63,9 @@ vi.mock("@/composables/useMedia", () => ({
 vi.mock("@/composables/useBackgroundSound", () => ({
   useBackgroundSound: () => ({ currentFile: { value: null } }),
 }));
-vi.mock("@/composables/useFileProjection", () => ({ useFileProjection: () => ({ start: vi.fn() }) }));
+vi.mock("@/composables/useFileProjection", () => ({
+  useFileProjection: () => ({ start: vi.fn() }),
+}));
 /*
  * Só o que o composable chama. `validateUrl` copia a regra de
  * `src/helpers/Liturgy.ts`: sem o mock o item Site lançava TypeError e o
@@ -69,10 +74,7 @@ vi.mock("@/composables/useFileProjection", () => ({ useFileProjection: () => ({ 
 vi.mock("@/helpers/Liturgy", () => ({
   default: {
     validateUrl: (url: string) =>
-      !url ||
-      url.startsWith("http://") ||
-      url.startsWith("https://") ||
-      url.startsWith("ftp://")
+      !url || url.startsWith("http://") || url.startsWith("https://") || url.startsWith("ftp://")
         ? url
         : `http://${url}`,
   },
@@ -98,6 +100,11 @@ vi.mock("@/helpers/CustomSongs", async (importOriginal) => ({
   getSong: mocks.getCustomSong,
 }));
 vi.mock("@/helpers/AudioLibrary", () => ({ resolveAudio: mocks.resolveAudio }));
+vi.mock("@/helpers/LiturgyFiles", () => ({
+  resolveLiturgyFile: mocks.resolveLiturgyFile,
+  releaseLiturgyFileUrl: mocks.releaseLiturgyFileUrl,
+  retainLiturgyFileUrl: mocks.retainLiturgyFileUrl,
+}));
 vi.mock("@/helpers/Http", () => ({ fetchWithTimeout: vi.fn(), NET_TIMEOUT: { MEDIA: 1 } }));
 vi.mock("@/helpers/Telemetry", () => ({
   default: { track: vi.fn(), captureException: vi.fn() },
@@ -108,6 +115,8 @@ import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import { KEYS } from "@/constants/UserDataKeys";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import type { LiturgyItem } from "@/types/Liturgy";
+import { DB_TABLE } from "@/constants/DbTables";
+import $alert from "@/helpers/Alert";
 
 function arquivo(dir: string, item = "Arquivo"): LiturgyItem {
   return { id: "1", tipo: LiturgyItemTypeEnum.ARQUIVO, item, dir } as LiturgyItem;
@@ -149,11 +158,88 @@ beforeEach(() => {
   mocks.idbGetAll.mockResolvedValue([]);
   mocks.getCustomSong.mockResolvedValue(null);
   mocks.resolveAudio.mockResolvedValue(null);
+  mocks.resolveLiturgyFile.mockResolvedValue(null);
   mocks.openAnnouncementsWindow.mockResolvedValue(true);
   mocks.openSiteWindow.mockResolvedValue(true);
   mocks.closeMedia.mockClear();
   mocks.closeProjectionStage.mockClear();
   mocks.broadcastGetLastPayload.mockReturnValue(null);
+});
+
+describe("liturgia — arquivo escolhido na web", () => {
+  it("projeta bytes locais pela referência após reabrir, sem tratar o nome como caminho", async () => {
+    mocks.resolveLiturgyFile.mockResolvedValue({
+      url: "blob:local",
+      name: "aviso.png",
+      kind: "image",
+    });
+    const ui = useLiturgyExecution();
+    expect(await ui.openFile({ ...arquivo("aviso.png"), ref_id: "file-1" })).toBe(true);
+    expect(mocks.resolveLiturgyFile).toHaveBeenCalledWith("file-1");
+    expect(mocks.projectFile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "blob:local",
+        type: "image",
+        libRef: { table: DB_TABLE.LITURGY_FILES, id: "file-1" },
+      })
+    );
+    expect($alert.error).not.toHaveBeenCalled();
+  });
+
+  it("solicita áudio local e abre .slja dentro do app", async () => {
+    const ui = useLiturgyExecution();
+    mocks.resolveLiturgyFile.mockResolvedValue({
+      url: "blob:audio",
+      name: "hino.mp3",
+      kind: "audio",
+    });
+    await ui.openFile({ ...arquivo("hino.mp3"), ref_id: "audio-1" });
+    expect(mocks.openAudio).toHaveBeenCalledWith(
+      expect.objectContaining({ url: "blob:audio", mediaType: "audio" })
+    );
+    mocks.resolveLiturgyFile.mockResolvedValue({
+      url: "blob:slja",
+      name: "hino.slja",
+      kind: "slja",
+    });
+    await ui.openFile({ ...arquivo("hino.slja"), ref_id: "slja-1" });
+    expect(mocks.openSlja).toHaveBeenCalledWith(
+      "blob:slja",
+      expect.objectContaining({ origin: "liturgy" })
+    );
+  });
+
+  it("uma abertura antiga que termina depois não substitui a URL do áudio mais novo", async () => {
+    let finishOld!: () => void;
+    mocks.openAudio.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishOld = resolve;
+        })
+    );
+    mocks.resolveLiturgyFile
+      .mockResolvedValueOnce({ url: "blob:old", name: "old.mp3", kind: "audio" })
+      .mockResolvedValueOnce({ url: "blob:new", name: "new.mp3", kind: "audio" });
+    const ui = useLiturgyExecution();
+    const old = ui.openFile({ ...arquivo("old.mp3"), ref_id: "old" });
+    await vi.waitFor(() => expect(mocks.openAudio).toHaveBeenCalledOnce());
+    await ui.openFile({ ...arquivo("new.mp3"), ref_id: "new" });
+    finishOld();
+    await old;
+    expect(mocks.retainLiturgyFileUrl).toHaveBeenCalledExactlyOnceWith("blob:new", "audio");
+    expect(mocks.releaseLiturgyFileUrl).toHaveBeenCalledWith("blob:old");
+  });
+
+  it("avisa quando os bytes faltam e preserva caminhos desktop sem ref_id", async () => {
+    const ui = useLiturgyExecution();
+    expect(await ui.openFile({ ...arquivo("aviso.png"), ref_id: "missing" })).toBe(false);
+    expect($alert.error).toHaveBeenCalledOnce();
+    expect(mocks.projectFile).not.toHaveBeenCalled();
+    mocks.resolveLiturgyFile.mockClear();
+    expect(await ui.openFile(arquivo("C:\\LouvorJA\\aviso.png"))).toBe(true);
+    expect(mocks.resolveLiturgyFile).not.toHaveBeenCalled();
+    expect(mocks.projectFile).toHaveBeenCalledWith(expect.objectContaining({ type: "image" }));
+  });
 });
 
 describe("liturgia — item de arquivo .slja", () => {
@@ -304,9 +390,11 @@ describe("liturgia — item de site", () => {
 describe("liturgia — vínculo de sobreposição", () => {
   it("liga o slot apenas depois de a projeção da imagem confirmar sucesso", async () => {
     let finishProjection!: (_success: boolean) => void;
-    mocks.projectFile.mockReturnValueOnce(new Promise<boolean>((resolve) => {
-      finishProjection = resolve;
-    }));
+    mocks.projectFile.mockReturnValueOnce(
+      new Promise<boolean>((resolve) => {
+        finishProjection = resolve;
+      })
+    );
 
     const { executeItem } = useLiturgyExecution();
     const execution = executeItem(linked(arquivo("/Users/ana/aviso.png")));
@@ -343,11 +431,13 @@ describe("liturgia — vínculo de sobreposição", () => {
     mocks.idbGetAll.mockResolvedValueOnce([
       { id: "slide-1", nome: "Aviso", ordem: 1, texto: "Olá" },
     ]);
-    await executeItem(linked({
-      id: "announcements-1",
-      tipo: LiturgyItemTypeEnum.ANUNCIOS,
-      anuncios_ids: [],
-    } as unknown as LiturgyItem));
+    await executeItem(
+      linked({
+        id: "announcements-1",
+        tipo: LiturgyItemTypeEnum.ANUNCIOS,
+        anuncios_ids: [],
+      } as unknown as LiturgyItem)
+    );
 
     expect(mocks.openAudio).toHaveBeenCalledTimes(1);
     expect(mocks.broadcastSend).not.toHaveBeenCalled();
@@ -361,9 +451,7 @@ describe("liturgia — vínculo de sobreposição", () => {
       tipo: LiturgyItemTypeEnum.ANUNCIOS,
       anuncios_ids: ["slide-1"],
     } as unknown as LiturgyItem);
-    mocks.idbGetAll.mockResolvedValue([
-      { id: "slide-1", nome: "Aviso", ordem: 1, texto: "Olá" },
-    ]);
+    mocks.idbGetAll.mockResolvedValue([{ id: "slide-1", nome: "Aviso", ordem: 1, texto: "Olá" }]);
     mocks.broadcastGetLastPayload.mockImplementation(() => {
       const intent = mocks.broadcastSend.mock.calls.find(
         ([type]) => type === BROADCAST_TYPE.ANNOUNCEMENTS_INTENT
