@@ -371,6 +371,7 @@ import Platform from "@/helpers/Platform";
 import $path from "@/helpers/Path";
 import $alert from "@/helpers/Alert";
 import { reportLocalFileFailure } from "@/helpers/LocalFailureNotice";
+import { localPathOf } from "@/helpers/FilePath";
 import $snackbar from "@/helpers/Snackbar";
 import { ICONS } from "@/config/Icons";
 import $idb from "@/helpers/IndexedDB";
@@ -744,7 +745,7 @@ async function onDrop(e: DragEvent): Promise<void> {
 
 /** Importa um arquivo arrastado (com caminho no desktop ou blob na web). */
 async function importDroppedEntry(f: File, categoryId: string): Promise<void> {
-  const filePath = (f as any).path;
+  const filePath = localPathOf(f);
   if (filePath && !isHeic(f.name, (f as File).type)) {
     const name = f.name;
     const ext = name.split(".").pop()?.toLowerCase() || "";
@@ -993,7 +994,7 @@ async function onFilesSelected(e: Event): Promise<void> {
   if (!input.files?.length) return;
   for (const f of Array.from(input.files)) {
     try {
-      const filePath = (f as any).path;
+      const filePath = localPathOf(f);
       if (filePath && !isHeic(f.name, (f as File).type)) {
         const name = f.name;
         const ext = name.split(".").pop()?.toLowerCase() || "";

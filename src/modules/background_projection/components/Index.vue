@@ -227,6 +227,7 @@ import type { LjTab } from "@/components/ui";
 import $broadcast from "@/helpers/Broadcast";
 import Alert from "@/helpers/Alert";
 import { reportLocalFileFailure } from "@/helpers/LocalFailureNotice";
+import { localPathOf } from "@/helpers/FilePath";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import {
@@ -603,7 +604,7 @@ function selectCategoryForImport(catId: string): void {
     const files = [...pendingDropFiles.value];
     pendingDropFiles.value = [];
     for (const f of files) {
-      const filePath = (f as any).path;
+      const filePath = isHeic(f.name, f.type) ? "" : localPathOf(f);
       const pending = filePath ? importFilePath(filePath) : importFileBlob(f);
       pending.catch((error) => {
         if (!reportLocalFileFailure(error, [f.name])) console.error(error);
@@ -704,7 +705,7 @@ async function onFilesSelected(e: Event): Promise<void> {
   input.value = "";
   for (const f of selected) {
     try {
-      const filePath = (f as any).path;
+      const filePath = isHeic(f.name, f.type) ? "" : localPathOf(f);
       if (filePath) {
         await importFilePath(filePath);
       } else {
