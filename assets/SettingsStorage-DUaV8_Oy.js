@@ -1,0 +1,3 @@
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{};e._posthogReleaseId=e._posthogReleaseId||"01a12361-574b-0000-8ec3-f6d9fe420ee8";var n=(new e.Error).stack;n&&(e._posthogChunkIds=e._posthogChunkIds||{},e._posthogChunkIds[n]="eaf88ad8-5123-5325-81ab-0ecef54e268d")}catch(e){}}();import{f as n,D as s}from"./BootOrchestrator-awNxo_SX.js";const a=s.SETTINGS;async function i(t){return n.get(a,t)}async function o(t){await n.put(a,t)}export{i as g,o as s};
+
+//# chunkId=eaf88ad8-5123-5325-81ab-0ecef54e268d

@@ -1,0 +1,3 @@
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{};e._posthogReleaseId=e._posthogReleaseId||"01a12361-574b-0000-8ec3-f6d9fe420ee8";var n=(new e.Error).stack;n&&(e._posthogChunkIds=e._posthogChunkIds||{},e._posthogChunkIds[n]="dd01c9de-df0c-5353-880b-ed4dea5f03e5")}catch(e){}}();import{r as o}from"./vendor-vue-BOE-cAJB.js";const r=o(null);function u(e){const n=Number(e);!Number.isInteger(n)||n<=0||(r.value=n,window.dispatchEvent(new CustomEvent("louvorja:open-sync")))}export{r as p,u as r};
+
+//# chunkId=dd01c9de-df0c-5353-880b-ed4dea5f03e5
