@@ -96,6 +96,53 @@
       </div>
     </section>
 
+    <section v-else class="opt-section">
+      <h3 class="opt-section-title">
+        <LjIcon :icon="ICONS.UI.CHECK_UPDATE" size="18" />
+        {{ $t("options.updates.app") }}
+      </h3>
+
+      <div class="opt-row opt-row--spread">
+        <label class="opt-label">{{ $t("options.updates.current_version") }}</label>
+        <strong>v{{ webAppVersion }}</strong>
+      </div>
+      <div v-if="pwa.state.value.lastCheckedAt" class="opt-row opt-row--spread">
+        <label class="opt-label">{{ $t("options.updates.last_check") }}</label>
+        <span>{{ formatLastCheck(new Date(pwa.state.value.lastCheckedAt).toISOString()) }}</span>
+      </div>
+      <div class="opt-row opt-row--col">
+        <div class="opt-folder-path" role="status">{{ pwaUpdateStatusText }}</div>
+        <div v-if="pwa.state.value.ready" class="opt-folder-path">
+          {{ $t("options.updates.pwa_reload_hint") }}
+        </div>
+        <div v-if="pwa.state.value.ready && pwa.blocked.value" class="opt-folder-path">
+          {{ $t("options.updates.pwa_blocked") }}
+        </div>
+        <div class="opt-folder-actions">
+          <button
+            v-requires-network
+            type="button"
+            class="opt-btn"
+            :disabled="['checking', 'applying', 'unsupported'].includes(pwa.state.value.status)"
+            @click="pwa.check"
+          >
+            <LjIcon :icon="ICONS.ACTIONS.REFRESH" size="14" />
+            {{ $t("options.updates.check") }}
+          </button>
+          <button
+            v-if="pwa.state.value.ready"
+            type="button"
+            class="opt-btn opt-btn--primary"
+            :disabled="pwa.blocked.value || pwa.state.value.status === 'applying'"
+            @click="pwa.apply"
+          >
+            <LjIcon :icon="ICONS.ACTIONS.RESTART" size="14" />
+            {{ $t("options.updates.pwa_apply") }}
+          </button>
+        </div>
+      </div>
+    </section>
+
     <section class="opt-section">
       <h3 class="opt-section-title">
         <LjIcon :icon="ICONS.UI.DATABASE" size="18" />
@@ -237,6 +284,8 @@ import {
 import { KEYS } from "@/constants/UserDataKeys";
 import { useSyncManager } from "@/composables/useSyncManager";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
+import { usePwaUpdates } from "@/composables/usePwaUpdates";
+import packageJson from "@root/package.json";
 import type { DbConfig } from "@/types/Database";
 import {
   API_TOKEN,
@@ -263,6 +312,9 @@ type UpdateStatus = "idle" | "checking" | "ok" | "available" | "error";
 
 const isDesktop = computed(() => Platform.isDesktop);
 const { t, locale } = useI18n();
+const pwa = usePwaUpdates();
+const webAppVersion = packageJson.version;
+const pwaUpdateStatusText = computed(() => t(`options.updates.pwa_${pwa.state.value.status}`));
 
 const appUpdate = ref<AppUpdateState>({
   status: "idle",

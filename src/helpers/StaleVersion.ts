@@ -1,8 +1,8 @@
 /**
- * Depois de uma publicação, os arquivos da versão anterior somem: a aba que já
- * estava aberta não consegue mais baixar módulo, tela do menu, CSS nem tradução.
- * Recarregar sozinho derrubaria o que estiver tocando, então a decisão fica com
- * o operador — mas ele precisa ser avisado, onde quer que a falha aconteça.
+ * A importação sob demanda pode falhar por rede, resposta inválida ou porque
+ * a aba ainda pede arquivos de uma versão anterior. A mensagem do navegador
+ * não distingue essas causas. Recarregar sozinho derrubaria o que estiver
+ * tocando, então a decisão fica com o operador.
  *
  * @category deve-virar-composable
  */
@@ -14,7 +14,7 @@ export function isStaleChunkError(err: unknown): boolean {
   return /dynamically imported module|preload CSS|module script failed/i.test(String(err));
 }
 
-/** Vale também offline: o service worker já guardou a versão nova. */
+/** A falha não comprova que existe uma versão nova ou que ela já foi guardada offline. */
 export function notifyStaleVersion(): void {
   if (Platform.isDesktop) return;
   $snackbar.show({

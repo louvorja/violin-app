@@ -7,7 +7,7 @@ Versão web/desktop do sistema original em Delphi (`louvorja-desktop`).
 
 **Plataformas:**
 
-- **Web/PWA** — servido via Vite/Vercel
+- **Web/PWA** — build Vite publicado na branch `dist`, servida pelo GitHub Pages
 - **Desktop** — Electron 41 (empacotamento NSIS/DMG/AppImage)
 
 A aplicação é composta por:
@@ -34,6 +34,30 @@ completa e os limites testados estão em
 [`architecture-refactor-final-report.md`](architecture-refactor-final-report.md).
 
 ---
+
+## Atualização web/PWA
+
+`src/main.js` inicia o registro nativo do service worker antes do bootstrap de
+dados. O SW ativa automaticamente para permitir a migração de clientes antigos,
+mas o documento aberto só recarrega por ação do operador. O monitor verifica na
+abertura, no retorno à rede/primeiro plano e a cada 15 minutos em primeiro plano,
+com `updateViaCache: none`. A identidade de cada build está no HTML e em
+`app-build.json` precacheado: a comparação detecta um controlador mais recente
+mesmo após a ativação, sem depender da versão SemVer.
+
+A Shell e a seção Aplicativo em Atualizações avisam quando é preciso recarregar.
+A aplicação manual aguarda as escritas de liturgia e finaliza o save web pendente
+das preferências; fica bloqueada durante apresentação, reprodução, tarefas e
+enquanto o editor de slides está aberto. Não limpa IndexedDB nem os caches do
+acervo. Clientes publicados antes desse monitor precisam de uma primeira recarga
+manual depois de o SW novo ativar para receber o aviso e os controles.
+
+O deploy é serializado e, depois de gerar o precache atual, retém somente assets
+imutáveis validados de até cinco builds no total, por até 14 dias e 128 MiB no
+total. O build atual nunca é removido pelo orçamento; builds antigos excedentes
+são descartados inteiros. HTML, SW e dados do usuário não entram na retenção.
+Isso mantém imports de abas antigas durante essa janela; não garante uso offline
+de uma aba antiga após a troca do SW nem retenção indefinida.
 
 ## Armazenamento desktop
 

@@ -10,6 +10,8 @@
     <!-- PageControl interno (tabs dos módulos abertos) -->
     <OpenModulesTabs />
 
+    <PwaUpdateNotice v-if="!Platform.isDesktop" />
+
     <main class="shell-main">
       <div class="shell-grid" :class="{ 'shell-grid--with-sidebar': showLiturgySidebar }">
         <Transition name="chat-drawer-slide">
@@ -82,6 +84,7 @@ const MusicSpotlight = defineAsyncComponent(() => import("@components/MusicSpotl
 const BibleSpotlight = defineAsyncComponent(() => import("@components/BibleSpotlight.vue"));
 import RibbonBar from "@/layout/shell/RibbonBar.vue";
 import OpenModulesTabs from "@/layout/shell/OpenModulesTabs.vue";
+import PwaUpdateNotice from "@/layout/shell/PwaUpdateNotice.vue";
 import ShellLiturgyPanel from "@/layout/shell/ShellLiturgyPanel.vue";
 import { liturgySidebarDefault } from "@/helpers/LiturgySidebar";
 const HotkeysCheatsheet = defineAsyncComponent(

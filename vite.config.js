@@ -4,6 +4,7 @@ import { VitePWA } from "vite-plugin-pwa";
 import posthogRollupPlugin from "@posthog/rollup-plugin";
 import path from "path";
 import { createRequire } from "module";
+import { randomUUID } from "node:crypto";
 import { normalizeAppVersion } from "./src/helpers/AppVersion.js";
 
 const require_ = createRequire(import.meta.url);
@@ -43,6 +44,7 @@ export default async ({ mode }) => {
 
   // Detectar target: "desktop" (Electron) ou "web" (padrão PWA)
   const isDesktop = process.env.VITE_TARGET === "desktop";
+  const webBuildId = isDesktop ? null : randomUUID();
   const posthogApiKey = process.env.POSTHOG_API_KEY;
   const posthogProjectId = process.env.POSTHOG_PROJECT_ID;
 
@@ -87,7 +89,17 @@ export default async ({ mode }) => {
             name: "louvorja-csp-prod",
             apply: "build",
             transformIndexHtml(html) {
-              return html.replace("<!--CSP_PROD-->", cspMeta);
+              return html.replace(
+                "<!--CSP_PROD-->",
+                `${cspMeta}<meta name="louvorja-build" content="${webBuildId}">`
+              );
+            },
+            generateBundle() {
+              this.emitFile({
+                type: "asset",
+                fileName: "app-build.json",
+                source: JSON.stringify({ version: 1, id: webBuildId }),
+              });
             },
           },
         ]),
@@ -217,12 +229,17 @@ export default async ({ mode }) => {
 
     plugins.push(
       VitePWA({
+        // Ativa o SW também para clientes legados. O documento só recarrega
+        // pela ação do operador em PwaUpdates; não importar o client virtual.
         registerType: "autoUpdate",
+        injectRegister: false,
         devOptions: {
           enabled: true,
         },
         workbox: {
-          globPatterns: ["**/*.{html,js,css,svg,png,woff,woff2}"],
+          skipWaiting: true,
+          clientsClaim: true,
+          globPatterns: ["**/*.{html,js,css,svg,png,woff,woff2}", "app-build.json"],
           // O conversor de HEIC passa dos 2MiB que o workbox aceita precachear,
           // e o build falha por isso em vez de apenas avisar. Subir o limite
           // seria a correção errada: ele empurraria 3MB para o primeiro acesso
