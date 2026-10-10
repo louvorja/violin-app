@@ -316,12 +316,13 @@ const expandable = computed(() => hasChildren.value || props.item.kind === "mome
   text-overflow: ellipsis;
 }
 
+/* Neutro: no tema escuro o acento é o laranja do "no ar". */
 .pm-ask-badge {
   flex-shrink: 0;
   padding: 0 5px;
-  border: 1px solid var(--lj-ui-accent);
+  border: 1px solid var(--lj-text-subtle);
   border-radius: 2px;
-  color: var(--lj-ui-accent);
+  color: var(--lj-text);
   font-size: 9.5px;
   font-weight: 700;
   white-space: nowrap;

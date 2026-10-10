@@ -3,7 +3,7 @@
     v-model="open"
     :title="tm('settings_dialog.title')"
     :icon="ICONS.TIMER.CLOCK_START"
-    size="sm"
+    size="md"
   >
     <form data-testid="pm-settings-dialog" @submit.prevent="save">
       <LjField
@@ -22,6 +22,7 @@
         <div class="pm-settings__folder">
           <span
             class="pm-settings__path"
+            :class="{ 'pm-settings__path--set': !!church.root.value }"
             :title="church.root.value ?? ''"
             data-testid="pm-church-folder"
           >
@@ -117,11 +118,15 @@ form {
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  direction: rtl;
   text-align: left;
   white-space: nowrap;
   text-overflow: ellipsis;
   font-size: var(--lj-text-sm);
   color: var(--lj-text-muted);
+}
+
+/* Caminho longo: corta o começo, que é o menos útil ("/Users/…/OneDrive/…"). */
+.pm-settings__path--set {
+  direction: rtl;
 }
 </style>

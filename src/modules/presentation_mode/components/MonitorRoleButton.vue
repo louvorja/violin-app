@@ -6,6 +6,7 @@
         :label="label"
         :icon-color="monitor === null ? '#7f8c8d' : '#1b4f8a'"
         :testid="`ribbon-btn-monitor-${role}`"
+        dropdown
       />
     </template>
   </LjMenu>

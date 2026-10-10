@@ -203,7 +203,7 @@ watch(
   height: auto;
   min-height: 44px;
   padding-block: 6px;
-  border-top: 2px solid var(--lj-ui-accent);
+  border-top: 2px solid var(--lj-live-select);
 }
 
 .pm-preview__choose {

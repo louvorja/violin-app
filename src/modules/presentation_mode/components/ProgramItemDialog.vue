@@ -89,11 +89,12 @@
         <LjInput v-model="title" :autofocus="!isNew || kind === 'note' || kind === 'moment'" />
       </LjField>
 
+      <!-- Também na anotação: é onde fica o responsável ("Ancião", "Professores"). -->
+      <LjField :label="tm('item_dialog.subtitle')">
+        <LjInput v-model="subtitle" data-testid="pm-item-subtitle" />
+      </LjField>
       <LjField v-if="kind === 'note'" :label="tm('item_dialog.note_text')">
         <LjTextarea v-model="noteText" :rows="3" />
-      </LjField>
-      <LjField v-else :label="tm('item_dialog.subtitle')">
-        <LjInput v-model="subtitle" />
       </LjField>
 
       <!-- Os hinos, a música especial: mudam toda semana, e o modelo os traz vazios. -->
@@ -435,7 +436,6 @@ function build(): ProgramItem | string {
       return {
         ...common,
         kind: "note",
-        subtitle: undefined,
         notes: text || undefined,
         source: liturgyItem({
           id: sourceId,
