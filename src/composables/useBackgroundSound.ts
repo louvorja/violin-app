@@ -13,6 +13,8 @@ import { BackgroundSoundSettings } from "@/types/Settings";
 const _audio = new Audio();
 const isPlaying = ref(false);
 const currentFile = ref<MediaFile | null>(null);
+/** Última faixa que o navegador recusou tocar (arquivo movido, apagado ou formato inválido). */
+const unplayableFile = ref<MediaFile | null>(null);
 const currentTime = ref(0);
 const duration = ref(0);
 const progress = ref(0);
@@ -189,8 +191,12 @@ export function useBackgroundSound() {
           fadeIn(volume.value, fadeInMs);
           _setupEnded();
         })
-        .catch(() => {
+        .catch((error: unknown) => {
           isPlaying.value = false;
+          // AbortError é só o play() interrompido por outra faixa: não é falha do arquivo.
+          if ((error as { name?: string } | null)?.name === "NotSupportedError") {
+            unplayableFile.value = file;
+          }
         });
     }
   }
@@ -361,6 +367,7 @@ export function useBackgroundSound() {
   return {
     isPlaying,
     currentFile,
+    unplayableFile,
     autoPause,
     carregarConfig,
     currentTime,

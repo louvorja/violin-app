@@ -252,6 +252,8 @@ import {
   notifyLocalEnvironmentFailure,
   reportLocalFileFailure,
 } from "@/helpers/LocalFailureNotice";
+import { localPathOf } from "@/helpers/FilePath";
+import { resolveBackgroundSoundPath } from "@/helpers/BackgroundSoundPath";
 import { ICONS } from "@/config/Icons";
 import {
   LjButton,
@@ -684,7 +686,7 @@ async function addAudioFiles(categoryId: string): Promise<void> {
 }
 
 async function addFileRecord(f: File, categoryId: string): Promise<BgSoundFile> {
-  const filePath = (f as any).path;
+  const filePath = localPathOf(f);
   const fileId = crypto.randomUUID();
   const bgFile: BgSoundFile = {
     id: fileId,
@@ -811,7 +813,7 @@ async function saveFileEdit(): Promise<void> {
   // Lê o arquivo novo antes de tocar no registro: se falhar, a edição inteira
   // fica como estava e o diálogo continua aberto para escolher outro arquivo.
   const newFile = editFileForm.value.newFile;
-  const newFilePath = newFile ? (newFile as any).path : undefined;
+  const newFilePath = newFile ? localPathOf(newFile) : "";
   let newData: { data: ArrayBuffer; mime: string } | null = null;
   if (newFile && !newFilePath) {
     try {
@@ -892,7 +894,9 @@ function playFile(file: MediaFile): void {
 }
 
 function resolveFilePath(file: MediaFile): string {
-  if (file.path && !file.path.startsWith("blob:")) return file.path;
+  if (file.path && !file.path.startsWith("blob:")) {
+    return resolveBackgroundSoundPath({ path: file.path });
+  }
   if (file.data && file.mime) {
     const existing = createdObjectUrls.get(file.id);
     if (existing) URL.revokeObjectURL(existing);
@@ -929,6 +933,18 @@ function stop(): void {
 function stopImmediately(): void {
   bg.stop(0);
 }
+
+watch(
+  () => bg.unplayableFile.value,
+  (file) => {
+    if (!file) return;
+    bg.unplayableFile.value = null;
+    Alert.info({
+      title: tm("add_audio"),
+      text: tm("file_not_playable", { name: file.name || file.fileName }),
+    });
+  }
+);
 
 watch(
   () => bg.isPlaying.value,
