@@ -121,6 +121,9 @@
     }
   },
   "alert": {
+    "local_file_unreadable": "No se pudo leer: {names}. El archivo puede estar abierto en otro programa, haberse movido o estar disponible solo en línea (OneDrive). Revise el archivo e inténtelo de nuevo.",
+    "local_storage_full": "No se pudo guardar: {names}. No hay espacio suficiente en disco — libere espacio e inténtelo de nuevo.",
+    "local_storage_unavailable": "No se pudo guardar: {names}. El almacenamiento local de la aplicación no respondió — verifique el espacio en disco e inténtelo de nuevo.",
     "close": "Cerrar",
     "retry": "Intentar de nuevo",
     "technical_details": "Detalles técnicos",
@@ -1280,6 +1283,8 @@
       "completed": "Completado",
       "error": "Error",
       "cancelled": "Cancelado",
+      "storage_full": "No hay espacio en disco para guardar los datos. Libere espacio e inténtelo de nuevo.",
+      "storage_unavailable": "El almacenamiento local de la aplicación no respondió. Verifique el espacio en disco e inténtelo de nuevo.",
       "confirm_cancel": "¿Desea cancelar esta descarga?",
       "app_update": "Actualización de la app",
       "db_bundle": "Actualizando base de datos",

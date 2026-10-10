@@ -1,5 +1,6 @@
 import { ref, computed, watch, onBeforeUnmount } from "vue";
 import { useI18n } from "vue-i18n";
+import { classifyLocalEnvironmentError } from "@/helpers/LocalEnvironmentErrors";
 import Platform from "@/helpers/Platform";
 import Database from "@/helpers/Database";
 import $idb from "@/helpers/IndexedDB";
@@ -1135,6 +1136,18 @@ export function useSyncManager() {
     } catch (e) {
       if (signal.aborted) {
         bgTasks.updateTask(taskId, { status: "cancelled" });
+      } else if (classifyLocalEnvironmentError(e)) {
+        // Disco cheio, banco local preso por antivírus/sincronizador ou
+        // corrompido: problema da máquina, não do app. Aviso, não erro.
+        console.warn("[useSyncManager] downloadBundle: armazenamento local indisponível:", e);
+        bgTasks.updateTask(taskId, {
+          status: "error",
+          detail: t(
+            classifyLocalEnvironmentError(e) === "storage_full"
+              ? "shell.background_tasks.storage_full"
+              : "shell.background_tasks.storage_unavailable"
+          ),
+        });
       } else {
         console.error("[useSyncManager] downloadBundle:", e);
         bgTasks.updateTask(taskId, { status: "error" });

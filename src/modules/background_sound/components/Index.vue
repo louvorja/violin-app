@@ -244,6 +244,14 @@ import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
 import Alert from "@/helpers/Alert";
+import {
+  classifyLocalEnvironmentError,
+  type LocalEnvironmentErrorKind,
+} from "@/helpers/LocalEnvironmentErrors";
+import {
+  notifyLocalEnvironmentFailure,
+  reportLocalFileFailure,
+} from "@/helpers/LocalFailureNotice";
 import { ICONS } from "@/config/Icons";
 import {
   LjButton,
@@ -668,12 +676,7 @@ async function addAudioFiles(categoryId: string): Promise<void> {
   if (pendingDropFiles.value.length) {
     const files = [...pendingDropFiles.value];
     pendingDropFiles.value = [];
-    for (const f of files) {
-      await addFileRecord(f, categoryId);
-    }
-    libraryFiles.value = await loadLibrary();
-    rebuildAllBlobUrls(libraryFiles.value);
-    selectAllCategoriesAndUncategorized();
+    await addFiles(files, categoryId);
     return;
   }
 
@@ -699,18 +702,52 @@ async function addFileRecord(f: File, categoryId: string): Promise<BgSoundFile> 
   return bgFile;
 }
 
-async function onAudioFilesSelected(e: Event): Promise<void> {
-  const input = e.target as HTMLInputElement;
-  if (!input.files?.length) return;
-  for (const f of Array.from(input.files)) {
-    await addFileRecord(f, pendingCategoryId!);
+/**
+ * Adiciona os arquivos um a um. Um arquivo ilegível (aberto em outro programa,
+ * movido depois de escolhido, só-online no OneDrive) não derruba o lote: os
+ * demais entram e o operador recebe a lista do que ficou de fora.
+ */
+async function addFiles(files: File[], categoryId: string): Promise<void> {
+  const localFailures = new Map<LocalEnvironmentErrorKind, string[]>();
+  const unexpectedFailures: string[] = [];
+
+  for (const f of files) {
+    try {
+      await addFileRecord(f, categoryId);
+    } catch (error) {
+      const kind = classifyLocalEnvironmentError(error);
+      if (kind) {
+        console.warn("[background_sound] arquivo não adicionado:", f.name, error);
+        localFailures.set(kind, [...(localFailures.get(kind) ?? []), f.name]);
+      } else {
+        console.error("[background_sound] falha ao adicionar arquivo:", error);
+        unexpectedFailures.push(f.name);
+      }
+    }
   }
-  input.value = "";
+
+  // Sempre recarrega: os arquivos que entraram antes de uma falha precisam aparecer.
   libraryFiles.value = await loadLibrary();
   rebuildAllBlobUrls(libraryFiles.value);
   // Garante que o chip "Sem categoria" fique ativo quando o arquivo for
   // adicionado sem categoria — senão ele não aparece na lista.
   selectAllCategoriesAndUncategorized();
+
+  for (const [kind, names] of localFailures) notifyLocalEnvironmentFailure(kind, names);
+  if (unexpectedFailures.length) {
+    Alert.error({
+      title: tm("add_audio"),
+      text: tm("add_failed_unexpected", { names: unexpectedFailures.join(", ") }),
+    });
+  }
+}
+
+async function onAudioFilesSelected(e: Event): Promise<void> {
+  const input = e.target as HTMLInputElement;
+  if (!input.files?.length) return;
+  const files = Array.from(input.files);
+  input.value = "";
+  await addFiles(files, pendingCategoryId!);
 }
 
 async function removeFile(categoryId: string, file: MediaFile): Promise<void> {
@@ -771,21 +808,33 @@ async function saveFileEdit(): Promise<void> {
   const storedFile = libraryFiles.value.find((f) => f.id === originalFile.id);
   if (!storedFile) return;
 
+  // Lê o arquivo novo antes de tocar no registro: se falhar, a edição inteira
+  // fica como estava e o diálogo continua aberto para escolher outro arquivo.
+  const newFile = editFileForm.value.newFile;
+  const newFilePath = newFile ? (newFile as any).path : undefined;
+  let newData: { data: ArrayBuffer; mime: string } | null = null;
+  if (newFile && !newFilePath) {
+    try {
+      newData = await readFileData(newFile);
+    } catch (error) {
+      if (!reportLocalFileFailure(error, [newFile.name])) throw error;
+      return;
+    }
+  }
+
   storedFile.name = editFileForm.value.name.trim();
   storedFile.categoryId = editFileForm.value.categoryId;
 
-  if (editFileForm.value.newFile) {
-    const filePath = (editFileForm.value.newFile as any).path;
-    storedFile.fileName = editFileForm.value.newFile.name;
-    if (filePath) {
-      storedFile.path = filePath;
+  if (newFile) {
+    storedFile.fileName = newFile.name;
+    if (newFilePath) {
+      storedFile.path = newFilePath;
       delete storedFile.data;
       storedFile.mime = undefined;
-    } else {
-      const { data, mime } = await readFileData(editFileForm.value.newFile);
-      storedFile.path = URL.createObjectURL(editFileForm.value.newFile);
-      storedFile.data = data;
-      storedFile.mime = mime;
+    } else if (newData) {
+      storedFile.path = URL.createObjectURL(newFile);
+      storedFile.data = newData.data;
+      storedFile.mime = newData.mime;
     }
   }
 

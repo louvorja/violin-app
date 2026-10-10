@@ -127,7 +127,11 @@
               </span>
             </template>
             <span v-else class="bg-task__detail">
-              {{ t(`shell.background_tasks.${task.status}`) }}
+              {{
+                task.status === "error" && task.detail
+                  ? task.detail
+                  : t(`shell.background_tasks.${task.status}`)
+              }}
             </span>
           </div>
 

@@ -226,6 +226,7 @@ import {
 import type { LjTab } from "@/components/ui";
 import $broadcast from "@/helpers/Broadcast";
 import Alert from "@/helpers/Alert";
+import { reportLocalFileFailure } from "@/helpers/LocalFailureNotice";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import {
@@ -603,11 +604,10 @@ function selectCategoryForImport(catId: string): void {
     pendingDropFiles.value = [];
     for (const f of files) {
       const filePath = (f as any).path;
-      if (filePath) {
-        importFilePath(filePath);
-      } else {
-        importFileBlob(f);
-      }
+      const pending = filePath ? importFilePath(filePath) : importFileBlob(f);
+      pending.catch((error) => {
+        if (!reportLocalFileFailure(error, [f.name])) console.error(error);
+      });
     }
     return;
   }
@@ -700,15 +700,20 @@ async function importFileBlob(f: File): Promise<void> {
 async function onFilesSelected(e: Event): Promise<void> {
   const input = e.target as HTMLInputElement;
   if (!input.files?.length) return;
-  for (const f of Array.from(input.files)) {
-    const filePath = (f as any).path;
-    if (filePath) {
-      await importFilePath(filePath);
-    } else {
-      await importFileBlob(f);
+  const selected = Array.from(input.files);
+  input.value = "";
+  for (const f of selected) {
+    try {
+      const filePath = (f as any).path;
+      if (filePath) {
+        await importFilePath(filePath);
+      } else {
+        await importFileBlob(f);
+      }
+    } catch (error) {
+      if (!reportLocalFileFailure(error, [f.name])) throw error;
     }
   }
-  input.value = "";
 }
 
 // Drag & drop

@@ -641,6 +641,34 @@ describe("Telemetry", () => {
       }
     });
 
+    it("falha do ambiente local vira aviso, não exceção", async () => {
+      const Telemetry = await loadTelemetry();
+      await Telemetry.init();
+      posthog.captureException.mockClear();
+      posthog.logger.warn.mockClear();
+
+      const unreadable = Object.assign(new Error("The requested file could not be read"), {
+        name: "NotReadableError",
+      });
+      Telemetry.captureException(unreadable, { source: "vue" });
+      Telemetry.captureException(
+        Object.assign(new Error("Internal error committing transaction."), { name: "UnknownError" })
+      );
+
+      expect(posthog.captureException).not.toHaveBeenCalled();
+      expect(posthog.logger.warn).toHaveBeenCalledWith(
+        "The requested file could not be read",
+        expect.objectContaining({ local_environment_error: "file_unreadable", source: "vue" })
+      );
+      expect(posthog.logger.warn).toHaveBeenCalledWith(
+        "Internal error committing transaction.",
+        expect.objectContaining({ local_environment_error: "storage_unavailable" })
+      );
+
+      Telemetry.captureException(new Error("erro de verdade"));
+      expect(posthog.captureException).toHaveBeenCalledOnce();
+    });
+
     it("só a janela principal leva o link do replay nos erros", async () => {
       posthog.get_session_replay_url.mockReturnValue("https://us.posthog.com/project/1/replay/abc");
       const Telemetry = await loadTelemetry();

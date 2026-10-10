@@ -36,6 +36,7 @@
   "remove_confirm": "Remover \"{name}\"?",
   "unsupported_file_type": "Tipo de arquivo não suportado. Use mp3, wav, ogg, flac, etc.",
   "partial_files_supported": "{valid} de {total} arquivos são suportados. Os demais foram ignorados.",
+  "add_failed_unexpected": "Não foi possível adicionar: {names}. Tente de novo; se persistir, feche e abra o aplicativo.",
   "edit_audio": "Editar áudio",
   "audio_name": "Nome do áudio",
   "change_file": "Alterar arquivo",

@@ -370,6 +370,7 @@ import $userdata from "@/helpers/UserData";
 import Platform from "@/helpers/Platform";
 import $path from "@/helpers/Path";
 import $alert from "@/helpers/Alert";
+import { reportLocalFileFailure } from "@/helpers/LocalFailureNotice";
 import $snackbar from "@/helpers/Snackbar";
 import { ICONS } from "@/config/Icons";
 import $idb from "@/helpers/IndexedDB";
@@ -975,7 +976,11 @@ async function selectCategoryForImport(catId: string): Promise<void> {
     const entries = [...pendingDropEntries.value];
     pendingDropEntries.value = [];
     for (const f of entries) {
-      await importDroppedEntry(f, catId);
+      try {
+        await importDroppedEntry(f, catId);
+      } catch (error) {
+        if (!reportLocalFileFailure(error, [f.name])) throw error;
+      }
     }
     selectAllCategoriesAndUncategorized();
     return;
@@ -987,62 +992,74 @@ async function onFilesSelected(e: Event): Promise<void> {
   const input = e.target as HTMLInputElement;
   if (!input.files?.length) return;
   for (const f of Array.from(input.files)) {
-    const filePath = (f as any).path;
-    if (filePath && !isHeic(f.name, (f as File).type)) {
-      const name = f.name;
-      const ext = name.split(".").pop()?.toLowerCase() || "";
-      const isImage = IMAGE_EXT.includes(ext);
-      const isVideo = VIDEO_EXT.includes(ext);
-      const isPdf = ext === "pdf";
-      if (!isImage && !isVideo && !isPdf) {
-        noteUnsupported();
-        continue;
+    try {
+      const filePath = (f as any).path;
+      if (filePath && !isHeic(f.name, (f as File).type)) {
+        const name = f.name;
+        const ext = name.split(".").pop()?.toLowerCase() || "";
+        const isImage = IMAGE_EXT.includes(ext);
+        const isVideo = VIDEO_EXT.includes(ext);
+        const isPdf = ext === "pdf";
+        if (!isImage && !isVideo && !isPdf) {
+          noteUnsupported();
+          continue;
+        }
+        const fileType = isPdf
+          ? ("pdf" as const)
+          : isImage
+            ? ("image" as const)
+            : ("video" as const);
+        const file: MediaFile = {
+          id: "file_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8),
+          name,
+          path: filePath,
+          type: fileType,
+          addedAt: Date.now(),
+          categoryId: pendingCategoryId ?? UNCATEGORIZED_ID,
+        };
+        if (isImage) file.thumb = buildThumbPath(filePath);
+        await saveFile(file);
+        files.value.unshift(file);
+        if (isVideo) generateAndStoreThumb(file);
+      } else {
+        // Sem caminho (web/drag-drop) ou HEIC/HEIF: armazena autocontido com
+        // os bytes convertidos para JPEG — o Chromium não decodifica HEIC.
+        const { blob, name } = await ensureRenderableImage(f.name, f);
+        const isImage =
+          IMAGE_EXT.includes(name.split(".").pop()?.toLowerCase() || "") ||
+          blob.type.startsWith("image/");
+        const isVideo = VIDEO_EXT.includes(f.name.split(".").pop()?.toLowerCase() || "");
+        const isPdf = f.type === "application/pdf" || f.name?.toLowerCase().endsWith(".pdf");
+        if (!isImage && !isVideo && !isPdf) {
+          noteUnsupported();
+          continue;
+        }
+        const fileType = isPdf
+          ? ("pdf" as const)
+          : isImage
+            ? ("image" as const)
+            : ("video" as const);
+        const fileId = "file_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
+        const path = URL.createObjectURL(blob);
+        const { data, mime } = await readFileData(new File([blob], name, { type: blob.type }));
+        const file: MediaFile = {
+          id: fileId,
+          name,
+          path,
+          type: fileType,
+          addedAt: Date.now(),
+          data,
+          mime,
+          categoryId: pendingCategoryId ?? UNCATEGORIZED_ID,
+        };
+        if (isImage) file.thumb = path;
+        createdObjectUrls.set(fileId, path);
+        await saveFile(file);
+        files.value.unshift(file);
+        if (isVideo) generateAndStoreThumb(file);
       }
-      const fileType = isPdf ? ("pdf" as const) : isImage ? ("image" as const) : ("video" as const);
-      const file: MediaFile = {
-        id: "file_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8),
-        name,
-        path: filePath,
-        type: fileType,
-        addedAt: Date.now(),
-        categoryId: pendingCategoryId ?? UNCATEGORIZED_ID,
-      };
-      if (isImage) file.thumb = buildThumbPath(filePath);
-      await saveFile(file);
-      files.value.unshift(file);
-      if (isVideo) generateAndStoreThumb(file);
-    } else {
-      // Sem caminho (web/drag-drop) ou HEIC/HEIF: armazena autocontido com
-      // os bytes convertidos para JPEG — o Chromium não decodifica HEIC.
-      const { blob, name } = await ensureRenderableImage(f.name, f);
-      const isImage =
-        IMAGE_EXT.includes(name.split(".").pop()?.toLowerCase() || "") ||
-        blob.type.startsWith("image/");
-      const isVideo = VIDEO_EXT.includes(f.name.split(".").pop()?.toLowerCase() || "");
-      const isPdf = f.type === "application/pdf" || f.name?.toLowerCase().endsWith(".pdf");
-      if (!isImage && !isVideo && !isPdf) {
-        noteUnsupported();
-        continue;
-      }
-      const fileType = isPdf ? ("pdf" as const) : isImage ? ("image" as const) : ("video" as const);
-      const fileId = "file_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
-      const path = URL.createObjectURL(blob);
-      const { data, mime } = await readFileData(new File([blob], name, { type: blob.type }));
-      const file: MediaFile = {
-        id: fileId,
-        name,
-        path,
-        type: fileType,
-        addedAt: Date.now(),
-        data,
-        mime,
-        categoryId: pendingCategoryId ?? UNCATEGORIZED_ID,
-      };
-      if (isImage) file.thumb = path;
-      createdObjectUrls.set(fileId, path);
-      await saveFile(file);
-      files.value.unshift(file);
-      if (isVideo) generateAndStoreThumb(file);
+    } catch (error) {
+      if (!reportLocalFileFailure(error, [f.name])) throw error;
     }
   }
   input.value = "";

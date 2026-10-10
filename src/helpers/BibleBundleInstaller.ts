@@ -15,6 +15,7 @@ import type { BundleProgress } from "@/types/Database";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 import { API_TOKEN, API_URL, API_URL_FALLBACK, API_URL_FALLBACK_TOKEN } from "@/config/Api";
 import { DB_TABLE } from "@/constants/DbTables";
+import { classifyLocalEnvironmentError } from "@/helpers/LocalEnvironmentErrors";
 import { extractBundleEntries } from "@/helpers/BundleExtraction";
 
 const MARKER_KEY = "__bible_bundle_marker__";
@@ -35,6 +36,27 @@ interface InstallOptions {
 
 function abortCheck(signal?: AbortSignal): void {
   signal?.throwIfAborted();
+}
+
+const SEED_RETRY_DELAYS_MS = [150, 600];
+
+/**
+ * Antivírus e sincronizadores (OneDrive, iCloud) seguram o banco local por
+ * instantes: a gravação falha com um erro interno e funciona na tentativa
+ * seguinte. Sem isso, um soluço em milhares de gravações derrubava o download.
+ */
+async function seedWithRetry(key: string, data: unknown, signal?: AbortSignal): Promise<void> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await $database.seed(key, data);
+      return;
+    } catch (error) {
+      const delay = SEED_RETRY_DELAYS_MS[attempt];
+      if (delay === undefined || !classifyLocalEnvironmentError(error)) throw error;
+      abortCheck(signal);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
 }
 
 async function fetchBuffer(
@@ -126,7 +148,7 @@ export default {
       signal,
       onEntry: async ({ key, data, current, total }) => {
         abortCheck(signal);
-        await $database.seed(key, data);
+        await seedWithRetry(key, data, signal);
         chapters++;
         onProgress?.({ phase: "inject", current, total, detail: key });
       },

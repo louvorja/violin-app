@@ -449,6 +449,7 @@ import { ensureRenderableImage } from "@/helpers/ImageConvert";
 import CustomSongs from "@/helpers/CustomSongs";
 import { downloadSongPackages, readSongFile } from "@/helpers/CustomSongPackage";
 import $alert from "@/helpers/Alert";
+import { reportLocalFileFailure } from "@/helpers/LocalFailureNotice";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
 import { useSlideStyle } from "@/composables/useSlideStyle";
@@ -1093,7 +1094,13 @@ async function onImportTxt(e) {
   const file = e.target.files[0];
   e.target.value = "";
   if (!file) return;
-  const text = await readTxtWithEncoding(file);
+  let text;
+  try {
+    text = await readTxtWithEncoding(file);
+  } catch (error) {
+    if (!reportLocalFileFailure(error, [file.name])) throw error;
+    return;
+  }
 
   const idx = current.value;
   const newSlide = CustomSongs.newSlide({

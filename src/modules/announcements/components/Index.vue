@@ -350,6 +350,7 @@ import { computed, onMounted, onBeforeUnmount, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import draggable from "vuedraggable";
 import $alert from "@/helpers/Alert";
+import { reportLocalFileFailure } from "@/helpers/LocalFailureNotice";
 import {
   ContextMenuContent,
   ContextMenuItem,
@@ -596,7 +597,14 @@ async function onMediaSelected(e: Event, kind: "image" | "video"): Promise<void>
       /* HEIC fallback */
     }
   }
-  const data = await work.arrayBuffer();
+  let data: ArrayBuffer;
+  try {
+    data = await work.arrayBuffer();
+  } catch (error) {
+    input.value = "";
+    if (!reportLocalFileFailure(error, [f.name])) throw error;
+    return;
+  }
   if (kind === "image") {
     editing.value.imageData = data;
     editing.value.imageMime = work.type || "image/jpeg";

@@ -29,6 +29,7 @@ import $userdata from "@/helpers/UserData";
 import { setNetworkTimingReporter } from "@/helpers/Http";
 import { setDatabaseTimingReporter } from "@/helpers/Database";
 import { KEYS } from "@/constants/UserDataKeys";
+import { classifyLocalEnvironmentError } from "@/helpers/LocalEnvironmentErrors";
 import packageJson from "@root/package.json";
 
 const KEY = import.meta.env.VITE_POSTHOG_KEY ?? "";
@@ -197,6 +198,16 @@ export function isBenignException(properties: Record<string, unknown> | undefine
     const value = (item as { value?: unknown } | null)?.value;
     return typeof value === "string" && BENIGN_EXCEPTION.test(value.trim());
   });
+}
+
+function localEnvironmentKindOf(properties: Record<string, unknown> | undefined) {
+  const list = properties?.$exception_list;
+  if (!Array.isArray(list) || list.length === 0) return null;
+  const kinds = list.map((item) => {
+    const { type, value } = (item ?? {}) as { type?: unknown; value?: unknown };
+    return classifyLocalEnvironmentError({ name: type, message: value });
+  });
+  return kinds.every(Boolean) ? kinds[0] : null;
 }
 
 function serializableValue(value: unknown, depth = 0): unknown {
@@ -661,6 +672,15 @@ export function captureException(error: unknown, properties: Record<string, unkn
     _explicitErrors.set(error, now);
   }
   const sanitized = safeError(error);
+  const localKind = classifyLocalEnvironmentError(error);
+  if (localKind) {
+    log("warn", sanitized.message, {
+      ...serializableProperties(properties),
+      error_name: sanitized.name,
+      local_environment_error: localKind,
+    });
+    return;
+  }
   const enriched = {
     ...baseContext(),
     ...errorProperties(sanitized),
@@ -1766,6 +1786,16 @@ async function _init(): Promise<void> {
       if (!capture) return null;
       if (capture.event === "$exception") {
         if (isBenignException(capture.properties)) return null;
+        const localKind = localEnvironmentKindOf(capture.properties);
+        if (localKind) {
+          const first = (capture.properties?.$exception_list as { type?: string; value?: string }[])[0];
+          log("warn", String(first?.value ?? "Falha do ambiente local"), {
+            source: "sdk.autocapture",
+            error_name: first?.type,
+            local_environment_error: localKind,
+          });
+          return null;
+        }
         normalizeOwnProtocolExceptionFrames(capture.properties);
         onRealException(isMainWindow, capture);
       }
