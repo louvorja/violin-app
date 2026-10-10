@@ -8,7 +8,9 @@ const moment = (): ProgramItem => ({ id: "m", kind: "moment", title: "Anúncios"
 
 describe("momento", () => {
   it("aceita foto, vídeo e PDF/apresentação; recusa áudio e o que não é mídia", () => {
-    expect(["a.jpg", "b.mp4", "c.pdf", "d.pptx"].every(acceptsInMoment)).toBe(true);
+    expect(["a.jpg", "b.mp4", "c.pdf"].every(acceptsInMoment)).toBe(true);
+    // PowerPoint desligado por enquanto: só PDF.
+    expect(acceptsInMoment("d.pptx")).toBe(false);
     expect(["e.mp3", "f.txt"].some(acceptsInMoment)).toBe(false);
   });
 

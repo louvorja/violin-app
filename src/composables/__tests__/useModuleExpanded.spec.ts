@@ -7,6 +7,7 @@ import {
   useShellExpanded,
 } from "@/composables/useModuleExpanded";
 import $appdata from "@/helpers/AppData";
+import { KEYS } from "@/constants/UserDataKeys";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 
 /**
@@ -17,7 +18,7 @@ import { ModuleEnum } from "@/enums/ModuleEnum";
 describe("useModuleExpanded", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
-    $appdata.set("active_module", null);
+    $appdata.set(KEYS.SHELL.ACTIVE_MODULE, null);
   });
 
   it("alterna a preferência do módulo", () => {
@@ -32,10 +33,10 @@ describe("useModuleExpanded", () => {
     const { isExpanded } = useShellExpanded();
     setModuleExpanded(ModuleEnum.PRESENTATION_MODE, true);
 
-    $appdata.set("active_module", ModuleEnum.PRESENTATION_MODE);
+    $appdata.set(KEYS.SHELL.ACTIVE_MODULE, ModuleEnum.PRESENTATION_MODE);
     expect(isExpanded.value).toBe(true);
 
-    $appdata.set("active_module", ModuleEnum.LITURGY);
+    $appdata.set(KEYS.SHELL.ACTIVE_MODULE, ModuleEnum.LITURGY);
     expect(isExpanded.value).toBe(false);
     expect(isModuleExpanded(ModuleEnum.PRESENTATION_MODE)).toBe(true);
   });

@@ -553,7 +553,7 @@ function onSessionItems(sessionId: string, list: ProgramItem[]): void {
 }
 
 .pm-progress__done {
-  background: var(--lj-navy-active);
+  background: var(--lj-live-select);
   transition: width 200ms var(--lj-ease);
 }
 

@@ -2,7 +2,6 @@ import type { ComputedRef, Ref } from "vue";
 import { computed } from "vue";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { useModuleI18n } from "@/composables/useModuleI18n";
-import { useSlides } from "@/composables/useSlides";
 import type { ProgramItem } from "@/types/Presentation";
 import type { PreviewView } from "../components/StagePreview.vue";
 import { KIND_ICONS } from "../program/kinds";
@@ -26,7 +25,6 @@ export function useStageHeader(deps: {
 }) {
   const { tm } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
   const stage = useStage();
-  const slides = useSlides();
   const live = useLiveContent();
 
   const stageIcon = computed(() => {
@@ -51,20 +49,7 @@ export function useStageHeader(deps: {
       return part ? `${item.title} · ${part}` : item.title;
     }
     if (deps.audioLive.value && !deps.liveKind.value) return deps.audioTitle.value;
-    switch (deps.liveKind.value) {
-      case "music":
-        return slides.title.value;
-      case "bible":
-        return live.bible.value?.reference ?? "";
-      case "file":
-        return live.file.value?.title ?? "";
-      case "online_video":
-        return live.onlineTitle.value;
-      case "announcements":
-        return live.announcement.value?.nome ?? "";
-      default:
-        return tm("panels.stage");
-    }
+    return deps.liveKind.value ? live.title.value : tm("panels.stage");
   });
 
   const stageMeta = computed(() => {

@@ -144,7 +144,7 @@ watch(deck.page, async (n) => {
 }
 
 .pm-pdf__page--next .pm-pdf__thumb {
-  border-color: var(--lj-navy-active);
+  border-color: var(--lj-live-select);
 }
 
 .pm-pdf__n {

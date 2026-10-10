@@ -27,6 +27,12 @@ import { isWebFileStoreSupported, webDownload, webStorage } from "@/helpers/WebF
 
 const api = typeof window !== "undefined" ? (window.louvorjaApi ?? null) : null;
 
+/** Resposta das operações de arquivo que só o desktop faz, no navegador. */
+const _unsupported = () =>
+  Promise.resolve(
+    /** @type {{ ok: false, error: string }} */ ({ ok: false, error: "unsupported" })
+  );
+
 export default {
   /**
    * true quando rodando dentro do Electron, false no browser/PWA.
@@ -335,7 +341,7 @@ export default {
 
   /** Um nível de uma pasta, com tamanho e data. No navegador: `{ ok: false }`. */
   listDir(dirPath) {
-    return api?.storage?.listDir?.(dirPath) ?? Promise.resolve({ ok: false, error: "unsupported" });
+    return api?.storage?.listDir?.(dirPath) ?? _unsupported();
   },
 
   /** Quais arquivos estão só na nuvem. No navegador: nenhum (`{}`). */
@@ -345,10 +351,7 @@ export default {
 
   /** Baixa o arquivo da nuvem para o computador. No navegador: `{ ok: false }`. */
   cloudDownload(filePath) {
-    return (
-      api?.storage?.cloudDownload?.(filePath) ??
-      Promise.resolve({ ok: false, error: "unsupported" })
-    );
+    return api?.storage?.cloudDownload?.(filePath) ?? _unsupported();
   },
 
   /** Andamento dos downloads da nuvem; devolve a função que para de ouvir. */
@@ -358,33 +361,22 @@ export default {
 
   /** Histórico da série de vídeos da pasta. No navegador: `{ ok: false }`. */
   seriesRead(dirPath) {
-    return (
-      api?.storage?.seriesRead?.(dirPath) ?? Promise.resolve({ ok: false, error: "unsupported" })
-    );
+    return api?.storage?.seriesRead?.(dirPath) ?? _unsupported();
   },
 
   /** Resolve as cópias em conflito do histórico: `"merge"` ou o nome da versão a manter. */
   seriesResolve(dirPath, choice) {
-    return (
-      api?.storage?.seriesResolve?.(dirPath, choice) ??
-      Promise.resolve({ ok: false, error: "unsupported" })
-    );
+    return api?.storage?.seriesResolve?.(dirPath, choice) ?? _unsupported();
   },
 
   /** PowerPoint → PDF pelo PowerPoint do computador. No navegador: `{ ok: false }`. */
   convertPresentation(filePath) {
-    return (
-      api?.storage?.convertPresentation?.(filePath) ??
-      Promise.resolve({ ok: false, error: "unsupported" })
-    );
+    return api?.storage?.convertPresentation?.(filePath) ?? _unsupported();
   },
 
   /** Aplica uma operação ao histórico da série, sobre o que está no disco agora. */
   seriesApply(dirPath, op) {
-    return (
-      api?.storage?.seriesApply?.(dirPath, op) ??
-      Promise.resolve({ ok: false, error: "unsupported" })
-    );
+    return api?.storage?.seriesApply?.(dirPath, op) ?? _unsupported();
   },
 
   /**

@@ -39,7 +39,9 @@
           :disabled="locked || index <= 0"
           @click="Media.prevSlide()"
         />
-        <span class="pm-slides__counter" data-testid="pm-slides-counter">{{ index + 1 }} / {{ total }}</span>
+        <span class="pm-slides__counter" data-testid="pm-slides-counter">
+          {{ index + 1 }} / {{ total }}
+        </span>
         <LjButton
           size="sm"
           icon-only
@@ -96,7 +98,6 @@ function togglePlay(): void {
   if (audio.isPaused.value) Media.play();
   else Media.pause(true);
 }
-
 
 // O slide no ar fica sempre à vista, mesmo quando a música avança sozinha.
 watch(index, async (i) => {
@@ -175,7 +176,7 @@ watch(index, async (i) => {
 .pm-slides__progress span {
   display: block;
   height: 100%;
-  background: var(--lj-navy-active);
+  background: var(--lj-live-select);
 }
 
 .pm-slides__pager {

@@ -91,11 +91,11 @@ const { tm } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
 }
 
 .pm-slide-card:hover:not(:disabled) .pm-slide-card__frame {
-  outline-color: var(--lj-navy-active);
+  outline-color: var(--lj-live-select);
 }
 
 .pm-slide-card--next .pm-slide-card__frame {
-  outline: 2px solid var(--lj-navy-active);
+  outline: 2px solid var(--lj-live-select);
 }
 
 .pm-slide-card--live .pm-slide-card__frame {

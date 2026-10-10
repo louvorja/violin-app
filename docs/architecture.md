@@ -33,6 +33,17 @@ o arquivo ativo. `PdfPageRenderQueue` serializa páginas no mesmo canvas. A matr
 completa e os limites testados estão em
 [`architecture-refactor-final-report.md`](architecture-refactor-final-report.md).
 
+O **Modo apresentação** (`src/modules/presentation_mode`) é a mesa de operação do
+culto: programa por data à esquerda (documento no `DocStore`), palco com prévia e
+controles no centro, biblioteca embaixo (Arquivos, Mídia com o Online, Áudio,
+Músicas, Bíblia) e as saídas à direita — liga/desliga por tela, miniaturas que
+refletem as telas reais, "Tirar do ar" e "Limpar tela" (`projection_clear`). Ele
+não tem projeção própria: manda cada conteúdo pelos contratos existentes (música,
+Bíblia, `file_projection`, vídeo on-line, anúncios). O que é exclusivo do retorno
+de palco vai por `return_override`, com o som tocado na janela principal. Reproduzir
+não é apresentar: sem a apresentação ligada, o conteúdo fica na prévia e o som
+toca com aviso. Uma camada visual e uma de áudio; um vídeo por vez.
+
 ---
 
 ## Armazenamento desktop
@@ -703,6 +714,8 @@ Canal único `BroadcastChannel("louvorja")`. Duas finalidades:
 | `request_libras_state`    | LibrasOverlay           | main.js                                     |
 | `overlay_config_changed`  | Shell (estado canônico); módulo (invalidação de slots) | OverlayRenderer |
 | `request_overlay_state`   | OverlayRenderer         | Shell (visibilidade) e leitura local dos slots |
+| `projection_clear`        | presentation_mode       | Views de projeção e retorno (cobre com o fundo) |
+| `return_override`         | presentation_mode, Esc  | Views de retorno (conteúdo só no retorno)   |
 
 ---
 

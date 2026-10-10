@@ -162,8 +162,26 @@ const currentAnnouncement = computed(() => {
 export function useLiveContent() {
   _install();
   const slides = useSlides();
+  /** O nome do que está no ar, qualquer que seja o tipo; vazio sem nada. */
+  const title = computed(() => {
+    switch (current.value) {
+      case "music":
+        return slides.title.value;
+      case "bible":
+        return _bible.value?.reference ?? "";
+      case "file":
+        return _file.value?.title ?? "";
+      case "online_video":
+        return _onlineTitle.value;
+      case "announcements":
+        return currentAnnouncement.value?.nome ?? "";
+      default:
+        return "";
+    }
+  });
   return {
     current,
+    title,
     music: slides,
     bible: _bible,
     file: _file,

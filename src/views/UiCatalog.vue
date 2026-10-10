@@ -512,6 +512,14 @@ const menuItems: LjMenuItem[] = [
   { label: "Mesma janela", checked: true, action: () => {} },
   { label: "Tela principal", icon: ICONS.UI.MONITORS, hint: "1470×918", action: () => {} },
   { label: "Tela de retorno", icon: ICONS.UI.MONITORS, hint: "1470×918", action: () => {} },
+  {
+    label: "Outros monitores",
+    icon: ICONS.UI.MONITORS,
+    children: [
+      { label: "Monitor 3", hint: "1920×1080", action: () => {} },
+      { label: "Monitor 4", hint: "1280×720", action: () => {} },
+    ],
+  },
   { separator: true },
   { label: "Identificar monitores", icon: ICONS.ACTIONS.SEARCH, shortcut: "F9", action: () => {} },
 ];

@@ -54,6 +54,14 @@
           <span v-else-if="onAir" class="pm-playing-only" data-testid="pm-stage-badge">
             {{ tm("stage.playing_not_presenting") }}
           </span>
+          <!-- Na prévia de outra coisa, o aviso de som fora das telas continua à vista. -->
+          <span
+            v-if="stagePreview && onAir && !screenOn.main && !screenOn.stage"
+            class="pm-playing-only"
+            data-testid="pm-stage-playing-warning"
+          >
+            {{ tm("stage.playing_not_presenting") }}
+          </span>
           <LjIcon v-if="stageIcon" :icon="stageIcon" :size="14" />
           <span class="pm-bar__title" data-testid="pm-stage-title">{{ stageTitle }}</span>
           <span v-if="stageMeta" class="pm-bar__meta">{{ stageMeta }}</span>
@@ -275,6 +283,7 @@ import { KEYS } from "@/constants/UserDataKeys";
 import { useFileLibrary, type LibraryEntry } from "../composables/useFileLibrary";
 import { useLibraryLiveMarks } from "../composables/useLibraryLiveMarks";
 import { useFlash } from "../composables/useFlash";
+import { useSlideWait } from "../composables/useSlideWait";
 import Media from "@/composables/useMedia";
 import { useSlides } from "@/composables/useSlides";
 import { useLiveContent } from "../composables/useLiveContent";
@@ -376,6 +385,9 @@ interface DispatchOptions extends PlayOptions {
   /** Ignora a trava — é o destravar mandando ao ar o que estava na fila. */
   force?: boolean;
 }
+
+// Clique num slide da prévia: a música vai ao ar e salta para ele quando carregar.
+const { goToSlideWhenLoaded } = useSlideWait();
 
 /**
  * Única porta para o ar. Item com sub-itens só abre a lista e espera o
@@ -520,35 +532,6 @@ const previewView = computed(() => {
   const t = stage.preview.value;
   return t ? previewViewOf(t, itemOf(t)) : null;
 });
-
-/**
- * Clique num slide da prévia: a música vai ao ar e, quando os slides dela
- * chegarem, salta para o slide escolhido. Só uma espera por vez: mandar outra
- * coisa ao ar cancela a anterior.
- */
-let cancelSlideWait: (() => void) | null = null;
-function goToSlideWhenLoaded(idMusic: number, index: number): void {
-  cancelSlideWait?.();
-  cancelSlideWait = null;
-  if (index <= 0) return;
-  const stop = watch(
-    () => [slides.totalSlides.value, slides.slides.value[0]?.id_music] as const,
-    ([total, id]) => {
-      if (total <= index || Number(id) !== idMusic) return;
-      cancel();
-      Media.goToSlide(index);
-    },
-    { immediate: true }
-  );
-  const timer = setTimeout(() => cancel(), 15000);
-  function cancel(): void {
-    stop();
-    clearTimeout(timer);
-    if (cancelSlideWait === cancel) cancelSlideWait = null;
-  }
-  cancelSlideWait = cancel;
-}
-onBeforeUnmount(() => cancelSlideWait?.());
 
 function playPreview(slideIndex = 0, mode?: MusicMode): void {
   const t = stage.preview.value;
@@ -879,7 +862,7 @@ useBroadcastListener(BROADCAST_TYPE.MODULE_RIBBON_ACTION, (payload) => {
 .pm-preview-badge {
   flex-shrink: 0;
   padding: 0 6px;
-  border: 1px solid var(--lj-navy-active);
+  border: 1px solid var(--lj-live-select);
   border-radius: 3px;
   color: var(--lj-text);
   font-size: 9.5px;

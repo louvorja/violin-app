@@ -115,22 +115,9 @@ export function useLayers() {
   const live = useLiveContent();
   const player = useReturnPlayer();
 
-  const screenTitle = computed(() => {
-    switch (live.current.value) {
-      case "music":
-        return live.music.title.value;
-      case "bible":
-        return live.bible.value?.reference ?? "";
-      case "file":
-        return live.file.value?.title ?? "";
-      case "online_video":
-        return live.onlineTitle.value;
-      case "announcements":
-        return live.announcement.value?.nome ?? tm("announcements");
-      default:
-        return "";
-    }
-  });
+  const screenTitle = computed(
+    () => live.title.value || (live.current.value === "announcements" ? tm("announcements") : "")
+  );
 
   const audioTitle = computed(() => {
     if ($appdata.get<boolean>(KEYS.MODULES.MEDIA.CONFIG.AUDIO_ONLY, false)) {

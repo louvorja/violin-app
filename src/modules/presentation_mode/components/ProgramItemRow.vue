@@ -227,11 +227,11 @@ const expandable = computed(() => hasChildren.value || props.item.kind === "mome
 }
 
 .pm-row--next {
-  border-left-color: var(--lj-navy-active);
+  border-left-color: var(--lj-live-select);
 }
 
 .pm-row--selected {
-  box-shadow: inset 0 0 0 1px var(--lj-navy-active);
+  box-shadow: inset 0 0 0 1px var(--lj-live-select);
 }
 
 .pm-row__time {
@@ -350,7 +350,7 @@ const expandable = computed(() => hasChildren.value || props.item.kind === "mome
 .pm-queued-badge {
   flex-shrink: 0;
   padding: 1px 5px;
-  border: 1px solid var(--lj-navy-active);
+  border: 1px solid var(--lj-live-select);
   border-radius: 3px;
   color: var(--lj-text);
   font-size: 9.5px;

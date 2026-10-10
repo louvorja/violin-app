@@ -408,7 +408,7 @@ watch(locale, (l) => void bible.ensureLoaded(l));
 .pm-chapter:hover,
 .pm-chapter:focus-visible {
   outline: none;
-  border-color: var(--lj-navy-active);
+  border-color: var(--lj-live-select);
 }
 
 .pm-verses {
@@ -499,7 +499,7 @@ watch(locale, (l) => void bible.ensureLoaded(l));
 }
 
 .pm-verse__btn:hover {
-  border-color: var(--lj-navy-active);
+  border-color: var(--lj-live-select);
 }
 
 .pm-verse__btn:focus-visible {

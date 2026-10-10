@@ -335,7 +335,7 @@ function stop(): void {
 }
 
 .pm-video__progress {
-  background: var(--lj-navy-active);
+  background: var(--lj-live-select);
 }
 
 .pm-video__thumb {

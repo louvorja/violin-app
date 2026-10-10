@@ -188,7 +188,7 @@ watch(liveIndex, async (i) => {
 }
 
 .pm-moment__tile--next .pm-moment__thumb {
-  border-color: var(--lj-navy-active);
+  border-color: var(--lj-live-select);
 }
 
 .pm-moment__label {

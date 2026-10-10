@@ -14,6 +14,37 @@
       >
         <template v-for="(item, index) in items" :key="index">
           <DropdownMenuSeparator v-if="item.separator" class="lj-menu__separator" />
+          <!-- Lista que cresce (momentos, coletâneas…) vai para o segundo nível. -->
+          <DropdownMenuSub v-else-if="item.children">
+            <DropdownMenuSubTrigger class="lj-menu__item" :disabled="item.disabled">
+              <span class="lj-menu__mark">
+                <LjIcon v-if="item.icon" :icon="item.icon" :size="13" />
+              </span>
+              <span class="lj-menu__text">{{ item.label }}</span>
+              <LjIcon :icon="ICONS.UI.CHEVRON_RIGHT" :size="13" class="lj-menu__sub-arrow" />
+            </DropdownMenuSubTrigger>
+            <DropdownMenuPortal>
+              <DropdownMenuSubContent class="lj-ui-float lj-menu" :side-offset="4">
+                <template v-for="(child, childIndex) in item.children" :key="childIndex">
+                  <DropdownMenuSeparator v-if="child.separator" class="lj-menu__separator" />
+                  <DropdownMenuItem
+                    v-else
+                    class="lj-menu__item"
+                    :disabled="child.disabled"
+                    @select="child.action?.()"
+                  >
+                    <span class="lj-menu__mark">
+                      <LjIcon v-if="child.icon" :icon="child.icon" :size="13" />
+                    </span>
+                    <span class="lj-menu__text">
+                      {{ child.label }}
+                      <small v-if="child.hint" class="lj-menu__hint">{{ child.hint }}</small>
+                    </span>
+                  </DropdownMenuItem>
+                </template>
+              </DropdownMenuSubContent>
+            </DropdownMenuPortal>
+          </DropdownMenuSub>
           <DropdownMenuLabel
             v-else-if="item.label && !item.action && item.checked === undefined"
             class="lj-menu__label"
@@ -72,6 +103,9 @@ import {
   DropdownMenuPortal,
   DropdownMenuRoot,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "reka-ui";
 import { ICONS } from "@/config/Icons";
@@ -85,7 +119,7 @@ export interface LjMenuItem {
   disabled?: boolean;
   separator?: boolean;
   action?: () => void;
-  /** Submenu (só no `LjContextMenu`, por enquanto): a lista que cresce fica no segundo nível. */
+  /** Submenu: a lista que cresce fica no segundo nível. */
   children?: LjMenuItem[];
 }
 

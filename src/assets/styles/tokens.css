@@ -55,6 +55,9 @@
   --lj-live-early-border: rgba(22, 163, 74, 0.3);
   /* Faixa do slide atual no retorno de palco (miniatura). */
   --lj-live-return-slide-bg: #1a201a;
+  /* Selecionado, em prévia e progresso: o tom ativo da marca de cada tema,
+     nunca o laranja de "no ar" (que é o acento dos temas escuros). */
+  --lj-live-select: var(--lj-navy-active);
   --lj-color-favorites-line: #e8e8e8;
 
   /* Cores funcionais */

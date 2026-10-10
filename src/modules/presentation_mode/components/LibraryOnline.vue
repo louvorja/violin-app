@@ -462,7 +462,7 @@ onMounted(() => {
 }
 
 .pm-online__card:hover .pm-online__thumb {
-  border-color: var(--lj-navy-active);
+  border-color: var(--lj-live-select);
 }
 
 .pm-online__card--live .pm-online__thumb {
@@ -471,8 +471,8 @@ onMounted(() => {
 }
 
 .pm-online__card--selected:not(.pm-online__card--live) .pm-online__thumb {
-  border-color: var(--lj-navy-active);
-  box-shadow: inset 0 0 0 2px var(--lj-navy-active);
+  border-color: var(--lj-live-select);
+  box-shadow: inset 0 0 0 2px var(--lj-live-select);
 }
 
 .pm-online__badge {

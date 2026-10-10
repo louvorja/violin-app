@@ -383,7 +383,7 @@ watch(
 }
 
 .pm-file:hover .pm-file__thumb {
-  border-color: var(--lj-navy-active);
+  border-color: var(--lj-live-select);
 }
 
 .pm-file__action,
@@ -503,8 +503,8 @@ watch(
 
 /* Em prévia: azul, como o "próximo" do programa. No ar é laranja (acima). */
 .pm-file--selected:not(.pm-file--live) .pm-file__thumb {
-  box-shadow: inset 0 0 0 2px var(--lj-navy-active);
-  border-color: var(--lj-navy-active);
+  box-shadow: inset 0 0 0 2px var(--lj-live-select);
+  border-color: var(--lj-live-select);
 }
 
 .pm-file:focus-visible {

@@ -90,6 +90,11 @@ $broadcast.send(BROADCAST_TYPE.REQUEST_MUSIC_PRESENTATION_SNAPSHOT);
 | `LIBRAS_TOGGLE` | `"libras_toggle"` | ShellTools | Projection |
 | `LIBRAS_TRANSLATE` | `"libras_translate"` | useLibras | Projection, Obs |
 | `REQUEST_LIBRAS_STATE` | `"request_libras_state"` | LibrasOverlay | main.js |
+| `PROJECTION_CLEAR` | `"projection_clear"` | presentation_mode ("Limpar tela") | Views de projeção e retorno (`ProjectionClearScreen`), espelho do módulo |
+| `REQUEST_PROJECTION_CLEAR` | `"request_projection_clear"` | Janela de projeção recém-aberta | presentation_mode |
+| `RETURN_OVERRIDE` | `"return_override"` | presentation_mode, Esc | Views de retorno (`ReturnOverride`): imagem, vídeo ou `blank` só no retorno |
+| `RETURN_OVERRIDE_STATE` | `"return_override_state"` | presentation_mode (player do vídeo só no retorno) | `ReturnOverride` (relógio do vídeo mudo) |
+| `REQUEST_RETURN_OVERRIDE` | `"request_return_override"` | Retorno recém-aberto | presentation_mode |
 | `TELEMETRY_SESSION_REQUEST` | `"telemetry_session_request"` | Telemetry (janelas auxiliares) | Telemetry (janela principal) |
 | `TELEMETRY_SESSION` | `"telemetry_session"` | Telemetry (janela principal) | Telemetry (janelas auxiliares) |
 | `TELEMETRY_ERROR_SEEN` | `"telemetry_error_seen"` | Telemetry (janelas auxiliares) | Telemetry (janela principal) |
