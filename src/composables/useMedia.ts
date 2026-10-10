@@ -537,7 +537,16 @@ async function _openVideoFileProjection(
   if (_isYouTube()) _self.close(true, true, true, true);
   const stageEpoch = _stageEpoch;
 
-  const payload = { url, type: "video", title, stage_epoch: projectionEpoch };
+  // Uma identidade só, da tela ao player (ver MediaOpenParams.playback_id).
+  const playbackId = _newPlaybackId();
+  const payload = {
+    url,
+    type: "video",
+    title,
+    stage_epoch: projectionEpoch,
+    playback_id: playbackId,
+    clock: "player" as const,
+  };
   try {
     localStorage.setItem(KEYS.PROJECTION.LJ_FILE_PROJECTION, JSON.stringify(payload));
     localStorage.removeItem(KEYS.PROJECTION.LJ_YOUTUBE_PROJECTION);
@@ -558,6 +567,7 @@ async function _openVideoFileProjection(
     url: audioUrl,
     title,
     mediaType: "video",
+    playback_id: playbackId,
     // Imagem e som em arquivos diferentes: o player do app mostra a imagem por conta própria.
     ...(audioUrl !== url ? { videoUrl: url } : {}),
   }, true);
@@ -2046,6 +2056,8 @@ const _self = {
       !["image", "pdf", "video"].includes(payload.type)) return false;
     const projection = {
       ...payload,
+      // Vídeo com som no player: a tela segue o relógio dele e não anda sozinha.
+      ...(payload.type === "video" && videoAudioUrl ? { clock: "player" as const } : {}),
       stage_epoch: nextFileProjectionEpoch(),
       playback_id: typeof payload.playback_id === "string" && payload.playback_id
         ? payload.playback_id : _newPlaybackId(),
@@ -2085,7 +2097,15 @@ const _self = {
     if (stageEpoch !== _stageEpoch) return false;
     $broadcast.send(BROADCAST_TYPE.FILE_PROJECTION, projection);
     if (projection.type === "video" && videoAudioUrl) {
-      await this.openAudio({ url: videoAudioUrl, title: projection.title || "", mediaType: "video" }, true);
+      await this.openAudio(
+        {
+          url: videoAudioUrl,
+          title: projection.title || "",
+          mediaType: "video",
+          playback_id: projection.playback_id,
+        },
+        true
+      );
     }
     return stageEpoch === _stageEpoch;
   },
@@ -2239,7 +2259,9 @@ const _self = {
       await _queueStageWindows(stageEpoch, closeMusicProjectionWindows);
       if (stageEpoch !== _stageEpoch) return;
     }
-    const playback_id = _newPlaybackId();
+    // Vídeo já anunciado às telas: a mesma identidade, não uma segunda.
+    const playback_id =
+      typeof params.playback_id === "string" && params.playback_id ? params.playback_id : _newPlaybackId();
     const audioMode = params.mode || "audio";
     const playbackContext: AudioTelemetryContext = {
       playback_id,

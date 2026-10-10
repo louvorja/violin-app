@@ -15,6 +15,12 @@ export interface MediaOpenParams {
    * baixa: trilha de vídeo e trilha de áudio). O player do app a mostra, muda.
    */
   videoUrl?: string;
+  /**
+   * Identidade da reprodução que as janelas de projeção já receberam (vídeo).
+   * O player adota a mesma: as telas só obedecem a VIDEO_STATE com o id delas,
+   * e um segundo id criado aqui deixava a tela presa ao primeiro, rodando sozinha.
+   */
+  playback_id?: string;
 }
 
 export interface MediaConfig {
@@ -53,6 +59,12 @@ export interface FileProjectionState {
   url: string;
   title: string;
   playback_id?: string;
+  /**
+   * `"player"`: o vídeo segue o player da janela principal (é de lá que sai o
+   * som) — a tela não toca sozinha. Sem isso (o timer projetando um vídeo,
+   * por exemplo), a tela toca por conta própria.
+   */
+  clock?: "player";
   stage_epoch?: number;
   page?: number;
   totalPages?: number;

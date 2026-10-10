@@ -20,7 +20,7 @@
               :src="fileProjection.url"
               class="file-projection__media"
               :style="{ backgroundColor: wpColor }"
-              autoplay
+              :autoplay="!playerClock"
               muted
               playsinline
               @loadedmetadata="onVideoReady"
@@ -93,6 +93,7 @@ import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 import { heicToJpeg, isHeic } from "@/helpers/ImageConvert";
 import Telemetry from "@/helpers/Telemetry";
 import { useScreenVideoReport } from "@/composables/useScreenVideoReport";
+import { useSlaveVideoClock } from "@/composables/useSlaveVideoClock";
 import {
   mediaElementDetails,
   mediaSourceDetails,
@@ -138,6 +139,12 @@ const { transitionName, stageStyle } = useTransitionStage(
 );
 
 const videoRef = ref<HTMLVideoElement | null>(null);
+/** O vídeo segue o player da janela principal: sem ele, não anda (ver useSlaveVideoClock). */
+const playerClock = ref(false);
+const slaveClock = useSlaveVideoClock(videoRef, {
+  enabled: () => playerClock.value && fileProjection.active && fileProjection.type === "video",
+  request: () => _requestVideoState(),
+});
 // O módulo confere se esta tela faz o que o player manda (pausado é pausado).
 useScreenVideoReport(
   "main",
@@ -375,6 +382,8 @@ async function _activateProjection(p: FileProjectionState): Promise<void> {
   fileProjection.url = p.url || "";
   fileProjection.title = p.title || "";
   fileProjection.playback_id = p.playback_id;
+  playerClock.value = p.type === "video" && p.clock === "player";
+  slaveClock.reset();
   fileProjection.backward = p.backward === true;
   videoStateGate.begin(p.playback_id);
   videoFirstFrame.begin(p.type === "video" ? p.playback_id : null);
@@ -425,6 +434,11 @@ function _prepareVideo(): void {
   videoFirstFrame.attach(el);
   el.load();
   const diagnosticContext = _captureVideoDiagnostics(el);
+  // Com player, a tela espera o estado dele para andar; pede já.
+  if (playerClock.value) {
+    _requestVideoState();
+    return;
+  }
   el.play().catch((error) => {
     // O erro de codec chega também pelo evento `error`; este log captura o
     // caso em que o Windows bloqueia autoplay ou o arquivo ainda não tem
@@ -685,6 +699,7 @@ useBroadcastListener(BROADCAST_TYPE.VIDEO_STATE, (payload: unknown) => {
   if (!fileProjection.active || fileProjection.type !== "video") return;
   const data = payload as VideoMediaState;
   if (!videoStateGate.accepts(data)) return;
+  slaveClock.heard();
   latestVideoState = data;
   videoFirstFrame.acceptRevision(data.revision, data.playback_id);
   _applyVideoState(data);
