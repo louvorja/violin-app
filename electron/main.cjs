@@ -84,6 +84,7 @@ const docStore = require("./main/docStore.js");
 const fileBrowser = require("./main/fileBrowser.js");
 const cloudFiles = require("./main/cloudFiles.js").createCloudFiles();
 const seriesFile = require("./main/seriesFile.js");
+const churchFolder = require("./main/churchFolder.js");
 const { createPresentationConverter } = require("./main/presentationConvert.js");
 const mediaVariants = require("./main/mediaVariants.js");
 const mediaResolver = require("./main/mediaResolver.js");
@@ -2510,6 +2511,19 @@ ipcMain.handle("files:seriesRead", (_e, dirPath) => seriesFile.read(dirPath));
 ipcMain.handle("files:seriesApply", (_e, dirPath, op) => seriesFile.apply(dirPath, op));
 // Cópias em conflito do sincronizador: "merge" ou o nome da versão escolhida.
 ipcMain.handle("files:seriesResolve", (_e, dirPath, choice) => seriesFile.resolve(dirPath, choice));
+// Pasta da igreja: programas e modelos do Modo apresentação numa pasta compartilhada.
+const CHURCH_OPS = {
+  stat: churchFolder.stat,
+  read: churchFolder.read,
+  write: churchFolder.write,
+  list: churchFolder.list,
+  conflicts: churchFolder.conflicts,
+  resolve: churchFolder.resolve,
+};
+ipcMain.handle("files:church", (_e, op, ...args) =>
+  Object.prototype.hasOwnProperty.call(CHURCH_OPS, op) ? CHURCH_OPS[op](...args) : { ok: false, error: "invalid" }
+);
+ipcMain.handle("files:computerName", () => churchFolder.computerName());
 // PowerPoint → PDF pelo PowerPoint instalado; o PDF é cache, refeito se o arquivo mudar.
 const presentationConverter = createPresentationConverter({
   cacheDir: path.join(paths.dataDir(), "cache", "presentations"),

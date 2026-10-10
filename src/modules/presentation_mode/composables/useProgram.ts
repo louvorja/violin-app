@@ -1,24 +1,24 @@
-import { computed, ref } from "vue";
-import $docs from "@/helpers/DocStore";
+import { computed, ref, watch } from "vue";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
 import Telemetry from "@/helpers/Telemetry";
-import { DB_TABLE } from "@/constants/DbTables";
-import type { Program, ProgramItem, ProgramSession } from "@/types/Presentation";
+import type { Program, ProgramItem, ProgramModel, ProgramSession } from "@/types/Presentation";
 import { flattenItems, minutesOfDate } from "../program/time";
+import { sessionsFromModel } from "../program/models";
+import { checkRemote, loadProgram, saveProgram } from "./programStore";
+import { useChurchFolder } from "./useChurchFolder";
 
 /**
- * Programa do culto: um documento por data no DocStore, e o estado da
- * execução ao vivo ao lado dele.
+ * Programa do culto: um documento por data, e o estado da execução ao vivo ao
+ * lado dele. Onde o documento mora (DocStore ou pasta da igreja) é com o
+ * `programStore`.
  *
- * O documento é trabalho do operador — grava a cada mudança (o DocStore junta
- * as escritas). O estado ao vivo (item no ar, concluídos, seleção) é da
+ * O documento é trabalho do operador — grava a cada mudança (as escritas são
+ * juntadas). O estado ao vivo (item no ar, concluídos, seleção) é da
  * sessão: vale para o culto em andamento, não para o próximo sábado.
  *
  * Singleton: a lista, o ribbon e o rodapé do módulo falam do mesmo programa.
  */
-
-const TABLE = DB_TABLE.PRESENTATION_PROGRAMS;
 
 export function newId(): string {
   return crypto.randomUUID();
@@ -67,7 +67,7 @@ function _resetRuntime(): void {
 async function _load(date: string): Promise<void> {
   const seq = ++_loadSeq;
   try {
-    const stored = await $docs.get<Program>(TABLE, date);
+    const stored = await loadProgram(date);
     if (seq !== _loadSeq) return;
     _program.value = stored ?? emptyProgram(date);
   } catch (e) {
@@ -78,19 +78,32 @@ async function _load(date: string): Promise<void> {
   _loaded.value = true;
 }
 
-async function _persist(program: Program): Promise<void> {
-  try {
-    await $docs.put(TABLE, JSON.parse(JSON.stringify(program)) as Program);
-  } catch (e) {
-    Telemetry.captureException(e, { source: "presentation_program_save" });
-  }
-}
-
 /** Toda mudança no documento passa por aqui: carimba e grava. */
 function _commit(next: Omit<Program, "updatedAt">): void {
   const program: Program = { ...next, updatedAt: new Date().toISOString() };
   _program.value = program;
-  void _persist(program);
+  saveProgram(program);
+}
+
+/** Outro computador salvou: o documento muda, a execução ao vivo continua. */
+function _replace(program: Program): void {
+  _program.value = program;
+  const ids = new Set(flattenItems(program).map((i) => i.id));
+  if (_selectedItemId.value && !ids.has(_selectedItemId.value)) _selectedItemId.value = null;
+  if (_preparedItemId.value && !ids.has(_preparedItemId.value)) _preparedItemId.value = null;
+}
+
+let _watchingFolder = false;
+/** Trocou a pasta da igreja: o programa aberto passa a vir (ou ir) de lá. */
+function _watchFolder(): void {
+  if (_watchingFolder) return;
+  _watchingFolder = true;
+  watch(
+    () => useChurchFolder().root.value,
+    () => {
+      if (_loaded.value) void _load(_date.value);
+    }
+  );
 }
 
 function _mapSessions(fn: (_sessions: ProgramSession[]) => ProgramSession[]): void {
@@ -108,7 +121,9 @@ function _locate(itemId: string): { sessionIndex: number; itemIndex: number } | 
 
 const items = computed(() => flattenItems(_program.value));
 
-const selectedItem = computed(() => items.value.find((i) => i.id === _selectedItemId.value) ?? null);
+const selectedItem = computed(
+  () => items.value.find((i) => i.id === _selectedItemId.value) ?? null
+);
 
 const nextItemId = computed(() => {
   if (!_liveItemId.value) return null;
@@ -132,6 +147,7 @@ const upNextItem = computed<ProgramItem | null>(() => {
 });
 
 export function useProgram() {
+  _watchFolder();
   return {
     date: _date,
     program: _program,
@@ -160,6 +176,29 @@ export function useProgram() {
 
     async ensureLoaded(): Promise<void> {
       if (!_loaded.value) await _load(_date.value);
+    },
+
+    /** Confere se outro computador salvou o programa aberto e, se sim, o põe no lugar. */
+    async syncFromChurch(): Promise<boolean> {
+      const remote = await checkRemote();
+      if (!remote || remote.date !== _date.value) return false;
+      _replace(remote);
+      return true;
+    },
+
+    /** Põe no lugar a versão escolhida num conflito. */
+    replaceProgram(program: Program): void {
+      if (program.date === _date.value) _replace(program);
+    },
+
+    /** O programa da data aberta passa a ser o do modelo (as pendências vêm vazias). */
+    applyModel(model: ProgramModel): void {
+      _resetRuntime();
+      _commit({
+        ..._program.value,
+        plannedStart: model.plannedStart,
+        sessions: sessionsFromModel(model, newId),
+      });
     },
 
     async setDate(date: string): Promise<void> {
@@ -191,7 +230,9 @@ export function useProgram() {
     },
 
     updateSession(sessionId: string, patch: Partial<Omit<ProgramSession, "id" | "items">>): void {
-      _mapSessions((sessions) => sessions.map((s) => (s.id === sessionId ? { ...s, ...patch } : s)));
+      _mapSessions((sessions) =>
+        sessions.map((s) => (s.id === sessionId ? { ...s, ...patch } : s))
+      );
     },
 
     removeSession(sessionId: string): void {
@@ -227,7 +268,9 @@ export function useProgram() {
       if (!sessionId || sessionId === current.id) {
         _mapSessions((sessions) =>
           sessions.map((s) =>
-            s.id === current.id ? { ...s, items: s.items.map((i) => (i.id === itemId ? updated : i)) } : s
+            s.id === current.id
+              ? { ...s, items: s.items.map((i) => (i.id === itemId ? updated : i)) }
+              : s
           )
         );
         return;

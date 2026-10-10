@@ -197,7 +197,7 @@ function _nav(scope: LibraryScope): Nav {
 }
 
 /** Pastas e favoritos mudaram: toda aba já aberta relê. */
-async function _refreshAll(reload: (nav: Nav) => boolean): Promise<void> {
+async function _refreshAll(reload: (_nav: Nav) => boolean): Promise<void> {
   await Promise.all(
     [..._navs.values()].flatMap((nav) => [nav.refreshCounts(), reload(nav) ? nav.reload() : null])
   );
@@ -288,6 +288,19 @@ export function useFileLibrary(scope: LibraryScope = "files") {
         ]);
       }
       await Promise.all([_refreshAll((n) => n.source.value === ALL), nav.open(chosen)]);
+    },
+
+    /** Põe a pasta na biblioteca sem perguntar (a pasta da igreja). Já coberta por outra, nada muda. */
+    async includeFolder(path: string): Promise<void> {
+      const covered = folders.value.some(
+        (f) => path === f.path || path.startsWith(f.path.replace(/[\\/]$/, "") + (f.path.includes("\\") ? "\\" : "/"))
+      );
+      if (covered) return;
+      $userdata.set(KEYS.MODULES.PRESENTATION_MODE.LIBRARY_FOLDERS, [
+        ...folders.value,
+        { path, label: basename(path) },
+      ]);
+      await _refreshAll((n) => n.source.value === ALL);
     },
 
     async removeFolder(path: string): Promise<void> {

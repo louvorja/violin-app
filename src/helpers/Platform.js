@@ -379,6 +379,16 @@ export default {
     return api?.storage?.seriesApply?.(dirPath, op) ?? _unsupported();
   },
 
+  /** Pasta da igreja do Modo apresentação (`stat`, `read`, `write`…). No navegador: `{ ok: false }`. */
+  church(op, ...args) {
+    return api?.storage?.church?.(op, ...args) ?? _unsupported();
+  },
+
+  /** Nome deste computador. No navegador: "". */
+  computerName() {
+    return api?.storage?.computerName?.() ?? Promise.resolve("");
+  },
+
   /**
    * Detecção da versão clássica Delphi (Windows).
    * { detect() } — retorna { detected, installDir, configDir, lang, folders }.

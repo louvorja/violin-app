@@ -59,6 +59,11 @@ export interface ProgramItem {
   /** Caminho da pasta de um item `folder`. */
   folder?: string;
   notes?: string;
+  /**
+   * Muda toda semana (os hinos, a música especial): no modelo fica sem
+   * conteúdo, e no programa aparece como pendente até alguém escolher.
+   */
+  fill?: boolean;
 }
 
 export interface ProgramSession {
@@ -76,5 +81,18 @@ export interface Program {
   plannedStart: string;
   sessions: ProgramSession[];
   createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Modelo de culto (Sábado…): a estrutura de um programa, sem data. Os itens
+ * `fill` vêm vazios; o resto já vem configurado (pastas, séries, arquivos).
+ */
+export interface ProgramModel {
+  /** Nome em minúsculas e hífens (`sabado`): também o nome do arquivo. */
+  id: string;
+  name: string;
+  plannedStart: string;
+  sessions: ProgramSession[];
   updatedAt: string;
 }

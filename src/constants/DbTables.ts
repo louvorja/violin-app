@@ -11,8 +11,9 @@ export const DB_NAME = "louvorja-violin";
  * v2 → v3: adicionada tabela "presentation_mode.programs" (programas do culto no navegador)
  * v3 → v4: adicionadas "presentation_mode.online" (vídeos, playlists e canais favoritos) e
  *          "presentation_mode.online_cache" (primeira página de cada playlist/canal)
+ * v4 → v5: adicionada "presentation_mode.models" (modelos de culto sem pasta da igreja)
  */
-export const DB_VERSION = 4;
+export const DB_VERSION = 5;
 
 /**
  * Nomes de todas as tabelas do banco IndexedDB unificado `louvorja`.
@@ -75,6 +76,8 @@ export const DB_TABLE = {
   DEVICES: "devices",
   // ─── Modo apresentação: um programa do culto por data (DocStore) ───
   PRESENTATION_PROGRAMS: ModuleEnum.PRESENTATION_MODE + ".programs",
+  // ─── Modo apresentação: modelos de culto (Sábado…), quando não há pasta da igreja (DocStore) ───
+  PRESENTATION_MODELS: ModuleEnum.PRESENTATION_MODE + ".models",
   // ─── Modo apresentação: vídeos, playlists e canais do YouTube favoritos (DocStore) ───
   PRESENTATION_ONLINE: ModuleEnum.PRESENTATION_MODE + ".online",
   // ─── Modo apresentação: cópia da primeira página de cada playlist/canal (cache, IndexedDB) ───

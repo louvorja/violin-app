@@ -29,6 +29,18 @@
       </LjPopover>
       <button
         type="button"
+        class="pm-program__icon-btn pm-program__ready"
+        :class="{ 'pm-program__ready--issues': problems > 0 }"
+        :title="tm('readiness.title')"
+        :aria-label="tm('readiness.title')"
+        data-testid="pm-program-readiness"
+        @click="readinessOpen = true"
+      >
+        <LjIcon :icon="ICONS.PLAYER.PLAYLIST_CHECK" :size="13" />
+        <span v-if="problems > 0" class="pm-program__ready-count">{{ problems }}</span>
+      </button>
+      <button
+        type="button"
         class="pm-program__icon-btn"
         :title="tm('program.settings')"
         :aria-label="tm('program.settings')"
@@ -38,6 +50,21 @@
         <LjIcon :icon="ICONS.ACTIONS.EDIT_OUTLINE" :size="13" />
       </button>
     </header>
+
+    <!-- Onde o programa está salvo e o que falta escolher nesta semana. -->
+    <div v-if="sync.state !== 'local' || pending.length" class="pm-program__status">
+      <ProgramSyncStatus />
+      <button
+        v-if="pending.length"
+        type="button"
+        class="pm-program__pending"
+        data-testid="pm-program-pending"
+        :title="tm('models.pending_hint')"
+        @click="editNextPending"
+      >
+        {{ tm("models.pending", { n: pending.length }) }}
+      </button>
+    </div>
 
     <section class="pm-clock">
       <div class="pm-clock__row">
@@ -77,6 +104,15 @@
     <div class="pm-program__list" data-testid="pm-program-list">
       <div v-if="!program.sessions.length" class="pm-program__empty">
         <LjEmpty :icon="ICONS.LITURGY.SCRIPT" :title="tm('empty.program')">
+          <LjButton
+            size="sm"
+            variant="primary"
+            :icon="ICONS.LITURGY.SCRIPT"
+            data-testid="pm-program-from-model"
+            @click="openModels('new')"
+          >
+            {{ tm("models.new_title") }}
+          </LjButton>
           <LjButton size="sm" :icon="ICONS.ACTIONS.IMPORT" @click="emit('import')">
             {{ tm("ribbon.btn.import_liturgy") }}
           </LjButton>
@@ -129,7 +165,7 @@
               @child-preview="(childId: string) => emit('child-preview', element.id, childId)"
               @child-play="(childId: string) => emit('child-play', element.id, childId)"
               @children="(list: ProgramSubItem[]) => updateItem(element.id, { children: list })"
-              @activate="emit('activate', element.id)"
+              @activate="onActivate(element)"
               @toggle="toggleOpen(element.id)"
               @edit="emit('edit-item', element.id)"
             />
@@ -157,6 +193,9 @@
       </template>
     </LjMenu>
 
+    <ProgramModelDialog v-model="modelsOpen" :mode="modelsMode" />
+    <ReadinessDialog v-model="readinessOpen" @edit="(id: string) => emit('edit-item', id)" />
+
     <footer class="pm-program__foot">
       <span>{{ countsLabel }}</span>
       <span class="pm-program__total">{{ formatDuration(totalMinutes(program)) }}</span>
@@ -165,7 +204,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import draggable from "vuedraggable";
 import {
   LjButton,
@@ -182,7 +221,13 @@ import { ModuleEnum } from "@/enums/ModuleEnum";
 import { useModuleI18n } from "@/composables/useModuleI18n";
 import type { ProgramItem, ProgramSubItem } from "@/types/Presentation";
 import ProgramItemRow from "./ProgramItemRow.vue";
+import ProgramModelDialog from "./ProgramModelDialog.vue";
+import ProgramSyncStatus from "./ProgramSyncStatus.vue";
+import ReadinessDialog from "./ReadinessDialog.vue";
 import { todayIso, useProgram } from "../composables/useProgram";
+import { sync } from "../composables/programStore";
+import { useReadiness } from "../composables/useReadiness";
+import { isPending, pendingItems } from "../program/models";
 import {
   forecast,
   formatDuration,
@@ -326,7 +371,70 @@ const addMenu = computed<LjMenuItem[]>(() => [
     icon: ICONS.ACTIONS.SAVE,
     action: () => emit("save"),
   },
+  { separator: true },
+  {
+    label: tm("models.new_title"),
+    icon: ICONS.LITURGY.SCRIPT,
+    action: () => openModels("new"),
+  },
+  {
+    label: tm("models.save_title"),
+    icon: ICONS.ACTIONS.SAVE,
+    disabled: !items.value.length,
+    action: () => openModels("save"),
+  },
 ]);
+
+/* ─── Modelos, pendências e "pronto para o culto" ─── */
+
+const modelsOpen = ref(false);
+const modelsMode = ref<"new" | "save">("new");
+function openModels(mode: "new" | "save"): void {
+  modelsMode.value = mode;
+  modelsOpen.value = true;
+}
+
+const pending = computed(() => pendingItems(program.value));
+
+/** Leva de pendência em pendência: abre a edição da primeira. */
+function editNextPending(): void {
+  const first = pending.value[0];
+  if (!first) return;
+  select(first.id);
+  emit("edit-item", first.id);
+}
+
+/** Item que ainda não tem conteúdo não vai ao ar: o duplo clique abre a escolha. */
+function onActivate(item: ProgramItem): void {
+  if (isPending(item)) emit("edit-item", item.id);
+  else emit("activate", item.id);
+}
+
+const readiness = useReadiness();
+const problems = readiness.problems;
+const readinessOpen = ref(false);
+/** Abriu o programa de hoje com algo faltando: mostra uma vez por dia. */
+const shownFor = new Set<string>();
+let readinessTimer: ReturnType<typeof setTimeout> | null = null;
+watch(
+  program,
+  (p) => {
+    if (readinessTimer) clearTimeout(readinessTimer);
+    // Montar o programa é editar várias vezes seguidas: confere depois que assenta.
+    readinessTimer = setTimeout(async () => {
+      await readiness.check(p);
+      const today = p.date === todayIso();
+      if (today && problems.value > 0 && p.sessions.length && !shownFor.has(p.date)) {
+        shownFor.add(p.date);
+        readinessOpen.value = true;
+      }
+    }, 1500);
+  },
+  { immediate: true }
+);
+onBeforeUnmount(() => {
+  if (readinessTimer) clearTimeout(readinessTimer);
+});
 
 /** Menu do item: reproduzir e editar em cima (como no FreeShow); o resto embaixo. */
 function itemMenu(item: ProgramItem): { quick: LjMenuItem[]; items: LjMenuItem[] } {
@@ -444,6 +552,52 @@ function onSessionItems(sessionId: string, list: ProgramItem[]): void {
 .pm-program__icon-btn:hover {
   background: var(--lj-hover-bg);
   color: var(--lj-text);
+}
+
+.pm-program__ready {
+  position: relative;
+  width: auto;
+  min-width: 20px;
+  gap: 2px;
+  padding: 0 3px;
+}
+
+/* Neutro de propósito: laranja é só o "no ar". */
+.pm-program__ready--issues {
+  color: var(--lj-text);
+  font-weight: 700;
+}
+
+.pm-program__ready-count {
+  font-family: var(--lj-font-mono);
+  font-size: 10px;
+}
+
+.pm-program__status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-height: 22px;
+  padding: 0 6px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--lj-surface-border);
+}
+
+.pm-program__pending {
+  margin-left: auto;
+  padding: 1px 6px;
+  border: 1px dashed var(--lj-text-subtle);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--lj-text);
+  font-size: 10.5px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pm-program__pending:hover {
+  background: var(--lj-hover-bg);
 }
 
 .pm-clock {

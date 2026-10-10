@@ -30,12 +30,19 @@
         <LjIcon :icon="KIND_ICONS[item.kind]" :size="15" class="pm-row__icon" />
         <div class="pm-row__text">
           <span class="pm-row__title">{{ item.title || tm("program.untitled") }}</span>
-          <span v-if="item.subtitle || folderSummary" class="pm-row__subtitle">
-            {{ item.subtitle || folderSummary }}
-          </span>
+          <span v-if="subtitle" class="pm-row__subtitle">{{ subtitle }}</span>
         </div>
+        <!-- Muda toda semana e ainda ninguém escolheu: o duplo clique abre a escolha. -->
         <span
-          v-if="askMode"
+          v-if="pending"
+          class="pm-fill-badge"
+          :title="tm('models.pending_hint')"
+          data-testid="pm-row-pending"
+        >
+          {{ tm("models.choose") }}
+        </span>
+        <span
+          v-else-if="askMode"
           class="pm-ask-badge"
           :title="tm('music_modes.ask_hint')"
           data-testid="pm-row-ask"
@@ -136,6 +143,7 @@ import type { ProgramItem, ProgramSubItem } from "@/types/Presentation";
 import { useMediaMeta } from "../composables/useMediaMeta";
 import { useFolderItems } from "../composables/useFolderItems";
 import { needsModeChoice } from "../program/musicModes";
+import { contentLabel, isPending } from "../program/models";
 import { KIND_ICONS } from "../program/kinds";
 import { formatDuration } from "../program/time";
 
@@ -170,6 +178,7 @@ const { thumbOf } = useMediaMeta();
 
 /** Música com a versão em aberto: o operador escolhe ao mandar ao ar. */
 const askMode = computed(() => needsModeChoice(props.item));
+const pending = computed(() => isPending(props.item));
 
 /** Pasta: quantos arquivos, ou o próximo da série — lido da pasta na hora. */
 const folders = useFolderItems();
@@ -184,6 +193,11 @@ const folderSummary = computed(() => {
   }
   return tm("folder.count", { n: summary.count });
 });
+
+/** O escolhido na semana (hino, pasta…) vem antes do responsável. */
+const subtitle = computed(() =>
+  [contentLabel(props.item), props.item.subtitle || folderSummary.value].filter(Boolean).join(" · ")
+);
 
 const { tm } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
 
@@ -308,6 +322,17 @@ const expandable = computed(() => hasChildren.value || props.item.kind === "mome
   border: 1px solid var(--lj-ui-accent);
   border-radius: 2px;
   color: var(--lj-ui-accent);
+  font-size: 9.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.pm-fill-badge {
+  flex-shrink: 0;
+  padding: 0 5px;
+  border: 1px dashed var(--lj-text-subtle);
+  border-radius: 2px;
+  color: var(--lj-text);
   font-size: 9.5px;
   font-weight: 700;
   white-space: nowrap;

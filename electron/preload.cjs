@@ -484,6 +484,13 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
     seriesApply: (dirPath, op) => ipcRenderer.invoke("files:seriesApply", dirPath, op),
     /** Resolve cópias em conflito do histórico: `"merge"` ou o nome da versão a manter. */
     seriesResolve: (dirPath, choice) => ipcRenderer.invoke("files:seriesResolve", dirPath, choice),
+    /**
+     * Pasta da igreja (programas e modelos do Modo apresentação):
+     * `stat`, `read`, `write`, `list`, `conflicts`, `resolve`.
+     */
+    church: (op, ...args) => ipcRenderer.invoke("files:church", op, ...args),
+    /** Nome deste computador, para "salvo no computador X". */
+    computerName: () => ipcRenderer.invoke("files:computerName"),
     /** PowerPoint → PDF pelo PowerPoint instalado (com cache). */
     convertPresentation: (filePath) => ipcRenderer.invoke("files:convertPresentation", filePath),
     /** Verifica quais arquivos remotos já estão no disco. */

@@ -96,6 +96,14 @@
         <LjInput v-model="subtitle" />
       </LjField>
 
+      <!-- Os hinos, a música especial: mudam toda semana, e o modelo os traz vazios. -->
+      <LjCheckbox
+        v-if="canFill"
+        v-model="fill"
+        :label="tm('item_dialog.fill')"
+        data-testid="pm-item-fill"
+      />
+
       <LjField :label="tm('item_dialog.duration')">
         <div class="pm-item-form__minutes">
           <LjInput v-model="minutes" type="number" />
@@ -143,7 +151,15 @@
 
 <script setup lang="ts">
 import { computed, defineAsyncComponent, ref, watch } from "vue";
-import { LjButton, LjDialog, LjField, LjInput, LjSelect, LjTextarea } from "@/components/ui";
+import {
+  LjButton,
+  LjCheckbox,
+  LjDialog,
+  LjField,
+  LjInput,
+  LjSelect,
+  LjTextarea,
+} from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
@@ -196,6 +212,7 @@ type MusicPick = { id_music: number; name: string; has_instrumental_music: boole
 const kind = ref<ProgramItemKind>("music");
 const title = ref("");
 const subtitle = ref("");
+const fill = ref(false);
 const minutes = ref<string | number>(0);
 const targetSessionId = ref<string | null>(null);
 const music = ref<MusicPick | null>(null);
@@ -256,6 +273,7 @@ function reset(): void {
   const item = props.item;
   const source = item?.source;
   error.value = "";
+  fill.value = !!item?.fill;
   kind.value = item?.kind ?? "music";
   title.value = item?.title ?? "";
   subtitle.value = item?.subtitle ?? "";
@@ -430,8 +448,31 @@ function build(): ProgramItem | string {
   }
 }
 
-function save(): void {
+/** Itens que têm conteúdo para escolher (anotação e momento não). */
+const canFill = computed(() => !["note", "moment"].includes(kind.value));
+
+/**
+ * Marcado "muda toda semana": sem conteúdo ainda, o item é salvo assim mesmo
+ * e fica pendente no programa. Com conteúdo, guarda a marca para o modelo.
+ */
+function buildWithFill(): ProgramItem | string {
   const result = build();
+  if (!fill.value || !canFill.value)
+    return typeof result === "string" ? result : { ...result, fill: undefined };
+  if (typeof result !== "string") return { ...result, fill: true };
+  if (!title.value.trim()) return "item_dialog.missing_title";
+  return {
+    id: props.item?.id ?? newId(),
+    kind: kind.value === "file" ? "file" : kind.value,
+    title: title.value.trim(),
+    subtitle: subtitle.value.trim() || undefined,
+    plannedMinutes: Math.max(0, Math.round(Number(minutes.value) || 0)),
+    fill: true,
+  };
+}
+
+function save(): void {
+  const result = buildWithFill();
   if (typeof result === "string") {
     error.value = tm(result);
     return;

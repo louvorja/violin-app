@@ -136,6 +136,11 @@ export const KEYS = {
       PROGRAM_WIDTH: `${MODULES_PRESENTATION_MODE}.program_width`,
       /** UserData: largura (px) da coluna das saídas, à direita. */
       OUTPUTS_WIDTH: `${MODULES_PRESENTATION_MODE}.outputs_width`,
+      /**
+       * UserData: a pasta da igreja deste computador (OneDrive…), onde ficam os
+       * programas e modelos compartilhados. Vazio: só neste computador.
+       */
+      CHURCH_FOLDER: `${MODULES_PRESENTATION_MODE}.church_folder`,
       /** UserData: onde a busca da aba Músicas procura — `{ name, lyric, album, track }`. */
       MUSIC_SEARCH: `${MODULES_PRESENTATION_MODE}.music_search`,
       /** UserData: aba Músicas mostra só as que têm playback. */

@@ -224,6 +224,8 @@ declare global {
         dirPath: string,
         op: import("./types/Series").SeriesOp
       ) => Promise<{ ok: true; series: import("./types/Series").SeriesDoc } | { ok: false; error: string }>;
+      church?: (op: string, ...args: unknown[]) => Promise<unknown>;
+      computerName?: () => Promise<string>;
       convertPresentation?: (
         filePath: string
       ) => Promise<{ ok: true; pdf: string; cached: boolean } | { ok: false; error: string }>;

@@ -44,6 +44,16 @@ de palco vai por `return_override`, com o som tocado na janela principal. Reprod
 não é apresentar: sem a apresentação ligada, o conteúdo fica na prévia e o som
 toca com aviso. Uma camada visual e uma de áudio; um vídeo por vez.
 
+Com uma **pasta da igreja** configurada (preferência de cada computador, em geral
+uma pasta do OneDrive), o programa de cada data e os modelos de culto ficam em
+`<pasta>/LouvorJA/programas/AAAA-MM-DD.json` e `<pasta>/LouvorJA/modelos/`, gravados
+pelo main (`electron/main/churchFolder.js`) com escrita atômica e `expectMtime` — uma
+gravação nunca passa por cima do que outro computador salvou depois da leitura.
+Caminhos dentro da pasta viajam como `igreja:<relativo>`, porque o mesmo OneDrive
+mora em endereços diferentes no Mac e no Windows. Cópias em conflito do
+sincronizador e edições simultâneas viram uma escolha de versão para o operador.
+Sem a pasta, o programa continua no DocStore deste computador.
+
 ---
 
 ## Armazenamento desktop
