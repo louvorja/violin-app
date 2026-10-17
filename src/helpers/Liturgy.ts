@@ -195,6 +195,25 @@ export default {
     return this.list(day).find((i) => i.id === id) || null;
   },
 
+  /**
+   * Item vindo de um **comando remoto** (`POST /api/liturgy-execute`).
+   *
+   * A rota `GET /api/liturgy` resolve o dia como **hoje** e só cai no dia
+   * ativo se hoje estiver vazio — mas o `ACTIVE_DAY` só é sincronizado para
+   * hoje quando o módulo de liturgia **abre** (`useLiturgyPersistence`),
+   * então antes disso ele aponta para o dia da última sessão e o item não é
+   * encontrado. Por isso: primeiro o dia que o cliente exibiu (`day`), depois
+   * o mesmo par da rota — hoje, depois o dia ativo.
+   */
+  getFromCommand(id: string, day?: number): LiturgyItem | null {
+    if (day != null && Number.isInteger(day) && day >= 0 && day <= 6) {
+      const explicit = this.get(id, day);
+      if (explicit) return explicit;
+    }
+    const hoje = todayDayIndex();
+    return this.get(id, hoje) ?? this.get(id);
+  },
+
   add(item: Partial<LiturgyItem>, day?: number): LiturgyItem {
     const items = this.list(day);
     const merged: LiturgyItem = {

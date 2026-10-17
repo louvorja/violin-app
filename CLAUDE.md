@@ -606,6 +606,11 @@ const song = await $database.get(`music_${id}`);
 | `libras_toggle`        | ShellTools / ribbon             | Projection                                  |
 | `libras_translate`     | useLibras composable            | Projection, Obs                             |
 | `request_libras_state` | LibrasOverlay                   | main.js (re-emite LIBRAS_TOGGLE)            |
+| `projection_clear`     | presentation_mode               | Views de projeção e retorno (cobre a tela)   |
+| `return_override`      | presentation_mode, Esc          | Views de retorno (conteúdo só no retorno)    |
+| `return_override_state`| presentation_mode               | ReturnOverride (relógio do vídeo no retorno) |
+
+Tabela completa, com os pedidos de estado (`request_*`), em `docs/broadcast.md`.
 
 ---
 
@@ -947,7 +952,7 @@ A aplicação mantém web/PWA e desktop Electron em paralelo, usando o mesmo ren
 | Fonte de dados      | **JSON pronto do servidor** (não SQLite local)           | Mantém `<api>/json_db/*` como fonte; sem precisar lidar com senha SQLite (`bddbuscacdja`). Cache local em `userData/json_db/` para offline. |
 | PWA web em paralelo | **Sim, ambos**                                           | Mesmo código Vue, dois targets (web + desktop). Adapter `Platform.js` detecta `window.louvorjaApi`.                                         |
 | Layout              | **Manter Ribbon** (evolução do `AppsRibbon.vue`)         | Familiaridade com usuários do Delphi. Sem reescrever UI.                                                                                    |
-| Servidor LouvorJA   | **`api.louvorja.workers.dev`** (Cloudflare Workers + R2) | Réplica somente leitura, sem autenticação. O legado `api.louvorja.com.br` segue liberado no CSP para rollback via `.env`, sem rebuild.      |
+| Servidor LouvorJA   | **`api.louvorja.workers.dev`** (Cloudflare Workers + R2) | Réplica somente leitura, sem autenticação. O domínio `api.louvorja.com.br` é atendido pelo mesmo Worker (catálogo com endereços no domínio antigo, para o Delphi e o app web antigo) e serve de reserva via `.env`; mídia vem de subdomínios de `louvorja.com.br` (`files.`).      |
 
 ### Arquitetura
 

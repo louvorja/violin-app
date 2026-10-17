@@ -1,5 +1,5 @@
 <template>
-  <ModuleContainer ref="moduleContainer" :manifest="manifest" @close="close()">
+  <ModuleContainer ref="moduleContainer" :manifest="manifest" @close="close()" @scroll="onScroll">
     <div v-if="favorites.length === 0" class="music-list-empty">
       <LjIcon :icon="ICONS.UI.STAR_OFF_OUTLINE" size="64" class="lj-u-faded" />
       <div class="music-list-empty-text">
@@ -10,14 +10,14 @@
 
     <draggable
       v-else
-      v-model="favorites"
+      v-model="pageFavorites"
       item-key="id_music"
       handle=".drag-handle"
       class="music-list"
       role="list"
     >
       <template #item="{ element }">
-        <div class="music-list-item" role="listitem">
+        <div class="music-list-item lj-music-row" role="listitem">
           <LjIcon class="drag-handle" :icon="ICONS.ACTIONS.DRAG" size="small" color="grey" />
           <div class="music-list-item-info">
             <span class="music-list-item-name">{{ musicTitle(element) }}</span>
@@ -51,6 +51,8 @@ import { useMusicReferences } from "@/composables/useMusicReferences";
 import { musicTitle } from "@root/config/musicCatalog.mjs";
 
 const moduleContainer = ref(null);
+const PAGE_SIZE = 60;
+const visibleLimit = ref(PAGE_SIZE);
 
 const savedFavorites = computed(() => AppData.get("user_data.favorites", []));
 const { items: visibleFavorites, reorder } = useMusicReferences(savedFavorites);
@@ -58,6 +60,24 @@ const favorites = computed({
   get: () => visibleFavorites.value,
   set: (val) => Favorites.reorder(reorder(val)),
 });
+const pageFavorites = computed({
+  get: () => favorites.value.slice(0, visibleLimit.value),
+  // O arraste reordena só a parte montada. As próximas páginas e as referências
+  // ocultas por álbuns desativados conservam seus lugares no conjunto salvo.
+  set: (val) => {
+    favorites.value = [...val, ...favorites.value.slice(visibleLimit.value)];
+  },
+});
+
+function onScroll(payload) {
+  if (
+    typeof payload?.scroll_bottom === "number" &&
+    payload.scroll_bottom <= 150 &&
+    visibleLimit.value < favorites.value.length
+  ) {
+    visibleLimit.value += PAGE_SIZE;
+  }
+}
 
 const tm = (key) => moduleContainer.value?.tm(key) || key;
 
@@ -105,11 +125,6 @@ function close() {}
   min-height: 36px;
   padding: var(--lj-space-3) var(--lj-space-5);
   border-bottom: 1px solid var(--lj-surface-divider);
-  transition: background var(--lj-transition-fast);
-}
-
-.music-list-item:hover {
-  background: var(--lj-surface-bg-hover);
 }
 
 .drag-handle {

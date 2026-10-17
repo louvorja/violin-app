@@ -4,15 +4,16 @@ import { VitePWA } from "vite-plugin-pwa";
 import posthogRollupPlugin from "@posthog/rollup-plugin";
 import path from "path";
 import { createRequire } from "module";
+import { randomUUID, createHash } from "node:crypto";
+import { KEYS_LS } from "./src/constants/LocalStorageKeys";
 import { normalizeAppVersion } from "./src/helpers/AppVersion.js";
 
 const require_ = createRequire(import.meta.url);
 const { version: packageVersion } = require_("./package.json");
 const { version: posthogSdkPackageVersion } = require_("posthog-js/package.json");
 
-function escapeRegex(str) {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
+const { escapeRegex, dbCachePattern } = require_("./config/swDbRoute.cjs");
+const { installPwaRecovery } = require_("./config/pwaRecovery.cjs");
 
 // https://vitejs.dev/config/
 export default async ({ mode }) => {
@@ -43,6 +44,14 @@ export default async ({ mode }) => {
 
   // Detectar target: "desktop" (Electron) ou "web" (padrão PWA)
   const isDesktop = process.env.VITE_TARGET === "desktop";
+  const webBuildId = isDesktop ? null : randomUUID();
+  const recoveryScript = `(${installPwaRecovery.toString()})(${JSON.stringify({
+    scope: process.env.VITE_BASE_URL || "/",
+    build: webBuildId,
+    storageKey: KEYS_LS.PWA_RECOVERY_STATE,
+    startupWaitMs: 2500,
+  })});`;
+  const recoveryHash = createHash("sha256").update(recoveryScript).digest("base64");
   const posthogApiKey = process.env.POSTHOG_API_KEY;
   const posthogProjectId = process.env.POSTHOG_PROJECT_ID;
 
@@ -60,7 +69,7 @@ export default async ({ mode }) => {
     return (
       `<meta http-equiv="Content-Security-Policy" content="` +
       `default-src 'self';` +
-      ` script-src 'self' blob: ${DOMAINS_CSP.SCRIPT} 'wasm-unsafe-eval';` +
+      ` script-src 'self' blob: ${DOMAINS_CSP.SCRIPT} 'wasm-unsafe-eval' 'sha256-${recoveryHash}';` +
       ` style-src 'self' 'unsafe-inline' ${DOMAINS_CSP.STYLE};` +
       ` font-src 'self' data: ${DOMAINS_CSP.FONT};` +
       ` img-src 'self' blob: data: ${cspApi} ${DOMAINS_CSP.IMG};` +
@@ -87,7 +96,17 @@ export default async ({ mode }) => {
             name: "louvorja-csp-prod",
             apply: "build",
             transformIndexHtml(html) {
-              return html.replace("<!--CSP_PROD-->", cspMeta);
+              return html.replace(
+                "<!--CSP_PROD-->",
+                `${cspMeta}<meta name="louvorja-build" content="${webBuildId}"><script>${recoveryScript}</script>`
+              );
+            },
+            generateBundle() {
+              this.emitFile({
+                type: "asset",
+                fileName: "app-build.json",
+                source: JSON.stringify({ version: 1, id: webBuildId }),
+              });
             },
           },
         ]),
@@ -134,15 +153,19 @@ export default async ({ mode }) => {
       ? `${process.env.VITE_URL_API}${process.env.VITE_PATH_FILES || "/file"}`
       : (process.env.VITE_URL_FILES ?? "");
 
+    // O catálogo aponta a mídia para a API ou direto para o armazenamento: as
+    // duas origens são o mesmo acervo e caem nas mesmas rotas de cache.
+    const mediaOrigins = [filesUrl, ...DOMAINS.FILES].map(escapeRegex).join("|");
+
     // Runtime caching: DB JSONs (stale-while-revalidate) + mídia (cache-first 30 dias).
     // Quando VITE_URL_* está definido, usa padrão preciso de URL; caso contrário, cai
     // em padrão por extensão (amplo mas seguro para este app de apresentação).
     const runtimeCaching = [
-      // JSONs do banco — serve do cache enquanto atualiza em background
+      // JSONs do banco — serve do cache enquanto atualiza em background (menos o `config`)
       ...(dbUrl
         ? [
             {
-              urlPattern: new RegExp(`^${escapeRegex(dbUrl)}`),
+              urlPattern: dbCachePattern(dbUrl),
               handler: "StaleWhileRevalidate",
               options: {
                 cacheName: "louvorja-db",
@@ -152,28 +175,39 @@ export default async ({ mode }) => {
             },
           ]
         : []),
-      // Áudio (mp3, ogg, wav) — cache-first, TTL 30 dias
+      // Áudio (mp3, ogg, opus, m4a, aac, wav, flac; o catálogo atual é .opus) — cache-first.
+      // Este cache e o de imagens são o acervo baixado: "Baixar álbum" grava aqui
+      // (helpers/WebFileStore.ts). Por isso NÃO têm `expiration`, nem por data nem
+      // por quantidade. O fetch do download passa por esta rota, o plugin de
+      // expiração registra cada URL e apaga as mais antigas acima do limite: com
+      // `maxEntries` o acervo de milhares de arquivos nunca ficava completo e os
+      // álbuns voltavam a "não baixado" sozinhos. Sem limite, resposta opaca
+      // (status 0) também não entra: o Chrome cobra ~7MB de cota por cada uma, e
+      // toda capa vista em <img> viraria uma. `rangeRequests` é obrigatório: o
+      // <audio> pede `Range: bytes=0-`, e sem fatiar a resposta do cache o Chrome
+      // Android não consegue tocar nem pular dentro do áudio offline.
       {
         urlPattern: filesUrl
-          ? new RegExp(`^${escapeRegex(filesUrl)}.*\\.(mp3|ogg|wav)(\\?.*)?$`, "i")
-          : /\.(mp3|ogg|wav)(\?.*)?$/i,
+          ? new RegExp(`^(?:${mediaOrigins}).*\\.(mp3|ogg|opus|m4a|aac|wav|flac)(\\?.*)?$`, "i")
+          : /\.(mp3|ogg|opus|m4a|aac|wav|flac)(\?.*)?$/i,
         handler: "CacheFirst",
         options: {
           cacheName: "louvorja-audio",
-          expiration: { maxEntries: 500, maxAgeSeconds: 30 * 24 * 3600 },
-          cacheableResponse: { statuses: [0, 200] },
+          cacheableResponse: { statuses: [200] },
+          rangeRequests: true,
+          matchOptions: { ignoreVary: true },
         },
       },
-      // Imagens externas — cache-first, TTL 30 dias
+      // Imagens externas — cache-first (sem expiração, pelo mesmo motivo do áudio)
       {
         urlPattern: filesUrl
-          ? new RegExp(`^${escapeRegex(filesUrl)}.*\\.(jpg|jpeg|png|webp|gif)(\\?.*)?$`, "i")
+          ? new RegExp(`^(?:${mediaOrigins}).*\\.(jpg|jpeg|png|webp|gif)(\\?.*)?$`, "i")
           : /\.(jpg|jpeg|png|webp|gif)(\?.*)?$/i,
         handler: "CacheFirst",
         options: {
           cacheName: "louvorja-images",
-          expiration: { maxEntries: 200, maxAgeSeconds: 30 * 24 * 3600 },
-          cacheableResponse: { statuses: [0, 200] },
+          cacheableResponse: { statuses: [200] },
+          matchOptions: { ignoreVary: true },
         },
       },
       // Conversor de HEIC — guardado no primeiro uso, e não antes. Fica fora do
@@ -188,23 +222,39 @@ export default async ({ mode }) => {
           cacheableResponse: { statuses: [0, 200] },
         },
       },
+      // Decodificador de Opus — mesmo raciocínio do HEIC: são 4MB que só o
+      // Safari usa, e só ao tocar um .opus.
+      {
+        urlPattern: /\/assets\/opus-decoder-[^/]*\.js$/,
+        handler: "CacheFirst",
+        options: {
+          cacheName: "louvorja-opus-decoder",
+          expiration: { maxEntries: 2, maxAgeSeconds: 90 * 24 * 3600 },
+          cacheableResponse: { statuses: [0, 200] },
+        },
+      },
     ];
 
     plugins.push(
       VitePWA({
+        // Ativa o SW também para clientes legados. O documento só recarrega
+        // pela ação do operador em PwaUpdates; não importar o client virtual.
         registerType: "autoUpdate",
+        injectRegister: false,
         devOptions: {
           enabled: true,
         },
         workbox: {
-          globPatterns: ["**/*.{html,js,css,svg,png,woff,woff2}"],
+          skipWaiting: true,
+          clientsClaim: true,
+          globPatterns: ["**/*.{html,js,css,svg,png,woff,woff2}", "app-build.json"],
           // O conversor de HEIC passa dos 2MiB que o workbox aceita precachear,
           // e o build falha por isso em vez de apenas avisar. Subir o limite
           // seria a correção errada: ele empurraria 3MB para o primeiro acesso
           // de todo mundo, quando o arquivo só interessa a quem importa foto de
           // iPhone. Fora do precache, ele desce sob demanda e o
           // `runtimeCaching` acima o guarda a partir daí.
-          globIgnores: ["**/heic-to-*.js"],
+          globIgnores: ["**/heic-to-*.js", "**/opus-decoder-*.js"],
           runtimeCaching,
         },
         manifest: {
@@ -215,6 +265,13 @@ export default async ({ mode }) => {
           display: "standalone",
           background_color: "#000000",
           theme_color: "#000000",
+          // Chrome/ChromeOS desktop: "Abrir com" LouvorJA para músicas .slja.
+          file_handlers: [
+            {
+              action: process.env.VITE_BASE_URL ?? "/",
+              accept: { "application/zip": [".slja"] },
+            },
+          ],
           icons: [
             {
               src: (process.env.VITE_BASE_URL ?? "/") + "ico/favicon-16x16.png",
@@ -309,6 +366,15 @@ export default async ({ mode }) => {
               if (/[\\/]node_modules[\\/](vue|vue-router|pinia)[\\/]/.test(id)) return "vendor-vue";
               // Busca full-text
               if (/[\\/]node_modules[\\/]fuse\.js[\\/]/.test(id)) return "vendor-fuse";
+              // Decodificador de Opus em WASM (só o iOS precisa). O nome fixo é o
+              // que deixa `globIgnores` e o `runtimeCaching` o reconhecerem.
+              if (
+                /[\\/]node_modules[\\/](ogg-opus-decoder|opus-decoder|codec-parser|@wasm-audio-decoders|@eshaz[\\/]web-worker|simple-yenc)[\\/]/.test(
+                  id
+                )
+              ) {
+                return "opus-decoder";
+              }
               // Reka UI — o headless por trás dos primitivos
               if (/[\\/]node_modules[\\/]reka-ui[\\/]/.test(id)) return "vendor-reka";
               return;

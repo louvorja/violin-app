@@ -3,6 +3,8 @@
  */
 
 export const KEYS_LS = {
+  PWA_RECOVERY_STATE: "lj:pwa-recovery-state",
+  WEB_STORAGE_AUDIT: "lj:web-storage-audit",
   LIBRAS: {
     AVATAR: "libras_avatar",
     ENABLED: "libras_enabled",

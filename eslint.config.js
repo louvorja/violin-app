@@ -18,6 +18,8 @@ export default [
         // Tipos ambientes (src/vite-env.d.ts e lib.dom) usados nos blocos <script lang="ts">
         LouvorjaApi: "readonly",
         FullscreenOptions: "readonly",
+        CanvaStatus: "readonly",
+        CanvaItem: "readonly",
       },
       parserOptions: {
         parser: tseslint.parser,
@@ -59,6 +61,16 @@ export default [
       radix: "error",
       // Imports entre src/ e electron/ devem usar alias (@/helpers/X) ou IPC
       "no-restricted-imports": ["error", { patterns: ["../..electron/*", "../..src/*"] }],
+    },
+  },
+  {
+    // `.d.ts` declara a forma da API: o nome do parâmetro ali é documentação,
+    // não uma variável esquecida. Sem isto cada interface com callback vira
+    // um falso positivo de no-unused-vars.
+    files: ["**/*.d.ts"],
+    rules: {
+      "no-unused-vars": "off",
+      "@typescript-eslint/no-unused-vars": "off",
     },
   },
   {

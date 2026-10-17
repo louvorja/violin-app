@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent } from "vue";
 import { flushPromises } from "@vue/test-utils";
 import Screen from "../Screen.vue";
+import Broadcast from "@/helpers/Broadcast";
+import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { mountUi } from "@/components/ui/__tests__/mountUi";
 import { PROJECTION_TYPE, PROJECTION_URL } from "@/constants/Projection";
 import { KEYS } from "@/constants/UserDataKeys";
@@ -56,7 +58,8 @@ vi.mock("@/helpers/Platform", () => ({
   default: {
     isDesktop: true,
     displays: {
-      getPreferred: async (feature: string) => (feature in monitors ? { id: monitors[feature] } : null),
+      getPreferred: async (feature: string) =>
+        feature in monitors ? { id: monitors[feature] } : null,
     },
   },
 }));
@@ -69,6 +72,38 @@ vi.mock("@/helpers/AppData", () => ({
   default: { get: (_key: string, fallback?: unknown) => fallback ?? false },
 }));
 vi.mock("@/helpers/Popup", () => ({ default: { open: vi.fn(), exit: vi.fn(), close: vi.fn() } }));
+
+/** Features com a janela de fundo no ar — o portão dos utilitários. */
+let backgroundAberto = false;
+vi.mock("@/helpers/ProjectionWindows", async (orig) => ({
+  ...(await (orig() as Promise<Record<string, unknown>>)),
+  isBackgroundOpen: async () => backgroundAberto,
+}));
+
+const broadcastEnviado: { type: string; payload: unknown }[] = [];
+let estadoDosModulos: Record<string, { active: boolean }> = {};
+const ouvintes = new Set<(m: { type: string; payload: unknown }) => void>();
+vi.mock("@/helpers/Broadcast", () => ({
+  default: {
+    /* Entrega local em laço: o que o botão emite volta para ele mesmo, como
+       acontece entre janelas de verdade. */
+    listen: (cb: (m: { type: string; payload: unknown }) => void) => {
+      ouvintes.add(cb);
+      return () => ouvintes.delete(cb);
+    },
+    send: (type: string, payload: unknown) => {
+      broadcastEnviado.push({ type, payload });
+      const mod = (payload as { module?: string } | null)?.module;
+      const at = (payload as { active?: boolean } | null)?.active;
+      if (type === "module_projection_value" && mod && typeof at === "boolean") {
+        estadoDosModulos[mod] = { active: at };
+      }
+      for (const cb of ouvintes) cb({ type, payload });
+    },
+    getLastPayload: (type: string, mod?: string) =>
+      type === "module_projection_value" && mod ? (estadoDosModulos[mod] ?? null) : null,
+  },
+}));
 
 const { openMediaWindow } = await import("@/helpers/ProjectionWindows");
 const { MUSIC, FILE, ONLINE_VIDEO } = PROJECTION_TYPE;
@@ -91,7 +126,8 @@ async function mountButton(props: Record<string, unknown>) {
   return wrapper;
 }
 
-const main = (wrapper: Awaited<ReturnType<typeof mountButton>>) => wrapper.find(".screen-btn__main");
+const main = (wrapper: Awaited<ReturnType<typeof mountButton>>) =>
+  wrapper.find(".screen-btn__main");
 const lastOpen = () => openWindow.mock.calls.at(-1)?.[0] as OpenArgs;
 
 beforeEach(() => {
@@ -101,6 +137,109 @@ beforeEach(() => {
   openFeatures = [];
   monitors = { [MUSIC]: 7, [FILE]: 7, [ONLINE_VIDEO]: 7 };
   prefs = {};
+  backgroundAberto = false;
+  broadcastEnviado.length = 0;
+  estadoDosModulos = {};
+  ouvintes.clear();
+});
+
+/*
+ * Utilitários (timer, contador, relógio…) com a Projeção de Fundo ligada.
+ *
+ * Sem o portão, `/projection/module` abria uma JANELA fullscreen por cima do
+ * telão: um retângulo preto, sem fade. Com o fundo aberto, o utilitário é uma
+ * camada dele — e o botão precisa refletir isso, senão ficaria dizendo "não
+ * projetado" com o utilitário na tela.
+ */
+describe("utilitário com a projeção de fundo ligada", () => {
+  const TIMER = "/projection/module?module=timer";
+
+  it("não abre janela: quem projeta é a camada do fundo", async () => {
+    backgroundAberto = true;
+    const wrapper = await mountButton({ module: "timer" });
+
+    await main(wrapper).trigger("click");
+    await flushPromises();
+
+    expect(openWindow).not.toHaveBeenCalled();
+  });
+
+  it("o botão reflete a camada, não a janela", async () => {
+    /* O módulo já está no ar e a camada é a que o projeta — o botão tem que
+       dizer "ligado" mesmo sem janela nenhuma. */
+    backgroundAberto = true;
+    const wrapper = await mountButton({ module: "timer" });
+
+    /* O módulo emite valor desde que abre — isso NÃO pode ligar o botão. */
+    estadoDosModulos.timer = { active: true };
+    expect(main(wrapper).classes()).not.toContain("screen-btn__main--active");
+
+    Broadcast.send(BROADCAST_TYPE.MODULE_PROJECTION_OPEN, { module: "timer" });
+    await flushPromises();
+    await wrapper.vm.$nextTick();
+    expect(main(wrapper).classes()).toContain("screen-btn__main--active");
+  });
+
+  it("o clique em Projetar avisa a camada do fundo", async () => {
+    backgroundAberto = true;
+    const wrapper = await mountButton({ module: "timer" });
+
+    await main(wrapper).trigger("click");
+    await flushPromises();
+
+    expect(broadcastEnviado).toContainEqual({
+      type: "module_projection_open",
+      payload: { module: "timer" },
+    });
+  });
+
+  it("fechar desliga o módulo em vez de fechar janela", async () => {
+    backgroundAberto = true;
+    const wrapper = await mountButton({ module: "timer" });
+    Broadcast.send(BROADCAST_TYPE.MODULE_PROJECTION_OPEN, { module: "timer" });
+    await flushPromises();
+
+    await main(wrapper).trigger("click"); // está ligado: o clique fecha
+    await flushPromises();
+
+    expect(closeWindow).not.toHaveBeenCalled();
+    /*
+     * O aviso de fechar é o mesmo que o ESC da janela usa. Mandar o INTENT de
+     * desligar não chega à camada: quem consome aquele é a autoridade, que
+     * publica o VALOR do módulo — e valor não é visibilidade. O utilitário
+     * ficaria preso no telão.
+     */
+    expect(broadcastEnviado).toContainEqual({
+      type: "module_projection_close",
+      payload: { module: "timer" },
+    });
+    expect(broadcastEnviado).not.toContainEqual({
+      type: "module_projection_intent",
+      payload: { module: "timer", active: false },
+    });
+  });
+
+  it("fora do fundo ligado, o botão continua perguntando pela janela", async () => {
+    /* Sem fundo, quem responde é a janela: um utilitário com a janela fechada
+       por engano não pode parecer ligado. */
+    backgroundAberto = false;
+    const wrapper = await mountButton({ module: "timer" });
+    Broadcast.send(BROADCAST_TYPE.MODULE_PROJECTION_OPEN, { module: "timer" });
+    await flushPromises();
+
+    expect(main(wrapper).classes()).not.toContain("screen-btn__main--active");
+  });
+
+  it("sem o fundo ligado, continua abrindo a janela própria", async () => {
+    backgroundAberto = false;
+    const wrapper = await mountButton({ module: "timer" });
+
+    await main(wrapper).trigger("click");
+    await flushPromises();
+
+    expect(openWindow).toHaveBeenCalledTimes(1);
+    expect(lastOpen()).toMatchObject({ route: TIMER, feature: "timer" });
+  });
 });
 
 describe("botão 'Abrir no monitor' do player abre a janela da mídia no ar", () => {
@@ -217,6 +356,10 @@ describe("botão genérico, sem mídia (outros módulos)", () => {
     await main(wrapper).trigger("click");
     await flushPromises();
 
-    expect(lastOpen()).toMatchObject({ feature: "bible", route: "/projection/bible", fullscreen: true });
+    expect(lastOpen()).toMatchObject({
+      feature: "bible",
+      route: "/projection/bible",
+      fullscreen: true,
+    });
   });
 });

@@ -11,23 +11,34 @@ import { DB_TABLE } from "@/constants/DbTables";
 import type { BundleProgress } from "@/types/Database";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 import Telemetry from "@/helpers/Telemetry";
+import { failureDetails, reportReliabilityFailure } from "@/helpers/ReliabilityDiagnostics";
 import { extractBundleEntries } from "@/helpers/BundleExtraction";
 import {
   API_URL,
   API_TOKEN,
+  apiTokenHeaders,
   API_URL_FALLBACK,
   API_URL_FALLBACK_TOKEN,
   API_URL_DB,
   API_URL_DB_FALLBACK,
 } from "@/config/Api";
 
+import { BUNDLE_VALIDATION_REVISION, type BundleKind } from "@/types/Bundle";
+
+import packageJson from "@root/package.json";
+
 const BUNDLE_MARKER_KEY = "__bundle_marker__";
 
 interface BundleMarker {
   id: string;
+  kind: "full" | "catalog";
+  validation_revision: number;
+  includes_bible?: boolean;
   version_number: number;
   /** Epoch da exportação da origem; muda mesmo quando o schema não muda. */
   source_version?: number;
+  /** Versão do app que instalou o catálogo: outra versão pede catálogo renovado. */
+  app_version?: string;
   installed_at: string;
 }
 
@@ -36,12 +47,8 @@ interface RemoteBundleConfig {
   source_version?: number;
 }
 
-function bundleUrl(): string {
-  return `${API_URL}/db/bundle`;
-}
-
-function authHeaders(): Record<string, string> {
-  return { "Api-Token": API_TOKEN };
+function bundleUrl(api: string, kind: BundleKind): string {
+  return `${api}/db/${kind === "catalog" ? "catalog-bundle" : "bundle"}`;
 }
 
 function abortCheck(signal?: AbortSignal): void {
@@ -81,16 +88,28 @@ function parseRemoteVersion(value: unknown): RemoteBundleConfig | null {
 export default {
   async fetchBundle(
     onProgress?: (p: BundleProgress) => void,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    kind: "full" | "catalog" = "full"
   ): Promise<ArrayBuffer> {
     abortCheck(signal);
-    const res = await fetchWithTimeout(bundleUrl(), {
-      headers: authHeaders(),
-      signal,
-      timeout: NET_TIMEOUT.MEDIA,
-      source: "bundle",
-    });
-    if (!res.ok) throw new Error(`Bundle download failed: HTTP ${res.status}`);
+    const fetchFrom = (api: string, token: string) =>
+      fetchWithTimeout(bundleUrl(api, kind), {
+        headers: apiTokenHeaders(token),
+        signal,
+        cache: "no-store",
+        timeout: NET_TIMEOUT.MEDIA,
+        source: "bundle",
+      });
+    let res: Response;
+    try {
+      res = await fetchFrom(API_URL, API_TOKEN);
+      if (!res.ok) throw new Error(`Bundle download failed: HTTP ${res.status}`);
+    } catch (error) {
+      abortCheck(signal);
+      if (!API_URL_FALLBACK || API_URL_FALLBACK === API_URL) throw error;
+      res = await fetchFrom(API_URL_FALLBACK, API_URL_FALLBACK_TOKEN);
+      if (!res.ok) throw new Error(`Bundle download failed: HTTP ${res.status}`);
+    }
 
     const totalBytes = Number(res.headers.get("content-length") || 0);
     const reader = res.body?.getReader();
@@ -149,13 +168,14 @@ export default {
   async extractBundle(
     buffer: ArrayBuffer,
     onProgress?: (p: BundleProgress) => void,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    kind: "full" | "catalog" = "full"
   ): Promise<Map<string, unknown>> {
     abortCheck(signal);
     const datasets = new Map<string, unknown>();
     const report = progressReporter(onProgress);
     await extractBundleEntries(buffer, {
-      kind: "catalog",
+      kind,
       signal,
       onEntry: ({ key, data, current, total }) => {
         if (datasets.has(key)) throw new Error(`Bundle inválido: chave duplicada ${key}`);
@@ -169,6 +189,7 @@ export default {
 
   async install(opts: {
     force?: boolean;
+    catalogOnly?: boolean;
     version?: number;
     onProgress?: (p: BundleProgress) => void;
     signal?: AbortSignal;
@@ -185,7 +206,8 @@ export default {
       abortCheck(signal);
       onProgress?.({ phase: "download", current: 0, total: 1 });
       const downloadStartedAt = Date.now();
-      const buffer = await this.fetchBundle(onProgress, signal);
+      const kind = opts.catalogOnly ? "catalog" : "full";
+      const buffer = await this.fetchBundle(onProgress, signal, kind);
       const downloadMs = Date.now() - downloadStartedAt;
       Telemetry.track("database_bundle_stage_completed", {
         stage: "download",
@@ -199,7 +221,7 @@ export default {
       abortCheck(signal);
       stage = "extract";
       const extractStartedAt = Date.now();
-      const datasets = await this.extractBundle(buffer, onProgress, signal);
+      const datasets = await this.extractBundle(buffer, onProgress, signal, kind);
       const extractMs = Date.now() - extractStartedAt;
       Telemetry.track("database_bundle_stage_completed", {
         stage: "extract",
@@ -215,49 +237,34 @@ export default {
       // tocar no IndexedDB.
       stage = "validate";
       const config = datasets.get("config");
-      if (
-        datasets.size < 2 ||
-        !config ||
-        typeof config !== "object" ||
-        Array.isArray(config)
-      ) {
+      if (datasets.size < 2 || !config || typeof config !== "object" || Array.isArray(config)) {
         throw new Error("Bundle inválido: configuração do banco ausente");
       }
 
       // Grava marker confirmando instalação do bundle
       // Usa a versão recebida como parâmetro (evita fetchRemoteConfig redundante)
       stage = "resolve_version";
-      let markerVersion = version ?? 0;
-      let sourceVersion: number | undefined = version;
-      // O ZIP já traz o `config`: perguntar de novo à API seria uma segunda
-      // requisição só para saber o que acabou de chegar.
-      const bundled = markerVersion ? null : parseRemoteVersion(datasets.get("config"));
-      if (bundled) {
-        markerVersion = bundled.source_version ?? bundled.version_number;
-        sourceVersion = bundled.source_version;
-      } else if (!markerVersion) {
-        try {
-          const remote = await this.fetchRemoteConfig();
-          markerVersion = remote?.source_version ?? remote?.version_number ?? 0;
-          sourceVersion = remote?.source_version;
-        } catch {
-          // Se fetchRemoteConfig falhar, tenta ler do config local
-          try {
-            const localConfig = await $database.get<{ version_number?: number }>("config", {
-              silent: true,
-            });
-            markerVersion = localConfig?.version_number ?? 0;
-          } catch {
-            // mantém 0
-          }
-        }
+      const bundled = parseRemoteVersion(datasets.get("config"));
+      if (!bundled) throw new Error("Bundle inválido: versão ausente");
+      const markerVersion = bundled.source_version ?? bundled.version_number;
+      if (
+        version !== undefined &&
+        version !== markerVersion &&
+        version !== bundled.version_number
+      ) {
+        throw new Error("Bundle inválido: versão diferente da solicitada");
       }
+      const sourceVersion = bundled.source_version;
       const marker = {
         id: BUNDLE_MARKER_KEY,
         data: {
           id: BUNDLE_MARKER_KEY,
+          kind,
+          includes_bible: kind === "full" || (await this.hasBundleMarker("full")),
+          validation_revision: BUNDLE_VALIDATION_REVISION,
           version_number: markerVersion,
           ...(sourceVersion == null ? {} : { source_version: sourceVersion }),
+          app_version: packageJson.version,
           installed_at: new Date().toISOString(),
         } satisfies BundleMarker,
         ts: Date.now(),
@@ -303,7 +310,8 @@ export default {
       Telemetry.track("database_bundle_install_failed", {
         version: version ?? null,
         duration_ms: durationMs,
-        reason: error instanceof Error ? error.name : "unknown",
+        ...failureDetails(error),
+        bundle_kind: opts.catalogOnly ? "catalog" : "full",
         stage,
         aborted: signal?.aborted === true,
       });
@@ -334,17 +342,39 @@ export default {
    * não considera o dataset `config` em cache: a web o guarda rotineiramente,
    * sem nunca ter instalado bundle nenhum.
    */
-  async hasBundleMarker(): Promise<boolean> {
+  async hasBundleMarker(kind: "catalog" | "full" = "catalog"): Promise<boolean> {
     try {
       const row = await $idb.get<{ data?: BundleMarker }>(DB_TABLE.CACHE, BUNDLE_MARKER_KEY);
-      return !!row?.data;
+      return (
+        row?.data?.validation_revision === BUNDLE_VALIDATION_REVISION &&
+        (row.data.kind === "full" ||
+          (row.data.kind === "catalog" && (kind === "catalog" || row.data.includes_bible === true)))
+      );
+    } catch {
+      return false;
+    }
+  },
+
+  /**
+   * True quando há catálogo instalado, mas por outra versão do app. Cada versão
+   * renova o catálogo: o servidor pode ter mudado o que entrega (endereços de
+   * mídia, campos), e o que ficou guardado ainda reflete a versão anterior.
+   * Sem catálogo válido devolve false: quem instala é o fluxo normal.
+   */
+  async catalogNeedsRefreshForApp(): Promise<boolean> {
+    try {
+      const row = await $idb.get<{ data?: BundleMarker }>(DB_TABLE.CACHE, BUNDLE_MARKER_KEY);
+      const marker = row?.data;
+      if (!marker) return false;
+      if (marker.validation_revision !== BUNDLE_VALIDATION_REVISION) return true;
+      return marker.app_version !== packageJson.version;
     } catch {
       return false;
     }
   },
 
   /** Retorna a versão do último bundle instalado, sem buscar na rede. */
-  async getInstalledBundleVersion(): Promise<number | null> {
+  async getInstalledBundleVersion({ allowLegacyConfig = true } = {}): Promise<number | null> {
     try {
       const marker = await $idb.get<{
         data?: { version_number?: unknown; source_version?: unknown };
@@ -358,6 +388,7 @@ export default {
         return markerVersion;
       }
 
+      if (!allowLegacyConfig) return null;
       // Instalações anteriores ao marker ainda têm o dataset `config` no
       // cache normalizado/legado. Ler diretamente o IDB evita disparar uma
       // requisição durante a decisão de boot offline.
@@ -401,18 +432,25 @@ export default {
       source: string
     ): Promise<RemoteBundleConfig | null> => {
       const res = await fetchWithTimeout(url, {
-        headers: { "Api-Token": token },
+        headers: apiTokenHeaders(token),
         cache: "no-store",
         source,
       });
-      if (!res.ok) return null;
-      return parseRemoteVersion(await res.json());
+      if (!res.ok) throw new Error(`Configuração do banco: HTTP ${res.status}`);
+      const config = parseRemoteVersion(await res.json());
+      if (!config) throw new Error("Configuração do banco sem versão válida");
+      return config;
     };
 
     try {
       const primary = await fetchConfig(`${API_URL_DB}/config`, API_TOKEN, "bundle-config");
       if (primary) return primary;
-    } catch {
+    } catch (error) {
+      if (!API_URL_FALLBACK)
+        reportReliabilityFailure("database_update_check_failed", error, {
+          stage: "config",
+          endpoint: "primary",
+        });
       // Abaixo o fallback também é tentado quando a conexão lança (timeout,
       // DNS), não apenas quando a API respondeu com HTTP ruim.
     }
@@ -424,7 +462,11 @@ export default {
         API_URL_FALLBACK_TOKEN,
         "bundle-config-fallback"
       );
-    } catch {
+    } catch (error) {
+      reportReliabilityFailure("database_update_check_failed", error, {
+        stage: "config",
+        endpoint: "fallback",
+      });
       return null;
     }
   },

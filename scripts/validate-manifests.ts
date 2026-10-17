@@ -14,6 +14,9 @@ const MODULES_DIR = resolve(root, "src/modules")
 const VALID_CUSTOMIZATION_TYPES = new Set([
   "font", "color", "font-size", "border-spacing",
   "v-align", "h-align", "image", "opacity", "object-fit", "select", "boolean",
+  // Caixa de texto dos módulos utilitários: raio e espessura da borda, com
+  // faixas próprias (o raio admite 0, que é "sem cantos arredondados").
+  "radius", "border-width",
 ])
 const VALID_MODULE_OPTION_SIZES = new Set(["small", "medium", "large"])
 

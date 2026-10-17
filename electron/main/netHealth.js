@@ -14,6 +14,9 @@ const FALHAS_PARA_OFFLINE = 2;
 let _online = true;
 let _falhas = 0;
 let _desdeQuando = null;
+// Ao acordar, o Wi-Fi leva alguns segundos para voltar; as falhas desse
+// intervalo não dizem nada sobre a internet.
+let _carenciaAte = 0;
 const _ouvintes = new Set();
 
 /**
@@ -32,9 +35,20 @@ function report(ok, source = "main") {
     _definir(true, source);
     return _online;
   }
+  if (Date.now() < _carenciaAte) return _online;
   _falhas += 1;
   if (_falhas >= FALHAS_PARA_OFFLINE) _definir(false, source);
   return _online;
+}
+
+/**
+ * Ignora falhas por `ms` — para o sistema acordando, quando a rede ainda está
+ * reconectando. Sucesso continua valendo na hora.
+ * @param {number} ms
+ */
+function holdFailures(ms) {
+  _carenciaAte = Date.now() + ms;
+  _falhas = 0;
 }
 
 function _definir(online, source) {
@@ -67,7 +81,8 @@ function _reset() {
   _online = true;
   _falhas = 0;
   _desdeQuando = null;
+  _carenciaAte = 0;
   _ouvintes.clear();
 }
 
-module.exports = { report, status, onChange, FALHAS_PARA_OFFLINE, _reset };
+module.exports = { report, holdFailures, status, onChange, FALHAS_PARA_OFFLINE, _reset };

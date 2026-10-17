@@ -133,6 +133,30 @@ describe("download IPC file-entry validation", () => {
     })).not.toThrow();
   });
 
+  describe("regra curinga https://*.louvorja.com.br", () => {
+    const wildcard = { ...options, allowedRemoteOrigins: ["https://*.louvorja.com.br"] };
+    const entryFor = (remoteUrl) => ({ remote: "/images/capa.jpg", local: "images/capa.jpg", remoteUrl });
+
+    it.each([
+      "https://files.louvorja.com.br/images/capa.jpg",
+      "https://static.louvorja.com.br/images/capa.jpg",
+      "https://api.louvorja.com.br/file/images/capa.jpg",
+    ])("aceita subdomínio: %s", (remoteUrl) => {
+      expect(validateDownloadEntries([entryFor(remoteUrl)], wildcard)).toHaveLength(1);
+    });
+
+    it.each([
+      "https://louvorja.com.br/images/capa.jpg",
+      "https://evil-louvorja.com.br/images/capa.jpg",
+      "https://louvorja.com.br.evil.com/images/capa.jpg",
+      "https://files.louvorja.com.br:8443/images/capa.jpg",
+      "http://files.louvorja.com.br/images/capa.jpg",
+      "https://cdn.louvorja.com/images/capa.jpg",
+    ])("recusa fora do domínio ou sem HTTPS: %s", (remoteUrl) => {
+      expect(() => validateDownloadEntries([entryFor(remoteUrl)], wildcard)).toThrow();
+    });
+  });
+
   it.each([
     "https://cdn.louvorja.com/images/%252e%252e/images/capa.jpg",
     "https://cdn.louvorja.com/images%252fcapa.jpg",

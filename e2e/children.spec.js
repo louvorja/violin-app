@@ -66,11 +66,11 @@ async function start(page, options = {}) {
     if (musicMatch && Number(musicMatch[1]) === lyricDetail.id_music) {
       return route.fulfill({ json: lyricDetail });
     }
+    if (/\/(?:pt|es)_children_albums$/.test(url.pathname)) {
+      return route.fulfill({ json: listedAlbums });
+    }
     return route.fulfill({ json: [] });
   });
-  await page.route(/\/(?:pt|es)\/albums\/category\/children(?:\?.*)?$/, (route) =>
-    route.fulfill({ json: listedAlbums })
-  );
 
   await page.goto("/");
   await page.locator('[data-testid="modules-ready"]').waitFor({ state: "attached" });

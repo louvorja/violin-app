@@ -70,6 +70,27 @@ function readLastLight(): unknown {
 
 function stamp(id: ThemeId): void {
   document.documentElement.dataset.theme = id;
+  syncThemeColor();
+}
+
+// O iOS pinta a faixa da barra de status com o theme-color, borrando-a sobre o
+// conteúdo; um preto fixo do manifesto aparecia como névoa sobre o cabeçalho.
+function syncThemeColor(): void {
+  try {
+    const color = getComputedStyle(document.documentElement)
+      .getPropertyValue("--lj-shell-chrome-bg")
+      .trim();
+    if (!color) return;
+    let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+    if (!meta) {
+      meta = document.createElement("meta");
+      meta.name = "theme-color";
+      document.head.appendChild(meta);
+    }
+    meta.content = color;
+  } catch {
+    /* ambiente sem DOM completo */
+  }
 }
 
 export function useAppTheme(): AppThemeAPI {

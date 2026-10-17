@@ -8,8 +8,15 @@ export const DB_NAME = "louvorja-violin";
  * Para testes, use `indexedDB.deleteDatabase("louvorja")` no console do navegador para resetar o banco
  *
  * v1 → v2: adicionada tabela "devices" (dispositivos autorizados)
+ * v2 → v3: arquivos locais escolhidos na liturgia web/PWA (main) e, na linha do
+ *          modo apresentação, "presentation_mode.programs" (programas do culto no navegador)
+ * v3 → v4: "presentation_mode.online" (vídeos, playlists e canais favoritos) e
+ *          "presentation_mode.online_cache" (primeira página de cada playlist/canal)
+ * v4 → v5: "presentation_mode.models" (modelos de culto sem pasta da igreja)
+ * v5 → v6: junção das duas linhas — quem já estava em v3 (main) ou v5 (modo
+ *          apresentação) ganha as tabelas que faltam
  */
-export const DB_VERSION = 2;
+export const DB_VERSION = 6;
 
 /**
  * Nomes de todas as tabelas do banco IndexedDB unificado `louvorja`.
@@ -22,7 +29,7 @@ export const DB_VERSION = 2;
  *
  * Ao adicionar uma nova tabela:
  *   1. Adicione a chave aqui
- *   2. Incremente `DB_VERSION` em `src/helpers/IndexedDB.ts`
+ *   2. Incremente `DB_VERSION` neste arquivo
  *   3. O `upgrade()` criará a store automaticamente
  */
 export const DB_TABLE = {
@@ -31,7 +38,7 @@ export const DB_TABLE = {
   // ─── Catálogos normalizados (1 registro por entidade) ───
   MUSICS: ModuleEnum.MUSICS,
   // ─── Playlists do usuário ───
-  MUSICS_PLAYLISTS: ModuleEnum.MUSICS+".playlists",
+  MUSICS_PLAYLISTS: ModuleEnum.MUSICS + ".playlists",
   HYMNAL: ModuleEnum.HYMNAL,
   HYMNAL_1996: ModuleEnum.HYMNAL_1996,
   ALBUMS: "albums",
@@ -62,6 +69,7 @@ export const DB_TABLE = {
   AUDIO_LIBRARY: "audio_library",
   IMAGE_LIBRARY: "image_library",
   LITURGY_LIBRARY: ModuleEnum.LITURGY + ".library",
+  LITURGY_FILES: ModuleEnum.LITURGY + ".files",
   SCHEDULED_CATEGORIES: ModuleEnum.LITURGY + ".scheduled_categories",
   SCHEDULED_ITEMS: ModuleEnum.LITURGY + ".scheduled_items",
   // ─── Cache de tradução Libras ───
@@ -70,6 +78,14 @@ export const DB_TABLE = {
   LIBRAS_BUNDLES: "libras.bundles",
   // ─── Dispositivos autorizados ───
   DEVICES: "devices",
+  // ─── Modo apresentação: um programa do culto por data (DocStore) ───
+  PRESENTATION_PROGRAMS: ModuleEnum.PRESENTATION_MODE + ".programs",
+  // ─── Modo apresentação: modelos de culto (Sábado…), quando não há pasta da igreja (DocStore) ───
+  PRESENTATION_MODELS: ModuleEnum.PRESENTATION_MODE + ".models",
+  // ─── Modo apresentação: vídeos, playlists e canais do YouTube favoritos (DocStore) ───
+  PRESENTATION_ONLINE: ModuleEnum.PRESENTATION_MODE + ".online",
+  // ─── Modo apresentação: cópia da primeira página de cada playlist/canal (cache, IndexedDB) ───
+  PRESENTATION_ONLINE_CACHE: ModuleEnum.PRESENTATION_MODE + ".online_cache",
   // ─── Chat ───
   CHAT_MESSAGES: "chat.messages",
 } as const;

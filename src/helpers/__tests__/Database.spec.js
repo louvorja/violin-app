@@ -3,7 +3,7 @@
  * roteamento para tabelas normalizadas por entidade, gravação incremental
  * (diff), migração do formato legado e stale-if-error.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 
 // IDB em memória — tabelas separadas, simulando persistência entre "restarts".
@@ -70,6 +70,7 @@ vi.mock("@/config/Api", () => ({
   API_URL_DB: "https://api.test/json_db",
   API_URL_FILES: "https://api.test/file",
   getTokenForUrl: () => "",
+  apiTokenHeaders: (token) => (token ? { "Api-Token": token } : {}),
 }));
 
 const fetchMock = vi.fn();
@@ -83,6 +84,17 @@ async function importDatabase() {
   const mod = await import("@/helpers/Database");
   return mod.default;
 }
+
+it("recupera pela rede quando a leitura do IndexedDB falha", async () => {
+  const database = await importDatabase();
+  const { default: idb } = await import("@/helpers/IndexedDB");
+  idb.get.mockRejectedValueOnce(
+    new DOMException("Internal error opening backing store", "UnknownError")
+  );
+  fetchMock.mockResolvedValue(new Response(JSON.stringify({ ok: true })));
+  expect(await database.get("recovery_test", { silent: true })).toEqual({ ok: true });
+  expect(fetchMock).toHaveBeenCalledOnce();
+});
 
 beforeEach(() => {
   setActivePinia(createPinia());
@@ -258,7 +270,7 @@ describe("Database — roteamento para tabelas normalizadas", () => {
     expect(tbl("bible_chapters").has("bible_2_39_5")).toBe(true);
   });
 
-  it("divide collections_online em canal/playlist/vídeo com referências preservadas (rota REST)", async () => {
+  it("divide collections_online em canal/playlist/vídeo com referências preservadas (json_db)", async () => {
     const payload = {
       channels: [{ channel_id: "c1", title: "Canal" }],
       playlists: [{ playlist_id: "p1", channel_id: "c1", title: "PL" }],
@@ -276,8 +288,8 @@ describe("Database — roteamento para tabelas normalizadas", () => {
 
     const out = await db.get("pt_collections_online");
     expect(out).toEqual(payload);
-    // Fonte é a rota REST da API, não o json_db estático.
-    expect(seenUrl.startsWith("https://api.test/pt/collections/online")).toBe(true);
+    // A chave vem do json_db, como as demais; a rota REST foi descontinuada.
+    expect(seenUrl.startsWith("https://db.test/pt_collections_online")).toBe(true);
 
     expect(dataIds("online_videos_channels", "pt_collections_online")).toEqual(["c1"]);
     expect(dataIds("online_videos_playlists", "pt_collections_online")).toEqual(["p1"]);
@@ -311,6 +323,68 @@ describe("Database — invalidação e legado", () => {
 
     db.invalidate();
     await vi.waitFor(() => expect(tbl("musics").size).toBe(0));
+  });
+
+  describe("cópia do service worker", () => {
+    let swEntries;
+    let swCaches;
+
+    beforeEach(() => {
+      swEntries = new Set([
+        "https://db.test/pt_musics?20261013",
+        "https://db.test/es_musics?20261013",
+      ]);
+      const cache = {
+        delete: vi.fn(async (url, options) => {
+          const path = url.split("?")[0];
+          const alvos = [...swEntries].filter((u) =>
+            options?.ignoreSearch ? u.split("?")[0] === path : u === url
+          );
+          alvos.forEach((u) => swEntries.delete(u));
+          return alvos.length > 0;
+        }),
+      };
+      swCaches = {
+        has: vi.fn(async (name) => name === "louvorja-db"),
+        open: vi.fn(async () => cache),
+        delete: vi.fn(async () => {
+          swEntries.clear();
+          return true;
+        }),
+      };
+      vi.stubGlobal("caches", swCaches);
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it("invalidate(file) apaga a cópia daquele dataset, e só dela", async () => {
+      const db = await importDatabase();
+      db.invalidate("pt_musics");
+
+      await vi.waitFor(() =>
+        expect([...swEntries]).toEqual(["https://db.test/es_musics?20261013"])
+      );
+    });
+
+    it("invalidateAll() descarta o cache do service worker inteiro", async () => {
+      const db = await importDatabase();
+      await db.invalidateAll();
+
+      expect(swCaches.delete).toHaveBeenCalledWith("louvorja-db");
+      expect(swEntries.size).toBe(0);
+    });
+
+    it("sem Cache Storage, invalidar continua funcionando", async () => {
+      vi.stubGlobal("caches", undefined);
+      fetchMock.mockResolvedValue(jsonResponse([{ id_music: 1 }]));
+      const db = await importDatabase();
+      await db.get("pt_musics");
+
+      expect(() => db.invalidate("pt_musics")).not.toThrow();
+      await expect(db.invalidateAll()).resolves.toBeUndefined();
+    });
   });
 
   it("migra blob legado da tabela cache para as tabelas novas na primeira leitura", async () => {
@@ -403,6 +477,57 @@ describe("Database — deduplicação de buscas concorrentes", () => {
     await db.seed("bible_2_39_5", { 1: "No princípio" });
 
     expect(await db.getLocal("bible_2_39_5")).toEqual({ 1: "No princípio" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("getLocal respeita o orçamento de memória ao lembrar metadados locais", async () => {
+    const db = await importDatabase();
+    const { default: idb } = await import("@/helpers/IndexedDB");
+    idb.get.mockClear();
+    for (let id = 1; id <= 24; id++) {
+      await db.seed(`music_${id}`, { id_music: id, lyric: "x".repeat(1024 * 1024) });
+      expect((await db.getLocal(`music_${id}`)).id_music).toBe(id);
+    }
+    const reads = idb.get.mock.calls.length;
+
+    expect((await db.getLocal("music_24")).id_music).toBe(24);
+    expect(idb.get).toHaveBeenCalledTimes(reads);
+    expect((await db.getLocal("music_1")).id_music).toBe(1);
+    expect(idb.get).toHaveBeenCalledTimes(reads + 1);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("getLocal com remember:false não acumula metadados de uma varredura", async () => {
+    const db = await importDatabase();
+    const { default: idb } = await import("@/helpers/IndexedDB");
+    await db.seed("music_1", { id_music: 1 });
+    idb.get.mockClear();
+
+    await db.getLocal("music_1", { remember: false });
+    await db.getLocal("music_1", { remember: false });
+
+    expect(idb.get).toHaveBeenCalledTimes(2);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("reseed desconta a memória anterior e preserva entradas novas dentro do orçamento", async () => {
+    const db = await importDatabase();
+    const { default: idb } = await import("@/helpers/IndexedDB");
+    const lyric = "x".repeat(1024 * 1024);
+    for (let update = 0; update < 20; update++) {
+      await db.seed("music_1", { id_music: 1, lyric, update });
+      await db.getLocal("music_1");
+      await db.seed("music_1", { id_music: 1, lyric, update: update + 1 });
+    }
+    await db.seed("music_2", { id_music: 2, lyric });
+    await db.seed("music_3", { id_music: 3, lyric });
+    idb.get.mockClear();
+
+    await db.getLocal("music_2");
+    await db.getLocal("music_3");
+    expect((await db.getLocal("music_2")).id_music).toBe(2);
+
+    expect(idb.get).toHaveBeenCalledTimes(2);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -545,6 +670,53 @@ describe("Database — falha sem nenhum cache: o que aparece na tela", () => {
 });
 
 describe("Database — publicação de bundle", () => {
+  it("uma resposta iniciada antes do bundle não sobrescreve o catálogo novo", async () => {
+    const db = await importDatabase();
+    let finish;
+    fetchMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        })
+    );
+    const oldRequest = db.get("pt_musics", { fresh: true });
+    await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+    await db.seedBundleAtomic(new Map([["pt_musics", [{ id_music: 2, name: "nova" }]]]), {
+      id: "marker",
+    });
+    finish(jsonResponse([{ id_music: 1, name: "antiga" }]));
+    expect(await oldRequest).toEqual([{ id_music: 2, name: "nova" }]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect((await db.getLocal("pt_musics")).map((item) => item.name)).toEqual(["nova"]);
+    expect(dataIds("musics", "pt_musics")).toEqual(["2"]);
+  });
+
+  it("aguarda uma escrita de rede em curso antes de publicar o bundle", async () => {
+    const db = await importDatabase();
+    const { default: idb } = await import("@/helpers/IndexedDB");
+    let finish;
+    idb.putMany.mockImplementationOnce(async (table, rows, deleteIds = []) => {
+      await new Promise((resolve) => {
+        finish = resolve;
+      });
+      for (const id of deleteIds) tbl(table).delete(id);
+      for (const row of rows) tbl(table).set(row.id, row);
+    });
+    fetchMock.mockResolvedValue(jsonResponse([{ id_music: 1, name: "antiga" }]));
+    await db.get("pt_musics", { fresh: true });
+    await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+    const installation = db.seedBundleAtomic(
+      new Map([["pt_musics", [{ id_music: 2, name: "nova" }]]]),
+      { id: "marker" }
+    );
+    await Promise.resolve();
+    expect(applyCatalogBatch).not.toHaveBeenCalled();
+    finish();
+    await installation;
+    expect((await db.getLocal("pt_musics")).map((item) => item.name)).toEqual(["nova"]);
+    expect(dataIds("musics", "pt_musics")).toEqual(["2"]);
+  });
+
   it("troca somente o dataset publicado e descarta a cópia antiga em memória", async () => {
     const db = await importDatabase();
     await db.seed("pt_musics", [{ id_music: 1, name: "antiga" }]);

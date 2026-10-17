@@ -90,10 +90,12 @@
     "time_managed_by_bloco": "Horário gerenciado automaticamente pelo bloco",
     "bloco_select": "Bloco",
     "bloco_pick": "-- sem bloco --",
-    "video_select": "Vídeo",
     "video_pick": "-- selecione um vídeo --",
     "video_search_btn": "Buscar vídeo…",
-    "video_url_or_select": "URL do vídeo ou selecione um salvo",
+    "video_url_or_select": "Projeção direta com URL do vídeo",
+    "video_url_placeholder": "Cole o link do vídeo do YouTube",
+    "video_url_invalid": "Esta URL não é um link do YouTube",
+    "video_save_mine": "Salvar em Meus Vídeos Online",
     "music_version_label": "Versão",
     "music_version_sung": "Cantada",
     "music_version_pb": "Playback",
@@ -250,7 +252,9 @@
     "import_invalid": "Arquivo inválido."
   },
   "alerts": {
-    "media_not_found": "Item não encontrado na biblioteca. Ele pode ter sido removido."
+    "media_not_found": "Item não encontrado na biblioteca. Ele pode ter sido removido.",
+    "file_unsupported": "Escolha uma imagem, vídeo, áudio, PDF ou apresentação .slja.",
+    "file_import_failed": "Não foi possível guardar o arquivo neste aparelho. Verifique o espaço disponível e tente novamente."
   },
   "library_search": {
     "title_media": "Biblioteca de Mídia",

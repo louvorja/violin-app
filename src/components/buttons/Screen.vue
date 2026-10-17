@@ -1,5 +1,5 @@
 <template>
-  <div v-if="!is_mobile" class="screen-btn">
+  <div v-if="!is_mobile && canProject" class="screen-btn">
     <LjTooltip :text="$t('options.slides.open_at')">
       <LjButton
         class="screen-btn__main"
@@ -36,14 +36,12 @@ import Popup from "@/helpers/Popup";
 import { LjButton, LjMenu, LjTooltip } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { useCategorizedDisplays } from "@/composables/useCategorizedDisplays";
+import { useScreenProjection } from "@/composables/useScreenProjection";
 import {
   listDisplays,
   getPreferredMonitor,
   setPreferredMonitor,
   identifyDisplays,
-  isOpen as isProjectionOpen,
-  open as openProjection,
-  close as closeProjection,
   getFallbackFeature,
   isUsingFallback,
   needsScreenAccess,
@@ -51,6 +49,7 @@ import {
 } from "@/helpers/Projection";
 import { mediaWindowPlan, openMediaWindow } from "@/helpers/ProjectionWindows";
 import { PROJECTION_TYPE } from "@/constants/Projection";
+import { canOpenWebWindows } from "@/helpers/projection/webWindow";
 
 const props = defineProps({
   /** Identificador único da projeção (ex: "bible", "music"). Default: derivado de `module`. */
@@ -86,6 +85,7 @@ const ROUTE_BY_MODULE = {
 };
 
 const is_mobile = computed(() => AppData.get("is_mobile"));
+const canProject = canOpenWebWindows();
 
 const FEATURE_BY_MODULE = {
   music: PROJECTION_TYPE.MUSIC,
@@ -118,8 +118,23 @@ const is_popup_selected = computed(
   () => is_popup_opened.value && popup_module.value === props.module
 );
 
-// Estado da projeção (novo — feature/route)
-const projection_open = ref(false);
+/*
+ * A regra de "projetar" mora no composable — é a mesma que a ribbon usa em
+ * `RibbonScreenButton.vue`, o botão que os módulos de fato renderizam.
+ */
+const {
+  aberto: projeçãoAberta,
+  refresh: refreshProjection,
+  abrir,
+  fechar,
+} = useScreenProjection({
+  feature: () => featureName.value,
+  route: () => routePath.value,
+  monitorId: () => effective_id.value,
+  fullscreen: () => props.fullscreen,
+  alwaysOnTop: () => props.alwaysOnTop,
+});
+
 const displays = ref([]);
 // Effective: o que efetivamente vai abrir (com fallback aplicado)
 const effective_id = ref(null);
@@ -138,7 +153,7 @@ const fallback_label = computed(() => {
 });
 
 const is_active = computed(() =>
-  isProjectionMode.value ? projection_open.value : is_popup_selected.value
+  isProjectionMode.value ? projeçãoAberta.value : is_popup_selected.value
 );
 const can_identify = computed(() => displays.value.length > 1);
 const needs_access = ref(false);
@@ -265,7 +280,7 @@ async function refreshDisplays() {
   explicit_id.value = usingFallback ? undefined : explicit;
   // effective: com fallback aplicado — esse é quem abre a janela
   effective_id.value = await getPreferredMonitor(monitorFeature.value);
-  projection_open.value = await isProjectionOpen(featureName.value);
+  await refreshProjection();
 }
 
 /** Abre a janela no monitor dado. No player é a mesma função da abertura automática e do menu. */
@@ -274,13 +289,7 @@ async function openWindow(monitorId) {
     await openMediaWindow("projection", props.media, { explicit: true, monitorId });
     return;
   }
-  await openProjection({
-    feature: featureName.value,
-    route: routePath.value,
-    monitorId,
-    fullscreen: props.fullscreen,
-    alwaysOnTop: props.alwaysOnTop,
-  });
+  await abrir(monitorId);
 }
 
 function legacyPopup() {
@@ -293,9 +302,11 @@ async function primaryClick() {
     legacyPopup();
     return;
   }
-  // Toggle abrir/fechar usando preferência efetiva (com fallback)
-  if (projection_open.value) {
-    await closeProjection(featureName.value);
+  // Toggle abrir/fechar usando preferência efetiva (com fallback).
+  // O fechamento passa por `closeOpen`: é lá que mora a diferença entre fechar
+  // uma JANELA e desligar um utilitário que é camada da janela de fundo.
+  if (projeçãoAberta.value) {
+    await closeOpen();
   } else {
     await openWindow(effective_id.value);
   }
@@ -315,10 +326,10 @@ async function choose(displayId) {
 
   if (effective_id.value == null) {
     // "Mesma janela" ou fallback resultou em null — fecha projeção aberta
-    if (projection_open.value) await closeProjection(featureName.value);
+    if (projeçãoAberta.value) await fechar();
   } else {
     // Re-abre no monitor efetivo (escolhido ou herdado)
-    if (projection_open.value) await closeProjection(featureName.value);
+    if (projeçãoAberta.value) await fechar();
     await openWindow(effective_id.value);
   }
   await refreshDisplays();
@@ -326,8 +337,7 @@ async function choose(displayId) {
 
 async function closeOpen() {
   if (isProjectionMode.value) {
-    await closeProjection(featureName.value);
-    await refreshDisplays();
+    await fechar();
   } else {
     Popup.close();
   }
@@ -351,8 +361,7 @@ onMounted(async () => {
   if (pollTimer) clearInterval(pollTimer);
   if (isProjectionMode.value) {
     pollTimer = setInterval(async () => {
-      const open = await isProjectionOpen(featureName.value);
-      if (open !== projection_open.value) projection_open.value = open;
+      await refreshProjection();
     }, 2000);
   }
 });

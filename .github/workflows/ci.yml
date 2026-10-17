@@ -42,6 +42,12 @@ jobs:
       - name: Instalar navegador dos testes de estilo
         run: npx playwright install --with-deps chromium
 
+      - name: Rodar testes E2E
+        # A suíte completa também roda na release; rodá-la aqui faz a falha
+        # aparecer no commit que a causou, e não 25 minutos depois, na tag.
+        # Dois workers: o runner tem 4 vCPU e a suíte cai pela metade.
+        run: npm run test:e2e -- --workers=2
+
       - name: Conferir estilos do build contra o desenvolvimento
         run: npm run test:e2e:build
 

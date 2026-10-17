@@ -5,7 +5,8 @@
  * importante para a Bíblia: ela grava um capítulo por vez e não acumula os
  * ~15 mil JSONs na memória da janela que abriu a tela bíblica.
  */
-export type BundleExtractionKind = "catalog" | "bible";
+import type { BundleKind } from "@/types/Bundle";
+export type BundleExtractionKind = BundleKind;
 
 export interface ExtractedBundleEntry {
   key: string;

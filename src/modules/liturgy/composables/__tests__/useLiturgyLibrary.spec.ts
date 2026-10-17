@@ -1,6 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseJaImport, useLiturgyLibrary } from "../useLiturgyLibrary";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
+import { agendaParaPersistir, prepararAgenda } from "../../agenda";
+import DocStore from "@/helpers/DocStore";
+import type { LiturgyLibraryItem } from "@/types/LiturgyLibrary";
+
+afterEach(() => vi.restoreAllMocks());
 
 // Recorte fiel de um `liturgia.ja` real (formato Delphi/TIniFile), com dois
 // grupos: um sem "categoria" (culto avulso) e um com ela (Escola Sabatina).
@@ -82,7 +87,9 @@ describe("parseJaImport", () => {
   });
 
   it("preserva o id da música selecionada no formato legado", () => {
-    const result = parseJaImport(`[Geral]\n1=item_music\n[item_music]\ntipo=musica\nmusica=42\nsubtipo=ja\nitem=Louvor\n`)!;
+    const result = parseJaImport(
+      `[Geral]\n1=item_music\n[item_music]\ntipo=musica\nmusica=42\nsubtipo=ja\nitem=Louvor\n`
+    )!;
     expect(result[0].items[0].id_music).toBe(42);
     expect(result[0].items[0].musica).toBe(42);
   });
@@ -116,7 +123,7 @@ describe("parseJaImport", () => {
             overlay_action: "activate",
           },
         ],
-      }),
+      })
     );
     expect(parsed?.items[0]).toMatchObject({
       ref_id: "media-42",
@@ -124,5 +131,75 @@ describe("parseJaImport", () => {
       linked_overlay_id: "overlay-1",
       overlay_action: "activate",
     });
+  });
+
+  it("preserva o modo do horário no roundtrip JSON e recalcula a continuação", () => {
+    const library = useLiturgyLibrary();
+    const parsed = library.parseImport(
+      JSON.stringify({
+        name: "Culto",
+        items: [
+          {
+            id: "manual",
+            tipo: "anotacao",
+            item: "Início",
+            time: "09:00",
+            time_mode: "manual",
+            duration: 5,
+          },
+          { id: "auto", tipo: "anotacao", item: "Continuação", time: "09:05", time_mode: "auto" },
+        ],
+      })
+    )!;
+    const persisted = agendaParaPersistir(parsed.items);
+    const reimported = library.parseImport(
+      JSON.stringify({ name: parsed.name, items: persisted })
+    )!;
+    expect(reimported.items[0]).toMatchObject({ time: "09:00", time_mode: "manual" });
+    expect(reimported.items[1]).toMatchObject({ time: "", time_mode: "auto" });
+    reimported.items[0].duration = 15;
+    expect(prepararAgenda(reimported.items)[1].time).toBe("09:15");
+  });
+
+  it("salva na biblioteca somente a hora manual e recupera os modos", async () => {
+    const library = useLiturgyLibrary();
+    const parsed = library.parseImport(
+      JSON.stringify({
+        name: "Culto",
+        items: [
+          { id: "manual", time: "09:00", time_mode: "manual", duration: 5 },
+          { id: "auto", time_mode: "auto" },
+        ],
+      })
+    )!;
+    const put = vi.spyOn(DocStore, "put").mockResolvedValue(undefined);
+    const document = await library.save({ name: parsed.name, items: prepararAgenda(parsed.items) });
+    expect(put).toHaveBeenCalledOnce();
+    expect(document.items[0]).toMatchObject({ time: "09:00", time_mode: "manual" });
+    expect(document.items[1]).toMatchObject({ time: "", time_mode: "auto" });
+    vi.spyOn(DocStore, "get").mockResolvedValue(
+      JSON.parse(JSON.stringify(document)) as LiturgyLibraryItem
+    );
+    const loaded = (await library.get(document.id))!;
+    loaded.items[0].duration = 10;
+    expect(prepararAgenda(loaded.items)[1].time).toBe("09:10");
+  });
+
+  it("valida modo e hora externos sem apagar uma âncora legada válida", () => {
+    const library = useLiturgyLibrary();
+    const parsed = library.parseImport(
+      JSON.stringify({
+        name: "Culto",
+        items: [
+          { id: "legacy", time: "19:00" },
+          { id: "invalid", time: "25:00", time_mode: { manual: true } },
+        ],
+      })
+    )!;
+    expect(parsed.items[0].time).toBe("19:00");
+    expect(parsed.items[0].time_mode).toBeUndefined();
+    expect(parsed.items[1].time).toBe("");
+    expect(parsed.items[1].time_mode).toBeUndefined();
+    expect(prepararAgenda(parsed.items)[0]).toMatchObject({ time: "19:00", time_mode: "manual" });
   });
 });

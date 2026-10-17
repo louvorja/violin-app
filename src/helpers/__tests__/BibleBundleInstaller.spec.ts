@@ -3,8 +3,8 @@
  * checagem de "já instalada" olha só o disco: cada requisição a mais na abertura
  * de uma tela bíblica é o que estourou a cota da API.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import JSZip from "jszip";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { zipWithManifest, useTestBundleWorker } from "./fixtures/bundle";
 
 const { rows, seeded, events, generalBundle, fetchWithTimeout } = vi.hoisted(() => ({
   rows: new Map<string, unknown>(),
@@ -47,47 +47,26 @@ vi.mock("@/config/Api", () => ({
   API_TOKEN: "t",
   API_URL_FALLBACK: "",
   API_URL_FALLBACK_TOKEN: "",
+  apiTokenHeaders: (token: string) => (token ? { "Api-Token": token } : {}),
 }));
 
 // A semântica de instalação (um capítulo por vez e marker por último) não
 // depende do browser Worker; a ponte Worker é coberta separadamente.
-vi.mock("@/helpers/BundleExtraction", async () => {
-  const JSZip = (await import("jszip")).default;
-  return {
-    extractBundleEntries: async (
-      buffer: ArrayBuffer,
-      options: { onEntry: (entry: { key: string; data: unknown; current: number; total: number }) => unknown }
-    ) => {
-      const zip = await JSZip.loadAsync(buffer);
-      const paths = Object.keys(zip.files).filter(
-        (path) => !zip.files[path].dir && /^bible_\d+_\d+_\d+\.json$/.test(path.split("/").at(-1) || "")
-      );
-      for (let index = 0; index < paths.length; index++) {
-        const path = paths[index];
-        await options.onEntry({
-          key: path.split("/").at(-1)!.replace(/\.json$/, ""),
-          data: JSON.parse(await zip.files[path].async("text")),
-          current: index + 1,
-          total: paths.length,
-        });
-      }
-    },
-  };
-});
 
 import BibleBundleInstaller from "@/helpers/BibleBundleInstaller";
 
 async function zipOf(files: Record<string, unknown>): Promise<ArrayBuffer> {
-  const zip = new JSZip();
-  for (const [name, data] of Object.entries(files)) zip.file(name, JSON.stringify(data));
-  return zip.generateAsync({ type: "arraybuffer" });
+  return zipWithManifest(files, "bible");
 }
 
 function respondWith(buffer: ArrayBuffer) {
   fetchWithTimeout.mockResolvedValue(new Response(buffer, { status: 200 }));
 }
 
+afterEach(() => vi.unstubAllGlobals());
+
 beforeEach(() => {
+  useTestBundleWorker();
   rows.clear();
   seeded.length = 0;
   events.length = 0;
@@ -101,7 +80,7 @@ describe("BibleBundleInstaller.isInstalled", () => {
   });
 
   it("é verdadeiro depois de instalar, sem tocar na rede", async () => {
-    respondWith(await zipOf({ "bible_1_1_1.json": { v: 1 } }));
+    respondWith(await zipOf({ "bible_1_1_1.json": { 1: "Texto" } }));
     await BibleBundleInstaller.install();
     fetchWithTimeout.mockClear();
 
@@ -127,10 +106,8 @@ describe("BibleBundleInstaller.install", () => {
   it("grava só capítulos bíblicos, um a um, e o marcador por último", async () => {
     respondWith(
       await zipOf({
-        "bible_1_1_1.json": { v: 1 },
-        "bible_9_24_51.json": { v: 2 },
-        "music_1.json": { id_music: 1 },
-        "config.json": { version_number: 185 },
+        "bible_1_1_1.json": { 1: "Texto" },
+        "bible_9_24_51.json": { 1: "Outro texto" },
       })
     );
 
@@ -142,17 +119,18 @@ describe("BibleBundleInstaller.install", () => {
   });
 
   it("baixa o ZIP uma única vez, da rota dedicada", async () => {
-    respondWith(await zipOf({ "bible_1_1_1.json": { v: 1 } }));
+    respondWith(await zipOf({ "bible_1_1_1.json": { 1: "Texto" } }));
     await BibleBundleInstaller.install();
 
     expect(fetchWithTimeout).toHaveBeenCalledTimes(1);
-    expect(fetchWithTimeout.mock.calls[0][0]).toBe("https://api.test/db/bible-bundle");
+    expect(fetchWithTimeout.mock.calls[0][1]).toMatchObject({ cache: "no-store" });
+    expect(fetchWithTimeout.mock.calls[0][0]).toBe("https://api.test/db/bible-bundle?format=1");
   });
 
   it("recusa um ZIP sem capítulos e não grava o marcador", async () => {
     respondWith(await zipOf({ "music_1.json": { id_music: 1 } }));
 
-    await expect(BibleBundleInstaller.install()).rejects.toThrow(/nenhum capítulo/);
+    await expect(BibleBundleInstaller.install()).rejects.toThrow(/incompleto/);
     expect(await BibleBundleInstaller.isInstalled()).toBe(false);
   });
 
@@ -165,7 +143,9 @@ describe("BibleBundleInstaller.install", () => {
   });
 
   it("cancelado no meio, deixa sem marcador para recomeçar na próxima abertura", async () => {
-    respondWith(await zipOf({ "bible_1_1_1.json": { v: 1 }, "bible_1_1_2.json": { v: 2 } }));
+    respondWith(
+      await zipOf({ "bible_1_1_1.json": { 1: "Texto" }, "bible_1_1_2.json": { 1: "Outro texto" } })
+    );
     const controller = new AbortController();
     const { default: Database } = await import("@/helpers/Database");
     vi.mocked(Database.seed).mockImplementationOnce(async (key: string) => {

@@ -13,7 +13,7 @@ const workerDiagnostics = createWorkerDiagnostics();
 
 // Apenas as origens do acervo oficial. A base configurada também é aceita
 // pelo validador; origens recebidas do renderer nunca entram nesta lista.
-const TRUSTED_MEDIA_ORIGINS = ["https://cdn.louvorja.com", "https://api.louvorja.com.br"];
+const TRUSTED_MEDIA_ORIGINS = ["https://*.louvorja.com.br"];
 
 let _activeQueue = null;
 let _startingDownload = false;

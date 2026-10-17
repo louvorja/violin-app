@@ -20,6 +20,7 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
+    setupFiles: ["./vitest.setup.js"],
     teardownTimeout: 5000,
     pool: needsVmThreads ? "vmThreads" : "forks",
     exclude: ["**/node_modules/**", "**/e2e/**"],

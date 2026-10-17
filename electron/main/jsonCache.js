@@ -122,12 +122,12 @@ const _inflight = new Map();
  * @param {object} headers        Headers para a requisição (Api-Token, etc.)
  * @returns {Promise<{body: Buffer|null, contentType: string, fromCache: boolean, status: number}>}
  */
-async function fetchJson(relPath, remoteBaseUrl, headers = {}) {
+async function fetchJson(relPath, remoteBaseUrl, headers = {}, { fresh = false } = {}) {
   let localPath = safeLocalPath(relPath);
-  const requestKey = localPath;
+  const requestKey = `${localPath}|${fresh ? "fresh" : "cached"}`;
 
   // Cache válido — retornar do disco (sem deduplicação necessária)
-  if (await isCacheValid(localPath)) {
+  if (!fresh && await isCacheValid(localPath)) {
     console.log(`[jsonCache] HIT ${relPath}`);
     return {
       body: await fs.readFile(localPath),
@@ -138,8 +138,8 @@ async function fetchJson(relPath, remoteBaseUrl, headers = {}) {
   }
 
   // Deduplicação: se já tem request em andamento para este path, reutiliza
-  if (_inflight.has(localPath)) {
-    return _inflight.get(localPath);
+  if (_inflight.has(requestKey)) {
+    return _inflight.get(requestKey);
   }
 
   const promise = (async () => {
@@ -147,7 +147,7 @@ async function fetchJson(relPath, remoteBaseUrl, headers = {}) {
     try {
       // Remover barra inicial duplicada entre base e relPath
       const sep = relPath.startsWith("/") ? "" : "/";
-      const remoteUrl = remoteBaseUrl + sep + relPath;
+      const remoteUrl = remoteBaseUrl + sep + relPath + (fresh ? `?_=${Date.now()}` : "");
       console.log(`[jsonCache] MISS ${relPath} — baixando: ${remoteUrl}`);
       const response = await httpRequest(remoteUrl, headers);
       localPath = safeLocalPath(relPath);
@@ -264,6 +264,36 @@ async function clearCache() {
   }
 }
 
+/** Arquivo, dentro do cache, que guarda a versão do app que o preencheu. */
+const VERSION_MARKER = ".app-version";
+
+/**
+ * Expira os JSONs ao atualizar o app, preservando-os como fallback offline.
+ * A próxima leitura tenta a rede antes do disco, sem apagar um banco utilizável.
+ */
+async function expireOnAppUpdate(appVersion) {
+  const dir = CACHE_DIR();
+  const marker = path.join(dir, VERSION_MARKER);
+  let stored = null;
+  try { stored = (await fs.readFile(marker, "utf8")).trim(); } catch { /* primeira versão */ }
+  if (stored === appVersion) return { expired: 0 };
+  await fs.ensureDir(dir);
+  let expired = 0;
+  async function expireDirectory(directory) {
+    for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
+      const file = path.join(directory, entry.name);
+      if (entry.isDirectory()) await expireDirectory(file);
+      else if (entry.isFile() && entry.name.endsWith(".json")) {
+        await fs.utimes(file, new Date(0), new Date(0));
+        expired++;
+      }
+    }
+  }
+  await expireDirectory(dir);
+  await fs.writeFile(marker, String(appVersion));
+  return { expired };
+}
+
 /**
  * Retorna o caminho do diretório de cache (debug / módulo update).
  * @returns {string}
@@ -272,4 +302,4 @@ function dir() {
   return CACHE_DIR();
 }
 
-module.exports = { fetchJson, clearCache, dir, safeLocalPath };
+module.exports = { fetchJson, clearCache, dir, safeLocalPath, expireOnAppUpdate };

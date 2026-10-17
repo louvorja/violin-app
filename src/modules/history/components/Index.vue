@@ -20,7 +20,12 @@
     </div>
 
     <div v-else class="music-list" role="list">
-      <div v-for="item in history" :key="item.id_music" class="music-list-item" role="listitem">
+      <div
+        v-for="item in history"
+        :key="item.id_music"
+        class="music-list-item lj-music-row"
+        role="listitem"
+      >
         <div class="music-list-item-info">
           <span class="music-list-item-name">{{ musicTitle(item) }}</span>
           <span class="music-list-item-meta">{{ relativeDate(item.opened_at) }}</span>
@@ -132,11 +137,6 @@ function close() {}
   min-height: 36px;
   padding: var(--lj-space-3) var(--lj-space-5);
   border-bottom: 1px solid var(--lj-surface-divider);
-  transition: background var(--lj-transition-fast);
-}
-
-.music-list-item:hover {
-  background: var(--lj-surface-bg-hover);
 }
 
 .music-list-item-info {

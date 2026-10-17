@@ -65,6 +65,12 @@
     <p v-if="error" class="col-alert" role="alert">{{ error }}</p>
 
     <div class="collections-scroll" @scroll="onScroll">
+      <LjAlert
+        v-if="offlineLibrary.active.value"
+        variant="info"
+        :text="t('shell.offline_albums_only')"
+        class="col-offline"
+      />
       <div class="col-search">
         <LjInput
           v-model="search"
@@ -107,7 +113,8 @@ import { useI18n } from "vue-i18n";
 import { useViewport } from "@/composables/useViewport";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
-import { LjButton, LjIcon, LjInput, LjMenu, LjProgress, LjSpinner } from "@/components/ui";
+import { LjAlert, LjButton, LjIcon, LjInput, LjMenu, LjProgress, LjSpinner } from "@/components/ui";
+import { useOfflineLibrary } from "@/composables/useOfflineLibrary";
 import { ICONS } from "@/config/Icons";
 import Strings from "@/helpers/Strings";
 import Database from "@/helpers/Database";
@@ -118,7 +125,8 @@ import { useShell } from "@/composables/useShell";
 import { useDisabledAlbums } from "@/composables/useMusicCatalog";
 import { isAlbumEnabled, albumYear } from "@root/config/musicCatalog.mjs";
 
-const { locale } = useI18n();
+const { t, locale } = useI18n();
+const offlineLibrary = useOfflineLibrary(() => locale.value);
 const { width } = useViewport();
 const shell = useShell();
 
@@ -133,7 +141,9 @@ const disabledAlbums = useDisabledAlbums();
 const albums = computed(() => {
   const disabled = disabledAlbums.value;
   const activeOnly = (list) =>
-    (list || []).filter((album) => isAlbumEnabled(album.id_album, disabled));
+    (list || []).filter(
+      (album) => isAlbumEnabled(album.id_album, disabled) && offlineLibrary.hasAlbum(album.id_album)
+    );
 
   if (!categories.value) return [];
   if (!id_category.value) {

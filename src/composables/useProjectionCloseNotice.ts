@@ -17,27 +17,43 @@ import Broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 
 export function useProjectionCloseNotice(feature: string | (() => string)): void {
-  function avisar(): void {
-    const id = typeof feature === "function" ? feature() : feature;
+  const idAtual = (): string => (typeof feature === "function" ? feature() : feature);
+
+  /**
+   * `definitivo` só no ESC: ali a janela vai mesmo fechar. `beforeunload` e
+   * `pagehide` também disparam num F5, e quem recebe precisa esperar a janela
+   * dizer se voltou.
+   */
+  function avisar(definitivo: boolean): void {
+    const id = idAtual();
     if (!id) return;
-    Broadcast.send(BROADCAST_TYPE.PROJECTION_CLOSED, { feature: id });
+    Broadcast.send(BROADCAST_TYPE.PROJECTION_CLOSED, {
+      feature: id,
+      ...(definitivo ? { definitive: true } : {}),
+    });
   }
 
+  const aoDescarregar = (): void => avisar(false);
+
   function aoTeclar(e: KeyboardEvent): void {
-    if (e.key === "Escape") avisar();
+    if (e.key === "Escape") avisar(true);
   }
 
   onMounted(() => {
     window.addEventListener("keydown", aoTeclar);
     // Os dois eventos: o Chromium pula `beforeunload` em alguns fechamentos de
     // janela e `pagehide` em outros.
-    window.addEventListener("beforeunload", avisar);
-    window.addEventListener("pagehide", avisar);
+    window.addEventListener("beforeunload", aoDescarregar);
+    window.addEventListener("pagehide", aoDescarregar);
+    // O contrário do aviso de fechamento: uma janela que recarregou volta
+    // dizendo que voltou, e a principal não apaga o que ela vai reler.
+    const id = idAtual();
+    if (id) Broadcast.send(BROADCAST_TYPE.PROJECTION_OPENED, { feature: id });
   });
 
   onUnmounted(() => {
     window.removeEventListener("keydown", aoTeclar);
-    window.removeEventListener("beforeunload", avisar);
-    window.removeEventListener("pagehide", avisar);
+    window.removeEventListener("beforeunload", aoDescarregar);
+    window.removeEventListener("pagehide", aoDescarregar);
   });
 }

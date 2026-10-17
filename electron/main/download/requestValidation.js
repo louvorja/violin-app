@@ -114,17 +114,25 @@ function validateRemoteUrl(value, remote, filesBaseUrl, allowedRemoteOrigins) {
   safeUrlPath(value);
   const base = parseTrustedBase(filesBaseUrl, "filesBaseUrl");
   const allowed = new Set([base.origin]);
+  const allowedSuffixes = [];
   if (allowedRemoteOrigins !== undefined) {
     if (!Array.isArray(allowedRemoteOrigins) || allowedRemoteOrigins.length > 16) {
       invalid("allowedRemoteOrigins inválida");
     }
     for (const origin of allowedRemoteOrigins) {
+      const wildcard = typeof origin === "string" ? /^https:\/\/\*\.([a-z0-9-]+(?:\.[a-z0-9-]+)+)$/i.exec(origin) : null;
+      if (wildcard) {
+        allowedSuffixes.push(`.${wildcard[1].toLowerCase()}`);
+        continue;
+      }
       const trusted = parseTrustedBase(origin, "allowedRemoteOrigins");
       if (trusted.href !== `${trusted.origin}/`) invalid("allowedRemoteOrigins inválida");
       allowed.add(trusted.origin);
     }
   }
-  if (!allowed.has(url.origin)) invalid("remoteUrl usa origem não confiável");
+  const viaWildcard =
+    url.protocol === "https:" && !url.port && allowedSuffixes.some((suffix) => url.hostname.endsWith(suffix));
+  if (!allowed.has(url.origin) && !viaWildcard) invalid("remoteUrl usa origem não confiável");
   if (url.protocol !== "https:" && url.origin !== base.origin) invalid("remoteUrl exige HTTPS");
 
   let pathname;

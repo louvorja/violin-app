@@ -68,6 +68,27 @@ async function chooseVersion(page, label) {
   await expect(page.locator("#listVerse_1")).toContainText(`${label}:`);
 }
 
+test("teclado com alvo window/document não quebra a busca da Bíblia", async ({ page }) => {
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await start(page);
+  for (const target of ["window", "document"]) {
+    await page.evaluate((target) => {
+      (target === "window" ? window : document).dispatchEvent(
+        new KeyboardEvent("keydown", { key: "g", bubbles: true, cancelable: true })
+      );
+    }, target);
+    expect(errors.filter((message) => message.includes("closest"))).toEqual([]);
+    await expect(page.locator(".quicknav-step.current")).toContainText("Capítulo");
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".quicknav-card")).toBeHidden();
+  }
+  // O mesmo atalho continua respeitando o campo de seleção de versões.
+  await page.locator('.bible-header [role="combobox"]').focus();
+  await page.keyboard.press("g");
+  await expect(page.locator(".quicknav-card")).toBeHidden();
+});
+
 test("busca rápida mantém capítulo 12 mesmo com pausa entre os dígitos", async ({ page }) => {
   await start(page);
   await page.locator("#listBook_1").focus();

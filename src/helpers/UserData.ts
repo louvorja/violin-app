@@ -133,7 +133,16 @@ export default {
     _saveTimer = setTimeout(() => {
       $dev.write("salvando dados");
       $storage.set("user_data", useUserDataStore().$state);
+      _saveTimer = null;
     }, 300);
+  },
+
+  /** Finaliza apenas o save web pendente antes da recarga manual da PWA. */
+  flushPendingWebSave(): void {
+    if (Platform.isDesktop || _saveTimer === null) return;
+    clearTimeout(_saveTimer);
+    $storage.set("user_data", useUserDataStore().$state);
+    _saveTimer = null;
   },
 
   /**

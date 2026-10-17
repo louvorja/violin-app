@@ -64,9 +64,12 @@ jobs:
         if: matrix.platform == 'mac'
         shell: bash
         run: |
-          xcodebuild -version
+          # Guarda a saída antes de filtrar: com `pipefail`, um awk que sai cedo
+          # fecha o pipe e o xcodebuild morre com "Broken pipe" (exit 134).
+          xcode_info="$(xcodebuild -version)"
+          echo "$xcode_info"
           actool --version
-          version="$(xcodebuild -version | awk '/^Xcode / { print $2; exit }')"
+          version="$(awk '/^Xcode / { print $2 }' <<<"$xcode_info")"
           if [[ -z "$version" || "${version%%.*}" -lt 26 ]]; then
             echo "::error::O ícone .icon requer Xcode 26 ou superior."
             exit 1

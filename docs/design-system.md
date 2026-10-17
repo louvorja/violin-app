@@ -695,8 +695,11 @@ Veja todos lado a lado, nos 10 temas, na rota **`/ui`**.
 
 Foco preso, navegação por teclado, ARIA e portal:
 
-`LjSelect` · `LjCombobox` · `LjDialog` · `LjMenu` · `LjTooltip` · `LjTabs` ·
-`LjSlider` · `LjPopover` · `LjAccordion` · `LjDrawer`
+`LjSelect` · `LjCombobox` · `LjDialog` · `LjMenu` · `LjContextMenu` · `LjTooltip` ·
+`LjTabs` · `LjSlider` · `LjPopover` · `LjAccordion` · `LjDrawer`
+
+`LjContextMenu` é o `LjMenu` aberto pelo clique direito (ou pela tecla de menu)
+sobre o elemento do slot: mesma lista de itens, mesmo desenho.
 
 ```ts
 import { LjButton, LjSelect, LjDialog } from "@/components/ui";
@@ -727,6 +730,18 @@ Invariantes:
 - **um anel de foco**: `--lj-ui-focus`;
 - **superfície flutuante = borda + sombra** (`.lj-ui-float`), nunca sombra
   difusa sozinha — é isso que dá aparência Material a menus e dropdowns.
+
+### Linhas de seleção de músicas
+
+Use `.lj-music-row` em cada linha de música, tanto em tabelas quanto em listas.
+O estado compartilhado em `ui.css` usa um fundo com 10% de `--lj-ui-accent` sobre
+`--lj-surface-bg` e uma faixa interna de 3px na mesma cor de acento, sem deslocar
+o conteúdo. Ele aparece ao passar o mouse, ao focar uma ação pelo teclado e
+enquanto o menu da linha estiver aberto, inclusive quando renderizado em portal.
+No toque, exibir os atalhos de todas as músicas não destaca todas as linhas.
+Seleção persistente no hinário e indicação de reprodução na playlist continuam
+com seus próprios marcadores. A transição respeita a preferência de movimento
+reduzido do sistema.
 
 ### Acento: por que não usar `--lj-navy` direto
 

@@ -176,6 +176,55 @@ describe("Storage.removeAll — sessionStorage", () => {
 // storage() accessor
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Sem backend: o contexto simplesmente não tem os dois storages
+// ---------------------------------------------------------------------------
+
+describe("Storage — quando o backend web não existe", () => {
+  beforeEach(() => {
+    /*
+     * É o estado real que gerava os erros não tratados: o `localStorage`
+     * ausente derrubava o `setItem` dentro do `setTimeout` do debounce do
+     * UserData.
+     *
+     * O `undefined` é posto AQUI de propósito: só o `unstubAllGlobals` devolve
+     * o `localStorage` real, e ele existe no jsdom do CI e não existe nesta
+     * máquina — o teste passava de um lado e falhava do outro. Determinístico
+     * dos dois lados, como o teste do `sessionStorage` logo abaixo.
+     */
+    vi.unstubAllGlobals();
+    vi.stubGlobal("sessionStorage", sessionMock);
+    vi.stubGlobal("localStorage", undefined);
+  });
+
+  it("o caso sob teste é real: o contexto não tem localStorage", () => {
+    expect(typeof localStorage).toBe("undefined");
+  });
+
+  it("set de preferência vira no-op, não exceção", () => {
+    expect(() => Storage.set("preferencia", "valor")).not.toThrow();
+  });
+
+  it("get devolve o padrão", () => {
+    expect(Storage.get("preferencia", "padrao")).toBe("padrao");
+  });
+
+  it("remove e removeAll também não quebram", () => {
+    expect(() => Storage.remove("preferencia")).not.toThrow();
+    expect(() => Storage.removeAll("prefixo")).not.toThrow();
+  });
+
+  it("o caminho de sessão cai da mesma forma", () => {
+    /* O jsdom TEM sessionStorage, então aqui ele é removido de propósito. */
+    vi.stubGlobal("sessionStorage", undefined);
+
+    expect(() => Storage.set("sessao", "valor", "session")).not.toThrow();
+    expect(Storage.get("sessao", "padrao", "session")).toBe("padrao");
+    expect(() => Storage.remove("sessao", "session")).not.toThrow();
+    expect(() => Storage.removeAll("db", "session")).not.toThrow();
+  });
+});
+
 describe("Storage.storage()", () => {
   it("retorna localStorage para type=local", () => {
     expect(Storage.storage("local")).toBe(localStorage);

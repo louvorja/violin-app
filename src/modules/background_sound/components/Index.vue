@@ -80,6 +80,17 @@
               />
             </div>
             <div class="bgs-audio-card-actions">
+              <!-- Estrela = som padrão (o ponteiro único que o Apresentador inicia). -->
+              <LjButton
+                size="sm"
+                variant="ghost"
+                icon-only
+                :icon="isDefault(item.file.id) ? ICONS.UI.STAR : ICONS.UI.STAR_OUTLINE"
+                :aria-label="isDefault(item.file.id) ? tm('unset_default') : tm('set_default')"
+                class="bgs-audio-card-star"
+                :class="{ 'is-default': isDefault(item.file.id) }"
+                @click.stop="toggleDefault(item.file.id)"
+              />
               <LjButton
                 size="sm"
                 variant="ghost"
@@ -201,6 +212,8 @@
           </LjButton>
         </div>
 
+        <LjCheckbox v-model="editFileForm.isDefault" :label="tm('default_checkbox')" />
+
         <template #footer>
           <LjButton size="sm" @click="cancelEditFile">{{ tm("cancel") }}</LjButton>
           <LjButton size="sm" variant="primary" @click="saveFileEdit">{{ tm("save") }}</LjButton>
@@ -228,12 +241,30 @@ import ModuleContainer from "@/components/ModuleContainer.vue";
 import { useBackgroundSound } from "@/composables/useBackgroundSound";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
-import $appdata from "@/helpers/AppData";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
 import Alert from "@/helpers/Alert";
+import {
+  classifyLocalEnvironmentError,
+  type LocalEnvironmentErrorKind,
+} from "@/helpers/LocalEnvironmentErrors";
+import {
+  notifyLocalEnvironmentFailure,
+  reportLocalFileFailure,
+} from "@/helpers/LocalFailureNotice";
+import { localPathOf } from "@/helpers/FilePath";
+import { resolveBackgroundSoundPath } from "@/helpers/BackgroundSoundPath";
 import { ICONS } from "@/config/Icons";
-import { LjButton, LjDialog, LjEmpty, LjField, LjIcon, LjInput, LjSelect } from "@/components/ui";
+import {
+  LjButton,
+  LjCheckbox,
+  LjDialog,
+  LjEmpty,
+  LjField,
+  LjIcon,
+  LjInput,
+  LjSelect,
+} from "@/components/ui";
 import { AUDIO_EXT } from "@/constants/FileTypes";
 import CategoryManagerDialog, { CategoryFileData } from "@/components/CategoryManagerDialog.vue";
 import $idb from "@/helpers/IndexedDB";
@@ -365,11 +396,13 @@ const editFileForm = ref<{
   fileName: string;
   newFile: File | null;
   categoryId: string;
+  isDefault: boolean;
 }>({
   name: "",
   fileName: "",
   newFile: null,
   categoryId: "",
+  isDefault: false,
 });
 const editFileInput = ref<HTMLInputElement | null>(null);
 
@@ -401,7 +434,12 @@ async function loadSettings(): Promise<void> {
 }
 
 async function saveSettings(): Promise<void> {
-  await saveSetting({ id: SETTINGS_ID, ...cachedSettings });
+  /*
+   * `saveSetting` é `$idb.put` (substituição, não merge): o `autoPause` vem do
+   * player e não do cache local, senão um ajuste de fade daqui regravaria por
+   * cima da opção que o operador acabou de ligar na ribbon.
+   */
+  await saveSetting({ id: SETTINGS_ID, ...cachedSettings, autoPause: bg.autoPause.value });
   bg.fadeInMs.value = cachedSettings.fadeIn;
   bg.fadeOutMs.value = cachedSettings.fadeOut;
 }
@@ -417,13 +455,6 @@ const fadeOutDuration = computed({
   get: () => cachedSettings.fadeOut,
   set: (v: number) => {
     cachedSettings.fadeOut = v;
-    saveSettings();
-  },
-});
-const autoPause = computed({
-  get: () => cachedSettings.autoPause,
-  set: (v: boolean) => {
-    cachedSettings.autoPause = v;
     saveSettings();
   },
 });
@@ -647,12 +678,7 @@ async function addAudioFiles(categoryId: string): Promise<void> {
   if (pendingDropFiles.value.length) {
     const files = [...pendingDropFiles.value];
     pendingDropFiles.value = [];
-    for (const f of files) {
-      await addFileRecord(f, categoryId);
-    }
-    libraryFiles.value = await loadLibrary();
-    rebuildAllBlobUrls(libraryFiles.value);
-    selectAllCategoriesAndUncategorized();
+    await addFiles(files, categoryId);
     return;
   }
 
@@ -660,7 +686,7 @@ async function addAudioFiles(categoryId: string): Promise<void> {
 }
 
 async function addFileRecord(f: File, categoryId: string): Promise<BgSoundFile> {
-  const filePath = (f as any).path;
+  const filePath = localPathOf(f);
   const fileId = crypto.randomUUID();
   const bgFile: BgSoundFile = {
     id: fileId,
@@ -678,18 +704,52 @@ async function addFileRecord(f: File, categoryId: string): Promise<BgSoundFile> 
   return bgFile;
 }
 
-async function onAudioFilesSelected(e: Event): Promise<void> {
-  const input = e.target as HTMLInputElement;
-  if (!input.files?.length) return;
-  for (const f of Array.from(input.files)) {
-    await addFileRecord(f, pendingCategoryId!);
+/**
+ * Adiciona os arquivos um a um. Um arquivo ilegível (aberto em outro programa,
+ * movido depois de escolhido, só-online no OneDrive) não derruba o lote: os
+ * demais entram e o operador recebe a lista do que ficou de fora.
+ */
+async function addFiles(files: File[], categoryId: string): Promise<void> {
+  const localFailures = new Map<LocalEnvironmentErrorKind, string[]>();
+  const unexpectedFailures: string[] = [];
+
+  for (const f of files) {
+    try {
+      await addFileRecord(f, categoryId);
+    } catch (error) {
+      const kind = classifyLocalEnvironmentError(error);
+      if (kind) {
+        console.warn("[background_sound] arquivo não adicionado:", f.name, error);
+        localFailures.set(kind, [...(localFailures.get(kind) ?? []), f.name]);
+      } else {
+        console.error("[background_sound] falha ao adicionar arquivo:", error);
+        unexpectedFailures.push(f.name);
+      }
+    }
   }
-  input.value = "";
+
+  // Sempre recarrega: os arquivos que entraram antes de uma falha precisam aparecer.
   libraryFiles.value = await loadLibrary();
   rebuildAllBlobUrls(libraryFiles.value);
   // Garante que o chip "Sem categoria" fique ativo quando o arquivo for
   // adicionado sem categoria — senão ele não aparece na lista.
   selectAllCategoriesAndUncategorized();
+
+  for (const [kind, names] of localFailures) notifyLocalEnvironmentFailure(kind, names);
+  if (unexpectedFailures.length) {
+    Alert.error({
+      title: tm("add_audio"),
+      text: tm("add_failed_unexpected", { names: unexpectedFailures.join(", ") }),
+    });
+  }
+}
+
+async function onAudioFilesSelected(e: Event): Promise<void> {
+  const input = e.target as HTMLInputElement;
+  if (!input.files?.length) return;
+  const files = Array.from(input.files);
+  input.value = "";
+  await addFiles(files, pendingCategoryId!);
 }
 
 async function removeFile(categoryId: string, file: MediaFile): Promise<void> {
@@ -702,8 +762,24 @@ async function removeFile(categoryId: string, file: MediaFile): Promise<void> {
 async function doRemove(fileId: string): Promise<void> {
   if (bg.currentFile.value?.id === fileId) bg.stop();
   await deleteLibraryFile(fileId);
+  const defaultKey = KEYS.MODULES.BACKGROUND_SOUND.DEFAULT_ID;
+  if (String($userdata.get(defaultKey, "")) === fileId) $userdata.set(defaultKey, "");
   libraryFiles.value = await loadLibrary();
   rebuildAllBlobUrls(libraryFiles.value);
+}
+
+/** Som marcado como padrão (user_data) — mesma chave do edit e da ribbon. */
+const defaultSoundId = computed(() =>
+  String($userdata.get(KEYS.MODULES.BACKGROUND_SOUND.DEFAULT_ID, "") ?? "")
+);
+
+function isDefault(fileId: string): boolean {
+  return !!fileId && defaultSoundId.value === fileId;
+}
+
+/** Estrela alterna: marcar este (substitui o anterior) ou desmarcar (se é o atual). */
+function toggleDefault(fileId: string): void {
+  $userdata.set(KEYS.MODULES.BACKGROUND_SOUND.DEFAULT_ID, isDefault(fileId) ? "" : fileId);
 }
 
 function openEditFile(item: { file: MediaFile; categoryId: string }): void {
@@ -713,6 +789,7 @@ function openEditFile(item: { file: MediaFile; categoryId: string }): void {
     fileName: item.file.fileName,
     newFile: null,
     categoryId: item.categoryId,
+    isDefault: String($userdata.get(KEYS.MODULES.BACKGROUND_SOUND.DEFAULT_ID, "")) === item.file.id,
   };
   showEditFileDialog.value = true;
 }
@@ -733,21 +810,33 @@ async function saveFileEdit(): Promise<void> {
   const storedFile = libraryFiles.value.find((f) => f.id === originalFile.id);
   if (!storedFile) return;
 
+  // Lê o arquivo novo antes de tocar no registro: se falhar, a edição inteira
+  // fica como estava e o diálogo continua aberto para escolher outro arquivo.
+  const newFile = editFileForm.value.newFile;
+  const newFilePath = newFile ? localPathOf(newFile) : "";
+  let newData: { data: ArrayBuffer; mime: string } | null = null;
+  if (newFile && !newFilePath) {
+    try {
+      newData = await readFileData(newFile);
+    } catch (error) {
+      if (!reportLocalFileFailure(error, [newFile.name])) throw error;
+      return;
+    }
+  }
+
   storedFile.name = editFileForm.value.name.trim();
   storedFile.categoryId = editFileForm.value.categoryId;
 
-  if (editFileForm.value.newFile) {
-    const filePath = (editFileForm.value.newFile as any).path;
-    storedFile.fileName = editFileForm.value.newFile.name;
-    if (filePath) {
-      storedFile.path = filePath;
+  if (newFile) {
+    storedFile.fileName = newFile.name;
+    if (newFilePath) {
+      storedFile.path = newFilePath;
       delete storedFile.data;
       storedFile.mime = undefined;
-    } else {
-      const { data, mime } = await readFileData(editFileForm.value.newFile);
-      storedFile.path = URL.createObjectURL(editFileForm.value.newFile);
-      storedFile.data = data;
-      storedFile.mime = mime;
+    } else if (newData) {
+      storedFile.path = URL.createObjectURL(newFile);
+      storedFile.data = newData.data;
+      storedFile.mime = newData.mime;
     }
   }
 
@@ -758,6 +847,17 @@ async function saveFileEdit(): Promise<void> {
   createdObjectUrls.delete(urlKey);
 
   await saveLibraryFile(storedFile);
+
+  // Som padrão = ponteiro único em user_data (marcar este substitui o anterior;
+  // desmarcar só limpa se o ponteiro apontava para este arquivo).
+  const defaultKey = KEYS.MODULES.BACKGROUND_SOUND.DEFAULT_ID;
+  const atual = String($userdata.get(defaultKey, ""));
+  if (editFileForm.value.isDefault) {
+    $userdata.set(defaultKey, storedFile.id);
+  } else if (atual === storedFile.id) {
+    $userdata.set(defaultKey, "");
+  }
+
   libraryFiles.value = await loadLibrary();
   rebuildAllBlobUrls(libraryFiles.value);
   showEditFileDialog.value = false;
@@ -794,7 +894,9 @@ function playFile(file: MediaFile): void {
 }
 
 function resolveFilePath(file: MediaFile): string {
-  if (file.path && !file.path.startsWith("blob:")) return file.path;
+  if (file.path && !file.path.startsWith("blob:")) {
+    return resolveBackgroundSoundPath({ path: file.path });
+  }
   if (file.data && file.mime) {
     const existing = createdObjectUrls.get(file.id);
     if (existing) URL.revokeObjectURL(existing);
@@ -831,6 +933,18 @@ function stop(): void {
 function stopImmediately(): void {
   bg.stop(0);
 }
+
+watch(
+  () => bg.unplayableFile.value,
+  (file) => {
+    if (!file) return;
+    bg.unplayableFile.value = null;
+    Alert.info({
+      title: tm("add_audio"),
+      text: tm("file_not_playable", { name: file.name || file.fileName }),
+    });
+  }
+);
 
 watch(
   () => bg.isPlaying.value,
@@ -887,42 +1001,6 @@ useBroadcastListener(BROADCAST_TYPE.MODULE_RIBBON_ACTION, (payload) => {
     case "manage_categories":
       showManageDialog.value = true;
       break;
-  }
-});
-
-/* ------------------------------------------------------------------ */
-/*  Auto-pause when media player opens                                 */
-/* ------------------------------------------------------------------ */
-
-watch(
-  () => $appdata.get("modules.media.show"),
-  (show) => {
-    if (autoPause.value && show && bg.isPlaying.value) {
-      bg.fadeOut(fadeOutDuration.value, () => bg.pause());
-    }
-  }
-);
-
-// Música tocando (áudio puro ou letra) — cobre openAudio/openLyric,
-// que não abrem o módulo de Mídia.
-watch(
-  () => $appdata.get("modules.media.is_playing"),
-  (playing) => {
-    if (autoPause.value && playing && bg.isPlaying.value) {
-      bg.fadeOut(fadeOutDuration.value, () => bg.pause());
-    }
-  }
-);
-
-useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION, () => {
-  if (autoPause.value && bg.isPlaying.value) {
-    bg.fadeOut(fadeOutDuration.value, () => bg.pause());
-  }
-});
-
-useBroadcastListener(BROADCAST_TYPE.ONLINE_VIDEO_PROJECTION, () => {
-  if (autoPause.value && bg.isPlaying.value) {
-    bg.fadeOut(fadeOutDuration.value, () => bg.pause());
   }
 });
 
@@ -1004,6 +1082,12 @@ onMounted(async () => {
   bg.repeat.value = cachedSettings.repeat;
   bg.fadeInMs.value = cachedSettings.fadeIn;
   bg.fadeOutMs.value = cachedSettings.fadeOut;
+  /*
+   * Os gatilhos do "pausar automaticamente" vivem no composable (e não aqui):
+   * esta aba vai para a faixa KeepAlive de consultas e some do DOM depois de
+   * outras quatro. Aqui só sincroniza o valor lido.
+   */
+  bg.autoPause.value = cachedSettings.autoPause;
   categories.value = await loadCategories();
   libraryFiles.value = await loadLibrary();
   rebuildIconUrls(categories.value);
@@ -1202,6 +1286,10 @@ onBeforeUnmount(() => {
   box-shadow: 0 0 0 2px var(--lj-white-alpha-50);
   border-color: transparent;
 }
+.bgs-audio-card-star.is-default {
+  color: var(--lj-warning);
+}
+
 .bgs-audio-card-body {
   flex: 1;
   display: flex;

@@ -1025,8 +1025,8 @@ onMounted(async () => {
   selectedAvatar.value = localStorage.getItem(KEYS_LS.LIBRAS.AVATAR) || "icaro";
   currentAnchor.value =
     $userdata.get<string>(KEYS.MODULES.LIBRAS.ANCHOR, "bottom-right") || "bottom-right";
-  currentOffsetX.value = $userdata.get<number>(KEYS.MODULES.LIBRAS.OFFSET_X, -20) as number;
-  currentOffsetY.value = $userdata.get<number>(KEYS.MODULES.LIBRAS.OFFSET_Y, -20) as number;
+  currentOffsetX.value = $userdata.get<number>(KEYS.MODULES.LIBRAS.OFFSET_X, 0) as number;
+  currentOffsetY.value = $userdata.get<number>(KEYS.MODULES.LIBRAS.OFFSET_Y, 0) as number;
   currentWidth.value = $userdata.get<number>(KEYS.MODULES.LIBRAS.WIDTH, 450) || 200;
   currentHeight.value = $userdata.get<number>(KEYS.MODULES.LIBRAS.HEIGHT, 400) as number;
   showBorder.value = $userdata.get<boolean>(KEYS.MODULES.LIBRAS.SHOW_BORDER, false) || false;

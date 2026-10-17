@@ -19,9 +19,18 @@ const { OnlineVideoError } = require("./runner.js");
  */
 const YTDLP_BASE = "https://github.com/yt-dlp/yt-dlp/releases/latest/download";
 
+/**
+ * No macOS vai a versão "onedir" (um .zip com o executável e a pasta `_internal`).
+ * O executável único (`yt-dlp_macos`) se desempacota numa pasta temporária nova a
+ * cada execução, e o macOS verifica esses arquivos toda vez: ~11 s antes de fazer
+ * qualquer coisa, em toda chamada. Desempacotado uma vez, ele parte em ~0,4 s — e
+ * resolver um vídeo cai de ~14 s para ~2 s.
+ */
+const YTDLP_MACOS_DIST = { name: "yt-dlp_macos.zip", exe: "yt-dlp_macos" };
+
 const YTDLP_ASSETS = {
-  "darwin-arm64": "yt-dlp_macos",
-  "darwin-x64": "yt-dlp_macos",
+  "darwin-arm64": YTDLP_MACOS_DIST,
+  "darwin-x64": YTDLP_MACOS_DIST,
   "win32-x64": "yt-dlp.exe",
   "win32-arm64": "yt-dlp_arm64.exe",
   "win32-ia32": "yt-dlp_x86.exe",
@@ -178,6 +187,24 @@ function parseSums(text, assetName) {
   return null;
 }
 
+/** Asset do yt-dlp normalizado: `exe` só existe quando ele vem num .zip. */
+function ytdlpAssetOf(entry) {
+  if (!entry) return null;
+  return typeof entry === "string" ? { name: entry, exe: null } : entry;
+}
+
+/** O `ditto` do macOS extrai preservando permissões e links da pasta `_internal`. */
+function dittoUnzip(zip, dest) {
+  return new Promise((resolve, reject) => {
+    execFile("ditto", ["-x", "-k", zip, dest], { timeout: 120_000 }, (err) =>
+      err ? reject(toolError(`Não foi possível extrair o yt-dlp: ${err.message}`)) : resolve()
+    );
+  });
+}
+
+/** A primeira execução de um executável recém-extraído passa pela verificação do macOS. */
+const FIRST_RUN_TIMEOUT_MS = 120_000;
+
 function run(bin, args, { timeout = 15_000, execFileImpl = execFile } = {}) {
   return new Promise((resolve, reject) => {
     execFileImpl(bin, args, { timeout, windowsHide: true }, (err, stdout, stderr) => {
@@ -201,14 +228,20 @@ function createTools(cfg) {
     ytdlpAssets = YTDLP_ASSETS,
     ffmpegAssets = FFMPEG_ASSETS,
     execFileImpl = execFile,
+    unzipImpl = dittoUnzip,
   } = cfg;
 
   const key = `${platform}-${arch}`;
   const exe = platform === "win32" ? ".exe" : "";
-  const ytdlpPath = path.join(binDir, `yt-dlp${exe}`);
+  const ytdlpAsset = ytdlpAssetOf(ytdlpAssets[key]);
+  /** Onde fica a versão desempacotada (macOS); as outras plataformas usam um executável só. */
+  const ytdlpDistDir = path.join(binDir, "yt-dlp-dist");
+  /** O executável único de versões anteriores — sai quando a versão desempacotada entra. */
+  const legacyYtdlpPath = path.join(binDir, `yt-dlp${exe}`);
+  const ytdlpPath = ytdlpAsset?.exe ? path.join(ytdlpDistDir, ytdlpAsset.exe) : legacyYtdlpPath;
   const ffmpegPath = path.join(binDir, `ffmpeg${exe}`);
   const metaPath = path.join(binDir, "tools.json");
-  const supported = Boolean(ytdlpAssets[key] && ffmpegAssets[key]);
+  const supported = Boolean(ytdlpAsset && ffmpegAssets[key]);
 
   let _ensuring = null;
   const _listeners = new Set();
@@ -229,12 +262,13 @@ function createTools(cfg) {
   }
 
   async function installYtdlp({ onProgress, signal }) {
-    const asset = ytdlpAssets[key];
+    const asset = ytdlpAsset;
     const sums = await fetchText(`${ytdlpBase}/SHA2-256SUMS`, { signal });
-    const expected = parseSums(sums, asset);
-    if (!expected) throw toolError(`Sem checksum publicado para ${asset}`);
+    const expected = parseSums(sums, asset.name);
+    if (!expected) throw toolError(`Sem checksum publicado para ${asset.name}`);
+    if (asset.exe) return installYtdlpDist(asset, expected, { onProgress, signal });
 
-    const { tmp, sha256 } = await downloadTo(`${ytdlpBase}/${asset}`, ytdlpPath, {
+    const { tmp, sha256 } = await downloadTo(`${ytdlpBase}/${asset.name}`, ytdlpPath, {
       expectedSha256: expected,
       signal,
       onProgress: (p) => onProgress?.({ tool: "yt-dlp", ...p }),
@@ -250,6 +284,39 @@ function createTools(cfg) {
     } catch (error) {
       await fs.remove(tmp);
       throw error;
+    }
+  }
+
+  /**
+   * Baixa o .zip, extrai numa pasta ao lado e só a põe no lugar depois que o
+   * executável respondeu: um yt-dlp que não sobe nunca substitui o que funciona.
+   */
+  async function installYtdlpDist(asset, expected, { onProgress, signal }) {
+    const { tmp, sha256 } = await downloadTo(`${ytdlpBase}/${asset.name}`, path.join(binDir, asset.name), {
+      expectedSha256: expected,
+      signal,
+      onProgress: (p) => onProgress?.({ tool: "yt-dlp", ...p }),
+    });
+    const staging = `${ytdlpDistDir}.new`;
+    try {
+      await fs.remove(staging);
+      await unzipImpl(tmp, staging);
+      const staged = path.join(staging, asset.exe);
+      await fs.chmod(staged, 0o755);
+      // A primeira execução absorve a verificação do macOS aqui, não no primeiro vídeo.
+      const out = await run(staged, ["--version"], { execFileImpl, timeout: FIRST_RUN_TIMEOUT_MS });
+      const version = out.trim().split(/\s+/)[0];
+      if (!/^\d{4}\.\d{2}\.\d{2}/.test(version)) throw toolError(`Versão inesperada do yt-dlp: ${version}`);
+      await fs.remove(ytdlpDistDir);
+      await fs.move(staging, ytdlpDistDir);
+      await fs.remove(legacyYtdlpPath);
+      await writeMeta({ ytdlp: { version, sha256, installedAt: Date.now() } });
+      return version;
+    } catch (error) {
+      await fs.remove(staging);
+      throw error;
+    } finally {
+      await fs.remove(tmp);
     }
   }
 
@@ -384,6 +451,8 @@ function createTools(cfg) {
   /** Descarta os binários para o próximo `ensure` recomeçar do zero (arquivo corrompido, arquitetura errada). */
   async function reset() {
     await fs.remove(ytdlpPath);
+    await fs.remove(ytdlpDistDir);
+    await fs.remove(legacyYtdlpPath);
     await fs.remove(ffmpegPath);
     await fs.remove(metaPath);
   }
@@ -398,12 +467,20 @@ function createTools(cfg) {
     };
   }
 
+  /**
+   * Quem já usava vídeos on-line tem o executável único antigo. A troca pela versão
+   * desempacotada deve acontecer ao abrir o app, não no primeiro vídeo do culto.
+   */
+  function needsUpgrade() {
+    return supported && !!ytdlpAsset.exe && !fs.pathExistsSync(ytdlpPath) && fs.pathExistsSync(legacyYtdlpPath);
+  }
+
   /** Aguarda uma instalação em curso sem iniciar outra, antes de mover `bin/`. */
   async function waitForIdle() {
     await _ensuring?.catch(() => {});
   }
 
-  return { key, supported, paths, ready, ensure, refreshYtdlp, works, ffmpegWorks, reset, info, waitForIdle };
+  return { key, supported, paths, ready, ensure, refreshYtdlp, works, ffmpegWorks, reset, info, waitForIdle, needsUpgrade };
 }
 
 module.exports = {

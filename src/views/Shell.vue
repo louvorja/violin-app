@@ -8,7 +8,9 @@
     <RibbonBar />
 
     <!-- PageControl interno (tabs dos módulos abertos) -->
-    <OpenModulesTabs />
+    <OpenModulesTabs v-show="!isShellExpanded" />
+
+    <PwaUpdateNotice v-if="!Platform.isDesktop" />
 
     <main class="shell-main">
       <div class="shell-grid" :class="{ 'shell-grid--with-sidebar': showLiturgySidebar }">
@@ -35,12 +37,14 @@
           </div>
         </div>
 
-        <!-- O painel lateral aparece nos demais módulos conforme a preferência do usuário. -->
+        <!-- O painel lateral aparece nos demais módulos conforme a preferência do
+             usuário; some com o módulo Liturgia aberto (duplicaria) e com o Modo
+             apresentação aberto, cujo programa do culto substitui o painel. -->
         <ShellLiturgyPanel v-if="showLiturgySidebar" class="shell-sidebar" />
       </div>
     </main>
 
-    <AppFooter />
+    <AppFooter v-show="!hideFooterPlayer" />
     <OpeningBar />
 
     <CommandPalette v-if="cmdPaletteOpen" v-model="cmdPaletteOpen" />
@@ -54,6 +58,7 @@
       @close="onReleaseNotesClose"
     />
     <StartupCheckDialog v-if="startupCheckOpen" v-model="startupCheckOpen" />
+    <InstallAppDialog v-if="installDialogOpen" v-model="installDialogOpen" />
     <UpdateAvailableDialog
       v-if="updateDialogOpen"
       v-model="updateDialogOpen"
@@ -81,10 +86,13 @@ const MusicSpotlight = defineAsyncComponent(() => import("@components/MusicSpotl
 const BibleSpotlight = defineAsyncComponent(() => import("@components/BibleSpotlight.vue"));
 import RibbonBar from "@/layout/shell/RibbonBar.vue";
 import OpenModulesTabs from "@/layout/shell/OpenModulesTabs.vue";
+import PwaUpdateNotice from "@/layout/shell/PwaUpdateNotice.vue";
 import ShellLiturgyPanel from "@/layout/shell/ShellLiturgyPanel.vue";
+import { liturgySidebarDefault } from "@/helpers/LiturgySidebar";
 const HotkeysCheatsheet = defineAsyncComponent(
   () => import("@/layout/shell/HotkeysCheatsheet.vue")
 );
+const InstallAppDialog = defineAsyncComponent(() => import("@/components/InstallAppDialog.vue"));
 const StartupCheckDialog = defineAsyncComponent(
   () => import("@/components/StartupCheckDialog.vue")
 );
@@ -105,6 +113,7 @@ import Platform from "@/helpers/Platform";
 import Telemetry from "@/helpers/Telemetry";
 import { ICONS } from "@/config/Icons";
 import { KEYS } from "@/constants/UserDataKeys";
+import { anyOpenModuleWants, moduleShell } from "@/config/modules";
 import $popup from "@/helpers/Popup";
 import Broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
@@ -112,12 +121,14 @@ import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { registerShell } from "@/composables/useShell";
 import { useAppTheme } from "@/composables/useAppTheme";
 import { useViewport } from "@/composables/useViewport";
+import { useShellExpanded } from "@/composables/useModuleExpanded";
 import { useProjectionShutdown } from "@/composables/useProjectionShutdown";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
 import { hasOpenWebWindows } from "@/helpers/projection/webWindow";
 import { open as openProjection } from "@/helpers/Projection";
 import { useSyncManager } from "@/composables/useSyncManager";
-import { detectDesktopDownloadPlatform } from "@/helpers/DesktopDownload";
+import { useAppInstall } from "@/composables/useAppInstall";
+import { shouldAutoInstallCatalog } from "@/helpers/CatalogAutoInstall";
 const ChatDrawer = defineAsyncComponent(() => import("@/components/ChatDrawer.vue"));
 import { useChat } from "@/composables/useChat";
 import ScheduledStore from "@/helpers/ScheduledStore";
@@ -139,13 +150,44 @@ const releaseNotes = ref<ReleaseNotes | null>(null);
 const updateDialogOpen = ref(false);
 const updateDialogVersion = ref("");
 const ready = ref(false);
-const browserDesktopPlatform =
-  typeof navigator === "undefined" ? "other" : detectDesktopDownloadPlatform(navigator);
+const {
+  channel: installChannel,
+  dialogOpen: installDialogOpen,
+  installed: appInstalled,
+} = useAppInstall();
+
+// App instalado: o catálogo desce sozinho no primeiro uso com internet, para as
+// listas e o modo offline não dependerem de abrir Sincronizar antes. Espera o
+// boot assentar, porque instalar o ZIP grava milhares de registros no IndexedDB.
+// `ensureCatalogBundle` não baixa nada quando o catálogo já está instalado.
+const CATALOG_AUTO_INSTALL_DELAY_MS = 8000;
+let catalogAutoInstallTimer: ReturnType<typeof setTimeout> | null = null;
+let catalogAutoInstallArmed = false;
+const shellOnline = () => $appdata.get<boolean>(KEYS.SHELL.IS_ONLINE, true) !== false;
+
+function autoInstallCatalog(): void {
+  if (!catalogAutoInstallArmed) return;
+  // Atualizou o app: renova o catálogo guardado (em qualquer plataforma).
+  if (shellOnline()) void sync.refreshCatalogAfterUpdate();
+  const context = {
+    desktop: Platform.isDesktop,
+    installed: appInstalled.value,
+    online: shellOnline(),
+  };
+  if (shouldAutoInstallCatalog(context)) void sync.ensureCatalogBundle();
+}
+
+watch([shellOnline, appInstalled], autoInstallCatalog);
+// Um app que ficou aberto/offline por dias também verifica ao voltar ao uso.
+const checkCatalogOnForeground = () => {
+  if (document.visibilityState === "visible") autoInstallCatalog();
+};
+onMounted(() => document.addEventListener("visibilitychange", checkCatalogOnForeground));
+onBeforeUnmount(() => document.removeEventListener("visibilitychange", checkCatalogOnForeground));
 
 const showDesktopDownload = computed(() => {
   return (
-    !Platform.isDesktop &&
-    browserDesktopPlatform !== "other" &&
+    installChannel.value === "desktop" &&
     width.value >= 720 &&
     !$appdata.get<string | null>("active_module", null)
   );
@@ -164,8 +206,16 @@ const liturgyModuleOpen = computed(() => {
 
 const showLiturgySidebar = computed(
   () =>
-    !liturgyModuleOpen.value && $userdata.get<boolean>(KEYS.SHELL.LITURGY_VISIBLE, true) !== false
+    !liturgyModuleOpen.value &&
+    !anyOpenModuleWants("hidesLiturgySidebar") &&
+    $userdata.get<boolean>(KEYS.SHELL.LITURGY_VISIBLE, liturgySidebarDefault()) !== false
 );
+
+const { activeModule, isExpanded: isShellExpanded } = useShellExpanded();
+
+// Módulo com os próprios controles da música e do vídeo no ar: o mini-player
+// do rodapé seria um segundo painel dos mesmos botões.
+const hideFooterPlayer = computed(() => moduleShell(activeModule.value).hidesFooterPlayer === true);
 
 useProjectionShutdown();
 
@@ -550,6 +600,12 @@ onMounted(() => {
 
   applyStoredTheme();
 
+  catalogAutoInstallTimer = setTimeout(() => {
+    catalogAutoInstallTimer = null;
+    catalogAutoInstallArmed = true;
+    autoInstallCatalog();
+  }, CATALOG_AUTO_INSTALL_DELAY_MS);
+
   // Idioma
   const lang = $userdata.get<string>(KEYS.OPTIONS.LANGUAGE);
   if (lang && lang !== "") {
@@ -685,6 +741,8 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  if (catalogAutoInstallTimer) clearTimeout(catalogAutoInstallTimer);
+  catalogAutoInstallArmed = false;
   if (clockBootTimer) {
     clearTimeout(clockBootTimer);
     clockBootTimer = null;
@@ -786,6 +844,23 @@ onBeforeUnmount(() => {
 
 .shell-sidebar {
   flex-shrink: 0;
+}
+
+/* Em telas baixas o aviso de atualização não pode reduzir a lista a zero.
+   Mantém o aviso visível e permite alcançar o conteúdo rolando a janela. */
+@media (max-height: 650px) {
+  .shell-root--web:has(> .pwa-update-notice) {
+    overflow-y: auto;
+  }
+
+  .shell-root--web:has(> .pwa-update-notice) .shell-main {
+    flex-shrink: 0;
+    min-height: max(320px, 100dvh);
+  }
+
+  .shell-root--web:has(> .pwa-update-notice) :deep(.footer) {
+    position: fixed;
+  }
 }
 
 @media (max-width: 700px) {

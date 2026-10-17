@@ -44,21 +44,31 @@
           :label="tm('repeat')"
           @update:model-value="save('repeat', $event)"
         />
+        <!-- Som padrão (ponteiro único em user_data) — o que o Apresentador inicia. -->
+        <div class="bgm-ribbon-row bgm-ribbon-row--default" style="margin-top: 20px">
+          <label class="bgm-ribbon-label">{{ tm("default_sound") }}:</label>
+          <span class="bgm-ribbon-value" :title="defaultName || undefined">
+            {{ defaultName || "—" }}
+          </span>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { LjSlider, LjSwitch } from "@/components/ui";
+import $userdata from "@/helpers/UserData";
+import $idb from "@/helpers/IndexedDB";
+import { KEYS } from "@/constants/UserDataKeys";
+import { DB_TABLE, SETTINGS_TABLE } from "@/constants/DbTables";
 import { useBackgroundSound } from "@/composables/useBackgroundSound";
 import $modules from "@/helpers/Modules";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { getSetting, saveSetting } from "@/helpers/SettingsStorage";
 import { BackgroundSoundSettings } from "@/types/Settings";
-import { SETTINGS_TABLE } from "@/constants/DbTables";
 
 const { t: i18nT } = useI18n();
 
@@ -78,6 +88,33 @@ const autoPause = ref(true);
 const repeat_ = ref(false);
 const bg = useBackgroundSound();
 
+/** Ponteiro do som padrão (user_data) e o nome resolvido da biblioteca. */
+const defaultId = computed(() =>
+  String($userdata.get(KEYS.MODULES.BACKGROUND_SOUND.DEFAULT_ID, "") ?? "")
+);
+const defaultName = ref("");
+
+async function resolveDefaultName(): Promise<void> {
+  const id = defaultId.value;
+  if (!id) {
+    defaultName.value = "";
+    return;
+  }
+  try {
+    const rec = await $idb.get<{ name?: string; fileName?: string }>(
+      DB_TABLE.BACKGROUND_SOUND_LIBRARY,
+      id
+    );
+    defaultName.value = rec?.name || rec?.fileName || "";
+  } catch {
+    defaultName.value = "";
+  }
+}
+
+watch(defaultId, () => {
+  void resolveDefaultName();
+});
+
 async function save(key: string, value: unknown): Promise<void> {
   const existing = await getSetting<BackgroundSoundSettings & { id: string }>(
     SETTINGS_TABLE.BACKGROUND_SOUND
@@ -86,6 +123,7 @@ async function save(key: string, value: unknown): Promise<void> {
   (s as any)[key] = value;
   await saveSetting(s);
   if (key === "repeat") bg.repeat.value = value as boolean;
+  if (key === "autoPause") bg.autoPause.value = value as boolean;
   if (key === "fadeIn") bg.fadeInMs.value = value as number;
   if (key === "fadeOut") bg.fadeOutMs.value = value as number;
 }
@@ -99,6 +137,13 @@ onMounted(async () => {
   fadeOut.value = cfg.fadeOut;
   autoPause.value = cfg.autoPause;
   repeat_.value = cfg.repeat;
+  /*
+   * Empurra para o player: quem decide se outra mídia pausa o som é o
+   * composable (os gatilhos vivem lá, não no Index do módulo). Sem este
+   * empurrão, ligar o switch só mudava o IndexedDB e nada pausava.
+   */
+  bg.autoPause.value = cfg.autoPause;
+  await resolveDefaultName();
 });
 </script>
 
@@ -126,6 +171,13 @@ onMounted(async () => {
   gap: 2px;
   padding-left: 15px;
 }
+.bgm-ribbon-row--default .bgm-ribbon-value {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .bgm-ribbon-row {
   display: flex;
   align-items: center;

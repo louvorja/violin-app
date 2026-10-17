@@ -137,18 +137,49 @@ async function _responderArquivo(caminho, request) {
   }
 
   const stream = fs.createReadStream(caminho, { start, end });
+  /*
+   * Ciclo de vida do corpo da faixa, com uma bandeira em vez de `try/catch`
+   * mudo em cada evento.
+   *
+   * O consumidor cancela a faixa o tempo todo — seek de vídeo, troca de slide,
+   * projeção fechada no meio — e cada cancelamento deixa o controller em estado
+   * fechado. O stream do disco, porém, CONTINUA disparando `data`/`end`/`error`
+   * depois disso, e fechar (ou errar, ou enfileirar) um controller já fechado
+   * lança. A exceção saía daqui num tick, fora do `try/catch` de quem pediu o
+   * arquivo — o catch vazio escondia o local e sobrava só o
+   * "ReadableStream is already closed" na tela.
+   *
+   * Com a bandeira, cada operação acontece no máximo uma vez e nenhuma
+   * exceção escapa.
+   */
+  let encerrado = false;
   const readable = new ReadableStream({
     start(controller) {
       stream.on("data", (chunk) => {
-        try { controller.enqueue(chunk); } catch {
+        if (encerrado) return;
+        try {
+          controller.enqueue(chunk);
+        } catch {
           // Consumer fechou o stream (seek/navegação) → para de ler do disco.
+          encerrado = true;
           stream.destroy();
         }
       });
-      stream.on("end", () => { try { controller.close(); } catch { /* ignore */ } });
-      stream.on("error", (err) => { try { controller.error(err); } catch { /* ignore */ } });
+      stream.on("end", () => {
+        if (encerrado) return;
+        encerrado = true;
+        try { controller.close(); } catch { /* fechado pelo consumidor */ }
+      });
+      stream.on("error", (err) => {
+        if (encerrado) return;
+        encerrado = true;
+        try { controller.error(err); } catch { /* idem */ }
+      });
     },
-    cancel() { stream.destroy(); },
+    cancel() {
+      encerrado = true;
+      stream.destroy();
+    },
   });
 
   return new Response(readable, {
@@ -303,7 +334,8 @@ function handle() {
           const result = await jsonCache.fetchJson(
             pathname,
             _config.databaseUrl,
-            headers
+            headers,
+            { fresh: url.searchParams.get("fresh") === "1" || url.searchParams.has("_") || pathname === "/config" }
           );
 
           if (result.status === 404) {

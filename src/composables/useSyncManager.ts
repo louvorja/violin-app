@@ -1,14 +1,17 @@
 import { ref, computed, watch, onBeforeUnmount } from "vue";
 import { useI18n } from "vue-i18n";
+import { classifyLocalEnvironmentError } from "@/helpers/LocalEnvironmentErrors";
 import Platform from "@/helpers/Platform";
 import Database from "@/helpers/Database";
 import $idb from "@/helpers/IndexedDB";
 import $userdata from "@/helpers/UserData";
 import { KEYS, moduleShowInMainMenu } from "@/constants/UserDataKeys";
 import { DB_TABLE } from "@/constants/DbTables";
+import { AUDIO_EXT } from "@/constants/FileTypes";
 import type { BibleVersion } from "@/types/Bible";
 import type { BundleProgress } from "@/types/Database";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
+import { useAppInstall } from "@/composables/useAppInstall";
 import Libras from "@/helpers/Libras";
 import BundleInstaller from "@/helpers/BundleInstaller";
 import BibleBundleInstaller from "@/helpers/BibleBundleInstaller";
@@ -16,6 +19,7 @@ import { formatBackgroundTaskDetail } from "@/helpers/BackgroundTaskDetail";
 import type { Music } from "@/types/Music";
 import type { BibleBook } from "@/types/Bible";
 import { resolveMediaReference } from "@/helpers/MediaUrl";
+import { reportReliabilityEvent, reportReliabilityFailure } from "@/helpers/ReliabilityDiagnostics";
 
 interface FileEntry {
   remote: string;
@@ -78,12 +82,22 @@ let ftpInflight: Promise<boolean> | null = null;
 /** Por quanto tempo uma conexão confirmada é considerada válida. */
 const FTP_OK_TTL_MS = 60_000;
 
+/** Quantos arquivos de uma coleção já estão no disco, quando faltam outros. */
+export interface PartialProgress {
+  have: number;
+  total: number;
+}
+
 interface ScanCacheResult {
   cachedAlbums: Set<number>;
   /** Subconjunto de `cachedAlbums` que só está completo graças ao acervo clássico. */
   classicAlbums: Set<number>;
   hymnalCached: boolean;
   hymnal1996Cached: boolean;
+  /** Álbuns com parte dos arquivos no disco (interrompidos ou removidos à mão). */
+  partialAlbums?: Map<number, PartialProgress>;
+  partialHymnal?: PartialProgress | null;
+  partialHymnal1996?: PartialProgress | null;
 }
 
 export interface CatalogScanResult extends ScanCacheResult {
@@ -121,18 +135,69 @@ const bundleInstalling = ref(false);
 const bundleProgress = ref<BundleProgress>({ phase: "download", current: 0, total: 0 });
 let activeBundleDownload: Promise<boolean> | null = null;
 // O bundle geral já contém a Bíblia; o bundle bíblico não contém o catálogo.
-let activeBundleKind: "full" | "bible" | null = null;
+let activeBundleKind: "full" | "catalog" | "bible" | null = null;
 let activeBundleAbort: AbortController | null = null;
 let bundleReady = false;
 let bundleEnsurePromise: Promise<boolean> | null = null;
 let bundleFailedAt = 0;
-let catalogReady = false;
 let catalogEnsurePromise: Promise<boolean> | null = null;
 let catalogFailedAt = 0;
+let catalogRefreshPromise: Promise<boolean> | null = null;
+let catalogRefreshFailedAt = 0;
+let catalogCheckedAt = 0;
+const CATALOG_CHECK_INTERVAL_MS = 15 * 60_000;
 
 // Depois de uma falha, reabrir a tela bíblica não recomeça o download de 25 MB
 // na hora: numa rede que soluça, cada abertura seria uma nova tentativa do zero.
 const BUNDLE_RETRY_COOLDOWN_MS = 5 * 60_000;
+
+// Um passo que não dá sinal de vida por tanto tempo está pendurado, não lento:
+// abandonamos e recomeçamos em vez de deixar o operador olhando "Preparando…".
+const BUNDLE_STALL_MS = 90_000;
+const COLLECT_STALL_MS = 90_000;
+// Tempo máximo que montar a lista espera a renovação do catálogo; passado isso
+// segue com o catálogo que já está no disco.
+const CATALOG_REFRESH_WAIT_MS = 45_000;
+const CATALOG_RECOVERY_WAIT_MS = 120_000;
+
+let bundleProgressAt = Date.now();
+
+class CollectStalledError extends Error {
+  constructor() {
+    super("collect_stalled");
+  }
+}
+
+export class CatalogIncompleteError extends Error {
+  constructor(readonly dataset: string) {
+    super(`Catálogo local incompleto: ${dataset}`);
+    this.name = "CatalogIncompleteError";
+  }
+}
+
+/** Corre `run` e rejeita com `CollectStalledError` se ele parar de chamar `alive()`. */
+async function untilStalled<T>(
+  run: (alive: () => void) => Promise<T>,
+  stallMs: number
+): Promise<T> {
+  let lastAlive = Date.now();
+  let timer: ReturnType<typeof setInterval> | undefined;
+  const stalled = new Promise<never>((_, reject) => {
+    timer = setInterval(() => {
+      if (Date.now() - lastAlive > stallMs) reject(new CollectStalledError());
+    }, 5_000);
+  });
+  try {
+    return await Promise.race([
+      run(() => {
+        lastAlive = Date.now();
+      }),
+      stalled,
+    ]);
+  } finally {
+    clearInterval(timer);
+  }
+}
 
 // Cada fase reportava o próprio 0→100 (baixar, extrair, gravar). A barra chegava
 // a 100% e voltava a 0% — e, valendo 0, as telas a desenhavam como
@@ -168,6 +233,7 @@ function bumpBibleRevision(): void {
 
 export function useSyncManager() {
   const { t, locale } = useI18n();
+  const { suggest: suggestInstall } = useAppInstall();
   const bgTasks = useBackgroundTasks();
 
   // Scan
@@ -355,6 +421,7 @@ export function useSyncManager() {
 
     const cachedAlbums = new Set<number>();
     const classicAlbums = new Set<number>();
+    const partialAlbums = new Map<number, PartialProgress>();
     const ALBUM_BATCH = 3;
 
     for (let i = 0; i < albumIds.length; i += ALBUM_BATCH) {
@@ -364,9 +431,12 @@ export function useSyncManager() {
           try {
             const files = await collectAlbumFileList(id, { localOnly: true });
             if (files.length === 0) return;
-            const origem = await originOfFileList(files);
-            if (origem) cachedAlbums.add(id);
-            if (origem === "classic") classicAlbums.add(id);
+            const state = await localStateOfFileList(files);
+            if (state.origin) cachedAlbums.add(id);
+            if (state.origin === "classic") classicAlbums.add(id);
+            if (!state.origin && state.partial) {
+              partialAlbums.set(id, { have: state.have, total: state.total });
+            }
           } catch (e) {
             console.warn(`[useSyncManager] scan album ${id}:`, e);
           } finally {
@@ -377,10 +447,15 @@ export function useSyncManager() {
     }
 
     let hymnalCached = false;
+    let partialHymnal: PartialProgress | null = null;
     if (hymnalIds.length) {
       try {
         const hymFiles = await collectHymnalFileList(hymnalIds, { localOnly: true });
-        hymnalCached = hymFiles.length > 0 && (await isFileListComplete(hymFiles));
+        const state = await localStateOfFileList(hymFiles);
+        hymnalCached = hymFiles.length > 0 && !!state.origin;
+        if (!hymnalCached && state.partial) {
+          partialHymnal = { have: state.have, total: state.total };
+        }
       } catch (e) {
         console.warn("[useSyncManager] scan hymnal:", e);
       }
@@ -388,10 +463,15 @@ export function useSyncManager() {
     }
 
     let hymnal1996Cached = false;
+    let partialHymnal1996: PartialProgress | null = null;
     if (hymnal1996Ids.length) {
       try {
         const hymFiles = await collectHymnalFileList(hymnal1996Ids, { localOnly: true });
-        hymnal1996Cached = hymFiles.length > 0 && (await isFileListComplete(hymFiles));
+        const state = await localStateOfFileList(hymFiles);
+        hymnal1996Cached = hymFiles.length > 0 && !!state.origin;
+        if (!hymnal1996Cached && state.partial) {
+          partialHymnal1996 = { have: state.have, total: state.total };
+        }
       } catch (e) {
         console.warn("[useSyncManager] scan hymnal 1996:", e);
       }
@@ -404,6 +484,9 @@ export function useSyncManager() {
       classicAlbums,
       hymnalCached,
       hymnal1996Cached,
+      partialAlbums,
+      partialHymnal,
+      partialHymnal1996,
     };
     scanCacheEntry = { lang, at: Date.now(), result: cloneScanResult(result) };
     return result;
@@ -416,6 +499,9 @@ export function useSyncManager() {
       ...r,
       cachedAlbums: new Set(r.cachedAlbums),
       classicAlbums: new Set(r.classicAlbums),
+      partialAlbums: new Map(r.partialAlbums ?? []),
+      partialHymnal: r.partialHymnal ? { ...r.partialHymnal } : null,
+      partialHymnal1996: r.partialHymnal1996 ? { ...r.partialHymnal1996 } : null,
     };
   }
 
@@ -787,13 +873,108 @@ export function useSyncManager() {
 
   // ─── Collections Download ───────────────────────────────────────
 
+  /**
+   * Espera a renovação do catálogo no máximo `CATALOG_REFRESH_WAIT_MS`. É um
+   * melhor-esforço: se ela não volta a tempo, a lista sai do catálogo que já
+   * está no disco e o download pendurado é abandonado.
+   */
+  async function refreshCatalogBounded(): Promise<void> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const gaveUp = await Promise.race([
+      refreshCatalogAfterUpdate()
+        .catch(() => false)
+        .then(() => false),
+      new Promise<boolean>((resolve) => {
+        timer = setTimeout(() => resolve(true), CATALOG_REFRESH_WAIT_MS);
+      }),
+    ]);
+    clearTimeout(timer);
+    if (gaveUp) {
+      console.warn("[useSyncManager] renovação do catálogo demorou demais; seguindo sem ela");
+      catalogRefreshFailedAt = Date.now();
+      cancelBundle();
+    }
+  }
+
+  /**
+   * Monta a lista de arquivos das coletâneas escolhidas. Este é o único caminho
+   * — Sincronizar e Verificação Inicial passam por aqui — e ele se recupera
+   * sozinho: se a montagem parar de andar, reinstala o catálogo (o que o
+   * operador faria à mão em "Reinstalar banco de dados") e tenta de novo uma vez.
+   */
   async function collectFiles(
     selectedAlbums: Set<number>,
     selectedHymnal: boolean,
     hymnalIds: number[],
     selectedHymnal1996 = false,
-    hymnal1996Ids: number[] = []
+    hymnal1996Ids: number[] = [],
+    onProgress?: (done: number, total: number) => void
   ): Promise<FileEntry[]> {
+    const attempt = () =>
+      untilStalled(
+        (alive) =>
+          collectFilesOnce(
+            selectedAlbums,
+            selectedHymnal,
+            hymnalIds,
+            selectedHymnal1996,
+            hymnal1996Ids,
+            alive,
+            onProgress
+          ),
+        COLLECT_STALL_MS
+      );
+
+    try {
+      return await attempt();
+    } catch (error) {
+      if (!(error instanceof CollectStalledError) && !(error instanceof CatalogIncompleteError))
+        throw error;
+      const details = {
+        stage: "collect",
+        ...(error instanceof CatalogIncompleteError ? { dataset: error.dataset } : {}),
+      };
+      reportReliabilityFailure(
+        error instanceof CatalogIncompleteError
+          ? "sync_catalog_incomplete"
+          : "sync_collect_stalled",
+        error,
+        details
+      );
+      cancelBundle();
+      const installed = await untilStalled(
+        () => downloadBundle({ catalogOnly: true, force: true }).catch(() => false),
+        CATALOG_RECOVERY_WAIT_MS
+      ).catch(() => false);
+      try {
+        const files = await attempt();
+        reportReliabilityEvent("sync_catalog_recovered", {
+          ...details,
+          bundle_installed: installed,
+        });
+        return files;
+      } catch (retryError) {
+        reportReliabilityFailure("sync_catalog_recovery_failed", retryError, {
+          ...details,
+          ...(retryError instanceof CatalogIncompleteError ? { dataset: retryError.dataset } : {}),
+          bundle_installed: installed,
+        });
+        throw retryError;
+      }
+    }
+  }
+
+  async function collectFilesOnce(
+    selectedAlbums: Set<number>,
+    selectedHymnal: boolean,
+    hymnalIds: number[],
+    selectedHymnal1996: boolean,
+    hymnal1996Ids: number[],
+    alive: () => void,
+    onProgress?: (done: number, total: number) => void
+  ): Promise<FileEntry[]> {
+    await refreshCatalogBounded();
+    alive();
     const files = new Map<string, FileEntry>();
     const albumIds = [...selectedAlbums];
     const allMusicIds = new Set<number>();
@@ -805,8 +986,9 @@ export function useSyncManager() {
       albumIds
         .filter((id) => !disabled.includes(Number(id)))
         .map(async (id) => {
-          const album = await fetchJson<MusicData>(`album_${id}`);
-          if (!album) return;
+          const album = await fetchJson<MusicData>(`album_${id}`, { localOnly: true });
+          alive();
+          if (!album) throw new CatalogIncompleteError(`album_${id}`);
           const f = toFile(album.url_image);
           if (f) files.set(f.remote, f);
           album.musics?.forEach((m) => allMusicIds.add(Number(m.id_music)));
@@ -822,7 +1004,14 @@ export function useSyncManager() {
     }
 
     const musicIds = [...allMusicIds];
-    await collectMusicFiles(musicIds, files);
+    onProgress?.(0, musicIds.length);
+    await collectMusicFiles(musicIds, files, {
+      localOnly: true,
+      onBatch: (done) => {
+        alive();
+        onProgress?.(done, musicIds.length);
+      },
+    });
 
     return [...files.values()];
   }
@@ -831,9 +1020,12 @@ export function useSyncManager() {
     albumId: number,
     { localOnly = false }: { localOnly?: boolean } = {}
   ): Promise<FileEntry[]> {
+    // Montar a lista a partir de um catálogo de versão anterior baixaria pelos
+    // endereços antigos; a leitura local do scan não deve gerar rede.
+    if (!localOnly) return collectFiles(new Set([albumId]), false, []);
     const files = new Map<string, FileEntry>();
     const album = await fetchJson<MusicData>(`album_${albumId}`, { localOnly });
-    if (!album) return [];
+    if (!album) throw new CatalogIncompleteError(`album_${albumId}`);
     const f = toFile(album.url_image);
     if (f) files.set(f.remote, f);
     const musicIds = (album.musics || [])
@@ -847,6 +1039,7 @@ export function useSyncManager() {
     hymnalIds: number[],
     { localOnly = false }: { localOnly?: boolean } = {}
   ): Promise<FileEntry[]> {
+    if (!localOnly) return collectFiles(new Set(), true, hymnalIds);
     const files = new Map<string, FileEntry>();
     await collectMusicFiles(hymnalIds, files, { localOnly });
     return [...files.values()];
@@ -855,7 +1048,7 @@ export function useSyncManager() {
   async function collectMusicFiles(
     musicIds: number[],
     files: Map<string, FileEntry>,
-    { localOnly = false }: { localOnly?: boolean } = {}
+    { localOnly = true, onBatch }: { localOnly?: boolean; onBatch?: (done: number) => void } = {}
   ): Promise<void> {
     // `scanCache` pode chamar esta função para até três álbuns ao mesmo tempo.
     // Um lote fixo de quatro limita a rajada de leitura e persistência no IDB
@@ -866,9 +1059,11 @@ export function useSyncManager() {
       await Promise.all(
         slice.map(async (mid) => {
           const m = await fetchJson<MusicData>(`music_${mid}`, { localOnly });
+          if (!m) throw new CatalogIncompleteError(`music_${mid}`);
           addMusicToFileMap(m, files);
         })
       );
+      onBatch?.(Math.min(i + BATCH, musicIds.length));
     }
   }
 
@@ -899,7 +1094,7 @@ export function useSyncManager() {
     key: string,
     { localOnly = false }: { localOnly?: boolean } = {}
   ): Promise<T | null> {
-    return localOnly ? Database.getLocal<T>(key) : Database.get<T>(key);
+    return localOnly ? Database.getLocal<T>(key, { remember: false }) : Database.get<T>(key);
   }
 
   /**
@@ -907,6 +1102,33 @@ export function useSyncManager() {
    * mesmo jeito: o operador consegue tocar tudo, e propor download seria pedir
    * que ele baixe de novo o que já tem no disco.
    */
+  /** Completa ou quantos arquivos faltam: a mesma leitura do disco, sem custo extra. */
+  async function localStateOfFileList(
+    files: FileEntry[]
+  ): Promise<{ origin: FileOrigin; have: number; total: number; partial: boolean }> {
+    if (!files.length || !Platform.storage?.checkLocal)
+      return { origin: false, have: 0, total: 0, partial: false };
+    const remotes = files.map((f) => f.remote);
+    const local = (await Platform.storage.checkLocal(remotes)) as LocalCheckResult;
+    const have = remotes.filter((r) => local[r] === "own" || local[r] === "classic").length;
+    if (have === remotes.length) {
+      return {
+        origin: remotes.some((r) => local[r] === "classic") ? "classic" : "own",
+        have,
+        total: remotes.length,
+        partial: false,
+      };
+    }
+    // Fundos são compartilhados entre o hinário e muitos álbuns; capas também
+    // entram no cache ao navegar. Isso não significa que o álbum foi baixado.
+    const audio = remotes.filter((remote) =>
+      AUDIO_EXT.includes(remote.split(/[?#]/)[0].split(".").pop()?.toLowerCase() ?? "")
+    );
+    const partial = audio.length
+      ? audio.some((remote) => local[remote] === "own" || local[remote] === "classic")
+      : have > 0;
+    return { origin: false, have, total: remotes.length, partial };
+  }
   async function isFileListComplete(files: FileEntry[]): Promise<boolean> {
     if (!files.length || !Platform.storage?.checkLocal) return false;
     const remotes = files.map((f) => f.remote);
@@ -946,6 +1168,24 @@ export function useSyncManager() {
       Platform.download?.cancel();
     });
 
+    // Os assinantes desta rodada. Ao terminar (ou nem começar, quando não há nada
+    // a baixar) eles saem, em vez de se acumularem a cada "Continuar" ou "Baixar".
+    const mine: CleanupFn[] = [];
+    const track = (unsubscribe: CleanupFn): void => {
+      mine.push(unsubscribe);
+      _downloadCleanup.push(unsubscribe);
+    };
+    const releaseListeners = (): void => {
+      for (const unsubscribe of mine.splice(0)) {
+        try {
+          unsubscribe();
+        } catch {
+          /* noop */
+        }
+      }
+      _downloadCleanup = _downloadCleanup.filter((fn) => !mine.includes(fn));
+    };
+
     const cleanupFns: CleanupFn[] = [];
 
     cleanupFns.push(
@@ -974,39 +1214,52 @@ export function useSyncManager() {
       })
     );
 
-    _downloadCleanup.push(...cleanupFns);
+    cleanupFns.forEach(track);
 
     // Escuta conclusão da fila
-    _downloadCleanup.push(
-      Platform.download.onQueueDone((result: { downloaded?: number; failed?: number; error?: string }) => {
-        downloading.value = false;
-        const reportedFailed = typeof result?.failed === "number" &&
-          Number.isSafeInteger(result.failed) && result.failed > 0 ? result.failed : 0;
-        const failed = Math.max(downloadProgress.value.failed, reportedFailed);
-        downloadFailedCount.value = Math.max(downloadFailedCount.value, failed);
-        downloadProgress.value = {
-          ...downloadProgress.value,
-          failed: Math.max(downloadProgress.value.failed, failed),
-        };
-        if (failed > 0) {
-          downloadCompletedMsg.value = t("options.collections_download.failed", { n: failed });
-          bgTasks.updateTask("sync-collections", { status: "error", completedAt: Date.now() });
-          const code = typeof result?.error === "string" && /^download_worker_[a-z_]{1,48}$/.test(result.error)
-            ? result.error : "file_error";
-          // Telemetria é opcional no boot e nunca atrasa nem substitui o aviso
-          // funcional de erro, inclusive quando o renderer ainda está montando.
-          void import("@/helpers/Telemetry").then(({ default: Telemetry }) => {
-            Telemetry.track("download_queue_failed", { code, failed_count: failed });
-          }).catch(() => {});
-        } else {
-          bgTasks.completeTask("sync-collections");
+    track(
+      Platform.download.onQueueDone(
+        (result: { downloaded?: number; failed?: number; error?: string }) => {
+          downloading.value = false;
+          const reportedFailed =
+            typeof result?.failed === "number" &&
+            Number.isSafeInteger(result.failed) &&
+            result.failed > 0
+              ? result.failed
+              : 0;
+          const failed = Math.max(downloadProgress.value.failed, reportedFailed);
+          downloadFailedCount.value = Math.max(downloadFailedCount.value, failed);
+          downloadProgress.value = {
+            ...downloadProgress.value,
+            failed: Math.max(downloadProgress.value.failed, failed),
+          };
+          if (failed > 0) {
+            downloadCompletedMsg.value = t("options.collections_download.failed", { n: failed });
+            bgTasks.updateTask("sync-collections", { status: "error", completedAt: Date.now() });
+            const code =
+              typeof result?.error === "string" &&
+              /^download_worker_[a-z_]{1,48}$/.test(result.error)
+                ? result.error
+                : "file_error";
+            // Telemetria é opcional no boot e nunca atrasa nem substitui o aviso
+            // funcional de erro, inclusive quando o renderer ainda está montando.
+            void import("@/helpers/Telemetry")
+              .then(({ default: Telemetry }) => {
+                Telemetry.track("download_queue_failed", { code, failed_count: failed });
+              })
+              .catch(() => {});
+          } else {
+            bgTasks.completeTask("sync-collections");
+          }
+          releaseListeners();
         }
-      })
+      )
     );
-    _downloadCleanup.push(
+    track(
       Platform.download.onQueueCancelled(() => {
         downloading.value = false;
         bgTasks.updateTask("sync-collections", { status: "cancelled" });
+        releaseListeners();
       })
     );
 
@@ -1015,14 +1268,25 @@ export function useSyncManager() {
         | { queued?: number; message?: string; downloaded?: number; failed?: number }
         | undefined;
       if (result?.queued === 0) {
+        // Nada a baixar: não houve fila, então ninguém vai emitir "terminou". Sem
+        // fechar a tarefa aqui, a barra ficava em "0 de 0" com o botão Cancelar.
         downloading.value = false;
+        downloadProgress.value = { done: 0, failed: 0, total: 0, currentFile: "" };
         downloadCompletedMsg.value = result.message || "Já está atualizado.";
+        bgTasks.dismissTask("sync-collections");
+        releaseListeners();
       } else if (result?.queued != null) {
         downloadProgress.value = { ...downloadProgress.value, total: result.queued };
+        bgTasks.updateTask("sync-collections", { _total: result.queued });
+        if (result.queued > 0) {
+          suggestInstall("offline_downloads", t("shell.pwa_install.snack_offline"));
+        }
       }
     } catch (e) {
       downloading.value = false;
       downloadCompletedMsg.value = (e as Error).message;
+      bgTasks.dismissTask("sync-collections");
+      releaseListeners();
     }
   }
 
@@ -1050,9 +1314,9 @@ export function useSyncManager() {
   // ─── Bundle Download ────────────────────────────────────────
 
   async function downloadBundle(
-    opts: { force?: boolean; version?: number; bibleOnly?: boolean } = {}
+    opts: { force?: boolean; version?: number; bibleOnly?: boolean; catalogOnly?: boolean } = {}
   ): Promise<boolean> {
-    const kind = opts.bibleOnly ? "bible" : "full";
+    const kind = opts.bibleOnly ? "bible" : opts.catalogOnly ? "catalog" : "full";
     while (activeBundleDownload) {
       if (activeBundleKind === "full" || activeBundleKind === kind) return activeBundleDownload;
       // Quem pediu o banco completo não pode se dar por satisfeito com o
@@ -1063,7 +1327,7 @@ export function useSyncManager() {
     activeBundleDownload = pending;
     activeBundleKind = kind;
     try {
-      return await pending;
+      return await untilBundleStalls(pending);
     } finally {
       if (activeBundleDownload === pending) {
         activeBundleDownload = null;
@@ -1072,11 +1336,44 @@ export function useSyncManager() {
     }
   }
 
+  /**
+   * Devolve o resultado do download, ou `false` se ele ficar `BUNDLE_STALL_MS`
+   * sem progresso. Sem isto, uma conexão que trava no meio do corpo (ou uma
+   * transação do IndexedDB que não volta) deixava a promessa compartilhada
+   * pendurada: todo pedido seguinte do pacote esperava nela e só reiniciar o
+   * app destravava.
+   */
+  function untilBundleStalls(pending: Promise<boolean>): Promise<boolean> {
+    return new Promise<boolean>((resolve, reject) => {
+      const timer = setInterval(() => {
+        if (Date.now() - bundleProgressAt < BUNDLE_STALL_MS) return;
+        clearInterval(timer);
+        console.warn("[useSyncManager] downloadBundle: sem progresso, abandonando");
+        activeBundleAbort?.abort();
+        activeBundleAbort = null;
+        bundleInstalling.value = false;
+        bgTasks.updateTask("db-bundle", { status: "error" });
+        resolve(false);
+      }, 5_000);
+      pending.then(
+        (value) => {
+          clearInterval(timer);
+          resolve(value);
+        },
+        (error) => {
+          clearInterval(timer);
+          reject(error);
+        }
+      );
+    });
+  }
+
   async function downloadBundleInternal(
-    opts: { force?: boolean; version?: number; bibleOnly?: boolean } = {}
+    opts: { force?: boolean; version?: number; bibleOnly?: boolean; catalogOnly?: boolean } = {}
   ): Promise<boolean> {
     if (bundleInstalling.value) return false;
 
+    bundleProgressAt = Date.now();
     bundleInstalling.value = true;
     bundleProgress.value = {
       phase: "download",
@@ -1085,8 +1382,9 @@ export function useSyncManager() {
       bytesReceived: 0,
       bytesTotal: 0,
     };
-    activeBundleAbort = new AbortController();
-    const signal = activeBundleAbort.signal;
+    const abort = new AbortController();
+    activeBundleAbort = abort;
+    const signal = abort.signal;
 
     const taskId = "db-bundle";
     bgTasks.registerTask(taskId, "shell.background_tasks.db_bundle", () => {
@@ -1097,9 +1395,11 @@ export function useSyncManager() {
       const installer = opts.bibleOnly ? BibleBundleInstaller : BundleInstaller;
       await installer.install({
         force: opts.force,
+        catalogOnly: opts.catalogOnly,
         version: opts.version,
         signal,
         onProgress: (p: BundleProgress) => {
+          bundleProgressAt = Date.now();
           bundleProgress.value = p;
           const pct = bundlePercentOf(p);
           const received = p.bytesReceived ?? (p.phase === "download" ? p.current : 0);
@@ -1122,21 +1422,38 @@ export function useSyncManager() {
       });
 
       bgTasks.completeTask(taskId);
-      bundleReady = true;
-      if (!opts.bibleOnly) catalogReady = true;
-      bumpBibleRevision();
+      if (!opts.catalogOnly) {
+        bundleReady = true;
+        bumpBibleRevision();
+      }
       return true;
     } catch (e) {
       if (signal.aborted) {
         bgTasks.updateTask(taskId, { status: "cancelled" });
+      } else if (classifyLocalEnvironmentError(e)) {
+        // Disco cheio, banco local preso por antivírus/sincronizador ou
+        // corrompido: problema da máquina, não do app. Aviso, não erro.
+        console.warn("[useSyncManager] downloadBundle: armazenamento local indisponível:", e);
+        bgTasks.updateTask(taskId, {
+          status: "error",
+          detail: t(
+            classifyLocalEnvironmentError(e) === "storage_full"
+              ? "shell.background_tasks.storage_full"
+              : "shell.background_tasks.storage_unavailable"
+          ),
+        });
       } else {
         console.error("[useSyncManager] downloadBundle:", e);
         bgTasks.updateTask(taskId, { status: "error" });
       }
       return false;
     } finally {
-      bundleInstalling.value = false;
-      activeBundleAbort = null;
+      // Um download abandonado por estagnação pode terminar muito depois; não
+      // deixa que ele desligue a bandeira de uma instalação que já é outra.
+      if (activeBundleAbort === abort) {
+        bundleInstalling.value = false;
+        activeBundleAbort = null;
+      }
     }
   }
 
@@ -1177,20 +1494,77 @@ export function useSyncManager() {
    * Garante o catálogo (álbuns, músicas, hinário…) local antes de uma leitura
    * em massa. O scan da Verificação Inicial abre o JSON de cada álbum e de cada
    * música — ~2 mil requisições por instalação se o catálogo não estiver no
-   * disco. O bundle geral traz tudo (e a Bíblia junto) em um único GET.
+   * disco. O pacote de catálogo traz esses dados, sem capítulos bíblicos, em um único GET.
    */
+  /**
+   * Renova o catálogo uma vez por versão do app: baixa o pacote de catálogo (um
+   * GET, sem a Bíblia) e o grava por cima, de forma atômica. É o "reset" que
+   * faz o app deixar de usar endereços guardados por versões anteriores. Sem
+   * rede, mantém o catálogo atual e tenta de novo no próximo boot.
+   */
+  async function refreshCatalogAfterUpdate(): Promise<boolean> {
+    if (catalogRefreshPromise) return catalogRefreshPromise;
+    if (Date.now() - catalogRefreshFailedAt < BUNDLE_RETRY_COOLDOWN_MS) return false;
+    if (Date.now() - catalogCheckedAt < CATALOG_CHECK_INTERVAL_MS) return false;
+
+    const pending = (async (): Promise<boolean> => {
+      try {
+        const appChanged = await BundleInstaller.catalogNeedsRefreshForApp();
+        let remoteVersion: number | undefined;
+        if (!appChanged) {
+          if (!(await BundleInstaller.hasBundleMarker())) return false;
+          const local = await BundleInstaller.getInstalledBundleVersion({
+            allowLegacyConfig: false,
+          });
+          const remote = await BundleInstaller.fetchRemoteConfig();
+          if (!remote) {
+            catalogRefreshFailedAt = Date.now();
+            return false;
+          }
+          remoteVersion = remote.source_version ?? remote.version_number;
+          reportReliabilityEvent("database_update_checked", {
+            installed_version: local,
+            remote_version: remoteVersion,
+          });
+          if (local !== null && remoteVersion <= local) {
+            catalogCheckedAt = Date.now();
+            return false;
+          }
+        }
+        const installed = await downloadBundle({
+          catalogOnly: true,
+          force: true,
+          ...(remoteVersion === undefined ? {} : { version: remoteVersion }),
+        });
+        if (!installed) catalogRefreshFailedAt = Date.now();
+        else catalogCheckedAt = Date.now();
+        return installed;
+      } catch (error) {
+        catalogRefreshFailedAt = Date.now();
+        reportReliabilityFailure("database_update_check_failed", error, {
+          stage: "catalog_refresh",
+        });
+        return false;
+      }
+    })();
+
+    catalogRefreshPromise = pending;
+    try {
+      return await pending;
+    } finally {
+      if (catalogRefreshPromise === pending) catalogRefreshPromise = null;
+    }
+  }
+
   async function ensureCatalogBundle(): Promise<boolean> {
-    if (catalogReady) return true;
     if (catalogEnsurePromise) return catalogEnsurePromise;
     if (Date.now() - catalogFailedAt < BUNDLE_RETRY_COOLDOWN_MS) return false;
 
     const pending = (async (): Promise<boolean> => {
       if (await BundleInstaller.hasBundleMarker()) {
-        catalogReady = true;
-        bundleReady = true;
         return true;
       }
-      const installed = await downloadBundle();
+      const installed = await downloadBundle({ catalogOnly: true });
       if (!installed) catalogFailedAt = Date.now();
       return installed;
     })();
@@ -1205,15 +1579,12 @@ export function useSyncManager() {
 
   /**
    * Guarda local para leituras em massa. Deliberadamente não instala nada:
-   * baixar o ZIP completo exige `ensureCatalogBundle()`/`downloadBundle()` a
-   * partir de uma ação explícita da interface.
+   * baixar o ZIP completo fica com `ensureCatalogBundle()`/`downloadBundle()`,
+   * chamados por uma ação da interface ou pelo boot do app instalado.
    */
   async function hasCatalogForBulkRead(): Promise<boolean> {
     if (!Platform.storage?.checkLocal) return true;
-    if (catalogReady) return true;
     if (!(await BundleInstaller.hasBundleMarker())) return false;
-    catalogReady = true;
-    bundleReady = true;
     return true;
   }
 
@@ -1235,7 +1606,8 @@ export function useSyncManager() {
     cachedAlbums: Set<number>,
     hymnalCached: boolean,
     hymnal1996Cached = false,
-    hymnal1996Ids: number[] = []
+    hymnal1996Ids: number[] = [],
+    hymnalIds: number[] = []
   ): Promise<DiskUsage> {
     if (!Platform.storage?.sizeOfPaths) {
       return { bytes: 0, fileCount: 0, albumCount: 0, hymnalCached: false };
@@ -1254,19 +1626,19 @@ export function useSyncManager() {
       const slice = albumIds.slice(i, i + ALBUM_BATCH);
       await Promise.all(
         slice.map(async (id) => {
-          const files = await collectAlbumFileList(id);
+          const files = await collectAlbumFileList(id, { localOnly: true });
           files.forEach((f) => remotes.add(f.remote));
         })
       );
     }
 
     if (hymnalCached) {
-      const hymFiles = await collectHymnalFileList(albumIds);
+      const hymFiles = await collectHymnalFileList(hymnalIds, { localOnly: true });
       hymFiles.forEach((f) => remotes.add(f.remote));
     }
 
     if (hymnal1996Cached && hymnal1996Ids.length) {
-      const hymFiles = await collectHymnalFileList(hymnal1996Ids);
+      const hymFiles = await collectHymnalFileList(hymnal1996Ids, { localOnly: true });
       hymFiles.forEach((f) => remotes.add(f.remote));
     }
 
@@ -1526,6 +1898,7 @@ export function useSyncManager() {
     cancelBundle,
     ensureBibleBundle,
     ensureCatalogBundle,
+    refreshCatalogAfterUpdate,
     cleanup,
   };
 }

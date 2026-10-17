@@ -6,6 +6,24 @@ import RemoteControl from "../RemoteControl.vue";
 
 const listeners = vi.hoisted(() => new Map<string, (_payload: unknown) => void>());
 const postApi = vi.hoisted(() => vi.fn(async () => ({ status: "ok" })));
+/**
+ * A aba de slides consulta o estado ao abrir. Por padrão "não há música em
+ * apresentação", que é o estado neutro e não muda nada nos testes de FSM.
+ */
+const semMusica = {
+  status: "ok",
+  supported: true,
+  playing: false,
+  slides: [],
+  currentSlideIndex: 0,
+  title: "",
+  presentation_session: null,
+};
+/** O envelope é frouxo de propósito: cada teste devolve um corpo diferente. */
+type SlideReply = { ok: boolean; json: () => Promise<unknown> };
+const apiFetch = vi.hoisted(() =>
+  vi.fn(async (): Promise<SlideReply> => ({ ok: false, json: async () => ({}) }))
+);
 vi.mock("@/composables/useBroadcastListener", () => ({
   useBroadcastListener: (type: string, listener: (_payload: unknown) => void) => {
     listeners.set(type, listener);
@@ -13,7 +31,7 @@ vi.mock("@/composables/useBroadcastListener", () => ({
 }));
 vi.mock("@/helpers/ApiClient", () => ({
   isTokenInvalid: vi.fn(() => false),
-  apiFetch: vi.fn(),
+  apiFetch,
   postApi,
 }));
 vi.mock("vue-router", () => ({ useRoute: () => ({ query: {} }) }));
@@ -41,6 +59,9 @@ describe("remote slide selection", () => {
   let wrapper: VueWrapper | null = null;
   beforeEach(() => {
     listeners.clear();
+    postApi.mockClear();
+    apiFetch.mockReset();
+    apiFetch.mockImplementation(async () => ({ ok: true, json: async () => structuredClone(semMusica) }));
     wrapper = shallowMount(RemoteControl, { global: { plugins: [i18n] } });
   });
   afterEach(() => {
@@ -117,5 +138,114 @@ describe("remote slide selection", () => {
     expect(postApi).toHaveBeenCalledWith("/api/song-slides", {
       action: "close", presentation_session: "song-a",
     }, expect.anything());
+  });
+});
+
+describe("remote slide state by query", () => {
+  let wrapper: VueWrapper | null = null;
+  const comMusica = {
+    status: "ok",
+    supported: true,
+    playing: true,
+    slides: [{ lyric: "Capa" }, { lyric: "Verso" }],
+    currentSlideIndex: 1,
+    title: "A música",
+    presentation_session: "song-consulta",
+  };
+
+  beforeEach(() => {
+    listeners.clear();
+    postApi.mockClear();
+    apiFetch.mockReset();
+  });
+  afterEach(() => {
+    wrapper?.unmount();
+    wrapper = null;
+  });
+  /** Abre a tela já com a resposta da consulta engatilhada: é o mount que consulta. */
+  const abrir = async (replay: unknown) => {
+    apiFetch.mockImplementation(async () => ({ ok: true, json: async () => replay }));
+    wrapper = shallowMount(RemoteControl, { global: { plugins: [i18n] } });
+    await flushPromises();
+  };
+  const estado = () =>
+    (wrapper!.vm as unknown as { $: { setupState: Record<string, unknown> } }).$.setupState;
+  const abrirSemRede = async () => {
+    apiFetch.mockImplementation(async () => {
+      throw new Error("sem rede");
+    });
+    wrapper = shallowMount(RemoteControl, { global: { plugins: [i18n] } });
+    await flushPromises();
+  };
+
+  it("consulta o estado e manda a sessão da consulta nos comandos, sem depender do stream", async () => {
+    // Este é o caso do defeito: nenhum evento de SSE chega. Só a consulta
+    // devolve a sessão, e sem ela o desktop descarta todo comando.
+    await abrir(comMusica);
+    expect(apiFetch).toHaveBeenCalledWith(expect.stringContaining("action=playing-check"));
+    expect(estado().slides).toEqual(comMusica.slides);
+    expect(estado().currentSlideIndex).toBe(1);
+    expect(estado().currentTitle).toBe("A música");
+
+    (estado().goToSlide as (_index: number) => void)(0);
+    await flushPromises();
+    expect(postApi).toHaveBeenCalledWith("/api/song-slides", {
+      action: "go-to-slide", index: 0, presentation_session: "song-consulta",
+    }, expect.anything());
+
+    await (estado().closeMedia as () => Promise<void>)();
+    expect(postApi).toHaveBeenCalledWith("/api/song-slides", {
+      action: "close", presentation_session: "song-consulta",
+    }, expect.anything());
+  });
+
+  it("não inventa revisão canônica com a resposta da consulta", async () => {
+    // A consulta não traz `revision` nem `selectionRevision`. Se elas fossem
+    // inventadas aqui, o primeiro snapshot verdadeiro seria descartado como
+    // "revisão repetida" e a aba nunca acompanharia a música.
+    await abrir(comMusica);
+    emit(BROADCAST_TYPE.MUSIC_PRESENTATION_SNAPSHOT, packet("song-consulta", 0, 1));
+    await flushPromises();
+    expect(estado().currentSlideIndex).toBe(1);
+    emit(BROADCAST_TYPE.MUSIC_PRESENTATION_SNAPSHOT, packet("song-consulta", 1, 0));
+    await flushPromises();
+    expect(estado().currentSlideIndex).toBe(0);
+  });
+
+  it("desktop sem apresentação limpa a aba em vez de deixar lixo antigo", async () => {
+    await abrir(comMusica);
+    expect(estado().slides).toHaveLength(2);
+    // Reconsulta é o caminho de recuperação: trocar de aba dispara a consulta.
+    apiFetch.mockImplementation(async () => ({ ok: true, json: async () => structuredClone(semMusica) }));
+    estado().tab = "slides";
+    await flushPromises();
+    expect(apiFetch).toHaveBeenCalledTimes(2);
+    expect(estado().slides).toEqual([]);
+    expect(estado().currentTitle).toBe("");
+    // E o comando seguinte não leva sessão de uma música que não existe.
+    (estado().goToSlide as (_index: number) => void)(1);
+    await flushPromises();
+    expect(postApi).toHaveBeenCalledWith("/api/song-slides", {
+      action: "go-to-slide", index: 1,
+    }, expect.anything());
+  });
+
+  it.each([
+    ["resposta não é o contrato do endpoint", { status: "ok", playing: true }],
+    ["índice fora de inteiro", { ...comMusica, currentSlideIndex: -1 }],
+    ["deck maior que o servidor aceita", { ...comMusica, slides: new Array(10_001).fill({}) }],
+    ["sessão com tamanho impossível", { ...comMusica, presentation_session: "x".repeat(129) }],
+  ])("resposta fora do contrato não entra na tela: %s", async (_caso, replay) => {
+    await abrir(replay);
+    expect(estado().slides).toEqual([]);
+  });
+
+  it("consulta falhando não derruba o resto do controle remoto", async () => {
+    await abrirSemRede();
+    const state = estado();
+    expect(state.slides).toEqual([]);
+    (state.goToSlide as (index: number) => void)(0);
+    await flushPromises();
+    expect(postApi).toHaveBeenCalled();
   });
 });

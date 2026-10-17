@@ -15,6 +15,8 @@ export type CustomizationType =
   | "h-align"
   | "image"
   | "opacity"
+  | "radius"
+  | "border-width"
   | "object-fit"
   | "select"
   | "boolean";
@@ -43,6 +45,21 @@ export interface ModuleOptions {
   popup?: boolean;
   /** Tamanho da janela do módulo */
   size?: "small" | "medium" | "large";
+}
+
+/**
+ * O que um módulo pede ao shell. Fica no manifesto para o shell não precisar
+ * conhecer módulo nenhum pelo nome.
+ */
+export interface ModuleShellBehavior {
+  /** Pode esconder o ribbon e as abas; a escolha fica gravada nesta chave de UserData. */
+  expandedKey?: string;
+  /** Aberto, esconde a barra da liturgia: o módulo tem o próprio roteiro. */
+  hidesLiturgySidebar?: boolean;
+  /** Com a aba ativa, esconde o mini-player do rodapé: o módulo tem os próprios controles. */
+  hidesFooterPlayer?: boolean;
+  /** Aberto, o Esc tira tudo da tela sem pedir confirmação — é a saída de emergência. */
+  immediateEscape?: boolean;
 }
 
 /**
@@ -87,6 +104,9 @@ export interface Module {
   /** Visibilidade inicial no menu (persistida em modules.<id>.show_in_main_menu).
    *  Default = showInMainMenu. Permite começar oculto mesmo instalado. */
   defaultShowInMainMenu?: boolean;
+  /** O módulo só existe para alimentar uma janela de projeção. Some do menu
+   *  onde o navegador não consegue abri-la (ver `canOpenWebWindows`). */
+  requiresProjectionWindow?: boolean;
   /** Código de idioma para módulos com idioma fixo (ex: pt, es) */
   language?: string;
   /**
@@ -101,6 +121,7 @@ export interface Module {
    * Cada campo define type, label, default e (para select) options.
    */
   customization?: Record<string, CustomizationField>;
+  shell?: ModuleShellBehavior;
 }
 
 /**

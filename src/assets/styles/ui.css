@@ -140,6 +140,33 @@
   --lj-ui-tooltip-border: var(--lj-surface-border-strong);
 }
 
+/* Linha de música: liga visualmente o título às ações, em tabelas e listas.
+   O traço interno não altera a largura das células. O menu mantém a origem
+   marcada mesmo quando seu conteúdo recebe foco em um portal. */
+.lj-music-row {
+  --lj-music-row-bg: transparent;
+  --lj-music-row-marker: transparent;
+
+  background: var(--lj-music-row-bg);
+  box-shadow: inset 3px 0 var(--lj-music-row-marker);
+  transition:
+    background-color var(--lj-transition-fast),
+    box-shadow var(--lj-transition-fast);
+}
+
+.lj-music-row:has(:focus-visible),
+.lj-music-row:has([aria-haspopup="menu"][data-state="open"]) {
+  --lj-music-row-bg: color-mix(in srgb, var(--lj-ui-accent) 10%, var(--lj-surface-bg));
+  --lj-music-row-marker: var(--lj-ui-accent);
+}
+
+@media (hover: hover) {
+  .lj-music-row:hover {
+    --lj-music-row-bg: color-mix(in srgb, var(--lj-ui-accent) 10%, var(--lj-surface-bg));
+    --lj-music-row-marker: var(--lj-ui-accent);
+  }
+}
+
 /* Base comum a todo controle interativo do sistema.
    Componha com .lj-ui-size-* para obter as medidas. */
 .lj-ui-control {

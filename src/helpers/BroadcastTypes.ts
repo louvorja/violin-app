@@ -98,11 +98,60 @@ export const BROADCAST_TYPE = Object.freeze({
    *  com noopener não devolve referência para o Projection.close() fechar. */
   MODULE_PROJECTION_CLOSE: "module_projection_close",
 
+  /** A projeção de um módulo foi LIGADA.
+   *  Payload: { module: string }
+   *  Emitido por: `Screen.vue`, quando o operador clica em "Projetar" e há
+   *  Projeção de Fundo aberta — aí não há janela, e era a existência dela que
+   *  dizia "isto está no ar". Emitido por: `BackgroundProjection.vue`.
+   *  Sem isto, qualquer VALOR emitido pelo módulo (o contador andando, o relógio
+   *  dando a hora) apareceria no telão sozinho: o fluxo de valor não é estado
+   *  de projeção. */
+  MODULE_PROJECTION_OPEN: "module_projection_open",
+
   /** Uma janela de projeção sumiu — por ESC, pelo X ou pelo sistema.
    *  Payload: { feature: string } (PROJECTION_TYPE.* ou id do módulo)
    *  Emitido por: as views de projeção (useProjectionCloseNotice). Recebido por:
    *  Shell — que desliga o estado que ficaria marcando projeção ligada. */
   PROJECTION_CLOSED: "projection_closed",
+
+  /** "Limpar tela": cobre a tela principal e o retorno com o fundo configurado
+   *  em Opções; o conteúdo segue rodando por baixo.
+   *  Payload: { active: boolean }
+   *  Emitido por: presentation_mode. Recebido por: as views de projeção e
+   *  retorno (ProjectionClearScreen) e o espelho do módulo. */
+  PROJECTION_CLEAR: "projection_clear",
+
+  /** Janela de projeção recém-aberta pedindo o estado da tela limpa — o cache
+   *  do Broadcast é por janela. Respondido pelo presentation_mode. */
+  REQUEST_PROJECTION_CLEAR: "request_projection_clear",
+
+  /** Imagem ou vídeo só no retorno de palco (letra para o louvor especial,
+   *  recado para quem está no palco). Cobre o retorno; a tela principal não muda.
+   *  `type: "blank"` esconde o conteúdo do retorno e mostra só o fundo.
+   *  Payload: { active: boolean, type?: "image" | "video" | "blank", url?: string, title?: string, id?: string }
+   *  Emitido por: presentation_mode e o Esc. Recebido por: views de retorno. */
+  RETURN_OVERRIDE: "return_override",
+
+  /** Relógio do vídeo só no retorno: o som sai do player da janela principal,
+   *  e o retorno (mudo) acompanha. Payload: VideoMediaState + `id` do override.
+   *  Emitido por: presentation_mode. Recebido por: ReturnOverride. */
+  RETURN_OVERRIDE_STATE: "return_override_state",
+
+  /** Retorno recém-aberto pedindo o conteúdo exclusivo dele. */
+  REQUEST_RETURN_OVERRIDE: "request_return_override",
+
+  /** O que o vídeo de uma tela real está fazendo de fato (não o que o player
+   *  acha que mandou). Uma vez por segundo enquanto há vídeo na tela.
+   *  Payload: { screen: "main" | "return", playback_id, isPaused, currentTime, sentAt }
+   *  Emitido por: FileProjection e FileProjectionReturn. Recebido por:
+   *  presentation_mode, que avisa nas miniaturas quando a tela diverge do player. */
+  SCREEN_VIDEO_REPORT: "screen_video_report",
+
+  /** Uma janela de projeção acabou de montar — a primeira vez ou depois de um F5.
+   *  Payload: { feature: string }. Emitido por: as views de projeção
+   *  (useProjectionCloseNotice). Recebido por: Shell, que cancela o desligamento
+   *  pendente de uma janela que só recarregou. */
+  PROJECTION_OPENED: "projection_opened",
 
   /** Texto do painel de recados. Emitido por message_board/Index.vue.
    *  Recebido por: (recepção futura). */
@@ -121,6 +170,15 @@ export const BROADCAST_TYPE = Object.freeze({
    *  Payload: { playback_id, page, totalPages?, source: "operator" | "projection" }.
    *  O ID impede que um arquivo anterior altere a projeção ativa. */
   FILE_PROJECTION_PAGE: "file_projection_page",
+
+  /** Zoom de imagem ou página de PDF nas telas: o recorte que o operador escolheu.
+   *  Payload: { key: playback_id | url, page, scale, cx, cy } (centro em frações 0–1).
+   *  Emitido por: presentation_mode. Recebido por: FileProjection, FileProjectionReturn,
+   *  BackgroundProjection, BackgroundProjectionReturn e os espelhos do módulo. */
+  FILE_PROJECTION_ZOOM: "file_projection_zoom",
+
+  /** Tela recém-aberta pedindo o recorte atual. Respondido pelo presentation_mode. */
+  REQUEST_FILE_PROJECTION_ZOOM: "request_file_projection_zoom",
   /** Snapshot versionado dos anúncios, emitido pela janela principal. */
   ANNOUNCEMENTS_STATE: "announcements_state",
   /** Atualização pequena de navegação dentro do deck ativo. */
@@ -140,6 +198,11 @@ export const BROADCAST_TYPE = Object.freeze({
    *  Payload: { url: string, type: "youtube", title?: string }
    *  Emitido por: useMedia.ts (openYouTube). Recebido por: FileProjection.vue. */
   ONLINE_VIDEO_PROJECTION: "online_video_projection",
+
+  /** Projeção de URL (item Site da liturgia ou design do Canva).
+   *  Payload: { source: "liturgy" | "canva" }
+   *  Emitido por: ProjectionWindows.openSiteWindow. Recebido por: Som de Fundo. */
+  SITE_PROJECTION: "site_projection",
 
   /** Notifica que o wallpaper/background settings foi alterado.
    *  Payload: {} (vazio — as views recarregam do IndexedDB)

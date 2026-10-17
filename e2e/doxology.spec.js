@@ -84,11 +84,11 @@ async function start(page, { resolveDetail } = {}) {
     if (url.pathname.endsWith(`/music_${musicDetail.id_music}`)) {
       return route.fulfill({ json: musicDetail });
     }
+    if (/\/(?:pt|es)_doxology_albums$/.test(url.pathname)) {
+      return route.fulfill({ json: albums });
+    }
     return route.fulfill({ json: [] });
   });
-  await page.route(/\/(?:pt|es)\/albums\/category\/doxology(?:\?.*)?$/, (route) =>
-    route.fulfill({ json: albums })
-  );
 
   await page.goto("/");
   await page.locator('[data-testid="modules-ready"]').waitFor({ state: "attached" });

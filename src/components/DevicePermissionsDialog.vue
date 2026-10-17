@@ -90,8 +90,10 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { LjButton, LjCheckbox, LjDialog, LjDivider, LjIcon, LjInput } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
+import $alert from "@/helpers/Alert";
 import type { Device, DevicePermission } from "@/types/Device";
 import { DEVICE_PERMISSIONS, DEVICE_PERMISSION_LABELS } from "@/types/Device";
 
@@ -105,6 +107,8 @@ const emit = defineEmits<{
   reject: [id: string];
   close: [];
 }>();
+
+const { t } = useI18n();
 
 const permissions = DEVICE_PERMISSIONS.filter((p) => p !== "root");
 
@@ -147,8 +151,19 @@ function togglePermission(perm: DevicePermission) {
   }
 }
 
-function save() {
+async function save() {
   if (!displayDevice.value) return;
+  /*
+   * Salvar sem nenhuma permissão é legítimo — o aparelho continua cadastrado e
+   * simplesmente não controla nada — mas é o resultado fácil de um clique em
+   * "Desmarcar todas" seguido de "Salvar", e o efeito é silencioso: do lado do
+   * celular, tudo deixa de responder. Por isso a confirmação. Ela é reversível
+   * (há outro Salvar logo depois) e some sozinha com o diálogo.
+   */
+  if (editPermissions.value.length === 0) {
+    const ok = await $alert.confirm(t("options.transmission.confirm_no_permissions"));
+    if (!ok) return;
+  }
   emit("save", displayDevice.value.id, editName.value, editPermissions.value);
 }
 

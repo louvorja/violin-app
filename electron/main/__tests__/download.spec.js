@@ -111,7 +111,7 @@ describe("download.startDownload", () => {
     vi.spyOn(require("../paths.js"), "filesDir").mockReturnValue(path.join(os.tmpdir(), "lj-download-test-files"));
     const scan = vi.spyOn(integrity, "diff");
     download.setApiConfig({ filesUrl: "https://api.louvorja.workers.dev/file" });
-    const valid = { remote: "/images/capa.jpg", local: "images/capa.jpg", remoteUrl: "https://cdn.louvorja.com/images/capa.jpg" };
+    const valid = { remote: "/images/capa.jpg", local: "images/capa.jpg", remoteUrl: "https://files.louvorja.com.br/images/capa.jpg" };
 
     await expect(download.startDownload([{ ...valid, local: "../outside.jpg" }], null)).rejects.toThrow("download files");
     await expect(download.startDownload([valid, valid], null)).rejects.toThrow("destino duplicado");
@@ -126,7 +126,7 @@ describe("download.startDownload", () => {
     download.setApiConfig({ filesUrl: "https://api.louvorja.workers.dev/file" });
     const scan = vi.spyOn(integrity, "diff").mockResolvedValue({ missing: [], damaged: [], ok: [] });
 
-    await expect(download.checkFiles([{ remote: "/images/capa.jpg", local: "images/capa.jpg", remoteUrl: "https://cdn.louvorja.com/images/capa.jpg" }])).resolves.toMatchObject({ ok: [] });
+    await expect(download.checkFiles([{ remote: "/images/capa.jpg", local: "images/capa.jpg", remoteUrl: "https://files.louvorja.com.br/images/capa.jpg" }])).resolves.toMatchObject({ ok: [] });
     expect(scan).toHaveBeenCalledOnce();
     expect(() => download.checkFiles([{ remote: "/images/capa.jpg", local: "../outside.jpg" }])).toThrow("download files");
     expect(scan).toHaveBeenCalledOnce();
@@ -147,7 +147,7 @@ describe("download.startDownload", () => {
       return Promise.resolve();
     });
     download.setApiConfig({ filesUrl: "https://api.louvorja.workers.dev/file" });
-    const entry = { remote: "/images/capa.jpg", local: "images/capa.jpg", remoteUrl: "https://cdn.louvorja.com/images/capa.jpg" };
+    const entry = { remote: "/images/capa.jpg", local: "images/capa.jpg", remoteUrl: "https://files.louvorja.com.br/images/capa.jpg" };
 
     await expect(download.startDownload([entry], null)).resolves.toEqual({ queued: 1 });
 

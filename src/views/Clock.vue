@@ -1,7 +1,7 @@
 <template>
   <div ref="container" class="clock-fullscreen" :style="rootStyle">
     <div
-      v-fit-clock-line="textStyle.fontSize"
+      v-fit-clock-line="{ size: textStyle.fontSize, widthFrom: container }"
       class="clock-time"
       :style="[textStyle, { lineHeight: 1 }]"
     >
@@ -9,7 +9,7 @@
     </div>
     <div
       v-if="date"
-      v-fit-clock-line="referenceStyle.fontSize"
+      v-fit-clock-line="{ size: referenceStyle.fontSize, widthFrom: container }"
       class="clock-date"
       :style="[referenceStyle, { lineHeight: 1.1 }]"
     >

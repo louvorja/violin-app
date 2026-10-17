@@ -33,6 +33,20 @@ export interface MusicItem {
   albums: AlbumItem[];
 }
 
+/** Álbum de música do controle remoto (oficial ou coletânea personalizada). */
+export interface MusicLibraryAlbum {
+  id: string;
+  title: string | null;
+  subtitle: string | null;
+  /** 0 = contagem desconhecida (álbuns oficiais) — o card não mostra badge. */
+  count: number;
+  source: "official" | "custom";
+  /** Módulo dono do álbum (pins do hinário) — o card usa o ícone do módulo. */
+  module_id?: string | null;
+  color: string | null;
+  image: string | null;
+}
+
 export interface SearchMusicItem extends MusicItem {
   track?: string | number;
   album?: string;

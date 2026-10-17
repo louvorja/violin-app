@@ -117,6 +117,7 @@
       :has_scroll="has_scroll"
       sort_by="name"
       :file="`${$i18n.locale}_musics`"
+      offline_filter
       :extra_rows="customMusics"
     >
       <thead>
@@ -134,6 +135,7 @@
         <tr
           v-for="item in data.data"
           :key="item.id_music"
+          class="lj-music-row"
           :data-testid="`music-row-${item.id_music}`"
         >
           <td>

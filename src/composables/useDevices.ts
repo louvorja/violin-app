@@ -27,15 +27,34 @@ let _cleanup: (() => void) | null = null;
 let _cleanupPending: (() => void) | null = null;
 
 /**
- * Fallback: qualquer device cadastrado sem permissões é tratado como
- * pendente. Garante que a tela de permissões abra mesmo quando o evento
- * `devices:pending` se perdeu (janela recriada, renderer sem listener, etc.).
+ * Este device está esperando o operador definir as permissões?
+ *
+ * Pendência é estado explícito (`status`). A inferência antiga — "sem permissões
+ * = pendente" — quebrava o fluxo normal: salvar um dispositivo sem NENHUMA
+ * permissão o devolvia para a tela de aprovação, porque o `devices:changed`
+ * do save reavaliava a lista inteira. Sem permissão significa **inerte** (o
+ * servidor recusa o acesso), que é outra coisa.
+ *
+ * A exceção é o registro antigo, anterior ao campo `status`: não marcar nada
+ * deixaria para sempre um aparelho que chegou antes da mudança esperando
+ * aprovação que ninguém veria.
+ */
+function _ehPendente(d: Device): boolean {
+  if (d.status) return d.status === "pending";
+  return !d.permissions || d.permissions.length === 0;
+}
+
+/**
+ * Recupera o device pendente a partir da lista.
+ *
+ * Garante que a tela de permissões abra mesmo quando o evento `devices:pending`
+ * se perdeu (janela recriada, renderer sem listener, etc.).
  */
 function _syncPendingFromList(list: Device[]) {
   if (_pendingDevice.value) return;
-  const orphan = list.find((d) => !d.permissions || d.permissions.length === 0);
+  const orphan = list.find(_ehPendente);
   if (orphan) {
-    console.log("[useDevices] device sem permissões detectado:", orphan.name);
+    console.log("[useDevices] device pendente detectado:", orphan.name);
     _pendingDevice.value = orphan;
   }
 }
@@ -55,7 +74,14 @@ function _attachListeners() {
 
   const api = _getApi();
 
-  console.log("[useDevices] _attachListeners Platform.devices:", !!api, "onPending:", !!api?.onPending, "onChanged:", !!api?.onChanged);
+  console.log(
+    "[useDevices] _attachListeners Platform.devices:",
+    !!api,
+    "onPending:",
+    !!api?.onPending,
+    "onChanged:",
+    !!api?.onChanged
+  );
 
   if (api?.onChanged) {
     _cleanup = api.onChanged((list: Device[]) => {
@@ -156,6 +182,8 @@ export function useDevices() {
       platform: info.platform,
       registeredAt: new Date().toISOString(),
       permissions: info.permissions || [],
+      /* Nasce adicionado pelo operador, com as permissões que ele escolheu. */
+      status: "approved" as const,
     };
     _devices.value = [..._devices.value, device];
     await _sync();
@@ -170,7 +198,7 @@ export function useDevices() {
     patch: Partial<Pick<Device, "name" | "permissions">>
   ): Promise<void> {
     _devices.value = _devices.value.map((d) =>
-      d.id === id ? { ...d, ...patch } : d
+      d.id === id ? { ...d, ...patch, status: "approved" as const } : d
     );
     await _sync();
   }
@@ -215,7 +243,7 @@ export function useDevices() {
   ): Promise<Device | null> {
     if (!_pendingDevice.value) return null;
     const device = _pendingDevice.value;
-    const updated: Device = { ...device, name, permissions };
+    const updated: Device = { ...device, name, permissions, status: "approved" };
     const exists = _devices.value.some((d) => d.id === device.id);
     _devices.value = exists
       ? _devices.value.map((d) => (d.id === device.id ? updated : d))

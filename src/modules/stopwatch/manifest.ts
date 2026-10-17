@@ -33,6 +33,17 @@ export const module: Module = {
     font_color: { type: "color", default: "#FFFFFF" },
     text_background_enabled: { type: "boolean", default: false },
     text_background_color: { type: "color", default: "transparent" },
+    /*
+     * Fundo do texto: cor + transparência e borda (raio, cor e transparência).
+     * Mesmo contrato dos slides (`useSlideStyle.textBoxStyle`), com padrões
+     * neutros: quem já usava o fundo continua vendo igual.
+     */
+    text_background_opacity: { type: "opacity", default: 100 },
+    text_border_enabled: { type: "boolean", default: false },
+    text_border_color: { type: "color", default: "#FFFFFF" },
+    text_border_opacity: { type: "opacity", default: 100 },
+    text_border_radius: { type: "radius", default: 0 },
+    text_border_width: { type: "border-width", default: 2 },
     font_size: { type: "font-size", default: 50 },
     text_shadow: { type: "boolean", default: false },
     text_shadow_color: { type: "color", default: "#000000" },

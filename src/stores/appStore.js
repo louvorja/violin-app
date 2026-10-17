@@ -60,7 +60,8 @@ export const useAppStore = defineStore("app", {
     /** @type {boolean} App rodando no Electron (desktop) */
     is_desktop: false,
     /** @type {boolean} Conexão com internet disponível */
-    is_online: false,
+    // Começa online: só uma falha de rede apurada pelo useConnectivity derruba.
+    is_online: true,
     /** @type {Window|null} Referência à janela popup aberta; null quando fechada */
     popup: null,
     /** @type {string|null} ID do módulo exibido em popup */

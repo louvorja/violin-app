@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from "vitest";
 import { createRequire } from "module";
 import http from "node:http";
-import { mkdtempSync, rmSync, utimesSync, existsSync } from "node:fs";
+import { mkdtempSync, rmSync, utimesSync, existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -92,6 +92,19 @@ describe("jsonCache — falha de rede × resposta ruim", () => {
     expect(netHealth.status().online).toBe(true);
   });
 
+  it("fresh ignora o JSON ainda dentro das 24 horas e conserva o anterior se a rede cair", async () => {
+    responde(200, '{"version":1}');
+    await jsonCache.fetchJson("/fresh_test", baseUrl);
+    responde(200, '{"version":2}');
+    const cached = await jsonCache.fetchJson("/fresh_test", baseUrl);
+    expect(JSON.parse(cached.body)).toEqual({ version: 1 });
+    const fresh = await jsonCache.fetchJson("/fresh_test", baseUrl, {}, { fresh: true });
+    expect(JSON.parse(fresh.body)).toEqual({ version: 2 });
+    expect(fresh.fromCache).toBe(false);
+    const offline = await jsonCache.fetchJson("/fresh_test", portaMorta, {}, { fresh: true });
+    expect(JSON.parse(offline.body)).toEqual({ version: 2 });
+  });
+
   it("um 500 não adianta a queda: só a segunda falha de rede seguida declara offline", async () => {
     responde(500, "{}");
     await jsonCache.fetchJson("/pt_b", baseUrl).catch(() => {});
@@ -123,5 +136,62 @@ describe("jsonCache — falha de rede × resposta ruim", () => {
     expect(resultado.fromCache).toBe(true);
     expect(resultado.status).toBe(200);
     expect(JSON.parse(resultado.body.toString("utf-8"))).toEqual([{ id: 1 }]);
+  });
+});
+
+describe("jsonCache — preservação offline quando o app é atualizado", () => {
+  const { mkdirSync, writeFileSync, readdirSync, readFileSync } = require("node:fs");
+
+  function novoCache() {
+    cacheRoot = mkdtempSync(join(tmpdir(), "louvorja-purge-"));
+    const dir = join(cacheRoot, "json_db");
+    mkdirSync(dir, { recursive: true });
+    return dir;
+  }
+
+  it("primeira execução com cache antigo: expira sem apagar e registra a versão", async () => {
+    const dir = novoCache();
+    writeFileSync(join(dir, "music_1.json"), "{}");
+    mkdirSync(join(dir, "sub"));
+    writeFileSync(join(dir, "sub", "album_1.json"), "{}");
+
+    const result = await jsonCache.expireOnAppUpdate("2.0.0-beta.17");
+
+    expect(result).toEqual({ expired: 2 });
+    expect(readdirSync(dir).sort()).toEqual([".app-version", "music_1.json", "sub"]);
+    expect(statSync(join(dir, "music_1.json")).mtimeMs).toBe(0);
+    expect(readFileSync(join(dir, "sub", "album_1.json"), "utf8")).toBe("{}");
+    expect(readFileSync(join(dir, ".app-version"), "utf8")).toBe("2.0.0-beta.17");
+  });
+
+  it("mesma versão: não mexe no cache", async () => {
+    const dir = novoCache();
+    writeFileSync(join(dir, ".app-version"), "2.0.0-beta.17");
+    writeFileSync(join(dir, "music_1.json"), "{}");
+
+    const result = await jsonCache.expireOnAppUpdate("2.0.0-beta.17");
+
+    expect(result).toEqual({ expired: 0 });
+    expect(readdirSync(dir).sort()).toEqual([".app-version", "music_1.json"]);
+  });
+
+  it("versão nova: expira de novo e atualiza o registro", async () => {
+    const dir = novoCache();
+    writeFileSync(join(dir, ".app-version"), "2.0.0-beta.16");
+    writeFileSync(join(dir, "music_1.json"), "{}");
+
+    const result = await jsonCache.expireOnAppUpdate("2.0.0-beta.17");
+
+    expect(result).toEqual({ expired: 1 });
+    expect(readFileSync(join(dir, ".app-version"), "utf8")).toBe("2.0.0-beta.17");
+  });
+
+  it("pasta ainda inexistente: cria e registra, sem erro", async () => {
+    cacheRoot = mkdtempSync(join(tmpdir(), "louvorja-purge-"));
+
+    const result = await jsonCache.expireOnAppUpdate("2.0.0-beta.17");
+
+    expect(result).toEqual({ expired: 0 });
+    expect(existsSync(join(cacheRoot, "json_db", ".app-version"))).toBe(true);
   });
 });

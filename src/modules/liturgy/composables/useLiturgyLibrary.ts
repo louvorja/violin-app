@@ -5,6 +5,7 @@ import { DB_TABLE } from "@/constants/DbTables";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import type { LiturgyItem } from "@/types/Liturgy";
 import type { LiturgyLibraryItem } from "@/types/LiturgyLibrary";
+import { agendaParaPersistir, lerHorario } from "../agenda";
 
 const TABLE = DB_TABLE.LITURGY_LIBRARY;
 const DEFAULT_COLOR = "#00004F";
@@ -26,7 +27,7 @@ function _normalizeLiturgyItem(raw: unknown): LiturgyItem | null {
   const id =
     typeof r.id === "string" && r.id !== ""
       ? r.id
-      : crypto.randomUUID?.() ?? `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+      : (crypto.randomUUID?.() ?? `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`);
 
   return {
     id,
@@ -45,10 +46,13 @@ function _normalizeLiturgyItem(raw: unknown): LiturgyItem | null {
     // Campos opcionais — preservados se presentes
     ...(typeof r.id_music === "number" && Number.isFinite(r.id_music)
       ? { id_music: r.id_music }
-      : typeof r.id_music === "string" && r.id_music.trim() !== "" && Number.isFinite(Number(r.id_music))
+      : typeof r.id_music === "string" &&
+          r.id_music.trim() !== "" &&
+          Number.isFinite(Number(r.id_music))
         ? { id_music: Number(r.id_music) }
         : {}),
-    ...(typeof r.time === "string" ? { time: r.time } : {}),
+    ...(typeof r.time === "string" ? { time: lerHorario(r.time) } : {}),
+    ...(r.time_mode === "manual" || r.time_mode === "auto" ? { time_mode: r.time_mode } : {}),
     ...(typeof r.checked === "string" ? { checked: r.checked } : {}),
     ...(typeof r.blocoId === "string" ? { blocoId: r.blocoId } : {}),
     ...(typeof r.ref_id === "string" ? { ref_id: r.ref_id } : {}),
@@ -118,7 +122,9 @@ function _mapJaItemFields(id: string, fields: Record<string, string>): Record<st
     url: fields.url ?? "",
     musica: fields.musica !== undefined ? Number(fields.musica) : -1,
     id_music:
-      fields.musica !== undefined && Number.isFinite(Number(fields.musica)) && Number(fields.musica) > 0
+      fields.musica !== undefined &&
+      Number.isFinite(Number(fields.musica)) &&
+      Number(fields.musica) > 0
         ? Number(fields.musica)
         : undefined,
     escolha: fields.escolha === "1",
@@ -205,7 +211,12 @@ export function useLiturgyLibrary() {
   async function save(
     data: Partial<LiturgyLibraryItem> & { name: string; items: LiturgyLibraryItem["items"] }
   ): Promise<LiturgyLibraryItem> {
-    const cleanData = JSON.parse(JSON.stringify(data)) as typeof data;
+    const cleanData = JSON.parse(
+      JSON.stringify({
+        ...data,
+        items: agendaParaPersistir(data.items),
+      })
+    ) as typeof data;
     const now = new Date().toISOString();
 
     if (cleanData.id) {
@@ -244,7 +255,7 @@ export function useLiturgyLibrary() {
     const payload = {
       name,
       exportedAt: new Date().toISOString(),
-      items,
+      items: agendaParaPersistir(items),
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);

@@ -1,5 +1,5 @@
 <template>
-  <div class="ribbon-screen-btn" :class="`ribbon-btn--${size}`">
+  <div v-if="canProject" class="ribbon-screen-btn" :class="`ribbon-btn--${size}`">
     <button
       type="button"
       class="ribbon-btn ribbon-btn--main"
@@ -33,17 +33,16 @@
 </template>
 
 <script setup lang="ts">
+import { canOpenWebWindows } from "@/helpers/projection/webWindow";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { LjIcon, LjMenu, type LjMenuItem } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
+import { useScreenProjection } from "@/composables/useScreenProjection";
 import {
   listDisplays,
   getPreferredMonitor,
   setPreferredMonitor,
   identifyDisplays,
-  isOpen as isProjectionOpen,
-  open as openProjection,
-  close as closeProjection,
   getFallbackFeature,
   isUsingFallback,
   getCategorizedDisplays,
@@ -53,9 +52,15 @@ import {
 import { useI18n } from "vue-i18n";
 import { CategorizedDisplays, DisplayInfo } from "@/types/Projection";
 
+const canProject = canOpenWebWindows();
+
 const props = defineProps({
   feature: { type: String, default: "" },
   route: { type: String, default: "" },
+  /** Rótulo com a janela fechada. Distingue botões vizinhos (tela principal, retorno). */
+  label: { type: String, default: null },
+  /** Rótulo com a janela aberta; sem ele, o genérico "Parar Projeção". */
+  activeLabel: { type: String, default: null },
   iconColor: { type: String, default: null },
   size: { type: String, default: "large" },
   testid: { type: String, default: null },
@@ -64,7 +69,6 @@ const props = defineProps({
 });
 
 const { t } = useI18n();
-const projection_open = ref(false);
 const displays = ref<any[]>([]);
 const effective_id = ref<number | string | null>(null);
 const explicit_id = ref<number | string | null | undefined>(undefined);
@@ -97,6 +101,25 @@ const fallback_label = computed(() => {
   return f;
 });
 
+/*
+ * A regra de "projetar" é a mesma do player (`Screen.vue`): utilitário com a
+ * Projeção de Fundo ligada não abre janela — vira camada dela, que é o que dá o
+ * fade. Este botão é o que os módulos de fato renderizam.
+ */
+const {
+  aberto: projection_open,
+  refresh: refreshProjection,
+  abrir,
+  fechar,
+  toggle,
+} = useScreenProjection({
+  feature: () => props.feature,
+  route: () => props.route,
+  monitorId: () => effective_id.value,
+  fullscreen: () => props.fullscreen,
+  alwaysOnTop: () => props.alwaysOnTop,
+});
+
 const is_active = computed(() => projection_open.value);
 const can_identify = computed(() => displays.value.length > 1);
 const needs_access = ref(false);
@@ -109,7 +132,9 @@ const dynamicIconColor = computed<string | undefined>(() =>
   is_active.value ? "var(--lj-danger)" : (props.iconColor ?? undefined)
 );
 const dynamicLabel = computed(() =>
-  is_active.value ? t("ribbon.btn.stop_projection") : t("ribbon.btn.project")
+  is_active.value
+    ? props.activeLabel || t("ribbon.btn.stop_projection")
+    : props.label || t("ribbon.btn.project")
 );
 
 /** Resolução do monitor — vira a linha secundária do item de menu. */
@@ -207,21 +232,11 @@ async function refresh() {
   const usingFallback = await isUsingFallback(props.feature);
   explicit_id.value = usingFallback ? undefined : explicit;
   effective_id.value = await getPreferredMonitor(props.feature);
-  projection_open.value = await isProjectionOpen(props.feature);
+  await refreshProjection();
 }
 
 async function primaryClick() {
-  if (projection_open.value) {
-    await closeProjection(props.feature);
-  } else {
-    await openProjection({
-      feature: props.feature,
-      route: props.route,
-      monitorId: effective_id.value,
-      fullscreen: props.fullscreen,
-      alwaysOnTop: props.alwaysOnTop,
-    });
-  }
+  await toggle();
   await refresh();
 }
 
@@ -229,22 +244,16 @@ async function choose(displayId: number | string | null | undefined) {
   await setPreferredMonitor(props.feature, displayId);
   await refresh();
   if (effective_id.value == null) {
-    if (projection_open.value) await closeProjection(props.feature);
+    if (projection_open.value) await fechar();
   } else {
-    if (projection_open.value) await closeProjection(props.feature);
-    await openProjection({
-      feature: props.feature,
-      route: props.route,
-      monitorId: effective_id.value,
-      fullscreen: props.fullscreen,
-      alwaysOnTop: props.alwaysOnTop,
-    });
+    if (projection_open.value) await fechar();
+    await abrir(effective_id.value);
   }
   await refresh();
 }
 
 async function closeOpen() {
-  await closeProjection(props.feature);
+  await fechar();
   await refresh();
 }
 
@@ -265,8 +274,7 @@ onMounted(async () => {
   // Sem isso, acumula múltiplos polls de 2s e o estado fica inconsistente.
   if (pollTimer) clearInterval(pollTimer);
   pollTimer = setInterval(async () => {
-    const open = await isProjectionOpen(props.feature);
-    if (open !== projection_open.value) projection_open.value = open;
+    await refreshProjection();
   }, 2000);
 });
 

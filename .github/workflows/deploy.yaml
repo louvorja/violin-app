@@ -3,6 +3,9 @@ on:
   push:
     branches:
       - main
+concurrency:
+  group: deploy-dist
+  cancel-in-progress: false
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -23,10 +26,13 @@ jobs:
           echo "https://${access_token}:x-oauth-basic@github.com" > ~/.git-credentials
           git config --global user.email $email
           git config --global user.name $username
-      - name: fetch CNAME from dist branch
+      - name: fetch previous web deployment
+        id: previous_deploy
         run: |
-          git fetch origin dist:dist
-          git show dist:CNAME > CNAME || echo "CNAME not found, skipping"
+          git fetch origin +dist:refs/remotes/origin/dist
+          mkdir -p "$RUNNER_TEMP/louvorja-previous-dist"
+          git archive refs/remotes/origin/dist | tar -x -C "$RUNNER_TEMP/louvorja-previous-dist"
+          echo "created_at=$(git show -s --format=%cI refs/remotes/origin/dist)" >> "$GITHUB_OUTPUT"
       - name: install dependencies
         run: npm install
       - name: read app version
@@ -55,10 +61,16 @@ jobs:
           POSTHOG_PROJECT_ID: ${{ vars.POSTHOG_PROJECT_ID }}
           POSTHOG_HOST: ${{ vars.POSTHOG_HOST }}
           REQUIRE_POSTHOG_SOURCEMAPS: "true"
+      # O SW já foi gerado: assets retidos ficam no servidor, fora do precache.
+      # Até cinco builds completos (atual + quatro), 14 dias e 128 MiB.
+      - name: retain assets for open tabs
+        env:
+          PREVIOUS_DEPLOY_AT: ${{ steps.previous_deploy.outputs.created_at }}
+        run: node scripts/retain-web-assets.mjs dist "$RUNNER_TEMP/louvorja-previous-dist" "$PREVIOUS_DEPLOY_AT"
       - name: copy CNAME to dist (if exists)
         run: |
-          if [ -f CNAME ]; then
-            cp CNAME dist/CNAME
+          if [ -f "$RUNNER_TEMP/louvorja-previous-dist/CNAME" ]; then
+            cp "$RUNNER_TEMP/louvorja-previous-dist/CNAME" dist/CNAME
           fi
       - name: copy index.html to 404.html
         run: |

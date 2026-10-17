@@ -93,6 +93,7 @@ body {
   padding: 48px;
 }
 .obs-text {
+  text-transform: uppercase;
   color: #fff;
   font-size: 52px;
   font-weight: 300;

@@ -81,6 +81,10 @@ export default {
       $appdata.set("snackbar.color", d.color);
       $appdata.set("snackbar.icon", d.icon);
       $appdata.set("snackbar.timeout", d.timeout);
+      // A ação mora fora do store (funções não serializam); este espelho
+      // existe para a interface reagir a ela — um computed sobre
+      // `_currentAction` ficaria preso no primeiro valor.
+      $appdata.set("snackbar.has_action", d.action !== null);
     });
   },
 

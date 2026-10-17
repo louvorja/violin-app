@@ -53,6 +53,7 @@ import packageJson from "@root/package.json";
 import {
   desktopDownloadUrl,
   desktopReleaseUrl,
+  desktopDownloadLabel,
   detectDesktopDownloadPlatform,
 } from "@/helpers/DesktopDownload";
 
@@ -64,17 +65,7 @@ const isDirectDownload = platform === "windows" || platform === "macos";
 const downloadUrl = desktopDownloadUrl(platform, version);
 const releaseUrl = desktopReleaseUrl(version);
 
-const primaryLabel = computed(() => {
-  if (platform === "other") return t("shell.desktop_download.view_downloads");
-  if (platform === "linux") {
-    return t("shell.desktop_download.view_downloads_for", {
-      platform: t("shell.desktop_download.platform.linux"),
-    });
-  }
-  return t("shell.desktop_download.download_for", {
-    platform: t(`shell.desktop_download.platform.${platform}`),
-  });
-});
+const primaryLabel = computed(() => desktopDownloadLabel(platform, t));
 </script>
 
 <style scoped>

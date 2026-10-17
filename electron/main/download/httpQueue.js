@@ -3,10 +3,29 @@ const fs = require("fs-extra");
 const path = require("path");
 const https = require("https");
 const http = require("http");
+const os = require("os");
 const { EventEmitter } = require("events");
+const { pathToFileURL } = require("url");
 
 const DEFAULT_PROGRESS_INTERVAL_MS = 100;
 const MAX_REDIRECTS = 3;
+// Um parcial mais velho que isto não é retomado: o arquivo no servidor pode ter mudado.
+const PARTIAL_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+// Esperas entre novas tentativas do mesmo arquivo; cada uma retoma de onde parou.
+const DEFAULT_RETRY_DELAYS_MS = [1000, 4000];
+const RESUMABLE_CODES = new Set([
+  "ECONNRESET", "ETIMEDOUT", "EPIPE", "ECONNABORTED", "ENOTFOUND", "EAI_AGAIN", "ECONNREFUSED",
+]);
+
+// ESM compartilhado com o renderer (WebFileStore); o import dinâmico é o que
+// permite ao CommonJS carregá-lo sem manter uma cópia.
+let _adaptiveModule = null;
+function loadAdaptiveConcurrency() {
+  _adaptiveModule ||= import(pathToFileURL(path.join(__dirname, "adaptiveConcurrency.mjs")).href);
+  return _adaptiveModule;
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * HttpQueue — fila de downloads HTTPS com pool de workers concorrentes.
@@ -24,12 +43,21 @@ class HttpQueue extends EventEmitter {
   /**
    * @param {{ baseUrl: string, apiToken?: string, concurrency?: number, progressIntervalMs?: number, filesDir?: string }} options
    */
-  constructor({ baseUrl, apiToken, concurrency, progressIntervalMs, filesDir } = {}) {
+  constructor({ baseUrl, apiToken, concurrency, progressIntervalMs, filesDir, retryDelaysMs } = {}) {
     super();
+    this.retryDelaysMs = Array.isArray(retryDelaysMs) ? retryDelaysMs : DEFAULT_RETRY_DELAYS_MS;
     this.baseUrl = (baseUrl || "").replace(/\/+$/, "");
     this.apiToken = apiToken || null;
     this.filesDir = filesDir;
-    this.concurrency = Math.max(1, Math.min(16, concurrency ?? 6));
+    // `concurrency` explícito fixa o número de downloads; sem ele a fila se
+    // adapta à vazão (ver adaptiveConcurrency.mjs).
+    this.fixedConcurrency = Number.isFinite(concurrency)
+      ? Math.max(1, Math.min(16, concurrency))
+      : null;
+    // Teto do controlador adaptativo. Ele só sobe enquanto a vazão melhora, então
+    // uma linha lenta não chega nele; uma linha rápida precisa de muitos fluxos,
+    // porque cada arquivo paga a latência do primeiro byte (≈0,4 s no áudio).
+    this.maxConcurrency = Math.max(6, Math.min(24, (os.cpus().length || 2) * 3));
     this.queue = [];
     this.running = false;
     this.cancelled = false;
@@ -154,7 +182,12 @@ class HttpQueue extends EventEmitter {
     return `${this.baseUrl}/${encoded}`;
   }
 
-  _downloadOne(url, localPath, onProgress, redirectCount = 0, tokenAllowed = true) {
+  /**
+   * `resume`: { offset, validator, onResponse(meta) }. Com `offset > 0` pede só o
+   * resto (`Range` + `If-Range`); se o servidor devolver o arquivo inteiro, o
+   * parcial é descartado e o download recomeça sozinho.
+   */
+  _downloadOne(url, localPath, onProgress, redirectCount = 0, tokenAllowed = true, resume = null) {
     return new Promise((resolve, reject) => {
       let target;
       try {
@@ -173,6 +206,10 @@ class HttpQueue extends EventEmitter {
 
       const lib = target.protocol === "https:" ? https : http;
       const headers = {};
+      if (resume && resume.offset > 0) {
+        headers.Range = `bytes=${resume.offset}-`;
+        if (resume.validator) headers["If-Range"] = resume.validator;
+      }
       // O token pertence ao servidor configurado, não a URLs de CDN nem a
       // origens alcançadas por redirects. Uma vez fora da origem, não o reenvie.
       let baseOrigin;
@@ -214,18 +251,41 @@ class HttpQueue extends EventEmitter {
           }
           this._downloadOne(
             next.href, localPath, onProgress, redirectCount + 1,
-            tokenAllowed && next.origin === target.origin
+            tokenAllowed && next.origin === target.origin, resume
           ).then(resolve, reject);
           return;
         }
-        if (res.statusCode !== 200) {
+        if (res.statusCode !== 200 && res.statusCode !== 206) {
           res.resume();
-          reject(new Error(`HTTP ${res.statusCode}`));
+          const error = new Error(`HTTP ${res.statusCode}`);
+          error.status = res.statusCode;
+          reject(error);
           return;
         }
-        const total = parseInt(res.headers["content-length"] || "0", 10);
+        let total = parseInt(res.headers["content-length"] || "0", 10);
         let bytes = 0;
-        const out = fs.createWriteStream(localPath);
+        let append = false;
+        if (res.statusCode === 206) {
+          // Só vale se for exatamente o pedaço pedido; qualquer outra coisa
+          // anexada ao parcial produziria um arquivo corrompido.
+          const range = /^bytes (\d+)-(\d+)\/(\d+|\*)$/.exec(res.headers["content-range"] || "");
+          if (!resume || !(resume.offset > 0) || !range || Number(range[1]) !== resume.offset) {
+            res.resume();
+            const error = new Error("Resposta parcial inesperada");
+            error.discardPartial = true;
+            reject(error);
+            return;
+          }
+          append = true;
+          bytes = resume.offset;
+          total = range[3] === "*" ? 0 : Number(range[3]);
+        }
+        resume?.onResponse?.({
+          etag: res.headers.etag || null,
+          lastModified: res.headers["last-modified"] || null,
+          total,
+        });
+        const out = fs.createWriteStream(localPath, { flags: append ? "a" : "w" });
         res.on("data", (chunk) => {
           bytes += chunk.length;
           onProgress?.(bytes, total);
@@ -236,7 +296,9 @@ class HttpQueue extends EventEmitter {
             // Conexão que cai no meio entrega um arquivo curto sem erro nenhum,
             // e ele viraria acervo "baixado" que não toca.
             if (total > 0 && bytes !== total) {
-              reject(new Error(`Download incompleto: ${bytes}/${total} bytes`));
+              const error = new Error(`Download incompleto: ${bytes}/${total} bytes`);
+              error.status = 0;
+              reject(error);
               return;
             }
             resolve();
@@ -257,10 +319,49 @@ class HttpQueue extends EventEmitter {
     });
   }
 
+  /** Erro de rede ou de servidor: o que já chegou ao disco continua valendo. */
+  _isResumable(err) {
+    if (!err || err.discardPartial) return false;
+    if (typeof err.status === "number" && err.status > 0) {
+      return err.status >= 500 || err.status === 429 || err.status === 408;
+    }
+    if (err.code && RESUMABLE_CODES.has(err.code)) return true;
+    return /timeout|incompleto|aborted|socket hang up/i.test(err.message || "");
+  }
+
+  /** Quanto do arquivo já está no disco e como provar ao servidor que é o mesmo. */
+  async _readResume(tmp, item) {
+    const meta = `${tmp}.meta`;
+    const discard = async () => {
+      await fs.remove(tmp).catch(() => {});
+      await fs.remove(meta).catch(() => {});
+      return { offset: 0, validator: null };
+    };
+    let stat;
+    try {
+      stat = await fs.stat(tmp);
+    } catch (error) {
+      if (error.code === "ENOENT") return { offset: 0, validator: null };
+      throw error;
+    }
+    if (!stat.isFile() || stat.size === 0 || Date.now() - stat.mtimeMs > PARTIAL_MAX_AGE_MS) {
+      return discard();
+    }
+    let saved = null;
+    try { saved = await fs.readJson(meta); } catch (_) { /* sem validador */ }
+    const validator = saved?.etag || saved?.lastModified || null;
+    if (!validator) return discard();
+    if (item.expectedSize > 0 && stat.size >= item.expectedSize) return discard();
+    if (saved?.total > 0 && stat.size >= saved.total) return discard();
+    return { offset: stat.size, validator };
+  }
+
   async _processItem(item, total, getNextIndex) {
     const idx = getNextIndex();
     const url = item.remoteUrl || this._buildUrl(item.remote);
     const tmp = `${item.local}.tmp`;
+    const metaPath = `${tmp}.meta`;
+    let receivedBytes = 0;
 
     try {
       await this._prepareDestination(item.local);
@@ -274,28 +375,60 @@ class HttpQueue extends EventEmitter {
       }
       if (this.cancelled) throw new Error("cancelled");
 
-      await this._downloadOne(url, tmp, (bytes, totalBytes) => {
-        this._queueProgress(idx, {
-          current: idx,
-          total,
-          file: item.remote,
-          bytes,
-          totalBytes: totalBytes || item.expectedSize || 0,
-        });
-      });
+      const attempts = 1 + this.retryDelaysMs.length;
+      for (let attempt = 1; ; attempt++) {
+        const resume = await this._readResume(tmp, item);
+        resume.onResponse = (meta) => {
+          fs.outputJson(metaPath, meta).catch(() => {});
+        };
+        try {
+          await this._downloadOne(url, tmp, (bytes, totalBytes) => {
+            receivedBytes = bytes;
+            this._queueProgress(idx, {
+              current: idx,
+              total,
+              file: item.remote,
+              bytes,
+              totalBytes: totalBytes || item.expectedSize || 0,
+            });
+          }, 0, true, resume);
+          break;
+        } catch (error) {
+          if (this.cancelled) throw error;
+          // Parcial que o servidor não reconhece: recomeça do zero, sem gastar tentativa.
+          if (error.discardPartial || error.status === 416) {
+            await fs.remove(tmp).catch(() => {});
+            await fs.remove(metaPath).catch(() => {});
+            if (attempt >= attempts) throw error;
+            continue;
+          }
+          if (!this._isResumable(error) || attempt >= attempts) throw error;
+          console.warn(`[httpQueue] ${url}: ${error.message}; retomando (${attempt}/${attempts - 1})`);
+          await sleep(this.retryDelaysMs[attempt - 1]);
+          if (this.cancelled) throw new Error("cancelled");
+        }
+      }
       if (this.cancelled) throw new Error("cancelled");
 
       // `file-done` nunca ultrapassa a última posição conhecida do arquivo.
       this._flushPendingProgress(idx);
       await this._assertDestination(item.local, tmp);
       await fs.move(tmp, item.local, { overwrite: true });
+      await fs.remove(metaPath).catch(() => {});
       this._activeTmps.delete(tmp);
       this.emit("file-done", { file: item.remote, localPath: item.local });
-      return { ok: true };
+      return { ok: true, bytes: receivedBytes };
     } catch (err) {
       if (!this.cancelled) this._flushPendingProgress(idx);
+      // Falha de rede ou de servidor guarda o parcial: a próxima tentativa (ou
+      // o próximo "baixar") pede só o que falta. Cancelar e erro definitivo
+      // (404, destino inválido…) apagam o temporário.
+      const keepPartial = !this.cancelled && this._isResumable(err);
       if (this._activeTmps.has(tmp)) {
-        try { await fs.remove(tmp); } catch (_) { /* ignore */ }
+        if (!keepPartial) {
+          try { await fs.remove(tmp); } catch (_) { /* ignore */ }
+          try { await fs.remove(metaPath); } catch (_) { /* ignore */ }
+        }
         this._activeTmps.delete(tmp);
       }
       if (this.cancelled) return { ok: false, cancelled: true };
@@ -356,24 +489,47 @@ class HttpQueue extends EventEmitter {
     let failed = 0;
     const getNextIndex = () => ++started;
 
+    let adaptive = null;
+    if (this.fixedConcurrency === null) {
+      const { createAdaptiveConcurrency } = await loadAdaptiveConcurrency();
+      adaptive = createAdaptiveConcurrency({
+        min: 2,
+        start: 4,
+        max: this.maxConcurrency,
+        ramp: "geometric",
+      });
+    }
+    const slots = this.fixedConcurrency ?? this.maxConcurrency;
+
     // Pool de workers concorrentes — cada um consome o queue até esvaziar.
-    const worker = async () => {
+    // Todos os workers existem; só os de índice abaixo do limite atual pegam
+    // trabalho, os demais esperam o limite subir.
+    const worker = async (index) => {
       while (!this.cancelled) {
         await this._waitWhilePaused();
         if (this.cancelled) break;
         // A pausa pode chegar entre o Promise resolvido e este microtask.
         if (this.paused) continue;
         if (this.queue.length === 0) break;
+        if (adaptive && index >= adaptive.limit()) {
+          await sleep(250);
+          continue;
+        }
         const item = this.queue.shift();
         if (!item) break;
         const r = await this._processItem(item, total, getNextIndex);
-        if (r.ok) downloaded++;
-        else if (!r.cancelled) failed++;
+        if (r.ok) {
+          downloaded++;
+          adaptive?.report({ bytes: r.bytes, ok: true });
+        } else if (!r.cancelled) {
+          failed++;
+          adaptive?.report({ ok: false });
+        }
       }
     };
 
     const workers = [];
-    for (let i = 0; i < this.concurrency; i++) workers.push(worker());
+    for (let i = 0; i < slots; i++) workers.push(worker(i));
     await Promise.all(workers);
 
     this.running = false;

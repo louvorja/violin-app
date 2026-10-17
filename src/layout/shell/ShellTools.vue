@@ -23,8 +23,9 @@
       </div>
     </LjPopover>
 
-    <!--    Projeção de Fundo-->
+    <!--    Projeção de Fundo — sem segunda tela no celular, não há o que abrir-->
     <LjTooltip
+      v-if="!compact && canProject"
       :text="isBgPlaying ? 'Desativar projeção de fundo' : 'Ativar projeção de fundo'"
       side="bottom"
     >
@@ -124,9 +125,16 @@
               <span class="bg-task__detail">
                 {{ formatTaskDetail(task.detail) || `${Math.round(task.progress)}%` }}
               </span>
+              <span v-if="task.etaSeconds != null" class="bg-task__detail bg-task__eta">
+                {{ t("shell.background_tasks.eta", { time: formatEta(task.etaSeconds) }) }}
+              </span>
             </template>
             <span v-else class="bg-task__detail">
-              {{ t(`shell.background_tasks.${task.status}`) }}
+              {{
+                task.status === "error" && task.detail
+                  ? task.detail
+                  : t(`shell.background_tasks.${task.status}`)
+              }}
             </span>
           </div>
 
@@ -181,7 +189,7 @@
     </LjTooltip>
 
     <!--    Favoritos-->
-    <LjTooltip :text="$t('ribbon.btn.favorites')" side="bottom">
+    <LjTooltip v-if="!compact" :text="$t('ribbon.btn.favorites')" side="bottom">
       <button
         type="button"
         class="shell-tool"
@@ -193,7 +201,7 @@
     </LjTooltip>
 
     <!--    Modo de cor-->
-    <LjTooltip :text="$t('shell.toggle_theme')" side="bottom">
+    <LjTooltip v-if="!compact" :text="$t('shell.toggle_theme')" side="bottom">
       <button
         type="button"
         class="shell-tool"
@@ -205,7 +213,7 @@
     </LjTooltip>
 
     <!--    Sobre-->
-    <LjTooltip :text="$t('shell.appmenu_items.about')" side="bottom">
+    <LjTooltip v-if="!compact" :text="$t('shell.appmenu_items.about')" side="bottom">
       <button
         type="button"
         class="shell-tool"
@@ -217,7 +225,7 @@
     </LjTooltip>
 
     <!--    Hotkeys-->
-    <LjTooltip :text="$t('hotkeys.title')" side="bottom">
+    <LjTooltip v-if="!compact" :text="$t('hotkeys.title')" side="bottom">
       <button
         type="button"
         class="shell-tool"
@@ -251,6 +259,7 @@ import {
 import { useBackgroundTasks, type BackgroundTask } from "@/composables/useBackgroundTasks";
 import { useConnectivity } from "@/composables/useConnectivity";
 import Platform from "@/helpers/Platform";
+import { canOpenWebWindows } from "@/helpers/projection/webWindow";
 import { useChat } from "@/composables/useChat";
 import { localeTag } from "@/helpers/DateTime";
 import { useLibrasState } from "@/modules/libras/composables/useLibrasState";
@@ -258,10 +267,22 @@ import { useAppTheme } from "@/composables/useAppTheme";
 import { backgroundTaskLabel, formatBackgroundTaskDetail } from "@/helpers/BackgroundTaskDetail";
 import { LjButton, LjIcon, LjPopover, LjProgress, LjTooltip } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
+import { formatEta } from "@/helpers/Eta";
 import { COLORS } from "@constants/Colors";
 
 const { t, te, locale } = useI18n();
 const { isDark, toggleDark } = useAppTheme();
+
+const canProject = canOpenWebWindows();
+
+defineProps<{
+  /**
+   * Layout de celular: ficam os avisos de estado, as buscas e o Libras. O
+   * resto já tem outro caminho — aba Favoritos, tema e Sobre no menu — ou não
+   * se aplica sem segunda tela e sem teclado.
+   */
+  compact?: boolean;
+}>();
 const bgTasks = useBackgroundTasks();
 const { isOpen: chatOpen, unreadCount, toggleOpen: toggleChat } = useChat();
 
@@ -451,7 +472,7 @@ function toggleLibras() {
 .shell-tools--compact-web .shell-tool {
   flex: 0 0 44px;
   width: 44px;
-  height: 44px;
+  height: auto;
 }
 </style>
 

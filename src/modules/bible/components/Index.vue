@@ -629,7 +629,8 @@ function onKeydown(e: KeyboardEvent): void {
   if (!show.value) return;
   if (AppData.get("active_module") !== moduleId) return;
   if (bibleSpotlightOpen.value) return;
-  const alvo = e.target as HTMLElement | null;
+  // Atalhos encaminhados por window/document não têm closest().
+  const alvo = e.target instanceof Element ? e.target : null;
   const tag = alvo?.tagName;
   if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
   // Os primitivos sobre Reka não são <input>: o gatilho do select é um <button>

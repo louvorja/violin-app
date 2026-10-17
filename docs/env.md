@@ -60,11 +60,22 @@ URL resultante: `{VITE_URL_API}{VITE_PATH_FILES}`
 | Exemplo     | *(obtido com o administrador)*           |
 | Usado em    | `config/Api.ts`, `main.js`              |
 
-Token enviado como header `Api-Token` em todas as requisições ao servidor louvorja.
-Obrigatório no servidor legado (`api.louvorja.com.br`), que responde 401 sem ele.
-A API em `api.louvorja.workers.dev` é somente leitura e não exige token — o header
-é enviado assim mesmo e simplesmente ignorado.
-Em desenvolvimento com servidor local (`npm run files`), pode ser deixado vazio.
+Token enviado como header `Api-Token` nas buscas ao banco, **somente** quando
+`VITE_API_TOKEN_REQUIRED=true`. A API oficial (`api.louvorja.workers.dev` e
+`api.louvorja.com.br`, atendidas pelo mesmo Worker) é pública e ignora o header; o
+padrão é não enviá-lo, porque ele obriga o navegador a um pré-voo CORS (`OPTIONS`) antes
+de cada GET, e cada pré-voo também conta na cota diária da API.
+
+### `VITE_API_TOKEN_REQUIRED`
+
+| Campo       | Valor                                    |
+|-------------|------------------------------------------|
+| Tipo        | `"true"` (qualquer outro valor desliga)  |
+| Padrão      | desligado                                |
+| Usado em    | `config/Api.ts`                          |
+
+Ligue só ao hospedar a própria API com proteção por token. Com ele, o app envia
+`VITE_API_TOKEN` (e `VITE_URL_API_FALLBACK_TOKEN` no fallback) como `Api-Token`.
 
 ---
 
@@ -82,6 +93,26 @@ Em desenvolvimento com servidor local (`npm run files`), pode ser deixado vazio.
 URL da API de fallback. Quando a API principal (`VITE_URL_API`) falha,
 as chamadas são repetidas automaticamente usando esta URL.
 Se ambas falharem, o app usa cache stale quando disponível.
+
+---
+
+### `VITE_URL_MEDIA`
+
+| Campo       | Valor                                          |
+|-------------|------------------------------------------------|
+| Tipo        | URL (string)                                   |
+| Exemplo     | `https://files.louvorja.com.br`                |
+| Padrão      | `https://files.louvorja.com.br`                |
+| Usado em    | `config/Api.ts`, `helpers/MediaUrl.ts`         |
+
+Endereço público dos arquivos de mídia. O catálogo já entrega cada `url_*`
+completa; esta variável só serve para reconhecer, na web, o que foi baixado
+quando a mídia ainda saía pelo `<API>/file/...` e mudar a chave do arquivo no
+Cache Storage para o endereço atual (migração feita uma vez, no boot).
+
+A cada versão nova do app o catálogo guardado é renovado: o desktop esvazia o
+cache de JSON (`<dados>/json_db`) e todas as plataformas baixam de novo o pacote
+de catálogo, sem a Bíblia.
 
 ---
 
@@ -240,8 +271,10 @@ O script `npm run electron:build` injetará essa variável automaticamente.
 | `VITE_URL_API`          | Sim         | —                            | `import.meta.env`  |
 | `VITE_PATH_JSON_DB`     | Não         | `/json_db`                   | `import.meta.env`  |
 | `VITE_PATH_FILES`       | Não         | `/file`                      | `import.meta.env`  |
-| `VITE_API_TOKEN`        | Sim (prod)  | *(sem auth em dev local)*    | `import.meta.env`  |
+| `VITE_API_TOKEN`        | Não         | *(sem auth em dev local)*    | `import.meta.env`  |
+| `VITE_API_TOKEN_REQUIRED` | Não       | desligado                    | `import.meta.env`  |
 | `VITE_URL_API_FALLBACK` | Não         | *(vazio)*                    | `import.meta.env`  |
+| `VITE_URL_MEDIA`        | Não         | `https://files.louvorja.com.br` | `import.meta.env`  |
 | `VITE_URL_API_FALLBACK_TOKEN` | Não  | herda `VITE_API_TOKEN`       | `import.meta.env`  |
 | `VITE_APP_MODE`         | Não         | `"production"`               | `import.meta.env`  |
 | `VITE_APP_VERSION`      | Não         | versão de `package.json`     | `import.meta.env`  |

@@ -17,7 +17,7 @@
       <div
         v-for="(song, index) in visibleSongs"
         :key="song.id_music"
-        class="playlist-songs-item"
+        class="playlist-songs-item lj-music-row"
         :class="{
           'playlist-songs-item--playing': isPlayingSong(song.id_music),
           'playlist-songs-item--played': isPlayedSong(song.id_music),
@@ -249,15 +249,11 @@ function playAll(): void {
   gap: var(--lj-space-3);
   padding: var(--lj-space-2) var(--lj-space-4);
   border-bottom: 1px solid var(--lj-surface-divider);
-  transition: background var(--lj-transition-fast);
-}
-
-.playlist-songs-item:hover {
-  background: var(--lj-surface-bg-hover);
 }
 
 .playlist-songs-item--playing {
-  background: var(--lj-surface-bg-active);
+  --lj-music-row-bg: var(--lj-surface-bg-active);
+
   border-left: 2px solid var(--lj-navy);
 }
 
@@ -315,7 +311,8 @@ function playAll(): void {
   transition: opacity var(--lj-transition-fast);
 }
 
-.playlist-songs-item:hover .playlist-songs-item-actions {
+.playlist-songs-item:hover .playlist-songs-item-actions,
+.playlist-songs-item:focus-within .playlist-songs-item-actions {
   opacity: 1;
 }
 

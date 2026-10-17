@@ -4,9 +4,10 @@
  * Fases posteriores (D4) vão adicionar factories para janelas de projeção/retorno.
  */
 
-const { BrowserWindow, shell } = require("electron");
+const { BrowserWindow, Menu, shell } = require("electron");
 const path = require("path");
 const { prepareWindow } = require("./e2eWindowMode.js");
+const { attachEditContextMenu } = require("./editContextMenu.js");
 
 /**
  * Posição de repouso dos semáforos do macOS, alinhada ao centro da systembar.
@@ -99,6 +100,7 @@ function createMainWindow(devUrl, prodHtmlPath, preloadPath) {
     },
   });
   prepareWindow(win);
+  attachEditContextMenu(win, Menu);
 
   // Handler para window.open() — necessário para janelas popup e projeção.
   // Em D4, este handler vai ser expandido para abrir BrowserWindows em monitores específicos.

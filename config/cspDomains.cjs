@@ -27,6 +27,12 @@ const DOMAINS = {
     "https://api.louvorja.workers.dev",
     "https://api.louvorja.com.br"
   ],
+  // Armazenamento dos arquivos de mídia. O catálogo pode apontar capa e áudio
+  // direto para cá, sem passar pela API: cada arquivo servido por ela conta na
+  // cota diária de requisições.
+  FILES: [
+    "https://*.louvorja.com.br"
+  ],
   CDN: [
     "https://cdn.jsdelivr.net",
     "https://static.cloudflareinsights.com"
@@ -66,6 +72,11 @@ const DOMAINS = {
     "https://t2.gstatic.com",
     "https://t3.gstatic.com",
   ],
+  // Miniaturas de designs do Canva (`thumbnail.url` documentado como
+  // document-export.canva.com; o wildcard cobre hosts de assets que o Canva
+  // pode trocar). Só IMG: as chamadas REST acontecem no main, então CONNECT
+  // não ganha nada aqui.
+  CANVA: ["https://document-export.canva.com", "https://*.canva.com"],
   VLIBRAS: [
     DOMAINS_SCR.VLIBRAS.URL,
     DOMAINS_SCR.VLIBRAS.DICT,
@@ -75,6 +86,7 @@ const DOMAINS = {
 };
 
 const api = DOMAINS.API.join(" ");
+const files = DOMAINS.FILES.join(" ");
 const cdn = DOMAINS.CDN.join(" ");
 const google = DOMAINS.GOOGLE.join(" ");
 const youtube = DOMAINS.YOUTUBE.join(" ");
@@ -82,6 +94,7 @@ const vlibras = DOMAINS.VLIBRAS.join(" ");
 const fonts = DOMAINS.FONTS.join(" ");
 const posthog = DOMAINS.POSTHOG.join(" ");
 const contributorImages = DOMAINS.CONTRIBUTOR_IMAGES.join(" ");
+const canva = DOMAINS.CANVA.join(" ");
 const thirdParty = `${youtube} ${google} ${vlibras} ${cdn} ${posthog}`;
 
 const DOMAINS_CSP = {
@@ -93,9 +106,11 @@ const DOMAINS_CSP = {
   // navegador barrava a capa e o áudio enquanto o `fetch` da mesma origem
   // passava — o operador via "Ocorreu um erro ao carregar este áudio". Só o
   // desktop escapava, porque lá o CSP libera `https:` inteiro.
-  IMG: `${api} ${youtube} ${contributorImages}`,
-  MEDIA: `${api} ${youtube}`,
-  CONNECT: `${api} ${thirdParty}`,
+  // O armazenamento entra nos mesmos três: o download para uso offline no
+  // web/PWA é um `fetch`, e a capa e o áudio tocam direto de lá.
+  IMG: `${api} ${files} ${youtube} ${contributorImages} ${canva}`,
+  MEDIA: `${api} ${files} ${youtube}`,
+  CONNECT: `${api} ${files} ${thirdParty}`,
   WORKER: `data:`,
   FRAME: `${youtube} ${vlibras}`,
 };

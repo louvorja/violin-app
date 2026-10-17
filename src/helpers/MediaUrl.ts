@@ -1,4 +1,20 @@
-import { API_URL_FILES } from "@/config/Api";
+import { API_URL_FILES, LEGACY_MEDIA_PREFIXES, MEDIA_URL } from "@/config/Api";
+
+/**
+ * Endereço atual de uma mídia guardada com o endereço antigo (`<API>/file/...`),
+ * ou `null` quando ela não é desse tipo. Não é usado ao ler o catálogo: o
+ * catálogo é renovado a cada atualização do app. Serve só para mudar a chave de
+ * arquivos que a web já baixou, porque o Cache Storage é indexado pela URL.
+ */
+export function currentUrlOfLegacyMedia(url: string): string | null {
+  const base = (MEDIA_URL || "").replace(/\/+$/, "");
+  if (!base) return null;
+  for (const prefix of LEGACY_MEDIA_PREFIXES ?? []) {
+    const root = prefix.replace(/\/+$/, "");
+    if (root && url.startsWith(`${root}/`)) return `${base}/${url.slice(root.length + 1)}`;
+  }
+  return null;
+}
 
 export interface MediaReference {
   url: string;

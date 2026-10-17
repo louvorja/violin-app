@@ -252,6 +252,14 @@ function createRuntimeHealthMonitor(options = {}) {
       report("main_event_loop_stall", "error", {
         window_role: "main",
         feature: "main_process",
+        /*
+         * O logger do main só imprime `duration_ms` e `reason` (ver
+         * `_emitRuntimeIncident`) — sem eles aqui, o log do stall saía
+         * `duration_ms: undefined`, que não diz quanto tempo a aplicação
+         * ficou travada nem por quê.
+         */
+        duration_ms: sample.main_loop_max_ms,
+        reason: "event_loop_max_delay",
         ...sample,
         critical_budget_ms: criticalDelayMs,
       });

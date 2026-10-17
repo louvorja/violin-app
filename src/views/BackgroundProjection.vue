@@ -1,149 +1,210 @@
 <template>
-  <!-- Layer 0: Fundo preto permanente -->
-  <div class="layer-root-bg"></div>
+  <!--
+    Raiz única de propósito: um `Transition` que é filho direto de um
+    template com vários irmãos NÃO anima a saída — o Vue não pendura os ganchos
+    nele. Tudo aqui dentro é `position: fixed`, então a raiz não atrapalha a
+    sobreposição das camadas.
+  -->
+  <div class="projection-root">
+    <!-- Layer 0: Fundo preto permanente -->
+    <div class="layer-root-bg"></div>
 
-  <!-- Layer: Fundo customizado (wallpaper) -->
-  <div class="fp-wallpaper" :style="fallbackStyle"></div>
+    <!-- Layer: Fundo customizado (wallpaper) -->
+    <div class="fp-wallpaper" :style="fallbackStyle"></div>
 
-  <!-- MODO FILE PROJECTION -->
-  <template v-if="fileState.active">
-    <div class="file-projection">
-      <img v-if="fileState.type === 'image'" :src="fileState.url" class="layer-file" alt="" />
-      <video
-        v-else-if="fileState.type === 'video'"
-        ref="projVideoRef"
-        :src="fileState.url"
-        class="layer-file"
-        autoplay
-        muted
-        loop
-      ></video>
-      <template v-else-if="fileState.type === 'youtube'">
-        <div v-show="!ytFailed" ref="ytContainer" class="layer-file"></div>
-        <div v-if="ytFailed" class="layer-file video-unavailable">
-          <span class="video-unavailable__title">{{ $t("projection.video_unavailable") }}</span>
-          <span class="video-unavailable__hint">{{ $t("projection.video_unavailable_hint") }}</span>
-        </div>
-      </template>
-      <canvas
-        v-else-if="fileState.type === 'pdf'"
-        ref="pdfCanvas"
-        class="layer-file layer-file--pdf"
-      ></canvas>
-    </div>
-  </template>
-
-  <!-- MODO BACKGROUND PROJECTION -->
-  <template v-else>
-    <Transition name="fade">
-      <img
-        v-if="curBg.type === 'image'"
-        :key="'img-' + curBg.url"
-        :src="curBg.url"
-        class="layer-bg"
-        :style="{ '--fade-ms': fadeDurationMs + 'ms' }"
-        alt=""
-      />
-      <video
-        v-else-if="curBg.type === 'video'"
-        :key="'vid-' + curBg.url"
-        ref="bgVideoRef"
-        :src="curBg.url"
-        class="layer-bg"
-        :style="{ '--fade-ms': fadeDurationMs + 'ms' }"
-        autoplay
-        muted
-        loop
-      ></video>
-    </Transition>
-    <Transition name="fade">
+    <!-- MODO FILE PROJECTION -->
+    <Transition name="fade" :duration="fadeDurationMs">
       <div
-        v-if="!curBg.active"
-        class="layer-bg layer-bg--fallback"
-        :style="{ ...fallbackStyle, '--fade-ms': fadeDurationMs + 'ms' }"
-      ></div>
-    </Transition>
-    <div v-if="projActive" class="layer-projection">
-      <!-- Bíblia: renderização com formatação própria -->
-      <div
-        v-if="projType === 'bible'"
-        ref="container"
-        class="bible-root"
-        :class="[`align-${bibleVerticalAlign}`, `justify-${bibleHorizontalAlign}`]"
+        v-if="fileState.active"
+        class="file-projection"
+        :style="{ '--fade-ms': fadeDurationMs + 'ms' }"
       >
-        <Transition name="fade-verse" mode="out-in">
-          <div
-            v-if="bibleActive && (bibleDisplayText || bibleDisplayReference)"
-            :key="bibleDisplayText + bibleDisplayReference"
-            class="bible-content"
-            :style="{
-              padding: `${bibleBorderSpacing}px`,
-              backgroundColor: bibleTextBackgroundEnabled
-                ? bibleTextBackgroundColor || 'transparent'
-                : 'transparent',
-            }"
-          >
-            <span
-              v-if="bibleDisplayText"
-              class="bible-text"
-              :style="{
-                color: bibleFontColor,
-                fontSize: bibleFontSizePx + 'px',
-                fontFamily: bibleFont,
-                textAlign: bibleTextAlign,
-                ...bibleTextShadowStyle,
-              }"
-            >
-              {{ bibleDisplayText }}
-            </span>
-            <span
-              v-if="bibleDisplayReference"
-              class="bible-reference"
-              :style="{
-                color: bibleRefFontColor,
-                fontSize: bibleRefFontSizePx + 'px',
-                fontFamily: bibleRefFont,
-                textAlign: bibleTextAlign,
-              }"
-            >
-              {{ bibleDisplayReference }}
+        <img
+          v-if="fileState.type === 'image'"
+          :src="fileState.url"
+          class="layer-file"
+          :style="projectionZoom.styleFor(fileState.playback_id ?? fileState.url)"
+          alt=""
+        />
+        <video
+          v-else-if="fileState.type === 'video'"
+          ref="projVideoRef"
+          :src="fileState.url"
+          class="layer-file"
+          autoplay
+          muted
+          loop
+        ></video>
+        <template v-else-if="fileState.type === 'youtube'">
+          <div v-show="!ytFailed" ref="ytContainer" class="layer-file"></div>
+          <div v-if="ytFailed" class="layer-file video-unavailable">
+            <span class="video-unavailable__title">{{ $t("projection.video_unavailable") }}</span>
+            <span class="video-unavailable__hint">
+              {{ $t("projection.video_unavailable_hint") }}
             </span>
           </div>
-          <div v-else class="bible-empty"></div>
+        </template>
+        <canvas
+          v-else-if="fileState.type === 'pdf'"
+          ref="pdfCanvas"
+          class="layer-file layer-file--pdf"
+          :style="projectionZoom.styleFor(fileState.playback_id ?? fileState.url, currentPdfPage)"
+        ></canvas>
+      </div>
+    </Transition>
+
+    <!-- MODO BACKGROUND PROJECTION -->
+    <!--
+      O wrapper existe para o conjunto (fundo, fallback e camada de projeção)
+      poder sair com fade quando o arquivo assume a tela. Ele é estático de
+      propósito: os filhos são `position: fixed` e precisam continuar se ancorando
+      na janela, e não nele.
+    -->
+    <Transition name="fade" :duration="fadeDurationMs">
+      <div
+        v-if="!fileState.active"
+        class="bg-stack"
+        :style="{ '--fade-ms': fadeDurationMs + 'ms' }"
+      >
+        <Transition name="fade">
+          <img
+            v-if="curBg.type === 'image'"
+            :key="'img-' + curBg.url"
+            :src="curBg.url"
+            class="layer-bg"
+            :style="{ '--fade-ms': fadeDurationMs + 'ms' }"
+            alt=""
+          />
+          <video
+            v-else-if="curBg.type === 'video'"
+            :key="'vid-' + curBg.url"
+            ref="bgVideoRef"
+            :src="curBg.url"
+            class="layer-bg"
+            :style="{ '--fade-ms': fadeDurationMs + 'ms' }"
+            autoplay
+            muted
+            loop
+          ></video>
+        </Transition>
+        <Transition name="fade">
+          <div
+            v-if="!curBg.active"
+            class="layer-bg layer-bg--fallback"
+            :style="{ ...fallbackStyle, '--fade-ms': fadeDurationMs + 'ms' }"
+          ></div>
+        </Transition>
+        <Transition name="fade" :duration="fadeDurationMs">
+          <div
+            v-if="projActive"
+            :key="projType"
+            class="layer-projection"
+            :style="{ '--fade-ms': fadeDurationMs + 'ms' }"
+          >
+            <!-- Bíblia: renderização com formatação própria -->
+            <div
+              v-if="projType === 'bible'"
+              ref="container"
+              class="bible-root"
+              :class="[`align-${bibleVerticalAlign}`, `justify-${bibleHorizontalAlign}`]"
+            >
+              <Transition name="fade-verse" mode="out-in">
+                <div
+                  v-if="bibleActive && (bibleDisplayText || bibleDisplayReference)"
+                  :key="bibleDisplayText + bibleDisplayReference"
+                  class="bible-content"
+                  :style="{
+                    padding: `${bibleBorderSpacing}px`,
+                    backgroundColor: bibleTextBackgroundEnabled
+                      ? bibleTextBackgroundColor || 'transparent'
+                      : 'transparent',
+                  }"
+                >
+                  <span
+                    v-if="bibleDisplayText"
+                    class="bible-text"
+                    :style="{
+                      color: bibleFontColor,
+                      fontSize: bibleFontSizePx + 'px',
+                      fontFamily: bibleFont,
+                      textAlign: bibleTextAlign,
+                      ...bibleTextShadowStyle,
+                    }"
+                  >
+                    {{ bibleDisplayText }}
+                  </span>
+                  <span
+                    v-if="bibleDisplayReference"
+                    class="bible-reference"
+                    :style="{
+                      color: bibleRefFontColor,
+                      fontSize: bibleRefFontSizePx + 'px',
+                      fontFamily: bibleRefFont,
+                      textAlign: bibleTextAlign,
+                    }"
+                  >
+                    {{ bibleDisplayReference }}
+                  </span>
+                </div>
+                <div v-else class="bible-empty"></div>
+              </Transition>
+            </div>
+
+            <!-- Música: renderização via Slide -->
+            <Slide
+              v-else
+              :slide="slide!!"
+              :title="title"
+              :progress="progress"
+              show-progress
+              class="layer-slide"
+            />
+          </div>
         </Transition>
       </div>
+    </Transition>
 
-      <!-- Música: renderização via Slide -->
-      <Slide
-        v-else
-        :slide="slide!!"
-        :title="title"
-        :progress="progress"
-        show-progress
-        class="layer-slide"
-      />
-    </div>
-  </template>
+    <!-- Layer 2: Avisos (Utilitários) — por cima de tudo, como a janela própria fazia -->
+    <Transition name="fade" :duration="fadeDurationMs">
+      <div v-if="avisosAtivos" class="layer-avisos" :style="{ '--fade-ms': fadeDurationMs + 'ms' }">
+        <AnnouncementsLayer hold-last-slide-on-close />
+      </div>
+    </Transition>
 
-  <!-- Layer 2: Overlays -->
-  <OverlayRenderer />
-  <LibrasOverlay
-    :slide-lyric="projType === 'music' ? (slide?.lyric as string) : undefined"
-    :music-id="projType === 'music' ? (slide?.id_music as number | undefined) : undefined"
-    :slide-index="projType === 'music' ? slideIndex : undefined"
-    :verse-text="projType === 'bible' ? bibleText : undefined"
-    :bible-version="projType === 'bible' ? bibleVersion : undefined"
-    :bible-book-id="projType === 'bible' ? bibleBookId : undefined"
-    :bible-chapter="projType === 'bible' ? Number(bibleChapter) || undefined : undefined"
-    :bible-verses="projType === 'bible' ? bibleVerses : undefined"
-    :type="projType"
-  />
+    <!-- Layer 3: Utilitários (timer, contador, relógio…) — por cima de tudo -->
+    <Transition name="fade" :duration="fadeDurationMs">
+      <div
+        v-if="utilitarioAtivo"
+        :key="utilitarioAtivo"
+        class="layer-utilitario"
+        :style="{ '--fade-ms': fadeDurationMs + 'ms' }"
+      >
+        <ModuleProjectionLayer :module-id="utilitarioAtivo" />
+      </div>
+    </Transition>
+
+    <!-- Layer 4: Overlays -->
+    <OverlayRenderer />
+    <ProjectionClearScreen />
+    <LibrasOverlay
+      :slide-lyric="projType === 'music' ? (slide?.lyric as string) : undefined"
+      :music-id="projType === 'music' ? (slide?.id_music as number | undefined) : undefined"
+      :slide-index="projType === 'music' ? slideIndex : undefined"
+      :verse-text="projType === 'bible' ? bibleText : undefined"
+      :bible-version="projType === 'bible' ? bibleVersion : undefined"
+      :bible-book-id="projType === 'bible' ? bibleBookId : undefined"
+      :bible-chapter="projType === 'bible' ? Number(bibleChapter) || undefined : undefined"
+      :bible-verses="projType === 'bible' ? bibleVerses : undefined"
+      :type="projType"
+    />
+  </div>
 </template>
 
 <script setup lang="ts">
 import { reactive, ref, computed, onMounted, onBeforeUnmount, nextTick } from "vue";
 import { estiloDeFundo } from "@/helpers/BackgroundStyle";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
+import { useProjectionZoom } from "@/composables/useProjectionZoom";
 import { useProjectionCloseNotice } from "@/composables/useProjectionCloseNotice";
 import { PROJECTION_TYPE } from "@/constants/Projection";
 import { useProjectionState } from "@/composables/useProjectionState";
@@ -155,8 +216,11 @@ import $modules from "@/helpers/Modules";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { getSetting } from "@/helpers/SettingsStorage";
 import OverlayRenderer from "@/components/OverlayRenderer.vue";
+import ProjectionClearScreen from "@/components/ProjectionClearScreen.vue";
 import LibrasOverlay from "@/views/LibrasOverlay.vue";
 import Slide from "@/components/Slide.vue";
+import AnnouncementsLayer from "@/modules/announcements/components/ProjectionLayer.vue";
+import ModuleProjectionLayer from "@/components/ModuleProjectionLayer.vue";
 import { DEFAULT_BACKGROUND_COLOR, MAIN_BACKGROUND_ID, Settings } from "@/types/Settings";
 import { KEYS } from "@/constants/UserDataKeys";
 import { SETTINGS_TABLE } from "@/constants/DbTables";
@@ -170,6 +234,10 @@ import {
   BackgroundPresentationGate,
   readStoredBackgroundState,
 } from "@/presentation/BackgroundPresentationState";
+import {
+  AnnouncementsPresentationGate,
+  type AnnouncementPacket,
+} from "@/presentation/AnnouncementsPresentationState";
 import { loadYtApi } from "@/composables/useYouTubeApi";
 import { loadPdfDocument, type PDFDocumentProxy } from "@/helpers/PdfRuntime";
 import { FONT, resolveFont } from "@/config/Fonts";
@@ -244,6 +312,9 @@ let ytPlayer: YTPlayer | null = null;
 
 /* ── PDF state ── */
 const pdfCanvas = ref<HTMLCanvasElement | null>(null);
+// Zoom de imagem/PDF escolhido no Modo apresentação: esta tela só aplica o recorte.
+const projectionZoom = useProjectionZoom();
+
 let pdfDoc: PDFDocumentProxy | null = null;
 let pdfLoadGeneration = 0;
 const pdfRenderQueue = new PdfPageRenderQueue();
@@ -256,6 +327,87 @@ const youtubeStateGate = new VideoStateGate();
 const activationGate = new FileProjectionActivationGate();
 const ytFailed = ref(false);
 let _ytSyncTimer: ReturnType<typeof setInterval> | null = null;
+
+/* ── Avisos (Utilitários) ── */
+
+/*
+ * Os avisos renderizam AQUI quando há Projeção de Fundo, em vez de numa janela
+ * própria: é o que faz eles entrarem e saírem com o mesmo fade das músicas, da
+ * bíblia e do arquivo. O estado vem pelos mesmos broadcasts de sempre — a
+ * camada (`ProjectionLayer.vue`) e este sinal leem o mesmo pacote, então os dois
+ * concordam sobre quando o aviso está no ar.
+ */
+const announcementsGate = new AnnouncementsPresentationGate();
+const avisosAtivos = ref(false);
+
+useBroadcastListener(BROADCAST_TYPE.ANNOUNCEMENTS_STATE, (payload: unknown) => {
+  const packet: AnnouncementPacket | null = announcementsGate.accept(payload);
+  if (packet) avisosAtivos.value = packet.active;
+});
+
+/* ── Utilitários (timer, contador, relógio, cronômetro, quadro, painel) ── */
+
+/*
+ * Os Utilitários entravam por `/projection/module`, uma janela FULLSCREEN
+ * própria: aparecia por cima do telão como um retângulo preto, sem fade nenhum.
+ * Aqui eles viram mais uma camada.
+ *
+ * Vários utilitários podem estar ativos ao mesmo tempo (um relógio e um
+ * contador, por exemplo) — mas só cabe um no telão. Quem manda é o último que
+ * falou: a ordem de chegada é a ordem em que o operador os ligou.
+ */
+/**
+ * Quem está no ar, do mais antigo ao mais recente. A ordem É o estado: quem
+ * está ligado está na lista, e a frente é o último da lista.
+ */
+const ordemModulos = ref<string[]>([]);
+/** null quando nenhum utilitário está no ar — é o que faz a camada sair. */
+const utilitarioAtivo = ref<string | null>(null);
+
+/** Liga ou desliga um utilitário, mantendo qual fica na frente. */
+function _utilitario(id: string, ativo: boolean): void {
+  if (!id) return;
+  const ordem = ordemModulos.value.filter((m) => m !== id);
+
+  if (ativo) {
+    ordem.push(id);
+    ordemModulos.value = ordem;
+    /* O último que falou manda: foi o que o operador ligou por último. */
+    utilitarioAtivo.value = id;
+    return;
+  }
+
+  /* Desligado sai de vez, para não ressuscitar quando outro for desligado. */
+  ordemModulos.value = ordem;
+  if (utilitarioAtivo.value === id) {
+    /* Sobrou outro no ar: ele volta à frente em vez de o telão esvaziar. */
+    utilitarioAtivo.value = ordem[ordem.length - 1] ?? null;
+  }
+}
+
+/*
+ * Quem decide o que está na tela é o clique em "Projetar", NÃO o valor emitido.
+ *
+ * `MODULE_PROJECTION_VALUE` é fluxo: o timer manda `active:true` na hora, ligado
+ * ou não (o `watch` tem `immediate: true`), e o relógio manda a hora todo
+ * segundo. Com janela própria isso não importava — não havia onde aparecer. Na
+ * janela de fundo importaria: bastava abrir o módulo para o telão paintar.
+ */
+useBroadcastListener(BROADCAST_TYPE.MODULE_PROJECTION_OPEN, (payload: unknown) => {
+  const packet = payload as { module?: string } | null;
+  if (typeof packet?.module !== "string") return;
+  _utilitario(packet.module, true);
+});
+
+/*
+ * Fechar é o mesmo caminho de desligar — e o evento não traz `active`: tratá-lo
+ * como "no ar" manteria o utilitário preso na tela depois do ESC.
+ */
+useBroadcastListener(BROADCAST_TYPE.MODULE_PROJECTION_CLOSE, (payload: unknown) => {
+  const packet = payload as { module?: string } | null;
+  if (typeof packet?.module !== "string") return;
+  _utilitario(packet.module, false);
+});
 
 const projActive = computed(() => !!slide.value);
 const projType = computed(() => {
@@ -855,7 +1007,38 @@ onBeforeUnmount(() => {
   opacity: 0;
 }
 
+/*
+ * A raiz não desenha nada e não posiciona: existe só para o template ter um
+ * único elemento na raiz, porque é isso que faz o `Transition` pendurar os
+ * ganchos de entrada E de saída. Sem `position`, os filhos `fixed` continuam
+ * se ancorando na janela.
+ */
+.projection-root {
+  display: block;
+}
+
 .layer-projection {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+}
+/* Acima de tudo, como a janela de avisos fazia: o aviso cobria o telão inteiro. */
+.layer-avisos {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+}
+/*
+ * Utilitário: fica ACIMA dos slides (mesmo `z-index` da camada de música, e
+ * depois dela no documento) e ABAIXO do arquivo e dos avisos.
+ *
+ * Z-index 4 — "era uma janela por cima, então por cima" — escondia o VÍDEO: com
+ * o fundo aberto o vídeo também não abre janela, ele vira `.file-projection`
+ * (`z-index: 2`), e um timer ligado esconderia a coisa principal do telão. A
+ * ordem de quem manda é a mesma de sempre: arquivo > avisos > utilitário >
+ * slides. Desligar o vídeo traz o utilitário de volta, sem refazer nada.
+ */
+.layer-utilitario {
   position: fixed;
   inset: 0;
   z-index: 1;
@@ -877,7 +1060,7 @@ onBeforeUnmount(() => {
 .file-projection {
   position: fixed;
   inset: 0;
-  z-index: 1;
+  z-index: 2;
 }
 
 /* Bible rendering inside background projection */

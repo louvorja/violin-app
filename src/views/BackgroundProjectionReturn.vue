@@ -1,89 +1,130 @@
 <template>
-  <!-- Layer 0: Fundo preto permanente -->
-  <div class="return-root-bg"></div>
+  <!--
+    Raiz única pelo mesmo motivo da tela de projeção: sem ela, a camada de
+    slides e o arquivo entrariam sem fade de saída.
+  -->
+  <div class="projection-root">
+    <!-- Layer 0: Fundo preto permanente -->
+    <div class="return-root-bg"></div>
 
-  <!-- Layer: Fundo customizado (wallpaper) -->
-  <div class="return-wallpaper" :style="fallbackStyle"></div>
+    <!-- Layer: Fundo customizado (wallpaper) -->
+    <div class="return-wallpaper" :style="fallbackStyle"></div>
 
-  <!-- MODO FILE PROJECTION -->
-  <template v-if="fileState.active">
-    <div class="file-projection">
-      <img v-if="fileState.type === 'image'" :src="fileState.url" class="return-file" alt="" />
-      <video
-        v-else-if="fileState.type === 'video'"
-        ref="projVideoRef"
-        :src="fileState.url"
-        class="return-file"
-        autoplay
-        muted
-        loop
-      ></video>
-      <template v-else-if="fileState.type === 'youtube'">
-        <div v-show="!ytFailed" ref="ytContainer" class="return-file"></div>
-        <div v-if="ytFailed" class="return-file video-unavailable">
-          <span class="video-unavailable__title">{{ $t("projection.video_unavailable") }}</span>
-          <span class="video-unavailable__hint">{{ $t("projection.video_unavailable_hint") }}</span>
-        </div>
-      </template>
-      <canvas
-        v-else-if="fileState.type === 'pdf'"
-        ref="pdfCanvas"
-        class="return-file return-file--pdf"
-      ></canvas>
-    </div>
-  </template>
-
-  <!-- MODO BACKGROUND PROJECTION -->
-  <template v-else>
-    <Transition name="fade">
-      <img
-        v-if="curBg.type === 'image'"
-        :key="'img-' + curBg.url"
-        :src="curBg.url"
-        class="return-bg"
-        :style="{ '--fade-ms': fadeDurationMs + 'ms' }"
-        alt=""
-      />
-      <video
-        v-else-if="curBg.type === 'video'"
-        :key="'vid-' + curBg.url"
-        ref="bgVideoRef"
-        :src="curBg.url"
-        class="return-bg"
-        :style="{ '--fade-ms': fadeDurationMs + 'ms' }"
-        autoplay
-        muted
-        loop
-      ></video>
-    </Transition>
-    <Transition name="fade">
+    <!-- MODO FILE PROJECTION -->
+    <Transition name="fade" :duration="fadeDurationMs">
       <div
-        v-if="!curBg.active"
-        class="return-bg return-bg--fallback"
-        :style="{ ...fallbackStyle, '--fade-ms': fadeDurationMs + 'ms' }"
-      ></div>
+        v-if="fileState.active"
+        class="file-projection"
+        :style="{ '--fade-ms': fadeDurationMs + 'ms' }"
+      >
+        <img
+          v-if="fileState.type === 'image'"
+          :src="fileState.url"
+          class="return-file"
+          :style="projectionZoom.styleFor(fileState.playback_id ?? fileState.url)"
+          alt=""
+        />
+        <video
+          v-else-if="fileState.type === 'video'"
+          ref="projVideoRef"
+          :src="fileState.url"
+          class="return-file"
+          autoplay
+          muted
+          loop
+        ></video>
+        <template v-else-if="fileState.type === 'youtube'">
+          <div v-show="!ytFailed" ref="ytContainer" class="return-file"></div>
+          <div v-if="ytFailed" class="return-file video-unavailable">
+            <span class="video-unavailable__title">{{ $t("projection.video_unavailable") }}</span>
+            <span class="video-unavailable__hint">
+              {{ $t("projection.video_unavailable_hint") }}
+            </span>
+          </div>
+        </template>
+        <canvas
+          v-else-if="fileState.type === 'pdf'"
+          ref="pdfCanvas"
+          class="return-file return-file--pdf"
+          :style="projectionZoom.styleFor(fileState.playback_id ?? fileState.url, currentPdfPage)"
+        ></canvas>
+      </div>
     </Transition>
-    <div v-if="projActive" class="return-projection">
-      <Slide
-        v-if="projType === 'music' || projType === 'bible'"
-        :slide="slide!!"
-        :title="title"
-        :progress="progress"
-        show-progress
-        progress-target="return"
-        class="return-slide"
-      />
-    </div>
-  </template>
 
-  <!-- Layer 2: Overlays -->
-  <OverlayRenderer />
+    <!-- MODO BACKGROUND PROJECTION -->
+    <!--
+      O wrapper existe para o conjunto (fundo, fallback e camada de projeção)
+      poder sair com fade quando o arquivo assume a tela. Ele é estático de
+      propósito: os filhos são `position: fixed` e precisam continuar se ancorando
+      na janela, e não nele.
+    -->
+    <Transition name="fade" :duration="fadeDurationMs">
+      <div
+        v-if="!fileState.active"
+        class="return-stack"
+        :style="{ '--fade-ms': fadeDurationMs + 'ms' }"
+      >
+        <Transition name="fade">
+          <img
+            v-if="curBg.type === 'image'"
+            :key="'img-' + curBg.url"
+            :src="curBg.url"
+            class="return-bg"
+            :style="{ '--fade-ms': fadeDurationMs + 'ms' }"
+            alt=""
+          />
+          <video
+            v-else-if="curBg.type === 'video'"
+            :key="'vid-' + curBg.url"
+            ref="bgVideoRef"
+            :src="curBg.url"
+            class="return-bg"
+            :style="{ '--fade-ms': fadeDurationMs + 'ms' }"
+            autoplay
+            muted
+            loop
+          ></video>
+        </Transition>
+        <Transition name="fade">
+          <div
+            v-if="!curBg.active"
+            class="return-bg return-bg--fallback"
+            :style="{ ...fallbackStyle, '--fade-ms': fadeDurationMs + 'ms' }"
+          ></div>
+        </Transition>
+        <Transition name="fade" :duration="fadeDurationMs">
+          <div
+            v-if="projActive"
+            :key="projType"
+            class="return-projection"
+            :style="{ '--fade-ms': fadeDurationMs + 'ms' }"
+          >
+            <Slide
+              v-if="projType === 'music' || projType === 'bible'"
+              :slide="slide!!"
+              :title="title"
+              :progress="progress"
+              show-progress
+              progress-target="return"
+              class="return-slide"
+            />
+          </div>
+        </Transition>
+      </div>
+    </Transition>
+
+    <!-- Layer 2: Overlays -->
+    <OverlayRenderer />
+    <ReturnOverride />
+    <ProjectionClearScreen />
+  </div>
 </template>
 
 <script setup lang="ts">
 import { reactive, ref, computed, onMounted, onBeforeUnmount, nextTick } from "vue";
 import { estiloDeFundo } from "@/helpers/BackgroundStyle";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
+import { useProjectionZoom } from "@/composables/useProjectionZoom";
 import { useProjectionState } from "@/composables/useProjectionState";
 import $broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
@@ -92,6 +133,8 @@ import $modules from "@/helpers/Modules";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { getSetting } from "@/helpers/SettingsStorage";
 import OverlayRenderer from "@/components/OverlayRenderer.vue";
+import ProjectionClearScreen from "@/components/ProjectionClearScreen.vue";
+import ReturnOverride from "@/components/ReturnOverride.vue";
 import Slide from "@/components/Slide.vue";
 import { DEFAULT_BACKGROUND_COLOR, MAIN_BACKGROUND_ID, Settings } from "@/types/Settings";
 import { KEYS } from "@/constants/UserDataKeys";
@@ -180,6 +223,9 @@ let ytPlayer: YTPlayer | null = null;
 
 /* ── PDF state ── */
 const pdfCanvas = ref<HTMLCanvasElement | null>(null);
+// Zoom de imagem/PDF escolhido no Modo apresentação: esta tela só aplica o recorte.
+const projectionZoom = useProjectionZoom();
+
 let pdfDoc: PDFDocumentProxy | null = null;
 let pdfLoadGeneration = 0;
 const pdfRenderQueue = new PdfPageRenderQueue();
@@ -655,6 +701,11 @@ onBeforeUnmount(() => {
   opacity: 0;
 }
 
+/* Raiz única para o `Transition` animar a saída também. Ver a tela de projeção. */
+.projection-root {
+  display: block;
+}
+
 .return-projection {
   position: fixed;
   inset: 0;
@@ -677,7 +728,7 @@ onBeforeUnmount(() => {
 .file-projection {
   position: fixed;
   inset: 0;
-  z-index: 1;
+  z-index: 2;
 }
 
 /* Um vídeo que não carrega deixava a tela em branco na frente da igreja. */

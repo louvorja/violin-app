@@ -19,6 +19,7 @@ export interface RuntimePerformanceProfile {
 export const PERSISTENT_MODULE_IDS: ReadonlySet<string> = new Set([
   "clock",
   "liturgy",
+  "presentation_mode",
   "stopwatch",
   "timer",
   "timer_worship",

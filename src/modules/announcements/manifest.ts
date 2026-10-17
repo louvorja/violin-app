@@ -27,6 +27,7 @@ export const module: Module = {
   icon: ICONS.MODULES.ANNOUNCEMENTS,
   color: "#f39c12",
   showInMainMenu: true,
+  requiresProjectionWindow: true,
   category: ModuleCategoryEnum.WORSHIP,
   group: ModuleGroupEnum.CHURCH,
   order: 1,

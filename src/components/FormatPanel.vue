@@ -50,6 +50,11 @@ const TYPE_TO_COMPONENT = {
   "font-size": FieldNumber,
   "border-spacing": FieldNumber,
   opacity: FieldNumber,
+  // Raio e espessura da borda da caixa de texto: MESMO campo numérico, com
+  // faixas próprias no FieldNumber (raio admite 0 = sem cantos arredondados).
+  // Sem estas linhas eles caem no FieldText e viram input de texto solto.
+  radius: FieldNumber,
+  "border-width": FieldNumber,
   select: FieldSelect,
   "h-align": FieldSelect,
   "v-align": FieldSelect,
@@ -79,6 +84,12 @@ const FIELD_LABEL_KEYS = {
   text_shadow_blur: "components.customization.shadow_blur",
   text_background_enabled: "components.customization.text_bg_toggle",
   text_background_color: "components.customization.text_bg_color",
+  text_background_opacity: "components.customization.text_bg_opacity",
+  text_border_enabled: "components.customization.text_border_toggle",
+  text_border_color: "components.customization.text_border_color",
+  text_border_opacity: "components.customization.text_border_opacity",
+  text_border_radius: "components.customization.text_border_radius",
+  text_border_width: "components.customization.text_border_width",
   alert_color: "components.customization.alert_color",
   background_color: "components.customization.color",
   border_spacing: "components.customization.border",
@@ -154,7 +165,14 @@ const groupedFields = computed(() => {
       key === "text_shadow_color" ||
       key === "text_shadow_blur" ||
       key === "text_background_enabled" ||
-      key === "text_background_color"
+      key === "text_background_color" ||
+      /* Fundo do texto e borda vivem no mesmo grupo: é o mesmo "caixa" na tela. */
+      key === "text_background_opacity" ||
+      key === "text_border_enabled" ||
+      key === "text_border_color" ||
+      key === "text_border_opacity" ||
+      key === "text_border_radius" ||
+      key === "text_border_width"
     )
       groups.text.fields.push(f);
     else groups.other.fields.push(f);

@@ -57,7 +57,9 @@
         <label class="opt-checkbox">
           <input
             type="checkbox"
-            :checked="getUserData<boolean>(KEYS.SHELL.LITURGY_VISIBLE, true) !== false"
+            :checked="
+              getUserData<boolean>(KEYS.SHELL.LITURGY_VISIBLE, liturgySidebarDefault()) !== false
+            "
             @change="saveUserData(KEYS.SHELL.LITURGY_VISIBLE, $c($event))"
           />
           <span>{{ $t("options.general.show_liturgy_sidebar") }}</span>
@@ -1208,6 +1210,38 @@
             {{ $t("options.videos.cache_clear") }}
           </LjButton>
         </div>
+        <div class="opt-row">
+          <span class="opt-label">
+            {{ $t("options.videos.account_title") }} —
+            {{
+              youtubeLoggedIn
+                ? $t("options.videos.account_connected")
+                : $t("options.videos.account_none")
+            }}
+          </span>
+          <LjButton
+            v-if="youtubeLoggedIn"
+            variant="default"
+            size="sm"
+            :disabled="youtubeBusy"
+            data-testid="opt-youtube-logout"
+            @click="youtubeLogout"
+          >
+            {{ $t("options.videos.account_logout") }}
+          </LjButton>
+          <LjButton
+            v-else
+            variant="default"
+            size="sm"
+            :icon="ICONS.MEDIA.YOUTUBE"
+            :loading="youtubeBusy"
+            data-testid="opt-youtube-login"
+            @click="youtubeLogin"
+          >
+            {{ $t("options.videos.account_login") }}
+          </LjButton>
+        </div>
+        <p class="opt-hint">{{ $t("options.videos.account_hint") }}</p>
       </template>
       <div class="opt-row">
         <label class="opt-checkbox">
@@ -1445,6 +1479,32 @@
       </template>
     </section>
 
+    <!--
+      Logo abaixo da de arquivo porque as duas cuidam do mesmo telão: o item
+      Site é só uma forma diferente de chegar a ele (URL externa, sem preload
+      e com partição própria).
+    -->
+    <section
+      v-if="renderDeferredSections || initialTab === 'site_projection'"
+      id="opt-sec-site_projection"
+      class="opt-section"
+    >
+      <h3 class="opt-section-title">
+        <LjIcon :icon="ICONS.UI.WEB" size="18" />
+        <span>{{ $t("options.site_projection.title") }}</span>
+      </h3>
+      <div class="opt-row">
+        <label class="opt-checkbox">
+          <input
+            type="checkbox"
+            :checked="siteProjShowReturn"
+            @change="saveUserData(KEYS.OPTIONS.SITE_PROJECTION.SHOW_RETURN, $c($event))"
+          />
+          <span>{{ $t("options.player.show_return") }}</span>
+        </label>
+      </div>
+    </section>
+
     <section
       v-if="renderDeferredSections || initialTab === 'utilities'"
       id="opt-sec-utilities"
@@ -1528,6 +1588,7 @@
 import { LjButton, LjIcon, LjSelect } from "@/components/ui";
 import { computed, type ComputedRef, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { pickImageData } from "@/helpers/FilePicker";
+import { liturgySidebarDefault } from "@/helpers/LiturgySidebar";
 import { getSetting, saveSetting } from "@/helpers/SettingsStorage";
 import Broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
@@ -1543,6 +1604,7 @@ import Platform from "@/helpers/Platform";
 import Telemetry from "@/helpers/Telemetry";
 import $alert from "@/helpers/Alert";
 import { DEFAULT_MAX_HEIGHT, MAX_HEIGHTS, normalizeMaxHeight } from "@/helpers/OnlineVideo";
+import { useYoutubeAccount } from "@/composables/useYoutubeAccount";
 import { ICONS } from "@/config/Icons";
 import { KEYS } from "@/constants/UserDataKeys";
 import { DEFAULT_BACKGROUND_COLOR, MAIN_BACKGROUND_ID, Settings } from "@/types/Settings";
@@ -1968,6 +2030,13 @@ function clearVideoCache(): void {
   });
 }
 
+const {
+  loggedIn: youtubeLoggedIn,
+  busy: youtubeBusy,
+  login: youtubeLogin,
+  logout: youtubeLogout,
+} = useYoutubeAccount(() => isDesktop.value);
+
 onMounted(() => {
   if (isDesktop.value) void refreshVideoCache();
 });
@@ -1984,6 +2053,9 @@ const fileProjAlwaysOnTop: ComputedRef<boolean> = computed(
 );
 const fileProjShowReturn: ComputedRef<boolean> = computed(
   () => $userdata.get<boolean>(KEYS.OPTIONS.FILE_PROJECTION.SHOW_RETURN, false)!!
+);
+const siteProjShowReturn: ComputedRef<boolean> = computed(
+  () => $userdata.get<boolean>(KEYS.OPTIONS.SITE_PROJECTION.SHOW_RETURN, false)!!
 );
 
 function setMedia(key: string, value: any): void {

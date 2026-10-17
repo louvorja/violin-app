@@ -1,6 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   WEB_WINDOW_FEATURES,
+  canOpenWebWindows,
+  openWebWindow,
   featuresForRect,
   nudgeIntoRect,
 } from "@/helpers/projection/webWindow";
@@ -117,5 +119,32 @@ describe("nudgeIntoRect", () => {
   it("não faz nada sem janela ou sem geometria", () => {
     expect(() => nudgeIntoRect(null, rect)).not.toThrow();
     expect(() => nudgeIntoRect(fakeWindow(), null)).not.toThrow();
+  });
+});
+
+describe("navegador sem API de tela cheia (iPhone)", () => {
+  const setApi = (value: boolean | undefined) =>
+    Object.defineProperty(document, "fullscreenEnabled", { value, configurable: true });
+
+  afterEach(() => {
+    setApi(undefined);
+    vi.restoreAllMocks();
+  });
+
+  it("não abre janela de projeção: ela cobriria o app sem ter como voltar", () => {
+    setApi(false);
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    expect(canOpenWebWindows()).toBe(false);
+    expect(openWebWindow("sem_api", "/projection")).toBeNull();
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it("com a API, abre normalmente", () => {
+    setApi(true);
+    const win = { closed: false, focus: vi.fn() } as unknown as Window;
+    const open = vi.spyOn(window, "open").mockReturnValue(win);
+    expect(canOpenWebWindows()).toBe(true);
+    expect(openWebWindow("com_api", "/projection")).toBe(win);
+    expect(open).toHaveBeenCalledOnce();
   });
 });

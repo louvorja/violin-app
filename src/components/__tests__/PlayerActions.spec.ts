@@ -26,6 +26,10 @@ vi.mock("@/helpers/UserData", () => ({
 
 const CONFIG = KEYS.MODULES.MEDIA.CONFIG;
 
+// O jsdom não tem a API de tela cheia; sem ela o menu de janelas some (iPhone).
+// Estes testes são do navegador que a tem.
+Object.defineProperty(document, "fullscreenEnabled", { value: true, configurable: true });
+
 /** O menu de janelas, com os itens que o componente entrega a ele. */
 const MenuStub = defineComponent({
   name: "LjMenu",

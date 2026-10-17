@@ -19,7 +19,11 @@ import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { useContainerSize } from "@/composables/useContainerSize";
 import { FONT, resolveFont } from "@/config/Fonts";
-import { horizontalTextAlign, moduleCustomizationDefault } from "@/helpers/ModuleFormatting";
+import {
+  horizontalTextAlign,
+  moduleCustomizationDefault,
+  textBoxStyle,
+} from "@/helpers/ModuleFormatting";
 
 export function useModuleBodyStyle(moduleId: string) {
   // Força re-leitura do UserData quando formatação muda.
@@ -73,6 +77,29 @@ export function useModuleBodyStyle(moduleId: string) {
   const text_background_color = computed(() =>
     read<string>("text_background_color", "transparent")
   );
+  const text_background_opacity = computed(() => read<number>("text_background_opacity", 100));
+  const text_border_enabled = computed(() => read<boolean>("text_border_enabled", false));
+  const text_border_color = computed(() => read<string>("text_border_color", "#FFFFFF"));
+  const text_border_opacity = computed(() => read<number>("text_border_opacity", 100));
+  const text_border_radius = computed(() => read<number>("text_border_radius", 0));
+  const text_border_width = computed(() => read<number>("text_border_width", 2));
+
+  /**
+   * Fundo e borda da caixa de texto — o MESMO objeto que a projeção usa
+   * (`ModuleProjectionLayer`), para programa e telão não divergirem.
+   */
+  const textBox = computed(() =>
+    textBoxStyle({
+      enabled: text_background_enabled.value,
+      color: text_background_color.value,
+      opacity: text_background_opacity.value,
+      borderEnabled: text_border_enabled.value,
+      borderColor: text_border_color.value,
+      borderOpacity: text_border_opacity.value,
+      borderRadius: text_border_radius.value,
+      borderWidth: text_border_width.value,
+    })
+  );
 
   // Alinhamento do conteúdo do body.
   // Módulos usam flex-direction: column, então:
@@ -100,11 +127,16 @@ export function useModuleBodyStyle(moduleId: string) {
     fontSize: `${fontSizePc(font_size.value)}px`,
     lineHeight: 1.4,
     textAlign: horizontalTextAlign(horizontal_align.value),
-    width: "100%",
-    boxSizing: "border-box",
-    backgroundColor: text_background_enabled.value
-      ? text_background_color.value || "transparent"
-      : "transparent",
+    /*
+     * A caixa encolhe até o texto, como a dos slides (`Slide.vue`): o pai é
+     * flex e nunca estica, então `fit-content` + padding lateral dão a mesma
+     * margem ao redor da letra. Era `width: "100%"`, e o fundo preenchia a linha
+     * inteira.
+     */
+    width: "fit-content",
+    maxWidth: "100%",
+    padding: "0.2em 0.4em",
+    ...textBox.value,
     ...(text_shadow.value
       ? {
           textShadow: `0 0 ${text_shadow_blur.value || 4}px ${text_shadow_color.value || "#000000"}, 0 0 ${text_shadow_blur.value || 4}px ${text_shadow_color.value || "#000000"}`,
@@ -119,8 +151,11 @@ export function useModuleBodyStyle(moduleId: string) {
     fontSize: `${fontSizePc(reference_font_size.value)}px`,
     lineHeight: 1.5,
     textAlign: horizontalTextAlign(horizontal_align.value),
-    width: "100%",
-    boxSizing: "border-box",
+    /* Mesma caixa do texto principal: fundo só na área do que foi escrito. */
+    width: "fit-content",
+    maxWidth: "100%",
+    padding: "0.2em 0.4em",
+    ...textBox.value,
   }));
 
   /** Cor do alerta (estado de alarme). */

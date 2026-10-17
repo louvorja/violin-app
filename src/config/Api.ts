@@ -43,6 +43,19 @@ export const API_TOKEN: string = import.meta.env.VITE_API_TOKEN || "";
 export const API_URL_FALLBACK: string = import.meta.env.VITE_URL_API_FALLBACK || "";
 export const API_URL_DB_FALLBACK: string = `${API_URL_FALLBACK}${PATH_JSON_DB}`;
 
+/**
+ * Endereço público dos arquivos de mídia (áudio, capas, imagens). O catálogo
+ * já entrega URLs completas apontando para ele; esta constante só serve para
+ * reconhecer o que foi guardado com o endereço antigo (`<API>/file/...`).
+ */
+export const MEDIA_URL: string = import.meta.env.VITE_URL_MEDIA || "https://files.louvorja.com.br";
+
+/** Prefixos pelos quais a mídia já foi servida pela API: o principal e o de reserva. */
+export const LEGACY_MEDIA_PREFIXES: string[] = [
+  API_URL_FILES,
+  `${import.meta.env.VITE_URL_API_FALLBACK || ""}${PATH_FILES}`,
+].filter((prefix) => /^https?:\/\//i.test(prefix));
+
 /** Token da API de fallback. */
 export const API_URL_FALLBACK_TOKEN: string =
   import.meta.env.VITE_URL_API_FALLBACK_TOKEN || API_TOKEN;
@@ -54,6 +67,19 @@ export const API_URL_FALLBACK_TOKEN: string =
  */
 export function apiOrigin(): string {
   return API_URL;
+}
+
+/**
+ * O servidor configurado exige o cabeçalho `Api-Token`? A API oficial é
+ * pública e o ignora; mandá-lo só obriga o navegador a um pré-voo `OPTIONS`
+ * antes de cada GET, e cada pré-voo também é uma requisição na cota diária.
+ * Quem hospeda a própria API e a protege com token liga `VITE_API_TOKEN_REQUIRED`.
+ */
+const API_TOKEN_REQUIRED: boolean = import.meta.env.VITE_API_TOKEN_REQUIRED === "true";
+
+/** Cabeçalho de autenticação das buscas ao banco; vazio quando não há o que enviar. */
+export function apiTokenHeaders(token: string): Record<string, string> {
+  return API_TOKEN_REQUIRED && token ? { "Api-Token": token } : {};
 }
 
 /**

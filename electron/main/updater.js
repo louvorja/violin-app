@@ -33,6 +33,7 @@ const http = require("http");
 const { installRequiresWindowsElevation } = require("./windowsInstallScope.js");
 const { safeSend } = require("./safeWebContents.js");
 const { WorkPriority, canStartWork } = require("./presentationAdmission.js");
+const netHealth = require("./netHealth.js");
 
 const GITHUB_OWNER = "louvorja";
 const GITHUB_REPO = "violin-app";
@@ -58,6 +59,10 @@ let _state = {
   transferred: 0,
   total: 0,
   error: null,
+  /* Categoria da falha ("network" | "http" | "unknown") e detalhe cru só para
+     diagnóstico — nenhum dos dois é exibido. */
+  errorKind: null,
+  errorDetail: null,
   packagePath: null,
   // Uma cópia antiga em Program Files não pode ser substituída por um
   // instalador silencioso disparado ao fechar o app. O renderer usa esta flag
@@ -95,6 +100,49 @@ _state.version = app.getVersion() || "0.0.0";
 
 function _emit() {
   safeSend(_mainWindow, "updater:state", { ..._state });
+}
+
+/**
+ * Categoria do erro — nunca texto de tela.
+ *
+ * `getaddrinfo ENOTFOUND api.github.com` é literalmente o que o operador via:
+ * o `Error` cru do Node entrava direto em `_state.error` e a tela mostrava. O
+ * texto é do renderer (i18n); aqui só se decide a categoria. O detalhe cru
+ * continua existindo, mas em `errorDetail` — que ninguém exibe — e no console,
+ * onde serve de diagnóstico.
+ *
+ * O padrão de rede é o mesmo que `onlineVideo/runner.js` já usa: o
+ * classificador do renderer (`Http.ts`) não cobre `ENOTFOUND`, e de todo modo
+ * não é alcançável daqui.
+ */
+const CATEGORIA_REDE =
+  /getaddrinfo|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EPIPE|ENETUNREACH|network is unreachable|name resolution|offline|timed out|dns/i;
+
+function _categoriaDeErro(e) {
+  const codigo = String(e?.code || "");
+  const mensagem = String(e?.message || e || "");
+  const bruto = `${codigo} ${mensagem}`;
+  if (CATEGORIA_REDE.test(bruto)) return "network";
+  /* O servidor respondeu: há rede, o serviço é que não atendeu. */
+  if (/^HTTP \d{3}/.test(mensagem)) return "http";
+  return "unknown";
+}
+
+/**
+ * Estado de erro: categoria para a tela, detalhe cru para o log.
+ *
+ * `error` fica vazio de propósito — é o campo que a UI exibia cru. O operador
+ * passa a ver a mensagem por i18n escolhida pela categoria.
+ */
+function _setErrorState(e) {
+  const errorKind = _categoriaDeErro(e);
+  const errorDetail = String(e?.message || e || "");
+  /* Rede caída: o app passa a saber. Resposta HTTP prova que há rede — e uma
+     única falha não vira "offline", o netHealth tem carência. */
+  netHealth.report(errorKind !== "network", "updater");
+  console.warn("[updater] verificação falhou:", errorKind, "|", errorDetail);
+  _setState({ status: "error", error: null, errorKind, errorDetail });
+  return errorKind;
 }
 
 function _setState(patch) {
@@ -303,9 +351,11 @@ async function checkGithubRelease() {
 
 /** Faz o check via GitHub API e emite o estado correspondente. */
 async function checkGithubAndSetState() {
-  _setState({ status: "checking", error: null, newVersion: null });
+  _setState({ status: "checking", error: null, errorKind: null, errorDetail: null, newVersion: null });
   try {
     const info = await checkGithubRelease();
+    /* Respondeu: a rede está de pé, mesmo que não haja release novo. */
+    netHealth.report(true, "updater");
     if (!info) {
       _setState({ status: "not-available" });
       return { ok: true, updateAvailable: false };
@@ -321,8 +371,7 @@ async function checkGithubAndSetState() {
     _maybeStartAutomaticDownload();
     return { ok: true, updateAvailable: true, version: info.version };
   } catch (e) {
-    _setState({ status: "error", error: e.message || String(e) });
-    return { ok: false, error: e.message };
+    return { ok: false, errorKind: _setErrorState(e) };
   }
 }
 
@@ -406,7 +455,7 @@ async function downloadPackage(sender) {
     if (e.message === "cancelled") {
       _setState({ status: "available", error: null });
     } else {
-      _setState({ status: "error", error: e.message || String(e) });
+      _setErrorState(e);
     }
     throw e;
   } finally {
@@ -655,7 +704,8 @@ function init({ channel = "latest", autoCheck = true, autoDownload = false, useB
     });
 
     autoUpdater.on("error", (err) => {
-      _setState({ status: "error", error: err?.message || String(err) });
+      /* Mesmo caminho do check por GitHub: categoria para a tela, cru só no log. */
+      _setErrorState(err);
     });
 
     autoUpdater.on("download-progress", (progressInfo) => {
@@ -687,7 +737,7 @@ function init({ channel = "latest", autoCheck = true, autoDownload = false, useB
         try {
           autoUpdater.checkForUpdates();
         } catch (e) {
-          _setState({ status: "error", error: e.message });
+          _setErrorState(e);
         }
       }, 5000);
     }
@@ -776,7 +826,7 @@ async function _runDownloadUpdate(sender) {
     try {
       return await downloadPackage(sender);
     } catch (e) {
-      return { ok: false, error: e.message };
+      return { ok: false, errorKind: _categoriaDeErro(e) };
     }
   }
   const token = new UpdaterCancellationToken();
@@ -791,8 +841,7 @@ async function _runDownloadUpdate(sender) {
       _setState({ status: "available", error: null });
       return { ok: false, error: "cancelled" };
     }
-    _setState({ status: "error", error: e.message });
-    return { ok: false, error: e.message };
+    return { ok: false, errorKind: _setErrorState(e) };
   } finally {
     if (_nativeDownloadToken === token) _nativeDownloadToken = null;
     autoUpdater.autoDownload = false;

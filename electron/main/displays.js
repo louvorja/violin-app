@@ -226,7 +226,7 @@ function getFeatureRole(feature) {
 /**
  * Salva preferência de display para uma feature.
  * @param {string} featureId
- * @param {number|string|null} displayId
+ * @param {number|string|null|undefined} displayId  undefined = padrão, null = mesma janela
  */
 async function setPreferred(featureId, displayId) {
   if (typeof featureId !== "string" || !featureId || featureId.length > 100) return false;
@@ -238,11 +238,10 @@ async function setPreferred(featureId, displayId) {
   const display = wantedId == null ? null : conectados.find((d) => d.id === wantedId) || null;
   if (displayId != null && !display) return false;
 
-  // Dual-write enquanto a UI ainda configura por feature: o formato antigo
-  // segue intacto (rollback continua possível) e o papel correspondente é
-  // atualizado para o novo resolvedor enxergar a escolha.
+  // Mantém a preferência legada para rollback, sem alterar o papel global.
   const prefs = userStore.read(PREF_KEY) || {};
-  prefs[featureId] = displayId;
+  if (displayId === undefined) delete prefs[featureId];
+  else prefs[featureId] = displayId;
   try {
     await userStore.write(PREF_KEY, prefs);
   } catch (error) {
@@ -253,20 +252,12 @@ async function setPreferred(featureId, displayId) {
   const config = monitorConfig.getConfig(userData);
   if (!config) return;
 
-  const role = monitorIdentity.roles().roleOfFeature(featureId);
-  if (!role) return;
-
-  if (displayId == null) {
-    // "Mesma janela" é uma escolha da feature. Limpar o monitor do papel
-    // inteiro também desligava projeção/retorno de todos os outros módulos.
-    monitorConfig.setFeatureRole({ userData, feature: featureId, role: null });
-    config.source_hash = monitorConfig.hashSource(prefs);
-    _saveUserData();
-    return;
-  }
-
-  monitorConfig.setFeatureRole({ userData, feature: featureId, role });
-  monitorConfig.setRoleDisplay({ userData, role, display, connected: conectados });
+  monitorConfig.setFeatureDisplay({
+    userData,
+    feature: featureId,
+    display: displayId === undefined ? undefined : display,
+    connected: conectados,
+  });
   // Já aplicamos a mudança no v2. Sem atualizar o hash, o próximo boot
   // remigra todo o mapa legado e pode apagar papéis configurados só no v2.
   config.source_hash = monitorConfig.hashSource(prefs);
@@ -274,10 +265,26 @@ async function setPreferred(featureId, displayId) {
 }
 
 /**
- * Retorna todas as preferências salvas.
+ * Retorna apenas escolhas explícitas por feature, sem os padrões herdados.
+ * No v2 o mapa legado não representa a escolha atual: ele só serve ao rollback.
  * @returns {object}
  */
 function getPrefs() {
+  const userData = _readUserData();
+  const config = monitorConfig.getConfig(userData);
+  if (config && !config.use_legacy_resolver) {
+    const conectados = connected();
+    const features = new Set([
+      ...Object.keys(config.features || {}),
+      ...Object.keys(config.feature_displays || {}),
+    ]);
+    return Object.fromEntries([...features].map((feature) => {
+      const result = monitorConfig.resolveFeature({
+        userData, feature, connected: conectados, operatorDisplay: _operatorDisplay(conectados),
+      });
+      return [feature, result.display?.id ?? null];
+    }));
+  }
   return userStore.read(PREF_KEY) || {};
 }
 

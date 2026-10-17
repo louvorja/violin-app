@@ -6,7 +6,7 @@ Sistema de apresentação de letras de música e conteúdo bíblico para cultos 
 
 ## Como rodar o projeto
 
-**Pré-requisitos:** Node.js 20.19+ (ou 22.12+) e npm 10+
+**Pré-requisitos:** Node.js 24 LTS (`.nvmrc`; aceita 22.12+, não use 25) e npm 10+
 
 ```bash
 git clone https://github.com/louvorja/violin-app

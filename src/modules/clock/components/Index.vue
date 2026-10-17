@@ -7,6 +7,7 @@
   >
     <template #right>
       <LjButton
+        v-if="canProject"
         variant="ghost"
         :icon="ICONS.PLAYER.FULLSCREEN"
         :title="tm('actions.fullscreen')"
@@ -20,7 +21,7 @@
       <div ref="container" class="clock-stage" :style="rootStyle">
         <img v-if="bgImage" :src="bgImage" class="clock-bg-img" :style="imageStyle" alt="" />
         <div
-          v-fit-clock-line="textStyle.fontSize"
+          v-fit-clock-line="{ size: textStyle.fontSize, widthFrom: container }"
           class="clock-time"
           :style="[textStyle, { lineHeight: 1 }]"
         >
@@ -28,7 +29,7 @@
         </div>
         <div
           v-if="date"
-          v-fit-clock-line="referenceStyle.fontSize"
+          v-fit-clock-line="{ size: referenceStyle.fontSize, widthFrom: container }"
           class="clock-date"
           :style="[referenceStyle, { lineHeight: 1.1 }]"
         >
@@ -50,6 +51,7 @@ import ModuleContainer from "@/components/ModuleContainer.vue";
 import ModuleFormatDrawer from "@/components/ModuleFormatDrawer.vue";
 import UserData from "@/helpers/UserData";
 import { open as openProjection } from "@/helpers/Projection";
+import { canOpenWebWindows } from "@/helpers/projection/webWindow";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { useModuleProjection } from "@/composables/useModuleProjection";
@@ -135,6 +137,8 @@ function toggleSeconds() {
   fmt.time_format = (fmt.time_format ?? "hh:mm:ss") === "hh:mm:ss" ? "hh:mm" : "hh:mm:ss";
   tick();
 }
+
+const canProject = canOpenWebWindows();
 
 function openFullscreen() {
   const { is24h, showSeconds } = read();

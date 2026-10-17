@@ -96,6 +96,52 @@
       </div>
     </section>
 
+    <section v-else class="opt-section">
+      <h3 class="opt-section-title">
+        <LjIcon :icon="ICONS.UI.CHECK_UPDATE" size="18" />
+        {{ $t("options.updates.app") }}
+      </h3>
+
+      <div class="opt-row opt-row--spread">
+        <label class="opt-label">{{ $t("options.updates.current_version") }}</label>
+        <strong>v{{ webAppVersion }}</strong>
+      </div>
+      <div v-if="pwa.state.value.lastCheckedAt" class="opt-row opt-row--spread">
+        <label class="opt-label">{{ $t("options.updates.last_check") }}</label>
+        <span>{{ formatLastCheck(new Date(pwa.state.value.lastCheckedAt).toISOString()) }}</span>
+      </div>
+      <div class="opt-row opt-row--col">
+        <div class="opt-folder-path" role="status">{{ pwaUpdateStatusText }}</div>
+        <div v-if="pwa.state.value.ready" class="opt-folder-path">
+          {{ $t("options.updates.pwa_reload_hint") }}
+        </div>
+        <div v-if="pwa.state.value.ready && pwa.blocked.value" class="opt-folder-path">
+          {{ $t("options.updates.pwa_blocked") }}
+        </div>
+        <div class="opt-folder-actions">
+          <button
+            type="button"
+            class="opt-btn"
+            :disabled="['checking', 'applying', 'unsupported'].includes(pwa.state.value.status)"
+            @click="pwa.check"
+          >
+            <LjIcon :icon="ICONS.ACTIONS.REFRESH" size="14" />
+            {{ $t("options.updates.check") }}
+          </button>
+          <button
+            v-if="pwa.state.value.ready"
+            type="button"
+            class="opt-btn opt-btn--primary"
+            :disabled="pwa.blocked.value || pwa.state.value.status === 'applying'"
+            @click="pwa.apply"
+          >
+            <LjIcon :icon="ICONS.ACTIONS.RESTART" size="14" />
+            {{ $t("options.updates.pwa_apply") }}
+          </button>
+        </div>
+      </div>
+    </section>
+
     <section class="opt-section">
       <h3 class="opt-section-title">
         <LjIcon :icon="ICONS.UI.DATABASE" size="18" />
@@ -228,6 +274,8 @@ import { localeTag } from "@/helpers/DateTime";
 import Platform from "@/helpers/Platform";
 import $alert from "@/helpers/Alert";
 import $database from "@/helpers/Database";
+import BundleInstaller from "@/helpers/BundleInstaller";
+import { failureDetails } from "@/helpers/ReliabilityDiagnostics";
 import $userdata from "@/helpers/UserData";
 import DatabaseBackup, { type BackupProgress } from "@/helpers/DatabaseBackup";
 import {
@@ -237,9 +285,12 @@ import {
 import { KEYS } from "@/constants/UserDataKeys";
 import { useSyncManager } from "@/composables/useSyncManager";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
+import { usePwaUpdates } from "@/composables/usePwaUpdates";
+import packageJson from "@root/package.json";
 import type { DbConfig } from "@/types/Database";
 import {
   API_TOKEN,
+  apiTokenHeaders,
   API_URL_FALLBACK,
   API_URL_FALLBACK_TOKEN,
   API_URL_DB,
@@ -247,6 +298,7 @@ import {
 } from "@/config/Api";
 import Snackbar from "@helpers/Snackbar";
 import { fetchWithTimeout } from "@/helpers/Http";
+import { textoDoStatusDeAtualizacao } from "@/helpers/UpdaterStatus";
 import Telemetry from "@/helpers/Telemetry";
 
 interface AppUpdateState {
@@ -254,7 +306,18 @@ interface AppUpdateState {
   version: string | null;
   progress: number;
   newVersion: string | null;
+  /** Texto cru: o main já não preenche (vira categoria + detalhe). Fica no tipo
+   *  porque o payload mais antigo de uma janela pode ainda trazê-lo. */
   error: string | null;
+  /**
+   * Categoria da falha: "network" | "http" | "unknown". Decide o texto.
+   *
+   * `string` porque é o que chega pelo IPC, sem tipo do outro lado — quem
+   * garante o conjunto de valores é o main, em `_categoriaDeErro`.
+   */
+  errorKind?: string | null;
+  /** Detalhe técnico, só para diagnóstico — nunca exibido. */
+  errorDetail?: string | null;
   packagePath?: string | null;
   installRequiresElevation?: boolean;
 }
@@ -263,6 +326,9 @@ type UpdateStatus = "idle" | "checking" | "ok" | "available" | "error";
 
 const isDesktop = computed(() => Platform.isDesktop);
 const { t, locale } = useI18n();
+const pwa = usePwaUpdates();
+const webAppVersion = packageJson.version;
+const pwaUpdateStatusText = computed(() => t(`options.updates.pwa_${pwa.state.value.status}`));
 
 const appUpdate = ref<AppUpdateState>({
   status: "idle",
@@ -278,6 +344,7 @@ let _lastAppProgressBucket = -1;
 const dbChecking = ref<boolean>(false);
 const dbStatus = ref<UpdateStatus>("idle");
 const dbCurrentConfig = ref<DbConfig | null>(null);
+const dbInstalledVersion = ref<number | null>(null);
 const dbLatestConfig = ref<DbConfig | null>(null);
 const dbCacheCleared = ref<boolean>(false);
 const lastDbCheck = ref<string | null>(null);
@@ -352,30 +419,17 @@ const dbBackupProgressDetail = computed<string>(() => {
 const dbHasUpdate = computed<boolean>(
   () =>
     !!dbLatestConfig.value &&
-    (!dbCurrentConfig.value ||
-      dbLatestConfig.value.version_number > dbCurrentConfig.value.version_number)
+    (dbInstalledVersion.value === null || dbLatestConfig.value.version > dbInstalledVersion.value)
 );
 
 const appVersion = computed<string>(() => appUpdate.value.version || Platform.api?.version || "?");
 
-const appUpdateStatusText = computed<string>(() => {
-  switch (appUpdate.value.status) {
-    case "checking":
-      return t("options.updates.app_checking");
-    case "available":
-      return t("options.updates.app_available", { version: appUpdate.value.newVersion });
-    case "not-available":
-      return t("options.updates.app_up_to_date");
-    case "downloading":
-      return t("options.updates.app_downloading");
-    case "downloaded":
-      return t("options.updates.app_downloaded");
-    case "error":
-      return appUpdate.value.error || t("options.updates.app_error");
-    default:
-      return t("options.updates.app_idle");
-  }
-});
+/*
+ * A tabela de status vive em `helpers/UpdaterStatus.ts`: ela decide o texto a
+ * partir da CATEGORIA do erro, e o `error` cru — que era o que aparecia na tela
+ * — não entra na conta.
+ */
+const appUpdateStatusText = computed<string>(() => textoDoStatusDeAtualizacao(appUpdate.value, t));
 
 const dbUpdateStatusText = computed<string>(() => {
   if (dbCacheCleared.value) return t("options.updates.cache_cleared");
@@ -482,24 +536,37 @@ async function openPackageFile(): Promise<void> {
   try {
     const res = await Platform.updater.openPackage();
     if (res && !res.ok) {
-      $alert.error({ text: res.error || t("options.updates.app_error") });
+      /* Mesmo critério da linha de status: rede tem texto próprio, o resto é a
+         mensagem genérica. O `error` cru não é exibido. */
+      $alert.error({
+        text: textoDoStatusDeAtualizacao({ status: "error", errorKind: res.errorKind }, t),
+      });
     }
   } catch (e) {
     console.error("[Atualizações] openPackage:", e);
   }
 }
 
+// `no-store`: é a pergunta "saiu versão nova?"; uma resposta guardada pelo
+// navegador responderia com a versão de antes.
+function _fetchConfigFrom(base: string, token: string, source: string): Promise<Response> {
+  const url = `${base}/config`;
+  return fetchWithTimeout(url, {
+    headers: apiTokenHeaders(token),
+    cache: "no-store",
+    source,
+  });
+}
+
 async function _fetchDbConfig(): Promise<Response> {
   try {
-    const res = await fetchWithTimeout(`${API_URL_DB}/config`, {
-      headers: { "Api-Token": API_TOKEN },
-      source: "db-config",
-    });
+    const res = await _fetchConfigFrom(API_URL_DB, API_TOKEN, "db-config");
     if (!res.ok && API_URL_FALLBACK) {
-      return await fetchWithTimeout(`${API_URL_DB_FALLBACK}/config`, {
-        headers: { "Api-Token": API_URL_FALLBACK_TOKEN },
-        source: "db-config-fallback",
-      });
+      return await _fetchConfigFrom(
+        API_URL_DB_FALLBACK,
+        API_URL_FALLBACK_TOKEN,
+        "db-config-fallback"
+      );
     }
     return res;
   } catch (e) {
@@ -507,10 +574,11 @@ async function _fetchDbConfig(): Promise<Response> {
     // sem este catch, uma falha transitória no host principal nunca
     // chegava a tentar o legado, mesmo com ele configurado.
     if (!API_URL_FALLBACK) throw e;
-    return await fetchWithTimeout(`${API_URL_DB_FALLBACK}/config`, {
-      headers: { "Api-Token": API_URL_FALLBACK_TOKEN },
-      source: "db-config-fallback",
-    });
+    return await _fetchConfigFrom(
+      API_URL_DB_FALLBACK,
+      API_URL_FALLBACK_TOKEN,
+      "db-config-fallback"
+    );
   }
 }
 
@@ -559,30 +627,38 @@ async function checkDbUpdate(): Promise<void> {
     dbStatus.value = dbHasUpdate.value ? "available" : "ok";
     lastDbCheck.value = new Date().toISOString();
     $userdata.set(KEYS.OPTIONS.LAST_DB_CHECK, lastDbCheck.value);
-  } catch {
+  } catch (error) {
     dbStatus.value = "error";
+    Telemetry.captureException(error, { source: "database_update_check", stage: "config" });
+    Telemetry.track("database_update_check_failed", failureDetails(error));
   } finally {
     dbChecking.value = false;
   }
 }
 
+// Web e desktop instalam o mesmo pacote do catálogo. O ramo web antigo só
+// invalidava o `config`: a tela passava a dizer "Banco atualizado" e as
+// músicas, hinários e álbuns continuavam na versão de antes.
 async function applyDbUpdate(): Promise<void> {
-  if (isDesktop.value) {
-    const ok = await sync.downloadBundle();
-    if (!ok) return;
-    dbCacheCleared.value = true;
-    dbCurrentConfig.value = dbLatestConfig.value;
-    await new Promise<void>((r) => setTimeout(r, 1000));
-    window.location.reload();
-  } else {
-    sessionStorage.clear();
-    $database.invalidate("config");
-    dbCacheCleared.value = true;
-    dbStatus.value = "ok";
-    dbCurrentConfig.value = dbLatestConfig.value;
-    await new Promise<void>((r) => setTimeout(r, 2000));
-    window.location.reload();
+  const ok = await sync.downloadBundle({
+    catalogOnly: true,
+    version: dbLatestConfig.value?.version,
+  });
+  if (!ok) {
+    Snackbar.warning(
+      dbBundleTask.value?.detail ||
+        t(
+          dbBundleTask.value?.status === "cancelled"
+            ? "startup_check.bundle_cancel"
+            : "startup_check.bundle_error"
+        )
+    );
+    return;
   }
+  dbCacheCleared.value = true;
+  dbCurrentConfig.value = dbLatestConfig.value;
+  await new Promise<void>((r) => setTimeout(r, 1000));
+  window.location.reload();
 }
 
 function formatLastCheck(iso: string): string {
@@ -591,8 +667,8 @@ function formatLastCheck(iso: string): string {
 }
 
 async function clearDbCache(): Promise<void> {
-  sessionStorage.clear();
-  $database.invalidate(); // memória + tabela db_cache inteira
+  // O sessionStorage guarda o rascunho do editor de slides, não o banco.
+  await $database.invalidateAll(); // memória + IndexedDB + cópia do service worker
   dbCacheCleared.value = true;
   setTimeout(() => {
     dbCacheCleared.value = false;
@@ -728,7 +804,11 @@ async function reinstallDatabase(): Promise<void> {
 
 async function loadCurrentDbVersion(): Promise<void> {
   try {
-    const data = await $database.get<DbConfig>("config", { silent: true });
+    // Consultar config remoto não prova que o catálogo foi instalado.
+    dbInstalledVersion.value = await BundleInstaller.getInstalledBundleVersion({
+      allowLegacyConfig: false,
+    });
+    const data = await $database.getLocal<DbConfig>("config");
     dbCurrentConfig.value = isValidDbConfig(data) ? data : null;
   } catch {
     dbCurrentConfig.value = null;

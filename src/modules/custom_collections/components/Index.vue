@@ -159,7 +159,7 @@
             @end="persistCollectionOrder"
           >
             <template #item="{ element }">
-              <div class="cc-song-row">
+              <div class="cc-song-row lj-music-row">
                 <span class="cc-drag">
                   <LjIcon :icon="ICONS.ACTIONS.DRAG" :size="16" />
                 </span>

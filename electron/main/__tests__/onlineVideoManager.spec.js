@@ -1409,6 +1409,48 @@ describe("stream (tocar já, enquanto baixa uma vez só)", () => {
     expect(resolve).toHaveBeenCalledTimes(1);
   });
 
+  describe("prefetch", () => {
+    /** Um pouco antes do `expiresAt` dos links falsos, com folga maior que a margem. */
+    const BEFORE_EXPIRY = 1789960552000 - 2 * 60 * 60 * 1000;
+
+    it("resolve antes do play e o stream seguinte não consulta o YouTube de novo", async () => {
+      const { manager, resolve } = makeStream({ cfg: { now: () => BEFORE_EXPIRY } });
+      expect(await manager.prefetch(A)).toEqual({ ok: true });
+      expect(await manager.prefetch(A)).toEqual({ ok: true, cached: true });
+      const played = await manager.stream(A);
+      expect(played.ok).toBe(true);
+      expect(resolve).toHaveBeenCalledTimes(1);
+      await manager.ensure(A);
+    });
+
+    it("links perto de vencer são resolvidos de novo no play", async () => {
+      let clock = BEFORE_EXPIRY;
+      const { manager, resolve } = makeStream({ cfg: { now: () => clock } });
+      await manager.prefetch(A);
+      clock = 1789960552000 - 60 * 1000;
+      expect((await manager.stream(A)).ok).toBe(true);
+      expect(resolve).toHaveBeenCalledTimes(2);
+      await manager.ensure(A);
+    });
+
+    it("depois de um bloqueio \"não é um robô\", para de adiantar consultas", async () => {
+      const { manager, resolve } = makeStream({ cfg: { now: () => BEFORE_EXPIRY } });
+      manager.noteBlocked();
+      expect(await manager.prefetch(A)).toEqual({ ok: true, skipped: "blocked" });
+      expect(resolve).not.toHaveBeenCalled();
+    });
+
+    it("não resolve o que já está baixado nem aceita ID inválido", async () => {
+      const { manager, resolve } = makeStream({ cfg: { now: () => BEFORE_EXPIRY } });
+      await manager.stream(A);
+      await manager.ensure(A);
+      resolve.mockClear();
+      expect(await manager.prefetch(A)).toEqual({ ok: true, skipped: "ready" });
+      expect(resolve).not.toHaveBeenCalled();
+      expect((await manager.prefetch("../x")).ok).toBe(false);
+    });
+  });
+
   it("join mede somente sua espera pelo job existente sem repetir resolução/probe", async () => {
     let clock = 0;
     const entering = deferred();

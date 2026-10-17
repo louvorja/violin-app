@@ -231,12 +231,75 @@ function setFeatureRole({ userData, feature, role }) {
   if (!role) target.features[feature] = "";
   else if (Object.values(monitorIdentity.roles().ROLES).includes(role)) target.features[feature] = role;
   else return false;
+  // Voltar a um papel substitui a escolha de monitor feita só nesta feature.
+  if (target.feature_displays) delete target.feature_displays[feature];
   return true;
 }
 
-/** Resolve o monitor de uma feature, pelo papel dela. */
+/**
+ * @typedef {{identity: import("../../src/helpers/MonitorIdentity").MonitorIdentity}} FeatureDisplay
+ * `options.displays.feature_displays`: Record<string, FeatureDisplay>.
+ * A identidade é a mesma dos papéis, mas a escolha pertence só à feature.
+ */
+
+/** Valida a identidade persistida antes de entregá-la ao comparador. */
+function validFeatureDisplay(value) {
+  const identity = value && value.identity;
+  if (!identity || identity.source !== "electron" || typeof identity.label !== "string") return false;
+  const finiteOrNull = (n) => n === null || (typeof n === "number" && Number.isFinite(n));
+  const pair = (v, a, b) => v === null || (v && finiteOrNull(v[a]) && finiteOrNull(v[b]));
+  return pair(identity.px, "w", "h") && pair(identity.dip, "w", "h") &&
+    pair(identity.nativeOrigin, "x", "y") &&
+    ["scaleFactor", "rotation", "index", "nativeId"].every((key) => finiteOrNull(identity[key])) &&
+    ["internal", "primary"].every((key) => identity[key] === null || typeof identity[key] === "boolean");
+}
+
+/** undefined restaura o padrão; null desativa; um display fica isolado na feature. */
+function setFeatureDisplay({ userData, feature, display, connected }) {
+  const config = getConfig(userData);
+  if (!config || !monitorIdentity.roles().roleOfFeature(feature)) return false;
+  if (display === null) return setFeatureRole({ userData, feature, role: null });
+  if (display === undefined) {
+    if (config.feature_displays) delete config.feature_displays[feature];
+    if (config.features) delete config.features[feature];
+    return true;
+  }
+  const index = (connected || []).findIndex((d) => d.id === display.id);
+  if (index === -1) return false;
+  if (!config.feature_displays) config.feature_displays = {};
+  config.feature_displays[feature] = {
+    identity: monitorIdentity.get().identityFromDisplay(connected[index], index),
+  };
+  return true;
+}
+
+/** Resolve primeiro a escolha da feature; sem ela, herda o papel. */
 function resolveFeature({ userData, feature, connected, operatorDisplay }) {
   const role = featureRole(userData, feature);
+  const config = getConfig(userData);
+  if (config && !config.use_legacy_resolver && Object.hasOwn(config.feature_displays || {}, feature)) {
+    const saved = config.feature_displays[feature];
+    if (!validFeatureDisplay(saved)) {
+      return { status: STATUS.PENDING, display: null, reason: "invalid-monitor", role };
+    }
+    const list = connected || [];
+    const candidates = list.map((d, i) => monitorIdentity.get().identityFromDisplay(d, i));
+    const match = monitorIdentity.get().matchIdentity(saved.identity, candidates);
+    if (match.status === "resolved") {
+      const display = list[candidates.indexOf(match.candidate)];
+      if (_substituiTelaDoOperador({ role, display, saved: saved.identity, candidate: match.candidate, operatorDisplay })) {
+        return { status: STATUS.PENDING, display: null, reason: "operator-screen", role };
+      }
+      return { status: STATUS.RESOLVED, display, reason: null, role };
+    }
+    // Uma escolha específica ausente não pode voltar ao monitor global.
+    return {
+      status: match.status === "ambiguous" ? STATUS.AMBIGUOUS : STATUS.PENDING,
+      display: null,
+      reason: match.status === "ambiguous" ? "twin-monitors" : "monitor-absent",
+      role,
+    };
+  }
   if (!role) {
     // Distingue "o usuário escolheu mesma janela" de "essa feature não existe",
     // que são bugs bem diferentes de diagnosticar.
@@ -300,6 +363,7 @@ module.exports = {
   resolveFeature,
   featureRole,
   setFeatureRole,
+  setFeatureDisplay,
   rolesSummary,
   setRoleDisplay,
 };

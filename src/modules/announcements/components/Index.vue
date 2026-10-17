@@ -350,6 +350,7 @@ import { computed, onMounted, onBeforeUnmount, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import draggable from "vuedraggable";
 import $alert from "@/helpers/Alert";
+import { reportLocalFileFailure } from "@/helpers/LocalFailureNotice";
 import {
   ContextMenuContent,
   ContextMenuItem,
@@ -358,6 +359,7 @@ import {
   ContextMenuTrigger,
 } from "reka-ui";
 import { module as manifest } from "../manifest";
+import { aplicarOrdemDoDrag } from "../dragOrder";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import {
   LjButton,
@@ -566,10 +568,13 @@ async function removeAnnouncement(a: Announcement): Promise<void> {
 }
 
 async function onDragEnd(): Promise<void> {
-  for (let i = 0; i < sorted.value.length; i++) {
-    sorted.value[i].ordem = i + 1;
-  }
-  await Promise.all(sorted.value.map((a) => saveItem(a)));
+  /*
+   * Uma leitura só (ver dragOrder.ts): ler `sorted.value` dentro do laço
+   * reordenava a lista debaixo dos pés a cada escrita de `ordem`, e o valor
+   * acabava no item errado — a ordem "não mudava" ao soltar.
+   */
+  const ordenados = aplicarOrdemDoDrag(() => sorted.value);
+  await Promise.all(ordenados.map((a) => saveItem(a)));
 }
 
 // ─── Mídia ───────────────────────────────────────────────────────────
@@ -592,7 +597,14 @@ async function onMediaSelected(e: Event, kind: "image" | "video"): Promise<void>
       /* HEIC fallback */
     }
   }
-  const data = await work.arrayBuffer();
+  let data: ArrayBuffer;
+  try {
+    data = await work.arrayBuffer();
+  } catch (error) {
+    input.value = "";
+    if (!reportLocalFileFailure(error, [f.name])) throw error;
+    return;
+  }
   if (kind === "image") {
     editing.value.imageData = data;
     editing.value.imageMime = work.type || "image/jpeg";

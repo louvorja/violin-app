@@ -39,9 +39,7 @@ import { defineAsyncComponent, computed, type Component } from "vue";
 import $appdata from "@/helpers/AppData";
 import $modules from "@/helpers/Modules";
 import Telemetry from "@/helpers/Telemetry";
-import Platform from "@/helpers/Platform";
-import $snackbar from "@/helpers/Snackbar";
-import { i18nAtual } from "@/i18n";
+import { isStaleChunkError, notifyStaleVersion } from "@/helpers/StaleVersion";
 import ModuleManager from "@/helpers/ModuleManager";
 import { isPersistentModule, RUNTIME_PERFORMANCE } from "@/helpers/RuntimePerformance";
 
@@ -86,22 +84,7 @@ function buildAsyncComponent(moduleId: string): Component {
         module_id: moduleId,
         reason: err instanceof Error ? err.name : "unknown",
       });
-      // Na web, depois de uma publicação os arquivos da versão anterior somem do
-      // servidor: a aba aberta não consegue mais baixar módulo nenhum. Recarregar
-      // sozinho derrubaria o que estiver tocando, então a decisão fica com o operador.
-      const stale =
-        !Platform.isDesktop &&
-        navigator.onLine &&
-        /dynamically imported module|preload CSS|module script failed/i.test(String(err));
-      if (stale) {
-        $snackbar.show({
-          text: i18nAtual()?.global.t("shell.stale_version") ?? "",
-          color: "warning",
-          timeout: 15000,
-          key: "stale_version",
-          action: () => window.location.reload(),
-        });
-      }
+      if (isStaleChunkError(err)) notifyStaleVersion();
       fail();
     },
     delay: 0,

@@ -28,6 +28,7 @@ vi.mock("@/helpers/Broadcast", () => ({
 
 import Broadcast from "@/helpers/Broadcast";
 import AnnouncementsProjection from "@/views/AnnouncementsProjection.vue";
+import AnnouncementsLayer from "@/modules/announcements/components/ProjectionLayer.vue";
 import { useUserDataStore } from "@/stores/userDataStore";
 
 const slides = [
@@ -231,5 +232,44 @@ describe("AnnouncementsProjection transitions", () => {
       .map((s) => (s.element as HTMLElement).style.backgroundColor);
     expect(backgrounds).toHaveLength(2);
     expect(new Set(backgrounds)).toEqual(new Set(["rgb(1, 2, 3)", "rgb(4, 5, 6)"]));
+  });
+
+  function closeAnnouncements(): void {
+    const closed = authority.control({
+      action: "stop",
+      announcement_session: authority.current()!.announcement_session,
+    });
+    Broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_STATE, closed);
+  }
+
+  it("clears the slide in its own window when the announcements stop", async () => {
+    start(0);
+    await nextTick();
+    expect(wrapper!.find(".ann-text").exists()).toBe(true);
+
+    closeAnnouncements();
+    await nextTick();
+
+    expect(wrapper!.find(".ann-text").exists()).toBe(false);
+  });
+
+  it("keeps the last slide inside the background window so it can fade out", async () => {
+    Broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_INTENT, {
+      ...beginAnnouncementIntent(),
+      slides,
+      index: 0,
+    });
+    wrapper = mount(AnnouncementsLayer, {
+      attachTo: document.body,
+      props: { holdLastSlideOnClose: true },
+      global: { stubs: { Transition: false } },
+    });
+    await nextTick();
+    expect(wrapper.find(".ann-text").text()).toContain("Slide A");
+
+    closeAnnouncements();
+    await nextTick();
+
+    expect(wrapper.find(".ann-text").text()).toContain("Slide A");
   });
 });

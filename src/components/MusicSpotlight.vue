@@ -45,6 +45,7 @@
             <tr
               v-for="item in filteredMusics"
               :key="item.custom_song_id || item.id_music"
+              class="lj-music-row"
               :class="{ 'music-search__row--pick': mode === 'pick' }"
               @click="mode === 'pick' && pickMusic(item)"
               @dblclick="pickMusic(item)"
@@ -385,10 +386,6 @@ watch(
 
 .music-search__table tbody tr:last-child td {
   border-bottom: none;
-}
-
-.music-search__table tbody tr:hover {
-  background: var(--lj-surface-bg-hover);
 }
 
 .music-search__row--pick {

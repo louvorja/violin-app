@@ -16,14 +16,15 @@ import { fetchWithTimeout, classifyNetworkError, isTransientFailure } from "@/he
 import $path from "@/helpers/Path";
 import $dev from "@/helpers/Dev";
 import $idb from "@/helpers/IndexedDB";
+import { reportReliabilityFailure } from "@/helpers/ReliabilityDiagnostics";
 import type { CatalogChange } from "@/helpers/IndexedDB";
 import { DB_TABLE } from "@/constants/DbTables";
 import {
   API_URL,
   API_TOKEN,
+  apiTokenHeaders,
   API_URL_FALLBACK,
   API_URL_FALLBACK_TOKEN,
-  apiOrigin,
 } from "@/config/Api";
 
 // Uma frase por queda do servidor: reabre só depois de uma resposta saudável.
@@ -115,12 +116,6 @@ const CATALOG_TABLES = [
   DB_TABLE.BIBLE_CHAPTERS,
 ];
 
-enum ENDPOINT_CATEGORIES {
-  VIDEOS_ONLINE = "collections/online",
-  DOXOLOGY = "albums/category/doxology",
-  CHILDREN = "albums/category/children",
-}
-
 /** Cache em memória — primeira camada (instantânea, mesma sessão). */
 const _memory = new Map<string, CacheEntry<unknown>>();
 const MEMORY_CACHE_BUDGET_BYTES = 32 * 1024 * 1024;
@@ -190,6 +185,9 @@ function memorySet<T>(file: string, data: T): void {
  * cada um dispara o próprio download (o catálogo online tem ~5 MB).
  */
 const _inflight = new Map<string, Promise<unknown>>();
+const _networkWrites = new Set<Promise<void>>();
+let _catalogGeneration = 0;
+let _catalogInstalls = 0;
 
 function getVersion(): string {
   return import.meta.env.VITE_DB_VERSION || "";
@@ -203,21 +201,36 @@ function isValidV(v: string | undefined): boolean {
 // ───────────────────────── Roteamento ─────────────────────────
 
 /**
- * URL de rede por chave. A maioria dos JSONs vive no json_db estático;
- * `_collections_online` e `_doxology_albums` são rotas REST da API (não
- * existem como arquivos em /json_db).
+ * URL de rede por chave. Tudo vive no json_db, inclusive `_collections_online`,
+ * `_doxology_albums` e `_children_albums`, que antes eram rotas REST da API.
  */
 function fetchUrlFor(file: string): string {
-  if (/^.{2}_collections_online$/.test(file)) {
-    return `${apiOrigin()}/${file.slice(0, 2)}/${ENDPOINT_CATEGORIES.VIDEOS_ONLINE}`;
-  }
-  if (/^.{2}_doxology_albums$/.test(file)) {
-    return `${apiOrigin()}/${file.slice(0, 2)}/${ENDPOINT_CATEGORIES.DOXOLOGY}`;
-  }
-  if (/^.{2}_children_albums$/.test(file)) {
-    return `${apiOrigin()}/${file.slice(0, 2)}/${ENDPOINT_CATEGORIES.CHILDREN}`;
-  }
   return $path.db(`/${file}`);
+}
+
+/** Cache do service worker que atende os JSONs do banco (rota em vite.config.js). */
+const SW_DB_CACHE = "louvorja-db";
+
+/**
+ * Apaga a cópia do service worker. A rota dele é stale-while-revalidate e o
+ * cache-buster do fetch muda só por dia: sem isto, depois de invalidar o
+ * IndexedDB o próximo `get` recebia de volta o JSON antigo e o regravava.
+ */
+async function purgeServiceWorkerCopy(file?: string): Promise<void> {
+  if (typeof caches === "undefined") return;
+  try {
+    if (!file) {
+      await caches.delete(SW_DB_CACHE);
+      return;
+    }
+    if (!(await caches.has(SW_DB_CACHE))) return;
+    const cache = await caches.open(SW_DB_CACHE);
+    const url = fetchUrlFor(file);
+    const urls = API_URL_FALLBACK ? [url, url.replace(API_URL, API_URL_FALLBACK)] : [url];
+    await Promise.all(urls.map((u) => cache.delete(u, { ignoreSearch: true })));
+  } catch {
+    // Sem Cache Storage (modo privado, política do navegador): nada a apagar.
+  }
 }
 
 type RoutedKind = "items" | "detail-music" | "single" | "composite-online";
@@ -532,7 +545,8 @@ async function writeRouted(file: string, data: unknown, r: Route | null): Promis
  * fica com quem chamou, para que cada um respeite o próprio `silent`.
  */
 function fetchAndStore<T>(file: string, fresh: boolean): Promise<T | null> {
-  const key = `${file}|${fresh ? 1 : 0}`;
+  const generation = _catalogGeneration;
+  const key = `${file}|${fresh ? 1 : 0}|${generation}`;
   const running = _inflight.get(key);
   if (running) {
     $dev.write("Reusando busca em andamento", file);
@@ -545,15 +559,14 @@ function fetchAndStore<T>(file: string, fresh: boolean): Promise<T | null> {
     const url = fetchUrlFor(file);
     const fallbackUrl = API_URL_FALLBACK ? url.replace(API_URL, API_URL_FALLBACK) : "";
     const cacheBuster = fresh
-      ? `?_=${Date.now()}`
+      ? `?fresh=1&_=${Date.now()}`
       : `?${new Date().toISOString().slice(0, 10).replace(/-/g, "")}`;
     $dev.write("Abrindo DB", `${url}${cacheBuster}`);
     let response: Response;
     try {
       response = await fetchWithTimeout(`${url}${cacheBuster}`, {
-        headers: {
-          "Api-Token": API_TOKEN,
-        },
+        headers: apiTokenHeaders(API_TOKEN),
+        ...(fresh ? { cache: "no-store" as const } : {}),
         source: "database",
       });
     } catch (primaryError) {
@@ -563,9 +576,8 @@ function fetchAndStore<T>(file: string, fresh: boolean): Promise<T | null> {
       if (!fallbackUrl || fallbackUrl === url) throw primaryError;
       $dev.write("Fallback DB", `${fallbackUrl}${cacheBuster}`);
       response = await fetchWithTimeout(`${fallbackUrl}${cacheBuster}`, {
-        headers: {
-          "Api-Token": API_URL_FALLBACK_TOKEN,
-        },
+        headers: apiTokenHeaders(API_URL_FALLBACK_TOKEN),
+        ...(fresh ? { cache: "no-store" as const } : {}),
         source: "database-fallback",
       });
     }
@@ -575,9 +587,8 @@ function fetchAndStore<T>(file: string, fresh: boolean): Promise<T | null> {
     if (!response.ok && fallbackUrl && fallbackUrl !== url) {
       $dev.write("Fallback DB", `${fallbackUrl}${cacheBuster}`);
       response = await fetchWithTimeout(`${fallbackUrl}${cacheBuster}`, {
-        headers: {
-          "Api-Token": API_URL_FALLBACK_TOKEN,
-        },
+        headers: apiTokenHeaders(API_URL_FALLBACK_TOKEN),
+        ...(fresh ? { cache: "no-store" as const } : {}),
         source: "database-fallback",
       });
     }
@@ -612,13 +623,24 @@ function fetchAndStore<T>(file: string, fresh: boolean): Promise<T | null> {
     // para uso offline, mas não faz parte do caminho crítico de exibição.
     // A escrita é idempotente e o cache de origem (HTTP/jsonCache do desktop)
     // já está protegido por gravação atômica antes de esta resposta chegar.
+    // Uma resposta antiga não pode desfazer o bundle publicado enquanto ela
+    // estava na rede. Durante a instalação, o bundle é o único escritor.
+    if (_catalogInstalls || generation !== _catalogGeneration) {
+      return (await readRouted<T>(file, route).catch(() => null)) ?? data;
+    }
     memorySet(file, data);
-    void writeRouted(file, data, route).catch((writeError) => {
+    const write = writeRouted(file, data, route).catch((writeError) => {
+      reportReliabilityFailure("database_persist_failed", writeError, {
+        dataset: file,
+        stage: "persist",
+      });
       $dev.write(
         "Não foi possível persistir DB em segundo plano",
         `${file}: ${writeError instanceof Error ? writeError.message : String(writeError)}`
       );
     });
+    _networkWrites.add(write);
+    void write.finally(() => _networkWrites.delete(write));
 
     return data;
   })();
@@ -647,10 +669,12 @@ export default {
       _memory.clear();
       _memoryBytes = 0;
       for (const t of CATALOG_TABLES) void $idb.clear(t);
+      void purgeServiceWorkerCopy();
       $dev.write("Cache do DB limpo (tudo)");
       return;
     }
     memoryDelete(file);
+    void purgeServiceWorkerCopy(file);
     const r = routeFor(file);
     if (!r) {
       void $idb.del(DB_TABLE.CACHE, file);
@@ -676,7 +700,7 @@ export default {
   async invalidateAll(): Promise<void> {
     _memory.clear();
     _memoryBytes = 0;
-    await Promise.all(CATALOG_TABLES.map((t) => $idb.clear(t)));
+    await Promise.all([...CATALOG_TABLES.map((t) => $idb.clear(t)), purgeServiceWorkerCopy()]);
     $dev.write("Cache do DB limpo (tudo, aguardado)");
   },
 
@@ -697,7 +721,16 @@ export default {
         }
 
         // 2) IndexedDB — tabelas roteadas (+ migração do formato legado).
-        const routed = await readRouted<T>(file, routeFor(file));
+        let routed: T | null = null;
+        try {
+          routed = await readRouted<T>(file, routeFor(file));
+        } catch (error) {
+          // Um IDB indisponível não impede recuperar o dado pela rede.
+          reportReliabilityFailure("database_read_failed", error, {
+            dataset: file,
+            stage: "read_local",
+          });
+        }
         if (routed !== null) {
           $dev.write(`Lendo DB do cache IDB`, file);
           memorySet(file, routed);
@@ -754,14 +787,19 @@ export default {
    * fluxos exploratórios, como busca textual, que podem consultar milhares de
    * chaves e não devem transformar um cache incompleto em uma rajada de GETs.
    */
-  async getLocal<T = unknown>(file: string): Promise<T | null> {
-    const mem = _memory.get(file);
+  async getLocal<T = unknown>(
+    file: string,
+    { remember = true }: { remember?: boolean } = {}
+  ): Promise<T | null> {
+    const mem = memoryGet<T>(file);
     if (mem && isValidV(mem.v)) return mem.data as T;
 
     try {
       const routed = await readRouted<T>(file, routeFor(file));
       if (routed !== null) {
-        _memory.set(file, { id: file, data: routed, ts: Date.now(), v: getVersion() });
+        // Varreduras de milhares de chaves passam `remember: false` para não
+        // encher a memória com registros que ninguém vai abrir.
+        if (remember) memorySet(file, routed);
         return routed;
       }
     } catch {
@@ -816,7 +854,7 @@ export default {
     // Um bundle pode substituir um capítulo que já foi lido nesta sessão.
     // Esquecer a cópia em memória faz a próxima leitura usar o valor novo do
     // IndexedDB sem invalidar os demais datasets.
-    _memory.delete(file);
+    memoryDelete(file);
   },
 
   /** Publica o bundle e seu marker juntos; falha/abort deixa o catálogo antigo intacto. */
@@ -828,12 +866,21 @@ export default {
       onProgress?: (_current: number, _total: number, _key: string) => void;
     } = {}
   ): Promise<void> {
-    const changes = await prepareBundleChanges(datasets, options.signal);
-    await $idb.applyCatalogBatch(changes, marker, {
-      signal: options.signal,
-      onApplied: options.onProgress,
-    });
-    for (const file of datasets.keys()) memoryDelete(file);
+    _catalogGeneration++;
+    _catalogInstalls++;
+    try {
+      // Escritas que já começaram precisam terminar antes de preparar a troca.
+      await Promise.allSettled([..._networkWrites]);
+      const changes = await prepareBundleChanges(datasets, options.signal);
+      await $idb.applyCatalogBatch(changes, marker, {
+        signal: options.signal,
+        onApplied: options.onProgress,
+      });
+      for (const file of datasets.keys()) memoryDelete(file);
+    } finally {
+      _catalogInstalls--;
+      _catalogGeneration++;
+    }
   },
 
   /**

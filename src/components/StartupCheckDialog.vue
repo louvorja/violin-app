@@ -19,6 +19,7 @@
         />
         <span v-if="sync.bundlePercent.value > 0" class="sc-scanning__count">
           {{ sync.bundlePercent.value }}%
+          <template v-if="bundleEta">· {{ bundleEta }}</template>
         </span>
       </template>
       <template v-else>
@@ -424,7 +425,7 @@ import { ref, computed, onMounted, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
-import { useSyncManager } from "@/composables/useSyncManager";
+import { useSyncManager, CatalogIncompleteError } from "@/composables/useSyncManager";
 import type { BibleVersion } from "@/types/Bible";
 import { ICONS } from "@/config/Icons";
 import DontShowAgainCheckbox from "@/components/inputs/DontShowAgainCheckbox.vue";
@@ -441,6 +442,8 @@ import {
   LjSpinner,
 } from "@/components/ui";
 import { formatBibleDownloadDetail } from "@/helpers/BackgroundTaskDetail";
+import { formatEta } from "@/helpers/Eta";
+import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
 
 interface Album {
   id_album: number;
@@ -496,6 +499,11 @@ const scanData = ref<ScanData>({
 });
 
 const sync = useSyncManager();
+const bgTasks = useBackgroundTasks();
+const bundleEta = computed(() => {
+  const seconds = bgTasks.tasks.value.find((task) => task.id === "db-bundle")?.etaSeconds;
+  return seconds == null ? "" : t("shell.background_tasks.eta", { time: formatEta(seconds) });
+});
 
 const canDownload = computed(() => sync.ftpOk.value && !sync.ftpChecking.value);
 
@@ -621,7 +629,7 @@ async function prepareCatalog(): Promise<void> {
     view.value = "scanning";
     // Clique explícito: não aplica cooldown e permite tentar novamente logo
     // após uma falha ou cancelamento.
-    const installed = await sync.downloadBundle();
+    const installed = await sync.downloadBundle({ catalogOnly: true });
     if (!installed) {
       catalogActionFailed.value = true;
       view.value = "summary";
@@ -730,7 +738,9 @@ async function performDownload(
   } catch (e) {
     console.error("[StartupCheck] download:", e);
     sync.downloadCompletedMsg.value =
-      (e as Error).message || t("options.collections_download.collect_failed");
+      e instanceof CatalogIncompleteError
+        ? t("options.collections_download.catalog_incomplete")
+        : (e as Error).message || t("options.collections_download.collect_failed");
   }
 
   view.value = "summary";

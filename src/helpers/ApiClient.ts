@@ -24,3 +24,25 @@ export function postApi(
     body: JSON.stringify(body),
   })
 }
+
+/**
+ * POST de bytes crus (upload do celular para o desktop).
+ *
+ * De propósito **sem** `Content-Type: application/json`: o `express.json()`
+ * global do servidor tem limite de 100 kb e consumiria o stream — com
+ * `application/octet-stream` ele passa reto e a rota de upload faz o pipe
+ * direto para o disco.
+ */
+export function postRaw(
+  path: string,
+  body: ArrayBuffer,
+  token?: string,
+  headers: Record<string, string> = {},
+): Promise<Response> {
+  const url = token ? `${path}?token=${token}` : path
+  return apiFetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/octet-stream", ...headers },
+    body,
+  })
+}

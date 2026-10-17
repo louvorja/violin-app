@@ -83,12 +83,20 @@ const { t } = useI18n();
 const liturgy = Liturgy;
 const liturgyItems = ref<LiturgyItem[]>([]);
 
+/**
+ * O dia da lista que está na tela — a rota GET devolve `day` (hoje, ou o dia
+ * ativo quando hoje está vazio) e o execute devolve para o renderer achar o
+ * item no dia certo antes mesmo do módulo de liturgia abrir.
+ */
+const liturgyDay = ref<number | null>(null);
+
 async function fetchLiturgy(): Promise<void> {
   try {
     const res = await apiFetch(`/api/liturgy?token=${props.token}`);
     if (res.ok) {
-      const data = (await res.json()) as { items?: LiturgyItem[] };
+      const data = (await res.json()) as { items?: LiturgyItem[]; day?: number };
       liturgyItems.value = data.items || [];
+      liturgyDay.value = Number.isInteger(data.day) ? (data.day ?? null) : null;
     }
   } catch (e) {
     console.error("Erro ao buscar liturgia:", e);
@@ -101,7 +109,15 @@ async function executeLiturgyItem(item: LiturgyItem): Promise<void> {
     return;
   }
   try {
-    const res = await postApi("/api/liturgy-execute", { id: item.id, tag: "audio" }, props.token);
+    const res = await postApi(
+      "/api/liturgy-execute",
+      {
+        id: item.id,
+        tag: "audio",
+        ...(liturgyDay.value !== null ? { day: liturgyDay.value } : {}),
+      },
+      props.token
+    );
     if (res.ok) {
       emit("show-snackbar", t("components.music_menu.execute") + ": " + item.item);
       if (item.tipo === "musica") {

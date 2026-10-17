@@ -8,6 +8,7 @@ import { ModuleEnum } from "@/enums/ModuleEnum"
 import { getModulePath } from "@/helpers/ModulePath"
 import { KEYS } from "@/constants/UserDataKeys"
 import { COLORS } from "@constants/Colors";
+import { liturgySidebarDefault } from "@/helpers/LiturgySidebar";
 
 const LiturgyRibbonInfo = defineAsyncComponent(
   () => import("./components/LiturgyRibbonInfo.vue")
@@ -75,7 +76,7 @@ export const contextualPages: RibbonPage[] = [
             labelOn: "ribbon.btn.unlock_liturgy",
             labelOff: "ribbon.btn.lock_liturgy",
           } },
-          { id: "show_liturgy_sidebar", type: "switch", label: `${modulePath}.ribbon.show_sidebar`, optionKey: KEYS.SHELL.LITURGY_VISIBLE, defaultValue: true },
+          { id: "show_liturgy_sidebar", type: "switch", label: `${modulePath}.ribbon.show_sidebar`, optionKey: KEYS.SHELL.LITURGY_VISIBLE, get defaultValue() { return liturgySidebarDefault(); } },
           { id: "mark_done", type: "switch", label: `${modulePath}.ribbon.mark_on_access`, optionKey: KEYS.MODULES.LITURGY.MARK_ON_ACCESS, defaultValue: false },
         ],
       },

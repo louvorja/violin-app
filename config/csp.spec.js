@@ -9,6 +9,14 @@ describe("PostHog CSP", () => {
     expect(DOMAINS_CSP.WORKER).toContain("data:");
   });
 
+  // O catálogo pode apontar capa e áudio direto para o armazenamento. Sem ele
+  // aqui, o web/PWA barra a capa, o áudio e o download para uso offline.
+  it("libera o armazenamento de mídia para imagem, áudio e download", () => {
+    for (const directive of [DOMAINS_CSP.IMG, DOMAINS_CSP.MEDIA, DOMAINS_CSP.CONNECT]) {
+      expect(directive).toContain("https://*.louvorja.com.br");
+    }
+  });
+
   it("aplica os hosts do PostHog na CSP do Electron", () => {
     const csp = buildCsp("prod-desktop");
     expect(csp).toContain("script-src");

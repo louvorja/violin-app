@@ -184,6 +184,27 @@ O download de vídeos do YouTube (`electron/main/onlineVideo/`) executa dois bin
 O servidor Express (porta 7070) protege endpoints `/api/*` e `/events` para
 requests remotos. Localhost sempre bypassa (segurança via firewall do SO).
 
+### Aprovação e permissões
+
+O cadastro de um celular tem **dois estados independentes**:
+
+| Estado                | Quem define                         | Efeito                                        |
+| --------------------- | ----------------------------------- | --------------------------------------------- |
+| `pending`             | `POST /api/register-device` (main)  | Espera o operador definir as permissões        |
+| `approved`            | Salvar/aprovar no menu Transmissão  | Vale o que estiver na lista de permissões       |
+
+`pending` é **estado explícito** (`Device.status`), não "lista de permissões
+vazia". A inferência antiga quebrava o fluxo normal: salvar um dispositivo sem
+nenhuma permissão o devolvia para a fila de aprovação — a cada `devices:changed`
+e a cada reinício do app, porque a checagem também roda no boot. Sem permissão
+significa **inerte**: o registro continua, e o servidor trata o aparelho como não
+autorizado (`_hasPermissions` em `httpServer/auth.js`). Por isso o salvamento
+sem nenhuma permissão é legítimo e pede confirmação, em vez de ser impossível.
+
+Registros anteriores ao campo `status` seguem a regra antiga (lista vazia =
+pendente), para o aparelho que chegou antes da mudança não ficar esperando uma
+aprovação que a tela nunca mostraria.
+
 ### Modos de autenticação
 
 | Modo                          | Como chega                           | Validado por                          |

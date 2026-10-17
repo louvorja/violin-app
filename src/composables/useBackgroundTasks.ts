@@ -1,5 +1,6 @@
-import { reactive, computed } from "vue";
+import { reactive, computed, watch, effectScope } from "vue";
 import Platform from "@/helpers/Platform";
+import { createEtaEstimator, type EtaEstimator } from "@/helpers/Eta";
 
 export interface BackgroundTask {
   id: string;
@@ -10,6 +11,8 @@ export interface BackgroundTask {
   error?: string;
   startedAt: number;
   completedAt?: number;
+  /** Segundos que faltam, estimados pelo ritmo da própria tarefa; `null` até haver base. */
+  etaSeconds?: number | null;
   _cancelFn?: () => void;
   _done?: number;
   _failed?: number;
@@ -20,6 +23,46 @@ type CleanupFn = () => void;
 
 const _tasks = reactive(new Map<string, BackgroundTask>());
 const _downloadListeners: CleanupFn[] = [];
+const _estimators = new Map<string, EtaEstimator>();
+let _etaWatching = false;
+
+/**
+ * Toda tarefa informa só a porcentagem; o tempo restante sai do ritmo dela. Um
+ * observador único atualiza `etaSeconds` quando o progresso muda, e vale para
+ * qualquer produtor (coletâneas, Bíblia, banco, atualização) sem mexer neles.
+ */
+function _watchEta(): void {
+  if (_etaWatching) return;
+  _etaWatching = true;
+  effectScope(true).run(() =>
+    watch(
+      () =>
+        Array.from(_tasks.values())
+          .map((t) => `${t.id}:${t.status}:${t.progress}`)
+          .join("|"),
+      () => {
+        const now = Date.now();
+        const alive = new Set<string>();
+        for (const task of _tasks.values()) {
+          if (task.status !== "running") {
+            task.etaSeconds = null;
+            continue;
+          }
+          alive.add(task.id);
+          let estimator = _estimators.get(task.id);
+          if (!estimator) {
+            estimator = createEtaEstimator();
+            _estimators.set(task.id, estimator);
+            estimator.push(task.startedAt, 0);
+          }
+          estimator.push(now, task.progress ?? 0);
+          task.etaSeconds = estimator.eta(now);
+        }
+        for (const id of [..._estimators.keys()]) if (!alive.has(id)) _estimators.delete(id);
+      },
+    ),
+  );
+}
 
 function _ensureDownloadListeners(): void {
   if (_downloadListeners.length > 0 || !Platform.download) return;
@@ -92,6 +135,7 @@ function _ensureDownloadListeners(): void {
 }
 
 export function useBackgroundTasks() {
+  _watchEta();
   const tasks = computed(() => Array.from(_tasks.values()));
 
   const hasActiveTasks = computed(() =>

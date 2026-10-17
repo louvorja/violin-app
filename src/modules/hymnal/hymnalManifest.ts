@@ -73,13 +73,6 @@ export function createHymnalManifest({
           ],
         },
         {
-          id: `${moduleCtxId}_export`,
-          title: "ribbon.groups.export",
-          buttons: [
-            { id: "export_music", icon: ICONS.ACTIONS.EXPORT, label: "ribbon.btn.export_music", action: `${id}_export`, color: "#16a085" },
-          ],
-        },
-        {
           id: `${moduleCtxId}_options`,
           title: "ribbon.groups.options",
           buttons: [

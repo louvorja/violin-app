@@ -4,7 +4,13 @@
        não entrasse de fato (ex.: chamado fora de gesto do usuário), este
        overlay se sobrepunha ao preview inline e mostrava um Player duplicado
        sobre o do rodapé. -->
-  <div v-if="actuallyFullscreen" class="fsp-overlay" style="z-index: 9999" @mousemove="mouseMove">
+  <div
+    v-if="actuallyFullscreen"
+    class="fsp-overlay"
+    style="z-index: 9999"
+    @mousemove="mouseMove"
+    @pointerdown="pointerDown"
+  >
     <transition name="slide-up">
       <div v-if="visible" class="fsp-bar" @mouseenter="mouseEnter" @mouseleave="mouseLeave">
         <l-player location="fullscreen" />
@@ -16,18 +22,41 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from "vue";
 import LPlayer from "@/components/Player.vue";
+import { fullscreenApiAvailable } from "@/helpers/Fullscreen";
 
 const visible = ref(false);
 const start_timer = ref(true);
 const actuallyFullscreen = ref(false);
 let timeout = null;
 
+// Sem a API (iPhone) o vue-fullscreen cai no modo "só página": o preview vira
+// `position: fixed`, `fullscreenElement` fica nulo e não há Esc para sair. Este
+// componente só é montado com a tela cheia ligada, então ali ela é real — e a
+// barra, com o botão de sair, é a única saída.
+const pageOnly = !fullscreenApiAvailable();
+let hideDelay = 1000;
+
 function _syncFullscreen() {
-  actuallyFullscreen.value = !!document.fullscreenElement;
+  actuallyFullscreen.value = pageOnly || !!document.fullscreenElement;
+}
+
+// No dedo não há mousemove nem hover: o toque mostra a barra e ela fica tempo
+// bastante para alcançar um botão.
+function pointerDown(e) {
+  if (e.pointerType === "mouse") return;
+  hideDelay = 4000;
+  start_timer.value = true;
+  showChild();
+  startHideTimer();
 }
 
 onMounted(() => {
   _syncFullscreen();
+  if (pageOnly) {
+    hideDelay = 4000;
+    showChild();
+    startHideTimer();
+  }
   document.addEventListener("fullscreenchange", _syncFullscreen);
 });
 
@@ -61,7 +90,7 @@ function startHideTimer() {
   clearTimeout(timeout);
   timeout = setTimeout(() => {
     visible.value = false;
-  }, 1000);
+  }, hideDelay);
 }
 </script>
 
@@ -76,6 +105,9 @@ function startHideTimer() {
   right: 0;
   bottom: 0;
   left: 0;
+  /* Fora do indicador de início do iPhone; nos demais o inset é 0. */
+  padding-bottom: env(safe-area-inset-bottom);
+  background: var(--lj-footer-bg);
 }
 
 .slide-up-enter-active,

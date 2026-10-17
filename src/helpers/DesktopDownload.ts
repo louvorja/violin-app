@@ -64,3 +64,18 @@ export function desktopDownloadUrl(platform: DesktopDownloadPlatform, version: s
 
   return `${RELEASES_BASE_URL}/download/v${encodeURIComponent(cleanVersion)}/${encodeURIComponent(assetName)}`;
 }
+
+type Translate = (key: string, params?: Record<string, unknown>) => string;
+
+/** Rótulo do botão principal de download — único para a home e para o diálogo de instalação. */
+export function desktopDownloadLabel(platform: DesktopDownloadPlatform, t: Translate): string {
+  if (platform === "other") return t("shell.desktop_download.view_downloads");
+  if (platform === "linux") {
+    return t("shell.desktop_download.view_downloads_for", {
+      platform: t("shell.desktop_download.platform.linux"),
+    });
+  }
+  return t("shell.desktop_download.download_for", {
+    platform: t(`shell.desktop_download.platform.${platform}`),
+  });
+}

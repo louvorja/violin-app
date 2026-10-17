@@ -18,6 +18,8 @@ import Broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE, type TelemetrySessionPayload } from "@/helpers/BroadcastTypes";
 import Platform from "@/helpers/Platform";
 import { normalizeAppVersion } from "@/helpers/AppVersion.js";
+import { collectEnvironment, desktopRuntime } from "@/helpers/TelemetryEnvironment";
+import type { EnvironmentProperties } from "@/types/TelemetryEnvironment";
 import { normalizeOwnProtocolExceptionFrames } from "@/helpers/ExceptionFrames";
 import { cpuProfileLogSummary } from "@/helpers/CpuProfileDiagnostic";
 import {
@@ -29,6 +31,8 @@ import $userdata from "@/helpers/UserData";
 import { setNetworkTimingReporter } from "@/helpers/Http";
 import { setDatabaseTimingReporter } from "@/helpers/Database";
 import { KEYS } from "@/constants/UserDataKeys";
+import { classifyLocalEnvironmentError } from "@/helpers/LocalEnvironmentErrors";
+import { failureDetails } from "@/helpers/ReliabilityDiagnostics";
 import packageJson from "@root/package.json";
 
 const KEY = import.meta.env.VITE_POSTHOG_KEY ?? "";
@@ -40,6 +44,7 @@ let _ph: PostHog | null = null;
 let _appVersion = normalizeAppVersion(packageJson.version) || "unknown";
 let _appVersionSource = "package_json_fallback";
 let _sdkVersion = BUILD_SDK_VERSION || "unknown";
+let _environmentContext: EnvironmentProperties = {};
 let _installed = false;
 let _nativeAutocaptureActive = false;
 let _responsivenessCleanup: (() => void) | null = null;
@@ -147,6 +152,32 @@ function sanitizeString(value: string): string {
   return value.slice(0, MAX_STRING_LENGTH).replace(SENSITIVE_QUERY, "$1[REDACTED]");
 }
 
+/**
+ * Valor de uma `route` que pode sair do app.
+ *
+ * A rota interna da SPA (`/projection/file`) é caminho nosso: vai inteira, já
+ * sanitizada — se um dia trouxer `?token=`, o `SENSITIVE_QUERY` cobre.
+ *
+ * URL externa vira **só o host**. O `path` de um `view_url` do Canva carrega o
+ * JWT (a própria API do app o chama de "JWT com `expwy`"), e o `SENSITIVE_QUERY`
+ * só redige **query** — `?token=`, `?jwt=`… o que estiver no caminho passaria
+ * inteiro. Host responde "foi site? de onde?" sem levar nem o token nem o
+ * endereço completo do terceiro.
+ *
+ * @param route rota/URL que ia para a telemetria
+ * @returns rota interna sanitizada, ou o host de uma URL externa
+ */
+export function routeForTelemetry(route: unknown): string {
+  const texto = typeof route === "string" ? route.trim() : "";
+  if (!texto) return "";
+  if (!/^https?:\/\/[^/\s]+/i.test(texto)) return sanitizeString(texto);
+  try {
+    return new URL(texto).host;
+  } catch {
+    return "[external]";
+  }
+}
+
 function normalizeVersion(value: unknown): string {
   return typeof value === "string" ? value.trim().replace(/^v(?=\d)/, "") : "";
 }
@@ -171,6 +202,16 @@ export function isBenignException(properties: Record<string, unknown> | undefine
     const value = (item as { value?: unknown } | null)?.value;
     return typeof value === "string" && BENIGN_EXCEPTION.test(value.trim());
   });
+}
+
+function localEnvironmentKindOf(properties: Record<string, unknown> | undefined) {
+  const list = properties?.$exception_list;
+  if (!Array.isArray(list) || list.length === 0) return null;
+  const kinds = list.map((item) => {
+    const { type, value } = (item ?? {}) as { type?: unknown; value?: unknown };
+    return classifyLocalEnvironmentError({ name: type, message: value });
+  });
+  return kinds.every(Boolean) ? kinds[0] : null;
 }
 
 function serializableValue(value: unknown, depth = 0): unknown {
@@ -285,10 +326,10 @@ function runtimeContext(): Record<string, unknown> {
   const api = typeof window !== "undefined" ? window.louvorjaApi : undefined;
   return {
     target: Platform.isDesktop ? "electron" : "web",
+    app_platform: appPlatform(),
     os: osName(),
-    electron_version: api?.runtime?.electron || Platform.electronVersion || undefined,
-    chromium_version: api?.runtime?.chrome || undefined,
-    node_version: api?.runtime?.node || undefined,
+    ...(Platform.isDesktop ? desktopRuntime(api) : {}),
+    ..._environmentContext,
     is_dev: Platform.isDev,
   };
 }
@@ -360,6 +401,10 @@ function captureResultDetails(result: CaptureResult | undefined): Record<string,
 function baseContext(): Record<string, unknown> {
   return {
     app_version: _appVersion,
+    app_build:
+      typeof document !== "undefined"
+        ? document.querySelector<HTMLMetaElement>('meta[name="louvorja-build"]')?.content
+        : undefined,
     app_version_source: _appVersionSource,
     sdk_version: _sdkVersion,
     ...runtimeContext(),
@@ -585,14 +630,9 @@ async function importPostHogWithTransportDiagnostics(): Promise<typeof import("p
  * processo principal.
  */
 function safeError(error: unknown): Error {
-  let message = "Erro não identificado";
-  try {
-    message = error instanceof Error ? error.message : String(error);
-  } catch {
-    message = "Erro não serializável";
-  }
-
-  const safe = new Error(sanitizeString(message));
+  const details = failureDetails(error);
+  const safe = new Error(sanitizeString(details.error_message));
+  safe.name = sanitizeString(details.error_name);
   if (error instanceof Error) {
     safe.name = sanitizeString(error.name || "Error");
     if (error.stack) safe.stack = sanitizeString(error.stack);
@@ -634,6 +674,20 @@ export function captureException(error: unknown, properties: Record<string, unkn
     _explicitErrors.set(error, now);
   }
   const sanitized = safeError(error);
+  const localKind = classifyLocalEnvironmentError(error);
+  if (localKind) {
+    track("local_storage_failed", {
+      ...properties,
+      ...failureDetails(error),
+      local_environment_error: localKind,
+    });
+    log("warn", sanitized.message, {
+      ...serializableProperties(properties),
+      error_name: sanitized.name,
+      local_environment_error: localKind,
+    });
+    return;
+  }
   const enriched = {
     ...baseContext(),
     ...errorProperties(sanitized),
@@ -1442,6 +1496,20 @@ function osName(): string {
   return "unknown";
 }
 
+export type AppPlatform = "desktop" | "pwa" | "web";
+
+/** desktop = Electron; pwa = instalado/standalone; web = aba comum do navegador. */
+function appPlatform(): AppPlatform {
+  if (Platform.isDesktop) return "desktop";
+  if (typeof window === "undefined") return "web";
+  const standalone =
+    window.matchMedia?.("(display-mode: standalone)").matches ||
+    window.matchMedia?.("(display-mode: fullscreen)").matches ||
+    window.matchMedia?.("(display-mode: minimal-ui)").matches ||
+    (navigator as Navigator & { standalone?: boolean }).standalone === true;
+  return standalone ? "pwa" : "web";
+}
+
 async function appVersion(): Promise<string> {
   // O executável instalado é a fonte de verdade no desktop. Um override do
   // build (por exemplo, uma execução manual em main) não deve substituí-lo.
@@ -1518,9 +1586,11 @@ export function setEnabled(enabled: boolean): void {
   if (_ph) {
     _ph.opt_in_capturing({ captureEventName: false });
     _ph.register({
+      ..._environmentContext,
       app_version: _appVersion,
       app_version_source: _appVersionSource,
       sdk_version: _sdkVersion,
+      app_platform: appPlatform(),
     });
     startResponsivenessMonitor();
   } else void init();
@@ -1540,9 +1610,11 @@ export function resetId(): void {
   if (isEnabled()) _ph.opt_in_capturing({ captureEventName: false });
   else _ph.opt_out_capturing();
   _ph.register({
+    ..._environmentContext,
     app_version: _appVersion,
     app_version_source: _appVersionSource,
     sdk_version: _sdkVersion,
+    app_platform: appPlatform(),
   });
 }
 
@@ -1589,6 +1661,16 @@ export async function init(): Promise<void> {
 async function _init(): Promise<void> {
   const { default: posthog } = await importPostHogWithTransportDiagnostics();
   const version = (await appVersion()) || "unknown";
+  // A leitura só começa com telemetria habilitada. IPC/Client Hints têm prazo
+  // limitado e a preferência é conferida novamente após a espera.
+  if (!isEnabled()) return;
+  _environmentContext = await collectEnvironment({
+    desktop: Platform.isDesktop,
+    platform: Platform.platform,
+    api: typeof window !== "undefined" ? window.louvorjaApi : undefined,
+    navigatorInfo: typeof navigator !== "undefined" ? navigator : undefined,
+  });
+  if (!isEnabled()) return;
   _appVersion = version;
   const sdkVersion =
     typeof (posthog as PostHog & { LIB_VERSION?: unknown }).LIB_VERSION === "string"
@@ -1723,6 +1805,24 @@ async function _init(): Promise<void> {
       if (!capture) return null;
       if (capture.event === "$exception") {
         if (isBenignException(capture.properties)) return null;
+        const localKind = localEnvironmentKindOf(capture.properties);
+        if (localKind) {
+          const first = (
+            capture.properties?.$exception_list as { type?: string; value?: string }[]
+          )[0];
+          track("local_storage_failed", {
+            source: "sdk.autocapture",
+            error_name: first?.type,
+            error_message: first?.value,
+            local_environment_error: localKind,
+          });
+          log("warn", String(first?.value ?? "Falha do ambiente local"), {
+            source: "sdk.autocapture",
+            error_name: first?.type,
+            local_environment_error: localKind,
+          });
+          return null;
+        }
         normalizeOwnProtocolExceptionFrames(capture.properties);
         onRealException(isMainWindow, capture);
       }
@@ -1760,9 +1860,11 @@ async function _init(): Promise<void> {
   // opção ficaria sem telemetria para sempre, com o toggle marcado.
   posthog.opt_in_capturing({ captureEventName: false });
   posthog.register({
+    ..._environmentContext,
     app_version: version,
     app_version_source: _appVersionSource,
     sdk_version: sdkVersion,
+    app_platform: appPlatform(),
     window_role: windowRole(),
     window_feature: windowFeature(),
     window_route: routePath(),
@@ -1808,6 +1910,9 @@ async function _init(): Promise<void> {
   }
 
   const pendingEvents = _pendingEvents.splice(0);
+  for (const diagnostic of window.__ljPwaRecovery?.drainDiagnostics() ?? []) {
+    track("pwa_boot_recovered", diagnostic);
+  }
   for (const pending of pendingEvents) posthog.capture(pending.event, pending.properties);
   if (pendingEvents.length > 0) {
     diagnostic("debug", "eventos pendentes enviados após init", { count: pendingEvents.length });
@@ -1839,7 +1944,9 @@ async function _init(): Promise<void> {
     "app_opened",
     {
       platform: Platform.isDesktop ? "desktop" : "web",
+      app_platform: appPlatform(),
       os: osName(),
+      ..._environmentContext,
       app_version: version,
       app_version_source: _appVersionSource,
       // Explícito em vez de depender só do `register()` acima: o evento
@@ -1988,5 +2095,6 @@ export default {
   setRuntimeContext,
   reportRuntimeIncident,
   histogram,
+  routeForTelemetry,
   installVueErrorHandler,
 };

@@ -7,6 +7,7 @@
  * como reserva, para quando o download não é possível.
  */
 import Platform from "@/helpers/Platform";
+import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 import { i18nAtual } from "@/i18n";
 import $userdata from "@/helpers/UserData";
 import Telemetry from "@/helpers/Telemetry";
@@ -115,6 +116,98 @@ export function videoIdFromUrl(url: string | null | undefined): string | null {
   return m ? m[1] : null;
 }
 
+/** Canal ou playlist do YouTube, como o main aceita listar. */
+export interface YouTubeCollectionSource {
+  kind: "channel" | "playlist";
+  /** Canal: "UC…" ou "@nome". Playlist: o `list=` do link. */
+  id: string;
+}
+
+/** Um link do YouTube colado pelo operador: um vídeo, uma playlist ou um canal. */
+export type YouTubeSource = { kind: "video"; id: string } | YouTubeCollectionSource;
+
+export interface YouTubeCollectionEntry {
+  id: string;
+  title: string;
+  /** Segundos; null quando o YouTube não informa. */
+  duration: number | null;
+}
+
+export interface YouTubeCollectionPage {
+  title: string;
+  channel: string;
+  thumbnail: string | null;
+  entries: YouTubeCollectionEntry[];
+  hasMore: boolean;
+}
+
+const PLAYLIST_RE = /[?&]list=([A-Za-z0-9_-]{12,64})/;
+const CHANNEL_RE = /youtube\.com\/(?:channel\/(UC[A-Za-z0-9_-]{22})|(@[\p{L}\p{N}._-]{3,100}))/u;
+
+/**
+ * O que um link do YouTube aponta. Link de vídeo dentro de uma playlist
+ * (`watch?v=…&list=…`) conta como o vídeo: é ele que o operador estava vendo.
+ */
+export function youtubeSourceFromUrl(url: string | null | undefined): YouTubeSource | null {
+  if (typeof url !== "string" || !/(?:youtube\.com|youtu\.be)/i.test(url)) return null;
+  const video = videoIdFromUrl(url);
+  if (video) return { kind: "video", id: video };
+  const playlist = url.match(PLAYLIST_RE);
+  if (playlist) return { kind: "playlist", id: playlist[1] };
+  const channel = url.match(CHANNEL_RE);
+  if (channel) return { kind: "channel", id: channel[1] ?? decodeURIComponent(channel[2]) };
+  return null;
+}
+
+/** Só no desktop: o yt-dlp lista o canal ou a playlist no processo principal. */
+export function collectionsAvailable(): boolean {
+  return typeof Platform.onlineVideo?.collection === "function";
+}
+
+/**
+ * Uma página de vídeos de um canal (do mais recente ao mais antigo) ou de uma
+ * playlist. Lança com `kind` quando o main devolve falha.
+ */
+export async function listCollection(
+  source: YouTubeCollectionSource,
+  range: { start: number; count: number; lang?: string }
+): Promise<YouTubeCollectionPage> {
+  const api = Platform.onlineVideo;
+  if (!api?.collection) throw Object.assign(new Error("unsupported"), { kind: "unsupported" });
+  const res = await api.collection({ kind: source.kind, id: source.id }, range);
+  if (!res.ok) throw Object.assign(new Error(res.error.message), { kind: res.error.kind });
+  return { title: res.title, channel: res.channel, thumbnail: res.thumbnail, entries: res.entries, hasMore: res.hasMore };
+}
+
+/** Título e canal de um vídeo pelo oEmbed do YouTube (público, sem chave); null se não achar. */
+export async function youtubeOembed(id: string): Promise<{ title: string; channel: string } | null> {
+  try {
+    const watch = `https://www.youtube.com/watch?v=${id}`;
+    const res = await fetchWithTimeout(
+      `https://www.youtube.com/oembed?url=${encodeURIComponent(watch)}&format=json`,
+      { timeout: NET_TIMEOUT.QUICK, source: "youtube-oembed", thirdParty: true }
+    );
+    if (!res.ok) return null;
+    const json = (await res.json()) as { title?: unknown; author_name?: unknown };
+    return {
+      title: typeof json.title === "string" ? json.title : "",
+      channel: typeof json.author_name === "string" ? json.author_name : "",
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Miniatura do vídeo servida pelo YouTube, sem chamar API nenhuma. */
+export function youtubeThumb(id: string): string {
+  return `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
+}
+
+/** O player embutido, como o resto do app abre os vídeos on-line. */
+export function youtubeEmbedUrl(id: string): string {
+  return `https://www.youtube.com/embed/${id}?autoplay=1&rel=0&controls=0`;
+}
+
 /**
  * Quando o download falha, cair no player do YouTube só ajuda se o problema for
  * nosso (ferramenta, rede até o GitHub, formato). Se o próprio vídeo é o problema
@@ -128,6 +221,33 @@ const VIDEO_ITSELF_UNPLAYABLE: ReadonlySet<string> = new Set([
   "unavailable",
 ]);
 
+/**
+ * Título do vídeo pelo oEmbed público do YouTube.
+ *
+ * É a única fonte de título sem API key e sem acionar o yt-dlp, e basta o ID.
+ * Devolve null em rede quebrada, vídeo privado ou removido — quem chama é que
+ * decide o nome de reserva.
+ *
+ * Existe aqui porque duas telas precisam do mesmo título (form de liturgia e
+ * "Meus Vídeos Online") e copiar o fetch duplicava o tratamento de falha.
+ */
+export async function fetchYoutubeTitle(ytId: string): Promise<string | null> {
+  if (!ytId) return null;
+  try {
+    const res = await fetchWithTimeout(
+      `https://www.youtube.com/oembed?url=${encodeURIComponent(
+        `https://www.youtube.com/watch?v=${ytId}`
+      )}&format=json`,
+      { timeout: NET_TIMEOUT.QUICK, source: "youtube-oembed", thirdParty: true }
+    );
+    if (!res.ok) return null;
+    const json = await res.json();
+    return typeof json.title === "string" && json.title ? json.title : null;
+  } catch {
+    return null;
+  }
+}
+
 export type FailureAction = "silent" | "error" | "embed";
 
 export function actionForFailure(kind: string): FailureAction {
@@ -138,6 +258,7 @@ export function actionForFailure(kind: string): FailureAction {
 
 /** Chave i18n (global) da explicação para o operador. */
 export function messageKeyForFailure(kind: string): string {
+  if (kind === "bot") return "online_video.errors.bot";
   return VIDEO_ITSELF_UNPLAYABLE.has(kind)
     ? `online_video.errors.${kind}`
     : "online_video.errors.fallback";
@@ -148,6 +269,7 @@ export function messageKeyForFailure(kind: string): string {
  * pode prometer um. Se o problema é o próprio vídeo, a explicação é a mesma.
  */
 export function messageKeyForDownloadFailure(kind: string): string {
+  if (kind === "bot") return "online_video.errors.bot";
   return VIDEO_ITSELF_UNPLAYABLE.has(kind)
     ? `online_video.errors.${kind}`
     : "online_video.errors.download";
@@ -158,6 +280,7 @@ export function messageKeyForDownloadFailure(kind: string): string {
  * fala em download. O que é do próprio vídeo tem a mesma explicação de sempre.
  */
 export function messageKeyForStreamFailure(kind: string): string {
+  if (kind === "bot") return "online_video.errors.bot";
   return VIDEO_ITSELF_UNPLAYABLE.has(kind)
     ? `online_video.errors.${kind}`
     : "online_video.errors.stream";
@@ -206,6 +329,34 @@ export function maxHeight(): number {
   return normalizeMaxHeight(
     $userdata.get(KEYS.OPTIONS.ONLINE_VIDEO_PROJECTION.MAX_HEIGHT, DEFAULT_MAX_HEIGHT)
   );
+}
+
+export interface YouTubeAccountStatus {
+  loggedIn: boolean;
+}
+
+/** Conta do YouTube do operador (só desktop). Os cookies ficam no main. */
+export async function youtubeAccountStatus(): Promise<YouTubeAccountStatus> {
+  return (await Platform.onlineVideo?.accountStatus?.().catch(() => null)) ?? { loggedIn: false };
+}
+
+/** Abre a janela de login do Google; resolve quando ela fecha. */
+export async function youtubeAccountLogin(): Promise<YouTubeAccountStatus> {
+  return (await Platform.onlineVideo?.accountLogin?.().catch(() => null)) ?? { loggedIn: false };
+}
+
+export async function youtubeAccountLogout(): Promise<YouTubeAccountStatus> {
+  return (await Platform.onlineVideo?.accountLogout?.().catch(() => null)) ?? { loggedIn: false };
+}
+
+/**
+ * Deixa os links do vídeo prontos antes do play (prévia, "a seguir"): o próximo
+ * `stream` dele começa sem consultar o YouTube. Só vale quando o app toca o
+ * vídeo por conta própria; com o player do YouTube não há o que adiantar.
+ */
+export function prefetch(id: string): void {
+  if (!downloadEnabled() || !/^[A-Za-z0-9_-]{11}$/.test(id)) return;
+  void Platform.onlineVideo?.prefetch?.(id, { maxHeight: maxHeight() }).catch(() => {});
 }
 
 /**
@@ -319,6 +470,17 @@ export async function ensure(
  */
 export function isProgressiveUrl(url: string | null | undefined): boolean {
   return typeof url === "string" && url.startsWith("louvorja://onlinestream/");
+}
+
+const PLAYBACK_URL_RE = /^louvorja:\/\/online(?:video|stream)\/([A-Za-z0-9_-]{11})(?:[./]|$)/;
+
+/**
+ * O vídeo do YouTube por trás do que está tocando: o arquivo baixado, o que
+ * ainda baixa ou o player embutido. null para qualquer outro arquivo.
+ */
+export function videoIdFromPlaybackUrl(url: string | null | undefined): string | null {
+  if (typeof url !== "string") return null;
+  return url.match(PLAYBACK_URL_RE)?.[1] ?? videoIdFromUrl(url);
 }
 
 /**
