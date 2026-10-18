@@ -185,6 +185,7 @@ async function startDownload(files, webContents) {
       apiToken,
       filesDir,
       workDir: path.join(paths.dataDir(), "temp", "downloads"),
+      shared: require("../storageAccess.js").status().media?.shared === true,
       allowedRemoteOrigins: TRUSTED_MEDIA_ORIGINS,
       reportDiagnostic: workerDiagnostics.record,
     });

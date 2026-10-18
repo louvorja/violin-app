@@ -97,17 +97,31 @@ temporários de vídeo em `temp/videos/` e downloads HTTP em `temp/downloads/` e
 O IndexedDB inteiro continua privado: ele mistura catálogos com coleções pessoais
 e binários, portanto não pode ser compartilhado apenas porque também guarda catálogo.
 
-`paths.mediaDir()` aponta diretamente ao acervo (`musics/`, `images/`, `covers/`),
-e `paths.videosDir()` à pasta de vídeos prontos. Os padrões por usuário são
-`Documentos/LouvorJA Violin/Acervo` e `<pasta de vídeos do sistema>/LouvorJA Violin`.
+`paths.mediaDir()` aponta diretamente ao acervo (`musics/`, `images/`, `covers/`).
+O padrão é compartilhado, nunca Documentos particulares:
+
+| Sistema | Acervo comum |
+| --- | --- |
+| Windows | `%PUBLIC%/Documents/LouvorJA Violin/Acervo` (ou o endereço provisionado pelo instalador) |
+| macOS | `/Users/Shared/LouvorJA Violin/Acervo` |
+| Linux DEB/RPM | `/var/lib/louvorja-violin/acervo` |
+| Windows individual / Linux AppImage | O mesmo acervo comum, quando configurado e acessível |
+
+O instalador Windows para todos provisiona o acervo com permissão para usuários
+comuns e registra seu endereço em `%ProgramData%/LouvorJA Violin/storage-defaults.json`.
+DEB/RPM provisionam o acervo em hook de instalação. No macOS, o app pode criar a
+pasta em `/Users/Shared`. Pastas compartilhadas novas permitem escrita às contas
+locais; os dados privados nunca são criados nelas. Permissões de pastas existentes
+não são ampliadas silenciosamente. Sem acesso ao local comum, o setup permite
+escolher uma pasta; não há substituição silenciosa por Documentos particulares.
+
+`paths.videosDir()` é independente e usa `<pasta de vídeos do sistema>/LouvorJA Violin`.
 A pasta nativa vem de `app.getPath("videos")`: Videos no Windows, Movies no macOS
 e o diretório XDG de vídeos no Linux, respeitando redirecionamentos do sistema.
-Instalação Windows para todos provisiona somente o acervo em Documentos Públicos,
-com permissão de escrita para usuários comuns, e publica esse padrão em
-`%ProgramData%/LouvorJA Violin/storage-defaults.json`. Vídeos continuam por conta
-mesmo quando o programa é instalado para todos; podem ser compartilhados por
-escolha de pasta no aplicativo. Reinstalações e atualizações preservam o escopo existente;
-troca de escopo exige desinstalar o programa e instalar novamente, preservando dados.
+Vídeos continuam por conta mesmo quando o programa é instalado para todos;
+podem ser compartilhados por escolha de pasta no aplicativo. Reinstalações e
+atualizações preservam o escopo existente; troca de escopo exige desinstalar o
+programa e instalar novamente, preservando dados.
 
 No primeiro uso e em Armazenamento, `StorageLocations.vue` permite escolher acervo
 e vídeos independentemente, reutilizar arquivos existentes ou copiar os atuais.
@@ -121,10 +135,11 @@ A migração da antiga raiz única copia e confere os dados privados antes de
 publicar o perfil fixo, preservando todas as origens do IndexedDB. Preferências
 antigas ainda no AppData são recuperadas quando ausentes na raiz ativa. Acervo e vídeos prontos
 também são copiados aos destinos padrão, mantendo as origens como recuperação.
-`defaultLocationsVersion` registra a migração única, inclusive para perfis que
-já passaram pela primeira versão da separação. Escolhas explícitas posteriores
+`defaultLocationsVersion` registra a separação de vídeo/perfil, e
+`sharedLocationsVersion` leva também o acervo do padrão provisório em Documentos
+ao acervo comum, inclusive em perfis já migrados. Escolhas explícitas posteriores
 não são redefinidas. A raiz plana legada com `musics/` ao lado de `Videos/` é
-convertida para `Acervo/` e a pasta nativa de vídeos; novas escolhas exigem raízes
+migrada para o acervo comum e a pasta nativa de vídeos; novas escolhas exigem raízes
 sem sobreposição. Checkpoints `.partial`, cache yt-dlp e marcadores de migração
 vão para `temp/videos/`; streams antigos descartáveis não são reutilizados.
 A primeira migração e mudanças pendentes usam um worker e uma janela de progresso num processo
@@ -153,7 +168,10 @@ processo. Outras contas podem ler os arquivos prontos com seus próprios perfis.
 Acervos compartilhados não têm limpeza automática nem exclusão pelo app nesta
 implementação. Reprodução de vídeo somente leitura usa temporários privados.
 Compartilhamento no macOS/Linux exige permissões do sistema adequadas na pasta
-escolhida; o app não eleva privilégios nem muda permissões de pastas existentes.
+escolhida. Somente diretórios novos de acervo comum recebem `0777`, com arquivos
+novos legíveis (`0644`); não há mudança do umask global nem de permissões de
+pastas existentes. O perfil e seus temporários continuam privados. O app não
+eleva privilégios; o provisionamento DEB/RPM pertence ao instalador.
 O contrato de armazenamento web/PWA continua no navegador.
 
 ## 🧠 Stack

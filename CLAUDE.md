@@ -276,20 +276,25 @@ O programa é instalado separadamente do **perfil privado**, do **acervo** e dos
 ```
 
 `paths.mediaDir()` e `paths.videosDir()` são independentes e alteráveis no setup e
-em Sincronizar Arquivos → Armazenamento. Por usuário, os padrões ficam em
-`Documentos/LouvorJA Violin/Acervo` e `<pasta de vídeos do sistema>/LouvorJA Violin`
-(`Videos` no Windows, `Movies` no macOS, diretório XDG de vídeos no Linux).
-No Windows para todos, o acervo usa o padrão provisionado pelo instalador
-em Documentos Públicos; vídeos continuam na pasta da conta atual. A configuração da máquina fica em ProgramData e os
-perfis de cada conta continuam privados. Mac/Linux podem selecionar pastas
-compartilhadas com as permissões já concedidas pelo sistema.
+em Sincronizar Arquivos → Armazenamento. O acervo padrão é compartilhado:
+`%PUBLIC%/Documents/LouvorJA Violin/Acervo` no Windows,
+`/Users/Shared/LouvorJA Violin/Acervo` no macOS e
+`/var/lib/louvorja-violin/acervo` no Linux DEB/RPM. Windows individual e AppImage
+usam o mesmo acervo quando configurado e acessível, sem fallback silencioso para
+Documentos particulares. Sem acesso, o setup permite escolher outra pasta.
+Vídeos usam `<pasta de vídeos do sistema>/LouvorJA Violin` da conta atual
+(`Videos` no Windows, `Movies` no macOS, diretório XDG no Linux).
+Os instaladores Windows para todos e DEB/RPM provisionam o local comum; no macOS
+o app cria o padrão em `/Users/Shared`. Só pastas novas compartilhadas recebem
+permissão pública de escrita; pastas existentes e perfil nunca são ampliados.
 
 Mudanças são agendadas para o próximo boot e oferecem reutilizar uma coleção ou
 copiar a atual com verificação. Não apagam a origem, não sobrescrevem conflitos e
 não transferem arquivos pessoais junto ao acervo. A migração do perfil antigo
 também conserva a origem, incluindo todos os bancos IndexedDB. Acervo e vídeos
-legados são copiados aos padrões uma vez (`defaultLocationsVersion`), incluindo
-a correção do primeiro layout de separação. Escolhas explícitas posteriores são
+legados são copiados aos padrões uma vez (`defaultLocationsVersion`), e
+`sharedLocationsVersion` corrige o acervo provisório em Documentos para o local
+comum da tabela. Escolhas explícitas posteriores são
 preservadas. A cópia mostra progresso em um processo auxiliar com perfil
 temporário; conflitos mantêm as pastas anteriores e aparecem em Armazenamento.
 Downloads ficam privados; a publicação atômica entre volumes e a herança de

@@ -19,6 +19,7 @@ beforeEach(async () => {
   } };
   require.cache[ids[1]] = { id: ids[1], filename: ids[1], loaded: true, exports: {
     assertWritable: () => { if (!writable) throw new Error("read-only"); },
+    status: () => ({ media: { shared: true, writable } }),
   } };
   delete require.cache[ids[2]];
   library = require("../classicLibrary.js");
@@ -56,6 +57,11 @@ describe("Classic read-only source", () => {
     expect(await fs.readFile(path.join(source, "musicas", "faixa.mp3"), "utf8")).toBe("classic-media");
     expect(await fs.readFile(path.join(source, "database.db"), "utf8")).toBe("database");
     expect(await fs.pathExists(path.join(media, "files"))).toBe(false);
+    expect(await fs.readdir(path.join(root, "Private", "temp", "imports"))).toEqual([]);
+    if (process.platform !== "win32") {
+      expect((await fs.stat(path.join(media, "musics", "es"))).mode & 0o777).toBe(0o777);
+      expect((await fs.stat(path.join(media, "musics", "es", "faixa.mp3"))).mode & 0o777).toBe(0o644);
+    }
   });
 
   it("recusa mover mesmo quando solicitado por uma interface antiga", async () => {

@@ -87,6 +87,21 @@ afterEach(() => {
 });
 
 describe("acervo compartilhado com trabalho privado", () => {
+  it.skipIf(process.platform === "win32")("publica vídeos e marcas legíveis entre contas sem expor o trabalho privado", async () => {
+    const run = vi.fn(async ({ outDir, id }) => {
+      fs.mkdirSync(outDir, { recursive: true, mode: 0o700 });
+      const file = path.join(outDir, `${id}.mp4`);
+      fs.writeFileSync(file, "ready", { mode: 0o600 });
+      return { file, size: 5, meta: {} };
+    });
+    const { manager } = make({ run, shared: true, canMaintain: () => false });
+    expect(await manager.ensure(A, { keep: true })).toMatchObject({ ok: true });
+    expect(fs.statSync(manager.store.pathFor(A)).mode & 0o777).toBe(0o644);
+    expect(fs.statSync(path.join(dir, `${A}.keep`)).mode & 0o777).toBe(0o644);
+    expect(fs.statSync(workDir).mode & 0o777).toBe(0o700);
+    await manager.close();
+  });
+
   it("downloads e cache do worker ficam privados até a publicação do MP4 pronto", async () => {
     const waiting = deferred();
     const complete = okRun();
@@ -1169,11 +1184,11 @@ describe("cache", () => {
     expect(await manager.list()).toEqual([]);
   });
 
-  it("remove apaga o MP4 se o abort chegar durante o move final", async () => {
+  it("remove apaga o MP4 se o abort chegar durante a publicação final", async () => {
     const moved = deferred();
     const releaseMove = deferred();
-    const originalMove = fsExtra.move;
-    const move = vi.spyOn(fsExtra, "move").mockImplementation(async (...args) => {
+    const originalMove = fsExtra.rename;
+    const move = vi.spyOn(fsExtra, "rename").mockImplementation(async (...args) => {
       await originalMove(...args);
       moved.resolve();
       await releaseMove.promise;

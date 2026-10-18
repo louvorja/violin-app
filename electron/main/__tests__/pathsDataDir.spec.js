@@ -5,7 +5,7 @@ import path from "node:path";
 import os from "node:os";
 const require = createRequire(import.meta.url);
 const fs = require("fs-extra");
-let root, paths, locations, bootstrap;
+let root, paths, locations, bootstrap, sharedMedia;
 function loadPaths() {
   const original = Module._load;
   Module._load = function (request, ...args) {
@@ -18,6 +18,8 @@ beforeEach(() => {
   vi.stubEnv("LJ_E2E_USER_DATA", "");
   root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "lj-paths-data-")));
   bootstrap = path.join(root, "appData", "LouvorJA Violin");
+  vi.stubEnv("LJ_E2E_USER_DATA", bootstrap);
+  sharedMedia = path.join(bootstrap, "shared", "LouvorJA Violin", "Acervo");
   locations = { appData: path.join(root, "appData"), userData: bootstrap, documents: path.join(root, "Documents"), videos: path.join(root, "Movies") };
   loadPaths();
 });
@@ -25,12 +27,12 @@ afterEach(() => {
   vi.restoreAllMocks(); vi.unstubAllEnvs(); delete require.cache[require.resolve("../paths.js")]; fs.removeSync(root);
 });
 describe("perfil privado e destinos independentes", () => {
-  it("instalação nova usa perfil privado, acervo em Documentos e vídeos na pasta nativa", () => {
+  it("instalação nova usa perfil privado, acervo comum e vídeos na pasta nativa", () => {
     paths.configureProfile();
     expect(paths.dataDir()).toBe(path.join(bootstrap, "profile"));
     expect(locations.userData).toBe(path.join(bootstrap, "profile", ".electron"));
     expect(locations.sessionData).toBe(locations.userData);
-    expect(paths.filesDir()).toBe(path.join(locations.documents, "LouvorJA Violin", "Acervo"));
+    expect(paths.filesDir()).toBe(sharedMedia);
     expect(paths.videosDir()).toBe(path.join(locations.videos, "LouvorJA Violin"));
     expect(paths.storageLayout().setupCompleted).toBe(false);
   });
@@ -45,7 +47,7 @@ describe("perfil privado e destinos independentes", () => {
       expect(fs.readFileSync(path.join(paths.dataDir(), name), "utf8")).toBe(name.endsWith(".json") ? JSON.stringify({ saved: name }) : "saved:" + name);
       expect(fs.existsSync(path.join(old, name))).toBe(true);
     }
-    expect(paths.filesDir()).toBe(path.join(locations.documents, "LouvorJA Violin", "Acervo"));
+    expect(paths.filesDir()).toBe(sharedMedia);
     expect(paths.videosDir()).toBe(path.join(locations.videos, "LouvorJA Violin"));
     expect(fs.readFileSync(path.join(paths.filesDir(), "musics/pt/song.mp3"), "utf8")).toBe("saved:files/musics/pt/song.mp3");
     expect(fs.readFileSync(path.join(paths.videosDir(), "abcdefghijk.mp4"), "utf8")).toBe("saved:Videos/abcdefghijk.mp4");
@@ -72,7 +74,7 @@ describe("perfil privado e destinos independentes", () => {
     fs.outputFileSync(path.join(previous.videosDir, ".partial/abcdefghijk/video.part"), "partial");
     expect(paths.needsMigration()).toBe(true);
     paths.configureProfile();
-    expect(paths.filesDir()).toBe(path.join(old, "Acervo"));
+    expect(paths.filesDir()).toBe(sharedMedia);
     expect(paths.videosDir()).toBe(path.join(locations.videos, "LouvorJA Violin"));
     expect(paths.storageLayout().defaultLocationsVersion).toBe(1);
     expect(fs.readJsonSync(path.join(paths.dataDir(), "storage/user_data.json"))).toEqual({ session: "current" });
@@ -93,11 +95,52 @@ describe("perfil privado e destinos independentes", () => {
     paths.configureProfile();
     expect(paths.storageLayout()).toMatchObject({ ...chosen, defaultLocationsVersion: 1 });
   });
+  it("leva o padrão provisório em Documentos ao acervo comum sem recopiá-lo nos próximos boots", () => {
+    const old = path.join(locations.documents, "LouvorJA Violin");
+    const origin = { version: 1, setupCompleted: true, mediaDir: path.join(old, "files"), videosDir: path.join(old, "Videos") };
+    const previous = { ...origin, mediaDir: path.join(old, "Acervo"), videosDir: path.join(locations.videos, "LouvorJA Violin"), defaultLocationsVersion: 1, mediaShared: false, videosShared: false };
+    fs.outputJsonSync(path.join(bootstrap, "profile", ".layout-origin.json"), origin);
+    fs.outputJsonSync(path.join(bootstrap, "storage-layout.json"), previous);
+    fs.outputFileSync(path.join(previous.mediaDir, "musics/song.opus"), "current-song");
+    fs.outputFileSync(path.join(origin.mediaDir, "musics/song.opus"), "obsolete-song");
+    fs.outputFileSync(path.join(previous.videosDir, "abcdefghijk.mp4"), "video");
+    fs.outputFileSync(path.join(bootstrap, "profile/.electron/IndexedDB/offline"), "personal");
+    expect(paths.needsMigration()).toBe(true);
+    paths.configureProfile();
+    expect(paths.storageLayout()).toMatchObject({ mediaDir: sharedMedia, mediaShared: true, videosDir: previous.videosDir, videosShared: false, defaultLocationsVersion: 1, sharedLocationsVersion: 1 });
+    expect(fs.readFileSync(path.join(sharedMedia, "musics/song.opus"), "utf8")).toBe("current-song");
+    expect(fs.readFileSync(path.join(previous.mediaDir, "musics/song.opus"), "utf8")).toBe("current-song");
+    expect(fs.readFileSync(path.join(paths.profileDir(), "IndexedDB/offline"), "utf8")).toBe("personal");
+    expect(fs.existsSync(path.join(sharedMedia, ".electron"))).toBe(false);
+    fs.removeSync(path.join(sharedMedia, "musics/song.opus"));
+    loadPaths();
+    expect(paths.needsMigration()).toBe(false);
+    paths.configureProfile();
+    expect(fs.existsSync(path.join(sharedMedia, "musics/song.opus"))).toBe(false);
+  });
+  it("mantém o acervo ativo e uma pendência corrigível quando não consegue criar o acervo comum", () => {
+    const old = path.join(locations.documents, "LouvorJA Violin");
+    const previous = { version: 1, setupCompleted: true, defaultLocationsVersion: 1, mediaDir: path.join(old, "Acervo"), videosDir: path.join(locations.videos, "LouvorJA Violin") };
+    fs.outputJsonSync(path.join(bootstrap, "profile", ".layout-origin.json"), previous);
+    fs.outputJsonSync(path.join(bootstrap, "storage-layout.json"), previous);
+    fs.outputFileSync(path.join(previous.mediaDir, "musics/song.opus"), "saved");
+    fs.ensureDirSync(previous.videosDir);
+    const mkdir = fs.mkdirSync;
+    vi.spyOn(fs, "mkdirSync").mockImplementation((dir, ...args) => {
+      if (dir === sharedMedia) throw Object.assign(new Error("access denied"), { code: "EACCES" });
+      return mkdir(dir, ...args);
+    });
+    paths.configureProfile();
+    expect(paths.filesDir()).toBe(previous.mediaDir);
+    expect(paths.storageLayout()).toMatchObject({ sharedLocationsVersion: 1, pending: { mediaDir: sharedMedia } });
+    expect(paths.storageLayout().pendingError).toMatch(/indisponível/);
+    expect(fs.readFileSync(path.join(previous.mediaDir, "musics/song.opus"), "utf8")).toBe("saved");
+  });
   it("conflito no padrão preserva layout ativo, origem e conteúdo diferente", () => {
     const old = path.join(root, "legacy");
     fs.outputJsonSync(path.join(bootstrap, "data-location.json"), { dataDir: old });
     fs.outputFileSync(path.join(old, "files/musics/song.mp3"), "original");
-    const target = path.join(locations.documents, "LouvorJA Violin", "Acervo", "musics/song.mp3");
+    const target = path.join(sharedMedia, "musics/song.mp3");
     fs.outputFileSync(target, "different");
     paths.configureProfile();
     expect(paths.storageLayout().pendingError).toMatch(/diferente/);
@@ -108,7 +151,7 @@ describe("perfil privado e destinos independentes", () => {
   it("padrão de máquina compartilha somente o acervo e usa vídeos da conta atual", () => {
     const { defaultLocations } = require("../storageLayout.js");
     for (const version of [1, 2]) {
-      expect(defaultLocations({ documents: locations.documents, videos: locations.videos,
+      expect(defaultLocations({ documents: locations.documents, videos: locations.videos, sharedMedia,
         machineDefaults: { version, mediaDir: path.join(root, "Public", "Acervo"), videosDir: path.join(root, "obsolete-public-videos") } })).toEqual({
         mediaDir: path.join(root, "Public", "Acervo"), mediaShared: true,
         videosDir: path.join(locations.videos, "LouvorJA Violin"), videosShared: false,
@@ -143,7 +186,7 @@ describe("perfil privado e destinos independentes", () => {
     const layout = require("../storageLayout.js");
     fs.outputFileSync(path.join(bootstrap, "IndexedDB", "offline"), "personal");
     const progress = [];
-    expect(() => layout.initialize({ bootstrap, documents: locations.documents, onProgress(event) {
+    expect(() => layout.initialize({ bootstrap, documents: locations.documents, sharedMedia, onProgress(event) {
       progress.push(event);
       if (event.phase === "publishing") throw new Error("parent exited");
     } })).toThrow("parent exited");
@@ -158,11 +201,11 @@ describe("perfil privado e destinos independentes", () => {
     fs.outputFileSync(path.join(media, "musics", "song.mp3"), "music");
     fs.outputFileSync(path.join(bootstrap, "IndexedDB", "database"), "private");
     paths.configureProfile();
-    expect(paths.filesDir()).toBe(path.join(media, "Acervo"));
+    expect(paths.filesDir()).toBe(sharedMedia);
     expect(paths.videosDir()).toBe(path.join(locations.videos, "LouvorJA Violin"));
     expect(fs.readFileSync(path.join(paths.profileDir(), "IndexedDB", "database"), "utf8")).toBe("private");
     loadPaths(); paths.configureProfile();
-    expect(paths.filesDir()).toBe(path.join(media, "Acervo"));
+    expect(paths.filesDir()).toBe(sharedMedia);
   });
   it("preserva preferências no AppData quando só a mídia havia ido para Documentos", () => {
     const old = path.join(locations.documents, "LouvorJA Violin");

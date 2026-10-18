@@ -23,10 +23,10 @@ function runWorker(port) {
       if (typeof message.jobId !== "string" || message.jobId.length > 64) return;
       jobId = message.jobId;
       try {
-        const { files, filesDir, workDir, baseUrl, apiToken, allowedRemoteOrigins } = message.data || {};
+        const { files, filesDir, workDir, shared, baseUrl, apiToken, allowedRemoteOrigins } = message.data || {};
         const validated = validateDownloadEntries(files, { filesDir, filesBaseUrl: baseUrl, allowedRemoteOrigins });
-        if (!absolute(workDir) || overlaps(canonical(workDir), canonical(filesDir))) throw new Error("Pasta temporária de download inválida");
-        queue = new HttpQueue({ baseUrl, apiToken, filesDir, workDir });
+        if (!absolute(workDir) || overlaps(canonical(workDir), canonical(filesDir)) || typeof shared !== "boolean") throw new Error("Pasta temporária de download inválida");
+        queue = new HttpQueue({ baseUrl, apiToken, filesDir, workDir, shared });
         queue.add(validated);
         for (const type of ["progress", "file-done", "file-error"]) queue.on(type, (data) => send(type, data));
         queue.on("queue-done", (data) => finish("queue-done", data));

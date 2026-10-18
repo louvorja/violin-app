@@ -14,7 +14,7 @@ afterEach(() => { for (const root of roots.splice(0)) fs.removeSync(root); });
 function fixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "lj-bootstrap-worker-"));
   roots.push(root);
-  const options = { bootstrap: path.join(root, "appData"), documents: path.join(root, "Documents"), videos: path.join(root, "Videos"), programDir: path.join(root, "program"), ownedBootstrapPid: process.pid };
+  const options = { bootstrap: path.join(root, "appData"), documents: path.join(root, "Documents"), videos: path.join(root, "Videos"), sharedMedia: path.join(root, "Shared", "Acervo"), programDir: path.join(root, "program"), ownedBootstrapPid: process.pid };
   fs.ensureDirSync(options.bootstrap);
   return { root, options };
 }
@@ -31,7 +31,7 @@ function run(options) {
 
 describe("preparação de armazenamento antes do perfil Chromium", () => {
   it("valida a fronteira do processo auxiliar", () => {
-    const base = { version: 1, bootstrap: "/tmp/profile", documents: "/tmp/documents", videos: "/tmp/videos", programDir: "/tmp/program", ownedBootstrapPid: process.pid + 1 };
+    const base = { version: 1, bootstrap: "/tmp/profile", documents: "/tmp/documents", videos: "/tmp/videos", sharedMedia: "/tmp/shared", programDir: "/tmp/program", ownedBootstrapPid: process.pid + 1 };
     expect(validateRequest(base)).toEqual(base);
     for (const change of [{ version: 2 }, { ownedBootstrapPid: process.pid }, { ownedBootstrapPid: -1 }, { bootstrap: "relative" }, { documents: null }]) {
       expect(() => validateRequest({ ...base, ...change })).toThrow(/inválida/);

@@ -66,6 +66,7 @@
         >
           <div class="opt-section-top">
             <p class="opt-hint">{{ $t("options.collections_download.hint") }}</p>
+            <p v-if="mediaMaintenanceHint" class="opt-hint">{{ mediaMaintenanceHint }}</p>
 
             <div
               v-if="bundleEmDownload && !(loadingCategories || scanningCache)"
@@ -187,7 +188,13 @@
                     <input
                       type="checkbox"
                       :checked="selectedHymnal"
-                      :disabled="downloading || preparing || scanningCache || saving"
+                      :disabled="
+                        downloading ||
+                        preparing ||
+                        scanningCache ||
+                        saving ||
+                        (!canMaintainMedia && cachedHymnalBaseline)
+                      "
                       @change="onHymnalToggle(($event.target as HTMLInputElement).checked)"
                     />
                     <strong>{{ $t("options.collections_download.hymnal") }}</strong>
@@ -227,7 +234,7 @@
                     <LjButton
                       size="sm"
                       variant="danger"
-                      :disabled="partialBusy"
+                      :disabled="partialBusy || !canMaintainMedia"
                       @click="discardPartial({ hymnal: 'main' })"
                     >
                       {{ $t("options.collections_download.partial_discard") }}
@@ -244,7 +251,13 @@
                     <input
                       type="checkbox"
                       :checked="selectedHymnal1996"
-                      :disabled="downloading || preparing || scanningCache || saving"
+                      :disabled="
+                        downloading ||
+                        preparing ||
+                        scanningCache ||
+                        saving ||
+                        (!canMaintainMedia && cachedHymnal1996Baseline)
+                      "
                       @change="onHymnal1996Toggle(($event.target as HTMLInputElement).checked)"
                     />
                     <strong>{{ $t("options.collections_download.hymnal_1996") }}</strong>
@@ -284,7 +297,7 @@
                     <LjButton
                       size="sm"
                       variant="danger"
-                      :disabled="partialBusy"
+                      :disabled="partialBusy || !canMaintainMedia"
                       @click="discardPartial({ hymnal: '1996' })"
                     >
                       {{ $t("options.collections_download.partial_discard") }}
@@ -299,7 +312,13 @@
                       type="checkbox"
                       :checked="isCategoryFullySelected(cat)"
                       :indeterminate.prop="isCategoryPartiallySelected(cat)"
-                      :disabled="downloading || preparing || scanningCache || saving"
+                      :disabled="
+                        downloading ||
+                        preparing ||
+                        scanningCache ||
+                        saving ||
+                        (!canMaintainMedia && isCategoryFullyCached(cat))
+                      "
                       @change="toggleCategory(cat, ($event.target as HTMLInputElement).checked)"
                     />
                     <strong>{{ cat.name }}</strong>
@@ -319,6 +338,7 @@
                             preparing ||
                             scanningCache ||
                             saving ||
+                            (!canMaintainMedia && cachedAlbumsBaseline.has(album.id_album)) ||
                             classicAlbums.has(album.id_album)
                           "
                           @change="
@@ -381,7 +401,7 @@
                         <LjButton
                           size="sm"
                           variant="danger"
-                          :disabled="partialBusy"
+                          :disabled="partialBusy || !canMaintainMedia"
                           @click="discardPartial({ album: album.id_album, name: album.name })"
                         >
                           {{ $t("options.collections_download.partial_discard") }}
@@ -456,7 +476,7 @@
                   v-if="hasPendingRemovals || saving"
                   type="button"
                   class="opt-btn opt-btn--danger"
-                  :disabled="saving || scanningCache"
+                  :disabled="saving || scanningCache || !canMaintainMedia"
                   @click="confirmRemoval"
                 >
                   <LjIcon :icon="ICONS.ACTIONS.DELETE_FILLED" size="14" />
@@ -750,6 +770,7 @@
               id="opt-quota"
               class="opt-select"
               :value="quotaGb"
+              :disabled="!canMaintainMedia"
               @change="setQuotaGb(Number(($event.target as HTMLSelectElement).value))"
             >
               <option :value="0">{{ $t("options.storage.no_limit") }}</option>
@@ -761,14 +782,21 @@
               <option :value="50">50 GB</option>
             </select>
           </div>
-          <p class="opt-hint">{{ $t("options.storage.quota_hint") }}</p>
+          <p v-if="canMaintainMedia || mediaMaintenanceHint" class="opt-hint">
+            {{ mediaMaintenanceHint || $t("options.storage.quota_hint") }}
+          </p>
 
           <div class="opt-actions">
             <button type="button" class="opt-btn" @click="clearJson">
               <LjIcon :icon="ICONS.ACTIONS.DATABASE_REMOVE" size="14" />
               {{ $t("options.storage.clear_cache") }}
             </button>
-            <button type="button" class="opt-btn opt-btn--danger" @click="clearFiles">
+            <button
+              type="button"
+              class="opt-btn opt-btn--danger"
+              :disabled="!canMaintainMedia"
+              @click="clearFiles"
+            >
               <LjIcon :icon="ICONS.ACTIONS.DELETE_FILLED" size="14" />
               {{ $t("options.storage.clear_files") }}
             </button>
@@ -888,6 +916,15 @@ const bundleEta = computed(() => {
 /* ---- Estado ---- */
 
 const isDesktop = computed<boolean>(() => Platform.isDesktop);
+const mediaAccess = ref<{ writable: boolean; shared: boolean } | null>(null);
+const canMaintainMedia = computed(
+  () => !isDesktop.value || (mediaAccess.value?.writable === true && !mediaAccess.value.shared)
+);
+const mediaMaintenanceHint = computed(() => {
+  if (!isDesktop.value || !mediaAccess.value) return "";
+  if (mediaAccess.value.shared) return t("options.storage.shared_hint");
+  return mediaAccess.value.writable ? "" : t("options.storage.read_only_hint");
+});
 // Web/PWA baixa para o Cache Storage pelo mesmo contrato do desktop; só Bíblia,
 // armazenamento em pasta e versão clássica são exclusivos do Electron.
 const canDownload = computed<boolean>(() => !!Platform.download && !!Platform.storage?.checkLocal);
@@ -955,6 +992,7 @@ function abaIniciada(aba: string): boolean {
 
 watch(activeTab, (aba) => {
   if (!abasIniciadas.value.has(aba)) abasIniciadas.value = new Set(abasIniciadas.value).add(aba);
+  void refreshMediaAccess();
 });
 
 // O scan atualiza o progresso no composable a cada lote. Espelhar essa ref
@@ -1127,8 +1165,16 @@ function isCategoryPartiallySelected(cat: Category): boolean {
   return sel > 0 && sel < cat.albums.length;
 }
 
+function isCategoryFullyCached(cat: Category): boolean {
+  return (
+    !!cat.albums?.length &&
+    cat.albums.every((album) => cachedAlbumsBaseline.value.has(album.id_album))
+  );
+}
+
 function toggleCategory(cat: Category, checked: boolean): void {
   cat.albums?.forEach((a) => {
+    if (!checked && !canMaintainMedia.value && cachedAlbumsBaseline.value.has(a.id_album)) return;
     if (checked) selectedAlbums.value.add(a.id_album);
     else selectedAlbums.value.delete(a.id_album);
   });
@@ -1136,16 +1182,19 @@ function toggleCategory(cat: Category, checked: boolean): void {
 }
 
 function toggleAlbum(id: number, checked: boolean): void {
+  if (!checked && !canMaintainMedia.value && cachedAlbumsBaseline.value.has(id)) return;
   if (checked) selectedAlbums.value.add(id);
   else selectedAlbums.value.delete(id);
   selectedAlbums.value = new Set(selectedAlbums.value);
 }
 
 function onHymnalToggle(checked: boolean): void {
+  if (!checked && !canMaintainMedia.value && cachedHymnalBaseline.value) return;
   selectedHymnal.value = checked;
 }
 
 function onHymnal1996Toggle(checked: boolean): void {
+  if (!checked && !canMaintainMedia.value && cachedHymnal1996Baseline.value) return;
   selectedHymnal1996.value = checked;
 }
 
@@ -1164,9 +1213,11 @@ function selectAll(): void {
 }
 
 function deselectAll(): void {
-  selectedAlbums.value = new Set();
-  selectedHymnal.value = false;
-  selectedHymnal1996.value = false;
+  selectedAlbums.value = canMaintainMedia.value
+    ? new Set()
+    : new Set([...cachedAlbumsBaseline.value, ...classicAlbums.value]);
+  onHymnalToggle(false);
+  onHymnal1996Toggle(false);
 }
 
 function selectAllBibles(): void {
@@ -1298,6 +1349,8 @@ async function startDownloads(): Promise<void> {
 /* ---- Salvar seleção (remover do disco) ---- */
 
 async function confirmRemoval(): Promise<void> {
+  await refreshMediaAccess();
+  if (!canMaintainMedia.value) return;
   const ok = await $alert.confirm(
     t("options.collections_download.remove_confirm", { n: pendingRemovalCount.value })
   );
@@ -1305,7 +1358,8 @@ async function confirmRemoval(): Promise<void> {
 }
 
 async function saveSelection(): Promise<void> {
-  if (!hasPendingRemovals.value || !Platform.storage?.removeFiles) return;
+  if (!canMaintainMedia.value || !hasPendingRemovals.value || !Platform.storage?.removeFiles)
+    return;
 
   saving.value = true;
   let removedAlbums = 0;
@@ -1419,6 +1473,8 @@ async function continuePartial(target: PartialTarget): Promise<void> {
 
 /** Apaga o que chegou do disco, depois de confirmar. Não mexe em outras coleções. */
 async function discardPartial(target: PartialTarget): Promise<void> {
+  await refreshMediaAccess();
+  if (!canMaintainMedia.value) return;
   if (partialBusy.value || !Platform.storage?.removeFiles) return;
   const progress =
     target.album !== undefined
@@ -1566,8 +1622,19 @@ const quotaGb = computed({
   set: (v: number) => $userdata.set(KEYS.OPTIONS.STORAGE_QUOTA_GB, Number(v) || 0),
 });
 
+async function refreshMediaAccess(): Promise<void> {
+  if (!isDesktop.value) return;
+  try {
+    mediaAccess.value = (await Platform.api?.storage.locations())?.access?.media ?? null;
+  } catch (error) {
+    mediaAccess.value = null;
+    console.warn("[Sincronizar] storage.locations falhou:", error);
+  }
+}
+
 async function reloadStats(): Promise<void> {
   loading.value = true;
+  await refreshMediaAccess();
   try {
     if (Platform?.storage?.stats) {
       storageStats.value = (await Platform.storage.stats()) as StorageStats;
@@ -1597,6 +1664,8 @@ async function toggleAutoCache(enabled: boolean): Promise<void> {
 }
 
 async function setQuotaGb(gb: number): Promise<void> {
+  await refreshMediaAccess();
+  if (!canMaintainMedia.value) return;
   $userdata.set(KEYS.OPTIONS.STORAGE_QUOTA_GB, gb);
   const maxBytes = gb > 0 ? gb * 1024 * 1024 * 1024 : 0;
   const cur = (await Platform.userStore?.read("storage")) || {};
@@ -1647,6 +1716,8 @@ watch(activeTab, (aba) => {
 });
 
 async function clearFiles(): Promise<void> {
+  await refreshMediaAccess();
+  if (!canMaintainMedia.value) return;
   $alert.yesno("options.storage.clear_files_confirm", (async (btn) => {
     if (btn !== "yes") return;
     await Platform?.storage?.clearFiles?.();

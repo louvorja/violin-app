@@ -8,6 +8,7 @@ import path from "node:path";
 const require = createRequire(import.meta.url);
 const fs = require("fs-extra");
 const { HttpQueue } = require("../download/httpQueue.js");
+const { publishCollectionFile } = require("../collectionPublication.js");
 const roots = [];
 const servers = [];
 const payload = Buffer.alloc(8000, 7);
@@ -133,6 +134,56 @@ describe("temporários privados dos downloads do acervo", () => {
     expect(await fs.readdir(folders.filesDir)).toEqual([]);
   });
 
+  it("não publica se perde a permissão de escrita durante a cópia entre volumes", async () => {
+    const folders = await fixture();
+    await fs.ensureDir(folders.workDir);
+    const temporary = path.join(folders.workDir, "arquivo.partial");
+    await fs.writeFile(temporary, payload);
+    await fs.writeFile(folders.local, "anterior");
+    let writable = true;
+    const copyFile = fs.copyFile.bind(fs);
+    const rename = vi.spyOn(fs, "rename").mockRejectedValue(Object.assign(new Error("cross device"), { code: "EXDEV" }));
+    vi.spyOn(fs, "copyFile").mockImplementation(async (...args) => {
+      await copyFile(...args);
+      writable = false;
+    });
+
+    await expect(publishCollectionFile(temporary, folders.local, {
+      root: folders.filesDir, platform: "linux",
+      assertCanPublish: () => { if (!writable) throw new Error("lease-lost"); },
+    })).rejects.toThrow("lease-lost");
+
+    expect(rename).toHaveBeenCalledTimes(1);
+    expect(await fs.readFile(folders.local, "utf8")).toBe("anterior");
+    expect(await fs.readdir(folders.filesDir)).toEqual(["audio.opus"]);
+    expect(await fs.readFile(temporary)).toEqual(payload);
+  });
+
+  it("informa publicação concluída mesmo se a limpeza do temporário privado falhar", async () => {
+    const folders = await fixture();
+    await fs.ensureDir(folders.workDir);
+    const temporary = path.join(folders.workDir, "arquivo.partial");
+    await fs.writeFile(temporary, payload);
+    const rename = fs.rename.bind(fs);
+    vi.spyOn(fs, "rename").mockImplementation(async (from, to) => {
+      if (from === temporary) throw Object.assign(new Error("cross device"), { code: "EXDEV" });
+      return rename(from, to);
+    });
+    const remove = fs.remove.bind(fs);
+    vi.spyOn(fs, "remove").mockImplementation(async (file) => {
+      if (file === temporary) throw Object.assign(new Error("busy"), { code: "EBUSY" });
+      return remove(file);
+    });
+
+    await expect(publishCollectionFile(temporary, folders.local, {
+      root: folders.filesDir, platform: "linux",
+    })).resolves.toBeUndefined();
+
+    expect(await fs.readFile(folders.local)).toEqual(payload);
+    expect(await fs.readdir(folders.filesDir)).toEqual(["audio.opus"]);
+    expect(await fs.readFile(temporary)).toEqual(payload);
+  });
+
   it("no Windows cria a publicação no acervo, sem renomear o arquivo privado mesmo no mesmo volume", async () => {
     const folders = await fixture();
     await fs.ensureDir(folders.workDir);
@@ -159,5 +210,24 @@ describe("temporários privados dos downloads do acervo", () => {
     expect(await fs.readFile(folders.local)).toEqual(payload);
     expect(await fs.readdir(folders.filesDir)).toEqual(["audio.opus"]);
     expect(await fs.readdir(folders.workDir)).toEqual([]);
+  });
+
+  it.skipIf(process.platform === "win32")("publica leitura0644 e subpastas777 em acervo compartilhado sem ampliar existentes", async () => {
+    const folders = await fixture();
+    await fs.chmod(folders.filesDir, 0o755);
+    await fs.ensureDir(folders.workDir, { mode: 0o700 });
+    const temporary = path.join(folders.workDir, "arquivo.partial");
+    await fs.writeFile(temporary, payload, { mode: 0o600 });
+    const local = path.join(folders.filesDir, "musics", "pt", "a.opus");
+    const queue = new HttpQueue({ ...folders, shared: true });
+
+    await queue._prepareDestination(local);
+    await queue._publish(temporary, local);
+
+    expect((await fs.stat(local)).mode & 0o777).toBe(0o644);
+    expect((await fs.stat(path.dirname(local))).mode & 0o777).toBe(0o777);
+    expect((await fs.stat(path.join(folders.filesDir, "musics"))).mode & 0o777).toBe(0o777);
+    expect((await fs.stat(folders.filesDir)).mode & 0o777).toBe(0o755);
+    expect((await fs.stat(folders.workDir)).mode & 0o777).toBe(0o700);
   });
 });

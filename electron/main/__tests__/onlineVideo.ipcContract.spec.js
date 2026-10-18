@@ -52,6 +52,9 @@ async function withFakeElectron(platform, fn) {
 
   const originalLoad = Module._load;
   const originalPlatform = Object.getOwnPropertyDescriptor(process, "platform");
+  const originalUserData = process.env.LJ_E2E_USER_DATA;
+  // Inclui o acervo comum: a plataforma simulada nunca acessa diretórios reais.
+  process.env.LJ_E2E_USER_DATA = root;
   Module._load = function (request, ...rest) {
     return request === "electron" ? electron : originalLoad.call(this, request, ...rest);
   };
@@ -63,6 +66,8 @@ async function withFakeElectron(platform, fn) {
     await require(INDEX).releaseDataDir();
     Module._load = originalLoad;
     Object.defineProperty(process, "platform", originalPlatform);
+    if (originalUserData === undefined) delete process.env.LJ_E2E_USER_DATA;
+    else process.env.LJ_E2E_USER_DATA = originalUserData;
     for (const f of [PRELOAD, INDEX, PATHS]) delete require.cache[f];
     fs.rmSync(root, { recursive: true, force: true });
   }

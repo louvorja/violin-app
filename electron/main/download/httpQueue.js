@@ -6,8 +6,9 @@ const http = require("http");
 const os = require("os");
 const { EventEmitter } = require("events");
 const { pathToFileURL } = require("url");
-const { createHash, randomUUID } = require("node:crypto");
-const { pipeline } = require("node:stream/promises");
+const { createHash } = require("node:crypto");
+const { ensureCollectionSubdirectory } = require("../sharedCollectionDirs.js");
+const { publishCollectionFile } = require("../collectionPublication.js");
 
 const DEFAULT_PROGRESS_INTERVAL_MS = 100;
 const MAX_REDIRECTS = 3;
@@ -43,9 +44,9 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  */
 class HttpQueue extends EventEmitter {
   /**
-   * @param {{ baseUrl: string, apiToken?: string, concurrency?: number, progressIntervalMs?: number, filesDir?: string, workDir?: string, platform?: string }} options
+   * @param {{ baseUrl: string, apiToken?: string, concurrency?: number, progressIntervalMs?: number, filesDir?: string, workDir?: string, shared?: boolean, platform?: string }} options
    */
-  constructor({ baseUrl, apiToken, concurrency, progressIntervalMs, filesDir, workDir, retryDelaysMs, platform = process.platform } = {}) {
+  constructor({ baseUrl, apiToken, concurrency, progressIntervalMs, filesDir, workDir, shared = false, retryDelaysMs, platform = process.platform } = {}) {
     super();
     this.retryDelaysMs = Array.isArray(retryDelaysMs) ? retryDelaysMs : DEFAULT_RETRY_DELAYS_MS;
     this.baseUrl = (baseUrl || "").replace(/\/+$/, "");
@@ -53,6 +54,7 @@ class HttpQueue extends EventEmitter {
     this.filesDir = filesDir;
     this.workDir = workDir;
     this.platform = platform;
+    this.shared = shared;
     // `concurrency` explícito fixa o número de downloads; sem ele a fila se
     // adapta à vazão (ver adaptiveConcurrency.mjs).
     this.fixedConcurrency = Number.isFinite(concurrency)
@@ -473,58 +475,17 @@ class HttpQueue extends EventEmitter {
   }
 
   async _publish(tmp, local) {
-    if (this.cancelled) throw new Error("cancelled");
-    if (this.platform !== "win32") {
-      try {
-        // Mesmo volume: o acervo só vê o arquivo quando já está completo.
-        await fs.rename(tmp, local);
-        return;
-      } catch (error) { if (error.code !== "EXDEV") throw error; }
-    }
-    // Entre volumes, rename não existe. No Windows ele também preservaria a
-    // ACL privada da origem: crie o arquivo no destino para herdar suas
-    // permissões. Só a publicação usa este nome transitório no acervo;
-    // download e retomada continuam no perfil privado.
-    const publishing = path.join(path.dirname(local), `.lj-download-${randomUUID()}.publishing`);
-    let publicationCreated = false;
-    try {
-      await this._assertDestination(local, publishing);
-      if (this.platform === "win32") {
-        // Cria um arquivo novo e copia somente os bytes, sem transportar ACLs
-        // ou outros atributos de segurança do arquivo no perfil privado.
-        const fd = await fs.open(publishing, "wx", 0o666);
-        publicationCreated = true;
-        await pipeline(fs.createReadStream(tmp), fs.createWriteStream(publishing, { fd }));
-      } else {
-        try {
-          await fs.copyFile(tmp, publishing, fs.constants.COPYFILE_EXCL);
-          publicationCreated = true;
-        } catch (error) {
-          if (error.code !== "EEXIST") await fs.remove(publishing);
-          throw error;
-        }
-      }
-      if (this.cancelled) throw new Error("cancelled");
-      await this._assertDestination(local, publishing);
-      await fs.rename(publishing, local);
-      await fs.remove(tmp);
-    } finally { if (publicationCreated) await fs.remove(publishing); }
+    return publishCollectionFile(tmp, local, {
+      root: this.filesDir || path.dirname(local), shared: this.shared,
+      platform: this.platform, cancelled: () => this.cancelled,
+    });
   }
 
   async _prepareDestination(local) {
     if (!this.filesDir) return fs.ensureDir(path.dirname(local));
-    const relative = path.relative(this.filesDir, path.dirname(local));
-    if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
-      throw new Error("Destino fora da pasta de arquivos");
-    }
-    await fs.ensureDir(this.filesDir);
-    let current = this.filesDir;
-    for (const segment of relative.split(path.sep).filter(Boolean)) {
-      current = path.join(current, segment);
-      try { await fs.mkdir(current); } catch (error) { if (error.code !== "EEXIST") throw error; }
-      const stat = await fs.lstat(current);
-      if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error("Diretório de destino inválido");
-    }
+    return ensureCollectionSubdirectory(this.filesDir, path.dirname(local), {
+      shared: this.shared, platform: this.platform,
+    });
   }
 
   async _assertDestination(local, tmp) {

@@ -230,6 +230,12 @@ async function load(): Promise<void> {
     locations.value = nextLocations;
     draft.mediaDir = nextLocations.mediaDir;
     draft.videosDir = nextLocations.videosDir;
+    // No primeiro setup um padrão indisponível pode não ter sido criado.
+    // A alternativa escolhida começa sem exigir a cópia dessa origem.
+    for (const kind of editableKinds) {
+      draft[`${kind}Action`] =
+        props.setup && nextLocations.access?.[kind]?.reason === "unavailable" ? "reuse" : "copy";
+    }
     if (nextClassic) Object.assign(classic, nextClassic);
     originalClassic.value = classicValue();
   } catch (cause) {

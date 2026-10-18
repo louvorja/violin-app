@@ -7,9 +7,10 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { PROFILE_ENTRIES } = require("./dataMigration.js");
 const { rebaseJsonFiles } = require("./privatePathMigration.js");
-const { absolute, validateRoots } = require("./storageRoots.js");
+const { absolute, validateRoots, canonical } = require("./storageRoots.js");
 const { assertProfileIdle } = require("./profileActivity.js");
 const { acquireProfileMigrationLock } = require("./profileMigrationLock.js");
+const { ensureCollectionDirectorySync } = require("./sharedCollectionDirs.js");
 
 const PRIVATE_ENTRIES = ["storage", "library", "json_db", "bin", "server", "canva",
   "configweb.json", "runtime-incidents.json", "telemetry-main-errors.json"];
@@ -46,6 +47,7 @@ function validateLayout(raw, roots) {
     || typeof raw.setupCompleted !== "boolean"
     || (raw.pendingError !== undefined && typeof raw.pendingError !== "string")
     || (raw.defaultLocationsVersion !== undefined && raw.defaultLocationsVersion !== 1)
+    || (raw.sharedLocationsVersion !== undefined && raw.sharedLocationsVersion !== 1)
     || ["mediaShared", "videosShared"].some((key) => raw[key] !== undefined && typeof raw[key] !== "boolean")
     || (raw.legacyRoot !== undefined && !absolute(raw.legacyRoot))) {
     throw new Error("A configuração de armazenamento é inválida. Os dados existentes foram preservados.");
@@ -159,20 +161,20 @@ function copyVerified(from, to, options = {}) {
   } else throw new Error(`Tipo de arquivo não suportado na migração: ${from}`);
 }
 
-function defaultLocations({ documents, videos = path.join(path.dirname(documents), "Videos"), machineDefaults }) {
-  if (!absolute(documents) || !absolute(videos)) throw new Error("As pastas padrão do sistema são inválidas.");
+function defaultLocations({ documents, videos = path.join(path.dirname(documents), "Videos"), sharedMedia, machineDefaults }) {
+  if (!absolute(documents) || !absolute(videos) || !absolute(sharedMedia)) throw new Error("As pastas padrão do sistema são inválidas.");
   if (machineDefaults && (![1, 2].includes(machineDefaults.version) || !absolute(machineDefaults.mediaDir))) {
     throw new Error("A configuração de acervo da máquina é inválida.");
   }
   return {
-    mediaDir: machineDefaults?.mediaDir || path.join(documents, "LouvorJA Violin", "Acervo"),
+    mediaDir: machineDefaults?.mediaDir || sharedMedia,
     videosDir: path.join(videos, "LouvorJA Violin"),
-    mediaShared: !!machineDefaults,
+    mediaShared: true,
     videosShared: false,
   };
 }
 
-function resolveInitial({ bootstrap, documents, videos, machineDefaults }) {
+function resolveInitial({ bootstrap, documents, videos, sharedMedia, machineDefaults }) {
   const anchor = readJson(path.join(bootstrap, "data-location.json"));
   if (anchor && (!absolute(anchor.dataDir) || (anchor.profileSource !== undefined && !absolute(anchor.profileSource)))) {
     throw new Error("O endereço antigo dos dados é inválido. A migração não foi iniciada.");
@@ -200,7 +202,7 @@ function resolveInitial({ bootstrap, documents, videos, machineDefaults }) {
     chromium = sourceExists ? anchor.profileSource : (fs.existsSync(`${chromium}.migrating`) ? `${chromium}.migrating` : chromium);
     if (!fs.existsSync(chromium)) throw new Error("O perfil da mudança anterior não está disponível.");
   }
-  const locations = existing ? { mediaDir, videosDir, legacyRoot } : { ...defaultLocations({ documents, videos, machineDefaults }), defaultLocationsVersion: 1 };
+  const locations = existing ? { mediaDir, videosDir, legacyRoot } : { ...defaultLocations({ documents, videos, sharedMedia, machineDefaults }), defaultLocationsVersion: 1, sharedLocationsVersion: 1 };
   return { layout: { version: 1, ...locations, setupCompleted: existing }, chromium, legacyRoot };
 }
 
@@ -227,16 +229,19 @@ function initialize(options) {
 // O marcador é por perfil, não por máquina: a troca automática ocorre uma vez.
 // A origem permanece registrada separadamente para rebase dos anexos privados.
 function migrateDefaultLocations(current, options) {
-  if (current.defaultLocationsVersion === 1) return current;
+  if (current.defaultLocationsVersion === 1 && current.sharedLocationsVersion === 1) return current;
   const { bootstrap, programDir, onProgress } = options;
   const profile = path.join(bootstrap, "profile");
   const origin = readJson(path.join(profile, ".layout-origin.json"));
   const defaults = defaultLocations(options);
-  const next = { ...current, defaultLocationsVersion: 1 };
+  const next = { ...current, defaultLocationsVersion: 1, sharedLocationsVersion: 1 };
   // Uma escolha explícita feita após a primeira migração prevalece sobre padrões.
   for (const kind of ["media", "videos"]) {
     const key = kind + "Dir";
-    if (current.pending || (origin && current[key] !== origin[key])) continue;
+    const previousDefault = kind === "media" && current.sharedLocationsVersion !== 1
+      && path.resolve(current[key]) === path.resolve(options.documents, "LouvorJA Violin", "Acervo");
+    if ((current.pending && current.pending.defaultMigration !== true)
+      || (origin && current[key] !== origin[key] && !previousDefault)) continue;
     next[key] = defaults[key];
     next[kind + "Shared"] = defaults[kind + "Shared"];
   }
@@ -247,16 +252,17 @@ function migrateDefaultLocations(current, options) {
   const changed = next.mediaDir !== current.mediaDir || next.videosDir !== current.videosDir;
   // Persiste a intenção antes da cópia. Falta de espaço ou conflito abre o app
   // com as pastas anteriores e um erro visível, permitindo escolher outro destino.
-  if (changed) {
+  if (changed || current.pending?.defaultMigration === true) {
     next.pending = { id: crypto.randomUUID(), mediaDir: next.mediaDir, videosDir: next.videosDir,
       mediaAction: "copy", videosAction: "copy", defaultMigration: true,
       mediaShared: next.mediaShared === true, videosShared: next.videosShared === true };
     next.mediaDir = current.mediaDir; next.videosDir = current.videosDir;
     next.mediaShared = current.mediaShared === true; next.videosShared = current.videosShared === true;
-    for (const target of [next.pending.mediaDir, next.pending.videosDir]) {
+    for (const [kind, target] of [["media", next.pending.mediaDir], ["videos", next.pending.videosDir]]) {
       // A primeira resolução pode criar os padrões. Retentativas não recriam
       // volumes desconectados: applyPendingLayout preserva a origem nesse caso.
-      try { fs.ensureDirSync(target); } catch { /* o erro aparece ao aplicar a cópia */ }
+      try { ensureCollectionDirectorySync(canonical(target), { shared: next.pending[kind + "Shared"] === true }); }
+      catch { /* o erro aparece ao aplicar a cópia */ }
     }
   }
   onProgress?.({ phase: "publishing", files: 0, bytes: 0 });
@@ -264,7 +270,7 @@ function migrateDefaultLocations(current, options) {
   return next;
 }
 
-function initializeLocked({ bootstrap, documents, videos, programDir, machineDefaults = null, ownedBootstrapPid = process.pid, onProgress }) {
+function initializeLocked({ bootstrap, documents, videos, sharedMedia, programDir, machineDefaults = null, ownedBootstrapPid = process.pid, onProgress }) {
   const counts = new Map();
   let lastPhase, lastProgress = 0;
   function progress(phase, size = 0) {
@@ -293,7 +299,7 @@ function initializeLocked({ bootstrap, documents, videos, programDir, machineDef
   if (published) { validateLayout(published, roots); atomicJson(file, published); return published; }
   if (fs.existsSync(profile)) throw new Error(`A pasta do usuário já existe sem registro de migração: ${profile}`);
 
-  const { layout, chromium, legacyRoot } = resolveInitial({ bootstrap, documents, videos, machineDefaults });
+  const { layout, chromium, legacyRoot } = resolveInitial({ bootstrap, documents, videos, sharedMedia, machineDefaults });
   const chromiumSource = fs.existsSync(chromium) ? chromium : bootstrap;
   const idleOptions = { ownedBootstrapDir: bootstrap, currentPid: ownedBootstrapPid };
   assertProfileIdle(chromiumSource, idleOptions);
@@ -313,9 +319,10 @@ function initializeLocked({ bootstrap, documents, videos, programDir, machineDef
   validateLayout(layout, roots);
   // Criar padrões só nesta primeira resolução. Um disco removido depois nunca
   // é substituído silenciosamente por outro diretório.
-  for (const dir of [layout.mediaDir, layout.videosDir]) {
+  for (const [kind, dir] of [["media", layout.mediaDir], ["videos", layout.videosDir]]) {
     if (!fs.existsSync(dir)) {
-      try { fs.ensureDirSync(dir); } catch { /* a UI permite escolher um destino acessível */ }
+      try { ensureCollectionDirectorySync(canonical(dir), { shared: layout[kind + "Shared"] === true }); }
+      catch { /* a UI permite escolher um destino acessível */ }
     }
   }
   const staging = path.join(bootstrap, "profile.migrating");

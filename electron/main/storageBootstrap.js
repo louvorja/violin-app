@@ -17,7 +17,7 @@ const PHASES = new Set(["scanning", "copying", "verifying", "publishing", "compl
 function validateRequest(value) {
   if (!value || value.version !== 1 || !Number.isSafeInteger(value.ownedBootstrapPid)
     || value.ownedBootstrapPid <= 0 || value.ownedBootstrapPid === process.pid
-    || ["bootstrap", "documents", "videos", "programDir"].some((key) =>
+    || ["bootstrap", "documents", "videos", "sharedMedia", "programDir"].some((key) =>
       typeof value[key] !== "string" || !path.isAbsolute(value[key]) || value[key].includes("\0"))) {
     throw new Error("A solicitação de migração é inválida.");
   }

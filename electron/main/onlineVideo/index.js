@@ -51,6 +51,7 @@ function getManager() {
     _manager = createManager({
       dir: paths.videosDir(),
       workDir: paths.videoWorkDir(),
+      shared: storageAccess.status().videos?.shared === true,
       canWrite: () => storageAccess.canWrite("videos"),
       canMaintain: () => storageAccess.canMaintain("videos"),
       tools,
@@ -66,7 +67,9 @@ function getManager() {
     });
     const manager = _manager;
     _ready = (storageAccess.canWrite("videos")
-      ? migrateDownloads(path.join(paths.bootstrapDir(), "online_videos"), manager.store.dir, { workDir: paths.videoWorkDir() })
+      ? migrateDownloads(path.join(paths.bootstrapDir(), "online_videos"), manager.store.dir, {
+        workDir: paths.videoWorkDir(), shared: storageAccess.status().videos?.shared === true,
+      })
       : Promise.resolve())
       .then(() => manager.init());
     // O boot e os pedidos IPC observam a mesma promessa, inclusive se falhar.

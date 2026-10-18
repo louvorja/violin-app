@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 const require = createRequire(import.meta.url);
 const fs = require("fs-extra");
 const { copyCollection, applyPendingLayout } = require("../storageCollectionMigration.js");
@@ -12,6 +13,33 @@ beforeEach(() => { root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 
 afterEach(() => { vi.restoreAllMocks(); fs.removeSync(root); });
 
 describe("cópia de acervo no boot", () => {
+  it.skipIf(process.platform === "win32")("publica novos arquivos compartilhados legíveis sob umask 077 sem alterar origem ou destino existente", () => {
+    const source = path.join(root, "source");
+    const target = path.join(root, "target");
+    const workDir = path.join(root, "profile", "work");
+    fs.outputFileSync(path.join(source, "musics", "pt", "song.mp3"), "song");
+    fs.chmodSync(path.join(source, "musics", "pt", "song.mp3"), 0o600);
+    fs.outputFileSync(path.join(source, "covers", "existing.jpg"), "same");
+    fs.outputFileSync(path.join(target, "covers", "existing.jpg"), "same");
+    fs.chmodSync(path.join(target, "covers"), 0o700);
+    fs.chmodSync(path.join(target, "covers", "existing.jpg"), 0o600);
+    fs.chmodSync(target, 0o755);
+    execFileSync(process.execPath, ["-e", `
+      process.umask(0o077);
+      const [module, source, target, workDir, id] = process.argv.slice(1);
+      require(module).copyCollection(source, target, "media", id, { shared: true, workDir });
+    `, require.resolve("../storageCollectionMigration.js"), source, target, workDir, id]);
+    const mode = (file) => fs.statSync(file).mode & 0o777;
+    expect(mode(path.join(target, "musics"))).toBe(0o777);
+    expect(mode(path.join(target, "musics", "pt"))).toBe(0o777);
+    expect(mode(path.join(target, "musics", "pt", "song.mp3"))).toBe(0o644);
+    expect(mode(path.join(source, "musics", "pt", "song.mp3"))).toBe(0o600);
+    expect(mode(path.join(target, "covers", "existing.jpg"))).toBe(0o600);
+    expect(mode(path.join(target, "covers"))).toBe(0o700);
+    expect(mode(target)).toBe(0o755);
+    expect(mode(workDir)).toBe(0o700);
+  });
+
   it.each([[false, true], [true, false]])("protege compartilhamento no caminho já padrão sem rebaixar a proteção (%s → %s)", (currentShared, requestedShared) => {
     const mediaDir = path.join(root, "media");
     const videosDir = path.join(root, "videos");
@@ -22,6 +50,36 @@ describe("cópia de acervo no boot", () => {
     expect(result.mediaShared).toBe(true);
     expect(result.pending).toBeUndefined();
     expect(require("../storageAccess.js").readMarker(mediaDir, "media").shared).toBe(true);
+  });
+
+  it.skipIf(process.platform === "win32")("mantém o acervo de destino já compartilhado legível mesmo sem a flag da pendência", () => {
+    const source = path.join(root, "source");
+    const target = path.join(root, "shared");
+    const videosDir = path.join(root, "videos");
+    fs.outputFileSync(path.join(source, "musics", "song.mp3"), "song");
+    fs.chmodSync(path.join(source, "musics", "song.mp3"), 0o600);
+    fs.ensureDirSync(target); fs.ensureDirSync(videosDir);
+    require("../storageAccess.js").markShared(target, "media");
+    const result = applyPendingLayout({ version: 1, mediaDir: source, videosDir, setupCompleted: true,
+      pending: { id, mediaDir: target, videosDir, mediaAction: "copy", videosAction: "copy", defaultMigration: true, mediaShared: false } },
+    { profileDir: path.join(root, "profile"), programDir: path.join(root, "program") });
+    expect(result.pendingError).toBeUndefined();
+    expect(result.mediaShared).toBe(true);
+    expect(fs.statSync(path.join(target, "musics", "song.mp3")).mode & 0o777).toBe(0o644);
+  });
+
+  it.skipIf(process.platform === "win32")("não amplia permissões de outro arquivo ligado ao staging de uma cópia interrompida", () => {
+    const source = path.join(root, "source");
+    const target = path.join(root, "target");
+    const original = path.join(source, "musics", "song.mp3");
+    fs.outputFileSync(original, "song"); fs.chmodSync(original, 0o600);
+    const staging = path.join(target, `.louvorja-migration-${id}`);
+    fs.outputJsonSync(path.join(staging, ".owner.json"), { version: 1, id, source, target, kind: "media" });
+    fs.ensureDirSync(path.join(staging, "musics"));
+    fs.linkSync(original, path.join(staging, "musics", "song.mp3"));
+    expect(() => copyCollection(source, target, "media", id, { shared: true })).toThrow(/vínculos/);
+    expect(fs.statSync(original).mode & 0o777).toBe(0o600);
+    expect(fs.existsSync(path.join(target, "musics", "song.mp3"))).toBe(false);
   });
 
   it("permite só o filho Acervo da antiga raiz plana e preserva seus dados privados", () => {

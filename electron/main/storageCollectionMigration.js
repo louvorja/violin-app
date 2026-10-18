@@ -9,6 +9,7 @@ const access = require("./storageAccess.js");
 const { atomicJson, copyVerified, hash } = require("./storageLayout.js");
 const { managedRelative } = require("./mediaFiles.js");
 const { canonical, overlaps, validateRoots } = require("./storageRoots.js");
+const { ensureCollectionDirectorySync, setNewCollectionFileModeSync } = require("./sharedCollectionDirs.js");
 const PRIVATE_NAMES = [".electron", "storage", "library", "profile", "attachments", "canva", "storage-layout.json", "data-location.json"];
 function normalized(p) { const s = path.resolve(p); return process.platform === "win32" ? s.toLowerCase() : s; }
 function validateContents(root, kind) {
@@ -128,7 +129,7 @@ function prepareStaging(target, source, kind, id, workDir) {
   return staging;
 }
 
-function copyCollection(source, target, kind, id, { onProgress, workDir, allowLegacyNested = false, acquire = access.acquire } = {}) {
+function copyCollection(source, target, kind, id, { onProgress, workDir, allowLegacyNested = false, acquire = access.acquire, shared = false } = {}) {
   if (!["media", "videos"].includes(kind) || typeof id !== "string" || !/^[\da-f-]{36}$/i.test(id)) throw new Error("Identificação da cópia inválida.");
   source = canonical(source); target = canonical(target);
   if (canonical(source) === canonical(target)) return;
@@ -162,7 +163,13 @@ function copyCollection(source, target, kind, id, { onProgress, workDir, allowLe
       }
       copyVerified(entry.source, staged, { inheritPermissions: true });
       assertStagingPath(staging, entry.relative);
-      fs.ensureDirSync(path.dirname(dest));
+      // Somente o arquivo privado que será publicado agora recebe permissão
+      // de leitura pública. Arquivos já presentes no destino ficam intactos.
+      if (shared && process.platform !== "win32" && fs.lstatSync(staged).nlink !== 1) {
+        throw new Error(`O arquivo temporário possui outros vínculos e foi preservado: ${staged}`);
+      }
+      setNewCollectionFileModeSync(staged, { shared });
+      ensureCollectionDirectorySync(path.dirname(dest), { shared });
       if (normalized(canonical(dest)) !== normalized(dest)) throw new Error(`O destino contém um link: ${dest}`);
       if (fs.existsSync(dest)) throw new Error(`O destino mudou durante a cópia: ${entry.relative}`);
       fs.renameSync(staged, dest);
@@ -181,7 +188,8 @@ function applyPendingLayout(current, { profileDir, programDir, workDir, acquire,
     for (const [kind, target] of [["media", mediaDir], ["videos", videosDir]]) {
       if (normalized(target) === normalized(canonical(current[kind + "Dir"]))) {
         if (pending.defaultMigration === true) {
-          const shared = current[kind + "Shared"] === true || pending[kind + "Shared"] === true;
+          const shared = current[kind + "Shared"] === true || pending[kind + "Shared"] === true
+            || access.readMarker(target, kind)?.shared === true;
           next[kind + "Shared"] = shared;
           if (shared) markShared(target, kind);
         }
@@ -189,11 +197,12 @@ function applyPendingLayout(current, { profileDir, programDir, workDir, acquire,
       }
       validateContents(target, kind);
       if (!fs.existsSync(target)) throw new Error(`A pasta escolhida está indisponível: ${target}`);
-      if (pending[kind + "Action"] === "copy") copyCollection(current[kind + "Dir"], target, kind, pending.id, {
-        workDir, acquire, onProgress, allowLegacyNested: pending.defaultMigration === true,
-      });
-      const shared = pending.defaultMigration === true ? pending[kind + "Shared"] === true
+      const requestedShared = pending.defaultMigration === true ? pending[kind + "Shared"] === true
         : pending[kind + "Action"] === "reuse" || !normalized(target).startsWith(normalized(os.homedir()) + path.sep);
+      const shared = requestedShared || access.readMarker(target, kind)?.shared === true;
+      if (pending[kind + "Action"] === "copy") copyCollection(current[kind + "Dir"], target, kind, pending.id, {
+        workDir, acquire, onProgress, allowLegacyNested: pending.defaultMigration === true, shared,
+      });
       next[kind + "Shared"] = shared;
       if (shared) markShared(target, kind);
     }

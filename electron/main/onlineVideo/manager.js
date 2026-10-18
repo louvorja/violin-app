@@ -3,13 +3,14 @@
 const fs = require("fs-extra");
 const nodeFs = require("fs");
 const path = require("path");
-const { randomUUID } = require("crypto");
 const { performance } = require("node:perf_hooks");
 const { createStore } = require("./store.js");
 const runner = require("./runner.js");
 const progressive = require("./progressive.js");
 const { isVideoId } = require("./ids.js");
 const { WorkPriority, canStartWork } = require("../presentationAdmission.js");
+const { ensureCollectionDirectory } = require("../sharedCollectionDirs.js");
+const { publishCollectionFile } = require("../collectionPublication.js");
 
 const { OnlineVideoError, clampHeight, needsFreshTool } = runner;
 
@@ -98,6 +99,7 @@ function createManager(cfg) {
   const {
     dir,
     workDir,
+    shared = false,
     canWrite = () => true,
     canMaintain = () => true,
     tools,
@@ -117,7 +119,7 @@ function createManager(cfg) {
   } = cfg;
   let presentationActive = initialPresentationActive === true;
 
-  const store = createStore(dir, { workDir, canWrite, canMaintain });
+  const store = createStore(dir, { workDir, shared, canWrite, canMaintain });
   const cacheDir = path.join(workDir, ".ytdlp-cache");
   /** @type {Map<string, any>} */
   const jobs = new Map();
@@ -135,6 +137,7 @@ function createManager(cfg) {
   const removalGenerations = new Map();
   const streamDir = path.join(workDir, ".stream");
   async function availableBytes() {
+    if (canWrite()) await ensureCollectionDirectory(dir, { shared });
     const roots = canWrite() ? [dir, workDir] : [workDir];
     const values = await Promise.all([...new Set(roots)].map((root) => freeBytes(root)));
     const known = values.filter((value) => value != null);
@@ -521,22 +524,21 @@ function createManager(cfg) {
     const { id } = job;
     if (job.controller.signal.aborted) throw new OnlineVideoError("cancelled", "Download cancelado");
     if (!canWrite()) throw new OnlineVideoError("disk", "A pasta de vídeos está em uso por outro perfil ou sem permissão de gravação.");
-    // Trabalho e vídeos podem estar em volumes diferentes. Copiar diretamente
-    // para <id>.mp4 tornaria um arquivo incompleto visível aos outros perfis.
-    const publishing = path.join(dir, `.${id}-${randomUUID()}.publishing`);
+    // A publicação comum respeita ACL do Windows e leitura entre contas no
+    // POSIX, sem expor um MP4 incompleto no nome definitivo.
     let published = false;
-    try {
-      await fs.move(result.file, publishing, { overwrite: false });
-      if (job.controller.signal.aborted) throw new OnlineVideoError("cancelled", "Download cancelado");
-      if (!canWrite()) throw new OnlineVideoError("disk", "A pasta de vídeos perdeu a permissão de gravação.");
-      if (await fs.pathExists(store.pathFor(id))) {
-        if (!store.has(id)) throw new OnlineVideoError("disk", "Já existe um item incompatível no destino do vídeo.");
-      } else {
-        await fs.rename(publishing, store.pathFor(id));
-        published = true;
-      }
-    } finally {
-      await fs.remove(publishing);
+    if (await fs.pathExists(store.pathFor(id))) {
+      if (!store.has(id)) throw new OnlineVideoError("disk", "Já existe um item incompatível no destino do vídeo.");
+    } else {
+      await ensureCollectionDirectory(dir, { shared });
+      await publishCollectionFile(result.file, store.pathFor(id), {
+        root: dir, shared, overwrite: false,
+        assertCanPublish() {
+          if (job.controller.signal.aborted) throw new OnlineVideoError("cancelled", "Download cancelado");
+          if (!canWrite()) throw new OnlineVideoError("disk", "A pasta de vídeos perdeu a permissão de gravação.");
+        },
+      });
+      published = true;
     }
     // O cancelamento pode chegar durante o rename. Só remova o arquivo que
     // este download publicou; nunca um MP4 já existente no acervo.

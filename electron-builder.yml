@@ -247,6 +247,19 @@ linux:
   executableArgs:
     - --ozone-platform=x11
 
+# O FPM já instala os binários em /opt/LouvorJA Violin. Só os pacotes
+# administrados provisionam o acervo público; AppImage usa a pasta configurada.
+deb:
+  afterInstall: build/linux-after-install.sh
+  # Acrescenta ACL sem substituir as dependências nativas do electron-builder.
+  fpm:
+    - --depends=acl
+
+rpm:
+  afterInstall: build/linux-after-install.sh
+  fpm:
+    - --depends=acl
+
 appImage:
   # O metadata de atualização normaliza o espaço do productName como hífen.
   # Declarar o mesmo nome no arquivo impede que ele aponte para um AppImage

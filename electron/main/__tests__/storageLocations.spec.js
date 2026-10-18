@@ -24,6 +24,39 @@ beforeEach(() => {
 afterEach(() => { access.release(); vi.unstubAllEnvs(); fs.removeSync(root); });
 const request = (overrides = {}) => ({ mediaDir: paths.filesDir(), videosDir: paths.videosDir(), mediaAction: "reuse", videosAction: "reuse", ...overrides });
 describe("troca independente de acervo e vídeos", () => {
+  it("conclui o setup com outro acervo quando o padrão da instalação nova está indisponível", async () => {
+    const media = paths.filesDir(), profile = paths.profileDir(), videos = paths.videosDir();
+    expect(storage.locations().setupCompleted).toBe(false);
+    expect(fs.readdirSync(media)).toEqual([]);
+    // rmdir só remove a raiz vazia da fixture: simula falha de criação do padrão.
+    fs.rmdirSync(media);
+    fs.outputFileSync(path.join(profile, "IndexedDB/db"), "private profile");
+    fs.outputFileSync(path.join(videos, "abcdefghijk.mp4"), "existing video");
+    access.initialize(paths.storageLayout());
+    expect(storage.locations().access.media).toMatchObject({ writable: false, reason: "unavailable" });
+    const destination = path.join(root, "accessible-media");
+    fs.outputFileSync(path.join(destination, "musics/song.mp3"), "existing audio");
+
+    await expect(storage.configure(request({ mediaDir: destination, mediaAction: "reuse" })))
+      .resolves.toEqual({ ok: true, restartRequired: true });
+    storage.completeSetup();
+    expect(storage.locations().setupCompleted).toBe(true);
+    expect(paths.filesDir()).toBe(media);
+    access.release();
+    storage.applyPending();
+    access.initialize(paths.storageLayout());
+
+    expect(storage.locations()).toMatchObject({
+      setupCompleted: true, restartRequired: false, pending: null, changeError: null,
+      mediaDir: destination, videosDir: videos, access: { media: { writable: true } },
+    });
+    expect(fs.existsSync(media)).toBe(false);
+    expect(paths.profileDir()).toBe(profile);
+    expect(fs.readFileSync(path.join(profile, "IndexedDB/db"), "utf8")).toBe("private profile");
+    expect(fs.readFileSync(path.join(videos, "abcdefghijk.mp4"), "utf8")).toBe("existing video");
+    expect(fs.readFileSync(path.join(destination, "musics/song.mp3"), "utf8")).toBe("existing audio");
+  });
+
   it("agenda mudança sem trocar caminhos em uso; próximo boot copia apenas mídia e preserva origem", async () => {
     const media = paths.filesDir(); const profile = paths.profileDir();
     fs.outputFileSync(path.join(media, "musics/pt/song.mp3"), "audio");

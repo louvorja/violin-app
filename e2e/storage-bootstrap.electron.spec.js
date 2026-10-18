@@ -45,6 +45,7 @@ test("mostra progresso em sessão temporária e publica o perfil sem abrir seu I
         bootstrap,
         documents: path.join(root, "Documents"),
         videos: path.join(root, "Videos"),
+        sharedMedia: path.join(root, "Shared", "Acervo"),
         programDir: nodeProcess.cwd(),
         ownedBootstrapPid: nodeProcess.pid,
       })

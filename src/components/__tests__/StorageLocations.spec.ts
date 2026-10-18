@@ -121,6 +121,36 @@ describe("pastas de armazenamento", () => {
     expect(mocks.storage.restart).toHaveBeenCalledOnce();
   });
 
+  it.each([
+    { setup: true, reason: "unavailable", expectedAction: "reuse" },
+    { setup: false, reason: "unavailable", expectedAction: "copy" },
+    { setup: true, reason: "in-use", expectedAction: "copy" },
+  ])("escolhe $expectedAction com setup=$setup e padrão $reason", async ({ setup, reason, expectedAction }) => {
+    mocks.storage.locations.mockResolvedValue({
+      ...initial,
+      mediaDir: "/var/lib/louvorja-violin/acervo",
+      access: {
+        media: { writable: false, shared: true, reason },
+        videos: { writable: true, shared: false, reason: null },
+      },
+    });
+    await render(setup);
+    mocks.storage.chooseDir.mockResolvedValue("/user/collection");
+    await wrapper
+      .findAll("button")
+      .filter((b) => b.text() === "Alterar pasta…")[0]
+      .trigger("click");
+    await flushPromises();
+    expect((wrapper.get("select").element as HTMLSelectElement).value).toBe(expectedAction);
+    await submit();
+    expect(mocks.storage.configureLocations).toHaveBeenCalledWith({
+      mediaDir: "/user/collection",
+      videosDir: initial.videosDir,
+      mediaAction: expectedAction,
+      videosAction: "copy",
+    });
+  });
+
   it("permite reutilizar o acervo de destino sem mover nem copiar o perfil", async () => {
     await render();
     mocks.storage.chooseDir.mockResolvedValue("/shared/collection");
@@ -129,6 +159,7 @@ describe("pastas de armazenamento", () => {
       .filter((b) => b.text() === "Alterar pasta…")[0]
       .trigger("click");
     await flushPromises();
+    expect((wrapper.get("select").element as HTMLSelectElement).value).toBe("copy");
     await wrapper.get("select").setValue("reuse");
     await submit();
     expect(mocks.storage.configureLocations).toHaveBeenCalledWith({

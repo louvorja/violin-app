@@ -26,6 +26,9 @@ const electron = require("electron");
 const { pathToFileURL } = require("url");
 const fs = require("fs-extra");
 const path = require("path");
+const { randomUUID } = require("node:crypto");
+const { Readable } = require("node:stream");
+const { pipeline } = require("node:stream/promises");
 const paths = require("./paths.js");
 const jsonCache = require("./jsonCache.js");
 const mediaResolver = require("./mediaResolver.js");
@@ -34,6 +37,9 @@ const netHealth = require("./netHealth.js");
 const apiConfig = require("./apiConfig.js");
 const { buildCsp } = require("./csp.js");
 const onlineVideo = require("./onlineVideo/index.js");
+const storageAccess = require("./storageAccess.js");
+const { ensureCollectionSubdirectory } = require("./sharedCollectionDirs.js");
+const { publishCollectionFile } = require("./collectionPublication.js");
 
 // ---------------------------------------------------------------------------
 // Configuração de URLs remotas
@@ -202,44 +208,21 @@ function setAutoCacheEnabled(enabled) {
   _autoCacheEnabled = !!enabled;
 }
 
-/**
- * Grava um ReadableStream em um arquivo via .tmp + rename atômico.
- * Usado pelo auto-cache do host "files".
- */
+/** O streaming permanece privado; só o arquivo completo é publicado no acervo. */
 async function _writeStreamToFile(readable, finalPath) {
-  await fs.ensureDir(path.dirname(finalPath));
-  const tmp = `${finalPath}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}.tmp`;
-  const writer = fs.createWriteStream(tmp);
-  const reader = readable.getReader();
-
+  const root = paths.filesDir();
+  const shared = storageAccess.status().media?.shared === true;
+  const workDir = path.join(paths.dataDir(), "temp", "downloads");
+  await fs.ensureDir(workDir, { mode: 0o700 });
+  const tmp = path.join(workDir, `autocache-${randomUUID()}.partial`);
   try {
-    /* eslint-disable no-constant-condition */
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      // value é Uint8Array — converte pra Buffer antes de gravar
-      writer.write(Buffer.from(value));
-    }
-    /* eslint-enable no-constant-condition */
-    await new Promise((resolve, reject) => {
-      writer.end((err) => (err ? reject(err) : resolve()));
+    await ensureCollectionSubdirectory(root, path.dirname(finalPath), { shared });
+    await pipeline(Readable.fromWeb(readable), fs.createWriteStream(tmp, { flags: "wx", mode: 0o600 }));
+    await publishCollectionFile(tmp, finalPath, { root, shared,
+      cancelled: () => !storageAccess.canWrite("media"),
     });
-    await fs.move(tmp, finalPath, { overwrite: true });
     console.log("[protocol] Auto-cached:", finalPath);
-  } catch (e) {
-    try {
-      await fs.remove(tmp);
-    } catch (_) {
-      /* ignore */
-    }
-    throw e;
-  } finally {
-    try {
-      reader.releaseLock();
-    } catch (_) {
-      /* ignore */
-    }
-  }
+  } finally { await fs.remove(tmp); }
 }
 
 // ---------------------------------------------------------------------------
@@ -458,7 +441,7 @@ function handle() {
               return response;
             }
 
-            // Tee: uma branch vai pro renderer, outra grava em .tmp e renomeia.
+            // Tee: uma branch vai ao renderer; a outra usa temporário privado.
             const [forRenderer, forDisk] = response.body.tee();
             _writeStreamToFile(forDisk, localPath).catch((e) =>
               console.warn("[protocol] Auto-cache falhou:", e.message || e)

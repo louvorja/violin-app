@@ -3,6 +3,7 @@
 const fs = require("fs-extra");
 const path = require("path");
 const { isVideoId } = require("./ids.js");
+const { setNewCollectionFileModeSync } = require("../sharedCollectionDirs.js");
 const { assertPrivateWorkDir } = require("./workDirectory.js");
 
 const PARTIAL_DIR = ".partial";
@@ -19,7 +20,7 @@ const PARTIAL_MAX_AGE_MS = 24 * 60 * 60 * 1000;
  * @param {string} dir  pasta do cache (criada sob demanda)
  * @param {{ workDir: string, canWrite?: Function, canMaintain?: Function }} options
  */
-function createStore(dir, { workDir, canWrite = () => true, canMaintain = () => true } = {}) {
+function createStore(dir, { workDir, shared = false, canWrite = () => true, canMaintain = () => true } = {}) {
   assertPrivateWorkDir(dir, workDir);
   const partialRoot = path.join(workDir, PARTIAL_DIR);
 
@@ -70,7 +71,10 @@ function createStore(dir, { workDir, canWrite = () => true, canMaintain = () => 
     if (!canWrite()) return false;
     if (!has(id)) return false;
     try {
-      try { fs.writeFileSync(keepPathFor(id), "", { flag: "wx" }); } catch (error) {
+      try {
+        fs.writeFileSync(keepPathFor(id), "", { flag: "wx" });
+        setNewCollectionFileModeSync(keepPathFor(id), { shared });
+      } catch (error) {
         if (error.code !== "EEXIST" || !fs.lstatSync(keepPathFor(id)).isFile()) return false;
       }
       return true;

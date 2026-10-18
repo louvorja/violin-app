@@ -19,10 +19,20 @@ function videosDir() {
   if (!layout.absolute(folder)) throw new Error("A pasta de vídeos do sistema não está disponível.");
   return folder;
 }
+function sharedMediaDir() {
+  const isolated = process.env.LJ_E2E_USER_DATA?.trim();
+  if (isolated) return path.join(path.resolve(isolated), "shared", "LouvorJA Violin", "Acervo");
+  if (process.platform === "darwin") return "/Users/Shared/LouvorJA Violin/Acervo";
+  if (process.platform === "linux") return "/var/lib/louvorja-violin/acervo";
+  if (process.platform === "win32" && layout.absolute(process.env.PUBLIC)) {
+    return path.join(process.env.PUBLIC, "Documents", "LouvorJA Violin", "Acervo");
+  }
+  throw new Error("Não foi possível localizar a pasta de acervo compartilhado do sistema.");
+}
 function migrationOptions() {
   const machineDefaults = process.platform === "win32" && !process.env.LJ_E2E_USER_DATA && process.env.ProgramData
     ? layout.readJson(path.join(process.env.ProgramData, "LouvorJA Violin", "storage-defaults.json")) : null;
-  return { bootstrap: bootstrapDir(), documents: documentsDir(), videos: videosDir(), programDir: programDir(), machineDefaults };
+  return { bootstrap: bootstrapDir(), documents: documentsDir(), videos: videosDir(), sharedMedia: sharedMediaDir(), programDir: programDir(), machineDefaults };
 }
 function programDir() {
   if (!app.isPackaged) return app.getAppPath();
@@ -52,7 +62,7 @@ module.exports = {
       || layout.readJson(path.join(this.dataDir(), ".layout-origin.json"));
     if (current) {
       layout.validateLayout(current, { profileDir: this.dataDir(), programDir: programDir() });
-      return current.defaultLocationsVersion !== 1 || !!current.pending;
+      return current.defaultLocationsVersion !== 1 || current.sharedLocationsVersion !== 1 || !!current.pending;
     }
     return layout.resolveInitial(this.migrationOptions()).layout.setupCompleted;
   },

@@ -3,6 +3,9 @@ const path = require("path");
 const os = require("os");
 const fs = require("fs-extra");
 const paths = require("./paths.js");
+const { randomUUID } = require("node:crypto");
+const { ensureCollectionDirectory } = require("./sharedCollectionDirs.js");
+const { publishCollectionFile } = require("./collectionPublication.js");
 const { classicSearchDirs, CLASSIC_FOLDERS } = require("./mediaRoots.js");
 const { shortcutDirectories, discoverShortcuts, winePrefixes } = require("./classicDiscovery.js");
 
@@ -259,9 +262,22 @@ async function importFrom(configDir, opts = {}) {
       await collect(from, to);
       copied.push(classic);
     }
-    require("./storageAccess.js").assertWritable("media");
-    for (const directory of folders) await fs.ensureDir(directory);
-    for (const [from, to] of files) await fs.copyFile(from, to, fs.constants.COPYFILE_EXCL);
+    const access = require("./storageAccess.js");
+    access.assertWritable("media");
+    const shared = access.status().media?.shared === true;
+    for (const directory of folders) await ensureCollectionDirectory(directory, { shared });
+    const workDir = path.join(paths.dataDir(), "temp", "imports");
+    await fs.ensureDir(workDir, { mode: 0o700 });
+    for (const [from, to] of files) {
+      const temporary = path.join(workDir, `${randomUUID()}.partial`);
+      try {
+        await fs.copyFile(from, temporary, fs.constants.COPYFILE_EXCL);
+        access.assertWritable("media");
+        await publishCollectionFile(temporary, to, { root: destination, shared, overwrite: false,
+          assertCanPublish: () => access.assertWritable("media"),
+        });
+      } finally { await fs.remove(temporary); }
+    }
     return { ok: true, copiadas: copied };
   } catch (err) {
     return { ok: false, error: err.code === "EEXIST" ? "destination-exists" : err.message };

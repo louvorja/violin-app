@@ -23,6 +23,23 @@ afterEach(() => {
 });
 
 describe("migração do trabalho privado de vídeos", () => {
+  it.skipIf(process.platform === "win32")("publica vídeos legados compartilhados com0644 preservando modos da origem", async () => {
+    const legacy = path.join(root, "online_videos");
+    const videos = path.join(root, "shared-videos");
+    fs.ensureDirSync(legacy);
+    fs.writeFileSync(path.join(legacy, `${A}.mp4`), "video", { mode: 0o600 });
+    fs.writeFileSync(path.join(legacy, `${A}.keep`), "", { mode: 0o600 });
+
+    await migrateDownloads(legacy, videos, { workDir: target, shared: true });
+
+    expect(fs.statSync(videos).mode & 0o777).toBe(0o777);
+    expect(fs.statSync(path.join(videos, `${A}.mp4`)).mode & 0o777).toBe(0o644);
+    expect(fs.statSync(path.join(videos, `${A}.keep`)).mode & 0o777).toBe(0o644);
+    expect(fs.statSync(path.join(legacy, `${A}.mp4`)).mode & 0o777).toBe(0o600);
+    expect(fs.statSync(target).mode & 0o777).toBe(0o700);
+    expect(fs.readdirSync(target)).toEqual([".legacy-downloads-v1.json"]);
+  });
+
   it("leva o registro de importação para não restaurar vídeos já excluídos", async () => {
     const source = path.join(root, "old-work");
     const legacy = path.join(root, "online_videos");

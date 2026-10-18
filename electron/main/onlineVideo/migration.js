@@ -6,6 +6,8 @@ const { randomUUID } = require("crypto");
 const { isVideoId } = require("./ids.js");
 const { assertPrivateWorkDir } = require("./workDirectory.js");
 const { copyVerified, atomicJson, readJson } = require("../storageLayout.js");
+const { ensureCollectionDirectory } = require("../sharedCollectionDirs.js");
+const { publishCollectionFile } = require("../collectionPublication.js");
 
 async function entries(dir) {
   try {
@@ -27,19 +29,21 @@ async function copyMissing(from, to) {
   } else if (stat.isFile() && !(await fs.pathExists(to))) await publishCopy(from, to);
 }
 
-async function publishCopy(from, to) {
+async function publishCopy(from, to, { workDir = path.dirname(to), shared = false, root = path.dirname(to) } = {}) {
   // Outro perfil pode estar lendo o acervo durante a migração. Só exponha o
   // nome definitivo quando todos os bytes já tiverem sido conferidos.
-  const temporary = path.join(path.dirname(to), `.louvorja-legacy-${randomUUID()}.tmp`);
+  await fs.ensureDir(workDir, { mode: 0o700 });
+  const temporary = path.join(workDir, `.louvorja-legacy-${randomUUID()}.tmp`);
   try {
     copyVerified(from, temporary);
     if (await fs.pathExists(to)) return;
-    await fs.rename(temporary, to);
+    await ensureCollectionDirectory(path.dirname(to), { shared });
+    await publishCollectionFile(temporary, to, { root, shared, overwrite: false });
   } finally { await fs.remove(temporary); }
 }
 
 /** Copia e verifica downloads antigos sem apagar a origem ou seguir links. */
-async function migrateDownloads(fromDir, toDir, { workDir } = {}) {
+async function migrateDownloads(fromDir, toDir, { workDir, shared = false } = {}) {
   assertPrivateWorkDir(toDir, workDir);
   if (path.resolve(fromDir) === path.resolve(toDir)) return;
   const source = await entries(fromDir);
@@ -62,7 +66,7 @@ async function migrateDownloads(fromDir, toDir, { workDir } = {}) {
       if (extension === "keep" && !(await fs.pathExists(path.join(toDir, `${match[1]}.mp4`)))) continue;
       const target = path.join(toDir, entry.name);
       if (await fs.pathExists(target)) continue;
-      await publishCopy(path.join(fromDir, entry.name), target);
+      await publishCopy(path.join(fromDir, entry.name), target, { workDir, shared, root: toDir });
     }
   }
 
