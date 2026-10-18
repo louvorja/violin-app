@@ -65,8 +65,7 @@ asar: true
 # Associação de arquivos — .slja (apresentação de slides do LouvorJA)
 # ---------------------------------------------------------------------------
 # Faz o sistema reconhecer o formato como do app e oferecê-lo em "Abrir com":
-#   Windows — o NSIS grava a classe em HKCU, o mesmo escopo do protocolo
-#             louvorja://, sem pedir UAC;
+#   Windows — o NSIS registra no escopo escolhido, como louvorja://;
 #   macOS   — CFBundleDocumentTypes no Info.plist;
 #   Linux   — MimeType no .desktop e o tipo em /usr/share/mime (deb e rpm; o
 #             AppImage só declara o MimeType, o resto fica com o integrador).
@@ -120,25 +119,20 @@ win:
 #   header.bmp      — cabeçalho do instalador (150x57 px, formato BMP)
 #   sidebar.bmp     — barra lateral do instalador (164x314 px, formato BMP)
 nsis:
-  # Instalador com wizard (não one-click), mas sempre no escopo do usuário.
+  # Instalações novas oferecem somente este usuário ou todos. Reinstalações
+  # preservam o escopo existente. Perfil e IndexedDB continuam privados.
   oneClick: false
-  # Não oferecer a escolha "todos os usuários": o app precisa atualizar sem
-  # UAC e os dados/atalhos pertencem ao usuário que o executa.
   perMachine: false
   # O nome precisa ser explícito: o electron-builder usa outra normalização
   # no latest.yml quando recebe o productName com espaços.
   # O mesmo nome aqui garante que o arquivo publicado e o arquivo apontado
   # pelo atualizador sejam exatamente iguais.
   artifactName: "LouvorJA.Violin-Setup-${version}.${ext}"
-  # O modo normal não pede admin. O script customizado ainda eleva
-  # explicitamente quando encontra uma instalação antiga em Program Files,
-  # para atualizá-la no lugar sem criar uma segunda cópia.
-  allowElevation: false
-  # Instalação sempre por usuário (%LOCALAPPDATA%\Programs\...), sem pedir
-  # admin — os dados do usuário já vivem em Documents, não na pasta do app.
-  # Uma instalação antiga que tenha escolhido C:\Program Files é tratada como
-  # legado pelo script NSIS e só é atualizada após confirmação do UAC.
-  allowToChangeInstallationDirectory: false
+  # Apenas o modo para todos pede UAC; cada conta usa seu próprio perfil.
+  allowElevation: true
+  # A pasta do programa é independente das pastas de acervo e vídeos,
+  # configuradas na primeira abertura do aplicativo.
+  allowToChangeInstallationDirectory: true
   # Criar atalho na área de trabalho
   createDesktopShortcut: true
   # Criar atalho no menu iniciar

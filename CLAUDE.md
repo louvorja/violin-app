@@ -251,46 +251,58 @@ $userdata.set("theme", "dark");
 
 ## Onde moram os dados
 
-Tudo que é do usuário fica numa **pasta de dados única** — `Documents/LouvorJA Violin`
-por padrão, trocável em "Sincronizar Arquivos → Armazenamento". No endereço antigo do
-sistema sobra apenas a âncora `data-location.json`, que diz onde essa pasta está:
-alguém precisa saber o endereço antes de abri-la.
+O programa é instalado separadamente do **perfil privado**, do **acervo** e dos
+**vídeos**. O perfil não tem seletor de local: `paths.dataDir()` retorna
+`<appData>/LouvorJA Violin/profile`, com o endereço de `appData` fornecido pelo Electron:
+
+| Sistema | Perfil privado |
+| --- | --- |
+| Windows | `%APPDATA%/LouvorJA Violin/profile` |
+| macOS | `~/Library/Application Support/LouvorJA Violin/profile` |
+| Linux | `$XDG_CONFIG_HOME/LouvorJA Violin/profile` ou `~/.config/LouvorJA Violin/profile` |
 
 ```
-<dados>/
-├── files/      acervo — áudio, capas, imagens
-├── storage/    preferências — user_data.json, config.json, monitor_prefs.json
-├── library/    documentos — liturgias salvas, playlists, coletâneas, itens agendados
-├── Videos/     vídeos online baixados e suas marcas de manter
-├── json_db/    cache das respostas JSON
-├── bin/        yt-dlp e ffmpeg
-└── .electron/  perfil, IndexedDB, cookies, caches e logs internos
+<perfil>/
+├── storage/           preferências e configurações por conta do sistema
+├── library/           documentos pessoais em JSON
+├── attachments/media/ anexos privados enviados pelo controle remoto
+├── canva/             documentos e miniaturas importados
+├── json_db/           cache de respostas JSON
+├── bin/               yt-dlp e ffmpeg
+├── video-work/        downloads parciais e streaming temporário
+└── .electron/         IndexedDB, cookies, caches e logs internos
 ```
 
-A divisão que importa é entre **documento** e **cache**:
+`paths.mediaDir()` e `paths.videosDir()` são independentes e alteráveis no setup e
+em Sincronizar Arquivos → Armazenamento. Por usuário, os padrões ficam em
+`Documentos/LouvorJA Violin/Acervo` e `Documentos/LouvorJA Violin/Videos`.
+No Windows para todos, novos perfis usam o padrão provisionado pelo instalador
+em Documentos Públicos. A configuração da máquina fica em ProgramData e os
+perfis de cada conta continuam privados. Mac/Linux podem selecionar pastas
+compartilhadas com as permissões já concedidas pelo sistema.
 
-|          | Documento                                                                             | Cache                                                         |
-| -------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| O quê    | preferências, liturgias salvas, playlists, coletâneas personalizadas, itens agendados | `json_db/`, catálogos baixados, bundles do Libras, thumbnails |
-| Onde     | pasta de dados                                                                        | pasta de dados                                                |
-| Se sumir | o operador perde trabalho que ele fez à mão                                           | o app baixa de novo                                           |
+Mudanças são agendadas para o próximo boot e oferecem reutilizar uma coleção ou
+copiar a atual com verificação. Não apagam a origem, não sobrescrevem conflitos e
+não transferem arquivos pessoais junto ao acervo. A migração do perfil antigo
+também conserva a origem, incluindo todos os bancos IndexedDB. As raízes de mídia
+existentes são preservadas; não se força um acervo já baixado para outro disco.
 
-Ao criar armazenamento novo, classifique primeiro: documento vai para a pasta de
-dados via `DocStore`; cache também fica dentro da raiz escolhida. O perfil do
-Electron só muda de pasta no próximo boot, após fechar os bancos abertos.
+No desktop, preferências e documentos JSON são escritos pelo main, via
+`userStore`/`DocStore`, com gravação atômica em lote (300 ms). IndexedDB continua
+no Chromium e mistura catálogos com favoritos, histórico e coleções que contêm
+Blob/ArrayBuffer: deve permanecer privado até uma futura separação lógica por
+coleção. A migração ajusta caminhos de anexos privados sem serializar os binários
+em JSON. Não trate o ZIP de exportação como cópia integral do perfil.
 
-No desktop **o main é o único escritor**. O renderer nunca grava em disco por conta
-própria: `$userdata.set` manda um patch por IPC e `DocStore` manda a coleção. Os dois
-gravam em lote (janela de 300ms) e de forma atômica — a pasta costuma estar dentro do
-OneDrive ou do iCloud, e gravar a cada tecla acordaria o sincronizador sem parar.
+`storageAccess` concede uma única escrita por raiz de mídia. Outras contas leem
+os arquivos prontos; para adquirir escrita após a saída da outra conta, reiniciam
+o app. Limpeza de coleções compartilhadas fica desativada. Vídeos em streaming
+podem usar o diretório temporário privado mesmo com a coleção somente leitura.
+O acervo Classic é uma fonte opcional separada, somente leitura, com cópia
+explícita para o acervo próprio sem remover os originais.
 
-No navegador nada disso vale: lá o `Storage` usa localStorage e o `DocStore` delega ao
-IndexedDB. **Não há paridade entre web e desktop** — a ponte é exportar e importar.
-
-O IndexedDB continua sendo a casa dos catálogos baixados e das coleções que guardam
-binário (imagens de overlay, biblioteca de mídia, miniaturas, sons de fundo). Estas
-últimas ainda não têm caminho para a pasta de dados: vão precisar do arquivo gravado
-ao lado, em `library/<colecao>/<id>.<ext>`, com o JSON guardando só o metadado.
+No navegador, `Storage` usa localStorage e `DocStore` delega ao IndexedDB.
+Não há escolha de pastas nativas nem mudança nesse contrato do web/PWA.
 
 ## Helpers vs Composables
 
@@ -995,7 +1007,7 @@ electron/
 └── main/
     ├── apiConfig.js      # Config central de URLs/tokens da API (shared)
     ├── csp.js            # Config central de Content-Security-Policy
-    ├── paths.js          # pasta de dados (âncora + fallback), userData, tempDir
+    ├── paths.js          # perfil privado fixo, acervo e vídeos independentes
     ├── windows.js        # BrowserWindow factory
     ├── userStore.js      # preferências em <dados>/storage (D1)
     ├── docStore.js       # documentos do usuário em <dados>/library

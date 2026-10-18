@@ -2,6 +2,7 @@
 
 const path = require("path");
 const paths = require("../paths.js");
+const storageAccess = require("../storageAccess.js");
 const { createTools } = require("./tools.js");
 const { createManager } = require("./manager.js");
 const { isVideoId } = require("./ids.js");
@@ -10,7 +11,6 @@ const { migrateDownloads } = require("./migration.js");
 
 let _manager = null;
 let _ready = null;
-let _dataDirChange = null;
 let streamFailureReporter = null;
 let presentationActive = false;
 
@@ -50,6 +50,9 @@ function getManager() {
     const tools = createTools({ binDir: path.join(paths.dataDir(), "bin") });
     _manager = createManager({
       dir: paths.videosDir(),
+      workDir: paths.videoWorkDir(),
+      canWrite: () => storageAccess.canWrite("videos"),
+      canMaintain: () => storageAccess.canMaintain("videos"),
       tools,
       // O YouTube passou a exigir a resolução de um desafio em JavaScript para
       // liberar os formatos. O próprio Electron, rodando como Node, faz isso sem
@@ -62,7 +65,9 @@ function getManager() {
       presentationActive,
     });
     const manager = _manager;
-    _ready = migrateDownloads(path.join(paths.bootstrapDir(), "online_videos"), manager.store.dir)
+    _ready = (storageAccess.canWrite("videos")
+      ? migrateDownloads(path.join(paths.bootstrapDir(), "online_videos"), manager.store.dir, { workDir: paths.videoWorkDir() })
+      : Promise.resolve())
       .then(() => manager.init());
     // O boot e os pedidos IPC observam a mesma promessa, inclusive se falhar.
     void _ready.catch((error) => console.warn("[onlineVideo] inicialização falhou:", error?.message || error));
@@ -71,7 +76,6 @@ function getManager() {
 }
 
 async function readyManager() {
-  if (_dataDirChange) await _dataDirChange;
   const manager = getManager();
   await _ready;
   return manager;
@@ -156,20 +160,6 @@ async function releaseDataDir() {
   _ready = null;
 }
 
-/** Pedidos de vídeo aguardam a troca da raiz antes de resolver qualquer caminho. */
-async function withDataDirChange(operation) {
-  if (_dataDirChange) throw new Error("Mudança da pasta de dados já em andamento");
-  let complete;
-  _dataDirChange = new Promise((resolve) => { complete = resolve; });
-  try {
-    await releaseDataDir();
-    return await operation();
-  } finally {
-    _dataDirChange = null;
-    complete();
-  }
-}
-
 function shutdown() {
   if (_manager) _manager.cancelAll();
 }
@@ -185,7 +175,6 @@ module.exports = {
   registerIpc,
   init,
   releaseDataDir,
-  withDataDirChange,
   shutdown,
   diagnosticSnapshot,
   setStreamFailureReporter,

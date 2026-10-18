@@ -450,15 +450,19 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
     /** Compara servidor vs local — retorna { missing, damaged, extra }. */
     verify: (remoteFiles) => ipcRenderer.invoke("storage:verify", remoteFiles),
     /** Abre a pasta de mídia no explorer do SO. */
-    openDir: () => ipcRenderer.invoke("storage:openDir"),
+    openDir: (kind) => ipcRenderer.invoke("storage:openDir", kind),
     /** Mostra dialog de seleção de pasta. */
     chooseDir: () => ipcRenderer.invoke("storage:chooseDir"),
     /** Mostra dialog de seleção de arquivo único. Retorna o caminho completo ou null. */
     chooseFile: (kind) => ipcRenderer.invoke("storage:chooseFile", kind),
     /** Mostra dialog de seleção de imagem com filtro de tipos. Retorna o caminho completo ou null. */
     chooseImage: () => ipcRenderer.invoke("storage:chooseImage"),
-    /** Define nova pasta de mídia (com opção de mover conteúdo). */
-    setDataDir: (newDir, opts) => ipcRenderer.invoke("storage:setDataDir", newDir, opts),
+    /** Perfil privado e pastas independentes do acervo e dos vídeos. */
+    locations: () => ipcRenderer.invoke("storage:locations"),
+    configureLocations: (locations) => ipcRenderer.invoke("storage:configureLocations", locations),
+    completeSetup: () => ipcRenderer.invoke("storage:completeSetup"),
+    privatePathMappings: () => ipcRenderer.invoke("storage:privatePathMappings"),
+    restart: () => ipcRenderer.invoke("storage:restart"),
     /** Auto-limpeza FIFO ao ultrapassar maxBytes. */
     enforceQuota: (maxBytes) => ipcRenderer.invoke("storage:enforceQuota", maxBytes),
     /** Lista arquivos de um diretório local (para auto-populate). */

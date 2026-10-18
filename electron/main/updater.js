@@ -679,8 +679,14 @@ function init({ channel = "latest", autoCheck = true, autoDownload = false, useB
     // O electron-updater não conhece a atividade da apresentação. Mantemos o
     // check separado do download para admitir apenas o trabalho automático.
     autoUpdater.autoDownload = false;
-    // Instalações atuais por usuário continuam simples. Para o legado em
-    // Program Files, nunca esconda uma falha de UAC ao encerrar o programa:
+    // NSIS recebe /D= com o diretório real, inclusive numa instalação legada
+    // registrada em HKCU dentro de Program Files. A elevação não pode trocar
+    // esse caminho pelo diretório padrão da conta administrativa.
+    if (process.platform === "win32") {
+      autoUpdater.installDirectory = path.win32.dirname(process.execPath);
+    }
+    // Instalações por usuário continuam simples. Para instalações para todos
+    // ou legadas em Program Files, não esconda uma falha de UAC ao encerrar:
     // o operador verá o estado baixado e clicará em "Instalar".
     autoUpdater.autoInstallOnAppQuit = !_installRequiresElevation;
 

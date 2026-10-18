@@ -43,7 +43,10 @@ async function withFakeElectron(platform, fn) {
       off: () => {},
     },
     webUtils: { getPathForFile: () => "" },
-    app: { getPath: (name) => { seen.appGetPathCalls += 1; return path.join(root, name); } },
+    app: {
+      getPath: (name) => { seen.appGetPathCalls += 1; return path.join(root, name); },
+      getAppPath: () => path.join(root, "program"),
+    },
   };
   const electron = new Proxy(stub, { get: (target, key) => (key in target ? target[key] : () => {}) });
 
@@ -94,31 +97,27 @@ describe.each(["darwin", "win32", "linux"])("vídeo online: preload e main (%s)"
 });
 
 describe("vídeo online: o que fica de fora do carregamento do preload", () => {
-  it("aguarda a mudança da pasta antes de consultar vídeos ou criar outro gerenciador", async () => {
+  it("uma mudança pendente conserva vídeos e ferramentas atuais até o próximo boot", async () => {
     await withFakeElectron("darwin", async (seen) => {
       const onlineVideo = require(INDEX);
       onlineVideo.registerIpc({ handle: (channel, handler) => seen.handlers.set(channel, handler) });
       await onlineVideo.init();
       const previous = onlineVideo.getManager();
-      const chosen = path.join(path.dirname(previous.store.dir), "..", "chosen");
-      fs.mkdirSync(path.join(chosen, "Videos"), { recursive: true });
-      fs.writeFileSync(path.join(chosen, "Videos", "abcdefghijk.mp4"), "offline video");
-      let finishMove;
-      const gate = new Promise((resolve) => { finishMove = resolve; });
-      const change = onlineVideo.withDataDirChange(async () => {
-        await gate;
-        require(PATHS).setDataDir(chosen);
-      });
-      let consulted = false;
-      const lookup = seen.handlers.get("onlineVideo:has")({}, "abcdefghijk").then((value) => { consulted = true; return value; });
-      await Promise.resolve();
-      expect(consulted).toBe(false);
-      finishMove();
-      await change;
-      expect(await lookup).toBe(true);
-      expect(onlineVideo.getManager()).not.toBe(previous);
-      expect(onlineVideo.getManager().store.dir).toBe(path.join(path.resolve(chosen), "Videos"));
-      expect(onlineVideo.getManager().tools.paths().ytdlp).toBe(path.join(path.resolve(chosen), "bin", "yt-dlp"));
+      const paths = require(PATHS);
+      fs.mkdirSync(previous.store.dir, { recursive: true });
+      fs.writeFileSync(previous.store.pathFor("abcdefghijk"), "current video");
+      const chosen = path.join(path.dirname(previous.store.dir), "chosen");
+      fs.mkdirSync(chosen, { recursive: true });
+      fs.writeFileSync(path.join(chosen, "zzzzzzzzzzz.mp4"), "future video");
+      paths.saveLayout({ ...paths.storageLayout(), pending: {
+        id: "00000000-0000-4000-8000-000000000000", mediaDir: paths.filesDir(), videosDir: chosen,
+        mediaAction: "reuse", videosAction: "reuse",
+      } });
+      expect(await seen.handlers.get("onlineVideo:has")({}, "abcdefghijk")).toBe(true);
+      expect(await seen.handlers.get("onlineVideo:has")({}, "zzzzzzzzzzz")).toBe(false);
+      expect(onlineVideo.getManager()).toBe(previous);
+      expect(previous.store.dir).not.toBe(chosen);
+      expect(previous.tools.paths().ytdlp).toBe(path.join(paths.dataDir(), "bin", "yt-dlp"));
     });
   });
 

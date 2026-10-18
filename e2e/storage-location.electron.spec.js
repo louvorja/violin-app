@@ -1,4 +1,4 @@
-/** Offline storage migration and folder change using a real, isolated Electron profile. */
+/** Offline storage separation with real Electron profiles; all files live in temporary roots. */
 import { test, expect } from "@playwright/test";
 import { _electron as electron } from "playwright";
 import fs from "node:fs/promises";
@@ -12,12 +12,20 @@ import { closeElectronApp } from "./helpers/electron-processes.mjs";
 test.skip(nodeProcess.env.LJ_RUN_STORAGE_LOCATION !== "1", "Real Electron storage test is opt-in");
 test.use({ trace: "off", screenshot: "off", video: "off" });
 
-test("centralizes legacy files and keeps IndexedDB and offline videos after a folder change and restart", async () => {
-  test.setTimeout(120_000);
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "lj-storage-location-"));
-  const dataDir = path.join(root, "documents", "LouvorJA Violin");
-  const chosen = path.join(root, "Chosen data folder");
-  const id = "aaaaaaaaaaa";
+const VIDEO = "aaaaaaaaaaa";
+const PRELOAD = path.resolve("e2e/helpers/loopback-network.cjs");
+const ARGS = [
+  "-r",
+  PRELOAD,
+  ".",
+  "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1",
+];
+
+async function output(file, contents) {
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  await fs.writeFile(file, contents);
+}
+function environment(root) {
   const env = {
     ...nodeProcess.env,
     LJ_E2E_USER_DATA: root,
@@ -25,24 +33,16 @@ test("centralizes legacy files and keeps IndexedDB and offline videos after a fo
     ELECTRON_DEV: "1",
   };
   delete env.ELECTRON_RUN_AS_NODE;
-  let app;
-
-  async function output(file, contents) {
-    await fs.mkdir(path.dirname(file), { recursive: true });
-    await fs.writeFile(file, contents);
-  }
-  async function launch() {
-    app = await electron.launch({
-      cwd: nodeProcess.cwd(),
-      args: [
-        "-r",
-        path.resolve("e2e/helpers/loopback-network.cjs"),
-        ".",
-        "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1",
-      ],
-      env,
-      timeout: 60_000,
-    });
+  return env;
+}
+async function launch(root) {
+  const app = await electron.launch({
+    cwd: nodeProcess.cwd(),
+    args: ARGS,
+    env: environment(root),
+    timeout: 60_000,
+  });
+  try {
     let page;
     await expect
       .poll(
@@ -53,52 +53,124 @@ test("centralizes legacy files and keeps IndexedDB and offline videos after a fo
         { timeout: 60_000 }
       )
       .toBe(true);
-    await page.waitForFunction(() => Boolean(window.louvorjaApi?.storage));
+    await page.waitForFunction(() => Boolean(window.louvorjaApi?.storage?.locations));
     await page
       .locator('[data-testid="modules-ready"]')
       .waitFor({ state: "attached", timeout: 60_000 });
-    return page;
+    return { app, page };
+  } catch (error) {
+    await closeElectronApp(app, { timeoutMs: 15_000 });
+    throw error;
   }
-  async function database(page, write) {
-    return page.evaluate(
-      (value) =>
-        new Promise((resolve, reject) => {
-          const request = indexedDB.open("storage-location-fixture", 1);
-          request.onupgradeneeded = () => request.result.createObjectStore("data");
-          request.onerror = () => reject(request.error);
-          request.onsuccess = () => {
-            const db = request.result;
-            const tx = db.transaction("data", value ? "readwrite" : "readonly");
-            const operation = value
-              ? tx.objectStore("data").put(value, "saved")
+}
+async function close(session) {
+  if (!session) return;
+  expect((await closeElectronApp(session.app, { timeoutMs: 15_000 })).forced).toBe(false);
+}
+async function database(page, write) {
+  return page.evaluate(
+    (value) =>
+      new Promise((resolve, reject) => {
+        const request = indexedDB.open("storage-location-fixture", 1);
+        request.onupgradeneeded = () => request.result.createObjectStore("data");
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          const db = request.result;
+          const tx = db.transaction("data", value !== undefined ? "readwrite" : "readonly");
+          const operation =
+            value !== undefined
+              ? tx
+                  .objectStore("data")
+                  .put({ owner: value, blob: new Blob([`private bytes: ${value}`]) }, "saved")
               : tx.objectStore("data").get("saved");
-            tx.oncomplete = () => {
-              db.close();
-              resolve(operation.result);
-            };
-            tx.onerror = () => {
-              db.close();
-              reject(tx.error);
-            };
+          tx.oncomplete = async () => {
+            db.close();
+            const result =
+              value !== undefined
+                ? { owner: value, blob: `private bytes: ${value}` }
+                : operation.result;
+            resolve(
+              result
+                ? {
+                    owner: result.owner,
+                    blob: result.blob instanceof Blob ? await result.blob.text() : result.blob,
+                  }
+                : null
+            );
           };
-        }),
-      write
-    );
-  }
-  async function expectSingleInstance() {
-    const second = await promisify(execFile)(
-      app.process().spawnfile,
-      ["-r", path.resolve("e2e/helpers/loopback-network.cjs"), "."],
-      { cwd: nodeProcess.cwd(), env, timeout: 15_000 }
-    );
-    expect(second.stderr).toContain("Segunda instância detectada");
-    expect(await app.evaluate(() => true)).toBe(true);
-  }
-
+          tx.onerror = () => {
+            db.close();
+            reject(tx.error);
+          };
+        };
+      }),
+    write
+  );
+}
+async function locations(session) {
+  return session.page.evaluate(() => window.louvorjaApi.storage.locations());
+}
+async function assertSingleInstance(session, root) {
+  const second = await promisify(execFile)(session.app.process().spawnfile, ["-r", PRELOAD, "."], {
+    cwd: nodeProcess.cwd(),
+    env: environment(root),
+    timeout: 15_000,
+  });
+  expect(second.stderr).toContain("Segunda instância detectada");
+  expect(await session.app.evaluate(() => true)).toBe(true);
+}
+async function seedIndexedDB(root, profile) {
+  const seed = path.join(root, "seed-profile.cjs");
+  await output(
+    seed,
+    `
+    const { app, BrowserWindow } = require("electron");
+    app.setPath("userData", process.env.LJ_E2E_PROFILE_SEED);
+    app.setPath("sessionData", process.env.LJ_E2E_PROFILE_SEED);
+    app.whenReady().then(() => {
+      const window = new BrowserWindow({ show: false });
+      window.loadURL("http://localhost:5002");
+    });
+    app.on("window-all-closed", () => app.quit());
+  `
+  );
+  await fs.mkdir(profile, { recursive: true });
+  const app = await electron.launch({
+    cwd: nodeProcess.cwd(),
+    env: { ...environment(root), LJ_E2E_PROFILE_SEED: profile },
+    args: ["-r", PRELOAD, seed, ARGS.at(-1)],
+  });
   try {
+    const page = await app.firstWindow();
+    await page.waitForURL("http://localhost:5002/**");
+    await database(page, "legacy profile");
+  } finally {
+    await close({ app });
+  }
+}
+async function fetchVideo(session) {
+  return session.app.evaluate(async ({ net }, video) => {
+    const response = await net.fetch(`louvorja://onlinevideo/${video}.mp4`, {
+      headers: { Range: "bytes=3-5" },
+    });
+    return { status: response.status, body: await response.text() };
+  }, VIDEO);
+}
+
+test("migrates the private profile once and changes only media/video roots after restart", async () => {
+  test.setTimeout(180_000);
+  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "lj-storage-location-")));
+  const legacy = path.join(root, "legacy-all-data");
+  const profile = path.join(root, "profile");
+  const chosenMedia = path.join(root, "Chosen collection");
+  const chosenVideos = path.join(root, "Chosen videos");
+  let session;
+  try {
+    await output(path.join(root, "data-location.json"), JSON.stringify({ dataDir: legacy }));
     await output(
-      path.join(root, "storage", "user_data.json"),
+      path.join(legacy, "storage", "user_data.json"),
       JSON.stringify({
+        fixturePrivate: "preferences",
         options: {
           telemetry: false,
           check_updates_on_start: false,
@@ -107,110 +179,230 @@ test("centralizes legacy files and keeps IndexedDB and offline videos after a fo
         },
       })
     );
-    await output(path.join(root, "json_db", "storage-fixture.json"), '{"offline":true}');
-    await output(path.join(root, "bin", "fixture-tool"), "tool");
-    await output(path.join(root, "online_videos", `${id}.mp4`), "0123456789");
-    await output(path.join(root, "online_videos", `${id}.keep`), "");
-
-    // Cria um IndexedDB real no endereço usado pelas versões anteriores.
-    const seed = path.join(root, "seed-profile.cjs");
+    const privateFiles = {
+      "library/fixture.json": '{"private":"playlist"}',
+      "canva/fixture.pdf": "private canva",
+      "json_db/storage-fixture.json": '{"offline":true}',
+      "bin/fixture-tool": "tool",
+    };
+    for (const [name, value] of Object.entries(privateFiles))
+      await output(path.join(legacy, name), value);
+    await output(path.join(legacy, "files", "musics", "pt", "fixture.opus"), "official song");
+    await output(path.join(legacy, "files", "library", "media", "private.jpg"), "private upload");
+    await output(path.join(legacy, "files", "notes.txt"), "unknown file");
+    await output(path.join(legacy, "Videos", `${VIDEO}.mp4`), "0123456789");
+    await output(path.join(legacy, "Videos", `${VIDEO}.keep`), "");
     await output(
-      seed,
-      `
-      const { app, BrowserWindow } = require("electron");
-      app.setPath("userData", process.env.LJ_E2E_USER_DATA);
-      app.setPath("sessionData", process.env.LJ_E2E_USER_DATA);
-      app.whenReady().then(() => {
-        const window = new BrowserWindow({ show: false });
-        window.loadURL("http://localhost:5002");
-      });
-      app.on("window-all-closed", () => app.quit());
-    `
+      path.join(legacy, "Videos", ".partial", VIDEO, "private.part"),
+      "unfinished download"
     );
-    app = await electron.launch({
-      cwd: nodeProcess.cwd(),
-      env,
-      args: [
-        "-r",
-        path.resolve("e2e/helpers/loopback-network.cjs"),
-        seed,
-        "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1",
-      ],
-    });
-    const seedPage = await app.firstWindow();
-    await seedPage.waitForURL("http://localhost:5002/**");
-    await database(seedPage, "legacy offline database");
-    expect((await closeElectronApp(app, { timeoutMs: 15_000 })).forced).toBe(false);
-    app = null;
+    await seedIndexedDB(root, path.join(legacy, ".electron"));
 
-    let page = await launch();
-    await expectSingleInstance();
-    expect(await database(page)).toBe("legacy offline database");
-    const profile = await app.evaluate(({ app }) => ({
-      userData: app.getPath("userData"),
-      sessionData: app.getPath("sessionData"),
-    }));
-    expect(profile).toEqual({
-      userData: path.join(dataDir, ".electron"),
-      sessionData: path.join(dataDir, ".electron"),
+    session = await launch(root);
+    await assertSingleInstance(session, root);
+    expect(await database(session.page)).toEqual({
+      owner: "legacy profile",
+      blob: "private bytes: legacy profile",
     });
-    expect(await page.evaluate(() => window.louvorjaApi.storage.stats())).toMatchObject({
-      dataDir,
+    expect(
+      await session.app.evaluate(({ app }) => [app.getPath("userData"), app.getPath("sessionData")])
+    ).toEqual([path.join(profile, ".electron"), path.join(profile, ".electron")]);
+    expect(await locations(session)).toMatchObject({
+      profileDir: profile,
+      mediaDir: path.join(legacy, "files"),
+      videosDir: path.join(legacy, "Videos"),
       restartRequired: false,
     });
-    expect(await page.evaluate(() => window.louvorjaApi.onlineVideo.list())).toEqual([
-      expect.objectContaining({ id, kept: true, size: 10 }),
-    ]);
-    expect(await fs.readFile(path.join(dataDir, "bin", "fixture-tool"), "utf8")).toBe("tool");
-    expect(await fs.readFile(path.join(dataDir, "json_db", "storage-fixture.json"), "utf8")).toBe(
-      '{"offline":true}'
-    );
-    await database(page, "offline database survives");
-
-    await page.evaluate(
-      (dir) => window.louvorjaApi.storage.setDataDir(dir, { moveExisting: true }),
-      chosen
-    );
-    expect(await page.evaluate(() => window.louvorjaApi.storage.stats())).toMatchObject({
-      dataDir: chosen,
+    expect(
+      JSON.parse(await fs.readFile(path.join(root, "storage-layout.json"), "utf8"))
+    ).toMatchObject({ version: 1 });
+    for (const [name, value] of Object.entries(privateFiles)) {
+      expect(await fs.readFile(path.join(profile, name), "utf8")).toBe(value);
+      expect(await fs.readFile(path.join(legacy, name), "utf8")).toBe(value);
+    }
+    expect(
+      await fs.readFile(path.join(profile, "attachments", "media", "private.jpg"), "utf8")
+    ).toBe("private upload");
+    expect((await fs.stat(path.join(legacy, ".electron", "IndexedDB"))).isDirectory()).toBe(true);
+    await database(session.page, "current profile");
+    await session.page.evaluate(() => window.louvorjaApi.storage.completeSetup());
+    await session.page.evaluate((value) => window.louvorjaApi.storage.configureLocations(value), {
+      mediaDir: chosenMedia,
+      videosDir: chosenVideos,
+      mediaAction: "copy",
+      videosAction: "copy",
+    });
+    expect(await locations(session)).toMatchObject({
+      profileDir: profile,
+      mediaDir: path.join(legacy, "files"),
+      videosDir: path.join(legacy, "Videos"),
       restartRequired: true,
     });
-    expect(await page.evaluate((video) => window.louvorjaApi.onlineVideo.has(video), id)).toBe(
-      true
-    );
-    const ranged = await app.evaluate(async ({ net }, video) => {
-      const response = await net.fetch(`louvorja://onlinevideo/${video}.mp4`, {
-        headers: { Range: "bytes=3-5" },
-      });
-      return { status: response.status, body: await response.text() };
-    }, id);
-    expect(ranged).toEqual({ status: 206, body: "345" });
-    expect((await closeElectronApp(app, { timeoutMs: 15_000 })).forced).toBe(false);
-    app = null;
+    expect(await fetchVideo(session)).toEqual({ status: 206, body: "345" });
+    await close(session);
+    session = null;
 
-    page = await launch();
-    await expectSingleInstance();
-    expect(await app.evaluate(({ app }) => app.getPath("userData"))).toBe(
-      path.join(chosen, ".electron")
-    );
-    expect(await database(page)).toBe("offline database survives");
-    expect(await page.evaluate(() => window.louvorjaApi.storage.stats())).toMatchObject({
-      dataDir: chosen,
+    session = await launch(root);
+    await assertSingleInstance(session, root);
+    expect(await locations(session)).toMatchObject({
+      profileDir: profile,
+      mediaDir: chosenMedia,
+      videosDir: chosenVideos,
       restartRequired: false,
+      changeError: null,
     });
-    expect(await page.evaluate((video) => window.louvorjaApi.onlineVideo.has(video), id)).toBe(
-      true
+    expect(await session.app.evaluate(({ app }) => app.getPath("userData"))).toBe(
+      path.join(profile, ".electron")
     );
-    expect(await fs.readFile(path.join(chosen, "Videos", `${id}.mp4`), "utf8")).toBe("0123456789");
-    expect(await fs.readFile(path.join(chosen, "json_db", "storage-fixture.json"), "utf8")).toBe(
-      '{"offline":true}'
+    expect(await database(session.page)).toEqual({
+      owner: "current profile",
+      blob: "private bytes: current profile",
+    });
+    expect(await fetchVideo(session)).toEqual({ status: 206, body: "345" });
+    expect(
+      await session.page.evaluate(() => window.louvorjaApi.userStore.read("user_data"))
+    ).toMatchObject({ fixturePrivate: "preferences" });
+    for (const [name, value] of Object.entries(privateFiles))
+      expect(await fs.readFile(path.join(profile, name), "utf8")).toBe(value);
+    expect(await fs.readFile(path.join(chosenMedia, "musics", "pt", "fixture.opus"), "utf8")).toBe(
+      "official song"
     );
-    expect(await fs.readFile(path.join(chosen, "bin", "fixture-tool"), "utf8")).toBe("tool");
-    await expect(fs.stat(path.join(dataDir, ".electron"))).rejects.toMatchObject({
+    expect(await fs.readFile(path.join(chosenVideos, `${VIDEO}.mp4`), "utf8")).toBe("0123456789");
+    expect(await fs.readFile(path.join(chosenVideos, `${VIDEO}.keep`), "utf8")).toBe("");
+    for (const relative of ["library", ".electron", "storage", "canva", "notes.txt"]) {
+      await expect(fs.stat(path.join(chosenMedia, relative))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+    }
+    await expect(fs.stat(path.join(chosenVideos, ".partial"))).rejects.toMatchObject({
       code: "ENOENT",
     });
+    expect(
+      await fs.readFile(path.join(legacy, "files", "library", "media", "private.jpg"), "utf8")
+    ).toBe("private upload");
+    expect(
+      await fs.readFile(path.join(legacy, "files", "musics", "pt", "fixture.opus"), "utf8")
+    ).toBe("official song");
+    expect(await fs.readFile(path.join(legacy, "Videos", `${VIDEO}.mp4`), "utf8")).toBe(
+      "0123456789"
+    );
+    expect((await fs.stat(path.join(legacy, ".electron", "IndexedDB"))).isDirectory()).toBe(true);
   } finally {
-    if (app) await closeElectronApp(app, { timeoutMs: 15_000 });
+    if (session) await close(session);
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("new profiles keep separate IndexedDB while reusing one collection and one writer lease", async () => {
+  test.setTimeout(180_000);
+  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "lj-storage-accounts-")));
+  const firstRoot = path.join(root, "first-account");
+  const secondRoot = path.join(root, "second-account");
+  let first;
+  let second;
+  try {
+    first = await launch(firstRoot);
+    const defaults = await locations(first);
+    expect(defaults).toMatchObject({
+      profileDir: path.join(firstRoot, "profile"),
+      mediaDir: path.join(firstRoot, "documents", "LouvorJA Violin", "Acervo"),
+      videosDir: path.join(firstRoot, "documents", "LouvorJA Violin", "Videos"),
+      setupCompleted: false,
+      access: { media: { writable: true }, videos: { writable: true } },
+    });
+    await expect(first.page.getByTestId("media-path")).toHaveText(defaults.mediaDir);
+    await expect(first.page.getByTestId("videos-path")).toHaveText(defaults.videosDir);
+    await expect(first.page.getByTestId("profile-path")).toHaveText(defaults.profileDir);
+    await expect(
+      first.page.getByTestId("profile-path").locator("..").getByRole("button")
+    ).toHaveCount(1);
+    await expect(
+      first.page.getByTestId("media-path").locator("..").getByRole("button")
+    ).toHaveCount(2);
+    await expect(
+      first.page.getByTestId("videos-path").locator("..").getByRole("button")
+    ).toHaveCount(2);
+    await expect(first.page.locator(".storage-locations").getByRole("checkbox")).not.toBeChecked();
+    expect(await database(first.page)).toBeNull();
+    await database(first.page, "account one");
+    await first.page.getByTestId("save-storage").click();
+    await expect(first.page.locator(".storage-locations")).toHaveCount(0);
+    expect(await locations(first)).toMatchObject({ setupCompleted: true });
+    await output(
+      path.join(defaults.mediaDir, "musics", "pt", "fixture.opus"),
+      "shared official song"
+    );
+    await output(path.join(defaults.videosDir, `${VIDEO}.mp4`), "0123456789");
+
+    second = await launch(secondRoot);
+    expect(await database(second.page)).toBeNull();
+    await database(second.page, "account two");
+    await second.page.evaluate(() => window.louvorjaApi.storage.completeSetup());
+    await second.page.evaluate((value) => window.louvorjaApi.storage.configureLocations(value), {
+      mediaDir: defaults.mediaDir,
+      videosDir: defaults.videosDir,
+      mediaAction: "reuse",
+      videosAction: "reuse",
+    });
+    await close(second);
+    second = null;
+    second = await launch(secondRoot);
+    expect(await locations(second)).toMatchObject({
+      profileDir: path.join(secondRoot, "profile"),
+      mediaDir: defaults.mediaDir,
+      videosDir: defaults.videosDir,
+      restartRequired: false,
+      access: {
+        media: { writable: false, shared: true, reason: "in-use" },
+        videos: { writable: false, shared: true, reason: "in-use" },
+      },
+    });
+    expect(await database(first.page)).toEqual({
+      owner: "account one",
+      blob: "private bytes: account one",
+    });
+    expect(await database(second.page)).toEqual({
+      owner: "account two",
+      blob: "private bytes: account two",
+    });
+    expect(await fetchVideo(second)).toEqual({ status: 206, body: "345" });
+    expect(
+      await second.page.evaluate(() =>
+        window.louvorjaApi.storage.checkLocal(["musics/pt/fixture.opus"])
+      )
+    ).toMatchObject({ "musics/pt/fixture.opus": "own" });
+    expect(await second.page.evaluate((id) => window.louvorjaApi.onlineVideo.keep(id), VIDEO)).toBe(
+      false
+    );
+    expect(
+      await second.page.evaluate(async () => {
+        try {
+          await window.louvorjaApi.storage.clearFiles();
+          return "unexpected success";
+        } catch (error) {
+          return error.message;
+        }
+      })
+    ).toContain("somente para leitura");
+    expect(
+      await fs.readFile(path.join(defaults.mediaDir, "musics", "pt", "fixture.opus"), "utf8")
+    ).toBe("shared official song");
+    await close(first);
+    first = null;
+    await close(second);
+    second = null;
+    second = await launch(secondRoot);
+    expect(await locations(second)).toMatchObject({
+      access: { media: { writable: true, shared: true }, videos: { writable: true, shared: true } },
+    });
+    expect(await database(second.page)).toEqual({
+      owner: "account two",
+      blob: "private bytes: account two",
+    });
+    expect(await fetchVideo(second)).toEqual({ status: 206, body: "345" });
+  } finally {
+    if (second) await close(second);
+    if (first) await close(first);
     await fs.rm(root, { recursive: true, force: true });
   }
 });

@@ -16,7 +16,7 @@ const pathsReal = require("../../paths.js");
  * Mesma abordagem do `backgroundSoundVolume.spec.js`: app falso, renderer
  * simulado (leitura via `rendererRequests.request`; comandos via `safeSend`
  * no `webContents` falso). O upload é diferente — ele encosta no disco: o
- * `paths.filesDir` é mockado para um tmpdir e o `req` é um `Readable` de
+ * `paths.privateMediaDir` é mockado para um tmpdir e o `req` é um `Readable` de
  * verdade, porque a rota faz stream (não passa por body-parser).
  */
 const handlers = { get: new Map(), post: new Map() };
@@ -28,10 +28,10 @@ let userData = { modules: { media_library: { playlist: [] } } };
 
 const mocks = vi.hoisted(() => ({ root: "" }));
 
-// `paths.filesDir` aponta para um tmpdir (o upload encosta no disco). spyOn no
+// `paths.privateMediaDir` aponta para um tmpdir (o upload encosta no disco). spyOn no
 // módulo real — os specs usam createRequire (require nativo), então vi.mock
 // não intercepta; mesmo molde do jsonCache/docStore no musicLibrary.spec.
-vi.spyOn(pathsReal, "filesDir").mockImplementation(() => mocks.root);
+vi.spyOn(pathsReal, "privateMediaDir").mockImplementation(() => path.join(mocks.root, "private", "library", "media"));
 
 function response() {
   return {
@@ -519,6 +519,8 @@ describe("POST /api/media-library/upload", () => {
     expect(gravado.toString()).toBe("JPEG-BYTES-FIM");
     // Dentro da subpasta combinada, com a extensão do nome.
     expect(res.body.item.path).toContain(`${path.sep}library${path.sep}media${path.sep}`);
+    expect(res.body.item.path.startsWith(path.join(mocks.root, "private"))).toBe(true);
+    expect(await fs.readdir(mocks.root)).toEqual(["private"]);
     expect(res.body.item.path.endsWith(".jpeg")).toBe(true);
     // O renderer é avisado para registrar na biblioteca.
     expect(enviados.at(-1)[1]).toMatchObject({ action: "saved", record: { id: res.body.item.id } });

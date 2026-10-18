@@ -82,4 +82,4 @@ function prepareProfile({ legacyDir, sourceDir, targetDir }) {
   return targetDir;
 }
 
-module.exports = { DATA_ENTRIES, migrateLegacyData, prepareProfile, moveMissing };
+module.exports = { DATA_ENTRIES, PROFILE_ENTRIES, migrateLegacyData, prepareProfile, moveMissing };

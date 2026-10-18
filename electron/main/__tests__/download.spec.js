@@ -88,6 +88,60 @@ describe("download.checkConnection", () => {
 });
 
 describe("download.startDownload", () => {
+  beforeEach(() => {
+    vi.spyOn(require("../storageAccess.js"), "assertWritable").mockImplementation(() => {});
+    require("../download/index.js").resumeAfterShutdownFailure();
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it("recusa outro escritor antes de varrer arquivos ou criar a fila", async () => {
+    const access = require("../storageAccess.js");
+    access.assertWritable.mockImplementation(() => { throw new Error("somente leitura"); });
+    const scan = vi.spyOn(require("../download/integrity.js"), "diff");
+    await expect(require("../download/index.js").startDownload([], null)).rejects.toThrow("somente leitura");
+    expect(access.assertWritable).toHaveBeenCalledWith("media");
+    expect(scan).not.toHaveBeenCalled();
+  });
+
+  it("shutdown invalida a varredura pendente mesmo se o encerramento depois for cancelado", async () => {
+    const download = require("../download/index.js");
+    const { UtilityQueue } = require("../download/utilityQueue.js");
+    vi.spyOn(require("../paths.js"), "filesDir").mockReturnValue(path.join(os.tmpdir(), "lj-download-test-files"));
+    download.setApiConfig({ filesUrl: "https://example.invalid/files" });
+    let finishScan;
+    vi.spyOn(require("../download/integrity.js"), "diff").mockImplementation(() => new Promise((resolve) => { finishScan = resolve; }));
+    const start = vi.spyOn(UtilityQueue.prototype, "start");
+    const entry = { remote: "/images/a.jpg", local: "images/a.jpg" };
+    const pending = download.startDownload([entry], null).then(() => "unexpected success", (error) => error);
+    await download.shutdown();
+    await expect(download.startDownload([], null)).rejects.toThrow("encerrando");
+    download.resumeAfterShutdownFailure();
+    finishScan({ missing: [entry], damaged: [], ok: [] });
+    expect((await pending).message).toContain("cancelado pelo encerramento");
+    expect(start).not.toHaveBeenCalled();
+    expect(download.isDownloading()).toBe(false);
+  });
+
+  it("não admite outra fila até observar a saída do utility anterior", async () => {
+    const download = require("../download/index.js");
+    const { UtilityQueue } = require("../download/utilityQueue.js");
+    vi.spyOn(require("../paths.js"), "filesDir").mockReturnValue(path.join(os.tmpdir(), "lj-download-test-files"));
+    vi.spyOn(require("../download/integrity.js"), "diff").mockImplementation(async (files) => ({ missing: files, damaged: [], ok: [] }));
+    let queue;
+    vi.spyOn(UtilityQueue.prototype, "start").mockImplementation(function () {
+      queue = this; this.running = true; this.child = {}; return Promise.resolve();
+    });
+    download.setApiConfig({ filesUrl: "https://example.invalid/files" });
+    await download.startDownload([{ remote: "/images/a.jpg", local: "images/a.jpg" }], null);
+    queue.running = false;
+    queue.emit("queue-cancelled");
+    expect(download.isDownloading()).toBe(true);
+    await expect(download.startDownload([], null)).rejects.toThrow("processo anterior");
+    queue.workerExitObserved = true;
+    queue.emit("worker-exited");
+    expect(download.isDownloading()).toBe(false);
+  });
+
   it("reserves the start while asynchronous integrity scanning is pending", async () => {
     const download = require("../download/index.js");
     const integrity = require("../download/integrity.js");

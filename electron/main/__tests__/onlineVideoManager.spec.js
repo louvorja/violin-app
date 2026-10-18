@@ -80,6 +80,58 @@ afterEach(() => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
+describe("acervo compartilhado com trabalho privado", () => {
+  it("leitor reaproveita MP4 sem tocar mtime/marca e recusa persistência ou limpeza", async () => {
+    const { manager, run } = make({ canWrite: () => false, canMaintain: () => false });
+    fs.writeFileSync(manager.store.pathFor(A), "ready");
+    const old = new Date(1_000);
+    fs.utimesSync(manager.store.pathFor(A), old, old);
+    expect(await manager.ensure(A, { keep: true })).toMatchObject({ ok: true, cached: true });
+    expect(fs.statSync(manager.store.pathFor(A)).mtimeMs).toBe(1_000);
+    expect(manager.keep(A)).toBe(false);
+    expect(await manager.ensure(B)).toMatchObject({ ok: false, error: { kind: "disk" } });
+    await expect(manager.remove(A)).rejects.toThrow("não permite");
+    await expect(manager.clear()).rejects.toThrow("não permite");
+    expect(run).not.toHaveBeenCalled();
+    expect(manager.store.has(A)).toBe(true);
+  });
+
+  it("escritor de raiz compartilhada pode baixar mas não aplica a cota privada", async () => {
+    const { manager } = make({ canWrite: () => true, canMaintain: () => false, maxBytes: 1 });
+    fs.writeFileSync(manager.store.pathFor(A), "previous video");
+    expect((await manager.ensure(B)).ok).toBe(true);
+    expect(manager.store.has(A)).toBe(true);
+    expect(manager.store.has(B)).toBe(true);
+  });
+
+  it("avisa falta de espaço no volume privado mesmo com vídeos em outro volume", async () => {
+    const workDir = path.join(dir, "work");
+    const { manager, run } = make({ workDir, freeBytes: async (root) => root === workDir ? 0 : MIN_FREE_BYTES * 10 });
+    expect(await manager.ensure(A)).toMatchObject({ ok: false, error: { kind: "disk" } });
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("um gerenciador não limpa trilhas da outra conta e usa seu próprio cache do yt-dlp", async () => {
+    const videos = path.join(dir, "videos");
+    const firstWork = path.join(dir, "first");
+    const secondWork = path.join(dir, "second");
+    const first = make({ dir: videos, workDir: firstWork });
+    const second = make({ dir: videos, workDir: secondWork });
+    fs.mkdirSync(path.join(firstWork, ".stream", A), { recursive: true });
+    fs.writeFileSync(path.join(firstWork, ".stream", A, "video.mp4"), "playing");
+    await second.manager.init();
+    expect(fs.readFileSync(path.join(firstWork, ".stream", A, "video.mp4"), "utf8")).toBe("playing");
+    expect((await second.manager.ensure(B)).ok).toBe(true);
+    expect(second.run.mock.calls[0][0]).toMatchObject({
+      outDir: path.join(secondWork, ".partial", B),
+      cacheDir: path.join(secondWork, ".ytdlp-cache"),
+    });
+    expect((await first.manager.ensure(B)).cached).toBe(true);
+    expect(first.run).not.toHaveBeenCalled();
+    await Promise.all([first.manager.close(), second.manager.close()]);
+  });
+});
+
 describe("ensure — caminho feliz", () => {
   it("encerra um download e aguarda as ferramentas antes de soltar a pasta sem apagar vídeos offline", async () => {
     const idle = deferred();
@@ -1390,6 +1442,22 @@ describe("stream (tocar já, enquanto baixa uma vez só)", () => {
   }
 
   const read = async (served) => Buffer.from(await new Response(served.body).arrayBuffer());
+
+  it("leitor continua streaming privado sem publicar MP4 na pasta compartilhada", async () => {
+    const shared = path.join(dir, "shared");
+    const workDir = path.join(dir, "private");
+    const { manager, mux, video } = makeStream({ cfg: {
+      dir: shared, workDir, canWrite: () => false, canMaintain: () => false,
+    } });
+    expect(await manager.stream(A)).toMatchObject({ ok: true, cached: false });
+    const response = manager.serveStream(A, "video", null);
+    expect(await read(response)).toEqual(video);
+    await vi.waitFor(() => expect(manager.diagnosticSnapshot().online_video_active_count).toBe(0));
+    expect(fs.existsSync(shared)).toBe(false);
+    expect(mux).not.toHaveBeenCalled();
+    expect(fs.existsSync(path.join(workDir, ".stream", A))).toBe(true);
+    await manager.close();
+  });
 
   it("mede resolução e abertura separadamente, sem confundir cache com rede", async () => {
     let clock = 0;

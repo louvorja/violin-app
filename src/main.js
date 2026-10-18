@@ -4,6 +4,11 @@ const profile = getRendererProfile(window.location);
 // Antes do primeiro quadro: o iOS 26 tira a cor da barra de status do <body>.
 if (profile === "shell") document.body.classList.add("lj-shell-body");
 const bootstrap = (async () => {
+  if (profile === "shell" && window.louvorjaApi?.storage.privatePathMappings) {
+    const mappings = await window.louvorjaApi.storage.privatePathMappings();
+    const { migratePrivateStorageReferences } = await import("@/helpers/PrivateStorageMigration");
+    await migratePrivateStorageReferences(mappings);
+  }
   // Na nova abertura aplica código que já está pronto antes de ler/escrever dados.
   // Se a instalação ainda está baixando, abre o app e oferece o aviso persistente.
   if (import.meta.env.PROD && import.meta.env.VITE_TARGET !== "desktop" && !window.louvorjaApi) {

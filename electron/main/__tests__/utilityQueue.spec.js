@@ -171,9 +171,29 @@ describe("download utility process", () => {
     emit("ready");
     emit("started");
     await vi.advanceTimersByTimeAsync(2000);
+    let exited = false;
+    void completion.then(() => { exited = true; });
+    await Promise.resolve();
+    expect(exited).toBe(false);
+    child.emit("exit", 0);
     await completion;
     expect(cancelled).toHaveBeenCalledOnce();
     expect(child.kill).toHaveBeenCalledOnce();
+  });
+
+  it("shutdown falha explicitamente se kill é recusado e nenhum exit foi observado", async () => {
+    vi.useFakeTimers();
+    const { queue, child } = fixture({ cancelTimeoutMs: 10, exitTimeoutMs: 50 });
+    child.kill.mockReturnValue(false);
+    queue.start();
+    const closing = queue.shutdown().then(() => "unexpected success", (error) => error);
+    await vi.advanceTimersByTimeAsync(60);
+    expect(await closing).toMatchObject({ code: "DOWNLOAD_WORKER_STILL_RUNNING" });
+    expect(queue.workerExitObserved).toBe(false);
+    expect(queue.killResult).toBe("rejected");
+    // O processo que continua vivo não é tratado como uma gravação encerrada.
+    child.emit("exit", 0);
+    await expect(queue.shutdown()).resolves.toBeUndefined();
   });
 
   it("forwards explicit pause/resume while running", async () => {

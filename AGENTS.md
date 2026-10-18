@@ -19,7 +19,7 @@ Em caso de conflito, siga esta ordem:
 - Dados remotos: use `src/helpers/Http.ts` e `src/helpers/Database.ts`; eles concentram timeout, cache e fallback. Não introduza `fetch` avulso para dados do produto. Vale para o renderer: no processo main não existe `Http.ts`, e lá o `fetch` do Node é aceito com timeout e validação de fronteira no próprio módulo (ex.: `electron/main/canva/`).
 - Estado e preferências: use `AppData`/`UserData` e as chaves de `src/constants/UserDataKeys.ts`; não crie chaves literais novas. Exceção: segredo de terceiro não entra no `user_data` (que é sincronizado entre janelas) — vai para um arquivo próprio do `userStore`, cifrado.
 - Janelas: envie eventos semânticos por `Broadcast`; não acople componentes a `BroadcastChannel` diretamente.
-- Armazenamento desktop: todos os dados usam `paths.dataDir()` (Documentos/LouvorJA Violin ou a pasta escolhida); vídeos em `Videos/`, perfil Electron em `.electron/`. O endereço do sistema guarda apenas a âncora e o lock. Mudança do perfil termina no próximo boot.
+- Armazenamento desktop: `paths.dataDir()` é o perfil privado fixo em `<appData>/LouvorJA Violin/profile`, com IndexedDB em `.electron/`. Acervo em `paths.mediaDir()` e vídeos em `paths.videosDir()` têm pastas configuráveis independentes; mudanças são aplicadas no próximo boot por cópia verificada, preservando a origem. `storageAccess` permite um escritor por pasta e desativa limpeza de acervo compartilhado. Classic é fonte opcional somente de leitura. Não grave dados pessoais no acervo.
 
 ## Guardrails de alteração
 

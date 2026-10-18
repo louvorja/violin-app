@@ -12,6 +12,23 @@ const env = {
 };
 
 describe("windowsInstallScope", () => {
+  it("reconhece instalação para todos fora de Program Files pelo marcador do instalador", () => {
+    const reads = [];
+    expect(installRequiresWindowsElevation({
+      platform: "win32", execPath: "D:\\LouvorJA\\LouvorJA Violin.exe", env,
+      readFile: (file) => { reads.push(file); return JSON.stringify({ version: 1, scope: "machine" }); },
+    })).toBe(true);
+    expect(reads).toEqual(["D:\\LouvorJA\\resources\\install-scope.json"]);
+  });
+
+  it("marcador inválido não substitui a detecção legada de pasta protegida", () => {
+    for (const value of ["invalid", '{"version":9,"scope":"machine"}', '{"version":1,"scope":"user"}']) {
+      expect(installRequiresWindowsElevation({
+        platform: "win32", execPath: "C:\\Program Files\\LouvorJA.exe", env, readFile: () => value,
+      })).toBe(true);
+    }
+  });
+
   it("não sinaliza instalações fora do Windows", () => {
     expect(
       installRequiresWindowsElevation({

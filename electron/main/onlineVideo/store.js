@@ -8,7 +8,7 @@ const PARTIAL_DIR = ".partial";
 const PARTIAL_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Vídeos baixados ficam em `Videos/` dentro da pasta de dados do usuário.
+ * Vídeos prontos ficam na pasta de vídeos configurada; parciais no perfil privado.
  * Downloads automáticos são cache: se sumirem, o app baixa de novo.
  *
  * Um vídeo que o operador mandou manter (`keep`) é a exceção: ele o baixou de
@@ -17,8 +17,25 @@ const PARTIAL_MAX_AGE_MS = 24 * 60 * 60 * 1000;
  *
  * @param {string} dir  pasta do cache (criada sob demanda)
  */
-function createStore(dir) {
-  const partialRoot = path.join(dir, PARTIAL_DIR);
+function createStore(dir, { workDir = dir, canWrite = () => true, canMaintain = () => true } = {}) {
+  const partialRoot = path.join(workDir, PARTIAL_DIR);
+
+  function regularRoot() {
+    try { return fs.lstatSync(dir).isDirectory(); } catch { return false; }
+  }
+
+  async function unlinkRegular(file) {
+    if (!canWrite() || !regularRoot()) return false;
+    try {
+      if (!(await fs.lstat(file)).isFile()) return false;
+      if (!canWrite()) return false;
+      await fs.unlink(file);
+      return true;
+    } catch (error) {
+      if (error.code === "ENOENT") return false;
+      throw error;
+    }
+  }
 
   function pathFor(id) {
     if (!isVideoId(id)) throw new Error("ID de vídeo inválido");
@@ -37,7 +54,9 @@ function createStore(dir) {
 
   function has(id) {
     try {
-      return fs.statSync(pathFor(id)).size > 0;
+      if (!regularRoot()) return false;
+      const stat = fs.lstatSync(pathFor(id));
+      return stat.isFile() && stat.size > 0;
     } catch {
       return false;
     }
@@ -45,9 +64,12 @@ function createStore(dir) {
 
   /** Manda manter o vídeo baixado. Sem o arquivo do vídeo não há o que manter. */
   function keep(id) {
+    if (!canWrite()) return false;
     if (!has(id)) return false;
     try {
-      fs.writeFileSync(keepPathFor(id), "");
+      try { fs.writeFileSync(keepPathFor(id), "", { flag: "wx" }); } catch (error) {
+        if (error.code !== "EEXIST" || !fs.lstatSync(keepPathFor(id)).isFile()) return false;
+      }
       return true;
     } catch {
       return false;
@@ -56,7 +78,8 @@ function createStore(dir) {
 
   function isKept(id) {
     try {
-      return fs.statSync(keepPathFor(id)).isFile();
+      if (!regularRoot()) return false;
+      return fs.lstatSync(keepPathFor(id)).isFile();
     } catch {
       return false;
     }
@@ -65,6 +88,8 @@ function createStore(dir) {
   /** Marca o vídeo como usado agora; o despejo descarta o que foi visto há mais tempo. */
   function touch(id) {
     try {
+      if (!canWrite()) return;
+      if (!has(id)) return;
       const now = new Date();
       fs.utimesSync(pathFor(id), now, now);
     } catch {
@@ -73,6 +98,7 @@ function createStore(dir) {
   }
 
   async function list() {
+    if (!regularRoot()) return [];
     let names;
     try {
       names = await fs.readdir(dir);
@@ -82,14 +108,14 @@ function createStore(dir) {
     const kept = new Set();
     for (const name of names) {
       const k = /^([A-Za-z0-9_-]{11})\.keep$/.exec(name);
-      if (k) kept.add(k[1]);
+      if (k && isKept(k[1])) kept.add(k[1]);
     }
     const out = [];
     for (const name of names) {
       const m = /^([A-Za-z0-9_-]{11})\.mp4$/.exec(name);
       if (!m) continue;
       try {
-        const st = await fs.stat(path.join(dir, name));
+        const st = await fs.lstat(path.join(dir, name));
         if (st.isFile()) {
           out.push({ id: m[1], size: st.size, usedAt: st.mtimeMs, kept: kept.has(m[1]) });
         }
@@ -104,17 +130,19 @@ function createStore(dir) {
     return (await list()).reduce((sum, v) => sum + v.size, 0);
   }
 
-  async function remove(id) {
-    await fs.remove(pathFor(id));
-    await fs.remove(keepPathFor(id));
+  async function remove(id, { downloadOwned = false } = {}) {
+    if (!(downloadOwned ? canWrite() : canMaintain())) throw new Error("Esta pasta de vídeos não permite remoção por este perfil.");
+    await unlinkRegular(pathFor(id));
+    await unlinkRegular(keepPathFor(id));
     await fs.remove(partialDirFor(id));
   }
 
   async function clear() {
+    if (!canMaintain()) throw new Error("Esta pasta de vídeos não permite limpeza por este perfil.");
     const items = await list();
     for (const v of items) {
-      await fs.remove(pathFor(v.id));
-      await fs.remove(keepPathFor(v.id));
+      await unlinkRegular(pathFor(v.id));
+      await unlinkRegular(keepPathFor(v.id));
     }
     await fs.remove(partialRoot);
     return items.length;
@@ -127,6 +155,7 @@ function createStore(dir) {
    * operador guardou.
    */
   async function evict({ maxBytes, inUse = [] }) {
+    if (!canMaintain()) return [];
     if (!(maxBytes > 0)) return [];
     const protectedIds = new Set(inUse);
     const items = (await list()).filter((v) => !v.kept);
@@ -137,9 +166,10 @@ function createStore(dir) {
       .sort((a, b) => a.usedAt - b.usedAt);
     for (const v of candidates) {
       if (total <= maxBytes) break;
-      await fs.remove(pathFor(v.id));
-      total -= v.size;
-      removed.push(v.id);
+      if (await unlinkRegular(pathFor(v.id))) {
+        total -= v.size;
+        removed.push(v.id);
+      }
     }
     return removed;
   }
@@ -148,6 +178,7 @@ function createStore(dir) {
   async function sweepPartials(now = Date.now()) {
     let names;
     try {
+      if (!(await fs.lstat(partialRoot)).isDirectory()) return 0;
       names = await fs.readdir(partialRoot);
     } catch {
       return 0;
@@ -156,8 +187,8 @@ function createStore(dir) {
     for (const name of names) {
       const full = path.join(partialRoot, name);
       try {
-        const st = await fs.stat(full);
-        if (now - st.mtimeMs > PARTIAL_MAX_AGE_MS) {
+        const st = await fs.lstat(full);
+        if (st.isDirectory() && isVideoId(name) && now - st.mtimeMs > PARTIAL_MAX_AGE_MS) {
           await fs.remove(full);
           removed++;
         }

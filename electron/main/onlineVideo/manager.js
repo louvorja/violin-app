@@ -3,6 +3,7 @@
 const fs = require("fs-extra");
 const nodeFs = require("fs");
 const path = require("path");
+const { randomUUID } = require("crypto");
 const { performance } = require("node:perf_hooks");
 const { createStore } = require("./store.js");
 const runner = require("./runner.js");
@@ -95,6 +96,9 @@ async function settleCancelled(promises) {
 function createManager(cfg) {
   const {
     dir,
+    workDir = dir,
+    canWrite = () => true,
+    canMaintain = () => true,
     tools,
     run = runner.run,
     resolve = runner.resolveStreams,
@@ -112,8 +116,8 @@ function createManager(cfg) {
   } = cfg;
   let presentationActive = initialPresentationActive === true;
 
-  const store = createStore(dir);
-  const cacheDir = path.join(dir, ".ytdlp-cache");
+  const store = createStore(dir, { workDir, canWrite, canMaintain });
+  const cacheDir = path.join(workDir, ".ytdlp-cache");
   /** @type {Map<string, any>} */
   const jobs = new Map();
   /** Pedidos de URL direta em andamento (tocar já, sem baixar). */
@@ -128,7 +132,13 @@ function createManager(cfg) {
   /** Remoções em curso por vídeo: novo pedido do mesmo ID só começa após a fronteira destrutiva. */
   const removals = new Map();
   const removalGenerations = new Map();
-  const streamDir = path.join(dir, ".stream");
+  const streamDir = path.join(workDir, ".stream");
+  async function availableBytes() {
+    const roots = canWrite() ? [dir, workDir] : [workDir];
+    const values = await Promise.all([...new Set(roots)].map((root) => freeBytes(root)));
+    const known = values.filter((value) => value != null);
+    return known.length ? Math.min(...known) : null;
+  }
   let sessionSweep = null;
   const lanes = {
     foreground: { running: 0, waiters: [] },
@@ -357,7 +367,7 @@ function createManager(cfg) {
         toolPaths = tools.paths();
       }
 
-      const free = await freeBytes(dir);
+      const free = await availableBytes();
       if (free != null && free < MIN_FREE_BYTES) {
         throw new OnlineVideoError("disk", "Pouco espaço livre no disco");
       }
@@ -458,7 +468,7 @@ function createManager(cfg) {
   async function assertRoomFor(links) {
     const sizes = [links.video.size, links.muxed ? 0 : links.audio.size];
     const needed = sizes.every((n) => n > 0) ? Math.max(MIN_FREE_BYTES, (sizes[0] + sizes[1]) * 2.2) : MIN_FREE_BYTES;
-    const free = await freeBytes(dir);
+    const free = await availableBytes();
     if (free != null && free < needed) throw new OnlineVideoError("disk", "Pouco espaço livre no disco");
   }
 
@@ -509,11 +519,28 @@ function createManager(cfg) {
   async function deliver(job, partial, result, startedAt, installedTools) {
     const { id } = job;
     if (job.controller.signal.aborted) throw new OnlineVideoError("cancelled", "Download cancelado");
-    await fs.move(result.file, store.pathFor(id), { overwrite: true });
-    // `fs.move()` pode ter começado no exato instante do abort. Apague a cópia
-    // que acabou de chegar antes de comunicar cancelamento ao chamador.
+    if (!canWrite()) throw new OnlineVideoError("disk", "A pasta de vídeos está em uso por outro perfil ou sem permissão de gravação.");
+    // Trabalho e vídeos podem estar em volumes diferentes. Copiar diretamente
+    // para <id>.mp4 tornaria um arquivo incompleto visível aos outros perfis.
+    const publishing = path.join(dir, `.${id}-${randomUUID()}.publishing`);
+    let published = false;
+    try {
+      await fs.move(result.file, publishing, { overwrite: false });
+      if (job.controller.signal.aborted) throw new OnlineVideoError("cancelled", "Download cancelado");
+      if (!canWrite()) throw new OnlineVideoError("disk", "A pasta de vídeos perdeu a permissão de gravação.");
+      if (await fs.pathExists(store.pathFor(id))) {
+        if (!store.has(id)) throw new OnlineVideoError("disk", "Já existe um item incompatível no destino do vídeo.");
+      } else {
+        await fs.rename(publishing, store.pathFor(id));
+        published = true;
+      }
+    } finally {
+      await fs.remove(publishing);
+    }
+    // O cancelamento pode chegar durante o rename. Só remova o arquivo que
+    // este download publicou; nunca um MP4 já existente no acervo.
     if (job.controller.signal.aborted) {
-      await store.remove(id);
+      if (published) await store.remove(id, { downloadOwned: true });
       throw new OnlineVideoError("cancelled", "Download cancelado");
     }
     await fs.remove(partial);
@@ -524,7 +551,7 @@ function createManager(cfg) {
       /* falha ao liberar espaço nunca invalida o download que deu certo */
     }
     if (job.controller.signal.aborted) {
-      await store.remove(id);
+      if (published) await store.remove(id, { downloadOwned: true });
       throw new OnlineVideoError("cancelled", "Download cancelado");
     }
 
@@ -576,6 +603,7 @@ function createManager(cfg) {
       if (opts.keep) store.keep(id);
       return Promise.resolve({ ok: true, id, url: urlFor(id), size: 0, cached: true, meta: null });
     }
+    if (!canWrite()) return Promise.resolve(fail(new OnlineVideoError("disk", "A pasta de vídeos está em uso por outro perfil ou sem permissão de gravação.")));
 
     const existing = jobs.get(id);
     if (existing && existing.controller.signal.aborted) {
@@ -756,6 +784,7 @@ function createManager(cfg) {
       return withTimings({ ok: true, id, cached: true, video: { url }, audio: { url }, muxed: true, duration: null });
     };
     if (store.has(id)) return cached();
+    if (opts.keep && !canWrite()) return fail(new OnlineVideoError("disk", "A pasta de vídeos está em uso por outro perfil ou sem permissão de gravação."));
     if (!tools.ready()) return fail(new OnlineVideoError("tools", "Ferramentas ainda não instaladas"));
 
     const join = async (job) => {
@@ -849,6 +878,12 @@ function createManager(cfg) {
     job.promise = job.ready
       .then(async (opened) => {
         if (!opened) throw job.openError;
+        // Em uma pasta de leitura, o streaming continua no espaço privado.
+        // Não publique um MP4 nem apague conteúdo compartilhado ao terminar.
+        if (!canWrite()) {
+          await job.session.done;
+          return { ok: true, id, cached: false, streamOnly: true };
+        }
         const partial = store.partialDirFor(id);
         const result = await assemble(job, partial);
         return deliver(job, partial, result, startedAt, false);
@@ -908,6 +943,7 @@ function createManager(cfg) {
    */
   function keep(id) {
     if (!isVideoId(id)) return false;
+    if (!canWrite()) return false;
     const running = jobs.get(id);
     if (running) {
       running.keep = true;
@@ -932,6 +968,7 @@ function createManager(cfg) {
   }
 
   function remove(id) {
+    if (!canMaintain()) return Promise.reject(new Error("Esta pasta de vídeos não permite remoção por este perfil."));
     if (clearing) return clearing.then(() => remove(id));
     if (!isVideoId(id)) return Promise.resolve(false);
     const existing = removals.get(id);
@@ -968,6 +1005,7 @@ function createManager(cfg) {
   }
 
   async function clear() {
+    if (!canMaintain()) throw new Error("Esta pasta de vídeos não permite limpeza por este perfil.");
     if (clearing) return clearing;
     clearGeneration++;
     const jobsToSettle = [...jobs.values()].map((job) => job.promise);

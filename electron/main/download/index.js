@@ -17,6 +17,9 @@ const TRUSTED_MEDIA_ORIGINS = ["https://*.louvorja.com.br"];
 
 let _activeQueue = null;
 let _startingDownload = false;
+let _shuttingDown = false;
+let _shutdownGeneration = 0;
+const _retiringQueues = new Set();
 let _filesUrl = "";
 let _apiUrl = "";
 let _apiToken = "";
@@ -151,10 +154,13 @@ async function checkConnection() {
  * @returns {Promise<{ queued: number }>}
  */
 async function startDownload(files, webContents) {
-  if (_activeQueue || _startingDownload) throw new Error("Download já em andamento");
+  if (_shuttingDown) throw new Error("O aplicativo está encerrando; não é possível iniciar outro download.");
+  require("../storageAccess.js").assertWritable("media");
+  if (_activeQueue || _startingDownload || _retiringQueues.size) throw new Error("Download já em andamento ou aguardando o encerramento do processo anterior.");
   if (!_filesUrl) throw new Error("filesUrl não configurada — chame setApiConfig antes");
 
   _startingDownload = true;
+  const generation = _shutdownGeneration;
   try {
     const filesDir = paths.filesDir();
     const filesUrl = _filesUrl;
@@ -164,6 +170,7 @@ async function startDownload(files, webContents) {
     const entries = _validatedFiles(files, filesDir, filesUrl);
     // Filtrar arquivos já OK sem bloquear o main durante a varredura.
     const { missing, damaged } = await integrity.diff(entries);
+    if (_shuttingDown || generation !== _shutdownGeneration) throw new Error("O preparo do download foi cancelado pelo encerramento do aplicativo.");
     if (paths.filesDir() !== filesDir) {
       throw new Error("Pasta de arquivos alterada durante o preparo do download; tente novamente");
     }
@@ -173,13 +180,14 @@ async function startDownload(files, webContents) {
       return { queued: 0, message: "Todos os arquivos já estão atualizados" };
     }
 
-    _activeQueue = new UtilityQueue({
+    const queue = new UtilityQueue({
       baseUrl: filesUrl,
       apiToken,
       filesDir,
       allowedRemoteOrigins: TRUSTED_MEDIA_ORIGINS,
       reportDiagnostic: workerDiagnostics.record,
     });
+    _activeQueue = queue;
     _activeQueue.add(toDownload.map((entry) => ({
       remote: entry.remote,
       remoteUrl: entry.remoteUrl,
@@ -190,13 +198,18 @@ async function startDownload(files, webContents) {
     _activeQueue.on("progress", (data) => safeSend(webContents, "download:progress", data));
     _activeQueue.on("file-done", (data) => safeSend(webContents, "download:file-done", data));
     _activeQueue.on("file-error", (data) => safeSend(webContents, "download:file-error", data));
+    const retire = () => {
+      if (queue.child && !queue.workerExitObserved) _retiringQueues.add(queue);
+      if (_activeQueue === queue) _activeQueue = null;
+    };
+    queue.on("worker-exited", () => _retiringQueues.delete(queue));
     _activeQueue.on("queue-done", (data) => {
       safeSend(webContents, "download:queue-done", data);
-      _activeQueue = null;
+      retire();
     });
     _activeQueue.on("queue-cancelled", () => {
       safeSend(webContents, "download:queue-cancelled");
-      _activeQueue = null;
+      retire();
     });
 
     // Não await — queue roda em background, eventos reportam progresso
@@ -233,12 +246,16 @@ function resumeDownload() {
 }
 
 function isDownloading() {
-  return !!(_activeQueue && _activeQueue.running);
+  return !!_startingDownload || !!(_activeQueue && _activeQueue.running) || _retiringQueues.size > 0;
 }
 
-function shutdown() {
-  return _activeQueue?.shutdown() || Promise.resolve();
+async function shutdown() {
+  _shuttingDown = true;
+  _shutdownGeneration++;
+  await Promise.all([...new Set([_activeQueue, ..._retiringQueues])].filter(Boolean).map((queue) => queue.shutdown()));
 }
+
+function resumeAfterShutdownFailure() { _shuttingDown = false; }
 
 function checkFiles(files) {
   const entries = _validatedFiles(files, paths.filesDir(), _filesUrl);
@@ -255,6 +272,7 @@ module.exports = {
   resumeDownload,
   isDownloading,
   shutdown,
+  resumeAfterShutdownFailure,
   checkFiles,
   getChildProcessContext: workerDiagnostics.getChildProcessContext,
   setWorkerDiagnosticsEnabled: workerDiagnostics.setEnabled,

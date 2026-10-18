@@ -454,7 +454,7 @@ function handle() {
               return response; // não cacheamos parciais nem erros
             }
 
-            if (!_autoCacheEnabled || !response.body) {
+            if (!_autoCacheEnabled || !require("./storageAccess.js").canWrite("media") || !response.body) {
               return response;
             }
 

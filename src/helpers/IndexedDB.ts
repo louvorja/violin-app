@@ -212,6 +212,38 @@ export default {
     }
   },
 
+  /** Migra registros sem carregar a biblioteca inteira (incluindo os blobs) na memória. */
+  async rewriteRecords(table: string, rewrite: (value: unknown) => unknown): Promise<number> {
+    const tx = (await getDb()).transaction(table, "readwrite");
+    let changed = 0;
+    try {
+      let cursor = await tx.store.openCursor();
+      while (cursor) {
+        const original = cursor.value;
+        const next = rewrite(original);
+        if (next !== original) {
+          await cursor.update(next);
+          changed++;
+        }
+        cursor = await cursor.continue();
+      }
+      await tx.done;
+      return changed;
+    } catch (error) {
+      try {
+        tx.abort();
+      } catch {
+        /* A transação pode já ter sido abortada pelo IDB. */
+      }
+      try {
+        await tx.done;
+      } catch {
+        /* Preserva a causa original. */
+      }
+      throw error;
+    }
+  },
+
   /**
    * === Métodos para Tabela Settings
    */

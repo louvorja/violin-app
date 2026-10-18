@@ -295,7 +295,7 @@ describe("WebFileStore", () => {
   it("queda de rede pausa a fila e retoma sem contar falha quando a conexão volta", async () => {
     const listeners: Array<() => void> = [];
     vi.stubGlobal("window", {
-      addEventListener: (_: string, cb: () => void) => listeners.push(cb),
+      addEventListener: (event: string, cb: () => void) => { if (event === "online") listeners.push(cb); },
       removeEventListener: () => {},
     });
     let offline = true;

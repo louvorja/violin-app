@@ -661,131 +661,69 @@
 
         <!-- Armazenamento -->
         <section v-if="abaIniciada('storage')" v-show="activeTab === 'storage'" class="opt-section">
-          <div class="opt-row opt-row--col sinc-row-gap">
-            <label class="opt-label sinc-storage-label">
-              {{ $t("options.storage.folder") }}
-            </label>
-            <div class="opt-folder">
-              <code class="opt-folder-path">
-                {{ storageStats?.dataDir || "—" }}
-              </code>
-              <p v-if="storageStats?.dataDirIssue" class="opt-hint opt-hint--warn">
-                {{
-                  $t("options.storage.folder_fallback", { dir: storageStats.dataDirIssue.wanted })
-                }}
-              </p>
-              <p v-if="storageStats?.restartRequired" class="opt-hint">
-                {{ $t("options.storage.restart_required") }}
-              </p>
-
-              <div class="opt-folder-actions">
-                <button type="button" class="opt-btn" @click="openFolder">
-                  {{ $t("options.storage.open_folder") }}
-                </button>
-                <button type="button" class="opt-btn" @click="changeFolder">
-                  {{ $t("options.storage.change_folder") }}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Acervo da versão clássica: leitura, nunca escrita -->
-          <div class="opt-row opt-row--col sinc-row-gap">
-            <label class="opt-label sinc-storage-label">
-              {{ $t("options.storage.classic.title") }}
-            </label>
-            <p class="opt-hint">{{ $t("options.storage.classic.hint") }}</p>
-
-            <div class="opt-folder">
-              <code v-if="classicDir" class="opt-folder-path">{{ classicDir }}</code>
-              <p v-else class="opt-hint">{{ $t("options.storage.classic.none") }}</p>
-
-              <p v-if="classicDir && !classicAvailable" class="opt-hint opt-hint--warn">
-                {{ $t("options.storage.classic.unavailable") }}
-              </p>
-
-              <label v-if="classicDir" class="opt-checkbox">
-                <input
-                  type="checkbox"
-                  :checked="classicEnabled"
-                  @change="onClassicToggle(($event.target as HTMLInputElement).checked)"
-                />
-                <span>{{ $t("options.storage.classic.enabled") }}</span>
-              </label>
-
-              <div class="opt-folder-actions">
-                <button
-                  type="button"
-                  class="opt-btn"
-                  :disabled="classicBusy"
-                  @click="detectClassic"
-                >
-                  {{ $t("options.storage.classic.detect") }}
-                </button>
-                <button
-                  type="button"
-                  class="opt-btn"
-                  :disabled="classicBusy"
-                  @click="chooseClassic"
-                >
-                  {{ $t("options.storage.classic.choose") }}
-                </button>
-                <button
-                  v-if="classicDir"
-                  type="button"
-                  class="opt-btn"
-                  :disabled="classicBusy"
-                  @click="importClassic"
-                >
-                  {{ $t("options.storage.classic.import") }}
-                </button>
-                <button
-                  v-if="classicDir"
-                  type="button"
-                  class="opt-btn"
-                  :disabled="classicBusy"
-                  @click="removeClassic"
-                >
-                  {{ $t("options.storage.classic.remove") }}
-                </button>
-              </div>
-            </div>
-          </div>
+          <StorageLocations @changed="onStorageLocationsChanged" />
 
           <div class="opt-stats">
             <div class="opt-stat">
               <span class="opt-stat-label">{{ $t("options.storage.media_size") }}</span>
               <span class="opt-stat-value">
                 {{ sync.humanSize(storageStats?.files?.bytes) }}
-                <small>({{ storageStats?.files?.count || 0 }} arq.)</small>
+                <small>
+                  ({{
+                    $t("options.storage.file_count", { count: storageStats?.files?.count || 0 })
+                  }})
+                </small>
               </span>
             </div>
             <div class="opt-stat">
-              <span class="opt-stat-label">Músicas (álbuns, músicas, letras)</span>
+              <span class="opt-stat-label">{{ $t("options.storage.videos_folder") }}</span>
+              <span class="opt-stat-value">
+                {{ sync.humanSize(storageStats?.videos?.bytes) }}
+                <small>
+                  ({{
+                    $t("options.storage.file_count", { count: storageStats?.videos?.count || 0 })
+                  }})
+                </small>
+              </span>
+            </div>
+            <div class="opt-stat">
+              <span class="opt-stat-label">{{ $t("options.storage.catalog_size") }}</span>
               <span class="opt-stat-value">
                 {{ sync.humanSize(storageStats?.music?.bytes) }}
-                <small>({{ storageStats?.music?.count || 0 }} arq.)</small>
+                <small>
+                  ({{
+                    $t("options.storage.file_count", { count: storageStats?.music?.count || 0 })
+                  }})
+                </small>
               </span>
             </div>
             <div class="opt-stat">
               <span class="opt-stat-label">{{ $t("options.storage.cache_size") }}</span>
               <span class="opt-stat-value">
                 {{ sync.humanSize(storageStats?.json?.bytes) }}
-                <small>({{ storageStats?.json?.count || 0 }} arq.)</small>
+                <small>
+                  ({{
+                    $t("options.storage.file_count", { count: storageStats?.json?.count || 0 })
+                  }})
+                </small>
               </span>
             </div>
             <div class="opt-stat">
-              <span class="opt-stat-label">Bíblia</span>
+              <span class="opt-stat-label">{{ $t("options.storage.bible_size") }}</span>
               <span class="opt-stat-value">
                 {{ sync.humanSize(storageStats?.bible?.bytes) }}
-                <small>({{ storageStats?.bible?.count || 0 }} arq.)</small>
+                <small>
+                  ({{
+                    $t("options.storage.file_count", { count: storageStats?.bible?.count || 0 })
+                  }})
+                </small>
               </span>
             </div>
             <div class="opt-stat">
               <span class="opt-stat-label">{{ $t("options.storage.libras_size") }}</span>
               <span class="opt-stat-value">
                 {{ sync.humanSize(librasStats?.total_bytes) }}
-                <small>({{ librasFileCount }} arq.)</small>
+                <small>({{ $t("options.storage.file_count", { count: librasFileCount }) }})</small>
               </span>
             </div>
             <div class="opt-stat opt-stat--total">
@@ -868,6 +806,7 @@
 import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import Platform from "@/helpers/Platform";
+import StorageLocations from "@/components/StorageLocations.vue";
 import { pendingSyncAlbum } from "@/helpers/SyncIntent";
 import $userdata from "@/helpers/UserData";
 import $alert from "@/helpers/Alert";
@@ -916,6 +855,7 @@ interface StorageStats {
   restartRequired?: boolean;
   filesDir?: string;
   files?: { bytes: number; count: number };
+  videos?: { bytes: number; count: number };
   json?: { bytes: number; count: number };
   music?: { bytes: number; count: number };
   bible?: { bytes: number; count: number };
@@ -1643,171 +1583,8 @@ async function reloadStats(): Promise<void> {
   loading.value = false;
 }
 
-async function openFolder(): Promise<void> {
-  await Platform?.storage?.openDir?.();
-}
-
-async function changeFolder(): Promise<void> {
-  const newDir = await Platform?.storage?.chooseDir?.();
-  if (!newDir) return;
-
-  $alert.yesno("options.storage.move_confirm", (async (btn: string) => {
-    if (btn === "cancel") return;
-    const move = btn === "yes";
-    try {
-      await Platform.storage?.setDataDir(newDir, { moveExisting: move });
-      const cur = (await Platform.userStore?.read("storage")) || {};
-      await Platform.userStore?.write("storage", { ...cur, filesDir: newDir });
-      await Promise.all([reloadStats(), scanLocalCache({ force: true })]);
-    } catch (e) {
-      $alert.error({ text: "options.storage.change_failed", error: e as Error });
-    }
-  }) as (...args: unknown[]) => unknown);
-}
-
-// ─── Acervo da versão clássica ──────────────────────────────────────
-
-const classicDir = ref<string | null>(null);
-const classicLang = ref<string | null>(null);
-const classicEnabled = ref(false);
-const classicAvailable = ref(false);
-const classicBusy = ref(false);
-
-async function loadClassic(): Promise<void> {
-  if (!Platform.classic) return;
-  const s = await Platform.classic.getSource();
-  classicDir.value = s.dir;
-  classicLang.value = s.lang;
-  classicEnabled.value = s.enabled;
-  classicAvailable.value = s.available;
-}
-
-/** Depois de mudar a origem, o que estava "não baixado" pode ter virado outra coisa. */
-async function afterClassicChange(): Promise<void> {
-  await Promise.all([loadClassic(), reloadStats(), scanLocalCache({ force: true })]);
-}
-
-async function applyClassic(dir: string | null, lang?: string | null): Promise<void> {
-  classicBusy.value = true;
-  try {
-    const r = await Platform.classic!.setSource({ dir, lang, enabled: true });
-    if (!r.ok) {
-      $alert.error({ text: t("options.storage.classic.invalid") });
-      return;
-    }
-    await afterClassicChange();
-    if (dir) $snackbar.success(t("options.storage.classic.applied"));
-  } finally {
-    classicBusy.value = false;
-  }
-}
-
-async function detectClassic(): Promise<void> {
-  if (!Platform.classic) return;
-  classicBusy.value = true;
-  let achados: Awaited<ReturnType<NonNullable<typeof Platform.classic>["detect"]>> = [];
-  try {
-    achados = await Platform.classic.detect();
-  } finally {
-    classicBusy.value = false;
-  }
-
-  if (!achados.length) {
-    // Fora do Windows a instalação vive dentro do disco emulado do Wine, em
-    // caminho que só o dono conhece: cair no seletor é o comportamento útil.
-    $alert.yesno("options.storage.classic.not_found", ((btn: string) => {
-      if (btn === "yes") void chooseClassic();
-    }) as (...args: unknown[]) => unknown);
-    return;
-  }
-
-  await applyClassic(achados[0].dir, achados[0].lang);
-}
-
-async function chooseClassic(): Promise<void> {
-  const dir = await Platform?.storage?.chooseDir?.();
-  if (!dir) return;
-  await applyClassic(dir);
-}
-
-async function onClassicToggle(enabled: boolean): Promise<void> {
-  classicBusy.value = true;
-  try {
-    await Platform.classic!.setSource({
-      dir: classicDir.value,
-      lang: classicLang.value,
-      enabled,
-    });
-    await afterClassicChange();
-  } finally {
-    classicBusy.value = false;
-  }
-}
-
-async function removeClassic(): Promise<void> {
-  classicBusy.value = true;
-  try {
-    await Platform.classic!.setSource({ dir: null });
-    await afterClassicChange();
-  } finally {
-    classicBusy.value = false;
-  }
-}
-
-/**
- * Trazer o acervo para a nossa pasta. Fica separado do resto de propósito: ler
- * no lugar não gasta disco nem mexe no que é do outro programa, então copiar é
- * escolha, não o caminho normal.
- */
-/** Program Files exige elevação; uma remoção parcial deixaria o clássico quebrado. */
-function classicEmProgramFiles(): boolean {
-  return /program files/i.test(classicDir.value || "");
-}
-
-async function importClassic(): Promise<void> {
-  if (!classicDir.value) return;
-
-  const botoes = [
-    { text: "alert.cancel", color: "error", value: "cancel" },
-    { text: "options.storage.classic.import_copy", color: "info", value: "copy" },
-  ];
-  // Mover tira a mídia de quem ainda usa o programa antigo em paralelo, que é
-  // justamente o caso desta tela — então é a opção menos à mão, e some quando
-  // não daria para concluir.
-  if (!classicEmProgramFiles()) {
-    botoes.splice(1, 0, {
-      text: "options.storage.classic.import_move",
-      color: "warning",
-      value: "move",
-    });
-  }
-
-  $alert.show(
-    {
-      title: t("options.storage.classic.import"),
-      text: t("options.storage.classic.import_confirm"),
-      buttons: botoes,
-    },
-    (async (btn: string) => {
-      if (btn !== "copy" && btn !== "move") return;
-      classicBusy.value = true;
-      try {
-        const r = await Platform.classic!.import({
-          dir: classicDir.value!,
-          lang: classicLang.value || "pt",
-          move: btn === "move",
-        });
-        if (!r.ok) {
-          $alert.error({ text: t("options.storage.classic.import_failed") });
-          return;
-        }
-        await afterClassicChange();
-        $snackbar.success(t("options.storage.classic.import_done"));
-      } finally {
-        classicBusy.value = false;
-      }
-    }) as (...args: unknown[]) => unknown
-  );
+async function onStorageLocationsChanged(): Promise<void> {
+  await Promise.all([reloadStats(), scanLocalCache({ force: true })]);
 }
 
 async function toggleAutoCache(enabled: boolean): Promise<void> {
@@ -1959,13 +1736,7 @@ onMounted(async () => {
     return;
   }
   // Independentes entre si — em série a tela levava a soma dos quatro tempos.
-  await Promise.all([
-    loadCatalog(),
-    sync.checkFtp(),
-    reloadStats(),
-    loadBibleVersions(),
-    loadClassic(),
-  ]);
+  await Promise.all([loadCatalog(), sync.checkFtp(), reloadStats(), loadBibleVersions()]);
 });
 
 onBeforeUnmount(() => {

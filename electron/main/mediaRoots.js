@@ -37,7 +37,7 @@ function toClassicRel(rel, lang) {
 
   // Sem idioma não dá para mapear música: `musicas/` do clássico atende um só,
   // e adivinhar serviria arquivo de outro idioma com o mesmo nome de faixa.
-  if (lang) {
+  if (lang === "pt" || lang === "es") {
     const prefixo = `musics/${lang}/`;
     if (limpo.startsWith(prefixo)) return "musicas/" + limpo.slice(prefixo.length);
   }
@@ -120,7 +120,7 @@ function candidatesFor(rel, roots = []) {
  * @param {{platform?: string, home?: string, env?: object}} options
  * @returns {string[]}
  */
-function classicSearchDirs({ platform = process.platform, home = "", env = process.env } = {}) {
+function classicSearchDirs({ platform = process.platform, home = "", env = process.env, winePrefixes = [] } = {}) {
   if (platform === "win32") {
     const dirs = [
       "C:\\Program Files (x86)\\Louvor JA",
@@ -132,22 +132,23 @@ function classicSearchDirs({ platform = process.platform, home = "", env = proce
     // unidade e o Windows expõe os diretórios reais por estas variáveis.
     for (const base of [env?.ProgramFiles, env?.["ProgramFiles(x86)"]]) {
       if (!base) continue;
-      for (const nome of ["Louvor JA", "LouvorJA"]) dirs.push(path.join(base, nome));
+      for (const nome of ["Louvor JA", "LouvorJA", "Loor JA", "LoorJA"]) dirs.push(path.win32.join(base, nome));
     }
     return [...new Set(dirs)];
   }
 
   if (!home) return [];
 
-  const wine = [
-    path.join(home, ".wine", "drive_c"),
-    path.join(home, "Library", "Application Support", "CrossOver", "Bottles"),
-  ];
+  const prefixes = [env?.WINEPREFIX, path.join(home, ".wine"), ...winePrefixes]
+    .filter((prefix) => typeof prefix === "string" && path.isAbsolute(prefix));
 
   const saida = [];
-  for (const base of wine) {
-    saida.push(path.join(base, "Program Files (x86)", "Louvor JA"));
-    saida.push(path.join(base, "Program Files", "Louvor JA"));
+  for (const prefix of new Set(prefixes)) {
+    for (const programs of ["Program Files (x86)", "Program Files"]) {
+      for (const name of ["Louvor JA", "LouvorJA", "Loor JA", "LoorJA"]) {
+        saida.push(path.join(prefix, "drive_c", programs, name));
+      }
+    }
   }
   return saida;
 }

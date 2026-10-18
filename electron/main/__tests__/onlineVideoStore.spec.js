@@ -235,3 +235,38 @@ describe("sweepPartials", () => {
     expect(await store.sweepPartials()).toBe(0);
   });
 });
+
+
+describe("pastas privadas de trabalho", () => {
+  it("duas contas reaproveitam MP4 mas não apagam parciais uma da outra", async () => {
+    const shared = path.join(dir, "shared");
+    const first = createStore(shared, { workDir: path.join(dir, "user-a") });
+    const second = createStore(shared, { workDir: path.join(dir, "user-b") });
+    fs.mkdirSync(shared);
+    fs.writeFileSync(first.pathFor(A), "video pronto");
+    for (const current of [first, second]) {
+      fs.mkdirSync(current.partialDirFor(B), { recursive: true });
+      fs.writeFileSync(path.join(current.partialDirFor(B), "video.part"), "partial");
+    }
+    expect(second.has(A)).toBe(true);
+    expect(first.partialDirFor(B)).not.toBe(second.partialDirFor(B));
+    await first.clear();
+    expect(fs.existsSync(first.partialDirFor(B))).toBe(false);
+    expect(fs.readFileSync(path.join(second.partialDirFor(B), "video.part"), "utf8")).toBe("partial");
+  });
+
+  it("ignora links e pastas com extensão MP4 e não altera alvos de marcas keep", async () => {
+    const outside = path.join(dir, "private.txt");
+    fs.writeFileSync(outside, "private");
+    fs.symlinkSync(outside, store.pathFor(A));
+    fs.mkdirSync(store.pathFor(B));
+    expect(store.has(A)).toBe(false);
+    expect(store.has(B)).toBe(false);
+    expect(await store.list()).toEqual([]);
+    put(C, 10);
+    fs.symlinkSync(outside, path.join(dir, `${C}.keep`));
+    expect(store.keep(C)).toBe(false);
+    expect(store.isKept(C)).toBe(false);
+    expect(fs.readFileSync(outside, "utf8")).toBe("private");
+  });
+});

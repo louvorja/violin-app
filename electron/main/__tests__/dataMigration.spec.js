@@ -101,24 +101,58 @@ describe("perfil Electron", () => {
 });
 
 describe("downloads de vídeo", () => {
+  it("não publica uma cópia incompleta e permite repetir sem apagar a origem", async () => {
+    const source = path.join(legacy, "online_videos");
+    const videos = path.join(target, "Videos");
+    const workDir = path.join(target, "private-video-work");
+    await fs.outputFile(path.join(source, `${A}.mp4`), "complete original");
+    const copy = vi.spyOn(fs, "copyFileSync").mockImplementationOnce((_from, to) => fs.writeFileSync(to, "short"));
+    await expect(migrateDownloads(source, videos, { workDir })).rejects.toThrow("verificada");
+    expect(await fs.pathExists(path.join(videos, `${A}.mp4`))).toBe(false);
+    expect(await fs.pathExists(path.join(workDir, ".legacy-downloads-v1.json"))).toBe(false);
+    expect(await fs.readFile(path.join(source, `${A}.mp4`), "utf8")).toBe("complete original");
+    copy.mockRestore();
+    await migrateDownloads(source, videos, { workDir });
+    expect(await fs.readFile(path.join(videos, `${A}.mp4`), "utf8")).toBe("complete original");
+  });
+
   it("preserva vídeos offline, marcas de manter e retomada de downloads parciais", async () => {
     const source = path.join(legacy, "online_videos");
     const videos = path.join(target, "Videos");
+    const workDir = path.join(target, "private-video-work");
     await fs.outputFile(path.join(source, `${A}.mp4`), "video");
     await fs.outputFile(path.join(source, `${A}.keep`), "");
     await fs.outputFile(path.join(source, ".partial", B, "video.mp4.part"), "partial");
     await fs.outputFile(path.join(source, ".stream", B, "video"), "temporary track");
     await fs.outputFile(path.join(source, ".ytdlp-cache", "metadata.json"), "cache");
     await fs.outputFile(path.join(source, "unrelated.txt"), "preserve");
-    await migrateDownloads(source, videos);
-    const store = createStore(videos);
+    await migrateDownloads(source, videos, { workDir });
+    const store = createStore(videos, { workDir });
     expect(store.has(A)).toBe(true);
     expect(store.isKept(A)).toBe(true);
     expect(await fs.readFile(path.join(store.partialDirFor(B), "video.mp4.part"), "utf8")).toBe("partial");
-    expect(await fs.pathExists(path.join(source, `${A}.mp4`))).toBe(false);
-    expect(await fs.readFile(path.join(videos, ".ytdlp-cache", "metadata.json"), "utf8")).toBe("cache");
-    expect(await fs.pathExists(path.join(source, ".stream", B, "video"))).toBe(false);
+    expect(await fs.readFile(path.join(source, `${A}.mp4`), "utf8")).toBe("video");
+    expect(await fs.readFile(path.join(source, `${A}.keep`), "utf8")).toBe("");
+    expect(await fs.readFile(path.join(source, ".partial", B, "video.mp4.part"), "utf8")).toBe("partial");
+    expect(await fs.readFile(path.join(workDir, ".ytdlp-cache", "metadata.json"), "utf8")).toBe("cache");
+    expect(await fs.readFile(path.join(source, ".stream", B, "video"), "utf8")).toBe("temporary track");
+    expect(await fs.pathExists(path.join(videos, ".partial"))).toBe(false);
     expect(await fs.readFile(path.join(source, "unrelated.txt"), "utf8")).toBe("preserve");
+  });
+
+  it("não restaura vídeos excluídos nem reimporta a origem ao trocar a pasta", async () => {
+    const source = path.join(legacy, "online_videos");
+    const videos = path.join(target, "Videos");
+    const workDir = path.join(target, "private-video-work");
+    await fs.outputFile(path.join(source, `${A}.mp4`), "original");
+    await migrateDownloads(source, videos, { workDir });
+    await fs.remove(path.join(videos, `${A}.mp4`));
+    await migrateDownloads(source, videos, { workDir });
+    expect(await fs.pathExists(path.join(videos, `${A}.mp4`))).toBe(false);
+    const changed = path.join(target, "New videos");
+    await migrateDownloads(source, changed, { workDir });
+    expect(await fs.pathExists(path.join(changed, `${A}.mp4`))).toBe(false);
+    expect(await fs.readFile(path.join(source, `${A}.mp4`), "utf8")).toBe("original");
   });
 
   it("não sobrescreve vídeos existentes e mantém a proteção offline", async () => {

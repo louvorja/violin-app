@@ -114,9 +114,9 @@ describe("classicSearchDirs", () => {
   });
 
   it("fora do Windows procura dentro do disco emulado do Wine", () => {
-    const dirs = classicSearchDirs({ platform: "darwin", home: "/Users/x" });
+    const dirs = classicSearchDirs({ platform: "darwin", home: "/Users/x", winePrefixes: ["/Users/x/Library/Application Support/CrossOver/Bottles/Igreja"] });
     expect(dirs.some((d) => d.includes(".wine/drive_c") || d.includes(".wine\\drive_c"))).toBe(true);
-    expect(dirs.some((d) => d.includes("CrossOver"))).toBe(true);
+    expect(dirs.some((d) => d.includes("CrossOver/Bottles/Igreja/drive_c"))).toBe(true);
   });
 
   it("sem home, não inventa caminho", () => {

@@ -90,15 +90,48 @@ SW — sem isso o próximo `get` regravava o JSON antigo. Nenhuma dessas ações
 
 ## Armazenamento desktop
 
-No desktop, todos os dados persistentes ficam em uma raiz única, por padrão
-`Documentos/LouvorJA Violin`, ou na pasta definida em Armazenamento. `paths.dataDir()`
-resolve essa raiz: mídia em `files/`, vídeos baixados em `Videos/`, preferências em
-`storage/`, documentos em `library/`, cache do banco em `json_db/`, ferramentas em
-`bin/` e dados internos do Electron (IndexedDB, cookies, caches, logs) em `.electron/`.
-O endereço original de AppData/Application Support guarda a âncora `data-location.json`
-e o lock de instância única. Downloads e dados existentes são migrados sem sobrescrever
-destinos. Ao mover a raiz em Armazenamento, o perfil ainda aberto termina a migração no
-próximo boot; a tela indica que é preciso reiniciar.
+Programa, perfil privado, acervo e vídeos têm responsabilidades separadas.
+`paths.dataDir()` é fixo em `<appData>/LouvorJA Violin/profile`; contém `storage/`,
+`library/`, anexos privados em `attachments/media/`, `canva/`, `json_db/`, `bin/`,
+temporários de vídeo em `video-work/` e o perfil Chromium em `.electron/`.
+O IndexedDB inteiro continua privado: ele mistura catálogos com coleções pessoais
+e binários, portanto não pode ser compartilhado apenas porque também guarda catálogo.
+
+`paths.mediaDir()` aponta diretamente ao acervo (`musics/`, `images/`, `covers/`),
+e `paths.videosDir()` à pasta de vídeos prontos. Os padrões por usuário são
+`Documentos/LouvorJA Violin/Acervo` e `Documentos/LouvorJA Violin/Videos`.
+Instalação Windows para todos provisiona essas duas pastas em Documentos Públicos,
+com permissão de escrita para usuários comuns, e publica os padrões em
+`%ProgramData%/LouvorJA Violin/storage-defaults.json`. Somente perfis novos adotam
+esse padrão de máquina. Reinstalações e atualizações preservam o escopo existente;
+troca de escopo exige desinstalar o programa e instalar novamente, preservando dados.
+
+No primeiro uso e em Armazenamento, `StorageLocations.vue` permite escolher acervo
+e vídeos independentemente, reutilizar arquivos existentes ou copiar os atuais.
+A alteração fica pendente em `<appData>/LouvorJA Violin/storage-layout.json` e
+é aplicada no próximo boot antes dos gravadores abrirem; conflitos não são
+sobrescritos, links não são percorridos e a origem permanece intacta.
+Disco indisponível não é substituído por uma pasta vazia. Classic tem seleção
+opcional separada, automática ou manual, sem ativação silenciosa.
+
+A migração da antiga raiz única copia e confere os dados privados antes de
+publicar o perfil fixo, preservando todas as origens do IndexedDB. Preferências
+antigas ainda no AppData são recuperadas quando ausentes na raiz ativa. As pastas
+de mídia existentes continuam no lugar; o perfil antigo fica como cópia de
+recuperação. A raiz plana legada com `musics/` ao lado de `Videos/` é aceita no
+upgrade; novas escolhas exigem pastas sem sobreposição.
+As outras instâncias antigas devem estar fechadas durante essa migração:
+marcadores de processo ativos/ambíguos ou mudanças nos arquivos durante a cópia
+interrompem a publicação. Essa conferência não é um snapshot transacional de
+um perfil aberto por uma versão antiga em outra conta.
+
+`storageAccess` mantém uma concessão de escrita exclusiva por pasta, renovada pelo
+processo. Outras contas podem ler os arquivos prontos com seus próprios perfis.
+Acervos compartilhados não têm limpeza automática nem exclusão pelo app nesta
+implementação. Reprodução de vídeo somente leitura usa temporários privados.
+Compartilhamento no macOS/Linux exige permissões do sistema adequadas na pasta
+escolhida; o app não eleva privilégios nem muda permissões de pastas existentes.
+O contrato de armazenamento web/PWA continua no navegador.
 
 ## 🧠 Stack
 
@@ -586,10 +619,10 @@ Remoto, Sincronizar e StartupCheck.
 ## Download de coletâneas no web/PWA
 
 `Platform.download` e `Platform.storage` têm o mesmo contrato nas duas plataformas:
-no Electron são o downloader do main process e a pasta de dados; no web/PWA são o
+no Electron são o downloader do main process e a pasta de acervo; no web/PWA são o
 adaptador `helpers/WebFileStore.ts`, que grava no Cache Storage (`louvorja-audio` e
 `louvorja-images`). `useSyncManager` e a tela **Sincronizar** não distinguem a
-plataforma: o PWA mostra só a aba Coletâneas (Bíblia, pasta de dados e versão
+plataforma: o PWA mostra só a aba Coletâneas (Bíblia, pastas nativas e versão
 clássica seguem exclusivos do desktop).
 
 - **URL é a chave.** O arquivo é guardado sob a mesma URL que o player pede
@@ -639,7 +672,7 @@ que o navegador de fato não oferece.
   mídia" apaga só os caches de áudio e imagem; o catálogo (IndexedDB) fica.
 - **Só no desktop, sem equivalente web**: baixar vídeo online (yt-dlp), servidor
   HTTP local (chat, controle remoto, dispositivos, OBS), atalhos globais do SO,
-  iniciar com o sistema e pasta de dados escolhida pelo usuário.
+  iniciar com o sistema e pastas de acervo e vídeos escolhidas pelo usuário.
 
 ## 🖥️ Versão clássica (Delphi)
 
@@ -647,14 +680,15 @@ A detecção da versão clássica é feita em `electron/main/classicLibrary.js`,
 usando os palpites de `electron/main/mediaRoots.js`. O app aceita tanto a raiz
 da instalação quanto a própria pasta `config/`; mídia em `capas/`, `imagens/`
 ou `musicas/` basta para validar, assim como um `config/database.db` não vazio.
-No Windows, os dois `Program Files` e as pastas expostas por
-`ProgramFiles`/`ProgramFiles(x86)` são consultados — a unidade não é fixada em
-`C:`.
+No Windows, os dois `Program Files` e atalhos da instalação são consultados,
+incluindo o argumento legado `dir_config`; a unidade não é fixada em `C:`.
+No macOS/Linux, a escolha manual e candidatos de instalações Wine continuam
+disponíveis. Todos os candidatos são validados antes de oferecer a seleção.
 
 ### Fluxo de login
 
-- A configuração é explícita na seção **Armazenamento** de
-  `AppMenuSincronizar.vue`; o app não ativa uma pasta de outro programa sem a
+- A configuração é explícita no setup ou na seção **Armazenamento**, por
+  `StorageLocations.vue`; o app não ativa uma pasta de outro programa sem a
   confirmação do operador.
 - `storage.classicDir`, `storage.classicLang` e `storage.classicEnabled` são
   aplicados pelo processo principal sem reiniciar a aplicação.
@@ -674,12 +708,12 @@ No Windows, os dois `Program Files` e as pastas expostas por
   importado automaticamente.
 - Quando o modo clássico está ativo, a origem em runtime é atualizada sem
   reiniciar a aplicação e o cache de disponibilidade é refeito.
-- Ao trocar a pasta, o alerta oferece `Copiar` / `Mover` / `Cancelar`.
+- A cópia para o acervo próprio é uma ação explícita separada da consulta ao Classic.
 - A importação clássica copia apenas as pastas de mídia:
   - `capas` → `covers`
   - `imagens` → `images`
   - `musicas` → `musics/<lang>`
-- Em `Mover`, só essas pastas são removidas da origem.
+- A origem nunca é apagada; arquivos diferentes no destino interrompem a cópia.
 
 ---
 
@@ -2093,7 +2127,7 @@ real e responde pela `RENDERER_RESPONSE_CHANNEL`.
 | POST            | `/api/media-library`                                      | `{ action: project, id } \| { action: canva-project, designId?\|url? } \| { action: playlist, command: add\|remove\|clear\|goto\|play\|next\|prev\|stop, id?/index? }` | Projeta item/design, controla a playlist (permission `media_library`)                    |
 | GET             | `/api/media-library?action=playlist`                      | —                                                                                                                                                                      | Itens da playlist (`modules.media_library.playlist` do userData, servido pelo main)      |
 | POST            | `/api/media-library` (`canva-export`/`canva-clear-cache`) | `{ designId, format? }`                                                                                                                                                | Exporta JPG/PDF sem projetar / elimina o cache do design (round-trip 30 s)               |
-| POST            | `/api/media-library/upload`                               | bytes crus + `X-File-Name`/`X-Mime-Type`/`X-Category-Id`                                                                                                               | Recebe arquivo do celular em `<dados>/files/library/media/` (permission `media_library`) |
+| POST            | `/api/media-library/upload`                               | bytes crus + `X-File-Name`/`X-Mime-Type`/`X-Category-Id`                                                                                                               | Recebe arquivo do celular em `<perfil>/attachments/media/` (permission `media_library`) |
 | GET             | `/api/user-data`                                          | `?path=...`                                                                                                                                                            | Lê valor do user_data                                                                    |
 | GET             | `/api/db/:path`                                           | —                                                                                                                                                                      | JSON do banco (cache local ou remoto)                                                    |
 | GET             | `/libras/:token`                                          | —                                                                                                                                                                      | Bundle de animação VLibras                                                               |
@@ -2132,7 +2166,7 @@ A aba **Biblioteca de Mídia** (`src/views/remote_control/RemoteMediaLibrary.vue
   (`express.json` global tem limite de 100 kb e não consome stream de outro
   content-type, então o pipe chega inteiro na rota). O main valida a extensão
   pelo `X-File-Name` (imagem/vídeo/pdf), grava `.tmp` + `rename` em
-  `<dados>/files/library/media/<id>.<ext>` (guarda de path pelo `joinDentroDe`)
+  `<perfil>/attachments/media/<id>.<ext>` (guarda de path pelo `joinDentroDe`)
   e avisa o renderer (`action: "saved"`), que registra no IndexedDB com o
   thumb `louvorja://local`. Teto: 300 MB no servidor (413), 250 MB no cliente.
 - **Miniaturas**: `?action=image&url=` busca os bytes no renderer pelo protocolo

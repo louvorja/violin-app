@@ -11,6 +11,7 @@
  * privados daqui. Este arquivo não requer routes.js (sem ciclo).
  */
 const path = require("path");
+const { randomUUID } = require("crypto");
 const fs = require("fs");
 const { Transform } = require("stream");
 const { pipeline } = require("stream/promises");
@@ -1292,7 +1293,7 @@ function register(app, ctx) {
   // POST action=project|canva-project|playlist — projeta um item/design ou
   //      controla a playlist do desktop
   // POST /api/media-library/upload — stream de bytes do celular, gravado em
-  //      <dados>/files/library/media/ e registrado na biblioteca pelo renderer
+  //      <perfil>/library/media/ e registrado na biblioteca pelo renderer
   // Permission: media_library (ou root)
   // ---------------------------------------------------------------
 
@@ -1325,7 +1326,6 @@ function register(app, ctx) {
     "pdf",
   ];
   /** Subpasta (relativa a <dados>/files) onde os uploads do remoto moram. */
-  const MEDIA_LIBRARY_UPLOAD_DIR = "library/media";
 
   /** Extensão aceita de um nome de arquivo (inclui o ponto: ".jpg"). */
   function mediaLibraryExt(fileName) {
@@ -1697,7 +1697,7 @@ function register(app, ctx) {
   // consome stream de outro type, então o pipe chega inteiro aqui).
   // Headers: X-File-Name (obrigatório, URL-encoded), X-Category-Id (opcional).
   //
-  // O main grava em <dados>/files/library/media/<id>.<ext> (tmp + rename) e
+  // O main grava em <perfil>/library/media/<id>.<ext> (tmp + rename) e
   // avisa o renderer para registrar na biblioteca — aí o item já projeta.
   // ---------------------------------------------------------------
   app.post("/api/media-library/upload", async (req, res) => {
@@ -1726,8 +1726,8 @@ function register(app, ctx) {
     }
 
     const dest = joinDentroDe(
-      paths.filesDir(),
-      path.posix.join(MEDIA_LIBRARY_UPLOAD_DIR, `upl_${Date.now()}_${Math.random().toString(36).slice(2, 10)}.${ext}`)
+      paths.privateMediaDir(),
+      `upl_${randomUUID()}.${ext}`
     );
     if (!dest) {
       return res.status(500).json({ error: "Destino inválido no diretório de mídia" });
@@ -1754,7 +1754,7 @@ function register(app, ctx) {
     let stream;
     try {
       await fs.promises.mkdir(path.dirname(dest), { recursive: true });
-      stream = fs.createWriteStream(tmp);
+      stream = fs.createWriteStream(tmp, { flags: "wx", mode: 0o600 });
       await pipeline(req, counter, stream);
     } catch (error) {
       if (stream && !stream.destroyed) stream.destroy();

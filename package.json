@@ -63,6 +63,7 @@
     "fs-extra": "^11.2.0",
     "heic-to": "^1.5.2",
     "ogg-opus-decoder": "^1.7.5",
+    "proper-lockfile": "4.1.2",
     "qr-code-styling": "^1.9.2"
   },
   "devDependencies": {

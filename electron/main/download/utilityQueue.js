@@ -7,13 +7,14 @@ const { workerName } = require("./workerDiagnostics.js");
 
 /** Main-process adapter. The renderer never receives a process handle or port. */
 class UtilityQueue extends EventEmitter {
-  constructor({ baseUrl, apiToken, filesDir, allowedRemoteOrigins, fork, startupTimeoutMs = 10000, cancelTimeoutMs = 2000,
+  constructor({ baseUrl, apiToken, filesDir, allowedRemoteOrigins, fork, startupTimeoutMs = 10000, cancelTimeoutMs = 2000, exitTimeoutMs = 10000,
     reportDiagnostic, monotonicNow = () => performance.now() } = {}) {
     super();
     this.config = { baseUrl, apiToken, filesDir, allowedRemoteOrigins };
     this.fork = fork || ((entry, options) => require("electron").utilityProcess.fork(entry, [], options));
     this.startupTimeoutMs = startupTimeoutMs;
     this.cancelTimeoutMs = cancelTimeoutMs;
+    this.exitTimeoutMs = exitTimeoutMs;
     this.queue = [];
     this.running = false;
     this.paused = false;
@@ -87,6 +88,7 @@ class UtilityQueue extends EventEmitter {
         this.workerExitCode = Number.isInteger(code) ? code : undefined;
         this.workerPhase = "exited";
         this._diagnostic();
+        this.emit("worker-exited");
         if (!this.done) this._fail("download_worker_exited");
       });
       this.child.once("error", () => this._fail("download_worker_error"));
@@ -188,7 +190,24 @@ class UtilityQueue extends EventEmitter {
     if (this.ready) this._send("cancel");
     this._deadline(this.cancelTimeoutMs, () => this._finish("queue-cancelled", undefined, "cancel_deadline"));
   }
-  shutdown() { this.cancel(); return this.completion || Promise.resolve(); }
+  async shutdown() {
+    this.cancel();
+    await this.completion;
+    if (!this.child || this.workerExitObserved) return;
+    // kill() só confirma que o sinal foi pedido. O lease do main precisa durar
+    // até o processo gravador realmente sair, inclusive após o timeout de cancel.
+    await new Promise((resolve, reject) => {
+      const exited = () => { clearTimeout(timer); resolve(); };
+      const timer = setTimeout(() => {
+        this.off("worker-exited", exited);
+        const error = new Error("O processo de download ainda não encerrou. Aguarde e tente fechar o aplicativo novamente.");
+        error.code = "DOWNLOAD_WORKER_STILL_RUNNING";
+        reject(error);
+      }, this.exitTimeoutMs);
+      this.once("worker-exited", exited);
+      if (this.workerExitObserved) { this.off("worker-exited", exited); exited(); }
+    });
+  }
 }
 
 module.exports = { UtilityQueue };

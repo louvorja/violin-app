@@ -100,7 +100,8 @@ const { createRuntimeHealthMonitor } = require("./main/runtimeHealth.js");
 const { createRuntimeWorkDiagnostics } = require("./main/runtimeWorkDiagnostics.js");
 const { createCpuProfileCapture } = require("./main/cpuProfileCapture.js");
 const { createRuntimeIncidentJournal } = require("./main/runtimeIncidentJournal.js");
-const { migrateLegacyData } = require("./main/dataMigration.js");
+const storageLocations = require("./main/storageLocations.js");
+const storageAccess = require("./main/storageAccess.js");
 const { createPresentationActivity } = require("./main/presentationActivity.js");
 const { buildCsp } = require("./main/csp.js");
 const { backgroundWindows } = require("./main/e2eWindowMode.js");
@@ -141,97 +142,6 @@ function configureAppPaths() {
 // cima do arquivo bom — o que o usuário não reescrevesse na sessão sumia.
 configureAppPaths();
 
-/**
- * Leva as preferências de `<userData>/storage` para a pasta de dados.
- *
- * Move somente preferências ausentes no destino. Roda antes de `_userDataMain` ser
- * lido, mais abaixo neste módulo — depois seria tarde, o main já teria
- * carregado um estado vazio.
- */
-function migrateStorageToDataDir() {
-  const legacy = path.join(app.getPath("userData"), "storage");
-  const target = path.join(paths.dataDir(), "storage");
-  if (path.resolve(legacy) === path.resolve(target)) return;
-  if (!fs.existsSync(legacy)) return;
-  if (fs.existsSync(path.join(target, "user_data.json"))) return;
-
-  try {
-    fs.ensureDirSync(target);
-    let copiados = 0;
-    for (const nome of fs.readdirSync(legacy)) {
-      if (!nome.endsWith(".json")) continue;
-      const dest = path.join(target, nome);
-      if (fs.existsSync(dest)) continue;
-      fs.moveSync(path.join(legacy, nome), dest, { overwrite: false });
-      copiados++;
-    }
-    if (copiados) console.log(`[main] Preferências migradas para ${target} (${copiados} arquivos)`);
-  } catch (e) {
-    console.warn("[main] Falha ao migrar preferências:", e?.message || e);
-  }
-}
-
-/** Um diretório que existe e tem pelo menos uma entrada dentro. */
-function _temConteudo(dir) {
-  try {
-    return fs.existsSync(dir) && fs.statSync(dir).isDirectory() && fs.readdirSync(dir).length > 0;
-  } catch (_) {
-    return false;
-  }
-}
-
-/**
- * O que, dentro de `dir`, conta como acervo a mudar de lugar. `files/` e
- * `storage/`, `library/` e `Videos/` ficam de fora porque são a estrutura nova: sem essa exceção a
- * própria pasta de dados, recém-criada com as preferências dentro, passaria
- * por origem de migração e encerraria a busca antes de olhar as outras.
- */
-function _entradasDeAcervo(dir) {
-  return require("./main/mediaMigration.js").listLegacyMediaEntries(dir);
-}
-
-/**
- * Recolhe o acervo para `<dados>/files`.
- *
- * O acervo passou por três endereços — pasta escolhida à mão, `Documents/
- * LouvorJA Violin` solto na raiz e `<userData>/files` — e uma instalação
- * antiga pode ter parado em qualquer um deles. Move entrada por entrada, e
- * não a pasta inteira, porque no caso da raiz a origem é a própria pasta de
- * dados: mover ela para dentro de si mesma não existe.
- *
- * Move em vez de copiar: `fs.move` renomeia quando origem e destino estão no
- * mesmo volume, então gigabytes de MP3 mudam de lugar num piscar. Só o que
- * ainda não existe no destino é movido — a migração pode ser interrompida e
- * retomada no boot seguinte.
- */
-function migrateMediaToDataDir(storageCfg = {}) {
-  const target = paths.filesDir();
-  if (_temConteudo(target)) return;
-
-  const candidatos = [storageCfg.filesDir, ...paths.legacyMediaDirs()].filter(Boolean);
-  for (const origem of candidatos) {
-    if (path.resolve(origem) === path.resolve(target)) continue;
-    const entradas = _entradasDeAcervo(origem);
-    if (!entradas.length) continue;
-
-    try {
-      fs.ensureDirSync(target);
-      let movidos = 0;
-      for (const nome of entradas) {
-        const dest = path.join(target, nome);
-        if (fs.existsSync(dest)) continue;
-        fs.moveSync(path.join(origem, nome), dest);
-        movidos++;
-      }
-      if (movidos) console.log(`[main] Acervo movido: ${origem} → ${target} (${movidos} entradas)`);
-      return;
-    } catch (e) {
-      console.warn(`[main] Falha ao mover acervo de ${origem}:`, e?.message || e);
-      return;
-    }
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Instância única
 // ---------------------------------------------------------------------------
@@ -247,12 +157,15 @@ if (!app.requestSingleInstanceLock()) {
   return;
 }
 console.log("[LouvorJA] Instância única: lock adquirido.");
-migrateStorageToDataDir();
-// O lock permanece no endereço estável da âncora; o perfil pode acompanhar a
-// pasta escolhida sem permitir duas instâncias com pastas de dados diferentes.
-paths.configureProfile();
-const legacyDataMigration = migrateLegacyData(paths.bootstrapDir(), paths.dataDir());
-void legacyDataMigration.catch((error) => console.warn("[main] Migração de dados falhou:", error?.message || error));
+try {
+  paths.configureProfile();
+  storageLocations.applyPending();
+  storageAccess.initialize(paths.storageLayout());
+} catch (error) {
+  dialog.showErrorBox("Não foi possível preparar os dados do LouvorJA", error.message);
+  app.exit(1);
+  return;
+}
 // Mesmo AppUserModelID do instalador NSIS em todas as BrowserWindows. O Windows
 // agrupa as projeções sob o app, em vez de mostrá-las como aplicativos distintos.
 if (process.platform === "win32") app.setAppUserModelId("br.com.louvorja.app");
@@ -1175,7 +1088,6 @@ app.whenReady().then(async () => {
   // bootstrap de monitores, limpeza de cache e a subida do servidor HTTP, e
   // nada disso dá sinal de vida ao operador.
   splash.show(_userDataMain);
-  await legacyDataMigration;
 
   // Atualizou o app: tenta renovar os JSONs, mas conserva a cópia offline.
   // Falha aqui não pode travar o boot.
@@ -1301,14 +1213,12 @@ app.whenReady().then(async () => {
     }
   });
 
-  // S2 — Aplicar config de armazenamento salva e recolher o acervo espalhado
-  // pelas pastas que versões anteriores usaram.
+  // Aplicar preferências privadas de cache e a fonte opcional do Classic.
   try {
     const storageCfg = userStore.read("storage") || {};
     if (typeof storageCfg.autoCache === "boolean") {
       protocolModule.setAutoCacheEnabled(storageCfg.autoCache);
     }
-    migrateMediaToDataDir(storageCfg);
     aplicarAcervoClassico(storageCfg);
   } catch (e) {
     console.warn("[main] Falha ao aplicar storage config:", e.message);
@@ -1351,6 +1261,7 @@ app.on("before-quit", (event) => {
   event.preventDefault();
   if (quitFlushStarted) return;
   quitFlushStarted = true;
+  let downloadShutdownComplete = false;
 
   void (async () => {
     // Coloca o snapshot final na fila antes de flush(), sem fazer I/O sincrono.
@@ -1395,9 +1306,10 @@ app.on("before-quit", (event) => {
 
     // Um yt-dlp em andamento seguiria baixando (e segurando o vídeo) depois do app fechar.
     onlineVideo.shutdown();
-    // O acervo usa um processo utilitário separado. Cancela e espera no máximo
-    // dois segundos para limpar temporários; nunca prende o encerramento.
+    // O lease de escrita só termina depois que o processo utilitário saiu.
+    // Cancelamento tem prazo; falha de encerramento mantém o main e o lease vivos.
     await downloader.shutdown();
+    downloadShutdownComplete = true;
 
     try {
       await httpServer.stop();
@@ -1406,10 +1318,18 @@ app.on("before-quit", (event) => {
     }
   })()
     .catch((e) => {
-      // Nao prenda o processo para sempre se um teardown inesperado falhar.
       console.warn("[before-quit] Falha durante encerramento:", e?.message || e);
+      if (!downloadShutdownComplete) {
+        dialog.showErrorBox("Não foi possível encerrar o LouvorJA", "O aplicativo foi mantido aberto para proteger os arquivos em uso pelo download. " + (e?.message || "Aguarde e tente fechar novamente."));
+      }
     })
     .finally(() => {
+      if (!downloadShutdownComplete) {
+        quitFlushStarted = false;
+        isQuitting = false;
+        downloader.resumeAfterShutdownFailure();
+        return;
+      }
       quitFlushComplete = true;
       app.quit();
     });
@@ -1687,8 +1607,7 @@ ipcMain.handle("userdata:fetch", () => {
  * Grava `user_data` no máximo uma vez a cada 300ms.
  *
  * Um slider de fonte ou um item arrastado na liturgia disparam dezenas de
- * patches por segundo, e a pasta de dados agora costuma estar dentro do
- * OneDrive ou do iCloud: cada gravação acorda o sincronizador. A janela conta
+ * patches por segundo; o lote reduz gravações no perfil privado. A janela conta
  * a partir do primeiro patch, não do último — assim uma rajada longa ainda
  * chega ao disco enquanto acontece, em vez de esperar ela terminar.
  */
@@ -2506,7 +2425,13 @@ ipcMain.handle("storage:clearUnused", (_e, remoteFiles) => storage.clearUnused(r
 ipcMain.handle("storage:verify", (_e, remoteFiles) => storage.verify(remoteFiles));
 ipcMain.handle("storage:removeFiles", (_e, remotePaths) => storage.removeFiles(remotePaths));
 ipcMain.handle("storage:sizeOfPaths", (_e, remotePaths) => storage.sizeOfPaths(remotePaths));
-ipcMain.handle("storage:openDir", () => storage.openFilesDir());
+ipcMain.handle("storage:openDir", async (_e, kind = "media") => {
+  if (!["media", "videos", "profile"].includes(kind)) throw new Error("Tipo de pasta inválido.");
+  const dir = kind === "profile" ? paths.dataDir() : kind === "videos" ? paths.videosDir() : paths.filesDir();
+  const error = await shell.openPath(dir);
+  if (error) throw new Error(error);
+  return { ok: true, dir };
+});
 
 /** Abre um arquivo de mídia no aplicativo padrão do sistema. */
 ipcMain.handle("shell:openPath", async (_event, filePath) => {
@@ -2551,14 +2476,13 @@ ipcMain.handle("shell:openPath", async (_event, filePath) => {
     return { ok: false, path: resolved, error: error?.message || String(error) };
   }
 });
-ipcMain.handle("storage:setDataDir", async (_e, newDir, opts) => {
-  if (downloader.isDownloading()) throw new Error("Aguarde ou cancele o download antes de alterar a pasta de dados.");
-  // Nao mova/troque a raiz enquanto uma escrita ainda usa o caminho antigo.
-  if (_userDataFlushTimer) await _flushUserData();
-  await Promise.all([userStore.flush(), docStore.flush(), runtimeIncidentJournal.flush()]);
-  const result = await onlineVideo.withDataDirChange(() => storage.setDataDir(newDir, opts));
-  if (result.ok) _userDataMain = userStore.read("user_data") || {};
-  return result;
+ipcMain.handle("storage:locations", () => storageLocations.locations());
+ipcMain.handle("storage:configureLocations", (_e, input) => storageLocations.configure(input));
+ipcMain.handle("storage:completeSetup", () => storageLocations.completeSetup());
+ipcMain.handle("storage:privatePathMappings", () => paths.privatePathMappings());
+ipcMain.handle("storage:restart", () => {
+  app.relaunch();
+  app.quit();
 });
 
 // ---------------------------------------------------------------------------
@@ -2714,41 +2638,14 @@ ipcMain.handle("classic:validate", (_e, dir) => classicLibrary.validate(dir));
 /**
  * Grava a escolha do usuário e aplica na hora. `dir` nulo desliga.
  */
-ipcMain.handle("classic:setSource", async (_e, { dir, lang, enabled } = {}) => {
-  const atual = userStore.read("storage") || {};
-  const cfg = { ...atual };
-
-  if (!dir) {
-    cfg.classicDir = null;
-    cfg.classicLang = null;
-    cfg.classicEnabled = false;
-  } else {
-    const r = classicLibrary.validate(dir);
-    if (!r.ok) return { ok: false, error: r.error };
-    cfg.classicDir = r.configDir;
-    // O marcador do idioma do Delphi fica no `%APPDATA%` e pode não estar no
-    // diretório padrão do processo (instalação portátil, outro usuário ou
-    // Wine). Passe também o config escolhido para que a detecção seja feita
-    // no contexto da instalação apontada, em vez de usar sempre a primeira
-    // configuração encontrada no computador.
-    cfg.classicLang = lang || classicLibrary.detectLanguage(os.homedir(), r.configDir) || "pt";
-    cfg.classicEnabled = enabled !== false;
-    console.info("[main] Acervo clássico selecionado:", JSON.stringify({
-      configDir: cfg.classicDir,
-      lang: cfg.classicLang,
-      enabled: cfg.classicEnabled,
-      folders: r.folders,
-    }));
-  }
-
+ipcMain.handle("classic:setSource", async (_e, input) => {
+  const source = classicLibrary.normalizeSource(input);
+  if (!source.ok) return source;
+  const cfg = { ...(userStore.read("storage") || {}),
+    classicDir: source.dir, classicLang: source.lang, classicEnabled: source.enabled };
   await userStore.write("storage", cfg);
   aplicarAcervoClassico(cfg);
-  return {
-    ok: true,
-    dir: cfg.classicDir,
-    lang: cfg.classicLang,
-    enabled: cfg.classicEnabled,
-  };
+  return source;
 });
 
 ipcMain.handle("classic:getSource", () => {

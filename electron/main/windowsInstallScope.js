@@ -1,6 +1,7 @@
 "use strict";
 
 const path = require("path");
+const fs = require("fs");
 
 function _normalizeWinPath(value) {
   const normalized = path.win32.normalize(String(value || "").trim());
@@ -18,14 +19,19 @@ function _isInside(root, target) {
  * os testes rodam em macOS/Linux, mas a entrada representa sempre o caminho do
  * Windows.
  *
- * @param {{ platform?: string, execPath?: string, env?: Record<string,string|undefined> }} [options]
+ * @param {{ platform?: string, execPath?: string, env?: Record<string,string|undefined>, readFile?: typeof fs.readFileSync }} [options]
  */
 function installRequiresWindowsElevation({
   platform = process.platform,
   execPath = process.execPath,
   env = process.env,
+  readFile = fs.readFileSync,
 } = {}) {
   if (platform !== "win32") return false;
+  try {
+    const marker = JSON.parse(readFile(path.win32.join(path.win32.dirname(execPath), "resources", "install-scope.json"), "utf8"));
+    if (marker?.version === 1 && marker.scope === "machine") return true;
+  } catch { /* Older installers have no marker; retain the Program Files check. */ }
   const target = _normalizeWinPath(execPath);
   if (!target) return false;
 
