@@ -184,6 +184,7 @@ async function startDownload(files, webContents) {
       baseUrl: filesUrl,
       apiToken,
       filesDir,
+      workDir: path.join(paths.dataDir(), "temp", "downloads"),
       allowedRemoteOrigins: TRUSTED_MEDIA_ORIGINS,
       reportDiagnostic: workerDiagnostics.record,
     });

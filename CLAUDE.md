@@ -269,23 +269,31 @@ O programa é instalado separadamente do **perfil privado**, do **acervo** e dos
 ├── canva/             documentos e miniaturas importados
 ├── json_db/           cache de respostas JSON
 ├── bin/               yt-dlp e ffmpeg
-├── video-work/        downloads parciais e streaming temporário
+├── temp/videos/       downloads parciais e streaming temporário
+├── temp/downloads/    downloads HTTP e retomadas
+├── temp/migrations/   cópias em preparação no mesmo volume
 └── .electron/         IndexedDB, cookies, caches e logs internos
 ```
 
 `paths.mediaDir()` e `paths.videosDir()` são independentes e alteráveis no setup e
 em Sincronizar Arquivos → Armazenamento. Por usuário, os padrões ficam em
-`Documentos/LouvorJA Violin/Acervo` e `Documentos/LouvorJA Violin/Videos`.
-No Windows para todos, novos perfis usam o padrão provisionado pelo instalador
-em Documentos Públicos. A configuração da máquina fica em ProgramData e os
+`Documentos/LouvorJA Violin/Acervo` e `<pasta de vídeos do sistema>/LouvorJA Violin`
+(`Videos` no Windows, `Movies` no macOS, diretório XDG de vídeos no Linux).
+No Windows para todos, o acervo usa o padrão provisionado pelo instalador
+em Documentos Públicos; vídeos continuam na pasta da conta atual. A configuração da máquina fica em ProgramData e os
 perfis de cada conta continuam privados. Mac/Linux podem selecionar pastas
 compartilhadas com as permissões já concedidas pelo sistema.
 
 Mudanças são agendadas para o próximo boot e oferecem reutilizar uma coleção ou
 copiar a atual com verificação. Não apagam a origem, não sobrescrevem conflitos e
 não transferem arquivos pessoais junto ao acervo. A migração do perfil antigo
-também conserva a origem, incluindo todos os bancos IndexedDB. As raízes de mídia
-existentes são preservadas; não se força um acervo já baixado para outro disco.
+também conserva a origem, incluindo todos os bancos IndexedDB. Acervo e vídeos
+legados são copiados aos padrões uma vez (`defaultLocationsVersion`), incluindo
+a correção do primeiro layout de separação. Escolhas explícitas posteriores são
+preservadas. A cópia mostra progresso em um processo auxiliar com perfil
+temporário; conflitos mantêm as pastas anteriores e aparecem em Armazenamento.
+Downloads ficam privados; a publicação atômica entre volumes e a herança de
+permissões no Windows usam staging oculto transitório no destino.
 
 No desktop, preferências e documentos JSON são escritos pelo main, via
 `userStore`/`DocStore`, com gravação atômica em lote (300 ms). IndexedDB continua

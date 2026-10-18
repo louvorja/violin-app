@@ -209,8 +209,8 @@ test("migrates the private profile once and changes only media/video roots after
     ).toEqual([path.join(profile, ".electron"), path.join(profile, ".electron")]);
     expect(await locations(session)).toMatchObject({
       profileDir: profile,
-      mediaDir: path.join(legacy, "files"),
-      videosDir: path.join(legacy, "Videos"),
+      mediaDir: path.join(root, "documents", "LouvorJA Violin", "Acervo"),
+      videosDir: path.join(root, "videos", "LouvorJA Violin"),
       restartRequired: false,
     });
     expect(
@@ -234,8 +234,8 @@ test("migrates the private profile once and changes only media/video roots after
     });
     expect(await locations(session)).toMatchObject({
       profileDir: profile,
-      mediaDir: path.join(legacy, "files"),
-      videosDir: path.join(legacy, "Videos"),
+      mediaDir: path.join(root, "documents", "LouvorJA Violin", "Acervo"),
+      videosDir: path.join(root, "videos", "LouvorJA Violin"),
       restartRequired: true,
     });
     expect(await fetchVideo(session)).toEqual({ status: 206, body: "345" });
@@ -306,7 +306,7 @@ test("new profiles keep separate IndexedDB while reusing one collection and one 
     expect(defaults).toMatchObject({
       profileDir: path.join(firstRoot, "profile"),
       mediaDir: path.join(firstRoot, "documents", "LouvorJA Violin", "Acervo"),
-      videosDir: path.join(firstRoot, "documents", "LouvorJA Violin", "Videos"),
+      videosDir: path.join(firstRoot, "videos", "LouvorJA Violin"),
       setupCompleted: false,
       access: { media: { writable: true }, videos: { writable: true } },
     });

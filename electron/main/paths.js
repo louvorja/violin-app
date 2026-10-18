@@ -13,6 +13,17 @@ function documentsDir() {
   try { return app.getPath("documents"); }
   catch { return path.join(bootstrapDir(), "media"); }
 }
+function videosDir() {
+  // Respeita Known Folders, XDG e o nome Movies do macOS, inclusive redirecionamentos.
+  const folder = app.getPath("videos");
+  if (!layout.absolute(folder)) throw new Error("A pasta de vídeos do sistema não está disponível.");
+  return folder;
+}
+function migrationOptions() {
+  const machineDefaults = process.platform === "win32" && !process.env.LJ_E2E_USER_DATA && process.env.ProgramData
+    ? layout.readJson(path.join(process.env.ProgramData, "LouvorJA Violin", "storage-defaults.json")) : null;
+  return { bootstrap: bootstrapDir(), documents: documentsDir(), videos: videosDir(), programDir: programDir(), machineDefaults };
+}
 function programDir() {
   if (!app.isPackaged) return app.getAppPath();
   const directory = path.dirname(process.execPath);
@@ -21,9 +32,7 @@ function programDir() {
 }
 function config() {
   if (!resolved) {
-    const machineDefaults = process.platform === "win32" && !process.env.LJ_E2E_USER_DATA && process.env.ProgramData
-      ? layout.readJson(path.join(process.env.ProgramData, "LouvorJA Violin", "storage-defaults.json")) : null;
-    resolved = layout.initialize({ bootstrap: bootstrapDir(), documents: documentsDir(), programDir: programDir(), machineDefaults });
+    resolved = layout.initialize(migrationOptions());
   }
   return resolved;
 }
@@ -34,8 +43,29 @@ module.exports = {
   dataDir: () => path.join(bootstrapDir(), "profile"),
   profileDir() { return path.join(this.dataDir(), ".electron"); },
   privateMediaDir() { return path.join(this.dataDir(), "attachments", "media"); },
-  videoWorkDir() { return path.join(this.dataDir(), "video-work"); },
+  videoWorkDir() { return path.join(this.dataDir(), "temp", "videos"); },
+  migrationOptions,
+  needsMigration() {
+    // A primeira instalação não tem um perfil grande para copiar. Layouts já
+    // publicados continuam no caminho rápido e são validados por configureProfile.
+    const current = layout.readJson(path.join(bootstrapDir(), "storage-layout.json"))
+      || layout.readJson(path.join(this.dataDir(), ".layout-origin.json"));
+    if (current) {
+      layout.validateLayout(current, { profileDir: this.dataDir(), programDir: programDir() });
+      return current.defaultLocationsVersion !== 1 || !!current.pending;
+    }
+    return layout.resolveInitial(this.migrationOptions()).layout.setupCompleted;
+  },
   initialize() { return config(); },
+  acceptPreparedLayout() {
+    // O auxiliar já executou a tentativa deste boot. Um pendingError deve ir
+    // para a UI, sem repetir imediatamente a cópia síncrona no processo pai.
+    const current = layout.readJson(path.join(bootstrapDir(), "storage-layout.json"));
+    layout.validateLayout(current, { profileDir: this.dataDir(), programDir: programDir() });
+    const stat = fs.lstatSync(this.dataDir());
+    if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error("A pasta privada do usuário não está disponível.");
+    resolved = structuredClone(current);
+  },
   storageLayout() { return structuredClone(config()); },
   saveLayout(value) {
     layout.validateLayout(value, { profileDir: this.dataDir(), programDir: programDir() });

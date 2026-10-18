@@ -161,10 +161,10 @@ describe("downloads de vídeo", () => {
     await fs.outputFile(path.join(source, `${A}.mp4`), "old");
     await fs.outputFile(path.join(source, `${A}.keep`), "");
     await fs.outputFile(path.join(videos, `${A}.mp4`), "current");
-    await migrateDownloads(source, videos);
-    await migrateDownloads(source, videos);
+    await migrateDownloads(source, videos, { workDir: path.join(target, "private-video-work") });
+    await migrateDownloads(source, videos, { workDir: path.join(target, "private-video-work") });
     expect(await fs.readFile(path.join(videos, `${A}.mp4`), "utf8")).toBe("current");
     expect(await fs.readFile(path.join(source, `${A}.mp4`), "utf8")).toBe("old");
-    expect(createStore(videos).isKept(A)).toBe(true);
+    expect(createStore(videos, { workDir: path.join(target, "private-video-work") }).isKept(A)).toBe(true);
   });
 });

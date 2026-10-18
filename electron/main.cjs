@@ -1,5 +1,11 @@
 "use strict";
 
+const storageBootstrap = require("./main/storageBootstrap.js");
+if (process.argv.includes(storageBootstrap.FLAG) && process.env[storageBootstrap.REQUEST_ENV]) {
+  storageBootstrap.runHelper();
+  return;
+}
+
 /**
  * Entry point do main process do LouvorJA Electron.
  *
@@ -130,6 +136,7 @@ function configureAppPaths() {
     const isolatedRoot = path.resolve(e2eUserData);
     app.setPath("userData", isolatedRoot);
     app.setPath("documents", path.join(isolatedRoot, "documents"));
+    app.setPath("videos", path.join(isolatedRoot, "videos"));
     return;
   }
 
@@ -158,10 +165,14 @@ if (!app.requestSingleInstanceLock()) {
 }
 console.log("[LouvorJA] Instância única: lock adquirido.");
 try {
+  if (paths.needsMigration()) {
+    storageBootstrap.prepare(app, paths.migrationOptions());
+    paths.acceptPreparedLayout();
+  }
   paths.configureProfile();
-  storageLocations.applyPending();
   storageAccess.initialize(paths.storageLayout());
 } catch (error) {
+  console.error("[storage] Não foi possível preparar os dados:", error);
   dialog.showErrorBox("Não foi possível preparar os dados do LouvorJA", error.message);
   app.exit(1);
   return;

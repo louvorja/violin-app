@@ -56,6 +56,7 @@ describe.skipIf(!enabled)("vídeo online — ponta a ponta com a internet real",
     // Mesmo runtime JS que o app passa em produção (lá é o Electron rodando como Node).
     manager = createManager({
       dir: path.join(root, "online_videos"),
+      workDir: path.join(root, "private-video-work"),
       tools,
       jsRuntime: () => `node:${process.execPath}`,
     });

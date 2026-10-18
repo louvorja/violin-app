@@ -228,6 +228,18 @@ describe("download utility process", () => {
     expect(port.postMessage.mock.calls.map(([message]) => message.type)).toEqual(["ready", "fatal"]);
   });
 
+  it.each([undefined, "relative", "inside"])("worker rejects an invalid or shared temporary root (%s)", (input) => {
+    const port = new EventEmitter();
+    port.postMessage = vi.fn();
+    runWorker(port);
+    const filesDir = path.join(os.tmpdir(), "lj-worker-acervo");
+    port.emit("message", { data: { version: 1, jobId: "job", type: "start", data: {
+      filesDir, workDir: input === "inside" ? path.join(filesDir, "temp") : input,
+      baseUrl: "https://example.test", files: [{ remote: "/a", local: "a" }],
+    } } });
+    expect(port.postMessage.mock.calls.map(([message]) => message.type)).toEqual(["ready", "fatal"]);
+  });
+
   it("rejects symlinked destination parents and temporary files", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "download-root-"));
     const outside = await mkdtemp(path.join(os.tmpdir(), "download-outside-"));

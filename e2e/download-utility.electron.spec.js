@@ -109,9 +109,7 @@ test("downloads and cancels through the real preload in a separate utility proce
       }));
       expect(runtime.packaged).toBe(true);
       expect(await fs.realpath(runtime.executable)).toBe(await fs.realpath(packagedExecutable));
-      expect(path.resolve(runtime.userData)).toBe(
-        path.join(root, "documents", "LouvorJA Violin", ".electron")
-      );
+      expect(path.resolve(runtime.userData)).toBe(path.join(root, "profile", ".electron"));
       expect(path.resolve(runtime.documents)).toBe(path.join(root, "documents"));
     } else {
       expect(
@@ -217,7 +215,7 @@ test("downloads and cancels through the real preload in a separate utility proce
         const metrics = await app.evaluate(({ app }) =>
           app
             .getAppMetrics()
-            .filter((metric) => metric.name === "LouvorJA Downloads")
+            .filter((metric) => metric.name?.startsWith("LouvorJA Downloads "))
             .map((metric) => ({ pid: metric.pid, type: metric.type }))
         );
         utilityPid = metrics[0]?.pid;
@@ -228,13 +226,17 @@ test("downloads and cancels through the real preload in a separate utility proce
     await expect
       .poll(() => page.evaluate(() => window.__downloadTest.terminal))
       .toEqual({ downloaded: 1, failed: 0 });
-    const filesDir = path.join(root, "documents", "LouvorJA Violin", "files");
+    const locations = await page.evaluate(() => window.louvorjaApi.storage.locations());
+    const filesDir = locations.mediaDir;
+    const workDir = path.join(locations.profileDir, "temp", "downloads");
     expect(await fs.readFile(path.join(filesDir, "complete.bin"))).toEqual(fixture);
     expect(await page.evaluate(() => window.__downloadTest.progress)).toBeGreaterThan(0);
 
     slow = true;
     expect((await start("retry.bin")).queued).toBe(1);
     await expect.poll(() => page.evaluate(() => window.__downloadTest.progress)).toBeGreaterThan(0);
+    expect((await fs.readdir(workDir)).some((name) => name.endsWith(".partial"))).toBe(true);
+    expect((await fs.readdir(filesDir)).some((name) => /\.(tmp|partial)$/.test(name))).toBe(false);
     expect(await page.evaluate(() => window.louvorjaApi.download.cancel())).toBe(true);
     await expect.poll(() => page.evaluate(() => window.__downloadTest.cancelled)).toBe(true);
     await expect(fs.stat(path.join(filesDir, "retry.bin"))).rejects.toMatchObject({
@@ -243,6 +245,7 @@ test("downloads and cancels through the real preload in a separate utility proce
     await expect(fs.stat(path.join(filesDir, "retry.bin.tmp"))).rejects.toMatchObject({
       code: "ENOENT",
     });
+    await expect.poll(() => fs.readdir(workDir)).toEqual([]);
     slow = false;
     expect((await start("retry.bin")).queued).toBe(1);
     await expect
@@ -253,7 +256,8 @@ test("downloads and cancels through the real preload in a separate utility proce
       .poll(async () =>
         app.evaluate(
           ({ app }) =>
-            app.getAppMetrics().filter((metric) => metric.name === "LouvorJA Downloads").length
+            app.getAppMetrics().filter((metric) => metric.name?.startsWith("LouvorJA Downloads "))
+              .length
         )
       )
       .toBe(0);

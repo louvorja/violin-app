@@ -7,10 +7,10 @@ const { workerName } = require("./workerDiagnostics.js");
 
 /** Main-process adapter. The renderer never receives a process handle or port. */
 class UtilityQueue extends EventEmitter {
-  constructor({ baseUrl, apiToken, filesDir, allowedRemoteOrigins, fork, startupTimeoutMs = 10000, cancelTimeoutMs = 2000, exitTimeoutMs = 10000,
+  constructor({ baseUrl, apiToken, filesDir, workDir, allowedRemoteOrigins, fork, startupTimeoutMs = 10000, cancelTimeoutMs = 2000, exitTimeoutMs = 10000,
     reportDiagnostic, monotonicNow = () => performance.now() } = {}) {
     super();
-    this.config = { baseUrl, apiToken, filesDir, allowedRemoteOrigins };
+    this.config = { baseUrl, apiToken, filesDir, workDir, allowedRemoteOrigins };
     this.fork = fork || ((entry, options) => require("electron").utilityProcess.fork(entry, [], options));
     this.startupTimeoutMs = startupTimeoutMs;
     this.cancelTimeoutMs = cancelTimeoutMs;

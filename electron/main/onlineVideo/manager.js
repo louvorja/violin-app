@@ -90,13 +90,14 @@ async function settleCancelled(promises) {
  *
  * @param {object} cfg
  * @param {string} cfg.dir             pasta do cache de vídeos
+ * @param {string} cfg.workDir         pasta privada de downloads, trilhas e conversão
  * @param {ReturnType<typeof import("./tools.js").createTools>} cfg.tools
  * @param {number} [cfg.refreshCooldownMs]  intervalo mínimo entre renovações do yt-dlp (padrão: 1 h)
  */
 function createManager(cfg) {
   const {
     dir,
-    workDir = dir,
+    workDir,
     canWrite = () => true,
     canMaintain = () => true,
     tools,

@@ -6,6 +6,8 @@ const http = require("http");
 const os = require("os");
 const { EventEmitter } = require("events");
 const { pathToFileURL } = require("url");
+const { createHash, randomUUID } = require("node:crypto");
+const { pipeline } = require("node:stream/promises");
 
 const DEFAULT_PROGRESS_INTERVAL_MS = 100;
 const MAX_REDIRECTS = 3;
@@ -41,14 +43,16 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  */
 class HttpQueue extends EventEmitter {
   /**
-   * @param {{ baseUrl: string, apiToken?: string, concurrency?: number, progressIntervalMs?: number, filesDir?: string }} options
+   * @param {{ baseUrl: string, apiToken?: string, concurrency?: number, progressIntervalMs?: number, filesDir?: string, workDir?: string, platform?: string }} options
    */
-  constructor({ baseUrl, apiToken, concurrency, progressIntervalMs, filesDir, retryDelaysMs } = {}) {
+  constructor({ baseUrl, apiToken, concurrency, progressIntervalMs, filesDir, workDir, retryDelaysMs, platform = process.platform } = {}) {
     super();
     this.retryDelaysMs = Array.isArray(retryDelaysMs) ? retryDelaysMs : DEFAULT_RETRY_DELAYS_MS;
     this.baseUrl = (baseUrl || "").replace(/\/+$/, "");
     this.apiToken = apiToken || null;
     this.filesDir = filesDir;
+    this.workDir = workDir;
+    this.platform = platform;
     // `concurrency` explícito fixa o número de downloads; sem ele a fila se
     // adapta à vazão (ver adaptiveConcurrency.mjs).
     this.fixedConcurrency = Number.isFinite(concurrency)
@@ -359,12 +363,18 @@ class HttpQueue extends EventEmitter {
   async _processItem(item, total, getNextIndex) {
     const idx = getNextIndex();
     const url = item.remoteUrl || this._buildUrl(item.remote);
-    const tmp = `${item.local}.tmp`;
+    // O processo principal sempre fornece um diretório privado. O hash evita
+    // misturar retomadas de acervos ou origens diferentes com o mesmo nome.
+    const tmp = this.workDir
+      ? path.join(this.workDir, `${createHash("sha256").update(JSON.stringify([item.local, url])).digest("hex")}.partial`)
+      : `${item.local}.tmp`;
     const metaPath = `${tmp}.meta`;
     let receivedBytes = 0;
+    let metadataWrite = Promise.resolve();
 
     try {
       await this._prepareDestination(item.local);
+      await this._prepareWorkFile(tmp);
       await this._assertDestination(item.local, tmp);
       this._activeTmps.add(tmp);
 
@@ -377,9 +387,10 @@ class HttpQueue extends EventEmitter {
 
       const attempts = 1 + this.retryDelaysMs.length;
       for (let attempt = 1; ; attempt++) {
+        await this._assertWorkFile(tmp);
         const resume = await this._readResume(tmp, item);
         resume.onResponse = (meta) => {
-          fs.outputJson(metaPath, meta).catch(() => {});
+          metadataWrite = metadataWrite.then(() => fs.outputJson(metaPath, meta)).catch(() => {});
         };
         try {
           await this._downloadOne(url, tmp, (bytes, totalBytes) => {
@@ -394,6 +405,7 @@ class HttpQueue extends EventEmitter {
           }, 0, true, resume);
           break;
         } catch (error) {
+          await metadataWrite;
           if (this.cancelled) throw error;
           // Parcial que o servidor não reconhece: recomeça do zero, sem gastar tentativa.
           if (error.discardPartial || error.status === 416) {
@@ -408,17 +420,21 @@ class HttpQueue extends EventEmitter {
           if (this.cancelled) throw new Error("cancelled");
         }
       }
+      await metadataWrite;
       if (this.cancelled) throw new Error("cancelled");
 
       // `file-done` nunca ultrapassa a última posição conhecida do arquivo.
       this._flushPendingProgress(idx);
       await this._assertDestination(item.local, tmp);
-      await fs.move(tmp, item.local, { overwrite: true });
+      await this._publish(tmp, item.local);
       await fs.remove(metaPath).catch(() => {});
       this._activeTmps.delete(tmp);
       this.emit("file-done", { file: item.remote, localPath: item.local });
       return { ok: true, bytes: receivedBytes };
     } catch (err) {
+      // Uma escrita atrasada do ETag não pode recriar um temporário após o
+      // cancelamento ou depois de o arquivo final já ter sido publicado.
+      await metadataWrite;
       if (!this.cancelled) this._flushPendingProgress(idx);
       // Falha de rede ou de servidor guarda o parcial: a próxima tentativa (ou
       // o próximo "baixar") pede só o que falta. Cancelar e erro definitivo
@@ -436,6 +452,63 @@ class HttpQueue extends EventEmitter {
       this.emit("file-error", { file: item.remote, error: err.message });
       return { ok: false };
     }
+  }
+
+  async _prepareWorkFile(tmp) {
+    if (!this.workDir) return;
+    await fs.ensureDir(this.workDir, { mode: 0o700 });
+    await this._assertWorkFile(tmp);
+  }
+
+  async _assertWorkFile(tmp) {
+    if (!this.workDir) return;
+    if (!(await fs.lstat(this.workDir)).isDirectory() || path.dirname(tmp) !== this.workDir) {
+      throw new Error("Pasta temporária de download inválida");
+    }
+    for (const file of [tmp, `${tmp}.meta`]) {
+      try {
+        if (!(await fs.lstat(file)).isFile()) throw new Error("Arquivo temporário de download inválido");
+      } catch (error) { if (error.code !== "ENOENT") throw error; }
+    }
+  }
+
+  async _publish(tmp, local) {
+    if (this.cancelled) throw new Error("cancelled");
+    if (this.platform !== "win32") {
+      try {
+        // Mesmo volume: o acervo só vê o arquivo quando já está completo.
+        await fs.rename(tmp, local);
+        return;
+      } catch (error) { if (error.code !== "EXDEV") throw error; }
+    }
+    // Entre volumes, rename não existe. No Windows ele também preservaria a
+    // ACL privada da origem: crie o arquivo no destino para herdar suas
+    // permissões. Só a publicação usa este nome transitório no acervo;
+    // download e retomada continuam no perfil privado.
+    const publishing = path.join(path.dirname(local), `.lj-download-${randomUUID()}.publishing`);
+    let publicationCreated = false;
+    try {
+      await this._assertDestination(local, publishing);
+      if (this.platform === "win32") {
+        // Cria um arquivo novo e copia somente os bytes, sem transportar ACLs
+        // ou outros atributos de segurança do arquivo no perfil privado.
+        const fd = await fs.open(publishing, "wx", 0o666);
+        publicationCreated = true;
+        await pipeline(fs.createReadStream(tmp), fs.createWriteStream(publishing, { fd }));
+      } else {
+        try {
+          await fs.copyFile(tmp, publishing, fs.constants.COPYFILE_EXCL);
+          publicationCreated = true;
+        } catch (error) {
+          if (error.code !== "EEXIST") await fs.remove(publishing);
+          throw error;
+        }
+      }
+      if (this.cancelled) throw new Error("cancelled");
+      await this._assertDestination(local, publishing);
+      await fs.rename(publishing, local);
+      await fs.remove(tmp);
+    } finally { if (publicationCreated) await fs.remove(publishing); }
   }
 
   async _prepareDestination(local) {

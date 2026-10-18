@@ -93,17 +93,20 @@ SW — sem isso o próximo `get` regravava o JSON antigo. Nenhuma dessas ações
 Programa, perfil privado, acervo e vídeos têm responsabilidades separadas.
 `paths.dataDir()` é fixo em `<appData>/LouvorJA Violin/profile`; contém `storage/`,
 `library/`, anexos privados em `attachments/media/`, `canva/`, `json_db/`, `bin/`,
-temporários de vídeo em `video-work/` e o perfil Chromium em `.electron/`.
+temporários de vídeo em `temp/videos/` e downloads HTTP em `temp/downloads/` e o perfil Chromium em `.electron/`.
 O IndexedDB inteiro continua privado: ele mistura catálogos com coleções pessoais
 e binários, portanto não pode ser compartilhado apenas porque também guarda catálogo.
 
 `paths.mediaDir()` aponta diretamente ao acervo (`musics/`, `images/`, `covers/`),
 e `paths.videosDir()` à pasta de vídeos prontos. Os padrões por usuário são
-`Documentos/LouvorJA Violin/Acervo` e `Documentos/LouvorJA Violin/Videos`.
-Instalação Windows para todos provisiona essas duas pastas em Documentos Públicos,
-com permissão de escrita para usuários comuns, e publica os padrões em
-`%ProgramData%/LouvorJA Violin/storage-defaults.json`. Somente perfis novos adotam
-esse padrão de máquina. Reinstalações e atualizações preservam o escopo existente;
+`Documentos/LouvorJA Violin/Acervo` e `<pasta de vídeos do sistema>/LouvorJA Violin`.
+A pasta nativa vem de `app.getPath("videos")`: Videos no Windows, Movies no macOS
+e o diretório XDG de vídeos no Linux, respeitando redirecionamentos do sistema.
+Instalação Windows para todos provisiona somente o acervo em Documentos Públicos,
+com permissão de escrita para usuários comuns, e publica esse padrão em
+`%ProgramData%/LouvorJA Violin/storage-defaults.json`. Vídeos continuam por conta
+mesmo quando o programa é instalado para todos; podem ser compartilhados por
+escolha de pasta no aplicativo. Reinstalações e atualizações preservam o escopo existente;
 troca de escopo exige desinstalar o programa e instalar novamente, preservando dados.
 
 No primeiro uso e em Armazenamento, `StorageLocations.vue` permite escolher acervo
@@ -116,10 +119,30 @@ opcional separada, automática ou manual, sem ativação silenciosa.
 
 A migração da antiga raiz única copia e confere os dados privados antes de
 publicar o perfil fixo, preservando todas as origens do IndexedDB. Preferências
-antigas ainda no AppData são recuperadas quando ausentes na raiz ativa. As pastas
-de mídia existentes continuam no lugar; o perfil antigo fica como cópia de
-recuperação. A raiz plana legada com `musics/` ao lado de `Videos/` é aceita no
-upgrade; novas escolhas exigem pastas sem sobreposição.
+antigas ainda no AppData são recuperadas quando ausentes na raiz ativa. Acervo e vídeos prontos
+também são copiados aos destinos padrão, mantendo as origens como recuperação.
+`defaultLocationsVersion` registra a migração única, inclusive para perfis que
+já passaram pela primeira versão da separação. Escolhas explícitas posteriores
+não são redefinidas. A raiz plana legada com `musics/` ao lado de `Videos/` é
+convertida para `Acervo/` e a pasta nativa de vídeos; novas escolhas exigem raízes
+sem sobreposição. Checkpoints `.partial`, cache yt-dlp e marcadores de migração
+vão para `temp/videos/`; streams antigos descartáveis não são reutilizados.
+A primeira migração e mudanças pendentes usam um worker e uma janela de progresso num processo
+auxiliar com perfil temporário; o processo principal conserva seu singleton e
+só abre a sessão definitiva após a publicação. Não há reinício do processo
+principal nem do servidor de desenvolvimento. Caches regeneráveis na raiz do
+Chromium (HTTP, código, GPU, logs e relatórios de falha) permanecem na origem;
+IndexedDB, blobs, Service Worker/CacheStorage e entradas desconhecidas são
+copiados e verificados. O hash inicial é reaproveitado na verificação da cópia,
+e o manifesto da origem é conferido novamente antes da publicação. O processo
+auxiliar mantém os leases de acervo ativos enquanto o worker faz a cópia.
+Falha na mudança de acervo/vídeos mantém caminhos anteriores e exibe o erro no
+app, permitindo corrigir ou cancelar. Temporários de transferência ficam no
+perfil; publicação entre volumes usa staging oculto transitório no destino,
+pois rename atômico não atravessa volumes. No Windows, a publicação também cria
+o arquivo no destino para herdar suas permissões, em vez de carregar a ACL
+privada com um rename (contrato de [descritores de segurança do Windows](https://learn.microsoft.com/en-us/windows/win32/fileio/file-security-and-access-rights)). Arquivos parciais nunca aparecem
+como arquivos finais.
 As outras instâncias antigas devem estar fechadas durante essa migração:
 marcadores de processo ativos/ambíguos ou mudanças nos arquivos durante a cópia
 interrompem a publicação. Essa conferência não é um snapshot transacional de
@@ -1246,7 +1269,7 @@ Media.openYouTube(embedUrl, título)          ← único ponto de entrada (5 cha
        ├─ /operator               prévia do vídeo (abre se "Abrir operador" estiver ligado)
        └─ janela principal        único que toca o áudio; controla play/pausa/busca/volume
 
-  Quando as trilhas terminam: ffmpeg junta sem recodificar → <dados>/Videos/<id>.mp4
+  Quando as trilhas terminam: ffmpeg junta sem recodificar → <paths.videosDir()>/<id>.mp4
   (a próxima vez toca do arquivo: `louvorja://onlinevideo/<id>.mp4`, os dois endereços iguais)
 ```
 
@@ -1283,12 +1306,13 @@ mesmas trilhas e não abre uma segunda conexão. Só um vídeo sem trilhas servi
   (`onlineVideo:prepare`, uma vez por sessão).
 - **Progresso** aparece em "Processos em segundo plano" (`useBackgroundTasks`, com botão de
   cancelar). Vídeo já em cache não pisca tarefa nenhuma.
-- **Vídeos baixados** em `<dados>/Videos/` (por padrão, `Documents/LouvorJA Violin/Videos`).
-  Downloads de versões anteriores em `userData/online_videos/` são movidos na inicialização,
-  preservando marcas de manter e parciais, sem sobrescrever o destino. A pasta acompanha a
-  mudança da raiz de dados. O cache automático mantém a cota de 6 GB,
-  despeja o menos usado; "Apagar vídeos baixados" em Opções. Parciais com mais de 1 dia são
-  varridos na abertura do app.
+- **Vídeos baixados** em `paths.videosDir()` (por padrão, a pasta nativa de vídeos
+  da conta, subpasta `LouvorJA Violin`). A pasta é independente do perfil e do acervo.
+  Vídeos antigos são copiados e verificados sem apagar a origem. Parciais, trilhas,
+  cache do downloader e marcadores privados ficam em `profile/temp/videos/`.
+  O cache automático privado mantém a cota de 6 GB e despeja o menos usado;
+  manutenção de vídeos compartilhados é desativada. Parciais com mais de 1 dia
+  são varridos na abertura do app.
 - **Vídeos mantidos** (`<id>.keep` ao lado do arquivo): o que o operador baixou de propósito,
   em "Meus Vídeos Online", e o que projetou a partir da própria lista. O despejo por espaço
   nunca os leva e eles não contam na cota (que é do cache automático). Sair só pelo botão de
@@ -1302,7 +1326,7 @@ mesmas trilhas e não abre uma segunda conexão. Só um vídeo sem trilhas servi
   já começa o download e guarda o vídeo, salvo com o download desligado nas opções.
 - **A cópia única** (`onlineVideo:stream`, `progressive.js`): o yt-dlp pede só os **links** das
   duas trilhas (`-J`, sem baixar) e o main as baixa **uma vez**, em pedaços de 2 MB, para
-  arquivos do tamanho final em `Videos/.stream/<id>/` que vão sendo preenchidos.
+  arquivos do tamanho final em `profile/temp/videos/.stream/<id>/` que vão sendo preenchidos.
   Projeção, retorno, operador e o player do app leem desses arquivos por `Range`, em
   `louvorja://onlinestream/<id>/video|audio` — o handler espera o trecho que ainda não chegou
   e, num salto, o baixador pula para lá. Começa em ~7 s. Ao terminar, o ffmpeg junta as trilhas

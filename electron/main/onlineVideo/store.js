@@ -3,6 +3,7 @@
 const fs = require("fs-extra");
 const path = require("path");
 const { isVideoId } = require("./ids.js");
+const { assertPrivateWorkDir } = require("./workDirectory.js");
 
 const PARTIAL_DIR = ".partial";
 const PARTIAL_MAX_AGE_MS = 24 * 60 * 60 * 1000;
@@ -16,8 +17,10 @@ const PARTIAL_MAX_AGE_MS = 24 * 60 * 60 * 1000;
  * conta na cota do cache. A marca é um arquivo `<id>.keep` ao lado do vídeo.
  *
  * @param {string} dir  pasta do cache (criada sob demanda)
+ * @param {{ workDir: string, canWrite?: Function, canMaintain?: Function }} options
  */
-function createStore(dir, { workDir = dir, canWrite = () => true, canMaintain = () => true } = {}) {
+function createStore(dir, { workDir, canWrite = () => true, canMaintain = () => true } = {}) {
+  assertPrivateWorkDir(dir, workDir);
   const partialRoot = path.join(workDir, PARTIAL_DIR);
 
   function regularRoot() {

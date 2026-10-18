@@ -90,6 +90,7 @@ describe("download.checkConnection", () => {
 describe("download.startDownload", () => {
   beforeEach(() => {
     vi.spyOn(require("../storageAccess.js"), "assertWritable").mockImplementation(() => {});
+    vi.spyOn(require("../paths.js"), "dataDir").mockReturnValue(path.join(os.tmpdir(), "lj-download-test-profile"));
     require("../download/index.js").resumeAfterShutdownFailure();
   });
   afterEach(() => vi.restoreAllMocks());
@@ -133,6 +134,7 @@ describe("download.startDownload", () => {
     });
     download.setApiConfig({ filesUrl: "https://example.invalid/files" });
     await download.startDownload([{ remote: "/images/a.jpg", local: "images/a.jpg" }], null);
+    expect(queue.config.workDir).toBe(path.join(os.tmpdir(), "lj-download-test-profile", "temp", "downloads"));
     queue.running = false;
     queue.emit("queue-cancelled");
     expect(download.isDownloading()).toBe(true);

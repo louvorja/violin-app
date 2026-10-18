@@ -12,7 +12,9 @@ const A = "aaaaaaaaaaa";
 const B = "bbbbbbbbbbb";
 const C = "ccccccccccc";
 
+let root;
 let dir;
+let workDir;
 let store;
 
 function put(id, bytes, usedAtMs) {
@@ -26,18 +28,31 @@ function put(id, bytes, usedAtMs) {
 }
 
 beforeEach(() => {
-  dir = fs.mkdtempSync(path.join(os.tmpdir(), "lj-store-"));
-  store = createStore(dir);
+  root = fs.mkdtempSync(path.join(os.tmpdir(), "lj-store-"));
+  dir = path.join(root, "videos");
+  workDir = path.join(root, "private-work");
+  fs.mkdirSync(dir);
+  store = createStore(dir, { workDir });
 });
 
 afterEach(() => {
-  fs.rmSync(dir, { recursive: true, force: true });
+  fs.rmSync(root, { recursive: true, force: true });
 });
 
 describe("pathFor / partialDirFor", () => {
+  it("exige trabalho privado separado e recusa sobreposição mesmo por link", () => {
+    expect(() => createStore(dir)).toThrow("pasta privada");
+    for (const candidate of [dir, path.join(dir, "work"), root]) {
+      expect(() => createStore(dir, { workDir: candidate })).toThrow("pasta privada");
+    }
+    const alias = path.join(root, "alias");
+    fs.symlinkSync(dir, alias, process.platform === "win32" ? "junction" : "dir");
+    expect(() => createStore(dir, { workDir: path.join(alias, "work") })).toThrow("pasta privada");
+  });
+
   it("resolve dentro do cache, com o ID como nome", () => {
     expect(store.pathFor(A)).toBe(path.join(dir, `${A}.mp4`));
-    expect(store.partialDirFor(A)).toBe(path.join(dir, ".partial", A));
+    expect(store.partialDirFor(A)).toBe(path.join(workDir, ".partial", A));
   });
 
   it("recusa ID que escaparia da pasta", () => {
@@ -66,8 +81,8 @@ describe("list / totalSize", () => {
   it("lista só os MP4 com nome de ID, ignorando parciais e estranhos", async () => {
     put(A, 100);
     put(B, 50);
-    fs.mkdirSync(path.join(dir, ".partial", C), { recursive: true });
-    fs.writeFileSync(path.join(dir, ".partial", C, `${C}.mp4`), "parcial");
+    fs.mkdirSync(path.join(workDir, ".partial", C), { recursive: true });
+    fs.writeFileSync(path.join(workDir, ".partial", C, `${C}.mp4`), "parcial");
     fs.writeFileSync(path.join(dir, "notas.txt"), "x");
     fs.writeFileSync(path.join(dir, "curto.mp4"), "x");
     fs.writeFileSync(path.join(dir, `${C}.mp4.part`), "x");
@@ -79,7 +94,7 @@ describe("list / totalSize", () => {
   });
 
   it("devolve lista vazia quando a pasta ainda não existe", async () => {
-    const vazio = createStore(path.join(dir, "nao-existe"));
+    const vazio = createStore(path.join(dir, "nao-existe"), { workDir });
     expect(await vazio.list()).toEqual([]);
     expect(await vazio.totalSize()).toBe(0);
   });
@@ -105,7 +120,7 @@ describe("remove / clear", () => {
     fs.mkdirSync(store.partialDirFor(C), { recursive: true });
     expect(await store.clear()).toBe(2);
     expect(await store.list()).toEqual([]);
-    expect(fs.existsSync(path.join(dir, ".partial"))).toBe(false);
+    expect(fs.existsSync(path.join(workDir, ".partial"))).toBe(false);
   });
 });
 

@@ -268,8 +268,8 @@ FunctionEnd
 !macroend
 !endif
 
-; Defaults compartilhados só são publicados depois de preparar as duas
-; pastas de mídia. O perfil nunca é provisionado pelo instalador elevado.
+; O acervo compartilhado é provisionado pelo instalador. Vídeos e perfil
+; usam as pastas da conta que executa o app, nunca as do administrador elevado.
 !macro LouvorJAProvisionSharedMedia
   ${If} $installMode == "all"
     ; No contexto all, APPDATA = ProgramData e DOCUMENTS = Public Documents.
@@ -313,40 +313,22 @@ FunctionEnd
       Goto louvorja_shared_unavailable
     ${EndIf}
     StrCpy $R4 "$R3\Acervo"
-    StrCpy $R5 "$R3\Videos"
-    Push $R4
-    Push $R5
-    StrCpy $R6 2
-louvorja_shared_folder:
-    Pop $R7
-    System::Call 'kernel32::GetFileAttributesW(w R7) i.R0'
+    System::Call 'kernel32::GetFileAttributesW(w R4) i.R0'
     IntOp $R1 $R0 & 0x400
     ${If} $R0 != -1
     ${AndIf} $R1 != 0
-      ; Balance the remaining stack before returning.
-      ${If} $R6 == 2
-        Pop $R7
-      ${EndIf}
       Goto louvorja_shared_unavailable
     ${EndIf}
-    CreateDirectory "$R7"
-    nsExec::ExecToStack '"$SYSDIR\icacls.exe" "$R7" /grant:r "*S-1-5-32-545:(OI)(CI)M"'
+    CreateDirectory "$R4"
+    nsExec::ExecToStack '"$SYSDIR\icacls.exe" "$R4" /grant:r "*S-1-5-32-545:(OI)(CI)M"'
     Pop $R0
     Pop $R1
     ${If} $R0 != 0
-      ${If} $R6 == 2
-        Pop $R7
-      ${EndIf}
       Goto louvorja_shared_unavailable
-    ${EndIf}
-    IntOp $R6 $R6 - 1
-    ${If} $R6 > 0
-      Goto louvorja_shared_folder
     ${EndIf}
 
     ; JSON aceita '/' no Windows; normalize para não escrever escapes inválidos.
     ${StrRep} $R4 "$R4" "\" "/"
-    ${StrRep} $R5 "$R5" "\" "/"
     Delete "$R2\storage-defaults.json.tmp"
     ClearErrors
     FileOpen $R0 "$R2\storage-defaults.json.tmp" w
@@ -355,7 +337,7 @@ louvorja_shared_folder:
     ${EndIf}
     ; FileWrite usa a página ANSI do Windows. Escreva UTF-8 explicitamente
     ; para preservar pastas redirecionadas com acentos ou outros alfabetos.
-    StrCpy $R8 '{"version":1,"mediaDir":"$R4","videosDir":"$R5"}'
+    StrCpy $R8 '{"version":2,"mediaDir":"$R4"}'
     System::Call 'kernel32::WideCharToMultiByte(i 65001, i 0, w R8, i -1, p 0, i 0, p 0, p 0) i.R9'
     ${If} $R9 <= 1
       FileClose $R0

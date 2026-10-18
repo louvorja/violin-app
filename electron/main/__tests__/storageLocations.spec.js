@@ -10,7 +10,7 @@ let root, paths, storage, access;
 beforeEach(() => {
   root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "lj-storage-layout-")));
   vi.stubEnv("LJ_E2E_USER_DATA", path.join(root, "user"));
-  const locations = { documents: path.join(root, "Documents"), userData: path.join(root, "user") };
+  const locations = { documents: path.join(root, "Documents"), videos: path.join(root, "Movies"), userData: path.join(root, "user") };
   const original = Module._load;
   Module._load = function (request, ...args) {
     return request === "electron" ? { app: { getPath: (n) => locations[n], setPath: (n, v) => { locations[n] = v; }, getAppPath: () => path.join(root, "program") } } : original.call(this, request, ...args);

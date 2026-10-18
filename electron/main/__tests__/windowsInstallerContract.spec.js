@@ -61,9 +61,11 @@ describe("contrato do instalador Windows", () => {
     expect(shared).toContain('*S-1-5-32-545:(OI)(CI)RX');
     expect(shared).not.toContain('*S-1-1-0'); // no Everyone grant
     expect(shared).not.toContain('IndexedDB');
+    expect(shared).not.toContain('videosDir');
+    expect(shared).not.toContain('$R3\\Videos');
     expect(shared).toContain('WideCharToMultiByte(i 65001');
     expect(shared.indexOf('storage-defaults.json.tmp" w')).toBeGreaterThan(shared.lastIndexOf('/grant:r'));
-    expect(shared).toContain('"version":1,"mediaDir":"$R4","videosDir":"$R5"');
+    expect(shared).toContain('"version":2,"mediaDir":"$R4"');
   });
 
   it("oferece escopo e diretório dos binários no instalador assistido", () => {

@@ -47,6 +47,7 @@ const toolName = (name) => `${name}${nodeProcess.platform === "win32" ? ".exe" :
 let app;
 let main;
 let root;
+let privateProfile;
 /** Últimas mensagens de aviso/erro do console da janela principal: é o que explica uma tela que não apareceu. */
 const mainConsole = [];
 const requests = [];
@@ -272,8 +273,7 @@ const removeFromList = (id) =>
   );
 
 /** As trilhas de um vídeo que ainda baixa (a cópia que as janelas leem) ficam aqui. */
-const streamDirOf = (id) =>
-  path.join(root, "documents", "LouvorJA Violin", "Videos", ".stream", id);
+const streamDirOf = (id) => path.join(privateProfile, "temp", "videos", ".stream", id);
 
 const tasks = () =>
   main.evaluate(async (url) => {
@@ -340,6 +340,7 @@ test.beforeAll(async () => {
   delete env.ELECTRON_RUN_AS_NODE;
 
   app = await electron.launch({ args: ["."], env, timeout: 90_000 });
+  privateProfile = path.dirname(await app.evaluate(({ app }) => app.getPath("userData")));
   app.on("window", (page) => {
     page.on("request", (r) => requests.push({ at: Date.now(), page: route(page), url: r.url() }));
   });
@@ -782,7 +783,7 @@ test.describe("quando algo dá errado", () => {
   });
 
   test("binário corrompido: o download reinstala as ferramentas e o vídeo baixa", async () => {
-    const ffmpeg = path.join(root, "documents", "LouvorJA Violin", "bin", toolName("ffmpeg"));
+    const ffmpeg = path.join(privateProfile, "bin", toolName("ffmpeg"));
     fs.writeFileSync(ffmpeg, Buffer.from([0, 1, 2, 3, 4, 5]), { mode: 0o755 });
     await removeFromList(SHORT);
 
@@ -1795,7 +1796,7 @@ test.describe("Meus vídeos online: baixar de antemão e gerenciar", () => {
     });
 
     test("com o yt-dlp quebrado: usa o YouTube e renova a ferramenta ao encerrar a apresentação", async () => {
-      const ytdlp = path.join(root, "documents", "LouvorJA Violin", "bin", toolName("yt-dlp"));
+      const ytdlp = path.join(privateProfile, "bin", toolName("yt-dlp"));
       await removeFromDisk(LONG);
       if (nodeProcess.platform === "win32") {
         // Um PE inválido produz a mesma categoria de erro de ferramenta e força

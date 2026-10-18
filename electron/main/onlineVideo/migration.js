@@ -4,6 +4,7 @@ const fs = require("fs-extra");
 const path = require("path");
 const { randomUUID } = require("crypto");
 const { isVideoId } = require("./ids.js");
+const { assertPrivateWorkDir } = require("./workDirectory.js");
 const { copyVerified, atomicJson, readJson } = require("../storageLayout.js");
 
 async function entries(dir) {
@@ -38,7 +39,8 @@ async function publishCopy(from, to) {
 }
 
 /** Copia e verifica downloads antigos sem apagar a origem ou seguir links. */
-async function migrateDownloads(fromDir, toDir, { workDir = toDir } = {}) {
+async function migrateDownloads(fromDir, toDir, { workDir } = {}) {
+  assertPrivateWorkDir(toDir, workDir);
   if (path.resolve(fromDir) === path.resolve(toDir)) return;
   const source = await entries(fromDir);
   if (!source.length) return;
