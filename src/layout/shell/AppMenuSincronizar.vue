@@ -4,7 +4,7 @@
       <p class="opt-empty">{{ $t("options.collections_download.desktop_only") }}</p>
     </section>
 
-    <section v-if="canDownload" class="opt-section">
+    <section v-if="canDownload" class="opt-section sinc-connection">
       <h3 class="opt-section-title">
         <LjIcon :icon="ICONS.UI.SYNC_CLOUD" size="18" />
         {{ $t("options.collections_download.connection") }}
@@ -680,8 +680,12 @@
         </section>
 
         <!-- Armazenamento -->
-        <section v-if="abaIniciada('storage')" v-show="activeTab === 'storage'" class="opt-section">
-          <StorageLocations @changed="onStorageLocationsChanged" />
+        <section
+          v-if="abaIniciada('storage')"
+          v-show="activeTab === 'storage'"
+          class="opt-section sinc-storage"
+        >
+          <StorageLocations class="sinc-storage-locations" @changed="onStorageLocationsChanged" />
 
           <div class="opt-stats">
             <div class="opt-stat">
@@ -1873,12 +1877,51 @@ onBeforeUnmount(() => {
   margin-bottom: 10px;
 }
 
+.sinc-connection {
+  margin-bottom: 0;
+}
+
+.sinc-connection > .opt-row {
+  gap: var(--lj-space-4);
+  margin-bottom: 0;
+}
+
 .sinc-tabs {
-  margin-top: var(--lj-space-4);
+  margin-top: var(--lj-space-6);
 }
 
 .sinc-panes {
-  margin-top: var(--lj-space-7);
+  margin-top: var(--lj-space-6);
+}
+
+.sinc-storage {
+  grid-template-columns: minmax(0, 1fr);
+  margin-bottom: 0;
+}
+
+.sinc-storage-locations {
+  margin-bottom: var(--lj-space-6);
+}
+
+.sinc-storage-locations :deep(.storage-locations__actions) {
+  gap: var(--lj-space-3);
+}
+
+.sinc-storage-locations :deep(.storage-locations__section > .storage-locations__actions),
+.sinc-storage-locations :deep(.storage-locations__section > .lj-btn) {
+  margin-top: var(--lj-space-2);
+}
+
+.sinc-storage-locations > :deep(.storage-locations__actions) {
+  padding-top: var(--lj-space-2);
+}
+
+.sinc-storage > .opt-stats {
+  margin-bottom: var(--lj-space-6);
+}
+
+.sinc-storage > .opt-actions {
+  margin-top: var(--lj-space-2);
 }
 
 .sinc-row-gap {
