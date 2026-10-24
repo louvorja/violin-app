@@ -280,6 +280,31 @@ on run argv
 end run
 `;
 
+/**
+ * PDF → um PNG por página, pelo PDFKit do macOS (JavaScript for Automation).
+ * argv: pdf, pasta de saída, largura em pixels. Devolve quantas páginas.
+ */
+const MAC_RASTER_SCRIPT = `
+ObjC.import("Quartz");
+ObjC.import("AppKit");
+function run(argv) {
+  var doc = $.PDFDocument.alloc.initWithURL($.NSURL.fileURLWithPath(argv[0]));
+  if (!doc || doc.isNil()) return "0";
+  var largura = parseInt(argv[2], 10) || 1920;
+  var n = doc.pageCount;
+  for (var i = 0; i < n; i++) {
+    var page = doc.pageAtIndex(i);
+    var b = page.boundsForBox(0);
+    var esc = largura / b.size.width;
+    var img = page.thumbnailOfSizeForBox($.NSMakeSize(Math.round(b.size.width * esc), Math.round(b.size.height * esc)), 0);
+    var rep = $.NSBitmapImageRep.imageRepWithData(img.TIFFRepresentation);
+    var png = rep.representationUsingTypeProperties(4, $.NSDictionary.dictionary);
+    png.writeToFileAtomically(argv[1] + "/Slide" + (i + 1) + ".png", true);
+  }
+  return String(n);
+}
+`;
+
 async function _macPowerPoint(input, output, opts) {
   // Igual ao Windows: cada slide vira PNG e o PDF é montado aqui.
   // Copia para dentro do container do PowerPoint: fora dele o macOS pede
@@ -310,14 +335,27 @@ async function _macPowerPoint(input, output, opts) {
       await imagesToPdf(imagens, output);
       return { staleFonts: out.trim() === "1" };
     }
-    // Sem imagens: o PDF do próprio PowerPoint. Os títulos podem sair um pouco
-    // diferentes no pdf.js, mas o culto não fica sem os slides.
+    // Sem imagens: o PDF do próprio PowerPoint, desenhado em imagem pelo próprio
+    // macOS (PDFKit). O PDF de texto direto no pdf.js trocava as letras das fontes
+    // do arquivo por símbolos ("!\"#$%&…"), igual acontecia no Windows.
     log("[pptx] mac: PNG não veio", { base, pngs: todas.length, saida: out.trim() });
     await _exec("osascript", ["-e", MAC_PDF_SCRIPT, tmpIn, tmpPdf], 10 * 60 * 1000);
     if (!_existe(tmpPdf)) {
       throw new Error(
         `O PowerPoint não exportou nenhum slide (pasta: ${base}; PNGs encontrados: ${todas.length}).`
       );
+    }
+    const rasterDir = path.join(base, `${id}-raster`);
+    await fs.mkdir(rasterDir, { recursive: true });
+    try {
+      await _exec("osascript", ["-l", "JavaScript", "-e", MAC_RASTER_SCRIPT, tmpPdf, rasterDir, "1920"], 5 * 60 * 1000);
+    } catch (e) {
+      log("[pptx] mac: PDFKit não desenhou os slides:", e.message);
+    }
+    const desenhadas = await _listarPngs(rasterDir);
+    if (desenhadas.length) {
+      await imagesToPdf(desenhadas, output);
+      return { staleFonts: out.trim() === "1" };
     }
     await fs.copyFile(tmpPdf, output);
     return { staleFonts: out.trim() === "1", pdfText: true };

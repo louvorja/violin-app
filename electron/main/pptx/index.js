@@ -49,8 +49,11 @@ const MAX_BYTES = 1024 * 1024 * 1024; // 1 GB — apresentação com vídeo pesa
 
 const FETCH_TIMEOUT_MS = 20000;
 
-/** Sobe quando o formato do PDF muda (v2: slides como imagem) — o cache antigo deixa de valer. */
-const CACHE_VERSION = 2;
+/**
+ * Sobe quando o formato do PDF muda — o cache antigo deixa de valer.
+ * v2: slides como imagem; v3: no Mac, o PDF do PowerPoint desenhado em imagem.
+ */
+const CACHE_VERSION = 3;
 
 /** `fetch` do Node com tempo limite (regra do AGENTS.md para o processo main). */
 async function fetchWithTimeout(url, init = {}) {
