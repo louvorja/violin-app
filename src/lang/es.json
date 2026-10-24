@@ -992,7 +992,11 @@
       "board_on": "Pizarra blanca",
       "board_off": "Volver a la diapositiva",
       "offline": "No pude leer la presentación en la computadora.",
-      "no_display": "No hay pantalla de proyección conectada: conecta el monitor de proyección (Opciones → Monitores) para ver el láser y la pizarra."
+      "no_display": "No hay pantalla de proyección conectada: conecta el monitor de proyección (Opciones → Monitores) para ver el láser y la pizarra.",
+      "next_slide": "Siguiente: diapositiva {page}",
+      "last_slide": "Esta es la última diapositiva.",
+      "zoom_toggle": "Ampliar donde señalo",
+      "zoom_hint": "Toca la diapositiva: la pantalla amplía 2× ahí y el láser acompaña. Al soltar, vuelve a la normalidad."
     }
   },
   "bible": {

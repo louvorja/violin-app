@@ -2,6 +2,7 @@ import Platform from "@/helpers/Platform";
 import { usePdfDeck } from "./composables/usePdfDeck";
 import { useLiveContent } from "./composables/useLiveContent";
 import { usePptxNative } from "./composables/usePptxNative";
+import { useLiveZoom } from "./composables/useLiveZoom";
 
 /**
  * Aba Apresentação do controle remoto (`electron/main/httpServer/presenterRoutes.js`):
@@ -19,6 +20,10 @@ interface PresenterRequest {
   nav?: string;
   page?: number;
   width?: number;
+  scale?: number;
+  x?: number;
+  y?: number;
+  fit?: boolean;
 }
 
 function respond(requestId: string | undefined, payload: Record<string, unknown>): void {
@@ -66,6 +71,29 @@ export async function handlePresenterHttp(data: PresenterRequest): Promise<void>
       const width = Math.min(1600, Math.max(160, Number(data.width) || 320));
       const image = deck.active.value && Number.isInteger(page) ? await deck.renderPage(page, width) : null;
       respond(data.requestId, image ? { status: "ok", image } : { status: "error" });
+      return;
+    }
+    case "zoom": {
+      // "Ampliar onde aponto": o laser do celular amplia a imagem ou a página
+      // de PDF no ar em volta do dedo, com o zoom que o módulo já tem. O
+      // celular recebe o recorte aplicado para pôr o laser no lugar certo.
+      const zoom = useLiveZoom();
+      if (data.fit === true || !zoom.target.value) {
+        zoom.fit();
+      } else {
+        const clamp = (v: unknown) => {
+          const n = Number(v);
+          return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0.5;
+        };
+        const scale = Math.min(4, Math.max(1, Number(data.scale) || 2));
+        zoom.fit();
+        zoom.zoomTo(scale, { x: clamp(data.x), y: clamp(data.y) });
+      }
+      const z = zoom.current.value;
+      respond(data.requestId, {
+        status: "ok",
+        zoom: z && z.scale > 1 ? { scale: z.scale, cx: z.cx, cy: z.cy } : null,
+      });
       return;
     }
     case "nav": {

@@ -125,6 +125,30 @@ function register(app, { getValidMainWindow, requestRenderer, sendRendererError,
     res.json({ status: "ok" });
   });
 
+  // POST /api/presenter/zoom — { scale, x, y } amplia em volta do ponto; { fit: true } volta
+  app.post("/api/presenter/zoom", async (req, res) => {
+    if (!allowed(req, res)) return;
+    const body = req.body || {};
+    const win = mainWindowOr503(res);
+    if (!win) return;
+    const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : undefined);
+    const payload =
+      body.fit === true
+        ? { action: "zoom", fit: true }
+        : { action: "zoom", scale: num(body.scale), x: num(body.x), y: num(body.y) };
+    try {
+      const data = await requestRenderer(win, res, "http:presenter", payload, {
+        prefix: "presenter",
+        timeoutMs: 3_000,
+        maxPayloadBytes: 1_024,
+        validatePayload: (p) => isPlainObject(p) && p.status === "ok",
+      });
+      if (!res.headersSent) res.json({ status: "ok", zoom: data.zoom || null });
+    } catch (error) {
+      sendRendererError(res, error, "Timeout ao ampliar");
+    }
+  });
+
   // POST /api/presenter/laser — { x, y } (0–1) ou { hide: true }
   app.post("/api/presenter/laser", async (req, res) => {
     if (!allowed(req, res)) return;

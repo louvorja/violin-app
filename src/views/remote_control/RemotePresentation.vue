@@ -60,6 +60,16 @@
 
     <!-- Controle -->
     <template v-if="mode === 'control'">
+      <!-- O que vem depois, como no retorno de palco -->
+      <div v-if="state.total && state.page < state.total" class="rpr-next">
+        <span class="rpr-next__label">
+          {{ t("remote_control.presentation.next_slide", { page: state.page + 1 }) }}
+        </span>
+        <img :src="slideUrl(state.page + 1, 480)" alt="" draggable="false" />
+      </div>
+      <p v-else-if="state.total" class="rpr-next__end">
+        {{ t("remote_control.presentation.last_slide") }}
+      </p>
       <div class="rpr-nav">
         <button
           type="button"
@@ -125,13 +135,29 @@
     </template>
 
     <!-- Laser -->
-    <p v-else-if="mode === 'laser'" class="rpr-hint">
-      {{
-        state.native
-          ? t("remote_control.presentation.laser_hint_native")
-          : t("remote_control.presentation.laser_hint")
-      }}
-    </p>
+    <template v-else-if="mode === 'laser'">
+      <!-- Lupa: o telão amplia em volta do dedo enquanto ele está no slide -->
+      <button
+        v-if="canZoom"
+        type="button"
+        class="rpr-pill rpr-zoom"
+        :class="{ 'rpr-pill--on': zoomOn }"
+        :aria-pressed="zoomOn"
+        @click="zoomOn = !zoomOn"
+      >
+        <LjIcon :icon="ICONS.ACTIONS.SEARCH" :size="16" />
+        {{ t("remote_control.presentation.zoom_toggle") }}
+      </button>
+      <p class="rpr-hint">
+        {{
+          state.native
+            ? t("remote_control.presentation.laser_hint_native")
+            : zoomOn
+              ? t("remote_control.presentation.zoom_hint")
+              : t("remote_control.presentation.laser_hint")
+        }}
+      </p>
+    </template>
 
     <!-- Lousa -->
     <template v-else>
@@ -343,6 +369,48 @@ function hideLaser(): void {
   laserAt.value = null;
   laserPending = null;
   void postApi("/api/presenter/laser", { hide: true }, props.token).catch(() => {});
+  if (applied || zoomPending) void zoomFit();
+}
+
+// ── Ampliar onde aponto ────────────────────────────────────────────────────
+/** A lupa só vale para imagem e página de PDF no ar (o PowerPoint apresentando não amplia). */
+const canZoom = computed(() => state.value.total > 0 && !state.value.native);
+const zoomOn = ref(false);
+/** O recorte que o PC aplicou: o laser vai para onde o ponto aparece ampliado. */
+let applied: { scale: number; cx: number; cy: number } | null = null;
+let zoomPending: Promise<void> | null = null;
+
+function toScreen(x: number, y: number): { x: number; y: number } {
+  if (!applied) return { x, y };
+  const c = (v: number) => Math.min(1, Math.max(0, v));
+  return {
+    x: c(0.5 + (x - applied.cx) * applied.scale),
+    y: c(0.5 + (y - applied.cy) * applied.scale),
+  };
+}
+
+function sendLaser(x: number, y: number): void {
+  laserAt.value = { x, y };
+  laserPending = toScreen(x, y);
+  void pumpLaser();
+}
+
+async function zoomAt(x: number, y: number): Promise<void> {
+  try {
+    const res = await postApi("/api/presenter/zoom", { scale: 2, x, y }, props.token);
+    if (!res.ok) return;
+    const data = (await res.json()) as { zoom: { scale: number; cx: number; cy: number } | null };
+    applied = data.zoom;
+  } catch {
+    applied = null;
+  }
+}
+
+async function zoomFit(): Promise<void> {
+  if (zoomPending) await zoomPending;
+  zoomPending = null;
+  applied = null;
+  await postApi("/api/presenter/zoom", { fit: true }, props.token).catch(() => {});
 }
 
 // ── Lousa ─────────────────────────────────────────────────────────────────
@@ -442,9 +510,15 @@ function onDown(e: PointerEvent): void {
   stageEl.value?.setPointerCapture?.(e.pointerId);
   const [x, y] = norm(e);
   if (mode.value === "laser") {
-    laserAt.value = { x, y };
-    laserPending = { x, y };
-    void pumpLaser();
+    if (zoomOn.value && canZoom.value) {
+      // Amplia primeiro: o laser já sai no lugar certo do slide ampliado.
+      laserAt.value = { x, y };
+      zoomPending = zoomAt(x, y).then(() =>
+        sendLaser(laserAt.value?.x ?? x, laserAt.value?.y ?? y)
+      );
+    } else {
+      sendLaser(x, y);
+    }
   } else {
     current = { points: [[x, y]], color: color.value, size: size.value };
     redraw();
@@ -456,9 +530,8 @@ function onMove(e: PointerEvent): void {
   e.preventDefault();
   const [x, y] = norm(e);
   if (mode.value === "laser") {
-    laserAt.value = { x, y };
-    laserPending = { x, y };
-    void pumpLaser();
+    if (zoomPending && !applied) laserAt.value = { x, y };
+    else sendLaser(x, y);
   } else if (current) {
     const last = current.points[current.points.length - 1];
     if (Math.abs(last[0] - x) + Math.abs(last[1] - y) < 0.003) return;
@@ -754,6 +827,38 @@ onBeforeUnmount(() => {
   color: var(--lj-warning);
   font-size: 0.8125rem;
   text-align: center;
+}
+
+.rpr-next {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-3);
+}
+
+.rpr-next__label {
+  flex: 1;
+  font-size: 0.8125rem;
+  color: var(--lj-text-muted, inherit);
+}
+
+.rpr-next img {
+  width: 42%;
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+  background: #000;
+  border: 2px solid var(--lj-live-select, var(--lj-ui-accent));
+  border-radius: 4px;
+}
+
+.rpr-next__end {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--lj-text-muted, inherit);
+  text-align: center;
+}
+
+.rpr-zoom {
+  flex: 0 0 auto;
 }
 
 .rpr-hint {

@@ -993,7 +993,11 @@
       "board_on": "Lousa branca",
       "board_off": "Voltar ao slide",
       "offline": "Não consegui ler a apresentação no computador.",
-      "no_display": "Nenhum telão ligado: conecte o monitor de projeção (Opções → Monitores) para ver o laser e a lousa."
+      "no_display": "Nenhum telão ligado: conecte o monitor de projeção (Opções → Monitores) para ver o laser e a lousa.",
+      "next_slide": "Próximo: slide {page}",
+      "last_slide": "Este é o último slide.",
+      "zoom_toggle": "Ampliar onde aponto",
+      "zoom_hint": "Encoste o dedo no slide: o telão amplia 2× ali e o laser acompanha. Soltou, volta ao normal."
     }
   },
   "bible": {
