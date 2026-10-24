@@ -2355,7 +2355,20 @@ onMounted(async () => {
   loadPlaylist();
 });
 
+/** Arquivo enviado pelo celular: a lista recarrega, sem precisar reabrir a Biblioteca. */
+async function recarregarDoCelular(): Promise<void> {
+  const novos = await loadLibrary();
+  const conhecidos = new Set(files.value.map((f) => f.id));
+  const chegaram = novos.filter((f) => !conhecidos.has(f.id));
+  if (!chegaram.length) return;
+  files.value = [...chegaram, ...files.value];
+  $snackbar.success(tm("uploaded_from_phone", { name: chegaram.map((f) => f.name).join(", ") }));
+}
+const aoMudarBiblioteca = () => void recarregarDoCelular();
+window.addEventListener("lj:media-library-changed", aoMudarBiblioteca);
+
 onBeforeUnmount(() => {
+  window.removeEventListener("lj:media-library-changed", aoMudarBiblioteca);
   pararEscutaNativo?.();
   _cancelarFilaMiniaturas();
   for (const url of createdObjectUrls.values()) {

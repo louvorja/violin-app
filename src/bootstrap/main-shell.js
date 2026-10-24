@@ -1464,6 +1464,8 @@ $storage.hydrate().then(async () => {
                   : {}),
               });
               console.log("[http:media-library] upload registrado:", record.id);
+              // A Biblioteca aberta lê a lista só ao montar: avisa que chegou arquivo.
+              window.dispatchEvent(new CustomEvent("lj:media-library-changed"));
               respond({ status: "ok" });
             } catch (error) {
               console.warn("[http:media-library] upload não registrou:", error?.message || error);

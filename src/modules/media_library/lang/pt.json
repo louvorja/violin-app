@@ -142,5 +142,6 @@
     "feat_hint_no_native": "Este arquivo tem {items}, que ficam parados no modo imagem. Para apresentá-los é preciso o PowerPoint (Windows) ou o LibreOffice — veja em Opções → Player de Áudio/Vídeo.",
     "project_native": "Apresentar com o {app}",
     "open_presentation": "Abrir no modo apresentação"
-  }
+  },
+  "uploaded_from_phone": "Chegou do celular: {name}"
 }
