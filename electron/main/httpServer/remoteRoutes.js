@@ -24,6 +24,9 @@ const { createMusicSearchCatalog, normalize } = require("./musicSearchCatalog.js
 const { joinDentroDe } = require("../mediaRoots.js");
 
 
+/** PowerPoint enviado pelo celular: o PC converte (fontes + slides) antes de pôr na Biblioteca. */
+const PPT_UPLOAD_EXT = ["pptx", "ppsx", "pptm", "ppt", "pps", "odp"];
+
 const KEY_LITURGY_DAYS = "modules.liturgy.days";
 
 const KEY_LITURGY_ACTIVE_DAY = "modules.liturgy.active_day";
@@ -1385,6 +1388,7 @@ function register(app, ctx) {
     "jpg", "jpeg", "png", "webp", "gif", "bmp", "svg", "heic", "heif",
     "mp4", "webm", "mkv", "mov", "avi", "m4v",
     "pdf",
+    ...PPT_UPLOAD_EXT,
   ];
   /** Subpasta (relativa a <dados>/files) onde os uploads do remoto moram. */
   const MEDIA_LIBRARY_UPLOAD_DIR = "library/media";
@@ -1762,6 +1766,44 @@ function register(app, ctx) {
   // O main grava em <dados>/files/library/media/<id>.<ext> (tmp + rename) e
   // avisa o renderer para registrar na biblioteca — aí o item já projeta.
   // ---------------------------------------------------------------
+  /** Converte o PowerPoint que chegou do celular e registra o PDF na Biblioteca. */
+  async function converterPowerPointDoCelular(mainWindow, source, fileName, categoryId) {
+    const avisar = (payload) => safeSend(mainWindow, "http:media-library", { action: "phone-pptx", name: fileName, ...payload });
+    avisar({ status: "converting" });
+    try {
+      const pptx = require("../pptx/index.js");
+      const pref = getUserData()?.options?.file_projection?.presentation_engine;
+      const engine = pref === "powerpoint" || pref === "libreoffice" ? pref : "auto";
+      const r = await pptx.convert(source, {
+        engine,
+        onProgress: (p) => safeSend(mainWindow, "pptx:progress", { path: source, ...p }),
+      });
+      if (!r || !r.ok) {
+        avisar({ status: "error", message: (r && r.message) || "Falha ao converter" });
+        return;
+      }
+      const record = {
+        id: `file_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        name: fileName,
+        path: r.path,
+        type: "pdf",
+        addedAt: Date.now(),
+        ...(categoryId ? { categoryId } : {}),
+        pptx: {
+          source,
+          fonts: Array.isArray(r.fonts) ? r.fonts : [],
+          features: r.features || null,
+          nativeAvailable: r.nativeAvailable === true,
+        },
+      };
+      safeSend(mainWindow, "http:media-library", { action: "saved", record });
+      console.log(`[httpServer] media-library PowerPoint do celular convertido → ${r.path}`);
+    } catch (error) {
+      console.warn("[httpServer] media-library PowerPoint do celular falhou:", error?.message || error);
+      avisar({ status: "error", message: String(error?.message || error).slice(0, 300) });
+    }
+  }
+
   app.post("/api/media-library/upload", async (req, res) => {
     if (!hasMediaLibraryPermission(req)) {
       console.log("[httpServer] media-library upload → 403 (device sem a permission)");
@@ -1838,6 +1880,15 @@ function register(app, ctx) {
     const categoryId = typeof req.headers["x-category-id"] === "string"
       ? req.headers["x-category-id"].trim().slice(0, 256)
       : "";
+
+    // PowerPoint: a conversão leva de segundos a minutos. O celular ouve "recebido"
+    // (202) na hora; o PC converte com o programa escolhido em Opções e só então
+    // o item entra na Biblioteca — o mesmo item que "Adicionar arquivos" criaria.
+    if (PPT_UPLOAD_EXT.includes(ext)) {
+      res.status(202).json({ status: "converting", name: fileName });
+      void converterPowerPointDoCelular(mainWindow, dest, fileName, categoryId);
+      return;
+    }
     const id = path.basename(dest, `.${ext}`);
     const record = {
       id,

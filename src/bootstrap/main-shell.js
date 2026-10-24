@@ -5,7 +5,8 @@ import { watchStaleVersion } from "@/helpers/StaleVersion";
 import requiresNetwork from "@/directives/requiresNetwork";
 import App from "@/App.vue";
 import router from "@/router";
-import { createI18nInstance } from "@/i18n";
+import { createI18nInstance, i18nAtual } from "@/i18n";
+import $snackbar from "@/helpers/Snackbar";
 import VueFullscreen from "vue-fullscreen";
 import "@/assets/styles/tokens.css";
 import "@/assets/styles/ui.css";
@@ -1443,6 +1444,27 @@ $storage.hydrate().then(async () => {
                     : undefined,
               });
               remoteMediaPlaylistIndex = target;
+            }
+            break;
+          }
+
+          case "phone-pptx": {
+            // PowerPoint enviado pelo celular: o main converte e avisa aqui o andamento.
+            const t = i18nAtual()?.global?.t;
+            const msg = (key, params) =>
+              t ? String(t(`remote_control.media_library.${key}`, params)) : key;
+            if (data.status === "converting") {
+              $snackbar.info(msg("phone_pptx_converting", { name: clip(data.name, 200) }), {
+                timeout: 8000,
+              });
+            } else if (data.status === "error") {
+              $snackbar.error(
+                msg("phone_pptx_failed", {
+                  name: clip(data.name, 200),
+                  message: clip(data.message, 300),
+                }),
+                { timeout: 12000 }
+              );
             }
             break;
           }

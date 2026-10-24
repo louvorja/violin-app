@@ -26,7 +26,7 @@
         ref="fileInput"
         class="lj-u-sr-only"
         type="file"
-        accept="image/*,video/*,.pdf,.heic,.heif"
+        accept="image/*,video/*,.pdf,.heic,.heif,.pptx,.ppsx,.pptm,.ppt,.pps,.odp"
         @change="onFilePicked"
       />
     </div>
@@ -765,7 +765,11 @@ async function onFilePicked(event: Event): Promise<void> {
       "X-File-Name": encodeURIComponent(file.name),
       "X-Mime-Type": file.type || "application/octet-stream",
     });
-    if (res.ok) {
+    if (res.status === 202) {
+      // PowerPoint: o PC ainda converte; o item aparece na lista quando ficar pronto.
+      snack(t("remote_control.media_library.phone_pptx_received"), "success");
+      setTimeout(() => void loadLibrary(), 15_000);
+    } else if (res.ok) {
       snack(t("remote_control.media_library.uploaded"), "success");
       await loadLibrary();
     } else {

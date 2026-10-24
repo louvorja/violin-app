@@ -958,7 +958,10 @@
       "canva_cleared": "Arquivo exportado eliminado",
       "canva_add": "Adicionar à playlist",
       "canva_added": "Design adicionado à playlist",
-      "playlist_site": "Link"
+      "playlist_site": "Link",
+      "phone_pptx_converting": "Chegou do celular o PowerPoint \"{name}\". Preparando os slides…",
+      "phone_pptx_failed": "Não foi possível preparar o PowerPoint \"{name}\" que veio do celular: {message}",
+      "phone_pptx_received": "Recebido! O computador está preparando os slides do PowerPoint."
     },
     "presentation": {
       "mode_control": "Controle",
