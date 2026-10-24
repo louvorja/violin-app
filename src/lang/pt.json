@@ -833,7 +833,8 @@
       "online_videos": "Vídeos Online",
       "background_sound": "Som de fundo",
       "presenter": "Apresentador",
-      "media_library": "Biblioteca de Mídia"
+      "media_library": "Biblioteca de Mídia",
+      "presentation": "Apresentação"
     },
     "music": {
       "albums": "Álbuns",
@@ -958,6 +959,27 @@
       "canva_add": "Adicionar à playlist",
       "canva_added": "Design adicionado à playlist",
       "playlist_site": "Link"
+    },
+    "presentation": {
+      "mode_control": "Controle",
+      "mode_laser": "Laser",
+      "mode_draw": "Lousa",
+      "nothing": "Nada no ar",
+      "slide": "Slide {page} de {total}",
+      "native": "PowerPoint",
+      "no_image": "Sem imagem deste conteúdo. O laser e a lousa funcionam mesmo assim.",
+      "first": "Primeiro slide",
+      "last": "Último slide",
+      "black": "Tela preta",
+      "upload": "Enviar vídeo ou áudio",
+      "laser_hint": "Arraste o dedo sobre o slide para apontar no telão. Soltou, o laser some.",
+      "laser_hint_native": "Arraste o dedo sobre o slide: o laser aparece por cima do PowerPoint no telão.",
+      "draw_hint": "Desenhe com o dedo sobre o slide. Ao passar de slide, o desenho é apagado.",
+      "undo": "Desfazer",
+      "clear": "Limpar",
+      "board_on": "Lousa branca",
+      "board_off": "Voltar ao slide",
+      "offline": "Não consegui ler a apresentação no computador."
     }
   },
   "bible": {

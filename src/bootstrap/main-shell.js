@@ -2155,6 +2155,13 @@ $storage.hydrate().then(async () => {
         case "http:media-library":
           await handleMediaLibraryHttp(data);
           break;
+        case "http:presenter": {
+          // Aba Apresentação do controle remoto: carregado só quando alguém usa.
+          const { handlePresenterHttp } =
+            await import("@/modules/presentation_mode/remotePresenter");
+          await handlePresenterHttp(data);
+          break;
+        }
         case "http:background-sound": {
           // Som de fundo: o player é single (useBackgroundSound), então o
           // controle remoto funciona sem o módulo aberto.

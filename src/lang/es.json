@@ -832,7 +832,8 @@
       "online_videos": "Videos en línea",
       "background_sound": "Sonido de fondo",
       "presenter": "Presentador",
-      "media_library": "Biblioteca de Medios"
+      "media_library": "Biblioteca de Medios",
+      "presentation": "Presentación"
     },
     "music": {
       "albums": "Álbumes",
@@ -957,6 +958,27 @@
       "canva_add": "Añadir a la lista",
       "canva_added": "Diseño añadido a la lista",
       "playlist_site": "Enlace"
+    },
+    "presentation": {
+      "mode_control": "Control",
+      "mode_laser": "Láser",
+      "mode_draw": "Pizarra",
+      "nothing": "Nada al aire",
+      "slide": "Diapositiva {page} de {total}",
+      "native": "PowerPoint",
+      "no_image": "Sin imagen de este contenido. El láser y la pizarra funcionan igual.",
+      "first": "Primera diapositiva",
+      "last": "Última diapositiva",
+      "black": "Pantalla negra",
+      "upload": "Enviar video o audio",
+      "laser_hint": "Arrastra el dedo sobre la diapositiva para señalar en la pantalla. Al soltar, el láser desaparece.",
+      "laser_hint_native": "Arrastra el dedo sobre la diapositiva: el láser aparece encima de PowerPoint en la pantalla.",
+      "draw_hint": "Dibuja con el dedo sobre la diapositiva. Al cambiar de diapositiva, el dibujo se borra.",
+      "undo": "Deshacer",
+      "clear": "Limpiar",
+      "board_on": "Pizarra blanca",
+      "board_off": "Volver a la diapositiva",
+      "offline": "No pude leer la presentación en la computadora."
     }
   },
   "bible": {
