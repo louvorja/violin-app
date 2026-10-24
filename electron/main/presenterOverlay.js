@@ -131,7 +131,11 @@ function createPresenterOverlay({ BrowserWindow, getBounds, log = () => {} }) {
 
   return {
     state() {
-      return { laser, board, strokes: strokes.length, open: alive() };
+      return { laser, board, strokes: strokes.length, open: alive(), display: !!getBounds() };
+    },
+    /** Há monitor de projeção para pôr o laser e a lousa? */
+    hasDisplay() {
+      return !!getBounds();
     },
     strokes() {
       return strokes;

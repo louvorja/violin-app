@@ -135,6 +135,7 @@ function register(app, { getValidMainWindow, requestRenderer, sendRendererError,
       overlay.laserHide();
       return res.json({ status: "ok" });
     }
+    if (!overlay.hasDisplay()) return res.status(409).json({ error: "no_display" });
     const ok = await overlay.laserMove(body.x, body.y);
     if (!ok) return res.status(400).json({ error: "x e y de 0 a 1" });
     res.json({ status: "ok" });
@@ -152,6 +153,10 @@ function register(app, { getValidMainWindow, requestRenderer, sendRendererError,
     const overlay = getOverlay();
     if (!overlay) return res.status(503).json({ error: "Telão indisponível" });
     const body = req.body || {};
+    // Sem monitor de projeção, o traço não teria onde aparecer.
+    if ((body.op === "stroke" || (body.op === "board" && body.on === true)) && !overlay.hasDisplay()) {
+      return res.status(409).json({ error: "no_display" });
+    }
     switch (body.op) {
       case "stroke":
         if (!(await overlay.addStroke(body.stroke))) return res.status(400).json({ error: "traço inválido" });

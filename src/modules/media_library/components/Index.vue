@@ -2293,7 +2293,13 @@ function conferirContagem(total: number): void {
 // Recebe page/totalPages da janela de projeção
 useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION_PAGE, (payload) => {
   const data = fileProjectionPageFor(payload, currentPdfPlaybackId);
-  if (!data || data.source !== "projection" || data.totalPages === undefined) return;
+  if (!data || data.source !== "projection") return;
+  // A tela mudou de página por outro caminho (o controle remoto, o modo
+  // apresentação): o painel acompanha, sem mandar a página de volta.
+  if (Number.isInteger(data.page) && data.page >= 1 && data.page !== currentPdfPage.value) {
+    currentPdfPage.value = data.page;
+  }
+  if (data.totalPages === undefined) return;
   currentPdfTotalPages.value = data.totalPages;
   conferirContagem(data.totalPages);
   if (currentPdfPage.value > data.totalPages) {

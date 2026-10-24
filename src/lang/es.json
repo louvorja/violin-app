@@ -978,7 +978,8 @@
       "clear": "Limpiar",
       "board_on": "Pizarra blanca",
       "board_off": "Volver a la diapositiva",
-      "offline": "No pude leer la presentación en la computadora."
+      "offline": "No pude leer la presentación en la computadora.",
+      "no_display": "No hay pantalla de proyección conectada: conecta el monitor de proyección (Opciones → Monitores) para ver el láser y la pizarra."
     }
   },
   "bible": {

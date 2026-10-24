@@ -979,7 +979,8 @@
       "clear": "Limpar",
       "board_on": "Lousa branca",
       "board_off": "Voltar ao slide",
-      "offline": "Não consegui ler a apresentação no computador."
+      "offline": "Não consegui ler a apresentação no computador.",
+      "no_display": "Nenhum telão ligado: conecte o monitor de projeção (Opções → Monitores) para ver o laser e a lousa."
     }
   },
   "bible": {

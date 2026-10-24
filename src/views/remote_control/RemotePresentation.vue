@@ -53,6 +53,11 @@
       />
     </div>
 
+    <!-- Sem monitor de projeção, laser e lousa não têm onde aparecer -->
+    <p v-if="mode !== 'control' && noDisplay" class="rpr-warn" role="alert">
+      {{ t("remote_control.presentation.no_display") }}
+    </p>
+
     <!-- Controle -->
     <template v-if="mode === 'control'">
       <div class="rpr-nav">
@@ -216,7 +221,7 @@ interface PresenterState {
   rev: string;
   native: boolean;
   black: boolean;
-  overlay: { board: boolean } | null;
+  overlay: { board: boolean; display?: boolean } | null;
 }
 
 const COLORS = ["#ff4444", "#ffffff", "#ffd060", "#00d4aa", "#4da3ff", "#ff8c42", "#000000"];
@@ -265,6 +270,13 @@ const strokes = ref<Stroke[]>([]);
 const color = ref(COLORS[0]);
 const size = ref(4);
 const laserAt = ref<{ x: number; y: number } | null>(null);
+/** O PC disse que não há monitor de projeção ligado. */
+const noDisplay = ref(false);
+
+/** 409 = sem telão: mostra o aviso em vez de falhar calado. */
+function checkDisplay(res: Response): void {
+  if (res.status === 409) noDisplay.value = true;
+}
 
 const q = (extra = "") => `token=${encodeURIComponent(props.token ?? "")}${extra}`;
 const slideUrl = (n: number, w: number) =>
@@ -284,7 +296,10 @@ async function refresh(): Promise<void> {
     const next = (await res.json()) as PresenterState;
     const changed = next.page !== state.value.page || next.rev !== state.value.rev;
     state.value = next;
-    if (next.overlay) board.value = next.overlay.board;
+    if (next.overlay) {
+      board.value = next.overlay.board;
+      noDisplay.value = next.overlay.display === false;
+    }
     if (changed && mode.value === "draw") void loadStrokes();
   } catch {
     if (Date.now() - lastError > 15_000) {
@@ -315,7 +330,7 @@ async function pumpLaser(): Promise<void> {
   const p = laserPending;
   laserPending = null;
   try {
-    await postApi("/api/presenter/laser", p, props.token);
+    checkDisplay(await postApi("/api/presenter/laser", p, props.token));
   } catch {
     /* o próximo movimento tenta de novo */
   } finally {
@@ -358,7 +373,10 @@ async function toggleBoard(): Promise<void> {
   board.value = on;
   strokes.value = [];
   redraw();
-  await postApi("/api/presenter/draw", { op: "board", on }, props.token).catch(() => {});
+  const res = await postApi("/api/presenter/draw", { op: "board", on }, props.token).catch(
+    () => null
+  );
+  if (res) checkDisplay(res);
 }
 
 function ctx(): { c: CanvasRenderingContext2D; w: number; h: number } | null {
@@ -459,9 +477,9 @@ function onUp(): void {
     current = null;
     strokes.value = [...strokes.value, s];
     redraw();
-    void postApi("/api/presenter/draw", { op: "stroke", stroke: s }, props.token).catch(() =>
-      emit("show-snackbar", t("remote_control.errors.generic"), "error")
-    );
+    void postApi("/api/presenter/draw", { op: "stroke", stroke: s }, props.token)
+      .then(checkDisplay)
+      .catch(() => emit("show-snackbar", t("remote_control.errors.generic"), "error"));
   }
 }
 
@@ -726,6 +744,16 @@ onBeforeUnmount(() => {
   background: var(--lj-ui-accent);
   border-color: var(--lj-ui-accent);
   color: var(--lj-ui-accent-fg);
+}
+
+.rpr-warn {
+  margin: 0;
+  padding: var(--lj-space-3);
+  border: 1px solid var(--lj-warning);
+  border-radius: var(--lj-ui-radius);
+  color: var(--lj-warning);
+  font-size: 0.8125rem;
+  text-align: center;
 }
 
 .rpr-hint {
