@@ -137,6 +137,41 @@ async function validateInput(raw) {
  * Descobre as fontes do arquivo e instala as que faltam.
  * @returns {Promise<{items: {name: string, status: string, source: string|null}[], installed: number, embedded: boolean}>}
  */
+/**
+ * Conferência das fontes já feita nesta sessão, por arquivo (caminho + tamanho
+ * + data). Ela abre o PowerShell para listar as fontes do Windows e procura no
+ * Google as que faltam: repetida a cada "pôr no ar" e a cada "Apresentar com
+ * animações", o mesmo arquivo levava 40 s para ir à tela. Sai do cache quando
+ * uma fonte é instalada, no "Gerar de novo" e depois de 30 minutos.
+ */
+const FONTS_MEMO_MS = 30 * 60 * 1000;
+const _fontsMemo = new Map();
+
+async function _fontsKey(file) {
+  const st = await fs.stat(file);
+  return `${file}|${st.size}|${st.mtimeMs}`;
+}
+
+async function ensureFontsCached(file, onProgress, log, { force = false } = {}) {
+  let key = null;
+  try {
+    key = await _fontsKey(file);
+  } catch {
+    /* sem stat: confere sem cache */
+  }
+  const hit = key && !force ? _fontsMemo.get(key) : null;
+  if (hit && Date.now() - hit.at < FONTS_MEMO_MS) {
+    const report = { ...hit.report, items: hit.report.items.map((i) => ({ ...i })), installed: 0 };
+    onProgress({ phase: "fonts", fonts: report.items.map((i) => ({ ...i })) });
+    return report;
+  }
+  const report = await ensureFonts(file, onProgress, log);
+  // Instalou agora: o Windows (e o PowerPoint) ainda vão ver as novas; confere de novo da próxima vez.
+  if (key && !report.installed) _fontsMemo.set(key, { at: Date.now(), report });
+  else if (key) _fontsMemo.delete(key);
+  return report;
+}
+
 async function ensureFonts(file, onProgress, log) {
   const report = { items: [], installed: 0, embedded: false };
   if (!OOXML_EXT.includes(path.extname(file).toLowerCase())) return report;
@@ -306,7 +341,7 @@ async function _convert(rawPath, { onProgress = () => {}, log = console.log, for
   let report = { items: [], installed: 0, embedded: false };
   let fontsError = "";
   try {
-    report = await ensureFonts(file, onProgress, log);
+    report = await ensureFontsCached(file, onProgress, log, { force });
   } catch (e) {
     // Sem a análise de fontes ainda dá para converter — só não há garantia.
     // O motivo vai para a tela: antes ficava só no console e a lista vinha vazia.
@@ -479,6 +514,8 @@ async function installFontFiles(files) {
   }
   try {
     const installed = await _systemFonts().install(fonts);
+    // Fonte nova no sistema: a conferência guardada de todo arquivo fica velha.
+    if (installed) _fontsMemo.clear();
     return { ok: true, installed, families: [...families] };
   } catch (e) {
     return { ok: false, code: "install_failed", message: String(e.message || e).slice(0, 400) };
@@ -619,7 +656,7 @@ async function _nativeStart(
     };
   }
   try {
-    await ensureFonts(v.file, onProgress, log);
+    await ensureFontsCached(v.file, onProgress, log);
   } catch (e) {
     log("[pptx] fontes antes do modo nativo:", e.message);
   }
