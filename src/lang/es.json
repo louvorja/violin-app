@@ -960,7 +960,17 @@
       "playlist_site": "Enlace",
       "phone_pptx_converting": "Llegó del celular el PowerPoint \"{name}\". Preparando las diapositivas…",
       "phone_pptx_failed": "No se pudo preparar el PowerPoint \"{name}\" que llegó del celular: {message}",
-      "phone_pptx_received": "¡Recibido! La computadora está preparando las diapositivas del PowerPoint."
+      "phone_pptx_received": "¡Recibido! La computadora está preparando las diapositivas del PowerPoint.",
+      "phone_pptx_task": "PowerPoint del celular: {name}",
+      "phone_pptx_fonts": "Revisando las fuentes…",
+      "phone_pptx_converting_short": "Generando las diapositivas…",
+      "phone_pptx_slides": "Generando diapositiva {done} de {total}…",
+      "uploading": "Enviando {name}… {percent}%",
+      "preparing": "Preparando las diapositivas…",
+      "preparing_count": "Generando diapositiva {done} de {total}…",
+      "ready": "Listo: {name}",
+      "failed_item": "No funcionó: {message}",
+      "dismiss": "Descartar"
     },
     "presentation": {
       "mode_control": "Control",

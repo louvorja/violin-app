@@ -7,6 +7,7 @@ import App from "@/App.vue";
 import router from "@/router";
 import { createI18nInstance, i18nAtual } from "@/i18n";
 import $snackbar from "@/helpers/Snackbar";
+import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
 import VueFullscreen from "vue-fullscreen";
 import "@/assets/styles/tokens.css";
 import "@/assets/styles/ui.css";
@@ -1453,17 +1454,42 @@ $storage.hydrate().then(async () => {
             const t = i18nAtual()?.global?.t;
             const msg = (key, params) =>
               t ? String(t(`remote_control.media_library.${key}`, params)) : key;
+            // Na lista de tarefas em segundo plano, com "slide 3 de 12".
+            const tasks = useBackgroundTasks();
+            const taskId = `phone-pptx-${clip(data.id, 64)}`;
+            const name = clip(data.name, 200);
             if (data.status === "converting") {
-              $snackbar.info(msg("phone_pptx_converting", { name: clip(data.name, 200) }), {
-                timeout: 8000,
-              });
+              tasks.registerTask(taskId, msg("phone_pptx_task", { name }));
+              tasks.updateTask(taskId, { progress: 5, detail: msg("phone_pptx_fonts") });
+              $snackbar.info(msg("phone_pptx_converting", { name }), { timeout: 8000 });
+            } else if (data.status === "progress") {
+              const total = Number(data.total) || 0;
+              const done = Math.min(Number(data.done) || 0, total);
+              tasks.updateTask(
+                taskId,
+                total
+                  ? {
+                      progress: 10 + Math.round((85 * done) / total),
+                      detail: msg("phone_pptx_slides", { done, total }),
+                    }
+                  : {
+                      progress: 10,
+                      detail: msg(
+                        data.phase === "converting"
+                          ? "phone_pptx_converting_short"
+                          : "phone_pptx_fonts"
+                      ),
+                    }
+              );
+            } else if (data.status === "done") {
+              tasks.completeTask(taskId);
             } else if (data.status === "error") {
+              tasks.updateTask(taskId, { status: "error", error: clip(data.message, 300) });
               $snackbar.error(
-                msg("phone_pptx_failed", {
-                  name: clip(data.name, 200),
-                  message: clip(data.message, 300),
-                }),
-                { timeout: 12000 }
+                msg("phone_pptx_failed", { name, message: clip(data.message, 300) }),
+                {
+                  timeout: 12000,
+                }
               );
             }
             break;

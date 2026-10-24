@@ -58,6 +58,62 @@
         />
       </div>
 
+      <!-- Envio e PowerPoints sendo preparados no computador -->
+      <ul v-if="sending || pending.length" class="rm-list rm-pending" aria-live="polite">
+        <li v-if="sending" class="rm-item rm-item--pending">
+          <span class="rm-item__icon"><LjSpinner :size="20" /></span>
+          <div class="rm-item__text">
+            <span class="rm-item__title">
+              {{
+                t("remote_control.media_library.uploading", {
+                  name: sending.name,
+                  percent: sending.percent,
+                })
+              }}
+            </span>
+            <span class="rm-bar">
+              <span class="rm-bar__fill" :style="{ width: sending.percent + '%' }" />
+            </span>
+          </div>
+        </li>
+        <li
+          v-for="u in pending"
+          :key="u.id"
+          class="rm-item rm-item--pending"
+          :class="{ 'rm-item--error': u.status === 'error' }"
+        >
+          <span class="rm-item__icon">
+            <LjSpinner v-if="u.status === 'converting'" :size="20" />
+            <LjIcon
+              v-else
+              :icon="u.status === 'done' ? ICONS.UI.CHECK_CIRCLE : ICONS.UI.ALERT"
+              :size="22"
+            />
+          </span>
+          <div class="rm-item__text">
+            <span class="rm-item__title">{{ u.name }}</span>
+            <span class="rm-item__subtitle">{{ pendingLabel(u) }}</span>
+            <span v-if="u.status === 'converting'" class="rm-bar">
+              <span
+                class="rm-bar__fill"
+                :class="{ 'rm-bar__fill--busy': !u.total }"
+                :style="u.total ? { width: Math.round((100 * u.done) / u.total) + '%' } : undefined"
+              />
+            </span>
+          </div>
+          <LjButton
+            v-if="u.status === 'error'"
+            variant="ghost"
+            size="lg"
+            class="rm-item__action"
+            :icon="ICONS.ACTIONS.CLOSE"
+            icon-only
+            :title="t('remote_control.media_library.dismiss')"
+            @click.stop="dismissPending(u.id)"
+          />
+        </li>
+      </ul>
+
       <ul v-if="rows.length > 0" class="rm-list">
         <template v-for="row in rows" :key="row.key">
           <li v-if="row.kind === 'group'" class="rm-group">{{ row.label }}</li>
@@ -282,9 +338,9 @@
 <script setup lang="ts">
 import { LjButton, LjDivider, LjIcon, LjInput, LjSpinner } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
-import { computed, onMounted, ref, useTemplateRef, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { apiFetch, postApi, postRaw } from "@/helpers/ApiClient";
+import { apiFetch, isTokenInvalid, postApi } from "@/helpers/ApiClient";
 import { httpErrorMessage } from "@/helpers/httpErrorMessage";
 import $alert from "@/helpers/Alert";
 
@@ -754,34 +810,164 @@ function pickFile(): void {
   fileInput.value?.click();
 }
 
+/* ── Envio com andamento ─────────────────────────────────────────────── */
+
+/** O arquivo subindo: nome e porcentagem (o fetch não informa o andamento do envio). */
+const sending = ref<{ name: string; percent: number } | null>(null);
+
+function uploadWithProgress(
+  file: File,
+  onProgress: (_percent: number) => void
+): Promise<{ status: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const url = props.token
+      ? `/api/media-library/upload?token=${props.token}`
+      : "/api/media-library/upload";
+    xhr.open("POST", url);
+    xhr.setRequestHeader("Content-Type", "application/octet-stream");
+    xhr.setRequestHeader("X-File-Name", encodeURIComponent(file.name));
+    xhr.setRequestHeader("X-Mime-Type", file.type || "application/octet-stream");
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(Math.min(100, Math.round((100 * e.loaded) / e.total)));
+    };
+    xhr.onload = () => {
+      if (xhr.status === 401) isTokenInvalid.value = true;
+      resolve({ status: xhr.status, body: xhr.responseText });
+    };
+    xhr.onerror = () => reject(new Error("rede"));
+    xhr.send(file);
+  });
+}
+
+function errorOf(body: string): string {
+  try {
+    const data = JSON.parse(body) as { error?: unknown };
+    if (typeof data.error === "string" && data.error) return data.error;
+  } catch {
+    /* corpo sem JSON */
+  }
+  return t("remote_control.errors.generic");
+}
+
 async function onFilePicked(event: Event): Promise<void> {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
   if (!file) return;
   uploading.value = true;
+  sending.value = { name: file.name, percent: 0 };
   try {
-    const bytes = await file.arrayBuffer();
-    const res = await postRaw("/api/media-library/upload", bytes, props.token, {
-      "X-File-Name": encodeURIComponent(file.name),
-      "X-Mime-Type": file.type || "application/octet-stream",
+    const res = await uploadWithProgress(file, (percent) => {
+      if (sending.value) sending.value = { ...sending.value, percent };
     });
     if (res.status === 202) {
-      // PowerPoint: o PC ainda converte; o item aparece na lista quando ficar pronto.
+      // PowerPoint: o PC ainda converte; a lista mostra "Preparando…" até ficar pronto.
+      let uploadId = "";
+      try {
+        uploadId = String((JSON.parse(res.body) as { uploadId?: unknown }).uploadId || "");
+      } catch {
+        /* sem id: só o aviso */
+      }
+      if (uploadId) {
+        myUploads.add(uploadId);
+        pending.value = [
+          {
+            id: uploadId,
+            name: file.name,
+            status: "converting",
+            phase: "fonts",
+            done: 0,
+            total: 0,
+            message: "",
+          },
+          ...pending.value,
+        ];
+        startPolling();
+      }
       snack(t("remote_control.media_library.phone_pptx_received"), "success");
-      setTimeout(() => void loadLibrary(), 15_000);
-    } else if (res.ok) {
+    } else if (res.status >= 200 && res.status < 300) {
       snack(t("remote_control.media_library.uploaded"), "success");
       await loadLibrary();
     } else {
-      snack(await mensagemDeErro(res), "error");
+      snack(errorOf(res.body), "error");
     }
   } catch {
     snack(t("remote_control.errors.generic"), "error");
   } finally {
     uploading.value = false;
+    sending.value = null;
     input.value = "";
   }
 }
+
+/* ── PowerPoints sendo preparados no computador ──────────────────────── */
+
+interface PhoneUpload {
+  id: string;
+  name: string;
+  status: "converting" | "done" | "error";
+  phase: string;
+  done: number;
+  total: number;
+  message: string;
+}
+
+const pending = ref<PhoneUpload[]>([]);
+/** Só os envios deste celular aparecem aqui. */
+const myUploads = new Set<string>();
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+const POLL_MS = 2000;
+
+function pendingLabel(u: PhoneUpload): string {
+  if (u.status === "done") return t("remote_control.media_library.ready", { name: u.name });
+  if (u.status === "error")
+    return t("remote_control.media_library.failed_item", { message: u.message });
+  if (u.total)
+    return t("remote_control.media_library.preparing_count", { done: u.done, total: u.total });
+  return t("remote_control.media_library.preparing");
+}
+
+function dismissPending(id: string): void {
+  pending.value = pending.value.filter((u) => u.id !== id);
+  myUploads.delete(id);
+}
+
+function stopPolling(): void {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = null;
+}
+
+async function pollPending(): Promise<void> {
+  try {
+    const res = await apiFetch(`/api/media-library/phone-uploads?token=${props.token ?? ""}`);
+    if (!res.ok) return;
+    const data = (await res.json()) as { uploads?: PhoneUpload[] };
+    const byId = new Map((data.uploads ?? []).map((u) => [u.id, u]));
+    let ficouPronto = false;
+    pending.value = pending.value.map((old) => {
+      const now = byId.get(old.id);
+      if (!now) return old;
+      if (old.status === "converting" && now.status === "done") {
+        ficouPronto = true;
+        snack(t("remote_control.media_library.ready", { name: now.name }), "success");
+        // Sai da lista depois de uns segundos: o item já está na Biblioteca.
+        setTimeout(() => dismissPending(now.id), 4000);
+      }
+      return { ...old, ...now };
+    });
+    if (ficouPronto) await loadLibrary();
+    if (!pending.value.some((u) => u.status === "converting")) stopPolling();
+  } catch {
+    /* tenta de novo na próxima volta */
+  }
+}
+
+function startPolling(): void {
+  if (pollTimer) return;
+  pollTimer = setInterval(() => void pollPending(), POLL_MS);
+}
+
+onBeforeUnmount(stopPolling);
 
 function refresh(): Promise<void> {
   if (view.value === "canva") return loadCanva(folderTrail.value.at(-1)?.id || "");
@@ -907,6 +1093,51 @@ defineExpose({ refresh });
   background: var(--lj-surface-bg, transparent);
   cursor: pointer;
   min-height: 56px;
+}
+
+.rm-pending {
+  margin-bottom: var(--lj-space-2, 8px);
+}
+
+.rm-item--pending {
+  cursor: default;
+  border-style: dashed;
+}
+
+.rm-item--error {
+  border-color: var(--lj-danger, #d32f2f);
+}
+
+.rm-bar {
+  position: relative;
+  display: block;
+  height: 4px;
+  margin-top: 6px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--lj-surface-bg-active, rgba(127, 127, 127, 0.25));
+}
+
+.rm-bar__fill {
+  display: block;
+  height: 100%;
+  background: var(--lj-ui-accent, #f59e0b);
+  transition: width 0.3s ease;
+}
+
+.rm-bar__fill--busy {
+  position: absolute;
+  width: 35%;
+  animation: rm-bar-run 1.2s ease-in-out infinite;
+}
+
+@keyframes rm-bar-run {
+  from {
+    left: -35%;
+  }
+  to {
+    left: 100%;
+  }
 }
 
 .rm-item:active {
