@@ -131,10 +131,14 @@ export function missingFontNames(info: PowerPointInfo | null | undefined): strin
     .map((f) => f.name);
 }
 
-/** O que se sabe do arquivo; sem nada guardado (app reaberto), pergunta ao main. */
-export function loadPowerPointInfo(path: string): void {
+/**
+ * O que se sabe do arquivo; sem nada guardado (app reaberto), pergunta ao main.
+ * `name` é o que o operador vê na faixa de andamento — o arquivo que veio do
+ * celular, por exemplo, fica no disco com um nome interno (`upl_…`).
+ */
+export function loadPowerPointInfo(path: string, name?: string): void {
   if (!POWERPOINT_ENABLED || powerPointInfo.has(path) || pending.has(path)) return;
-  void convert(path);
+  void (name ? convertNamed(path, name) : convert(path));
 }
 
 /**
