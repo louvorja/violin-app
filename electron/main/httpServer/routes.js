@@ -41,7 +41,8 @@ function getPresenterOverlay() {
     _presenterOverlay = createPresenterOverlay({
       BrowserWindow,
       getBounds: () => {
-        const d = displays.getPreferred("file_projection");
+        // O mesmo telão em que o slide aparece (e o PowerPoint com animações).
+        const d = displays.getFileProjectionDisplay();
         return d ? d.bounds : null;
       },
       log: console.log,

@@ -136,7 +136,7 @@
       <p v-else-if="state.total" class="rpr-next__end">
         {{ t("remote_control.presentation.last_slide") }}
       </p>
-      <div class="rpr-nav">
+      <div v-if="state.total || state.native" class="rpr-nav">
         <button
           type="button"
           class="rpr-btn"
@@ -172,6 +172,7 @@
       </div>
       <div class="rpr-row">
         <button
+          v-if="state.total || state.native"
           type="button"
           class="rpr-pill"
           :class="{ 'rpr-pill--on': state.black }"
