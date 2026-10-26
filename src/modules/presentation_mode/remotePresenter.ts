@@ -78,7 +78,9 @@ export async function handlePresenterHttp(data: PresenterRequest): Promise<void>
       // de PDF no ar em volta do dedo, com o zoom que o módulo já tem. O
       // celular recebe o recorte aplicado para pôr o laser no lugar certo.
       const zoom = useLiveZoom();
-      if (data.fit === true || !zoom.target.value) {
+      // Com o PowerPoint apresentando por cima, ampliar o PDF de baixo não
+      // apareceria no telão — e deixaria o zoom ligado quando ele sair.
+      if (data.fit === true || !zoom.target.value || native.active.value) {
         zoom.fit();
       } else {
         const clamp = (v: unknown) => {

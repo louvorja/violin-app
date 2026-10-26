@@ -134,10 +134,6 @@ async function validateInput(raw) {
 // ── Fontes ────────────────────────────────────────────────────────────────
 
 /**
- * Descobre as fontes do arquivo e instala as que faltam.
- * @returns {Promise<{items: {name: string, status: string, source: string|null}[], installed: number, embedded: boolean}>}
- */
-/**
  * Conferência das fontes já feita nesta sessão, por arquivo (caminho + tamanho
  * + data). Ela abre o PowerShell para listar as fontes do Windows e procura no
  * Google as que faltam: repetida a cada "pôr no ar" e a cada "Apresentar com
@@ -172,6 +168,10 @@ async function ensureFontsCached(file, onProgress, log, { force = false } = {}) 
   return report;
 }
 
+/**
+ * Descobre as fontes do arquivo e instala as que faltam.
+ * @returns {Promise<{items: {name: string, status: string, source: string|null}[], installed: number, embedded: boolean}>}
+ */
 async function ensureFonts(file, onProgress, log) {
   const report = { items: [], installed: 0, embedded: false };
   if (!OOXML_EXT.includes(path.extname(file).toLowerCase())) return report;

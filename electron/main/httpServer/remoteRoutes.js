@@ -1821,6 +1821,8 @@ function register(app, ctx) {
       });
       if (!r || !r.ok) {
         const message = (r && r.message) || "Falha ao converter";
+        // Não virou item da Biblioteca: o arquivo enviado não fica perdido na pasta.
+        await fs.promises.unlink(source).catch(() => {});
         atualizar({ status: "error", message });
         avisar({ status: "error", message });
         return;
@@ -1846,6 +1848,7 @@ function register(app, ctx) {
     } catch (error) {
       const message = String(error?.message || error).slice(0, 300);
       console.warn("[httpServer] media-library PowerPoint do celular falhou:", message);
+      await fs.promises.unlink(source).catch(() => {});
       atualizar({ status: "error", message });
       avisar({ status: "error", message });
     }
