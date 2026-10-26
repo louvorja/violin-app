@@ -45,6 +45,11 @@ export interface PowerPointProgress {
 export const powerPointInfo = reactive(new Map<string, PowerPointInfo>());
 /** A conversão que está demorando, para a faixa de andamento do módulo. */
 export const powerPointProgress = ref<PowerPointProgress | null>(null);
+/**
+ * O PowerPoint por trás do PDF no ar, enquanto o modo apresentação está aberto
+ * (o controle remoto pergunta por ele para as fontes e as animações).
+ */
+export const livePowerPointPath = ref<string | null>(null);
 
 let progressInstalled = false;
 /** Conversões pedidas e ainda sem resposta: caminho → quantas. */

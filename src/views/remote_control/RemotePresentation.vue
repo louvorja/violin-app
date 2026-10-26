@@ -11,7 +11,25 @@
       <span v-if="state.native" class="rpr-chip">
         {{ t("remote_control.presentation.native") }}
       </span>
+      <button type="button" class="rpr-open" @click="openFiles">
+        <LjIcon :icon="ICONS.ACTIONS.FOLDER_OPEN" :size="18" />
+        <span>{{ t("remote_control.presentation.open") }}</span>
+      </button>
     </header>
+
+    <!-- Algo no ar, mas o telão desligado: não aparece na projeção -->
+    <div v-if="state.total && !state.screen && !state.native" class="rpr-screen" role="status">
+      <span>{{ t("remote_control.presentation.screen_off") }}</span>
+      <button
+        type="button"
+        class="rpr-pill rpr-pill--on"
+        :disabled="screenBusy"
+        @click="setScreen(true)"
+      >
+        <LjIcon :icon="ICONS.PROJECTION.SCREEN" :size="16" />
+        {{ t("remote_control.presentation.screen_on_btn") }}
+      </button>
+    </div>
 
     <!-- Controle · Laser · Lousa -->
     <div class="rpr-modes" role="tablist">
@@ -60,6 +78,54 @@
 
     <!-- Controle -->
     <template v-if="mode === 'control'">
+      <!-- Nada no ar: começa pela Biblioteca -->
+      <div v-if="!state.total && !state.native" class="rpr-empty">
+        <p class="rpr-hint">{{ t("remote_control.presentation.nothing_hint") }}</p>
+        <button type="button" class="rpr-pill rpr-pill--on" @click="openFiles">
+          <LjIcon :icon="ICONS.ACTIONS.FOLDER_OPEN" :size="18" />
+          {{ t("remote_control.presentation.open") }}
+        </button>
+      </div>
+
+      <!-- PowerPoint no ar: fontes e apresentar com animações -->
+      <div v-if="state.pptx" class="rpr-pptx">
+        <p v-if="state.pptx.missing.length" class="rpr-warn" role="alert">
+          {{
+            t("remote_control.presentation.fonts_missing", { names: state.pptx.missing.join(", ") })
+          }}
+        </p>
+        <p v-else-if="state.pptx.staleFonts" class="rpr-warn" role="alert">
+          {{ t("remote_control.presentation.fonts_stale") }}
+        </p>
+        <p v-else-if="!state.pptx.checked" class="rpr-hint">
+          {{ t("remote_control.presentation.fonts_checking") }}
+        </p>
+        <button
+          v-if="state.native"
+          type="button"
+          class="rpr-pill rpr-pill--danger"
+          :disabled="nativeBusy"
+          @click="setNative(false)"
+        >
+          <LjIcon :icon="ICONS.PLAYER.STOP" :size="16" />
+          {{ t("remote_control.presentation.native_end") }}
+        </button>
+        <button
+          v-else-if="state.pptx.canNative"
+          type="button"
+          class="rpr-pill rpr-pill--on"
+          :disabled="nativeBusy || state.pptx.opening"
+          @click="setNative(true)"
+        >
+          <LjIcon :icon="ICONS.PROJECTION.PRESENT" :size="16" />
+          {{
+            nativeBusy || state.pptx.opening
+              ? t("remote_control.presentation.native_opening")
+              : t("remote_control.presentation.native_start")
+          }}
+        </button>
+        <p v-else class="rpr-hint">{{ t("remote_control.presentation.native_unavailable") }}</p>
+      </div>
       <!-- O que vem depois, como no retorno de palco -->
       <div v-if="state.total && state.page < state.total" class="rpr-next">
         <span class="rpr-next__label">
@@ -113,6 +179,16 @@
         >
           <LjIcon :icon="ICONS.UI.EYE_OFF" :size="16" />
           {{ t("remote_control.presentation.black") }}
+        </button>
+        <button
+          v-if="state.total && state.screen && !state.native"
+          type="button"
+          class="rpr-pill"
+          :disabled="screenBusy"
+          @click="setScreen(false)"
+        >
+          <LjIcon :icon="ICONS.PROJECTION.STOP" :size="16" />
+          {{ t("remote_control.presentation.screen_off_btn") }}
         </button>
         <button type="button" class="rpr-pill" @click="emit('go-tab', 'media_library')">
           <LjIcon :icon="ICONS.ACTIONS.UPLOAD" :size="16" />
@@ -210,6 +286,49 @@
       </div>
       <p class="rpr-hint">{{ t("remote_control.presentation.draw_hint") }}</p>
     </template>
+
+    <!-- Abrir da Biblioteca: tocar = pôr no ar no modo apresentação -->
+    <div
+      v-if="filesOpen"
+      class="rpr-sheet"
+      role="dialog"
+      :aria-label="t('remote_control.presentation.open_title')"
+    >
+      <div class="rpr-sheet__head">
+        <strong>{{ t("remote_control.presentation.open_title") }}</strong>
+        <button
+          type="button"
+          class="rpr-sheet__close"
+          :aria-label="t('actions.close')"
+          @click="filesOpen = false"
+        >
+          <LjIcon :icon="ICONS.ACTIONS.CLOSE" :size="20" />
+        </button>
+      </div>
+      <input
+        v-if="files.length > 8"
+        v-model="filesQuery"
+        type="search"
+        class="rpr-sheet__search"
+        :placeholder="t('remote_control.presentation.open_search')"
+      />
+      <p class="rpr-hint">{{ t("remote_control.presentation.open_hint") }}</p>
+      <p v-if="filesLoading" class="rpr-hint">…</p>
+      <p v-else-if="!files.length" class="rpr-hint">
+        {{ t("remote_control.presentation.open_empty") }}
+      </p>
+      <ul v-else class="rpr-files">
+        <li v-for="f in shownFiles" :key="f.id">
+          <button type="button" class="rpr-file" :disabled="!!openingId" @click="openFile(f)">
+            <LjIcon :icon="kindIcon(f.kind)" :size="22" />
+            <span class="rpr-file__name">{{ f.name }}</span>
+            <span class="rpr-file__kind">
+              {{ t(`remote_control.presentation.kind_${f.kind}`) }}
+            </span>
+          </button>
+        </li>
+      </ul>
+    </div>
   </div>
 </template>
 
@@ -248,6 +367,23 @@ interface PresenterState {
   native: boolean;
   black: boolean;
   overlay: { board: boolean; display?: boolean } | null;
+  /** PowerPoint no ar: fontes e se dá para apresentar com animações. */
+  pptx?: {
+    canNative: boolean;
+    opening: boolean;
+    checked: boolean;
+    missing: string[];
+    staleFonts: boolean;
+  } | null;
+  /** A tela principal (o telão) está ligada. */
+  screen?: boolean;
+}
+
+type FileKind = "pptx" | "pdf" | "image" | "video" | "file";
+interface LibraryFile {
+  id: string;
+  name: string;
+  kind: FileKind;
 }
 
 const COLORS = ["#ff4444", "#ffffff", "#ffd060", "#00d4aa", "#4da3ff", "#ff8c42", "#000000"];
@@ -343,6 +479,95 @@ async function nav(action: string, page?: number): Promise<void> {
     setTimeout(refresh, 250);
   } catch {
     emit("show-snackbar", t("remote_control.errors.generic"), "error");
+  }
+}
+
+// ── Abrir da Biblioteca ───────────────────────────────────────────────────
+const filesOpen = ref(false);
+const files = ref<LibraryFile[]>([]);
+const filesLoading = ref(false);
+const filesQuery = ref("");
+const openingId = ref<string | null>(null);
+
+const shownFiles = computed(() => {
+  const q = filesQuery.value.trim().toLowerCase();
+  return q ? files.value.filter((f) => f.name.toLowerCase().includes(q)) : files.value;
+});
+
+function kindIcon(kind: FileKind): string {
+  if (kind === "pptx") return ICONS.PROJECTION.PRESENT;
+  if (kind === "pdf") return ICONS.UI.FILE_PDF;
+  if (kind === "image") return ICONS.MEDIA.IMAGE;
+  if (kind === "video") return ICONS.MEDIA.VIDEO;
+  return ICONS.ACTIONS.FOLDER_OPEN;
+}
+
+async function openFiles(): Promise<void> {
+  filesOpen.value = true;
+  filesQuery.value = "";
+  filesLoading.value = true;
+  try {
+    const res = await apiFetch(`/api/presenter/files?${q()}`);
+    if (!res.ok) throw new Error(String(res.status));
+    const data = (await res.json()) as { items: LibraryFile[] };
+    files.value = Array.isArray(data.items) ? data.items : [];
+  } catch {
+    files.value = [];
+    emit("show-snackbar", t("remote_control.errors.generic"), "error");
+  } finally {
+    filesLoading.value = false;
+  }
+}
+
+async function openFile(f: LibraryFile): Promise<void> {
+  if (openingId.value) return;
+  openingId.value = f.id;
+  try {
+    const res = await postApi("/api/presenter/open", { id: f.id }, props.token);
+    if (!res.ok) throw new Error(String(res.status));
+    filesOpen.value = false;
+    mode.value = "control";
+    emit("show-snackbar", t("remote_control.presentation.opening", { name: f.name }), "info");
+    // O PowerPoint pode levar alguns segundos para converter: pergunta logo e de novo.
+    setTimeout(refresh, 600);
+    setTimeout(refresh, 2000);
+  } catch {
+    emit("show-snackbar", t("remote_control.presentation.open_failed"), "error");
+  } finally {
+    openingId.value = null;
+  }
+}
+
+// ── Telão e PowerPoint com animações ──────────────────────────────────────
+const screenBusy = ref(false);
+const nativeBusy = ref(false);
+
+async function setScreen(on: boolean): Promise<void> {
+  if (screenBusy.value) return;
+  screenBusy.value = true;
+  try {
+    const res = await postApi("/api/presenter/screen", { on }, props.token);
+    if (!res.ok) throw new Error(String(res.status));
+    await refresh();
+  } catch {
+    emit("show-snackbar", t("remote_control.errors.generic"), "error");
+  } finally {
+    screenBusy.value = false;
+  }
+}
+
+async function setNative(on: boolean): Promise<void> {
+  if (nativeBusy.value) return;
+  nativeBusy.value = true;
+  try {
+    const res = await postApi("/api/presenter/native", { on }, props.token);
+    if (!res.ok) throw new Error(String(res.status));
+    await refresh();
+  } catch {
+    if (on) emit("show-snackbar", t("remote_control.presentation.native_failed"), "error");
+    else emit("show-snackbar", t("remote_control.errors.generic"), "error");
+  } finally {
+    nativeBusy.value = false;
   }
 }
 
@@ -907,5 +1132,126 @@ onBeforeUnmount(() => {
 .rpr-thumb--live span {
   color: var(--lj-orange, var(--lj-ui-accent));
   font-weight: 700;
+}
+
+.rpr-open {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lj-space-2);
+  min-height: 40px;
+  padding: 0 var(--lj-space-3);
+  background: var(--lj-surface-bg);
+  border: var(--lj-ui-border);
+  border-radius: var(--lj-ui-radius);
+  color: var(--lj-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.rpr-screen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-2);
+  padding: var(--lj-space-3);
+  border: 1px solid var(--lj-warning);
+  border-radius: var(--lj-ui-radius);
+  color: var(--lj-warning);
+  font-size: 0.8125rem;
+  text-align: center;
+}
+
+.rpr-empty,
+.rpr-pptx {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-3);
+}
+
+.rpr-pill:disabled,
+.rpr-file:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.rpr-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-3);
+  padding: var(--lj-space-4);
+  background: var(--lj-bg, var(--lj-surface-bg));
+  overflow-y: auto;
+  pointer-events: auto;
+}
+
+.rpr-sheet__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lj-space-3);
+}
+
+.rpr-sheet__close {
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  color: var(--lj-text);
+  cursor: pointer;
+}
+
+.rpr-sheet__search {
+  min-height: 44px;
+  padding: 0 var(--lj-space-3);
+  background: var(--lj-surface-bg);
+  border: var(--lj-ui-border);
+  border-radius: var(--lj-ui-radius);
+  color: var(--lj-text);
+  font: inherit;
+}
+
+.rpr-files {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-2);
+}
+
+.rpr-file {
+  width: 100%;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-3);
+  padding: 0 var(--lj-space-3);
+  background: var(--lj-surface-bg);
+  border: var(--lj-ui-border);
+  border-radius: var(--lj-ui-radius);
+  color: var(--lj-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rpr-file__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rpr-file__kind {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  color: var(--lj-text-muted, inherit);
 }
 </style>

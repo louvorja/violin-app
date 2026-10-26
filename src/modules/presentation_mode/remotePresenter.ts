@@ -3,6 +3,16 @@ import { usePdfDeck } from "./composables/usePdfDeck";
 import { useLiveContent } from "./composables/useLiveContent";
 import { usePptxNative } from "./composables/usePptxNative";
 import { useLiveZoom } from "./composables/useLiveZoom";
+import {
+  isPowerPoint,
+  livePowerPointPath,
+  missingFontNames,
+  powerPointInfo,
+} from "./composables/usePowerPoint";
+import { presentInPresentationMode } from "./composables/openInPresentationMode";
+import { screenOn, setScreen } from "./composables/useOutputs";
+import $idb from "@/helpers/IndexedDB";
+import { DB_TABLE } from "@/constants/DbTables";
 
 /**
  * Aba Apresentação do controle remoto (`electron/main/httpServer/presenterRoutes.js`):
@@ -24,6 +34,59 @@ interface PresenterRequest {
   x?: number;
   y?: number;
   fit?: boolean;
+  id?: string;
+  on?: boolean;
+}
+
+/** Item da Biblioteca de Mídia (só o que a lista do celular precisa). */
+interface LibraryRecord {
+  id?: unknown;
+  name?: unknown;
+  path?: unknown;
+  type?: unknown;
+  addedAt?: unknown;
+  pptx?: { source?: unknown } | null;
+}
+
+/** Caminho no disco que o modo apresentação abre: o .pptx de origem, ou o próprio arquivo. */
+function pathOfRecord(r: LibraryRecord): string | null {
+  const src = r.pptx && typeof r.pptx.source === "string" ? r.pptx.source : null;
+  if (src) return src;
+  const p = typeof r.path === "string" ? r.path : "";
+  // Blob, data URL e endereço da web não são arquivos que o módulo abre.
+  if (!p || /^(blob|data|https?):/i.test(p)) return null;
+  return p;
+}
+
+function kindOfRecord(r: LibraryRecord, path: string): string {
+  if (isPowerPoint(path)) return "pptx";
+  return r.type === "image" || r.type === "video" || r.type === "pdf" ? r.type : "file";
+}
+
+async function libraryRecords(): Promise<LibraryRecord[]> {
+  try {
+    return await $idb.getAll<LibraryRecord>(DB_TABLE.MEDIA_LIBRARY);
+  } catch {
+    return [];
+  }
+}
+
+/** O PowerPoint no ar: fontes que faltam e se dá para apresentar com animações. */
+function pptxState(native: ReturnType<typeof usePptxNative>) {
+  const path = livePowerPointPath.value;
+  if (!path) return null;
+  // Não pede a conferência daqui: a faixa do PowerPoint no módulo já pede, e
+  // um arquivo que falhou seria convertido de novo a cada pergunta do celular.
+  const info = powerPointInfo.get(path) ?? null;
+  return {
+    canNative: native.available.value === true,
+    opening: native.opening.value === true,
+    checked: !!info,
+    missing: missingFontNames(info)
+      .slice(0, 20)
+      .map((n) => String(n).slice(0, 100)),
+    staleFonts: info?.staleFonts === true,
+  };
 }
 
 function respond(requestId: string | undefined, payload: Record<string, unknown>): void {
@@ -63,7 +126,55 @@ export async function handlePresenterHttp(data: PresenterRequest): Promise<void>
         rev: active ? revOf(deck.url.value) : "",
         native: native.active.value,
         black: native.state.value.black === true,
+        pptx: pptxState(native),
+        screen: screenOn.value.main === true,
       });
+      return;
+    }
+    case "files": {
+      // A Biblioteca de Mídia, do mais novo ao mais velho, só com o que abre no módulo.
+      const items = (await libraryRecords())
+        .map((r) => ({ r, path: pathOfRecord(r) }))
+        .filter((x): x is { r: LibraryRecord; path: string } => !!x.path && typeof x.r.id === "string")
+        .sort((a, b) => (Number(b.r.addedAt) || 0) - (Number(a.r.addedAt) || 0))
+        .slice(0, 300)
+        .map(({ r, path }) => ({
+          id: String(r.id).slice(0, 256),
+          name: String(r.name || path.split(/[\\/]/).pop() || "").slice(0, 200),
+          kind: kindOfRecord(r, path),
+        }));
+      respond(data.requestId, { status: "ok", items });
+      return;
+    }
+    case "open": {
+      // Tocar no arquivo no celular = abrir no modo apresentação e "Apresentar".
+      const id = typeof data.id === "string" ? data.id : "";
+      const rec = id ? (await libraryRecords()).find((r) => r.id === id) : undefined;
+      const path = rec ? pathOfRecord(rec) : null;
+      if (!rec || !path) return respond(data.requestId, { status: "error", error: "not_found" });
+      const name = String(rec.name || "").replace(/\.[^.]+$/, "") || undefined;
+      presentInPresentationMode(path, name);
+      respond(data.requestId, { status: "ok" });
+      return;
+    }
+    case "screen": {
+      // Liga ou desliga só a tela principal (o retorno de palco fica como está).
+      await setScreen("main", data.on !== false);
+      respond(data.requestId, { status: "ok" });
+      return;
+    }
+    case "native": {
+      // "Apresentar com animações" e "Encerrar", como na faixa do PowerPoint no PC.
+      if (data.on === false) {
+        await native.end();
+        return respond(data.requestId, { status: "ok" });
+      }
+      const path = livePowerPointPath.value;
+      if (!path) return respond(data.requestId, { status: "error", error: "no_pptx" });
+      if (native.active.value) return respond(data.requestId, { status: "ok" });
+      const page = deck.active.value ? deck.page.value : 1;
+      const ok = await native.start(path, Math.max(0, page - 1));
+      respond(data.requestId, ok ? { status: "ok" } : { status: "error", error: "native_failed" });
       return;
     }
     case "slide": {

@@ -113,4 +113,41 @@ describe("presenterRoutes", () => {
     expect(renderer.mock.calls[0][3]).toEqual({ action: "zoom", scale: 2, x: 0.3, y: undefined });
     expect(res.body).toEqual({ status: "ok", zoom: { scale: 2, cx: 0.4, cy: 0.5 } });
   });
+
+  it("abrir arquivo exige um id e devolve 404 quando o PC não acha", async () => {
+    const renderer = vi.fn(async () => ({ status: "error", error: "not_found" }));
+    const { call } = setup({ renderer });
+    expect((await call("POST /api/presenter/open", {})).statusCode).toBe(400);
+    expect((await call("POST /api/presenter/open", { id: "x".repeat(300) })).statusCode).toBe(400);
+    expect(renderer).not.toHaveBeenCalled();
+    expect((await call("POST /api/presenter/open", { id: "file_1" })).statusCode).toBe(404);
+    expect(renderer.mock.calls[0][3]).toEqual({ action: "open", id: "file_1" });
+  });
+
+  it("animações e telão só aceitam on true/false", async () => {
+    const renderer = vi.fn(async () => ({ status: "ok" }));
+    const { call } = setup({ renderer });
+    expect((await call("POST /api/presenter/native", { on: "sim" })).statusCode).toBe(400);
+    expect((await call("POST /api/presenter/screen", {})).statusCode).toBe(400);
+    expect((await call("POST /api/presenter/native", { on: true })).statusCode).toBe(200);
+    expect((await call("POST /api/presenter/screen", { on: false })).statusCode).toBe(200);
+    expect(renderer.mock.calls.map((c) => c[3])).toEqual([
+      { action: "native", on: true },
+      { action: "screen", on: false },
+    ]);
+  });
+
+  it("PowerPoint que não abriu volta 409 para o celular avisar", async () => {
+    const { call } = setup({ renderer: vi.fn(async () => ({ status: "error", error: "native_failed" })) });
+    const res = await call("POST /api/presenter/native", { on: true });
+    expect(res.statusCode).toBe(409);
+    expect(res.body).toEqual({ error: "native_failed" });
+  });
+
+  it("lista da Biblioteca só passa com o formato esperado", () => {
+    const { isFilesResponse } = require("../httpServer/presenterRoutes.js");
+    expect(isFilesResponse({ status: "ok", items: [{ id: "a", name: "Culto", kind: "pptx" }] })).toBe(true);
+    expect(isFilesResponse({ status: "ok", items: [{ id: "a", name: "Culto", kind: "exe" }] })).toBe(false);
+    expect(isFilesResponse({ status: "ok", items: [{ id: 1, name: "Culto", kind: "pdf" }] })).toBe(false);
+  });
 });

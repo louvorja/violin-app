@@ -44,6 +44,30 @@ function isSlideResponse(p) {
   return isPlainObject(p) && (p.status === "error" || (p.status === "ok" && typeof p.image === "string"));
 }
 
+const FILE_KINDS = new Set(["pptx", "pdf", "image", "video", "file"]);
+
+function isFilesResponse(p) {
+  return (
+    isPlainObject(p) &&
+    p.status === "ok" &&
+    Array.isArray(p.items) &&
+    p.items.length <= 300 &&
+    p.items.every(
+      (i) =>
+        isPlainObject(i) &&
+        typeof i.id === "string" &&
+        i.id.length <= 256 &&
+        typeof i.name === "string" &&
+        i.name.length <= 200 &&
+        FILE_KINDS.has(i.kind)
+    )
+  );
+}
+
+function isResultResponse(p) {
+  return isPlainObject(p) && (p.status === "ok" || (p.status === "error" && (p.error === undefined || typeof p.error === "string")));
+}
+
 function register(app, { getValidMainWindow, requestRenderer, sendRendererError, hasDevicePermission, getOverlay }) {
   function allowed(req, res) {
     if (hasDevicePermission(req, "keyboard")) return true;
@@ -149,6 +173,91 @@ function register(app, { getValidMainWindow, requestRenderer, sendRendererError,
     }
   });
 
+  // GET /api/presenter/files — a Biblioteca de Mídia, para abrir e apresentar pelo celular
+  app.get("/api/presenter/files", async (req, res) => {
+    if (!allowed(req, res)) return;
+    const win = mainWindowOr503(res);
+    if (!win) return;
+    try {
+      const data = await requestRenderer(win, res, "http:presenter", { action: "files" }, {
+        prefix: "presenter",
+        timeoutMs: 5_000,
+        maxPayloadBytes: 256 * 1024,
+        validatePayload: isFilesResponse,
+      });
+      if (!res.headersSent) res.json({ items: data.items });
+    } catch (error) {
+      sendRendererError(res, error, "Timeout ao ler a Biblioteca");
+    }
+  });
+
+  // POST /api/presenter/open — { id } abre o arquivo no modo apresentação e põe no ar
+  app.post("/api/presenter/open", async (req, res) => {
+    if (!allowed(req, res)) return;
+    const id = req.body && req.body.id;
+    if (typeof id !== "string" || !id || id.length > 256) {
+      return res.status(400).json({ error: "id inválido" });
+    }
+    const win = mainWindowOr503(res);
+    if (!win) return;
+    try {
+      const data = await requestRenderer(win, res, "http:presenter", { action: "open", id }, {
+        prefix: "presenter",
+        timeoutMs: 5_000,
+        maxPayloadBytes: 1_024,
+        validatePayload: isResultResponse,
+      });
+      if (res.headersSent) return;
+      if (data.status !== "ok") return res.status(404).json({ error: data.error || "not_found" });
+      res.json({ status: "ok" });
+    } catch (error) {
+      sendRendererError(res, error, "Timeout ao abrir o arquivo");
+    }
+  });
+
+  // POST /api/presenter/screen — { on } liga ou desliga a tela principal (o telão)
+  app.post("/api/presenter/screen", async (req, res) => {
+    if (!allowed(req, res)) return;
+    const on = req.body && req.body.on;
+    if (typeof on !== "boolean") return res.status(400).json({ error: "on deve ser true ou false" });
+    const win = mainWindowOr503(res);
+    if (!win) return;
+    try {
+      await requestRenderer(win, res, "http:presenter", { action: "screen", on }, {
+        prefix: "presenter",
+        timeoutMs: 15_000,
+        maxPayloadBytes: 1_024,
+        validatePayload: isResultResponse,
+      });
+      if (!res.headersSent) res.json({ status: "ok" });
+    } catch (error) {
+      sendRendererError(res, error, "Timeout ao ligar o telão");
+    }
+  });
+
+  // POST /api/presenter/native — { on: true } apresenta com animações; { on: false } encerra
+  app.post("/api/presenter/native", async (req, res) => {
+    if (!allowed(req, res)) return;
+    const on = req.body && req.body.on;
+    if (typeof on !== "boolean") return res.status(400).json({ error: "on deve ser true ou false" });
+    const win = mainWindowOr503(res);
+    if (!win) return;
+    try {
+      // Abrir o PowerPoint e conferir as fontes pode levar alguns segundos.
+      const data = await requestRenderer(win, res, "http:presenter", { action: "native", on }, {
+        prefix: "presenter",
+        timeoutMs: 60_000,
+        maxPayloadBytes: 1_024,
+        validatePayload: isResultResponse,
+      });
+      if (res.headersSent) return;
+      if (data.status !== "ok") return res.status(409).json({ error: data.error || "native_failed" });
+      res.json({ status: "ok" });
+    } catch (error) {
+      sendRendererError(res, error, "Timeout ao abrir o PowerPoint");
+    }
+  });
+
   // POST /api/presenter/laser — { x, y } (0–1) ou { hide: true }
   app.post("/api/presenter/laser", async (req, res) => {
     if (!allowed(req, res)) return;
@@ -204,4 +313,4 @@ function register(app, { getValidMainWindow, requestRenderer, sendRendererError,
   });
 }
 
-module.exports = { register, isStateResponse, isSlideResponse };
+module.exports = { register, isStateResponse, isSlideResponse, isFilesResponse, isResultResponse };
