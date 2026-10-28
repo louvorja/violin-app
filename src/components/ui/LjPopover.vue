@@ -5,6 +5,10 @@
       <PopoverContent class="lj-ui-float lj-popover" :side="side" :align="align" :side-offset="4">
         <header v-if="title" class="lj-popover__header">
           <span :id="titleId" class="lj-popover__title">{{ title }}</span>
+          <!-- Ações extras do consumidor ficam à esquerda do fechar. -->
+          <div class="lj-popover__actions">
+            <slot name="actions" />
+          </div>
           <PopoverClose class="lj-popover__close" :aria-label="t('actions.close')">
             <LjIcon :icon="ICONS.ACTIONS.CLOSE" :size="14" />
           </PopoverClose>
@@ -71,9 +75,16 @@ const titleId = useId();
   font-weight: var(--lj-weight-semibold);
 }
 
+.lj-popover__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lj-space-2);
+  margin-left: auto;
+}
+
 .lj-popover__close {
   display: inline-flex;
-  margin-left: auto;
+  margin-left: 0;
   padding: 0;
   border: none;
   background: transparent;

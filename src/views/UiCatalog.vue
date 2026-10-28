@@ -280,6 +280,21 @@
         </div>
       </section>
 
+      <!-- ══════════ Cor ══════════ -->
+      <section class="cat__section">
+        <h2 class="cat__h2">Cor</h2>
+        <p class="cat__lead">
+          Sobre Reka UI: as cores rápidas são um listbox (teclado e foco visível) e o seletor
+          personalizado compõe área de saturação/brilho, matiz e campo HEX — o valor sai sempre em
+          hex de 6 dígitos, o mesmo formato gravado nas categorias.
+        </p>
+        <div class="cat__form">
+          <LjField label="Cor da categoria" layout="column">
+            <LjColorPicker v-model="demoColor" :presets="demoColorPresets" />
+          </LjField>
+        </div>
+      </section>
+
       <!-- ══════════ Camadas flutuantes ══════════ -->
       <section class="cat__section">
         <h2 class="cat__h2">Camadas flutuantes</h2>
@@ -444,6 +459,7 @@ import {
   LjButton,
   LjCard,
   LjCheckbox,
+  LjColorPicker,
   LjAlert,
   LjChip,
   LjDivider,
@@ -519,6 +535,17 @@ const demoSearch = ref("Ó Deus de Amor");
 const demoArea = ref("");
 const demoCheck = ref(true);
 const demoSwitch = ref(false);
+const demoColor = ref("#2196f3");
+const demoColorPresets = [
+  "#4CAF50",
+  "#2196F3",
+  "#9C27B0",
+  "#FF9800",
+  "#F44336",
+  "#00BCD4",
+  "#3F51B5",
+  "#E91E63",
+];
 const progress = ref(38);
 const demoTheme = ref<string>(COLOR_THEMES.DEFAULT);
 const demoFont = ref("DIN Condensed Bold");

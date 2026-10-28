@@ -9,6 +9,11 @@ export interface EtaEstimator {
   push(timeMs: number, percent: number): void;
   /** Segundos que faltam, ou `null` quando ainda não dá para estimar. */
   eta(nowMs: number): number | null;
+  /**
+   * Já passou do tempo mínimo, mas o avanço ainda não chegou ao percentual
+   * mínimo: dá para mostrar "calculando" em vez de esconder o tempo.
+   */
+  calculating(nowMs: number): boolean;
 }
 
 interface Sample {
@@ -19,9 +24,14 @@ interface Sample {
 export function createEtaEstimator({
   windowMs = 20_000,
   minElapsedMs = 4_000,
-  minPercent = 1,
+  minPercent = 0.05,
   staleMs = 20_000,
-}: { windowMs?: number; minElapsedMs?: number; minPercent?: number; staleMs?: number } = {}): EtaEstimator {
+}: {
+  windowMs?: number;
+  minElapsedMs?: number;
+  minPercent?: number;
+  staleMs?: number;
+} = {}): EtaEstimator {
   let samples: Sample[] = [];
   let first: Sample | null = null;
 
@@ -54,6 +64,16 @@ export function createEtaEstimator({
       const rate = 0.6 * recent + 0.4 * overall;
       if (!(rate > 0)) return null;
       return Math.round(remaining / rate / 1000);
+    },
+
+    calculating(nowMs) {
+      const last = samples[samples.length - 1];
+      if (!first || !last) return false;
+      if (100 - last.p <= 0) return false;
+      if (nowMs - last.t > staleMs) return false;
+      const elapsed = last.t - first.t;
+      if (elapsed < minElapsedMs) return false;
+      return last.p - first.p < minPercent;
     },
   };
 }

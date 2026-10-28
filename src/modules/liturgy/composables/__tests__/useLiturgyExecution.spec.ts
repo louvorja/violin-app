@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   closeProjectionStage: vi.fn(async () => {}),
   broadcastSend: vi.fn(),
   broadcastGetLastPayload: vi.fn(),
+  broadcastListen: vi.fn(),
   systemPlayer: false,
   /** Preferências que um caso queira forçar, lidas antes do `fallback`. */
   userdataValues: new Map<string, unknown>(),
@@ -44,7 +45,10 @@ vi.mock("@/helpers/UserData", () => ({
       if (mocks.userdataValues.has(key)) return mocks.userdataValues.get(key);
       return mocks.systemPlayer ? true : fallback;
     },
-    set: mocks.userdataSet,
+    set: (key: string, value: unknown) => {
+      mocks.userdataSet(key, value);
+      mocks.userdataValues.set(key, value);
+    },
   },
 }));
 vi.mock("@/composables/useMedia", () => ({
@@ -82,7 +86,14 @@ vi.mock("@/helpers/Liturgy", () => ({
 vi.mock("@/helpers/ImageConvert", () => ({ heicToJpeg: vi.fn() }));
 vi.mock("@/helpers/Alert", () => ({ default: { error: vi.fn(), info: vi.fn(), show: vi.fn() } }));
 vi.mock("@/helpers/Broadcast", () => ({
-  default: { send: mocks.broadcastSend, getLastPayload: mocks.broadcastGetLastPayload },
+  default: {
+    send: mocks.broadcastSend,
+    getLastPayload: mocks.broadcastGetLastPayload,
+    listen: (handler: (_msg: unknown) => void, options: unknown) => {
+      mocks.broadcastListen(handler, options);
+      return () => {};
+    },
+  },
 }));
 vi.mock("@/helpers/ProjectionWindows", () => ({
   openFileProjectionWindows: vi.fn(async () => {}),
@@ -111,6 +122,7 @@ vi.mock("@/helpers/Telemetry", () => ({
 }));
 
 import { useLiturgyExecution } from "../useLiturgyExecution";
+import { resetarSessaoOverlayVinculado } from "../../linkedOverlay";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import { KEYS } from "@/constants/UserDataKeys";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
@@ -143,6 +155,7 @@ function music(mode = "sung"): LiturgyItem {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  resetarSessaoOverlayVinculado();
   mocks.systemPlayer = false;
   mocks.userdataValues.clear();
   mocks.openSlja.mockResolvedValue(true);
@@ -536,5 +549,100 @@ describe("liturgia — vínculo de sobreposição", () => {
     expect(mocks.openCustomSong).toHaveBeenCalledWith(customSong, mode);
     expect(mocks.openMusic).not.toHaveBeenCalled();
     expect(mocks.openCustomAudio).not.toHaveBeenCalled();
+  });
+});
+
+describe("liturgia — ciclo de vida do overlay vinculado", () => {
+  let slots: { id: string; enabled: boolean }[];
+
+  beforeEach(() => {
+    slots = [{ id: "slot-1", enabled: false }];
+    mocks.readAllOverlaySlots.mockImplementation(async () => slots.map((slot) => ({ ...slot })));
+    mocks.writeOverlaySlot.mockImplementation(async (slot: { id: string; enabled: boolean }) => {
+      const indice = slots.findIndex((atual) => atual.id === slot.id);
+      if (indice >= 0) slots[indice] = { ...slot };
+    });
+    slots = [{ id: "slot-1", enabled: false }];
+  });
+
+  it("executar outro item que assume o telão desliga o overlay do anterior", async () => {
+    const { executeItem } = useLiturgyExecution();
+    await executeItem(linked(arquivo("/Users/ana/aviso.png")));
+    expect(slots[0].enabled).toBe(true);
+
+    mocks.writeOverlaySlot.mockClear();
+    mocks.userdataSet.mockClear();
+
+    /* Outra imagem, sem vínculo: assume o telão e recolhe o anterior. */
+    await executeItem({ ...arquivo("/Users/ana/outra.png"), id: "2" });
+
+    expect(slots[0].enabled).toBe(false);
+    expect(mocks.writeOverlaySlot).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "slot-1", enabled: false })
+    );
+    /* A chave geral foi ligada pelo item: volta a desligar. */
+    expect(mocks.userdataSet).toHaveBeenCalledWith(KEYS.MODULES.OVERLAY.ENABLED, false);
+  });
+
+  it("fechar a mídia desliga o overlay vinculado", async () => {
+    const { executeItem } = useLiturgyExecution();
+    await executeItem(linked(arquivo("/Users/ana/aviso.png")));
+    expect(slots[0].enabled).toBe(true);
+
+    const listener = mocks.broadcastListen.mock.calls[0]?.[0] as (_msg: unknown) => void;
+    expect(listener).toBeTypeOf("function");
+    listener({ type: BROADCAST_TYPE.MEDIA_CLOSE });
+
+    await vi.waitFor(() => expect(slots[0].enabled).toBe(false));
+    expect(mocks.userdataSet).toHaveBeenCalledWith(KEYS.MODULES.OVERLAY.ENABLED, false);
+  });
+
+  it("anotação, botão de overlay e som de fundo não encerram o item", async () => {
+    const { executeItem } = useLiturgyExecution();
+    await executeItem(linked(arquivo("/Users/ana/aviso.png")));
+    expect(slots[0].enabled).toBe(true);
+
+    await executeItem({
+      id: "nota-1",
+      tipo: LiturgyItemTypeEnum.ANOTACAO,
+      item: "Lembrete",
+      subitem: "Avisar o pastor",
+    } as LiturgyItem);
+    expect(slots[0].enabled).toBe(true);
+
+    await executeItem({
+      id: "overlay-1",
+      tipo: LiturgyItemTypeEnum.OVERLAY,
+      overlay_id: "slot-2",
+      overlay_action: "activate",
+    } as unknown as LiturgyItem);
+    expect(slots[0].enabled).toBe(true);
+
+    await executeItem({
+      id: "bg-1",
+      tipo: LiturgyItemTypeEnum.BG_SOUND,
+      ref_id: "",
+    } as unknown as LiturgyItem);
+    expect(slots[0].enabled).toBe(true);
+  });
+
+  it("versão só de áudio da mesma música não desliga o overlay", async () => {
+    const { playMusic } = useLiturgyExecution();
+    await playMusic(music("sung"), "sung");
+    expect(slots[0].enabled).toBe(true);
+
+    await playMusic(music("sung"), "audio");
+    expect(mocks.openAudio).toHaveBeenCalledTimes(1);
+    expect(slots[0].enabled).toBe(true);
+  });
+
+  it("trocar a versão da mesma música não reescreve o overlay (sem piscar)", async () => {
+    const { playMusic } = useLiturgyExecution();
+    await playMusic(music("sung"), "sung");
+    mocks.writeOverlaySlot.mockClear();
+
+    await playMusic(music("sung"), "lyric");
+
+    expect(mocks.writeOverlaySlot).not.toHaveBeenCalled();
   });
 });

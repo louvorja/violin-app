@@ -36,6 +36,7 @@ import {
   retainLiturgyFileUrl,
 } from "@/helpers/LiturgyFiles";
 import { canLinkOverlay, youtubeVideoId } from "../overlayLink";
+import { ativarOverlayVinculado, prepararExecucao } from "../linkedOverlay";
 
 // A shell e o módulo podem pedir arquivos ao mesmo tempo. Uma leitura/abertura
 // antiga que termina depois não assume a URL da solicitação mais recente.
@@ -80,6 +81,15 @@ export function useLiturgyExecution() {
   async function executeItem(item: LiturgyItem): Promise<void> {
     let projected = false;
     try {
+      /*
+       * O overlay vinculado pertence ao item que está no telão: o próximo item
+       * que assume a projeção recolhe o anterior antes de entrar. Anotação,
+       * botão de overlay e som de fundo não assumem — o helper filtra.
+       */
+      await prepararExecucao(
+        item,
+        item.tipo === LiturgyItemTypeEnum.MUSICA ? item.subtipo : undefined
+      );
       switch (item.tipo) {
         case LiturgyItemTypeEnum.MUSICA:
           // playMusic também é chamado diretamente pelo cartão e pelo painel.
@@ -126,7 +136,7 @@ export function useLiturgyExecution() {
           await toggleOverlay(item);
           break;
       }
-      if (projected && item.linked_overlay_id) await activateLinkedOverlay(item);
+      if (projected) await ativarOverlayVinculado(item);
     } catch (error) {
       reportExecutionError(error, "execute_item", { type: item.tipo });
     }
@@ -139,6 +149,12 @@ export function useLiturgyExecution() {
       return false;
     }
 
+    /*
+     * Prepara com o modo EFETIVO: o card deixa o operador escolher a versão
+     * sem gravar no item, e uma faixa só de áudio não assume o telão.
+     */
+    await prepararExecucao(item, mode);
+
     // Música personalizada (custom_collections): cantado, playback, sem áudio ou só o arquivo
     if (item.ref_id && item.id_music < 0) {
       try {
@@ -149,7 +165,7 @@ export function useLiturgyExecution() {
             LITURGY_VERSION_ACTION[mode] ?? MusicActionEnum.AUDIO
           );
           if (projected && canLinkOverlay({ ...item, subtipo: mode })) {
-            await activateLinkedOverlay(item);
+            await ativarOverlayVinculado(item);
           }
           return projected;
         }
@@ -182,7 +198,7 @@ export function useLiturgyExecution() {
     try {
       const projected = await $media.open(map[mode] || map.sung);
       if (projected && canLinkOverlay({ ...item, subtipo: mode })) {
-        await activateLinkedOverlay(item);
+        await ativarOverlayVinculado(item);
       }
       return projected;
     } catch (error) {
@@ -435,29 +451,6 @@ export function useLiturgyExecution() {
       });
     } catch (error) {
       reportExecutionError(error, "toggle_overlay");
-    }
-  }
-
-  async function activateLinkedOverlay(item: LiturgyItem): Promise<void> {
-    if (!item.linked_overlay_id) return;
-    try {
-      const slots = await readAllOverlaySlots();
-      const slot = slots.find((s) => s.id === item.linked_overlay_id);
-      if (!slot) {
-        reportMissingResource("activate_linked_overlay", "overlay_slot");
-        return;
-      }
-
-      slot.enabled = true;
-      await writeOverlaySlot(slot);
-
-      $userdata.set(KEYS.MODULES.OVERLAY.ENABLED, true);
-
-      $broadcast.send(BROADCAST_TYPE.OVERLAY_CONFIG_CHANGED, {
-        slot,
-      });
-    } catch (error) {
-      reportExecutionError(error, "activate_linked_overlay");
     }
   }
 

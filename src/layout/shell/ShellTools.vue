@@ -116,49 +116,72 @@
         </button>
       </template>
 
+      <template #actions>
+        <LjButton
+          v-if="bgTasks.completedCount.value > 0 || clearingFinished"
+          size="sm"
+          variant="ghost"
+          icon-only
+          :icon="ICONS.UI.BROOM"
+          :disabled="clearingFinished"
+          :title="t('shell.background_tasks.clear_completed')"
+          :aria-label="t('shell.background_tasks.clear_completed')"
+          @click="clearFinishedTasks"
+        />
+      </template>
+
       <div class="bg-tasks">
-        <div v-for="task in bgTasks.tasks.value" :key="task.id" class="bg-task">
-          <div class="bg-task__main">
-            <span class="bg-task__label">{{ backgroundTaskLabel(task.label, t, te) }}</span>
-            <template v-if="task.status === 'running'">
-              <LjProgress :value="task.progress ?? 0" :indeterminate="!task.progress" :height="4" />
-              <span class="bg-task__detail">
-                {{ formatTaskDetail(task.detail) || `${Math.round(task.progress)}%` }}
+        <TransitionGroup name="bg-task" tag="div" class="bg-tasks__list">
+          <div v-for="task in bgTasks.tasks.value" :key="task.id" class="bg-task">
+            <div class="bg-task__main">
+              <span class="bg-task__label">{{ backgroundTaskLabel(task.label, t, te) }}</span>
+              <template v-if="task.status === 'running'">
+                <LjProgress
+                  :value="task.progress ?? 0"
+                  :indeterminate="taskProgressIsIndeterminate(task)"
+                  :height="4"
+                />
+                <span class="bg-task__detail">
+                  {{ formatTaskDetail(task.detail) || `${Math.round(task.progress)}%` }}
+                </span>
+                <span v-if="task.etaSeconds != null" class="bg-task__detail bg-task__eta">
+                  {{ t("shell.background_tasks.eta", { time: formatEta(task.etaSeconds) }) }}
+                </span>
+                <span v-else-if="task.etaCalculating" class="bg-task__detail bg-task__eta">
+                  {{ t("shell.background_tasks.eta_calculating") }}
+                </span>
+              </template>
+              <span v-else class="bg-task__detail">
+                {{
+                  task.status === "error" && task.detail
+                    ? task.detail
+                    : t(`shell.background_tasks.${task.status}`)
+                }}
               </span>
-              <span v-if="task.etaSeconds != null" class="bg-task__detail bg-task__eta">
-                {{ t("shell.background_tasks.eta", { time: formatEta(task.etaSeconds) }) }}
-              </span>
-            </template>
-            <span v-else class="bg-task__detail">
-              {{
-                task.status === "error" && task.detail
-                  ? task.detail
-                  : t(`shell.background_tasks.${task.status}`)
-              }}
-            </span>
+            </div>
+
+            <LjButton
+              v-if="task.status === 'running' && task._cancelFn"
+              size="sm"
+              variant="ghost"
+              icon-only
+              :icon="ICONS.ACTIONS.CANCEL"
+              :aria-label="t('shell.background_tasks.cancel')"
+              @click="confirmCancel(task)"
+            />
+            <LjButton
+              v-else
+              size="sm"
+              variant="ghost"
+              icon-only
+              :icon="ICONS.ACTIONS.CLOSE"
+              :aria-label="t('shell.background_tasks.dismiss')"
+              @click="bgTasks.dismissTask(task.id)"
+            />
           </div>
+        </TransitionGroup>
 
-          <LjButton
-            v-if="task.status === 'running' && task._cancelFn"
-            size="sm"
-            variant="ghost"
-            icon-only
-            :icon="ICONS.ACTIONS.CANCEL"
-            :aria-label="t('shell.background_tasks.cancel')"
-            @click="confirmCancel(task)"
-          />
-          <LjButton
-            v-else
-            size="sm"
-            variant="ghost"
-            icon-only
-            :icon="ICONS.ACTIONS.CLOSE"
-            :aria-label="t('shell.background_tasks.dismiss')"
-            @click="bgTasks.dismissTask(task.id)"
-          />
-        </div>
-
-        <p v-if="bgTasks.tasks.value.length === 0" class="bg-tasks__empty">
+        <p v-if="bgTasks.tasks.value.length === 0 && listaVaziaPronta" class="bg-tasks__empty">
           {{ t("shell.background_tasks.empty") }}
         </p>
       </div>
@@ -239,7 +262,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import $appdata from "@/helpers/AppData";
 import $userdata from "@/helpers/UserData";
@@ -256,7 +279,11 @@ import {
   nextBackgroundEpoch,
   readStoredBackgroundState,
 } from "@/presentation/BackgroundPresentationState";
-import { useBackgroundTasks, type BackgroundTask } from "@/composables/useBackgroundTasks";
+import {
+  taskProgressIsIndeterminate,
+  useBackgroundTasks,
+  type BackgroundTask,
+} from "@/composables/useBackgroundTasks";
 import { useConnectivity } from "@/composables/useConnectivity";
 import Platform from "@/helpers/Platform";
 import { canOpenWebWindows } from "@/helpers/projection/webWindow";
@@ -284,6 +311,54 @@ defineProps<{
   compact?: boolean;
 }>();
 const bgTasks = useBackgroundTasks();
+/*
+ * O card sai deslizando; o aviso de lista vazia só pode entrar depois que o
+ * último terminar de sair. Contar as transições do TransitionGroup falharia se
+ * o popover fechasse no meio, então o prazo vem do relógio: cada remoção
+ * reinicia a espera pela duração da saída.
+ */
+const SAIDA_DO_CARD_MS = 450;
+const listaVaziaPronta = ref(true);
+let timerListaVazia: ReturnType<typeof setTimeout> | null = null;
+
+function duracaoDaSaida(): number {
+  const reduzido =
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+  return reduzido ? 0 : SAIDA_DO_CARD_MS;
+}
+
+watch(
+  () => bgTasks.tasks.value.length,
+  (atual, anterior) => {
+    if (atual >= anterior) return;
+    listaVaziaPronta.value = false;
+    if (timerListaVazia) clearTimeout(timerListaVazia);
+    timerListaVazia = setTimeout(() => {
+      timerListaVazia = null;
+      listaVaziaPronta.value = true;
+    }, duracaoDaSaida());
+  }
+);
+
+onBeforeUnmount(() => {
+  if (timerListaVazia) clearTimeout(timerListaVazia);
+});
+/** Trava o clique duplo e mantém o botão visível até a última saída. */
+const clearingFinished = ref(false);
+
+async function clearFinishedTasks(): Promise<void> {
+  if (clearingFinished.value) return;
+  const reduced =
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+  clearingFinished.value = true;
+  try {
+    await bgTasks.clearCompleted({ staggerMs: reduced ? 0 : 300 });
+  } finally {
+    clearingFinished.value = false;
+  }
+}
 const { isOpen: chatOpen, unreadCount, toggleOpen: toggleChat } = useChat();
 
 function formatTaskDetail(detail: string | null | undefined): string {
@@ -497,10 +572,25 @@ function toggleLibras() {
 }
 
 .bg-tasks {
+  min-width: 300px;
+}
+
+.bg-tasks__list {
   display: flex;
   flex-direction: column;
   gap: var(--lj-space-3);
-  min-width: 300px;
+}
+
+/* Saída do card: desliza para a direita e some; os irmãos acompanham. */
+.bg-task-leave-active {
+  transition:
+    transform 0.45s var(--lj-ease),
+    opacity 0.45s var(--lj-ease);
+}
+
+.bg-task-leave-to {
+  transform: translateX(20px);
+  opacity: 0;
 }
 
 .bg-task {

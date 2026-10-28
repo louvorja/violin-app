@@ -267,6 +267,7 @@ import {
 } from "@/components/ui";
 import { AUDIO_EXT } from "@/constants/FileTypes";
 import CategoryManagerDialog, { CategoryFileData } from "@/components/CategoryManagerDialog.vue";
+import { nextCategorySelection } from "@/helpers/CategorySelection";
 import $idb from "@/helpers/IndexedDB";
 import { DB_TABLE } from "@/constants/DbTables";
 import { getSetting, saveSetting } from "@/helpers/SettingsStorage";
@@ -577,9 +578,14 @@ function toggleCategoryChip(id: string): void {
 async function handleSaveCategory(cat: CategoryFileData): Promise<void> {
   saving.value = true;
   try {
+    const isNew = !categories.value.some((c) => String(c.id) === String(cat.id));
     await saveCategoryRecord(cat);
     categories.value = await loadCategories();
-    selectAllCategoriesAndUncategorized();
+    selectedCategoryIds.value = nextCategorySelection(
+      selectedCategoryIds.value,
+      String(cat.id),
+      isNew
+    );
   } finally {
     saving.value = false;
   }

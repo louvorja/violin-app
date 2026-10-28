@@ -696,7 +696,7 @@ Veja todos lado a lado, nos 10 temas, na rota **`/ui`**.
 Foco preso, navegação por teclado, ARIA e portal:
 
 `LjSelect` · `LjCombobox` · `LjDialog` · `LjMenu` · `LjTooltip` · `LjTabs` ·
-`LjSlider` · `LjPopover` · `LjAccordion` · `LjDrawer`
+`LjSlider` · `LjPopover` · `LjAccordion` · `LjDrawer` · `LjColorPicker`
 
 ```ts
 import { LjButton, LjSelect, LjDialog } from "@/components/ui";

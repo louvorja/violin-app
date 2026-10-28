@@ -374,6 +374,7 @@ import ModuleContainer from "@/components/ModuleContainer.vue";
 import CategoryManagerDialog, {
   type CategoryFileData,
 } from "@/components/CategoryManagerDialog.vue";
+import { nextCategorySelection } from "@/helpers/CategorySelection";
 import { LjButton, LjDialog, LjDivider, LjEmpty, LjIcon, LjInput, LjTabs } from "@/components/ui";
 import CanvaTab from "./CanvaTab.vue";
 import $broadcast from "@/helpers/Broadcast";
@@ -566,9 +567,14 @@ async function saveCategoryRecord(cat: CategoryFileData): Promise<void> {
 async function handleSaveCategory(cat: CategoryFileData): Promise<void> {
   saving.value = true;
   try {
+    const isNew = !categories.value.some((c) => String(c.id) === String(cat.id));
     await saveCategoryRecord(cat);
     await loadCategories();
-    selectAllCategoriesAndUncategorized();
+    selectedCategoryIds.value = nextCategorySelection(
+      selectedCategoryIds.value,
+      String(cat.id),
+      isNew
+    );
   } finally {
     saving.value = false;
   }

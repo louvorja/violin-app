@@ -21,9 +21,17 @@ describe("vínculo de sobreposição — disponibilidade no formulário", () => 
     const selected = item(LiturgyItemTypeEnum.MUSICA, { id_music: 42, subtipo: "sung" });
     expect(canLinkOverlay(selected)).toBe(true);
     expect(canLinkOverlay({ ...selected, subtipo: "audio" })).toBe(false);
-    expect(canLinkOverlay({ ...selected, escolha: true })).toBe(false);
     expect(canLinkOverlay({ ...selected, id_music: undefined })).toBe(false);
     expect(canLinkOverlay({ ...selected, id_music: -1, ref_id: "custom-1" })).toBe(true);
+  });
+
+  it('oferece o vínculo para "escolher na hora" — a música só existe na execução', () => {
+    /* O formulário ainda não conhece a música nem a versão; a execução decide
+       se o hino escolhido projeta slides (modo áudio continua sem overlay). */
+    expect(
+      canLinkOverlay(item(LiturgyItemTypeEnum.MUSICA, { escolha: true, musica: -1 }))
+    ).toBe(true);
+    expect(canLinkOverlay({ ...item(LiturgyItemTypeEnum.MUSICA), escolha: true })).toBe(true);
   });
 
   it("exige slides de anúncio disponíveis e selecionados", () => {

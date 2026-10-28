@@ -88,6 +88,11 @@
       "file_sing": "Archivo Cantado",
       "file_playback": "Archivo Playback"
     },
+    "color_picker": {
+      "presets": "Colores",
+      "custom": "Personalizado",
+      "hex": "HEX"
+    },
     "customization": {
       "title": "Formato",
       "restore": "Restaurar",
@@ -649,7 +654,9 @@
       "save": "Guardar",
       "saving": "Guardando…",
       "save_done": "{n} versión(es) eliminada(s) del disco.",
-      "cancel": "Cancelar Descarga"
+      "cancel": "Cancelar Descarga",
+      "remove": "Eliminar {n} del dispositivo",
+      "remove_confirm": "¿Eliminar {n} versión(es) de la Biblia de este dispositivo? Puedes descargarlas de nuevo después."
     },
     "storage": {
       "title": "Almacenamiento",
@@ -1386,6 +1393,7 @@
       "eta": "{time} restantes",
       "cancel": "Cancelar descarga",
       "dismiss": "Descartar",
+      "clear_completed": "Limpiar completadas",
       "title": "Procesos en segundo plano",
       "empty": "Ningún proceso en curso",
       "running": "En curso",
@@ -1407,7 +1415,8 @@
       "gloss": "Glosa",
       "libras_music": "Traducción Libras — Músicas",
       "libras_bible": "Traducción Libras — Biblia",
-      "scheduled_scan": "Escaneando ítems programados"
+      "scheduled_scan": "Escaneando ítems programados",
+      "eta_calculating": "Calculando tiempo restante…"
     },
     "appmenu_items": {
       "about": "Acerca de",
@@ -1696,13 +1705,18 @@
       "no_selection": "Ninguna canción seleccionada.",
       "cached": "Traducido",
       "not_cached": "No traducido",
-      "remove": "Eliminar traducción",
-      "remove_confirm": "¿Eliminar la traducción Libras de \"{name}\"?",
+      "remove": "Eliminar {n} del dispositivo",
+      "remove_confirm": "¿Eliminar {n} grupo(s) de traducciones Libras de este dispositivo? Puedes traducirlas de nuevo después.",
       "save": "Guardar",
       "saving": "Guardando…",
       "save_done": "{count} traducción(es) eliminada(s).",
       "category": "Categoría",
-      "songs": "canción(es)"
+      "songs": "canción(es)",
+      "partial_files": "{have} de {total} canciones traducidas",
+      "partial_continue": "Continuar",
+      "partial_discard": "Borrar",
+      "partial_discard_confirm": "¿Borrar las {n} canciones ya traducidas de \"{name}\"?",
+      "partial_discarded": "Traducciones parciales borradas."
     },
     "bible": {
       "title": "Biblia",
@@ -1724,9 +1738,14 @@
       "chapters": "{count} capítulo(s)",
       "save": "Guardar",
       "saving": "Guardando…",
-      "save_done": "{count} entrada(s) eliminada(s).",
-      "remove": "Eliminar traducción",
-      "remove_confirm": "¿Eliminar la traducción Libras de {count} capítulo(s) de esta versión?"
+      "save_done": "{count} versión(es) eliminada(s).",
+      "remove": "Eliminar {n} del dispositivo",
+      "remove_confirm": "¿Eliminar {n} versión(es) de la Biblia en Libras de este dispositivo? Puedes traducirlas de nuevo después.",
+      "partial_files": "{have} de {total} capítulos traducidos",
+      "partial_continue": "Continuar",
+      "partial_discard": "Borrar",
+      "partial_discard_confirm": "¿Borrar los {n} capítulos ya traducidos de \"{name}\"?",
+      "partial_discarded": "Traducciones parciales borradas."
     },
     "storage": {
       "title": "Almacenamiento",

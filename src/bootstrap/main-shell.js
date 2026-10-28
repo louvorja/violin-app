@@ -89,6 +89,11 @@ import { ModulePresentationAuthority } from "@/presentation/ModulePresentationSt
 import { nextOverlayEpoch } from "@/presentation/OverlayVisibilityState";
 import { canLinkOverlay, projectedFileKind, youtubeVideoId } from "@/modules/liturgy/overlayLink";
 import {
+  ativarOverlayVinculado,
+  desativarOverlayVinculado,
+  prepararExecucao,
+} from "@/modules/liturgy/linkedOverlay";
+import {
   AnnouncementsPresentationAuthority,
   announcementPosition,
   beginAnnouncementIntent,
@@ -1714,6 +1719,15 @@ $storage.hydrate().then(async () => {
                 let projected = false;
                 let overlayItem = litItem;
                 const overlayContext = {};
+                /*
+                 * Mesmo ciclo do módulo: o item que assume o telão recolhe o
+                 * overlay vinculado do anterior antes de projetar. Anotação,
+                 * botão de overlay e som de fundo não assumem.
+                 */
+                await prepararExecucao(
+                  litItem,
+                  litItem.tipo === "musica" ? litItem.subtipo || "sung" : undefined
+                );
                 switch (litItem.tipo) {
                   case "musica": {
                     if (litItem.escolha || !litItem.id_music) break;
@@ -1948,25 +1962,8 @@ $storage.hydrate().then(async () => {
                 }
 
                 // O vínculo só aparece na projeção que este comando abriu de fato.
-                if (
-                  projected &&
-                  litItem.linked_overlay_id &&
-                  canLinkOverlay(overlayItem, overlayContext)
-                ) {
-                  try {
-                    const linkedSlots = await readAllOverlaySlots();
-                    const linkedSlot = linkedSlots.find((s) => s.id === litItem.linked_overlay_id);
-                    if (linkedSlot) {
-                      linkedSlot.enabled = true;
-                      await writeOverlaySlot(linkedSlot);
-                      UserData.set(KEYS.MODULES.OVERLAY.ENABLED, true);
-                      Broadcast.send(BROADCAST_TYPE.OVERLAY_CONFIG_CHANGED, {
-                        slot: linkedSlot,
-                      });
-                    }
-                  } catch (e) {
-                    console.error("[http] liturgy-execute: overlay vinculado falhou:", e);
-                  }
+                if (projected && canLinkOverlay(overlayItem, overlayContext)) {
+                  await ativarOverlayVinculado(overlayItem);
                 }
               } catch (e) {
                 console.error("[http] liturgy-execute falhou:", litItem.tipo, e);
@@ -2832,6 +2829,8 @@ $storage.hydrate().then(async () => {
             Projection.close(id);
             Broadcast.send(BROADCAST_TYPE.MODULE_PROJECTION_CLOSE, { module: id });
           }
+          /* Nada de projeção no telão: o overlay vinculado não tem a quem pertencer. */
+          void desativarOverlayVinculado();
         };
 
         /*
@@ -2850,6 +2849,11 @@ $storage.hydrate().then(async () => {
         if (fp.isProjecting.value && fp.currentType.value === "announcements") {
           fp.stopProjection();
           Projection.close("announcements");
+          /*
+           * Anúncios não passam pelo `Media.close`, então não emitem
+           * `MEDIA_CLOSE` — o overlay vinculado precisa ser recolhido aqui.
+           */
+          void desativarOverlayVinculado();
         }
         // Projeção de arquivos de imagem e vídeo
         else if (Broadcast.getLastPayload(BROADCAST_TYPE.FILE_PROJECTION)) {

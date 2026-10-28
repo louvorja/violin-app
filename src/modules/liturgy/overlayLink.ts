@@ -41,11 +41,17 @@ export function youtubeVideoId(url: string | undefined): string | null {
 export function canLinkOverlay(item: LiturgyItem, context: OverlayLinkContext = {}): boolean {
   switch (item.tipo) {
     case LiturgyItemTypeEnum.MUSICA: {
+      /*
+       * "Escolher na hora": a música e a versão só existem na execução. O
+       * vínculo é do item — a ativação continua condicionada à projeção real
+       * (`projected` + modo), que decide se o hino escolhido mostra slides.
+       */
+      if (item.escolha) return true;
       const musicId = Number(item.id_music);
       const hasMusic = Number.isFinite(musicId) &&
         (musicId > 0 || (musicId < 0 && !!item.ref_id));
       const mode = item.subtipo || "sung";
-      return !item.escolha && hasMusic && ["sung", "pb", "lyric", "no_audio"].includes(mode);
+      return hasMusic && ["sung", "pb", "lyric", "no_audio"].includes(mode);
     }
     case LiturgyItemTypeEnum.ARQUIVO:
       return !!item.dir && !!projectedFileKind(item.dir, "", context.systemMediaPlayer);
