@@ -129,13 +129,11 @@ function prepareStaging(target, source, kind, id, workDir) {
   return staging;
 }
 
-function copyCollection(source, target, kind, id, { onProgress, workDir, allowLegacyNested = false, acquire = access.acquire, shared = false } = {}) {
+function copyCollection(source, target, kind, id, { onProgress, workDir, acquire = access.acquire, shared = false } = {}) {
   if (!["media", "videos"].includes(kind) || typeof id !== "string" || !/^[\da-f-]{36}$/i.test(id)) throw new Error("Identificação da cópia inválida.");
   source = canonical(source); target = canonical(target);
   if (canonical(source) === canonical(target)) return;
-  const knownLegacyChild = allowLegacyNested === true && kind === "media"
-    && normalized(target) === normalized(path.join(source, "Acervo"));
-  if (overlaps(source, target) && !knownLegacyChild) throw new Error("A pasta de destino não pode conter a origem nem estar dentro dela.");
+  if (overlaps(source, target)) throw new Error("A pasta de destino não pode conter a origem nem estar dentro dela.");
   const releases = [];
   let copiedFiles = 0, copiedBytes = 0;
   const progress = () => onProgress?.({ phase: "copying", files: copiedFiles, bytes: copiedBytes });
@@ -186,22 +184,13 @@ function applyPendingLayout(current, { profileDir, programDir, workDir, acquire,
     const next = { ...current };
     const [mediaDir, videosDir] = validateRoots(pending.mediaDir, pending.videosDir, { profileDir, programDir });
     for (const [kind, target] of [["media", mediaDir], ["videos", videosDir]]) {
-      if (normalized(target) === normalized(canonical(current[kind + "Dir"]))) {
-        if (pending.defaultMigration === true) {
-          const shared = current[kind + "Shared"] === true || pending[kind + "Shared"] === true
-            || access.readMarker(target, kind)?.shared === true;
-          next[kind + "Shared"] = shared;
-          if (shared) markShared(target, kind);
-        }
-        continue;
-      }
+      if (normalized(target) === normalized(canonical(current[kind + "Dir"]))) continue;
       validateContents(target, kind);
       if (!fs.existsSync(target)) throw new Error(`A pasta escolhida está indisponível: ${target}`);
-      const requestedShared = pending.defaultMigration === true ? pending[kind + "Shared"] === true
-        : pending[kind + "Action"] === "reuse" || !normalized(target).startsWith(normalized(os.homedir()) + path.sep);
+      const requestedShared = pending[kind + "Action"] === "reuse" || !normalized(target).startsWith(normalized(os.homedir()) + path.sep);
       const shared = requestedShared || access.readMarker(target, kind)?.shared === true;
       if (pending[kind + "Action"] === "copy") copyCollection(current[kind + "Dir"], target, kind, pending.id, {
-        workDir, acquire, onProgress, allowLegacyNested: pending.defaultMigration === true, shared,
+        workDir, acquire, onProgress, shared,
       });
       next[kind + "Shared"] = shared;
       if (shared) markShared(target, kind);

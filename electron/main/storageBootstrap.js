@@ -100,6 +100,8 @@ function runHelper() {
     console.error("[storage] Preparação interrompida:", message);
     saveResult({ ok: false, error: message });
     update({ error: message });
+    // Ninguém fecha uma janela que não aparece: sem isso a abertura esperaria para sempre.
+    if (!window || window.isDestroyed() || !window.isVisible()) app.exit(1);
   };
   const watchdog = setInterval(() => {
     try { process.kill(request.ownedBootstrapPid, 0); }

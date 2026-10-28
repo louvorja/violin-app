@@ -207,12 +207,15 @@ test("migrates the private profile once and changes only media/video roots after
     expect(
       await session.app.evaluate(({ app }) => [app.getPath("userData"), app.getPath("sessionData")])
     ).toEqual([path.join(profile, ".electron"), path.join(profile, ".electron")]);
+    // Acervo e vídeos ficam onde estavam, como pastas escolhidas: nada é copiado.
     expect(await locations(session)).toMatchObject({
       profileDir: profile,
-      mediaDir: path.join(root, "shared", "LouvorJA Violin", "Acervo"),
-      videosDir: path.join(root, "videos", "LouvorJA Violin"),
+      mediaDir: path.join(legacy, "files"),
+      videosDir: path.join(legacy, "Videos"),
       restartRequired: false,
     });
+    await expect(fs.stat(path.join(root, "shared"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(fs.stat(path.join(root, "videos", "LouvorJA Violin"))).rejects.toMatchObject({ code: "ENOENT" });
     expect(
       JSON.parse(await fs.readFile(path.join(root, "storage-layout.json"), "utf8"))
     ).toMatchObject({ version: 1 });
@@ -234,8 +237,8 @@ test("migrates the private profile once and changes only media/video roots after
     });
     expect(await locations(session)).toMatchObject({
       profileDir: profile,
-      mediaDir: path.join(root, "shared", "LouvorJA Violin", "Acervo"),
-      videosDir: path.join(root, "videos", "LouvorJA Violin"),
+      mediaDir: path.join(legacy, "files"),
+      videosDir: path.join(legacy, "Videos"),
       restartRequired: true,
     });
     expect(await fetchVideo(session)).toEqual({ status: 206, body: "345" });

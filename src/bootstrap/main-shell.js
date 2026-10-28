@@ -734,12 +734,12 @@ async function warnDataDirFallback(i18n) {
   const issue = await Promise.resolve(Platform.storage?.dataDirIssue?.()).catch(() => null);
   if (!issue) return;
   Telemetry.track("storage_data_dir_fallback", { reason: issue.reason });
+  // Sem tempo para sumir: o app abriu sem os dados e o operador precisa saber por quê.
   $snackbar.warning(
-    i18n.global.t("options.storage.folder_fallback_notice", { dir: issue.wanted }),
-    {
-      timeout: 15000,
-      key: "data-dir-fallback",
-    }
+    issue.reason === "unavailable"
+      ? i18n.global.t("options.storage.folder_fallback_notice", { dir: issue.wanted })
+      : i18n.global.t("options.storage.prepare_failed_notice", { error: issue.message }),
+    { timeout: 0, key: "data-dir-fallback" }
   );
 }
 

@@ -4,6 +4,7 @@ const path = require("node:path");
 const fs = require("fs-extra");
 const layout = require("./storageLayout.js");
 let resolved = null;
+let fallback = null;
 
 function bootstrapDir() {
   const isolated = process.env.LJ_E2E_USER_DATA?.trim();
@@ -50,19 +51,19 @@ module.exports = {
   bootstrapDir,
   programDir,
   userData: () => app.getPath("userData"),
-  dataDir: () => path.join(bootstrapDir(), "profile"),
+  dataDir: () => fallback?.profile || path.join(bootstrapDir(), "profile"),
   profileDir() { return path.join(this.dataDir(), ".electron"); },
   privateMediaDir() { return path.join(this.dataDir(), "attachments", "media"); },
   videoWorkDir() { return path.join(this.dataDir(), "temp", "videos"); },
   migrationOptions,
   needsMigration() {
     // A primeira instalação não tem um perfil grande para copiar. Layouts já
-    // publicados continuam no caminho rápido e são validados por configureProfile.
+    // publicados só voltam ao auxiliar para aplicar uma mudança de pasta pedida.
     const current = layout.readJson(path.join(bootstrapDir(), "storage-layout.json"))
       || layout.readJson(path.join(this.dataDir(), ".layout-origin.json"));
     if (current) {
       layout.validateLayout(current, { profileDir: this.dataDir(), programDir: programDir() });
-      return current.defaultLocationsVersion !== 1 || current.sharedLocationsVersion !== 1 || !!current.pending;
+      return !!current.pending;
     }
     return layout.resolveInitial(this.migrationOptions()).layout.setupCompleted;
   },
@@ -78,6 +79,8 @@ module.exports = {
   },
   storageLayout() { return structuredClone(config()); },
   saveLayout(value) {
+    // Publicar aqui marcaria a migração como feita e a origem nunca mais seria lida.
+    if (fallback) throw new Error("Seus dados ainda não foram trazidos para esta versão. Abra o LouvorJA de novo depois de resolver o aviso.");
     layout.validateLayout(value, { profileDir: this.dataDir(), programDir: programDir() });
     layout.atomicJson(path.join(bootstrapDir(), "storage-layout.json"), value);
     resolved = structuredClone(value);
@@ -95,8 +98,23 @@ module.exports = {
     }
     return dir;
   },
+  /**
+   * Abre num perfil provisório quando os dados não puderam ser preparados. Nada
+   * é publicado: a origem fica intacta e a próxima abertura tenta de novo.
+   */
+  useFallback(error) {
+    const root = path.join(bootstrapDir(), "fallback");
+    fallback = {
+      profile: path.join(root, "profile"),
+      issue: error?.code === "LJ_DATA_UNAVAILABLE"
+        ? { reason: "unavailable", wanted: error.dir }
+        : { reason: "failed", message: String(error?.message || error) },
+    };
+    resolved = { version: 1, setupCompleted: true, mediaDir: path.join(root, "Acervo"), videosDir: path.join(root, "Videos") };
+    for (const dir of [fallback.profile, resolved.mediaDir, resolved.videosDir]) fs.ensureDirSync(dir, { mode: 0o700 });
+  },
   profileRestartRequired: () => !!config().pending,
-  dataDirIssue: () => null,
+  dataDirIssue: () => fallback?.issue || null,
   mediaDir: () => config().mediaDir,
   filesDir: () => config().mediaDir,
   /** Cache de export do Canva: da conta, nunca no acervo compartilhado. */

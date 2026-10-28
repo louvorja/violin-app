@@ -46,8 +46,6 @@ function validateLayout(raw, roots) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw) || raw.version !== 1 || !absolute(raw.mediaDir) || !absolute(raw.videosDir)
     || typeof raw.setupCompleted !== "boolean"
     || (raw.pendingError !== undefined && typeof raw.pendingError !== "string")
-    || (raw.defaultLocationsVersion !== undefined && raw.defaultLocationsVersion !== 1)
-    || (raw.sharedLocationsVersion !== undefined && raw.sharedLocationsVersion !== 1)
     || ["mediaShared", "videosShared"].some((key) => raw[key] !== undefined && typeof raw[key] !== "boolean")
     || (raw.legacyRoot !== undefined && !absolute(raw.legacyRoot))) {
     throw new Error("A configuração de armazenamento é inválida. Os dados existentes foram preservados.");
@@ -56,7 +54,6 @@ function validateLayout(raw, roots) {
     const p = raw.pending;
     if (!p || typeof p !== "object" || Array.isArray(p) || !absolute(p.mediaDir) || !absolute(p.videosDir)
       || !["reuse", "copy"].includes(p.mediaAction) || !["reuse", "copy"].includes(p.videosAction)
-      || (p.defaultMigration !== undefined && typeof p.defaultMigration !== "boolean")
       || ["mediaShared", "videosShared"].some((key) => p[key] !== undefined && typeof p[key] !== "boolean")
       || typeof p.id !== "string" || !/^[\da-f-]{36}$/i.test(p.id)) {
       throw new Error("A mudança de pastas pendente é inválida. Os caminhos atuais foram preservados.");
@@ -174,24 +171,52 @@ function defaultLocations({ documents, videos = path.join(path.dirname(documents
   };
 }
 
+function unavailable(dir, cause) {
+  return Object.assign(new Error(`Sem acesso à pasta dos dados: ${dir}`, { cause }), { code: "LJ_DATA_UNAVAILABLE", dir });
+}
+
+// existsSync também responde false sem permissão (TCC do macOS, ACL): tomar
+// "sem acesso" por "não existe" trataria quem tem dados como instalação nova.
+function present(file, root) {
+  try { fs.statSync(file); return true; }
+  catch (error) {
+    if (error.code === "ENOENT" || error.code === "ENOTDIR") return false;
+    throw unavailable(root, error);
+  }
+}
+function readable(dir) {
+  try { fs.readdirSync(dir); return true; }
+  catch (error) {
+    if (error.code === "ENOENT") return false;
+    throw unavailable(dir, error);
+  }
+}
+
+// Quem já usa o app fica com o acervo e os vídeos onde estão, como se os tivesse
+// escolhido ali; só o perfil vem para a pasta privada.
 function resolveInitial({ bootstrap, documents, videos, sharedMedia, machineDefaults }) {
   const anchor = readJson(path.join(bootstrap, "data-location.json"));
   if (anchor && (!absolute(anchor.dataDir) || (anchor.profileSource !== undefined && !absolute(anchor.profileSource)))) {
     throw new Error("O endereço antigo dos dados é inválido. A migração não foi iniciada.");
   }
   const oldDefault = path.join(documents, "LouvorJA Violin");
-  const hasOldDefault = [".electron", ...PRIVATE_ENTRIES, "files", "Videos", "musics", "images", "covers"].some((name) => fs.existsSync(path.join(oldDefault, name)));
+  // A beta.14+ grava a âncora a cada abertura e as anteriores usavam o AppData
+  // como perfil. Sem nenhum dos dois é instalação nova, e Documentos nem é
+  // consultado: no macOS isso já abriria o pedido de acesso.
+  const previousInBootstrap = [...PRIVATE_ENTRIES, ...PROFILE_ENTRIES].some((name) => fs.existsSync(path.join(bootstrap, name)));
+  const hasOldDefault = !anchor && previousInBootstrap
+    && [".electron", ...PRIVATE_ENTRIES, "files", "Videos", "musics", "images", "covers"].some((name) => present(path.join(oldDefault, name), oldDefault));
   const legacyRoot = anchor?.dataDir || (hasOldDefault ? oldDefault : bootstrap);
-  if (anchor && !fs.existsSync(legacyRoot)) throw new Error(`A pasta antiga está indisponível: ${legacyRoot}. Reconecte o disco para preservar seus dados.`);
+  if (anchor && !readable(legacyRoot)) throw unavailable(legacyRoot);
   const oldStorage = readJson(path.join(legacyRoot, "storage", "storage.json"))
     || readJson(path.join(bootstrap, "storage", "storage.json"));
   if (oldStorage?.filesDir && !absolute(oldStorage.filesDir)) throw new Error("O endereço antigo do acervo é inválido.");
-  const oldMedia = oldStorage?.filesDir || null;
-  const existing = !!anchor || hasOldDefault || [...PRIVATE_ENTRIES, ...PROFILE_ENTRIES].some((name) => fs.existsSync(path.join(bootstrap, name)));
-  const mediaDir = fs.existsSync(path.join(legacyRoot, "files")) ? path.join(legacyRoot, "files")
-    : oldMedia || (["musics", "images", "covers"].some((n) => fs.existsSync(path.join(oldDefault, n))) ? oldDefault : path.join(oldDefault, "Acervo"));
-  const videosDir = fs.existsSync(path.join(legacyRoot, "Videos")) ? path.join(legacyRoot, "Videos") : path.join(oldDefault, "Videos");
-  if (mediaDir === oldMedia && !fs.existsSync(mediaDir)) throw new Error(`A pasta antiga do acervo está indisponível: ${mediaDir}. Reconecte o disco antes de migrar.`);
+  const oldMedia = oldStorage?.filesDir && present(oldStorage.filesDir, oldStorage.filesDir) ? oldStorage.filesDir : null;
+  const existing = !!anchor || previousInBootstrap;
+  const mediaInDocuments = hasOldDefault && ["musics", "images", "covers"].some((n) => present(path.join(oldDefault, n), oldDefault));
+  const mediaDir = present(path.join(legacyRoot, "files"), legacyRoot) ? path.join(legacyRoot, "files")
+    : oldMedia || (mediaInDocuments ? oldDefault : path.join(legacyRoot, "files"));
+  const videosDir = path.join(legacyRoot, "Videos");
   let chromium = path.join(legacyRoot, ".electron");
   if (anchor?.profileSource) {
     if (path.basename(anchor.profileSource) !== ".electron") throw new Error("Origem do perfil antigo inválida.");
@@ -202,14 +227,14 @@ function resolveInitial({ bootstrap, documents, videos, sharedMedia, machineDefa
     chromium = sourceExists ? anchor.profileSource : (fs.existsSync(`${chromium}.migrating`) ? `${chromium}.migrating` : chromium);
     if (!fs.existsSync(chromium)) throw new Error("O perfil da mudança anterior não está disponível.");
   }
-  const locations = existing ? { mediaDir, videosDir, legacyRoot } : { ...defaultLocations({ documents, videos, sharedMedia, machineDefaults }), defaultLocationsVersion: 1, sharedLocationsVersion: 1 };
+  const locations = existing ? { mediaDir, videosDir, legacyRoot } : defaultLocations({ documents, videos, sharedMedia, machineDefaults });
   return { layout: { version: 1, ...locations, setupCompleted: existing }, chromium, legacyRoot };
 }
 
 function initialize(options) {
   const release = acquireProfileMigrationLock(options.bootstrap);
   try {
-    const current = migrateDefaultLocations(initializeLocked(options), options);
+    const current = initializeLocked(options);
     const next = require("./storageCollectionMigration.js").applyPendingLayout(current, {
       profileDir: path.join(options.bootstrap, "profile"), programDir: options.programDir,
       workDir: path.join(options.bootstrap, "profile", "temp", "migrations"),
@@ -224,50 +249,6 @@ function initialize(options) {
     return next;
   }
   finally { release(); }
-}
-
-// O marcador é por perfil, não por máquina: a troca automática ocorre uma vez.
-// A origem permanece registrada separadamente para rebase dos anexos privados.
-function migrateDefaultLocations(current, options) {
-  if (current.defaultLocationsVersion === 1 && current.sharedLocationsVersion === 1) return current;
-  const { bootstrap, programDir, onProgress } = options;
-  const profile = path.join(bootstrap, "profile");
-  const origin = readJson(path.join(profile, ".layout-origin.json"));
-  const defaults = defaultLocations(options);
-  const next = { ...current, defaultLocationsVersion: 1, sharedLocationsVersion: 1 };
-  // Uma escolha explícita feita após a primeira migração prevalece sobre padrões.
-  for (const kind of ["media", "videos"]) {
-    const key = kind + "Dir";
-    const previousDefault = kind === "media" && current.sharedLocationsVersion !== 1
-      && path.resolve(current[key]) === path.resolve(options.documents, "LouvorJA Violin", "Acervo");
-    if ((current.pending && current.pending.defaultMigration !== true)
-      || (origin && current[key] !== origin[key] && !previousDefault)) continue;
-    next[key] = defaults[key];
-    next[kind + "Shared"] = defaults[kind + "Shared"];
-  }
-  validateLayout(next, { profileDir: profile, programDir });
-  const { migrateVideoWork } = require("./onlineVideo/workMigration.js");
-  onProgress?.({ phase: "copying", files: 0, bytes: 0 });
-  migrateVideoWork([path.join(profile, "video-work"), current.videosDir, path.join(bootstrap, "online_videos")], path.join(profile, "temp", "videos"));
-  const changed = next.mediaDir !== current.mediaDir || next.videosDir !== current.videosDir;
-  // Persiste a intenção antes da cópia. Falta de espaço ou conflito abre o app
-  // com as pastas anteriores e um erro visível, permitindo escolher outro destino.
-  if (changed || current.pending?.defaultMigration === true) {
-    next.pending = { id: crypto.randomUUID(), mediaDir: next.mediaDir, videosDir: next.videosDir,
-      mediaAction: "copy", videosAction: "copy", defaultMigration: true,
-      mediaShared: next.mediaShared === true, videosShared: next.videosShared === true };
-    next.mediaDir = current.mediaDir; next.videosDir = current.videosDir;
-    next.mediaShared = current.mediaShared === true; next.videosShared = current.videosShared === true;
-    for (const [kind, target] of [["media", next.pending.mediaDir], ["videos", next.pending.videosDir]]) {
-      // A primeira resolução pode criar os padrões. Retentativas não recriam
-      // volumes desconectados: applyPendingLayout preserva a origem nesse caso.
-      try { ensureCollectionDirectorySync(canonical(target), { shared: next.pending[kind + "Shared"] === true }); }
-      catch { /* o erro aparece ao aplicar a cópia */ }
-    }
-  }
-  onProgress?.({ phase: "publishing", files: 0, bytes: 0 });
-  atomicJson(path.join(bootstrap, "storage-layout.json"), next);
-  return next;
 }
 
 function initializeLocked({ bootstrap, documents, videos, sharedMedia, programDir, machineDefaults = null, ownedBootstrapPid = process.pid, onProgress }) {
@@ -382,6 +363,11 @@ function initializeLocked({ bootstrap, documents, videos, sharedMedia, programDi
   progress("publishing", null);
   fs.renameSync(staging, profile);
   atomicJson(file, layout);
+  // Downloads de vídeo interrompidos são retomáveis do zero: não impedem a abertura.
+  try {
+    require("./onlineVideo/workMigration.js").migrateVideoWork(
+      [layout.videosDir, path.join(bootstrap, "online_videos")], path.join(profile, "temp", "videos"));
+  } catch (error) { console.warn("[storage] Downloads de vídeo interrompidos ficaram na origem:", error.message); }
   progress("complete", null);
   return layout;
 }

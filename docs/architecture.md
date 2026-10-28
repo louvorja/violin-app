@@ -133,14 +133,21 @@ opcional separada, automática ou manual, sem ativação silenciosa.
 
 A migração da antiga raiz única copia e confere os dados privados antes de
 publicar o perfil fixo, preservando todas as origens do IndexedDB. Preferências
-antigas ainda no AppData são recuperadas quando ausentes na raiz ativa. Acervo e vídeos prontos
-também são copiados aos destinos padrão, mantendo as origens como recuperação.
-`defaultLocationsVersion` registra a separação de vídeo/perfil, e
-`sharedLocationsVersion` leva também o acervo do padrão provisório em Documentos
-ao acervo comum, inclusive em perfis já migrados. Escolhas explícitas posteriores
-não são redefinidas. A raiz plana legada com `musics/` ao lado de `Videos/` é
-migrada para o acervo comum e a pasta nativa de vídeos; novas escolhas exigem raízes
-sem sobreposição. Checkpoints `.partial`, cache yt-dlp e marcadores de migração
+antigas ainda no AppData são recuperadas quando ausentes na raiz ativa. Acervo e
+vídeos não são copiados: ficam em `<dados>/files` e `<dados>/Videos`, registrados
+como escolha do usuário, que pode mudá-los depois em Armazenamento. Os padrões
+comuns da tabela valem só para instalações novas, reconhecidas pela ausência de
+âncora e de perfil no AppData (a beta.14+ grava a âncora a cada abertura; as
+anteriores usavam o AppData como perfil); nesse caso Documentos nem é consultado.
+A raiz plana legada com `musics/` ao lado de `Videos/` continua aceita como está;
+novas escolhas exigem raízes sem sobreposição.
+
+"Sem acesso" não é "não existe": `existsSync` responde `false` nos dois casos, e
+tomar um pelo outro trataria quem tem dados como instalação nova. Pasta antiga
+ilegível ou ausente (TCC do macOS, disco desconectado) levanta
+`LJ_DATA_UNAVAILABLE`. Essa e qualquer outra falha da preparação abrem o app num
+perfil provisório em `<appData>/LouvorJA Violin/fallback`, com aviso persistente;
+nada é publicado (`saveLayout` recusa) e a próxima abertura tenta de novo. Checkpoints `.partial`, cache yt-dlp e marcadores de migração
 vão para `temp/videos/`; streams antigos descartáveis não são reutilizados.
 A primeira migração e mudanças pendentes usam um worker e uma janela de progresso num processo
 auxiliar com perfil temporário; o processo principal conserva seu singleton e

@@ -25,11 +25,11 @@
     const texts = es ? {
       title: "Preparando sus datos", scanning: "Revisando los archivos…", copying: "Copiando sus archivos…",
       verifying: "Verificando la copia…", publishing: "Finalizando la preparación…", complete: "Abriendo LouvorJA…",
-      preserved: "Se conservarán los archivos originales. Espere a que termine.", files: "archivos procesados", close: "Cerrar", error: "No se pudo completar la preparación", retry: "Los archivos originales se conservaron. Cierre esta ventana para volver a intentarlo.",
+      preserved: "Se conservarán los archivos originales. Espere a que termine.", files: "archivos procesados", close: "Cerrar", error: "No se pudo completar la preparación", retry: "Los archivos originales se conservaron. Cierre esta ventana para abrir LouvorJA sin ellos; la próxima vez que lo abra, se intentará de nuevo.",
     } : {
       title: "Preparando seus dados", scanning: "Conferindo os arquivos…", copying: "Copiando seus arquivos…",
       verifying: "Verificando a cópia…", publishing: "Concluindo a preparação…", complete: "Abrindo o LouvorJA…",
-      preserved: "Seus arquivos originais serão preservados. Aguarde a conclusão.", files: "arquivos processados", close: "Fechar", error: "Não foi possível concluir a preparação", retry: "Os arquivos originais foram preservados. Feche esta janela para tentar novamente.",
+      preserved: "Seus arquivos originais serão preservados. Aguarde a conclusão.", files: "arquivos processados", close: "Fechar", error: "Não foi possível concluir a preparação", retry: "Os arquivos originais foram preservados. Feche esta janela para abrir o LouvorJA sem eles; na próxima abertura ele tenta de novo.",
     };
     document.documentElement.lang = es ? "es" : "pt-br";
     document.getElementById("title").textContent = texts.title;

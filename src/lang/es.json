@@ -669,7 +669,8 @@
       "folder": "Colección de LouvorJA",
       "restart_required": "Las nuevas carpetas se usarán al volver a abrir la aplicación. Reinicia para completar el cambio; los archivos de origen se conservarán.",
       "folder_fallback": "No pude escribir en {dir}; los datos están en la carpeta del programa. Elija otra carpeta o libere el acceso.",
-      "folder_fallback_notice": "Sin acceso a {dir}. Sus datos se están guardando en la carpeta del programa hasta que libere el acceso o elija otra carpeta en Sincronizar Archivos → Almacenamiento.",
+      "folder_fallback_notice": "Sin acceso a {dir}, donde están sus datos. LouvorJA se abrió sin ellos: libere el acceso o vuelva a conectar el disco y abra la aplicación de nuevo. Lo que haga antes queda aparte.",
+      "prepare_failed_notice": "No se pudieron traer sus datos a esta versión ({error}). Siguen intactos y LouvorJA lo intentará de nuevo la próxima vez que se abra. Mientras tanto, la aplicación se abrió sin ellos.",
       "open_folder": "Abrir carpeta",
       "change_folder": "Cambiar carpeta…",
       "classic": {

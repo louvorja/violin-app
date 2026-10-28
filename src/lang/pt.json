@@ -670,7 +670,8 @@
       "folder": "Acervo do LouvorJA",
       "restart_required": "As novas pastas serão usadas na próxima abertura. Reinicie o aplicativo para concluir a alteração; os arquivos de origem serão preservados.",
       "folder_fallback": "Não consegui escrever em {dir}; os dados estão na pasta do programa. Escolha outra pasta ou libere o acesso.",
-      "folder_fallback_notice": "Sem acesso a {dir}. Seus dados estão sendo guardados na pasta do programa até você liberar o acesso ou escolher outra pasta em Sincronizar Arquivos → Armazenamento.",
+      "folder_fallback_notice": "Sem acesso a {dir}, onde estão seus dados. O LouvorJA abriu sem eles: libere o acesso ou reconecte o disco e abra o app de novo. O que for feito antes disso fica separado.",
+      "prepare_failed_notice": "Não foi possível trazer seus dados para esta versão ({error}). Eles continuam intactos, e o LouvorJA tenta de novo na próxima abertura. Até lá o app abriu sem eles.",
       "open_folder": "Abrir pasta",
       "change_folder": "Alterar pasta…",
       "classic": {

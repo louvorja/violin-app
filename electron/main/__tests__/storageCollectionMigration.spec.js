@@ -40,18 +40,6 @@ describe("cópia de acervo no boot", () => {
     expect(mode(workDir)).toBe(0o700);
   });
 
-  it.each([[false, true], [true, false]])("protege compartilhamento no caminho já padrão sem rebaixar a proteção (%s → %s)", (currentShared, requestedShared) => {
-    const mediaDir = path.join(root, "media");
-    const videosDir = path.join(root, "videos");
-    fs.ensureDirSync(mediaDir); fs.ensureDirSync(videosDir);
-    const current = { version: 1, mediaDir, videosDir, mediaShared: currentShared, setupCompleted: true,
-      pending: { id, mediaDir, videosDir, mediaAction: "copy", videosAction: "copy", defaultMigration: true, mediaShared: requestedShared } };
-    const result = applyPendingLayout(current, { profileDir: path.join(root, "profile"), programDir: path.join(root, "program") });
-    expect(result.mediaShared).toBe(true);
-    expect(result.pending).toBeUndefined();
-    expect(require("../storageAccess.js").readMarker(mediaDir, "media").shared).toBe(true);
-  });
-
   it.skipIf(process.platform === "win32")("mantém o acervo de destino já compartilhado legível mesmo sem a flag da pendência", () => {
     const source = path.join(root, "source");
     const target = path.join(root, "shared");
@@ -61,7 +49,7 @@ describe("cópia de acervo no boot", () => {
     fs.ensureDirSync(target); fs.ensureDirSync(videosDir);
     require("../storageAccess.js").markShared(target, "media");
     const result = applyPendingLayout({ version: 1, mediaDir: source, videosDir, setupCompleted: true,
-      pending: { id, mediaDir: target, videosDir, mediaAction: "copy", videosAction: "copy", defaultMigration: true, mediaShared: false } },
+      pending: { id, mediaDir: target, videosDir, mediaAction: "copy", videosAction: "copy", mediaShared: false } },
     { profileDir: path.join(root, "profile"), programDir: path.join(root, "program") });
     expect(result.pendingError).toBeUndefined();
     expect(result.mediaShared).toBe(true);
@@ -82,18 +70,13 @@ describe("cópia de acervo no boot", () => {
     expect(fs.existsSync(path.join(target, "musics", "song.mp3"))).toBe(false);
   });
 
-  it("permite só o filho Acervo da antiga raiz plana e preserva seus dados privados", () => {
+  it("recusa destino dentro da origem, inclusive o antigo filho Acervo", () => {
     const source = path.join(root, "legacy");
-    const target = path.join(source, "Acervo");
     fs.outputFileSync(path.join(source, "musics", "pt", "song.mp3"), "public song");
-    fs.outputFileSync(path.join(source, ".electron", "IndexedDB", "saved"), "private");
-    fs.ensureDirSync(target);
-    expect(() => copyCollection(source, target, "media", id)).toThrow(/dentro dela/);
-    copyCollection(source, target, "media", id, { allowLegacyNested: true });
-    expect(fs.readFileSync(path.join(target, "musics", "pt", "song.mp3"), "utf8")).toBe("public song");
-    expect(fs.existsSync(path.join(target, ".electron"))).toBe(false);
-    expect(fs.readFileSync(path.join(source, ".electron", "IndexedDB", "saved"), "utf8")).toBe("private");
-    expect(() => copyCollection(source, path.join(source, "Other"), "media", id, { allowLegacyNested: true })).toThrow(/dentro dela/);
+    for (const name of ["Acervo", "Other"]) {
+      fs.ensureDirSync(path.join(source, name));
+      expect(() => copyCollection(source, path.join(source, name), "media", id)).toThrow(/dentro dela/);
+    }
   });
 
   it("mantém o staging privado no mesmo volume e remove-o após publicação", () => {

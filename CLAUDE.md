@@ -291,11 +291,13 @@ permissão pública de escrita; pastas existentes e perfil nunca são ampliados.
 Mudanças são agendadas para o próximo boot e oferecem reutilizar uma coleção ou
 copiar a atual com verificação. Não apagam a origem, não sobrescrevem conflitos e
 não transferem arquivos pessoais junto ao acervo. A migração do perfil antigo
-também conserva a origem, incluindo todos os bancos IndexedDB. Acervo e vídeos
-legados são copiados aos padrões uma vez (`defaultLocationsVersion`), e
-`sharedLocationsVersion` corrige o acervo provisório em Documentos para o local
-comum da tabela. Escolhas explícitas posteriores são
-preservadas. A cópia mostra progresso em um processo auxiliar com perfil
+também conserva a origem, incluindo todos os bancos IndexedDB. Quem já usava o
+app fica com acervo e vídeos onde estavam (`<dados>/files` e `<dados>/Videos`),
+como se os tivesse escolhido ali: só o perfil é copiado, e os padrões comuns valem
+para instalações novas. Instalação nova não consulta Documentos. Se a pasta antiga
+estiver sem acesso (TCC do macOS, disco desconectado) ou a cópia falhar, o app abre
+num perfil provisório em `<appData>/LouvorJA Violin/fallback`, avisa e não publica
+nada; a próxima abertura tenta de novo. A cópia mostra progresso em um processo auxiliar com perfil
 temporário; conflitos mantêm as pastas anteriores e aparecem em Armazenamento.
 Downloads ficam privados; a publicação atômica entre volumes e a herança de
 permissões no Windows usam staging oculto transitório no destino.

@@ -236,19 +236,19 @@ declare global {
       clearUnused: (files: unknown) => Promise<void>;
       stats: () => Promise<{
         dataDir?: string;
-        dataDirIssue?: { wanted: string; reason: string } | null;
+        dataDirIssue?: { reason: "unavailable" | "failed"; wanted?: string; message?: string } | null;
         restartRequired?: boolean;
         filesDir?: string;
         mediaDir?: string;
         videosDir?: string;
         videos?: { bytes: number; count: number };
         files?: { bytes: number; count: number };
-        /** Cache de export do Canva (`files/canva`), fora do acervo. */
+        /** Cache de export do Canva, no perfil e fora do acervo. */
         canva?: { bytes: number; count: number };
         json?: { bytes: number; count: number };
         total?: { bytes: number };
       }>;
-      dataDirIssue: () => Promise<{ wanted: string; reason: string } | null>;
+      dataDirIssue: () => Promise<{ reason: "unavailable" | "failed"; wanted?: string; message?: string } | null>;
       clearJson: () => Promise<void>;
       clearFiles: () => Promise<void>;
       setAutoCache: (enabled: boolean) => Promise<void>;

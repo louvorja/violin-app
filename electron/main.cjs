@@ -166,11 +166,19 @@ if (!app.requestSingleInstanceLock()) {
 }
 console.log("[LouvorJA] Instância única: lock adquirido.");
 try {
-  if (paths.needsMigration()) {
-    storageBootstrap.prepare(app, paths.migrationOptions());
-    paths.acceptPreparedLayout();
+  try {
+    if (paths.needsMigration()) {
+      storageBootstrap.prepare(app, paths.migrationOptions());
+      paths.acceptPreparedLayout();
+    }
+    paths.configureProfile();
+  } catch (error) {
+    // Pasta sem acesso, disco desconectado ou cópia interrompida: a origem fica
+    // intacta e a próxima abertura tenta de novo. Não abrir seria pior no culto.
+    console.error("[storage] Dados não preparados; abrindo num perfil provisório:", error);
+    paths.useFallback(error);
+    paths.configureProfile();
   }
-  paths.configureProfile();
   storageAccess.initialize(paths.storageLayout());
 } catch (error) {
   console.error("[storage] Não foi possível preparar os dados:", error);
