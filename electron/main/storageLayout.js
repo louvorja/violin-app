@@ -12,7 +12,7 @@ const { assertProfileIdle } = require("./profileActivity.js");
 const { acquireProfileMigrationLock } = require("./profileMigrationLock.js");
 const { ensureCollectionDirectorySync } = require("./sharedCollectionDirs.js");
 
-const PRIVATE_ENTRIES = ["storage", "library", "json_db", "bin", "server", "canva",
+const PRIVATE_ENTRIES = ["storage", "library", "json_db", "bin", "server", "canva", "pptx",
   "configweb.json", "runtime-incidents.json", "telemetry-main-errors.json"];
 const PROFILE_LOCKS = new Set(["SingletonLock", "SingletonCookie", "SingletonSocket", "lockfile", "LOCK", "DevToolsActivePort"]);
 // Só caches regeneráveis na raiz do perfil. Service Worker/CacheStorage,
@@ -353,6 +353,7 @@ function initializeLocked({ bootstrap, documents, videos, sharedMedia, programDi
     { from: canvaInFiles, to: path.join(profile, "canva") },
     { from: path.join(legacyRoot, "canva"), to: path.join(profile, "canva") },
     { from: path.join(bootstrap, "canva"), to: path.join(profile, "canva") },
+    { from: path.join(legacyRoot, "pptx"), to: path.join(profile, "pptx") },
   ]);
   atomicJson(path.join(staging, ".layout-origin.json"), layout);
   assertProfileIdle(chromiumSource, idleOptions);

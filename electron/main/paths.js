@@ -133,6 +133,8 @@ module.exports = {
       { from: path.join(origin.legacyRoot, "files", "canva"), to: this.canvaDir() },
       { from: path.join(origin.legacyRoot, "canva"), to: this.canvaDir() },
       { from: path.join(bootstrapDir(), "canva"), to: this.canvaDir() },
+      // PDFs e fontes do PowerPoint (módulo de apresentação) moram em <dados>/pptx.
+      { from: path.join(origin.legacyRoot, "pptx"), to: path.join(this.dataDir(), "pptx") },
     ].filter(({ from, to }) => path.resolve(from) !== path.resolve(to));
   },
 };

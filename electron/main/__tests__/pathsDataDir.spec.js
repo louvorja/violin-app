@@ -83,6 +83,24 @@ describe("perfil privado e destinos independentes", () => {
     expect(fs.readFileSync(pdf, "utf8")).toBe("pdf");
   });
 
+  it("leva os PDFs do PowerPoint de <dados>/pptx ao perfil e reescreve a playlist", () => {
+    const old = path.join(root, "legacy");
+    const pdf = path.join(old, "pptx", "abc-powerpoint.pdf");
+    fs.outputJsonSync(path.join(bootstrap, "data-location.json"), { dataDir: old });
+    fs.outputFileSync(pdf, "pdf");
+    fs.outputFileSync(path.join(old, "pptx", "fonts", "manual", "Brich.ttf"), "font");
+    fs.outputJsonSync(path.join(old, "storage", "user_data.json"), {
+      modules: { media_library: { playlist: [{ type: "pdf", path: pdf }] } },
+    });
+    paths.configureProfile();
+    const moved = path.join(paths.dataDir(), "pptx", "abc-powerpoint.pdf");
+    expect(fs.readFileSync(moved, "utf8")).toBe("pdf");
+    expect(fs.readFileSync(path.join(paths.dataDir(), "pptx", "fonts", "manual", "Brich.ttf"), "utf8")).toBe("font");
+    expect(fs.readJsonSync(path.join(paths.dataDir(), "storage", "user_data.json")).modules.media_library.playlist[0].path).toBe(moved);
+    expect(paths.privatePathMappings()).toContainEqual({ from: path.join(old, "pptx"), to: path.join(paths.dataDir(), "pptx") });
+    expect(fs.readFileSync(pdf, "utf8")).toBe("pdf");
+  });
+
   it("preserva perfil antigo plano no endereço do sistema", () => {
     fs.outputFileSync(path.join(bootstrap, "IndexedDB", "offline"), "saved");
     paths.configureProfile();
