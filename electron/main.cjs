@@ -82,6 +82,7 @@ const youtubeReferer = require("./main/youtubeReferer.js");
 const onlineVideo = require("./main/onlineVideo/index.js");
 const shortcuts = require("./main/shortcuts.js");
 const updater = require("./main/updater.js");
+const updateChannel = require("./main/updateChannel.js");
 const powerBlocker = require("./main/powerBlocker.js");
 const fileOpen = require("./main/fileOpen.js");
 const splash = require("./main/splash.js");
@@ -934,15 +935,20 @@ function createWindow() {
     // Lê as opções da tela Atualizações (persistidas em user_data).
     // O check ao iniciar NÃO roda aqui — o renderer (Shell.vue) dispara o
     // check no boot para poder mostrar o dialog quando encontrar versão nova.
-    let ud = {};
-    try {
-      ud = userStore.read("user_data") || {};
-    } catch (_) { /* userStore indisponível no boot */ }
-    const opts = (ud && ud.options) || {};
-    // TODO: remover o default true abaixo quando a versão estável for publicada.
-    // "Usar versões beta" fica ativo por padrão durante o ciclo de preview.
-    const useBeta = opts.use_beta_updates == null ? true : opts.use_beta_updates;
-    console.info("[main] updater.init → isPackaged:", app.isPackaged, "| options:", JSON.stringify(opts));
+    const opts = _userDataMain?.options || {};
+    // Pré-versões: padrão ligado numa beta, desligado numa estável, e desligado de
+    // novo ao chegar numa estável vindo de uma beta (updateChannel.js).
+    const { useBeta, persist } = updateChannel.resolveUseBeta({
+      currentVersion: app.getVersion(),
+      lastRunVersion: updateChannel.readLastRunVersion(paths.bootstrapDir()),
+      saved: opts.use_beta_updates,
+    });
+    if (persist) {
+      _walkSet(_userDataMain, "options.use_beta_updates", useBeta);
+      void _persistUserDataFromMain("options.use_beta_updates").catch(() => {});
+    }
+    updateChannel.writeLastRunVersion(paths.bootstrapDir(), app.getVersion());
+    console.info("[main] updater.init → isPackaged:", app.isPackaged, "| useBeta:", useBeta, "| options:", JSON.stringify(opts));
     updater.init({
       channel: "latest",
       autoCheck: false,
@@ -973,6 +979,19 @@ function createWindow() {
 
 // Permite autoplay de vídeos (YouTube embarcado) sem gesto do usuário
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
+
+// No Windows o Chromium para de pintar a janela que julga coberta, e
+// `backgroundThrottling: false` não impede isso. Na telemetria de out/2026, 34
+// slides da projeção levaram ~1 s (985–1.015 ms) entre atualizar a tela e pintar,
+// todos em /projection no Windows e nenhum no macOS ou Linux. A projeção e a
+// captura do OBS precisam pintar mesmo com outra janela por cima.
+if (process.platform === "win32") {
+  app.commandLine.appendSwitch("disable-features", "CalculateNativeWinOcclusion");
+}
+
+// Placa de vídeo dedicada no PC de mesa e integrada no notebook (gpuPreference.js).
+const gpuPreference = require("./main/gpuPreference.js");
+const _gpuChoice = gpuPreference.apply(app, paths.bootstrapDir());
 
 // ---------------------------------------------------------------------------
 // Linux — Forçar X11 e desabilitar sandbox
@@ -1092,6 +1111,8 @@ async function _bootstrapMonitorConfig() {
 }
 
 app.whenReady().then(async () => {
+  // Vale a partir da próxima abertura; longe da abertura atual para não disputar CPU.
+  setTimeout(() => gpuPreference.detect(paths.bootstrapDir()), 60_000).unref?.();
   powerMonitor.on("resume", handleSystemResume);
   powerMonitor.on("unlock-screen", handleScreenUnlock);
   if (backgroundWindows && process.platform === "darwin") app.dock?.hide();
@@ -1315,11 +1336,11 @@ app.on("before-quit", (event) => {
       console.log("[before-quit] user_data sincronizado com sucesso");
     }
 
-    // Um yt-dlp em andamento seguiria baixando (e segurando o vídeo) depois do app fechar.
-    onlineVideo.shutdown();
-    // O lease de escrita só termina depois que o processo utilitário saiu.
-    // Cancelamento tem prazo; falha de encerramento mantém o main e o lease vivos.
-    await downloader.shutdown();
+    // Um yt-dlp em andamento seguiria baixando (e segurando o vídeo) depois do app
+    // fechar. Vídeos e acervo usam processos utilitários separados e encerram juntos.
+    // O lease de escrita só termina depois que o downloader saiu: falha de
+    // encerramento dele mantém o main e o lease vivos.
+    await Promise.all([onlineVideo.shutdown(), downloader.shutdown()]);
     downloadShutdownComplete = true;
 
     try {
@@ -1429,7 +1450,10 @@ ipcMain.handle("telemetry:system-info", () => (systemInfoPromise ??= collectSyst
 // Qual placa o Chromium escolheu e a taxa de cada monitor: "aceleração ligada"
 // não distingue a placa dedicada da integrada num computador com as duas.
 ipcMain.handle("telemetry:graphics", async () => {
-  const info = { gpu_feature_status: {}, gpu_devices: [], displays: [], cpu_model: "", cpu_cores: 0, memory_gb: 0 };
+  const info = {
+    gpu_feature_status: {}, gpu_devices: [], displays: [], cpu_model: "", cpu_cores: 0, memory_gb: 0,
+    device_class: _gpuChoice.device_class, gpu_high_performance: _gpuChoice.high_performance,
+  };
   try {
     const cpus = require("node:os").cpus();
     info.cpu_model = String(cpus[0]?.model || "").trim().slice(0, 80);
@@ -1592,6 +1616,22 @@ function _walkSet(obj, path, value) {
 }
 
 let _userDataMain = userStore.read("user_data") || {};
+
+/*
+ * Estado das janelas COMUNS (hoje só a tela do operador), em
+ * `options.windows.<feature>` — o espelho de `KEYS.OPTIONS.WINDOWS` em
+ * `src/constants/UserDataKeys.ts`. Guarda modo (maximizada), tamanho e posição
+ * para a próxima abertura; `_flushUserData` grava direto no disco, sem
+ * broadcast, porque nenhum renderer lê isto.
+ */
+windowFactory.setWindowStateStore({
+  get: (feature) => _userDataMain?.options?.windows?.[feature] ?? null,
+  save: (feature, estado) => {
+    _walkSet(_userDataMain, `options.windows.${feature}`, estado);
+    void _flushUserData();
+  },
+});
+
 httpServer.setUserDataProvider(() => _userDataMain);
 runtimeJournalConsent = _userDataMain?.options?.telemetry !== false;
 downloader.setWorkerDiagnosticsEnabled(runtimeJournalConsent);
@@ -2428,6 +2468,7 @@ ipcMain.handle("canva:clearCachedPdfs", () => canva.clearCachedPdfs());
 // ---------------------------------------------------------------------------
 
 ipcMain.handle("storage:stats", () => storage.stats());
+ipcMain.handle("storage:dataDirIssue", () => paths.dataDirIssue());
 ipcMain.handle("storage:clearJson", () => storage.clearJson());
 ipcMain.handle("storage:clearFiles", () => storage.clearFiles());
 ipcMain.handle("storage:removeJsonByPrefix", (_e, prefix) => storage.removeJsonByPrefix(prefix));
@@ -2454,21 +2495,21 @@ ipcMain.handle("shell:openPath", async (_event, filePath) => {
   let resolved = path.isAbsolute(raw) ? path.resolve(raw) : null;
   if (!resolved) {
     // Caminhos relativos do banco apontam para a pasta de mídia escolhida.
-    // Nunca permitimos que `..` escape dela.
+    // Nunca permitimos que `..` escape dela. As pastas antigas ficam em
+    // Documents: checagem síncrona ali parava o app inteiro enquanto o macOS
+    // esperava a resposta ao pedido de acesso.
     const relative = raw.replace(/^[\\/]+/, "");
-    const roots = [paths.filesDir(), ...paths.legacyMediaDirs()];
-    resolved = roots
-      .map((root) => path.resolve(root, relative))
-      .find((candidate, index) => {
-        const root = path.resolve(roots[index]);
-        return (
-          (candidate === root || candidate.startsWith(root + path.sep)) &&
-          fs.existsSync(candidate)
-        );
-      }) || null;
+    for (const root of [paths.filesDir(), ...paths.legacyMediaDirs()].map((dir) => path.resolve(dir))) {
+      const candidate = path.resolve(root, relative);
+      const inside = candidate === root || candidate.startsWith(root + path.sep);
+      if (inside && (await fs.pathExists(candidate))) {
+        resolved = candidate;
+        break;
+      }
+    }
   }
 
-  if (!resolved || !fs.existsSync(resolved)) {
+  if (!resolved || !(await fs.pathExists(resolved))) {
     console.warn("[shell] arquivo para abrir não encontrado:", raw);
     return { ok: false, error: "arquivo não encontrado" };
   }
@@ -2543,13 +2584,14 @@ ipcMain.handle("storage:chooseFile", async (event, kind) => {
     properties: ["openFile"],
     title: "Selecionar arquivo",
     // A Biblioteca de Mídia só guarda estes tipos; sem o filtro o operador
-    // escolhia um áudio e o arquivo era descartado.
+    // escolhia um áudio e o arquivo era descartado. Áudio passou a ser aceito
+    // (espelha IMAGE_EXT/AUDIO_EXT/VIDEO_EXT + pdf de constants/FileTypes.ts).
     ...(kind === "media"
       ? {
           filters: [
             {
-              name: "Imagens, vídeos e PDF",
-              extensions: ["jpg", "jpeg", "png", "webp", "gif", "bmp", "svg", "heic", "heif", "mp4", "webm", "mkv", "mov", "avi", "m4v", "pdf"],
+              name: "Imagens, áudios, vídeos e PDF",
+              extensions: ["jpg", "jpeg", "png", "webp", "gif", "bmp", "svg", "heic", "heif", "mp3", "wav", "ogg", "flac", "aac", "m4a", "wma", "opus", "mp4", "webm", "mkv", "mov", "avi", "m4v", "pdf"],
             },
             { name: "Todos os arquivos", extensions: ["*"] },
           ],

@@ -14,8 +14,8 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '24'
-          cache: 'npm'
+          node-version: "24"
+          cache: "npm"
 
       - name: Instalar dependências
         run: npm ci
@@ -39,8 +39,8 @@ jobs:
           NODE_ENV: production
           VITE_BASE_URL: /
 
-      - name: Instalar navegador dos testes de estilo
-        run: npx playwright install --with-deps chromium
+      - name: Instalar navegadores dos testes de interface
+        run: npx playwright install --with-deps chromium webkit
 
       - name: Rodar testes E2E
         # A suíte completa também roda na release; rodá-la aqui faz a falha
@@ -51,5 +51,5 @@ jobs:
       - name: Conferir estilos do build contra o desenvolvimento
         run: npm run test:e2e:build
 
-      - name: Conferir web Android no build PWA
+      - name: Conferir web Android e iPhone no build PWA
         run: npm run test:e2e:mobile:build

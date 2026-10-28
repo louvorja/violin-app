@@ -2,17 +2,16 @@ import { computed, onScopeDispose, shallowRef, toValue, watch, type MaybeRefOrGe
 import { useI18n } from "vue-i18n";
 import Database from "@/helpers/Database";
 import UserData from "@/helpers/UserData";
-import { KEYS, moduleShowInMainMenu } from "@/constants/UserDataKeys";
-import { albumYears, HYMNAL_ALBUM_IDS, prepareMusicCatalog } from "@root/config/musicCatalog.mjs";
+import { KEYS } from "@/constants/UserDataKeys";
+import { albumYears, prepareMusicCatalog } from "@root/config/musicCatalog.mjs";
 import type { LiturgyMusicItem } from "@/types/Liturgy";
 
 export function getDisabledAlbums() {
+  // `disabled_albums` é a fonte única. O toggle `hymnal_1996.show_in_main_menu`
+  // controla só a visibilidade do módulo no desktop — o acervo (inclusive os
+  // hinos de 1996) continua disponível para busca e navegação.
   const saved = UserData.get<(number | string)[]>(KEYS.OPTIONS.DISABLED_ALBUMS, []);
-  const disabled = Array.isArray(saved) ? [...saved] : [];
-  if (!UserData.get(moduleShowInMainMenu("hymnal_1996"), false)) {
-    disabled.push(HYMNAL_ALBUM_IDS.legacy);
-  }
-  return disabled;
+  return Array.isArray(saved) ? [...saved] : [];
 }
 
 export function useDisabledAlbums() {

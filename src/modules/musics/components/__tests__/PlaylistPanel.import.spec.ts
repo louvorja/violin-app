@@ -42,6 +42,7 @@ vi.mock("@/helpers/Telemetry", () => ({
 vi.mock("@/helpers/ScrollMemory", () => ({
   setScrollPosition: vi.fn(),
   getScrollPosition: () => 0,
+  restoreScrollPosition: vi.fn(),
 }));
 
 const { default: PlaylistPanel } = await import("../PlaylistPanel.vue");

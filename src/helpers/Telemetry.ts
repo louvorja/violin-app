@@ -348,6 +348,8 @@ async function reportGraphics(posthog: PostHog): Promise<void> {
       gpu_active_vendor: active ? GPU_VENDORS[active.vendor_id] || String(active.vendor_id) : null,
       gpu_active_device_id: active?.device_id ?? null,
       gpu_vendors: info.gpu_devices.map((d) => GPU_VENDORS[d.vendor_id] || String(d.vendor_id)),
+      device_class: info.device_class ?? null,
+      gpu_high_performance: info.gpu_high_performance === true,
       cpu_model: info.cpu_model,
       cpu_cores: info.cpu_cores,
       memory_gb: info.memory_gb,
@@ -947,6 +949,8 @@ const RUNTIME_INCIDENT_KEYS = new Set([
   "renderer_overlapping_operations",
   "renderer_script_attribution_supported",
   "renderer_animation_frame",
+  "renderer_js_heap_mb",
+  "system_free_memory_mb",
   "main_synchronous_operations",
   "main_operation_coverage",
   "download_worker_id",
@@ -1010,6 +1014,29 @@ function safeStreamFailureDiagnostic(value: unknown): Record<string, string> | n
     safe[key] = entry;
   }
   return safe;
+}
+
+/**
+ * Memória no instante da travada. Quadros longos sem nenhum script vêm quase só de
+ * computadores com 4 GB; isto separa coleta de lixo do próprio app (heap grande) de
+ * sistema paginando (pouca memória livre).
+ */
+function memoryAtIncident(): { renderer_js_heap_mb?: number; system_free_memory_mb?: number } {
+  const out: { renderer_js_heap_mb?: number; system_free_memory_mb?: number } = {};
+  const heap = (performance as Performance & { memory?: { usedJSHeapSize?: number } }).memory
+    ?.usedJSHeapSize;
+  if (typeof heap === "number" && Number.isFinite(heap)) {
+    out.renderer_js_heap_mb = Math.round(heap / 1048576);
+  }
+  try {
+    const free = window.louvorjaApi?.systemMemory?.().free;
+    if (typeof free === "number" && Number.isFinite(free)) {
+      out.system_free_memory_mb = Math.round(free / 1024);
+    }
+  } catch {
+    /* web/PWA não tem a ponte do desktop */
+  }
+  return out;
 }
 
 export function reportRuntimeIncident(payload: unknown): void {
@@ -1133,7 +1160,10 @@ function startResponsivenessMonitor(): void {
     source: "renderer_long_task" | "renderer_timer_stall",
     entry?: PerformanceEntry
   ) => {
-    if (!Number.isFinite(durationMs) || durationMs < 100) return;
+    // Uma "tarefa" de horas é o computador dormindo com a janela aberta: a telemetria
+    // chegou a registrar 28 h. Nenhum travamento real passa de 2 minutos sem o processo
+    // ser dado como não responsivo.
+    if (!Number.isFinite(durationMs) || durationMs < 100 || durationMs > 120_000) return;
     addJank(heartbeatAggregate, durationMs);
     addJank(remoteAggregate, durationMs);
     const now = Date.now();
@@ -1171,6 +1201,7 @@ function startResponsivenessMonitor(): void {
             _pendingSpans.values()
           )
         : [],
+      ...memoryAtIncident(),
       ..._runtimeContext,
     });
   };
@@ -1186,6 +1217,11 @@ function startResponsivenessMonitor(): void {
             if (entry.startTime < monitoredFrom) continue;
             frames.noteFrame(entry);
             if (entry.duration < UI_JANK_BUDGET.critical) continue;
+            // Quadro longo sem bloqueio é a janela coberta ou em segundo plano esperando
+            // para desenhar (cerca de 1 s exato), não código travando: 191 dos 541
+            // incidentes de 14 dias eram isso.
+            if ((entry as PerformanceEntry & { blockingDuration?: number }).blockingDuration === 0)
+              continue;
             const now = Date.now();
             if (now - lastScriptIncidentAt < RUNTIME_CRITICAL_COOLDOWN_MS) continue;
             const frame = animationFrameDiagnostic(entry);
@@ -1209,6 +1245,7 @@ function startResponsivenessMonitor(): void {
                 entry.duration,
                 _pendingSpans.values()
               ),
+              ...memoryAtIncident(),
               ..._runtimeContext,
             });
           }

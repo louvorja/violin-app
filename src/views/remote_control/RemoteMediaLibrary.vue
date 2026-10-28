@@ -26,7 +26,7 @@
         ref="fileInput"
         class="lj-u-sr-only"
         type="file"
-        accept="image/*,video/*,.pdf,.heic,.heif"
+        accept="image/*,video/*,audio/*,.pdf,.heic,.heif"
         @change="onFilePicked"
       />
     </div>
@@ -363,6 +363,7 @@ const canvaViews = computed(() => [
 
 const typeLabel = (type: string): string => {
   if (type === "video") return t("remote_control.media_library.type_video");
+  if (type === "audio") return t("remote_control.media_library.type_audio");
   if (type === "pdf") return t("remote_control.media_library.type_pdf");
   if (type === "site") return t("remote_control.media_library.playlist_site");
   return t("remote_control.media_library.type_image");

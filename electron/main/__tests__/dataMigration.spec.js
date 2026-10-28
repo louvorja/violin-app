@@ -89,14 +89,60 @@ describe("perfil Electron", () => {
     expect(() => prepareProfile({ legacyDir: legacy, sourceDir, targetDir })).not.toThrow();
   });
 
-  it("recusa misturar perfis existentes sem apagar nenhuma das cópias", async () => {
+  it("guarda de lado um perfil que surgiu no destino e conclui a mudança sem apagar nenhum", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
     const sourceDir = path.join(root, "old-data", ".electron");
     const targetDir = path.join(target, ".electron");
-    await fs.outputFile(path.join(sourceDir, "IndexedDB", "offline"), "old");
-    await fs.outputFile(path.join(targetDir, "IndexedDB", "offline"), "current");
-    expect(() => prepareProfile({ legacyDir: legacy, sourceDir, targetDir })).toThrow("já contém um perfil");
-    expect(await fs.readFile(path.join(sourceDir, "IndexedDB", "offline"), "utf8")).toBe("old");
-    expect(await fs.readFile(path.join(targetDir, "IndexedDB", "offline"), "utf8")).toBe("current");
+    await fs.outputFile(path.join(sourceDir, "IndexedDB", "offline"), "mine");
+    await fs.outputFile(path.join(targetDir, "IndexedDB", "offline"), "other computer");
+    expect(prepareProfile({ legacyDir: legacy, sourceDir, targetDir })).toBe(targetDir);
+    expect(await fs.readFile(path.join(targetDir, "IndexedDB", "offline"), "utf8")).toBe("mine");
+    const aside = (await fs.readdir(target)).filter((name) => name.startsWith(".electron.conflito-"));
+    expect(aside).toHaveLength(1);
+    expect(await fs.readFile(path.join(target, aside[0], "IndexedDB", "offline"), "utf8")).toBe("other computer");
+  });
+
+  it("abre no perfil antigo quando a mudança falha e conclui no boot seguinte", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const sourceDir = path.join(root, "old-data", ".electron");
+    const targetDir = path.join(target, ".electron");
+    await fs.outputFile(path.join(sourceDir, "IndexedDB", "offline"), "database");
+    const move = fs.moveSync;
+    const spy = vi.spyOn(fs, "moveSync").mockImplementationOnce(() => {
+      throw Object.assign(new Error("no space left on device"), { code: "ENOSPC" });
+    });
+    expect(prepareProfile({ legacyDir: legacy, sourceDir, targetDir })).toBe(sourceDir);
+    expect(await fs.readFile(path.join(sourceDir, "IndexedDB", "offline"), "utf8")).toBe("database");
+    expect(await fs.pathExists(targetDir)).toBe(false);
+    spy.mockImplementation(move);
+    expect(prepareProfile({ legacyDir: legacy, sourceDir, targetDir })).toBe(targetDir);
+    expect(await fs.readFile(path.join(targetDir, "IndexedDB", "offline"), "utf8")).toBe("database");
+  });
+
+  it("abre com perfil novo quando o antigo foi apagado à mão", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const sourceDir = path.join(root, "deleted", ".electron");
+    const targetDir = path.join(target, ".electron");
+    expect(prepareProfile({ legacyDir: legacy, sourceDir, targetDir })).toBe(targetDir);
+    expect(await fs.pathExists(targetDir)).toBe(true);
+  });
+
+  it("abre no perfil das versões antigas quando uma entrada não muda e retoma depois", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    await fs.outputFile(path.join(legacy, "IndexedDB", "offline"), "database");
+    await fs.outputFile(path.join(legacy, "Local Storage", "leveldb"), "local");
+    const profile = path.join(target, ".electron");
+    const move = fs.moveSync;
+    const spy = vi.spyOn(fs, "moveSync").mockImplementation((from, ...rest) => {
+      if (path.basename(from) === "IndexedDB") throw Object.assign(new Error("busy"), { code: "EBUSY" });
+      return move(from, ...rest);
+    });
+    expect(prepareProfile({ legacyDir: legacy, targetDir: profile })).toBe(legacy);
+    expect(await fs.readFile(path.join(legacy, "IndexedDB", "offline"), "utf8")).toBe("database");
+    spy.mockImplementation(move);
+    expect(prepareProfile({ legacyDir: legacy, targetDir: profile })).toBe(profile);
+    expect(await fs.readFile(path.join(profile, "IndexedDB", "offline"), "utf8")).toBe("database");
+    expect(await fs.readFile(path.join(profile, "Local Storage", "leveldb"), "utf8")).toBe("local");
   });
 });
 

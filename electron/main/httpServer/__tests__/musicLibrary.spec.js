@@ -24,6 +24,8 @@ const mediaResolver = require("../../mediaResolver.js");
 const handlers = { get: new Map(), post: new Map() };
 let root;
 let userData;
+/** URL do banco remoto — vazia nos testes que só usam o cache local. */
+let databaseUrl = "";
 
 /** Categorias: album7 repetido (dedupe), album8 desativado e o hinário 1996. */
 const CATEGORIES = [
@@ -177,7 +179,7 @@ beforeAll(async () => {
       getMainWindow: () => null,
       getUserData: () => userData,
       jsonCache: null,
-      getDatabaseUrl: () => "",
+      getDatabaseUrl: () => databaseUrl,
       getApiToken: () => "",
       rendererRequests: null,
     }
@@ -190,9 +192,11 @@ afterAll(async () => {
 });
 
 beforeEach(() => {
-  // Hinário 1996 desligado (entra no `disabled`) + album 8 desativado.
+  databaseUrl = "";
+  // 8 desativado + 629 desativado (é o que o toggle do Hinário 1996 persiste
+  // em `disabled_albums` quando está desligado).
   userData = {
-    options: { disabled_albums: [8] },
+    options: { disabled_albums: [8, 629] },
     modules: { hymnal_1996: { show_in_main_menu: false } },
   };
   COLLECTIONS = JSON.parse(JSON.stringify(BASE_COLLECTIONS));
@@ -294,9 +298,9 @@ describe("GET /api/music-library?action=albums", () => {
     expect(res.body.albums.at(-1)).toMatchObject({ id: "orphans:none", title: "Sin álbum" });
   });
 
-  it("com o toggle ligado, o hinário 1996 pinado aparece UMA vez (sem duplicar)", async () => {
+  it("com o 1996 habilitado (629 fora de disabled_albums), o pin aparece UMA vez", async () => {
     // O fixture de categorias TAMBÉM traz 629 — o pin não pode duplicar o card.
-    userData.modules.hymnal_1996.show_in_main_menu = true;
+    userData.options.disabled_albums = [8];
 
     const res = await callGet("/api/music-library", { action: "albums", lang: "pt" });
 
@@ -316,7 +320,7 @@ describe("GET /api/music-library?action=albums", () => {
   });
 
   it("712 em disabled_albums tira o pin de cima (mesma régua dos demais)", async () => {
-    userData.options.disabled_albums = [8, 712];
+    userData.options.disabled_albums = [8, 712, 629];
 
     const res = await callGet("/api/music-library", { action: "albums", lang: "pt" });
 
@@ -361,6 +365,28 @@ describe("GET /api/music-library?action=albums", () => {
     vi.spyOn(jsonCache, "safeLocalPath").mockImplementation((key) =>
       path.join(root, `${key.replace(/\.json$/, "")}.json`)
     );
+  });
+
+  it("hinário ausente no disco é baixado sob demanda e vira card", async () => {
+    const jsonCache = require("../../jsonCache.js");
+    const esHymnal = path.join(root, "es_hymnal.json");
+    await fs.rm(esHymnal, { force: true });
+    databaseUrl = "https://db.test/json_db";
+    const fetch = vi.spyOn(jsonCache, "fetchJson").mockImplementation(async (relPath) => {
+      const body = Buffer.from(JSON.stringify(HYMNAL));
+      await fs.writeFile(path.join(root, `${relPath.replace(/\.json$/, "")}.json`), body);
+      return { status: 200, body };
+    });
+
+    const res = await callGet("/api/music-library", { action: "albums", lang: "es" });
+
+    expect(res.code).toBe(200);
+    expect(res.body.albums.map((album) => album.id)).toContain("album:712");
+    expect(fetch).toHaveBeenCalledWith("es_hymnal", "https://db.test/json_db", {});
+
+    fetch.mockRestore();
+    databaseUrl = "";
+    await fs.writeFile(esHymnal, JSON.stringify(HYMNAL));
   });
 });
 
@@ -461,7 +487,7 @@ describe("GET /api/music-library?action=songs", () => {
     expect(isMusicLibrarySongsResponse(res.body)).toBe(true);
   });
 
-  it("hinário 1996: 404 com o toggle off e faixas com ele ligado", async () => {
+  it("hinário 1996: 404 com 629 em disabled_albums e faixas quando liberado", async () => {
     const off = await callGet("/api/music-library", {
       action: "songs",
       album: "album:629",
@@ -469,7 +495,8 @@ describe("GET /api/music-library?action=songs", () => {
     });
     expect(off.code).toBe(404);
 
-    userData.modules.hymnal_1996.show_in_main_menu = true;
+    // `disabled_albums` é a fonte única — o toggle do módulo não filtra.
+    userData.options.disabled_albums = [8];
     const on = await callGet("/api/music-library", {
       action: "songs",
       album: "album:629",
@@ -499,6 +526,50 @@ describe("GET /api/music-library?action=songs", () => {
     expect((await callGet("/api/music-library", { action: "songs", album: "album:999" })).code).toBe(404);
     expect((await callGet("/api/music-library", { action: "songs", album: "collection:nope" })).code).toBe(404);
     expect((await callGet("/api/music-library", { action: "songs", album: "album:abc" })).code).toBe(400);
+  });
+
+  it("detalhe do álbum ausente no disco é baixado sob demanda", async () => {
+    const jsonCache = require("../../jsonCache.js");
+    const detail = {
+      id_album: 9,
+      name: "Vigna",
+      musics: [{ id_music: 201, track: 1, name: "Faixa Nova", duration: "00:02:00" }],
+    };
+    databaseUrl = "https://db.test/json_db";
+    const fetch = vi.spyOn(jsonCache, "fetchJson").mockImplementation(async (relPath) => {
+      const body = Buffer.from(JSON.stringify(detail));
+      await fs.writeFile(path.join(root, `${relPath.replace(/\.json$/, "")}.json`), body);
+      return { status: 200, body };
+    });
+
+    const res = await callGet("/api/music-library", {
+      action: "songs",
+      album: "album:9",
+      lang: "pt",
+    });
+
+    expect(res.code).toBe(200);
+    expect(res.body.songs.map((song) => song.name)).toEqual(["Faixa Nova"]);
+    expect(fetch).toHaveBeenCalledWith("album_9", "https://db.test/json_db", {});
+
+    fetch.mockRestore();
+    databaseUrl = "";
+    await fs.rm(path.join(root, "album_9.json"), { force: true });
+  });
+
+  it("arquivo local existente NÃO dispara download", async () => {
+    const jsonCache = require("../../jsonCache.js");
+    const fetch = vi.spyOn(jsonCache, "fetchJson");
+
+    const res = await callGet("/api/music-library", {
+      action: "songs",
+      album: "album:7",
+      lang: "pt",
+    });
+
+    expect(res.code).toBe(200);
+    expect(fetch).not.toHaveBeenCalled();
+    fetch.mockRestore();
   });
 });
 

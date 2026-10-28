@@ -655,10 +655,19 @@ function updateDurationForVersion(version: string) {
   props.setFormField("duration", minutes);
 }
 
+/**
+ * O nome do item é do operador. O título do vídeo só entra no campo quando ele
+ * ainda está vazio — trocar o vídeo de um item já nomeado nunca o renomeia.
+ */
+function preencherNomeSeVazio(nome: string): void {
+  if (!String(props.form.item || "").trim()) props.setFormField("item", nome);
+}
+
 function onVideoSearchPicked(v: { name: string; url: string }): void {
   props.setFormField("url", v.url);
-  props.setFormField("item", v.name);
+  /* A lista mostra este campo no lugar da URL. */
   props.setFormField("subitem", v.name);
+  preencherNomeSeVazio(v.name);
   /*
    * O link colado deixa de valer: sem isto o campo desabilitado ainda
    * carregaria o URL antigo, e o botão "Usar" o reaplicaria por cima da
@@ -667,10 +676,9 @@ function onVideoSearchPicked(v: { name: string; url: string }): void {
   videoUrl.value = "";
 }
 
-/** O X do chip: devolve o campo de URL direta ao operador. */
+/** O X do chip: devolve o campo de URL direta ao operador, sem apagar o nome. */
 function clearVideoSelection(): void {
   props.setFormField("url", "");
-  props.setFormField("item", "");
   props.setFormField("subitem", "");
   videoUrl.value = "";
 }
@@ -716,6 +724,7 @@ function setSaveToMyVideos(ativo: boolean): void {
 async function salvarItem(): Promise<void> {
   if (videoUrlBusy.value) return;
   if (!videoUrl.value.trim()) {
+    await nomearVideoLegado();
     props.saveItem();
     return;
   }
@@ -746,8 +755,8 @@ async function aplicarUrlColada(): Promise<boolean> {
   }
   const nome = (await fetchYoutubeTitle(ytId)) || url;
   props.setFormField("url", url);
-  props.setFormField("item", nome);
-  props.setFormField("subitem", "YouTube");
+  props.setFormField("subitem", nome);
+  preencherNomeSeVazio(nome);
   videoUrl.value = url;
 
   if (saveToMyVideos.value) {
@@ -773,11 +782,42 @@ async function aplicarUrlColada(): Promise<boolean> {
   return true;
 }
 
+const SUBTITULO_LEGADO = /^URL:\s*/i;
+
+/**
+ * Itens gravados antes deste ajuste guardam a URL no subtítulo. Ao salvar,
+ * resolve o título uma vez e passa a mostrar o nome. Nada toca no nome do
+ * item; se o oEmbed falhar, o subtítulo fica a própria URL (sem o prefixo
+ * legado), para a busca não se repetir a cada salvamento.
+ */
+async function nomearVideoLegado(): Promise<void> {
+  if (props.form.tipo !== LiturgyItemTypeEnum.VIDEO_ONLINE) return;
+  const url = String(props.form.url || "");
+  const subitem = String(props.form.subitem || "");
+  if (!url || (subitem && !SUBTITULO_LEGADO.test(subitem))) return;
+  const ytId = videoIdFromUrl(url);
+  if (!ytId) {
+    props.setFormField("subitem", url);
+    return;
+  }
+  videoUrlBusy.value = true;
+  try {
+    const nome = (await fetchYoutubeTitle(ytId)) || url;
+    props.setFormField("subitem", nome);
+  } finally {
+    videoUrlBusy.value = false;
+  }
+}
+
 const selectedVideoName = computed(() => {
   const url = props.form.url || "";
   if (!url) return "";
   const video: VideoSearchItem | undefined = props.videosList?.find((v) => v.url === url);
-  return video?.name || props.form.item || url;
+  if (video?.name) return video.name;
+  const subitem = String(props.form.subitem || "");
+  /* Legado ("URL: ...") não é nome: aí vale o nome do item. */
+  if (subitem && !SUBTITULO_LEGADO.test(subitem)) return subitem;
+  return props.form.item || url;
 });
 
 // ─── Biblioteca de Mídia / Som de fundo ──────────────────────────────

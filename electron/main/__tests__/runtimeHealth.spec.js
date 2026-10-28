@@ -216,6 +216,31 @@ describe("runtimeHealth", () => {
     expect(state.incidents).toHaveLength(1);
   });
 
+  it("ignora o sono do sistema mesmo quando o aviso de retomada chega depois", () => {
+    const loopDelayMonitor = fakeLoopDelay({ max: 9_000e6, p99: 9_000e6 });
+    const state = makeMonitor({ loopDelayMonitor });
+
+    // Dormiu 40 min: o relógio de parede andou, o monotônico não.
+    state.advanceWall(40 * 60_000);
+    state.advanceMonotonic(15_000);
+    state.monitor.sampleEventLoop();
+    expect(state.incidents).toHaveLength(0);
+
+    // Um atraso de horas também não é travamento real do processo.
+    loopDelayMonitor.max = 3 * 3_600_000e6;
+    state.advanceWall(15_000);
+    state.advanceMonotonic(15_000);
+    state.monitor.sampleEventLoop();
+    expect(state.incidents).toHaveLength(0);
+
+    // Uma travada real seguinte continua sendo registrada.
+    loopDelayMonitor.max = 9_000e6;
+    state.advanceWall(15_000);
+    state.advanceMonotonic(15_000);
+    state.monitor.sampleEventLoop();
+    expect(state.incidents).toHaveLength(1);
+  });
+
   it("captura render crash e queda do processo GPU sem polling extra", () => {
     const state = makeMonitor();
     const win = fakeWindow(11);

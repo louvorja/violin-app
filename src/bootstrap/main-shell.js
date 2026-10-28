@@ -72,6 +72,7 @@ import {
 } from "@/helpers/Overlay";
 import Shortcuts from "@/helpers/Shortcuts";
 import Telemetry from "@/helpers/Telemetry";
+import $snackbar from "@/helpers/Snackbar";
 import Hotkeys from "@/helpers/Hotkeys";
 import { useShell } from "@/composables/useShell";
 import { BROADCAST_TYPE } from "@helpers/BroadcastTypes";
@@ -727,6 +728,21 @@ function _bootStage(stage, properties = {}) {
   Telemetry.histogram("louvorja.boot.stage.duration", durationMs, { stage });
 }
 
+// Sem escrita na pasta de dados (macOS negou Documentos, antivírus bloqueou), o
+// main abre na pasta do programa. Calado, o app parecia ter perdido tudo.
+async function warnDataDirFallback(i18n) {
+  const issue = await Promise.resolve(Platform.storage?.dataDirIssue?.()).catch(() => null);
+  if (!issue) return;
+  Telemetry.track("storage_data_dir_fallback", { reason: issue.reason });
+  $snackbar.warning(
+    i18n.global.t("options.storage.folder_fallback_notice", { dir: issue.wanted }),
+    {
+      timeout: 15000,
+      key: "data-dir-fallback",
+    }
+  );
+}
+
 $storage.hydrate().then(async () => {
   _bootStage("storage_hydrated");
   // As três etapas abaixo não dependem uma da outra (cada uma é uma
@@ -963,6 +979,23 @@ $storage.hydrate().then(async () => {
       return Platform.isDesktop ? Path.local(raw) : Path.file(raw);
     }
 
+    /**
+     * Áudio pedido pelo celular: toca no PLAYER DE MÍDIA do desktop, minimizado.
+     *
+     * O mesmo caminho da Biblioteca (e da liturgia): a janela não abre, e o que
+     * estiver no telão continua lá. Não há aviso para o módulo da Biblioteca —
+     * ele não mantém mais estado de áudio.
+     */
+    async function tocarAudioDoRemoto(url, item) {
+      await Media.openAudio({
+        url,
+        title: String(item?.name || ""),
+        mediaType: "audio",
+        minimized: true,
+        preserveFileProjection: true,
+      });
+    }
+
     /** Miniatura que o cliente remoto consegue carregar (caminho, não bytes). */
     function mediaLibraryRemoteThumb(item) {
       const thumb = typeof item?.thumb === "string" ? item.thumb : "";
@@ -1070,6 +1103,29 @@ $storage.hydrate().then(async () => {
               Promise.resolve(api.cachedPdfs()).catch(() => ({})),
             ]);
             if (!resultado?.ok) {
+              const code = resultado?.code || "";
+              // Sem Client ID/Secret ou sem conta conectada não é um "502
+              // genérico": a aba do app precisa dizer o que falta configurar.
+              // `available:false` + `reason` mantém o HTTP 200 (sem toast de
+              // erro) e a mensagem certa no lugar do gateway.
+              if (code === "no_credentials" || code === "not_connected") {
+                let hasCredentials = false;
+                try {
+                  const estado = await api.status();
+                  hasCredentials = estado?.hasCredentials === true;
+                } catch {
+                  /* status é só informativo */
+                }
+                respond({
+                  status: "ok",
+                  available: false,
+                  reason: hasCredentials ? "not_connected" : "no_credentials",
+                  items: [],
+                  continuation: null,
+                  cached: {},
+                });
+                break;
+              }
               respond({
                 status: "error",
                 error: clip(resultado?.message, 300) || "Falha ao listar o Canva",
@@ -1146,6 +1202,13 @@ $storage.hydrate().then(async () => {
             const url = mediaLibraryItemUrl(rec);
             if (!url) {
               fail("Arquivo indisponível para projeção");
+              break;
+            }
+            /* Áudio não tem o que projetar: toca no player e o telão fica
+             * como está (o mesmo caminho do clique no desktop). */
+            if (rec.type === "audio") {
+              await tocarAudioDoRemoto(url, rec);
+              respond({ status: "ok" });
               break;
             }
             await Media.projectFile({
@@ -1429,6 +1492,11 @@ $storage.hydrate().then(async () => {
                 remoteMediaPlaylistIndex = target;
                 break;
               }
+              if (item.type === "audio") {
+                await tocarAudioDoRemoto(url, item);
+                remoteMediaPlaylistIndex = target;
+                break;
+              }
               await Media.projectFile({
                 url,
                 type: item.type || "image",
@@ -1546,7 +1614,12 @@ $storage.hydrate().then(async () => {
                 UserData.get(KEYS.MODULES.LITURGY.MARK_ON_ACCESS, false) === true &&
                 !Liturgy.isCheckedToday(litItem)
               ) {
-                Liturgy.toggleChecked(litItem.id);
+                // Grava no dia RESOLVIDO pelo `data.day` do pedido remoto. Antes
+                // ia sem dia e caía em `getActiveDay()`, que só é sincronizado
+                // para "hoje" quando o módulo da Liturgia é aberto no desktop; se
+                // o módulo não tivesse sido aberto a gravação ia parar no dia da
+                // última sessão (ou virar no-op).
+                Liturgy.toggleChecked(litItem.id, data.day);
               }
 
               /** Resolve um path de arquivo para URL reproduzível. */
@@ -2128,7 +2201,7 @@ $storage.hydrate().then(async () => {
             UserData.get(KEYS.MODULES.LITURGY.MARK_ON_ACCESS, false) === true &&
             !Liturgy.isCheckedToday(litItem)
           ) {
-            Liturgy.toggleChecked(litItem.id);
+            Liturgy.toggleChecked(litItem.id, data.day);
           }
           break;
         }
@@ -2353,7 +2426,17 @@ $storage.hydrate().then(async () => {
     // abre o IndexedDB. Rodar em série custava um round-trip de I/O à toa.
     if (isAuxiliaryRenderer) ModuleManager.bindI18n(i18n);
     const moduleManagerReady = isAuxiliaryRenderer ? Promise.resolve() : ModuleManager.init(i18n);
-    const idbReady = $idb.init();
+    // Sem o banco local o app ainda abre: o catálogo vem da rede. Deixar a
+    // rejeição subir parava o boot antes do mount e da telemetria — janela
+    // vazia em toda abertura, sem nenhum registro do motivo.
+    const idbReady = $idb.init().then(
+      () => true,
+      (error) => {
+        console.error("[main] IndexedDB indisponível; abrindo sem o banco local:", error);
+        Telemetry.captureException(error, { source: "boot_indexeddb" });
+        return false;
+      }
+    );
 
     if (import.meta.env.DEV) {
       try {
@@ -2364,8 +2447,8 @@ $storage.hydrate().then(async () => {
       }
     }
 
-    await Promise.all([moduleManagerReady, idbReady]);
-    _bootStage("dependencies_ready");
+    const [, indexeddbReady] = await Promise.all([moduleManagerReady, idbReady]);
+    _bootStage("dependencies_ready", { indexeddb_ready: indexeddbReady });
 
     // Sincroniza devices do IndexedDB para o main process (cache em memória).
     // Deve rodar após $idb.init() e antes do app.mount() para garantir que
@@ -2380,6 +2463,7 @@ $storage.hydrate().then(async () => {
     app.mount("#app");
     window.__ljPwaRecovery?.markMounted();
     _bootStage("mounted");
+    if (!isAuxiliaryRenderer) void warnDataDirFallback(i18n);
 
     // Estado atual, não a ação de alternar: sem isto, saber "quantos usuários
     // usam Libras" dependia de esperar alguém tocar no interruptor depois do

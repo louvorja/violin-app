@@ -208,6 +208,31 @@ function setAutoCacheEnabled(enabled) {
   _autoCacheEnabled = !!enabled;
 }
 
+/**
+ * Endereço novo de um arquivo pessoal que ficou num endereço antigo.
+ *
+ * Cache do Canva e anexos moraram dentro da pasta de dados única e agora vivem
+ * no perfil privado. URLs guardadas antes da mudança continuam apontando para o
+ * endereço velho. A que dói é o `LJ_FILE_PROJECTION` do telão: reabrir a última
+ * projeção cairia num arquivo inexistente e a tela ficaria vazia até o operador
+ * projetar de novo. Só vale para um ARQUIVO dentro de uma origem conhecida.
+ *
+ * @param {string} absoluto
+ * @returns {string|null}
+ */
+function _enderecoNovoPrivado(absoluto) {
+  try {
+    const alvo = path.resolve(absoluto);
+    for (const { from, to } of paths.privatePathMappings()) {
+      const origem = path.resolve(from);
+      if (alvo.startsWith(`${origem}${path.sep}`)) return path.join(to, path.relative(origem, alvo));
+    }
+  } catch (_) {
+    /* Sem layout legível não há endereço antigo a procurar. */
+  }
+  return null;
+}
+
 /** O streaming permanece privado; só o arquivo completo é publicado no acervo. */
 async function _writeStreamToFile(readable, finalPath) {
   const root = paths.filesDir();
@@ -490,6 +515,11 @@ function handle() {
         }
 
         if (!(await fs.pathExists(raw))) {
+          /* Arquivo pessoal no endereço antigo: serve do novo. */
+          const migrado = _enderecoNovoPrivado(raw);
+          if (migrado && (await fs.pathExists(migrado))) {
+            return await _responderArquivo(migrado, request);
+          }
           return new Response("Not found", { status: 404 });
         }
 

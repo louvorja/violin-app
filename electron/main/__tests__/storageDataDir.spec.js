@@ -6,7 +6,6 @@ import path from "node:path";
 
 const require = createRequire(import.meta.url);
 const fs = require("fs-extra");
-const { listLegacyMediaEntries } = require("../mediaMigration.js");
 let base, oldDir, filesDir, storage, maintenanceAllowed;
 
 beforeEach(async () => {
@@ -105,15 +104,5 @@ describe("limpeza de acervo", () => {
     expect(await storage.clearUnused([{ remote: "musics/pt/song.opus" }])).toEqual({ removed: 1 });
     expect(await fs.readFile(path.join(filesDir, "musics", "pt", "song.mp3"), "utf8")).toBe("download");
     await expectProtected();
-  });
-});
-
-describe("migração de mídia no boot", () => {
-  it("não trata documentos modernos como mídia legada quando files está vazio", async () => {
-    await fs.emptyDir(path.join(oldDir, "files"));
-    expect(listLegacyMediaEntries(oldDir)).toEqual([]);
-    expect(await fs.readJson(path.join(oldDir, "library", "saved.json"))).toEqual({ collection: "library" });
-    await fs.outputFile(path.join(oldDir, "musicas", "track.mp3"), "audio");
-    expect(listLegacyMediaEntries(oldDir)).toEqual(["musicas"]);
   });
 });

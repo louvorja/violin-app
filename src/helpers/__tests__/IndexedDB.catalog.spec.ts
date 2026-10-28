@@ -8,6 +8,7 @@ const state = vi.hoisted(() => ({
 
 vi.mock("idb", () => ({
   openDB: vi.fn(async () => ({
+    objectStoreNames: { contains: () => true },
     transaction(names: string[]) {
       const draft = new Map(names.map((name) => [name, new Map(state.tables.get(name) ?? [])]));
       let aborted = false;

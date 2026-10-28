@@ -4,7 +4,7 @@
  * storage.js — Visibilidade e gerenciamento do armazenamento local.
  *
  * Replica o comportamento do Delphi (fmArquivosFalta + fmArquivosExcesso):
- * - stats(): tamanho ocupado por categoria (json, files, total).
+ * - stats(): tamanho ocupado por categoria (json, files, canva, total).
  * - clearJson(): limpa cache de JSON do banco.
  * - clearFiles(): limpa somente arquivos oficiais reconhecidos do acervo.
  * - clearUnused(remotePaths): remove arquivos locais que não estão na lista
@@ -73,8 +73,9 @@ async function _listAllFiles(dir) {
 /**
  * Retorna estatísticas de uso do armazenamento.
  * Classifica arquivos JSON do cache em: bible (bible_*), music (album_*, music_*),
- * e json (demais). Media files (mp3/imagens) ficam em files.
- * @returns {Promise<{filesDir: string, jsonDir: string, files: {bytes, count}, json: {bytes, count}, music: {bytes, count}, bible: {bytes, count}, total: {bytes, count}}>}
+ * e json (demais). Media files (mp3/imagens) ficam em files; o cache de export do
+ * Canva fica no perfil privado e tem categoria própria.
+ * @returns {Promise<{filesDir: string, jsonDir: string, files: {bytes, count}, canva: {bytes, count}, json: {bytes, count}, music: {bytes, count}, bible: {bytes, count}, total: {bytes, count}}>}
  */
 async function stats() {
   const filesDir = paths.filesDir();
@@ -82,6 +83,12 @@ async function stats() {
   const managed = await listManagedMedia(filesDir);
   const filesStat = { bytes: managed.reduce((sum, file) => sum + file.size, 0), files: managed.length };
   const videoStat = await _videoSize(paths.videosDir());
+  const canvaStat = { bytes: 0, files: 0 };
+  for (const arquivo of await _listAllFiles(paths.canvaDir())) {
+    canvaStat.bytes += arquivo.size;
+    // `<id>.pdf.json` é o meta do mesmo cache: conta a apresentação, não os dois arquivos.
+    if (!arquivo.relative.endsWith(".json")) canvaStat.files += 1;
+  }
 
   let bibleBytes = 0;
   let bibleCount = 0;
@@ -119,12 +126,13 @@ async function stats() {
     filesDir,
     jsonDir,
     files: { bytes: filesStat.bytes, count: filesStat.files },
+    canva: { bytes: canvaStat.bytes, count: canvaStat.files },
     json: { bytes: jsonBytes, count: jsonCount },
     music: { bytes: musicBytes, count: musicCount },
     bible: { bytes: bibleBytes, count: bibleCount },
     total: {
-      bytes: filesStat.bytes + videoStat.bytes + jsonBytes + musicBytes + bibleBytes,
-      count: filesStat.files + videoStat.files + jsonCount + musicCount + bibleCount,
+      bytes: filesStat.bytes + videoStat.bytes + canvaStat.bytes + jsonBytes + musicBytes + bibleBytes,
+      count: filesStat.files + videoStat.files + canvaStat.files + jsonCount + musicCount + bibleCount,
     },
   };
 }
@@ -155,10 +163,12 @@ async function clearFiles() {
  * - extra: presentes na nossa pasta e ausentes da lista do servidor
  *
  * `extra` é a única saída que alimenta remoção (`clearUnused`), e por isso é
- * derivada exclusivamente de `_listAllFiles(filesDir)` — nunca do resolvedor.
- * Um arquivo encontrado no acervo da versão clássica pode deixar de ser
- * `missing`, mas jamais pode virar candidato a apagar: a pasta é de outro
- * programa, que muita gente ainda usa em paralelo.
+ * derivada exclusivamente do acervo real em `files/` — nem do resolvedor, nem
+ * do cache de export do Canva. Um arquivo encontrado no acervo da versão
+ * clássica pode deixar de ser `missing`, mas jamais pode virar candidato a
+ * apagar: a pasta é de outro programa, que muita gente ainda usa em paralelo.
+ * O mesmo vale para o Canva: PDF exportado não está na lista do servidor e,
+ * sem a exclusão, todo o cache seria removido como "sobra".
  *
  * @param {Array<{remote: string, expectedSize?: number}>} remoteFiles
  * @returns {Promise<{missing, damaged, extra}>}

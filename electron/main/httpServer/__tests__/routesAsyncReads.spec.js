@@ -70,7 +70,9 @@ describe("HTTP routes with asynchronous local reads", () => {
     expect((await call("/api/music-search", { q: "1" })).body.results).toEqual([]);
     userData.options.disabled_albums = [];
     userData.modules.hymnal_1996.show_in_main_menu = false;
-    expect((await call("/api/music-search", { q: "1" })).body.results.map((music) => music.id_music)).toEqual([2]);
+    // O toggle do módulo controla só a visibilidade no desktop — o acervo
+    // continua disponível (a fonte é `disabled_albums`).
+    expect((await call("/api/music-search", { q: "1" })).body.results.map((music) => music.id_music)).toEqual([2, 1]);
     await fs.unlink(path.join(root, "pt_musics.json"));
   });
 

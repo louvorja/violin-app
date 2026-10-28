@@ -131,10 +131,31 @@ function isEssentialMemoryDataset(file: string): boolean {
   return /(^|_)(musics|hymnal|hymnal_1996|bible_version|bible_book|categories)$/.test(file);
 }
 
+/**
+ * Tamanho aproximado do JSON. Serializar o catálogo de músicas inteiro (2 MB) só para
+ * medir custava dezenas de milissegundos na thread da tela a cada leitura; para o
+ * orçamento do cache, uma amostra espalhada de cem linhas dá a mesma ordem de grandeza,
+ * inclusive nas listas guardadas dentro de um objeto (vídeos on-line).
+ */
+function estimateJsonLength(value: unknown, depth = 0): number {
+  if (Array.isArray(value) && value.length > 200) {
+    const step = value.length / 100;
+    let sampled = 0;
+    for (let i = 0; i < 100; i++) sampled += JSON.stringify(value[Math.floor(i * step)] ?? null).length;
+    return Math.round((sampled / 100) * value.length);
+  }
+  if (depth < 2 && value && typeof value === "object" && !Array.isArray(value)) {
+    let total = 2;
+    for (const [key, item] of Object.entries(value)) total += key.length + 4 + estimateJsonLength(item, depth + 1);
+    return total;
+  }
+  return JSON.stringify(value)?.length ?? 4;
+}
+
 function estimateMemoryBytes(data: unknown): number {
   try {
     // UTF-16 é uma estimativa conservadora para strings mantidas pelo renderer.
-    return JSON.stringify(data).length * 2;
+    return estimateJsonLength(data) * 2;
   } catch {
     return MEMORY_CACHE_ENTRY_LIMIT_BYTES + 1;
   }
@@ -890,21 +911,15 @@ export default {
    */
   async getStoredIdsForPrefix(table: string, filePrefix: string): Promise<Set<string>> {
     try {
-      const all = await $idb.getAll<ItemRow>(table);
-      const ids = new Set(
-        all
-          .filter((r) => typeof r.file === "string" && r.file.startsWith(filePrefix))
-          .map((r) => r.file)
-      );
+      // A chave é o próprio arquivo (`bible_2_39_5`) ou `<arquivo>:<item>`.
+      const fileOf = (key: string) => (key.includes(":") ? key.slice(0, key.indexOf(":")) : key);
+      const ids = new Set((await $idb.getAllKeysByPrefix(table, filePrefix)).map(fileOf));
 
       // Instalações anteriores guardavam capítulos inteiros na tabela `cache`.
       // Considerá-los aqui permite que buscas locais aproveitem esse acervo e
       // que o próximo download não rebaixe o que já está no disco lógico.
       if (table === DB_TABLE.BIBLE_CHAPTERS) {
-        const legacy = await $idb.getAll<{ id?: string }>(DB_TABLE.CACHE);
-        for (const row of legacy) {
-          if (typeof row.id === "string" && row.id.startsWith(filePrefix)) ids.add(row.id);
-        }
+        for (const id of await $idb.getAllKeysByPrefix(DB_TABLE.CACHE, filePrefix)) ids.add(id);
       }
       return ids;
     } catch {
@@ -915,6 +930,6 @@ export default {
 
 /** Remove todas as linhas de um dataset (por `file`) dentro de uma tabela. */
 async function purgeFileRows(table: string, file: string): Promise<void> {
-  const all = await $idb.getAll<ItemRow>(table);
-  await Promise.all(all.filter((r) => r.file === file).map((r) => $idb.del(table, r.id)));
+  const ids = await $idb.getAllKeysByPrefix(table, `${file}:`);
+  await $idb.putMany(table, [], ids);
 }

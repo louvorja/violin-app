@@ -112,6 +112,22 @@ describe("useViewport", () => {
     expect(countResizeCalls(remove)).toBe(1);
   });
 
+  it("consumidor novo não relê a janela enquanto o listener está ligado", () => {
+    const first = mountConsumer();
+    let reads = 0;
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      get: () => {
+        reads += 1;
+        return 1280;
+      },
+    });
+    const rows = Array.from({ length: 60 }, () => mountConsumer());
+    expect(reads).toBe(0);
+    for (const row of rows) row.wrapper.unmount();
+    first.wrapper.unmount();
+  });
+
   it("religa e remede quando um consumidor volta depois de todos saírem", () => {
     const a = mountConsumer();
     const b = mountConsumer();

@@ -324,7 +324,7 @@
         ref="fileInput"
         type="file"
         multiple
-        accept="image/*,video/*,.pdf,.heic,.heif"
+        accept="image/*,video/*,audio/*,.pdf,.heic,.heif"
         class="media-file-input"
         @change="onFilesSelected"
       />
@@ -394,7 +394,7 @@ import $idb from "@/helpers/IndexedDB";
 import { ensureRenderableImage, isHeic, heicToJpeg } from "@/helpers/ImageConvert";
 import { DB_TABLE } from "@/constants/DbTables";
 import { KEYS } from "@/constants/UserDataKeys";
-import { IMAGE_EXT, VIDEO_EXT } from "@/constants/FileTypes";
+import { AUDIO_EXT, IMAGE_EXT, VIDEO_EXT } from "@/constants/FileTypes";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 import Telemetry from "@/helpers/Telemetry";
 import {
@@ -415,7 +415,7 @@ interface MediaFile {
   id: string;
   name: string;
   path: string;
-  type: "image" | "video" | "pdf";
+  type: "image" | "video" | "pdf" | "audio";
   thumb?: string;
   addedAt: number;
   data?: ArrayBuffer;
@@ -427,7 +427,7 @@ interface PlaylistItem {
   id: string;
   name: string;
   path: string;
-  type: "image" | "video" | "pdf" | "site";
+  type: "image" | "video" | "pdf" | "audio" | "site";
   typeIcon: string;
 }
 
@@ -438,6 +438,7 @@ type LibraryFilter = "all" | MediaFile["type"] | "canva";
 function fileTypeIcon(type: MediaFile["type"] | "site"): string {
   if (type === "image") return ICONS.MEDIA.IMAGE;
   if (type === "pdf") return ICONS.UI.FILE_PDF;
+  if (type === "audio") return ICONS.MEDIA.AUDIO;
   // Item de URL do Canva (modo site): link, não arquivo.
   if (type === "site") return ICONS.UI.LINK;
   return ICONS.MEDIA.VIDEO_FILE;
@@ -487,9 +488,18 @@ const tm = (key: string, named?: Record<string, unknown>): string =>
 
 const libraryFilter = ref<LibraryFilter>("all");
 
+/**
+ * A Biblioteca colocou um ARQUIVO no telão?
+ *
+ * Áudio não conta: ele toca no player e não ocupa palco. A distinção é o que
+ * permite "Parar" só calar o áudio sem fechar um PDF que esteja na tela.
+ */
+const projetandoDaBiblioteca = ref(false);
+
 const filterTabs = computed(() => [
   { value: "all", label: tm("all") },
   { value: "image", label: tm("images") },
+  { value: "audio", label: tm("audios") },
   { value: "video", label: tm("videos") },
   { value: "pdf", label: tm("documents") },
   { value: "canva", label: tm("canva.title") },
@@ -833,7 +843,11 @@ async function onDrop(e: DragEvent): Promise<void> {
   const valid: File[] = [];
   for (const f of Array.from(droppedFiles)) {
     const ext = f.name.split(".").pop()?.toLowerCase() || "";
-    const isMedia = IMAGE_EXT.includes(ext) || VIDEO_EXT.includes(ext) || ext === "pdf";
+    const isMedia =
+      IMAGE_EXT.includes(ext) ||
+      VIDEO_EXT.includes(ext) ||
+      AUDIO_EXT.includes(ext) ||
+      ext === "pdf";
     if (isMedia) valid.push(f);
   }
   if (valid.length < droppedFiles.length) noteUnsupported();
@@ -848,36 +862,35 @@ async function onDrop(e: DragEvent): Promise<void> {
 /** Importa um arquivo arrastado (com caminho no desktop ou blob na web). */
 async function importDroppedEntry(f: File, categoryId: string): Promise<void> {
   const filePath = localPathOf(f);
+  const tipoDoDrop = tipoDoArquivo(f.name, (f as File).type);
+  if (!tipoDoDrop) return;
+  /* Com caminho no disco, o registro guarda só o caminho; os bytes ficam onde
+   * já estavam. HEIC é a exceção: não decodifica no Chromium e precisa ser
+   * convertido antes de virar arquivo autocontido. */
   if (filePath && !isHeic(f.name, (f as File).type)) {
-    const name = f.name;
-    const ext = name.split(".").pop()?.toLowerCase() || "";
-    const isImage = IMAGE_EXT.includes(ext);
-    const isVideo = VIDEO_EXT.includes(ext);
-    const isPdf = ext === "pdf";
-    if (!isImage && !isVideo && !isPdf) return;
-    const fileType = isPdf ? ("pdf" as const) : isImage ? ("image" as const) : ("video" as const);
     const file: MediaFile = {
       id: "file_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8),
-      name,
+      name: f.name,
       path: filePath,
-      type: fileType,
+      type: tipoDoDrop,
       addedAt: Date.now(),
       categoryId,
     };
-    if (isImage) file.thumb = buildThumbPath(filePath);
+    if (tipoDoDrop === "image") file.thumb = buildThumbPath(filePath);
     await saveFile(file);
     files.value.unshift(file);
-    if (isVideo) generateAndStoreThumb(file);
-  } else {
-    // Sem caminho (web) ou HEIC/HEIF: converte e armazena autocontido.
-    const { blob, name } = await ensureRenderableImage(f.name, f);
-    const isImage =
-      IMAGE_EXT.includes(name.split(".").pop()?.toLowerCase() || "") ||
-      blob.type.startsWith("image/");
-    const isVideo = VIDEO_EXT.includes(f.name.split(".").pop()?.toLowerCase() || "");
-    const isPdf = f.type === "application/pdf" || f.name?.toLowerCase().endsWith(".pdf");
-    if (!isImage && !isVideo && !isPdf) return;
-    const fileType = isPdf ? ("pdf" as const) : isImage ? ("image" as const) : ("video" as const);
+    if (tipoDoDrop === "video") generateAndStoreThumb(file);
+    return;
+  }
+  {
+    // Sem caminho (web) ou HEIC/HEIF: armazena autocontido. Só IMAGEM passa
+    // pela conversão; áudio e vídeo vão como vieram, senão o conversor tentaria
+    // decodificar um mp3 como imagem.
+    const { blob, name } =
+      tipoDoDrop === "image"
+        ? await ensureRenderableImage(f.name, f)
+        : { blob: f as Blob, name: f.name };
+    const fileType = tipoDoDrop;
     const fileId = "file_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
     const path = URL.createObjectURL(blob);
     const { data, mime } = await readFileData(new File([blob], name, { type: blob.type }));
@@ -891,11 +904,11 @@ async function importDroppedEntry(f: File, categoryId: string): Promise<void> {
       mime,
       categoryId,
     };
-    if (isImage) file.thumb = path;
+    if (fileType === "image") file.thumb = path;
     createdObjectUrls.set(fileId, path);
     await saveFile(file);
     files.value.unshift(file);
-    if (isVideo) generateAndStoreThumb(file);
+    if (fileType === "video") generateAndStoreThumb(file);
   }
 }
 
@@ -1016,6 +1029,28 @@ function buildThumbPath(filePath: string): string | undefined {
   return undefined;
 }
 
+/**
+ * Tipo de arquivo importável a partir do nome e do mime.
+ *
+ * O mime vem primeiro porque é o que distingue um `.mp4` de vídeo de um
+ * `audio/mp4`, e porque o navegador acerta o tipo de `.m4a`/`.opus` mesmo
+ * quando a extensão não está na lista. A extensão cobre o caso oposto: sistema
+ * que entrega `application/octet-stream` para tudo.
+ */
+function tipoDoArquivo(name: string, mime?: string): MediaFile["type"] | null {
+  const ext = (name.split(".").pop() || "").toLowerCase();
+  const tipo = (mime || "").toLowerCase();
+  if (tipo.startsWith("image/")) return "image";
+  if (tipo.startsWith("video/")) return "video";
+  if (tipo.startsWith("audio/")) return "audio";
+  if (tipo === "application/pdf") return "pdf";
+  if (IMAGE_EXT.includes(ext)) return "image";
+  if (VIDEO_EXT.includes(ext)) return "video";
+  if (AUDIO_EXT.includes(ext)) return "audio";
+  if (ext === "pdf") return "pdf";
+  return null;
+}
+
 /** Entrada do botão Adicionar: abre seleção de categoria antes do picker. */
 function addFiles(): void {
   pendingDropEntries.value = [];
@@ -1042,15 +1077,11 @@ async function doAddFiles(categoryId: string): Promise<void> {
     const paths = Array.isArray(result) ? result : [result];
     for (const rawPath of paths) {
       const name = rawPath.split("/").pop() || rawPath.split("\\").pop() || rawPath;
-      const ext = name.split(".").pop()?.toLowerCase() || "";
-      const isImage = IMAGE_EXT.includes(ext);
-      const isVideo = VIDEO_EXT.includes(ext);
-      const isPdf = ext === "pdf";
-      if (!isImage && !isVideo && !isPdf) {
+      const fileType = tipoDoArquivo(name);
+      if (!fileType) {
         noteUnsupported();
         continue;
       }
-      const fileType = isPdf ? ("pdf" as const) : isImage ? ("image" as const) : ("video" as const);
       const file: MediaFile = {
         id: "file_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8),
         name,
@@ -1059,10 +1090,10 @@ async function doAddFiles(categoryId: string): Promise<void> {
         addedAt: Date.now(),
         categoryId,
       };
-      if (isImage) file.thumb = buildThumbPath(rawPath);
+      if (fileType === "image") file.thumb = buildThumbPath(rawPath);
       await saveFile(file);
       files.value.unshift(file);
-      if (isVideo) generateAndStoreThumb(file);
+      if (fileType === "video") generateAndStoreThumb(file);
     }
   } else {
     fileInput.value?.click();
@@ -1097,51 +1128,32 @@ async function onFilesSelected(e: Event): Promise<void> {
   for (const f of Array.from(input.files)) {
     try {
       const filePath = localPathOf(f);
+      const fileType = tipoDoArquivo(f.name, (f as File).type);
+      if (!fileType) {
+        noteUnsupported();
+        continue;
+      }
       if (filePath && !isHeic(f.name, (f as File).type)) {
-        const name = f.name;
-        const ext = name.split(".").pop()?.toLowerCase() || "";
-        const isImage = IMAGE_EXT.includes(ext);
-        const isVideo = VIDEO_EXT.includes(ext);
-        const isPdf = ext === "pdf";
-        if (!isImage && !isVideo && !isPdf) {
-          noteUnsupported();
-          continue;
-        }
-        const fileType = isPdf
-          ? ("pdf" as const)
-          : isImage
-            ? ("image" as const)
-            : ("video" as const);
         const file: MediaFile = {
           id: "file_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8),
-          name,
+          name: f.name,
           path: filePath,
           type: fileType,
           addedAt: Date.now(),
           categoryId: pendingCategoryId ?? UNCATEGORIZED_ID,
         };
-        if (isImage) file.thumb = buildThumbPath(filePath);
+        if (fileType === "image") file.thumb = buildThumbPath(filePath);
         await saveFile(file);
         files.value.unshift(file);
-        if (isVideo) generateAndStoreThumb(file);
+        if (fileType === "video") generateAndStoreThumb(file);
       } else {
-        // Sem caminho (web/drag-drop) ou HEIC/HEIF: armazena autocontido com
-        // os bytes convertidos para JPEG — o Chromium não decodifica HEIC.
-        const { blob, name } = await ensureRenderableImage(f.name, f);
-        const isImage =
-          IMAGE_EXT.includes(name.split(".").pop()?.toLowerCase() || "") ||
-          blob.type.startsWith("image/");
-        const isVideo = VIDEO_EXT.includes(f.name.split(".").pop()?.toLowerCase() || "");
-        const isPdf = f.type === "application/pdf" || f.name?.toLowerCase().endsWith(".pdf");
-        if (!isImage && !isVideo && !isPdf) {
-          noteUnsupported();
-          continue;
-        }
-        const fileType = isPdf
-          ? ("pdf" as const)
-          : isImage
-            ? ("image" as const)
-            : ("video" as const);
+        // Sem caminho (web/drag-drop) ou HEIC/HEIF: armazena autocontido. Só
+        // IMAGEM é convertida (o Chromium não decodifica HEIC); áudio e vídeo
+        // vão como vieram.
+        const { blob, name } =
+          fileType === "image"
+            ? await ensureRenderableImage(f.name, f)
+            : { blob: f as Blob, name: f.name };
         const fileId = "file_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
         const path = URL.createObjectURL(blob);
         const { data, mime } = await readFileData(new File([blob], name, { type: blob.type }));
@@ -1155,11 +1167,11 @@ async function onFilesSelected(e: Event): Promise<void> {
           mime,
           categoryId: pendingCategoryId ?? UNCATEGORIZED_ID,
         };
-        if (isImage) file.thumb = path;
+        if (fileType === "image") file.thumb = path;
         createdObjectUrls.set(fileId, path);
         await saveFile(file);
         files.value.unshift(file);
-        if (isVideo) generateAndStoreThumb(file);
+        if (fileType === "video") generateAndStoreThumb(file);
       }
     } catch (error) {
       if (!reportLocalFileFailure(error, [f.name])) throw error;
@@ -1182,7 +1194,7 @@ function savePlaylist(): void {
 function loadPlaylist(): void {
   isPlaying.value = false;
   const saved = $userdata.get<
-    { id: string; name: string; path: string; type: "image" | "video" | "pdf" }[]
+    { id: string; name: string; path: string; type: MediaFile["type"] }[]
   >(PLAYLIST_KEY, []);
   if (saved?.length) {
     playlist.value = saved.map((item) => {
@@ -1278,7 +1290,12 @@ async function resolveRenderableUrl(item: PlaylistItem): Promise<string> {
 async function playIndex(index: number): Promise<void> {
   const item = playlist.value[index];
   if (!item) return;
-  if (currentIndex.value === index && isPlaying.value) return;
+  if (currentIndex.value === index && isPlaying.value) {
+    /* Áudio já terminou: o player está parado, e tocar de novo é o esperado.
+     * Para imagem/PDF a guarda continua valendo (reprojetar sem motivo pisca). */
+    const atual = playlist.value[index];
+    if (atual?.type !== "audio" || $appdata.get(KEYS.MODULES.MEDIA.IS_PLAYING) === true) return;
+  }
   // Direção da navegação para o modo automático de transição da projeção.
   const backward = index < currentIndex.value;
 
@@ -1337,8 +1354,52 @@ async function tocarDaBiblioteca(file: MediaFile): Promise<void> {
  * define a geração, e o `generation` protege contra uma projeção lenta que
  * perde o posto para a seguinte.
  */
+/**
+ * URL reproduzível de um áudio da biblioteca.
+ *
+ * No web o arquivo mora no IndexedDB: um blob NOVO por reprodução, porque o
+ * player revoga a URL anterior ao trocar de fonte (`setSrc`). Reusar a URL
+ * guardada no registro significaria tocar uma URL já revogada na segunda vez.
+ */
+function urlDoAudio(item: PlaylistItem): string {
+  const file = files.value.find((f) => f.id === item.id);
+  if (file?.data && file.mime) {
+    return URL.createObjectURL(new Blob([file.data], { type: file.mime }));
+  }
+  return resolvePath(item.path);
+}
+
+/**
+ * Leva o áudio da biblioteca ao PLAYER DE MÍDIA, MINIMIZADO.
+ *
+ * Áudio não tem o que projetar, e `projectFile` só aceita imagem/vídeo/PDF — por
+ * isso ele entra pelo `openAudio`, o mesmo caminho que a liturgia usa. O player
+ * fica minimizado (a janela não abre) e o telão fica como está
+ * (`preserveFileProjection`), salvo se houver um vídeo tocando: aí ele sai,
+ * senão os dois sons se sobreporiam.
+ */
+async function tocarAudio(item: PlaylistItem): Promise<void> {
+  const src = urlDoAudio(item);
+  if (!src) return;
+  await $media.openAudio({
+    url: src,
+    title: item.name,
+    mediaType: "audio",
+    minimized: true,
+    preserveFileProjection: true,
+  });
+}
+
 async function projetarItem(item: PlaylistItem, backward: boolean): Promise<void> {
   const generation = ++playIndexGeneration;
+
+  /* Áudio não tem o que projetar: toca no player e o telão fica como está. */
+  if (item.type === "audio") {
+    await tocarAudio(item);
+    return;
+  }
+  /* Qualquer outra mídia assume o palco: `projectFile` cala o áudio por conta
+   * própria (`stopExistingAudio`). */
 
   /*
    * Item de URL (Canva em modo site): não é arquivo — a projeção é a janela de
@@ -1399,6 +1460,7 @@ async function projetarItem(item: PlaylistItem, backward: boolean): Promise<void
     isVideo ? url : undefined,
     { stopExistingAudio: true }
   );
+  projetandoDaBiblioteca.value = projected === true;
   if (!projected) {
     if (generation === playIndexGeneration) {
       isPlaying.value = false;
@@ -1494,13 +1556,25 @@ async function prev(): Promise<void> {
 }
 
 function stop(): void {
+  const eraPdfDeFora = !!pdfExterno.value;
+  const eraProjecao = projetandoDaBiblioteca.value;
   ++playIndexGeneration;
+  /* Áudio toca no player de mídia, não numa janela desta Biblioteca: parar
+   * aqui precisa calá-lo explicitamente. */
+  $media.stopAudioFile();
   currentPdfPlaybackId = undefined;
   pdfExterno.value = null;
   avisoContagemDado = false;
   isPlaying.value = false;
   currentIndex.value = -1;
+  projetandoDaBiblioteca.value = false;
   $media.unregisterNavigationDelegate();
+  /*
+   * Nada DESTA Biblioteca no telão (o caso de um áudio avulso tocando): parar
+   * não pode apagar a projeção que outra coisa deixou lá — um PDF da aba Canva,
+   * por exemplo. Antes, o "Parar" da barra do áudio fechava o telão inteiro.
+   */
+  if (!eraProjecao && !eraPdfDeFora) return;
   localStorage.removeItem(KEYS.PROJECTION.LJ_FILE_PROJECTION);
   $broadcast.send(BROADCAST_TYPE.MEDIA_CLOSE, {});
   closeProjectionWindows();

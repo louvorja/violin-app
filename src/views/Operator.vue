@@ -80,7 +80,7 @@
         @click="goTo(i)"
       >
         <div class="op-card-num">{{ i + 1 }}</div>
-        <div class="op-card-text" v-html="slide.lyric || slide.name || '—'" />
+        <div class="op-card-text" v-html="slideMainText(slide) || '—'" />
       </div>
     </div>
 
@@ -91,6 +91,7 @@
 </template>
 
 <script setup>
+import { slideMainText } from "@/helpers/SlideText";
 import { computed, ref, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
 import { useI18n } from "vue-i18n";
 import $broadcast from "@/helpers/Broadcast";

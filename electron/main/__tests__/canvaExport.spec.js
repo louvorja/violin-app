@@ -14,14 +14,14 @@ require.cache[caminhoPaths] = {
   id: caminhoPaths,
   filename: caminhoPaths,
   loaded: true,
-  exports: { dataDir: () => base },
+  exports: { dataDir: () => base, filesDir: () => join(base, "files"), canvaDir: () => join(base, "canva") },
 };
 
 const store = require("../canva/store.js");
 const exporter = require("../canva/export.js");
 
 const RAPIDO = { pollMs: 1, maxTentativas: 5 };
-/** Escreve arquivo solto dentro de <base>/canva (a pasta já existe). */
+/** Escreve arquivo solto dentro de <base>/files/canva (a pasta já existe). */
 const fsWrite = (arquivo, conteudo) => writeFileSync(arquivo, conteudo);
 const PDF = "%PDF-1.7\n%%EOF";
 const HTML = "<html><body>erro</body></html>";

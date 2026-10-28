@@ -13,7 +13,7 @@ const fixtureEnv = { ...base.webServer.env, VITE_TARGET: "web" };
 
 export default defineConfig({
   ...base,
-  testMatch: "mobile-web.spec.js",
+  testMatch: ["mobile-web.spec.js", "media-fullscreen.mobile.spec.js"],
   outputDir: "./test-results/mobile-playwright",
   use: {
     ...base.use,
@@ -31,6 +31,11 @@ export default defineConfig({
           ? { launchOptions: base.projects[0].use.launchOptions }
           : {}),
       },
+    },
+    {
+      name: "iphone-webkit",
+      testMatch: "media-fullscreen.mobile.spec.js",
+      use: { ...devices["iPhone 13"] },
     },
   ],
   webServer: builtWeb

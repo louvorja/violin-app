@@ -166,7 +166,12 @@ function summarizeCpuProfile(profile, options = {}) {
       let current = id;
       for (let depth = 0; current !== undefined && depth < 64; depth++, current = parents.get(current)) {
         const caller = nodes.get(current);
-        if (caller.frame && callerFrames.length < 6) callerFrames.push(caller.frame);
+        if (!caller.frame || callerFrames.length >= 6) continue;
+        // Nativos seguidos viram um quadro só. Um spawn do Node tem cinco deles e, sem
+        // isso, ocupava os seis lugares e escondia a função do app que o chamou.
+        const inner = callerFrames.at(-1);
+        if (inner && CONSTANT_SOURCES.has(inner.source) && CONSTANT_SOURCES.has(caller.frame.source)) continue;
+        callerFrames.push(caller.frame);
       }
       callerFrames.reverse();
       const stackKey = JSON.stringify(callerFrames);

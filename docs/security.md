@@ -205,6 +205,14 @@ Registros anteriores ao campo `status` seguem a regra antiga (lista vazia =
 pendente), para o aparelho que chegou antes da mudança não ficar esperando uma
 aprovação que a tela nunca mostraria.
 
+O **id do aparelho é a chave da autorização**: ele vem do campo `fingerprint` do
+`POST /api/register-device` e é por ele que o reencontro do pareamento acontece
+(`addPending` reusa a linha existente, com as permissões já concedidas). Um valor
+que não seja único por aparelho — como um identificador de build/ROM — faz dois
+aparelhos caírem na mesma linha, e o segundo herda a autorização do primeiro. O
+contrato completo (o que enviar em cada campo e por quê) está em
+[`architecture.md` → Pareamento de dispositivos](architecture.md#pareamento-de-dispositivos).
+
 ### Modos de autenticação
 
 | Modo                          | Como chega                           | Validado por                          |
@@ -223,6 +231,13 @@ cadastrados"**:
 - Localhost continua tendo acesso total
 - Persistido em `device_settings.json` via `devices.js`
 - Endpoint `POST /api/settings/devices` para alternar via API
+
+**Onde a lista de dispositivos vive:** o renderer é dono dela, no IndexedDB
+(tabela `devices`, **um registro por dispositivo** com a chave sendo o `id`) e
+manda a lista completa para o main a cada mudança (`devices:save`); o main
+mantém a cópia em memória que o middleware consulta. O banco guarda **só
+dispositivo autorizado**: recusado/removido é apagado dele e pendente não é
+gravado (a pendência existe apenas em memória, até o operador aprovar).
 
 **Fluxo:**
 

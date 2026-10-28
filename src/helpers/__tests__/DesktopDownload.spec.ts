@@ -50,6 +50,15 @@ describe("DesktopDownload", () => {
     expect(desktopDownloadUrl("macos", "v2.0.0-beta.7")).toBe(
       "https://github.com/louvorja/violin-app/releases/download/v2.0.0-beta.7/LouvorJA.Violin-2.0.0-beta.7.dmg"
     );
+    // A partir da beta.19 o .dmg universal traz a marca no nome; as anteriores não mudam.
+    expect(desktopDownloadUrl("macos", "2.0.0-beta.18")).toBe(
+      "https://github.com/louvorja/violin-app/releases/download/v2.0.0-beta.18/LouvorJA.Violin-2.0.0-beta.18.dmg"
+    );
+    for (const v of ["2.0.0-beta.19", "2.0.0-rc.1", "2.0.0", "2.1.0-beta.1"]) {
+      expect(desktopDownloadUrl("macos", v)).toBe(
+        `https://github.com/louvorja/violin-app/releases/download/v${v}/LouvorJA.Violin-${v}_universal.dmg`
+      );
+    }
     expect(desktopDownloadUrl("linux", "2.0.0-beta.7")).toBe(
       "https://github.com/louvorja/violin-app/releases/tag/v2.0.0-beta.7"
     );

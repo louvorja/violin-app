@@ -365,7 +365,56 @@ function register(app, ctx) {
     isMediaLibraryPlaylistResponse,
     isMediaLibraryImageResponse,
     hasDevicePermission,
+    getDatabaseUrl,
+    getApiToken,
   } = ctx;
+
+
+  /**
+   * Garante que o JSON exista no jsonCache; se ainda não está no disco, baixa
+   * do banco remoto e grava ali — o mesmo caminho do `louvorja://json_db` que
+   * o renderer usa ao abrir um álbum/hinário.
+   *
+   * Sem isso, as rotas do controle remoto só enxergavam o que o desktop já
+   * tinha aberto alguma vez: `album_<id>.json` e `{lang}_hymnal*.json` são
+   * baixados sob demanda pelo renderer, não pelo sync.
+   *
+   * @returns `true` quando o arquivo está (ou passou a estar) disponível.
+   */
+  async function ensureJsonCache(relPath) {
+    const filePath = jsonCache.safeLocalPath(relPath);
+    try {
+      await fs.promises.access(filePath);
+      return true;
+    } catch {
+      /* ainda não existe no disco */
+    }
+    const databaseUrl = typeof getDatabaseUrl === "function" ? getDatabaseUrl() : "";
+    if (!databaseUrl) return false;
+    try {
+      const apiToken = typeof getApiToken === "function" ? getApiToken() : "";
+      const headers = apiToken ? { "Api-Token": apiToken } : {};
+      const result = await jsonCache.fetchJson(relPath, databaseUrl, headers);
+      return result?.status === 200 && Boolean(result.body);
+    } catch (error) {
+      console.warn(
+        `[httpServer] jsonCache fetch ${relPath}: ${error?.code || error?.message || error}`
+      );
+      return false;
+    }
+  }
+
+  /** JSON do jsonCache, baixando do banco remoto quando ainda não está no disco. */
+  async function readJsonCacheOrFetch(relPath) {
+    const filePath = jsonCache.safeLocalPath(relPath);
+    try {
+      return JSON.parse(await fs.promises.readFile(filePath, "utf8"));
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+    if (!(await ensureJsonCache(relPath))) return null;
+    return readJsonCacheOrNull(filePath);
+  }
 
 
   /**
@@ -524,12 +573,17 @@ function register(app, ctx) {
 
     try {
       const filePath = jsonCache.safeLocalPath(`${lang}_musics`);
+      // Base ausente no disco: baixa na hora (mesmo caminho do renderer) —
+      // antes a busca dava 404 até o desktop abrir o módulo de música.
+      await ensureJsonCache(`${lang}_musics`);
+      await ensureJsonCache(`${lang}_categories`);
       let results;
       try {
         const userData = typeof getUserData === "function" ? getUserData() : {};
         const disabled = Array.isArray(userData?.options?.disabled_albums)
           ? [...userData.options.disabled_albums] : [];
-        if (userData?.modules?.hymnal_1996?.show_in_main_menu !== true) disabled.push(629);
+        // Só `disabled_albums` filtra: o toggle `show_in_main_menu` controla a
+        // visibilidade do módulo no desktop, não a disponibilidade do acervo.
         results = await musicSearchCatalog.search(filePath, query, disabled,
           jsonCache.safeLocalPath(`${lang}_categories`));
       } catch (error) {
@@ -573,18 +627,18 @@ function register(app, ctx) {
       const lang = req.query.lang === "es" ? "es" : "pt";
 
       if (action === "albums") {
-        const categories = await readJsonCacheOrNull(jsonCache.safeLocalPath(`${lang}_categories`));
+        const categories = await readJsonCacheOrFetch(`${lang}_categories`);
         if (!Array.isArray(categories)) {
           return res.status(404).json({
             error: "Base de músicas não encontrada localmente. Faça uma atualização do banco.",
           });
         }
 
-        // Mesma régua da busca oficial: álbuns desativados e o hinário 1996
-        // ligado pelo toggle de compatibilidade.
+        // Álbuns desativados pelo operador — `disabled_albums` é a fonte
+        // única. O toggle `hymnal_1996.show_in_main_menu` controla só a
+        // visibilidade do módulo no desktop (o acervo continua disponível).
         const userData = typeof getUserData === "function" ? getUserData() : {};
         const disabled = [...(userData?.options?.disabled_albums ?? [])];
-        if (userData?.modules?.hymnal_1996?.show_in_main_menu !== true) disabled.push(629);
 
         const { albumYear, isAlbumEnabled, HYMNAL_ALBUM_IDS } = await import(
           "../../../config/musicCatalog.mjs"
@@ -652,8 +706,8 @@ function register(app, ctx) {
           ["legacy", HYMNAL_ALBUM_IDS.legacy],
         ]) {
           if (!isAlbumEnabled(albumId, disabled)) continue;
-          const file = await readJsonCacheOrNull(
-            jsonCache.safeLocalPath(which === "legacy" ? `${lang}_hymnal_1996` : `${lang}_hymnal`)
+          const file = await readJsonCacheOrFetch(
+            which === "legacy" ? `${lang}_hymnal_1996` : `${lang}_hymnal`
           );
           if (!Array.isArray(file)) continue;
           const moduleId = which === "legacy" ? "hymnal_1996" : "hymnal";
@@ -698,21 +752,18 @@ function register(app, ctx) {
             return res.status(400).json({ error: "album inválido" });
           }
           // Hinários não têm `album_<id>.json`: as faixas vêm direto de
-          // `{lang}_hymnal[_1996].json`. O mesmo gate da lista — a legacy some
-          // com o toggle de compatibilidade off (ou fora do disco).
+          // `{lang}_hymnal[_1996].json`. `disabled_albums` é a fonte única —
+          // o toggle do módulo não esconde o acervo.
           const { HYMNAL_ALBUM_IDS } = await import("../../../config/musicCatalog.mjs");
           const isCurrentHymnal = Number(id) === HYMNAL_ALBUM_IDS.current;
           const isLegacyHymnal = Number(id) === HYMNAL_ALBUM_IDS.legacy;
           if (isCurrentHymnal || isLegacyHymnal) {
             const userData = typeof getUserData === "function" ? getUserData() : {};
             const disabled = [...(userData?.options?.disabled_albums ?? [])];
-            if (userData?.modules?.hymnal_1996?.show_in_main_menu !== true) {
-              disabled.push(HYMNAL_ALBUM_IDS.legacy);
-            }
             const enabled = !disabled.some((value) => String(value) === id);
             const hymnFile = enabled
-              ? await readJsonCacheOrNull(
-                  jsonCache.safeLocalPath(isLegacyHymnal ? `${lang}_hymnal_1996` : `${lang}_hymnal`)
+              ? await readJsonCacheOrFetch(
+                  isLegacyHymnal ? `${lang}_hymnal_1996` : `${lang}_hymnal`
                 )
               : null;
             if (!Array.isArray(hymnFile)) {
@@ -725,7 +776,7 @@ function register(app, ctx) {
             return res.json({ status: "ok", songs });
           }
 
-          const detail = await readJsonCacheOrNull(jsonCache.safeLocalPath(`album_${id}`));
+          const detail = await readJsonCacheOrFetch(`album_${id}`);
           if (!detail) {
             return res.status(404).json({ error: "Álbum não encontrado no banco local" });
           }
@@ -1319,9 +1370,12 @@ function register(app, ctx) {
   const MEDIA_LIBRARY_MAX_BYTES = 8 * 1024 * 1024;
   const MEDIA_LIBRARY_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
   const MEDIA_LIBRARY_UPLOAD_MAX_BYTES = 300 * 1024 * 1024;
-  // Espelha IMAGE_EXT/VIDEO_EXT do desktop (constants/FileTypes.ts) + pdf.
+  // Espelha IMAGE_EXT/AUDIO_EXT/VIDEO_EXT do desktop (constants/FileTypes.ts)
+  // + pdf. Áudio entra aqui porque a biblioteca passou a aceitá-lo: sem isso, o
+  // celular receberia "extensão não suportada" para um tipo que o desktop aceita.
   const MEDIA_LIBRARY_EXT = [
     "jpg", "jpeg", "png", "webp", "gif", "bmp", "svg", "heic", "heif",
+    "mp3", "wav", "ogg", "flac", "aac", "m4a", "wma", "opus",
     "mp4", "webm", "mkv", "mov", "avi", "m4v",
     "pdf",
   ];
@@ -1340,6 +1394,7 @@ function register(app, ctx) {
   function mediaLibraryType(ext) {
     if (ext === "pdf") return "pdf";
     if (["mp4", "webm", "mkv", "mov", "avi", "m4v"].includes(ext)) return "video";
+    if (["mp3", "wav", "ogg", "flac", "aac", "m4a", "wma", "opus"].includes(ext)) return "audio";
     return "image";
   }
 

@@ -61,10 +61,12 @@ function _measure(): void {
 }
 
 function _listen(): void {
-  // Remede a cada assinatura nova: entre a saída do último consumidor e agora
-  // ninguém ouvia resize, e a janela pode ter mudado de tamanho nesse intervalo.
-  _measure();
+  // Com o listener ligado os refs já estão em dia: medir de novo a cada assinatura
+  // custava um layout forçado por linha de lista no celular, onde ler `innerWidth`
+  // obriga o Chromium a refazer o layout. Ao religar, mede — a janela pode ter mudado
+  // de tamanho enquanto ninguém ouvia.
   if (_listening || typeof window === "undefined") return;
+  _measure();
   window.addEventListener("resize", _measure);
   _listening = true;
 }

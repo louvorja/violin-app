@@ -148,6 +148,7 @@ import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { ICONS } from "@/config/Icons";
 import { DB_TABLE } from "@/constants/DbTables";
 import { useSyncManager } from "@/composables/useSyncManager";
+import { interpretarReferencia } from "@/helpers/BibleBookSearch";
 
 const container = ref<{ tm: (key: string, named?: Record<string, unknown>) => string } | null>(
   null
@@ -393,18 +394,15 @@ watch([() => searchTerms.value.length, draft], () => {
 });
 
 async function searchByReference(q: string): Promise<BibleSearchResult[]> {
-  const refMatch = q.match(/^(\d?\s*[a-zA-Z\s]+?)\s+(\d+)(?:[\s:]+(\d+))?$/);
-  if (!refMatch) return [];
-  const bookSearch = normalize(refMatch[1].replace(/\s+/g, ""));
-  const chapter = parseInt(refMatch[2], 10);
-  const verse = refMatch[3] ? parseInt(refMatch[3], 10) : null;
-
-  const book = books.value.find((b: BibleBook) => {
-    const bn = normalize(b.name).replace(/\s+/g, "");
-    const ba = normalize(b.abbreviation ?? "").replace(/\s+/g, "");
-    return bn.includes(bookSearch) || ba === bookSearch;
-  });
-  if (!book) return [];
+  /*
+   * Livro + capítulo[:versículo]. O livro aceita numeral romano ou arábico
+   * ("ii pedro 1", "1 samuel 3:16") e pode vir colado ("2pedro 1:1"). Quem
+   * resolve ordinal/acento/abreviação é o helper da busca, o mesmo do
+   * spotlight — antes "1 samuel 3" caía na busca por texto.
+   */
+  const referencia = interpretarReferencia(q, books.value);
+  if (!referencia) return [];
+  const { book, chapter, verse } = referencia;
 
   const versionId = await getVersionId();
   const bibleFile = `bible_${versionId}_${book.id_bible_book}_${chapter}`;

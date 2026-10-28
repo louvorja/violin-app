@@ -51,6 +51,8 @@ const FUZZY_LIMIT = 100;
  * pelo mesmo scroll progressivo em todos os ambientes.
  */
 const TABLE_PAGE_SIZE = 60;
+// Cabe na área visível de um módulo em 1366 × 768 e 1920 × 1080.
+const FIRST_FRAME_ROWS = 20;
 
 /**
  * A camada Database devolve a mesma referência enquanto o dataset está no cache
@@ -348,6 +350,9 @@ watch(
     // Carrega +PAGE_SIZE ao se aproximar do fim do scroll (payload do
     // ModuleContainer/Window). Sem métricas (popup sem payload), não cresce.
     const sb = props.scroll?.scroll_bottom;
+    // Enquanto a primeira página ainda completa, a rolagem não pede a seguinte: ela
+    // entraria inteira num quadro só e a etapa pendente depois encolheria a lista.
+    if (_paginateRaf) return;
     if (typeof sb === "number" && sb <= 150 && data.value.length < filter_data.value.length) {
       paginateData();
     }
@@ -577,19 +582,56 @@ function fuzzySearch(baseEntries, searchable) {
   return _fuseCache.fuse.search(query, { limit: FUZZY_LIMIT }).map((hit) => hit.item.item);
 }
 
+/**
+ * A primeira página entra em duas etapas: as linhas que cabem na tela agora e o
+ * resto em levas de 20, uma por quadro pintado. Montar as 60 de uma vez era o maior travamento ao
+ * abrir Músicas e Hinário (1,4 s num quadro com a CPU 6× mais lenta; a carga
+ * lenta da lista aparecia para 141 pessoas). Com um rAF só, o restante entraria
+ * antes da primeira pintura e o quadro continuaria longo.
+ */
+function showFirstPage(rows) {
+  if (_paginateRaf) cancelAnimationFrame(_paginateRaf);
+  _paginateRaf = 0;
+  if (rows <= FIRST_FRAME_ROWS || typeof requestAnimationFrame !== "function") {
+    data.value = filter_data.value.slice(0, rows);
+    return false;
+  }
+  let shown = FIRST_FRAME_ROWS;
+  data.value = filter_data.value.slice(0, shown);
+  // Uma leva por quadro pintado: 40 linhas juntas ainda davam ~0,7 s num quadro.
+  const nextBatch = () => {
+    _paginateRaf = requestAnimationFrame(() => {
+      _paginateRaf = requestAnimationFrame(() => {
+        shown = Math.min(rows, shown + FIRST_FRAME_ROWS);
+        data.value = filter_data.value.slice(0, shown);
+        if (shown < rows) nextBatch();
+        else _paginateRaf = 0;
+      });
+    });
+  };
+  nextBatch();
+  return true;
+}
+
 function paginateData() {
   const searching = Strings.clean(props.search).length > 0;
 
   // Durante a busca, os resultados ficam limitados a no máximo 100.
   if (searching) {
-    data.value = filter_data.value.slice(0, TABLE_PAGE_SIZE);
+    showFirstPage(TABLE_PAGE_SIZE);
     loading.value = false;
     return;
   }
 
   limit.value += TABLE_PAGE_SIZE;
-  data.value = filter_data.value.slice(0, limit.value);
-  loading.value = false;
+  if (limit.value === TABLE_PAGE_SIZE) {
+    const deferred = showFirstPage(limit.value);
+    loading.value = false;
+    if (deferred) return;
+  } else {
+    data.value = filter_data.value.slice(0, limit.value);
+    loading.value = false;
+  }
 
   // Fallback: sem barra de rolagem, segue paginando até completar,
   // mas limita a _RAF_MAX_CYCLES iterações para não renderizar tudo de uma vez.

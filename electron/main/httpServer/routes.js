@@ -534,6 +534,10 @@ function setupRoutes(
     requestRenderer,
     sendRendererError,
     getUserData,
+    // Catálogo/hinários/álbuns: a rota baixa sob demanda o que ainda não está
+    // no jsonCache (mesmo caminho do `louvorja://json_db`).
+    getDatabaseUrl,
+    getApiToken,
     isPlainObject,
     isCustomSongsSearchResponse,
     isOnlineVideosAlbumsResponse,

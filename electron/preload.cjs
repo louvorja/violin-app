@@ -50,6 +50,9 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
   /** Plataforma do sistema operacional: "win32" | "darwin" | "linux" */
   platform: process.platform,
 
+  /** Memória física em KB, lida na hora e sem IPC. `free` só é "disponível" no Windows; o macOS a deixa baixa de propósito. */
+  systemMemory: () => process.getSystemMemoryInfo(),
+
   /** true quando rodando em desenvolvimento (ELECTRON_DEV=1 ou executável não empacotado). */
   isDev: process.env.ELECTRON_DEV === "1" || process.defaultApp,
 
@@ -438,6 +441,8 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
   storage: {
     /** Estatísticas: tamanho ocupado por categoria + caminhos. */
     stats: () => ipcRenderer.invoke("storage:stats"),
+    /** Pasta de dados pedida e motivo, quando o app teve de abrir em outra. */
+    dataDirIssue: () => ipcRenderer.invoke("storage:dataDirIssue"),
     /** Limpa cache de JSON (banco). */
     clearJson: () => ipcRenderer.invoke("storage:clearJson"),
     /** Limpa toda a mídia local (mp3, imagens). */

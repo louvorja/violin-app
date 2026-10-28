@@ -50,6 +50,7 @@
           v-if="!isYouTube"
           v-model="fullscreen"
           class="media-preview"
+          :class="{ 'media-preview--page-fullscreen': pageOnlyFullscreen }"
           :style="{ height: preview_height + 'px' }"
         >
           <div v-if="isLocalVideo" class="media-video-stage">
@@ -159,6 +160,7 @@ import Telemetry from "@/helpers/Telemetry";
 
 const { t: i18nT } = useI18n();
 const { width } = useViewport();
+const pageOnlyFullscreen = !fullscreenApiAvailable();
 const moduleId = manifest.id;
 const module_ = computed(() => Modules.get(moduleId));
 
@@ -594,6 +596,20 @@ onBeforeUnmount(() => {
    `scoped`: a raiz do vue-fullscreen não recebe o atributo de escopo. */
 .media-preview.fullscreen {
   background-color: #000;
+}
+
+/* No iPhone a tela cheia usa position: fixed. A transformação que centraliza
+   o diálogo prendia essa prévia ao card, deixando lista e rodapé por cima.
+   Mantém a prévia dentro do modal (foco/toque), mas usa a viewport como limite. */
+.lj-window:has(.media-preview--page-fullscreen.fullscreen) {
+  top: 0;
+  left: 0;
+  transform: none;
+  animation: none;
+}
+
+.media-preview--page-fullscreen.fullscreen {
+  z-index: 1;
 }
 
 .media-options {

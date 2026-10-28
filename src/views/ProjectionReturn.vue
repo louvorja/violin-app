@@ -60,6 +60,7 @@
 </template>
 
 <script setup>
+import { slideMainText } from "@/helpers/SlideText";
 import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { useI18n } from "vue-i18n";
 import { useProjectionState } from "@/composables/useProjectionState";
@@ -103,8 +104,8 @@ const bottomPanelStyle = computed(() => ({
   height: `${cfg.value.return_height_bottom}vh`,
 }));
 
-const topHtml = computed(() => slide.value?.lyric || slide.value?.name || "");
-const nextHtml = computed(() => nextSlide.value?.lyric || nextSlide.value?.name || "—");
+const topHtml = computed(() => slideMainText(slide.value));
+const nextHtml = computed(() => slideMainText(nextSlide.value) || "—");
 
 // Sem `fontSize` nem `maxWidth`: o tamanho é do ajuste automático (useFitText)
 // e a largura é a do palco. Fixá-los aqui era o que cortava a letra.

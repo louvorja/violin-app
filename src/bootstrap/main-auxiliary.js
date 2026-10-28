@@ -75,7 +75,12 @@ async function start() {
   if (requiresIdbBeforeMount) {
     // Arquivo/PDF, fundo e anúncios recuperam estado persistido já no mount.
     // Mantemos a barreira para não trocar uma reabertura correta por tela preta.
-    await $idb.init();
+    // Com o banco indisponível não há estado a recuperar: montar sem ele ainda
+    // é melhor que a janela de projeção preta para sempre.
+    await $idb.init().catch((error) => {
+      console.warn("[bootstrap/auxiliary] IndexedDB indisponível; montando sem ele:", error);
+      Telemetry.captureException(error, { source: "auxiliary_indexeddb_init" });
+    });
   }
   bootStage("dependencies_ready", { indexeddb_blocking: requiresIdbBeforeMount });
 

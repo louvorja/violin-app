@@ -412,6 +412,7 @@ export async function open(opts: OpenOptions): Promise<void> {
         frame,
         alwaysOnTop,
         showInTaskbar,
+        focusOnOpen: opts.focusOnOpen === true,
       });
       // O main recusa abrir na tela do operador quando o monitor do papel não
       // está conectado. Sem aviso o clique ficaria sem resposta nenhuma.

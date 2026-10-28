@@ -16,8 +16,8 @@
         :aria-label="t('placeholder')"
         autocomplete="off"
         spellcheck="false"
-        @keydown.escape.prevent="open = false"
-        @keydown.enter.prevent="pickFirst"
+        @keydown.escape.prevent.stop="open = false"
+        @keydown.enter.prevent.stop="pickFirst"
       />
     </div>
 
@@ -140,6 +140,7 @@
 
 <script setup lang="ts">
 import { computed, onScopeDispose, provide, ref, watch } from "vue";
+import { useSobreposicaoGlobal } from "@/composables/useSobreposicaoGlobal";
 import { useI18n } from "vue-i18n";
 import LMusicMenuTable from "@/components/MusicMenuTable.vue";
 import { LjButton, LjDialog, LjEmpty, LjInput, LjSpinner } from "@/components/ui";
@@ -187,6 +188,8 @@ const open = computed({
   get: () => props.modelValue,
   set: (value: boolean) => emit("update:modelValue", value),
 });
+
+useSobreposicaoGlobal(open);
 
 provide("close-spotlight", () => {
   open.value = false;

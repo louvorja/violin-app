@@ -266,7 +266,7 @@ O programa é instalado separadamente do **perfil privado**, do **acervo** e dos
 ├── storage/           preferências e configurações por conta do sistema
 ├── library/           documentos pessoais em JSON
 ├── attachments/media/ anexos privados enviados pelo controle remoto
-├── canva/             documentos e miniaturas importados
+├── canva/             cache dos exports do Canva (PDF/imagem) — da conta, fora do acervo
 ├── json_db/           cache de respostas JSON
 ├── bin/               yt-dlp e ffmpeg
 ├── temp/videos/       downloads parciais e streaming temporário

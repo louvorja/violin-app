@@ -37,6 +37,14 @@ describe("bounded CPU sampling summaries", () => {
       .toEqual([{ count: 2, ms: 5, names: ["dispatch", "controlledBurn"] }, { count: 1, ms: 1, names: ["dispatch", "render"] }]);
   });
 
+  it("collapses consecutive native frames so the app caller survives the six-frame budget", () => {
+    const external = (id, children) => node(id, "", "node:internal/child_process", children);
+    const input = profile([node(1, "(root)", "", [2]), node(2, "ffmpegWorks", undefined, [3]), node(3, "run", undefined, [4]),
+      external(4, [5]), external(5, [6]), external(6, [7]), external(7, [8]), node(8, "spawn", "", [])], [8, 8]);
+    const result = summarize(input);
+    expect(result.top_stacks[0].frames.map((frame) => frame.function)).toEqual(["ffmpegWorks", "run", "native"]);
+  });
+
   it("separates idle, GC and program while retaining only constant native/external labels", () => {
     const input = profile([node(1, "(idle)", ""), node(2, "(garbage collector)", ""), node(3, "(program)", ""),
       node(4, "nativeSecretFileName", ""), node(5, "", ""), node(6, "privateProviderFunction", "https://user:password@secret.example/a.js?token=secret"), node(7, "app")],

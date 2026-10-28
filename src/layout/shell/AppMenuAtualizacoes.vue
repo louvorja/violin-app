@@ -303,6 +303,8 @@ import Telemetry from "@/helpers/Telemetry";
 
 interface AppUpdateState {
   status: string;
+  /** Escolha efetiva de pré-versões, resolvida pelo main (padrão e volta à estável). */
+  useBeta?: boolean;
   version: string | null;
   progress: number;
   newVersion: string | null;
@@ -819,16 +821,16 @@ onMounted(async () => {
   lastDbCheck.value = $userdata.get<string>(KEYS.OPTIONS.LAST_DB_CHECK, null);
   lastAppCheck.value = $userdata.get<string>(KEYS.OPTIONS.LAST_APP_CHECK, null);
 
-  // Opções persistidas.
-  // TODO: remover o default true do useBeta quando a versão estável for publicada.
-  const savedBeta = $userdata.get<boolean | null>(KEYS.OPTIONS.USE_BETA_UPDATES, null);
-  useBeta.value = savedBeta == null ? true : savedBeta;
+  // Opções persistidas. A escolha de pré-versões vem do status do atualizador
+  // logo abaixo: é o main que decide o padrão e a desliga ao chegar numa estável.
+  useBeta.value = $userdata.get<boolean | null>(KEYS.OPTIONS.USE_BETA_UPDATES, null) === true;
   checkOnStart.value = $userdata.get<boolean>(KEYS.OPTIONS.CHECK_UPDATES_ON_START, true) === true;
   autoDownload.value = $userdata.get<boolean>(KEYS.OPTIONS.AUTO_DOWNLOAD_UPDATES, false) === true;
 
   if (Platform.isDesktop && Platform.updater) {
     try {
       appUpdate.value = (await Platform.updater.status()) as AppUpdateState;
+      if (typeof appUpdate.value.useBeta === "boolean") useBeta.value = appUpdate.value.useBeta;
       _appUpdateUnsub = Platform.updater.onStateChange((s: AppUpdateState) => {
         appUpdate.value = s;
       });

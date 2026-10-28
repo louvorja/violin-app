@@ -95,11 +95,16 @@ export function compareMusics(a, b) {
 
 /** @template {CatalogMusic} T @param {T[]} musics @param {(number|string)[]} disabled @param {Map<string, number>} years @returns {T[]} */
 export function prepareMusicCatalog(musics, disabled = [], years = new Map()) {
+  // Mesma ordem de `compareMusics`, mas o ano de cada música é calculado uma vez:
+  // na comparação ele era refeito para as duas músicas em cada uma das ~20 mil
+  // comparações do catálogo.
   return musics
     .filter((music) => music && typeof music === "object" && typeof music.name === "string")
     .map((music) => visibleMusic(music, disabled, years))
     .filter((music) => music !== null)
-    .sort(compareMusics);
+    .map((music) => ({ music, year: musicYear(music), name: String(music.name ?? "") }))
+    .sort((a, b) => b.year - a.year || musicNames.compare(a.name, b.name))
+    .map(({ music }) => music);
 }
 
 /** @param {CatalogMusic|null|undefined} music @returns {number[]} */

@@ -141,7 +141,7 @@ import $snackbar from "@/helpers/Snackbar";
 import { nextTick, onActivated, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import DateTime from "@/helpers/DateTime";
-import { setScrollPosition, getScrollPosition } from "@/helpers/ScrollMemory";
+import { setScrollPosition, restoreScrollPosition } from "@/helpers/ScrollMemory";
 import { usePlaylists } from "../composables/usePlaylists";
 import type { Playlist } from "@/types/Music";
 import Telemetry from "@/helpers/Telemetry";
@@ -171,7 +171,7 @@ function rememberScroll() {
 
 function restoreScroll() {
   void nextTick(() => {
-    if (scroller.value) scroller.value.scrollTop = getScrollPosition("musics:painel");
+    restoreScrollPosition(scroller.value, "musics:painel");
   });
 }
 

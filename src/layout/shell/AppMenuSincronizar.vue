@@ -711,6 +711,13 @@
               </span>
             </div>
             <div class="opt-stat">
+              <span class="opt-stat-label">{{ $t("options.storage.canva_size") }}</span>
+              <span class="opt-stat-value">
+                {{ sync.humanSize(storageStats?.canva?.bytes) }}
+                <small>({{ storageStats?.canva?.count || 0 }} arq.)</small>
+              </span>
+            </div>
+            <div class="opt-stat">
               <span class="opt-stat-label">{{ $t("options.storage.catalog_size") }}</span>
               <span class="opt-stat-value">
                 {{ sync.humanSize(storageStats?.music?.bytes) }}
@@ -804,6 +811,16 @@
               <LjIcon :icon="ICONS.ACTIONS.DELETE_FILLED" size="14" />
               {{ $t("options.storage.clear_files") }}
             </button>
+            <button
+              v-if="Platform.isDesktop"
+              type="button"
+              class="opt-btn"
+              :disabled="!storageStats?.canva?.count"
+              @click="clearCanvaCache"
+            >
+              <LjIcon :icon="ICONS.UI.FILE_PDF" size="14" />
+              {{ $t("options.storage.clear_canva") }}
+            </button>
             <button type="button" class="opt-btn" :disabled="loading" @click="reloadStats">
               <LjIcon :icon="ICONS.ACTIONS.REFRESH" size="14" />
               {{ $t("options.storage.refresh") }}
@@ -888,6 +905,7 @@ interface StorageStats {
   filesDir?: string;
   files?: { bytes: number; count: number };
   videos?: { bytes: number; count: number };
+  canva?: { bytes: number; count: number };
   json?: { bytes: number; count: number };
   music?: { bytes: number; count: number };
   bible?: { bytes: number; count: number };
@@ -1727,6 +1745,30 @@ async function clearFiles(): Promise<void> {
     await Platform?.storage?.clearFiles?.();
     await Promise.all([reloadStats(), scanLocalCache({ force: true }), loadWebUsage()]);
   }) as (...args: unknown[]) => unknown);
+}
+
+/**
+ * Apaga as exportações do Canva (PDF/JPG guardados para projetar sem internet).
+ *
+ * Não é acervo do operador — por isso tem botão próprio em vez de sair junto no
+ * "Limpar mídia". O custo é real e precisa estar no aviso: cada design volta a
+ * ser exportado na próxima projeção, e isso gasta a cota do Canva.
+ */
+async function clearCanvaCache(): Promise<void> {
+  $alert.yesno("options.storage.clear_canva_confirm", (async (btn) => {
+    if (btn !== "yes") return;
+    try {
+      const resultado = await window.louvorjaApi?.canva?.clearCachedPdfs();
+      if (!resultado?.ok) {
+        $snackbar.warning(t("options.storage.clear_canva_failed"));
+      } else {
+        $snackbar.success(t("options.storage.clear_canva_done", { n: resultado.removidos || 0 }));
+      }
+    } catch (e) {
+      $snackbar.warning((e as Error)?.message || t("options.storage.clear_canva_failed"));
+    }
+    await reloadStats();
+  }) as (..._args: unknown[]) => unknown);
 }
 
 const restoringDb = ref(false);

@@ -8,7 +8,7 @@
     </div>
     <ul v-else class="ra-list">
       <li v-for="ann in announcements" :key="ann.id">
-        <button type="button" class="ra-item" @click="projectAnnouncement(ann)">
+        <div class="ra-item">
           <span class="ra-item__badge">
             <LjIcon :icon="ICONS.MODULES.ANNOUNCEMENTS" size="18" />
           </span>
@@ -18,8 +18,15 @@
               {{ t("remote_control.announcements.with_image") }}
             </span>
           </span>
-          <LjIcon :icon="ICONS.PLAYER.PLAY_OUTLINE" color="primary" />
-        </button>
+          <button
+            type="button"
+            class="ra-item__play"
+            :aria-label="t('remote_control.announcements.project')"
+            @click="projectAnnouncement(ann)"
+          >
+            <LjIcon :icon="ICONS.PLAYER.PLAY_OUTLINE" color="primary" />
+          </button>
+        </div>
       </li>
     </ul>
   </div>
@@ -78,7 +85,7 @@ async function projectAnnouncement(ann: Announcement): Promise<void> {
     );
     if (res.ok) {
       emit("update:ann-projecting", true);
-      emit("show-snackbar", ann.nome);
+      emit("show-snackbar", t("remote_control.announcements.executed", { name: ann.nome }));
     }
   } catch (e) {
     emit("show-snackbar", t("remote_control.errors.generic"), "error");
@@ -115,8 +122,7 @@ defineExpose({
   list-style: none;
 }
 
-/* Tela de dedo: a linha inteira é o alvo, na altura de toque — a densidade
-   de mouse do resto do app não vale aqui. */
+/* Tela de dedo: linha na altura de toque; só o botão de play projeta. */
 .ra-item {
   display: flex;
   align-items: center;
@@ -124,24 +130,31 @@ defineExpose({
   width: 100%;
   min-height: 56px;
   padding: var(--lj-space-4) var(--lj-space-5);
-  background: transparent;
-  border: none;
   border-radius: var(--lj-ui-radius);
   color: inherit;
   font: inherit;
   text-align: left;
+}
+
+.ra-item__play {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  background: var(--lj-surface-bg-hover);
+  border: none;
+  border-radius: 50%;
   cursor: pointer;
 }
 
-.ra-item:hover {
-  background: var(--lj-surface-bg-hover);
-}
-
-.ra-item:active {
+.ra-item__play:hover {
   background: var(--lj-surface-bg-active);
 }
 
-.ra-item:focus-visible {
+.ra-item__play:focus-visible {
   outline: none;
   box-shadow: var(--lj-ui-focus);
 }

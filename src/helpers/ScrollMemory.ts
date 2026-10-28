@@ -20,3 +20,14 @@ export function setScrollPosition(chave: string, top: number): void {
 export function getScrollPosition(chave: string): number {
   return posicoes.get(chave) ?? 0;
 }
+
+/**
+ * Devolve a posição salva a um elemento. Atribuir `scrollTop` força o layout da
+ * lista inteira na hora, então na posição zero (o caso comum, e o estado de uma
+ * lista recém-inserida) nada é feito: abrir a Liturgia num computador lento
+ * gastava ~140 ms só nisso.
+ */
+export function restoreScrollPosition(el: HTMLElement | null | undefined, chave: string): void {
+  const top = getScrollPosition(chave);
+  if (el && top > 0) el.scrollTop = top;
+}

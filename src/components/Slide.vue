@@ -49,6 +49,7 @@
 </template>
 
 <script setup>
+import { slideMainText } from "@/helpers/SlideText";
 /**
  * Slide.vue — Renderizador canônico de slides do LouvorJA.
  *
@@ -132,7 +133,7 @@ const slideObj = computed(() => {
 });
 
 const isCover = computed(() => slideObj.value?.cover === true);
-const mainText = computed(() => slideObj.value?.lyric || slideObj.value?.name || "");
+const mainText = computed(() => slideMainText(slideObj.value));
 const auxText = computed(() => slideObj.value?.aux_lyric || slideObj.value?.lyric_aux || "");
 
 // Slides de letra → sempre mostra.

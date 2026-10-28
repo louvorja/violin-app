@@ -9,7 +9,7 @@ import {
   reposicionarParaBloco,
 } from "../agenda";
 import { useLiturgyExecution } from "./useLiturgyExecution";
-import { ref, computed, watch, type Ref, type WritableComputedRef } from "vue";
+import { ref, shallowRef, computed, watch, type Ref, type WritableComputedRef } from "vue";
 import $liturgy from "@/helpers/Liturgy";
 import $database from "@/helpers/Database";
 import { ICONS } from "@/config/Icons";
@@ -131,7 +131,9 @@ export function useLiturgyItems(
     },
     { flush: "sync" }
   );
-  const musicsCache = ref<LiturgyMusicItem[] | null>(null);
+  // Catálogo inteiro (≈1.900 músicas) que só é trocado, nunca alterado por dentro: um
+  // `ref` profundo envolvia cada música em proxy e triplicava o custo de prepará-lo.
+  const musicsCache = shallowRef<LiturgyMusicItem[] | null>(null);
   const isDraggingOver = ref(false);
   const menuOpen = ref(false);
   const overlaySlots = ref<OverlaySlot[]>([]);
@@ -165,6 +167,8 @@ export function useLiturgyItems(
   );
 
   const { musics: musicsList } = useMusicCatalog(() => musicsCache.value || []);
+  // Cada item exibido procurava sua música no catálogo inteiro (≈1.900 entradas).
+  const musicById = computed(() => new Map(musicsList.value.map((m) => [Number(m.id_music), m])));
 
   /* ============== Listing ============== */
   function isChecked(item: LiturgyItem): boolean {
@@ -283,9 +287,7 @@ export function useLiturgyItems(
     if (item.tipo === LiturgyItemTypeEnum.MUSICA && item.escolha)
       return t("placeholders.music_choose");
     if (item.tipo === LiturgyItemTypeEnum.MUSICA) {
-      const music = musicsList.value.find(
-        (m) => Number(m.id_music) === Number(item.id_music || item.musica)
-      );
+      const music = musicById.value.get(Number(item.id_music || item.musica));
       if (music) return musicTitle(music, t("data.music_prefix"));
     }
     // ITENS_AGENDADOS: re-resolve dinamicamente contra a data ativa (não snapshot).
@@ -416,7 +418,7 @@ export function useLiturgyItems(
   }
 
   function onMusicChange(): void {
-    const m = musicsList.value.find((x) => x.id_music === form.value.musica);
+    const m = musicById.value.get(Number(form.value.musica));
     if (m) {
       form.value.has_instrumental_music = !!m.has_instrumental_music;
       form.value.escolha = false;
@@ -533,7 +535,7 @@ export function useLiturgyItems(
           built.subtipo = "escolha";
           built.subitem = t("placeholders.music_choose");
         } else {
-          const m = musicsList.value.find((x) => x.id_music === Number(f.musica));
+          const m = musicById.value.get(Number(f.musica));
           built.escolha = false;
           built.subtipo = f.subtipo || MusicActionEnum.SUNG;
           built.subitem = m
@@ -590,9 +592,13 @@ export function useLiturgyItems(
         break;
       }
       case LiturgyItemTypeEnum.VIDEO_ONLINE:
-        console.log(built);
         built.url = f.url || "";
-        built.subitem = "URL: " + built.url;
+        /*
+         * A segunda linha da lista é o NOME do vídeo (o título do YouTube,
+         * resolvido no formulário). A URL fica no item e é o que a execução
+         * usa; mostrá-la na lista escondia o nome que o operador escolheu.
+         */
+        built.subitem = f.subitem || built.url;
         break;
       case LiturgyItemTypeEnum.MEDIA_LIBRARY:
         built.ref_id = f.ref_id;

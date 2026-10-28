@@ -94,6 +94,12 @@ export function createPwaUpdateController(options: UpdateOptions) {
   };
   const failed = (stage: string, error: unknown) => {
     if (disposed) return;
+    // Sem rede a falha é a esperada: o estado diz "offline" e o evento `online`
+    // verifica de novo. Relatar como erro contava toda sessão sem internet.
+    if (!online()) {
+      if (!state.ready) publish({ status: "offline" });
+      return;
+    }
     const previous = failures.get(stage);
     const failure = {
       started: previous?.started ?? Date.now(),
@@ -117,6 +123,13 @@ export function createPwaUpdateController(options: UpdateOptions) {
     }
   };
   const ready = () => publish({ ready: true, status: applying ? "applying" : "ready" });
+  const slow = (stage: string, durationMs: number) =>
+    reportReliabilityEvent("pwa_update_slow", {
+      stage,
+      duration_ms: durationMs,
+      loaded_build: options.loadedBuildId ?? null,
+      active_build: activeBuildId,
+    });
   // Leitura passa pelo precache do controlador ativo. Assim um documento A
   // detecta SW B mesmo se a ativação ocorreu antes de carregar este módulo.
   const inspectBuild = async () => {
@@ -186,6 +199,7 @@ export function createPwaUpdateController(options: UpdateOptions) {
 
   const register = (buildId?: string | null) => {
     const attempt = ++registerAttempt;
+    const startedAt = Date.now();
     const url = buildId ? `${options.swUrl}?build=${encodeURIComponent(buildId)}` : options.swUrl;
     // O timeout limita a espera da UI, não cancela register() no navegador.
     // Observe o resultado nativo mesmo se chegar tarde, sem perder updatefound.
@@ -221,12 +235,22 @@ export function createPwaUpdateController(options: UpdateOptions) {
         });
         return value;
       });
-    return bounded(operation).catch((error) => {
-      // Outra tentativa/registro tardio já pode ter restabelecido o monitor.
-      if (attempt < acceptedRegisterAttempt) return registration;
-      failed("register", error);
-      return null;
-    });
+    // Sem prazo: na primeira visita o register() só resolve depois que o navegador
+    // baixa o app inteiro para o cache (5,7 MB em 513 arquivos, ~70 s no Wi-Fi).
+    // Com 30 s, quase toda primeira visita via a faixa de erro e virava exceção.
+    // A demora fica medida; só a rejeição do navegador é falha.
+    return operation
+      .then((value) => {
+        const duration = Date.now() - startedAt;
+        if (duration >= UPDATE_TIMEOUT_MS && !disposed) slow("register", duration);
+        return value;
+      })
+      .catch((error) => {
+        // Outra tentativa/registro tardio já pode ter restabelecido o monitor.
+        if (attempt < acceptedRegisterAttempt) return registration;
+        failed("register", error);
+        return null;
+      });
   };
   const readDeployed = async () => {
     try {
@@ -308,6 +332,14 @@ export function createPwaUpdateController(options: UpdateOptions) {
         else if (verified && !value.installing && !state.ready) publish({ status: "current" });
         publish({ lastCheckedAt: Date.now() });
       } catch (error) {
+        // Baixar o código novo pode passar do prazo sem nada errado. Com um worker
+        // instalando, o acompanhamento dele (updatefound/statechange) publica o
+        // resultado: pronto, ou falha se ele terminar redundante.
+        if (error instanceof DOMException && error.name === "TimeoutError" && value.installing) {
+          if (!state.ready) publish({ status: "checking" });
+          slow(stage, UPDATE_TIMEOUT_MS);
+          return;
+        }
         failed(stage, error);
       }
     })().finally(() => {

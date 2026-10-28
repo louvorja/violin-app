@@ -99,6 +99,8 @@ module.exports = {
   dataDirIssue: () => null,
   mediaDir: () => config().mediaDir,
   filesDir: () => config().mediaDir,
+  /** Cache de export do Canva: da conta, nunca no acervo compartilhado. */
+  canvaDir() { return path.join(this.dataDir(), "canva"); },
   videosDir: () => config().videosDir,
   jsonCacheDir() { return path.join(this.dataDir(), "json_db"); },
   tempDir: () => app.getPath("temp"),
@@ -110,8 +112,9 @@ module.exports = {
     if (!origin?.legacyRoot) return [];
     return [
       { from: path.join(origin.mediaDir, "library", "media"), to: this.privateMediaDir() },
-      { from: path.join(origin.legacyRoot, "canva"), to: path.join(this.dataDir(), "canva") },
-      { from: path.join(bootstrapDir(), "canva"), to: path.join(this.dataDir(), "canva") },
+      { from: path.join(origin.legacyRoot, "files", "canva"), to: this.canvaDir() },
+      { from: path.join(origin.legacyRoot, "canva"), to: this.canvaDir() },
+      { from: path.join(bootstrapDir(), "canva"), to: this.canvaDir() },
     ].filter(({ from, to }) => path.resolve(from) !== path.resolve(to));
   },
 };

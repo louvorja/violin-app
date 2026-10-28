@@ -3,17 +3,7 @@ import { ModuleEnum } from "@/enums/ModuleEnum";
 export const DB_NAME = "louvorja-violin";
 
 /**
- * Incrementar DB_VERSION quando adicionar novas tabelas para poder atualizar o banco somente quando
- * for fazer a release para PRD.
- * Para testes, use `indexedDB.deleteDatabase("louvorja")` no console do navegador para resetar o banco
- *
- * v1 → v2: adicionada tabela "devices" (dispositivos autorizados)
- * v2 → v3: arquivos locais escolhidos na liturgia web/PWA
- */
-export const DB_VERSION = 3;
-
-/**
- * Nomes de todas as tabelas do banco IndexedDB unificado `louvorja`.
+ * Nomes de todas as tabelas do banco IndexedDB unificado `louvorja-violin`.
  * Cada módulo usa o prefixo do módulo seguido do nome da entidade.
  *
  * As tabelas de catálogo (musics, hymnal, albums, bible_*, online_*)
@@ -21,10 +11,9 @@ export const DB_VERSION = 3;
  * (ex.: playlist.channel_id, video.playlist_id, album.musics[].id_music).
  * O roteamento chave → tabela fica em `src/helpers/Database.ts`.
  *
- * Ao adicionar uma nova tabela:
- *   1. Adicione a chave aqui
- *   2. Incremente `DB_VERSION` neste arquivo
- *   3. O `upgrade()` criará a store automaticamente
+ * Nova tabela entra só aqui: não há versão do banco para incrementar.
+ * `src/helpers/IndexedDB.ts` abre o banco na versão que estiver no disco e
+ * sobe uma versão sozinho quando falta alguma tabela desta lista.
  */
 export const DB_TABLE = {
   SETTINGS: "settings",
@@ -71,6 +60,7 @@ export const DB_TABLE = {
   LIBRAS_BIBLE: "libras.bible",
   LIBRAS_BUNDLES: "libras.bundles",
   // ─── Dispositivos autorizados ───
+  /** Um registro por dispositivo, com a chave sendo o `id` do aparelho. Só autorizado. */
   DEVICES: "devices",
   // ─── Chat ───
   CHAT_MESSAGES: "chat.messages",

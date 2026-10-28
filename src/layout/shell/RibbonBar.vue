@@ -524,24 +524,32 @@ function rolarComRoda(e: WheelEvent): void {
   el.scrollLeft += e.deltaY;
 }
 
-// Duas coisas mudam se há sobra, e cada uma pede um gatilho. A largura do
-// container muda quando a janela é redimensionada — daí o observer. A largura
-// do conteúdo muda quando os grupos são outros, sem o container mudar de
-// tamanho: acontece ao trocar de aba e também quando um módulo aberto acrescenta
-// a aba contextual dele, que não passa por `activePage`. Por isso o watch olha
-// os grupos em si.
+// Duas coisas mudam se há sobra: a largura do container (a janela foi
+// redimensionada) e a do conteúdo (os grupos são outros, ao trocar de aba ou
+// quando um módulo aberto acrescenta a aba contextual dele, que não passa por
+// `activePage`). O observer acompanha o container e cada grupo, e mede só depois
+// do layout: ler `scrollWidth` no `onMounted` forçava o layout da página inteira
+// no meio da abertura — 225 ms com a CPU 6× mais lenta num celular emulado.
 let observador: ResizeObserver | null = null;
-onMounted(() => {
-  medirSobra();
-  if (typeof ResizeObserver === "undefined" || !corpoRibbon.value) return;
-  observador = new ResizeObserver(medirSobra);
-  observador.observe(corpoRibbon.value);
-});
+function observarSobra(): void {
+  const el = corpoRibbon.value;
+  if (!el) return;
+  if (typeof ResizeObserver === "undefined") {
+    medirSobra();
+    return;
+  }
+  observador ??= new ResizeObserver(medirSobra);
+  // Recomeçar solta os grupos que saíram; cada `observe` novo já entrega a medida.
+  observador.disconnect();
+  observador.observe(el);
+  for (const grupo of Array.from(el.children)) observador.observe(grupo);
+}
+onMounted(observarSobra);
 onBeforeUnmount(() => observador?.disconnect());
 
 watch(
   () => activeGroups.value.map((g) => g.id).join(","),
-  () => nextTick(medirSobra)
+  () => nextTick(observarSobra)
 );
 
 // O scroll horizontal pertence à aba atual. Ao sair de uma coleção larga para
@@ -551,7 +559,7 @@ watch(
   () =>
     nextTick(() => {
       if (corpoRibbon.value) corpoRibbon.value.scrollLeft = 0;
-      medirSobra();
+      observarSobra();
     })
 );
 const isContextualActive: ComputedRef<boolean> = computed(() => !!activePageObj.value?.contextual);

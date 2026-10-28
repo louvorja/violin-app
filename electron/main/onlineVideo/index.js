@@ -5,11 +5,14 @@ const paths = require("../paths.js");
 const storageAccess = require("../storageAccess.js");
 const { createTools } = require("./tools.js");
 const { createManager } = require("./manager.js");
+const runner = require("./runner.js");
+const { createSpawnHost } = require("./spawnHost.js");
 const { isVideoId } = require("./ids.js");
 const { safeSend } = require("../safeWebContents.js");
 const { migrateDownloads } = require("./migration.js");
 
 let _manager = null;
+let _spawnHost = null;
 let _ready = null;
 let streamFailureReporter = null;
 let presentationActive = false;
@@ -47,7 +50,11 @@ function inactiveDiagnosticSnapshot() {
 /** Instância única: vídeos em `dataDir/Videos`, ferramentas em `dataDir/bin`. */
 function getManager() {
   if (!_manager) {
-    const tools = createTools({ binDir: path.join(paths.dataDir(), "bin") });
+    // yt-dlp e ffmpeg nascem num processo utilitário: no Windows, criar o processo
+    // espera o antivírus e, no main, congelaria todas as janelas.
+    const host = (_spawnHost ||= createSpawnHost());
+    const children = { spawnImpl: host.spawn, killImpl: host.killTree };
+    const tools = createTools({ binDir: path.join(paths.dataDir(), "bin"), execFileImpl: host.execFile });
     _manager = createManager({
       dir: paths.videosDir(),
       workDir: paths.videoWorkDir(),
@@ -55,6 +62,9 @@ function getManager() {
       canWrite: () => storageAccess.canWrite("videos"),
       canMaintain: () => storageAccess.canMaintain("videos"),
       tools,
+      run: (opts) => runner.run({ ...opts, ...children }),
+      resolve: (opts) => runner.resolveStreams({ ...opts, ...children }),
+      mux: (opts) => runner.muxCopy({ ...opts, ...children }),
       // O YouTube passou a exigir a resolução de um desafio em JavaScript para
       // liberar os formatos. O próprio Electron, rodando como Node, faz isso sem
       // baixar mais nada (o runner liga ELECTRON_RUN_AS_NODE só para esse filho).
@@ -163,8 +173,10 @@ async function releaseDataDir() {
   _ready = null;
 }
 
-function shutdown() {
+/** Cancela tudo e espera (no máximo 2 s) o processo utilitário encerrar os filhos. */
+async function shutdown() {
   if (_manager) _manager.cancelAll();
+  await _spawnHost?.settle(2_000);
 }
 
 function diagnosticSnapshot() {

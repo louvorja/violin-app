@@ -101,6 +101,7 @@ declare global {
 
   interface LouvorjaApi {
     platform: string;
+    systemMemory?: () => { total: number; free: number };
     version: string;
     isDev: boolean;
     runtime?: {
@@ -159,6 +160,8 @@ declare global {
       graphics?: () => Promise<{
         gpu_feature_status: Record<string, string>;
         gpu_devices: Array<{ active: boolean; vendor_id: number; device_id: number }>;
+        device_class?: "desktop" | "laptop" | null;
+        gpu_high_performance?: boolean;
         displays: Array<{ width: number; height: number; scale: number; hz: number }>;
         cpu_model: string;
         cpu_cores: number;
@@ -240,9 +243,12 @@ declare global {
         videosDir?: string;
         videos?: { bytes: number; count: number };
         files?: { bytes: number; count: number };
+        /** Cache de export do Canva (`files/canva`), fora do acervo. */
+        canva?: { bytes: number; count: number };
         json?: { bytes: number; count: number };
         total?: { bytes: number };
       }>;
+      dataDirIssue: () => Promise<{ wanted: string; reason: string } | null>;
       clearJson: () => Promise<void>;
       clearFiles: () => Promise<void>;
       setAutoCache: (enabled: boolean) => Promise<void>;

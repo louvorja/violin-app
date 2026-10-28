@@ -14,7 +14,14 @@ import Platform from "@/helpers/Platform";
 import $idb from "@/helpers/IndexedDB";
 import { DB_TABLE } from "@/constants/DbTables";
 
-const DEVICE_IDB_KEY = "authorized_devices";
+/**
+ * Id do registro agregado do formato ANTIGO da tabela (`authorized_devices`
+ * com o array de dispositivos dentro). Só existe para a migração.
+ *
+ * TODO: remover a migração do formato antigo no próximo release — roteiro em
+ * `docs/devices-idb-migration-removal.md`.
+ */
+const ID_REGISTRO_ANTIGO = "authorized_devices";
 
 const _devices = ref<Device[]>([]);
 const _loaded = ref(false);
@@ -25,6 +32,118 @@ const _pendingDevice = ref<Device | null>(null);
 let _listenersAttached = false;
 let _cleanup: (() => void) | null = null;
 let _cleanupPending: (() => void) | null = null;
+
+/** Linha do formato antigo: um registro só, com os dispositivos dentro. */
+interface RegistroAgregado {
+  id: string;
+  devices?: unknown;
+}
+
+/** `true` quando a linha é o registro agregado antigo. */
+function _ehRegistroAgregado(row: unknown): row is RegistroAgregado & { devices: Device[] } {
+  const linha = row as RegistroAgregado | null;
+  return (
+    !!linha &&
+    typeof linha === "object" &&
+    linha.id === ID_REGISTRO_ANTIGO &&
+    Array.isArray(linha.devices)
+  );
+}
+
+/**
+ * Autorizado = não é pendente. Registro sem `status` é anterior ao campo, e a
+ * pendência dele é inferida pelo `_ehPendente` — persistir não o autoriza.
+ */
+function _ehAutorizado(device: Device): boolean {
+  return device.status !== "pending";
+}
+
+/**
+ * Até a beta.17, todo aparelho aprovado usava o módulo Atalhos do app; a
+ * permissão `keyboard` passou a ser exigida depois. Quem vem do formato antigo
+ * a herda, para os atalhos não pararem no meio de um culto ao atualizar. O
+ * operador pode tirá-la depois, e aparelho novo começa sem ela.
+ */
+function _comAtalhosHerdados(device: Device): Device {
+  const perms = device.permissions || [];
+  if (!_ehAutorizado(device) || !perms.length) return device;
+  if (perms.includes("root") || perms.includes("keyboard")) return device;
+  return { ...device, permissions: [...perms, "keyboard"] };
+}
+
+/** Mais antigo primeiro; sem data vai para o começo. */
+function _porRegistro(a: Device, b: Device): number {
+  return String(a.registeredAt || "").localeCompare(String(b.registeredAt || ""));
+}
+
+/**
+ * Tabela `devices`: UM registro por dispositivo, com a chave sendo o `id`.
+ *
+ * O banco guarda só dispositivo AUTORIZADO — recusado e removido são apagados,
+ * e pendente não chega a ser gravado. Era um único registro agregado que um
+ * `_sync` reescrevia inteiro a cada mudança; agora cada operação grava (ou
+ * apaga) só o que mudou.
+ *
+ * A migração do agregado roda na primeira leitura e cobre os dois caminhos que
+ * ainda podem trazê-lo: banco instalado por versão anterior e backup antigo
+ * restaurado (o import recarrega a janela, então a leitura acontece em seguida).
+ *
+ * TODO: remover a migração logo abaixo no próximo release — roteiro em
+ * `docs/devices-idb-migration-removal.md`.
+ *
+ * @returns todos os dispositivos que estavam gravados, na ordem de cadastro
+ */
+async function _lerDispositivos(): Promise<Device[]> {
+  const rows = await $idb.getAll<RegistroAgregado | Device>(DB_TABLE.DEVICES);
+  const agregados = rows.filter(_ehRegistroAgregado);
+  const dasLinhas = rows.filter((row) => !_ehRegistroAgregado(row)) as Device[];
+  const doAgregado = agregados.flatMap((linha) => (linha.devices as Device[]).map(_comAtalhosHerdados));
+  const todos = [...dasLinhas, ...doAgregado];
+
+  if (agregados.length) {
+    console.log("[useDevices] migrando registro agregado:", doAgregado.length, "devices");
+  }
+
+  /*
+   * Pendente não mora no banco. Um que tenha ficado lá (versão anterior gravava
+   * a lista inteira) sai da tabela, mas continua na memória — a tela de
+   * aprovação abre uma última vez em vez de deixar o aparelho órfão.
+   */
+  const pendentesPersistidos = todos.filter((d) => !_ehAutorizado(d));
+  if (agregados.length || pendentesPersistidos.length) {
+    try {
+      await $idb.putMany(
+        DB_TABLE.DEVICES,
+        todos.filter(_ehAutorizado),
+        [ID_REGISTRO_ANTIGO, ...pendentesPersistidos.map((d) => d.id)]
+      );
+    } catch (e) {
+      console.error("[useDevices] migração do IndexedDB:", e);
+    }
+  }
+
+  return todos.sort(_porRegistro);
+}
+
+/** Grava UM dispositivo. Pendente não vai para o banco: lá só mora autorizado. */
+async function _persistirDispositivo(device: Device): Promise<void> {
+  if (!_ehAutorizado(device)) return;
+  try {
+    const plain = JSON.parse(JSON.stringify(device)) as Device;
+    await $idb.put<Device>(DB_TABLE.DEVICES, plain);
+  } catch (e) {
+    console.error("[useDevices] persist device:", e);
+  }
+}
+
+/** Apaga a linha de um dispositivo. Id sem linha é no-op (recusa de pendente). */
+async function _apagarDispositivo(id: string): Promise<void> {
+  try {
+    await $idb.del(DB_TABLE.DEVICES, id);
+  } catch (e) {
+    console.error("[useDevices] delete device:", e);
+  }
+}
 
 /**
  * Este device está esperando o operador definir as permissões?
@@ -104,10 +223,9 @@ function _attachListeners() {
  */
 async function syncFromIdb(): Promise<void> {
   try {
-    const row = await $idb.get<{ id: string; devices: Device[] }>(DB_TABLE.DEVICES, DEVICE_IDB_KEY);
-    const list = row?.devices;
-    console.log("[useDevices] syncFromIdb:", list?.length ?? 0, "devices");
-    _devices.value = Array.isArray(list) ? list : [];
+    const lista = await _lerDispositivos();
+    console.log("[useDevices] syncFromIdb:", lista.length, "devices");
+    _devices.value = lista;
     _loaded.value = true;
     _syncPendingFromList(_devices.value);
     // Envia para main process (cache em memória para auth middleware).
@@ -142,6 +260,10 @@ export function useDevices() {
 
   /**
    * Sincroniza a lista atual com o main process (cache em memória).
+   *
+   * O main recebe a lista COMPLETA, pendentes incluídos: é ela que o auth usa
+   * para reconhecer o par id+token de um aparelho ainda sem permissões (e
+   * liberar `/api/ping` enquanto o operador decide).
    */
   async function _syncToMainProcess(): Promise<void> {
     if (!Platform.devices) return;
@@ -151,22 +273,6 @@ export function useDevices() {
     } catch (e) {
       console.error("[useDevices] sync to main:", e);
     }
-  }
-
-  /**
-   * Persiste no IndexedDB e sincroniza com main process.
-   */
-  async function _sync(): Promise<void> {
-    try {
-      const plain = JSON.parse(JSON.stringify(_devices.value));
-      await $idb.put<{ id: string; devices: Device[] }>(DB_TABLE.DEVICES, {
-        id: DEVICE_IDB_KEY,
-        devices: plain,
-      });
-    } catch (e) {
-      console.error("[useDevices] sync IndexedDB:", e);
-    }
-    await _syncToMainProcess();
   }
 
   /**
@@ -186,7 +292,8 @@ export function useDevices() {
       status: "approved" as const,
     };
     _devices.value = [..._devices.value, device];
-    await _sync();
+    await _persistirDispositivo(device);
+    await _syncToMainProcess();
     return device;
   }
 
@@ -197,10 +304,12 @@ export function useDevices() {
     id: string,
     patch: Partial<Pick<Device, "name" | "permissions">>
   ): Promise<void> {
-    _devices.value = _devices.value.map((d) =>
-      d.id === id ? { ...d, ...patch, status: "approved" as const } : d
-    );
-    await _sync();
+    const atual = _devices.value.find((d) => d.id === id);
+    if (!atual) return;
+    const atualizado: Device = { ...atual, ...patch, status: "approved" as const };
+    _devices.value = _devices.value.map((d) => (d.id === id ? atualizado : d));
+    await _persistirDispositivo(atualizado);
+    await _syncToMainProcess();
   }
 
   /**
@@ -208,7 +317,8 @@ export function useDevices() {
    */
   async function removeDevice(id: string): Promise<void> {
     _devices.value = _devices.value.filter((d) => d.id !== id);
-    await _sync();
+    await _apagarDispositivo(id);
+    await _syncToMainProcess();
   }
 
   /**
@@ -250,7 +360,9 @@ export function useDevices() {
       : [..._devices.value, updated];
     _pendingDevice.value = null;
     _pendingToken.value = null;
-    await _sync();
+    /* A aprovação é o que coloca a linha no banco. */
+    await _persistirDispositivo(updated);
+    await _syncToMainProcess();
     return updated;
   }
 
@@ -262,7 +374,8 @@ export function useDevices() {
     const id = _pendingDevice.value.id;
     _devices.value = _devices.value.filter((d) => d.id !== id);
     _pendingDevice.value = null;
-    await _sync();
+    await _apagarDispositivo(id);
+    await _syncToMainProcess();
   }
 
   return {

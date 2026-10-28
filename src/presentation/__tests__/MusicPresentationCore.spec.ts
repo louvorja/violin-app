@@ -43,6 +43,27 @@ describe("music presentation domain", () => {
     expect(core.snapshot().slide?.lyric).toBe("Only");
   });
 
+  it("passa pelo slide sem horário sem exibi-lo nem anunciá-lo como o próximo", () => {
+    const core = new MusicPresentationCore("a", [
+      { lyric: "Capa" }, { lyric: "Verso" }, { lyric: "" }, { lyric: "Refrão" },
+    ], [0, 10, 0, 30], "Song");
+    const at = (commandId: number, position: number) =>
+      core.dispatch({ sessionId: "a", commandId, type: "clock", position });
+    expect(at(1, 5)).toMatchObject({ slideIndex: 0, nextSlide: { lyric: "Verso" } });
+    expect(at(2, 15)).toMatchObject({ slideIndex: 1, nextSlide: { lyric: "Refrão" } });
+    expect(at(3, 31)).toMatchObject({ slideIndex: 3, nextSlide: null });
+  });
+
+  it("sem horários depois da capa, quem troca o slide é o operador", () => {
+    const core = new MusicPresentationCore("a", [
+      { lyric: "Capa" }, { lyric: "Verso" }, { lyric: "Refrão" },
+    ], [0, 0, 0], "Song");
+    expect(core.dispatch({ sessionId: "a", commandId: 1, type: "clock", position: 50 }).slideIndex).toBe(0);
+    expect(core.dispatch({ sessionId: "a", commandId: 2, type: "select", index: 1 })).toMatchObject({
+      slideIndex: 1, nextSlide: { lyric: "Refrão" },
+    });
+  });
+
   it("does not share selection fields or markers with mutable inputs", () => {
     const slides = [{ lyric: "Original" }];
     const times = [0];

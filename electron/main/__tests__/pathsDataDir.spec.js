@@ -56,6 +56,26 @@ describe("perfil privado e destinos independentes", () => {
     expect(paths.privatePathMappings()).toContainEqual({ from: path.join(old, "files/library/media"), to: paths.privateMediaDir() });
     expect(paths.storageLayout().setupCompleted).toBe(true);
   });
+  it("leva o cache do Canva da beta.18 (files/canva) ao perfil e reescreve a playlist", () => {
+    const old = path.join(locations.documents, "LouvorJA Violin");
+    const pdf = path.join(old, "files", "canva", "D1.pdf");
+    fs.outputJsonSync(path.join(bootstrap, "data-location.json"), { dataDir: old });
+    fs.outputFileSync(pdf, "pdf");
+    fs.outputFileSync(path.join(old, "files", "canva", "D1.pdf.json"), "{}");
+    fs.outputFileSync(path.join(old, "files", "musics", "pt", "song.mp3"), "song");
+    fs.outputJsonSync(path.join(old, "storage", "user_data.json"), {
+      modules: { media_library: { playlist: [{ type: "pdf", path: pdf }] } },
+    });
+    paths.configureProfile();
+    expect(fs.readFileSync(path.join(paths.canvaDir(), "D1.pdf"), "utf8")).toBe("pdf");
+    expect(fs.existsSync(path.join(paths.canvaDir(), "D1.pdf.json"))).toBe(true);
+    expect(fs.existsSync(path.join(paths.filesDir(), "canva"))).toBe(false);
+    expect(fs.readJsonSync(path.join(paths.dataDir(), "storage", "user_data.json")).modules.media_library.playlist[0].path)
+      .toBe(path.join(paths.canvaDir(), "D1.pdf"));
+    expect(paths.privatePathMappings()).toContainEqual({ from: path.join(old, "files", "canva"), to: paths.canvaDir() });
+    expect(fs.readFileSync(pdf, "utf8")).toBe("pdf");
+  });
+
   it("preserva perfil antigo plano no endereço do sistema", () => {
     fs.outputFileSync(path.join(bootstrap, "IndexedDB", "offline"), "saved");
     paths.configureProfile();

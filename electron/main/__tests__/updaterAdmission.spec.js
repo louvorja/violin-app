@@ -26,10 +26,30 @@ function loadUpdater() {
     nativeUpdater.emit("update-downloaded", { version: "9.0.0" });
   });
 
+  nativeUpdater.setFeedURL = vi.fn();
+
   originalLoad = Module._load;
   Module._load = function (request, ...args) {
     if (request === "electron") return { app: { getVersion: () => "1.0.0" } };
     if (request === "electron-updater") return { autoUpdater: nativeUpdater, CancellationToken: FakeCancellationToken };
+    // A escolha da release passa pela API do GitHub antes do electron-updater.
+    if (request === "https") {
+      return {
+        get: (_url, _opts, callback) => {
+          const req = new EventEmitter();
+          req.setTimeout = () => {};
+          setImmediate(() => {
+            const res = new EventEmitter();
+            res.statusCode = 200;
+            res.headers = {};
+            callback(res);
+            res.emit("data", Buffer.from(JSON.stringify([{ tag_name: "v9.0.0", prerelease: false, draft: false }])));
+            res.emit("end");
+          });
+          return req;
+        },
+      };
+    }
     return originalLoad.call(this, request, ...args);
   };
   delete require.cache[updaterPath];

@@ -288,7 +288,7 @@ describe("PwaUpdates", () => {
     expect(h.reload).not.toHaveBeenCalled();
   });
 
-  it("acompanha registro concluído depois do timeout e relata a recuperação", async () => {
+  it("registro demorado da primeira instalação não vira erro e fica medido", async () => {
     let finish!: (_value: unknown) => void;
     const h = boot({
       register: () =>
@@ -296,23 +296,16 @@ describe("PwaUpdates", () => {
           finish = resolve;
         }),
     });
-    await vi.advanceTimersByTimeAsync(30_000);
-    expect(h.latest().status).toBe("error");
-    expect(diagnostics.failure).toHaveBeenCalledWith(
-      "pwa_update_failed",
-      expect.objectContaining({ name: "TimeoutError" }),
-      expect.objectContaining({ stage: "register" })
-    );
+    await vi.advanceTimersByTimeAsync(70_000);
+    expect(h.states.some((state) => state.status === "error")).toBe(false);
+    expect(diagnostics.failure).not.toHaveBeenCalled();
+    expect(h.sw.register).toHaveBeenCalledTimes(1);
     finish(h.reg);
     await h.tick();
     expect(h.latest().status).toBe("current");
     expect(diagnostics.event).toHaveBeenCalledWith(
-      "pwa_update_recovered",
-      expect.objectContaining({
-        stage: "register",
-        update_status: "current",
-        recovery_ms: 0,
-      })
+      "pwa_update_slow",
+      expect.objectContaining({ stage: "register", duration_ms: 70_000 })
     );
     const worker = new Worker();
     worker.state = "installing";
@@ -405,11 +398,10 @@ describe("PwaUpdates", () => {
     const checking = h.instance.check();
     await vi.advanceTimersByTimeAsync(30_000);
     await checking;
-    expect(diagnostics.failure).toHaveBeenCalledWith(
-      "pwa_update_failed",
-      expect.objectContaining({
-        name: "TimeoutError",
-      }),
+    expect(diagnostics.failure).not.toHaveBeenCalled();
+    expect(h.latest().status).toBe("checking");
+    expect(diagnostics.event).toHaveBeenCalledWith(
+      "pwa_update_slow",
       expect.objectContaining({ stage: "install_worker" })
     );
     await vi.advanceTimersByTimeAsync(2000);
@@ -417,14 +409,22 @@ describe("PwaUpdates", () => {
     h.reg.waiting = worker;
     worker.change("installed");
     expect(h.latest()).toMatchObject({ ready: true, status: "ready" });
-    expect(diagnostics.event).toHaveBeenCalledWith(
-      "pwa_update_recovered",
-      expect.objectContaining({
-        stage: "install_worker",
-        recovery_ms: 2000,
-      })
-    );
     expect(h.reload).not.toHaveBeenCalled();
+  });
+
+  it("falha sem internet não vira erro e verifica de novo quando a rede volta", async () => {
+    const h = boot({ register: () => Promise.reject(new TypeError("Failed to fetch")) });
+    h.online.mockReturnValue(false);
+    await h.tick();
+    expect(h.latest().status).toBe("offline");
+    expect(diagnostics.failure).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(h.sw.register).toHaveBeenCalledTimes(1);
+    h.sw.register.mockResolvedValue(h.reg);
+    h.online.mockReturnValue(true);
+    h.window_.dispatchEvent(new Event("online"));
+    await h.tick();
+    expect(h.latest().status).toBe("current");
   });
 
   it("fica offline sem tentar até a rede voltar e não perde uma atualização já pronta", async () => {

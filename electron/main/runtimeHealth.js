@@ -127,6 +127,7 @@ function createRuntimeHealthMonitor(options = {}) {
   let suppressLoopIncidentsUntil = -Infinity;
   let previousCpuUsage = process.cpuUsage();
   let previousSampleAt = monotonicNow();
+  let previousWallAt = now();
 
   function recordEvent(type, details = {}) {
     recentEvents.push({
@@ -222,9 +223,12 @@ function createRuntimeHealthMonitor(options = {}) {
     const sampledAt = monotonicNow();
     const sampleStart = previousSampleAt;
     const elapsedMs = Math.max(1, sampledAt - previousSampleAt);
+    const wallAt = now();
+    const wallElapsedMs = wallAt - previousWallAt;
     const cpu = process.cpuUsage(previousCpuUsage);
     previousCpuUsage = process.cpuUsage();
     previousSampleAt = sampledAt;
+    previousWallAt = wallAt;
 
     const sample = {
       main_loop_mean_ms: _millisecondsFromNanoseconds(loopDelay.mean),
@@ -241,8 +245,14 @@ function createRuntimeHealthMonitor(options = {}) {
 
     try { onEventLoopSample(sample); } catch { /* Keep the monitor independent of diagnostics. */ }
 
-    const observedAt = now();
+    // O aviso de "sistema acordou" pode chegar depois da primeira amostra pós-sono, e a
+    // telemetria registrou "travamentos" de horas. Em parte das máquinas o relógio
+    // monotônico para durante o sono e o de parede não; nas outras, nenhuma travada
+    // real do processo passa de dois minutos sem a janela cair por "unresponsive".
+    const suspendSuspected = wallElapsedMs - elapsedMs > 5_000 || sample.main_loop_max_ms > 120_000;
+    const observedAt = wallAt;
     if (
+      !suspendSuspected &&
       sampledAt >= suppressLoopIncidentsUntil &&
       sample.main_loop_max_ms >= criticalDelayMs &&
       observedAt - lastLoopIncidentAt >= incidentCooldownMs
@@ -271,6 +281,7 @@ function createRuntimeHealthMonitor(options = {}) {
     suppressLoopIncidentsUntil = monotonicNow() + Math.min(sampleIntervalMs * 2, 60_000);
     previousCpuUsage = process.cpuUsage();
     previousSampleAt = monotonicNow();
+    previousWallAt = now();
     loopDelay.reset();
     recordEvent("system_resume", { window_role: "unknown", status: "observed" });
   }

@@ -206,6 +206,76 @@ describe("useSlides.timeForPosition", () => {
   });
 });
 
+describe("useSlides com slide sem horário", () => {
+  // O slide 2, em branco, entrou depois da gravação e ficou sem horário.
+  const COM_BRANCO = [0, 10, 0, 30, 40];
+
+  beforeEach(() => slides.reset());
+
+  function tocar() {
+    abrir(COM_BRANCO);
+    const audio = {
+      currentTime: ref(0), duration: ref(50), progress: ref(0), seekTo: vi.fn(),
+    };
+    slides.bindAudio(audio as unknown as AudioPlayback);
+    return audio;
+  }
+
+  it("avançar sobre ele leva o áudio ao slide marcado seguinte, e voltar, ao anterior", async () => {
+    const audio = tocar();
+    audio.currentTime.value = 12;
+    await nextTick();
+    expect(slides.slideIndex.value).toBe(1);
+
+    slides.goNext();
+    expect(audio.seekTo).toHaveBeenLastCalledWith(30);
+
+    audio.currentTime.value = 30;
+    await nextTick();
+    slides.goPrev();
+    expect(audio.seekTo).toHaveBeenLastCalledWith(10);
+    slides.reset();
+  });
+
+  it("a barra do slide anterior vai até o próximo slide marcado", async () => {
+    const audio = tocar();
+    audio.currentTime.value = 20;
+    await nextTick();
+    expect(slides.slideIndex.value).toBe(1);
+    expect(slides.slideProgress.value).toBe(50);
+    slides.reset();
+  });
+
+  it("sem marcado adiante, avançar não mexe no áudio", async () => {
+    abrir([0, 10, 20, 0]);
+    const audio = {
+      currentTime: ref(25), duration: ref(50), progress: ref(0), seekTo: vi.fn(),
+    };
+    slides.bindAudio(audio as unknown as AudioPlayback);
+    audio.currentTime.value = 26;
+    await nextTick();
+    expect(slides.slideIndex.value).toBe(2);
+    slides.goNext();
+    expect(audio.seekTo).not.toHaveBeenCalled();
+    slides.reset();
+  });
+
+  it("música sem horários depois da capa avança pelo operador, sem mexer no áudio", async () => {
+    abrir([0, 0, 0]);
+    const audio = {
+      currentTime: ref(0), duration: ref(50), progress: ref(0), seekTo: vi.fn(),
+    };
+    slides.bindAudio(audio as unknown as AudioPlayback);
+    audio.currentTime.value = 5;
+    await nextTick();
+    expect(slides.slideIndex.value).toBe(0);
+    slides.goNext();
+    expect(audio.seekTo).not.toHaveBeenCalled();
+    expect(slides.slideIndex.value).toBe(1);
+    slides.reset();
+  });
+});
+
 describe("useSlides e o pedido de troca de slide entre janelas", () => {
   function tiposEmitidos(acao: () => void): string[] {
     const tipos: string[] = [];

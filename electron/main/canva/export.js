@@ -13,10 +13,10 @@
  * parada. Por isso isto é uma OPÇÃO na tela de Integrações, não o único
  * caminho.
  *
- * Cache: `<dados>/canva/<designId>.pdf` + `.json` com o `updated_at` do
- * design. Editou no Canva → o timestamp muda → o PDF local é considerado velho
- * e exportamos de novo. Sem isso, o operador projetaria uma versão antiga sem
- * perceber.
+ * Cache: `<perfil>/canva/<designId>.<ext>` + `.json` com o `updated_at` do
+ * design. Editou no Canva → o timestamp muda → o arquivo local é considerado
+ * velho e exportamos de novo. Sem isso, o operador projetaria uma versão antiga
+ * sem perceber.
  */
 
 const fs = require("fs-extra");
@@ -52,8 +52,14 @@ function formatoDe(nome) {
   return FORMATOS[String(nome || "pdf").toLowerCase()] || FORMATOS.pdf;
 }
 
+/**
+ * Onde o export vive: no perfil privado da conta. O acervo é compartilhado entre
+ * contas e PDF exportado do Canva é da conta que o exportou. A migração de layout
+ * (`storageLayout.js`) traz o cache dos endereços antigos (`<dados>/canva` e
+ * `<dados>/files/canva`) e reescreve as referências guardadas.
+ */
 function pastaCanva() {
-  return path.join(paths.dataDir(), "canva");
+  return paths.canvaDir();
 }
 
 /** Design id é `[A-Za-z0-9_-]`, mas não confiamos nisso para nome de arquivo. */

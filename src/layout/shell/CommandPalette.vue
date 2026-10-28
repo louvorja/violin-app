@@ -22,10 +22,10 @@
                 class="cmd-input"
                 autocomplete="off"
                 spellcheck="false"
-                @keydown.down.prevent="moveDown"
-                @keydown.up.prevent="moveUp"
-                @keydown.enter.prevent="executeSelected"
-                @keydown.escape.prevent="close"
+                @keydown.down.prevent.stop="moveDown"
+                @keydown.up.prevent.stop="moveUp"
+                @keydown.enter.prevent.stop="executeSelected"
+                @keydown.escape.prevent.stop="close"
               />
               <kbd v-if="!query" class="cmd-kbd cmd-kbd--hint">Esc</kbd>
               <LjButton
@@ -122,6 +122,7 @@ import {
   VisuallyHidden,
 } from "reka-ui";
 import { useI18n } from "vue-i18n";
+import { useSobreposicaoGlobal } from "@/composables/useSobreposicaoGlobal";
 import { useAppTheme } from "@/composables/useAppTheme";
 import CommandRegistry from "@/helpers/CommandRegistry";
 import Database from "@/helpers/Database";
@@ -217,6 +218,10 @@ const groupedResults = computed(() => {
 });
 
 const activeItem = computed(() => results.value[selectedIndex.value] || null);
+
+/* A paleta é sobreposição global: enquanto aberta, as janelas de módulo não
+ * prendem nem assumem o foco (ver `Window.vue`). */
+useSobreposicaoGlobal(open);
 
 watch(
   open,

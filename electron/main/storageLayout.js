@@ -358,9 +358,18 @@ function initializeLocked({ bootstrap, documents, videos, sharedMedia, programDi
     for (const name of PROFILE_ENTRIES) snapshotCopy(path.join(bootstrap, name), path.join(staging, ".electron", name), { chromium: true, chromiumRoot: bootstrap });
   }
   snapshotCopy(path.join(layout.mediaDir, "library", "media"), path.join(staging, "attachments", "media"));
+  // A beta.18 guardava o cache do Canva dentro do acervo (`files/canva`). Ele é
+  // da conta: vai para o perfil, sem substituir o que `<dados>/canva` já trouxe.
+  const canvaInFiles = path.join(legacyRoot, "files", "canva");
+  if (fs.existsSync(canvaInFiles) && fs.lstatSync(canvaInFiles).isDirectory()) {
+    for (const name of fs.readdirSync(canvaInFiles)) {
+      if (!fs.existsSync(path.join(staging, "canva", name))) snapshotCopy(path.join(canvaInFiles, name), path.join(staging, "canva", name));
+    }
+  }
   fs.ensureDirSync(path.join(staging, ".electron"), { mode: 0o700 });
   rebaseJsonFiles(staging, [
     { from: path.join(layout.mediaDir, "library", "media"), to: path.join(profile, "attachments", "media") },
+    { from: canvaInFiles, to: path.join(profile, "canva") },
     { from: path.join(legacyRoot, "canva"), to: path.join(profile, "canva") },
     { from: path.join(bootstrap, "canva"), to: path.join(profile, "canva") },
   ]);

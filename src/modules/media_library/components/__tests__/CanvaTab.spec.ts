@@ -120,7 +120,7 @@ beforeEach(() => {
   state.designUrl.mockReset().mockResolvedValue({ ok: true, url: "https://www.canva.com/design/D1/view" });
   state.exportPdf
     .mockReset()
-    .mockResolvedValue({ ok: true, path: "/dados/canva/D1.pdf", pageCount: 4 });
+    .mockResolvedValue({ ok: true, path: "/dados/files/canva/D1.pdf", pageCount: 4 });
   state.snackbar.mockClear();
   state.projectFile.mockClear();
   state.yesno.mockReset();
@@ -224,7 +224,7 @@ describe("Aba Canva — projeção", () => {
 
     expect(state.exportPdf).toHaveBeenCalledWith("D1");
     expect(state.projectFile).toHaveBeenCalledWith({
-      url: "file:///dados/canva/D1.pdf",
+      url: "file:///dados/files/canva/D1.pdf",
       type: "pdf",
       title: "Slide Páscoa",
       /* O que o Canva declara: a projeção compara com o que o pdf.js abriu. */
@@ -336,7 +336,7 @@ describe("Aba Canva — estados de carregamento", () => {
 
     expect(wrapper.text()).toContain("Exportando o design do Canva");
 
-    soltar({ ok: true, path: "/dados/canva/D1.pdf", pageCount: 4 });
+    soltar({ ok: true, path: "/dados/files/canva/D1.pdf", pageCount: 4 });
     await flushPromises();
     expect(wrapper.text()).not.toContain("Exportando o design do Canva");
   });
@@ -370,7 +370,7 @@ describe("Aba Canva — estados de carregamento", () => {
       await vi.advanceTimersByTimeAsync(400);
       expect(wrapper.text()).toContain("Exportando o design do Canva");
 
-      soltar({ ok: true, path: "/dados/canva/D9.pdf", pageCount: 3 });
+      soltar({ ok: true, path: "/dados/files/canva/D9.pdf", pageCount: 3 });
       await vi.advanceTimersByTimeAsync(0);
       expect(wrapper.text()).not.toContain("Exportando o design do Canva");
     } finally {
@@ -458,7 +458,7 @@ describe("Aba Canva — qualidade do export", () => {
   it("pro recusado → snackbar avisando que saiu em Regular", async () => {
     state.exportPdf.mockResolvedValueOnce({
       ok: true,
-      path: "/dados/canva/D1.pdf",
+      path: "/dados/files/canva/D1.pdf",
       pageCount: 4,
       quality: "regular",
       qualityFallback: true,

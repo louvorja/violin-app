@@ -670,6 +670,7 @@
       "folder": "Acervo do LouvorJA",
       "restart_required": "As novas pastas serão usadas na próxima abertura. Reinicie o aplicativo para concluir a alteração; os arquivos de origem serão preservados.",
       "folder_fallback": "Não consegui escrever em {dir}; os dados estão na pasta do programa. Escolha outra pasta ou libere o acesso.",
+      "folder_fallback_notice": "Sem acesso a {dir}. Seus dados estão sendo guardados na pasta do programa até você liberar o acesso ou escolher outra pasta em Sincronizar Arquivos → Armazenamento.",
       "open_folder": "Abrir pasta",
       "change_folder": "Alterar pasta…",
       "classic": {
@@ -701,6 +702,7 @@
         "symbolic_link": "Esta pasta contém atalhos de arquivos que não podem ser copiados com segurança."
       },
       "media_size": "Mídia (áudio, imagens)",
+      "canva_size": "Exportações do Canva",
       "cache_size": "Cache do banco",
       "libras_size": "Acessibilidade (Libras)",
       "total": "Total",
@@ -712,9 +714,13 @@
       "clear_cache": "Limpar cache do banco",
       "clear_cache_collections": "Limpar cache de coletâneas",
       "clear_files": "Limpar mídia (áudio/imagens)",
+      "clear_canva": "Limpar exportações do Canva",
       "refresh": "Recarregar",
       "clear_cache_confirm": "Limpar todo o cache de banco? O programa vai baixar tudo de novo na próxima abertura.",
-      "clear_files_confirm": "Apagar TODOS os arquivos de mídia baixados? Esta ação não pode ser desfeita.",
+      "clear_files_confirm": "Apagar TODOS os arquivos de mídia baixados? Esta ação não pode ser desfeita. As exportações do Canva são mantidas.",
+      "clear_canva_confirm": "Apagar os arquivos exportados do Canva? Eles são o cache que deixa projetar sem internet — na próxima projeção cada design será exportado de novo, e isso gasta exportações da sua cota do Canva.",
+      "clear_canva_done": "{n} arquivo(s) do Canva removidos do cache.",
+      "clear_canva_failed": "Não consegui limpar as exportações do Canva.",
       "restore_db": "Restaurar banco de dados",
       "restore_db_confirm": "Restaurar o banco de dados para os JSONs originais do programa? Os dados baixados/atualizados pela internet serão perdidos.",
       "restore_db_done": "Banco de dados restaurado.",
@@ -880,7 +886,9 @@
       "with_image": "Possui imagem",
       "controls": "Controles de Anúncios",
       "stop_projection": "Encerrar Projeção",
-      "projection_closed": "Projeção de anúncios encerrada"
+      "projection_closed": "Projeção de anúncios encerrada",
+      "executed": "{name} executado",
+      "project": "Projetar"
     },
     "shortcuts": {
       "nav_group": "Navegação",
@@ -942,6 +950,7 @@
       "uploaded": "Arquivo enviado para o desktop",
       "type_image": "Imagem",
       "type_video": "Vídeo",
+      "type_audio": "Áudio",
       "type_pdf": "PDF",
       "playlist_play": "Tocar",
       "playlist_stop": "Parar",

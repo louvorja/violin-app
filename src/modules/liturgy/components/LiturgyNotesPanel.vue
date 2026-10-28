@@ -175,7 +175,7 @@
 
 <script setup lang="ts">
 import { useLiturgyI18n } from "../i18n";
-import { setScrollPosition, getScrollPosition } from "@/helpers/ScrollMemory";
+import { setScrollPosition, restoreScrollPosition } from "@/helpers/ScrollMemory";
 import { LjIcon, LjSelect } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, watch, onMounted, onActivated, nextTick } from "vue";
@@ -201,7 +201,7 @@ function rememberScroll() {
 
 function restoreScroll() {
   void nextTick(() => {
-    if (editor.value) editor.value.scrollTop = getScrollPosition("liturgy:notas");
+    restoreScrollPosition(editor.value, "liturgy:notas");
   });
 }
 

@@ -344,6 +344,12 @@ export const KEYS = {
     /** Abre arquivos de áudio/vídeo da liturgia no programa padrão do SO. */
     USE_SYSTEM_MEDIA_PLAYER: `${OPTIONS}.use_system_media_player`,
     STORAGE_QUOTA_GB: `${OPTIONS}.storage_quota_gb`,
+    /**
+     * Estado (modo, tamanho e posição) das janelas COMUNS, por feature —
+     * gravado e lido só pelo processo principal. Hoje: `operador` (tela do
+     * operador). Projeções são fullscreen e não entram aqui.
+     */
+    WINDOWS: `${OPTIONS}.windows`,
     OPEN_RETURN: `${OPTIONS}.open_return`,
     OPEN_OPERATOR: `${OPTIONS}.open_operator`,
     /** Abre a projeção independente do relógio ao iniciar o desktop. */

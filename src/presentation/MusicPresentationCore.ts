@@ -1,4 +1,6 @@
 /** Music-only canonical domain. No clocks, I/O, framework or platform dependencies. */
+import { isSynced, nextMarked, slideAt } from "./SlideMarkers";
+
 export interface MusicSlide {
   lyric?: string;
   cover?: boolean;
@@ -40,8 +42,12 @@ export class MusicPresentationCore {
     this.times = [...times];
     this.state = Object.freeze({
       sessionId, revision: 0, active: true, title, slideIndex: 0,
-      totalSlides: slides.length, slide: this.slides[0] ?? null, nextSlide: this.slides[1] ?? null,
+      totalSlides: slides.length, slide: this.slides[0] ?? null, nextSlide: this.slides[this.nextIndex(0)] ?? null,
     });
+  }
+
+  private nextIndex(index: number): number {
+    return isSynced(this.times) ? nextMarked(this.times, index) : index + 1;
   }
 
   snapshot(): MusicSnapshot { return this.state; }
@@ -56,12 +62,8 @@ export class MusicPresentationCore {
       const requested = Number.isFinite(command.index) ? Math.floor(command.index) : 0;
       index = Math.max(0, Math.min(requested, this.slides.length - 1));
     }
-    if (command.type === "clock" && this.times.length) {
-      // Match timestamp semantics, including repeated markers, but never
-      // select beyond the deck now that this reducer can own the projection.
-      let reached = 0;
-      for (const time of this.times) if (time <= command.position) reached++;
-      index = Math.max(0, Math.min(reached - 1, this.slides.length - 1));
+    if (command.type === "clock" && isSynced(this.times)) {
+      index = slideAt(this.times, command.position, this.slides.length);
     }
     const closed = command.type === "close";
     this.state = Object.freeze({
@@ -69,7 +71,7 @@ export class MusicPresentationCore {
       title: closed ? "" : this.state.title,
       slideIndex: closed ? 0 : index, totalSlides: closed ? 0 : this.slides.length,
       slide: closed ? null : this.slides[index] ?? null,
-      nextSlide: closed ? null : this.slides[index + 1] ?? null,
+      nextSlide: closed ? null : this.slides[this.nextIndex(index)] ?? null,
     });
     return this.state;
   }

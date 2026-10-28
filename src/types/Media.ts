@@ -11,6 +11,11 @@ export interface MediaOpenParams {
    * preservar a faixa de áudio e o relógio de reprodução. */
   mediaType?: "audio" | "video";
   /**
+   * Áudio de arquivo que NÃO deve derrubar o que está no telão (Biblioteca de
+   * Mídia tocando sobre um PDF/versículo). Vídeo ignora esta opção.
+   */
+  preserveFileProjection?: boolean;
+  /**
    * Fonte da imagem quando ela vem de um arquivo diferente do som (vídeo que ainda
    * baixa: trilha de vídeo e trilha de áudio). O player do app a mostra, muda.
    */

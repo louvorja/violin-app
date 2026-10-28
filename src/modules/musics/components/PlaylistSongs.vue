@@ -118,7 +118,7 @@ import { LjIcon, LjTooltip } from "@/components/ui";
 import { nextTick, onActivated, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import DateTime from "@/helpers/DateTime";
-import { setScrollPosition, getScrollPosition } from "@/helpers/ScrollMemory";
+import { setScrollPosition, restoreScrollPosition } from "@/helpers/ScrollMemory";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
 import { ICONS } from "@/config/Icons";
@@ -150,7 +150,7 @@ function rememberScroll() {
 
 function restoreScroll() {
   void nextTick(() => {
-    if (scroller.value) scroller.value.scrollTop = getScrollPosition("musics:faixas");
+    restoreScrollPosition(scroller.value, "musics:faixas");
   });
 }
 

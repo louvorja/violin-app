@@ -18,7 +18,7 @@
           @click="goToSlide(i)"
         >
           <span class="rs-slide__num">{{ i + 1 }}</span>
-          <span class="rs-slide__text" v-html="s.lyric || s.name || '—'" />
+          <span class="rs-slide__text" v-html="slideMainText(s) || '—'" />
         </button>
       </div>
     </template>
@@ -26,6 +26,7 @@
 </template>
 
 <script setup lang="ts">
+import { slideMainText } from "@/helpers/SlideText";
 import { LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { useI18n } from "vue-i18n";

@@ -72,6 +72,30 @@ function _closeAlbumForPresentation(): void {
 }
 let _loadingId: string | number | null = null;
 let _playlistOnEnd: (() => boolean) | null = null;
+/**
+ * O que está carregado no player agora é um ARQUIVO DE ÁUDIO avulso (Biblioteca
+ * de Mídia), não uma música?
+ *
+ * O fim de faixa tem um caminho próprio: música/chamada encerram o culto
+ * (`close(true, true)`), mas um áudio avulso apenas termina. Sem esta marca, o
+ * fim de um áudio da Biblioteca FECHARIA as janelas de projeção — inclusive um
+ * PDF que estivesse no telão por baixo.
+ */
+let _arquivoDeAudio = false;
+/**
+ * Encerra o modo "arquivo de áudio".
+ *
+ * O player deixa de ser "mídia tocando": a janela da Mídia fecha e as setas
+ * voltam ao que estava antes. NÃO toca no telão — o palco é de quem projetou
+ * (um PDF, por exemplo) e continua lá.
+ */
+function _encerrarAudioArquivo(): void {
+  if (!_arquivoDeAudio) return;
+  _arquivoDeAudio = false;
+  $appdata.set(KEYS.MODULES.MEDIA.IS_PLAYING, false);
+  $appdata.set(KEYS.MODULES.MEDIA.SHOW, false);
+  $appdata.set(KEYS.MODULES.MEDIA.MINIMIZED, false);
+}
 
 /**
  * Quem tem a lista no ar AGORA — setas de avançar/retroceder.
@@ -102,11 +126,12 @@ let _navigationDelegate: NavigationDelegate | null = null;
  * com `stopExistingAudio: true` — `projectFile` zera `IS_PLAYING` nesse caminho,
  * então item de biblioteca no telão e música tocando nunca coexistem.
  *
- * Proteger aqui também é autocorreção: se algum módulo esquecer de devolver as
- * setas, a música as recupera sozinha quando assume o palco.
+ * Áudio de ARQUIVO (Biblioteca/liturgia) toca pelo mesmo player, mas NÃO é
+ * música: quem o abriu é quem conduz, e as setas continuam no delegado de quem
+ * está no palco.
  */
-function _musicaNoAr(): boolean {
-  return Boolean($appdata.get(KEYS.MODULES.MEDIA.IS_PLAYING));
+function _isPlayingMusic(): boolean {
+  return !_arquivoDeAudio && Boolean($appdata.get(KEYS.MODULES.MEDIA.IS_PLAYING));
 }
 // Database pode tentar dois hosts, cada um com NET_TIMEOUT.DEFAULT até os
 // headers. A margem cobre leitura do cache e JSON sem deixar um corpo travado
@@ -386,6 +411,18 @@ function _clearFileProjectionCache(): void {
     localStorage.removeItem(KEYS.PROJECTION.LJ_YOUTUBE_PROJECTION);
   } catch {
     /* armazenamento indisponível */
+  }
+}
+
+/** Tipo do que está projetado em cache (para não derrubar vídeo sem querer). */
+function _tipoProjecaoEmCache(): string | null {
+  try {
+    const raw = localStorage.getItem(KEYS.PROJECTION.LJ_FILE_PROJECTION);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return typeof parsed?.type === "string" ? parsed.type : null;
+  } catch {
+    return null;
   }
 }
 
@@ -1317,7 +1354,12 @@ _audio.onTimeUpdate((ct, d) => {
   }
 
   if (!_audio.isPaused.value && ct >= d && d > 0 && !_switchingMode) {
-    if (_playlistOnEnd) {
+    if (_arquivoDeAudio) {
+      /* Áudio avulso: termina e fica parado. NÃO fecha as janelas de projeção —
+       * o telão pode estar mostrando um PDF por baixo. */
+      $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED, true);
+      _encerrarAudioArquivo();
+    } else if (_playlistOnEnd) {
       const handled = _playlistOnEnd();
       if (!handled) {
         _self.close(true, true);
@@ -1463,6 +1505,11 @@ const _self = {
       )
     )
       return false;
+    /* Música assume o player: o áudio avulso acabou, e quem o iniciou precisa
+     * saber (senão a barra da Biblioteca fica presa num áudio que já parou).
+     * Depois da validação: um pedido inválido não pode matar o estado de um
+     * áudio que continua tocando. */
+    _encerrarAudioArquivo();
     _closeAlbumForPresentation();
 
     $dev.write("open media", params);
@@ -2235,6 +2282,18 @@ const _self = {
     $appdata.set(KEYS.MODULES.MEDIA.MINIMIZED, false);
   },
 
+  /**
+   * Para o áudio de arquivo SEM tocar no telão.
+   *
+   * É o "Parar" da Biblioteca: cala a faixa e fecha a janela do player, mas não
+   * apaga o PDF/versículo que está projetado.
+   */
+  stopAudioFile(): void {
+    if (!_arquivoDeAudio) return;
+    _audio.stop();
+    _encerrarAudioArquivo();
+  },
+
   /** O editor assume as janelas de slides; um player de arquivo/vídeo anterior precisa sair. */
   stopForSlideEditor(): Promise<void> {
     const wasFileVideo = _isYouTube() || _keepVideoProjectionOnLoadError();
@@ -2292,6 +2351,8 @@ const _self = {
     }
     if (wasYouTube || stopExistingAudio) {
       _audio.stop();
+      /* O áudio avulso morreu aqui (não antes de validar o payload). */
+      _encerrarAudioArquivo();
       this.clearVariables();
       $appdata.set(KEYS.MODULES.MEDIA.IS_PLAYING, false);
     } else {
@@ -2387,6 +2448,8 @@ const _self = {
     }
 
     _audio.stop();
+    /* `close()` também cala o áudio: o modo "arquivo de áudio" acabou aqui. */
+    _encerrarAudioArquivo();
     this.clearVariables();
     $appdata.set(KEYS.MODULES.MEDIA.SHOW, false);
     $appdata.set(KEYS.MODULES.MEDIA.IS_PLAYING, false);
@@ -2471,8 +2534,17 @@ const _self = {
       _opening.value = null;
     }
     if (params.mediaType !== "video") {
-      await _releaseFileVideoStage(stageEpoch);
-      if (stageEpoch !== _stageEpoch) return;
+      /*
+       * Áudio de arquivo (Biblioteca de Mídia) preserva o que já está no telão:
+       * um versículo projetado continua na tela com fundo musical. A exceção é
+       * vídeo — ele tem som próprio e sobreporia o áudio.
+       */
+      const preservar =
+        params.preserveFileProjection === true && _tipoProjecaoEmCache() !== "video";
+      if (!preservar) {
+        await _releaseFileVideoStage(stageEpoch);
+        if (stageEpoch !== _stageEpoch) return;
+      }
     } else if (!preserveProjectionStage) {
       if ($userdata.get<boolean>(KEYS.MODULES.SLIDE_EDITOR.PROJECTING, false) === true)
         $broadcast.send(BROADCAST_TYPE.MEDIA_CLOSE);
@@ -2507,6 +2579,9 @@ const _self = {
     // Modo URL direta (ex: arquivo de áudio da liturgia) — pula busca no banco
     if (params.url) {
       const isVideo = params.mediaType === "video";
+      /* Áudio de arquivo tem fim de faixa próprio (não fecha o telão) e não
+       * conta como música para o desempate das setas. */
+      _arquivoDeAudio = !isVideo;
       console.info("[Media] arquivo direto solicitado:", {
         kind: isVideo ? "video" : "audio",
         source_type: _sourceType(params.url),
@@ -2543,7 +2618,10 @@ const _self = {
       _audio.getElement().currentTime = 0;
 
       _loadAudioSrc(audioUrl, null, () => {});
-      this.minimize();
+      /* `minimized: false` pede o player À MOSTRA (Biblioteca). Sem a
+       * preferência, mantém o comportamento antigo de miniaturizar. */
+      if (params.minimized === false) this.maximize();
+      else this.minimize();
       return;
     }
 
@@ -3101,7 +3179,7 @@ const _self = {
   },
   prevSlide(): void {
     /* Lista de módulo manda: a Biblioteca tem a sua, e o deck não a conhece. */
-    if (_navigationDelegate && !_musicaNoAr()) {
+    if (_navigationDelegate && !_isPlayingMusic()) {
       void _navigationDelegate.prev();
       return;
     }
@@ -3110,7 +3188,7 @@ const _self = {
     _slides.goPrev();
   },
   nextSlide(): void {
-    if (_navigationDelegate && !_musicaNoAr()) {
+    if (_navigationDelegate && !_isPlayingMusic()) {
       void _navigationDelegate.next();
       return;
     }

@@ -337,6 +337,98 @@ describe("Telemetry", () => {
     Telemetry.setEnabled(false);
   });
 
+  it("não registra como travamento o quadro ocioso nem o computador dormindo", async () => {
+    const observers: Array<{ type: string; deliver: (_entries: PerformanceEntry[]) => void }> = [];
+    class Observer {
+      static supportedEntryTypes = ["longtask", "long-animation-frame"];
+      type = "";
+      disconnect = vi.fn();
+      constructor(private _callback: (_list: { getEntries: () => PerformanceEntry[] }) => void) {
+        observers.push(this);
+      }
+      observe(options: { type: string }) {
+        this.type = options.type;
+      }
+      deliver(entries: PerformanceEntry[]) {
+        this._callback({ getEntries: () => entries });
+      }
+    }
+    vi.stubGlobal("PerformanceObserver", Observer);
+    vi.stubEnv("MODE", "production");
+    vi.spyOn(performance, "now").mockImplementation(() => 100);
+    const Telemetry = await loadTelemetry();
+    await Telemetry.init();
+
+    const idleFrame = {
+      entryType: "long-animation-frame",
+      startTime: 200,
+      duration: 1016,
+      blockingDuration: 0,
+      scripts: [],
+    } as unknown as PerformanceEntry;
+    observers.find((observer) => observer.type === "long-animation-frame")?.deliver([idleFrame]);
+    const sleep = { entryType: "longtask", name: "self", startTime: 300, duration: 102_870_116 };
+    observers.find((observer) => observer.type === "longtask")?.deliver([sleep as PerformanceEntry]);
+
+    const incidents = posthog.logger.error.mock.calls.filter(([, attributes]) =>
+      /renderer_long_(task|animation_frame)/.test(String(attributes.incident_type))
+    );
+    expect(incidents).toHaveLength(0);
+    Telemetry.setEnabled(false);
+  });
+
+  it("anexa ao quadro longo o heap do renderer e a memória livre do sistema", async () => {
+    const observers: Array<{ type: string; deliver: (_entries: PerformanceEntry[]) => void }> = [];
+    class Observer {
+      static supportedEntryTypes = ["longtask", "long-animation-frame"];
+      type = "";
+      disconnect = vi.fn();
+      constructor(private _callback: (_list: { getEntries: () => PerformanceEntry[] }) => void) {
+        observers.push(this);
+      }
+      observe(options: { type: string }) {
+        this.type = options.type;
+      }
+      deliver(entries: PerformanceEntry[]) {
+        this._callback({ getEntries: () => entries });
+      }
+    }
+    vi.stubGlobal("PerformanceObserver", Observer);
+    vi.stubEnv("MODE", "production");
+    vi.spyOn(performance, "now").mockImplementation(() => 100);
+    Object.defineProperty(performance, "memory", {
+      configurable: true,
+      value: { usedJSHeapSize: 63 * 1048576 },
+    });
+    const api = window as unknown as { louvorjaApi?: unknown };
+    const previousApi = api.louvorjaApi;
+    api.louvorjaApi = { systemMemory: () => ({ total: 4 * 1048576, free: 380 * 1024 }) };
+    try {
+      const Telemetry = await loadTelemetry();
+      await Telemetry.init();
+      const frame = {
+        entryType: "long-animation-frame",
+        startTime: 200,
+        duration: 1800,
+        blockingDuration: 1750,
+        scripts: [],
+      } as unknown as PerformanceEntry;
+      observers.find((observer) => observer.type === "long-animation-frame")?.deliver([frame]);
+      expect(posthog.logger.error).toHaveBeenCalledWith(
+        "runtime incident",
+        expect.objectContaining({
+          incident_type: "renderer_long_animation_frame",
+          renderer_js_heap_mb: 63,
+          system_free_memory_mb: 380,
+        })
+      );
+      Telemetry.setEnabled(false);
+    } finally {
+      api.louvorjaApi = previousApi;
+      delete (performance as unknown as { memory?: unknown }).memory;
+    }
+  });
+
   it("discards cancelled measurements without emitting success and preserves other pending measurements", async () => {
     const Telemetry = await loadTelemetry();
     await Telemetry.init();

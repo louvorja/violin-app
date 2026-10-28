@@ -7,6 +7,7 @@ import { MusicPresentationCore, type MusicOperation, type MusicSnapshot } from "
 import { createMemoryPresentationTransport, type PresentationTransport } from "@/presentation/PresentationTransport";
 import { createBroadcastPresentationTransport } from "@/presentation/BroadcastPresentationTransport";
 import { readMusicPresentationPacket, type MusicPresentationPacket } from "@/presentation/MusicPresentationPacket";
+import { isSynced, navigableSlide, slideEnd, slideStart } from "@/presentation/SlideMarkers";
 import { createMusicPresentationSessionFactory } from "@/helpers/MusicPresentationSession";
 
 export interface Slide {
@@ -226,8 +227,8 @@ function _create(): SlidesInstance {
 
   /** Instante, na faixa vigente, do ponto `fraction` (0-1) dentro do slide `index`. */
   function timeForPosition(index: number, fraction: number, duration: number): number {
-    const start = times.value[index] ?? 0;
-    const end   = times.value[index + 1] ?? duration;
+    const start = slideStart(times.value, index);
+    const end   = slideEnd(times.value, index, duration);
     if (!Number.isFinite(end) || end <= start) return start;
     return start + Math.max(0, Math.min(1, fraction)) * (end - start);
   }
@@ -295,9 +296,16 @@ function _create(): SlidesInstance {
       commandAt <= now + 1_000 && commandAt >= now - 30_000 ? commandAt : now;
     _pendingCommand = { targetIndex: idx, at: issuedAt };
 
-    // Com áudio e timestamps: seek no áudio → slideIndex atualiza via watcher reativo
-    if (_audio && _audio.duration.value > 0 && times.value.length > 0) {
-      _audio.seekTo(times.value[idx] ?? 0);
+    // Com áudio sincronizado: seek no áudio → slideIndex atualiza via watcher reativo.
+    // Slide sem horário não tem ponto na faixa; vale o marcado seguinte no sentido do movimento.
+    if (_audio && _audio.duration.value > 0 && isSynced(times.value)) {
+      const target = navigableSlide(times.value, slideIndex.value, idx);
+      if (target !== idx && target === slideIndex.value) {
+        _pendingCommand = null;
+        return;
+      }
+      _pendingCommand = { targetIndex: target, at: issuedAt };
+      _audio.seekTo(slideStart(times.value, target));
     } else {
       const canonical = coreCommand({ type: "select", index });
       if (!canonical?.active) return;
@@ -324,13 +332,13 @@ function _create(): SlidesInstance {
       (ct) => {
         const ts = times.value;
         const d  = audioPlayback.duration.value;
-        if (!ts?.length) return;
+        if (!isSynced(ts)) return;
 
         const canonical = coreCommand({ type: "clock", position: ct });
         if (!canonical?.active) return;
         const si = canonical.slideIndex;
-        const start = ts[si] ?? 0;
-        const end   = ts[si + 1] ?? d;
+        const start = slideStart(ts, si);
+        const end   = slideEnd(ts, si, d);
         const spRaw = end > start ? ((ct - start) / (end - start)) * 100 : 0;
         const sp    = Math.max(0, Math.min(100, spRaw));
 

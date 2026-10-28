@@ -22,8 +22,8 @@ const ouvintes = {
   pending: [] as Array<(d: Device) => void>,
 };
 const salvos: Device[][] = [];
-/** O que o IndexedDB devolve no `syncFromIdb`. */
-let rowIdb: { id: string; devices: Device[] } | null = null;
+/** O que o IndexedDB devolve no `syncFromIdb` (uma linha por device). */
+let linhasIdb: Device[] = [];
 
 vi.mock("@/helpers/Platform", () => ({
   default: {
@@ -48,8 +48,10 @@ vi.mock("@/helpers/Platform", () => ({
 
 vi.mock("@/helpers/IndexedDB", () => ({
   default: {
-    get: async (_table: string, _key: string) => rowIdb,
+    getAll: async () => linhasIdb,
     put: async () => {},
+    del: async () => {},
+    putMany: async () => {},
   },
 }));
 
@@ -68,9 +70,9 @@ function device(extra: Partial<Device> = {}): Device {
   };
 }
 
-/** Instala um device na lista persistida e "reinicia" o composable. */
+/** Instala os devices na tabela e "reinicia" o composable. */
 async function bootCom(lista: Device[]) {
-  rowIdb = { id: "authorized_devices", devices: lista };
+  linhasIdb = lista;
   salvos.length = 0;
   const d = useDevices();
   await d.loadDevices();
@@ -78,7 +80,7 @@ async function bootCom(lista: Device[]) {
 }
 
 beforeEach(() => {
-  rowIdb = null;
+  linhasIdb = [];
   salvos.length = 0;
 });
 

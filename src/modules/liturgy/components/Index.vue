@@ -98,7 +98,7 @@
       :form-errors="formErrors"
       :file-importing="fileImporting"
       :colors="colors"
-      :musics-list="musicsList"
+      :musics-list="formMusicsList"
       :scheduled-categories="scheduledCategories"
       :bloco-items="blocoItems"
       :overlay-slots="overlaySlots"
@@ -155,7 +155,7 @@
     <MusicSpotlight
       v-model="chooseMusicSearchOpen"
       mode="pick"
-      :musics-list="musicsForSpotlight"
+      :musics-list="spotlightMusicsList"
       @pick="onChooseLaterMusicPicked"
     />
   </div>
@@ -284,6 +284,19 @@ const {
 
 const musicsForSpotlight = computed<SearchMusicItem[]>(
   () => musicsList.value as unknown as SearchMusicItem[]
+);
+
+// Preparar o catálogo custava centenas de milissegundos ao abrir a Liturgia num
+// computador fraco, só porque a lista ia como propriedade do formulário e da busca
+// fechados. Ela passa a ir na primeira abertura de cada um e fica, para o
+// fechamento não esvaziar o campo durante a animação.
+const formMusicsReady = ref(false);
+const spotlightMusicsReady = ref(false);
+watch(dialog, (open) => open && (formMusicsReady.value = true), { immediate: true });
+watch(chooseMusicSearchOpen, (open) => open && (spotlightMusicsReady.value = true));
+const formMusicsList = computed(() => (formMusicsReady.value ? musicsList.value : []));
+const spotlightMusicsList = computed(() =>
+  spotlightMusicsReady.value ? musicsForSpotlight.value : []
 );
 
 const blocoItems = computed(() => items.value.filter((i) => i.tipo === LiturgyItemTypeEnum.BLOCO));
@@ -599,23 +612,32 @@ function doExport() {
     });
 }
 
+/*
+ * Escuta as ações da ribbon e o pedido de nova anotação.
+ *
+ * O registro mora no setup — e não dentro do `onMounted`, que espera músicas,
+ * vídeos e a liturgia do dia — porque a ribbon fala por broadcast, sem
+ * callback e sem fila: o módulo precisa estar ouvindo desde que existe, senão
+ * a ação enviada antes do registro simplesmente não chega.
+ */
+_broadcastUnlisten = Broadcast.listen((data) => {
+  if (data?.type === BROADCAST_TYPE.LITURGY_NEW_ANNOTATION) {
+    Modules.open("liturgy");
+    nextTick(() => {
+      openItemDialog();
+      form.value.tipo = LiturgyItemTypeEnum.ANOTACAO;
+    });
+  } else if (data?.type === BROADCAST_TYPE.LITURGY_RIBBON_ACTION) {
+    const action = (data?.payload as { action?: string } | undefined)?.action;
+    if (action) handleRibbonAction(action);
+  }
+});
+
 onMounted(async () => {
   await loadMusicsList();
   await loadVideosList();
   await syncLiturgyForDay(activeDay.value);
   liturgyAutoLoad.checkAutoLoad();
-  _broadcastUnlisten = Broadcast.listen((data) => {
-    if (data?.type === BROADCAST_TYPE.LITURGY_NEW_ANNOTATION) {
-      Modules.open("liturgy");
-      nextTick(() => {
-        openItemDialog();
-        form.value.tipo = LiturgyItemTypeEnum.ANOTACAO;
-      });
-    } else if (data?.type === BROADCAST_TYPE.LITURGY_RIBBON_ACTION) {
-      const action = (data?.payload as { action?: string } | undefined)?.action;
-      if (action) handleRibbonAction(action);
-    }
-  });
 });
 
 onBeforeUnmount(() => {

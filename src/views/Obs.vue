@@ -23,7 +23,7 @@
           :style="{ backgroundImage: `url(${imageUrl(slide.url_image)})` }"
         />
         <div class="obs-content">
-          <div class="obs-text" v-html="slide.lyric || slide.name || ''" />
+          <div class="obs-text" v-html="slideMainText(slide)" />
         </div>
       </div>
     </Transition>
@@ -31,6 +31,7 @@
 </template>
 
 <script setup>
+import { slideMainText } from "@/helpers/SlideText";
 import { onMounted } from "vue";
 import { useProjectionState } from "@/composables/useProjectionState";
 import OverlayRenderer from "@/components/OverlayRenderer.vue";

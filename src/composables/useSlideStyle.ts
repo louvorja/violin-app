@@ -214,7 +214,8 @@ const _readSlideOpts = (): SlideCfg => {
   const slideFont = $userdata.get<string>(KEYS.OPTIONS.SLIDE.FONT, null);
   merged.font = resolveFont(slideFont || merged.font, FONT.PROJECTION.FALLBACK);
 
-  // O blur é um atalho global e também pode ser ajustado dentro da formatação personalizada.
+  // "Fundo borrado" desfoca a imagem de fundo (bgStyle). É um atalho global e
+  // também pode ser ajustado dentro da formatação personalizada.
   merged.text_bg_blur_enabled =
     $userdata.get<boolean>(KEYS.OPTIONS.SLIDE.TEXT_BG_BLUR_ENABLED, false) === true;
   const textBgBlur = Number($userdata.get<number>(KEYS.OPTIONS.SLIDE.TEXT_BG_BLUR, 12));
@@ -549,6 +550,15 @@ export function useSlideStyle(): SlideStyleAPI {
         style.backgroundPosition = POSITIONS[slideImagePos];
       }
     }
+    // "Fundo borrado" desfoca a imagem de fundo do slide, não só a área atrás do
+    // texto: a caixa do texto, escura por padrão, escondia o efeito (issue #13).
+    // A intensidade é medida numa tela de 1080 linhas e acompanha a altura do
+    // slide, para a prévia pequena não ficar mais borrada que a projeção. A escala
+    // esconde a borda transparente que o desfoque cria.
+    if (imageUrl && cfg.value.text_bg_blur_enabled && cfg.value.text_bg_blur > 0) {
+      style.filter = `blur(calc(${cfg.value.text_bg_blur} * 100cqh / 1080))`;
+      style.transform = "scale(1.08)";
+    }
     return style;
   }
 
@@ -573,15 +583,10 @@ export function useSlideStyle(): SlideStyleAPI {
     return cfg.value.color_repeat;
   }
 
-  /** Caixa de texto com fundo, blur do backdrop e borda opcionais. */
+  /** Caixa de texto com fundo e borda opcionais. */
   function textBoxStyle(): CSSProperties {
-    const backdropFilter = cfg.value.text_bg_blur_enabled
-      ? `blur(${cfg.value.text_bg_blur}px)`
-      : "none";
     return {
       backgroundColor: `rgba(0, 0, 0, ${cfg.value.text_bg_opacity / 100})`,
-      backdropFilter,
-      WebkitBackdropFilter: backdropFilter,
       border: cfg.value.text_border_enabled
         ? `${cfg.value.text_border_width}px solid ${cfg.value.text_border_color}`
         : "none",

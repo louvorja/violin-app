@@ -61,13 +61,17 @@ export const DEVICE_PERMISSION_LABELS: Record<DevicePermission, string> = {
  * Dispositivo autorizado a acessar o app remotamente.
  *
  * Cada device tem dois identificadores:
- *  - `id`: UUID criado pelo desktop, usado como índice da tabela
+ *  - `id`: fingerprint enviado pelo app no `register-device`
+ *    (`identifierForVendor` no iOS, `ANDROID_ID` no Android); índice da tabela
  *  - `token`: UUID gerado para o QR code, usado para autenticação HTTP
  *
  * O middleware de aceita token global (legado) ou par device-id + device-token.
  */
 export interface Device {
-  /** UUID — índice da tabela de dispositivos (criado pelo desktop). */
+  /**
+   * Identificador do aparelho enviado no `fingerprint` do `register-device`
+   * (UUID `identifierForVendor` no iOS, `ANDROID_ID` no Android).
+   */
   id: string;
   /** Token de acesso HTTP (UUID do QR code). */
   token: string;

@@ -199,8 +199,8 @@ function openLiturgy() {
 
 function marcar(item) {
   if ($userdata.get(KEYS.MODULES.LITURGY.MARK_ON_ACCESS, false) !== true) return;
-  const current = $liturgy.get(item.id);
-  if (current && !$liturgy.isCheckedToday(current)) $liturgy.toggleChecked(item.id);
+  const current = $liturgy.get(item.id, item.day); // item.day passado pela aba/painel
+  if (current && !$liturgy.isCheckedToday(current)) $liturgy.toggleChecked(item.id, item.day);
 }
 
 function executar(item) {

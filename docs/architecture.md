@@ -174,6 +174,13 @@ pastas existentes. O perfil e seus temporários continuam privados. O app não
 eleva privilégios; o provisionamento DEB/RPM pertence ao instalador.
 O contrato de armazenamento web/PWA continua no navegador.
 
+O cache de export do Canva (`<perfil>/canva/`) é da conta e fica fora do acervo
+compartilhado: tem contagem própria na tela de Armazenamento, não entra no "Limpar mídia"
+nem no limite de espaço — apagá-lo por idade forçaria uma reexportação, que gasta a cota
+do Canva. A beta.18 o guardava em `files/canva/`; a migração do perfil o copia para cá e
+reescreve as referências guardadas. Ele só sai pelos selos da aba Canva
+ou pelo botão "Limpar exportações do Canva".
+
 ## 🧠 Stack
 
 | Tecnologia | Versão | Uso                 |
@@ -931,6 +938,17 @@ via `Platform.updater`. O comportamento varia conforme a plataforma:
 | **macOS (DMG/zip)** | electron-updater                   | electron-updater — `.zip` (substitui o `.app`)                                                                                              |
 | **Linux AppImage**  | electron-updater                   | electron-updater — substitui o AppImage                                                                                                     |
 | **Linux deb/rpm**   | electron-updater                   | electron-updater — via `dpkg`/`apt`/`rpm` (exige sudo)                                                                                      |
+
+**Windows on ARM** usa um canal próprio. No Windows o electron-builder grava
+sempre `latest.yml` (o sufixo de arquitetura só existe no Linux), então o job
+ARM da release renomeia o metadata dele para `latest-arm64.yml`, e o updater
+procura por esse nome quando `process.arch === "arm64"`. Sem isso, a máquina ARM
+leria o `latest.yml` do x64 e trocaria a instalação nativa pela emulada.
+
+**macOS** publica um único `.dmg`/`.zip` **universal** (Intel + Apple Silicon) —
+o check e o download não dependem da arquitetura. O `.dmg` leva `_universal` no
+nome a partir da 2.0.0-beta.19, e o link do site acompanha
+(`src/helpers/DesktopDownload.ts`).
 
 O **fallback para GitHub API** (`checkGithubAndSetState`) é usado apenas quando o
 electron-updater está inativo (ex: dev, app não empacotado) ou falha. O flag
@@ -2114,6 +2132,54 @@ Quando ativado (via Transmissão → Dispositivos → checkbox), apenas devices
 cadastrados com permissões são aceitos. Token global legado é bloqueado.
 Persistido em `device_settings.json` via `devices.js`.
 
+### Pareamento de dispositivos
+
+O QR da tela **Transmissão → Dispositivos** carrega só o token que o desktop
+gerou, mais host e porta: `violin-remote://register?token=<uuid>&host=<host>&port=<porta>`.
+
+O app do celular então chama `POST /api/register-device` — rota pública, antes do
+auth — com:
+
+| Campo         | Obrigatório | O que é                                                       |
+| ------------- | ----------- | ------------------------------------------------------------- |
+| `token`       | sim         | O UUID do QR; vira a credencial HTTP do aparelho              |
+| `fingerprint` | **sim**     | Identidade do aparelho — **vira o `id` do registro**          |
+| `name`        | não         | Nome exibido na lista (`"Dispositivo"` quando ausente)        |
+| `model`       | não         | Modelo, só informativo                                        |
+| `platform`    | não         | `android`, `ios` ou `web` (qualquer outro valor cai em `web`) |
+
+**Contrato do `fingerprint`:** tem de ser um identificador **estável e único por
+aparelho** — um UUID gerado uma vez e persistido pelo próprio app, ou o
+equivalente da plataforma (`ANDROID_ID` no Android, `identifierForVendor` no
+iOS). Ele é duas coisas ao mesmo tempo:
+
+1. a **chave** do registro (a linha no IndexedDB e o device na lista em memória
+   do main são indexados por ele); e
+2. a chave de **reencontro** do pareamento — `addPending` (`devices.js`) procura
+   o fingerprint na lista e, achando, reusa a linha (mantendo as permissões e o
+   `status` já concedidos) em vez de criar outra.
+
+Depois de aprovado, o aparelho manda `X-Device-Id` + `X-Device-Token` em cada
+request, com o id sendo esse mesmo fingerprint.
+
+Dois erros já vistos na prática, e o que cada um custa:
+
+- **Identificador de build/ROM** (ex.: `Build.FINGERPRINT`, no formato
+  `Ulefone/Armor_8_Pro_8GB/Armor_8_Pro:11/RP1A.200720.011/1730442460:user/release-keys`):
+  **não é único por aparelho**. Dois aparelhos iguais com a mesma ROM mandam o
+  mesmo valor e o segundo registro reusa a linha do primeiro — herda as
+  permissões dele e o primeiro ainda perde o token. No modo restrito, isso é
+  autorização indevida.
+- **Valor que muda** (o próprio `Build.FINGERPRINT` muda a cada atualização de
+  SO): o aparelho parece novo a cada update, perde as permissões, volta para a
+  fila de aprovação e deixa a linha antiga órfã na lista.
+
+O desktop **não confere o formato** — exige apenas que `fingerprint` seja uma
+string não vazia (`httpServer/index.js`) —, então a qualidade desse valor é
+responsabilidade do cliente. Trocar o `fingerprint` depois de pareado é
+pareamento novo: a linha antiga precisa ser removida em Transmissão →
+Dispositivos.
+
 ### Organização dos arquivos do httpServer
 
 `electron/main/httpServer/` ficou em três arquivos (era um `routes.js` de
@@ -2173,7 +2239,7 @@ real e responde pela `RENDERER_RESPONSE_CHANNEL`.
 | GET             | `/api/user-data`                                          | `?path=...`                                                                                                                                                            | Lê valor do user_data                                                                    |
 | GET             | `/api/db/:path`                                           | —                                                                                                                                                                      | JSON do banco (cache local ou remoto)                                                    |
 | GET             | `/libras/:token`                                          | —                                                                                                                                                                      | Bundle de animação VLibras                                                               |
-| POST            | `/api/register-device`                                    | `{ token, name, model, platform }`                                                                                                                                     | Cadastro de device (antes do auth)                                                       |
+| POST            | `/api/register-device`                                    | `{ token, name, model, platform, fingerprint }`                                                                                                                        | Cadastro de device (antes do auth)                                                       |
 
 Todos os endpoints POST exigem `Content-Type: application/json`.
 
@@ -2537,11 +2603,11 @@ web do Canva e sem janela nova.
 `electron/main/canva/export.js`:
 
 1. `GET /v1/designs/{id}` → `updated_at` (chave do cache);
-2. se `<dados>/canva/<id>.pdf` e o `<id>.json` ao lado batem → **cache, nenhum job**;
+2. se `<perfil>/canva/<id>.<ext>` e o `<id>.<ext>.json` ao lado batem → **cache, nenhum job**;
 3. `POST /v1/exports {design_id, format:{type:"pdf", export_quality}}` → job;
 4. `GET /v1/exports/{jobId}` a cada 1 s, teto de 60 tentativas;
-5. baixa para `<dados>/canva/<id>.pdf` e grava o `.json` com `updated_at` e a
-   qualidade pedida.
+5. baixa para `<perfil>/canva/<id>.<ext>` e grava o `.json` com `updated_at` e
+   a qualidade pedida.
 
 Dois guards de fronteira, porque errar aqui é um canvas em branco na frente da
 congregação:
@@ -2649,7 +2715,7 @@ zero só faz o pdf.js reclamar.
 
 #### Selo de cache na lista
 
-O PDF já fica guardado em `<dados>/canva/<designId>.pdf` + `.json` — o que
+O arquivo já fica guardado em `<perfil>/canva/<designId>.<ext>` + `.json` — o que
 faltava era o operador VER isso e conseguir apagar.
 
 - **`canva:cachedPdfs`** devolve `designId → updated_at` de tudo que tem
@@ -2666,7 +2732,7 @@ faltava era o operador VER isso e conseguir apagar.
 - **Exclusão**: `canva:clearCachedPdf` → `yesno` → apaga `.pdf` + `.json`. O id
   é validado **na fronteira** (IPC) e **de novo** no `limparCachePdf`, porque
   ele vira caminho de arquivo; `nomeSeguro` neutraliza `..` e `/`, então o alvo
-  sempre cai em `<dados>/canva`.
+  sempre cai em `<perfil>/canva`.
 
 ### Conteúdo e projeção (modo "site")
 
