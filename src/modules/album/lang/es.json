@@ -13,5 +13,6 @@
     "actions": "Acciones"
   },
   "download": "Descargar álbum",
-  "download_hint": "Descarga este álbum en Sincronizar para escucharlo sin internet."
+  "download_hint": "Descarga este álbum en Sincronizar para escucharlo sin internet.",
+  "downloaded_hint": "Álbum descargado: suena incluso sin internet."
 }
