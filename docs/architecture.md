@@ -887,6 +887,17 @@ via `Platform.updater`. O comportamento varia conforme a plataforma:
 | **Linux AppImage**  | electron-updater                   | electron-updater — substitui o AppImage                                                                                                     |
 | **Linux deb/rpm**   | electron-updater                   | electron-updater — via `dpkg`/`apt`/`rpm` (exige sudo)                                                                                      |
 
+**Windows on ARM** usa um canal próprio. No Windows o electron-builder grava
+sempre `latest.yml` (o sufixo de arquitetura só existe no Linux), então o job
+ARM da release renomeia o metadata dele para `latest-arm64.yml`, e o updater
+procura por esse nome quando `process.arch === "arm64"`. Sem isso, a máquina ARM
+leria o `latest.yml` do x64 e trocaria a instalação nativa pela emulada.
+
+**macOS** publica um único `.dmg`/`.zip` **universal** (Intel + Apple Silicon) —
+o check e o download não dependem da arquitetura. O `.dmg` leva `_universal` no
+nome a partir da 2.0.0-beta.19, e o link do site acompanha
+(`src/helpers/DesktopDownload.ts`).
+
 O **fallback para GitHub API** (`checkGithubAndSetState`) é usado apenas quando o
 electron-updater está inativo (ex: dev, app não empacotado) ou falha. O flag
 `_checkedViaGithub` garante que o download use o mesmo mecanismo do check —

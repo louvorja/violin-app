@@ -238,3 +238,76 @@ describe("BibleSpotlight: digitação, carregamento e versão", () => {
     expect(wrapper.emitted("select")?.[0]?.[0]).toMatchObject({ chapter: 12, verse: 3 });
   });
 });
+
+describe("BibleSpotlight: ordinal dos livros (I Samuel, II Samuel)", () => {
+  let wrapper: VueWrapper;
+  const ordinalBooks = [
+    { id_bible_book: 9, name: "I Samuel", abbreviation: "1Sm", chapters: 31 },
+    { id_bible_book: 10, name: "II Samuel", abbreviation: "2Sm", chapters: 24 },
+    { id_bible_book: 11, name: "I Reis", abbreviation: "1Rs", chapters: 22 },
+    { id_bible_book: 12, name: "II Reis", abbreviation: "2Rs", chapters: 25 },
+    { id_bible_book: 19, name: "Salmos", abbreviation: "Sl", chapters: 150 },
+    { id_bible_book: 23, name: "Isaías", abbreviation: "Is", chapters: 66 },
+  ];
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.clearAllMocks();
+    mocks.appDataGet.mockReturnValue(1);
+    mocks.openBibleWindow.mockResolvedValue(undefined);
+    mocks.databaseGet.mockImplementation(async (key: string) =>
+      key === "pt_bible_book"
+        ? ordinalBooks
+        : key === "pt_bible_version"
+          ? versions
+          : { "1": `${key}:1`, "2": `${key}:2`, "3": `${key}:3` }
+    );
+  });
+  afterEach(() => {
+    wrapper?.unmount();
+    vi.useRealTimers();
+  });
+
+  async function open() {
+    wrapper = shallowMount(BibleSpotlight, { props: { modelValue: false }, global });
+    await wrapper.setProps({ modelValue: true });
+    await flushPromises();
+    return wrapper.get(".quicknav-hidden-input");
+  }
+
+  it('"i" lista o grupo I primeiro e Isaías depois, sem auto-confirmar', async () => {
+    const input = await open();
+    await input.trigger("keydown", { key: "i" });
+    await flushPromises();
+
+    const preview = wrapper.get(".quicknav-preview").text();
+    expect(preview).toBe("1Sm, 1Rs, Is");
+    expect(wrapper.emitted("select")).toBeUndefined();
+  });
+
+  it('"1s" confirma I Samuel e segue para capítulo e versículo', async () => {
+    const input = await open();
+
+    /* "1" é ambíguo (I Samuel, I Reis) e não confirma; "s" fecha em I Samuel. */
+    await input.trigger("keydown", { key: "1" });
+    await flushPromises();
+    expect(wrapper.emitted("select")).toBeUndefined();
+    await input.trigger("keydown", { key: "s" });
+    await flushPromises();
+    expect(wrapper.get(".quicknav-preview").text()).toBe("I Samuel → cap.");
+
+    await input.trigger("keydown", { key: "3" });
+    await input.trigger("keydown", { key: "Enter" });
+    await flushPromises();
+    await input.trigger("keydown", { key: "1" });
+    await input.trigger("keydown", { key: "Enter" });
+    await flushPromises();
+
+    expect(wrapper.emitted("select")?.[0]?.[0]).toMatchObject({
+      book: "I Samuel",
+      id_bible_book: 9,
+      chapter: 3,
+      verse: 1,
+      text: "bible_1_9_3:1",
+    });
+  });
+});

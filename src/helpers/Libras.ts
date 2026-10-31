@@ -21,12 +21,7 @@ import type { Music } from "@/types/Music";
 import type { Lyric } from "@/types/Lyric";
 import type { BibleBook } from "@/types/Bible";
 import { fetchWithTimeout } from "@/helpers/Http";
-import {
-  BUNDLE_URL,
-  REQUEST_TIMEOUT,
-  BUNDLE_RETRY_MAX,
-  TRANSLATE_URL,
-} from "@/config/Libras";
+import { BUNDLE_URL, REQUEST_TIMEOUT, BUNDLE_RETRY_MAX, TRANSLATE_URL } from "@/config/Libras";
 import { LibrasCacheEntry, LibrasCacheStats, type LibrasTranslationContext } from "@/types/Libras";
 import {
   beginLibrasTranslationDiagnostic,
@@ -103,8 +98,78 @@ export function bibleCacheId(
   return `bible_${versionAbbrev}_${bookId}_${chapter}_${region || "default"}`;
 }
 
+export interface ProgressoDeCache {
+  have: number;
+  total: number;
+  complete: boolean;
+  partial: boolean;
+}
+
+/** Classifica o que já está no cache de um grupo (álbum, hinário, versão). */
+export function progressoDeCache(have: number, total: number): ProgressoDeCache {
+  const totalSeguro = Math.max(0, Math.floor(total));
+  const haveSeguro = Math.max(0, Math.min(totalSeguro, Math.floor(have)));
+  return {
+    have: haveSeguro,
+    total: totalSeguro,
+    complete: totalSeguro > 0 && haveSeguro >= totalSeguro,
+    partial: totalSeguro > 0 && haveSeguro > 0 && haveSeguro < totalSeguro,
+  };
+}
+
+/**
+ * Músicas com a tradução principal completa (bundles) na região.
+ *
+ * A tradução de cada slide grava uma entrada própria (`music_slide_...`) com o
+ * mesmo `ref_id`; ela não pode fazer a música passar por completa.
+ */
+export function musicCacheCompletos(entries: LibrasCacheEntry[], region?: string): Set<number> {
+  const suffix = `_${region || "default"}`;
+  const completos = new Set<number>();
+  for (const entry of entries) {
+    if (entry.type !== "music" || !entry.bundles_cached) continue;
+    if (!entry.id.endsWith(suffix)) continue;
+    const ref = Number(entry.ref_id);
+    if (!Number.isSafeInteger(ref)) continue;
+    if (entry.id !== musicCacheId(ref, region)) continue;
+    completos.add(ref);
+  }
+  return completos;
+}
+
+/**
+ * Capítulos com tradução completa por versão.
+ *
+ * Chave do conjunto: `${bookId}_${chapter}`. As entradas por versículo têm
+ * `ref_id` com quatro partes e são ignoradas — só a entrada do capítulo conta.
+ */
+export function bibleChaptersCompletos(
+  entries: LibrasCacheEntry[],
+  versionByAbbrev: ReadonlyMap<string, number>,
+  region?: string
+): Map<number, Set<string>> {
+  const suffix = `_${region || "default"}`;
+  const porVersao = new Map<number, Set<string>>();
+  for (const entry of entries) {
+    if (entry.type !== "bible" || !entry.bundles_cached) continue;
+    if (!entry.id.endsWith(suffix)) continue;
+    const partes = entry.ref_id.split("_");
+    if (partes.length !== 3) continue;
+    const versionId = versionByAbbrev.get(partes[0]);
+    if (!versionId) continue;
+    const chave = `${partes[1]}_${partes[2]}`;
+    const conjunto = porVersao.get(versionId) ?? new Set<string>();
+    conjunto.add(chave);
+    porVersao.set(versionId, conjunto);
+  }
+  return porVersao;
+}
+
 /** Busca entrada no cache. */
-export async function getCached(id: string, type: "music" | "bible"): Promise<LibrasCacheEntry | null> {
+export async function getCached(
+  id: string,
+  type: "music" | "bible"
+): Promise<LibrasCacheEntry | null> {
   const entry = await $idb.get<LibrasCacheEntry>(cacheTable(type), id);
   return entry ?? null;
 }
@@ -120,7 +185,10 @@ export async function removeCached(id: string, type: "music" | "bible"): Promise
 }
 
 /** Busca entrada no cache pelo texto original. */
-export async function findCachedByText(originalText: string, type: "music" | "bible"): Promise<LibrasCacheEntry | null> {
+export async function findCachedByText(
+  originalText: string,
+  type: "music" | "bible"
+): Promise<LibrasCacheEntry | null> {
   const entries = await $idb.getAll<LibrasCacheEntry>(cacheTable(type));
   const clean = stripHtml(originalText).trim();
   return entries.find((e) => stripHtml(e.original_text).trim() === clean) ?? null;
@@ -303,16 +371,12 @@ export async function isBundleCached(token: string, region?: string): Promise<bo
  *   3. Se 404, tenta com o token normalizado (ex: BÊNÇÃO → BENCAO)
  *   4. Retry em caso de erro de rede (até BUNDLE_RETRY_MAX)
  */
-async function downloadBundleRaw(
-  token: string,
-  region?: string
-): Promise<ArrayBuffer | null> {
+async function downloadBundleRaw(token: string, region?: string): Promise<ArrayBuffer | null> {
   const regionPath = region || "BR";
   const normalized = normalizeToken(token);
 
   // Tokens para tentar: primeiro o original, depois o normalizado (se diferente)
-  const candidates =
-    normalized !== token.toUpperCase() ? [token, normalized] : [token];
+  const candidates = normalized !== token.toUpperCase() ? [token, normalized] : [token];
 
   for (const candidate of candidates) {
     for (let attempt = 0; attempt <= BUNDLE_RETRY_MAX; attempt++) {
@@ -434,16 +498,6 @@ export async function translateMusic(
   if (!text.trim()) return null;
   if (signal?.aborted) return null;
 
-  onProgress?.("translate", 0, 1);
-  const operationId = createLibrasOperationId();
-  const translationContext: LibrasTranslationContext = { operation: "download_music", operationId, musicId: idMusic };
-  const gloss = await translateText(text, { ...translationContext, part: "text" });
-  if (!gloss) return null;
-
-  if (signal?.aborted) return null;
-  onProgress?.("translate", 1, 1);
-  const tokens = uniqueTokens(gloss);
-
   // Traduz e cacheia cada slide individualmente para uso offline
   const slideEntries: Lyric[] = Array.isArray(music.lyric)
     ? music.lyric
@@ -452,32 +506,55 @@ export async function translateMusic(
     .filter((l) => l?.show_slide === 1)
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
+  // O texto é o primeiro passo e cada slide é um passo seguinte: a barra sai
+  // do zero assim que o texto termina, sem esperar o primeiro slide inteiro.
+  const totalPassos = 1 + sortedSlides.length;
+  onProgress?.("translate", 0, totalPassos);
+
+  const operationId = createLibrasOperationId();
+  const translationContext: LibrasTranslationContext = {
+    operation: "download_music",
+    operationId,
+    musicId: idMusic,
+  };
+  const gloss = await translateText(text, { ...translationContext, part: "text" });
+  if (!gloss) return null;
+
+  if (signal?.aborted) return null;
+  onProgress?.("translate", 1, totalPassos);
+  const tokens = uniqueTokens(gloss);
+
   for (let i = 0; i < sortedSlides.length; i++) {
     if (signal?.aborted) break;
     const slideText = stripHtml(sortedSlides[i]?.lyric || "").trim();
-    if (!slideText) continue;
-
-    const slideId = `music_slide_${idMusic}_${i}_${region || "default"}`;
-    const existingSlide = await getCached(slideId, "music");
-    if (existingSlide?.gloss) continue;
-
-    const slideGloss = await translateText(slideText, { ...translationContext, part: "slide", slideIndex: i });
-    if (slideGloss) {
-      const slideTokens = uniqueTokens(slideGloss);
-      await setCached({
-        id: slideId,
-        type: "music",
-        ref_id: String(idMusic),
-        lang,
-        original_text: slideText,
-        gloss: slideGloss,
-        tokens: slideTokens,
-        bundles_cached: true,
-        bundles_size: 0,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
+    if (slideText) {
+      const slideId = `music_slide_${idMusic}_${i}_${region || "default"}`;
+      const existingSlide = await getCached(slideId, "music");
+      if (!existingSlide?.gloss) {
+        const slideGloss = await translateText(slideText, {
+          ...translationContext,
+          part: "slide",
+          slideIndex: i,
+        });
+        if (slideGloss) {
+          const slideTokens = uniqueTokens(slideGloss);
+          await setCached({
+            id: slideId,
+            type: "music",
+            ref_id: String(idMusic),
+            lang,
+            original_text: slideText,
+            gloss: slideGloss,
+            tokens: slideTokens,
+            bundles_cached: true,
+            bundles_size: 0,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+        }
+      }
     }
+    onProgress?.("translate", i + 2, totalPassos);
   }
 
   // Download dos bundles
@@ -532,49 +609,57 @@ export async function translateBibleChapter(
   if (!text.trim()) return null;
   if (signal?.aborted) return null;
 
-  onProgress?.("translate", 0, 1);
+  // Traduz e cacheia cada versículo individualmente para uso offline
+  const verseKeys = Object.keys(verses).sort((a, b) => Number(a) - Number(b));
+  const totalPassos = 1 + verseKeys.length;
+  onProgress?.("translate", 0, totalPassos);
+
   const operationId = createLibrasOperationId();
   const translationContext: LibrasTranslationContext = {
-    operation: "download_bible", operationId, bibleVersion: versionAbbrev,
-    bibleBookId: book.id_bible_book, bibleChapter: chapter,
+    operation: "download_bible",
+    operationId,
+    bibleVersion: versionAbbrev,
+    bibleBookId: book.id_bible_book,
+    bibleChapter: chapter,
   };
   const gloss = await translateText(text, { ...translationContext, part: "text" });
   if (!gloss) return null;
 
   if (signal?.aborted) return null;
-  onProgress?.("translate", 1, 1);
+  onProgress?.("translate", 1, totalPassos);
   const tokens = uniqueTokens(gloss);
 
-  // Traduz e cacheia cada versículo individualmente para uso offline
-  const verseKeys = Object.keys(verses).sort((a, b) => Number(a) - Number(b));
   for (let i = 0; i < verseKeys.length; i++) {
     if (signal?.aborted) break;
     const verseText = stripHtml(verses[verseKeys[i]] || "").trim();
-    if (!verseText) continue;
-
-    const verseId = `bible_verse_${versionAbbrev}_${book.id_bible_book}_${chapter}_${verseKeys[i]}_${region || "default"}`;
-    const existingVerse = await getCached(verseId, "bible");
-    if (existingVerse?.gloss) continue;
-
-    const verseGloss = await translateText(verseText, {
-      ...translationContext, part: "verse", bibleVerses: [Number(verseKeys[i])],
-    });
-    if (verseGloss) {
-      const verseTokens = uniqueTokens(verseGloss);
-      await setCached({
-        id: verseId,
-        type: "bible",
-        ref_id: `${versionAbbrev}_${book.id_bible_book}_${chapter}_${verseKeys[i]}`,
-        lang,
-        original_text: verseText,
-        gloss: verseGloss,
-        tokens: verseTokens,
-        bundles_cached: true,
-        bundles_size: 0,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
+    if (verseText) {
+      const verseId = `bible_verse_${versionAbbrev}_${book.id_bible_book}_${chapter}_${verseKeys[i]}_${region || "default"}`;
+      const existingVerse = await getCached(verseId, "bible");
+      if (!existingVerse?.gloss) {
+        const verseGloss = await translateText(verseText, {
+          ...translationContext,
+          part: "verse",
+          bibleVerses: [Number(verseKeys[i])],
+        });
+        if (verseGloss) {
+          const verseTokens = uniqueTokens(verseGloss);
+          await setCached({
+            id: verseId,
+            type: "bible",
+            ref_id: `${versionAbbrev}_${book.id_bible_book}_${chapter}_${verseKeys[i]}`,
+            lang,
+            original_text: verseText,
+            gloss: verseGloss,
+            tokens: verseTokens,
+            bundles_cached: true,
+            bundles_size: 0,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+        }
+      }
     }
+    onProgress?.("translate", i + 2, totalPassos);
   }
 
   onProgress?.("download", 0, tokens.length);
@@ -657,6 +742,9 @@ export default {
   translateText,
   musicCacheId,
   bibleCacheId,
+  progressoDeCache,
+  musicCacheCompletos,
+  bibleChaptersCompletos,
   getCached,
   setCached,
   removeCached,

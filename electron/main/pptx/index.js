@@ -10,13 +10,14 @@
  *   1. lê as fontes que o .pptx usa (sem abrir o PowerPoint)
  *   2. as que vêm EMBUTIDAS no arquivo são extraídas e instaladas
  *   3. as que faltam são baixadas do Google Fonts (quando existem lá)
- *   4. o PowerPoint salva como PDF em `files/pptx/`
+ *   4. o PowerPoint salva como PDF em `<dados>/pptx/`
  *
  * O PDF entra na Biblioteca de Mídia como qualquer outro PDF — e a projeção
  * de arquivo já leva PDF para o telão (PA) e para o retorno.
  *
- * Cache: `files/pptx/<hash do arquivo>-<assinatura das fontes>.pdf` + `.json`;
- * fontes baixadas/extraídas ficam em `files/pptx/fonts/`.
+ * Cache: `<dados>/pptx/<hash do arquivo>-<assinatura das fontes>.pdf` + `.json`;
+ * fontes baixadas/extraídas ficam em `<dados>/pptx/fonts/`. Fora de `files/`
+ * de propósito: são do operador, e o acervo pode ser compartilhado entre contas.
  * Mudou o arquivo, ou uma fonte que faltava foi instalada → converte de novo.
  */
 const fs = require("fs/promises");
@@ -67,10 +68,10 @@ async function fetchWithTimeout(url, init = {}) {
 }
 
 function _outDir() {
-  return path.join(paths.filesDir(), "pptx");
+  return path.join(paths.dataDir(), "pptx");
 }
 function _fontCacheDir() {
-  return path.join(paths.filesDir(), "pptx", "fonts");
+  return path.join(_outDir(), "fonts");
 }
 function _tempDir() {
   return path.join(paths.tempDir(), "pptx");
@@ -454,7 +455,7 @@ const MAX_FONT_INPUT = 200 * 1024 * 1024;
 
 /**
  * Tira de um .zip (o que o DaFont entrega) os arquivos .ttf/.otf, gravando em
- * `files/pptx/fonts/manual/`. Pastas internas e o lixo de Mac (__MACOSX) são
+ * `<dados>/pptx/fonts/manual/`. Pastas internas e o lixo de Mac (__MACOSX) são
  * ignorados; o nome final não confia no caminho de dentro do zip.
  */
 async function _extrairZip(zipPath) {
@@ -567,7 +568,7 @@ async function _nativeSupported(converter) {
 }
 
 /**
- * Diário curto do modo nativo em `files/pptx/modo-nativo.log`: quando o
+ * Diário curto do modo nativo em `<dados>/pptx/modo-nativo.log`: quando o
  * PowerPoint se comporta diferente no computador de alguém, é o que dá para
  * pedir ao operador. Corta sozinho ao passar de ~200 KB.
  */

@@ -409,6 +409,8 @@ async function checkGithubAndSetState() {
  * Escolhe a extensão de asset conforme a plataforma/instalação atual.
  * - Linux deb → .deb | Linux rpm → .rpm | Linux AppImage → .AppImage
  * - win32 → .exe | darwin → .dmg (fallback .zip)
+ *   O mac publica UM .dmg/.zip universal (Intel + Apple Silicon): a escolha do
+ *   asset não depende da arquitetura da máquina.
  */
 function _assetExtension() {
   if (process.platform === "linux") {
@@ -420,6 +422,33 @@ function _assetExtension() {
   if (process.platform === "win32") return "exe";
   if (process.platform === "darwin") return "dmg";
   return "deb";
+}
+
+/**
+ * Escolhe o asset da release para a instalação atual.
+ *
+ * No Windows o x64 e o arm64 publicam instaladores diferentes, e escolher "o
+ * primeiro .exe" entregaria o errado em metade dos casos. A escolha é pela
+ * arquitetura: no ARM o nativo (nome com "arm64"); no x64 o que NÃO é ARM.
+ *
+ * Fora do Windows o primeiro candidato serve: o mac publica um único artefato
+ * universal e o Linux já era assim antes do ARM no Windows.
+ *
+ * Exportada para teste — é a regra que impede uma máquina ARM de receber o
+ * instalador x64 e perder a instalação nativa.
+ */
+function escolherAssetDaRelease(assets, ext, platform = process.platform, arch = process.arch) {
+  const sufixo = `.${String(ext).toLowerCase()}`;
+  const candidatos = (Array.isArray(assets) ? assets : []).filter(
+    (a) => a && typeof a.name === "string" && a.name.toLowerCase().endsWith(sufixo)
+  );
+  if (platform !== "win32") return candidatos[0];
+  const prefereArm = arch === "arm64";
+  return (
+    (prefereArm
+      ? candidatos.find((a) => /arm64/i.test(a.name))
+      : candidatos.find((a) => !/arm64/i.test(a.name))) ?? candidatos[0]
+  );
 }
 
 /**
@@ -441,7 +470,7 @@ async function downloadPackage(sender) {
   }
   const info = _latestReleaseInfo;
   const ext = _assetExtension();
-  const asset = info.assets.find((a) => a.name && a.name.toLowerCase().endsWith(`.${ext.toLowerCase()}`));
+  const asset = escolherAssetDaRelease(info.assets, ext);
 
   if (!asset) {
     throw new Error(`Asset .${ext} não encontrado na release ${info.tag}`);
@@ -705,7 +734,21 @@ function init({ channel = "latest", autoCheck = true, autoDownload = false, useB
     // on GitHub" — daí o app caía no modo manual, que só baixa o instalador e
     // pede para o operador abrir o arquivo. Sem esta linha, quem está numa beta
     // recebe beta, e quem está numa estável recebe estável.
-    if (channel && channel !== "latest") autoUpdater.channel = channel;
+    // Windows on ARM usa um metadata próprio.
+    //
+    // No Windows o electron-builder grava SEMPRE `latest.yml` (o sufixo de
+    // arquitetura só existe no Linux), e o job ARM da release renomeia o dele
+    // para `latest-arm64.yml`. Sem esta linha, uma máquina ARM leria o
+    // `latest.yml` do x64 e trocaria a instalação nativa pela emulada.
+    if (process.platform === "win32" && process.arch === "arm64") {
+      autoUpdater.channel = "latest-arm64";
+      // O setter do electron-updater liga `allowDowngrade` junto. Aqui o canal
+      // é fixo (não é troca de canal), então uma versão mais velha não deve ser
+      // oferecida — é o mesmo estado do x64, que nunca define o canal.
+      autoUpdater.allowDowngrade = false;
+    } else if (channel && channel !== "latest") {
+      autoUpdater.channel = channel;
+    }
     // O electron-updater não conhece a atividade da apresentação. Mantemos o
     // check separado do download para admitir apenas o trabalho automático.
     autoUpdater.autoDownload = false;
@@ -935,6 +978,7 @@ module.exports = {
   checkGithubRelease,
   checkGithubAndSetState,
   downloadPackage,
+  escolherAssetDaRelease,
   openPackage,
   openReleasePage,
   getCurrentReleaseNotes,

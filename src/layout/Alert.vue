@@ -45,7 +45,11 @@
               :key="index"
               type="button"
               class="alert-btn"
-              :class="`alert-btn--${btn.color || 'default'}`"
+              :class="[
+                `alert-btn--${btn.color || 'default'}`,
+                { 'alert-btn--picked': picked === index },
+              ]"
+              :data-alert-btn="index"
               @click="clickBtn(btn.value)"
             >
               {{ $t(btn.text) }}
@@ -60,7 +64,7 @@
 <script setup>
 import { LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import $appdata from "@/helpers/AppData";
 
 const alert = computed(() => $appdata.get("alert"));
@@ -97,6 +101,87 @@ const iconForVariant = computed(() => {
   };
   return map[variant.value] || ICONS.UI.INFORMATION_OUTLINE;
 });
+
+/*
+ * Teclado na pergunta, como no LouvorJA clássico: as setas (e o Tab) andam
+ * entre os botões, o Enter confirma o botão marcado e o Esc fica com a
+ * primeira opção ("Não"). Sem botão marcado, o Enter não faz nada. Só abre com
+ * um marcado a pergunta que declara `default_button` — as de encerrar o que
+ * está no telão, onde Esc e depois Enter fecham o hino. Excluir, limpar ou
+ * sair nunca abrem armadas.
+ *
+ * O ouvinte fica na window (captura), e não na caixa: o player é um diálogo da
+ * Reka que prende o foco dentro dele, então a pergunta — teleportada para fora —
+ * nunca recebe as teclas. Os atalhos globais (Hotkeys) saem da frente enquanto
+ * ela está aberta; aqui a tecla é consumida para não chegar ao player.
+ */
+const picked = ref(-1);
+
+function onKeydown(event) {
+  if (!show.value) return;
+  const buttons = alert.value?.buttons ?? [];
+  if (!buttons.length) return;
+  const consume = () => {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  };
+  if (alert.value?.prompt) {
+    // No campo de texto, só Enter e Esc são da pergunta.
+    if (event.key === "Enter") {
+      consume();
+      clickBtn("ok");
+    } else if (event.key === "Escape") {
+      consume();
+      clickBtn(buttons[0]?.value);
+    }
+    return;
+  }
+  const n = buttons.length;
+  const move =
+    { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key] ??
+    (event.key === "Tab" ? (event.shiftKey ? -1 : 1) : 0);
+  if (move) {
+    consume();
+    const from = picked.value === -1 ? (move > 0 ? -1 : n) : picked.value;
+    picked.value = (from + move + n) % n;
+    box.value?.querySelector(`[data-alert-btn="${picked.value}"]`)?.focus?.();
+    return;
+  }
+  if (event.key === "Enter" || event.key === " ") {
+    consume();
+    if (picked.value !== -1) clickBtn(buttons[picked.value]?.value);
+    return;
+  }
+  if (event.key === "Escape") {
+    consume();
+    clickBtn(buttons[0]?.value);
+  }
+}
+
+// O botão que o Enter aperta já aparece marcado, quando a pergunta tem um. Uma
+// pergunta nova pode chegar com outra ainda aberta: a marcação recomeça por ela.
+watch(
+  () => [show.value, alert.value?.buttons, alert.value?.default_button, alert.value?.prompt],
+  () => {
+    const buttons = alert.value?.buttons ?? [];
+    picked.value =
+      show.value && !alert.value?.prompt
+        ? buttons.findIndex((btn) => btn.value === alert.value?.default_button)
+        : -1;
+  },
+  { immediate: true }
+);
+
+watch(
+  show,
+  (visible) => {
+    if (typeof window === "undefined") return;
+    if (visible) window.addEventListener("keydown", onKeydown, { capture: true });
+    else window.removeEventListener("keydown", onKeydown, { capture: true });
+  },
+  { immediate: true }
+);
+onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown, { capture: true }));
 
 function clickBtn(value) {
   if (alert.value?.prompt) {
@@ -317,5 +402,12 @@ function clickBtn(value) {
 .alert-enter-from,
 .alert-leave-to {
   opacity: 0;
+}
+
+/* Escolha pelo teclado (setas): o operador precisa ver qual botão o Enter aperta. */
+.alert-btn:focus-visible,
+.alert-btn--picked {
+  outline: 3px solid var(--lj-ui-accent, #f59e0b);
+  outline-offset: 2px;
 }
 </style>

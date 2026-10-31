@@ -17,6 +17,8 @@ export interface BibleBook {
   abbreviation?: string
   chapters: number
   color?: string
+  /** Palavras extras para a busca ("cantares salomao canticos"). */
+  keywords?: string
 }
 
 export interface BibleVerse {

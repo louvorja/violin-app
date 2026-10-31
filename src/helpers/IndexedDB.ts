@@ -10,9 +10,10 @@
  */
 
 import { openDB, type IDBPDatabase } from "idb";
-import { DB_NAME, DB_TABLE, DB_VERSION } from "@/constants/DbTables";
+import { DB_NAME, DB_TABLE } from "@/constants/DbTables";
 
 const TABLE_SETTINGS = DB_TABLE.SETTINGS;
+const TABLES = Object.values(DB_TABLE);
 
 export interface CatalogChange {
   key: string;
@@ -26,23 +27,50 @@ export interface CatalogChange {
 
 let dbPromise: Promise<IDBPDatabase> | null = null;
 
+function createMissingTables(db: IDBPDatabase): void {
+  for (const name of TABLES) {
+    if (!db.objectStoreNames.contains(name)) db.createObjectStore(name, { keyPath: "id" });
+  }
+}
+
+/**
+ * Abre o banco na versão que estiver no disco e só sobe uma versão quando falta
+ * tabela. Com a versão fixa no código, um banco gravado por uma linha de
+ * desenvolvimento à frente (v6 contra v4) recusava abrir com VersionError: o
+ * catálogo deixava de ser guardado e atualizado até alguém apagar o banco à mão.
+ */
+async function openUpToDate(): Promise<IDBPDatabase> {
+  let version: number | undefined;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    let db: IDBPDatabase;
+    try {
+      db = await openDB(DB_NAME, version, {
+        upgrade: createMissingTables,
+        // O iOS encerra a conexão quando a aba vai para segundo plano. Sem soltar
+        // a promessa guardada, toda leitura seguinte falhava com "The database
+        // connection is closing" até o operador recarregar a página.
+        terminated() {
+          dbPromise = null;
+        },
+      });
+    } catch (error) {
+      // Outra janela subiu a versão entre as duas aberturas: vale a do disco.
+      if (version !== undefined && (error as DOMException | null)?.name === "VersionError") {
+        version = undefined;
+        continue;
+      }
+      throw error;
+    }
+    if (TABLES.every((name) => db.objectStoreNames.contains(name))) return db;
+    version = db.version + 1;
+    db.close();
+  }
+  throw new Error("IndexedDB: não foi possível criar as tabelas do app");
+}
+
 function getDb(): Promise<IDBPDatabase> {
   if (!dbPromise) {
-    dbPromise = openDB(DB_NAME, DB_VERSION, {
-      upgrade(db) {
-        for (const name of Object.values(DB_TABLE)) {
-          if (!db.objectStoreNames.contains(name)) {
-            db.createObjectStore(name, { keyPath: "id" });
-          }
-        }
-      },
-      // O iOS encerra a conexão quando a aba vai para segundo plano. Sem soltar
-      // a promessa guardada, toda leitura seguinte falhava com "The database
-      // connection is closing" até o operador recarregar a página.
-      terminated() {
-        dbPromise = null;
-      },
-    });
+    dbPromise = openUpToDate();
     const opening = dbPromise;
     void opening
       .then((db) => {

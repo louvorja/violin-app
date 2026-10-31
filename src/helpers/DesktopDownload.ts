@@ -48,17 +48,17 @@ export function desktopReleaseUrl(version: string): string {
 }
 
 /**
- * O .dmg universal ganhou "-universal" no nome a partir da 2.0.0-beta.19: o site
+ * O .dmg universal ganhou "_universal" no nome a partir da 2.0.0-beta.19: o site
  * da comunidade deduz a arquitetura pelo nome e, sem a marca, o anunciava como
- * só Intel. As versões publicadas antes disso mantêm o nome antigo.
+ * só Intel. As versões publicadas antes disso mantêm o nome antigo (sem sufixo).
  */
 function macInstallerSuffix(version: string): string {
   const m = /^(\d+)\.(\d+)\.(\d+)(?:-beta\.(\d+))?/.exec(version);
-  if (!m) return "-universal";
+  if (!m) return "_universal";
   const [major, minor, patch] = [Number(m[1]), Number(m[2]), Number(m[3])];
   if (major < 2) return "";
   const beta = m[4] === undefined ? null : Number(m[4]);
-  return major === 2 && minor === 0 && patch === 0 && beta !== null && beta <= 18 ? "" : "-universal";
+  return major === 2 && minor === 0 && patch === 0 && beta !== null && beta <= 18 ? "" : "_universal";
 }
 
 /**

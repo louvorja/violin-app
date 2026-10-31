@@ -50,23 +50,42 @@ async function migrateLegacyData(fromDir, toDir) {
   }
 }
 
+function moveProfile(sourceDir, staging, targetDir) {
+  if (fs.pathExistsSync(sourceDir)) {
+    // Um `.electron` que surgiu no destino depois da escolha (a nuvem trazendo
+    // o de outro computador) fica guardado ao lado: nenhum perfil é apagado.
+    if (fs.pathExistsSync(targetDir)) {
+      const aside = `${targetDir}.conflito-${Date.now()}`;
+      fs.moveSync(targetDir, aside, { overwrite: false });
+      console.warn(`[profile] ${targetDir} já existia; guardado em ${aside}`);
+    }
+    // Uma cópia entre volumes interrompida mantém a origem; refaça só a staging.
+    fs.removeSync(staging);
+    fs.moveSync(sourceDir, staging, { overwrite: false });
+  }
+  if (fs.pathExistsSync(staging)) fs.moveSync(staging, targetDir, { overwrite: false });
+  if (!fs.pathExistsSync(targetDir)) console.warn(`[profile] Perfil anterior não encontrado: ${sourceDir}`);
+}
+
 /**
  * Só roda antes de ready e depois do lock de instância única. O Chromium não
  * pode ter aberto IndexedDB/cookies enquanto esses arquivos mudam de lugar.
+ *
+ * Devolve o perfil a usar nesta sessão. Falhar aqui não pode impedir o boot: a
+ * âncora continua pedindo a mesma mudança, então o erro voltaria em toda
+ * abertura. Sem conseguir mover, o app abre no perfil antigo e tenta de novo.
  */
 function prepareProfile({ legacyDir, sourceDir, targetDir }) {
   if (sourceDir && path.resolve(sourceDir) !== path.resolve(targetDir)) {
     const staging = `${targetDir}.migrating`;
-    if (fs.pathExistsSync(targetDir) && fs.pathExistsSync(sourceDir)) {
-      throw new Error(`O destino já contém um perfil Electron: ${targetDir}`);
+    try {
+      moveProfile(sourceDir, staging, targetDir);
+    } catch (error) {
+      const current = [sourceDir, staging].find((dir) => fs.pathExistsSync(dir));
+      if (!current) throw error;
+      console.warn(`[profile] Perfil continua em ${current}: ${error?.message || error}`);
+      return current;
     }
-    if (fs.pathExistsSync(sourceDir)) {
-      // Uma cópia entre volumes interrompida mantém a origem; refaça só a staging.
-      fs.removeSync(staging);
-      fs.moveSync(sourceDir, staging, { overwrite: false });
-    }
-    if (fs.pathExistsSync(staging)) fs.moveSync(staging, targetDir, { overwrite: false });
-    if (!fs.pathExistsSync(targetDir)) throw new Error(`Perfil Electron não encontrado: ${sourceDir}`);
   }
   fs.ensureDirSync(targetDir);
   // Upgrade do perfil antigo: nunca carregue locks nem arquivos do produto no perfil.
@@ -76,7 +95,14 @@ function prepareProfile({ legacyDir, sourceDir, targetDir }) {
       const to = path.join(targetDir, name);
       if (!fs.pathExistsSync(from) || fs.pathExistsSync(to)) continue;
       if (fs.lstatSync(from).isSymbolicLink()) continue;
-      fs.moveSync(from, to, { overwrite: false });
+      try {
+        fs.moveSync(from, to, { overwrite: false });
+      } catch (error) {
+        // Seguir em frente deixaria o Chromium criar a entrada vazia no destino,
+        // e a original nunca mais seria levada. Esta sessão abre no perfil antigo.
+        console.warn(`[profile] Não foi possível mover ${from}: ${error?.message || error}`);
+        return legacyDir;
+      }
     }
   }
   return targetDir;

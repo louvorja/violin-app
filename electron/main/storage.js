@@ -41,27 +41,14 @@ function _ehCacheCanva(relative) {
 }
 
 /**
- * Subpasta de `files/` com os PDFs gerados a partir de PowerPoint (ver
- * `main/pptx/index.js`). A Biblioteca de Mídia aponta para eles: não vêm do
- * servidor, então não podem virar "arquivo em excesso" nem sair junto com a
- * limpeza do acervo baixado.
- */
-const PPTX_DIR = "pptx";
-
-function _ehPptx(relative) {
-  return relative === PPTX_DIR || relative.startsWith(`${PPTX_DIR}/`);
-}
-
-/**
- * Arquivos de `files/` que são ACERVO — o cache do Canva e os PDFs de
- * PowerPoint ficam de fora.
+ * Arquivos de `files/` que são ACERVO — o cache do Canva fica de fora.
  *
  * É o que alimenta `extra` (e portanto remoção) em `verify`: arquivo do Canva
  * não é mídia que o operador possa ter perdido, e não pode virar candidato a
  * apagar por não estar na lista do servidor.
  */
 async function _arquivosDeAcervo(filesDir) {
-  return (await _listAllFiles(filesDir)).filter((f) => !_ehCacheCanva(f.relative) && !_ehPptx(f.relative));
+  return (await _listAllFiles(filesDir)).filter((f) => !_ehCacheCanva(f.relative));
 }
 
 async function _listAllFiles(dir) {
@@ -190,7 +177,7 @@ async function clearFiles() {
     entradas = [];
   }
   for (const nome of entradas) {
-    if (nome === CANVA_DIR || nome === PPTX_DIR) continue;
+    if (nome === CANVA_DIR) continue;
     try {
       await fs.remove(path.join(dir, nome));
     } catch (_) {

@@ -7,6 +7,7 @@
           'pm-row--live': live,
           'pm-row--next': (next || prepared) && !live,
           'pm-row--selected': selected && !live,
+          'pm-row--skipped': skipped && !live,
         }"
         role="button"
         tabindex="0"
@@ -54,13 +55,31 @@
           {{ tm("program.live") }}
         </span>
         <span v-else-if="prepared" class="pm-queued-badge">{{ tm("program.queued") }}</span>
-        <LjIcon
+        <!-- Concluído: clicar desmarca. Pulado (ficou para trás sem check): clicar conclui. -->
+        <button
           v-else-if="done"
-          :icon="ICONS.UI.CHECK"
-          :size="13"
-          class="pm-row__done"
-          :aria-label="tm('program.done')"
-        />
+          type="button"
+          class="pm-row__mark pm-row__done"
+          :title="tm('program.done_hint')"
+          :aria-label="tm('program.mark_undone')"
+          data-testid="pm-row-done"
+          @click.stop="emit('set-done', false)"
+          @dblclick.stop
+        >
+          <LjIcon :icon="ICONS.UI.CHECK" :size="13" />
+        </button>
+        <button
+          v-else-if="skipped"
+          type="button"
+          class="pm-row__mark pm-row__skipped"
+          :title="tm('program.skipped_hint')"
+          :aria-label="tm('program.mark_done')"
+          data-testid="pm-row-skipped"
+          @click.stop="emit('set-done', true)"
+          @dblclick.stop
+        >
+          <LjIcon :icon="ICONS.ACTIONS.MINUS" :size="13" />
+        </button>
         <span class="pm-row__duration">{{ formatDuration(item.plannedMinutes) }}</span>
         <button
           type="button"
@@ -153,6 +172,8 @@ const props = defineProps<{
   live: boolean;
   next: boolean;
   done: boolean;
+  /** Ficou para trás sem ser concluído. */
+  skipped?: boolean;
   /** Na fila: enviado com a saída travada, vai ao ar quando destravar. */
   prepared: boolean;
   selected: boolean;
@@ -168,6 +189,8 @@ const emit = defineEmits<{
   activate: [];
   toggle: [];
   edit: [];
+  /** Concluir ou desmarcar à mão. */
+  "set-done": [done: boolean];
   "child-preview": [childId: string];
   "child-play": [childId: string];
   /** Momento: nova lista de filhos (reordenada ou com um removido). */
@@ -347,9 +370,40 @@ const expandable = computed(() => hasChildren.value || props.item.kind === "mome
   text-overflow: ellipsis;
 }
 
-.pm-row__done {
+.pm-row__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--lj-radius-sm);
+  background: transparent;
+  cursor: pointer;
+}
+
+.pm-row__mark:hover {
+  background: var(--lj-hover-bg);
+}
+
+.pm-row__mark:focus-visible {
+  outline: none;
+  box-shadow: var(--lj-ui-focus);
+}
+
+.pm-row__done {
   color: var(--lj-success);
+}
+
+.pm-row__skipped {
+  color: var(--lj-text-muted);
+}
+
+.pm-row--skipped .pm-row__title,
+.pm-row--skipped .pm-row__subtitle {
+  opacity: 0.6;
 }
 
 .pm-row__duration {

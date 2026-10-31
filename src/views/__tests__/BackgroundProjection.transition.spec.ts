@@ -42,6 +42,7 @@ import {
   AnnouncementsPresentationAuthority,
   beginAnnouncementIntent,
 } from "@/presentation/AnnouncementsPresentationState";
+import { nextBackgroundEpoch } from "@/presentation/BackgroundPresentationState";
 import { ModulePresentationAuthority } from "@/presentation/ModulePresentationState";
 import BackgroundProjection from "@/views/BackgroundProjection.vue";
 import BackgroundProjectionReturn from "@/views/BackgroundProjectionReturn.vue";
@@ -82,6 +83,25 @@ function projetarArquivo(tipo: "image" | "video" | "pdf" | "youtube" = "image"):
   });
 }
 
+/** Projeta um item de fundo (imagem) — o gate exige epoch crescente. */
+function projetarFundo(url: string): void {
+  Broadcast.send(BROADCAST_TYPE.BACKGROUND_PROJECTION, {
+    active: true,
+    epoch: nextBackgroundEpoch(),
+    type: "image",
+    url,
+    title: "fundo",
+  });
+}
+
+/** Limpa o item de fundo depois de montar (o replay pode chegar depois). */
+function limparFundo(): void {
+  Broadcast.send(BROADCAST_TYPE.BACKGROUND_PROJECTION, {
+    active: false,
+    epoch: nextBackgroundEpoch(),
+  });
+}
+
 /** Encerra a projeção de arquivo. */
 function encerrarArquivo(): void {
   Broadcast.send(BROADCAST_TYPE.FILE_PROJECTION, { action: "clear" });
@@ -110,6 +130,9 @@ describe("Projeção de Fundo — as camadas entram e saem com fade", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     epoch = 0;
+    // O replay do Broadcast traria a última projeção de arquivo dos testes
+    // anteriores e esconderia o bg-stack; limpa antes de montar.
+    Broadcast.send(BROADCAST_TYPE.FILE_PROJECTION, { action: "clear" });
     const guardado = new Map<string, string>();
     vi.stubGlobal("localStorage", {
       getItem: (k: string) => guardado.get(k) ?? null,
@@ -159,6 +182,106 @@ describe("Projeção de Fundo — as camadas entram e saem com fade", () => {
     await nextTick();
 
     expect(estiloDe(".file-projection")).toContain("--fade-ms: 1200ms");
+  });
+
+  it("o item novo entra por cima do atual e as camadas antigas saem depois do fade", async () => {
+    const w = montar();
+    limparFundo();
+    await nextTick();
+    await nextTick();
+
+    projetarFundo("a");
+    await nextTick();
+    await nextTick();
+    const primeiro = w.find(".layer-bg-stack .layer-bg");
+    expect(primeiro.exists()).toBe(true);
+    // Ainda esperando o primeiro frame: a camada fica invisível.
+    expect(primeiro.classes()).toContain("layer-bg--pending");
+
+    await primeiro.trigger("load");
+    await nextTick();
+    expect(primeiro.classes()).toContain("layer-bg--entering");
+    await new Promise((r) => setTimeout(r, 700));
+    await nextTick();
+    expect(w.findAll(".layer-bg-stack .layer-bg")).toHaveLength(1);
+
+    // Troca: o atual continua opaco; o novo fica por cima, invisível, e sobe.
+    projetarFundo("b");
+    await nextTick();
+    await nextTick();
+    let camadas = w.findAll(".layer-bg-stack .layer-bg");
+    expect(camadas).toHaveLength(2);
+    expect(camadas[0].attributes("src")).toContain("a");
+    expect(camadas[0].classes()).not.toContain("layer-bg--entering");
+    expect(camadas[1].attributes("src")).toContain("b");
+    expect(camadas[1].classes()).toContain("layer-bg--pending");
+
+    await camadas[1].trigger("load");
+    await nextTick();
+    expect(camadas[1].classes()).toContain("layer-bg--entering");
+
+    await new Promise((r) => setTimeout(r, 700));
+    await nextTick();
+    camadas = w.findAll(".layer-bg-stack .layer-bg");
+    expect(camadas).toHaveLength(1);
+    expect(camadas[0].attributes("src")).toContain("b");
+  });
+
+  it("a tela de retorno usa a mesma pilha de camadas", async () => {
+    const w = montar(BackgroundProjectionReturn);
+    limparFundo();
+    await nextTick();
+    await nextTick();
+
+    projetarFundo("a");
+    await nextTick();
+    await nextTick();
+    await w.find(".return-bg-stack .return-bg").trigger("load");
+    await nextTick();
+    await new Promise((r) => setTimeout(r, 700));
+
+    projetarFundo("b");
+    await nextTick();
+    await nextTick();
+    let camadas = w.findAll(".return-bg-stack .return-bg");
+    expect(camadas).toHaveLength(2);
+
+    await camadas[1].trigger("load");
+    await nextTick();
+    expect(camadas[1].classes()).toContain("return-bg--entering");
+
+    await new Promise((r) => setTimeout(r, 700));
+    await nextTick();
+    camadas = w.findAll(".return-bg-stack .return-bg");
+    expect(camadas).toHaveLength(1);
+    expect(camadas[0].attributes("src")).toContain("b");
+  });
+
+  it("parar limpa a pilha depois do fade e volta ao papel de parede", async () => {
+    const w = montar();
+    limparFundo();
+    await nextTick();
+    await nextTick();
+
+    projetarFundo("a");
+    await nextTick();
+    await nextTick();
+    await w.find(".layer-bg-stack .layer-bg").trigger("load");
+    await nextTick();
+    await new Promise((r) => setTimeout(r, 700));
+
+    Broadcast.send(BROADCAST_TYPE.BACKGROUND_PROJECTION, {
+      active: false,
+      epoch: nextBackgroundEpoch(),
+    });
+    await nextTick();
+    await nextTick();
+    expect(w.find(".layer-bg-stack").exists()).toBe(true);
+
+    await new Promise((r) => setTimeout(r, 700));
+    await nextTick();
+    expect(w.find(".layer-bg-stack").exists()).toBe(false);
+    expect(w.find(".layer-bg--fallback").exists()).toBe(true);
   });
 
   it("o arquivo sai com fade — a camada continua na tela, agora apagando", async () => {

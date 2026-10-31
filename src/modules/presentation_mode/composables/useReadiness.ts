@@ -75,16 +75,23 @@ async function songsToDownload(program: Program): Promise<SongNeed[]> {
   return needs.filter((n) => !local[n.remote]);
 }
 
-/** Existe aqui? Lê cada pasta-mãe uma vez. */
-async function missingPaths(paths: string[]): Promise<string[]> {
+/**
+ * Existe aqui? Lê cada pasta-mãe uma vez. O nome é comparado em NFC: o macOS
+ * devolve "Saúde" com o acento separado da letra (NFD), e o programa guarda
+ * junto — sem normalizar, toda pasta com acento parecia não existir.
+ */
+export async function missingPaths(paths: string[]): Promise<string[]> {
   const parents = new Map<string, Set<string> | null>();
   const parentOf = (p: string) => p.replace(/[\\/][^\\/]*$/, "");
-  const nameOf = (p: string) => p.split(/[\\/]/).pop() ?? p;
+  const nameOf = (p: string) => (p.split(/[\\/]/).pop() ?? p).normalize("NFC");
   for (const p of paths) {
     const dir = parentOf(p);
     if (!parents.has(dir)) {
       const res = await Platform.listDir(dir).catch(() => null);
-      parents.set(dir, res?.ok ? new Set(res.entries.map((e) => e.name)) : null);
+      parents.set(
+        dir,
+        res?.ok ? new Set(res.entries.map((e) => e.name.normalize("NFC"))) : null
+      );
     }
   }
   return paths.filter((p) => !parents.get(parentOf(p))?.has(nameOf(p)));

@@ -48,6 +48,15 @@ describe("samePlayable", () => {
   });
 });
 
+describe("Canva no navegador", () => {
+  it("é o mesmo design pelo id, e o módulo não acompanha o que a página mostra", () => {
+    const a = { type: "canva" as const, designId: "DAF1", title: "A", thumb: null };
+    expect(samePlayable(a, { ...a, title: "Outro nome" })).toBe(true);
+    expect(samePlayable(a, { ...a, designId: "DAF2" })).toBe(false);
+    expect(expectationOf(a, null)).toEqual({ kind: null });
+  });
+});
+
 describe("Bíblia", () => {
   it("o mesmo trecho é o mesmo Playable; outro versículo não é", () => {
     expect(samePlayable(verse([16]), verse([16]))).toBe(true);

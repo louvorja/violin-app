@@ -66,26 +66,46 @@
         class="bg-stack"
         :style="{ '--fade-ms': fadeDurationMs + 'ms' }"
       >
-        <Transition name="fade">
-          <img
-            v-if="curBg.type === 'image'"
-            :key="'img-' + curBg.url"
-            :src="curBg.url"
-            class="layer-bg"
+        <!--
+          O item novo entra POR CIMA do atual, que continua opaco embaixo: o
+          papel de parede nunca fica exposto no meio da troca. O fade só começa
+          quando a mídia tem o primeiro frame (ou estoura o timeout).
+        -->
+        <Transition name="fade" :duration="fadeDurationMs" @after-leave="resetBgLayers">
+          <div
+            v-if="curBg.active"
+            class="layer-bg-stack"
             :style="{ '--fade-ms': fadeDurationMs + 'ms' }"
-            alt=""
-          />
-          <video
-            v-else-if="curBg.type === 'video'"
-            :key="'vid-' + curBg.url"
-            ref="bgVideoRef"
-            :src="curBg.url"
-            class="layer-bg"
-            :style="{ '--fade-ms': fadeDurationMs + 'ms' }"
-            autoplay
-            muted
-            loop
-          ></video>
+          >
+            <template v-for="layer in bgLayers" :key="layer.key">
+              <img
+                v-if="layer.type === 'image'"
+                :src="layer.url"
+                class="layer-bg"
+                :class="{
+                  'layer-bg--pending': layer.key === bgPendingKey,
+                  'layer-bg--entering': layer.key === bgEnteringKey,
+                }"
+                alt=""
+                @load="markBgLayerReady(layer.key)"
+                @error="markBgLayerReady(layer.key)"
+              />
+              <video
+                v-else
+                :src="layer.url"
+                class="layer-bg"
+                :class="{
+                  'layer-bg--pending': layer.key === bgPendingKey,
+                  'layer-bg--entering': layer.key === bgEnteringKey,
+                }"
+                autoplay
+                muted
+                loop
+                @loadeddata="markBgLayerReady(layer.key)"
+                @error="markBgLayerReady(layer.key)"
+              ></video>
+            </template>
+          </div>
         </Transition>
         <Transition name="fade">
           <div
@@ -208,6 +228,7 @@ import { useProjectionZoom } from "@/composables/useProjectionZoom";
 import { useProjectionCloseNotice } from "@/composables/useProjectionCloseNotice";
 import { PROJECTION_TYPE } from "@/constants/Projection";
 import { useProjectionState } from "@/composables/useProjectionState";
+import { useBackgroundItemStack } from "@/composables/useBackgroundItemStack";
 import { useContainerSize } from "@/composables/useContainerSize";
 import $broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
@@ -257,13 +278,20 @@ interface BgState {
 }
 
 const curBg = reactive<BgState>({ active: false, type: "", url: "", title: "" });
-const bgVideoRef = ref<HTMLVideoElement | null>(null);
 const backgroundGate = new BackgroundPresentationGate();
 
 const MODULE_PATH = $modules.getPath(ModuleEnum.BACKGROUND_PROJECTION);
 const fadeDurationMs = computed(
   () => $userdata.get<number>(`${MODULE_PATH}.fade_duration`, 500) ?? 500
 );
+
+const {
+  layers: bgLayers,
+  pendingKey: bgPendingKey,
+  enteringKey: bgEnteringKey,
+  markReady: markBgLayerReady,
+  reset: resetBgLayers,
+} = useBackgroundItemStack(curBg, fadeDurationMs);
 
 function activateBg(value: unknown): void {
   const p = backgroundGate.accept(value);
@@ -995,6 +1023,20 @@ onBeforeUnmount(() => {
 }
 .layer-bg--fallback {
   z-index: 0;
+}
+.layer-bg--pending {
+  opacity: 0;
+}
+.layer-bg--entering {
+  animation: layer-fade-in var(--fade-ms, 500ms) linear both;
+}
+@keyframes layer-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 /* Vue Transition */

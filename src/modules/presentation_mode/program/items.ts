@@ -75,6 +75,36 @@ export function onlineItem(video: { id: string; title: string; duration: number 
   };
 }
 
+/** Prefixo do `ref_id` de um item de site que é design do Canva. */
+export const CANVA_REF = "canva:";
+
+/**
+ * Design do Canva aberto no navegador, como item de site. O `view_url` do
+ * Canva expira; o `ref_id` guarda o design para a execução pedir um novo.
+ */
+export function canvaSiteItem(design: { id: string; title: string; url: string }): ProgramItem {
+  return {
+    id: newId(),
+    kind: "site",
+    title: design.title,
+    subtitle: "Canva",
+    plannedMinutes: 5,
+    source: liturgyItem({
+      id: newId(),
+      tipo: LiturgyItemTypeEnum.SITE,
+      url: design.url,
+      item: design.title,
+      ref_id: `${CANVA_REF}${design.id}`,
+    }),
+  };
+}
+
+/** O design do Canva por trás de um item de site, se for um. */
+export function canvaDesignOf(item: Pick<ProgramItem, "source">): string | null {
+  const ref = item.source?.ref_id ?? "";
+  return item.source?.tipo === LiturgyItemTypeEnum.SITE && ref.startsWith(CANVA_REF) ? ref.slice(CANVA_REF.length) : null;
+}
+
 /** Trecho da Bíblia como item do programa: o título é a referência. */
 export function bibleItem(ref: ProgramBibleRef): ProgramItem {
   return {

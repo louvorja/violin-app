@@ -58,6 +58,7 @@
             {{ tm("library.play_muted") }}
           </LjButton>
           <LjButton
+            v-if="hasStageMonitor"
             size="sm"
             :icon="ICONS.PROJECTION.RETURN"
             data-testid="pm-preview-return"
@@ -101,6 +102,7 @@ import $database from "@/helpers/Database";
 import Telemetry from "@/helpers/Telemetry";
 import { buildSlidesFrom } from "@/composables/useMedia";
 import { useModuleI18n } from "@/composables/useModuleI18n";
+import { useHasStageMonitor } from "../composables/useOutputs";
 import type { Music } from "@/types/Music";
 import SlideGrid from "./SlideGrid.vue";
 
@@ -136,6 +138,7 @@ const emit = defineEmits<{
 }>();
 
 const { tm } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
+const hasStageMonitor = useHasStageMonitor();
 
 const songSlides = ref<Record<string, unknown>[]>([]);
 const songHasInstrumental = ref(false);

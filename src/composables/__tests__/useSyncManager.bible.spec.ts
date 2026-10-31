@@ -271,6 +271,42 @@ describe("useSyncManager.scanBibleVersionsDisk", () => {
   });
 });
 
+describe("useSyncManager.scanBibleVersionsStatus", () => {
+  it("separa versão completa de versão pela metade", async () => {
+    dbGet.mockResolvedValue([
+      { id_bible_book: 1, chapters: 2 },
+      { id_bible_book: 2, chapters: 2 },
+    ]);
+    storedIds.mockImplementation(async (_table: unknown, prefix: string) => {
+      if (prefix === "bible_1_") return new Set(["bible_1_1_1", "bible_1_1_2"]);
+      if (prefix === "bible_2_")
+        return new Set(["bible_2_1_1", "bible_2_1_2", "bible_2_2_1", "bible_2_2_2"]);
+      return new Set();
+    });
+    const sync = await mountSync();
+
+    const status = await sync.scanBibleVersionsStatus(
+      [{ id_bible_version: 1 }, { id_bible_version: 2 }] as never,
+      "pt"
+    );
+
+    expect(status.complete).toEqual([2]);
+    expect(status.partial.get(1)).toEqual({ have: 2, total: 4 });
+    expect(status.partial.has(2)).toBe(false);
+  });
+
+  it("versão sem nenhum capítulo não é completa nem parcial", async () => {
+    dbGet.mockResolvedValue([{ id_bible_book: 1, chapters: 1 }]);
+    storedIds.mockResolvedValue(new Set());
+    const sync = await mountSync();
+
+    const status = await sync.scanBibleVersionsStatus([{ id_bible_version: 1 }] as never, "pt");
+
+    expect(status.complete).toEqual([]);
+    expect(status.partial.size).toBe(0);
+  });
+});
+
 describe("bundlePercentOf", () => {
   const dl = (received: number, total: number) => ({
     phase: "download" as const,

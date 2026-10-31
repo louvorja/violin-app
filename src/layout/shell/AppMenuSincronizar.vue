@@ -539,7 +539,39 @@
                   <small v-if="ver.abbreviation" class="opt-download-count">
                     · {{ ver.abbreviation }}
                   </small>
+                  <small
+                    v-if="partialBibles.get(ver.id_bible_version)"
+                    class="opt-download-count opt-tag--partial"
+                  >
+                    · {{ partialPercent(partialBibles.get(ver.id_bible_version)!) }}
+                  </small>
                 </label>
+
+                <div v-if="partialBibles.get(ver.id_bible_version)" class="opt-partial">
+                  <span class="opt-partial__info">
+                    {{
+                      $t(
+                        "options.collections_download.partial_files",
+                        partialBibles.get(ver.id_bible_version)!
+                      )
+                    }}
+                  </span>
+                  <LjButton
+                    size="sm"
+                    :disabled="biblePartialBusy"
+                    @click="continueBiblePartial(ver.id_bible_version)"
+                  >
+                    {{ $t("options.collections_download.partial_continue") }}
+                  </LjButton>
+                  <LjButton
+                    size="sm"
+                    variant="danger"
+                    :disabled="biblePartialBusy"
+                    @click="discardBiblePartial(ver)"
+                  >
+                    {{ $t("options.collections_download.partial_discard") }}
+                  </LjButton>
+                </div>
               </div>
             </div>
           </div>
@@ -583,16 +615,17 @@
                 {{ $t("options.bible_download.download") }}
               </button>
               <button
-                v-if="!bibleDownloading && bibleDownloadedBaseline.size > 0"
+                v-if="bibleHasPendingRemovals || bibleSaving"
                 type="button"
-                class="opt-btn"
-                :disabled="bibleSaving || !bibleHasPendingRemovals"
-                @click="saveBibleSelection"
+                class="opt-btn opt-btn--danger"
+                :disabled="bibleSaving || bibleDownloading"
+                @click="confirmBibleRemoval"
               >
+                <LjIcon :icon="ICONS.ACTIONS.DELETE_FILLED" size="14" />
                 {{
                   bibleSaving
                     ? $t("options.bible_download.saving")
-                    : $t("options.bible_download.save")
+                    : $t("options.bible_download.remove", { n: biblePendingRemovalCount })
                 }}
               </button>
             </div>
@@ -1051,6 +1084,8 @@ const bibleVersions = ref<BibleVersion[]>([]);
 const selectedBibles = ref<Set<number>>(new Set());
 const bibleLoading = ref<boolean>(false);
 const bibleDownloadedBaseline = ref<Set<number>>(new Set());
+/** Versões baixadas pela metade: capítulos presentes de quantos existem. */
+const partialBibles = ref<Map<number, { have: number; total: number }>>(new Map());
 const bibleSaving = ref<boolean>(false);
 
 const saving = ref<boolean>(false);
@@ -1180,6 +1215,18 @@ const bibleHasPendingRemovals = computed<boolean>(() => {
   }
   return false;
 });
+
+const biblePendingRemovalCount = computed<number>(() => {
+  let n = 0;
+  for (const id of bibleDownloadedBaseline.value) {
+    if (!selectedBibles.value.has(id)) n += 1;
+  }
+  return n;
+});
+
+const biblePartialBusy = computed(
+  () => bibleDownloading.value || bibleSaving.value || bibleLoading.value
+);
 
 /* ---- Verificação inicial ---- */
 
@@ -1544,15 +1591,25 @@ async function loadBibleVersions(): Promise<void> {
     const result = await sync.loadBibleVersions(locale.value);
     bibleVersions.value = result.versions;
 
-    const downloadedOnDisk = await sync.scanBibleVersionsDisk(result.versions, locale.value);
-    const downloadedSet = new Set(downloadedOnDisk);
-    selectedBibles.value = downloadedSet;
-    bibleDownloadedBaseline.value = new Set(downloadedSet);
+    await loadBibleStatuses();
   } catch (e) {
     console.error("[Sincronizar] loadBibleVersions:", e);
   } finally {
     bibleLoading.value = false;
   }
+}
+
+/**
+ * Relê o disco e separa o que está completo do que ficou pela metade.
+ * É a única fonte da seleção/baseline — cancelar um download não pode mais
+ * marcar versões incompletas como baixadas.
+ */
+async function loadBibleStatuses(): Promise<void> {
+  const status = await sync.scanBibleVersionsStatus(bibleVersions.value, locale.value);
+  const complete = new Set(status.complete);
+  selectedBibles.value = complete;
+  bibleDownloadedBaseline.value = new Set(complete);
+  partialBibles.value = status.partial;
 }
 
 async function refreshBibleVersions(): Promise<void> {
@@ -1561,10 +1618,7 @@ async function refreshBibleVersions(): Promise<void> {
     const result = await sync.loadBibleVersions(locale.value);
     bibleVersions.value = result.versions;
 
-    const downloadedOnDisk = await sync.scanBibleVersionsDisk(result.versions, locale.value);
-    const downloadedSet = new Set(downloadedOnDisk);
-    selectedBibles.value = downloadedSet;
-    bibleDownloadedBaseline.value = new Set(downloadedSet);
+    await loadBibleStatuses();
   } catch (e) {
     console.error("[Sincronizar] refreshBibleVersions:", e);
   } finally {
@@ -1594,8 +1648,43 @@ async function downloadBibleVersions(): Promise<void> {
     bibleVersions.value,
     locale.value
   );
-  bibleDownloadedBaseline.value = new Set(selectedBibles.value);
+  /* Cancelado ou parcial: o disco é a verdade — nada de assumir a seleção. */
+  await loadBibleStatuses();
   sync.bibleCompletedMsg.value = t("options.bible_download.completed", { downloaded: done });
+}
+
+/** Retoma uma versão incompleta; o download já pula os capítulos presentes. */
+async function continueBiblePartial(versionId: number): Promise<void> {
+  if (biblePartialBusy.value) return;
+  await sync.downloadBibleVersions([versionId], bibleVersions.value, locale.value);
+  await loadBibleStatuses();
+}
+
+/** Apaga os capítulos já baixados de uma versão incompleta. */
+async function discardBiblePartial(ver: BibleVersion): Promise<void> {
+  if (biblePartialBusy.value) return;
+  const progresso = partialBibles.value.get(ver.id_bible_version);
+  const ok = await $alert.confirm(
+    t("options.collections_download.partial_discard_confirm", {
+      n: progresso?.have ?? 0,
+      name: ver.name,
+    })
+  );
+  if (!ok) return;
+  await sync.saveBibleSelectionToDisk([ver.id_bible_version]);
+  const restantes = (
+    $userdata.get<number[]>(KEYS.STORAGE.BIBLE_DOWNLOADED_VERSIONS, []) || []
+  ).filter((id) => id !== ver.id_bible_version);
+  $userdata.set(KEYS.STORAGE.BIBLE_DOWNLOADED_VERSIONS, restantes);
+  await loadBibleStatuses();
+}
+
+async function confirmBibleRemoval(): Promise<void> {
+  if (!bibleHasPendingRemovals.value) return;
+  const ok = await $alert.confirm(
+    t("options.bible_download.remove_confirm", { n: biblePendingRemovalCount.value })
+  );
+  if (ok) await saveBibleSelection();
 }
 
 async function saveBibleSelection(): Promise<void> {
@@ -1607,10 +1696,8 @@ async function saveBibleSelection(): Promise<void> {
       (id) => !selectedBibles.value.has(id)
     );
     await sync.saveBibleSelectionToDisk(toRemove);
-    for (const id of toRemove) bibleDownloadedBaseline.value.delete(id);
-    bibleDownloadedBaseline.value = new Set(bibleDownloadedBaseline.value);
-    const remaining = Array.from(bibleDownloadedBaseline.value);
-    $userdata.set(KEYS.STORAGE.BIBLE_DOWNLOADED_VERSIONS, remaining);
+    await loadBibleStatuses();
+    $userdata.set(KEYS.STORAGE.BIBLE_DOWNLOADED_VERSIONS, [...bibleDownloadedBaseline.value]);
     sync.bibleCompletedMsg.value = t("options.bible_download.save_done", { n: toRemove.length });
   } catch (e) {
     console.error("[Sincronizar] saveBibleSelection:", e);

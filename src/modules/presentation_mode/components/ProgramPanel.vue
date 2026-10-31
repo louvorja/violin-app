@@ -104,6 +104,7 @@
         <span class="pm-progress__done" :style="{ width: `${progress.done}%` }" />
         <span class="pm-progress__live" :style="{ width: `${progress.live}%` }" />
       </div>
+      <MusicOverrideToggle />
     </section>
 
     <div class="pm-program__body">
@@ -120,8 +121,35 @@
         />
 
         <section v-for="session in program.sessions" :key="session.id" class="pm-session">
-          <header class="pm-session__head" @dblclick="emit('edit-session', session.id)">
-            <span class="pm-session__label">{{ session.label }}</span>
+          <header
+            class="pm-session__head"
+            :class="{ 'pm-session__head--collapsed': collapsedSessions[session.id] }"
+            @dblclick="emit('edit-session', session.id)"
+          >
+            <!-- Recolher: a sessão que já passou (ou ainda vai demorar) sai do caminho. -->
+            <button
+              type="button"
+              class="pm-session__toggle"
+              :aria-expanded="!collapsedSessions[session.id]"
+              :title="
+                tm(
+                  collapsedSessions[session.id]
+                    ? 'program.expand_session'
+                    : 'program.collapse_session'
+                )
+              "
+              :data-testid="`pm-session-toggle-${session.id}`"
+              @click="toggleSession(session.id)"
+              @dblclick.stop
+            >
+              <LjIcon
+                :icon="
+                  collapsedSessions[session.id] ? ICONS.UI.CHEVRON_RIGHT : ICONS.UI.CHEVRON_DOWN
+                "
+                :size="12"
+              />
+              <span class="pm-session__label">{{ session.label }}</span>
+            </button>
             <button
               type="button"
               class="pm-program__icon-btn pm-session__edit"
@@ -131,12 +159,31 @@
             >
               <LjIcon :icon="ICONS.ACTIONS.EDIT_OUTLINE" :size="11" />
             </button>
-            <span class="pm-session__meta">
+            <span v-if="collapsedSessions[session.id]" class="pm-session__info">
+              <span
+                v-if="session.items.some((i) => i.id === liveItemId)"
+                class="pm-session__live"
+                data-testid="pm-session-live"
+              >
+                <span class="pm-session__live-dot" />
+                {{ tm("program.live") }}
+              </span>
+              <span class="pm-session__summary" data-testid="pm-session-summary">
+                {{
+                  tm("program.session_done", {
+                    done: session.items.filter((i) => doneIds.has(i.id)).length,
+                    total: session.items.length,
+                  })
+                }}
+              </span>
+            </span>
+            <span v-if="!collapsedSessions[session.id]" class="pm-session__meta">
               {{ formatHHMM(sessionStartMap.get(session.id) ?? 0) }} ·
               {{ formatDuration(sessionMinutes(program, session.id)) }}
             </span>
           </header>
           <draggable
+            v-show="!collapsedSessions[session.id]"
             :model-value="session.items"
             item-key="id"
             group="pm-program-items"
@@ -153,6 +200,7 @@
                 :live="element.id === liveItemId"
                 :next="element.id === nextItemId"
                 :done="doneIds.has(element.id)"
+                :skipped="skippedIds.has(element.id)"
                 :prepared="element.id === preparedItemId"
                 :selected="element.id === selectedItemId"
                 :open="!!openItems[element.id]"
@@ -165,6 +213,7 @@
                 @activate="onActivate(element)"
                 @toggle="toggleOpen(element.id)"
                 @edit="emit('edit-item', element.id)"
+                @set-done="(value: boolean) => setDone(element.id, value)"
               />
             </template>
           </draggable>
@@ -232,6 +281,7 @@ import { ModuleEnum } from "@/enums/ModuleEnum";
 import { useModuleI18n } from "@/composables/useModuleI18n";
 import type { ProgramItem, ProgramSubItem } from "@/types/Presentation";
 import ProgramItemRow from "./ProgramItemRow.vue";
+import MusicOverrideToggle from "./MusicOverrideToggle.vue";
 import AirHistory from "./AirHistory.vue";
 import { useAirHistory } from "../composables/useAirHistory";
 import type { HistoryEntry } from "../program/history";
@@ -303,10 +353,15 @@ const {
   liveItemId,
   liveStartedAt,
   doneIds,
+  skippedIds,
   openItems,
+  collapsedSessions,
+  toggleSession,
   nextItemId,
   preparedItemId,
   setDate,
+  setDone,
+  startHere,
   setSessions,
   select,
   toggleOpen,
@@ -439,10 +494,13 @@ function editNextPending(): void {
   emit("edit-item", first.id);
 }
 
-/** Item que ainda não tem conteúdo não vai ao ar: o duplo clique abre a escolha. */
+/**
+ * Item que ainda não tem conteúdo não vai ao ar: o duplo clique abre a escolha.
+ * O marcador anda do mesmo jeito — é o momento do culto.
+ */
 function onActivate(item: ProgramItem): void {
+  emit("activate", item.id);
   if (isPending(item)) emit("edit-item", item.id);
-  else emit("activate", item.id);
 }
 
 const readiness = useReadiness();
@@ -488,6 +546,23 @@ function itemMenu(item: ProgramItem): { quick: LjMenuItem[]; items: LjMenuItem[]
     ],
     items: [
       { label: tm("library.preview"), icon: ICONS.UI.EYE, action: () => onSelect(item.id) },
+      { separator: true },
+      doneIds.value.has(item.id)
+        ? {
+            label: tm("program.mark_undone"),
+            icon: ICONS.ACTIONS.UNDO,
+            action: () => setDone(item.id, false),
+          }
+        : {
+            label: tm("program.mark_done"),
+            icon: ICONS.UI.CHECK,
+            action: () => setDone(item.id, true),
+          },
+      {
+        label: tm("program.start_here"),
+        icon: ICONS.PLAYER.FAST_FORWARD,
+        action: () => startHere(item.id),
+      },
       { separator: true },
       {
         label: tm("ribbon.btn.duplicate"),
@@ -848,6 +923,78 @@ function onSessionItems(sessionId: string, list: ProgramItem[]): void {
 .pm-session__head:hover .pm-session__edit,
 .pm-session__edit:focus-visible {
   opacity: 1;
+}
+
+.pm-session__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  margin: -2px 0 -2px -4px;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: var(--lj-radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.pm-session__toggle:hover {
+  background: var(--lj-hover-bg);
+  color: var(--lj-text);
+}
+
+.pm-session__toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--lj-ui-focus);
+}
+
+.pm-session__head--collapsed {
+  padding-bottom: 6px;
+}
+
+/* Recolhida, o resumo vai para a direita no lugar do horário. */
+.pm-session__info {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.pm-session__summary {
+  margin-left: auto;
+}
+
+.pm-session__head--collapsed .pm-session__live + .pm-session__summary {
+  margin-left: 0;
+}
+
+.pm-session__summary {
+  flex-shrink: 0;
+  font-family: var(--lj-font-mono);
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.pm-session__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  color: var(--lj-danger);
+  letter-spacing: 0.4px;
+}
+
+.pm-session__live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .pm-session__meta {

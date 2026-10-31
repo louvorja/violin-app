@@ -33,6 +33,7 @@ export { default as LjToast } from "./LjToast.vue";
 
 /* — sobre Reka UI — */
 export { default as LjAccordion } from "./LjAccordion.vue";
+export { default as LjColorPicker } from "./LjColorPicker.vue";
 export { default as LjCombobox } from "./LjCombobox.vue";
 export { default as LjDialog } from "./LjDialog.vue";
 export { default as LjDrawer } from "./LjDrawer.vue";

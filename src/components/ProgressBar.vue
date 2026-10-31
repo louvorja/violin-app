@@ -4,6 +4,9 @@
       <span v-if="$slots.label" class="pgb__label"><slot name="label" /></span>
       <span v-else-if="total > 0" class="pgb__label">{{ done }}/{{ total }} ({{ percent }}%)</span>
       <span v-if="etaText" class="pgb__eta">{{ etaText }}</span>
+      <span v-else-if="etaCalculating && !completedMsg" class="pgb__eta">
+        {{ t("shell.background_tasks.eta_calculating") }}
+      </span>
     </div>
 
     <LjProgress :value="percent" :height="8" />
@@ -46,6 +49,8 @@ const props = withDefaults(
   defineProps<{
     done?: number;
     total?: number;
+    /** Percentual pronto (0–100); sobrepõe done/total na barra e no ETA. */
+    percent?: number;
     current?: string | null;
     failed?: number;
     completedMsg?: string;
@@ -56,6 +61,7 @@ const props = withDefaults(
   {
     done: 0,
     total: 0,
+    percent: undefined,
     current: "",
     failed: 0,
     completedMsg: "",
@@ -67,26 +73,38 @@ const props = withDefaults(
 
 defineEmits<{ cancel: [] }>();
 
-const percent = computed(() =>
-  props.total > 0 ? Math.round((props.done / props.total) * 100) : 0
-);
+const percent = computed(() => {
+  if (props.percent != null) {
+    return Math.round(Math.max(0, Math.min(100, props.percent)));
+  }
+  return props.total > 0 ? Math.round((props.done / props.total) * 100) : 0;
+});
 
 // Tempo restante pelo ritmo de arquivos concluídos. Vale para qualquer tela que
 // use a barra, sem depender de a tarefa existir no painel de processos.
 const { t } = useI18n();
 const estimator = createEtaEstimator();
 const etaSeconds = ref<number | null>(null);
+const etaCalculating = ref(false);
 
 watch(
-  () => [props.done, props.total],
+  () => [props.done, props.total, props.percent],
   () => {
-    if (props.total <= 0) {
+    const atual =
+      props.percent != null
+        ? Math.max(0, Math.min(100, props.percent))
+        : props.total > 0
+          ? (props.done / props.total) * 100
+          : null;
+    if (atual === null) {
       etaSeconds.value = null;
+      etaCalculating.value = false;
       return;
     }
     const now = Date.now();
-    estimator.push(now, Math.min(100, (props.done / props.total) * 100));
+    estimator.push(now, atual);
     etaSeconds.value = estimator.eta(now);
+    etaCalculating.value = estimator.calculating(now);
   },
   { immediate: true }
 );

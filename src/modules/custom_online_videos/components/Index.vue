@@ -224,6 +224,7 @@ import { ref, reactive, computed, onMounted, onBeforeUnmount } from "vue";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import CategoryManagerDialog, { CategoryFileData } from "@/components/CategoryManagerDialog.vue";
+import { nextCategorySelection } from "@/helpers/CategorySelection";
 import OnlineVideoDownload from "@/components/OnlineVideoDownload.vue";
 import OnlineVideoDownloadBadge from "@/components/OnlineVideoDownloadBadge.vue";
 import OnlineVideoDownloadsBar from "@/components/OnlineVideoDownloadsBar.vue";
@@ -376,9 +377,14 @@ async function saveCategoryRecord(cat: CategoryFileData): Promise<void> {
 async function handleSaveCategory(cat: CategoryFileData): Promise<void> {
   saving.value = true;
   try {
+    const isNew = !categories.value.some((c) => String(c.id) === String(cat.id));
     await saveCategoryRecord(cat);
     await loadCategories();
-    selectAllCategoriesAndUncategorized();
+    selectedCategoryIds.value = nextCategorySelection(
+      selectedCategoryIds.value,
+      String(cat.id),
+      isNew
+    );
   } finally {
     saving.value = false;
   }

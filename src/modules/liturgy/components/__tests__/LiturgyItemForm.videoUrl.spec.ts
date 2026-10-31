@@ -149,8 +149,9 @@ describe("LiturgyItemForm — URL colada do vídeo on-line", () => {
     await flushPromises();
 
     expect(mocks.setFormField).toHaveBeenCalledWith("url", URL_YOUTUBE);
+    /* Nome vazio: o título preenche. A lista usa o subtítulo, não a URL. */
     expect(mocks.setFormField).toHaveBeenCalledWith("item", "Título do YouTube");
-    expect(mocks.setFormField).toHaveBeenCalledWith("subitem", "YouTube");
+    expect(mocks.setFormField).toHaveBeenCalledWith("subitem", "Título do YouTube");
     // Baixa sempre; o checkbox é quem decide o salvamento.
     expect(mocks.download).toHaveBeenCalledWith("dQw4w9WgXcQ", "Título do YouTube", {
       keep: false,
@@ -238,7 +239,7 @@ describe("LiturgyItemForm — URL colada do vídeo on-line", () => {
     expect(mocks.saveItem).toHaveBeenCalledTimes(1);
   });
 
-  it("sem título do oEmbed, o próprio link vira o nome do item", async () => {
+  it("sem título do oEmbed, o próprio link vira o nome mostrado", async () => {
     mocks.fetchTitle.mockResolvedValue(null);
     wrapper = mountForm();
     const state = vm(wrapper);
@@ -247,7 +248,61 @@ describe("LiturgyItemForm — URL colada do vídeo on-line", () => {
     await (state.salvarItem as () => Promise<void>)();
     await flushPromises();
 
+    expect(mocks.setFormField).toHaveBeenCalledWith("subitem", URL_YOUTUBE);
     expect(mocks.setFormField).toHaveBeenCalledWith("item", URL_YOUTUBE);
+    expect(mocks.saveItem).toHaveBeenCalledTimes(1);
+  });
+
+  it("o nome digitado nunca é substituído pelo título do vídeo", async () => {
+    wrapper = mountForm({ item: "Abertura do culto" });
+    const state = vm(wrapper);
+
+    state.videoUrl = URL_YOUTUBE;
+    await (state.salvarItem as () => Promise<void>)();
+    await flushPromises();
+
+    expect(mocks.setFormField).not.toHaveBeenCalledWith("item", expect.anything());
+    expect(mocks.setFormField).toHaveBeenCalledWith("subitem", "Título do YouTube");
+    expect(mocks.saveItem).toHaveBeenCalledTimes(1);
+  });
+
+  it("trocar o vídeo de um item já nomeado não renomeia o item", async () => {
+    wrapper = mountForm({ item: "Abertura do culto" });
+    const state = vm(wrapper);
+
+    (state.onVideoSearchPicked as (_v: { name: string; url: string }) => void)({
+      name: "Outro vídeo",
+      url: "https://www.youtube.com/watch?v=outro1",
+    });
+    await flushPromises();
+
+    expect(mocks.setFormField).not.toHaveBeenCalledWith("item", expect.anything());
+    expect(mocks.setFormField).toHaveBeenCalledWith("subitem", "Outro vídeo");
+  });
+
+  it("editar item antigo migra o subtítulo \"URL: ...\" para o título ao salvar", async () => {
+    wrapper = mountForm({ url: URL_YOUTUBE, subitem: `URL: ${URL_YOUTUBE}`, item: "Abertura" });
+    const state = vm(wrapper);
+
+    await (state.salvarItem as () => Promise<void>)();
+    await flushPromises();
+
+    expect(mocks.fetchTitle).toHaveBeenCalledWith("dQw4w9WgXcQ");
+    expect(mocks.setFormField).toHaveBeenCalledWith("subitem", "Título do YouTube");
+    expect(mocks.setFormField).not.toHaveBeenCalledWith("item", expect.anything());
+    expect(mocks.saveItem).toHaveBeenCalledTimes(1);
+  });
+
+  it("na migração sem título, o subtítulo fica a URL e o nome não muda", async () => {
+    mocks.fetchTitle.mockResolvedValue(null);
+    wrapper = mountForm({ url: URL_YOUTUBE, subitem: `URL: ${URL_YOUTUBE}`, item: "Abertura" });
+    const state = vm(wrapper);
+
+    await (state.salvarItem as () => Promise<void>)();
+    await flushPromises();
+
+    expect(mocks.setFormField).toHaveBeenCalledWith("subitem", URL_YOUTUBE);
+    expect(mocks.setFormField).not.toHaveBeenCalledWith("item", expect.anything());
     expect(mocks.saveItem).toHaveBeenCalledTimes(1);
   });
 
@@ -329,7 +384,8 @@ describe("LiturgyItemForm — campo de URL e escolha de catálogo se excluem", (
     await flushPromises();
 
     expect(mocks.setFormField).toHaveBeenCalledWith("url", "");
-    expect(mocks.setFormField).toHaveBeenCalledWith("item", "");
+    /* Limpar o vídeo não apaga o nome que o operador deu ao item. */
+    expect(mocks.setFormField).not.toHaveBeenCalledWith("item", "");
     expect(mocks.setFormField).toHaveBeenCalledWith("subitem", "");
     expect(state.videoUrl).toBe("");
     expect(campoUrl(wrapper)?.props("disabled")).toBe(false);

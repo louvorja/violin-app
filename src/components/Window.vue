@@ -7,6 +7,7 @@
         :style="{ width: w_width, height: w_height }"
         :data-theme="dark ? 'dark' : undefined"
         v-bind="ariaSemOrfa"
+        :trap-focus="sobreposicoesGlobais === 0"
         @open-auto-focus="onOpenAutoFocus"
         @escape-key-down="onEscapeKeyDown"
         @pointer-down-outside="onPointerDownOutside"
@@ -103,6 +104,8 @@
 import { LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, watch, onMounted, useSlots } from "vue";
+import { deveAssumirFoco } from "@/helpers/FocusGuard";
+import { sobreposicoesGlobais } from "@/composables/useSobreposicaoGlobal";
 import { DialogContent, DialogOverlay, DialogPortal, DialogRoot, DialogTitle } from "reka-ui";
 import { useViewport } from "@/composables/useViewport";
 
@@ -220,6 +223,21 @@ function onEsc() {
 // conta própria e o `close`/`minimize` do módulo nunca rodaria.
 function onEscapeKeyDown(event) {
   event.preventDefault();
+  /*
+   * O Esc pertence à camada de cima.
+   *
+   * A Reka escuta o Escape no documento, então esta janela também recebe a
+   * tecla quando quem tem o foco é a paleta de comandos — e a mesma tecla não
+   * pode encerrar (ou pedir confirmação para encerrar) a projeção/mídia que
+   * está por baixo.
+   *
+   * O ALVO do evento decide, e não o estado da paleta: quando este handler
+   * roda, a paleta já pode ter fechado neste mesmo keydown, e a flag já estaria
+   * `false`.
+   */
+  const alvo = event.detail?.originalEvent?.target;
+  if (alvo instanceof Element && alvo.closest(".cmd-palette")) return;
+  if (sobreposicoesGlobais.value > 0) return;
   onEsc();
 }
 
@@ -247,6 +265,14 @@ function onPointerDownOutside(event) {
 // campo já selecionado. O contêiner recebe o foco e o Tab segue dali.
 function onOpenAutoFocus(event) {
   event.preventDefault();
+  /* O autofocus pode chegar depois de outra camada já ter o foco (player e
+   * paleta abertos em sequência). Ver `deveAssumirFoco`. */
+  /* A paleta de comandos é sobreposição global do shell: enquanto ela está
+   * aberta, nenhuma janela de módulo assume o foco. Sem esta guarda, o
+   * autofocus da janela (que pode re-disparar quando o conteúdo remonta) puxa
+   * o foco de volta e o que o operador digita cai na janela de trás. */
+  if (sobreposicoesGlobais.value > 0) return;
+  if (!deveAssumirFoco(document.activeElement, event.currentTarget)) return;
   event.currentTarget?.focus?.();
 }
 

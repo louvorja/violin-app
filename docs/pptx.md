@@ -82,16 +82,17 @@ o PowerPoint gerou.
 ## Onde fica
 
 ```
-<dados>/files/pptx/
+<dados>/pptx/
 ├── <hash do arquivo>-<assinatura das fontes>-<conversor>-v2.pdf
 ├── <mesmo nome>.json      metadado (arquivo de origem, fontes, data)
 └── fonts/                 fontes extraídas/baixadas (embedded/, google/)
 ```
 
 A assinatura das fontes muda quando uma fonte que faltava passa a existir:
-o mesmo arquivo é convertido de novo. `storage.js` trata `files/pptx` como
-conteúdo do operador — `clearFiles`, `clearUnused` e `enforceQuota` não
-apagam.
+o mesmo arquivo é convertido de novo. A pasta fica fora de `files/` porque é
+conteúdo do operador: as limpezas do acervo (`clearFiles`, `clearUnused`,
+`enforceQuota`) só olham `files/`, e o acervo pode ser compartilhado entre as
+contas do computador. Pelo mesmo motivo o PowerPoint não deve voltar para lá.
 
 ## Código
 
@@ -129,7 +130,7 @@ Nesse modo (`electron/main/pptx/nativeShow.js`, Windows + PowerPoint):
   o slide), Tela preta e Encerrar; o main consulta o slide atual a cada 700 ms
   e publica `pptx:native-state`, então avançar pelo próprio PowerPoint também
   aparece no painel;
-- cada início, falha e mudança de estado vai para `files/pptx/modo-nativo.log`
+- cada início, falha e mudança de estado vai para `<dados>/pptx/modo-nativo.log`
   (corta sozinho em ~200 KB): é o que pedir ao operador quando o PowerPoint se
   comportar diferente no computador dele.
 - **o retorno continua sendo o do LouvorJA** (se "Exibir na tela de retorno" estiver

@@ -492,6 +492,8 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
   storage: {
     /** Estatísticas: tamanho ocupado por categoria + caminhos. */
     stats: () => ipcRenderer.invoke("storage:stats"),
+    /** Pasta de dados pedida e motivo, quando o app teve de abrir em outra. */
+    dataDirIssue: () => ipcRenderer.invoke("storage:dataDirIssue"),
     /** Limpa cache de JSON (banco). */
     clearJson: () => ipcRenderer.invoke("storage:clearJson"),
     /** Limpa toda a mídia local (mp3, imagens). */

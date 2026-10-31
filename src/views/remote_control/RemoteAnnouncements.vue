@@ -21,7 +21,7 @@
           <button
             type="button"
             class="ra-item__play"
-            :aria-label="t('remote_control.announcements.executed', { name: ann.nome })"
+            :aria-label="t('remote_control.announcements.project')"
             @click="projectAnnouncement(ann)"
           >
             <LjIcon :icon="ICONS.PLAYER.PLAY_OUTLINE" color="primary" />

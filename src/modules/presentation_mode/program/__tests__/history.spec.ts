@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { historyItem, recordEntry, type HistoryEntry } from "../history";
+import { canvaDesignOf } from "../items";
 import type { Playable } from "../playable";
 
 const file = (path: string): Playable => ({
@@ -34,5 +35,16 @@ describe("history", () => {
     expect(historyItem(entry("3", { type: "online", videoId: "abc", title: "Vídeo" }))?.kind).toBe(
       "online_video"
     );
+  });
+});
+
+describe("design do Canva no navegador", () => {
+  const canva: Playable = { type: "canva", designId: "DAF1", title: "Avisos", thumb: null };
+
+  it("entra no histórico e volta ao programa como site que lembra o design", () => {
+    expect(recordEntry([], entry("1", canva))).toHaveLength(1);
+    const item = historyItem(entry("1", canva));
+    expect(item?.kind).toBe("site");
+    expect(item && canvaDesignOf(item)).toBe("DAF1");
   });
 });

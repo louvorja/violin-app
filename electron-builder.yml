@@ -97,12 +97,12 @@ publish:
 # Windows — NSIS installer
 # ---------------------------------------------------------------------------
 win:
-  # Só x64, de propósito — e isso não deixa o Windows on ARM de fora: desde o
-  # Windows 11 ele executa binários x64 por emulação, então o mesmo instalador
-  # serve as duas máquinas.
+  # A config padrão builda x64. O Windows on ARM tem um job PRÓPRIO na release
+  # (`electron:build:win:arm64`), que passa `--arm64` na linha de comando e um
+  # nome de instalador com "-arm64" (ver package.json).
   #
-  # Declarar `arch: [x64, arm64]` aqui sairia caro: o electron-builder monta
-  # SEMPRE um instalador combinado com as duas dentro (`NsisTarget.js`, o
+  # NÃO declarar `arch: [x64, arm64]` aqui: o electron-builder monta SEMPRE um
+  # instalador combinado com as duas dentro (`NsisTarget.js`, o
   # `new Set([this.archs])` que abre `finishBuild`), e o `${arch}` no nome do
   # arquivo apenas acrescenta os individuais em vez de substituí-lo. O resultado
   # são três `.exe`, e o `latest.yml` aponta o combinado — 193MB que todo
@@ -194,10 +194,12 @@ mac:
   entitlementsInherit: build/entitlements.mac.plist
 
 dmg:
-  # "-universal" é o que o site da comunidade lê para anunciar Intel e Apple
+  # "_universal" é o que o site da comunidade lê para anunciar Intel e Apple
   # Silicon; sem a marca ele chamava o instalador de "Intel (x86_64)". O link
   # direto da versão web acompanha (src/helpers/DesktopDownload.ts).
-  artifactName: "LouvorJA.Violin-${version}-universal.${ext}"
+  # O separador é "_" de propósito: fica visualmente separado do "-" que
+  # introduz a versão, e não se confunde com o "-mac" do .zip do updater.
+  artifactName: "LouvorJA.Violin-${version}_universal.${ext}"
   # O ícone do volume DMG ainda precisa do formato estático .icns.
   icon: build/icon-mac.icns
 

@@ -63,9 +63,17 @@ async function selected(page) {
 }
 
 async function chooseVersion(page, label) {
-  await page.locator('.bible-header [role="combobox"]').click();
+  const trigger = page.locator('.bible-header [role="combobox"]');
+  await trigger.click();
   await page.getByRole("option", { name: `${label} - Versão ${label}` }).click();
   await expect(page.locator("#listVerse_1")).toContainText(`${label}:`);
+  /*
+   * A Reka devolve o foco ao gatilho depois de escolher o item. Esperar essa
+   * devolução AQUI evita que ela caia depois do próximo `focus()` do teste —
+   * com o foco no gatilho, a busca rápida ignora a tecla (é o guard que impede
+   * digitar para filtrar a lista de abrir a busca), e o "g" se perdia.
+   */
+  await expect(trigger).toBeFocused();
 }
 
 test("teclado com alvo window/document não quebra a busca da Bíblia", async ({ page }) => {

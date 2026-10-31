@@ -49,6 +49,11 @@ export function previewViewOf(target: Playable, item: ProgramItem | null): Previ
   if (target.type === "online") {
     return { kind: "image", title: target.title, icon: KIND_ICONS.online_video, playable: true, url: youtubeThumb(target.videoId) };
   }
+  if (target.type === "canva") {
+    return target.thumb
+      ? { kind: "image", title: target.title, icon: KIND_ICONS.site, playable: true, url: target.thumb }
+      : { kind: "other", title: target.title, icon: KIND_ICONS.site, playable: true };
+  }
   if (target.type === "bible") {
     const { reference, text } = target.ref;
     return { kind: "text", title: reference, icon: KIND_ICONS.bible, playable: true, text, reference };

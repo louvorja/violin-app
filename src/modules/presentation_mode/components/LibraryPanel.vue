@@ -62,6 +62,16 @@
       @stop="emit('stop')"
       @show-on-return="(t: Playable | null) => emit('show-on-return', t)"
     />
+    <LibraryNativeMedia
+      v-else-if="tab === 'media_library'"
+      :live-path="livePath"
+      :return-path="returnPath"
+      v-bind="relay"
+      @stop="emit('stop')"
+      @show-on-return="
+        (e: LibraryEntry | null) => emit('show-on-return', e && { type: 'file', entry: e })
+      "
+    />
     <LibraryBible v-else-if="tab === 'bible'" :live="liveBible" v-bind="relay" />
     <LibraryFiles
       v-else
@@ -86,6 +96,7 @@ import { ICONS } from "@/config/Icons";
 const TABS = [
   { id: "files", label: "library.files", icon: ICONS.UI.FOLDER_OPEN },
   { id: "media", label: "library.media", icon: ICONS.MEDIA.IMAGE_MULTIPLE },
+  { id: "media_library", label: "library.media_library", icon: ICONS.MODULES.MEDIA_LIBRARY },
   { id: "audio", label: "library.audio", icon: ICONS.MEDIA.AUDIO_VIDEO },
   { id: "musics", label: "library.musics", icon: ICONS.MUSIC.MUSIC },
   { id: "bible", label: "library.bible", icon: ICONS.MODULES.BIBLE },
@@ -101,6 +112,7 @@ import LibraryFiles from "./LibraryFiles.vue";
 import LibraryMusic from "./LibraryMusic.vue";
 import LibraryBible from "./LibraryBible.vue";
 import LibraryMedia from "./LibraryMedia.vue";
+import LibraryNativeMedia from "./LibraryNativeMedia.vue";
 import type { ProgramBibleRef, ProgramItem } from "@/types/Presentation";
 import type { Playable, PlayOptions } from "../program/playable";
 import { LjButton, LjIcon } from "@/components/ui";

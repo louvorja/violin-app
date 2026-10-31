@@ -612,23 +612,32 @@ function doExport() {
     });
 }
 
+/*
+ * Escuta as ações da ribbon e o pedido de nova anotação.
+ *
+ * O registro mora no setup — e não dentro do `onMounted`, que espera músicas,
+ * vídeos e a liturgia do dia — porque a ribbon fala por broadcast, sem
+ * callback e sem fila: o módulo precisa estar ouvindo desde que existe, senão
+ * a ação enviada antes do registro simplesmente não chega.
+ */
+_broadcastUnlisten = Broadcast.listen((data) => {
+  if (data?.type === BROADCAST_TYPE.LITURGY_NEW_ANNOTATION) {
+    Modules.open("liturgy");
+    nextTick(() => {
+      openItemDialog();
+      form.value.tipo = LiturgyItemTypeEnum.ANOTACAO;
+    });
+  } else if (data?.type === BROADCAST_TYPE.LITURGY_RIBBON_ACTION) {
+    const action = (data?.payload as { action?: string } | undefined)?.action;
+    if (action) handleRibbonAction(action);
+  }
+});
+
 onMounted(async () => {
   await loadMusicsList();
   await loadVideosList();
   await syncLiturgyForDay(activeDay.value);
   liturgyAutoLoad.checkAutoLoad();
-  _broadcastUnlisten = Broadcast.listen((data) => {
-    if (data?.type === BROADCAST_TYPE.LITURGY_NEW_ANNOTATION) {
-      Modules.open("liturgy");
-      nextTick(() => {
-        openItemDialog();
-        form.value.tipo = LiturgyItemTypeEnum.ANOTACAO;
-      });
-    } else if (data?.type === BROADCAST_TYPE.LITURGY_RIBBON_ACTION) {
-      const action = (data?.payload as { action?: string } | undefined)?.action;
-      if (action) handleRibbonAction(action);
-    }
-  });
 });
 
 onBeforeUnmount(() => {

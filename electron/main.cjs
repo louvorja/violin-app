@@ -178,65 +178,16 @@ function migrateStorageToDataDir() {
   }
 }
 
-/** Um diretório que existe e tem pelo menos uma entrada dentro. */
-function _temConteudo(dir) {
-  try {
-    return fs.existsSync(dir) && fs.statSync(dir).isDirectory() && fs.readdirSync(dir).length > 0;
-  } catch (_) {
-    return false;
-  }
-}
-
-/**
- * O que, dentro de `dir`, conta como acervo a mudar de lugar. `files/` e
- * `storage/`, `library/` e `Videos/` ficam de fora porque são a estrutura nova: sem essa exceção a
- * própria pasta de dados, recém-criada com as preferências dentro, passaria
- * por origem de migração e encerraria a busca antes de olhar as outras.
- */
-function _entradasDeAcervo(dir) {
-  return require("./main/mediaMigration.js").listLegacyMediaEntries(dir);
-}
-
-/**
- * Recolhe o acervo para `<dados>/files`.
- *
- * O acervo passou por três endereços — pasta escolhida à mão, `Documents/
- * LouvorJA Violin` solto na raiz e `<userData>/files` — e uma instalação
- * antiga pode ter parado em qualquer um deles. Move entrada por entrada, e
- * não a pasta inteira, porque no caso da raiz a origem é a própria pasta de
- * dados: mover ela para dentro de si mesma não existe.
- *
- * Move em vez de copiar: `fs.move` renomeia quando origem e destino estão no
- * mesmo volume, então gigabytes de MP3 mudam de lugar num piscar. Só o que
- * ainda não existe no destino é movido — a migração pode ser interrompida e
- * retomada no boot seguinte.
- */
+/** Recolhe o acervo das pastas de versões anteriores; ver `main/mediaMigration.js`. */
 function migrateMediaToDataDir(storageCfg = {}) {
   const target = paths.filesDir();
-  if (_temConteudo(target)) return;
-
   const candidatos = [storageCfg.filesDir, ...paths.legacyMediaDirs()].filter(Boolean);
-  for (const origem of candidatos) {
-    if (path.resolve(origem) === path.resolve(target)) continue;
-    const entradas = _entradasDeAcervo(origem);
-    if (!entradas.length) continue;
-
-    try {
-      fs.ensureDirSync(target);
-      let movidos = 0;
-      for (const nome of entradas) {
-        const dest = path.join(target, nome);
-        if (fs.existsSync(dest)) continue;
-        fs.moveSync(path.join(origem, nome), dest);
-        movidos++;
-      }
-      if (movidos) console.log(`[main] Acervo movido: ${origem} → ${target} (${movidos} entradas)`);
-      return;
-    } catch (e) {
-      console.warn(`[main] Falha ao mover acervo de ${origem}:`, e?.message || e);
-      return;
-    }
-  }
+  return require("./main/mediaMigration.js")
+    .migrateLegacyMedia(target, candidatos)
+    .then((moved) => {
+      if (moved?.movidos) console.log(`[main] Acervo movido: ${moved.origem} → ${target} (${moved.movidos} entradas)`);
+    })
+    .catch((e) => console.warn("[main] Falha ao mover acervo:", e?.message || e));
 }
 
 // ---------------------------------------------------------------------------
@@ -1380,7 +1331,7 @@ app.whenReady().then(async () => {
     if (typeof storageCfg.autoCache === "boolean") {
       protocolModule.setAutoCacheEnabled(storageCfg.autoCache);
     }
-    migrateMediaToDataDir(storageCfg);
+    void migrateMediaToDataDir(storageCfg);
     aplicarAcervoClassico(storageCfg);
   } catch (e) {
     console.warn("[main] Falha ao aplicar storage config:", e.message);
@@ -1735,6 +1686,22 @@ function _walkSet(obj, path, value) {
 }
 
 let _userDataMain = userStore.read("user_data") || {};
+
+/*
+ * Estado das janelas COMUNS (hoje só a tela do operador), em
+ * `options.windows.<feature>` — o espelho de `KEYS.OPTIONS.WINDOWS` em
+ * `src/constants/UserDataKeys.ts`. Guarda modo (maximizada), tamanho e posição
+ * para a próxima abertura; `_flushUserData` grava direto no disco, sem
+ * broadcast, porque nenhum renderer lê isto.
+ */
+windowFactory.setWindowStateStore({
+  get: (feature) => _userDataMain?.options?.windows?.[feature] ?? null,
+  save: (feature, estado) => {
+    _walkSet(_userDataMain, `options.windows.${feature}`, estado);
+    void _flushUserData();
+  },
+});
+
 httpServer.setUserDataProvider(() => _userDataMain);
 runtimeJournalConsent = _userDataMain?.options?.telemetry !== false;
 downloader.setWorkerDiagnosticsEnabled(runtimeJournalConsent);
@@ -2718,6 +2685,7 @@ ipcMain.handle("pptx:convert", (event, payload) => {
 // ---------------------------------------------------------------------------
 
 ipcMain.handle("storage:stats", () => storage.stats());
+ipcMain.handle("storage:dataDirIssue", () => paths.dataDirIssue());
 ipcMain.handle("storage:clearJson", () => storage.clearJson());
 ipcMain.handle("storage:clearFiles", () => storage.clearFiles());
 ipcMain.handle("storage:removeJsonByPrefix", (_e, prefix) => storage.removeJsonByPrefix(prefix));
@@ -2738,21 +2706,21 @@ ipcMain.handle("shell:openPath", async (_event, filePath) => {
   let resolved = path.isAbsolute(raw) ? path.resolve(raw) : null;
   if (!resolved) {
     // Caminhos relativos do banco apontam para a pasta de mídia escolhida.
-    // Nunca permitimos que `..` escape dela.
+    // Nunca permitimos que `..` escape dela. As pastas antigas ficam em
+    // Documents: checagem síncrona ali parava o app inteiro enquanto o macOS
+    // esperava a resposta ao pedido de acesso.
     const relative = raw.replace(/^[\\/]+/, "");
-    const roots = [paths.filesDir(), ...paths.legacyMediaDirs()];
-    resolved = roots
-      .map((root) => path.resolve(root, relative))
-      .find((candidate, index) => {
-        const root = path.resolve(roots[index]);
-        return (
-          (candidate === root || candidate.startsWith(root + path.sep)) &&
-          fs.existsSync(candidate)
-        );
-      }) || null;
+    for (const root of [paths.filesDir(), ...paths.legacyMediaDirs()].map((dir) => path.resolve(dir))) {
+      const candidate = path.resolve(root, relative);
+      const inside = candidate === root || candidate.startsWith(root + path.sep);
+      if (inside && (await fs.pathExists(candidate))) {
+        resolved = candidate;
+        break;
+      }
+    }
   }
 
-  if (!resolved || !fs.existsSync(resolved)) {
+  if (!resolved || !(await fs.pathExists(resolved))) {
     console.warn("[shell] arquivo para abrir não encontrado:", raw);
     return { ok: false, error: "arquivo não encontrado" };
   }
@@ -2942,13 +2910,14 @@ ipcMain.handle("storage:chooseFile", async (event, kind) => {
     properties: ["openFile"],
     title: "Selecionar arquivo",
     // A Biblioteca de Mídia só guarda estes tipos; sem o filtro o operador
-    // escolhia um áudio e o arquivo era descartado.
+    // escolhia um áudio e o arquivo era descartado. Áudio passou a ser aceito
+    // (espelha IMAGE_EXT/AUDIO_EXT/VIDEO_EXT + pdf de constants/FileTypes.ts).
     ...(kind === "media"
       ? {
           filters: [
             {
-              name: "Imagens, vídeos, PDF e PowerPoint",
-              extensions: ["jpg", "jpeg", "png", "webp", "gif", "bmp", "svg", "heic", "heif", "mp4", "webm", "mkv", "mov", "avi", "m4v", "pdf", "pptx", "ppsx", "pptm", "ppt", "pps", "odp"],
+              name: "Imagens, áudios, vídeos, PDF e PowerPoint",
+              extensions: ["jpg", "jpeg", "png", "webp", "gif", "bmp", "svg", "heic", "heif", "mp3", "wav", "ogg", "flac", "aac", "m4a", "wma", "opus", "mp4", "webm", "mkv", "mov", "avi", "m4v", "pdf", "pptx", "ppsx", "pptm", "ppt", "pps", "odp"],
             },
             { name: "Todos os arquivos", extensions: ["*"] },
           ],

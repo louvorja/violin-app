@@ -222,6 +222,40 @@ export function bundlePercentOf(p: BundleProgress): number {
 
 const bundlePercent = computed<number>(() => bundlePercentOf(bundleProgress.value));
 
+export type LibrasProgressStage = "translate" | "download";
+
+/**
+ * Fração de um item Libras já concluída (0..1). A tradução (texto + slides ou
+ * versículos) ocupa os primeiros 20% e os bundles o restante, para o
+ * percentual da tarefa nunca voltar atrás na troca de etapa.
+ */
+export function librasItemFraction(
+  stage: LibrasProgressStage,
+  done: number,
+  total: number
+): number {
+  const parte = total > 0 ? Math.max(0, Math.min(1, done / total)) : 0;
+  return stage === "translate" ? parte * 0.2 : 0.2 + parte * 0.8;
+}
+
+/** Fatia do cartão reservada à instalação do bundle da Bíblia. */
+export const SYNC_BIBLE_BUNDLE_SHARE = 5;
+
+/** Progresso do cartão durante a instalação do bundle (0–5%). */
+export function syncBibleBundleProgress(percent: number): number {
+  return (Math.max(0, Math.min(100, percent)) * SYNC_BIBLE_BUNDLE_SHARE) / 100;
+}
+
+/**
+ * Progresso do cartão na fase de capítulos (5–100%). Começa exatamente onde a
+ * instalação do bundle terminou, para o ETA não ser reiniciado por um recuo.
+ */
+export function syncBibleChaptersProgress(done: number, total: number): number {
+  if (total <= 0) return SYNC_BIBLE_BUNDLE_SHARE;
+  const parte = Math.max(0, Math.min(1, done / total));
+  return SYNC_BIBLE_BUNDLE_SHARE + parte * (100 - SYNC_BIBLE_BUNDLE_SHARE);
+}
+
 // Sobe sempre que o conteúdo bíblico local muda (bundle instalado, versões
 // baixadas ou removidas). As telas que mostram "o que está baixado" — Bíblia e
 // Sincronizar — releem quando ele muda, em vez de ficar com a foto de quando
@@ -602,15 +636,15 @@ export function useSyncManager() {
     return { versions, downloaded: saved || [] };
   }
 
-  async function scanBibleVersionsDisk(
+  async function scanBibleVersionsStatus(
     versions: BibleVersion[],
     lang: string,
     {
       trackProgress = false,
       localOnly = false,
     }: { trackProgress?: boolean; localOnly?: boolean } = {}
-  ): Promise<number[]> {
-    if (!versions.length) return [];
+  ): Promise<{ complete: number[]; partial: Map<number, { have: number; total: number }> }> {
+    if (!versions.length) return { complete: [], partial: new Map() };
     const books = localOnly
       ? await Database.getLocal<Array<{ id_bible_book: number; chapters?: number }>>(
           `${lang}_bible_book`
@@ -618,9 +652,10 @@ export function useSyncManager() {
       : await Database.get<Array<{ id_bible_book: number; chapters?: number }>>(
           `${lang}_bible_book`
         );
-    if (!books || books.length === 0) return [];
+    if (!books || books.length === 0) return { complete: [], partial: new Map() };
 
-    const downloaded: number[] = [];
+    const complete: number[] = [];
+    const partial = new Map<number, { have: number; total: number }>();
     // Capítulos presentes no IndexedDB (bundle completo + downloads em
     // runtime). O disco (userData/json_db) continua valendo como
     // complemento para usuários legados.
@@ -646,16 +681,23 @@ export function useSyncManager() {
 
       try {
         const inIdb = await loadStored(ver.id_bible_version);
+        let present = 0;
         if ((Platform.storage as any)?.checkJson) {
           const exists = (await (Platform.storage as any).checkJson(allKeys)) as Record<
             string,
             boolean
           >;
-          if (allKeys.every((k) => exists[k] || inIdb.has(k))) {
-            downloaded.push(ver.id_bible_version);
+          present = allKeys.reduce((n, k) => n + (exists[k] || inIdb.has(k) ? 1 : 0), 0);
+        } else {
+          present = allKeys.reduce((n, k) => n + (inIdb.has(k) ? 1 : 0), 0);
+        }
+        if (allKeys.length > 0) {
+          if (present >= allKeys.length) {
+            complete.push(ver.id_bible_version);
+          } else if (present > 0) {
+            // Capítulos suficientes para retomar, mas não para considerar pronta.
+            partial.set(ver.id_bible_version, { have: present, total: allKeys.length });
           }
-        } else if (allKeys.every((k) => inIdb.has(k))) {
-          downloaded.push(ver.id_bible_version);
         }
       } catch (e) {
         console.warn(`[useSyncManager] scan bible version ${ver.id_bible_version}:`, e);
@@ -668,7 +710,19 @@ export function useSyncManager() {
       }
     }
 
-    return downloaded;
+    return { complete, partial };
+  }
+
+  /**
+   * Compatibilidade: só as versões completas. Quem precisa do parcial usa
+   * `scanBibleVersionsStatus`.
+   */
+  async function scanBibleVersionsDisk(
+    versions: BibleVersion[],
+    lang: string,
+    options: { trackProgress?: boolean; localOnly?: boolean } = {}
+  ): Promise<number[]> {
+    return (await scanBibleVersionsStatus(versions, lang, options)).complete;
   }
 
   async function downloadBibleVersions(
@@ -716,7 +770,7 @@ export function useSyncManager() {
       (pct) => {
         if (!bundleInstalling.value) return;
         bibleProgress.value = { done: pct, total: 100, currentFile: "" };
-        bgTasks.updateTask("sync-bible", { progress: pct });
+        bgTasks.updateTask("sync-bible", { progress: syncBibleBundleProgress(pct) });
       },
       { immediate: true }
     );
@@ -774,6 +828,8 @@ export function useSyncManager() {
     }
 
     bibleProgress.value = { ...bibleProgress.value, total: toDownload.length };
+    // Com o total em mãos, o painel desenha progresso desde 0% em vez de animar.
+    bgTasks.updateTask("sync-bible", { _done: 0, _total: toDownload.length });
 
     if (toDownload.length === 0) {
       bibleDownloading.value = false;
@@ -816,8 +872,10 @@ export function useSyncManager() {
           completed += 1;
           bibleProgress.value = { ...bibleProgress.value, done: completed };
           bgTasks.updateTask("sync-bible", {
-            progress: toDownload.length > 0 ? Math.round((completed / toDownload.length) * 100) : 0,
+            progress: syncBibleChaptersProgress(completed, toDownload.length),
             detail: detail || key,
+            _done: completed,
+            _total: toDownload.length,
           });
         })
       );
@@ -1698,6 +1756,7 @@ export function useSyncManager() {
       librasMusicCancelled.value = true;
       _librasMusicAbort?.abort();
     });
+    bgTasks.updateTask("libras-music", { _done: 0, _total: allIds.length });
 
     for (let i = 0; i < allIds.length; i++) {
       if (librasMusicCancelled.value || signal.aborted) break;
@@ -1715,10 +1774,13 @@ export function useSyncManager() {
           music,
           "pt",
           (stage, done, total) => {
-            const songProgress = ((i + done / total) / allIds.length) * 100;
+            const songProgress =
+              ((i + librasItemFraction(stage, done, total)) / allIds.length) * 100;
             bgTasks.updateTask("libras-music", {
-              progress: Math.round(songProgress),
+              progress: songProgress,
               detail: `${i + 1}/${allIds.length} — ${stage === "download" ? "bundles" : "gloss"}`,
+              _done: i,
+              _total: allIds.length,
             });
           },
           region,
@@ -1726,6 +1788,7 @@ export function useSyncManager() {
         );
         if (result) translated++;
         librasMusicProgress.value = { done: i + 1, total: allIds.length, current: "" };
+        bgTasks.updateTask("libras-music", { _done: i + 1, _total: allIds.length });
       } catch (e) {
         if (signal.aborted) break;
         console.error(`[useSyncManager] Erro ao traduzir música ${id}:`, e);
@@ -1775,10 +1838,11 @@ export function useSyncManager() {
 
     let translated = 0;
 
-    bgTasks.registerTask("sync-bible-libras", t("shell.background_tasks.libras_bible"), () => {
+    bgTasks.registerTask("libras-bible", t("shell.background_tasks.libras_bible"), () => {
       librasBibleCancelled.value = true;
       _librasBibleAbort?.abort();
     });
+    bgTasks.updateTask("libras-bible", { _done: 0, _total: chapters.length });
 
     for (let i = 0; i < chapters.length; i++) {
       if (librasBibleCancelled.value || signal.aborted) break;
@@ -1799,11 +1863,14 @@ export function useSyncManager() {
           ch,
           verses,
           lang,
-          (_stage, done, total) => {
-            const chProgress = ((i + done / total) / chapters.length) * 100;
-            bgTasks.updateTask("sync-bible-libras", {
-              progress: Math.round(chProgress),
+          (stage, done, total) => {
+            const chProgress =
+              ((i + librasItemFraction(stage, done, total)) / chapters.length) * 100;
+            bgTasks.updateTask("libras-bible", {
+              progress: chProgress,
               detail: `${i + 1}/${chapters.length} — ${book.name ?? abbreviation} ${ch}`,
+              _done: i,
+              _total: chapters.length,
             });
           },
           region,
@@ -1811,6 +1878,7 @@ export function useSyncManager() {
         );
         if (result) translated++;
         librasBibleProgress.value = { done: i + 1, total: chapters.length, current: "" };
+        bgTasks.updateTask("libras-bible", { _done: i + 1, _total: chapters.length });
       } catch (e) {
         if (signal.aborted) break;
         console.error(`[useSyncManager] Erro ao traduzir bíblia:`, e);
@@ -1818,9 +1886,9 @@ export function useSyncManager() {
     }
 
     if (librasBibleCancelled.value || signal.aborted) {
-      bgTasks.updateTask("sync-bible-libras", { status: "cancelled" });
+      bgTasks.updateTask("libras-bible", { status: "cancelled" });
     } else {
-      bgTasks.completeTask("sync-bible-libras");
+      bgTasks.completeTask("libras-bible");
     }
 
     librasBibleCancelled.value = false;
@@ -1879,6 +1947,7 @@ export function useSyncManager() {
     saveBibleSelectionToDisk,
     loadBibleVersions,
     scanBibleVersionsDisk,
+    scanBibleVersionsStatus,
     collectFiles,
     collectAlbumFileList,
     collectHymnalFileList,

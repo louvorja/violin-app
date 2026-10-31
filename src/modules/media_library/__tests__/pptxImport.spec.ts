@@ -25,7 +25,7 @@ describe("pptxImport", () => {
   it("aceita só resposta de sucesso com caminho de PDF", () => {
     const ok = parseConvertResult({
       ok: true,
-      path: "C:/dados/files/pptx/a.pdf",
+      path: "C:/dados/pptx/a.pdf",
       fonts: [{ name: "Brich", status: "installed" }],
     });
     expect(ok.ok).toBe(true);
@@ -40,7 +40,7 @@ describe("pptxImport", () => {
     expect(parseConvertResult(null).ok).toBe(false);
     const comFallback = parseConvertResult({
       ok: true,
-      path: "/dados/files/pptx/a.pdf",
+      path: "/dados/pptx/a.pdf",
       permissionFallback: true,
     });
     expect(comFallback).toMatchObject({ ok: true, permissionFallback: true });

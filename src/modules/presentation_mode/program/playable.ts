@@ -23,6 +23,8 @@ export type Playable =
   | { type: "song"; id_music: number; title: string; subtitle?: string; customId?: string }
   | { type: "bible"; ref: ProgramBibleRef }
   | { type: "online"; videoId: string; title: string; channel?: string }
+  /** Design do Canva aberto no navegador (a página ao vivo). Como PDF, ele é um `file`. */
+  | { type: "canva"; designId: string; title: string; thumb: string | null }
   /** Um arquivo ou anúncio de dentro de um momento do programa. */
   | { type: "child"; itemId: string; childId: string }
   /** Um arquivo de uma pasta da biblioteca que está no programa (item `folder`). */
@@ -50,6 +52,7 @@ export function samePlayable(a: Playable, b: Playable): boolean {
   }
   if (a.type === "bible" && b.type === "bible") return samePassage(a.ref, b.ref);
   if (a.type === "online" && b.type === "online") return a.videoId === b.videoId;
+  if (a.type === "canva" && b.type === "canva") return a.designId === b.designId;
   if (a.type === "child" && b.type === "child") return a.itemId === b.itemId && a.childId === b.childId;
   if (a.type === "folderFile" && b.type === "folderFile") return a.itemId === b.itemId && a.entry.path === b.entry.path;
   return false;
@@ -131,6 +134,8 @@ export function expectationOf(
   }
   if (playable.type === "bible") return { kind: "bible", passage: playable.ref };
   if (playable.type === "online") return { kind: "online_video", videoId: playable.videoId };
+  // A página do Canva abre numa janela de site, que o módulo não acompanha.
+  if (playable.type === "canva") return { kind: null };
   if (playable.type === "child") {
     const child = item?.children?.find((c) => c.id === playable.childId);
     if (child?.path) return fromPath(child.path);

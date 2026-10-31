@@ -57,3 +57,24 @@ const MODE_OF_ACTION: Partial<Record<MusicActionEnum, MusicMode>> = {
 export function modeOfAction(action: MusicActionEnum): MusicMode | null {
   return MODE_OF_ACTION[action] ?? null;
 }
+
+/**
+ * Versão de todas as músicas, escolhida no topo do módulo: com banda, "Só
+ * letra"; sem banda, "Cantado" ou "Playback". Vazio deixa cada música com a sua.
+ */
+export type MusicOverride = "" | "lyric" | "sung" | "pb";
+
+export const MUSIC_OVERRIDES: readonly MusicOverride[] = Object.freeze(["", "lyric", "sung", "pb"]);
+
+export function isMusicOverride(value: unknown): value is MusicOverride {
+  return typeof value === "string" && (MUSIC_OVERRIDES as readonly string[]).includes(value);
+}
+
+/**
+ * A versão que vai ao ar: a escolhida no topo vence a do item. "Só áudio"
+ * fica como está — toca sem telas (música ambiente), não é letra nem slide.
+ */
+export function applyOverride(mode: MusicMode, override: MusicOverride): MusicMode {
+  if (!override || mode === "audio" || mode === "audio_pb") return mode;
+  return override;
+}

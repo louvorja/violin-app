@@ -56,7 +56,7 @@ describe("DesktopDownload", () => {
     );
     for (const v of ["2.0.0-beta.19", "2.0.0-rc.1", "2.0.0", "2.1.0-beta.1"]) {
       expect(desktopDownloadUrl("macos", v)).toBe(
-        `https://github.com/louvorja/violin-app/releases/download/v${v}/LouvorJA.Violin-${v}-universal.dmg`
+        `https://github.com/louvorja/violin-app/releases/download/v${v}/LouvorJA.Violin-${v}_universal.dmg`
       );
     }
     expect(desktopDownloadUrl("linux", "2.0.0-beta.7")).toBe(

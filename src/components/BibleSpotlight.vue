@@ -102,6 +102,7 @@ import ProjectionWindows from "@/helpers/ProjectionWindows";
 import Broadcast from "@/helpers/Broadcast";
 import type { BibleBook, BibleSearchResult, BibleVersePayload, BibleVersion } from "@/types/Bible";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
+import { buscarLivros } from "@/helpers/BibleBookSearch";
 import { KEYS } from "@/constants/UserDataKeys";
 
 type QuickNavState = "book" | "chapter" | "verse";
@@ -168,30 +169,9 @@ function reset(): void {
   _composing = false;
 }
 
-function normalize(str: string): string {
-  return str
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
-}
-
+/* Ordinal, acento e espaços ficam com o helper — a tela só apresenta. */
 function searchBooks(input: string, list: BibleBook[]): BibleBook[] {
-  const n = normalize(input);
-  if (!n) return [];
-  const scored = list
-    .map((b) => {
-      const abbr = normalize(b.abbreviation ?? "");
-      const name = normalize(b.name ?? "");
-      let score = Infinity;
-      if (abbr === n) score = 0;
-      else if (name === n) score = 1;
-      else if (abbr.startsWith(n)) score = 2;
-      else if (name.startsWith(n)) score = 3;
-      return { book: b, score };
-    })
-    .filter((b) => b.score < Infinity)
-    .sort((a, b) => a.score - b.score);
-  return scored.map((s) => s.book);
+  return buscarLivros(input, list);
 }
 
 function checkBookMatch(): void {
@@ -348,7 +328,8 @@ function handleKeydown(e: KeyboardEvent): void {
   }
 
   if (state.value === "book") {
-    if (/^[a-zA-Z]$/.test(e.key)) {
+    /* Dígitos também: "1 samuel" e "2pedro" são formas de pedir o ordinal. */
+    if (/^[a-zA-Z0-9]$/.test(e.key)) {
       buffer.value += e.key.toLowerCase();
       e.preventDefault();
       e.stopPropagation();

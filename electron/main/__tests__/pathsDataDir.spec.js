@@ -64,6 +64,28 @@ describe("raiz única para todos os dados", () => {
     expect(fs.pathExistsSync(oldProfile)).toBe(false);
   });
 
+  it("mantém o pedido de mudança na âncora quando o perfil não consegue mudar de lugar", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    paths.configureProfile();
+    const oldProfile = locations.userData;
+    fs.outputFileSync(path.join(oldProfile, "IndexedDB", "offline"), "saved");
+    const chosen = path.join(root, "Full drive");
+    paths.setDataDir(chosen, { moveExisting: true });
+    const anchor = { dataDir: chosen, profileSource: oldProfile };
+    const move = fs.moveSync;
+    const spy = vi.spyOn(fs, "moveSync").mockImplementation(() => {
+      throw Object.assign(new Error("no space left on device"), { code: "ENOSPC" });
+    });
+    expect(() => paths.configureProfile()).not.toThrow();
+    expect(locations.userData).toBe(oldProfile);
+    expect(fs.readJsonSync(path.join(bootstrap, "data-location.json"))).toEqual(anchor);
+    spy.mockImplementation(move);
+    paths.configureProfile();
+    expect(locations.userData).toBe(path.join(chosen, ".electron"));
+    expect(fs.readFileSync(path.join(locations.userData, "IndexedDB", "offline"), "utf8")).toBe("saved");
+    expect(fs.readJsonSync(path.join(bootstrap, "data-location.json"))).toEqual({ dataDir: chosen });
+  });
+
   it("ler a âncora independe do endereço atual do perfil Electron", () => {
     const chosen = path.join(root, "Configured");
     fs.outputJsonSync(path.join(bootstrap, "data-location.json"), { dataDir: chosen });

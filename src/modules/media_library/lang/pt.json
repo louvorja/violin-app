@@ -1,7 +1,7 @@
 {
   "title": "Biblioteca de Mídia",
-  "unsupported_file_type": "Tipo de arquivo não suportado. A biblioteca aceita imagens, vídeos, PDF e PowerPoint. Para áudio, use o Som de Fundo.",
-  "description": "Gerencie e projeta imagens e vídeos em sequência.",
+  "unsupported_file_type": "Tipo de arquivo não suportado. A biblioteca aceita imagens, áudios, vídeos, PDF e PowerPoint.",
+  "description": "Gerencie e projete imagens, vídeos, PDF e PowerPoint, e reproduza áudios.",
   "library": "Biblioteca",
   "playlist": "Playlist",
   "all": "Todas",
@@ -77,6 +77,7 @@
     "project_url": "Projetar",
     "url_invalid": "Esse não é o link de um design do Canva. Cole algo como https://www.canva.com/design/..."
   },
+  "audios": "Áudios",
   "pptx": {
     "task": "PowerPoint: {name}",
     "checking_fonts": "Conferindo as fontes…",

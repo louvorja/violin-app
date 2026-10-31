@@ -12,6 +12,23 @@ const DEFAULT_COLOR = "#00004F";
 const JA_GROUP_KEY = /^\d+$/;
 
 /**
+ * Chaves i18n dos dias da semana, na ordem de `Date.getDay()` (0 = domingo).
+ *
+ * O import de `.ja` usa esta lista para nomear as liturgias pela POSIÇÃO, e as
+ * telas que mostram os dias usam a mesma ordem. Manter uma fonte só evita que
+ * "o terceiro dia" signifique coisas diferentes em cada lugar.
+ */
+export const WEEKDAY_KEYS = [
+  "sunday",
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+] as const;
+
+/**
  * Normaliza um item de liturgia importado (JSON externo) para um `LiturgyItem`
  * válido. Itens não-objeto são rejeitados (retorna null); itens com campos
  * faltando são preenchidos com valores padrão seguros. O `tipo` inválido cai
@@ -150,7 +167,9 @@ function _jaFallbackName(firstItem: LiturgyItem | undefined, index: number): str
  * o arquivo com `decodeJaText`, que trata Windows-1252 e UTF-8 com BOM). Um `.ja` pode conter mais de uma liturgia salva: a seção
  * `[Geral]` lista uma chave numérica por liturgia, cujo valor é a ordem dos
  * itens (`item_id;item_id;...`). O nome de cada uma vem do primeiro item do
- * tipo "categoria" no grupo, quando existir.
+ * tipo "categoria" no grupo, quando existir — mas o IMPORT do app não usa esse
+ * nome: `useLiturgyImport` renomeia pela posição (1ª = sábado, 2ª = domingo).
+ * Este nome aqui serve para inspecionar o formato.
  */
 export function parseJaImport(text: string): { name: string; items: LiturgyItem[] }[] | null {
   const sections = _parseIniSections(text);
