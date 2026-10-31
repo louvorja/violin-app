@@ -49,6 +49,41 @@ describe("useProgram", () => {
     expect([...program.doneIds.value]).toEqual(["b"]);
   });
 
+  it("pular itens deixa o buraco à vista, e um clique conclui", () => {
+    program.goLive("c");
+    expect([...program.skippedIds.value]).toEqual(["a", "b"]);
+
+    program.setDone("a", true);
+    expect([...program.skippedIds.value]).toEqual(["b"]);
+    program.setDone("a", false);
+    expect([...program.skippedIds.value]).toEqual(["a", "b"]);
+  });
+
+  it("concluir o item no ar o tira do marcador", () => {
+    program.goLive("b");
+    program.setDone("b", true);
+    expect(program.liveItemId.value).toBeNull();
+    expect(program.doneIds.value.has("b")).toBe(true);
+  });
+
+  it("começar daqui conclui tudo antes e põe o marcador no item", () => {
+    program.goLive("a");
+    program.setDone("a", false);
+    program.startHere("c");
+    expect(program.liveItemId.value).toBe("c");
+    expect([...program.doneIds.value].sort()).toEqual(["a", "b"]);
+    expect(program.skippedIds.value.size).toBe(0);
+  });
+
+  it("sessão recolhida reabre quando um item dela entra no ar", () => {
+    program.toggleSession("s2");
+    expect(program.collapsedSessions.value.s2).toBe(true);
+    program.goLive("a");
+    expect(program.collapsedSessions.value.s2).toBe(true);
+    program.goLive("c");
+    expect(program.collapsedSessions.value.s2).toBe(false);
+  });
+
   it("novo item entra logo depois do selecionado", () => {
     program.select("a");
     program.addItem(item("novo"), "s1");

@@ -61,15 +61,37 @@
             }}
           </span>
         </header>
-        <LjMenu :items="mainRole.items.value" align="start">
-          <template #trigger>
-            <button type="button" class="pm-outputs__monitor" data-testid="pm-monitor-main">
-              <LjIcon :icon="ICONS.PROJECTION.SCREEN_OUTLINE" :size="13" />
-              <span class="pm-outputs__monitor-label">{{ mainRole.selectorLabel.value }}</span>
-              <LjIcon :icon="ICONS.UI.CHEVRON_DOWN" :size="11" />
-            </button>
-          </template>
-        </LjMenu>
+        <div class="pm-outputs__monitor-row">
+          <LjMenu :items="mainRole.items.value" align="start">
+            <template #trigger>
+              <button type="button" class="pm-outputs__monitor" data-testid="pm-monitor-main">
+                <LjIcon :icon="ICONS.PROJECTION.SCREEN_OUTLINE" :size="13" />
+                <span class="pm-outputs__monitor-label">{{ mainRole.selectorLabel.value }}</span>
+                <LjIcon :icon="ICONS.UI.CHEVRON_DOWN" :size="11" />
+              </button>
+            </template>
+          </LjMenu>
+          <ScreenTextSize screen="main" />
+        </div>
+        <!-- As Opções mandam arquivos ou vídeos para outro lugar: o operador precisa saber. -->
+        <div
+          v-if="content.diverging.value.length"
+          class="pm-outputs__diverge"
+          data-testid="pm-outputs-diverge"
+        >
+          <LjIcon :icon="ICONS.UI.ALERT" :size="13" />
+          <span class="pm-outputs__diverge-text">
+            {{ divergeText }}
+          </span>
+          <LjButton
+            size="sm"
+            variant="subtle"
+            data-testid="pm-outputs-diverge-fix"
+            @click="content.followMainScreen()"
+          >
+            {{ tm("outputs.diverge_fix") }}
+          </LjButton>
+        </div>
         <button
           v-if="mainMissing && mainMonitor !== null"
           type="button"
@@ -138,15 +160,28 @@
             }}
           </span>
         </header>
-        <LjMenu :items="stageRole.items.value" align="start">
-          <template #trigger>
-            <button type="button" class="pm-outputs__monitor" data-testid="pm-monitor-stage">
-              <LjIcon :icon="ICONS.PROJECTION.RETURN" :size="13" />
-              <span class="pm-outputs__monitor-label">{{ stageRole.selectorLabel.value }}</span>
-              <LjIcon :icon="ICONS.UI.CHEVRON_DOWN" :size="11" />
-            </button>
-          </template>
-        </LjMenu>
+        <div class="pm-outputs__monitor-row">
+          <LjMenu :items="stageRole.items.value" align="start">
+            <template #trigger>
+              <button type="button" class="pm-outputs__monitor" data-testid="pm-monitor-stage">
+                <LjIcon :icon="ICONS.PROJECTION.RETURN" :size="13" />
+                <!-- Sem monitor no retorno: só o seletor, com um aviso discreto. -->
+                <span
+                  v-if="!hasStageMonitor"
+                  class="pm-outputs__monitor-label pm-outputs__monitor-label--empty"
+                  data-testid="pm-stage-no-monitor"
+                >
+                  {{ tm("outputs.no_stage_monitor") }}
+                </span>
+                <span v-else class="pm-outputs__monitor-label">
+                  {{ stageRole.selectorLabel.value }}
+                </span>
+                <LjIcon :icon="ICONS.UI.CHEVRON_DOWN" :size="11" />
+              </button>
+            </template>
+          </LjMenu>
+          <ScreenTextSize v-if="hasStageMonitor" screen="stage" />
+        </div>
         <button
           v-if="stageMissing && stageMonitor !== null"
           type="button"
@@ -157,6 +192,7 @@
           {{ tm("outputs.missing_stage_full") }}
         </button>
         <div
+          v-if="hasStageMonitor"
           class="pm-outputs__screen"
           role="button"
           tabindex="0"
@@ -192,7 +228,7 @@
           </button>
         </div>
         <!-- O que o retorno mostra, por tipo: desligado, ele fica no fundo enquanto o tipo está no ar. -->
-        <div class="pm-outputs__shows" data-testid="pm-return-shows">
+        <div v-if="hasStageMonitor" class="pm-outputs__shows" data-testid="pm-return-shows">
           <span class="pm-outputs__shows-label">{{ tm("return_control.shows") }}</span>
           <button
             v-for="group in RETURN_GROUPS"
@@ -278,7 +314,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { LjButton, LjChip, LjIcon, LjMenu } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ModuleEnum } from "@/enums/ModuleEnum";
@@ -286,12 +322,14 @@ import { useModuleI18n } from "@/composables/useModuleI18n";
 import type { ProgramItem } from "@/types/Presentation";
 import LiveMirror from "./LiveMirror.vue";
 import ReturnMirror from "./ReturnMirror.vue";
-import { returnOverride, useOutputs } from "../composables/useOutputs";
+import { returnOverride, useHasStageMonitor, useOutputs } from "../composables/useOutputs";
 import { useMonitorRole } from "../composables/useMonitorRole";
+import { useContentMonitors } from "../composables/useContentMonitors";
 import ScreenToggle from "./ScreenToggle.vue";
 import ScreenZoom from "./ScreenZoom.vue";
 import { useScreenTruth } from "../composables/useScreenTruth";
 import { useLayers, type LayerId } from "../composables/useLayers";
+import ScreenTextSize from "./ScreenTextSize.vue";
 import type { LiveKind } from "../composables/useLiveContent";
 import {
   RETURN_GROUPS,
@@ -313,7 +351,7 @@ const props = defineProps<{
   onAir: boolean;
 }>();
 
-const { tm } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
+const { t, tm } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
 const {
   cleared,
   showing,
@@ -334,6 +372,25 @@ const zoomed = ref<"main" | "stage" | null>(null);
 const truth = useScreenTruth();
 const mainRole = useMonitorRole("projection");
 const stageRole = useMonitorRole("stage");
+const content = useContentMonitors();
+// Arquivo ou vídeo indo ao ar: a hora em que a opção errada faria diferença.
+watch(
+  () => props.liveKind,
+  (kind) => {
+    if (kind === "file" || kind === "online_video") void content.refresh();
+  }
+);
+/** "Nas Opções, arquivos vão para Retorno, não para a Tela principal." Com os nomes das Opções. */
+const divergeText = computed(() =>
+  content.diverging.value
+    .map(({ feature, label }) => {
+      const role = content.featureRoles.value[feature];
+      const target = role ? t(`options.monitors.roles.${role}`) : t("options.slides.same_window");
+      return tm("outputs.diverge", { what: tm(label), target });
+    })
+    .join(" ")
+);
+const hasStageMonitor = useHasStageMonitor();
 
 const visibility = useReturnVisibility();
 const liveGroup = computed(() => returnGroupOf(props.liveKind));
@@ -461,6 +518,21 @@ const LAYER_ICONS: Record<LayerId, string> = {
 }
 
 /* Monitor da tela: opção, com cara de seletor. */
+.pm-outputs__monitor-label--empty {
+  color: var(--lj-text-subtle);
+}
+
+.pm-outputs__monitor-row {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-2);
+}
+
+.pm-outputs__monitor-row > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
 .pm-outputs__monitor {
   display: flex;
   align-items: center;
@@ -554,6 +626,23 @@ const LAYER_ICONS: Record<LayerId, string> = {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.6px;
+}
+
+.pm-outputs__diverge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 8px;
+  border: 1px solid var(--lj-warning);
+  border-radius: var(--lj-radius-sm);
+  color: var(--lj-warning);
+  font-size: 11px;
+}
+
+.pm-outputs__diverge-text {
+  flex: 1;
+  min-width: 0;
+  color: var(--lj-text);
 }
 
 /* Tela que sumiu com a apresentação iniciada: o aviso já é o botão de reabrir. */

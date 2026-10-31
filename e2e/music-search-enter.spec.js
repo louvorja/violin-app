@@ -2,6 +2,7 @@
  * Enter na busca toca o primeiro resultado, como no clássico — sem rede de verdade.
  * Run with: npx playwright test e2e/music-search-enter.spec.js
  */
+import { Buffer } from "node:buffer";
 import { test, expect } from "@playwright/test";
 import music1 from "./fixtures/music_1.json";
 

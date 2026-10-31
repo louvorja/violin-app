@@ -19,6 +19,7 @@
       "stop_stage_return": "Detener retorno",
       "library_files": "Archivos",
       "library_media": "Medios",
+      "library_media_library": "Biblioteca",
       "library_audio": "Audio",
       "library_musics": "Músicas",
       "library_bible": "Biblia",
@@ -58,6 +59,11 @@
     "items_count": "{n} ítem | {n} ítems",
     "live": "EN VIVO",
     "done": "Concluido",
+    "mark_done": "Marcar como concluido",
+    "mark_undone": "Desmarcar concluido",
+    "start_here": "Empezar desde aquí",
+    "done_hint": "Concluido · haz clic para desmarcar",
+    "skipped_hint": "Saltado · haz clic para marcar como concluido",
     "untitled": "(sin título)",
     "expand": "Mostrar subítems",
     "collapse": "Ocultar subítems",
@@ -66,7 +72,10 @@
     "default_session": "General",
     "save_default_name": "Programa {date}",
     "queued": "EN COLA",
-    "add": "Agregar"
+    "add": "Agregar",
+    "expand_session": "Mostrar los ítems de la sesión",
+    "collapse_session": "Contraer la sesión",
+    "session_done": "{done}/{total} hechos"
   },
   "kinds": {
     "music": "Música",
@@ -169,7 +178,12 @@
     "state_off": "APAGADA",
     "screen_off": "APAGADA",
     "screen_idle": "FONDO",
-    "missing_stage_full": "El retorno de escenario se cerró — reabrir"
+    "missing_stage_full": "El retorno de escenario se cerró — reabrir",
+    "no_stage_monitor": "Ningún monitor · haz clic para elegir",
+    "diverge": "En Opciones, {what} van a “{target}”, no a la Pantalla principal.",
+    "diverge_files": "los archivos",
+    "diverge_videos": "los videos en línea",
+    "diverge_fix": "Usar la Pantalla principal"
   },
   "stage": {
     "on_air": "AL AIRE",
@@ -226,6 +240,7 @@
     "remove_from_return": "Quitar del retorno",
     "play_muted": "Reproducir sin audio",
     "media": "Medios",
+    "media_library": "Biblioteca",
     "audio": "Audio",
     "opened_by_program": "Abierta por el programa:",
     "close_program_folder": "Cerrar la franja del programa"
@@ -308,6 +323,37 @@
     "desktop_only": "Las listas y los canales solo se pueden ver en la aplicación de escritorio.",
     "not_found": "No fue posible encontrar este enlace en YouTube. Revisa la dirección y la conexión.",
     "load_failed": "No fue posible cargar los videos. Revisa la conexión a internet."
+  },
+  "canva": {
+    "title": "Canva",
+    "desktop_only": "Canva solo funciona en la aplicación de escritorio.",
+    "docs": "Documentación",
+    "client_id": "Client ID",
+    "client_secret": "Client secret",
+    "connect": "Conectar a Canva",
+    "connecting": "Esperando la autorización en el navegador…",
+    "redirect_hint": "En la app de integración de Canva, registra esta dirección como Redirect URL:",
+    "copy": "Copiar",
+    "not_connected": "Las credenciales están guardadas, pero la cuenta de Canva aún no fue autorizada.",
+    "change_credentials": "Cambiar credenciales",
+    "reconnect_hint": "Conéctate de nuevo para autorizar la exportación de los diseños.",
+    "reconnect": "Conectar de nuevo",
+    "empty": "No hay diseños en esta carpeta.",
+    "exporting": "Exportando…",
+    "pages": "{n} páginas",
+    "load_more": "Cargar más",
+    "mode": "Proyectar como",
+    "mode_pdf": "PDF",
+    "mode_site": "Navegador",
+    "mode_pdf_hint": "Exporta el diseño en PDF y lo proyecta desde la app: no depende del sitio de Canva, pero las animaciones y videos quedan como páginas fijas.",
+    "mode_site_hint": "Abre la página de Canva en vivo en la pantalla: mantiene animaciones y videos, pero necesita la sesión del sitio de Canva e internet.",
+    "web_session_hint": "Para abrir en el navegador, inicia sesión en el sitio de Canva una vez en esta computadora.",
+    "web_login": "Iniciar sesión en Canva",
+    "play_pdf": "Reproducir como PDF",
+    "play_site": "Reproducir en el navegador",
+    "add_pdf": "Agregar al programa como PDF",
+    "add_site": "Agregar al programa (navegador)",
+    "site_failed": "No fue posible abrir el diseño de Canva. Revisa la conexión con Canva."
   },
   "series": {
     "make": "Tratar como serie",
@@ -644,5 +690,35 @@
     "visor_hint": "Ctrl/Cmd + rueda o pellizco amplía · doble clic alterna entre ajustar y el detalle · con zoom, arrastre, mantenga la rueda o desplace con dos dedos para mover",
     "actual_title": "Tamaño real en la pantalla principal (1)",
     "double_title": "Ampliar 2× (1)"
+  },
+  "music_override": {
+    "label": "Versión de todas las canciones",
+    "hint": "Vale para todas las canciones, incluso las del programa con versión definida. Con banda: Solo letra. Sin banda: Cantado o Playback.",
+    "lyric": "Solo letra",
+    "sung": "Cantado",
+    "pb": "Playback",
+    "short_label": "Canciones",
+    "release": "Haz clic para soltar: cada canción vuelve a su versión"
+  },
+  "text_size": {
+    "title": "Tamaño del texto",
+    "open": "Tamaño del texto de las canciones en esta pantalla",
+    "smaller": "Reducir",
+    "bigger": "Aumentar",
+    "reset": "Volver a 100%",
+    "hint_main": "Letra de las canciones en la pantalla principal. Cambia al instante; la miniatura muestra el resultado.",
+    "hint_stage": "Frase actual y siguiente en el retorno de escenario. Cambia al instante; la miniatura muestra el resultado."
+  },
+  "native": {
+    "categories": "Categorías de la Biblioteca de Medios",
+    "uncategorized": "Sin categoría",
+    "empty": "La Biblioteca de Medios está vacía. Las fotos, videos y PDF agregados allí aparecen aquí.",
+    "empty_category": "Nada en esta categoría.",
+    "open": "Abrir la Biblioteca de Medios",
+    "manage": "Gestionar",
+    "refresh": "Actualizar",
+    "unavailable": "{n} ítem solo se abre en la Biblioteca de Medios | {n} ítems solo se abren en la Biblioteca de Medios",
+    "unavailable_hint": "Guardados dentro de la Biblioteca de Medios, sin archivo en la computadora (como fotos HEIC arrastradas). Proyéctelos desde allí.",
+    "desktop_only": "La Biblioteca de Medios en el Modo presentación está disponible en la aplicación de computadora."
   }
 }

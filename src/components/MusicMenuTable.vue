@@ -346,7 +346,7 @@ const catalogMenu = computed<MenuItem[]>(() => [
                 has_instrumental_music: !!props.has_instrumental_music,
               };
               addSong(p.id, song);
-              $snackbar.show(t("playlists.song_added"));
+              $snackbar.show(t("modules.musics.playlists.song_added"));
             },
           })),
         },

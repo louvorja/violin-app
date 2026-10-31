@@ -76,6 +76,10 @@
       "custom_album": "Colección personalizada",
       "music": "Música",
       "select": "Seleccionar",
+      "audio": "Cantado",
+      "playback": "Playback",
+      "audio_only": "Solo audio",
+      "playback_only": "Solo audio (playback)",
       "results": "resultados"
     },
     "music_menu": {

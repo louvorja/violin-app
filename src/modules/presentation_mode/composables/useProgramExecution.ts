@@ -1,4 +1,6 @@
 import $userdata from "@/helpers/UserData";
+import $snackbar from "@/helpers/Snackbar";
+import { i18nAtual } from "@/i18n";
 import Broadcast from "@/helpers/Broadcast";
 import ProjectionWindows from "@/helpers/ProjectionWindows";
 import Telemetry from "@/helpers/Telemetry";
@@ -13,12 +15,25 @@ import type { LiturgyItem } from "@/types/Liturgy";
 import { useLiturgyExecution } from "@/modules/liturgy/composables/useLiturgyExecution";
 import type { ProgramBibleRef, ProgramItem } from "@/types/Presentation";
 import { liturgyItem } from "../program/liturgy";
-import { isMusicMode, type MusicMode } from "../program/musicModes";
+import { applyOverride, isMusicMode, type MusicMode } from "../program/musicModes";
+import { currentMusicOverride } from "./useMusicOverride";
 import { nextVerseOf } from "../program/bible";
 import { useBibleLibrary } from "./useBibleLibrary";
 import { isPowerPoint, powerPointAsPdf } from "./usePowerPoint";
 import { useCloudFiles } from "./useCloudFiles";
 import { isUrl } from "../program/paths";
+import { canvaDesignOf } from "../program/items";
+
+/**
+ * A versão escolhida no topo do módulo vence a pedida. Playback imposto a uma
+ * música sem playback cai no cantado, em vez de não tocar nada.
+ */
+function effectiveMode(mode: MusicMode | string): { mode: MusicMode | string; forcedPb: boolean } {
+  if (!isMusicMode(mode)) return { mode, forcedPb: false };
+  const override = currentMusicOverride();
+  const effective = applyOverride(mode, override);
+  return { mode: effective, forcedPb: effective === "pb" && mode !== "pb" };
+}
 
 /**
  * Toca uma música no formato pedido. Com letra, ela vai minimizada — os
@@ -26,7 +41,8 @@ import { isUrl } from "../program/paths";
  * cima dele. "Só áudio" toca sem mandar nada às telas e aparece no palco
  * com o player.
  */
-export function playMusicInMode(idMusic: number, mode: MusicMode | string = "sung"): void {
+export function playMusicInMode(idMusic: number, requested: MusicMode | string = "sung"): void {
+  const { mode, forcedPb } = effectiveMode(requested);
   if (mode === "audio" || mode === "audio_pb") {
     Media.stop();
     void Media.openAudio({
@@ -35,15 +51,24 @@ export function playMusicInMode(idMusic: number, mode: MusicMode | string = "sun
     });
     return;
   }
-  void Media.open({ id_music: idMusic, mode: LITURGY_VERSION_ACTION[mode] ?? MusicActionEnum.AUDIO, minimized: true });
+  const open = (m: MusicMode | string) =>
+    Media.open({ id_music: idMusic, mode: LITURGY_VERSION_ACTION[m] ?? MusicActionEnum.AUDIO, minimized: true });
+  void open(mode).then((ok) => {
+    if (!ok && forcedPb) void open("sung");
+  });
 }
 
 /**
  * Música personalizada no formato pedido, também minimizada. O caminho é o
  * mesmo das listas e da liturgia (`openCustomMusic`), que relê o documento.
  */
-export function playCustomMusicInMode(customId: string, mode: MusicMode | string = "sung"): void {
-  void openCustomMusic(customId, LITURGY_VERSION_ACTION[mode] ?? MusicActionEnum.AUDIO, { minimized: true });
+export function playCustomMusicInMode(customId: string, requested: MusicMode | string = "sung"): void {
+  const { mode, forcedPb } = effectiveMode(requested);
+  const open = (m: MusicMode | string) =>
+    openCustomMusic(customId, LITURGY_VERSION_ACTION[m] ?? MusicActionEnum.AUDIO, { minimized: true });
+  void open(mode).then((ok) => {
+    if (!ok && forcedPb) void open("sung");
+  });
 }
 
 /**
@@ -115,6 +140,11 @@ export function useProgramExecution() {
     }
     if (item.source) {
       if (item.source.tipo === LiturgyItemTypeEnum.MUSICA && playMusicOnStage(item.source, mode)) return true;
+      const design = canvaDesignOf(item);
+      if (design) {
+        projectCanva(design, item.title, item.source.url);
+        return true;
+      }
       // Arquivo do disco segue o caminho da biblioteca: nuvem e PowerPoint são tratados lá.
       const dir = item.source.dir ?? "";
       if (item.source.tipo === LiturgyItemTypeEnum.ARQUIVO && dir && !isUrl(dir)) {
@@ -140,6 +170,30 @@ export function useProgramExecution() {
       if (!isPowerPoint(path)) return void send(path);
       const pdf = await powerPointAsPdf(path, name);
       if (pdf) void send(pdf);
+    })();
+  }
+
+  /**
+   * Design do Canva no navegador: a página ao vivo na janela de site, pelo
+   * mesmo caminho do item Site da liturgia (o main aperta "Apresentar em tela
+   * cheia" em toda página do canva.com). O `view_url` expira, então cada envio
+   * pede um novo; sem conexão, vale o guardado no item.
+   */
+  function projectCanva(designId: string, title: string, storedUrl = ""): void {
+    void (async () => {
+      let url = storedUrl;
+      try {
+        const fresh = await window.louvorjaApi?.canva?.designUrl(designId);
+        if (fresh?.ok && fresh.url) url = fresh.url;
+      } catch {
+        // Fica o link guardado.
+      }
+      if (!url) {
+        const t = i18nAtual()?.global?.t as ((_key: string) => string) | undefined;
+        $snackbar.error(t?.("modules.presentation_mode.canva.site_failed") ?? "Canva");
+        return;
+      }
+      executeItem(liturgyItem({ id: crypto.randomUUID(), tipo: LiturgyItemTypeEnum.SITE, url, item: title }));
     })();
   }
 
@@ -170,5 +224,5 @@ export function useProgramExecution() {
     return false;
   }
 
-  return { execute, executeChild, projectPath, projectPdf, sendBible };
+  return { execute, executeChild, projectPath, projectCanva, projectPdf, sendBible };
 }

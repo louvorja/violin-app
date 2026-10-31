@@ -125,6 +125,7 @@ import { ModuleEnum } from "@/enums/ModuleEnum";
 import DateTime from "@/helpers/DateTime";
 import Platform from "@/helpers/Platform";
 import { useModuleI18n } from "@/composables/useModuleI18n";
+import { useHasStageMonitor } from "../composables/useOutputs";
 import type { ProgramItem } from "@/types/Presentation";
 import { fileKind, useFileLibrary, type LibraryEntry } from "../composables/useFileLibrary";
 import { useMediaMeta } from "../composables/useMediaMeta";
@@ -155,6 +156,11 @@ const props = defineProps<{
   extraMenu?: (entry: LibraryEntry) => LjMenuItem[];
   /** Sem o painel de detalhes por perto (palco): some o (i) e o "Detalhes" do menu. */
   noDetails?: boolean;
+  /**
+   * Arquivos que não são da pasta da biblioteca (os da Biblioteca de Mídia):
+   * sem renomear, esconder nem Lixeira — mexeriam no original de outro módulo.
+   */
+  noFileActions?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -171,6 +177,7 @@ const emit = defineEmits<{
 }>();
 
 const { tm } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
+const hasStageMonitor = useHasStageMonitor();
 const lib = useFileLibrary();
 const { meta, request } = useMediaMeta();
 const cloud = useCloudFiles();
@@ -275,7 +282,9 @@ function menuFor(entry: LibraryEntry): EntryMenu {
             },
           ]
         : []),
-      ...(kind === "image" || kind === "video"
+      // Só no retorno: só com monitor no retorno (ou para tirar o que já está lá).
+      ...((kind === "image" || kind === "video") &&
+      (hasStageMonitor.value || entry.path === props.returnPath)
         ? [
             entry.path === props.returnPath
               ? {
@@ -321,7 +330,7 @@ function menuFor(entry: LibraryEntry): EntryMenu {
 /* ─── Renomear, não mostrar, Lixeira, Finder ─── */
 
 function fileActions(entry: LibraryEntry): LjMenuItem[] {
-  if (!Platform.isDesktop) return [];
+  if (!Platform.isDesktop || props.noFileActions) return [];
   const live = entry.path === props.livePath;
   return [
     { separator: true },
@@ -363,7 +372,7 @@ const renameValue = ref("");
 let committing = false;
 
 async function startRename(entry: LibraryEntry): Promise<void> {
-  if (entry.isDir || !Platform.isDesktop) return;
+  if (entry.isDir || !Platform.isDesktop || props.noFileActions) return;
   renameValue.value = entry.name;
   renaming.value = entry.path;
   // Seleciona só o nome, sem a extensão — como o Finder e o Explorer.

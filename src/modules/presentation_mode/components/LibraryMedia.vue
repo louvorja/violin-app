@@ -3,19 +3,31 @@
     scope="media"
     :live-path="livePath"
     :return-path="returnPath"
-    :pane-active="onlineOpen"
+    :pane-active="!!pane"
     v-bind="relay"
     @stop="emit('stop')"
     @show-on-return="
       (e: LibraryEntry | null) => emit('show-on-return', e && { type: 'file', entry: e })
     "
-    @source-opened="onlineOpen = false"
+    @source-opened="pane = null"
   >
     <template #nav-extra>
-      <OnlineSources :active="onlineOpen" @open="onlineOpen = true" @add="addLink" />
+      <OnlineSources
+        :active="pane"
+        @open="pane = 'online'"
+        @canva="pane = 'canva'"
+        @add="addLink"
+      />
     </template>
     <template #pane>
+      <LibraryCanva
+        v-if="pane === 'canva'"
+        :live-path="livePath"
+        v-bind="relay"
+        @stop="emit('stop')"
+      />
       <LibraryOnline
+        v-else
         ref="onlinePane"
         :live-video-id="liveVideoId"
         :return-path="returnPath"
@@ -31,11 +43,12 @@
 import { ref } from "vue";
 
 /** Fica entre as visitas à aba: voltar à Mídia reabre o que estava à vista. */
-const onlineOpen = ref(false);
+const pane = ref<"online" | "canva" | null>(null);
 </script>
 
 <script setup lang="ts">
 import { nextTick } from "vue";
+import LibraryCanva from "./LibraryCanva.vue";
 import LibraryFiles from "./LibraryFiles.vue";
 import LibraryOnline from "./LibraryOnline.vue";
 import OnlineSources from "./OnlineSources.vue";
@@ -45,7 +58,8 @@ import type { Playable, PlayOptions } from "../program/playable";
 
 /**
  * Aba Mídia: fotos e vídeos das pastas da biblioteca e, no grupo Online, os
- * vídeos, playlists e canais do YouTube — como a aba Mídia do FreeShow.
+ * vídeos, playlists e canais do YouTube e os designs do Canva — como a aba
+ * Mídia do FreeShow.
  */
 
 defineProps<{
@@ -71,7 +85,7 @@ const relay = {
 const onlinePane = ref<{ startAdding: () => Promise<void> } | null>(null);
 
 async function addLink(): Promise<void> {
-  onlineOpen.value = true;
+  pane.value = "online";
   await nextTick();
   await onlinePane.value?.startAdding();
 }

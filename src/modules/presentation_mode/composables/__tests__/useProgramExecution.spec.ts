@@ -1,10 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { createPinia, setActivePinia } from "pinia";
+import $userdata from "@/helpers/UserData";
+import { KEYS } from "@/constants/UserDataKeys";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import { MusicActionEnum } from "@/enums/MusicActionEnum";
 import type { ProgramItem } from "@/types/Presentation";
 import { liturgyItem } from "../../program/liturgy";
 
-const open = vi.fn(async () => {});
+const open = vi.fn(async (_params?: unknown) => true);
 const openAudio = vi.fn(async () => {});
 const stop = vi.fn();
 const executeItem = vi.fn();
@@ -16,7 +19,7 @@ vi.mock("@/modules/liturgy/composables/useLiturgyExecution", () => ({
   useLiturgyExecution: () => ({ executeItem }),
 }));
 
-const { useProgramExecution } = await import("../useProgramExecution");
+const { useProgramExecution, playMusicInMode } = await import("../useProgramExecution");
 
 function music(fields: Partial<Parameters<typeof liturgyItem>[0]> = {}): ProgramItem {
   return {
@@ -34,6 +37,7 @@ function music(fields: Partial<Parameters<typeof liturgyItem>[0]> = {}): Program
  */
 describe("useProgramExecution", () => {
   beforeEach(() => {
+    setActivePinia(createPinia());
     open.mockClear();
     openAudio.mockClear();
     executeItem.mockClear();
@@ -97,5 +101,22 @@ describe("useProgramExecution", () => {
     };
     expect(useProgramExecution().execute(announcements)).toBe(false);
     expect(executeItem).not.toHaveBeenCalled();
+  });
+
+  it("a versão do topo vence a do item; playback sem playback cai no cantado", async () => {
+    $userdata.set(KEYS.MODULES.PRESENTATION_MODE.MUSIC_MODE_OVERRIDE, "lyric");
+    playMusicInMode(70, "pb");
+    expect(open).toHaveBeenLastCalledWith({ id_music: 70, mode: MusicActionEnum.NO_AUDIO, minimized: true });
+
+    $userdata.set(KEYS.MODULES.PRESENTATION_MODE.MUSIC_MODE_OVERRIDE, "pb");
+    open.mockClear();
+    open.mockResolvedValueOnce(false);
+    playMusicInMode(70, "sung");
+    await vi.waitFor(() => expect(open).toHaveBeenCalledTimes(2));
+    expect(open.mock.calls.map((c) => (c[0] as { mode: string }).mode)).toEqual([
+      MusicActionEnum.INSTRUMENTAL,
+      MusicActionEnum.AUDIO,
+    ]);
+    $userdata.set(KEYS.MODULES.PRESENTATION_MODE.MUSIC_MODE_OVERRIDE, "");
   });
 });

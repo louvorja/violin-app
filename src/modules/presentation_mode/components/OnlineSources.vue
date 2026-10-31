@@ -3,7 +3,7 @@
   <button
     type="button"
     class="pm-online-src"
-    :class="{ 'pm-online-src--active': active && online.openId.value === VIDEOS }"
+    :class="{ 'pm-online-src--active': active === 'online' && online.openId.value === VIDEOS }"
     data-testid="pm-online-videos"
     @click="open(VIDEOS)"
   >
@@ -23,7 +23,7 @@
     <template #item="{ element: fav }">
       <div
         class="pm-online-src pm-online-src--user"
-        :class="{ 'pm-online-src--active': active && online.openId.value === fav.id }"
+        :class="{ 'pm-online-src--active': active === 'online' && online.openId.value === fav.id }"
         role="button"
         tabindex="0"
         :title="
@@ -59,6 +59,16 @@
   </draggable>
   <button
     type="button"
+    class="pm-online-src"
+    :class="{ 'pm-online-src--active': active === 'canva' }"
+    data-testid="pm-online-canva"
+    @click="emit('canva')"
+  >
+    <img :src="logoCanva" alt="" class="pm-online-src__avatar" />
+    <span class="pm-online-src__label">{{ tm("canva.title") }}</span>
+  </button>
+  <button
+    type="button"
     class="pm-online-src pm-online-src--add"
     data-testid="pm-online-add"
     @click="emit('add')"
@@ -74,6 +84,7 @@ import { LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { useModuleI18n } from "@/composables/useModuleI18n";
+import logoCanva from "@/assets/img/canva.png";
 import {
   confirmRemoveFavorite,
   useOnlineLibrary,
@@ -83,15 +94,15 @@ import {
 
 /**
  * O grupo Online da barra lateral da aba Mídia: os vídeos favoritos, as
- * playlists e os canais do YouTube, e o "Adicionar link". Abrir um deles
- * mostra a grade on-line no lugar da grade de arquivos.
+ * playlists e os canais do YouTube, o Canva e o "Adicionar link". Abrir um
+ * deles mostra a grade on-line (ou a do Canva) no lugar da grade de arquivos.
  */
 
 defineProps<{
-  /** A grade on-line é a que está à vista. */
-  active: boolean;
+  /** A grade que está à vista no lugar da de arquivos, se alguma. */
+  active: "online" | "canva" | null;
 }>();
-const emit = defineEmits<{ open: []; add: [] }>();
+const emit = defineEmits<{ open: []; add: []; canva: [] }>();
 
 const { tm, locale } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
 const online = useOnlineLibrary();

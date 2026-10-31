@@ -1,6 +1,6 @@
 import { ICONS } from "@/config/Icons";
 import type { ProgramItem } from "@/types/Presentation";
-import { fileItem, fileTitle, onlineItem, bibleItem, songItem } from "./items";
+import { canvaSiteItem, fileItem, fileTitle, onlineItem, bibleItem, songItem } from "./items";
 import { kindFromPath } from "./liturgy";
 import { KIND_ICONS } from "./kinds";
 import type { MusicMode } from "./musicModes";
@@ -23,7 +23,7 @@ export interface HistoryEntry {
 
 /** O que a biblioteca manda ao ar e dá para repetir (os do programa ficam no programa). */
 export function isRecordable(playable: Playable): boolean {
-  return ["file", "song", "bible", "online"].includes(playable.type);
+  return ["file", "song", "bible", "online", "canva"].includes(playable.type);
 }
 
 /** Anota no fim; mandar de novo o que já está por último não repete a linha. */
@@ -40,6 +40,7 @@ export function historyTitle(playable: Playable): string {
       return fileTitle(playable.entry);
     case "song":
     case "online":
+    case "canva":
       return playable.title;
     case "bible":
       return playable.ref.reference;
@@ -56,6 +57,8 @@ export function historySubtitle(playable: Playable): string {
       return playable.subtitle ?? "";
     case "online":
       return playable.channel ?? "";
+    case "canva":
+      return "Canva";
     case "bible":
       return "";
     default:
@@ -71,6 +74,8 @@ export function historyIcon(playable: Playable): string {
       return KIND_ICONS.music;
     case "online":
       return KIND_ICONS.online_video;
+    case "canva":
+      return KIND_ICONS.site;
     case "bible":
       return KIND_ICONS.bible;
     default:
@@ -101,6 +106,8 @@ export function historyItem(entry: HistoryEntry): ProgramItem | null {
       return onlineItem({ id: p.videoId, title: p.title, duration: null, channel: p.channel });
     case "bible":
       return bibleItem(p.ref);
+    case "canva":
+      return canvaSiteItem({ id: p.designId, title: p.title, url: "" });
     default:
       return null;
   }

@@ -13,6 +13,7 @@ import { close as closeProjection } from "@/helpers/Projection";
 import { closingOnPurpose } from "@/composables/useProjectionShutdown";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { isWebWindowOpen } from "@/helpers/projection/webWindow";
+import WebRoles from "@/helpers/projection/WebRoles";
 import { PROJECTION_TYPE } from "@/constants/Projection";
 import { KEYS } from "@/constants/UserDataKeys";
 import $appdata from "@/helpers/AppData";
@@ -100,6 +101,8 @@ const _stageMissing = ref(false);
 let _missingStreak = { main: 0, stage: 0 };
 const _busy = ref(false);
 let _responderInstalled = false;
+/** O retorno tem monitor; lido a cada leitura das janelas. */
+let _stageMonitor = false;
 
 function _installResponder(): void {
   if (_responderInstalled) return;
@@ -137,12 +140,31 @@ async function _openFeatures(): Promise<string[]> {
 }
 
 /**
+ * O retorno de palco tem monitor agora. Sem ele, abrir o retorno a pedido do
+ * operador caía no monitor principal: em tela cheia por cima do LouvorJA.
+ */
+async function _stageHasMonitor(): Promise<boolean> {
+  const api = Platform.displays as { getRoles?: () => Promise<unknown> } | null | undefined;
+  if (Platform.isDesktop && api?.getRoles) {
+    try {
+      const roles = (await api.getRoles()) as { role: string; displayId: unknown }[];
+      return Array.isArray(roles) && roles.some((r) => r.role === "stage" && r.displayId != null);
+    } catch {
+      return false;
+    }
+  }
+  return !!WebRoles.screenForRole("stage");
+}
+
+/**
  * O ribbon habilita Iniciar, Parar e Limpar tela pelo que dá para fazer
  * agora — ele lê o AppData, não os refs daqui.
  */
 function _publish(): void {
   const idle = !_busy.value;
-  $appdata.set(KEYS.MODULES.PRESENTATION_MODE.CAN_START, idle && !(_on.value.main && _on.value.stage));
+  // Sem monitor, o retorno não liga: só a tela principal já é "tudo no ar".
+  const allOn = _on.value.main && (_on.value.stage || !_stageMonitor);
+  $appdata.set(KEYS.MODULES.PRESENTATION_MODE.CAN_START, idle && !allOn);
   $appdata.set(KEYS.MODULES.PRESENTATION_MODE.CAN_STOP, idle && _presenting.value);
   $appdata.set(KEYS.MODULES.PRESENTATION_MODE.CAN_CLEAR, _presenting.value && !_cleared.value);
 }
@@ -156,7 +178,8 @@ export async function anyScreenOpen(): Promise<boolean> {
 const MISSING_AFTER_READS = 2;
 
 export async function refreshShowing(): Promise<void> {
-  const open = await _openFeatures();
+  const [open, stageMonitor] = await Promise.all([_openFeatures(), _stageHasMonitor()]);
+  _stageMonitor = stageMonitor;
   _mainOpen.value = MAIN_SCREEN_FEATURES.some((f) => open.includes(f));
   _returnOpen.value = RETURN_FEATURES.some((f) => open.includes(f));
   if (!_busy.value) {
@@ -201,7 +224,8 @@ async function _openMissing(): Promise<void> {
   await refreshShowing();
   const media = _liveMedia();
   if (_on.value.main && !_mainOpen.value) await openMediaWindow("projection", media, { explicit: true });
-  if (_on.value.stage && !_returnOpen.value) await openMediaWindow("return", media, { explicit: true });
+  if (_on.value.stage && !_returnOpen.value && _stageMonitor)
+    await openMediaWindow("return", media, { explicit: true });
 }
 
 /** Fecha todas as janelas de uma tela (música, Bíblia, arquivo, vídeo). */
@@ -252,7 +276,7 @@ export async function showOnReturn(override: ReturnTarget | null): Promise<void>
   Broadcast.send(BROADCAST_TYPE.RETURN_OVERRIDE, _overridePayload());
   if (!override) return;
   const open = await _openFeatures();
-  if (!RETURN_FEATURES.some((f) => open.includes(f))) {
+  if (!RETURN_FEATURES.some((f) => open.includes(f)) && (await _stageHasMonitor())) {
     try {
       await openMediaWindow("return", "music", { explicit: true });
     } catch (e) {
@@ -274,8 +298,10 @@ export async function startOutputs(): Promise<void> {
   _busy.value = true;
   _publish();
   try {
+    // O retorno em "Nenhum" fica desligado: Iniciar liga só o que tem onde abrir.
+    const stage = await _stageHasMonitor();
     _setOn("main", true);
-    _setOn("stage", true);
+    _setOn("stage", stage);
     // Só abre a saída que falta: a janela da música por cima de um vídeo no ar
     // cobriria o vídeo com o fundo.
     await _openMissing();
@@ -312,6 +338,8 @@ export async function setScreen(screen: Screen, on: boolean): Promise<void> {
   _busy.value = true;
   _publish();
   try {
+    // Retorno sem monitor não liga: ficaria "ligado" sem janela, e o aviso de tela sumida acenderia.
+    if (on && screen === "stage" && !(await _stageHasMonitor())) return;
     _setOn(screen, on);
     if (on) await _openMissing();
     else await _closeScreen(screen);
@@ -339,6 +367,19 @@ export async function reopenOutputs(): Promise<void> {
     _missingStreak = { main: 0, stage: 0 };
     await refreshShowing();
   }
+}
+
+/**
+ * O retorno de palco tem monitor escolhido (e ligado). Sem ele, o módulo não
+ * oferece nada do retorno: miniatura, o que ele mostra e "Reproduzir só no retorno".
+ */
+export function useHasStageMonitor() {
+  const { displays, roles } = useDisplays();
+  return computed(() => {
+    const displayId = roles.value.find((r) => r.role === "stage")?.displayId;
+    if (displayId == null) return false;
+    return displays.value.some((d) => String(d.id) === String(displayId));
+  });
 }
 
 export function useOutputs() {

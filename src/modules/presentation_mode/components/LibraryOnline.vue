@@ -170,6 +170,7 @@ import DateTime from "@/helpers/DateTime";
 import $snackbar from "@/helpers/Snackbar";
 import { prepare as prepareOnlineVideo, youtubeThumb } from "@/helpers/OnlineVideo";
 import { useModuleI18n } from "@/composables/useModuleI18n";
+import { useHasStageMonitor } from "../composables/useOutputs";
 import type { ProgramItem } from "@/types/Presentation";
 import { onlineItem } from "../program/items";
 import type { Playable, PlayOptions } from "../program/playable";
@@ -202,6 +203,7 @@ const emit = defineEmits<{
 }>();
 
 const { tm, locale } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
+const hasStageMonitor = useHasStageMonitor();
 const online = useOnlineLibrary();
 const current = online.openFavorite;
 
@@ -231,17 +233,24 @@ function menuFor(video: OnlineEntry): { quick: LjMenuItem[]; items: LjMenuItem[]
         icon: ICONS.PLAYER.VOLUME_MUTE,
         action: () => emit("play", onlinePlayable(video), { muted: true }),
       },
-      props.returnPath === onlineReturnPath(video.id)
-        ? {
-            label: tm("library.remove_from_return"),
-            icon: ICONS.PROJECTION.RETURN,
-            action: () => emit("show-on-return", null),
-          }
-        : {
-            label: tm("library.play_on_return"),
-            icon: ICONS.PROJECTION.RETURN,
-            action: () => emit("show-on-return", onlinePlayable(video)),
-          },
+      // Só no retorno: só com monitor no retorno (ou para tirar o que já está lá).
+      ...(props.returnPath === onlineReturnPath(video.id)
+        ? [
+            {
+              label: tm("library.remove_from_return"),
+              icon: ICONS.PROJECTION.RETURN,
+              action: () => emit("show-on-return", null),
+            },
+          ]
+        : hasStageMonitor.value
+          ? [
+              {
+                label: tm("library.play_on_return"),
+                icon: ICONS.PROJECTION.RETURN,
+                action: () => emit("show-on-return", onlinePlayable(video)),
+              },
+            ]
+          : []),
       { separator: true },
       {
         label: tm("library.add_to_program"),
