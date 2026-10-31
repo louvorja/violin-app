@@ -69,7 +69,7 @@ describe("IndexedDB: abertura do banco", () => {
 
   it("cria a tabela que falta subindo uma versão a partir da do disco", async () => {
     disk.version = 6;
-    disk.stores = new Set(ALL.filter((name) => name !== DB_TABLE.PRESENTATION_MODELS));
+    disk.stores = new Set(ALL.filter((name) => name !== DB_TABLE.DEVICES));
 
     await init();
 

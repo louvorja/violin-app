@@ -45,6 +45,36 @@ describe("createEtaEstimator", () => {
     eta.push(5_000, 100);
     expect(eta.eta(5_000)).toBe(0);
   });
+
+  it("marca calculando abaixo do percentual mínimo depois do tempo mínimo", () => {
+    const eta = createEtaEstimator();
+    eta.push(0, 0);
+    eta.push(5_000, 0.02);
+    expect(eta.eta(5_000)).toBeNull();
+    expect(eta.calculating(5_000)).toBe(true);
+  });
+
+  it("não marca calculando antes do tempo mínimo", () => {
+    const eta = createEtaEstimator();
+    eta.push(0, 0);
+    eta.push(1_000, 0.02);
+    expect(eta.calculating(1_000)).toBe(false);
+  });
+
+  it("para de calcular quando atinge o percentual mínimo", () => {
+    const eta = createEtaEstimator();
+    eta.push(0, 0);
+    eta.push(5_000, 1);
+    expect(eta.calculating(5_000)).toBe(false);
+    expect(eta.eta(5_000)).not.toBeNull();
+  });
+
+  it("deixa de calcular quando a tarefa para de andar", () => {
+    const eta = createEtaEstimator();
+    eta.push(0, 0);
+    eta.push(5_000, 0.02);
+    expect(eta.calculating(5_000 + 25_000)).toBe(false);
+  });
 });
 
 describe("formatEta", () => {

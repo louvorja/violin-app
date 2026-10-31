@@ -113,6 +113,23 @@ describe("escolha da release por semver, de qualquer canal", () => {
     expect(nativo.checkForUpdates).toHaveBeenCalledTimes(1);
   });
 
+  it("no Windows ARM o updater procura o metadata próprio (latest-arm64)", () => {
+    const plataforma = Object.getOwnPropertyDescriptor(process, "platform");
+    const arq = Object.getOwnPropertyDescriptor(process, "arch");
+    Object.defineProperty(process, "platform", { value: "win32", configurable: true });
+    Object.defineProperty(process, "arch", { value: "arm64", configurable: true });
+    try {
+      const { updater, nativo } = carregar({ instalada: "2.0.0", releases: [] });
+      updater.init({ autoCheck: false });
+      /* Sem isto, a máquina ARM leria o latest.yml do x64 e trocaria a
+       * instalação nativa pela emulada na próxima atualização. */
+      expect(nativo.channel).toBe("latest-arm64");
+    } finally {
+      if (plataforma) Object.defineProperty(process, "platform", plataforma);
+      if (arq) Object.defineProperty(process, "arch", arq);
+    }
+  });
+
   it("o status entrega a escolha efetiva de pré-versões para a tela", () => {
     const { updater } = carregar({ instalada: "2.0.0", releases: [] });
     updater.init({ autoCheck: false, useBeta: false });

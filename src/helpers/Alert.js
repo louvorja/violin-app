@@ -31,6 +31,9 @@ export default {
       "alert.buttons",
       data.buttons || [{ text: "alert.close", color: "error", value: "close" }]
     );
+    // Botão que o Enter aperta sem escolha pelas setas. Só a pergunta que o declara
+    // tem um: confirmação de excluir, limpar ou sair nunca abre armada.
+    $appdata.set("alert.default_button", data.default_button ?? null);
 
     // unwatch() é chamado quando show → false, devolvendo o valor ao callback.
     const store = useAppStore();

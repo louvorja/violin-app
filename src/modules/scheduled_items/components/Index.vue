@@ -167,10 +167,10 @@
       <LjField layout="column" :label="tm('category_name')">
         <LjInput v-model="categoryNameInput" autofocus @keydown.enter="confirmCategoryDialog" />
       </LjField>
-      <label class="si-color-row">
+      <div class="si-color-row">
         <span class="si-color-label">{{ tm("color") }}</span>
-        <input v-model="categoryColorInput" type="color" class="si-color-input" />
-      </label>
+        <LjColorPicker v-model="categoryColorInput" :presets="CAT_COLORS" :label="tm('color')" />
+      </div>
       <template #footer>
         <LjButton size="sm" @click="categoryDialog = false">{{ t("actions.cancel") }}</LjButton>
         <LjButton
@@ -341,6 +341,7 @@ import ModuleContainer from "@/components/ModuleContainer.vue";
 import {
   LjButton,
   LjCalendar,
+  LjColorPicker,
   LjDialog,
   LjField,
   LjIcon,
@@ -1315,20 +1316,6 @@ async function removeEntry(): Promise<void> {
 .si-color-label {
   font-size: var(--lj-text-base);
   color: var(--lj-text-muted);
-}
-.si-color-input {
-  width: 100%;
-  height: var(--lj-ui-h-lg);
-  padding: 2px;
-  border: var(--lj-ui-border);
-  border-radius: var(--lj-ui-radius);
-  background: var(--lj-surface-bg);
-  cursor: pointer;
-}
-.si-color-input:focus-visible {
-  border-color: var(--lj-ui-accent);
-  box-shadow: var(--lj-ui-focus);
-  outline: none;
 }
 
 /* ── Diálogo de agendamento ────────────────────────────────────────── */

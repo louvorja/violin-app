@@ -6,7 +6,13 @@ import ProgressBar from "@/components/ProgressBar.vue";
 const i18n = createI18n({
   legacy: false,
   locale: "pt",
-  messages: { pt: { shell: { background_tasks: { eta: "{time} restantes" } } } },
+  messages: {
+    pt: {
+      shell: {
+        background_tasks: { eta: "{time} restantes", eta_calculating: "calculando tempo restante" },
+      },
+    },
+  },
 });
 
 describe("ProgressBar — tempo restante", () => {
@@ -34,5 +40,17 @@ describe("ProgressBar — tempo restante", () => {
 
     await wrapper.setProps({ done: 1000, completedMsg: "Concluído" });
     expect(wrapper.find(".pgb__eta").exists()).toBe(false);
+  });
+
+  it("mostra 'calculando' antes de atingir o percentual mínimo", async () => {
+    const wrapper = mount(ProgressBar, {
+      props: { done: 0, total: 100, percent: 0 },
+      global: { plugins: [i18n] },
+    });
+
+    vi.advanceTimersByTime(5_000);
+    await wrapper.setProps({ percent: 0.02 });
+
+    expect(wrapper.find(".pgb__eta").text()).toContain("calculando");
   });
 });

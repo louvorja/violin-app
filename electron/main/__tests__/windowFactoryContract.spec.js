@@ -133,3 +133,78 @@ describe("windowFactory — ordem de abertura da projeção de Site", () => {
     expect(exportados).toContain("willLoad");
   });
 });
+
+/**
+ * Janelas comuns (a tela do operador) guardam modo, tamanho e posição.
+ *
+ * A geometria em si é testada em `windowState.spec.js`; aqui só se garante que
+ * a factory realmente usa o store e que o main realmente o injeta — um refactor
+ * que apague a ligação não pode passar em silêncio.
+ */
+describe("estado da janela comum", () => {
+  it("a factory reaplica o estado e grava a geometria NORMAL", () => {
+    expect(FACTORY).toContain("resolverPosicaoJanela");
+    expect(FACTORY).toContain("win.getNormalBounds()");
+    expect(FACTORY).toContain("win.maximize()");
+  });
+
+  it("o main injeta o store em user_data", () => {
+    expect(MAIN).toContain("windowFactory.setWindowStateStore");
+    expect(MAIN).toContain("options.windows.");
+  });
+});
+
+/**
+ * A tela do operador é a única janela auxiliar que nasce com o foco: é onde o
+ * operador vai trabalhar. As projeções continuam aparecendo sem roubar o foco.
+ */
+describe("foco da tela do operador", () => {
+  it("a factory mostra com foco quando pedido e não devolve o foco à main", () => {
+    expect(FACTORY).toContain("focusOnOpen = false");
+    expect(FACTORY).toContain("receberFoco = focusOnOpen || feature === OPERATOR_FEATURE");
+    expect(FACTORY).toContain('mostrarComFoco ? () => _trazerParaFrente(win) : () => win.showInactive()');
+    expect(FACTORY).toContain("if (!mostrarComFoco) _refocusMainWindow();");
+  });
+
+  it("a feature decide o foco — um renderer antigo sem `focusOnOpen` não deixa o operador atrás", () => {
+    expect(FACTORY).toContain('const OPERATOR_FEATURE = "operador";');
+    expect(FACTORY).toContain("receberFoco = focusOnOpen || feature === OPERATOR_FEATURE");
+  });
+
+  it("ao REABRIR a janela, ela volta para a frente em vez de ficar atrás da principal", () => {
+    expect(FACTORY).toContain("trazerParaFrente = receberFoco && !backgroundWindows");
+    expect(FACTORY).toContain("if (!trazerParaFrente) _refocusMainWindow();");
+    expect(FACTORY).toContain("refocusMain: !trazerParaFrente");
+    expect(FACTORY).toContain("_trazerParaFrente(existing)");
+    /* Minimizada não volta com show(). */
+    expect(FACTORY).toContain("if (win.isMinimized()) win.restore();");
+  });
+
+  it("o mínimo da janela comum é o mesmo que o módulo de estado aceita", () => {
+    /* Sem minWidth/minHeight o usuário encolhia além do mínimo, o estado era
+       descartado e a próxima abertura vinha maximizada. */
+    expect(FACTORY).toContain("minWidth: LARGURA_MINIMA");
+    expect(FACTORY).toContain("minHeight: ALTURA_MINIMA");
+  });
+
+  it("o refocus da projeção não rouba o foco que o operador acabou de receber", () => {
+    /* A projeção termina de carregar depois; o refocus dela checa quem está com o foco
+       e também um pedido recente — o SO confirma o foco de forma assíncrona. */
+    expect(FACTORY).toContain("operador.isFocused()");
+    expect(FACTORY).toContain("_pedidoFocoOperadorEm");
+    expect(FACTORY).toContain("FOCO_OPERADOR_PROTEGIDO_MS");
+    /* `moveTop` sobe mesmo se o Windows negar o primeiro plano; o pulso de
+       alwaysOnTop força o foco sem deixá-lo para sempre. */
+    expect(FACTORY).toContain("win.moveTop()");
+    expect(FACTORY).toContain("win.setAlwaysOnTop(true)");
+    expect(FACTORY).toContain("win.setAlwaysOnTop(false)");
+  });
+
+  it("o renderer pede o foco só para o operador", () => {
+    const projectionWindows = fs.readFileSync(
+      fileURLToPath(new URL("../../../src/helpers/ProjectionWindows.ts", import.meta.url)),
+      "utf8",
+    );
+    expect(projectionWindows).toContain('kind === "operator"');
+  });
+});

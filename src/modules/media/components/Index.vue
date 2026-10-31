@@ -336,6 +336,9 @@ function _onKeyNav(e) {
   if (AppData.get(KEYS.SHELL.ACTIVE_MODULE, "") === ModuleEnum.PRESENTATION_MODE) return;
   if (e.ctrlKey || e.metaKey || e.altKey) return; // deixa Ctrl+arrow etc passar
   if (_isInTextField()) return;
+  // "Deseja fechar este slide?" na tela: as setas e o Enter são da pergunta
+  // (Alert.vue), não passam o slide por baixo dela.
+  if (document.querySelector('[role="alertdialog"]')) return;
 
   let handled = false;
   switch (e.key) {

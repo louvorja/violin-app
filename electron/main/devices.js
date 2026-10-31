@@ -7,7 +7,9 @@
  * e persistidos no IndexedDB do renderer.
  *
  * Cada device tem dois identificadores:
- *  - `id`: UUID criado pelo desktop (índice da tabela)
+ *  - `id`: identificador do aparelho enviado no `fingerprint` do
+ *    `POST /api/register-device` (UUID `identifierForVendor` no iOS,
+ *    `ANDROID_ID` no Android). Índice da tabela.
  *  - `token`: UUID gerado para o QR code (credencial de acesso)
  *
  * A flag `only_authorized_devices` controla se dispositivos não
@@ -142,10 +144,10 @@ function save(devices) {
  * Adiciona um device pendente (pré-registro antes de definir permissões).
  * Chamado quando o device faz POST /api/register-device.
  *
- * O `id` é o fingerprint fornecido pelo aparelho (hardware fingerprint no
- * Android, identifierForVendor no iOS). Se já existe um device com esse
- * fingerprint, sobrescreve os dados (mantendo as permissões definidas pelo
- * operador).
+ * O `id` é o fingerprint fornecido pelo aparelho (`identifierForVendor` no
+ * iOS, `Settings.Secure.ANDROID_ID` no Android). Se já existe um device com
+ * esse fingerprint, sobrescreve os dados (mantendo as permissões definidas
+ * pelo operador).
  *
  * @param {{token:string, name:string, model:string, platform:string, fingerprint:string}} info
  * @returns {object} device (sem permissões ainda, ou com as existentes)

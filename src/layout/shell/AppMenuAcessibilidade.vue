@@ -359,7 +359,36 @@
                 <small v-if="isHymnalCached" class="opt-download-count">
                   · {{ $t("accessibility.musics.cached") }}
                 </small>
+                <small v-if="partialHymnal" class="opt-download-count opt-tag--partial">
+                  · {{ partialPercent(partialHymnal) }}
+                </small>
               </label>
+              <div v-if="partialHymnal" class="opt-partial">
+                <span class="opt-partial__info">
+                  {{ $t("accessibility.musics.partial_files", partialHymnal) }}
+                </span>
+                <LjButton
+                  size="sm"
+                  :disabled="musicPartialBusy"
+                  @click="continueMusicPartial({ hymnal: true })"
+                >
+                  {{ $t("accessibility.musics.partial_continue") }}
+                </LjButton>
+                <LjButton
+                  size="sm"
+                  variant="danger"
+                  :disabled="musicPartialBusy"
+                  @click="
+                    discardMusicPartial(
+                      hymnalIds,
+                      $t('options.collections_download.hymnal'),
+                      partialHymnal.have
+                    )
+                  "
+                >
+                  {{ $t("accessibility.musics.partial_discard") }}
+                </LjButton>
+              </div>
             </div>
 
             <!-- Hinário 1996 -->
@@ -378,7 +407,36 @@
                 <small v-if="isHymnal1996Cached" class="opt-download-count">
                   · {{ $t("accessibility.musics.cached") }}
                 </small>
+                <small v-if="partialHymnal1996" class="opt-download-count opt-tag--partial">
+                  · {{ partialPercent(partialHymnal1996) }}
+                </small>
               </label>
+              <div v-if="partialHymnal1996" class="opt-partial">
+                <span class="opt-partial__info">
+                  {{ $t("accessibility.musics.partial_files", partialHymnal1996) }}
+                </span>
+                <LjButton
+                  size="sm"
+                  :disabled="musicPartialBusy"
+                  @click="continueMusicPartial({ hymnal1996: true })"
+                >
+                  {{ $t("accessibility.musics.partial_continue") }}
+                </LjButton>
+                <LjButton
+                  size="sm"
+                  variant="danger"
+                  :disabled="musicPartialBusy"
+                  @click="
+                    discardMusicPartial(
+                      hymnal1996Ids,
+                      $t('options.collections_download.hymnal_1996'),
+                      partialHymnal1996.have
+                    )
+                  "
+                >
+                  {{ $t("accessibility.musics.partial_discard") }}
+                </LjButton>
+              </div>
             </div>
 
             <!-- Categorias > Álbuns -->
@@ -398,27 +456,62 @@
               </label>
 
               <div class="opt-cat-albums">
-                <label
-                  v-for="album in cat.albums || []"
-                  :key="album.id_album"
-                  class="opt-checkbox opt-album"
-                >
-                  <input
-                    type="checkbox"
-                    :checked="selectedAlbums.has(album.id_album)"
-                    :disabled="translating"
-                    @change="
-                      toggleAlbum(album.id_album, ($event.target as HTMLInputElement).checked)
-                    "
-                  />
-                  <span>{{ album.name }}</span>
-                  <small v-if="album.subtitle" class="opt-download-count">
-                    · {{ album.subtitle }}
-                  </small>
-                  <small v-if="isAlbumCached(album.id_album)" class="opt-download-count">
-                    · {{ $t("accessibility.musics.cached") }}
-                  </small>
-                </label>
+                <div v-for="album in cat.albums || []" :key="album.id_album">
+                  <label class="opt-checkbox opt-album">
+                    <input
+                      type="checkbox"
+                      :checked="selectedAlbums.has(album.id_album)"
+                      :disabled="translating"
+                      @change="
+                        toggleAlbum(album.id_album, ($event.target as HTMLInputElement).checked)
+                      "
+                    />
+                    <span>{{ album.name }}</span>
+                    <small v-if="album.subtitle" class="opt-download-count">
+                      · {{ album.subtitle }}
+                    </small>
+                    <small v-if="isAlbumCached(album.id_album)" class="opt-download-count">
+                      · {{ $t("accessibility.musics.cached") }}
+                    </small>
+                    <small
+                      v-if="partialAlbums.get(album.id_album)"
+                      class="opt-download-count opt-tag--partial"
+                    >
+                      · {{ partialPercent(partialAlbums.get(album.id_album)!) }}
+                    </small>
+                  </label>
+                  <div
+                    v-if="partialAlbums.get(album.id_album)"
+                    class="opt-partial opt-partial--nested"
+                  >
+                    <span class="opt-partial__info">
+                      {{
+                        $t("accessibility.musics.partial_files", partialAlbums.get(album.id_album)!)
+                      }}
+                    </span>
+                    <LjButton
+                      size="sm"
+                      :disabled="musicPartialBusy"
+                      @click="continueMusicPartial({ albumId: album.id_album })"
+                    >
+                      {{ $t("accessibility.musics.partial_continue") }}
+                    </LjButton>
+                    <LjButton
+                      size="sm"
+                      variant="danger"
+                      :disabled="musicPartialBusy"
+                      @click="
+                        discardMusicPartial(
+                          albumMusicIds(album.id_album),
+                          album.name,
+                          partialAlbums.get(album.id_album)!.have
+                        )
+                      "
+                    >
+                      {{ $t("accessibility.musics.partial_discard") }}
+                    </LjButton>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -426,22 +519,23 @@
 
         <!-- Progresso -->
         <ProgressBar
-          v-if="translating"
+          v-if="mostrarProgressoMusicas"
           class="libras-progress"
           :done="musicProgress.done"
           :total="musicProgress.total"
+          :percent="musicProgress.percent"
           :current="musicProgress.current"
           :completed-msg="completedMsg"
           show-cancel
           :cancel-label="$t('accessibility.musics.cancel')"
-          @cancel="sync.cancelLibrasDownloads()"
+          @cancel="cancelLibrasDownload"
         >
           <template #label>
             {{
               $t("accessibility.musics.progress", {
                 done: musicProgress.done,
                 total: musicProgress.total,
-                percent: musicPercent,
+                percent: musicProgress.percent,
               })
             }}
           </template>
@@ -456,11 +550,17 @@
             {{ $t("accessibility.musics.translate") }}
           </LjButton>
           <LjButton
-            :icon="ICONS.ACTIONS.SAVE"
-            :disabled="translating || !hasPendingRemovals || saving"
-            @click="saveSelection"
+            v-if="hasPendingRemovals || saving"
+            :icon="ICONS.ACTIONS.DELETE_FILLED"
+            variant="danger"
+            :disabled="translating || saving || !hasPendingRemovals"
+            @click="confirmRemoveSelection"
           >
-            {{ saving ? $t("accessibility.musics.saving") : $t("accessibility.musics.save") }}
+            {{
+              saving
+                ? $t("accessibility.musics.saving")
+                : $t("accessibility.musics.remove", { n: pendingRemovalCount })
+            }}
           </LjButton>
         </div>
       </section>
@@ -495,28 +595,60 @@
                 <small v-if="isBibleVersionCached(ver.id_bible_version)" class="opt-download-count">
                   · {{ $t("accessibility.bible.cached") }}
                 </small>
+                <small
+                  v-if="partialBibles.get(ver.id_bible_version)"
+                  class="opt-download-count opt-tag--partial"
+                >
+                  · {{ partialPercent(partialBibles.get(ver.id_bible_version)!) }}
+                </small>
               </label>
+              <div v-if="partialBibles.get(ver.id_bible_version)" class="opt-partial">
+                <span class="opt-partial__info">
+                  {{
+                    $t(
+                      "accessibility.bible.partial_files",
+                      partialBibles.get(ver.id_bible_version)!
+                    )
+                  }}
+                </span>
+                <LjButton
+                  size="sm"
+                  :disabled="biblePartialBusy"
+                  @click="continueBiblePartial(ver.id_bible_version)"
+                >
+                  {{ $t("accessibility.bible.partial_continue") }}
+                </LjButton>
+                <LjButton
+                  size="sm"
+                  variant="danger"
+                  :disabled="biblePartialBusy"
+                  @click="discardBiblePartial(ver)"
+                >
+                  {{ $t("accessibility.bible.partial_discard") }}
+                </LjButton>
+              </div>
             </div>
           </div>
         </div>
 
         <ProgressBar
-          v-if="translatingBible"
+          v-if="mostrarProgressoBiblia"
           class="libras-progress"
           :done="bibleProgress.done"
           :total="bibleProgress.total"
+          :percent="bibleProgress.percent"
           :current="bibleProgress.current"
           :completed-msg="bibleCompletedMsg"
           show-cancel
           :cancel-label="$t('accessibility.bible.cancel')"
-          @cancel="sync.cancelLibrasDownloads()"
+          @cancel="cancelLibrasDownload"
         >
           <template #label>
             {{
               $t("accessibility.bible.progress", {
                 done: bibleProgress.done,
                 total: bibleProgress.total,
-                percent: biblePercent,
+                percent: bibleProgress.percent,
               })
             }}
           </template>
@@ -531,11 +663,17 @@
             {{ $t("accessibility.bible.translate") }}
           </LjButton>
           <LjButton
-            :icon="ICONS.ACTIONS.SAVE"
-            :disabled="translatingBible || !bibleHasPendingRemovals || savingBible"
-            @click="saveBibleSelection"
+            v-if="bibleHasPendingRemovals || savingBible"
+            :icon="ICONS.ACTIONS.DELETE_FILLED"
+            variant="danger"
+            :disabled="translatingBible || savingBible || !bibleHasPendingRemovals"
+            @click="confirmRemoveBibleSelection"
           >
-            {{ savingBible ? $t("accessibility.bible.saving") : $t("accessibility.bible.save") }}
+            {{
+              savingBible
+                ? $t("accessibility.bible.saving")
+                : $t("accessibility.bible.remove", { n: biblePendingRemovalCount })
+            }}
           </LjButton>
         </div>
       </section>
@@ -669,6 +807,12 @@ const selectedAlbums = ref<Set<number>>(new Set());
 const selectedHymnal = ref(false);
 const selectedHymnal1996 = ref(false);
 const cachedAlbumIds = ref<Set<number>>(new Set());
+/** Grupos de tradução pela metade (álbum/hinário): presentes de total. */
+const partialAlbums = ref<Map<number, { have: number; total: number }>>(new Map());
+/** Músicas por álbum, do último refresh — usado nos parciais. */
+const albumMusicRefs = ref<Map<number, number[]>>(new Map());
+const partialHymnal = ref<{ have: number; total: number } | null>(null);
+const partialHymnal1996 = ref<{ have: number; total: number } | null>(null);
 const isHymnalCached = ref(false);
 const isHymnal1996Cached = ref(false);
 const loadingCatalog = ref(false);
@@ -686,6 +830,9 @@ const categoryCheckboxRefs = ref<Record<number, HTMLInputElement | null>>({});
 const bibleVersions = ref<BibleVersion[]>([]);
 const selectedBibleVersions = ref<Set<number>>(new Set());
 const cachedBibleVersionIds = ref<Set<number>>(new Set());
+/** Versões com tradução parcial: capítulos presentes de total. */
+const partialBibles = ref<Map<number, { have: number; total: number }>>(new Map());
+const bibleBooks = ref<BibleBook[]>([]);
 const cachedBibleBaseline = ref<Set<number>>(new Set());
 const loadingBible = ref(false);
 const translatingBible = ref(false);
@@ -699,15 +846,20 @@ const musicProgress = computed(() => {
     return {
       done: task._done ?? 0,
       total: task._total ?? 0,
+      // Percentual real da tarefa: anda durante os slides e os bundles.
+      percent: task.progress ?? 0,
       current: formatBackgroundTaskDetail(task.detail, t),
     };
   }
-  return sync.librasMusicProgress.value;
+  const progresso = sync.librasMusicProgress.value;
+  return {
+    ...progresso,
+    percent: progresso.total > 0 ? Math.round((progresso.done / progresso.total) * 100) : 0,
+  };
 });
-const musicPercent = computed(() =>
-  musicProgress.value.total > 0
-    ? Math.round((musicProgress.value.done / musicProgress.value.total) * 100)
-    : 0
+/** Basta a tarefa existir: a barra não some por corrida de estado local. */
+const mostrarProgressoMusicas = computed(
+  () => translating.value || findTask("libras-music") !== undefined
 );
 const bibleProgress = computed(() => {
   const task = findTask("libras-bible");
@@ -715,15 +867,18 @@ const bibleProgress = computed(() => {
     return {
       done: task._done ?? 0,
       total: task._total ?? 0,
+      percent: task.progress ?? 0,
       current: formatBackgroundTaskDetail(task.detail, t),
     };
   }
-  return sync.librasBibleProgress.value;
+  const progresso = sync.librasBibleProgress.value;
+  return {
+    ...progresso,
+    percent: progresso.total > 0 ? Math.round((progresso.done / progresso.total) * 100) : 0,
+  };
 });
-const biblePercent = computed(() =>
-  bibleProgress.value.total > 0
-    ? Math.round((bibleProgress.value.done / bibleProgress.value.total) * 100)
-    : 0
+const mostrarProgressoBiblia = computed(
+  () => translatingBible.value || findTask("libras-bible") !== undefined
 );
 
 // Avatar
@@ -1019,6 +1174,28 @@ const bibleHasPendingRemovals = computed<boolean>(() => {
   return false;
 });
 
+/** Grupos (álbuns + hinários) marcados para remoção. */
+const pendingRemovalCount = computed<number>(() => {
+  let n = 0;
+  for (const id of cachedAlbumsBaseline.value) {
+    if (!selectedAlbums.value.has(id)) n += 1;
+  }
+  if (cachedHymnalBaseline.value && !selectedHymnal.value) n += 1;
+  if (cachedHymnal1996Baseline.value && !selectedHymnal1996.value) n += 1;
+  return n;
+});
+
+const biblePendingRemovalCount = computed<number>(() => {
+  let n = 0;
+  for (const id of cachedBibleBaseline.value) {
+    if (!selectedBibleVersions.value.has(id)) n += 1;
+  }
+  return n;
+});
+
+const musicPartialBusy = computed(() => translating.value || saving.value);
+const biblePartialBusy = computed(() => translatingBible.value || savingBible.value);
+
 // ─── Init ───────────────────────────────────────────────────────────────────
 
 onMounted(async () => {
@@ -1084,18 +1261,33 @@ watch(currentRegion, () => {
   refreshStats();
 });
 
-// Sincronizar estado de translating com bgTasks (download pode terminar com menu fechado)
+// Sincronizar estado de translating com a tarefa específica. Observar o
+// tamanho da lista era frágil: qualquer outra tarefa criada/removida durante o
+// download zerava a barra. Aqui só a tarefa da Libras manda.
 watch(
-  () => bgTasks.tasks.value.length,
-  () => {
-    if (!findTask("libras-music") && translating.value) {
-      translating.value = false;
-    }
-    if (!findTask("libras-bible") && translatingBible.value) {
-      translatingBible.value = false;
-    }
+  () => findTask("libras-music") !== undefined,
+  (running, wasRunning) => {
+    // Só encerra quando a tarefa estava rodando e parou; antes de registrar
+    // (scan inicial do cache) a barra precisa continuar visível.
+    if (wasRunning && !running) translating.value = false;
   }
 );
+watch(
+  () => findTask("libras-bible") !== undefined,
+  (running, wasRunning) => {
+    if (wasRunning && !running) translatingBible.value = false;
+  }
+);
+
+/**
+ * Cancela pela tarefa, que guarda o AbortController do download mesmo quando o
+ * menu foi fechado e reaberto (aí a instância do composable é outra).
+ */
+function cancelLibrasDownload(): void {
+  if (findTask("libras-music")) bgTasks.cancelTask("libras-music");
+  if (findTask("libras-bible")) bgTasks.cancelTask("libras-bible");
+  sync.cancelLibrasDownloads();
+}
 
 // ─── Stats ──────────────────────────────────────────────────────────────────
 
@@ -1115,10 +1307,8 @@ async function refreshStats(): Promise<void> {
       (e) => e.type === "bible" && e.id.endsWith(regionSuffix)
     );
 
-    // Extrair music IDs das entries cacheadas
-    const cachedMusicIds = new Set(
-      cachedMusicEntries.map((e) => parseInt(e.ref_id, 10)).filter((id) => !isNaN(id))
-    );
+    // Só a tradução principal conta; slides gravam uma entrada à parte.
+    const cachedMusicIds = Libras.musicCacheCompletos(cachedMusicEntries, currentRegion.value);
 
     // Mapear music IDs → album IDs usando o catálogo (paralelo)
     const allAlbums = categories.value.flatMap((cat) => cat.albums || []);
@@ -1132,33 +1322,72 @@ async function refreshStats(): Promise<void> {
     );
 
     const albumIdSet = new Set<number>();
+    const albumPartials = new Map<number, { have: number; total: number }>();
+    const albumMusicsMap = new Map<number, number[]>();
     for (const { id, musics } of albumEntries) {
-      if (musics && musics.length > 0) {
-        const allCached = musics.every((m) => cachedMusicIds.has(Number(m.id_music)));
-        if (allCached) albumIdSet.add(id);
-      }
+      if (!musics || musics.length === 0) continue;
+      albumMusicsMap.set(
+        id,
+        musics.map((m) => Number(m.id_music))
+      );
+      const progresso = Libras.progressoDeCache(
+        musics.filter((m) => cachedMusicIds.has(Number(m.id_music))).length,
+        musics.length
+      );
+      if (progresso.complete) albumIdSet.add(id);
+      else if (progresso.partial)
+        albumPartials.set(id, { have: progresso.have, total: progresso.total });
     }
     cachedAlbumIds.value = albumIdSet;
+    partialAlbums.value = albumPartials;
+    albumMusicRefs.value = albumMusicsMap;
 
     // Calcular hinários cacheados
-    isHymnalCached.value =
-      hymnalIds.value.length > 0 && hymnalIds.value.every((id) => cachedMusicIds.has(id));
-    isHymnal1996Cached.value =
-      hymnal1996Ids.value.length > 0 && hymnal1996Ids.value.every((id) => cachedMusicIds.has(id));
+    const progressoHinario = Libras.progressoDeCache(
+      hymnalIds.value.filter((id) => cachedMusicIds.has(id)).length,
+      hymnalIds.value.length
+    );
+    isHymnalCached.value = progressoHinario.complete;
+    partialHymnal.value = progressoHinario.partial
+      ? { have: progressoHinario.have, total: progressoHinario.total }
+      : null;
+    const progressoHinario1996 = Libras.progressoDeCache(
+      hymnal1996Ids.value.filter((id) => cachedMusicIds.has(id)).length,
+      hymnal1996Ids.value.length
+    );
+    isHymnal1996Cached.value = progressoHinario1996.complete;
+    partialHymnal1996.value = progressoHinario1996.partial
+      ? { have: progressoHinario1996.have, total: progressoHinario1996.total }
+      : null;
 
     // Mapear bible version abbreviation → id_bible_version
     const versionByAbbrev = new Map<string, number>();
     for (const v of bibleVersions.value) {
       if (v.abbreviation) versionByAbbrev.set(v.abbreviation, v.id_bible_version);
     }
-    cachedBibleVersionIds.value = new Set(
-      cachedBibleEntries
-        .map((e) => {
-          const parts = e.ref_id.split("_");
-          return versionByAbbrev.get(parts[0]) ?? NaN;
-        })
-        .filter((id) => !isNaN(id))
+    const chaptersPorVersao = Libras.bibleChaptersCompletos(
+      cachedBibleEntries,
+      versionByAbbrev,
+      currentRegion.value
     );
+    const books = await loadBibleBooks();
+    const totalCapitulos = books.reduce((n, b) => n + (b.chapters ?? 1), 0);
+    const bibleIds = new Set<number>();
+    const biblePartials = new Map<number, { have: number; total: number }>();
+    for (const v of bibleVersions.value) {
+      const progresso = Libras.progressoDeCache(
+        chaptersPorVersao.get(v.id_bible_version)?.size ?? 0,
+        totalCapitulos
+      );
+      if (progresso.complete) bibleIds.add(v.id_bible_version);
+      else if (progresso.partial)
+        biblePartials.set(v.id_bible_version, {
+          have: progresso.have,
+          total: progresso.total,
+        });
+    }
+    cachedBibleVersionIds.value = bibleIds;
+    partialBibles.value = biblePartials;
 
     // Pre-selecionar itens cacheados + salvar baselines
     selectedAlbums.value = new Set(albumIdSet);
@@ -1178,6 +1407,27 @@ async function refreshStats(): Promise<void> {
 
 function isAlbumCached(idAlbum: number): boolean {
   return cachedAlbumIds.value.has(idAlbum);
+}
+
+function albumMusicIds(albumId: number): number[] {
+  return albumMusicRefs.value.get(albumId) ?? [];
+}
+
+function partialPercent(p: { have: number; total: number }): string {
+  if (!p.total) return "0%";
+  return `${Math.min(100, Math.round((p.have / p.total) * 100))}%`;
+}
+
+/** Livros com o total de capítulos; usado para medir a Bíblia traduzida. */
+async function loadBibleBooks(): Promise<BibleBook[]> {
+  if (bibleBooks.value.length) return bibleBooks.value;
+  try {
+    const books = await $database.get<BibleBook[]>(`${locale.value}_bible_book`);
+    bibleBooks.value = Array.isArray(books) ? books : [];
+  } catch {
+    bibleBooks.value = [];
+  }
+  return bibleBooks.value;
 }
 
 function isCategoryFullySelected(cat: Category): boolean {
@@ -1295,8 +1545,8 @@ async function translateSelectedBibles(): Promise<void> {
   translatingBible.value = true;
   bibleCompletedMsg.value = "";
   try {
-    const books = await $database.get<BibleBook[]>("pt_bible_book");
-    if (!books) return;
+    const books = await loadBibleBooks();
+    if (!books.length) return;
 
     const count = await sync.startLibrasBibleDownloads(
       Array.from(selectedBibleVersions.value),
@@ -1315,7 +1565,131 @@ async function translateSelectedBibles(): Promise<void> {
   }
 }
 
-// ─── Remoção de traduções ───────────────────────────────────────────────────
+// ─── Parciais e remoção ─────────────────────────────────────────────────────
+
+/** Remove a tradução principal e os slides da(s) música(s) na região atual. */
+async function removeMusicEntries(refs: Set<number>): Promise<void> {
+  const suffix = `_${currentRegion.value}`;
+  const entries = await Libras.listCached("music");
+  for (const entry of entries) {
+    if (entry.type !== "music" || !entry.id.endsWith(suffix)) continue;
+    if (!refs.has(Number(entry.ref_id))) continue;
+    await Libras.removeCached(entry.id, "music");
+  }
+}
+
+async function continueMusicPartial(opts: {
+  albumId?: number;
+  hymnal?: boolean;
+  hymnal1996?: boolean;
+}): Promise<void> {
+  if (musicPartialBusy.value) return;
+  translating.value = true;
+  completedMsg.value = "";
+  try {
+    const count = await sync.startLibrasMusicDownloads(
+      opts.hymnal ? hymnalIds.value : [],
+      opts.hymnal1996 ? hymnal1996Ids.value : [],
+      opts.albumId ? new Set([opts.albumId]) : new Set<number>(),
+      currentRegion.value
+    );
+    completedMsg.value = t("accessibility.musics.completed", { count });
+  } catch (e) {
+    console.error("[Acessibilidade] continueMusicPartial:", e);
+    $snackbar.error((e as Error).message);
+  } finally {
+    translating.value = false;
+    await refreshStats();
+  }
+}
+
+async function discardMusicPartial(
+  refs: Iterable<number>,
+  label: string,
+  have: number
+): Promise<void> {
+  if (musicPartialBusy.value) return;
+  const ok = await $alert.confirm(
+    t("accessibility.musics.partial_discard_confirm", { name: label, n: have })
+  );
+  if (!ok) return;
+  try {
+    await removeMusicEntries(new Set([...refs].map(Number)));
+    $snackbar.success(t("accessibility.musics.partial_discarded"));
+  } catch (e) {
+    console.error("[Acessibilidade] discardMusicPartial:", e);
+    $snackbar.error((e as Error).message);
+  } finally {
+    await refreshStats();
+  }
+}
+
+async function continueBiblePartial(versionId: number): Promise<void> {
+  if (biblePartialBusy.value) return;
+  translatingBible.value = true;
+  bibleCompletedMsg.value = "";
+  try {
+    const books = await loadBibleBooks();
+    if (!books.length) return;
+    const count = await sync.startLibrasBibleDownloads(
+      [versionId],
+      bibleVersions.value,
+      books,
+      locale.value,
+      currentRegion.value
+    );
+    bibleCompletedMsg.value = t("accessibility.bible.completed", { count });
+  } catch (e) {
+    console.error("[Acessibilidade] continueBiblePartial:", e);
+    $snackbar.error((e as Error).message);
+  } finally {
+    translatingBible.value = false;
+    await refreshStats();
+  }
+}
+
+async function discardBiblePartial(ver: BibleVersion): Promise<void> {
+  if (biblePartialBusy.value) return;
+  const progresso = partialBibles.value.get(ver.id_bible_version);
+  const ok = await $alert.confirm(
+    t("accessibility.bible.partial_discard_confirm", {
+      name: ver.name,
+      n: progresso?.have ?? 0,
+    })
+  );
+  if (!ok) return;
+  try {
+    const suffix = `_${currentRegion.value}`;
+    const entries = await Libras.listCached("bible");
+    for (const entry of entries) {
+      if (entry.type !== "bible" || !entry.id.endsWith(suffix)) continue;
+      if (!entry.ref_id.startsWith(`${ver.abbreviation}_`)) continue;
+      await Libras.removeCached(entry.id, "bible");
+    }
+    $snackbar.success(t("accessibility.bible.partial_discarded"));
+  } catch (e) {
+    console.error("[Acessibilidade] discardBiblePartial:", e);
+    $snackbar.error((e as Error).message);
+  } finally {
+    await refreshStats();
+  }
+}
+
+async function confirmRemoveSelection(): Promise<void> {
+  if (!hasPendingRemovals.value) return;
+  const ok = await $alert.confirm(
+    t("accessibility.musics.remove_confirm", { n: pendingRemovalCount.value })
+  );
+  if (ok) await saveSelection();
+}
+
+async function confirmRemoveBibleSelection(): Promise<void> {
+  if (!bibleHasPendingRemovals.value) return;
+  const ok = await $alert.confirm(
+    t("accessibility.bible.remove_confirm", { n: biblePendingRemovalCount.value })
+  );
+  if (ok) await saveBibleSelection();
+}
 
 async function saveSelection(): Promise<void> {
   if (!hasPendingRemovals.value) return;
@@ -1326,7 +1700,6 @@ async function saveSelection(): Promise<void> {
   let removedHymnal1996 = false;
 
   try {
-    const region = currentRegion.value;
     const albumsToRemove = [...cachedAlbumsBaseline.value].filter(
       (id) => !selectedAlbums.value.has(id)
     );
@@ -1334,28 +1707,18 @@ async function saveSelection(): Promise<void> {
     for (const id of albumsToRemove) {
       const albumData = await $database.get<{ musics?: { id_music: number }[] }>(`album_${id}`);
       if (albumData?.musics) {
-        for (const m of albumData.musics) {
-          await Libras.removeCached(Libras.musicCacheId(Number(m.id_music), region), "music");
-        }
+        await removeMusicEntries(new Set(albumData.musics.map((m) => Number(m.id_music))));
       }
-      cachedAlbumsBaseline.value.delete(id);
       removedAlbums += 1;
     }
-    cachedAlbumsBaseline.value = new Set(cachedAlbumsBaseline.value);
 
     if (cachedHymnalBaseline.value && !selectedHymnal.value) {
-      for (const id of hymnalIds.value) {
-        await Libras.removeCached(Libras.musicCacheId(id, region), "music");
-      }
-      cachedHymnalBaseline.value = false;
+      await removeMusicEntries(new Set(hymnalIds.value));
       removedHymnal = true;
     }
 
     if (cachedHymnal1996Baseline.value && !selectedHymnal1996.value) {
-      for (const id of hymnal1996Ids.value) {
-        await Libras.removeCached(Libras.musicCacheId(id, region), "music");
-      }
-      cachedHymnal1996Baseline.value = false;
+      await removeMusicEntries(new Set(hymnal1996Ids.value));
       removedHymnal1996 = true;
     }
 
@@ -1376,7 +1739,6 @@ async function saveBibleSelection(): Promise<void> {
   if (!bibleHasPendingRemovals.value) return;
 
   savingBible.value = true;
-  let removed = 0;
 
   try {
     const region = currentRegion.value;
@@ -1400,15 +1762,11 @@ async function saveBibleSelection(): Promise<void> {
 
       for (const entry of entriesToRemove) {
         await Libras.removeCached(entry.id, "bible");
-        removed++;
       }
-
-      cachedBibleBaseline.value.delete(versionId);
     }
-    cachedBibleBaseline.value = new Set(cachedBibleBaseline.value);
 
-    if (removed > 0) {
-      $snackbar.success(t("accessibility.bible.save_done", { count: removed }));
+    if (versionsToRemove.length > 0) {
+      $snackbar.success(t("accessibility.bible.save_done", { count: versionsToRemove.length }));
     }
   } catch (e) {
     console.error("[Acessibilidade] saveBibleSelection:", e);
@@ -1623,6 +1981,26 @@ async function clearLibrasCache(): Promise<void> {
 }
 .opt-album {
   font-size: var(--lj-text-sm);
+}
+.opt-tag--partial {
+  color: var(--lj-warning, var(--lj-text-muted));
+  font-weight: var(--lj-weight-medium);
+}
+/* Continuar / Apagar ficam fora do <label> para o clique não marcar a caixa. */
+.opt-partial {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--lj-space-3);
+  padding: var(--lj-space-1) 0 var(--lj-space-2) 26px;
+  font-size: var(--lj-text-sm);
+}
+.opt-partial--nested {
+  padding-left: 50px;
+}
+.opt-partial__info {
+  color: var(--lj-text-muted);
+  font-variant-numeric: tabular-nums;
 }
 .opt-divider {
   height: 1px;

@@ -61,7 +61,8 @@ import { openSlja, SLJA_EXT } from "@/helpers/SljaPlayer";
 import { heicToJpeg, isHeic } from "@/helpers/ImageConvert";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 import { loadCustomMusicCatalog, openCustomMusic } from "@/helpers/CustomMusicCatalog";
-import { LITURGY_VERSION_ACTION } from "@/config/MusicAction";
+import { executeMusic } from "@/helpers/MusicExecution";
+import { LITURGY_VERSION_ACTION, MUSIC_EXECUTIONS } from "@/config/MusicAction";
 import { DB_TABLE } from "@/constants/DbTables";
 import $idb from "@/helpers/IndexedDB";
 import $docs from "@/helpers/DocStore";
@@ -74,6 +75,7 @@ import {
 } from "@/helpers/Overlay";
 import Shortcuts from "@/helpers/Shortcuts";
 import Telemetry from "@/helpers/Telemetry";
+import $snackbar from "@/helpers/Snackbar";
 import Hotkeys from "@/helpers/Hotkeys";
 import { useShell } from "@/composables/useShell";
 import { BROADCAST_TYPE } from "@helpers/BroadcastTypes";
@@ -89,6 +91,11 @@ import { BiblePresentationAuthority } from "@/presentation/BiblePresentationStat
 import { ModulePresentationAuthority } from "@/presentation/ModulePresentationState";
 import { nextOverlayEpoch } from "@/presentation/OverlayVisibilityState";
 import { canLinkOverlay, projectedFileKind, youtubeVideoId } from "@/modules/liturgy/overlayLink";
+import {
+  ativarOverlayVinculado,
+  desativarOverlayVinculado,
+  prepararExecucao,
+} from "@/modules/liturgy/linkedOverlay";
 import {
   AnnouncementsPresentationAuthority,
   announcementPosition,
@@ -448,36 +455,6 @@ function searchOnlineVideos(catalog, mine, q, clip) {
   return merged;
 }
 
-/**
- * Executa uma música no modo escolhido (vindo do `POST /api/open-song`).
- *
- * - `audio`         → slides + faixa cantada
- * - `instrumental`  → slides + playback
- * - `no_audio`      → somente slides (Letra)
- * - `audio-only`    → somente o áudio, sem abrir slides
- * - `playback-only` → somente o playback, sem abrir slides
- */
-async function openSongByMode(idMusic, mode) {
-  switch (mode) {
-    case MusicActionEnum.NO_AUDIO:
-      await Media.open({ id_music: idMusic, mode: MusicActionEnum.NO_AUDIO });
-      break;
-    case MusicActionEnum.AUDIO_ONLY:
-      await Media.openAudio(idMusic);
-      break;
-    case MusicActionEnum.PLAYBACK_ONLY:
-      await Media.openAudio({ id_music: idMusic, mode: MusicActionEnum.INSTRUMENTAL });
-      break;
-    case MusicActionEnum.INSTRUMENTAL:
-      await Media.open({ id_music: idMusic, mode: MusicActionEnum.INSTRUMENTAL });
-      break;
-    case MusicActionEnum.AUDIO:
-    default:
-      await Media.open({ id_music: idMusic, mode: MusicActionEnum.AUDIO });
-      break;
-  }
-}
-
 app.use(createPinia());
 app.use(router);
 app.use(VueFullscreen);
@@ -729,6 +706,21 @@ function _bootStage(stage, properties = {}) {
   Telemetry.histogram("louvorja.boot.stage.duration", durationMs, { stage });
 }
 
+// Sem escrita na pasta de dados (macOS negou Documentos, antivírus bloqueou), o
+// main abre na pasta do programa. Calado, o app parecia ter perdido tudo.
+async function warnDataDirFallback(i18n) {
+  const issue = await Promise.resolve(Platform.storage?.dataDirIssue?.()).catch(() => null);
+  if (!issue) return;
+  Telemetry.track("storage_data_dir_fallback", { reason: issue.reason });
+  $snackbar.warning(
+    i18n.global.t("options.storage.folder_fallback_notice", { dir: issue.wanted }),
+    {
+      timeout: 15000,
+      key: "data-dir-fallback",
+    }
+  );
+}
+
 $storage.hydrate().then(async () => {
   _bootStage("storage_hydrated");
   // As três etapas abaixo não dependem uma da outra (cada uma é uma
@@ -965,6 +957,23 @@ $storage.hydrate().then(async () => {
       return Platform.isDesktop ? Path.local(raw) : Path.file(raw);
     }
 
+    /**
+     * Áudio pedido pelo celular: toca no PLAYER DE MÍDIA do desktop, minimizado.
+     *
+     * O mesmo caminho da Biblioteca (e da liturgia): a janela não abre, e o que
+     * estiver no telão continua lá. Não há aviso para o módulo da Biblioteca —
+     * ele não mantém mais estado de áudio.
+     */
+    async function tocarAudioDoRemoto(url, item) {
+      await Media.openAudio({
+        url,
+        title: String(item?.name || ""),
+        mediaType: "audio",
+        minimized: true,
+        preserveFileProjection: true,
+      });
+    }
+
     /** Miniatura que o cliente remoto consegue carregar (caminho, não bytes). */
     function mediaLibraryRemoteThumb(item) {
       const thumb = typeof item?.thumb === "string" ? item.thumb : "";
@@ -1072,6 +1081,29 @@ $storage.hydrate().then(async () => {
               Promise.resolve(api.cachedPdfs()).catch(() => ({})),
             ]);
             if (!resultado?.ok) {
+              const code = resultado?.code || "";
+              // Sem Client ID/Secret ou sem conta conectada não é um "502
+              // genérico": a aba do app precisa dizer o que falta configurar.
+              // `available:false` + `reason` mantém o HTTP 200 (sem toast de
+              // erro) e a mensagem certa no lugar do gateway.
+              if (code === "no_credentials" || code === "not_connected") {
+                let hasCredentials = false;
+                try {
+                  const estado = await api.status();
+                  hasCredentials = estado?.hasCredentials === true;
+                } catch {
+                  /* status é só informativo */
+                }
+                respond({
+                  status: "ok",
+                  available: false,
+                  reason: hasCredentials ? "not_connected" : "no_credentials",
+                  items: [],
+                  continuation: null,
+                  cached: {},
+                });
+                break;
+              }
               respond({
                 status: "error",
                 error: clip(resultado?.message, 300) || "Falha ao listar o Canva",
@@ -1148,6 +1180,13 @@ $storage.hydrate().then(async () => {
             const url = mediaLibraryItemUrl(rec);
             if (!url) {
               fail("Arquivo indisponível para projeção");
+              break;
+            }
+            /* Áudio não tem o que projetar: toca no player e o telão fica
+             * como está (o mesmo caminho do clique no desktop). */
+            if (rec.type === "audio") {
+              await tocarAudioDoRemoto(url, rec);
+              respond({ status: "ok" });
               break;
             }
             await Media.projectFile({
@@ -1431,6 +1470,11 @@ $storage.hydrate().then(async () => {
                 remoteMediaPlaylistIndex = target;
                 break;
               }
+              if (item.type === "audio") {
+                await tocarAudioDoRemoto(url, item);
+                remoteMediaPlaylistIndex = target;
+                break;
+              }
               await Media.projectFile({
                 url,
                 type: item.type || "image",
@@ -1648,6 +1692,15 @@ $storage.hydrate().then(async () => {
                 let projected = false;
                 let overlayItem = litItem;
                 const overlayContext = {};
+                /*
+                 * Mesmo ciclo do módulo: o item que assume o telão recolhe o
+                 * overlay vinculado do anterior antes de projetar. Anotação,
+                 * botão de overlay e som de fundo não assumem.
+                 */
+                await prepararExecucao(
+                  litItem,
+                  litItem.tipo === "musica" ? litItem.subtipo || "sung" : undefined
+                );
                 switch (litItem.tipo) {
                   case "musica": {
                     if (litItem.escolha || !litItem.id_music) break;
@@ -1882,25 +1935,8 @@ $storage.hydrate().then(async () => {
                 }
 
                 // O vínculo só aparece na projeção que este comando abriu de fato.
-                if (
-                  projected &&
-                  litItem.linked_overlay_id &&
-                  canLinkOverlay(overlayItem, overlayContext)
-                ) {
-                  try {
-                    const linkedSlots = await readAllOverlaySlots();
-                    const linkedSlot = linkedSlots.find((s) => s.id === litItem.linked_overlay_id);
-                    if (linkedSlot) {
-                      linkedSlot.enabled = true;
-                      await writeOverlaySlot(linkedSlot);
-                      UserData.set(KEYS.MODULES.OVERLAY.ENABLED, true);
-                      Broadcast.send(BROADCAST_TYPE.OVERLAY_CONFIG_CHANGED, {
-                        slot: linkedSlot,
-                      });
-                    }
-                  } catch (e) {
-                    console.error("[http] liturgy-execute: overlay vinculado falhou:", e);
-                  }
+                if (projected && canLinkOverlay(overlayItem, overlayContext)) {
+                  await ativarOverlayVinculado(overlayItem);
                 }
               } catch (e) {
                 console.error("[http] liturgy-execute falhou:", litItem.tipo, e);
@@ -2129,13 +2165,12 @@ $storage.hydrate().then(async () => {
         }
         case "http:open-song": {
           console.log("[http:open-song] Abrindo música:", data);
-          if (data.custom_song_id) {
-            // Música personalizada: o `id` do corpo é negativo (só para listas)
-            // — a execução é sempre pelo UUID (caminho único do desktop).
-            await openCustomMusic(data.custom_song_id, data.mode);
-          } else {
-            await openSongByMode(data.id_music, data.mode);
-          }
+          // Personalizada vai pelo UUID (o `id` do corpo é negativo, só para listas).
+          // Modo fora das execuções (cliente antigo, campo ausente) fica com o padrão da música.
+          await executeMusic(
+            { id_music: data.id_music, custom_song_id: data.custom_song_id },
+            MUSIC_EXECUTIONS.some((item) => item.action === data.mode) ? data.mode : undefined
+          );
 
           // Música escolhida na hora: só marca o item depois da escolha.
           const litItem = data.id ? Liturgy.getFromCommand(data.id, data.day) : null;
@@ -2407,6 +2442,7 @@ $storage.hydrate().then(async () => {
     app.mount("#app");
     window.__ljPwaRecovery?.markMounted();
     _bootStage("mounted");
+    if (!isAuxiliaryRenderer) void warnDataDirFallback(i18n);
 
     // Estado atual, não a ação de alternar: sem isto, saber "quantos usuários
     // usam Libras" dependia de esperar alguém tocar no interruptor depois do
@@ -2775,6 +2811,8 @@ $storage.hydrate().then(async () => {
             Projection.close(id);
             Broadcast.send(BROADCAST_TYPE.MODULE_PROJECTION_CLOSE, { module: id });
           }
+          /* Nada de projeção no telão: o overlay vinculado não tem a quem pertencer. */
+          void desativarOverlayVinculado();
         };
 
         // Com um módulo de operação ao vivo aberto (manifesto: `shell.immediateEscape`)
@@ -2785,7 +2823,9 @@ $storage.hydrate().then(async () => {
         const immediate = anyOpenModuleWants("immediateEscape");
         const stop = (confirmKey, action) => {
           if (immediate) action();
-          else $alert.yesno(confirmKey, (btn) => btn === "yes" && action());
+          // Encerrar o telão é a resposta esperada: o Sim já vem marcado.
+          else
+            $alert.yesno({ text: confirmKey, default_button: "yes" }, (btn) => btn === "yes" && action());
         };
         Broadcast.send(BROADCAST_TYPE.RETURN_OVERRIDE, { active: false });
 
@@ -2807,6 +2847,11 @@ $storage.hydrate().then(async () => {
         if (fp.isProjecting.value && fp.currentType.value === "announcements") {
           fp.stopProjection();
           Projection.close("announcements");
+          /*
+           * Anúncios não passam pelo `Media.close`, então não emitem
+           * `MEDIA_CLOSE` — o overlay vinculado precisa ser recolhido aqui.
+           */
+          void desativarOverlayVinculado();
         }
         // Projeção de arquivos de imagem e vídeo. O "clear" também fica no
         // cache — não é arquivo no ar.

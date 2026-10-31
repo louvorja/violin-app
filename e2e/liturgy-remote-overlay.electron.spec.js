@@ -96,17 +96,17 @@ test("remote liturgy activates linked overlay only when a selected announcement 
       }).id;
     });
 
-    async function sendRemoteExecute() {
-      await app.evaluate(({ BrowserWindow }, itemId) => {
+    async function sendRemoteExecute(itemId = id) {
+      await app.evaluate(({ BrowserWindow }, alvo) => {
         const window = BrowserWindow.getAllWindows().find((win) =>
           win.webContents.getURL().includes("localhost:5002")
         );
         window.webContents.send("http:song-slides", {
           action: "liturgy-execute",
-          id: itemId,
+          id: alvo,
           tag: "audio",
         });
-      }, id);
+      }, itemId);
     }
 
     async function linkedSlotEnabled() {
@@ -148,6 +148,21 @@ test("remote liturgy activates linked overlay only when a selected announcement 
     await expect(projection.locator('[data-slot-id="remote-overlay"]')).toHaveText(
       "Sobreposição remota"
     );
+
+    /*
+     * O próximo item que assume o telão recolhe o overlay vinculado do
+     * anterior — mesmo vindo pelo controle remoto.
+     */
+    const outroId = await main.evaluate(async () => {
+      const { default: Liturgy } = await import("/src/helpers/Liturgy.ts");
+      return Liturgy.add({
+        tipo: "anuncios",
+        item: "Outro aviso remoto",
+        anuncios_ids: ["remote-announcement"],
+      }).id;
+    });
+    await sendRemoteExecute(outroId);
+    await expect.poll(linkedSlotEnabled).toBe(false);
   } finally {
     try {
       if (app) expect((await closeElectronApp(app)).forced).toBe(false);

@@ -11,17 +11,22 @@
       <div class="hymnal-form-group">
         <div class="hymnal-form-item search-box">
           <LjInput
+            ref="searchInput"
             v-model="search"
             :placeholder="tm('inputs.search')"
+            :title="i18nT('components.quick_play.hint')"
             :icon="ICONS.ACTIONS.SEARCH"
             :invalid="data.filter_count <= 0"
+            autocomplete="off"
             clearable
+            @keydown="onSearchKey"
           />
         </div>
       </div>
     </template>
 
     <l-table
+      ref="table"
       v-model="data"
       :search="search"
       letter=""
@@ -112,6 +117,10 @@ import $appdata from "@/helpers/AppData";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
 import { HYMNAL_ALBUM_IDS } from "@root/config/musicCatalog.mjs";
+import { useQuickSearch } from "@/composables/useQuickSearch";
+import { isQuickPlayEnter, quickPlay } from "@/helpers/QuickPlay";
+import { executeMusic } from "@/helpers/MusicExecution";
+import { MusicActionEnum } from "@/enums/MusicActionEnum";
 
 const props = defineProps({
   moduleId: { type: String, required: true },
@@ -131,6 +140,32 @@ const sequenceQueue = ref([]);
 const _sequenceTimer = ref(null);
 
 const tm = (text) => i18nT(`modules.${props.moduleId}.${text}`);
+
+/*
+ * Busca pelo teclado, como no LouvorJA clássico: abriu o Hinário, o cursor já
+ * está aqui; digitou o número e deu Enter, o hino vai para a tela (Shift+Enter,
+ * o playback). Voltando para cá, o número anterior fica selecionado.
+ */
+const searchInput = ref(null);
+const table = ref(null);
+const quickSearch = useQuickSearch({ moduleId: () => props.moduleId, input: searchInput });
+
+function onSearchKey(event) {
+  if (event.key === "Escape" && search.value) {
+    event.preventDefault();
+    search.value = "";
+    return;
+  }
+  if (!isQuickPlayEnter(event)) return;
+  event.preventDefault();
+  // Lista filtrada agora: o Enter logo depois do número não espera o debounce.
+  const results = table.value?.currentResults() ?? [];
+  const first = results.find((item) => item.id_music != null);
+  if (!first || !search.value.trim()) return;
+  clearQueue();
+  selectedId.value = first.id_music;
+  if (quickPlay(first, event.shiftKey)) quickSearch.afterPlay();
+}
 
 const disabledAlbums = computed(() => {
   return $userdata.get(KEYS.OPTIONS.DISABLED_ALBUMS, []) || [];
@@ -168,7 +203,7 @@ function _pollSequence() {
     if (_lastSeqProgress >= 0.95) {
       _clearSequenceTimer();
       const nextId = sequenceQueue.value.shift();
-      Media.open({ id_music: nextId, mode: "audio" });
+      void executeMusic({ id_music: nextId }, MusicActionEnum.AUDIO);
       _lastSeqProgress = 0;
     } else if (_lastSeqProgress > 0 && _lastSeqProgress < 0.95) {
       _clearSequenceTimer();
@@ -190,7 +225,7 @@ function playAll() {
   _lastSeqProgress = 0;
   _clearSequenceTimer();
   _sequenceTimer.value = setInterval(_pollSequence, 300);
-  Media.open({ id_music: ordered[0].id_music, mode: "audio" });
+  void executeMusic({ id_music: ordered[0].id_music }, MusicActionEnum.AUDIO);
 }
 
 function clearQueue() {
@@ -204,23 +239,23 @@ const HYMN_ACTIONS = {
   },
   sing: () => {
     clearQueue();
-    Media.open({ id_music: selectedId.value, mode: "audio" });
+    void executeMusic({ id_music: selectedId.value }, MusicActionEnum.AUDIO);
   },
   playback: () => {
     clearQueue();
-    Media.open({ id_music: selectedId.value, mode: "instrumental" });
+    void executeMusic({ id_music: selectedId.value }, MusicActionEnum.INSTRUMENTAL);
   },
   no_audio: () => {
     clearQueue();
-    Media.open(selectedId.value);
+    void executeMusic({ id_music: selectedId.value }, MusicActionEnum.NO_AUDIO);
   },
   audio_sing: () => {
     clearQueue();
-    Media.openAudio(selectedId.value);
+    void executeMusic({ id_music: selectedId.value }, MusicActionEnum.AUDIO_ONLY);
   },
   audio_playback: () => {
     clearQueue();
-    Media.openAudio({ id_music: selectedId.value, mode: "instrumental" });
+    void executeMusic({ id_music: selectedId.value }, MusicActionEnum.PLAYBACK_ONLY);
   },
   sequence: () => playAll(),
   report_error: () =>

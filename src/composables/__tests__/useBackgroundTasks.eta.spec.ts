@@ -33,6 +33,27 @@ describe("useBackgroundTasks — tempo restante", () => {
     bg.dismissTask("eta-teste");
   });
 
+  it("mostra 'calculando' enquanto o avanço não chega ao percentual mínimo", async () => {
+    const bg = useBackgroundTasks();
+    bg.registerTask("eta-calculo", "test");
+    vi.advanceTimersByTime(5_000);
+    bg.updateTask("eta-calculo", { progress: 0.02 });
+    await nextTick();
+
+    let task = bg.tasks.value.find((t) => t.id === "eta-calculo");
+    expect(task?.etaSeconds ?? null).toBeNull();
+    expect(task?.etaCalculating).toBe(true);
+
+    vi.advanceTimersByTime(5_000);
+    bg.updateTask("eta-calculo", { progress: 1 });
+    await nextTick();
+
+    task = bg.tasks.value.find((t) => t.id === "eta-calculo");
+    expect(task?.etaSeconds).not.toBeNull();
+    expect(task?.etaCalculating).toBe(false);
+    bg.dismissTask("eta-calculo");
+  });
+
   it("fica sem estimativa enquanto a tarefa é nova", async () => {
     const bg = useBackgroundTasks();
     bg.registerTask("eta-nova", "test");

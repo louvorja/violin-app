@@ -349,6 +349,7 @@ declare global {
         json?: { bytes: number; count: number };
         total?: { bytes: number };
       }>;
+      dataDirIssue: () => Promise<{ wanted: string; reason: string } | null>;
       clearJson: () => Promise<void>;
       clearFiles: () => Promise<void>;
       setAutoCache: (enabled: boolean) => Promise<void>;

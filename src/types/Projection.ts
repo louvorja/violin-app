@@ -21,6 +21,14 @@ export interface OpenOptions {
   alwaysOnTop?: boolean;
   showInTaskbar?: boolean;
   frame?: boolean;
+  /**
+   * A janela deve receber o foco ao abrir.
+   *
+   * Só a tela do operador usa isto: as projeções aparecem sem roubar o foco da
+   * janela principal de propósito (o operador continua trabalhando nela), mas a
+   * tela do operador é onde ele vai operar.
+   */
+  focusOnOpen?: boolean;
 }
 
 export interface CategorizedDisplays {

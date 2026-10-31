@@ -17,6 +17,7 @@ jobs:
         include:
           - os: windows-latest
             platform: win
+            build_script: electron:build:win
             artifact: installer-windows
             # Node 24 crasha o pool de workers do Vitest no Windows (o config
             # cai para vmThreads, que por sua vez não sustenta mock de
@@ -28,9 +29,28 @@ jobs:
               dist_electron/*.exe
               dist_electron/*.blockmap
               dist_electron/latest.yml
+          # Windows on ARM roda o x64 por emulação, mas o instalador nativo é
+          # menor e usa a arquitetura da máquina. Job separado de propósito: no
+          # mesmo job, `arch: [x64, arm64]` faz o electron-builder montar um
+          # instalador COMBINADO (~193 MB) e apontar o `latest.yml` para ele.
+          #
+          # O metadata sai como `latest-arm64.yml` (ver passo "Separar metadata
+          # do Windows ARM"): no Windows o nome do arquivo é sempre `latest.yml`,
+          # então os dois jobs colidiriam no mesmo asset da release.
+          - os: windows-latest
+            platform: win
+            build_script: electron:build:win:arm64
+            artifact: installer-windows-arm64
+            windows_arch: arm64
+            node_version: "22"
+            artifact_glob: |
+              dist_electron/*.exe
+              dist_electron/*.blockmap
+              dist_electron/latest-arm64.yml
           # Icon Composer exige actool/Xcode 26+ para compilar o .icon em camadas.
           - os: macos-26
             platform: mac
+            build_script: electron:build:mac
             artifact: installer-macos
             artifact_glob: |
               dist_electron/*.dmg
@@ -39,6 +59,7 @@ jobs:
               dist_electron/latest-mac.yml
           - os: ubuntu-latest
             platform: linux
+            build_script: electron:build:linux
             artifact: installer-linux
             artifact_glob: |
               dist_electron/*.AppImage
@@ -150,7 +171,7 @@ jobs:
           rm -f cert.p12
 
       - name: Build Electron
-        run: npm run electron:build:${{ matrix.platform }} -- --publish never
+        run: npm run ${{ matrix.build_script }} -- --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_ENV: production
@@ -186,6 +207,15 @@ jobs:
           test -s "$app/Contents/Resources/icon.icns"
           name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconName' "$app/Contents/Info.plist")"
           test "$name" = Icon
+
+      # No Windows o electron-builder grava SEMPRE `latest.yml` (o sufixo de
+      # arquitetura só existe no Linux). Como o job ARM publica no mesmo
+      # release, o metadata dele precisa de um nome próprio — é esse nome que o
+      # updater procura numa máquina ARM (ver electron/main/updater.js).
+      - name: Separar metadata do Windows ARM
+        if: matrix.windows_arch == 'arm64'
+        shell: bash
+        run: mv dist_electron/latest.yml dist_electron/latest-arm64.yml
 
       - name: Conferir arquivos do atualizador
         run: npm run validate:release-artifacts

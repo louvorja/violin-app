@@ -145,7 +145,7 @@
         <template #footer>
           <LjButton size="sm" @click="showRenameDialog = false">{{ tm("cancel") }}</LjButton>
           <LjButton size="sm" variant="primary" :disabled="!renameInput" @click="confirmRename">
-            {{ tm("rename") }}
+            {{ tm("save") }}
           </LjButton>
         </template>
       </LjDialog>
@@ -240,6 +240,7 @@ import { ICONS } from "@/config/Icons";
 import $idb from "@/helpers/IndexedDB";
 import { DB_TABLE } from "@/constants/DbTables";
 import CategoryManagerDialog from "@/components/CategoryManagerDialog.vue";
+import { nextCategorySelection } from "@/helpers/CategorySelection";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
 import { IMAGE_EXT, VIDEO_EXT } from "@/constants/FileTypes";
@@ -527,10 +528,11 @@ function getCategoryName(id: string): string {
 async function handleSaveCategory(cat: BgCategory): Promise<void> {
   saving.value = true;
   try {
+    const isNew = !categories.value.some((c) => c.id === cat.id);
     await saveCategory(cat);
     categories.value = await loadCategories();
-    selectedCategoryIds.value = new Set(categories.value.map((c) => c.id));
-    if (uncategorizedCount.value > 0) selectedCategoryIds.value.add(UNCATEGORIZED_ID);
+    // Editar preserva o filtro; criar foca só na nova categoria.
+    selectedCategoryIds.value = nextCategorySelection(selectedCategoryIds.value, cat.id, isNew);
   } finally {
     saving.value = false;
   }
@@ -898,8 +900,9 @@ onMounted(async () => {
 }
 
 .bg-root {
-  height: 100%;
+  display: flex;
   flex-direction: column;
+  height: 100%;
   overflow: hidden;
 }
 .bg-root--drag-over {
@@ -976,6 +979,11 @@ onMounted(async () => {
   padding: var(--lj-space-5);
   overflow-y: auto;
   flex: 1;
+  /* Sem `min-height: 0` a grade não encolhe abaixo do conteúdo e não rola;
+     `max-content` impede as linhas de serem espremidas para caber na tela. */
+  min-height: 0;
+  grid-auto-rows: max-content;
+  align-content: start;
 }
 .bg-grid-item {
   cursor: pointer;
@@ -1175,7 +1183,6 @@ onMounted(async () => {
   }
 
   .bg-root {
-    display: flex;
     min-width: 0;
   }
 

@@ -69,59 +69,74 @@
                 >
                   <LjIcon :icon="ICONS.ACTIONS.EDIT" size="14" />
                 </button>
-                <button
-                  class="tl-bloco-action tl-bloco-collapse"
-                  :title="
-                    collapsedBlocos.has(element.id) ? t('actions.expand') : t('actions.collapse')
-                  "
-                  @click.stop="toggleBlocoCollapse(element.id)"
-                >
-                  <LjIcon
-                    :icon="
-                      collapsedBlocos.has(element.id) ? ICONS.UI.CHEVRON_DOWN : ICONS.UI.CHEVRON_UP
-                    "
-                    size="16"
-                  />
-                </button>
               </span>
               <span class="tl-bloco-line" />
+              <!--
+                Recolher/expandir no CANTO direito da faixa, e sempre visível:
+                dentro do texto ele ficava escondido atrás do hover, e no toque
+                (sem hover) não existia. O `click.stop` protege o arraste, já
+                que a faixa inteira é o punho.
+              -->
+              <button
+                class="tl-bloco-action tl-bloco-collapse"
+                :aria-expanded="!collapsedBlocos.has(element.id)"
+                :aria-label="
+                  collapsedBlocos.has(element.id) ? t('actions.expand') : t('actions.collapse')
+                "
+                :title="
+                  collapsedBlocos.has(element.id) ? t('actions.expand') : t('actions.collapse')
+                "
+                @click.stop="toggleBlocoCollapse(element.id)"
+              >
+                <LjIcon
+                  :icon="
+                    collapsedBlocos.has(element.id) ? ICONS.UI.CHEVRON_DOWN : ICONS.UI.CHEVRON_UP
+                  "
+                  size="16"
+                />
+              </button>
             </div>
 
             <template v-else>
-              <Transition name="tl-meta">
-                <div
-                  v-if="!element.blocoId || !collapsedBlocos.has(element.blocoId)"
-                  class="tl-meta-collapse"
-                >
-                  <div class="tl-item-meta">
-                    <div v-if="element.time" class="tl-time">{{ element.time }}</div>
-                    <div class="tl-line" />
-                  </div>
-                </div>
-              </Transition>
+              <!--
+                Tempo e cartão recolhem JUNTOS: `grid-template-rows` vai de `1fr`
+                para `0fr`, o que anima a altura real sem ninguém medi-la. Antes o
+                cartão só ganhava `height: 0` por classe e sumia de um quadro para
+                o outro, enquanto o tempo já tinha a sua própria transição.
+              -->
               <div
-                class="tl-card"
+                class="tl-collapse"
                 :class="{
-                  'tl-card--hidden': element.blocoId && collapsedBlocos.has(element.blocoId),
+                  'tl-collapse--closed': element.blocoId && collapsedBlocos.has(element.blocoId),
                 }"
               >
-                <LiturgyItemComponent
-                  :element="element"
-                  :index="index"
-                  :locked="locked"
-                  :default-color="defaultColor"
-                  :checked="isChecked(element)"
-                  :subtitle-for="subtitleFor"
-                  :overlay-slots="overlaySlots"
-                  @edit="openItemDialog"
-                  @clone="cloneItem"
-                  @confirm-remove="confirmRemove"
-                  @execute="executeItem"
-                  @play-music="playMusic"
-                  @open-lyric="openLyric"
-                  @change-color="changeColor"
-                  @toggle-checked="toggleChecked"
-                />
+                <div class="tl-collapse-inner">
+                  <div class="tl-meta-collapse">
+                    <div class="tl-item-meta">
+                      <div v-if="element.time" class="tl-time">{{ element.time }}</div>
+                      <div class="tl-line" />
+                    </div>
+                  </div>
+                  <div class="tl-card">
+                    <LiturgyItemComponent
+                      :element="element"
+                      :index="index"
+                      :locked="locked"
+                      :default-color="defaultColor"
+                      :checked="isChecked(element)"
+                      :subtitle-for="subtitleFor"
+                      :overlay-slots="overlaySlots"
+                      @edit="openItemDialog"
+                      @clone="cloneItem"
+                      @confirm-remove="confirmRemove"
+                      @execute="executeItem"
+                      @play-music="playMusic"
+                      @open-lyric="openLyric"
+                      @change-color="changeColor"
+                      @toggle-checked="toggleChecked"
+                    />
+                  </div>
+                </div>
               </div>
             </template>
           </div>
@@ -293,6 +308,11 @@ function onDragMove(evt: Record<string, unknown>): boolean | void {
 .tl-item--in-bloco {
   padding: var(--lj-space-2) 0;
   background: color-mix(in srgb, var(--bloco-color, var(--lj-surface-border)) 6%, transparent);
+  /* O padding/margem somem junto com o conteúdo ao recolher; sem transição, o
+     último frame do cartão "pula" um degrau. */
+  transition:
+    padding var(--lj-transition-normal),
+    margin var(--lj-transition-normal);
 }
 .tl-item--bloco-collapsed {
   padding: 0 !important;
@@ -321,17 +341,41 @@ function onDragMove(evt: Record<string, unknown>): boolean | void {
   min-height: 0;
   overflow: hidden;
 }
-.tl-meta-enter-active,
-.tl-meta-leave-active {
-  transition: grid-template-rows var(--lj-transition-normal);
+/* Recolher/expandir o conteúdo do item: `0fr` → `1fr` anima a altura real. */
+.tl-collapse {
+  /*
+   * É o único filho flex do `.tl-item`: sem `flex` ele encolhe para o conteúdo
+   * e o item deixa de ocupar a linha inteira. `min-width: 0` devolve o
+   * truncamento do texto do cartão.
+   */
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-rows: 1fr;
+  transition:
+    grid-template-rows var(--lj-transition-normal),
+    opacity var(--lj-transition-normal);
 }
-.tl-meta-enter-from,
-.tl-meta-leave-to {
+.tl-collapse--closed {
   grid-template-rows: 0fr;
+  opacity: 0;
+  pointer-events: none;
+}
+/*
+ * A linha [tempo 64px][cartão flex:1] vivia no `.tl-item`; com o invólucro, ela
+ * precisa ser repetida aqui — senão tempo e cartão empilham na vertical e o
+ * `flex: 1` do cartão deixa de valer. O `min-height: 0` + `overflow: hidden`
+ * são o que permitem o miolo ser cortado na animação.
+ */
+.tl-collapse-inner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 @media (prefers-reduced-motion: reduce) {
-  .tl-meta-enter-active,
-  .tl-meta-leave-active {
+  .tl-collapse {
     transition: none;
   }
 }
@@ -363,6 +407,7 @@ function onDragMove(evt: Record<string, unknown>): boolean | void {
 
 /* ── Bloco (divider style) ── */
 .tl-bloco {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--lj-space-5);
@@ -372,6 +417,11 @@ function onDragMove(evt: Record<string, unknown>): boolean | void {
   user-select: none;
   background: color-mix(in srgb, var(--cat-color, var(--lj-divider)) 10%, transparent);
   border-radius: var(--lj-radius-lg);
+}
+/* Reserva a faixa do botão de recolher, que fica fora do fluxo (canto direito):
+   sem isso, um nome de bloco comprido correria por baixo dele. */
+.tl-bloco {
+  padding-right: calc(var(--lj-space-5) + var(--lj-ui-h-sm));
 }
 .tl-bloco:active {
   cursor: grabbing;
@@ -426,6 +476,22 @@ function onDragMove(evt: Record<string, unknown>): boolean | void {
   outline: none;
   box-shadow: var(--lj-ui-focus);
 }
+
+/*
+ * Recolher fica fora do "só no hover": é ação de rotina, e no celular não
+ * existe hover. A regra composta vence o `opacity: 0` de `.tl-bloco-action`.
+ */
+.tl-bloco-action.tl-bloco-collapse {
+  position: absolute;
+  right: var(--lj-space-4);
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0.65;
+}
+.tl-bloco-action.tl-bloco-collapse:hover,
+.tl-bloco-action.tl-bloco-collapse:focus-visible {
+  opacity: 1;
+}
 .tl-bloco:hover .tl-bloco-action {
   opacity: 1;
 }
@@ -449,14 +515,6 @@ function onDragMove(evt: Record<string, unknown>): boolean | void {
 }
 
 /* ── Bloco collapse ── */
-.tl-card--hidden {
-  opacity: 0;
-  height: 0;
-  overflow: hidden;
-  padding: 0;
-  margin: 0;
-  pointer-events: none;
-}
 .tl-bloco--collapsed {
   margin-bottom: var(--lj-space-5);
 }

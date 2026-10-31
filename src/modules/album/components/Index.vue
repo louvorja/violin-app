@@ -19,11 +19,20 @@
         </div>
       </div>
 
-      <div v-if="!loading && tracks.length && canDownload" class="album-download">
-        <p class="album-download__hint">{{ t("download_hint") }}</p>
-        <LjButton size="sm" :icon="ICONS.ACTIONS.DOWNLOAD" @click="goDownload">
-          {{ t("download") }}
-        </LjButton>
+      <div
+        v-if="!loading && tracks.length && canDownload && albumDownloaded !== null"
+        class="album-download"
+      >
+        <template v-if="albumDownloaded">
+          <LjIcon :icon="ICONS.UI.CHECK" :size="16" class="album-download__icon" />
+          <p class="album-download__hint">{{ t("downloaded_hint") }}</p>
+        </template>
+        <template v-else>
+          <p class="album-download__hint">{{ t("download_hint") }}</p>
+          <LjButton size="sm" :icon="ICONS.ACTIONS.DOWNLOAD" @click="goDownload">
+            {{ t("download") }}
+          </LjButton>
+        </template>
       </div>
 
       <LjProgress v-if="loading" indeterminate :label="t('loading')" />
@@ -85,6 +94,7 @@ import { useAlbum } from "@/composables/useAlbum";
 import { LjButton, LjDialog, LjEmpty, LjIcon, LjProgress, LjTable } from "@/components/ui";
 import Platform from "@/helpers/Platform";
 import { requestAlbumDownload } from "@/helpers/SyncIntent";
+import { useSyncManager } from "@/composables/useSyncManager";
 import { ICONS } from "@/config/Icons";
 import MusicMenuTable from "@/components/MusicMenuTable.vue";
 import { useDisabledAlbums } from "@/composables/useMusicCatalog";
@@ -126,6 +136,27 @@ watch(coverUrl, () => {
 
 // Download é centralizado em Opções → Sincronizar; aqui só leva o álbum até lá.
 const canDownload = computed(() => Boolean(Platform.download && Platform.storage?.checkLocal));
+
+// Mesma leitura que marca o álbum como baixado no Sincronizar. `null` enquanto
+// confere o disco, para o convite a baixar não piscar num álbum que já está lá.
+const sync = useSyncManager();
+const albumDownloaded = ref(null);
+watch(
+  [() => album.value.id_album, loading],
+  async ([id, busy]) => {
+    albumDownloaded.value = null;
+    if (!canDownload.value || busy || !id) return;
+    let downloaded = false;
+    try {
+      const files = await sync.collectAlbumFileList(Number(id), { localOnly: true });
+      downloaded = Boolean(await sync.originOfFileList(files));
+    } catch {
+      // Catálogo local incompleto: o Sincronizar também não o dá como baixado.
+    }
+    if (album.value.id_album === id && !loading.value) albumDownloaded.value = downloaded;
+  },
+  { immediate: true }
+);
 
 function goDownload() {
   const id = album.value.id_album;
@@ -200,11 +231,18 @@ watch(disabledAlbums, (disabled) => {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--lj-space-4);
+  /* Altura do botão: baixado ou não, a tabela começa no mesmo ponto. */
+  min-height: calc(var(--lj-ui-h-sm) + 2 * var(--lj-space-4) + 2px);
   margin-bottom: var(--lj-space-6);
   padding: var(--lj-space-4) var(--lj-space-5);
   border: 1px solid var(--lj-surface-border);
   border-radius: var(--lj-radius-md);
   background: var(--lj-surface-bg-soft);
+}
+
+.album-download__icon {
+  flex: 0 0 auto;
+  color: var(--lj-success);
 }
 
 .album-download__hint {

@@ -9,6 +9,7 @@ type OpenArgs = {
   monitorId: number | null;
   fullscreen: boolean;
   alwaysOnTop: boolean;
+  focusOnOpen?: boolean;
 };
 
 const calls: string[] = [];
@@ -177,6 +178,17 @@ describe("openMediaWindow — a tabela de janelas por mídia", () => {
     }
     await windows.openMediaWindow("operator", "video");
     expect([lastOpen().fullscreen, lastOpen().alwaysOnTop]).toEqual([false, false]);
+  });
+
+  it("só a tela do operador pede o foco ao abrir; projeção e retorno não", async () => {
+    for (const media of ["music", "file", "video"] as const) {
+      await windows.openMediaWindow("operator", media);
+      expect(lastOpen().focusOnOpen).toBe(true);
+    }
+    await windows.openMediaWindow("projection", "music");
+    expect(lastOpen().focusOnOpen).toBe(false);
+    await windows.openMediaWindow("return", "music");
+    expect(lastOpen().focusOnOpen).toBe(false);
   });
 
   it("automático sem monitor para o papel não abre nada, mas o operador abre", async () => {
@@ -466,7 +478,14 @@ describe("a abertura automática e o menu do player abrem exatamente a mesma jan
       for (const kind of ["projection", "return", "operator"] as const) {
         await windows.openMediaWindow(kind, media, { explicit: true });
       }
-      const manual = openWindow.mock.calls.map(([o]) => o);
+      /*
+       * O menu do player abre o operador para QUALQUER mídia; a abertura
+       * automática só para música. Compara-se, então, o que as duas rotas
+       * compartilham.
+       */
+      const manual = openWindow.mock.calls
+        .map(([o]) => o)
+        .filter((o) => media === "music" || o.feature !== OPERATOR);
 
       expect(manual).toEqual(auto);
     }
@@ -490,6 +509,12 @@ describe("as aberturas automáticas", () => {
 
     expect(calls).toEqual([`open:${MUSIC}`, `close:${RETURN}`]);
     expect(opened().map((o) => o.feature)).toEqual([MUSIC]);
+  });
+
+  it("arquivo: não abre o operador, nem com a opção ligada", async () => {
+    prefs = { [KEYS.OPTIONS.OPEN_OPERATOR]: true };
+    await windows.openFileProjectionWindows();
+    expect(opened().map((o) => o.feature)).not.toContain(OPERATOR);
   });
 
   it("arquivo: retorno só pela opção de arquivo; a opção geral de música não puxa retorno", async () => {
@@ -558,19 +583,18 @@ describe("as aberturas automáticas", () => {
     expect(calls).toEqual([`close:${RETURN}`, `close:${ONLINE_VIDEO_RETURN}`, `open:${FILE_RETURN}`]);
   });
 
-  it("vídeo on-line: o operador entra com a opção ligada, embutido ou baixado — ele mostra a prévia dos dois", async () => {
-    await windows.openVideoProjectionWindows();
-    expect(opened().map((o) => o.feature)).not.toContain(OPERATOR);
+  it("vídeo on-line: o operador não entra, nem com a opção ligada", async () => {
     prefs = { [KEYS.OPTIONS.OPEN_OPERATOR]: true };
     await windows.openVideoProjectionWindows();
-    expect(opened().map((o) => o.feature)).toContain(OPERATOR);
+    expect(opened().map((o) => o.feature)).not.toContain(OPERATOR);
   });
 
-  it("vídeo on-line: não fecha o operador que já estava aberto", async () => {
-    isWindowOpen.mockImplementation(async (feature: string) => feature === OPERATOR);
+  it("vídeo on-line: o operador que sobrou da música é fechado e não volta", async () => {
     calls.length = 0;
+    await windows.closeMusicProjectionWindows();
     await windows.openVideoProjectionWindows();
-    expect(calls).not.toContain(`close:${OPERATOR}`);
+    expect(calls).toContain(`close:${OPERATOR}`);
+    expect(opened().map((o) => o.feature)).not.toContain(OPERATOR);
   });
 
   it.each([
@@ -596,11 +620,14 @@ it("libera apenas janelas de arquivo e vídeo antes de os slides assumirem o pal
   expect(closeWindow).not.toHaveBeenCalledWith(OPERATOR);
 });
 
-it("ao entrar vídeo, fecha somente as janelas de música e retorno", async () => {
+it("ao entrar vídeo, fecha as janelas da música: projeção, retorno e operador", async () => {
   await windows.closeMusicProjectionWindows();
-  expect(closeWindow.mock.calls.map(([feature]) => feature)).toEqual([MUSIC, RETURN]);
+  expect(closeWindow.mock.calls.map(([feature]) => feature)).toEqual([
+    MUSIC,
+    RETURN,
+    OPERATOR,
+  ]);
   expect(closeWindow).not.toHaveBeenCalledWith(FILE);
-  expect(closeWindow).not.toHaveBeenCalledWith(OPERATOR);
 });
 
 it.each([
@@ -644,7 +671,11 @@ it("vídeo espera uma janela MUSIC já abrindo antes de fechá-la", async () => 
   expect(closeWindow).not.toHaveBeenCalled();
   finishOpen();
   await Promise.all([music, closeMusic]);
-  expect(closeWindow.mock.calls.map(([feature]) => feature)).toEqual([MUSIC, RETURN]);
+  expect(closeWindow.mock.calls.map(([feature]) => feature)).toEqual([
+    MUSIC,
+    RETURN,
+    OPERATOR,
+  ]);
 });
 
 it("MUSIC que termina de abrir após o limite é fechada sem bloquear o novo vídeo", async () => {
@@ -661,11 +692,11 @@ it("MUSIC que termina de abrir após o limite é fechada sem bloquear o novo ví
   const closeMusic = windows.closeMusicProjectionWindows();
   await vi.advanceTimersByTimeAsync(2500);
   await closeMusic;
-  expect(closeWindow).toHaveBeenCalledTimes(2);
+  expect(closeWindow).toHaveBeenCalledTimes(3);
 
   finishOpen();
   await music;
-  await vi.waitFor(() => expect(closeWindow).toHaveBeenCalledTimes(4));
+  await vi.waitFor(() => expect(closeWindow).toHaveBeenCalledTimes(6));
 });
 
 /** Evento de tecla mínimo — o que `takeSiteKey` lê. */

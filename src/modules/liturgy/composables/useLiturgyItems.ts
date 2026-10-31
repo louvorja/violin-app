@@ -592,9 +592,13 @@ export function useLiturgyItems(
         break;
       }
       case LiturgyItemTypeEnum.VIDEO_ONLINE:
-        console.log(built);
         built.url = f.url || "";
-        built.subitem = "URL: " + built.url;
+        /*
+         * A segunda linha da lista é o NOME do vídeo (o título do YouTube,
+         * resolvido no formulário). A URL fica no item e é o que a execução
+         * usa; mostrá-la na lista escondia o nome que o operador escolheu.
+         */
+        built.subitem = f.subitem || built.url;
         break;
       case LiturgyItemTypeEnum.MEDIA_LIBRARY:
         built.ref_id = f.ref_id;

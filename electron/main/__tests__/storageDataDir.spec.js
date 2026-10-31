@@ -6,7 +6,7 @@ import path from "node:path";
 
 const require = createRequire(import.meta.url);
 const fs = require("fs-extra");
-const { listLegacyMediaEntries } = require("../mediaMigration.js");
+const { listLegacyMediaEntries, migrateLegacyMedia } = require("../mediaMigration.js");
 let base, oldDir, targetDir, currentDir, storage, setDataDir;
 const collections = ["files", "storage", "library", "Videos", "json_db", "bin", "server"];
 
@@ -151,9 +151,37 @@ describe("storage.setDataDir", () => {
 describe("migração de mídia no boot", () => {
   it("não trata documentos modernos como mídia legada quando files está vazio", async () => {
     await fs.emptyDir(path.join(oldDir, "files"));
-    expect(listLegacyMediaEntries(oldDir)).toEqual([]);
+    expect(await listLegacyMediaEntries(oldDir)).toEqual([]);
     expect(await fs.readJson(path.join(oldDir, "library", "saved.json"))).toEqual({ collection: "library" });
     await fs.outputFile(path.join(oldDir, "musicas", "track.mp3"), "audio");
-    expect(listLegacyMediaEntries(oldDir)).toEqual(["musicas"]);
+    expect(await listLegacyMediaEntries(oldDir)).toEqual(["musicas"]);
+  });
+
+  it("recolhe o acervo da primeira pasta antiga que tiver mídia, sem sobrescrever", async () => {
+    const target = path.join(targetDir, "files");
+    const denied = path.join(base, "Documents sem permissão");
+    await fs.outputFile(path.join(oldDir, "musicas", "track.mp3"), "audio");
+    await fs.outputFile(path.join(oldDir, "capas", "cover.jpg"), "cover");
+    await fs.outputFile(path.join(denied, "musicas", "hidden.mp3"), "hidden");
+    await fs.chmod(denied, 0o000);
+    let result;
+    try {
+      result = await migrateLegacyMedia(target, [denied, oldDir]);
+    } finally {
+      await fs.chmod(denied, 0o755);
+    }
+    expect(result).toEqual({ origem: oldDir, movidos: 2 });
+    expect(await fs.readFile(path.join(target, "musicas", "track.mp3"), "utf8")).toBe("audio");
+    expect(await fs.pathExists(path.join(oldDir, "capas"))).toBe(false);
+  });
+
+  it("não procura pastas antigas quando a pasta de dados já tem acervo", async () => {
+    const target = path.join(targetDir, "files");
+    await fs.outputFile(path.join(target, "musicas", "current.mp3"), "current");
+    await fs.outputFile(path.join(oldDir, "musicas", "track.mp3"), "audio");
+    const stat = vi.spyOn(fs, "stat");
+    expect(await migrateLegacyMedia(target, [oldDir])).toBeNull();
+    expect(stat.mock.calls.map(([dir]) => dir)).toEqual([target]);
+    expect(await fs.pathExists(path.join(oldDir, "musicas", "track.mp3"))).toBe(true);
   });
 });

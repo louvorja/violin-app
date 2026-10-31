@@ -130,6 +130,11 @@ function _onKeyDown(e) {
   // Janelas de módulo (.lj-window ou .lj-dialog--module) também usam DialogContent,
   // mas mantêm os atalhos globais. Menus abertos dentro delas seguem bloqueando
   // atalhos porque o foco fica no próprio portal do menu.
+  // Pergunta na tela ("Deseja fechar este slide?"): as setas escolhem entre
+  // Sim e Não e o Enter confirma (Alert.vue). Os atalhos não podem passar o
+  // slide por baixo dela.
+  if (document.querySelector('[role="alertdialog"]')) return;
+
   const _layerEl = document.activeElement?.closest?.("[data-dismissable-layer]");
   if (_layerEl && !_layerEl.closest(".lj-window, .lj-dialog--module")) return;
 

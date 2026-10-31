@@ -69,9 +69,11 @@ function iconForItem(item: LiturgyItem): string {
         ? ICONS.MEDIA.IMAGE
         : item.subtipo === "video"
           ? ICONS.MEDIA.VIDEO_FILE
-          : item.subtipo === "pdf"
-            ? ICONS.UI.FILE_PDF
-            : ICONS.MEDIA.LIBRARY,
+          : item.subtipo === "audio"
+            ? ICONS.MEDIA.AUDIO
+            : item.subtipo === "pdf"
+              ? ICONS.UI.FILE_PDF
+              : ICONS.MEDIA.LIBRARY,
     [LiturgyItemTypeEnum.BG_SOUND]: ICONS.MUSIC.PLAYBACK,
     [LiturgyItemTypeEnum.ANUNCIOS]: ICONS.MODULES.ANNOUNCEMENTS,
     [LiturgyItemTypeEnum.ITENS_AGENDADOS]: ICONS.CALENDAR.MULTISELECT,

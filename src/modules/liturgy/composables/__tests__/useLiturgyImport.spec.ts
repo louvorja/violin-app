@@ -12,14 +12,33 @@ type YesNo = { options: { title: string; text: string }; answer: (_btn?: string)
 let questions: YesNo[] = [];
 vi.mock("@/helpers/Alert", () => ({
   default: {
-    yesno: (options: YesNo["options"], answer: YesNo["answer"]) => questions.push({ options, answer }),
+    yesno: (options: YesNo["options"], answer: YesNo["answer"]) =>
+      questions.push({ options, answer }),
   },
 }));
 
+const list = vi.fn();
 const track = vi.fn();
-vi.mock("@/helpers/Telemetry", () => ({ default: { track: (...args: unknown[]) => track(...args) } }));
+vi.mock("@/helpers/Telemetry", () => ({
+  default: { track: (...args: unknown[]) => track(...args) },
+}));
 
-vi.mock("../../i18n", () => ({ useLiturgyI18n: () => ({ t: (key: string) => key }) }));
+vi.mock("../../i18n", () => ({
+  useLiturgyI18n: () => ({
+    t: (key: string) =>
+      (
+        ({
+          "library.weekday_sunday": "Domingo",
+          "library.weekday_monday": "Segunda",
+          "library.weekday_tuesday": "Terça",
+          "library.weekday_wednesday": "Quarta",
+          "library.weekday_thursday": "Quinta",
+          "library.weekday_friday": "Sexta",
+          "library.weekday_saturday": "Sábado",
+        }) as Record<string, string>
+      )[key] ?? key,
+  }),
+}));
 
 const JSON_LITURGY = JSON.stringify({
   name: "Culto de domingo",
@@ -104,6 +123,7 @@ function setup() {
     parseImport: useLiturgyLibrary().parseImport,
     getByName: (name: string) => getByName(name),
     save: (data: unknown) => save(data),
+    list: () => list(),
   } as unknown as Parameters<typeof useLiturgyImport>[0];
   return useLiturgyImport(library, report);
 }
@@ -117,6 +137,7 @@ beforeEach(() => {
   questions = [];
   save.mockReset().mockResolvedValue(undefined);
   getByName.mockReset().mockResolvedValue(undefined);
+  list.mockReset().mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -316,8 +337,12 @@ describe("useLiturgyImport — arquivo .ja do Delphi", () => {
     expect(error).not.toHaveBeenCalled();
     expect(save).toHaveBeenCalledOnce();
     const saved = save.mock.calls[0][0] as { name: string; items: Array<Record<string, unknown>> };
-    expect(saved.name).toBe("Culto Divino — Oração");
-    expect(saved.items.map((i) => i.item)).toEqual(["Culto Divino — Oração", "19h00: Vídeo de abertura"]);
+    /* O nome de categoria do arquivo é ignorado: a posição manda (1ª = domingo). */
+    expect(saved.name).toBe("Domingo");
+    expect(saved.items.map((i) => i.item)).toEqual([
+      "Culto Divino — Oração",
+      "19h00: Vídeo de abertura",
+    ]);
     expect(JSON.stringify(saved.items[1])).toContain("João");
     expect(track).toHaveBeenCalledWith(
       "liturgy_import_completed",
@@ -334,7 +359,7 @@ describe("useLiturgyImport — arquivo .ja do Delphi", () => {
     await done;
 
     expect(save).toHaveBeenCalledOnce();
-    expect((save.mock.calls[0][0] as { name: string }).name).toBe("Culto Divino - Oração");
+    expect((save.mock.calls[0][0] as { name: string }).name).toBe("Domingo");
     expect(track).toHaveBeenCalledWith(
       "liturgy_import_completed",
       expect.objectContaining({ encoding: "cp1252" })
@@ -415,5 +440,76 @@ describe("useLiturgyImport — o seletor de arquivo", () => {
     expect(created).toHaveLength(0);
     writing.finish();
     await vi.advanceTimersByTimeAsync(500);
+  });
+});
+
+describe("useLiturgyImport — nome do .ja pela posição", () => {
+  /** `.ja` com N grupos sem item categoria — o caso do arquivo do legado. */
+  function muitosGrupos(n: number): string {
+    return [
+      "[Geral]",
+      ...Array.from({ length: n }, (_, i) => `${i + 1}=item_${i};`),
+      ...Array.from(
+        { length: n },
+        (_, i) => `[item_${i}]\ntipo=arquivo\nitem=Item ${i}\nsubtipo=arq\ndir=C:\\v${i}.mp4\n`
+      ),
+    ].join("\n");
+  }
+
+  const nomesSalvos = () => save.mock.calls.map(([dados]) => (dados as { name: string }).name);
+
+  it("a primeira liturgia é domingo, a segunda segunda-feira", async () => {
+    const { importFile } = setup();
+    const done = importFile(file("liturgia.ja", JA_TWO_LITURGIES));
+    await vi.advanceTimersByTimeAsync(500);
+    await done;
+
+    expect(nomesSalvos()).toEqual(["Domingo", "Segunda"]);
+  });
+
+  it("nome já usado na biblioteca ganha número", async () => {
+    list.mockResolvedValue([{ name: "Domingo" }]);
+    const { importFile } = setup();
+    const done = importFile(file("liturgia.ja", JA_TWO_LITURGIES));
+    await vi.advanceTimersByTimeAsync(500);
+    await done;
+
+    expect(nomesSalvos()).toEqual(["Domingo 1", "Segunda"]);
+  });
+
+  it("importar duas vezes no mesmo dia continua numerando", async () => {
+    /* A biblioteca devolve o que o primeiro import gravou. */
+    list.mockResolvedValue([{ name: "Domingo" }, { name: "Segunda" }, { name: "Domingo 1" }]);
+    const { importFile } = setup();
+    const done = importFile(file("liturgia.ja", JA_TWO_LITURGIES));
+    await vi.advanceTimersByTimeAsync(500);
+    await done;
+
+    expect(nomesSalvos()).toEqual(["Domingo 2", "Segunda 1"]);
+  });
+
+  it("depois do sétimo dia o ciclo reinicia e numera", async () => {
+    const { importFile } = setup();
+    const done = importFile(file("liturgia.ja", muitosGrupos(8)));
+    await vi.advanceTimersByTimeAsync(500);
+    await done;
+
+    const nomes = nomesSalvos();
+    expect(nomes).toHaveLength(8);
+    /* Domingo, Segunda … Sábado, e o oitavo volta a ser Domingo — que já foi
+     * usado neste MESMO arquivo, então entra numerado. */
+    expect(nomes[0]).toBe("Domingo");
+    expect(nomes[1]).toBe("Segunda");
+    expect(nomes[6]).toBe("Sábado");
+    expect(nomes[7]).toBe("Domingo 1");
+  });
+
+  it("ignora o nome de categoria quando o arquivo traz um", async () => {
+    const { importFile } = setup();
+    const done = importFile(file("liturgia.ja", JA_V26_7, "utf8-bom"));
+    await vi.advanceTimersByTimeAsync(500);
+    await done;
+
+    expect(nomesSalvos()).toEqual(["Domingo"]);
   });
 });

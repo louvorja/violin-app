@@ -55,6 +55,7 @@
 <script setup lang="ts">
 import { LjIcon } from "@/components/ui";
 import { computed } from "vue";
+import { deveAssumirFoco } from "@/helpers/FocusGuard";
 import {
   DialogClose,
   DialogContent,
@@ -124,6 +125,9 @@ const estilo = computed(
 // recebe o foco e o Tab segue a partir dali.
 function focarPainel(event: Event): void {
   event.preventDefault();
+  /* O autofocus pode chegar depois de outra camada já ter o foco; a regra é a
+   * mesma da `Window` (ver `deveAssumirFoco`). */
+  if (!deveAssumirFoco(document.activeElement, event.currentTarget as Element | null)) return;
   (event.currentTarget as HTMLElement | null)?.focus?.();
 }
 </script>

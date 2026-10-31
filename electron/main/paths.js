@@ -96,8 +96,9 @@ module.exports = {
     fs.ensureDirSync(path.join(dir, "Crashpad"));
     app.setPath("logs", path.join(dir, "logs"));
     app.setPath("crashDumps", path.join(dir, "Crashpad"));
-    // Um disco temporariamente indisponível não deve apagar a pasta escolhida.
-    if (sameRoot) _writeAnchor({ dataDir: this.dataDir() });
+    // Um disco temporariamente indisponível não deve apagar a pasta escolhida,
+    // e um perfil que não mudou de lugar mantém `profileSource` para o próximo boot.
+    if (sameRoot && dir === this.profileDir()) _writeAnchor({ dataDir: this.dataDir() });
     return dir;
   },
 

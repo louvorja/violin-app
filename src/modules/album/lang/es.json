@@ -12,6 +12,7 @@
     "duration": "Duración",
     "actions": "Acciones"
   },
-  "download": "Administrar descargas",
-  "download_hint": "Consulta y administra los archivos de este álbum en Sincronizar."
+  "download": "Descargar álbum",
+  "download_hint": "Descarga este álbum en Sincronizar para escucharlo sin internet.",
+  "downloaded_hint": "Álbum descargado: suena incluso sin internet."
 }

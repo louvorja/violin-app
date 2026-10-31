@@ -64,19 +64,11 @@
     <div class="cat-form-grid">
       <div class="cat-form-col">
         <span class="cat-label">{{ $t("components.customization.color") }}</span>
-        <div class="cat-color-swatches">
-          <button
-            v-for="c in colorPresets"
-            :key="c"
-            type="button"
-            class="cat-color-swatch"
-            :class="{ 'cat-color-swatch--active': form.color === c }"
-            :style="{ background: c }"
-            :aria-label="c"
-            :aria-pressed="form.color === c"
-            @click="form.color = c"
-          />
-        </div>
+        <LjColorPicker
+          v-model="form.color"
+          :presets="colorPresets"
+          :label="$t('components.customization.color')"
+        />
       </div>
 
       <div class="cat-form-col">
@@ -158,7 +150,15 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { LjButton, LjDialog, LjEmpty, LjField, LjIcon, LjInput } from "@/components/ui";
+import {
+  LjButton,
+  LjColorPicker,
+  LjDialog,
+  LjEmpty,
+  LjField,
+  LjIcon,
+  LjInput,
+} from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import $alert from "@/helpers/Alert";
 import { MediaFile } from "@/types/Media";
@@ -402,35 +402,16 @@ function removeCustomIcon(): void {
   border-top: 1px solid var(--lj-surface-divider);
 }
 
-.cat-color-swatches,
+/* Com o catálogo grande a grade rola; o diálogo em si não cresce por causa
+   dela. `contain` evita que a roda do mouse role o diálogo ao chegar ao fim. */
 .cat-icon-grid {
   display: flex;
   flex-wrap: wrap;
   gap: var(--lj-space-2);
-}
-
-.cat-color-swatch {
-  width: var(--lj-space-8);
-  height: var(--lj-space-8);
-  padding: 0;
-  border: 2px solid transparent;
-  border-radius: 50%;
-  cursor: pointer;
-  transition: transform var(--lj-transition-fast);
-}
-
-.cat-color-swatch:hover {
-  transform: scale(1.15);
-}
-
-.cat-color-swatch--active {
-  border-color: var(--lj-ui-accent);
-  transform: scale(1.15);
-}
-
-.cat-color-swatch:focus-visible {
-  outline: none;
-  box-shadow: var(--lj-ui-focus);
+  max-height: 220px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: var(--lj-space-1);
 }
 
 .cat-icon-btn {

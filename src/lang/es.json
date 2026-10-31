@@ -88,6 +88,11 @@
       "file_sing": "Archivo Cantado",
       "file_playback": "Archivo Playback"
     },
+    "color_picker": {
+      "presets": "Colores",
+      "custom": "Personalizado",
+      "hex": "HEX"
+    },
     "customization": {
       "title": "Formato",
       "restore": "Restaurar",
@@ -124,6 +129,10 @@
       "time_format": "Formato de la hora",
       "show_date": "Mostrar fecha",
       "date_format": "Formato de la fecha"
+    },
+    "quick_play": {
+      "hint": "Escriba el número o el nombre y presione Enter para tocar cantado. Shift+Enter toca la pista. Esc limpia.",
+      "no_playback": "\"{name}\" no tiene pista instrumental. Presione solo Enter para tocar cantado."
     }
   },
   "alert": {
@@ -649,7 +658,9 @@
       "save": "Guardar",
       "saving": "Guardando…",
       "save_done": "{n} versión(es) eliminada(s) del disco.",
-      "cancel": "Cancelar Descarga"
+      "cancel": "Cancelar Descarga",
+      "remove": "Eliminar {n} del dispositivo",
+      "remove_confirm": "¿Eliminar {n} versión(es) de la Biblia de este dispositivo? Puedes descargarlas de nuevo después."
     },
     "storage": {
       "title": "Almacenamiento",
@@ -669,6 +680,7 @@
       "folder": "Carpeta de datos",
       "restart_required": "Reinicie la aplicación para completar el traslado de todos los datos a esta carpeta.",
       "folder_fallback": "No pude escribir en {dir}; los datos están en la carpeta del programa. Elija otra carpeta o libere el acceso.",
+      "folder_fallback_notice": "Sin acceso a {dir}. Sus datos se están guardando en la carpeta del programa hasta que libere el acceso o elija otra carpeta en Sincronizar Archivos → Almacenamiento.",
       "open_folder": "Abrir carpeta",
       "change_folder": "Cambiar carpeta…",
       "classic": {
@@ -863,7 +875,8 @@
       "controls": "Controles de Anuncios",
       "stop_projection": "Finalizar Proyección",
       "projection_closed": "Proyección de anuncios finalizada",
-      "executed": "{name} ejecutado"
+      "executed": "{name} ejecutado",
+      "project": "Proyectar"
     },
     "shortcuts": {
       "nav_group": "Navegación",
@@ -925,6 +938,7 @@
       "uploaded": "Archivo enviado al escritorio",
       "type_image": "Imagen",
       "type_video": "Vídeo",
+      "type_audio": "Audio",
       "type_pdf": "PDF",
       "playlist_play": "Reproducir",
       "playlist_stop": "Detener",
@@ -1287,6 +1301,7 @@
     "add_item": "Agregar",
     "no_results": "No se encontraron resultados",
     "navigate": "navegar",
+    "playback": "pista",
     "execute": "ejecutar",
     "close": "cerrar",
     "results": "resultados",
@@ -1367,6 +1382,7 @@
       "eta": "{time} restantes",
       "cancel": "Cancelar descarga",
       "dismiss": "Descartar",
+      "clear_completed": "Limpiar completadas",
       "title": "Procesos en segundo plano",
       "empty": "Ningún proceso en curso",
       "running": "En curso",
@@ -1388,7 +1404,8 @@
       "gloss": "Glosa",
       "libras_music": "Traducción Libras — Músicas",
       "libras_bible": "Traducción Libras — Biblia",
-      "scheduled_scan": "Escaneando ítems programados"
+      "scheduled_scan": "Escaneando ítems programados",
+      "eta_calculating": "Calculando tiempo restante…"
     },
     "appmenu_items": {
       "about": "Acerca de",
@@ -1684,13 +1701,18 @@
       "no_selection": "Ninguna canción seleccionada.",
       "cached": "Traducido",
       "not_cached": "No traducido",
-      "remove": "Eliminar traducción",
-      "remove_confirm": "¿Eliminar la traducción Libras de \"{name}\"?",
+      "remove": "Eliminar {n} del dispositivo",
+      "remove_confirm": "¿Eliminar {n} grupo(s) de traducciones Libras de este dispositivo? Puedes traducirlas de nuevo después.",
       "save": "Guardar",
       "saving": "Guardando…",
       "save_done": "{count} traducción(es) eliminada(s).",
       "category": "Categoría",
-      "songs": "canción(es)"
+      "songs": "canción(es)",
+      "partial_files": "{have} de {total} canciones traducidas",
+      "partial_continue": "Continuar",
+      "partial_discard": "Borrar",
+      "partial_discard_confirm": "¿Borrar las {n} canciones ya traducidas de \"{name}\"?",
+      "partial_discarded": "Traducciones parciales borradas."
     },
     "bible": {
       "title": "Biblia",
@@ -1712,9 +1734,14 @@
       "chapters": "{count} capítulo(s)",
       "save": "Guardar",
       "saving": "Guardando…",
-      "save_done": "{count} entrada(s) eliminada(s).",
-      "remove": "Eliminar traducción",
-      "remove_confirm": "¿Eliminar la traducción Libras de {count} capítulo(s) de esta versión?"
+      "save_done": "{count} versión(es) eliminada(s).",
+      "remove": "Eliminar {n} del dispositivo",
+      "remove_confirm": "¿Eliminar {n} versión(es) de la Biblia en Libras de este dispositivo? Puedes traducirlas de nuevo después.",
+      "partial_files": "{have} de {total} capítulos traducidos",
+      "partial_continue": "Continuar",
+      "partial_discard": "Borrar",
+      "partial_discard_confirm": "¿Borrar los {n} capítulos ya traducidos de \"{name}\"?",
+      "partial_discarded": "Traducciones parciales borradas."
     },
     "storage": {
       "title": "Almacenamiento",

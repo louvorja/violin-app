@@ -493,4 +493,71 @@ describe("diagnóstico de tradução Libras", () => {
     ).toBe(true);
     expect(JSON.stringify(attributes())).not.toContain("private-secret");
   });
+
+  it("reporta o avanço de cada slide durante a tradução", async () => {
+    const controller = new AbortController();
+    const progresso: Array<[string, number, number]> = [];
+    mocks.fetch.mockResolvedValue(new Response("GLOSS", { status: 200 }));
+
+    expect(
+      await translateMusic(
+        77,
+        {
+          id_music: 77,
+          name: "Música",
+          duration: "03:00",
+          lyric: [
+            { lyric: "Primeiro", order: 1, show_slide: 1 },
+            { lyric: "Segundo", order: 2, show_slide: 1 },
+          ],
+        },
+        "pt",
+        (stage, done, total) => {
+          progresso.push([stage, done, total]);
+          // Aborta antes dos bundles: o teste olha só a fase de tradução.
+          if (stage === "download") controller.abort();
+        },
+        "BR",
+        controller.signal
+      )
+    ).toBeNull();
+
+    expect(progresso).toEqual([
+      ["translate", 0, 3],
+      ["translate", 1, 3],
+      ["translate", 2, 3],
+      ["translate", 3, 3],
+      ["download", 0, 1],
+    ]);
+  });
+
+  it("reporta o avanço de cada versículo durante a tradução", async () => {
+    const controller = new AbortController();
+    const progresso: Array<[string, number, number]> = [];
+    mocks.fetch.mockResolvedValue(new Response("GLOSS", { status: 200 }));
+
+    expect(
+      await translateBibleChapter(
+        "NVI",
+        { id_bible_book: 43, name: "João", chapters: 21 },
+        3,
+        { "16": "Dezesseis", "17": "Dezessete" },
+        "pt",
+        (stage, done, total) => {
+          progresso.push([stage, done, total]);
+          if (stage === "download") controller.abort();
+        },
+        "BR",
+        controller.signal
+      )
+    ).toBeNull();
+
+    expect(progresso).toEqual([
+      ["translate", 0, 3],
+      ["translate", 1, 3],
+      ["translate", 2, 3],
+      ["translate", 3, 3],
+      ["download", 0, 1],
+    ]);
+  });
 });
