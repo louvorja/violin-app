@@ -24,6 +24,9 @@ const { createMusicSearchCatalog, normalize } = require("./musicSearchCatalog.js
 const { joinDentroDe } = require("../mediaRoots.js");
 
 
+/** PowerPoint enviado pelo celular: o PC converte (fontes + slides) antes de pôr na Biblioteca. */
+const PPT_UPLOAD_EXT = ["pptx", "ppsx", "pptm", "ppt", "pps", "odp"];
+
 const KEY_LITURGY_DAYS = "modules.liturgy.days";
 
 const KEY_LITURGY_ACTIVE_DAY = "modules.liturgy.active_day";
@@ -1440,6 +1443,7 @@ function register(app, ctx) {
     "mp3", "wav", "ogg", "flac", "aac", "m4a", "wma", "opus",
     "mp4", "webm", "mkv", "mov", "avi", "m4v",
     "pdf",
+    ...PPT_UPLOAD_EXT,
   ];
   /** Subpasta (relativa a <dados>/files) onde os uploads do remoto moram. */
   const MEDIA_LIBRARY_UPLOAD_DIR = "library/media";
@@ -1818,6 +1822,94 @@ function register(app, ctx) {
   // O main grava em <dados>/files/library/media/<id>.<ext> (tmp + rename) e
   // avisa o renderer para registrar na biblioteca — aí o item já projeta.
   // ---------------------------------------------------------------
+  /*
+   * PowerPoints do celular em conversão: o celular pergunta o andamento
+   * (GET /api/media-library/phone-uploads) e mostra "Preparando os slides…" na
+   * lista até o item ficar pronto. Some 10 minutos depois de terminar.
+   */
+  const phoneUploads = new Map();
+  const PHONE_UPLOAD_KEEP_MS = 10 * 60 * 1000;
+
+  function limparPhoneUploads() {
+    const agora = Date.now();
+    for (const [id, u] of phoneUploads) {
+      if (u.status !== "converting" && agora - u.updatedAt > PHONE_UPLOAD_KEEP_MS) phoneUploads.delete(id);
+    }
+  }
+
+  app.get("/api/media-library/phone-uploads", (req, res) => {
+    if (!hasMediaLibraryPermission(req)) {
+      return res.status(403).json({ error: "Device sem permissão da biblioteca de mídia" });
+    }
+    limparPhoneUploads();
+    res.json({ uploads: [...phoneUploads.values()] });
+  });
+
+  /** Converte o PowerPoint que chegou do celular e registra o PDF na Biblioteca. */
+  async function converterPowerPointDoCelular(mainWindow, uploadId, source, fileName, categoryId) {
+    const estado = { id: uploadId, name: fileName, status: "converting", phase: "fonts", done: 0, total: 0, message: "", itemId: null, updatedAt: Date.now() };
+    phoneUploads.set(uploadId, estado);
+    const atualizar = (patch) => Object.assign(estado, patch, { updatedAt: Date.now() });
+    // O PC mostra o andamento na lista de tarefas em segundo plano.
+    const avisar = (payload) =>
+      safeSend(mainWindow, "http:media-library", { action: "phone-pptx", id: uploadId, name: fileName, ...payload });
+    avisar({ status: "converting" });
+    let ultimoAviso = 0;
+    try {
+      const pptx = require("../pptx/index.js");
+      const pref = getUserData()?.options?.file_projection?.presentation_engine;
+      const engine = pref === "powerpoint" || pref === "libreoffice" ? pref : "auto";
+      const r = await pptx.convert(source, {
+        engine,
+        onProgress: (p) => {
+          safeSend(mainWindow, "pptx:progress", { path: source, ...p });
+          if (!p || p.phase === "done") return;
+          atualizar({
+            phase: p.phase === "font" ? "fonts" : p.phase,
+            ...(Number.isInteger(p.total) ? { done: p.done || 0, total: p.total } : {}),
+          });
+          const agora = Date.now();
+          if (agora - ultimoAviso > 500) {
+            ultimoAviso = agora;
+            avisar({ status: "progress", phase: estado.phase, done: estado.done, total: estado.total });
+          }
+        },
+      });
+      if (!r || !r.ok) {
+        const message = (r && r.message) || "Falha ao converter";
+        // Não virou item da Biblioteca: o arquivo enviado não fica perdido na pasta.
+        await fs.promises.unlink(source).catch(() => {});
+        atualizar({ status: "error", message });
+        avisar({ status: "error", message });
+        return;
+      }
+      const record = {
+        id: `file_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        name: fileName,
+        path: r.path,
+        type: "pdf",
+        addedAt: Date.now(),
+        ...(categoryId ? { categoryId } : {}),
+        pptx: {
+          source,
+          fonts: Array.isArray(r.fonts) ? r.fonts : [],
+          features: r.features || null,
+          nativeAvailable: r.nativeAvailable === true,
+        },
+      };
+      safeSend(mainWindow, "http:media-library", { action: "saved", record });
+      atualizar({ status: "done", itemId: record.id });
+      avisar({ status: "done" });
+      console.log(`[httpServer] media-library PowerPoint do celular convertido → ${r.path}`);
+    } catch (error) {
+      const message = String(error?.message || error).slice(0, 300);
+      console.warn("[httpServer] media-library PowerPoint do celular falhou:", message);
+      await fs.promises.unlink(source).catch(() => {});
+      atualizar({ status: "error", message });
+      avisar({ status: "error", message });
+    }
+  }
+
   app.post("/api/media-library/upload", async (req, res) => {
     if (!hasMediaLibraryPermission(req)) {
       console.log("[httpServer] media-library upload → 403 (device sem a permission)");
@@ -1894,6 +1986,16 @@ function register(app, ctx) {
     const categoryId = typeof req.headers["x-category-id"] === "string"
       ? req.headers["x-category-id"].trim().slice(0, 256)
       : "";
+
+    // PowerPoint: a conversão leva de segundos a minutos. O celular ouve "recebido"
+    // (202) na hora; o PC converte com o programa escolhido em Opções e só então
+    // o item entra na Biblioteca — o mesmo item que "Adicionar arquivos" criaria.
+    if (PPT_UPLOAD_EXT.includes(ext)) {
+      const uploadId = `pu_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      res.status(202).json({ status: "converting", name: fileName, uploadId });
+      void converterPowerPointDoCelular(mainWindow, uploadId, dest, fileName, categoryId);
+      return;
+    }
     const id = path.basename(dest, `.${ext}`);
     const record = {
       id,

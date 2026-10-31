@@ -2602,9 +2602,9 @@ ipcMain.handle("pptx:nativeStart", async (event, payload) => {
   const filePath = payload && typeof payload === "object" ? payload.path : undefined;
   if (typeof filePath !== "string") return { ok: false, code: "invalid_file", message: "Arquivo inválido." };
   const startIndex = Number.isInteger(payload.startIndex) ? payload.startIndex : 0;
-  // Monitor do PA: o mesmo da projeção de arquivo. Sem ele, não abre na tela do
-  // operador (a mesma regra das outras projeções).
-  const d = displays.getPreferred("file_projection");
+  // Monitor do PA: o mesmo da projeção de arquivo (e, sem ele, o das músicas,
+  // como a janela do slide). Sem nenhum, não abre na tela do operador.
+  const d = displays.getFileProjectionDisplay();
   if (!d) {
     return {
       ok: false,

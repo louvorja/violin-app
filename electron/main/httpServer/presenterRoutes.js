@@ -1,0 +1,379 @@
+"use strict";
+
+/**
+ * Aba Apresentação do controle remoto: o celular vê o slide no ar e as
+ * miniaturas, vai a qualquer slide, aponta com o laser e desenha na lousa.
+ *
+ * - Estado, miniaturas e navegação vêm do renderer (o PDF no ar do modo
+ *   apresentação), pelo mesmo `requestRenderer` das outras abas.
+ * - Laser e lousa não passam pelo renderer: vão direto para a janela
+ *   transparente sobre o telão (`presenterOverlay.js`), para o ponto seguir o
+ *   dedo sem atraso.
+ *
+ * Permissão: a mesma das setas do Apresentador (`keyboard`) — quem já passa
+ * os slides pelo celular pode também apontar e desenhar.
+ */
+
+const { safeSend } = require("../safeWebContents.js");
+
+const NAV_ACTIONS = new Set(["next", "prev", "first", "last", "goto", "black"]);
+const SLIDE_MAX_BYTES = 4 * 1024 * 1024;
+const DATA_URL_RE = /^data:image\/(jpeg|png);base64,([A-Za-z0-9+/=]+)$/;
+
+function isPlainObject(v) {
+  return !!v && typeof v === "object" && !Array.isArray(v);
+}
+
+/** O que está no ar além do PDF: letra, versículo, anúncio e se há imagem. */
+function isLiveDetails(l) {
+  return (
+    l === undefined ||
+    (isPlainObject(l) &&
+      typeof l.text === "string" &&
+      l.text.length <= 1_500 &&
+      Number.isInteger(l.page) &&
+      Number.isInteger(l.total) &&
+      l.total >= 0 &&
+      l.total <= 10_000 &&
+      typeof l.image === "string" &&
+      l.image.length <= 64)
+  );
+}
+
+function isStateResponse(p) {
+  return (
+    isPlainObject(p) &&
+    p.status === "ok" &&
+    typeof p.title === "string" &&
+    p.title.length <= 500 &&
+    Number.isInteger(p.page) &&
+    Number.isInteger(p.total) &&
+    p.total >= 0 &&
+    p.total <= 10_000 &&
+    typeof p.aspect === "number" &&
+    typeof p.rev === "string" &&
+    p.rev.length <= 64 &&
+    isLiveDetails(p.live)
+  );
+}
+
+function isSlideResponse(p) {
+  return isPlainObject(p) && (p.status === "error" || (p.status === "ok" && typeof p.image === "string"));
+}
+
+const FILE_KINDS = new Set(["pptx", "pdf", "image", "video", "file"]);
+
+function isFilesResponse(p) {
+  return (
+    isPlainObject(p) &&
+    p.status === "ok" &&
+    Array.isArray(p.items) &&
+    p.items.length <= 300 &&
+    p.items.every(
+      (i) =>
+        isPlainObject(i) &&
+        typeof i.id === "string" &&
+        i.id.length <= 256 &&
+        typeof i.name === "string" &&
+        i.name.length <= 200 &&
+        FILE_KINDS.has(i.kind)
+    )
+  );
+}
+
+function isResultResponse(p) {
+  return isPlainObject(p) && (p.status === "ok" || (p.status === "error" && (p.error === undefined || typeof p.error === "string")));
+}
+
+function register(app, { getValidMainWindow, requestRenderer, sendRendererError, hasDevicePermission, getOverlay }) {
+  function allowed(req, res) {
+    if (hasDevicePermission(req, "keyboard")) return true;
+    res.status(403).json({ error: "Device sem permissão de teclas de atalho" });
+    return false;
+  }
+
+  function mainWindowOr503(res) {
+    const win = getValidMainWindow();
+    if (!win) res.status(503).json({ error: "Janela principal não disponível" });
+    return win;
+  }
+
+  // GET /api/presenter/state — o que está no ar e a página
+  app.get("/api/presenter/state", async (req, res) => {
+    if (!allowed(req, res)) return;
+    const win = mainWindowOr503(res);
+    if (!win) return;
+    try {
+      const data = await requestRenderer(win, res, "http:presenter", { action: "state" }, {
+        prefix: "presenter",
+        timeoutMs: 3_000,
+        // A letra do slide ou o versículo no ar vêm junto (até 1.500 letras).
+        maxPayloadBytes: 16_384,
+        validatePayload: isStateResponse,
+      });
+      const overlay = getOverlay();
+      if (overlay) overlay.setAspect(data.aspect);
+      if (!res.headersSent) res.json({ ...data, overlay: overlay ? overlay.state() : null });
+    } catch (error) {
+      sendRendererError(res, error, "Timeout ao ler a apresentação");
+    }
+  });
+
+  // GET /api/presenter/slide/:n?w=960 — imagem de uma página do PDF no ar
+  app.get("/api/presenter/slide/:n", async (req, res) => {
+    if (!allowed(req, res)) return;
+    const page = Number.parseInt(req.params.n, 10);
+    if (!Number.isInteger(page) || page < 1 || page > 10_000) {
+      return res.status(400).json({ error: "página inválida" });
+    }
+    const width = Math.min(1600, Math.max(160, Number.parseInt(String(req.query.w || "320"), 10) || 320));
+    const win = mainWindowOr503(res);
+    if (!win) return;
+    try {
+      const data = await requestRenderer(win, res, "http:presenter", { action: "slide", page, width }, {
+        prefix: "presenter",
+        timeoutMs: 8_000,
+        maxPayloadBytes: SLIDE_MAX_BYTES,
+        validatePayload: isSlideResponse,
+      });
+      if (res.headersSent) return;
+      const m = data.status === "ok" ? DATA_URL_RE.exec(data.image) : null;
+      if (!m) return res.status(404).json({ error: "slide indisponível" });
+      res.set("Content-Type", `image/${m[1]}`);
+      res.set("Cache-Control", "private, max-age=600");
+      res.send(Buffer.from(m[2], "base64"));
+    } catch (error) {
+      sendRendererError(res, error, "Timeout ao desenhar o slide");
+    }
+  });
+
+  // POST /api/presenter/nav — { action: next|prev|first|last|goto|black, page? }
+  app.post("/api/presenter/nav", (req, res) => {
+    if (!allowed(req, res)) return;
+    const action = req.body && req.body.action;
+    if (!NAV_ACTIONS.has(action)) {
+      return res.status(400).json({ error: "action inválida", valid: [...NAV_ACTIONS] });
+    }
+    const page = Number.parseInt(req.body.page, 10);
+    if (action === "goto" && (!Number.isInteger(page) || page < 1)) {
+      return res.status(400).json({ error: "page é obrigatória para goto" });
+    }
+    const win = mainWindowOr503(res);
+    if (!win) return;
+    // Trocou de slide: o desenho era do slide anterior (na lousa branca, fica).
+    const overlay = getOverlay();
+    if (overlay && action !== "black" && !overlay.state().board) overlay.clear();
+    safeSend(win, "http:presenter", { action: "nav", nav: action, ...(action === "goto" ? { page } : {}) });
+    res.json({ status: "ok" });
+  });
+
+  // POST /api/presenter/zoom — { scale, x, y } amplia em volta do ponto; { fit: true } volta
+  app.post("/api/presenter/zoom", async (req, res) => {
+    if (!allowed(req, res)) return;
+    const body = req.body || {};
+    const win = mainWindowOr503(res);
+    if (!win) return;
+    const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : undefined);
+    const payload =
+      body.fit === true
+        ? { action: "zoom", fit: true }
+        : { action: "zoom", scale: num(body.scale), x: num(body.x), y: num(body.y) };
+    try {
+      const data = await requestRenderer(win, res, "http:presenter", payload, {
+        prefix: "presenter",
+        timeoutMs: 3_000,
+        maxPayloadBytes: 1_024,
+        validatePayload: (p) => isPlainObject(p) && p.status === "ok",
+      });
+      if (!res.headersSent) res.json({ status: "ok", zoom: data.zoom || null });
+    } catch (error) {
+      sendRendererError(res, error, "Timeout ao ampliar");
+    }
+  });
+
+  // GET /api/presenter/files — a Biblioteca de Mídia, para abrir e apresentar pelo celular
+  app.get("/api/presenter/files", async (req, res) => {
+    if (!allowed(req, res)) return;
+    const win = mainWindowOr503(res);
+    if (!win) return;
+    try {
+      const data = await requestRenderer(win, res, "http:presenter", { action: "files" }, {
+        prefix: "presenter",
+        timeoutMs: 5_000,
+        maxPayloadBytes: 256 * 1024,
+        validatePayload: isFilesResponse,
+      });
+      if (!res.headersSent) res.json({ items: data.items });
+    } catch (error) {
+      sendRendererError(res, error, "Timeout ao ler a Biblioteca");
+    }
+  });
+
+  // POST /api/presenter/open — { id } abre o arquivo no modo apresentação e põe no ar
+  app.post("/api/presenter/open", async (req, res) => {
+    if (!allowed(req, res)) return;
+    const id = req.body && req.body.id;
+    if (typeof id !== "string" || !id || id.length > 256) {
+      return res.status(400).json({ error: "id inválido" });
+    }
+    const win = mainWindowOr503(res);
+    if (!win) return;
+    try {
+      const data = await requestRenderer(win, res, "http:presenter", { action: "open", id }, {
+        prefix: "presenter",
+        timeoutMs: 5_000,
+        maxPayloadBytes: 1_024,
+        validatePayload: isResultResponse,
+      });
+      if (res.headersSent) return;
+      if (data.status !== "ok") return res.status(404).json({ error: data.error || "not_found" });
+      res.json({ status: "ok" });
+    } catch (error) {
+      sendRendererError(res, error, "Timeout ao abrir o arquivo");
+    }
+  });
+
+  // POST /api/presenter/screen — { on } liga ou desliga a tela principal (o telão)
+  app.post("/api/presenter/screen", async (req, res) => {
+    if (!allowed(req, res)) return;
+    const on = req.body && req.body.on;
+    if (typeof on !== "boolean") return res.status(400).json({ error: "on deve ser true ou false" });
+    const win = mainWindowOr503(res);
+    if (!win) return;
+    try {
+      await requestRenderer(win, res, "http:presenter", { action: "screen", on }, {
+        prefix: "presenter",
+        timeoutMs: 15_000,
+        maxPayloadBytes: 1_024,
+        validatePayload: isResultResponse,
+      });
+      if (!res.headersSent) res.json({ status: "ok" });
+    } catch (error) {
+      sendRendererError(res, error, "Timeout ao ligar o telão");
+    }
+  });
+
+  // POST /api/presenter/start e /stop — o Iniciar e o Parar do módulo
+  for (const action of ["start", "stop"]) {
+    app.post(`/api/presenter/${action}`, async (req, res) => {
+      if (!allowed(req, res)) return;
+      const win = mainWindowOr503(res);
+      if (!win) return;
+      try {
+        await requestRenderer(win, res, "http:presenter", { action }, {
+          prefix: "presenter",
+          // Abrir as janelas do telão e do retorno pode levar alguns segundos.
+          timeoutMs: 15_000,
+          maxPayloadBytes: 1_024,
+          validatePayload: isResultResponse,
+        });
+        if (!res.headersSent) res.json({ status: "ok" });
+      } catch (error) {
+        sendRendererError(res, error, action === "start" ? "Timeout ao iniciar" : "Timeout ao parar");
+      }
+    });
+  }
+
+  // GET /api/presenter/live-image?w=640 — a imagem no ar (arquivo de imagem), reduzida
+  app.get("/api/presenter/live-image", async (req, res) => {
+    if (!allowed(req, res)) return;
+    const width = Math.min(1600, Math.max(160, Number.parseInt(String(req.query.w || "640"), 10) || 640));
+    const win = mainWindowOr503(res);
+    if (!win) return;
+    try {
+      const data = await requestRenderer(win, res, "http:presenter", { action: "live-image", width }, {
+        prefix: "presenter",
+        timeoutMs: 10_000,
+        maxPayloadBytes: SLIDE_MAX_BYTES,
+        validatePayload: isSlideResponse,
+      });
+      if (res.headersSent) return;
+      const m = data.status === "ok" ? DATA_URL_RE.exec(data.image) : null;
+      if (!m) return res.status(404).json({ error: "imagem indisponível" });
+      res.set("Content-Type", `image/${m[1]}`);
+      res.set("Cache-Control", "private, max-age=600");
+      res.send(Buffer.from(m[2], "base64"));
+    } catch (error) {
+      sendRendererError(res, error, "Timeout ao ler a imagem");
+    }
+  });
+
+  // POST /api/presenter/native — { on: true } apresenta com animações; { on: false } encerra
+  app.post("/api/presenter/native", async (req, res) => {
+    if (!allowed(req, res)) return;
+    const on = req.body && req.body.on;
+    if (typeof on !== "boolean") return res.status(400).json({ error: "on deve ser true ou false" });
+    const win = mainWindowOr503(res);
+    if (!win) return;
+    try {
+      // Abrir o PowerPoint e conferir as fontes pode levar alguns segundos.
+      const data = await requestRenderer(win, res, "http:presenter", { action: "native", on }, {
+        prefix: "presenter",
+        timeoutMs: 60_000,
+        maxPayloadBytes: 1_024,
+        validatePayload: isResultResponse,
+      });
+      if (res.headersSent) return;
+      if (data.status !== "ok") return res.status(409).json({ error: data.error || "native_failed" });
+      res.json({ status: "ok" });
+    } catch (error) {
+      sendRendererError(res, error, "Timeout ao abrir o PowerPoint");
+    }
+  });
+
+  // POST /api/presenter/laser — { x, y } (0–1) ou { hide: true }
+  app.post("/api/presenter/laser", async (req, res) => {
+    if (!allowed(req, res)) return;
+    const overlay = getOverlay();
+    if (!overlay) return res.status(503).json({ error: "Telão indisponível" });
+    const body = req.body || {};
+    if (body.hide === true) {
+      overlay.laserHide();
+      return res.json({ status: "ok" });
+    }
+    if (!overlay.hasDisplay()) return res.status(409).json({ error: "no_display" });
+    const ok = await overlay.laserMove(body.x, body.y);
+    if (!ok) return res.status(400).json({ error: "x e y de 0 a 1" });
+    res.json({ status: "ok" });
+  });
+
+  // GET/POST /api/presenter/draw — traços da lousa
+  app.get("/api/presenter/draw", (req, res) => {
+    if (!allowed(req, res)) return;
+    const overlay = getOverlay();
+    res.json({ strokes: overlay ? overlay.strokes() : [], board: overlay ? overlay.state().board : false });
+  });
+
+  app.post("/api/presenter/draw", async (req, res) => {
+    if (!allowed(req, res)) return;
+    const overlay = getOverlay();
+    if (!overlay) return res.status(503).json({ error: "Telão indisponível" });
+    const body = req.body || {};
+    // Sem monitor de projeção, o traço não teria onde aparecer.
+    if ((body.op === "stroke" || (body.op === "board" && body.on === true)) && !overlay.hasDisplay()) {
+      return res.status(409).json({ error: "no_display" });
+    }
+    switch (body.op) {
+      case "stroke":
+        if (!(await overlay.addStroke(body.stroke))) return res.status(400).json({ error: "traço inválido" });
+        break;
+      case "undo":
+        overlay.undo();
+        break;
+      case "clear":
+        overlay.clear();
+        break;
+      case "board":
+        await overlay.setBoard(body.on === true);
+        break;
+      case "close":
+        overlay.close();
+        break;
+      default:
+        return res.status(400).json({ error: "op inválida" });
+    }
+    res.json({ status: "ok", ...overlay.state() });
+  });
+}
+
+module.exports = { register, isStateResponse, isSlideResponse, isFilesResponse, isResultResponse };
