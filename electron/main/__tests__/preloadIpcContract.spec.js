@@ -126,12 +126,14 @@ describe("preload IPC contract", () => {
     const cleanup = api.onHttpEvent(() => {});
 
     expect(seen.listeners.has("http:online-videos")).toBe(true);
+    expect(seen.listeners.has("http:music-album")).toBe(true);
     expect(seen.listeners.has("http:background-sound")).toBe(true);
     expect(seen.listeners.has("http:volume")).toBe(true);
     expect(seen.listeners.has("http:song-slides")).toBe(true);
     expect(seen.listeners.has("http:open-song")).toBe(true);
     cleanup();
     expect(seen.listeners.has("http:online-videos")).toBe(false);
+    expect(seen.listeners.has("http:music-album")).toBe(false);
   });
 
   it("aceita o prefixo custom-music na resposta", () => {
@@ -173,6 +175,7 @@ describe("preload IPC contract", () => {
       "libras",
       "online-videos",
       "custom-music",
+      "music-album",
       "background-sound",
       "volume",
       "media-library",

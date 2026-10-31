@@ -685,3 +685,44 @@ describe("stream", () => {
     expect(await stream(ID)).toMatchObject({ ok: false, error: { kind: "unknown" } });
   });
 });
+
+describe("youtubeSourceFromUrl", () => {
+  it("reconhece vídeo, playlist e canal", async () => {
+    const { youtubeSourceFromUrl } = await import("../OnlineVideo");
+    expect(youtubeSourceFromUrl("https://youtu.be/dQw4w9WgXcQ")).toEqual({ kind: "video", id: "dQw4w9WgXcQ" });
+    expect(youtubeSourceFromUrl("https://www.youtube.com/playlist?list=PLx0sYbCqOb8TBPRdmBHs5Iftvv9TPboYG")).toEqual({
+      kind: "playlist",
+      id: "PLx0sYbCqOb8TBPRdmBHs5Iftvv9TPboYG",
+    });
+    expect(youtubeSourceFromUrl("https://www.youtube.com/@novotempo/videos")).toEqual({ kind: "channel", id: "@novotempo" });
+    expect(youtubeSourceFromUrl("https://www.youtube.com/channel/UC_OaSsAydgSIjUtjYn9qLog")).toEqual({
+      kind: "channel",
+      id: "UC_OaSsAydgSIjUtjYn9qLog",
+    });
+  });
+
+  it("vídeo aberto dentro de uma playlist conta como o vídeo", async () => {
+    const { youtubeSourceFromUrl } = await import("../OnlineVideo");
+    expect(youtubeSourceFromUrl("https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLx0sYbCqOb8TBPRdmBHs5Iftvv9TPboYG")).toEqual({
+      kind: "video",
+      id: "dQw4w9WgXcQ",
+    });
+  });
+
+  it("recusa o que não é do YouTube", async () => {
+    const { youtubeSourceFromUrl } = await import("../OnlineVideo");
+    expect(youtubeSourceFromUrl("https://vimeo.com/123")).toBeNull();
+    expect(youtubeSourceFromUrl("https://www.youtube.com/")).toBeNull();
+    expect(youtubeSourceFromUrl("")).toBeNull();
+  });
+});
+
+describe("videoIdFromPlaybackUrl", () => {
+  it("acha o vídeo no arquivo baixado, no que ainda baixa e no embutido", async () => {
+    const { videoIdFromPlaybackUrl } = await import("../OnlineVideo");
+    expect(videoIdFromPlaybackUrl("louvorja://onlinevideo/dQw4w9WgXcQ.mp4")).toBe("dQw4w9WgXcQ");
+    expect(videoIdFromPlaybackUrl("louvorja://onlinestream/dQw4w9WgXcQ/video")).toBe("dQw4w9WgXcQ");
+    expect(videoIdFromPlaybackUrl("https://www.youtube.com/embed/dQw4w9WgXcQ?autoplay=1")).toBe("dQw4w9WgXcQ");
+    expect(videoIdFromPlaybackUrl("louvorja://local/Videos/culto.mp4")).toBeNull();
+  });
+});

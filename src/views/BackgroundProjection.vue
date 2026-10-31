@@ -19,7 +19,13 @@
         class="file-projection"
         :style="{ '--fade-ms': fadeDurationMs + 'ms' }"
       >
-        <img v-if="fileState.type === 'image'" :src="fileState.url" class="layer-file" alt="" />
+        <img
+          v-if="fileState.type === 'image'"
+          :src="fileState.url"
+          class="layer-file"
+          :style="projectionZoom.styleFor(fileState.playback_id ?? fileState.url)"
+          alt=""
+        />
         <video
           v-else-if="fileState.type === 'video'"
           ref="projVideoRef"
@@ -42,6 +48,7 @@
           v-else-if="fileState.type === 'pdf'"
           ref="pdfCanvas"
           class="layer-file layer-file--pdf"
+          :style="projectionZoom.styleFor(fileState.playback_id ?? fileState.url, currentPdfPage)"
         ></canvas>
       </div>
     </Transition>
@@ -198,6 +205,7 @@
 
     <!-- Layer 4: Overlays -->
     <OverlayRenderer />
+    <ProjectionClearScreen />
     <LibrasOverlay
       :slide-lyric="projType === 'music' ? (slide?.lyric as string) : undefined"
       :music-id="projType === 'music' ? (slide?.id_music as number | undefined) : undefined"
@@ -216,6 +224,7 @@
 import { reactive, ref, computed, onMounted, onBeforeUnmount, nextTick } from "vue";
 import { estiloDeFundo } from "@/helpers/BackgroundStyle";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
+import { useProjectionZoom } from "@/composables/useProjectionZoom";
 import { useProjectionCloseNotice } from "@/composables/useProjectionCloseNotice";
 import { PROJECTION_TYPE } from "@/constants/Projection";
 import { useProjectionState } from "@/composables/useProjectionState";
@@ -228,6 +237,7 @@ import $modules from "@/helpers/Modules";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { getSetting } from "@/helpers/SettingsStorage";
 import OverlayRenderer from "@/components/OverlayRenderer.vue";
+import ProjectionClearScreen from "@/components/ProjectionClearScreen.vue";
 import LibrasOverlay from "@/views/LibrasOverlay.vue";
 import Slide from "@/components/Slide.vue";
 import AnnouncementsLayer from "@/modules/announcements/components/ProjectionLayer.vue";
@@ -330,6 +340,9 @@ let ytPlayer: YTPlayer | null = null;
 
 /* ── PDF state ── */
 const pdfCanvas = ref<HTMLCanvasElement | null>(null);
+// Zoom de imagem/PDF escolhido no Modo apresentação: esta tela só aplica o recorte.
+const projectionZoom = useProjectionZoom();
+
 let pdfDoc: PDFDocumentProxy | null = null;
 let pdfLoadGeneration = 0;
 const pdfRenderQueue = new PdfPageRenderQueue();

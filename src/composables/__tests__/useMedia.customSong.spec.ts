@@ -81,6 +81,40 @@ afterEach(() => {
 });
 
 describe("abrir música personalizada", () => {
+  it("preserva as linhas principal e auxiliar do .slja até os slides de projeção", async () => {
+    const { default: SljaConverter } = await import("@/helpers/SljaConverter");
+    const imported = await SljaConverter.loadSlja(new Blob([
+      "[Geral]\r\nslides=1\r\n[Slide:1]\r\ntipo=LETRA\r\n" +
+      "letra=Ricos e pobres, Plebeus e nobres|Diante do trono de Deus\r\n" +
+      "letra_aux=Primeira linha|Segunda linha\r\n",
+    ]));
+    expect(imported.slides[0].letra).toBe("Ricos e pobres, Plebeus e nobres\nDiante do trono de Deus");
+    await media.openCustomSong({ nome: "Hino importado", slides: imported.slides });
+    expect(media.slides()[0]).toMatchObject({
+      lyric: "Ricos e pobres, Plebeus e nobres<br>Diante do trono de Deus",
+      aux_lyric: "Primeira linha<br>Segunda linha",
+    });
+    // O documento continua em texto: edição/exportação não recebem HTML.
+    expect(imported.slides[0].letra_aux).toBe("Primeira linha\nSegunda linha");
+  });
+
+  it("mantém linhas vazias e trata a letra personalizada como texto, inclusive na capa", async () => {
+    await media.openCustomSong(song({
+      nome: "Capa <especial> & título",
+      slides: [
+        { tipo: "CAPA", letra: "" },
+        { tipo: "LETRA", letra: "Um & dois\r\n\r\n<três>\rFim", letra_aux: "<b>Auxiliar</b>\nFim" },
+        { tipo: "LETRA", letra: "" },
+      ],
+    }));
+    expect(media.slides()[0].name).toBe("Capa &lt;especial&gt; &amp; título");
+    expect(media.slides()[1]).toMatchObject({
+      lyric: "Um &amp; dois<br><br>&lt;três&gt;<br>Fim",
+      aux_lyric: "&lt;b&gt;Auxiliar&lt;/b&gt;<br>Fim",
+    });
+    expect(media.slides()[2].lyric).toBe("");
+  });
+
   it("sem modo pedido abre o cantado, e guarda as duas faixas para a troca no ar", async () => {
     expect(await media.openCustomSong(song())).toBe(true);
     expect(config()).toMatchObject({ mode: "audio", audio: "blob:sung" });

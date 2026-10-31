@@ -17,6 +17,7 @@ describe("RuntimePerformance", () => {
     expect([...PERSISTENT_MODULE_IDS]).toEqual([
       "clock",
       "liturgy",
+      "presentation_mode",
       "stopwatch",
       "timer",
       "timer_worship",

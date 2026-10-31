@@ -76,6 +76,10 @@
       "custom_album": "Coletânea personalizada",
       "music": "Música",
       "select": "Selecionar",
+      "audio": "Cantado",
+      "playback": "Playback",
+      "audio_only": "Só áudio",
+      "playback_only": "Só áudio (playback)",
       "results": "resultados"
     },
     "music_menu": {
@@ -745,7 +749,13 @@
       "open_return_at": "Tela de retorno do vídeo em:",
       "show_return": "Exibir na tela de retorno",
       "title": "Vídeos On-line",
-      "youtube_action": "Ao executar link do YouTube na liturgia, abrir:"
+      "youtube_action": "Ao executar link do YouTube na liturgia, abrir:",
+      "account_title": "Conta do YouTube",
+      "account_none": "Nenhuma conta conectada.",
+      "account_connected": "Conta conectada: os vídeos são consultados com ela.",
+      "account_login": "Entrar no YouTube",
+      "account_logout": "Sair da conta",
+      "account_hint": "Só é necessário se o YouTube começar a pedir \"confirme que você não é um robô\". Use uma conta secundária, criada para a igreja — o YouTube pode restringir contas usadas por programas como este. A sessão fica só neste computador e pode ser encerrada aqui a qualquer momento. Ter conta não faz aparecer anúncios: o app toca os vídeos sem o player do YouTube."
     },
     "player": {
       "title": "Player de Áudio/Vídeo",
@@ -756,7 +766,14 @@
       "lazy_load": "Carregar áudios sob demanda",
       "show_return": "Exibir na tela de retorno",
       "use_system_media_player": "Abrir áudio e vídeo no programa do Windows",
-      "use_system_media_player_hint": "Quando ativado, arquivos .mp3, .mp4 e similares da liturgia são abertos no programa padrão do sistema. Se não houver associação, o player interno é usado."
+      "use_system_media_player_hint": "Quando ativado, arquivos .mp3, .mp4 e similares da liturgia são abertos no programa padrão do sistema. Se não houver associação, o player interno é usado.",
+      "presentation_engine": "Programa para apresentações (PowerPoint)",
+      "engine_auto": "Automático (PowerPoint, se instalado; senão LibreOffice)",
+      "engine_missing": "não instalado neste computador",
+      "engine_hint_auto": "Usa o PowerPoint quando ele está instalado, porque é quem mostra o .pptx igual ao original. Sem ele, usa o LibreOffice.",
+      "engine_hint_powerpoint": "Fiel para arquivos do PowerPoint (.pptx). Arquivos feitos no LibreOffice (.odp) podem perder alguns efeitos. As animações só funcionam no Windows.",
+      "engine_hint_libreoffice": "Funciona no Windows, no Mac e no Linux, mas arquivos feitos no PowerPoint (.pptx) podem ficar diferentes: algumas animações, transições e posições de texto mudam ou não funcionam, e as fontes precisam estar instaladas.",
+      "engine_hint_fallback": "Como ele não está instalado aqui, o LouvorJA usa o outro programa."
     },
     "file_projection": {
       "title": "Projeção de Arquivos",
@@ -1088,6 +1105,10 @@
       "info": "Informações",
       "items": "Itens",
       "library": "Biblioteca",
+      "navigation": "Navegação",
+      "outputs": "Saídas",
+      "presentation": "Apresentação",
+      "program": "Programa",
       "manage": "Gerenciar",
       "main_text": "Texto Principal",
       "media": "Mídia",
@@ -1251,6 +1272,9 @@
     "home_music": "Músicas",
     "home_bible": "Bíblia",
     "home_liturgy": "Liturgia",
+    "home_try": "ou experimente o novo",
+    "home_presentation": "Modo apresentação",
+    "home_beta": "Beta",
     "search_placeholder": "Buscar hino, música, versículo...",
     "toggle_sidebar": "Mostrar/ocultar menu",
     "toggle_liturgy": "Mostrar/ocultar liturgia",
@@ -1526,7 +1550,8 @@
       "media": "Player",
       "liturgy": "Liturgia",
       "bible": "Bíblia",
-      "system": "Sistema"
+      "system": "Sistema",
+      "presentation": "Modo apresentação"
     },
     "esc": "Encerrar projeções ativas",
     "f1": "Mostrar atalhos de teclado",
@@ -1561,7 +1586,13 @@
     "next_slide": "Próximo slide",
     "bible_prev_verse": "Versículo anterior",
     "bible_next_verse": "Próximo versículo",
-    "bible_clear": "Limpar versículo selecionado"
+    "bible_clear": "Limpar versículo selecionado",
+    "presentation_next": "Modo apresentação: próximo (passador)",
+    "presentation_prev": "Modo apresentação: anterior (passador)",
+    "presentation_black": "Modo apresentação: tela preta / voltar",
+    "presentation_send": "Modo apresentação: apresentar a prévia ou enviar o próximo item",
+    "presentation_play": "Modo apresentação: reproduzir / pausar o que está no ar",
+    "presentation_mute": "Modo apresentação: silenciar"
   },
   "startup_check": {
     "title": "Verificação Inicial",
@@ -1808,7 +1839,8 @@
       "unavailable": "Este vídeo foi removido ou não está disponível.",
       "fallback": "Não foi possível baixar o vídeo. Usando o player do YouTube.",
       "download": "Não foi possível baixar o vídeo agora. Tente de novo mais tarde.",
-      "stream": "Não foi possível abrir o vídeo direto. Usando o player do YouTube."
+      "stream": "Não foi possível abrir o vídeo direto. Usando o player do YouTube.",
+      "bot": "O YouTube pediu para confirmar que não é um robô. Entre com uma conta em Opções → Vídeos para voltar a tocar sem anúncios; por enquanto, usando o player do YouTube."
     },
     "download": {
       "start": "Baixar para usar sem internet",

@@ -1,5 +1,7 @@
 <template>
   <OverlayRenderer />
+  <ReturnOverride />
+  <ProjectionClearScreen />
   <div class="fp-wallpaper" :style="fallbackStyle"></div>
   <div class="return-root" :class="{ 'return-root--ready': ready }">
     <div v-if="fileProjection.active" class="return-file-projection">
@@ -11,6 +13,7 @@
               v-if="fileProjection.type === 'image'"
               :src="fileProjection.url"
               class="return-file-projection__media"
+              :style="projectionZoom.styleFor(fileProjection.playback_id ?? fileProjection.url)"
               alt=""
             />
             <template v-else-if="fileProjection.type === 'video'">
@@ -20,7 +23,7 @@
                 :src="fileProjection.url"
                 class="return-file-projection__media"
                 :style="{ backgroundColor: wpColor }"
-                autoplay
+                :autoplay="!playerClock"
                 muted
                 playsinline
                 preload="auto"
@@ -56,6 +59,12 @@
               v-else-if="fileProjection.type === 'pdf'"
               ref="pdfCanvas"
               class="return-file-projection__pdf"
+              :style="
+                projectionZoom.styleFor(
+                  fileProjection.playback_id ?? fileProjection.url,
+                  fileProjection.page
+                )
+              "
             />
           </div>
         </Transition>
@@ -72,11 +81,14 @@ import "@/assets/styles/transitions.css";
 import { estiloDeFundo } from "@/helpers/BackgroundStyle";
 import { pdfPageFit } from "@/helpers/PdfPageFit";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
+import { useProjectionZoom } from "@/composables/useProjectionZoom";
 import { useTransitionStage } from "@/composables/useTransitionStage";
 import { createTransitionContext } from "@/config/Transitions";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import Broadcast from "@/helpers/Broadcast";
 import OverlayRenderer from "@/components/OverlayRenderer.vue";
+import ProjectionClearScreen from "@/components/ProjectionClearScreen.vue";
+import ReturnOverride from "@/components/ReturnOverride.vue";
 import {
   FileProjectionState,
   VideoMediaState,
@@ -95,6 +107,8 @@ import { DB_TABLE, SETTINGS_TABLE } from "@/constants/DbTables";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 import { heicToJpeg, isHeic } from "@/helpers/ImageConvert";
 import Telemetry from "@/helpers/Telemetry";
+import { useScreenVideoReport } from "@/composables/useScreenVideoReport";
+import { useSlaveVideoClock } from "@/composables/useSlaveVideoClock";
 import {
   mediaElementDetails,
   mediaSourceDetails,
@@ -141,6 +155,19 @@ const { transitionName, stageStyle } = useTransitionStage(
 );
 
 const videoRef = ref<HTMLVideoElement | null>(null);
+/** O vídeo segue o player da janela principal: sem ele, não anda (ver useSlaveVideoClock). */
+const playerClock = ref(false);
+const slaveClock = useSlaveVideoClock(videoRef, {
+  enabled: () => playerClock.value && fileProjection.active && fileProjection.type === "video",
+  request: () => _requestVideoState(),
+});
+// O módulo confere se esta tela faz o que o player manda (pausado é pausado).
+useScreenVideoReport(
+  "return",
+  videoRef,
+  () => fileProjection.playback_id ?? null,
+  () => fileProjection.active && fileProjection.type === "video"
+);
 const videoFailed = ref(false);
 const videoStateGate = new VideoStateGate();
 const activationGate = new FileProjectionActivationGate();
@@ -155,6 +182,9 @@ let latestVideoState: VideoMediaState | null = null;
 let activationGeneration = 0;
 const ytContainer = ref<HTMLDivElement | null>(null);
 const pdfCanvas = ref<HTMLCanvasElement | null>(null);
+// Zoom de imagem/PDF escolhido no Modo apresentação: esta tela só aplica o recorte.
+const projectionZoom = useProjectionZoom();
+
 const ready = ref<boolean>(false);
 
 let pdfDoc: PDFDocumentProxy | null = null;
@@ -383,6 +413,8 @@ async function _activateProjection(p: FileProjectionState): Promise<void> {
   fileProjection.url = p.url || "";
   fileProjection.title = p.title || "";
   fileProjection.playback_id = p.playback_id;
+  playerClock.value = p.type === "video" && p.clock === "player";
+  slaveClock.reset();
   fileProjection.backward = p.backward === true;
   videoStateGate.begin(p.playback_id);
   videoFirstFrame.begin(p.type === "video" ? p.playback_id : null);
@@ -432,6 +464,11 @@ function _prepareVideo(): void {
   videoFirstFrame.attach(el);
   el.load();
   const diagnosticContext = _captureVideoDiagnostics(el);
+  // Com player, a tela espera o estado dele para andar; pede já.
+  if (playerClock.value) {
+    _requestVideoState();
+    return;
+  }
   el.play().catch((error) => {
     console.warn("[FileProjectionReturn] vídeo não iniciou sozinho:", error?.name || error);
     mediaDiagnosticLog("warn", "file projection return video play rejected", {
@@ -688,6 +725,7 @@ useBroadcastListener(BROADCAST_TYPE.VIDEO_STATE, (payload: unknown) => {
   if (!fileProjection.active || fileProjection.type !== "video") return;
   const data = payload as VideoMediaState;
   if (!videoStateGate.accepts(data)) return;
+  slaveClock.heard();
   latestVideoState = data;
   videoFirstFrame.acceptRevision(data.revision, data.playback_id);
   _applyVideoState(data);
@@ -1141,14 +1179,11 @@ onBeforeUnmount(() => {
   background: transparent;
 }
 
+/* Como na tela principal: preenche mantendo a proporção. */
 .return-file-projection__media {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-}
-.return-file-projection video.return-file-projection__media {
   width: 100%;
   height: 100%;
+  object-fit: contain;
 }
 .return-file-projection__youtube {
   width: 100%;

@@ -32,7 +32,7 @@ const HTTP_RENDERER_RESPONSE_CHANNEL = "http:renderer-response";
  * pessoais. O `preloadIpcContract.spec` cobre a lista de prefixos justamente
  * para o próximo esquecimento falhar no teste e não em produção.
  */
-const HTTP_RENDERER_REQUEST_ID_RE = /^(slides|announcements|libras|online-videos|custom-music|background-sound|volume|media-library):[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const HTTP_RENDERER_REQUEST_ID_RE = /^(slides|announcements|libras|online-videos|custom-music|music-album|background-sound|volume|media-library):[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 contextBridge.exposeInMainWorld("louvorjaApi", {
   /** Resolve o caminho real de um File arrastado/selecionado (Electron 32+). */
@@ -266,6 +266,23 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
     has: (id) => ipcRenderer.invoke("onlineVideo:has", id),
     /** Vídeos em disco: [{ id, size, usedAt, kept }] */
     list: () => ipcRenderer.invoke("onlineVideo:list"),
+    /**
+     * Resolve os links do vídeo antes do play, sem baixar: o próximo `stream` dele
+     * começa sem consultar o YouTube. `opts`: `{ maxHeight }`. Resolve `{ ok }`.
+     */
+    prefetch: (id, opts) => ipcRenderer.invoke("onlineVideo:prefetch", id, opts),
+    /** Conta do YouTube para o yt-dlp: `{ loggedIn }`. Os cookies nunca chegam ao renderer. */
+    accountStatus: () => ipcRenderer.invoke("onlineVideo:accountStatus"),
+    /** Abre a janela de login do Google; resolve quando ela fecha, com o novo estado. */
+    accountLogin: () => ipcRenderer.invoke("onlineVideo:accountLogin"),
+    accountLogout: () => ipcRenderer.invoke("onlineVideo:accountLogout"),
+    /**
+     * Vídeos de um canal (do mais recente ao mais antigo) ou de uma playlist, sem baixar.
+     * `source`: `{ kind: "channel" | "playlist", id }` — id do canal (UC…), @ dele ou id
+     * da playlist. `range`: `{ start, count }` (1-based, até 50). Resolve
+     * `{ ok, title, channel, thumbnail, entries: [{ id, title, duration }], hasMore }`.
+     */
+    collection: (source, range) => ipcRenderer.invoke("onlineVideo:collection", source, range),
     /** Manda manter um vídeo já baixado: o despejo por espaço não o leva. */
     keep: (id) => ipcRenderer.invoke("onlineVideo:keep", id),
     /** Instala yt-dlp e ffmpeg de antemão, em silêncio. Resolve `{ ok, ready }`. */
@@ -334,6 +351,40 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
     /** Mostra/oculta janelas de projeção fullscreen na barra de tarefas */
     setTaskbarVisibility: (show) =>
       ipcRenderer.invoke("windows:setTaskbarVisibility", show),
+  },
+
+  /*
+   * PowerPoint fiel: o main instala as fontes que faltam e o PowerPoint (ou o
+   * LibreOffice) salva o .pptx como PDF. Ver `electron/main/pptx/`.
+   */
+  pptx: {
+    status: (engine) => ipcRenderer.invoke("pptx:status", { engine }),
+    /** Abre Ajustes → Privacidade e Segurança → Arquivos e Pastas (macOS 27+). */
+    openPermissionSettings: () => ipcRenderer.invoke("pptx:openPermissionSettings"),
+    /** Pendente durante a conversão; devolve `{ ok, path }` ou `{ ok: false, code, message }`. */
+    /** `force`: ignora o PDF guardado ("Gerar de novo"). */
+    convert: (path, force, engine) => ipcRenderer.invoke("pptx:convert", { path, force: force === true, engine }),
+    /** Abre o diálogo nativo de fontes e instala as escolhidas. */
+    installFonts: () => ipcRenderer.invoke("pptx:installFonts"),
+    /** Modo nativo: o PowerPoint apresenta no PA (animações e mídias). */
+    features: (path) => ipcRenderer.invoke("pptx:features", { path }),
+    nativeStart: (path, startIndex, engine) => ipcRenderer.invoke("pptx:nativeStart", { path, startIndex, engine }),
+    nativeNav: (action, index) => ipcRenderer.invoke("pptx:nativeNav", { action, index }),
+    nativeEnd: () => ipcRenderer.invoke("pptx:nativeEnd"),
+    nativeState: () => ipcRenderer.invoke("pptx:nativeState"),
+    onNativeState: (cb) => {
+      const handler = (_e, data) => cb?.(data);
+      ipcRenderer.on("pptx:native-state", handler);
+      return () => ipcRenderer.off("pptx:native-state", handler);
+    },
+    /** Instala fontes arrastadas (.ttf, .otf ou .zip). */
+    installFontPaths: (paths) => ipcRenderer.invoke("pptx:installFontPaths", { paths }),
+    /** Andamento (fontes, conversão). Devolve a função de cleanup. */
+    onProgress: (cb) => {
+      const handler = (_e, data) => cb?.(data);
+      ipcRenderer.on("pptx:progress", handler);
+      return () => ipcRenderer.off("pptx:progress", handler);
+    },
   },
 
   /*
@@ -468,6 +519,42 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
     enforceQuota: (maxBytes) => ipcRenderer.invoke("storage:enforceQuota", maxBytes),
     /** Lista arquivos de um diretório local (para auto-populate). */
     readDir: (dirPath) => ipcRenderer.invoke("storage:readDir", dirPath),
+    /** Um nível de uma pasta, com tamanho e data (navegador de arquivos). */
+    listDir: (dirPath) => ipcRenderer.invoke("files:listDir", dirPath),
+    /** Quais destes arquivos estão só na nuvem: `{ caminho: "local" | "cloud" }`. */
+    cloudStates: (paths) => ipcRenderer.invoke("files:cloudStates", paths),
+    /** Traz o arquivo da nuvem para o computador; o andamento chega por `onCloudProgress`. */
+    cloudDownload: (filePath) => ipcRenderer.invoke("files:cloudDownload", filePath),
+    onCloudProgress: (cb) => {
+      const listener = (_e, data) => cb(data);
+      ipcRenderer.on("files:cloudProgress", listener);
+      return () => ipcRenderer.removeListener("files:cloudProgress", listener);
+    },
+    /** Histórico da série de vídeos da pasta (`.louvorja-serie.json`); `series: null` se não é série. */
+    seriesRead: (dirPath) => ipcRenderer.invoke("files:seriesRead", dirPath),
+    /** Aplica uma operação (`play`, `undo`, `restart`, `create`, `settings`) ao histórico do disco. */
+    seriesApply: (dirPath, op) => ipcRenderer.invoke("files:seriesApply", dirPath, op),
+    /** Resolve cópias em conflito do histórico: `"merge"` ou o nome da versão a manter. */
+    seriesResolve: (dirPath, choice) => ipcRenderer.invoke("files:seriesResolve", dirPath, choice),
+    /** Renomeia um arquivo (mesma extensão, sem sobrescrever); a série e a marca de oculto seguem o nome. */
+    renameFile: (filePath, newName) => ipcRenderer.invoke("files:rename", filePath, newName),
+    /** Marca ou desmarca "não mostrar" — gravado na própria pasta (`.louvorja-ocultos.json`). */
+    setFileHidden: (filePath, hidden) => ipcRenderer.invoke("files:setHidden", filePath, hidden),
+    /** Move o arquivo para a Lixeira do sistema. */
+    trashFile: (filePath) => ipcRenderer.invoke("files:trash", filePath),
+    /** Mostra o arquivo no Finder/Explorer. */
+    revealFile: (filePath) => ipcRenderer.invoke("files:reveal", filePath),
+    /**
+     * Pasta da igreja (programas e modelos do Modo apresentação):
+     * `stat`, `read`, `write`, `list`, `conflicts`, `resolve`.
+     */
+    church: (op, ...args) => ipcRenderer.invoke("files:church", op, ...args),
+    /** Nome deste computador, para "salvo no computador X". */
+    computerName: () => ipcRenderer.invoke("files:computerName"),
+    /** PowerPoint → PDF pelo PowerPoint instalado (com cache). */
+    /** `opts.force`: "Gerar de novo" (ignora o PDF guardado). */
+    convertPresentation: (filePath, opts) =>
+      ipcRenderer.invoke("files:convertPresentation", filePath, opts && opts.force === true ? { force: true } : undefined),
     /** Verifica quais arquivos remotos já estão no disco. */
     checkLocal: (remotePaths) => ipcRenderer.invoke("storage:checkLocal", remotePaths),
     /** Remove arquivos de mídia do cache local (paths remotos relativos). */
@@ -727,7 +814,7 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
    * Registra um callback para eventos emitidos pelo servidor HTTP ao renderer.
    * Eventos: "http:song-slides", "http:open-song", "http:drawing-number",
    * "http:drawing-name", "http:libras-bundle", "http:projections-close",
-   * "http:online-videos", "http:custom-music", "http:background-sound",
+   * "http:online-videos", "http:custom-music", "http:music-album", "http:background-sound",
    * "http:volume", "http:media-library"
    * Retorna função de cleanup que remove todos os listeners.
    *
@@ -744,6 +831,7 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
       "http:projections-close",
       "http:online-videos",
       "http:custom-music",
+      "http:music-album",
       "http:background-sound",
       "http:volume",
       "http:media-library",

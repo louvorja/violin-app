@@ -29,6 +29,11 @@ const CAMADAS: { arquivo: string; seletor: string; oQueE: string }[] = [
   { arquivo: "src/layout/shell/AppMenu.vue", seletor: ".app-menu-overlay", oQueE: "menu do app" },
   { arquivo: "src/components/ui/LjToast.vue", seletor: ".lj-toast", oQueE: "aviso com ação" },
   {
+    arquivo: "src/modules/presentation_mode/components/ScreenZoom.vue",
+    seletor: ".pm-screen-zoom",
+    oQueE: "tela em tamanho cheio do modo apresentação",
+  },
+  {
     arquivo: "src/modules/bible_search/components/BookPicker.vue",
     seletor: ".book-picker-popover",
     oQueE: "seletor de livro",

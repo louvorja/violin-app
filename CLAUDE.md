@@ -258,8 +258,9 @@ alguém precisa saber o endereço antes de abri-la.
 
 ```
 <dados>/
-├── files/      acervo — áudio, capas, imagens; e files/canva/ com os exports do Canva
+├── files/      acervo — áudio, capas, imagens; files/canva/ com os exports do Canva
 ├── storage/    preferências — user_data.json, config.json, monitor_prefs.json
+├── pptx/       PDFs gerados de PowerPoint e as fontes deles (docs/pptx.md) — fora do acervo
 ├── library/    documentos — liturgias salvas, playlists, coletâneas, itens agendados
 ├── Videos/     vídeos online baixados e suas marcas de manter
 ├── json_db/    cache das respostas JSON
@@ -606,6 +607,11 @@ const song = await $database.get(`music_${id}`);
 | `libras_toggle`        | ShellTools / ribbon             | Projection                                  |
 | `libras_translate`     | useLibras composable            | Projection, Obs                             |
 | `request_libras_state` | LibrasOverlay                   | main.js (re-emite LIBRAS_TOGGLE)            |
+| `projection_clear`     | presentation_mode               | Views de projeção e retorno (cobre a tela)   |
+| `return_override`      | presentation_mode, Esc          | Views de retorno (conteúdo só no retorno)    |
+| `return_override_state`| presentation_mode               | ReturnOverride (relógio do vídeo no retorno) |
+
+Tabela completa, com os pedidos de estado (`request_*`), em `docs/broadcast.md`.
 
 ---
 

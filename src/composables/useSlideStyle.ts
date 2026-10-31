@@ -369,6 +369,17 @@ const _readSlideOpts = (): SlideCfg => {
     if (typeof bottomAlign === "string") merged.return_bottom_text_align = bottomAlign;
   }
 
+  // Escala do texto por tela, ajustada ao vivo no modo apresentação: vale por
+  // cima do tamanho configurado (padrão ou personalizado nas Opções).
+  const mainScale = _numeroNaFaixa(KEYS.OPTIONS.SLIDE.MAIN_TEXT_SCALE, 100, 50, 200) / 100;
+  const returnScale = _numeroNaFaixa(KEYS.OPTIONS.SLIDE.RETURN_TEXT_SCALE, 100, 50, 200) / 100;
+  merged.font_size_cover *= mainScale;
+  merged.font_size_lyric *= mainScale;
+  merged.font_size_aux *= mainScale;
+  merged.return_font_size_cover *= returnScale;
+  merged.return_font_size_lyric *= returnScale;
+  merged.font_size_next *= returnScale;
+
   // Nunca deixa background_color vazio — senão o v-if da div de fundo
   // no Slide.vue avalia false e a div não renderiza.
   if (!merged.background_color) merged.background_color = "#000000";

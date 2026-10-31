@@ -613,8 +613,8 @@ function register(app, ctx) {
   //   action=songs  → faixas de um álbum (`album:<id>` ou `collection:<uuid>`)
   //   (a capa tem rota própria, logo abaixo)
   //
-  // Tudo legível no main: jsonCache (catálogo) e docStore (coletâneas) — sem
-  // ida ao renderer, diferente de Vídeos Online.
+  // A lista usa jsonCache e docStore; as faixas também consultam o IndexedDB
+  // do renderer, onde o instalador do bundle grava os detalhes dos álbuns.
   // ---------------------------------------------------------------
   app.get("/api/music-library", async (req, res) => {
     if (!hasDevicePermission(req, "music")) {
@@ -750,6 +750,13 @@ function register(app, ctx) {
           if (!/^\d+$/.test(id)) {
             return res.status(400).json({ error: "album inválido" });
           }
+          if (!Number.isSafeInteger(Number(id)) || Number(id) <= 0) {
+            return res.status(400).json({ error: "album inválido" });
+          }
+          const userData = typeof getUserData === "function" ? getUserData() : {};
+          if ((userData?.options?.disabled_albums ?? []).some((value) => Number(value) === Number(id))) {
+            return res.status(404).json({ error: "Álbum não encontrado no banco local" });
+          }
           // Hinários não têm `album_<id>.json`: as faixas vêm direto de
           // `{lang}_hymnal[_1996].json`. `disabled_albums` é a fonte única —
           // o toggle do módulo não esconde o acervo.
@@ -775,8 +782,64 @@ function register(app, ctx) {
             return res.json({ status: "ok", songs });
           }
 
-          const detail = await readJsonCacheOrFetch(`album_${id}`);
+          let detail = null;
+          let rendererError = null;
+          const mainWindow = getValidMainWindow();
+          if (mainWindow) {
+            try {
+              const reply = await requestRenderer(
+                mainWindow,
+                res,
+                "http:music-album",
+                { albumId: Number(id) },
+                {
+                  prefix: "music-album",
+                  timeoutMs: 8_000,
+                  maxPayloadBytes: 8 * 1024 * 1024,
+                  validatePayload: (payload) => {
+                    if (!isPlainObject(payload)) return false;
+                    const album = payload.album;
+                    if (album === null) return true;
+                    return (
+                      isPlainObject(album) &&
+                      album.id_album === Number(id) &&
+                      typeof album.name === "string" &&
+                      album.name.length <= 1_000 &&
+                      Array.isArray(album.musics) &&
+                      album.musics.length <= 5_000 &&
+                      album.musics.every(
+                        (music) =>
+                          isPlainObject(music) &&
+                          Number.isSafeInteger(music.id_music) &&
+                          music.id_music >= 0 &&
+                          typeof music.name === "string" &&
+                          music.name.length <= 500 &&
+                          ((typeof music.duration === "string" && music.duration.length <= 16) ||
+                            (Number.isFinite(music.duration) && music.duration >= 0)) &&
+                          (music.has_instrumental_music === 0 || music.has_instrumental_music === 1)
+                      )
+                    );
+                  },
+                }
+              );
+              detail = reply.album;
+            } catch (error) {
+              rendererError = error;
+            }
+          }
+          if (
+            res.headersSent ||
+            res.writableEnded ||
+            res.destroyed ||
+            rendererError?.code === "CLIENT_CLOSED"
+          )
+            return;
+          // Instalações anteriores ainda podem ter apenas o cache em disco; sem
+          // ele, o banco remoto (o download sob demanda do controle remoto).
+          detail ??= await readJsonCacheOrFetch(`album_${id}`);
           if (!detail) {
+            if (rendererError)
+              return sendRendererError(res, rendererError, "Timeout ao buscar músicas do álbum");
             return res.status(404).json({ error: "Álbum não encontrado no banco local" });
           }
           const albumName = typeof detail.name === "string" ? detail.name : "";

@@ -27,6 +27,12 @@ import { isWebFileStoreSupported, webDownload, webStorage } from "@/helpers/WebF
 
 const api = typeof window !== "undefined" ? (window.louvorjaApi ?? null) : null;
 
+/** Resposta das operações de arquivo que só o desktop faz, no navegador. */
+const _unsupported = () =>
+  Promise.resolve(
+    /** @type {{ ok: false, error: string }} */ ({ ok: false, error: "unsupported" })
+  );
+
 export default {
   /**
    * true quando rodando dentro do Electron, false no browser/PWA.
@@ -182,7 +188,7 @@ export default {
    * Vídeos do YouTube baixados para projeção sem anúncios, ou deixados prontos de antemão.
    * null quando rodando no browser/PWA — lá só existe o player embutido.
    *
-   * @returns {{ status, ensure, stream, cancel, has, list, keep, prepare, remove, clear, onProgress } | null}
+   * @returns {{ status, ensure, stream, cancel, has, list, prefetch, collection, accountStatus, accountLogin, accountLogout, keep, prepare, remove, clear, onProgress } | null}
    */
   get onlineVideo() {
     return api?.onlineVideo ?? null;
@@ -331,6 +337,76 @@ export default {
   /** Lista arquivos de um diretório local (auto-populate). */
   readDir(dirPath) {
     return api?.storage?.readDir?.(dirPath) ?? Promise.resolve([]);
+  },
+
+  /** Um nível de uma pasta, com tamanho e data. No navegador: `{ ok: false }`. */
+  listDir(dirPath) {
+    return api?.storage?.listDir?.(dirPath) ?? _unsupported();
+  },
+
+  /** Quais arquivos estão só na nuvem. No navegador: nenhum (`{}`). */
+  cloudStates(paths) {
+    return api?.storage?.cloudStates?.(paths) ?? Promise.resolve({});
+  },
+
+  /** Baixa o arquivo da nuvem para o computador. No navegador: `{ ok: false }`. */
+  cloudDownload(filePath) {
+    return api?.storage?.cloudDownload?.(filePath) ?? _unsupported();
+  },
+
+  /** Andamento dos downloads da nuvem; devolve a função que para de ouvir. */
+  onCloudProgress(cb) {
+    return api?.storage?.onCloudProgress?.(cb) ?? (() => {});
+  },
+
+  /** Histórico da série de vídeos da pasta. No navegador: `{ ok: false }`. */
+  seriesRead(dirPath) {
+    return api?.storage?.seriesRead?.(dirPath) ?? _unsupported();
+  },
+
+  /** Resolve as cópias em conflito do histórico: `"merge"` ou o nome da versão a manter. */
+  seriesResolve(dirPath, choice) {
+    return api?.storage?.seriesResolve?.(dirPath, choice) ?? _unsupported();
+  },
+
+  /** Renomeia um arquivo da biblioteca. No navegador: `{ ok: false }`. */
+  renameFile(filePath, newName) {
+    return api?.storage?.renameFile?.(filePath, newName) ?? _unsupported();
+  },
+
+  /** "Não mostrar" na biblioteca, gravado na pasta. No navegador: `{ ok: false }`. */
+  setFileHidden(filePath, hidden) {
+    return api?.storage?.setFileHidden?.(filePath, hidden) ?? _unsupported();
+  },
+
+  /** Move o arquivo para a Lixeira. No navegador: `{ ok: false }`. */
+  trashFile(filePath) {
+    return api?.storage?.trashFile?.(filePath) ?? _unsupported();
+  },
+
+  /** Mostra o arquivo no Finder/Explorer. No navegador: `{ ok: false }`. */
+  revealFile(filePath) {
+    return api?.storage?.revealFile?.(filePath) ?? _unsupported();
+  },
+
+  /** PowerPoint → PDF pelo PowerPoint do computador. No navegador: `{ ok: false }`. */
+  convertPresentation(filePath, opts) {
+    return api?.storage?.convertPresentation?.(filePath, opts) ?? _unsupported();
+  },
+
+  /** Aplica uma operação ao histórico da série, sobre o que está no disco agora. */
+  seriesApply(dirPath, op) {
+    return api?.storage?.seriesApply?.(dirPath, op) ?? _unsupported();
+  },
+
+  /** Pasta da igreja do Modo apresentação (`stat`, `read`, `write`…). No navegador: `{ ok: false }`. */
+  church(op, ...args) {
+    return api?.storage?.church?.(op, ...args) ?? _unsupported();
+  },
+
+  /** Nome deste computador. No navegador: "". */
+  computerName() {
+    return api?.storage?.computerName?.() ?? Promise.resolve("");
   },
 
   /**

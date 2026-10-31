@@ -48,6 +48,21 @@ export interface ModuleOptions {
 }
 
 /**
+ * O que um módulo pede ao shell. Fica no manifesto para o shell não precisar
+ * conhecer módulo nenhum pelo nome.
+ */
+export interface ModuleShellBehavior {
+  /** Pode esconder o ribbon e as abas; a escolha fica gravada nesta chave de UserData. */
+  expandedKey?: string;
+  /** Aberto, esconde a barra da liturgia: o módulo tem o próprio roteiro. */
+  hidesLiturgySidebar?: boolean;
+  /** Com a aba ativa, esconde o mini-player do rodapé: o módulo tem os próprios controles. */
+  hidesFooterPlayer?: boolean;
+  /** Aberto, o Esc tira tudo da tela sem pedir confirmação — é a saída de emergência. */
+  immediateEscape?: boolean;
+}
+
+/**
  * Dependência externa com metadados de versão e CDN
  */
 export interface ExternalDependency {
@@ -106,6 +121,7 @@ export interface Module {
    * Cada campo define type, label, default e (para select) options.
    */
   customization?: Record<string, CustomizationField>;
+  shell?: ModuleShellBehavior;
 }
 
 /**

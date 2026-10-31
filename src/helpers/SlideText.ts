@@ -1,3 +1,10 @@
+import Strings from "@/helpers/Strings";
+
+/** Texto do editor/.slja vira HTML só ao montar a apresentação. */
+export function plainSlideText(text: string | undefined): string {
+  return Strings.escapeHtml(text || "").replace(/\r\n|\r|\n/g, "<br>");
+}
+
 /**
  * Texto principal de um slide, igual em todas as telas (projeção, retorno, OBS,
  * operador e controle remoto).

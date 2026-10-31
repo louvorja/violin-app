@@ -178,6 +178,13 @@ mac:
   # compila o .icon em Assets.car e gera um .icns de compatibilidade.
   icon: build/icon-mac.icon
   category: public.app-category.music
+  # Textos das permissões do macOS. `NSAppDataUsageDescription` é o que o
+  # sistema usa quando o LouvorJA precisa entrar no container do PowerPoint
+  # (macOS 14+; no macOS 27 o acesso é concedido em Arquivos e Pastas).
+  # `NSAppleEventsUsageDescription` cobre a automação do PowerPoint.
+  extendInfo:
+    NSAppDataUsageDescription: "O LouvorJA abre o Microsoft PowerPoint para converter a apresentação em PDF."
+    NSAppleEventsUsageDescription: "O LouvorJA controla o Microsoft PowerPoint para gerar os slides da apresentação."
   # Assinatura + notarização (certificado Developer ID + credenciais Apple
   # fornecidas via env no CI: CSC_LINK/CSC_KEY_PASSWORD + APPLE_ID/
   # APPLE_APP_SPECIFIC_PASSWORD/APPLE_TEAM_ID).

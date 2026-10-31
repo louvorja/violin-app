@@ -11,6 +11,7 @@ enum RoleContribuitorEnum {
   electron = "Electron",
   delphi = "Delphi",
   api = "API",
+  appMobile = "App Mobile",
 }
 
 const ROLE_CONTRIBUTOR: Record<RoleContribuitorEnum, RoleContribuitor> = {
@@ -34,6 +35,11 @@ const ROLE_CONTRIBUTOR: Record<RoleContribuitorEnum, RoleContribuitor> = {
     icon: ICONS.PROJETOS.API,
     color: "#43a047",
   },
+  [RoleContribuitorEnum.appMobile]: {
+    name: RoleContribuitorEnum.appMobile,
+    icon: ICONS.PROJETOS.APP_MOBILE,
+    color: "#ff9800",
+  }
 };
 
 export interface Contributors {
@@ -132,10 +138,20 @@ export const CONTRIBUTORS: ContributorsCategory[] = [
         description: [
           ROLE_CONTRIBUTOR[RoleContribuitorEnum.web],
           ROLE_CONTRIBUTOR[RoleContribuitorEnum.electron],
+          ROLE_CONTRIBUTOR[RoleContribuitorEnum.appMobile],
         ],
         website: "https://79team.com",
         github: "diego-menezes",
         linkedin: "menezes-diego",
+      },
+      {
+        name: "Elias Matheus Oliveira",
+        description: [
+          ROLE_CONTRIBUTOR[RoleContribuitorEnum.electron],
+        ],
+        email: "eliasmatheus@hotmail.com",
+        github: "eliasmatheus",
+        linkedin: "eliasmatheus",
       },
       {
         name: "Gabriel Kramer Mota",
@@ -154,15 +170,21 @@ export const CONTRIBUTORS: ContributorsCategory[] = [
         description: [
           ROLE_CONTRIBUTOR[RoleContribuitorEnum.web],
           ROLE_CONTRIBUTOR[RoleContribuitorEnum.electron],
+          ROLE_CONTRIBUTOR[RoleContribuitorEnum.api],
         ],
         github: "juanaleixo",
         linkedin: "juanaleixo",
       },
       {
-        name: "Paulo Vitor",
+        name: "Marcelo Araújo",
         description: [
-          ROLE_CONTRIBUTOR[RoleContribuitorEnum.web],
+          ROLE_CONTRIBUTOR[RoleContribuitorEnum.electron],
         ],
+        github: "marceloaraujo7-dev",
+      },
+      {
+        name: "Paulo Vitor",
+        description: [ROLE_CONTRIBUTOR[RoleContribuitorEnum.web]],
         email: "paulovitor.ssantos@outlook.com",
         github: "paulo-ssantos",
         linkedin: "paulo-2048",

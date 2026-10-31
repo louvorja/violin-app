@@ -99,6 +99,37 @@ it("recupera pela rede quando a leitura do IndexedDB falha", async () => {
   expect(fetchMock).toHaveBeenCalledOnce();
 });
 
+it("o controle remoto lê as faixas instaladas no banco sem buscar a rede", async () => {
+  const database = await importDatabase();
+  const { readRemoteMusicAlbum } = await import("@/helpers/RemoteMusicAlbum");
+  await database.seed("album_9", {
+    id_album: 9,
+    name: "Álbum instalado",
+    musics: [
+      { id_music: 2, name: "Faixa dois", duration: 95, has_instrumental_music: 1 },
+      null,
+      { id_music: 0, name: "Inválida" },
+      { id_music: "1", name: "Faixa um", duration: "00:03:39" },
+    ],
+  });
+  expect(await readRemoteMusicAlbum({ albumId: 9 })).toEqual({
+    album: {
+      id_album: 9,
+      name: "Álbum instalado",
+      musics: [
+        { id_music: 2, name: "Faixa dois", duration: 95, has_instrumental_music: 1 },
+        { id_music: 1, name: "Faixa um", duration: "00:03:39", has_instrumental_music: 0 },
+      ],
+    },
+  });
+  expect(await readRemoteMusicAlbum({ albumId: 10 })).toEqual({ album: null });
+  for (const albumId of ["../config", "9", 0, -1, 1.5, Infinity]) {
+    expect(await readRemoteMusicAlbum({ albumId })).toEqual({ album: null });
+  }
+  expect(fetchMock).not.toHaveBeenCalled();
+  expect(alertError).not.toHaveBeenCalled();
+});
+
 beforeEach(() => {
   setActivePinia(createPinia());
   tables.clear();

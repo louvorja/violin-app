@@ -1210,6 +1210,38 @@
             {{ $t("options.videos.cache_clear") }}
           </LjButton>
         </div>
+        <div class="opt-row">
+          <span class="opt-label">
+            {{ $t("options.videos.account_title") }} —
+            {{
+              youtubeLoggedIn
+                ? $t("options.videos.account_connected")
+                : $t("options.videos.account_none")
+            }}
+          </span>
+          <LjButton
+            v-if="youtubeLoggedIn"
+            variant="default"
+            size="sm"
+            :disabled="youtubeBusy"
+            data-testid="opt-youtube-logout"
+            @click="youtubeLogout"
+          >
+            {{ $t("options.videos.account_logout") }}
+          </LjButton>
+          <LjButton
+            v-else
+            variant="default"
+            size="sm"
+            :icon="ICONS.MEDIA.YOUTUBE"
+            :loading="youtubeBusy"
+            data-testid="opt-youtube-login"
+            @click="youtubeLogin"
+          >
+            {{ $t("options.videos.account_login") }}
+          </LjButton>
+        </div>
+        <p class="opt-hint">{{ $t("options.videos.account_hint") }}</p>
       </template>
       <div class="opt-row">
         <label class="opt-checkbox">
@@ -1329,6 +1361,21 @@
           <span>{{ $t("options.player.use_system_media_player") }}</span>
         </label>
         <p class="opt-hint">{{ $t("options.player.use_system_media_player_hint") }}</p>
+      </div>
+
+      <div v-if="isDesktop" class="opt-row opt-row--col">
+        <div class="opt-row">
+          <label class="opt-label" for="opt-presentation-engine">
+            {{ $t("options.player.presentation_engine") }}
+          </label>
+          <LjSelect
+            id="opt-presentation-engine"
+            :items="opcoesMotorApresentacao"
+            :model-value="motorApresentacao"
+            @update:model-value="saveUserData(KEYS.OPTIONS.FILE_PROJECTION.PRESENTATION_ENGINE, String($event))"
+          />
+        </div>
+        <p class="opt-hint">{{ dicaMotorApresentacao }}</p>
       </div>
     </section>
 
@@ -1572,6 +1619,7 @@ import Platform from "@/helpers/Platform";
 import Telemetry from "@/helpers/Telemetry";
 import $alert from "@/helpers/Alert";
 import { DEFAULT_MAX_HEIGHT, MAX_HEIGHTS, normalizeMaxHeight } from "@/helpers/OnlineVideo";
+import { useYoutubeAccount } from "@/composables/useYoutubeAccount";
 import { ICONS } from "@/config/Icons";
 import { KEYS } from "@/constants/UserDataKeys";
 import { DEFAULT_BACKGROUND_COLOR, MAIN_BACKGROUND_ID, Settings } from "@/types/Settings";
@@ -1680,6 +1728,46 @@ const opcoesIdioma = computed(() => [
   { value: "pt", label: "Português" },
   { value: "es", label: "Español" },
 ]);
+
+/*
+ * Programa que gera e apresenta PowerPoint. O aviso explica o efeito colateral
+ * de abrir um arquivo de um programa no outro, e se a escolha não está
+ * instalada aqui.
+ */
+const programasInstalados = ref<{ powerpoint: boolean; libreoffice: boolean } | null>(null);
+const motorApresentacao = computed(
+  () => getUserData<string>(KEYS.OPTIONS.FILE_PROJECTION.PRESENTATION_ENGINE, "auto") || "auto"
+);
+const opcoesMotorApresentacao = computed(() => {
+  const inst = programasInstalados.value;
+  const nome = (id: "powerpoint" | "libreoffice", rotulo: string) =>
+    inst && !inst[id] ? `${rotulo} — ${t("options.player.engine_missing")}` : rotulo;
+  return [
+    { value: "auto", label: t("options.player.engine_auto") },
+    { value: "powerpoint", label: nome("powerpoint", "Microsoft PowerPoint") },
+    { value: "libreoffice", label: nome("libreoffice", "LibreOffice") },
+  ];
+});
+const dicaMotorApresentacao = computed(() => {
+  const m = motorApresentacao.value;
+  const inst = programasInstalados.value;
+  let dica = t(`options.player.engine_hint_${m === "powerpoint" || m === "libreoffice" ? m : "auto"}`);
+  if (inst && (m === "powerpoint" || m === "libreoffice") && !inst[m]) {
+    dica += " " + t("options.player.engine_hint_fallback");
+  }
+  return dica;
+});
+onMounted(() => {
+  const api = (Platform.api as { pptx?: { status?: (e?: string) => Promise<unknown> } } | null)?.pptx;
+  if (!api?.status) return;
+  void api
+    .status("auto")
+    .then((r) => {
+      const a = (r as { available?: { powerpoint?: unknown; libreoffice?: unknown } } | null)?.available;
+      if (a) programasInstalados.value = { powerpoint: a.powerpoint === true, libreoffice: a.libreoffice === true };
+    })
+    .catch(() => {});
+});
 
 const opcoesPosicaoFundo = computed(() => [
   { value: "cover", label: t("options.slides.pos_cover") },
@@ -1996,6 +2084,13 @@ function clearVideoCache(): void {
     await refreshVideoCache();
   });
 }
+
+const {
+  loggedIn: youtubeLoggedIn,
+  busy: youtubeBusy,
+  login: youtubeLogin,
+  logout: youtubeLogout,
+} = useYoutubeAccount(() => isDesktop.value);
 
 onMounted(() => {
   if (isDesktop.value) void refreshVideoCache();

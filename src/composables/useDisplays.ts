@@ -58,6 +58,12 @@ const lastIdentifyError = ref<string | null>(null);
 const lastIdentifiedAt = ref<number | null>(null);
 const roles = ref<RoleState[]>([]);
 const screenAccess = ref<string>("native");
+/**
+ * Sobe a cada troca de papel de uma feature (as Opções mudando "Projetar
+ * arquivos em", por exemplo). O main não avisa dessas trocas; quem depende
+ * delas observa este contador em vez de perguntar de tempos em tempos.
+ */
+const featureRolesVersion = ref(0);
 let refreshInFlight: Promise<void> | null = null;
 let mountedConsumers = 0;
 const sharedCleanups: (() => void)[] = [];
@@ -93,6 +99,7 @@ export function useDisplays(): {
   setRole: (role: string, displayId: number | string | null) => Promise<void>;
   getFeatureRole: (feature: string) => Promise<string | null>;
   setFeatureRole: (feature: string, role: string | null) => Promise<void>;
+  featureRolesVersion: Ref<number>;
 } {
   async function refresh(): Promise<void> {
     if (refreshInFlight) return refreshInFlight;
@@ -220,6 +227,7 @@ export function useDisplays(): {
       if (role) next[feature] = role;
       else delete next[feature];
       $userdata.set(KEYS.OPTIONS.DISPLAYS.FEATURE_ROLES, next);
+      featureRolesVersion.value += 1;
       return;
     }
     try {
@@ -227,6 +235,7 @@ export function useDisplays(): {
     } catch (err) {
       console.error("[useDisplays] setFeatureRole falhou:", err);
     }
+    featureRolesVersion.value += 1;
   }
 
   async function identify(durationMs = 5000): Promise<void> {
@@ -309,5 +318,6 @@ export function useDisplays(): {
     setRole,
     getFeatureRole,
     setFeatureRole,
+    featureRolesVersion,
   };
 }

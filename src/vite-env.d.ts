@@ -78,6 +78,80 @@ declare global {
     continuation?: string | null;
   }
 
+  /** Situação de uma fonte usada pelo .pptx depois da verificação. */
+  interface PptxFont {
+    name: string;
+    /**
+     * ok = já instalada · office = fonte de nuvem do Office · embedded = usada de
+     * dentro do arquivo · installed = instalada agora · missing = não encontrada ·
+     * unmatched = instalada, mas com nome diferente do que o arquivo pede
+     */
+    status: "ok" | "office" | "embedded" | "installed" | "missing" | "unmatched";
+    source: "embedded" | "google" | null;
+  }
+
+  type PptxConvertResult =
+    | {
+        ok: true;
+        path: string;
+        cached: boolean;
+        converter: string;
+        fonts: PptxFont[];
+        /** O PowerPoint estava com outra apresentação aberta e não leu as fontes novas. */
+        staleFonts: boolean;
+        /** A conferência das fontes falhou (a conversão seguiu sem ela). */
+        fontsError?: string;
+        /** O que o modo imagem não leva: slides animados e mídias no arquivo. */
+        features?: PptxFeatures;
+        /** Este computador pode "Apresentar com o PowerPoint" (Windows + PowerPoint). */
+        nativeAvailable?: boolean;
+        /** O macOS bloqueou o PowerPoint e a conversão caiu para o LibreOffice. */
+        permissionFallback?: boolean;
+      }
+    | { ok: false; code: string; message: string };
+
+  interface PptxFeatures {
+    animatedSlides: number;
+    videos: number;
+    audios: number;
+  }
+
+  /** Estado da apresentação nativa (o próprio PowerPoint no PA). */
+  interface PptxNativeState {
+    active: boolean;
+    /** Quem está apresentando. */
+    engine?: "powerpoint" | "libreoffice";
+    index?: number;
+    total?: number;
+    black?: boolean;
+    /** Por que parou: "fim" = passou do último slide. */
+    motivo?: string;
+  }
+
+  type PptxNativeResult =
+    | { ok: true; state: PptxNativeState }
+    | { ok: false; code: string; message: string };
+
+  type PptxFontInstallResult =
+    | { ok: true; installed: number; families?: string[] }
+    | { ok: false; code: string; message: string };
+
+  interface PptxProgress {
+    path: string;
+    phase: "fonts" | "font" | "converting" | "done";
+    name?: string;
+    status?: string;
+    source?: string | null;
+    converter?: string;
+    /** Na fase "fonts": a lista completa de fontes do arquivo, já classificadas. */
+    fonts?: PptxFont[];
+    /** Na fase "fonts": a conferência das fontes falhou, com o motivo. */
+    error?: string;
+    /** Na fase "converting": slides já gerados e o total (quando o conversor informa). */
+    done?: number;
+    total?: number;
+  }
+
   interface LouvorjaApi {
     platform: string;
     systemMemory?: () => { total: number; free: number };
@@ -195,6 +269,65 @@ declare global {
       chooseFile: (kind?: "media") => Promise<string | null>;
       chooseImage: () => Promise<string | null>;
       chooseDir: () => Promise<string | null>;
+      listDir: (dirPath: string) => Promise<
+        | {
+            ok: true;
+            entries: {
+              name: string;
+              path: string;
+              isDir: boolean;
+              ext: string;
+              size: number;
+              mtimeMs: number;
+            }[];
+          }
+        | { ok: false; error: string }
+      >;
+      seriesRead?: (
+        dirPath: string
+      ) => Promise<
+        | {
+            ok: true;
+            series: import("./types/Series").SeriesDoc | null;
+            versions: import("./types/Series").SeriesVersion[];
+          }
+        | { ok: false; error: string }
+      >;
+      seriesResolve?: (
+        dirPath: string,
+        choice: string
+      ) => Promise<
+        | { ok: true; series: import("./types/Series").SeriesDoc | null; partial?: number }
+        | { ok: false; error: string }
+      >;
+      seriesApply?: (
+        dirPath: string,
+        op: import("./types/Series").SeriesOp
+      ) => Promise<{ ok: true; series: import("./types/Series").SeriesDoc } | { ok: false; error: string }>;
+      church?: (op: string, ...args: unknown[]) => Promise<unknown>;
+      computerName?: () => Promise<string>;
+      /** `force`: ignora o PDF guardado ("Gerar de novo") e devolve um endereço novo. */
+      convertPresentation?: (
+        filePath: string,
+        opts?: { force?: boolean }
+      ) => Promise<
+        | {
+            ok: true;
+            pdf: string;
+            cached: boolean;
+            converter?: string;
+            missingFonts?: string[];
+            fonts?: PptxFont[];
+            staleFonts?: boolean;
+            fontsError?: string;
+            permissionFallback?: boolean;
+            features?: PptxFeatures | null;
+          }
+        | { ok: false; error: string; message?: string }
+      >;
+      cloudStates?: (paths: string[]) => Promise<Record<string, "local" | "cloud">>;
+      cloudDownload?: (filePath: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+      onCloudProgress?: (cb: (data: { path: string; percent: number }) => void) => () => void;
       setDataDir: (dir: string, opts?: { moveExisting?: boolean }) => Promise<void>;
       enforceQuota: (maxBytes: number) => Promise<void>;
       checkLocal: (paths: string[]) => Promise<Record<string, "own" | "classic" | false>>;
@@ -306,6 +439,17 @@ declare global {
       cancel: (id: string) => Promise<boolean>;
       has: (id: string) => Promise<boolean>;
       list: () => Promise<import("./helpers/OnlineVideo").OnlineVideoFile[]>;
+      prefetch?: (id: string, opts?: { maxHeight?: number }) => Promise<{ ok: boolean }>;
+      accountStatus?: () => Promise<import("./helpers/OnlineVideo").YouTubeAccountStatus>;
+      accountLogin?: () => Promise<import("./helpers/OnlineVideo").YouTubeAccountStatus>;
+      accountLogout?: () => Promise<import("./helpers/OnlineVideo").YouTubeAccountStatus>;
+      collection?: (
+        source: import("./helpers/OnlineVideo").YouTubeCollectionSource,
+        range: { start: number; count: number; lang?: string }
+      ) => Promise<
+        | ({ ok: true } & import("./helpers/OnlineVideo").YouTubeCollectionPage)
+        | { ok: false; error: { kind: string; message: string } }
+      >;
       keep: (id: string) => Promise<boolean>;
       prepare: () => Promise<{ ok: boolean; ready?: boolean; error?: unknown }>;
       remove: (id: string) => Promise<boolean>;
@@ -345,6 +489,46 @@ declare global {
      * Integração Canva. OAuth2+PKCE, listagem e `view_url` acontecem no main;
      * aqui só chega resultado já validado.
      */
+    /**
+     * PowerPoint fiel: instala as fontes que faltam e converte o .pptx em PDF
+     * pelo próprio PowerPoint (Windows/Mac) ou pelo LibreOffice.
+     */
+    pptx?: {
+      /** `native`: dá para apresentar pelo próprio PowerPoint neste computador. */
+      status: (engine?: "auto" | "powerpoint" | "libreoffice") => Promise<{
+        ok: true;
+        converter: string | null;
+        engine?: "powerpoint" | "libreoffice" | null;
+        fallback?: boolean;
+        available?: { powerpoint: boolean; libreoffice: boolean };
+        platform: string;
+        native?: boolean;
+      }>;
+      /** Abre Ajustes → Privacidade e Segurança → Arquivos e Pastas (macOS 27+). */
+      openPermissionSettings: () => Promise<{ ok: boolean }>;
+      /** Pendente durante a conversão (segundos a alguns minutos). */
+      convert: (path: string, force?: boolean, engine?: "auto" | "powerpoint" | "libreoffice") => Promise<PptxConvertResult>;
+      /** Diálogo nativo de fontes (.ttf/.otf); instala para o usuário. */
+      installFonts: () => Promise<PptxFontInstallResult>;
+      /** Animações e mídias de um .pptx (itens antigos, sem a contagem guardada). */
+      features?: (
+        path: string
+      ) => Promise<{ ok: true; features: unknown } | { ok: false; code: string; message: string }>;
+      /** Modo nativo: o PowerPoint apresenta no PA, com animações e mídias. */
+      nativeStart: (
+        path: string,
+        startIndex?: number,
+        engine?: "auto" | "powerpoint" | "libreoffice"
+      ) => Promise<PptxNativeResult>;
+      nativeNav: (action: "next" | "prev" | "goto" | "black", index?: number) => Promise<PptxNativeResult>;
+      nativeEnd: () => Promise<PptxNativeResult>;
+      nativeState: () => Promise<PptxNativeState>;
+      onNativeState: (cb: (state: PptxNativeState) => void) => () => void;
+      /** Instala fontes arrastadas (.ttf, .otf ou o .zip do DaFont). */
+      installFontPaths: (paths: string[]) => Promise<PptxFontInstallResult>;
+      /** Andamento da conversão. Devolve a função de cleanup. */
+      onProgress: (cb: (data: PptxProgress) => void) => () => void;
+    };
     canva: {
       status: () => Promise<CanvaStatus>;
       /** Grava no cofre. O Client Secret nunca volta daqui. */

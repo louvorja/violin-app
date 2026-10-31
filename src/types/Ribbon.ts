@@ -26,6 +26,10 @@ export interface RibbonButton {
   module?: string;
   action?: string;
   disabled?: boolean;
+  /** Caminho no AppData que precisa ser `true` para o botão ficar habilitado — o estado real do app, não só o clique. */
+  enabledWhen?: string;
+  /** Botão de tela aberta: rótulo com a janela no ar ("Parar tela principal"). */
+  labelActive?: string;
   color?: string;
   size?: "small";
   style?: CSSProperties;

@@ -1,0 +1,36 @@
+import { computed, type Ref } from "vue";
+import type { ProgramBibleRef, ProgramItem } from "@/types/Presentation";
+import type { Playable } from "../program/playable";
+import { useFileLibrary } from "./useFileLibrary";
+
+/**
+ * O que a biblioteca marca como "no ar": o arquivo da fila de Anterior/Próximo
+ * que está na tela (borda de destaque e ✕ na grade) e o trecho da Bíblia que o
+ * módulo pôs no ar — da biblioteca ou de um item do programa.
+ */
+export function useLibraryLiveMarks(opts: {
+  liveOrigin: Ref<Playable | null>;
+  /** A música por baixo: marcada quando não há arquivo da fila nas telas. */
+  audioOrigin?: Ref<Playable | null>;
+  liveProgramItem: Ref<ProgramItem | null>;
+}) {
+  const library = useFileLibrary();
+
+  const libraryLivePath = computed(() => {
+    const q = library.queue.value;
+    const origin = opts.liveOrigin.value;
+    const fromQueue = origin?.type === "file" || origin?.type === "folderFile";
+    if (q && fromQueue && q.entries[q.index]?.path === origin.entry.path)
+      return q.entries[q.index].path;
+    const audio = opts.audioOrigin?.value;
+    return audio?.type === "file" || audio?.type === "folderFile" ? audio.entry.path : null;
+  });
+
+  const liveBibleRef = computed<ProgramBibleRef | null>(() => {
+    const origin = opts.liveOrigin.value;
+    if (origin?.type === "bible") return origin.ref;
+    return opts.liveProgramItem.value?.bible ?? null;
+  });
+
+  return { libraryLivePath, liveBibleRef };
+}
