@@ -1038,7 +1038,18 @@
       "kind_pdf": "PDF",
       "kind_image": "Imagen",
       "kind_video": "Video",
-      "kind_file": "Archivo"
+      "kind_file": "Archivo",
+      "start": "Iniciar",
+      "stop": "Detener",
+      "outputs_hint": "Iniciar y Detener hacen lo mismo que los botones del modo presentación en la computadora.",
+      "live_music": "Música",
+      "live_bible": "Biblia",
+      "live_image": "Imagen",
+      "live_video": "Video",
+      "live_file": "Archivo",
+      "live_online_video": "Video en línea",
+      "live_announcements": "Anuncio",
+      "nothing_live_hint": "Nada al aire. Ponga algo al aire desde la computadora o abra un archivo de la Biblioteca."
     }
   },
   "bible": {

@@ -3,9 +3,18 @@
     <!-- O que está no ar -->
     <header class="rpr-head">
       <div class="rpr-head__title">
+        <span v-if="liveLabel" class="rpr-head__kind">{{ liveLabel }}</span>
         <strong>{{ state.title || t("remote_control.presentation.nothing") }}</strong>
         <span v-if="state.total" class="rpr-head__page">
           {{ t("remote_control.presentation.slide", { page: state.page, total: state.total }) }}
+        </span>
+        <span v-else-if="state.live?.total" class="rpr-head__page">
+          {{
+            t("remote_control.presentation.slide", {
+              page: state.live.page,
+              total: state.live.total,
+            })
+          }}
         </span>
       </div>
       <span v-if="state.native" class="rpr-chip">
@@ -17,19 +26,40 @@
       </button>
     </header>
 
-    <!-- Algo no ar, mas o telão desligado: não aparece na projeção -->
-    <div v-if="state.total && !state.screen && !state.native" class="rpr-screen" role="status">
-      <span>{{ t("remote_control.presentation.screen_off") }}</span>
+    <!-- Iniciar e Parar do modo apresentação, para qualquer conteúdo -->
+    <div class="rpr-outputs">
       <button
         type="button"
         class="rpr-pill rpr-pill--on"
-        :disabled="screenBusy"
-        @click="setScreen(true)"
+        data-testid="rpr-start"
+        :disabled="outputsBusy || !state.canStart"
+        :title="t('remote_control.presentation.outputs_hint')"
+        @click="setOutputs('start')"
       >
-        <LjIcon :icon="ICONS.PROJECTION.SCREEN" :size="16" />
-        {{ t("remote_control.presentation.screen_on_btn") }}
+        <LjIcon :icon="ICONS.PROJECTION.START" :size="16" />
+        {{ t("remote_control.presentation.start") }}
+      </button>
+      <button
+        type="button"
+        class="rpr-pill rpr-pill--danger"
+        data-testid="rpr-stop"
+        :disabled="outputsBusy || !state.canStop"
+        :title="t('remote_control.presentation.outputs_hint')"
+        @click="setOutputs('stop')"
+      >
+        <LjIcon :icon="ICONS.PROJECTION.STOP" :size="16" />
+        {{ t("remote_control.presentation.stop") }}
       </button>
     </div>
+
+    <!-- Algo no ar, mas o telão desligado: não aparece na projeção -->
+    <p
+      v-if="(state.total || state.kind) && !state.screen && !state.native"
+      class="rpr-screen"
+      role="status"
+    >
+      {{ t("remote_control.presentation.screen_off") }}
+    </p>
 
     <!-- Controle · Laser · Lousa -->
     <div class="rpr-modes" role="tablist">
@@ -62,6 +92,11 @@
     >
       <div v-if="board" class="rpr-stage__board" />
       <img v-else-if="currentSrc" :src="currentSrc" alt="" draggable="false" />
+      <img v-else-if="liveImageSrc" :src="liveImageSrc" alt="" draggable="false" />
+      <p v-else-if="state.live?.text" class="rpr-stage__text">{{ state.live.text }}</p>
+      <p v-else-if="state.kind" class="rpr-stage__text rpr-stage__text--title">
+        {{ state.title || liveLabel }}
+      </p>
       <p v-else class="rpr-stage__empty">{{ t("remote_control.presentation.no_image") }}</p>
       <canvas ref="inkEl" class="rpr-stage__ink" />
       <div
@@ -79,8 +114,8 @@
     <!-- Controle -->
     <template v-if="mode === 'control'">
       <!-- Nada no ar: começa pela Biblioteca -->
-      <div v-if="!state.total && !state.native" class="rpr-empty">
-        <p class="rpr-hint">{{ t("remote_control.presentation.nothing_hint") }}</p>
+      <div v-if="!state.total && !state.native && !state.kind" class="rpr-empty">
+        <p class="rpr-hint">{{ t("remote_control.presentation.nothing_live_hint") }}</p>
         <button type="button" class="rpr-pill rpr-pill--on" @click="openFiles">
           <LjIcon :icon="ICONS.ACTIONS.FOLDER_OPEN" :size="18" />
           {{ t("remote_control.presentation.open") }}
@@ -136,7 +171,7 @@
       <p v-else-if="state.total" class="rpr-next__end">
         {{ t("remote_control.presentation.last_slide") }}
       </p>
-      <div v-if="state.total || state.native" class="rpr-nav">
+      <div v-if="state.total || state.native || state.kind" class="rpr-nav">
         <button
           type="button"
           class="rpr-btn"
@@ -180,16 +215,6 @@
         >
           <LjIcon :icon="ICONS.UI.EYE_OFF" :size="16" />
           {{ t("remote_control.presentation.black") }}
-        </button>
-        <button
-          v-if="state.total && state.screen && !state.native"
-          type="button"
-          class="rpr-pill"
-          :disabled="screenBusy"
-          @click="setScreen(false)"
-        >
-          <LjIcon :icon="ICONS.PROJECTION.STOP" :size="16" />
-          {{ t("remote_control.presentation.screen_off_btn") }}
         </button>
         <button type="button" class="rpr-pill" @click="emit('go-tab', 'media_library')">
           <LjIcon :icon="ICONS.ACTIONS.UPLOAD" :size="16" />
@@ -378,6 +403,13 @@ interface PresenterState {
   } | null;
   /** A tela principal (o telão) está ligada. */
   screen?: boolean;
+  /** O que está no ar no modo apresentação (music, bible, file, online_video, announcements). */
+  kind?: string | null;
+  /** Iniciar e Parar do módulo, ativos quando os botões dele estão. */
+  canStart?: boolean;
+  canStop?: boolean;
+  /** Além do PDF: letra do slide, versículo ou anúncio; e se há imagem para mostrar. */
+  live?: { text: string; page: number; total: number; image: string } | null;
 }
 
 type FileKind = "pptx" | "pdf" | "image" | "video" | "file";
@@ -445,6 +477,25 @@ const q = (extra = "") => `token=${encodeURIComponent(props.token ?? "")}${extra
 const slideUrl = (n: number, w: number) =>
   `/api/presenter/slide/${n}?w=${w}&v=${state.value.rev}&${q()}`;
 const currentSrc = computed(() => (state.value.page ? slideUrl(state.value.page, 960) : ""));
+/** A imagem no ar (arquivo de imagem), reduzida pelo PC: o celular não abre os endereços de lá. */
+const liveImageSrc = computed(() =>
+  state.value.live?.image
+    ? `/api/presenter/live-image?w=960&v=${state.value.live.image}&${q()}`
+    : ""
+);
+/** O tipo do que está no ar, em palavras, quando não é um arquivo de slides. */
+const liveLabel = computed(() => {
+  if (state.value.total || state.value.native) return "";
+  const k = state.value.kind;
+  if (!k) return "";
+  if (k === "file") {
+    if (state.value.live?.image) return t("remote_control.presentation.live_image");
+    return t("remote_control.presentation.live_file");
+  }
+  const key = `remote_control.presentation.live_${k}`;
+  const label = t(key);
+  return label === key ? "" : label;
+});
 
 // ── Estado ────────────────────────────────────────────────────────────────
 let timer: ReturnType<typeof setInterval> | null = null;
@@ -539,21 +590,22 @@ async function openFile(f: LibraryFile): Promise<void> {
   }
 }
 
-// ── Telão e PowerPoint com animações ──────────────────────────────────────
-const screenBusy = ref(false);
+// ── Iniciar/Parar e PowerPoint com animações ──────────────────────────────
+const outputsBusy = ref(false);
 const nativeBusy = ref(false);
 
-async function setScreen(on: boolean): Promise<void> {
-  if (screenBusy.value) return;
-  screenBusy.value = true;
+/** O Iniciar e o Parar do modo apresentação no computador. */
+async function setOutputs(action: "start" | "stop"): Promise<void> {
+  if (outputsBusy.value) return;
+  outputsBusy.value = true;
   try {
-    const res = await postApi("/api/presenter/screen", { on }, props.token);
+    const res = await postApi(`/api/presenter/${action}`, {}, props.token);
     if (!res.ok) throw new Error(String(res.status));
     await refresh();
   } catch {
     emit("show-snackbar", t("remote_control.errors.generic"), "error");
   } finally {
-    screenBusy.value = false;
+    outputsBusy.value = false;
   }
 }
 
@@ -835,6 +887,14 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
+.rpr-head__kind {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--lj-ui-accent);
+}
+
 .rpr-head__page {
   font-size: 0.8125rem;
   color: var(--lj-text-muted, inherit);
@@ -848,6 +908,12 @@ onBeforeUnmount(() => {
   background: var(--lj-ui-accent);
   color: var(--lj-ui-accent-fg);
   font-size: 0.75rem;
+}
+
+.rpr-outputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--lj-space-2);
 }
 
 .rpr-modes {
@@ -920,6 +986,29 @@ onBeforeUnmount(() => {
 
 .rpr-stage__board {
   background: #fff;
+}
+
+/* Letra do slide, versículo ou anúncio: o "slide" em texto, como no telão. */
+.rpr-stage__text {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--lj-space-4);
+  overflow: auto;
+  text-align: center;
+  white-space: pre-line;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.rpr-stage__text--title {
+  font-weight: 400;
+  color: #ddd;
 }
 
 .rpr-stage__empty {
@@ -1151,9 +1240,7 @@ onBeforeUnmount(() => {
 }
 
 .rpr-screen {
-  display: flex;
-  flex-direction: column;
-  gap: var(--lj-space-2);
+  margin: 0;
   padding: var(--lj-space-3);
   border: 1px solid var(--lj-warning);
   border-radius: var(--lj-ui-radius);

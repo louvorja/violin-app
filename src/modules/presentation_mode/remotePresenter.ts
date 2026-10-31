@@ -10,9 +10,11 @@ import {
   powerPointInfo,
 } from "./composables/usePowerPoint";
 import { presentInPresentationMode } from "./composables/openInPresentationMode";
-import { screenOn, setScreen } from "./composables/useOutputs";
+import { screenOn, setScreen, startOutputs, stopOutputs } from "./composables/useOutputs";
 import $idb from "@/helpers/IndexedDB";
+import $appdata from "@/helpers/AppData";
 import { DB_TABLE } from "@/constants/DbTables";
+import { KEYS } from "@/constants/UserDataKeys";
 
 /**
  * Aba Apresentação do controle remoto (`electron/main/httpServer/presenterRoutes.js`):
@@ -92,12 +94,101 @@ function pptxState(native: ReturnType<typeof usePptxNative>) {
 function respond(requestId: string | undefined, payload: Record<string, unknown>): void {
   if (!requestId) return;
   const api = Platform.httpServer as { respond?: (id: string, p: unknown) => boolean } | null;
-  if (!api?.respond?.(requestId, payload)) console.warn("[http:presenter] resposta descartada", requestId);
+  if (!api?.respond?.(requestId, payload))
+    console.warn("[http:presenter] resposta descartada", requestId);
 }
 
 /** Tecla para os atalhos do app, como o /api/keyboard faz. */
 function key(name: string): void {
-  window.dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true }));
+  window.dispatchEvent(
+    new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true })
+  );
+}
+
+/** Texto que vai para o celular: sem espaço sobrando e com tamanho limitado. */
+function clip(text: unknown, max: number): string {
+  return String(text ?? "")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+    .slice(0, max);
+}
+
+/**
+ * O que está no ar além do PDF, para o celular mostrar: a letra do slide da
+ * música, o versículo, a imagem, o título do vídeo, o anúncio. O PDF tem a
+ * própria tela (slide no ar e miniaturas).
+ */
+function liveDetails(live: ReturnType<typeof useLiveContent>) {
+  switch (live.current.value) {
+    case "music": {
+      const m = live.music;
+      const total = m.slides.value.length;
+      return {
+        text: clip(m.slide.value?.lyric, 1500),
+        page: total ? m.slideIndex.value + 1 : 0,
+        total,
+        image: "",
+      };
+    }
+    case "bible":
+      return { text: clip(live.bible.value?.text, 1500), page: 0, total: 0, image: "" };
+    case "file": {
+      const f = live.file.value;
+      // Imagem: o celular pede a imagem reduzida; vídeo e PDF ficam só no título.
+      const image = f && f.type === "image" ? revOf(f.url) : "";
+      return { text: "", page: 0, total: 0, image };
+    }
+    case "announcements":
+      return { text: clip(live.announcement.value?.texto, 1500), page: 0, total: 0, image: "" };
+    default:
+      return { text: "", page: 0, total: 0, image: "" };
+  }
+}
+
+/**
+ * Iniciar e Parar valem o que os botões do módulo valem. O módulo só publica
+ * isso depois de aberto uma vez: antes disso, o que está ligado decide.
+ */
+function canStartStop(): { canStart: boolean; canStop: boolean } {
+  const start = $appdata.get(KEYS.MODULES.PRESENTATION_MODE.CAN_START) as boolean | undefined;
+  const stop = $appdata.get(KEYS.MODULES.PRESENTATION_MODE.CAN_STOP) as boolean | undefined;
+  const anyOn = screenOn.value.main === true || screenOn.value.stage === true;
+  return {
+    canStart: typeof start === "boolean" ? start : screenOn.value.main !== true,
+    canStop: typeof stop === "boolean" ? stop : anyOn,
+  };
+}
+
+/** A imagem no ar, reduzida, como os slides do PDF: o celular não abre os endereços do PC. */
+function renderLiveImage(url: string, width: number): Promise<string | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    // Como as miniaturas da Biblioteca: os arquivos do PC liberam o canvas assim.
+    img.crossOrigin = "anonymous";
+    const timer = setTimeout(() => resolve(null), 8_000);
+    img.onload = () => {
+      clearTimeout(timer);
+      try {
+        const scale = Math.min(1, width / (img.naturalWidth || width));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round((img.naturalWidth || width) * scale));
+        canvas.height = Math.max(1, Math.round((img.naturalHeight || width * 0.5625) * scale));
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return resolve(null);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", 0.8));
+      } catch {
+        resolve(null);
+      }
+    };
+    img.onerror = () => {
+      clearTimeout(timer);
+      resolve(null);
+    };
+    img.src = url;
+  });
 }
 
 /** Identifica o PDF no ar, para o celular trocar as imagens quando ele muda. */
@@ -128,14 +219,40 @@ export async function handlePresenterHttp(data: PresenterRequest): Promise<void>
         black: native.state.value.black === true,
         pptx: pptxState(native),
         screen: screenOn.value.main === true,
+        // Iniciar e Parar do módulo, ativos quando os botões dele estão.
+        ...canStartStop(),
+        live: liveDetails(live),
       });
+      return;
+    }
+    case "start": {
+      // O mesmo "Iniciar" do módulo: liga o telão e o retorno (se tiver monitor).
+      await startOutputs();
+      respond(data.requestId, { status: "ok" });
+      return;
+    }
+    case "stop": {
+      await stopOutputs();
+      respond(data.requestId, { status: "ok" });
+      return;
+    }
+    case "live-image": {
+      const f = live.file.value;
+      const width = Math.min(1600, Math.max(160, Number(data.width) || 640));
+      const image =
+        live.current.value === "file" && f?.type === "image"
+          ? await renderLiveImage(f.url, width)
+          : null;
+      respond(data.requestId, image ? { status: "ok", image } : { status: "error" });
       return;
     }
     case "files": {
       // A Biblioteca de Mídia, do mais novo ao mais velho, só com o que abre no módulo.
       const items = (await libraryRecords())
         .map((r) => ({ r, path: pathOfRecord(r) }))
-        .filter((x): x is { r: LibraryRecord; path: string } => !!x.path && typeof x.r.id === "string")
+        .filter(
+          (x): x is { r: LibraryRecord; path: string } => !!x.path && typeof x.r.id === "string"
+        )
         .sort((a, b) => (Number(b.r.addedAt) || 0) - (Number(a.r.addedAt) || 0))
         .slice(0, 300)
         .map(({ r, path }) => ({
@@ -180,7 +297,8 @@ export async function handlePresenterHttp(data: PresenterRequest): Promise<void>
     case "slide": {
       const page = Number(data.page);
       const width = Math.min(1600, Math.max(160, Number(data.width) || 320));
-      const image = deck.active.value && Number.isInteger(page) ? await deck.renderPage(page, width) : null;
+      const image =
+        deck.active.value && Number.isInteger(page) ? await deck.renderPage(page, width) : null;
       respond(data.requestId, image ? { status: "ok", image } : { status: "error" });
       return;
     }

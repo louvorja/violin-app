@@ -24,6 +24,22 @@ function isPlainObject(v) {
   return !!v && typeof v === "object" && !Array.isArray(v);
 }
 
+/** O que está no ar além do PDF: letra, versículo, anúncio e se há imagem. */
+function isLiveDetails(l) {
+  return (
+    l === undefined ||
+    (isPlainObject(l) &&
+      typeof l.text === "string" &&
+      l.text.length <= 1_500 &&
+      Number.isInteger(l.page) &&
+      Number.isInteger(l.total) &&
+      l.total >= 0 &&
+      l.total <= 10_000 &&
+      typeof l.image === "string" &&
+      l.image.length <= 64)
+  );
+}
+
 function isStateResponse(p) {
   return (
     isPlainObject(p) &&
@@ -36,7 +52,8 @@ function isStateResponse(p) {
     p.total <= 10_000 &&
     typeof p.aspect === "number" &&
     typeof p.rev === "string" &&
-    p.rev.length <= 64
+    p.rev.length <= 64 &&
+    isLiveDetails(p.live)
   );
 }
 
@@ -90,7 +107,8 @@ function register(app, { getValidMainWindow, requestRenderer, sendRendererError,
       const data = await requestRenderer(win, res, "http:presenter", { action: "state" }, {
         prefix: "presenter",
         timeoutMs: 3_000,
-        maxPayloadBytes: 8_192,
+        // A letra do slide ou o versículo no ar vêm junto (até 1.500 letras).
+        maxPayloadBytes: 16_384,
         validatePayload: isStateResponse,
       });
       const overlay = getOverlay();
@@ -232,6 +250,51 @@ function register(app, { getValidMainWindow, requestRenderer, sendRendererError,
       if (!res.headersSent) res.json({ status: "ok" });
     } catch (error) {
       sendRendererError(res, error, "Timeout ao ligar o telão");
+    }
+  });
+
+  // POST /api/presenter/start e /stop — o Iniciar e o Parar do módulo
+  for (const action of ["start", "stop"]) {
+    app.post(`/api/presenter/${action}`, async (req, res) => {
+      if (!allowed(req, res)) return;
+      const win = mainWindowOr503(res);
+      if (!win) return;
+      try {
+        await requestRenderer(win, res, "http:presenter", { action }, {
+          prefix: "presenter",
+          // Abrir as janelas do telão e do retorno pode levar alguns segundos.
+          timeoutMs: 15_000,
+          maxPayloadBytes: 1_024,
+          validatePayload: isResultResponse,
+        });
+        if (!res.headersSent) res.json({ status: "ok" });
+      } catch (error) {
+        sendRendererError(res, error, action === "start" ? "Timeout ao iniciar" : "Timeout ao parar");
+      }
+    });
+  }
+
+  // GET /api/presenter/live-image?w=640 — a imagem no ar (arquivo de imagem), reduzida
+  app.get("/api/presenter/live-image", async (req, res) => {
+    if (!allowed(req, res)) return;
+    const width = Math.min(1600, Math.max(160, Number.parseInt(String(req.query.w || "640"), 10) || 640));
+    const win = mainWindowOr503(res);
+    if (!win) return;
+    try {
+      const data = await requestRenderer(win, res, "http:presenter", { action: "live-image", width }, {
+        prefix: "presenter",
+        timeoutMs: 10_000,
+        maxPayloadBytes: SLIDE_MAX_BYTES,
+        validatePayload: isSlideResponse,
+      });
+      if (res.headersSent) return;
+      const m = data.status === "ok" ? DATA_URL_RE.exec(data.image) : null;
+      if (!m) return res.status(404).json({ error: "imagem indisponível" });
+      res.set("Content-Type", `image/${m[1]}`);
+      res.set("Cache-Control", "private, max-age=600");
+      res.send(Buffer.from(m[2], "base64"));
+    } catch (error) {
+      sendRendererError(res, error, "Timeout ao ler a imagem");
     }
   });
 

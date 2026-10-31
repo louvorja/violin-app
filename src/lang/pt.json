@@ -1039,7 +1039,18 @@
       "kind_pdf": "PDF",
       "kind_image": "Imagem",
       "kind_video": "Vídeo",
-      "kind_file": "Arquivo"
+      "kind_file": "Arquivo",
+      "start": "Iniciar",
+      "stop": "Parar",
+      "outputs_hint": "Iniciar e Parar fazem o mesmo que os botões do modo apresentação no computador.",
+      "live_music": "Música",
+      "live_bible": "Bíblia",
+      "live_image": "Imagem",
+      "live_video": "Vídeo",
+      "live_file": "Arquivo",
+      "live_online_video": "Vídeo on-line",
+      "live_announcements": "Anúncio",
+      "nothing_live_hint": "Nada no ar. Coloque algo no ar pelo computador ou abra um arquivo da Biblioteca."
     }
   },
   "bible": {

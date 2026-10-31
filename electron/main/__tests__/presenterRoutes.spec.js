@@ -150,4 +150,44 @@ describe("presenterRoutes", () => {
     expect(isFilesResponse({ status: "ok", items: [{ id: "a", name: "Culto", kind: "exe" }] })).toBe(false);
     expect(isFilesResponse({ status: "ok", items: [{ id: 1, name: "Culto", kind: "pdf" }] })).toBe(false);
   });
+
+  it("Iniciar e Parar pedem ao PC o mesmo Iniciar/Parar do módulo", async () => {
+    const renderer = vi.fn(async () => ({ status: "ok" }));
+    const { call } = setup({ renderer });
+    expect((await call("POST /api/presenter/start")).statusCode).toBe(200);
+    expect((await call("POST /api/presenter/stop")).statusCode).toBe(200);
+    expect(renderer.mock.calls.map((c) => c[3])).toEqual([{ action: "start" }, { action: "stop" }]);
+  });
+
+  it("sem a permissão de teclas, Iniciar, Parar e a imagem no ar não passam", async () => {
+    const renderer = vi.fn();
+    const { call } = setup({ permission: false, renderer });
+    for (const key of ["POST /api/presenter/start", "POST /api/presenter/stop", "GET /api/presenter/live-image"]) {
+      expect((await call(key)).statusCode).toBe(403);
+    }
+    expect(renderer).not.toHaveBeenCalled();
+  });
+
+  it("imagem no ar: devolve os bytes, e 404 quando o PC não tem imagem", async () => {
+    const png = "data:image/jpeg;base64," + Buffer.from("jpg").toString("base64");
+    const renderer = vi.fn(async () => ({ status: "ok", image: png }));
+    const ok = setup({ renderer });
+    const res = await ok.call("GET /api/presenter/live-image", {}, {}, { w: "99999" });
+    expect(res.statusCode).toBe(200);
+    expect(Buffer.isBuffer(res.body)).toBe(true);
+    // A largura pedida é limitada antes de chegar ao renderer.
+    expect(renderer.mock.calls[0][3]).toEqual({ action: "live-image", width: 1600 });
+    const none = setup({ renderer: vi.fn(async () => ({ status: "error" })) });
+    expect((await none.call("GET /api/presenter/live-image")).statusCode).toBe(404);
+  });
+
+  it("estado com o que está no ar além do PDF passa; texto grande demais não", () => {
+    const { isStateResponse } = require("../httpServer/presenterRoutes.js");
+    const base = { status: "ok", title: "Vinde", page: 0, total: 0, aspect: 1.77, rev: "" };
+    const live = { text: "Vinde, povo do Senhor", page: 2, total: 14, image: "" };
+    expect(isStateResponse(base)).toBe(true);
+    expect(isStateResponse({ ...base, live })).toBe(true);
+    expect(isStateResponse({ ...base, live: { ...live, text: "x".repeat(1_501) } })).toBe(false);
+    expect(isStateResponse({ ...base, live: { ...live, image: 5 } })).toBe(false);
+  });
 });
