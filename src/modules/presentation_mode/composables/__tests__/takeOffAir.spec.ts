@@ -11,7 +11,7 @@ vi.mock("@/helpers/Broadcast", () => ({ default: { send: m.send } }));
 vi.mock("@/helpers/UserData", () => ({ default: { set: m.set } }));
 vi.mock("@/composables/useFileProjection", () => ({ useFileProjection: () => ({ stopProjection: m.stopProjection }) }));
 
-import { takeOffAir } from "../takeOffAir";
+import { hasAnythingOnAir, takeOffAir } from "../takeOffAir";
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -35,5 +35,17 @@ describe("takeOffAir", () => {
   it("nada no ar: não faz nada", () => {
     takeOffAir(null);
     expect([m.close, m.send, m.stopProjection].some((f) => f.mock.calls.length)).toBe(false);
+  });
+});
+
+describe("hasAnythingOnAir", () => {
+  it("um áudio tocando sozinho está no ar, mesmo fora das telas", () => {
+    expect(hasAnythingOnAir({ kind: null, returnOnly: false, audio: true })).toBe(true);
+  });
+
+  it("tela principal ou só o retorno também contam; nada tocando, nada no ar", () => {
+    expect(hasAnythingOnAir({ kind: "file", returnOnly: false, audio: false })).toBe(true);
+    expect(hasAnythingOnAir({ kind: null, returnOnly: true, audio: false })).toBe(true);
+    expect(hasAnythingOnAir({ kind: null, returnOnly: false, audio: false })).toBe(false);
   });
 });
