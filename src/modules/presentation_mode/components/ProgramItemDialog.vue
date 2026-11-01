@@ -176,7 +176,7 @@ import type {
   ProgramSession,
 } from "@/types/Presentation";
 import { CREATABLE_KINDS, KIND_ICONS } from "../program/kinds";
-import { kindFromPath, liturgyItem } from "../program/liturgy";
+import { kindOfPath, newItem } from "@/modules/liturgy/item";
 import { isMusicMode, modeOfAction, modesFor, type MusicMode } from "../program/musicModes";
 import { MusicActionEnum } from "@/enums/MusicActionEnum";
 import { newId } from "../composables/useProgram";
@@ -371,10 +371,9 @@ function build(): ProgramItem | string {
         ...common,
         kind: "music",
         title: common.title || music.value.name,
-        source: liturgyItem({
+        source: newItem(LiturgyItemTypeEnum.MUSICA, {
           ...(base?.source ?? {}),
           id: sourceId,
-          tipo: LiturgyItemTypeEnum.MUSICA,
           subtipo: musicMode.value === ASK ? "" : musicMode.value,
           id_music: music.value.id_music,
           musica: music.value.id_music,
@@ -395,11 +394,10 @@ function build(): ProgramItem | string {
       if (!filePath.value) return "item_dialog.missing_file";
       return {
         ...common,
-        kind: kindFromPath(filePath.value),
+        kind: kindOfPath(filePath.value),
         title: common.title || basename(filePath.value),
-        source: liturgyItem({
+        source: newItem(LiturgyItemTypeEnum.ARQUIVO, {
           id: sourceId,
-          tipo: LiturgyItemTypeEnum.ARQUIVO,
           dir: filePath.value,
           item: common.title || basename(filePath.value),
         }),
@@ -423,9 +421,8 @@ function build(): ProgramItem | string {
         ...common,
         kind: "online_video",
         title: common.title || url.value.trim(),
-        source: liturgyItem({
+        source: newItem(LiturgyItemTypeEnum.VIDEO_ONLINE, {
           id: sourceId,
-          tipo: LiturgyItemTypeEnum.VIDEO_ONLINE,
           url: url.value.trim(),
           item: common.title,
         }),
@@ -437,9 +434,8 @@ function build(): ProgramItem | string {
         ...common,
         kind: "note",
         notes: text || undefined,
-        source: liturgyItem({
+        source: newItem(LiturgyItemTypeEnum.ANOTACAO, {
           id: sourceId,
-          tipo: LiturgyItemTypeEnum.ANOTACAO,
           item: common.title,
           subitem: text,
         }),

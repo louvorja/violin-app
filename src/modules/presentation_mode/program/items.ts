@@ -5,7 +5,7 @@ import type { LibrarySong } from "./song";
 import type { LibraryEntry } from "../composables/useFileLibrary";
 import type { MediaMeta } from "../composables/useMediaMeta";
 import { newId } from "../composables/useProgram";
-import { kindFromPath, liturgyItem } from "./liturgy";
+import { kindOfPath, newItem } from "@/modules/liturgy/item";
 import type { MusicMode } from "./musicModes";
 
 /** Nome do arquivo sem a extensão — o título que o item do programa mostra. */
@@ -25,9 +25,8 @@ export function songItem(song: LibrarySong, mode: MusicMode | null, modeLabel: s
     title: song.name,
     subtitle: [song.album, modeLabel].filter(Boolean).join(" · ") || undefined,
     plannedMinutes: seconds > 0 ? Math.ceil(seconds / 60) : 3,
-    source: liturgyItem({
+    source: newItem(LiturgyItemTypeEnum.MUSICA, {
       id: newId(),
-      tipo: LiturgyItemTypeEnum.MUSICA,
       subtipo: mode ?? "",
       id_music: song.id_music,
       musica: song.id_music,
@@ -43,12 +42,12 @@ export function fileItem(entry: LibraryEntry, meta: MediaMeta | null): ProgramIt
   const seconds = meta?.duration ?? 0;
   return {
     id: newId(),
-    kind: kindFromPath(entry.path),
+    kind: kindOfPath(entry.path),
     title: fileTitle(entry),
     subtitle: entry.name,
     // Imagem não tem duração própria: um minuto é o ponto de partida mais comum.
     plannedMinutes: seconds > 0 ? Math.ceil(seconds / 60) : 1,
-    source: liturgyItem({ id: newId(), tipo: LiturgyItemTypeEnum.ARQUIVO, dir: entry.path, item: fileTitle(entry) }),
+    source: newItem(LiturgyItemTypeEnum.ARQUIVO, { id: newId(), dir: entry.path, item: fileTitle(entry) }),
   };
 }
 
@@ -66,9 +65,8 @@ export function onlineItem(video: { id: string; title: string; duration: number 
     title: video.title,
     subtitle: video.channel || undefined,
     plannedMinutes: seconds > 0 ? Math.ceil(seconds / 60) : 5,
-    source: liturgyItem({
+    source: newItem(LiturgyItemTypeEnum.VIDEO_ONLINE, {
       id: newId(),
-      tipo: LiturgyItemTypeEnum.VIDEO_ONLINE,
       url: `https://www.youtube.com/watch?v=${video.id}`,
       item: video.title,
     }),
@@ -89,9 +87,8 @@ export function canvaSiteItem(design: { id: string; title: string; url: string }
     title: design.title,
     subtitle: "Canva",
     plannedMinutes: 5,
-    source: liturgyItem({
+    source: newItem(LiturgyItemTypeEnum.SITE, {
       id: newId(),
-      tipo: LiturgyItemTypeEnum.SITE,
       url: design.url,
       item: design.title,
       ref_id: `${CANVA_REF}${design.id}`,

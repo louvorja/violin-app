@@ -5,7 +5,8 @@ import { KEYS } from "@/constants/UserDataKeys";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import { MusicActionEnum } from "@/enums/MusicActionEnum";
 import type { ProgramItem } from "@/types/Presentation";
-import { liturgyItem } from "../../program/liturgy";
+import type { LiturgyItem } from "@/types/Liturgy";
+import { newItem } from "@/modules/liturgy/item";
 
 const open = vi.fn(async (_params?: unknown) => true);
 const openAudio = vi.fn(async () => {});
@@ -21,13 +22,13 @@ vi.mock("@/modules/liturgy/composables/useLiturgyExecution", () => ({
 
 const { useProgramExecution, playMusicInMode } = await import("../useProgramExecution");
 
-function music(fields: Partial<Parameters<typeof liturgyItem>[0]> = {}): ProgramItem {
+function music(fields: Partial<LiturgyItem> = {}): ProgramItem {
   return {
     id: "i1",
     kind: "music",
     title: "Grande Comandante",
     plannedMinutes: 3,
-    source: liturgyItem({ id: "s1", tipo: LiturgyItemTypeEnum.MUSICA, id_music: 70, musica: 70, subtipo: "sung", ...fields }),
+    source: newItem(LiturgyItemTypeEnum.MUSICA, { id: "s1", id_music: 70, musica: 70, subtipo: "sung", ...fields }),
   };
 }
 

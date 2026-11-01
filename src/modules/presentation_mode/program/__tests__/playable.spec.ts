@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import type { ProgramItem } from "@/types/Presentation";
 import type { LibraryEntry } from "../../composables/useFileLibrary";
-import { liturgyItem } from "../liturgy";
+import { newItem } from "@/modules/liturgy/item";
 import { expectationOf, filePathOf, isOnAir, itemIdOf, samePlayable, type LiveSignal } from "../playable";
 
 const entry = (path: string): LibraryEntry => ({
@@ -19,7 +19,7 @@ const music = (id: number, subtipo = "sung"): ProgramItem => ({
   kind: "music",
   title: "Hino",
   plannedMinutes: 3,
-  source: liturgyItem({ id: "s", tipo: LiturgyItemTypeEnum.MUSICA, subtipo, id_music: id, musica: id, item: "Hino" }),
+  source: newItem(LiturgyItemTypeEnum.MUSICA, { id: "s", subtipo, id_music: id, musica: id, item: "Hino" }),
 });
 
 const signal = (s: Partial<LiveSignal>): LiveSignal => ({
@@ -150,7 +150,7 @@ describe("música personalizada", () => {
       kind: "music",
       title: "Minha Canção",
       plannedMinutes: 3,
-      source: liturgyItem({ id: "s", tipo: LiturgyItemTypeEnum.MUSICA, subtipo: "sung", id_music: -2, ref_id: "uuid", item: "Minha Canção" }),
+      source: newItem(LiturgyItemTypeEnum.MUSICA, { id: "s", subtipo: "sung", id_music: -2, ref_id: "uuid", item: "Minha Canção" }),
     };
     const expected = expectationOf({ type: "program", itemId: "c" }, item);
     expect(isOnAir(expected, signal({ kind: "music", customSongId: "uuid" }))).toBe(true);

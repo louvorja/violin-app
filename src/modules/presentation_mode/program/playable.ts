@@ -5,7 +5,7 @@ import type { LiveKind } from "../composables/useLiveContent";
 import { isMusicMode, type MusicMode } from "./musicModes";
 import { videoIdFromUrl } from "@/helpers/OnlineVideo";
 import { samePassage, type BiblePassage } from "./bible";
-import { kindFromPath } from "./liturgy";
+import { kindOfPath } from "@/modules/liturgy/item";
 
 /**
  * Algo que o operador pode pôr no palco e mandar ao ar: um item do programa,
@@ -88,7 +88,7 @@ export interface LiveSignal {
 }
 
 function fromPath(path: string): LiveExpectation {
-  const kind = kindFromPath(path);
+  const kind = kindOfPath(path);
   if (kind === "image" || kind === "video") return { kind: "file" };
   if (kind === "audio") return { kind: "audio" };
   return { kind: null };
@@ -120,7 +120,7 @@ export function playsVideo(playable: Playable, item: ProgramItem | null): boolea
   if (playable.type === "online") return true;
   if (playable.type === "program" && item?.source?.tipo === LiturgyItemTypeEnum.VIDEO_ONLINE) return true;
   const path = filePathOf(playable, item);
-  return !!path && (kindFromPath(path) === "video" || !!videoIdFromUrl(path));
+  return !!path && (kindOfPath(path) === "video" || !!videoIdFromUrl(path));
 }
 
 export function expectationOf(

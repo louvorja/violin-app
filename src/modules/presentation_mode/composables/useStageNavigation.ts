@@ -17,7 +17,7 @@ import { isDeck, usePdfDeck } from "./usePdfDeck";
 import { usePptxNative } from "./usePptxNative";
 import { useStage } from "./useStage";
 import { claimScreen } from "./useLayers";
-import { kindFromPath } from "../program/liturgy";
+import { kindOfPath } from "@/modules/liturgy/item";
 
 /**
  * Anterior/Próximo do palco (botões, teclado e passador): junta as fontes que
@@ -94,7 +94,7 @@ export function useStageNavigation(deps: {
         sent: () => sentWhile(["file"]),
         step: (to) => library.stepQueue(to),
         send: (entry) => {
-          claimScreen(kindFromPath(entry.path) === "video" ? "video" : "other");
+          claimScreen(kindOfPath(entry.path) === "video" ? "video" : "other");
           deps.projectPath(entry.path, entry.name);
           // Na pasta do programa, o item continua sendo o que está no ar.
           const sent = stage.sent.value?.playable;
