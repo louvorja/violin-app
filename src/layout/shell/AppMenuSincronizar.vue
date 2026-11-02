@@ -933,7 +933,7 @@ interface DiskUsage {
 
 interface StorageStats {
   dataDir?: string;
-  dataDirIssue?: StorageDataDirIssue | null;
+  dataDirIssue?: { reason: "unavailable" | "failed"; wanted?: string; message?: string } | null;
   restartRequired?: boolean;
   filesDir?: string;
   files?: { bytes: number; count: number };
