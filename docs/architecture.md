@@ -541,6 +541,8 @@ SHA-256. O gerador da API valida referências e todos os capítulos esperados a
 partir das versões e livros antes de publicar. O Worker do app verifica CRC,
 manifesto, nomes, arquivos faltantes/extras, tipo do pacote e SHA-256 antes de
 entregar cada JSON. O manifesto não é um dataset e nunca vai para o IndexedDB.
+`Sha256.ts` usa WebCrypto quando disponível e SHA-256 em JavaScript nos demais
+ambientes, preservando a validação dos pacotes e os hashes da biblioteca de mídia.
 
 `BundleInstaller.install({ catalogOnly: true })` baixa o catálogo com `no-store`,
 usa fallback da API quando necessário e publica os datasets e o marcador na mesma

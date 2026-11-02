@@ -59,6 +59,7 @@
     "type-check": "vue-tsc --noEmit"
   },
   "dependencies": {
+    "@noble/hashes": "2.4.0",
     "electron-updater": "^6.8.9",
     "express": "^4.22.1",
     "fs-extra": "^11.2.0",

@@ -15,6 +15,7 @@
  * @category helper-puro — Sem APIs Vue; sem acesso ao store.
  */
 import $idb from "@/helpers/IndexedDB";
+import { sha256Hex } from "@/helpers/Sha256";
 import { DB_TABLE } from "@/constants/DbTables";
 
 const STORE_AUDIO = DB_TABLE.AUDIO_LIBRARY;
@@ -41,11 +42,7 @@ interface ImageRecord {
 }
 
 async function sha256(blob: Blob): Promise<string> {
-  const buf = await blob.arrayBuffer();
-  const hashBuffer = await crypto.subtle.digest("SHA-256", buf);
-  return Array.from(new Uint8Array(hashBuffer))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+  return sha256Hex(new Uint8Array(await blob.arrayBuffer()));
 }
 
 function extOf(name: string, fallback = "mp3"): string {

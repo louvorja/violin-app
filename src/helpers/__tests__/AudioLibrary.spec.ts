@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DB_TABLE } from "@/constants/DbTables";
+import { webcrypto } from "node:crypto";
 
 const records = vi.hoisted(() => new Map<string, unknown>());
 vi.mock("@/helpers/IndexedDB", () => ({
@@ -25,7 +26,21 @@ describe.each([
   ["image", DB_TABLE.IMAGE_LIBRARY, importImage, resolveImage, getImageBlob],
 ] as const)("biblioteca de %s", (kind, table, importFile, resolve, getBlob) => {
   beforeEach(() => records.clear());
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("importa sem crypto.subtle e mantém o mesmo hash do caminho nativo", async () => {
+    const blob = new Blob(["arquivo de mídia"], { type: `${kind}/test` });
+    vi.stubGlobal("crypto", undefined);
+    const fallbackToken = await importFile(blob, "file.bin");
+    vi.stubGlobal("crypto", webcrypto);
+    const nativeToken = await importFile(blob, "file.bin");
+    expect(nativeToken).toBe(fallbackToken);
+    expect(records.size).toBe(1);
+    expect(await getBlob(nativeToken)).toBe(blob);
+  });
 
   it.each([{}, null, "bytes ausentes"])(
     "trata bytes inválidos como mídia indisponível: %j",
