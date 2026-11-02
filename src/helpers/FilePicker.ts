@@ -4,13 +4,14 @@
  * Desktop (Electron): usa Platform.api.storage.chooseImage()
  *   → retorna "louvorja://local/..." (processado pelo protocolo customizado)
  *
- * Web/PWA: cria input file + FileReader.readAsDataURL()
- *   → retorna "data:image/...;base64,..." (auto-contido, sobrevive a reload)
+ * Web/PWA: guarda os bytes na biblioteca IndexedDB e retorna lib://image/...
+ *   → preferências guardam só a referência, sem consumir a quota do localStorage.
  */
 
 import Platform from "@/helpers/Platform";
 import $path from "@/helpers/Path";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
+import { importImage } from "@/helpers/AudioLibrary";
 
 type ImagePicker = {
   storage?: {
@@ -43,16 +44,18 @@ export async function pickImage(): Promise<string | null> {
     input.type = "file";
     input.accept = "image/*";
     input.style.display = "none";
-    input.onchange = () => {
+    input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) {
         resolve(null);
         return;
       }
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(file);
+      try {
+        resolve(await importImage(file));
+      } catch (error) {
+        console.warn("[FilePicker] não foi possível guardar a imagem:", error);
+        resolve(null);
+      }
     };
     document.body.appendChild(input);
     input.click();
@@ -62,7 +65,8 @@ export async function pickImage(): Promise<string | null> {
 
 /**
  * Fundo de módulo: aceita imagem, GIF ou vídeo. No desktop usa o diálogo de
- * mídia da Biblioteca (imagem/vídeo); no web lê o arquivo como data URL.
+ * mídia da Biblioteca (imagem/vídeo); no web a imagem vai para a biblioteca
+ * IndexedDB e o vídeo segue como data URL.
  */
 export async function pickBackgroundMedia(): Promise<string | null> {
   const api = (Platform.api as ImagePicker) || null;
@@ -88,10 +92,19 @@ export async function pickBackgroundMedia(): Promise<string | null> {
     input.type = "file";
     input.accept = "image/*,video/*";
     input.style.display = "none";
-    input.onchange = () => {
+    input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) {
         resolve(null);
+        return;
+      }
+      if (file.type.startsWith("image/")) {
+        try {
+          resolve(await importImage(file));
+        } catch (error) {
+          console.warn("[FilePicker] não foi possível guardar a imagem:", error);
+          resolve(null);
+        }
         return;
       }
       const reader = new FileReader();

@@ -72,6 +72,7 @@ import UserData from "@/helpers/UserData";
 import ModuleBackgroundMedia from "@/components/ModuleBackgroundMedia.vue";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { useContainerSize } from "@/composables/useContainerSize";
+import { useStoredImageUrl } from "@/composables/useStoredImageUrl";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useI18n } from "vue-i18n";
 import { getModule } from "@/config/modules";
@@ -129,7 +130,7 @@ const vertical_align = computed<CSSProperties["alignItems"]>(
 const horizontal_align = computed<CSSProperties["justifyContent"]>(
   () => ud("horizontal_align", "center") as CSSProperties["justifyContent"]
 );
-const image = computed(() => ud("image", ""));
+const image = useStoredImageUrl(() => ud("image", ""));
 const image_opacity = computed(() => ud("image_opacity", 100));
 const image_fit = computed<CSSProperties["objectFit"]>(
   () => ud("image_fit", "cover") as CSSProperties["objectFit"]

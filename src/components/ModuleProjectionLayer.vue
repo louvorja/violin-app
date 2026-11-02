@@ -100,6 +100,7 @@ import DrawProjection from "@/modules/draw/components/DrawProjection.vue";
 import NameDrawProjection from "@/modules/name_draw/components/NameDrawProjection.vue";
 import ModuleBackgroundMedia from "@/components/ModuleBackgroundMedia.vue";
 import { useContainerSize } from "@/composables/useContainerSize";
+import { useStoredImageUrl } from "@/composables/useStoredImageUrl";
 import {
   horizontalTextAlign,
   moduleCustomizationDefault,
@@ -187,7 +188,7 @@ const textBox = computed(() =>
 const border_spacing = computed(() => ud("border_spacing", 10));
 const vertical_align = computed(() => ud("vertical_align", "center"));
 const horizontal_align = computed(() => ud("horizontal_align", "center"));
-const image = computed(() => ud("image", ""));
+const image = useStoredImageUrl(() => ud("image", ""));
 const image_opacity = computed(() => ud("image_opacity", 100));
 const image_fit = computed(() => ud("image_fit", "cover"));
 

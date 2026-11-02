@@ -121,6 +121,7 @@
       "text_border_width": "Grosor del borde",
       "text_bg_toggle": "Fondo en el texto",
       "image": "Imagen/GIF/vídeo de fondo",
+      "saved_image": "Imagen guardada",
       "transparency": "Transparencia",
       "adjust": "Ajuste de imagen",
       "media_placeholder": "Ruta de la imagen, GIF, vídeo o URL",

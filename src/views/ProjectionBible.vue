@@ -78,6 +78,7 @@ import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { useProjectionCloseNotice } from "@/composables/useProjectionCloseNotice";
 import { PROJECTION_TYPE } from "@/constants/Projection";
 import { useContainerSize } from "@/composables/useContainerSize";
+import { useStoredImageUrl } from "@/composables/useStoredImageUrl";
 import Broadcast from "@/helpers/Broadcast";
 import UserData from "@/helpers/UserData";
 import { FONT, resolveFont } from "@/config/Fonts";
@@ -157,7 +158,7 @@ const textBox = computed(() =>
 const border_spacing = computed(() => ud("border_spacing", 10));
 const vertical_align = computed(() => ud("vertical_align", "center"));
 const horizontal_align = computed(() => ud("horizontal_align", "center"));
-const image = computed(() => ud("image", ""));
+const image = useStoredImageUrl(() => ud("image", ""));
 const image_opacity = computed(() => ud("image_opacity", 100));
 const image_fit = computed(() => ud("image_fit", "cover"));
 

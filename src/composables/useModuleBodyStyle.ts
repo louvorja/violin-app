@@ -18,6 +18,7 @@ import UserData from "@/helpers/UserData";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { useContainerSize } from "@/composables/useContainerSize";
+import { useStoredImageUrl } from "@/composables/useStoredImageUrl";
 import { FONT, resolveFont } from "@/config/Fonts";
 import {
   horizontalTextAlign,
@@ -172,7 +173,7 @@ export function useModuleBodyStyle(moduleId: string) {
   const alertStyle = computed<CSSProperties>(() => ({ color: alert_color.value }));
 
   /** Imagem de fundo (opcional). */
-  const bgImage = computed(() => image.value || "");
+  const bgImage = useStoredImageUrl(image);
 
   /** Estilos da imagem de fundo (opacidade + object-fit). */
   const imageStyle = computed<CSSProperties>(() => ({

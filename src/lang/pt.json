@@ -121,6 +121,7 @@
       "text_border_width": "Espessura da borda",
       "text_bg_toggle": "Fundo no texto",
       "image": "Imagem/GIF/vídeo de fundo",
+      "saved_image": "Imagem salva",
       "transparency": "Transparência",
       "adjust": "Ajuste da imagem",
       "media_placeholder": "Caminho da imagem, GIF, vídeo ou URL",

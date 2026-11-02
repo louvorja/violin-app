@@ -5,7 +5,11 @@
         type="text"
         :value="displayValue"
         class="format-field format-field--input field-image__input"
-        :placeholder="t('components.customization.media_placeholder')"
+        :placeholder="
+          storedImage
+            ? t('components.customization.saved_image')
+            : t('components.customization.media_placeholder')
+        "
         @input="onInput(($event.target as HTMLInputElement).value)"
       />
       <button
@@ -69,9 +73,10 @@ const emit = defineEmits<{
 const { t } = useI18n();
 const mediaPickerOpen = ref(false);
 const LOCAL_PREFIX = "louvorja://local";
+const storedImage = computed(() => props.modelValue?.startsWith("lib://image/") === true);
 
 const displayValue = computed(() => {
-  if (!props.modelValue) return "";
+  if (!props.modelValue || storedImage.value) return "";
   if (props.modelValue.startsWith(LOCAL_PREFIX)) {
     return decodeURIComponent(props.modelValue.slice(LOCAL_PREFIX.length));
   }
