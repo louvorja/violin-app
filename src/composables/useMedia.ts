@@ -1470,6 +1470,12 @@ function _pdfPageStep(delta: number): boolean {
 }
 
 const _self = {
+  /** Preparações externas só podem assumir a apresentação se nada a substituiu. */
+  captureStageGuard(): () => boolean {
+    const stageEpoch = _stageEpoch;
+    return () => stageEpoch === _stageEpoch;
+  },
+
   /** ID da tentativa atual para os módulos que orquestram a reprodução. */
   getActivePlaybackId(): string | null {
     return _activePlayback?.playback_id || null;

@@ -37,3 +37,22 @@ describe("Media.clearVariables — slide_index", () => {
     expect(slideIndex()).toBe(0);
   });
 });
+
+describe("Media — preparações externas", () => {
+  it("invalida a guarda ao fechar ou iniciar outra projeção", async () => {
+    const beforeClose = media.captureStageGuard();
+    expect(beforeClose()).toBe(true);
+    await media.close(true);
+    expect(beforeClose()).toBe(false);
+    const beforeProjection = media.captureStageGuard();
+    const projection = media.projectFile({ url: "blob:new", type: "image", title: "Nova" });
+    expect(beforeProjection()).toBe(false);
+    await projection;
+  });
+
+  it("uma solicitação inválida não interrompe a preparação atual", async () => {
+    const current = media.captureStageGuard();
+    expect(await media.open(null as unknown as number)).toBe(false);
+    expect(current()).toBe(true);
+  });
+});

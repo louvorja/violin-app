@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => ({
   broadcastGetLastPayload: vi.fn(),
   broadcastListen: vi.fn(),
   systemPlayer: false,
+  stage: 0,
   /** Preferências que um caso queira forçar, lidas antes do `fallback`. */
   userdataValues: new Map<string, unknown>(),
 }));
@@ -53,6 +54,10 @@ vi.mock("@/helpers/UserData", () => ({
 }));
 vi.mock("@/composables/useMedia", () => ({
   default: {
+    captureStageGuard: () => {
+      const stage = mocks.stage;
+      return () => stage === mocks.stage;
+    },
     close: mocks.closeMedia,
     stop: vi.fn(),
     open: mocks.openMusic,
@@ -171,6 +176,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   resetarSessaoOverlayVinculado();
   mocks.systemPlayer = false;
+  mocks.stage = 0;
   mocks.userdataValues.clear();
   mocks.openSlja.mockResolvedValue(true);
   mocks.openPath.mockResolvedValue({ ok: true });
@@ -275,6 +281,49 @@ describe("liturgia — arquivo escolhido na web", () => {
 });
 
 describe("liturgia — item de arquivo .slja", () => {
+  it.each([true, false])(
+    "resposta tardia do programa externo (ok=%s) não altera o arquivo mais novo",
+    async (ok) => {
+      mocks.systemPlayer = true;
+      let finish!: (_result: { ok: boolean }) => void;
+      mocks.openPath.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          })
+      );
+      const ui = useLiturgyExecution();
+      const old = ui.openFile(arquivo("/old.mp4"));
+      await vi.waitFor(() => expect(mocks.openPath).toHaveBeenCalledOnce());
+      await ui.openFile(arquivo("/new.png"));
+      finish({ ok });
+      await old;
+      expect(mocks.projectFile).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ url: "louvorja://local/new.png" })
+      );
+      expect(mocks.closeMedia).not.toHaveBeenCalled();
+      expect(mocks.openAudio).not.toHaveBeenCalled();
+    }
+  );
+
+  it("não abre fallback tardio quando outra ação já mudou o palco", async () => {
+    mocks.systemPlayer = true;
+    let reject!: (_error: Error) => void;
+    mocks.openPath.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, fail) => {
+          reject = fail;
+        })
+    );
+    const old = useLiturgyExecution().openFile(arquivo("/old.mp4"));
+    await vi.waitFor(() => expect(mocks.openPath).toHaveBeenCalledOnce());
+    mocks.stage++;
+    reject(new Error("reply was never sent"));
+    await old;
+    expect(mocks.projectFile).not.toHaveBeenCalled();
+    expect(mocks.closeMedia).not.toHaveBeenCalled();
+  });
+
   it("apresenta dentro do app, sem entregar ao sistema", async () => {
     const { executeItem } = useLiturgyExecution();
 

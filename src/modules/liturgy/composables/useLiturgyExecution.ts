@@ -598,12 +598,14 @@ export function useLiturgyExecution() {
     extraPayload?: Record<string, unknown>
   ): Promise<boolean> {
     const intent = ++fileOpenIntent;
+    const stageIsCurrent = $media.captureStageGuard();
+    const isCurrent = () => intent === fileOpenIntent && stageIsCurrent();
     let dir = item.dir || "";
     const storedFile =
       item.tipo === LiturgyItemTypeEnum.ARQUIVO && item.ref_id
         ? await resolveLiturgyFile(item.ref_id)
         : null;
-    if (item.tipo === LiturgyItemTypeEnum.ARQUIVO && item.ref_id && intent !== fileOpenIntent) {
+    if (!isCurrent()) {
       if (storedFile) releaseLiturgyFileUrl(storedFile.url);
       return false;
     }
@@ -644,17 +646,24 @@ export function useLiturgyExecution() {
     if (
       !storedFile &&
       (kind === "audio" || kind === "video") &&
-      Boolean($userdata.get(KEYS.OPTIONS.USE_SYSTEM_MEDIA_PLAYER, false)) &&
-      (await openWithSystemPlayer(dir, kind))
+      Boolean($userdata.get(KEYS.OPTIONS.USE_SYSTEM_MEDIA_PLAYER, false))
     ) {
-      // Não deixe uma projeção anterior congelada enquanto o Windows assume
-      // a reprodução deste arquivo.
-      $media.close(true);
-      return false;
+      const opened = await openWithSystemPlayer(dir, kind);
+      // O SO pode responder minutos depois. Nem o sucesso deve fechar uma
+      // apresentação nova, nem a falha deve iniciar o arquivo antigo no app.
+      if (!isCurrent()) return false;
+      if (opened) {
+        $media.close(true);
+        return false;
+      }
     }
 
     // HEIC/HEIF: converte para JPEG antes de enviar à projeção.
     const url = storedFile?.url || (await _resolveRenderableUrl(dir));
+    if (!isCurrent()) {
+      if (storedFile) releaseLiturgyFileUrl(url);
+      return false;
+    }
 
     if (
       !url ||
@@ -739,7 +748,7 @@ export function useLiturgyExecution() {
       }
     } else if (!kind && !typeHint) {
       // Tipo desconhecido sem hint: comportamento legado (abrir com SO).
-      if (!(await openWithSystemPlayer(dir, "unknown"))) openUrl(dir);
+      if (!(await openWithSystemPlayer(dir, "unknown")) && isCurrent()) openUrl(dir);
       return false;
     } else {
       reportMissingResource("open_file", "renderable_file");
