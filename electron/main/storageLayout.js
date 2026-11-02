@@ -10,7 +10,7 @@ const { rebaseJsonFiles } = require("./privatePathMigration.js");
 const { absolute, validateRoots, canonical } = require("./storageRoots.js");
 const { assertProfileIdle } = require("./profileActivity.js");
 const { acquireProfileMigrationLock } = require("./profileMigrationLock.js");
-const { ensureCollectionDirectorySync } = require("./sharedCollectionDirs.js");
+const { ensureCollectionDirectorySync, grantLocalAccountsSync } = require("./sharedCollectionDirs.js");
 
 const PRIVATE_ENTRIES = ["storage", "library", "json_db", "bin", "server", "canva", "pptx",
   "configweb.json", "runtime-incidents.json", "telemetry-main-errors.json"];
@@ -302,8 +302,11 @@ function initializeLocked({ bootstrap, documents, videos, sharedMedia, programDi
   // é substituído silenciosamente por outro diretório.
   for (const [kind, dir] of [["media", layout.mediaDir], ["videos", layout.videosDir]]) {
     if (!fs.existsSync(dir)) {
-      try { ensureCollectionDirectorySync(canonical(dir), { shared: layout[kind + "Shared"] === true }); }
-      catch { /* a UI permite escolher um destino acessível */ }
+      const shared = layout[kind + "Shared"] === true;
+      try { ensureCollectionDirectorySync(canonical(dir), { shared }); }
+      catch { continue; /* a UI permite escolher um destino acessível */ }
+      try { if (shared) grantLocalAccountsSync(canonical(dir)); }
+      catch (error) { console.warn("[storage]", error.message); }
     }
   }
   const staging = path.join(bootstrap, "profile.migrating");

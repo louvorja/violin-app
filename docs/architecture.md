@@ -109,6 +109,11 @@ O padrão é compartilhado, nunca Documentos particulares:
 
 O instalador Windows para todos provisiona o acervo com permissão para usuários
 comuns e registra seu endereço em `%ProgramData%/LouvorJA Violin/storage-defaults.json`.
+Na instalação "só para mim", quem cria a pasta comum é o app, na primeira
+abertura; no Windows ela herdaria de `%PUBLIC%` o modelo "o dono edita, os outros
+leem", e uma segunda conta não conseguiria baixar nada. Por isso o app dá a
+`Users` o mesmo Modificar (`grantLocalAccountsSync`), só na raiz que acabou de
+criar.
 DEB/RPM provisionam o acervo em hook de instalação. No macOS, o app pode criar a
 pasta em `/Users/Shared`. Pastas compartilhadas novas permitem escrita às contas
 locais; os dados privados nunca são criados nelas. Permissões de pastas existentes
@@ -941,7 +946,7 @@ via `Platform.updater`. O comportamento varia conforme a plataforma:
 
 | Instalação          | Check                              | Download / Instalação                                                                                                                       |
 | ------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Windows (NSIS)**  | electron-updater (provider GitHub) | Instalação por usuário em `%LOCALAPPDATA%\Programs`; `.exe` + blockmap (diferencial). Cópias legadas em `Program Files` pedem UAC explícito |
+| **Windows (NSIS)**  | electron-updater (provider GitHub) | "Só para mim" em `%LOCALAPPDATA%\Programs` atualiza sem UAC; "para todos" e cópias legadas em `Program Files` pedem UAC a cada atualização; `.exe` + blockmap (diferencial) |
 | **macOS (DMG/zip)** | electron-updater                   | electron-updater — `.zip` (substitui o `.app`)                                                                                              |
 | **Linux AppImage**  | electron-updater                   | electron-updater — substitui o AppImage                                                                                                     |
 | **Linux deb/rpm**   | electron-updater                   | electron-updater — via `dpkg`/`apt`/`rpm` (exige sudo)                                                                                      |
@@ -1016,21 +1021,34 @@ Persistidas em `user_data.options` e aplicadas em runtime via `Platform.updater.
    mesma versão seja retomada automaticamente.
 5. Estado propagado ao renderer via IPC `updater:state` (`Platform.updater.onStateChange`).
 
-No Windows, o instalador assistido fixa o modo por usuário (`perMachine: false`,
-sem elevação no caminho normal) e grava o protocolo `louvorja://` em
-`HKCU\Software\Classes`. Uma instalação antiga que tenha sido registrada por
-usuário dentro de `Program Files` é reconhecida pelo script NSIS e atualizada
-no mesmo diretório somente depois da confirmação do UAC; o updater não tenta
-fazê-lo silenciosamente ao fechar o app (`installRequiresElevation`). Isso evita
-o estado anterior, em que a atualização falhava sem aviso e deixava uma segunda
-cópia concorrente. Se o Windows iniciar diretamente o instalador com um token
-elevado — por compatibilidade `RUNASADMIN`, shell elevado, UAC desativado ou a
-conta Administrator interna — o NSIS compara o SID desse token com o SID do
-processo do Explorer. A instalação por usuário pode continuar quando ambos
-pertencem à mesma conta; credenciais de outro administrador continuam
-bloqueadas para não direcionar HKCU e `LocalAppData` ao perfil errado. A
-instância interna do UAC permanece reservada à recuperação do legado em
-`Program Files`.
+No Windows, o instalador assistido tem dois modos. **Só para mim** (o padrão)
+instala em `%LOCALAPPDATA%\Programs`, registra `louvorja://` e `.slja` em
+`HKCU\Software\Classes` e se atualiza sem UAC. **Todos os usuários** instala em
+`Program Files`, registra em HKLM, prepara o acervo comum com escrita para
+`Users` e grava `%ProgramData%/LouvorJA Violin/storage-defaults.json`; cada
+atualização pede UAC, então o updater não instala ao fechar o app
+(`installRequiresElevation`) e espera o operador clicar em "Instalar". O
+instalador grava `resources/install-scope.json` com o modo escolhido. Perfil,
+preferências e vídeos são sempre da conta que abre o app, nos dois modos.
+
+Reinstalar ou atualizar mantém o modo existente; trocar exige desinstalar
+(os dados ficam) e instalar de novo. Uma instalação antiga registrada por usuário
+dentro de `Program Files` é tratada como "todos os usuários" e só é atualizada
+depois do UAC, sem deixar uma segunda cópia concorrente. Se o Windows iniciar
+o instalador "só para mim" com um token elevado — `RUNASADMIN`, shell elevado,
+UAC desativado ou a conta Administrator interna —, o NSIS compara o SID desse
+token com o do Explorer: credenciais de outro administrador são recusadas para
+não gravar HKCU e `LocalAppData` no perfil errado.
+
+O instalador só enxerga as cópias da conta que o executa. Quando um
+administrador instala "para todos" numa máquina em que o operador já tinha a
+cópia dele, essa conta fica com duas cópias que abrem o mesmo perfil — e a da
+máquina, que depende de UAC, tende a ficar para trás. No boot, antes do lock de
+instância única, `windowsInstallCopies.newerCopy` compara as versões (lidas do
+`app.asar` de cada cópia) e a mais antiga abre a mais nova, repassando os
+argumentos, e encerra; no empate fica a que se atualiza sem UAC. As cópias são
+achadas no lugar padrão de cada modo e em `<appData>/LouvorJA Violin/installations.json`,
+onde cada uma se registra ao abrir. `LJ_HANDED_OVER` impede uma segunda troca.
 
 A ordem do fluxo de boot é: **atualização → release notes → startup check**.
 Cada etapa encadeia na próxima apenas quando concluída (ou dispensada), e há um

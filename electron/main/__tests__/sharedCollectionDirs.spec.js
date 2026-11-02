@@ -68,3 +68,22 @@ describe("permissões somente dos novos itens compartilhados", () => {
     expect(await fs.readdir(outside)).toEqual([]);
   });
 });
+
+describe("acervo comum criado por uma conta comum no Windows", () => {
+  it("dá Modificar a Users na raiz, herdado pelas subpastas", () => {
+    const calls = [];
+    helper.grantLocalAccountsSync("C:\\Users\\Public\\Documents\\LouvorJA Violin\\Acervo", {
+      platform: "win32", env: { SystemRoot: "C:\\Windows" },
+      run: (...args) => { calls.push(args); return { status: 0 }; },
+    });
+    expect(calls).toEqual([["C:\\Windows\\System32\\icacls.exe",
+      ["C:\\Users\\Public\\Documents\\LouvorJA Violin\\Acervo", "/grant:r", "*S-1-5-32-545:(OI)(CI)M"],
+      { windowsHide: true, timeout: 15000 }]]);
+  });
+
+  it("falha do icacls vira erro; fora do Windows nada roda", () => {
+    expect(() => helper.grantLocalAccountsSync("C:\\x", { platform: "win32", env: {}, run: () => ({ status: 5, stderr: "Acesso negado" }) }))
+      .toThrow(/Acesso negado/);
+    helper.grantLocalAccountsSync("/Users/Shared/x", { platform: "darwin", run: () => { throw new Error("não deveria rodar"); } });
+  });
+});

@@ -2,6 +2,7 @@
 
 const fs = require("fs-extra");
 const path = require("node:path");
+const { spawnSync } = require("node:child_process");
 
 function directoryError(dir) {
   return new Error(`Diretório de destino inválido: ${dir}`);
@@ -87,5 +88,20 @@ async function ensureCollectionSubdirectory(root, dir, options = {}) {
   }
 }
 
-module.exports = { ensureCollectionDirectory, ensureCollectionDirectorySync,
+/**
+ * No Windows a pasta criada por uma conta comum herda de %PUBLIC% o modelo
+ * "o dono edita, os outros leem": a segunda conta não baixaria nada. Sem o
+ * instalador para todos, que já prepara o acervo, damos a Users o mesmo
+ * Modificar. Só para a raiz que este processo acabou de criar.
+ */
+function grantLocalAccountsSync(dir, { platform = process.platform, run = spawnSync, env = process.env } = {}) {
+  if (platform !== "win32") return;
+  const icacls = path.win32.join(env.SystemRoot || "C:\\Windows", "System32", "icacls.exe");
+  const result = run(icacls, [dir, "/grant:r", "*S-1-5-32-545:(OI)(CI)M"], { windowsHide: true, timeout: 15000 });
+  if (result.error || result.status !== 0) {
+    throw new Error(`Não foi possível liberar o acervo para as outras contas: ${result.error?.message || result.stderr || result.status}`);
+  }
+}
+
+module.exports = { ensureCollectionDirectory, ensureCollectionDirectorySync, grantLocalAccountsSync,
   setNewCollectionFileMode, setNewCollectionFileModeSync, ensureCollectionSubdirectory };

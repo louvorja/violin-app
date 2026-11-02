@@ -150,6 +150,30 @@ function configureAppPaths() {
 // cima do arquivo bom — o que o usuário não reescrevesse na sessão sumia.
 configureAppPaths();
 
+// Com "só para mim" e "para todos" na mesma conta, a cópia mais antiga cede a
+// vez antes de tocar no perfil — e antes do lock, que a outra vai precisar.
+if (app.isPackaged && !process.env.LJ_E2E_USER_DATA && !process.env.LJ_HANDED_OVER) {
+  try {
+    const newer = require("./main/windowsInstallCopies.js").newerCopy({
+      execPath: process.execPath, version: app.getVersion(), bootstrap: paths.bootstrapDir(),
+      compareVersions: updater.compareVersions,
+    });
+    if (newer) {
+      const child = require("node:child_process").spawn(newer, process.argv.slice(1), {
+        detached: true, stdio: "ignore", env: { ...process.env, LJ_HANDED_OVER: "1" },
+      });
+      if (child.pid) {
+        console.warn(`[LouvorJA] Abrindo a cópia mais nova instalada: ${newer}`);
+        child.unref();
+        app.exit(0);
+        return;
+      }
+    }
+  } catch (error) {
+    console.warn("[LouvorJA] Não foi possível comparar as cópias instaladas:", error.message);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Instância única
 // ---------------------------------------------------------------------------

@@ -990,4 +990,5 @@ module.exports = {
   getCurrentReleaseNotes,
   getInstallType,
   isDebRpm,
+  compareVersions: _compareVersions,
 };
