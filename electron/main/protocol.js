@@ -134,8 +134,10 @@ async function _responderArquivo(caminho, request) {
   }
 
   const start = parseInt(match[1], 10);
-  const end = match[2] ? parseInt(match[2], 10) : fileSize - 1;
-  if (start >= fileSize) {
+  // O cliente pode pedir além do EOF sem conhecer o tamanho (RFC 9110, 14.1.2).
+  // Corpo e cabeçalhos precisam descrever apenas os bytes que existem.
+  const end = match[2] ? Math.min(parseInt(match[2], 10), fileSize - 1) : fileSize - 1;
+  if (start >= fileSize || end < start) {
     return new Response(null, {
       status: 416,
       headers: { "Content-Range": `bytes */${fileSize}` },
