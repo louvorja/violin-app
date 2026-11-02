@@ -2718,7 +2718,11 @@ const _self = {
    * @returns true quando há algo tocando; false quando o operador cancelou ou o
    *          vídeo não pode ser reproduzido (privado, removido, restrito).
    */
-  async openYouTube(url: string, title: string): Promise<boolean> {
+  async openYouTube(
+    url: string,
+    title: string,
+    options: { preferStream?: boolean } = {}
+  ): Promise<boolean> {
     const id = OnlineVideo.videoIdFromUrl(url);
     // Dois cliques no mesmo vídeo enquanto ele abre partilham a tentativa em
     // curso; um segundo vídeo de fato revoga a primeira tentativa.
@@ -2735,16 +2739,26 @@ const _self = {
         const outcome = await _prepareDownloadedYouTube(id, title);
         if (outcome !== "embed") return outcome === "playing";
       } else if (id && OnlineVideo.downloadEnabled()) {
-        // Sem esperar o download: toca das trilhas que o main baixa uma vez só, e o download termina
-        // ao fundo. Se não der para tocar assim, começa pelo player do YouTube (que pode ter
-        // anúncio) e o download segue mesmo assim, para as próximas vezes.
-        const outcome = await _prepareStreamedYouTube(id, title);
-        if (outcome !== "embed") return outcome === "playing";
-        void useOnlineVideoDownloads().download(id, title, {
-          keep: false,
-          quiet: true,
-          background: true,
-        });
+        if (options.preferStream === true) {
+          // Modo antigo, mantido para diagnóstico/teste: tenta tocar das trilhas
+          // diretas antes de abrir o embed.
+          const outcome = await _prepareStreamedYouTube(id, title);
+          if (outcome !== "embed") return outcome === "playing";
+          void useOnlineVideoDownloads().download(id, title, {
+            keep: false,
+            quiet: true,
+            background: true,
+          });
+        } else {
+          // Padrão: o clique abre o vídeo imediatamente pelo YouTube e o
+          // arquivo local é preparado em segundo plano. Na próxima abertura,
+          // `isDownloaded` acha o MP4 e toca sem anúncio.
+          void useOnlineVideoDownloads().download(id, title, {
+            keep: false,
+            quiet: true,
+            background: true,
+          });
+        }
       }
       if (stageEpoch !== _stageEpoch) return false;
       await this.openEmbeddedYouTube(url, title, stageEpoch);
@@ -3152,6 +3166,12 @@ const _self = {
       const self = this;
       _audio.play(
         (e) => {
+          // O "tocar já" do YouTube tem um fallback próprio (volta ao embed e
+          // inicia o download). Um 403 do CDN no meio da trilha não pode abrir
+          // o modal de áudio: o operador acabaria fechando um erro que o app
+          // já está resolvendo.
+          const source = $appdata.get(KEYS.MODULES.MEDIA.CONFIG.AUDIO);
+          if (typeof source === "string" && OnlineVideo.isProgressiveUrl(source)) return;
           const id = $appdata.get(KEYS.MODULES.MEDIA.ID_MUSIC) as string | number | null;
           // Arquivos diretos da liturgia não têm id_music: sem reabrir o banco com null.
           _alertAudioFailure(e, id != null ? () => self.open(id) : undefined);

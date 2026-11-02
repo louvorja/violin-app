@@ -4,7 +4,7 @@
     <LjButton
       v-if="state === 'downloading'"
       size="sm"
-      variant="ghost"
+      variant="danger"
       icon-only
       :icon="ICONS.ACTIONS.CLOSE"
       :title="t('online_video.download.cancel')"

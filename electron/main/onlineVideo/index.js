@@ -146,7 +146,12 @@ function registerIpc(ipcMain) {
   // stats sequenciais e atrasar a primeira imagem em discos lentos/antivírus.
   ipcMain.handle("onlineVideo:has", async (_event, id) => isVideoId(id) && (await readyManager()).store.has(id));
   ipcMain.handle("onlineVideo:keep", async (_event, id) => (await readyManager()).keep(id));
-  ipcMain.handle("onlineVideo:prepare", async () => (await readyManager()).prepare());
+  ipcMain.handle("onlineVideo:prepare", async (event) => {
+    const manager = await readyManager();
+    return manager.prepare((progress) => {
+      safeSend(event.sender, "onlineVideo:progress", { id: "__tools__", ...progress });
+    });
+  });
   ipcMain.handle("onlineVideo:list", async () => (await readyManager()).list());
   ipcMain.handle("onlineVideo:remove", async (_event, id) => (await readyManager()).remove(id));
   ipcMain.handle("onlineVideo:clear", async () => (await readyManager()).clear());

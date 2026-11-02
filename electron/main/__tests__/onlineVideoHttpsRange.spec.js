@@ -63,6 +63,29 @@ afterEach(() => {
   requestSpy.mockRestore();
 });
 
+describe("httpsRange usa os cabeçalhos do cliente que resolveu o link", () => {
+  it("repassa User-Agent/Accept e mantém o Range/identity", async () => {
+    mockResponses([
+      { statusCode: 206, headers: { "content-range": "bytes 0-0/1" }, body: Buffer.from("a") },
+    ]);
+    await httpsRange(URL_BASE, 0, 0, {
+      headers: {
+        "User-Agent": "ua-do-ytdlp",
+        Accept: "text/html",
+        Range: "bytes=9-9",
+        "Accept-Encoding": "gzip",
+        "Content-Length": "999",
+      },
+    });
+    const options = https.request.mock.calls[0][1];
+    expect(options.headers["User-Agent"]).toBe("ua-do-ytdlp");
+    expect(options.headers.Accept).toBe("text/html");
+    expect(options.headers.Range).toBe("bytes=0-0");
+    expect(options.headers["Accept-Encoding"]).toBe("identity");
+    expect(options.headers["Content-Length"]).toBeUndefined();
+  });
+});
+
 describe("httpsRange segue redirecionamentos do CDN do googlevideo", () => {
   it("um 302 com Location: busca o pedaço de novo no host novo e entrega os bytes", async () => {
     mockResponses([

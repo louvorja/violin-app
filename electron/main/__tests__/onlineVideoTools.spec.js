@@ -24,6 +24,8 @@ let hits;
 let ytdlpBody;
 let sumsOverride;
 let ffmpegGz;
+let potZip;
+let potBin;
 /** Quando definido, o servidor segura a resposta do ffmpeg até o teste liberar. */
 let ffmpegGate = null;
 
@@ -43,6 +45,12 @@ beforeAll(async () => {
     if (req.url === "/ff/ffmpeg-fake.gz") {
       const reply = () => send(200, ffmpegGz, { "content-length": ffmpegGz.length });
       return ffmpegGate ? ffmpegGate.then(reply) : reply();
+    }
+    if (req.url === "/pot/bgutil-plugin.zip") {
+      return send(200, potZip ?? Buffer.alloc(0), { "content-length": (potZip ?? Buffer.alloc(0)).length });
+    }
+    if (req.url === "/pot/bgutil-pot-fake") {
+      return send(200, potBin ?? Buffer.alloc(0), { "content-length": (potBin ?? Buffer.alloc(0)).length });
     }
     if (req.url === "/loop/a") return send(302, "", { location: "/loop/a" });
     return send(404, "nope");
@@ -66,6 +74,9 @@ function make(overrides = {}) {
     ffmpegBase: `${origin}/ff`,
     ytdlpAssets: { "linux-x64": "yt-dlp_fake" },
     ffmpegAssets: { "linux-x64": { name: "ffmpeg-fake.gz", sha256: sha(FFMPEG_GZ) } },
+    // Os testes não baixam o provedor real do GitHub; quem testa o plugin
+    // injeta os próprios assets.
+    potAssets: {},
     ...overrides,
   });
 }
@@ -77,6 +88,8 @@ beforeEach(() => {
   sumsOverride = undefined;
   ffmpegGz = FFMPEG_GZ;
   ffmpegGate = null;
+  potZip = undefined;
+  potBin = undefined;
 });
 
 afterEach(() => {
@@ -120,9 +133,9 @@ describe.skipIf(process.platform === "win32")("createTools", () => {
     const events = [];
     const paths = await tools.ensure({ onProgress: (p) => events.push(p) });
 
-    expect(paths).toEqual({ ytdlp: path.join(binDir, "yt-dlp"), ffmpeg: path.join(binDir, "ffmpeg") });
+    expect(paths).toMatchObject({ ytdlp: path.join(binDir, "yt-dlp"), ffmpeg: path.join(binDir, "ffmpeg") });
     expect(tools.ready()).toBe(true);
-    for (const f of Object.values(paths)) {
+    for (const f of [paths.ytdlp, paths.ffmpeg]) {
       expect(fs.statSync(f).mode & 0o111).not.toBe(0);
     }
     expect(fs.readFileSync(paths.ffmpeg)).toEqual(FFMPEG); // gunzip devolve o original
@@ -355,6 +368,57 @@ describe.skipIf(process.platform === "win32")("createTools", () => {
     hits.length = 0;
     await tools.ensure();
     expect(hits).toContain("/yt/yt-dlp_fake");
+  });
+});
+
+describe("provedor de PO token", () => {
+  it("instala o binário e extrai o plugin do yt-dlp", async () => {
+    const JSZip = (await import("jszip")).default;
+    const zip = new JSZip();
+    zip.file("yt_dlp_plugins/extractor/getpot_fake.py", "# plugin fake\n");
+    potZip = await zip.generateAsync({ type: "nodebuffer" });
+    potBin = Buffer.from('#!/bin/sh\necho "bgutil-pot 0.8.1"\n');
+
+    const tools = make({
+      potBase: `${origin}/pot`,
+      potAssets: {
+        "linux-x64": { name: "bgutil-pot-fake", sha256: sha(potBin) },
+      },
+      potPlugin: { name: "bgutil-plugin.zip", sha256: sha(potZip) },
+    });
+    const events = [];
+    const paths = await tools.ensure({ onProgress: (p) => events.push(p) });
+
+    expect(tools.potReady()).toBe(true);
+    expect(paths.pot).toBeTruthy();
+    expect(
+      fs.existsSync(
+        path.join(
+          paths.pluginDir,
+          "bgutil-ytdlp-pot-provider/yt_dlp_plugins/extractor/getpot_fake.py"
+        )
+      )
+    ).toBe(true);
+    expect((await tools.info()).potVersion).toBe("0.8.1");
+    expect(events.some((e) => e.tool === "pot")).toBe(true);
+
+    await tools.reset();
+    expect(tools.potReady()).toBe(false);
+  });
+
+  it("zip com caminho fora da pasta não é extraído", async () => {
+    const JSZip = (await import("jszip")).default;
+    const zip = new JSZip();
+    zip.file("../fora.py", "nope");
+    potZip = await zip.generateAsync({ type: "nodebuffer" });
+    potBin = Buffer.from('#!/bin/sh\necho "bgutil-pot 0.8.1"\n');
+    const tools = make({
+      potBase: `${origin}/pot`,
+      potAssets: { "linux-x64": { name: "bgutil-pot-fake", sha256: sha(potBin) } },
+      potPlugin: { name: "bgutil-plugin.zip", sha256: sha(potZip) },
+    });
+    await tools.ensure();
+    expect(tools.potReady()).toBe(false);
   });
 });
 

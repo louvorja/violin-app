@@ -24,6 +24,10 @@ const REFRESH_COOLDOWN_MS = 60 * 60 * 1000;
 const PROGRESS_INTERVAL_MS = 250;
 /** Não prenda o diálogo de apagar cache se um processo externo ignorar o abort. */
 const CANCEL_SETTLE_MS = 10_000;
+/** O CDN pode recusar uma URL específica; depois disso o próximo play tenta o direto de novo. */
+const DIRECT_BLOCK_TTL_MS = 5 * 60 * 1000;
+/** Tempo para o primeiro pedaço das duas trilhas confirmar que a URL direta vale. */
+const DIRECT_PREFLIGHT_TIMEOUT_MS = 15_000;
 const STREAM_FAILURE_TTL_MS = 5 * 60 * 1000;
 const STREAM_FAILURE_KINDS = new Set([
   "age", "bot", "disk", "forbidden", "format", "geo", "live", "network", "private", "tool", "unavailable", "unknown",
@@ -35,8 +39,9 @@ const STREAM_FAILURE_KINDS = new Set([
  * o restante; com as ferramentas já instaladas, o vídeo usa a barra inteira.
  */
 const TOOLS_SHARE = 25;
-const YTDLP_SHARE = 12;
-
+const YTDLP_SHARE = 8;
+const FFMPEG_SHARE = 9;
+const POT_SHARE = TOOLS_SHARE - YTDLP_SHARE - FFMPEG_SHARE;
 async function defaultFreeBytes(dir) {
   try {
     await fs.ensureDir(dir);
@@ -53,6 +58,28 @@ function urlFor(id) {
 
 function streamUrlFor(id, kind) {
   return `${STREAM_PREFIX}${id}/${kind}`;
+}
+
+function waitForFirstData(promise, timeoutMs, signal) {
+  if (signal?.aborted) return Promise.reject(new OnlineVideoError("cancelled", "Cancelado"));
+  return new Promise((resolve, reject) => {
+    let done = false;
+    let timer = null;
+    const finish = (fn, value) => {
+      if (done) return;
+      done = true;
+      if (timer) clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      fn(value);
+    };
+    const onAbort = () => finish(reject, new OnlineVideoError("cancelled", "Cancelado"));
+    timer = setTimeout(
+      () => finish(reject, new OnlineVideoError("network", "Primeiro pedaço do vídeo não chegou")),
+      timeoutMs
+    );
+    signal?.addEventListener("abort", onAbort, { once: true });
+    promise.then((value) => finish(resolve, value), (error) => finish(reject, error));
+  });
 }
 
 function fail(error) {
@@ -107,6 +134,7 @@ function createManager(cfg) {
     now = Date.now,
     monotonicNow = () => performance.now(),
     refreshCooldownMs = REFRESH_COOLDOWN_MS,
+    directPreflight = true,
     onStreamFailure = () => {},
     presentationActive: initialPresentationActive = false,
   } = cfg;
@@ -114,6 +142,8 @@ function createManager(cfg) {
 
   const store = createStore(dir);
   const cacheDir = path.join(dir, ".ytdlp-cache");
+  /** IDs cujo caminho direto tomou 403 recentemente: o próximo pedido vai direto ao yt-dlp. */
+  const directBlocks = new Map();
   /** @type {Map<string, any>} */
   const jobs = new Map();
   /** Pedidos de URL direta em andamento (tocar já, sem baixar). */
@@ -136,10 +166,42 @@ function createManager(cfg) {
   };
   let lastRefreshAt = -Infinity;
 
+  /** Argumentos do provedor de PO token, quando ele está instalado. */
+  function potArgs(paths) {
+    return paths?.pot
+      ? {
+          pluginDir: paths.pluginDir,
+          potCli: paths.pot,
+          potCacheDir: paths.potCacheDir,
+        }
+      : {};
+  }
+
+  /** Percentual dentro da fatia de ferramentas (0–25), para o cartão e o prepare. */
+  function toolsPercent(tool, raw) {
+    if (tool === "ffmpeg") return Math.round(YTDLP_SHARE + (raw * FFMPEG_SHARE) / 100);
+    if (tool === "pot") {
+      return Math.round(YTDLP_SHARE + FFMPEG_SHARE + (raw * POT_SHARE) / 100);
+    }
+    return Math.round((raw * YTDLP_SHARE) / 100);
+  }
+
   /** Vídeos tocando enquanto baixam: não usam as raias, mas contam como transferência em curso. */
   let streaming = 0;
   /** Um único erro recente, sem ID, URL, mensagem ou caminho, para o diagnóstico de incidentes. */
   let lastStreamFailure = null;
+
+  function isDirectBlocked(id) {
+    const until = directBlocks.get(id);
+    if (!until) return false;
+    if (now() < until) return true;
+    directBlocks.delete(id);
+    return false;
+  }
+
+  function blockDirect(id) {
+    directBlocks.set(id, now() + DIRECT_BLOCK_TTL_MS);
+  }
 
   const timeBucket = (ms) => {
     if (!Number.isFinite(ms)) return "unknown";
@@ -190,7 +252,8 @@ function createManager(cfg) {
     fence.clear === clearGeneration && fence.remove === (removalGenerations.get(id) ?? 0);
   const boundaryCancelled = () => fail(new OnlineVideoError("cancelled", "Cancelado"));
 
-  const transfersRunning = () => lanes.foreground.running + lanes.background.running + streaming;
+  const transfersRunning = () =>
+    lanes.foreground.running + lanes.background.running + streaming + resolutions.size;
 
   function grant(waiter) {
     const { job } = waiter;
@@ -321,34 +384,37 @@ function createManager(cfg) {
     await acquire(job);
     try {
       let toolPaths;
-      let installedTools = !tools.ready();
+      const installedCore = !tools.ready();
+      // O provedor de PO token também entra na instalação: sem ele os formatos
+      // altos do YouTube respondem 403.
+      let needsInstall = installedCore || tools.needsPot?.() === true;
+      // Ferramentas de mídia (yt-dlp/ffmpeg) recém-instaladas ou pré-reparadas:
+      // uma falha logo depois não se resolve reinstalando outra vez.
+      let toolsFresh = installedCore;
       // Um ffmpeg corrompido ou barrado pelo antivírus depois de instalado passa
       // despercebido: sem ele o yt-dlp NÃO falha — cai para o melhor formato que já
       // vem inteiro (360p) e o telão sairia borrado sem nenhum aviso. Conferir custa
       // ~50 ms. (O yt-dlp quebrado, esse, falha alto e é tratado mais abaixo.)
-      if (!installedTools && !(await tools.ffmpegWorks())) {
+      if (!installedCore && !(await tools.ffmpegWorks())) {
         await tools.reset();
-        installedTools = true;
+        needsInstall = true;
+        toolsFresh = true;
       }
-      const base = installedTools ? TOOLS_SHARE : 0;
+      const base = needsInstall ? TOOLS_SHARE : 0;
       /** Progresso do vídeo (0–99) na parte da barra que sobra depois das ferramentas. */
       const overall = (p) => Math.round(base + (p * (99 - base)) / 99);
       job.mapPercent = overall;
 
-      if (installedTools) {
+      if (needsInstall) {
         publish(job, { phase: "tools", percent: 0, phasePercent: 0 }, { force: true });
         toolPaths = await tools.ensure({
           signal,
           onProgress: (p) => {
             const raw = p.total ? Math.round((p.received / p.total) * 100) : 0;
-            const share =
-              p.tool === "ffmpeg"
-                ? YTDLP_SHARE + (raw * (TOOLS_SHARE - YTDLP_SHARE)) / 100
-                : (raw * YTDLP_SHARE) / 100;
             publish(job, {
               phase: "tools",
               tool: p.tool,
-              percent: Math.round(share),
+              percent: toolsPercent(p.tool, raw),
               phasePercent: raw,
             });
           },
@@ -365,7 +431,7 @@ function createManager(cfg) {
       const partial = store.partialDirFor(id);
       // Ferramentas recém-instaladas já passaram pela verificação do instalador:
       // uma falha logo depois não se resolve reinstalando de novo.
-      let repaired = installedTools;
+      let repaired = toolsFresh;
       let refreshed = false;
       let result;
       for (;;) {
@@ -391,7 +457,7 @@ function createManager(cfg) {
             toolPaths = await tools.ensure({ signal });
             continue;
           }
-          if (needsFreshTool(kind) && !installedTools && !refreshed && alone && now() - lastRefreshAt > refreshCooldownMs) {
+          if (needsFreshTool(kind) && !installedCore && !refreshed && alone && now() - lastRefreshAt > refreshCooldownMs) {
             refreshed = true;
             lastRefreshAt = now();
             publish(job, { phase: "tools", tool: "yt-dlp", percent: 0, phasePercent: 0 }, { force: true });
@@ -406,7 +472,7 @@ function createManager(cfg) {
       // Alguns processos externos só percebem o abort depois de devolver o arquivo.
       // Nunca publique esse resultado depois de um cancelar/limpar o cache.
       if (signal.aborted) throw new OnlineVideoError("cancelled", "Download cancelado");
-      return await deliver(job, partial, result, startedAt, installedTools);
+      return await deliver(job, partial, result, startedAt, needsInstall);
     } finally {
       release(job);
     }
@@ -421,23 +487,73 @@ function createManager(cfg) {
   async function fetchVideo(job, { toolPaths, partial, overall }) {
     const { id, controller } = job;
     const signal = controller.signal;
-    const links = await resolveLinks(id, { maxHeight: job.maxHeight });
-    if (signal.aborted) throw new OnlineVideoError("cancelled", "Download cancelado");
-    if (links.ok) {
-      await assertRoomFor(links);
-      await openJobSession(job, links);
-      job.settleReady(true);
-      return assemble(job, partial);
+    let directAttempt = 0;
+
+    // Uma URL assinada pode ser recusada por um edge mesmo com o vídeo válido.
+    // Tenta o direto uma vez; se o CDN insistir no 403, bloqueia por um tempo e
+    // vai direto ao yt-dlp completo (que re-resolve com o cliente dele).
+    while (!isDirectBlocked(id)) {
+      const links = await resolveLinks(id, { maxHeight: job.maxHeight });
+      if (signal.aborted) throw new OnlineVideoError("cancelled", "Download cancelado");
+      if (!links.ok) {
+        if (links.error.kind === "forbidden") {
+          if (directAttempt === 0) {
+            directAttempt++;
+            continue;
+          }
+          blockDirect(id);
+          break;
+        }
+        if (links.error.kind !== "format") {
+          throw new OnlineVideoError(links.error.kind, links.error.message);
+        }
+        break;
+      }
+
+      try {
+        await assertRoomFor(links);
+        await openJobSession(job, links);
+        job.settleReady(true);
+        return await assemble(job, partial);
+      } catch (error) {
+        const kind = error instanceof OnlineVideoError ? error.kind : "unknown";
+        if (signal.aborted || kind === "cancelled" || kind === "disk") throw error;
+        console.warn(
+          "[onlineVideo] trilhas diretas falharam; tentando o download completo:",
+          id,
+          kind,
+          error?.message
+        );
+        await disposeSession(id);
+        job.session = null;
+        job.links = null;
+        job.settleReady(false);
+        await fs.remove(partial);
+        if (kind === "forbidden" && directAttempt === 0) {
+          directAttempt++;
+          continue;
+        }
+        if (kind === "forbidden") blockDirect(id);
+        break;
+      }
     }
-    // Só formatos em fragmentos: o yt-dlp sabe juntá-los, as janelas não conseguem ler. Quem
-    // pedir para tocar enquanto ele baixa acompanha o download (não há o que ler antes do fim).
-    if (links.error.kind !== "format") throw new OnlineVideoError(links.error.kind, links.error.message);
+
+    // Só formatos em fragmentos (ou trilhas diretas recusadas): o yt-dlp sabe
+    // juntá-los e baixa com o cliente dele. Quem pedir para tocar enquanto ele
+    // baixa acompanha o download (não há o que ler antes do fim).
+    //
+    // Quando o direto tomou 403, o 1080p de 116 MB é o pior dos mundos: o
+    // operador já esperou por uma falha. O fallback cai para 720p; o próximo
+    // play, se precisar, tenta o direto de novo depois da janela de bloqueio.
+    const fallbackHeight =
+      isDirectBlocked(id) && job.maxHeight > 720 ? 720 : job.maxHeight;
     job.settleReady(false);
     return run({
       tools: toolPaths,
+      ...potArgs(toolPaths),
       id,
       outDir: partial,
-      maxHeight: job.maxHeight,
+      maxHeight: fallbackHeight,
       cacheDir,
       jsRuntime: jsRuntime(),
       signal,
@@ -488,6 +604,20 @@ function createManager(cfg) {
     sessions.set(id, session);
     if (job.controller.signal.aborted) session.abort();
     else job.controller.signal.addEventListener("abort", () => session.abort(), { once: true });
+    // Não entregue uma sessão ao renderer antes de o CDN aceitar o primeiro
+    // pedaço real de cada trilha. O 403 no meio virava "no supported source".
+    if (directPreflight && session.firstData) {
+      try {
+        await waitForFirstData(
+          session.firstData,
+          DIRECT_PREFLIGHT_TIMEOUT_MS,
+          job.controller.signal
+        );
+      } catch (error) {
+        await disposeSession(id);
+        throw error;
+      }
+    }
     return session;
   }
 
@@ -588,7 +718,21 @@ function createManager(cfg) {
       if (onProgress) existing.listeners.add(onProgress);
       if (opts.keep) existing.keep = true;
       if (opts.priority !== "background") promote(existing);
-      return existing.promise;
+      if (!existing.streamingMode) return existing.promise;
+      return existing.promise.then((res) => {
+        // Um job de "tocar já" que falhou já não serve ao download que chegou
+        // depois (o renderer inicia o download ao cair no embed). Comece um
+        // download de verdade em vez de devolver a falha do stream.
+        if (
+          res?.ok ||
+          !existing.streamingMode ||
+          existing.streamDelivered ||
+          res?.error?.kind === "cancelled"
+        ) {
+          return res;
+        }
+        return ensure(id, opts, onProgress);
+      });
     }
 
     const job = {
@@ -650,16 +794,18 @@ function createManager(cfg) {
 
     const entry = { controller: new AbortController(), promise: null };
     entry.promise = Promise.resolve()
-      .then(() =>
-        resolve({
-          tools: tools.paths(),
+      .then(() => {
+        const toolPaths = tools.paths();
+        return resolve({
+          tools: toolPaths,
+          ...potArgs(toolPaths),
           id,
           maxHeight: clampHeight(opts.maxHeight),
           cacheDir,
           jsRuntime: jsRuntime(),
           signal: entry.controller.signal,
-        })
-      )
+        });
+      })
       .then(
         // Cancelado no mesmo instante em que os links chegaram: o cancelamento vale.
         (links) =>
@@ -677,12 +823,15 @@ function createManager(cfg) {
 
   function streamInfo(job) {
     const { links } = job;
+    // Cabeçalhos ficam no main: o renderer só recebe os endereços louvorja://.
+    const { headers: _videoHeaders, ...video } = links.video;
+    const { headers: _audioHeaders, ...audio } = links.audio;
     return {
       ok: true,
       id: job.id,
       cached: false,
-      video: { ...links.video, url: streamUrlFor(job.id, "video") },
-      audio: { ...links.audio, url: streamUrlFor(job.id, "audio") },
+      video: { ...video, url: streamUrlFor(job.id, "video") },
+      audio: { ...audio, url: streamUrlFor(job.id, "audio") },
       muxed: links.muxed,
       duration: links.duration,
     };
@@ -757,6 +906,9 @@ function createManager(cfg) {
     };
     if (store.has(id)) return cached();
     if (!tools.ready()) return fail(new OnlineVideoError("tools", "Ferramentas ainda não instaladas"));
+    if (isDirectBlocked(id)) {
+      return fail(new OnlineVideoError("forbidden", "Caminho direto bloqueado após 403"));
+    }
 
     const join = async (job) => {
       if (job.controller.signal.aborted) {
@@ -790,7 +942,10 @@ function createManager(cfg) {
     const resolveStartedAt = monotonicNow();
     const links = await resolveLinks(id, opts);
     timings.resolve_ms = elapsed(resolveStartedAt);
-    if (!links.ok) return links;
+    if (!links.ok) {
+      if (links.error.kind === "forbidden") blockDirect(id);
+      return links;
+    }
     if (!streamFenceCurrent(id, fence)) return boundaryCancelled();
     // Enquanto os links chegavam, o mesmo vídeo pode ter sido baixado ou pedido de novo.
     if (store.has(id)) return cached();
@@ -869,7 +1024,10 @@ function createManager(cfg) {
     const opened = await job.ready;
     timings.session_open_ms = elapsed(openStartedAt);
     if (job.controller.signal.aborted || !streamFenceCurrent(id, fence)) return boundaryCancelled();
-    if (!opened) return fail(job.openError);
+    if (!opened) {
+      if (job.openError?.kind === "forbidden") blockDirect(id);
+      return fail(job.openError);
+    }
     job.streamDelivered = true;
     publish(job, { phase: "downloading", percent: 0 }, { force: true });
     return withTimings(streamInfo(job));
@@ -891,12 +1049,26 @@ function createManager(cfg) {
    * vai querer tocar um, e o primeiro não deve pagar 20–40 s de instalação. Se o
    * operador pedir um vídeo no meio, o download aproveita a instalação em curso.
    */
-  async function prepare() {
+  async function prepare(onProgress) {
     if (!tools.supported) return fail(new OnlineVideoError("unsupported", "Plataforma sem suporte"));
-    if (tools.ready()) return { ok: true, ready: true };
+    const potSupported = tools.potSupported === true;
+    const potOk = tools.potReady?.() === true;
+    if (tools.ready() && (potOk || !potSupported || !tools.needsPot?.())) {
+      return { ok: true, ready: true, pot: potOk, potSupported };
+    }
     try {
-      await tools.ensure();
-      return { ok: true, ready: true };
+      await tools.ensure({
+        onProgress: (p) => {
+          const raw = p.total ? Math.round((p.received / p.total) * 100) : 0;
+          onProgress?.({
+            phase: "tools",
+            tool: p.tool,
+            percent: toolsPercent(p.tool, raw),
+            phasePercent: raw,
+          });
+        },
+      });
+      return { ok: true, ready: true, pot: tools.potReady?.() === true, potSupported };
     } catch (error) {
       return fail(error);
     }

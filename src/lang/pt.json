@@ -1793,13 +1793,15 @@
   },
   "online_video": {
     "preparing": "Baixando o vídeo…",
+    "preparing_named": "Baixando vídeo: {title}",
     "phase": {
       "tools": "Preparando os componentes do vídeo",
-      "tools_ytdlp": "Preparando ferramenta 1 de 2 (yt-dlp): {percent}%",
-      "tools_ffmpeg": "Preparando ferramenta 2 de 2 (ffmpeg): {percent}%",
+      "tools_ytdlp": "Preparando ferramenta 1 de 3 (yt-dlp): {percent}%",
+      "tools_ffmpeg": "Preparando ferramenta 2 de 3 (ffmpeg): {percent}%",
       "queued": "Na fila",
       "downloading": "Baixando",
-      "finalizing": "Finalizando"
+      "finalizing": "Finalizando",
+      "tools_pot": "Preparando ferramenta 3 de 3 (provedor de PO token): {percent}%"
     },
     "errors": {
       "age": "Este vídeo tem restrição de idade e não pode ser projetado.",
@@ -1820,7 +1822,11 @@
       "download_all": "Baixar todos",
       "remove_all": "Remover downloads",
       "confirm_remove_all": "Remover os {count} vídeos baixados desta lista? Eles continuam na lista."
-    }
+    },
+    "preparing_tools": "Preparando os componentes de vídeo…",
+    "preparing_pot": "Instalando o provedor de PO token…",
+    "pot_unavailable": "O provedor de PO token não pôde ser instalado; alguns vídeos podem abrir no player do YouTube.",
+    "prepare_failed": "Não foi possível preparar os componentes de vídeo."
   },
   "chat": {
     "title": "Chat",

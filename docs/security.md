@@ -146,6 +146,7 @@ O download de vídeos do YouTube (`electron/main/onlineVideo/`) executa dois bin
 | -------- | -------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | `yt-dlp` | `github.com/yt-dlp/yt-dlp/releases/latest`         | SHA-256 do `SHA2-256SUMS` da mesma release; roda `--version` antes de instalar                |
 | `ffmpeg` | `github.com/eugeneware/ffmpeg-static` (tag fixa)   | SHA-256 do `.gz` **fixado no código** (`tools.js`); roda `-version` antes de instalar         |
+| `bgutil-pot` + plugin | `github.com/jim60105/bgutil-ytdlp-pot-provider-rs` (tag `v0.8.1`) | SHA-256 do binário e do zip do plugin fixados no código; roda `--version`; extração sem `..` |
 
 - O renderer só pede `onlineVideo:ensure(id, { maxHeight, priority, keep })` e
   `onlineVideo:stream(id, { maxHeight, keep })` (mais `keep(id)`, `cancel(id)`, `remove(id)`,
@@ -176,6 +177,13 @@ O download de vídeos do YouTube (`electron/main/onlineVideo/`) executa dois bin
   pelo processo principal e pelo yt-dlp, não pelo renderer: a CSP não ganha domínio novo.
 - Um binário que baixou certo mas não executa (antivírus, arquitetura errada) é apagado e
   reinstalado uma vez; se continuar falhando, o app cai no player do YouTube.
+- O **provedor de PO token** é opcional e baixado no primeiro uso. Ele roda em modo CLI
+  (`bgutil-pot --content-binding <videoId>`), iniciado pelo plugin dentro do processo do
+  yt-dlp, sem servidor HTTP/porta. O yt-dlp recebe `--plugin-dirs` e
+  `--extractor-args youtubepot-bgutilcli:cli_path=...`; o binário e o plugin são GPL-3.0,
+  sem modificações, com versão/SHA fixos. Se ele faltar/falhar, o yt-dlp/ffmpeg continuam
+  funcionando e o vídeo cai no player do YouTube. Os cabeçalhos do yt-dlp (incluindo o PO
+  token, quando vier) são repassados às requisições das trilhas; logs não incluem URLs.
 
 ---
 

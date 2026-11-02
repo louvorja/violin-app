@@ -78,7 +78,13 @@ let mediaSpies: { mockRestore(): void }[] = [];
 const ID = "T8YHfGrk3ok";
 const OTHER = "jNQXAC9IVRw";
 const embed = (id: string) => `https://www.youtube.com/embed/${id}?autoplay=1&rel=0&controls=0`;
-const ok = (id: string) => ({ ok: true, id, url: `louvorja://onlinevideo/${id}.mp4`, size: 1, cached: false });
+const ok = (id: string) => ({
+  ok: true,
+  id,
+  url: `louvorja://onlinevideo/${id}.mp4`,
+  size: 1,
+  cached: false,
+});
 const cancelled = { ok: false, error: { kind: "cancelled", message: "Download cancelado" } };
 const tick = () => new Promise((r) => setTimeout(r, 0));
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -109,6 +115,9 @@ function controlledDownloads() {
   });
   return calls;
 }
+
+const openStream = (url: string, title: string) =>
+  media.openYouTube(url, title, { preferStream: true });
 
 // O preparo em curso é estado de módulo: cada teste começa com um módulo novo.
 beforeEach(async () => {
@@ -156,6 +165,29 @@ function onlyFragmentedFormats() {
   h.stream.mockResolvedValue(streamFail("busy"));
 }
 
+it("não abre o modal de áudio quando a falha é de uma trilha progressiva do YouTube", async () => {
+  openAudio.mockRestore();
+  const { default: $alert } = await import("@/helpers/Alert");
+  const show = vi.spyOn($alert, "show").mockImplementation(() => {});
+  const play = vi
+    .spyOn(HTMLMediaElement.prototype, "play")
+    .mockRejectedValue(new DOMException("no supported source", "NotSupportedError"));
+
+  await media.openAudio(
+    {
+      url: `louvorja://onlinestream/${ID}/audio`,
+      title: "Vídeo",
+      mediaType: "video",
+    },
+    true
+  );
+  await tick();
+
+  expect(show).not.toHaveBeenCalled();
+  play.mockRestore();
+  show.mockRestore();
+});
+
 it("retains real XHR Blob MIME, bytes and original basename when play rejects the opaque source", async () => {
   openAudio.mockRestore();
   // Este é o caminho do blob baixado por inteiro, não o do streaming.
@@ -170,28 +202,58 @@ it("retains real XHR Blob MIME, bytes and original basename when play rejects th
     responseType = "";
     timeout = 0;
     onload: ((_this: XMLHttpRequest) => void) | null = null;
-    constructor() { request = this as unknown as XMLHttpRequest; }
-    open() {} send() {} abort() {}
-    getResponseHeader() { return "text/html; charset=utf-8"; }
+    constructor() {
+      request = this as unknown as XMLHttpRequest;
+    }
+    open() {}
+    send() {}
+    abort() {}
+    getResponseHeader() {
+      return "text/html; charset=utf-8";
+    }
   }
   vi.stubGlobal("XMLHttpRequest", FakeXHR);
   const create = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:loaded-body");
-  const play = vi.spyOn(HTMLMediaElement.prototype, "play").mockRejectedValue(new DOMException("source blob:loaded-body unsupported", "NotSupportedError"));
+  const play = vi
+    .spyOn(HTMLMediaElement.prototype, "play")
+    .mockRejectedValue(
+      new DOMException("source blob:loaded-body unsupported", "NotSupportedError")
+    );
   try {
-    await media.openAudio({ url: "https://provider.example/Private%20file.mov?signature=secret", title: "Private title", mediaType: "video" });
+    await media.openAudio({
+      url: "https://provider.example/Private%20file.mov?signature=secret",
+      title: "Private title",
+      mediaType: "video",
+    });
     request.onload?.call(request, new ProgressEvent("load"));
-    await Promise.resolve(); await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
     expect(create).toHaveBeenCalledOnce();
-    expect(log).toHaveBeenCalledWith("error", "music play promise rejected", expect.objectContaining({
-      stage: "play_promise", playback_id: expect.any(String), source_scheme: "blob",
-      original_source: expect.objectContaining({ file_ext: "mov", file_basename: "Private file.mov",
-        blob_mime: "text/html", blob_bytes: 19, response_content_type: "text/html", codec: "unknown" }),
-    }));
+    expect(log).toHaveBeenCalledWith(
+      "error",
+      "music play promise rejected",
+      expect.objectContaining({
+        stage: "play_promise",
+        playback_id: expect.any(String),
+        source_scheme: "blob",
+        original_source: expect.objectContaining({
+          file_ext: "mov",
+          file_basename: "Private file.mov",
+          blob_mime: "text/html",
+          blob_bytes: 19,
+          response_content_type: "text/html",
+          codec: "unknown",
+        }),
+      })
+    );
     const failed = log.mock.calls.find(([level]) => level === "error")?.[2];
     expect(JSON.stringify(failed)).not.toMatch(/signature|provider\.example|loaded-body|<html>/);
   } finally {
     media.close(true);
-    log.mockRestore(); create.mockRestore(); play.mockRestore(); vi.unstubAllGlobals();
+    log.mockRestore();
+    create.mockRestore();
+    play.mockRestore();
+    vi.unstubAllGlobals();
   }
 });
 
@@ -200,18 +262,21 @@ describe("acompanhar o download do yt-dlp e projetar", () => {
 
   it("com o vídeo pronto, abre as janelas e toca o arquivo (não o player do YouTube)", async () => {
     h.ensure.mockResolvedValue(ok(ID));
-    expect(await media.openYouTube(embed(ID), "Louvor")).toBe(true);
+    expect(await openStream(embed(ID), "Louvor")).toBe(true);
     expect(h.openWindows).toHaveBeenCalled();
-    expect(openAudio).toHaveBeenCalledWith({
-      url: `louvorja://onlinevideo/${ID}.mp4`,
-      title: "Louvor",
-      mediaType: "video",
-    }, true);
+    expect(openAudio).toHaveBeenCalledWith(
+      {
+        url: `louvorja://onlinevideo/${ID}.mp4`,
+        title: "Louvor",
+        mediaType: "video",
+      },
+      true
+    );
   });
 
   it("cancelado pelo operador: não abre nada, e nenhum aviso de erro", async () => {
     h.ensure.mockResolvedValue(cancelled);
-    expect(await media.openYouTube(embed(ID), "Louvor")).toBe(false);
+    expect(await openStream(embed(ID), "Louvor")).toBe(false);
     expect(openAudio).not.toHaveBeenCalled();
     expect(h.warning).not.toHaveBeenCalled();
     expect(h.error).not.toHaveBeenCalled();
@@ -220,7 +285,7 @@ describe("acompanhar o download do yt-dlp e projetar", () => {
   it("lookup de cache atrasado não inicia vídeo depois que o editor assumiu", async () => {
     const lookup = deferred<boolean>();
     h.isDownloaded.mockReturnValueOnce(lookup.promise);
-    const video = media.openYouTube(embed(ID), "Vídeo antigo");
+    const video = openStream(embed(ID), "Vídeo antigo");
     await tick();
     expect(h.isDownloaded).toHaveBeenCalledWith(ID);
     expect(h.ensure).not.toHaveBeenCalled();
@@ -256,12 +321,12 @@ describe("cancelar e tocar de novo (download do yt-dlp)", () => {
 
   it("cancelar pelo botão de parar e pedir o mesmo vídeo na hora começa um download novo", async () => {
     const calls = controlledDownloads();
-    const first = media.openYouTube(embed(ID), "Louvor");
+    const first = openStream(embed(ID), "Louvor");
     await tick();
     media.close(true); // o operador parou
     expect(h.cancel).toHaveBeenCalledWith(ID);
 
-    const second = media.openYouTube(embed(ID), "Louvor"); // e clicou de novo, sem esperar
+    const second = openStream(embed(ID), "Louvor"); // e clicou de novo, sem esperar
     await tick();
     expect(calls).toHaveLength(2); // pedido novo, não a carona no que foi cancelado
 
@@ -274,10 +339,10 @@ describe("cancelar e tocar de novo (download do yt-dlp)", () => {
 
   it("o resultado do download cancelado, chegando depois, não abre o vídeo por cima do novo", async () => {
     const calls = controlledDownloads();
-    const first = media.openYouTube(embed(ID), "Louvor");
+    const first = openStream(embed(ID), "Louvor");
     await tick();
     media.close(true);
-    const second = media.openYouTube(embed(ID), "Louvor");
+    const second = openStream(embed(ID), "Louvor");
     await tick();
 
     // O antigo termina "com sucesso" (o cancelamento chegou tarde): já não interessa.
@@ -291,8 +356,8 @@ describe("cancelar e tocar de novo (download do yt-dlp)", () => {
 
   it("pedir o mesmo vídeo duas vezes seguidas, sem cancelar, continua sendo uma projeção só", async () => {
     const calls = controlledDownloads();
-    const first = media.openYouTube(embed(ID), "Louvor");
-    const second = media.openYouTube(embed(ID), "Louvor");
+    const first = openStream(embed(ID), "Louvor");
+    const second = openStream(embed(ID), "Louvor");
     await tick();
     expect(calls).toHaveLength(1);
     calls[0].done.resolve(ok(ID));
@@ -303,9 +368,9 @@ describe("cancelar e tocar de novo (download do yt-dlp)", () => {
 
   it("pedir outro vídeo cancela o anterior e só o novo abre", async () => {
     const calls = controlledDownloads();
-    const first = media.openYouTube(embed(ID), "Um");
+    const first = openStream(embed(ID), "Um");
     await tick();
-    const second = media.openYouTube(embed(OTHER), "Dois");
+    const second = openStream(embed(OTHER), "Dois");
     await tick();
     expect(h.cancel).toHaveBeenCalledWith(ID);
 
@@ -319,7 +384,7 @@ describe("cancelar e tocar de novo (download do yt-dlp)", () => {
 
   it("tocar outra mídia no meio do download cancela o vídeo pendente", async () => {
     const calls = controlledDownloads();
-    const pending = media.openYouTube(embed(ID), "Louvor");
+    const pending = openStream(embed(ID), "Louvor");
     await tick();
     openAudio.mockRestore(); // aqui o openAudio é o de verdade: ele é quem cancela
     const real = vi.spyOn(media, "openAudio");
@@ -342,7 +407,7 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
   it("toca do arquivo em crescimento: imagem nas janelas, som na principal, e nenhum player do YouTube", async () => {
     controlledDownloads();
     const { video, audio } = streams(ID);
-    expect(await media.openYouTube(embed(ID), "Louvor")).toBe(true);
+    expect(await openStream(embed(ID), "Louvor")).toBe(true);
     expect(h.stream).toHaveBeenCalledWith(ID);
     expect(h.openWindows).toHaveBeenCalled();
     expect(h.send).toHaveBeenCalledWith(BROADCAST_TYPE.FILE_PROJECTION, {
@@ -352,12 +417,15 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
       stage_epoch: expect.any(Number),
     });
     // a imagem do player do app vem da trilha de vídeo; o som, da de áudio
-    expect(openAudio).toHaveBeenCalledWith({
-      url: audio.url,
-      title: "Louvor",
-      mediaType: "video",
-      videoUrl: video.url,
-    }, true);
+    expect(openAudio).toHaveBeenCalledWith(
+      {
+        url: audio.url,
+        title: "Louvor",
+        mediaType: "video",
+        videoUrl: video.url,
+      },
+      true
+    );
     expect(embedded).not.toHaveBeenCalled();
     // abre direto: nenhum toast de "abrindo" entre o clique e o vídeo
     expect(h.info).not.toHaveBeenCalled();
@@ -368,9 +436,11 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
     const track = vi.spyOn(Telemetry, "track").mockImplementation(() => {});
     controlledDownloads();
 
-    expect(await media.openYouTube(embed(ID), "Título privado")).toBe(true);
+    expect(await openStream(embed(ID), "Título privado")).toBe(true);
 
-    const summary = track.mock.calls.find(([event]) => event === "online_video_stream_start_latency")?.[1];
+    const summary = track.mock.calls.find(
+      ([event]) => event === "online_video_stream_start_latency"
+    )?.[1];
     expect(summary).toMatchObject({ outcome: "playing" });
     expect(summary?.resolution_ms).toEqual(expect.any(Number));
     expect(summary?.projection_open_ms).toEqual(expect.any(Number));
@@ -378,39 +448,55 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
     expect(summary).not.toHaveProperty("title");
     expect(summary).not.toHaveProperty("url");
     expect(summary).not.toHaveProperty("video_id");
-    expect(track.mock.calls.filter(([event]) => event === "online_video_stream_start_latency")).toHaveLength(1);
+    expect(
+      track.mock.calls.filter(([event]) => event === "online_video_stream_start_latency")
+    ).toHaveLength(1);
     track.mockRestore();
   });
 
   it("o vídeo que já estava no disco quando o main foi perguntado toca do arquivo, sem trilhas separadas", async () => {
     const file = `louvorja://onlinevideo/${ID}.mp4`;
-    h.stream.mockResolvedValue({ ok: true, id: ID, cached: true, video: { url: file }, audio: { url: file }, muxed: true, duration: null });
+    h.stream.mockResolvedValue({
+      ok: true,
+      id: ID,
+      cached: true,
+      video: { url: file },
+      audio: { url: file },
+      muxed: true,
+      duration: null,
+    });
     controlledDownloads();
-    expect(await media.openYouTube(embed(ID), "Louvor")).toBe(true);
-    expect(openAudio).toHaveBeenCalledWith({ url: file, title: "Louvor", mediaType: "video" }, true);
+    expect(await openStream(embed(ID), "Louvor")).toBe(true);
+    expect(openAudio).toHaveBeenCalledWith(
+      { url: file, title: "Louvor", mediaType: "video" },
+      true
+    );
     expect(embedded).not.toHaveBeenCalled();
   });
 
   it("já baixando pelo yt-dlp (vídeo só com formatos em fragmentos): acompanha esse download, sem abrir o player do YouTube", async () => {
     h.stream.mockResolvedValue(streamFail("busy"));
     const calls = controlledDownloads();
-    const opening = media.openYouTube(embed(ID), "Louvor");
+    const opening = openStream(embed(ID), "Louvor");
     await vi.waitFor(() => expect(calls).toHaveLength(1));
     calls[0].done.resolve(ok(ID));
     expect(await opening).toBe(true);
     expect(embedded).not.toHaveBeenCalled();
     expect(h.warning).not.toHaveBeenCalled();
-    expect(openAudio).toHaveBeenCalledWith({
-      url: `louvorja://onlinevideo/${ID}.mp4`,
-      title: "Louvor",
-      mediaType: "video",
-    }, true);
+    expect(openAudio).toHaveBeenCalledWith(
+      {
+        url: `louvorja://onlinevideo/${ID}.mp4`,
+        title: "Louvor",
+        mediaType: "video",
+      },
+      true
+    );
   });
 
   it("o download só começa depois de o vídeo estar tocando, e sem guardá-lo", async () => {
     h.ready = 0; // o som ainda não está pronto
     const calls = controlledDownloads();
-    const opening = media.openYouTube(embed(ID), "Louvor");
+    const opening = openStream(embed(ID), "Louvor");
     await sleep(450);
     expect(openAudio).toHaveBeenCalledTimes(1);
     expect(h.ensure).not.toHaveBeenCalled();
@@ -418,12 +504,15 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
     h.ready = 4;
     expect(await opening).toBe(true);
     expect(calls).toHaveLength(1);
-    expect(h.ensure).toHaveBeenCalledWith(ID, expect.any(Function), { background: true, keep: false });
+    expect(h.ensure).toHaveBeenCalledWith(ID, expect.any(Function), {
+      background: true,
+      keep: false,
+    });
   });
 
   it("terminar de baixar não troca o que já está tocando", async () => {
     const calls = controlledDownloads();
-    await media.openYouTube(embed(ID), "Louvor");
+    await openStream(embed(ID), "Louvor");
     calls[0].done.resolve(ok(ID));
     await tick();
     expect(openAudio).toHaveBeenCalledTimes(1);
@@ -433,7 +522,7 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
 
   it("se o download em segundo plano falha, ninguém é avisado: o vídeo já está tocando", async () => {
     const calls = controlledDownloads();
-    await media.openYouTube(embed(ID), "Louvor");
+    await openStream(embed(ID), "Louvor");
     calls[0].done.resolve({ ok: false, error: { kind: "network", message: "sem rede" } });
     await tick();
     expect(h.warning).not.toHaveBeenCalled();
@@ -443,16 +532,19 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
   it("com o arquivo já no disco, toca dele e nem procura os links", async () => {
     h.downloaded = true;
     h.ensure.mockResolvedValue({ ...ok(ID), cached: true });
-    expect(await media.openYouTube(embed(ID), "Louvor")).toBe(true);
+    expect(await openStream(embed(ID), "Louvor")).toBe(true);
     expect(h.stream).not.toHaveBeenCalled();
     expect(embedded).not.toHaveBeenCalled();
-    expect(openAudio).toHaveBeenCalledWith(expect.objectContaining({ url: `louvorja://onlinevideo/${ID}.mp4` }), true);
+    expect(openAudio).toHaveBeenCalledWith(
+      expect.objectContaining({ url: `louvorja://onlinevideo/${ID}.mp4` }),
+      true
+    );
   });
 
   it("pedir o mesmo vídeo de novo enquanto abre continua sendo uma projeção só", async () => {
     controlledDownloads();
-    const first = media.openYouTube(embed(ID), "Louvor");
-    const second = media.openYouTube(embed(ID), "Louvor");
+    const first = openStream(embed(ID), "Louvor");
+    const second = openStream(embed(ID), "Louvor");
     expect(await first).toBe(true);
     expect(await second).toBe(true);
     expect(h.stream).toHaveBeenCalledTimes(1);
@@ -464,7 +556,7 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       h.stream.mockResolvedValue(streamFail("network"));
       const calls = controlledDownloads();
-      expect(await media.openYouTube(embed(ID), "Louvor")).toBe(true);
+      expect(await openStream(embed(ID), "Louvor")).toBe(true);
       expect(warn).toHaveBeenCalledWith("[OnlineVideo] abrir direto falhou:", {
         id: ID,
         kind: "network",
@@ -474,14 +566,17 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
       expect(embedded).toHaveBeenCalledWith(embed(ID), "Louvor", expect.any(Number));
       expect(h.warning).toHaveBeenCalledTimes(1);
       expect(calls).toHaveLength(1);
-      expect(h.ensure).toHaveBeenCalledWith(ID, expect.any(Function), { background: true, keep: false });
+      expect(h.ensure).toHaveBeenCalledWith(ID, expect.any(Function), {
+        background: true,
+        keep: false,
+      });
       expect(openAudio).not.toHaveBeenCalled();
     });
 
     it("ferramentas ainda não instaladas (primeiro uso): player do YouTube sem aviso, e o download as instala", async () => {
       h.stream.mockResolvedValue(streamFail("tools"));
       const calls = controlledDownloads();
-      expect(await media.openYouTube(embed(ID), "Louvor")).toBe(true);
+      expect(await openStream(embed(ID), "Louvor")).toBe(true);
       expect(embedded).toHaveBeenCalledTimes(1);
       expect(h.warning).not.toHaveBeenCalled();
       expect(calls).toHaveLength(1);
@@ -490,7 +585,7 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
     it("o vídeo em si não pode ser projetado (privado): avisa o operador e não abre nada", async () => {
       h.stream.mockResolvedValue(streamFail("private"));
       controlledDownloads();
-      expect(await media.openYouTube(embed(ID), "Louvor")).toBe(false);
+      expect(await openStream(embed(ID), "Louvor")).toBe(false);
       expect(h.error).toHaveBeenCalledTimes(1);
       expect(embedded).not.toHaveBeenCalled();
       expect(openAudio).not.toHaveBeenCalled();
@@ -499,7 +594,7 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
 
     it("cancelado enquanto procura os links: não abre nada, sem aviso", async () => {
       h.stream.mockResolvedValue(streamFail("cancelled"));
-      expect(await media.openYouTube(embed(ID), "Louvor")).toBe(false);
+      expect(await openStream(embed(ID), "Louvor")).toBe(false);
       expect(embedded).not.toHaveBeenCalled();
       expect(h.warning).not.toHaveBeenCalled();
       expect(h.error).not.toHaveBeenCalled();
@@ -510,7 +605,7 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
       h.ready = 0;
       const closed = vi.spyOn(media, "close").mockImplementation(() => {});
       controlledDownloads();
-      const opening = media.openYouTube(embed(ID), "Louvor");
+      const opening = openStream(embed(ID), "Louvor");
       await vi.advanceTimersByTimeAsync(21_000);
       expect(await opening).toBe(true);
       expect(closed).toHaveBeenCalledWith(true, true, true, true);
@@ -526,7 +621,7 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
       h.mediaError = { code: 4 };
       const closed = vi.spyOn(media, "close").mockImplementation(() => {});
       controlledDownloads();
-      expect(await media.openYouTube(embed(ID), "Louvor")).toBe(true);
+      expect(await openStream(embed(ID), "Louvor")).toBe(true);
       expect(warn).toHaveBeenCalledWith(
         "[OnlineVideo] o vídeo aberto direto não chegou a tocar:",
         expect.objectContaining({ id: ID, ready_state: 0, error_code: 4 })
@@ -548,7 +643,7 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
 
     it("tocar entra nesse download: um pedido só de links, e o cartão segue mostrando o andamento", async () => {
       const downloads = await startCardDownload();
-      expect(await media.openYouTube(embed(ID), "Louvor")).toBe(true);
+      expect(await openStream(embed(ID), "Louvor")).toBe(true);
       expect(h.stream).toHaveBeenCalledTimes(1);
       expect(openAudio).toHaveBeenCalledTimes(1);
       expect(h.ensure).not.toHaveBeenCalled(); // não abre um segundo download por cima
@@ -559,7 +654,7 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
       await startCardDownload();
       const links = deferred<unknown>();
       h.stream.mockReturnValue(links.promise);
-      const pending = media.openYouTube(embed(ID), "Louvor");
+      const pending = openStream(embed(ID), "Louvor");
       await tick();
       media.close(true);
       expect(h.cancel).not.toHaveBeenCalled();
@@ -573,7 +668,7 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
       await startCardDownload();
       const links = deferred<unknown>();
       h.stream.mockReturnValue(links.promise);
-      const pending = media.openYouTube(embed(ID), "Louvor");
+      const pending = openStream(embed(ID), "Louvor");
       await tick();
 
       await media.stopForSlideEditor();
@@ -588,10 +683,12 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
       await startCardDownload();
       controlledDownloads(); // o vídeo novo baixa ao fundo depois de começar a tocar
       const links = deferred<unknown>();
-      h.stream.mockImplementation((id: string) => (id === ID ? links.promise : Promise.resolve(streams(id))));
-      const one = media.openYouTube(embed(ID), "Um");
+      h.stream.mockImplementation((id: string) =>
+        id === ID ? links.promise : Promise.resolve(streams(id))
+      );
+      const one = openStream(embed(ID), "Um");
       await tick();
-      const two = media.openYouTube(embed(OTHER), "Dois");
+      const two = openStream(embed(OTHER), "Dois");
       expect(await two).toBe(true);
       expect(h.cancel).not.toHaveBeenCalled();
 
@@ -605,7 +702,7 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
       const links = deferred<unknown>();
       h.stream.mockReturnValue(links.promise);
       controlledDownloads();
-      const pending = media.openYouTube(embed(ID), "Louvor");
+      const pending = openStream(embed(ID), "Louvor");
       await tick();
       media.close(true);
       expect(h.cancel).toHaveBeenCalledWith(ID);
@@ -620,7 +717,7 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
     it("fecha a mídia depois de as janelas abrirem e antes de o som ficar pronto: nada de player por cima", async () => {
       h.ready = 0;
       controlledDownloads();
-      const pending = media.openYouTube(embed(ID), "Louvor");
+      const pending = openStream(embed(ID), "Louvor");
       await vi.waitFor(() => expect(openAudio).toHaveBeenCalledTimes(1));
       media.close(true);
       expect(await pending).toBe(false);
@@ -632,9 +729,9 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
       const windowsOpening = deferred<void>();
       h.openWindows.mockImplementationOnce(() => windowsOpening.promise);
       controlledDownloads();
-      const one = media.openYouTube(embed(ID), "Um");
+      const one = openStream(embed(ID), "Um");
       await vi.waitFor(() => expect(h.openWindows).toHaveBeenCalledTimes(1));
-      const two = media.openYouTube(embed(OTHER), "Dois");
+      const two = openStream(embed(OTHER), "Dois");
       expect(await two).toBe(true);
 
       windowsOpening.resolve();
@@ -645,11 +742,13 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
 
     it("pede outro vídeo enquanto os links do primeiro chegam: só o novo abre", async () => {
       const first = deferred<unknown>();
-      h.stream.mockImplementation((id: string) => (id === ID ? first.promise : Promise.resolve(streams(id))));
+      h.stream.mockImplementation((id: string) =>
+        id === ID ? first.promise : Promise.resolve(streams(id))
+      );
       controlledDownloads();
-      const one = media.openYouTube(embed(ID), "Um");
+      const one = openStream(embed(ID), "Um");
       await tick();
-      const two = media.openYouTube(embed(OTHER), "Dois");
+      const two = openStream(embed(OTHER), "Dois");
       expect(await two).toBe(true);
 
       first.resolve(streams(ID));
@@ -673,7 +772,7 @@ describe("aviso de que o vídeo está sendo aberto (o clique não pode parecer m
     const links = deferred<ReturnType<typeof streams>>();
     h.stream.mockReturnValue(links.promise);
 
-    const opening = media.openYouTube(embed(ID), "Hino 202");
+    const opening = openStream(embed(ID), "Hino 202");
     expect(media.opening()).toEqual({ id: ID, title: "Hino 202" });
     await sleep(20);
     expect(media.opening()).toEqual({ id: ID, title: "Hino 202" });
@@ -686,7 +785,7 @@ describe("aviso de que o vídeo está sendo aberto (o clique não pode parecer m
   it("um vídeo já baixado também mostra o aviso até tocar", async () => {
     h.downloaded = true;
     const calls = controlledDownloads();
-    const opening = media.openYouTube(embed(ID), "Hino 202");
+    const opening = openStream(embed(ID), "Hino 202");
     expect(media.opening()).toEqual({ id: ID, title: "Hino 202" });
     await sleep(20);
     calls[0].done.resolve(ok(ID));
@@ -696,28 +795,28 @@ describe("aviso de que o vídeo está sendo aberto (o clique não pode parecer m
 
   it("some quando o vídeo não pode ser aberto (indisponível, com o aviso de erro)", async () => {
     h.stream.mockResolvedValue(streamFail("unavailable"));
-    expect(await media.openYouTube(embed(ID), "Hino 202")).toBe(false);
+    expect(await openStream(embed(ID), "Hino 202")).toBe(false);
     expect(media.opening()).toBeNull();
   });
 
   it("some quando cai no player do YouTube", async () => {
     h.stream.mockResolvedValue(streamFail("network"));
     vi.spyOn(console, "warn").mockImplementation(() => {});
-    expect(await media.openYouTube(embed(ID), "Hino 202")).toBe(true);
+    expect(await openStream(embed(ID), "Hino 202")).toBe(true);
     expect(embedded).toHaveBeenCalledOnce();
     expect(media.opening()).toBeNull();
   });
 
   it("some também quando algo dá errado no meio do caminho", async () => {
     h.stream.mockRejectedValue(new Error("falha inesperada"));
-    await expect(media.openYouTube(embed(ID), "Hino 202")).rejects.toThrow("falha inesperada");
+    await expect(openStream(embed(ID), "Hino 202")).rejects.toThrow("falha inesperada");
     expect(media.opening()).toBeNull();
   });
 
   it("cancelar pelo aviso desiste do pedido: o aviso some e o vídeo não abre depois", async () => {
     const links = deferred<ReturnType<typeof streams>>();
     h.stream.mockReturnValue(links.promise);
-    const opening = media.openYouTube(embed(ID), "Hino 202");
+    const opening = openStream(embed(ID), "Hino 202");
     await sleep(20);
 
     media.cancelOpening();
@@ -734,9 +833,9 @@ describe("aviso de que o vídeo está sendo aberto (o clique não pode parecer m
     const second = deferred<ReturnType<typeof streams>>();
     h.stream.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
 
-    const a = media.openYouTube(embed(ID), "Primeiro");
+    const a = openStream(embed(ID), "Primeiro");
     await sleep(20);
-    const b = media.openYouTube(embed(OTHER), "Segundo");
+    const b = openStream(embed(OTHER), "Segundo");
     expect(media.opening()).toEqual({ id: OTHER, title: "Segundo" });
 
     first.resolve(streams(ID));
@@ -746,6 +845,27 @@ describe("aviso de que o vídeo está sendo aberto (o clique não pode parecer m
     second.resolve(streams(OTHER));
     expect(await b).toBe(true);
     expect(media.opening()).toBeNull();
+  });
+});
+
+describe("abertura rápida (padrão)", () => {
+  it("sem vídeo no disco, abre o embed imediatamente e baixa em segundo plano", async () => {
+    const embedded = vi.spyOn(media, "openEmbeddedYouTube").mockResolvedValue(undefined);
+    const calls = controlledDownloads();
+
+    const opening = media.openYouTube(embed(ID), "Louvor");
+
+    await vi.waitFor(() =>
+      expect(embedded).toHaveBeenCalledWith(embed(ID), "Louvor", expect.any(Number))
+    );
+    expect(h.stream).not.toHaveBeenCalled();
+    expect(calls).toHaveLength(1);
+    expect(h.ensure).toHaveBeenCalledWith(ID, expect.any(Function), {
+      background: true,
+      keep: false,
+    });
+    expect(await opening).toBe(true);
+    embedded.mockRestore();
   });
 });
 
@@ -766,7 +886,10 @@ describe("com o download automático desligado", () => {
 
     expect(await fresh.openYouTube(embed(ID), "Louvor")).toBe(true);
     expect(h.ensure).toHaveBeenCalledWith(ID, expect.anything());
-    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ url: `louvorja://onlinevideo/${ID}.mp4` }), true);
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({ url: `louvorja://onlinevideo/${ID}.mp4` }),
+      true
+    );
     vi.doUnmock("@/helpers/OnlineVideo");
   });
 
@@ -810,7 +933,11 @@ describe("trocar do vídeo baixado para o player embutido", () => {
     // para janelas que abrirem depois de perder o broadcast ao vivo (ver `_readPendingProjection`).
     localStorage.setItem(
       KEYS.PROJECTION.LJ_FILE_PROJECTION,
-      JSON.stringify({ url: "louvorja://onlinevideo/old.mp4", type: "video", title: "Vídeo antigo" })
+      JSON.stringify({
+        url: "louvorja://onlinevideo/old.mp4",
+        type: "video",
+        title: "Vídeo antigo",
+      })
     );
 
     await media.openEmbeddedYouTube(embed(OTHER), "Vídeo novo");
@@ -856,9 +983,13 @@ describe("posse do palco durante a abertura do vídeo", () => {
         "blob:old-video"
       );
       await tick();
-      const newOwner = next === "editor"
-        ? media.stopForSlideEditor()
-        : media.openCustomSong({ nome: "Música nova", slides: [{ tipo: "CAPA", letra: "Capa" }] });
+      const newOwner =
+        next === "editor"
+          ? media.stopForSlideEditor()
+          : media.openCustomSong({
+              nome: "Música nova",
+              slides: [{ tipo: "CAPA", letra: "Capa" }],
+            });
       fileOpened.resolve();
       const [projected] = await Promise.all([oldFile, newOwner]);
 
@@ -880,8 +1011,9 @@ describe("posse do palco durante a abertura do vídeo", () => {
       playback_id: expect.any(String),
       stage_epoch: expect.any(Number),
     });
-    expect(JSON.parse(localStorage.getItem(KEYS.PROJECTION.LJ_FILE_PROJECTION) || "null"))
-      .toMatchObject({ ...payload, playback_id: expect.any(String) });
+    expect(
+      JSON.parse(localStorage.getItem(KEYS.PROJECTION.LJ_FILE_PROJECTION) || "null")
+    ).toMatchObject({ ...payload, playback_id: expect.any(String) });
     expect(openAudio).not.toHaveBeenCalled();
   });
 
@@ -892,11 +1024,9 @@ describe("posse do palco durante a abertura do vídeo", () => {
     try {
       await media.projectFile({ url: "blob:reading", type: "pdf", title: "Leitura" });
       expect(stop).not.toHaveBeenCalled();
-      await media.projectFile(
-        { url: "blob:library", type: "image", title: "Acervo" },
-        undefined,
-        { stopExistingAudio: true }
-      );
+      await media.projectFile({ url: "blob:library", type: "image", title: "Acervo" }, undefined, {
+        stopExistingAudio: true,
+      });
       expect(stop).toHaveBeenCalledOnce();
     } finally {
       stop.mockRestore();
@@ -935,7 +1065,10 @@ describe("posse do palco durante a abertura do vídeo", () => {
 
     expect(h.closeFileWindows).toHaveBeenCalledOnce();
     expect(localStorage.getItem(KEYS.PROJECTION.LJ_YOUTUBE_PROJECTION)).toBeNull();
-    expect(h.send).not.toHaveBeenCalledWith(BROADCAST_TYPE.ONLINE_VIDEO_PROJECTION, expect.anything());
+    expect(h.send).not.toHaveBeenCalledWith(
+      BROADCAST_TYPE.ONLINE_VIDEO_PROJECTION,
+      expect.anything()
+    );
     expect(h.listeners.size).toBe(0);
   });
 
@@ -951,7 +1084,10 @@ describe("posse do palco durante a abertura do vídeo", () => {
     const oldVideo = media.openEmbeddedYouTube(embed(ID), "Vídeo antigo");
     await tick();
 
-    const music = media.openCustomSong({ nome: "Música nova", slides: [{ tipo: "CAPA", letra: "Capa" }] });
+    const music = media.openCustomSong({
+      nome: "Música nova",
+      slides: [{ tipo: "CAPA", letra: "Capa" }],
+    });
     await tick();
     expect(h.openMusicWindows).not.toHaveBeenCalled();
     windowOpened.resolve();
@@ -959,7 +1095,10 @@ describe("posse do palco durante a abertura do vídeo", () => {
 
     expect(h.closeFileWindows).toHaveBeenCalledOnce();
     expect(h.openMusicWindows).toHaveBeenCalledOnce();
-    expect(h.send).not.toHaveBeenCalledWith(BROADCAST_TYPE.ONLINE_VIDEO_PROJECTION, expect.anything());
+    expect(h.send).not.toHaveBeenCalledWith(
+      BROADCAST_TYPE.ONLINE_VIDEO_PROJECTION,
+      expect.anything()
+    );
     expect(localStorage.getItem(KEYS.PROJECTION.LJ_YOUTUBE_PROJECTION)).toBeNull();
   });
 
@@ -992,7 +1131,10 @@ describe("posse do palco durante a abertura do vídeo", () => {
     h.closeMusicWindows.mockReturnValueOnce(musicClose.promise);
     const oldVideo = media.openEmbeddedYouTube(embed(ID), "Vídeo antigo");
     await tick();
-    const newMusic = media.openCustomSong({ nome: "Nova", slides: [{ tipo: "CAPA", letra: "Capa" }] });
+    const newMusic = media.openCustomSong({
+      nome: "Nova",
+      slides: [{ tipo: "CAPA", letra: "Capa" }],
+    });
     expect(h.openMusicWindows).not.toHaveBeenCalled();
 
     musicClose.resolve();
@@ -1039,27 +1181,63 @@ describe("fim natural do player embutido", () => {
       vi.spyOn(onlineVideo, "ensure").mockImplementation(h.ensure),
     ];
     try {
-      h.stream.mockResolvedValue({ ok: false, error: { kind: "network", message: "blocked https://provider/private?sig=secret" } });
+      h.stream.mockResolvedValue({
+        ok: false,
+        error: { kind: "network", message: "blocked https://provider/private?sig=secret" },
+      });
       h.ensure.mockResolvedValue(cancelled);
-      expect(await media.openYouTube(embed(ID), "Private title")).toBe(true);
-      const resolution = log.mock.calls.find(([, message]) => message === "youtube stream resolution")?.[2];
-      const embedRequest = log.mock.calls.find(([, message]) => message === "youtube embed requested")?.[2];
-      expect(resolution).toMatchObject({ video_id: ID, phase: "stream_resolution", reason: "network", fallback_action: "embed" });
+      expect(await openStream(embed(ID), "Private title")).toBe(true);
+      const resolution = log.mock.calls.find(
+        ([, message]) => message === "youtube stream resolution"
+      )?.[2];
+      const embedRequest = log.mock.calls.find(
+        ([, message]) => message === "youtube embed requested"
+      )?.[2];
+      expect(resolution).toMatchObject({
+        video_id: ID,
+        phase: "stream_resolution",
+        reason: "network",
+        fallback_action: "embed",
+      });
       expect(JSON.stringify(resolution)).not.toMatch(/secret|provider|Private title/);
-      expect(embedRequest).toMatchObject({ video_id: ID, media_stage_epoch: resolution?.media_stage_epoch,
-        playback_id: expect.any(String), fallback_origin: { from_stage_epoch: resolution?.media_stage_epoch,
-          prepare_sequence: resolution?.prepare_sequence, from_phase: "stream_resolution", reason: "network" } });
+      expect(embedRequest).toMatchObject({
+        video_id: ID,
+        media_stage_epoch: resolution?.media_stage_epoch,
+        playback_id: expect.any(String),
+        fallback_origin: {
+          from_stage_epoch: resolution?.media_stage_epoch,
+          prepare_sequence: resolution?.prepare_sequence,
+          from_phase: "stream_resolution",
+          reason: "network",
+        },
+      });
       for (const listener of [...h.listeners]) {
-        listener({ type: BROADCAST_TYPE.YOUTUBE_STATE, payload: { playback_id: "stale", sampledAt: Date.now() } });
-        listener({ type: BROADCAST_TYPE.YOUTUBE_STATE, payload: { playback_id: embedRequest?.playback_id, sampledAt: "bad" } });
+        listener({
+          type: BROADCAST_TYPE.YOUTUBE_STATE,
+          payload: { playback_id: "stale", sampledAt: Date.now() },
+        });
+        listener({
+          type: BROADCAST_TYPE.YOUTUBE_STATE,
+          payload: { playback_id: embedRequest?.playback_id, sampledAt: "bad" },
+        });
       }
       await vi.advanceTimersByTimeAsync(15000);
-      const watchdog = log.mock.calls.find(([, message]) => message === "youtube player state watchdog")?.[2];
-      expect(watchdog).toMatchObject({ playback_id: embedRequest?.playback_id, video_id: ID,
-        media_stage_epoch: resolution?.media_stage_epoch, reason: "no_player_state",
-        received_messages: 2, mismatched_playback_messages: 1, invalid_sample_messages: 1 });
+      const watchdog = log.mock.calls.find(
+        ([, message]) => message === "youtube player state watchdog"
+      )?.[2];
+      expect(watchdog).toMatchObject({
+        playback_id: embedRequest?.playback_id,
+        video_id: ID,
+        media_stage_epoch: resolution?.media_stage_epoch,
+        reason: "no_player_state",
+        received_messages: 2,
+        mismatched_playback_messages: 1,
+        invalid_sample_messages: 1,
+      });
       expect(watchdog?.fallback_origin).toEqual(embedRequest?.fallback_origin);
-      expect(log.mock.calls.filter(([, message]) => message === "youtube player state watchdog")).toHaveLength(1);
+      expect(
+        log.mock.calls.filter(([, message]) => message === "youtube player state watchdog")
+      ).toHaveLength(1);
     } finally {
       media.close(true);
       restore.forEach((spy) => spy.mockRestore());
@@ -1077,19 +1255,42 @@ describe("fim natural do player embutido", () => {
     for (const listener of [...h.listeners]) {
       listener({
         type: BROADCAST_TYPE.YOUTUBE_STATE,
-        payload: { playback_id: playbackId, state: 2, currentTime: 42, duration: 120, isPaused: true, sampledAt: 100 },
+        payload: {
+          playback_id: playbackId,
+          state: 2,
+          currentTime: 42,
+          duration: 120,
+          isPaused: true,
+          sampledAt: 100,
+        },
       });
       listener({
         type: BROADCAST_TYPE.YOUTUBE_STATE,
-        payload: { playback_id: playbackId, state: 1, currentTime: 5, duration: 120, isPaused: false, sampledAt: 90 },
+        payload: {
+          playback_id: playbackId,
+          state: 1,
+          currentTime: 5,
+          duration: 120,
+          isPaused: false,
+          sampledAt: 90,
+        },
       });
     }
     media.broadcastVideoStateForRequest("retired-playback");
-    expect(h.send.mock.calls.filter(([type]) => type === BROADCAST_TYPE.VIDEO_STATE)).toHaveLength(0);
+    expect(h.send.mock.calls.filter(([type]) => type === BROADCAST_TYPE.VIDEO_STATE)).toHaveLength(
+      0
+    );
     media.broadcastVideoStateForRequest(playbackId);
-    expect(h.send).toHaveBeenCalledWith(BROADCAST_TYPE.VIDEO_STATE,
-      expect.objectContaining({ playback_id: playbackId, revision: 1,
-        currentTime: 42, duration: 120, isPaused: true }));
+    expect(h.send).toHaveBeenCalledWith(
+      BROADCAST_TYPE.VIDEO_STATE,
+      expect.objectContaining({
+        playback_id: playbackId,
+        revision: 1,
+        currentTime: 42,
+        duration: 120,
+        isPaused: true,
+      })
+    );
   });
 
   it("a Shell encerra somente o playback YouTube ativo ao receber state 0", async () => {
@@ -1104,7 +1305,14 @@ describe("fim natural do player embutido", () => {
       for (const listener of [...h.listeners]) {
         listener({
           type: BROADCAST_TYPE.YOUTUBE_STATE,
-          payload: { state: 0, playback_id, currentTime: 10, duration: 10, isPaused: true, sampledAt: Date.now() },
+          payload: {
+            state: 0,
+            playback_id,
+            currentTime: 10,
+            duration: 10,
+            isPaused: true,
+            sampledAt: Date.now(),
+          },
         });
       }
     };
@@ -1115,10 +1323,14 @@ describe("fim natural do player embutido", () => {
 
     media.pause();
     media.goToTime(12);
-    expect(h.send).toHaveBeenCalledWith(BROADCAST_TYPE.YOUTUBE_CONTROL,
-      expect.objectContaining({ action: "pause", playback_id: projection?.playback_id }));
-    expect(h.send).toHaveBeenCalledWith(BROADCAST_TYPE.YOUTUBE_CONTROL,
-      expect.objectContaining({ action: "seekTo", value: 12, playback_id: projection?.playback_id }));
+    expect(h.send).toHaveBeenCalledWith(
+      BROADCAST_TYPE.YOUTUBE_CONTROL,
+      expect.objectContaining({ action: "pause", playback_id: projection?.playback_id })
+    );
+    expect(h.send).toHaveBeenCalledWith(
+      BROADCAST_TYPE.YOUTUBE_CONTROL,
+      expect.objectContaining({ action: "seekTo", value: 12, playback_id: projection?.playback_id })
+    );
 
     emitState(projection?.playback_id as string);
     emitState(projection?.playback_id as string);

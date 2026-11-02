@@ -49,19 +49,61 @@ const getAgent = () => (agent ||= createAgent());
 /** Quantos redirecionamentos (302 etc.) uma busca de pedaço segue antes de desistir. */
 const CHUNK_MAX_REDIRECTS = 5;
 
-function httpsRange(url, start, end, { signal, timeoutMs = CHUNK_TIMEOUT_MS, maxRedirects = CHUNK_MAX_REDIRECTS } = {}) {
+/** Cabeçalhos do yt-dlp, sem deixar nada sobrescrever o Range/streaming. */
+function requestHeadersFor(headers, start, end) {
+  const out = { ...(headers && typeof headers === "object" ? headers : {}) };
+  for (const name of Object.keys(out)) {
+    const lower = name.toLowerCase();
+    if (
+      lower === "range" ||
+      lower === "host" ||
+      lower === "content-length" ||
+      lower === "accept-encoding"
+    ) {
+      delete out[name];
+    }
+  }
+  if (!out["User-Agent"] && !out["user-agent"]) out["User-Agent"] = USER_AGENT;
+  if (!out.Accept && !out.accept) out.Accept = "*/*";
+  out.Range = `bytes=${start}-${end}`;
+  out["Accept-Encoding"] = "identity";
+  return out;
+}
+
+/** Corpo de erro pequeno: o CDN manda o motivo em texto/JSON curto. */
+function readBoundedBody(res, limit = 2048) {
+  return new Promise((resolve) => {
+    const chunks = [];
+    let size = 0;
+    const append = () => {
+      if (!chunks.length) return "";
+      return Buffer.concat(chunks).subarray(0, limit).toString("utf8");
+    };
+    res.on("data", (chunk) => {
+      if (size >= limit) return;
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk));
+      chunks.push(buf);
+      size += buf.length;
+    });
+    res.on("end", () => resolve(append()));
+    res.on("error", () => resolve(append()));
+  });
+}
+
+function httpsRange(url, start, end, { signal, timeoutMs = CHUNK_TIMEOUT_MS, maxRedirects = CHUNK_MAX_REDIRECTS, headers } = {}) {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
       reject(new OnlineVideoError("cancelled", "Cancelado"));
       return;
     }
     const expected = end - start + 1;
+    const requestHeaders = requestHeadersFor(headers, start, end);
     const req = https.request(
       url,
       {
         method: "GET",
         agent: getAgent(),
-        headers: { Range: `bytes=${start}-${end}`, "User-Agent": USER_AGENT, Accept: "*/*" },
+        headers: requestHeaders,
       },
       (res) => {
         const status = res.statusCode || 0;
@@ -82,13 +124,50 @@ function httpsRange(url, start, end, { signal, timeoutMs = CHUNK_TIMEOUT_MS, max
             reject(new OnlineVideoError("network", "Location de redirecionamento inválida"));
             return;
           }
-          httpsRange(redirected, start, end, { signal, timeoutMs, maxRedirects: maxRedirects - 1 }).then(resolve, reject);
+          httpsRange(redirected, start, end, {
+            signal,
+            timeoutMs,
+            maxRedirects: maxRedirects - 1,
+            headers,
+          }).then(resolve, reject);
           return;
         }
         if (status !== 206 && !(status === 200 && start === 0)) {
-          res.resume();
-          const kind = status === 403 || status === 404 || status === 410 ? "forbidden" : "network";
-          reject(new OnlineVideoError(kind, `HTTP ${status}`));
+          void readBoundedBody(res).then((body) => {
+            const host = (() => {
+              try {
+                return new URL(url).host;
+              } catch {
+                return null;
+              }
+            })();
+            const safeBody = String(body)
+              .replace(/https?:\/\/\S+/gi, "[url]")
+              .replace(/\s+/g, " ")
+              .slice(0, 512);
+            console.warn("[onlineVideo] faixa recusada pelo CDN:", {
+              status,
+              host,
+              content_type: res.headers["content-type"] || null,
+              content_range: res.headers["content-range"] || null,
+              location_host: (() => {
+                try {
+                  return res.headers.location ? new URL(res.headers.location, url).host : null;
+                } catch {
+                  return null;
+                }
+              })(),
+              request_headers: Object.keys(requestHeaders),
+              user_agent: requestHeaders["User-Agent"] || requestHeaders["user-agent"] || null,
+              body: safeBody || null,
+            });
+            const kind = status === 403 || status === 404 || status === 410 ? "forbidden" : "network";
+            const error = new OnlineVideoError(kind, `HTTP ${status}`);
+            error.status = status;
+            error.host = host;
+            error.detail = safeBody || null;
+            reject(error);
+          });
           return;
         }
         const chunks = [];
@@ -152,10 +231,12 @@ class Track {
     chunkBytes = CHUNK_BYTES,
     retryDelayMs = RETRY_DELAY_MS,
     now = Date.now,
+    headers,
     onData,
   }) {
     this.kind = kind;
     this.url = url;
+    this.headers = headers && typeof headers === "object" ? headers : {};
     this.size = size;
     this.file = file;
     this.fetchRange = fetchRange;
@@ -181,7 +262,10 @@ class Track {
 
   async open() {
     if (this.size == null) {
-      const { total } = await this.fetchRange(this.url, 0, 0, { signal: this.controller.signal });
+      const { total } = await this.fetchRange(this.url, 0, 0, {
+        signal: this.controller.signal,
+        headers: this.headers,
+      });
       if (!(total > 0)) throw new OnlineVideoError("format", "Tamanho do vídeo desconhecido");
       this.size = total;
     }
@@ -228,7 +312,10 @@ class Track {
     const signal = this.controller.signal;
     for (let attempt = 0; ; attempt++) {
       try {
-        const { data } = await this.fetchRange(this.url, start, end, { signal });
+        const { data } = await this.fetchRange(this.url, start, end, {
+          signal,
+          headers: this.headers,
+        });
         if (data.length !== end - start + 1) throw new OnlineVideoError("network", "Pedaço incompleto");
         return data;
       } catch (error) {
@@ -265,7 +352,14 @@ class Track {
       if (!this.closed) {
         this.error = error;
         if (error?.kind !== "cancelled") {
-          console.warn(`[onlineVideo] a trilha parou de baixar (${process.platform}-${process.arch}):`, error?.kind, error?.message);
+          console.warn(
+            `[onlineVideo] a trilha parou de baixar (${process.platform}-${process.arch}):`,
+            this.kind,
+            error?.kind,
+            error?.message,
+            error?.status ?? "",
+            error?.host ?? ""
+          );
         }
       }
       this.notify();
@@ -361,7 +455,33 @@ async function openSession(opts) {
     if (!streamUrl(streams[kind]?.url)) throw new OnlineVideoError("format", "Link de vídeo inválido");
   }
 
+  // O primeiro pedaço de TODAS as trilhas confirma que o CDN aceitou a URL
+  // assinada antes de o renderer abrir o <audio>/<video>. Sem isso a janela
+  // recebia um 403 no meio e o player mostrava "no supported source".
+  let firstSettled = false;
+  let resolveFirst;
+  let rejectFirst;
+  const firstData = new Promise((resolve, reject) => {
+    resolveFirst = resolve;
+    rejectFirst = reject;
+  });
+  firstData.catch(() => {});
+  const settleFirst = (error) => {
+    if (firstSettled) return;
+    const failed = error || Object.values(tracks).find((t) => t.error)?.error;
+    if (failed) {
+      firstSettled = true;
+      rejectFirst(failed);
+      return;
+    }
+    const list = Object.values(tracks);
+    if (list.every((t) => t.have.bytes > 0)) {
+      firstSettled = true;
+      resolveFirst();
+    }
+  };
   const onData = () => {
+    settleFirst();
     if (!onProgress) return;
     const list = Object.values(tracks);
     onProgress({
@@ -374,6 +494,7 @@ async function openSession(opts) {
       kind,
       url: streams[kind].url,
       size: streams[kind].size ?? null,
+      headers: streams[kind].headers,
       file: path.join(dir, file),
       fetchRange,
       chunkBytes,
@@ -401,6 +522,7 @@ async function openSession(opts) {
     /** Arquivos das trilhas, para juntar quando terminarem. */
     files: { video: tracks.video.file, audio: (tracks.audio || tracks.video).file },
     done: null,
+    firstData,
     disposed: false,
 
     get readers() {
@@ -463,9 +585,12 @@ async function openSession(opts) {
 
   const pumps = Object.values(tracks).map((t) => t.start());
   session.done = Promise.all(pumps).then(
-    () => undefined,
+    () => {
+      settleFirst();
+    },
     (error) => {
       session.abort(); // uma trilha caiu: a outra não vale mais nada sozinha
+      settleFirst(error);
       throw error;
     }
   );

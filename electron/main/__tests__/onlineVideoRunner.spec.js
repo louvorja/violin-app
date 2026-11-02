@@ -56,7 +56,7 @@ describe("formatSelector", () => {
 
   it("para tocar direto, cada alternativa exige um arquivo servido por HTTP (nada de fragmentos ou HLS)", () => {
     const alternatives = runner.formatSelector(1080, { direct: true }).split("/");
-    expect(alternatives).toHaveLength(4);
+    expect(alternatives).toHaveLength(2);
     expect(alternatives[0]).toBe(
       "bv*[height<=1080][vcodec^=avc1][protocol=https]+ba[acodec^=mp4a][protocol=https]"
     );
@@ -98,6 +98,29 @@ describe("buildArgs", () => {
 
   it("recusa ID que não seja de vídeo em vez de montar a linha de comando", () => {
     expect(() => runner.buildArgs({ ...base, id: "--exec=calc" })).toThrow();
+  });
+
+  it("passa plugin, provedor e cliente do PO token quando informados", () => {
+    const args = runner.buildArgs({
+      ...base,
+      pluginDir: "/plugins",
+      potCli: "/bin/bgutil-pot",
+      playerClient: "web,mweb",
+    });
+    expect(args[args.indexOf("--plugin-dirs") + 1]).toBe("/plugins");
+    expect(args).toContain("youtubepot-bgutilcli:cli_path=/bin/bgutil-pot");
+    expect(args).toContain("youtube:player_client=web,mweb");
+
+    const resolve = runner.buildResolveArgs({
+      id: ID,
+      maxHeight: 1080,
+      pluginDir: "/plugins",
+      potCli: "/bin/bgutil-pot",
+      playerClient: "web,mweb",
+    });
+    expect(resolve[resolve.indexOf("--plugin-dirs") + 1]).toBe("/plugins");
+    expect(resolve).toContain("youtubepot-bgutilcli:cli_path=/bin/bgutil-pot");
+    expect(resolve).toContain("youtube:player_client=web,mweb");
   });
 
   it("só passa runtime JS e cache quando informados", () => {
@@ -436,6 +459,61 @@ const audioFormat = (extra = {}) => ({
   protocol: "https",
   url: `${GV}?expire=${EXPIRE + 5}&mime=audio%2Fmp4&c=VISIONOS`,
   ...extra,
+});
+
+describe("cabeçalhos das trilhas diretas", () => {
+  it("mantém só os cabeçalhos do cliente que o yt-dlp usou", () => {
+    const out = runner.parseStreams({
+      http_headers: {
+        "User-Agent": "top-ua",
+        Cookie: "session=secret",
+        Range: "bytes=5-9",
+        "Accept-Encoding": "gzip",
+      },
+      requested_formats: [
+        videoFormat({
+          http_headers: {
+            "User-Agent": "video-ua",
+            Accept: "text/html",
+            "Sec-Fetch-Mode": "navigate",
+            "Content-Length": "10",
+          },
+        }),
+        audioFormat(),
+      ],
+    });
+    expect(out.video.headers).toEqual({
+      "User-Agent": "video-ua",
+      Accept: "text/html",
+      "Sec-Fetch-Mode": "navigate",
+      Cookie: "session=secret",
+    });
+    expect(out.audio.headers).toEqual({
+      "User-Agent": "top-ua",
+      Cookie: "session=secret",
+    });
+    expect(out.video.headers).not.toHaveProperty("Range");
+    expect(out.video.headers).not.toHaveProperty("Accept-Encoding");
+    expect(out.video.headers).not.toHaveProperty("Content-Length");
+  });
+});
+
+describe("parseStreams — só MP4/H.264+AAC no caminho direto", () => {
+  it("recusa VP9/Opus/WebM para não entregar WebM com MIME de MP4", () => {
+    expect(() =>
+      runner.parseStreams({
+        requested_formats: [
+          videoFormat({ ext: "webm", vcodec: "vp9" }),
+          audioFormat({ ext: "webm", acodec: "opus" }),
+        ],
+      })
+    ).toThrow(expect.objectContaining({ kind: "format" }));
+    expect(() =>
+      runner.parseStreams({
+        ...videoFormat({ ext: "webm", vcodec: "vp9", acodec: "opus" }),
+      })
+    ).toThrow(expect.objectContaining({ kind: "format" }));
+  });
 });
 
 describe("parseStreams (o que o yt-dlp devolve para tocar direto)", () => {

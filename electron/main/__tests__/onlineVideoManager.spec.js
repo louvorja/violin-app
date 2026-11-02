@@ -67,6 +67,7 @@ function make(overrides = {}) {
     run,
     resolve: noDirectLinks,
     freeBytes: async () => MIN_FREE_BYTES * 10,
+    directPreflight: false,
     ...overrides,
   });
   return { manager, tools, run };
@@ -243,6 +244,29 @@ describe("ensure — ferramentas", () => {
     const { manager, tools } = make({ run });
     expect(await manager.ensure(A)).toMatchObject({ ok: false, error: { kind: "tool" } });
     expect(tools.reset).toHaveBeenCalledTimes(1);
+    expect(run).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("ensure — provedor ausente não confunde o core com instalação nova", () => {
+  it("core pronto sem provedor instala só o provedor e ainda permite renovar o yt-dlp", async () => {
+    const tools = fakeTools({
+      needsPot: vi.fn(() => true),
+      potSupported: true,
+    });
+    const good = okRun();
+    const run = vi
+      .fn()
+      .mockRejectedValueOnce(new OnlineVideoError("unknown", "Postprocessing: ffmpeg"))
+      .mockImplementation(good);
+    const { manager } = make({ tools, run });
+
+    const res = await manager.ensure(A);
+
+    expect(res).toMatchObject({ ok: true, installedTools: true });
+    expect(tools.ensure).toHaveBeenCalledTimes(1);
+    expect(tools.refreshYtdlp).toHaveBeenCalledTimes(1);
+    expect(tools.reset).not.toHaveBeenCalled();
     expect(run).toHaveBeenCalledTimes(2);
   });
 });
@@ -768,14 +792,14 @@ describe("prepare (ferramentas de antemão)", () => {
   it("instala as ferramentas em silêncio quando faltam", async () => {
     const tools = fakeTools({ ready: vi.fn(() => false) });
     const { manager } = make({ tools });
-    expect(await manager.prepare()).toEqual({ ok: true, ready: true });
+    expect(await manager.prepare()).toMatchObject({ ok: true, ready: true });
     expect(tools.ensure).toHaveBeenCalledTimes(1);
   });
 
   it("já instaladas: não faz nada", async () => {
     const tools = fakeTools();
     const { manager } = make({ tools });
-    expect(await manager.prepare()).toEqual({ ok: true, ready: true });
+    expect(await manager.prepare()).toMatchObject({ ok: true, ready: true });
     expect(tools.ensure).not.toHaveBeenCalled();
   });
 
@@ -797,6 +821,33 @@ describe("prepare (ferramentas de antemão)", () => {
     expect(tools.ensure).not.toHaveBeenCalled();
   });
 
+  it("prepara também o provedor de PO token quando ele falta", async () => {
+    let instalado = false;
+    const tools = fakeTools({
+      ready: () => true,
+      potSupported: true,
+      needsPot: () => !instalado,
+      potReady: () => instalado,
+      ensure: vi.fn(async ({ onProgress }) => {
+        onProgress?.({ tool: "pot", received: 50, total: 100 });
+        instalado = true;
+        return { ytdlp: "/y", ffmpeg: "/f", pot: "/p", pluginDir: "/pl", potCacheDir: "/pc" };
+      }),
+    });
+    const { manager } = make({ tools });
+    const events = [];
+    expect(await manager.prepare((e) => events.push(e))).toMatchObject({
+      ok: true,
+      pot: true,
+      potSupported: true,
+    });
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ phase: "tools", tool: "pot", phasePercent: 50 }),
+      ])
+    );
+  });
+
   it("um vídeo pedido durante o preparo usa a mesma instalação (as ferramentas não são instaladas duas vezes)", async () => {
     let installed = false;
     const gate = deferred();
@@ -815,6 +866,37 @@ describe("prepare (ferramentas de antemão)", () => {
     await preparing;
     expect(await playing).toMatchObject({ ok: true, installedTools: true });
     expect(tools.ensure).toHaveBeenCalledTimes(2); // dois pedidos, e é o tools que os une numa instalação só
+  });
+});
+
+describe("PO token nos argumentos do yt-dlp", () => {
+  it("passa plugin, CLI, cache e cliente para resolver e para o download completo", async () => {
+    const resolve = vi.fn(async () => {
+      throw new OnlineVideoError("format", "sem links diretos");
+    });
+    const run = okRun();
+    const tools = fakeTools({
+      ready: () => true,
+      potSupported: true,
+      potReady: () => true,
+      paths: () => ({
+        ytdlp: "/y",
+        ffmpeg: "/f",
+        pot: "/p",
+        pluginDir: "/pl",
+        potCacheDir: "/pc",
+      }),
+    });
+    const { manager } = make({ tools, resolve, run });
+
+    expect(await manager.ensure(A)).toMatchObject({ ok: true });
+    const esperado = {
+      pluginDir: "/pl",
+      potCli: "/p",
+      potCacheDir: "/pc",
+    };
+    expect(resolve.mock.calls[0][0]).toMatchObject(esperado);
+    expect(run.mock.calls[0][0]).toMatchObject(esperado);
   });
 });
 
@@ -1650,7 +1732,9 @@ describe("stream (tocar já, enquanto baixa uma vez só)", () => {
       fetchFails: new OnlineVideoError("network", "Falha no pré-download"),
       cfg: { onStreamFailure },
     });
-    expect(await background.manager.ensure(B, { priority: "background" })).toMatchObject({ ok: false });
+    // O pré-download não chegou a entregar stream; ao falhar nas trilhas diretas
+    // ele agora tenta o download completo e conclui sem incidente de tela.
+    expect(await background.manager.ensure(B, { priority: "background" })).toMatchObject({ ok: true });
     expect(onStreamFailure).not.toHaveBeenCalled();
 
     const opening = makeStream({ cfg: {
@@ -1676,7 +1760,8 @@ describe("stream (tocar já, enquanto baixa uma vez só)", () => {
       throw new OnlineVideoError("network", "Falha no pré-download");
     });
     const { manager } = makeStream({ cfg: { fetchRange } });
-    expect(await manager.ensure(A, { priority: "background" })).toMatchObject({ ok: false, error: { kind: "network" } });
+    // Sem stream entregue, a falha das trilhas diretas cai no download completo.
+    expect(await manager.ensure(A, { priority: "background" })).toMatchObject({ ok: true });
     expect(manager.diagnosticSnapshot().last_stream_failure).toBeNull();
   });
 
@@ -2020,6 +2105,16 @@ describe("stream (tocar já, enquanto baixa uma vez só)", () => {
   });
 
   describe("quando algo dá errado no meio", () => {
+    it("403 nas trilhas diretas cai no download completo do yt-dlp", async () => {
+      const { manager, run } = makeStream({
+        fetchFails: new OnlineVideoError("forbidden", "HTTP 403"),
+      });
+      expect(await manager.ensure(A)).toMatchObject({ ok: true });
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(manager.store.has(A)).toBe(true);
+      expect(fs.existsSync(path.join(dir, ".stream", A))).toBe(false);
+    });
+
     it("link vencido (403): quem espera o download recebe o erro, e a sessão some (nada pela metade)", async () => {
       const { manager } = makeStream({ fetchFails: new OnlineVideoError("forbidden", "HTTP 403") });
       await manager.stream(A);
@@ -2159,5 +2254,44 @@ describe("stream (tocar já, enquanto baixa uma vez só)", () => {
     gate.resolve();
     expect(await other).toMatchObject({ ok: true });
     await manager.ensure(A);
+  });
+
+  it("403 no preflight não entrega sessão, bloqueia o direto e baixa em 720p", async () => {
+    const fetchRange = vi.fn(async () => {
+      throw new OnlineVideoError("forbidden", "HTTP 403");
+    });
+    const run = okRun();
+    const { manager, resolve } = makeStream({
+      cfg: { directPreflight: true, fetchRange, run },
+    });
+
+    expect(await manager.stream(A)).toMatchObject({
+      ok: false,
+      error: { kind: "forbidden" },
+    });
+    expect(manager.serveStream(A, "video", "bytes=0-9")).toBeNull();
+
+    expect(await manager.ensure(A)).toMatchObject({ ok: true });
+    expect(resolve).toHaveBeenCalledTimes(1);
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(run.mock.calls[0][0].maxHeight).toBe(720);
+  });
+
+  it("preflight 403 re-resolve uma vez antes de desistir do caminho direto", async () => {
+    let fail = true;
+    const fetchRange = vi.fn(async (url, start, end) => {
+      if (fail) {
+        fail = false;
+        throw new OnlineVideoError("forbidden", "HTTP 403");
+      }
+      return { data: Buffer.alloc(end - start + 1), total: url === VURL ? 6000 : 2000 };
+    });
+    const { manager, resolve, run } = makeStream({
+      cfg: { directPreflight: true, fetchRange },
+    });
+
+    expect(await manager.ensure(A)).toMatchObject({ ok: true });
+    expect(resolve).toHaveBeenCalledTimes(2);
+    expect(run).not.toHaveBeenCalled();
   });
 });

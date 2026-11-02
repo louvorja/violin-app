@@ -9,6 +9,19 @@ const h = vi.hoisted(() => ({
     params?.percent === undefined ? key : `${key}:${params.percent}`
   ),
 }));
+const bg = vi.hoisted(() => ({
+  tasks: {
+    registerTask: vi.fn(),
+    updateTask: vi.fn(),
+    completeTask: vi.fn(),
+  },
+}));
+const snack = vi.hoisted(() => ({
+  info: vi.fn(),
+  warning: vi.fn(),
+  error: vi.fn(),
+  success: vi.fn(),
+}));
 
 vi.mock("@/helpers/Platform", () => ({ default: h.platform }));
 vi.mock("@/helpers/UserData", () => ({
@@ -16,6 +29,10 @@ vi.mock("@/helpers/UserData", () => ({
 }));
 vi.mock("@/helpers/Telemetry", () => ({ default: { track: h.track } }));
 vi.mock("@/i18n", () => ({ i18nAtual: () => ({ global: { t: h.translate } }) }));
+vi.mock("@/composables/useBackgroundTasks", () => ({
+  useBackgroundTasks: () => bg.tasks,
+}));
+vi.mock("@/helpers/Snackbar", () => ({ default: snack }));
 
 import {
   actionForFailure,
@@ -35,6 +52,7 @@ import {
   messageKeyForStreamFailure,
   normalizeMaxHeight,
   phaseText,
+  prepare,
   removeFile,
   stream,
   videoIdFromUrl,
@@ -70,6 +88,78 @@ beforeEach(() => {
   h.platform.onlineVideo = fakeApi();
   h.prefs = {};
   h.track.mockClear();
+  bg.tasks.registerTask.mockClear();
+  bg.tasks.updateTask.mockClear();
+  bg.tasks.completeTask.mockClear();
+  snack.info.mockClear();
+  snack.warning.mockClear();
+  snack.error.mockClear();
+  snack.success.mockClear();
+});
+
+describe("prepare (instalação do PO token)", () => {
+  it("avisa na snackbar quando a instalação falha", async () => {
+    const preparing = vi.fn(async () => ({ ok: false, error: { kind: "network" } }));
+    const status = vi.fn(async () => ({ ready: false, potReady: false, potSupported: true }));
+    h.platform.onlineVideo = fakeApi({ prepare: preparing, status });
+
+    prepare();
+
+    await vi.waitFor(() =>
+      expect(bg.tasks.updateTask).toHaveBeenCalledWith(
+        "online-video:tools",
+        expect.objectContaining({ status: "error" })
+      )
+    );
+    expect(snack.warning).toHaveBeenCalledWith(
+      "online_video.prepare_failed",
+      expect.objectContaining({ key: "ov-tools-failed" })
+    );
+    expect(preparing).toHaveBeenCalledTimes(1);
+  });
+
+  it("mostra tarefa e snackbar e conclui quando o provedor instala", async () => {
+    let concluir: (_value: unknown) => void = () => {};
+    const preparing = vi.fn(
+      () => new Promise((resolve) => (concluir = resolve)) as Promise<unknown>
+    );
+    const status = vi.fn(async () => ({ ready: false, potReady: false, potSupported: true }));
+    h.platform.onlineVideo = fakeApi({ prepare: preparing, status });
+
+    prepare();
+    await vi.waitFor(() =>
+      expect(bg.tasks.registerTask).toHaveBeenCalledWith(
+        "online-video:tools",
+        "online_video.preparing_tools"
+      )
+    );
+    expect(snack.info).toHaveBeenCalledWith(
+      "online_video.preparing_tools",
+      expect.objectContaining({ key: "ov-tools-installing" })
+    );
+
+    h.platform.onlineVideo.emit({
+      id: "__tools__",
+      phase: "tools",
+      tool: "pot",
+      percent: 17,
+      phasePercent: 50,
+    });
+    expect(bg.tasks.updateTask).toHaveBeenCalledWith(
+      "online-video:tools",
+      expect.objectContaining({ progress: 17, detail: "online_video.phase.tools_pot:50" })
+    );
+    expect(snack.info).toHaveBeenCalledWith(
+      "online_video.preparing_pot",
+      expect.objectContaining({ key: "ov-pot-installing" })
+    );
+
+    concluir({ ok: true, pot: true, potSupported: true });
+    await vi.waitFor(() =>
+      expect(bg.tasks.completeTask).toHaveBeenCalledWith("online-video:tools")
+    );
+    expect(preparing).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("videoIdFromUrl", () => {
@@ -158,6 +248,7 @@ describe("texto de fase do vídeo", () => {
   it.each([
     ["yt-dlp", "online_video.phase.tools_ytdlp", 42],
     ["ffmpeg", "online_video.phase.tools_ffmpeg", 58],
+    ["pot", "online_video.phase.tools_pot", 73],
   ])("identifica %s e arredonda o progresso da ferramenta", (tool, key, percent) => {
     expect(
       phaseText({ id: ID, phase: "tools", percent: 10, phasePercent: percent + 0.4, tool })
@@ -175,9 +266,15 @@ describe("mensagens ao operador existem nos dois idiomas", () => {
       messageKeyForFailure
     ),
     "online_video.preparing",
+    "online_video.preparing_named",
+    "online_video.preparing_tools",
+    "online_video.preparing_pot",
+    "online_video.pot_unavailable",
+    "online_video.prepare_failed",
     "online_video.phase.tools",
     "online_video.phase.tools_ytdlp",
     "online_video.phase.tools_ffmpeg",
+    "online_video.phase.tools_pot",
     "online_video.phase.queued",
     "online_video.phase.downloading",
     "online_video.phase.finalizing",

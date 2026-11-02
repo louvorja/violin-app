@@ -41,12 +41,17 @@ function formatSelector(maxHeight, { direct = false } = {}) {
   // Tocar direto exige um arquivo servido por HTTP com `Range` (o <video> busca por
   // pedaços); trilhas em fragmentos ou HLS só o yt-dlp sabe juntar.
   const https = direct ? "[protocol=https]" : "";
-  return [
+  const alternatives = [
     `bv*[height<=${h}][vcodec^=avc1]${https}+ba[acodec^=mp4a]${https}`,
     `b[height<=${h}][vcodec^=avc1][ext=mp4]${https}`,
-    `bv*[height<=${h}]${https}+ba${https}`,
-    `b[height<=${h}]${https}`,
-  ].join("/");
+  ];
+  // Para tocar direto, só MP4/H.264+AAC: o servidor progressivo anuncia MP4 e o
+  // Chromium não decodifica VP9/Opus entregue com esse MIME. Sem esse par, é
+  // melhor devolver "format" e deixar o yt-dlp baixar/juntar.
+  if (!direct) {
+    alternatives.push(`bv*[height<=${h}]${https}+ba${https}`, `b[height<=${h}]${https}`);
+  }
+  return alternatives.join("/");
 }
 
 /**
@@ -59,7 +64,18 @@ const SYSTEM_CERTS_ARGS = ["--compat-options", "no-certifi"];
 /** Vale para o processo todo: depois que o repositório do sistema resolveu, as chamadas já começam com ele. */
 const defaultCertTrust = { system: false };
 
-function buildArgs({ id, outDir, ffmpegPath, maxHeight, cacheDir, jsRuntime, systemCerts }) {
+function buildArgs({
+  id,
+  outDir,
+  ffmpegPath,
+  maxHeight,
+  cacheDir,
+  jsRuntime,
+  systemCerts,
+  pluginDir,
+  potCli,
+  playerClient,
+}) {
   const args = [
     "--ignore-config",
     "--no-playlist",
@@ -90,16 +106,21 @@ function buildArgs({ id, outDir, ffmpegPath, maxHeight, cacheDir, jsRuntime, sys
   ];
   if (cacheDir) args.push("--cache-dir", cacheDir);
   if (jsRuntime) args.push("--js-runtimes", jsRuntime);
+  if (pluginDir) args.push("--plugin-dirs", pluginDir);
+  if (potCli) args.push("--extractor-args", `youtubepot-bgutilcli:cli_path=${potCli}`);
+  if (playerClient) args.push("--extractor-args", `youtube:player_client=${playerClient}`);
   if (systemCerts) args.push(...SYSTEM_CERTS_ARGS);
   args.push(watchUrl(id));
   return args;
 }
 
 /** Só o runtime de JavaScript do yt-dlp pode rodar o Electron como Node; para o resto, herdar a variável de um ambiente de desenvolvimento seria um acidente. */
-function childEnv(jsRuntime) {
+function childEnv(jsRuntime, potCacheDir) {
   const env = { ...process.env, PYTHONIOENCODING: "utf-8" };
   if (jsRuntime && /^node:/.test(jsRuntime)) env.ELECTRON_RUN_AS_NODE = "1";
   else delete env.ELECTRON_RUN_AS_NODE;
+  if (potCacheDir) env.CACHE_DIR = potCacheDir;
+  env.RUST_LOG = env.RUST_LOG || "error";
   return env;
 }
 
@@ -283,6 +304,10 @@ function runOnce(opts) {
     cacheDir,
     jsRuntime,
     systemCerts,
+    pluginDir,
+    potCli,
+    playerClient,
+    potCacheDir,
     onProgress,
     signal,
     spawnImpl = spawn,
@@ -297,8 +322,19 @@ function runOnce(opts) {
     }
     fs.ensureDirSync(outDir);
 
-    const args = buildArgs({ id, outDir, ffmpegPath: tools.ffmpeg, maxHeight, cacheDir, jsRuntime, systemCerts });
-    const env = childEnv(jsRuntime);
+    const args = buildArgs({
+      id,
+      outDir,
+      ffmpegPath: tools.ffmpeg,
+      maxHeight,
+      cacheDir,
+      jsRuntime,
+      systemCerts,
+      pluginDir,
+      potCli,
+      playerClient,
+    });
+    const env = childEnv(jsRuntime, potCacheDir);
 
     let child;
     try {
@@ -411,7 +447,16 @@ function run(opts) {
   return withSystemCerts(runOnce, opts);
 }
 
-function buildResolveArgs({ id, maxHeight, cacheDir, jsRuntime, systemCerts }) {
+function buildResolveArgs({
+  id,
+  maxHeight,
+  cacheDir,
+  jsRuntime,
+  systemCerts,
+  pluginDir,
+  potCli,
+  playerClient,
+}) {
   const args = [
     "--ignore-config",
     "--no-playlist",
@@ -427,6 +472,9 @@ function buildResolveArgs({ id, maxHeight, cacheDir, jsRuntime, systemCerts }) {
   ];
   if (cacheDir) args.push("--cache-dir", cacheDir);
   if (jsRuntime) args.push("--js-runtimes", jsRuntime);
+  if (pluginDir) args.push("--plugin-dirs", pluginDir);
+  if (potCli) args.push("--extractor-args", `youtubepot-bgutilcli:cli_path=${potCli}`);
+  if (playerClient) args.push("--extractor-args", `youtube:player_client=${playerClient}`);
   if (systemCerts) args.push(...SYSTEM_CERTS_ARGS);
   args.push(watchUrl(id));
   return args;
@@ -460,6 +508,40 @@ function expiryOf(url) {
 }
 
 /**
+ * Cabeçalhos que o yt-dlp usa na requisição do link. O googlevideo assina a URL
+ * para o cliente que a resolveu; repetir a faixa com outro User-Agent/Accept é
+ * uma das causas de 403. Só nomes conhecidos, e nunca os valores em log.
+ */
+const DIRECT_HEADER_NAMES = new Set([
+  "user-agent",
+  "accept",
+  "accept-language",
+  "referer",
+  "origin",
+  "cookie",
+  "sec-fetch-mode",
+  "sec-fetch-site",
+  "sec-fetch-dest",
+  "x-goog-visitor-id",
+  "x-goog-po-token",
+  "x-youtube-client-name",
+  "x-youtube-client-version",
+]);
+
+function directHeaders(...sources) {
+  const out = {};
+  for (const source of sources) {
+    if (!source || typeof source !== "object" || Array.isArray(source)) continue;
+    for (const [name, value] of Object.entries(source)) {
+      if (typeof value !== "string") continue;
+      if (!DIRECT_HEADER_NAMES.has(name.toLowerCase())) continue;
+      out[name] = value;
+    }
+  }
+  return out;
+}
+
+/**
  * Do JSON do yt-dlp para o que o renderer precisa: uma URL de vídeo e uma de áudio
  * (a mesma, quando o formato já vem com os dois). Nada aqui baixa: são links do
  * YouTube para o <video> ler direto.
@@ -476,13 +558,49 @@ function parseStreams(info, now = Date.now()) {
   const hasVideo = (f) => !!f.vcodec && f.vcodec !== "none";
   const hasAudio = (f) => !!f.acodec && f.acodec !== "none";
 
-  const video = usable.find(hasVideo);
-  if (!video) throw new OnlineVideoError("format", "Nenhum vídeo servido direto");
-  const muxed = hasAudio(video);
-  const audio = muxed ? video : usable.find((f) => hasAudio(f) && !hasVideo(f));
-  if (!audio) throw new OnlineVideoError("format", "Nenhuma trilha de áudio servida direto");
+  const isMp4Video = (f) =>
+    String(f.ext || "").toLowerCase() === "mp4" && /^avc1/i.test(String(f.vcodec || ""));
+  const isAacAudio = (f) =>
+    ["mp4", "m4a"].includes(String(f.ext || "").toLowerCase()) &&
+    /^mp4a/i.test(String(f.acodec || ""));
 
+  const video = usable.find((f) => hasVideo(f) && isMp4Video(f));
+  if (!video) throw new OnlineVideoError("format", "Nenhum vídeo MP4/H.264 servido direto");
+  const muxed = hasAudio(video);
+  const audio =
+    muxed && isAacAudio(video)
+      ? video
+      : usable.find((f) => hasAudio(f) && !hasVideo(f) && isAacAudio(f));
+  if (!audio) throw new OnlineVideoError("format", "Nenhuma trilha AAC servida direto");
+
+  const videoHeaders = directHeaders(info.http_headers, video.http_headers);
+  const audioHeaders = muxed
+    ? videoHeaders
+    : directHeaders(info.http_headers, audio.http_headers);
   const expiries = [video, audio].map((f) => expiryOf(streamUrl(f.url))).filter((t) => t != null);
+
+  // Diagnóstico sem URL: mostra o cliente/codecs e quais cabeçalhos o yt-dlp espera.
+  // É o que separa "formato incompatível" de "403 por cliente/headers".
+  console.info("[onlineVideo] formatos diretos:", {
+    muxed,
+    video: {
+      format_id: video.format_id || null,
+      ext: video.ext || null,
+      vcodec: video.vcodec || null,
+      protocol: video.protocol || null,
+      headers: Object.keys(videoHeaders),
+      user_agent: videoHeaders["User-Agent"] || videoHeaders["user-agent"] || null,
+    },
+    audio: {
+      format_id: audio.format_id || null,
+      ext: audio.ext || null,
+      acodec: audio.acodec || null,
+      protocol: audio.protocol || null,
+      headers: Object.keys(audioHeaders),
+      user_agent: audioHeaders["User-Agent"] || audioHeaders["user-agent"] || null,
+    },
+  });
+
   return {
     video: {
       url: streamUrl(video.url),
@@ -491,12 +609,14 @@ function parseStreams(info, now = Date.now()) {
       vcodec: video.vcodec || null,
       ext: video.ext || null,
       size: exactSize(streamUrl(video.url), video),
+      headers: videoHeaders,
     },
     audio: {
       url: streamUrl(audio.url),
       acodec: audio.acodec || null,
       ext: audio.ext || null,
       size: exactSize(streamUrl(audio.url), audio),
+      headers: audioHeaders,
     },
     muxed,
     duration: num(String(info.duration)),
@@ -528,6 +648,10 @@ function resolveStreamsOnce(opts) {
     cacheDir,
     jsRuntime,
     systemCerts,
+    pluginDir,
+    potCli,
+    playerClient,
+    potCacheDir,
     signal,
     spawnImpl = spawn,
     killImpl = killTree,
@@ -541,12 +665,25 @@ function resolveStreamsOnce(opts) {
     }
     let child;
     try {
-      child = spawnImpl(tools.ytdlp, buildResolveArgs({ id, maxHeight, cacheDir, jsRuntime, systemCerts }), {
-        windowsHide: true,
-        stdio: ["ignore", "pipe", "pipe"],
-        env: childEnv(jsRuntime),
-        detached: process.platform !== "win32",
-      });
+      child = spawnImpl(
+        tools.ytdlp,
+        buildResolveArgs({
+          id,
+          maxHeight,
+          cacheDir,
+          jsRuntime,
+          systemCerts,
+          pluginDir,
+          potCli,
+          playerClient,
+        }),
+        {
+          windowsHide: true,
+          stdio: ["ignore", "pipe", "pipe"],
+          env: childEnv(jsRuntime, potCacheDir),
+          detached: process.platform !== "win32",
+        }
+      );
     } catch (error) {
       reject(new OnlineVideoError("tool", error.message));
       return;
@@ -720,6 +857,7 @@ function muxCopy(opts) {
 }
 
 module.exports = {
+  directHeaders,
   OnlineVideoError,
   ALLOWED_HEIGHTS,
   DEFAULT_HEIGHT,

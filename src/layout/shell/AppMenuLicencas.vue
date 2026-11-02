@@ -15,7 +15,7 @@
 
     <h4 class="licenses-subtitle">{{ $t("licenses.libraries") }}</h4>
     <div class="licenses-grid">
-      <div v-for="lib in libraries" :key="lib.name" class="licenses-card">
+      <div v-for="lib in orderedLibraries" :key="lib.name" class="licenses-card">
         <div class="licenses-card-header">
           <span class="licenses-card-name">{{ lib.name }}</span>
           <span class="licenses-card-version">{{ lib.version }}</span>
@@ -40,6 +40,7 @@
 </template>
 
 <script setup>
+import { computed } from "vue";
 import LjLogo from "@/components/LjLogo.vue";
 
 const libraries = [
@@ -88,7 +89,29 @@ const libraries = [
   { name: "Electron", version: "41.4", license: "MIT", url: "https://www.electronjs.org" },
   { name: "Vite", version: "7.3", license: "MIT", url: "https://vitejs.dev" },
   { name: "Anime.js", version: "3.2", license: "MIT", url: "https://animejs.com" },
+  {
+    name: "yt-dlp",
+    version: "runtime",
+    license: "Unlicense",
+    url: "https://github.com/yt-dlp/yt-dlp",
+  },
+  {
+    name: "FFmpeg",
+    version: "runtime",
+    license: "GPL-3.0",
+    url: "https://github.com/eugeneware/ffmpeg-static",
+  },
+  {
+    name: "BgUtils POT Provider",
+    version: "0.8.1",
+    license: "GPL-3.0",
+    url: "https://github.com/jim60105/bgutil-ytdlp-pot-provider-rs",
+  },
 ];
+
+const orderedLibraries = computed(() =>
+  [...libraries].sort((a, b) => a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" }))
+);
 
 function badgeType(license) {
   if (license.includes("LGPL")) return "copyleft";

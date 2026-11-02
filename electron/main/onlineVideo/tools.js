@@ -65,6 +65,45 @@ const FFMPEG_ASSETS = {
 
 const USER_AGENT = "LouvorJA-Violin";
 
+/**
+ * PO Token provider (Rust) + plugin do yt-dlp. O YouTube exige um token por
+ * vídeo para liberar formatos altos; sem ele, os links do CDN respondem 403.
+ * Versão fixa e SHA-256 dos assets do release; atualização junto do yt-dlp.
+ */
+const POT_VERSION = "0.8.1";
+const POT_BASE = `https://github.com/jim60105/bgutil-ytdlp-pot-provider-rs/releases/download/v${POT_VERSION}`;
+const POT_PLUGIN = {
+  name: "bgutil-ytdlp-pot-provider-rs.zip",
+  sha256: "99fd83b98fa93b193d6a3b69dc74410d76e7a2b889868c54d16121cac9060344",
+};
+const POT_ASSETS = {
+  "darwin-arm64": {
+    name: "bgutil-pot-macos-aarch64",
+    sha256: "34b83baf0a557fecaa6d67a8177e53e169c2ccf987182883a4bae289a7176883",
+  },
+  "darwin-x64": {
+    name: "bgutil-pot-macos-x86_64",
+    sha256: "0391175fa938c7fabbb8b40a40bd43182ef75af97e1dd3fab56eb23b4ac3e113",
+  },
+  "win32-x64": {
+    name: "bgutil-pot-windows-x86_64.exe",
+    sha256: "25d6b05c79176aa792454c3d1727922ca47e56cf11cb1e866615d751819b14a0",
+  },
+  // Windows ARM64 roda o binário x64 por emulação.
+  "win32-arm64": {
+    name: "bgutil-pot-windows-x86_64.exe",
+    sha256: "25d6b05c79176aa792454c3d1727922ca47e56cf11cb1e866615d751819b14a0",
+  },
+  "linux-x64": {
+    name: "bgutil-pot-linux-x86_64",
+    sha256: "e7c264a574fa2705b6e5dc62283a8a4e80130f27b9d7e9df44e6b09aa6151a87",
+  },
+  "linux-arm64": {
+    name: "bgutil-pot-linux-aarch64",
+    sha256: "4f4a1f681dba45e695e1c14d314517da180a1fd374afd09d634fd80ef6d0284b",
+  },
+};
+
 function toolError(message) {
   return new OnlineVideoError("tool", message);
 }
@@ -200,6 +239,9 @@ function createTools(cfg) {
     ffmpegBase = FFMPEG_BASE,
     ytdlpAssets = YTDLP_ASSETS,
     ffmpegAssets = FFMPEG_ASSETS,
+    potBase = POT_BASE,
+    potAssets = POT_ASSETS,
+    potPlugin = POT_PLUGIN,
     execFileImpl = execFile,
   } = cfg;
 
@@ -209,6 +251,12 @@ function createTools(cfg) {
   const ffmpegPath = path.join(binDir, `ffmpeg${exe}`);
   const metaPath = path.join(binDir, "tools.json");
   const supported = Boolean(ytdlpAssets[key] && ffmpegAssets[key]);
+  const potPath = path.join(binDir, `bgutil-pot${exe}`);
+  const potPluginDir = path.join(binDir, "yt-dlp-plugins");
+  const potPluginRoot = path.join(potPluginDir, "bgutil-ytdlp-pot-provider");
+  const potCacheDir = path.join(binDir, "pot-cache");
+  const potAsset = potAssets[key];
+  const potSupported = Boolean(potAsset);
 
   let _ensuring = null;
   const _listeners = new Set();
@@ -273,12 +321,80 @@ function createTools(cfg) {
     }
   }
 
+  async function installPot({ onProgress, signal } = {}) {
+    if (!potSupported) {
+      throw new OnlineVideoError("unsupported", `Provedor de PO token sem suporte: ${key}`);
+    }
+    const JSZip = require("jszip");
+    // O zip do plugin tem poucos KB: não vale reiniciar a barra da ferramenta.
+    const pluginZip = await downloadTo(`${potBase}/${potPlugin.name}`, `${potPluginRoot}.zip`, {
+      expectedSha256: potPlugin.sha256,
+      signal,
+    });
+    try {
+      const zip = await JSZip.loadAsync(await fs.readFile(pluginZip.tmp));
+      await fs.remove(potPluginRoot);
+      const root = path.resolve(potPluginRoot);
+      for (const [name, entry] of Object.entries(zip.files)) {
+        if (entry.dir) continue;
+        const clean = path.posix.normalize(name);
+        if (!clean || clean.startsWith("../") || path.posix.isAbsolute(clean)) {
+          throw toolError("O zip do provedor de PO token tem caminho inválido");
+        }
+        const dest = path.resolve(root, clean);
+        if (dest !== root && !dest.startsWith(root + path.sep)) {
+          throw toolError("O zip do provedor de PO token sai da pasta do plugin");
+        }
+        await fs.ensureDir(path.dirname(dest));
+        await fs.writeFile(dest, await entry.async("nodebuffer"));
+      }
+    } finally {
+      await fs.remove(`${potPluginRoot}.zip`).catch(() => {});
+      await fs.remove(pluginZip.tmp).catch(() => {});
+    }
+
+    const { tmp, sha256 } = await downloadTo(`${potBase}/${potAsset.name}`, potPath, {
+      expectedSha256: potAsset.sha256,
+      signal,
+      onProgress: (p) => onProgress?.({ tool: "pot", ...p }),
+    });
+    try {
+      await fs.chmod(tmp, 0o755);
+      const out = await run(tmp, ["--version"], { execFileImpl });
+      if (!/bgutil-pot/i.test(out)) throw toolError("O provedor de PO token não respondeu como esperado");
+      await fs.move(tmp, potPath, { overwrite: true });
+      await writeMeta({ pot: { version: POT_VERSION, sha256, installedAt: Date.now() } });
+    } catch (error) {
+      await fs.remove(tmp);
+      throw error;
+    }
+  }
+
   function paths() {
-    return { ytdlp: ytdlpPath, ffmpeg: ffmpegPath };
+    const pot = potReady() ? potPath : null;
+    return {
+      ytdlp: ytdlpPath,
+      ffmpeg: ffmpegPath,
+      pot,
+      pluginDir: pot ? potPluginDir : null,
+      potCacheDir,
+    };
   }
 
   function ready() {
     return fs.pathExistsSync(ytdlpPath) && fs.pathExistsSync(ffmpegPath);
+  }
+
+  function potReady() {
+    return (
+      potSupported &&
+      fs.pathExistsSync(potPath) &&
+      fs.pathExistsSync(path.join(potPluginRoot, "yt_dlp_plugins"))
+    );
+  }
+
+  function needsPot() {
+    return potSupported && !potReady();
   }
 
   /** Espera `promise`, mas desiste (sem interrompê-la) se `signal` for abortado. */
@@ -336,6 +452,20 @@ function createTools(cfg) {
           };
           if (!fs.pathExistsSync(ytdlpPath)) await installYtdlp({ onProgress: notify });
           if (!fs.pathExistsSync(ffmpegPath)) await installFfmpeg({ onProgress: notify });
+          if (needsPot()) {
+            try {
+              // Provedor é opcional: sem ele o yt-dlp/ffmpeg continuam válidos e
+              // o app cai no player do YouTube quando o CDN exigir o token.
+              await installPot({ onProgress: notify, signal });
+            } catch (error) {
+              if (!signal?.aborted) {
+                console.warn(
+                  "[onlineVideo] provedor de PO token indisponível:",
+                  error?.message || error
+                );
+              }
+            }
+          }
           return paths();
         } finally {
           _ensuring = null;
@@ -385,6 +515,12 @@ function createTools(cfg) {
   async function reset() {
     await fs.remove(ytdlpPath);
     await fs.remove(ffmpegPath);
+    await fs.remove(potPath);
+    await fs.remove(`${potPath}.download`);
+    await fs.remove(potPluginRoot);
+    await fs.remove(`${potPluginRoot}.zip`);
+    await fs.remove(`${potPluginRoot}.zip.download`);
+    await fs.remove(potCacheDir);
     await fs.remove(metaPath);
   }
 
@@ -393,8 +529,11 @@ function createTools(cfg) {
     return {
       supported,
       ready: ready(),
+      potReady: potReady(),
+      potSupported,
       ytdlpVersion: meta.ytdlp?.version ?? null,
       ytdlpInstalledAt: meta.ytdlp?.installedAt ?? null,
+      potVersion: meta.pot?.version ?? null,
     };
   }
 
@@ -403,7 +542,22 @@ function createTools(cfg) {
     await _ensuring?.catch(() => {});
   }
 
-  return { key, supported, paths, ready, ensure, refreshYtdlp, works, ffmpegWorks, reset, info, waitForIdle };
+  return {
+    key,
+    supported,
+    paths,
+    ready,
+    potReady,
+    potSupported,
+    needsPot,
+    ensure,
+    refreshYtdlp,
+    works,
+    ffmpegWorks,
+    reset,
+    info,
+    waitForIdle,
+  };
 }
 
 module.exports = {
@@ -415,4 +569,8 @@ module.exports = {
   FFMPEG_ASSETS,
   YTDLP_BASE,
   FFMPEG_BASE,
+  POT_ASSETS,
+  POT_PLUGIN,
+  POT_VERSION,
+  POT_BASE,
 };

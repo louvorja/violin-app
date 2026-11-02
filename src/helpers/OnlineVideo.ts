@@ -10,6 +10,8 @@ import Platform from "@/helpers/Platform";
 import { i18nAtual } from "@/i18n";
 import $userdata from "@/helpers/UserData";
 import Telemetry from "@/helpers/Telemetry";
+import $snackbar from "@/helpers/Snackbar";
+import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 import { KEYS } from "@/constants/UserDataKeys";
 
@@ -201,7 +203,9 @@ export function phaseText(p: OnlineVideoProgress): string {
         ? "online_video.phase.tools_ytdlp"
         : p.tool === "ffmpeg"
           ? "online_video.phase.tools_ffmpeg"
-          : null;
+          : p.tool === "pot"
+            ? "online_video.phase.tools_pot"
+            : null;
     return toolPhase
       ? String(t(toolPhase, { percent: Math.round(p.phasePercent ?? p.percent) }))
       : String(t("online_video.phase.tools"));
@@ -413,15 +417,108 @@ export function cancel(id: string): void {
 let _prepared = false;
 
 /**
- * Deixa as ferramentas de vídeo instaladas antes de o operador pedir o primeiro
- * vídeo. Uma vez por sessão, sem barulho: se falhar, o download tenta de novo na hora.
+ * Deixa as ferramentas de vídeo (yt-dlp, ffmpeg e o provedor de PO token)
+ * instaladas antes de o operador pedir o primeiro vídeo. A instalação aparece na
+ * lista de processos e na snackbar; se o provedor falhar, o app segue com yt-dlp
+ * e o vídeo cai no player do YouTube. Uma vez por sessão; falhas permitem retry.
  */
 export function prepare(): void {
   if (_prepared || !downloadAvailable()) return;
   _prepared = true;
-  void Platform.onlineVideo?.prepare?.().catch(() => {
-    _prepared = false;
-  });
+
+  const start = (): void => {
+    const t = i18nAtual()?.global?.t;
+    const say = (key: string, params?: Record<string, unknown>): string =>
+      t ? String(t(key, params)) : key;
+    const tasks = useBackgroundTasks();
+    const taskId = "online-video:tools";
+    let off: (() => void) | null = null;
+    let potNotified = false;
+
+    const finish = (ok: boolean, pot: boolean, potSupported: boolean, message?: string): void => {
+      off?.();
+      off = null;
+      if (ok) tasks.completeTask(taskId);
+      else
+        tasks.updateTask(taskId, {
+          status: "error",
+          error: message || say("online_video.prepare_failed"),
+        });
+      if (ok && potSupported && !pot) {
+        $snackbar.warning(say("online_video.pot_unavailable"), {
+          key: "ov-pot-unavailable",
+          timeout: 8000,
+        });
+        // O provedor é opcional; tenta de novo quando o módulo for reaberto.
+        _prepared = false;
+      } else if (!ok) {
+        $snackbar.warning(say("online_video.prepare_failed"), {
+          key: "ov-tools-failed",
+          timeout: 8000,
+        });
+        _prepared = false;
+      }
+    };
+
+    tasks.registerTask(taskId, say("online_video.preparing_tools"));
+    off =
+      Platform.onlineVideo?.onProgress?.((p: OnlineVideoProgress) => {
+        if (p?.id !== "__tools__") return;
+        tasks.updateTask(taskId, {
+          progress: p.percent ?? 0,
+          detail: phaseText(p),
+        });
+        if (p.tool === "pot" && !potNotified) {
+          potNotified = true;
+          $snackbar.info(say("online_video.preparing_pot"), {
+            key: "ov-pot-installing",
+            timeout: 5000,
+          });
+        }
+      }) ?? null;
+
+    $snackbar.info(say("online_video.preparing_tools"), {
+      key: "ov-tools-installing",
+      timeout: 5000,
+    });
+
+    const preparing = Platform.onlineVideo?.prepare?.();
+    if (!preparing) {
+      finish(false, false, true, "online_video.prepare_failed");
+      return;
+    }
+    void preparing
+      .then(
+        (
+          res:
+            | { ok?: boolean; pot?: boolean; potSupported?: boolean; error?: { message?: string } }
+            | undefined
+        ) => {
+          finish(
+            res?.ok === true,
+            res?.pot === true,
+            res?.potSupported === true,
+            res?.error?.message
+          );
+        }
+      )
+      .catch((error: unknown) => {
+        finish(false, false, true, error instanceof Error ? error.message : String(error));
+      });
+  };
+
+  const status = Platform.onlineVideo?.status;
+  if (typeof status !== "function") {
+    start();
+    return;
+  }
+  void status()
+    .then((st: { ready?: boolean; potReady?: boolean; potSupported?: boolean } | undefined) => {
+      // Já pronto: não pisca tarefa nem snackbar de instalação.
+      if (st?.ready === true && (st.potReady === true || st.potSupported === false)) return;
+      start();
+    })
+    .catch(start);
 }
 
 /** Vídeos que estão no disco, com o tamanho e se o operador mandou mantê-los. */
