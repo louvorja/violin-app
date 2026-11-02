@@ -444,6 +444,7 @@ import ModuleContainer from "@/components/ModuleContainer.vue";
 import $broadcast from "@/helpers/Broadcast";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import SljaConverter from "@/helpers/SljaConverter";
+import { plainSlideText } from "@/helpers/SlideText";
 import AudioLibrary from "@/helpers/AudioLibrary";
 import { ensureRenderableImage } from "@/helpers/ImageConvert";
 import CustomSongs from "@/helpers/CustomSongs";
@@ -1124,8 +1125,8 @@ async function toProjectionPayload(s, title = song.value.nome) {
       resolvedImages.value.get(s.imagem) || (await AudioLibrary.resolveImage(s.imagem)) || null;
   }
   return {
-    lyric: s.letra || "",
-    aux_lyric: s.letra_aux || "",
+    lyric: plainSlideText(s.letra),
+    aux_lyric: plainSlideText(s.letra_aux),
     url_image: urlImage,
     image_position: typeof s.imagem_posicao === "number" ? s.imagem_posicao - 1 : 4,
     cover: s.tipo === "CAPA",
@@ -1134,7 +1135,7 @@ async function toProjectionPayload(s, title = song.value.nome) {
     color_aux: s.cor_letra_aux,
     font_size_pct: s.tamanho_letra,
     font_size_aux_pct: s.tamanho_letra_aux,
-    name: title,
+    name: plainSlideText(title),
   };
 }
 

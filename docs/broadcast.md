@@ -71,6 +71,8 @@ $broadcast.send(BROADCAST_TYPE.REQUEST_MUSIC_PRESENTATION_SNAPSHOT);
 | `MEDIA_CLOSE` | `"media_close"` | useMedia.close() | Projection, Obs, FileProjection |
 | `FILE_PROJECTION` | `"file_projection"` | liturgy / media_library / background_sound / timer end action | FileProjection, FileProjectionReturn |
 | `FILE_PROJECTION_PAGE` | `"file_projection_page"` | media_library (pedido do operador); FileProjection/Return/BackgroundProjection (página e total) | FileProjection, FileProjectionReturn, BackgroundProjection, BackgroundProjectionReturn e media_library |
+| `FILE_PROJECTION_ZOOM` | `"file_projection_zoom"` | presentation_mode (zoom do operador) | FileProjection, FileProjectionReturn, BackgroundProjection, BackgroundProjectionReturn: recorte `{ key, page, scale, cx, cy }` da imagem ou página de PDF |
+| `REQUEST_FILE_PROJECTION_ZOOM` | `"request_file_projection_zoom"` | Tela recém-aberta ou recarregada | presentation_mode (reenvia o recorte atual) |
 | `ONLINE_VIDEO_PROJECTION` | `"online_video_projection"` | useMedia.openEmbeddedYouTube() (reserva com o player do YouTube; o vídeo baixado usa `FILE_PROJECTION` com `type: "video"`) | FileProjection |
 | `BACKGROUND_PROJECTION` | `"background_projection"` | background_projection module | BackgroundProjection, BackgroundProjectionReturn |
 | `WALLPAPER_UPDATE` | `"wallpaper_update"` | RibbonWallpaper, AppMenuOpcoes | BackgroundProjection, FileProjection |
@@ -90,6 +92,12 @@ $broadcast.send(BROADCAST_TYPE.REQUEST_MUSIC_PRESENTATION_SNAPSHOT);
 | `LIBRAS_TOGGLE` | `"libras_toggle"` | ShellTools | Projection |
 | `LIBRAS_TRANSLATE` | `"libras_translate"` | useLibras | Projection, Obs |
 | `REQUEST_LIBRAS_STATE` | `"request_libras_state"` | LibrasOverlay | main.js |
+| `PROJECTION_CLEAR` | `"projection_clear"` | presentation_mode ("Limpar tela") | Views de projeção e retorno (`ProjectionClearScreen`), espelho do módulo |
+| `REQUEST_PROJECTION_CLEAR` | `"request_projection_clear"` | Janela de projeção recém-aberta | presentation_mode |
+| `RETURN_OVERRIDE` | `"return_override"` | presentation_mode, Esc | Views de retorno (`ReturnOverride`): imagem, vídeo ou `blank` só no retorno |
+| `RETURN_OVERRIDE_STATE` | `"return_override_state"` | presentation_mode (player do vídeo só no retorno) | `ReturnOverride` (relógio do vídeo mudo) |
+| `REQUEST_RETURN_OVERRIDE` | `"request_return_override"` | Retorno recém-aberto | presentation_mode |
+| `SCREEN_VIDEO_REPORT` | `"screen_video_report"` | FileProjection, FileProjectionReturn (1×/s com vídeo) | presentation_mode (avisa na miniatura quando a tela diverge do player) |
 | `TELEMETRY_SESSION_REQUEST` | `"telemetry_session_request"` | Telemetry (janelas auxiliares) | Telemetry (janela principal) |
 | `TELEMETRY_SESSION` | `"telemetry_session"` | Telemetry (janela principal) | Telemetry (janelas auxiliares) |
 | `TELEMETRY_ERROR_SEEN` | `"telemetry_error_seen"` | Telemetry (janelas auxiliares) | Telemetry (janela principal) |

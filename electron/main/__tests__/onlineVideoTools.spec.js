@@ -7,6 +7,7 @@ import path from "path";
 import fs from "fs";
 import zlib from "zlib";
 import crypto from "crypto";
+import { execFileSync } from "child_process";
 
 const require = createRequire(import.meta.url);
 const { createTools, parseSums, YTDLP_ASSETS, FFMPEG_ASSETS } = require("../onlineVideo/tools.js");
@@ -26,6 +27,8 @@ let sumsOverride;
 let ffmpegGz;
 /** Quando definido, o servidor segura a resposta do ffmpeg até o teste liberar. */
 let ffmpegGate = null;
+/** O .zip "onedir" do macOS, montado pelo teste. */
+let distZip = null;
 
 beforeAll(async () => {
   server = http.createServer((req, res) => {
@@ -38,6 +41,7 @@ beforeAll(async () => {
       return send(200, sumsOverride ?? `${sha(ytdlpBody)}  yt-dlp_fake\n`);
     }
     if (req.url === "/yt/yt-dlp_fake") return send(200, ytdlpBody, { "content-length": ytdlpBody.length });
+    if (req.url === "/yt/yt-dlp_dist.zip") return send(200, distZip, { "content-length": distZip.length });
     if (req.url === "/redir/SHA2-256SUMS") return send(302, "", { location: "/yt/SHA2-256SUMS" });
     if (req.url === "/redir/yt-dlp_fake") return send(302, "", { location: "/yt/yt-dlp_fake" });
     if (req.url === "/ff/ffmpeg-fake.gz") {
@@ -371,5 +375,67 @@ describe("plataforma sem suporte", () => {
     const tools = createTools({ binDir, platform: "win32", arch: "x64" });
     expect(tools.paths().ytdlp.endsWith("yt-dlp.exe")).toBe(true);
     expect(tools.paths().ffmpeg.endsWith("ffmpeg.exe")).toBe(true);
+  });
+});
+
+/** Monta um .zip como o `yt-dlp_macos.zip`: o executável e a pasta `_internal` na raiz. */
+function makeDistZip(script) {
+  const src = fs.mkdtempSync(path.join(os.tmpdir(), "lj-dist-src-"));
+  fs.writeFileSync(path.join(src, "yt-dlp_dist"), script, { mode: 0o755 });
+  fs.mkdirSync(path.join(src, "_internal"));
+  fs.writeFileSync(path.join(src, "_internal", "base_library.zip"), "lib");
+  const zip = path.join(os.tmpdir(), `lj-dist-${process.pid}-${Date.now()}.zip`);
+  execFileSync("ditto", ["-c", "-k", src, zip]);
+  const buf = fs.readFileSync(zip);
+  fs.rmSync(src, { recursive: true, force: true });
+  fs.rmSync(zip, { force: true });
+  return buf;
+}
+
+describe.runIf(process.platform === "darwin")("yt-dlp desempacotado (macOS)", () => {
+  const makeDist = () =>
+    make({
+      platform: "darwin",
+      arch: "arm64",
+      ytdlpAssets: { "darwin-arm64": { name: "yt-dlp_dist.zip", exe: "yt-dlp_dist" } },
+      ffmpegAssets: { "darwin-arm64": { name: "ffmpeg-fake.gz", sha256: sha(FFMPEG_GZ) } },
+    });
+
+  it("extrai o .zip numa pasta própria e aposenta o executável único antigo", async () => {
+    distZip = makeDistZip(YTDLP_V1);
+    sumsOverride = `${sha(distZip)}  yt-dlp_dist.zip\n`;
+    fs.writeFileSync(path.join(binDir, "yt-dlp"), "binário antigo");
+
+    const tools = makeDist();
+    expect(tools.needsUpgrade()).toBe(true);
+    const paths = await tools.ensure();
+    expect(tools.needsUpgrade()).toBe(false);
+
+    expect(paths.ytdlp).toBe(path.join(binDir, "yt-dlp-dist", "yt-dlp_dist"));
+    expect(fs.existsSync(path.join(binDir, "yt-dlp-dist", "_internal", "base_library.zip"))).toBe(true);
+    expect(fs.existsSync(path.join(binDir, "yt-dlp"))).toBe(false);
+    expect(fs.existsSync(path.join(binDir, "yt-dlp_dist.zip.download"))).toBe(false);
+    expect(await tools.works()).toBe(true);
+    expect((await tools.info()).ytdlpVersion).toBe("2026.01.02");
+  });
+
+  it("um .zip cujo executável não responde não substitui o que funciona", async () => {
+    distZip = makeDistZip(YTDLP_V1);
+    sumsOverride = `${sha(distZip)}  yt-dlp_dist.zip\n`;
+    const tools = makeDist();
+    await tools.ensure();
+
+    distZip = makeDistZip(Buffer.from("#!/bin/sh\necho quebrado\n"));
+    sumsOverride = `${sha(distZip)}  yt-dlp_dist.zip\n`;
+    await expect(tools.refreshYtdlp()).rejects.toMatchObject({ kind: "tool" });
+    expect(fs.readFileSync(tools.paths().ytdlp, "utf8")).toContain("2026.01.02");
+    expect(fs.existsSync(path.join(binDir, "yt-dlp-dist.new"))).toBe(false);
+  });
+
+  it("recusa o .zip com SHA-256 diferente do publicado", async () => {
+    distZip = makeDistZip(YTDLP_V1);
+    sumsOverride = `${"0".repeat(64)}  yt-dlp_dist.zip\n`;
+    await expect(makeDist().ensure()).rejects.toMatchObject({ kind: "tool" });
+    expect(fs.existsSync(path.join(binDir, "yt-dlp-dist"))).toBe(false);
   });
 });

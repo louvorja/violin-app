@@ -367,8 +367,11 @@ export function useLiturgyExecution() {
     }
   }
 
-  /** Anúncios: envia os slides selecionados (na ordem) para a projeção. */
-  async function executeAnnouncements(item: LiturgyItem): Promise<boolean> {
+  /**
+   * Anúncios: envia os slides selecionados (na ordem) para a projeção.
+   * `startIndex`: começa por um deles (o modo apresentação manda o anúncio clicado).
+   */
+  async function executeAnnouncements(item: LiturgyItem, startIndex = 0): Promise<boolean> {
     const announcementToken = beginAnnouncementIntent();
     try {
       const all = (
@@ -406,7 +409,7 @@ export function useLiturgyExecution() {
           videoMime: a.videoMime,
           style: a.style,
         })),
-        index: 0,
+        index: Math.min(Math.max(0, startIndex), selected.length - 1),
       };
       $broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_INTENT, payload);
       if (
@@ -417,7 +420,7 @@ export function useLiturgyExecution() {
       $appdata.set(KEYS.MODULES.MEDIA.IS_PLAYING, true);
       // Ativa a barra de controles global.
       const fp = useFileProjection();
-      fp.start("announcements", selected[0]?.nome || "", selected.length, 0);
+      fp.start("announcements", selected[payload.index]?.nome || "", selected.length, payload.index);
       const opened = await openAnnouncementsWindow();
       return (
         opened &&
@@ -703,5 +706,6 @@ export function useLiturgyExecution() {
     openUrl,
     openFile,
     isYoutube,
+    executeAnnouncements,
   };
 }

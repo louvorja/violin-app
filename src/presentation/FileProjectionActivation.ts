@@ -22,7 +22,8 @@ export function readFileActivation(value: unknown): FileActivation | null {
       (raw.page !== undefined && (!Number.isSafeInteger(raw.page) || (raw.page as number) < 1)) ||
       (raw.totalPages !== undefined &&
         (!Number.isSafeInteger(raw.totalPages) || (raw.totalPages as number) < 1)) ||
-      (raw.backward !== undefined && typeof raw.backward !== "boolean")) return null;
+      (raw.backward !== undefined && typeof raw.backward !== "boolean") ||
+      (raw.clock !== undefined && raw.clock !== "player")) return null;
   if (raw.libRef !== undefined) {
     if (!raw.libRef || typeof raw.libRef !== "object" || Array.isArray(raw.libRef)) return null;
     const ref = raw.libRef as Record<string, unknown>;
@@ -39,6 +40,8 @@ export function readFileActivation(value: unknown): FileActivation | null {
     ...(typeof raw.page === "number" ? { page: raw.page } : {}),
     ...(typeof raw.totalPages === "number" ? { totalPages: raw.totalPages } : {}),
     ...(raw.backward === true ? { backward: true } : {}),
+    // Vídeo que segue o player da janela principal: a tela não toca sozinha.
+    ...(raw.clock === "player" && raw.type === "video" ? { clock: "player" as const } : {}),
     ...(raw.libRef ? { libRef: raw.libRef as FileProjectionState["libRef"] } : {}),
   };
 }

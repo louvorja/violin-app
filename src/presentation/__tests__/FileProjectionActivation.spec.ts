@@ -38,3 +38,20 @@ describe("FileProjectionActivationGate", () => {
     expect(readFileActivation({ ...packet(1, "a"), stage_epoch: Infinity })).toBeNull();
   });
 });
+
+describe("relógio do vídeo", () => {
+  const video = (clock?: unknown) => ({ stage_epoch: 1, type: "video", url: "louvorja://local/v.mp4", playback_id: "p", clock });
+
+  it("vídeo que segue o player chega à tela com a marca", () => {
+    expect(readFileActivation(video("player"))?.clock).toBe("player");
+  });
+
+  it("sem player (timer), a tela toca sozinha; valor estranho é recusado", () => {
+    expect(readFileActivation(video())?.clock).toBeUndefined();
+    expect(readFileActivation(video("outro"))).toBeNull();
+  });
+
+  it("imagem e PDF não levam a marca", () => {
+    expect(readFileActivation({ ...video("player"), type: "pdf" })?.clock).toBeUndefined();
+  });
+});

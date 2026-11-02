@@ -22,7 +22,7 @@ const MAIN = file("../../main.cjs");
 const PROTOCOL = file("../protocol.js");
 const PATHS = file("../paths.js");
 
-const FUNCTIONS = ["status", "ensure", "stream", "cancel", "has", "list", "keep", "prepare", "remove", "clear"];
+const FUNCTIONS = ["status", "ensure", "stream", "cancel", "has", "list", "prefetch", "accountStatus", "accountLogin", "accountLogout", "collection", "keep", "prepare", "remove", "clear"];
 
 async function withFakeElectron(platform, fn) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "lj-video-ipc-"));
@@ -89,6 +89,8 @@ describe.each(["darwin", "win32", "linux"])("vídeo online: preload e main (%s)"
       expect(called.find((c) => c.channel === "onlineVideo:stream").args).toEqual(["abcdefghijk", opts]);
       expect(called.find((c) => c.channel === "onlineVideo:ensure").args).toEqual(["abcdefghijk", opts]);
       expect(called.find((c) => c.channel === "onlineVideo:has").args).toEqual(["abcdefghijk"]);
+      // Canal ou playlist: a fonte e a página seguem como vieram; o main as valida.
+      expect(called.find((c) => c.channel === "onlineVideo:collection").args).toEqual(["abcdefghijk", opts]);
 
       require(INDEX).registerIpc({ handle: (channel, handler) => seen.handlers.set(channel, handler) });
       expect([...seen.handlers.keys()].sort()).toEqual(channels);
@@ -122,7 +124,9 @@ describe("vídeo online: o que fica de fora do carregamento do preload", () => {
       expect(await seen.handlers.get("onlineVideo:has")({}, "zzzzzzzzzzz")).toBe(false);
       expect(onlineVideo.getManager()).toBe(previous);
       expect(previous.store.dir).not.toBe(chosen);
-      expect(previous.tools.paths().ytdlp).toBe(path.join(paths.dataDir(), "bin", "yt-dlp"));
+      // No macOS o yt-dlp fica desempacotado numa pasta própria (ver tools.js).
+      const ytdlp = process.platform === "darwin" ? path.join("yt-dlp-dist", "yt-dlp_macos") : `yt-dlp${process.platform === "win32" ? ".exe" : ""}`;
+      expect(previous.tools.paths().ytdlp).toBe(path.join(paths.dataDir(), "bin", ytdlp));
     });
   });
 

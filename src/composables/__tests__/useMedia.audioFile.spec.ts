@@ -65,6 +65,8 @@ vi.mock("@/helpers/ProjectionWindows", () => ({
   closeProjectionWindows: () => h.fecharTudo(),
   closeFileProjectionWindows: () => h.fecharArquivo(),
   closeMusicProjectionWindows: vi.fn(async () => {}),
+  // Fim da mídia com o Modo apresentação ligado: as telas ficam (não é o caso aqui).
+  presentationKeepsScreens: () => false,
 }));
 vi.mock("@/composables/useSlides", () => ({
   useSlides: () => ({
@@ -136,8 +138,12 @@ describe("áudio de arquivo: palco", () => {
     expect(h.fecharArquivo).toHaveBeenCalled();
   });
 
-  it("sem a opção de preservar, continua liberando o palco (liturgia/legado)", async () => {
-    projecao("pdf");
+  /*
+   * Sem a opção, uma foto ou um PDF também ficam: o áudio toca por baixo deles
+   * (useMedia.audioUnderImage.spec). O que sai é o vídeo, porque o player é um só.
+   */
+  it("sem a opção de preservar, um vídeo projetado ainda sai (liturgia/legado)", async () => {
+    projecao("video");
     await media
       .openAudio({ url: "blob:audio", title: "x", mediaType: "audio" })
       .catch(() => {});

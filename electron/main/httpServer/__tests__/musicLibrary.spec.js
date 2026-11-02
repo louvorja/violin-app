@@ -24,6 +24,9 @@ const mediaResolver = require("../../mediaResolver.js");
 const handlers = { get: new Map(), post: new Map() };
 let root;
 let userData;
+let rendererReply;
+let rendererError;
+const rendererSend = vi.fn();
 /** URL do banco remoto — vazia nos testes que só usam o cache local. */
 let databaseUrl = "";
 
@@ -176,12 +179,25 @@ beforeAll(async () => {
       post() {},
     },
     {
-      getMainWindow: () => null,
+      getMainWindow: () => rendererReply === undefined ? null : ({
+        isDestroyed: () => false,
+        webContents: { isDestroyed: () => false, send: rendererSend },
+      }),
       getUserData: () => userData,
       jsonCache: null,
       getDatabaseUrl: () => databaseUrl,
       getApiToken: () => "",
-      rendererRequests: null,
+      rendererRequests: {
+        request(prefix, options) {
+          const error = rendererError || (!options.validatePayload(rendererReply)
+            ? Object.assign(new Error("invalid"), { code: "INVALID_PAYLOAD" }) : null);
+          return {
+            requestId: `${prefix}:00000000-0000-4000-8000-000000000001`,
+            promise: error ? Promise.reject(error) : Promise.resolve(rendererReply),
+            cancel() {},
+          };
+        },
+      },
     }
   );
 });
@@ -192,6 +208,9 @@ afterAll(async () => {
 });
 
 beforeEach(() => {
+  rendererReply = undefined;
+  rendererError = null;
+  rendererSend.mockClear();
   databaseUrl = "";
   // 8 desativado + 629 desativado (é o que o toggle do Hinário 1996 persiste
   // em `disabled_albums` quando está desligado).
@@ -391,6 +410,38 @@ describe("GET /api/music-library?action=albums", () => {
 });
 
 describe("GET /api/music-library?action=songs", () => {
+  it("lista o álbum instalado no IndexedDB mesmo sem album_<id>.json no disco", async () => {
+    rendererReply = { album: { ...ALBUM_DETAIL, id_album: 9, musics: ALBUM_DETAIL.musics.filter((song) => song.id_music > 0) } };
+    const res = await callGet("/api/music-library", { action: "songs", album: "album:9" });
+    expect(res.code).toBe(200);
+    expect(res.body.songs.map((song) => song.id_music)).toEqual([101, 102]);
+    expect(isMusicLibrarySongsResponse(res.body)).toBe(true);
+    expect(rendererSend).toHaveBeenCalledWith("http:music-album", expect.objectContaining({ albumId: 9 }));
+  });
+
+  it("prefere o álbum atualizado do aplicativo à cópia antiga do disco", async () => {
+    rendererReply = { album: { ...ALBUM_DETAIL, musics: [ALBUM_DETAIL.musics[2]] } };
+    const res = await callGet("/api/music-library", { action: "songs", album: "album:7" });
+    expect(res.body.songs.map((song) => song.id_music)).toEqual([102]);
+  });
+
+  it("mantém o cache legado quando o renderer está indisponível ou não tem o álbum", async () => {
+    rendererReply = { album: null };
+    for (const error of [null, new Error("renderer indisponível")]) {
+      rendererError = error;
+      const res = await callGet("/api/music-library", { action: "songs", album: "album:7" });
+      expect(res.code).toBe(200);
+      expect(res.body.songs.map((song) => song.id_music)).toEqual([101, 102]);
+    }
+  });
+
+  it("não aceita resposta inválida do renderer nem consulta álbum desativado", async () => {
+    rendererReply = { album: { name: "Inválido", musics: "não é uma lista" } };
+    expect((await callGet("/api/music-library", { action: "songs", album: "album:9" })).code).toBe(502);
+    expect((await callGet("/api/music-library", { action: "songs", album: "album:8" })).code).toBe(404);
+    expect(rendererSend).toHaveBeenCalledTimes(1);
+  });
+
   it("devolve as faixas do álbum oficial, sem id inválido e com duração normalizada", async () => {
     const res = await callGet("/api/music-library", { action: "songs", album: "album:7", lang: "pt" });
 

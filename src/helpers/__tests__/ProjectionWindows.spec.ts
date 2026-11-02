@@ -571,6 +571,18 @@ describe("as aberturas automáticas", () => {
     expect(opened().map((o) => o.feature)).not.toContain(ONLINE_VIDEO_RETURN);
   });
 
+  it("vídeo on-line depois de um vídeo local: o retorno de arquivo é FECHADO, nunca dois retornos", async () => {
+    isWindowOpen.mockImplementation(async (feature: string) => feature === FILE_RETURN);
+    await windows.openMediaWindow("return", "video");
+    expect(calls).toEqual([`close:${RETURN}`, `close:${FILE_RETURN}`, `open:${ONLINE_VIDEO_RETURN}`]);
+  });
+
+  it("vídeo local depois de um on-line: o retorno do on-line é FECHADO", async () => {
+    isWindowOpen.mockImplementation(async (feature: string) => feature === ONLINE_VIDEO_RETURN);
+    await windows.openMediaWindow("return", "file");
+    expect(calls).toEqual([`close:${RETURN}`, `close:${ONLINE_VIDEO_RETURN}`, `open:${FILE_RETURN}`]);
+  });
+
   it("vídeo on-line: o operador não entra, nem com a opção ligada", async () => {
     prefs = { [KEYS.OPTIONS.OPEN_OPERATOR]: true };
     await windows.openVideoProjectionWindows();

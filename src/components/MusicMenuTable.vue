@@ -151,7 +151,9 @@ interface MenuSubItem {
 interface ExtraMenuItem {
   title: string;
   icon: string;
-  click: () => void;
+  click?: () => void;
+  /** Com submenu, o item abre as opções em vez de executar `click`. */
+  menu?: MenuSubItem[];
 }
 
 const props = withDefaults(
@@ -174,6 +176,11 @@ const props = withDefaults(
     compactBreakpoint?: number;
     /** Monta ações rápidas apenas quando a linha é explorada, reduzindo o custo da tabela. */
     deferQuickActions?: boolean;
+    /**
+     * Quem usa a tabela decide como tocar (o modo apresentação toca pelo palco dele).
+     * Sem isto, a música vai direto para o player.
+     */
+    runAction?: (action: MusicActionEnum) => void;
   }>(),
   {
     albumId: null,
@@ -226,6 +233,10 @@ function openLyric(): void {
 }
 
 function execute(action: MusicActionEnum): void {
+  if (props.runAction) {
+    props.runAction(action);
+    return;
+  }
   void executeMusic({ id_music: props.id_music, custom_song_id: props.customSongId }, action);
 }
 
@@ -335,7 +346,7 @@ const catalogMenu = computed<MenuItem[]>(() => [
                 has_instrumental_music: !!props.has_instrumental_music,
               };
               addSong(p.id, song);
-              $snackbar.show(t("playlists.song_added"));
+              $snackbar.show(t("modules.musics.playlists.song_added"));
             },
           })),
         },
@@ -369,7 +380,7 @@ const menu = computed<MenuItem[]>(() => [
   ...(props.extraMenu?.map((item) => ({
     title: item.title,
     icon: item.icon,
-    menu: [{ title: item.title, icon: item.icon, click: item.click }],
+    menu: item.menu ?? [{ title: item.title, icon: item.icon, click: item.click }],
   })) ?? []),
 ]);
 </script>

@@ -13,6 +13,7 @@
 <template>
   <OverlayRenderer />
   <ModuleProjectionLayer :module-id="moduleId" />
+  <ProjectionClearScreen />
 </template>
 
 <script setup>
@@ -21,6 +22,7 @@ import { useRoute } from "vue-router";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import OverlayRenderer from "@/components/OverlayRenderer.vue";
+import ProjectionClearScreen from "@/components/ProjectionClearScreen.vue";
 import ModuleProjectionLayer from "@/components/ModuleProjectionLayer.vue";
 
 const route = useRoute();

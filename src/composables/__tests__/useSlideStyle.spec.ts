@@ -20,9 +20,20 @@ describe("useSlideStyle — leitura das opções", () => {
                      K.CUSTOM_RETURN_TEXT_FORMAT, K.RETURN_TEXT_CASE, K.SLIDES,
                      K.RETURN_FONT_SIZE_LYRIC, K.RETURN_FONT_SIZE_COVER,
                      K.CUSTOM_RETURN_BACKGROUND, K.RETURN_BG_TOP_POSITION,
-                     K.RETURN_BG_BOTTOM_POSITION, K.TEXT_BG_BLUR_ENABLED, K.TEXT_BG_BLUR]) {
+                     K.RETURN_BG_BOTTOM_POSITION, K.MAIN_TEXT_SCALE, K.RETURN_TEXT_SCALE,
+                     K.TEXT_BG_BLUR_ENABLED, K.TEXT_BG_BLUR]) {
       $userdata.set(k, undefined);
     }
+  });
+
+  it("a escala de cada tela vale por cima do tamanho, sem ligar a formatação personalizada", () => {
+    $userdata.set(K.MAIN_TEXT_SCALE, 150);
+    $userdata.set(K.RETURN_TEXT_SCALE, 50);
+    const cfg = useSlideStyle().cfg.value;
+    expect(cfg.font_size_lyric).toBeCloseTo(SLIDE_STYLE_DEFAULT.font_size_lyric * 1.5);
+    expect(cfg.return_font_size_lyric).toBeCloseTo(SLIDE_STYLE_DEFAULT.return_font_size_lyric * 0.5);
+    expect(cfg.font_size_next).toBeCloseTo(SLIDE_STYLE_DEFAULT.font_size_next * 0.5);
+    expect(cfg.custom_return_text_format_active).toBe(false);
   });
 
   it("desligar a formatação personalizada desliga a sombra", () => {

@@ -31,6 +31,7 @@ import {
   closeProjectionWindows,
   closeFileProjectionWindows,
   closeMusicProjectionWindows,
+  presentationKeepsScreens,
 } from "@/helpers/ProjectionWindows";
 import { Music } from "@/types/Music";
 import type { Lyric } from "@/types/Lyric";
@@ -41,6 +42,7 @@ import { MediaOpenParams } from "@/types/Media";
 import { MusicActionEnum } from "@/enums/MusicActionEnum";
 import AudioLibrary from "@/helpers/AudioLibrary";
 import { slideTimes } from "@/helpers/CustomSongs";
+import { plainSlideText } from "@/helpers/SlideText";
 import Telemetry from "@/helpers/Telemetry";
 import { decodeOpusToWav, isOpusUrl, opusNeedsFallback } from "@/helpers/OpusFallback";
 import Platform from "@/helpers/Platform";
@@ -426,12 +428,22 @@ function _tipoProjecaoEmCache(): string | null {
   }
 }
 
-function _hasFileProjectionCache(): boolean {
+/**
+ * Há projeção de arquivo em cache. Com `videoOnly`, só conta vídeo (ou
+ * YouTube): uma foto ou um PDF na tela não ocupam o player, e um áudio pode
+ * tocar por baixo deles (a música do momento com a foto da família).
+ */
+function _hasFileProjectionCache(videoOnly = false): boolean {
   try {
-    return Boolean(
-      localStorage.getItem(KEYS.PROJECTION.LJ_FILE_PROJECTION) ||
-      localStorage.getItem(KEYS.PROJECTION.LJ_YOUTUBE_PROJECTION)
-    );
+    if (localStorage.getItem(KEYS.PROJECTION.LJ_YOUTUBE_PROJECTION)) return true;
+    const file = localStorage.getItem(KEYS.PROJECTION.LJ_FILE_PROJECTION);
+    if (!file || !videoOnly) return Boolean(file);
+    try {
+      const type = (JSON.parse(file) as { type?: string } | null)?.type;
+      return type === "video" || type === "youtube";
+    } catch {
+      return true;
+    }
   } catch {
     return false;
   }
@@ -492,12 +504,14 @@ async function _waitForPreviousVideoWindows(stageEpoch: number): Promise<void> {
 /** Encerra o palco de arquivo/vídeo antes de um novo slide musical ou do editor. */
 async function _releaseFileVideoStage(
   stageEpoch: number,
-  wasVisibleAlready = false
+  wasVisibleAlready = false,
+  /** Áudio entrando: só um vídeo na tela precisa sair (foto e PDF ficam). */
+  videoOnly = false
 ): Promise<void> {
   const wasVisible =
     _isYouTube() ||
     _keepVideoProjectionOnLoadError() ||
-    _hasFileProjectionCache() ||
+    _hasFileProjectionCache(videoOnly) ||
     _videoWindowOpenings.size > 0 ||
     wasVisibleAlready;
   if (!wasVisible) return;
@@ -678,7 +692,16 @@ async function _openVideoFileProjection(
   if (_isYouTube()) _self.close(true, true, true, true);
   const stageEpoch = _stageEpoch;
 
-  const payload = { url, type: "video", title, stage_epoch: projectionEpoch };
+  // Uma identidade só, da tela ao player (ver MediaOpenParams.playback_id).
+  const playbackId = _newPlaybackId();
+  const payload = {
+    url,
+    type: "video",
+    title,
+    stage_epoch: projectionEpoch,
+    playback_id: playbackId,
+    clock: "player" as const,
+  };
   try {
     localStorage.setItem(KEYS.PROJECTION.LJ_FILE_PROJECTION, JSON.stringify(payload));
     localStorage.removeItem(KEYS.PROJECTION.LJ_YOUTUBE_PROJECTION);
@@ -700,6 +723,7 @@ async function _openVideoFileProjection(
       url: audioUrl,
       title,
       mediaType: "video",
+      playback_id: playbackId,
       // Imagem e som em arquivos diferentes: o player do app mostra a imagem por conta própria.
       ...(audioUrl !== url ? { videoUrl: url } : {}),
     },
@@ -1354,6 +1378,9 @@ _audio.onTimeUpdate((ct, d) => {
   }
 
   if (!_audio.isPaused.value && ct >= d && d > 0 && !_switchingMode) {
+    // Com uma apresentação ligada, acabar a mídia não acaba a apresentação:
+    // as telas ficam abertas, no fundo configurado.
+    const keepWindows = presentationKeepsScreens();
     if (_arquivoDeAudio) {
       /* Áudio avulso: termina e fica parado. NÃO fecha as janelas de projeção —
        * o telão pode estar mostrando um PDF por baixo. */
@@ -1362,10 +1389,10 @@ _audio.onTimeUpdate((ct, d) => {
     } else if (_playlistOnEnd) {
       const handled = _playlistOnEnd();
       if (!handled) {
-        _self.close(true, true);
+        _self.close(true, true, keepWindows);
       }
     } else {
-      _self.close(true, true);
+      _self.close(true, true, keepWindows);
     }
   }
 
@@ -1381,11 +1408,31 @@ _audio.onTimeUpdate((ct, d) => {
   }
 });
 
+// Pausado, o relógio do player para e com ele a sincronia contínua: uma tela
+// que perdeu o aviso da pausa seguiria rodando sozinha, sem som, enquanto o
+// operador vê "pausado". Parado, o estado é reafirmado a cada segundo.
+const _PAUSED_RESYNC_MS = 1000;
+if (typeof window !== "undefined") {
+  setInterval(() => {
+    if (!_activePlayback || !$appdata.get(KEYS.MODULES.MEDIA.CONFIG.VIDEO_FILE)) return;
+    const el = document.getElementById("__audio") as HTMLMediaElement | null;
+    if (el?.paused) _broadcastVideoState();
+  }, _PAUSED_RESYNC_MS);
+}
+
 function _lyricEntries(data: Music): Lyric[] {
   const lyric = data?.lyric;
   if (Array.isArray(lyric)) return lyric;
   if (lyric && typeof lyric === "object") return Object.values(lyric);
   return [];
+}
+
+/**
+ * Slides de uma música como a projeção os mostra (capa + letra), sem tocá-la.
+ * Exportado para prévias — o Modo apresentação mostra a grade antes de ir ao ar.
+ */
+export function buildSlidesFrom(data: Music): Slide[] {
+  return _buildSlidesFrom(data);
 }
 
 function _buildSlidesFrom(data: Music): Slide[] {
@@ -2017,7 +2064,9 @@ const _self = {
    */
   async openCustomSong(
     song: CustomSongSource,
-    mode: MusicActionEnum | string = MusicActionEnum.AUDIO
+    mode: MusicActionEnum | string = MusicActionEnum.AUDIO,
+    /** Como `open`: quem tem o próprio palco (modo apresentação) abre o player minimizado. */
+    { minimized }: { minimized?: boolean } = {}
   ): Promise<boolean> {
     if (mode === MusicActionEnum.INSTRUMENTAL && !song?.playback_token) {
       Telemetry.track("custom_music_open_failed", {
@@ -2072,8 +2121,8 @@ const _self = {
         if (superseded()) return false;
       }
       slidesArray.push({
-        lyric: s.letra || "",
-        aux_lyric: s.letra_aux || "",
+        lyric: plainSlideText(s.letra),
+        aux_lyric: plainSlideText(s.letra_aux),
         url_image: urlImage,
         image_position: typeof s.imagem_posicao === "number" ? s.imagem_posicao - 1 : 4,
         cover: s.tipo === "CAPA",
@@ -2082,7 +2131,9 @@ const _self = {
         color_aux: s.cor_letra_aux,
         font_size_pct: s.tamanho_letra,
         font_size_aux_pct: s.tamanho_letra_aux,
-        name: song.nome || "",
+        name: plainSlideText(song.nome),
+        // Quem acompanha o que está no ar (modo apresentação) reconhece a música pelo UUID.
+        custom_song_id: song.id,
       });
     }
     if (!slidesArray.length) {
@@ -2144,7 +2195,7 @@ const _self = {
       audioUrl,
       idCheck: null,
       retryFn: () => {},
-      minimized: !!minimizeOnStart,
+      minimized: minimized ?? !!minimizeOnStart,
       mode: audioUrl ? mode : MusicActionEnum.NO_AUDIO,
       playbackId: playback_id,
     });
@@ -2333,6 +2384,8 @@ const _self = {
       return false;
     const projection = {
       ...payload,
+      // Vídeo com som no player: a tela segue o relógio dele e não anda sozinha.
+      ...(payload.type === "video" && videoAudioUrl ? { clock: "player" as const } : {}),
       stage_epoch: nextFileProjectionEpoch(),
       playback_id:
         typeof payload.playback_id === "string" && payload.playback_id
@@ -2379,7 +2432,12 @@ const _self = {
     $broadcast.send(BROADCAST_TYPE.FILE_PROJECTION, projection);
     if (projection.type === "video" && videoAudioUrl) {
       await this.openAudio(
-        { url: videoAudioUrl, title: projection.title || "", mediaType: "video" },
+        {
+          url: videoAudioUrl,
+          title: projection.title || "",
+          mediaType: "video",
+          playback_id: projection.playback_id,
+        },
         true
       );
     }
@@ -2542,7 +2600,8 @@ const _self = {
       const preservar =
         params.preserveFileProjection === true && _tipoProjecaoEmCache() !== "video";
       if (!preservar) {
-        await _releaseFileVideoStage(stageEpoch);
+        // Só áudio: a foto ou o PDF na tela continuam; um vídeo sai (o player é um só).
+        await _releaseFileVideoStage(stageEpoch, false, params.mediaType === "audio");
         if (stageEpoch !== _stageEpoch) return;
       }
     } else if (!preserveProjectionStage) {
@@ -2551,7 +2610,11 @@ const _self = {
       await _queueStageWindows(stageEpoch, closeMusicProjectionWindows);
       if (stageEpoch !== _stageEpoch) return;
     }
-    const playback_id = _newPlaybackId();
+    // Vídeo já anunciado às telas: a mesma identidade, não uma segunda.
+    const playback_id =
+      typeof params.playback_id === "string" && params.playback_id
+        ? params.playback_id
+        : _newPlaybackId();
     const audioMode = params.mode || "audio";
     const playbackContext: AudioTelemetryContext = {
       playback_id,
@@ -2949,7 +3012,7 @@ const _self = {
         ) {
           // A janela apenas reporta o fim; a Shell é a dona do lifecycle e
           // publica MEDIA_CLOSE uma única vez para todas as projeções.
-          _self.close(true);
+          _self.close(true, false, presentationKeepsScreens());
           return;
         }
       }
@@ -3154,7 +3217,14 @@ const _self = {
         (e) => {
           const id = $appdata.get(KEYS.MODULES.MEDIA.ID_MUSIC) as string | number | null;
           // Arquivos diretos da liturgia não têm id_music: sem reabrir o banco com null.
-          _alertAudioFailure(e, id != null ? () => self.open(id) : undefined);
+          // A nova tentativa fica onde a música estava: minimizada, ela não pode
+          // reabrir o player por cima de quem a controla.
+          _alertAudioFailure(
+            e,
+            id != null
+              ? () => self.open({ id_music: id, minimized: self.isMinimized() })
+              : undefined
+          );
         },
         () => {
           $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED, false);

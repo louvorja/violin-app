@@ -62,6 +62,14 @@ export const DB_TABLE = {
   // ─── Dispositivos autorizados ───
   /** Um registro por dispositivo, com a chave sendo o `id` do aparelho. Só autorizado. */
   DEVICES: "devices",
+  // ─── Modo apresentação: um programa do culto por data (DocStore) ───
+  PRESENTATION_PROGRAMS: ModuleEnum.PRESENTATION_MODE + ".programs",
+  // ─── Modo apresentação: modelos de culto (Sábado…), quando não há pasta da igreja (DocStore) ───
+  PRESENTATION_MODELS: ModuleEnum.PRESENTATION_MODE + ".models",
+  // ─── Modo apresentação: vídeos, playlists e canais do YouTube favoritos (DocStore) ───
+  PRESENTATION_ONLINE: ModuleEnum.PRESENTATION_MODE + ".online",
+  // ─── Modo apresentação: cópia da primeira página de cada playlist/canal (cache, IndexedDB) ───
+  PRESENTATION_ONLINE_CACHE: ModuleEnum.PRESENTATION_MODE + ".online_cache",
   // ─── Chat ───
   CHAT_MESSAGES: "chat.messages",
 } as const;

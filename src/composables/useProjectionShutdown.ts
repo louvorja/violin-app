@@ -26,6 +26,19 @@ import { nextBackgroundEpoch } from "@/presentation/BackgroundPresentationState"
 const CONFIRMACAO_MS = 400;
 
 /**
+ * Janelas fechadas de propósito por quem segue no controle do conteúdo — o
+ * Modo apresentação desligando só a tela principal: o retorno continua com o
+ * mesmo vídeo, então nada do estado pode ser desfeito por esse fechamento.
+ */
+const _closingOnPurpose = new Map<string, number>();
+/** A janela avisa mais de uma vez ao fechar (ESC, beforeunload, pagehide): a marca vale por um tempo. */
+const ON_PURPOSE_MS = 5000;
+
+export function closingOnPurpose(feature: string): void {
+  _closingOnPurpose.set(feature, Date.now() + ON_PURPOSE_MS);
+}
+
+/**
  * O registro de janelas só conhece as que o app abriu. Uma projeção aberta por
  * fora (outro navegador, fonte do OBS) some do registro enquanto recarrega, e
  * numa máquina lenta a página volta depois da conferência acima: o estado era
@@ -41,6 +54,7 @@ async function desligar(
   reabertaEm: Map<string, number>
 ): Promise<void> {
   if (!feature) return;
+  if ((_closingOnPurpose.get(feature) ?? 0) > Date.now()) return;
 
   const avisadoEm = Date.now();
   const voltou = (): boolean => (reabertaEm.get(feature) ?? 0) >= avisadoEm;
@@ -58,7 +72,8 @@ async function desligar(
       $userdata.set(KEYS.MODULES.BACKGROUND_PROJECTION.IS_PLAYING, false);
       localStorage.removeItem(KEYS.PROJECTION.LJ_BACKGROUND_PROJECTION);
       Broadcast.send(BROADCAST_TYPE.BACKGROUND_PROJECTION, {
-        active: false, epoch: nextBackgroundEpoch(),
+        active: false,
+        epoch: nextBackgroundEpoch(),
       });
       await closeProjection(PROJECTION_TYPE.BACKGROUND_RETURN);
       break;

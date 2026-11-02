@@ -17,7 +17,13 @@
         class="file-projection"
         :style="{ '--fade-ms': fadeDurationMs + 'ms' }"
       >
-        <img v-if="fileState.type === 'image'" :src="fileState.url" class="return-file" alt="" />
+        <img
+          v-if="fileState.type === 'image'"
+          :src="fileState.url"
+          class="return-file"
+          :style="projectionZoom.styleFor(fileState.playback_id ?? fileState.url)"
+          alt=""
+        />
         <video
           v-else-if="fileState.type === 'video'"
           ref="projVideoRef"
@@ -40,6 +46,7 @@
           v-else-if="fileState.type === 'pdf'"
           ref="pdfCanvas"
           class="return-file return-file--pdf"
+          :style="projectionZoom.styleFor(fileState.playback_id ?? fileState.url, currentPdfPage)"
         ></canvas>
       </div>
     </Transition>
@@ -124,6 +131,8 @@
 
     <!-- Layer 2: Overlays -->
     <OverlayRenderer />
+    <ReturnOverride />
+    <ProjectionClearScreen />
   </div>
 </template>
 
@@ -131,6 +140,7 @@
 import { reactive, ref, computed, onMounted, onBeforeUnmount, nextTick } from "vue";
 import { estiloDeFundo } from "@/helpers/BackgroundStyle";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
+import { useProjectionZoom } from "@/composables/useProjectionZoom";
 import { useProjectionState } from "@/composables/useProjectionState";
 import $broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
@@ -139,6 +149,8 @@ import $modules from "@/helpers/Modules";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { getSetting } from "@/helpers/SettingsStorage";
 import OverlayRenderer from "@/components/OverlayRenderer.vue";
+import ProjectionClearScreen from "@/components/ProjectionClearScreen.vue";
+import ReturnOverride from "@/components/ReturnOverride.vue";
 import Slide from "@/components/Slide.vue";
 import { DEFAULT_BACKGROUND_COLOR, MAIN_BACKGROUND_ID, Settings } from "@/types/Settings";
 import { KEYS } from "@/constants/UserDataKeys";
@@ -235,6 +247,9 @@ let ytPlayer: YTPlayer | null = null;
 
 /* ── PDF state ── */
 const pdfCanvas = ref<HTMLCanvasElement | null>(null);
+// Zoom de imagem/PDF escolhido no Modo apresentação: esta tela só aplica o recorte.
+const projectionZoom = useProjectionZoom();
+
 let pdfDoc: PDFDocumentProxy | null = null;
 let pdfLoadGeneration = 0;
 const pdfRenderQueue = new PdfPageRenderQueue();

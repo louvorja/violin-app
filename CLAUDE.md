@@ -267,6 +267,7 @@ O programa é instalado separadamente do **perfil privado**, do **acervo** e dos
 ├── library/           documentos pessoais em JSON
 ├── attachments/media/ anexos privados enviados pelo controle remoto
 ├── canva/             cache dos exports do Canva (PDF/imagem) — da conta, fora do acervo
+├── pptx/              PDFs gerados de PowerPoint e as fontes deles (docs/pptx.md) — fora do acervo
 ├── json_db/           cache de respostas JSON
 ├── bin/               yt-dlp e ffmpeg
 ├── temp/videos/       downloads parciais e streaming temporário
@@ -633,6 +634,11 @@ const song = await $database.get(`music_${id}`);
 | `libras_toggle`        | ShellTools / ribbon             | Projection                                  |
 | `libras_translate`     | useLibras composable            | Projection, Obs                             |
 | `request_libras_state` | LibrasOverlay                   | main.js (re-emite LIBRAS_TOGGLE)            |
+| `projection_clear`     | presentation_mode               | Views de projeção e retorno (cobre a tela)   |
+| `return_override`      | presentation_mode, Esc          | Views de retorno (conteúdo só no retorno)    |
+| `return_override_state`| presentation_mode               | ReturnOverride (relógio do vídeo no retorno) |
+
+Tabela completa, com os pedidos de estado (`request_*`), em `docs/broadcast.md`.
 
 ---
 

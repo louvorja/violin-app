@@ -6,6 +6,8 @@ const path = require("path");
 const { performance } = require("node:perf_hooks");
 const { createStore } = require("./store.js");
 const runner = require("./runner.js");
+const collections = require("./collections.js");
+const { createLinkCache } = require("./linkCache.js");
 const progressive = require("./progressive.js");
 const { isVideoId } = require("./ids.js");
 const { WorkPriority, canStartWork } = require("../presentationAdmission.js");
@@ -105,12 +107,15 @@ function createManager(cfg) {
     tools,
     run = runner.run,
     resolve = runner.resolveStreams,
+    listCollection = collections.listCollection,
     mux = runner.muxCopy,
     openSession = progressive.openSession,
     fetchRange,
     maxBytes = DEFAULT_MAX_BYTES,
     freeBytes = defaultFreeBytes,
     jsRuntime = () => undefined,
+    /** Arquivo de cookies da conta do YouTube, quando o operador entrou nela. */
+    cookies = () => undefined,
     now = Date.now,
     monotonicNow = () => performance.now(),
     refreshCooldownMs = REFRESH_COOLDOWN_MS,
@@ -125,6 +130,8 @@ function createManager(cfg) {
   const jobs = new Map();
   /** Pedidos de URL direta em andamento (tocar já, sem baixar). */
   const resolutions = new Map();
+  /** Links resolvidos antes do play, e o bloqueio "não é um robô" (ver linkCache.js). */
+  const prefetched = createLinkCache({ now });
   /** Vídeos tocando enquanto baixam, por ID: as trilhas em disco de que as janelas leem. */
   const sessions = new Map();
   /** Descartes já retirados de `sessions`, mas que ainda podem apagar a pasta compartilhada. */
@@ -453,6 +460,7 @@ function createManager(cfg) {
       outDir: partial,
       maxHeight: job.maxHeight,
       cacheDir,
+      cookiesFile: cookies(),
       jsRuntime: jsRuntime(),
       signal,
       onProgress: (p) =>
@@ -674,8 +682,10 @@ function createManager(cfg) {
     for (const resolution of resolutions.values()) resolution.controller.abort();
   }
 
-  /** Os links diretos do YouTube (vídeo e áudio) que o yt-dlp descobre em ~6 s; um pedido só por vídeo. */
+  /** Os links diretos do YouTube (vídeo e áudio) que o yt-dlp descobre em ~2 s; um pedido só por vídeo. */
   function resolveLinks(id, opts) {
+    const ready = prefetched.take(id, clampHeight(opts.maxHeight));
+    if (ready) return Promise.resolve({ ok: true, id, ...ready });
     const existing = resolutions.get(id);
     if (existing && !existing.controller.signal.aborted) return existing.promise;
 
@@ -687,6 +697,7 @@ function createManager(cfg) {
           id,
           maxHeight: clampHeight(opts.maxHeight),
           cacheDir,
+          cookiesFile: cookies(),
           jsRuntime: jsRuntime(),
           signal: entry.controller.signal,
         })
@@ -972,6 +983,7 @@ function createManager(cfg) {
 
   function remove(id) {
     if (!canMaintain()) return Promise.reject(new Error("Esta pasta de vídeos não permite remoção por este perfil."));
+    prefetched.delete(id);
     if (clearing) return clearing.then(() => remove(id));
     if (!isVideoId(id)) return Promise.resolve(false);
     const existing = removals.get(id);
@@ -1010,6 +1022,7 @@ function createManager(cfg) {
   async function clear() {
     if (!canMaintain()) throw new Error("Esta pasta de vídeos não permite limpeza por este perfil.");
     if (clearing) return clearing;
+    prefetched.clear();
     clearGeneration++;
     const jobsToSettle = [...jobs.values()].map((job) => job.promise);
     const resolutionsToSettle = [...resolutions.values()].map((resolution) => resolution.promise);
@@ -1091,6 +1104,50 @@ function createManager(cfg) {
     return store.list();
   }
 
+  /**
+   * Resolve os links de um vídeo antes do play, sem baixar nada: é o que o
+   * operador está vendo na prévia ou o que vem a seguir. Quando ele mandar tocar,
+   * o `stream` pula a consulta ao YouTube (~2 s). Pedido do operador, então
+   * interativo — roda mesmo com a apresentação no ar; é só uma consulta curta.
+   */
+  async function prefetch(id, opts = {}) {
+    if (!isVideoId(id)) return fail(new OnlineVideoError("invalid", "ID de vídeo inválido"));
+    if (prefetched.blocked()) return { ok: true, skipped: "blocked" };
+    if (!tools.supported || !tools.ready()) return { ok: true, skipped: "tools" };
+    if (store.has(id) || jobs.has(id) || sessions.has(id)) return { ok: true, skipped: "ready" };
+    const maxHeight = clampHeight(opts.maxHeight);
+    if (prefetched.has(id, maxHeight)) return { ok: true, cached: true };
+    const res = await resolveLinks(id, { maxHeight });
+    if (!res.ok) return res;
+    // Enquanto resolvia, o operador pode ter mandado tocar — aí a sessão já existe.
+    if (sessions.has(id) || jobs.has(id)) return { ok: true, skipped: "ready" };
+    const { ok: _ok, id: _id, ...links } = res;
+    prefetched.put(id, links, maxHeight);
+    return { ok: true };
+  }
+
+  /**
+   * Os vídeos de um canal ou de uma playlist, uma página por vez. Instala as
+   * ferramentas na primeira vez, como o tocar faria.
+   */
+  async function collection(source, range) {
+    if (!tools.supported) return fail(new OnlineVideoError("unsupported", "Plataforma sem suporte"));
+    try {
+      if (!tools.ready()) await tools.ensure();
+      const result = await listCollection({
+        tools: tools.paths(),
+        cacheDir,
+        cookiesFile: cookies(),
+        jsRuntime: jsRuntime(),
+        source,
+        range,
+      });
+      return { ok: true, ...result };
+    } catch (error) {
+      return fail(error);
+    }
+  }
+
   async function init() {
     // Recém-aberto o app, nada pode estar lendo as trilhas de um vídeo que baixava antes.
     await fs.remove(streamDir).catch(() => {});
@@ -1128,6 +1185,10 @@ function createManager(cfg) {
     status,
     diagnosticSnapshot,
     list,
+    prefetch,
+    /** O YouTube recusou com "não é um robô": pausa as consultas adiantadas. */
+    noteBlocked: () => prefetched.noteBlocked(),
+    collection,
     init,
     close,
     setPresentationActive,

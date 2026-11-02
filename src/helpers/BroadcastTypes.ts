@@ -114,6 +114,39 @@ export const BROADCAST_TYPE = Object.freeze({
    *  Shell — que desliga o estado que ficaria marcando projeção ligada. */
   PROJECTION_CLOSED: "projection_closed",
 
+  /** "Limpar tela": cobre a tela principal e o retorno com o fundo configurado
+   *  em Opções; o conteúdo segue rodando por baixo.
+   *  Payload: { active: boolean }
+   *  Emitido por: presentation_mode. Recebido por: as views de projeção e
+   *  retorno (ProjectionClearScreen) e o espelho do módulo. */
+  PROJECTION_CLEAR: "projection_clear",
+
+  /** Janela de projeção recém-aberta pedindo o estado da tela limpa — o cache
+   *  do Broadcast é por janela. Respondido pelo presentation_mode. */
+  REQUEST_PROJECTION_CLEAR: "request_projection_clear",
+
+  /** Imagem ou vídeo só no retorno de palco (letra para o louvor especial,
+   *  recado para quem está no palco). Cobre o retorno; a tela principal não muda.
+   *  `type: "blank"` esconde o conteúdo do retorno e mostra só o fundo.
+   *  Payload: { active: boolean, type?: "image" | "video" | "blank", url?: string, title?: string, id?: string }
+   *  Emitido por: presentation_mode e o Esc. Recebido por: views de retorno. */
+  RETURN_OVERRIDE: "return_override",
+
+  /** Relógio do vídeo só no retorno: o som sai do player da janela principal,
+   *  e o retorno (mudo) acompanha. Payload: VideoMediaState + `id` do override.
+   *  Emitido por: presentation_mode. Recebido por: ReturnOverride. */
+  RETURN_OVERRIDE_STATE: "return_override_state",
+
+  /** Retorno recém-aberto pedindo o conteúdo exclusivo dele. */
+  REQUEST_RETURN_OVERRIDE: "request_return_override",
+
+  /** O que o vídeo de uma tela real está fazendo de fato (não o que o player
+   *  acha que mandou). Uma vez por segundo enquanto há vídeo na tela.
+   *  Payload: { screen: "main" | "return", playback_id, isPaused, currentTime, sentAt }
+   *  Emitido por: FileProjection e FileProjectionReturn. Recebido por:
+   *  presentation_mode, que avisa nas miniaturas quando a tela diverge do player. */
+  SCREEN_VIDEO_REPORT: "screen_video_report",
+
   /** Uma janela de projeção acabou de montar — a primeira vez ou depois de um F5.
    *  Payload: { feature: string }. Emitido por: as views de projeção
    *  (useProjectionCloseNotice). Recebido por: Shell, que cancela o desligamento
@@ -137,6 +170,15 @@ export const BROADCAST_TYPE = Object.freeze({
    *  Payload: { playback_id, page, totalPages?, source: "operator" | "projection" }.
    *  O ID impede que um arquivo anterior altere a projeção ativa. */
   FILE_PROJECTION_PAGE: "file_projection_page",
+
+  /** Zoom de imagem ou página de PDF nas telas: o recorte que o operador escolheu.
+   *  Payload: { key: playback_id | url, page, scale, cx, cy } (centro em frações 0–1).
+   *  Emitido por: presentation_mode. Recebido por: FileProjection, FileProjectionReturn,
+   *  BackgroundProjection, BackgroundProjectionReturn e os espelhos do módulo. */
+  FILE_PROJECTION_ZOOM: "file_projection_zoom",
+
+  /** Tela recém-aberta pedindo o recorte atual. Respondido pelo presentation_mode. */
+  REQUEST_FILE_PROJECTION_ZOOM: "request_file_projection_zoom",
   /** Snapshot versionado dos anúncios, emitido pela janela principal. */
   ANNOUNCEMENTS_STATE: "announcements_state",
   /** Atualização pequena de navegação dentro do deck ativo. */
