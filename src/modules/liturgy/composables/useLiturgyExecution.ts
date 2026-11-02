@@ -329,7 +329,12 @@ export function useLiturgyExecution() {
       $alert.error({ text: "modules.custom_online_videos.invalid_url" });
       return false;
     }
-    return $media.openYouTube(embedUrl, item.item || item.subitem || url);
+    // O subitem guarda o título do vídeo (YouTube); o item é o nome do item
+    // litúrgico. A tarefa de download em segundo plano precisa do primeiro.
+    const videoName = String(item.subitem || "")
+      .replace(/^URL:\s*/i, "")
+      .trim();
+    return $media.openYouTube(embedUrl, videoName || item.item || url);
   }
 
   /**

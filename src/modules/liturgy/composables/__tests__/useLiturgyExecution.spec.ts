@@ -138,6 +138,16 @@ function site(url: string, item = "Site"): LiturgyItem {
   return { id: "s1", tipo: LiturgyItemTypeEnum.SITE, item, url } as LiturgyItem;
 }
 
+function onlineVideo(item = "Item da liturgia", subitem = "Título do YouTube"): LiturgyItem {
+  return {
+    id: "v1",
+    tipo: LiturgyItemTypeEnum.VIDEO_ONLINE,
+    item,
+    subitem,
+    url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+  } as LiturgyItem;
+}
+
 function linked(item: LiturgyItem): LiturgyItem {
   return { ...item, linked_overlay_id: "slot-1" };
 }
@@ -397,6 +407,17 @@ describe("liturgia — item de site", () => {
 
     expect(mocks.openYouTube).toHaveBeenCalledTimes(1);
     expect(mocks.openSiteWindow).not.toHaveBeenCalled();
+  });
+
+  it("vídeo da coletânea usa o título do YouTube, não o nome do item litúrgico", async () => {
+    const { executeItem } = useLiturgyExecution();
+
+    await executeItem(onlineVideo("Abertura do culto", "Título do YouTube"));
+
+    expect(mocks.openYouTube).toHaveBeenCalledWith(
+      "https://www.youtube.com/embed/dQw4w9WgXcQ?autoplay=1&rel=0&controls=0",
+      "Título do YouTube"
+    );
   });
 });
 

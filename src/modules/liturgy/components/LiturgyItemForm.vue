@@ -725,6 +725,7 @@ async function salvarItem(): Promise<void> {
   if (videoUrlBusy.value) return;
   if (!videoUrl.value.trim()) {
     await nomearVideoLegado();
+    await baixarVideoSelecionado();
     props.saveItem();
     return;
   }
@@ -769,17 +770,44 @@ async function aplicarUrlColada(): Promise<boolean> {
     await props.reloadVideos?.();
   }
 
-  /*
-   * Aviso só onde há download de verdade: no web/PWA o `download` devolve
-   * false e o operador veria "Baixando" sem que nada baixasse.
-   */
-  if (downloadAvailable()) {
-    const globalT = i18nAtual()?.global?.t;
-    const aviso = globalT ? String(globalT("online_video.preparing")) : "";
-    if (aviso) $snackbar.info(aviso, { key: "liturgy-video-download", timeout: 5000 });
-  }
-  void videoDownloads.download(ytId, nome, { keep: saveToMyVideos.value });
+  await baixarVideo(ytId, nome, saveToMyVideos.value);
   return true;
+}
+
+/**
+ * Baixa o vídeo do item (link colado ou escolhido da coletânea) se ele ainda
+ * não estiver no disco. O aviso usa o título do YouTube, não o nome do item
+ * litúrgico — é ele que identifica o vídeo na tarefa de segundo plano.
+ */
+async function baixarVideo(id: string, nome: string, keep: boolean): Promise<void> {
+  // No web/PWA o download devolve false: avisar "Baixando" faria o operador
+  // esperar algo que não vai acontecer.
+  if (!downloadAvailable()) return;
+  try {
+    await videoDownloads.refresh();
+  } catch {
+    /* A checagem de disco é só para evitar um aviso falso; o download decide. */
+  }
+  if (videoDownloads.stateOf(id) === "downloaded") return;
+
+  const globalT = i18nAtual()?.global?.t;
+  const aviso = globalT ? String(globalT("online_video.preparing_named", { title: nome })) : "";
+  if (aviso) $snackbar.info(aviso, { key: "liturgy-video-download", timeout: 5000 });
+  void videoDownloads.download(id, nome, { keep });
+}
+
+/** Item de vídeo escolhido da coletânea: salvar também prepara o arquivo. */
+async function baixarVideoSelecionado(): Promise<void> {
+  if (props.form.tipo !== LiturgyItemTypeEnum.VIDEO_ONLINE) return;
+  const url = String(props.form.url || "");
+  const id = videoIdFromUrl(url);
+  if (!id) return;
+  const nome =
+    selectedVideoName.value ||
+    String(props.form.subitem || "") ||
+    String(props.form.item || "") ||
+    url;
+  await baixarVideo(id, nome, saveToMyVideos.value);
 }
 
 const SUBTITULO_LEGADO = /^URL:\s*/i;

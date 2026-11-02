@@ -9,6 +9,8 @@ import LiturgyItemForm from "../LiturgyItemForm.vue";
 const mocks = vi.hoisted(() => ({
   fetchTitle: vi.fn(),
   download: vi.fn(),
+  downloadRefresh: vi.fn(),
+  downloadState: "none" as "none" | "downloading" | "downloaded",
   snackbarInfo: vi.fn(),
   snackbarError: vi.fn(),
   snackbarWarning: vi.fn(),
@@ -41,7 +43,11 @@ vi.mock("@/helpers/OnlineVideo", async (importOriginal) => ({
   fetchYoutubeTitle: mocks.fetchTitle,
 }));
 vi.mock("@/composables/useOnlineVideoDownloads", () => ({
-  useOnlineVideoDownloads: () => ({ download: mocks.download, stateOf: () => "none" }),
+  useOnlineVideoDownloads: () => ({
+    download: mocks.download,
+    refresh: mocks.downloadRefresh,
+    stateOf: () => mocks.downloadState,
+  }),
 }));
 vi.mock("@/helpers/IndexedDB", () => ({
   default: {
@@ -132,6 +138,8 @@ describe("LiturgyItemForm — URL colada do vídeo on-line", () => {
     platform.onlineVideo = {};
     mocks.fetchTitle.mockResolvedValue("Título do YouTube");
     mocks.download.mockResolvedValue(true);
+    mocks.downloadRefresh.mockResolvedValue(undefined);
+    mocks.downloadState = "none";
     mocks.idbPut.mockResolvedValue(undefined);
     mocks.reloadVideos.mockResolvedValue(undefined);
   });
@@ -157,7 +165,10 @@ describe("LiturgyItemForm — URL colada do vídeo on-line", () => {
       keep: false,
     });
     expect(mocks.idbPut).not.toHaveBeenCalled();
-    expect(mocks.snackbarInfo).toHaveBeenCalledWith("online_video.preparing", expect.anything());
+    expect(mocks.snackbarInfo).toHaveBeenCalledWith(
+      "online_video.preparing_named",
+      expect.anything()
+    );
     /* O link entra no item: é o que faz o vídeo projetar no primeiro clique. */
     expect(mocks.saveItem).toHaveBeenCalledTimes(1);
   });
@@ -208,6 +219,46 @@ describe("LiturgyItemForm — URL colada do vídeo on-line", () => {
     });
   });
 
+  it("vídeo escolhido da coletânea também inicia o download ao salvar", async () => {
+    wrapper = mountForm({
+      url: URL_YOUTUBE,
+      subitem: "Título do YouTube",
+      item: "Item da liturgia",
+    });
+    const state = vm(wrapper);
+
+    await (state.salvarItem as () => Promise<void>)();
+    await flushPromises();
+
+    expect(mocks.downloadRefresh).toHaveBeenCalled();
+    expect(mocks.download).toHaveBeenCalledWith("dQw4w9WgXcQ", "Título do YouTube", {
+      keep: false,
+    });
+    expect(mocks.snackbarInfo).toHaveBeenCalledWith(
+      "online_video.preparing_named",
+      expect.anything()
+    );
+    expect(mocks.saveItem).toHaveBeenCalledTimes(1);
+  });
+
+  it("vídeo já baixado não repete o download nem o aviso", async () => {
+    mocks.downloadState = "downloaded";
+    wrapper = mountForm({
+      url: URL_YOUTUBE,
+      subitem: "Título do YouTube",
+      item: "Item da liturgia",
+    });
+    const state = vm(wrapper);
+
+    await (state.salvarItem as () => Promise<void>)();
+    await flushPromises();
+
+    expect(mocks.downloadRefresh).toHaveBeenCalled();
+    expect(mocks.download).not.toHaveBeenCalled();
+    expect(mocks.snackbarInfo).not.toHaveBeenCalled();
+    expect(mocks.saveItem).toHaveBeenCalledTimes(1);
+  });
+
   it("campo vazio salva o item como está", async () => {
     wrapper = mountForm();
     const state = vm(wrapper);
@@ -222,7 +273,7 @@ describe("LiturgyItemForm — URL colada do vídeo on-line", () => {
     expect(mocks.snackbarError).not.toHaveBeenCalled();
   });
 
-  it("sem suporte a download (web), não anuncia \"Baixando\"", async () => {
+  it('sem suporte a download (web), não anuncia "Baixando"', async () => {
     // No web/PWA o `download` devolve false sem baixar nada: avisar assim
     // mesmo faria o operador esperar um download que não vai acontecer.
     platform.onlineVideo = null;
@@ -280,7 +331,7 @@ describe("LiturgyItemForm — URL colada do vídeo on-line", () => {
     expect(mocks.setFormField).toHaveBeenCalledWith("subitem", "Outro vídeo");
   });
 
-  it("editar item antigo migra o subtítulo \"URL: ...\" para o título ao salvar", async () => {
+  it('editar item antigo migra o subtítulo "URL: ..." para o título ao salvar', async () => {
     wrapper = mountForm({ url: URL_YOUTUBE, subitem: `URL: ${URL_YOUTUBE}`, item: "Abertura" });
     const state = vm(wrapper);
 
@@ -398,11 +449,17 @@ describe("LiturgyItemForm — campo de URL e escolha de catálogo se excluem", (
     await flushPromises();
     expect(campoUrl(wrapper)?.props("disabled")).toBe(false);
 
-    (state.onVideoSearchPicked as (_v: { name: string; url: string }) => void)({ name: "Vídeo do catálogo", url: "https://www.youtube.com/watch?v=outro1" });
+    (state.onVideoSearchPicked as (_v: { name: string; url: string }) => void)({
+      name: "Vídeo do catálogo",
+      url: "https://www.youtube.com/watch?v=outro1",
+    });
     await flushPromises();
 
     expect(state.videoUrl).toBe("");
-    expect(mocks.setFormField).toHaveBeenCalledWith("url", "https://www.youtube.com/watch?v=outro1");
+    expect(mocks.setFormField).toHaveBeenCalledWith(
+      "url",
+      "https://www.youtube.com/watch?v=outro1"
+    );
     expect(campoUrl(wrapper)?.props("disabled")).toBe(true);
   });
 });
