@@ -116,7 +116,10 @@ vi.mock("@/helpers/LiturgyFiles", () => ({
   releaseLiturgyFileUrl: mocks.releaseLiturgyFileUrl,
   retainLiturgyFileUrl: mocks.retainLiturgyFileUrl,
 }));
-vi.mock("@/helpers/Http", () => ({ fetchWithTimeout: vi.fn(), NET_TIMEOUT: { MEDIA: 1 } }));
+vi.mock("@/helpers/Http", () => ({
+  fetchWithTimeout: vi.fn(),
+  NET_TIMEOUT: { MEDIA: 1, QUICK: 1 },
+}));
 vi.mock("@/helpers/Telemetry", () => ({
   default: { track: vi.fn(), captureException: vi.fn() },
 }));
@@ -129,6 +132,7 @@ import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import type { LiturgyItem } from "@/types/Liturgy";
 import { DB_TABLE } from "@/constants/DbTables";
 import $alert from "@/helpers/Alert";
+import { fetchWithTimeout } from "@/helpers/Http";
 
 function arquivo(dir: string, item = "Arquivo"): LiturgyItem {
   return { id: "1", tipo: LiturgyItemTypeEnum.ARQUIVO, item, dir } as LiturgyItem;
@@ -187,6 +191,11 @@ beforeEach(() => {
   mocks.closeMedia.mockClear();
   mocks.closeProjectionStage.mockClear();
   mocks.broadcastGetLastPayload.mockReturnValue(null);
+  vi.mocked(fetchWithTimeout).mockResolvedValue({
+    ok: true,
+    status: 206,
+    body: { cancel: vi.fn(async () => {}) },
+  } as unknown as Response);
 });
 
 describe("liturgia — arquivo escolhido na web", () => {
@@ -457,6 +466,24 @@ describe("liturgia — vínculo de sobreposição", () => {
     expect(mocks.openPath).toHaveBeenCalledWith("/Users/ana/aviso.mp4");
     expect(mocks.writeOverlaySlot).not.toHaveBeenCalled();
     expect(mocks.userdataSet).not.toHaveBeenCalled();
+  });
+
+  it("arquivo local ausente não abre projeção e avisa o caminho salvo", async () => {
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
+      ok: false,
+      status: 404,
+      body: { cancel: vi.fn(async () => {}) },
+    } as unknown as Response);
+    const { executeItem } = useLiturgyExecution();
+
+    await executeItem(arquivo("/Users/ana/nao-existe.mp4"));
+
+    expect(mocks.projectFile).not.toHaveBeenCalled();
+    expect(mocks.openAudio).not.toHaveBeenCalled();
+    expect($alert.error).toHaveBeenCalledWith({
+      text: "/Users/ana/nao-existe.mp4",
+      title: "modules.media.alerts.file_not_found",
+    });
   });
 
   it("não liga o slot para áudio ou para anúncios sem slides selecionados", async () => {

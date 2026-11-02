@@ -530,6 +530,43 @@ export function useLiturgyExecution() {
     return $path.file(dir);
   }
 
+  /**
+   * O arquivo ainda existe no caminho salvo? O protocolo `louvorja://local`
+   * devolve 404 para caminho ausente; pedir 1 byte evita abrir a projeção e
+   * deixar a tela preta/erro de áudio quando o arquivo foi movido ou apagado.
+   * Só vale para caminhos locais absolutos; URLs remotas/blob seguem o fluxo
+   * normal (a falha ali é de rede/formato, não de arquivo ausente).
+   */
+  async function _localFileExists(dir: string): Promise<boolean> {
+    if (!dir || !Platform.isDesktop) return true;
+    if (/^(blob|data):/i.test(dir)) return true;
+    const hasProtocol = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(dir);
+    if (hasProtocol && !/^louvorja:\/\/local\//i.test(dir)) return true;
+    const isLocalPath =
+      /^louvorja:\/\/local\//i.test(dir) ||
+      dir.startsWith("/") ||
+      /^[A-Za-z]:[\\/]/.test(dir) ||
+      dir.startsWith("\\\\");
+    if (!isLocalPath) return true;
+    const url = /^louvorja:\/\//i.test(dir) ? dir : _resolveFileUrl(dir);
+    try {
+      const response = await fetchWithTimeout(url, {
+        method: "GET",
+        headers: { Range: "bytes=0-0" },
+        timeout: NET_TIMEOUT.QUICK,
+        source: "file",
+      });
+      try {
+        await response.body?.cancel();
+      } catch {
+        /* corpo de erro/cancelamento não interessa */
+      }
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
   /** Cache de objectURLs para HEIC→JPEG (evita reconverter a cada projeção). */
   const _heicProjectionCache = new Map<string, string>();
 
@@ -582,7 +619,17 @@ export function useLiturgyExecution() {
         ...extraPayload,
         libRef: { table: DB_TABLE.LITURGY_FILES, id: item.ref_id },
       };
+    } else {
+      const exists = await _localFileExists(dir);
+      // Outro item pode ter sido pedido enquanto o disco era consultado.
+      if (intent !== fileOpenIntent) return false;
+      if (!exists) {
+        reportMissingResource("open_file", "file");
+        $alert.error({ text: dir, title: "modules.media.alerts.file_not_found" });
+        return false;
+      }
     }
+    if (intent !== fileOpenIntent) return false;
     const ext = dir.split(/[?#]/)[0].split(".").pop()?.toLowerCase() || "";
     // Tipo efetivo: extensão do caminho; sem extensão (ex.: blob URLs),
     // usa o hint informado pelo chamador (subtipo do item).
