@@ -17,6 +17,8 @@ describe("horário no título da liturgia", () => {
     ["08:30 Leitura João 3:16", "08:30"],
     ["08:30 Leitura João 3:16 e 4:10", "08:30"],
     ["08:30 Leitura João 3:16-4:10", "08:30"],
+    ["  (8h30) Louvor", "08:30"],
+    ["Louvor 8h30,8h30", "08:30"],
   ])("reconhece %s", (title, expected) => {
     expect(horarioDoTitulo(title)).toBe(expected);
   });
@@ -42,6 +44,11 @@ describe("horário no título da liturgia", () => {
     "2026-10-08T08:30",
     "Vídeo ABC08:30",
     "08:30:99 Louvor",
+    "Vídeo ação8h30",
+    "Vídeo 𝟙8h30",
+    "Arquivo /8h30",
+    "Arquivo .8h30",
+    "Louvor 8h30,9h30",
   ])("não adivinha hora em %s", (title) => {
     expect(horarioDoTitulo(title)).toBe("");
   });
