@@ -460,6 +460,14 @@ louvorja/
 └── liturgy.library                           ← liturgias salvas
 ```
 
+O backup completo (`DatabaseBackup.ts`) usa o formato ZIP versão 2: os JSONs
+guardam referências tipadas e os bytes de `Blob`, `File`, `ArrayBuffer` e views
+ficam em entradas `binary/`. A importação valida e reconstrói esses dados antes
+de limpar as tabelas. Backups JSON da versão 1 continuam legíveis, mas bytes que
+essa versão exportou como `{}` não podem ser recuperados do ZIP. A biblioteca
+de áudio/imagens trata esses registros como indisponíveis; reimportar o arquivo
+original substitui o registro inválido mantendo seu token por hash.
+
 Helper genérico para a tabela `settings`:
 
 ```ts

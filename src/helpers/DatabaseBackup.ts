@@ -1,9 +1,10 @@
 import JSZip from "jszip";
 import { DB_NAME, DB_TABLE } from "@/constants/DbTables";
 import $idb from "@/helpers/IndexedDB";
+import { createBackupEncoder, decodeBackupBinary } from "@/helpers/BackupBinary";
 
 const EXPORT_FORMAT = "louvorja-violin-db";
-const EXPORT_VERSION = 1;
+const EXPORT_VERSION = 2;
 
 const BACKUP_TABLES = Array.from(new Set(Object.values(DB_TABLE)));
 
@@ -93,15 +94,21 @@ function normalizeRows(raw: unknown, table: string): Array<Record<string, unknow
 export default {
   async exportAll(onProgress?: (_progress: BackupProgress) => void): Promise<BackupExportResult> {
     const zip = new JSZip();
+    const encode = createBackupEncoder(zip);
     const manifestTables: BackupManifestTable[] = [];
     let totalRows = 0;
 
     for (const table of BACKUP_TABLES) {
-      onProgress?.({ phase: "export", current: manifestTables.length + 1, total: BACKUP_TABLES.length, detail: table });
+      onProgress?.({
+        phase: "export",
+        current: manifestTables.length + 1,
+        total: BACKUP_TABLES.length,
+        detail: table,
+      });
       const rows = await $idb.getAll<Record<string, unknown>>(table);
       manifestTables.push({ name: table, rows: rows.length });
       totalRows += rows.length;
-      zip.file(tableFileName(table), JSON.stringify(rows, null, 2));
+      zip.file(tableFileName(table), await encode(rows));
     }
 
     const manifest: BackupManifest = {
@@ -130,13 +137,20 @@ export default {
     };
   },
 
-  async importAll(file: File, onProgress?: (_progress: BackupProgress) => void): Promise<BackupImportResult> {
+  async importAll(
+    file: File,
+    onProgress?: (_progress: BackupProgress) => void
+  ): Promise<BackupImportResult> {
     onProgress?.({ phase: "import", current: 0, total: 4, detail: "loading" });
-    const zip = await JSZip.loadAsync(await file.arrayBuffer());
+    const zip = await JSZip.loadAsync(await file.arrayBuffer(), { checkCRC32: true });
     const manifestRaw = await readTextFile(zip, manifestFileName());
     const manifest = JSON.parse(manifestRaw) as Partial<BackupManifest>;
 
-    if (manifest.format !== EXPORT_FORMAT || manifest.version !== EXPORT_VERSION) {
+    if (
+      !manifest ||
+      manifest.format !== EXPORT_FORMAT ||
+      ![1, EXPORT_VERSION].includes(manifest.version ?? 0)
+    ) {
       throw new Error("Arquivo de backup incompatível");
     }
 
@@ -157,19 +171,32 @@ export default {
       step += 1;
       onProgress?.({ phase: "import", current: step, total: tableNames.length + 2, detail: table });
       const raw = JSON.parse(await readTextFile(zip, tableFileName(table)));
-      const rows = normalizeRows(raw, table);
+      const rows = normalizeRows(
+        manifest.version === 1 ? raw : await decodeBackupBinary(zip, raw),
+        table
+      );
       data.set(table, rows);
       totalRows += rows.length;
     }
 
     step = tableNames.length + 1;
-    onProgress?.({ phase: "import", current: step, total: tableNames.length + 2, detail: "clearing" });
+    onProgress?.({
+      phase: "import",
+      current: step,
+      total: tableNames.length + 2,
+      detail: "clearing",
+    });
     for (const table of BACKUP_TABLES) {
       await $idb.clear(table);
     }
 
     step = tableNames.length + 2;
-    onProgress?.({ phase: "import", current: step, total: tableNames.length + 2, detail: "writing" });
+    onProgress?.({
+      phase: "import",
+      current: step,
+      total: tableNames.length + 2,
+      detail: "writing",
+    });
     for (const [table, rows] of data) {
       for (const row of rows) {
         await $idb.put(table, row as { id: string });
