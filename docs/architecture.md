@@ -1234,26 +1234,13 @@ Media.openYouTube(embedUrl, título)          ← único ponto de entrada (5 cha
   (a próxima vez toca do arquivo: `louvorja://onlinevideo/<id>.mp4`, os dois endereços iguais)
 ```
 
-**Toda transferência é a mesma coisa**: o botão de baixar, o **link novo na lista** (o download
-já começa ao salvar, e o vídeo fica guardado) e o download em segundo plano usam o mesmo
-downloader (`progressive.js`). Quem manda tocar no meio de um pré-download entra nele: sai da
-fila, lê das mesmas trilhas e não abre uma segunda conexão. Só um vídeo sem trilhas servidas por
-HTTP (formatos em fragmentos) cai no yt-dlp, e então o play acompanha o download (`busy`).
+**Toda transferência é a mesma coisa**: tocar (`stream`), o botão de baixar e o **link novo na
+lista** (o download já começa ao salvar, e o vídeo fica guardado) usam o mesmo downloader
+(`progressive.js`). Quem manda tocar no meio de um pré-download entra nele: sai da fila, lê das
+mesmas trilhas e não abre uma segunda conexão. Só um vídeo sem trilhas servidas por HTTP
+(formatos em fragmentos) cai no yt-dlp, e então o play acompanha o download (`busy`).
 
-- **Primeira abertura**: se o MP4 não está no disco, o `openYouTube` abre o player embutido do
-  YouTube imediatamente e dispara `ensure` em segundo plano (`keep:false`). A próxima abertura
-  usa o arquivo local. O caminho antigo de tocar direto das trilhas (`onlineVideo:stream`) fica
-  como opt-in de diagnóstico (`preferStream`); ele espera a resolução do yt-dlp.
-- **Sem anúncio nas aberturas seguintes**: com o MP4 no cache, o yt-dlp/arquivo local toca sem
-  passar pelo player; a primeira abertura usa o embed para não esperar a resolução.
-- **PO token**: o YouTube passou a exigir token por vídeo para os formatos altos (SABR/403).
-  O app baixa o provedor Rust `bgutil-pot` + o plugin do yt-dlp no primeiro uso; o yt-dlp
-  recebe `--plugin-dirs` e o caminho do CLI. Não forçamos `player_client`: em 2026 o
-  `web,mweb` deixou de devolver formatos e o yt-dlp escolhe `visionos` (que ainda entrega
-  H.264/AAC); o provedor continua disponível para quando o cliente escolhido pedir token.
-  O token/URL é repassado às trilhas; se o provedor falhar, o
-  fallback é o player do YouTube, nunca 360p. A instalação aparece na tarefa
-  `online-video:tools` e na snackbar.
+- **Sem anúncio por construção**: o yt-dlp baixa o arquivo, não passa pelo player.
 - **Qualidade**: H.264 + AAC em MP4 até a altura escolhida (480/720/**1080**, em Opções →
   Vídeos On-line). O ffmpeg só junta as trilhas (`-c copy`), nunca recodifica. H.264 é o que
   o Chromium decodifica em hardware nos PCs modestos; VP9/AV1 só entram se o vídeo não tiver
@@ -1297,12 +1284,12 @@ HTTP (formatos em fragmentos) cai no yt-dlp, e então o play acompanha o downloa
   projeção inicia também aparece no cartão, com barra e "✕") e pela lista de processos. Só no
   desktop; no navegador os controles não aparecem. **Link novo na lista** (`startForNewLink`)
   já começa o download e guarda o vídeo, salvo com o download desligado nas opções.
-- **A cópia única** (`onlineVideo:stream`, `progressive.js`, opt-in `preferStream`): o yt-dlp
-  pede só os **links** das duas trilhas (`-J`, sem baixar) e o main as baixa **uma vez**, em
-  pedaços de 2 MB, para arquivos do tamanho final em `Videos/.stream/<id>/` que vão sendo
-  preenchidos. Projeção, retorno, operador e o player do app leem desses arquivos por `Range`, em
+- **A cópia única** (`onlineVideo:stream`, `progressive.js`): o yt-dlp pede só os **links** das
+  duas trilhas (`-J`, sem baixar) e o main as baixa **uma vez**, em pedaços de 2 MB, para
+  arquivos do tamanho final em `Videos/.stream/<id>/` que vão sendo preenchidos.
+  Projeção, retorno, operador e o player do app leem desses arquivos por `Range`, em
   `louvorja://onlinestream/<id>/video|audio` — o handler espera o trecho que ainda não chegou
-  e, num salto, o baixador pula para lá. Ao terminar, o ffmpeg junta as trilhas
+  e, num salto, o baixador pula para lá. Começa em ~7 s. Ao terminar, o ffmpeg junta as trilhas
   sem recodificar (`muxCopy`) e o MP4 entra no cache. O renderer só precisa chamar `ensure`
   em segundo plano, que se junta ao mesmo job (barra, cancelar e "manter" iguais).
   - **Por que não dar o link do YouTube direto ao `<video>`** (foi o primeiro protótipo): cada
@@ -1315,12 +1302,6 @@ HTTP (formatos em fragmentos) cai no yt-dlp, e então o play acompanha o downloa
     As de um vídeo anterior saem quando outro começa, ou 30 min depois de o último leitor sair
     (o `<video>` pausado pode voltar a pedir dados); ao abrir o app, `.stream` é apagada.
   - **Contam como transferência** para a troca das ferramentas, que espera o fim.
-  - **Preflight e 403**: antes de entregar a sessão ao renderer, o main espera o primeiro
-    pedaço real de vídeo e áudio. Se o CDN recusar a URL assinada, uma nova resolução é
-    tentada no caminho de download; persistindo o 403, o vídeo fica bloqueado para o direto
-    por 5 min e o download completo cai para 720p. O modal de áudio não aparece nesse fluxo:
-    o renderer volta ao player do YouTube e baixa em segundo plano. O arquivo local só entra
-    na próxima abertura; nada troca no meio de uma reprodução.
   - **Player do app**: o elemento de som toca a trilha de áudio, então a prévia de imagem do
     módulo Mídia lê a trilha de vídeo (`MEDIA.CONFIG.VIDEO_SRC`), muda e sincronizada.
   - **Cancelar o download do vídeo que está tocando** (✕ no cartão) o leva junto: as trilhas de

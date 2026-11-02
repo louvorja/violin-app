@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createRequire } from "module";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -19,7 +19,7 @@ describe("validate", () => {
   let base;
 
   beforeAll(() => {
-    base = mkdtempSync(join(tmpdir(), "louvorja-classico-"));
+    base = realpathSync(mkdtempSync(join(tmpdir(), "louvorja-classico-")));
     mkdirSync(join(base, "instalacao", "config", "musicas"), { recursive: true });
     writeFileSync(join(base, "instalacao", "config", "musicas", "faixa.mp3"), "x");
     mkdirSync(join(base, "vazia", "config", "musicas"), { recursive: true });

@@ -73,7 +73,6 @@ import {
 } from "@/helpers/Overlay";
 import Shortcuts from "@/helpers/Shortcuts";
 import Telemetry from "@/helpers/Telemetry";
-import $snackbar from "@/helpers/Snackbar";
 import Hotkeys from "@/helpers/Hotkeys";
 import { useShell } from "@/composables/useShell";
 import { BROADCAST_TYPE } from "@helpers/BroadcastTypes";
@@ -706,19 +705,6 @@ function _bootStage(stage, properties = {}) {
 
 // Sem escrita na pasta de dados (macOS negou Documentos, antivírus bloqueou), o
 // main abre na pasta do programa. Calado, o app parecia ter perdido tudo.
-async function warnDataDirFallback(i18n) {
-  const issue = await Promise.resolve(Platform.storage?.dataDirIssue?.()).catch(() => null);
-  if (!issue) return;
-  Telemetry.track("storage_data_dir_fallback", { reason: issue.reason });
-  $snackbar.warning(
-    i18n.global.t("options.storage.folder_fallback_notice", { dir: issue.wanted }),
-    {
-      timeout: 15000,
-      key: "data-dir-fallback",
-    }
-  );
-}
-
 $storage.hydrate().then(async () => {
   _bootStage("storage_hydrated");
   // As três etapas abaixo não dependem uma da outra (cada uma é uma
@@ -2430,7 +2416,15 @@ $storage.hydrate().then(async () => {
     app.mount("#app");
     window.__ljPwaRecovery?.markMounted();
     _bootStage("mounted");
-    if (!isAuxiliaryRenderer) void warnDataDirFallback(i18n);
+    if (!isAuxiliaryRenderer) {
+      const t = (key, values) => i18n.global.t(key, values ?? {});
+      void import("@/helpers/StorageRecovery").then(
+        async ({ warnDataDirFallback, offerOlderVersionData }) => {
+          await warnDataDirFallback(t);
+          await offerOlderVersionData(t, i18n.global.locale.value === "es" ? "es" : "pt-BR");
+        }
+      );
+    }
 
     // Estado atual, não a ação de alternar: sem isto, saber "quantos usuários
     // usam Libras" dependia de esperar alguém tocar no interruptor depois do

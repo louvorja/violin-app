@@ -4,7 +4,7 @@
       <p class="opt-empty">{{ $t("options.collections_download.desktop_only") }}</p>
     </section>
 
-    <section v-if="canDownload" class="opt-section">
+    <section v-if="canDownload" class="opt-section sinc-connection">
       <h3 class="opt-section-title">
         <LjIcon :icon="ICONS.UI.SYNC_CLOUD" size="18" />
         {{ $t("options.collections_download.connection") }}
@@ -66,6 +66,7 @@
         >
           <div class="opt-section-top">
             <p class="opt-hint">{{ $t("options.collections_download.hint") }}</p>
+            <p v-if="mediaMaintenanceHint" class="opt-hint">{{ mediaMaintenanceHint }}</p>
 
             <div
               v-if="bundleEmDownload && !(loadingCategories || scanningCache)"
@@ -187,7 +188,13 @@
                     <input
                       type="checkbox"
                       :checked="selectedHymnal"
-                      :disabled="downloading || preparing || scanningCache || saving"
+                      :disabled="
+                        downloading ||
+                        preparing ||
+                        scanningCache ||
+                        saving ||
+                        (!canMaintainMedia && cachedHymnalBaseline)
+                      "
                       @change="onHymnalToggle(($event.target as HTMLInputElement).checked)"
                     />
                     <strong>{{ $t("options.collections_download.hymnal") }}</strong>
@@ -227,7 +234,7 @@
                     <LjButton
                       size="sm"
                       variant="danger"
-                      :disabled="partialBusy"
+                      :disabled="partialBusy || !canMaintainMedia"
                       @click="discardPartial({ hymnal: 'main' })"
                     >
                       {{ $t("options.collections_download.partial_discard") }}
@@ -244,7 +251,13 @@
                     <input
                       type="checkbox"
                       :checked="selectedHymnal1996"
-                      :disabled="downloading || preparing || scanningCache || saving"
+                      :disabled="
+                        downloading ||
+                        preparing ||
+                        scanningCache ||
+                        saving ||
+                        (!canMaintainMedia && cachedHymnal1996Baseline)
+                      "
                       @change="onHymnal1996Toggle(($event.target as HTMLInputElement).checked)"
                     />
                     <strong>{{ $t("options.collections_download.hymnal_1996") }}</strong>
@@ -284,7 +297,7 @@
                     <LjButton
                       size="sm"
                       variant="danger"
-                      :disabled="partialBusy"
+                      :disabled="partialBusy || !canMaintainMedia"
                       @click="discardPartial({ hymnal: '1996' })"
                     >
                       {{ $t("options.collections_download.partial_discard") }}
@@ -299,7 +312,13 @@
                       type="checkbox"
                       :checked="isCategoryFullySelected(cat)"
                       :indeterminate.prop="isCategoryPartiallySelected(cat)"
-                      :disabled="downloading || preparing || scanningCache || saving"
+                      :disabled="
+                        downloading ||
+                        preparing ||
+                        scanningCache ||
+                        saving ||
+                        (!canMaintainMedia && isCategoryFullyCached(cat))
+                      "
                       @change="toggleCategory(cat, ($event.target as HTMLInputElement).checked)"
                     />
                     <strong>{{ cat.name }}</strong>
@@ -319,6 +338,7 @@
                             preparing ||
                             scanningCache ||
                             saving ||
+                            (!canMaintainMedia && cachedAlbumsBaseline.has(album.id_album)) ||
                             classicAlbums.has(album.id_album)
                           "
                           @change="
@@ -381,7 +401,7 @@
                         <LjButton
                           size="sm"
                           variant="danger"
-                          :disabled="partialBusy"
+                          :disabled="partialBusy || !canMaintainMedia"
                           @click="discardPartial({ album: album.id_album, name: album.name })"
                         >
                           {{ $t("options.collections_download.partial_discard") }}
@@ -456,7 +476,7 @@
                   v-if="hasPendingRemovals || saving"
                   type="button"
                   class="opt-btn opt-btn--danger"
-                  :disabled="saving || scanningCache"
+                  :disabled="saving || scanningCache || !canMaintainMedia"
                   @click="confirmRemoval"
                 >
                   <LjIcon :icon="ICONS.ACTIONS.DELETE_FILLED" size="14" />
@@ -693,104 +713,34 @@
         </section>
 
         <!-- Armazenamento -->
-        <section v-if="abaIniciada('storage')" v-show="activeTab === 'storage'" class="opt-section">
-          <div class="opt-row opt-row--col sinc-row-gap">
-            <label class="opt-label sinc-storage-label">
-              {{ $t("options.storage.folder") }}
-            </label>
-            <div class="opt-folder">
-              <code class="opt-folder-path">
-                {{ storageStats?.dataDir || "—" }}
-              </code>
-              <p v-if="storageStats?.dataDirIssue" class="opt-hint opt-hint--warn">
-                {{
-                  $t("options.storage.folder_fallback", { dir: storageStats.dataDirIssue.wanted })
-                }}
-              </p>
-              <p v-if="storageStats?.restartRequired" class="opt-hint">
-                {{ $t("options.storage.restart_required") }}
-              </p>
-
-              <div class="opt-folder-actions">
-                <button type="button" class="opt-btn" @click="openFolder">
-                  {{ $t("options.storage.open_folder") }}
-                </button>
-                <button type="button" class="opt-btn" @click="changeFolder">
-                  {{ $t("options.storage.change_folder") }}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Acervo da versão clássica: leitura, nunca escrita -->
-          <div class="opt-row opt-row--col sinc-row-gap">
-            <label class="opt-label sinc-storage-label">
-              {{ $t("options.storage.classic.title") }}
-            </label>
-            <p class="opt-hint">{{ $t("options.storage.classic.hint") }}</p>
-
-            <div class="opt-folder">
-              <code v-if="classicDir" class="opt-folder-path">{{ classicDir }}</code>
-              <p v-else class="opt-hint">{{ $t("options.storage.classic.none") }}</p>
-
-              <p v-if="classicDir && !classicAvailable" class="opt-hint opt-hint--warn">
-                {{ $t("options.storage.classic.unavailable") }}
-              </p>
-
-              <label v-if="classicDir" class="opt-checkbox">
-                <input
-                  type="checkbox"
-                  :checked="classicEnabled"
-                  @change="onClassicToggle(($event.target as HTMLInputElement).checked)"
-                />
-                <span>{{ $t("options.storage.classic.enabled") }}</span>
-              </label>
-
-              <div class="opt-folder-actions">
-                <button
-                  type="button"
-                  class="opt-btn"
-                  :disabled="classicBusy"
-                  @click="detectClassic"
-                >
-                  {{ $t("options.storage.classic.detect") }}
-                </button>
-                <button
-                  type="button"
-                  class="opt-btn"
-                  :disabled="classicBusy"
-                  @click="chooseClassic"
-                >
-                  {{ $t("options.storage.classic.choose") }}
-                </button>
-                <button
-                  v-if="classicDir"
-                  type="button"
-                  class="opt-btn"
-                  :disabled="classicBusy"
-                  @click="importClassic"
-                >
-                  {{ $t("options.storage.classic.import") }}
-                </button>
-                <button
-                  v-if="classicDir"
-                  type="button"
-                  class="opt-btn"
-                  :disabled="classicBusy"
-                  @click="removeClassic"
-                >
-                  {{ $t("options.storage.classic.remove") }}
-                </button>
-              </div>
-            </div>
-          </div>
+        <section
+          v-if="abaIniciada('storage')"
+          v-show="activeTab === 'storage'"
+          class="opt-section sinc-storage"
+        >
+          <StorageLocations class="sinc-storage-locations" @changed="onStorageLocationsChanged" />
 
           <div class="opt-stats">
             <div class="opt-stat">
               <span class="opt-stat-label">{{ $t("options.storage.media_size") }}</span>
               <span class="opt-stat-value">
                 {{ sync.humanSize(storageStats?.files?.bytes) }}
-                <small>({{ storageStats?.files?.count || 0 }} arq.)</small>
+                <small>
+                  ({{
+                    $t("options.storage.file_count", { count: storageStats?.files?.count || 0 })
+                  }})
+                </small>
+              </span>
+            </div>
+            <div class="opt-stat">
+              <span class="opt-stat-label">{{ $t("options.storage.videos_folder") }}</span>
+              <span class="opt-stat-value">
+                {{ sync.humanSize(storageStats?.videos?.bytes) }}
+                <small>
+                  ({{
+                    $t("options.storage.file_count", { count: storageStats?.videos?.count || 0 })
+                  }})
+                </small>
               </span>
             </div>
             <div class="opt-stat">
@@ -801,31 +751,43 @@
               </span>
             </div>
             <div class="opt-stat">
-              <span class="opt-stat-label">Músicas (álbuns, músicas, letras)</span>
+              <span class="opt-stat-label">{{ $t("options.storage.catalog_size") }}</span>
               <span class="opt-stat-value">
                 {{ sync.humanSize(storageStats?.music?.bytes) }}
-                <small>({{ storageStats?.music?.count || 0 }} arq.)</small>
+                <small>
+                  ({{
+                    $t("options.storage.file_count", { count: storageStats?.music?.count || 0 })
+                  }})
+                </small>
               </span>
             </div>
             <div class="opt-stat">
               <span class="opt-stat-label">{{ $t("options.storage.cache_size") }}</span>
               <span class="opt-stat-value">
                 {{ sync.humanSize(storageStats?.json?.bytes) }}
-                <small>({{ storageStats?.json?.count || 0 }} arq.)</small>
+                <small>
+                  ({{
+                    $t("options.storage.file_count", { count: storageStats?.json?.count || 0 })
+                  }})
+                </small>
               </span>
             </div>
             <div class="opt-stat">
-              <span class="opt-stat-label">Bíblia</span>
+              <span class="opt-stat-label">{{ $t("options.storage.bible_size") }}</span>
               <span class="opt-stat-value">
                 {{ sync.humanSize(storageStats?.bible?.bytes) }}
-                <small>({{ storageStats?.bible?.count || 0 }} arq.)</small>
+                <small>
+                  ({{
+                    $t("options.storage.file_count", { count: storageStats?.bible?.count || 0 })
+                  }})
+                </small>
               </span>
             </div>
             <div class="opt-stat">
               <span class="opt-stat-label">{{ $t("options.storage.libras_size") }}</span>
               <span class="opt-stat-value">
                 {{ sync.humanSize(librasStats?.total_bytes) }}
-                <small>({{ librasFileCount }} arq.)</small>
+                <small>({{ $t("options.storage.file_count", { count: librasFileCount }) }})</small>
               </span>
             </div>
             <div class="opt-stat opt-stat--total">
@@ -852,6 +814,7 @@
               id="opt-quota"
               class="opt-select"
               :value="quotaGb"
+              :disabled="!canMaintainMedia"
               @change="setQuotaGb(Number(($event.target as HTMLSelectElement).value))"
             >
               <option :value="0">{{ $t("options.storage.no_limit") }}</option>
@@ -863,14 +826,21 @@
               <option :value="50">50 GB</option>
             </select>
           </div>
-          <p class="opt-hint">{{ $t("options.storage.quota_hint") }}</p>
+          <p v-if="canMaintainMedia || mediaMaintenanceHint" class="opt-hint">
+            {{ mediaMaintenanceHint || $t("options.storage.quota_hint") }}
+          </p>
 
           <div class="opt-actions">
             <button type="button" class="opt-btn" @click="clearJson">
               <LjIcon :icon="ICONS.ACTIONS.DATABASE_REMOVE" size="14" />
               {{ $t("options.storage.clear_cache") }}
             </button>
-            <button type="button" class="opt-btn opt-btn--danger" @click="clearFiles">
+            <button
+              type="button"
+              class="opt-btn opt-btn--danger"
+              :disabled="!canMaintainMedia"
+              @click="clearFiles"
+            >
               <LjIcon :icon="ICONS.ACTIONS.DELETE_FILLED" size="14" />
               {{ $t("options.storage.clear_files") }}
             </button>
@@ -918,6 +888,7 @@
 import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import Platform from "@/helpers/Platform";
+import StorageLocations from "@/components/StorageLocations.vue";
 import { pendingSyncAlbum } from "@/helpers/SyncIntent";
 import $userdata from "@/helpers/UserData";
 import $alert from "@/helpers/Alert";
@@ -962,10 +933,11 @@ interface DiskUsage {
 
 interface StorageStats {
   dataDir?: string;
-  dataDirIssue?: { wanted: string; reason: string } | null;
+  dataDirIssue?: { reason: "unavailable" | "failed"; wanted?: string; message?: string } | null;
   restartRequired?: boolean;
   filesDir?: string;
   files?: { bytes: number; count: number };
+  videos?: { bytes: number; count: number };
   canva?: { bytes: number; count: number };
   json?: { bytes: number; count: number };
   music?: { bytes: number; count: number };
@@ -999,6 +971,15 @@ const bundleEta = computed(() => {
 /* ---- Estado ---- */
 
 const isDesktop = computed<boolean>(() => Platform.isDesktop);
+const mediaAccess = ref<{ writable: boolean; shared: boolean } | null>(null);
+const canMaintainMedia = computed(
+  () => !isDesktop.value || (mediaAccess.value?.writable === true && !mediaAccess.value.shared)
+);
+const mediaMaintenanceHint = computed(() => {
+  if (!isDesktop.value || !mediaAccess.value) return "";
+  if (mediaAccess.value.shared) return t("options.storage.shared_hint");
+  return mediaAccess.value.writable ? "" : t("options.storage.read_only_hint");
+});
 // Web/PWA baixa para o Cache Storage pelo mesmo contrato do desktop; só Bíblia,
 // armazenamento em pasta e versão clássica são exclusivos do Electron.
 const canDownload = computed<boolean>(() => !!Platform.download && !!Platform.storage?.checkLocal);
@@ -1066,6 +1047,7 @@ function abaIniciada(aba: string): boolean {
 
 watch(activeTab, (aba) => {
   if (!abasIniciadas.value.has(aba)) abasIniciadas.value = new Set(abasIniciadas.value).add(aba);
+  void refreshMediaAccess();
 });
 
 // O scan atualiza o progresso no composable a cada lote. Espelhar essa ref
@@ -1252,8 +1234,16 @@ function isCategoryPartiallySelected(cat: Category): boolean {
   return sel > 0 && sel < cat.albums.length;
 }
 
+function isCategoryFullyCached(cat: Category): boolean {
+  return (
+    !!cat.albums?.length &&
+    cat.albums.every((album) => cachedAlbumsBaseline.value.has(album.id_album))
+  );
+}
+
 function toggleCategory(cat: Category, checked: boolean): void {
   cat.albums?.forEach((a) => {
+    if (!checked && !canMaintainMedia.value && cachedAlbumsBaseline.value.has(a.id_album)) return;
     if (checked) selectedAlbums.value.add(a.id_album);
     else selectedAlbums.value.delete(a.id_album);
   });
@@ -1261,16 +1251,19 @@ function toggleCategory(cat: Category, checked: boolean): void {
 }
 
 function toggleAlbum(id: number, checked: boolean): void {
+  if (!checked && !canMaintainMedia.value && cachedAlbumsBaseline.value.has(id)) return;
   if (checked) selectedAlbums.value.add(id);
   else selectedAlbums.value.delete(id);
   selectedAlbums.value = new Set(selectedAlbums.value);
 }
 
 function onHymnalToggle(checked: boolean): void {
+  if (!checked && !canMaintainMedia.value && cachedHymnalBaseline.value) return;
   selectedHymnal.value = checked;
 }
 
 function onHymnal1996Toggle(checked: boolean): void {
+  if (!checked && !canMaintainMedia.value && cachedHymnal1996Baseline.value) return;
   selectedHymnal1996.value = checked;
 }
 
@@ -1289,9 +1282,11 @@ function selectAll(): void {
 }
 
 function deselectAll(): void {
-  selectedAlbums.value = new Set();
-  selectedHymnal.value = false;
-  selectedHymnal1996.value = false;
+  selectedAlbums.value = canMaintainMedia.value
+    ? new Set()
+    : new Set([...cachedAlbumsBaseline.value, ...classicAlbums.value]);
+  onHymnalToggle(false);
+  onHymnal1996Toggle(false);
 }
 
 function selectAllBibles(): void {
@@ -1423,6 +1418,8 @@ async function startDownloads(): Promise<void> {
 /* ---- Salvar seleção (remover do disco) ---- */
 
 async function confirmRemoval(): Promise<void> {
+  await refreshMediaAccess();
+  if (!canMaintainMedia.value) return;
   const ok = await $alert.confirm(
     t("options.collections_download.remove_confirm", { n: pendingRemovalCount.value })
   );
@@ -1430,7 +1427,8 @@ async function confirmRemoval(): Promise<void> {
 }
 
 async function saveSelection(): Promise<void> {
-  if (!hasPendingRemovals.value || !Platform.storage?.removeFiles) return;
+  if (!canMaintainMedia.value || !hasPendingRemovals.value || !Platform.storage?.removeFiles)
+    return;
 
   saving.value = true;
   let removedAlbums = 0;
@@ -1544,6 +1542,8 @@ async function continuePartial(target: PartialTarget): Promise<void> {
 
 /** Apaga o que chegou do disco, depois de confirmar. Não mexe em outras coleções. */
 async function discardPartial(target: PartialTarget): Promise<void> {
+  await refreshMediaAccess();
+  if (!canMaintainMedia.value) return;
   if (partialBusy.value || !Platform.storage?.removeFiles) return;
   const progress =
     target.album !== undefined
@@ -1731,8 +1731,19 @@ const quotaGb = computed({
   set: (v: number) => $userdata.set(KEYS.OPTIONS.STORAGE_QUOTA_GB, Number(v) || 0),
 });
 
+async function refreshMediaAccess(): Promise<void> {
+  if (!isDesktop.value) return;
+  try {
+    mediaAccess.value = (await Platform.api?.storage.locations())?.access?.media ?? null;
+  } catch (error) {
+    mediaAccess.value = null;
+    console.warn("[Sincronizar] storage.locations falhou:", error);
+  }
+}
+
 async function reloadStats(): Promise<void> {
   loading.value = true;
+  await refreshMediaAccess();
   try {
     if (Platform?.storage?.stats) {
       storageStats.value = (await Platform.storage.stats()) as StorageStats;
@@ -1748,171 +1759,8 @@ async function reloadStats(): Promise<void> {
   loading.value = false;
 }
 
-async function openFolder(): Promise<void> {
-  await Platform?.storage?.openDir?.();
-}
-
-async function changeFolder(): Promise<void> {
-  const newDir = await Platform?.storage?.chooseDir?.();
-  if (!newDir) return;
-
-  $alert.yesno("options.storage.move_confirm", (async (btn: string) => {
-    if (btn === "cancel") return;
-    const move = btn === "yes";
-    try {
-      await Platform.storage?.setDataDir(newDir, { moveExisting: move });
-      const cur = (await Platform.userStore?.read("storage")) || {};
-      await Platform.userStore?.write("storage", { ...cur, filesDir: newDir });
-      await Promise.all([reloadStats(), scanLocalCache({ force: true })]);
-    } catch (e) {
-      $alert.error({ text: "options.storage.change_failed", error: e as Error });
-    }
-  }) as (...args: unknown[]) => unknown);
-}
-
-// ─── Acervo da versão clássica ──────────────────────────────────────
-
-const classicDir = ref<string | null>(null);
-const classicLang = ref<string | null>(null);
-const classicEnabled = ref(false);
-const classicAvailable = ref(false);
-const classicBusy = ref(false);
-
-async function loadClassic(): Promise<void> {
-  if (!Platform.classic) return;
-  const s = await Platform.classic.getSource();
-  classicDir.value = s.dir;
-  classicLang.value = s.lang;
-  classicEnabled.value = s.enabled;
-  classicAvailable.value = s.available;
-}
-
-/** Depois de mudar a origem, o que estava "não baixado" pode ter virado outra coisa. */
-async function afterClassicChange(): Promise<void> {
-  await Promise.all([loadClassic(), reloadStats(), scanLocalCache({ force: true })]);
-}
-
-async function applyClassic(dir: string | null, lang?: string | null): Promise<void> {
-  classicBusy.value = true;
-  try {
-    const r = await Platform.classic!.setSource({ dir, lang, enabled: true });
-    if (!r.ok) {
-      $alert.error({ text: t("options.storage.classic.invalid") });
-      return;
-    }
-    await afterClassicChange();
-    if (dir) $snackbar.success(t("options.storage.classic.applied"));
-  } finally {
-    classicBusy.value = false;
-  }
-}
-
-async function detectClassic(): Promise<void> {
-  if (!Platform.classic) return;
-  classicBusy.value = true;
-  let achados: Awaited<ReturnType<NonNullable<typeof Platform.classic>["detect"]>> = [];
-  try {
-    achados = await Platform.classic.detect();
-  } finally {
-    classicBusy.value = false;
-  }
-
-  if (!achados.length) {
-    // Fora do Windows a instalação vive dentro do disco emulado do Wine, em
-    // caminho que só o dono conhece: cair no seletor é o comportamento útil.
-    $alert.yesno("options.storage.classic.not_found", ((btn: string) => {
-      if (btn === "yes") void chooseClassic();
-    }) as (...args: unknown[]) => unknown);
-    return;
-  }
-
-  await applyClassic(achados[0].dir, achados[0].lang);
-}
-
-async function chooseClassic(): Promise<void> {
-  const dir = await Platform?.storage?.chooseDir?.();
-  if (!dir) return;
-  await applyClassic(dir);
-}
-
-async function onClassicToggle(enabled: boolean): Promise<void> {
-  classicBusy.value = true;
-  try {
-    await Platform.classic!.setSource({
-      dir: classicDir.value,
-      lang: classicLang.value,
-      enabled,
-    });
-    await afterClassicChange();
-  } finally {
-    classicBusy.value = false;
-  }
-}
-
-async function removeClassic(): Promise<void> {
-  classicBusy.value = true;
-  try {
-    await Platform.classic!.setSource({ dir: null });
-    await afterClassicChange();
-  } finally {
-    classicBusy.value = false;
-  }
-}
-
-/**
- * Trazer o acervo para a nossa pasta. Fica separado do resto de propósito: ler
- * no lugar não gasta disco nem mexe no que é do outro programa, então copiar é
- * escolha, não o caminho normal.
- */
-/** Program Files exige elevação; uma remoção parcial deixaria o clássico quebrado. */
-function classicEmProgramFiles(): boolean {
-  return /program files/i.test(classicDir.value || "");
-}
-
-async function importClassic(): Promise<void> {
-  if (!classicDir.value) return;
-
-  const botoes = [
-    { text: "alert.cancel", color: "error", value: "cancel" },
-    { text: "options.storage.classic.import_copy", color: "info", value: "copy" },
-  ];
-  // Mover tira a mídia de quem ainda usa o programa antigo em paralelo, que é
-  // justamente o caso desta tela — então é a opção menos à mão, e some quando
-  // não daria para concluir.
-  if (!classicEmProgramFiles()) {
-    botoes.splice(1, 0, {
-      text: "options.storage.classic.import_move",
-      color: "warning",
-      value: "move",
-    });
-  }
-
-  $alert.show(
-    {
-      title: t("options.storage.classic.import"),
-      text: t("options.storage.classic.import_confirm"),
-      buttons: botoes,
-    },
-    (async (btn: string) => {
-      if (btn !== "copy" && btn !== "move") return;
-      classicBusy.value = true;
-      try {
-        const r = await Platform.classic!.import({
-          dir: classicDir.value!,
-          lang: classicLang.value || "pt",
-          move: btn === "move",
-        });
-        if (!r.ok) {
-          $alert.error({ text: t("options.storage.classic.import_failed") });
-          return;
-        }
-        await afterClassicChange();
-        $snackbar.success(t("options.storage.classic.import_done"));
-      } finally {
-        classicBusy.value = false;
-      }
-    }) as (...args: unknown[]) => unknown
-  );
+async function onStorageLocationsChanged(): Promise<void> {
+  await Promise.all([reloadStats(), scanLocalCache({ force: true })]);
 }
 
 async function toggleAutoCache(enabled: boolean): Promise<void> {
@@ -1925,6 +1773,8 @@ async function toggleAutoCache(enabled: boolean): Promise<void> {
 }
 
 async function setQuotaGb(gb: number): Promise<void> {
+  await refreshMediaAccess();
+  if (!canMaintainMedia.value) return;
   $userdata.set(KEYS.OPTIONS.STORAGE_QUOTA_GB, gb);
   const maxBytes = gb > 0 ? gb * 1024 * 1024 * 1024 : 0;
   const cur = (await Platform.userStore?.read("storage")) || {};
@@ -1975,6 +1825,8 @@ watch(activeTab, (aba) => {
 });
 
 async function clearFiles(): Promise<void> {
+  await refreshMediaAccess();
+  if (!canMaintainMedia.value) return;
   $alert.yesno("options.storage.clear_files_confirm", (async (btn) => {
     if (btn !== "yes") return;
     await Platform?.storage?.clearFiles?.();
@@ -2088,13 +1940,7 @@ onMounted(async () => {
     return;
   }
   // Independentes entre si — em série a tela levava a soma dos quatro tempos.
-  await Promise.all([
-    loadCatalog(),
-    sync.checkFtp(),
-    reloadStats(),
-    loadBibleVersions(),
-    loadClassic(),
-  ]);
+  await Promise.all([loadCatalog(), sync.checkFtp(), reloadStats(), loadBibleVersions()]);
 });
 
 onBeforeUnmount(() => {
@@ -2160,12 +2006,51 @@ onBeforeUnmount(() => {
   margin-bottom: 10px;
 }
 
+.sinc-connection {
+  margin-bottom: 0;
+}
+
+.sinc-connection > .opt-row {
+  gap: var(--lj-space-4);
+  margin-bottom: 0;
+}
+
 .sinc-tabs {
-  margin-top: var(--lj-space-4);
+  margin-top: var(--lj-space-6);
 }
 
 .sinc-panes {
-  margin-top: var(--lj-space-7);
+  margin-top: var(--lj-space-6);
+}
+
+.sinc-storage {
+  grid-template-columns: minmax(0, 1fr);
+  margin-bottom: 0;
+}
+
+.sinc-storage-locations {
+  margin-bottom: var(--lj-space-6);
+}
+
+.sinc-storage-locations :deep(.storage-locations__actions) {
+  gap: var(--lj-space-3);
+}
+
+.sinc-storage-locations :deep(.storage-locations__section > .storage-locations__actions),
+.sinc-storage-locations :deep(.storage-locations__section > .lj-btn) {
+  margin-top: var(--lj-space-2);
+}
+
+.sinc-storage-locations > :deep(.storage-locations__actions) {
+  padding-top: var(--lj-space-2);
+}
+
+.sinc-storage > .opt-stats {
+  margin-bottom: var(--lj-space-6);
+}
+
+.sinc-storage > .opt-actions {
+  margin-top: var(--lj-space-2);
 }
 
 .sinc-row-gap {
