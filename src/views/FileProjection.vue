@@ -249,7 +249,7 @@ async function loadPdf(
     pdfDoc = null;
     if (previousDoc) {
       try {
-        await (previousDoc as unknown as { destroy: () => Promise<void> }).destroy();
+        await previousDoc.loadingTask.destroy();
       } catch {
         /* ignore */
       }
@@ -267,7 +267,7 @@ async function loadPdf(
       expectedPlaybackId !== fileProjection.playback_id ||
       !fileProjection.active
     ) {
-      await (doc as unknown as { destroy: () => Promise<void> }).destroy();
+      await doc.loadingTask.destroy();
       return;
     }
     pdfDoc = doc;
@@ -650,7 +650,7 @@ useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION_PAGE, (payload: unknown) => 
   }
 });
 
-useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, async () => {
+useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, () => {
   activationGate.retire();
   ++activationGeneration;
   ++pdfLoadGeneration;
@@ -658,7 +658,7 @@ useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, async () => {
   _destroyYoutube();
   if (pdfDoc) {
     try {
-      await (pdfDoc as any).destroy();
+      void pdfDoc.loadingTask.destroy().catch(() => {});
     } catch {
       /* ignore */
     }
@@ -1048,14 +1048,16 @@ onMounted(async () => {
   document.body.style.background = wpColor.value;
 });
 
-onBeforeUnmount(async () => {
+onBeforeUnmount(() => {
+  ++pdfLoadGeneration;
+  fileProjection.active = false;
   pdfRenderQueue.invalidate();
   videoFrameConfirmation.dispose();
   videoFirstFrame.dispose();
   if (wpBlobUrl) URL.revokeObjectURL(wpBlobUrl);
   if (pdfDoc) {
     try {
-      await (pdfDoc as any).destroy();
+      void pdfDoc.loadingTask.destroy().catch(() => {});
     } catch {
       /* ignore */
     }
