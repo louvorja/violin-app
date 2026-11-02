@@ -14,7 +14,7 @@ require.cache[caminhoPaths] = {
   id: caminhoPaths,
   filename: caminhoPaths,
   loaded: true,
-  exports: { dataDir: () => base, filesDir: () => join(base, "files") },
+  exports: { dataDir: () => base, filesDir: () => join(base, "files"), canvaDir: () => join(base, "canva") },
 };
 
 const store = require("../canva/store.js");
@@ -69,12 +69,12 @@ function stubApi({ design, job, download } = {}) {
   return chamadas;
 }
 
-const PDF_ESPERADO = join(base, "files", "canva", "D1.pdf");
-const META_ESPERADO = join(base, "files", "canva", "D1.pdf.json");
+const PDF_ESPERADO = join(base, "canva", "D1.pdf");
+const META_ESPERADO = join(base, "canva", "D1.pdf.json");
 
 beforeEach(async () => {
   /* Cache entre casos: sem limpar, todo o resto leria o PDF do primeiro teste. */
-  rmSync(join(base, "files", "canva"), { recursive: true, force: true });
+  rmSync(join(base, "canva"), { recursive: true, force: true });
   await store.setToken({
     access_token: "ACESSO",
     refresh_token: "R",
@@ -190,12 +190,12 @@ describe("alvos do design", () => {
     const nome = basename(alvos.arquivo);
     expect(nome).toBe("______etc_passwd.pdf");
     expect(nome).not.toContain("/");
-    expect(alvos.arquivo.startsWith(join(base, "files", "canva"))).toBe(true);
+    expect(alvos.arquivo.startsWith(join(base, "canva"))).toBe(true);
   });
 });
 
 describe("baixar — fronteira de tamanho e de formato", () => {
-  const destino = join(base, "files", "canva", "grande.pdf");
+  const destino = join(base, "canva", "grande.pdf");
 
   it("arquivo maior que o teto não é gravado", async () => {
     vi.stubGlobal("fetch", () =>
@@ -313,7 +313,7 @@ describe("qualidade do export", () => {
     await exporter.exportarPdf("D1", RAPIDO);
     expect(um.find((c) => c.kind === "criar").body.format.export_quality).toBe("regular");
 
-    rmSync(join(base, "files", "canva"), { recursive: true, force: true });
+    rmSync(join(base, "canva"), { recursive: true, force: true });
     const dois = stubApi();
     await exporter.exportarPdf("D1", { ...RAPIDO, exportQuality: "pro" });
     expect(dois.find((c) => c.kind === "criar").body.format.export_quality).toBe("pro");
@@ -500,14 +500,14 @@ describe("limpar todo o cache", () => {
   });
 
   it("pasta que não existe é cache vazio, não erro", async () => {
-    rmSync(join(base, "files", "canva"), { recursive: true, force: true });
+    rmSync(join(base, "canva"), { recursive: true, force: true });
 
     await expect(exporter.limparTodoCachePdf()).resolves.toEqual({ ok: true, removidos: 0 });
   });
 
   it("arquivo de fora do cache fica onde está — só .pdf e .json saem", async () => {
-    mkdirSync(join(base, "files", "canva"), { recursive: true });
-    const alheio = join(base, "files", "canva", "notas.txt");
+    mkdirSync(join(base, "canva"), { recursive: true });
+    const alheio = join(base, "canva", "notas.txt");
     fsWrite(alheio, "não me apaga");
 
     await expect(exporter.limparTodoCachePdf()).resolves.toEqual({ ok: true, removidos: 0 });
@@ -519,8 +519,8 @@ describe("limpar todo o cache", () => {
 describe("exportarImg — a imagem inteira do design", () => {
   /* Bytes de verdade: string com \xff viraria UTF-8 (2 bytes) no Response. */
   const JPG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x4a, 0x46, 0x49, 0x46]);
-  const JPG_ESPERADO = join(base, "files", "canva", "D1.jpg");
-  const META_JPG = join(base, "files", "canva", "D1.jpg.json");
+  const JPG_ESPERADO = join(base, "canva", "D1.jpg");
+  const META_JPG = join(base, "canva", "D1.jpg.json");
 
   beforeEach(() => {
     rmSync(JPG_ESPERADO, { force: true });
@@ -580,136 +580,5 @@ describe("exportarImg — a imagem inteira do design", () => {
 
     expect(existsSync(JPG_ESPERADO)).toBe(false);
     expect(existsSync(META_JPG)).toBe(false);
-  });
-});
-
-describe("migração do cache antigo (<dados>/canva → files/canva)", () => {
-  /* O endereço antigo: `<dados>/canva`, ao lado de `files/`. */
-  const ANTIGO = join(base, "canva");
-  const ANTIGO_PDF = join(ANTIGO, "D1.pdf");
-  const ANTIGO_META = join(ANTIGO, "D1.pdf.json");
-  const NOVO_PDF = join(base, "files", "canva", "D1.pdf");
-  const NOVO_META = join(base, "files", "canva", "D1.pdf.json");
-
-  beforeEach(() => {
-    rmSync(ANTIGO, { recursive: true, force: true });
-    rmSync(join(base, "files", "canva"), { recursive: true, force: true });
-  });
-
-  it("leva PDF e meta para files/canva e some com a pasta antiga", async () => {
-    mkdirSync(ANTIGO, { recursive: true });
-    fsWrite(ANTIGO_PDF, PDF);
-    fsWrite(ANTIGO_META, JSON.stringify({ updatedAt: 111 }));
-
-    await expect(exporter.migrarCacheAntigo()).resolves.toMatchObject({ movidos: 2, falhas: 0 });
-
-    expect(existsSync(NOVO_PDF)).toBe(true);
-    expect(existsSync(NOVO_META)).toBe(true);
-    /* Sem a pasta antiga: nenhuma instalação nova volta a escrever nela. */
-    expect(existsSync(ANTIGO)).toBe(false);
-  });
-
-  it("o selo continua aceso depois de migrar — o cache não se perde", async () => {
-    mkdirSync(ANTIGO, { recursive: true });
-    fsWrite(ANTIGO_PDF, PDF);
-    fsWrite(ANTIGO_META, JSON.stringify({ updatedAt: 111 }));
-
-    await exporter.migrarCacheAntigo();
-
-    expect(await exporter.listarCachePdf()).toEqual({ D1: 111 });
-  });
-
-  it("sem a pasta antiga não faz nada", async () => {
-    await expect(exporter.migrarCacheAntigo()).resolves.toMatchObject({ movidos: 0, falhas: 0 });
-    expect(existsSync(ANTIGO)).toBe(false);
-  });
-
-  it("não sobrescreve o arquivo que já está no destino", async () => {
-    mkdirSync(ANTIGO, { recursive: true });
-    fsWrite(ANTIGO_PDF, "antigo");
-    mkdirSync(join(base, "files", "canva"), { recursive: true });
-    fsWrite(NOVO_PDF, "novo");
-
-    await expect(exporter.migrarCacheAntigo()).resolves.toMatchObject({ movidos: 0, falhas: 0 });
-
-    /* O do destino vence: pode ter sido reexportado depois. */
-    expect(readFileSync(NOVO_PDF, "utf8")).toBe("novo");
-  });
-
-  it("é idempotente: a segunda passada não tem o que mover", async () => {
-    mkdirSync(ANTIGO, { recursive: true });
-    fsWrite(ANTIGO_PDF, PDF);
-
-    await exporter.migrarCacheAntigo();
-    await expect(exporter.migrarCacheAntigo()).resolves.toMatchObject({ movidos: 0, falhas: 0 });
-
-    expect(existsSync(NOVO_PDF)).toBe(true);
-  });
-
-  it("devolve os dois endereços: quem chama precisa deles para reescrever referências", async () => {
-    const r = await exporter.migrarCacheAntigo();
-
-    expect(r.antigo).toBe(ANTIGO);
-    expect(r.novo).toBe(join(base, "files", "canva"));
-  });
-});
-
-describe("referências guardadas ao cache (playlist da Biblioteca de Mídia)", () => {
-  const { migrarCaminhosCanva } = require("../canva/migration.js");
-  const ANTIGO = join(base, "canva");
-  const NOVO = join(base, "files", "canva");
-
-  it("reescreve o caminho do item do Canva para o endereço novo", () => {
-    const lista = [
-      { id: "canva:D1", name: "Deck", path: join(ANTIGO, "D1.pdf"), type: "pdf", canva: true },
-    ];
-
-    const { lista: nova, trocados } = migrarCaminhosCanva(lista, ANTIGO, NOVO);
-
-    expect(trocados).toBe(1);
-    expect(nova[0].path).toBe(join(NOVO, "D1.pdf"));
-    expect(nova[0].id).toBe("canva:D1");
-  });
-
-  it("não toca em item de outra pasta, em URL de site nem em payload estranho", () => {
-    const lista = [
-      { id: "m1", path: join(base, "files", "musicas", "a.mp3") },
-      { id: "canva:D2", path: "https://www.canva.com/design/D2/view", type: "site" },
-      null,
-      "texto",
-      { id: "x" },
-    ];
-
-    const { lista: nova, trocados } = migrarCaminhosCanva(lista, ANTIGO, NOVO);
-
-    expect(trocados).toBe(0);
-    expect(nova).toEqual(lista);
-  });
-
-  it("não muta a lista original (o estado do main não muda sem querer)", () => {
-    const original = { id: "canva:D1", path: join(ANTIGO, "D1.pdf") };
-    const lista = [original];
-
-    const { lista: nova } = migrarCaminhosCanva(lista, ANTIGO, NOVO);
-
-    expect(original.path).toBe(join(ANTIGO, "D1.pdf"));
-    expect(nova).not.toBe(lista);
-    expect(nova[0]).not.toBe(original);
-  });
-
-  it("lista vazia ou não-lista devolve como veio", () => {
-    expect(migrarCaminhosCanva([], ANTIGO, NOVO)).toEqual({ lista: [], trocados: 0 });
-    const estranho = { nao: "e lista" };
-    expect(migrarCaminhosCanva(null, ANTIGO, NOVO)).toEqual({ lista: null, trocados: 0 });
-    expect(migrarCaminhosCanva(estranho, ANTIGO, NOVO)).toEqual({
-      lista: estranho,
-      trocados: 0,
-    });
-  });
-
-  it("prefixo parecido não é confundido (canva-x fica de fora)", () => {
-    const lista = [{ id: "outro", path: join(base, "canva-extra", "D1.pdf") }];
-
-    expect(migrarCaminhosCanva(lista, ANTIGO, NOVO).trocados).toBe(0);
   });
 });

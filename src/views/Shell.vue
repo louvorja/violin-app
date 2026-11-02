@@ -55,7 +55,8 @@
       :release="releaseNotes"
       @close="onReleaseNotesClose"
     />
-    <StartupCheckDialog v-if="startupCheckOpen" v-model="startupCheckOpen" />
+    <StorageSetupDialog v-if="storageSetupOpen" @complete="onStorageSetupComplete" />
+    <StartupCheckDialog v-if="startupCheckOpen && storageReady" v-model="startupCheckOpen" />
     <InstallAppDialog v-if="installDialogOpen" v-model="installDialogOpen" />
     <UpdateAvailableDialog
       v-if="updateDialogOpen"
@@ -93,6 +94,9 @@ const HotkeysCheatsheet = defineAsyncComponent(
 const InstallAppDialog = defineAsyncComponent(() => import("@/components/InstallAppDialog.vue"));
 const StartupCheckDialog = defineAsyncComponent(
   () => import("@/components/StartupCheckDialog.vue")
+);
+const StorageSetupDialog = defineAsyncComponent(
+  () => import("@/components/StorageSetupDialog.vue")
 );
 const ReleaseNotesDialog = defineAsyncComponent(
   () => import("@/components/ReleaseNotesDialog.vue")
@@ -141,6 +145,43 @@ const musicSearchOpen = ref(false);
 const bibleSearchOpen = ref(false);
 const hotkeysOpen = ref(false);
 const startupCheckOpen = ref(false);
+const storageSetupOpen = ref(false);
+const storageReady = ref(!Platform.isDesktop);
+let storageSetupPromise: Promise<void> | null = null;
+let finishStorageSetup: (() => void) | null = null;
+
+function onStorageSetupComplete(): void {
+  storageSetupOpen.value = false;
+  storageReady.value = true;
+  finishStorageSetup?.();
+  finishStorageSetup = null;
+  autoInstallCatalog();
+}
+
+/** A primeira escolha das pastas acontece antes de qualquer download de boot. */
+function ensureStorageSetup(): Promise<void> {
+  if (storageReady.value) return Promise.resolve();
+  if (storageSetupPromise) return storageSetupPromise;
+  storageSetupPromise = (async () => {
+    try {
+      const locations = await Platform.api?.storage.locations();
+      if (locations?.setupCompleted && !locations.pending && !locations.restartRequired) {
+        storageReady.value = true;
+        autoInstallCatalog();
+        return;
+      }
+    } catch (error) {
+      // A própria tela permite tentar ler novamente. Não prosseguir com
+      // downloads em um caminho que ainda não pudemos verificar.
+      console.warn("[Shell] storage setup falhou:", error);
+    }
+    storageSetupOpen.value = true;
+    await new Promise<void>((resolve) => {
+      finishStorageSetup = resolve;
+    });
+  })();
+  return storageSetupPromise;
+}
 const releaseNotesOpen = ref(false);
 const releaseNotes = ref<ReleaseNotes | null>(null);
 const updateDialogOpen = ref(false);
@@ -162,7 +203,7 @@ let catalogAutoInstallArmed = false;
 const shellOnline = () => $appdata.get<boolean>(KEYS.SHELL.IS_ONLINE, true) !== false;
 
 function autoInstallCatalog(): void {
-  if (!catalogAutoInstallArmed) return;
+  if (!catalogAutoInstallArmed || !storageReady.value) return;
   // Atualizou o app: renova o catálogo guardado (em qualquer plataforma).
   if (shellOnline()) void sync.refreshCatalogAfterUpdate();
   const context = {
@@ -221,7 +262,8 @@ const onOpenMusicSearch = () => {
 const onOpenBibleSearch = () => {
   bibleSearchOpen.value = true;
 };
-const onOpenStartupCheck = () => {
+const onOpenStartupCheck = async () => {
+  await ensureStorageSetup();
   startupCheckOpen.value = true;
 };
 
@@ -351,6 +393,7 @@ async function _showPendingReleaseNotes(): Promise<boolean> {
 }
 
 async function _continueBootAfterUpdate(): Promise<void> {
+  await ensureStorageSetup();
   _startupCheckPending = false;
   if (_startupCheckTimeout) {
     clearTimeout(_startupCheckTimeout);
@@ -365,6 +408,7 @@ async function _continueBootAfterUpdate(): Promise<void> {
 
 async function _showPendingStartupCheck() {
   if (!Platform.isDesktop) return;
+  await ensureStorageSetup();
 
   // Em desenvolvimento a verificação roda a cada recarga do Vite e prende o boot
   // num diálogo modal que só diz respeito à instalação do usuário final.
@@ -693,7 +737,7 @@ onMounted(() => {
   }
 
   if (Platform.isDesktop) {
-    _runStartupUpdateCheck();
+    void ensureStorageSetup().then(() => _runStartupUpdateCheck());
   } else {
     void _continueBootAfterUpdate();
   }

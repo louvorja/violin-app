@@ -90,21 +90,133 @@ SW — sem isso o próximo `get` regravava o JSON antigo. Nenhuma dessas ações
 
 ## Armazenamento desktop
 
-No desktop, todos os dados persistentes ficam em uma raiz única, por padrão
-`Documentos/LouvorJA Violin`, ou na pasta definida em Armazenamento. `paths.dataDir()`
-resolve essa raiz: mídia em `files/` (com os exports do Canva em `files/canva/`),
-vídeos baixados em `Videos/`, preferências em `storage/`, documentos em `library/`,
-cache do banco em `json_db/`, ferramentas em `bin/` e dados internos do Electron
-(IndexedDB, cookies, caches, logs) em `.electron/`.
-O endereço original de AppData/Application Support guarda a âncora `data-location.json`
-e o lock de instância única. Downloads e dados existentes são migrados sem sobrescrever
-destinos. Ao mover a raiz em Armazenamento, o perfil ainda aberto termina a migração no
-próximo boot; a tela indica que é preciso reiniciar.
+Programa, perfil privado, acervo e vídeos têm responsabilidades separadas.
+`paths.dataDir()` é fixo em `<appData>/LouvorJA Violin/profile`; contém `storage/`,
+`library/`, anexos privados em `attachments/media/`, `canva/`, `json_db/`, `bin/`,
+temporários de vídeo em `temp/videos/` e downloads HTTP em `temp/downloads/` e o perfil Chromium em `.electron/`.
+O IndexedDB inteiro continua privado: ele mistura catálogos com coleções pessoais
+e binários, portanto não pode ser compartilhado apenas porque também guarda catálogo.
 
-O cache de export do Canva (`files/canva/`) vive dentro do acervo, mas não é tratado como
-ele: tem contagem própria na tela de Armazenamento, sobrevive ao "Limpar mídia" e fica
-fora do limite de espaço e da remoção de arquivos não referenciados — apagá-lo por idade
-forçaria uma reexportação, que gasta a cota do Canva. Ele só sai pelos selos da aba Canva
+`paths.mediaDir()` aponta diretamente ao acervo (`musics/`, `images/`, `covers/`).
+O padrão é compartilhado, nunca Documentos particulares:
+
+| Sistema | Acervo comum |
+| --- | --- |
+| Windows | `%PUBLIC%/Documents/LouvorJA Violin/Acervo` (ou o endereço provisionado pelo instalador) |
+| macOS | `/Users/Shared/LouvorJA Violin/Acervo` |
+| Linux DEB/RPM | `/var/lib/louvorja-violin/acervo` |
+| Windows individual / Linux AppImage | O mesmo acervo comum, quando configurado e acessível |
+
+O instalador Windows para todos provisiona o acervo com permissão para usuários
+comuns e registra seu endereço em `%ProgramData%/LouvorJA Violin/storage-defaults.json`.
+Na instalação "só para mim", quem cria a pasta comum é o app, na primeira
+abertura; no Windows ela herdaria de `%PUBLIC%` o modelo "o dono edita, os outros
+leem", e uma segunda conta não conseguiria baixar nada. Por isso o app dá a
+`Users` o mesmo Modificar (`grantLocalAccountsSync`), só na raiz que acabou de
+criar.
+DEB/RPM provisionam o acervo em hook de instalação. No macOS, o app pode criar a
+pasta em `/Users/Shared`. Pastas compartilhadas novas permitem escrita às contas
+locais; os dados privados nunca são criados nelas. Permissões de pastas existentes
+não são ampliadas silenciosamente. Sem acesso ao local comum, o setup permite
+escolher uma pasta; não há substituição silenciosa por Documentos particulares.
+
+`paths.videosDir()` é independente e usa `<pasta de vídeos do sistema>/LouvorJA Violin`.
+A pasta nativa vem de `app.getPath("videos")`: Videos no Windows, Movies no macOS
+e o diretório XDG de vídeos no Linux, respeitando redirecionamentos do sistema.
+Vídeos continuam por conta mesmo quando o programa é instalado para todos;
+podem ser compartilhados por escolha de pasta no aplicativo. Reinstalações e
+atualizações preservam o escopo existente; troca de escopo exige desinstalar o
+programa e instalar novamente, preservando dados.
+
+No primeiro uso e em Armazenamento, `StorageLocations.vue` permite escolher acervo
+e vídeos independentemente, reutilizar arquivos existentes ou copiar os atuais.
+A alteração fica pendente em `<appData>/LouvorJA Violin/storage-layout.json` e
+é aplicada no próximo boot antes dos gravadores abrirem; conflitos não são
+sobrescritos, links não são percorridos e a origem permanece intacta.
+Disco indisponível não é substituído por uma pasta vazia. Classic tem seleção
+opcional separada, automática ou manual, sem ativação silenciosa.
+
+A migração da antiga raiz única copia e confere os dados privados antes de
+publicar o perfil fixo, preservando todas as origens do IndexedDB. Preferências
+antigas ainda no AppData são recuperadas quando ausentes na raiz ativa. Acervo e
+vídeos não são copiados: ficam em `<dados>/files` e `<dados>/Videos`, registrados
+como escolha do usuário, que pode mudá-los depois em Armazenamento. Os padrões
+comuns da tabela valem só para instalações novas, reconhecidas pela ausência de
+âncora e de perfil no AppData (a beta.14+ grava a âncora a cada abertura; as
+anteriores usavam o AppData como perfil); nesse caso Documentos nem é consultado.
+A raiz plana legada com `musics/` ao lado de `Videos/` continua aceita como está;
+novas escolhas exigem raízes sem sobreposição.
+
+"Sem acesso" não é "não existe": `existsSync` responde `false` nos dois casos, e
+tomar um pelo outro trataria quem tem dados como instalação nova. Pasta antiga
+ilegível ou ausente (TCC do macOS, disco desconectado) levanta
+`LJ_DATA_UNAVAILABLE`. Essa e qualquer outra falha da preparação abrem o app num
+perfil provisório em `<appData>/LouvorJA Violin/fallback`, com aviso persistente;
+nada é publicado (`saveLayout` recusa) e a próxima abertura tenta de novo.
+
+**Recuperação.** Nenhum estado em disco pode prender a conta no provisório:
+
+- *Conserto sozinho, sem perguntar* (`storageLayout.js`): o que tem uma única
+  resposta certa. Registro ilegível ou inválido vai para `recovery/` e o perfil
+  reabre pelo `.layout-origin.json`; uma `pending` inválida perde só a mudança.
+  Perfil sem registro ganha o registro de volta, sem copiar a origem por cima.
+  Registro sem o perfil copia a pasta antiga de novo, mantendo acervo e vídeos
+  escolhidos. `profile.migrating` alheio vai para `recovery/`. Âncora truncada
+  entrega o endereço quando o texto ainda o tem; ilegível, vale o endereço
+  padrão, como na própria versão antiga, e nunca é regravada. JSON corrompido
+  nos documentos é copiado como está.
+- *Diagnóstico* (`storageRecovery.js`, `recovery.json`): cada abertura no
+  provisório conta uma tentativa e guarda o motivo. O aviso abre um diálogo
+  (`src/helpers/StorageRecovery.ts`) com o que fazer e o detalhe técnico;
+  "Tentar de novo" reinicia. A partir da segunda tentativa entra "Começar do
+  zero": perfil vazio, sem copiar a instalação anterior, com acervo e vídeos onde
+  estavam quando ainda dá para achá-los. Até o perfil vazio ser publicado, uma
+  nova queda continua sendo "do zero".
+- *Versão anterior usada depois da migração*: a beta.14+ regrava a âncora a cada
+  abertura. Mudou depois da última vez que esta versão olhou
+  (`profile/.legacy-anchor-seen.json`), o app pergunta uma vez se traz de volta
+  o que foi feito lá; "Trazer de volta" copia a pasta antiga de novo.
+
+Nada é apagado: o que sai do caminho vai para `<appData>/LouvorJA Violin/recovery/<quando>-<motivo>/`,
+e só as três guardas mais recentes ficam no disco. Checkpoints `.partial`, cache yt-dlp e marcadores de migração
+vão para `temp/videos/`; streams antigos descartáveis não são reutilizados.
+A primeira migração e mudanças pendentes usam um worker e uma janela de progresso num processo
+auxiliar com perfil temporário; o processo principal conserva seu singleton e
+só abre a sessão definitiva após a publicação. Não há reinício do processo
+principal nem do servidor de desenvolvimento. Caches regeneráveis na raiz do
+Chromium (HTTP, código, GPU, logs e relatórios de falha) permanecem na origem;
+IndexedDB, blobs, Service Worker/CacheStorage e entradas desconhecidas são
+copiados e verificados. O hash inicial é reaproveitado na verificação da cópia,
+e o manifesto da origem é conferido novamente antes da publicação. O processo
+auxiliar mantém os leases de acervo ativos enquanto o worker faz a cópia.
+Falha na mudança de acervo/vídeos mantém caminhos anteriores e exibe o erro no
+app, permitindo corrigir ou cancelar. Temporários de transferência ficam no
+perfil; publicação entre volumes usa staging oculto transitório no destino,
+pois rename atômico não atravessa volumes. No Windows, a publicação também cria
+o arquivo no destino para herdar suas permissões, em vez de carregar a ACL
+privada com um rename (contrato de [descritores de segurança do Windows](https://learn.microsoft.com/en-us/windows/win32/fileio/file-security-and-access-rights)). Arquivos parciais nunca aparecem
+como arquivos finais.
+As outras instâncias antigas devem estar fechadas durante essa migração:
+marcadores de processo ativos/ambíguos ou mudanças nos arquivos durante a cópia
+interrompem a publicação. Essa conferência não é um snapshot transacional de
+um perfil aberto por uma versão antiga em outra conta.
+
+`storageAccess` mantém uma concessão de escrita exclusiva por pasta, renovada pelo
+processo. Outras contas podem ler os arquivos prontos com seus próprios perfis.
+Acervos compartilhados não têm limpeza automática nem exclusão pelo app nesta
+implementação. Reprodução de vídeo somente leitura usa temporários privados.
+Compartilhamento no macOS/Linux exige permissões do sistema adequadas na pasta
+escolhida. Somente diretórios novos de acervo comum recebem `0777`, com arquivos
+novos legíveis (`0644`); não há mudança do umask global nem de permissões de
+pastas existentes. O perfil e seus temporários continuam privados. O app não
+eleva privilégios; o provisionamento DEB/RPM pertence ao instalador.
+O contrato de armazenamento web/PWA continua no navegador.
+
+O cache de export do Canva (`<perfil>/canva/`) é da conta e fica fora do acervo
+compartilhado: tem contagem própria na tela de Armazenamento, não entra no "Limpar mídia"
+nem no limite de espaço — apagá-lo por idade forçaria uma reexportação, que gasta a cota
+do Canva. A beta.18 o guardava em `files/canva/`; a migração do perfil o copia para cá e
+reescreve as referências guardadas. Ele só sai pelos selos da aba Canva
 ou pelo botão "Limpar exportações do Canva".
 
 ## 🧠 Stack
@@ -601,10 +713,10 @@ Remoto, Sincronizar e StartupCheck.
 ## Download de coletâneas no web/PWA
 
 `Platform.download` e `Platform.storage` têm o mesmo contrato nas duas plataformas:
-no Electron são o downloader do main process e a pasta de dados; no web/PWA são o
+no Electron são o downloader do main process e a pasta de acervo; no web/PWA são o
 adaptador `helpers/WebFileStore.ts`, que grava no Cache Storage (`louvorja-audio` e
 `louvorja-images`). `useSyncManager` e a tela **Sincronizar** não distinguem a
-plataforma: o PWA mostra só a aba Coletâneas (Bíblia, pasta de dados e versão
+plataforma: o PWA mostra só a aba Coletâneas (Bíblia, pastas nativas e versão
 clássica seguem exclusivos do desktop).
 
 - **URL é a chave.** O arquivo é guardado sob a mesma URL que o player pede
@@ -654,7 +766,7 @@ que o navegador de fato não oferece.
   mídia" apaga só os caches de áudio e imagem; o catálogo (IndexedDB) fica.
 - **Só no desktop, sem equivalente web**: baixar vídeo online (yt-dlp), servidor
   HTTP local (chat, controle remoto, dispositivos, OBS), atalhos globais do SO,
-  iniciar com o sistema e pasta de dados escolhida pelo usuário.
+  iniciar com o sistema e pastas de acervo e vídeos escolhidas pelo usuário.
 
 ## 🖥️ Versão clássica (Delphi)
 
@@ -662,14 +774,15 @@ A detecção da versão clássica é feita em `electron/main/classicLibrary.js`,
 usando os palpites de `electron/main/mediaRoots.js`. O app aceita tanto a raiz
 da instalação quanto a própria pasta `config/`; mídia em `capas/`, `imagens/`
 ou `musicas/` basta para validar, assim como um `config/database.db` não vazio.
-No Windows, os dois `Program Files` e as pastas expostas por
-`ProgramFiles`/`ProgramFiles(x86)` são consultados — a unidade não é fixada em
-`C:`.
+No Windows, os dois `Program Files` e atalhos da instalação são consultados,
+incluindo o argumento legado `dir_config`; a unidade não é fixada em `C:`.
+No macOS/Linux, a escolha manual e candidatos de instalações Wine continuam
+disponíveis. Todos os candidatos são validados antes de oferecer a seleção.
 
 ### Fluxo de login
 
-- A configuração é explícita na seção **Armazenamento** de
-  `AppMenuSincronizar.vue`; o app não ativa uma pasta de outro programa sem a
+- A configuração é explícita no setup ou na seção **Armazenamento**, por
+  `StorageLocations.vue`; o app não ativa uma pasta de outro programa sem a
   confirmação do operador.
 - `storage.classicDir`, `storage.classicLang` e `storage.classicEnabled` são
   aplicados pelo processo principal sem reiniciar a aplicação.
@@ -689,12 +802,12 @@ No Windows, os dois `Program Files` e as pastas expostas por
   importado automaticamente.
 - Quando o modo clássico está ativo, a origem em runtime é atualizada sem
   reiniciar a aplicação e o cache de disponibilidade é refeito.
-- Ao trocar a pasta, o alerta oferece `Copiar` / `Mover` / `Cancelar`.
+- A cópia para o acervo próprio é uma ação explícita separada da consulta ao Classic.
 - A importação clássica copia apenas as pastas de mídia:
   - `capas` → `covers`
   - `imagens` → `images`
   - `musicas` → `musics/<lang>`
-- Em `Mover`, só essas pastas são removidas da origem.
+- A origem nunca é apagada; arquivos diferentes no destino interrompem a cópia.
 
 ---
 
@@ -867,7 +980,7 @@ via `Platform.updater`. O comportamento varia conforme a plataforma:
 
 | Instalação          | Check                              | Download / Instalação                                                                                                                       |
 | ------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Windows (NSIS)**  | electron-updater (provider GitHub) | Instalação por usuário em `%LOCALAPPDATA%\Programs`; `.exe` + blockmap (diferencial). Cópias legadas em `Program Files` pedem UAC explícito |
+| **Windows (NSIS)**  | electron-updater (provider GitHub) | "Só para mim" em `%LOCALAPPDATA%\Programs` atualiza sem UAC; "para todos" e cópias legadas em `Program Files` pedem UAC a cada atualização; `.exe` + blockmap (diferencial) |
 | **macOS (DMG/zip)** | electron-updater                   | electron-updater — `.zip` (substitui o `.app`)                                                                                              |
 | **Linux AppImage**  | electron-updater                   | electron-updater — substitui o AppImage                                                                                                     |
 | **Linux deb/rpm**   | electron-updater                   | electron-updater — via `dpkg`/`apt`/`rpm` (exige sudo)                                                                                      |
@@ -942,21 +1055,34 @@ Persistidas em `user_data.options` e aplicadas em runtime via `Platform.updater.
    mesma versão seja retomada automaticamente.
 5. Estado propagado ao renderer via IPC `updater:state` (`Platform.updater.onStateChange`).
 
-No Windows, o instalador assistido fixa o modo por usuário (`perMachine: false`,
-sem elevação no caminho normal) e grava o protocolo `louvorja://` em
-`HKCU\Software\Classes`. Uma instalação antiga que tenha sido registrada por
-usuário dentro de `Program Files` é reconhecida pelo script NSIS e atualizada
-no mesmo diretório somente depois da confirmação do UAC; o updater não tenta
-fazê-lo silenciosamente ao fechar o app (`installRequiresElevation`). Isso evita
-o estado anterior, em que a atualização falhava sem aviso e deixava uma segunda
-cópia concorrente. Se o Windows iniciar diretamente o instalador com um token
-elevado — por compatibilidade `RUNASADMIN`, shell elevado, UAC desativado ou a
-conta Administrator interna — o NSIS compara o SID desse token com o SID do
-processo do Explorer. A instalação por usuário pode continuar quando ambos
-pertencem à mesma conta; credenciais de outro administrador continuam
-bloqueadas para não direcionar HKCU e `LocalAppData` ao perfil errado. A
-instância interna do UAC permanece reservada à recuperação do legado em
-`Program Files`.
+No Windows, o instalador assistido tem dois modos. **Só para mim** (o padrão)
+instala em `%LOCALAPPDATA%\Programs`, registra `louvorja://` e `.slja` em
+`HKCU\Software\Classes` e se atualiza sem UAC. **Todos os usuários** instala em
+`Program Files`, registra em HKLM, prepara o acervo comum com escrita para
+`Users` e grava `%ProgramData%/LouvorJA Violin/storage-defaults.json`; cada
+atualização pede UAC, então o updater não instala ao fechar o app
+(`installRequiresElevation`) e espera o operador clicar em "Instalar". O
+instalador grava `resources/install-scope.json` com o modo escolhido. Perfil,
+preferências e vídeos são sempre da conta que abre o app, nos dois modos.
+
+Reinstalar ou atualizar mantém o modo existente; trocar exige desinstalar
+(os dados ficam) e instalar de novo. Uma instalação antiga registrada por usuário
+dentro de `Program Files` é tratada como "todos os usuários" e só é atualizada
+depois do UAC, sem deixar uma segunda cópia concorrente. Se o Windows iniciar
+o instalador "só para mim" com um token elevado — `RUNASADMIN`, shell elevado,
+UAC desativado ou a conta Administrator interna —, o NSIS compara o SID desse
+token com o do Explorer: credenciais de outro administrador são recusadas para
+não gravar HKCU e `LocalAppData` no perfil errado.
+
+O instalador só enxerga as cópias da conta que o executa. Quando um
+administrador instala "para todos" numa máquina em que o operador já tinha a
+cópia dele, essa conta fica com duas cópias que abrem o mesmo perfil — e a da
+máquina, que depende de UAC, tende a ficar para trás. No boot, antes do lock de
+instância única, `windowsInstallCopies.newerCopy` compara as versões (lidas do
+`app.asar` de cada cópia) e a mais antiga abre a mais nova, repassando os
+argumentos, e encerra; no empate fica a que se atualiza sem UAC. As cópias são
+achadas no lugar padrão de cada modo e em `<appData>/LouvorJA Violin/installations.json`,
+onde cada uma se registra ao abrir. `LJ_HANDED_OVER` impede uma segunda troca.
 
 A ordem do fluxo de boot é: **atualização → release notes → startup check**.
 Cada etapa encadeia na próxima apenas quando concluída (ou dispensada), e há um
@@ -1238,7 +1364,7 @@ Media.openYouTube(embedUrl, título)          ← único ponto de entrada (5 cha
        ├─ /operator               prévia do vídeo (abre se "Abrir operador" estiver ligado)
        └─ janela principal        único que toca o áudio; controla play/pausa/busca/volume
 
-  Quando as trilhas terminam: ffmpeg junta sem recodificar → <dados>/Videos/<id>.mp4
+  Quando as trilhas terminam: ffmpeg junta sem recodificar → <paths.videosDir()>/<id>.mp4
   (a próxima vez toca do arquivo: `louvorja://onlinevideo/<id>.mp4`, os dois endereços iguais)
 ```
 
@@ -1275,12 +1401,13 @@ mesmas trilhas e não abre uma segunda conexão. Só um vídeo sem trilhas servi
   (`onlineVideo:prepare`, uma vez por sessão).
 - **Progresso** aparece em "Processos em segundo plano" (`useBackgroundTasks`, com botão de
   cancelar). Vídeo já em cache não pisca tarefa nenhuma.
-- **Vídeos baixados** em `<dados>/Videos/` (por padrão, `Documents/LouvorJA Violin/Videos`).
-  Downloads de versões anteriores em `userData/online_videos/` são movidos na inicialização,
-  preservando marcas de manter e parciais, sem sobrescrever o destino. A pasta acompanha a
-  mudança da raiz de dados. O cache automático mantém a cota de 6 GB,
-  despeja o menos usado; "Apagar vídeos baixados" em Opções. Parciais com mais de 1 dia são
-  varridos na abertura do app.
+- **Vídeos baixados** em `paths.videosDir()` (por padrão, a pasta nativa de vídeos
+  da conta, subpasta `LouvorJA Violin`). A pasta é independente do perfil e do acervo.
+  Vídeos antigos são copiados e verificados sem apagar a origem. Parciais, trilhas,
+  cache do downloader e marcadores privados ficam em `profile/temp/videos/`.
+  O cache automático privado mantém a cota de 6 GB e despeja o menos usado;
+  manutenção de vídeos compartilhados é desativada. Parciais com mais de 1 dia
+  são varridos na abertura do app.
 - **Vídeos mantidos** (`<id>.keep` ao lado do arquivo): o que o operador baixou de propósito,
   em "Meus Vídeos Online", e o que projetou a partir da própria lista. O despejo por espaço
   nunca os leva e eles não contam na cota (que é do cache automático). Sair só pelo botão de
@@ -1294,7 +1421,7 @@ mesmas trilhas e não abre uma segunda conexão. Só um vídeo sem trilhas servi
   já começa o download e guarda o vídeo, salvo com o download desligado nas opções.
 - **A cópia única** (`onlineVideo:stream`, `progressive.js`): o yt-dlp pede só os **links** das
   duas trilhas (`-J`, sem baixar) e o main as baixa **uma vez**, em pedaços de 2 MB, para
-  arquivos do tamanho final em `Videos/.stream/<id>/` que vão sendo preenchidos.
+  arquivos do tamanho final em `profile/temp/videos/.stream/<id>/` que vão sendo preenchidos.
   Projeção, retorno, operador e o player do app leem desses arquivos por `Range`, em
   `louvorja://onlinestream/<id>/video|audio` — o handler espera o trecho que ainda não chegou
   e, num salto, o baixador pula para lá. Começa em ~7 s. Ao terminar, o ffmpeg junta as trilhas
@@ -2167,7 +2294,7 @@ real e responde pela `RENDERER_RESPONSE_CHANNEL`.
 | POST            | `/api/media-library`                                      | `{ action: project, id } \| { action: canva-project, designId?\|url? } \| { action: playlist, command: add\|remove\|clear\|goto\|play\|next\|prev\|stop, id?/index? }` | Projeta item/design, controla a playlist (permission `media_library`)                    |
 | GET             | `/api/media-library?action=playlist`                      | —                                                                                                                                                                      | Itens da playlist (`modules.media_library.playlist` do userData, servido pelo main)      |
 | POST            | `/api/media-library` (`canva-export`/`canva-clear-cache`) | `{ designId, format? }`                                                                                                                                                | Exporta JPG/PDF sem projetar / elimina o cache do design (round-trip 30 s)               |
-| POST            | `/api/media-library/upload`                               | bytes crus + `X-File-Name`/`X-Mime-Type`/`X-Category-Id`                                                                                                               | Recebe arquivo do celular em `<dados>/files/library/media/` (permission `media_library`) |
+| POST            | `/api/media-library/upload`                               | bytes crus + `X-File-Name`/`X-Mime-Type`/`X-Category-Id`                                                                                                               | Recebe arquivo do celular em `<perfil>/attachments/media/` (permission `media_library`) |
 | GET             | `/api/user-data`                                          | `?path=...`                                                                                                                                                            | Lê valor do user_data                                                                    |
 | GET             | `/api/db/:path`                                           | —                                                                                                                                                                      | JSON do banco (cache local ou remoto)                                                    |
 | GET             | `/libras/:token`                                          | —                                                                                                                                                                      | Bundle de animação VLibras                                                               |
@@ -2206,7 +2333,7 @@ A aba **Biblioteca de Mídia** (`src/views/remote_control/RemoteMediaLibrary.vue
   (`express.json` global tem limite de 100 kb e não consome stream de outro
   content-type, então o pipe chega inteiro na rota). O main valida a extensão
   pelo `X-File-Name` (imagem/vídeo/pdf), grava `.tmp` + `rename` em
-  `<dados>/files/library/media/<id>.<ext>` (guarda de path pelo `joinDentroDe`)
+  `<perfil>/attachments/media/<id>.<ext>` (guarda de path pelo `joinDentroDe`)
   e avisa o renderer (`action: "saved"`), que registra no IndexedDB com o
   thumb `louvorja://local`. Teto: 300 MB no servidor (413), 250 MB no cliente.
 - **Miniaturas**: `?action=image&url=` busca os bytes no renderer pelo protocolo
@@ -2535,10 +2662,10 @@ web do Canva e sem janela nova.
 `electron/main/canva/export.js`:
 
 1. `GET /v1/designs/{id}` → `updated_at` (chave do cache);
-2. se `<dados>/files/canva/<id>.<ext>` e o `<id>.<ext>.json` ao lado batem → **cache, nenhum job**;
+2. se `<perfil>/canva/<id>.<ext>` e o `<id>.<ext>.json` ao lado batem → **cache, nenhum job**;
 3. `POST /v1/exports {design_id, format:{type:"pdf", export_quality}}` → job;
 4. `GET /v1/exports/{jobId}` a cada 1 s, teto de 60 tentativas;
-5. baixa para `<dados>/files/canva/<id>.<ext>` e grava o `.json` com `updated_at` e
+5. baixa para `<perfil>/canva/<id>.<ext>` e grava o `.json` com `updated_at` e
    a qualidade pedida.
 
 Dois guards de fronteira, porque errar aqui é um canvas em branco na frente da
@@ -2647,7 +2774,7 @@ zero só faz o pdf.js reclamar.
 
 #### Selo de cache na lista
 
-O arquivo já fica guardado em `<dados>/files/canva/<designId>.<ext>` + `.json` — o que
+O arquivo já fica guardado em `<perfil>/canva/<designId>.<ext>` + `.json` — o que
 faltava era o operador VER isso e conseguir apagar.
 
 - **`canva:cachedPdfs`** devolve `designId → updated_at` de tudo que tem
@@ -2664,7 +2791,7 @@ faltava era o operador VER isso e conseguir apagar.
 - **Exclusão**: `canva:clearCachedPdf` → `yesno` → apaga `.pdf` + `.json`. O id
   é validado **na fronteira** (IPC) e **de novo** no `limparCachePdf`, porque
   ele vira caminho de arquivo; `nomeSeguro` neutraliza `..` e `/`, então o alvo
-  sempre cai em `<dados>/files/canva`.
+  sempre cai em `<perfil>/canva`.
 
 ### Conteúdo e projeção (modo "site")
 

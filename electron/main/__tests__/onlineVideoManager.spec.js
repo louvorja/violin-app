@@ -14,7 +14,9 @@ const A = "aaaaaaaaaaa";
 const B = "bbbbbbbbbbb";
 const C = "ccccccccccc";
 
+let root;
 let dir;
+let workDir;
 
 function deferred() {
   let resolve;
@@ -63,6 +65,7 @@ function make(overrides = {}) {
   const run = overrides.run ?? okRun();
   const manager = createManager({
     dir,
+    workDir,
     tools,
     run,
     resolve: noDirectLinks,
@@ -73,11 +76,106 @@ function make(overrides = {}) {
 }
 
 beforeEach(() => {
-  dir = fs.mkdtempSync(path.join(os.tmpdir(), "lj-mgr-"));
+  root = fs.mkdtempSync(path.join(os.tmpdir(), "lj-mgr-"));
+  dir = path.join(root, "videos");
+  workDir = path.join(root, "private-work");
+  fs.mkdirSync(dir);
 });
 
 afterEach(() => {
-  fs.rmSync(dir, { recursive: true, force: true });
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+describe("acervo compartilhado com trabalho privado", () => {
+  it.skipIf(process.platform === "win32")("publica vídeos e marcas legíveis entre contas sem expor o trabalho privado", async () => {
+    const run = vi.fn(async ({ outDir, id }) => {
+      fs.mkdirSync(outDir, { recursive: true, mode: 0o700 });
+      const file = path.join(outDir, `${id}.mp4`);
+      fs.writeFileSync(file, "ready", { mode: 0o600 });
+      return { file, size: 5, meta: {} };
+    });
+    const { manager } = make({ run, shared: true, canMaintain: () => false });
+    expect(await manager.ensure(A, { keep: true })).toMatchObject({ ok: true });
+    expect(fs.statSync(manager.store.pathFor(A)).mode & 0o777).toBe(0o644);
+    expect(fs.statSync(path.join(dir, `${A}.keep`)).mode & 0o777).toBe(0o644);
+    expect(fs.statSync(workDir).mode & 0o777).toBe(0o700);
+    await manager.close();
+  });
+
+  it("downloads e cache do worker ficam privados até a publicação do MP4 pronto", async () => {
+    const waiting = deferred();
+    const complete = okRun();
+    const run = vi.fn(async (options) => {
+      fs.mkdirSync(options.outDir, { recursive: true });
+      fs.writeFileSync(path.join(options.outDir, "download.part"), "incomplete");
+      fs.mkdirSync(options.cacheDir, { recursive: true });
+      fs.writeFileSync(path.join(options.cacheDir, "player.json"), "cache");
+      await waiting.promise;
+      return complete(options);
+    });
+    const { manager } = make({ run });
+    const downloading = manager.ensure(A);
+    await vi.waitFor(() => expect(run).toHaveBeenCalled());
+    expect(fs.readdirSync(dir)).toEqual([]);
+    expect(run.mock.calls[0][0]).toMatchObject({
+      outDir: path.join(workDir, ".partial", A),
+      cacheDir: path.join(workDir, ".ytdlp-cache"),
+    });
+    waiting.resolve();
+    expect((await downloading).ok).toBe(true);
+    expect(fs.readdirSync(dir)).toEqual([`${A}.mp4`]);
+    await manager.close();
+  });
+
+  it("leitor reaproveita MP4 sem tocar mtime/marca e recusa persistência ou limpeza", async () => {
+    const { manager, run } = make({ canWrite: () => false, canMaintain: () => false });
+    fs.writeFileSync(manager.store.pathFor(A), "ready");
+    const old = new Date(1_000);
+    fs.utimesSync(manager.store.pathFor(A), old, old);
+    expect(await manager.ensure(A, { keep: true })).toMatchObject({ ok: true, cached: true });
+    expect(fs.statSync(manager.store.pathFor(A)).mtimeMs).toBe(1_000);
+    expect(manager.keep(A)).toBe(false);
+    expect(await manager.ensure(B)).toMatchObject({ ok: false, error: { kind: "disk" } });
+    await expect(manager.remove(A)).rejects.toThrow("não permite");
+    await expect(manager.clear()).rejects.toThrow("não permite");
+    expect(run).not.toHaveBeenCalled();
+    expect(manager.store.has(A)).toBe(true);
+  });
+
+  it("escritor de raiz compartilhada pode baixar mas não aplica a cota privada", async () => {
+    const { manager } = make({ canWrite: () => true, canMaintain: () => false, maxBytes: 1 });
+    fs.writeFileSync(manager.store.pathFor(A), "previous video");
+    expect((await manager.ensure(B)).ok).toBe(true);
+    expect(manager.store.has(A)).toBe(true);
+    expect(manager.store.has(B)).toBe(true);
+  });
+
+  it("avisa falta de espaço no volume privado mesmo com vídeos em outro volume", async () => {
+    const workDir = path.join(root, "work");
+    const { manager, run } = make({ workDir, freeBytes: async (root) => root === workDir ? 0 : MIN_FREE_BYTES * 10 });
+    expect(await manager.ensure(A)).toMatchObject({ ok: false, error: { kind: "disk" } });
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("um gerenciador não limpa trilhas da outra conta e usa seu próprio cache do yt-dlp", async () => {
+    const videos = path.join(dir, "videos");
+    const firstWork = path.join(dir, "first");
+    const secondWork = path.join(dir, "second");
+    const first = make({ dir: videos, workDir: firstWork });
+    const second = make({ dir: videos, workDir: secondWork });
+    fs.mkdirSync(path.join(firstWork, ".stream", A), { recursive: true });
+    fs.writeFileSync(path.join(firstWork, ".stream", A, "video.mp4"), "playing");
+    await second.manager.init();
+    expect(fs.readFileSync(path.join(firstWork, ".stream", A, "video.mp4"), "utf8")).toBe("playing");
+    expect((await second.manager.ensure(B)).ok).toBe(true);
+    expect(second.run.mock.calls[0][0]).toMatchObject({
+      outDir: path.join(secondWork, ".partial", B),
+      cacheDir: path.join(secondWork, ".ytdlp-cache"),
+    });
+    expect((await first.manager.ensure(B)).cached).toBe(true);
+    expect(first.run).not.toHaveBeenCalled();
+    await Promise.all([first.manager.close(), second.manager.close()]);
+  });
 });
 
 describe("ensure — caminho feliz", () => {
@@ -113,7 +211,7 @@ describe("ensure — caminho feliz", () => {
       meta: { height: 1080 },
     });
     expect(fs.existsSync(path.join(dir, `${A}.mp4`))).toBe(true);
-    expect(fs.existsSync(path.join(dir, ".partial", A))).toBe(false);
+    expect(fs.existsSync(path.join(workDir, ".partial", A))).toBe(false);
     expect(run).toHaveBeenCalledTimes(1);
     expect(run.mock.calls[0][0].id).toBe(A);
   });
@@ -1086,11 +1184,11 @@ describe("cache", () => {
     expect(await manager.list()).toEqual([]);
   });
 
-  it("remove apaga o MP4 se o abort chegar durante o move final", async () => {
+  it("remove apaga o MP4 se o abort chegar durante a publicação final", async () => {
     const moved = deferred();
     const releaseMove = deferred();
-    const originalMove = fsExtra.move;
-    const move = vi.spyOn(fsExtra, "move").mockImplementation(async (...args) => {
+    const originalMove = fsExtra.rename;
+    const move = vi.spyOn(fsExtra, "rename").mockImplementation(async (...args) => {
       await originalMove(...args);
       moved.resolve();
       await releaseMove.promise;
@@ -1390,6 +1488,22 @@ describe("stream (tocar já, enquanto baixa uma vez só)", () => {
   }
 
   const read = async (served) => Buffer.from(await new Response(served.body).arrayBuffer());
+
+  it("leitor continua streaming privado sem publicar MP4 na pasta compartilhada", async () => {
+    const shared = path.join(dir, "shared");
+    const workDir = path.join(dir, "private");
+    const { manager, mux, video } = makeStream({ cfg: {
+      dir: shared, workDir, canWrite: () => false, canMaintain: () => false,
+    } });
+    expect(await manager.stream(A)).toMatchObject({ ok: true, cached: false });
+    const response = manager.serveStream(A, "video", null);
+    expect(await read(response)).toEqual(video);
+    await vi.waitFor(() => expect(manager.diagnosticSnapshot().online_video_active_count).toBe(0));
+    expect(fs.existsSync(shared)).toBe(false);
+    expect(mux).not.toHaveBeenCalled();
+    expect(fs.existsSync(path.join(workDir, ".stream", A))).toBe(true);
+    await manager.close();
+  });
 
   it("mede resolução e abertura separadamente, sem confundir cache com rede", async () => {
     let clock = 0;
@@ -1717,7 +1831,7 @@ describe("stream (tocar já, enquanto baixa uma vez só)", () => {
     expect(mux).toHaveBeenCalledTimes(1);
     expect(mux.mock.calls[0][0]).toMatchObject({ ffmpeg: "/fake/ffmpeg" });
     expect(manager.store.has(A)).toBe(true);
-    expect(fs.existsSync(path.join(dir, ".partial", A))).toBe(false);
+    expect(fs.existsSync(path.join(workDir, ".partial", A))).toBe(false);
     expect(run).not.toHaveBeenCalled(); // o yt-dlp nem entrou no download
     expect(tools.refreshYtdlp).not.toHaveBeenCalled();
   });
@@ -1924,7 +2038,7 @@ describe("stream (tocar já, enquanto baixa uma vez só)", () => {
       await manager.ensure(A);
       await new Promise((r) => setTimeout(r, 50));
       expect(manager.serveStream(A, "video", "bytes=0-9")).toBeNull();
-      expect(fs.existsSync(path.join(dir, ".stream", A))).toBe(false);
+      expect(fs.existsSync(path.join(workDir, ".stream", A))).toBe(false);
       expect(manager.store.has(A)).toBe(true);
     });
 
@@ -1985,7 +2099,7 @@ describe("stream (tocar já, enquanto baixa uma vez só)", () => {
       expect(await download).toMatchObject({ ok: false, error: { kind: "cancelled" } });
       await new Promise((r) => setTimeout(r, 50));
       expect(manager.serveStream(A, "video", "bytes=0-9")).toBeNull();
-      expect(fs.existsSync(path.join(dir, ".stream", A))).toBe(false);
+      expect(fs.existsSync(path.join(workDir, ".stream", A))).toBe(false);
       expect(manager.store.has(A)).toBe(false);
     });
 
@@ -2027,7 +2141,7 @@ describe("stream (tocar já, enquanto baixa uma vez só)", () => {
       expect(res).toMatchObject({ ok: false, error: { kind: "forbidden" } });
       expect(manager.serveStream(A, "video", "bytes=0-9")).toBeNull();
       expect(manager.store.has(A)).toBe(false);
-      expect(fs.existsSync(path.join(dir, ".stream", A))).toBe(false);
+      expect(fs.existsSync(path.join(workDir, ".stream", A))).toBe(false);
     });
 
     it("o ffmpeg falha ao juntar: nada entra no cache, e o erro chega", async () => {
@@ -2038,7 +2152,7 @@ describe("stream (tocar já, enquanto baixa uma vez só)", () => {
       await manager.stream(A);
       expect(await manager.ensure(A)).toMatchObject({ ok: false, error: { kind: "format" } });
       expect(manager.store.has(A)).toBe(false);
-      expect(fs.existsSync(path.join(dir, ".partial", A)) && fs.readdirSync(path.join(dir, ".partial", A)).length).toBeFalsy();
+      expect(fs.existsSync(path.join(workDir, ".partial", A)) && fs.readdirSync(path.join(workDir, ".partial", A)).length).toBeFalsy();
     });
 
     it("cancelar para o download, acorda quem lê e não deixa trilhas em disco", async () => {
@@ -2079,7 +2193,7 @@ describe("stream (tocar já, enquanto baixa uma vez só)", () => {
       expect(fetchRange).not.toHaveBeenCalled();
       expect((await manager.status()).active).toEqual([]);
       expect(manager.serveStream(A, "video", "bytes=0-9")).toBeNull();
-      expect(fs.existsSync(path.join(dir, ".stream", A))).toBe(false);
+      expect(fs.existsSync(path.join(workDir, ".stream", A))).toBe(false);
     });
 
     it("remover o vídeo no meio do download cancela, apaga as trilhas e não deixa cache", async () => {
@@ -2112,7 +2226,7 @@ describe("stream (tocar já, enquanto baixa uma vez só)", () => {
       expect(manager.serveStream(A, "video", "bytes=0-9")).not.toBeNull(); // ainda serve: a janela pode estar pausada
       await manager.stream(B);
       expect(manager.serveStream(A, "video", "bytes=0-9")).not.toBeNull();
-      expect(fs.existsSync(path.join(dir, ".stream", A))).toBe(true);
+      expect(fs.existsSync(path.join(workDir, ".stream", A))).toBe(true);
     });
 
     it("as trilhas do vídeo anterior só saem sozinhas depois de ficarem ociosas", async () => {
@@ -2125,15 +2239,15 @@ describe("stream (tocar já, enquanto baixa uma vez só)", () => {
       clock += SESSION_IDLE_MS + 1;
       await manager.stream(B); // a varredura roda aqui; A já está ocioso há tempo suficiente
       expect(manager.serveStream(A, "video", "bytes=0-9")).toBeNull();
-      expect(fs.existsSync(path.join(dir, ".stream", A))).toBe(false);
+      expect(fs.existsSync(path.join(workDir, ".stream", A))).toBe(false);
     });
 
     it("ao abrir o app, o que sobrou de uma sessão anterior é apagado", async () => {
-      fs.mkdirSync(path.join(dir, ".stream", A), { recursive: true });
-      fs.writeFileSync(path.join(dir, ".stream", A, "video.mp4"), "x");
+      fs.mkdirSync(path.join(workDir, ".stream", A), { recursive: true });
+      fs.writeFileSync(path.join(workDir, ".stream", A, "video.mp4"), "x");
       const { manager } = makeStream();
       await manager.init();
-      expect(fs.existsSync(path.join(dir, ".stream"))).toBe(false);
+      expect(fs.existsSync(path.join(workDir, ".stream"))).toBe(false);
     });
 
     it("as trilhas não aparecem na lista de vídeos baixados nem contam na cota", async () => {

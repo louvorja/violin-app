@@ -57,9 +57,8 @@ function storageDir() {
  * Chamado por init() e pelos métodos individualmente como guard.
  */
 function ensureDir() {
-  // Sem cache: a pasta de dados muda em runtime quando o operador escolhe
-  // outra em "Armazenamento", e um destino lembrado deixaria a escrita
-  // seguinte apontando para um caminho que não existe mais.
+  // O perfil privado é fixo; a criação permanece lazy para acontecer somente
+  // depois da configuração de caminhos e da migração no boot.
   fs.ensureDirSync(storageDir());
 }
 // NÃO chamar ensureDir no top-level — `app` ainda não está pronto durante imports.

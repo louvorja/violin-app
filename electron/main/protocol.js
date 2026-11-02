@@ -26,6 +26,9 @@ const electron = require("electron");
 const { pathToFileURL } = require("url");
 const fs = require("fs-extra");
 const path = require("path");
+const { randomUUID } = require("node:crypto");
+const { Readable } = require("node:stream");
+const { pipeline } = require("node:stream/promises");
 const paths = require("./paths.js");
 const jsonCache = require("./jsonCache.js");
 const mediaResolver = require("./mediaResolver.js");
@@ -34,6 +37,9 @@ const netHealth = require("./netHealth.js");
 const apiConfig = require("./apiConfig.js");
 const { buildCsp } = require("./csp.js");
 const onlineVideo = require("./onlineVideo/index.js");
+const storageAccess = require("./storageAccess.js");
+const { ensureCollectionSubdirectory } = require("./sharedCollectionDirs.js");
+const { publishCollectionFile } = require("./collectionPublication.js");
 
 // ---------------------------------------------------------------------------
 // Configuração de URLs remotas
@@ -203,73 +209,45 @@ function setAutoCacheEnabled(enabled) {
 }
 
 /**
- * Endereço novo de um arquivo que ficou no cache ANTIGO do Canva.
+ * Endereço novo de um arquivo pessoal que ficou num endereço antigo.
  *
- * O cache de export mudou de `<dados>/canva` para `<dados>/files/canva`, e
- * URLs guardadas antes disso continuam apontando para o endereço velho. A que
- * dói é o `LJ_FILE_PROJECTION` do telão: reabrir a última projeção depois de
- * atualizar cairia num arquivo inexistente e a tela ficaria vazia até o
- * operador projetar de novo. Em vez disso, servimos do endereço novo.
- *
- * Só vale para um ARQUIVO dentro da pasta antiga: a pasta em si continuaria
- * 404 (servir diretório viraria 500 no stream).
- *
- * TODO: remover junto com `main/canva/migration.js`, na versão seguinte —
- * roteiro em `docs/canva-cache-migration-removal.md`.
+ * Cache do Canva e anexos moraram dentro da pasta de dados única e agora vivem
+ * no perfil privado. URLs guardadas antes da mudança continuam apontando para o
+ * endereço velho. A que dói é o `LJ_FILE_PROJECTION` do telão: reabrir a última
+ * projeção cairia num arquivo inexistente e a tela ficaria vazia até o operador
+ * projetar de novo. Só vale para um ARQUIVO dentro de uma origem conhecida.
  *
  * @param {string} absoluto
- * @returns {string|null} null quando o caminho não é o cache antigo do Canva
+ * @returns {string|null}
  */
-function _enderecoNovoDoCanva(absoluto) {
+function _enderecoNovoPrivado(absoluto) {
   try {
-    const antigo = path.resolve(paths.dataDir(), "canva");
     const alvo = path.resolve(absoluto);
-    if (!alvo.startsWith(`${antigo}${path.sep}`)) return null;
-    return path.join(paths.filesDir(), "canva", path.relative(antigo, alvo));
+    for (const { from, to } of paths.privatePathMappings()) {
+      const origem = path.resolve(from);
+      if (alvo.startsWith(`${origem}${path.sep}`)) return path.join(to, path.relative(origem, alvo));
+    }
   } catch (_) {
-    /* Sem pasta de dados resolvida não há cache antigo a procurar. */
-    return null;
+    /* Sem layout legível não há endereço antigo a procurar. */
   }
+  return null;
 }
 
-/**
- * Grava um ReadableStream em um arquivo via .tmp + rename atômico.
- * Usado pelo auto-cache do host "files".
- */
+/** O streaming permanece privado; só o arquivo completo é publicado no acervo. */
 async function _writeStreamToFile(readable, finalPath) {
-  await fs.ensureDir(path.dirname(finalPath));
-  const tmp = `${finalPath}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}.tmp`;
-  const writer = fs.createWriteStream(tmp);
-  const reader = readable.getReader();
-
+  const root = paths.filesDir();
+  const shared = storageAccess.status().media?.shared === true;
+  const workDir = path.join(paths.dataDir(), "temp", "downloads");
+  await fs.ensureDir(workDir, { mode: 0o700 });
+  const tmp = path.join(workDir, `autocache-${randomUUID()}.partial`);
   try {
-    /* eslint-disable no-constant-condition */
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      // value é Uint8Array — converte pra Buffer antes de gravar
-      writer.write(Buffer.from(value));
-    }
-    /* eslint-enable no-constant-condition */
-    await new Promise((resolve, reject) => {
-      writer.end((err) => (err ? reject(err) : resolve()));
+    await ensureCollectionSubdirectory(root, path.dirname(finalPath), { shared });
+    await pipeline(Readable.fromWeb(readable), fs.createWriteStream(tmp, { flags: "wx", mode: 0o600 }));
+    await publishCollectionFile(tmp, finalPath, { root, shared,
+      cancelled: () => !storageAccess.canWrite("media"),
     });
-    await fs.move(tmp, finalPath, { overwrite: true });
     console.log("[protocol] Auto-cached:", finalPath);
-  } catch (e) {
-    try {
-      await fs.remove(tmp);
-    } catch (_) {
-      /* ignore */
-    }
-    throw e;
-  } finally {
-    try {
-      reader.releaseLock();
-    } catch (_) {
-      /* ignore */
-    }
-  }
+  } finally { await fs.remove(tmp); }
 }
 
 // ---------------------------------------------------------------------------
@@ -484,11 +462,11 @@ function handle() {
               return response; // não cacheamos parciais nem erros
             }
 
-            if (!_autoCacheEnabled || !response.body) {
+            if (!_autoCacheEnabled || !require("./storageAccess.js").canWrite("media") || !response.body) {
               return response;
             }
 
-            // Tee: uma branch vai pro renderer, outra grava em .tmp e renomeia.
+            // Tee: uma branch vai ao renderer; a outra usa temporário privado.
             const [forRenderer, forDisk] = response.body.tee();
             _writeStreamToFile(forDisk, localPath).catch((e) =>
               console.warn("[protocol] Auto-cache falhou:", e.message || e)
@@ -537,8 +515,8 @@ function handle() {
         }
 
         if (!(await fs.pathExists(raw))) {
-          /* Cache do Canva no endereço antigo: serve do novo (ver o TODO acima). */
-          const migrado = _enderecoNovoDoCanva(raw);
+          /* Arquivo pessoal no endereço antigo: serve do novo. */
+          const migrado = _enderecoNovoPrivado(raw);
           if (migrado && (await fs.pathExists(migrado))) {
             return await _responderArquivo(migrado, request);
           }
