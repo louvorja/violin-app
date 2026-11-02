@@ -19,7 +19,8 @@ import Fuse from "fuse.js";
 import Modules from "@/helpers/Modules";
 import Media from "@/composables/useMedia";
 import Platform from "@/helpers/Platform";
-import { loadCustomMusicCatalog, openCustomMusic } from "@/helpers/CustomMusicCatalog";
+import { loadCustomMusicCatalog } from "@/helpers/CustomMusicCatalog";
+import { executeMusic } from "@/helpers/MusicExecution";
 import { currentMediaKind, openMediaWindow } from "@/helpers/ProjectionWindows";
 import { ICONS } from "@/config/Icons";
 import { hymnalTracks } from "@/helpers/Hymnal";
@@ -260,7 +261,7 @@ async function dynamicCommands($database, $userdata) {
         keywords: ["favorito"],
         icon: ICONS.UI.STAR,
         category: "favorite",
-        run: () => Media.open({ id_music: f.id_music, mode: "no_audio" }),
+        run: () => executeMusic({ id_music: Number(f.id_music) }),
       });
     });
   }
@@ -276,7 +277,7 @@ async function dynamicCommands($database, $userdata) {
       keywords: ["recente", "historico"],
       icon: ICONS.UI.HISTORY,
       category: "recent",
-      run: () => Media.open({ id_music: h.id_music, mode: "no_audio" }),
+      run: () => executeMusic({ id_music: Number(h.id_music) }),
     });
   });
 
@@ -306,11 +307,7 @@ async function dynamicCommands($database, $userdata) {
           icon: ICONS.MUSIC.NOTE,
           category: "music",
           subtitle: m.albums_names || "",
-          run: () =>
-            Media.open({
-              id_music: m.id_music,
-              mode: m.has_instrumental_music ? "audio" : "no_audio",
-            }),
+          run: () => executeMusic({ id_music: Number(m.id_music) }),
         });
       });
     }
@@ -347,7 +344,8 @@ export async function getAll($database, $userdata, t) {
         customLabel,
         icon: ICONS.MUSIC.NOTE,
         category: "music",
-        run: () => openCustomMusic(music.custom_song_id),
+        run: () =>
+          executeMusic({ id_music: Number(music.id_music), custom_song_id: music.custom_song_id }),
       })),
     ];
   }

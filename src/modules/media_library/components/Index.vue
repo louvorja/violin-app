@@ -1798,9 +1798,10 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
-/* Bloco, não flex: `flex-direction` e `gap` aqui são inertes. Mantido como
-   estava — ligar o flex muda a altura da grade e da área vazia. */
+/* Flex porque a grade e o vazio precisam ocupar o restante da altura e rolar;
+   como bloco, a grade crescia com o conteúdo e era cortada pelo overflow. */
 .media-library {
+  display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
@@ -1811,6 +1812,7 @@ onBeforeUnmount(() => {
 }
 
 .media-search {
+  flex-shrink: 0;
   margin-bottom: var(--lj-space-5);
 }
 
@@ -1825,6 +1827,9 @@ onBeforeUnmount(() => {
   overflow-y: auto;
   flex: 1;
   min-height: 0;
+  /* Linhas no tamanho do conteúdo: sem isso as linhas são espremidas para
+     caber na altura e os cards somem atrás do overflow. */
+  grid-auto-rows: max-content;
   align-content: start;
   align-items: start;
   padding-bottom: var(--lj-space-4);
@@ -1911,6 +1916,7 @@ onBeforeUnmount(() => {
 .media-chips {
   display: flex;
   flex-wrap: wrap;
+  flex-shrink: 0;
   align-items: center;
   gap: var(--lj-space-3);
   padding: var(--lj-space-2) var(--lj-space-4) var(--lj-space-4);

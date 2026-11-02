@@ -90,8 +90,18 @@ onMounted(async () => {
   inputEl.value?.focus();
 });
 
-/** Permite ao consumidor focar o campo sob demanda. */
-defineExpose({ focus: () => inputEl.value?.focus() });
+/**
+ * Permite ao consumidor focar o campo sob demanda. `select` foca e deixa o
+ * texto selecionado: a próxima tecla substitui o que estava digitado.
+ */
+defineExpose({
+  focus: () => inputEl.value?.focus(),
+  select: () => {
+    inputEl.value?.focus();
+    inputEl.value?.select();
+  },
+  el: () => inputEl.value,
+});
 
 function onInput(event: Event): void {
   emit("update:modelValue", (event.target as HTMLInputElement).value);

@@ -59,7 +59,8 @@ import { openSlja, SLJA_EXT } from "@/helpers/SljaPlayer";
 import { heicToJpeg, isHeic } from "@/helpers/ImageConvert";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 import { loadCustomMusicCatalog, openCustomMusic } from "@/helpers/CustomMusicCatalog";
-import { LITURGY_VERSION_ACTION } from "@/config/MusicAction";
+import { executeMusic } from "@/helpers/MusicExecution";
+import { LITURGY_VERSION_ACTION, MUSIC_EXECUTIONS } from "@/config/MusicAction";
 import { DB_TABLE } from "@/constants/DbTables";
 import $idb from "@/helpers/IndexedDB";
 import $docs from "@/helpers/DocStore";
@@ -450,36 +451,6 @@ function searchOnlineVideos(catalog, mine, q, clip) {
 
   merged.sort((a, b) => a.title.localeCompare(b.title));
   return merged;
-}
-
-/**
- * Executa uma música no modo escolhido (vindo do `POST /api/open-song`).
- *
- * - `audio`         → slides + faixa cantada
- * - `instrumental`  → slides + playback
- * - `no_audio`      → somente slides (Letra)
- * - `audio-only`    → somente o áudio, sem abrir slides
- * - `playback-only` → somente o playback, sem abrir slides
- */
-async function openSongByMode(idMusic, mode) {
-  switch (mode) {
-    case MusicActionEnum.NO_AUDIO:
-      await Media.open({ id_music: idMusic, mode: MusicActionEnum.NO_AUDIO });
-      break;
-    case MusicActionEnum.AUDIO_ONLY:
-      await Media.openAudio(idMusic);
-      break;
-    case MusicActionEnum.PLAYBACK_ONLY:
-      await Media.openAudio({ id_music: idMusic, mode: MusicActionEnum.INSTRUMENTAL });
-      break;
-    case MusicActionEnum.INSTRUMENTAL:
-      await Media.open({ id_music: idMusic, mode: MusicActionEnum.INSTRUMENTAL });
-      break;
-    case MusicActionEnum.AUDIO:
-    default:
-      await Media.open({ id_music: idMusic, mode: MusicActionEnum.AUDIO });
-      break;
-  }
 }
 
 app.use(createPinia());
@@ -2182,13 +2153,12 @@ $storage.hydrate().then(async () => {
         }
         case "http:open-song": {
           console.log("[http:open-song] Abrindo música:", data);
-          if (data.custom_song_id) {
-            // Música personalizada: o `id` do corpo é negativo (só para listas)
-            // — a execução é sempre pelo UUID (caminho único do desktop).
-            await openCustomMusic(data.custom_song_id, data.mode);
-          } else {
-            await openSongByMode(data.id_music, data.mode);
-          }
+          // Personalizada vai pelo UUID (o `id` do corpo é negativo, só para listas).
+          // Modo fora das execuções (cliente antigo, campo ausente) fica com o padrão da música.
+          await executeMusic(
+            { id_music: data.id_music, custom_song_id: data.custom_song_id },
+            MUSIC_EXECUTIONS.some((item) => item.action === data.mode) ? data.mode : undefined
+          );
 
           // Música escolhida na hora: só marca o item depois da escolha.
           const litItem = data.id ? Liturgy.getFromCommand(data.id, data.day) : null;
@@ -2838,9 +2808,12 @@ $storage.hydrate().then(async () => {
          * e com a mesma confirmação que a projeção de slides tem.
          */
         if (ProjectionWindows.isSiteProjectionActive()) {
-          $alert.yesno("modules.media.alerts.close_projection", (btn) => {
-            if (btn === "yes") void ProjectionWindows.closeSiteWindow();
-          });
+          $alert.yesno(
+            { text: "modules.media.alerts.close_projection", default_button: "yes" },
+            (btn) => {
+              if (btn === "yes") void ProjectionWindows.closeSiteWindow();
+            }
+          );
           return;
         }
 
@@ -2857,16 +2830,19 @@ $storage.hydrate().then(async () => {
         }
         // Projeção de arquivos de imagem e vídeo
         else if (Broadcast.getLastPayload(BROADCAST_TYPE.FILE_PROJECTION)) {
-          $alert.yesno("modules.media.alerts.close_projection", (btn) => {
-            if (btn === "yes") {
-              Broadcast.send(BROADCAST_TYPE.FILE_PROJECTION, { action: "clear" });
-              Media.close(true);
-              closeEverythingElse();
+          $alert.yesno(
+            { text: "modules.media.alerts.close_projection", default_button: "yes" },
+            (btn) => {
+              if (btn === "yes") {
+                Broadcast.send(BROADCAST_TYPE.FILE_PROJECTION, { action: "clear" });
+                Media.close(true);
+                closeEverythingElse();
+              }
             }
-          });
+          );
         } else if (_mediaIsActive()) {
           // Música/Slides (com confirmação se ativa)
-          $alert.yesno("modules.media.alerts.close", (btn) => {
+          $alert.yesno({ text: "modules.media.alerts.close", default_button: "yes" }, (btn) => {
             if (btn === "yes") {
               Media.close(true);
               closeEverythingElse();

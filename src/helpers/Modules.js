@@ -49,6 +49,11 @@ export default {
     if (!wasVisible) $appdata.set(`modules.${id}.show`, true);
     if (!wasActive) $appdata.set("active_module", id);
     Telemetry.track(wasVisible ? "module_focused" : "module_opened", { module_id: id });
+    // Aviso de "o operador pediu esta tela", mesmo se ela já era a ativa: a
+    // busca do Hinário (useQuickSearch) põe o cursor nela a cada clique.
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("lj:module-open", { detail: { id } }));
+    }
 
     // Track tab opening order (first opened = leftmost).
     // Ordem ESTÁVEL: focar/reabrir um módulo não o move para o fim;

@@ -2406,7 +2406,7 @@ const _self = {
       if (!force) {
         const key = "modules.media.alerts.close";
         const self = this;
-        $alert.yesno({ title: key }, function (btn?: string) {
+        $alert.yesno({ title: key, default_button: "yes" }, function (btn?: string) {
           if (btn == "yes") self.close(true);
         });
         return;
@@ -2441,7 +2441,7 @@ const _self = {
       const key = $appdata.get(KEYS.MODULES.MEDIA.CONFIG.AUDIO_ONLY)
         ? "modules.media.alerts.close_audio"
         : "modules.media.alerts.close";
-      $alert.yesno({ title: key }, function (btn?: string) {
+      $alert.yesno({ title: key, default_button: "yes" }, function (btn?: string) {
         if (btn == "yes") self.close(true);
       });
       return;

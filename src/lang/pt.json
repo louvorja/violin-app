@@ -129,6 +129,10 @@
       "time_format": "Formato da hora",
       "show_date": "Exibir data",
       "date_format": "Formato da data"
+    },
+    "quick_play": {
+      "hint": "Digite o número ou o nome e tecle Enter para tocar cantado. Shift+Enter toca o playback. Esc limpa.",
+      "no_playback": "\"{name}\" não tem playback. Tecle só Enter para tocar cantado."
     }
   },
   "alert": {
@@ -1314,6 +1318,7 @@
     "add_item": "Adicionar",
     "no_results": "Nenhum resultado encontrado",
     "navigate": "navegar",
+    "playback": "playback",
     "execute": "executar",
     "close": "fechar",
     "results": "resultados",

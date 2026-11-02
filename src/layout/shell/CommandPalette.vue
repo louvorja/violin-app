@@ -24,7 +24,7 @@
                 spellcheck="false"
                 @keydown.down.prevent.stop="moveDown"
                 @keydown.up.prevent.stop="moveUp"
-                @keydown.enter.prevent.stop="executeSelected"
+                @keydown.enter.prevent.stop="onEnter"
                 @keydown.escape.prevent.stop="close"
               />
               <kbd v-if="!query" class="cmd-kbd cmd-kbd--hint">Esc</kbd>
@@ -94,6 +94,11 @@
                 {{ $t("shell.execute") }}
               </span>
               <span>
+                <kbd>Shift</kbd>
+                <kbd>Enter</kbd>
+                {{ $t("shell.playback") }}
+              </span>
+              <span>
                 <kbd>Esc</kbd>
                 {{ $t("shell.close") }}
               </span>
@@ -108,6 +113,15 @@
     </DialogPortal>
   </DialogRoot>
 </template>
+
+<script>
+/**
+ * A última busca sobrevive ao fechamento (a paleta é montada com `v-if`): ao
+ * reabrir, volta selecionada — digitar o próximo número já substitui, como no
+ * LouvorJA clássico.
+ */
+let lastQuery = "";
+</script>
 
 <script setup>
 import { LjButton, LjDivider, LjIcon, LjSpinner } from "@/components/ui";
@@ -129,6 +143,7 @@ import Database from "@/helpers/Database";
 import UserData from "@/helpers/UserData";
 import { useDisabledAlbums } from "@/composables/useMusicCatalog";
 import { compareMusics } from "@root/config/musicCatalog.mjs";
+import { isQuickPlayEnter, quickPlay } from "@/helpers/QuickPlay";
 
 const PAGE_SIZE = 50;
 
@@ -168,6 +183,7 @@ const open = computed({
 function focusSearch(event) {
   event.preventDefault();
   searchInput.value?.focus();
+  searchInput.value?.select();
 }
 
 /** Resultados brutos: aplica Fuse ou filtro por categoria */
@@ -227,11 +243,14 @@ watch(
   open,
   (v) => {
     if (v) {
-      query.value = "";
+      query.value = lastQuery;
       selectedIndex.value = 0;
       visibleCount.value = PAGE_SIZE;
       loadCommands();
-      nextTick(() => searchInput.value?.focus());
+      nextTick(() => {
+        searchInput.value?.focus();
+        searchInput.value?.select();
+      });
     }
   },
   { immediate: true }
@@ -300,11 +319,28 @@ function moveUp() {
   selectedIndex.value = Math.max(selectedIndex.value - 1, 0);
 }
 
-function executeSelected() {
-  if (activeItem.value) execute(activeItem.value);
+/**
+ * Enter executa o item marcado. Shift+Enter numa música (do catálogo, dos
+ * recentes ou dos favoritos) toca o playback; sem playback, avisa e a paleta
+ * fica aberta.
+ */
+function onEnter(event) {
+  if (!isQuickPlayEnter(event)) return;
+  const item = activeItem.value;
+  if (!item) return;
+  if (event.shiftKey && item.music) {
+    if (quickPlay(item.music, true)) {
+      lastQuery = query.value;
+      close();
+    }
+    return;
+  }
+  execute(item);
 }
 
 async function execute(item) {
+  // Quem abriu uma música volta para a mesma busca; um comando ou módulo, não.
+  lastQuery = item.music ? query.value : "";
   close();
   try {
     await item.run();

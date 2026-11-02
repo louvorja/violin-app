@@ -17,7 +17,7 @@
         autocomplete="off"
         spellcheck="false"
         @keydown.escape.prevent.stop="open = false"
-        @keydown.enter.prevent.stop="pickFirst"
+        @keydown.enter.prevent.stop="onEnter"
       />
     </div>
 
@@ -155,6 +155,7 @@ import Platform from "@/helpers/Platform";
 import { ICONS } from "@/config/Icons";
 import type { SearchMusicItem } from "@/types/Music";
 import { MusicActionEnum } from "@/enums/MusicActionEnum";
+import { isQuickPlayEnter, quickPlay } from "@/helpers/QuickPlay";
 
 const props = defineProps<{
   modelValue: boolean;
@@ -256,8 +257,14 @@ function albumLabel(music: SearchMusicItem): string {
 
 function focusSearch(event: Event): void {
   event.preventDefault();
-  searchBar.value?.querySelector("input")?.focus();
+  // A última busca volta selecionada: digitar já substitui (como no clássico).
+  const input = searchBar.value?.querySelector("input");
+  input?.focus();
+  input?.select();
 }
+
+/** Busca que toca na hora (não é seletor de música para outro módulo). */
+const executes = computed(() => props.mode !== "pick" && !props.onMusicAction);
 
 async function loadMusics(): Promise<void> {
   if (Array.isArray(props.musicsList)) return;
@@ -287,9 +294,22 @@ async function loadMusics(): Promise<void> {
   }
 }
 
-function pickFirst(): void {
+/**
+ * Enter: a primeira da lista. Tocando aqui, Enter é cantado e Shift+Enter o
+ * playback; como seletor de outro módulo, Enter escolhe.
+ */
+function onEnter(event: KeyboardEvent): void {
+  if (!isQuickPlayEnter(event)) return;
   const music = filteredMusics.value[0];
-  if (music) pickMusic(music);
+  if (!music || !search.value.trim()) return;
+  if (props.mode === "pick") return pickMusic(music);
+  if (props.onMusicAction) {
+    return handleMusicAction(
+      music,
+      event.shiftKey ? MusicActionEnum.INSTRUMENTAL : MusicActionEnum.AUDIO
+    );
+  }
+  if (quickPlay(music, event.shiftKey)) open.value = false;
 }
 
 function pickMusic(music: SearchMusicItem): void {
@@ -307,7 +327,8 @@ watch(
   open,
   (value: boolean) => {
     if (!value) return;
-    search.value = "";
+    // Quem toca daqui reencontra a última busca (selecionada); o seletor começa limpo.
+    if (!executes.value) search.value = "";
     void loadMusics();
   },
   { immediate: true }

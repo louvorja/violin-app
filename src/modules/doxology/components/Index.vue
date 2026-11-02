@@ -10,6 +10,8 @@
           :placeholder="selectedAlbum ? tm('search_musics') : tm('search_albums')"
           :aria-label="selectedAlbum ? tm('search_musics') : tm('search_albums')"
           autocomplete="off"
+          :title="i18nT('components.quick_play.hint')"
+          @keydown="onSearchKey"
         />
       </div>
     </template>
@@ -144,6 +146,8 @@ import $database from "@/helpers/Database";
 import Path from "@/helpers/Path";
 import { isAlbumEnabled } from "@root/config/musicCatalog.mjs";
 import { module as manifest } from "../manifest";
+import { useQuickSearch } from "@/composables/useQuickSearch";
+import { isQuickPlayEnter, quickPlay } from "@/helpers/QuickPlay";
 
 interface DoxAlbum {
   id_album: number;
@@ -164,7 +168,11 @@ const offlineLibrary = useOfflineLibrary(() => locale.value);
 const tm = (key: string): string => i18nT(`modules.doxology.${key}`);
 
 const pageEl = ref<HTMLElement | null>(null);
-const searchInput = ref<{ focus: () => void } | null>(null);
+const searchInput = ref<{
+  focus: () => void;
+  select?: () => void;
+  el?: () => HTMLInputElement | null;
+} | null>(null);
 const panelWidth = ref(0);
 const compactActions = computed(() => panelWidth.value <= 760);
 const narrowPanel = computed(() => panelWidth.value <= 580);
@@ -194,9 +202,35 @@ const filteredMusics = computed(() =>
   musics.value.filter(
     (music) =>
       offlineLibrary.hasMusic(music.id_music) &&
-      (!query.value || music.name.toLocaleLowerCase(locale.value).includes(query.value))
+      (!query.value ||
+        music.name.toLocaleLowerCase(locale.value).includes(query.value) ||
+        // Número digitado acha a faixa, como no Hinário.
+        (/^\d+$/.test(query.value) && String(music.track) === query.value))
   )
 );
+
+/*
+ * Busca pelo teclado, como no LouvorJA clássico: na lista de álbuns, Enter abre
+ * o primeiro achado; dentro do álbum, Enter toca a primeira música (Shift+Enter,
+ * o playback). Voltando para cá, o texto anterior fica selecionado.
+ */
+const quickSearch = useQuickSearch({ moduleId: () => manifest.id, input: searchInput });
+
+function onSearchKey(event: KeyboardEvent): void {
+  if (event.key === "Escape" && search.value) {
+    event.preventDefault();
+    search.value = "";
+    return;
+  }
+  if (!isQuickPlayEnter(event) || !search.value.trim()) return;
+  event.preventDefault();
+  if (!selectedAlbum.value) {
+    const album = filteredAlbums.value[0];
+    if (album) openAlbum(album);
+    return;
+  }
+  if (quickPlay(filteredMusics.value[0], event.shiftKey)) quickSearch.afterPlay();
+}
 
 function positiveId(value: unknown): number | null {
   if (typeof value !== "number" && !(typeof value === "string" && /^\d+$/.test(value))) {

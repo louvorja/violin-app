@@ -129,6 +129,10 @@
       "time_format": "Formato de la hora",
       "show_date": "Mostrar fecha",
       "date_format": "Formato de la fecha"
+    },
+    "quick_play": {
+      "hint": "Escriba el número o el nombre y presione Enter para tocar cantado. Shift+Enter toca la pista. Esc limpia.",
+      "no_playback": "\"{name}\" no tiene pista instrumental. Presione solo Enter para tocar cantado."
     }
   },
   "alert": {
@@ -1313,6 +1317,7 @@
     "add_item": "Agregar",
     "no_results": "No se encontraron resultados",
     "navigate": "navegar",
+    "playback": "pista",
     "execute": "ejecutar",
     "close": "cerrar",
     "results": "resultados",

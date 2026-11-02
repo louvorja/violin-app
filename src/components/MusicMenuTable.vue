@@ -118,7 +118,7 @@ import {
 import Favorites from "@/helpers/Favorites";
 import Liturgy from "@/helpers/Liturgy";
 import Media from "@/composables/useMedia";
-import { openCustomMusic } from "@/helpers/CustomMusicCatalog";
+import { executeMusic } from "@/helpers/MusicExecution";
 import $snackbar from "@/helpers/Snackbar";
 import { LjButton, LjIcon, LjMenu } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
@@ -225,25 +225,8 @@ function openLyric(): void {
   );
 }
 
-/** Executa a música no modo pedido: a do acervo pelo id, a personalizada pelo UUID. */
 function execute(action: MusicActionEnum): void {
-  if (props.customSongId) {
-    void openCustomMusic(props.customSongId, action);
-    return;
-  }
-  switch (action) {
-    case MusicActionEnum.AUDIO_ONLY:
-      Media.openAudio(props.id_music);
-      break;
-    case MusicActionEnum.PLAYBACK_ONLY:
-      Media.openAudio({ id_music: props.id_music, mode: MusicActionEnum.INSTRUMENTAL });
-      break;
-    case MusicActionEnum.NO_AUDIO:
-      Media.open(props.id_music);
-      break;
-    default:
-      Media.open({ id_music: props.id_music, mode: action });
-  }
+  void executeMusic({ id_music: props.id_music, custom_song_id: props.customSongId }, action);
 }
 
 function quickExecute(action: MusicActionEnum): void {

@@ -900,8 +900,9 @@ onMounted(async () => {
 }
 
 .bg-root {
-  height: 100%;
+  display: flex;
   flex-direction: column;
+  height: 100%;
   overflow: hidden;
 }
 .bg-root--drag-over {
@@ -978,6 +979,11 @@ onMounted(async () => {
   padding: var(--lj-space-5);
   overflow-y: auto;
   flex: 1;
+  /* Sem `min-height: 0` a grade não encolhe abaixo do conteúdo e não rola;
+     `max-content` impede as linhas de serem espremidas para caber na tela. */
+  min-height: 0;
+  grid-auto-rows: max-content;
+  align-content: start;
 }
 .bg-grid-item {
   cursor: pointer;
@@ -1177,7 +1183,6 @@ onMounted(async () => {
   }
 
   .bg-root {
-    display: flex;
     min-width: 0;
   }
 

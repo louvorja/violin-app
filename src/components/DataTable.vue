@@ -65,11 +65,21 @@ const _preparedDatasets = new WeakMap();
 
 // Debounce leve: aguarda `ms` ms de inatividade antes de executar `fn`.
 function debounce(fn, ms = 300) {
-  let timer;
-  return function (...args) {
+  let timer = null;
+  const debounced = (...args) => {
     clearTimeout(timer);
-    timer = setTimeout(() => fn.apply(this, args), ms);
+    timer = setTimeout(() => {
+      timer = null;
+      fn(...args);
+    }, ms);
   };
+  debounced.flush = () => {
+    if (timer === null) return;
+    clearTimeout(timer);
+    timer = null;
+    fn();
+  };
+  return debounced;
 }
 
 const props = defineProps({
@@ -437,6 +447,27 @@ async function loadData() {
   }
 }
 
+/**
+ * Gate de performance: com search_min_length configurado, só filtra a partir
+ * do mínimo de caracteres (buscas curtas mostram a lista base). Buscas
+ * numéricas escapam do gate — match exato por nº do hino/track.
+ */
+function appliedSearch() {
+  const value = Strings.clean(props.search);
+  const belowMin =
+    props.search_min_length > 0 &&
+    value.length > 0 &&
+    value.length < props.search_min_length &&
+    !/^\d+$/.test(value);
+  return belowMin ? "" : value;
+}
+
+function searchableKeys() {
+  return props.searchable_fields
+    ? Object.keys(props.searchable_fields).filter((key) => props.searchable_fields[key] === true)
+    : [];
+}
+
 function filterData() {
   const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
   const reportFilter = () => {
@@ -460,21 +491,8 @@ function filterData() {
   try {
     limit.value = 0;
     _rafCycles = 0;
-    let value = Strings.clean(props.search);
-
-    // Gate de performance: com search_min_length configurado, só filtra a partir
-    // do mínimo de caracteres (buscas curtas mostram a lista base). Buscas
-    // numéricas escapam do gate — match exato por nº do hino/track.
-    const belowMin =
-      props.search_min_length > 0 &&
-      value.length > 0 &&
-      value.length < props.search_min_length &&
-      !/^\d+$/.test(value);
-    if (belowMin) value = "";
-
-    const searchable = props.searchable_fields
-      ? Object.keys(props.searchable_fields).filter((key) => props.searchable_fields[key] === true)
-      : [];
+    const value = appliedSearch();
+    const searchable = searchableKeys();
     const filter = props.filter
       ? Object.keys(props.filter).filter((key) => props.filter[key] === true)
       : [];
@@ -660,6 +678,20 @@ function compareFilterData() {
   last_filter.value = filter;
   filterData();
 }
+
+/**
+ * O resultado da busca AGORA, sem esperar o debounce de digitação: quem digita
+ * "12" e tecla Enter na hora não pode receber a lista ainda sem filtro (o
+ * primeiro dela é o hino 1). Sem busca aplicada — campo vazio ou abaixo do
+ * mínimo de letras — a lista é o acervo inteiro, e o Enter não tem o que tocar.
+ */
+function currentResults() {
+  if (!fileData || appliedSearch() === "" || searchableKeys().length === 0) return [];
+  debouncedFilterData.flush();
+  return filter_data.value;
+}
+
+defineExpose({ currentResults });
 </script>
 
 <style>

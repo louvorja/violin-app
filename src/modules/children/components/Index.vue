@@ -10,6 +10,8 @@
           :placeholder="searchLabel"
           :aria-label="searchLabel"
           autocomplete="off"
+          :title="i18nT('components.quick_play.hint')"
+          @keydown="onSearchKey"
         />
       </div>
     </template>
@@ -138,6 +140,8 @@ import { useOfflineLibrary } from "@/composables/useOfflineLibrary";
 import { LjAlert, LjButton, LjEmpty, LjIcon, LjInput, LjProgress, LjTable } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { module as manifest } from "../manifest";
+import { useQuickSearch } from "@/composables/useQuickSearch";
+import { isQuickPlayEnter, quickPlay } from "@/helpers/QuickPlay";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import MusicMenuTable from "@/components/MusicMenuTable.vue";
 import { useDisabledAlbums } from "@/composables/useMusicCatalog";
@@ -174,7 +178,11 @@ const selectedAlbum = ref<ChildAlbum | null>(null);
 const musics = ref<AlbumMusic[]>([]);
 const coverFailed = ref(new Set<number>());
 const root = ref<HTMLElement | null>(null);
-const searchInput = ref<{ focus: () => void } | null>(null);
+const searchInput = ref<{
+  focus: () => void;
+  select?: () => void;
+  el?: () => HTMLInputElement | null;
+} | null>(null);
 const panelWidth = ref(0);
 let resizeObserver: ResizeObserver | null = null;
 let albumsRequest = 0;
@@ -199,9 +207,35 @@ const filteredMusics = computed(() =>
   musics.value.filter(
     (music) =>
       offlineLibrary.hasMusic(music.id_music) &&
-      (!q.value || music.name.toLocaleLowerCase(locale.value).includes(q.value))
+      (!q.value ||
+        music.name.toLocaleLowerCase(locale.value).includes(q.value) ||
+        // Número digitado acha a faixa, como no Hinário.
+        (/^\d+$/.test(q.value) && String(music.track) === q.value))
   )
 );
+
+/*
+ * Busca pelo teclado, como no LouvorJA clássico: na lista de álbuns, Enter abre
+ * o primeiro achado; dentro do álbum, Enter toca a primeira música (Shift+Enter,
+ * o playback). Voltando para cá, o texto anterior fica selecionado.
+ */
+const quickSearch = useQuickSearch({ moduleId: () => manifest.id, input: searchInput });
+
+function onSearchKey(event: KeyboardEvent): void {
+  if (event.key === "Escape" && search.value) {
+    event.preventDefault();
+    search.value = "";
+    return;
+  }
+  if (!isQuickPlayEnter(event) || !search.value.trim()) return;
+  event.preventDefault();
+  if (!selectedAlbum.value) {
+    const album = filteredAlbums.value[0];
+    if (album) openAlbum(album);
+    return;
+  }
+  if (quickPlay(filteredMusics.value[0], event.shiftKey)) quickSearch.afterPlay();
+}
 // MusicMenuTable mede a viewport, mas esta tabela pode ocupar só um painel estreito.
 const compactPanel = computed(() => panelWidth.value <= 760);
 const narrowPanel = computed(() => panelWidth.value <= 580);

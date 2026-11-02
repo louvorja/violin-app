@@ -73,10 +73,13 @@
       />
       <div class="col-search">
         <LjInput
+          ref="searchInput"
           v-model="search"
           clearable
+          autocomplete="off"
           :icon="ICONS.ACTIONS.SEARCH"
           :placeholder="tm('music_search.title')"
+          @keydown="onSearchKey"
         />
       </div>
 
@@ -122,6 +125,7 @@ import Modules from "@/helpers/Modules";
 import Media from "@/composables/useMedia";
 import Path from "@/helpers/Path";
 import { useShell } from "@/composables/useShell";
+import { useQuickSearch } from "@/composables/useQuickSearch";
 import { useDisabledAlbums } from "@/composables/useMusicCatalog";
 import { isAlbumEnabled, albumYear } from "@root/config/musicCatalog.mjs";
 
@@ -242,6 +246,29 @@ async function loadData() {
 function setCategory(id = null) {
   id_category.value = id;
   visibleCount.value = PAGE_SIZE;
+}
+
+/*
+ * Busca pelo teclado: abriu as Coletâneas, o cursor já está aqui; Enter abre a
+ * primeira coletânea achada. Voltando para cá, o texto anterior fica selecionado.
+ */
+const searchInput = ref(null);
+const quickSearch = useQuickSearch({ moduleId: () => manifest.id, input: searchInput });
+
+function onSearchKey(event) {
+  if (event.key === "Escape" && search.value) {
+    event.preventDefault();
+    search.value = "";
+    return;
+  }
+  if (event.key !== "Enter" || event.isComposing) return;
+  event.preventDefault();
+  // Abaixo de 4 letras a lista não filtra: o "primeiro" seria um qualquer.
+  if (Strings.clean(search.value).length < 4) return;
+  const first = filteredAlbums.value[0];
+  if (!first) return;
+  quickSearch.afterPlay();
+  openAlbum(first.id_album);
 }
 
 function openAlbum(id_album) {

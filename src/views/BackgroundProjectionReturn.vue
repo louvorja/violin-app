@@ -57,26 +57,42 @@
         class="return-stack"
         :style="{ '--fade-ms': fadeDurationMs + 'ms' }"
       >
-        <Transition name="fade">
-          <img
-            v-if="curBg.type === 'image'"
-            :key="'img-' + curBg.url"
-            :src="curBg.url"
-            class="return-bg"
+        <!-- Mesma pilha da projeção: o novo entra por cima do atual. -->
+        <Transition name="fade" :duration="fadeDurationMs" @after-leave="resetBgLayers">
+          <div
+            v-if="curBg.active"
+            class="return-bg-stack"
             :style="{ '--fade-ms': fadeDurationMs + 'ms' }"
-            alt=""
-          />
-          <video
-            v-else-if="curBg.type === 'video'"
-            :key="'vid-' + curBg.url"
-            ref="bgVideoRef"
-            :src="curBg.url"
-            class="return-bg"
-            :style="{ '--fade-ms': fadeDurationMs + 'ms' }"
-            autoplay
-            muted
-            loop
-          ></video>
+          >
+            <template v-for="layer in bgLayers" :key="layer.key">
+              <img
+                v-if="layer.type === 'image'"
+                :src="layer.url"
+                class="return-bg"
+                :class="{
+                  'return-bg--pending': layer.key === bgPendingKey,
+                  'return-bg--entering': layer.key === bgEnteringKey,
+                }"
+                alt=""
+                @load="markBgLayerReady(layer.key)"
+                @error="markBgLayerReady(layer.key)"
+              />
+              <video
+                v-else
+                :src="layer.url"
+                class="return-bg"
+                :class="{
+                  'return-bg--pending': layer.key === bgPendingKey,
+                  'return-bg--entering': layer.key === bgEnteringKey,
+                }"
+                autoplay
+                muted
+                loop
+                @loadeddata="markBgLayerReady(layer.key)"
+                @error="markBgLayerReady(layer.key)"
+              ></video>
+            </template>
+          </div>
         </Transition>
         <Transition name="fade">
           <div
@@ -138,6 +154,7 @@ import {
   readStoredBackgroundState,
 } from "@/presentation/BackgroundPresentationState";
 import { loadYtApi } from "@/composables/useYouTubeApi";
+import { useBackgroundItemStack } from "@/composables/useBackgroundItemStack";
 import { loadPdfDocument, type PDFDocumentProxy } from "@/helpers/PdfRuntime";
 import Telemetry from "@/helpers/Telemetry";
 import { normalizeYouTubeError } from "@/helpers/YouTubeError";
@@ -154,13 +171,20 @@ interface BgState {
 }
 
 const curBg = reactive<BgState>({ active: false, type: "", url: "", title: "" });
-const bgVideoRef = ref<HTMLVideoElement | null>(null);
 const backgroundGate = new BackgroundPresentationGate();
 
 const MODULE_PATH = $modules.getPath(ModuleEnum.BACKGROUND_PROJECTION);
 const fadeDurationMs = computed(
   () => $userdata.get<number>(`${MODULE_PATH}.fade_duration`, 500) ?? 500
 );
+
+const {
+  layers: bgLayers,
+  pendingKey: bgPendingKey,
+  enteringKey: bgEnteringKey,
+  markReady: markBgLayerReady,
+  reset: resetBgLayers,
+} = useBackgroundItemStack(curBg, fadeDurationMs);
 
 function activateBg(value: unknown): void {
   const p = backgroundGate.accept(value);
@@ -674,6 +698,20 @@ onBeforeUnmount(() => {
 }
 .return-bg--fallback {
   z-index: 0;
+}
+.return-bg--pending {
+  opacity: 0;
+}
+.return-bg--entering {
+  animation: return-layer-fade-in var(--fade-ms, 500ms) linear both;
+}
+@keyframes return-layer-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 /* Vue Transition */

@@ -39,13 +39,17 @@
         <div v-if="!mobileLayout || mobileView === 'music'" class="musics-searchbar">
           <LjInput
             v-if="!disabled"
+            ref="searchInput"
             v-model="search"
             :placeholder="tm('inputs.search')"
             :aria-label="tm('inputs.search')"
+            :title="$t('components.quick_play.hint')"
             :icon="ICONS.ACTIONS.SEARCH"
             :invalid="data.filter_count <= 0"
             :disabled="disabled"
+            autocomplete="off"
             clearable
+            @keydown="onSearchKey"
           />
 
           <p v-if="disabled" class="musics-searchbar__warning">
@@ -100,6 +104,7 @@
 
     <Table
       v-show="!mobileLayout || mobileView === 'music'"
+      ref="table"
       v-model="data"
       :search="search"
       :letter="letter"
@@ -252,6 +257,8 @@ import { computed, nextTick, onActivated, onMounted, ref, useId, watch } from "v
 import { useViewport } from "@/composables/useViewport";
 import Platform from "@/helpers/Platform";
 import Media from "@/composables/useMedia";
+import { useQuickSearch } from "@/composables/useQuickSearch";
+import { isQuickPlayEnter, quickPlay } from "@/helpers/QuickPlay";
 import AppData from "@/helpers/AppData";
 import DateTime from "@/helpers/DateTime";
 import $userdata from "@/helpers/UserData";
@@ -399,6 +406,33 @@ const mobileView = ref("music");
 
 const scopeLabelId = useId();
 const search = ref("");
+
+/*
+ * Busca pelo teclado: Enter toca a primeira música da lista (Shift+Enter, o
+ * playback); ao voltar para cá, o texto anterior fica selecionado.
+ */
+const searchInput = ref(null);
+const table = ref(null);
+const quickSearch = useQuickSearch({
+  moduleId: () => manifest.id,
+  input: searchInput,
+  enabled: () => !mobileLayout.value || mobileView.value === "music",
+});
+
+function onSearchKey(event) {
+  if (event.key === "Escape" && search.value) {
+    event.preventDefault();
+    search.value = "";
+    return;
+  }
+  if (!isQuickPlayEnter(event)) return;
+  event.preventDefault();
+  // Lista filtrada agora: o Enter logo depois da digitação não espera o debounce.
+  const results = table.value?.currentResults() ?? [];
+  const first = results.find((item) => item.id_music != null || item.custom_song_id);
+  if (!first || !search.value.trim()) return;
+  if (quickPlay(first, event.shiftKey)) quickSearch.afterPlay();
+}
 const scroll = ref({});
 const has_scroll = ref(false);
 const letter = ref("");

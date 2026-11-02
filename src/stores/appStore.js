@@ -97,6 +97,7 @@ export const useAppStore = defineStore("app", {
       buttons: [],
       value: "",
       translate: false,
+      default_button: null,
     },
   }),
 

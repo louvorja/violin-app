@@ -1232,12 +1232,13 @@ onBeforeUnmount(() => {
   overflow-y: auto;
   flex: 1;
   min-height: 0;
+  grid-auto-rows: max-content;
   align-content: start;
 }
 .bgs-audio-card {
   display: flex;
   flex-direction: column;
-  padding: 14px;
+  padding: 8px;
   border-radius: var(--lj-radius-md);
   background: color-mix(in srgb, var(--card-color) 85%, var(--lj-white));
   position: relative;
