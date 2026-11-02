@@ -471,7 +471,11 @@ async function saveLiturgyDirect() {
   const items = safeItems.value;
   try {
     const existing = await liturgyLibrary.get(id);
-    if (!existing) throw new Error("Liturgia não encontrada na biblioteca");
+    if (!existing) {
+      $liturgy.clearLibraryReferences(id);
+      saveDialog.value = true;
+      return;
+    }
     await liturgyLibrary.save({
       id,
       name: existing.name,

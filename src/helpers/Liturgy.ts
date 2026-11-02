@@ -522,6 +522,14 @@ export default {
     $userdata.set(KEYS.MODULES.LITURGY.DAY_LITURGIES, map);
   },
 
+  /** Desvincula um registro da biblioteca, preservando os itens de cada dia. */
+  clearLibraryReferences(id: string): void {
+    const map = $userdata.get<Record<number, string>>(KEYS.MODULES.LITURGY.DAY_LITURGIES, {}) ?? {};
+    const remaining = Object.fromEntries(Object.entries(map).filter(([, value]) => value !== id));
+    $userdata.set(KEYS.MODULES.LITURGY.DAY_LITURGIES, remaining);
+    if (this.getCurrentLiturgyId() === id) this.setCurrentLiturgyId(null);
+  },
+
   isDecimoTerceiroSabado(date: Date): boolean {
     if (date.getDay() !== 6) return false;
 
