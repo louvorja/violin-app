@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
@@ -46,12 +46,14 @@ describe("referências privadas dos documentos e preferências", () => {
     expect(fs.readJsonSync(file)).toEqual({ path: "C:\\User\\private\\a.pdf", dir: "D:\\old\\media-extra" });
   });
 
-  it("aborta ao encontrar JSON corrompido sem modificar seu conteúdo", () => {
+  it("JSON corrompido fica intacto e não impede ajustar os outros documentos", () => {
     const file = path.join(dir, "library", "broken.json");
     fs.outputFileSync(file, '{"id":');
-    expect(() => rebaseJsonFiles(dir, mappings)).toThrow();
+    fs.outputJsonSync(path.join(dir, "library", "ok.json"), { path: "/legacy/canva/personal.pdf" });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(rebaseJsonFiles(dir, mappings)).toBe(1);
     expect(fs.readFileSync(file, "utf8")).toBe('{"id":');
-    expect(fs.readdirSync(path.dirname(file))).toEqual(["broken.json"]);
+    expect(fs.readdirSync(path.dirname(file)).sort()).toEqual(["broken.json", "ok.json"]);
   });
 
   it.skipIf(process.platform === "win32")("recusa links para não alterar documentos fora da cópia privada", () => {
