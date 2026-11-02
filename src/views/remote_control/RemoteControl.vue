@@ -252,7 +252,7 @@ import RemoteMediaLibrary from "./RemoteMediaLibrary.vue";
 
 /** @typedef {import('@/types/Bible').ActiveBibleState} ActiveBibleState */
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const route = useRoute();
 
 const tab = ref("shortcuts");
@@ -270,42 +270,46 @@ const backgroundSoundRef = ref(null);
 const mediaLibraryRef = ref(null);
 const musicRef = ref(null);
 
-const tabItems = computed(() => [
-  {
-    value: "shortcuts",
-    label: t("remote_control.tabs.shortcuts"),
-    icon: ICONS.UI.KEYBOARD,
-  },
-  { value: "music", label: t("module_group.musics.title"), icon: ICONS.MUSIC.NOTE },
-  { value: "bible", label: t("module_group.bible.title"), icon: ICONS.BIBLE.BOOK_OPEN },
-  { value: "liturgy", label: t("modules.liturgy.title"), icon: ICONS.FORMAT.LIST_BULLETED },
-  { value: "slides", label: t("remote_control.tabs.slides"), icon: ICONS.UI.VIEW_GRID },
-  {
-    value: "announcements",
-    label: t("remote_control.tabs.announcements"),
-    icon: ICONS.MODULES.ANNOUNCEMENTS,
-  },
-  {
-    value: "videos",
-    label: t("remote_control.tabs.online_videos"),
-    icon: ICONS.MODULES.ONLINE_VIDEOS,
-  },
-  {
-    value: "background_sound",
-    label: t("remote_control.tabs.background_sound"),
-    icon: ICONS.MODULES.BACKGROUND_SOUND,
-  },
-  {
-    value: "presenter",
-    label: t("remote_control.tabs.presenter"),
-    icon: ICONS.PROJECTION.PRESENTATION,
-  },
-  {
-    value: "media_library",
-    label: t("remote_control.tabs.media_library"),
-    icon: ICONS.MODULES.MEDIA_LIBRARY,
-  },
-]);
+const tabItems = computed(() =>
+  [
+    // Ordem alfabética por `value`, para leitura/manutenção do código. O sort
+    // abaixo é o que define a ordem exibida no idioma ativo.
+    {
+      value: "announcements",
+      label: t("remote_control.tabs.announcements"),
+      icon: ICONS.MODULES.ANNOUNCEMENTS,
+    },
+    {
+      value: "background_sound",
+      label: t("remote_control.tabs.background_sound"),
+      icon: ICONS.MODULES.BACKGROUND_SOUND,
+    },
+    { value: "bible", label: t("module_group.bible.title"), icon: ICONS.BIBLE.BOOK_OPEN },
+    { value: "liturgy", label: t("modules.liturgy.title"), icon: ICONS.FORMAT.LIST_BULLETED },
+    {
+      value: "media_library",
+      label: t("remote_control.tabs.media_library"),
+      icon: ICONS.MODULES.MEDIA_LIBRARY,
+    },
+    { value: "music", label: t("module_group.musics.title"), icon: ICONS.MUSIC.NOTE },
+    {
+      value: "presenter",
+      label: t("remote_control.tabs.presenter"),
+      icon: ICONS.PROJECTION.PRESENTATION,
+    },
+    {
+      value: "shortcuts",
+      label: t("remote_control.tabs.shortcuts"),
+      icon: ICONS.UI.KEYBOARD,
+    },
+    { value: "slides", label: t("remote_control.tabs.slides"), icon: ICONS.UI.VIEW_GRID },
+    {
+      value: "videos",
+      label: t("remote_control.tabs.online_videos"),
+      icon: ICONS.MODULES.ONLINE_VIDEOS,
+    },
+  ].sort((a, b) => a.label.localeCompare(b.label, locale.value, { sensitivity: "base" }))
+);
 
 // O `v-window-item` do Vuetify montava a aba no primeiro acesso e a mantinha
 // montada dali em diante (só escondia). As telas dependem disso: os `ref`

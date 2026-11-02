@@ -15,7 +15,7 @@
 
     <h4 class="licenses-subtitle">{{ $t("licenses.libraries") }}</h4>
     <div class="licenses-grid">
-      <div v-for="lib in orderedLibraries" :key="lib.name" class="licenses-card">
+      <div v-for="lib in libraries" :key="lib.name" class="licenses-card">
         <div class="licenses-card-header">
           <span class="licenses-card-name">{{ lib.name }}</span>
           <span class="licenses-card-version">{{ lib.version }}</span>
@@ -40,30 +40,32 @@
 </template>
 
 <script setup>
-import { computed } from "vue";
 import LjLogo from "@/components/LjLogo.vue";
 
 const libraries = [
-  { name: "Vue", version: "3.5", license: "MIT", url: "https://vuejs.org" },
-  { name: "Vue Router", version: "5.0", license: "MIT", url: "https://router.vuejs.org" },
-  { name: "Vue I18n", version: "11.2", license: "MIT", url: "https://vue-i18n.intlify.dev" },
-  { name: "Pinia", version: "3.0", license: "MIT", url: "https://pinia.vuejs.org" },
-  { name: "Reka UI", version: "2.10", license: "MIT", url: "https://reka-ui.com" },
-  { name: "Tabler Icons", version: "3.46", license: "MIT", url: "https://tabler.io/icons" },
+  // Ordem alfabética por `name`.
+  { name: "Anime.js", version: "3.2", license: "MIT", url: "https://animejs.com" },
   {
-    name: "Vuedraggable",
-    version: "4.1",
-    license: "MIT",
-    url: "https://sortablejs.github.io/vue.draggable.next",
+    name: "BgUtils POT Provider",
+    version: "0.8.1",
+    license: "GPL-3.0",
+    url: "https://github.com/jim60105/bgutil-ytdlp-pot-provider-rs",
   },
+  { name: "Electron", version: "41.4", license: "MIT", url: "https://www.electronjs.org" },
+  { name: "Express", version: "4.22", license: "MIT", url: "https://expressjs.com" },
   {
-    name: "Vue Fullscreen",
-    version: "3.1",
-    license: "MIT",
-    url: "https://github.com/mirari/vue-fullscreen",
+    name: "FFmpeg",
+    version: "runtime",
+    license: "GPL-3.0",
+    url: "https://github.com/eugeneware/ffmpeg-static",
   },
-  { name: "VLibras", version: "2.3", license: "MIT", url: "https://vlibras.gov.br" },
   { name: "Fuse.js", version: "7.3", license: "Apache-2.0", url: "https://www.fusejs.io" },
+  {
+    name: "HEIC to",
+    version: "1.5",
+    license: "LGPL-3.0",
+    url: "https://github.com/nickmessing/heic-to",
+  },
   { name: "idb", version: "8.0", license: "ISC", url: "https://github.com/jakearchibald/idb" },
   { name: "JSZip", version: "3.10", license: "MIT / GPL-3.0", url: "https://stuk.github.io/jszip" },
   {
@@ -72,6 +74,7 @@ const libraries = [
     license: "Apache-2.0",
     url: "https://mozilla.github.io/pdf.js",
   },
+  { name: "Pinia", version: "3.0", license: "MIT", url: "https://pinia.vuejs.org" },
   { name: "PostHog", version: "1.427", license: "MIT / Apache-2.0", url: "https://posthog.com" },
   {
     name: "qr-code-styling",
@@ -79,39 +82,32 @@ const libraries = [
     license: "MIT",
     url: "https://github.com/nicedoc/qr-code-styling",
   },
-  {
-    name: "HEIC to",
-    version: "1.5",
-    license: "LGPL-3.0",
-    url: "https://github.com/nickmessing/heic-to",
-  },
-  { name: "Express", version: "4.22", license: "MIT", url: "https://expressjs.com" },
-  { name: "Electron", version: "41.4", license: "MIT", url: "https://www.electronjs.org" },
+  { name: "Reka UI", version: "2.10", license: "MIT", url: "https://reka-ui.com" },
+  { name: "Tabler Icons", version: "3.46", license: "MIT", url: "https://tabler.io/icons" },
   { name: "Vite", version: "7.3", license: "MIT", url: "https://vitejs.dev" },
-  { name: "Anime.js", version: "3.2", license: "MIT", url: "https://animejs.com" },
+  { name: "VLibras", version: "2.3", license: "MIT", url: "https://vlibras.gov.br" },
+  { name: "Vue", version: "3.5", license: "MIT", url: "https://vuejs.org" },
+  {
+    name: "Vue Fullscreen",
+    version: "3.1",
+    license: "MIT",
+    url: "https://github.com/mirari/vue-fullscreen",
+  },
+  { name: "Vue I18n", version: "11.2", license: "MIT", url: "https://vue-i18n.intlify.dev" },
+  { name: "Vue Router", version: "5.0", license: "MIT", url: "https://router.vuejs.org" },
+  {
+    name: "Vuedraggable",
+    version: "4.1",
+    license: "MIT",
+    url: "https://sortablejs.github.io/vue.draggable.next",
+  },
   {
     name: "yt-dlp",
     version: "runtime",
     license: "Unlicense",
     url: "https://github.com/yt-dlp/yt-dlp",
   },
-  {
-    name: "FFmpeg",
-    version: "runtime",
-    license: "GPL-3.0",
-    url: "https://github.com/eugeneware/ffmpeg-static",
-  },
-  {
-    name: "BgUtils POT Provider",
-    version: "0.8.1",
-    license: "GPL-3.0",
-    url: "https://github.com/jim60105/bgutil-ytdlp-pot-provider-rs",
-  },
 ];
-
-const orderedLibraries = computed(() =>
-  [...libraries].sort((a, b) => a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" }))
-);
 
 function badgeType(license) {
   if (license.includes("LGPL")) return "copyleft";

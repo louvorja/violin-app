@@ -723,14 +723,16 @@ function setSaveToMyVideos(ativo: boolean): void {
  */
 async function salvarItem(): Promise<void> {
   if (videoUrlBusy.value) return;
-  if (!videoUrl.value.trim()) {
-    await nomearVideoLegado();
-    await baixarVideoSelecionado();
-    props.saveItem();
-    return;
-  }
+  // O caminho do vídeo escolhido também faz I/O (disco/oEmbed): sem a trava,
+  // dois cliques em Salvar gravariam dois itens.
   videoUrlBusy.value = true;
   try {
+    if (!videoUrl.value.trim()) {
+      await nomearVideoLegado();
+      await baixarVideoSelecionado();
+      props.saveItem();
+      return;
+    }
     const aplicou = await aplicarUrlColada();
     if (!aplicou) return;
     props.saveItem();
@@ -788,7 +790,12 @@ async function baixarVideo(id: string, nome: string, keep: boolean): Promise<voi
   } catch {
     /* A checagem de disco é só para evitar um aviso falso; o download decide. */
   }
-  if (videoDownloads.stateOf(id) === "downloaded") return;
+  if (videoDownloads.stateOf(id) === "downloaded") {
+    // Já está no disco: nada de aviso nem download, mas o checkbox ainda pode
+    // querer marcá-lo como mantido (o cache automático não o despeja).
+    if (keep) void videoDownloads.download(id, nome, { keep: true });
+    return;
+  }
 
   const globalT = i18nAtual()?.global?.t;
   const aviso = globalT ? String(globalT("online_video.preparing_named", { title: nome })) : "";
@@ -828,13 +835,8 @@ async function nomearVideoLegado(): Promise<void> {
     props.setFormField("subitem", url);
     return;
   }
-  videoUrlBusy.value = true;
-  try {
-    const nome = (await fetchYoutubeTitle(ytId)) || url;
-    props.setFormField("subitem", nome);
-  } finally {
-    videoUrlBusy.value = false;
-  }
+  const nome = (await fetchYoutubeTitle(ytId)) || url;
+  props.setFormField("subitem", nome);
 }
 
 const selectedVideoName = computed(() => {

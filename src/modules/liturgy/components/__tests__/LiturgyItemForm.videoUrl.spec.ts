@@ -241,6 +241,53 @@ describe("LiturgyItemForm — URL colada do vídeo on-line", () => {
     expect(mocks.saveItem).toHaveBeenCalledTimes(1);
   });
 
+  it("dois cliques em Salvar não gravam dois itens enquanto o vídeo é preparado", async () => {
+    let releaseRefresh!: () => void;
+    mocks.downloadRefresh.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseRefresh = resolve;
+        })
+    );
+    wrapper = mountForm({
+      url: URL_YOUTUBE,
+      subitem: "Título do YouTube",
+      item: "Item da liturgia",
+    });
+    const state = vm(wrapper);
+
+    const first = (state.salvarItem as () => Promise<void>)();
+    await Promise.resolve();
+    const second = (state.salvarItem as () => Promise<void>)();
+    await Promise.resolve();
+    expect(mocks.saveItem).not.toHaveBeenCalled();
+
+    releaseRefresh();
+    await Promise.all([first, second]);
+    expect(mocks.saveItem).toHaveBeenCalledTimes(1);
+  });
+
+  it("vídeo já baixado com o checkbox ligado só o mantém, sem aviso", async () => {
+    mocks.downloadState = "downloaded";
+    wrapper = mountForm({
+      url: URL_YOUTUBE,
+      subitem: "Título do YouTube",
+      item: "Item da liturgia",
+    });
+    const state = vm(wrapper);
+    (state.setSaveToMyVideos as (_v: boolean) => void)(true);
+
+    await (state.salvarItem as () => Promise<void>)();
+    await flushPromises();
+
+    expect(mocks.downloadRefresh).toHaveBeenCalled();
+    expect(mocks.download).toHaveBeenCalledWith("dQw4w9WgXcQ", "Título do YouTube", {
+      keep: true,
+    });
+    expect(mocks.snackbarInfo).not.toHaveBeenCalled();
+    expect(mocks.saveItem).toHaveBeenCalledTimes(1);
+  });
+
   it("vídeo já baixado não repete o download nem o aviso", async () => {
     mocks.downloadState = "downloaded";
     wrapper = mountForm({
