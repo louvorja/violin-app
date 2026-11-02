@@ -1905,6 +1905,11 @@ const _self = {
       return;
     }
     const switchPlaybackId = _newPlaybackId();
+    const switchStageEpoch = _stageEpoch;
+    const isCurrentSwitch = () =>
+      switchStageEpoch === _stageEpoch &&
+      _loadingId === idMusic &&
+      _activePlayback?.playback_id === switchPlaybackId;
     const switchContext: AudioTelemetryContext = {
       playback_id: switchPlaybackId,
       id_music: idMusic,
@@ -1941,13 +1946,9 @@ const _self = {
             original_source: sourceDetails,
           })
           .then((faixa) => {
-            // Outra música entrou no ar durante o carregamento: esta não serve
-            // mais, e o blob dela só sai da memória se alguém soltar. A música
-            // personalizada não tem id de acervo, então é o playback que a distingue.
-            if (
-              _loadingId !== idMusic ||
-              (custom && _activePlayback?.playback_id !== switchPlaybackId)
-            ) {
+            // Fechar, abrir outra música ou mudar de modo invalida o preparo,
+            // mesmo quando o ID da música continua igual.
+            if (!isCurrentSwitch()) {
               _audio.release(faixa);
               return;
             }
@@ -1981,6 +1982,8 @@ const _self = {
               });
           })
           .catch((error) => {
+            // Um erro atrasado não pode reabrir a música que o operador já deixou.
+            if (!isCurrentSwitch()) return;
             // A faixa não quis carregar em paralelo; o caminho normal reabre a
             // música e traz junto o tratamento de erro de sempre.
             _switchingMode = false;
