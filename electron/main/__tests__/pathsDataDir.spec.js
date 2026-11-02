@@ -423,3 +423,64 @@ describe.skipIf(semPermissao)("sem acesso aos dados antigos", () => {
     expect(paths.dataDirIssue()).toEqual({ reason: "failed", message: "Os dados antigos mudaram durante a migração" });
   });
 });
+
+describe("versões em uso que pulam direto para esta", () => {
+  it("beta.12: dados em Documentos e perfil, json_db, bin e vídeos no AppData, tudo copiado sem mexer na origem", () => {
+    const docs = path.join(locations.documents, "LouvorJA Violin");
+    const inDocs = ["storage/user_data.txt", "library/liturgies.txt", "files/musics/pt/Album/song.opus", "files/covers/pt/Album.jpg"];
+    const inAppData = ["IndexedDB/file__0.indexeddb.leveldb/000003.log", "Local Storage/leveldb/000003.log", "json_db/pt_musics.json", "bin/yt-dlp", "online_videos/abcdefghijk.mp4"];
+    for (const file of inDocs) fs.outputFileSync(path.join(docs, file), "doc:" + file);
+    for (const file of inAppData) fs.outputFileSync(path.join(bootstrap, file), "app:" + file);
+    paths.configureProfile();
+    expect(paths.storageLayout()).toEqual({ version: 1, setupCompleted: true, legacyRoot: docs, mediaDir: path.join(docs, "files"), videosDir: path.join(docs, "Videos") });
+    for (const file of ["storage/user_data.txt", "library/liturgies.txt"]) {
+      expect(fs.readFileSync(path.join(paths.dataDir(), file), "utf8")).toBe("doc:" + file);
+    }
+    for (const file of ["json_db/pt_musics.json", "bin/yt-dlp"]) {
+      expect(fs.readFileSync(path.join(paths.dataDir(), file), "utf8")).toBe("app:" + file);
+    }
+    expect(fs.readFileSync(path.join(paths.profileDir(), "IndexedDB/file__0.indexeddb.leveldb/000003.log"), "utf8")).toBe("app:IndexedDB/file__0.indexeddb.leveldb/000003.log");
+    for (const file of inDocs) expect(fs.readFileSync(path.join(docs, file), "utf8")).toBe("doc:" + file);
+    for (const file of inAppData) expect(fs.readFileSync(path.join(bootstrap, file), "utf8")).toBe("app:" + file);
+  });
+
+  it("beta.1–3: acervo na pasta de nome antigo, Documents/LouvorJA", () => {
+    const old = path.join(locations.documents, "LouvorJA");
+    fs.outputFileSync(path.join(old, "musics", "pt", "song.mp3"), "music");
+    fs.outputJsonSync(path.join(bootstrap, "storage", "user_data.json"), { language: "pt" });
+    paths.configureProfile();
+    expect(paths.filesDir()).toBe(old);
+    expect(fs.readFileSync(path.join(old, "musics", "pt", "song.mp3"), "utf8")).toBe("music");
+  });
+
+  it("beta.1–3: pasta escolhida à mão vence restos sem acervo no AppData", () => {
+    const chosen = path.join(root, "Escolhida");
+    fs.outputFileSync(path.join(chosen, "musics", "pt", "song.mp3"), "music");
+    fs.outputJsonSync(path.join(bootstrap, "storage", "storage.json"), { filesDir: chosen });
+    fs.outputFileSync(path.join(bootstrap, "files", ".write-probe"), "");
+    paths.configureProfile();
+    expect(paths.filesDir()).toBe(chosen);
+  });
+
+  it("com âncora (beta.14+), endereços antigos não são consultados: a main já os recolheu", () => {
+    const data = path.join(locations.documents, "LouvorJA Violin");
+    fs.outputJsonSync(path.join(bootstrap, "data-location.json"), { dataDir: data });
+    fs.outputJsonSync(path.join(data, "storage", "user_data.json"), { language: "pt" });
+    fs.outputFileSync(path.join(locations.documents, "LouvorJA", "musics", "pt", "stale.mp3"), "stale");
+    paths.configureProfile();
+    expect(paths.filesDir()).toBe(path.join(data, "files"));
+  });
+
+  it("um JSON corrompido nos documentos é copiado como está e não trava a migração", () => {
+    const docs = path.join(locations.documents, "LouvorJA Violin");
+    fs.outputFileSync(path.join(docs, "library", "liturgies.json"), '{"items": [');
+    fs.outputJsonSync(path.join(docs, "library", "playlists.json"), [{ audio: path.join(docs, "files", "library", "media", "a.mp3") }]);
+    fs.outputFileSync(path.join(docs, "files", "library", "media", "a.mp3"), "audio");
+    fs.outputFileSync(path.join(bootstrap, "IndexedDB", "database"), "private");
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    paths.configureProfile();
+    expect(fs.readFileSync(path.join(paths.dataDir(), "library", "liturgies.json"), "utf8")).toBe('{"items": [');
+    expect(fs.readJsonSync(path.join(paths.dataDir(), "library", "playlists.json"))).toEqual([{ audio: path.join(paths.privateMediaDir(), "a.mp3") }]);
+    expect(paths.dataDirIssue()).toBeNull();
+  });
+});

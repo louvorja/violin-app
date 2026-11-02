@@ -213,9 +213,18 @@ function resolveInitial({ bootstrap, documents, videos, sharedMedia, machineDefa
   if (oldStorage?.filesDir && !absolute(oldStorage.filesDir)) throw new Error("O endereço antigo do acervo é inválido.");
   const oldMedia = oldStorage?.filesDir && present(oldStorage.filesDir, oldStorage.filesDir) ? oldStorage.filesDir : null;
   const existing = !!anchor || previousInBootstrap;
-  const mediaInDocuments = hasOldDefault && ["musics", "images", "covers"].some((n) => present(path.join(oldDefault, n), oldDefault));
-  const mediaDir = present(path.join(legacyRoot, "files"), legacyRoot) ? path.join(legacyRoot, "files")
-    : oldMedia || (mediaInDocuments ? oldDefault : path.join(legacyRoot, "files"));
+  const filesInRoot = path.join(legacyRoot, "files");
+  const holdsMedia = (dir, root = dir) => ["musics", "images", "covers"].some((n) => present(path.join(dir, n), root));
+  const holdsMediaIfReadable = (dir) => { try { return holdsMedia(dir); } catch { return false; } };
+  // Sem âncora, a versão anterior é a beta.13 ou mais antiga: até a beta.3 o
+  // acervo podia estar em qualquer destes lugares, e só a main o recolhia no
+  // boot. Fica o primeiro que tem acervo de fato, na ordem em que ela procurava.
+  const legacyMedia = !anchor && previousInBootstrap
+    ? [oldMedia, hasOldDefault ? oldDefault : null].find((dir) => dir && holdsMedia(dir))
+      || [path.join(documents, "LouvorJA"), path.join(bootstrap, "files")].find(holdsMediaIfReadable)
+    : null;
+  const mediaDir = holdsMedia(filesInRoot, legacyRoot) ? filesInRoot
+    : legacyMedia || (present(filesInRoot, legacyRoot) ? filesInRoot : oldMedia || filesInRoot);
   const videosDir = path.join(legacyRoot, "Videos");
   let chromium = path.join(legacyRoot, ".electron");
   if (anchor?.profileSource) {

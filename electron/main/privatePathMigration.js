@@ -89,8 +89,16 @@ function rebaseJsonFiles(profileDir, rawMappings) {
       if (entry.isSymbolicLink()) throw new Error(`Os dados pessoais contêm um link: ${file}`);
       if (entry.isDirectory()) { walk(file); continue; }
       if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
-      // JSON inválido aborta a migração inteira antes de publicar o perfil.
-      const original = fs.readJsonSync(file);
+      // Um JSON ilegível (queda de energia, conflito do OneDrive) não tem
+      // endereço para reescrever. Segue copiado como estava; abortar aqui
+      // prenderia a conta no perfil provisório a cada abertura.
+      let original;
+      try { original = fs.readJsonSync(file); }
+      catch (error) {
+        if (!(error instanceof SyntaxError)) throw error;
+        console.warn(`[storage] JSON ilegível copiado sem ajuste de endereços: ${file}`);
+        continue;
+      }
       const next = rewrite(original, mappings);
       if (next === original) continue;
       const temporary = `${file}.${crypto.randomUUID()}.tmp`;
