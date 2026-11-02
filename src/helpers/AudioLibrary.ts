@@ -41,8 +41,15 @@ interface ImageRecord {
   addedAt: string;
 }
 
-async function sha256(blob: Blob): Promise<string> {
-  return sha256Hex(new Uint8Array(await blob.arrayBuffer()));
+async function readImport(file: File | Blob): Promise<{ blob: Blob; hash: string }> {
+  const source = file instanceof Blob ? file : new Blob([file as ArrayBuffer]);
+  const bytes = await source.arrayBuffer();
+  // File pode continuar ligado ao arquivo no disco. Depois de ler para o hash,
+  // guarda os mesmos bytes, mesmo que a origem mude antes do commit no IndexedDB.
+  return {
+    blob: new Blob([bytes], { type: source.type }),
+    hash: await sha256Hex(new Uint8Array(bytes)),
+  };
 }
 
 function extOf(name: string, fallback = "mp3"): string {
@@ -66,8 +73,7 @@ function storedBlob(record: unknown): Blob | null {
 }
 
 export async function importAudio(file: File | Blob, name?: string): Promise<string> {
-  const blob = file instanceof Blob ? file : new Blob([file as ArrayBuffer]);
-  const hash = await sha256(blob);
+  const { blob, hash } = await readImport(file);
   const fileName = name || (file as File).name || "audio.mp3";
   const ext = extOf(fileName);
   const existing = await $idb.get<AudioRecord>(STORE_AUDIO, hash);
@@ -87,8 +93,7 @@ export async function importAudio(file: File | Blob, name?: string): Promise<str
 }
 
 export async function importImage(file: File | Blob, name?: string): Promise<string> {
-  const blob = file instanceof Blob ? file : new Blob([file as ArrayBuffer]);
-  const hash = await sha256(blob);
+  const { blob, hash } = await readImport(file);
   const fileName = name || (file as File).name || "image.png";
   const ext = extOf(fileName, "png");
   const existing = await $idb.get<ImageRecord>(STORE_IMAGES, hash);

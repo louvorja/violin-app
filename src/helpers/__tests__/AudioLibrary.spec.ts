@@ -39,7 +39,9 @@ describe.each([
     const nativeToken = await importFile(blob, "file.bin");
     expect(nativeToken).toBe(fallbackToken);
     expect(records.size).toBe(1);
-    expect(await getBlob(nativeToken)).toBe(blob);
+    const stored = await getBlob(nativeToken);
+    expect(await stored?.text()).toBe(await blob.text());
+    expect(stored?.type).toBe(blob.type);
   });
 
   it.each([{}, null, "bytes ausentes"])(
