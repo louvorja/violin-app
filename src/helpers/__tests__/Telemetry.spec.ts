@@ -719,6 +719,49 @@ describe("Telemetry", () => {
     const beforeSend = () =>
       (posthog.init.mock.calls[0][1] as { before_send: BeforeSend }).before_send;
 
+    it("preserva o lote e a árvore do Replay sem remover a sanitização dos metadados", async () => {
+      const Telemetry = await loadTelemetry();
+      await Telemetry.init();
+      let node: Record<string, unknown> = { type: 3, id: 20, textContent: "Texto público" };
+      for (let id = 19; id >= 1; id--) {
+        node = { type: 2, id, tagName: "div", attributes: {}, childNodes: [node] };
+      }
+      const snapshots = [
+        { type: 2, timestamp: 1000, data: { node, initialOffset: { top: 0, left: 0 } } },
+        ...Array.from({ length: 150 }, (_, i) => ({
+          type: 3,
+          timestamp: 1001 + i,
+          data: { source: 3, id: 20, x: i, y: 0 },
+        })),
+      ];
+      const result = beforeSend()({
+        event: "$snapshot",
+        properties: {
+          token: "phc_fixture",
+          $snapshot_data: snapshots,
+          $session_id: "session-fixture",
+          diagnostic: { access_token: "secret", url: "https://example.test/?token=secret" },
+        },
+      });
+      expect(result?.properties.$snapshot_data).toEqual(snapshots);
+      expect(result?.properties.token).toBe("phc_fixture");
+      expect(result?.properties.diagnostic).toEqual({ url: "https://example.test/?token=[REDACTED]" });
+    });
+
+    it("mantém os limites de propriedades nos eventos comuns, mesmo com chave parecida com Replay", async () => {
+      const Telemetry = await loadTelemetry();
+      await Telemetry.init();
+      const result = beforeSend()({
+        event: "custom_event",
+        properties: {
+          $snapshot_data: Array.from({ length: 150 }, (_, i) => i),
+          message: "x".repeat(30000),
+        },
+      });
+      expect(result?.properties.$snapshot_data).toHaveLength(100);
+      expect(result?.properties.message).toHaveLength(20000);
+    });
+
     it("não grava no boot nem ao religar a telemetria", async () => {
       const Telemetry = await loadTelemetry();
       await Telemetry.init();

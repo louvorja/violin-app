@@ -1869,7 +1869,18 @@ async function _init(): Promise<void> {
       // exact SDK field; user-provided nested token fields remain redacted.
       const ingestionToken =
         typeof capture.properties?.token === "string" ? capture.properties.token : undefined;
-      capture.properties = serializableProperties(capture.properties);
+      // O rrweb já aplicou as máscaras de session_recording antes de comprimir
+      // o Replay. Seus lotes têm limites próprios no SDK: cortar uma string
+      // gzip, a árvore DOM ou a lista de eventos torna a gravação ilegível.
+      // Sanitizamos os metadados, preservando apenas esse payload do SDK.
+      const replayData =
+        capture.event === "$snapshot" ? capture.properties?.$snapshot_data : undefined;
+      capture.properties = serializableProperties(
+        replayData === undefined
+          ? capture.properties
+          : { ...capture.properties, $snapshot_data: undefined }
+      );
+      if (replayData !== undefined) capture.properties.$snapshot_data = replayData;
       if (ingestionToken) capture.properties.token = ingestionToken;
       if (capture.$set) capture.$set = serializableProperties(capture.$set);
       if (capture.$set_once) capture.$set_once = serializableProperties(capture.$set_once);
