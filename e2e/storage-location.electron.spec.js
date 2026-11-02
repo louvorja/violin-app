@@ -409,3 +409,77 @@ test("new profiles keep separate IndexedDB while reusing one collection and one 
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+
+test("sem a pasta dos dados, o aviso explica, oferece tentar de novo e depois começar do zero", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "lj-storage-recovery-"));
+  await output(path.join(root, "data-location.json"), JSON.stringify({ dataDir: path.join(root, "disco-desconectado") }));
+  const notice = (page) => page.getByText(/O LouvorJA abriu sem eles/);
+  const answer = (page, name) => page.locator("[data-alert-btn]", { hasText: name });
+  let session;
+  try {
+    session = await launch(root);
+    await notice(session.page).click();
+    await expect(answer(session.page, "Tentar de novo")).toBeVisible();
+    await expect(answer(session.page, "Começar do zero")).toHaveCount(0);
+    await answer(session.page, "Fechar").click();
+    await close(session);
+    session = null;
+
+    session = await launch(root);
+    await notice(session.page).click();
+    await session.app.evaluate(({ app }) => { app.relaunch = () => {}; });
+    const closed = session.app.waitForEvent("close", { timeout: 30_000 });
+    await answer(session.page, "Começar do zero").click();
+    await answer(session.page, "Sim").click();
+    await closed;
+    session = null;
+    expect(JSON.parse(await fs.readFile(path.join(root, "recovery.json"), "utf8"))).toMatchObject({ request: "reset" });
+
+    session = await launch(root);
+    expect(await session.page.evaluate(() => window.louvorjaApi.storage.dataDirIssue())).toBeNull();
+    await expect(notice(session.page)).toHaveCount(0);
+    expect(JSON.parse(await fs.readFile(path.join(root, "storage-layout.json"), "utf8")).setupCompleted).toBe(false);
+    expect(JSON.parse(await fs.readFile(path.join(root, "recovery.json"), "utf8"))).toEqual({ version: 1 });
+  } finally {
+    await close(session);
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("versão anterior usada depois da migração: o app percebe e traz de volta o que foi feito nela", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "lj-storage-older-"));
+  const legacy = path.join(root, "dados-antigos");
+  const playlists = (base) => path.join(base, "library", "musics.playlists.json");
+  await output(path.join(root, "data-location.json"), JSON.stringify({ dataDir: legacy }));
+  await output(playlists(legacy), JSON.stringify([{ id: "a", name: "Antes da atualização", songs: [] }]));
+  const answer = (page, name) => page.locator("[data-alert-btn]", { hasText: name });
+  let session;
+  try {
+    session = await launch(root);
+    await expect(session.page.getByText("Uma versão anterior foi usada")).toHaveCount(0);
+    await close(session);
+    session = null;
+
+    // A beta.18 aberta de novo: grava na pasta antiga e regrava a âncora.
+    await output(playlists(legacy), JSON.stringify([{ id: "b", name: "Feita na versão anterior", songs: [] }]));
+    const later = new Date(Date.now() + 60_000);
+    await fs.utimes(path.join(root, "data-location.json"), later, later);
+
+    session = await launch(root);
+    await expect(session.page.getByText("Uma versão anterior foi usada")).toBeVisible();
+    await session.app.evaluate(({ app }) => { app.relaunch = () => {}; });
+    const closed = session.app.waitForEvent("close", { timeout: 30_000 });
+    await answer(session.page, "Trazer de volta").click();
+    await answer(session.page, "Sim").click();
+    await closed;
+    session = null;
+
+    session = await launch(root);
+    const profile = path.join(root, "profile");
+    expect(JSON.parse(await fs.readFile(playlists(profile), "utf8"))).toEqual([{ id: "b", name: "Feita na versão anterior", songs: [] }]);
+    await expect(session.page.getByText("Uma versão anterior foi usada")).toHaveCount(0);
+  } finally {
+    await close(session);
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});

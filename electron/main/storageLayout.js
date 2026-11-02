@@ -42,6 +42,65 @@ function atomicJson(file, value) {
   } finally { fs.removeSync(tmp); }
 }
 
+/** JSON corrompido conta como ausente; erro de leitura continua sendo erro. */
+function readJsonLenient(file) {
+  try { return fs.readJsonSync(file); }
+  catch (error) {
+    if (error.code === "ENOENT") return null;
+    if (error instanceof SyntaxError) { console.warn(`[storage] JSON ilegível ignorado: ${file}`); return null; }
+    throw new Error(`Não foi possível ler a configuração de armazenamento: ${file}`, { cause: error });
+  }
+}
+
+const KEEP_RECOVERY = 3;
+/**
+ * Tira do caminho, sem apagar, o que impediria a abertura. Fica em
+ * `<appData>/LouvorJA Violin/recovery/<quando>-<motivo>/`; só as últimas
+ * guardas são mantidas, para não acumular perfis inteiros no disco.
+ */
+function setAside(bootstrap, files, reason) {
+  const present = files.filter((file) => { try { fs.lstatSync(file); return true; } catch { return false; } });
+  if (!present.length) return null;
+  const recovery = path.join(bootstrap, "recovery");
+  const folder = path.join(recovery, `${new Date().toISOString().replace(/[:.]/g, "-")}-${reason}`);
+  fs.ensureDirSync(folder, { mode: 0o700 });
+  for (const file of present) {
+    fs.renameSync(file, path.join(folder, path.basename(file)));
+    console.warn(`[storage] ${file} guardado em ${folder} (${reason}).`);
+  }
+  const kept = fs.readdirSync(recovery).sort();
+  for (const old of kept.slice(0, Math.max(0, kept.length - KEEP_RECOVERY))) fs.removeSync(path.join(recovery, old));
+  return folder;
+}
+
+/**
+ * A beta.14+ regrava a âncora a cada abertura; uma queda no meio deixa o JSON
+ * truncado, quase sempre com o endereço inteiro. Recupera o endereço quando dá
+ * e, sem ele, faz como a própria versão antiga: procura no endereço padrão.
+ * A âncora nunca é regravada aqui.
+ */
+function readAnchor(bootstrap) {
+  const file = path.join(bootstrap, "data-location.json");
+  let text;
+  try { text = fs.readFileSync(file, "utf8"); }
+  catch (error) {
+    if (error.code === "ENOENT") return { present: false, anchor: null };
+    throw new Error(`Não foi possível ler o endereço antigo dos dados: ${file}`, { cause: error });
+  }
+  let parsed = null;
+  try { parsed = JSON.parse(text); }
+  catch {
+    const match = text.match(/"dataDir"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    try { parsed = match ? { dataDir: JSON.parse(`"${match[1]}"`) } : null; } catch { parsed = null; }
+  }
+  const dataDir = parsed && absolute(parsed.dataDir) ? parsed.dataDir : null;
+  if (!dataDir) {
+    console.warn("[storage] Endereço antigo dos dados ilegível; procurando no endereço padrão.");
+    return { present: true, anchor: null };
+  }
+  return { present: true, anchor: absolute(parsed.profileSource) ? { dataDir, profileSource: parsed.profileSource } : { dataDir } };
+}
+
 function validateLayout(raw, roots) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw) || raw.version !== 1 || !absolute(raw.mediaDir) || !absolute(raw.videosDir)
     || typeof raw.setupCompleted !== "boolean"
@@ -195,23 +254,21 @@ function readable(dir) {
 // Quem já usa o app fica com o acervo e os vídeos onde estão, como se os tivesse
 // escolhido ali; só o perfil vem para a pasta privada.
 function resolveInitial({ bootstrap, documents, videos, sharedMedia, machineDefaults }) {
-  const anchor = readJson(path.join(bootstrap, "data-location.json"));
-  if (anchor && (!absolute(anchor.dataDir) || (anchor.profileSource !== undefined && !absolute(anchor.profileSource)))) {
-    throw new Error("O endereço antigo dos dados é inválido. A migração não foi iniciada.");
-  }
+  const { present: anchorPresent, anchor } = readAnchor(bootstrap);
   const oldDefault = path.join(documents, "LouvorJA Violin");
   // A beta.14+ grava a âncora a cada abertura e as anteriores usavam o AppData
   // como perfil. Sem nenhum dos dois é instalação nova, e Documentos nem é
   // consultado: no macOS isso já abriria o pedido de acesso.
-  const previousInBootstrap = [...PRIVATE_ENTRIES, ...PROFILE_ENTRIES].some((name) => fs.existsSync(path.join(bootstrap, name)));
+  // Uma âncora ilegível ainda prova que houve uma instalação antes.
+  const previousInBootstrap = anchorPresent
+    || [...PRIVATE_ENTRIES, ...PROFILE_ENTRIES].some((name) => fs.existsSync(path.join(bootstrap, name)));
   const hasOldDefault = !anchor && previousInBootstrap
     && [".electron", ...PRIVATE_ENTRIES, "files", "Videos", "musics", "images", "covers"].some((name) => present(path.join(oldDefault, name), oldDefault));
   const legacyRoot = anchor?.dataDir || (hasOldDefault ? oldDefault : bootstrap);
   if (anchor && !readable(legacyRoot)) throw unavailable(legacyRoot);
-  const oldStorage = readJson(path.join(legacyRoot, "storage", "storage.json"))
-    || readJson(path.join(bootstrap, "storage", "storage.json"));
-  if (oldStorage?.filesDir && !absolute(oldStorage.filesDir)) throw new Error("O endereço antigo do acervo é inválido.");
-  const oldMedia = oldStorage?.filesDir && present(oldStorage.filesDir, oldStorage.filesDir) ? oldStorage.filesDir : null;
+  const oldStorage = readJsonLenient(path.join(legacyRoot, "storage", "storage.json"))
+    || readJsonLenient(path.join(bootstrap, "storage", "storage.json"));
+  const oldMedia = absolute(oldStorage?.filesDir) && present(oldStorage.filesDir, oldStorage.filesDir) ? oldStorage.filesDir : null;
   const existing = !!anchor || previousInBootstrap;
   const filesInRoot = path.join(legacyRoot, "files");
   const holdsMedia = (dir, root = dir) => ["musics", "images", "covers"].some((n) => present(path.join(dir, n), root));
@@ -260,7 +317,51 @@ function initialize(options) {
   finally { release(); }
 }
 
-function initializeLocked({ bootstrap, documents, videos, sharedMedia, programDir, machineDefaults = null, ownedBootstrapPid = process.pid, onProgress }) {
+/** Um registro só com a mudança de pastas inválida perde a mudança, não o resto. */
+function usableLayout(raw, roots) {
+  if (!raw) return null;
+  try { return validateLayout(raw, roots); }
+  catch (error) {
+    console.warn("[storage] Registro de armazenamento inválido:", error.message);
+    if (raw.pending == null || typeof raw !== "object") return null;
+    const { pending: _discarded, ...rest } = raw;
+    try {
+      return validateLayout({ ...rest, pendingError: "A mudança de pastas pedida estava inválida e foi descartada. Escolha as pastas de novo." }, roots);
+    } catch { return null; }
+  }
+}
+
+function createDefaultRoots(layout) {
+  // Criar padrões só nesta primeira resolução. Um disco removido depois nunca
+  // é substituído silenciosamente por outro diretório.
+  for (const [kind, dir] of [["media", layout.mediaDir], ["videos", layout.videosDir]]) {
+    if (!fs.existsSync(dir)) {
+      const shared = layout[kind + "Shared"] === true;
+      try { ensureCollectionDirectorySync(canonical(dir), { shared }); }
+      catch { continue; /* a UI permite escolher um destino acessível */ }
+      try { if (shared) grantLocalAccountsSync(canonical(dir)); }
+      catch (error) { console.warn("[storage]", error.message); }
+    }
+  }
+}
+
+function openStaging(bootstrap) {
+  const staging = path.join(bootstrap, "profile.migrating");
+  if (fs.existsSync(staging)) {
+    const marker = path.join(staging, ".migration-owned");
+    if (!fs.lstatSync(staging).isDirectory() || !fs.existsSync(marker)
+      || !fs.lstatSync(marker).isFile() || fs.readFileSync(marker, "utf8") !== "LouvorJA storage layout 1") {
+      // Não foi esta rotina que criou: guarda, em vez de apagar ou travar.
+      setAside(bootstrap, [staging], "copia-desconhecida");
+    }
+  }
+  fs.removeSync(staging);
+  fs.ensureDirSync(staging, { mode: 0o700 });
+  fs.writeFileSync(path.join(staging, ".migration-owned"), "LouvorJA storage layout 1", { mode: 0o600 });
+  return staging;
+}
+
+function initializeLocked({ bootstrap, documents, videos, sharedMedia, programDir, machineDefaults = null, ownedBootstrapPid = process.pid, onProgress, freshStart = false }) {
   const counts = new Map();
   let lastPhase, lastProgress = 0;
   function progress(phase, size = 0) {
@@ -279,17 +380,37 @@ function initializeLocked({ bootstrap, documents, videos, sharedMedia, programDi
   if (fs.existsSync(profile) && (!fs.lstatSync(profile).isDirectory() || fs.lstatSync(profile).isSymbolicLink())) {
     throw new Error("A pasta privada do usuário não pode ser um link nem um arquivo.");
   }
-  const current = readJson(file);
-  if (current) {
-    validateLayout(current, roots);
-    if (!fs.existsSync(profile)) throw new Error(`A pasta do usuário está indisponível: ${profile}`);
+  const originFile = path.join(profile, ".layout-origin.json");
+  const raw = readJsonLenient(file);
+  const current = usableLayout(raw, roots);
+  const hasProfile = fs.existsSync(profile);
+  if (current && hasProfile) {
+    if (current !== raw) atomicJson(file, current);
     return current;
   }
-  const published = readJson(path.join(profile, ".layout-origin.json"));
-  if (published) { validateLayout(published, roots); atomicJson(file, published); return published; }
-  if (fs.existsSync(profile)) throw new Error(`A pasta do usuário já existe sem registro de migração: ${profile}`);
+  // Ilegível, inválido ou sem o perfil que descreve: fica guardado, nunca apagado.
+  if (fs.existsSync(file)) setAside(bootstrap, [file], current ? "registro-sem-perfil" : "registro-invalido");
+  const published = hasProfile ? usableLayout(readJsonLenient(originFile), roots) : null;
+  if (published) { atomicJson(file, published); return published; }
+  if (hasProfile) {
+    // O perfil é o dado mais novo da conta e só o registro se perdeu: refaz o
+    // registro a partir dele, sem copiar a origem antiga por cima.
+    const { layout } = resolveInitial({ bootstrap, documents, videos, sharedMedia, machineDefaults });
+    validateLayout(layout, roots);
+    atomicJson(originFile, layout);
+    atomicJson(file, layout);
+    console.warn(`[storage] Registro refeito para o perfil existente: ${profile}`);
+    return layout;
+  }
+  // Perfil sumiu com o registro intacto: os dados antigos são copiados de novo,
+  // mas acervo e vídeos ficam onde o operador os tinha deixado.
+  const kept = current ? { mediaDir: current.mediaDir, videosDir: current.videosDir, mediaShared: current.mediaShared, videosShared: current.videosShared } : null;
 
-  const { layout, chromium, legacyRoot } = resolveInitial({ bootstrap, documents, videos, sharedMedia, machineDefaults });
+  if (freshStart) return publishFresh({ bootstrap, documents, videos, sharedMedia, machineDefaults, roots, file, profile, kept });
+
+  const initial = resolveInitial({ bootstrap, documents, videos, sharedMedia, machineDefaults });
+  const { chromium, legacyRoot } = initial;
+  const layout = kept ? { ...initial.layout, ...kept } : initial.layout;
   const chromiumSource = fs.existsSync(chromium) ? chromium : bootstrap;
   const idleOptions = { ownedBootstrapDir: bootstrap, currentPid: ownedBootstrapPid };
   assertProfileIdle(chromiumSource, idleOptions);
@@ -307,28 +428,8 @@ function initializeLocked({ bootstrap, documents, videos, sharedMedia, programDi
     snapshots.push({ from, before, options });
   }
   validateLayout(layout, roots);
-  // Criar padrões só nesta primeira resolução. Um disco removido depois nunca
-  // é substituído silenciosamente por outro diretório.
-  for (const [kind, dir] of [["media", layout.mediaDir], ["videos", layout.videosDir]]) {
-    if (!fs.existsSync(dir)) {
-      const shared = layout[kind + "Shared"] === true;
-      try { ensureCollectionDirectorySync(canonical(dir), { shared }); }
-      catch { continue; /* a UI permite escolher um destino acessível */ }
-      try { if (shared) grantLocalAccountsSync(canonical(dir)); }
-      catch (error) { console.warn("[storage]", error.message); }
-    }
-  }
-  const staging = path.join(bootstrap, "profile.migrating");
-  if (fs.existsSync(staging)) {
-    const marker = path.join(staging, ".migration-owned");
-    if (!fs.lstatSync(staging).isDirectory() || !fs.existsSync(marker)
-      || !fs.lstatSync(marker).isFile() || fs.readFileSync(marker, "utf8") !== "LouvorJA storage layout 1") {
-      throw new Error(`A pasta temporária já existe e foi preservada: ${staging}`);
-    }
-  }
-  fs.removeSync(staging);
-  fs.ensureDirSync(staging, { mode: 0o700 });
-  fs.writeFileSync(path.join(staging, ".migration-owned"), "LouvorJA storage layout 1", { mode: 0o600 });
+  createDefaultRoots(layout);
+  const staging = openStaging(bootstrap);
   for (const name of PRIVATE_ENTRIES) {
     for (const suffix of name.endsWith(".json") ? ["", ".bak", ".tmp"] : [""]) {
       const source = path.join(legacyRoot, name + suffix);
@@ -385,4 +486,27 @@ function initializeLocked({ bootstrap, documents, videos, sharedMedia, programDi
   return layout;
 }
 
-module.exports = { initialize, resolveInitial, defaultLocations, absolute, atomicJson, readJson, validateLayout, copyVerified, hash, PRIVATE_ENTRIES };
+/**
+ * "Começar do zero": perfil vazio, sem copiar nada da instalação anterior.
+ * Acervo e vídeos continuam onde estavam quando dá para encontrá-los — eles
+ * não costumam ser a causa e baixar tudo de novo custaria horas.
+ */
+function publishFresh({ bootstrap, documents, videos, sharedMedia, machineDefaults, roots, file, profile, kept }) {
+  let layout = null;
+  try {
+    const initial = resolveInitial({ bootstrap, documents, videos, sharedMedia, machineDefaults }).layout;
+    if (initial.setupCompleted) layout = initial;
+  } catch (error) { console.warn("[storage] Começando do zero sem os endereços antigos:", error.message); }
+  layout ||= { version: 1, ...defaultLocations({ documents, videos, sharedMedia, machineDefaults }), setupCompleted: false };
+  if (kept) layout = { ...layout, ...kept, setupCompleted: true };
+  validateLayout(layout, roots);
+  createDefaultRoots(layout);
+  const staging = openStaging(bootstrap);
+  fs.ensureDirSync(path.join(staging, ".electron"), { mode: 0o700 });
+  atomicJson(path.join(staging, ".layout-origin.json"), layout);
+  fs.renameSync(staging, profile);
+  atomicJson(file, layout);
+  return layout;
+}
+
+module.exports = { initialize, resolveInitial, defaultLocations, absolute, atomicJson, readJson, readJsonLenient, setAside, validateLayout, copyVerified, hash, PRIVATE_ENTRIES };

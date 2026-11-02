@@ -14,6 +14,15 @@ declare global {
     changeError?: string;
   }
 
+  /** Por que o app abriu num perfil provisório, e quantas aberturas seguidas falharam. */
+  interface StorageDataDirIssue {
+    reason: "unavailable" | "failed";
+    wanted?: string;
+    message?: string;
+    attempts?: number;
+    canReset?: boolean;
+  }
+
   interface StorageLocationsInput {
     mediaDir: string;
     videosDir: string;
@@ -236,7 +245,7 @@ declare global {
       clearUnused: (files: unknown) => Promise<void>;
       stats: () => Promise<{
         dataDir?: string;
-        dataDirIssue?: { reason: "unavailable" | "failed"; wanted?: string; message?: string } | null;
+        dataDirIssue?: StorageDataDirIssue | null;
         restartRequired?: boolean;
         filesDir?: string;
         mediaDir?: string;
@@ -248,7 +257,10 @@ declare global {
         json?: { bytes: number; count: number };
         total?: { bytes: number };
       }>;
-      dataDirIssue: () => Promise<{ reason: "unavailable" | "failed"; wanted?: string; message?: string } | null>;
+      dataDirIssue: () => Promise<StorageDataDirIssue | null>;
+      recover: (action: "reset" | "reimport") => Promise<void>;
+      olderVersion: () => Promise<{ since: string; legacyRoot: string } | null>;
+      keepCurrentVersion: () => Promise<void>;
       clearJson: () => Promise<void>;
       clearFiles: () => Promise<void>;
       setAutoCache: (enabled: boolean) => Promise<void>;

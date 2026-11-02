@@ -3,8 +3,10 @@ const { app } = require("electron");
 const path = require("node:path");
 const fs = require("fs-extra");
 const layout = require("./storageLayout.js");
+const recovery = require("./storageRecovery.js");
 let resolved = null;
 let fallback = null;
+let freshStart = null;
 
 function bootstrapDir() {
   const isolated = process.env.LJ_E2E_USER_DATA?.trim();
@@ -41,9 +43,15 @@ function programDir() {
   // No macOS todo o bundle .app pertence ao programa, não apenas app.asar.
   return process.platform === "darwin" ? path.resolve(directory, "../..") : directory;
 }
+function pendingFreshStart() {
+  freshStart ??= recovery.applyRequest(bootstrapDir()).freshStart;
+  return freshStart;
+}
 function config() {
   if (!resolved) {
-    resolved = layout.initialize(migrationOptions());
+    const fresh = pendingFreshStart();
+    resolved = layout.initialize({ ...migrationOptions(), freshStart: fresh });
+    if (fresh) { recovery.clearFreshStart(bootstrapDir()); freshStart = false; }
   }
   return resolved;
 }
@@ -57,14 +65,19 @@ module.exports = {
   videoWorkDir() { return path.join(this.dataDir(), "temp", "videos"); },
   migrationOptions,
   needsMigration() {
-    // A primeira instalação não tem um perfil grande para copiar. Layouts já
-    // publicados só voltam ao auxiliar para aplicar uma mudança de pasta pedida.
-    const current = layout.readJson(path.join(bootstrapDir(), "storage-layout.json"))
-      || layout.readJson(path.join(this.dataDir(), ".layout-origin.json"));
+    // Começar do zero e refazer um registro perdido são instantâneos.
+    if (pendingFreshStart()) return false;
+    const profile = this.dataDir();
+    const roots = { profileDir: profile, programDir: programDir() };
+    const current = layout.readJsonLenient(path.join(bootstrapDir(), "storage-layout.json"));
     if (current) {
-      layout.validateLayout(current, { profileDir: this.dataDir(), programDir: programDir() });
-      return !!current.pending;
+      // Registro estranho ou perfil sumido: o auxiliar conserta com a tela de progresso.
+      try { layout.validateLayout(current, roots); }
+      catch { return true; }
+      return !!current.pending || !fs.existsSync(profile);
     }
+    if (fs.existsSync(profile)) return false;
+    // A primeira instalação não tem um perfil grande para copiar.
     return layout.resolveInitial(this.migrationOptions()).layout.setupCompleted;
   },
   initialize() { return config(); },
@@ -102,18 +115,29 @@ module.exports = {
    * Abre num perfil provisório quando os dados não puderam ser preparados. Nada
    * é publicado: a origem fica intacta e a próxima abertura tenta de novo.
    */
-  useFallback(error) {
+  useFallback(error, attempts = 1) {
     const root = path.join(bootstrapDir(), "fallback");
     fallback = {
       profile: path.join(root, "profile"),
-      issue: error?.code === "LJ_DATA_UNAVAILABLE"
-        ? { reason: "unavailable", wanted: error.dir }
-        : { reason: "failed", message: String(error?.message || error) },
+      issue: {
+        ...(error?.code === "LJ_DATA_UNAVAILABLE"
+          ? { reason: "unavailable", wanted: error.dir }
+          : { reason: "failed", message: String(error?.message || error) }),
+        attempts, canReset: attempts >= recovery.RESET_AFTER,
+      },
     };
     resolved = { version: 1, setupCompleted: true, mediaDir: path.join(root, "Acervo"), videosDir: path.join(root, "Videos") };
     for (const dir of [fallback.profile, resolved.mediaDir, resolved.videosDir]) fs.ensureDirSync(dir, { mode: 0o700 });
   },
   profileRestartRequired: () => !!config().pending,
+  /** Uma versão anterior foi aberta depois da migração e gravou na pasta antiga. */
+  olderVersionUsed() {
+    if (fallback) return null;
+    return recovery.olderVersionUsed({ bootstrap: bootstrapDir(), profile: this.dataDir(), legacyRoot: config().legacyRoot });
+  },
+  acknowledgeOlderVersion() {
+    recovery.acknowledgeOlderVersion({ bootstrap: bootstrapDir(), profile: this.dataDir() });
+  },
   dataDirIssue: () => fallback?.issue || null,
   mediaDir: () => config().mediaDir,
   filesDir: () => config().mediaDir,

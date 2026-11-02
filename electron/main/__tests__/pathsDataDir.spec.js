@@ -242,16 +242,23 @@ describe("perfil privado e destinos independentes", () => {
   it.each([
     { mediaShared: "invalid" }, { pending: false }, { pending: [] },
     { mediaDir: "profile" }, { mediaDir: "program" }, { videosDir: "media" },
-  ])("recusa layout persistido inválido antes de inicializar gravadores: %j", (change) => {
+  ])("layout persistido inválido nunca chega aos gravadores: fica guardado e a abertura segue: %j", (change) => {
     paths.configureProfile();
     const saved = paths.storageLayout();
     if (change.mediaDir === "profile") change = { mediaDir: paths.dataDir() };
     if (change.mediaDir === "program") change = { mediaDir: paths.appRoot() };
     if (change.videosDir === "media") change = { videosDir: saved.mediaDir };
     fs.outputJsonSync(path.join(bootstrap, "storage-layout.json"), { ...saved, ...change });
-    loadPaths();
-    expect(() => paths.configureProfile()).toThrow();
-    expect(fs.readJsonSync(path.join(bootstrap, "storage-layout.json"))).toEqual({ ...saved, ...change });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    loadPaths(); paths.configureProfile();
+    if ("pending" in change) {
+      // Só a mudança de pastas pedida era inválida: perde a mudança, não o resto.
+      expect(paths.storageLayout()).toEqual({ ...saved, pendingError: expect.stringMatching(/descartada/) });
+      return;
+    }
+    expect(paths.storageLayout()).toEqual(saved);
+    const [kept] = fs.readdirSync(path.join(bootstrap, "recovery"));
+    expect(fs.readJsonSync(path.join(bootstrap, "recovery", kept, "storage-layout.json"))).toEqual({ ...saved, ...change });
   });
   it("conclui migração pendente da versão anterior sem apagar a origem", () => {
     const old = path.join(root, "Old", ".electron");
@@ -268,11 +275,26 @@ describe("perfil privado e destinos independentes", () => {
     expect(thrown(() => paths.configureProfile())).toMatchObject({ code: "LJ_DATA_UNAVAILABLE", dir: path.join(root, "unmounted") });
     expect(fs.existsSync(paths.dataDir())).toBe(false);
   });
-  it("âncora corrompida não é sobrescrita", () => {
+  it("âncora ilegível não trava a abertura nem é regravada: procura no endereço padrão, como a versão antiga", () => {
     const file = path.join(bootstrap, "data-location.json");
     fs.outputFileSync(file, "broken");
-    expect(() => paths.configureProfile()).toThrow(/configuração/);
+    const old = path.join(locations.documents, "LouvorJA Violin");
+    fs.outputJsonSync(path.join(old, "storage", "user_data.json"), { language: "es" });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    paths.configureProfile();
+    expect(paths.storageLayout().legacyRoot).toBe(old);
+    expect(fs.readJsonSync(path.join(paths.dataDir(), "storage", "user_data.json"))).toEqual({ language: "es" });
     expect(fs.readFileSync(file, "utf8")).toBe("broken");
+  });
+  it("âncora truncada no meio da gravação ainda entrega o endereço inteiro", () => {
+    const chosen = path.join(root, "Pasta escolhida");
+    fs.outputJsonSync(path.join(chosen, "storage", "user_data.json"), { language: "es" });
+    const file = path.join(bootstrap, "data-location.json");
+    fs.outputFileSync(file, `{\n  "dataDir": ${JSON.stringify(chosen)},\n  "profileSo`);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    paths.configureProfile();
+    expect(paths.storageLayout().legacyRoot).toBe(chosen);
+    expect(fs.readJsonSync(path.join(paths.dataDir(), "storage", "user_data.json"))).toEqual({ language: "es" });
   });
   it("retoma publicação interrompida depois da cópia sem copiar preferências antigas novamente", () => {
     fs.outputFileSync(path.join(bootstrap, "IndexedDB", "offline"), "saved");
@@ -402,7 +424,7 @@ describe.skipIf(semPermissao)("sem acesso aos dados antigos", () => {
     expect(paths.dataDir()).toBe(path.join(fallback, "profile"));
     expect(locations.userData).toBe(path.join(fallback, "profile", ".electron"));
     expect([paths.filesDir(), paths.videosDir()]).toEqual([path.join(fallback, "Acervo"), path.join(fallback, "Videos")]);
-    expect(paths.dataDirIssue()).toEqual({ reason: "unavailable", wanted: old() });
+    expect(paths.dataDirIssue()).toEqual({ reason: "unavailable", wanted: old(), attempts: 1, canReset: false });
     expect(paths.privatePathMappings()).toEqual([]);
     expect(() => paths.saveLayout(paths.storageLayout())).toThrow(/ainda não foram trazidos/);
     expect(fs.existsSync(path.join(bootstrap, "storage-layout.json"))).toBe(false);
@@ -420,7 +442,7 @@ describe.skipIf(semPermissao)("sem acesso aos dados antigos", () => {
   it("uma falha que não é de acesso também abre o provisório, com o motivo", () => {
     paths.useFallback(new Error("Os dados antigos mudaram durante a migração"));
     paths.configureProfile();
-    expect(paths.dataDirIssue()).toEqual({ reason: "failed", message: "Os dados antigos mudaram durante a migração" });
+    expect(paths.dataDirIssue()).toEqual({ reason: "failed", message: "Os dados antigos mudaram durante a migração", attempts: 1, canReset: false });
   });
 });
 
@@ -482,5 +504,121 @@ describe("versões em uso que pulam direto para esta", () => {
     expect(fs.readFileSync(path.join(paths.dataDir(), "library", "liturgies.json"), "utf8")).toBe('{"items": [');
     expect(fs.readJsonSync(path.join(paths.dataDir(), "library", "playlists.json"))).toEqual([{ audio: path.join(paths.privateMediaDir(), "a.mp3") }]);
     expect(paths.dataDirIssue()).toBeNull();
+  });
+});
+
+describe("recuperação automática", () => {
+  const recovery = () => require("../storageRecovery.js");
+  const legacy = () => path.join(locations.documents, "LouvorJA Violin");
+  function migrated() {
+    fs.outputJsonSync(path.join(bootstrap, "data-location.json"), { dataDir: legacy() });
+    fs.outputJsonSync(path.join(legacy(), "storage", "user_data.json"), { language: "es" });
+    fs.outputFileSync(path.join(legacy(), "files", "musics", "pt", "song.opus"), "music");
+    paths.configureProfile();
+    return paths.storageLayout();
+  }
+  const reopen = () => { loadPaths(); paths.configureProfile(); };
+  const keptIn = (reason) => {
+    const folder = fs.readdirSync(path.join(bootstrap, "recovery")).find((name) => name.endsWith(reason));
+    return folder && path.join(bootstrap, "recovery", folder);
+  };
+  beforeEach(() => { vi.spyOn(console, "warn").mockImplementation(() => {}); });
+
+  it("registro truncado é guardado e o perfil reabre pelo registro de origem", () => {
+    const saved = migrated();
+    fs.writeFileSync(path.join(bootstrap, "storage-layout.json"), '{"version": 1, "media');
+    expect(paths.needsMigration()).toBe(false);
+    reopen();
+    expect(paths.storageLayout()).toEqual(saved);
+    expect(fs.readFileSync(path.join(keptIn("registro-invalido"), "storage-layout.json"), "utf8")).toBe('{"version": 1, "media');
+  });
+
+  it("perfil sem nenhum registro ganha o registro de volta, sem copiar a pasta antiga por cima", () => {
+    const saved = migrated();
+    fs.outputJsonSync(path.join(paths.dataDir(), "storage", "user_data.json"), { language: "pt", changed: "nesta versão" });
+    fs.removeSync(path.join(bootstrap, "storage-layout.json"));
+    fs.removeSync(path.join(paths.dataDir(), ".layout-origin.json"));
+    reopen();
+    expect(paths.storageLayout()).toEqual(saved);
+    expect(fs.readJsonSync(path.join(paths.dataDir(), "storage", "user_data.json"))).toEqual({ language: "pt", changed: "nesta versão" });
+  });
+
+  it("perfil sumido com o registro intacto copia os dados antigos de novo e mantém o acervo escolhido", () => {
+    migrated();
+    const chosen = path.join(root, "Acervo escolhido");
+    fs.ensureDirSync(chosen);
+    const layout = { ...paths.storageLayout(), mediaDir: chosen };
+    fs.outputJsonSync(path.join(bootstrap, "storage-layout.json"), layout);
+    fs.removeSync(paths.dataDir());
+    expect(paths.needsMigration()).toBe(true);
+    reopen();
+    expect(paths.filesDir()).toBe(chosen);
+    expect(fs.readJsonSync(path.join(paths.dataDir(), "storage", "user_data.json"))).toEqual({ language: "es" });
+  });
+
+  it("cópia interrompida que não é desta rotina é guardada e a migração segue", () => {
+    fs.outputFileSync(path.join(bootstrap, "profile.migrating", "lixo.txt"), "?");
+    migrated();
+    expect(fs.readFileSync(path.join(keptIn("copia-desconhecida"), "profile.migrating", "lixo.txt"), "utf8")).toBe("?");
+  });
+
+  it("começar do zero: perfil vazio, acervo antigo em uso e nada da origem apagado", () => {
+    const saved = migrated();
+    fs.outputJsonSync(path.join(paths.dataDir(), "library", "liturgies.json"), [{ title: "quebrada" }]);
+    recovery().request(bootstrap, "reset");
+    reopen();
+    expect(fs.existsSync(path.join(paths.dataDir(), "library", "liturgies.json"))).toBe(false);
+    expect(fs.existsSync(path.join(paths.dataDir(), "storage", "user_data.json"))).toBe(false);
+    expect(paths.filesDir()).toBe(saved.mediaDir);
+    expect(paths.storageLayout().setupCompleted).toBe(true);
+    expect(fs.readJsonSync(path.join(keptIn("comecar-do-zero"), "profile", "library", "liturgies.json"))).toEqual([{ title: "quebrada" }]);
+    expect(fs.readJsonSync(path.join(legacy(), "storage", "user_data.json"))).toEqual({ language: "es" });
+    reopen();
+    expect(fs.existsSync(path.join(paths.dataDir(), "storage", "user_data.json"))).toBe(false);
+  });
+
+  it("começar do zero com a pasta antiga sem acesso abre nos padrões, sem cair no provisório", () => {
+    migrated();
+    fs.outputJsonSync(path.join(bootstrap, "data-location.json"), { dataDir: path.join(root, "desconectado") });
+    recovery().request(bootstrap, "reset");
+    reopen();
+    expect(paths.dataDirIssue()).toBeNull();
+    expect(paths.filesDir()).toBe(sharedMedia);
+    expect(paths.storageLayout().setupCompleted).toBe(false);
+  });
+
+  it("versão anterior aberta depois da migração é percebida, e trazer de volta copia a pasta antiga de novo", () => {
+    migrated();
+    expect(paths.olderVersionUsed()).toBeNull();
+    fs.outputJsonSync(path.join(legacy(), "storage", "user_data.json"), { language: "pt", from: "beta.18" });
+    const later = new Date(Date.now() + 60_000);
+    fs.utimesSync(path.join(bootstrap, "data-location.json"), later, later);
+    expect(paths.olderVersionUsed()).toMatchObject({ legacyRoot: legacy() });
+    recovery().request(bootstrap, "reimport");
+    reopen();
+    expect(fs.readJsonSync(path.join(paths.dataDir(), "storage", "user_data.json"))).toEqual({ language: "pt", from: "beta.18" });
+    expect(fs.readJsonSync(path.join(keptIn("trazer-de-volta"), "profile", "storage", "user_data.json"))).toEqual({ language: "es" });
+    expect(paths.olderVersionUsed()).toBeNull();
+  });
+
+  it("manter como está não pergunta de novo", () => {
+    migrated();
+    paths.olderVersionUsed();
+    const later = new Date(Date.now() + 60_000);
+    fs.utimesSync(path.join(bootstrap, "data-location.json"), later, later);
+    expect(paths.olderVersionUsed()).not.toBeNull();
+    paths.acknowledgeOlderVersion();
+    expect(paths.olderVersionUsed()).toBeNull();
+  });
+
+  it("conta as aberturas que falharam e só oferece começar do zero a partir da segunda", () => {
+    const failure = new Error("Os dados antigos mudaram durante a migração");
+    paths.useFallback(failure, recovery().recordFailure(bootstrap, failure));
+    expect(paths.dataDirIssue()).toMatchObject({ attempts: 1, canReset: false });
+    loadPaths();
+    paths.useFallback(failure, recovery().recordFailure(bootstrap, failure));
+    expect(paths.dataDirIssue()).toMatchObject({ attempts: 2, canReset: true });
+    recovery().recordSuccess(bootstrap);
+    expect(recovery().failures(bootstrap)).toBe(0);
   });
 });

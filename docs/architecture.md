@@ -152,7 +152,33 @@ tomar um pelo outro trataria quem tem dados como instalação nova. Pasta antiga
 ilegível ou ausente (TCC do macOS, disco desconectado) levanta
 `LJ_DATA_UNAVAILABLE`. Essa e qualquer outra falha da preparação abrem o app num
 perfil provisório em `<appData>/LouvorJA Violin/fallback`, com aviso persistente;
-nada é publicado (`saveLayout` recusa) e a próxima abertura tenta de novo. Checkpoints `.partial`, cache yt-dlp e marcadores de migração
+nada é publicado (`saveLayout` recusa) e a próxima abertura tenta de novo.
+
+**Recuperação.** Nenhum estado em disco pode prender a conta no provisório:
+
+- *Conserto sozinho, sem perguntar* (`storageLayout.js`): o que tem uma única
+  resposta certa. Registro ilegível ou inválido vai para `recovery/` e o perfil
+  reabre pelo `.layout-origin.json`; uma `pending` inválida perde só a mudança.
+  Perfil sem registro ganha o registro de volta, sem copiar a origem por cima.
+  Registro sem o perfil copia a pasta antiga de novo, mantendo acervo e vídeos
+  escolhidos. `profile.migrating` alheio vai para `recovery/`. Âncora truncada
+  entrega o endereço quando o texto ainda o tem; ilegível, vale o endereço
+  padrão, como na própria versão antiga, e nunca é regravada. JSON corrompido
+  nos documentos é copiado como está.
+- *Diagnóstico* (`storageRecovery.js`, `recovery.json`): cada abertura no
+  provisório conta uma tentativa e guarda o motivo. O aviso abre um diálogo
+  (`src/helpers/StorageRecovery.ts`) com o que fazer e o detalhe técnico;
+  "Tentar de novo" reinicia. A partir da segunda tentativa entra "Começar do
+  zero": perfil vazio, sem copiar a instalação anterior, com acervo e vídeos onde
+  estavam quando ainda dá para achá-los. Até o perfil vazio ser publicado, uma
+  nova queda continua sendo "do zero".
+- *Versão anterior usada depois da migração*: a beta.14+ regrava a âncora a cada
+  abertura. Mudou depois da última vez que esta versão olhou
+  (`profile/.legacy-anchor-seen.json`), o app pergunta uma vez se traz de volta
+  o que foi feito lá; "Trazer de volta" copia a pasta antiga de novo.
+
+Nada é apagado: o que sai do caminho vai para `<appData>/LouvorJA Violin/recovery/<quando>-<motivo>/`,
+e só as três guardas mais recentes ficam no disco. Checkpoints `.partial`, cache yt-dlp e marcadores de migração
 vão para `temp/videos/`; streams antigos descartáveis não são reutilizados.
 A primeira migração e mudanças pendentes usam um worker e uma janela de progresso num processo
 auxiliar com perfil temporário; o processo principal conserva seu singleton e

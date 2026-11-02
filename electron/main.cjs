@@ -109,6 +109,7 @@ const { createCpuProfileCapture } = require("./main/cpuProfileCapture.js");
 const { createRuntimeIncidentJournal } = require("./main/runtimeIncidentJournal.js");
 const storageLocations = require("./main/storageLocations.js");
 const storageAccess = require("./main/storageAccess.js");
+const storageRecovery = require("./main/storageRecovery.js");
 const { createPresentationActivity } = require("./main/presentationActivity.js");
 const { buildCsp } = require("./main/csp.js");
 const { backgroundWindows } = require("./main/e2eWindowMode.js");
@@ -196,11 +197,15 @@ try {
       paths.acceptPreparedLayout();
     }
     paths.configureProfile();
+    storageRecovery.recordSuccess(paths.bootstrapDir());
   } catch (error) {
     // Pasta sem acesso, disco desconectado ou cópia interrompida: a origem fica
     // intacta e a próxima abertura tenta de novo. Não abrir seria pior no culto.
     console.error("[storage] Dados não preparados; abrindo num perfil provisório:", error);
-    paths.useFallback(error);
+    let attempts = 1;
+    try { attempts = storageRecovery.recordFailure(paths.bootstrapDir(), error); }
+    catch (recordError) { console.warn("[storage] Falha ao registrar a tentativa:", recordError.message); }
+    paths.useFallback(error, attempts);
     paths.configureProfile();
   }
   storageAccess.initialize(paths.storageLayout());
@@ -2568,6 +2573,16 @@ ipcMain.handle("storage:restart", () => {
   app.relaunch();
   app.quit();
 });
+// Recuperação pedida pelo operador: aplicada no começo da próxima abertura.
+ipcMain.handle("storage:recover", (_e, action) => {
+  if (action === "reset" && !paths.dataDirIssue()?.canReset) throw new Error("Começar do zero só é oferecido depois de tentar de novo.");
+  if (action === "reimport" && !paths.olderVersionUsed()) throw new Error("Não há dados de uma versão anterior para trazer.");
+  storageRecovery.request(paths.bootstrapDir(), action);
+  app.relaunch();
+  app.quit();
+});
+ipcMain.handle("storage:olderVersion", () => paths.olderVersionUsed());
+ipcMain.handle("storage:keepCurrentVersion", () => paths.acknowledgeOlderVersion());
 
 // ---------------------------------------------------------------------------
 // Documentos do usuário (biblioteca de liturgias, playlists, coletâneas)

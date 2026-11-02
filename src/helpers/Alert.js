@@ -4,7 +4,7 @@ import $dev from "@/helpers/Dev";
 import $appdata from "@/helpers/AppData";
 import { useAppStore } from "@/stores/appStore";
 
-function escapeHtml(text) {
+export function escapeHtml(text) {
   return String(text ?? "").replace(
     /[&<>"']/g,
     (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]
@@ -12,6 +12,7 @@ function escapeHtml(text) {
 }
 
 export default {
+  /** @param {(value: string, ret?: unknown) => unknown} [callback] Recebe o `value` do botão escolhido. */
   show(data, callback = function () {}) {
     data = this.getData(data);
 
