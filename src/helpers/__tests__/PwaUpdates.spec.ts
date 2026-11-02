@@ -207,6 +207,56 @@ describe("PwaUpdates", () => {
     expect(h.reload).not.toHaveBeenCalled();
   });
 
+  it("recupera o build atual somente por pedido explícito, após persistir", async () => {
+    const h = boot();
+    await h.tick();
+    const beforeReload = vi.fn().mockResolvedValue(undefined);
+    const options = { canReload: () => true, beforeReload };
+    expect(await h.instance.apply(options)).toBe(false);
+    expect(beforeReload).not.toHaveBeenCalled();
+    expect(await h.instance.apply({ ...options, reloadCurrentBuild: true })).toBe(true);
+    expect(beforeReload).toHaveBeenCalledOnce();
+    expect(h.reload).toHaveBeenCalledOnce();
+    expect(h.latest()).toMatchObject({ ready: false, status: "current" });
+  });
+
+  it("não recarrega o build atual se ficar offline ou surgir trabalho durante a gravação", async () => {
+    const h = boot();
+    await h.tick();
+    const canReload = vi.fn(() => true);
+    const beforeReload = vi.fn(async () => {
+      canReload.mockReturnValue(false);
+    });
+    const options = { canReload, beforeReload, reloadCurrentBuild: true };
+    expect(await h.instance.apply(options)).toBe(false);
+    expect(h.latest()).toMatchObject({ ready: false, status: "current" });
+    canReload.mockReturnValue(true);
+    beforeReload.mockImplementation(async () => {
+      h.online.mockReturnValue(false);
+    });
+    expect(await h.instance.apply(options)).toBe(false);
+    expect(h.latest()).toMatchObject({ ready: false, status: "offline" });
+    expect(h.reload).not.toHaveBeenCalled();
+    expect(await h.instance.apply(options)).toBe(false);
+    expect(beforeReload).toHaveBeenCalledTimes(2);
+  });
+
+  it("falha ao salvar também impede a recuperação do build atual", async () => {
+    const h = boot();
+    await h.tick();
+    expect(
+      await h.instance.apply({
+        canReload: () => true,
+        beforeReload: async () => {
+          throw new Error("IDB");
+        },
+        reloadCurrentBuild: true,
+      })
+    ).toBe(false);
+    expect(h.reload).not.toHaveBeenCalled();
+    expect(h.latest()).toMatchObject({ ready: false, status: "error" });
+  });
+
   it("espera terminar a ativação mesmo após controllerchange antes de recarregar", async () => {
     const h = boot({ active: "B" });
     await h.tick();

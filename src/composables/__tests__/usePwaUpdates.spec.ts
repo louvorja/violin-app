@@ -165,6 +165,24 @@ describe("aplicação PWA preserva o trabalho atual", () => {
     expect(h.applied).toHaveBeenCalledOnce();
   });
 
+  it("aguarda o fim da reprodução para recarregar o build atual por clique", async () => {
+    setup();
+    h.subscribers.forEach((callback) =>
+      callback({ status: "current", ready: false, lastCheckedAt: null })
+    );
+    window.dispatchEvent(new Event("lj:pwa-recover"));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(h.applied).not.toHaveBeenCalled();
+    h.playing = true;
+    window.dispatchEvent(new Event("lj:pwa-reload"));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(h.flush).not.toHaveBeenCalled();
+    h.playing = false;
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(h.applied).toHaveBeenCalledOnce();
+    expect(h.flush).toHaveBeenCalledOnce();
+  });
+
   it("não repete falha de gravação a cada segundo nem após desmontar", async () => {
     const pwa = setup();
     ready();
