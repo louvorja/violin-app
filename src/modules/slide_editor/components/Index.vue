@@ -639,10 +639,9 @@ const previewSlideForStyle = computed(() => {
   };
 });
 
-// Tamanho do preview replica EXATAMENTE o que Slide.vue (projeção real) usa:
-// clamp com a config global cfg.font_size_*, ignorando tamanho_letra do slide.
-// O Slide.vue dá `delete out.fontSize` e aplica CSS class com cfg global —
-// fazemos o mesmo cálculo inline aqui.
+// Mesma proporção de Slide.vue: cfg.font_size_* é a porcentagem da altura
+// do container, sem piso/teto em pixels. A prévia acompanha o telão mesmo
+// quando este usa uma resolução muito maior.
 const mainTextStyle = computed(() => {
   const s = activeSlide.value;
   const isCover = s.tipo === "CAPA";
@@ -652,11 +651,9 @@ const mainTextStyle = computed(() => {
   const sizeVar = isCover
     ? slideStyle.cfg.value.font_size_cover
     : slideStyle.cfg.value.font_size_lyric;
-  const min = isCover ? 20 : 18;
-  const max = isCover ? 220 : 200;
   return {
     ...base,
-    fontSize: `clamp(${min}px, calc(${sizeVar} * 1cqh), ${max}px)`,
+    fontSize: `${sizeVar}cqh`,
     textAlign: s.text_align || "center",
     background: s.fundo_letra ? "rgba(0,0,0,0.55)" : "transparent",
     padding: "0.4cqh 1cqh",
@@ -670,7 +667,7 @@ const auxTextStyle = computed(() => {
   const sizeVar = slideStyle.cfg.value.font_size_aux;
   return {
     ...base,
-    fontSize: `clamp(14px, calc(${sizeVar} * 1cqh), 120px)`,
+    fontSize: `${sizeVar}cqh`,
     textAlign: s.text_align || "center",
     background: s.fundo_letra ? "rgba(0,0,0,0.55)" : "transparent",
     padding: "0.4cqh 1cqh",

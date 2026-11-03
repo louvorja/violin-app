@@ -72,7 +72,8 @@ import { slideMainText } from "@/helpers/SlideText";
  * Tamanho dos textos: usa `cqh` (% da altura DESTE container) — automaticamente
  * ajusta tanto pra fullscreen (Projection) quanto pra preview menor (Slide
  * dentro do v-dialog do media). Sem multiplicadores arbitrários: o cfg.font_size_*
- * é a proporção direta.
+ * é a proporção direta, sem limites em pixels que travem telões de alta
+ * resolução ou aumentem artificialmente o texto nas prévias pequenas.
  *
  * Fundo, cores, fontes, alinhamento, blur/borda da caixa de texto e refrão com
  * cor própria — tudo lido de useSlideStyle (única fonte de verdade).
@@ -326,17 +327,17 @@ onUnmounted(() => {
 }
 
 .lj-slide__text--cover {
-  font-size: clamp(20px, calc(var(--lj-cover-size, 18) * 1cqh), 150px);
+  font-size: calc(var(--lj-cover-size, 18) * 1cqh);
   letter-spacing: 0.02em;
 }
 
 .lj-slide__text--lyric {
-  font-size: clamp(18px, calc(var(--lj-lyric-size, 14) * 1cqh), 200px);
+  font-size: calc(var(--lj-lyric-size, 10) * 1cqh);
   font-weight: 600;
 }
 
 .lj-slide__text--aux {
-  font-size: clamp(14px, calc(var(--lj-aux-size, 8) * 1cqh), 120px);
+  font-size: calc(var(--lj-aux-size, 8) * 1cqh);
   font-weight: 600;
   opacity: 0.95;
 }

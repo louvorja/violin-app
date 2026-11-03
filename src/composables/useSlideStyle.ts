@@ -476,7 +476,7 @@ export function useSlideStyle(): SlideStyleAPI {
     const color = _pickColor((slide as { color?: string })?.color, cfg.value.color_cover);
     return {
       fontFamily: _baseFont(slide ?? null),
-      fontSize: `clamp(28px, ${sizePct}vh, 200px)`,
+      fontSize: `${sizePct}vh`,
       color,
       fontWeight: 700,
       textAlign: "center",
@@ -495,7 +495,7 @@ export function useSlideStyle(): SlideStyleAPI {
     const color = _pickColor((slide as { color?: string })?.color, cfg.value.color_lyric);
     return {
       fontFamily: _baseFont(slide ?? null),
-      fontSize: `clamp(28px, ${sizePct}vh, 200px)`,
+      fontSize: `${sizePct}vh`,
       color,
       fontWeight: 600,
       textAlign: "center",
@@ -514,7 +514,7 @@ export function useSlideStyle(): SlideStyleAPI {
     const color = _pickColor((slide as { color_aux?: string })?.color_aux, cfg.value.color_aux);
     return {
       fontFamily: _baseFont(slide ?? null),
-      fontSize: `clamp(20px, ${sizePct}vh, 120px)`,
+      fontSize: `${sizePct}vh`,
       color,
       fontWeight: 600,
       textAlign: "center",
