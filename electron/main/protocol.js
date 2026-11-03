@@ -235,6 +235,34 @@ function _enderecoNovoPrivado(absoluto) {
   return null;
 }
 
+/**
+ * Resposta remota que o player pode abandonar no meio. O Electron cancela o
+ * corpo que devolvemos quando o player desiste do trecho (busca dentro da
+ * faixa, troca de versão), mas não repassa isso à resposta do `net.fetch`: o
+ * pedido ao servidor seguia aberto, os abandonados enchiam a janela da conexão
+ * com dados que ninguém lia e o trecho seguinte não chegava — a música parava.
+ */
+function _abandonableResponse(response, abort) {
+  if (!response.body) return response;
+  const reader = response.body.getReader();
+  const body = new ReadableStream({
+    async pull(controller) {
+      try {
+        const { value, done } = await reader.read();
+        if (done) controller.close();
+        else controller.enqueue(value);
+      } catch (error) {
+        try { controller.error(error); } catch { /* o player já encerrou */ }
+      }
+    },
+    cancel() {
+      abort.abort();
+      reader.cancel().catch(() => {});
+    },
+  });
+  return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+}
+
 /** O streaming permanece privado; só o arquivo completo é publicado no acervo. */
 async function _writeStreamToFile(readable, finalPath) {
   const root = paths.filesDir();
@@ -456,16 +484,17 @@ function handle() {
           if (rangeHeader) headers.Range = rangeHeader;
 
           try {
-            const response = await electron.net.fetch(remoteUrl, { headers });
+            const abort = new AbortController();
+            const response = await electron.net.fetch(remoteUrl, { headers, signal: abort.signal });
             // Resposta é resposta: mesmo um 404 prova que o servidor respondeu.
             netHealth.report(true, "protocol");
 
             if (!response.ok || response.status !== 200 || isRangeRequest) {
-              return response; // não cacheamos parciais nem erros
+              return _abandonableResponse(response, abort); // não cacheamos parciais nem erros
             }
 
             if (!_autoCacheEnabled || !require("./storageAccess.js").canWrite("media") || !response.body) {
-              return response;
+              return _abandonableResponse(response, abort);
             }
 
             // Tee: uma branch vai ao renderer; a outra usa temporário privado.
