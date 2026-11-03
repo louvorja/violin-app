@@ -11,7 +11,9 @@ const h = vi.hoisted(() => {
     getReleaseNotes: vi.fn(async () => null),
     onStateChange: vi.fn((callback: (state: Record<string, unknown>) => void) => {
       listener = callback;
-      return () => { listener = null; };
+      return () => {
+        listener = null;
+      };
     }),
     emit: (state: Record<string, unknown>) => listener?.(state),
   };
@@ -49,5 +51,45 @@ describe("UpdateAvailableDialog", () => {
     h.api.emit({ status: "downloaded", progress: 100 });
     await nextTick();
     expect(document.body.textContent).not.toContain("Instalar");
+  });
+
+  it("mostra as notas formatadas, sem os marcadores do texto cru", async () => {
+    h.api.getReleaseNotes.mockResolvedValueOnce({
+      version: "2.0.0-beta.13",
+      name: "beta.13",
+      body: "## Novidades\n\n- Use **Recarregar**.",
+      bodyHtml: "<h2>Novidades</h2><ul><li>Use <strong>Recarregar</strong>.</li></ul>",
+      url: "https://example.invalid",
+    } as never);
+    const dialog = mountUi(UpdateAvailableDialog, {
+      attachTo: document.body,
+      props: { modelValue: true, version: "2.0.0-beta.13" },
+      global: { stubs: { DontShowAgainCheckbox: true } },
+    });
+    openDialogs.push(dialog);
+    await flushPromises();
+
+    expect(h.api.getReleaseNotes).toHaveBeenCalledWith("2.0.0-beta.13");
+    expect(document.body.querySelector(".ua-notes strong")?.textContent).toBe("Recarregar");
+    expect(document.body.textContent).not.toContain("**");
+  });
+
+  it("sem o HTML, cai no texto das notas", async () => {
+    h.api.getReleaseNotes.mockResolvedValueOnce({
+      version: "2.0.0-beta.13",
+      name: "beta.13",
+      body: "- Correções",
+      bodyHtml: null,
+      url: "https://example.invalid",
+    } as never);
+    const dialog = mountUi(UpdateAvailableDialog, {
+      attachTo: document.body,
+      props: { modelValue: true, version: "2.0.0-beta.13" },
+      global: { stubs: { DontShowAgainCheckbox: true } },
+    });
+    openDialogs.push(dialog);
+    await flushPromises();
+
+    expect(document.body.querySelector(".ua-notes__raw")?.textContent).toBe("- Correções");
   });
 });
