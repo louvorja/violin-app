@@ -592,18 +592,22 @@ async function _runDownloadedYouTube(
   let registered = false;
 
   _ytDownloading = id;
-  const res = await OnlineVideo.ensure(id, (p) => {
-    if (seq !== _ytPrepareSeq) return;
-    downloads.mark(id, p); // o cartão do vídeo mostra o andamento, e o "✕" cancela
-    // Só entra na lista quando há trabalho de verdade: um vídeo em cache não tem
-    // progresso, e não vale piscar um "preparando" para algo instantâneo.
-    if (!registered) {
-      registered = true;
-      tasks.registerTask(taskId, title || id, () => OnlineVideo.cancel(id));
-      $snackbar.info(say("online_video.preparing"), { key: `ov-prep-${id}`, timeout: 5000 });
-    }
-    tasks.updateTask(taskId, { progress: p.percent, detail: OnlineVideo.phaseText(p) });
-  });
+  const res = await OnlineVideo.ensure(
+    id,
+    (p) => {
+      if (seq !== _ytPrepareSeq) return;
+      downloads.mark(id, p); // o cartão do vídeo mostra o andamento, e o "✕" cancela
+      // Só entra na lista quando há trabalho de verdade: um vídeo em cache não tem
+      // progresso, e não vale piscar um "preparando" para algo instantâneo.
+      if (!registered) {
+        registered = true;
+        tasks.registerTask(taskId, title || id, () => OnlineVideo.cancel(id));
+        $snackbar.info(say("online_video.preparing"), { key: `ov-prep-${id}`, timeout: 5000 });
+      }
+      tasks.updateTask(taskId, { progress: p.percent, detail: OnlineVideo.phaseText(p) });
+    },
+    { origin: "playback", stageEpoch: diagnosticContext.media_stage_epoch }
+  );
   mediaDiagnosticLog(res.ok ? "debug" : "warn", "youtube download resolution", {
     ...diagnosticContext,
     phase: "download_resolution",
@@ -753,7 +757,7 @@ async function _runStreamedYouTube(
 
   try {
     _ytDownloading = id; // até os links chegarem, cancelar ou abrir outra coisa desiste do pedido
-    const res = await OnlineVideo.stream(id);
+    const res = await OnlineVideo.stream(id, diagnosticContext.media_stage_epoch);
     mediaDiagnosticLog(res.ok ? "debug" : "warn", "youtube stream resolution", {
       ...diagnosticContext,
       phase: "stream_resolution",
@@ -856,7 +860,14 @@ async function _runStreamedYouTube(
         error_message: mediaDiagnosticMessage(el.error?.message) ?? null,
       };
       console.warn("[OnlineVideo] o vídeo aberto direto não chegou a tocar:", { id, ...detail });
-      Telemetry.track("online_video_stream_start_failed", { video_id: id, ...detail });
+      Telemetry.track("online_video_stream_start_failed", {
+        video_id: id,
+        ...detail,
+        ...OnlineVideo.telemetryDiagnostics(res.diagnostic),
+        playback_id: _activePlayback?.playback_id,
+        request_origin: "playback",
+        media_stage_epoch: _stageEpoch,
+      });
       mediaDiagnosticLog("warn", "youtube stream media not ready", {
         ...diagnosticContext,
         phase: "media_ready_wait",
@@ -3101,6 +3112,12 @@ const _self = {
   },
 
   goToTime(time: number): void {
+    Telemetry.breadcrumb?.("media_seek_requested", {
+      playback_id: _activePlayback?.playback_id,
+      from_time: _audio.currentTime.value,
+      requested_time: time,
+      mode: _isYouTube() ? "youtube" : "media",
+    });
     if (_isYouTube()) {
       $broadcast.send(BROADCAST_TYPE.YOUTUBE_CONTROL, {
         action: "seekTo",
@@ -3114,6 +3131,11 @@ const _self = {
   },
 
   advanceTime(time = 10): void {
+    Telemetry.breadcrumb?.("media_seek_requested", {
+      playback_id: _activePlayback?.playback_id,
+      from_time: _audio.currentTime.value,
+      delta: time,
+    });
     if (_isYouTube()) {
       const newTime = Math.max(0, _audio.currentTime.value + time);
       $broadcast.send(BROADCAST_TYPE.YOUTUBE_CONTROL, {
@@ -3136,6 +3158,12 @@ const _self = {
   },
 
   pause(bool = true, callback?: () => void): void {
+    Telemetry.breadcrumb?.("media_playback_requested", {
+      playback_id: _activePlayback?.playback_id,
+      action: bool ? "pause" : "play",
+      current_time: _audio.currentTime.value,
+      was_paused: _audio.isPaused.value,
+    });
     if (_isYouTube()) {
       if (bool) {
         $broadcast.send(BROADCAST_TYPE.YOUTUBE_CONTROL, {
@@ -3229,7 +3257,14 @@ const _self = {
   },
 
   setVolume(val: number): void {
+    const previous = _audio.volume.value;
     _audio.setVolume(val);
+    Telemetry.breadcrumb?.("media_volume_changed", {
+      playback_id: _activePlayback?.playback_id,
+      from_volume: previous,
+      requested_volume: val,
+      volume: _audio.volume.value,
+    });
     $appdata.set(KEYS.MODULES.MEDIA.CONFIG.VOLUME, val);
     if (_isYouTube()) {
       $broadcast.send(BROADCAST_TYPE.YOUTUBE_CONTROL, {

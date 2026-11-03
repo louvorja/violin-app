@@ -89,6 +89,14 @@ function _create(): AudioPlayback {
   let _lastListenedTime = 0;
   let _lastListeningReportAt = 0;
   let _listeningStartedReported = false;
+  let _listeningCompletedReported = false;
+  let _bufferingTimer: ReturnType<typeof setTimeout> | null = null;
+  let _bufferingPhase = "initial_load";
+  let _clockStalled = false;
+  const _mediaStates = new WeakMap<
+    HTMLMediaElement,
+    { key: string; started: boolean; phase: string }
+  >();
   const LISTENING_REPORT_INTERVAL_MS = 30_000;
   // A UI e o transporte de projeção já publicam progresso a no máximo 10 Hz.
   // Amostrar o relógio do elemento a 60 Hz fazia Vue recalcular refs/watchers
@@ -183,7 +191,11 @@ function _create(): AudioPlayback {
     Telemetry.histogram("louvorja.music.listened.seconds", _listenedSeconds, {
       mode: _telemetryContext.mode || "unknown",
     });
-    if (reason === "ended" || (completionRatio !== undefined && completionRatio >= 0.9)) {
+    if (
+      !_listeningCompletedReported &&
+      (reason === "ended" || (completionRatio !== undefined && completionRatio >= 0.9))
+    ) {
+      _listeningCompletedReported = true;
       Telemetry.track(
         "music_listening_completed",
         _telemetryProps(el, {
@@ -198,25 +210,65 @@ function _create(): AudioPlayback {
   function _trackMediaEvent(el: HTMLMediaElement, eventName: string): void {
     if (!_elementTelemetryContext.has(el) && !_telemetryContext) return;
     const now = Date.now();
+    const context = _elementTelemetryContext.get(el) || _telemetryContext;
+    const key = `${context?.playback_id}:${context?.media_stage_epoch ?? 0}`;
+    let state = _mediaStates.get(el);
+    if (!state || state.key !== key) {
+      state = { key, started: false, phase: "loading" };
+      _mediaStates.set(el, state);
+    }
     if (eventName === "waiting" || eventName === "stalled") {
       if (!_bufferingSince) {
         _bufferingSince = now;
-        Telemetry.track("music_buffering_started", _telemetryProps(el, { trigger: eventName }));
+        _bufferingPhase = el.seeking ? "seek" : state.started ? "playback" : "initial_load";
+        const details = _telemetryProps(el, {
+          trigger: eventName,
+          buffering_phase: _bufferingPhase,
+        });
+        Telemetry.breadcrumb?.("music_buffering", details, "diagnostic");
+        _bufferingTimer = setTimeout(() => {
+          _bufferingTimer = null;
+          if (
+            !_bufferingSince ||
+            (_elementTelemetryContext.get(el) || _telemetryContext)?.playback_id !==
+              context?.playback_id
+          )
+            return;
+          Telemetry.track("music_buffering_started", {
+            ...details,
+            buffering_ms: Date.now() - _bufferingSince,
+          });
+          Telemetry.log("warn", "music media buffering", details);
+        }, 1000);
       }
-      Telemetry.log("warn", "music media buffering", _telemetryProps(el, { trigger: eventName }));
+      state.phase = "buffering";
       return;
     }
     if (eventName === "playing") {
+      if (_bufferingTimer) clearTimeout(_bufferingTimer);
+      _bufferingTimer = null;
       if (_bufferingSince) {
+        const bufferingMs = now - _bufferingSince;
+        Telemetry.histogram("louvorja.music.buffering.duration", bufferingMs, {
+          phase: _bufferingPhase,
+        });
         Telemetry.track(
           "music_buffering_recovered",
           _telemetryProps(el, {
-            buffering_ms: now - _bufferingSince,
+            buffering_ms: bufferingMs,
+            buffering_phase: _bufferingPhase,
           })
         );
         _bufferingSince = 0;
       }
-      Telemetry.track("music_play_started", _telemetryProps(el));
+      if (!state.started || state.phase !== "playing") {
+        Telemetry.track(
+          state.started ? "music_playback_resumed" : "music_play_started",
+          _telemetryProps(el, { previous_state: state.phase })
+        );
+      }
+      state.started = true;
+      state.phase = "playing";
       if (!_listeningStartedReported) {
         _listeningStartedReported = true;
         _lastListenedTime = Number.isFinite(el.currentTime) ? el.currentTime : 0;
@@ -237,6 +289,7 @@ function _create(): AudioPlayback {
       return;
     }
     if (eventName === "error") {
+      state.phase = "failed";
       const reason =
         el.error?.code === 1
           ? "aborted"
@@ -259,16 +312,19 @@ function _create(): AudioPlayback {
       return;
     }
     if (eventName === "ended") {
+      state.phase = "ended";
       _reportListening(el, "ended", true);
       Telemetry.track("music_playback_ended", _telemetryProps(el, { ended_reason: "media_ended" }));
       return;
     }
     if (eventName === "pause") {
+      state.phase = "paused";
       _reportListening(el, "paused", true);
       Telemetry.track("music_playback_paused", _telemetryProps(el, { stage: "media_element" }));
       return;
     }
     if (eventName === "abort") {
+      state.phase = "aborted";
       _reportListening(el, "aborted", true);
       Telemetry.track("music_playback_aborted", _telemetryProps(el, { stage: "media_element" }));
     }
@@ -290,11 +346,16 @@ function _create(): AudioPlayback {
       const now = Date.now();
       const current = Number.isFinite(el.currentTime) ? el.currentTime : 0;
       if (current !== _lastProgressTime) {
+        if (_clockStalled) {
+          _clockStalled = false;
+          Telemetry.track("music_playback_progress_recovered", _telemetryProps(el));
+        }
         _lastProgressTime = current;
         _lastProgressAt = now;
         return;
       }
       if (now - _lastProgressAt >= 5000 && _telemetryContext) {
+        _clockStalled = true;
         Telemetry.track(
           "music_playback_stalled",
           _telemetryProps(el, {
@@ -312,6 +373,9 @@ function _create(): AudioPlayback {
     if (_watchdog) clearInterval(_watchdog);
     _watchdog = null;
     _bufferingSince = 0;
+    if (_bufferingTimer) clearTimeout(_bufferingTimer);
+    _bufferingTimer = null;
+    _clockStalled = false;
   }
 
   function _syncTime(): void {
@@ -330,6 +394,10 @@ function _create(): AudioPlayback {
     }
     for (const cb of _timeCallbacks) cb(ct, d);
     if (ct !== _lastProgressTime) {
+      if (_clockStalled) {
+        _clockStalled = false;
+        Telemetry.track("music_playback_progress_recovered", _telemetryProps(_el));
+      }
       _lastProgressTime = ct;
       _lastProgressAt = Date.now();
     }
@@ -394,6 +462,7 @@ function _create(): AudioPlayback {
   }
 
   function _unlisten(el: HTMLMediaElement): void {
+    _mediaStates.delete(el);
     if (!_listening.has(el)) return;
     el.removeEventListener("timeupdate", _syncTime);
     el.removeEventListener("progress", _syncTime);
@@ -839,6 +908,7 @@ function _create(): AudioPlayback {
     _lastListenedTime = 0;
     _lastListeningReportAt = 0;
     _listeningStartedReported = false;
+    _listeningCompletedReported = false;
     if (_el) {
       // Não deixe eventos enfileirados da faixa anterior atravessarem o novo
       // contexto no mesmo elemento DOM. `getElement` reinstala de forma
@@ -874,6 +944,7 @@ function _create(): AudioPlayback {
         _lastListenedTime = 0;
         _lastListeningReportAt = 0;
         _listeningStartedReported = false;
+        _listeningCompletedReported = false;
       }
       _telemetryContext = context;
       if (_el) {

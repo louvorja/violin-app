@@ -84,9 +84,11 @@ function waitForFirstData(promise, timeoutMs, signal) {
   });
 }
 
-function fail(error) {
+function fail(error, diagnostic) {
   const kind = error instanceof OnlineVideoError ? error.kind : "unknown";
-  return { ok: false, error: { kind, message: error?.message || String(error) } };
+  const status = Number.isInteger(error?.httpStatus) && error.httpStatus >= 400 && error.httpStatus <= 599 ? error.httpStatus : undefined;
+  return { ok: false, error: { kind, message: error?.message || String(error), ...(status ? { http_status: status } : {}) },
+    ...(diagnostic ? { diagnostic } : {}) };
 }
 
 async function settleCancelled(promises) {
@@ -390,6 +392,19 @@ function createManager(cfg) {
     }
   }
 
+  async function toolDiagnostic() {
+    try {
+      const info = await tools.info?.();
+      return {
+        ytdlp_version: typeof info?.ytdlpVersion === "string" && /^\d{4}\.\d{2}\.\d{2}[a-zA-Z0-9.+-]{0,30}$/.test(info.ytdlpVersion) ? info.ytdlpVersion : "unknown",
+        tool_version_source: "installed_metadata",
+        tools_ready: tools.ready(),
+        pot_ready: info?.potReady === true,
+        pot_version: typeof info?.potVersion === "string" && /^[\d.a-zA-Z+-]{1,40}$/.test(info.potVersion) ? info.potVersion : "unknown",
+      };
+    } catch { return { ytdlp_version: "unknown", tool_version_source: "unavailable" }; }
+  }
+
   async function execute(job) {
     const { id, controller } = job;
     const signal = controller.signal;
@@ -397,6 +412,7 @@ function createManager(cfg) {
     publish(job, { phase: "queued", percent: 0 }, { force: true });
     await acquire(job);
     try {
+      job.diagnostic = { delivery_path: "download", failure_phase: "tools" };
       let toolPaths;
       const installedCore = !tools.ready();
       // O provedor de PO token também entra na instalação: sem ele os formatos
@@ -449,6 +465,7 @@ function createManager(cfg) {
       let refreshed = false;
       let result;
       for (;;) {
+        job.diagnostic = { ...job.diagnostic, ...await toolDiagnostic(), tool_refreshed: refreshed, tool_repaired: repaired && !toolsFresh };
         publish(job, { phase: "downloading", percent: overall(0), phasePercent: 0 }, { force: true });
         try {
           result = await fetchVideo(job, { toolPaths, partial, overall });
@@ -507,6 +524,7 @@ function createManager(cfg) {
     // Tenta o direto uma vez; se o CDN insistir no 403, bloqueia por um tempo e
     // vai direto ao yt-dlp completo (que re-resolve com o cliente dele).
     while (!isDirectBlocked(id)) {
+      job.diagnostic.failure_phase = "extraction";
       const links = await resolveLinks(id, { maxHeight: job.maxHeight });
       if (signal.aborted) throw new OnlineVideoError("cancelled", "Download cancelado");
       if (!links.ok) {
@@ -519,7 +537,9 @@ function createManager(cfg) {
           break;
         }
         if (links.error.kind !== "format") {
-          throw new OnlineVideoError(links.error.kind, links.error.message);
+          const error = new OnlineVideoError(links.error.kind, links.error.message);
+          if (links.error.http_status) error.httpStatus = links.error.http_status;
+          throw error;
         }
         break;
       }
@@ -562,6 +582,8 @@ function createManager(cfg) {
     const fallbackHeight =
       isDirectBlocked(id) && job.maxHeight > 720 ? 720 : job.maxHeight;
     job.settleReady(false);
+    job.diagnostic.failure_phase = "ytdlp_download";
+    job.diagnostic.delivery_path = "ytdlp_fallback";
     return run({
       tools: toolPaths,
       ...potArgs(toolPaths),
@@ -594,6 +616,7 @@ function createManager(cfg) {
 
   /** Abre as trilhas em disco de onde as janelas leem; o mesmo par de conexões serve a todas. */
   async function openJobSession(job, links) {
+    job.diagnostic = { ...links.diagnostic, ...job.diagnostic, failure_phase: "cdn_download", delivery_path: "progressive" };
     const { id } = job;
     const disposing = disposingSessions.get(id);
     if (disposing) await disposing;
@@ -639,6 +662,7 @@ function createManager(cfg) {
   async function assemble(job, partial) {
     const { id, session, controller } = job;
     await session.done;
+    job.diagnostic.failure_phase = "mux";
     publish(job, { phase: "finalizing", percent: 97 }, { force: true });
     await fs.ensureDir(partial);
     const out = path.join(partial, `${id}.mp4`);
@@ -698,6 +722,7 @@ function createManager(cfg) {
       meta: result.meta,
       durationMs: now() - startedAt,
       installedTools,
+      diagnostic: job.diagnostic,
     };
   }
 
@@ -734,7 +759,8 @@ function createManager(cfg) {
     if (store.has(id)) {
       store.touch(id);
       if (opts.keep) store.keep(id);
-      return Promise.resolve({ ok: true, id, url: urlFor(id), size: 0, cached: true, meta: null });
+      return Promise.resolve({ ok: true, id, url: urlFor(id), size: 0, cached: true, meta: null,
+        diagnostic: { delivery_path: "cache", tool_version_source: "not_used" } });
     }
     if (!canWrite()) return Promise.resolve(fail(new OnlineVideoError("disk", "A pasta de vídeos está em uso por outro perfil ou sem permissão de gravação.")));
 
@@ -798,7 +824,7 @@ function createManager(cfg) {
         publish(job, { phase: "error", percent: 0, kind: error?.kind }, { force: true });
         // Falhou ou foi cancelado: as trilhas pela metade não servem a ninguém.
         await disposeSession(id);
-        return fail(error);
+        return fail(error, job.diagnostic);
       })
       .finally(() => settleJob(job));
     jobs.set(id, job);
@@ -823,9 +849,11 @@ function createManager(cfg) {
     const existing = resolutions.get(id);
     if (existing && !existing.controller.signal.aborted) return existing.promise;
 
-    const entry = { controller: new AbortController(), promise: null };
+    const entry = { controller: new AbortController(), promise: null, diagnostic: null };
     entry.promise = Promise.resolve()
       .then(() => {
+        if (entry.controller.signal.aborted) throw new OnlineVideoError("cancelled", "Cancelado");
+        entry.diagnostic = toolDiagnostic().then(info => ({ ...info, failure_phase: "extraction", delivery_path: "progressive" }));
         const toolPaths = tools.paths();
         return resolve({
           tools: toolPaths,
@@ -839,11 +867,11 @@ function createManager(cfg) {
       })
       .then(
         // Cancelado no mesmo instante em que os links chegaram: o cancelamento vale.
-        (links) =>
+        async (links) =>
           entry.controller.signal.aborted
             ? fail(new OnlineVideoError("cancelled", "Cancelado"))
-            : { ok: true, id, ...links },
-        (error) => fail(error)
+            : { ok: true, id, ...links, diagnostic: await entry.diagnostic },
+        async (error) => fail(error, await entry.diagnostic)
       )
       .finally(() => {
         if (resolutions.get(id) === entry) resolutions.delete(id);
@@ -865,6 +893,7 @@ function createManager(cfg) {
       audio: { ...audio, url: streamUrlFor(job.id, "audio") },
       muxed: links.muxed,
       duration: links.duration,
+      diagnostic: job.diagnostic,
     };
   }
 
@@ -933,11 +962,13 @@ function createManager(cfg) {
       store.touch(id);
       if (opts.keep) store.keep(id);
       const url = urlFor(id);
-      return withTimings({ ok: true, id, cached: true, video: { url }, audio: { url }, muxed: true, duration: null });
+      return withTimings({ ok: true, id, cached: true, video: { url }, audio: { url }, muxed: true, duration: null,
+        diagnostic: { delivery_path: "cache", tool_version_source: "not_used" } });
     };
     if (store.has(id)) return cached();
     if (opts.keep && !canWrite()) return fail(new OnlineVideoError("disk", "A pasta de vídeos está em uso por outro perfil ou sem permissão de gravação."));
-    if (!tools.ready()) return fail(new OnlineVideoError("tools", "Ferramentas ainda não instaladas"));
+    if (!tools.ready()) return fail(new OnlineVideoError("tools", "Ferramentas ainda não instaladas"),
+      { tools_ready: false, failure_phase: "tools", delivery_path: "progressive", tool_version_source: "not_used" });
     if (isDirectBlocked(id)) {
       return fail(new OnlineVideoError("forbidden", "Caminho direto bloqueado após 403"));
     }
@@ -961,7 +992,7 @@ function createManager(cfg) {
         job.streamDelivered = true;
         return withTimings(streamInfo(job));
       }
-      if (job.openError) return fail(job.openError);
+      if (job.openError) return fail(job.openError, job.diagnostic);
       // Só há formatos em fragmentos e o yt-dlp está baixando: não há trilha para ler antes do
       // fim. Ele passa a ser o urgente, e quem pediu decide se espera.
       promote(job);
@@ -1051,7 +1082,7 @@ function createManager(cfg) {
         publish(job, { phase: "error", percent: 0, kind: error?.kind }, { force: true });
         // Falhou ou foi cancelado: as trilhas pela metade não servem a ninguém.
         await disposeSession(id);
-        return fail(error);
+        return fail(error, job.diagnostic);
       })
       .finally(() => {
         streaming--;
@@ -1064,7 +1095,7 @@ function createManager(cfg) {
     if (job.controller.signal.aborted || !streamFenceCurrent(id, fence)) return boundaryCancelled();
     if (!opened) {
       if (job.openError?.kind === "forbidden") blockDirect(id);
-      return fail(job.openError);
+      return fail(job.openError, job.diagnostic);
     }
     job.streamDelivered = true;
     publish(job, { phase: "downloading", percent: 0 }, { force: true });

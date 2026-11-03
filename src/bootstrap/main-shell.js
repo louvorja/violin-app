@@ -73,6 +73,7 @@ import {
 } from "@/helpers/Overlay";
 import Shortcuts from "@/helpers/Shortcuts";
 import Telemetry from "@/helpers/Telemetry";
+import { withTelemetryActionSource } from "@/helpers/TelemetryAction";
 import { installRouteTelemetry } from "@/helpers/RouteTelemetry";
 import Hotkeys from "@/helpers/Hotkeys";
 import { useShell } from "@/composables/useShell";
@@ -1466,6 +1467,33 @@ $storage.hydrate().then(async () => {
 
     Platform.onHttpEvent(async (eventType, data) => {
       const action = data?.action;
+      // Keep only command intent, never arbitrary HTTP payloads or user content.
+      if (
+        (["http:song-slides", "http:media-library"].includes(eventType) &&
+          [
+            "next",
+            "previous",
+            "close",
+            "go-to-slide",
+            "play",
+            "pause",
+            "seek",
+            "stop",
+            "liturgy-execute",
+            "bible-verse",
+            "bible-next",
+            "bible-prev",
+            "bible-close",
+          ].includes(action)) ||
+        eventType === "http:volume"
+      ) {
+        Telemetry.breadcrumb("remote_command_received", {
+          action_source: "remote",
+          channel: eventType,
+          action: typeof action === "string" && /^[a-z-]{1,40}$/.test(action) ? action : "unknown",
+          ...(Number.isFinite(data?.index) ? { requested_index: data.index } : {}),
+        });
+      }
       const bibleRequest =
         eventType === "http:song-slides" &&
         ["bible-verse", "bible-next", "bible-prev", "bible-close"].includes(action);
@@ -1475,11 +1503,11 @@ $storage.hydrate().then(async () => {
           switch (action) {
             case "next":
               if (!acceptsRemoteMusicCommand(action, data)) break;
-              Media.nextSlide();
+              withTelemetryActionSource("remote", () => Media.nextSlide());
               break;
             case "previous":
               if (!acceptsRemoteMusicCommand(action, data)) break;
-              Media.prevSlide();
+              withTelemetryActionSource("remote", () => Media.prevSlide());
               break;
             case "close":
               if (!acceptsRemoteMusicCommand(action, data)) break;
@@ -1495,7 +1523,7 @@ $storage.hydrate().then(async () => {
                 data.index < 0
               )
                 break;
-              Media.goToSlide(data.index);
+              withTelemetryActionSource("remote", () => Media.goToSlide(data.index));
               break;
             case "playing-check": {
               // Consulta de estado (aba Slides do app remoto e pull-to-refresh).
@@ -2227,7 +2255,7 @@ $storage.hydrate().then(async () => {
             // YouTube) devolveria 51.5 — o validador exige inteiro e a rota
             // responderia 502 mesmo com o volume já aplicado.
             next = Math.round(next);
-            Media.setVolume(next);
+            withTelemetryActionSource("remote", () => Media.setVolume(next));
             useBackgroundSound().setVolume(next);
             const requestId = data?.requestId;
             if (requestId && Platform.httpServer?.respond) {

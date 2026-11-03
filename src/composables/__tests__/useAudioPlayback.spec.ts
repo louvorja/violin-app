@@ -70,8 +70,11 @@ describe("useAudioPlayback.play", () => {
     const el = audio.getElement();
     audio.setTelemetryContext({ playback_id: "p-buffer", id_music: 42, mode: "audio" });
 
+    vi.useFakeTimers();
     el.dispatchEvent(new Event("waiting"));
+    vi.advanceTimersByTime(1200);
     el.dispatchEvent(new Event("playing"));
+    vi.useRealTimers();
 
     expect(Telemetry.track).toHaveBeenCalledWith(
       "music_buffering_started",
@@ -333,4 +336,30 @@ describe("useAudioPlayback.prepare", () => {
       expect(vi.getTimerCount()).toBe(baselineTimers);
     }
   );
+});
+
+it("buffering curto só registra recuperação e playing repetido não repete início", () => {
+  audio.reset();
+  vi.clearAllMocks();
+  vi.useFakeTimers();
+  const el = audio.getElement();
+  audio.setTelemetryContext({ playback_id: "p-fast", mode: "audio" });
+  el.dispatchEvent(new Event("playing"));
+  el.dispatchEvent(new Event("playing"));
+  el.dispatchEvent(new Event("waiting"));
+  vi.advanceTimersByTime(150);
+  el.dispatchEvent(new Event("playing"));
+  el.dispatchEvent(new Event("playing"));
+  expect(
+    vi.mocked(Telemetry.track).mock.calls.filter(([event]) => event === "music_play_started")
+  ).toHaveLength(1);
+  expect(
+    vi.mocked(Telemetry.track).mock.calls.filter(([event]) => event === "music_playback_resumed")
+  ).toHaveLength(1);
+  expect(Telemetry.track).not.toHaveBeenCalledWith("music_buffering_started", expect.anything());
+  expect(Telemetry.histogram).toHaveBeenCalledWith("louvorja.music.buffering.duration", 150, {
+    phase: "playback",
+  });
+  audio.reset();
+  vi.useRealTimers();
 });

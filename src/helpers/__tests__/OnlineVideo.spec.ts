@@ -505,11 +505,12 @@ describe("ensure", () => {
     expect(failing.listeners.size).toBe(0);
   });
 
-  it("não assina o progresso quando ninguém quer", async () => {
+  it("observa fases para diagnóstico mesmo sem UI e remove o listener ao terminar", async () => {
     const api = fakeApi();
     h.platform.onlineVideo = api;
     await ensure(ID);
-    expect(api.onProgress).not.toHaveBeenCalled();
+    expect(api.onProgress).toHaveBeenCalledOnce();
+    expect(api.listeners.size).toBe(0);
   });
 
   it("nunca rejeita: falha do IPC vira erro 'unknown' (que cai no player do YouTube)", async () => {
@@ -781,4 +782,38 @@ describe("stream", () => {
     });
     expect(await stream(ID)).toMatchObject({ ok: false, error: { kind: "unknown" } });
   });
+});
+
+it("correlaciona origem, fase, HTTP e versão sem enviar campos arbitrários do IPC", async () => {
+  h.platform.onlineVideo = fakeApi({
+    ensure: vi.fn(async () => ({
+      ok: false,
+      error: { kind: "forbidden", message: "provider", http_status: 429 },
+      diagnostic: {
+        ytdlp_version: "2026.11.01",
+        tool_version_source: "installed_metadata",
+        failure_phase: "ytdlp_download",
+        delivery_path: "ytdlp_fallback",
+        pot_ready: true,
+        headers: "private",
+        token: "never-send",
+      },
+    })),
+  });
+  await ensure(ID, undefined, { origin: "playback", stageEpoch: 7 });
+  const requested = h.track.mock.calls.find(
+    ([event]) => event === "online_video_download_requested"
+  )?.[1];
+  const failed = h.track.mock.calls.find(
+    ([event]) => event === "online_video_download_failed"
+  )?.[1];
+  expect(failed).toMatchObject({
+    request_id: requested.request_id,
+    request_origin: "playback",
+    media_stage_epoch: 7,
+    http_status: 429,
+    ytdlp_version: "2026.11.01",
+    failure_phase: "ytdlp_download",
+  });
+  expect(JSON.stringify(failed)).not.toMatch(/private|never-send/);
 });

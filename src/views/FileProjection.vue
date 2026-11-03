@@ -459,6 +459,7 @@ function onVideoReady(event: Event): void {
     network_state: el.networkState,
   });
   Telemetry.track("file_projection_video_ready", {
+    readiness: event.type,
     playback_id: fileProjection.playback_id,
     duration: Number.isFinite(el.duration) ? el.duration : 0,
     width: el.videoWidth,
@@ -508,7 +509,7 @@ function onVideoPlaying(): void {
 
 function onVideoBuffering(event: Event): void {
   const el = event.currentTarget as HTMLVideoElement | null;
-  console.warn("[FileProjection] vídeo aguardando dados:", {
+  console.debug("[FileProjection] vídeo aguardando dados:", {
     playback_id: fileProjection.playback_id,
     trigger: event.type,
     current_time: el && Number.isFinite(el.currentTime) ? Number(el.currentTime.toFixed(3)) : 0,

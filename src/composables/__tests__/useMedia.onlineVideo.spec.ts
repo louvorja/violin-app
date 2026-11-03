@@ -408,7 +408,7 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
     controlledDownloads();
     const { video, audio } = streams(ID);
     expect(await openStream(embed(ID), "Louvor")).toBe(true);
-    expect(h.stream).toHaveBeenCalledWith(ID);
+    expect(h.stream).toHaveBeenCalledWith(ID, expect.any(Number));
     expect(h.openWindows).toHaveBeenCalled();
     expect(h.send).toHaveBeenCalledWith(BROADCAST_TYPE.FILE_PROJECTION, {
       url: video.url,
@@ -885,7 +885,11 @@ describe("com o download automático desligado", () => {
     h.ensure.mockResolvedValue({ ...ok(ID), cached: true });
 
     expect(await fresh.openYouTube(embed(ID), "Louvor")).toBe(true);
-    expect(h.ensure).toHaveBeenCalledWith(ID, expect.anything());
+    expect(h.ensure).toHaveBeenCalledWith(
+      ID,
+      expect.anything(),
+      expect.objectContaining({ origin: "playback", stageEpoch: expect.any(Number) })
+    );
     expect(spy).toHaveBeenCalledWith(
       expect.objectContaining({ url: `louvorja://onlinevideo/${ID}.mp4` }),
       true

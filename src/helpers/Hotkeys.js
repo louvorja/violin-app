@@ -28,6 +28,8 @@
  * Formato: chave normalizada por _normalizeCombo (módificadores maiúsculos, tecla minúscula).
  * Ver tabela completa em docs/architecture.md — seção "Atalhos de Teclado".
  */
+import { withTelemetryActionSource } from "@/helpers/TelemetryAction";
+
 export const GLOBAL_CANDIDATES = new Set([
   "f1", // Cheatsheet — útil system-wide durante apresentação
   "Ctrl+space", // Quick Search
@@ -167,7 +169,7 @@ function _onKeyDown(e) {
       e.stopPropagation();
     }
 
-    handler(e);
+    withTelemetryActionSource("keyboard", () => handler(e));
 
     // Parar na primeira correspondência válida (último registrado vence)
     break;
@@ -219,7 +221,7 @@ function register(combo, handler, options = {}) {
   if (!_registry.has(key)) _registry.set(key, []);
 
   // Avisa se o atalho é candidato a globalShortcut — double-fire potencial no Electron.
-  if (GLOBAL_CANDIDATES.has(key)) {
+  if (import.meta.env.DEV && GLOBAL_CANDIDATES.has(key)) {
     console.warn(
       `[Hotkeys] "${key}" é candidato a globalShortcut — pode causar double-fire ` +
         `se o Electron registrar o mesmo atalho via D6. Ver docs/architecture.md.`

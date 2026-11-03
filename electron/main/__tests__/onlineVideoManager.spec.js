@@ -704,6 +704,7 @@ describe("raias: o que é urgente não espera pré-download", () => {
     await tick();
 
     clock += 2_500;
+    const infoCalls = tools.info.mock.calls.length;
     const snapshot = manager.diagnosticSnapshot();
     expect(snapshot).toMatchObject({
       online_video_manager_initialized: true,
@@ -721,7 +722,7 @@ describe("raias: o que é urgente não espera pré-download", () => {
         expect.objectContaining({ priority: "background", lane: "queued", phase: "queued", age_bucket: "lt_10s" }),
       ])
     );
-    expect(tools.info).not.toHaveBeenCalled();
+    expect(tools.info.mock.calls.length).toBe(infoCalls);
     expect(JSON.stringify(snapshot)).not.toContain(A);
     expect(JSON.stringify(snapshot)).not.toContain(B);
     expect(JSON.stringify(snapshot)).not.toContain(C);
@@ -2040,7 +2041,7 @@ describe("stream (tocar já, enquanto baixa uma vez só)", () => {
         throw new OnlineVideoError("private", "Private video");
       });
       const { manager, tools } = makeStream({ resolve });
-      expect(await manager.stream(A)).toEqual({ ok: false, error: { kind: "private", message: "Private video" } });
+      expect(await manager.stream(A)).toMatchObject({ ok: false, error: { kind: "private", message: "Private video" } });
       expect(tools.refreshYtdlp).not.toHaveBeenCalled();
     });
 
@@ -2407,5 +2408,32 @@ describe("stream (tocar já, enquanto baixa uma vez só)", () => {
     expect(await manager.ensure(A)).toMatchObject({ ok: true });
     expect(resolve).toHaveBeenCalledTimes(2);
     expect(run).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("proveniência das falhas de YouTube", () => {
+  it.each([403, 429])("preserva HTTP %s, versão instalada e tentativa após atualização", async (status) => {
+    let version = "2026.10.14";
+    const tools = fakeTools({
+      info: vi.fn(async () => ({ ytdlpVersion: version, potReady: true, potVersion: "1.3.0" })),
+      refreshYtdlp: vi.fn(async () => { version = "2026.11.01"; return version; }),
+    });
+    const run = vi.fn(async () => { throw new OnlineVideoError("forbidden", `HTTP Error ${status}: refused`); });
+    const { manager } = make({ tools, run });
+    expect(await manager.ensure(A)).toMatchObject({
+      ok: false, error: { kind: "forbidden", http_status: status },
+      diagnostic: { ytdlp_version: "2026.11.01", tool_version_source: "installed_metadata", tool_refreshed: true, pot_ready: true, delivery_path: "ytdlp_fallback", failure_phase: "ytdlp_download" },
+    });
+    expect(run).toHaveBeenCalledTimes(2);
+  });
+  it("cache não atribui o sucesso à ferramenta e ferramentas ausentes têm fase explícita", async () => {
+    const { manager, tools } = make();
+    await manager.ensure(A);
+    const calls = tools.info.mock.calls.length;
+    expect(await manager.ensure(A)).toMatchObject({ cached: true, diagnostic: { delivery_path: "cache", tool_version_source: "not_used" } });
+    expect(tools.info).toHaveBeenCalledTimes(calls);
+    tools.ready.mockReturnValue(false);
+    expect(await manager.stream(B)).toMatchObject({ ok: false, error: { kind: "tools" }, diagnostic: { tools_ready: false, failure_phase: "tools" } });
   });
 });

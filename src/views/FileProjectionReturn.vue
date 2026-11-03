@@ -465,6 +465,7 @@ function onVideoReady(event: Event): void {
     ready_state: el.readyState,
   });
   Telemetry.track("file_projection_return_video_ready", {
+    readiness: event.type,
     playback_id: fileProjection.playback_id,
     duration: Number.isFinite(el.duration) ? el.duration : 0,
     width: el.videoWidth,

@@ -368,7 +368,9 @@ describe("Telemetry", () => {
     } as unknown as PerformanceEntry;
     observers.find((observer) => observer.type === "long-animation-frame")?.deliver([idleFrame]);
     const sleep = { entryType: "longtask", name: "self", startTime: 300, duration: 102_870_116 };
-    observers.find((observer) => observer.type === "longtask")?.deliver([sleep as PerformanceEntry]);
+    observers
+      .find((observer) => observer.type === "longtask")
+      ?.deliver([sleep as PerformanceEntry]);
 
     const incidents = posthog.logger.error.mock.calls.filter(([, attributes]) =>
       /renderer_long_(task|animation_frame)/.test(String(attributes.incident_type))
@@ -438,9 +440,18 @@ describe("Telemetry", () => {
     expect(Telemetry.markEnd("module.open", "closed")).toBeNull();
     expect(posthog.capture).not.toHaveBeenCalledWith("performance_measurement", expect.anything());
     expect(Telemetry.markEnd("module.open", "mounted")).toEqual(expect.any(Number));
+    Telemetry.flushDiagnostics();
     expect(posthog.capture).toHaveBeenCalledWith(
-      "performance_measurement",
-      expect.objectContaining({ measurement: "module.open" })
+      "telemetry_activity_summary",
+      expect.objectContaining({
+        groups: [
+          expect.objectContaining({
+            event: "performance_measurement",
+            count: 1,
+            labels: { measurement: "module.open" },
+          }),
+        ],
+      })
     );
   });
 
@@ -745,7 +756,9 @@ describe("Telemetry", () => {
       });
       expect(result?.properties.$snapshot_data).toEqual(snapshots);
       expect(result?.properties.token).toBe("phc_fixture");
-      expect(result?.properties.diagnostic).toEqual({ url: "https://example.test/?token=[REDACTED]" });
+      expect(result?.properties.diagnostic).toEqual({
+        url: "https://example.test/?token=[REDACTED]",
+      });
     });
 
     it("mantém os limites de propriedades nos eventos comuns, mesmo com chave parecida com Replay", async () => {
@@ -808,14 +821,17 @@ describe("Telemetry", () => {
           beforeSend()(exception(`erro aos ${minute} min`));
           await vi.advanceTimersByTimeAsync(4 * 60_000);
         }
-        expect(posthog.startSessionRecording).toHaveBeenCalledTimes(2);
+        expect(posthog.startSessionRecording).toHaveBeenCalledOnce();
         expect(posthog.stopSessionRecording).toHaveBeenCalledOnce();
+        beforeSend()(exception("novo incidente depois do intervalo"));
+        await vi.advanceTimersByTimeAsync(0);
+        expect(posthog.startSessionRecording).toHaveBeenCalledTimes(2);
       } finally {
         vi.useRealTimers();
       }
     });
 
-    it("um erro depois do teto reinicia a gravação mesmo que o timer de parada tenha atrasado", async () => {
+    it("um timer atrasado encerra no teto e respeita o intervalo antes de gravar novamente", async () => {
       const Telemetry = await loadTelemetry();
       await Telemetry.init();
       vi.useFakeTimers();
@@ -829,6 +845,10 @@ describe("Telemetry", () => {
         await vi.advanceTimersByTimeAsync(0);
 
         expect(posthog.stopSessionRecording).toHaveBeenCalledOnce();
+        expect(posthog.startSessionRecording).toHaveBeenCalledOnce();
+        await vi.advanceTimersByTimeAsync(5 * 60_000);
+        beforeSend()(exception("novo incidente"));
+        await vi.advanceTimersByTimeAsync(0);
         expect(posthog.startSessionRecording).toHaveBeenCalledTimes(2);
       } finally {
         vi.useRealTimers();
@@ -1628,4 +1648,74 @@ describe("routeForTelemetry", () => {
     /* Casa o padrão de URL mas o `new URL` recusa: cai no marcador. */
     expect(Telemetry.routeForTelemetry("http://[")).toBe("[external]");
   });
+});
+
+it("protege comandos recentes da rajada e enriquece exceções nativas com build e contexto", async () => {
+  const Telemetry = await loadTelemetry();
+  vi.stubEnv("VITE_APP_BUILD", "build-fixture");
+  vi.stubEnv("VITE_APP_COMMIT", "commit-fixture");
+  await Telemetry.init();
+  Telemetry.setRuntimeContext({ playback_id: "p-current", presentation_revision: 4 });
+  const { withTelemetryActionSource } = await import("@/helpers/TelemetryAction");
+  withTelemetryActionSource("keyboard", () => Telemetry.breadcrumb("seek", { requested_time: 12 }));
+  for (let i = 0; i < 1000; i++) {
+    Telemetry.track("network_request", {
+      source: "libras-bundle",
+      ok: false,
+      status: 404,
+      duration_ms: 10,
+    });
+    Telemetry.track("module_view_mounted", { module_id: "music" });
+  }
+  const config = posthog.init.mock.calls[0][1];
+  const result = config.before_send({
+    event: "$exception",
+    properties: { $exception_list: [{ type: "Error", value: "fixture" }] },
+  });
+  expect(result.properties).toMatchObject({
+    app_build: "build-fixture",
+    app_commit: "commit-fixture",
+    playback_id: "p-current",
+    presentation_revision: 4,
+  });
+  expect(result.properties.breadcrumbs).toContainEqual(
+    expect.objectContaining({
+      event: "seek",
+      properties: { action_source: "keyboard", requested_time: 12 },
+    })
+  );
+  expect(result.properties.breadcrumbs.length).toBeLessThanOrEqual(50);
+  Telemetry.flushDiagnostics();
+  const rows = posthog.capture.mock.calls.find(
+    ([event]) => event === "telemetry_activity_summary"
+  )?.[1].groups;
+  expect(rows.find((row: any) => row.event === "network_request").count).toBe(1000);
+  expect(posthog.capture.mock.calls.filter(([event]) => event === "network_request")).toHaveLength(
+    1
+  );
+  Telemetry.setEnabled(false);
+});
+
+it("incidente funcional inicia Replay, conta repetições e fecha quando o relógio volta a avançar", async () => {
+  const Telemetry = await loadTelemetry();
+  await Telemetry.init();
+  vi.useFakeTimers();
+  Telemetry.track("music_playback_stalled", { playback_id: "p" });
+  Telemetry.track("music_playback_stalled", { playback_id: "p" });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(posthog.startSessionRecording).toHaveBeenCalledOnce();
+  expect(posthog.captureException).not.toHaveBeenCalled();
+  expect(
+    posthog.capture.mock.calls.filter(([event]) => event === "music_playback_stalled")
+  ).toHaveLength(1);
+  Telemetry.track("music_playback_progress_recovered", { playback_id: "p" });
+  expect(posthog.capture).toHaveBeenCalledWith(
+    "functional_incident_closed",
+    expect.objectContaining({ occurrence_count: 2, incident_status: "recovered" })
+  );
+  Telemetry.setEnabled(false);
+  Telemetry.track("music_playback_stalled", { playback_id: "p2" });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(posthog.startSessionRecording).toHaveBeenCalledOnce();
+  vi.useRealTimers();
 });

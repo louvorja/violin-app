@@ -35,6 +35,70 @@ export type OnlineVideoErrorKind =
   | "unknown";
 
 export type OnlineVideoPhase = "queued" | "tools" | "downloading" | "finalizing" | "done" | "error";
+export interface OnlineVideoDiagnostic {
+  ytdlp_version?: string;
+  pot_version?: string;
+  tool_version_source?: string;
+  tools_ready?: boolean;
+  pot_ready?: boolean;
+  tool_refreshed?: boolean;
+  tool_repaired?: boolean;
+  delivery_path?: string;
+  failure_phase?: string;
+}
+
+/** IPC diagnostics are an allowlist, never raw provider output, paths or headers. */
+export function telemetryDiagnostics(value: unknown): OnlineVideoDiagnostic {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const raw = value as Record<string, unknown>;
+  const result: OnlineVideoDiagnostic = {};
+  for (const key of ["ytdlp_version", "pot_version"] as const) {
+    if (typeof raw[key] === "string" && /^[a-zA-Z0-9.+-]{1,40}$/.test(raw[key]))
+      result[key] = raw[key];
+  }
+  for (const key of ["tools_ready", "pot_ready", "tool_refreshed", "tool_repaired"] as const) {
+    if (typeof raw[key] === "boolean") result[key] = raw[key];
+  }
+  const allowed = {
+    tool_version_source: ["installed_metadata", "unavailable", "not_used"],
+    delivery_path: ["cache", "download", "progressive", "ytdlp_fallback"],
+    failure_phase: ["tools", "extraction", "cdn_download", "ytdlp_download", "mux"],
+  } as const;
+  for (const key of Object.keys(allowed) as Array<keyof typeof allowed>) {
+    if (typeof raw[key] === "string" && (allowed[key] as readonly string[]).includes(raw[key]))
+      result[key] = raw[key];
+  }
+  return result;
+}
+
+function requestContext(
+  origin: string,
+  playbackId?: string,
+  stageEpoch?: number
+): Record<string, unknown> {
+  let requestId: string | undefined;
+  try {
+    requestId = crypto.randomUUID();
+  } catch {
+    /* diagnostics never prevent playback */
+  }
+  return {
+    request_id: requestId,
+    request_origin: origin,
+    ...(Number.isSafeInteger(stageEpoch) && Number(stageEpoch) >= 0
+      ? { media_stage_epoch: stageEpoch }
+      : {}),
+    ...(typeof playbackId === "string" && /^[a-zA-Z0-9-]{1,100}$/.test(playbackId)
+      ? { playback_id: playbackId }
+      : {}),
+  };
+}
+
+function httpStatus(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isInteger(value) && value >= 400 && value <= 599
+    ? value
+    : undefined;
+}
 
 export interface OnlineVideoProgress {
   id: string;
@@ -61,8 +125,13 @@ export type OnlineVideoResult =
       meta?: { height?: number | null; vcodec?: string | null } | null;
       durationMs?: number;
       installedTools?: boolean;
+      diagnostic?: OnlineVideoDiagnostic;
     }
-  | { ok: false; error: { kind: OnlineVideoErrorKind; message: string } };
+  | {
+      ok: false;
+      error: { kind: OnlineVideoErrorKind; message: string; http_status?: number };
+      diagnostic?: OnlineVideoDiagnostic;
+    };
 
 /** Vídeo que está no disco. `kept`: baixado de propósito, o despejo por espaço não o leva. */
 export interface OnlineVideoFile {
@@ -77,6 +146,7 @@ export interface OnlineVideoFile {
  * (`stream`). São a mesma cópia para todas: quem baixa é o main.
  */
 export interface OnlineVideoStreams {
+  diagnostic?: OnlineVideoDiagnostic;
   video: {
     url: string;
     height?: number | null;
@@ -97,13 +167,20 @@ export interface OnlineVideoStreams {
 
 export type OnlineVideoStreamResult =
   | ({ ok: true; id: string } & OnlineVideoStreams)
-  | { ok: false; error: { kind: OnlineVideoErrorKind; message: string } };
+  | {
+      ok: false;
+      error: { kind: OnlineVideoErrorKind; message: string; http_status?: number };
+      diagnostic?: OnlineVideoDiagnostic;
+    };
 
 export interface EnsureOptions {
   /** Pré-download: espera na sua própria fila e não atrasa o que o operador projeta agora. */
   background?: boolean;
   /** Guarda o vídeo: ele só sai quando o operador o remover. */
   keep?: boolean;
+  origin?: "playback" | "download" | "background_download";
+  playbackId?: string;
+  stageEpoch?: number;
 }
 
 export const MAX_HEIGHTS = [480, 720, 1080] as const;
@@ -253,6 +330,15 @@ export async function ensure(
   if (!api) return { ok: false, error: { kind: "unsupported", message: "sem desktop" } };
 
   const startedAt = Date.now();
+  const context = requestContext(
+    options.origin === "playback"
+      ? "playback"
+      : options.background
+        ? "background_download"
+        : "download",
+    options.playbackId,
+    options.stageEpoch
+  );
   let lastWorkPhase: "queued" | "tools" | "downloading" | "finalizing" | null = null;
   let lastTool: "yt-dlp" | "ffmpeg" | null = null;
   let lastPhaseAt = startedAt;
@@ -271,7 +357,7 @@ export async function ensure(
         ? boundedMs(firstDownloadingAt - toolsStartedAt)
         : null,
   });
-  const off = onProgress
+  const off = api.onProgress
     ? api.onProgress((p: OnlineVideoProgress) => {
         if (p?.id !== id) return;
         if (
@@ -291,12 +377,13 @@ export async function ensure(
             lastPhaseAt = at;
           }
         }
-        onProgress(p);
+        onProgress?.(p);
       })
     : null;
   const background = options.background === true;
   const keep = options.keep === true;
   Telemetry.track("online_video_download_requested", {
+    ...context,
     video_id: id,
     max_height: maxHeight(),
     background,
@@ -310,6 +397,8 @@ export async function ensure(
     })) as OnlineVideoResult;
     if (res.ok) {
       Telemetry.track("online_video_download_ready", {
+        ...context,
+        ...telemetryDiagnostics(res.diagnostic),
         video_id: id,
         cached: res.cached,
         size: res.size,
@@ -321,6 +410,9 @@ export async function ensure(
       });
     } else if (res.error.kind !== "cancelled") {
       Telemetry.track("online_video_download_failed", {
+        ...context,
+        ...telemetryDiagnostics(res.diagnostic),
+        http_status: httpStatus(res.error.http_status),
         video_id: id,
         kind: res.error.kind,
         action: actionForFailure(res.error.kind),
@@ -333,6 +425,7 @@ export async function ensure(
     // O IPC em si falhou (janela recarregando, main sem o handler): trate como falha nossa.
     const message = error instanceof Error ? error.message : String(error);
     Telemetry.track("online_video_download_failed", {
+      ...context,
       video_id: id,
       kind: "unknown",
       ipc: true,
@@ -359,10 +452,11 @@ export function isProgressiveUrl(url: string | null | undefined): boolean {
  * anúncio). Uns 6 s até poder tocar. Nunca rejeita: se não der, a resposta diz por quê e
  * quem chama cai no player embutido.
  */
-export async function stream(id: string): Promise<OnlineVideoStreamResult> {
+export async function stream(id: string, stageEpoch?: number): Promise<OnlineVideoStreamResult> {
   const api = Platform.onlineVideo;
   if (!api?.stream) return { ok: false, error: { kind: "unsupported", message: "sem desktop" } };
   const startedAt = Date.now();
+  const context = requestContext("playback", undefined, stageEpoch);
   try {
     const res = (await api.stream(id, { maxHeight: maxHeight() })) as OnlineVideoStreamResult;
     if (res.ok) {
@@ -381,6 +475,8 @@ export async function stream(id: string): Promise<OnlineVideoStreamResult> {
         }
       }
       Telemetry.track("online_video_stream_resolved", {
+        ...context,
+        ...telemetryDiagnostics(res.diagnostic),
         video_id: id,
         height: res.video.height ?? null,
         muxed: res.muxed,
@@ -391,6 +487,9 @@ export async function stream(id: string): Promise<OnlineVideoStreamResult> {
       return res.timings === undefined ? res : { ...res, timings: safeTimings };
     } else if (res.error.kind !== "cancelled") {
       Telemetry.track("online_video_stream_failed", {
+        ...context,
+        ...telemetryDiagnostics(res.diagnostic),
+        http_status: httpStatus(res.error.http_status),
         video_id: id,
         kind: res.error.kind,
         message: String(res.error.message ?? "").slice(0, 200),
@@ -401,6 +500,7 @@ export async function stream(id: string): Promise<OnlineVideoStreamResult> {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     Telemetry.track("online_video_stream_failed", {
+      ...context,
       video_id: id,
       kind: "unknown",
       ipc: true,

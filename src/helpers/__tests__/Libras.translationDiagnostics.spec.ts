@@ -61,7 +61,11 @@ describe("diagnóstico de tradução Libras", () => {
         timeout: 15000,
         source: "libras-translate",
         thirdParty: true,
-        signal: expect.any(AbortSignal),
+        diagnostic: expect.objectContaining({
+          endpoint: "libras.translate",
+          requestId: expect.any(String),
+          operationId: expect.any(String),
+        }),
       })
     );
     expect(mocks.log).not.toHaveBeenCalled();
@@ -404,14 +408,7 @@ describe("diagnóstico de tradução Libras", () => {
   });
 
   it("distingue timeout da requisição e conserva null sem novas tentativas", async () => {
-    mocks.fetch.mockImplementation(
-      (_url: string, init: RequestInit) =>
-        new Promise((_resolve, reject) => {
-          init.signal!.addEventListener("abort", () =>
-            reject(new DOMException("Aborted", "AbortError"))
-          );
-        })
-    );
+    mocks.fetch.mockRejectedValue(new DOMException("Timeout", "TimeoutError"));
     const request = translateText("Texto", context);
     await vi.advanceTimersByTimeAsync(15000);
     expect(await request).toBeNull();
@@ -420,7 +417,7 @@ describe("diagnóstico de tradução Libras", () => {
     expect(attributes()[0]).toMatchObject({
       failure_kind: "transport",
       transport_kind: "timeout",
-      error_name: "AbortError",
+      error_name: "TimeoutError",
     });
   });
 

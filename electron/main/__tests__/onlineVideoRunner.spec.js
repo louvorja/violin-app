@@ -1008,3 +1008,12 @@ describe("certificado que o yt-dlp não reconhece (proxy ou antivírus que inspe
     expect(certTrust.system).toBe(true);
   });
 });
+
+
+it.each([403, 429])("preserva status HTTP %s mesmo quando a última linha de stderr é genérica", async (status) => {
+  const child = fakeChild();
+  const pending = runner.run({ tools, id: ID, outDir: tmpDir(), spawnImpl: () => child });
+  child.stderr.write(`ERROR: HTTP Error ${status}: refused\nERROR: unable to download video data\n`);
+  child.emit("close", 1);
+  await expect(pending).rejects.toMatchObject({ kind: "forbidden", httpStatus: status });
+});

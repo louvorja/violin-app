@@ -288,6 +288,12 @@ function _create(): SlidesInstance {
   }
 
   function goToSlide(index: number, commandAt?: number): void {
+    Telemetry.breadcrumb?.("slide_navigation_requested", {
+      playback_id: _playbackId,
+      from_slide: slideIndex.value,
+      requested_slide: index,
+      total_slides: totalSlides.value,
+    });
     const last = totalSlides.value - 1;
     const requestedIndex = Number.isFinite(index) ? Math.floor(index) : 0;
     const idx  = Math.max(0, Math.min(requestedIndex, last < 0 ? 0 : last));

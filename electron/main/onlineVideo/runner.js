@@ -22,6 +22,8 @@ class OnlineVideoError extends Error {
     super(message || kind);
     this.name = "OnlineVideoError";
     this.kind = kind;
+    const status = /\bHTTP(?: Error)?[ :]+([45]\d{2})\b/i.exec(String(message));
+    if (status) this.httpStatus = Number(status[1]);
   }
 }
 
@@ -215,6 +217,8 @@ function classifyError(stderr) {
 function ytdlpFailure(stderr, code) {
   const detail = stderr.trim().split("\n").filter(Boolean).pop() || `código ${code}`;
   const error = new OnlineVideoError(classifyError(stderr), detail);
+  const statuses = [...String(stderr).matchAll(/\bHTTP(?: Error)?[ :]+([45]\d{2})\b/gi)];
+  if (statuses.length) error.httpStatus = Number(statuses.at(-1)[1]);
   error.certificate = CERT_ERROR_RE.test(stderr);
   return error;
 }
