@@ -5,11 +5,9 @@
     :style="containerStyle"
   >
     <!--    Imagem de fundo -->
-    <img
+    <ModuleBackgroundMedia
       v-if="image"
       :src="image"
-      alt=""
-      loading="eager"
       :style="{
         top: 0,
         left: 0,
@@ -29,6 +27,7 @@
         backgroundColor: text_background_enabled
           ? text_background_color || 'transparent'
           : 'transparent',
+        padding: text_background_enabled ? `${text_padding_y}px ${text_padding_x}px` : undefined,
       }"
     >
       <span
@@ -70,6 +69,7 @@
 <script setup lang="ts">
 import { ref, computed, type CSSProperties } from "vue";
 import UserData from "@/helpers/UserData";
+import ModuleBackgroundMedia from "@/components/ModuleBackgroundMedia.vue";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { useContainerSize } from "@/composables/useContainerSize";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
@@ -119,6 +119,8 @@ const text_shadow_color = computed(() => ud("text_shadow_color", "#000000"));
 const text_shadow_blur = computed(() => ud("text_shadow_blur", 4));
 const text_background_enabled = computed(() => ud("text_background_enabled", false));
 const text_background_color = computed(() => ud("text_background_color", "transparent"));
+const text_padding_x = computed(() => ud("text_padding_x", 0));
+const text_padding_y = computed(() => ud("text_padding_y", 0));
 const chip_font_size = computed(() => ud("chip_font_size", 12));
 const border_spacing = computed(() => ud("border_spacing", 10));
 const vertical_align = computed<CSSProperties["alignItems"]>(

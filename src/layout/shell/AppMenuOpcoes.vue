@@ -947,11 +947,29 @@
               >
                 {{ $t("options.background.select") }}
               </LjButton>
+              <LjButton
+                variant="default"
+                size="sm"
+                icon-only
+                :icon="ICONS.MEDIA.LIBRARY"
+                :title="$t('options.background.select_library')"
+                :aria-label="$t('options.background.select_library')"
+                @click="openBgLibrary('slide')"
+              />
               <span v-if="!slideBgImageUrl" class="opt-bg-empty-text">
                 {{ $t("options.background.no_image") }}
               </span>
               <div v-else class="opt-bg-preview">
-                <img :src="slideBgImageUrl" class="opt-bg-preview-img" alt="" />
+                <video
+                  v-if="slideBgIsVideo"
+                  :src="slideBgImageUrl"
+                  class="opt-bg-preview-img"
+                  autoplay
+                  loop
+                  muted
+                  playsinline
+                />
+                <img v-else :src="slideBgImageUrl" class="opt-bg-preview-img" alt="" />
                 <button
                   class="opt-bg-preview-remove"
                   type="button"
@@ -1015,11 +1033,29 @@
               >
                 {{ $t("options.background.select") }}
               </LjButton>
+              <LjButton
+                variant="default"
+                size="sm"
+                icon-only
+                :icon="ICONS.MEDIA.LIBRARY"
+                :title="$t('options.background.select_library')"
+                :aria-label="$t('options.background.select_library')"
+                @click="openBgLibrary('return_top')"
+              />
               <span v-if="!returnTopImageUrl" class="opt-bg-empty-text">
                 {{ $t("options.background.no_image") }}
               </span>
               <div v-else class="opt-bg-preview">
-                <img :src="returnTopImageUrl" class="opt-bg-preview-img" alt="" />
+                <video
+                  v-if="returnTopIsVideo"
+                  :src="returnTopImageUrl"
+                  class="opt-bg-preview-img"
+                  autoplay
+                  loop
+                  muted
+                  playsinline
+                />
+                <img v-else :src="returnTopImageUrl" class="opt-bg-preview-img" alt="" />
                 <button
                   class="opt-bg-preview-remove"
                   type="button"
@@ -1071,11 +1107,29 @@
               >
                 {{ $t("options.background.select") }}
               </LjButton>
+              <LjButton
+                variant="default"
+                size="sm"
+                icon-only
+                :icon="ICONS.MEDIA.LIBRARY"
+                :title="$t('options.background.select_library')"
+                :aria-label="$t('options.background.select_library')"
+                @click="openBgLibrary('return_bottom')"
+              />
               <span v-if="!returnBottomImageUrl" class="opt-bg-empty-text">
                 {{ $t("options.background.no_image") }}
               </span>
               <div v-else class="opt-bg-preview">
-                <img :src="returnBottomImageUrl" class="opt-bg-preview-img" alt="" />
+                <video
+                  v-if="returnBottomIsVideo"
+                  :src="returnBottomImageUrl"
+                  class="opt-bg-preview-img"
+                  autoplay
+                  loop
+                  muted
+                  playsinline
+                />
+                <img v-else :src="returnBottomImageUrl" class="opt-bg-preview-img" alt="" />
                 <button
                   class="opt-bg-preview-remove"
                   type="button"
@@ -1549,13 +1603,21 @@
       </div>
       <p class="opt-hint">{{ $t("options.privacy.telemetry_hint") }}</p>
     </section>
+
+    <MediaBackgroundPicker
+      v-model="bgLibraryOpen"
+      :media-types="['image', 'video']"
+      @pick="onBgLibraryPicked"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { LjButton, LjIcon, LjSelect } from "@/components/ui";
 import { computed, type ComputedRef, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { pickImageData } from "@/helpers/FilePicker";
+import { pickImageData, pickMediaData } from "@/helpers/FilePicker";
+import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
+import MediaBackgroundPicker from "@/components/MediaBackgroundPicker.vue";
 import { liturgySidebarDefault } from "@/helpers/LiturgySidebar";
 import { getSetting, saveSetting } from "@/helpers/SettingsStorage";
 import Broadcast from "@/helpers/Broadcast";
@@ -2044,11 +2106,86 @@ function setFileProj(key: string, value: any): void {
   $userdata.set(`options.file_projection.${key}`, value);
 }
 
+/* ── Slide backgrounds a partir das bibliotecas ── */
+
+type SlideBgTarget = "slide" | "return_top" | "return_bottom";
+
+const bgLibraryOpen = ref(false);
+const bgLibraryTarget = ref<SlideBgTarget | null>(null);
+
+function openBgLibrary(target: SlideBgTarget): void {
+  bgLibraryTarget.value = target;
+  bgLibraryOpen.value = true;
+}
+
+async function readImageFromLibrary(
+  url: string
+): Promise<{ data: ArrayBuffer; mime: string } | null> {
+  try {
+    const response = await fetchWithTimeout(url, {
+      timeout: NET_TIMEOUT.MEDIA,
+      source: "media",
+    });
+    if (!response.ok) return null;
+    return {
+      data: await response.arrayBuffer(),
+      mime: response.headers.get("content-type") || "image/png",
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function setSlideBackground(
+  target: SlideBgTarget,
+  data: ArrayBuffer,
+  mime: string
+): Promise<void> {
+  const blob = new Blob([data], { type: mime });
+  if (target === "slide") {
+    if (slideBgBlobUrl) URL.revokeObjectURL(slideBgBlobUrl);
+    slideBgBlobUrl = URL.createObjectURL(blob);
+    slideBgImageUrl.value = slideBgBlobUrl;
+    slideBgIsVideo.value = String(mime).startsWith("video/");
+    await saveSetting({ id: SLIDE_BG_STORAGE_ID, image: data, mime });
+    refreshSlideBg();
+    Broadcast.send(BROADCAST_TYPE.SLIDE_BG_CHANGED, {});
+    return;
+  }
+  if (target === "return_top") {
+    if (returnTopBlobUrl) URL.revokeObjectURL(returnTopBlobUrl);
+    returnTopBlobUrl = URL.createObjectURL(blob);
+    returnTopImageUrl.value = returnTopBlobUrl;
+    returnTopIsVideo.value = String(mime).startsWith("video/");
+    await saveSetting({ id: RETURN_BG_TOP_STORAGE_ID, image: data, mime });
+    refreshReturnBg();
+    Broadcast.send(BROADCAST_TYPE.RETURN_BG_CHANGED, {});
+    return;
+  }
+  if (returnBottomBlobUrl) URL.revokeObjectURL(returnBottomBlobUrl);
+  returnBottomBlobUrl = URL.createObjectURL(blob);
+  returnBottomImageUrl.value = returnBottomBlobUrl;
+  returnBottomIsVideo.value = String(mime).startsWith("video/");
+  await saveSetting({ id: RETURN_BG_BOTTOM_STORAGE_ID, image: data, mime });
+  refreshReturnBg();
+  Broadcast.send(BROADCAST_TYPE.RETURN_BG_CHANGED, {});
+}
+
+async function onBgLibraryPicked(item: { url: string; type: "image" | "video" }): Promise<void> {
+  const target = bgLibraryTarget.value;
+  bgLibraryTarget.value = null;
+  if (!target) return;
+  const image = await readImageFromLibrary(item.url);
+  if (!image) return;
+  await setSlideBackground(target, image.data, image.mime);
+}
+
 /* ── Slide Custom Background Image ── */
 
 const SLIDE_BG_STORAGE_ID = "slide_custom_background";
 let slideBgBlobUrl: string | null = null;
 const slideBgImageUrl = ref("");
+const slideBgIsVideo = ref(false);
 
 async function loadDeferredAssets(): Promise<void> {
   if (deferredAssetsLoaded) return;
@@ -2068,25 +2205,21 @@ async function loadSlideBg(): Promise<void> {
     const blob = new Blob([s.image], { type: s.mime || "image/png" });
     slideBgBlobUrl = URL.createObjectURL(blob);
     slideBgImageUrl.value = slideBgBlobUrl;
+    slideBgIsVideo.value = String(s.mime || "").startsWith("video/");
   } else {
     if (slideBgBlobUrl) {
       URL.revokeObjectURL(slideBgBlobUrl);
       slideBgBlobUrl = null;
     }
     slideBgImageUrl.value = "";
+    slideBgIsVideo.value = false;
   }
 }
 
 async function pickSlideBgImage(): Promise<void> {
-  const r = await pickImageData();
+  const r = await pickMediaData();
   if (!r) return;
-  const blob = new Blob([r.data], { type: r.mime });
-  if (slideBgBlobUrl) URL.revokeObjectURL(slideBgBlobUrl);
-  slideBgBlobUrl = URL.createObjectURL(blob);
-  slideBgImageUrl.value = slideBgBlobUrl;
-  await saveSetting({ id: SLIDE_BG_STORAGE_ID, image: r.data, mime: r.mime });
-  refreshSlideBg();
-  Broadcast.send(BROADCAST_TYPE.SLIDE_BG_CHANGED, {});
+  await setSlideBackground("slide", r.data, r.mime);
 }
 
 async function removeSlideBgImage(): Promise<void> {
@@ -2095,6 +2228,7 @@ async function removeSlideBgImage(): Promise<void> {
     slideBgBlobUrl = null;
   }
   slideBgImageUrl.value = "";
+  slideBgIsVideo.value = false;
   await saveSetting({ id: SLIDE_BG_STORAGE_ID, image: null, mime: null });
   refreshSlideBg();
   Broadcast.send(BROADCAST_TYPE.SLIDE_BG_CHANGED, {});
@@ -2108,6 +2242,8 @@ let returnTopBlobUrl: string | null = null;
 let returnBottomBlobUrl: string | null = null;
 const returnTopImageUrl = ref("");
 const returnBottomImageUrl = ref("");
+const returnTopIsVideo = ref(false);
+const returnBottomIsVideo = ref(false);
 
 async function loadReturnBgs(): Promise<void> {
   const [top, bottom] = await Promise.all([
@@ -2119,37 +2255,35 @@ async function loadReturnBgs(): Promise<void> {
     const blob = new Blob([top.image], { type: top.mime || "image/png" });
     returnTopBlobUrl = URL.createObjectURL(blob);
     returnTopImageUrl.value = returnTopBlobUrl;
+    returnTopIsVideo.value = String(top.mime || "").startsWith("video/");
   } else {
     if (returnTopBlobUrl) {
       URL.revokeObjectURL(returnTopBlobUrl);
       returnTopBlobUrl = null;
     }
     returnTopImageUrl.value = "";
+    returnTopIsVideo.value = false;
   }
   if (bottom?.image) {
     if (returnBottomBlobUrl) URL.revokeObjectURL(returnBottomBlobUrl);
     const blob = new Blob([bottom.image], { type: bottom.mime || "image/png" });
     returnBottomBlobUrl = URL.createObjectURL(blob);
     returnBottomImageUrl.value = returnBottomBlobUrl;
+    returnBottomIsVideo.value = String(bottom.mime || "").startsWith("video/");
   } else {
     if (returnBottomBlobUrl) {
       URL.revokeObjectURL(returnBottomBlobUrl);
       returnBottomBlobUrl = null;
     }
     returnBottomImageUrl.value = "";
+    returnBottomIsVideo.value = false;
   }
 }
 
 async function pickReturnTopImage(): Promise<void> {
-  const r = await pickImageData();
+  const r = await pickMediaData();
   if (!r) return;
-  const blob = new Blob([r.data], { type: r.mime });
-  if (returnTopBlobUrl) URL.revokeObjectURL(returnTopBlobUrl);
-  returnTopBlobUrl = URL.createObjectURL(blob);
-  returnTopImageUrl.value = returnTopBlobUrl;
-  await saveSetting({ id: RETURN_BG_TOP_STORAGE_ID, image: r.data, mime: r.mime });
-  refreshReturnBg();
-  Broadcast.send(BROADCAST_TYPE.RETURN_BG_CHANGED, {});
+  await setSlideBackground("return_top", r.data, r.mime);
 }
 
 async function removeReturnTopImage(): Promise<void> {
@@ -2158,21 +2292,16 @@ async function removeReturnTopImage(): Promise<void> {
     returnTopBlobUrl = null;
   }
   returnTopImageUrl.value = "";
+  returnTopIsVideo.value = false;
   await saveSetting({ id: RETURN_BG_TOP_STORAGE_ID, image: null, mime: null });
   refreshReturnBg();
   Broadcast.send(BROADCAST_TYPE.RETURN_BG_CHANGED, {});
 }
 
 async function pickReturnBottomImage(): Promise<void> {
-  const r = await pickImageData();
+  const r = await pickMediaData();
   if (!r) return;
-  const blob = new Blob([r.data], { type: r.mime });
-  if (returnBottomBlobUrl) URL.revokeObjectURL(returnBottomBlobUrl);
-  returnBottomBlobUrl = URL.createObjectURL(blob);
-  returnBottomImageUrl.value = returnBottomBlobUrl;
-  await saveSetting({ id: RETURN_BG_BOTTOM_STORAGE_ID, image: r.data, mime: r.mime });
-  refreshReturnBg();
-  Broadcast.send(BROADCAST_TYPE.RETURN_BG_CHANGED, {});
+  await setSlideBackground("return_bottom", r.data, r.mime);
 }
 
 async function removeReturnBottomImage(): Promise<void> {
@@ -2181,6 +2310,7 @@ async function removeReturnBottomImage(): Promise<void> {
     returnBottomBlobUrl = null;
   }
   returnBottomImageUrl.value = "";
+  returnBottomIsVideo.value = false;
   await saveSetting({ id: RETURN_BG_BOTTOM_STORAGE_ID, image: null, mime: null });
   refreshReturnBg();
   Broadcast.send(BROADCAST_TYPE.RETURN_BG_CHANGED, {});

@@ -3,7 +3,12 @@
     <div class="mod-shell">
       <ModuleFormatDrawer v-model="show_format" :module-id="'timer'" :manifest="manifest" />
       <div ref="container" class="timer-stage" style="gap: 16px" :style="rootStyle">
-        <img v-if="bgImage" :src="bgImage" class="sw-bg-img" :style="imageStyle" alt="" />
+        <ModuleBackgroundMedia
+          v-if="bgImage"
+          :src="bgImage"
+          class="sw-bg-img"
+          :style="imageStyle"
+        />
         <!-- Display -->
         <div
           class="sw-display"
@@ -26,6 +31,7 @@
 import { ref, computed, watch, onBeforeUnmount } from "vue";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
+import ModuleBackgroundMedia from "@/components/ModuleBackgroundMedia.vue";
 import ModuleFormatDrawer from "@/components/ModuleFormatDrawer.vue";
 import TimerEndActionDialogs from "@/components/TimerEndActionDialogs.vue";
 import { playBeep } from "@/helpers/AudioBeep";

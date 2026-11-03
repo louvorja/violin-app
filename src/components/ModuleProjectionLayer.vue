@@ -25,10 +25,9 @@
       padding: `${border_spacing_px}px`,
     }"
   >
-    <img
+    <ModuleBackgroundMedia
       v-if="image"
       :src="image"
-      alt=""
       :style="{
         position: 'absolute',
         inset: 0,
@@ -99,6 +98,7 @@ import { FONT, resolveFont } from "@/config/Fonts";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import DrawProjection from "@/modules/draw/components/DrawProjection.vue";
 import NameDrawProjection from "@/modules/name_draw/components/NameDrawProjection.vue";
+import ModuleBackgroundMedia from "@/components/ModuleBackgroundMedia.vue";
 import { useContainerSize } from "@/composables/useContainerSize";
 import {
   horizontalTextAlign,
@@ -158,6 +158,8 @@ const background_color = computed(() => ud("background_color", "#000000"));
 const text_background_color = computed(() => ud("text_background_color", "transparent"));
 const text_background_enabled = computed(() => ud("text_background_enabled", false));
 const text_background_opacity = computed(() => ud("text_background_opacity", 100));
+const text_padding_x = computed(() => ud("text_padding_x", 0));
+const text_padding_y = computed(() => ud("text_padding_y", 0));
 const text_border_enabled = computed(() => ud("text_border_enabled", false));
 const text_border_color = computed(() => ud("text_border_color", "#FFFFFF"));
 const text_border_opacity = computed(() => ud("text_border_opacity", 100));
@@ -173,6 +175,8 @@ const textBox = computed(() =>
     enabled: text_background_enabled.value,
     color: text_background_color.value,
     opacity: text_background_opacity.value,
+    paddingX: text_padding_x.value,
+    paddingY: text_padding_y.value,
     borderEnabled: text_border_enabled.value,
     borderColor: text_border_color.value,
     borderOpacity: text_border_opacity.value,

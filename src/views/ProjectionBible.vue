@@ -17,10 +17,9 @@
       padding: `${border_spacing_px}px`,
     }"
   >
-    <img
+    <ModuleBackgroundMedia
       v-if="image"
       :src="image"
-      alt=""
       :style="{
         position: 'absolute',
         inset: 0,
@@ -37,11 +36,7 @@
         v-if="active && (displayText || displayReference)"
         :key="displayText + displayReference"
         class="projection-bible-content"
-        :style="{
-          backgroundColor: text_background_enabled
-            ? text_background_color || 'transparent'
-            : 'transparent',
-        }"
+        :style="textBox"
       >
         <span
           v-if="displayText"
@@ -86,9 +81,14 @@ import { useContainerSize } from "@/composables/useContainerSize";
 import Broadcast from "@/helpers/Broadcast";
 import UserData from "@/helpers/UserData";
 import { FONT, resolveFont } from "@/config/Fonts";
-import { horizontalTextAlign, moduleCustomizationDefault } from "@/helpers/ModuleFormatting";
+import {
+  horizontalTextAlign,
+  moduleCustomizationDefault,
+  textBoxStyle,
+} from "@/helpers/ModuleFormatting";
 import OverlayRenderer from "@/components/OverlayRenderer.vue";
 import LibrasOverlay from "@/views/LibrasOverlay.vue";
+import ModuleBackgroundMedia from "@/components/ModuleBackgroundMedia.vue";
 
 const MID = "modules.bible";
 
@@ -132,6 +132,28 @@ const reference_font_size = computed(() => ud("reference_font_size", 10));
 const background_color = computed(() => ud("background_color", "#000000"));
 const text_background_color = computed(() => ud("text_background_color", "transparent"));
 const text_background_enabled = computed(() => ud("text_background_enabled", false));
+const text_background_opacity = computed(() => ud("text_background_opacity", 100));
+const text_padding_x = computed(() => ud("text_padding_x", 0));
+const text_padding_y = computed(() => ud("text_padding_y", 0));
+const text_border_enabled = computed(() => ud("text_border_enabled", false));
+const text_border_color = computed(() => ud("text_border_color", "#FFFFFF"));
+const text_border_opacity = computed(() => ud("text_border_opacity", 100));
+const text_border_radius = computed(() => ud("text_border_radius", 0));
+const text_border_width = computed(() => ud("text_border_width", 2));
+const textBox = computed(() =>
+  textBoxStyle({
+    enabled: text_background_enabled.value,
+    color: text_background_color.value,
+    opacity: text_background_opacity.value,
+    paddingX: text_padding_x.value,
+    paddingY: text_padding_y.value,
+    borderEnabled: text_border_enabled.value,
+    borderColor: text_border_color.value,
+    borderOpacity: text_border_opacity.value,
+    borderRadius: text_border_radius.value,
+    borderWidth: text_border_width.value,
+  })
+);
 const border_spacing = computed(() => ud("border_spacing", 10));
 const vertical_align = computed(() => ud("vertical_align", "center"));
 const horizontal_align = computed(() => ud("horizontal_align", "center"));
@@ -305,7 +327,7 @@ watch([font, font_color, font_size, background_color, image], measure);
   display: flex;
   flex-direction: column;
   max-width: 100%;
-  width: 100%;
+  width: fit-content;
 }
 
 .projection-bible-text {

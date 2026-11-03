@@ -33,6 +33,7 @@ const MODOS_DE_FUNDO = new Set(["cover", "contain", "center", "stretch", "tile"]
  * vez por sessão e reutilizamos.
  */
 let _slideBgBlobUrl: string | null = null;
+let _slideBgIsVideo = false;
 let _slideBgResolving = false;
 const _slideBgReady = ref(false);
 
@@ -42,14 +43,17 @@ async function _resolveSlideBgFromIdb(): Promise<void> {
   try {
     const s = await getSetting<any>(SLIDE_BG_STORAGE_ID).catch(() => null);
     if (s?.image) {
-      const blob = new Blob([s.image], { type: s.mime || "image/png" });
+      const mime = s.mime || "image/png";
+      const blob = new Blob([s.image], { type: mime });
       if (_slideBgBlobUrl) URL.revokeObjectURL(_slideBgBlobUrl);
       _slideBgBlobUrl = URL.createObjectURL(blob);
+      _slideBgIsVideo = String(mime).startsWith("video/");
     } else {
       if (_slideBgBlobUrl) {
         URL.revokeObjectURL(_slideBgBlobUrl);
         _slideBgBlobUrl = null;
       }
+      _slideBgIsVideo = false;
     }
   } finally {
     _slideBgResolving = false;
@@ -59,6 +63,8 @@ async function _resolveSlideBgFromIdb(): Promise<void> {
 
 let _returnTopBlobUrl: string | null = null;
 let _returnBottomBlobUrl: string | null = null;
+let _returnTopIsVideo = false;
+let _returnBottomIsVideo = false;
 let _returnBgResolving = false;
 const _returnBgReady = ref(false);
 
@@ -71,18 +77,30 @@ async function _resolveReturnBgFromIdb(): Promise<void> {
       getSetting<any>(RETURN_BG_BOTTOM_STORAGE_ID).catch(() => null),
     ]);
     if (top?.image) {
-      const blob = new Blob([top.image], { type: top.mime || "image/png" });
+      const mime = top.mime || "image/png";
+      const blob = new Blob([top.image], { type: mime });
       if (_returnTopBlobUrl) URL.revokeObjectURL(_returnTopBlobUrl);
       _returnTopBlobUrl = URL.createObjectURL(blob);
+      _returnTopIsVideo = String(mime).startsWith("video/");
     } else {
-      if (_returnTopBlobUrl) { URL.revokeObjectURL(_returnTopBlobUrl); _returnTopBlobUrl = null; }
+      if (_returnTopBlobUrl) {
+        URL.revokeObjectURL(_returnTopBlobUrl);
+        _returnTopBlobUrl = null;
+      }
+      _returnTopIsVideo = false;
     }
     if (bottom?.image) {
-      const blob = new Blob([bottom.image], { type: bottom.mime || "image/png" });
+      const mime = bottom.mime || "image/png";
+      const blob = new Blob([bottom.image], { type: mime });
       if (_returnBottomBlobUrl) URL.revokeObjectURL(_returnBottomBlobUrl);
       _returnBottomBlobUrl = URL.createObjectURL(blob);
+      _returnBottomIsVideo = String(mime).startsWith("video/");
     } else {
-      if (_returnBottomBlobUrl) { URL.revokeObjectURL(_returnBottomBlobUrl); _returnBottomBlobUrl = null; }
+      if (_returnBottomBlobUrl) {
+        URL.revokeObjectURL(_returnBottomBlobUrl);
+        _returnBottomBlobUrl = null;
+      }
+      _returnBottomIsVideo = false;
     }
   } finally {
     _returnBgResolving = false;
@@ -114,19 +132,19 @@ export function refreshSlideBg(): void {
 export type SlideOption = Record<string, unknown> | null;
 
 interface SlideStyleAPI {
-  cfg:                ComputedRef<SlideCfg>;
-  coverStyle:         (slide?: SlideOption) => CSSProperties;
-  lyricStyle:         (slide?: SlideOption) => CSSProperties;
-  auxStyle:           (slide?: SlideOption) => CSSProperties;
-  nextStyle:          (slide?: SlideOption) => CSSProperties;
-  bgStyle:            (slide?: SlideOption) => CSSProperties;
-  returnTopBgStyle:   () => CSSProperties;
-  returnBottomBgStyle:() => CSSProperties;
-  rootStyle:          ComputedRef<CSSProperties>;
-  repeatColor:        () => string;
-  textBoxStyle:       () => CSSProperties;
-  textTransform:      ComputedRef<string>;
-  returnTopTextTransform:    ComputedRef<string>;
+  cfg: ComputedRef<SlideCfg>;
+  coverStyle: (slide?: SlideOption) => CSSProperties;
+  lyricStyle: (slide?: SlideOption) => CSSProperties;
+  auxStyle: (slide?: SlideOption) => CSSProperties;
+  nextStyle: (slide?: SlideOption) => CSSProperties;
+  bgStyle: (slide?: SlideOption) => CSSProperties;
+  returnTopBgStyle: () => CSSProperties;
+  returnBottomBgStyle: () => CSSProperties;
+  rootStyle: ComputedRef<CSSProperties>;
+  repeatColor: () => string;
+  textBoxStyle: () => CSSProperties;
+  textTransform: ComputedRef<string>;
+  returnTopTextTransform: ComputedRef<string>;
   returnBottomTextTransform: ComputedRef<string>;
 }
 
@@ -143,6 +161,7 @@ interface SlideCfg {
   color_aux: string;
   background_color: string;
   background_image: string;
+  background_is_video: boolean;
   background_position: string;
   progress_color: string;
   show_progress_bar: boolean;
@@ -168,9 +187,11 @@ interface SlideCfg {
   custom_return_background_active: boolean;
   return_bg_top_color: string;
   return_bg_top_image: string;
+  return_bg_top_is_video: boolean;
   return_bg_top_position: string;
   return_bg_bottom_color: string;
   return_bg_bottom_image: string;
+  return_bg_bottom_is_video: boolean;
   return_bg_bottom_position: string;
   // Formatação do retorno
   return_height_bottom: number;
@@ -195,7 +216,8 @@ const _readSlideOpts = (): SlideCfg => {
     return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : padrao;
   };
 
-  const legacy = ($userdata.get(KEYS.OPTIONS.SLIDE.SLIDES, {}) as Partial<typeof SLIDE_STYLE_DEFAULT>) ?? {};
+  const legacy =
+    ($userdata.get(KEYS.OPTIONS.SLIDE.SLIDES, {}) as Partial<typeof SLIDE_STYLE_DEFAULT>) ?? {};
   const merged: SlideCfg = { ...SLIDE_STYLE_DEFAULT, ...legacy };
 
   // text_align e show_title_first_slide são chaves planas globais (sempre aplicam)
@@ -219,9 +241,7 @@ const _readSlideOpts = (): SlideCfg => {
   merged.text_bg_blur_enabled =
     $userdata.get<boolean>(KEYS.OPTIONS.SLIDE.TEXT_BG_BLUR_ENABLED, false) === true;
   const textBgBlur = Number($userdata.get<number>(KEYS.OPTIONS.SLIDE.TEXT_BG_BLUR, 12));
-  merged.text_bg_blur = Number.isFinite(textBgBlur)
-    ? Math.min(30, Math.max(0, textBgBlur))
-    : 12;
+  merged.text_bg_blur = Number.isFinite(textBgBlur) ? Math.min(30, Math.max(0, textBgBlur)) : 12;
 
   // Formatação de texto personalizada
   const customTextFormat =
@@ -236,12 +256,8 @@ const _readSlideOpts = (): SlideCfg => {
     const titleSize = Number($userdata.get<number>(KEYS.OPTIONS.SLIDE.TITLE_SIZE, null) ?? NaN);
     const bodySize = Number($userdata.get<number>(KEYS.OPTIONS.SLIDE.BODY_SIZE, null) ?? NaN);
     const auxSize = Number($userdata.get<number>(KEYS.OPTIONS.SLIDE.AUX_SIZE, null) ?? NaN);
-    const textBgOpacity = _numeroNaFaixa(
-      KEYS.OPTIONS.SLIDE.TEXT_BG_OPACITY, 75, 0, 100
-    );
-    const textBorderWidth = Number(
-      $userdata.get<number>(KEYS.OPTIONS.SLIDE.TEXT_BORDER_WIDTH, 2)
-    );
+    const textBgOpacity = _numeroNaFaixa(KEYS.OPTIONS.SLIDE.TEXT_BG_OPACITY, 75, 0, 100);
+    const textBorderWidth = Number($userdata.get<number>(KEYS.OPTIONS.SLIDE.TEXT_BORDER_WIDTH, 2));
     if (typeof titleColor === "string") merged.color_cover = titleColor;
     if (typeof textColor === "string") merged.color_lyric = textColor;
     if (typeof repeatColor === "string") merged.color_repeat = repeatColor;
@@ -257,9 +273,7 @@ const _readSlideOpts = (): SlideCfg => {
     merged.text_border_width = Number.isFinite(textBorderWidth)
       ? Math.min(10, Math.max(1, textBorderWidth))
       : 2;
-    merged.text_border_radius = _numeroNaFaixa(
-      KEYS.OPTIONS.SLIDE.TEXT_BORDER_RADIUS, 0, 0, 50
-    );
+    merged.text_border_radius = _numeroNaFaixa(KEYS.OPTIONS.SLIDE.TEXT_BORDER_RADIUS, 0, 0, 50);
   }
 
   // Flag global de "afetar slides externos"
@@ -296,7 +310,10 @@ const _readSlideOpts = (): SlideCfg => {
     // O valor antigo em UserData era uma blob URL efêmera que morria no
     // unmount do painel de Opções; agora o binário mora no IndexedDB e
     // a blob URL é criada uma vez por sessão.
-    if (_slideBgBlobUrl) merged.background_image = _slideBgBlobUrl;
+    if (_slideBgBlobUrl) {
+      merged.background_image = _slideBgBlobUrl;
+      merged.background_is_video = _slideBgIsVideo;
+    }
     if (typeof bgPos === "string") {
       // Guarda o modo cru (cover/contain/center/stretch/tile) — o estiloDeFundo
       // converte para background-size/repeat. Não achatar para CSS aqui.
@@ -317,8 +334,14 @@ const _readSlideOpts = (): SlideCfg => {
     const bottomPos = $userdata.get<string>(KEYS.OPTIONS.SLIDE.RETURN_BG_BOTTOM_POSITION, null);
     if (typeof topColor === "string") merged.return_bg_top_color = topColor;
     if (typeof bottomColor === "string") merged.return_bg_bottom_color = bottomColor;
-    if (_returnTopBlobUrl) merged.return_bg_top_image = _returnTopBlobUrl;
-    if (_returnBottomBlobUrl) merged.return_bg_bottom_image = _returnBottomBlobUrl;
+    if (_returnTopBlobUrl) {
+      merged.return_bg_top_image = _returnTopBlobUrl;
+      merged.return_bg_top_is_video = _returnTopIsVideo;
+    }
+    if (_returnBottomBlobUrl) {
+      merged.return_bg_bottom_image = _returnBottomBlobUrl;
+      merged.return_bg_bottom_is_video = _returnBottomIsVideo;
+    }
     // O modo ("Ajuste") é guardado como escolhido: achatá-lo em uma posição CSS
     // fazia contain, esticado, ladrilho e centralizado saírem todos como cover.
     if (typeof topPos === "string" && MODOS_DE_FUNDO.has(topPos)) {
@@ -336,15 +359,21 @@ const _readSlideOpts = (): SlideCfg => {
   if (customReturnText) {
     const returnHeightBottom = _numeroNaFaixa(
       KEYS.OPTIONS.SLIDE.RETURN_HEIGHT_BOTTOM,
-      SLIDE_STYLE_DEFAULT.return_height_bottom, 8, 50
+      SLIDE_STYLE_DEFAULT.return_height_bottom,
+      8,
+      50
     );
     const returnCoverSize = _numeroNaFaixa(
       KEYS.OPTIONS.SLIDE.RETURN_FONT_SIZE_COVER,
-      SLIDE_STYLE_DEFAULT.return_font_size_cover, 6, 60
+      SLIDE_STYLE_DEFAULT.return_font_size_cover,
+      6,
+      60
     );
     const returnLyricSize = _numeroNaFaixa(
       KEYS.OPTIONS.SLIDE.RETURN_FONT_SIZE_LYRIC,
-      SLIDE_STYLE_DEFAULT.return_font_size_lyric, 6, 60
+      SLIDE_STYLE_DEFAULT.return_font_size_lyric,
+      6,
+      60
     );
     merged.return_height_bottom = returnHeightBottom;
     merged.return_font_size_cover = returnCoverSize;
@@ -353,7 +382,9 @@ const _readSlideOpts = (): SlideCfg => {
     // Próximo slide — tamanho do texto no rodapé
     merged.font_size_next = _numeroNaFaixa(
       KEYS.OPTIONS.SLIDE.FONT_SIZE_NEXT,
-      SLIDE_STYLE_DEFAULT.font_size_next, 3, 15
+      SLIDE_STYLE_DEFAULT.font_size_next,
+      3,
+      15
     );
 
     // Topo — estilo e alinhamento
@@ -442,10 +473,7 @@ export function useSlideStyle(): SlideStyleAPI {
       (slide as { font_size_pct?: number })?.font_size_pct,
       cfg.value.font_size_cover
     );
-    const color = _pickColor(
-      (slide as { color?: string })?.color,
-      cfg.value.color_cover
-    );
+    const color = _pickColor((slide as { color?: string })?.color, cfg.value.color_cover);
     return {
       fontFamily: _baseFont(slide ?? null),
       fontSize: `clamp(28px, ${sizePct}vh, 200px)`,
@@ -464,10 +492,7 @@ export function useSlideStyle(): SlideStyleAPI {
       (slide as { font_size_pct?: number })?.font_size_pct,
       cfg.value.font_size_lyric
     );
-    const color = _pickColor(
-      (slide as { color?: string })?.color,
-      cfg.value.color_lyric
-    );
+    const color = _pickColor((slide as { color?: string })?.color, cfg.value.color_lyric);
     return {
       fontFamily: _baseFont(slide ?? null),
       fontSize: `clamp(28px, ${sizePct}vh, 200px)`,
@@ -486,10 +511,7 @@ export function useSlideStyle(): SlideStyleAPI {
       (slide as { font_size_aux_pct?: number })?.font_size_aux_pct,
       cfg.value.font_size_aux
     );
-    const color = _pickColor(
-      (slide as { color_aux?: string })?.color_aux,
-      cfg.value.color_aux
-    );
+    const color = _pickColor((slide as { color_aux?: string })?.color_aux, cfg.value.color_aux);
     return {
       fontFamily: _baseFont(slide ?? null),
       fontSize: `clamp(20px, ${sizePct}vh, 120px)`,
@@ -539,11 +561,21 @@ export function useSlideStyle(): SlideStyleAPI {
     });
 
     // Preserva image_position numérica do slide (0-8 do banco) quando custom não vence
-    if (!customWins && imageUrl && typeof (slide as { image_position?: number | string })?.image_position === "number") {
+    if (
+      !customWins &&
+      imageUrl &&
+      typeof (slide as { image_position?: number | string })?.image_position === "number"
+    ) {
       const POSITIONS = [
-        "top left", "top center", "top right",
-        "center left", "center center", "center right",
-        "bottom left", "bottom center", "bottom right",
+        "top left",
+        "top center",
+        "top right",
+        "center left",
+        "center center",
+        "center right",
+        "bottom left",
+        "bottom center",
+        "bottom right",
       ];
       const slideImagePos = Number((slide as { image_position?: number | string }).image_position);
       if (Number.isFinite(slideImagePos) && POSITIONS[slideImagePos]) {
@@ -590,9 +622,7 @@ export function useSlideStyle(): SlideStyleAPI {
       border: cfg.value.text_border_enabled
         ? `${cfg.value.text_border_width}px solid ${cfg.value.text_border_color}`
         : "none",
-      borderRadius: cfg.value.text_border_radius
-        ? `${cfg.value.text_border_radius}px`
-        : undefined,
+      borderRadius: cfg.value.text_border_radius ? `${cfg.value.text_border_radius}px` : undefined,
       boxSizing: "border-box",
     };
   }
@@ -634,5 +664,20 @@ export function useSlideStyle(): SlideStyleAPI {
     return "uppercase";
   });
 
-  return { cfg, coverStyle, lyricStyle, auxStyle, nextStyle, bgStyle, returnTopBgStyle, returnBottomBgStyle, rootStyle, repeatColor, textBoxStyle, textTransform, returnTopTextTransform, returnBottomTextTransform };
+  return {
+    cfg,
+    coverStyle,
+    lyricStyle,
+    auxStyle,
+    nextStyle,
+    bgStyle,
+    returnTopBgStyle,
+    returnBottomBgStyle,
+    rootStyle,
+    repeatColor,
+    textBoxStyle,
+    textTransform,
+    returnTopTextTransform,
+    returnBottomTextTransform,
+  };
 }

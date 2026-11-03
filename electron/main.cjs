@@ -2643,7 +2643,17 @@ ipcMain.handle("storage:chooseFile", async (event, kind) => {
             { name: "Todos os arquivos", extensions: ["*"] },
           ],
         }
-      : {}),
+      : kind === "background"
+        ? {
+            filters: [
+              {
+                name: "Imagens, GIFs e vídeos",
+                extensions: ["jpg", "jpeg", "png", "webp", "gif", "bmp", "svg", "mp4", "webm", "mkv", "mov", "avi", "m4v"],
+              },
+              { name: "Todos os arquivos", extensions: ["*"] },
+            ],
+          }
+        : {}),
   });
   if (result.canceled || !result.filePaths?.length) return null;
   return result.filePaths[0];

@@ -19,7 +19,12 @@
     <div class="mod-shell">
       <ModuleFormatDrawer v-model="show_format" :module-id="'clock'" :manifest="manifest" />
       <div ref="container" class="clock-stage" :style="rootStyle">
-        <img v-if="bgImage" :src="bgImage" class="clock-bg-img" :style="imageStyle" alt="" />
+        <ModuleBackgroundMedia
+          v-if="bgImage"
+          :src="bgImage"
+          class="clock-bg-img"
+          :style="imageStyle"
+        />
         <div
           v-fit-clock-line="{ size: textStyle.fontSize, widthFrom: container }"
           class="clock-time"
@@ -48,6 +53,7 @@ import { useI18n } from "vue-i18n";
 import { localeTag } from "@/helpers/DateTime";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
+import ModuleBackgroundMedia from "@/components/ModuleBackgroundMedia.vue";
 import ModuleFormatDrawer from "@/components/ModuleFormatDrawer.vue";
 import UserData from "@/helpers/UserData";
 import { open as openProjection } from "@/helpers/Projection";

@@ -1,11 +1,11 @@
-import { ModuleCategoryEnum } from "@/enums/ModuleCategoryEnum"
-import { ModuleGroupEnum } from "@/enums/ModuleGroupEnum"
-import type { RibbonPage } from "@/types/Ribbon"
-import { Module } from "@/types/Module"
-import { ICONS } from "@/config/Icons"
-import { FONT } from "@/config/Fonts"
-import { ModuleEnum } from "@/enums/ModuleEnum"
-import { getModulePath } from "@/helpers/ModulePath"
+import { ModuleCategoryEnum } from "@/enums/ModuleCategoryEnum";
+import { ModuleGroupEnum } from "@/enums/ModuleGroupEnum";
+import type { RibbonPage } from "@/types/Ribbon";
+import { Module } from "@/types/Module";
+import { ICONS } from "@/config/Icons";
+import { FONT } from "@/config/Fonts";
+import { ModuleEnum } from "@/enums/ModuleEnum";
+import { getModulePath } from "@/helpers/ModulePath";
 
 const moduleId = ModuleEnum.MESSAGE_BOARD;
 const modulePath = getModulePath(moduleId);
@@ -28,6 +28,8 @@ export const module: Module = {
     font_color: { type: "color", default: "#FFFFFF" },
     text_background_enabled: { type: "boolean", default: false },
     text_background_color: { type: "color", default: "transparent" },
+    text_padding_x: { type: "padding", default: 0 },
+    text_padding_y: { type: "padding", default: 0 },
     font_size: { type: "font-size", default: 50 },
     text_shadow: { type: "boolean", default: false },
     text_shadow_color: { type: "color", default: "#000000" },
@@ -41,11 +43,11 @@ export const module: Module = {
     image_opacity: { type: "opacity", default: 100 },
     image_fit: { type: "object-fit", default: "cover" },
   },
-}
+};
 
 export const contextualPages: RibbonPage[] = [
   {
-      id: moduleCtxId,
+    id: moduleCtxId,
     title: `${modulePath}.ribbon.title_ctx`,
     contextual: true,
     activeOnModules: [moduleId],
@@ -55,24 +57,50 @@ export const contextualPages: RibbonPage[] = [
         id: "ctx_message_board_actions",
         title: "ribbon.groups.actions",
         buttons: [
-          { id: `${moduleId}_toggle_list`, icon: ICONS.FORMAT.LIST_BULLETED, label: "ribbon.btn.message_board_list", action: `${moduleId}_toggle_list`, color: "#27ae60" },
-          { id: `${moduleId}_clear`, icon: ICONS.PLAYER.STOP_CIRCLE, label: "ribbon.btn.message_board_clear", action: `${moduleId}_clear`, color: "#e74c3c" },
+          {
+            id: `${moduleId}_toggle_list`,
+            icon: ICONS.FORMAT.LIST_BULLETED,
+            label: "ribbon.btn.message_board_list",
+            action: `${moduleId}_toggle_list`,
+            color: "#27ae60",
+          },
+          {
+            id: `${moduleId}_clear`,
+            icon: ICONS.PLAYER.STOP_CIRCLE,
+            label: "ribbon.btn.message_board_clear",
+            action: `${moduleId}_clear`,
+            color: "#e74c3c",
+          },
         ],
       },
       {
         id: "ctx_message_board_format",
         title: "ribbon.groups.format",
         buttons: [
-          { id: `${moduleId}_toggle_format`, icon: ICONS.ACTIONS.FORMAT, label: "ribbon.btn.format", action: `${moduleId}_toggle_format`, color: "#1b4f8a" },
+          {
+            id: `${moduleId}_toggle_format`,
+            icon: ICONS.ACTIONS.FORMAT,
+            label: "ribbon.btn.format",
+            action: `${moduleId}_toggle_format`,
+            color: "#1b4f8a",
+          },
         ],
       },
       {
         id: "ctx_message_board_screen",
         title: "ribbon.groups.projection",
         buttons: [
-          { id: `${moduleId}_project`, type: "screen", feature: moduleId, route: `/projection/module?module=${moduleId}`, icon: ICONS.PROJECTION.SCREEN_OUTLINE, label: "ribbon.btn.project", color: "#1b4f8a" },
+          {
+            id: `${moduleId}_project`,
+            type: "screen",
+            feature: moduleId,
+            route: `/projection/module?module=${moduleId}`,
+            icon: ICONS.PROJECTION.SCREEN_OUTLINE,
+            label: "ribbon.btn.project",
+            color: "#1b4f8a",
+          },
         ],
       },
     ],
   },
-]
+];

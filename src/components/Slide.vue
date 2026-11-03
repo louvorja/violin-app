@@ -6,8 +6,15 @@
   >
     <!-- Fundo (cor + imagem). Só pinta se houver imagem ou cor diferente do
          padrão; senão fica transparente sobre o root. -->
+    <ModuleBackgroundMedia
+      v-if="backgroundVideo"
+      :src="cfg.background_image"
+      :video="true"
+      class="lj-slide__bg"
+      :style="backgroundVideoStyle"
+    />
     <div
-      v-if="bgStyle.backgroundImage || cfg.background_color || cfg.custom_background_active"
+      v-else-if="bgStyle.backgroundImage || cfg.background_color || cfg.custom_background_active"
       :key="bgKey"
       class="lj-slide__bg"
       :style="bgStyle"
@@ -73,6 +80,7 @@ import { slideMainText } from "@/helpers/SlideText";
 import { computed, ref, watch, onMounted, onUnmounted } from "vue";
 import Strings from "@/helpers/Strings";
 import Path from "@/helpers/Path";
+import ModuleBackgroundMedia from "@/components/ModuleBackgroundMedia.vue";
 import { useSlideStyle } from "@/composables/useSlideStyle";
 
 /** Resolve url_image: passa caminho relativo pra Path.file; absoluto retorna como-está. */
@@ -172,6 +180,27 @@ const bgStyle = computed(() => {
   return slideStyle.bgStyle(slideObj.value);
 });
 const bgKey = computed(() => slideObj.value?.url_image || cfg.value.background_image || "default");
+const customBackgroundWins = computed(() => {
+  const current = slideObj.value;
+  const isImported = current?.id_music == null;
+  return cfg.value.custom_background_active && (!isImported || cfg.value.affect_external_slides);
+});
+const backgroundVideo = computed(
+  () =>
+    customBackgroundWins.value &&
+    cfg.value.background_is_video === true &&
+    !!cfg.value.background_image
+);
+const backgroundVideoStyle = computed(() => {
+  const position = cfg.value.background_position;
+  const objectFit = position === "contain" ? "contain" : position === "stretch" ? "fill" : "cover";
+  const style = { objectFit };
+  if (cfg.value.text_bg_blur_enabled && cfg.value.text_bg_blur > 0) {
+    style.filter = `blur(calc(${cfg.value.text_bg_blur} * 100cqh / 1080))`;
+    style.transform = "scale(1.08)";
+  }
+  return style;
+});
 
 const mainTextStyle = computed(() => {
   const base = isCover.value

@@ -104,7 +104,12 @@
 
       <!-- Preview do recado selecionado -->
       <div ref="container" class="mb-preview-area" :style="rootStyle">
-        <img v-if="bgImage" :src="bgImage" class="mb-bg-img" :style="imageStyle" alt="" />
+        <ModuleBackgroundMedia
+          v-if="bgImage"
+          :src="bgImage"
+          class="mb-bg-img"
+          :style="imageStyle"
+        />
         <div v-if="showing" class="mb-preview" :style="textStyle">
           {{ messages[activeIndex]?.text || "" }}
         </div>
@@ -168,6 +173,7 @@ import { ref, computed, watch, nextTick, onMounted } from "vue";
 import { useViewport } from "@/composables/useViewport";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
+import ModuleBackgroundMedia from "@/components/ModuleBackgroundMedia.vue";
 import ModuleFormatDrawer from "@/components/ModuleFormatDrawer.vue";
 import { LjButton, LjChip, LjDivider, LjTextarea } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
