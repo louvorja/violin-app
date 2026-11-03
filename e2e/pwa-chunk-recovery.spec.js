@@ -72,7 +72,6 @@ test("recupera importação interrompida pelo botão mesmo sem uma versão nova"
     ],
   });
   let documents = 0;
-  let chunkRequests = 0;
   const server = createServer((request, response) => {
     response.setHeader("Cache-Control", "no-store");
     const url = new URL(request.url, "http://localhost");
@@ -88,11 +87,12 @@ test("recupera importação interrompida pelo botão mesmo sem uma versão nova"
       response.setHeader("Content-Type", "application/javascript");
       response.end(bundle.outputFiles[0].text);
     } else if (url.pathname === "/chunk.js") {
-      chunkRequests++;
-      response.statusCode = chunkRequests === 1 ? 503 : 200;
+      // Só volta depois de recarregar: o Chromium 147 guarda a falha do import(), o 156 tenta de novo.
+      const available = documents > 1;
+      response.statusCode = available ? 200 : 503;
       response.setHeader("Content-Type", "application/javascript");
       response.end(
-        chunkRequests === 1 ? "temporarily unavailable" : "export const value='Módulo carregado';"
+        available ? "export const value='Módulo carregado';" : "temporarily unavailable"
       );
     } else if (url.pathname === "/") {
       documents++;
@@ -114,9 +114,9 @@ test("recupera importação interrompida pelo botão mesmo sem uma versão nova"
     await page.locator("#load").click();
     await expect(page.locator("#recover")).toBeVisible();
     await expect(page.locator("body")).toHaveAttribute("data-status", "current");
-    // O navegador conserva a falha do módulo até uma nova navegação.
+    await page.locator("#recover").evaluate((button) => (button.dataset.previous = "yes"));
     await page.locator("#load").click();
-    expect(chunkRequests).toBe(1);
+    await expect(page.locator("#recover:not([data-previous])")).toBeVisible();
     expect(documents).toBe(1);
     await page.evaluate(() => {
       window.playing = true;
@@ -134,7 +134,6 @@ test("recupera importação interrompida pelo botão mesmo sem uma versão nova"
     expect(await page.evaluate(() => localStorage.getItem("flushed"))).toBe("yes");
     await page.locator("#load").click();
     await expect(page.locator("#result")).toHaveText("Módulo carregado");
-    expect(chunkRequests).toBe(2);
   } finally {
     await context.close();
     server.closeAllConnections();
