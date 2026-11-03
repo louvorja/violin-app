@@ -151,18 +151,6 @@ async function readJsonCacheOrNull(filePath) {
 
 
 /**
- * Faixas válidas do `album_<id>.json` — a contagem exibida no card.
- *
- * Os detalhes são arquivos de 1–2 KB (≤70 por catálogo), lidos em paralelo;
- * arquivo ausente devolve 0 e o badge simplesmente não aparece.
- */
-async function albumTrackCount(albumId) {
-  const detail = await readJsonCacheOrNull(jsonCache.safeLocalPath(`album_${albumId}`));
-  if (!Array.isArray(detail?.musics)) return 0;
-  return detail.musics.filter((music) => music && Number(Number(music.id_music)) > 0).length;
-}
-
-/**
  * Capa de um álbum: `http(s)` vira URL direta; caminho relativo vira a rota
  * própria `/api/music-library/image` (os clientes absolutizam com host+token).
  */
@@ -181,7 +169,7 @@ function officialAlbumPayload(album, count = 0) {
     id: `album:${Number(album.id_album)}`,
     title: String(album.name || "").slice(0, 1_000),
     subtitle: subtitle ? subtitle.slice(0, 300) : null,
-    // Faixas do `album_<id>.json` — 0 quando o detalhe local não existe
+    // Faixas do catálogo `{lang}_musics` — 0 quando o álbum não tem faixas
     // (mesma régua de `action=songs`: o badge nunca promete o que a lista
     // de faixas não entrega).
     count,
@@ -416,6 +404,30 @@ function register(app, ctx) {
     return readJsonCacheOrNull(filePath);
   }
 
+  /**
+   * Contagem de faixas por álbum a partir do catálogo `{lang}_musics`.
+   *
+   * Uma leitura do catálogo (cacheado, ~1,9 MB) em vez de baixar cada
+   * `album_<id>.json`: dá a contagem de todos os álbuns já na lista. A régua
+   * é a mesma da lista de faixas — só `id_music > 0` e um voto por álbum.
+   */
+  async function albumTrackCounts(lang) {
+    const catalog = await readJsonCacheOrFetch(`${lang}_musics`);
+    const counts = new Map();
+    if (!Array.isArray(catalog)) return counts;
+    for (const music of catalog) {
+      if (!music || Number(Number(music.id_music)) <= 0) continue;
+      const seen = new Set();
+      for (const association of Array.isArray(music.albums) ? music.albums : []) {
+        const albumId = Number(association?.id_album);
+        if (!Number.isFinite(albumId) || albumId <= 0 || seen.has(albumId)) continue;
+        seen.add(albumId);
+        counts.set(albumId, (counts.get(albumId) || 0) + 1);
+      }
+    }
+    return counts;
+  }
+
 
   /**
    * Músicas do acervo pessoal (IDB do renderer), filtradas com o **mesmo**
@@ -646,27 +658,25 @@ function register(app, ctx) {
 
         // Achata categorias → álbuns (dedup por id_album), filtra e ordena como
         // o módulo Álbuns do desktop (ano desc, depois nome).
-        const oficiais = await Promise.all(
-          [
-            ...new Map(
-              categories
-                .flatMap((category) => (Array.isArray(category?.albums) ? category.albums : []))
-                .filter(
-                  (album) =>
-                    album && Number.isFinite(Number(album.id_album)) && isAlbumEnabled(album.id_album, disabled)
-                )
-                .map((album) => [Number(album.id_album), album])
-            ).values(),
-          ]
-            .sort(
-              (a, b) =>
-                albumYear(b) - albumYear(a) || String(a.name || "").localeCompare(String(b.name || ""))
-            )
-            .map(
-              async (album) =>
-                officialAlbumPayload(album, await albumTrackCount(Number(album.id_album)))
-            )
-        );
+        const trackCounts = await albumTrackCounts(lang);
+        const oficiais = [
+          ...new Map(
+            categories
+              .flatMap((category) => (Array.isArray(category?.albums) ? category.albums : []))
+              .filter(
+                (album) =>
+                  album && Number.isFinite(Number(album.id_album)) && isAlbumEnabled(album.id_album, disabled)
+              )
+              .map((album) => [Number(album.id_album), album])
+          ).values(),
+        ]
+          .sort(
+            (a, b) =>
+              albumYear(b) - albumYear(a) || String(a.name || "").localeCompare(String(b.name || ""))
+          )
+          .map((album) =>
+            officialAlbumPayload(album, trackCounts.get(Number(album.id_album)) || 0)
+          );
 
         const colecoes = (docStore.read("custom_collections.collections") || [])
           .filter(
