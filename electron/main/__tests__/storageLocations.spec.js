@@ -160,6 +160,8 @@ describe("troca independente de acervo e vídeos", () => {
     fs.outputFileSync(path.join(videos, ".partial/active"), "partial");
     const dest = path.join(root, "moved-videos");
     await expect(storage.configure(request({ videosDir: dest, videosAction: "move" }))).resolves.toEqual({ ok: true, restartRequired: true });
+    // O aviso de reinício não pode prometer que a origem fica.
+    expect(storage.locations().pending).toMatchObject({ videosDir: dest, moving: true });
     access.release();
     storage.applyPending();
     expect(storage.locations().changeError).toBeNull();

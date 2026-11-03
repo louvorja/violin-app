@@ -136,7 +136,15 @@
         class="storage-locations__notice"
         role="status"
       >
-        <p>{{ t("options.storage.restart_required") }}</p>
+        <p>
+          {{
+            t(
+              locations.pending?.moving
+                ? "options.storage.restart_required_move"
+                : "options.storage.restart_required"
+            )
+          }}
+        </p>
         <template v-if="locations.pending">
           <p>
             {{ t("options.storage.media_folder") }}:

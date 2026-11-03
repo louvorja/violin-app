@@ -26,7 +26,8 @@ function locations() {
   const c = paths.storageLayout();
   return { profileDir: paths.dataDir(), mediaDir: c.mediaDir, videosDir: c.videosDir,
     setupCompleted: c.setupCompleted, restartRequired: !!c.pending,
-    pending: c.pending ? { mediaDir: c.pending.mediaDir, videosDir: c.pending.videosDir } : null,
+    pending: c.pending ? { mediaDir: c.pending.mediaDir, videosDir: c.pending.videosDir,
+      moving: c.pending.mediaAction === "move" || c.pending.videosAction === "move" } : null,
     access: access.status(), changeError: c.pendingError || changeError,
     defaults: defaults(),
     // Mover apaga a pasta atual depois da cópia: só quando esta conta é a dona dela.

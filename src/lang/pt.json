@@ -697,6 +697,7 @@
       },
       "folder": "Acervo do LouvorJA",
       "restart_required": "As novas pastas serão usadas na próxima abertura. Reinicie o aplicativo para concluir a alteração; os arquivos de origem serão preservados.",
+      "restart_required_move": "As novas pastas serão usadas na próxima abertura. Reinicie o aplicativo para concluir: cada arquivo é copiado e conferido, e depois apagado da pasta antiga.",
       "folder_fallback": "Não consegui escrever em {dir}; os dados estão na pasta do programa. Escolha outra pasta ou libere o acesso.",
       "folder_fallback_notice": "Sem acesso a {dir}, onde estão seus dados. O LouvorJA abriu sem eles. Clique aqui para ver o que fazer.",
       "prepare_failed_notice": "Não foi possível trazer seus dados para esta versão. Eles continuam intactos, e o LouvorJA abriu sem eles. Clique aqui para ver o que fazer.",

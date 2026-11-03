@@ -6,7 +6,7 @@ declare global {
     videosDir: string;
     setupCompleted: boolean;
     restartRequired: boolean;
-    pending?: { mediaDir: string; videosDir: string } | null;
+    pending?: { mediaDir: string; videosDir: string; moving?: boolean } | null;
     access?: {
       media: { writable: boolean; shared: boolean; reason?: string };
       videos: { writable: boolean; shared: boolean; reason?: string };

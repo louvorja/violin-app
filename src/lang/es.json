@@ -696,6 +696,7 @@
       },
       "folder": "Colección de LouvorJA",
       "restart_required": "Las nuevas carpetas se usarán al volver a abrir la aplicación. Reinicia para completar el cambio; los archivos de origen se conservarán.",
+      "restart_required_move": "Las nuevas carpetas se usarán al volver a abrir la aplicación. Reinicia para completar: cada archivo se copia y se verifica, y luego se borra de la carpeta anterior.",
       "folder_fallback": "No pude escribir en {dir}; los datos están en la carpeta del programa. Elija otra carpeta o libere el acceso.",
       "folder_fallback_notice": "Sin acceso a {dir}, donde están sus datos. LouvorJA se abrió sin ellos. Haga clic aquí para ver qué hacer.",
       "prepare_failed_notice": "No se pudieron traer sus datos a esta versión. Siguen intactos, y LouvorJA se abrió sin ellos. Haga clic aquí para ver qué hacer.",
