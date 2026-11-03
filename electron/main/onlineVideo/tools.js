@@ -9,25 +9,47 @@ const { execFile } = require("child_process");
 const fs = require("fs-extra");
 const path = require("path");
 const { OnlineVideoError } = require("./runner.js");
+const { extractZip } = require("./unzip.js");
 
 /**
- * As duas ferramentas não vão dentro do instalador: o ffmpeg sozinho somaria
- * 60–90 MB por plataforma, e o yt-dlp precisa ser trocado toda vez que o
- * YouTube muda o player — o que acontece a cada poucas semanas. Elas são
- * baixadas no primeiro uso para `userData/bin`, e o yt-dlp pode ser renovado
- * sem lançar uma versão do app.
+ * As ferramentas não vão dentro do instalador: o ffmpeg sozinho somaria
+ * 60–90 MB por plataforma, o yt-dlp.exe é barrado por alguns antivírus (o que
+ * barraria o instalador inteiro), e o yt-dlp precisa ser trocado toda vez que o
+ * YouTube muda o player. Elas são baixadas para `userData/bin` em segundo plano
+ * e o yt-dlp se renova sozinho, sem lançar uma versão do app.
+ *
+ * Canal nightly: é o que o próprio yt-dlp recomenda, e onde as correções do
+ * YouTube saem primeiro — o estável chegou a ficar dois meses parado em 2026.
  */
-const YTDLP_BASE = "https://github.com/yt-dlp/yt-dlp/releases/latest/download";
+const YTDLP_BASE = "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download";
 
+/**
+ * `zip` é a versão em pasta (PyInstaller onedir), a preferida: o arquivo único se
+ * descompacta numa pasta temporária a cada execução — 3,5 s medidos no macOS só
+ * para responder `--version`, contra 0,35 s da pasta. `file` é a reserva, se a
+ * pasta não puder ser instalada.
+ */
 const YTDLP_ASSETS = {
-  "darwin-arm64": "yt-dlp_macos",
-  "darwin-x64": "yt-dlp_macos",
-  "win32-x64": "yt-dlp.exe",
-  "win32-arm64": "yt-dlp_arm64.exe",
-  "win32-ia32": "yt-dlp_x86.exe",
-  "linux-x64": "yt-dlp_linux",
-  "linux-arm64": "yt-dlp_linux_aarch64",
+  "darwin-arm64": { zip: "yt-dlp_macos.zip", exe: "yt-dlp_macos", file: "yt-dlp_macos" },
+  "darwin-x64": { zip: "yt-dlp_macos.zip", exe: "yt-dlp_macos", file: "yt-dlp_macos" },
+  "win32-x64": { zip: "yt-dlp_win.zip", exe: "yt-dlp.exe", file: "yt-dlp.exe" },
+  "win32-arm64": { zip: "yt-dlp_win_arm64.zip", exe: "yt-dlp_arm64.exe", file: "yt-dlp_arm64.exe" },
+  "win32-ia32": { zip: "yt-dlp_win_x86.zip", exe: "yt-dlp_x86.exe", file: "yt-dlp_x86.exe" },
+  "linux-x64": { zip: "yt-dlp_linux.zip", exe: "yt-dlp_linux", file: "yt-dlp_linux" },
+  "linux-arm64": { zip: "yt-dlp_linux_aarch64.zip", exe: "yt-dlp_linux_aarch64", file: "yt-dlp_linux_aarch64" },
 };
+
+/** A primeira execução de uma pasta nova espera o antivírus examinar cada arquivo (6 s no macOS). */
+const FIRST_RUN_TIMEOUT_MS = 120_000;
+/** Checar se há yt-dlp novo custa ~1,5 KB; baixar custa 24–54 MB. */
+const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+/** Uma versão com menos que isso não é trocada pela checagem periódica, só por uma falha. */
+const UPDATE_MIN_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+/** Quem não usa vídeo on-line há este tempo não paga atualizações; reabrir o módulo retoma. */
+const DORMANT_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
+/** Pré-instalação que falhou (sem rede, antivírus) não se repete a cada abertura. */
+const PREINSTALL_RETRY_MS = 24 * 60 * 60 * 1000;
+const USAGE_WRITE_INTERVAL_MS = 60 * 60 * 1000;
 
 /**
  * ffmpeg estático do projeto `ffmpeg-static` (o mesmo que o pacote npm usa),
@@ -217,6 +239,8 @@ function parseSums(text, assetName) {
   return null;
 }
 
+const VERSION_RE = /^\d{4}\.\d{2}\.\d{2}/;
+
 function run(bin, args, { timeout = 15_000, execFileImpl = execFile } = {}) {
   return new Promise((resolve, reject) => {
     execFileImpl(bin, args, { timeout, windowsHide: true }, (err, stdout, stderr) => {
@@ -243,11 +267,15 @@ function createTools(cfg) {
     potAssets = POT_ASSETS,
     potPlugin = POT_PLUGIN,
     execFileImpl = execFile,
+    now = Date.now,
   } = cfg;
 
   const key = `${platform}-${arch}`;
   const exe = platform === "win32" ? ".exe" : "";
-  const ytdlpPath = path.join(binDir, `yt-dlp${exe}`);
+  /** Cada versão do yt-dlp numa pasta própria (`<sha256[0:16]>`): trocar nunca mexe na que está rodando. */
+  const ytdlpRoot = path.join(binDir, "ytdlp");
+  /** O arquivo único que as versões anteriores do app instalavam; vale até a primeira troca. */
+  const legacyYtdlpPath = path.join(binDir, `yt-dlp${exe}`);
   const ffmpegPath = path.join(binDir, `ffmpeg${exe}`);
   const metaPath = path.join(binDir, "tools.json");
   const supported = Boolean(ytdlpAssets[key] && ffmpegAssets[key]);
@@ -271,34 +299,175 @@ function createTools(cfg) {
     }
   }
 
-  async function writeMeta(patch) {
-    const current = await readMeta();
-    await fs.writeJson(metaPath, { ...current, ...patch }, { spaces: 2 });
+  /** `tools.json` diz qual pasta do yt-dlp vale: gravação atômica e uma de cada vez. */
+  let _metaQueue = Promise.resolve();
+  function updateMeta(mutate) {
+    const task = _metaQueue.then(async () => {
+      const next = mutate(await readMeta());
+      await fs.ensureDir(binDir);
+      const tmp = `${metaPath}.tmp`;
+      await fs.writeJson(tmp, next, { spaces: 2 });
+      await fs.rename(tmp, metaPath);
+      return next;
+    });
+    _metaQueue = task.catch(() => {});
+    return task;
   }
 
-  async function installYtdlp({ onProgress, signal }) {
-    const asset = ytdlpAssets[key];
-    const sums = await fetchText(`${ytdlpBase}/SHA2-256SUMS`, { signal });
-    const expected = parseSums(sums, asset);
-    if (!expected) throw toolError(`Sem checksum publicado para ${asset}`);
+  function writeMeta(patch) {
+    return updateMeta((current) => ({ ...current, ...patch }));
+  }
 
-    const { tmp, sha256 } = await downloadTo(`${ytdlpBase}/${asset}`, ytdlpPath, {
-      expectedSha256: expected,
-      signal,
-      onProgress: (p) => onProgress?.({ tool: "yt-dlp", ...p }),
-    });
+  function loadCurrentSync() {
     try {
+      const y = fs.readJsonSync(metaPath)?.ytdlp;
+      if (y && /^[0-9a-f]{16}$/.test(y.dir) && typeof y.exe === "string" && path.basename(y.exe) === y.exe) {
+        return { dir: y.dir, exe: y.exe };
+      }
+    } catch {
+      /* sem metadados: vale o arquivo único antigo, se existir */
+    }
+    return null;
+  }
+
+  let _current = loadCurrentSync();
+
+  function currentYtdlpPath() {
+    if (!_current) return null;
+    const file = path.join(ytdlpRoot, _current.dir, _current.exe);
+    return fs.pathExistsSync(file) ? file : null;
+  }
+
+  function ytdlpPath() {
+    return currentYtdlpPath() || legacyYtdlpPath;
+  }
+
+  /** Instalar, trocar e limpar versões do yt-dlp nunca correm ao mesmo tempo. */
+  let _ytdlpLock = Promise.resolve();
+  function exclusive(task) {
+    const result = _ytdlpLock.then(task, task);
+    _ytdlpLock = result.then(
+      () => {},
+      () => {}
+    );
+    return result;
+  }
+
+  async function probeYtdlp(file) {
+    const out = await run(file, ["--version"], { execFileImpl, timeout: FIRST_RUN_TIMEOUT_MS });
+    const version = out.trim().split(/\s+/)[0];
+    if (!VERSION_RE.test(version)) throw toolError(`Versão inesperada do yt-dlp: ${version}`);
+    return version;
+  }
+
+  /** Baixa uma versão para a pasta dela e confere que executa. Não a torna a atual. */
+  async function installVersion(assetName, sha256, { zip, exeName, onProgress, signal }) {
+    const dir = sha256.slice(0, 16);
+    const target = path.join(ytdlpRoot, dir);
+    const file = path.join(target, exeName);
+    // Mesmo SHA-256 da que está em uso: nada a baixar.
+    if (_current?.dir === dir && _current.exe === exeName && fs.pathExistsSync(file)) {
+      const meta = await readMeta();
+      return { dir, exe: exeName, asset: assetName, sha256, version: meta.ytdlp?.version ?? (await probeYtdlp(file)) };
+    }
+    // Resto de uma tentativa anterior: nunca é a pasta em uso, que tem outro SHA-256.
+    await fs.remove(target);
+    await fs.ensureDir(ytdlpRoot);
+    const progress = (p) => onProgress?.({ tool: "yt-dlp", ...p });
+    try {
+      if (zip) {
+        const { tmp } = await downloadTo(`${ytdlpBase}/${assetName}`, path.join(ytdlpRoot, `${dir}.zip`), {
+          expectedSha256: sha256,
+          signal,
+          onProgress: progress,
+        });
+        try {
+          await extractZip(tmp, target, { signal });
+        } catch (error) {
+          if (signal?.aborted) throw new OnlineVideoError("cancelled", "Cancelado");
+          throw toolError(`O zip do yt-dlp não abriu: ${error.message}`);
+        } finally {
+          await fs.remove(tmp).catch(() => {});
+        }
+        if (!(await fs.pathExists(file))) throw toolError(`O zip do yt-dlp não traz ${exeName}`);
+        await fs.chmod(file, 0o755);
+        return { dir, exe: exeName, asset: assetName, sha256, version: await probeYtdlp(file) };
+      }
+      const { tmp } = await downloadTo(`${ytdlpBase}/${assetName}`, file, {
+        expectedSha256: sha256,
+        signal,
+        onProgress: progress,
+      });
       await fs.chmod(tmp, 0o755);
-      const out = await run(tmp, ["--version"], { execFileImpl });
-      const version = out.trim().split(/\s+/)[0];
-      if (!/^\d{4}\.\d{2}\.\d{2}/.test(version)) throw toolError(`Versão inesperada do yt-dlp: ${version}`);
-      await fs.move(tmp, ytdlpPath, { overwrite: true });
-      await writeMeta({ ytdlp: { version, sha256, installedAt: Date.now() } });
-      return version;
+      const version = await probeYtdlp(tmp);
+      await fs.move(tmp, file, { overwrite: true });
+      return { dir, exe: exeName, asset: assetName, sha256, version };
     } catch (error) {
-      await fs.remove(tmp);
+      await fs.remove(target).catch(() => {});
       throw error;
     }
+  }
+
+  /**
+   * Instala o yt-dlp mais novo do canal numa pasta nova e só então o torna o atual. A
+   * versão anterior continua no disco, intacta, para o que ainda a estiver executando;
+   * `cleanup` a apaga na próxima abertura. Com `onlyIfChanged`, não baixa nada se o
+   * SHA-256 publicado for o da versão instalada.
+   */
+  function installYtdlp({ onProgress, signal, onlyIfChanged = false } = {}) {
+    return exclusive(async () => {
+      const asset = ytdlpAssets[key];
+      const sums = await fetchText(`${ytdlpBase}/SHA2-256SUMS`, { signal });
+      const installed = (await readMeta()).ytdlp;
+      if (
+        onlyIfChanged &&
+        installed?.asset &&
+        currentYtdlpPath() &&
+        parseSums(sums, installed.asset) === installed.sha256
+      ) {
+        return { version: installed.version, updated: false };
+      }
+
+      let result = null;
+      let zipError = null;
+      const zipSha = parseSums(sums, asset.zip);
+      if (zipSha) {
+        try {
+          result = await installVersion(asset.zip, zipSha, { zip: true, exeName: asset.exe, onProgress, signal });
+        } catch (error) {
+          if (error?.kind !== "tool" || !asset.file) throw error;
+          zipError = error;
+          console.warn("[onlineVideo] yt-dlp em pasta indisponível, usando o arquivo único:", error.message);
+        }
+      }
+      if (!result) {
+        const fileSha = asset.file ? parseSums(sums, asset.file) : null;
+        if (!fileSha) throw zipError || toolError(`Sem checksum publicado para ${asset.zip}`);
+        result = await installVersion(asset.file, fileSha, {
+          zip: false,
+          exeName: `yt-dlp${exe}`,
+          onProgress,
+          signal,
+        });
+      }
+
+      const at = now();
+      await updateMeta((meta) => ({
+        ...meta,
+        ytdlp: {
+          version: result.version,
+          sha256: result.sha256,
+          asset: result.asset,
+          dir: result.dir,
+          exe: result.exe,
+          installedAt: at,
+          checkedAt: at,
+          lastUsedAt: meta.ytdlp?.lastUsedAt ?? null,
+        },
+      }));
+      _current = { dir: result.dir, exe: result.exe };
+      return { version: result.version, updated: true };
+    });
   }
 
   async function installFfmpeg({ onProgress, signal }) {
@@ -373,7 +542,7 @@ function createTools(cfg) {
   function paths() {
     const pot = potReady() ? potPath : null;
     return {
-      ytdlp: ytdlpPath,
+      ytdlp: ytdlpPath(),
       ffmpeg: ffmpegPath,
       pot,
       pluginDir: pot ? potPluginDir : null,
@@ -382,7 +551,7 @@ function createTools(cfg) {
   }
 
   function ready() {
-    return fs.pathExistsSync(ytdlpPath) && fs.pathExistsSync(ffmpegPath);
+    return fs.pathExistsSync(ytdlpPath()) && fs.pathExistsSync(ffmpegPath);
   }
 
   function potReady() {
@@ -450,7 +619,7 @@ function createTools(cfg) {
               }
             }
           };
-          if (!fs.pathExistsSync(ytdlpPath)) await installYtdlp({ onProgress: notify });
+          if (!fs.pathExistsSync(ytdlpPath())) await installYtdlp({ onProgress: notify });
           if (!fs.pathExistsSync(ffmpegPath)) await installFfmpeg({ onProgress: notify });
           if (needsPot()) {
             try {
@@ -479,11 +648,98 @@ function createTools(cfg) {
     return abortable(_ensuring, signal);
   }
 
-  /** Reinstala o yt-dlp mais novo. Só chamar sem nenhum download em andamento (no Windows o .exe em uso não é sobrescrito). */
+  /**
+   * Troca pelo yt-dlp mais novo, se houver um: sem release nova, custa só a lista de
+   * SHA-256 (~1,5 KB). A versão nova vai para outra pasta, então o que ainda roda a
+   * anterior não é afetado. Devolve a versão em uso depois da troca.
+   */
   async function refreshYtdlp({ onProgress, signal } = {}) {
     if (!supported) throw new OnlineVideoError("unsupported", `Plataforma sem suporte: ${key}`);
-    await fs.ensureDir(binDir);
-    return installYtdlp({ onProgress, signal });
+    const { version } = await installYtdlp({ onProgress, signal, onlyIfChanged: true });
+    return version;
+  }
+
+  /**
+   * Apaga as versões do yt-dlp que não são a atual e o arquivo único antigo. Só no
+   * início do app, antes de qualquer yt-dlp deste processo rodar: uma versão trocada
+   * durante a sessão pode estar executando até o fim dela. No Windows, um .exe que
+   * ainda roda (app anterior travado) fica para a próxima vez.
+   */
+  function cleanup() {
+    return exclusive(async () => {
+      const keep = currentYtdlpPath() ? _current.dir : null;
+      let entries = [];
+      try {
+        entries = await fs.readdir(ytdlpRoot);
+      } catch {
+        /* nada instalado em pasta ainda */
+      }
+      for (const name of entries) {
+        if (name !== keep) await fs.remove(path.join(ytdlpRoot, name)).catch(() => {});
+      }
+      if (keep) {
+        await fs.remove(legacyYtdlpPath).catch(() => {});
+        await fs.remove(`${legacyYtdlpPath}.download`).catch(() => {});
+      }
+    });
+  }
+
+  let _usageWrittenAt = -Infinity;
+  /** Anota que o yt-dlp foi usado (no máximo uma gravação por hora): quem parou de usar deixa de pagar atualizações. */
+  function markUsed() {
+    const at = now();
+    if (at - _usageWrittenAt < USAGE_WRITE_INTERVAL_MS) return;
+    _usageWrittenAt = at;
+    void updateMeta((meta) => (meta.ytdlp ? { ...meta, ytdlp: { ...meta.ytdlp, lastUsedAt: at } } : meta)).catch(
+      () => {}
+    );
+  }
+
+  /**
+   * A checagem periódica: no máximo uma por dia, só para quem usou vídeo on-line no
+   * último mês e só quando a versão instalada já tem uma semana — falhas que uma
+   * versão nova resolve não esperam isso, renovam na hora (`refreshYtdlp`). O arquivo
+   * único das versões anteriores do app migra para a pasta na primeira oportunidade.
+   */
+  async function checkForUpdate({ ignoreDormancy = false, signal } = {}) {
+    if (!supported) return { action: "unsupported" };
+    if (!ready()) return { action: "missing" };
+    const y = (await readMeta()).ytdlp || {};
+    const at = now();
+    const migrating = !y.asset || !currentYtdlpPath();
+    if (!migrating) {
+      if (!ignoreDormancy && at - (y.lastUsedAt ?? y.installedAt ?? 0) > DORMANT_AFTER_MS) return { action: "dormant" };
+      if (at - (y.installedAt ?? 0) < UPDATE_MIN_AGE_MS) return { action: "fresh" };
+    }
+    if (at - (y.checkedAt ?? 0) < UPDATE_CHECK_INTERVAL_MS) return { action: "checked" };
+    // Anotada antes de tentar: uma checagem que falha (sem rede, antivírus) não se repete no mesmo dia.
+    await updateMeta((meta) => ({ ...meta, ytdlp: { ...meta.ytdlp, checkedAt: at } }));
+    const { version, updated } = await installYtdlp({ signal, onlyIfChanged: true });
+    return { action: updated ? "updated" : "current", version };
+  }
+
+  /**
+   * Instala tudo antes do primeiro vídeo, em segundo plano. Uma tentativa que falhou
+   * (inclusive o provedor de PO token, que `ensure` tolera) só se repete no dia seguinte.
+   */
+  async function preinstall() {
+    if (!supported) return { action: "unsupported" };
+    if (ready() && !needsPot()) return { action: "ready" };
+    const meta = await readMeta();
+    if (meta.preinstallFailedAt && now() - meta.preinstallFailedAt < PREINSTALL_RETRY_MS) {
+      return { action: "backoff" };
+    }
+    try {
+      await ensure();
+    } catch (error) {
+      await writeMeta({ preinstallFailedAt: now() }).catch(() => {});
+      throw error;
+    }
+    if (needsPot()) {
+      await writeMeta({ preinstallFailedAt: now() }).catch(() => {});
+      return { action: "partial" };
+    }
+    return { action: "installed" };
   }
 
   /**
@@ -503,8 +759,8 @@ function createTools(cfg) {
 
   async function works() {
     try {
-      const yt = await run(ytdlpPath, ["--version"], { execFileImpl });
-      if (!/^\d{4}\.\d{2}\.\d{2}/.test(yt.trim())) return false;
+      const yt = await run(ytdlpPath(), ["--version"], { execFileImpl });
+      if (!VERSION_RE.test(yt.trim())) return false;
     } catch {
       return false;
     }
@@ -513,7 +769,11 @@ function createTools(cfg) {
 
   /** Descarta os binários para o próximo `ensure` recomeçar do zero (arquivo corrompido, arquitetura errada). */
   async function reset() {
-    await fs.remove(ytdlpPath);
+    await exclusive(async () => {
+      _current = null;
+      await fs.remove(ytdlpRoot);
+      await fs.remove(legacyYtdlpPath);
+    });
     await fs.remove(ffmpegPath);
     await fs.remove(potPath);
     await fs.remove(`${potPath}.download`);
@@ -540,6 +800,7 @@ function createTools(cfg) {
   /** Aguarda uma instalação em curso sem iniciar outra, antes de mover `bin/`. */
   async function waitForIdle() {
     await _ensuring?.catch(() => {});
+    await _ytdlpLock;
   }
 
   return {
@@ -552,6 +813,10 @@ function createTools(cfg) {
     needsPot,
     ensure,
     refreshYtdlp,
+    cleanup,
+    markUsed,
+    checkForUpdate,
+    preinstall,
     works,
     ffmpegWorks,
     reset,

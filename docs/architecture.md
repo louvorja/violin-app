@@ -1254,9 +1254,9 @@ mesmas trilhas e não abre uma segunda conexão. Só um vídeo sem trilhas servi
   Tocar um vídeo que só esperava na fila de pré-download o tira da fila (`runNow`, sem ocupar
   raia: nada segura o play, nem o fim de outro download); pedir outro vídeo cancela o que a
   projeção esperava — menos o download que o operador pediu de propósito (botão, link novo),
-  que só deixa de ser esperado; cancelar mata a árvore de processos (yt-dlp → python → ffmpeg). A troca/renovação das ferramentas só acontece com um único
-  download em curso (no Windows o `.exe` em uso não é sobrescrito). A barra é única e
-  monótona: na primeira vez as ferramentas ocupam os primeiros 25%.
+  que só deixa de ser esperado; cancelar mata a árvore de processos (yt-dlp → python → ffmpeg). O reparo
+  das ferramentas (apagar e reinstalar) só acontece com um único download em curso. A barra é
+  única e monótona: na primeira vez as ferramentas ocupam os primeiros 25%.
 - **Cancelar e pedir de novo** funciona na hora: um job já abortado, mas ainda saindo, não é
   reaproveitado por quem pede em seguida (`manager.ensure` espera o antigo largar a pasta de
   parciais e recomeça), e no renderer `_dropPendingDownload` também descarta o preparo
@@ -1264,9 +1264,16 @@ mesmas trilhas e não abre uma segunda conexão. Só um vídeo sem trilhas servi
 - **Ferramentas (yt-dlp + ffmpeg)** são instaladas uma vez, por todos: pedidos simultâneos
   compartilham a instalação e todos recebem o andamento (quem chega no meio parte do estado
   atual). Cancelar só faz quem cancelou parar de esperar — a instalação segue, porque o
-  operador que trocou de vídeo no primeiro uso a aproveita em vez de recomeçar do zero. Abrir
-  "Vídeos On-line" ou "Meus Vídeos Online" já dispara a instalação em silêncio
-  (`onlineVideo:prepare`, uma vez por sessão).
+  operador que trocou de vídeo no primeiro uso a aproveita em vez de recomeçar do zero. O
+  main as instala sozinho 3 min depois do boot (`maintainTools` em `index.js`: opção "Baixar"
+  ligada, sem projeção aberta nem download em curso), e abrir "Vídeos On-line" ou "Meus
+  Vídeos Online" dispara a mesma instalação (`onlineVideo:prepare`).
+- **yt-dlp em pasta, não em arquivo único**: o arquivo único (PyInstaller onefile) se
+  descompacta numa pasta temporária a cada execução — 3,5 s medidos no macOS só para o
+  `--version`, contra 0,35 s da versão em pasta; a resolução de um vídeo caiu de 6,6 s para
+  2,95 s. O zip é extraído em fluxo (`unzip.js`, ~0,5 s) para `bin/ytdlp/<sha256[0:16]>/`, e o
+  `tools.json` aponta a pasta atual: trocar de versão não mexe na que está rodando (no Windows o
+  `.exe` em uso nem seria sobrescrito), e as antigas saem na abertura seguinte (`cleanup`).
 - **Progresso** aparece em "Processos em segundo plano" (`useBackgroundTasks`, com botão de
   cancelar). Vídeo já em cache não pisca tarefa nenhuma.
 - **Vídeos baixados** em `<dados>/Videos/` (por padrão, `Documents/LouvorJA Violin/Videos`).
@@ -1288,7 +1295,9 @@ mesmas trilhas e não abre uma segunda conexão. Só um vídeo sem trilhas servi
   já começa o download e guarda o vídeo, salvo com o download desligado nas opções.
 - **A cópia única** (`onlineVideo:stream`, `progressive.js`): o yt-dlp pede só os **links** das
   duas trilhas (`-J`, sem baixar) e o main as baixa **uma vez**, em pedaços de 2 MB, para
-  arquivos do tamanho final em `Videos/.stream/<id>/` que vão sendo preenchidos.
+  arquivos do tamanho final em `Videos/.stream/<id>/` que vão sendo preenchidos. Os links dos
+  clientes de TV só valem alguns segundos depois de emitidos (`available_at` no JSON, ~4 s):
+  pedir antes dá 403, então `resolveStreams` só os devolve nessa hora.
   Projeção, retorno, operador e o player do app leem desses arquivos por `Range`, em
   `louvorja://onlinestream/<id>/video|audio` — o handler espera o trecho que ainda não chegou
   e, num salto, o baixador pula para lá. Começa em ~7 s. Ao terminar, o ffmpeg junta as trilhas
@@ -1317,12 +1326,16 @@ mesmas trilhas e não abre uma segunda conexão. Só um vídeo sem trilhas servi
   ou de país → só avisa o operador e **nada vai para o telão**; cancelamento → silencioso;
   qualquer outra (sem GitHub, ferramenta quebrada, `bot`, disco cheio, transmissão ao vivo) →
   aviso e cai no player do YouTube (`openEmbeddedYouTube`).
-- **yt-dlp desatualizado** (o YouTube muda o player a cada poucas semanas): falha que uma
-  versão nova resolve (`unknown`, `forbidden`, `format`, `bot`) renova o yt-dlp e repete uma
-  vez, no máximo uma renovação por hora.
+- **yt-dlp desatualizado** (o YouTube muda o player a cada poucas semanas): o canal é o
+  nightly, que o próprio yt-dlp recomenda e onde as correções saem primeiro (o estável ficou
+  dois meses parado em 2026). Falha que uma versão nova resolve (`unknown`, `forbidden`,
+  `format`, `bot`) renova e repete uma vez, no máximo uma renovação por hora; sem release
+  nova, a renovação custa só o `SHA2-256SUMS` (~1,5 KB). Além disso, `checkForUpdate` olha uma
+  vez por dia, para quem usou vídeo on-line no último mês, e troca a versão que já tem uma
+  semana; o arquivo único de versões anteriores do app migra para a pasta na primeira checagem.
 - **Web/PWA** não baixa: continua só com o player do YouTube.
 
-Arquivos: `electron/main/onlineVideo/{ids,store,runner,rangeSet,progressive,tools,manager,index}.js`,
+Arquivos: `electron/main/onlineVideo/{ids,store,runner,rangeSet,progressive,tools,unzip,manager,index}.js`,
 `src/helpers/OnlineVideo.ts`, `src/composables/useMedia.ts` (`openYouTube`),
 `src/composables/useOnlineVideoDownloads.ts` e os componentes
 `src/components/OnlineVideoDownload{,Badge,sBar}.vue`.

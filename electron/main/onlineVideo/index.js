@@ -10,16 +10,27 @@ const { createSpawnHost } = require("./spawnHost.js");
 const { isVideoId } = require("./ids.js");
 const { safeSend } = require("../safeWebContents.js");
 const { migrateDownloads } = require("./migration.js");
+const { WorkPriority, canStartWork } = require("../presentationAdmission.js");
+
+/** Depois do boot, para não disputar a abertura do app. */
+const MAINTENANCE_DELAY_MS = 3 * 60 * 1000;
+const MAINTENANCE_INTERVAL_MS = 6 * 60 * 60 * 1000;
+/** Adiada por projeção aberta ou download em curso: tenta de novo logo. */
+const MAINTENANCE_RETRY_MS = 10 * 60 * 1000;
 
 let _manager = null;
 let _spawnHost = null;
 let _ready = null;
 let streamFailureReporter = null;
 let presentationActive = false;
+let _maintenanceTimer = null;
+let _maintaining = null;
 
 function setPresentationActive(active) {
+  const wasActive = presentationActive;
   presentationActive = active === true;
   _manager?.setPresentationActive(presentationActive);
+  if (wasActive && !presentationActive && _maintenanceTimer) scheduleMaintenance(MAINTENANCE_RETRY_MS);
 }
 
 function setStreamFailureReporter(reporter) {
@@ -55,6 +66,8 @@ function getManager() {
     const host = (_spawnHost ||= createSpawnHost());
     const children = { spawnImpl: host.spawn, killImpl: host.killTree };
     const tools = createTools({ binDir: path.join(paths.dataDir(), "bin"), execFileImpl: host.execFile });
+    // Antes de qualquer yt-dlp deste processo rodar; não segura a inicialização.
+    void tools.cleanup().catch((error) => console.warn("[onlineVideo] limpeza do yt-dlp falhou:", error?.message || error));
     _manager = createManager({
       dir: paths.videosDir(),
       workDir: paths.videoWorkDir(),
@@ -62,8 +75,14 @@ function getManager() {
       canWrite: () => storageAccess.canWrite("videos"),
       canMaintain: () => storageAccess.canMaintain("videos"),
       tools,
-      run: (opts) => runner.run({ ...opts, ...children }),
-      resolve: (opts) => runner.resolveStreams({ ...opts, ...children }),
+      run: (opts) => {
+        tools.markUsed();
+        return runner.run({ ...opts, ...children });
+      },
+      resolve: (opts) => {
+        tools.markUsed();
+        return runner.resolveStreams({ ...opts, ...children });
+      },
       mux: (opts) => runner.muxCopy({ ...opts, ...children }),
       // O YouTube passou a exigir a resolução de um desafio em JavaScript para
       // liberar os formatos. O próprio Electron, rodando como Node, faz isso sem
@@ -92,6 +111,61 @@ async function readyManager() {
   const manager = getManager();
   await _ready;
   return manager;
+}
+
+/** A opção "Baixar" de Opções → Vídeos On-line (ligada por padrão). */
+function downloadPreferenceEnabled() {
+  try {
+    const userData = require("../userStore.js").read("user_data");
+    return userData?.options?.online_video_projection?.download !== false;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Deixa as ferramentas instaladas e o yt-dlp em dia sem que ninguém peça: quem
+ * abre um vídeo não espera a instalação (13 s na mediana do Windows, 105 s no
+ * p90), e o yt-dlp acompanha o YouTube sem o app ser atualizado. Trabalho de
+ * fundo: não começa com projeção aberta nem com vídeo baixando.
+ *
+ * @param {{ ignoreDormancy?: boolean }} [opts] o operador acabou de abrir um módulo de vídeo
+ * @returns {Promise<{ action: string }>}
+ */
+function maintainTools(opts = {}) {
+  if (_maintaining) return _maintaining;
+  _maintaining = (async () => {
+    if (!canStartWork(WorkPriority.BACKGROUND, presentationActive)) return { action: "presentation" };
+    const manager = await readyManager();
+    const snapshot = manager.diagnosticSnapshot();
+    if (snapshot.online_video_active_count > 0 || snapshot.online_video_resolving_count > 0) {
+      return { action: "busy" };
+    }
+    const tools = manager.tools;
+    if (!tools.ready() || tools.needsPot?.()) {
+      if (!downloadPreferenceEnabled()) return { action: "disabled" };
+      return tools.preinstall();
+    }
+    return tools.checkForUpdate(opts);
+  })()
+    .catch((error) => {
+      console.warn("[onlineVideo] manutenção das ferramentas falhou:", error?.kind || "", error?.message || error);
+      return { action: "error" };
+    })
+    .finally(() => {
+      _maintaining = null;
+    });
+  return _maintaining;
+}
+
+function scheduleMaintenance(delay = MAINTENANCE_DELAY_MS) {
+  clearTimeout(_maintenanceTimer);
+  _maintenanceTimer = setTimeout(async () => {
+    const { action } = await maintainTools();
+    const deferred = action === "presentation" || action === "busy";
+    scheduleMaintenance(deferred ? MAINTENANCE_RETRY_MS : MAINTENANCE_INTERVAL_MS);
+  }, delay);
+  _maintenanceTimer.unref?.();
 }
 
 /** Sem isto a falha só vira um aviso na tela, e não se sabe por quê (no Windows, sobretudo). */
@@ -155,9 +229,12 @@ function registerIpc(ipcMain) {
   ipcMain.handle("onlineVideo:keep", async (_event, id) => (await readyManager()).keep(id));
   ipcMain.handle("onlineVideo:prepare", async (event) => {
     const manager = await readyManager();
-    return manager.prepare((progress) => {
+    const result = await manager.prepare((progress) => {
       safeSend(event.sender, "onlineVideo:progress", { id: "__tools__", ...progress });
     });
+    // Quem volta a usar vídeo depois de um tempo parado recebe o yt-dlp em dia, ao fundo.
+    if (result?.ok) void maintainTools({ ignoreDormancy: true });
+    return result;
   });
   ipcMain.handle("onlineVideo:list", async () => (await readyManager()).list());
   ipcMain.handle("onlineVideo:remove", async (_event, id) => (await readyManager()).remove(id));
@@ -166,11 +243,16 @@ function registerIpc(ipcMain) {
 
 function init() {
   getManager();
+  // O E2E usa perfil isolado e não pode baixar ferramentas por conta própria no meio do teste.
+  if (!process.env.LJ_E2E_USER_DATA) scheduleMaintenance();
   return _ready;
 }
 
 /** Solta processos e trilhas antes de a pasta de dados ser movida ou trocada. */
 async function releaseDataDir() {
+  clearTimeout(_maintenanceTimer);
+  _maintenanceTimer = null;
+  await _maintaining;
   if (!_manager) return;
   await _ready.catch(() => {});
   await _manager.close();
@@ -180,6 +262,8 @@ async function releaseDataDir() {
 
 /** Cancela tudo e espera (no máximo 2 s) o processo utilitário encerrar os filhos. */
 async function shutdown() {
+  clearTimeout(_maintenanceTimer);
+  _maintenanceTimer = null;
   if (_manager) _manager.cancelAll();
   await _spawnHost?.settle(2_000);
 }
@@ -194,6 +278,7 @@ module.exports = {
   serveStream,
   registerIpc,
   init,
+  maintainTools,
   releaseDataDir,
   shutdown,
   diagnosticSnapshot,

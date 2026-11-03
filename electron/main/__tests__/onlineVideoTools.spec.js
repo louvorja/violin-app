@@ -7,6 +7,7 @@ import path from "path";
 import fs from "fs";
 import zlib from "zlib";
 import crypto from "crypto";
+import JSZip from "jszip";
 
 const require = createRequire(import.meta.url);
 const { createTools, parseSums, YTDLP_ASSETS, FFMPEG_ASSETS } = require("../onlineVideo/tools.js");
@@ -23,6 +24,22 @@ let origin;
 let hits;
 let ytdlpBody;
 let sumsOverride;
+/** Quando verdadeiro, o servidor publica um "zip" que não abre (com SHA-256 coerente). */
+let zipBroken;
+const zipCache = new Map();
+
+/** O que a release publica em pasta: o executável e o `_internal` ao lado dele. */
+async function zipFor(body) {
+  if (zipBroken) return Buffer.from("isto não é um zip");
+  const cacheKey = body.toString("base64");
+  if (!zipCache.has(cacheKey)) {
+    const zip = new JSZip();
+    zip.file("yt-dlp_fake", body, { unixPermissions: 0o100755 });
+    zip.file("_internal/base_library.zip", "pyz", { unixPermissions: 0o100644 });
+    zipCache.set(cacheKey, await zip.generateAsync({ type: "nodebuffer", platform: "UNIX", compression: "DEFLATE" }));
+  }
+  return zipCache.get(cacheKey);
+}
 let ffmpegGz;
 let potZip;
 let potBin;
@@ -30,18 +47,23 @@ let potBin;
 let ffmpegGate = null;
 
 beforeAll(async () => {
-  server = http.createServer((req, res) => {
+  server = http.createServer(async (req, res) => {
     hits.push(req.url);
     const send = (status, body, headers = {}) => {
       res.writeHead(status, headers);
       res.end(body);
     };
     if (req.url === "/yt/SHA2-256SUMS") {
-      return send(200, sumsOverride ?? `${sha(ytdlpBody)}  yt-dlp_fake\n`);
+      const zip = await zipFor(ytdlpBody);
+      return send(200, sumsOverride ?? `${sha(zip)}  yt-dlp_fake.zip\n${sha(ytdlpBody)}  yt-dlp_fake\n`);
+    }
+    if (req.url === "/yt/yt-dlp_fake.zip") {
+      const zip = await zipFor(ytdlpBody);
+      return send(200, zip, { "content-length": zip.length });
     }
     if (req.url === "/yt/yt-dlp_fake") return send(200, ytdlpBody, { "content-length": ytdlpBody.length });
     if (req.url === "/redir/SHA2-256SUMS") return send(302, "", { location: "/yt/SHA2-256SUMS" });
-    if (req.url === "/redir/yt-dlp_fake") return send(302, "", { location: "/yt/yt-dlp_fake" });
+    if (req.url === "/redir/yt-dlp_fake.zip") return send(302, "", { location: "/yt/yt-dlp_fake.zip" });
     if (req.url === "/ff/ffmpeg-fake.gz") {
       const reply = () => send(200, ffmpegGz, { "content-length": ffmpegGz.length });
       return ffmpegGate ? ffmpegGate.then(reply) : reply();
@@ -72,7 +94,7 @@ function make(overrides = {}) {
     arch: "x64",
     ytdlpBase: `${origin}/yt`,
     ffmpegBase: `${origin}/ff`,
-    ytdlpAssets: { "linux-x64": "yt-dlp_fake" },
+    ytdlpAssets: { "linux-x64": { zip: "yt-dlp_fake.zip", exe: "yt-dlp_fake", file: "yt-dlp_fake" } },
     ffmpegAssets: { "linux-x64": { name: "ffmpeg-fake.gz", sha256: sha(FFMPEG_GZ) } },
     // Os testes não baixam o provedor real do GitHub; quem testa o plugin
     // injeta os próprios assets.
@@ -86,6 +108,7 @@ beforeEach(() => {
   hits = [];
   ytdlpBody = YTDLP_V1;
   sumsOverride = undefined;
+  zipBroken = false;
   ffmpegGz = FFMPEG_GZ;
   ffmpegGate = null;
   potZip = undefined;
@@ -133,7 +156,13 @@ describe.skipIf(process.platform === "win32")("createTools", () => {
     const events = [];
     const paths = await tools.ensure({ onProgress: (p) => events.push(p) });
 
-    expect(paths).toMatchObject({ ytdlp: path.join(binDir, "yt-dlp"), ffmpeg: path.join(binDir, "ffmpeg") });
+    expect(paths.ffmpeg).toBe(path.join(binDir, "ffmpeg"));
+    // A versão em pasta: o executável e o `_internal` que ele carrega, numa pasta só dela.
+    expect(path.dirname(path.dirname(paths.ytdlp))).toBe(path.join(binDir, "ytdlp"));
+    expect(path.basename(paths.ytdlp)).toBe("yt-dlp_fake");
+    expect(fs.existsSync(path.join(path.dirname(paths.ytdlp), "_internal/base_library.zip"))).toBe(true);
+    expect(hits).toContain("/yt/yt-dlp_fake.zip");
+    expect(hits).not.toContain("/yt/yt-dlp_fake");
     expect(tools.ready()).toBe(true);
     for (const f of [paths.ytdlp, paths.ffmpeg]) {
       expect(fs.statSync(f).mode & 0o111).not.toBe(0);
@@ -159,7 +188,7 @@ describe.skipIf(process.platform === "win32")("createTools", () => {
   it("chamadas simultâneas compartilham um único download", async () => {
     const tools = make();
     await Promise.all([tools.ensure(), tools.ensure(), tools.ensure()]);
-    expect(hits.filter((u) => u === "/yt/yt-dlp_fake")).toHaveLength(1);
+    expect(hits.filter((u) => u === "/yt/yt-dlp_fake.zip")).toHaveLength(1);
     expect(hits.filter((u) => u === "/ff/ffmpeg-fake.gz")).toHaveLength(1);
   });
 
@@ -179,11 +208,12 @@ describe.skipIf(process.platform === "win32")("createTools", () => {
   });
 
   it("recusa yt-dlp adulterado em relação ao SHA2-256SUMS", async () => {
-    sumsOverride = `${"f".repeat(64)}  yt-dlp_fake\n`;
+    sumsOverride = `${"f".repeat(64)}  yt-dlp_fake.zip\n${"e".repeat(64)}  yt-dlp_fake\n`;
     const tools = make();
     await expect(tools.ensure()).rejects.toMatchObject({ kind: "tool" });
+    expect(tools.ready()).toBe(false);
     expect(fs.existsSync(path.join(binDir, "yt-dlp"))).toBe(false);
-    expect(fs.readdirSync(binDir).filter((n) => n.endsWith(".download"))).toEqual([]);
+    expect(fs.readdirSync(path.join(binDir, "ytdlp"))).toEqual([]);
   });
 
   it("recusa quando a release não publica checksum para o asset", async () => {
@@ -195,7 +225,18 @@ describe.skipIf(process.platform === "win32")("createTools", () => {
     ytdlpBody = Buffer.from("#!/bin/sh\necho oops\n");
     const tools = make();
     await expect(tools.ensure()).rejects.toMatchObject({ kind: "tool" });
-    expect(fs.existsSync(path.join(binDir, "yt-dlp"))).toBe(false);
+    expect(tools.ready()).toBe(false);
+    expect(fs.readdirSync(path.join(binDir, "ytdlp"))).toEqual([]);
+  });
+
+  it("zip que não abre cai no arquivo único da mesma release", async () => {
+    zipBroken = true;
+    const tools = make();
+    const paths = await tools.ensure();
+    expect(tools.ready()).toBe(true);
+    expect(fs.readFileSync(paths.ytdlp)).toEqual(YTDLP_V1);
+    expect(hits).toContain("/yt/yt-dlp_fake");
+    expect((await tools.info()).ytdlpVersion).toBe("2026.01.02");
   });
 
   it("recusa ffmpeg que baixou certo mas não é ffmpeg", async () => {
@@ -244,7 +285,7 @@ describe.skipIf(process.platform === "win32")("createTools", () => {
     await expect(second).resolves.toEqual(tools.paths());
     expect(tools.ready()).toBe(true);
     expect(hits.filter((u) => u === "/ff/ffmpeg-fake.gz")).toHaveLength(1); // não recomeçou
-    expect(hits.filter((u) => u === "/yt/yt-dlp_fake")).toHaveLength(1);
+    expect(hits.filter((u) => u === "/yt/yt-dlp_fake.zip")).toHaveLength(1);
     expect(events).toContain("ffmpeg"); // quem chegou no meio também vê o andamento
   });
 
@@ -282,7 +323,7 @@ describe.skipIf(process.platform === "win32")("createTools", () => {
   });
 
   it("instalação que falha sem ninguém esperando não vira rejeição sem dono, e a próxima tentativa recomeça", async () => {
-    sumsOverride = `${"f".repeat(64)}  yt-dlp_fake\n`;
+    sumsOverride = `${"f".repeat(64)}  outro_asset\n`;
     const tools = make();
     const controller = new AbortController();
     const desistiu = tools.ensure({ signal: controller.signal });
@@ -291,11 +332,13 @@ describe.skipIf(process.platform === "win32")("createTools", () => {
     // A falha da instalação em curso, sem ninguém esperando, não vira rejeição sem dono.
     await new Promise((r) => setTimeout(r, 50));
     sumsOverride = undefined;
-    await expect(tools.ensure()).resolves.toEqual(tools.paths());
+    const paths = await tools.ensure();
+    expect(paths).toEqual(tools.paths());
+    expect(tools.ready()).toBe(true);
   });
 
   it("depois de uma falha, a próxima tentativa recomeça do zero", async () => {
-    sumsOverride = `${"f".repeat(64)}  yt-dlp_fake\n`;
+    sumsOverride = `${"f".repeat(64)}  outro_asset\n`;
     const tools = make();
     await expect(tools.ensure()).rejects.toBeTruthy();
     sumsOverride = undefined;
@@ -303,25 +346,68 @@ describe.skipIf(process.platform === "win32")("createTools", () => {
     expect(tools.ready()).toBe(true);
   });
 
-  it("refreshYtdlp troca pela versão nova e mantém o ffmpeg", async () => {
+  it("refreshYtdlp troca pela versão nova, noutra pasta, e mantém o ffmpeg", async () => {
     const tools = make();
     await tools.ensure();
     const ffBefore = fs.readFileSync(path.join(binDir, "ffmpeg"));
+    const oldPath = tools.paths().ytdlp;
 
     ytdlpBody = YTDLP_V2;
     const version = await tools.refreshYtdlp();
     expect(version).toBe("2026.03.04");
     expect((await tools.info()).ytdlpVersion).toBe("2026.03.04");
+    expect(fs.readFileSync(tools.paths().ytdlp)).toEqual(YTDLP_V2);
+    // O que ainda roda a versão anterior não perde os arquivos no meio.
+    expect(tools.paths().ytdlp).not.toBe(oldPath);
+    expect(fs.readFileSync(oldPath)).toEqual(YTDLP_V1);
     expect(fs.readFileSync(path.join(binDir, "ffmpeg"))).toEqual(ffBefore);
+  });
+
+  it("refreshYtdlp sem release nova só lê a lista de SHA-256, não baixa de novo", async () => {
+    const tools = make();
+    await tools.ensure();
+    hits.length = 0;
+    expect(await tools.refreshYtdlp()).toBe("2026.01.02");
+    expect(hits).toEqual(["/yt/SHA2-256SUMS"]);
   });
 
   it("refreshYtdlp que falha não estraga o yt-dlp que já funcionava", async () => {
     const tools = make();
     await tools.ensure();
-    sumsOverride = `${"f".repeat(64)}  yt-dlp_fake\n`;
+    const before = tools.paths().ytdlp;
+    sumsOverride = `${"f".repeat(64)}  yt-dlp_fake.zip\n${"e".repeat(64)}  yt-dlp_fake\n`;
     await expect(tools.refreshYtdlp()).rejects.toBeTruthy();
-    expect(fs.readFileSync(path.join(binDir, "yt-dlp"))).toEqual(YTDLP_V1);
+    expect(tools.paths().ytdlp).toBe(before);
+    expect(fs.readFileSync(before)).toEqual(YTDLP_V1);
     expect((await tools.info()).ytdlpVersion).toBe("2026.01.02");
+  });
+
+  it("a versão atual sobrevive a reabrir o app (outra instância lê o tools.json)", async () => {
+    await make().ensure();
+    const reopened = make();
+    expect(reopened.ready()).toBe(true);
+    expect(path.basename(reopened.paths().ytdlp)).toBe("yt-dlp_fake");
+  });
+
+  it("cleanup apaga as versões trocadas e o arquivo único antigo, nunca a atual", async () => {
+    const tools = make();
+    await tools.ensure();
+    const oldDir = path.dirname(tools.paths().ytdlp);
+    ytdlpBody = YTDLP_V2;
+    await tools.refreshYtdlp();
+    fs.writeFileSync(path.join(binDir, "yt-dlp"), YTDLP_V1, { mode: 0o755 });
+
+    await make().cleanup();
+    expect(fs.existsSync(oldDir)).toBe(false);
+    expect(fs.existsSync(path.join(binDir, "yt-dlp"))).toBe(false);
+    expect(fs.readFileSync(tools.paths().ytdlp)).toEqual(YTDLP_V2);
+    expect(fs.readdirSync(path.join(binDir, "ytdlp"))).toHaveLength(1);
+  });
+
+  it("cleanup sem versão em pasta não apaga o arquivo único que ainda é o único yt-dlp", async () => {
+    fs.writeFileSync(path.join(binDir, "yt-dlp"), YTDLP_V1, { mode: 0o755 });
+    await make().cleanup();
+    expect(fs.existsSync(path.join(binDir, "yt-dlp"))).toBe(true);
   });
 
   it("ffmpegWorks: só o ffmpeg, sem depender do yt-dlp", async () => {
@@ -330,7 +416,7 @@ describe.skipIf(process.platform === "win32")("createTools", () => {
     await tools.ensure();
     expect(await tools.ffmpegWorks()).toBe(true);
 
-    fs.writeFileSync(path.join(binDir, "yt-dlp"), "#!/bin/sh\necho nada\n", { mode: 0o755 });
+    fs.writeFileSync(tools.paths().ytdlp, "#!/bin/sh\necho nada\n", { mode: 0o755 });
     expect(await tools.ffmpegWorks()).toBe(true); // yt-dlp quebrado não muda a resposta
     expect(await tools.works()).toBe(false);
 
@@ -356,7 +442,7 @@ describe.skipIf(process.platform === "win32")("createTools", () => {
     await tools.ensure();
     expect(await tools.works()).toBe(true);
 
-    fs.writeFileSync(path.join(binDir, "yt-dlp"), "#!/bin/sh\necho nada\n", { mode: 0o755 });
+    fs.writeFileSync(tools.paths().ytdlp, "#!/bin/sh\necho nada\n", { mode: 0o755 });
     expect(await tools.works()).toBe(false);
   });
 
@@ -367,9 +453,120 @@ describe.skipIf(process.platform === "win32")("createTools", () => {
     expect(tools.ready()).toBe(false);
     hits.length = 0;
     await tools.ensure();
-    expect(hits).toContain("/yt/yt-dlp_fake");
+    expect(hits).toContain("/yt/yt-dlp_fake.zip");
   });
 });
+
+describe.skipIf(process.platform === "win32")("manutenção automática do yt-dlp", () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  let clock;
+  const timed = (overrides = {}) => make({ now: () => clock, ...overrides });
+
+  beforeEach(() => {
+    clock = 1_800_000_000_000;
+  });
+
+  it("versão recém-instalada não é checada: nem toca a rede", async () => {
+    const tools = timed();
+    await tools.ensure();
+    hits.length = 0;
+    clock += 3 * DAY;
+    expect(await tools.checkForUpdate()).toMatchObject({ action: "fresh" });
+    expect(hits).toEqual([]);
+  });
+
+  it("depois de uma semana, troca pela release nova; sem release nova, só lê a lista", async () => {
+    const tools = timed();
+    await tools.ensure();
+    tools.markUsed();
+    clock += 8 * DAY;
+    hits.length = 0;
+    expect(await tools.checkForUpdate()).toMatchObject({ action: "current", version: "2026.01.02" });
+    expect(hits).toEqual(["/yt/SHA2-256SUMS"]);
+
+    // No mesmo dia não checa de novo.
+    hits.length = 0;
+    expect(await tools.checkForUpdate()).toMatchObject({ action: "checked" });
+    expect(hits).toEqual([]);
+
+    clock += DAY + 1;
+    ytdlpBody = YTDLP_V2;
+    expect(await tools.checkForUpdate()).toMatchObject({ action: "updated", version: "2026.03.04" });
+    expect(fs.readFileSync(tools.paths().ytdlp)).toEqual(YTDLP_V2);
+  });
+
+  it("quem não usa vídeo on-line há um mês não paga atualização, a menos que volte a abrir o módulo", async () => {
+    const tools = timed();
+    await tools.ensure();
+    tools.markUsed();
+    clock += 40 * DAY;
+    hits.length = 0;
+    expect(await tools.checkForUpdate()).toMatchObject({ action: "dormant" });
+    expect(hits).toEqual([]);
+    expect(await tools.checkForUpdate({ ignoreDormancy: true })).toMatchObject({ action: "current" });
+  });
+
+  it("checagem que falha (sem rede) não se repete no mesmo dia", async () => {
+    const tools = timed();
+    await tools.ensure();
+    clock += 8 * DAY;
+    const offline = timed({ ytdlpBase: `${origin}/inexistente` });
+    await expect(offline.checkForUpdate()).rejects.toMatchObject({ kind: "network" });
+    hits.length = 0;
+    expect(await offline.checkForUpdate()).toMatchObject({ action: "checked" });
+    expect(hits).toEqual([]);
+  });
+
+  it("migra o arquivo único das versões anteriores do app, sem esperar a semana", async () => {
+    fs.writeFileSync(path.join(binDir, "yt-dlp"), YTDLP_V1, { mode: 0o755 });
+    fs.writeFileSync(path.join(binDir, "ffmpeg"), FFMPEG, { mode: 0o755 });
+    fs.writeFileSync(
+      path.join(binDir, "tools.json"),
+      JSON.stringify({ ytdlp: { version: "2026.01.02", sha256: sha(YTDLP_V1), installedAt: clock } })
+    );
+    const tools = timed();
+    expect(tools.ready()).toBe(true);
+    expect(tools.paths().ytdlp).toBe(path.join(binDir, "yt-dlp"));
+
+    ytdlpBody = YTDLP_V2;
+    expect(await tools.checkForUpdate()).toMatchObject({ action: "updated", version: "2026.03.04" });
+    expect(path.basename(tools.paths().ytdlp)).toBe("yt-dlp_fake");
+    // O antigo fica até a próxima abertura, quando nada deste processo o usa.
+    expect(fs.existsSync(path.join(binDir, "yt-dlp"))).toBe(true);
+    await timed().cleanup();
+    expect(fs.existsSync(path.join(binDir, "yt-dlp"))).toBe(false);
+  });
+
+  it("markUsed grava no máximo uma vez por hora", async () => {
+    const tools = timed();
+    await tools.ensure();
+    tools.markUsed();
+    await vi.waitFor(async () => expect((await readMetaFile()).ytdlp.lastUsedAt).toBe(clock));
+    const first = clock;
+    clock += 10 * 60 * 1000;
+    tools.markUsed();
+    await new Promise((r) => setTimeout(r, 20));
+    expect((await readMetaFile()).ytdlp.lastUsedAt).toBe(first);
+  });
+
+  it("preinstall instala tudo uma vez e, se falhar, só tenta de novo no dia seguinte", async () => {
+    const offline = timed({ ffmpegBase: `${origin}/inexistente` });
+    await expect(offline.preinstall()).rejects.toMatchObject({ kind: "network" });
+    hits.length = 0;
+    expect(await offline.preinstall()).toMatchObject({ action: "backoff" });
+    expect(hits).toEqual([]);
+
+    clock += DAY + 1;
+    const tools = timed();
+    expect(await tools.preinstall()).toMatchObject({ action: "installed" });
+    expect(tools.ready()).toBe(true);
+    expect(await tools.preinstall()).toMatchObject({ action: "ready" });
+  });
+});
+
+async function readMetaFile() {
+  return JSON.parse(fs.readFileSync(path.join(binDir, "tools.json"), "utf8"));
+}
 
 describe("provedor de PO token", () => {
   it("instala o binário e extrai o plugin do yt-dlp", async () => {
