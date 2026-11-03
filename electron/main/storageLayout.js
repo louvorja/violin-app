@@ -243,6 +243,10 @@ function present(file, root) {
     throw unavailable(root, error);
   }
 }
+function isDirectory(dir) {
+  try { return fs.statSync(dir).isDirectory(); } catch { return false; }
+}
+
 function readable(dir) {
   try { fs.readdirSync(dir); return true; }
   catch (error) {
@@ -388,8 +392,9 @@ function initializeLocked({ bootstrap, documents, videos, sharedMedia, programDi
     if (current !== raw) atomicJson(file, current);
     return current;
   }
-  // Ilegível, inválido ou sem o perfil que descreve: fica guardado, nunca apagado.
-  if (fs.existsSync(file)) setAside(bootstrap, [file], current ? "registro-sem-perfil" : "registro-invalido");
+  // Ilegível ou inválido: fica guardado, nunca apagado. O válido sem perfil é
+  // reaproveitado abaixo e só é regravado quando o perfil novo for publicado.
+  if (!current && fs.existsSync(file)) setAside(bootstrap, [file], "registro-invalido");
   const published = hasProfile ? usableLayout(readJsonLenient(originFile), roots) : null;
   if (published) { atomicJson(file, published); return published; }
   if (hasProfile) {
@@ -498,7 +503,9 @@ function publishFresh({ bootstrap, documents, videos, sharedMedia, machineDefaul
     if (initial.setupCompleted) layout = initial;
   } catch (error) { console.warn("[storage] Começando do zero sem os endereços antigos:", error.message); }
   layout ||= { version: 1, ...defaultLocations({ documents, videos, sharedMedia, machineDefaults }), setupCompleted: false };
-  if (kept) layout = { ...layout, ...kept, setupCompleted: true };
+  // As pastas em uso continuam valendo enquanto existirem; a que sumiu (disco
+  // desconectado) não é recriada em outro lugar: volta-se ao endereço antigo ou ao padrão.
+  if (kept && [kept.mediaDir, kept.videosDir].every(isDirectory)) layout = { ...layout, ...kept, setupCompleted: true };
   validateLayout(layout, roots);
   createDefaultRoots(layout);
   const staging = openStaging(bootstrap);

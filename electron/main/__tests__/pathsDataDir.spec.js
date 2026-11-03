@@ -577,9 +577,35 @@ describe("recuperação automática", () => {
     expect(fs.existsSync(path.join(paths.dataDir(), "storage", "user_data.json"))).toBe(false);
   });
 
+  it("começar do zero e trazer de volta mantêm as pastas escolhidas depois da migração", () => {
+    migrated();
+    // Como depois de "mover para a pasta padrão": a pasta antiga do acervo já não existe.
+    const chosen = path.join(root, "Acervo movido");
+    fs.moveSync(path.join(legacy(), "files"), chosen);
+    const layout = { ...paths.storageLayout(), mediaDir: chosen };
+    fs.outputJsonSync(path.join(bootstrap, "storage-layout.json"), layout);
+    fs.outputJsonSync(path.join(paths.dataDir(), "library", "liturgies.json"), [{ title: "antes" }]);
+
+    recovery().request(bootstrap, "reset");
+    reopen();
+    expect(fs.existsSync(path.join(paths.dataDir(), "library", "liturgies.json"))).toBe(false);
+    expect(paths.filesDir()).toBe(chosen);
+    expect(paths.videosDir()).toBe(layout.videosDir);
+    expect(paths.storageLayout().setupCompleted).toBe(true);
+    expect(fs.readJsonSync(path.join(keptIn("comecar-do-zero"), "storage-layout.json")).mediaDir).toBe(chosen);
+    expect(fs.readdirSync(path.join(bootstrap, "recovery"))).toHaveLength(1);
+
+    recovery().request(bootstrap, "reimport");
+    reopen();
+    expect(fs.readJsonSync(path.join(paths.dataDir(), "storage", "user_data.json"))).toEqual({ language: "es" });
+    expect(paths.filesDir()).toBe(chosen);
+    expect(fs.readJsonSync(path.join(keptIn("trazer-de-volta"), "storage-layout.json")).mediaDir).toBe(chosen);
+  });
+
   it("começar do zero com a pasta antiga sem acesso abre nos padrões, sem cair no provisório", () => {
     migrated();
-    fs.outputJsonSync(path.join(bootstrap, "data-location.json"), { dataDir: path.join(root, "desconectado") });
+    // O acervo e os vídeos de quem atualizou moram na pasta antiga: somem com ela.
+    fs.moveSync(legacy(), path.join(root, "desconectado"));
     recovery().request(bootstrap, "reset");
     reopen();
     expect(paths.dataDirIssue()).toBeNull();

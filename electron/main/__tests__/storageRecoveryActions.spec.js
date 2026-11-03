@@ -73,6 +73,8 @@ describe("reset total", () => {
     }));
     for (const name of [".electron/Cache/a", "storage/user_data.json", "json_db/x.json", "bin/yt-dlp", "server/a"]) put(path.join(legacy, name));
     put(path.join(legacy, "files/musics/pt/antiga.mp3"), "acervo antigo");
+    for (const name of ["IndexedDB/louvorja/000.ldb", "Local Storage/leveldb/1.log", "Preferences", "storage/user_data.json", "json_db/x.json"]) put(path.join(bootstrap, name));
+    put(path.join(bootstrap, "files/musics/pt/beta12.mp3"), "acervo da beta.12");
     put(path.join(media, "musics/pt/hino.mp3"), "hino");
     put(path.join(media, "anotacoes.txt"), "do usuário");
     put(path.join(media, ".louvorja-collection.json"), JSON.stringify({ version: 1, kind: "media", shared: mediaShared }));
@@ -91,6 +93,9 @@ describe("reset total", () => {
       expect(exists(path.join(bootstrap, gone))).toBe(false);
     }
     for (const gone of [".electron", "storage", "json_db", "bin", "server"]) expect(exists(path.join(legacy, gone))).toBe(false);
+    // Perfil das versões até a beta.13, na própria pasta do app.
+    for (const gone of ["IndexedDB", "Local Storage", "Preferences", "storage", "json_db"]) expect(exists(path.join(bootstrap, gone))).toBe(false);
+    expect(fs.readFileSync(path.join(bootstrap, "files/musics/pt/beta12.mp3"), "utf8")).toBe("acervo da beta.12");
     // Sem pedir, acervo e vídeos ficam — inclusive o acervo que mora na pasta antiga.
     expect(exists(path.join(legacy, "files/musics/pt/antiga.mp3"))).toBe(true);
     expect(exists(path.join(media, "musics/pt/hino.mp3"))).toBe(true);

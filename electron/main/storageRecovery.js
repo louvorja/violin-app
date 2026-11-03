@@ -4,6 +4,7 @@ const fs = require("fs-extra");
 const path = require("node:path");
 const { atomicJson, readJsonLenient, setAside, absolute, PRIVATE_ENTRIES, REBUILDABLE_CHROMIUM } = require("./storageLayout.js");
 const { managedRelative } = require("./mediaFiles.js");
+const { PROFILE_ENTRIES } = require("./dataMigration.js");
 
 // `<appData>/LouvorJA Violin/recovery.json`: quantas aberturas seguidas não
 // conseguiram preparar os dados, por quê, e o que o operador pediu para fazer.
@@ -148,6 +149,8 @@ function wipeEverything(bootstrap, options) {
     for (const name of [".electron", ...PRIVATE_ENTRIES]) removeQuietly(path.join(legacyRoot, name));
     pruneEmpty(legacyRoot, legacyRoot);
   }
+  // Até a beta.13 o perfil do Chromium e as preferências moravam aqui mesmo.
+  for (const name of [...PROFILE_ENTRIES, ...PRIVATE_ENTRIES]) removeQuietly(path.join(bootstrap, name));
   for (const name of ["storage-layout.json", "profile", "profile.migrating", "fallback", "recovery", "data-location.json"]) {
     removeQuietly(path.join(bootstrap, name));
   }
@@ -173,8 +176,13 @@ function applyRequest(bootstrap) {
     return { freshStart: true };
   }
   if (state.request) {
-    const items = ["storage-layout.json", "profile", "profile.migrating", ...(state.request === "reset" ? ["fallback"] : [])];
-    setAside(bootstrap, items.map((name) => path.join(bootstrap, name)), state.request === "reset" ? "comecar-do-zero" : "trazer-de-volta");
+    const items = ["profile", "profile.migrating", ...(state.request === "reset" ? ["fallback"] : [])];
+    const folder = setAside(bootstrap, items.map((name) => path.join(bootstrap, name)), state.request === "reset" ? "comecar-do-zero" : "trazer-de-volta");
+    // O registro fica no lugar: sem ele, a próxima abertura voltaria às pastas
+    // antigas ou às padrão, e a pasta escolhida (ou para onde a mídia foi movida)
+    // pareceria vazia. A cópia de segurança leva uma cópia dele.
+    const layoutFile = path.join(bootstrap, "storage-layout.json");
+    if (folder && fs.existsSync(layoutFile)) fs.copySync(layoutFile, path.join(folder, "storage-layout.json"));
     const next = { version: 1 };
     // Até publicar o perfil vazio, uma nova queda continua sendo "do zero".
     if (state.request === "reset") next.freshStart = true;
