@@ -63,6 +63,26 @@ describe("Hotkeys — KeyboardEvent sintético (POST /api/keyboard)", () => {
     Hotkeys.unregister("Space", handler);
   });
 
+  it("Escape com allowInForm dispara mesmo com um campo de busca focado", () => {
+    const input = document.createElement("input");
+    document.body.append(input);
+    input.focus();
+
+    let fired = 0;
+    const handler = () => {
+      fired += 1;
+    };
+    Hotkeys.register("Escape", handler, { allowInForm: true });
+
+    input.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })
+    );
+
+    expect(fired).toBe(1);
+    Hotkeys.unregister("Escape", handler);
+    input.remove();
+  });
+
   it("preserva Space para ativar o botão focado", () => {
     const button = document.createElement("button");
     document.body.append(button);

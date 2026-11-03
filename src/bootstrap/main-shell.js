@@ -2848,6 +2848,10 @@ $storage.hydrate().then(async () => {
       },
       {
         context: "global",
+        // Escape é uma saída global: precisa valer também com o foco num
+        // campo de busca (ex.: módulo Músicas), onde o Hotkeys ignora os
+        // demais atalhos.
+        allowInForm: true,
         description: "hotkeys.esc",
         group: "general",
         label: "Esc",
