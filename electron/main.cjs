@@ -2573,11 +2573,13 @@ ipcMain.handle("storage:restart", () => {
   app.relaunch();
   app.quit();
 });
-// Recuperação pedida pelo operador: aplicada no começo da próxima abertura.
-ipcMain.handle("storage:recover", (_e, action) => {
-  if (action === "reset" && !paths.dataDirIssue()?.canReset) throw new Error("Começar do zero só é oferecido depois de tentar de novo.");
+// Recuperação pedida pelo operador: aplicada no começo da próxima abertura,
+// antes de o Chromium abrir o perfil. "repair", "reset" e "wipe" também vêm das
+// Opções → Armazenamento, que confirmam antes.
+ipcMain.handle("storage:recover", (_e, action, options) => {
   if (action === "reimport" && !paths.olderVersionUsed()) throw new Error("Não há dados de uma versão anterior para trazer.");
-  storageRecovery.request(paths.bootstrapDir(), action);
+  const wipe = options && typeof options === "object" ? { media: options.media === true, videos: options.videos === true } : {};
+  storageRecovery.request(paths.bootstrapDir(), action, wipe);
   app.relaunch();
   app.quit();
 });

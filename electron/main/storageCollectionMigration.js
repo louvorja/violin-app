@@ -177,6 +177,51 @@ function copyCollection(source, target, kind, id, { onProgress, workDir, acquire
     fs.removeSync(staging);
   } finally { for (const release of releases.reverse()) release(); }
 }
+const VIDEO_ID_FILE = /^[A-Za-z0-9_-]{11}\.(mp4|keep)$/;
+
+function pruneEmptyDirs(dir, { removeSelf }) {
+  let entries;
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
+  catch { return; }
+  for (const entry of entries) {
+    if (entry.isDirectory() && !entry.isSymbolicLink()) pruneEmptyDirs(path.join(dir, entry.name), { removeSelf: true });
+  }
+  if (!removeSelf) return;
+  try {
+    const rest = fs.readdirSync(dir).filter((name) => name !== ".DS_Store");
+    if (!rest.length) fs.removeSync(dir);
+  } catch { /* fica */ }
+}
+
+/**
+ * Segunda metade de "mover": depois de `copyCollection` conferir cada arquivo no
+ * destino pelo hash, apaga da origem o que chegou com o mesmo tamanho. Só arquivos
+ * que o app gerencia (vídeos só pelo ID do YouTube); pastas que ficarem vazias
+ * saem, e a raiz só se não sobrar nada além da marca. Origem compartilhada com
+ * outras contas é preservada.
+ */
+function removeMovedSource(source, target, kind) {
+  source = canonical(source); target = canonical(target);
+  let marker;
+  try { marker = access.readMarker(source, kind); }
+  catch { return { removed: 0, preserved: true }; }
+  if (marker?.shared === true) return { removed: 0, preserved: true };
+  let removed = 0;
+  for (const entry of files(source, kind)) {
+    if (kind === "videos" && !VIDEO_ID_FILE.test(entry.relative)) continue;
+    try {
+      const dest = fs.lstatSync(path.join(target, entry.relative));
+      if (!dest.isFile() || dest.size !== entry.size) continue;
+      fs.unlinkSync(entry.source);
+      removed++;
+    } catch { /* não chegou: fica na origem */ }
+  }
+  if (kind === "media") for (const name of ["musics", "images", "covers"]) pruneEmptyDirs(path.join(source, name), { removeSelf: true });
+  const rest = fs.existsSync(source) ? fs.readdirSync(source).filter((name) => ![".DS_Store", ".louvorja-collection.json"].includes(name)) : [];
+  if (!rest.length) fs.removeSync(source);
+  return { removed, preserved: rest.length > 0 };
+}
+
 function applyPendingLayout(current, { profileDir, programDir, workDir, acquire, onProgress } = {}) {
   const pending = current.pending;
   if (!pending) return current;
@@ -189,9 +234,19 @@ function applyPendingLayout(current, { profileDir, programDir, workDir, acquire,
       if (!fs.existsSync(target)) throw new Error(`A pasta escolhida está indisponível: ${target}`);
       const requestedShared = pending[kind + "Action"] === "reuse" || !normalized(target).startsWith(normalized(os.homedir()) + path.sep);
       const shared = requestedShared || access.readMarker(target, kind)?.shared === true;
-      if (pending[kind + "Action"] === "copy") copyCollection(current[kind + "Dir"], target, kind, pending.id, {
+      const action = pending[kind + "Action"];
+      if (action === "copy" || action === "move") copyCollection(current[kind + "Dir"], target, kind, pending.id, {
         workDir, acquire, onProgress, shared,
       });
+      if (action === "move") {
+        // A cópia já valeu: uma falha ao apagar deixa sobra na origem, não desfaz a troca.
+        try {
+          const result = removeMovedSource(current[kind + "Dir"], target, kind);
+          console.info(`[storage] ${kind}: ${result.removed} arquivos movidos de ${current[kind + "Dir"]}${result.preserved ? " (a pasta antiga ficou com outros arquivos)" : ""}.`);
+        } catch (error) {
+          console.warn(`[storage] ${kind}: a cópia terminou, mas a pasta antiga não pôde ser apagada:`, error.message);
+        }
+      }
       next[kind + "Shared"] = shared;
       if (shared) markShared(target, kind);
     }
@@ -204,4 +259,4 @@ function applyPendingLayout(current, { profileDir, programDir, workDir, acquire,
   }
 }
 
-module.exports = { validateContents, probe, files, preflightCopy, copyCollection, prepareStaging, applyPendingLayout };
+module.exports = { validateContents, probe, files, preflightCopy, copyCollection, prepareStaging, applyPendingLayout, removeMovedSource };

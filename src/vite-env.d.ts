@@ -12,6 +12,10 @@ declare global {
       videos: { writable: boolean; shared: boolean; reason?: string };
     };
     changeError?: string;
+    /** As pastas que uma instalação nova usaria nesta máquina. */
+    defaults?: { mediaDir: string; videosDir: string } | null;
+    /** Se esta conta pode apagar a pasta atual depois de mover (não compartilhada). */
+    canMove?: { media: boolean; videos: boolean };
   }
 
   /** Por que o app abriu num perfil provisório, e quantas aberturas seguidas falharam. */
@@ -26,8 +30,8 @@ declare global {
   interface StorageLocationsInput {
     mediaDir: string;
     videosDir: string;
-    mediaAction: "reuse" | "copy";
-    videosAction: "reuse" | "copy";
+    mediaAction: "reuse" | "copy" | "move";
+    videosAction: "reuse" | "copy" | "move";
   }
 
   interface UserDataIpcPatch {
@@ -258,7 +262,10 @@ declare global {
         total?: { bytes: number };
       }>;
       dataDirIssue: () => Promise<StorageDataDirIssue | null>;
-      recover: (action: "reset" | "reimport") => Promise<void>;
+      recover: (
+        action: "reset" | "reimport" | "repair" | "wipe",
+        options?: { media?: boolean; videos?: boolean }
+      ) => Promise<void>;
       olderVersion: () => Promise<{ since: string; legacyRoot: string } | null>;
       keepCurrentVersion: () => Promise<void>;
       clearJson: () => Promise<void>;

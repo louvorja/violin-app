@@ -112,7 +112,7 @@ function validateLayout(raw, roots) {
   if (raw.pending !== undefined && raw.pending !== null) {
     const p = raw.pending;
     if (!p || typeof p !== "object" || Array.isArray(p) || !absolute(p.mediaDir) || !absolute(p.videosDir)
-      || !["reuse", "copy"].includes(p.mediaAction) || !["reuse", "copy"].includes(p.videosAction)
+      || !["reuse", "copy", "move"].includes(p.mediaAction) || !["reuse", "copy", "move"].includes(p.videosAction)
       || ["mediaShared", "videosShared"].some((key) => p[key] !== undefined && typeof p[key] !== "boolean")
       || typeof p.id !== "string" || !/^[\da-f-]{36}$/i.test(p.id)) {
       throw new Error("A mudança de pastas pendente é inválida. Os caminhos atuais foram preservados.");
@@ -509,4 +509,4 @@ function publishFresh({ bootstrap, documents, videos, sharedMedia, machineDefaul
   return layout;
 }
 
-module.exports = { initialize, resolveInitial, defaultLocations, absolute, atomicJson, readJson, readJsonLenient, setAside, validateLayout, copyVerified, hash, PRIVATE_ENTRIES };
+module.exports = { initialize, resolveInitial, defaultLocations, absolute, atomicJson, readJson, readJsonLenient, setAside, validateLayout, copyVerified, hash, PRIVATE_ENTRIES, REBUILDABLE_CHROMIUM };

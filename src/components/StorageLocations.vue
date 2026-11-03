@@ -22,7 +22,23 @@
           <LjButton size="sm" :disabled="busy || !!locations.pending" @click="chooseFolder(kind)">
             {{ t("options.storage.change_folder") }}
           </LjButton>
+          <LjButton
+            v-if="!setup && defaultDir(kind) && defaultDir(kind) !== draft[`${kind}Dir`]"
+            size="sm"
+            :disabled="busy || !!locations.pending"
+            :data-testid="`${kind}-use-default`"
+            @click="useDefault(kind)"
+          >
+            {{ t("options.storage.use_default") }}
+          </LjButton>
         </div>
+        <p
+          v-if="!setup && defaultDir(kind) && defaultDir(kind) !== locations[`${kind}Dir`]"
+          class="storage-locations__hint"
+        >
+          {{ t("options.storage.default_is") }}
+          <code>{{ defaultDir(kind) }}</code>
+        </p>
         <label
           v-if="draft[`${kind}Dir`] !== locations[`${kind}Dir`]"
           class="storage-locations__action"
@@ -33,6 +49,9 @@
             :disabled="busy"
             class="lj-ui-control lj-ui-size-md"
           >
+            <option value="move" :disabled="!locations.canMove?.[kind]">
+              {{ t("options.storage.move_existing") }}
+            </option>
             <option value="copy">{{ t("options.storage.copy_existing") }}</option>
             <option value="reuse">{{ t("options.storage.reuse_existing") }}</option>
           </select>
@@ -159,13 +178,71 @@
         {{ t(setup ? "options.storage.setup_continue" : "options.storage.save_locations") }}
       </LjButton>
     </div>
+
+    <section
+      v-if="locations && !setup && storage?.recover"
+      class="storage-locations__section storage-locations__section--recovery"
+    >
+      <h3>{{ t("options.storage.repair.title") }}</h3>
+      <p class="storage-locations__hint">{{ t("options.storage.repair.hint") }}</p>
+      <div class="storage-locations__recovery">
+        <div>
+          <LjButton size="sm" :disabled="busy" data-testid="repair-app" @click="repair">
+            {{ t("options.storage.repair.repair") }}
+          </LjButton>
+          <p class="storage-locations__hint">{{ t("options.storage.repair.repair_hint") }}</p>
+        </div>
+        <div>
+          <LjButton size="sm" :disabled="busy" data-testid="reset-app" @click="resetWithBackup">
+            {{ t("options.storage.repair.reset") }}
+          </LjButton>
+          <p class="storage-locations__hint">{{ t("options.storage.repair.reset_hint") }}</p>
+        </div>
+        <div>
+          <LjButton
+            size="sm"
+            variant="danger"
+            :disabled="busy"
+            data-testid="wipe-app"
+            @click="wipeDialog = true"
+          >
+            {{ t("options.storage.repair.wipe") }}
+          </LjButton>
+          <p class="storage-locations__hint">{{ t("options.storage.repair.wipe_hint") }}</p>
+        </div>
+      </div>
+      <LjDialog v-model="wipeDialog" size="sm" :title="t('options.storage.repair.wipe_title')">
+        <p>{{ t("options.storage.repair.wipe_text") }}</p>
+        <div class="storage-locations__wipe-options">
+          <LjCheckbox
+            v-model="wipe.media"
+            :disabled="!locations.canMove?.media"
+            :label="t('options.storage.repair.wipe_media')"
+          />
+          <p v-if="!locations.canMove?.media" class="storage-locations__hint">
+            {{ t("options.storage.repair.wipe_media_shared") }}
+          </p>
+          <LjCheckbox
+            v-model="wipe.videos"
+            :disabled="!locations.canMove?.videos"
+            :label="t('options.storage.repair.wipe_videos')"
+          />
+        </div>
+        <template #footer>
+          <LjButton @click="wipeDialog = false">{{ t("actions.cancel") }}</LjButton>
+          <LjButton variant="danger" data-testid="wipe-confirm" @click="wipeAll">
+            {{ t("options.storage.repair.wipe_confirm") }}
+          </LjButton>
+        </template>
+      </LjDialog>
+    </section>
   </form>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { LjButton } from "@/components/ui";
+import { LjButton, LjCheckbox, LjDialog } from "@/components/ui";
 import Platform from "@/helpers/Platform";
 import Alert from "@/helpers/Alert";
 
@@ -196,6 +273,8 @@ const candidates = ref<ClassicCandidate[]>([]);
 const searched = ref(false);
 const loading = ref(true);
 const busy = ref(false);
+const wipeDialog = ref(false);
+const wipe = reactive({ media: false, videos: false });
 const error = ref("");
 const saved = ref(false);
 const classicValue = () =>
@@ -245,6 +324,41 @@ async function load(): Promise<void> {
   }
 }
 
+function defaultDir(kind: "media" | "videos"): string | null {
+  return locations.value?.defaults?.[`${kind}Dir`] ?? null;
+}
+/** A pasta padrão desta máquina; mover quando esta conta é a dona da atual, senão copiar. */
+function useDefault(kind: "media" | "videos"): void {
+  const dir = defaultDir(kind);
+  if (!dir) return;
+  draft[`${kind}Dir`] = dir;
+  draft[`${kind}Action`] = locations.value?.canMove?.[kind] ? "move" : "copy";
+}
+async function recover(
+  action: "repair" | "reset" | "wipe",
+  options?: { media?: boolean; videos?: boolean }
+): Promise<void> {
+  if (!storage?.recover || busy.value) return;
+  busy.value = true;
+  error.value = "";
+  try {
+    await storage.recover(action, options);
+  } catch (cause) {
+    reportError(cause, "options.storage.repair.failed");
+  } finally {
+    busy.value = false;
+  }
+}
+async function repair(): Promise<void> {
+  if (await Alert.confirm(t("options.storage.repair.repair_confirm"))) await recover("repair");
+}
+async function resetWithBackup(): Promise<void> {
+  if (await Alert.confirm(t("options.storage.repair.reset_confirm"))) await recover("reset");
+}
+async function wipeAll(): Promise<void> {
+  wipeDialog.value = false;
+  await recover("wipe", { media: wipe.media, videos: wipe.videos });
+}
 async function openDir(kind: "media" | "videos" | "profile"): Promise<void> {
   try {
     await storage?.openDir(kind);
@@ -327,6 +441,11 @@ async function copyClassic(): Promise<void> {
 
 async function save(): Promise<void> {
   if (!storage || !locations.value || busy.value) return;
+  const moving = editableKinds.some(
+    (kind) =>
+      draft[`${kind}Action`] === "move" && draft[`${kind}Dir`] !== locations.value![`${kind}Dir`]
+  );
+  if (moving && !(await Alert.confirm(t("options.storage.move_confirm")))) return;
   busy.value = true;
   error.value = "";
   saved.value = false;
@@ -465,6 +584,28 @@ onMounted(async () => {
 .storage-locations__warning {
   color: var(--lj-warning);
   overflow-wrap: anywhere;
+}
+.storage-locations__section--recovery {
+  padding-top: var(--lj-space-4);
+  border-top: 1px solid var(--lj-surface-divider);
+}
+.storage-locations__recovery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--lj-space-4);
+  width: 100%;
+}
+.storage-locations__recovery > div {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--lj-space-2);
+}
+.storage-locations__wipe-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-3);
+  margin-top: var(--lj-space-4);
 }
 .storage-locations__notice {
   padding: var(--lj-space-4);

@@ -21,7 +21,16 @@ beforeEach(() => {
     paths.configureProfile();
   } finally { Module._load = original; }
 });
-afterEach(() => { access.release(); vi.unstubAllEnvs(); fs.removeSync(root); });
+afterEach(() => { access.release(); vi.unstubAllEnvs(); vi.restoreAllMocks(); fs.removeSync(root); });
+/** Uma pasta de acervo só desta conta: dentro da "home" do teste e fora do padrão compartilhado. */
+async function privateMedia() {
+  vi.spyOn(os, "homedir").mockReturnValue(root);
+  const own = path.join(root, "own-media");
+  await storage.configure(request({ mediaDir: own, mediaAction: "copy" }));
+  storage.applyPending();
+  access.initialize(paths.storageLayout());
+  return own;
+}
 const request = (overrides = {}) => ({ mediaDir: paths.filesDir(), videosDir: paths.videosDir(), mediaAction: "reuse", videosAction: "reuse", ...overrides });
 describe("troca independente de acervo e vídeos", () => {
   it("conclui o setup com outro acervo quando o padrão da instalação nova está indisponível", async () => {
@@ -103,7 +112,7 @@ describe("troca independente de acervo e vídeos", () => {
     }
   });
   it("valida tipos e caminhos no IPC antes de gravar configuração", async () => {
-    for (const input of [null, [], {}, request({ mediaDir: "relative" }), request({ videosAction: "move" }), request({ mediaDir: 1 })]) {
+    for (const input of [null, [], {}, request({ mediaDir: "relative" }), request({ videosAction: "teleport" }), request({ mediaDir: 1 })]) {
       await expect(storage.configure(input)).rejects.toThrow();
     }
     expect(storage.locations().pending).toBeNull();
@@ -134,6 +143,67 @@ describe("troca independente de acervo e vídeos", () => {
     await storage.configure(request({ mediaDir: path.join(root, "new"), mediaAction: "copy" })); storage.applyPending();
     expect(storage.locations().changeError).toMatch(/link/);
     expect(fs.existsSync(path.join(root, "new/musics/link.mp3"))).toBe(false);
+  });
+  it("informa as pastas que uma instalação nova usaria", () => {
+    expect(storage.locations().defaults).toEqual({
+      mediaDir: path.join(root, "user", "shared", "LouvorJA Violin", "Acervo"),
+      videosDir: path.join(root, "Movies", "LouvorJA Violin"),
+    });
+  });
+  it("mover vídeos copia, confere e só então apaga da origem o que é do app", async () => {
+    const videos = paths.videosDir();
+    access.initialize(paths.storageLayout());
+    expect(storage.locations().canMove.videos).toBe(true);
+    fs.outputFileSync(path.join(videos, "abcdefghijk.mp4"), "video");
+    fs.outputFileSync(path.join(videos, "abcdefghijk.keep"), "");
+    fs.outputFileSync(path.join(videos, "ferias.mp4"), "pessoal");
+    fs.outputFileSync(path.join(videos, ".partial/active"), "partial");
+    const dest = path.join(root, "moved-videos");
+    await expect(storage.configure(request({ videosDir: dest, videosAction: "move" }))).resolves.toEqual({ ok: true, restartRequired: true });
+    access.release();
+    storage.applyPending();
+    expect(storage.locations().changeError).toBeNull();
+    expect(paths.videosDir()).toBe(dest);
+    expect(fs.readFileSync(path.join(dest, "abcdefghijk.mp4"), "utf8")).toBe("video");
+    expect(fs.existsSync(path.join(dest, "abcdefghijk.keep"))).toBe(true);
+    expect(fs.existsSync(path.join(videos, "abcdefghijk.mp4"))).toBe(false);
+    expect(fs.existsSync(path.join(videos, "abcdefghijk.keep"))).toBe(false);
+    // Fora do padrão de ID do app: nada garante que seja do LouvorJA.
+    expect(fs.readFileSync(path.join(videos, "ferias.mp4"), "utf8")).toBe("pessoal");
+    expect(fs.existsSync(path.join(videos, ".partial/active"))).toBe(true);
+  });
+  it("mover o acervo apaga a pasta antiga quando não sobra nada nela", async () => {
+    const media = await privateMedia();
+    expect(storage.locations().canMove.media).toBe(true);
+    fs.outputFileSync(path.join(media, "musics/pt/song.mp3"), "audio");
+    fs.outputFileSync(path.join(media, "covers/pt/a.jpg"), "capa");
+    const dest = path.join(root, "moved-media");
+    await storage.configure(request({ mediaDir: dest, mediaAction: "move" }));
+    access.release();
+    storage.applyPending();
+    expect(paths.filesDir()).toBe(dest);
+    expect(fs.readFileSync(path.join(dest, "musics/pt/song.mp3"), "utf8")).toBe("audio");
+    expect(fs.readFileSync(path.join(dest, "covers/pt/a.jpg"), "utf8")).toBe("capa");
+    expect(fs.existsSync(media)).toBe(false);
+  });
+  it("mover com arquivo diferente no destino não troca a pasta nem apaga nada", async () => {
+    const media = await privateMedia(), dest = path.join(root, "conflict");
+    fs.outputFileSync(path.join(media, "musics/song.mp3"), "source");
+    fs.outputFileSync(path.join(dest, "musics/song.mp3"), "different");
+    await storage.configure(request({ mediaDir: dest, mediaAction: "move" }));
+    access.release();
+    storage.applyPending();
+    expect(paths.filesDir()).toBe(media);
+    expect(storage.locations().changeError).toMatch(/diferente/);
+    expect(fs.readFileSync(path.join(media, "musics/song.mp3"), "utf8")).toBe("source");
+  });
+  it("mover é recusado quando a pasta atual é compartilhada com outras contas", async () => {
+    const shared = path.join(root, "shared");
+    await storage.configure(request({ mediaDir: shared })); storage.applyPending();
+    access.initialize(paths.storageLayout());
+    expect(storage.locations().canMove.media).toBe(false);
+    await expect(storage.configure(request({ mediaDir: path.join(root, "elsewhere"), mediaAction: "move" })))
+      .rejects.toThrow(/compartilhada/);
   });
   it("disco do destino removido fica pendente, sem criar substituto", async () => {
     const dest = path.join(root, "detached");

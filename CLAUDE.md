@@ -288,9 +288,16 @@ Os instaladores Windows para todos e DEB/RPM provisionam o local comum; no macOS
 o app cria o padrão em `/Users/Shared`. Só pastas novas compartilhadas recebem
 permissão pública de escrita; pastas existentes e perfil nunca são ampliados.
 
-Mudanças são agendadas para o próximo boot e oferecem reutilizar uma coleção ou
-copiar a atual com verificação. Não apagam a origem, não sobrescrevem conflitos e
-não transferem arquivos pessoais junto ao acervo. A migração do perfil antigo
+Mudanças são agendadas para o próximo boot e oferecem reutilizar uma coleção,
+copiar a atual com verificação ou mover. Copiar e reutilizar não apagam a origem;
+"mover" copia e confere pelo hash e só então apaga da origem os arquivos que o app
+gerencia (vídeos só pelo ID do YouTube), e só é oferecido quando a pasta atual não é
+compartilhada com outras contas. Nenhuma sobrescreve conflitos (com conflito nada é
+apagado) nem transfere arquivos pessoais junto ao acervo. "Usar a pasta padrão" em
+Armazenamento propõe as pastas de uma instalação nova. A seção Recuperação pede, para a
+próxima abertura (`storageRecovery.applyRequest`, antes de o Chromium abrir o perfil):
+reparar (caches regeneráveis e ferramentas de vídeo), começar do zero (perfil guardado em
+`recovery/`) ou reset total (sem cópia; acervo e vídeos só se marcados e não compartilhados). A migração do perfil antigo
 também conserva a origem, incluindo todos os bancos IndexedDB. Quem já usava o
 app fica com acervo e vídeos onde estavam (`<dados>/files` e `<dados>/Videos`),
 como se os tivesse escolhido ali: só o perfil é copiado, e os padrões comuns valem

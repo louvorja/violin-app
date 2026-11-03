@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
     restart: vi.fn(),
     chooseDir: vi.fn(),
     openDir: vi.fn(),
+    recover: vi.fn(),
   },
   classic: {
     getSource: vi.fn(),
@@ -31,6 +32,16 @@ vi.mock("@/components/ui", () => ({
     props: ["disabled", "loading", "type"],
     template:
       '<button :type="type || \'button\'" :disabled="disabled || loading"><slot /></button>',
+  },
+  LjDialog: {
+    props: ["modelValue", "title"],
+    template: '<div v-if="modelValue" data-testid="dialog"><slot /><slot name="footer" /></div>',
+  },
+  LjCheckbox: {
+    props: ["modelValue", "label", "disabled"],
+    emits: ["update:modelValue"],
+    template:
+      '<label><input type="checkbox" :checked="modelValue" :disabled="disabled" @change="$emit(\'update:modelValue\', $event.target.checked)" />{{ label }}</label>',
   },
 }));
 
@@ -286,6 +297,81 @@ describe("pastas de armazenamento", () => {
     expect(wrapper.text()).toContain("somente para leitura");
     expect(wrapper.text()).toContain("mais de um perfil");
     expect(wrapper.get('[data-testid="media-path"]').text()).toBe(initial.mediaDir);
+  });
+
+  it("usar a pasta padrão escolhe mover quando a conta é dona da pasta atual, senão copiar", async () => {
+    mocks.storage.locations.mockResolvedValue({
+      ...initial,
+      setupCompleted: true,
+      defaults: { mediaDir: "/padrao/acervo", videosDir: "/padrao/videos" },
+      canMove: { media: false, videos: true },
+    });
+    await render();
+    expect(wrapper.text()).toContain("/padrao/videos");
+    await wrapper.get('[data-testid="videos-use-default"]').trigger("click");
+    await wrapper.get('[data-testid="media-use-default"]').trigger("click");
+    await flushPromises();
+    expect(wrapper.find('[data-testid="videos-use-default"]').exists()).toBe(false);
+    await submit();
+    expect(mocks.confirm).toHaveBeenCalledWith(expect.stringContaining("apaga a pasta antiga"));
+    expect(mocks.storage.configureLocations).toHaveBeenCalledWith({
+      mediaDir: "/padrao/acervo",
+      videosDir: "/padrao/videos",
+      mediaAction: "copy",
+      videosAction: "move",
+    });
+  });
+
+  it("mover só agenda depois da confirmação", async () => {
+    mocks.storage.locations.mockResolvedValue({
+      ...initial,
+      setupCompleted: true,
+      defaults: { mediaDir: "/collection", videosDir: "/padrao/videos" },
+      canMove: { media: true, videos: true },
+    });
+    mocks.confirm.mockResolvedValue(false);
+    await render();
+    await wrapper.get('[data-testid="videos-use-default"]').trigger("click");
+    await submit();
+    expect(mocks.storage.configureLocations).not.toHaveBeenCalled();
+  });
+
+  it("recuperação: reparar e começar do zero confirmam antes; o reset total leva as escolhas", async () => {
+    mocks.storage.locations.mockResolvedValue({
+      ...initial,
+      setupCompleted: true,
+      canMove: { media: false, videos: true },
+    });
+    await render();
+    mocks.confirm.mockResolvedValueOnce(false);
+    await wrapper.get('[data-testid="repair-app"]').trigger("click");
+    await flushPromises();
+    expect(mocks.storage.recover).not.toHaveBeenCalled();
+    await wrapper.get('[data-testid="repair-app"]').trigger("click");
+    await flushPromises();
+    expect(mocks.storage.recover).toHaveBeenLastCalledWith("repair", undefined);
+    await wrapper.get('[data-testid="reset-app"]').trigger("click");
+    await flushPromises();
+    expect(mocks.storage.recover).toHaveBeenLastCalledWith("reset", undefined);
+
+    await wrapper.get('[data-testid="wipe-app"]').trigger("click");
+    const boxes = wrapper.get('[data-testid="dialog"]').findAll('input[type="checkbox"]');
+    expect(boxes[0].attributes("disabled")).toBeDefined(); // acervo compartilhado
+    await boxes[1].setValue(true);
+    await wrapper.get('[data-testid="wipe-confirm"]').trigger("click");
+    await flushPromises();
+    expect(mocks.storage.recover).toHaveBeenLastCalledWith("wipe", { media: false, videos: true });
+  });
+
+  it("não mostra recuperação nem pasta padrão no primeiro setup", async () => {
+    mocks.storage.locations.mockResolvedValue({
+      ...initial,
+      defaults: { mediaDir: "/padrao/acervo", videosDir: "/padrao/videos" },
+      canMove: { media: true, videos: true },
+    });
+    await render(true);
+    expect(wrapper.find('[data-testid="repair-app"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="videos-use-default"]').exists()).toBe(false);
   });
 
   it("não permite sobrescrever uma origem Classic que falhou ao carregar", async () => {

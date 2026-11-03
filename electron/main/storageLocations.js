@@ -9,21 +9,33 @@ const { canonical, overlaps } = roots;
 let changeError = null;
 let configuring = false;
 const { validateContents, probe, preflightCopy, copyCollection, applyPendingLayout } = require("./storageCollectionMigration.js");
+const { defaultLocations } = require("./storageLayout.js");
 function normalized(p) { const s = path.resolve(p); return process.platform === "win32" ? s.toLowerCase() : s; }
 function validateRoots(mediaDir, videosDir) {
   return roots.validateRoots(mediaDir, videosDir, { profileDir: paths.dataDir(), programDir: paths.programDir() });
+}
+const ACTIONS = ["reuse", "copy", "move"];
+/** As pastas que uma instalação nova usaria nesta máquina; null se o sistema não as informa. */
+function defaults() {
+  try {
+    const d = defaultLocations(paths.migrationOptions());
+    return { mediaDir: d.mediaDir, videosDir: d.videosDir };
+  } catch { return null; }
 }
 function locations() {
   const c = paths.storageLayout();
   return { profileDir: paths.dataDir(), mediaDir: c.mediaDir, videosDir: c.videosDir,
     setupCompleted: c.setupCompleted, restartRequired: !!c.pending,
     pending: c.pending ? { mediaDir: c.pending.mediaDir, videosDir: c.pending.videosDir } : null,
-    access: access.status(), changeError: c.pendingError || changeError };
+    access: access.status(), changeError: c.pendingError || changeError,
+    defaults: defaults(),
+    // Mover apaga a pasta atual depois da cópia: só quando esta conta é a dona dela.
+    canMove: { media: access.canMaintain("media"), videos: access.canMaintain("videos") } };
 }
 async function configure(input) {
   if (configuring) throw new Error("Uma mudança de pastas já está sendo preparada.");
   if (!input || typeof input !== "object" || Array.isArray(input)
-    || !["reuse", "copy"].includes(input.mediaAction) || !["reuse", "copy"].includes(input.videosAction)) {
+    || !ACTIONS.includes(input.mediaAction) || !ACTIONS.includes(input.videosAction)) {
     throw new Error("Opções de armazenamento inválidas.");
   }
   configuring = true;
@@ -38,8 +50,11 @@ async function configure(input) {
     for (const [kind, target] of [["media", mediaDir], ["videos", videosDir]]) {
       if (normalized(target) === normalized(canonical(c[kind + "Dir"]))) continue;
       validateContents(target, kind);
+      if (input[kind + "Action"] === "move" && !access.canMaintain(kind)) {
+        throw new Error("A pasta atual é compartilhada com outras contas ou está só para leitura: use Copiar.");
+      }
       // Reutilização permite leitura sem escrita; uma pasta nova exige criação.
-      if (input[kind + "Action"] === "copy" || !fs.existsSync(target)) probe(target);
+      if (input[kind + "Action"] !== "reuse" || !fs.existsSync(target)) probe(target);
       else fs.accessSync(target, fs.constants.R_OK);
       if (overlaps(canonical(c[kind + "Dir"]), target)) throw new Error("A nova pasta não pode conter a atual nem estar dentro dela.");
     }

@@ -469,7 +469,7 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
     privatePathMappings: () => ipcRenderer.invoke("storage:privatePathMappings"),
     restart: () => ipcRenderer.invoke("storage:restart"),
     /** "reset" (começar do zero) ou "reimport" (trazer de volta a versão anterior); reinicia o app. */
-    recover: (action) => ipcRenderer.invoke("storage:recover", action),
+    recover: (action, options) => ipcRenderer.invoke("storage:recover", action, options),
     olderVersion: () => ipcRenderer.invoke("storage:olderVersion"),
     keepCurrentVersion: () => ipcRenderer.invoke("storage:keepCurrentVersion"),
     /** Auto-limpeza FIFO ao ultrapassar maxBytes. */
