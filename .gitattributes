@@ -2,3 +2,7 @@
 # No Windows o autocrlf trocaria LF por CRLF no checkout, o hash mudaria e o
 # build da release falharia com "os ícones não acompanham o SVG atual".
 *.svg text eol=lf
+
+# Scripts de shell rodam no Linux (pós-instalação do .deb/.rpm): CRLF quebraria o
+# interpretador, e o teste que compara com o modelo do electron-builder falharia no Windows.
+*.sh text eol=lf

@@ -85,14 +85,16 @@ describe("cópia de acervo no boot", () => {
     const workDir = path.join(root, "profile", "temp", "migrations");
     fs.outputFileSync(path.join(source, "musics", "pt", "song.mp3"), "song");
     fs.ensureDirSync(target);
-    let observedPrivate = false;
+    const staging = (dir) => fs.readdirSync(dir).some((entry) => entry.startsWith(".louvorja-migration-"));
+    let observedPrivate = false, observedInTarget = false;
     copyCollection(source, target, "media", id, { workDir, onProgress({ files }) {
-      if (files === 1) {
-        observedPrivate = fs.readdirSync(workDir).some((entry) => entry.startsWith(".louvorja-migration-"));
-        expect(fs.readdirSync(target).some((entry) => entry.startsWith(".louvorja-migration-"))).toBe(false);
-      }
+      if (files === 1) { observedPrivate = staging(workDir); observedInTarget = staging(target); }
     } });
-    expect(observedPrivate).toBe(true);
+    // No Windows o transitório nasce no destino para herdar a ACL do acervo antes de publicar.
+    const privateStaging = process.platform !== "win32";
+    expect(observedPrivate).toBe(privateStaging);
+    expect(observedInTarget).toBe(!privateStaging);
+    expect(staging(target)).toBe(false);
     expect(fs.readdirSync(workDir)).toEqual([]);
     expect(fs.readFileSync(path.join(target, "musics", "pt", "song.mp3"), "utf8")).toBe("song");
   });

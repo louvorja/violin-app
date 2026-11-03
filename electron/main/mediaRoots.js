@@ -139,14 +139,16 @@ function classicSearchDirs({ platform = process.platform, home = "", env = proce
 
   if (!home) return [];
 
-  const prefixes = [env?.WINEPREFIX, path.join(home, ".wine"), ...winePrefixes]
-    .filter((prefix) => typeof prefix === "string" && path.isAbsolute(prefix));
+  // Fora do Windows os prefixos do Wine são caminhos Unix, mesmo quando a
+  // função é exercitada a partir de outra plataforma.
+  const prefixes = [env?.WINEPREFIX, path.posix.join(home, ".wine"), ...winePrefixes]
+    .filter((prefix) => typeof prefix === "string" && path.posix.isAbsolute(prefix));
 
   const saida = [];
   for (const prefix of new Set(prefixes)) {
     for (const programs of ["Program Files (x86)", "Program Files"]) {
       for (const name of ["Louvor JA", "LouvorJA", "Loor JA", "LoorJA"]) {
-        saida.push(path.join(prefix, "drive_c", programs, name));
+        saida.push(path.posix.join(prefix, "drive_c", programs, name));
       }
     }
   }

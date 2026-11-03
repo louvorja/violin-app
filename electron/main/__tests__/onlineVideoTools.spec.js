@@ -568,7 +568,8 @@ async function readMetaFile() {
   return JSON.parse(fs.readFileSync(path.join(binDir, "tools.json"), "utf8"));
 }
 
-describe("provedor de PO token", () => {
+// Executa binários falsos em shell, como os blocos acima: não roda no Windows.
+describe.skipIf(process.platform === "win32")("provedor de PO token", () => {
   it("instala o binário e extrai o plugin do yt-dlp", async () => {
     const JSZip = (await import("jszip")).default;
     const zip = new JSZip();
