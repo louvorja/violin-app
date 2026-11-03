@@ -83,6 +83,37 @@ describe("Hotkeys — KeyboardEvent sintético (POST /api/keyboard)", () => {
     input.remove();
   });
 
+  it("allowInForm como função decide pelo campo focado e não cancela a tecla recusada", () => {
+    const input = document.createElement("input");
+    document.body.append(input);
+    input.focus();
+
+    let fired = 0;
+    const handler = () => {
+      fired += 1;
+    };
+    Hotkeys.register("Escape", handler, { allowInForm: () => !document.activeElement?.value });
+    const press = () => {
+      const event = new KeyboardEvent("keydown", {
+        key: "Escape",
+        bubbles: true,
+        cancelable: true,
+      });
+      input.dispatchEvent(event);
+      return event;
+    };
+
+    input.value = "santo";
+    expect(press().defaultPrevented).toBe(false);
+    expect(fired).toBe(0);
+
+    input.value = "";
+    expect(press().defaultPrevented).toBe(true);
+    expect(fired).toBe(1);
+    Hotkeys.unregister("Escape", handler);
+    input.remove();
+  });
+
   it("preserva Space para ativar o botão focado", () => {
     const button = document.createElement("button");
     document.body.append(button);

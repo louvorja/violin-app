@@ -102,6 +102,10 @@ function _focusIsInForm() {
   return false;
 }
 
+function _allowsInForm(rule, e) {
+  return typeof rule === "function" ? Boolean(rule(e)) : Boolean(rule);
+}
+
 /** Space pertence ao controle focado: cancelá-lo impediria o clique nativo do botão. */
 function _focusOwnsSpace() {
   return Boolean(
@@ -151,7 +155,7 @@ function _onKeyDown(e) {
     const ctx = options.context || "global";
 
     // Ignora atalhos em campos de texto, exceto os marcados com allowInForm
-    if (inForm && ctx !== "edit" && !options.allowInForm) continue;
+    if (inForm && ctx !== "edit" && !_allowsInForm(options.allowInForm, e)) continue;
 
     // Contextos especiais verificados externamente pelo handler (media/liturgy)
     // Hotkeys.js não valida se o módulo está aberto — isso é responsabilidade do handler.
@@ -199,7 +203,7 @@ function destroy() {
  * @param {string} [options.context]        'global'|'media'|'liturgy'|'live'|'edit'
  * @param {boolean} [options.preventDefault]  default: true
  * @param {boolean} [options.stopPropagation] default: false
- * @param {boolean} [options.allowInForm]     default: false
+ * @param {boolean|((e: KeyboardEvent) => boolean)} [options.allowInForm] default: false
  * @param {string} [options.description]      Texto para o cheatsheet (chave i18n ou texto literal)
  * @param {string} [options.label]            Label do combo (ex: "Ctrl+K")
  * @param {string} [options.group]            Grupo para o cheatsheet

@@ -2806,8 +2806,9 @@ $storage.hydrate().then(async () => {
         context: "global",
         // Escape é uma saída global: precisa valer também com o foco num
         // campo de busca (ex.: módulo Músicas), onde o Hotkeys ignora os
-        // demais atalhos.
-        allowInForm: true,
+        // demais atalhos. Com texto no campo, o primeiro Esc só limpa o campo:
+        // quem limpa a busca não pode apagar o telão junto.
+        allowInForm: () => !document.activeElement?.value,
         description: "hotkeys.esc",
         group: "general",
         label: "Esc",
