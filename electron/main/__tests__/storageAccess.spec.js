@@ -84,6 +84,22 @@ describe("permissão de escrita e metadado compartilhado", () => {
     expect(fs.lstatSync(lock).isDirectory()).toBe(true);
   });
 
+  it("o iCloud reescrever o horário da trava não derruba o escritor, e ela continua sendo renovada", () => {
+    vi.useFakeTimers();
+    access.initialize(layout());
+    const lock = path.join(media, ".louvorja-writer.lock");
+    // Documentos no iCloud Drive: o horário volta em segundos inteiros, com o relógio do próprio
+    // iCloud — depois do nascimento da pasta ou, no mesmo segundo, antes dele.
+    for (const rewritten of [Math.ceil(Date.now() / 1000) + 1, Math.floor(Date.now() / 1000) - 3]) {
+      fs.utimesSync(lock, rewritten, rewritten);
+      expect(() => vi.advanceTimersByTime(10001)).not.toThrow();
+      expect(access.canWrite("media")).toBe(true);
+      expect(fs.statSync(lock).mtimeMs).not.toBe(rewritten * 1000);
+    }
+    access.release();
+    expect(fs.existsSync(lock)).toBe(false);
+  });
+
   it("mantém heartbeat do escritor após gravar metadados com um lease independente", () => {
     vi.useFakeTimers();
     access.initialize(layout());

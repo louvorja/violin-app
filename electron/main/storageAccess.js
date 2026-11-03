@@ -60,8 +60,10 @@ function acquire(root) {
   function sameDirectory(file, expected) {
     try {
       const current = fs.lstatSync(file);
+      // Uma pasta recriada nasce depois. No macOS, gravar um horário anterior ao
+      // nascimento (o iCloud faz isso) recua a data de criação da mesma pasta.
       return current.isDirectory() && current.dev === expected.dev && current.ino === expected.ino
-        && current.birthtimeMs === expected.birthtimeMs;
+        && current.birthtimeMs <= expected.birthtimeMs;
     } catch { return false; }
   }
   const isValid = () => !!lockIdentity && sameDirectory(root, rootIdentity) && sameDirectory(lockPath, lockIdentity);
@@ -72,13 +74,29 @@ function acquire(root) {
       throw Object.assign(new Error("A pasta ou a proteção de escrita não está mais disponível."), { code: "ENOENT" });
     }
   };
+  // iCloud Drive (Documentos sincronizados) reescreve o horário das pastas que
+  // acompanha, e o proper-lockfile tomaria isso por outro dono: o app fechava
+  // 10 s depois de abrir e deixava a trava para trás. A posse já é conferida
+  // pela identidade da pasta; para ele, vale o horário que nós gravamos.
+  let writtenMtime = null;
   const releaseLock = lockfile.lockSync(root, {
     realpath: true, lockfilePath: path.join(root, ".louvorja-writer.lock"),
     stale: 120000, update: 10000,
     fs: {
       ...fs,
-      statSync(file, ...args) { assertOwnedLock(file); return fs.statSync(file, ...args); },
-      utimesSync(file, ...args) { assertOwnedLock(file); return fs.utimesSync(file, ...args); },
+      statSync(file, ...args) {
+        assertOwnedLock(file);
+        const stat = fs.statSync(file, ...args);
+        if (file === lockPath && writtenMtime && (!lockIdentity || isValid())) {
+          Object.defineProperty(stat, "mtime", { value: new Date(writtenMtime), configurable: true, enumerable: true });
+        }
+        return stat;
+      },
+      utimesSync(file, atime, mtime, ...args) {
+        assertOwnedLock(file);
+        fs.utimesSync(file, atime, mtime, ...args);
+        if (file === lockPath) writtenMtime = new Date(mtime).getTime();
+      },
       rmdirSync(file, ...args) { assertOwnedLock(file); return fs.rmdirSync(file, ...args); },
     },
     onCompromised(error) {
