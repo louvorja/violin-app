@@ -582,6 +582,9 @@ function parseStreams(info, now = Date.now()) {
     ? videoHeaders
     : directHeaders(info.http_headers, audio.http_headers);
   const expiries = [video, audio].map((f) => expiryOf(streamUrl(f.url))).filter((t) => t != null);
+  const availability = [video, audio]
+    .map((f) => Number(f.available_at))
+    .filter((t) => Number.isFinite(t) && t > 0);
 
   // Diagnóstico sem URL: mostra o cliente/codecs e quais cabeçalhos o yt-dlp espera.
   // É o que separa "formato incompatível" de "403 por cliente/headers".
@@ -625,7 +628,36 @@ function parseStreams(info, now = Date.now()) {
     muxed,
     duration: num(String(info.duration)),
     expiresAt: expiries.length ? Math.min(...expiries) : now + 30 * 60 * 1000,
+    // Os clientes de TV entregam links que o googlevideo só aceita alguns segundos depois:
+    // pedir antes responde 403. O yt-dlp espera sozinho quando ele mesmo baixa.
+    availableAt: availability.length ? Math.max(...availability) * 1000 : null,
   };
+}
+
+/** Acima disto o link não vale esperar: o download completo do yt-dlp faz a espera que precisar. */
+const MAX_AVAILABILITY_WAIT_MS = 30_000;
+
+function waitUntilAvailable(availableAt, { signal, now = Date.now, maxWaitMs = MAX_AVAILABILITY_WAIT_MS } = {}) {
+  const wait = availableAt == null ? 0 : availableAt - now();
+  if (wait <= 0) return Promise.resolve();
+  if (wait > maxWaitMs) {
+    return Promise.reject(new OnlineVideoError("forbidden", "O YouTube só libera o link daqui a muito tempo"));
+  }
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new OnlineVideoError("cancelled", "Cancelado"));
+      return;
+    }
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new OnlineVideoError("cancelled", "Cancelado"));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, wait);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 /**
@@ -746,9 +778,14 @@ function resolveStreamsOnce(opts) {
   });
 }
 
-/** Como `resolveStreamsOnce`, com a mesma repetição por certificado recusado de `run`. */
-function resolveStreams(opts) {
-  return withSystemCerts(resolveStreamsOnce, opts);
+/**
+ * Como `resolveStreamsOnce`, com a mesma repetição por certificado recusado de `run`, e só
+ * devolve os links quando o googlevideo já os aceita.
+ */
+async function resolveStreams(opts) {
+  const links = await withSystemCerts(resolveStreamsOnce, opts);
+  await waitUntilAvailable(links.availableAt, { signal: opts.signal, now: opts.now });
+  return links;
 }
 
 /** Juntar duas trilhas sem recodificar leva poucos segundos; passar disso é ffmpeg pendurado. */

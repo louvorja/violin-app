@@ -576,6 +576,14 @@ describe("parseStreams (o que o yt-dlp devolve para tocar direto)", () => {
     expect(out.audio.url).toContain("audio%2Fmp4");
   });
 
+  it("guarda quando o googlevideo passa a aceitar o link (o mais tardio das duas trilhas)", () => {
+    const out = runner.parseStreams({
+      requested_formats: [videoFormat({ available_at: 1_800_000_003.5 }), audioFormat({ available_at: 1_800_000_002 })],
+    });
+    expect(out.availableAt).toBe(1_800_000_003_500);
+    expect(runner.parseStreams({ requested_formats: [videoFormat(), audioFormat()] }).availableAt).toBeNull();
+  });
+
   it("sem parâmetro de validade, assume meia hora a partir de agora", () => {
     const out = runner.parseStreams(
       { requested_formats: [videoFormat({ url: GV }), audioFormat({ url: GV })] },
@@ -666,6 +674,55 @@ describe("resolveStreams", () => {
     expect(spawnImpl.mock.calls[0][0]).toBe("/fake/yt-dlp");
     expect(Array.isArray(spawnImpl.mock.calls[0][1])).toBe(true);
     expect(spawnImpl.mock.calls[0][2].shell).toBeUndefined();
+  });
+
+  it("segura os links até o horário em que o googlevideo os aceita (antes disso ele responde 403)", async () => {
+    const child = fakeChild();
+    let clock = 1_000_000;
+    const promise = runner.resolveStreams({ tools, id: ID, spawnImpl: () => child, now: () => clock });
+    const availableAt = (clock + 60) / 1000;
+    child.stdout.write(json({ requested_formats: [videoFormat({ available_at: availableAt }), audioFormat()] }));
+    child.emit("close", 0);
+    let settled = false;
+    void promise.then(() => (settled = true));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(settled).toBe(false);
+    const out = await promise;
+    expect(out.availableAt).toBe(clock + 60);
+  });
+
+  it("link já liberado não espera nada", async () => {
+    const child = fakeChild();
+    const promise = runner.resolveStreams({ tools, id: ID, spawnImpl: () => child, now: () => 5_000_000 });
+    child.stdout.write(json({ requested_formats: [videoFormat({ available_at: 4_000 }), audioFormat()] }));
+    child.emit("close", 0);
+    await expect(promise).resolves.toMatchObject({ availableAt: 4_000_000 });
+  });
+
+  it("espera longa demais vira 403, para cair no download completo do yt-dlp", async () => {
+    const child = fakeChild();
+    const promise = runner.resolveStreams({ tools, id: ID, spawnImpl: () => child, now: () => 0 });
+    child.stdout.write(json({ requested_formats: [videoFormat({ available_at: 60 }), audioFormat()] }));
+    child.emit("close", 0);
+    await expect(promise).rejects.toMatchObject({ kind: "forbidden" });
+  });
+
+  it("cancelar durante a espera rejeita como cancelado", async () => {
+    const child = fakeChild();
+    const controller = new AbortController();
+    const promise = runner.resolveStreams({
+      tools,
+      id: ID,
+      spawnImpl: () => child,
+      killImpl: () => {},
+      signal: controller.signal,
+      now: () => 0,
+    });
+    child.stdout.write(json({ requested_formats: [videoFormat({ available_at: 5 }), audioFormat()] }));
+    child.emit("close", 0);
+    await new Promise((r) => setTimeout(r, 10));
+    controller.abort();
+    await expect(promise).rejects.toMatchObject({ kind: "cancelled" });
   });
 
   it("só liga o Electron-como-Node quando o runtime é node:", async () => {
