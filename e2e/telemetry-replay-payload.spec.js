@@ -1,13 +1,16 @@
 import { test, expect } from "@playwright/test";
 import { build } from "esbuild";
 import { createServer } from "node:http";
-import { resolve, extname } from "node:path";
-import { existsSync } from "node:fs";
+import { resolve, extname, basename } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import { Buffer } from "node:buffer";
 import process from "node:process";
+import csp from "../electron/main/csp.js";
 
-test("preserva snapshot real do Replay e mantém inputs mascarados", async ({ browser }) => {
+test("erro inicia Replay automaticamente e envia snapshots íntegros com inputs mascarados", async ({
+  browser,
+}) => {
   const mocks = {
     "@/helpers/Platform": "export default {isDesktop:false,isDev:false};",
     "@/helpers/Broadcast": "export default {send:()=>{},listen:()=>()=>{}};",
@@ -20,21 +23,10 @@ test("preserva snapshot real do Replay e mantém inputs mascarados", async ({ br
     stdin: {
       resolveDir: process.cwd(),
       contents: `import Telemetry from '@/helpers/Telemetry';
-        import posthog from 'posthog-js/full/no-external';
-        // Grava um DOM real com o rrweb do SDK. A captura usa o hook real do app.
-        window.snapshots=[];
-        let recordingOptions;
+        import posthog from 'posthog-js';
         const originalInit=posthog.init.bind(posthog);
-        posthog.init=(key,config)=>{
-          recordingOptions=config.session_recording;
-          const beforeSend=config.before_send;
-          return originalInit(key,{...config,opt_out_useragent_filter:true,before_send:capture=>{
-            const before=capture?.event==='$snapshot' ? structuredClone(capture.properties.$snapshot_data) : null;
-            const result=beforeSend(capture);
-            if(before) window.snapshots.push({before,after:result?.properties.$snapshot_data});
-            return result;
-          }});
-        };
+        // O SDK ignora navegadores headless por padrão; só a fixture permite capturá-los.
+        posthog.init=(key,config)=>originalInit(key,{...config,opt_out_useragent_filter:true});
         const fragment=document.createDocumentFragment();
         for(let i=0;i<1200;i++){
           const p=document.createElement('p');
@@ -43,22 +35,7 @@ test("preserva snapshot real do Replay e mantém inputs mascarados", async ({ br
         }
         document.querySelector('main').append(fragment);
         await Telemetry.init();
-        window.captureReplay=async()=>{
-          let fullSnapshot;
-          const stop=window.__PosthogExtensions__.rrweb.record({...recordingOptions,
-            emit:event=>{if(event.type===2) fullSnapshot=event;}
-          });
-          stop();
-          if(!fullSnapshot) throw new Error('O rrweb não produziu snapshot');
-          // Formato cv=2024-10 usado pelo SDK instalado: gzip em string binária.
-          const bytes=new Uint8Array(await new Response(new Blob([JSON.stringify(fullSnapshot.data)]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer());
-          let data='';
-          for(let i=0;i<bytes.length;i+=8192) data+=String.fromCharCode(...bytes.subarray(i,i+8192));
-          posthog.capture('$snapshot',{
-            $snapshot_data:[{...fullSnapshot,data,cv:'2024-10'}],
-            $snapshot_bytes:bytes.length,$session_id:posthog.get_session_id(),$window_id:'fixture-window'
-          },{_noTruncate:true,send_instantly:true});
-        };`,
+        window.fixture={Telemetry,posthog};`,
     },
     bundle: true,
     write: false,
@@ -75,9 +52,6 @@ test("preserva snapshot real do Replay e mantém inputs mascarados", async ({ br
       {
         name: "local-replay-services",
         setup(builder) {
-          builder.onResolve({ filter: /^posthog-js(?:\/full\/no-external)?$/ }, () => ({
-            path: resolve("node_modules/posthog-js/dist/module.full.no-external.js"),
-          }));
           builder.onResolve({ filter: /^@root\// }, ({ path }) => ({
             path: resolve(path.slice(6)),
           }));
@@ -93,44 +67,127 @@ test("preserva snapshot real do Replay e mantém inputs mascarados", async ({ br
       },
     ],
   });
+  const captures = [];
+  const decodeErrors = [];
+  const remoteConfig = {
+    hasFeatureFlags: false,
+    sessionRecording: { endpoint: "/s/", minimumDurationMilliseconds: null, recordCanvas: true },
+  };
   const server = createServer((request, response) => {
     response.setHeader("Cache-Control", "no-store");
     const url = new URL(request.url, "http://localhost");
     if (url.pathname === "/app.js") {
       response.setHeader("Content-Type", "application/javascript");
       response.end(bundle.outputFiles[0].text);
+    } else if (url.pathname === "/config.js") {
+      response.setHeader("Content-Type", "application/javascript");
+      response.end(
+        `window._POSTHOG_REMOTE_CONFIG={phc_local_fixture:{config:${JSON.stringify(remoteConfig)}}};`
+      );
+    } else if (url.pathname.startsWith("/static/")) {
+      // Serve o lazy-recorder instalado, carregado pelo próprio SDK após o erro.
+      const file = resolve("node_modules/posthog-js/dist", basename(url.pathname));
+      if (extname(file) !== ".js" || !existsSync(file)) {
+        response.writeHead(404).end();
+        return;
+      }
+      response.setHeader("Content-Type", "application/javascript");
+      response.end(readFileSync(file));
     } else if (url.pathname === "/") {
       response.setHeader("Content-Type", "text/html");
+      response.setHeader("Content-Security-Policy", csp.buildCsp("prod-desktop"));
       response.end(
-        '<main><input value="secret-fixture-value"><input type="hidden" value="hidden-fixture-value"><script type="module" src="/app.js"></script></main>'
+        '<main><input value="secret-fixture-value"><input type="hidden" value="hidden-fixture-value"></main><script src="/config.js"></script><script type="module" src="/app.js"></script>'
       );
     } else {
-      request.resume();
-      response.setHeader("Content-Type", "application/json");
-      response.end(JSON.stringify({ featureFlags: {}, sessionRecording: { endpoint: "/s/" } }));
+      const chunks = [];
+      request.on("data", (chunk) => chunks.push(chunk));
+      request.on("end", () => {
+        if (url.pathname === "/s/") {
+          try {
+            const body = Buffer.concat(chunks);
+            const decoded = body[0] === 31 && body[1] === 139 ? gunzipSync(body) : body;
+            captures.push(...[].concat(JSON.parse(decoded.toString())));
+          } catch (error) {
+            decodeErrors.push(error.message);
+          }
+        }
+        response.setHeader("Content-Type", "application/json");
+        response.end(JSON.stringify({ status: 1 }));
+      });
     }
   });
   await new Promise((done) => server.listen(0, "127.0.0.1", done));
-  const context = await browser.newContext();
+  const context = await browser.newContext({ bypassCSP: false });
   const origin = `http://127.0.0.1:${server.address().port}`;
   await context.route("**/*", (route) =>
     new URL(route.request().url()).origin === origin ? route.continue() : route.abort()
   );
   try {
     const page = await context.newPage();
+    const pageErrors = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message));
     await page.goto(origin);
-    await page.waitForFunction(() => typeof window.captureReplay === "function");
-    await page.evaluate(() => window.captureReplay());
-    const batches = await page.evaluate(() => window.snapshots);
-    const before = batches.flatMap((batch) => batch.before).find((event) => event.type === 2);
-    const after = batches.flatMap((batch) => batch.after).find((event) => event.type === 2);
-    expect(before.cv).toBe("2024-10");
-    expect(before.data.length).toBeGreaterThan(20000);
-    const raw = gunzipSync(Buffer.from(before.data, "latin1")).toString();
-    expect(raw).not.toContain("secret-fixture-value");
-    expect(raw).not.toContain("hidden-fixture-value");
-    expect(after.data.length).toBe(before.data.length);
-    expect(gunzipSync(Buffer.from(after.data, "latin1")).toString()).toBe(raw);
+    await page.waitForFunction(() => !!window.fixture);
+    expect(await page.evaluate(() => window.fixture.posthog.sessionRecording.status)).toBe(
+      "disabled"
+    );
+    expect(captures).toHaveLength(0);
+
+    // Nenhuma chamada manual de rrweb.record ou $snapshot: exercita o fluxo do app.
+    await page.evaluate(() =>
+      window.fixture.Telemetry.captureException(new Error("Replay automatic fixture"))
+    );
+    await page.waitForFunction(() => window.fixture.posthog.sessionRecording.status === "active");
+    await page.locator("input:not([type])").fill("typed-private-value");
+    await page.evaluate(() => {
+      const p = document.createElement("p");
+      p.textContent = "Mutation after replay started";
+      document.querySelector("main").append(p);
+    });
+    await expect.poll(() => captures.length, { timeout: 15000 }).toBeGreaterThan(0);
+    expect(decodeErrors).toEqual([]);
+    expect(pageErrors).toEqual([]);
+    const snapshots = captures.flatMap((event) => event.properties?.$snapshot_data || []);
+    const fullSnapshots = snapshots.filter((event) => event.type === 2);
+    expect(fullSnapshots.length).toBeGreaterThan(0);
+    for (const snapshot of fullSnapshots) {
+      expect(snapshot.cv).toBe("2024-10");
+      expect(snapshot.data.length).toBeGreaterThan(20000);
+    }
+    const decompressField = (value) =>
+      typeof value === "string" && value.charCodeAt(0) === 31 && value.charCodeAt(1) === 139
+        ? JSON.parse(gunzipSync(Buffer.from(value, "latin1")).toString())
+        : value;
+    const decodedContent = () =>
+      JSON.stringify(
+        captures
+          .flatMap((event) => event.properties?.$snapshot_data || [])
+          .map((snapshot) => ({
+            ...snapshot,
+            data:
+              snapshot.cv === "2024-10"
+                ? typeof snapshot.data === "string"
+                  ? decompressField(snapshot.data)
+                  : Object.fromEntries(
+                      Object.entries(snapshot.data).map(([key, value]) => [
+                        key,
+                        decompressField(value),
+                      ])
+                    )
+                : snapshot.data,
+          }))
+      );
+    // O SDK pode enviar o snapshot inicial antes do lote das ações seguintes.
+    await expect
+      .poll(() => decodedContent().includes("Mutation after replay started"), { timeout: 15000 })
+      .toBe(true);
+    const raw = decodedContent();
+    expect(raw.includes("secret-fixture-value")).toBe(false);
+    expect(raw.includes("hidden-fixture-value")).toBe(false);
+    expect(raw.includes("typed-private-value")).toBe(false);
+    expect(decodeErrors).toEqual([]);
+    expect(pageErrors).toEqual([]);
   } finally {
     await context.close();
     server.closeAllConnections();
