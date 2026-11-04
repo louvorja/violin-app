@@ -31,9 +31,16 @@
           v-for="cat in categories"
           :key="cat.id"
           class="bgs-chip"
-          :class="{ 'bgm-chip--active': selectedCategoryIds.has(cat.id) }"
+          :class="{
+            'bgm-chip--active': selectedCategoryIds.has(cat.id),
+            'bgs-chip--drop-target': dropTargetId === cat.id,
+          }"
           :style="{ '--chip-color': cat.color }"
-          @click="toggleCategoryChip(cat.id)"
+          :data-category-drop-id="cat.id"
+          @click="onCategoryChipClick(cat.id)"
+          @dragover="onCategoryDragOver($event, cat.id)"
+          @dragleave="onCategoryDragLeave($event, cat.id)"
+          @drop="onCategoryDrop($event, cat.id)"
         >
           <span class="bgs-chip-icon-wrap">
             <LjIcon v-if="cat.iconType === 'icon'" :icon="cat.icon" :size="14" />
@@ -46,11 +53,18 @@
         </div>
         <!-- Virtual: arquivos sem categoria -->
         <div
-          v-if="uncategorizedCount > 0"
+          v-if="categories.length > 0 || uncategorizedCount > 0"
           class="bgs-chip"
-          :class="{ 'bgm-chip--active': selectedCategoryIds.has(UNCATEGORIZED_ID) }"
+          :class="{
+            'bgm-chip--active': selectedCategoryIds.has(UNCATEGORIZED_ID),
+            'bgs-chip--drop-target': dropTargetId === UNCATEGORIZED_ID,
+          }"
           :style="{ '--chip-color': UNCATEGORIZED_COLOR }"
-          @click="toggleCategoryChip(UNCATEGORIZED_ID)"
+          :data-category-drop-id="UNCATEGORIZED_ID"
+          @click="onCategoryChipClick(UNCATEGORIZED_ID)"
+          @dragover="onCategoryDragOver($event, UNCATEGORIZED_ID)"
+          @dragleave="onCategoryDragLeave($event, UNCATEGORIZED_ID)"
+          @drop="onCategoryDrop($event, UNCATEGORIZED_ID)"
         >
           <span class="bgs-chip-icon-wrap">
             <LjIcon :icon="ICONS.MUSIC.NOTE_OUTLINE" :size="14" />
@@ -66,10 +80,15 @@
           :key="item.file.id"
           class="bgs-audio-card"
           :style="{ '--card-color': item.color }"
-          @click="toggleFile(item.file)"
+          draggable="true"
+          @click="onCardClick(item)"
+          @dragstart="onCardDragStart($event, item.file)"
+          @dragend="onCardDragEnd"
+          @touchstart.passive="onCardTouchStart($event, item.file)"
+          @contextmenu.prevent
         >
           <div class="bgs-audio-card-top">
-            <div class="bgs-audio-card-play">
+            <div class="bgs-audio-card-play" data-no-category-drag @dragstart.stop.prevent>
               <LjButton
                 size="lg"
                 variant="ghost"
@@ -79,7 +98,7 @@
                 @click.stop="toggleFile(item.file)"
               />
             </div>
-            <div class="bgs-audio-card-actions">
+            <div class="bgs-audio-card-actions" data-no-category-drag @dragstart.stop.prevent>
               <!-- Estrela = som padrão (o ponteiro único que o Apresentador inicia). -->
               <LjButton
                 size="sm"
@@ -133,8 +152,6 @@
         v-model="showManageDialog"
         :categories="categories"
         :saving="saving"
-        :icon-options="iconOptions"
-        :color-presets="colorPresets"
         :module-id="'background_sound'"
         @save="handleSaveCategory"
         @delete="handleDeleteCategory"
@@ -229,6 +246,8 @@
         class="bgs-file-input"
         @change="onAudioFilesSelected"
       />
+
+      <CategoryDragGhost :ghost="touchGhost" :compact="dropTargetId !== null" />
     </div>
   </ModuleContainer>
 </template>
@@ -244,6 +263,7 @@ import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
 import Alert from "@/helpers/Alert";
+import $snackbar from "@/helpers/Snackbar";
 import {
   classifyLocalEnvironmentError,
   type LocalEnvironmentErrorKind,
@@ -273,6 +293,9 @@ import { DB_TABLE } from "@/constants/DbTables";
 import { getSetting, saveSetting } from "@/helpers/SettingsStorage";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { MediaFile } from "@/types/Media";
+import { hasMediaCategoryDrag } from "@/helpers/MediaCategoryDrag";
+import { useCategoryDrag } from "@/composables/useCategoryDrag";
+import CategoryDragGhost from "@/components/CategoryDragGhost.vue";
 
 const { width: viewportWidth } = useViewport();
 const isMobileWeb = computed(() => viewportWidth.value > 0 && viewportWidth.value <= 700);
@@ -346,11 +369,14 @@ async function getFilesByCategory(categoryId: string): Promise<BgSoundFile[]> {
 /*  Module helpers                                                     */
 /* ------------------------------------------------------------------ */
 
-const moduleContainer = ref<{ tm(key: string, named?: Record<string, unknown>): string } | null>(
-  null
-);
+const moduleContainer = ref<{
+  tm(_key: string, _named?: Record<string, unknown>): string;
+  t?(_key: string, _named?: Record<string, unknown>): string;
+} | null>(null);
 const tm = (key: string, named?: Record<string, unknown>): string =>
   moduleContainer.value?.tm(key, named as any) || key;
+const t = (key: string, named?: Record<string, unknown>): string =>
+  moduleContainer.value?.t?.(key, named as any) || key;
 
 /* ------------------------------------------------------------------ */
 /*  State                                                              */
@@ -471,38 +497,14 @@ const isMuted = ref(false);
 const previousVolume = ref(50);
 
 /* ------------------------------------------------------------------ */
-/*  Icon options                                                       */
-/* ------------------------------------------------------------------ */
-
-const iconOptions = Object.entries(ICONS.CATEGORY).map(([key, value]) => ({
-  value,
-}));
-
-const colorPresets = [
-  "#4CAF50",
-  "#2196F3",
-  "#9C27B0",
-  "#FF9800",
-  "#F44336",
-  "#00BCD4",
-  "#3F51B5",
-  "#E91E63",
-  "#8BC34A",
-  "#FF5722",
-  "#607D8B",
-  "#795548",
-  "#9E9E9E",
-  "#CDDC39",
-  "#03A9F4",
-];
-
-/* ------------------------------------------------------------------ */
 /*  Computed                                                           */
 /* ------------------------------------------------------------------ */
 
+const AUDIO_FILE_RE = /\.(mp3|wav|ogg|flac|m4a|aac|wma|opus|webm)$/i;
+
 const visibleFiles = computed(() => {
   const result: {
-    file: MediaFile;
+    file: BgSoundFile;
     categoryId: string;
     categoryName: string;
     color: string;
@@ -510,7 +512,6 @@ const visibleFiles = computed(() => {
     displayName: string;
     ext: string;
   }[] = [];
-  const audioExts = /\.(mp3|wav|ogg|flac|m4a|aac|wma|opus|webm)$/i;
   const catById = new Map(categories.value.map((c) => [c.id, c]));
   const selected = selectedCategoryIds.value;
 
@@ -525,26 +526,88 @@ const visibleFiles = computed(() => {
         categoryName: tm("uncategorized"),
         color: UNCATEGORIZED_COLOR,
         icon: ICONS.MUSIC.NOTE_OUTLINE,
-        displayName:
-          f.name || (f.fileName.match(audioExts) ? f.fileName.replace(audioExts, "") : f.fileName),
-        ext: f.fileName.match(audioExts)?.[1]?.toUpperCase() || "",
+        displayName: soundDisplayName(f),
+        ext: f.fileName.match(AUDIO_FILE_RE)?.[1]?.toUpperCase() || "",
       });
       continue;
     }
     if (!selected.has(cat.id)) continue;
-    const extMatch = f.fileName.match(audioExts);
+    const extMatch = f.fileName.match(AUDIO_FILE_RE);
     result.push({
       file: f,
       categoryId: cat.id,
       categoryName: cat.name,
       color: cat.color,
-      icon: cat.iconType === "icon" ? cat.icon : ICONS.MUSIC.MUSIC,
-      displayName: f.name || (extMatch ? f.fileName.replace(audioExts, "") : f.fileName),
+      icon: categoryIcon(f),
+      displayName: soundDisplayName(f),
       ext: extMatch ? extMatch[1].toUpperCase() : "",
     });
   }
   return result;
 });
+
+function soundDisplayName(file: BgSoundFile): string {
+  const ext = file.fileName.match(AUDIO_FILE_RE);
+  return file.name || (ext ? file.fileName.replace(AUDIO_FILE_RE, "") : file.fileName);
+}
+
+function categoryIcon(file: BgSoundFile): string {
+  const cat = categories.value.find((c) => c.id === file.categoryId);
+  if (!cat) return ICONS.MUSIC.NOTE_OUTLINE;
+  return cat.iconType === "icon" ? cat.icon : ICONS.MUSIC.MUSIC;
+}
+
+async function moveFileToCategory(file: BgSoundFile, categoryId: string): Promise<void> {
+  if ((file.categoryId || "") === categoryId) return;
+  if (categoryId && !categories.value.some((category) => category.id === categoryId)) return;
+
+  const previous = file.categoryId;
+  file.categoryId = categoryId;
+  try {
+    await saveLibraryFile(file);
+  } catch (error) {
+    file.categoryId = previous;
+    throw error;
+  }
+
+  const category = categoryId
+    ? categories.value.find((item) => item.id === categoryId)?.name || ""
+    : tm("uncategorized");
+  $snackbar.show(t("moved_to_category", { category }));
+}
+
+const {
+  draggingId,
+  dropTargetId,
+  touchGhost,
+  shouldSuppressClick,
+  shouldSuppressCategoryClick,
+  onCardDragStart,
+  onCardDragEnd,
+  onCategoryDragOver,
+  onCategoryDragLeave,
+  onCategoryDrop,
+  onCardTouchStart,
+} = useCategoryDrag<BgSoundFile>({
+  source: "background_sound",
+  findItem: (id) => libraryFiles.value.find((file) => file.id === id) || null,
+  canDrop: (file, categoryId) =>
+    (file.categoryId || "") !== categoryId &&
+    (!categoryId || categories.value.some((category) => category.id === categoryId)),
+  assign: moveFileToCategory,
+  label: soundDisplayName,
+  icon: categoryIcon,
+});
+
+function onCardClick(item: { file: BgSoundFile }): void {
+  if (shouldSuppressClick(item.file.id)) return;
+  toggleFile(item.file);
+}
+
+function onCategoryChipClick(categoryId: string): void {
+  if (shouldSuppressCategoryClick(categoryId)) return;
+  toggleCategoryChip(categoryId);
+}
 
 const editCategorySelectItems = computed(() => [
   { title: tm("uncategorized"), value: UNCATEGORIZED_ID },
@@ -611,16 +674,19 @@ async function handleDeleteCategory(id: string): Promise<void> {
 /*  Drag & drop                                                        */
 /* ------------------------------------------------------------------ */
 
-function onDragEnter(): void {
+function onDragEnter(e: DragEvent): void {
+  if (hasMediaCategoryDrag(e.dataTransfer) || draggingId.value !== null) return;
   isDragOver.value = true;
   dragCounter++;
 }
 
-function onDragOver(): void {
+function onDragOver(e: DragEvent): void {
+  if (hasMediaCategoryDrag(e.dataTransfer) || draggingId.value !== null) return;
   isDragOver.value = true;
 }
 
-function onDragLeave(): void {
+function onDragLeave(e: DragEvent): void {
+  if (hasMediaCategoryDrag(e.dataTransfer) || draggingId.value !== null) return;
   dragCounter--;
   if (dragCounter <= 0) {
     isDragOver.value = false;
@@ -629,6 +695,7 @@ function onDragLeave(): void {
 }
 
 async function onDrop(e: DragEvent): Promise<void> {
+  if (hasMediaCategoryDrag(e.dataTransfer) || draggingId.value !== null) return;
   isDragOver.value = false;
   dragCounter = 0;
   const droppedFiles = e.dataTransfer?.files;
@@ -1180,6 +1247,12 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--chip-color) 20%, transparent);
   opacity: 1;
 }
+.bgs-chip--drop-target {
+  outline: 2px dashed var(--lj-ui-accent);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--lj-ui-accent-soft);
+  opacity: 1;
+}
 .bgs-chip-icon-wrap {
   display: flex;
   align-items: center;
@@ -1243,10 +1316,13 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--card-color) 85%, var(--lj-white));
   position: relative;
   min-height: 80px;
-  cursor: pointer;
+  cursor: grab;
   transition:
     transform var(--lj-transition-normal),
-    box-shadow var(--lj-transition-normal);
+    box-shadow var(--lj-transition-normal),
+    opacity var(--lj-transition-fast);
+  -webkit-touch-callout: none;
+  user-select: none;
 }
 .bgs-audio-card:hover {
   transform: translateY(-2px);

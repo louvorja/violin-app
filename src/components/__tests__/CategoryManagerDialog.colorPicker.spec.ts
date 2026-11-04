@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import CategoryManagerDialog from "../CategoryManagerDialog.vue";
 import { LjColorPicker } from "@/components/ui";
+import { CATEGORY_COLOR_PRESETS, CATEGORY_ICON_OPTIONS } from "@/constants/CategoryOptions";
 import { mountUi } from "@/components/ui/__tests__/mountUi";
 
 /* O Listbox das cores rola até o item destacado; no jsdom só precisa existir. */
@@ -39,6 +40,25 @@ function montar() {
 const botaoSalvar = (wrapper: ReturnType<typeof montar>) =>
   wrapper.findAll("button").find((botao) => botao.text() === "Salvar")!;
 
+function montarSemOpcoes() {
+  return mountUi(CategoryManagerDialog, {
+    props: {
+      modelValue: true,
+      categories: [],
+      saving: false,
+      moduleId: "teste",
+    },
+    global: {
+      stubs: {
+        LjDialog: {
+          props: ["modelValue", "title"],
+          template: "<div><slot /><slot name='footer' /></div>",
+        },
+      },
+    },
+  });
+}
+
 describe("CategoryManagerDialog — seletor de cor da categoria", () => {
   it("usa o LjColorPicker com as cores rápidas do módulo", () => {
     const wrapper = montar();
@@ -46,6 +66,26 @@ describe("CategoryManagerDialog — seletor de cor da categoria", () => {
     expect(picker.exists()).toBe(true);
     expect(picker.props("presets")).toEqual(PRESETS);
     expect(picker.props("modelValue")).toBe(PRESETS[0]);
+  });
+
+  it("usa a paleta e os ícones globais quando o módulo não passa opções", async () => {
+    const wrapper = montarSemOpcoes();
+
+    expect(wrapper.findComponent(LjColorPicker).props("presets")).toEqual(CATEGORY_COLOR_PRESETS);
+
+    const nova = wrapper
+      .findAll("button")
+      .find((botao) => botao.text().includes("Nova categoria"))!;
+    await nova.trigger("click");
+    await wrapper.find("input:not([type='file'])").setValue("Nova categoria");
+    await botaoSalvar(wrapper).trigger("click");
+
+    expect(wrapper.emitted("save")?.[0]?.[0]).toMatchObject({
+      name: "Nova categoria",
+      icon: CATEGORY_ICON_OPTIONS[0]?.value,
+      iconType: "icon",
+      color: CATEGORY_COLOR_PRESETS[0],
+    });
   });
 
   it("a cor personalizada escolhida é a que o salvar entrega", async () => {

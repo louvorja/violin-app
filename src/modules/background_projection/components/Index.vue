@@ -26,25 +26,43 @@
           :key="cat.id"
           type="button"
           class="bg-chip"
-          :class="{ 'bg-chip--on': selectedCategoryIds.has(cat.id) }"
+          :class="{
+            'bg-chip--on': selectedCategoryIds.has(cat.id),
+            'bg-chip--drop-target': dropTargetId === cat.id,
+          }"
           :style="{ '--bg-chip-color': cat.color }"
           :aria-pressed="selectedCategoryIds.has(cat.id)"
-          @click="toggleCategoryChip(cat.id)"
+          :data-category-drop-id="cat.id"
+          @click="onCategoryChipClick(cat.id)"
+          @dragover="onCategoryDragOver($event, cat.id)"
+          @dragleave="onCategoryDragLeave($event, cat.id)"
+          @drop="onCategoryDrop($event, cat.id)"
         >
           <LjIcon v-if="cat.iconType === 'icon'" :icon="cat.icon" :size="14" />
           <img v-else-if="cat.iconType === 'image'" :src="cat.icon" class="bg-chip__img" alt="" />
           {{ cat.name }}
+          <span class="bg-chip-count">
+            {{ files.filter((f) => f.categoryId === cat.id).length }}
+          </span>
         </button>
         <!-- Virtual: arquivos sem categoria -->
         <button
-          v-if="uncategorizedCount > 0"
+          v-if="categories.length > 0 || uncategorizedCount > 0"
           type="button"
           class="bg-chip bg-chip--uncategorized"
-          :class="{ 'bg-chip--on': selectedCategoryIds.has(UNCATEGORIZED_ID) }"
+          :class="{
+            'bg-chip--on': selectedCategoryIds.has(UNCATEGORIZED_ID),
+            'bg-chip--drop-target': dropTargetId === UNCATEGORIZED_ID,
+          }"
           :aria-pressed="selectedCategoryIds.has(UNCATEGORIZED_ID)"
-          @click="toggleCategoryChip(UNCATEGORIZED_ID)"
+          :data-category-drop-id="UNCATEGORIZED_ID"
+          @click="onCategoryChipClick(UNCATEGORIZED_ID)"
+          @dragover="onCategoryDragOver($event, UNCATEGORIZED_ID)"
+          @dragleave="onCategoryDragLeave($event, UNCATEGORIZED_ID)"
+          @drop="onCategoryDrop($event, UNCATEGORIZED_ID)"
         >
-          {{ tm("uncategorized") }} ({{ uncategorizedCount }})
+          {{ tm("uncategorized") }}
+          <span class="bg-chip-count">{{ uncategorizedCount }}</span>
         </button>
       </div>
 
@@ -56,20 +74,29 @@
           v-for="file in filteredFiles"
           :key="file.id"
           class="bg-grid-item"
+          :style="{ '--card-category-color': getCategoryColor(file.categoryId) }"
+          draggable="true"
           @mouseenter="onHoverStart(file)"
           @mouseleave="onHoverEnd"
+          @dragstart="onCardDragStart($event, file)"
+          @dragend="onCardDragEnd"
+          @touchstart.passive="onCardTouchStart($event, file)"
+          @contextmenu.prevent
         >
           <button
             type="button"
             class="bg-grid-thumb"
+            draggable="true"
             :class="{
               'bg-grid-thumb--selected': selectedId === file.id,
               'bg-grid-thumb--playing': selectedId === file.id && isPlaying,
             }"
             :title="file.name"
-            @click="playFile(file)"
+            @click="onCardClick(file)"
+            @dragstart.stop="onCardDragStart($event, file)"
+            @dragend="onCardDragEnd"
           >
-            <img v-if="file.thumb" :src="file.thumb" class="bg-grid-img" alt="" />
+            <img v-if="file.thumb" :src="file.thumb" class="bg-grid-img" alt="" draggable="false" />
             <video
               v-else-if="hoverFile?.id === file.id && file.type === 'video' && file.path"
               ref="hoverVideoRef"
@@ -77,6 +104,7 @@
               class="bg-grid-img"
               muted
               autoplay
+              draggable="false"
             />
             <span v-else class="bg-grid-icon">
               <LjIcon
@@ -93,7 +121,7 @@
             </span>
           </button>
           <div class="bg-grid-name">{{ file.name }}</div>
-          <div class="bg-grid-actions">
+          <div class="bg-grid-actions" data-no-category-drag @dragstart.stop.prevent>
             <LjButton
               size="sm"
               variant="ghost"
@@ -155,8 +183,6 @@
         v-model="showManageDialog"
         :categories="categories"
         :saving="saving"
-        :icon-options="iconOptions"
-        :color-presets="colorPresets"
         :module-id="'background_projection'"
         @save="handleSaveCategory"
         @delete="handleDeleteCategory"
@@ -204,6 +230,8 @@
         class="bg-file-input"
         @change="onFilesSelected"
       />
+
+      <CategoryDragGhost :ghost="touchGhost" :compact="dropTargetId !== null" />
     </div>
   </ModuleContainer>
 </template>
@@ -226,6 +254,7 @@ import {
 import type { LjTab } from "@/components/ui";
 import $broadcast from "@/helpers/Broadcast";
 import Alert from "@/helpers/Alert";
+import $snackbar from "@/helpers/Snackbar";
 import { reportLocalFileFailure } from "@/helpers/LocalFailureNotice";
 import { localPathOf } from "@/helpers/FilePath";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
@@ -247,6 +276,9 @@ import { IMAGE_EXT, VIDEO_EXT } from "@/constants/FileTypes";
 import { ensureRenderableImage, isHeic } from "@/helpers/ImageConvert";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { nextBackgroundEpoch } from "@/presentation/BackgroundPresentationState";
+import { hasMediaCategoryDrag } from "@/helpers/MediaCategoryDrag";
+import { useCategoryDrag } from "@/composables/useCategoryDrag";
+import CategoryDragGhost from "@/components/CategoryDragGhost.vue";
 
 interface BgFile {
   id: string;
@@ -307,11 +339,14 @@ async function deleteCategoryById(id: string): Promise<void> {
   await $idb.del(STORE_CATEGORIES, id);
 }
 
-const moduleContainer = ref<{ tm(key: string, named?: Record<string, unknown>): string } | null>(
-  null
-);
+const moduleContainer = ref<{
+  tm(_key: string, _named?: Record<string, unknown>): string;
+  t?(_key: string, _named?: Record<string, unknown>): string;
+} | null>(null);
 const tm = (key: string, named?: Record<string, unknown>): string =>
   moduleContainer.value?.tm(key, named as any) || key;
+const t = (key: string, named?: Record<string, unknown>): string =>
+  moduleContainer.value?.t?.(key, named as any) || key;
 
 type LibraryFilter = "all" | "image" | "video";
 
@@ -489,26 +524,6 @@ const filteredFiles = computed(() => {
   return list;
 });
 
-const colorPresets = [
-  "#4CAF50",
-  "#2196F3",
-  "#9C27B0",
-  "#FF9800",
-  "#F44336",
-  "#00BCD4",
-  "#3F51B5",
-  "#E91E63",
-  "#8BC34A",
-  "#FF5722",
-  "#607D8B",
-  "#795548",
-  "#9E9E9E",
-  "#CDDC39",
-  "#03A9F4",
-];
-
-const iconOptions = Object.entries(ICONS.CATEGORY).map(([, value]) => ({ value }));
-
 function selectFile(file: BgFile): void {
   if (selectedId.value === file.id) return;
   selectedId.value = file.id;
@@ -525,13 +540,65 @@ function getCategoryName(id: string): string {
   return categories.value.find((c) => c.id === id)?.name || "";
 }
 
+function getCategoryColor(id: string): string {
+  return categories.value.find((c) => c.id === id)?.color || "transparent";
+}
+
+async function moveFileToCategory(file: BgFile, categoryId: string): Promise<void> {
+  if (file.categoryId === categoryId) return;
+  if (categoryId && !categories.value.some((category) => category.id === categoryId)) return;
+
+  const previous = file.categoryId;
+  file.categoryId = categoryId;
+  try {
+    await saveFile(file);
+  } catch (error) {
+    file.categoryId = previous;
+    throw error;
+  }
+
+  const categoryName = categoryId ? getCategoryName(categoryId) : tm("uncategorized");
+  $snackbar.show(t("moved_to_category", { category: categoryName }));
+}
+
+const {
+  draggingId,
+  dropTargetId,
+  touchGhost,
+  shouldSuppressClick,
+  shouldSuppressCategoryClick,
+  onCardDragStart,
+  onCardDragEnd,
+  onCategoryDragOver,
+  onCategoryDragLeave,
+  onCategoryDrop,
+  onCardTouchStart,
+} = useCategoryDrag<BgFile>({
+  source: "background_projection",
+  findItem: (id) => files.value.find((file) => file.id === id) || null,
+  canDrop: (file, categoryId) =>
+    file.categoryId !== categoryId &&
+    (!categoryId || categories.value.some((category) => category.id === categoryId)),
+  assign: moveFileToCategory,
+});
+
+function onCardClick(file: BgFile): void {
+  if (shouldSuppressClick(file.id)) return;
+  void playFile(file);
+}
+
+function onCategoryChipClick(categoryId: string): void {
+  if (shouldSuppressCategoryClick(categoryId)) return;
+  toggleCategoryChip(categoryId);
+}
+
 async function handleSaveCategory(cat: BgCategory): Promise<void> {
   saving.value = true;
   try {
     const isNew = !categories.value.some((c) => c.id === cat.id);
     await saveCategory(cat);
     categories.value = await loadCategories();
-    // Editar preserva o filtro; criar foca só na nova categoria.
+    // Criar só acrescenta a nova ao filtro; editar preserva o filtro atual.
     selectedCategoryIds.value = nextCategorySelection(selectedCategoryIds.value, cat.id, isNew);
   } finally {
     saving.value = false;
@@ -723,16 +790,19 @@ async function onFilesSelected(e: Event): Promise<void> {
 const isDragOver = ref(false);
 let dragCounter = 0;
 
-function onDragEnter(): void {
+function onDragEnter(e: DragEvent): void {
+  if (hasMediaCategoryDrag(e.dataTransfer) || draggingId.value !== null) return;
   isDragOver.value = true;
   dragCounter++;
 }
 
-function onDragOver(): void {
+function onDragOver(e: DragEvent): void {
+  if (hasMediaCategoryDrag(e.dataTransfer) || draggingId.value !== null) return;
   isDragOver.value = true;
 }
 
-function onDragLeave(): void {
+function onDragLeave(e: DragEvent): void {
+  if (hasMediaCategoryDrag(e.dataTransfer) || draggingId.value !== null) return;
   dragCounter--;
   if (dragCounter <= 0) {
     isDragOver.value = false;
@@ -741,6 +811,7 @@ function onDragLeave(): void {
 }
 
 async function onDrop(e: DragEvent): Promise<void> {
+  if (hasMediaCategoryDrag(e.dataTransfer) || draggingId.value !== null) return;
   isDragOver.value = false;
   dragCounter = 0;
   const droppedFiles = e.dataTransfer?.files;
@@ -957,6 +1028,12 @@ onMounted(async () => {
 .bg-chip:focus-visible {
   box-shadow: var(--lj-ui-focus);
 }
+.bg-chip--drop-target {
+  outline: 2px dashed var(--lj-ui-accent);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--lj-ui-accent-soft);
+}
+
 .bg-chip--on {
   background: var(--bg-chip-color, var(--lj-ui-accent));
   color: var(--lj-white);
@@ -969,6 +1046,13 @@ onMounted(async () => {
   width: 14px;
   height: 14px;
   object-fit: contain;
+}
+.bg-chip-count {
+  font-size: var(--lj-text-xs);
+  background: color-mix(in srgb, var(--bg-chip-color) 30%, transparent);
+  border-radius: var(--lj-radius-pill);
+  padding: 0 var(--lj-space-3);
+  line-height: 16px;
 }
 
 /* ── Grade da biblioteca ── */
@@ -986,11 +1070,21 @@ onMounted(async () => {
   align-content: start;
 }
 .bg-grid-item {
-  cursor: pointer;
+  cursor: grab;
   overflow: hidden;
-  background: var(--lj-surface-bg-soft);
+  background: color-mix(
+    in srgb,
+    var(--card-category-color, transparent) 14%,
+    var(--lj-surface-bg-soft)
+  );
   border-radius: var(--lj-radius-lg);
+  transition:
+    opacity var(--lj-transition-fast),
+    transform var(--lj-transition-fast);
+  -webkit-touch-callout: none;
+  user-select: none;
 }
+
 .bg-grid-item:hover .bg-grid-thumb {
   border-color: var(--lj-ui-accent);
 }

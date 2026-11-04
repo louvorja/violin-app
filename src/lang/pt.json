@@ -1933,5 +1933,6 @@
     "toggle": "Chat",
     "clear": "Limpar mensagens",
     "confirm_clear": "Tem certeza que deseja limpar todas as mensagens?"
-  }
+  },
+  "moved_to_category": "Movido para “{category}”"
 }

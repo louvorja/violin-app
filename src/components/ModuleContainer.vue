@@ -351,7 +351,7 @@ const tm = (key, named) =>
     ? i18nT(`modules.${moduleId.value}.${key}`, named)
     : i18nT(`modules.${moduleId.value}.${key}`);
 
-defineExpose({ userdata, tm, moduleId, module: module_ });
+defineExpose({ userdata, tm, t: i18nT, moduleId, module: module_ });
 </script>
 
 <style scoped>

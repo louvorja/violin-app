@@ -1932,5 +1932,6 @@
     "toggle": "Chat",
     "clear": "Limpiar mensajes",
     "confirm_clear": "¿Estás seguro de que deseas limpiar todos los mensajes?"
-  }
+  },
+  "moved_to_category": "Movido a «{category}»"
 }

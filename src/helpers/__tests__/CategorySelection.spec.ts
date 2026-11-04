@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { nextCategorySelection } from "@/helpers/CategorySelection";
 
 describe("nextCategorySelection", () => {
-  it("ao criar, exibe somente a categoria criada", () => {
-    const atual = new Set(["a", "b"]);
-    expect(nextCategorySelection(atual, "nova", true)).toEqual(new Set(["nova"]));
+  it("ao criar, exibe a nova categoria sem alterar as demais", () => {
+    const atual = new Set(["a"]);
+    expect(nextCategorySelection(atual, "nova", true)).toEqual(new Set(["a", "nova"]));
   });
 
   it("ao editar, preserva as categorias ocultas", () => {
@@ -16,6 +16,13 @@ describe("nextCategorySelection", () => {
   it("editar uma categoria oculta não a reexibe", () => {
     const atual = new Set(["a"]);
     expect(nextCategorySelection(atual, "b", false)).toEqual(new Set(["a"]));
+  });
+
+  it("criar não compartilha a referência do conjunto original", () => {
+    const atual = new Set(["a"]);
+    const proximo = nextCategorySelection(atual, "nova", true);
+    proximo.add("b");
+    expect(atual).toEqual(new Set(["a"]));
   });
 
   it("não compartilha a referência do conjunto original", () => {

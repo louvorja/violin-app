@@ -14,9 +14,16 @@
           v-for="cat in categories"
           :key="cat.id"
           class="cv-chip"
-          :class="{ 'cv-chip--active': selectedCategoryIds.has(cat.id) }"
+          :class="{
+            'cv-chip--active': selectedCategoryIds.has(cat.id),
+            'cv-chip--drop-target': dropTargetId === cat.id,
+          }"
           :style="{ '--chip-color': cat.color }"
-          @click="toggleCategoryChip(cat.id)"
+          :data-category-drop-id="cat.id"
+          @click="onCategoryChipClick(cat.id)"
+          @dragover="onCategoryDragOver($event, cat.id)"
+          @dragleave="onCategoryDragLeave($event, cat.id)"
+          @drop="onCategoryDrop($event, cat.id)"
         >
           <span class="cv-chip-icon-wrap">
             <LjIcon v-if="cat.iconType === 'icon'" :icon="cat.icon" :size="14" />
@@ -31,16 +38,23 @@
             class="cv-chip-add"
             :title="tm('add_video')"
             :aria-label="tm('add_video')"
-            @click.stop="openAdd(cat.id)"
+            @click.stop="onAddCategoryClick(cat.id)"
           >
             <LjIcon :icon="ICONS.ACTIONS.ADD" :size="12" />
           </button>
         </div>
         <div
-          v-if="uncategorizedCount > 0"
+          v-if="categories.length > 0 || uncategorizedCount > 0"
           class="cv-chip cv-chip--uncategorized"
-          :class="{ 'cv-chip--active': selectedCategoryIds.has(UNCATEGORIZED_ID) }"
-          @click="toggleCategoryChip(UNCATEGORIZED_ID)"
+          :class="{
+            'cv-chip--active': selectedCategoryIds.has(UNCATEGORIZED_ID),
+            'cv-chip--drop-target': dropTargetId === UNCATEGORIZED_ID,
+          }"
+          :data-category-drop-id="UNCATEGORIZED_ID"
+          @click="onCategoryChipClick(UNCATEGORIZED_ID)"
+          @dragover="onCategoryDragOver($event, UNCATEGORIZED_ID)"
+          @dragleave="onCategoryDragLeave($event, UNCATEGORIZED_ID)"
+          @drop="onCategoryDrop($event, UNCATEGORIZED_ID)"
         >
           <span class="cv-chip-icon-wrap">
             <LjIcon :icon="ICONS.MEDIA.YOUTUBE" :size="14" />
@@ -52,7 +66,7 @@
             class="cv-chip-add"
             :title="tm('add_video')"
             :aria-label="tm('add_video')"
-            @click.stop="openAdd()"
+            @click.stop="onAddCategoryClick()"
           >
             <LjIcon :icon="ICONS.ACTIONS.ADD" :size="12" />
           </button>
@@ -69,7 +83,16 @@
       <!-- List view -->
       <div v-else-if="viewMode === 'list'" class="cv-list">
         <template v-for="v in filteredVideos" :key="v.id">
-          <div class="cv-list-item" :class="{ 'cv-list-item--active': projectingId === v.id }">
+          <div
+            class="cv-list-item"
+            :class="{ 'cv-list-item--active': projectingId === v.id }"
+            :style="{ '--card-category-color': categoryColor(v.categoryId) }"
+            draggable="true"
+            @dragstart="onCardDragStart($event, v)"
+            @dragend="onCardDragEnd"
+            @touchstart.passive="onCardTouchStart($event, v)"
+            @contextmenu.prevent
+          >
             <LjIcon :icon="ICONS.MEDIA.YOUTUBE" :size="20" class="cv-youtube" />
             <span class="cv-list-name">{{ v.name }}</span>
             <span v-if="categoryName(v.categoryId)" class="cv-list-category">
@@ -79,12 +102,16 @@
             <OnlineVideoDownload
               :video-id="extractYoutubeId(v.url)"
               :name="v.name"
+              data-no-category-drag
+              @dragstart.stop.prevent
               @cancelled="stopIfProjecting(v)"
             />
             <LjButton
               size="sm"
               variant="primary"
               :disabled="projectingId == v.id"
+              data-no-category-drag
+              @dragstart.stop.prevent
               @click="projectVideo(v)"
             >
               {{ tm("project") }}
@@ -96,6 +123,8 @@
               :icon="ICONS.ACTIONS.EDIT"
               :title="tm('edit')"
               :aria-label="tm('edit')"
+              data-no-category-drag
+              @dragstart.stop.prevent
               @click="openEdit(v)"
             />
             <LjButton
@@ -106,6 +135,8 @@
               :icon="ICONS.ACTIONS.DELETE"
               :title="tm('delete')"
               :aria-label="tm('delete')"
+              data-no-category-drag
+              @dragstart.stop.prevent
               @click="confirmDelete(v)"
             />
           </div>
@@ -119,10 +150,22 @@
             flush
             class="cv-grid-card"
             :class="{ 'cv-grid-card--active': projectingId === v.id }"
-            @click="projectVideo(v)"
+            :style="{ '--card-category-color': categoryColor(v.categoryId) }"
+            draggable="true"
+            @click="onCardClick(v)"
+            @dragstart="onCardDragStart($event, v)"
+            @dragend="onCardDragEnd"
+            @touchstart="onCardTouchStart($event, v)"
+            @contextmenu.prevent
           >
             <div class="cv-grid-thumb">
-              <img v-if="thumbUrls[v.id]" :src="thumbUrls[v.id]" alt="" class="cv-grid-img" />
+              <img
+                v-if="thumbUrls[v.id]"
+                :src="thumbUrls[v.id]"
+                alt=""
+                class="cv-grid-img"
+                draggable="false"
+              />
               <div v-else class="cv-grid-placeholder">
                 <LjIcon :icon="ICONS.MEDIA.YOUTUBE" :size="40" class="cv-youtube" />
               </div>
@@ -137,7 +180,7 @@
             <div v-if="categoryName(v.categoryId)" class="cv-grid-category">
               {{ categoryName(v.categoryId) }}
             </div>
-            <div class="cv-grid-actions">
+            <div class="cv-grid-actions" data-no-category-drag @dragstart.stop.prevent>
               <OnlineVideoDownload
                 :video-id="extractYoutubeId(v.url)"
                 :name="v.name"
@@ -210,12 +253,12 @@
       v-model="showManageDialog"
       :categories="categories"
       :saving="saving"
-      :icon-options="iconOptions"
-      :color-presets="colorPresets"
       module-id="custom_online_videos"
       @save="handleSaveCategory"
       @delete="handleDeleteCategory"
     />
+
+    <CategoryDragGhost :ghost="touchGhost" :compact="dropTargetId !== null" />
   </ModuleContainer>
 </template>
 
@@ -244,12 +287,15 @@ import {
 } from "@/components/ui";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import $alert from "@/helpers/Alert";
+import $snackbar from "@/helpers/Snackbar";
 import $idb from "@/helpers/IndexedDB";
 import { DB_TABLE } from "@/constants/DbTables";
 import { ICONS } from "@/config/Icons";
 import { RibbonAction } from "@/types/Ribbon";
 import Media from "@/composables/useMedia";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
+import { useCategoryDrag } from "@/composables/useCategoryDrag";
+import CategoryDragGhost from "@/components/CategoryDragGhost.vue";
 
 interface VideoItem {
   id: string;
@@ -272,8 +318,14 @@ const STORE_CATEGORY = DB_TABLE.CUSTOM_ONLINE_VIDEOS_CATEGORIES;
 /** Id virtual dos vídeos adicionados sem categoria. */
 const UNCATEGORIZED_ID = "";
 
-const moduleContainer = ref<{ tm(key: string): string } | null>(null);
-const tm = (key: string): string => moduleContainer.value?.tm(key) || key;
+const moduleContainer = ref<{
+  tm(_key: string, _named?: Record<string, unknown>): string;
+  t?(_key: string, _named?: Record<string, unknown>): string;
+} | null>(null);
+const tm = (key: string, named?: Record<string, unknown>): string =>
+  moduleContainer.value?.tm(key, named) || key;
+const t = (key: string, named?: Record<string, unknown>): string =>
+  moduleContainer.value?.t?.(key, named) || key;
 const downloads = useOnlineVideoDownloads();
 
 const videos = ref<VideoItem[]>([]);
@@ -299,20 +351,6 @@ const categories = ref<CategoryFileData[]>([]);
 const selectedCategoryIds = ref(new Set<string>());
 const showManageDialog = ref<boolean>(false);
 
-const iconOptions = Object.values(ICONS.CATEGORY).map((value) => ({ value }));
-
-const colorPresets = [
-  "#4CAF50",
-  "#2196F3",
-  "#9C27B0",
-  "#FF9800",
-  "#F44336",
-  "#00BCD4",
-  "#3F51B5",
-  "#E91E63",
-  "#8BC34A",
-];
-
 async function loadCategories(): Promise<void> {
   categories.value = (await $idb.getAll<CategoryFileData>(STORE_CATEGORY)).sort((a, b) =>
     a.name.localeCompare(b.name)
@@ -322,6 +360,11 @@ async function loadCategories(): Promise<void> {
 function categoryName(categoryId?: string): string {
   if (!categoryId) return "";
   return categories.value.find((c) => c.id === categoryId)?.name || "";
+}
+
+function categoryColor(categoryId?: string): string {
+  if (!categoryId) return "transparent";
+  return categories.value.find((c) => c.id === categoryId)?.color || "transparent";
 }
 
 const uncategorizedCount = computed(() => {
@@ -350,6 +393,62 @@ function toggleCategoryChip(id: string): void {
   if (next.has(id)) next.delete(id);
   else next.add(id);
   selectedCategoryIds.value = next;
+}
+
+async function moveVideoToCategory(video: VideoItem, categoryId: string): Promise<void> {
+  if ((video.categoryId || "") === categoryId) return;
+  if (categoryId && !categories.value.some((category) => category.id === categoryId)) return;
+
+  const previous = video.categoryId;
+  video.categoryId = categoryId || undefined;
+  try {
+    await saveVideoInternal({ ...video });
+  } catch (error) {
+    video.categoryId = previous;
+    throw error;
+  }
+
+  const category = categoryId ? categoryName(categoryId) : tm("uncategorized");
+  $snackbar.show(t("moved_to_category", { category }));
+}
+
+const {
+  dropTargetId,
+  touchGhost,
+  shouldSuppressClick,
+  shouldSuppressCategoryClick,
+  onCardDragStart,
+  onCardDragEnd,
+  onCategoryDragOver,
+  onCategoryDragLeave,
+  onCategoryDrop,
+  onCardTouchStart,
+} = useCategoryDrag<VideoItem>({
+  source: "custom_online_videos",
+  findItem: (id) => videos.value.find((video) => video.id === id) || null,
+  canDrop: (video, categoryId) =>
+    (video.categoryId || "") !== categoryId &&
+    (!categoryId || categories.value.some((category) => category.id === categoryId)),
+  assign: moveVideoToCategory,
+  label: (video) => video.name,
+  icon: () => ICONS.MEDIA.YOUTUBE,
+  thumb: (video) => thumbUrls[video.id],
+});
+
+function onCardClick(video: VideoItem): void {
+  if (shouldSuppressClick(video.id)) return;
+  void projectVideo(video);
+}
+
+function onCategoryChipClick(categoryId: string): void {
+  if (shouldSuppressCategoryClick(categoryId)) return;
+  toggleCategoryChip(categoryId);
+}
+
+function onAddCategoryClick(categoryId?: string): void {
+  const target = categoryId ?? UNCATEGORIZED_ID;
+  if (shouldSuppressCategoryClick(target)) return;
+  openAdd(categoryId);
 }
 
 /** Após carregar/salvar, garante que tudo fique visível. */
@@ -737,6 +836,12 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--chip-color) 20%, transparent);
   opacity: 1;
 }
+.cv-chip--drop-target {
+  outline: 2px dashed var(--lj-ui-accent);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--lj-ui-accent-soft);
+  opacity: 1;
+}
 
 /* "Sem categoria" não tem cor própria — herda o cinza de texto do tema. */
 .cv-chip--uncategorized {
@@ -838,11 +943,22 @@ onBeforeUnmount(() => {
   gap: var(--lj-space-4);
   padding: var(--lj-space-3) var(--lj-space-4);
   border-radius: var(--lj-radius-md);
-  transition: background var(--lj-transition-normal);
+  background: color-mix(in srgb, var(--card-category-color, transparent) 10%, transparent);
+  transition:
+    background var(--lj-transition-normal),
+    opacity var(--lj-transition-fast),
+    transform var(--lj-transition-fast);
+  cursor: grab;
+  -webkit-touch-callout: none;
+  user-select: none;
 }
 
 .cv-list-item:hover {
-  background: var(--lj-surface-bg-hover);
+  background: color-mix(
+    in srgb,
+    var(--card-category-color, transparent) 16%,
+    var(--lj-surface-bg-hover)
+  );
 }
 
 .cv-list-item--active {
@@ -869,13 +985,19 @@ onBeforeUnmount(() => {
   border: 2px solid transparent;
   border-radius: var(--lj-radius-lg);
   overflow: hidden;
-  cursor: pointer;
-  background: var(--lj-surface-bg-soft);
+  cursor: grab;
+  background: color-mix(
+    in srgb,
+    var(--card-category-color, transparent) 14%,
+    var(--lj-surface-bg-soft)
+  );
   transition:
     transform var(--lj-transition-normal),
-    box-shadow var(--lj-transition-normal);
+    box-shadow var(--lj-transition-normal),
+    opacity var(--lj-transition-fast);
+  -webkit-touch-callout: none;
+  user-select: none;
 }
-
 .cv-grid .cv-grid-card:hover {
   transform: translateY(-2px);
   box-shadow: var(--lj-shadow-3);
