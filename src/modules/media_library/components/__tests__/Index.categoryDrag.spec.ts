@@ -212,7 +212,7 @@ describe("Biblioteca de Mídia: arrastar card para categoria", () => {
     expect(dataTransfer.getData(MEDIA_CATEGORY_DRAG_MIME)).toContain(FILE.id);
 
     await chip.trigger("dragover", { dataTransfer });
-    expect(chip.classes()).toContain("media-chip--drop-target");
+    expect(chip.classes()).toContain("lj-category-chip--drop-target");
 
     await chip.trigger("drop", { dataTransfer });
     await flushPromises();
@@ -233,7 +233,7 @@ describe("Biblioteca de Mídia: arrastar card para categoria", () => {
     card.element.dispatchEvent(dispatchTouch("touchstart", card.element, [touch(10, 10)]));
     vi.advanceTimersByTime(400);
     await nextTick();
-    expect(chip.classes()).toContain("media-chip--drop-target");
+    expect(chip.classes()).toContain("lj-category-chip--drop-target");
 
     dispatchTouch("touchmove", window, [touch(10, 10)]);
     dispatchTouch("touchend", window, []);
@@ -246,15 +246,15 @@ describe("Biblioteca de Mídia: arrastar card para categoria", () => {
 
     // O clique sintetizado do toque não pode alternar o filtro do chip.
     await chip.trigger("click");
-    expect(chip.classes()).toContain("media-chip--active");
+    expect(chip.classes()).toContain("lj-category-chip--active");
   });
 
   it("clique normal no chip continua alternando o filtro", async () => {
     const chip = wrapper.find(`[data-category-drop-id="${CATEGORY.id}"]`);
 
-    expect(chip.classes()).toContain("media-chip--active");
+    expect(chip.classes()).toContain("lj-category-chip--active");
     await chip.trigger("click");
-    expect(chip.classes()).not.toContain("media-chip--active");
+    expect(chip.classes()).not.toContain("lj-category-chip--active");
   });
 
   it("drop de arquivo externo continua abrindo a seleção de categoria", async () => {

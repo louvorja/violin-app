@@ -21,49 +21,38 @@
 
       <!-- Category chips -->
       <div v-if="categories.length || uncategorizedCount > 0" class="bg-category-chips">
-        <button
+        <CategoryChip
           v-for="cat in categories"
           :key="cat.id"
-          type="button"
-          class="bg-chip"
-          :class="{
-            'bg-chip--on': selectedCategoryIds.has(cat.id),
-            'bg-chip--drop-target': dropTargetId === cat.id,
-          }"
-          :style="{ '--bg-chip-color': cat.color }"
-          :aria-pressed="selectedCategoryIds.has(cat.id)"
-          :data-category-drop-id="cat.id"
-          @click="onCategoryChipClick(cat.id)"
+          :category-id="cat.id"
+          :name="cat.name"
+          :icon="cat.icon"
+          :icon-type="cat.iconType"
+          :color="cat.color"
+          :count="files.filter((f) => f.categoryId === cat.id).length"
+          :active="selectedCategoryIds.has(cat.id)"
+          :drop-target="dropTargetId === cat.id"
+          @select="onCategoryChipClick(cat.id)"
           @dragover="onCategoryDragOver($event, cat.id)"
           @dragleave="onCategoryDragLeave($event, cat.id)"
           @drop="onCategoryDrop($event, cat.id)"
-        >
-          <LjIcon v-if="cat.iconType === 'icon'" :icon="cat.icon" :size="14" />
-          <img v-else-if="cat.iconType === 'image'" :src="cat.icon" class="bg-chip__img" alt="" />
-          {{ cat.name }}
-          <span class="bg-chip-count">
-            {{ files.filter((f) => f.categoryId === cat.id).length }}
-          </span>
-        </button>
+        />
         <!-- Virtual: arquivos sem categoria -->
-        <button
+        <CategoryChip
           v-if="categories.length > 0 || uncategorizedCount > 0"
-          type="button"
-          class="bg-chip bg-chip--uncategorized"
-          :class="{
-            'bg-chip--on': selectedCategoryIds.has(UNCATEGORIZED_ID),
-            'bg-chip--drop-target': dropTargetId === UNCATEGORIZED_ID,
-          }"
-          :aria-pressed="selectedCategoryIds.has(UNCATEGORIZED_ID)"
-          :data-category-drop-id="UNCATEGORIZED_ID"
-          @click="onCategoryChipClick(UNCATEGORIZED_ID)"
+          category-id=""
+          :name="tm('uncategorized')"
+          :icon="ICONS.MEDIA.IMAGE_MULTIPLE"
+          icon-type="icon"
+          color="var(--lj-gray-500)"
+          :count="uncategorizedCount"
+          :active="selectedCategoryIds.has(UNCATEGORIZED_ID)"
+          :drop-target="dropTargetId === UNCATEGORIZED_ID"
+          @select="onCategoryChipClick(UNCATEGORIZED_ID)"
           @dragover="onCategoryDragOver($event, UNCATEGORIZED_ID)"
           @dragleave="onCategoryDragLeave($event, UNCATEGORIZED_ID)"
           @drop="onCategoryDrop($event, UNCATEGORIZED_ID)"
-        >
-          {{ tm("uncategorized") }}
-          <span class="bg-chip-count">{{ uncategorizedCount }}</span>
-        </button>
+        />
       </div>
 
       <LjDivider />
@@ -279,6 +268,7 @@ import { nextBackgroundEpoch } from "@/presentation/BackgroundPresentationState"
 import { hasMediaCategoryDrag } from "@/helpers/MediaCategoryDrag";
 import { useCategoryDrag } from "@/composables/useCategoryDrag";
 import CategoryDragGhost from "@/components/CategoryDragGhost.vue";
+import CategoryChip from "@/components/CategoryChip.vue";
 
 interface BgFile {
   id: string;
@@ -991,68 +981,14 @@ onMounted(async () => {
 }
 
 /* ── Chips de categoria ──
-   A cor vem do banco (category.color) e entra por variável inline, para que
-   traço, texto e preenchimento do estado ligado saiam todos dela. Sem cor
-   definida, o chip cai no acento do sistema. */
+   O desenho é o CategoryChip compartilhado; aqui fica só o espaçamento da
+   faixa que agrupa os chips. */
 .bg-category-chips {
   display: flex;
   flex-wrap: wrap;
   gap: var(--lj-space-3);
   padding: var(--lj-space-4) var(--lj-space-6);
   flex-shrink: 0;
-}
-.bg-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--lj-space-2);
-  height: var(--lj-ui-h-sm);
-  padding-inline: var(--lj-ui-px-sm);
-  border: 1px solid var(--bg-chip-color, var(--lj-ui-accent));
-  border-radius: var(--lj-ui-radius);
-  background: transparent;
-  color: var(--bg-chip-color, var(--lj-ui-accent-text));
-  font-family: inherit;
-  font-size: var(--lj-ui-font-sm);
-  font-weight: var(--lj-weight-medium);
-  line-height: 1;
-  white-space: nowrap;
-  cursor: pointer;
-  outline: none;
-  transition:
-    background var(--lj-transition-fast),
-    color var(--lj-transition-fast);
-}
-.bg-chip:hover {
-  background: color-mix(in srgb, var(--bg-chip-color, var(--lj-ui-accent)) 15%, transparent);
-}
-.bg-chip:focus-visible {
-  box-shadow: var(--lj-ui-focus);
-}
-.bg-chip--drop-target {
-  outline: 2px dashed var(--lj-ui-accent);
-  outline-offset: 2px;
-  box-shadow: 0 0 0 4px var(--lj-ui-accent-soft);
-}
-
-.bg-chip--on {
-  background: var(--bg-chip-color, var(--lj-ui-accent));
-  color: var(--lj-white);
-}
-/* O chip virtual não tem categoria no banco, então não tem cor própria. */
-.bg-chip--uncategorized {
-  --bg-chip-color: var(--lj-gray-500);
-}
-.bg-chip__img {
-  width: 14px;
-  height: 14px;
-  object-fit: contain;
-}
-.bg-chip-count {
-  font-size: var(--lj-text-xs);
-  background: color-mix(in srgb, var(--bg-chip-color) 30%, transparent);
-  border-radius: var(--lj-radius-pill);
-  padding: 0 var(--lj-space-3);
-  line-height: 16px;
 }
 
 /* ── Grade da biblioteca ── */
@@ -1295,11 +1231,6 @@ onMounted(async () => {
     padding-inline: var(--lj-space-4);
     overflow-x: auto;
     scrollbar-width: thin;
-  }
-
-  .bg-chip {
-    flex: 0 0 auto;
-    min-height: 44px;
   }
 
   .bg-grid {

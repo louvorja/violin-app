@@ -176,7 +176,7 @@ describe("Projeção de Fundo: arrastar card para categoria", () => {
     expect(dataTransfer.getData(MEDIA_CATEGORY_DRAG_MIME)).toContain(FILE.id);
 
     await chip.trigger("dragover", { dataTransfer });
-    expect(chip.classes()).toContain("bg-chip--drop-target");
+    expect(chip.classes()).toContain("lj-category-chip--drop-target");
 
     await chip.trigger("drop", { dataTransfer });
     await flushPromises();
@@ -201,8 +201,8 @@ describe("Projeção de Fundo: arrastar card para categoria", () => {
     const dataTransfer = fakeDataTransfer();
 
     expect(uncategorized.exists()).toBe(true);
-    expect(outra.find(".bg-chip-count").text()).toBe("1");
-    expect(uncategorized.find(".bg-chip-count").text()).toBe("0");
+    expect(outra.find(".lj-category-chip__count").text()).toBe("1");
+    expect(uncategorized.find(".lj-category-chip__count").text()).toBe("0");
     expect(card.attributes("style")).toContain("#4CAF50");
     await card.trigger("dragstart", { dataTransfer });
     await uncategorized.trigger("drop", { dataTransfer });
@@ -223,7 +223,7 @@ describe("Projeção de Fundo: arrastar card para categoria", () => {
     card.element.dispatchEvent(dispatchTouch("touchstart", card.element, [touch(10, 10)]));
     vi.advanceTimersByTime(400);
     await nextTick();
-    expect(chip.classes()).toContain("bg-chip--drop-target");
+    expect(chip.classes()).toContain("lj-category-chip--drop-target");
 
     dispatchTouch("touchmove", window, [touch(10, 10)]);
     dispatchTouch("touchend", window, []);

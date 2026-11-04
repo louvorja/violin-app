@@ -27,51 +27,38 @@
       <!-- Category chips -->
       <div v-if="categories.length || uncategorizedCount > 0" class="bgs-chips">
         <span class="bgm-header-title">{{ tm("categories") }}</span>
-        <div
+        <CategoryChip
           v-for="cat in categories"
           :key="cat.id"
-          class="bgs-chip"
-          :class="{
-            'bgm-chip--active': selectedCategoryIds.has(cat.id),
-            'bgs-chip--drop-target': dropTargetId === cat.id,
-          }"
-          :style="{ '--chip-color': cat.color }"
-          :data-category-drop-id="cat.id"
-          @click="onCategoryChipClick(cat.id)"
+          :category-id="cat.id"
+          :name="cat.name"
+          :icon="cat.icon"
+          :icon-type="cat.iconType"
+          :color="cat.color"
+          :count="libraryFiles.filter((f) => f.categoryId === cat.id).length"
+          :active="selectedCategoryIds.has(cat.id)"
+          :drop-target="dropTargetId === cat.id"
+          @select="onCategoryChipClick(cat.id)"
           @dragover="onCategoryDragOver($event, cat.id)"
           @dragleave="onCategoryDragLeave($event, cat.id)"
           @drop="onCategoryDrop($event, cat.id)"
-        >
-          <span class="bgs-chip-icon-wrap">
-            <LjIcon v-if="cat.iconType === 'icon'" :icon="cat.icon" :size="14" />
-            <img v-else :src="cat.icon" class="bgs-chip-img" alt="" />
-          </span>
-          <span class="bgm-chip-name">{{ cat.name }}</span>
-          <span class="bgs-chip-count">
-            {{ libraryFiles.filter((f) => f.categoryId === cat.id).length }}
-          </span>
-        </div>
+        />
         <!-- Virtual: arquivos sem categoria -->
-        <div
+        <CategoryChip
           v-if="categories.length > 0 || uncategorizedCount > 0"
-          class="bgs-chip"
-          :class="{
-            'bgm-chip--active': selectedCategoryIds.has(UNCATEGORIZED_ID),
-            'bgs-chip--drop-target': dropTargetId === UNCATEGORIZED_ID,
-          }"
-          :style="{ '--chip-color': UNCATEGORIZED_COLOR }"
-          :data-category-drop-id="UNCATEGORIZED_ID"
-          @click="onCategoryChipClick(UNCATEGORIZED_ID)"
+          category-id=""
+          :name="tm('uncategorized')"
+          :icon="ICONS.MUSIC.NOTE_OUTLINE"
+          icon-type="icon"
+          :color="UNCATEGORIZED_COLOR"
+          :count="uncategorizedCount"
+          :active="selectedCategoryIds.has(UNCATEGORIZED_ID)"
+          :drop-target="dropTargetId === UNCATEGORIZED_ID"
+          @select="onCategoryChipClick(UNCATEGORIZED_ID)"
           @dragover="onCategoryDragOver($event, UNCATEGORIZED_ID)"
           @dragleave="onCategoryDragLeave($event, UNCATEGORIZED_ID)"
           @drop="onCategoryDrop($event, UNCATEGORIZED_ID)"
-        >
-          <span class="bgs-chip-icon-wrap">
-            <LjIcon :icon="ICONS.MUSIC.NOTE_OUTLINE" :size="14" />
-          </span>
-          <span class="bgm-chip-name">{{ tm("uncategorized") }}</span>
-          <span class="bgs-chip-count">{{ uncategorizedCount }}</span>
-        </div>
+        />
       </div>
       <!-- Audio cards grid -->
       <div v-if="visibleFiles.length" class="bgs-audio-grid">
@@ -296,6 +283,7 @@ import { MediaFile } from "@/types/Media";
 import { hasMediaCategoryDrag } from "@/helpers/MediaCategoryDrag";
 import { useCategoryDrag } from "@/composables/useCategoryDrag";
 import CategoryDragGhost from "@/components/CategoryDragGhost.vue";
+import CategoryChip from "@/components/CategoryChip.vue";
 
 const { width: viewportWidth } = useViewport();
 const isMobileWeb = computed(() => viewportWidth.value > 0 && viewportWidth.value <= 700);
@@ -1220,81 +1208,6 @@ onBeforeUnmount(() => {
   letter-spacing: 0.4px;
   color: var(--lj-group-label-color, var(--lj-text-subtle));
 }
-.bgs-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--lj-space-2);
-  padding: var(--lj-space-2) 10px;
-  border-radius: var(--lj-radius-pill);
-  border: 1.5px solid var(--chip-color);
-  background: transparent;
-  color: var(--chip-color);
-  cursor: pointer;
-  font-size: var(--lj-text-base);
-  font-family: inherit;
-  transition:
-    background var(--lj-transition-normal),
-    color var(--lj-transition-normal),
-    opacity var(--lj-transition-normal);
-  opacity: 0.5;
-  outline: none;
-  white-space: nowrap;
-}
-.bgs-chip:hover {
-  opacity: 0.85;
-}
-.bgm-chip--active {
-  background: color-mix(in srgb, var(--chip-color) 20%, transparent);
-  opacity: 1;
-}
-.bgs-chip--drop-target {
-  outline: 2px dashed var(--lj-ui-accent);
-  outline-offset: 2px;
-  box-shadow: 0 0 0 4px var(--lj-ui-accent-soft);
-  opacity: 1;
-}
-.bgs-chip-icon-wrap {
-  display: flex;
-  align-items: center;
-}
-.bgs-chip-img {
-  width: 14px;
-  height: 14px;
-  object-fit: contain;
-}
-.bgs-chip-count {
-  font-size: var(--lj-text-xs);
-  background: color-mix(in srgb, var(--chip-color) 30%, transparent);
-  border-radius: var(--lj-radius-pill);
-  padding: 0 5px;
-  line-height: 16px;
-}
-.bgs-chip-add {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  color: inherit;
-  padding: 0;
-  opacity: 0.6;
-  transition:
-    opacity var(--lj-transition-fast),
-    background var(--lj-transition-fast);
-}
-.bgs-chip-add:hover {
-  opacity: 1;
-  background: color-mix(in srgb, var(--chip-color) 20%, transparent);
-}
-.bgs-chip-add:focus-visible {
-  outline: none;
-  opacity: 1;
-  box-shadow: var(--lj-ui-focus);
-}
 
 /* ── Audio cards grid ── */
 .bgs-audio-grid {
@@ -1486,8 +1399,7 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 700px) {
-  .bgs-header-actions :deep(.lj-btn),
-  .bgs-chip {
+  .bgs-header-actions :deep(.lj-btn) {
     min-height: 44px;
   }
 

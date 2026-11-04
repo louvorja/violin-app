@@ -10,67 +10,43 @@
       <!-- Chips de categorias (filtro) -->
       <div v-if="categories.length || uncategorizedCount > 0" class="cv-chips">
         <span class="cv-chips-title">{{ tm("categories") }}</span>
-        <div
+        <CategoryChip
           v-for="cat in categories"
           :key="cat.id"
-          class="cv-chip"
-          :class="{
-            'cv-chip--active': selectedCategoryIds.has(cat.id),
-            'cv-chip--drop-target': dropTargetId === cat.id,
-          }"
-          :style="{ '--chip-color': cat.color }"
-          :data-category-drop-id="cat.id"
-          @click="onCategoryChipClick(cat.id)"
+          :category-id="cat.id"
+          :name="cat.name"
+          :icon="cat.icon"
+          :icon-type="cat.iconType"
+          :color="cat.color"
+          :count="videos.filter((v) => v.categoryId === cat.id).length"
+          :active="selectedCategoryIds.has(cat.id)"
+          :drop-target="dropTargetId === cat.id"
+          show-add
+          :add-label="tm('add_video')"
+          @select="onCategoryChipClick(cat.id)"
+          @add="onAddCategoryClick(cat.id)"
           @dragover="onCategoryDragOver($event, cat.id)"
           @dragleave="onCategoryDragLeave($event, cat.id)"
           @drop="onCategoryDrop($event, cat.id)"
-        >
-          <span class="cv-chip-icon-wrap">
-            <LjIcon v-if="cat.iconType === 'icon'" :icon="cat.icon" :size="14" />
-            <img v-else :src="cat.icon" class="cv-chip-img" alt="" />
-          </span>
-          <span class="cv-chip-name">{{ cat.name }}</span>
-          <span class="cv-chip-count">
-            {{ videos.filter((v) => v.categoryId === cat.id).length }}
-          </span>
-          <button
-            type="button"
-            class="cv-chip-add"
-            :title="tm('add_video')"
-            :aria-label="tm('add_video')"
-            @click.stop="onAddCategoryClick(cat.id)"
-          >
-            <LjIcon :icon="ICONS.ACTIONS.ADD" :size="12" />
-          </button>
-        </div>
-        <div
+        />
+        <CategoryChip
           v-if="categories.length > 0 || uncategorizedCount > 0"
-          class="cv-chip cv-chip--uncategorized"
-          :class="{
-            'cv-chip--active': selectedCategoryIds.has(UNCATEGORIZED_ID),
-            'cv-chip--drop-target': dropTargetId === UNCATEGORIZED_ID,
-          }"
-          :data-category-drop-id="UNCATEGORIZED_ID"
-          @click="onCategoryChipClick(UNCATEGORIZED_ID)"
+          category-id=""
+          :name="tm('uncategorized')"
+          :icon="ICONS.MEDIA.YOUTUBE"
+          icon-type="icon"
+          color="var(--lj-text-muted)"
+          :count="uncategorizedCount"
+          :active="selectedCategoryIds.has(UNCATEGORIZED_ID)"
+          :drop-target="dropTargetId === UNCATEGORIZED_ID"
+          show-add
+          :add-label="tm('add_video')"
+          @select="onCategoryChipClick(UNCATEGORIZED_ID)"
+          @add="onAddCategoryClick()"
           @dragover="onCategoryDragOver($event, UNCATEGORIZED_ID)"
           @dragleave="onCategoryDragLeave($event, UNCATEGORIZED_ID)"
           @drop="onCategoryDrop($event, UNCATEGORIZED_ID)"
-        >
-          <span class="cv-chip-icon-wrap">
-            <LjIcon :icon="ICONS.MEDIA.YOUTUBE" :size="14" />
-          </span>
-          <span class="cv-chip-name">{{ tm("uncategorized") }}</span>
-          <span class="cv-chip-count">{{ uncategorizedCount }}</span>
-          <button
-            type="button"
-            class="cv-chip-add"
-            :title="tm('add_video')"
-            :aria-label="tm('add_video')"
-            @click.stop="onAddCategoryClick()"
-          >
-            <LjIcon :icon="ICONS.ACTIONS.ADD" :size="12" />
-          </button>
-        </div>
+        />
       </div>
 
       <LjEmpty
@@ -296,6 +272,7 @@ import Media from "@/composables/useMedia";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useCategoryDrag } from "@/composables/useCategoryDrag";
 import CategoryDragGhost from "@/components/CategoryDragGhost.vue";
+import CategoryChip from "@/components/CategoryChip.vue";
 
 interface VideoItem {
   id: string;
@@ -803,96 +780,6 @@ onBeforeUnmount(() => {
   letter-spacing: 0.5px;
   color: var(--lj-text-muted);
   margin-right: var(--lj-space-1);
-}
-
-/* A cor vem da categoria (dado do usuário), então entra por `--chip-color`
-   no style inline — o resto do desenho é todo token. */
-.cv-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--lj-space-2);
-  padding: 3px 10px;
-  border-radius: var(--lj-radius-pill);
-  border: 1.5px solid var(--chip-color);
-  background: transparent;
-  color: var(--chip-color);
-  cursor: pointer;
-  font-size: var(--lj-text-base);
-  font-family: inherit;
-  transition:
-    background var(--lj-transition-normal),
-    color var(--lj-transition-normal),
-    opacity var(--lj-transition-normal);
-  opacity: 0.5;
-  outline: none;
-  white-space: nowrap;
-}
-
-.cv-chip:hover {
-  opacity: 0.85;
-}
-
-.cv-chip--active {
-  background: color-mix(in srgb, var(--chip-color) 20%, transparent);
-  opacity: 1;
-}
-.cv-chip--drop-target {
-  outline: 2px dashed var(--lj-ui-accent);
-  outline-offset: 2px;
-  box-shadow: 0 0 0 4px var(--lj-ui-accent-soft);
-  opacity: 1;
-}
-
-/* "Sem categoria" não tem cor própria — herda o cinza de texto do tema. */
-.cv-chip--uncategorized {
-  --chip-color: var(--lj-text-muted);
-}
-
-.cv-chip-icon-wrap {
-  display: flex;
-  align-items: center;
-}
-
-.cv-chip-img {
-  width: 14px;
-  height: 14px;
-  object-fit: cover;
-}
-
-.cv-chip-count {
-  font-size: var(--lj-text-xs);
-  background: color-mix(in srgb, var(--chip-color) 30%, transparent);
-  border-radius: var(--lj-radius-pill);
-  padding: 0 5px;
-  line-height: 16px;
-}
-
-.cv-chip-add {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  color: inherit;
-  padding: 0;
-  opacity: 0.6;
-  transition:
-    opacity var(--lj-transition-fast),
-    background var(--lj-transition-fast);
-}
-
-.cv-chip-add:hover {
-  opacity: 1;
-  background: color-mix(in srgb, var(--chip-color) 20%, transparent);
-}
-
-.cv-chip-add:focus-visible {
-  outline: none;
-  box-shadow: var(--lj-ui-focus);
 }
 
 /* Etiqueta de categoria no item/card */
