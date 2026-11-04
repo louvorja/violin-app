@@ -101,6 +101,15 @@
                 :size="32"
               />
             </span>
+            <CategoryItemIcon
+              v-if="getCategory(file.categoryId)"
+              placement="top-left"
+              translucent
+              :icon="getCategory(file.categoryId)?.icon || ''"
+              :icon-type="getCategory(file.categoryId)?.iconType || 'icon'"
+              :color="getCategory(file.categoryId)?.color || 'var(--lj-gray-500)'"
+              :label="getCategory(file.categoryId)?.name || ''"
+            />
             <span class="bg-grid-badge">{{ fileBadge(file) }}</span>
             <span v-if="selectedId === file.id && !isPlaying" class="bg-grid-check">
               <LjIcon :icon="ICONS.UI.CHECK_CIRCLE" :size="22" class="bg-grid-check__icon" />
@@ -269,6 +278,7 @@ import { hasMediaCategoryDrag } from "@/helpers/MediaCategoryDrag";
 import { useCategoryDrag } from "@/composables/useCategoryDrag";
 import CategoryDragGhost from "@/components/CategoryDragGhost.vue";
 import CategoryChip from "@/components/CategoryChip.vue";
+import CategoryItemIcon from "@/components/CategoryItemIcon.vue";
 
 interface BgFile {
   id: string;
@@ -528,6 +538,10 @@ function toggleCategoryChip(id: string): void {
 
 function getCategoryName(id: string): string {
   return categories.value.find((c) => c.id === id)?.name || "";
+}
+
+function getCategory(id: string) {
+  return categories.value.find((c) => c.id === id) || null;
 }
 
 function getCategoryColor(id: string): string {
@@ -1006,6 +1020,7 @@ onMounted(async () => {
   align-content: start;
 }
 .bg-grid-item {
+  position: relative;
   cursor: grab;
   overflow: hidden;
   background: color-mix(
@@ -1100,7 +1115,7 @@ onMounted(async () => {
 }
 .bg-grid-check {
   position: absolute;
-  top: var(--lj-space-2);
+  bottom: var(--lj-space-2);
   left: var(--lj-space-2);
   display: none;
   filter: drop-shadow(0 1px 3px var(--lj-black-alpha-40));

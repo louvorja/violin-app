@@ -128,21 +128,32 @@
                 @touchstart.passive="onCardTouchStart($event, file)"
                 @contextmenu.prevent
               >
-                <img
-                  v-if="file.thumb"
-                  :src="file.thumb"
-                  class="media-grid-item-thumb"
-                  alt=""
-                  loading="lazy"
-                  draggable="false"
-                  @error="thumbNaoCarregou(file)"
-                />
-                <div v-else class="media-grid-item-thumb media-grid-item-thumb--icon">
-                  <LjIcon :icon="fileTypeIcon(file.type)" :size="28" />
+                <div class="media-grid-item-thumb-wrap">
+                  <img
+                    v-if="file.thumb"
+                    :src="file.thumb"
+                    class="media-grid-item-thumb"
+                    alt=""
+                    loading="lazy"
+                    draggable="false"
+                    @error="thumbNaoCarregou(file)"
+                  />
+                  <div v-else class="media-grid-item-thumb media-grid-item-thumb--icon">
+                    <LjIcon :icon="fileTypeIcon(file.type)" :size="28" />
+                  </div>
+                  <CategoryItemIcon
+                    v-if="categoryFor(file.categoryId)"
+                    placement="top-left"
+                    translucent
+                    :icon="categoryFor(file.categoryId)?.icon || ''"
+                    :icon-type="categoryFor(file.categoryId)?.iconType || 'icon'"
+                    :color="categoryFor(file.categoryId)?.color || 'var(--lj-text-subtle)'"
+                    :label="categoryFor(file.categoryId)?.name || ''"
+                  />
                 </div>
                 <div class="media-grid-item-name">{{ file.name }}</div>
-                <div v-if="categoryName(file.categoryId)" class="media-grid-item-category">
-                  {{ categoryName(file.categoryId) }}
+                <div v-if="categoryFor(file.categoryId)" class="media-grid-item-footer">
+                  <span class="media-grid-item-category">{{ categoryName(file.categoryId) }}</span>
                 </div>
                 <!--
                   Ações do card. O "+" vem primeiro porque enfileirar é a ação
@@ -391,6 +402,7 @@ import { hasMediaCategoryDrag } from "@/helpers/MediaCategoryDrag";
 import { useCategoryDrag } from "@/composables/useCategoryDrag";
 import CategoryDragGhost from "@/components/CategoryDragGhost.vue";
 import CategoryChip from "@/components/CategoryChip.vue";
+import CategoryItemIcon from "@/components/CategoryItemIcon.vue";
 import { ICONS } from "@/config/Icons";
 import $idb from "@/helpers/IndexedDB";
 import { ensureRenderableImage, isHeic, heicToJpeg } from "@/helpers/ImageConvert";
@@ -537,6 +549,11 @@ function categoryName(categoryId?: string): string {
 function categoryColor(categoryId?: string): string {
   if (!categoryId) return "transparent";
   return categories.value.find((c) => c.id === categoryId)?.color || "transparent";
+}
+
+function categoryFor(categoryId?: string) {
+  if (!categoryId) return null;
+  return categories.value.find((c) => c.id === categoryId) || null;
 }
 
 async function moveFileToCategory(file: MediaFile, categoryId: string): Promise<void> {
@@ -1933,9 +1950,16 @@ onBeforeUnmount(() => {
   opacity: 1;
 }
 
-.media-grid-item-thumb {
+.media-grid-item-thumb-wrap {
+  position: relative;
   width: 100%;
   height: 70px;
+  flex-shrink: 0;
+}
+
+.media-grid-item-thumb {
+  width: 100%;
+  height: 100%;
   object-fit: contain;
   border-radius: var(--lj-radius-lg);
   overflow: hidden;
@@ -1963,15 +1987,23 @@ onBeforeUnmount(() => {
   color: var(--lj-text);
 }
 
+.media-grid-item-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-2);
+  width: 100%;
+  padding: 0 var(--lj-space-2) var(--lj-space-1);
+}
+
 .media-grid-item-category {
+  flex: 1;
+  min-width: 0;
   font-size: var(--lj-text-xs);
-  padding: 0 var(--lj-space-3) var(--lj-space-1);
   color: var(--lj-text-subtle);
-  text-align: center;
+  text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  width: 100%;
 }
 
 /* ── Chips de categorias (filtro) ── */

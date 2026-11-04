@@ -204,6 +204,7 @@ describe("Projeção de Fundo: arrastar card para categoria", () => {
     expect(outra.find(".lj-category-chip__count").text()).toBe("1");
     expect(uncategorized.find(".lj-category-chip__count").text()).toBe("0");
     expect(card.attributes("style")).toContain("#4CAF50");
+    expect(card.find(".lj-category-item-icon").exists()).toBe(true);
     await card.trigger("dragstart", { dataTransfer });
     await uncategorized.trigger("drop", { dataTransfer });
     await flushPromises();

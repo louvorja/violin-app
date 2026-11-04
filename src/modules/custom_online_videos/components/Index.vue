@@ -148,15 +148,24 @@
               <div class="cv-grid-overlay">
                 <LjIcon :icon="ICONS.PLAYER.PLAY" :size="36" class="cv-grid-play" />
               </div>
-              <span class="cv-grid-badge">
-                <OnlineVideoDownloadBadge :video-id="extractYoutubeId(v.url)" compact />
-              </span>
+              <CategoryItemIcon
+                v-if="categoryFor(v.categoryId)"
+                placement="top-left"
+                translucent
+                :icon="categoryFor(v.categoryId)?.icon || ''"
+                :icon-type="categoryFor(v.categoryId)?.iconType || 'icon'"
+                :color="categoryFor(v.categoryId)?.color || 'var(--lj-text-muted)'"
+                :label="categoryFor(v.categoryId)?.name || ''"
+              />
             </div>
             <div class="cv-grid-name">{{ v.name }}</div>
             <div v-if="categoryName(v.categoryId)" class="cv-grid-category">
               {{ categoryName(v.categoryId) }}
             </div>
             <div class="cv-grid-actions" data-no-category-drag @dragstart.stop.prevent>
+              <span class="cv-grid-size-badge">
+                <OnlineVideoDownloadBadge :video-id="extractYoutubeId(v.url)" compact />
+              </span>
               <OnlineVideoDownload
                 :video-id="extractYoutubeId(v.url)"
                 :name="v.name"
@@ -273,6 +282,7 @@ import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useCategoryDrag } from "@/composables/useCategoryDrag";
 import CategoryDragGhost from "@/components/CategoryDragGhost.vue";
 import CategoryChip from "@/components/CategoryChip.vue";
+import CategoryItemIcon from "@/components/CategoryItemIcon.vue";
 
 interface VideoItem {
   id: string;
@@ -342,6 +352,11 @@ function categoryName(categoryId?: string): string {
 function categoryColor(categoryId?: string): string {
   if (!categoryId) return "transparent";
   return categories.value.find((c) => c.id === categoryId)?.color || "transparent";
+}
+
+function categoryFor(categoryId?: string) {
+  if (!categoryId) return null;
+  return categories.value.find((c) => c.id === categoryId) || null;
 }
 
 const uncategorizedCount = computed(() => {
@@ -869,6 +884,7 @@ onBeforeUnmount(() => {
 }
 
 .cv-grid .cv-grid-card {
+  position: relative;
   border: 2px solid transparent;
   border-radius: var(--lj-radius-lg);
   overflow: hidden;
@@ -937,21 +953,6 @@ onBeforeUnmount(() => {
   color: var(--lj-white);
 }
 
-.cv-grid-badge {
-  position: absolute;
-  top: var(--lj-space-3);
-  left: var(--lj-space-3);
-  display: inline-flex;
-  padding: var(--lj-space-1);
-  background: var(--lj-surface-bg);
-  border-radius: var(--lj-radius-md);
-  box-shadow: var(--lj-shadow-1);
-}
-
-.cv-grid-badge:empty {
-  display: none;
-}
-
 .cv-grid-name {
   padding: var(--lj-space-3) var(--lj-space-4) var(--lj-space-1);
   font-size: var(--lj-text-base);
@@ -963,8 +964,19 @@ onBeforeUnmount(() => {
 
 .cv-grid-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: var(--lj-space-1);
   padding: 0 var(--lj-space-2) var(--lj-space-2);
+}
+
+.cv-grid-size-badge {
+  display: flex;
+  align-items: center;
+  margin-right: auto;
+}
+
+.cv-grid-size-badge:empty {
+  display: none;
 }
 </style>
