@@ -310,6 +310,8 @@ function removeCustomIcon(): void {
   form.value.iconType = "icon";
   form.value.icon = props.iconOptions[0]?.value || "";
 }
+
+defineExpose({ openEditCategory });
 </script>
 
 <!-- O conteúdo dos diálogos vai para um portal, mas é compilado AQUI (slot do

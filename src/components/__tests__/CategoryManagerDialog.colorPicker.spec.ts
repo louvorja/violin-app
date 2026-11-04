@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
+import { nextTick } from "vue";
 import CategoryManagerDialog from "../CategoryManagerDialog.vue";
 import { LjColorPicker } from "@/components/ui";
 import { CATEGORY_COLOR_PRESETS, CATEGORY_ICON_OPTIONS } from "@/constants/CategoryOptions";
@@ -86,6 +87,26 @@ describe("CategoryManagerDialog — seletor de cor da categoria", () => {
       iconType: "icon",
       color: CATEGORY_COLOR_PRESETS[0],
     });
+  });
+
+  it("expõe openEditCategory para abrir o formulário já preenchido", async () => {
+    const wrapper = montar();
+    const categoria = {
+      id: "cat1",
+      name: "Culto",
+      icon: "bible",
+      iconType: "icon" as const,
+      color: "#4caf50",
+    };
+
+    (
+      wrapper.vm as unknown as {
+        openEditCategory: (_category: typeof categoria) => void;
+      }
+    ).openEditCategory(categoria);
+    await nextTick();
+
+    expect(wrapper.find("input:not([type='file'])").element).toHaveProperty("value", "Culto");
   });
 
   it("a cor personalizada escolhida é a que o salvar entrega", async () => {

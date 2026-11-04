@@ -32,7 +32,11 @@
           :count="files.filter((f) => f.categoryId === cat.id).length"
           :active="selectedCategoryIds.has(cat.id)"
           :drop-target="dropTargetId === cat.id"
+          :add-item-label="t('ribbon.btn.add_item')"
+          :edit-label="t('shell.category.edit_category')"
           @select="onCategoryChipClick(cat.id)"
+          @add="addItemsToCategory(cat.id)"
+          @edit="editCategoryFromChip(cat.id)"
           @dragover="onCategoryDragOver($event, cat.id)"
           @dragleave="onCategoryDragLeave($event, cat.id)"
           @drop="onCategoryDrop($event, cat.id)"
@@ -48,7 +52,10 @@
           :count="uncategorizedCount"
           :active="selectedCategoryIds.has(UNCATEGORIZED_ID)"
           :drop-target="dropTargetId === UNCATEGORIZED_ID"
+          :editable="false"
+          :add-item-label="t('ribbon.btn.add_item')"
           @select="onCategoryChipClick(UNCATEGORIZED_ID)"
+          @add="addItemsToCategory(UNCATEGORIZED_ID)"
           @dragover="onCategoryDragOver($event, UNCATEGORIZED_ID)"
           @dragleave="onCategoryDragLeave($event, UNCATEGORIZED_ID)"
           @drop="onCategoryDrop($event, UNCATEGORIZED_ID)"
@@ -178,6 +185,7 @@
 
       <!-- Category Manager -->
       <CategoryManagerDialog
+        ref="categoryManagerRef"
         v-model="showManageDialog"
         :categories="categories"
         :saving="saving"
@@ -381,6 +389,9 @@ const uncategorizedCount = computed(() => {
   return files.value.filter((f) => !f.categoryId || !ids.has(f.categoryId)).length;
 });
 const showManageDialog = ref(false);
+const categoryManagerRef = ref<{
+  openEditCategory: (_category: BgCategory) => void;
+} | null>(null);
 const showCategorySelect = ref(false);
 const saving = ref(false);
 const pendingFiles = ref<File[]>([]);
@@ -594,6 +605,18 @@ function onCardClick(file: BgFile): void {
 function onCategoryChipClick(categoryId: string): void {
   if (shouldSuppressCategoryClick(categoryId)) return;
   toggleCategoryChip(categoryId);
+}
+
+function addItemsToCategory(categoryId: string): void {
+  pendingDropFiles.value = [];
+  selectCategoryForImport(categoryId);
+}
+
+function editCategoryFromChip(categoryId: string): void {
+  const category = categories.value.find((item) => item.id === categoryId);
+  if (!category) return;
+  showManageDialog.value = true;
+  categoryManagerRef.value?.openEditCategory(category);
 }
 
 async function handleSaveCategory(cat: BgCategory): Promise<void> {

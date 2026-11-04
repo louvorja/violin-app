@@ -88,10 +88,13 @@
                 :count="files.filter((f) => f.categoryId === cat.id).length"
                 :active="selectedCategoryIds.has(cat.id)"
                 :drop-target="dropTargetId === cat.id"
+                :add-item-label="t('ribbon.btn.add_item')"
+                :edit-label="t('shell.category.edit_category')"
                 show-add
                 :add-label="tm('add_files')"
                 @select="onCategoryChipClick(cat.id)"
                 @add="onCategoryAddClick(cat.id)"
+                @edit="editCategoryFromChip(cat.id)"
                 @dragover="onCategoryDragOver($event, cat.id)"
                 @dragleave="onCategoryDragLeave($event, cat.id)"
                 @drop="onCategoryDrop($event, cat.id)"
@@ -106,6 +109,8 @@
                 :count="uncategorizedCount"
                 :active="selectedCategoryIds.has(UNCATEGORIZED_ID)"
                 :drop-target="dropTargetId === UNCATEGORIZED_ID"
+                :editable="false"
+                :add-item-label="t('ribbon.btn.add_item')"
                 show-add
                 :add-label="tm('add_files')"
                 @select="onCategoryChipClick(UNCATEGORIZED_ID)"
@@ -363,6 +368,7 @@
 
       <!-- Gerenciar Categorias -->
       <CategoryManagerDialog
+        ref="categoryManagerRef"
         v-model="showManageDialog"
         :categories="categories"
         :saving="saving"
@@ -530,6 +536,9 @@ const files = ref<MediaFile[]>([]);
 const categories = ref<CategoryFileData[]>([]);
 const selectedCategoryIds = ref(new Set<string>());
 const showManageDialog = ref(false);
+const categoryManagerRef = ref<{
+  openEditCategory: (_category: CategoryFileData) => void;
+} | null>(null);
 const showCategorySelect = ref(false);
 const saving = ref(false);
 let pendingCategoryId: string | null = null;
@@ -607,6 +616,13 @@ function onCategoryChipClick(categoryId: string): void {
 function onCategoryAddClick(categoryId: string): void {
   if (shouldSuppressCategoryClick(categoryId)) return;
   beginAddWithCategory(categoryId);
+}
+
+function editCategoryFromChip(categoryId: string): void {
+  const category = categories.value.find((item) => item.id === categoryId);
+  if (!category) return;
+  showManageDialog.value = true;
+  categoryManagerRef.value?.openEditCategory(category);
 }
 
 const uncategorizedCount = computed(() => {

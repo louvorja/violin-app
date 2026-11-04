@@ -1,42 +1,73 @@
 <template>
-  <div
-    class="lj-category-chip"
-    :class="{
-      'lj-category-chip--active': active,
-      'lj-category-chip--drop-target': dropTarget,
-    }"
-    :style="{ '--category-chip-color': color }"
-    role="button"
-    tabindex="0"
-    :aria-pressed="active"
-    :data-category-drop-id="categoryId"
-    @click="$emit('select')"
-    @keydown.enter.prevent="$emit('select')"
-    @keydown.space.prevent="$emit('select')"
-  >
-    <span class="lj-category-chip__icon">
-      <LjIcon v-if="iconType === 'icon'" :icon="icon" :size="14" />
-      <img v-else-if="icon" :src="icon" class="lj-category-chip__img" alt="" />
-    </span>
-    <span class="lj-category-chip__name">{{ name }}</span>
-    <span class="lj-category-chip__count">{{ count }}</span>
-    <button
-      v-if="showAdd"
-      type="button"
-      class="lj-category-chip__add"
-      :title="addLabel"
-      :aria-label="addLabel"
-      @click.stop="$emit('add')"
-      @keydown.stop
-    >
-      <LjIcon :icon="ICONS.ACTIONS.ADD" :size="12" />
-    </button>
-  </div>
+  <ContextMenuRoot>
+    <ContextMenuTrigger as-child>
+      <div
+        v-bind="$attrs"
+        class="lj-category-chip"
+        :class="{
+          'lj-category-chip--active': active,
+          'lj-category-chip--drop-target': dropTarget,
+        }"
+        :style="{ '--category-chip-color': color }"
+        role="button"
+        tabindex="0"
+        :aria-pressed="active"
+        :data-category-drop-id="categoryId"
+        @click="$emit('select')"
+        @keydown.enter.prevent="$emit('select')"
+        @keydown.space.prevent="$emit('select')"
+      >
+        <span class="lj-category-chip__icon">
+          <LjIcon v-if="iconType === 'icon'" :icon="icon" :size="14" />
+          <img v-else-if="icon" :src="icon" class="lj-category-chip__img" alt="" />
+        </span>
+        <span class="lj-category-chip__name">{{ name }}</span>
+        <span class="lj-category-chip__count">{{ count }}</span>
+        <button
+          v-if="showAdd"
+          type="button"
+          class="lj-category-chip__add"
+          :title="addLabel"
+          :aria-label="addLabel"
+          @click.stop="$emit('add')"
+          @keydown.stop
+        >
+          <LjIcon :icon="ICONS.ACTIONS.ADD" :size="12" />
+        </button>
+      </div>
+    </ContextMenuTrigger>
+
+    <ContextMenuPortal>
+      <ContextMenuContent class="lj-ui-float lj-menu lj-category-chip__menu">
+        <ContextMenuItem class="lj-menu__item" @select="$emit('add')">
+          <span class="lj-menu__mark">
+            <LjIcon :icon="ICONS.ACTIONS.ADD" :size="13" />
+          </span>
+          <span class="lj-menu__text">{{ addItemLabel }}</span>
+        </ContextMenuItem>
+        <ContextMenuItem v-if="editable" class="lj-menu__item" @select="$emit('edit')">
+          <span class="lj-menu__mark">
+            <LjIcon :icon="ICONS.ACTIONS.EDIT" :size="13" />
+          </span>
+          <span class="lj-menu__text">{{ editLabel }}</span>
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenuPortal>
+  </ContextMenuRoot>
 </template>
 
 <script setup lang="ts">
+import {
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuPortal,
+  ContextMenuRoot,
+  ContextMenuTrigger,
+} from "reka-ui";
 import { LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
+
+defineOptions({ inheritAttrs: false });
 
 withDefaults(
   defineProps<{
@@ -50,6 +81,9 @@ withDefaults(
     dropTarget?: boolean;
     showAdd?: boolean;
     addLabel?: string;
+    addItemLabel?: string;
+    editLabel?: string;
+    editable?: boolean;
   }>(),
   {
     categoryId: "",
@@ -62,12 +96,16 @@ withDefaults(
     dropTarget: false,
     showAdd: false,
     addLabel: "",
+    addItemLabel: "",
+    editLabel: "",
+    editable: true,
   }
 );
 
 defineEmits<{
   select: [];
   add: [];
+  edit: [];
 }>();
 </script>
 

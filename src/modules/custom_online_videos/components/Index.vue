@@ -21,10 +21,13 @@
           :count="videos.filter((v) => v.categoryId === cat.id).length"
           :active="selectedCategoryIds.has(cat.id)"
           :drop-target="dropTargetId === cat.id"
+          :add-item-label="t('ribbon.btn.add_item')"
+          :edit-label="t('shell.category.edit_category')"
           show-add
           :add-label="tm('add_video')"
           @select="onCategoryChipClick(cat.id)"
           @add="onAddCategoryClick(cat.id)"
+          @edit="editCategoryFromChip(cat.id)"
           @dragover="onCategoryDragOver($event, cat.id)"
           @dragleave="onCategoryDragLeave($event, cat.id)"
           @drop="onCategoryDrop($event, cat.id)"
@@ -39,6 +42,8 @@
           :count="uncategorizedCount"
           :active="selectedCategoryIds.has(UNCATEGORIZED_ID)"
           :drop-target="dropTargetId === UNCATEGORIZED_ID"
+          :editable="false"
+          :add-item-label="t('ribbon.btn.add_item')"
           show-add
           :add-label="tm('add_video')"
           @select="onCategoryChipClick(UNCATEGORIZED_ID)"
@@ -235,6 +240,7 @@
 
     <!-- Gerenciar Categorias -->
     <CategoryManagerDialog
+      ref="categoryManagerRef"
       v-model="showManageDialog"
       :categories="categories"
       :saving="saving"
@@ -337,6 +343,9 @@ let objectUrlIndex: Record<string, string> = {};
 const categories = ref<CategoryFileData[]>([]);
 const selectedCategoryIds = ref(new Set<string>());
 const showManageDialog = ref<boolean>(false);
+const categoryManagerRef = ref<{
+  openEditCategory: (_category: CategoryFileData) => void;
+} | null>(null);
 
 async function loadCategories(): Promise<void> {
   categories.value = (await $idb.getAll<CategoryFileData>(STORE_CATEGORY)).sort((a, b) =>
@@ -441,6 +450,13 @@ function onAddCategoryClick(categoryId?: string): void {
   const target = categoryId ?? UNCATEGORIZED_ID;
   if (shouldSuppressCategoryClick(target)) return;
   openAdd(categoryId);
+}
+
+function editCategoryFromChip(categoryId: string): void {
+  const category = categories.value.find((item) => item.id === categoryId);
+  if (!category) return;
+  showManageDialog.value = true;
+  categoryManagerRef.value?.openEditCategory(category);
 }
 
 /** Após carregar/salvar, garante que tudo fique visível. */
