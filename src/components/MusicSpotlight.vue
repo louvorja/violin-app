@@ -54,58 +54,23 @@
               <td class="music-search__album">{{ albumLabel(item) }}</td>
               <td>
                 <div class="music-search__actions">
-                  <LjButton
-                    v-if="mode === 'pick' && !onMusicAction"
-                    size="sm"
-                    variant="ghost"
-                    icon-only
-                    :icon="ICONS.MUSIC.SLIDES_AUDIO"
-                    :title="t('select')"
-                    :aria-label="t('select')"
-                    @click.stop="pickMusic(item)"
-                  />
                   <template v-if="onMusicAction">
                     <LjButton
-                      size="sm"
+                      v-for="execution in pickExecutions"
+                      :key="execution.id"
+                      size="md"
                       variant="ghost"
                       icon-only
-                      :icon="ICONS.MUSIC.SLIDES_AUDIO"
-                      :title="t('audio')"
-                      :aria-label="t('audio')"
-                      @click.stop="handleMusicAction(item, MusicActionEnum.AUDIO)"
-                    />
-                    <LjButton
-                      size="sm"
-                      variant="ghost"
-                      icon-only
-                      :icon="ICONS.MUSIC.SLIDES_PLAYBACK"
-                      :title="t('playback')"
-                      :aria-label="t('playback')"
-                      :disabled="!item.has_instrumental_music"
-                      @click.stop="handleMusicAction(item, MusicActionEnum.INSTRUMENTAL)"
-                    />
-                    <LjButton
-                      size="sm"
-                      variant="ghost"
-                      icon-only
-                      :icon="ICONS.MUSIC.AUDIO"
-                      :title="t('audio_only')"
-                      :aria-label="t('audio_only')"
-                      @click.stop="handleMusicAction(item, MusicActionEnum.AUDIO_ONLY)"
-                    />
-                    <LjButton
-                      size="sm"
-                      variant="ghost"
-                      icon-only
-                      :icon="ICONS.MUSIC.AUDIO_PLAYBACK"
-                      :title="t('playback_only')"
-                      :aria-label="t('playback_only')"
-                      :disabled="!item.has_instrumental_music"
-                      @click.stop="handleMusicAction(item, MusicActionEnum.PLAYBACK_ONLY)"
+                      :icon="execution.icon"
+                      :title="i18nT(execution.label)"
+                      :aria-label="i18nT(execution.label)"
+                      :disabled="!canExecute(execution, tracksOf(item))"
+                      :data-testid="'music-search-' + execution.id"
+                      @click.stop="handleMusicAction(item, execution.action)"
                     />
                   </template>
                   <l-music-menu-table
-                    v-else-if="!Platform.isRemote"
+                    v-else-if="mode !== 'pick' && !Platform.isRemote"
                     :id_music="Number(item.id_music)"
                     :music-subtitle="musicTitle(item, 'Música')"
                     :name="item.name"
@@ -155,13 +120,17 @@ import Platform from "@/helpers/Platform";
 import { ICONS } from "@/config/Icons";
 import type { SearchMusicItem } from "@/types/Music";
 import { MusicActionEnum } from "@/enums/MusicActionEnum";
+import { MUSIC_EXECUTIONS, canExecute } from "@/config/MusicAction";
 import { isQuickPlayEnter, quickPlay } from "@/helpers/QuickPlay";
 
 const props = defineProps<{
   modelValue: boolean;
   mode?: "execute" | "pick";
   musicsList?: SearchMusicItem[] | null;
+  /** Escolher pela versão: cada botão da linha entrega a música com a ação dele. */
   onMusicAction?: (music: SearchMusicItem, action: MusicActionEnum) => void;
+  /** As ações que quem escolhe sabe tocar; sem a lista, todas. */
+  musicActions?: MusicActionEnum[];
 }>();
 
 const emit = defineEmits<{
@@ -253,6 +222,16 @@ function t(key: string): string {
 
 function albumLabel(music: SearchMusicItem): string {
   return musicAlbumLabel(music, t("custom_album"));
+}
+
+const pickExecutions = computed(() =>
+  props.musicActions
+    ? MUSIC_EXECUTIONS.filter((execution) => props.musicActions!.includes(execution.action))
+    : MUSIC_EXECUTIONS
+);
+
+function tracksOf(music: SearchMusicItem): { sung: boolean; playback: boolean } {
+  return { sung: music.has_audio !== false, playback: !!music.has_instrumental_music };
 }
 
 function focusSearch(event: Event): void {

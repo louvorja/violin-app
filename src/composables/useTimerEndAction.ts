@@ -27,6 +27,14 @@ import { MusicActionEnum } from "@/enums/MusicActionEnum";
 import type { Music } from "@/types/Music";
 import { IMAGE_EXT } from "@constants/FileTypes";
 
+/** O que `handleMusicAction` sabe guardar: sem áudio não tem como tocar no fim do tempo. */
+export const TIMER_END_MUSIC_ACTIONS: MusicActionEnum[] = [
+  MusicActionEnum.AUDIO,
+  MusicActionEnum.INSTRUMENTAL,
+  MusicActionEnum.AUDIO_ONLY,
+  MusicActionEnum.PLAYBACK_ONLY,
+];
+
 export interface TimerEndActionKeys {
   END_ACTION: string;
   END_ACTION_AUDIO: string;

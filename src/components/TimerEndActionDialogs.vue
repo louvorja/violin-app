@@ -52,6 +52,7 @@
     v-model="ui.showMusicDialog"
     mode="pick"
     :on-music-action="endAction.handleMusicAction"
+    :music-actions="TIMER_END_MUSIC_ACTIONS"
     @pick="endAction.onMusicPicked"
   />
 </template>
@@ -61,7 +62,7 @@ import { LjButton, LjDialog, LjIcon, LjInput } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { computed } from "vue";
 import MusicSpotlight from "@/components/MusicSpotlight.vue";
-import type { TimerEndAction } from "@/composables/useTimerEndAction";
+import { TIMER_END_MUSIC_ACTIONS, type TimerEndAction } from "@/composables/useTimerEndAction";
 
 const props = defineProps<{
   endAction: TimerEndAction;

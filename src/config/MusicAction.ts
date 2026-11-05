@@ -118,6 +118,15 @@ export const LITURGY_VERSION_ACTION: Record<string, MusicActionEnum> = {
   audio_pb: MusicActionEnum.PLAYBACK_ONLY,
 };
 
+/** O caminho de volta: o botão de execução escolhido → versão que a liturgia toca. */
+export const ACTION_LITURGY_VERSION: Partial<Record<MusicActionEnum, string>> = {
+  [MusicActionEnum.AUDIO]: "sung",
+  [MusicActionEnum.INSTRUMENTAL]: "pb",
+  [MusicActionEnum.NO_AUDIO]: "no_audio",
+  [MusicActionEnum.AUDIO_ONLY]: "audio",
+  [MusicActionEnum.PLAYBACK_ONLY]: "audio_pb",
+};
+
 /**
  * A música tem o que a ação precisa. Música feita sem áudio ainda abre pelo
  * "cantado" — entra só com os slides, como no clássico; ele só não vale para a

@@ -156,6 +156,7 @@
       v-model="chooseMusicSearchOpen"
       mode="pick"
       :musics-list="spotlightMusicsList"
+      :on-music-action="onChooseLaterMusicAction"
       @pick="onChooseLaterMusicPicked"
     />
   </div>
@@ -185,6 +186,8 @@ import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import MusicSpotlight from "@/components/MusicSpotlight.vue";
 import { SearchMusicItem } from "@/types/Music";
 import { musicTitle } from "@root/config/musicCatalog.mjs";
+import { ACTION_LITURGY_VERSION } from "@/config/MusicAction";
+import type { MusicActionEnum } from "@/enums/MusicActionEnum";
 import LiturgySaveDialog from "./LiturgySaveDialog.vue";
 import LiturgyLoadDialog from "./LiturgyLoadDialog.vue";
 import LiturgyManageDialog from "./LiturgyManageDialog.vue";
@@ -317,7 +320,11 @@ function markItemOnAccess(item: LiturgyItem): void {
   if (current && !isChecked(current)) toggleChecked(current);
 }
 
-function onChooseLaterMusicPicked(music: SearchMusicItem) {
+function onChooseLaterMusicAction(music: SearchMusicItem, action: MusicActionEnum) {
+  onChooseLaterMusicPicked(music, ACTION_LITURGY_VERSION[action] ?? chooseLaterMode.value);
+}
+
+function onChooseLaterMusicPicked(music: SearchMusicItem, mode = chooseLaterMode.value) {
   const item = chooseLaterItem.value;
   const id = Number(music.id_music);
   if (!item || !Number.isFinite(id)) return;
@@ -335,7 +342,7 @@ function onChooseLaterMusicPicked(music: SearchMusicItem) {
 
   chooseLaterItem.value = null;
   const executable = { ...item, ...musica };
-  playMusic(executable, chooseLaterMode.value);
+  playMusic(executable, mode);
   markItemOnAccess(item);
 }
 
