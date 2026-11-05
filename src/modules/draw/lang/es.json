@@ -34,7 +34,8 @@
     "type": "Tipo de sorteo",
     "mode": "Modo",
     "list": "Lista del Sorteo",
-    "random_finish": "Animación final aleatoria"
+    "random_finish": "Animación final aleatoria",
+    "roulette_sound": "Sonido de la ruleta"
   },
   "modes": {
     "numbers": "Números",

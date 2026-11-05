@@ -147,6 +147,13 @@ export const contextualPages: RibbonPage[] = [
             max: 10000,
             step: 100,
           },
+          {
+            id: `${moduleId}_roulette_sound`,
+            type: "switch",
+            optionKey: KEYS.MODULES.DRAW.ROULETTE_SOUND,
+            label: `${modulePath}.ribbon.roulette_sound`,
+            defaultValue: true,
+          },
         ],
       },
       {

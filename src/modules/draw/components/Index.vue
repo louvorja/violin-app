@@ -49,6 +49,7 @@
               :active="wheel != null || current != null"
               :mode="mode"
               :wheel="wheel"
+              :tick-sound="!fullscreen && rouletteSoundEnabled"
             />
           </div>
         </div>
@@ -220,7 +221,13 @@
         @keydown.space.prevent="drawCurrent"
         @keydown.esc="fullscreen = false"
       >
-        <DrawWheel v-if="wheel" :wheel="wheel" large class="draw-fs-wheel" />
+        <DrawWheel
+          v-if="wheel"
+          :wheel="wheel"
+          large
+          :tick-sound="rouletteSoundEnabled"
+          class="draw-fs-wheel"
+        />
         <div v-else class="draw-fs-number" :class="{ 'draw-fs-number--name': mode === 'names' }">
           {{ current ?? "—" }}
         </div>
@@ -304,6 +311,7 @@ import DrawProjection from "./DrawProjection.vue";
 import DrawWheel from "./DrawWheel.vue";
 import { DRAW_DURATION_MAX_MS, DRAW_DURATION_MIN_MS } from "../constants";
 import { createBoomerangPlan } from "../boomerang";
+import { primeRouletteAudio } from "@/helpers/RouletteTick";
 
 type DrawMode = "number" | "names";
 
@@ -441,6 +449,11 @@ function isOptionDrawn(option: string): boolean {
     ? drawnNames.value.includes(option)
     : drawnNumbers.value.includes(Number(option));
 }
+
+const rouletteSoundEnabled = computed(() => {
+  void rangeTick.value;
+  return UserData.get<unknown>(KEYS.MODULES.DRAW.ROULETTE_SOUND, true) !== false;
+});
 
 const numberTotal = computed(() => {
   const { mn, mx } = currentRange();
@@ -590,6 +603,7 @@ function drawCurrent(): void {
   const hasOptions =
     mode.value === "names" ? namePool.value.length > 0 : numberPool.value.length > 0;
   if (!hasOptions) return;
+  if (rouletteSoundEnabled.value) primeRouletteAudio();
   // O primeiro "Sortear" inicia a sessão automaticamente; o Reiniciar finaliza.
   if (!namesRunning.value) namesRunning.value = true;
   if (mode.value === "names") drawName();

@@ -41,7 +41,12 @@
           ...textShadowStyle,
         }"
       >
-        <DrawWheel :wheel="wheel" :band-style="bandStyle" :font-key="wheelFontKey" />
+        <DrawWheel
+          :wheel="wheel"
+          :band-style="bandStyle"
+          :font-key="wheelFontKey"
+          :tick-sound="tickSound"
+        />
       </div>
       <span
         v-else-if="text"
@@ -113,6 +118,8 @@ interface Props {
   height?: number | null;
   mode?: "number" | "names";
   wheel?: ModuleWheelState | null;
+  /** Tick da roleta; usado só na prévia/tela cheia do operador. */
+  tickSound?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -122,6 +129,7 @@ const props = withDefaults(defineProps<Props>(), {
   height: null,
   mode: "number",
   wheel: null,
+  tickSound: false,
 });
 
 const module = getModule(ModuleEnum.DRAW);

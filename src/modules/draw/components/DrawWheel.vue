@@ -51,6 +51,7 @@ import {
 import type { ModuleWheelState } from "@/presentation/ModulePresentationState";
 import { DRAW_DURATION_MAX_MS, DRAW_DURATION_MIN_MS } from "../constants";
 import { createBoomerangPlan } from "../boomerang";
+import { playRouletteTick } from "@/helpers/RouletteTick";
 
 const props = withDefaults(
   defineProps<{
@@ -60,8 +61,10 @@ const props = withDefaults(
     bandStyle?: CSSProperties | null;
     /** Muda quando fonte/tamanho mudam para refazer o ajuste dos nomes. */
     fontKey?: string;
+    /** Toca um tick quando o item central muda (preview/tela cheia). */
+    tickSound?: boolean;
   }>(),
-  { large: false, bandStyle: null, fontKey: "" }
+  { large: false, bandStyle: null, fontKey: "", tickSound: false }
 );
 
 const ROW_EM = 1.18;
@@ -203,13 +206,26 @@ function start(): void {
   // em que as opções voltam a aparecer.
   offset.value = startOffset;
 
+  let lastTickIndex = Math.floor(startOffset);
+  let lastTickAt = 0;
+  const tickIntervalMs = 45;
+  const playTick = (now: number): void => {
+    if (!props.tickSound) return;
+    const index = Math.floor(offset.value);
+    if (index === lastTickIndex) return;
+    lastTickIndex = index;
+    if (now - lastTickAt < tickIntervalMs) return;
+    lastTickAt = now;
+    playRouletteTick();
+  };
+
   const easeInOutCubic = (value: number): number =>
     value < 0.5 ? 4 * Math.pow(value, 3) : 1 - Math.pow(-2 * value + 2, 3) / 2;
 
   const firstBoomerangOffset = endOffset + boomerang.positions[0];
   const totalMs = duration + boomerang.totalMs;
 
-  const tick = (now: number) => {
+  const mainTick = (now: number) => {
     const elapsed = now - startedAt;
 
     if (elapsed <= duration) {
@@ -239,15 +255,18 @@ function start(): void {
       }
     }
 
+    playTick(now);
+
     if (elapsed >= totalMs) {
       offset.value = endOffset;
+      playTick(now);
       raf = null;
       return;
     }
-    raf = requestAnimationFrame(tick);
+    raf = requestAnimationFrame(mainTick);
   };
 
-  raf = requestAnimationFrame(tick);
+  raf = requestAnimationFrame(mainTick);
 }
 
 // Nomes longos não podem ser cortados pela roda. Mede o maior nome no tamanho

@@ -176,6 +176,7 @@ export const KEYS = {
       RANGE_MIN: `${MODULES}.${ModuleEnum.DRAW}.range_min`,
       RANGE_MAX: `${MODULES}.${ModuleEnum.DRAW}.range_max`,
       EFFECT_DURATION: `${MODULES}.${ModuleEnum.DRAW}.effect_duration`,
+      ROULETTE_SOUND: `${MODULES}.${ModuleEnum.DRAW}.roulette_sound`,
       SHOW_DRAWN_HISTORY: `${MODULES}.${ModuleEnum.DRAW}.show_drawn_history`,
       RANDOM_FINISH: `${MODULES}.${ModuleEnum.DRAW}.random_finish`,
       NAMES: `${MODULES}.${ModuleEnum.DRAW}.names`,
