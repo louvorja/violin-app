@@ -334,6 +334,19 @@ export function createPwaUpdateController(options: UpdateOptions) {
         else if (verified && !value.installing && !state.ready) publish({ status: "current" });
         publish({ lastCheckedAt: Date.now() });
       } catch (error) {
+        if (
+          stage === "check" &&
+          error instanceof DOMException &&
+          error.name === "InvalidStateError" &&
+          registration === value
+        ) {
+          // Uma instalação que falhou pode deixar o registro sem nenhum worker.
+          // update() nunca recupera esse objeto: a próxima tentativa precisa
+          // registrar de novo, consultando antes a versão publicada.
+          registration = null;
+          registeredBuildId = null;
+          registered = Promise.resolve(null);
+        }
         // Baixar o código novo pode passar do prazo sem nada errado. Com um worker
         // instalando, o acompanhamento dele (updatefound/statechange) publica o
         // resultado: pronto, ou falha se ele terminar redundante.

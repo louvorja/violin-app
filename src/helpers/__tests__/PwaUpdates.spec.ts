@@ -436,6 +436,62 @@ describe("PwaUpdates", () => {
     );
   });
 
+  it.each([false, true])(
+    "registra novamente após update rejeitar um registro inválido (build publicado: %s)",
+    async (versioned) => {
+      const deployed = versioned ? vi.fn().mockResolvedValue("B") : undefined;
+      const h = boot({ deployed });
+      await h.tick();
+      // Após a primeira instalação falhar, o navegador remove os workers do
+      // registro. update() continua rejeitando esse objeto mesmo com rede.
+      h.reg.update.mockRejectedValue(new DOMException("No newest worker", "InvalidStateError"));
+      const replacement = Object.assign(new EventTarget(), {
+        installing: null,
+        waiting: null,
+        update: vi.fn().mockResolvedValue(undefined),
+      });
+      h.sw.register.mockResolvedValue(replacement);
+
+      await h.instance.check();
+      expect(h.latest().status).toBe("error");
+      await vi.advanceTimersByTimeAsync(15_000);
+
+      expect(h.sw.register).toHaveBeenCalledTimes(2);
+      expect(h.sw.register).toHaveBeenLastCalledWith(versioned ? "/sw.js?build=B" : "/sw.js", {
+        scope: "/",
+        updateViaCache: "none",
+      });
+      expect(h.reg.update).toHaveBeenCalledTimes(1);
+      expect(replacement.update).toHaveBeenCalledOnce();
+      expect(h.latest()).toMatchObject({ status: "current", ready: false });
+      expect(diagnostics.event).toHaveBeenCalledWith(
+        "pwa_update_recovered",
+        expect.objectContaining({ stage: "check", attempts: 1 })
+      );
+      expect(h.reload).not.toHaveBeenCalled();
+    }
+  );
+
+  it("aguarda a identidade publicada antes de substituir um registro inválido", async () => {
+    const deployed = vi.fn().mockResolvedValue("B");
+    const h = boot({ loaded: "A", deployed });
+    await h.tick();
+    h.reg.update.mockRejectedValueOnce(new DOMException("No newest worker", "InvalidStateError"));
+    await h.instance.check();
+    deployed.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(h.sw.register).toHaveBeenCalledTimes(1);
+    expect(h.latest().status).toBe("error");
+
+    deployed.mockResolvedValue("C");
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(h.sw.register).toHaveBeenCalledTimes(2);
+    expect(h.sw.register).toHaveBeenLastCalledWith("/sw.js?build=C", expect.anything());
+    expect(h.latest().status).toBe("current");
+    expect(h.reload).not.toHaveBeenCalled();
+  });
+
   it("instalação lenta mantém o acompanhamento e informa a etapa correta", async () => {
     const h = boot();
     await h.tick();
