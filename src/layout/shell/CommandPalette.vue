@@ -60,7 +60,7 @@
                   class="cmd-item"
                   :class="{ 'cmd-item--active': isSelected(item) }"
                   @click="execute(item)"
-                  @mouseenter="setActive(item)"
+                  @mousemove="setActive(item)"
                 >
                   <LjIcon :icon="item.icon" size="18" class="cmd-item-icon" />
                   <div class="cmd-item-body">
@@ -137,6 +137,7 @@ import {
 } from "reka-ui";
 import { useI18n } from "vue-i18n";
 import { useSobreposicaoGlobal } from "@/composables/useSobreposicaoGlobal";
+import { useListNavigation } from "@/composables/useListNavigation";
 import { useAppTheme } from "@/composables/useAppTheme";
 import CommandRegistry from "@/helpers/CommandRegistry";
 import Database from "@/helpers/Database";
@@ -159,7 +160,6 @@ const { toggleDark } = useAppTheme();
 const searchInput = ref(null);
 const resultsContainer = ref(null);
 const query = ref("");
-const selectedIndex = ref(0);
 const allCommands = ref([]);
 const disabledAlbums = useDisabledAlbums();
 watch(
@@ -233,7 +233,12 @@ const groupedResults = computed(() => {
   return sorted;
 });
 
-const activeItem = computed(() => results.value[selectedIndex.value] || null);
+const nav = useListNavigation({
+  items: () => results.value,
+  container: resultsContainer,
+  activeSelector: ".cmd-item--active",
+});
+const activeItem = nav.active;
 
 /* A paleta é sobreposição global: enquanto aberta, as janelas de módulo não
  * prendem nem assumem o foco (ver `Window.vue`). */
@@ -244,7 +249,7 @@ watch(
   (v) => {
     if (v) {
       query.value = lastQuery;
-      selectedIndex.value = 0;
+      nav.reset();
       visibleCount.value = PAGE_SIZE;
       loadCommands();
       nextTick(() => {
@@ -257,12 +262,8 @@ watch(
 );
 
 watch(query, () => {
-  selectedIndex.value = 0;
+  nav.reset();
   visibleCount.value = PAGE_SIZE;
-});
-
-watch(selectedIndex, () => {
-  nextTick(() => scrollIntoView());
 });
 
 async function loadCommands() {
@@ -307,16 +308,15 @@ function isSelected(item) {
 }
 
 function setActive(item) {
-  const idx = results.value.indexOf(item);
-  if (idx >= 0) selectedIndex.value = idx;
+  nav.setActive(results.value.indexOf(item));
 }
 
 function moveDown() {
-  selectedIndex.value = Math.min(selectedIndex.value + 1, results.value.length - 1);
+  nav.move(1);
 }
 
 function moveUp() {
-  selectedIndex.value = Math.max(selectedIndex.value - 1, 0);
+  nav.move(-1);
 }
 
 /**
@@ -351,13 +351,6 @@ async function execute(item) {
 
 function close() {
   open.value = false;
-}
-
-function scrollIntoView() {
-  const items = resultsContainer.value?.querySelectorAll(".cmd-item");
-  if (items && items[selectedIndex.value]) {
-    items[selectedIndex.value].scrollIntoView({ block: "nearest" });
-  }
 }
 
 function groupLabel(cat) {

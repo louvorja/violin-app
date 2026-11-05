@@ -17,6 +17,8 @@
         autocomplete="off"
         spellcheck="false"
         @keydown.escape.prevent.stop="open = false"
+        @keydown.down.prevent.stop="nav.move(1)"
+        @keydown.up.prevent.stop="nav.move(-1)"
         @keydown.enter.prevent.stop="onEnter"
       />
     </div>
@@ -32,7 +34,7 @@
         :title="search ? t('empty_search') : t('empty')"
       />
 
-      <div v-else class="music-search__scroll">
+      <div v-else ref="resultsScroll" class="music-search__scroll">
         <table class="music-search__table">
           <thead>
             <tr>
@@ -43,10 +45,14 @@
           </thead>
           <tbody>
             <tr
-              v-for="item in filteredMusics"
+              v-for="(item, index) in filteredMusics"
               :key="item.custom_song_id || item.id_music"
               class="lj-music-row"
-              :class="{ 'music-search__row--pick': mode === 'pick' }"
+              :class="{
+                'music-search__row--pick': mode === 'pick',
+                'lj-music-row--active': index === nav.index.value,
+              }"
+              @mousemove="nav.setActive(index)"
               @click="mode === 'pick' && pickMusic(item)"
               @dblclick="pickMusic(item)"
             >
@@ -106,6 +112,7 @@
 <script setup lang="ts">
 import { computed, onScopeDispose, provide, ref, watch } from "vue";
 import { useSobreposicaoGlobal } from "@/composables/useSobreposicaoGlobal";
+import { useListNavigation } from "@/composables/useListNavigation";
 import { useI18n } from "vue-i18n";
 import LMusicMenuTable from "@/components/MusicMenuTable.vue";
 import { LjButton, LjDialog, LjEmpty, LjInput, LjSpinner } from "@/components/ui";
@@ -187,6 +194,14 @@ const filteredMusics = computed<SearchMusicItem[]>(() => {
   if (exact.length) return exact;
   return approximateMusics();
 });
+
+const resultsScroll = ref<HTMLElement | null>(null);
+const nav = useListNavigation({
+  items: () => filteredMusics.value,
+  container: resultsScroll,
+  activeSelector: ".lj-music-row--active",
+});
+watch(search, () => nav.reset());
 
 /**
  * Rede de segurança para quem errou a digitação — mesma regra do módulo
@@ -274,12 +289,12 @@ async function loadMusics(): Promise<void> {
 }
 
 /**
- * Enter: a primeira da lista. Tocando aqui, Enter é cantado e Shift+Enter o
- * playback; como seletor de outro módulo, Enter escolhe.
+ * Enter: a destacada (de início, a primeira). Tocando aqui, Enter é cantado e
+ * Shift+Enter o playback; como seletor de outro módulo, Enter escolhe.
  */
 function onEnter(event: KeyboardEvent): void {
   if (!isQuickPlayEnter(event)) return;
-  const music = filteredMusics.value[0];
+  const music = nav.active.value;
   if (!music || !search.value.trim()) return;
   if (props.mode === "pick") return pickMusic(music);
   if (props.onMusicAction) {

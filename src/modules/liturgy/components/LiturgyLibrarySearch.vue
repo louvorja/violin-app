@@ -11,13 +11,13 @@
         ref="inputEl"
         v-model="query"
         autocomplete="off"
-        @keydown.enter.prevent="selectFirstMatch"
-        @keydown.down.prevent="moveSelection(1)"
-        @keydown.up.prevent="moveSelection(-1)"
+        @keydown.enter.prevent="selectActive"
+        @keydown.down.prevent="nav.move(1)"
+        @keydown.up.prevent="nav.move(-1)"
       />
     </LjField>
 
-    <div class="lls-table-wrap">
+    <div ref="tableWrap" class="lls-table-wrap">
       <table class="lls-table">
         <thead>
           <tr>
@@ -35,8 +35,8 @@
           <tr
             v-for="(row, i) in filteredRows"
             :key="`${row.id}-${i}`"
-            :class="{ 'is-active': i === activeIndex }"
-            @mouseenter="activeIndex = i"
+            :class="{ 'is-active': i === nav.index.value }"
+            @mousemove="nav.setActive(i)"
             @click="selectRow(row)"
             @dblclick="selectRow(row)"
           >
@@ -71,6 +71,7 @@ import { useLiturgyI18n } from "../i18n";
 import { computed, nextTick, ref, watch } from "vue";
 import { LjButton, LjDialog, LjField, LjIcon, LjInput } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
+import { useListNavigation } from "@/composables/useListNavigation";
 
 export interface LibrarySearchItem {
   id: string;
@@ -105,7 +106,6 @@ const emit = defineEmits<{
 const { t } = useLiturgyI18n();
 
 const query = ref("");
-const activeIndex = ref(0);
 const inputEl = ref<{ focus: () => void } | null>(null);
 
 const allRows = computed(() => props.items ?? []);
@@ -124,16 +124,20 @@ const filteredRows = computed(() => {
   );
 });
 
-watch(filteredRows, () => {
-  activeIndex.value = 0;
+const tableWrap = ref<HTMLElement | null>(null);
+const nav = useListNavigation({
+  items: () => filteredRows.value,
+  container: tableWrap,
+  activeSelector: "tr.is-active",
 });
+watch(filteredRows, () => nav.reset());
 
 watch(
   () => props.modelValue,
   (v) => {
     if (v) {
       query.value = "";
-      activeIndex.value = 0;
+      nav.reset();
       // O campo só existe depois que o diálogo monta o conteúdo; o nextTick
       // roda depois do autofoco do próprio diálogo, então o foco fica aqui.
       nextTick(() => inputEl.value?.focus());
@@ -141,14 +145,8 @@ watch(
   }
 );
 
-function moveSelection(delta: number): void {
-  const max = filteredRows.value.length - 1;
-  if (max < 0) return;
-  activeIndex.value = Math.max(0, Math.min(max, activeIndex.value + delta));
-}
-
-function selectFirstMatch(): void {
-  const row = filteredRows.value[activeIndex.value];
+function selectActive(): void {
+  const row = nav.active.value;
   if (row) selectRow(row);
 }
 

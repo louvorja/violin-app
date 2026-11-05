@@ -142,7 +142,8 @@
 
 /* Linha de música: liga visualmente o título às ações, em tabelas e listas.
    O traço interno não altera a largura das células. O menu mantém a origem
-   marcada mesmo quando seu conteúdo recebe foco em um portal. */
+   marcada mesmo quando seu conteúdo recebe foco em um portal; `--active` é a
+   linha que o Enter vai tocar quando as setas escolhem a partir de um campo. */
 .lj-music-row {
   --lj-music-row-bg: transparent;
   --lj-music-row-marker: transparent;
@@ -154,6 +155,7 @@
     box-shadow var(--lj-transition-fast);
 }
 
+.lj-music-row--active,
 .lj-music-row:has(:focus-visible),
 .lj-music-row:has([aria-haspopup="menu"][data-state="open"]) {
   --lj-music-row-bg: color-mix(in srgb, var(--lj-ui-accent) 10%, var(--lj-surface-bg));
