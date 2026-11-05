@@ -79,9 +79,13 @@ export function overlayTextStyle(
   units: OverlayUnits = VIEWPORT_UNITS
 ): Record<string, string> {
   const s = slot.style;
+  const rawSize = Number(s.font_size);
+  const size = Number.isFinite(rawSize)
+    ? Math.min(20, Math.max(0, rawSize))
+    : OVERLAY_STYLE_DEFAULTS.font_size;
   return {
     fontFamily: resolveFont(s.font, FONT.PROJECTION.FALLBACK),
-    fontSize: `clamp(14px, ${s.font_size || OVERLAY_STYLE_DEFAULTS.font_size}${units.h}, 80px)`,
+    fontSize: `${size}${units.h}`,
     color: s.color || "#FFFFFF",
     textAlign: s.text_align || "center",
     lineHeight: "1.3",
