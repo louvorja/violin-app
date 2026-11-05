@@ -208,6 +208,9 @@ function _onKeyDown(e) {
   if (_layerEl && !_layerEl.closest(".lj-window, .lj-dialog--module")) return;
 
   const combo = _comboFromEvent(e);
+  // O Esc pertence à camada de cima: no diálogo de módulo (o álbum) ele fecha o
+  // diálogo e não apaga o telão por baixo. Cancelado aqui, a Reka não fecharia.
+  if (combo === "escape" && _layerEl?.closest(".lj-dialog--module")) return;
   if (combo === "space" && _focusOwnsSpace()) return;
   const handlers = _registry.get(combo);
   if (!handlers || handlers.length === 0) return;

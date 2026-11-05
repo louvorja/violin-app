@@ -227,6 +227,32 @@ describe("Hotkeys — KeyboardEvent sintético (POST /api/keyboard)", () => {
     menu.remove();
     layer.remove();
   });
+
+  it("no diálogo de módulo o Esc é dele: o atalho global não roda nem cancela a tecla", () => {
+    const layer = document.createElement("div");
+    layer.className = "lj-dialog--module";
+    layer.setAttribute("data-dismissable-layer", "");
+    const list = document.createElement("div");
+    list.tabIndex = 0;
+    layer.append(list);
+    document.body.append(layer);
+
+    let fired = 0;
+    const handler = () => fired++;
+    Hotkeys.register("Escape", handler);
+    list.focus();
+    const esc = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    window.dispatchEvent(esc);
+    expect(fired).toBe(0);
+    expect(esc.defaultPrevented).toBe(false);
+
+    layer.remove();
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })
+    );
+    expect(fired).toBe(1);
+    Hotkeys.unregister("Escape", handler);
+  });
 });
 
 describe("Hotkeys — Command no Mac", () => {
