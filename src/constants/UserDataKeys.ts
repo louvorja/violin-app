@@ -219,6 +219,12 @@ export const KEYS = {
       MODE: `${MODULES_STOPWATCH}.mode`,
       TARGET_SECONDS: `${MODULES_STOPWATCH}.target_seconds`,
       SHOW_SECONDS: `${MODULES_STOPWATCH}.show_seconds`,
+      /** Regressivo continua depois do zero, mostrando "+mm:ss". */
+      COUNT_OVERTIME: `${MODULES_STOPWATCH}.count_overtime`,
+      /** Segundos antes do fim em que o aviso amarelo começa (0 desliga). */
+      WARNING_SECONDS: `${MODULES_STOPWATCH}.warning_seconds`,
+      /** Bordas pulsando na tela e no telão durante os avisos. */
+      FLASH_BORDERS: `${MODULES_STOPWATCH}.flash_borders`,
     },
     SLIDE_EDITOR: {
       PROJECTING: `${MODULES}.${ModuleEnum.SLIDE_EDITOR}.projecting`,

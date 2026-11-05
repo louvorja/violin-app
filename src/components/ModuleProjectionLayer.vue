@@ -90,6 +90,15 @@
         </span>
       </div>
     </Transition>
+
+    <!-- Aviso de tempo (Cronômetro): moldura pulsando por cima de tudo. -->
+    <div
+      v-if="active && alert"
+      class="module-projection__alert"
+      :class="`module-projection__alert--${alert}`"
+      :data-testid="`module-projection-alert-${alert}`"
+      aria-hidden="true"
+    />
   </div>
 </template>
 
@@ -131,6 +140,7 @@ const drawMode = ref("number");
 const drawWheel = ref(null);
 const active = ref(false);
 const color = ref("");
+const alert = ref("");
 
 // O Sorteio tem layout dedicado que monta os chips dos já sorteados.
 const isDraw = computed(() => moduleId.value === ModuleEnum.DRAW);
@@ -249,6 +259,7 @@ useBroadcastListener(BROADCAST_TYPE.MODULE_PROJECTION_VALUE, (payload) => {
   }
   active.value = payload.active ?? true;
   color.value = payload.color || "";
+  alert.value = payload.alert === "warning" || payload.alert === "danger" ? payload.alert : "";
 });
 
 useBroadcastListener(BROADCAST_TYPE.MODULE_FORMAT_CHANGED, (payload) => {
@@ -406,6 +417,42 @@ onMounted(() => {
 }
 .fade-content-leave-to {
   opacity: 0;
+}
+
+/*
+ * Moldura de aviso do Cronômetro. Pulso lento de propósito: chama a atenção de
+ * quem está no púlpito sem virar um pisca-pisca que distrai a igreja.
+ */
+.module-projection__alert {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  animation: module-projection-alert 1.2s ease-in-out infinite alternate;
+}
+.module-projection__alert--warning {
+  box-shadow:
+    inset 0 0 0 1.2vmin #f59e0b,
+    inset 0 0 6vmin rgba(245, 158, 11, 0.55);
+}
+.module-projection__alert--danger {
+  box-shadow:
+    inset 0 0 0 1.4vmin #ef4444,
+    inset 0 0 8vmin rgba(239, 68, 68, 0.6);
+  animation-duration: 0.8s;
+}
+@keyframes module-projection-alert {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.25;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .module-projection__alert {
+    animation: none;
+  }
 }
 
 /* Módulos "live" (clock/stopwatch) — sem transição entre tics. */
