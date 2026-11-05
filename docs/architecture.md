@@ -713,7 +713,25 @@ No Windows, os dois `Program Files` e as pastas expostas por
 | **In-window**         | `src/helpers/Hotkeys.js`     | Apenas com janela do app em foco |
 | **Global (OS-level)** | `electron/main/shortcuts.js` | System-wide                      |
 
-Atalhos in-window registrados em `src/main.js` via `Hotkeys.register()`.
+Atalhos in-window registrados em `src/bootstrap/main-shell.js` via `Hotkeys.register()`.
+
+### Command no Mac
+
+As combinações com modificador moram em `src/constants/HotkeyCombos.ts` (`HOTKEY.*`),
+e o registro, as dicas (`LjTooltip :shortcut`, `RibbonButton.shortcut`) e a lista do F1
+leem dali. `Mod` é o Command no Mac e o Ctrl nos outros sistemas; o rótulo sai de
+`formatShortcut()` (`⇧⌘N` no Mac, `Ctrl+Shift+N` fora dele) — não escreva "Ctrl+X" em
+texto traduzido.
+
+`Ctrl` explícito fica só onde o Mac já usa o Command: ⌃M (⌘M minimiza), ⌃W (⌘W fecha a
+janela pelo menu nativo), ⌃Tab (⌘Tab troca de app), ⌃Espaço (⌘Espaço é o Spotlight) e
+⌃⌥D (⌥⌘D é o Dock). No Mac o Ctrl continua valendo por baixo do Command, sem aparecer na
+lista: o controle remoto manda Ctrl seja qual for o sistema. No navegador do Mac, ⌘N e
+⇧⌘N ficam com o Chrome, então ali a interface mostra o Ctrl.
+
+Tecla que só age com mídia aberta passa por `_ifMedia` com `preventDefault: false`: é ele
+que cancela quando age. Com o cancelamento automático do Hotkeys, PageUp não rolava lista
+nenhuma e Ctrl+← não pulava palavra em campo nenhum, com ou sem música.
 
 ### Cartão da biblioteca: projetar ou enfileirar
 

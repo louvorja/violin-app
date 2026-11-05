@@ -231,7 +231,7 @@ describe("LjTooltip", () => {
     mountTooltip((t) => ({ text: t("shell.quick_search") }), { locale: "pt" });
     await abrirPorFoco();
 
-    expect(conteudo()?.textContent).toContain("Busca rápida (Ctrl+K)");
+    expect(conteudo()?.textContent).toContain("Busca rápida");
   });
 
   it("mostra o rótulo traduzido pelo chamador em ES", async () => {
@@ -239,7 +239,7 @@ describe("LjTooltip", () => {
     mountTooltip((t) => ({ text: t("shell.quick_search") }), { locale: "es" });
     await abrirPorFoco();
 
-    expect(conteudo()?.textContent).toContain("Búsqueda rápida (Ctrl+K)");
+    expect(conteudo()?.textContent).toContain("Búsqueda rápida");
   });
 
   it("espera o delay informado antes de abrir pelo ponteiro", async () => {

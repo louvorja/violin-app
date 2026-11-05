@@ -6,6 +6,7 @@ import { ICONS } from "@/config/Icons"
 import { ModuleEnum } from "@/enums/ModuleEnum"
 import { getModulePath } from "@/helpers/ModulePath"
 import { KEYS } from "@/constants/UserDataKeys";
+import { HOTKEY } from "@/constants/HotkeyCombos";
 
 const moduleId = ModuleEnum.OVERLAY;
 const modulePath = getModulePath(moduleId);
@@ -43,6 +44,7 @@ export const contextualPages: RibbonPage[] = [
             icon: ICONS.UI.LAYERS_OFF,
             label: `${modulePath}.ribbon.btn.overlay_activate`,
             action: `${moduleId}_toggle`,
+            shortcut: HOTKEY.OVERLAY,
             color: "#7c3aed",
             stateBinding: {
               watchPath: KEYS.MODULES.OVERLAY.ENABLED,

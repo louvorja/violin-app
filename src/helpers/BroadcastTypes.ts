@@ -239,22 +239,16 @@ export const BROADCAST_TYPE = Object.freeze({
   /** Texto sorteado via HTTP externo (número ou nome). Recebido por: módulo draw. */
   DRAWING_TEXT: "drawing_text",
 
-  /** Solicita recarga de dados do módulo ativo. Emitido por F5/F9 e Ctrl+Shift+F2. */
+  /** Solicita recarga de dados do módulo ativo. Emitido por ⇧⌘F2 / Ctrl+Shift+F2 e pelo menu Dev. */
   MODULE_REFRESH: "module:refresh",
 
-  /** Solicita foco no campo de busca do módulo ativo. Emitido por Ctrl+F. */
-  MODULE_FOCUS_SEARCH: "module:focus_search",
-
-  /** Solicita música anterior no álbum/liturgia. Emitido por Ctrl+←. */
+  /** Solicita música anterior no álbum/liturgia. Emitido por ⌘← / Ctrl+←. */
   MEDIA_PREV_MUSIC: "media:prev_music",
 
-  /** Solicita próxima música no álbum/liturgia. Emitido por Ctrl+→. */
+  /** Solicita próxima música no álbum/liturgia. Emitido por ⌘→ / Ctrl+→. */
   MEDIA_NEXT_MUSIC: "media:next_music",
 
-  /** Abre diálogo de novo item na liturgia. Emitido por Ctrl+N. */
-  LITURGY_NEW_ITEM: "liturgy:new_item",
-
-  /** Abre diálogo de nova anotação na liturgia. Emitido por Ctrl+Shift+N. */
+  /** Abre diálogo de nova anotação na liturgia. Emitido por ⇧⌘N / Ctrl+Shift+N. */
   LITURGY_NEW_ANNOTATION: "liturgy:new_annotation",
 
   /** Ação contextual do Ribbon da Liturgia para itens, notas, bloqueio e biblioteca. */
