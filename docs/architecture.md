@@ -560,8 +560,12 @@ O marcador bíblico usa revisão 2 e só é gravado após todos os capítulos.
 
 - PWA instalado: pode garantir o catálogo após oito segundos, online, sem economia
   de dados e fora de redes 2G. Aba comum não faz esse download automático.
-- Desktop: Verificação Inicial e Sincronizar garantem o catálogo antes de leituras
-  em massa, com progresso na própria tela. Esse download não traz capítulos.
+- Desktop: baixa o catálogo automaticamente assim que o armazenamento estiver
+  pronto, sem confirmação, mesmo quando a Verificação Inicial está oculta. Se
+  estiver offline, tenta ao reconectar. O diálogo acompanha a mesma instalação
+  e oferece nova tentativa em caso de falha; a varredura detalhada é opcional.
+  Sincronizar também garante o catálogo antes de leituras em massa. O catálogo
+  já instalado é reaproveitado, e esse download não traz áudios nem capítulos.
 - Aplicar atualização do catálogo usa o pacote menor. Reinstalar/restaurar o banco
   explicitamente usa o pacote completo.
 - Catálogos instalados são conferidos no boot/retomada/reconexão, com intervalo

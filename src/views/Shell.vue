@@ -194,10 +194,11 @@ const {
 } = useAppInstall();
 
 // App instalado: o catálogo desce sozinho no primeiro uso com internet, para as
-// listas e o modo offline não dependerem de abrir Sincronizar antes. Espera o
-// boot assentar, porque instalar o ZIP grava milhares de registros no IndexedDB.
+// listas e o modo offline não dependerem de abrir Sincronizar antes. No desktop,
+// começa assim que o armazenamento estiver pronto, mesmo com o diálogo oculto.
+// No PWA, espera o boot assentar antes de gravar os registros no IndexedDB.
 // `ensureCatalogBundle` não baixa nada quando o catálogo já está instalado.
-const CATALOG_AUTO_INSTALL_DELAY_MS = 8000;
+const CATALOG_AUTO_INSTALL_DELAY_MS = Platform.isDesktop ? 0 : 8000;
 let catalogAutoInstallTimer: ReturnType<typeof setTimeout> | null = null;
 let catalogAutoInstallArmed = false;
 const shellOnline = () => $appdata.get<boolean>(KEYS.SHELL.IS_ONLINE, true) !== false;
@@ -675,9 +676,9 @@ onMounted(() => {
     $appdata.set(KEYS.SHELL.IS_DESKTOP, false);
   }
 
-  // Startup check — só no desktop. O diálogo automático faz apenas a checagem
-  // leve do marker/conexão; bundle e varredura detalhada exigem ação explícita.
-  // O fluxo é: update check → release notes → startup check leve.
+  // Startup check — só no desktop. O diálogo acompanha a instalação automática
+  // do catálogo; a varredura detalhada e os downloads de mídia ficam por escolha.
+  // O fluxo dos diálogos é: update check → release notes → startup check.
   if (platform.electron) {
     // As notas pertencem a uma atualização, não a uma versão. Sem registrar a
     // versão da execução anterior, uma instalação nova (chave vazia) contava

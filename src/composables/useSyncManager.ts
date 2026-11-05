@@ -439,8 +439,8 @@ export function useSyncManager() {
       };
 
     // O scan nunca instala nada. Sem um catálogo concluído no disco, abrir cada
-    // álbum/música viraria milhares de GETs; a tela oferece a instalação como
-    // uma ação explícita e este caminho retorna um estado vazio recuperável.
+    // álbum/música viraria milhares de GETs. A instalação cabe ao chamador;
+    // este caminho retorna um estado vazio recuperável.
     if (!(await hasCatalogForBulkRead())) {
       return {
         cachedAlbums: new Set(),
@@ -560,7 +560,7 @@ export function useSyncManager() {
   }
 
   /**
-   * A abertura automática faz somente a checagem local do marker. O scan
+   * Confere o marker local depois que o chamador preparou o catálogo. O scan
    * detalhado abre milhares de registros de álbum/música e, por isso, só roda
    * depois de uma ação explícita da pessoa na tela.
    */
