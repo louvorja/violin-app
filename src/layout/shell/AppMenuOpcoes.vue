@@ -76,6 +76,17 @@
           <span>{{ $t("options.general.start_with_os") }}</span>
         </label>
       </div>
+
+      <div class="opt-row">
+        <label class="opt-checkbox">
+          <input
+            type="checkbox"
+            :checked="getUserData<boolean>(KEYS.OPTIONS.SHOW_STARTUP_TIPS, true) !== false"
+            @change="saveUserData(KEYS.OPTIONS.SHOW_STARTUP_TIPS, $c($event))"
+          />
+          <span>{{ $t("options.general.show_startup_tips") }}</span>
+        </label>
+      </div>
       <div class="opt-bg">
         <div class="opt-bg-fields">
           <div class="opt-row">

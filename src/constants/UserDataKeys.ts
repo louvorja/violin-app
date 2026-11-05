@@ -349,6 +349,8 @@ export const KEYS = {
     SKIP_STARTUP_CHECK: `${OPTIONS}.skip_startup_check`,
     /** A verificação inicial já foi apresentada uma vez; é de instalação nova. */
     STARTUP_CHECK_DONE: `${OPTIONS}.startup_check_done`,
+    /** Exibe a dica de abertura na próxima inicialização. */
+    SHOW_STARTUP_TIPS: `${OPTIONS}.show_startup_tips`,
     USE_BETA_UPDATES: `${OPTIONS}.use_beta_updates`,
     CHECK_UPDATES_ON_START: `${OPTIONS}.check_updates_on_start`,
     AUTO_DOWNLOAD_UPDATES: `${OPTIONS}.auto_download_updates`,

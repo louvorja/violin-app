@@ -194,6 +194,8 @@
       "projection_font": "Fonte de Projeção:",
       "show_liturgy_sidebar": "Exibir liturgia na lateral da tela",
       "start_with_os": "Iniciar com o sistema operacional",
+      "show_startup_tips": "Mostrar dicas ao iniciar",
+
       "clock_projection_on_boot": "Projetar o relógio ao iniciar",
       "clock_projection_on_boot_hint": "Abre o relógio em tela cheia no monitor de retorno ao iniciar o programa.",
       "themes": {
@@ -1663,6 +1665,115 @@
     "bible_prev_verse": "Versículo anterior",
     "bible_next_verse": "Próximo versículo",
     "bible_clear": "Limpar versículo selecionado"
+  },
+  "startup_tips": {
+    "title": "Dica do LouvorJA",
+    "shortcut_label": "Atalho de teclado",
+    "module_label": "Dica de módulo",
+    "feature_label": "Dica de configuração",
+    "dont_show_again": "Não mostrar dicas ao iniciar",
+    "previous": "Dica anterior",
+    "next": "Próxima dica",
+    "shortcut_details": {
+      "f1": "Abre a lista completa de atalhos de teclado do LouvorJA.",
+      "ctrl_k": "Abre a paleta de comandos para localizar rapidamente músicas, módulos e ações.",
+      "ctrl_space": "Abre a busca rápida de músicas, Bíblia e outros conteúdos em um só lugar.",
+      "ctrl_b": "Abre a busca bíblica para localizar livro, capítulo e versículo por nome, abreviação ou número.",
+      "ctrl_m": "Abre a busca de músicas para localizar hinos por nome, número ou trecho.",
+      "ctrl_o": "Liga ou desliga as sobreposições configuradas no módulo Sobreposições.",
+      "ctrl_p": "Inicia ou encerra a Projeção de Fundo no monitor configurado.",
+      "ctrl_tab": "Alterna para o próximo módulo aberto, sem fechar o atual.",
+      "ctrl_n": "Cria um novo item na liturgia ativa.",
+      "ctrl_shift_n": "Cria uma nova anotação na liturgia ativa.",
+      "ctrl_left": "Volta para a música anterior na coletânea ou liturgia.",
+      "ctrl_right": "Avança para a próxima música na coletânea ou liturgia.",
+      "space": "Pausa ou retoma a reprodução do conteúdo atual."
+    },
+    "features": {
+      "canva": {
+        "title": "Canva",
+        "body": "Conecte sua conta do canva no menu Opções > Integrações, para projetar designs do Canva. O app exporta o design, guarda uma cópia para abrir sem internet e mantém as páginas disponíveis no operador. Ou você pode projetar no modo apresentador, preservando a mídias e feitos da apresentação."
+      },
+      "libras": {
+        "title": "Tradução em Libras",
+        "body": "Em Acessibilidade, ative a tradução em Libras para músicas e textos bíblicos. A primeira tradução pode baixar animações e precisa de conexão com a internet."
+      },
+      "multi_monitor": {
+        "title": "Vários monitores",
+        "body": "Em Opções > Monitores, escolha onde abrir a projeção, a tela de retorno e o operador. Se um monitor for desconectado, o app evita abrir a janela na tela errada."
+      },
+      "remote_control": {
+        "title": "Controle remoto",
+        "body": "No menu Opções > Transmitir, ligue o servidor HTTP e use o QR Code para conectar o app Violin Remote ou use a versão web no celular. Converse com sua equipe em tempo real e defina as permissões de cada dispositivo para segregar os acessos(somente no App)."
+      },
+      "network_projection": {
+        "title": "Projeção pela rede",
+        "body": "No menu Opções > Transmitir, copie as URLs de projeção para abrir em outro computador ou celular da mesma rede. O token protege o acesso."
+      },
+      "obs": {
+        "title": "OBS e vMix",
+        "body": "No aplicativo desktop, use as URLs do servidor como Browser Source no OBS ou vMix. A tela é atualizada sozinha e pode entrar como camada na sua transmissão."
+      },
+      "liturgy_transfer": {
+        "title": "Levar a liturgia para outro computador",
+        "body": "Na Liturgia, use Exportar para salvar a programação e Importar no outro computador. O app também aceita arquivos .ja do LouvorJA clássico e da versão web."
+      },
+      "web_version": {
+        "title": "Versão web",
+        "body": "O LouvorJA também funciona no navegador como PWA. Instale pelo próprio navegador para abrir em uma janela separada; transmissão e atalhos globais continuam exclusivos do aplicativo desktop."
+      },
+      "storage_locations": {
+        "title": "Pastas de armazenamento",
+        "body": "Em Opções > Armazenamento, escolha onde ficam o acervo e os vídeos. Uma pasta compartilhada pode atender mais de uma instalação; não grave dados pessoais nela."
+      },
+      "custom_collections": {
+        "title": "Coletâneas personalizadas",
+        "body": "Crie Coletâneas Personalizadas para reunir músicas e arquivos .slja do seu jeito, sem depender das coletâneas oficiais."
+      },
+      "return_screen": {
+        "title": "Tela de retorno",
+        "body": "Personalize a tela de retorno com fundo, informações e o próximo item para o telão não ficar vazio entre músicas."
+      },
+      "scheduled_items": {
+        "title": "Itens agendados",
+        "body": "Use Itens Agendados para organizar avisos e compromissos do culto e acessá-los na hora certa. Com apenas alguns cliques você pode configurar mídias que passam todo culto alterando automaticamente para o dia configurado."
+      }
+    },
+    "items": {
+      "musics": {
+        "body": "Encontre hinos pelo número ou nome, monte listas e use a tela de retorno para manter o próximo item visível."
+      },
+      "bible": {
+        "body": "Use a busca rápida da Bíblia para abrir livro, capítulo e versículo, escolha a versão e projete o texto direto."
+      },
+      "liturgy": {
+        "body": "Monte a ordem do culto em blocos e execute cada item na sequência, sem perder o fio."
+      },
+      "overlay": {
+        "body": "Sobreposições exibem texto, imagem video, ou o espelho de um módulo por cima da projeção."
+      },
+      "background_projection": {
+        "body": "Use qualquer imagem ou vídeo como fundo da projeção, inclusive atrás de músicas e da Bíblia, sem interromper o que está no ar."
+      },
+      "background_sound": {
+        "body": "Prepare músicas e áudios de fundo para tocar antes, durante ou depois do culto."
+      },
+      "draw": {
+        "body": "Sorteie números ou nomes. De forma organizada, prática e elegante."
+      },
+      "media_library": {
+        "body": "Centralize imagens, áudios, vídeos e playlists que você usa nas projeções."
+      },
+      "slide_editor": {
+        "body": "Ajuste a letra, o playback e os tempos da música antes de projetar."
+      },
+      "announcements": {
+        "body": "Programe avisos e mantenha a ordem do que será exibido no telão."
+      },
+      "timer_worship": {
+        "body": "Use o Temporizador de Culto para acompanhar o tempo de cada parte do programa."
+      }
+    }
   },
   "startup_check": {
     "title": "Verificação Inicial",

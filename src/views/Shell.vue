@@ -49,6 +49,16 @@
     <MusicSpotlight v-if="musicSearchOpen" v-model="musicSearchOpen" />
     <BibleSpotlight v-if="bibleSearchOpen" v-model="bibleSearchOpen" />
     <HotkeysCheatsheet v-if="hotkeysOpen" v-model="hotkeysOpen" />
+    <StartupTipDialog
+      v-if="startupTipOpen && startupTip"
+      v-model="startupTipOpen"
+      :tip="startupTip"
+      :show-previous="startupTipHistory.length > 1"
+      :previous-disabled="startupTipHistoryIndex === 0"
+      :next-disabled="startupNextDisabled"
+      @previous="showPreviousStartupTip"
+      @next="showNextStartupTip"
+    />
     <ReleaseNotesDialog
       v-if="releaseNotesOpen"
       v-model="releaseNotesOpen"
@@ -91,6 +101,7 @@ import { liturgySidebarDefault } from "@/helpers/LiturgySidebar";
 const HotkeysCheatsheet = defineAsyncComponent(
   () => import("@/layout/shell/HotkeysCheatsheet.vue")
 );
+const StartupTipDialog = defineAsyncComponent(() => import("@/components/StartupTipDialog.vue"));
 const InstallAppDialog = defineAsyncComponent(() => import("@/components/InstallAppDialog.vue"));
 const StartupCheckDialog = defineAsyncComponent(
   () => import("@/components/StartupCheckDialog.vue")
@@ -118,6 +129,7 @@ import { KEYS } from "@/constants/UserDataKeys";
 import $popup from "@/helpers/Popup";
 import Broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
+import { buildStartupTips, type StartupTip } from "@/helpers/StartupTips";
 
 import { registerShell } from "@/composables/useShell";
 import { useAppTheme } from "@/composables/useAppTheme";
@@ -144,6 +156,15 @@ const cmdPaletteOpen = ref(false);
 const musicSearchOpen = ref(false);
 const bibleSearchOpen = ref(false);
 const hotkeysOpen = ref(false);
+const startupTipOpen = ref(false);
+const startupTips = ref<StartupTip[]>([]);
+const startupTipHistory = ref<StartupTip[]>([]);
+const startupTipHistoryIndex = ref(0);
+const startupTipSeen = ref<Set<string>>(new Set());
+const startupTip = computed(() => startupTipHistory.value[startupTipHistoryIndex.value] ?? null);
+const startupNextDisabled = computed(() =>
+  startupTips.value.every((tip) => startupTipSeen.value.has(tip.id))
+);
 const startupCheckOpen = ref(false);
 const storageSetupOpen = ref(false);
 const storageReady = ref(!Platform.isDesktop);
@@ -354,6 +375,40 @@ let _releaseNotesPromise: Promise<ReleaseNotes | null> | null = null;
 let _startupCheckTimeout: ReturnType<typeof setTimeout> | null = null;
 let _bootPhase: "idle" | "release-notes" | "startup" | "done" = "idle";
 let _startupCloseDeferred = false;
+let _startupTipShown = false;
+
+/** Encerra o encadeamento de diálogos do boot e mostra a dica de abertura. */
+function _finishBootFlow(): void {
+  _bootPhase = "done";
+  if (_startupTipShown) return;
+  _startupTipShown = true;
+  if ($userdata.get<boolean>(KEYS.OPTIONS.SHOW_STARTUP_TIPS, true) === false) return;
+  const tips = buildStartupTips();
+  if (tips.length === 0) return;
+  const first = tips[Math.floor(Math.random() * tips.length)];
+  startupTips.value = tips;
+  startupTipHistory.value = [first];
+  startupTipHistoryIndex.value = 0;
+  startupTipSeen.value = new Set([first.id]);
+  startupTipOpen.value = true;
+}
+
+function showPreviousStartupTip(): void {
+  if (startupTipHistoryIndex.value > 0) startupTipHistoryIndex.value -= 1;
+}
+
+function showNextStartupTip(): void {
+  const unseen = startupTips.value.filter((tip) => !startupTipSeen.value.has(tip.id));
+  if (unseen.length === 0) return;
+  const next = unseen[Math.floor(Math.random() * unseen.length)];
+
+  // A nova dica nasce do ponto atual; o que estava à frente vira histórico
+  // abandonado, mas continua marcado como já exibido.
+  startupTipHistory.value = startupTipHistory.value.slice(0, startupTipHistoryIndex.value + 1);
+  startupTipHistory.value.push(next);
+  startupTipHistoryIndex.value = startupTipHistory.value.length - 1;
+  startupTipSeen.value = new Set([...startupTipSeen.value, next.id]);
+}
 
 watch(startupCheckOpen, (isOpen, wasOpen) => {
   if (!wasOpen || isOpen || _bootPhase !== "startup") return;
@@ -362,7 +417,7 @@ watch(startupCheckOpen, (isOpen, wasOpen) => {
     return;
   }
   _startupCloseDeferred = false;
-  _bootPhase = "done";
+  _finishBootFlow();
 });
 
 watch(
@@ -371,7 +426,7 @@ watch(
     if (_bootPhase !== "startup" || !_startupCloseDeferred) return;
     if (downloading || bibleDownloading) return;
     _startupCloseDeferred = false;
-    _bootPhase = "done";
+    _finishBootFlow();
   }
 );
 
@@ -408,7 +463,10 @@ async function _continueBootAfterUpdate(): Promise<void> {
 }
 
 async function _showPendingStartupCheck() {
-  if (!Platform.isDesktop) return;
+  if (!Platform.isDesktop) {
+    _finishBootFlow();
+    return;
+  }
   await ensureStorageSetup();
 
   // Em desenvolvimento a verificação roda a cada recarga do Vite e prende o boot
@@ -418,7 +476,7 @@ async function _showPendingStartupCheck() {
     $userdata.get<boolean>(KEYS.OPTIONS.SKIP_STARTUP_CHECK, false) ||
     $userdata.get<boolean>(KEYS.OPTIONS.STARTUP_CHECK_DONE, false);
   if (skip) {
-    _bootPhase = "done";
+    _finishBootFlow();
     return;
   }
 

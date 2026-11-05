@@ -7,12 +7,7 @@
 
       <div class="hk-list">
         <div v-for="entry in group.entries" :key="entry.combo" class="hk-row">
-          <div class="hk-combo">
-            <template v-for="(part, i) in entry.comboParts" :key="i">
-              <kbd class="hk-kbd">{{ part }}</kbd>
-              <span v-if="i < entry.comboParts.length - 1" class="hk-plus">+</span>
-            </template>
-          </div>
+          <ShortcutKeys :parts="entry.comboParts" />
           <div class="hk-desc">
             {{ $t(entry.description, entry.description) }}
           </div>
@@ -38,6 +33,7 @@ import { LjDialog, LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { computed } from "vue";
 import Hotkeys from "@/helpers/Hotkeys";
+import ShortcutKeys from "@/components/ShortcutKeys.vue";
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -109,38 +105,6 @@ const groups = computed(() => {
   align-items: center;
   gap: var(--lj-space-5);
   padding: var(--lj-space-2) 0;
-}
-
-.hk-combo {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 2px;
-}
-
-.hk-kbd {
-  display: inline-flex;
-  align-items: center;
-  min-width: 22px;
-  height: 22px;
-  padding: 0 var(--lj-space-2);
-  font-size: var(--lj-text-xs);
-  font-family: var(--lj-font-mono);
-  font-weight: var(--lj-weight-medium);
-  border: 1px solid var(--lj-kbd-border);
-  border-bottom-width: 2px;
-  border-radius: var(--lj-radius-sm);
-  background: var(--lj-kbd-bg);
-  color: var(--lj-text);
-  letter-spacing: 0.02em;
-  justify-content: center;
-}
-
-.hk-plus {
-  font-size: var(--lj-text-xs);
-  color: var(--lj-text-subtle);
-  margin: 0 2px;
-  font-weight: var(--lj-weight-medium);
 }
 
 .hk-desc {
