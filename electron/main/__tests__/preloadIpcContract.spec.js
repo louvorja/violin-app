@@ -128,6 +128,7 @@ describe("preload IPC contract", () => {
     expect(seen.listeners.has("http:online-videos")).toBe(true);
     expect(seen.listeners.has("http:background-sound")).toBe(true);
     expect(seen.listeners.has("http:volume")).toBe(true);
+    expect(seen.listeners.has("http:draw")).toBe(true);
     expect(seen.listeners.has("http:song-slides")).toBe(true);
     expect(seen.listeners.has("http:open-song")).toBe(true);
     cleanup();
@@ -176,6 +177,7 @@ describe("preload IPC contract", () => {
       "background-sound",
       "volume",
       "media-library",
+      "draw",
     ]) {
       expect(
         api.httpServer.respond(`${prefixo}:${uuid}`, { status: "ok" }),

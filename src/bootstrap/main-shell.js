@@ -85,6 +85,8 @@ import { FONT, resolveDefaultFont } from "@/config/Fonts";
 import { startThemeSync } from "@/composables/useAppTheme";
 import { BootOrchestrator } from "@/bootstrap/BootOrchestrator";
 import { useLibrasState } from "@/modules/libras/composables/useLibrasState";
+import drawModule from "@/modules/draw/state";
+import { createDrawProjection } from "@/modules/draw/projection";
 import { handleProjectionStateRequest } from "@/helpers/ProjectionStateRequests";
 import { listenForVideoStateRequests } from "@/helpers/VideoStateRequest";
 import { BiblePresentationAuthority } from "@/presentation/BiblePresentationState";
@@ -130,6 +132,23 @@ const isAuxiliaryRenderer = AUXILIARY_ROUTE_PREFIXES.some((prefix) => {
   const route = initialRoutePath();
   return route === prefix || route.startsWith(`${prefix}/`);
 });
+
+/**
+ * Controlador de projeção do Sorteio. Só a janela principal abre/fecha a
+ * janela (ou a camada da Projeção de Fundo); nas auxiliares ele fica nulo.
+ */
+const drawProjection = !isAuxiliaryRenderer ? createDrawProjection() : null;
+
+/**
+ * Acrescenta ao estado do Sorteio se a projeção está no ar. O estado do
+ * módulo é síncrono; a janela/camada é consultada aqui antes de responder ao
+ * controle remoto.
+ */
+async function withDrawProjection(state) {
+  if (!drawProjection) return { ...state, projecting: false };
+  await drawProjection.refresh();
+  return { ...state, projecting: drawProjection.aberto.value === true };
+}
 
 // The primary shell owns Bible ordering for both Web/PWA and Electron. A
 // projection opened later asks this authority for the current snapshot.
@@ -2311,6 +2330,81 @@ $storage.hydrate().then(async () => {
         case "http:drawing-name":
           Broadcast.send(BROADCAST_TYPE.DRAWING_TEXT, { text: String(data.name) });
           break;
+        case "http:draw": {
+          const requestId = data?.requestId;
+          if (!requestId || !Platform.httpServer?.respond) break;
+          try {
+            drawModule.ensureDrawLoaded();
+            const action = data?.action;
+            let state;
+            if (action === "draw") {
+              void drawModule.draw();
+              state = drawModule.snapshot();
+            } else if (action === "reset") {
+              drawModule.reset();
+              state = drawModule.snapshot();
+            } else if (action === "set-mode") {
+              if (data.mode !== "number" && data.mode !== "names") throw new Error("mode inválido");
+              if (!drawModule.setMode(data.mode)) throw new Error("sorteio em andamento");
+              state = drawModule.snapshot();
+            } else if (action === "set-range") {
+              if (!Number.isInteger(data.min) || !Number.isInteger(data.max)) {
+                throw new Error("intervalo inválido");
+              }
+              if (!drawModule.setRange(data.min, data.max))
+                throw new Error("intervalo inválido ou sorteio em andamento");
+              state = drawModule.snapshot();
+            } else if (action === "add-name") {
+              if (typeof data.name !== "string") throw new Error("nome inválido");
+              if (!drawModule.addName(data.name))
+                throw new Error("nome inválido ou sorteio em andamento");
+              state = drawModule.snapshot();
+            } else if (action === "remove-name") {
+              const removed = Number.isInteger(data.index)
+                ? drawModule.removeNameAt(data.index)
+                : drawModule.removeName(data.name);
+              if (!removed) throw new Error("nome não encontrado ou sorteio em andamento");
+              state = drawModule.snapshot();
+            } else if (action === "rename-name") {
+              if (!Number.isInteger(data.index) || typeof data.name !== "string") {
+                throw new Error("nome inválido");
+              }
+              if (!drawModule.renameNameAt(data.index, data.name)) throw new Error("nome inválido");
+              state = drawModule.snapshot();
+            } else if (action === "replace-names") {
+              if (!Array.isArray(data.names)) throw new Error("nomes inválidos");
+              if (!drawModule.replaceNames(data.names)) throw new Error("sorteio em andamento");
+              state = drawModule.snapshot();
+            } else if (action === "set-running") {
+              if (typeof data.running !== "boolean") throw new Error("running inválido");
+              drawModule.setRunning(data.running);
+              state = drawModule.snapshot();
+            } else if (action === "set-projection") {
+              if (!drawProjection) throw new Error("projeção indisponível");
+              if (typeof data.active !== "boolean") throw new Error("active inválido");
+              // `useScreenProjection` decide entre janela e camada da Projeção
+              // de Fundo; sem refresh antes, o flag da camada pode estar velho.
+              await drawProjection.refresh();
+              if (data.active) await drawProjection.abrir();
+              else await drawProjection.fechar();
+              state = drawModule.snapshot();
+            } else if (action === "state") {
+              state = drawModule.snapshot();
+            } else {
+              throw new Error("action inválida");
+            }
+            state = await withDrawProjection(state);
+            const sent = Platform.httpServer.respond(requestId, { status: "ok", state });
+            if (!sent) console.warn("[http:draw] resposta descartada pelo preload", requestId);
+          } catch (error) {
+            console.warn("[http:draw] falha:", error?.message || error);
+            Platform.httpServer.respond(requestId, {
+              status: "error",
+              error: error?.message || "falha no sorteio",
+            });
+          }
+          break;
+        }
         case "http:projections-close": {
           Media.close(true);
           Broadcast.send(BROADCAST_TYPE.BIBLE_RIBBON_ACTION, { action: "stop" });

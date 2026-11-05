@@ -4,7 +4,8 @@
   "inputs": {
     "min": "Mínimo",
     "max": "Máximo",
-    "names": "Escribe un nombre y pulsa Enter"
+    "names": "Escribe un nombre y pulsa Enter",
+    "name_placeholder": "Nombre"
   },
   "actions": {
     "draw": "Sortear",
@@ -18,13 +19,22 @@
     "edit": "Editar",
     "save": "Guardar",
     "cancel": "Cancelar",
-    "export_txt": "Exportar"
+    "export_txt": "Exportar",
+    "apply": "Aplicar",
+    "add": "Agregar",
+    "drawing": "Sorteando..."
   },
   "data": {
     "drawn": "Sorteados",
     "remaining": "Restantes",
     "list": "Lista del sorteo",
-    "no_options": "Ninguna opción en el sorteo."
+    "no_options": "Ninguna opción en el sorteo.",
+    "result": "Resultado",
+    "remaining_count": "{left} de {total} restantes",
+    "range": "Intervalo",
+    "names": "Nombres",
+    "invalid_range": "Indica un intervalo válido.",
+    "drawn_now": "Sorteado: {value}"
   },
   "ribbon": {
     "title_ctx": "Configurar Sorteo",
@@ -43,6 +53,24 @@
   },
   "confirm": {
     "reset_title": "Reiniciar sorteo",
-    "reset_text": "¿Deseas reiniciar el sorteo? El resultado y el historial se borrarán. Si el sorteo está iniciado, se finalizará automáticamente."
+    "reset_text": "¿Deseas reiniciar el sorteo? El resultado y el historial se borrarán. Si el sorteo está iniciado, se finalizará automáticamente.",
+    "reset_done": "Sorteo reiniciado"
+  },
+  "status": {
+    "mode_updated": "Modo actualizado",
+    "range_updated": "Intervalo actualizado",
+    "name_added": "Nombre agregado",
+    "name_removed": "Nombre eliminado"
+  },
+  "projection": {
+    "project": "Proyectar Sorteo",
+    "stop": "Cerrar Proyección",
+    "project_title": "Proyectar Sorteo",
+    "project_text": "¿Deseas proyectar el Sorteo en el desktop?",
+    "stop_title": "Cerrar Proyección",
+    "stop_text": "¿Deseas cerrar la proyección del Sorteo?",
+    "projected": "Sorteo proyectado",
+    "closed": "Proyección del Sorteo cerrada",
+    "failed": "No fue posible cambiar la proyección del Sorteo."
   }
 }

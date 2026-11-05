@@ -4,7 +4,8 @@
   "inputs": {
     "min": "Mínimo",
     "max": "Máximo",
-    "names": "Digite um nome e pressione Enter"
+    "names": "Digite um nome e pressione Enter",
+    "name_placeholder": "Nome"
   },
   "actions": {
     "draw": "Sortear",
@@ -18,13 +19,22 @@
     "edit": "Editar",
     "save": "Salvar",
     "cancel": "Cancelar",
-    "export_txt": "Exportar"
+    "export_txt": "Exportar",
+    "apply": "Aplicar",
+    "add": "Adicionar",
+    "drawing": "Sorteando..."
   },
   "data": {
     "drawn": "Sorteados",
     "remaining": "Restantes",
     "list": "Lista do sorteio",
-    "no_options": "Nenhuma opção no sorteio."
+    "no_options": "Nenhuma opção no sorteio.",
+    "result": "Resultado",
+    "remaining_count": "{left} de {total} restantes",
+    "range": "Intervalo",
+    "names": "Nomes",
+    "invalid_range": "Informe um intervalo válido.",
+    "drawn_now": "Sorteado: {value}"
   },
   "ribbon": {
     "title_ctx": "Configurar Sorteio",
@@ -43,6 +53,24 @@
   },
   "confirm": {
     "reset_title": "Reiniciar sorteio",
-    "reset_text": "Deseja reiniciar o sorteio? O resultado e o histórico serão apagados. Se o sorteio estiver iniciado, ele será finalizado automaticamente."
+    "reset_text": "Deseja reiniciar o sorteio? O resultado e o histórico serão apagados. Se o sorteio estiver iniciado, ele será finalizado automaticamente.",
+    "reset_done": "Sorteio reiniciado"
+  },
+  "status": {
+    "mode_updated": "Modo atualizado",
+    "range_updated": "Intervalo atualizado",
+    "name_added": "Nome adicionado",
+    "name_removed": "Nome removido"
+  },
+  "projection": {
+    "project": "Projetar Sorteio",
+    "stop": "Encerrar Projeção",
+    "project_title": "Projetar Sorteio",
+    "project_text": "Deseja projetar o Sorteio no desktop?",
+    "stop_title": "Encerrar Projeção",
+    "stop_text": "Deseja encerrar a projeção do Sorteio?",
+    "projected": "Sorteio projetado",
+    "closed": "Projeção do Sorteio encerrada",
+    "failed": "Não foi possível alterar a projeção do Sorteio."
   }
 }

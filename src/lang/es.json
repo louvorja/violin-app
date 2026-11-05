@@ -414,6 +414,8 @@
       "permission_liturgy": "Liturgia",
       "permission_announce": "Anuncios",
       "permission_chat": "Chat",
+      "permission_draw": "Sorteo",
+      "permission_keyboard": "Teclas de acceso rápido",
       "permission_online_videos": "Videos en línea",
       "permission_background_sound": "Sonido de fondo",
       "permission_volume": "Volumen",

@@ -294,7 +294,7 @@ export default {
 
   /**
    * Registra um listener para eventos emitidos pelo servidor HTTP (D5).
-   * Eventos: "http:song-slides", "http:open-song", "http:drawing-number", "http:drawing-name"
+   * Eventos: "http:song-slides", "http:open-song", "http:drawing-number", "http:drawing-name", "http:draw"
    * Retorna função de cleanup. No-op no browser/PWA.
    *
    * @param {(eventType: string, data: object) => void} cb

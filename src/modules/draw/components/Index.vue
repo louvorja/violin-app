@@ -61,10 +61,20 @@
             <!-- No modo Números as opções vêm do intervalo, não da lista. -->
             <div v-if="mode === 'number'" class="draw-list-range">
               <LjField layout="column" :label="tm('inputs.min')">
-                <LjInput type="number" :model-value="rangeMin" @update:model-value="setRangeMin" />
+                <LjInput
+                  type="number"
+                  :model-value="rangeMin"
+                  :disabled="animating"
+                  @update:model-value="setRangeMin"
+                />
               </LjField>
               <LjField layout="column" :label="tm('inputs.max')">
-                <LjInput type="number" :model-value="rangeMax" @update:model-value="setRangeMax" />
+                <LjInput
+                  type="number"
+                  :model-value="rangeMax"
+                  :disabled="animating"
+                  @update:model-value="setRangeMax"
+                />
               </LjField>
             </div>
 
@@ -295,7 +305,7 @@ import {
 } from "@/components/ui";
 import type { LjTab } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
-import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
+import { ref, computed, watch, nextTick, onMounted } from "vue";
 import { useViewport } from "@/composables/useViewport";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
@@ -306,12 +316,22 @@ import { useModuleProjection } from "@/composables/useModuleProjection";
 import { useModuleFormat } from "@/composables/useModuleFormat";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
-import type { ModuleWheelState } from "@/presentation/ModulePresentationState";
 import DrawProjection from "./DrawProjection.vue";
 import DrawWheel from "./DrawWheel.vue";
-import { DRAW_DURATION_MAX_MS, DRAW_DURATION_MIN_MS } from "../constants";
-import { createBoomerangPlan } from "../boomerang";
 import { primeRouletteAudio } from "@/helpers/RouletteTick";
+import {
+  drawState,
+  ensureDrawLoaded,
+  setMode as applyMode,
+  setRange,
+  addName as addNameToState,
+  addNames,
+  removeNameAt,
+  renameNameAt,
+  setRunning,
+  draw,
+  reset as resetState,
+} from "../state";
 
 type DrawMode = "number" | "names";
 
@@ -320,12 +340,12 @@ const { width: viewportWidth } = useViewport();
 const isMobileWeb = computed(() => viewportWidth.value > 0 && viewportWidth.value <= 700);
 const drawerWidth = computed(() => Math.min(340, Math.max(260, viewportWidth.value - 16)));
 
-const projection = useModuleProjection("draw", {
+useModuleProjection("draw", {
   onAction(action) {
     if (action === "draw") drawCurrent();
     else if (action === "reset") requestReset();
     else if (action === "toggle_list") showList.value = !showList.value;
-    else if (action === "toggle") namesRunning.value = !namesRunning.value;
+    else if (action === "toggle") setRunning(!drawState.running);
     else if (action === "toggle_format") show_format.value = !show_format.value;
   },
 });
@@ -333,136 +353,70 @@ const projection = useModuleProjection("draw", {
 const moduleContainer = ref<{ tm(_key: string): string } | null>(null);
 const tm = (key: string): string => moduleContainer.value?.tm(key) || key;
 const fsRoot = ref<HTMLElement | null>(null);
-const current = ref<number | string | null>(null);
-const drawnNumbers = ref<number[]>([]);
-const drawnNames = ref<string[]>([]);
-const wheel = ref<ModuleWheelState | null>(null);
-const animating = ref(false);
 const fullscreen = ref(false);
 const showResetConfirm = ref(false);
 const showList = computed({
   get: () => UserData.get<unknown>(KEYS.MODULES.DRAW.LIST_OPEN, false) === true,
   set: (value: boolean) => UserData.set(KEYS.MODULES.DRAW.LIST_OPEN, !!value),
 });
-const names = ref<string[]>([]);
 const nameDraft = ref("");
 const editingNameIndex = ref<number | null>(null);
 const editingNameValue = ref("");
 const editInputEl = ref<HTMLInputElement | null>(null);
 const txtInput = ref<HTMLInputElement | null>(null);
-const namesRunning = computed({
-  get: () =>
-    UserData.get<unknown>(
-      KEYS.MODULES.DRAW.NAMES_RUNNING,
-      UserData.get<unknown>(KEYS.MODULES.NAME_DRAW.RUNNING, false)
-    ) === true,
-  set: (value: boolean) => UserData.set(KEYS.MODULES.DRAW.NAMES_RUNNING, value),
-});
-const listLocked = computed(() => animating.value || namesRunning.value);
+const configTick = ref(0);
 
-const mode = computed<DrawMode>({
-  get: () =>
-    UserData.get<string>(KEYS.MODULES.DRAW.MODE, "number") === "names" ? "names" : "number",
-  set: (value) => UserData.set(KEYS.MODULES.DRAW.MODE, value),
-});
+const current = computed(() => drawState.current);
+const wheel = computed(() => drawState.wheel);
+const animating = computed(() => drawState.animating);
+const namesRunning = computed(() => drawState.running);
+const names = computed(() => drawState.names);
+const mode = computed<DrawMode>(() => drawState.mode);
+const listLocked = computed(() => animating.value || namesRunning.value);
+const drawn = computed<(number | string)[]>(() =>
+  mode.value === "names" ? [...drawState.drawnNames] : [...drawState.drawnNumbers]
+);
+const drawnNumbersSet = computed(() => new Set(drawState.drawnNumbers));
+const drawnNamesSet = computed(() => new Set(drawState.drawnNames));
 
 const modeTabs = computed<LjTab[]>(() => [
   { value: "number", label: tm("modes.numbers") },
   { value: "names", label: tm("modes.names") },
 ]);
 
-const drawn = computed<(number | string)[]>(() =>
-  mode.value === "names" ? drawnNames.value : drawnNumbers.value
-);
-
-// Range do sorteio — configurado na ribbon contextual.
-const min = ref(1);
-const max = ref(100);
-const rangeTick = ref(0);
-
-function readRange() {
-  let mn = Number(UserData.get(KEYS.MODULES.DRAW.RANGE_MIN, 1));
-  let mx = Number(UserData.get(KEYS.MODULES.DRAW.RANGE_MAX, 100));
-  if (!Number.isFinite(mn)) mn = 1;
-  if (!Number.isFinite(mx)) mx = 100;
-  if (mn > mx) [mn, mx] = [mx, mn];
-  return { mn, mx };
-}
-
-function applyRange() {
-  const { mn, mx } = readRange();
-  min.value = mn;
-  max.value = mx;
-}
-applyRange();
-
-function currentRange() {
-  void rangeTick.value;
-  return readRange();
-}
-
-const numberPool = computed(() => {
-  const { mn, mx } = currentRange();
-  const all: number[] = [];
-  for (let i = mn; i <= mx; i++) {
-    if (!drawnNumbers.value.includes(i)) all.push(i);
-  }
-  return all;
-});
-
-const namePool = computed(() => names.value.filter((name) => !drawnNames.value.includes(name)));
-
-function rawRangeValue(key: string, fallback: number): number {
-  const value = Number(UserData.get(key, fallback));
-  return Number.isFinite(value) ? value : fallback;
-}
-
-const rangeMin = computed(() => rawRangeValue(KEYS.MODULES.DRAW.RANGE_MIN, 1));
-const rangeMax = computed(() => rawRangeValue(KEYS.MODULES.DRAW.RANGE_MAX, 100));
-
-function setRangeMin(value: string): void {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return;
-  UserData.set(KEYS.MODULES.DRAW.RANGE_MIN, Math.trunc(parsed));
-  rangeTick.value += 1;
-  applyRange();
-}
-
-function setRangeMax(value: string): void {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return;
-  UserData.set(KEYS.MODULES.DRAW.RANGE_MAX, Math.trunc(parsed));
-  rangeTick.value += 1;
-  applyRange();
-}
-
+const rangeMin = computed(() => drawState.min);
+const rangeMax = computed(() => drawState.max);
 const numberOptions = computed(() => {
-  const { mn, mx } = currentRange();
-  const length = Math.max(0, mx - mn + 1);
-  return Array.from({ length }, (_, index) => String(mn + index));
+  void configTick.value;
+  const length = Math.max(0, drawState.max - drawState.min + 1);
+  return Array.from({ length }, (_, index) => String(drawState.min + index));
 });
 
 const options = computed(() => (mode.value === "names" ? names.value : numberOptions.value));
 
 function isOptionDrawn(option: string): boolean {
   return mode.value === "names"
-    ? drawnNames.value.includes(option)
-    : drawnNumbers.value.includes(Number(option));
+    ? drawnNamesSet.value.has(option)
+    : drawnNumbersSet.value.has(Number(option));
 }
 
 const rouletteSoundEnabled = computed(() => {
-  void rangeTick.value;
+  void configTick.value;
   return UserData.get<unknown>(KEYS.MODULES.DRAW.ROULETTE_SOUND, true) !== false;
 });
 
-const numberTotal = computed(() => {
-  const { mn, mx } = currentRange();
-  return Math.max(0, mx - mn + 1);
-});
+const numberTotal = computed(() => Math.max(0, drawState.max - drawState.min + 1));
 const total = computed(() => (mode.value === "names" ? names.value.length : numberTotal.value));
-const remaining = computed(() =>
-  mode.value === "names" ? namePool.value.length : numberPool.value.length
-);
+const remaining = computed(() => {
+  if (mode.value === "names") {
+    return names.value.reduce((count, name) => count + (drawnNamesSet.value.has(name) ? 0 : 1), 0);
+  }
+  let count = 0;
+  for (let value = drawState.min; value <= drawState.max; value++) {
+    if (!drawnNumbersSet.value.has(value)) count += 1;
+  }
+  return count;
+});
 const progressPercent = computed(() =>
   total.value ? ((total.value - remaining.value) / total.value) * 100 : 0
 );
@@ -472,44 +426,22 @@ watch(fullscreen, (val) => {
 });
 
 watch(mode, () => {
-  clearDrawTimer();
-  wheel.value = null;
-  animating.value = false;
-  current.value = null;
   cancelEditName();
-  if (mode.value !== "names") namesRunning.value = false;
-  emitProjection();
 });
 
 watch(listLocked, (locked) => {
   if (locked) cancelEditName();
 });
 
-// Ribbon usa optionKey (UserData.set → USERDATA_PATCH). Re-aplica o range e
-// reemite o estado na projeção (ex: toggle do histórico de sorteados).
+// Ribbon usa optionKey (UserData.set → USERDATA_PATCH). Re-aplica o estado
+// visual (som da roleta etc.) e reemite a projeção quando o histórico muda.
 useBroadcastListener(BROADCAST_TYPE.USERDATA_PATCH, (payload) => {
   const p = payload as { path?: string } | null;
   if (!p || typeof p.path !== "string") return;
   if (p.path.startsWith("modules.draw.") || p.path.startsWith("modules.name_draw.")) {
-    applyRange();
-    rangeTick.value += 1;
-    if (current.value != null) emitProjection();
+    configTick.value += 1;
   }
 });
-
-function effectDuration(): number {
-  const stored = UserData.get(KEYS.MODULES.DRAW.EFFECT_DURATION, null);
-  const value =
-    stored != null
-      ? Number(stored)
-      : Number(UserData.get(KEYS.MODULES.NAME_DRAW.EFFECT_DURATION, 2000));
-  if (!Number.isFinite(value)) return 2000;
-  return Math.max(DRAW_DURATION_MIN_MS, Math.min(DRAW_DURATION_MAX_MS, value));
-}
-
-function randomFinish(): boolean {
-  return UserData.get<unknown>(KEYS.MODULES.DRAW.RANDOM_FINISH, true) !== false;
-}
 
 function showDrawnHistory(): boolean {
   const stored = UserData.get<unknown>(KEYS.MODULES.DRAW.SHOW_DRAWN_HISTORY, null);
@@ -519,136 +451,28 @@ function showDrawnHistory(): boolean {
 
 function drawnHistory(): string[] {
   if (!showDrawnHistory()) return [];
-  return drawn.value.map(String);
-}
-
-let drawTimer: ReturnType<typeof setTimeout> | null = null;
-
-const WHEEL_ITEMS_LIMIT = 1_000;
-
-function wheelWindow<T>(pool: T[], target: T): T[] {
-  if (pool.length <= WHEEL_ITEMS_LIMIT) return [...pool];
-  const index = Math.max(0, pool.indexOf(target));
-  const first = Math.max(
-    0,
-    Math.min(pool.length - WHEEL_ITEMS_LIMIT, index - Math.floor(WHEEL_ITEMS_LIMIT / 2))
-  );
-  return pool.slice(first, first + WHEEL_ITEMS_LIMIT);
-}
-
-// A roda mostra apenas o que ainda pode ser sorteado. O valor recém-sorteado
-// continua no overlay de reinício, mas não volta para as opções.
-function wheelItemsFor(target: string): string[] {
-  if (mode.value === "names") return wheelWindow(namePool.value, target);
-  return wheelWindow(numberPool.value, Number(target)).map(String);
-}
-
-function startWheel(picked: number | string): void {
-  const duration = effectDuration();
-  const target = String(picked);
-  const { mn, mx } = currentRange();
-  const runId = crypto.randomUUID();
-  const randomFinishEnabled = randomFinish();
-  const boomerang = createBoomerangPlan(runId, randomFinishEnabled);
-  wheel.value = {
-    run_id: runId,
-    mode: mode.value,
-    target,
-    duration,
-    settled: false,
-    random_finish: randomFinishEnabled,
-    ...(mode.value === "number" ? { min: mn, max: mx } : {}),
-    items: wheelItemsFor(target),
-  };
-  animating.value = true;
-  current.value = null;
-  emitProjection();
-
-  // Pequena folga para o último frame do bounce ser pintado antes de trocar
-  // o wheel pelo valor final.
-  drawTimer = setTimeout(
-    () => {
-      drawTimer = null;
-      if (!wheel.value) return;
-      wheel.value = { ...wheel.value, settled: true };
-      animating.value = false;
-      current.value = picked;
-      if (mode.value === "names") drawnNames.value.push(String(picked));
-      else drawnNumbers.value.push(Number(picked));
-      emitProjection();
-    },
-    duration + boomerang.totalMs + 60
-  );
-}
-
-function drawNumber(): void {
-  if (animating.value || !numberPool.value.length) return;
-  const values = numberPool.value;
-  startWheel(values[Math.floor(Math.random() * values.length)]);
-}
-
-function drawName(): void {
-  if (animating.value || !namePool.value.length) return;
-  const values = namePool.value;
-  startWheel(values[Math.floor(Math.random() * values.length)]);
-}
-
-function clearDrawTimer(): void {
-  if (drawTimer) clearTimeout(drawTimer);
-  drawTimer = null;
-}
-
-function drawCurrent(): void {
-  if (animating.value) return;
-  const hasOptions =
-    mode.value === "names" ? namePool.value.length > 0 : numberPool.value.length > 0;
-  if (!hasOptions) return;
-  if (rouletteSoundEnabled.value) primeRouletteAudio();
-  // O primeiro "Sortear" inicia a sessão automaticamente; o Reiniciar finaliza.
-  if (!namesRunning.value) namesRunning.value = true;
-  if (mode.value === "names") drawName();
-  else drawNumber();
+  // O contrato de projeção aceita no máximo 1000 referências.
+  return drawn.value.slice(-1000).map(String);
 }
 
 const showDrawnSection = computed(
   () => drawn.value.length > 0 && (wheel.value == null || wheel.value.settled === true)
 );
 
-function emitProjection(): void {
-  const history = wheel.value == null || wheel.value.settled === true ? drawnHistory() : [];
-  projection.emit({
-    text: current.value != null ? String(current.value) : "",
-    reference: history,
-    active: wheel.value != null || current.value != null,
-    mode: mode.value,
-    wheel: wheel.value ?? undefined,
-  });
-}
-
 function setMode(value: string): void {
-  mode.value = value === "names" ? "names" : "number";
+  applyMode(value);
 }
 
-function persistNames(): void {
-  UserData.set(KEYS.MODULES.DRAW.NAMES, [...names.value]);
+function setRangeMin(value: string): void {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return;
+  setRange(Math.trunc(parsed), drawState.max);
 }
 
-function loadNames(): void {
-  const current = UserData.get<unknown>(KEYS.MODULES.DRAW.NAMES, null);
-  const saved = current ?? UserData.get<unknown>(KEYS.MODULES.NAME_DRAW.NAMES, null);
-  names.value = Array.isArray(saved)
-    ? saved.filter((name): name is string => typeof name === "string")
-    : [];
-
-  // Quem vinha do módulo antigo abre no modo Nomes; quem já tem uma lista no
-  // draw mantém o modo salvo (ou o padrão Números).
-  if (
-    current == null &&
-    names.value.length > 0 &&
-    UserData.get<unknown>(KEYS.MODULES.DRAW.MODE, null) == null
-  ) {
-    mode.value = "names";
-  }
+function setRangeMax(value: string): void {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return;
+  setRange(drawState.min, Math.trunc(parsed));
 }
 
 function onNameKeydown(event: KeyboardEvent): void {
@@ -662,11 +486,9 @@ function addName(): void {
   if (listLocked.value) return;
   const name = nameDraft.value.trim();
   if (!name) return;
+  if (!addNameToState(name)) return;
   nameDraft.value = "";
   cancelEditName();
-  if (names.value.includes(name)) return;
-  names.value.push(name);
-  persistNames();
 }
 
 function setEditInput(element: unknown): void {
@@ -688,27 +510,9 @@ function startEditName(index: number): void {
 function confirmEditName(): void {
   const index = editingNameIndex.value;
   if (index == null || listLocked.value) return;
-  const oldName = names.value[index];
-  const nextName = editingNameValue.value.trim();
-  if (oldName == null || !nextName) return;
-  if (names.value.some((name, i) => i !== index && name === nextName)) return;
-
-  names.value.splice(index, 1, nextName);
-  drawnNames.value = drawnNames.value.map((name) => (name === oldName ? nextName : name));
-  if (wheel.value) {
-    wheel.value = {
-      ...wheel.value,
-      ...(wheel.value.target === oldName ? { target: nextName } : {}),
-      ...(wheel.value.items
-        ? { items: wheel.value.items.map((name) => (name === oldName ? nextName : name)) }
-        : {}),
-    };
-  }
-  if (current.value === oldName) current.value = nextName;
+  if (!renameNameAt(index, editingNameValue.value)) return;
   editingNameIndex.value = null;
   editingNameValue.value = "";
-  persistNames();
-  emitProjection();
 }
 
 function cancelEditName(): void {
@@ -718,17 +522,8 @@ function cancelEditName(): void {
 
 function removeName(index: number): void {
   if (listLocked.value) return;
-  const [removed] = names.value.splice(index, 1);
-  if (removed == null) return;
   cancelEditName();
-  drawnNames.value = drawnNames.value.filter((name) => name !== removed);
-  // Se o nome exibido foi removido, não há mais roda válida para mostrar. Os
-  // demais casos ficam com o estado antigo até o próximo sorteio; filtrar os
-  // itens sem reindexar o offset mostraria outro nome no centro.
-  if (wheel.value?.target === removed) wheel.value = null;
-  if (current.value === removed) current.value = null;
-  persistNames();
-  emitProjection();
+  removeNameAt(index);
 }
 
 function exportNames(): void {
@@ -759,16 +554,19 @@ async function importTxt(event: Event): Promise<void> {
       .map((name) => name.trim())
       .filter(Boolean);
     if (!imported.length) return;
-    const merged = [...names.value];
-    for (const name of imported) {
-      if (!merged.includes(name)) merged.push(name);
-    }
-    names.value = merged;
+    addNames(imported);
     cancelEditName();
-    persistNames();
   } catch (error) {
     console.warn("[draw] falha ao importar lista de nomes:", error);
   }
+}
+
+function drawCurrent(): void {
+  if (animating.value) return;
+  if (remaining.value <= 0) return;
+  if (rouletteSoundEnabled.value) primeRouletteAudio();
+  // O primeiro "Sortear" inicia a sessão automaticamente; o Reiniciar finaliza.
+  void draw();
 }
 
 function requestReset(): void {
@@ -777,32 +575,19 @@ function requestReset(): void {
 
 function confirmReset(): void {
   showResetConfirm.value = false;
-  reset();
+  resetState();
 }
 
 function reset(): void {
-  clearDrawTimer();
   cancelEditName();
-  wheel.value = null;
-  animating.value = false;
-  // Reiniciar também finaliza um sorteio automático que esteja iniciado.
-  namesRunning.value = false;
-  if (mode.value === "names") drawnNames.value = [];
-  else drawnNumbers.value = [];
-  current.value = null;
-  emitProjection();
+  resetState();
 }
 
 function close(): void {
   showList.value = false;
-  reset();
 }
 
-onMounted(loadNames);
-
-onBeforeUnmount(() => {
-  clearDrawTimer();
-});
+onMounted(ensureDrawLoaded);
 </script>
 
 <style scoped>

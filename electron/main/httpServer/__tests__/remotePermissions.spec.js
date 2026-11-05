@@ -76,6 +76,45 @@ beforeAll(() => {
   );
 });
 
+describe("GET/POST /api/draw — role draw", () => {
+  it("sem a role leva 403 nas duas rotas", async () => {
+    const resGet = response();
+    await handlers.get.get("/api/draw")({ query: {}, headers: {}, ...SEM }, resGet);
+    const resPost = response();
+    await handlers.post.get("/api/draw")(
+      { body: { action: "draw" }, headers: {}, ...SEM },
+      resPost
+    );
+
+    expect(resGet.code).toBe(403);
+    expect(resPost.code).toBe(403);
+  });
+
+  it("com a role passa do gate", async () => {
+    const res = response();
+    await handlers.post.get("/api/draw")(
+      { body: { action: "draw" }, headers: {}, authInfo: { permissions: ["draw"] } },
+      res
+    );
+
+    expect(res.code).not.toBe(403);
+  });
+
+  it("set-projection exige active boolean", async () => {
+    const res = response();
+    await handlers.post.get("/api/draw")(
+      {
+        body: { action: "set-projection", active: "yes" },
+        headers: {},
+        authInfo: { permissions: ["draw"] },
+      },
+      res
+    );
+
+    expect(res.code).toBe(400);
+  });
+});
+
 describe("POST /api/keyboard — role keyboard", () => {
   it("sem a role leva 403", async () => {
     const res = response();

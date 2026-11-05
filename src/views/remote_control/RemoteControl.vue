@@ -51,6 +51,11 @@
         />
       </div>
 
+      <!-- Tab Sorteio -->
+      <div v-if="isBooted('draw')" v-show="tab === 'draw'" class="rc-pane">
+        <remote-draw ref="drawRef" :token="token" @show-snackbar="showSnackbar" />
+      </div>
+
       <!-- Tab Liturgia -->
       <div v-if="isBooted('liturgy')" v-show="tab === 'liturgy'" class="rc-pane">
         <remote-liturgy
@@ -232,6 +237,7 @@
 <script setup>
 import { ref, onMounted, computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { useModuleI18n } from "@/composables/useModuleI18n";
 import { useRoute } from "vue-router";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
@@ -249,10 +255,12 @@ import RemoteVideos from "./RemoteVideos.vue";
 import RemoteBackgroundSound from "./RemoteBackgroundSound.vue";
 import RemotePresenter from "./RemotePresenter.vue";
 import RemoteMediaLibrary from "./RemoteMediaLibrary.vue";
+import RemoteDraw from "./RemoteDraw.vue";
 
 /** @typedef {import('@/types/Bible').ActiveBibleState} ActiveBibleState */
 
 const { t, locale } = useI18n();
+const { tm: drawTm } = useModuleI18n("draw");
 const route = useRoute();
 
 const tab = ref("shortcuts");
@@ -269,6 +277,7 @@ const videosRef = ref(null);
 const backgroundSoundRef = ref(null);
 const mediaLibraryRef = ref(null);
 const musicRef = ref(null);
+const drawRef = ref(null);
 
 const tabItems = computed(() =>
   [
@@ -285,6 +294,7 @@ const tabItems = computed(() =>
       icon: ICONS.MODULES.BACKGROUND_SOUND,
     },
     { value: "bible", label: t("module_group.bible.title"), icon: ICONS.BIBLE.BOOK_OPEN },
+    { value: "draw", label: drawTm("title"), icon: ICONS.SORT.DICE },
     { value: "liturgy", label: t("modules.liturgy.title"), icon: ICONS.FORMAT.LIST_BULLETED },
     {
       value: "media_library",
@@ -737,6 +747,8 @@ async function refreshState() {
       await backgroundSoundRef.value.refresh();
     } else if (tab.value === "media_library" && mediaLibraryRef.value) {
       await mediaLibraryRef.value.refresh();
+    } else if (tab.value === "draw" && drawRef.value) {
+      await drawRef.value.refresh();
     }
   } finally {
     loading.value = false;
