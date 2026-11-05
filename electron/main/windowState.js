@@ -3,13 +3,19 @@
 /**
  * windowState.js — Geometria das janelas COMUNS (não-fullscreen).
  *
- * Hoje só a tela do operador (`/operator`) é uma janela comum: as projeções
- * nascem em tela cheia e não têm tamanho do usuário. O estado é gravado em
+ * A tela do operador (`/operator`) e a principal no Windows guardam geometria;
+ * as projeções nascem em tela cheia e não têm tamanho do usuário. O estado é gravado em
  * `user_data` (`options.windows.<feature>`) e reaplicado na próxima abertura.
  *
  * Este módulo é puro: não conhece Electron, `user_data` nem `BrowserWindow`.
  * Recebe o estado cru (que veio do disco e não é confiável) e a lista de telas,
  * e devolve os bounds a usar. Toda a validação de fronteira mora aqui.
+ */
+
+/**
+ * @typedef {object} WindowState
+ * @property {boolean} maximized
+ * @property {{x:number,y:number,width:number,height:number} | null} bounds
  */
 
 /** Abaixo disto a janela é ilegível — melhor tratá-la como não salva. */
@@ -44,7 +50,7 @@ function _normalizarBounds(bruto) {
  * abrir com lixo de `setBounds` pode jogar a janela para fora da tela.
  *
  * @param {unknown} bruto
- * @returns {{ maximized: boolean, bounds: {x:number,y:number,width:number,height:number} | null } | null}
+ * @returns {WindowState | null}
  */
 function normalizarEstadoJanela(bruto) {
   if (!bruto || typeof bruto !== "object" || Array.isArray(bruto)) return null;

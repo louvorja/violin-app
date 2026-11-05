@@ -4,10 +4,11 @@
  * Fases posteriores (D4) vão adicionar factories para janelas de projeção/retorno.
  */
 
-const { BrowserWindow, Menu, shell } = require("electron");
+const { BrowserWindow, Menu, shell, screen } = require("electron");
 const path = require("path");
 const { prepareWindow } = require("./e2eWindowMode.js");
 const { attachEditContextMenu } = require("./editContextMenu.js");
+const { normalizarEstadoJanela, resolverPosicaoJanela } = require("./windowState.js");
 
 /**
  * Posição de repouso dos semáforos do macOS, alinhada ao centro da systembar.
@@ -42,9 +43,10 @@ const TITLEBAR_OVERLAY = { color: "#00000000", symbolColor: "#ffffff", height: 3
  * @param {string} devUrl    URL do dev server (ex: "http://localhost:5002")
  * @param {string} prodHtmlPath  Caminho absoluto para dist/index.html
  * @param {string} preloadPath   Caminho absoluto para o preload.cjs
+ * @param {{get: (feature: string) => unknown, save: (feature: string, state: import('./windowState.js').WindowState) => void} | null} windowStateStore
  * @returns {BrowserWindow}
  */
-function createMainWindow(devUrl, prodHtmlPath, preloadPath) {
+function createMainWindow(devUrl, prodHtmlPath, preloadPath, windowStateStore = null) {
   const isDev =
     process.env.ELECTRON_DEV === "1" ||
     !require("electron").app.isPackaged;
@@ -54,14 +56,46 @@ function createMainWindow(devUrl, prodHtmlPath, preloadPath) {
     ? path.join(__dirname, "..", "..", "public", "ico", "favicon-180x180.png")
     : path.join(process.resourcesPath, "app.asar.unpacked", "public", "ico", "favicon-180x180.png");
 
+  let placement = null;
+  let minWidth = 900;
+  let minHeight = 600;
+  if (process.platform === "win32") {
+    const primary = screen.getPrimaryDisplay();
+    const area = primary.workArea;
+    const width = Math.min(1370, area.width);
+    const height = Math.min(800, area.height);
+    const state = normalizarEstadoJanela(windowStateStore?.get("main"));
+    // A janela principal exige mais espaço que a do operador. Aplique o
+    // mínimo ANTES de ajustar a posição, para não sair da borda da tela.
+    if (state?.bounds) {
+      state.bounds.width = Math.max(minWidth, state.bounds.width);
+      state.bounds.height = Math.max(minHeight, state.bounds.height);
+    }
+    placement = resolverPosicaoJanela({
+      estado: state,
+      displayDestino: primary,
+      displays: screen.getAllDisplays(),
+      padrao: {
+        x: Math.round(area.x + (area.width - width) / 2),
+        y: Math.round(area.y + (area.height - height) / 2),
+        width,
+        height,
+      },
+    });
+    const targetArea = screen.getDisplayMatching(placement.bounds).workArea;
+    minWidth = Math.min(minWidth, targetArea.width);
+    minHeight = Math.min(minHeight, targetArea.height);
+  }
+
   const win = new BrowserWindow({
     width: 1370,
     height: 800,
+    ...placement?.bounds,
     // Não subir daqui sem antes resolver a ribbon: num monitor 1024x768 — o de
     // igreja com equipamento antigo — a área útil do Ubuntu é 958px, e um
     // mínimo maior deixaria a janela maior que a tela inteira.
-    minWidth: 900,
-    minHeight: 600,
+    minWidth,
+    minHeight,
     title: "LouvorJA Violin",
     icon: iconPath,
     // Quem revela a janela é revealMainWindow(), no main.cjs, ao receber o
@@ -101,6 +135,30 @@ function createMainWindow(devUrl, prodHtmlPath, preloadPath) {
   });
   prepareWindow(win);
   attachEditContextMenu(win, Menu);
+
+  if (placement) {
+    let shown = false;
+    const saveState = () => {
+      // Minimizar ou entrar em tela cheia não troca a preferência de abertura.
+      if (!shown || !windowStateStore || win.isDestroyed() || win.isMinimized() || win.isFullScreen()) return;
+      windowStateStore.save("main", {
+        maximized: win.isMaximized(),
+        bounds: win.getNormalBounds(),
+      });
+    };
+    // maximize() também revela uma janela oculta. Espere o show do main,
+    // que só ocorre quando a interface está pronta e o splash pode sair.
+    win.once("show", () => {
+      if (placement.maximized) win.maximize();
+      shown = true;
+      saveState();
+    });
+    // O store atualiza o snapshot em memória agora e agrupa as escritas.
+    // Assim, sair logo após arrastar ainda inclui a posição no flush do quit.
+    for (const event of ["resize", "move", "maximize", "unmaximize", "restore", "leave-full-screen", "close"]) {
+      win.on(event, saveState);
+    }
+  }
 
   // Handler para window.open() — necessário para janelas popup e projeção.
   // Em D4, este handler vai ser expandido para abrir BrowserWindows em monitores específicos.

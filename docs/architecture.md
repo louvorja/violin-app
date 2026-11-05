@@ -331,6 +331,16 @@ há projeção visível. O `windowFactory` desliga esse throttling somente enqua
 uma janela auxiliar de projeção está visível, preservando relógios e timers no
 telão sem manter CPU alta quando o operador minimiza o app.
 
+No Windows, a janela principal abre maximizada no primeiro uso e depois restaura
+o modo, o tamanho e a posição escolhidos em `options.windows.main`. A geometria
+é ajustada à área útil dos monitores disponíveis, e minimizar ou usar tela cheia
+temporariamente não altera essa preferência. A maximização espera a exibição
+da interface para não antecipar o fechamento do splash.
+
+A reconciliação dos monitores mantém a projeção local quando nenhum monitor foi
+atribuído ou a escolha é "Mesma janela". Um monitor configurado que ficou ausente
+ou ambíguo continua ocultando sua projeção até que o destino volte a estar disponível.
+
 ---
 
 ## 🔄 Gerenciamento de Estado

@@ -358,8 +358,8 @@ export const KEYS = {
     STORAGE_QUOTA_GB: `${OPTIONS}.storage_quota_gb`,
     /**
      * Estado (modo, tamanho e posição) das janelas COMUNS, por feature —
-     * gravado e lido só pelo processo principal. Hoje: `operador` (tela do
-     * operador). Projeções são fullscreen e não entram aqui.
+     * gravado e lido só pelo processo principal: `operador` e `main` (janela
+     * principal no Windows). Projeções são fullscreen e não entram aqui.
      */
     WINDOWS: `${OPTIONS}.windows`,
     OPEN_RETURN: `${OPTIONS}.open_return`,

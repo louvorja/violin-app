@@ -876,7 +876,7 @@ function createWindow() {
     console.log("[LouvorJA] userData:", paths.userData());
   }
 
-  mainWindow = runtimeWorkDiagnostics.measure("main_window.construct", { feature: "main" }, () => createMainWindow(DEV_URL, prodHtmlPath, preloadPath));
+  mainWindow = runtimeWorkDiagnostics.measure("main_window.construct", { feature: "main" }, () => createMainWindow(DEV_URL, prodHtmlPath, preloadPath, windowStateStore));
   runtimeHealth.watchWindow(mainWindow, { window_role: "main", feature: "main", route: "/" });
 
   // Fechar a janela principal durante uma projeção não pode destruir a fonte
@@ -1672,19 +1672,20 @@ function _walkSet(obj, path, value) {
 let _userDataMain = userStore.read("user_data") || {};
 
 /*
- * Estado das janelas COMUNS (hoje só a tela do operador), em
+ * Estado das janelas COMUNS (operador e principal no Windows), em
  * `options.windows.<feature>` — o espelho de `KEYS.OPTIONS.WINDOWS` em
  * `src/constants/UserDataKeys.ts`. Guarda modo (maximizada), tamanho e posição
- * para a próxima abertura; `_flushUserData` grava direto no disco, sem
- * broadcast, porque nenhum renderer lê isto.
+ * para a próxima abertura. O snapshot muda na hora e as escritas são agrupadas,
+ * sem broadcast, porque nenhum renderer lê isto.
  */
-windowFactory.setWindowStateStore({
+const windowStateStore = {
   get: (feature) => _userDataMain?.options?.windows?.[feature] ?? null,
   save: (feature, estado) => {
     _walkSet(_userDataMain, `options.windows.${feature}`, estado);
-    void _flushUserData();
+    _scheduleUserDataFlush();
   },
-});
+};
+windowFactory.setWindowStateStore(windowStateStore);
 
 httpServer.setUserDataProvider(() => _userDataMain);
 runtimeJournalConsent = _userDataMain?.options?.telemetry !== false;
