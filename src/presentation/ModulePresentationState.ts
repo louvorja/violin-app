@@ -16,6 +16,8 @@ export interface ModuleWheelState {
   target: string;
   duration: number;
   settled?: boolean;
+  /** Quando false, o sorteio assenta direto no alvo, sem bumerangue. */
+  random_finish?: boolean;
   min?: number;
   max?: number;
   items?: string[];
@@ -79,6 +81,7 @@ export function readModuleValue(value: unknown): ModuleValue | null {
       return null;
     if (wheel.min !== undefined && !integer(wheel.min)) return null;
     if (wheel.max !== undefined && !integer(wheel.max)) return null;
+    if (wheel.random_finish !== undefined && typeof wheel.random_finish !== "boolean") return null;
     if (wheel.items !== undefined) {
       if (
         !Array.isArray(wheel.items) ||
@@ -92,6 +95,9 @@ export function readModuleValue(value: unknown): ModuleValue | null {
         target: wheel.target,
         duration: wheel.duration,
         ...(wheel.settled !== undefined ? { settled: wheel.settled as boolean } : {}),
+        ...(wheel.random_finish !== undefined
+          ? { random_finish: wheel.random_finish as boolean }
+          : {}),
         ...(wheel.min !== undefined ? { min: wheel.min } : {}),
         ...(wheel.max !== undefined ? { max: wheel.max } : {}),
         items: [...wheel.items],
@@ -103,6 +109,9 @@ export function readModuleValue(value: unknown): ModuleValue | null {
         target: wheel.target,
         duration: wheel.duration,
         ...(wheel.settled !== undefined ? { settled: wheel.settled as boolean } : {}),
+        ...(wheel.random_finish !== undefined
+          ? { random_finish: wheel.random_finish as boolean }
+          : {}),
         ...(wheel.min !== undefined ? { min: wheel.min } : {}),
         ...(wheel.max !== undefined ? { max: wheel.max } : {}),
       };

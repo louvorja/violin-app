@@ -177,6 +177,7 @@ export const KEYS = {
       RANGE_MAX: `${MODULES}.${ModuleEnum.DRAW}.range_max`,
       EFFECT_DURATION: `${MODULES}.${ModuleEnum.DRAW}.effect_duration`,
       SHOW_DRAWN_HISTORY: `${MODULES}.${ModuleEnum.DRAW}.show_drawn_history`,
+      RANDOM_FINISH: `${MODULES}.${ModuleEnum.DRAW}.random_finish`,
       NAMES: `${MODULES}.${ModuleEnum.DRAW}.names`,
       NAMES_RUNNING: `${MODULES}.${ModuleEnum.DRAW}.names_running`,
       LIST_OPEN: `${MODULES}.${ModuleEnum.DRAW}.list_open`,

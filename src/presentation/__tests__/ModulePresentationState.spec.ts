@@ -44,6 +44,7 @@ describe("module presentation state", () => {
         mode: "names",
         target: "Ana",
         duration: 2_000,
+        random_finish: false,
         items: ["Ana", "Bia"],
       },
     })!;
@@ -52,6 +53,7 @@ describe("module presentation state", () => {
       mode: "names",
       target: "Ana",
       duration: 2_000,
+      random_finish: false,
       items: ["Ana", "Bia"],
     });
     expect(

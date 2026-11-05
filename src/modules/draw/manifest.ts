@@ -124,6 +124,13 @@ export const contextualPages: RibbonPage[] = [
             label: `${modulePath}.ribbon.show_drawn_history`,
             defaultValue: false,
           },
+          {
+            id: `${moduleId}_random_finish`,
+            type: "switch",
+            optionKey: KEYS.MODULES.DRAW.RANDOM_FINISH,
+            label: `${modulePath}.ribbon.random_finish`,
+            defaultValue: true,
+          },
         ],
       },
       {

@@ -302,7 +302,8 @@ import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import type { ModuleWheelState } from "@/presentation/ModulePresentationState";
 import DrawProjection from "./DrawProjection.vue";
 import DrawWheel from "./DrawWheel.vue";
-import { DRAW_BOOMERANG_MS, DRAW_DURATION_MAX_MS, DRAW_DURATION_MIN_MS } from "../constants";
+import { DRAW_DURATION_MAX_MS, DRAW_DURATION_MIN_MS } from "../constants";
+import { createBoomerangPlan } from "../boomerang";
 
 type DrawMode = "number" | "names";
 
@@ -493,6 +494,10 @@ function effectDuration(): number {
   return Math.max(DRAW_DURATION_MIN_MS, Math.min(DRAW_DURATION_MAX_MS, value));
 }
 
+function randomFinish(): boolean {
+  return UserData.get<unknown>(KEYS.MODULES.DRAW.RANDOM_FINISH, true) !== false;
+}
+
 function showDrawnHistory(): boolean {
   const stored = UserData.get<unknown>(KEYS.MODULES.DRAW.SHOW_DRAWN_HISTORY, null);
   if (stored != null) return stored === true;
@@ -529,12 +534,16 @@ function startWheel(picked: number | string): void {
   const duration = effectDuration();
   const target = String(picked);
   const { mn, mx } = currentRange();
+  const runId = crypto.randomUUID();
+  const randomFinishEnabled = randomFinish();
+  const boomerang = createBoomerangPlan(runId, randomFinishEnabled);
   wheel.value = {
-    run_id: crypto.randomUUID(),
+    run_id: runId,
     mode: mode.value,
     target,
     duration,
     settled: false,
+    random_finish: randomFinishEnabled,
     ...(mode.value === "number" ? { min: mn, max: mx } : {}),
     items: wheelItemsFor(target),
   };
@@ -555,7 +564,7 @@ function startWheel(picked: number | string): void {
       else drawnNumbers.value.push(Number(picked));
       emitProjection();
     },
-    duration + DRAW_BOOMERANG_MS + 60
+    duration + boomerang.totalMs + 60
   );
 }
 

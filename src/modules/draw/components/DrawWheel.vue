@@ -49,7 +49,8 @@ import {
   type CSSProperties,
 } from "vue";
 import type { ModuleWheelState } from "@/presentation/ModulePresentationState";
-import { DRAW_BOOMERANG_MS, DRAW_DURATION_MAX_MS, DRAW_DURATION_MIN_MS } from "../constants";
+import { DRAW_DURATION_MAX_MS, DRAW_DURATION_MIN_MS } from "../constants";
+import { createBoomerangPlan } from "../boomerang";
 
 const props = withDefaults(
   defineProps<{
@@ -195,6 +196,7 @@ function start(): void {
   // quando o alvo repetia o resultado anterior.
   const startOffset = offset.value + count.value * turns;
   const endOffset = target - count.value * turns;
+  const boomerang = createBoomerangPlan(props.wheel.run_id, props.wheel.random_finish !== false);
   const startedAt = performance.now();
 
   // O giro parte do resultado anterior (ou do primeiro item) no mesmo instante
@@ -204,10 +206,8 @@ function start(): void {
   const easeInOutCubic = (value: number): number =>
     value < 0.5 ? 4 * Math.pow(value, 3) : 1 - Math.pow(-2 * value + 2, 3) / 2;
 
-  const overshootPast1 = endOffset - 0.78;
-  const overshootBefore1 = endOffset + 0.55;
-  const overshootPast2 = endOffset - 0.35;
-  const totalMs = duration + DRAW_BOOMERANG_MS;
+  const firstBoomerangOffset = endOffset + boomerang.positions[0];
+  const totalMs = duration + boomerang.totalMs;
 
   const tick = (now: number) => {
     const elapsed = now - startedAt;
@@ -217,23 +217,25 @@ function start(): void {
       // pouco do centro.
       const progress = Math.min(1, elapsed / duration);
       const local = easeInOutCubic(progress);
-      offset.value = startOffset + (overshootPast1 - startOffset) * local;
+      offset.value = startOffset + (firstBoomerangOffset - startOffset) * local;
     } else {
-      // O bumerangue tem tempo fixo e passos de amplitude decrescente.
-      // 1º retorno: depois do centro -> antes do centro.
-      // 2º avanço: passa de novo do centro, mas mais perto e mais devagar;
-      // em seguida assenta no centro.
-      const progress = Math.min(1, (elapsed - duration) / DRAW_BOOMERANG_MS);
+      let segment = 0;
+      let segmentElapsed = elapsed - duration;
+      while (
+        segment < boomerang.durations.length &&
+        segmentElapsed > boomerang.durations[segment]
+      ) {
+        segmentElapsed -= boomerang.durations[segment];
+        segment += 1;
+      }
 
-      if (progress < 0.34) {
-        const local = easeInOutCubic(progress / 0.34);
-        offset.value = overshootPast1 + (overshootBefore1 - overshootPast1) * local;
-      } else if (progress < 0.6) {
-        const local = easeInOutCubic((progress - 0.34) / 0.26);
-        offset.value = overshootBefore1 + (overshootPast2 - overshootBefore1) * local;
+      if (segment >= boomerang.durations.length) {
+        offset.value = endOffset;
       } else {
-        const local = easeInOutCubic((progress - 0.6) / 0.4);
-        offset.value = overshootPast2 + (endOffset - overshootPast2) * local;
+        const from = endOffset + boomerang.positions[segment];
+        const to = endOffset + boomerang.positions[segment + 1];
+        const local = easeInOutCubic(Math.min(1, segmentElapsed / boomerang.durations[segment]));
+        offset.value = from + (to - from) * local;
       }
     }
 

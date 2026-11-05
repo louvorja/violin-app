@@ -33,7 +33,8 @@
     "show_drawn_history": "Exibir sorteados na projeção",
     "type": "Tipo de sorteio",
     "mode": "Modo",
-    "list": "Lista do Sorteio"
+    "list": "Lista do Sorteio",
+    "random_finish": "Animação final aleatória"
   },
   "modes": {
     "numbers": "Números",

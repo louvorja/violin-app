@@ -714,6 +714,14 @@ $storage.hydrate().then(async () => {
       : Promise.resolve();
 
   await Promise.all([userDataReady, protocolReady, downloadReady]);
+
+  // Estado de sessão do Sorteio não sobrevive ao fechamento do app: reabrir
+  // sempre começa com o sorteio parado. Só a janela principal grava, para não
+  // sobrescrever o estado a partir de uma projeção auxiliar.
+  if (!isAuxiliaryRenderer) {
+    UserData.set(KEYS.MODULES.DRAW.NAMES_RUNNING, false);
+  }
+
   _bootStage("remote_config_ready");
 
   // D6 — Atalhos globais pertencem à janela principal. Registrar o mesmo
