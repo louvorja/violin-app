@@ -283,11 +283,7 @@ function onSearchKey(event) {
     search.value = "";
     return;
   }
-  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-    event.preventDefault();
-    nav.move(event.key === "ArrowDown" ? 1 : -1);
-    return;
-  }
+  if (nav.handleArrow(event)) return;
   if (event.key !== "Enter" || event.isComposing) return;
   event.preventDefault();
   const album = nav.active.value;

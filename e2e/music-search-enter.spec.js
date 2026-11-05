@@ -170,6 +170,45 @@ test("Hinário: número do hino e Enter; duas letras não tocam o hino 1", async
   await expect(slide(page)).toContainText("Grandioso És Tu");
 });
 
+test("Músicas: ↑/↓ escolhem e Enter toca a destacada; sem busca, só depois da seta", async ({
+  page,
+}) => {
+  await start(page);
+  await page.locator("#ribbon-tab-collections").click();
+  await page.locator('[data-testid="ribbon-btn-musics"]').click();
+  await expect(page.locator('[data-testid^="music-row-"]')).toHaveCount(4);
+  const search = page.getByPlaceholder("Buscar por...");
+  const active = page.locator(".lj-music-row--active");
+
+  // Sem busca a lista é o acervo inteiro: nada destacado até a primeira seta.
+  await expect(active).toHaveCount(0);
+  await search.press("ArrowDown");
+  await expect(active).toContainText("Aleluia ao Rei");
+
+  // Sem esperar a pausa da digitação: a seta já anda na lista da busca nova.
+  await search.pressSequentially("castelo", { delay: 0 });
+  await search.press("ArrowDown");
+  await expect(active).toContainText("Castelo Forte");
+  await search.press("ArrowUp");
+  await expect(active).toContainText("Castelo de Glória");
+  await search.press("ArrowDown");
+  await search.press("Enter");
+  await expect(slide(page)).toContainText("Castelo Forte");
+});
+
+test("Hinário: ↓ escolhe outro hino, que fica selecionado, e Enter toca", async ({ page }) => {
+  await start(page);
+  await page.locator("#ribbon-tab-collections").click();
+  await page.locator('[data-testid="ribbon-btn-hymnal"]').click();
+  const search = page.locator(".hymnal-form-group input");
+  await search.fill("castelo");
+  await expect(page.locator(".lj-music-row--active")).toContainText("Castelo Forte");
+  await search.press("ArrowDown");
+  await expect(page.locator(".hymnal-row--selected")).toContainText("Castelo de Glória");
+  await search.press("Enter");
+  await expect(slide(page)).toContainText("Castelo de Glória");
+});
+
 test("busca rápida: Enter toca o primeiro e fecha a busca", async ({ page }) => {
   await start(page);
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("louvorja:open-music-search")));

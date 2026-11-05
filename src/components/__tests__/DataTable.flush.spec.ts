@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { computed, ref } from "vue";
+import { computed, nextTick, ref } from "vue";
 import { flushPromises } from "@vue/test-utils";
 import { mountUi } from "@/components/ui/__tests__/mountUi";
 import DataTable from "../DataTable.vue";
@@ -30,8 +30,14 @@ vi.mock("@/components/ui", () => ({
   LjTable: { template: "<table><slot /></table>" },
 }));
 
-type Table = { currentResults: () => Array<{ id_music: number; name: string }> };
+type Row = { id_music: number; name: string };
+type Model = { data: Row[]; revision: number };
+type Table = { flush: () => void; searching: () => boolean };
 const wrappers: ReturnType<typeof mountUi<typeof DataTable>>[] = [];
+
+function shown(wrapper: ReturnType<typeof mountUi<typeof DataTable>>): Model {
+  return wrapper.emitted("update:modelValue")!.at(-1)![0] as Model;
+}
 
 async function mountTable() {
   const wrapper = mountUi(DataTable, {
@@ -55,37 +61,43 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("resultado da busca para o Enter", () => {
-  it("vale o que está escrito, sem esperar a pausa da digitação", async () => {
+describe("busca pelo teclado no DataTable", () => {
+  it("flush aplica o que está escrito, sem esperar a pausa da digitação", async () => {
     const wrapper = await mountTable();
+    const table = wrapper.vm as unknown as Table;
     await wrapper.setProps({ search: "grandioso" });
+    expect(shown(wrapper).data).toHaveLength(3);
 
-    const table = wrapper.vm as unknown as Table;
-    expect(table.currentResults()[0]?.id_music).toBe(3);
+    table.flush();
+    await nextTick();
+    expect(shown(wrapper).data.map((row) => row.id_music)).toEqual([3]);
   });
 
-  it("devolve o primeiro da lista quando sobra mais de um", async () => {
+  it("a revisão muda ao refiltrar e não ao paginar", async () => {
     const wrapper = await mountTable();
+    const before = shown(wrapper).revision;
     await wrapper.setProps({ search: "castelo" });
-
-    const table = wrapper.vm as unknown as Table;
-    expect(table.currentResults()[0]?.name).toBe("Castelo de Deus");
+    (wrapper.vm as unknown as Table).flush();
+    await nextTick();
+    expect(shown(wrapper).revision).toBeGreaterThan(before);
+    expect(shown(wrapper).data[0]?.name).toBe("Castelo de Deus");
   });
 
-  it("não devolve nada sem busca aplicada: campo vazio ou abaixo do mínimo", async () => {
+  it("sem busca aplicada — campo vazio ou abaixo do mínimo — não é resultado de busca", async () => {
     const wrapper = await mountTable();
     const table = wrapper.vm as unknown as Table;
-    expect(table.currentResults()).toEqual([]);
+    expect(table.searching()).toBe(false);
 
     await wrapper.setProps({ search: "ca" });
-    expect(table.currentResults()).toEqual([]);
+    expect(table.searching()).toBe(false);
+
+    await wrapper.setProps({ search: "cas" });
+    expect(table.searching()).toBe(true);
   });
 
-  it("não devolve nada quando a busca não acha música", async () => {
+  it("número curto vale como busca (o hino 12)", async () => {
     const wrapper = await mountTable();
-    await wrapper.setProps({ search: "xyzxyzxyz" });
-
-    const table = wrapper.vm as unknown as Table;
-    expect(table.currentResults()).toEqual([]);
+    await wrapper.setProps({ search: "12" });
+    expect((wrapper.vm as unknown as Table).searching()).toBe(true);
   });
 });

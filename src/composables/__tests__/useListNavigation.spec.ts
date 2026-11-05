@@ -57,32 +57,47 @@ describe("useListNavigation", () => {
   });
 
   it("subindo, a linha não para atrás do cabeçalho fixo da tabela", async () => {
+    // Quem rola é um ancestral qualquer (no Músicas, a janela do módulo).
     const box = document.createElement("div");
-    const thead = document.createElement("thead");
-    const row = document.createElement("tr");
-    row.className = "is-active";
-    row.scrollIntoView = () => {};
-    box.append(thead, row);
+    box.style.overflowY = "auto";
+    Object.defineProperty(box, "scrollHeight", { value: 1000 });
+    Object.defineProperty(box, "clientHeight", { value: 300 });
     let scrollTop = 200;
     Object.defineProperty(box, "scrollTop", {
       get: () => scrollTop,
-      set: (value) => (scrollTop = value),
+      set: (value) => {
+        scrollTop = value;
+      },
     });
-    Object.defineProperty(box, "clientTop", { value: 1 });
-    const rect = (top: number, height = 0) => () => ({ top, height }) as DOMRect;
-    box.getBoundingClientRect = rect(100);
-    thead.getBoundingClientRect = rect(101, 40);
+    const table = document.createElement("table");
+    table.innerHTML = '<thead><tr><th></th></tr></thead><tbody><tr class="is-active"></tr></tbody>';
+    box.append(table);
+    const th = table.querySelector("th")!;
+    const row = table.querySelector<HTMLElement>("tr.is-active")!;
+    row.scrollIntoView = () => {};
+    th.getBoundingClientRect = () => ({ bottom: 141 }) as DOMRect;
     // `nearest` deixou a linha colada no topo da caixa, embaixo do cabeçalho.
-    row.getBoundingClientRect = rect(101);
+    row.getBoundingClientRect = () => ({ top: 101 }) as DOMRect;
 
     const nav = useListNavigation({
       items: () => ["a", "b"],
-      container: ref(box),
+      container: ref(table),
       activeSelector: ".is-active",
     });
     nav.move(1);
     await nextTick();
     expect(scrollTop).toBe(160);
+  });
+
+  it("↓/↑ andam e as outras teclas passam adiante", () => {
+    const { nav } = setup(["a", "b"]);
+    const down = new KeyboardEvent("keydown", { key: "ArrowDown", cancelable: true });
+    expect(nav.handleArrow(down)).toBe(true);
+    expect(down.defaultPrevented).toBe(true);
+    expect(nav.active.value).toBe("b");
+    const letter = new KeyboardEvent("keydown", { key: "a", cancelable: true });
+    expect(nav.handleArrow(letter)).toBe(false);
+    expect(letter.defaultPrevented).toBe(false);
   });
 
   it("o mouse fora da lista não muda o destaque", () => {

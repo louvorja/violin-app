@@ -155,12 +155,7 @@ function focusTracks(event) {
 function onTracksKey(event) {
   // Foco num botão da linha: a tecla é dele (o ↓ do ⋮ abre o menu).
   if (event.target !== event.currentTarget) return;
-  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-    event.preventDefault();
-    nav.move(event.key === "ArrowDown" ? 1 : -1);
-    return;
-  }
-  if (!isQuickPlayEnter(event)) return;
+  if (nav.handleArrow(event) || !isQuickPlayEnter(event)) return;
   event.preventDefault();
   quickPlay(nav.active.value, event.shiftKey);
 }

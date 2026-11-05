@@ -8,7 +8,7 @@ import { computed, nextTick, ref, type Ref } from "vue";
  */
 export function useListNavigation<T>(options: {
   items: () => readonly T[];
-  /** O contêiner que rola a lista, para a seta trazer o destacado até a vista. */
+  /** Onde procurar o item destacado, para a seta trazê-lo até a vista. */
   container: Readonly<Ref<HTMLElement | null | undefined>>;
   activeSelector: string;
   /** Destaque ao (re)começar: 0 é o primeiro; -1, nenhum até a primeira seta. */
@@ -30,21 +30,38 @@ export function useListNavigation<T>(options: {
     void nextTick(reveal);
   }
 
+  /** ↓/↑ andam pela lista; devolve `true` se a tecla era uma delas. */
+  function handleArrow(event: KeyboardEvent): boolean {
+    const delta = event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0;
+    if (!delta) return false;
+    event.preventDefault();
+    move(delta);
+    return true;
+  }
+
   function reveal(): void {
-    const box = options.container.value;
-    const item = box?.querySelector<HTMLElement>(options.activeSelector);
-    if (!box || !item) return;
+    const item = options.container.value?.querySelector<HTMLElement>(options.activeSelector);
+    if (!item) return;
     item.scrollIntoView?.({ block: "nearest" });
     // `nearest` não enxerga o cabeçalho fixo da tabela: subindo, a linha parava atrás dele.
-    const head = box.querySelector("thead")?.getBoundingClientRect().height ?? 0;
-    const hidden =
-      box.getBoundingClientRect().top + box.clientTop + head - item.getBoundingClientRect().top;
-    if (hidden > 0) box.scrollTop -= hidden;
+    const head = item.closest("table")?.querySelector("thead th");
+    if (!head) return;
+    const hidden = head.getBoundingClientRect().bottom - item.getBoundingClientRect().top;
+    const box = hidden > 0 ? scrollParent(item) : null;
+    if (box) box.scrollTop -= hidden;
   }
 
   function setActive(i: number): void {
     if (i >= 0 && i < options.items().length) index.value = i;
   }
 
-  return { index, active, move, setActive, reset };
+  return { index, active, move, handleArrow, setActive, reset };
+}
+
+function scrollParent(el: HTMLElement): HTMLElement | null {
+  for (let node = el.parentElement; node; node = node.parentElement) {
+    if (/auto|scroll/.test(getComputedStyle(node).overflowY) && node.scrollHeight > node.clientHeight)
+      return node;
+  }
+  return null;
 }
