@@ -95,3 +95,28 @@ for (const mod of MODULES) {
     await expect(page.getByTestId(mod.stage)).toHaveAttribute("data-alert", "danger");
   });
 }
+
+test("timer: sem mexer no modo, conta regressivo como a ribbon mostra", async ({ page }) => {
+  await page.clock.install({ time: new Date(2026, 10, 5, 10, 58, 0) });
+  await page.route("http://e2e.mock/**", (route) => route.fulfill({ json: [] }));
+  await page.route("**/json_db/**", (route) => route.fulfill({ json: [] }));
+  await page.goto("/");
+  await page
+    .locator('[data-testid="modules-ready"]')
+    .waitFor({ state: "attached", timeout: 30_000 });
+  await page.locator("#ribbon-tab-utilities").click();
+  await page.locator('[data-testid="ribbon-btn-timer"]').click();
+  const display = page.getByTestId("timer-display");
+  await expect(display).toBeVisible();
+  await expect(
+    page.locator('[data-testid="ribbon-btn-timer_mode"] select, select').first()
+  ).toHaveValue("down");
+  const time = page.locator('input[type="time"]').first();
+  await time.fill("11:00");
+  await time.dispatchEvent("change");
+  // Antes ficava 00:00:00: o módulo estava em progressivo e a ribbon dizia regressivo.
+  await expect(display).toContainText(/00:0(2:00|1:5\d)/);
+  await page.getByTestId("ribbon-btn-timer_toggle").click();
+  await page.clock.runFor(10_000);
+  await expect(display).toContainText(/00:01:[45]\d/);
+});

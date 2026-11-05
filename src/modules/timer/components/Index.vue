@@ -93,7 +93,13 @@ const alarmed = ref<boolean>(false);
 let timer: ReturnType<typeof setInterval> | null = null;
 
 const mode = computed<TimerMode>({
-  get: () => $userdata.get<TimerMode>(KEYS.MODULES.TIMER.MODE, "up") ?? "up",
+  /*
+   * Padrão "down", o mesmo da ribbon (manifest) e do Temporizador de Culto. Com
+   * "up" aqui, quem nunca mexeu no seletor via "Regressivo" na ribbon enquanto
+   * o módulo contava progressivo: 00:00:00 parado ao definir a hora, subindo
+   * ao iniciar.
+   */
+  get: () => $userdata.get<TimerMode>(KEYS.MODULES.TIMER.MODE, "down") ?? "down",
   set: (v: TimerMode) => $userdata.set(KEYS.MODULES.TIMER.MODE, v),
 });
 
