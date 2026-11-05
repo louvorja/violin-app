@@ -2786,22 +2786,6 @@ $storage.hydrate().then(async () => {
         context: "global",
         description: "hotkeys.ctrl_i",
         group: "general",
-        label: "Ctrl+I",
-      }
-    );
-    // Ctrl+F: foca campo de busca do módulo ativo via broadcast
-    Hotkeys.register(
-      "Ctrl+f",
-      () => {
-        Broadcast.send(BROADCAST_TYPE.MODULE_FOCUS_SEARCH, {});
-        // No browser este atalho abre busca nativa; não há como prevenir completamente.
-        // preventDefault já está definido no Hotkeys — no Electron funciona; no web pode falhar.
-      },
-      {
-        context: "global",
-        description: "hotkeys.ctrl_f",
-        group: "general",
-        label: "Ctrl+F",
       }
     );
 

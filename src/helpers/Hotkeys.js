@@ -77,11 +77,6 @@ function _normalizeCombo(combo) {
   return [...modifiers, key].join("+");
 }
 
-function _isMac() {
-  if (typeof navigator === "undefined") return false;
-  return /mac/i.test(navigator.userAgentData?.platform || navigator.platform || "");
-}
-
 // O Chrome no Mac fica com estas e a página nunca as recebe; no Electron elas chegam.
 const MAC_BROWSER_RESERVED = new Set(["Meta+n", "Meta+Shift+n", "Meta+t", "Meta+Shift+t"]);
 
@@ -96,7 +91,7 @@ function _resolveMod(combo) {
   if (!parts.some(isMod)) return [combo];
   const withMod = (mod) => parts.map((part) => (isMod(part) ? mod : part)).join("+");
   const ctrl = withMod("Ctrl");
-  if (!_isMac()) return [ctrl];
+  if (!Platform.isMac) return [ctrl];
   const meta = withMod("Meta");
   const isDesktop = typeof window !== "undefined" && !!window.louvorjaApi;
   return isDesktop || !MAC_BROWSER_RESERVED.has(_normalizeCombo(meta))
@@ -127,7 +122,7 @@ const DISPLAY_ORDER = ["Ctrl", "Alt", "Shift", "Meta"];
 export function shortcutParts(combo) {
   const parts = _normalizeCombo(_resolveMod(combo)[0]).split("+");
   const key = parts.pop();
-  const mac = _isMac();
+  const mac = Platform.isMac;
   const modifiers = parts
     .sort((a, b) => DISPLAY_ORDER.indexOf(a) - DISPLAY_ORDER.indexOf(b))
     .map((modifier) => (mac ? MAC_MODIFIERS[modifier] : modifier));
@@ -136,7 +131,7 @@ export function shortcutParts(combo) {
 
 /** Rótulo de dica e de menu: `⇧⌘N` no Mac, `Ctrl+Shift+N` nos outros sistemas. */
 export function formatShortcut(combo) {
-  return shortcutParts(combo).join(_isMac() ? "" : "+");
+  return shortcutParts(combo).join(Platform.isMac ? "" : "+");
 }
 
 /**
@@ -212,23 +207,9 @@ function _onKeyDown(e) {
   const _layerEl = document.activeElement?.closest?.("[data-dismissable-layer]");
   if (_layerEl && !_layerEl.closest(".lj-window, .lj-dialog--module")) return;
 
-  let combo = _comboFromEvent(e);
+  const combo = _comboFromEvent(e);
   if (combo === "space" && _focusOwnsSpace()) return;
-  let handlers = _registry.get(combo);
-
-  // No Mac, Cmd é alias do Ctrl nos atalhos in-window. Só tenta o alias
-  // quando não existe um atalho Meta específico, para Cmd+K continuar
-  // respeitando um registro próprio se houver.
-  if ((!handlers || handlers.length === 0) && Platform.isMac && e.metaKey && !e.ctrlKey) {
-    const alias = combo
-      .split("+")
-      .map((part) => (part === "Meta" ? "Ctrl" : part))
-      .join("+");
-    if (alias !== combo) {
-      combo = alias;
-      handlers = _registry.get(combo);
-    }
-  }
+  const handlers = _registry.get(combo);
   if (!handlers || handlers.length === 0) return;
 
   const inForm = _focusIsInForm();

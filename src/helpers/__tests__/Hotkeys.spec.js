@@ -54,7 +54,7 @@ describe("Hotkeys — KeyboardEvent sintético (POST /api/keyboard)", () => {
     const handler = () => {
       fired += 1;
     };
-    Hotkeys.register("Ctrl+Shift+N", handler, { preventDefault: false });
+    Hotkeys.register("Mod+Shift+N", handler, { preventDefault: false });
 
     window.dispatchEvent(
       new KeyboardEvent("keydown", {
@@ -78,7 +78,31 @@ describe("Hotkeys — KeyboardEvent sintético (POST /api/keyboard)", () => {
     );
     expect(fired).toBe(2);
 
-    Hotkeys.unregister("Ctrl+Shift+N", handler);
+    Hotkeys.unregister("Mod+Shift+N", handler);
+    vi.restoreAllMocks();
+  });
+
+  it("no macOS o Ctrl explícito não responde ao Cmd: ⌘M minimiza e ⌘W fecha a janela", () => {
+    vi.spyOn(navigator, "platform", "get").mockReturnValue("MacIntel");
+    let fired = 0;
+    const handler = () => fired++;
+    Hotkeys.register("Ctrl+m", handler, { preventDefault: false });
+
+    const cmd = new KeyboardEvent("keydown", {
+      key: "m",
+      metaKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    window.dispatchEvent(cmd);
+    expect(fired).toBe(0);
+    expect(cmd.defaultPrevented).toBe(false);
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "m", ctrlKey: true, bubbles: true, cancelable: true })
+    );
+    expect(fired).toBe(1);
+
+    Hotkeys.unregister("Ctrl+m", handler);
     vi.restoreAllMocks();
   });
 
