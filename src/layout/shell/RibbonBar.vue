@@ -101,6 +101,7 @@
                   :icon="resolveBtnIcon(btn)"
                   :icon-color="resolveBtnColor(btn)"
                   :label="$t(resolveBtnLabel(btn))"
+                  :shortcut="btn.shortcut ? formatShortcut(btn.shortcut) : undefined"
                   :size="btn.size || 'large'"
                   :active="isButtonActive(btn)"
                   :disabled="btn.disabled"
@@ -253,6 +254,7 @@
                   :icon="resolveBtnIcon(btn)"
                   :icon-color="resolveBtnColor(btn)"
                   :label="$t(resolveBtnLabel(btn))"
+                  :shortcut="btn.shortcut ? formatShortcut(btn.shortcut) : undefined"
                   :size="btn.size || 'small'"
                   :active="isButtonActive(btn)"
                   :disabled="btn.disabled"
@@ -298,6 +300,7 @@ import $alert from "@/helpers/Alert";
 import $database from "@/helpers/Database";
 import Broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
+import { formatShortcut } from "@/helpers/Hotkeys";
 import { getRibbonModules, isModuleVisible } from "@/config/modules";
 import { KEYS } from "@/constants/UserDataKeys";
 import type { RibbonButton, RibbonGroup, RibbonPage } from "@/types/Ribbon";

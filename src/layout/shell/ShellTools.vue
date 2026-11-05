@@ -77,7 +77,12 @@
     </LjTooltip>
 
     <!--    Chat (somente desktop)-->
-    <LjTooltip v-if="Platform.isDesktop" :text="t('chat.toggle')" side="bottom">
+    <LjTooltip
+      v-if="Platform.isDesktop"
+      :text="t('chat.toggle')"
+      :shortcut="formatShortcut(HOTKEY.CHAT)"
+      side="bottom"
+    >
       <button
         type="button"
         class="shell-tool"
@@ -188,7 +193,11 @@
     </LjPopover>
 
     <!--    Pesquisa Rápida-->
-    <LjTooltip :text="$t('shell.quick_search')" side="bottom">
+    <LjTooltip
+      :text="$t('shell.quick_search')"
+      :shortcut="formatShortcut(HOTKEY.COMMAND_PALETTE)"
+      side="bottom"
+    >
       <button
         type="button"
         class="shell-tool"
@@ -200,7 +209,11 @@
     </LjTooltip>
 
     <!--    Pesquisa Bíblia-->
-    <LjTooltip :text="$t('shell.bible_quick_search')" side="bottom">
+    <LjTooltip
+      :text="$t('shell.bible_quick_search')"
+      :shortcut="formatShortcut(HOTKEY.BIBLE_SEARCH)"
+      side="bottom"
+    >
       <button
         type="button"
         class="shell-tool"
@@ -248,7 +261,12 @@
     </LjTooltip>
 
     <!--    Hotkeys-->
-    <LjTooltip v-if="!compact" :text="$t('hotkeys.title')" side="bottom">
+    <LjTooltip
+      v-if="!compact"
+      :text="$t('hotkeys.title')"
+      :shortcut="formatShortcut(HOTKEY.HOTKEYS)"
+      side="bottom"
+    >
       <button
         type="button"
         class="shell-tool"
@@ -269,6 +287,8 @@ import $userdata from "@/helpers/UserData";
 import $modules from "@/helpers/Modules";
 import $alert from "@/helpers/Alert";
 import { KEYS } from "@/constants/UserDataKeys";
+import { HOTKEY } from "@/constants/HotkeyCombos";
+import { formatShortcut } from "@/helpers/Hotkeys";
 import {
   openBackgroundProjectionWindows,
   closeBackgroundProjectionWindows,

@@ -61,7 +61,7 @@ const groups = computed(() => {
     if (!map[g]) map[g] = { key: g, entries: [] };
     map[g].entries.push({
       ...entry,
-      comboParts: (entry.label || entry.combo).split("+"),
+      comboParts: entry.parts,
     });
   }
 

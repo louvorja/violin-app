@@ -251,10 +251,7 @@ export const BROADCAST_TYPE = Object.freeze({
   /** Solicita próxima música no álbum/liturgia. Emitido por Ctrl+→. */
   MEDIA_NEXT_MUSIC: "media:next_music",
 
-  /** Abre diálogo de novo item na liturgia. Emitido por Ctrl+N. */
-  LITURGY_NEW_ITEM: "liturgy:new_item",
-
-  /** Abre diálogo de nova anotação na liturgia. Emitido por Ctrl+Shift+N. */
+  /** Abre diálogo de nova anotação na liturgia. Emitido por ⇧⌘N / Ctrl+Shift+N. */
   LITURGY_NEW_ANNOTATION: "liturgy:new_annotation",
 
   /** Ação contextual do Ribbon da Liturgia para itens, notas, bloqueio e biblioteca. */

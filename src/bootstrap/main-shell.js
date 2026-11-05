@@ -76,6 +76,7 @@ import Telemetry from "@/helpers/Telemetry";
 import { withTelemetryActionSource } from "@/helpers/TelemetryAction";
 import { installRouteTelemetry } from "@/helpers/RouteTelemetry";
 import Hotkeys from "@/helpers/Hotkeys";
+import { HOTKEY } from "@/constants/HotkeyCombos";
 import { useShell } from "@/composables/useShell";
 import { BROADCAST_TYPE } from "@helpers/BroadcastTypes";
 import { ModuleEnum } from "@/enums/ModuleEnum";
@@ -2617,7 +2618,7 @@ $storage.hydrate().then(async () => {
 
     // F1: abre cheatsheet de atalhos
     Hotkeys.register(
-      "F1",
+      HOTKEY.HOTKEYS,
       () => {
         _shell().openHotkeysCheatsheet();
       },
@@ -2625,7 +2626,6 @@ $storage.hydrate().then(async () => {
         context: "global",
         description: "hotkeys.f1",
         group: "general",
-        label: "F1",
       }
     );
 
@@ -2638,35 +2638,29 @@ $storage.hydrate().then(async () => {
       context: "global",
       description: "hotkeys.f5",
       group: "general",
-      label: "F5",
     });
     Hotkeys.register("F9", _refreshHandler, {
       context: "global",
       description: "hotkeys.f5",
       group: "general",
-      label: "F9",
     });
 
-    // Ctrl+K / Cmd+K: Command Palette
-    const _openPalette = () => {
-      _shell().openCommandPalette();
-    };
-    Hotkeys.register("Ctrl+k", _openPalette, {
-      context: "global",
-      description: "hotkeys.ctrl_k",
-      group: "general",
-      label: "Ctrl+K",
-    });
-    Hotkeys.register("Meta+k", _openPalette, {
-      context: "global",
-      description: "hotkeys.ctrl_k",
-      group: "general",
-      label: "Cmd+K",
-    });
+    // ⌘K / Ctrl+K: Command Palette
+    Hotkeys.register(
+      HOTKEY.COMMAND_PALETTE,
+      () => {
+        _shell().openCommandPalette();
+      },
+      {
+        context: "global",
+        description: "hotkeys.ctrl_k",
+        group: "general",
+      }
+    );
 
     // Ctrl+Space: Quick Search
     Hotkeys.register(
-      "Ctrl+Space",
+      HOTKEY.QUICK_SEARCH,
       () => {
         _shell().openCommandPalette();
       },
@@ -2674,13 +2668,12 @@ $storage.hydrate().then(async () => {
         context: "global",
         description: "hotkeys.ctrl_space",
         group: "general",
-        label: "Ctrl+Space",
       }
     );
 
-    // Ctrl+B: Bible Spotlight
+    // ⌘B / Ctrl+B: Bible Spotlight
     Hotkeys.register(
-      "Ctrl+b",
+      HOTKEY.BIBLE_SEARCH,
       () => {
         _shell().openBibleSearch();
       },
@@ -2688,13 +2681,12 @@ $storage.hydrate().then(async () => {
         context: "global",
         description: "hotkeys.ctrl_b",
         group: "bible",
-        label: "Ctrl+B",
       }
     );
 
     // Ctrl+M: Music Spotlight
     Hotkeys.register(
-      "Ctrl+m",
+      HOTKEY.MUSIC_SEARCH,
       () => {
         _shell().openMusicSearch();
       },
@@ -2702,13 +2694,12 @@ $storage.hydrate().then(async () => {
         context: "global",
         description: "hotkeys.ctrl_m",
         group: "media",
-        label: "Ctrl+M",
       }
     );
 
-    // Ctrl+I: Chat toggle
+    // ⌘I / Ctrl+I: Chat toggle
     Hotkeys.register(
-      "Ctrl+i",
+      HOTKEY.CHAT,
       () => {
         window.dispatchEvent(new CustomEvent("louvorja:toggle-chat"));
       },
@@ -2716,25 +2707,12 @@ $storage.hydrate().then(async () => {
         context: "global",
         description: "hotkeys.ctrl_i",
         group: "general",
-        label: "Ctrl+I",
-      }
-    );
-    Hotkeys.register(
-      "Meta+i",
-      () => {
-        window.dispatchEvent(new CustomEvent("louvorja:toggle-chat"));
-      },
-      {
-        context: "global",
-        description: "hotkeys.ctrl_i",
-        group: "general",
-        label: "Cmd+I",
       }
     );
 
-    // Ctrl+F: foca campo de busca do módulo ativo via broadcast
+    // ⌘F / Ctrl+F: foca campo de busca do módulo ativo via broadcast
     Hotkeys.register(
-      "Ctrl+f",
+      HOTKEY.FOCUS_SEARCH,
       () => {
         Broadcast.send(BROADCAST_TYPE.MODULE_FOCUS_SEARCH, {});
         // No browser este atalho abre busca nativa; não há como prevenir completamente.
@@ -2744,7 +2722,6 @@ $storage.hydrate().then(async () => {
         context: "global",
         description: "hotkeys.ctrl_f",
         group: "general",
-        label: "Ctrl+F",
       }
     );
 
@@ -2845,13 +2822,12 @@ $storage.hydrate().then(async () => {
         allowInForm: () => !document.activeElement?.value,
         description: "hotkeys.esc",
         group: "general",
-        label: "Esc",
       }
     );
 
     // Ctrl+W: fecha módulo ativo (o browser pode fechar a aba — preventDefault tenta evitar)
     Hotkeys.register(
-      "Ctrl+w",
+      HOTKEY.CLOSE_MODULE,
       () => {
         const id = _getActiveModuleId();
         if (id) Modules.close(id);
@@ -2860,13 +2836,12 @@ $storage.hydrate().then(async () => {
         context: "global",
         description: "hotkeys.ctrl_w",
         group: "general",
-        label: "Ctrl+W",
       }
     );
 
-    // Ctrl+Shift+F2: limpa cache do DB e recarrega dados
+    // ⇧⌘F2 / Ctrl+Shift+F2: limpa cache do DB e recarrega dados
     Hotkeys.register(
-      "Ctrl+Shift+F2",
+      HOTKEY.CLEAR_CACHE,
       () => {
         $storage.removeAll("db", "session");
         Broadcast.send(BROADCAST_TYPE.MODULE_REFRESH, { clearCache: true });
@@ -2875,13 +2850,12 @@ $storage.hydrate().then(async () => {
         context: "global",
         description: "hotkeys.ctrl_shift_f2",
         group: "system",
-        label: "Ctrl+Shift+F2",
       }
     );
 
     // Ctrl+Alt+D: alterna o modo desenvolvedor
     Hotkeys.register(
-      "Ctrl+Alt+d",
+      HOTKEY.DEV_MODE,
       () => {
         Dev.toggle();
       },
@@ -2889,13 +2863,12 @@ $storage.hydrate().then(async () => {
         context: "global",
         description: "hotkeys.ctrl_alt_d",
         group: "system",
-        label: "Ctrl+Alt+D",
       }
     );
 
-    // Ctrl+O: ativar/desativar overlay
+    // ⌘O / Ctrl+O: ativar/desativar overlay
     Hotkeys.register(
-      "Ctrl+o",
+      HOTKEY.OVERLAY,
       () => {
         Broadcast.send(BROADCAST_TYPE.MODULE_RIBBON_ACTION, {
           module: ModuleEnum.OVERLAY,
@@ -2906,13 +2879,12 @@ $storage.hydrate().then(async () => {
         context: "global",
         description: "hotkeys.ctrl_o",
         group: "general",
-        label: "Ctrl+O",
       }
     );
 
-    // Ctrl+P: iniciar/parar projeção de fundo
+    // ⌘P / Ctrl+P: iniciar/parar projeção de fundo
     Hotkeys.register(
-      "Ctrl+p",
+      HOTKEY.BACKGROUND_PROJECTION,
       () => {
         Broadcast.send(BROADCAST_TYPE.MODULE_RIBBON_ACTION, {
           module: ModuleEnum.BACKGROUND_PROJECTION,
@@ -2923,13 +2895,12 @@ $storage.hydrate().then(async () => {
         context: "global",
         description: "hotkeys.ctrl_p",
         group: "general",
-        label: "Ctrl+P",
       }
     );
 
     // Ctrl+Tab: próximo módulo aberto
     Hotkeys.register(
-      "Ctrl+Tab",
+      HOTKEY.NEXT_MODULE,
       () => {
         _cycleModule(1);
       },
@@ -2937,13 +2908,12 @@ $storage.hydrate().then(async () => {
         context: "global",
         description: "hotkeys.ctrl_tab",
         group: "general",
-        label: "Ctrl+Tab",
       }
     );
 
-    // Shift+Ctrl+Tab: módulo anterior
+    // Ctrl+Shift+Tab: módulo anterior
     Hotkeys.register(
-      "Shift+Ctrl+Tab",
+      HOTKEY.PREV_MODULE,
       () => {
         _cycleModule(-1);
       },
@@ -2951,7 +2921,6 @@ $storage.hydrate().then(async () => {
         context: "global",
         description: "hotkeys.shift_ctrl_tab",
         group: "general",
-        label: "Shift+Ctrl+Tab",
       }
     );
 
@@ -2979,43 +2948,43 @@ $storage.hydrate().then(async () => {
       };
 
     Hotkeys.register(
-      "Ctrl+ArrowUp",
+      HOTKEY.PREV_SLIDE,
       _ifMedia(() => Media.prevSlide(), { arquivo: true }),
       {
         context: "media",
         description: "hotkeys.ctrl_up",
         group: "navigation",
-        label: "Ctrl+↑",
+        preventDefault: false,
       }
     );
     Hotkeys.register(
-      "Ctrl+ArrowDown",
+      HOTKEY.NEXT_SLIDE,
       _ifMedia(() => Media.nextSlide(), { arquivo: true }),
       {
         context: "media",
         description: "hotkeys.ctrl_down",
         group: "navigation",
-        label: "Ctrl+↓",
+        preventDefault: false,
       }
     );
     Hotkeys.register(
-      "Ctrl+PageUp",
+      HOTKEY.PREV_SLIDE_PAGE,
       _ifMedia(() => Media.prevSlide(), { arquivo: true }),
       {
         context: "media",
         description: "hotkeys.ctrl_pageup",
         group: "navigation",
-        label: "Ctrl+PageUp",
+        preventDefault: false,
       }
     );
     Hotkeys.register(
-      "Ctrl+PageDown",
+      HOTKEY.NEXT_SLIDE_PAGE,
       _ifMedia(() => Media.nextSlide(), { arquivo: true }),
       {
         context: "media",
         description: "hotkeys.ctrl_pagedown",
         group: "navigation",
-        label: "Ctrl+PageDown",
+        preventDefault: false,
       }
     );
     Hotkeys.register(
@@ -3025,7 +2994,7 @@ $storage.hydrate().then(async () => {
         context: "media",
         description: "hotkeys.home",
         group: "navigation",
-        label: "Home",
+        preventDefault: false,
       }
     );
     Hotkeys.register(
@@ -3035,7 +3004,7 @@ $storage.hydrate().then(async () => {
         context: "media",
         description: "hotkeys.end",
         group: "navigation",
-        label: "End",
+        preventDefault: false,
       }
     );
 
@@ -3045,17 +3014,17 @@ $storage.hydrate().then(async () => {
     /* Arrows + PageUp/PageDown: valem também com um arquivo no telão. */
     const _prevSlide = _ifMedia(() => Media.prevSlide(), { arquivo: true });
     const _nextSlide = _ifMedia(() => Media.nextSlide(), { arquivo: true });
-    // preventDefault: false aqui é importante — Hotkeys.js só executa o handler
-    // (não chama preventDefault automático). _ifMedia decide: se media está
-    // ativa, chama preventDefault + stopImmediatePropagation; senão, libera
-    // o evento para o browser/inputs.
+    // preventDefault: false em toda tecla que passa por _ifMedia — Hotkeys.js só
+    // executa o handler (não chama preventDefault automático). _ifMedia decide:
+    // se media está ativa, chama preventDefault + stopImmediatePropagation;
+    // senão, libera o evento para o browser/inputs (PageUp rola a lista,
+    // Ctrl+← pula palavra no campo).
     // allowInForm: true replica o FormKeyUp Delphi — setas navegam slides em
     // qualquer janela com a música aberta, mesmo com foco em um campo.
     Hotkeys.register("ArrowLeft", _prevSlide, {
       context: "media",
       description: "hotkeys.prev_slide",
       group: "navigation",
-      label: "←",
       preventDefault: false,
       allowInForm: true,
     });
@@ -3063,7 +3032,6 @@ $storage.hydrate().then(async () => {
       context: "media",
       description: "hotkeys.next_slide",
       group: "navigation",
-      label: "→",
       preventDefault: false,
       allowInForm: true,
     });
@@ -3071,7 +3039,6 @@ $storage.hydrate().then(async () => {
       context: "media",
       description: "hotkeys.prev_slide",
       group: "navigation",
-      label: "↑",
       preventDefault: false,
       allowInForm: true,
     });
@@ -3079,7 +3046,6 @@ $storage.hydrate().then(async () => {
       context: "media",
       description: "hotkeys.next_slide",
       group: "navigation",
-      label: "↓",
       preventDefault: false,
       allowInForm: true,
     });
@@ -3087,19 +3053,21 @@ $storage.hydrate().then(async () => {
       context: "media",
       description: "hotkeys.prev_slide",
       group: "navigation",
-      label: "PageUp",
+      preventDefault: false,
     });
     Hotkeys.register("PageDown", _nextSlide, {
       context: "media",
       description: "hotkeys.next_slide",
       group: "navigation",
-      label: "PageDown",
+      preventDefault: false,
     });
 
-    // Ctrl+← / Ctrl+→: música anterior / próxima
-    // Media.js não tem next()/prev() para álbum — emite broadcast para o módulo ouvir
+    // ⌘← / ⌘→ (Ctrl fora do Mac): música anterior / próxima
+    // Media.js não tem next()/prev() para álbum — emite broadcast para o módulo ouvir.
+    // No campo de texto o ⌘←/→ é início/fim da linha no Mac: ali só o Ctrl troca a música.
+    const _musicStepInForm = (e) => !e.metaKey;
     Hotkeys.register(
-      "Ctrl+ArrowLeft",
+      HOTKEY.PREV_MUSIC,
       _ifMedia(() => {
         Broadcast.send(BROADCAST_TYPE.MEDIA_PREV_MUSIC, {});
       }),
@@ -3107,12 +3075,12 @@ $storage.hydrate().then(async () => {
         context: "media",
         description: "hotkeys.ctrl_left",
         group: "navigation",
-        label: "Ctrl+←",
-        allowInForm: true,
+        preventDefault: false,
+        allowInForm: _musicStepInForm,
       }
     );
     Hotkeys.register(
-      "Ctrl+ArrowRight",
+      HOTKEY.NEXT_MUSIC,
       _ifMedia(() => {
         Broadcast.send(BROADCAST_TYPE.MEDIA_NEXT_MUSIC, {});
       }),
@@ -3120,8 +3088,8 @@ $storage.hydrate().then(async () => {
         context: "media",
         description: "hotkeys.ctrl_right",
         group: "navigation",
-        label: "Ctrl+→",
-        allowInForm: true,
+        preventDefault: false,
+        allowInForm: _musicStepInForm,
       }
     );
 
@@ -3138,35 +3106,35 @@ $storage.hydrate().then(async () => {
       context: "media",
       description: "hotkeys.space",
       group: "media",
-      label: "Space",
+      preventDefault: false,
     });
     Hotkeys.register("Pause", _togglePlayPause, {
       context: "media",
+      preventDefault: false,
       allowInForm: true,
       description: "hotkeys.pause",
       group: "media",
-      label: "Pause",
     });
 
     // --- Liturgia ---
 
-    // Ctrl+N: novo item (liturgia ativa)
+    // ⌘N / Ctrl+N: novo item (liturgia ativa) — o mesmo pedido do "Adicionar Item" da ribbon
     Hotkeys.register(
-      "Ctrl+n",
+      HOTKEY.LITURGY_NEW_ITEM,
       () => {
-        Broadcast.send(BROADCAST_TYPE.LITURGY_NEW_ITEM, {});
+        if (_getActiveModuleId() !== ModuleEnum.LITURGY) return;
+        Broadcast.send(BROADCAST_TYPE.LITURGY_RIBBON_ACTION, { action: "add" });
       },
       {
         context: "global",
         description: "hotkeys.ctrl_n",
         group: "liturgy",
-        label: "Ctrl+N",
       }
     );
 
-    // Ctrl+Shift+N: nova anotação na liturgia
+    // ⇧⌘N / Ctrl+Shift+N: nova anotação na liturgia
     Hotkeys.register(
-      "Ctrl+Shift+n",
+      HOTKEY.LITURGY_NEW_ANNOTATION,
       () => {
         Modules.open("liturgy");
         Broadcast.send(BROADCAST_TYPE.LITURGY_NEW_ANNOTATION, {});
@@ -3175,7 +3143,6 @@ $storage.hydrate().then(async () => {
         context: "global",
         description: "hotkeys.ctrl_shift_n",
         group: "liturgy",
-        label: "Ctrl+Shift+N",
       }
     );
   });

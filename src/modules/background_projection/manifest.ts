@@ -7,6 +7,7 @@ import { ICONS } from "@/config/Icons"
 import { ModuleEnum } from "@/enums/ModuleEnum"
 import { getModulePath } from "@/helpers/ModulePath"
 import { KEYS } from "@/constants/UserDataKeys";
+import { HOTKEY } from "@/constants/HotkeyCombos";
 const RibbonWallpaperSettings = defineAsyncComponent(
   () => import("@/modules/background_projection/components/RibbonWallpaperSettings.vue")
 );
@@ -49,6 +50,7 @@ export const contextualPages: RibbonPage[] = [
             icon: ICONS.PROJECTION.START,
             label: `${modulePath}.project_start`,
             action: `${moduleId}_play`,
+            shortcut: HOTKEY.BACKGROUND_PROJECTION,
             color: "#27ae60",
             stateBinding: {
               watchPath: KEYS.MODULES.BACKGROUND_PROJECTION.IS_PLAYING,

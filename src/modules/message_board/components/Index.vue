@@ -42,6 +42,7 @@
               :placeholder="tm('inputs.message')"
               :rows="3"
               @keydown.ctrl.enter.prevent="addMessage"
+              @keydown.meta.enter.prevent="addMessage"
             />
             <div class="mb-list-drawer__actions">
               <LjButton

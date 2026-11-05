@@ -25,6 +25,8 @@ export interface RibbonButton {
   label: string;
   module?: string;
   action?: string;
+  /** Combinação de `HOTKEY` que faz o mesmo que o botão; aparece na dica. */
+  shortcut?: string;
   disabled?: boolean;
   color?: string;
   /** Chave booleana que deixa o botão visualmente pressionado. */
