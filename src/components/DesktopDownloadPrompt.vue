@@ -12,8 +12,15 @@
         {{ t("shell.desktop_download.description") }}
       </p>
 
+      <LinuxDownloadOptions
+        v-if="platform === 'linux'"
+        :version="version"
+        class="desktop-download__linux"
+      />
+
       <div class="desktop-download__actions">
         <a
+          v-if="platform !== 'linux'"
           class="desktop-download__primary"
           :href="downloadUrl"
           :target="isDirectDownload ? undefined : '_blank'"
@@ -24,7 +31,7 @@
         </a>
 
         <a
-          v-if="isDirectDownload"
+          v-if="isDirectDownload || platform === 'linux'"
           class="desktop-download__secondary"
           :href="releaseUrl"
           target="_blank"
@@ -49,6 +56,7 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
+import LinuxDownloadOptions from "@/components/LinuxDownloadOptions.vue";
 import packageJson from "@root/package.json";
 import {
   desktopDownloadUrl,
@@ -119,6 +127,10 @@ const primaryLabel = computed(() => desktopDownloadLabel(platform, t));
   color: var(--lj-text-muted);
   font-size: var(--lj-text-md);
   line-height: 1.55;
+}
+
+.desktop-download__linux {
+  margin-top: var(--lj-space-7);
 }
 
 .desktop-download__actions {

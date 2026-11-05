@@ -1429,6 +1429,16 @@
       "view_downloads_for": "Ver descargas para {platform}",
       "available_for": "Windows, macOS y Linux",
       "version": "Versión {version}",
+      "linux": {
+        "processor": "Procesador del equipo",
+        "x64": "Intel / AMD (64 bits)",
+        "arm64": "ARM (64 bits)",
+        "choose_processor": "Seleccione el procesador para ver las descargas para Linux.",
+        "download_format": "Descargar {format}",
+        "deb": "Ubuntu, Debian y Mint",
+        "rpm": "Fedora y openSUSE",
+        "appimage": "Otras distribuciones"
+      },
       "platform": {
         "windows": "Windows",
         "macos": "macOS",
