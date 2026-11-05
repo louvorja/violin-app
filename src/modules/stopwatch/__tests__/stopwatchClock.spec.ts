@@ -48,6 +48,11 @@ describe("stopwatchClock", () => {
     expect(stopwatchAlert("up", 5, 60, true)).toBe("");
   });
 
+  it("parado na meta não avisa, mesmo com meta menor que o aviso", () => {
+    expect(stopwatchAlert("down", 240, 300, false, false)).toBe("");
+    expect(stopwatchAlert("down", 240, 300, false, true)).toBe("warning");
+  });
+
   it("progresso do regressivo fica entre 0 e 1", () => {
     expect(stopwatchProgress(600, 0)).toBe(0);
     expect(stopwatchProgress(600, 300_000)).toBe(0.5);

@@ -258,7 +258,14 @@ const seconds = computed(() =>
 );
 const display = computed(() => formatStopwatch(seconds.value, showSeconds.value));
 const alert = computed(() =>
-  stopwatchAlert(mode.value, seconds.value, warningSeconds.value, reachedEnd.value)
+  stopwatchAlert(
+    mode.value,
+    seconds.value,
+    warningSeconds.value,
+    reachedEnd.value,
+    // Começou = está contando ou já contou algo (pausado no meio ainda avisa).
+    running.value || elapsed.value > 0
+  )
 );
 const progress = computed(() => stopwatchProgress(targetSeconds.value, elapsed.value));
 const targetLabel = computed(() => formatStopwatch(targetSeconds.value, true));

@@ -55,7 +55,8 @@ export function formatStopwatch(seconds: number, showSeconds: boolean): string {
 }
 
 /**
- * Amarelo nos últimos `warningSeconds` (0 desliga) e vermelho a partir do zero.
+ * Amarelo nos últimos `warningSeconds` (0 desliga) e vermelho a partir do zero,
+ * só depois de a contagem ter começado (`started`).
  * O vermelho só vale depois de a contagem ter de fato chegado ao fim
  * (`reachedEnd`): com 0 de meta e parado, a tela não deve nascer alarmada.
  */
@@ -63,9 +64,12 @@ export function stopwatchAlert(
   mode: StopwatchMode,
   seconds: number,
   warningSeconds: number,
-  reachedEnd: boolean
+  reachedEnd: boolean,
+  started = true
 ): StopwatchAlert {
-  if (mode !== "down") return "";
+  // Parado na meta não avisa nada: com meta menor que o aviso (4 min de meta,
+  // aviso aos 5) a borda piscaria no telão antes de alguém apertar Iniciar.
+  if (mode !== "down" || !started) return "";
   if (seconds <= 0) return reachedEnd ? "danger" : "";
   if (warningSeconds > 0 && seconds <= warningSeconds) return "warning";
   return "";
