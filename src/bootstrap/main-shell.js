@@ -2719,19 +2719,6 @@ $storage.hydrate().then(async () => {
         label: "Ctrl+I",
       }
     );
-    Hotkeys.register(
-      "Meta+i",
-      () => {
-        window.dispatchEvent(new CustomEvent("louvorja:toggle-chat"));
-      },
-      {
-        context: "global",
-        description: "hotkeys.ctrl_i",
-        group: "general",
-        label: "Cmd+I",
-      }
-    );
-
     // Ctrl+F: foca campo de busca do módulo ativo via broadcast
     Hotkeys.register(
       "Ctrl+f",

@@ -38,6 +38,7 @@ import { LjDialog, LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { computed } from "vue";
 import Hotkeys from "@/helpers/Hotkeys";
+import Platform from "@/helpers/Platform";
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -59,9 +60,12 @@ const groups = computed(() => {
   for (const entry of all) {
     const g = entry.group || "general";
     if (!map[g]) map[g] = { key: g, entries: [] };
+    const label = entry.label || entry.combo;
     map[g].entries.push({
       ...entry,
-      comboParts: (entry.label || entry.combo).split("+"),
+      comboParts: label
+        .split("+")
+        .map((part) => (Platform.isMac && part.trim() === "Ctrl" ? "Ctrl / Cmd" : part.trim())),
     });
   }
 

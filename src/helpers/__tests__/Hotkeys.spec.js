@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Hotkeys from "../Hotkeys";
 
 /**
@@ -46,6 +46,40 @@ describe("Hotkeys — KeyboardEvent sintético (POST /api/keyboard)", () => {
 
     expect(fired).toBe(1);
     Hotkeys.unregister("Ctrl+O", handler);
+  });
+
+  it("no macOS aceita Cmd como alias de Ctrl, mantendo Ctrl funcionando", () => {
+    vi.spyOn(navigator, "platform", "get").mockReturnValue("MacIntel");
+    let fired = 0;
+    const handler = () => {
+      fired += 1;
+    };
+    Hotkeys.register("Ctrl+Shift+N", handler, { preventDefault: false });
+
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "n",
+        metaKey: true,
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      })
+    );
+    expect(fired).toBe(1);
+
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "n",
+        ctrlKey: true,
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      })
+    );
+    expect(fired).toBe(2);
+
+    Hotkeys.unregister("Ctrl+Shift+N", handler);
+    vi.restoreAllMocks();
   });
 
   it("dispara Space enviado como 'Space' (app) igual ao ' ' real", () => {

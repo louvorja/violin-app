@@ -29,6 +29,7 @@
  * Ver tabela completa em docs/architecture.md — seção "Atalhos de Teclado".
  */
 import { withTelemetryActionSource } from "@/helpers/TelemetryAction";
+import Platform from "@/helpers/Platform";
 
 export const GLOBAL_CANDIDATES = new Set([
   "f1", // Cheatsheet — útil system-wide durante apresentação
@@ -144,9 +145,23 @@ function _onKeyDown(e) {
   const _layerEl = document.activeElement?.closest?.("[data-dismissable-layer]");
   if (_layerEl && !_layerEl.closest(".lj-window, .lj-dialog--module")) return;
 
-  const combo = _comboFromEvent(e);
+  let combo = _comboFromEvent(e);
   if (combo === "space" && _focusOwnsSpace()) return;
-  const handlers = _registry.get(combo);
+  let handlers = _registry.get(combo);
+
+  // No Mac, Cmd é alias do Ctrl nos atalhos in-window. Só tenta o alias
+  // quando não existe um atalho Meta específico, para Cmd+K continuar
+  // respeitando um registro próprio se houver.
+  if ((!handlers || handlers.length === 0) && Platform.isMac && e.metaKey && !e.ctrlKey) {
+    const alias = combo
+      .split("+")
+      .map((part) => (part === "Meta" ? "Ctrl" : part))
+      .join("+");
+    if (alias !== combo) {
+      combo = alias;
+      handlers = _registry.get(combo);
+    }
+  }
   if (!handlers || handlers.length === 0) return;
 
   const inForm = _focusIsInForm();

@@ -61,6 +61,13 @@ export default {
     return api ? api.version : null;
   },
 
+  /** true no macOS, inclusive no browser/PWA, para atalhos e rótulos. */
+  get isMac() {
+    if (this.platform) return this.platform === "darwin";
+    if (typeof navigator === "undefined") return false;
+    return /mac/i.test(navigator.platform || navigator.userAgent || "");
+  },
+
   /** Informações do executável expostas por um canal IPC específico. */
   get app() {
     return api?.app ?? null;
