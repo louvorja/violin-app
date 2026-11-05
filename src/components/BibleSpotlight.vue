@@ -21,6 +21,11 @@
             autocorrect="off"
             autocapitalize="off"
             spellcheck="false"
+            :aria-activedescendant="
+              bookOptionsActive && bookMatches[bookOptionIndex]
+                ? `quicknav-book-${bookMatches[bookOptionIndex].id_bible_book}`
+                : undefined
+            "
             @keydown="handleKeydown"
             @input="onInput"
             @compositionstart="onCompositionStart"
@@ -62,6 +67,31 @@
               <span class="quicknav-cursor">|</span>
             </div>
             <div class="quicknav-preview">{{ feedback || " " }}</div>
+            <div
+              v-if="activeStep === 0 && bookMatches.length"
+              class="quicknav-options"
+              role="listbox"
+              :aria-label="t('modules.bible.quicknav.step_book')"
+            >
+              <button
+                v-for="(book, index) in bookMatches"
+                :id="`quicknav-book-${book.id_bible_book}`"
+                :key="book.id_bible_book"
+                :ref="(el) => setBookOptionRef(el, index)"
+                type="button"
+                role="option"
+                class="quicknav-option"
+                :class="{ selected: bookOptionsActive && index === bookOptionIndex }"
+                :aria-selected="bookOptionsActive && index === bookOptionIndex"
+                @mousedown.prevent.stop
+                @mouseenter="bookOptionIndex = index"
+                @touchend.prevent.stop="chooseBookOption(index)"
+                @click.stop="chooseBookOption(index)"
+              >
+                <span class="quicknav-option-abbr">{{ book.abbreviation || book.name }}</span>
+                <span class="quicknav-option-name">{{ book.name }}</span>
+              </button>
+            </div>
             <div class="quicknav-footer">
               <span v-if="activeStep === 0" v-html="t('modules.bible.quicknav.foot_book')" />
               <span
@@ -140,6 +170,10 @@ const selectedChapter = ref<number>(0);
 const chapterVerses = ref<Record<string, string>>({});
 const chapterLoading = ref(false);
 const selectedVersion = ref<BibleVersion | null>(null);
+const bookMatches = ref<BibleBook[]>([]);
+const bookOptionsActive = ref(false);
+const bookOptionIndex = ref(-1);
+const bookOptionRefs = ref<HTMLElement[]>([]);
 const cardRef = ref<HTMLElement | null>(null);
 const inputRef = ref<HTMLInputElement | null>(null);
 let chapterGeneration = 0;
@@ -166,6 +200,10 @@ function reset(): void {
   chapterLoading.value = false;
   chapterLoad = null;
   selectedVersion.value = null;
+  bookMatches.value = [];
+  bookOptionsActive.value = false;
+  bookOptionIndex.value = -1;
+  bookOptionRefs.value = [];
   _composing = false;
 }
 
@@ -175,12 +213,17 @@ function searchBooks(input: string, list: BibleBook[]): BibleBook[] {
 }
 
 function checkBookMatch(): void {
+  bookOptionsActive.value = false;
+  bookOptionIndex.value = -1;
+
   if (buffer.value.length === 0) {
     feedback.value = "";
+    bookMatches.value = [];
     return;
   }
   if (!books.value) return;
   const matches = searchBooks(buffer.value, books.value);
+  bookMatches.value = matches;
   if (matches.length === 0) {
     feedback.value = "—";
   } else if (matches.length === 1) {
@@ -194,7 +237,25 @@ function checkBookMatch(): void {
   }
 }
 
+function setBookOptionRef(element: unknown, index: number): void {
+  if (element instanceof HTMLElement) bookOptionRefs.value[index] = element;
+}
+
+function chooseBookOption(index: number): void {
+  if (state.value !== "book") return;
+  const book = bookMatches.value[index];
+  if (book) commitBook(book);
+}
+
+async function scrollSelectedBookOption(): Promise<void> {
+  await nextTick();
+  bookOptionRefs.value[bookOptionIndex.value]?.scrollIntoView?.({ block: "nearest" });
+}
+
 function commitBook(b: BibleBook): void {
+  bookMatches.value = [];
+  bookOptionsActive.value = false;
+  bookOptionIndex.value = -1;
   feedback.value = `${b.name}`;
   selectedBook.value = b;
   state.value = "chapter";
@@ -328,8 +389,42 @@ function handleKeydown(e: KeyboardEvent): void {
   }
 
   if (state.value === "book") {
+    if (bookMatches.value.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!bookOptionsActive.value) {
+          bookOptionsActive.value = true;
+          bookOptionIndex.value = 0;
+        }
+        void scrollSelectedBookOption();
+        return;
+      }
+      if (e.key === "ArrowUp" && bookOptionsActive.value) {
+        e.preventDefault();
+        e.stopPropagation();
+        bookOptionsActive.value = false;
+        return;
+      }
+      if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && bookOptionsActive.value) {
+        e.preventDefault();
+        e.stopPropagation();
+        const step = e.key === "ArrowRight" ? 1 : -1;
+        const count = bookMatches.value.length;
+        bookOptionIndex.value = (bookOptionIndex.value + step + count) % count;
+        void scrollSelectedBookOption();
+        return;
+      }
+      if (e.key === "Enter" && bookOptionsActive.value) {
+        e.preventDefault();
+        e.stopPropagation();
+        chooseBookOption(bookOptionIndex.value);
+        return;
+      }
+    }
+
     /* Dígitos também: "1 samuel" e "2pedro" são formas de pedir o ordinal. */
-    if (/^[a-zA-Z0-9]$/.test(e.key)) {
+    if (/^[\p{L}\p{N}]$/u.test(e.key)) {
       buffer.value += e.key.toLowerCase();
       e.preventDefault();
       e.stopPropagation();
@@ -337,12 +432,14 @@ function handleKeydown(e: KeyboardEvent): void {
       return;
     }
     if (e.key === "Backspace") {
+      bookOptionsActive.value = false;
       buffer.value = buffer.value.slice(0, -1);
       e.preventDefault();
       e.stopPropagation();
       if (buffer.value.length === 0) {
         activeStep.value = 0;
         feedback.value = "";
+        bookMatches.value = [];
       } else {
         checkBookMatch();
       }
@@ -620,6 +717,49 @@ onUnmounted(reset);
   color: var(--lj-text-muted, #999);
   min-height: 20px;
   text-align: center;
+}
+
+.quicknav-options {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  max-height: 150px;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.quicknav-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  border: 1px solid var(--lj-surface-border, #444);
+  border-radius: var(--lj-radius-pill);
+  background: var(--lj-surface-bg-soft, #2a2a2a);
+  color: var(--lj-text, #eee);
+  font: inherit;
+  cursor: pointer;
+  transition:
+    border-color var(--lj-transition-fast),
+    background var(--lj-transition-fast);
+}
+
+.quicknav-option:hover,
+.quicknav-option.selected {
+  border-color: var(--lj-primary, #1976d2);
+  background: color-mix(in srgb, var(--lj-primary, #1976d2) 22%, transparent);
+}
+
+.quicknav-option-abbr {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.quicknav-option-name {
+  font-size: 12px;
+  color: var(--lj-text-muted, #999);
 }
 
 .quicknav-text {

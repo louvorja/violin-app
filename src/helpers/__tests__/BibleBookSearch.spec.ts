@@ -7,11 +7,29 @@ const livros: BibleBook[] = [
   { id_bible_book: 1, name: "Gênesis", abbreviation: "Gn", chapters: 50, keywords: "genesis" },
   { id_bible_book: 2, name: "Êxodo", abbreviation: "Ex", chapters: 40, keywords: "exodo" },
   { id_bible_book: 9, name: "I Samuel", abbreviation: "1Sm", chapters: 31, keywords: "i samuel" },
-  { id_bible_book: 10, name: "II Samuel", abbreviation: "2Sm", chapters: 24, keywords: "ii samuel" },
+  {
+    id_bible_book: 10,
+    name: "II Samuel",
+    abbreviation: "2Sm",
+    chapters: 24,
+    keywords: "ii samuel",
+  },
   { id_bible_book: 11, name: "I Reis", abbreviation: "1Rs", chapters: 22, keywords: "i reis" },
   { id_bible_book: 12, name: "II Reis", abbreviation: "2Rs", chapters: 25, keywords: "ii reis" },
-  { id_bible_book: 13, name: "I Crônicas", abbreviation: "1Cr", chapters: 29, keywords: "i cronicas" },
-  { id_bible_book: 14, name: "II Crônicas", abbreviation: "2Cr", chapters: 36, keywords: "ii cronicas" },
+  {
+    id_bible_book: 13,
+    name: "I Crônicas",
+    abbreviation: "1Cr",
+    chapters: 29,
+    keywords: "i cronicas",
+  },
+  {
+    id_bible_book: 14,
+    name: "II Crônicas",
+    abbreviation: "2Cr",
+    chapters: 36,
+    keywords: "ii cronicas",
+  },
   { id_bible_book: 18, name: "Jó", abbreviation: "Jó", chapters: 42, keywords: "jo" },
   { id_bible_book: 19, name: "Salmos", abbreviation: "Sl", chapters: 150, keywords: "salmos" },
   {
@@ -23,8 +41,20 @@ const livros: BibleBook[] = [
   },
   { id_bible_book: 23, name: "Isaías", abbreviation: "Is", chapters: 66, keywords: "isaias" },
   { id_bible_book: 43, name: "João", abbreviation: "Jo", chapters: 21, keywords: "joao" },
-  { id_bible_book: 46, name: "I Coríntios", abbreviation: "1Co", chapters: 16, keywords: "i corintios" },
-  { id_bible_book: 47, name: "II Coríntios", abbreviation: "2Co", chapters: 13, keywords: "ii corintios" },
+  {
+    id_bible_book: 46,
+    name: "I Coríntios",
+    abbreviation: "1Co",
+    chapters: 16,
+    keywords: "i corintios",
+  },
+  {
+    id_bible_book: 47,
+    name: "II Coríntios",
+    abbreviation: "2Co",
+    chapters: 13,
+    keywords: "ii corintios",
+  },
   {
     id_bible_book: 52,
     name: "I Tessalonicenses",
@@ -40,7 +70,13 @@ const livros: BibleBook[] = [
     keywords: "ii tessalonicenses",
   },
   { id_bible_book: 54, name: "I Timóteo", abbreviation: "1Tm", chapters: 6, keywords: "i timoteo" },
-  { id_bible_book: 55, name: "II Timóteo", abbreviation: "2Tm", chapters: 4, keywords: "ii timoteo" },
+  {
+    id_bible_book: 55,
+    name: "II Timóteo",
+    abbreviation: "2Tm",
+    chapters: 4,
+    keywords: "ii timoteo",
+  },
   { id_bible_book: 60, name: "I Pedro", abbreviation: "1Pe", chapters: 5, keywords: "i pedro" },
   { id_bible_book: 61, name: "II Pedro", abbreviation: "2Pe", chapters: 3, keywords: "ii pedro" },
   { id_bible_book: 62, name: "I João", abbreviation: "1Jo", chapters: 5, keywords: "i joao" },
@@ -173,8 +209,9 @@ describe("buscarLivros — exatos e bordas", () => {
     expect(nomes("ISAIAS")).toEqual(["Isaías"]);
   });
 
-  it('"jo" devolve Jó e João, que compartilham a abreviação', () => {
-    expect(nomes("jo")).toEqual(["Jó", "João"]);
+  it('"jo" sem acento vai direto para João; "jó" com acento vai para Jó', () => {
+    expect(nomes("jo")).toEqual(["João"]);
+    expect(nomes("jó")).toEqual(["Jó"]);
   });
 
   it("consulta vazia ou sem correspondência", () => {
