@@ -104,7 +104,6 @@ describe("manifestos com o contrato do fundo do texto", () => {
       "counter",
       "draw",
       "message_board",
-      "name_draw",
       "stopwatch",
       "timer",
       "timer_worship",

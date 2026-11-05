@@ -6,6 +6,7 @@ import { ICONS } from "@/config/Icons";
 import { FONT } from "@/config/Fonts";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { getModulePath } from "@/helpers/ModulePath";
+import { KEYS } from "@/constants/UserDataKeys";
 
 const moduleId = ModuleEnum.DRAW;
 const modulePath = getModulePath(moduleId);
@@ -27,6 +28,12 @@ export const module: Module = {
     font_color: { type: "color", default: "#FFFFFF" },
     text_background_enabled: { type: "boolean", default: false },
     text_background_color: { type: "color", default: "transparent" },
+    text_background_opacity: { type: "opacity", default: 100 },
+    text_border_enabled: { type: "boolean", default: false },
+    text_border_color: { type: "color", default: "#FFFFFF" },
+    text_border_opacity: { type: "opacity", default: 100 },
+    text_border_radius: { type: "radius", default: 0 },
+    text_border_width: { type: "border-width", default: 2 },
     text_padding_x: { type: "padding", default: 0 },
     text_padding_y: { type: "padding", default: 0 },
     font_size: { type: "font-size", default: 50 },
@@ -69,25 +76,53 @@ export const contextualPages: RibbonPage[] = [
             action: `${moduleId}_reset`,
             color: "#7f8c8d",
           },
+          {
+            id: `${moduleId}_toggle`,
+            icon: ICONS.PLAYER.PLAY_PAUSE,
+            label: "",
+            action: `${moduleId}_toggle`,
+            color: "#3498db",
+            stateBinding: {
+              watchPath: KEYS.MODULES.DRAW.NAMES_RUNNING,
+              iconOn: ICONS.PLAYER.STOP,
+              iconOff: ICONS.PLAYER.PLAY,
+              colorOn: "#e67e22",
+              colorOff: "#27ae60",
+              labelOn: `${modulePath}.actions.finish`,
+              labelOff: `${modulePath}.actions.start`,
+            },
+          },
+          {
+            id: `${moduleId}_toggle_list`,
+            icon: ICONS.FORMAT.LIST_BULLETED,
+            label: `${modulePath}.ribbon.list`,
+            action: `${moduleId}_toggle_list`,
+            color: "#9c27b0",
+            activePath: KEYS.MODULES.DRAW.LIST_OPEN,
+          },
         ],
       },
       {
-        id: moduleCtxId + "_range",
-        title: `${modulePath}.ribbon.range`,
+        id: moduleCtxId + "_mode",
+        title: `${modulePath}.ribbon.type`,
         buttons: [
           {
-            id: `${moduleId}_range_min`,
-            type: "number",
-            optionKey: `modules.${moduleId}.range_min`,
-            label: `${modulePath}.ribbon.range_min`,
-            defaultValue: 1,
+            id: `${moduleId}_mode`,
+            type: "select",
+            optionKey: KEYS.MODULES.DRAW.MODE,
+            label: `${modulePath}.ribbon.mode`,
+            defaultValue: "number",
+            options: [
+              { value: "number", label: `${modulePath}.modes.numbers` },
+              { value: "names", label: `${modulePath}.modes.names` },
+            ],
           },
           {
-            id: `${moduleId}_range_max`,
-            type: "number",
-            optionKey: `modules.${moduleId}.range_max`,
-            label: `${modulePath}.ribbon.range_max`,
-            defaultValue: 100,
+            id: `${moduleId}_show_drawn_history`,
+            type: "switch",
+            optionKey: KEYS.MODULES.DRAW.SHOW_DRAWN_HISTORY,
+            label: `${modulePath}.ribbon.show_drawn_history`,
+            defaultValue: false,
           },
         ],
       },
@@ -98,11 +133,11 @@ export const contextualPages: RibbonPage[] = [
           {
             id: `${moduleId}_effect_duration`,
             type: "slider",
-            optionKey: `modules.${moduleId}.effect_duration`,
+            optionKey: KEYS.MODULES.DRAW.EFFECT_DURATION,
             label: `${modulePath}.ribbon.effect_duration`,
             defaultValue: 2000,
             min: 500,
-            max: 5000,
+            max: 10000,
             step: 100,
           },
         ],
@@ -111,13 +146,6 @@ export const contextualPages: RibbonPage[] = [
         id: moduleCtxId + "_format",
         title: "ribbon.groups.format",
         buttons: [
-          {
-            id: `${moduleId}_show_drawn_history`,
-            type: "switch",
-            optionKey: `modules.${moduleId}.show_drawn_history`,
-            label: `${modulePath}.ribbon.show_drawn_history`,
-            defaultValue: false,
-          },
           {
             id: `${moduleId}_toggle_format`,
             icon: ICONS.ACTIONS.FORMAT,

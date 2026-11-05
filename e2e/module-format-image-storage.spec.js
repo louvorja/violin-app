@@ -85,11 +85,10 @@ test("fundo grande de módulo preserva imagem e preferências após recarregar",
     .toBe(true);
   await page.evaluate(async (image) => {
     const { default: userData } = await import("/src/helpers/UserData.ts");
-    for (const module of ["draw", "name_draw", "bible"])
-      userData.set(`modules.${module}.image`, image);
+    for (const module of ["draw", "bible"]) userData.set(`modules.${module}.image`, image);
     userData.flushPendingWebSave();
   }, saved.image);
-  for (const module of ["draw", "name_draw"]) {
+  for (const module of ["draw"]) {
     await projection.goto(`/projection/module?module=${module}`);
     await expect
       .poll(() =>

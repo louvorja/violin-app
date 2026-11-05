@@ -2271,7 +2271,7 @@ $storage.hydrate().then(async () => {
           break;
         }
         case "http:drawing-number":
-          Broadcast.send(BROADCAST_TYPE.DRAWING_NUMBER, { number: data.number });
+          Broadcast.send(BROADCAST_TYPE.DRAWING_TEXT, { text: String(data.number) });
           break;
         case "http:libras-bundle": {
           // Handler para bundles de animação VLibras.
@@ -2300,7 +2300,7 @@ $storage.hydrate().then(async () => {
           break;
         }
         case "http:drawing-name":
-          Broadcast.send(BROADCAST_TYPE.DRAWING_NAME, { name: data.name });
+          Broadcast.send(BROADCAST_TYPE.DRAWING_TEXT, { text: String(data.name) });
           break;
         case "http:projections-close": {
           Media.close(true);
@@ -2313,7 +2313,6 @@ $storage.hydrate().then(async () => {
           const moduleIds = [
             ModuleEnum.COUNTER,
             ModuleEnum.DRAW,
-            ModuleEnum.NAME_DRAW,
             ModuleEnum.MESSAGE_BOARD,
             ModuleEnum.STOPWATCH,
             ModuleEnum.TIMER,
@@ -2346,7 +2345,7 @@ $storage.hydrate().then(async () => {
       // Para módulos com LScreenBtn, REQUEST_MODULE_STATE espera um
       // module id; sem janela de projeção pedindo, reemitimos para os
       // ids conhecidos que têm captura.
-      const moduleIds = ["counter", "draw", "name_draw", "message_board", "stopwatch", "timer"];
+      const moduleIds = ["counter", "draw", "message_board", "stopwatch", "timer"];
       for (const id of moduleIds) {
         Broadcast.send(BROADCAST_TYPE.REQUEST_MODULE_STATE, { module: id });
       }
@@ -2762,7 +2761,6 @@ $storage.hydrate().then(async () => {
           const moduleIds = [
             ModuleEnum.COUNTER,
             ModuleEnum.DRAW,
-            ModuleEnum.NAME_DRAW,
             ModuleEnum.MESSAGE_BOARD,
             ModuleEnum.STOPWATCH,
             ModuleEnum.TIMER,

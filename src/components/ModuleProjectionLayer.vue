@@ -13,8 +13,14 @@
   de fundo não tem query para ler.
 -->
 <template>
-  <DrawProjection v-if="isDraw" :text="text" :reference="reference" :active="active" />
-  <NameDrawProjection v-else-if="isNameDraw" :text="text" :reference="reference" :active="active" />
+  <DrawProjection
+    v-if="isDraw"
+    :text="text"
+    :reference="reference"
+    :active="active"
+    :mode="drawMode"
+    :wheel="drawWheel"
+  />
   <div
     v-else
     ref="container"
@@ -88,7 +94,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import Broadcast from "@/helpers/Broadcast";
@@ -97,7 +103,6 @@ import { KEYS } from "@/constants/UserDataKeys";
 import { FONT, resolveFont } from "@/config/Fonts";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import DrawProjection from "@/modules/draw/components/DrawProjection.vue";
-import NameDrawProjection from "@/modules/name_draw/components/NameDrawProjection.vue";
 import ModuleBackgroundMedia from "@/components/ModuleBackgroundMedia.vue";
 import { useContainerSize } from "@/composables/useContainerSize";
 import { useStoredImageUrl } from "@/composables/useStoredImageUrl";
@@ -122,12 +127,13 @@ const moduleId = computed(() => props.moduleId);
 const text = ref("");
 const extra = ref(""); // referência, "Sorteado:", etc.
 const reference = ref([]); // draw envia string[] de sorteados (chips)
+const drawMode = ref("number");
+const drawWheel = ref(null);
 const active = ref(false);
 const color = ref("");
 
-// Módulo draw/name_draw têm layout dedicado que monta chips.
+// O Sorteio tem layout dedicado que monta os chips dos já sorteados.
 const isDraw = computed(() => moduleId.value === ModuleEnum.DRAW);
-const isNameDraw = computed(() => moduleId.value === ModuleEnum.NAME_DRAW);
 
 // Tick force re-read do UserData quando broadcast chega.
 const _tick = ref(0);
@@ -230,25 +236,14 @@ const transitionKey = computed(() =>
   isLive.value ? `live:${active.value}` : `${text.value}|${extra.value}`
 );
 
-const EMPTY_ICONS = {
-  bible: "📖",
-  message_board: "📋",
-  draw: "🎲",
-  name_draw: "👥",
-  counter: "🔢",
-  clock: "🕐",
-  stopwatch: "⏱",
-  timer: "⏳",
-};
-const emptyIcon = computed(() => EMPTY_ICONS[moduleId.value] || "🖥");
-const emptyHint = computed(() => "Aguardando…");
-
 useBroadcastListener(BROADCAST_TYPE.MODULE_PROJECTION_VALUE, (payload) => {
   if (!payload || payload.module !== moduleId.value) return;
   text.value = payload.text || "";
-  if (isDraw.value || isNameDraw.value) {
+  if (isDraw.value) {
     reference.value = Array.isArray(payload.reference) ? payload.reference : [];
     extra.value = "";
+    drawMode.value = payload.mode === "names" ? "names" : "number";
+    drawWheel.value = payload.wheel ?? null;
   } else {
     extra.value = payload.reference || payload.extra || "";
   }

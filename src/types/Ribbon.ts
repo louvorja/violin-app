@@ -27,6 +27,8 @@ export interface RibbonButton {
   action?: string;
   disabled?: boolean;
   color?: string;
+  /** Chave booleana que deixa o botão visualmente pressionado. */
+  activePath?: string;
   size?: "small";
   style?: CSSProperties;
   type?: "screen" | "checkbox" | "switch" | "action_input" | "select" | "slider" | "number";

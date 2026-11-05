@@ -202,6 +202,14 @@ describe("LjTabs", () => {
     expect(document.body.textContent).not.toContain("Conteúdo Geral");
   });
 
+  it("desabilita todas as abas quando disabled", async () => {
+    const w = montar({ props: { modelValue: "geral", tabs: ABAS, disabled: true } });
+
+    expect(abas().map((el) => (el as HTMLButtonElement).disabled)).toEqual([true, true, true]);
+    await clicar(abas()[1]);
+    expect(w.emitted("update:modelValue")).toBeUndefined();
+  });
+
   it("não quebra quando a lista de abas está vazia", () => {
     montar({ props: { modelValue: "geral", tabs: [] } });
 

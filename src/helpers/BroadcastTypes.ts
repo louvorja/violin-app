@@ -236,11 +236,8 @@ export const BROADCAST_TYPE = Object.freeze({
 
   // ─── In-app (hotkeys / HTTP events → módulos) ────────────────────────────
 
-  /** Número sorteado via HTTP externo. Recebido por: módulo draw. */
-  DRAWING_NUMBER: "drawing_number",
-
-  /** Nome sorteado via HTTP externo. Recebido por: módulo name_draw. */
-  DRAWING_NAME: "drawing_name",
+  /** Texto sorteado via HTTP externo (número ou nome). Recebido por: módulo draw. */
+  DRAWING_TEXT: "drawing_text",
 
   /** Solicita recarga de dados do módulo ativo. Emitido por F5/F9 e Ctrl+Shift+F2. */
   MODULE_REFRESH: "module:refresh",
@@ -344,12 +341,8 @@ export interface MessageBoardPayload {
   active: boolean;
 }
 
-export interface DrawingNumberPayload {
-  number: number;
-}
-
-export interface DrawingNamePayload {
-  name: string;
+export interface DrawingTextPayload {
+  text: string;
 }
 
 export interface ModuleRefreshPayload {

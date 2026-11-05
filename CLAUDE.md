@@ -125,7 +125,6 @@ src/
 │   │       ├── Index.vue                 # Layout two-columns (playlist panel + songs)
 │   │       ├── PlaylistPanel.vue         # Painel esquerdo: criar/renomear/excluir playlists
 │   │       └── PlaylistSongs.vue         # Painel direito: músicas da playlist + play
-│   ├── name_draw/       # Sorteio de nomes (fullscreen dialog)
 │   ├── remote_control/
 │   ├── slide_editor/    # Editor de slides (autosave sessionStorage)
 │   ├── stopwatch/       # Cronômetro (alarme sonoro via Web Audio API)
@@ -870,7 +869,7 @@ _Muito solicitado por usuários de live_
 | Feature                    | Origem Delphi                  | Status                |
 | -------------------------- | ------------------------------ | --------------------- |
 | Sorteador de números       | `fmMonitorSorteio.pas`         | ✅ módulo `draw`      |
-| Sorteador de nomes         | `fmMonitorSorteioNomes.pas`    | ✅ módulo `name_draw` |
+| Sorteador de nomes         | `fmMonitorSorteioNomes.pas`    | ✅ módulo `draw` (modo Nomes) |
 | Painel de recados dinâmico | `fmMonitorPainelDinamico.pas`  | ⚠️ roadmap            |
 | Texto interativo em tela   | `fmMonitorTextoInterativo.pas` | ⚠️ roadmap            |
 | Contador                   | módulo `counter`               | ✅ módulo `counter`   |

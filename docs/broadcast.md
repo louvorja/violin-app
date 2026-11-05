@@ -120,8 +120,7 @@ evitando que uma cópia antiga substitua o estado atual.
 | `MEDIA_NEXT_MUSIC` | Ctrl+→ |
 | `LITURGY_NEW_ITEM` | Ctrl+N |
 | `LITURGY_NEW_ANNOTATION` | Ctrl+Shift+N |
-| `DRAWING_NUMBER` | HTTP externo (sorteio) |
-| `DRAWING_NAME` | HTTP externo (sorteio) |
+| `DRAWING_TEXT` | HTTP externo (sorteio): número ou nome em `{ text }` |
 
 ---
 

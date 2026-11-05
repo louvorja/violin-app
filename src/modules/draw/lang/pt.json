@@ -1,16 +1,46 @@
 {
   "title": "Sorteio",
-  "description": "Sorteador de números com animação.",
-  "inputs": { "min": "Mínimo", "max": "Máximo" },
-  "actions": { "draw": "Sortear", "reset": "Reiniciar", "fullscreen": "Tela cheia" },
-  "data": { "drawn": "Números sorteados", "remaining": "Restantes" },
+  "description": "Sorteador de números ou nomes com animação.",
+  "inputs": {
+    "min": "Mínimo",
+    "max": "Máximo",
+    "names": "Digite um nome e pressione Enter"
+  },
+  "actions": {
+    "draw": "Sortear",
+    "reset": "Reiniciar",
+    "fullscreen": "Tela cheia",
+    "list": "Lista do sorteio",
+    "start": "Iniciar sorteio",
+    "finish": "Finalizar sorteio",
+    "remove": "Remover",
+    "import_txt": "Importar txt",
+    "edit": "Editar",
+    "save": "Salvar",
+    "cancel": "Cancelar",
+    "export_txt": "Exportar"
+  },
+  "data": {
+    "drawn": "Sorteados",
+    "remaining": "Restantes",
+    "list": "Lista do sorteio",
+    "no_options": "Nenhuma opção no sorteio."
+  },
   "ribbon": {
     "title_ctx": "Configurar Sorteio",
-    "range": "Intervalo",
-    "range_min": "Número inicial",
-    "range_max": "Número final",
     "effects": "Efeito",
     "effect_duration": "Duração do efeito",
-    "show_drawn_history": "Exibir sorteados na projeção"
+    "show_drawn_history": "Exibir sorteados na projeção",
+    "type": "Tipo de sorteio",
+    "mode": "Modo",
+    "list": "Lista do Sorteio"
+  },
+  "modes": {
+    "numbers": "Números",
+    "names": "Nomes"
+  },
+  "confirm": {
+    "reset_title": "Reiniciar sorteio",
+    "reset_text": "Deseja reiniciar o sorteio? O resultado e o histórico serão apagados. Se o sorteio estiver iniciado, ele será finalizado automaticamente."
   }
 }

@@ -6,15 +6,15 @@
 import { ModuleEnum } from "@/enums/ModuleEnum";
 
 //Variáveis Locais
-const OPTIONS = "options"
-const MODULES = "modules"
+const OPTIONS = "options";
+const MODULES = "modules";
 const STORAGE = "storage";
-const OPTIONS_DISPLAYS = `${OPTIONS}.displays`
-const OPTIONS_SLIDE = `${OPTIONS}.slide`
-const OPTIONS_FILE_PROJECTION = `${OPTIONS}.file_projection`
-const OPTIONS_ONLINE_VIDEO_PROJECTION = `${OPTIONS}.online_video_projection`
-const OPTIONS_SITE_PROJECTION = `${OPTIONS}.site_projection`
-const OPTIONS_INTEGRATIONS = `${OPTIONS}.integrations`
+const OPTIONS_DISPLAYS = `${OPTIONS}.displays`;
+const OPTIONS_SLIDE = `${OPTIONS}.slide`;
+const OPTIONS_FILE_PROJECTION = `${OPTIONS}.file_projection`;
+const OPTIONS_ONLINE_VIDEO_PROJECTION = `${OPTIONS}.online_video_projection`;
+const OPTIONS_SITE_PROJECTION = `${OPTIONS}.site_projection`;
+const OPTIONS_INTEGRATIONS = `${OPTIONS}.integrations`;
 const MODULES_BIBLE = `${MODULES}.${ModuleEnum.BIBLE}`;
 const MODULES_BIBLE_DATA = `${MODULES}.${ModuleEnum.BIBLE}.data`;
 const MODULES_LIBRAS = `${MODULES}.${ModuleEnum.LIBRAS}`;
@@ -40,7 +40,6 @@ export const KEY_LITURGY_ACTIVE_DAY = `${MODULES_LITURGY}.active_day`;
 export function moduleShowInMainMenu(id: string): string {
   return `${MODULES}.${id}.show_in_main_menu`;
 }
-
 
 export const KEYS = {
   MODULES: {
@@ -172,11 +171,22 @@ export const KEYS = {
         CIRCLE_ORIGIN: `${MODULES}.${ModuleEnum.MEDIA_LIBRARY}.transition_options.circle_origin`,
       },
     },
+    DRAW: {
+      MODE: `${MODULES}.${ModuleEnum.DRAW}.mode`,
+      RANGE_MIN: `${MODULES}.${ModuleEnum.DRAW}.range_min`,
+      RANGE_MAX: `${MODULES}.${ModuleEnum.DRAW}.range_max`,
+      EFFECT_DURATION: `${MODULES}.${ModuleEnum.DRAW}.effect_duration`,
+      SHOW_DRAWN_HISTORY: `${MODULES}.${ModuleEnum.DRAW}.show_drawn_history`,
+      NAMES: `${MODULES}.${ModuleEnum.DRAW}.names`,
+      NAMES_RUNNING: `${MODULES}.${ModuleEnum.DRAW}.names_running`,
+      LIST_OPEN: `${MODULES}.${ModuleEnum.DRAW}.list_open`,
+    },
+    /** Chaves antigas do módulo Sorteio de Nomes; lidas apenas na migração. */
     NAME_DRAW: {
-      RUNNING: `${MODULES}.${ModuleEnum.NAME_DRAW}.running`,
-      SHOW_DRAWN: `${MODULES}.${ModuleEnum.NAME_DRAW}.show_drawn`,
-      EFFECT_DURATION: `${MODULES}.${ModuleEnum.NAME_DRAW}.effect_duration`,
-      NAMES: `${MODULES}.${ModuleEnum.NAME_DRAW}.names`,
+      RUNNING: `${MODULES}.name_draw.running`,
+      SHOW_DRAWN: `${MODULES}.name_draw.show_drawn`,
+      EFFECT_DURATION: `${MODULES}.name_draw.effect_duration`,
+      NAMES: `${MODULES}.name_draw.names`,
     },
     ONLINE_VIDEOS: {
       IS_PROJECTING: `${MODULES}.${ModuleEnum.ONLINE_VIDEOS}.is_projecting`,

@@ -47,7 +47,6 @@ const FEATURE_GROUP: Record<string, "presentation" | "return"> = {
   bible: "presentation",
   counter: "presentation",
   draw: "presentation",
-  name_draw: "presentation",
   message_board: "presentation",
   stopwatch: "presentation",
   timer: "presentation",
@@ -62,7 +61,7 @@ const FEATURE_GROUP: Record<string, "presentation" | "return"> = {
 
 const GROUP_TO_FEATURE = {
   presentation: "musicas", // alinhado com ProjectionWindows.ts FEATURE_PROJECTION
-  return: "retorno",        // FEATURE_RETURN
+  return: "retorno", // FEATURE_RETURN
 } as const;
 
 function _featureKey(feature: string): string {
@@ -109,7 +108,9 @@ export async function listDisplays(): Promise<DisplayInfo[]> {
   if (screens.length > 1) {
     return screens.map((screen) => ({
       id: screen.id,
-      label: screen.label ? `Monitor ${screen.index + 1} — ${screen.label}` : `Monitor ${screen.index + 1}`,
+      label: screen.label
+        ? `Monitor ${screen.index + 1} — ${screen.label}`
+        : `Monitor ${screen.index + 1}`,
       primary: screen.primary,
       bounds: screen.bounds,
     }));
@@ -127,7 +128,6 @@ export async function listDisplays(): Promise<DisplayInfo[]> {
   }
   return [];
 }
-
 
 export async function getCategorizedDisplays(): Promise<CategorizedDisplays> {
   const displays = await listDisplays();
@@ -169,8 +169,10 @@ async function _getRawPreferred(feature: string): Promise<number | string | null
     }
   }
   const prefs =
-    ($userdata.get(KEYS.OPTIONS.DISPLAYS.PREFERRED, {}) as Record<string, number | string | null>) ??
-    {};
+    ($userdata.get(KEYS.OPTIONS.DISPLAYS.PREFERRED, {}) as Record<
+      string,
+      number | string | null
+    >) ?? {};
   return prefs[feature] ?? null;
 }
 
@@ -210,7 +212,7 @@ export async function getPreferredMonitor(
   // O main já resolve o papel e a escolha individual. null pode significar
   // monitor desconectado: aplicar outro fallback aqui projetaria na tela errada.
   const api = await _getDisplaysApi();
-  if (api?.getFeatureRole || await _hasExplicitPreference(feature)) return null;
+  if (api?.getFeatureRole || (await _hasExplicitPreference(feature))) return null;
 
   const fallback = _fallbackFeature(feature);
   if (fallback) return await _getRawPreferred(fallback);
@@ -298,7 +300,9 @@ export async function isOpen(feature: string): Promise<boolean> {
  * Geometria da tela do papel que a feature usa, para abrir o popup já no
  * projetor. Síncrona de propósito — ver `openWebWindow`.
  */
-function _webRectFor(feature: string): { x: number; y: number; width: number; height: number } | null {
+function _webRectFor(
+  feature: string
+): { x: number; y: number; width: number; height: number } | null {
   try {
     const chosen =
       ($userdata.get(KEYS.OPTIONS.DISPLAYS.FEATURE_ROLES, {}) as Record<string, string>) ?? {};
@@ -348,7 +352,11 @@ let _warnedUnsupported = false;
 /** Abre a janela de projeção no monitor escolhido (ou no preferido). */
 export async function open(opts: OpenOptions): Promise<void> {
   const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
-  const elapsed = () => Math.max(0, Math.round((typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt));
+  const elapsed = () =>
+    Math.max(
+      0,
+      Math.round((typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt)
+    );
   const report = (outcome: string, extra: Record<string, unknown> = {}) => {
     const durationMs = elapsed();
     Telemetry.track("projection_window_opened", {
