@@ -14,7 +14,6 @@ export const HOTKEY = {
   // ⌘M minimiza a janela.
   MUSIC_SEARCH: "Ctrl+m",
   CHAT: "Mod+i",
-  FOCUS_SEARCH: "Mod+f",
   // ⌘W fecha a janela pelo menu nativo do macOS.
   CLOSE_MODULE: "Ctrl+w",
   CLEAR_CACHE: "Mod+Shift+F2",

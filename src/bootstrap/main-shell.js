@@ -2629,22 +2629,6 @@ $storage.hydrate().then(async () => {
       }
     );
 
-    // F5 / F9: refresh — recarrega dados do módulo ativo
-    const _refreshHandler = () => {
-      // Emite evento via broadcast para que o módulo ativo possa ouvir
-      Broadcast.send(BROADCAST_TYPE.MODULE_REFRESH, {});
-    };
-    Hotkeys.register("F5", _refreshHandler, {
-      context: "global",
-      description: "hotkeys.f5",
-      group: "general",
-    });
-    Hotkeys.register("F9", _refreshHandler, {
-      context: "global",
-      description: "hotkeys.f5",
-      group: "general",
-    });
-
     // ⌘K / Ctrl+K: Command Palette
     Hotkeys.register(
       HOTKEY.COMMAND_PALETTE,
@@ -2706,21 +2690,6 @@ $storage.hydrate().then(async () => {
       {
         context: "global",
         description: "hotkeys.ctrl_i",
-        group: "general",
-      }
-    );
-
-    // ⌘F / Ctrl+F: foca campo de busca do módulo ativo via broadcast
-    Hotkeys.register(
-      HOTKEY.FOCUS_SEARCH,
-      () => {
-        Broadcast.send(BROADCAST_TYPE.MODULE_FOCUS_SEARCH, {});
-        // No browser este atalho abre busca nativa; não há como prevenir completamente.
-        // preventDefault já está definido no Hotkeys — no Electron funciona; no web pode falhar.
-      },
-      {
-        context: "global",
-        description: "hotkeys.ctrl_f",
         group: "general",
       }
     );
