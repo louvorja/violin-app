@@ -14,8 +14,9 @@ export const HOTKEY = {
   // ⌘M minimiza a janela.
   MUSIC_SEARCH: "Ctrl+m",
   CHAT: "Mod+i",
-  // ⌘W fecha a janela pelo menu nativo do macOS.
-  CLOSE_MODULE: "Ctrl+w",
+  // Fecha a aba; sem aba, a janela. No Mac o ⌘W chega pelo main, antes do menu
+  // nativo (Fechar janela).
+  CLOSE_MODULE: "Mod+w",
   CLEAR_CACHE: "Mod+Shift+F2",
   // ⌥⌘D mostra e esconde o Dock.
   DEV_MODE: "Ctrl+Alt+d",

@@ -723,11 +723,17 @@ leem dali. `Mod` é o Command no Mac e o Ctrl nos outros sistemas; o rótulo sai
 `formatShortcut()` (`⇧⌘N` no Mac, `Ctrl+Shift+N` fora dele) — não escreva "Ctrl+X" em
 texto traduzido.
 
-`Ctrl` explícito fica só onde o Mac já usa o Command: ⌃M (⌘M minimiza), ⌃W (⌘W fecha a
-janela pelo menu nativo), ⌃Tab (⌘Tab troca de app), ⌃Espaço (⌘Espaço é o Spotlight) e
-⌃⌥D (⌥⌘D é o Dock). No Mac o Ctrl continua valendo por baixo do Command, sem aparecer na
-lista: o controle remoto manda Ctrl seja qual for o sistema. No navegador do Mac, ⌘N e
-⇧⌘N ficam com o Chrome, então ali a interface mostra o Ctrl.
+`Ctrl` explícito fica só onde o Mac já usa o Command: ⌃M (⌘M minimiza), ⌃Tab (⌘Tab troca
+de app), ⌃Espaço (⌘Espaço é o Spotlight) e ⌃⌥D (⌥⌘D é o Dock). No Mac o Ctrl continua
+valendo por baixo do Command, sem aparecer na lista: o controle remoto manda Ctrl seja qual
+for o sistema. No navegador do Mac, ⌘N, ⇧⌘N e ⌘W ficam com o Chrome, então ali a interface
+mostra o Ctrl.
+
+⌘W / Ctrl+W fecha a aba à vista, como no Chrome; sem aba, a janela — pelo mesmo
+`window:close` do botão de fechar, que com projeção no ar só tira a janela da frente. No
+Mac o menu nativo (Fechar janela) pegaria o ⌘W antes da página: o `before-input-event` da
+janela principal (`electron/main.cjs`) cancela a tecla e a entrega ao Hotkeys pelo mesmo
+evento sintético do `/api/keyboard`.
 
 Tecla que só age com mídia aberta passa por `_ifMedia` com `preventDefault: false`: é ele
 que cancela quando age. Com o cancelamento automático do Hotkeys, PageUp não rolava lista

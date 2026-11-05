@@ -2892,14 +2892,20 @@ $storage.hydrate().then(async () => {
     // Ctrl+W: fecha módulo ativo (o browser pode fechar a aba — preventDefault tenta evitar)
     Hotkeys.register(
       HOTKEY.CLOSE_MODULE,
-      () => {
-        const id = _getActiveModuleId();
-        if (id) Modules.close(id);
+      (e) => {
+        // Segurar a tecla não pode ir fechando abas até derrubar a janela.
+        if (e?.repeat) return;
+        // Sem aba, a janela: o mesmo que o botão de fechar (com projeção no ar,
+        // ela só sai da frente).
+        if (!Modules.closeActiveTab()) void Platform.api?.window?.close?.();
       },
       {
         context: "global",
         description: "hotkeys.ctrl_w",
         group: "general",
+        // O cursor quase sempre está na busca: fora dela a tecla seguiria para o
+        // menu nativo, que fecha a janela de uma vez.
+        allowInForm: true,
       }
     );
 

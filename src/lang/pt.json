@@ -1624,7 +1624,7 @@
     "esc": "Encerrar projeções ativas",
     "f1": "Mostrar atalhos de teclado",
     "f8": "Ativar/desativar modo culto",
-    "ctrl_w": "Fechar módulo ativo",
+    "ctrl_w": "Fechar a aba (sem abas, a janela)",
     "ctrl_space": "Abrir busca rápida",
     "ctrl_b": "Abrir busca bíblica rápida",
     "ctrl_m": "Abrir busca de músicas",

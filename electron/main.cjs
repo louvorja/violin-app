@@ -895,6 +895,23 @@ function createWindow() {
     console.info("[lifecycle] Janela principal mantida em segundo plano:", projections);
   });
 
+  // ⌘W fecha a aba, como no Chrome. O menu nativo do macOS (Fechar janela)
+  // pegaria a tecla antes da página; aqui ela segue para o Hotkeys do renderer
+  // pelo mesmo evento sintético do /api/keyboard, e ele decide entre a aba e a
+  // janela. Segurar a tecla não repete: não pode ir fechando até a janela.
+  mainWindow.webContents.on("before-input-event", (event, input) => {
+    if (process.platform !== "darwin" || input.type !== "keyDown") return;
+    if (!input.meta || input.control || input.alt || input.shift) return;
+    if (input.key.toLowerCase() !== "w") return;
+    event.preventDefault();
+    if (input.isAutoRepeat) return;
+    mainWindow.webContents
+      .executeJavaScript(
+        'window.dispatchEvent(new KeyboardEvent("keydown", { key: "w", metaKey: true, bubbles: true, cancelable: true }))'
+      )
+      .catch(() => { /* janela recarregando ou destruída */ });
+  });
+
   // Recarregar a página derruba o listener do renderer; até ele voltar a
   // avisar que está pronto, o que chegar precisa ficar na fila.
   mainWindow.webContents.on("did-start-loading", () => {

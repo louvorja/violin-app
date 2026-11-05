@@ -1624,7 +1624,7 @@
     "esc": "Finalizar proyecciones activas",
     "f1": "Mostrar atajos de teclado",
     "f8": "Activar/desactivar modo culto",
-    "ctrl_w": "Cerrar módulo activo",
+    "ctrl_w": "Cerrar la pestaña (sin pestañas, la ventana)",
     "ctrl_space": "Abrir búsqueda rápida",
     "ctrl_b": "Abrir búsqueda bíblica rápida",
     "ctrl_m": "Abrir búsqueda de canciones",

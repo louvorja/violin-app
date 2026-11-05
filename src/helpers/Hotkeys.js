@@ -78,7 +78,13 @@ function _normalizeCombo(combo) {
 }
 
 // O Chrome no Mac fica com estas e a página nunca as recebe; no Electron elas chegam.
-const MAC_BROWSER_RESERVED = new Set(["Meta+n", "Meta+Shift+n", "Meta+t", "Meta+Shift+t"]);
+const MAC_BROWSER_RESERVED = new Set([
+  "Meta+n",
+  "Meta+Shift+n",
+  "Meta+t",
+  "Meta+Shift+t",
+  "Meta+w",
+]);
 
 /**
  * `Mod` → as combinações reais. A primeira é a que a interface mostra; no Mac o
