@@ -130,7 +130,7 @@ export default {
    * Controle do cache JSON local em userData/json_db/ (D2).
    * null quando rodando no browser/PWA.
    *
-   * @returns {{ clear, dir } | null}
+   * @returns {{ expire, dir } | null}
    */
   get jsonCache() {
     return api?.jsonCache ?? null;

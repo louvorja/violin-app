@@ -109,9 +109,7 @@ import { LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { onMounted, ref } from "vue";
 import $userdata from "@/helpers/UserData";
-import $storage from "@/helpers/Storage";
-import Broadcast from "@/helpers/Broadcast";
-import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
+import { clearDatabaseCache } from "@/helpers/DatabaseCache";
 import { KEYS } from "@/constants/UserDataKeys";
 import Platform from "@/helpers/Platform";
 
@@ -189,8 +187,7 @@ function openDevToolsConsole(): void {
 }
 
 function clearDbCache(): void {
-  $storage.removeAll("db", "session");
-  Broadcast.send(BROADCAST_TYPE.MODULE_REFRESH, { clearCache: true });
+  void clearDatabaseCache();
 }
 
 async function loadEnv(): Promise<void> {

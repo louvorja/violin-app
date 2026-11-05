@@ -1764,7 +1764,7 @@ ipcMain.handle("protocol:setRemoteConfig", (_event, cfg) => {
 });
 
 /** Limpa todo o cache JSON em userData/json_db/ */
-ipcMain.handle("jsonCache:clear", () => jsonCache.clearCache());
+ipcMain.handle("jsonCache:expire", (_event, files) => jsonCache.expire(files));
 
 /** Retorna o caminho do diretório de cache (debug / módulo update) */
 ipcMain.handle("jsonCache:dir", () => {
@@ -2506,7 +2506,6 @@ ipcMain.handle("canva:clearCachedPdfs", () => canva.clearCachedPdfs());
 
 ipcMain.handle("storage:stats", () => storage.stats());
 ipcMain.handle("storage:dataDirIssue", () => paths.dataDirIssue());
-ipcMain.handle("storage:clearJson", () => storage.clearJson());
 ipcMain.handle("storage:clearFiles", () => storage.clearFiles());
 ipcMain.handle("storage:removeJsonByPrefix", (_e, prefix) => storage.removeJsonByPrefix(prefix));
 ipcMain.handle("storage:checkJson", (_e, keys) => storage.checkJsonExists(keys));

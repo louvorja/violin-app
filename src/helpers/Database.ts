@@ -16,6 +16,7 @@ import { fetchWithTimeout, classifyNetworkError, isTransientFailure } from "@/he
 import $path from "@/helpers/Path";
 import $dev from "@/helpers/Dev";
 import $idb from "@/helpers/IndexedDB";
+import Platform from "@/helpers/Platform";
 import { reportReliabilityFailure } from "@/helpers/ReliabilityDiagnostics";
 import type { CatalogChange } from "@/helpers/IndexedDB";
 import { DB_TABLE } from "@/constants/DbTables";
@@ -251,6 +252,19 @@ async function purgeServiceWorkerCopy(file?: string): Promise<void> {
     await Promise.all(urls.map((u) => cache.delete(u, { ignoreSearch: true })));
   } catch {
     // Sem Cache Storage (modo privado, política do navegador): nada a apagar.
+  }
+}
+
+/**
+ * No desktop a leitura seguinte passa pelo cache do main (`<perfil>/json_db`), que
+ * devolve o arquivo do disco por 24 h: sem expirá-lo, limpar aqui relia a mesma
+ * cópia. Expirar, e não apagar, mantém o arquivo como reserva sem internet.
+ */
+async function expireDesktopCopy(files?: string[]): Promise<void> {
+  try {
+    await Platform.jsonCache?.expire(files);
+  } catch {
+    // Sem o main (janela fechando): a cópia vence sozinha em 24 h.
   }
 }
 
@@ -691,11 +705,13 @@ export default {
       _memoryBytes = 0;
       for (const t of CATALOG_TABLES) void $idb.clear(t);
       void purgeServiceWorkerCopy();
+      void expireDesktopCopy();
       $dev.write("Cache do DB limpo (tudo)");
       return;
     }
     memoryDelete(file);
     void purgeServiceWorkerCopy(file);
+    void expireDesktopCopy([file]);
     const r = routeFor(file);
     if (!r) {
       void $idb.del(DB_TABLE.CACHE, file);
@@ -721,7 +737,11 @@ export default {
   async invalidateAll(): Promise<void> {
     _memory.clear();
     _memoryBytes = 0;
-    await Promise.all([...CATALOG_TABLES.map((t) => $idb.clear(t)), purgeServiceWorkerCopy()]);
+    await Promise.all([
+      ...CATALOG_TABLES.map((t) => $idb.clear(t)),
+      purgeServiceWorkerCopy(),
+      expireDesktopCopy(),
+    ]);
     $dev.write("Cache do DB limpo (tudo, aguardado)");
   },
 

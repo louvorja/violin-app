@@ -268,7 +268,6 @@ declare global {
       ) => Promise<void>;
       olderVersion: () => Promise<{ since: string; legacyRoot: string } | null>;
       keepCurrentVersion: () => Promise<void>;
-      clearJson: () => Promise<void>;
       clearFiles: () => Promise<void>;
       setAutoCache: (enabled: boolean) => Promise<void>;
     };
@@ -292,7 +291,10 @@ declare global {
       dir: string;
     };
     protocol: { setRemoteConfig: (config: unknown) => void };
-    jsonCache: { clear: () => Promise<void>; dir: string };
+    jsonCache: {
+      expire: (files?: string[]) => Promise<{ expired: number }>;
+      dir: () => Promise<string>;
+    };
     download: {
       onProgress: (
         cb: (d: { file?: string; total: number; downloaded?: number; failed?: number }) => void

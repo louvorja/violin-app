@@ -5,7 +5,6 @@
  *
  * Replica o comportamento do Delphi (fmArquivosFalta + fmArquivosExcesso):
  * - stats(): tamanho ocupado por categoria (json, files, canva, total).
- * - clearJson(): limpa cache de JSON do banco.
  * - clearFiles(): limpa somente arquivos oficiais reconhecidos do acervo.
  * - clearUnused(remotePaths): remove arquivos locais que não estão na lista
  *   atual do servidor (equivalente a fmArquivosExcesso).
@@ -135,14 +134,6 @@ async function stats() {
       count: filesStat.files + videoStat.files + canvaStat.files + jsonCount + musicCount + bibleCount,
     },
   };
-}
-
-/** Remove todo o cache de JSON. */
-async function clearJson() {
-  const dir = paths.jsonCacheDir();
-  await fs.remove(dir);
-  await fs.ensureDir(dir);
-  return { ok: true };
 }
 
 /** Remove apenas o conteúdo reconhecido como acervo oficial. */
@@ -386,7 +377,6 @@ async function enforceQuota(maxBytes) {
 
 module.exports = {
   stats,
-  clearJson,
   clearFiles,
   clearUnused,
   verify,

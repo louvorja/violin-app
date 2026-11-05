@@ -831,7 +831,7 @@
           </p>
 
           <div class="opt-actions">
-            <button type="button" class="opt-btn" @click="clearJson">
+            <button type="button" class="opt-btn" @click="clearDbCache">
               <LjIcon :icon="ICONS.ACTIONS.DATABASE_REMOVE" size="14" />
               {{ $t("options.storage.clear_cache") }}
             </button>
@@ -892,6 +892,7 @@ import StorageLocations from "@/components/StorageLocations.vue";
 import { pendingSyncAlbum } from "@/helpers/SyncIntent";
 import $userdata from "@/helpers/UserData";
 import $alert from "@/helpers/Alert";
+import { clearDatabaseCache } from "@/helpers/DatabaseCache";
 import { KEYS, moduleShowInMainMenu } from "@/constants/UserDataKeys";
 import { ICONS } from "@/config/Icons";
 import { LjButton, LjIcon, LjProgress, LjTabs } from "@/components/ui";
@@ -1785,11 +1786,10 @@ async function setQuotaGb(gb: number): Promise<void> {
   }
 }
 
-async function clearJson(): Promise<void> {
+async function clearDbCache(): Promise<void> {
   $alert.yesno("options.storage.clear_cache_confirm", (async (btn) => {
     if (btn !== "yes") return;
-    await Platform?.storage?.clearJson?.();
-    await reloadStats();
+    if (await clearDatabaseCache()) await reloadStats();
   }) as (...args: unknown[]) => unknown);
 }
 

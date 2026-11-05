@@ -183,8 +183,8 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
   },
 
   jsonCache: {
-    /** Limpa todo o cache JSON em userData/json_db/ */
-    clear: () => ipcRenderer.invoke("jsonCache:clear"),
+    /** Expira os JSONs do banco (todos, ou as chaves pedidas) sem apagar a reserva offline. */
+    expire: (files) => ipcRenderer.invoke("jsonCache:expire", files),
     /** Retorna o caminho do diretório de cache (debug / módulo update) */
     dir: () => ipcRenderer.invoke("jsonCache:dir"),
   },
@@ -444,7 +444,6 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
     /** Pasta de dados pedida e motivo, quando o app teve de abrir em outra. */
     dataDirIssue: () => ipcRenderer.invoke("storage:dataDirIssue"),
     /** Limpa cache de JSON (banco). */
-    clearJson: () => ipcRenderer.invoke("storage:clearJson"),
     /** Limpa toda a mídia local (mp3, imagens). */
     clearFiles: () => ipcRenderer.invoke("storage:clearFiles"),
     /** Remove arquivos JSON do cache por prefixo. */

@@ -114,7 +114,6 @@ evitando que uma cópia antiga substitua o estado atual.
 
 | Tipo | Gatilho |
 |---|---|
-| `MODULE_REFRESH` | ⇧⌘F2 / Ctrl+Shift+F2, menu Dev |
 | `MEDIA_PREV_MUSIC` | ⌘← / Ctrl+← |
 | `MEDIA_NEXT_MUSIC` | ⌘→ / Ctrl+→ |
 | `LITURGY_RIBBON_ACTION` | ⌘N / Ctrl+N (`add`) |

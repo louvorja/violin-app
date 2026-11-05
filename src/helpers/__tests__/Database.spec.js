@@ -786,3 +786,30 @@ describe("Database — publicação de bundle", () => {
     expect(dataIds("musics", "pt_musics")).toEqual(["1"]);
   });
 });
+
+describe("Database — cópia do main no desktop", () => {
+  const expire = vi.fn(async () => ({ expired: 0 }));
+
+  beforeEach(() => {
+    expire.mockClear();
+    window.louvorjaApi = { jsonCache: { expire } };
+  });
+
+  afterEach(() => {
+    delete window.louvorjaApi;
+  });
+
+  it("invalidateAll() expira o json_db inteiro, que continua como reserva offline", async () => {
+    const db = await importDatabase();
+    await db.invalidateAll();
+
+    expect(expire).toHaveBeenCalledWith(undefined);
+  });
+
+  it("invalidate(file) expira só aquele arquivo", async () => {
+    const db = await importDatabase();
+    db.invalidate("pt_musics");
+
+    await vi.waitFor(() => expect(expire).toHaveBeenCalledWith(["pt_musics"]));
+  });
+});

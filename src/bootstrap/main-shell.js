@@ -77,6 +77,7 @@ import { withTelemetryActionSource } from "@/helpers/TelemetryAction";
 import { installRouteTelemetry } from "@/helpers/RouteTelemetry";
 import Hotkeys from "@/helpers/Hotkeys";
 import { HOTKEY } from "@/constants/HotkeyCombos";
+import { clearDatabaseCache } from "@/helpers/DatabaseCache";
 import { useShell } from "@/composables/useShell";
 import { BROADCAST_TYPE } from "@helpers/BroadcastTypes";
 import { ModuleEnum } from "@/enums/ModuleEnum";
@@ -2918,12 +2919,11 @@ $storage.hydrate().then(async () => {
       }
     );
 
-    // ⇧⌘F2 / Ctrl+Shift+F2: limpa cache do DB e recarrega dados
+    // ⇧⌘F2 / Ctrl+Shift+F2: limpa o cache do banco (o mesmo botão de Atualizações)
     Hotkeys.register(
       HOTKEY.CLEAR_CACHE,
       () => {
-        $storage.removeAll("db", "session");
-        Broadcast.send(BROADCAST_TYPE.MODULE_REFRESH, { clearCache: true });
+        void clearDatabaseCache();
       },
       {
         context: "global",
