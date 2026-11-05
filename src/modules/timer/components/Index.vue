@@ -2,7 +2,14 @@
   <ModuleContainer :manifest="manifest" :style="{ minWidth: '300px' }" @close="close()">
     <div class="mod-shell">
       <ModuleFormatDrawer v-model="show_format" :module-id="'timer'" :manifest="manifest" />
-      <div ref="container" class="timer-stage" style="gap: 16px" :style="rootStyle">
+      <div
+        ref="container"
+        class="timer-stage"
+        style="gap: 16px"
+        :style="rootStyle"
+        data-testid="timer-stage"
+        :data-alert="alertLevel || 'none'"
+      >
         <ModuleBackgroundMedia
           v-if="bgImage"
           :src="bgImage"
@@ -14,12 +21,14 @@
           class="sw-display"
           :class="{
             'sw-warning': mode === 'down' && alertActive && seconds > 0,
-            'sw-done': mode === 'down' && seconds <= 0 && alarmed,
+            'sw-done': mode === 'down' && seconds <= 0 && alarmed && !overtime,
           }"
           :style="[textStyle, alertActive ? alertStyle : null]"
+          data-testid="timer-display"
         >
           {{ projecao }}
         </div>
+        <ModuleAlertFrame :level="flashBorders ? alertLevel : ''" />
       </div>
     </div>
 
@@ -33,6 +42,7 @@ import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import ModuleBackgroundMedia from "@/components/ModuleBackgroundMedia.vue";
 import ModuleFormatDrawer from "@/components/ModuleFormatDrawer.vue";
+import ModuleAlertFrame from "@/components/ModuleAlertFrame.vue";
 import TimerEndActionDialogs from "@/components/TimerEndActionDialogs.vue";
 import { playBeep } from "@/helpers/AudioBeep";
 import $userdata from "@/helpers/UserData";
@@ -115,12 +125,31 @@ const alertActive = computed<boolean>(
     (seconds.value > 0 || alarmed.value)
 );
 
+const overtime = computed<boolean>(
+  () => $userdata.get<boolean>(KEYS.MODULES.TIMER.COUNT_OVERTIME, true) !== false
+);
+const flashBorders = computed<boolean>(
+  () => $userdata.get<boolean>(KEYS.MODULES.TIMER.FLASH_BORDERS, true) !== false
+);
+
+/*
+ * Aviso de tempo para a moldura (tela e telão): amarelo nos segundos de
+ * destaque, vermelho depois do zero. Só com a contagem iniciada — parado,
+ * mesmo perto do horário, nada pisca no telão.
+ */
+const alertLevel = computed<"" | "warning" | "danger">(() => {
+  if (mode.value !== "down" || startedAt.value === null) return "";
+  if (seconds.value <= 0) return alarmed.value ? "danger" : "";
+  return alertActive.value ? "warning" : "";
+});
+
 const display = computed<string>(() => {
   const abs = Math.abs(seconds.value);
   const h = Math.floor(abs / 3600);
   const m = Math.floor((abs % 3600) / 60);
   const s = abs % 60;
-  const sign = seconds.value < 0 ? "-" : "";
+  // Negativo é tempo excedido: "+00:02:10".
+  const sign = seconds.value < 0 ? "+" : "";
 
   return `${sign}${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 });
@@ -132,12 +161,13 @@ const projecao = computed<string>(() => {
 watch(mode, () => reset());
 
 watch(
-  [projecao, alertActive],
+  [projecao, alertActive, alertLevel, flashBorders],
   () => {
     projection.emit({
       text: projecao.value,
       active: true,
       color: alertActive.value ? alertStyle.value.color : undefined,
+      alert: flashBorders.value && alertLevel.value ? alertLevel.value : undefined,
     });
   },
   { immediate: true }
@@ -203,11 +233,13 @@ function updateRunningTime(): void {
     return;
   }
 
-  seconds.value = Math.max(durationSeconds.value - elapsedSeconds, 0);
+  const left = durationSeconds.value - elapsedSeconds;
+  seconds.value = overtime.value ? left : Math.max(left, 0);
 
-  if (seconds.value <= 0 && !alarmed.value) {
+  if (left <= 0 && !alarmed.value) {
     alarmed.value = true;
-    pause();
+    // Com tempo excedido a contagem segue (+00:00:01…); sem ele, para no zero.
+    if (!overtime.value) pause();
     playAlarm();
     endAction.triggerTimerEndAction();
   }
@@ -222,8 +254,16 @@ function toggle(): void {
 }
 
 function start(): void {
-  alarmed.value = false;
-  durationSeconds.value = getDurationUntilTarget();
+  /*
+   * Retomar depois de pausar no tempo excedido: o horário já passou hoje, e
+   * getDurationUntilTarget() o jogaria para amanhã (23h59 restantes). Segue
+   * contando o excedido a partir do horário de hoje.
+   */
+  const resumingOvertime = alarmed.value && overtime.value && mode.value === "down";
+  alarmed.value = resumingOvertime;
+  durationSeconds.value = resumingOvertime
+    ? Math.ceil((getTargetDate().getTime() - Date.now()) / 1000)
+    : getDurationUntilTarget();
   startedAt.value = Date.now();
   seconds.value = mode.value === "down" ? durationSeconds.value : 0;
   running.value = true;
@@ -252,6 +292,10 @@ function close(): void {
   pause();
 }
 
+// Fechar o app com a contagem rodando deixava a chave em "true", e o botão da
+// ribbon abria em "Pausar" sem nada contando.
+$userdata.set(KEYS.MODULES.TIMER.RUNNING, false);
+
 onBeforeUnmount(() => {
   if (timer !== null) clearInterval(timer);
 });
@@ -264,6 +308,8 @@ onBeforeUnmount(() => {
 }
 
 .timer-stage {
+  position: relative;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   align-items: center;

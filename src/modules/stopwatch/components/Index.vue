@@ -73,13 +73,7 @@
             />
           </div>
 
-          <div
-            v-if="flashBorders && alert"
-            class="sw-frame"
-            :class="`sw-frame--${alert}`"
-            data-testid="stopwatch-frame"
-            aria-hidden="true"
-          />
+          <ModuleAlertFrame :level="flashBorders ? alert : ''" data-testid="stopwatch-frame" />
         </div>
 
         <!-- Controles do dia a dia, sem depender da ribbon. -->
@@ -161,6 +155,7 @@ import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import ModuleBackgroundMedia from "@/components/ModuleBackgroundMedia.vue";
 import ModuleFormatDrawer from "@/components/ModuleFormatDrawer.vue";
+import ModuleAlertFrame from "@/components/ModuleAlertFrame.vue";
 import { playBeep } from "@helpers/AudioBeep";
 import { useModuleProjection } from "@/composables/useModuleProjection";
 import { useModuleFormat } from "@/composables/useModuleFormat";
@@ -537,26 +532,6 @@ onBeforeUnmount(() => {
   background: #ef4444;
 }
 
-/* Mesma moldura do telão (ModuleProjectionLayer), em escala de prévia. */
-.sw-frame {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  pointer-events: none;
-  animation: sw-frame 1.2s ease-in-out infinite alternate;
-}
-.sw-frame--warning {
-  box-shadow:
-    inset 0 0 0 6px #f59e0b,
-    inset 0 0 36px rgba(245, 158, 11, 0.55);
-}
-.sw-frame--danger {
-  box-shadow:
-    inset 0 0 0 7px #ef4444,
-    inset 0 0 44px rgba(239, 68, 68, 0.6);
-  animation-duration: 0.8s;
-}
-
 .sw-bg-img {
   position: absolute;
   inset: 0;
@@ -655,16 +630,7 @@ onBeforeUnmount(() => {
     opacity: 0.35;
   }
 }
-@keyframes sw-frame {
-  from {
-    opacity: 1;
-  }
-  to {
-    opacity: 0.25;
-  }
-}
 @media (prefers-reduced-motion: reduce) {
-  .sw-frame,
   .sw-onair-dot,
   .sw-done--stopped {
     animation: none;

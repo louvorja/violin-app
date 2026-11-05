@@ -139,6 +139,13 @@ export const contextualPages: RibbonPage[] = [
             label: `${modulePath}.ribbon.show_target_time`,
             defaultValue: true,
           },
+        ],
+      },
+      {
+        id: moduleCtxId + "_alerts",
+        title: `${modulePath}.ribbon.alerts`,
+        compactRows: 2,
+        buttons: [
           {
             id: `${moduleId}_show_alert`,
             type: "checkbox",
@@ -155,6 +162,20 @@ export const contextualPages: RibbonPage[] = [
             min: 5,
             max: 600,
             step: 5,
+          },
+          {
+            id: `${moduleId}_count_overtime`,
+            type: "checkbox",
+            optionKey: KEYS.MODULES.TIMER.COUNT_OVERTIME,
+            label: `${modulePath}.ribbon.count_overtime`,
+            defaultValue: true,
+          },
+          {
+            id: `${moduleId}_flash_borders`,
+            type: "checkbox",
+            optionKey: KEYS.MODULES.TIMER.FLASH_BORDERS,
+            label: `${modulePath}.ribbon.flash_borders`,
+            defaultValue: true,
           },
         ],
       },
