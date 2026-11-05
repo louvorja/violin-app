@@ -142,12 +142,14 @@ function estimateJsonLength(value: unknown, depth = 0): number {
   if (Array.isArray(value) && value.length > 200) {
     const step = value.length / 100;
     let sampled = 0;
-    for (let i = 0; i < 100; i++) sampled += JSON.stringify(value[Math.floor(i * step)] ?? null).length;
+    for (let i = 0; i < 100; i++)
+      sampled += JSON.stringify(value[Math.floor(i * step)] ?? null).length;
     return Math.round((sampled / 100) * value.length);
   }
   if (depth < 2 && value && typeof value === "object" && !Array.isArray(value)) {
     let total = 2;
-    for (const [key, item] of Object.entries(value)) total += key.length + 4 + estimateJsonLength(item, depth + 1);
+    for (const [key, item] of Object.entries(value))
+      total += key.length + 4 + estimateJsonLength(item, depth + 1);
     return total;
   }
   return JSON.stringify(value)?.length ?? 4;
@@ -265,6 +267,30 @@ async function expireDesktopCopy(files?: string[]): Promise<void> {
     await Platform.jsonCache?.expire(files);
   } catch {
     // Sem o main (janela fechando): a cópia vence sozinha em 24 h.
+  }
+}
+
+/**
+ * Marca da última limpeza, no endereço pedido junto da data. A API manda
+ * `max-age=86400` e o endereço só mudava por dia: depois de limpar, o navegador
+ * devolvia a mesma resposta do cache HTTP dele até virar o dia. Fica gravada para
+ * valer também depois de recarregar a página.
+ */
+const CLEAR_MARK_KEY = "louvorja:db-cleared";
+
+function clearMark(): string {
+  try {
+    return localStorage.getItem(CLEAR_MARK_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function renewClearMark(): void {
+  try {
+    localStorage.setItem(CLEAR_MARK_KEY, Date.now().toString(36));
+  } catch {
+    // Sem armazenamento (janela privada): sobra só o cache HTTP até o fim do dia.
   }
 }
 
@@ -593,9 +619,10 @@ function fetchAndStore<T>(file: string, fresh: boolean): Promise<T | null> {
     // servir versão antiga após "Atualizar coletâneas" no UI.
     const url = fetchUrlFor(file);
     const fallbackUrl = API_URL_FALLBACK ? url.replace(API_URL, API_URL_FALLBACK) : "";
+    const mark = clearMark();
     const cacheBuster = fresh
       ? `?fresh=1&_=${Date.now()}`
-      : `?${new Date().toISOString().slice(0, 10).replace(/-/g, "")}`;
+      : `?${new Date().toISOString().slice(0, 10).replace(/-/g, "")}${mark ? `.${mark}` : ""}`;
     $dev.write("Abrindo DB", `${url}${cacheBuster}`);
     let response: Response;
     try {
@@ -703,12 +730,14 @@ export default {
     if (!file) {
       _memory.clear();
       _memoryBytes = 0;
+      renewClearMark();
       for (const t of CATALOG_TABLES) void $idb.clear(t);
       void purgeServiceWorkerCopy();
       void expireDesktopCopy();
       $dev.write("Cache do DB limpo (tudo)");
       return;
     }
+    renewClearMark();
     memoryDelete(file);
     void purgeServiceWorkerCopy(file);
     void expireDesktopCopy([file]);
@@ -735,6 +764,7 @@ export default {
 
   /** Igual a invalidate() sem argumento, mas aguardando a limpeza terminar. */
   async invalidateAll(): Promise<void> {
+    renewClearMark();
     _memory.clear();
     _memoryBytes = 0;
     await Promise.all([

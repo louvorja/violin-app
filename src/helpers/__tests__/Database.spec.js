@@ -813,3 +813,39 @@ describe("Database — cópia do main no desktop", () => {
     await vi.waitFor(() => expect(expire).toHaveBeenCalledWith(["pt_musics"]));
   });
 });
+
+describe("Database — o endereço muda ao limpar", () => {
+  afterEach(() => localStorage.removeItem("louvorja:db-cleared"));
+
+  const urlPedida = () => String(fetchMock.mock.calls.at(-1)[0]);
+
+  it("depois de limpar pede outro endereço, e o cache HTTP do navegador não responde por ele", async () => {
+    fetchMock.mockImplementation(async () => jsonResponse([{ id: 1 }]));
+    const db = await importDatabase();
+    await db.get("pt_teste_endereco");
+    const antes = urlPedida();
+
+    await db.invalidateAll();
+    await db.get("pt_teste_endereco");
+    const depois = urlPedida();
+
+    expect(depois).not.toBe(antes);
+    expect(depois.split("?")[0]).toBe(antes.split("?")[0]);
+    expect(depois).not.toContain("fresh=1");
+  });
+
+  it("a marca vale depois de recarregar a página", async () => {
+    fetchMock.mockImplementation(async () => jsonResponse([{ id: 1 }]));
+    let db = await importDatabase();
+    db.invalidate("pt_teste_marca");
+    await db.get("pt_teste_marca");
+    const primeira = urlPedida();
+
+    vi.resetModules();
+    tables.clear();
+    db = await importDatabase();
+    await db.get("pt_teste_marca");
+
+    expect(urlPedida()).toBe(primeira);
+  });
+});
